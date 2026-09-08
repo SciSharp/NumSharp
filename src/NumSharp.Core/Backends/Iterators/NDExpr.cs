@@ -125,7 +125,9 @@ namespace NumSharp.Backends.Iteration
                 vectorBody = il =>
                 {
                     var vectorLocals = new LocalBuilder[nIn];
-                    var vecType = DirectILKernelGenerator.GetVectorType(DirectILKernelGenerator.GetClrType(inputTypes[0]));
+                    // Vector locals take the SIMD LANE type: a bool operand rides the byte lanes
+                    // (Vector{N}<bool> is not a type — declaring it made the loads type-confused).
+                    var vecType = DirectILKernelGenerator.GetVectorType(DirectILKernelGenerator.GetSimdLaneType(inputTypes[0]));
                     for (int i = nIn - 1; i >= 0; i--)
                     {
                         vectorLocals[i] = il.DeclareLocal(vecType);
@@ -163,6 +165,25 @@ namespace NumSharp.Backends.Iteration
             return true;
         }
 
+        /// <summary>
+        /// A sub-32-bit integer result lives on the IL stack as an int32 that the arithmetic did
+        /// NOT wrap (byte 200 + 100 is 300 there; a ROOT node is truncated for free by its stind.i1
+        /// store). A PARENT node converts the intermediate to a wider dtype, so the wrap must
+        /// happen at the node or <c>sqrt(add(u8, u8))</c> reads 300 where NumPy reads 44 — the
+        /// uint8/int8/int16 cells of the evaluate oracle tier. One conv.* opcode; no-op elsewhere.
+        /// </summary>
+        internal static void EmitNormalizeNarrowInt(ILGenerator il, NPTypeCode t)
+        {
+            switch (t)
+            {
+                case NPTypeCode.Byte: il.Emit(OpCodes.Conv_U1); break;
+                case NPTypeCode.SByte: il.Emit(OpCodes.Conv_I1); break;
+                case NPTypeCode.Int16: il.Emit(OpCodes.Conv_I2); break;
+                case NPTypeCode.UInt16:
+                case NPTypeCode.Char: il.Emit(OpCodes.Conv_U2); break;
+            }
+        }
+
         // ===================================================================
         // Leaf factories
         // ===================================================================
@@ -170,11 +191,23 @@ namespace NumSharp.Backends.Iteration
         /// <summary>Reference the i-th operand of the iterator (0-based input index).</summary>
         public static NDExpr Input(int index) => new InputNode(index);
 
-        /// <summary>Push a constant of the given .NET type. Value is converted to the output dtype when evaluated.</summary>
+        /// <summary>
+        /// A literal. NEP50 kind follows the CLR type (see <see cref="NDExprLiteralKind"/>): the
+        /// numeric primitives, <c>bool</c> and <c>Complex</c> are WEAK Python literals that adopt the
+        /// dtype of the array they meet (<c>i4 + 2 → i4</c>, <c>f2 + 2.5 → f2</c>, <c>u8 + 2^64-1 → u8</c>);
+        /// <c>Half</c>, <c>decimal</c> and <c>char</c> are STRONG and promote like a 0-d array of their dtype.
+        /// </summary>
         public static NDExpr Const(double value) => new ConstNode(value);
         public static NDExpr Const(float value) => new ConstNode(value);
         public static NDExpr Const(long value) => new ConstNode(value);
         public static NDExpr Const(int value) => new ConstNode(value);
+        public static NDExpr Const(uint value) => new ConstNode(value);
+        public static NDExpr Const(ulong value) => new ConstNode(value);
+        public static NDExpr Const(bool value) => new ConstNode(value);
+        public static NDExpr Const(System.Numerics.Complex value) => new ConstNode(value);
+        public static NDExpr Const(Half value) => new ConstNode(value);
+        public static NDExpr Const(decimal value) => new ConstNode(value);
+        public static NDExpr Const(char value) => new ConstNode(value);
 
         // ===================================================================
         // Binary factories
@@ -439,22 +472,71 @@ namespace NumSharp.Backends.Iteration
     // Node: Constant
     // =========================================================================
 
+    /// <summary>
+    /// The CLR spelling of a literal, which decides its NEP50 behaviour. NumPy tells a Python
+    /// literal (weak: adopts the dtype of the array it meets) from a NumPy scalar (strong: a full
+    /// promotion participant); C# has no such split, so NumSharp maps it by TYPE, the same house
+    /// rule <c>np.r_</c> and <c>np.select</c> use: <c>bool</c>, the integer primitives, <c>float</c>/
+    /// <c>double</c> and <c>Complex</c> are the Python literals (weak); <c>Half</c>, <c>decimal</c>
+    /// and <c>char</c> — which have no Python literal — are strong. A <c>ulong</c> above
+    /// <c>long.MaxValue</c> is still a Python int, but only <c>uint64</c> can carry it (NumPy:
+    /// <c>np.uint64(1) + 2**64-1</c> is uint64; <c>np.int64(1) + 2**64-1</c> raises OverflowError).
+    /// </summary>
+    internal enum NDExprLiteralKind : byte
+    {
+        Bool,      // weak — Python bool
+        Int,       // weak — Python int (fits long)
+        UInt64,    // weak — Python int above long.MaxValue (default dtype uint64)
+        Float,     // weak — Python float
+        Complex,   // weak — Python complex
+        Half,      // strong — np.float16 scalar (no Python literal)
+        Decimal,   // strong — NumSharp-only dtype
+        Char,      // strong — NumSharp-only dtype
+    }
+
     public sealed partial class ConstNode : NDExpr
     {
-        // Store as double — widest scalar; convert down to outputType on emit.
-        // Also preserve an exact-int path for integer-typed outputs.
-        private readonly double _valueFp;
-        private readonly long _valueInt;
-        private readonly bool _isIntegerLiteral;
+        private readonly NDExprLiteralKind _kind;
+        private readonly long _i;                      // Bool (0/1) / Int / Char (code unit)
+        private readonly ulong _u;                     // UInt64
+        private readonly double _f;                    // Float / Half (exact as double)
+        private readonly System.Numerics.Complex _c;   // Complex
+        private readonly decimal _m;                   // Decimal
 
-        public ConstNode(double v) { _valueFp = v; _valueInt = 0; _isIntegerLiteral = false; }
-        public ConstNode(float v) { _valueFp = v; _valueInt = 0; _isIntegerLiteral = false; }
-        public ConstNode(long v) { _valueInt = v; _valueFp = v; _isIntegerLiteral = true; }
-        public ConstNode(int v) { _valueInt = v; _valueFp = v; _isIntegerLiteral = true; }
+        public ConstNode(double v) { _kind = NDExprLiteralKind.Float; _f = v; }
+        public ConstNode(float v) { _kind = NDExprLiteralKind.Float; _f = v; }
+        public ConstNode(long v) { _kind = NDExprLiteralKind.Int; _i = v; _f = v; }
+        public ConstNode(int v) { _kind = NDExprLiteralKind.Int; _i = v; _f = v; }
+        public ConstNode(uint v) { _kind = NDExprLiteralKind.Int; _i = v; _f = v; }
+        public ConstNode(ulong v)
+        {
+            // A Python int is one kind; only its VALUE decides whether int64 can hold it.
+            if (v <= long.MaxValue) { _kind = NDExprLiteralKind.Int; _i = (long)v; _f = v; }
+            else { _kind = NDExprLiteralKind.UInt64; _u = v; _f = v; }
+        }
+        public ConstNode(bool v) { _kind = NDExprLiteralKind.Bool; _i = v ? 1 : 0; _f = _i; }
+        public ConstNode(System.Numerics.Complex v) { _kind = NDExprLiteralKind.Complex; _c = v; _f = v.Real; }
+        public ConstNode(Half v) { _kind = NDExprLiteralKind.Half; _f = (double)v; }
+        public ConstNode(decimal v) { _kind = NDExprLiteralKind.Decimal; _m = v; _f = (double)v; }
+        public ConstNode(char v) { _kind = NDExprLiteralKind.Char; _i = v; _f = v; }
 
-        internal bool IsIntegerLiteral => _isIntegerLiteral;
-        internal long IntegerValue => _valueInt;
-        internal double FloatValue => _valueFp;
+        internal NDExprLiteralKind Kind => _kind;
+
+        /// <summary>True for a Python-int literal that fits <c>long</c> (the negative-exponent check reads <see cref="IntegerValue"/>).</summary>
+        internal bool IsIntegerLiteral => _kind == NDExprLiteralKind.Int;
+        internal long IntegerValue => _i;
+        internal double FloatValue => _f;
+
+        /// <summary>Strong literals (Half / decimal / char) participate in promotion as a 0-d array of that dtype.</summary>
+        internal bool IsStrong => _kind == NDExprLiteralKind.Half || _kind == NDExprLiteralKind.Decimal || _kind == NDExprLiteralKind.Char;
+
+        internal NPTypeCode StrongType => _kind switch
+        {
+            NDExprLiteralKind.Half => NPTypeCode.Half,
+            NDExprLiteralKind.Decimal => NPTypeCode.Decimal,
+            NDExprLiteralKind.Char => NPTypeCode.Char,
+            _ => throw new InvalidOperationException($"{_kind} literal is weak — it has no fixed dtype."),
+        };
 
         public override bool SupportsSimd => true;
 
@@ -469,19 +551,60 @@ namespace NumSharp.Backends.Iteration
             DirectILKernelGenerator.EmitVectorCreate(il, ctx.TypeOf(this));
         }
 
-        private void EmitLoadTyped(ILGenerator il, NPTypeCode target)
+        // ---- the literal's value in the widest carrier of each family --------------------
+
+        /// <summary>The value as an integer (truncating a float literal toward zero, like NumPy's int cast of an adopted float).</summary>
+        private long AsInt64() => _kind switch
+        {
+            NDExprLiteralKind.UInt64 => unchecked((long)_u),
+            NDExprLiteralKind.Float or NDExprLiteralKind.Half => (long)_f,
+            NDExprLiteralKind.Decimal => (long)_m,
+            NDExprLiteralKind.Complex => (long)_c.Real,
+            _ => _i,
+        };
+
+        private double AsDouble() => _kind switch
+        {
+            NDExprLiteralKind.UInt64 => _u,
+            NDExprLiteralKind.Decimal => (double)_m,
+            NDExprLiteralKind.Complex => _c.Real,
+            _ => _f,
+        };
+
+        private decimal AsDecimal() => _kind switch
+        {
+            NDExprLiteralKind.Decimal => _m,
+            NDExprLiteralKind.UInt64 => _u,
+            NDExprLiteralKind.Int or NDExprLiteralKind.Bool or NDExprLiteralKind.Char => _i,
+            NDExprLiteralKind.Complex => (decimal)_c.Real,
+            _ => (decimal)_f,
+        };
+
+        private System.Numerics.Complex AsComplex() => _kind switch
+        {
+            NDExprLiteralKind.Complex => _c,
+            _ => new System.Numerics.Complex(AsDouble(), 0.0),
+        };
+
+        /// <summary>Push the literal as a value of <paramref name="target"/> (its adopted / resolved dtype).</summary>
+        internal void EmitLoadTyped(ILGenerator il, NPTypeCode target)
         {
             switch (target)
             {
                 case NPTypeCode.Single:
-                    il.Emit(OpCodes.Ldc_R4, (float)_valueFp);
+                    il.Emit(OpCodes.Ldc_R4, (float)AsDouble());
                     return;
                 case NPTypeCode.Double:
-                    il.Emit(OpCodes.Ldc_R8, _valueFp);
+                    il.Emit(OpCodes.Ldc_R8, AsDouble());
                     return;
                 case NPTypeCode.Int64:
                 case NPTypeCode.UInt64:
-                    il.Emit(OpCodes.Ldc_I8, _isIntegerLiteral ? _valueInt : (long)_valueFp);
+                    il.Emit(OpCodes.Ldc_I8, AsInt64());
+                    return;
+                case NPTypeCode.Boolean:
+                    // A bool's numeric value is exactly 0 or 1 (NumPy: bool(x) of a nonzero literal is True).
+                    il.Emit(AsDouble() != 0.0 || (_kind == NDExprLiteralKind.Complex && _c != System.Numerics.Complex.Zero)
+                        ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
                     return;
                 case NPTypeCode.Byte:
                 case NPTypeCode.SByte:
@@ -490,31 +613,39 @@ namespace NumSharp.Backends.Iteration
                 case NPTypeCode.Int32:
                 case NPTypeCode.UInt32:
                 case NPTypeCode.Char:
-                case NPTypeCode.Boolean:
-                    il.Emit(OpCodes.Ldc_I4, _isIntegerLiteral ? (int)_valueInt : (int)_valueFp);
+                    // The IL stack holds sub-64-bit integers as int32 bit patterns — a uint32 above
+                    // int.MaxValue is its two's-complement image, exactly what Ldc_I4 wants.
+                    il.Emit(OpCodes.Ldc_I4, unchecked((int)AsInt64()));
                     return;
                 case NPTypeCode.Half:
-                    // No Ldc for Half — load double then convert (Half consts
-                    // arise from NEP50 weak adoption: f2_array + 2.5 stays f2).
-                    il.Emit(OpCodes.Ldc_R8, _isIntegerLiteral ? _valueInt : _valueFp);
+                    // No Ldc for Half — load double then convert (Half consts arise from NEP50 weak
+                    // adoption: f2_array + 2.5 stays f2; a strong Half literal stores its exact double).
+                    il.Emit(OpCodes.Ldc_R8, AsDouble());
                     DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Double, NPTypeCode.Half);
                     return;
                 case NPTypeCode.Decimal:
-                    if (_isIntegerLiteral)
-                    {
-                        il.Emit(OpCodes.Ldc_I8, _valueInt);
-                        DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Int64, NPTypeCode.Decimal);
-                    }
-                    else
-                    {
-                        il.Emit(OpCodes.Ldc_R8, _valueFp);
-                        DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Double, NPTypeCode.Decimal);
-                    }
+                {
+                    // decimal(int lo, int mid, int hi, bool isNegative, byte scale) — exact for every
+                    // literal kind (an integer literal is a scale-0 decimal, a decimal literal is itself).
+                    int[] bits = decimal.GetBits(AsDecimal());
+                    il.Emit(OpCodes.Ldc_I4, bits[0]);
+                    il.Emit(OpCodes.Ldc_I4, bits[1]);
+                    il.Emit(OpCodes.Ldc_I4, bits[2]);
+                    il.Emit((bits[3] & unchecked((int)0x80000000)) != 0 ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
+                    il.Emit(OpCodes.Ldc_I4, (bits[3] >> 16) & 0xFF);
+                    il.Emit(OpCodes.Newobj, typeof(decimal).GetConstructor(new[] { typeof(int), typeof(int), typeof(int), typeof(bool), typeof(byte) })
+                        ?? throw new MissingMethodException(typeof(decimal).FullName, ".ctor(int,int,int,bool,byte)"));
                     return;
+                }
                 case NPTypeCode.Complex:
-                    il.Emit(OpCodes.Ldc_R8, _isIntegerLiteral ? _valueInt : _valueFp);
-                    DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Double, NPTypeCode.Complex);
+                {
+                    var z = AsComplex();
+                    il.Emit(OpCodes.Ldc_R8, z.Real);
+                    il.Emit(OpCodes.Ldc_R8, z.Imaginary);
+                    il.Emit(OpCodes.Newobj, typeof(System.Numerics.Complex).GetConstructor(new[] { typeof(double), typeof(double) })
+                        ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, ".ctor(double,double)"));
                     return;
+                }
                 default:
                     throw new NotSupportedException(
                         $"ConstNode cannot emit for output dtype {target}.");
@@ -523,8 +654,18 @@ namespace NumSharp.Backends.Iteration
 
         public override void AppendSignature(StringBuilder sb)
         {
-            sb.Append("Const[");
-            if (_isIntegerLiteral) sb.Append(_valueInt); else sb.Append(_valueFp);
+            // Kind + exact value: two literals that differ in either compile to distinct kernels
+            // (2 and 2.0 type differently; 2m and 2 emit differently at a Decimal target).
+            sb.Append("Const").Append((int)_kind).Append('[');
+            switch (_kind)
+            {
+                case NDExprLiteralKind.UInt64: sb.Append(_u); break;
+                case NDExprLiteralKind.Complex: sb.Append(_c.Real.ToString("R")).Append(',').Append(_c.Imaginary.ToString("R")); break;
+                case NDExprLiteralKind.Decimal: sb.Append(_m.ToString(System.Globalization.CultureInfo.InvariantCulture)); break;
+                case NDExprLiteralKind.Float:
+                case NDExprLiteralKind.Half: sb.Append(_f.ToString("R", System.Globalization.CultureInfo.InvariantCulture)); break;
+                default: sb.Append(_i); break;
+            }
             sb.Append(']');
         }
     }
@@ -583,14 +724,52 @@ namespace NumSharp.Backends.Iteration
                 return;
             }
 
+            // NumPy's integer power loops refuse a negative exponent PER ELEMENT ("Integers to
+            // negative integer powers are not allowed."). A literal exponent is rejected at typing
+            // time; an exponent ARRAY can only be checked here, on the converted value.
+            if (_op == BinaryOp.Power && NDExprTypeRules.IsSignedInteger(my))
+                EmitNegativeExponentGuard(il, my);
+
             DirectILKernelGenerator.EmitScalarOperation(il, _op, my);
+            EmitNormalizeNarrowInt(il, my);
+        }
+
+        internal const string NegativeIntegerPowerMessage = "Integers to negative integer powers are not allowed.";
+
+        /// <summary>
+        /// Stack: [base, exp] → unchanged; throws NumPy's ValueError text when exp &lt; 0. Unsigned
+        /// exponents cannot be negative and skip the guard entirely.
+        /// </summary>
+        private static void EmitNegativeExponentGuard(ILGenerator il, NPTypeCode expType)
+        {
+            var ok = il.DefineLabel();
+            il.Emit(OpCodes.Dup);
+            if (expType == NPTypeCode.Int64) il.Emit(OpCodes.Ldc_I8, 0L); else il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Bge, ok);
+            il.Emit(OpCodes.Ldstr, NegativeIntegerPowerMessage);
+            il.Emit(OpCodes.Newobj, typeof(ArgumentException).GetConstructor(new[] { typeof(string) })
+                ?? throw new MissingMethodException(typeof(ArgumentException).FullName, ".ctor(string)"));
+            il.Emit(OpCodes.Throw);
+            il.MarkLabel(ok);
         }
 
         public override void EmitVector(ILGenerator il, NDExprCompileContext ctx)
         {
             _left.EmitVector(il, ctx);
             _right.EmitVector(il, ctx);
-            DirectILKernelGenerator.EmitVectorOperation(il, _op, ctx.OutputType);
+            var t = ctx.OutputType;
+
+            // NumPy's bool add / multiply are logical or / and (see EmitScalar). The byte lanes
+            // carry canonical 0/1 through the normalized logical ops; Vector{N}<bool> arithmetic
+            // does not exist (emitting it threw NotSupportedException once the SIMD block ran, and
+            // a broadcast constant operand made the JIT fail outright).
+            if (t == NPTypeCode.Boolean && (_op == BinaryOp.Add || _op == BinaryOp.Multiply))
+            {
+                DirectILKernelGenerator.EmitVectorOperation(il, _op == BinaryOp.Add ? BinaryOp.BitwiseOr : BinaryOp.BitwiseAnd, t);
+                return;
+            }
+
+            DirectILKernelGenerator.EmitVectorOperation(il, _op, t);
         }
 
         public override void AppendSignature(StringBuilder sb)
@@ -640,7 +819,11 @@ namespace NumSharp.Backends.Iteration
                 : (op == UnaryOp.Exp || op == UnaryOp.Log ||
                    op == UnaryOp.Sin || op == UnaryOp.Cos || op == UnaryOp.Tanh)
                     ? DirectILKernelGenerator.NumPyFloatKernelSimdAvailable(op, t)
-                    : IsSimdUnary(op);
+                    // integer reciprocal is the sentinel'd C division (no vector integer divide);
+                    // integer sqrt does not exist (the node types to a float tier first).
+                    : op == UnaryOp.Reciprocal
+                        ? (t == NPTypeCode.Single || t == NPTypeCode.Double)
+                        : IsSimdUnary(op);
 
         // Structural SIMD set used by the type-independent SupportsSimd. The rounding family
         // (Floor/Ceil/Round/Truncate) is gated per type+runtime by IsSimdUnaryAt instead, so it is
@@ -666,6 +849,12 @@ namespace NumSharp.Backends.Iteration
                t == NPTypeCode.Int16 || t == NPTypeCode.UInt16 || t == NPTypeCode.Char ||
                t == NPTypeCode.Int32 || t == NPTypeCode.UInt32 ||
                t == NPTypeCode.Int64 || t == NPTypeCode.UInt64;
+
+        // NumPy's npy_cabs (hypot, positive NaN) — the engine's own complex |z| helper, which the
+        // generic complex Abs emitter wraps back into a Complex(|z|, 0); np.absolute's loop is D->d.
+        private static readonly System.Reflection.MethodInfo s_complexAbs =
+            typeof(NumSharp.Utilities.NDComplexMath).GetMethod("Abs", new[] { typeof(System.Numerics.Complex) })
+            ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "Abs");
 
         public override void EmitScalar(ILGenerator il, NDExprCompileContext ctx)
         {
@@ -696,6 +885,18 @@ namespace NumSharp.Backends.Iteration
                 return;
             }
 
+            // np.absolute's complex loop is `D->d`: |z| is a float64 magnitude (npy_cabs = hypot),
+            // not a complex with a zero imaginary part. The engine's complex Abs emitter already
+            // leaves that double on the stack, so the child is consumed at its own dtype and no
+            // edge conversion applies (the typing pass resolves this node to Double).
+            if (_op == UnaryOp.Abs && childType == NPTypeCode.Complex)
+            {
+                _child.EmitScalar(il, ctx);
+                il.EmitCall(OpCodes.Call, s_complexAbs, null);   // Complex -> double (npy_cabs)
+                DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Double, my);
+                return;
+            }
+
             _child.EmitScalar(il, ctx);
             DirectILKernelGenerator.EmitConvertTo(il, childType, my);
 
@@ -714,7 +915,19 @@ namespace NumSharp.Backends.Iteration
                 return;
             }
 
+            // Integer reciprocal is C truncating 1/x with NumPy's probed per-dtype 1/0 sentinel
+            // (0x80..0 for int32/int64/uint64, 0 for every narrower type and uint32) — the same
+            // table the engine's ReciprocalInteger route implements; the generic emitter's
+            // double round-trip / raw div would throw or mis-sentinel.
+            if (_op == UnaryOp.Reciprocal && NDExprTypeRules.IsIntegerKind(my))
+            {
+                il.EmitCall(OpCodes.Call, NDExprIntegerReciprocal.For(my), null);
+                return;
+            }
+
             DirectILKernelGenerator.EmitUnaryScalarOperation(il, _op, my);
+            // negate / invert / square / abs(int8 min) leave an unwrapped int32 for narrow ints — see BinaryNode.
+            EmitNormalizeNarrowInt(il, my);
         }
 
         public override void EmitVector(ILGenerator il, NDExprCompileContext ctx)
@@ -729,6 +942,47 @@ namespace NumSharp.Backends.Iteration
             _child.AppendSignature(sb);
             sb.Append(')');
         }
+    }
+
+    /// <summary>
+    /// NumPy's integer reciprocal loop is <c>1/x</c> in C with the platform's 1/0 result, probed
+    /// per dtype against 2.4.2 (win-amd64): the sign-bit sentinel for int32 / int64 / uint64, 0 for
+    /// every narrower type and uint32. Mirrors <c>DefaultEngine.ReciprocalInteger</c> so the fused
+    /// and unfused paths agree bit-for-bit; one static per dtype, resolved once for the emitters.
+    /// </summary>
+    internal static class NDExprIntegerReciprocal
+    {
+        public static sbyte SByte(sbyte x) => x == 0 ? (sbyte)0 : (sbyte)(1 / x);
+        public static byte Byte(byte x) => x == 0 ? (byte)0 : (byte)(1 / x);
+        public static short Int16(short x) => x == 0 ? (short)0 : (short)(1 / x);
+        public static ushort UInt16(ushort x) => x == 0 ? (ushort)0 : (ushort)(1 / x);
+        public static char Char(char x) => x == 0 ? (char)0 : (char)(1 / x);
+        public static int Int32(int x) => x == 0 ? int.MinValue : 1 / x;
+        public static uint UInt32(uint x) => x == 0 ? 0u : 1u / x;
+        public static long Int64(long x) => x == 0 ? long.MinValue : 1 / x;
+        public static ulong UInt64(ulong x) => x == 0 ? 0x8000000000000000UL : 1UL / x;
+
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<NPTypeCode, System.Reflection.MethodInfo> s_cache = new();
+
+        public static System.Reflection.MethodInfo For(NPTypeCode t)
+            => s_cache.GetOrAdd(t, static tc =>
+            {
+                string name = tc switch
+                {
+                    NPTypeCode.SByte => nameof(SByte),
+                    NPTypeCode.Byte => nameof(Byte),
+                    NPTypeCode.Int16 => nameof(Int16),
+                    NPTypeCode.UInt16 => nameof(UInt16),
+                    NPTypeCode.Char => nameof(Char),
+                    NPTypeCode.Int32 => nameof(Int32),
+                    NPTypeCode.UInt32 => nameof(UInt32),
+                    NPTypeCode.Int64 => nameof(Int64),
+                    NPTypeCode.UInt64 => nameof(UInt64),
+                    _ => throw new NotSupportedException($"integer reciprocal has no {tc} loop"),
+                };
+                return typeof(NDExprIntegerReciprocal).GetMethod(name)
+                       ?? throw new MissingMethodException(typeof(NDExprIntegerReciprocal).FullName, name);
+            });
     }
 
     // =========================================================================
@@ -764,11 +1018,12 @@ namespace NumSharp.Backends.Iteration
             var lT = ctx.TypeOf(_left);
             var rT = ctx.TypeOf(_right);
             // NumPy compares at the operands' common dtype (result_type of the
-            // two children), then yields bool. Legacy mode compares at
-            // OutputType, where both children already sit.
+            // two children — with the exact int64/uint64 `qQ` loops, see
+            // NDExprTypeRules.ComparisonType), then yields bool. Legacy mode
+            // compares at OutputType, where both children already sit.
             var cmpType = ctx.NodeTypes is null
                 ? ctx.OutputType
-                : NDExprTypeRules.PromoteStrong(lT, rT);
+                : NDExprTypeRules.ComparisonType(lT, rT);
 
             _left.EmitScalar(il, ctx);
             DirectILKernelGenerator.EmitConvertTo(il, lT, cmpType);
@@ -825,57 +1080,18 @@ namespace NumSharp.Backends.Iteration
 
         public override void EmitScalar(ILGenerator il, NDExprCompileContext ctx)
         {
-            // Prefer Math.Min/Max — they propagate NaN per IEEE 754, matching NumPy's
-            // np.minimum/np.maximum. Fall back to a branchy select for dtypes without
-            // a Math.Min/Max overload (Char, Boolean, Half, Complex).
-            EmitBranchy(il, ctx);
-        }
-
-        private void EmitBranchy(ILGenerator il, NDExprCompileContext ctx)
-        {
             var my = ctx.TypeOf(this);
-            var clrType = DirectILKernelGenerator.GetClrType(my);
-            var locL = il.DeclareLocal(clrType);
-            var locR = il.DeclareLocal(clrType);
-
             _left.EmitScalar(il, ctx);
             DirectILKernelGenerator.EmitConvertTo(il, ctx.TypeOf(_left), my);
-            il.Emit(OpCodes.Stloc, locL);
             _right.EmitScalar(il, ctx);
             DirectILKernelGenerator.EmitConvertTo(il, ctx.TypeOf(_right), my);
-            il.Emit(OpCodes.Stloc, locR);
 
-            // Prefer Math.Min/Max if available (NaN-propagating for floats).
-            // ScalarMethodCache.Get throws on missing; fall back to the manual ldloc/branch
-            // path below for types without a Math overload (e.g. Char).
-            string methodName = _isMin ? "Min" : "Max";
-            System.Reflection.MethodInfo method = null;
-            try { method = ScalarMethodCache.Get(typeof(Math), methodName, clrType, clrType); }
-            catch (MissingMethodException) { /* fall through */ }
-            if (method != null)
-            {
-                il.Emit(OpCodes.Ldloc, locL);
-                il.Emit(OpCodes.Ldloc, locR);
-                il.EmitCall(OpCodes.Call, method, null);
-                return;
-            }
-
-            // Fallback: branchy select via comparison (for Char / Boolean / Half).
-            var lblElse = il.DefineLabel();
-            var lblEnd = il.DefineLabel();
-
-            il.Emit(OpCodes.Ldloc, locL);
-            il.Emit(OpCodes.Ldloc, locR);
-            DirectILKernelGenerator.EmitComparisonOperation(
-                il,
-                _isMin ? ComparisonOp.LessEqual : ComparisonOp.GreaterEqual,
-                my);
-            il.Emit(OpCodes.Brfalse, lblElse);
-            il.Emit(OpCodes.Ldloc, locL);
-            il.Emit(OpCodes.Br, lblEnd);
-            il.MarkLabel(lblElse);
-            il.Emit(OpCodes.Ldloc, locR);
-            il.MarkLabel(lblEnd);
+            // np.maximum / np.minimum: the engine's own scalar clamp, the body its ufunc kernels
+            // run — NaN-propagating with the SECOND operand winning a ±0 / equal tie (Math.Max
+            // resolves a -0/+0 tie to +0 and diverged from np.maximum), the lexicographic
+            // (real, imag) order with NaN-sticks for complex, Half / char / decimal / bool covered.
+            // One body for all 15 dtypes, so fused and unfused agree bit-for-bit.
+            DirectILKernelGenerator.EmitScalarOperation(il, _isMin ? BinaryOp.Minimum : BinaryOp.Maximum, my);
         }
 
         public override void EmitVector(ILGenerator il, NDExprCompileContext ctx)
@@ -961,11 +1177,15 @@ namespace NumSharp.Backends.Iteration
                     break;
                 case NPTypeCode.Boolean:
                 case NPTypeCode.Byte:
+                case NPTypeCode.SByte:
                 case NPTypeCode.Int16:
                 case NPTypeCode.UInt16:
                 case NPTypeCode.Int32:
                 case NPTypeCode.UInt32:
                 case NPTypeCode.Char:
+                    // Every sub-64-bit integer (SByte included — its absence used to throw
+                    // "Zero-push unsupported for SByte" out of Where/LogicalNot over an int8
+                    // operand) sits on the IL stack as an int32.
                     il.Emit(OpCodes.Ldc_I4_0);
                     break;
                 case NPTypeCode.Decimal:
@@ -1149,7 +1369,7 @@ namespace NumSharp.Backends.Iteration
                 var tc = pt.GetTypeCode();
                 if (!IsSupported(tc))
                     throw new ArgumentException(
-                        $"Parameter {i} type {pt.Name} is not one of the 12 supported NPTypeCode dtypes.",
+                        $"Parameter {i} type {pt.Name} is not one of the 15 supported NPTypeCode dtypes.",
                         nameof(parameters));
                 codes[i] = tc;
             }
@@ -1164,16 +1384,19 @@ namespace NumSharp.Backends.Iteration
             var tc = returnType.GetTypeCode();
             if (!IsSupported(tc))
                 throw new ArgumentException(
-                    $"Return type {returnType.Name} of {mi.Name} is not one of the 12 supported NPTypeCode dtypes.");
+                    $"Return type {returnType.Name} of {mi.Name} is not one of the 15 supported NPTypeCode dtypes.");
             return tc;
         }
 
+        // All 15 NumSharp dtypes: every one has a CLR type the edge conversions (EmitConvertTo)
+        // handle, so a method taking/returning sbyte, Half or Complex composes like any other.
         private static bool IsSupported(NPTypeCode code)
             => code switch
             {
-                NPTypeCode.Boolean or NPTypeCode.Byte or NPTypeCode.Int16 or NPTypeCode.UInt16 or
+                NPTypeCode.Boolean or NPTypeCode.Byte or NPTypeCode.SByte or NPTypeCode.Int16 or NPTypeCode.UInt16 or
                 NPTypeCode.Int32 or NPTypeCode.UInt32 or NPTypeCode.Int64 or NPTypeCode.UInt64 or
-                NPTypeCode.Char or NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Decimal => true,
+                NPTypeCode.Char or NPTypeCode.Half or NPTypeCode.Single or NPTypeCode.Double or
+                NPTypeCode.Decimal or NPTypeCode.Complex => true,
                 _ => false,
             };
 

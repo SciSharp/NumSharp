@@ -120,6 +120,34 @@ namespace NumSharp.Tests.Fuzz
             "cov", "conjugate", "real", "imag", "vector_norm", "matrix_norm"
         };
 
+        /// <summary>
+        ///     The evaluate tier's node names whose scalar loops are the platform libm (or a
+        ///     NumSharp algorithm that is not a NumPy port) — the fused-tree analogue of the unary
+        ///     tier's blanket (5) excuse. Spelled in the corpus grammar (OpRegistry.Evaluate.cs).
+        /// </summary>
+        private static readonly System.Collections.Generic.HashSet<string> EvaluateLibmOps = new()
+        {
+            "sqrt", "cbrt", "exp", "exp2", "expm1", "log", "log2", "log10", "log1p",
+            "sin", "cos", "tan", "sinh", "cosh", "tanh", "asin", "acos", "atan",
+            "asinh", "acosh", "atanh", "deg2rad", "rad2deg", "pow", "atan2", "div", "recip",
+        };
+
+        /// <summary>The bit-exact float32 ports, in the evaluate grammar's spelling (see NumPyPortedFloat32Kernels).</summary>
+        private static readonly System.Collections.Generic.HashSet<string> NumPyPortedFloat32KernelsAsEvaluateOps = new()
+        {
+            "exp", "log", "sin", "cos", "tanh", "rad2deg", "deg2rad",
+        };
+
+        /// <summary>Node names in an evaluate-tier expression (the identifiers followed by '(').</summary>
+        private static System.Collections.Generic.HashSet<string> EvaluateExprOps(string expr)
+        {
+            var ops = new System.Collections.Generic.HashSet<string>();
+            if (string.IsNullOrEmpty(expr)) return ops;
+            foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(expr, @"([A-Za-z_][A-Za-z0-9_]*)\s*\("))
+                ops.Add(m.Groups[1].Value);
+            return ops;
+        }
+
         public static string Classify(
             FuzzCorpus.Case c, DivergenceKind kind,
             byte[] expected, byte[] actual, NPTypeCode tc, IReadOnlyList<BitDiff.Diff> diffs,
@@ -244,13 +272,10 @@ namespace NumSharp.Tests.Fuzz
                 && c.Operands[0].Dtype != "float32" && c.Operands[0].Dtype != "float64")
                 return "modf(float16/int): no Half kernel, no integer->float64 promotion (throws) [known bug]";
 
-            // (W1-E) np.where on the scalar-broadcast path with a narrow-int operand throws
-            // "Zero-push unsupported for SByte" — NDExpr.EmitPushZero gained Complex/Half (F4) but
-            // not the sub-32-bit integers. Scoped to a where that threw with such an operand.
-            if (c.Op == "where" && kind == DivergenceKind.Threw
-                && c.Operands.Any(o => o.Dtype == "int8" || o.Dtype == "uint8"
-                                       || o.Dtype == "int16" || o.Dtype == "uint16"))
-                return "where(narrow-int) scalar-broadcast: NDExpr zero-push unsupported for sub-32-bit int [known bug]";
+            // (W1-E) was FIXED in the NDExpr Phase 0 pass: WhereNode.EmitPushZeroPublic covers every
+            // sub-32-bit integer (SByte included), so np.where / np.evaluate over an int8 condition
+            // no longer throws "Zero-push unsupported for SByte". Excuse removed so the matrix
+            // verifies it.
 
             // Size-1 result shape was FIXED in Phase 1 F7: Shape.Broadcast no longer collapses a
             // 1-D [1] against a lower-rank operand (e.g. [1] + 0-D scalar -> [1], not []). The NDim
@@ -563,6 +588,80 @@ namespace NumSharp.Tests.Fuzz
             // unbalanced (a spurious Ldc_R8 2.0 in EmitExp2Call's Single branch), throwing
             // InvalidProgramException for every int16/uint16/char/float32 input. The excuse is removed
             // so any regression of the malformed-IL crash now fails the fuzz gate.
+
+            // (E) np.evaluate — the fused tree's divergence policy is the per-node policy of the ops
+            //     it contains (params.expr names them). Three bounded branches, nothing else:
+            //     (E1) a root float Sum/Prod/Mean folds through 4 accumulators (and f16/f32 through
+            //          f64) where NumPy's add.reduce is pairwise — an ORDER-of-summation drift only,
+            //          bounded to 16 ULP over these ≤36-element pools. Phase 2 of
+            //          docs/plans/ndexpr-evaluate.md replaces the fold with NumPy's pairwise schedule
+            //          and DELETES this branch (it is a pending fix, not an accepted difference).
+            //     (E2) a transcendental / libm node (the same set the unary tier excuses in (5)
+            //          below, minus the bit-exact float32 ports) within 2 ULP.
+            //     (E3) expm1 / log1p composed as Exp(x)-1 / Log(1+x) — the (S1) envelope.
+            if (c.Op == "evaluate" && kind == DivergenceKind.Value && diffs.Count > 0
+                && c.Params != null && c.Params.TryGetValue("expr", out var evExpr))
+            {
+                var evOps = EvaluateExprOps(evExpr.GetString());
+                bool floatReduce = c.Params.TryGetValue("reduce", out var evRed)
+                    && evRed.ValueKind == System.Text.Json.JsonValueKind.Object
+                    && evRed.GetProperty("kind").GetString() is "sum" or "prod" or "mean"
+                    && (tc == NPTypeCode.Half || tc == NPTypeCode.Single || tc == NPTypeCode.Double || tc == NPTypeCode.Complex);
+                // complex: a Prod is a chain of complex multiplies, each FMA-contracted on NumPy's
+                // side (npy_cmul under MSVC) and not on .NET's — bound at the element's magnitude
+                // like the multiply excuse, wider for the chain.
+                if (floatReduce && diffs.All(d => tc == NPTypeCode.Complex
+                        ? WithinComplexElementMagnitudeUlp(expected, actual, d.Index, 64)
+                        : BitDiff.WithinUlp(expected, actual, d.Index, tc, 16)))
+                    return "evaluate: fused float Sum/Prod/Mean 4-accumulator fold vs NumPy pairwise, ≤16 ULP (complex ≤64 ULP of magnitude) "
+                         + "[PENDING ndexpr-evaluate.md Phase 2 — delete this excuse when the pairwise schedule lands]";
+
+                bool libm = evOps.Overlaps(EvaluateLibmOps)
+                    && !(tc == NPTypeCode.Single && evOps.IsSubsetOf(NumPyPortedFloat32KernelsAsEvaluateOps))
+                    && !(tc == NPTypeCode.Double && evOps.Count == 1 && evOps.Contains("tanh"));
+                if (libm && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 2)))
+                    return "evaluate: transcendental node ~ULP (libm / algorithm difference, same policy as the unary tier)";
+
+                if (evOps.Overlaps(new[] { "expm1", "log1p" })
+                    && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 2)
+                                      || BitDiff.WithinAbs(expected, actual, d.Index, tc, Expm1Log1pAbsTol(tc))))
+                    return "evaluate: expm1/log1p composed as Exp(x)-1 / Log(1+x), bounded abs error [documented non-portable defect]";
+
+                // (E5) complex Min/Max reduction over a NaN-carrying pool: which NaN element wins is
+                //      iteration-order dependent (NumPy's reduce walks a negative-stride 1-D operand in
+                //      LOGICAL order — probed: np.min(z[::-1]) picks the first NaN from the logical
+                //      start — while NDIter's KEEPORDER walks memory order, the same order the engine's
+                //      np.min takes). Both results carry a NaN; only the payload/partner differs.
+                //      Scoped to complex min/max with a NaN on both sides of every diff.
+                if (tc == NPTypeCode.Complex
+                    && c.Params.TryGetValue("reduce", out var evRed2)
+                    && evRed2.ValueKind == System.Text.Json.JsonValueKind.Object
+                    && evRed2.GetProperty("kind").GetString() is "min" or "max"
+                    && diffs.All(d => NonFiniteInvolved(expected, actual, d.Index) && ComplexHasNaN(expected, d.Index) && ComplexHasNaN(actual, d.Index)))
+                    return "evaluate: complex min/max reduction NaN identity — which NaN element wins is iteration-order dependent (NumPy logical vs memory order) [documented, P2 canonical-order work]";
+
+                // (E4) the fused tree inherits the ENGINE's documented per-op divergences, scoped
+                //      exactly as the ufunc tiers scope them (W1-A / B2-F10 / (2) / (5)):
+                bool anyHalf = tc == NPTypeCode.Half || c.Operands.Any(o => o.Dtype == "float16");
+                if (evOps.Overlaps(new[] { "mod", "floordiv" }) && anyHalf)
+                    return "evaluate: floor_divide/mod(float16) — NDDivision has no Half path (wrong value/NaN) [known bug W1-A]";
+
+                bool anyComplex = tc == NPTypeCode.Complex || c.Operands.Any(o => o.Dtype == "complex128");
+                if (anyComplex)
+                {
+                    if (evOps.Contains("pow")
+                        && diffs.All(d => tc != NPTypeCode.Complex
+                                          || WithinComplexElementMagnitudeUlp(expected, actual, d.Index, 512)
+                                          || NonFiniteInvolved(expected, actual, d.Index)))
+                        return "evaluate: complex power ~ULP / gross inf-NaN edge (Complex.Pow vs npy_cpow) [documented F5]";
+                    if (evOps.Contains("mul") && tc == NPTypeCode.Complex
+                        && diffs.All(d => WithinComplexElementMagnitudeUlp(expected, actual, d.Index, 16)))
+                        return "evaluate: complex multiply cancellation / ~ULP at element magnitude (npy_cmul vs System.Numerics) [documented #12]";
+                    if (evOps.Overlaps(new[] { "div", "recip", "add", "sub", "abs", "sqrt", "exp", "log", "sin", "cos", "tanh" })
+                        && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 3)))
+                        return "evaluate: complex arithmetic / magnitude / unary within 3 ULP (npy_c* vs System.Numerics; FMA contraction) [documented]";
+                }
+            }
 
             // (5) Unary transcendental / complex magnitude ~ULP (libm / algorithm differences).
             //     Tight: every differing element within 2 ULP — a gross error still fails.
@@ -902,6 +1001,13 @@ namespace NumSharp.Tests.Fuzz
         }
 
         /// <summary>Either side's complex element at <paramref name="index"/> has a NaN/inf component.</summary>
+        /// <summary>True when the complex128 element at <paramref name="index"/> has a NaN real or imaginary part.</summary>
+        private static bool ComplexHasNaN(byte[] buf, int index)
+        {
+            int o = index * 16;
+            return double.IsNaN(BitConverter.ToDouble(buf, o)) || double.IsNaN(BitConverter.ToDouble(buf, o + 8));
+        }
+
         private static bool NonFiniteInvolved(byte[] exp, byte[] act, int index)
         {
             int o = index * 16;

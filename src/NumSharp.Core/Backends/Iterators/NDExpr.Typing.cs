@@ -48,8 +48,12 @@ namespace NumSharp.Backends.Iteration
     internal enum NDExprWeak : byte
     {
         None = 0,
-        Int = 1,
-        Float = 2,
+        // Ordered as NEP50's Python-scalar category ladder (bool < int < float < complex): when two
+        // literals meet with no array, the higher category decides the default dtype.
+        Bool = 1,
+        Int = 2,
+        Float = 3,
+        Complex = 4,
     }
 
     /// <summary>
@@ -58,6 +62,7 @@ namespace NumSharp.Backends.Iteration
     /// </summary>
     internal readonly struct NDExprTypeInfo
     {
+        /// <summary>A strong node's dtype, or the NEP50 DEFAULT dtype a weak literal takes when no array adopts it.</summary>
         public readonly NPTypeCode Code;
         public readonly NDExprWeak Weak;
 
@@ -69,12 +74,15 @@ namespace NumSharp.Backends.Iteration
 
         public bool IsWeak => Weak != NDExprWeak.None;
 
-        /// <summary>NEP50 default when a weak scalar meets no array: int→int64, float→float64.</summary>
-        public NPTypeCode DefaultCode => Weak == NDExprWeak.Int ? NPTypeCode.Int64 : NPTypeCode.Double;
+        /// <summary>NEP50 default when a weak scalar meets no array: bool→bool, int→int64 (uint64 past long.MaxValue), float→float64, complex→complex128.</summary>
+        public NPTypeCode DefaultCode => Code;
 
         public static NDExprTypeInfo Strong(NPTypeCode code) => new(code, NDExprWeak.None);
+        public static readonly NDExprTypeInfo WeakBool = new(NPTypeCode.Boolean, NDExprWeak.Bool);
         public static readonly NDExprTypeInfo WeakInt = new(NPTypeCode.Int64, NDExprWeak.Int);
+        public static readonly NDExprTypeInfo WeakUInt64 = new(NPTypeCode.UInt64, NDExprWeak.Int);
         public static readonly NDExprTypeInfo WeakFloat = new(NPTypeCode.Double, NDExprWeak.Float);
+        public static readonly NDExprTypeInfo WeakComplex = new(NPTypeCode.Complex, NDExprWeak.Complex);
     }
 
     /// <summary>
@@ -196,20 +204,90 @@ namespace NumSharp.Backends.Iteration
                 return PromoteStrong(l.Code, r.Code);
 
             if (l.IsWeak && r.IsWeak)
-                return (l.Weak == NDExprWeak.Int && r.Weak == NDExprWeak.Int)
-                    ? NPTypeCode.Int64
-                    : NPTypeCode.Double;
+            {
+                // Two Python literals: the higher NEP50 category wins at its default dtype; an
+                // int pair lifts to uint64 when either needs it (np.add(2**64-1, 1) is uint64).
+                var top = l.Weak >= r.Weak ? l : r;
+                if (top.Weak == NDExprWeak.Int && (l.Code == NPTypeCode.UInt64 || r.Code == NPTypeCode.UInt64))
+                    return NPTypeCode.UInt64;
+                return top.Code;
+            }
 
             var weak = l.IsWeak ? l : r;
             var strong = l.IsWeak ? r.Code : l.Code;
 
-            if (weak.Weak == NDExprWeak.Int)
-                return strong == NPTypeCode.Boolean ? NPTypeCode.Int64 : strong;
+            switch (weak.Weak)
+            {
+                case NDExprWeak.Bool:
+                    // A Python bool adopts every dtype (probed: bool+True→bool, i1+True→i1, f4+True→f4).
+                    return strong;
+                case NDExprWeak.Int:
+                    return strong == NPTypeCode.Boolean ? NPTypeCode.Int64 : strong;
+                case NDExprWeak.Float:
+                    if (IsFloatKind(strong) || strong == NPTypeCode.Decimal || strong == NPTypeCode.Complex)
+                        return strong;
+                    return NPTypeCode.Double; // bool / any integer + float literal → f64
+                default:
+                    // A Python complex forces the complex kind; NumSharp has ONE complex width, so
+                    // f4+1j lands on Complex where NumPy narrows to complex64 (width-only divergence).
+                    return NPTypeCode.Complex;
+            }
+        }
 
-            // weak float
-            if (IsFloatKind(strong) || strong == NPTypeCode.Decimal || strong == NPTypeCode.Complex)
-                return strong;
-            return NPTypeCode.Double; // bool / any integer + float literal → f64
+        /// <summary>
+        /// The dtype two operands are COMPARED at. NumPy's comparison ufuncs promote like every
+        /// other binary ufunc with one deliberate exception, the <c>qQ</c>/<c>Qq</c> loops
+        /// (generate_umath.py): an int64 against a uint64 compares EXACTLY, where plain promotion
+        /// would route both through float64 and call 2^63+1 equal to 2^63-1 past 2^53. Decimal
+        /// holds every int64 and uint64 exactly, so comparing at Decimal reproduces those loops with
+        /// no new comparator — and the pair never vectorizes anyway. Shared with the engine's
+        /// comparison kernels (<see cref="Kernels.ComparisonKernelKey"/>).
+        /// </summary>
+        internal static NPTypeCode ComparisonType(NPTypeCode l, NPTypeCode r)
+        {
+            if ((l == NPTypeCode.Int64 && r == NPTypeCode.UInt64) || (l == NPTypeCode.UInt64 && r == NPTypeCode.Int64))
+                return NPTypeCode.Decimal;
+            return PromoteStrong(l, r);
+        }
+
+        /// <summary>
+        /// Whether an integer literal fits <paramref name="dtype"/> without the OverflowError NEP50
+        /// raises on adoption (<see cref="CheckIntLiteralFits"/>). Comparisons use it to compare an
+        /// out-of-range literal exactly instead of raising (probed: <c>uint64 &gt; -1</c> is True,
+        /// <c>int8 &gt; 300</c> is False, where <c>int8 + 300</c> raises).
+        /// </summary>
+        internal static bool IntLiteralFits(long value, NPTypeCode dtype)
+        {
+            (long min, ulong max) = IntBounds(dtype);
+            return value >= min && (value < 0 || (ulong)value <= max);
+        }
+
+        private static (long min, ulong max) IntBounds(NPTypeCode dtype) => dtype switch
+        {
+            NPTypeCode.Boolean => (0L, 1UL),
+            NPTypeCode.Byte => (0L, (ulong)byte.MaxValue),
+            NPTypeCode.SByte => ((long)sbyte.MinValue, (ulong)sbyte.MaxValue),
+            NPTypeCode.Int16 => ((long)short.MinValue, (ulong)short.MaxValue),
+            NPTypeCode.UInt16 => (0L, (ulong)ushort.MaxValue),
+            NPTypeCode.Char => (0L, (ulong)char.MaxValue),
+            NPTypeCode.Int32 => ((long)int.MinValue, (ulong)int.MaxValue),
+            NPTypeCode.UInt32 => (0L, (ulong)uint.MaxValue),
+            NPTypeCode.Int64 => (long.MinValue, (ulong)long.MaxValue),
+            NPTypeCode.UInt64 => (0L, ulong.MaxValue),
+            _ => (long.MinValue, ulong.MaxValue), // float adoptions never overflow-check
+        };
+
+        /// <summary>
+        /// A Python int above <c>long.MaxValue</c> fits only uint64 (or a non-integer dtype, which
+        /// never range-checks): <c>np.int64(1) + 2**64-1</c> raises "Python integer 18446744073709551615
+        /// out of bounds for int64".
+        /// </summary>
+        internal static void CheckUInt64LiteralFits(ulong value, NPTypeCode adopted)
+        {
+            if (adopted == NPTypeCode.UInt64 || !(IsIntegerKind(adopted) || adopted == NPTypeCode.Boolean))
+                return;
+            throw new OverflowException(
+                $"Python integer {value} out of bounds for {adopted.AsNumpyDtypeName()}");
         }
 
         /// <summary>
@@ -231,23 +309,7 @@ namespace NumSharp.Backends.Iteration
         /// </summary>
         internal static void CheckIntLiteralFits(long value, NPTypeCode adopted)
         {
-            (long min, ulong max) = adopted switch
-            {
-                NPTypeCode.Boolean => (0L, 1UL),
-                NPTypeCode.Byte => (0L, (ulong)byte.MaxValue),
-                NPTypeCode.SByte => ((long)sbyte.MinValue, (ulong)sbyte.MaxValue),
-                NPTypeCode.Int16 => ((long)short.MinValue, (ulong)short.MaxValue),
-                NPTypeCode.UInt16 => (0L, (ulong)ushort.MaxValue),
-                NPTypeCode.Char => (0L, (ulong)char.MaxValue),
-                NPTypeCode.Int32 => ((long)int.MinValue, (ulong)int.MaxValue),
-                NPTypeCode.UInt32 => (0L, (ulong)uint.MaxValue),
-                NPTypeCode.Int64 => (long.MinValue, (ulong)long.MaxValue),
-                NPTypeCode.UInt64 => (0L, ulong.MaxValue),
-                _ => (long.MinValue, ulong.MaxValue), // float adoptions never overflow-check
-            };
-
-            bool fits = value >= min && (value < 0 || (ulong)value <= max);
-            if (!fits)
+            if (!IntLiteralFits(value, adopted))
                 throw new OverflowException(
                     $"Python integer {value} out of bounds for {adopted.AsNumpyDtypeName()}");
         }
@@ -365,7 +427,8 @@ namespace NumSharp.Backends.Iteration
                 vectorBody = il =>
                 {
                     var vectorLocals = new LocalBuilder[nIn];
-                    var vecType = DirectILKernelGenerator.GetVectorType(DirectILKernelGenerator.GetClrType(inputTypes[0]));
+                    // Vector locals take the SIMD LANE type (bool -> byte lanes; Vector{N}<bool> is not a type).
+                    var vecType = DirectILKernelGenerator.GetVectorType(DirectILKernelGenerator.GetSimdLaneType(inputTypes[0]));
                     for (int i = nIn - 1; i >= 0; i--)
                     {
                         vectorLocals[i] = il.DeclareLocal(vecType);
@@ -404,13 +467,47 @@ namespace NumSharp.Backends.Iteration
     {
         internal override NDExprTypeInfo InferType(
             NPTypeCode[] inputTypes, Dictionary<NDExpr, NPTypeCode> nodeTypes)
-            => _isIntegerLiteral ? NDExprTypeInfo.WeakInt : NDExprTypeInfo.WeakFloat;
+        {
+            switch (_kind)
+            {
+                case NDExprLiteralKind.Bool: return NDExprTypeInfo.WeakBool;
+                case NDExprLiteralKind.Int: return NDExprTypeInfo.WeakInt;
+                case NDExprLiteralKind.UInt64: return NDExprTypeInfo.WeakUInt64;
+                case NDExprLiteralKind.Float: return NDExprTypeInfo.WeakFloat;
+                case NDExprLiteralKind.Complex: return NDExprTypeInfo.WeakComplex;
+                default:
+                    // Half / decimal / char: a NumPy-scalar-like STRONG literal — records itself like
+                    // any strong node and takes part in promotion as a 0-d array of its dtype.
+                    var t = StrongType;
+                    nodeTypes[this] = t;
+                    return NDExprTypeInfo.Strong(t);
+            }
+        }
 
         internal override void AdoptWeakType(NPTypeCode adopted, Dictionary<NDExpr, NPTypeCode> nodeTypes)
         {
-            if (_isIntegerLiteral && (NDExprTypeRules.IsIntegerKind(adopted) || adopted == NPTypeCode.Boolean))
-                NDExprTypeRules.CheckIntLiteralFits(_valueInt, adopted);
+            bool intTarget = NDExprTypeRules.IsIntegerKind(adopted) || adopted == NPTypeCode.Boolean;
+            if (_kind == NDExprLiteralKind.Int && intTarget)
+                NDExprTypeRules.CheckIntLiteralFits(_i, adopted);
+            else if (_kind == NDExprLiteralKind.UInt64)
+                NDExprTypeRules.CheckUInt64LiteralFits(_u, adopted);
             nodeTypes[this] = adopted;
+        }
+
+        /// <summary>
+        /// For a comparison: the weak integer literal does not fit <paramref name="dtype"/>, so
+        /// NumPy compares exactly instead of raising (see <see cref="NDExprTypeRules.IntLiteralFits"/>).
+        /// </summary>
+        internal bool IsOutOfRangeIntegerFor(NPTypeCode dtype)
+        {
+            if (!(NDExprTypeRules.IsIntegerKind(dtype) || dtype == NPTypeCode.Boolean))
+                return false;
+            return _kind switch
+            {
+                NDExprLiteralKind.Int => !NDExprTypeRules.IntLiteralFits(_i, dtype),
+                NDExprLiteralKind.UInt64 => dtype != NPTypeCode.UInt64,
+                _ => false,
+            };
         }
     }
 
@@ -436,9 +533,12 @@ namespace NumSharp.Backends.Iteration
                 BinaryOp.Power or BinaryOp.Mod or BinaryOp.FloorDivide
                     when common == NPTypeCode.Boolean => NPTypeCode.SByte,
 
-                // arctan2 is float-only: int/bool promote to their tier float
-                // (i1→f16, i2→f32, i4+→f64) — unlike divide's flat f64.
-                BinaryOp.ATan2 when intish => NDExprTypeRules.FloatTier(common),
+                // arctan2 is float-only: int/bool promote to their tier float (i1→f16, i2→f32,
+                // i4+→f64) — unlike divide's flat f64. The loop is picked PER INPUT (the default
+                // type resolver takes the first 'ee'/'ff'/'dd' loop both inputs cast safely into),
+                // not from result_type: arctan2(int8, uint8) is float16, though int8+uint8 is int16.
+                BinaryOp.ATan2 when intish => WidestFloatTier(
+                    lt.IsWeak ? common : lt.Code, rt.IsWeak ? common : rt.Code),
 
                 BinaryOp.Subtract when common == NPTypeCode.Boolean
                     => throw new NotSupportedException(
@@ -473,6 +573,13 @@ namespace NumSharp.Backends.Iteration
             BinaryOp.BitwiseOr => "bitwise_or",
             _ => "bitwise_xor",
         };
+
+        private static NPTypeCode WidestFloatTier(NPTypeCode l, NPTypeCode r)
+        {
+            var tl = NDExprTypeRules.FloatTier(l);
+            var tr = NDExprTypeRules.FloatTier(r);
+            return DirectILKernelGenerator.GetTypeSize(tl) >= DirectILKernelGenerator.GetTypeSize(tr) ? tl : tr;
+        }
     }
 
     public sealed partial class UnaryNode
@@ -497,7 +604,12 @@ namespace NumSharp.Backends.Iteration
             var childType = ct.IsWeak ? ct.DefaultCode : ct.Code;
 
             NPTypeCode result;
-            if (IsFloatPromoting(_op))
+            if (_op == UnaryOp.Abs && childType == NPTypeCode.Complex)
+            {
+                // np.absolute's complex loop is D->d: |z| is a float64 magnitude (probed 2.4.2).
+                result = NPTypeCode.Double;
+            }
+            else if (IsFloatPromoting(_op))
             {
                 result = NDExprTypeRules.UnaryFloatResult(childType);
             }
@@ -525,7 +637,11 @@ namespace NumSharp.Backends.Iteration
                         "ufunc 'sign' did not contain a loop with signature matching types " +
                         "<class 'numpy.dtypes.BoolDType'> -> None"),
                     UnaryOp.Square or UnaryOp.Reciprocal => NPTypeCode.SByte,
-                    _ => NPTypeCode.Boolean, // abs/floor/ceil/trunc/round/invert preserve bool
+                    // np.round is a function, not a ufunc: on bool it takes the float16 tier
+                    // (probed 2.4.2: np.round(bool_arr).dtype == float16) while the floor/ceil/
+                    // trunc ufuncs keep their identity '?->?' loops.
+                    UnaryOp.Round => NPTypeCode.Half,
+                    _ => NPTypeCode.Boolean, // abs/floor/ceil/trunc/invert preserve bool
                 };
             }
             else
@@ -547,6 +663,18 @@ namespace NumSharp.Backends.Iteration
             var lt = _left.InferType(inputTypes, nodeTypes);
             var rt = _right.InferType(inputTypes, nodeTypes);
             var common = NDExprTypeRules.PromoteMixed(lt, rt);
+
+            // NumPy 2.x compares an OUT-OF-RANGE Python int exactly instead of raising the
+            // OverflowError arithmetic gives (probed: uint64 > -1 is True, int8 > 300 is False,
+            // int8 + 300 raises). Adopt the literal at Decimal — exact for every integer dtype
+            // and every Python int a C# literal can spell — so ComparisonType promotes the
+            // whole compare to Decimal.
+            if (lt.IsWeak ^ rt.IsWeak)
+            {
+                var lit = lt.IsWeak ? _left : _right;
+                if (lit is ConstNode cn && cn.IsOutOfRangeIntegerFor(common))
+                    common = NPTypeCode.Decimal;
+            }
 
             ResolveChild(_left, lt, common, nodeTypes);
             ResolveChild(_right, rt, common, nodeTypes);

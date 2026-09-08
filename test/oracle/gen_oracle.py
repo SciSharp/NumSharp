@@ -20,6 +20,7 @@ operand-descriptor = {dtype, shape, strides(elements), offset(elements), bufferS
 import io
 import json
 import os
+import re
 import sys
 import tempfile
 import warnings
@@ -7203,6 +7204,366 @@ def gen_generator_parity():
     return portable, host
 
 
+# ---- np.evaluate / NDExpr: fused-expression differential tier -----------------------------
+#
+# NumPy has no expression fusion, so the oracle for a fused tree is the UNFUSED NumPy chain
+# evaluated node by node — exactly the contract np.evaluate claims ("bit-compatible with the
+# unfused NumPy sequence, per-node result_type incl. NEP50 weak literals"). Trees are encoded
+# in params["expr"] as a prefix grammar over the NDExpr node catalog; the C# side
+# (OpRegistry.Evaluate.cs) parses the same string into an NDExpr and runs np.evaluate.
+#
+#   in<k>                      operand k (the k-th entry of "operands")
+#   li:<int>  lu:<uint64>      weak Python int (lu: above long.MaxValue — only uint64 carries it)
+#   lf:<float>                 weak Python float ("nan"/"inf" spelled as Python prints them)
+#   lb:0|1                     weak Python bool
+#   lc:<re>;<im>               weak Python complex
+#   lh:<float>                 STRONG np.float16 scalar (Half in C#)
+#   <fn>(<arg>,...)            a node — see _EV_BINARY / _EV_UNARY / where
+#
+# Reductions are root-only in NDExpr, so they ride params["reduce"] = {kind, axis, keepdims}
+# over the tree in "expr" (kind: sum | prod | min | max | mean).
+#
+# "out" cases (params["out"] = true) carry the out view as the LAST operand and record the
+# out_where tuple shape [returned, out_base] so a kernel writing outside a strided / offset
+# window is caught.
+
+_EV_BINARY = {
+    "add": np.add, "sub": np.subtract, "mul": np.multiply, "div": np.true_divide,
+    "mod": np.remainder, "pow": np.power, "floordiv": np.floor_divide, "atan2": np.arctan2,
+    "and": np.bitwise_and, "or": np.bitwise_or, "xor": np.bitwise_xor,
+    "min": np.minimum, "max": np.maximum,
+    "eq": np.equal, "ne": np.not_equal, "lt": np.less, "le": np.less_equal,
+    "gt": np.greater, "ge": np.greater_equal,
+}
+_EV_UNARY = {
+    "neg": np.negative, "abs": np.absolute, "sqrt": np.sqrt, "square": np.square,
+    "recip": np.reciprocal, "sign": np.sign, "cbrt": np.cbrt,
+    "exp": np.exp, "exp2": np.exp2, "expm1": np.expm1,
+    "log": np.log, "log2": np.log2, "log10": np.log10, "log1p": np.log1p,
+    "sin": np.sin, "cos": np.cos, "tan": np.tan, "sinh": np.sinh, "cosh": np.cosh, "tanh": np.tanh,
+    "asin": np.arcsin, "acos": np.arccos, "atan": np.arctan,
+    "asinh": np.arcsinh, "acosh": np.arccosh, "atanh": np.arctanh,
+    "deg2rad": np.deg2rad, "rad2deg": np.rad2deg,
+    # round = np.round(x) (decimals=0): dtype-PRESERVING like NDExpr.Round / np.round_, an identity on
+    # integers; the float-tier np.rint is a separate node (Phase 4).
+    "floor": np.floor, "ceil": np.ceil, "round": lambda x: np.round(x), "trunc": np.trunc,
+    "not": np.invert, "lnot": np.logical_not,
+    "isnan": np.isnan, "isfinite": np.isfinite, "isinf": np.isinf,
+}
+_EV_REDUCE = {
+    "sum": lambda a, ax, kd: np.sum(a, axis=ax, keepdims=kd),
+    "prod": lambda a, ax, kd: np.prod(a, axis=ax, keepdims=kd),
+    "min": lambda a, ax, kd: np.min(a, axis=ax, keepdims=kd),
+    "max": lambda a, ax, kd: np.max(a, axis=ax, keepdims=kd),
+    "mean": lambda a, ax, kd: np.mean(a, axis=ax, keepdims=kd),
+}
+
+_EV_TOKEN = re.compile(r"\s*([A-Za-z_][A-Za-z0-9_]*(?::[^,()]+)?|[(),])")
+
+
+def _ev_tokens(expr):
+    pos, out = 0, []
+    while pos < len(expr):
+        m = _EV_TOKEN.match(expr, pos)
+        if not m:
+            raise ValueError(f"bad expr token at {pos}: {expr!r}")
+        out.append(m.group(1))
+        pos = m.end()
+    return out
+
+
+def _ev_literal(tok):
+    kind, _, val = tok.partition(":")
+    if kind == "li" or kind == "lu":
+        return int(val)
+    if kind == "lf":
+        return float(val)
+    if kind == "lb":
+        return bool(int(val))
+    if kind == "lc":
+        re_, im_ = val.split(";")
+        return complex(float(re_), float(im_))
+    if kind == "lh":
+        return np.float16(float(val))
+    raise ValueError(f"unknown literal {tok!r}")
+
+
+def _ev_eval(expr, operands):
+    """Evaluate a prefix-grammar tree with NumPy, node by node (the unfused chain)."""
+    toks = _ev_tokens(expr)
+    pos = [0]
+
+    def parse():
+        tok = toks[pos[0]]
+        pos[0] += 1
+        if tok.startswith("in") and tok[2:].isdigit():
+            return operands[int(tok[2:])]
+        if ":" in tok:
+            return _ev_literal(tok)
+        assert toks[pos[0]] == "(", f"expected '(' after {tok} in {expr}"
+        pos[0] += 1
+        args = []
+        while True:
+            args.append(parse())
+            sep = toks[pos[0]]
+            pos[0] += 1
+            if sep == ")":
+                break
+            assert sep == ",", f"expected ',' in {expr}"
+        if tok == "where":
+            return np.where(*args)
+        if tok in _EV_BINARY:
+            return _EV_BINARY[tok](*args)
+        if tok in _EV_UNARY:
+            return _EV_UNARY[tok](*args)
+        raise ValueError(f"unknown node {tok!r} in {expr}")
+
+    r = parse()
+    assert pos[0] == len(toks), f"trailing tokens in {expr}"
+    return r
+
+
+def _ev_ops_in_expr(expr):
+    """Node names used by a tree (for the generator's per-op dtype filters)."""
+    return {t for t in _ev_tokens(expr) if t not in "()," and ":" not in t and not (t.startswith("in") and t[2:].isdigit())}
+
+
+# NumPy raises on these cells with a message NumSharp reproduces verbatim — recorded as error
+# cases. Every other raise is skipped (error-text parity for the rest is the errors_full tier's
+# job, not this one's).
+_EV_VERBATIM_ERRORS = (
+    "numpy boolean subtract",
+    "numpy boolean negative",
+    "Integers to negative integer powers are not allowed.",
+    "not supported for the input types, and the inputs could not be safely coerced",
+)
+
+_EV_FLOAT_DTYPES = {"float16", "float32", "float64"}
+_EV_INT_DTYPES = {"int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64"}
+_EV_INTBOOL = _EV_INT_DTYPES | {"bool"}
+
+
+def gen_evaluate():
+    cases = []
+    n = 0
+    skipped = 0
+
+    def emit(expr, operands_bv, layout, params=None, out=None, cid_tag=""):
+        """operands_bv: list of (base, view). out: (base, view) or None."""
+        nonlocal n, skipped
+        views = [v for (_, v) in operands_bv]
+        params = dict(params or {})
+        params["expr"] = expr
+        ops_desc = [describe(b, v) for (b, v) in operands_bv]
+        cid = f"evaluate/{layout}/{cid_tag}/{n}"
+        try:
+            r = _ev_eval(expr, views)
+            red = params.get("reduce")
+            if red:
+                r = _EV_REDUCE[red["kind"]](r, red.get("axis"), bool(red.get("keepdims", False)))
+            r = np.asarray(r)
+            if r.dtype.name == "complex64":
+                skipped += 1          # NumSharp has one complex width; skip the width-only cells
+                return
+            if out is not None:
+                ob, ov = out
+                if ov.shape != r.shape:
+                    skipped += 1
+                    return
+                ops_desc.append(describe(ob, ov))
+                params["out"] = True
+                # PRIOR out contents are what ops_desc recorded above; run the write now.
+                np.copyto(ov, r, casting="same_kind")
+                cases.append(_case("evaluate", params, ops_desc,
+                                   _tuple_expected([np.asarray(ov), ob.ravel()]), layout, "mixed", cid=cid))
+            else:
+                cases.append(_case("evaluate", params, ops_desc, _arr_expected(r), layout, "mixed", cid=cid))
+            n += 1
+        except Exception as e:
+            if any(s in str(e) for s in _EV_VERBATIM_ERRORS):
+                cases.append(_error_case("evaluate", params, ops_desc, e, layout, cid=cid))
+                n += 1
+            else:
+                skipped += 1
+
+    def ok_for(expr, *dts):
+        """Per-op dtype filter: keep NumPy's no-loop / width-only cells out of the value tier."""
+        ops = _ev_ops_in_expr(expr)
+        toks = _ev_tokens(expr)
+        anyfloat = any(d in _EV_FLOAT_DTYPES for d in dts)
+        anycomplex = any(d == "complex128" for d in dts)
+        allintbool = all(d in _EV_INTBOOL for d in dts)
+        if ops & {"and", "or", "xor", "not"} and not allintbool:
+            return "err"                              # NumPy no-loop TypeError (verbatim) — keep as error cell
+        if anycomplex and ops & {"floor", "ceil", "round", "trunc", "mod", "floordiv", "atan2",
+                                  "lt", "le", "gt", "ge", "min", "max", "cbrt", "deg2rad", "rad2deg"}:
+            return False                              # complex: no such NumPy loop / ordering
+        if any(t.startswith("lc:") for t in toks) and not (allintbool or "float64" in dts or anycomplex):
+            return False                              # f16/f32 + complex literal -> complex64 (width only)
+        if any(t.startswith("lu:") for t in toks) and not all(d in ("uint64", "float64") for d in dts):
+            return False                              # out-of-range for every other adopter (OverflowError)
+        if anycomplex and "abs" in ops and len(ops) > 1:
+            return False                              # |z| is 1-2 ULP off CRT hypot; a composition can cancel that into any size
+        if "pow" in ops and set(dts) == {"int64", "uint64"}:
+            return False                              # W1-C: NumSharp keeps the integer power path for the u8/i8 pair [known bug]
+        return True
+
+    # ---- A. two-operand trees over the pairwise layouts --------------------------------------
+    pair_dts = [
+        ("float64", "float64"), ("float32", "float32"), ("float16", "float16"),
+        ("int32", "int32"), ("int64", "int64"), ("uint8", "uint8"), ("int8", "int8"), ("uint64", "uint64"),
+        ("bool", "bool"), ("complex128", "complex128"),
+        ("int32", "float64"), ("float32", "float64"), ("int8", "uint8"),
+        ("bool", "int32"), ("int64", "uint64"), ("complex128", "float64"),
+    ]
+    templates_a = [
+        "add(in0,in1)", "sub(in0,in1)", "mul(in0,in1)", "div(in0,in1)",
+        "mod(in0,in1)", "floordiv(in0,in1)", "pow(in0,in1)", "atan2(in0,in1)",
+        "and(in0,in1)", "or(in0,in1)", "xor(in0,in1)",
+        "min(in0,in1)", "max(in0,in1)",
+        "eq(in0,in1)", "ne(in0,in1)", "lt(in0,in1)", "le(in0,in1)", "gt(in0,in1)", "ge(in0,in1)",
+        # fused compositions — what np.evaluate exists for
+        "add(mul(in0,in1),in0)",
+        "div(sub(in0,in1),add(in0,in1))",
+        "sqrt(add(mul(in0,in0),mul(in1,in1)))",
+        "where(gt(in0,in1),in0,in1)",
+        "mul(in0,gt(in1,li:0))",
+        "and(gt(in0,li:0),lt(in1,li:3))",
+        "lnot(gt(in0,in1))",
+        "where(gt(in0,li:0),in0,mul(in0,lf:0.01))",
+        "max(min(in0,in1),lf:0.5)",
+        "where(in0,in1,li:0)",
+        "add(abs(in0),neg(in1))",
+        "eq(in0,li:1)",
+        "add(in0,lb:1)",
+        "mul(in0,lf:2.5)",
+        "sub(in0,li:2)",
+        "add(in0,lc:0;1)",
+        "add(in0,lh:2.0)",
+        "add(in0,lu:18446744073709551615)",
+        "gt(in0,li:-1)",
+        "lt(in0,li:300)",
+    ]
+    for ln, fn in PAIR_LAYOUTS.items():
+        for (sa, sb) in pair_dts:
+            ba, va, bb, vb = fn(np.dtype(sa), np.dtype(sb))
+            for expr in templates_a:
+                verdict = ok_for(expr, sa, sb)
+                if verdict is False:
+                    continue
+                emit(expr, [(ba, va), (bb, vb)], ln, cid_tag=f"{sa},{sb}/{expr}")
+
+    # ---- B. single-operand trees over the single layouts -------------------------------------
+    unary_layouts = ["c_contiguous_1d", "c_contiguous_2d", "f_contiguous_2d", "strided_step2_1d",
+                     "negstride_1d", "simple_slice_offset_1d"]
+    unary_exprs = [f"{op}(in0)" for op in _EV_UNARY]
+    for ln in unary_layouts:
+        for dt in ALL_DTYPES:
+            b, v = LAYOUTS[ln](np.dtype(dt))
+            for expr in unary_exprs:
+                verdict = ok_for(expr, dt)
+                if verdict is False:
+                    continue
+                emit(expr, [(b, v)], ln, cid_tag=f"{dt}/{expr}")
+
+    composite_exprs = [
+        "mul(sqrt(abs(in0)),lf:2.0)",
+        "exp(neg(square(in0)))",
+        "where(isnan(in0),lf:0.0,in0)",
+        "add(mul(in0,in0),in0)",
+        "div(sub(in0,lf:1.5),add(in0,lf:1.5))",
+        "gt(in0,lf:0.5)",
+        "and(gt(in0,lf:0.2),lt(in0,lf:0.8))",
+        "where(gt(in0,li:2),in0,neg(in0))",
+        "max(in0,li:0)",
+        "mul(in0,lb:1)",
+        "not(in0)",
+        "where(in0,li:1,li:0)",
+    ]
+    # Every layout the catalog has, at every third position (the unary set above already walks
+    # the contiguity / stride / offset axes; this pass is about the tree shapes).
+    composite_layouts = list(LAYOUTS.keys())[::2]
+    for ln in composite_layouts:
+        for dt in ALL_DTYPES:
+            b, v = LAYOUTS[ln](np.dtype(dt))
+            for expr in composite_exprs:
+                verdict = ok_for(expr, dt)
+                if verdict is False:
+                    continue
+                emit(expr, [(b, v)], ln, cid_tag=f"{dt}/{expr}")
+
+    # ---- C. root reductions over fused trees (flat + axis + keepdims) -------------------------
+    reduce_layouts = ["c_contiguous_1d", "c_contiguous_2d", "c_contiguous_3d", "f_contiguous_2d",
+                      "transposed_3d", "strided_step2_1d", "negstride_1d", "simple_slice_offset_1d"]
+    reduce_exprs = ["in0", "mul(in0,in0)", "gt(in0,li:2)", "where(gt(in0,li:2),in0,li:0)"]
+    reduce_dts = ["bool", "int8", "int32", "uint64", "float16", "float32", "float64", "complex128"]
+    for ln in reduce_layouts:
+        for dt in reduce_dts:
+            b, v = LAYOUTS[ln](np.dtype(dt))
+            # min/max tie-breaking on a ±0 pair follows the fold order (NumPy's SIMD reduction vs the
+            # fused 4-accumulator fold) and is not contractual: fold the signed zeros into +0 so the
+            # VALUE is the only thing compared.
+            if np.dtype(dt).kind in "fc":
+                b[b == 0] = 0
+            # A BENIGN twin for the float / complex Sum / Prod / Mean cells: until Phase 2 replaces the
+            # fused 4-accumulator fold with NumPy's pairwise schedule at the result dtype, the order of
+            # summation differs, and over the edge pool (2^31 - 2^31 + 0.5, inf - inf, ...) an order
+            # difference is a VALUE difference of any size. Values in [0.75, 1.25] keep every partial
+            # sum / product finite and normal in float16 and the drift within the ≤16-ULP excuse
+            # (MisalignedRegistry E1). Phase 2 deletes both: the excuse and this twin.
+            benign_b = None
+            if np.dtype(dt).kind in "fc":
+                benign_b = b.copy()
+                flat = benign_b.reshape(-1)
+                idx = np.arange(flat.size)
+                mag = 0.75 + 0.5 * ((idx * 7) % 11) / 10.0
+                if np.dtype(dt).kind == "c":
+                    flat[:] = (mag + 1j * (0.75 + 0.5 * ((idx * 3) % 11) / 10.0)).astype(flat.dtype)
+                else:
+                    flat[:] = mag.astype(flat.dtype)
+            for expr in reduce_exprs:
+                if ok_for(expr, dt) is False:
+                    continue
+                if dt == "complex128" and _ev_ops_in_expr(expr) & {"gt"}:
+                    continue
+                for kind in _EV_REDUCE:
+                    # Rebuild (base, view) with the SAME layout recipe over the pool this kind uses:
+                    # the layout builders always hand back a fresh C-contiguous base the view aliases.
+                    nb, nv = LAYOUTS[ln](np.dtype(dt))
+                    nb[...] = benign_b if (benign_b is not None and kind in ("sum", "prod", "mean")) else b
+                    # flat, every axis, and keepdims on the first axis
+                    combos = [(None, False)] + [(ax, False) for ax in range(nv.ndim)]
+                    if nv.ndim > 0:
+                        combos.append((0, True))
+                    for ax, kd in combos:
+                        emit(expr, [(nb, nv)], ln, params={"reduce": {"kind": kind, "axis": ax, "keepdims": kd}},
+                             cid_tag=f"{dt}/{kind}[{ax},{int(kd)}]/{expr}")
+
+    # ---- D. out= (returned view + the whole base buffer behind out) -------------------------
+    out_exprs = ["add(mul(in0,in1),in0)", "gt(in0,in1)", "where(gt(in0,in1),in0,in1)", "sqrt(abs(in0))"]
+    for shape in [(8,), (4, 5)]:
+        cnt = int(np.prod(shape))
+        for dt in ["float64", "float32", "int32", "int64", "uint8"]:
+            a = _fill(cnt, np.dtype(dt)).reshape(shape)
+            b2 = np.roll(_fill(cnt, np.dtype(dt)), 1).reshape(shape)
+            for expr in out_exprs:
+                probe = np.asarray(_ev_eval(expr, [a, b2]))
+                for out_kind in ["c", "f", "strided", "negstride", "offset"]:
+                    for out_dt in {probe.dtype.name, "float64" if probe.dtype.kind == "f" else probe.dtype.name}:
+                        built = _out_view(shape, np.dtype(out_dt), out_kind)
+                        if built is None:
+                            continue
+                        ob, ov = built
+                        if not np.can_cast(probe.dtype, ov.dtype, casting="same_kind"):
+                            continue
+                        emit(expr, [(a, a), (b2, b2)], f"out_{out_kind}", out=(ob, ov),
+                             cid_tag=f"{dt}->{out_dt}/{'x'.join(map(str, shape))}/{expr}")
+
+    if skipped:
+        print(f"  (skipped {skipped} evaluate cells: NumPy raised a non-verbatim error, or complex64 width)")
+    return cases
+
+
 def write_jsonl(path, cases):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", newline="\n") as f:
@@ -7430,8 +7791,11 @@ def main():
     elif mode == "fft":
         cases = gen_fft()                                               # np.fft.* differential tier
         write_jsonl(os.path.join(corpus_dir, "fft.jsonl"), cases)
+    elif mode == "evaluate":
+        cases = gen_evaluate()                                          # np.evaluate / NDExpr fused trees
+        write_jsonl(os.path.join(corpus_dir, "evaluate.jsonl"), cases)
     else:
-        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | rounding | bitwise | unary_extra | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft)")
+        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | rounding | bitwise | unary_extra | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | evaluate)")
         sys.exit(2)
 
 

@@ -40,7 +40,19 @@ namespace NumSharp
             // as the ufuncs this fuses do.
             if (@out is not null)
                 NumSharpException.ThrowIfNotWriteable(@out.Shape, "output array");
-            return BackendFactory.GetEngine().Evaluate(expr, @out);
+            return ResolveEngine(expr, null).Evaluate(expr, @out);
+        }
+
+        /// <summary>
+        ///     np.dot(a, b) dispatches on <c>a.TensorEngine</c>; np.evaluate follows the same rule
+        ///     with the first array the tree references (ARCHITECTURE.md P2), so an array bound to
+        ///     an alternative engine is evaluated by that engine. A constant-only tree names no
+        ///     engine and falls to the default, whose validation rejects it.
+        /// </summary>
+        private static TensorEngine ResolveEngine(NDExpr expr, NDArray[] operands)
+        {
+            NDArray first = operands is { Length: > 0 } ? operands[0] : expr?.FirstArray();
+            return first?.TensorEngine ?? BackendFactory.GetEngine();
         }
 
         /// <summary>
@@ -52,7 +64,7 @@ namespace NumSharp
         {
             if (@out is not null)
                 NumSharpException.ThrowIfNotWriteable(@out.Shape, "output array");
-            return BackendFactory.GetEngine().Evaluate(expr, operands, @out);
+            return ResolveEngine(expr, operands).Evaluate(expr, operands, @out);
         }
     }
 }

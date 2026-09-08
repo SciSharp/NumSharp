@@ -69,6 +69,17 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Reduce() => RunCorpus("reduce.jsonl");
 
+        // np.evaluate / NDExpr: fused trees over the pairwise + single layouts, every dtype, weak /
+        // strong literals, comparisons / where / min-max / logical nodes, the unary catalog, root
+        // reductions (flat + axis + keepdims) and out= (returned view + whole out base). NumPy has
+        // no fusion, so the oracle is its UNFUSED node-by-node chain — exactly the contract
+        // np.evaluate claims (per-node result_type incl. NEP50 weak literals, bit-compatible values).
+        // Grammar + node map: OpRegistry.Evaluate.cs <-> gen_oracle.gen_evaluate. Windows-CRT-pinned
+        // like the unary tier: the transcendental nodes call the same ucrtbase libm NumPy does.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Evaluate() => RunHostLibmCorpus("evaluate.jsonl");
+
         [TestMethod]
         [TestCategory("FuzzMatrix")]
         public void Where() => RunCorpus("where.jsonl");
@@ -539,6 +550,7 @@ namespace NumSharp.Tests.Fuzz
             ["dtype_text.jsonl"] = 2094,
             ["errors.jsonl"] = 8,
             ["errors_full.jsonl"] = 650,
+            ["evaluate.jsonl"] = 11800,   // np.evaluate fused-tree tier (14,742 at 2026-09-08)
             ["fft.jsonl"] = 1700,
             ["groupa.jsonl"] = 237,
             ["iter.jsonl"] = 4400,

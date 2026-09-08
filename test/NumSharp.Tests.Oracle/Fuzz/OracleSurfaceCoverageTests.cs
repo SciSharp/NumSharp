@@ -51,7 +51,7 @@ namespace NumSharp.Tests.Fuzz
             // corpus representation (the same reason block needs a bespoke multi-operand oracle path);
             // gated by the dedicated np.bmat.Tests.cs suite verified against NumPy 2.4.2.
             "bmat",
-            "evaluate", "finfo", "flat",
+            "finfo", "flat",
             "format_float_positional", "format_float_scientific",
             "get_printoptions", "iinfo", "load", "load_npy", "load_npz",
             "nditer_chunks", "printoptions", "save", "savez",

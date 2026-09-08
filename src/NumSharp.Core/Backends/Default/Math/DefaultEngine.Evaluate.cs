@@ -321,7 +321,7 @@ namespace NumSharp.Backends
                             *(decimal*)slot /= n;
                             break;
                         case NPTypeCode.Complex:
-                            *(System.Numerics.Complex*)slot /= n;
+                            *(System.Numerics.Complex*)slot = ComplexDivideByCountLikeNumPy(*(System.Numerics.Complex*)slot, n);
                             break;
                         default:
                             throw new NotSupportedException($"mean accumulator {accType} — typing bug.");
@@ -413,7 +413,19 @@ namespace NumSharp.Backends
                 }
 
                 if (reduce.Kind == NDExprReduceKind.Mean)
-                    ILKernelGenerator.MeanDivideByCount(outAcc, axisSize);
+                {
+                    if (accType == NPTypeCode.Complex)
+                    {
+                        // np.mean divides the complex sum by the count through the COMPLEX true_divide
+                        // loop, not component-wise — see ComplexDivideByCountLikeNumPy.
+                        for (long i = 0; i < outAcc.size; i++)
+                            outAcc.SetAtIndex(ComplexDivideByCountLikeNumPy((System.Numerics.Complex)outAcc.GetAtIndex(i), axisSize), i);
+                    }
+                    else
+                    {
+                        ILKernelGenerator.MeanDivideByCount(outAcc, axisSize);
+                    }
+                }
             }
 
             // Cast accumulator dtype → result dtype (no-op when equal — e.g. f16/f32 mean
@@ -429,6 +441,21 @@ namespace NumSharp.Backends
 
             if (@out is not null) { np.copyto(@out, reduced); return @out; }
             return reduced;
+        }
+
+        /// <summary>
+        /// np.mean's final <c>true_divide(sum, count)</c> runs NumPy's COMPLEX division loop (Smith's
+        /// method with the real divisor: <c>rat = 0, scl = 1/n</c>), so <c>out_r = (re + im*0)*scl</c>
+        /// and <c>out_i = (im - re*0)*scl</c> — a NaN or inf in EITHER part poisons BOTH
+        /// (<c>nan*0 = nan</c>). System.Numerics' component-wise <c>z / n</c> keeps the other part
+        /// finite and diverged from np.mean on every NaN-carrying complex slice (probed 2.4.2:
+        /// <c>np.mean([nan+1j, 2+3j]) == nan+nanj</c>).
+        /// </summary>
+        private static System.Numerics.Complex ComplexDivideByCountLikeNumPy(System.Numerics.Complex z, long n)
+        {
+            double scl = 1.0 / n;
+            double re = z.Real, im = z.Imaginary;
+            return new System.Numerics.Complex((re + im * 0.0) * scl, (im - re * 0.0) * scl);
         }
 
         private static unsafe void WriteOne(byte* slot, NPTypeCode accType)
@@ -475,6 +502,13 @@ namespace NumSharp.Backends
                 case NPTypeCode.Single: *(float*)slot = isMin ? float.PositiveInfinity : float.NegativeInfinity; break;
                 case NPTypeCode.Double: *(double*)slot = isMin ? double.PositiveInfinity : double.NegativeInfinity; break;
                 case NPTypeCode.Decimal: *(decimal*)slot = isMin ? decimal.MaxValue : decimal.MinValue; break;
+                case NPTypeCode.Complex:
+                    // (±inf, ±inf) is the identity under the lexicographic (real, imag) order the
+                    // complex clamp folds with — mirrors ILKernelGenerator.SeedReduceIdentity.
+                    *(System.Numerics.Complex*)slot = isMin
+                        ? new System.Numerics.Complex(double.PositiveInfinity, double.PositiveInfinity)
+                        : new System.Numerics.Complex(double.NegativeInfinity, double.NegativeInfinity);
+                    break;
                 default:
                     throw new NotSupportedException($"min/max accumulator {accType} — typing bug.");
             }
