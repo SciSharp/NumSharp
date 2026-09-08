@@ -31,6 +31,12 @@ using System.Runtime.CompilerServices;
 // The Python.NET interop test assembly exercises the same internals.
 [assembly: InternalsVisibleTo("NumSharp.Tests.Interop, PublicKey=" + NumSharpFriendKey.PublicKey)]
 
+// The ONNX Runtime interop bridge reads the same internal view (Storage.InternalArray for the ARC pin,
+// Shape's strided constructor for Fortran-order tensor views) to share NDArray buffers with ORT
+// OrtValue / DenseTensor zero-copy, both ways — and its test assembly exercises those internals.
+[assembly: InternalsVisibleTo("NumSharp.Interop.OnnxRuntime, PublicKey=" + NumSharpFriendKey.PublicKey)]
+[assembly: InternalsVisibleTo("NumSharp.Tests.Interop.OnnxRuntime, PublicKey=" + NumSharpFriendKey.PublicKey)]
+
 [assembly: InternalsVisibleTo("NumSharp.Benchmark, PublicKey=" + NumSharpFriendKey.PublicKey)]
 
 // Cross-repo: TensorFlow.NET signs with the identical key, which is the reason NumSharp keeps using

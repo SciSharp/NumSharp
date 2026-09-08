@@ -190,6 +190,7 @@ jobs:
                     src/NumSharp.Bitmap/NumSharp.Bitmap.csproj \
                     src/NumSharp.Interop.pythonnet/NumSharp.Interop.pythonnet.csproj \
                     src/NumSharp.Interop.OpenBLAS/NumSharp.Interop.OpenBLAS.csproj \
+                    src/NumSharp.Interop.OnnxRuntime/NumSharp.Interop.OnnxRuntime.csproj \
                     tools/NumSharp.Build/NumSharp.Build.csproj; do
           # Tolerate absence: the interop packages do not exist on every branch.
           [ -f "$proj" ] || { echo "skip (absent): $proj"; continue; }
@@ -346,6 +347,68 @@ jobs:
         path: ${{ github.workspace }}/**/TestResults/**/*.trx
         retention-days: 5
 
+  # ONNX Runtime interop. Its OWN job for the same reasons as interop-test: a red here is immediately
+  # attributable to the ORT bridge, and this is the ONLY place CI compiles
+  # src/NumSharp.Interop.OnnxRuntime (which reads NumSharp.Core internals through a keyed friend grant).
+  #
+  # No Python, no GPU: the suite runs 20 committed .onnx models (test/oracle/gen_onnx_models.py) through
+  # the CPU execution provider that the Microsoft.ML.OnnxRuntime package brings for every runner RID.
+  # It runs TWICE: against the package's FLOOR (1.16.0 — the ORT a bare consumer resolves, and the
+  # version the package compiles against) and against the CURRENT release, so both ends of the
+  # dependency range are exercised. The second build uses its own obj/bin (-p: changes the restore).
+  onnxruntime-interop-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ windows-latest, ubuntu-latest, macos-latest ]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - uses: actions/checkout@v7
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v6
+      with:
+        dotnet-version: |
+          8.0.x
+          10.0.x
+
+    - name: Build (ORT floor)
+      run: dotnet build test/NumSharp.Tests.Interop.OnnxRuntime/NumSharp.Tests.Interop.OnnxRuntime.csproj --configuration Release -p:NoWarn=${{ env.DOTNET_NOWARN }}
+
+    - name: Test (ORT floor, net8.0)
+      timeout-minutes: 10
+      shell: bash
+      run: |
+        dotnet test test/NumSharp.Tests.Interop.OnnxRuntime/NumSharp.Tests.Interop.OnnxRuntime.csproj \
+          --configuration Release --no-build --framework net8.0 --logger "trx"
+
+    - name: Test (ORT floor, net10.0)
+      timeout-minutes: 10
+      shell: bash
+      run: |
+        dotnet test test/NumSharp.Tests.Interop.OnnxRuntime/NumSharp.Tests.Interop.OnnxRuntime.csproj \
+          --configuration Release --no-build --framework net10.0 --logger "trx"
+
+    # The current ORT release. Keep the version in lockstep with the one the README's "Verified against"
+    # banner names; bumping it here is the whole of "support a newer ORT".
+    - name: Test (ORT current, net10.0)
+      timeout-minutes: 15
+      shell: bash
+      run: |
+        dotnet test test/NumSharp.Tests.Interop.OnnxRuntime/NumSharp.Tests.Interop.OnnxRuntime.csproj \
+          --configuration Release --framework net10.0 --logger "trx" \
+          -p:OnnxRuntimeVersion=1.29.0 -p:NoWarn=${{ env.DOTNET_NOWARN }}
+
+    - name: Upload Test Results
+      uses: actions/upload-artifact@v7
+      if: always()
+      with:
+        name: onnxruntime-interop-test-results-${{ matrix.os }}
+        path: ${{ github.workspace }}/**/TestResults/**/*.trx
+        retention-days: 5
+
   # The nupkg-CONSUMER gate for NumSharp.Interop.OpenBLAS, on all three OSes.
   #
   # Every other job consumes the package by ProjectReference, where a Content item copies files
@@ -395,7 +458,7 @@ jobs:
   validate-release:
     # Interop now ships as a package, so a broken interop must block the release — and so must a
     # package that restores but cannot load its own bundled binary.
-    needs: [test, interop-test, package-consumer-smoke]
+    needs: [test, interop-test, onnxruntime-interop-test, package-consumer-smoke]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     outputs:
@@ -518,6 +581,16 @@ jobs:
           -p:SourceRevisionId=${{ github.sha }} \
           -p:ContinuousIntegrationBuild=true
 
+        # ONNX Runtime interop: managed-only (depends on Microsoft.ML.OnnxRuntime.Managed, no native
+        # asset of its own), so a plain Rebuild is the whole build.
+        dotnet build src/NumSharp.Interop.OnnxRuntime/NumSharp.Interop.OnnxRuntime.csproj \
+          --configuration Release \
+          -t:Rebuild \
+          -p:NoWarn=${{ env.DOTNET_NOWARN }} \
+          -p:Version=${{ steps.version.outputs.VERSION }} \
+          -p:SourceRevisionId=${{ github.sha }} \
+          -p:ContinuousIntegrationBuild=true
+
         # The weaver: a tools-only build-time package (no lib/, no dependencies — see
         # tools/verify_build_package.sh). Its pack target publishes the tool into tools/,
         # which under --no-build below stages the outputs this Rebuild produced.
@@ -552,6 +625,15 @@ jobs:
           -p:ContinuousIntegrationBuild=true
 
         dotnet pack src/NumSharp.Interop.pythonnet/NumSharp.Interop.pythonnet.csproj \
+          --configuration Release \
+          --no-build \
+          --output artifacts/nuget \
+          -p:NoWarn=${{ env.DOTNET_NOWARN }} \
+          -p:Version=${{ steps.version.outputs.VERSION }} \
+          -p:SourceRevisionId=${{ github.sha }} \
+          -p:ContinuousIntegrationBuild=true
+
+        dotnet pack src/NumSharp.Interop.OnnxRuntime/NumSharp.Interop.OnnxRuntime.csproj \
           --configuration Release \
           --no-build \
           --output artifacts/nuget \
@@ -648,6 +730,7 @@ jobs:
           echo "dotnet add package NumSharp.Bitmap --version ${VERSION}"
           echo "dotnet add package NumSharp.Interop.pythonnet --version ${VERSION}"
           echo "dotnet add package NumSharp.Interop.OpenBLAS --version ${VERSION}"
+          echo "dotnet add package NumSharp.Interop.OnnxRuntime --version ${VERSION}"
           echo "dotnet add package NumSharp.Build --version ${VERSION}"
           echo '```'
           echo ""
@@ -659,6 +742,7 @@ jobs:
           echo "| NumSharp.Bitmap | [![NuGet](https://img.shields.io/nuget/v/NumSharp.Bitmap.svg)](https://www.nuget.org/packages/NumSharp.Bitmap/${VERSION}) |"
           echo "| NumSharp.Interop.pythonnet | [![NuGet](https://img.shields.io/nuget/v/NumSharp.Interop.pythonnet.svg)](https://www.nuget.org/packages/NumSharp.Interop.pythonnet/${VERSION}) |"
           echo "| NumSharp.Interop.OpenBLAS | [![NuGet](https://img.shields.io/nuget/v/NumSharp.Interop.OpenBLAS.svg)](https://www.nuget.org/packages/NumSharp.Interop.OpenBLAS/${VERSION}) |"
+          echo "| NumSharp.Interop.OnnxRuntime | [![NuGet](https://img.shields.io/nuget/v/NumSharp.Interop.OnnxRuntime.svg)](https://www.nuget.org/packages/NumSharp.Interop.OnnxRuntime/${VERSION}) |"
           echo "| NumSharp.Build | [![NuGet](https://img.shields.io/nuget/v/NumSharp.Build.svg)](https://www.nuget.org/packages/NumSharp.Build/${VERSION}) |"
         } > RELEASE_BODY.md
         if [ -f "$NOTES_FILE" ]; then

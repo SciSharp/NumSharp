@@ -44,6 +44,8 @@
     href: interop/numpy-net.md
   - name: OpenBLAS
     href: interop/openblas.md
+  - name: ONNX Runtime
+    href: interop/onnxruntime.md
 - name: NumPy API Coverage & Support
   href: coverage-support-dashboard.md
   expanded: true

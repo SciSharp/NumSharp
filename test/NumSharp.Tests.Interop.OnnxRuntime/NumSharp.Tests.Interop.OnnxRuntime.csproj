@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <LangVersion>latest</LangVersion>
+    <Platforms>AnyCPU</Platforms>
+    <!-- Strong-naming is set repo-wide in ../../Directory.Build.props. Signed because
+         NumSharp.Interop.OnnxRuntime grants it InternalsVisibleTo, which names a PublicKey. -->
+    <Configurations>Debug;Release;Publish</Configurations>
+
+    <!-- Which ONNX Runtime the suite runs against. The DEFAULT is the package's FLOOR (1.16.0 — the version
+         NuGet resolves for a consumer who adds nothing newer, and the version the package is compiled
+         against), so CI exercises exactly the out-of-box combination; the release pipeline runs the suite a
+         second time with `-p:OnnxRuntimeVersion=<current>` so the current ORT is covered too. Override
+         locally the same way: dotnet test -p:OnnxRuntimeVersion=1.29.0. -->
+    <OnnxRuntimeVersion Condition="'$(OnnxRuntimeVersion)' == ''">1.16.0</OnnxRuntimeVersion>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Publish|AnyCPU'">
+    <DocumentationFile />
+    <Optimize>true</Optimize>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MSTest" Version="3.8.3" />
+    <PackageReference Include="AwesomeAssertions" Version="9.3.0" />
+    <!-- The NATIVE ONNX Runtime — the CPU flavour. The interop package itself depends only on
+         Microsoft.ML.OnnxRuntime.Managed (see its csproj: the native flavours are mutually exclusive and the
+         consumer picks one); this suite is a consumer, so it picks. NuGet unifies the .Managed dependency to
+         this same version. -->
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="$(OnnxRuntimeVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\NumSharp.Core\NumSharp.Core.csproj" />
+    <ProjectReference Include="..\..\src\NumSharp.Interop.OnnxRuntime\NumSharp.Interop.OnnxRuntime.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The committed ONNX models the suite runs (generated + self-checked by test/oracle/gen_onnx_models.py;
+         real .onnx files ORT executes, ~100-250 bytes each). Copied beside the test binaries. -->
+    <None Include="Models\*.onnx" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

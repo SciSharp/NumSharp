@@ -150,6 +150,7 @@ own gates.
 | **Pandas containers** — `DataFrame` / `Series` / `Index` / extension arrays through verified `to_numpy` projections | `NumSharp.Interop.pythonnet` | ✅ when Pandas exposes stable storage; Auto copies otherwise | [Pandas](pandas.md) |
 | **Python buffer consumers** — `torch.frombuffer`, Pillow, Arrow, OpenCV, stdlib | `NumSharp.Interop.pythonnet` | ✅ `memoryview` / PEP 3118 | [Any library via np.frombuffer](np-frombuffer.md) |
 | **Numpy.NET coexistence** — drive real numpy's C# API over NumSharp buffers | + `Numpy.Bare` | ✅ `PyObject` handoff | [Numpy.NET](numpy-net.md) |
+| **ONNX Runtime inference** — `NDArray` ⇄ `OrtValue` / `DenseTensor<T>`, `session.Run(NDArray)`, softmax / argmax / top-k on the outputs | `NumSharp.Interop.OnnxRuntime` | ✅ inputs zero-copy (C-contiguous), outputs as owning copies or owning views; no Python, no GIL | [ONNX Runtime](onnxruntime.md) |
 | **`.npy` / `.npz` files** — `np.save` / `np.load`, byte-for-byte identical to NumPy's own writer | `NumSharp` (core) | — files, not memory | [NumPy compliance](../compliance.md#npy-and-npz-interoperability) |
 
 Start with the page whose *consumer* matches yours: numpy code → the pythonnet page; a library
