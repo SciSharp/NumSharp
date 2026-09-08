@@ -389,6 +389,16 @@ namespace NumSharp.Backends.Iteration
         /// </summary>
         public IReadOnlyDictionary<NDExpr, NPTypeCode>? NodeTypes { get; }
 
+        /// <summary>
+        /// Vector mode: the kernel's compute lane dtype W. Every node typed W emits a
+        /// <c>Vector&lt;W&gt;</c>; every Boolean-typed node emits a <c>Vector&lt;W&gt;</c> LANE MASK
+        /// (all-ones / zero lanes). <see cref="NPTypeCode.Boolean"/> is "byte mode": every operand is
+        /// bool and nodes carry canonical 0/1 bytes. Equals <see cref="OutputType"/> in legacy mode.
+        /// </summary>
+        public NPTypeCode VectorLaneType { get; }
+
+        internal bool ByteMode => VectorLaneType == NPTypeCode.Boolean;
+
         public NDExprCompileContext(
             NPTypeCode[] inputTypes, NPTypeCode outputType,
             LocalBuilder[] inputLocals, bool vectorMode)
@@ -399,13 +409,15 @@ namespace NumSharp.Backends.Iteration
         public NDExprCompileContext(
             NPTypeCode[] inputTypes, NPTypeCode outputType,
             LocalBuilder[] inputLocals, bool vectorMode,
-            IReadOnlyDictionary<NDExpr, NPTypeCode>? nodeTypes)
+            IReadOnlyDictionary<NDExpr, NPTypeCode>? nodeTypes,
+            NPTypeCode vectorLaneType = NPTypeCode.Empty)
         {
             InputTypes = inputTypes;
             OutputType = outputType;
             InputLocals = inputLocals;
             VectorMode = vectorMode;
             NodeTypes = nodeTypes;
+            VectorLaneType = vectorLaneType == NPTypeCode.Empty ? outputType : vectorLaneType;
         }
 
         /// <summary>
@@ -547,8 +559,19 @@ namespace NumSharp.Backends.Iteration
 
         public override void EmitVector(ILGenerator il, NDExprCompileContext ctx)
         {
-            EmitLoadTyped(il, ctx.TypeOf(this));
-            DirectILKernelGenerator.EmitVectorCreate(il, ctx.TypeOf(this));
+            var t = ctx.TypeOf(this);
+            if (t == NPTypeCode.Boolean && !ctx.ByteMode)
+            {
+                // A Boolean-typed literal in W-mode is a constant lane mask.
+                if (AsDouble() != 0.0 || (_kind == NDExprLiteralKind.Complex && _c != System.Numerics.Complex.Zero))
+                    NDExprVec.EmitAllBitsSet(il, ctx.VectorLaneType);
+                else
+                    NDExprVec.EmitZero(il, ctx.VectorLaneType);
+                return;
+            }
+
+            EmitLoadTyped(il, t);
+            DirectILKernelGenerator.EmitVectorCreate(il, t);
         }
 
         // ---- the literal's value in the widest carrier of each family --------------------
@@ -755,21 +778,38 @@ namespace NumSharp.Backends.Iteration
 
         public override void EmitVector(ILGenerator il, NDExprCompileContext ctx)
         {
-            _left.EmitVector(il, ctx);
-            _right.EmitVector(il, ctx);
-            var t = ctx.OutputType;
+            var my = ctx.TypeOf(this);
 
-            // NumPy's bool add / multiply are logical or / and (see EmitScalar). The byte lanes
-            // carry canonical 0/1 through the normalized logical ops; Vector{N}<bool> arithmetic
-            // does not exist (emitting it threw NotSupportedException once the SIMD block ran, and
-            // a broadcast constant operand made the JIT fail outright).
-            if (t == NPTypeCode.Boolean && (_op == BinaryOp.Add || _op == BinaryOp.Multiply))
+            if (my == NPTypeCode.Boolean)
             {
-                DirectILKernelGenerator.EmitVectorOperation(il, _op == BinaryOp.Add ? BinaryOp.BitwiseOr : BinaryOp.BitwiseAnd, t);
-                return;
+                // NumPy's bool add / multiply are logical or / and (see EmitScalar); bitwise ops on
+                // bools are the logical ops too. Byte mode runs the engine's normalized 0/1 byte ops
+                // (Vector{N}<bool> arithmetic does not exist — emitting it threw NotSupportedException
+                // once the SIMD block ran); W-mode combines lane masks bitwise.
+                EmitVectorChildAs(il, ctx, _left, NPTypeCode.Boolean);
+                EmitVectorChildAs(il, ctx, _right, NPTypeCode.Boolean);
+                var logical = _op == BinaryOp.Add ? BinaryOp.BitwiseOr
+                            : _op == BinaryOp.Multiply ? BinaryOp.BitwiseAnd
+                            : _op;
+                if (ctx.ByteMode)
+                {
+                    DirectILKernelGenerator.EmitVectorOperation(il, logical, NPTypeCode.Boolean);
+                    return;
+                }
+
+                var clr = DirectILKernelGenerator.GetClrType(ctx.VectorLaneType);
+                switch (logical)
+                {
+                    case BinaryOp.BitwiseOr: NDExprVec.EmitOr(il, clr); return;
+                    case BinaryOp.BitwiseAnd: NDExprVec.EmitAnd(il, clr); return;
+                    default: NDExprVec.EmitXor(il, clr); return;
+                }
             }
 
-            DirectILKernelGenerator.EmitVectorOperation(il, _op, t);
+            // my == lane: children arrive at the lane dtype (a bool child becomes exact 1/0 lanes).
+            EmitVectorChildAs(il, ctx, _left, my);
+            EmitVectorChildAs(il, ctx, _right, my);
+            DirectILKernelGenerator.EmitVectorOperation(il, _op, my);
         }
 
         public override void AppendSignature(StringBuilder sb)
@@ -932,8 +972,110 @@ namespace NumSharp.Backends.Iteration
 
         public override void EmitVector(ILGenerator il, NDExprCompileContext ctx)
         {
-            _child.EmitVector(il, ctx);
-            DirectILKernelGenerator.EmitUnaryVectorOperation(il, _op, ctx.OutputType);
+            var my = ctx.TypeOf(this);
+            var childType = ctx.TypeOf(_child);
+            var lane = ctx.VectorLaneType;
+
+            if (my == NPTypeCode.Boolean)
+            {
+                EmitBooleanVector(il, ctx, childType, lane);
+                return;
+            }
+
+            // my == lane: the child arrives at the lane dtype (a bool child becomes exact 1/0 lanes).
+            EmitVectorChildAs(il, ctx, _child, my);
+            if (IsRoundingOp(_op) && IsIntegerKind(my))
+                return;                                   // floor/ceil/round/trunc are the identity on integers
+            DirectILKernelGenerator.EmitUnaryVectorOperation(il, _op, my);
+        }
+
+        /// <summary>The Boolean-typed unary nodes: predicates, logical not, and the bool identities.</summary>
+        private void EmitBooleanVector(ILGenerator il, NDExprCompileContext ctx, NPTypeCode childType, NPTypeCode lane)
+        {
+            if (ctx.ByteMode)
+            {
+                // Everything is a 0/1 byte vector here.
+                switch (_op)
+                {
+                    case UnaryOp.LogicalNot:
+                    case UnaryOp.BitwiseNot:
+                        _child.EmitVector(il, ctx);
+                        DirectILKernelGenerator.EmitUnaryVectorOperation(il, UnaryOp.LogicalNot, NPTypeCode.Boolean);
+                        return;
+                    case UnaryOp.IsNan:
+                    case UnaryOp.IsInf:
+                        il.EmitCall(OpCodes.Call, VectorMethodCache.Zero(DirectILKernelGenerator.VectorBits, typeof(byte)), null);
+                        return;
+                    case UnaryOp.IsFinite:
+                        il.Emit(OpCodes.Ldc_I4_1);
+                        DirectILKernelGenerator.EmitVectorCreate(il, NPTypeCode.Boolean);
+                        return;
+                    default:                              // abs / floor / ceil / trunc on bool: identity
+                        _child.EmitVector(il, ctx);
+                        return;
+                }
+            }
+
+            switch (_op)
+            {
+                case UnaryOp.LogicalNot:
+                    if (childType == NPTypeCode.Boolean)
+                    {
+                        _child.EmitVector(il, ctx);
+                        NDExprVec.EmitNot(il, lane);
+                    }
+                    else
+                    {
+                        _child.EmitVector(il, ctx);       // value at lane
+                        NDExprVec.EmitIsZeroMask(il, lane);
+                    }
+                    return;
+
+                case UnaryOp.BitwiseNot:                  // ~bool == logical not (child is bool by the gate)
+                    _child.EmitVector(il, ctx);
+                    NDExprVec.EmitNot(il, lane);
+                    return;
+
+                case UnaryOp.IsNan:
+                    if (!NDExprVec.IsFloatLane(lane) || childType == NPTypeCode.Boolean)
+                    {
+                        NDExprVec.EmitZero(il, lane);      // integers / bools are never NaN
+                        return;
+                    }
+                    _child.EmitVector(il, ctx);
+                    il.Emit(OpCodes.Dup);
+                    il.EmitCall(OpCodes.Call, VectorMethodCache.Equals(DirectILKernelGenerator.VectorBits, DirectILKernelGenerator.GetClrType(lane)), null);
+                    NDExprVec.EmitNot(il, lane);           // ~(x == x)
+                    return;
+
+                case UnaryOp.IsInf:
+                    if (!NDExprVec.IsFloatLane(lane) || childType == NPTypeCode.Boolean)
+                    {
+                        NDExprVec.EmitZero(il, lane);
+                        return;
+                    }
+                    _child.EmitVector(il, ctx);
+                    NDExprVec.EmitAbs(il, lane);
+                    NDExprVec.EmitPositiveInfinity(il, lane);
+                    il.EmitCall(OpCodes.Call, VectorMethodCache.Equals(DirectILKernelGenerator.VectorBits, DirectILKernelGenerator.GetClrType(lane)), null);
+                    return;
+
+                case UnaryOp.IsFinite:
+                    if (!NDExprVec.IsFloatLane(lane) || childType == NPTypeCode.Boolean)
+                    {
+                        NDExprVec.EmitAllBitsSet(il, lane);
+                        return;
+                    }
+                    _child.EmitVector(il, ctx);
+                    NDExprVec.EmitAbs(il, lane);
+                    NDExprVec.EmitPositiveInfinity(il, lane);
+                    il.EmitCall(OpCodes.Call, VectorMethodCache.LessThan(DirectILKernelGenerator.VectorBits, DirectILKernelGenerator.GetClrType(lane)), null);
+                    return;                                // |x| < inf: NaN lanes compare false, like np.isfinite
+
+                default:                                   // abs / floor / ceil / trunc on a bool mask: identity
+                    _child.EmitVector(il, ctx);
+                    return;
+            }
         }
 
         public override void AppendSignature(StringBuilder sb)
@@ -1036,7 +1178,52 @@ namespace NumSharp.Backends.Iteration
 
         public override void EmitVector(ILGenerator il, NDExprCompileContext ctx)
         {
-            throw new InvalidOperationException("ComparisonNode has no vector path.");
+            var lane = ctx.VectorLaneType;
+            var cmpType = ctx.NodeTypes is null
+                ? ctx.OutputType
+                : NDExprTypeRules.ComparisonType(ctx.TypeOf(_left), ctx.TypeOf(_right));
+
+            if (cmpType == NPTypeCode.Boolean && !ctx.ByteMode)
+            {
+                // Two bool masks compared in W-mode: the truth table on lane masks.
+                //   eq: a == b  ne: a ^ b  lt: ~a & b  le: ~a | b  gt: a & ~b  ge: a | ~b
+                var clr = DirectILKernelGenerator.GetClrType(lane);
+                var vecType = VectorMethodCache.V(DirectILKernelGenerator.VectorBits, clr);
+                var locA = il.DeclareLocal(vecType);
+                var locB = il.DeclareLocal(vecType);
+                EmitVectorChildAs(il, ctx, _left, NPTypeCode.Boolean);
+                il.Emit(OpCodes.Stloc, locA);
+                EmitVectorChildAs(il, ctx, _right, NPTypeCode.Boolean);
+                il.Emit(OpCodes.Stloc, locB);
+                switch (_op)
+                {
+                    case ComparisonOp.Equal:
+                        il.Emit(OpCodes.Ldloc, locA); il.Emit(OpCodes.Ldloc, locB); NDExprVec.EmitXor(il, clr); NDExprVec.EmitNot(il, lane);
+                        return;
+                    case ComparisonOp.NotEqual:
+                        il.Emit(OpCodes.Ldloc, locA); il.Emit(OpCodes.Ldloc, locB); NDExprVec.EmitXor(il, clr);
+                        return;
+                    case ComparisonOp.Less:
+                        il.Emit(OpCodes.Ldloc, locB); il.Emit(OpCodes.Ldloc, locA); NDExprVec.EmitAndNot(il, clr);   // b & ~a
+                        return;
+                    case ComparisonOp.LessEqual:
+                        il.Emit(OpCodes.Ldloc, locA); NDExprVec.EmitNot(il, lane); il.Emit(OpCodes.Ldloc, locB); NDExprVec.EmitOr(il, clr);
+                        return;
+                    case ComparisonOp.Greater:
+                        il.Emit(OpCodes.Ldloc, locA); il.Emit(OpCodes.Ldloc, locB); NDExprVec.EmitAndNot(il, clr);   // a & ~b
+                        return;
+                    default: // GreaterEqual
+                        il.Emit(OpCodes.Ldloc, locB); NDExprVec.EmitNot(il, lane); il.Emit(OpCodes.Ldloc, locA); NDExprVec.EmitOr(il, clr);
+                        return;
+                }
+            }
+
+            // Compare at the common dtype (== the lane, or bool bytes in byte mode): the comparison
+            // kernel's own vector compare — NaN lanes false, NotEqual as ~Equals (NaN != NaN true),
+            // unsigned lanes through the unsigned-aware generic compares.
+            EmitVectorChildAs(il, ctx, _left, cmpType);
+            EmitVectorChildAs(il, ctx, _right, cmpType);
+            DirectILKernelGenerator.EmitVectorCompareMask(il, _op, cmpType);
         }
 
         public override void AppendSignature(StringBuilder sb)
@@ -1096,7 +1283,27 @@ namespace NumSharp.Backends.Iteration
 
         public override void EmitVector(ILGenerator il, NDExprCompileContext ctx)
         {
-            throw new InvalidOperationException("MinMaxNode has no vector path.");
+            var my = ctx.TypeOf(this);
+            if (my == NPTypeCode.Boolean)
+            {
+                // np.maximum(bool, bool) is logical or, minimum is logical and.
+                EmitVectorChildAs(il, ctx, _left, NPTypeCode.Boolean);
+                EmitVectorChildAs(il, ctx, _right, NPTypeCode.Boolean);
+                if (ctx.ByteMode)
+                {
+                    DirectILKernelGenerator.EmitVectorOperation(il, _isMin ? BinaryOp.BitwiseAnd : BinaryOp.BitwiseOr, NPTypeCode.Boolean);
+                    return;
+                }
+                var clr = DirectILKernelGenerator.GetClrType(ctx.VectorLaneType);
+                if (_isMin) NDExprVec.EmitAnd(il, clr); else NDExprVec.EmitOr(il, clr);
+                return;
+            }
+
+            // The fuzz-validated np.maximum / np.minimum vector body: NaN-propagating (first operand's
+            // NaN preferred), ±0 tie → second operand, integer lanes on the bare hardware min/max.
+            EmitVectorChildAs(il, ctx, _left, my);
+            EmitVectorChildAs(il, ctx, _right, my);
+            DirectILKernelGenerator.EmitVectorMinOrMax(il, isMax: !_isMin, my, propagateNaN: true);
         }
 
         public override void AppendSignature(StringBuilder sb)
@@ -1211,7 +1418,29 @@ namespace NumSharp.Backends.Iteration
 
         public override void EmitVector(ILGenerator il, NDExprCompileContext ctx)
         {
-            throw new InvalidOperationException("WhereNode has no vector path.");
+            var my = ctx.TypeOf(this);
+            var lane = ctx.VectorLaneType;
+            var vecType = VectorMethodCache.V(DirectILKernelGenerator.VectorBits, DirectILKernelGenerator.GetSimdLaneType(lane));
+            var locMask = il.DeclareLocal(vecType);
+            var locA = il.DeclareLocal(vecType);
+            var locB = il.DeclareLocal(vecType);
+
+            // cond → lane mask: a bool child already IS one (W-mode); a numeric child is nonzero-
+            // tested at its own dtype; byte mode turns the 0/1 (or any nonzero) bytes into a mask.
+            EmitVectorChildAs(il, ctx, _cond, NPTypeCode.Boolean);
+            if (ctx.ByteMode)
+                NDExprVec.EmitBytesToMask(il);
+            il.Emit(OpCodes.Stloc, locMask);
+
+            EmitVectorChildAs(il, ctx, _a, my);
+            il.Emit(OpCodes.Stloc, locA);
+            EmitVectorChildAs(il, ctx, _b, my);
+            il.Emit(OpCodes.Stloc, locB);
+
+            il.Emit(OpCodes.Ldloc, locMask);
+            il.Emit(OpCodes.Ldloc, locA);
+            il.Emit(OpCodes.Ldloc, locB);
+            NDExprVec.EmitSelect(il, lane);
         }
 
         public override void AppendSignature(StringBuilder sb)

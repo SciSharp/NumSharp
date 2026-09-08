@@ -387,27 +387,12 @@ namespace NumSharp.Backends.Iteration
             resolvedType = resolved;
             int nIn = inputTypes.Length;
 
-            bool homogeneous = true;
-            for (int i = 0; i < nIn && homogeneous; i++)
-                homogeneous = inputTypes[i] == resolved;
-            if (homogeneous)
-            {
-                foreach (var kv in nodeTypes)
-                {
-                    if (kv.Value != resolved)
-                    {
-                        homogeneous = false;
-                        break;
-                    }
-                }
-            }
-
-            // homogeneous => every operand and every node type equals `resolved`, so the tree (if
-            // it vectorizes at all) does so at that single type. SupportsSimdAt(resolved) refines
-            // the structural SupportsSimd with type/runtime capability — e.g. it keeps integer
-            // rounding and pre-.NET-9 Round/Truncate on the scalar path instead of emitting a
-            // Vector{N} method the BCL has no overload for.
-            bool wantSimd = homogeneous && SupportsSimdAt(resolved);
+            // The v2 vector plan: one compute lane dtype W (the unique non-bool operand dtype, or
+            // Boolean when every operand is bool), every node typed W or Boolean (a Boolean node
+            // rides as a lane mask), every node with a vector emit at W. See NDExpr.Vector.cs.
+            bool forceScalar = ForceScalar;
+            NPTypeCode lane = NPTypeCode.Empty;
+            bool wantSimd = !forceScalar && NDExprVectorPlan.TryPlan(this, inputTypes, nodeTypes, out lane);
 
             Action<ILGenerator> scalarBody = il =>
             {
@@ -424,17 +409,19 @@ namespace NumSharp.Backends.Iteration
             Action<ILGenerator>? vectorBody = null;
             if (wantSimd)
             {
+                var laneType = lane;
                 vectorBody = il =>
                 {
+                    // The fused shell hands every operand over as ONE CLR vector type — Vector<lane(W)>
+                    // (a bool operand arrives as a lane MASK of W; byte mode uses the byte lanes).
                     var vectorLocals = new LocalBuilder[nIn];
-                    // Vector locals take the SIMD LANE type (bool -> byte lanes; Vector{N}<bool> is not a type).
-                    var vecType = DirectILKernelGenerator.GetVectorType(DirectILKernelGenerator.GetSimdLaneType(inputTypes[0]));
+                    var vecType = DirectILKernelGenerator.GetVectorType(DirectILKernelGenerator.GetSimdLaneType(laneType));
                     for (int i = nIn - 1; i >= 0; i--)
                     {
                         vectorLocals[i] = il.DeclareLocal(vecType);
                         il.Emit(OpCodes.Stloc, vectorLocals[i]);
                     }
-                    var ctx = new NDExprCompileContext(inputTypes, resolved, vectorLocals, vectorMode: true, nodeTypes);
+                    var ctx = new NDExprCompileContext(inputTypes, resolved, vectorLocals, vectorMode: true, nodeTypes, laneType);
                     EmitVector(il, ctx);
                 };
             }
@@ -444,9 +431,9 @@ namespace NumSharp.Backends.Iteration
             operandTypes[nIn] = resolved;
 
             // Distinct cache namespace from legacy Compile — same signature,
-            // different emission contract.
-            string key = (cacheKey ?? DeriveCacheKey(inputTypes, resolved)) + "|np";
-            return DirectILKernelGenerator.CompileInnerLoop(operandTypes, scalarBody, vectorBody, key);
+            // different emission contract. A forced-scalar kernel is its own entry.
+            string key = (cacheKey ?? DeriveCacheKey(inputTypes, resolved)) + (forceScalar ? "|np|s" : "|np");
+            return DirectILKernelGenerator.CompileFusedInnerLoop(operandTypes, wantSimd ? lane : resolved, scalarBody, vectorBody, key);
         }
     }
 
