@@ -44,6 +44,62 @@
   passes (CSE, constant folding, parameter leaves), opt-in threading, string front-end, diagnostics.
   Each phase has acceptance numbers a re-run of the probe verifies.
 
+### 0.1 Landed status (2026-09-08, branch `exprs`; the half point — P0 → P1 → P3 done, P2 → P4 → P5 → P6 open)
+
+| Phase | Status | Commit | What landed / evidence |
+|---|---|---|---|
+| **P0** correctness + oracle | landed | `53602da9` | G1–G8 + G10 fixed (int8 zero-push, `Abs(complex)→float64`, exponent-array sign check, complex `Min/Max`, typed literals, exact `int64`/`uint64` compares, engine dispatch, `Call` dtype map). **`evaluate.jsonl`** tier: 14,702 cases, floor 11,800, green; `MisalignedRegistry` E1–E5. **E1** (float `Sum/Prod/Mean` 4-accumulator fold ≤16 ULP, complex ≤64 ULP of magnitude) and **E5** (complex min/max NaN identity on negative-stride views — NumPy reduces in logical order, the KEEPORDER iterator in memory order) are *pending Phase 2* and must be deleted with it, not widened. |
+| **P1** typed vector emission | landed | `939d0636` | "Vector v2": one lane dtype W per kernel, Boolean-typed nodes as lane masks (`NDExpr.Vector.cs`), the fused inner-loop shell with bool operand expansion / packed bool output / hoisted stride-0 operands / AVX2 gather (`DirectILKernelGenerator.InnerLoop.Fused.cs`), `NDExpr.ForceScalar` test hook + the 47-tree × 8-lane × 8-layout vector-vs-scalar metamorphic sweep (`NDEvaluateVectorTests`, 11). Measured NPY/NS at 100K / 4M: `a>0.5` 0.65 / 1.26–1.45 (was 0.16 / 0.71), `where(a>b,a,b)` ~1.0 / 2.6, `maximum(a,b)` 0.9 / 1.8, `(a>0.2)&(b<0.8)` 1.26 / 1.85, leaky relu 17.6 / 5.2, f32 `af>0.5` 8× the unfused engine compare. |
+| **P3** fixed cost | landed | `feat(evaluate): NDExpr Phase 3 — per-root compiled program, CompiledExpression handle, N-ary input broadcast` | `NDExprProgram` per-root cache (`NDExpr.Program.cs`), identical-dims fast path, single-allocation N-ary input broadcast with NumPy's every-operand error text, `NDExpr.Compile()` / `Compile(params NPTypeCode[])` → `CompiledExpression` (strict signature), the 0-d-operand parameter form pinned (`NDEvaluateProgramTests`, 14). Numbers below. |
+| P2 reductions (NumPy-exact pairwise, SIMD folds, Any/All/Arg/Std/Var/Nan*/Ptp/Average, tuple axis) | open | | E1/E5 excuses wait on it; `sum(af*bf)` f32 0.60× unfused and `max(a*b)` 0.44× NumPy at 100K are its cells. |
+| P4 coverage (Cast, Positive/Conjugate/Real/Imag/…, FMax/FMin/CopySign/NextAfter/LogAddExp/shifts, logical and/or/xor, Select/Clip, `< > <= >=` operators, `where=`/`casting=`/`order=`/`dtype=`) | open | | |
+| P5 Half + mixed-width SIMD | open | | `f2*f2+f2` 0.15× unfused; `i4*2+f8` scalar. |
+| P6 optimizer (CSE / constant folding / unary-only delegation / opt-in threading / string front-end / `Explain`) | open | | the structural hash (6.1) is also what would make the inline-rebuilt spelling below cheap. |
+
+**Phase 3 measured** (n = 8, ns / managed B per call; Release, one pinned P-core, `DOTNET_TC_CallCountingDelayMs=0`; probe section D, two runs):
+
+| Call | before | after | reference |
+|---|---:|---:|---|
+| `np.evaluate(expr)` prebuilt tree | 1006 / 2896 | **404–419 / 584** | acceptance ≤ 450 / ≤ 600 ✓; unfused `a*b+c` 353 / 928; NumPy 524 |
+| `np.evaluate(expr, out=)` | 831 / 2432 | **266–339 / 184–248** | unfused two-pass `out=` 332 / 400; NumPy 515 |
+| `np.evaluate(Sum(a*b))` prebuilt | 775 / 2648 | **295 / 464** | unfused `np.sum(a*b)` 348 / 1048; NumPy 1717 |
+| `np.evaluate(Where(a>b,a,b))` prebuilt | 935 / 2968 | **369–382 / 576** | unfused `np.where` 432 / 1040; NumPy 934 |
+| positional `np.evaluate(expr, ops)` prebuilt | — | **377 / 584** | |
+| `a*b+k`, `k` a 0-d operand (parameter form) | 823 / 1560 | **668 / 1368** | unfused `a*b+2.5` 453 / 1488 — see residual 2 |
+| `np.evaluate((NDExpr)a*b+c)` rebuilt per call | 1008 / 3048 | 901–1276 / 3128 (unchanged) | see residual 1 |
+
+**Section C at 1K after Phase 3** (µs per call, many-iteration timing; `unfused/fused`, > 1 = fused wins). With a
+**prebuilt** tree fusion wins 16 of 22 rows — `a*b+c` 1.32, `(a-b)/(a+b)` 1.82, `sqrt(a*a+b*b)` 2.05,
+`where` 1.28, `a>0.5` 1.53, `(a>0.2)&(b<0.8)` 3.55, leaky relu 3.23, `exp(a)*b` 1.08, `exp(af)*bf` 1.17,
+`sin*cos` 1.20, `i4*2+f8` 1.69, `i8*i8+1` 2.44, strided 1.80, `sum(a*b)` 1.19, `mean((a-b)²)` 2.75,
+`sum(ax1)` 1.24 — and the six it loses are each another phase's cell or have nothing to fuse:
+`maximum(a,b)` 0.65 and `abs(a)` 0.67 (a single op — the engine's direct kernel route has a lower fixed
+cost than an NDIter pass, P6.3), `f2*f2+f2` 0.18 (P5), `sum(af*bf)` 0.86 / `max(a*b)` 0.83 /
+`sum(ax0)` 0.96 (P2's scalar folds). With the tree **rebuilt per call** only 9 of 22 rows win (see
+residual 1). The 100K / 4M columns are unchanged from Phase 1 (fixed cost is invisible there).
+
+Two residuals, both measured and both outside the per-instance cache:
+
+1. **The inline-rebuilt spelling** — `np.evaluate((NDExpr)a * b + c)` inside a loop — builds a NEW root
+   each call, so it misses the per-instance cache by construction and still pays bind + typing + string
+   key (~0.5 µs + 2.5 KB over the prebuilt path). Hot loops should hoist the tree (or `Compile()` it);
+   the lever for the inline spelling is **Phase 6.1's structural hash** (a global program cache keyed by
+   tree structure + dedup slots + dtype signature, verified by structural equality — a false match would
+   run the wrong kernel, so the hash alone is never enough). Section C's 1K rows are timed with the
+   rebuilt spelling, which is why the "1K fused ≥ unfused" line waits on 6.1 (the prebuilt column now
+   printed beside it is what the cache serves).
+2. **A broadcast (0-d) operand costs ~250 ns + ~800 B over identical dims** even after the host's N-ary
+   dims helper (823 → 668 ns; the fold was ~150 ns of it). The rest is inside `NDIterRef.MultiNew`'s
+   handling of a stride-0 operand (per-operand broadcast `Shape`s with fresh dims/strides arrays) — an
+   iterator-level cost every ufunc with a scalar operand pays (the unfused `a*b+2.5` is 453 ns against
+   353 for `a*b+c`), so it belongs to the NDIter fixed-cost line (`docs/NDITER_PERF_CONTINUATION.md`),
+   not to evaluate.
+
+Not done from 3.3 as spelled: a *named weak* `NDExpr.Param("k")` leaf. The plan's alternative — a 0-d
+`NDArray` operand — is the shipped, tested parameter mechanism; note it is a **strong** scalar
+(`np.float64(k)` semantics: `int32 * 0-d int64 → int64`) where a literal is weak, so a sweep that must keep
+the literal's promotion needs the weak-leaf form (Phase 6 optional).
+
 ---
 
 ## 1. What `np.evaluate` / NDExpr is today (as built)

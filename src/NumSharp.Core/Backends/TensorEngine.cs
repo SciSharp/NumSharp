@@ -155,6 +155,15 @@ namespace NumSharp
         public virtual NDArray Evaluate(NDExpr expr, NDArray[] operands, NDArray @out = null)
             => throw new NotSupportedException($"{GetType().Name} does not support fused expression evaluation.");
 
+        /// <summary>
+        ///     Fused evaluation of an already-compiled program (<see cref="CompiledExpression"/>):
+        ///     the per-call work only — iteration shape, result allocation, iterator. The two
+        ///     <c>Evaluate(NDExpr, …)</c> members above resolve the program from the tree's cache and
+        ///     land here.
+        /// </summary>
+        internal virtual NDArray Evaluate(NDExprProgram program, NDArray[] operands, NDArray @out)
+            => throw new NotSupportedException($"{GetType().Name} does not support fused expression evaluation.");
+
         #endregion
 
         #region Logic
