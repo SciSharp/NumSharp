@@ -89,7 +89,7 @@ namespace NumSharp.Tests.Logic
         [TestMethod]
         public void Case11()
         {
-            var r = np.find_common_type(new[] {np.uint8, np.float32}, new Type[0]);
+            var r = np.find_common_type(new[] {np.uint8, np.float32}, new DType[0]);
             r.Should().Be(NPTypeCode.Single);
         }
 
@@ -97,35 +97,35 @@ namespace NumSharp.Tests.Logic
         public void Case12()
         {
             // np.@byte changed to int8/sbyte per NumPy convention — use np.ubyte/np.uint8 for uint8.
-            var r = np.find_common_type(new[] {np.ubyte, np.float32}, new Type[0]);
+            var r = np.find_common_type(new[] {np.ubyte, np.float32}, new DType[0]);
             r.Should().Be(NPTypeCode.Single);
         }
 
         [TestMethod]
         public void Case13()
         {
-            var r = np.find_common_type(new[] {np.float32, np.float32}, new Type[0]);
+            var r = np.find_common_type(new[] {np.float32, np.float32}, new DType[0]);
             r.Should().Be(NPTypeCode.Single);
         }
 
         [TestMethod]
         public void Case14()
         {
-            var r = np.find_common_type(new[] {np.float32, np.ubyte}, new Type[0]);
+            var r = np.find_common_type(new[] {np.float32, np.ubyte}, new DType[0]);
             r.Should().Be(NPTypeCode.Single);
         }
 
         [TestMethod]
         public void Case15()
         {
-            var r = np.find_common_type(new[] {np.float64, np.float64}, new Type[0]);
+            var r = np.find_common_type(new[] {np.float64, np.float64}, new DType[0]);
             r.Should().Be(NPTypeCode.Double);
         }
 
         [TestMethod]
         public void Case17()
         {
-            var r = np.find_common_type(new[] {np.ubyte, np.ubyte}, new Type[0]);
+            var r = np.find_common_type(new[] {np.ubyte, np.ubyte}, new DType[0]);
             r.Should().Be(NPTypeCode.Byte);
         }
 
@@ -133,21 +133,21 @@ namespace NumSharp.Tests.Logic
         public void Case17b_NpByteIsInt8()
         {
             // Post-fix: np.@byte = sbyte (int8) per NumPy convention.
-            var r = np.find_common_type(new[] {np.@byte, np.@byte}, new Type[0]);
+            var r = np.find_common_type(new[] {np.@byte, np.@byte}, new DType[0]);
             r.Should().Be(NPTypeCode.SByte);
         }
 
         [TestMethod]
         public void Case18()
         {
-            var r = np.find_common_type(new[] {np.complex128, np.@double}, new Type[0]);
+            var r = np.find_common_type(new[] {np.complex128, np.@double}, new DType[0]);
             r.Should().Be(NPTypeCode.Complex);
         }
 
         [TestMethod]
         public void Case19()
         {
-            var r = np.find_common_type(new[] {np.complex128, np.complex128}, new Type[0]);
+            var r = np.find_common_type(new[] {np.complex128, np.complex128}, new DType[0]);
             r.Should().Be(NPTypeCode.Complex);
         }
 
@@ -161,14 +161,14 @@ namespace NumSharp.Tests.Logic
         [TestMethod]
         public void Case21()
         {
-            var r = np.find_common_type(new[] {np.@decimal, np.@double}, new NPTypeCode[0]);
+            var r = np.find_common_type(new[] {np.@decimal, np.@double}, new DType[0]);
             r.Should().Be(NPTypeCode.Decimal);
         }
 
         [TestMethod]
         public void Case22()
         {
-            var r = np.find_common_type(new[] {np.int16, np.int64}, new NPTypeCode[0]);
+            var r = np.find_common_type(new[] {np.int16, np.int64}, new DType[0]);
             r.Should().Be(NPTypeCode.Int64);
         }
 
@@ -178,7 +178,7 @@ namespace NumSharp.Tests.Logic
             // Char is NumSharp's 16-bit-unsigned (uint16) masquerade: char + int16 promotes
             // exactly like uint16 + int16 -> int32 (int16 cannot hold the uint16 range).
             // Probed NumPy 2.4.2: np.result_type(np.uint16, np.int16) == int32.
-            var r = np.find_common_type(new[] {np.@char, np.int16}, new NPTypeCode[0]);
+            var r = np.find_common_type(new[] {np.@char, np.int16}, new DType[0]);
             r.Should().Be(NPTypeCode.Int32);
         }
 
@@ -214,9 +214,9 @@ namespace NumSharp.Tests.Logic
         [TestMethod, Ignore("Ignored")]
         public void gen_typecode_map()
         {
-            var r = np.find_common_type(new[] {np.float32, np.float64}, new NPTypeCode[0]);
+            var r = np.find_common_type(new[] {np.float32, np.float64}, new DType[0]);
             r.Should().Be(NPTypeCode.Double);
-            var dict = new Dictionary<(Type, Type), Type>();
+            var dict = new Dictionary<(DType, DType), DType>();
             dict.Add((np.@bool, np.@bool), np.@bool);
             dict.Add((np.@bool, np.uint8), np.uint8);
             dict.Add((np.@bool, np.int16), np.int16);

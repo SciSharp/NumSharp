@@ -46,8 +46,14 @@ namespace NumSharp
         /// <summary>Number of output operands.</summary>
         public int NOut { get; }
 
-        /// <summary>The minimal cast safety this method guarantees for ANY descriptors of its DTypes (<c>-1</c> in NumPy means "must resolve"; here <see cref="NPY_CASTING.NPY_UNSAFE_CASTING"/> plays that role).</summary>
-        public NPY_CASTING Casting { get; }
+        /// <summary>
+        ///     The minimal cast safety this method guarantees for ANY descriptors of its DTypes (<c>-1</c> in NumPy means
+        ///     "must resolve"; here <see cref="NPY_CASTING.NPY_UNSAFE_CASTING"/> plays that role). A per-method constant;
+        ///     <c>virtual</c> so an implementation whose value is derived from a table that may not be built yet when the
+        ///     method is REGISTERED (the builtin numeric casts read <c>np</c>'s frozen promotion table, and <c>np</c>'s own
+        ///     type initializer can be what constructs <see cref="DTypeRegistry"/>) can compute it on first read instead.
+        /// </summary>
+        public virtual NPY_CASTING Casting { get; }
 
         /// <summary>The method flags (unaligned support, floating-point-error behaviour, …).</summary>
         public NDArrayMethodFlags Flags { get; }

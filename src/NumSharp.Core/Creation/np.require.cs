@@ -27,7 +27,7 @@ namespace NumSharp
         /// <remarks>
         ///     Port of NumPy 2.x <c>numpy.require</c>. With no requirements this is exactly
         ///     <c>asanyarray(a, dtype)</c>. Otherwise it resolves an order ('A' by default, or 'C'/'F' when
-        ///     requested), routes through <see cref="asarray(NDArray, Type, char, bool?, NDArray, string)"/>,
+        ///     requested), routes through <see cref="asarray(NDArray, DType, char, bool?, NDArray, string)"/>,
         ///     then makes a single copy (in the resolved order) if any of the remaining ALIGNED / WRITEABLE /
         ///     OWNDATA flags is not already satisfied. ALIGNED is always satisfied in NumSharp (managed
         ///     allocations), so only WRITEABLE (false for broadcast views) and OWNDATA (false for views)
@@ -35,7 +35,7 @@ namespace NumSharp
         ///     ndarray subclasses to demote.
         ///     https://numpy.org/doc/stable/reference/generated/numpy.require.html
         /// </remarks>
-        public static NDArray require(NDArray a, Type dtype = null, string[] requirements = null, NDArray like = null)
+        public static NDArray require(NDArray a, DType dtype = null, string[] requirements = null, NDArray like = null)
         {
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
@@ -84,28 +84,8 @@ namespace NumSharp
         ///     (<c>new[]{ "F_CONTIGUOUS" }</c>) to use the full alias.
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.require.html</remarks>
-        public static NDArray require(NDArray a, Type dtype, string requirements)
+        public static NDArray require(NDArray a, DType dtype, string requirements)
             => require(a, dtype, ToCharTokens(requirements));
-
-        /// <summary>Convenience overload taking a NumPy-style dtype string (e.g. <c>"float32"</c>).</summary>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.require.html</remarks>
-        public static NDArray require(NDArray a, string dtype, string[] requirements = null)
-            => require(a, dtype == null ? null : np.dtype(dtype).type, requirements);
-
-        /// <summary>Convenience overload taking a NumPy-style dtype string and a single requirements string.</summary>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.require.html</remarks>
-        public static NDArray require(NDArray a, string dtype, string requirements)
-            => require(a, dtype == null ? null : np.dtype(dtype).type, ToCharTokens(requirements));
-
-        /// <summary>Convenience overload taking <see cref="NPTypeCode"/>.</summary>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.require.html</remarks>
-        public static NDArray require(NDArray a, NPTypeCode dtype, string[] requirements = null)
-            => require(a, dtype == NPTypeCode.Empty ? null : dtype.AsType(), requirements);
-
-        /// <summary>Convenience overload taking <see cref="NPTypeCode"/> and a single requirements string.</summary>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.require.html</remarks>
-        public static NDArray require(NDArray a, NPTypeCode dtype, string requirements)
-            => require(a, dtype == NPTypeCode.Empty ? null : dtype.AsType(), ToCharTokens(requirements));
 
         /// <summary>Splits a requirements string into one-character tokens (NumPy iterates a string by char).</summary>
         private static string[] ToCharTokens(string requirements)

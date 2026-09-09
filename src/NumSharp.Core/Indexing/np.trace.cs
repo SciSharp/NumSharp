@@ -47,7 +47,7 @@ namespace NumSharp
         [NDScoped] // reclaims the diagonal view, its contig copy and the natural result on the out= path
         public static NDArray trace(
             NDArray a, int offset = 0, int axis1 = 0, int axis2 = 1,
-            Type dtype = null, NDArray @out = null)
+            DType dtype = null, NDArray @out = null)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
 
@@ -124,7 +124,7 @@ namespace NumSharp
             var (accumCode, supported) = DirectILKernelGenerator.GetTraceAccumTypeCode(a.GetTypeCode);
             if (!supported) return false;
 
-            var kernel = DirectILKernelGenerator.GetTraceKernel(a.dtype);
+            var kernel = DirectILKernelGenerator.GetTraceKernel(a.dtype.type);
             if (kernel == null) return false;
 
             var shape = a.Shape;

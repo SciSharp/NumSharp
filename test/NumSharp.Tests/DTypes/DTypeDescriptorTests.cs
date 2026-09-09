@@ -127,7 +127,7 @@ namespace NumSharp.Tests.DTypes
         public void Datetime_HasNoStorage_ConversionsRaiseNotSupported()
         {
             var d = np.dtype("M8[ns]");
-            Action toType = () => { Type _ = d; };
+            Action toType = () => { Type _ = (Type)d; };
             Action toCode = () => { NPTypeCode _ = d; };
             Action getCode = () => d.GetTypeCode();
             toType.Should().Throw<NotSupportedException>().WithMessage("*has no NumSharp storage yet*Stage C*");
@@ -332,13 +332,14 @@ namespace NumSharp.Tests.DTypes
             canon.Should().Be(np.dtype("M8[ns]"));
         }
 
-        // ---- implicit conversions (the four spellings) -------------------------------------------------------------
+        // ---- conversions: the four spellings convert IN implicitly; OUT to Type is explicit, OUT to NPTypeCode implicit ----
 
         [TestMethod]
-        public void ImplicitConversions_RoundTrip()
+        public void Conversions_RoundTrip()
         {
-            Type t = DType.Double;
+            Type t = (Type)DType.Double; // explicit — see TypeConversion_IsExplicit_SoTypeEqualityResolvesToDType
             t.Should().Be(typeof(double));
+            DType.Double.type.Should().Be(typeof(double)); // NumPy's dtype.type is the field form
             NPTypeCode c = (DType)"int32";
             c.Should().Be(NPTypeCode.Int32);
             DType fromNullable = (NPTypeCode?)null;
@@ -347,11 +348,46 @@ namespace NumSharp.Tests.DTypes
             fromEmpty.Should().BeNull();
             DType fromNullString = (string)null;
             fromNullString.Should().BeNull();
-            Type nullType = (DType)null;
+            Type nullType = (Type)(DType)null;
             nullType.Should().BeNull();
             NPTypeCode empty = (DType)null;
             empty.Should().Be(NPTypeCode.Empty);
             ((DType)"M8[ns]").Meta.Should().BeSameAs(np.dtypes.DateTime64DType);
+        }
+
+        /// <summary>
+        ///     Stage B (NDArray.dtype → DType) pin: the DType→Type conversion is EXPLICIT on purpose. System.Type declares its
+        ///     own <c>==</c>, so with conversions in both directions <c>a.dtype == typeof(double)</c> would be ambiguous between
+        ///     <c>Type.==</c> and <c>DType.==</c> (CS0034); with only Type→DType implicit it resolves to the structural, coercing
+        ///     DType equality — which is also what lets <c>Assert.AreEqual(typeof(double), a.dtype)</c> infer <c>T = DType</c>.
+        ///     Every line here compiles ONLY because of that asymmetry, so this test is the guard against re-adding the implicit
+        ///     out-conversion (or `==(DType, Type)` overloads, which would make `descr == null` ambiguous instead).
+        /// </summary>
+        [TestMethod]
+        public void TypeConversion_IsExplicit_SoTypeEqualityResolvesToDType()
+        {
+            var a = np.zeros(new Shape(2), np.float64);
+            (a.dtype == typeof(double)).Should().BeTrue();
+            (typeof(double) == a.dtype).Should().BeTrue();
+            (a.dtype != typeof(float)).Should().BeTrue();
+            (a.dtype == np.float64).Should().BeTrue();
+            (a.dtype == NPTypeCode.Double).Should().BeTrue();
+            (a.dtype == "f8").Should().BeTrue();
+            (np.float64 == typeof(double)).Should().BeTrue();
+            Assert.AreEqual(typeof(double), a.dtype); // T infers as DType; would be CS0411 with a two-way implicit conversion
+            Assert.AreEqual(np.float64, a.dtype);
+            Assert.AreNotEqual(typeof(int), a.dtype);
+            a.dtype.Should().Be(typeof(double));
+            a.dtype.Should().Be<double>();
+            a.dtype.Should().Be(np.float64).And.Be(NPTypeCode.Double).And.Be("float64");
+            a.dtype.Should().NotBe(typeof(int)).And.NotBe<float>();
+            a.dtype.Should().BeSameAs(np.float64); // the builtin descriptor is the class singleton
+            DType none = null;
+            (none == null).Should().BeTrue(); // the null idiom the engine relies on stays unambiguous
+            (none != np.float64).Should().BeTrue();
+            np.float64.type.Should().Be(typeof(double));
+            np.float64.name.Should().Be("float64");
+            np.float64.itemsize.Should().Be(8);
         }
 
         [TestMethod]

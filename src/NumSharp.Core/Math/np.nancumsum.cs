@@ -12,7 +12,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">Input array.</param>
         /// <param name="axis">Axis along which the cumulative sum is computed. The default (None) is to compute the cumsum over the flattened array.</param>
-        /// <param name="typeCode">Type of the returned array and of the accumulator in which the elements are summed. If not specified, it defaults to the dtype of <paramref name="a"/>, unless <paramref name="a"/> has an integer dtype with a precision less than that of the default platform integer, in which case the default platform integer is used.</param>
+        /// <param name="dtype">Type of the returned array and of the accumulator in which the elements are summed (a <see cref="Type"/>, <see cref="NPTypeCode"/>, dtype string or <see cref="DType"/> — all convert implicitly). If not specified, it defaults to the dtype of <paramref name="a"/>, unless <paramref name="a"/> has an integer dtype with a precision less than that of the default platform integer, in which case the default platform integer is used.</param>
         /// <param name="out">Alternate output array in which to place the result. It must have the same shape and buffer length as the expected output, but its dtype may differ (the result is cast into it with NumPy's unsafe casting) and a reference to <paramref name="out"/> is returned.</param>
         /// <returns>A new array holding the result unless <paramref name="out"/> is specified, in which case a reference to <paramref name="out"/> is returned. The result has the same size as <paramref name="a"/>, and the same shape if <paramref name="axis"/> is not None or <paramref name="a"/> is 1-D.</returns>
         /// <remarks>
@@ -21,13 +21,13 @@ namespace NumSharp
         /// Only float-family dtypes can contain NaN, so integer/bool/decimal inputs are equivalent to <see cref="cumsum"/>.
         /// </remarks>
         [NDScoped]
-        public static NDArray nancumsum(NDArray a, int? axis = null, NPTypeCode? typeCode = null, NDArray @out = null)
+        public static NDArray nancumsum(NDArray a, int? axis = null, DType dtype = null, NDArray @out = null)
         {
             // Boundary scope: the full-size NaN-replaced copy is reclaimed at exit; the scan
             // result (or the caller's @out — untracked, a Returns no-op) is yielded.
             // NumPy: a, mask = _replace_nan(a, 0); return np.cumsum(a, axis, dtype, out). The mask is
             // discarded by nancumsum (unlike nanmean/nanvar), so we only need the NaN-replaced copy.
-            return cumsum(_replace_nan_for_scan(a, 0), axis, typeCode, @out);
+            return cumsum(_replace_nan_for_scan(a, 0), axis, dtype, @out);
         }
 
         /// <summary>

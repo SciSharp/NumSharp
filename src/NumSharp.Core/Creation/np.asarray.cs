@@ -46,7 +46,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asarray.html</remarks>
         public static NDArray asarray(
             NDArray a,
-            Type dtype = null,
+            DType dtype = null,
             char order = 'K',
             bool? copy = null,
             NDArray like = null,
@@ -65,7 +65,7 @@ namespace NumSharp
             // no array-subclass dispatch, so the value is accepted but never read.
             _ = like;
 
-            bool typeMatches = dtype == null || dtype == a.dtype;
+            bool typeMatches = dtype == null || a.typecode == dtype.GetTypeCode();
             bool layoutMatches = LayoutAlreadyOK(a.Shape, order);
             bool noCopyNeeded = typeMatches && layoutMatches;
 
@@ -97,61 +97,6 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Convert the input to an ndarray. Convenience overload taking a NumPy-style dtype string
-        ///     (e.g. <c>"float32"</c>, <c>"&lt;i4"</c>, <c>"complex128"</c>).
-        /// </summary>
-        /// <param name="a">Input ndarray.</param>
-        /// <param name="dtype">NumPy-style dtype string (parsed via <see cref="np.dtype(string)"/>).</param>
-        /// <param name="order">'C', 'F', 'A', or 'K' (default).</param>
-        /// <param name="copy">Tri-state copy: <c>null</c> = if-needed, <c>true</c> = always, <c>false</c> = never (raises).</param>
-        /// <param name="like">Reference for array-function dispatch — accepted for parity, no effect.</param>
-        /// <param name="device">Only <c>"cpu"</c> or <c>null</c>.</param>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asarray.html</remarks>
-        public static NDArray asarray(
-            NDArray a,
-            string dtype,
-            char order = 'K',
-            bool? copy = null,
-            NDArray like = null,
-            string device = null)
-        {
-            Type resolved = dtype == null ? null : np.dtype(dtype).type;
-            return asarray(a, resolved, order, copy, like, device);
-        }
-
-        /// <summary>
-        ///     Convert the input to an ndarray. Convenience overload taking a <see cref="DType"/> instance.
-        /// </summary>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asarray.html</remarks>
-        public static NDArray asarray(
-            NDArray a,
-            DType dtype,
-            char order = 'K',
-            bool? copy = null,
-            NDArray like = null,
-            string device = null)
-        {
-            Type resolved = dtype?.type;
-            return asarray(a, resolved, order, copy, like, device);
-        }
-
-        /// <summary>
-        ///     Convert the input to an ndarray. Convenience overload taking <see cref="NPTypeCode"/>.
-        /// </summary>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asarray.html</remarks>
-        public static NDArray asarray(
-            NDArray a,
-            NPTypeCode dtype,
-            char order = 'K',
-            bool? copy = null,
-            NDArray like = null,
-            string device = null)
-        {
-            Type resolved = dtype == NPTypeCode.Empty ? null : dtype.AsType();
-            return asarray(a, resolved, order, copy, like, device);
-        }
-
-        /// <summary>
         ///     Convert a <see cref="MemoryView"/> (obtained from <see cref="NDArray.data"/>) to an ndarray —
         ///     the consumer round-trip of <c>ndarray.data</c>. Matches NumPy's <c>np.asarray(a.data)</c>,
         ///     which reads the buffer's shape/strides/dtype and returns a zero-copy VIEW sharing its memory
@@ -167,7 +112,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asarray.html</remarks>
         public static NDArray asarray(
             MemoryView buffer,
-            Type dtype = null,
+            DType dtype = null,
             char order = 'K',
             bool? copy = null,
             NDArray like = null,

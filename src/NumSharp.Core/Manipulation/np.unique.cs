@@ -75,7 +75,7 @@ namespace NumSharp
             public int ndim => values.ndim;
 
             /// <summary>Element <see cref="Type"/> of <see cref="values"/>.</summary>
-            public Type dtype => values.dtype;
+            public DType dtype => values.dtype;
 
             /// <summary>Element <see cref="NPTypeCode"/> of <see cref="values"/>.</summary>
             public NPTypeCode typecode => values.typecode;

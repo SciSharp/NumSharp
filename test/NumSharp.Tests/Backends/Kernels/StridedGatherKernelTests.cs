@@ -24,7 +24,7 @@ namespace NumSharp.Tests.Backends.Kernels;
 [TestClass]
 public class StridedGatherKernelTests
 {
-    private static readonly (Type dtype, string name)[] GatherDtypes =
+    private static readonly (DType dtype, string name)[] GatherDtypes =
     {
         (np.int32, "i32"),
         (np.uint32, "u32"),

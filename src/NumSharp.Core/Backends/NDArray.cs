@@ -235,10 +235,13 @@ namespace NumSharp
         /// Constructor for init data type
         /// internal storage is 1D with 1 element
         /// </summary>
-        /// <param name="dtype">Data type of elements</param>
+        /// <param name="dtype">
+        ///     The dtype DESCRIPTOR of the elements (NumPy's <c>PyArray_NewFromDescr</c>). A C# <see cref="Type"/>,
+        ///     an <see cref="NPTypeCode"/> or a NumPy dtype string convert implicitly.
+        /// </param>
         /// <param name="engine">The engine of this <see cref="NDArray"/></param>
         /// <remarks>This constructor does not call allocation/></remarks>
-        protected internal NDArray(Type dtype, TensorEngine engine)
+        protected internal NDArray(DType dtype, TensorEngine engine)
         {
             tensorEngine = engine;
             Storage = TensorEngine.GetStorage(dtype);
@@ -248,30 +251,13 @@ namespace NumSharp
         /// Constructor for init data type
         /// internal storage is 1D with 1 element
         /// </summary>
-        /// <param name="typeCode">Data type of elements</param>
-        /// <param name="engine">The engine of this <see cref="NDArray"/></param>
+        /// <param name="dtype">
+        ///     The dtype DESCRIPTOR of the elements. A C# <see cref="Type"/> (<c>typeof(double)</c>), an
+        ///     <see cref="NPTypeCode"/> or a NumPy dtype string (<c>"f8"</c>) convert implicitly — this is the ONE
+        ///     dtype-taking constructor family (the former <see cref="NPTypeCode"/> twins were folded into it).
+        /// </param>
         /// <remarks>This constructor does not call allocation/></remarks>
-        protected internal NDArray(NPTypeCode typeCode, TensorEngine engine)
-        {
-            tensorEngine = engine;
-            Storage = TensorEngine.GetStorage(typeCode.AsType());
-        }
-
-        /// <summary>
-        /// Constructor for init data type
-        /// internal storage is 1D with 1 element
-        /// </summary>
-        /// <param name="dtype">Data type of elements</param>
-        /// <remarks>This constructor does not call allocation/></remarks>
-        public NDArray(Type dtype) : this(dtype, BackendFactory.GetEngine()) { }
-
-        /// <summary>
-        /// Constructor for init data type
-        /// internal storage is 1D with 1 element
-        /// </summary>
-        /// <param name="typeCode">Data type of elements</param>
-        /// <remarks>This constructor does not call allocation/></remarks>
-        public NDArray(NPTypeCode typeCode) : this(typeCode, BackendFactory.GetEngine()) { }
+        public NDArray(DType dtype) : this(dtype, BackendFactory.GetEngine()) { }
 
         /// <summary>
         /// Constructor which takes .NET array
@@ -324,10 +310,10 @@ namespace NumSharp
         /// Constructor which initialize elements with 0
         /// type and shape are given.
         /// </summary>
-        /// <param name="dtype">internal data type</param>
+        /// <param name="dtype">The dtype descriptor (a <see cref="Type"/>, <see cref="NPTypeCode"/> or NumPy dtype string converts implicitly)</param>
         /// <param name="shape">Shape of NDArray</param>
-        /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
-        public NDArray(Type dtype, Shape shape) : this(dtype, shape, true) { }
+        /// <remarks>This constructor calls <see cref="UnmanagedStorage.Allocate(NumSharp.Shape,NumSharp.DType,bool)"/></remarks>
+        public NDArray(DType dtype, Shape shape) : this(dtype, shape, true) { }
 
         /// <summary>
         /// Constructor which initialize elements with 0
@@ -336,16 +322,16 @@ namespace NumSharp
         /// <param name="dtype">internal data type</param>
         /// <param name="shape">Shape of NDArray</param>
         /// <param name="order">Memory order. Note: Only C-order is supported, F-order parameter is accepted but ignored.</param>
-        /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
-        public NDArray(Type dtype, Shape shape, char order) : this(dtype, shape, true) { }
+        /// <remarks>This constructor calls <see cref="UnmanagedStorage.Allocate(NumSharp.Shape,NumSharp.DType,bool)"/></remarks>
+        public NDArray(DType dtype, Shape shape, char order) : this(dtype, shape, true) { }
 
         /// <summary>
         ///     Constructor which initialize elements with length of <paramref name="size"/>
         /// </summary>
         /// <param name="dtype">Internal data type</param>
         /// <param name="size">The size as a single dimension shape</param>
-        /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
-        public NDArray(Type dtype, int size) : this(dtype, Shape.Vector(size), true) { }
+        /// <remarks>This constructor calls <see cref="UnmanagedStorage.Allocate(NumSharp.Shape,NumSharp.DType,bool)"/></remarks>
+        public NDArray(DType dtype, int size) : this(dtype, Shape.Vector(size), true) { }
 
         /// <summary>
         ///     Constructor which initialize elements with length of <paramref name="size"/>
@@ -353,16 +339,16 @@ namespace NumSharp
         /// <param name="dtype">Internal data type</param>
         /// <param name="size">The size as a single dimension shape</param>
         /// <param name="fillZeros">Should set the values of the new allocation to default(dtype)? otherwise - old memory noise</param>
-        /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
-        public NDArray(Type dtype, int size, bool fillZeros) : this(dtype, Shape.Vector(size), fillZeros) { }
+        /// <remarks>This constructor calls <see cref="UnmanagedStorage.Allocate(NumSharp.Shape,NumSharp.DType,bool)"/></remarks>
+        public NDArray(DType dtype, int size, bool fillZeros) : this(dtype, Shape.Vector(size), fillZeros) { }
 
         /// <summary>
         ///     Constructor which initialize elements with length of <paramref name="size"/> (long for >2GB arrays)
         /// </summary>
         /// <param name="dtype">Internal data type</param>
         /// <param name="size">The size as a single dimension shape</param>
-        /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
-        public NDArray(Type dtype, long size) : this(dtype, Shape.Vector(size), true) { }
+        /// <remarks>This constructor calls <see cref="UnmanagedStorage.Allocate(NumSharp.Shape,NumSharp.DType,bool)"/></remarks>
+        public NDArray(DType dtype, long size) : this(dtype, Shape.Vector(size), true) { }
 
         /// <summary>
         ///     Constructor which initialize elements with length of <paramref name="size"/> (long for >2GB arrays)
@@ -370,75 +356,18 @@ namespace NumSharp
         /// <param name="dtype">Internal data type</param>
         /// <param name="size">The size as a single dimension shape</param>
         /// <param name="fillZeros">Should set the values of the new allocation to default(dtype)? otherwise - old memory noise</param>
-        /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
-        public NDArray(Type dtype, long size, bool fillZeros) : this(dtype, Shape.Vector(size), fillZeros) { }
+        /// <remarks>This constructor calls <see cref="UnmanagedStorage.Allocate(NumSharp.Shape,NumSharp.DType,bool)"/></remarks>
+        public NDArray(DType dtype, long size, bool fillZeros) : this(dtype, Shape.Vector(size), fillZeros) { }
 
         /// <summary>
         /// Constructor which initialize elements with 0
         /// type and shape are given.
         /// </summary>
-        /// <param name="dtype">internal data type</param>
-        /// <param name="shape">Shape of NDArray</param>
-        /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
-        public NDArray(NPTypeCode dtype, Shape shape) : this(dtype, shape, true) { }
-
-        /// <summary>
-        ///     Constructor which initialize elements with length of <paramref name="size"/>
-        /// </summary>
-        /// <param name="dtype">Internal data type</param>
-        /// <param name="size">The size as a single dimension shape</param>
-        /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
-        public NDArray(NPTypeCode dtype, int size) : this(dtype, Shape.Vector(size), true) { }
-
-        /// <summary>
-        ///     Constructor which initialize elements with length of <paramref name="size"/>
-        /// </summary>
-        /// <param name="dtype">Internal data type</param>
-        /// <param name="size">The size as a single dimension shape</param>
-        /// <param name="fillZeros">Should set the values of the new allocation to default(dtype)? otherwise - old memory noise</param>
-        /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
-        public NDArray(NPTypeCode dtype, int size, bool fillZeros) : this(dtype, Shape.Vector(size), fillZeros) { }
-
-        /// <summary>
-        ///     Constructor which initialize elements with length of <paramref name="size"/>
-        /// </summary>
-        /// <param name="dtype">Internal data type</param>
-        /// <param name="size">The size as a single dimension shape (long for large arrays)</param>
-        /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
-        public NDArray(NPTypeCode dtype, long size) : this(dtype, Shape.Vector(size), true) { }
-
-        /// <summary>
-        ///     Constructor which initialize elements with length of <paramref name="size"/>
-        /// </summary>
-        /// <param name="dtype">Internal data type</param>
-        /// <param name="size">The size as a single dimension shape (long for large arrays)</param>
-        /// <param name="fillZeros">Should set the values of the new allocation to default(dtype)? otherwise - old memory noise</param>
-        /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
-        public NDArray(NPTypeCode dtype, long size, bool fillZeros) : this(dtype, Shape.Vector(size), fillZeros) { }
-
-        /// <summary>
-        /// Constructor which initialize elements with 0
-        /// type and shape are given.
-        /// </summary>
-        /// <param name="dtype">internal data type</param>
+        /// <param name="dtype">The dtype descriptor (a <see cref="Type"/>, <see cref="NPTypeCode"/> or NumPy dtype string converts implicitly)</param>
         /// <param name="shape">Shape of NDArray</param>
         /// <param name="fillZeros">Should set the values of the new allocation to default(dtype)? otherwise - old memory noise</param>
-        /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
-        public NDArray(Type dtype, Shape shape, bool fillZeros) : this(dtype)
-        {
-            Storage.Allocate(shape, dtype, fillZeros);
-            InitializeArc();
-        }
-
-        /// <summary>
-        /// Constructor which initialize elements with 0
-        /// type and shape are given.
-        /// </summary>
-        /// <param name="dtype">internal data type</param>
-        /// <param name="shape">Shape of NDArray</param>
-        /// <param name="fillZeros">Should set the values of the new allocation to default(dtype)? otherwise - old memory noise</param>
-        /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
-        public NDArray(NPTypeCode dtype, Shape shape, bool fillZeros) : this(dtype)
+        /// <remarks>This constructor calls <see cref="UnmanagedStorage.Allocate(NumSharp.Shape,NumSharp.DType,bool)"/></remarks>
+        public NDArray(DType dtype, Shape shape, bool fillZeros) : this(dtype)
         {
             Storage.Allocate(shape, dtype, fillZeros);
             InitializeArc();
@@ -453,9 +382,16 @@ namespace NumSharp
         #endregion
 
         /// <summary>
-        ///     The dtype of this array.
+        ///     The dtype of this array — the dtype DESCRIPTOR (NumPy's <c>ndarray.dtype</c>, a <see cref="DType"/>): the
+        ///     canonical instance of the array's dtype class (<c>np.float64</c> for a double array — the same object every
+        ///     time, so <c>a.dtype == b.dtype</c> and <c>a.dtype == np.float64</c> are cheap structural compares), or the
+        ///     parametric instance an array was created with. It converts implicitly to the CLR element
+        ///     <see cref="System.Type"/> (<c>Type t = a.dtype;</c>) and to <see cref="NPTypeCode"/>, and compares equal to a
+        ///     <see cref="Type"/> / <see cref="NPTypeCode"/> / dtype string the way NumPy's <c>dtype.__eq__</c> coerces
+        ///     (<c>a.dtype == typeof(double)</c>, <c>a.dtype.Equals("f8")</c>). Use <see cref="typecode"/> for the kernel
+        ///     discriminator and <c>dtype.type</c> for the element type when a <see cref="System.Type"/> is required by name.
         /// </summary>
-        public Type dtype => Storage.DType;
+        public DType dtype => Storage.Descr;
 
         /// <summary>
         ///     The <see cref="NPTypeCode"/> of this array.
@@ -701,17 +637,24 @@ namespace NumSharp
         /// <summary>
         ///     Copy of the array, cast to a specified type.
         /// </summary>
-        /// <param name="dtype">The dtype to cast this array.</param>
+        /// <param name="dtype">
+        ///     The dtype to cast this array to — one descriptor parameter, like NumPy's <c>dtype</c>: a C# <see cref="Type"/>
+        ///     (<c>typeof(float)</c>), an <see cref="NPTypeCode"/>, a NumPy dtype string (<c>"f4"</c>, <c>"float32"</c>) or a
+        ///     <see cref="DType"/> (<c>np.float32</c>, <c>other.dtype</c>) all convert implicitly.
+        /// </param>
         /// <param name="copy">By default, astype always returns a newly allocated array. If this is set to false and the dtype requirement is already satisfied, the input array itself is returned instead of a copy; when a conversion is needed a new array is still allocated and the input is never modified (NumPy semantics).</param>
         /// <returns>An <see cref="NDArray"/> of given <paramref name="dtype"/>.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.astype.html</remarks>
         [SuppressMessage("ReSharper", "ParameterHidesMember")]
-        public NDArray astype(Type dtype, bool copy = true) => astype(dtype, copy, 'K');
+        public NDArray astype(DType dtype, bool copy = true) => astype(dtype, copy, 'K');
 
         /// <summary>
         ///     Copy of the array, cast to a specified type and memory layout.
         /// </summary>
-        /// <param name="dtype">The dtype to cast this array.</param>
+        /// <param name="dtype">
+        ///     The dtype to cast this array to — one descriptor parameter, like NumPy's <c>dtype</c>: a C# <see cref="Type"/>,
+        ///     an <see cref="NPTypeCode"/>, a NumPy dtype string or a <see cref="DType"/> all convert implicitly.
+        /// </param>
         /// <param name="copy">By default, astype always returns a newly allocated array. If this is set to false and the dtype requirement is already satisfied, the input array itself is returned instead of a copy; when a conversion is needed a new array is still allocated and the input is never modified (NumPy semantics).</param>
         /// <param name="order">
         ///     Controls the memory layout: 'C' (row-major), 'F' (column-major),
@@ -725,55 +668,21 @@ namespace NumSharp
         ///     when the source dtype cannot cast to <paramref name="dtype"/> under that rule.
         /// </param>
         /// <returns>An <see cref="NDArray"/> of given <paramref name="dtype"/> with the requested layout.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is null.</exception>
+        /// <exception cref="NotSupportedException">The descriptor's class has no storage lane yet (a datetime64/timedelta64 descriptor before Stage C).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.astype.html</remarks>
         [SuppressMessage("ReSharper", "ParameterHidesMember")]
-        public NDArray astype(Type dtype, bool copy, char order, string casting = "unsafe")
+        public NDArray astype(DType dtype, bool copy, char order, string casting = "unsafe")
         {
-            ValidateAstypeCasting(dtype.GetTypeCode(), casting);
-            var casted = TensorEngine.Cast(this, dtype, copy);
+            if (dtype is null)
+                throw new ArgumentNullException(nameof(dtype));
+            var typeCode = dtype.GetTypeCode(); // a descriptor-only class raises its own descriptive "no storage yet"
+            ValidateAstypeCasting(typeCode, casting);
+            var casted = TensorEngine.Cast(this, dtype.type, copy);
             // 'K' (astype's default) is fully handled by Cast's KEEPORDER allocation — including
             // the neither-contiguous sorted-stride-perm layouts (3-D transpose, broadcast) that a
             // binary C/F resolve cannot express; re-imposing the collapsed order here would both
             // undo that layout and force a copy out of a satisfied `copy: false` call.
-            if (order == 'K' || order == 'k')
-                return casted;
-            char physical = OrderResolver.Resolve(order, this.Shape);
-            return RelayoutAstype(casted, physical);
-        }
-
-        /// <summary>
-        ///     Copy of the array, cast to a specified type.
-        /// </summary>
-        /// <param name="typeCode">The dtype to cast this array.</param>
-        /// <param name="copy">By default, astype always returns a newly allocated array. If this is set to false and the dtype requirement is already satisfied, the input array itself is returned instead of a copy; when a conversion is needed a new array is still allocated and the input is never modified (NumPy semantics).</param>
-        /// <returns>An <see cref="NDArray"/> of given <paramref name="typeCode"/>.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.astype.html</remarks>
-        public NDArray astype(NPTypeCode typeCode, bool copy = true) => astype(typeCode, copy, 'K');
-
-        /// <summary>
-        ///     Copy of the array, cast to a specified type and memory layout.
-        /// </summary>
-        /// <param name="typeCode">The dtype to cast this array.</param>
-        /// <param name="copy">By default, astype always returns a newly allocated array. If this is set to false and the dtype requirement is already satisfied, the input array itself is returned instead of a copy; when a conversion is needed a new array is still allocated and the input is never modified (NumPy semantics).</param>
-        /// <param name="order">
-        ///     Controls the memory layout: 'C' (row-major), 'F' (column-major),
-        ///     'A' - 'F' if source is F-contiguous (and not C-contiguous) else 'C',
-        ///     'K' (default) - preserve the source layout.
-        /// </param>
-        /// <param name="casting">
-        ///     NumPy's cast-rule gate ('no' / 'equiv' / 'safe' / 'same_kind' / 'unsafe').
-        ///     Default 'unsafe' (matches NumPy's astype default) — any conversion is permitted.
-        ///     A stricter rule raises <see cref="InvalidCastException"/> (NumPy's TypeError analogue)
-        ///     when the source dtype cannot cast to <paramref name="typeCode"/> under that rule.
-        /// </param>
-        /// <returns>An <see cref="NDArray"/> of given <paramref name="typeCode"/> with the requested layout.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.astype.html</remarks>
-        public NDArray astype(NPTypeCode typeCode, bool copy, char order, string casting = "unsafe")
-        {
-            ValidateAstypeCasting(typeCode, casting);
-            var casted = TensorEngine.Cast(this, typeCode.AsType(), copy);
-            // 'K' (astype's default) is fully handled by Cast's KEEPORDER allocation — see the
-            // Type-overload twin above for why re-imposing a collapsed C/F order here is wrong.
             if (order == 'K' || order == 'k')
                 return casted;
             char physical = OrderResolver.Resolve(order, this.Shape);
@@ -922,14 +831,14 @@ namespace NumSharp
         /// </param>
         /// <returns></returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.view.html</remarks>
-        public NDArray view(Type dtype = null)
+        public NDArray view(DType dtype = null)
         {
-            if (dtype == null || dtype == this.dtype)
+            if (dtype is null || dtype.GetTypeCode() == Storage.TypeCode)
             {
                 return new NDArray(Storage.Alias()) { TensorEngine = TensorEngine };
             }
             // AliasAs reinterprets bytes without conversion (like NumPy's view)
-            return new NDArray(Storage.AliasAs(dtype)) { TensorEngine = TensorEngine };
+            return new NDArray(Storage.AliasAs(dtype.GetTypeCode())) { TensorEngine = TensorEngine };
         }
 
         /// <summary>

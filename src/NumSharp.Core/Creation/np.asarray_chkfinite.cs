@@ -21,7 +21,7 @@ namespace NumSharp
         ///     hold inf/NaN. Complex is finite iff both its real and imaginary parts are finite.
         ///     https://numpy.org/doc/stable/reference/generated/numpy.asarray_chkfinite.html
         /// </remarks>
-        public static NDArray asarray_chkfinite(NDArray a, Type dtype = null, char order = 'K')
+        public static NDArray asarray_chkfinite(NDArray a, DType dtype = null, char order = 'K')
         {
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
@@ -33,21 +33,6 @@ namespace NumSharp
 
             return arr;
         }
-
-        /// <summary>
-        ///     Convert the input to an array, checking for NaNs or Infs. Convenience overload taking a
-        ///     NumPy-style dtype string (e.g. <c>"float32"</c>, <c>"&lt;c16"</c>).
-        /// </summary>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asarray_chkfinite.html</remarks>
-        public static NDArray asarray_chkfinite(NDArray a, string dtype, char order = 'K')
-            => asarray_chkfinite(a, dtype == null ? null : np.dtype(dtype).type, order);
-
-        /// <summary>
-        ///     Convert the input to an array, checking for NaNs or Infs. Convenience overload taking <see cref="NPTypeCode"/>.
-        /// </summary>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asarray_chkfinite.html</remarks>
-        public static NDArray asarray_chkfinite(NDArray a, NPTypeCode dtype, char order = 'K')
-            => asarray_chkfinite(a, dtype == NPTypeCode.Empty ? null : dtype.AsType(), order);
 
         /// <summary>
         ///     True for the dtypes NumPy checks for finiteness (its <c>typecodes['AllFloat']</c>: the real

@@ -39,7 +39,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.cov.html</remarks>
         [NDScoped]
         public static NDArray cov(NDArray m, NDArray y = null, bool rowvar = true, bool bias = false,
-            int? ddof = null, NDArray fweights = null, NDArray aweights = null, NPTypeCode? dtype = null)
+            int? ddof = null, NDArray fweights = null, NDArray aweights = null, DType dtype = null)
         {
             if (m is null) throw new ArgumentNullException(nameof(m));
 
@@ -50,7 +50,7 @@ namespace NumSharp
                 throw new ValueError("y has more than 2 dimensions");
 
             // Result dtype: at least float64 (complex input stays complex).
-            NPTypeCode resultType = dtype ?? (y is null
+            NPTypeCode resultType = dtype?.GetTypeCode() ?? (y is null
                 ? np.result_type(m, NPTypeCode.Double)
                 : np.result_type(m, y, NPTypeCode.Double));
 

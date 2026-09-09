@@ -14,9 +14,9 @@ namespace NumSharp
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.standard_exponential.html
         /// </remarks>
-        public NDArray standard_exponential(Shape size = default, Type dtype = null, string method = "zig", NDArray @out = null)
+        public NDArray standard_exponential(Shape size = default, DType dtype = null, string method = "zig", NDArray @out = null)
         {
-            dtype = dtype ?? typeof(double);
+            dtype ??= DType.Double;
             NPTypeCode tc = ResolveFloatDtype(dtype, "standard_exponential");
             bool zig = method == "zig"; // NumPy: anything not 'zig' uses the inverse-CDF sampler.
 

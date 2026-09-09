@@ -25,15 +25,16 @@ namespace NumSharp
         ///     </para>
         /// </remarks>
         [NDScoped]
-        public static NDArray indices(int[] dimensions, NPTypeCode dtype = NPTypeCode.Int64)
+        public static NDArray indices(int[] dimensions, DType dtype = null)
         {
             if (dimensions == null) throw new ArgumentNullException(nameof(dimensions));
+            var typeCode = dtype?.GetTypeCode() ?? NPTypeCode.Int64;
 
             // Special case: empty dimensions tuple → numpy returns shape (0,).
             if (dimensions.Length == 0)
-                return new NDArray(dtype, new Shape(0), false);
+                return new NDArray(typeCode, new Shape(0), false);
 
-            return BuildDenseIndices(dimensions, dtype);
+            return BuildDenseIndices(dimensions, typeCode);
         }
 
         /// <summary>
@@ -43,14 +44,14 @@ namespace NumSharp
         ///     <c>np.indices(dimensions, sparse=True)</c>.
         /// </summary>
         [NDScoped]
-        public static NDArray[] indices_sparse(int[] dimensions, NPTypeCode dtype = NPTypeCode.Int64)
+        public static NDArray[] indices_sparse(int[] dimensions, DType dtype = null)
         {
             if (dimensions == null) throw new ArgumentNullException(nameof(dimensions));
 
             if (dimensions.Length == 0)
                 return Array.Empty<NDArray>();
 
-            return BuildSparseIndicesAsArray(dimensions, dtype);
+            return BuildSparseIndicesAsArray(dimensions, dtype?.GetTypeCode() ?? NPTypeCode.Int64);
         }
 
         private static unsafe NDArray BuildDenseIndices(int[] dimensions, NPTypeCode dtype)

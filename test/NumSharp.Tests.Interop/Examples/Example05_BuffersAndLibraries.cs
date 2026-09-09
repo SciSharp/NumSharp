@@ -34,7 +34,7 @@ namespace NumSharp.Tests.Interop.Examples
                 NDArray v = py.e;
                 v.typecode.Should().Be(tc, expr);
                 v.Shape.IsWriteable.Should().BeTrue(expr);
-                v.SetValue(Convert.ChangeType(7, v.dtype), 0);
+                v.SetValue(Convert.ChangeType(7, v.dtype.type), 0);
                 long e0 = py.Eval("int(e[0])");
                 e0.Should().Be(7, "the NumSharp write landed in {0}", expr);
             }

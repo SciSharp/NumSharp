@@ -11,7 +11,7 @@ namespace NumSharp
         /// <param name="dtype">By default, the data-type is inferred from the input.</param>
         /// <returns>The input a in Fortran, or column-major, order.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asfortranarray.html</remarks>
-        public static NDArray asfortranarray(NDArray a, Type dtype = null)
+        public static NDArray asfortranarray(NDArray a, DType dtype = null)
         {
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
@@ -30,7 +30,7 @@ namespace NumSharp
         /// <param name="buffer">A <see cref="MemoryView"/> over an array.</param>
         /// <param name="dtype">By default, the data-type is inferred from the source.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asfortranarray.html</remarks>
-        public static NDArray asfortranarray(MemoryView buffer, Type dtype = null)
+        public static NDArray asfortranarray(MemoryView buffer, DType dtype = null)
         {
             if (buffer is null)
                 throw new ArgumentNullException(nameof(buffer));

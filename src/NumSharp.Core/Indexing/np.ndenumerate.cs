@@ -116,7 +116,7 @@ namespace NumSharp
 
                 if (_arr.dtype != typeof(T))
                     throw new ArgumentException(
-                        $"ndenumerate<{typeof(T).Name}> called on a {_arr.dtype.Name} array; " +
+                        $"ndenumerate<{typeof(T).Name}> called on a {_arr.dtype.type.Name} array; " +
                         $"cast it first (e.g. arr.astype(typeof({typeof(T).Name}))).", nameof(arr));
 
                 _walker = new NDIndexWalker(arr.Shape);

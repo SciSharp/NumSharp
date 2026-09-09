@@ -14,9 +14,9 @@ namespace NumSharp
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.standard_normal.html
         ///     <br/>Uses NumPy's ziggurat sampler, so the stream matches <c>default_rng(seed).standard_normal(...)</c>.
         /// </remarks>
-        public NDArray standard_normal(Shape size = default, Type dtype = null, NDArray @out = null)
+        public NDArray standard_normal(Shape size = default, DType dtype = null, NDArray @out = null)
         {
-            dtype = dtype ?? typeof(double);
+            dtype ??= DType.Double;
             NPTypeCode tc = ResolveFloatDtype(dtype, "standard_normal");
 
             if (@out is not null)

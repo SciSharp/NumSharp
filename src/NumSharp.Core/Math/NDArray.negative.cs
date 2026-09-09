@@ -23,7 +23,7 @@ namespace NumSharp
             if (this.size == 0)
                 return this.Clone();
 
-            var @out = TensorEngine.Cast(this, dtype ?? this.dtype, copy: true);
+            var @out = TensorEngine.Cast(this, (Type)(dtype ?? this.dtype), copy: true);
 
             var len = @out.size;
 

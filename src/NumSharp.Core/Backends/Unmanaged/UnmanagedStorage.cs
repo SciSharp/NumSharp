@@ -67,6 +67,15 @@ namespace NumSharp.Backends
 
         protected Type _dtype;
         protected NPTypeCode _typecode;
+
+        /// <summary>
+        ///     The dtype DESCRIPTOR of this storage (NumPy's <c>PyArrayObject.descr</c>) — see <see cref="Descr"/>.
+        ///     Lazily resolved from <see cref="_typecode"/> for the storage-backed builtins (each has exactly one canonical
+        ///     descriptor, the class singleton), and reset whenever the storage's lane changes (<see cref="_Allocate"/>,
+        ///     <c>ReplaceData</c>). A parametric descriptor (a future <c>datetime64[ns]</c>, whose unit lives on the
+        ///     instance rather than in the enum) is stored here explicitly and travels with aliases/clones.
+        /// </summary>
+        protected DType _descr;
         protected Shape _shape;
 
         /// <summary>
@@ -235,6 +244,31 @@ namespace NumSharp.Backends
         ///     The <see cref="NPTypeCode"/> of <see cref="IStorage.DType"/>.
         /// </summary>
         public NPTypeCode TypeCode => _typecode;
+
+        /// <summary>
+        ///     The dtype DESCRIPTOR of this storage — NumPy's <c>PyArrayObject.descr</c>, the object <c>ndarray.dtype</c>
+        ///     returns. For the storage-backed builtins this is the class's canonical instance
+        ///     (<c>np.dtype("int32")</c> for an <see cref="NPTypeCode.Int32"/> lane — the same object every time, so
+        ///     <c>a.dtype == b.dtype</c> is a cheap structural compare); a parametric descriptor is carried explicitly.
+        ///     <see cref="DType"/> (the CLR element <see cref="System.Type"/>) and <see cref="TypeCode"/> stay the kernel
+        ///     currency — the descriptor is the identity, they are its storage keys.
+        /// </summary>
+        public DType Descr
+        {
+            get
+            {
+                var descr = _descr;
+                if (descr is null)
+                {
+                    var meta = DTypeRegistry.FromTypeCode(_typecode);
+                    if (meta is null)
+                        return null;
+                    _descr = descr = meta.Singleton;
+                }
+
+                return descr;
+            }
+        }
 
         /// <summary>
         ///     The size in bytes of a single value of <see cref="DType"/>
@@ -436,6 +470,25 @@ namespace NumSharp.Backends
 
             _dtype = typeCode.AsType();
             _typecode = typeCode;
+        }
+
+        /// <summary>
+        ///     Creates an empty storage described by <paramref name="descr"/> — NumPy's <c>PyArray_NewFromDescr</c> entry:
+        ///     the descriptor IS the array's dtype (<see cref="Descr"/>), its class supplies the storage lane
+        ///     (<see cref="TypeCode"/>) and CLR element type (<see cref="DType"/>).
+        /// </summary>
+        /// <param name="descr">The dtype descriptor; a non-native byte order is canonicalised (NumSharp buffers are always native).</param>
+        /// <exception cref="ArgumentNullException"><paramref name="descr"/> is null.</exception>
+        /// <exception cref="NotSupportedException">The descriptor's class has no storage lane yet (a datetime64/timedelta64 descriptor before Stage C).</exception>
+        /// <remarks>Usually <see cref="Allocate(NumSharp.Shape,NumSharp.DType,bool)"/> is called after this constructor.</remarks>
+        public UnmanagedStorage(DType descr)
+        {
+            if (descr is null)
+                throw new ArgumentNullException(nameof(descr));
+
+            _typecode = descr.GetTypeCode(); // throws the descriptive "no storage yet" for a descriptor-only class
+            _dtype = descr.type;
+            _descr = descr.isnative ? descr : descr.Meta.EnsureCanonical(descr);
         }
 
         private UnmanagedStorage(object value)
@@ -1176,6 +1229,10 @@ namespace NumSharp.Backends
                 throw new NotSupportedException($"{values.TypeCode} as a dtype is not supported.");
 
             _dtype = _typecode.AsType();
+            // The descriptor follows the lane: a builtin re-resolves lazily from the (possibly new) typecode; an
+            // explicitly carried parametric descriptor survives only while its class still owns this lane.
+            if (_descr != null && _descr.typecode != _typecode)
+                _descr = null;
             SetInternalArray(values);
             Count = shape.size;
 
@@ -1242,6 +1299,29 @@ namespace NumSharp.Backends
             AllocationGuard.CheckDimensions(shape.dimensions, dtype);
 
             _Allocate(FreshWriteable(shape), ArraySlice.Allocate(dtype, shape.size, fillZeros));
+        }
+
+        /// <summary>
+        ///     Allocates a new <see cref="Array"/> into memory described by a dtype DESCRIPTOR (NumPy's
+        ///     <c>PyArray_NewFromDescr</c>): the descriptor becomes <see cref="Descr"/>, its class supplies the lane.
+        /// </summary>
+        /// <param name="shape">The shape of the array.</param>
+        /// <param name="dtype">The dtype descriptor of the array; a non-native byte order is canonicalised (NumSharp buffers are always native).</param>
+        /// <param name="fillZeros">Zero the fresh buffer, else leave the allocation noise.</param>
+        /// <exception cref="NotSupportedException">The descriptor's class has no storage lane yet (a datetime64/timedelta64 descriptor before Stage C).</exception>
+        public void Allocate(Shape shape, DType dtype, bool fillZeros)
+        {
+            if (shape.IsEmpty)
+                throw new ArgumentNullException(nameof(shape));
+
+            if (dtype is null)
+                throw new ArgumentNullException(nameof(dtype));
+
+            var typeCode = dtype.GetTypeCode(); // throws the descriptive "no storage yet" for a descriptor-only class
+            AllocationGuard.CheckDimensions(shape.dimensions, typeCode);
+
+            _Allocate(FreshWriteable(shape), ArraySlice.Allocate(typeCode, shape.size, fillZeros));
+            _descr = dtype.isnative ? dtype : dtype.Meta.EnsureCanonical(dtype);
         }
 
         /// <summary>

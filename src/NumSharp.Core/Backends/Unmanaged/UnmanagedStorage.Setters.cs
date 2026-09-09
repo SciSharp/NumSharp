@@ -1126,6 +1126,7 @@ namespace NumSharp.Backends
             //first try to convert to dtype only then we apply changes.
             _dtype = dtype;
             _typecode = _dtype.GetTypeCode();
+            _descr = null; // re-resolved lazily from the new lane
             if (_typecode == NPTypeCode.Empty)
                 throw new NotSupportedException($"{dtype.Name} as a dtype is not supported.");
             SetInternalArray(changedArray);
@@ -1150,6 +1151,7 @@ namespace NumSharp.Backends
             //first try to convert to dtype only then we apply changes.
             _dtype = dtype;
             _typecode = _dtype.GetTypeCode();
+            _descr = null; // re-resolved lazily from the new lane
             if (_typecode == NPTypeCode.Empty)
                 throw new NotSupportedException($"{dtype.Name} as a dtype is not supported.");
             SetInternalArray(changedArray);
@@ -1168,8 +1170,9 @@ namespace NumSharp.Backends
             //first try to convert to dtype only then we apply changes.
             _shape = nd.shape;
             OnReshaped(); // keep OWNDATA mirroring this storage's ownership (fresh shapes carry no bit)
-            _dtype = nd.dtype;
+            _dtype = nd.Storage.DType;
             _typecode = nd.GetTypeCode;
+            _descr = nd.Storage._descr; // carry an explicit (parametric) descriptor; a builtin re-resolves lazily
             if (_typecode == NPTypeCode.Empty)
                 throw new NotSupportedException($"{_dtype.Name} as a dtype is not supported.");
 
@@ -1241,6 +1244,7 @@ namespace NumSharp.Backends
             //first try to convert to dtype only then we apply changes.
             _dtype = dtype;
             _typecode = _dtype.GetTypeCode();
+            _descr = null; // re-resolved lazily from the new lane
             if (_typecode == NPTypeCode.Empty)
                 throw new NotSupportedException($"{dtype.Name} as a dtype is not supported.");
             _shape = shape;
@@ -1268,6 +1272,7 @@ namespace NumSharp.Backends
             //first try to convert to dtype only then we apply changes.
             _dtype = dtype;
             _typecode = _dtype.GetTypeCode();
+            _descr = null; // re-resolved lazily from the new lane
             if (_typecode == NPTypeCode.Empty)
                 throw new NotSupportedException($"{dtype.Name} as a dtype is not supported.");
             _shape = shape;
@@ -1287,8 +1292,9 @@ namespace NumSharp.Backends
                 throw new ArgumentNullException(nameof(nd));
 
             //first try to convert to dtype only then we apply changes.
-            _dtype = nd.dtype;
+            _dtype = nd.Storage.DType;
             _typecode = nd.GetTypeCode;
+            _descr = nd.Storage._descr; // carry an explicit (parametric) descriptor; a builtin re-resolves lazily
             if (_typecode == NPTypeCode.Empty)
                 throw new NotSupportedException($"{_dtype.Name} as a dtype is not supported.");
 

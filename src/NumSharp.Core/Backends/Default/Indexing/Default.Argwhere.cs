@@ -93,10 +93,10 @@ namespace NumSharp.Backends
 
             byte* basePtr = (byte*)source.Storage.Address + sourceShape.offset * nd.dtypesize;
 
-            var countKernel = DirectILKernelGenerator.GetArgwhereCountKernel(nd.dtype);
-            var flatKernel = DirectILKernelGenerator.GetArgwhereFlatKernel(nd.dtype);
+            var countKernel = DirectILKernelGenerator.GetArgwhereCountKernel(nd.dtype.type);
+            var flatKernel = DirectILKernelGenerator.GetArgwhereFlatKernel(nd.dtype.type);
             if (countKernel == null || flatKernel == null)
-                throw new NotSupportedException($"np.argwhere: no IL kernel available for {nd.dtype.Name}");
+                throw new NotSupportedException($"np.argwhere: no IL kernel available for {nd.dtype.type.Name}");
 
             try
             {

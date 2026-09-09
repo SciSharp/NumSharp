@@ -49,7 +49,7 @@ namespace NumSharp
         /// </remarks>
         [NDScoped]
         public static NDArray vecdot(NDArray x1, NDArray x2, NDArray @out = null, int[][] axes = null,
-            int? axis = null, bool keepdims = false, NPTypeCode? dtype = null)
+            int? axis = null, bool keepdims = false, DType dtype = null)
         {
             GufuncGuard.RejectAxisWithAxes(axes, axis);
             GufuncGuard.RequireRank("vecdot", VecdotSignature, 0, x1, 1);

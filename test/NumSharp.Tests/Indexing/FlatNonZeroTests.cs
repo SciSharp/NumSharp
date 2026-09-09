@@ -389,8 +389,8 @@ public class FlatNonZeroTests
         foreach (var nd in inputs)
         {
             var r = np.flatnonzero(nd);
-            r.ndim.Should().Be(1, $"flatnonzero result must be 1-D for dtype {nd.dtype.Name}");
-            r.typecode.Should().Be(NPTypeCode.Int64, $"flatnonzero result must be Int64 for dtype {nd.dtype.Name}");
+            r.ndim.Should().Be(1, $"flatnonzero result must be 1-D for dtype {nd.dtype.type.Name}");
+            r.typecode.Should().Be(NPTypeCode.Int64, $"flatnonzero result must be Int64 for dtype {nd.dtype.type.Name}");
         }
     }
 

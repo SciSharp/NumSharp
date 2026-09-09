@@ -42,6 +42,7 @@ namespace NumSharp.Backends
                 : _shape;
             r._typecode = _typecode;
             r._dtype = _dtype;
+            r._descr = _descr; // a view shares its base's descriptor (parametric metadata travels with the alias)
             if (InternalArray != null)
                 r.SetInternalArray(InternalArray);
             r.Count = _shape.size; //incase shape is sliced
@@ -79,6 +80,7 @@ namespace NumSharp.Backends
             var r = new UnmanagedStorage();
             r._typecode = _typecode;
             r._dtype = _dtype;
+            r._descr = _descr; // a view shares its base's descriptor (parametric metadata travels with the alias)
             // Hot path: when this storage is already wired (InternalArray + Address
             // set), copy the IArraySlice surface and the typed-slice union directly
             // instead of routing through SetInternalArray's full 15-case typecode
@@ -161,6 +163,7 @@ namespace NumSharp.Backends
             r._shape = aliasShape;
             r._typecode = _typecode;
             r._dtype = _dtype;
+            r._descr = _descr; // a view shares its base's descriptor (parametric metadata travels with the alias)
             if (InternalArray != null)
                 r.SetInternalArray(InternalArray);
             r.Count = shape.size; //incase shape is sliced

@@ -28,7 +28,7 @@ namespace NumSharp
         ///     and reversed inputs (no copy). A dtype change casts (which copies), then coerces the copy.
         ///     https://numpy.org/doc/stable/reference/generated/numpy.asmatrix.html
         /// </remarks>
-        public static NDArray asmatrix(NDArray data, Type dtype = null)
+        public static NDArray asmatrix(NDArray data, DType dtype = null)
         {
             if (data is null)
                 throw new ArgumentNullException(nameof(data));
@@ -36,21 +36,11 @@ namespace NumSharp
             var a = data;
             // matrix(data, copy=False): an ndarray of a different dtype is cast (a copy), matching NumPy's
             // `data.view(subtype).astype(intype)` before the 2-D finalize runs on the result.
-            if (dtype != null && !Equals(a.dtype, dtype))
+            if (dtype != null && a.typecode != dtype.GetTypeCode())
                 a = a.astype(dtype, copy: true);
 
             return CoerceToMatrix(a);
         }
-
-        /// <summary>Convenience overload taking <see cref="NPTypeCode"/>.</summary>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asmatrix.html</remarks>
-        public static NDArray asmatrix(NDArray data, NPTypeCode dtype)
-            => asmatrix(data, dtype == NPTypeCode.Empty ? null : dtype.AsType());
-
-        /// <summary>Convenience overload taking a NumPy-style dtype string (e.g. <c>"float32"</c>).</summary>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asmatrix.html</remarks>
-        public static NDArray asmatrix(NDArray data, string dtype)
-            => asmatrix(data, dtype == null ? null : np.dtype(dtype).type);
 
         /// <summary>
         ///     Interpret a matrix string as a 2-D array. Rows are separated by <c>';'</c> and columns by
@@ -62,7 +52,7 @@ namespace NumSharp
         /// <param name="dtype">Data-type of the output. <c>null</c> infers it from the values.</param>
         /// <exception cref="ValueError">If the rows are not all the same length.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asmatrix.html</remarks>
-        public static NDArray asmatrix(string data, Type dtype = null)
+        public static NDArray asmatrix(string data, DType dtype = null)
         {
             if (data is null)
                 throw new ArgumentNullException(nameof(data));
@@ -70,11 +60,6 @@ namespace NumSharp
             var mat = ParseMatrixString(data);
             return dtype == null ? mat : mat.astype(dtype, copy: false);
         }
-
-        /// <summary>Convenience overload taking a matrix string and <see cref="NPTypeCode"/>.</summary>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asmatrix.html</remarks>
-        public static NDArray asmatrix(string data, NPTypeCode dtype)
-            => asmatrix(data, dtype == NPTypeCode.Empty ? null : dtype.AsType());
 
         /// <summary>
         ///     Coerces <paramref name="a"/> to a 2-D view following NumPy's <c>matrix.__array_finalize__</c>:

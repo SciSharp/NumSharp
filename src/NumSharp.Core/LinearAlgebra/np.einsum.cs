@@ -77,7 +77,7 @@ namespace NumSharp
         ///     <inheritdoc cref="einsum(string, NDArray[])"/>
         /// </remarks>
         public static NDArray einsum(string subscripts, NDArray[] operands, NDArray @out = null,
-            NPTypeCode? dtype = null, char order = 'K', string casting = "safe", object optimize = null)
+            DType dtype = null, char order = 'K', string casting = "safe", object optimize = null)
         {
             if (subscripts is null)
                 throw new ArgumentNullException(nameof(subscripts));

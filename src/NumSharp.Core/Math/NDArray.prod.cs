@@ -14,7 +14,7 @@ namespace NumSharp
         /// <param name="keepdims">If this is set to True, the axes which are reduced are left in the result as dimensions with size one. With this option, the result will broadcast correctly against the input array.</param>
         /// <returns>An array shaped as a but with the specified axis removed.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.prod.html</remarks>
-        public NDArray prod(int? axis = null, Type dtype = null, bool keepdims = false)
+        public NDArray prod(int? axis = null, DType dtype = null, bool keepdims = false)
             => np.prod(this, axis, dtype, keepdims);
 
     }

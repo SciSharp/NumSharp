@@ -45,7 +45,7 @@ namespace NumSharp
         /// <param name="shape">Shape of the new array.</param>
         /// <param name="dtype">The desired data-type for the array, e.g., <see cref="uint8"/>. Default is <see cref="float64"/> / <see cref="double"/>.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ones.html</remarks>
-        public static NDArray ones(int[] shape, Type dtype)
+        public static NDArray ones(int[] shape, DType dtype)
         {
             return ones(new Shape(shape), dtype: dtype);
         }
@@ -65,13 +65,17 @@ namespace NumSharp
         ///     Return a new array of given shape and type, filled with ones.
         /// </summary>
         /// <param name="shape">Shape of the new array.</param>
-        /// <param name="dtype">The desired data-type for the array, e.g., <see cref="uint8"/>. Default is <see cref="float64"/> / <see cref="double"/>.</param>
+        /// <param name="dtype">
+        ///     The desired dtype for the array — one descriptor parameter, like NumPy's <c>dtype</c>: a C# <see cref="Type"/>, an
+        ///     <see cref="NPTypeCode"/>, a NumPy dtype string (<c>"f4"</c>) or a <see cref="DType"/> (<see cref="uint8"/>) all convert
+        ///     implicitly. Default (null) is <see cref="float64"/> / <see cref="double"/>.
+        /// </param>
         /// <param name="device">Target device. Only <c>"cpu"</c> and <c>null</c> are accepted (Array-API parity).</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ones.html</remarks>
-        public static NDArray ones(Shape shape, Type dtype, string device = null)
+        public static NDArray ones(Shape shape, DType dtype, string device = null)
         {
             ValidateDevice(device);
-            return ones(shape, (dtype ?? typeof(double)).GetTypeCode());
+            return OnesCore(shape, dtype?.GetTypeCode() ?? NPTypeCode.Double);
         }
 
 
@@ -83,16 +87,17 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ones.html</remarks>
         public static NDArray ones(Shape shape)
         {
-            return ones(shape, NPTypeCode.Double);
+            return OnesCore(shape, NPTypeCode.Double);
         }
 
         /// <summary>
-        ///     Return a new array of given shape and type, filled with ones.
+        ///     The storage-lane core behind every public <c>ones(..., dtype)</c> overload (which all take the single
+        ///     <see cref="DType"/> descriptor parameter, like NumPy's <c>dtype=</c>).
         /// </summary>
         /// <param name="shape">Shape of the new array.</param>
-        /// <param name="typeCode">The desired data-type for the array, e.g., <see cref="uint8"/>. Default is <see cref="float64"/> / <see cref="double"/>.</param>
+        /// <param name="typeCode">The desired data-type for the array.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ones.html</remarks>
-        public static NDArray ones(Shape shape, NPTypeCode typeCode)
+        private static NDArray OnesCore(Shape shape, NPTypeCode typeCode)
         {
             object one = null;
             switch (typeCode)
@@ -128,18 +133,18 @@ namespace NumSharp
 
         /// <summary>
         ///     Return a new array of ones with a specified memory layout — the port of NumPy's
-        ///     <c>np.ones(shape, dtype, order='C')</c> order parameter (mirrors <see cref="empty(Shape, char, Type)"/>).
+        ///     <c>np.ones(shape, dtype, order='C')</c> order parameter (mirrors <see cref="empty(Shape, char, DType)"/>).
         /// </summary>
         /// <param name="shape">Shape of the new array.</param>
         /// <param name="order">Memory layout: 'C' (row-major), 'F' (column-major), 'A'/'K' (default to 'C' with no source).</param>
-        /// <param name="dtype">Desired data-type. Default is <see cref="float64"/> / <see cref="double"/>.</param>
+        /// <param name="dtype">Desired dtype (a <see cref="Type"/>, <see cref="NPTypeCode"/>, dtype string or <see cref="DType"/> — all convert implicitly). Default is <see cref="float64"/> / <see cref="double"/>.</param>
         /// <returns>Array of ones in the requested layout (the fill is order-independent, so only the flags differ).</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ones.html</remarks>
-        public static NDArray ones(Shape shape, char order, Type dtype = null)
+        public static NDArray ones(Shape shape, char order, DType dtype = null)
         {
             char physical = OrderResolver.Resolve(order);
             var orderedShape = new Shape(shape.dimensions, physical);
-            return ones(orderedShape, (dtype ?? typeof(double)).GetTypeCode());
+            return OnesCore(orderedShape, dtype?.GetTypeCode() ?? NPTypeCode.Double);
         }
     }
 }

@@ -16,9 +16,9 @@ namespace NumSharp
         /// This function creates an NDArray directly without going through TensorEngine.
         /// Memory allocation is not backend-specific - all backends use the same unmanaged memory.
         /// </remarks>
-        public static NDArray ndarray(Shape shape, Type dtype = null, Array buffer = null, char order = 'F')
+        public static NDArray ndarray(Shape shape, DType dtype = null, Array buffer = null, char order = 'F')
         {
-            dtype ??= typeof(float); // Default to float32
+            dtype ??= DType.Single; // Default to float32
 
             if (buffer == null)
             {

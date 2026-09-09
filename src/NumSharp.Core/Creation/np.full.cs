@@ -52,29 +52,32 @@ namespace NumSharp
         /// </summary>
         /// <param name="shape">Shape of the array, e.g., (2, 3) or 2.</param>
         /// <param name="fill_value">Fill value (scalar).</param>
-        /// <param name="dtype">The desired data-type for the array. Default infers from fill_value.</param>
+        /// <param name="dtype">
+        ///     The desired dtype for the array — one descriptor parameter, like NumPy's <c>dtype</c>: a C# <see cref="Type"/>, an
+        ///     <see cref="NPTypeCode"/>, a NumPy dtype string (<c>"f4"</c>) or a <see cref="DType"/> all convert implicitly.
+        ///     Default (null) infers from fill_value.
+        /// </param>
         /// <param name="device">Target device. Only <c>"cpu"</c> and <c>null</c> are accepted (Array-API parity).</param>
         /// <returns>Array of fill_value with the given shape, dtype, and order.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.full.html</remarks>
-        public static NDArray full(Shape shape, object fill_value, Type dtype = null, string device = null)
+        public static NDArray full(Shape shape, object fill_value, DType dtype = null, string device = null)
         {
             ValidateDevice(device);
-            // When dtype is explicitly provided, use it
-            if (dtype != null)
-                return full(shape, fill_value, dtype.GetTypeCode());
-            // When dtype is null, infer from fill_value
-            return full(shape, fill_value, fill_value.GetType().GetTypeCode());
+            // When dtype is explicitly provided, use it; when null, infer from fill_value.
+            var typeCode = dtype != null ? dtype.GetTypeCode() : fill_value.GetType().GetTypeCode();
+            return FullCore(shape, fill_value, typeCode);
         }
 
         /// <summary>
-        ///     Return a new array of given shape and type, filled with fill_value.
+        ///     The storage-lane core behind <see cref="full(Shape,object,DType,string)"/>: a new array of given shape and
+        ///     lane, filled with fill_value.
         /// </summary>
         /// <param name="shape">Shape of the array, e.g., (2, 3) or 2.</param>
         /// <param name="fill_value">Fill value (scalar).</param>
         /// <param name="typeCode">The desired data-type for the array.</param>
         /// <returns>Array of fill_value with the given shape, dtype, and order.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.full.html</remarks>
-        public static NDArray full(Shape shape, object fill_value, NPTypeCode typeCode)
+        private static NDArray FullCore(Shape shape, object fill_value, NPTypeCode typeCode)
         {
             if (typeCode == NPTypeCode.Empty)
                 throw new ArgumentNullException(nameof(typeCode));

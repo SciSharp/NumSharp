@@ -58,9 +58,10 @@ namespace NumSharp
             return @out;
         }
 
-        /// <summary>Casts an operand to the requested loop dtype, or returns it unchanged.</summary>
-        internal static NDArray ToLoop(NDArray operand, NPTypeCode? dtype)
-            => dtype is null ? operand : operand.TensorEngine.Cast(operand, dtype.Value.AsType(), copy: false);
+        /// <summary>Casts an operand to the requested loop dtype (a descriptor; <see langword="null"/> = no request), or returns it unchanged.</summary>
+        internal static NDArray ToLoop(NDArray operand, DType dtype)
+            // GetTypeCode() raises the descriptive "no storage yet" for a descriptor-only class (datetime64 before Stage C).
+            => dtype is null ? operand : operand.TensorEngine.Cast(operand, dtype.GetTypeCode().AsType(), copy: false);
 
         /// <summary>
         ///     Validates a gufunc <c>axes=</c> list and normalizes each INPUT entry against its

@@ -73,9 +73,10 @@ namespace NumSharp.Tests.APIs
         {
             var expected = Is64Bit ? typeof(long) : typeof(int);
             np.intp.Should().Be(expected);
-            // Critical: must NOT be typeof(nint) — that Type has NPTypeCode.Empty
-            // and breaks np.zeros/np.empty dispatch.
-            np.intp.Should().NotBe(typeof(nint));
+            // Critical: the element type must NOT be typeof(nint) — that Type has NPTypeCode.Empty
+            // and breaks np.zeros/np.empty dispatch. (np.intp is a DType descriptor; nint has no
+            // descriptor at all, so the check is on its CLR element type, dtype.type.)
+            np.intp.type.Should().NotBe(typeof(nint));
         }
 
         [TestMethod]
@@ -83,7 +84,7 @@ namespace NumSharp.Tests.APIs
         {
             var expected = Is64Bit ? typeof(ulong) : typeof(uint);
             np.uintp.Should().Be(expected);
-            np.uintp.Should().NotBe(typeof(nuint));
+            np.uintp.type.Should().NotBe(typeof(nuint));
         }
 
         [TestMethod]

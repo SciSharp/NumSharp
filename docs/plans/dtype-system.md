@@ -141,7 +141,7 @@ DTypePromotionError : TypeError   numpy.exceptions.DTypePromotionError, verbatim
   `NPY_DATETIME`/`NPY_TIMEDELTA`) and its meta registers the code — the enum is an optimisation the
   registry hands out, not the identity.
 * `DType` keeps its public fields and implicit conversions (`Type`/`NPTypeCode`/`NPTypeCode?`/`string`
-  in; `Type`/`NPTypeCode` out). For the 15 builtins, structural equality collapses to typecode equality
+  in; `Type`/`NPTypeCode` out — *Stage B made the `Type` out-conversion EXPLICIT, see §5*). For the 15 builtins, structural equality collapses to typecode equality
   — bit-identical behaviour to today. `Equals(object)` additionally coerces `Type`/`NPTypeCode`/`string`
   (NumPy's `dtype.__eq__` coerces its operand), so `dtype.Should().Be(typeof(int))` and
   `dtype == np.int32` are true.
@@ -149,6 +149,9 @@ DTypePromotionError : TypeError   numpy.exceptions.DTypePromotionError, verbatim
   nd.dtype)`, which would silently fail with a descriptor on the right). Flipping it to `DType` is stage
   B, its own commit, after the Creation/IO families gain `DType` overloads (a `DType` argument is
   otherwise AMBIGUOUS between a `Type` and an `NPTypeCode` overload — the trap recorded in memory).
+  *(Stage B did this — §5. Two predictions here were wrong in a useful way: with `DType → Type` made
+  EXPLICIT, `Assert.AreEqual(typeof(X), nd.dtype)` infers `T = DType` and passes, so those sites needed no
+  rewrite; and the `Type`+`NPTypeCode` pairs were not given a third `DType` overload but REPLACED by it.)*
 * `np.dtype(string)` accepts everything it accepted (all `DTypeStringParityTests` mappings, the NumSharp
   PascalCase aliases) and now ALSO datetime/timedelta typestrs and non-native byte orders. Strings /
   void / object / StringDType still raise `NotSupportedException` (no meta registered) with the same
@@ -268,5 +271,51 @@ Things learned while landing it that the design above did not anticipate:
   reduction. The three internal engines (`np._FindCommonType*`, `NDExprTypeRules`, `NDIterCasting`) are
   untouched, as planned.
 
-**Not in Stage A** (unchanged from §3): the `NDArray.dtype → DType` flip (B), datetime storage/kernels/NaT/ISO
-(C — `docs/plans/datetime64.md`), strings (D).
+**Stage B landed (2026-09-09) — `DType` is the one dtype spelling end to end.**
+
+* **`NDArray.dtype` returns `DType`** — `UnmanagedStorage.Descr`, NumPy's `PyArrayObject.descr`. For a builtin lane it is the
+  class singleton (resolved lazily from `_typecode`, so a fresh result array pays nothing until asked), so `a.dtype == b.dtype`
+  and `a.dtype == np.float64` are cheap structural compares and `ReferenceEquals(a.dtype, np.float64)` holds; a parametric
+  descriptor (`UnmanagedStorage(DType)`, `Allocate(Shape, DType, bool)`, `TensorEngine.GetStorage(DType)` — the
+  `PyArray_NewFromDescr` entries) is stored as-is, travels through `Alias`/`Clone`/`ReplaceData`, and is dropped when the
+  lane changes. `UnmanagedStorage.DType` (the CLR element `Type`) and `TypeCode` stay the kernel currency.
+* **The `np.float64` family are `DType` descriptors** (`np.bool_`…`np.clongdouble`, `np.@decimal`, the platform aliases
+  `intp`/`uintp`/`@long`/`@ulong`/`@uint`, the throwing `complex64`/`csingle`/`chars`). NumSharp has no scalar-type objects (a
+  C# `double` IS the scalar), so the descriptor is the single currency; `np.float64.itemsize`/`.name`/`.kind` read like NumPy.
+* **Every `dtype`/`typeCode` parameter takes ONE `DType`** and the `Type`/`NPTypeCode` twins are gone: the Creation family,
+  IO (`fromfile`/`fromstring`/`loadtxt`; `frombuffer`'s `DType` entry delegates to its `NPTypeCode` implementation), `indices`,
+  `trace`, `clip`, `cumsum`/`cumprod`/`prod`/`sum`, `nancumsum`/`nancumprod`, `amax`/`amin`/`std`/`var`, `cov`/`corrcoef`,
+  `getfield`/`setfield`, `finfo`/`iinfo`, `Generator.*`/`randint`/`uniform`/`SeedSequence`, `concatenate`/`concat`,
+  `matmul`/`vecdot`/`matvec`/`vecmat`/`einsum` (via `GufuncGuard.ToLoop(NDArray, DType)`), `astype`/`view`, the seven
+  `NDArray(NPTypeCode, …)` ctors, `isdtype`, and `find_common_type(DType[] …)`. Kept as `Type` on purpose (the concrete
+  element type of a lane, never a user request): `TensorEngine.GetStorage(Type)`/`Cast(…, Type, …)`,
+  `UnmanagedStorage.Allocate/Cast/AliasAs(Type)`, `NDArray.ReplaceData`. Kept returning `NPTypeCode`: the typed
+  `result_type`/`promote_types`/`can_cast` pairs and `find_common_type`/`_FindCommonType*` (the `DType` overloads return `DType`).
+* **`DType → Type` became an EXPLICIT conversion** (`Type → DType` stays implicit) — §2.1's "implicit out" was wrong once
+  `NDArray.dtype` was a `DType`: `System.Type` declares its own `==`, so with conversions in both directions
+  `a.dtype == typeof(double)` is CS0034-ambiguous between `Type.==` and `DType.==`, and `==(DType, Type)` overloads would make
+  `descr == null` ambiguous instead (neither target is better when both directions convert). One-way implicit resolves
+  `a.dtype == typeof(double)` / `typeof(double) == a.dtype` / `== "f8"` / `== NPTypeCode.Double` to the structural, coercing
+  `DType.==`, and makes `Assert.AreEqual(typeof(double), a.dtype)` infer `T = DType` — which is why the 310 MSTest sites the
+  plan expected to rewrite needed no change. The cost is `(Type)a.dtype` / `a.dtype.type` wherever a `Type` is required by
+  signature (kernel-factory lookups, `Convert.ChangeType`, `Type.Name` in messages → `dtype.type.Name`).
+* **A static-initialization cycle had to be broken.** `np`'s field initializers now run `DType.From` → `DTypeRegistry`'s
+  constructor, which registered the 15×15 `BuiltinCastingImpl`s whose minimal `Casting` read `np._nptypemap_arr_arr` — filled by
+  `static np()` AFTER the field initializers — so the registry saw null and the process died with
+  `TypeInitializationException`. `ArrayMethod.Casting` is `virtual` and `BuiltinCastingImpl` computes it on first read (a
+  constant; the laziness is unobservable). The `static np()` tables are built as `Dictionary<(DType, DType), DType>` (the
+  aliases ARE descriptors) and the frozen `Type`/`NPTypeCode`-keyed maps are derived. Both orders are probed in fresh
+  processes (np-first and registry-first).
+* **`isdtype` folded onto the NumPy-exact `DType` overloads**: the old `NPTypeCode`/`Type` twins accepted `issubdtype`'s
+  vocabulary (`"floating"`, `"integer"`) which NumPy's `isdtype` rejects (`kind argument is a string, but 'floating' is not a
+  known kind name.`); the `NDArray` convenience overloads route through `arr.dtype`.
+* **Tests:** `test/NumSharp.Tests/Utilities/DTypeAssertions.cs` — `Should(this DType)` → `DTypeAssertions` (`Be(DType)`,
+  `Be<T>()`, `NotBe`, `BeOneOf`), declared in the `NumSharp.Tests` namespace so enclosing-namespace lookup binds every
+  `x.dtype.Should()` ahead of AwesomeAssertions' `Should(this object)`; ~1,000 existing `.dtype.Should().Be(…)` sites compile
+  unchanged. Gates: full suite net10.0 14,832 / net8.0 14,824 green, `FuzzMatrix` 30/30 + Oracle 176/176 (the `dtype_text`
+  tier unchanged), Interop 638/638.
+* **Breaking (accepted):** `Type t = a.dtype` / `Type t = np.float64` need a cast; `a.dtype.Name` → `a.dtype.name` (NumPy) or
+  `a.dtype.type.Name` (C#); `np.X` where a `Type` is required by signature → `np.X.type`; reflection over
+  `np.array(Array, Type, …)` → `typeof(DType)`; `np.isdtype(x, "floating")` raises.
+
+**Not yet** (unchanged from §3): datetime storage/kernels/NaT/ISO (C — `docs/plans/datetime64.md`), strings (D).

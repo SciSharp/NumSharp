@@ -15,9 +15,9 @@ namespace NumSharp
         /// <param name="out">Alternate output array in which to place the result. It must have the same shape as the expected output. A reference to <paramref name="out"/> is returned.</param>
         /// <returns>A new array holding the result is returned unless out is specified, in which case a reference to out is returned. The result has the same size as a, and the same shape as a if axis is not None or a is a 1-d array.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.cumsum.html</remarks>
-        public NDArray cumsum(int? axis = null, Type dtype = null, NDArray @out = null)
+        public NDArray cumsum(int? axis = null, DType dtype = null, NDArray @out = null)
         {
-            return np.cumsum(this, axis, dtype?.GetTypeCode(), @out);
+            return np.cumsum(this, axis, dtype, @out);
         }
     }
 }

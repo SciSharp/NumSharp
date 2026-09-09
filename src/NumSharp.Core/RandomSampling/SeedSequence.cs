@@ -188,9 +188,9 @@ namespace NumSharp
         ///     <c>generate_state(n_words, dtype=np.uint32)</c>). Returns a <c>uint[]</c> for
         ///     <c>uint32</c> (the default) or a <c>ulong[]</c> for <c>uint64</c>.
         /// </summary>
-        public Array generate_state(int n_words, Type dtype = null)
+        public Array generate_state(int n_words, DType dtype = null)
         {
-            if (dtype == null)
+            if (dtype is null)
                 return GenerateState(n_words);
             var tc = dtype.GetTypeCode();
             if (tc == NPTypeCode.UInt32)

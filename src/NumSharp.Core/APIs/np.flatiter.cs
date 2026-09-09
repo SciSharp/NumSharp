@@ -173,7 +173,7 @@ namespace NumSharp
                     return value is System.Numerics.Complex c ? c : new System.Numerics.Complex(Convert.ToDouble(value), 0);
                 if (tc == NPTypeCode.Half)
                     return (Half)Convert.ToDouble(value);
-                return Convert.ChangeType(value, _base.dtype);
+                return Convert.ChangeType(value, _base.dtype.type);
             }
 
             private static bool IsIntegerLike(NPTypeCode tc)

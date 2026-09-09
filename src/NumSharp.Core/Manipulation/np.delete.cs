@@ -234,7 +234,7 @@ namespace NumSharp
                 case NPTypeCode.UInt64: return (long)obj.GetUInt64(0);
                 default:
                     throw new ArgumentException(
-                        $"np.{fn}: obj must be int / slice / integer array / boolean mask, got {obj.dtype.Name}",
+                        $"np.{fn}: obj must be int / slice / integer array / boolean mask, got {obj.dtype.type.Name}",
                         "obj");
             }
         }
@@ -279,7 +279,7 @@ namespace NumSharp
                     break;
                 default:
                     throw new ArgumentException(
-                        $"np.{fn}: obj must be int / slice / integer array / boolean mask, got {obj.dtype.Name}",
+                        $"np.{fn}: obj must be int / slice / integer array / boolean mask, got {obj.dtype.type.Name}",
                         "obj");
             }
 

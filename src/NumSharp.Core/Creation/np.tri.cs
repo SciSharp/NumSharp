@@ -37,15 +37,16 @@ namespace NumSharp
         ///     NumPy (whose <c>arange</c> of a negative count yields an empty axis).
         ///     </para>
         /// </remarks>
-        public static NDArray tri(int N, int? M = null, int k = 0, Type dtype = null)
-            => tri(N, M, k, (dtype ?? typeof(double)).GetTypeCode());
+        public static NDArray tri(int N, int? M = null, int k = 0, DType dtype = null)
+            => TriCore(N, M, k, dtype?.GetTypeCode() ?? NPTypeCode.Double);
 
         /// <summary>
-        ///     An array with ones at and below the given diagonal and zeros elsewhere.
+        ///     The storage-lane core behind <see cref="tri(int,int?,int,DType)"/> (whose single <see cref="DType"/>
+        ///     descriptor parameter mirrors NumPy's <c>dtype=</c>): ones at and below the given diagonal, zeros elsewhere.
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.tri.html</remarks>
         [NDScoped]
-        public static unsafe NDArray tri(int N, int? M, int k, NPTypeCode dtype)
+        private static unsafe NDArray TriCore(int N, int? M, int k, NPTypeCode dtype)
         {
             // NumPy builds the row/column axes with arange, so a negative extent simply
             // produces an empty axis rather than an error.

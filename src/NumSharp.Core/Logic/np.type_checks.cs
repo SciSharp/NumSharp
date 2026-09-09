@@ -33,60 +33,28 @@ namespace NumSharp
         }
 
         /// <summary>
-        /// Returns True if dtype is of a specified category.
-        /// </summary>
-        /// <param name="dtype">The dtype to check.</param>
-        /// <param name="kind">
-        /// The dtype category. Can be:
-        /// - "bool" - boolean
-        /// - "integral" - integer types (signed and unsigned)
-        /// - "real floating" - floating point types
-        /// - "complex floating" - complex types
-        /// - "numeric" - any numeric type
-        /// </param>
-        /// <returns>True if dtype belongs to the specified category.</returns>
-        /// <remarks>
-        /// https://numpy.org/doc/stable/reference/generated/numpy.isdtype.html
-        /// This is a NumPy 2.0+ function.
-        ///
-        /// Uses NPTypeHierarchy for consistent type categorization across all typing functions.
-        /// </remarks>
-        /// <example>
-        /// <code>
-        /// np.isdtype(NPTypeCode.Int32, "integral")      // True
-        /// np.isdtype(NPTypeCode.Double, "real floating") // True
-        /// np.isdtype(NPTypeCode.Int32, "numeric")       // True
-        /// </code>
-        /// </example>
-        public static bool isdtype(NPTypeCode dtype, string kind)
-        {
-            // Use NPTypeHierarchy for consistent behavior with issubdtype
-            return NPTypeHierarchy.IsSubType(dtype, kind);
-        }
-
-        /// <summary>
-        /// Returns True if dtype is of any of the specified categories.
-        /// </summary>
-        /// <param name="dtype">The dtype to check.</param>
-        /// <param name="kinds">Array of dtype categories to check.</param>
-        /// <returns>True if dtype belongs to any of the specified categories.</returns>
-        public static bool isdtype(NPTypeCode dtype, string[] kinds)
-        {
-            foreach (var kind in kinds)
-            {
-                if (isdtype(dtype, kind))
-                    return true;
-            }
-            return false;
-        }
-
-        /// <summary>
         /// Returns True if the descriptor is of a specified category — NumPy 2.x's <c>np.isdtype(dtype, kind)</c> over a
         /// <see cref="DType"/>: <paramref name="kind"/> is one of <c>"bool"</c>, <c>"signed integer"</c>,
         /// <c>"unsigned integer"</c>, <c>"integral"</c>, <c>"real floating"</c>, <c>"complex floating"</c>, <c>"numeric"</c>
         /// (case-sensitive, as in NumPy). The datetime classes belong to none of them (NumPy builds the categories from
         /// <c>sctypes</c>, which exclude <c>datetime64</c>/<c>timedelta64</c>).
+        /// <para>
+        /// This is the ONE entry for every dtype spelling: a C# <see cref="Type"/> (<c>typeof(int)</c>), an
+        /// <see cref="NPTypeCode"/> (<c>NPTypeCode.Int32</c>) or a dtype string all convert implicitly to <see cref="DType"/>
+        /// (the earlier <c>NPTypeCode</c>/<c>Type</c> twins accepted <c>issubdtype</c>'s looser vocabulary — <c>"floating"</c>,
+        /// <c>"integer"</c> — which NumPy's <c>isdtype</c> rejects; they were folded into this overload).
+        /// </para>
         /// </summary>
+        /// <remarks>
+        /// https://numpy.org/doc/stable/reference/generated/numpy.isdtype.html — a NumPy 2.0+ function.
+        /// </remarks>
+        /// <example>
+        /// <code>
+        /// np.isdtype(NPTypeCode.Int32, "integral")      // True
+        /// np.isdtype(typeof(double), "real floating")   // True
+        /// np.isdtype(np.int32, "numeric")               // True
+        /// </code>
+        /// </example>
         /// <exception cref="ValueError"><c>kind argument is a string, but '…' is not a known kind name.</c> — verbatim NumPy.</exception>
         public static bool isdtype(DType dtype, string kind)
         {
@@ -153,29 +121,8 @@ namespace NumSharp
         }
 
         /// <summary>
-        /// Returns True if the CLR type is of a specified category.
-        /// </summary>
-        /// <param name="type">The CLR type to check.</param>
-        /// <param name="kind">The dtype category.</param>
-        /// <returns>True if type belongs to the specified category.</returns>
-        public static bool isdtype(Type type, string kind)
-        {
-            return isdtype(type.GetTypeCode(), kind);
-        }
-
-        /// <summary>
-        /// Returns True if the CLR type is of any of the specified categories.
-        /// </summary>
-        /// <param name="type">The CLR type to check.</param>
-        /// <param name="kinds">Array of dtype categories to check.</param>
-        /// <returns>True if type belongs to any of the specified categories.</returns>
-        public static bool isdtype(Type type, string[] kinds)
-        {
-            return isdtype(type.GetTypeCode(), kinds);
-        }
-
-        /// <summary>
-        /// Returns True if the array's dtype is of a specified category.
+        /// Returns True if the array's dtype is of a specified category (NumSharp convenience: NumPy's <c>isdtype</c> takes
+        /// only a dtype, so this is <c>np.isdtype(arr.dtype, kind)</c>).
         /// </summary>
         /// <param name="arr">The NDArray to check.</param>
         /// <param name="kind">The dtype category.</param>
@@ -185,7 +132,7 @@ namespace NumSharp
         {
             if (arr is null)
                 throw new ArgumentNullException(nameof(arr));
-            return isdtype(arr.GetTypeCode, kind);
+            return isdtype(arr.dtype, kind);
         }
 
         /// <summary>
@@ -199,7 +146,7 @@ namespace NumSharp
         {
             if (arr is null)
                 throw new ArgumentNullException(nameof(arr));
-            return isdtype(arr.GetTypeCode, kinds);
+            return isdtype(arr.dtype, kinds);
         }
 
         /// <summary>

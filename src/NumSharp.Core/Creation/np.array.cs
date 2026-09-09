@@ -68,7 +68,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html</remarks>
         [MethodImpl(Optimize)]
         [SuppressMessage("ReSharper", "InvalidXmlDocComment")]
-        public static NDArray array(Array array, Type dtype = null, int ndmin = 0, bool copy = true, char order = 'C')
+        public static NDArray array(Array array, DType dtype = null, int ndmin = 0, bool copy = true, char order = 'C')
         {
             if (array == null)
                 throw new ArgumentNullException(nameof(array));
@@ -96,9 +96,9 @@ namespace NumSharp
                 copy = false;
             }
 
-            if (dtype != null && dtype != arrType)
+            if (dtype != null && !dtype.Equals(arrType))
             {
-                array = ArrayConvert.To(array, dtype);
+                array = ArrayConvert.To(array, (Type)dtype);
                 copy = false;
             }
 
@@ -126,29 +126,17 @@ namespace NumSharp
         /// </summary>
         /// <typeparam name="T">The type of given array, must be compliant to numpy's supported dtypes.</typeparam>
         /// <param name="data">The array to create <see cref="NDArray"/> from.</param>
-        /// <param name="dtype">The desired data type for the array. If different from T, the data will be cast.</param>
+        /// <param name="dtype">
+        ///     The desired dtype for the array — one descriptor parameter, like NumPy's <c>dtype</c>: a C# <see cref="Type"/>, an
+        ///     <see cref="NPTypeCode"/>, a NumPy dtype string (<c>"f4"</c>) or a <see cref="DType"/> all convert implicitly.
+        ///     If different from <typeparamref name="T"/>, the data will be cast.
+        /// </param>
         /// <returns>An <see cref="NDArray"/> with the data cast to the specified dtype.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html</remarks>
-        public static NDArray array<T>(T[] data, Type dtype) where T : unmanaged
+        public static NDArray array<T>(T[] data, DType dtype) where T : unmanaged
         {
             var arr = new NDArray(ArraySlice.FromArray(data, true), Shape.Vector(data.Length));
-            if (dtype != null && dtype != typeof(T))
-                return arr.astype(dtype);
-            return arr;
-        }
-
-        /// <summary>
-        ///     Creates a Vector <see cref="NDArray"/> from given <paramref name="data"/> with specified dtype.
-        /// </summary>
-        /// <typeparam name="T">The type of given array, must be compliant to numpy's supported dtypes.</typeparam>
-        /// <param name="data">The array to create <see cref="NDArray"/> from.</param>
-        /// <param name="dtype">The desired data type code for the array. If different from T, the data will be cast.</param>
-        /// <returns>An <see cref="NDArray"/> with the data cast to the specified dtype.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html</remarks>
-        public static NDArray array<T>(T[] data, NPTypeCode dtype) where T : unmanaged
-        {
-            var arr = new NDArray(ArraySlice.FromArray(data, true), Shape.Vector(data.Length));
-            if (dtype != NPTypeCode.Empty && dtype != InfoOf<T>.NPTypeCode)
+            if (dtype != null && dtype.GetTypeCode() != InfoOf<T>.NPTypeCode)
                 return arr.astype(dtype);
             return arr;
         }
@@ -502,35 +490,20 @@ namespace NumSharp
         /// </summary>
         /// <typeparam name="T">The type of given array, must be compliant to numpy's supported dtypes.</typeparam>
         /// <param name="data">The array to create <see cref="NDArray"/> from.</param>
-        /// <param name="dtype">The desired data type for the array. If different from T, the data will be cast.</param>
+        /// <param name="dtype">
+        ///     The desired dtype for the array — one descriptor parameter, like NumPy's <c>dtype</c>: a C# <see cref="Type"/>, an
+        ///     <see cref="NPTypeCode"/>, a NumPy dtype string (<c>"f4"</c>) or a <see cref="DType"/> all convert implicitly.
+        ///     If different from <typeparamref name="T"/>, the data will be cast.
+        /// </param>
         /// <returns>An <see cref="NDArray"/> with the data cast to the specified dtype.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html</remarks>
-        public static NDArray array<T>(T[,] data, Type dtype) where T : unmanaged
+        public static NDArray array<T>(T[,] data, DType dtype) where T : unmanaged
         {
             if (data == null)
                 throw new ArgumentNullException(nameof(data));
 
             var arr = new NDArray(ArraySlice.FromArray(data, true), new Shape(data.GetLength(0), data.GetLength(1)));
-            if (dtype != null && dtype != typeof(T))
-                return arr.astype(dtype);
-            return arr;
-        }
-
-        /// <summary>
-        ///     Creates an <see cref="NDArray"/> from given <paramref name="data"/> with specified dtype.
-        /// </summary>
-        /// <typeparam name="T">The type of given array, must be compliant to numpy's supported dtypes.</typeparam>
-        /// <param name="data">The array to create <see cref="NDArray"/> from.</param>
-        /// <param name="dtype">The desired data type code for the array. If different from T, the data will be cast.</param>
-        /// <returns>An <see cref="NDArray"/> with the data cast to the specified dtype.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html</remarks>
-        public static NDArray array<T>(T[,] data, NPTypeCode dtype) where T : unmanaged
-        {
-            if (data == null)
-                throw new ArgumentNullException(nameof(data));
-
-            var arr = new NDArray(ArraySlice.FromArray(data, true), new Shape(data.GetLength(0), data.GetLength(1)));
-            if (dtype != NPTypeCode.Empty && dtype != InfoOf<T>.NPTypeCode)
+            if (dtype != null && dtype.GetTypeCode() != InfoOf<T>.NPTypeCode)
                 return arr.astype(dtype);
             return arr;
         }

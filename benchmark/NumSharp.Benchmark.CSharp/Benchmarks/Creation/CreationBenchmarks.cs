@@ -81,7 +81,7 @@ public class CreationBenchmarks : TypedBenchmarkBase
 
     [Benchmark(Description = "np.linspace(0, N, N)")]
     [BenchmarkCategory("Range")]
-    public void Linspace() { using var _ = np.linspace(0, N, N, typeCode: DType); }
+    public void Linspace() { using var _ = np.linspace(0, N, N, dtype: DType); }
 
     // ========================================================================
     // Copy / Conversion

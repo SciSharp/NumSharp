@@ -227,7 +227,7 @@ namespace NumSharp.Tests.DTypes
 
             var codes = new[] { NPTypeCode.SByte, NPTypeCode.Byte, NPTypeCode.Int16, NPTypeCode.Half, NPTypeCode.UInt32, NPTypeCode.Double };
             var expected = np.result_type(codes);
-            foreach (var perm in new[] { codes.Reverse().ToArray(), new[] { codes[3], codes[0], codes[5], codes[1], codes[4], codes[2] } })
+            foreach (var perm in new[] { Enumerable.Reverse(codes).ToArray(), new[] { codes[3], codes[0], codes[5], codes[1], codes[4], codes[2] } })
                 np.result_type(perm).Should().Be(expected);
         }
 
@@ -326,7 +326,7 @@ namespace NumSharp.Tests.DTypes
             var metas = new DTypeMeta[] { np.dtypes.Int8DType, np.dtypes.UInt32DType, np.dtypes.Float16DType, np.dtypes.Int16DType };
             var expected = DTypePromotion.PromoteDTypeSequence(metas);
             expected.Should().BeSameAs(np.dtypes.Float64DType);
-            DTypePromotion.PromoteDTypeSequence(metas.Reverse().ToArray()).Should().BeSameAs(expected);
+            DTypePromotion.PromoteDTypeSequence(Enumerable.Reverse(metas).ToArray()).Should().BeSameAs(expected);
             DTypePromotion.PromoteDTypeSequence(new DTypeMeta[] { np.dtypes.Int8DType }).Should().BeSameAs(np.dtypes.Int8DType);
             DTypePromotion.PromoteDTypeSequence(new DTypeMeta[] { np.dtypes.Int8DType, np.dtypes.Int8DType, np.dtypes.Int8DType }).Should().BeSameAs(np.dtypes.Int8DType);
             Action empty = () => DTypePromotion.PromoteDTypeSequence(Array.Empty<DTypeMeta>());

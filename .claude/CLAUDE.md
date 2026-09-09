@@ -946,8 +946,54 @@ NumPy's `dtype.__eq__` (`PyArray_EquivTypes`) is ASYMMETRIC for the metric-prefi
 reverse); `DType.Equals` stays structural and the NumPy relation is `DTypeCasting.EquivTypes` (`[Misaligned]`). (5)
 `result_type(f4, 1j)` is `complex128` (NumPy `complex64`) — the single-complex-width collapse (`[Misaligned]`). (6) The
 legacy `DType._kind_list_map` (`'?'` for bool, `'S'` for char) is what `np._FindCommonType` orders kinds through and must
-not move; the descriptor's own `kind` is `'b'`/`'u'`. Stage B (`NDArray.dtype → DType`), C (datetime storage, NaT,
-ISO-8601, arithmetic loops registered as `ArrayMethod`s — `docs/plans/datetime64.md`) and D (strings) are next.
+not move; the descriptor's own `kind` is `'b'`/`'u'`. Stage C (datetime storage, NaT, ISO-8601, arithmetic loops
+registered as `ArrayMethod`s — `docs/plans/datetime64.md`) and D (strings) are next.
+
+**Stage B landed (2026-09-09): `DType` is the ONE dtype spelling, end to end.** **`NDArray.dtype` returns `DType`**
+(`Storage.Descr` — NumPy's `PyArrayObject.descr`: the class singleton for a builtin lane, so `a.dtype == b.dtype` /
+`a.dtype == np.float64` are cheap structural compares and `ReferenceEquals(a.dtype, np.float64)` holds; a parametric
+descriptor is carried explicitly through `Alias`/`Clone`/`ReplaceData` and reset when the lane changes). **The `np.float64`
+family (`np.bool_`…`np.clongdouble`, `np.@decimal`, `np.intp`/`np.@long`/`np.@uint`, the throwing `complex64`/`csingle`/
+`chars`) are `DType` descriptors**, not `Type`s — NumSharp has no scalar-type objects (a C# `double` IS the scalar), so the
+descriptor is the one currency and `np.float64.itemsize`/`.name`/`.kind` read like NumPy. **Every `dtype`/`typeCode`
+parameter across np.*/NDArray takes ONE `DType`** (Creation, IO, `frombuffer` entry, `indices`, `trace`, `clip`, `cumsum`/
+`cumprod`/`prod`/`sum`, `nancumsum`/`nancumprod`, `amax`/`amin`/`std`/`var`, `cov`/`corrcoef`, `getfield`/`setfield`,
+`finfo`/`iinfo`, Generator/`randint`/`uniform`, `concatenate`/`concat`, `matmul`/`vecdot`/`matvec`/`vecmat`/`einsum`
+(`GufuncGuard.ToLoop`), `astype`/`view`, the `NDArray(DType, …)` ctors, `isdtype`, `find_common_type(DType[]…)`); the
+`Type`/`NPTypeCode` twins are GONE — a `Type`, `NPTypeCode`, `NPTypeCode?` or dtype string converts implicitly, so
+`np.zeros(3, typeof(int))`, `np.zeros(3, NPTypeCode.Int32)`, `np.zeros(3, "i4")`, `np.zeros(3, np.int32)` all bind the one
+overload. **Deliberately kept as `Type`** (the concrete element type of a storage lane, not a user dtype request):
+`TensorEngine.GetStorage(Type)`/`Cast(…, Type, …)`, `UnmanagedStorage.Allocate/Cast/AliasAs(Type)`, `NDArray.ReplaceData`,
+`UnmanagedStorage.DType` (the CLR type — `Descr` is the descriptor), plus the engine-internal `NPTypeCode` currency
+(`DefaultEngine.GetStorage(NPTypeCode)`, `finfo(NPTypeCode)` ctor, `NpyFormat.DtypeInfo`); the promotion family that
+RETURNS `NPTypeCode` (`result_type`/`promote_types`/`can_cast` typed pairs, `find_common_type`, `_FindCommonType*`) is
+unchanged — the `DType` overloads return `DType`. Four things Stage B had to get right, each pinned by a test:
+(1) **`DType → Type` is an EXPLICIT conversion** (`(Type)a.dtype` or NumPy's `a.dtype.type`; `Type → DType` stays implicit).
+`System.Type` declares its own `==`, so with conversions in BOTH directions `a.dtype == typeof(double)` was CS0034-ambiguous
+between `Type.==` and `DType.==`, and adding `==(DType, Type)` overloads instead makes `descr == null` ambiguous (neither
+target is "better" when both directions convert). One-way implicit is what makes `a.dtype == typeof(double)`,
+`typeof(double) == a.dtype`, `a.dtype == "f8"`, `a.dtype == NPTypeCode.Double` all resolve to the structural, coercing
+`DType.==`, and — the reason ~310 MSTest sites needed NO rewrite — `Assert.AreEqual(typeof(double), a.dtype)` infers
+`T = DType` (with two-way conversion the inference fails, CS0411). Cost: a `Type` parameter fed with `.dtype` needs
+`.dtype.type` / `(Type)` (Convert.ChangeType, kernel-factory lookups, `Type.Name` in messages → `dtype.type.Name`;
+`DTypeDescriptorTests.TypeConversion_IsExplicit_SoTypeEqualityResolvesToDType`). (2) **Static-initialization cycle:** `np`'s
+field initializers now run `DType.From` → `DTypeRegistry`'s cctor, which registers the 15×15 `BuiltinCastingImpl`s whose
+minimal `Casting` read `np._nptypemap_arr_arr` — a table `static np()` fills AFTER the field initializers, so the registry saw
+it as null → `TypeInitializationException` on first use. `ArrayMethod.Casting` is now `virtual` and `BuiltinCastingImpl`
+computes it on FIRST READ (a per-impl constant, so laziness is unobservable); both orders (np-first, registry-first) are
+probed. The `static np()` tables themselves are built as `Dictionary<(DType, DType), DType>` (the aliases ARE descriptors) and
+the frozen `Type`/`NPTypeCode`-keyed maps derived from them. (3) **`isdtype` folded to the NumPy-exact `DType` overloads** — the
+`NPTypeCode`/`Type` twins accepted `issubdtype`'s vocabulary (`"floating"`, `"integer"`), which NumPy's `isdtype` rejects with
+`kind argument is a string, but 'floating' is not a known kind name.` (ValueError); the `NDArray` convenience overloads route
+through `arr.dtype`. (4) **Test-side `Should()`:** `test/NumSharp.Tests/Utilities/DTypeAssertions.cs` adds
+`Should(this DType)` → `DTypeAssertions` (`Be(DType)` — a `Type`/`NPTypeCode`/string converts in — `Be<T>()`, `NotBe`,
+`BeOneOf`), declared in the `NumSharp.Tests` NAMESPACE so enclosing-namespace lookup binds every `x.dtype.Should()` (all
+tests live in `NumSharp.Tests.*`) ahead of AwesomeAssertions' `Should(this object)` with no per-file `using` — the ~1,000
+`.dtype.Should().Be(typeof(X))`/`.Be(np.X)`/`.Be<X>()` sites compile unchanged. **BREAKING (accepted):** `Type t = a.dtype`
+and `Type t = np.float64` need a cast; `a.dtype.Name` → `a.dtype.name` (NumPy) or `a.dtype.type.Name` (C#); `np.X` where a
+`Type` is required by signature (`Marshal.SizeOf(np.float64)`) → `np.float64.type`; reflection over `np.array(Array, Type, …)`
+→ `typeof(DType)`; `np.isdtype(x, "floating")` raises. Gates: full suite net10.0 14,832 / net8.0 14,824 green, FuzzMatrix
+30/30 + Oracle 176/176 (dtype_text tier unchanged), Interop 638/638.
 
 ### Selection
 `choose`, `compress`, `extract`, `index_exp`, `indices`, `ix_`, `place`, `put`, `ravel_multi_index`, `s_`, `select`, `take`, `take_along_axis`, `unravel_index`, `where`
@@ -2737,7 +2783,7 @@ NumSharp uses unsafe in many places, hence include `#:property AllowUnsafeBlocks
 | `nd.shape` | Dimensions as `int[]` |
 | `nd.ndim` | Number of dimensions |
 | `nd.size` | Total element count |
-| `nd.dtype` | Element type as `Type` |
+| `nd.dtype` | The dtype descriptor (`DType`, NumPy's `ndarray.dtype`); `nd.dtype.type` is the CLR element `Type`, `(Type)nd.dtype` the explicit cast |
 | `nd.typecode` | Element type as `NPTypeCode` |
 | `nd.T` | Transpose (swaps axes) |
 | `nd.flat` | 1D iterator over elements |

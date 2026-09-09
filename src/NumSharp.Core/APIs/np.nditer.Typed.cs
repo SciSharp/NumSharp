@@ -326,7 +326,7 @@ namespace NumSharp.Backends.Iteration
 
             if (op.dtype != typeof(T))
                 throw new ArgumentException(
-                    $"np.nditer<{typeof(T).Name}> called on a {op.dtype.Name} array. Typed iteration hands out " +
+                    $"np.nditer<{typeof(T).Name}> called on a {op.dtype.type.Name} array. Typed iteration hands out " +
                     $"`ref {typeof(T).Name}` straight into the array's memory, so no conversion is possible — " +
                     $"reinterpreting the bytes would return garbage. Cast first: arr.astype(typeof({typeof(T).Name})).",
                     paramName);

@@ -13,9 +13,9 @@ namespace NumSharp
         /// <param name="dtype">Data-type of the output. Defaults to double.</param>
         /// <returns>n x n array with its main diagonal set to one, and all other elements 0.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.identity.html</remarks>
-        public static NDArray identity(int n, Type dtype = null)
+        public static NDArray identity(int n, DType dtype = null)
         {
-            return eye(n, dtype: dtype ?? typeof(double));
+            return eye(n, dtype: dtype ?? DType.Double);
         }
 
         /// <summary>
@@ -29,7 +29,7 @@ namespace NumSharp
         /// <param name="device">Target device. Only <c>"cpu"</c> and <c>null</c> are accepted (Array-API parity).</param>
         /// <returns>An array where all elements are equal to zero, except for the k-th diagonal, whose values are equal to one.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.eye.html</remarks>
-        public static NDArray eye(int N, int? M = null, int k = 0, Type dtype = null, char order = 'C', string device = null)
+        public static NDArray eye(int N, int? M = null, int k = 0, DType dtype = null, char order = 'C', string device = null)
         {
             ValidateDevice(device);
             int cols = M ?? N;
@@ -40,7 +40,7 @@ namespace NumSharp
 
             char physical = OrderResolver.Resolve(order);
 
-            var resolvedType = dtype ?? typeof(double);
+            var resolvedType = dtype ?? DType.Double;
             var m = np.zeros(Shape.Matrix(N, cols), resolvedType);
             if (N == 0 || cols == 0)
                 return physical == 'F' ? m.copy('F') : m;

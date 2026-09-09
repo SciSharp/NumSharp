@@ -156,7 +156,10 @@ namespace NumSharp
             //
             // ============================================================================
 
-            var typemap_arr_arr = new Dictionary<(Type, Type), Type>(180);
+            // Keyed by the DType descriptors the np.* spellings ARE (np.float64 is np.dtype("float64")); the frozen
+            // Type-keyed and NPTypeCode-keyed tables below are derived from it. Structural DType equality collapses to
+            // typecode equality for the builtins, so the entries — and the duplicate-key guard — are unchanged.
+            var typemap_arr_arr = new Dictionary<(DType, DType), DType>(180);
             typemap_arr_arr.Add((np.@bool, np.@bool), np.@bool);
             typemap_arr_arr.Add((np.@bool, np.uint8), np.uint8);
             typemap_arr_arr.Add((np.@bool, np.int16), np.int16);
@@ -399,7 +402,7 @@ namespace NumSharp
             typemap_arr_arr.Add((np.@decimal, np.int8), np.@decimal);
             typemap_arr_arr.Add((np.@decimal, np.float16), np.@decimal);
 
-            _typemap_arr_arr = typemap_arr_arr.ToFrozenDictionary();
+            _typemap_arr_arr = typemap_arr_arr.ToFrozenDictionary(kv => (kv.Key.Item1.type, kv.Key.Item2.type), kv => kv.Value.type);
 
             var nptypemap_arr_arr = new Dictionary<(NPTypeCode, NPTypeCode), NPTypeCode>(typemap_arr_arr.Count);
             foreach (var tc in typemap_arr_arr) nptypemap_arr_arr[(tc.Key.Item1.GetTypeCode(), tc.Key.Item2.GetTypeCode())] = tc.Value.GetTypeCode();
@@ -448,7 +451,7 @@ namespace NumSharp
             //
             // ============================================================================
 
-            var typemap_arr_scalar = new Dictionary<(Type, Type), Type>();
+            var typemap_arr_scalar = new Dictionary<(DType, DType), DType>();
             typemap_arr_scalar.Add((np.@bool, np.@bool), np.@bool);
             typemap_arr_scalar.Add((np.@bool, np.uint8), np.uint8);
             typemap_arr_scalar.Add((np.@bool, np.@char), np.@char);  // bug 5: bool array + char scalar -> char (was missing -> KeyNotFoundException)
@@ -699,7 +702,7 @@ namespace NumSharp
             typemap_arr_scalar.Add((np.@decimal, np.int8), np.@decimal);
             typemap_arr_scalar.Add((np.@decimal, np.float16), np.@decimal);
 
-            _typemap_arr_scalar = typemap_arr_scalar.ToFrozenDictionary();
+            _typemap_arr_scalar = typemap_arr_scalar.ToFrozenDictionary(kv => (kv.Key.Item1.type, kv.Key.Item2.type), kv => kv.Value.type);
 
             var nptypemap_arr_scalar = new Dictionary<(NPTypeCode, NPTypeCode), NPTypeCode>(typemap_arr_scalar.Count);
             foreach (var tc in typemap_arr_scalar) nptypemap_arr_scalar[(tc.Key.Item1.GetTypeCode(), tc.Key.Item2.GetTypeCode())] = tc.Value.GetTypeCode();
@@ -836,6 +839,31 @@ namespace NumSharp
         public static NPTypeCode find_common_type(NPTypeCode[] array_types, Type[] scalar_types)
         {
             return _FindCommonType(array_types ?? Array.Empty<NPTypeCode>(), scalar_types?.Select(v => v.GetTypeCode()).ToArray() ?? Array.Empty<NPTypeCode>());
+        }
+
+        /// <summary>
+        ///     Determine common type following standard coercion rules — the <see cref="DType"/> form, which is what the
+        ///     <c>np.float32</c>/<c>np.int64</c> spellings are (<c>new[] { np.float32, np.int64 }</c> is a <c>DType[]</c>).
+        /// </summary>
+        /// <param name="array_types">A list of dtype descriptors representing arrays. Can be null.</param>
+        /// <returns>The common data type of <paramref name="array_types"/> (no scalar types).</returns>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.result_type.html</remarks>
+        public static NPTypeCode find_common_type(DType[] array_types)
+        {
+            return _FindCommonType(array_types?.Select(v => v.GetTypeCode()).ToArray() ?? Array.Empty<NPTypeCode>(), Array.Empty<NPTypeCode>());
+        }
+
+        /// <summary>
+        ///     Determine common type following standard coercion rules — the <see cref="DType"/> form, which is what the
+        ///     <c>np.float32</c>/<c>np.int64</c> spellings are (<c>new[] { np.float32, np.int64 }</c> is a <c>DType[]</c>).
+        /// </summary>
+        /// <param name="array_types">A list of dtype descriptors representing arrays. Can be null.</param>
+        /// <param name="scalar_types">A list of dtype descriptors representing scalars. Can be null.</param>
+        /// <returns>The common data type, which is the maximum of array_types ignoring scalar_types, unless the maximum of scalar_types is of a different kind (dtype.kind). If the kind is not understood, then None is returned.</returns>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.result_type.html</remarks>
+        public static NPTypeCode find_common_type(DType[] array_types, DType[] scalar_types)
+        {
+            return _FindCommonType(array_types?.Select(v => v.GetTypeCode()).ToArray() ?? Array.Empty<NPTypeCode>(), scalar_types?.Select(v => v.GetTypeCode()).ToArray() ?? Array.Empty<NPTypeCode>());
         }
 
         #endregion

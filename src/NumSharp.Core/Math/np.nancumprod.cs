@@ -11,7 +11,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">Input array.</param>
         /// <param name="axis">Axis along which the cumulative product is computed. The default (None) is to compute the cumprod over the flattened array.</param>
-        /// <param name="typeCode">Type of the returned array and of the accumulator in which the elements are multiplied. If not specified, it defaults to the dtype of <paramref name="a"/>, unless <paramref name="a"/> has an integer dtype with a precision less than that of the default platform integer, in which case the default platform integer is used.</param>
+        /// <param name="dtype">Type of the returned array and of the accumulator in which the elements are multiplied (a <see cref="Type"/>, <see cref="NPTypeCode"/>, dtype string or <see cref="DType"/> — all convert implicitly). If not specified, it defaults to the dtype of <paramref name="a"/>, unless <paramref name="a"/> has an integer dtype with a precision less than that of the default platform integer, in which case the default platform integer is used.</param>
         /// <param name="out">Alternate output array in which to place the result. It must have the same shape and buffer length as the expected output, but its dtype may differ (the result is cast into it with NumPy's unsafe casting) and a reference to <paramref name="out"/> is returned.</param>
         /// <returns>A new array holding the result unless <paramref name="out"/> is specified, in which case a reference to <paramref name="out"/> is returned.</returns>
         /// <remarks>
@@ -20,12 +20,12 @@ namespace NumSharp
         /// Only float-family dtypes can contain NaN, so integer/bool/decimal inputs are equivalent to <see cref="cumprod"/>.
         /// </remarks>
         [NDScoped]
-        public static NDArray nancumprod(NDArray a, int? axis = null, NPTypeCode? typeCode = null, NDArray @out = null)
+        public static NDArray nancumprod(NDArray a, int? axis = null, DType dtype = null, NDArray @out = null)
         {
             // Boundary scope: the full-size NaN-replaced copy is reclaimed at exit; the scan
             // result (or the caller's @out — untracked, a Returns no-op) is yielded.
             // NumPy: a, mask = _replace_nan(a, 1); return np.cumprod(a, axis, dtype, out).
-            return cumprod(_replace_nan_for_scan(a, 1), axis, typeCode, @out);
+            return cumprod(_replace_nan_for_scan(a, 1), axis, dtype, @out);
         }
     }
 }

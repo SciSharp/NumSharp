@@ -39,7 +39,7 @@ namespace NumSharp
             NDArray[] arrays,
             int? axis = 0,
             NDArray @out = null,
-            NPTypeCode? dtype = null,
+            DType dtype = null,
             string casting = "same_kind")
         {
             if (arrays == null)
@@ -140,7 +140,7 @@ namespace NumSharp
             // Resolve result dtype: dtype= wins, then out=, then NEP50 promotion.
             NPTypeCode resultType;
             if (dtype is not null)
-                resultType = dtype.Value;
+                resultType = dtype.GetTypeCode();
             else if (@out is not null)
                 resultType = @out.GetTypeCode;
             else if (workArrays.Length == 1)

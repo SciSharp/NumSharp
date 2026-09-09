@@ -19,9 +19,9 @@ namespace NumSharp
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.randint.html
         /// </remarks>
-        public NDArray randint(long low, long high = -1, Shape size = default, Type dtype = null)
+        public NDArray randint(long low, long high = -1, Shape size = default, DType dtype = null)
         {
-            dtype = dtype ?? np.int32;
+            dtype ??= DType.Int32;
             var typecode = dtype.GetTypeCode();
             if (high == -1)
             {

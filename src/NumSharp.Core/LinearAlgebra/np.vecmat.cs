@@ -44,7 +44,7 @@ namespace NumSharp
         /// </remarks>
         [NDScoped]
         public static NDArray vecmat(NDArray x1, NDArray x2, NDArray @out = null, int[][] axes = null,
-            int? axis = null, bool keepdims = false, NPTypeCode? dtype = null)
+            int? axis = null, bool keepdims = false, DType dtype = null)
         {
             GufuncGuard.RejectAxisWithAxes(axes, axis);
             GufuncGuard.RejectAxisAndKeepdims("vecmat", VecmatSignature, axis, keepdims, 2);

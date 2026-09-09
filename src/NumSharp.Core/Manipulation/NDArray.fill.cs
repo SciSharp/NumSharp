@@ -87,7 +87,7 @@ namespace NumSharp
             // through) — mirrors UnmanagedStorage.GetData<T>()'s own narrowing.
             if (Shape.offset != 0 || window.Count != n)
                 window = window.Slice(Shape.offset, n);
-            GetWindowFiller(dtype)(window, scalar);
+            GetWindowFiller(dtype.type)(window, scalar);
         }
 
         // Dtype-agnostic dispatch to the generic SIMD fill: one cached delegate per dtype (the reflection-
@@ -126,7 +126,7 @@ namespace NumSharp
             long[] dims = shape.dimensions;
             if (strides[ndim - 1] != 1 || dims[ndim - 1] <= 1)
                 return false;                                  // innermost must be a unit-stride run of len > 1
-            GetInnerRunFiller(dtype)(Storage.InternalArray, shape, scalar);
+            GetInnerRunFiller(dtype.type)(Storage.InternalArray, shape, scalar);
             return true;
         }
 
@@ -235,7 +235,7 @@ namespace NumSharp
             // float32 / float64 / decimal target: Convert saturates a float overflow to ±inf (matching
             // NumPy) for the float targets. A Half source has no IConvertible, so widen it through double.
             object v = value is Half hv ? (double)hv : value;
-            return Convert.ChangeType(v, dtype);
+            return Convert.ChangeType(v, dtype.type);
         }
 
         private static bool IsIntegerLikeTypeCode(NPTypeCode tc)

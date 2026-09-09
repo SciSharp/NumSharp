@@ -27,16 +27,12 @@ namespace NumSharp
         ///     <see cref="frombuffer(byte[],Type,long,long)"/> instead.
         /// </param>
         /// <remarks>
-        ///     Parity with NumPy 2.4.2's <c>np.fromstring</c> (text mode). Shares <see cref="fromfile(string,NPTypeCode,int,string,long)"/>'s
+        ///     Parity with NumPy 2.4.2's <c>np.fromstring</c> (text mode). Shares <see cref="fromfile(string,DType,int,string,long)"/>'s
         ///     text reader, so item parsing, the single-trailing-separator rule and the verbatim
         ///     "unmatched data" error all match it.
         ///     https://numpy.org/doc/stable/reference/generated/numpy.fromstring.html
         /// </remarks>
-        public static NDArray fromstring(string @string, NPTypeCode dtype, int count = -1, string sep = null)
-            => fromstring(@string, dtype.AsType(), count, sep);
-
-        /// <inheritdoc cref="fromstring(string,NPTypeCode,int,string)"/>
-        public static NDArray fromstring(string @string, Type dtype = null, int count = -1, string sep = null)
+        public static NDArray fromstring(string @string, DType dtype = null, int count = -1, string sep = null)
         {
             if (@string is null) throw new ArgumentNullException(nameof(@string));
 
@@ -45,7 +41,7 @@ namespace NumSharp
             if (string.IsNullOrEmpty(sep))
                 throw new ValueError("The binary mode of fromstring is removed, use frombuffer instead");
 
-            NPTypeCode tc = (dtype ?? typeof(double)).GetTypeCode();
+            NPTypeCode tc = dtype?.GetTypeCode() ?? NPTypeCode.Double;
             string[] tokens = SplitTokens(@string, sep, out bool nonWhitespaceSep);
             string[] items = SelectTokens(tokens, count, nonWhitespaceSep);
             return TokensToArray(items, items.Length, tc);

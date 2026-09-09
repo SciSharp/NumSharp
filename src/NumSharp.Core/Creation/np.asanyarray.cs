@@ -17,7 +17,7 @@ namespace NumSharp
         /// <param name="dtype">By default, the data-type is inferred from the input data.</param>
         /// <returns>Array interpretation of a. If a is an ndarray or a subclass of ndarray, it is returned as-is and no copy is performed.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asanyarray.html</remarks>
-        public static NDArray asanyarray(in object a, Type dtype = null, string device = null)
+        public static NDArray asanyarray(in object a, DType dtype = null, string device = null)
             => asanyarray(in a, dtype, 'K', device);
 
         /// <summary>
@@ -29,7 +29,7 @@ namespace NumSharp
         /// <param name="device">Target device. Only <c>"cpu"</c> and <c>null</c> are accepted (Array-API parity).</param>
         /// <returns>Array interpretation of a in the requested layout.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asanyarray.html</remarks>
-        public static NDArray asanyarray(in object a, Type dtype, char order, string device = null)
+        public static NDArray asanyarray(in object a, DType dtype, char order, string device = null)
         {
             ValidateDevice(device);
             NDArray ret;
@@ -114,7 +114,7 @@ namespace NumSharp
                     throw new NotSupportedException($"Unable to resolve asanyarray for type {type.Name}");
             }
 
-            if (dtype != null && !Equals(ret.dtype, dtype))
+            if (dtype != null && ret.typecode != dtype.GetTypeCode())
                 ret = ret.astype(dtype, true);
 
             // Apply requested order (no-op for scalars / 1-D / already-matching layouts).
@@ -141,7 +141,7 @@ namespace NumSharp
         /// <param name="order">'C', 'F', 'A' or 'K' (default).</param>
         /// <param name="device">Only <c>"cpu"</c> and <c>null</c> are accepted (Array-API parity).</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asanyarray.html</remarks>
-        public static NDArray asanyarray(MemoryView buffer, Type dtype = null, char order = 'K', string device = null)
+        public static NDArray asanyarray(MemoryView buffer, DType dtype = null, char order = 'K', string device = null)
         {
             if (buffer is null)
                 throw new ArgumentNullException(nameof(buffer));

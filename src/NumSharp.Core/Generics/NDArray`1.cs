@@ -104,7 +104,7 @@ namespace NumSharp.Generic
         public NDArray(Array values, Shape shape = default, char order = 'C') : base(values, shape, order)
         {
             if (dtype != typeof(TDType))
-                throw new ArgumentException($"Array type must be the same as T. {dtype.Name} != {typeof(TDType).Name}", nameof(values));
+                throw new ArgumentException($"Array type must be the same as T. {dtype.type.Name} != {typeof(TDType).Name}", nameof(values));
         }
 
         /// <summary>

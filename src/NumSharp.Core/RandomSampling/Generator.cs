@@ -65,9 +65,9 @@ namespace NumSharp
         /// <param name="dtype">Desired dtype — only <c>float64</c> (default) and <c>float32</c> are supported.</param>
         /// <param name="out">Optional output array to place the result in.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.random.html</remarks>
-        public NDArray random(Shape size = default, Type dtype = null, NDArray @out = null)
+        public NDArray random(Shape size = default, DType dtype = null, NDArray @out = null)
         {
-            dtype = dtype ?? typeof(double);
+            dtype ??= DType.Double;
             NPTypeCode tc = ResolveFloatDtype(dtype, "random");
 
             if (@out is not null)
@@ -91,7 +91,7 @@ namespace NumSharp
             return tc == NPTypeCode.Single ? FillFloats(size, _bitGenerator) : FillDoubles(size, _bitGenerator);
         }
 
-        private static NPTypeCode ResolveFloatDtype(Type dtype, string name)
+        private static NPTypeCode ResolveFloatDtype(DType dtype, string name)
         {
             var tc = dtype.GetTypeCode();
             if (tc != NPTypeCode.Double && tc != NPTypeCode.Single)

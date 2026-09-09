@@ -90,7 +90,7 @@ namespace NumSharp
 
             // Non-integer types are not valid for indexing (matches NumPy behavior)
             throw new IndexOutOfRangeException(
-                $"arrays used as indices must be of integer type, got {indices.dtype.Name}");
+                $"arrays used as indices must be of integer type, got {indices.dtype.type.Name}");
         }
 
         /// <summary>

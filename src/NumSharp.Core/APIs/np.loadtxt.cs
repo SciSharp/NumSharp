@@ -47,56 +47,49 @@ namespace NumSharp
         ///     Parity with NumPy 2.4.2's <c>np.loadtxt</c>. Reads back what <see cref="np.savetxt(string, NDArray, string, string, string, string, string, string, string)"/> writes.
         ///     https://numpy.org/doc/stable/reference/generated/numpy.loadtxt.html
         /// </remarks>
-        public static NDArray loadtxt(string fname, NPTypeCode dtype = NPTypeCode.Double, string comments = "#",
+        public static NDArray loadtxt(string fname, DType dtype = null, string comments = "#",
             string delimiter = null, object converters = null, int skiprows = 0, int[] usecols = null,
             bool unpack = false, int ndmin = 0, string encoding = null, int? max_rows = null, string quotechar = null)
         {
             if (fname is null) throw new ArgumentNullException(nameof(fname));
-            var cfg = BuildLoadTxtConfig(dtype, comments, delimiter, converters, usecols, ndmin, max_rows, quotechar, skiprows);
+            var cfg = BuildLoadTxtConfig(dtype?.GetTypeCode() ?? NPTypeCode.Double, comments, delimiter, converters, usecols, ndmin, max_rows, quotechar, skiprows);
             using var lines = OpenTextFileLines(fname, encoding).GetEnumerator();
             return LoadTxtCore(lines, cfg, unpack);
         }
 
-        /// <inheritdoc cref="loadtxt(string,NPTypeCode,string,string,object,int,int[],bool,int,string,int?,string)"/>
-        public static NDArray loadtxt(string fname, Type dtype, string comments = "#",
-            string delimiter = null, object converters = null, int skiprows = 0, int[] usecols = null,
-            bool unpack = false, int ndmin = 0, string encoding = null, int? max_rows = null, string quotechar = null)
-            => loadtxt(fname, (dtype ?? typeof(double)).GetTypeCode(), comments, delimiter, converters, skiprows,
-                usecols, unpack, ndmin, encoding, max_rows, quotechar);
-
         /// <summary>Load data from an open text <see cref="Stream"/> (read from the current position; left open).</summary>
-        /// <inheritdoc cref="loadtxt(string,NPTypeCode,string,string,object,int,int[],bool,int,string,int?,string)"/>
-        public static NDArray loadtxt(Stream stream, NPTypeCode dtype = NPTypeCode.Double, string comments = "#",
+        /// <inheritdoc cref="loadtxt(string,DType,string,string,object,int,int[],bool,int,string,int?,string)"/>
+        public static NDArray loadtxt(Stream stream, DType dtype = null, string comments = "#",
             string delimiter = null, object converters = null, int skiprows = 0, int[] usecols = null,
             bool unpack = false, int ndmin = 0, string encoding = null, int? max_rows = null, string quotechar = null)
         {
             if (stream is null) throw new ArgumentNullException(nameof(stream));
-            var cfg = BuildLoadTxtConfig(dtype, comments, delimiter, converters, usecols, ndmin, max_rows, quotechar, skiprows);
+            var cfg = BuildLoadTxtConfig(dtype?.GetTypeCode() ?? NPTypeCode.Double, comments, delimiter, converters, usecols, ndmin, max_rows, quotechar, skiprows);
             using var reader = new StreamReader(stream, ResolveSaveTxtEncoding(encoding), true, 1 << 16, leaveOpen: true);
             using var lines = ReadLines(reader).GetEnumerator();
             return LoadTxtCore(lines, cfg, unpack);
         }
 
         /// <summary>Load data from an open <see cref="TextReader"/> (left open).</summary>
-        /// <inheritdoc cref="loadtxt(string,NPTypeCode,string,string,object,int,int[],bool,int,string,int?,string)"/>
-        public static NDArray loadtxt(TextReader reader, NPTypeCode dtype = NPTypeCode.Double, string comments = "#",
+        /// <inheritdoc cref="loadtxt(string,DType,string,string,object,int,int[],bool,int,string,int?,string)"/>
+        public static NDArray loadtxt(TextReader reader, DType dtype = null, string comments = "#",
             string delimiter = null, object converters = null, int skiprows = 0, int[] usecols = null,
             bool unpack = false, int ndmin = 0, int? max_rows = null, string quotechar = null)
         {
             if (reader is null) throw new ArgumentNullException(nameof(reader));
-            var cfg = BuildLoadTxtConfig(dtype, comments, delimiter, converters, usecols, ndmin, max_rows, quotechar, skiprows);
+            var cfg = BuildLoadTxtConfig(dtype?.GetTypeCode() ?? NPTypeCode.Double, comments, delimiter, converters, usecols, ndmin, max_rows, quotechar, skiprows);
             using var lines = ReadLines(reader).GetEnumerator();
             return LoadTxtCore(lines, cfg, unpack);
         }
 
         /// <summary>Load data from a sequence of lines (each string is one or more newline-separated lines).</summary>
-        /// <inheritdoc cref="loadtxt(string,NPTypeCode,string,string,object,int,int[],bool,int,string,int?,string)"/>
-        public static NDArray loadtxt(IEnumerable<string> lines, NPTypeCode dtype = NPTypeCode.Double, string comments = "#",
+        /// <inheritdoc cref="loadtxt(string,DType,string,string,object,int,int[],bool,int,string,int?,string)"/>
+        public static NDArray loadtxt(IEnumerable<string> lines, DType dtype = null, string comments = "#",
             string delimiter = null, object converters = null, int skiprows = 0, int[] usecols = null,
             bool unpack = false, int ndmin = 0, int? max_rows = null, string quotechar = null)
         {
             if (lines is null) throw new ArgumentNullException(nameof(lines));
-            var cfg = BuildLoadTxtConfig(dtype, comments, delimiter, converters, usecols, ndmin, max_rows, quotechar, skiprows);
+            var cfg = BuildLoadTxtConfig(dtype?.GetTypeCode() ?? NPTypeCode.Double, comments, delimiter, converters, usecols, ndmin, max_rows, quotechar, skiprows);
             using var it = FlattenLines(lines).GetEnumerator();
             return LoadTxtCore(it, cfg, unpack);
         }

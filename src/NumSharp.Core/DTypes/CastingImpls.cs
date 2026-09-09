@@ -22,10 +22,28 @@ namespace NumSharp
     public sealed class BuiltinCastingImpl : CastingImpl
     {
         internal BuiltinCastingImpl(LegacyBuiltinDTypeMeta from, LegacyBuiltinDTypeMeta to)
-            : base(ReferenceEquals(from, to) ? "numeric_copy_or_byteswap" : "numeric_cast", ComputeCasting(from, to),
+            : base(ReferenceEquals(from, to) ? "numeric_copy_or_byteswap" : "numeric_cast", NPY_CASTING.NPY_UNSAFE_CASTING /* see Casting */,
                 NDArrayMethodFlags.SUPPORTS_UNALIGNED | NDArrayMethodFlags.NO_FLOATINGPOINT_ERRORS, from, to)
         {
+            _from = from;
+            _to = to;
         }
+
+        private readonly LegacyBuiltinDTypeMeta _from;
+        private readonly LegacyBuiltinDTypeMeta _to;
+        private NPY_CASTING? _casting;
+
+        /// <summary>
+        ///     The minimal safety of this numeric cast — NumPy's <c>add_numeric_cast</c> value (<c>equiv</c> within a class,
+        ///     <c>safe</c> when the promotion table maps <c>(from, to)</c> back onto <c>to</c>, <c>same_kind</c> along the
+        ///     <c>b &lt; u &lt; i &lt; f &lt; c</c> kind order, else <c>unsafe</c>). Computed on FIRST READ, not at registration:
+        ///     the promotion table is <c>np._nptypemap_arr_arr</c>, built by <c>np</c>'s static constructor, and <c>np</c>'s
+        ///     field initializers (<c>np.float64</c> is a <see cref="DType"/>) are what first construct
+        ///     <see cref="DTypeRegistry"/> — so reading the table while the registry registers the 15×15 impls would observe
+        ///     it before it exists. The value is a constant, so the lazy evaluation is unobservable (a benign race at worst
+        ///     computes it twice).
+        /// </summary>
+        public override NPY_CASTING Casting => _casting ??= ComputeCasting(_from, _to);
 
         private static NPY_CASTING ComputeCasting(LegacyBuiltinDTypeMeta from, LegacyBuiltinDTypeMeta to)
         {

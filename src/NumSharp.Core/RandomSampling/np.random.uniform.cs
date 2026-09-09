@@ -51,11 +51,11 @@ namespace NumSharp
         /// <param name="dtype">The dtype of the output NDArray.</param>
         /// <returns>Drawn samples.</returns>
         [NDScoped] // reclaims the rand draw, its astype, the (high-low) diff and the pre-cast ret
-        public NDArray uniform(NDArray low, NDArray high, Type dtype = null)
+        public NDArray uniform(NDArray low, NDArray high, DType dtype = null)
         {
             if (!low.shape.SequenceEqual(high.shape))
                 throw new IncorrectShapeException();
-            dtype = dtype ?? (low.dtype == high.dtype ? low.dtype : throw new IncorrectTypeException());
+            dtype ??= low.typecode == high.typecode ? low.dtype : throw new IncorrectTypeException();
 
             var ret = low + rand(low.shape).astype(dtype) * (high - low);
             return dtype != null ? ret.astype(dtype) : ret;

@@ -16,7 +16,7 @@ namespace NumSharp
         /// <param name="ddof">Means Delta Degrees of Freedom. The divisor used in calculations is N - ddof, where N represents the number of elements. By default ddof is zero.</param>
         /// <returns> returns a new array containing the std values, otherwise a reference to the output array is returned.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.std.html</remarks>
-        public NDArray std(bool keepdims = false, int? ddof = null, NPTypeCode? dtype = null)
+        public NDArray std(bool keepdims = false, int? ddof = null, DType dtype = null)
         {
             return np.std(this, keepdims, ddof, dtype);
         }
@@ -32,7 +32,7 @@ namespace NumSharp
         /// <param name="ddof">Means Delta Degrees of Freedom. The divisor used in calculations is N - ddof, where N represents the number of elements. By default ddof is zero.</param>
         /// <returns> returns a new array containing the std values, otherwise a reference to the output array is returned.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.std.html</remarks>
-        public NDArray std(int axis, bool keepdims = false, int? ddof = null, NPTypeCode? dtype = null)
+        public NDArray std(int axis, bool keepdims = false, int? ddof = null, DType dtype = null)
         {
             return np.std(this, axis, keepdims, ddof, dtype);
         }

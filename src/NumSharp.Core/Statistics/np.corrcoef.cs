@@ -37,7 +37,7 @@ namespace NumSharp
         ///     https://numpy.org/doc/stable/reference/generated/numpy.corrcoef.html
         /// </remarks>
         [NDScoped]
-        public static NDArray corrcoef(NDArray x, NDArray y = null, bool rowvar = true, NPTypeCode? dtype = null)
+        public static NDArray corrcoef(NDArray x, NDArray y = null, bool rowvar = true, DType dtype = null)
         {
             if (x is null) throw new ArgumentNullException(nameof(x));
 

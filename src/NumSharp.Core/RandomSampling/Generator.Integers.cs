@@ -21,9 +21,9 @@ namespace NumSharp
         ///     legacy masked rejection of <c>RandomState.randint</c> — so the stream is byte-identical
         ///     to <c>default_rng(seed).integers(...)</c>.
         /// </remarks>
-        public NDArray integers(long low, long? high = null, Shape size = default, Type dtype = null, bool endpoint = false)
+        public NDArray integers(long low, long? high = null, Shape size = default, DType dtype = null, bool endpoint = false)
         {
-            dtype = dtype ?? typeof(long);
+            dtype ??= DType.Int64;
             NPTypeCode tc = dtype.GetTypeCode();
 
             long lo, hiArg;
@@ -46,7 +46,7 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Unsigned overload of <see cref="integers(long, long?, Shape, Type, bool)"/> — the only way
+        ///     Unsigned overload of <see cref="integers(long, long?, Shape, DType, bool)"/> — the only way
         ///     to reach the upper half of the <c>uint64</c> range (values above <see cref="long.MaxValue"/>),
         ///     which NumPy addresses with arbitrary-precision Python ints. The full <c>[0, 2**64)</c> range
         ///     is drawn as <c>integers(0UL, ulong.MaxValue, dtype: np.uint64, endpoint: true)</c>.
@@ -56,14 +56,14 @@ namespace NumSharp
         ///     only genuinely-large uint64 requests take the dedicated path — which, like NumPy, rejects a
         ///     non-uint64 dtype whose range cannot hold the requested high (<c>high is out of bounds…</c>).
         /// </remarks>
-        public NDArray integers(ulong low, ulong? high = null, Shape size = default, Type dtype = null, bool endpoint = false)
+        public NDArray integers(ulong low, ulong? high = null, Shape size = default, DType dtype = null, bool endpoint = false)
         {
             // Everything that fits the signed domain goes through the (byte-exact, well-tested) signed path.
             if (low <= long.MaxValue && (high is null || high.Value <= (ulong)long.MaxValue))
                 return integers((long)low, high is null ? (long?)null : (long)high.Value, size, dtype, endpoint);
 
             // Values exceed the signed range: only uint64 can represent them (NumPy's per-dtype bound check).
-            dtype = dtype ?? typeof(long);
+            dtype ??= DType.Int64;
             NPTypeCode tc = dtype.GetTypeCode();
             if (tc != NPTypeCode.UInt64)
                 throw new ValueError($"high is out of bounds for {tc.AsNumpyDtypeName()}");
@@ -83,7 +83,7 @@ namespace NumSharp
         }
 
         // Shared result builder: size==0 -> empty, size==None -> scalar, else a filled dtype array.
-        private NDArray FillIntegers(Type dtype, NPTypeCode tc, Shape size, int width, ulong off, ulong rng)
+        private NDArray FillIntegers(DType dtype, NPTypeCode tc, Shape size, int width, ulong off, ulong rng)
         {
             // size == 0 -> empty array of the requested dtype (drawn no state).
             if (!IsNoSize(size) && size.size == 0)
@@ -124,7 +124,7 @@ namespace NumSharp
 
         // ---- off/rng computation + validation (numpy _bounded_integers.pyx.in scalar path) ----
 
-        private static void ComputeOffRng(NPTypeCode tc, Type dtype, long lo, long highInclusive, bool endpoint,
+        private static void ComputeOffRng(NPTypeCode tc, DType dtype, long lo, long highInclusive, bool endpoint,
                                           out int width, out ulong off, out ulong rng)
         {
             // (lb, ub, width). ub is the EXCLUSIVE upper bound; only meaningful (and checkable

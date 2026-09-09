@@ -24,9 +24,13 @@ namespace NumSharp
         /// Modifications to the NDArray will affect the original buffer.
         /// The buffer must stay alive while the NDArray is in use.
         /// </remarks>
-        public static NDArray frombuffer(byte[] buffer, Type dtype = null, long count = -1, long offset = 0)
+        public static NDArray frombuffer(byte[] buffer, DType dtype = null, long count = -1, long offset = 0)
         {
-            return frombuffer(buffer, (dtype ?? typeof(double)).GetTypeCode(), count, offset);
+            // A non-native descriptor (np.dtype(">u4")) means "these bytes are big-endian": route through the
+            // dtype-STRING path, which byte-swaps to native (a copy) exactly as NumPy's frombuffer + astype would.
+            if (dtype != null && !dtype.isnative)
+                return frombuffer(buffer, dtype.str, count, offset);
+            return frombuffer(buffer, dtype?.GetTypeCode() ?? NPTypeCode.Double, count, offset);
         }
 
         /// <summary>
@@ -157,12 +161,16 @@ namespace NumSharp
         /// <param name="offset">Start reading the buffer from this offset (in bytes). Default is 0.</param>
         /// <returns>A 1-D <see cref="NDArray"/> that VIEWS the buffer's memory (writes through to the source).</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.frombuffer.html</remarks>
-        public static NDArray frombuffer(MemoryView buffer, Type dtype = null, long count = -1, long offset = 0)
+        public static NDArray frombuffer(MemoryView buffer, DType dtype = null, long count = -1, long offset = 0)
         {
-            return frombuffer(buffer, (dtype ?? typeof(double)).GetTypeCode(), count, offset);
+            // A non-native descriptor (np.dtype(">u4")) means "these bytes are big-endian": route through the
+            // dtype-STRING path, which byte-swaps to native (a copy), exactly like the byte[] overload.
+            if (dtype != null && !dtype.isnative)
+                return frombuffer(buffer, dtype.str, count, offset);
+            return frombuffer(buffer, dtype?.GetTypeCode() ?? NPTypeCode.Double, count, offset);
         }
 
-        /// <inheritdoc cref="frombuffer(MemoryView, Type, long, long)"/>
+        /// <inheritdoc cref="frombuffer(MemoryView, DType, long, long)"/>
         public static NDArray frombuffer(MemoryView buffer, NPTypeCode dtype, long count = -1, long offset = 0)
         {
             if (buffer == null)
@@ -254,7 +262,7 @@ namespace NumSharp
         /// (e.g. <c>"&lt;i4"</c>, <c>"&gt;u4"</c> for big-endian uint32). Little-endian / native dtypes are
         /// a zero-copy view; a big-endian dtype needs a byte-swap and so COPIES (as the byte[] path does).
         /// </summary>
-        /// <inheritdoc cref="frombuffer(MemoryView, Type, long, long)"/>
+        /// <inheritdoc cref="frombuffer(MemoryView, DType, long, long)"/>
         public static NDArray frombuffer(MemoryView buffer, string dtype, long count = -1, long offset = 0)
         {
             if (buffer == null)
@@ -389,9 +397,9 @@ namespace NumSharp
         /// Interpret a ReadOnlySpan as a 1-dimensional array.
         /// Note: ReadOnlySpan cannot be pinned, so this always creates a copy.
         /// </summary>
-        public static NDArray frombuffer(ReadOnlySpan<byte> buffer, Type dtype = null, long count = -1, long offset = 0)
+        public static NDArray frombuffer(ReadOnlySpan<byte> buffer, DType dtype = null, long count = -1, long offset = 0)
         {
-            return frombuffer(buffer, (dtype ?? typeof(double)).GetTypeCode(), count, offset);
+            return frombuffer(buffer, dtype?.GetTypeCode() ?? NPTypeCode.Double, count, offset);
         }
 
         /// <summary>
@@ -464,7 +472,7 @@ namespace NumSharp
         /// <param name="dtype">Data-type of the returned array. Default is float64.</param>
         /// <param name="count">Number of items to read. -1 means all data in the segment.</param>
         /// <returns>1-dimensional NDArray viewing the segment's data.</returns>
-        public static NDArray frombuffer(ArraySegment<byte> segment, Type dtype = null, long count = -1)
+        public static NDArray frombuffer(ArraySegment<byte> segment, DType dtype = null, long count = -1)
         {
             if (segment.Array == null)
                 throw new ArgumentException("ArraySegment has no underlying array", nameof(segment));
@@ -492,9 +500,9 @@ namespace NumSharp
         /// <param name="count">Number of items to read. -1 means all data.</param>
         /// <param name="offset">Byte offset within the memory. Default is 0.</param>
         /// <returns>1-dimensional NDArray.</returns>
-        public static NDArray frombuffer(Memory<byte> memory, Type dtype = null, long count = -1, long offset = 0)
+        public static NDArray frombuffer(Memory<byte> memory, DType dtype = null, long count = -1, long offset = 0)
         {
-            return frombuffer(memory, (dtype ?? typeof(double)).GetTypeCode(), count, offset);
+            return frombuffer(memory, dtype?.GetTypeCode() ?? NPTypeCode.Double, count, offset);
         }
 
         /// <summary>
@@ -534,9 +542,9 @@ namespace NumSharp
         /// var ptr = Marshal.AllocHGlobal(1024);
         /// var arr = np.frombuffer(ptr, 1024, typeof(float), dispose: () => Marshal.FreeHGlobal(ptr));
         /// </example>
-        public static unsafe NDArray frombuffer(IntPtr address, long byteLength, Type dtype = null, long count = -1, long offset = 0, Action dispose = null)
+        public static unsafe NDArray frombuffer(IntPtr address, long byteLength, DType dtype = null, long count = -1, long offset = 0, Action dispose = null)
         {
-            return frombuffer(address, byteLength, (dtype ?? typeof(double)).GetTypeCode(), count, offset, dispose);
+            return frombuffer(address, byteLength, dtype?.GetTypeCode() ?? NPTypeCode.Double, count, offset, dispose);
         }
 
         /// <summary>
@@ -598,7 +606,7 @@ namespace NumSharp
         /// <param name="offset">Byte offset into the buffer. Default is 0.</param>
         /// <param name="dispose">Optional cleanup action called when NDArray is disposed.</param>
         /// <returns>1-dimensional NDArray viewing/owning the memory.</returns>
-        public static unsafe NDArray frombuffer(void* address, long byteLength, Type dtype = null, long count = -1, long offset = 0, Action dispose = null)
+        public static unsafe NDArray frombuffer(void* address, long byteLength, DType dtype = null, long count = -1, long offset = 0, Action dispose = null)
         {
             return frombuffer((IntPtr)address, byteLength, dtype, count, offset, dispose);
         }
@@ -626,10 +634,10 @@ namespace NumSharp
         /// var asBytes = np.frombuffer(ints, typeof(byte));  // 16 bytes
         /// var asFloats = np.frombuffer(ints, typeof(float)); // 4 floats (same bits)
         /// </example>
-        public static NDArray frombuffer<TSource>(TSource[] array, Type dtype = null, long count = -1, long offset = 0)
+        public static NDArray frombuffer<TSource>(TSource[] array, DType dtype = null, long count = -1, long offset = 0)
             where TSource : unmanaged
         {
-            return frombuffer(array, (dtype ?? typeof(TSource)).GetTypeCode(), count, offset);
+            return frombuffer(array, dtype?.GetTypeCode() ?? InfoOf<TSource>.NPTypeCode, count, offset);
         }
 
         /// <summary>

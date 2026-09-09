@@ -14,9 +14,9 @@ namespace NumSharp
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.standard_gamma.html
         /// </remarks>
-        public NDArray standard_gamma(double shape, Shape size = default, Type dtype = null, NDArray @out = null)
+        public NDArray standard_gamma(double shape, Shape size = default, DType dtype = null, NDArray @out = null)
         {
-            dtype = dtype ?? typeof(double);
+            dtype ??= DType.Double;
             NPTypeCode tc = ResolveFloatDtype(dtype, "standard_gamma");
             if (shape < 0)
                 throw new ValueError("shape < 0");

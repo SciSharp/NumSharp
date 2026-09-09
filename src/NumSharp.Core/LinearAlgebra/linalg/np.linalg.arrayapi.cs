@@ -61,7 +61,7 @@ namespace NumSharp
             ///     different functions.
             ///     </para>
             /// </remarks>
-            public static NDArray trace(NDArray x, int offset = 0, Type dtype = null)
+            public static NDArray trace(NDArray x, int offset = 0, DType dtype = null)
                 => np.trace(x, offset, -2, -1, dtype);
 
             /// <summary>

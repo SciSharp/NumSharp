@@ -32,6 +32,19 @@ namespace NumSharp
         /// </summary>
         public abstract UnmanagedStorage GetStorage(Type dtype);
 
+        /// <summary>
+        ///     Get storage described by the dtype DESCRIPTOR <paramref name="descr"/> (NumPy's <c>PyArray_NewFromDescr</c>
+        ///     entry — the descriptor becomes the array's <c>dtype</c>, its class supplies the storage lane). The default
+        ///     routes through <see cref="GetStorage(Type)"/>, which is exact for every builtin (one canonical descriptor
+        ///     per lane); an engine that carries parametric descriptors overrides it.
+        /// </summary>
+        public virtual UnmanagedStorage GetStorage(DType descr)
+        {
+            if (descr is null)
+                throw new ArgumentNullException(nameof(descr));
+            return GetStorage((Type)descr);
+        }
+
         #endregion
 
         #region Math

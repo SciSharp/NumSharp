@@ -428,15 +428,16 @@ public class AuditV2_NDArrayCreation
     [TestMethod]
     public void T1_56_NpArray_ArrayInput_DefaultNdmin_MatchesNumPy()
     {
-        // Pull the (Array, Type, int, bool, char) overload and inspect the
-        // `ndmin` default through reflection.
+        // Pull the (Array, DType, int, bool, char) overload and inspect the
+        // `ndmin` default through reflection. (The dtype parameter is the DType descriptor — the one
+        // dtype spelling; a Type / NPTypeCode / dtype string converts to it implicitly.)
         var mi = typeof(np).GetMethod(
             nameof(np.array),
             BindingFlags.Public | BindingFlags.Static,
             null,
-            new[] { typeof(Array), typeof(Type), typeof(int), typeof(bool), typeof(char) },
+            new[] { typeof(Array), typeof(DType), typeof(int), typeof(bool), typeof(char) },
             null);
-        mi.Should().NotBeNull("np.array(Array, Type, int, bool, char) overload");
+        mi.Should().NotBeNull("np.array(Array, DType, int, bool, char) overload");
 
         var ndminParam = mi!.GetParameters()[2];
         ndminParam.Name.Should().Be("ndmin");

@@ -119,7 +119,7 @@ namespace NumSharp.Tests.Math
         {
             // np.nancumsum([1.5, nan, 3.5], dtype=int64) == [1, 1, 4]
             // (NaN->0, then each element cast to int64 BEFORE accumulation: 1.5->1, 0->0, 3.5->3)
-            var r = np.nancumsum(np.array(new[] { 1.5, double.NaN, 3.5 }), typeCode: NPTypeCode.Int64);
+            var r = np.nancumsum(np.array(new[] { 1.5, double.NaN, 3.5 }), dtype: NPTypeCode.Int64);
             r.Should().BeOfType(NPTypeCode.Int64);
             r.Should().Be(np.array(new[] { 1L, 1L, 4L }));
         }
@@ -128,7 +128,7 @@ namespace NumSharp.Tests.Math
         public void NanCumSum_Dtype_Float32()
         {
             // np.nancumsum([1.5, nan, 3.5], dtype=float32) == [1.5, 1.5, 5.0]
-            var r = np.nancumsum(np.array(new[] { 1.5, double.NaN, 3.5 }), typeCode: NPTypeCode.Single);
+            var r = np.nancumsum(np.array(new[] { 1.5, double.NaN, 3.5 }), dtype: NPTypeCode.Single);
             r.Should().BeOfType(NPTypeCode.Single);
             r.Should().Be(np.array(new[] { 1.5f, 1.5f, 5.0f }));
         }
@@ -342,7 +342,7 @@ namespace NumSharp.Tests.Math
         [TestMethod]
         public void NanCumProd_Dtype_Float32()
         {
-            var r = np.nancumprod(np.array(new[] { 2.0, double.NaN, 4.0 }), typeCode: NPTypeCode.Single);
+            var r = np.nancumprod(np.array(new[] { 2.0, double.NaN, 4.0 }), dtype: NPTypeCode.Single);
             r.Should().BeOfType(NPTypeCode.Single);
             r.Should().Be(np.array(new[] { 2.0f, 2.0f, 8.0f }));
         }

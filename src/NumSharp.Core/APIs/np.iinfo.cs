@@ -126,20 +126,23 @@ namespace NumSharp
         /// </remarks>
         /// <example>
         /// <code>
-        /// var info = np.iinfo(NPTypeCode.Int32);
+        /// var info = np.iinfo(np.int32);
         /// Console.WriteLine(info.bits);  // 32
         /// Console.WriteLine(info.min);   // -2147483648
         /// Console.WriteLine(info.max);   // 2147483647
         /// </code>
         /// </example>
-        public static iinfo iinfo(NPTypeCode typeCode) => new iinfo(typeCode);
-
-        /// <summary>
-        /// Machine limits for integer types.
-        /// </summary>
-        /// <param name="type">A CLR integer type.</param>
-        /// <returns>An iinfo object describing the integer type limits.</returns>
-        public static iinfo iinfo(Type type) => new iinfo(type);
+        /// <param name="dtype">
+        ///     The integer dtype — one descriptor parameter, like NumPy's: a C# <see cref="Type"/> (<c>typeof(int)</c>), an
+        ///     <see cref="NPTypeCode"/>, a NumPy dtype string or a <see cref="DType"/> (<c>np.int32</c>, <c>arr.dtype</c>) all
+        ///     convert implicitly.
+        /// </param>
+        public static iinfo iinfo(DType dtype)
+        {
+            if (dtype is null)
+                throw new ArgumentNullException(nameof(dtype));
+            return new iinfo(dtype.GetTypeCode());
+        }
 
         /// <summary>
         /// Machine limits for integer types.

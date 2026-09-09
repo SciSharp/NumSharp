@@ -451,9 +451,18 @@ namespace NumSharp
         /// </summary>
         public static implicit operator DType(string dtype) => dtype == null ? null : np.dtype(dtype);
 
-        /// <summary>A descriptor converts back to its <see cref="System.Type"/> (none/<see langword="null"/> ⇒ null).</summary>
+        /// <summary>
+        ///     A descriptor converts back to its <see cref="System.Type"/> (none/<see langword="null"/> ⇒ null) — EXPLICITLY:
+        ///     <c>(Type)a.dtype</c>, or the NumPy field <c>a.dtype.type</c>. It is deliberately not implicit, because
+        ///     <see cref="System.Type"/> declares its own <c>==</c>: with conversions in BOTH directions,
+        ///     <c>a.dtype == typeof(double)</c> would be ambiguous between <c>Type.==</c> and <c>DType.==</c> (CS0034), and adding
+        ///     <c>==(DType, Type)</c> overloads instead would make <c>descr == null</c> ambiguous (neither target is better). With
+        ///     only the <see cref="Type"/>→<see cref="DType"/> direction implicit, <c>a.dtype == typeof(double)</c>,
+        ///     <c>typeof(double) == a.dtype</c>, <c>Assert.AreEqual(typeof(double), a.dtype)</c> (T infers as <see cref="DType"/>)
+        ///     and <c>a.dtype.Should().Be(typeof(double))</c> all resolve to the structural, coercing DType equality.
+        /// </summary>
         /// <exception cref="NotSupportedException">The class has no C# storage type yet (datetime64/timedelta64 in Stage A).</exception>
-        public static implicit operator Type(DType dtype)
+        public static explicit operator Type(DType dtype)
         {
             if (dtype is null)
                 return null;

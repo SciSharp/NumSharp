@@ -1398,7 +1398,7 @@ namespace NumSharp
                 if (!retShape.SequenceEqual(@out.shape))
                     throw new ArgumentException($"Given @out NDArray is expected to be shaped [{string.Join(", ", retShape)}] but is instead [{string.Join(", ", @out.shape)}]");
                 if (@out.dtype != typeof(T))
-                    throw new ArgumentException($"Given @out NDArray is expected to be dtype '{typeof(T).Name}' but is instead '{@out.dtype.Name}'");
+                    throw new ArgumentException($"Given @out NDArray is expected to be dtype '{typeof(T).Name}' but is instead '{@out.dtype.type.Name}'");
 
                 dst = @out;
             }
@@ -1466,7 +1466,7 @@ namespace NumSharp
                 if (!retShape.SequenceEqual(@out.shape))
                     throw new ArgumentException($"Given @out NDArray is expected to be shaped [{string.Join(", ", retShape)}] but is instead [{string.Join(", ", @out.shape)}]");
                 if (@out.dtype != typeof(T))
-                    throw new ArgumentException($"Given @out NDArray is expected to be dtype '{typeof(T).Name}' but is instead '{@out.dtype.Name}'");
+                    throw new ArgumentException($"Given @out NDArray is expected to be dtype '{typeof(T).Name}' but is instead '{@out.dtype.type.Name}'");
 
                 ret = @out.MakeGeneric<T>();
             }

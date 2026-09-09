@@ -106,7 +106,10 @@ public class NpTypeChecksBattleTests
     {
         var arr = np.array(new int[] { 1, 2, 3 });
         np.isdtype(arr, "integral").Should().BeTrue();
-        np.isdtype(arr, "floating").Should().BeFalse();
+        np.isdtype(arr, "real floating").Should().BeFalse();
+        // "floating" is issubdtype's vocabulary, not isdtype's — NumPy 2.4.2 raises ValueError for it.
+        Action looseKind = () => np.isdtype(arr, "floating");
+        looseKind.Should().Throw<ValueError>().WithMessage("kind argument is a string, but 'floating' is not a known kind name.");
     }
 
     [TestMethod]

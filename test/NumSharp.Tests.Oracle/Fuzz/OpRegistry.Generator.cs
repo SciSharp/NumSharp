@@ -23,7 +23,7 @@ namespace NumSharp.Tests.Fuzz
             double A(int i) => p["args"][i].GetDouble();
             long AL(int i) => p["args"][i].GetInt64();
             Shape S() => p.TryGetValue("size", out var sz) ? new Shape(ParseLongArray(sz)) : default;
-            Type Dt() => p.TryGetValue("dtype", out var d) ? DtypeFromName(d.GetString()) : null;
+            DType Dt() => p.TryGetValue("dtype", out var d) ? DtypeFromName(d.GetString()) : null;
 
             // ---- RandomState helpers (fresh instance) ----
             if (method == "random_integers")
@@ -118,7 +118,7 @@ namespace NumSharp.Tests.Fuzz
             return result;
         }
 
-        private static Type DtypeFromName(string n) => n switch
+        private static DType DtypeFromName(string n) => n switch
         {
             "int8" => np.int8,
             "int16" => np.int16,

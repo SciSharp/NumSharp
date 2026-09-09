@@ -27,11 +27,7 @@ namespace NumSharp
         /// </param>
         /// <param name="offset">Bytes to skip from the file's current position. Binary files only.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fromfile.html</remarks>
-        public static NDArray fromfile(string file, NPTypeCode dtype, int count = -1, string sep = "", long offset = 0)
-            => fromfile(file, dtype.AsType(), count, sep, offset);
-
-        /// <inheritdoc cref="fromfile(string,NPTypeCode,int,string,long)"/>
-        public static NDArray fromfile(string file, Type dtype = null, int count = -1, string sep = "", long offset = 0)
+        public static NDArray fromfile(string file, DType dtype = null, int count = -1, string sep = "", long offset = 0)
         {
             using var fs = new FileStream(file, FileMode.Open, FileAccess.Read);
             return fromfile(fs, dtype, count, sep, offset);
@@ -41,15 +37,11 @@ namespace NumSharp
         ///     Construct an array from data in an open <see cref="Stream"/> (the file-object form). Reads from
         ///     the stream's current position and leaves it open.
         /// </summary>
-        /// <inheritdoc cref="fromfile(string,NPTypeCode,int,string,long)"/>
-        public static NDArray fromfile(Stream stream, NPTypeCode dtype, int count = -1, string sep = "", long offset = 0)
-            => fromfile(stream, dtype.AsType(), count, sep, offset);
-
-        /// <inheritdoc cref="fromfile(Stream,NPTypeCode,int,string,long)"/>
-        public static NDArray fromfile(Stream stream, Type dtype = null, int count = -1, string sep = "", long offset = 0)
+        /// <inheritdoc cref="fromfile(string,DType,int,string,long)"/>
+        public static NDArray fromfile(Stream stream, DType dtype = null, int count = -1, string sep = "", long offset = 0)
         {
             if (stream is null) throw new ArgumentNullException(nameof(stream));
-            NPTypeCode tc = (dtype ?? typeof(double)).GetTypeCode();
+            NPTypeCode tc = dtype?.GetTypeCode() ?? NPTypeCode.Double;
 
             if (string.IsNullOrEmpty(sep))
                 return FromFileBinary(stream, tc, count, offset);

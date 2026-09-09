@@ -649,7 +649,7 @@ namespace NumSharp.Tests.Backends
             try
             {
                 var r = call();
-                return $"{r.dtype.Name}({string.Join(",", r.shape)})";
+                return $"{r.dtype.type.Name}({string.Join(",", r.shape)})";
             }
             catch (Exception e)
             {

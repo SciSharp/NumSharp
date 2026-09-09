@@ -208,20 +208,23 @@ namespace NumSharp
         /// </remarks>
         /// <example>
         /// <code>
-        /// var info = np.finfo(NPTypeCode.Double);
+        /// var info = np.finfo(np.float64);
         /// Console.WriteLine(info.bits);       // 64
         /// Console.WriteLine(info.eps);        // ~2.22e-16
         /// Console.WriteLine(info.precision);  // 15
         /// </code>
         /// </example>
-        public static finfo finfo(NPTypeCode typeCode) => new finfo(typeCode);
-
-        /// <summary>
-        /// Machine limits for floating point types.
-        /// </summary>
-        /// <param name="type">A CLR floating point type.</param>
-        /// <returns>An finfo object describing the floating point type limits.</returns>
-        public static finfo finfo(Type type) => new finfo(type);
+        /// <param name="dtype">
+        ///     The floating point dtype — one descriptor parameter, like NumPy's: a C# <see cref="Type"/> (<c>typeof(double)</c>),
+        ///     an <see cref="NPTypeCode"/>, a NumPy dtype string or a <see cref="DType"/> (<c>np.float64</c>, <c>arr.dtype</c>) all
+        ///     convert implicitly.
+        /// </param>
+        public static finfo finfo(DType dtype)
+        {
+            if (dtype is null)
+                throw new ArgumentNullException(nameof(dtype));
+            return new finfo(dtype.GetTypeCode());
+        }
 
         /// <summary>
         /// Machine limits for floating point types.

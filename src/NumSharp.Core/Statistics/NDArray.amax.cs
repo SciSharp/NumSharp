@@ -27,7 +27,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.amax.html</remarks>
         [SuppressMessage("ReSharper", "TooWideLocalVariableScope")]
         [SuppressMessage("ReSharper", "ParameterHidesMember")]
-        public NDArray amax(int axis, bool keepdims = false, Type dtype = null)
+        public NDArray amax(int axis, bool keepdims = false, DType dtype = null)
         {
             return TensorEngine.AMax(this, axis, dtype, keepdims);
         }
@@ -40,7 +40,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.amax.html</remarks>
         [SuppressMessage("ReSharper", "TooWideLocalVariableScope")]
         [SuppressMessage("ReSharper", "ParameterHidesMember")]
-        public NDArray amax(Type dtype = null)
+        public NDArray amax(DType dtype = null)
         {
             return TensorEngine.AMax(this, null, dtype, false);
         }
@@ -66,7 +66,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.amax.html</remarks>
         [SuppressMessage("ReSharper", "TooWideLocalVariableScope")]
         [SuppressMessage("ReSharper", "ParameterHidesMember")]
-        public NDArray max(int axis, bool keepdims = false, Type dtype = null)
+        public NDArray max(int axis, bool keepdims = false, DType dtype = null)
         {
             return amax(axis, keepdims, dtype);
         }
@@ -79,7 +79,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.amax.html</remarks>
         [SuppressMessage("ReSharper", "TooWideLocalVariableScope")]
         [SuppressMessage("ReSharper", "ParameterHidesMember")]
-        public NDArray max(Type dtype = null)
+        public NDArray max(DType dtype = null)
         {
             return amax(dtype);
         }

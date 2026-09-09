@@ -40,7 +40,7 @@ namespace NumSharp
             NDArray[] arrays,
             int? axis = 0,
             NDArray @out = null,
-            NPTypeCode? dtype = null,
+            DType dtype = null,
             string casting = "same_kind")
             => concatenate(arrays, axis, @out, dtype, casting);
 

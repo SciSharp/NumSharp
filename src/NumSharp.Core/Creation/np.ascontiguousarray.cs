@@ -11,7 +11,7 @@ namespace NumSharp
         /// <param name="dtype">By default, the data-type is inferred from the input.</param>
         /// <returns>Contiguous array of same shape and content as a, with type dtype if specified.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ascontiguousarray.html</remarks>
-        public static NDArray ascontiguousarray(NDArray a, Type dtype = null)
+        public static NDArray ascontiguousarray(NDArray a, DType dtype = null)
         {
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
@@ -30,7 +30,7 @@ namespace NumSharp
         /// <param name="buffer">A <see cref="MemoryView"/> over an array.</param>
         /// <param name="dtype">By default, the data-type is inferred from the source.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ascontiguousarray.html</remarks>
-        public static NDArray ascontiguousarray(MemoryView buffer, Type dtype = null)
+        public static NDArray ascontiguousarray(MemoryView buffer, DType dtype = null)
         {
             if (buffer is null)
                 throw new ArgumentNullException(nameof(buffer));

@@ -389,7 +389,7 @@ namespace NumSharp
         ///     accept an unboxed scalar so callers don't have to construct
         ///     a 0-D ndarray themselves.
         /// </summary>
-        private static NDArray ScalarValueAsArray(object value, Type dtype)
+        private static NDArray ScalarValueAsArray(object value, DType dtype)
         {
             if (value is NDArray nd) return nd; // (caller should disposes the wrapper, but the as-is path is safe)
             var asArr = np.asanyarray(value);

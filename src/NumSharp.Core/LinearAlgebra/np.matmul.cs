@@ -65,7 +65,7 @@ namespace NumSharp
         /// </remarks>
         [NDScoped]
         public static NDArray matmul(NDArray x1, NDArray x2, NDArray @out = null, int[][] axes = null,
-            int? axis = null, bool? keepdims = null, NPTypeCode? dtype = null, string casting = "same_kind",
+            int? axis = null, bool? keepdims = null, DType dtype = null, string casting = "same_kind",
             char order = 'K')
         {
             RequireOrder(order);
@@ -126,12 +126,13 @@ namespace NumSharp
 
             // A dtype= request selects the loop: validate each input reaches it under `casting`, then
             // cast so the product (and the backend route) run at that dtype.
-            if (dtype.HasValue)
+            if (dtype is not null)
             {
-                ValidateMatmulCast(a.typecode, dtype.Value, casting, "input 0");
-                ValidateMatmulCast(b.typecode, dtype.Value, casting, "input 1");
-                a = a.astype(dtype.Value, copy: false);
-                b = b.astype(dtype.Value, copy: false);
+                var loopType = dtype.GetTypeCode(); // a descriptor-only class raises its own descriptive "no storage yet"
+                ValidateMatmulCast(a.typecode, loopType, casting, "input 0");
+                ValidateMatmulCast(b.typecode, loopType, casting, "input 1");
+                a = a.astype(dtype, copy: false);
+                b = b.astype(dtype, copy: false);
             }
 
             var result = a.TensorEngine.Matmul(a, b);

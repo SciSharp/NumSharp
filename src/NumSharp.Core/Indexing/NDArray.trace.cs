@@ -5,7 +5,7 @@ namespace NumSharp
     public partial class NDArray
     {
         /// <summary>
-        ///     Return the sum along diagonals of the array. Refer to <see cref="np.trace(NDArray, int, int, int, Type, NDArray)"/>
+        ///     Return the sum along diagonals of the array. Refer to <see cref="np.trace(NDArray, int, int, int, DType, NDArray)"/>
         ///     for full documentation.
         /// </summary>
         /// <param name="offset">Offset of the diagonal from the main diagonal. Can be positive or negative. Defaults to 0.</param>
@@ -15,7 +15,7 @@ namespace NumSharp
         /// <param name="out">Optional output array whose shape must equal the natural reduction output.</param>
         /// <returns>The sum along the diagonals. For a 2-D array this is a 0-d scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.trace.html</remarks>
-        public NDArray trace(int offset = 0, int axis1 = 0, int axis2 = 1, Type dtype = null, NDArray @out = null)
+        public NDArray trace(int offset = 0, int axis1 = 0, int axis2 = 1, DType dtype = null, NDArray @out = null)
             => np.trace(this, offset, axis1, axis2, dtype, @out);
     }
 }

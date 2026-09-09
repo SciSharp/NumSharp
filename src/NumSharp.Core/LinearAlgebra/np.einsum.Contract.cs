@@ -47,7 +47,7 @@ namespace NumSharp
         /// </remarks>
         [NDScoped]
         private static NDArray EinsumContract(string subscripts, NDArray[] operands, NDArray @out,
-            NPTypeCode? dtype, char order, string casting, object optimize)
+            DType dtype, char order, string casting, object optimize)
         {
             // Parse AND validate — rank, ellipsis grammar, operand count, output labels, out='s rank,
             // every diagonal and every label extent. Nothing past this line is reachable by an
@@ -92,7 +92,7 @@ namespace NumSharp
             // A dtype= override forces it. EVERY operand must reach the loop dtype under the casting
             // rule — which is what makes casting='no' reject mixed dtypes — with NumPy's iterator
             // wording verbatim.
-            NPTypeCode computeType = dtype ?? np.result_type(operands);
+            NPTypeCode computeType = dtype?.GetTypeCode() ?? np.result_type(operands);
             for (int i = 0; i < operands.Length; i++)
             {
                 if (operands[i].typecode != computeType && !np.can_cast(operands[i].typecode, computeType, casting))

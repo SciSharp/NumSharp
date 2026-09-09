@@ -62,8 +62,8 @@ namespace NeuralNetwork.NumSharp.MnistMlp
             Console.WriteLine(isSynthetic
                 ? $"Data: SYNTHETIC — drop real IDX files into '{dataDir}' for genuine MNIST training"
                 : $"Data: REAL MNIST loaded from {dataDir}");
-            Console.WriteLine($"  train = ({trainX.shape[0]}, {trainX.shape[1]}) {trainX.dtype.Name}   labels ({trainY.shape[0]},) {trainY.dtype.Name}");
-            Console.WriteLine($"  test  = ({testX.shape[0]}, {testX.shape[1]}) {testX.dtype.Name}   labels ({testY.shape[0]},) {testY.dtype.Name}");
+            Console.WriteLine($"  train = ({trainX.shape[0]}, {trainX.shape[1]}) {trainX.dtype.name}   labels ({trainY.shape[0]},) {trainY.dtype.name}");
+            Console.WriteLine($"  test  = ({testX.shape[0]}, {testX.shape[1]}) {testX.dtype.name}   labels ({testY.shape[0]},) {testY.dtype.name}");
             Console.WriteLine();
 
             // ---- 2. Fusion probe: correctness + abbreviated perf ----

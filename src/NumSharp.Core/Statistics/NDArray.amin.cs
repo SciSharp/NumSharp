@@ -27,7 +27,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.amin.html</remarks>
         [SuppressMessage("ReSharper", "TooWideLocalVariableScope")]
         [SuppressMessage("ReSharper", "ParameterHidesMember")]
-        public NDArray amin(int axis, bool keepdims = false, Type dtype = null)
+        public NDArray amin(int axis, bool keepdims = false, DType dtype = null)
         {
             return TensorEngine.AMin(this, axis, dtype, keepdims);
         }
@@ -40,7 +40,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.amin.html</remarks>
         [SuppressMessage("ReSharper", "TooWideLocalVariableScope")]
         [SuppressMessage("ReSharper", "ParameterHidesMember")]
-        public NDArray amin(Type dtype = null)
+        public NDArray amin(DType dtype = null)
         {
             return TensorEngine.AMin(this, null, dtype, false);
         }
@@ -66,7 +66,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.amin.html</remarks>
         [SuppressMessage("ReSharper", "TooWideLocalVariableScope")]
         [SuppressMessage("ReSharper", "ParameterHidesMember")]
-        public NDArray min(int axis, bool keepdims = false, Type dtype = null)
+        public NDArray min(int axis, bool keepdims = false, DType dtype = null)
         {
             return amin(axis, keepdims, dtype);
         }
@@ -79,7 +79,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.amin.html</remarks>
         [SuppressMessage("ReSharper", "TooWideLocalVariableScope")]
         [SuppressMessage("ReSharper", "ParameterHidesMember")]
-        public NDArray min(Type dtype = null)
+        public NDArray min(DType dtype = null)
         {
             return amin(dtype);
         }
