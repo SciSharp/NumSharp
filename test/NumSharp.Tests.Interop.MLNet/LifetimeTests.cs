@@ -75,6 +75,65 @@ namespace NumSharp.Tests.Interop.MLNet
         }
 
         [TestMethod]
+        public void DisposedSource_CannotBeExported()
+        {
+            NDArray a = Arange(NPTypeCode.Single, 2, 2);
+            a.Dispose();
+            Assert.ThrowsException<ObjectDisposedException>(() => a.AsDataView("F"));
+            Assert.ThrowsException<ObjectDisposedException>(() => a.AsDataView(new[] { "x", "y" }));
+            Assert.ThrowsException<ObjectDisposedException>(() => a.ToVBuffer<float>());
+        }
+
+        [TestMethod]
+        public void ManyViewsOnOneBuffer_EachHoldsItsOwnReference()
+        {
+            using NDArray a = Arange(NPTypeCode.Double, 3, 2);
+            int baseline = NDArrayMLNetInterop.LiveExports;
+            var views = new NDArrayDataView[5];
+            for (int i = 0; i < views.Length; i++)
+                views[i] = a.AsDataView("F");
+            Assert.AreEqual(baseline + 5, NDArrayMLNetInterop.LiveExports);
+
+            // Every view reads correctly and independently.
+            foreach (NDArrayDataView v in views)
+                using (NDArray back = v.ToNDArray("F"))
+                    Assert.IsTrue(np.array_equal(a, back));
+
+            for (int i = 0; i < views.Length; i++)
+            {
+                views[i].Dispose();
+                Assert.AreEqual(baseline + (views.Length - 1 - i), NDArrayMLNetInterop.LiveExports, $"after disposing view {i}");
+            }
+        }
+
+        [TestMethod]
+        public void Resize_WithRefcheck_RefusesWhileExported_AndWorksAgainAfterwards()
+        {
+            NDArray a = Arange(NPTypeCode.Single, 3, 4);   // 12 elements
+            NDArrayDataView dv = a.AsDataView("F");
+
+            // A SIZE-CHANGING resize is refused while the view's pin references the buffer (NumPy's refcheck).
+            Assert.ThrowsException<IncorrectShapeException>(() => a.resize(new Shape(5, 5), refcheck: true));
+
+            dv.Dispose();
+            Settle();
+
+            // Once the view is gone the same resize succeeds.
+            a.resize(new Shape(5, 5), refcheck: true);
+            Assert.AreEqual(25L, a.size);
+            a.Dispose();
+        }
+
+        [TestMethod]
+        public void Resize_RefcheckFalse_BypassesWhileExported()
+        {
+            NDArray a = Arange(NPTypeCode.Single, 3, 4);
+            using NDArrayDataView dv = a.AsDataView("F");
+            a.resize(new Shape(5, 5), refcheck: false);   // bypasses the reference check
+            Assert.AreEqual(25L, a.size);
+        }
+
+        [TestMethod]
         public void Finalizer_SafetyNet_ReleasesAnUndisposedView()
         {
             using NDArray a = Arange(NPTypeCode.Single, 4, 4);
