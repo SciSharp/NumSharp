@@ -37,14 +37,14 @@ namespace NumSharp
         /// </remarks>
         public static NDIterator[] nested_iters(
             NDArray op, int[][] axes,
-            string[] flags = null, string[][] op_flags = null, NPTypeCode[] op_dtypes = null,
+            string[] flags = null, string[][] op_flags = null, DType[] op_dtypes = null,
             char order = 'K', string casting = "safe", long buffersize = 0)
             => nested_iters(new[] { op }, axes, flags, op_flags, op_dtypes, order, casting, buffersize);
 
-        /// <inheritdoc cref="nested_iters(NDArray, int[][], string[], string[][], NPTypeCode[], char, string, long)"/>
+        /// <inheritdoc cref="nested_iters(NDArray, int[][], string[], string[][], DType[], char, string, long)"/>
         public static NDIterator[] nested_iters(
             NDArray[] op, int[][] axes,
-            string[] flags = null, string[][] op_flags = null, NPTypeCode[] op_dtypes = null,
+            string[] flags = null, string[][] op_flags = null, DType[] op_dtypes = null,
             char order = 'K', string casting = "safe", long buffersize = 0)
         {
             // --- axes validation (verbatim NumPy messages, NpyIter_NestedIters order) ---

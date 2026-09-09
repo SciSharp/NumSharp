@@ -26,7 +26,7 @@ namespace NumSharp
         /// np.min_scalar_type(true)    // Boolean
         /// </code>
         /// </example>
-        public static NPTypeCode min_scalar_type(object value)
+        public static DType min_scalar_type(object value)
         {
             if (value == null)
                 throw new ArgumentNullException(nameof(value));

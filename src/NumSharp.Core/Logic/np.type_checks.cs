@@ -231,7 +231,7 @@ namespace NumSharp
         /// np.maximum_sctype(NPTypeCode.Single)  // Double (or Decimal)
         /// </code>
         /// </example>
-        public static NPTypeCode maximum_sctype(NPTypeCode t)
+        public static DType maximum_sctype(NPTypeCode t)
         {
             return NPTypeHierarchy.GetMaximumType(t);
         }

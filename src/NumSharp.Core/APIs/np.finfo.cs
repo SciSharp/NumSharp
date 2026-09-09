@@ -78,20 +78,24 @@ namespace NumSharp
         public NPTypeCode dtype { get; }
 
         /// <summary>
-        /// Create finfo for the specified NPTypeCode.
+        /// Create finfo for the specified dtype.
         /// </summary>
-        /// <param name="typeCode">A floating point type code.</param>
-        /// <exception cref="ArgumentException">Thrown if typeCode is not a floating point type.</exception>
-        public finfo(NPTypeCode typeCode)
+        /// <param name="dtype">A floating point dtype (a <see cref="Type"/>, <see cref="NPTypeCode"/>, dtype string or <see cref="DType"/> — all convert implicitly).</param>
+        /// <exception cref="ArgumentException">Thrown if <paramref name="dtype"/> is not a floating point type.</exception>
+        public finfo(DType dtype)
         {
+            if (dtype is null)
+                throw new ArgumentNullException(nameof(dtype));
+
+            NPTypeCode typeCode = dtype.GetTypeCode();
             if (!IsFloatType(typeCode))
-                throw new ArgumentException($"data type '{typeCode.AsNumpyDtypeName()}' not inexact", nameof(typeCode));
+                throw new ArgumentException($"data type '{typeCode.AsNumpyDtypeName()}' not inexact", nameof(dtype));
 
             // NumPy parity: np.finfo(np.complex128).dtype == np.float64.
             // The finfo represents the precision of the underlying real component, so
             // we report float64's machine limits with dtype set to the real type.
             // System.Numerics.Complex is 2 × float64 → underlying dtype is Double.
-            dtype = typeCode == NPTypeCode.Complex ? NPTypeCode.Double : typeCode;
+            this.dtype = typeCode == NPTypeCode.Complex ? NPTypeCode.Double : typeCode;
 
             switch (typeCode)
             {
@@ -167,15 +171,6 @@ namespace NumSharp
             }
         }
 
-        /// <summary>
-        /// Create finfo for the specified CLR type.
-        /// </summary>
-        /// <param name="type">A CLR floating point type.</param>
-        /// <exception cref="ArgumentException">Thrown if type is not a floating point type.</exception>
-        public finfo(Type type) : this(type.GetTypeCode())
-        {
-        }
-
         /// <inheritdoc />
         public override string ToString()
         {
@@ -223,7 +218,7 @@ namespace NumSharp
         {
             if (dtype is null)
                 throw new ArgumentNullException(nameof(dtype));
-            return new finfo(dtype.GetTypeCode());
+            return new finfo(dtype);
         }
 
         /// <summary>

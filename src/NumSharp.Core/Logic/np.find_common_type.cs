@@ -774,7 +774,7 @@ namespace NumSharp
         /// <param name="scalar_types">A list of dtypes or dtype convertible objects representing scalars.Can be null.</param>
         /// <returns>The common data type, which is the maximum of array_types ignoring scalar_types, unless the maximum of scalar_types is of a different kind (dtype.kind). If the kind is not understood, then None is returned.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.result_type.html</remarks>
-        public static NPTypeCode find_common_type(NPTypeCode[] array_types, NPTypeCode[] scalar_types)
+        public static DType find_common_type(NPTypeCode[] array_types, NPTypeCode[] scalar_types)
         {
             return _FindCommonType(array_types ?? Array.Empty<NPTypeCode>(), scalar_types ?? Array.Empty<NPTypeCode>());
         }
@@ -788,7 +788,7 @@ namespace NumSharp
         /// <param name="scalar_types">A list of dtypes or dtype convertible objects representing scalars.Can be null.</param>
         /// <returns>The common data type, which is the maximum of array_types ignoring scalar_types, unless the maximum of scalar_types is of a different kind (dtype.kind). If the kind is not understood, then None is returned.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.result_type.html</remarks>
-        public static NPTypeCode find_common_type(Type[] array_types)
+        public static DType find_common_type(Type[] array_types)
         {
             return _FindCommonType(array_types?.Select(v => v.GetTypeCode()).ToArray() ?? Array.Empty<NPTypeCode>(), Array.Empty<NPTypeCode>());
         }
@@ -800,7 +800,7 @@ namespace NumSharp
         /// <param name="scalar_types">A list of dtypes or dtype convertible objects representing scalars.Can be null.</param>
         /// <returns>The common data type, which is the maximum of array_types ignoring scalar_types, unless the maximum of scalar_types is of a different kind (dtype.kind). If the kind is not understood, then None is returned.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.result_type.html</remarks>
-        public static NPTypeCode find_common_type(Type[] array_types, Type[] scalar_types)
+        public static DType find_common_type(Type[] array_types, Type[] scalar_types)
         {
             return _FindCommonType(array_types?.Select(v => v.GetTypeCode()).ToArray() ?? Array.Empty<NPTypeCode>(), scalar_types?.Select(v => v.GetTypeCode()).ToArray() ?? Array.Empty<NPTypeCode>());
         }
@@ -812,7 +812,7 @@ namespace NumSharp
         /// <param name="scalar_types">A list of dtypes or dtype convertible objects representing scalars.Can be null.</param>
         /// <returns>The common data type, which is the maximum of array_types ignoring scalar_types, unless the maximum of scalar_types is of a different kind (dtype.kind). If the kind is not understood, then None is returned.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.result_type.html</remarks>
-        public static NPTypeCode find_common_type(string[] array_types, string[] scalar_types)
+        public static DType find_common_type(string[] array_types, string[] scalar_types)
         {
             return _FindCommonType(array_types?.Select(v => np.dtype(v).typecode).ToArray() ?? Array.Empty<NPTypeCode>(), scalar_types?.Select(v => np.dtype(v).typecode).ToArray() ?? Array.Empty<NPTypeCode>());
         }
@@ -824,7 +824,7 @@ namespace NumSharp
         /// <param name="scalar_types">A list of dtypes or dtype convertible objects representing scalars.Can be null.</param>
         /// <returns>The common data type, which is the maximum of array_types ignoring scalar_types, unless the maximum of scalar_types is of a different kind (dtype.kind). If the kind is not understood, then None is returned.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.result_type.html</remarks>
-        public static NPTypeCode find_common_type(Type[] array_types, NPTypeCode[] scalar_types)
+        public static DType find_common_type(Type[] array_types, NPTypeCode[] scalar_types)
         {
             return _FindCommonType(array_types?.Select(v => v.GetTypeCode()).ToArray() ?? Array.Empty<NPTypeCode>(), scalar_types ?? Array.Empty<NPTypeCode>());
         }
@@ -836,7 +836,7 @@ namespace NumSharp
         /// <param name="scalar_types">A list of dtypes or dtype convertible objects representing scalars.Can be null.</param>
         /// <returns>The common data type, which is the maximum of array_types ignoring scalar_types, unless the maximum of scalar_types is of a different kind (dtype.kind). If the kind is not understood, then None is returned.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.result_type.html</remarks>
-        public static NPTypeCode find_common_type(NPTypeCode[] array_types, Type[] scalar_types)
+        public static DType find_common_type(NPTypeCode[] array_types, Type[] scalar_types)
         {
             return _FindCommonType(array_types ?? Array.Empty<NPTypeCode>(), scalar_types?.Select(v => v.GetTypeCode()).ToArray() ?? Array.Empty<NPTypeCode>());
         }
@@ -848,7 +848,7 @@ namespace NumSharp
         /// <param name="array_types">A list of dtype descriptors representing arrays. Can be null.</param>
         /// <returns>The common data type of <paramref name="array_types"/> (no scalar types).</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.result_type.html</remarks>
-        public static NPTypeCode find_common_type(DType[] array_types)
+        public static DType find_common_type(DType[] array_types)
         {
             return _FindCommonType(array_types?.Select(v => v.GetTypeCode()).ToArray() ?? Array.Empty<NPTypeCode>(), Array.Empty<NPTypeCode>());
         }
@@ -861,7 +861,7 @@ namespace NumSharp
         /// <param name="scalar_types">A list of dtype descriptors representing scalars. Can be null.</param>
         /// <returns>The common data type, which is the maximum of array_types ignoring scalar_types, unless the maximum of scalar_types is of a different kind (dtype.kind). If the kind is not understood, then None is returned.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.result_type.html</remarks>
-        public static NPTypeCode find_common_type(DType[] array_types, DType[] scalar_types)
+        public static DType find_common_type(DType[] array_types, DType[] scalar_types)
         {
             return _FindCommonType(array_types?.Select(v => v.GetTypeCode()).ToArray() ?? Array.Empty<NPTypeCode>(), scalar_types?.Select(v => v.GetTypeCode()).ToArray() ?? Array.Empty<NPTypeCode>());
         }
@@ -1010,7 +1010,7 @@ namespace NumSharp
         ///     Resolves to which type should the output be.
         /// </summary>
         [MethodImpl(Optimize)]
-        public static NPTypeCode find_common_type(params string[] involvedTypes)
+        public static DType find_common_type(params string[] involvedTypes)
         {
             return _can_coerce_all(involvedTypes.Select(s => dtype(s).typecode).ToArray());
         }

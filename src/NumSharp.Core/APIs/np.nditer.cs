@@ -39,7 +39,7 @@ namespace NumSharp
             NDArray op,
             string[] flags = null,
             string[] op_flags = null,
-            NPTypeCode[] op_dtypes = null,
+            DType[] op_dtypes = null,
             char order = 'K',
             string casting = "safe",
             int[][] op_axes = null,
@@ -60,12 +60,12 @@ namespace NumSharp
         ///     One flag list per operand. A SINGLE inner list is broadcast to every operand —
         ///     NumPy's "flat list of strings applies to all operands" convenience.
         /// </param>
-        /// <inheritdoc cref="nditer(NDArray, string[], string[], NPTypeCode[], char, string, int[][], long[], long)"/>
+        /// <inheritdoc cref="nditer(NDArray, string[], string[], DType[], char, string, int[][], long[], long)"/>
         public static NDIterator nditer(
             NDArray[] op,
             string[] flags = null,
             string[][] op_flags = null,
-            NPTypeCode[] op_dtypes = null,
+            DType[] op_dtypes = null,
             char order = 'K',
             string casting = "safe",
             int[][] op_axes = null,
@@ -146,7 +146,7 @@ namespace NumSharp
                 NDArray[] op,
                 string[] flags,
                 string[][] op_flags,
-                NPTypeCode[] op_dtypes,
+                DType[] op_dtypes,
                 char order,
                 string casting,
                 int[][] op_axes,
@@ -157,6 +157,13 @@ namespace NumSharp
                     throw new ArgumentException("Must provide at least one operand");
 
                 int nop = op.Length;
+
+                // NumPy's op_dtypes is a sequence of dtype descriptors; the engine below works in
+                // NPTypeCode, and a null entry means "infer this operand" (the NPTypeCode.Empty sentinel
+                // InferAllocateDtypes/AdvancedNew already understand).
+                NPTypeCode[] op_typecodes = op_dtypes == null
+                    ? null
+                    : Array.ConvertAll(op_dtypes, d => d is null ? NPTypeCode.Empty : d.GetTypeCode());
 
                 var globalFlags = ParseGlobalFlags(flags);
                 var npyOrder = ParseOrder(order);
@@ -192,10 +199,10 @@ namespace NumSharp
                     }
                 }
 
-                op_dtypes = InferAllocateDtypes(op, perOpFlags, op_dtypes, nop);
+                op_typecodes = InferAllocateDtypes(op, perOpFlags, op_typecodes, nop);
 
                 var iter = NDIterRef.AdvancedNew(
-                    nop, op, globalFlags, npyOrder, npyCasting, perOpFlags, op_dtypes,
+                    nop, op, globalFlags, npyOrder, npyCasting, perOpFlags, op_typecodes,
                     op_axes == null ? -1 : (op_axes.Length > 0 && op_axes[0] != null ? op_axes[0].Length : -1),
                     op_axes, itershape, buffersize);
 

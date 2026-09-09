@@ -369,8 +369,8 @@ namespace NumSharp
             var (shape, slices, leaves) =
                 _block_info_recursion(normalized, listNdim, resultNdim, 0);
 
-            var dtype = leaves.Count == 1
-                ? leaves[0].GetTypeCode
+            DType dtype = leaves.Count == 1
+                ? leaves[0].dtype
                 : np.result_type(leaves.ToArray());
 
             // Prefer F only in the case that all input arrays are F (and not

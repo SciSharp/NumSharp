@@ -81,7 +81,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="types">One or more NPTypeCode values.</param>
         /// <returns>The result type from combining the inputs.</returns>
-        public static NPTypeCode result_type(params NPTypeCode[] types)
+        public static DType result_type(params NPTypeCode[] types)
         {
             if (types == null || types.Length == 0)
                 throw new ArgumentException("At least one type must be provided", nameof(types));
@@ -98,7 +98,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="arrays">One or more NDArray objects.</param>
         /// <returns>The result type from combining the array dtypes.</returns>
-        public static NPTypeCode result_type(params NDArray[] arrays)
+        public static DType result_type(params NDArray[] arrays)
         {
             if (arrays == null || arrays.Length == 0)
                 throw new ArgumentException("At least one array must be provided", nameof(arrays));
@@ -116,7 +116,7 @@ namespace NumSharp
         /// <param name="type1">First type code.</param>
         /// <param name="type2">Second type code.</param>
         /// <returns>The result type from combining the inputs.</returns>
-        public static NPTypeCode result_type(NPTypeCode type1, NPTypeCode type2)
+        public static DType result_type(NPTypeCode type1, NPTypeCode type2)
         {
             if (type1 == type2)
                 return type1;
@@ -130,7 +130,7 @@ namespace NumSharp
         /// <param name="type1">First CLR type.</param>
         /// <param name="type2">Second CLR type.</param>
         /// <returns>The result type from combining the inputs.</returns>
-        public static NPTypeCode result_type(Type type1, Type type2)
+        public static DType result_type(Type type1, Type type2)
         {
             return result_type(type1.GetTypeCode(), type2.GetTypeCode());
         }
@@ -142,7 +142,7 @@ namespace NumSharp
         /// <param name="arr1">First array.</param>
         /// <param name="arr2">Second array.</param>
         /// <returns>The result type from combining the array dtypes.</returns>
-        public static NPTypeCode result_type(NDArray arr1, NDArray arr2)
+        public static DType result_type(NDArray arr1, NDArray arr2)
         {
             if (arr1 is null)
                 throw new ArgumentNullException(nameof(arr1));

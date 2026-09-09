@@ -49,26 +49,21 @@ namespace NumSharp
         public char kind { get; }
 
         /// <summary>
-        /// Create iinfo for the specified NPTypeCode.
+        /// Create iinfo for the specified dtype.
         /// </summary>
-        /// <param name="typeCode">An integer type code.</param>
-        /// <exception cref="ArgumentException">Thrown if typeCode is not an integer type.</exception>
-        public iinfo(NPTypeCode typeCode)
+        /// <param name="dtype">An integer dtype (a <see cref="Type"/>, <see cref="NPTypeCode"/>, dtype string or <see cref="DType"/> — all convert implicitly).</param>
+        /// <exception cref="ArgumentException">Thrown if <paramref name="dtype"/> is not an integer type.</exception>
+        public iinfo(DType dtype)
         {
+            if (dtype is null)
+                throw new ArgumentNullException(nameof(dtype));
+
+            NPTypeCode typeCode = dtype.GetTypeCode();
             if (!IsIntegerType(typeCode))
-                throw new ArgumentException($"Invalid integer data type '{typeCode.AsNumpyDtypeName()}'", nameof(typeCode));
+                throw new ArgumentException($"Invalid integer data type '{typeCode.AsNumpyDtypeName()}'", nameof(dtype));
 
-            dtype = typeCode;
+            this.dtype = typeCode;
             (bits, min, max, maxUnsigned, kind) = GetTypeInfo(typeCode);
-        }
-
-        /// <summary>
-        /// Create iinfo for the specified CLR type.
-        /// </summary>
-        /// <param name="type">A CLR integer type.</param>
-        /// <exception cref="ArgumentException">Thrown if type is not an integer type.</exception>
-        public iinfo(Type type) : this(type.GetTypeCode())
-        {
         }
 
         /// <inheritdoc />
@@ -141,7 +136,7 @@ namespace NumSharp
         {
             if (dtype is null)
                 throw new ArgumentNullException(nameof(dtype));
-            return new iinfo(dtype.GetTypeCode());
+            return new iinfo(dtype);
         }
 
         /// <summary>

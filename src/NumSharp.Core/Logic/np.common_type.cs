@@ -22,12 +22,12 @@ namespace NumSharp
         /// np.common_type(a_float32, a_float64)                 // typeof(double)
         /// </code>
         /// </example>
-        public static Type common_type(params NDArray[] arrays)
+        public static DType common_type(params NDArray[] arrays)
         {
             if (arrays == null || arrays.Length == 0)
                 throw new ArgumentException("At least one array must be provided", nameof(arrays));
 
-            return common_type_code(arrays).AsType();
+            return common_type_code(arrays);
         }
 
         /// <summary>

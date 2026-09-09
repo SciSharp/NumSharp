@@ -224,7 +224,7 @@ namespace NumSharp.Tests.APIs
             using var it = np.nditer(
                 new[] {A(), null},
                 op_flags: new[] {new[] {"readonly"}, new[] {"writeonly", "allocate"}},
-                op_dtypes: new[] {NPTypeCode.Int64, NPTypeCode.Int64});
+                op_dtypes: new DType[] {NPTypeCode.Int64, NPTypeCode.Int64});
 
             foreach (var v in it)
                 v[1].SetAtIndex(Convert.ToInt64(v[0].GetAtIndex(0)) * 2, 0);
@@ -269,7 +269,7 @@ namespace NumSharp.Tests.APIs
         {
             var c = np.arange(3).astype(NPTypeCode.Double);
             var it = np.nditer(c, op_flags: new[] {"readwrite"}, flags: new[] {"buffered"},
-                op_dtypes: new[] {NPTypeCode.Double});
+                op_dtypes: new DType[] {NPTypeCode.Double});
 
             foreach (var v in it)
                 v[0].SetAtIndex(9.0, 0);
@@ -382,7 +382,7 @@ namespace NumSharp.Tests.APIs
         [TestMethod]
         public void NdIter_BufferedCast()
         {
-            using var it = np.nditer(A(), flags: new[] {"buffered"}, op_dtypes: new[] {NPTypeCode.Double});
+            using var it = np.nditer(A(), flags: new[] {"buffered"}, op_dtypes: new DType[] {NPTypeCode.Double});
             Values(it).Should().Be("0 1 2 3 4 5");
             it.dtypes[0].Should().Be(NPTypeCode.Double);
         }

@@ -56,7 +56,7 @@ namespace NumSharp
         /// np.promote_types(NPTypeCode.Int8, NPTypeCode.Int8)     // Int8
         /// </code>
         /// </example>
-        public static NPTypeCode promote_types(NPTypeCode type1, NPTypeCode type2)
+        public static DType promote_types(NPTypeCode type1, NPTypeCode type2)
         {
             if (type1 == type2)
                 return type1;
@@ -71,7 +71,7 @@ namespace NumSharp
         /// <param name="type1">First CLR type.</param>
         /// <param name="type2">Second CLR type.</param>
         /// <returns>The promoted type as NPTypeCode.</returns>
-        public static NPTypeCode promote_types(Type type1, Type type2)
+        public static DType promote_types(Type type1, Type type2)
         {
             return promote_types(type1.GetTypeCode(), type2.GetTypeCode());
         }
@@ -89,7 +89,7 @@ namespace NumSharp
         /// np.promote_types&lt;float, double&gt;()  // Double
         /// </code>
         /// </example>
-        public static NPTypeCode promote_types<T1, T2>()
+        public static DType promote_types<T1, T2>()
             where T1 : struct
             where T2 : struct
         {
