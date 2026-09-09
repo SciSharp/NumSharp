@@ -1353,8 +1353,23 @@ first, then the truncated value is range-checked; NaN/inf raise; a bool target n
 To a float/complex/decimal dtype it uses `Convert` (exact). **Perf (NPY/NS, Release, 100K, non-contiguous):**
 same-dtype set **1.8×**, cross-dtype→float set **2.4×**, get **6.3×** — all FASTER than NumPy (the
 allocation-free `GetAtIndex`/`SetAtIndex` hot path); cross-dtype→integer set is correctness-first (`astype`,
-slower, rarer). `x.flat` is UNCHANGED (still the raveled `NDArray`). See `APIs/np.flatiter.cs`; gate:
-`APIs/np.flatiter.Test.cs` (13).
+slower, rarer). `x.flat` is UNCHANGED (still the raveled `NDArray`).
+
+**Typed, by-`ref T` flat iteration — `np.flat<T>(a, writeable=false)` / `a.flatiter.AsTyped<T>(writeable=false)`
+→ `np.FlatRefIter<T>`.** The unboxed counterpart of the boxed `FlatIterator`: yields `ref T` straight into the
+array's memory in the SAME logical C-order, write-through for every layout — the flat analog of `np.nditer<T>`.
+It IS exactly `np.nditer<T>(a, order: 'C')` with a C-order default baked in (the order-configurable
+`np.nditer<T>` defaults to memory `'K'`), so `FlatRefIter<T>` is a `readonly struct` whose `GetEnumerator()`
+REUSES `NDRefIter<T>.Enumerator` pinned to `NPY_CORDER` — zero duplicated iteration logic, same `NDIterRef`
+engine, verified bit-identical to the boxed `flatiter`'s C-order across contiguous/transposed/reversed/strided/
+broadcast (probed). `T` must be the EXACT dtype (a `ref` can't convert → `ArgumentException`, so unlike the boxed
+setters it does NO scalar coercion); `writeable:true` opens readwrite and refuses a read-only broadcast with
+NumPy's message; 0-d yields its one element, empty iterates zero times, re-enumeration RESTARTS (holds no cursor,
+unlike the boxed `flatiter` which resumes). **The instance spelling is `a.flatiter.AsTyped<T>()`, NOT
+`a.flatiter<T>` — a generic method cannot share a name with the `flatiter` property (CS0102).** See
+`APIs/np.flatiter.cs` (`flat<T>` + `FlatRefIter<T>` + `FlatIterator.AsTyped<T>`), reusing `NDRefIter<T>.Enumerator`
+from `APIs/np.nditer.Typed.cs`; gate: `APIs/np.flatiter.Test.cs` (23 — `np_flatiter_tests` 13 boxed +
+`np_flat_typed_tests` 10 typed).
 
 The three NumPy iteration objects, all following the `np.broadcast` house shape — a lowercase
 factory returning a PascalCase nested class — and all **their own iterator** (NumPy's `iter(x) is x`),

@@ -24,6 +24,58 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     Typed, allocation-free FLAT iteration — the unboxed, by-reference counterpart of
+        ///     <see cref="flat(NDArray)"/> / <see cref="NDArray.flatiter"/>. Yields <c>ref T</c>
+        ///     straight into the array's memory in <b>logical C-order</b> (last axis fastest,
+        ///     honouring the array's strides — the same order the boxed <see cref="FlatIterator"/>
+        ///     walks), so reading costs a dereference and writing goes through to the array for
+        ///     EVERY memory layout — transposed, sliced, strided, negative-stride, broadcast.
+        ///
+        ///     <code>
+        ///     var a = np.arange(6).reshape(2, 3).T;   // transposed (non-contiguous) view
+        ///
+        ///     // read, by reference, in C-order (0 3 1 4 2 5 — same as a.flatiter)
+        ///     double total = 0;
+        ///     foreach (ref double x in np.flat&lt;double&gt;(a))
+        ///         total += x;
+        ///
+        ///     // write through, in C-order
+        ///     foreach (ref double x in np.flat&lt;double&gt;(a, writeable: true))
+        ///         x *= 2;
+        ///     </code>
+        /// </summary>
+        /// <typeparam name="T">
+        ///     Must be EXACTLY the array's element type — no conversion or casting is performed,
+        ///     because a <c>ref</c> cannot convert. A mismatch throws rather than reinterpreting the
+        ///     bytes (cast first with <c>a.astype(...)</c>). This is why the typed form cannot do the
+        ///     NumPy-style scalar coercion the boxed <see cref="FlatIterator"/>'s setters do.
+        /// </typeparam>
+        /// <param name="a">The array to iterate over.</param>
+        /// <param name="writeable">
+        ///     Open the operand <c>readwrite</c> so assignments through the <c>ref</c> reach the
+        ///     array. A read-only broadcast view (stride-0) is rejected with NumPy's verbatim
+        ///     message. (Like <c>np.nditer&lt;T&gt;</c>, this is a caller contract, not a C#
+        ///     read-only guarantee — the iterator is never buffered, so assigning through the
+        ///     <c>ref</c> always writes physically.)
+        /// </param>
+        /// <remarks>
+        ///     NumSharp extension: NumPy's <c>flatiter</c> hands back a boxed scalar per element
+        ///     because Python has no unboxed generics. This is the same walk with the boxing and the
+        ///     per-element view removed. It is exactly <c>np.nditer&lt;T&gt;(a, order: 'C')</c> with a
+        ///     C-order default baked in to match <see cref="NDArray.flatiter"/>'s order (the
+        ///     order-configurable <see cref="nditer{T}(NDArray, bool, char)"/> defaults instead to
+        ///     memory order <c>'K'</c>); it runs on the very same <see cref="NDIterRef"/> engine.
+        ///
+        ///     <para>
+        ///     <b>Empty arrays iterate zero times</b> and a <b>0-d array yields its single element</b>
+        ///     — matching the boxed <see cref="FlatIterator"/>, and unlike the boxed <c>np.nditer</c>
+        ///     which requires the <c>zerosize_ok</c> flag for an empty operand.
+        ///     </para>
+        /// </remarks>
+        public static FlatRefIter<T> flat<T>(NDArray a, bool writeable = false) where T : unmanaged
+            => new FlatRefIter<T>(a, writeable);
+
+        /// <summary>
         ///     A flat, C-order iterator over an <see cref="NDArray"/> — the NumSharp analog of NumPy's
         ///     <c>flatiter</c> (the type of <c>ndarray.flat</c>), obtained from <see cref="NDArray.flatiter"/>
         ///     or <see cref="np.flat(NDArray)"/>.
@@ -332,6 +384,32 @@ namespace NumSharp
             /// <summary>A fresh 1-D C-order COPY of the base (NumPy's <c>f.copy()</c>, which returns an ndarray).</summary>
             public NDArray copy() => _base.flatten();
 
+            /// <summary>
+            ///     A typed, allocation-free, by-reference view of this same flat iteration — the
+            ///     unboxed counterpart of iterating this <see cref="FlatIterator"/>. Yields
+            ///     <c>ref T</c> in logical C-order (the same order this object walks), writing
+            ///     through to <see cref="Base"/> for every layout:
+            ///
+            ///     <code>
+            ///     foreach (ref double x in a.flatiter.AsTyped&lt;double&gt;(writeable: true))
+            ///         x *= 2;
+            ///     </code>
+            ///
+            ///     <para>
+            ///     The by-reference spelling <c>a.flatiter&lt;T&gt;</c> is impossible in C# — a
+            ///     generic method cannot share a name with the <see cref="NDArray.flatiter"/>
+            ///     property — so the typed flat iterator is reached through this method (or the
+            ///     equivalent static <see cref="np.flat{T}(NDArray, bool)"/>). <typeparamref name="T"/>
+            ///     must be the array's EXACT element type; a <c>ref</c> cannot convert, so a mismatch
+            ///     throws rather than reinterpreting the bytes. Unlike the boxed cursor, the typed
+            ///     one holds no state and does not share this object's <see cref="index"/>/<see cref="coords"/>
+            ///     cursor — each <c>foreach</c> starts from the beginning.
+            ///     </para>
+            /// </summary>
+            /// <param name="writeable">Open the base <c>readwrite</c>; a read-only broadcast view is refused.</param>
+            public FlatRefIter<T> AsTyped<T>(bool writeable = false) where T : unmanaged
+                => new FlatRefIter<T>(_base, writeable);
+
             /// <summary>Return the current element and advance the cursor (NumPy's <c>next(f)</c>).</summary>
             public object next()
             {
@@ -358,6 +436,46 @@ namespace NumSharp
             }
 
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        /// <summary>
+        ///     The <c>foreach</c>-able returned by <see cref="np.flat{T}(NDArray, bool)"/> and
+        ///     <see cref="FlatIterator.AsTyped{T}(bool)"/> — the typed, unboxed, by-reference flat
+        ///     iterator. Yields <c>ref T</c> in <b>logical C-order</b> (matching <see cref="NDArray.flatiter"/>),
+        ///     write-through for every memory layout.
+        ///
+        ///     <para>
+        ///     <b>It is exactly a C-order <see cref="NDRefIter{T}"/>.</b> This type reuses
+        ///     <see cref="NDRefIter{T}.Enumerator"/> verbatim — the same <see cref="NDIterRef"/>
+        ///     cursor that <c>np.nditer&lt;T&gt;</c> drives — pinned to <c>NPY_CORDER</c>. It exists as
+        ///     its own type only so the flat contract (always C-order, never memory order) is stated
+        ///     in the type rather than left to a parameter default; there is no separate iteration
+        ///     logic. Everything documented on <see cref="NDRefIter{T}"/> — why the enumerator is a
+        ///     <c>ref struct</c>, that this value holds no unmanaged state while the enumerator does,
+        ///     that <c>foreach</c> disposes it and re-enumeration restarts — applies identically.
+        ///     </para>
+        /// </summary>
+        /// <typeparam name="T">The array's exact element type.</typeparam>
+        [NDBorrowed] // an enumerable over the caller's operand; each GetEnumerator builds (and foreach disposes) its own NDIterRef
+        public readonly struct FlatRefIter<T> where T : unmanaged
+        {
+            private readonly NDArray _op;
+            private readonly bool _writeable;
+
+            internal FlatRefIter(NDArray op, bool writeable)
+            {
+                Backends.Iteration.TypedIterHelpers.Validate<T>(op, writeable, nameof(op));
+                _op = op;
+                _writeable = writeable;
+            }
+
+            /// <summary>
+            ///     Builds a fresh C-order iterator; <c>foreach</c> disposes it for you. Reuses
+            ///     <see cref="NDRefIter{T}.Enumerator"/> so the walk is byte-for-byte the one
+            ///     <c>np.nditer&lt;T&gt;(op, order: 'C')</c> produces.
+            /// </summary>
+            public NDRefIter<T>.Enumerator GetEnumerator()
+                => new NDRefIter<T>.Enumerator(_op, _writeable, Backends.Iteration.NPY_ORDER.NPY_CORDER);
         }
     }
 }

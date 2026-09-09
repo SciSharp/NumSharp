@@ -177,4 +177,129 @@ namespace NumSharp.Tests.APIs
             CollectionAssert.AreEqual(new long[] { 2, 3 }, rest);
         }
     }
+
+    /// <summary>
+    /// Typed, by-reference flat iteration — np.flat&lt;T&gt;(a) and a.flatiter.AsTyped&lt;T&gt;(). The
+    /// unboxed counterpart of arr.flatiter: yields <c>ref T</c> in logical C-order (matching the boxed
+    /// flatiter's order), write-through for every layout. Reuses the NDIterRef engine pinned to C-order,
+    /// so the ORDER expectations mirror np_flatiter_tests exactly, just typed and by reference.
+    /// </summary>
+    [TestClass]
+    public class np_flat_typed_tests
+    {
+        private static long[] RefSeq(NDArray a)
+        {
+            var xs = new List<long>();
+            foreach (ref long x in np.flat<long>(a)) xs.Add(x);
+            return xs.ToArray();
+        }
+
+        private static long[] AsTypedSeq(NDArray a)
+        {
+            var xs = new List<long>();
+            foreach (ref long x in a.flatiter.AsTyped<long>()) xs.Add(x);
+            return xs.ToArray();
+        }
+
+        [TestMethod]
+        public void RefIterates_COrder_RegardlessOfLayout()
+        {
+            // Bit-for-bit the same C-order the boxed flatiter walks (see np_flatiter_tests).
+            var a = np.arange(6).reshape(2, 3);   // int64 (arange)
+            CollectionAssert.AreEqual(new long[] { 0, 1, 2, 3, 4, 5 }, RefSeq(a));
+            CollectionAssert.AreEqual(new long[] { 0, 3, 1, 4, 2, 5 }, RefSeq(a.T));           // transposed
+            CollectionAssert.AreEqual(new long[] { 3, 4, 5, 0, 1, 2 }, RefSeq(a["::-1"]));     // flip axis0
+            CollectionAssert.AreEqual(new long[] { 2, 1, 0, 5, 4, 3 }, RefSeq(a[":, ::-1"]));  // reverse each row
+            CollectionAssert.AreEqual(new long[] { 0, 2, 3, 5 }, RefSeq(a[":, ::2"]));         // stepped
+        }
+
+        [TestMethod]
+        public void AsTyped_Matches_Static_And_BoxedOrder()
+        {
+            var a = np.arange(6).reshape(2, 3).T; // non-contiguous
+            var boxed = a.flatiter.Cast<object>().Select(Convert.ToInt64).ToArray();
+            CollectionAssert.AreEqual(boxed, RefSeq(a));
+            CollectionAssert.AreEqual(boxed, AsTypedSeq(a));
+        }
+
+        [TestMethod]
+        public void Ref_WriteThrough_COrder_Transposed()
+        {
+            // Writing through the ref in C-order lands on the shared buffer; the defect arr.flat can't do.
+            var w = np.arange(6).reshape(2, 3).T;  // (3,2) view over buffer [0,1,2,3,4,5]
+            long i = 0;
+            foreach (ref long x in np.flat<long>(w, writeable: true)) x = i++;
+            // C-order visited every physical element once, assigning its C-order rank -> flatiter reads 0..5.
+            CollectionAssert.AreEqual(new long[] { 0, 1, 2, 3, 4, 5 },
+                w.flatiter.Cast<object>().Select(Convert.ToInt64).ToArray());
+        }
+
+        [TestMethod]
+        public void AsTyped_WriteThrough()
+        {
+            var w = np.arange(6).reshape(2, 3).T;
+            foreach (ref long x in w.flatiter.AsTyped<long>(writeable: true)) x += 100;
+            // every physical element +100 -> buffer [100..105], read back in C-order of the transposed view
+            CollectionAssert.AreEqual(new long[] { 100, 103, 101, 104, 102, 105 },
+                w.flatiter.Cast<object>().Select(Convert.ToInt64).ToArray());
+        }
+
+        [TestMethod]
+        public void ZeroD_Yields_Scalar()
+        {
+            var z = NDArray.Scalar(5L);
+            CollectionAssert.AreEqual(new long[] { 5 }, RefSeq(z));
+        }
+
+        [TestMethod]
+        public void Empty_Yields_Nothing()
+        {
+            CollectionAssert.AreEqual(new long[] { }, RefSeq(np.arange(0)));
+        }
+
+        [TestMethod]
+        public void DtypeMismatch_Throws()
+        {
+            // arange is int64; asking for ref double would reinterpret bytes -> refused.
+            Assert.ThrowsException<ArgumentException>(() =>
+            {
+                foreach (ref double x in np.flat<double>(np.arange(3))) { }
+            });
+        }
+
+        [TestMethod]
+        public void Broadcast_Read_COrder_But_Writeable_Refused()
+        {
+            var bc = np.broadcast_to(np.arange(3), new Shape(2, 3)); // read-only, stride-0
+            CollectionAssert.AreEqual(new long[] { 0, 1, 2, 0, 1, 2 }, RefSeq(bc));
+            Assert.ThrowsException<ArgumentException>(() =>
+            {
+                foreach (ref long x in np.flat<long>(bc, writeable: true)) { }
+            });
+        }
+
+        [TestMethod]
+        public void Float_Dtype_EndToEnd()
+        {
+            var f = np.arange(4).astype(NPTypeCode.Double).reshape(2, 2).T; // non-contiguous double
+            double s = 0;
+            foreach (ref double x in np.flat<double>(f)) s += x;
+            Assert.AreEqual(6.0, s, 1e-12);
+        }
+
+        [TestMethod]
+        public void ReEnumeration_Restarts()
+        {
+            // Unlike the boxed flatiter (which shares a cursor and RESUMES), the typed value holds no
+            // state — each foreach builds a fresh iterator, so a second pass restarts from the beginning.
+            var a = np.arange(4);
+            var it = np.flat<long>(a);
+            var first = new List<long>();
+            foreach (ref long x in it) first.Add(x);
+            var second = new List<long>();
+            foreach (ref long x in it) second.Add(x);
+            CollectionAssert.AreEqual(new long[] { 0, 1, 2, 3 }, first.ToArray());
+            CollectionAssert.AreEqual(new long[] { 0, 1, 2, 3 }, second.ToArray());
+        }
+    }
 }
