@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <LangVersion>latest</LangVersion>
+    <Platforms>AnyCPU</Platforms>
+    <!-- Strong-naming is set repo-wide in ../../Directory.Build.props. Signed because
+         NumSharp.Interop.MLNet grants it InternalsVisibleTo, which names a PublicKey. -->
+    <Configurations>Debug;Release;Publish</Configurations>
+
+    <!-- Which ML.NET the suite runs against. The DEFAULT is the package's FLOOR (Microsoft.ML 2.0.1, which
+         carries Microsoft.ML.DataView 2.0.0 — the version the package is compiled against and the version
+         NuGet resolves for a consumer who adds nothing newer), so CI exercises exactly the out-of-box
+         combination; the release pipeline runs the suite a second time with `-p:MLNetVersion=<current>` so
+         the current ML.NET is covered too. Override locally the same way: dotnet test -p:MLNetVersion=4.0.2. -->
+    <MLNetVersion Condition="'$(MLNetVersion)' == ''">2.0.1</MLNetVersion>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Publish|AnyCPU'">
+    <DocumentationFile />
+    <Optimize>true</Optimize>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MSTest" Version="3.8.3" />
+    <PackageReference Include="AwesomeAssertions" Version="9.3.0" />
+    <!-- The FULL ML.NET — MLContext, the transforms and trainers, the pipeline API. The interop package itself
+         depends only on the standalone Microsoft.ML.DataView (see its csproj: the runtime lives in Microsoft.ML,
+         which the consumer brings); this suite is a consumer, so it brings it. NuGet unifies the .DataView
+         dependency to the version this Microsoft.ML carries. -->
+    <PackageReference Include="Microsoft.ML" Version="$(MLNetVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\NumSharp.Core\NumSharp.Core.csproj" />
+    <ProjectReference Include="..\..\src\NumSharp.Interop.MLNet\NumSharp.Interop.MLNet.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -37,6 +37,13 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("NumSharp.Interop.OnnxRuntime, PublicKey=" + NumSharpFriendKey.PublicKey)]
 [assembly: InternalsVisibleTo("NumSharp.Tests.Interop.OnnxRuntime, PublicKey=" + NumSharpFriendKey.PublicKey)]
 
+// The ML.NET interop bridge reads the same internal view (Storage.InternalArray for the ARC pin, Shape's
+// strides/offset for the lazy any-layout IDataView cursor) to expose an NDArray to an ML.NET pipeline as an
+// IDataView over the same buffer, and to materialize a transformer's output column back into an NDArray — and
+// its test assembly exercises those internals.
+[assembly: InternalsVisibleTo("NumSharp.Interop.MLNet, PublicKey=" + NumSharpFriendKey.PublicKey)]
+[assembly: InternalsVisibleTo("NumSharp.Tests.Interop.MLNet, PublicKey=" + NumSharpFriendKey.PublicKey)]
+
 [assembly: InternalsVisibleTo("NumSharp.Benchmark, PublicKey=" + NumSharpFriendKey.PublicKey)]
 
 // Cross-repo: TensorFlow.NET signs with the identical key, which is the reason NumSharp keeps using

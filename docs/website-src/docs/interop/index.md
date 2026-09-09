@@ -151,6 +151,7 @@ own gates.
 | **Python buffer consumers** — `torch.frombuffer`, Pillow, Arrow, OpenCV, stdlib | `NumSharp.Interop.pythonnet` | ✅ `memoryview` / PEP 3118 | [Any library via np.frombuffer](np-frombuffer.md) |
 | **Numpy.NET coexistence** — drive real numpy's C# API over NumSharp buffers | + `Numpy.Bare` | ✅ `PyObject` handoff | [Numpy.NET](numpy-net.md) |
 | **ONNX Runtime inference** — `NDArray` ⇄ `OrtValue` / `DenseTensor<T>`, `session.Run(NDArray)`, softmax / argmax / top-k on the outputs | `NumSharp.Interop.OnnxRuntime` | ✅ inputs zero-copy (C-contiguous), outputs as owning copies or owning views; no Python, no GIL | [ONNX Runtime](onnxruntime.md) |
+| **ML.NET pipelines** — `NDArray` ⇄ `IDataView` / `VBuffer<T>`, `transformer.Transform(nd.AsDataView(...)).ToNDArray("Score")`, softmax / argmax / top-k on the outputs | `NumSharp.Interop.MLNet` | ✅ input `IDataView` shares the buffer lazily (any layout); `VBuffer` and output columns are copies; no Python | [ML.NET](mlnet.md) |
 | **`.npy` / `.npz` files** — `np.save` / `np.load`, byte-for-byte identical to NumPy's own writer | `NumSharp` (core) | — files, not memory | [NumPy compliance](../compliance.md#npy-and-npz-interoperability) |
 
 Start with the page whose *consumer* matches yours: numpy code → the pythonnet page; a library
@@ -194,6 +195,10 @@ above applies to it; it has [its own page](openblas.md).
 - [Numpy.NET](numpy-net.md) — running SciSharp's numpy binding over NumSharp memory
 - [OpenBLAS](openblas.md) — the compute-side sibling: a native BLAS binary behind
   `np.dot` / `np.matmul`, faster float32/float64 matrix products
+- [ONNX Runtime](onnxruntime.md) — feed an `NDArray` to `InferenceSession.Run` zero-copy, read
+  outputs back, post-process with `np.*`
+- [ML.NET](mlnet.md) — expose an `NDArray` to a `Microsoft.ML` pipeline as an `IDataView`, read a
+  transformer's output column back into an `NDArray`
 - [Buffering & Memory](../buffering.md) — how NumSharp's own storage, slices and reference
   counting work underneath all of this
 

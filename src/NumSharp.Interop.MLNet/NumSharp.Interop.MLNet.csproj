@@ -1,0 +1,74 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <AssemblyName>NumSharp.Interop.MLNet</AssemblyName>
+    <RootNamespace>NumSharp.Interop.MLNet</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+
+    <!-- NuGet package (co-versioned with NumSharp: the version is the repo-root Directory.Build.props
+         VersionPrefix, never a number in this file, so the nuspec dependency on NumSharp and this
+         package's own version cannot drift apart). -->
+    <PackageId>NumSharp.Interop.MLNet</PackageId>
+    <Authors>Eli Belash, Haiping Chen, Meinrad Recheis</Authors>
+    <Product>NumSharp</Product>
+    <Company>SciSharp STACK</Company>
+    <Copyright>2021 © SciSharp STACK Team</Copyright>
+    <Description>Interop between NumSharp NDArray and ML.NET (Microsoft.ML) data. Expose an NDArray to an ML.NET pipeline as an IDataView over the very same unmanaged buffer (no row-by-row POCO fill, no copy — read lazily through the array's strides), read a transformer's output column back as an NDArray, and convert to/from ML.NET's VBuffer vector primitive. Conversion library only: no engine backend, no ModuleInitializer, no native dependency — depends on the standalone Microsoft.ML.DataView contract package, and composes with whatever Microsoft.ML (MLContext, trainers, transforms) you already reference.</Description>
+    <PackageTags>NumSharp;NumPy;MLNet;ML.NET;Microsoft.ML;IDataView;VBuffer;DataView;machine-learning;interop;scientific-computing</PackageTags>
+    <PackageProjectUrl>https://scisharp.github.io/NumSharp/docs/interop/mlnet.html</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/SciSharp/NumSharp</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <!-- Packed explicitly (`dotnet pack`), never on build: see the release workflow. License
+         acceptance and the icon are repo-wide settings in ../../Directory.Build.props. -->
+    <PackageOutputPath>../../packages</PackageOutputPath>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Symbols: embed the .pdb in the .nupkg (matches NumSharp.Core / the other interop packages). The
+         release pipeline uploads/pushes only *.nupkg, so a separate .snupkg would be dropped. -->
+    <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- In-repo: ProjectReference (packs as a NuGet dependency on "NumSharp" $(Version)). -->
+    <ProjectReference Include="../NumSharp.Core/NumSharp.Core.csproj" />
+
+    <!-- The ONLY external dependency: the standalone `Microsoft.ML.DataView` package — the contract half of
+         ML.NET (IDataView, VBuffer<T>, DataViewSchema, DataViewType, the Number/Boolean/Vector types).
+         Deliberately NOT the full `Microsoft.ML`: ML.NET's runtime, trainers and transforms
+         (MLContext, ITransformer, the pipeline API) live in `Microsoft.ML`, and every consumer who runs a
+         pipeline references it; `Microsoft.ML` in turn depends on this same `Microsoft.ML.DataView`, so
+         depending on `.DataView` alone composes with WHICHEVER Microsoft.ML the consumer already has (NuGet
+         unifies upward). There is no standalone `Microsoft.ML.Data` package to depend on, and `ITransformer`
+         is not needed here anyway: IDataView is ML.NET's universal currency, so
+         `transformer.Transform(nd.AsDataView("Features")).ToNDArray("Score")` bridges the whole pipeline with
+         two conversions and no per-transformer runner.
+
+         The range is BOTH knobs (the same lesson as the ONNX Runtime and pythonnet pins):
+
+         (a) FLOOR = what we compile against. The managed assembly is strong-named and bumps its
+             AssemblyVersion every release; .NET rolls FORWARD to a newer one but a consumer whose resolved
+             version is OLDER than the one we compiled against gets a hard FileLoadException. So the compiled
+             reference IS the real minimum. 2.0.0 (Nov 2022) exposes every member used here — IDataView,
+             DataViewSchema.Builder, NumberDataViewType / BooleanDataViewType / VectorDataViewType,
+             DataViewRowCursor / DataViewRow.GetGetter, VBuffer<T>(int, T[]) and VBufferEditor, DataViewRowId —
+             all of which have existed since 1.0.0; 2.0.0 is a conservative, widely-deployed floor.
+         (b) FLOOR = what a bare consumer installs. NuGet resolves LOWEST-applicable, never latest — but a
+             consumer's `Microsoft.ML` (e.g. 3.0.1 / 4.0.2) carries its own `.DataView` dependency at its own
+             version, so NuGet unifies upward to THAT. In practice the consumer's ML.NET version wins; this
+             floor only stops an ancient one from sneaking in.
+
+         The upper bound keeps a future ML.NET 6.x (free to break the API) from being resolved automatically.
+         Verified against 2.0.0 (the floor) and current by the test project's MLNetVersion matrix. -->
+    <PackageReference Include="Microsoft.ML.DataView" Version="[2.0.0,6.0.0)" />
+  </ItemGroup>
+
+</Project>
