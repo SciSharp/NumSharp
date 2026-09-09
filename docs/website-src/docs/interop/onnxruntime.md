@@ -16,7 +16,7 @@ frees what, dtypes and versions.
 [Versions](#versions) · [Limits](#limits) · [Claims](#claims-ledger)
 
 > Verified on ONNX Runtime 1.16.0 (the floor) and 1.29.0 · net8.0/net10.0 · Windows, Linux, macOS.
-> Every claim below is reproduced by a test in `NumSharp.Tests.Interop.OnnxRuntime` (117 tests over 20
+> Every claim below is reproduced by a test in `NumSharp.Tests.Interop.OnnxRuntime` (128 tests over 20
 > committed `.onnx` models ORT executes; no Python at test time).
 
 ---
@@ -202,6 +202,8 @@ runs the suite at both ends of the range.
 | 9 | Pre-allocated outputs are written in place; zero-copy outputs own their values | `SessionRunTests.Run_PreallocatedOutputs…`, `Run_ZeroCopyOutputs…` |
 | 10 | Softmax / Argmax / TopK agree with ORT's own operators, ties lower-index-first | `PostprocessTests` |
 | 11 | The #512 BGRA → NCHW example and the Stable-Diffusion step run as written | `DocExampleTests` |
+| 12 | Special values (NaN sign/payload/signaling, ±inf, ±0, subnormals, every dtype extreme, BMP code units) survive every crossing AND a real `Identity` session bit-exact; a CLR NaN is preserved uncanonicalized | `SpecialValueFidelityTests` |
+| 13 | An import view is non-owning: a same-size `resize` reshapes in place and stays on ORT's memory, a derived slice inherits it, a 0-d value goes through the real lease path | `ImportViewOwnershipTests` |
 
 ## See also
 

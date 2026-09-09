@@ -103,7 +103,7 @@ targets (`AsOrtValue`, `Run(inputs, outputs)` writing into NumSharp arrays).
 3. **It closes issue #512 on its own terms** — "Is there a faster way?" than a per-pixel `DenseTensor`
    fill: yes, four vectorized ops and a pointer handoff (`DocExampleTests.Issue512_…`).
 4. **It is cheap to own.** The package is ~1,200 lines of conversion code with no native asset, no
-   engine seam, no `[ModuleInitializer]`, one `.Managed` dependency, and a 73-test gate over committed
+   engine seam, no `[ModuleInitializer]`, one `.Managed` dependency, and a 128-test gate over committed
    models that runs on all three CI OSes without Python or GPU. Maintenance is "bump the ORT version the
    CI's second run uses".
 5. **It composes with the rest of the stack.** `AsNDArray` views feed straight back into `AsOrtValue`
@@ -125,7 +125,7 @@ targets (`AsOrtValue`, `Run(inputs, outputs)` writing into NumSharp arrays).
 ## 5. Recommendation
 
 Ship `NumSharp.Interop.OnnxRuntime` as the third interop package (done on the `onnxruntime` branch:
-package, 117 tests, docs page, CI job, release wiring). Lead the messaging with the two loops every
+package, 128 tests, docs page, CI job, release wiring). Lead the messaging with the two loops every
 tutorial hand-writes, show the #512 and Stable-Diffusion examples, and open an issue on
 `microsoft/onnxruntime-inference-examples` offering a NumSharp-based variant of the ResNet50 sample
 once the package is on nuget.org.

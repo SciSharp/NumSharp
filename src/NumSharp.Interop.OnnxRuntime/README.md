@@ -25,7 +25,7 @@ NumSharp reads. So there is no `TensorEngine` seam, no `[ModuleInitializer]`, an
 changes nothing until a verb is called.
 
 > Verified against ONNX Runtime **1.16.0** (the package floor) and **1.29.0** (current) on net8.0 / net10.0,
-> by `test/NumSharp.Tests.Interop.OnnxRuntime` (117 tests over 20 committed `.onnx` models ORT actually executes).
+> by `test/NumSharp.Tests.Interop.OnnxRuntime` (128 tests over 20 committed `.onnx` models ORT actually executes).
 
 ## Install
 
