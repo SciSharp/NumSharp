@@ -15,7 +15,7 @@ namespace NumSharp
         public unsafe _Unsafe Unsafe => new _Unsafe(this);
 
         [NDBorrowed] // a facade over the array that created it (a back-pointer), never an owner
-        public readonly unsafe struct _Unsafe
+        public readonly unsafe partial struct _Unsafe
         {
             private readonly NDArray _this;
 

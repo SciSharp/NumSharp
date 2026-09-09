@@ -998,7 +998,7 @@ and `Type t = np.float64` need a cast; `a.dtype.Name` → `a.dtype.name` (NumPy)
 30/30 + Oracle 176/176 (dtype_text tier unchanged), Interop 638/638.
 
 ### Selection
-`choose`, `compress`, `extract`, `index_exp`, `indices`, `ix_`, `place`, `put`, `ravel_multi_index`, `s_`, `select`, `take`, `take_along_axis`, `unravel_index`, `where`
+`choose`, `compress`, `extract`, `index_exp`, `indices`, `ix_`, `place`, `put`, `putmask`, `ravel_multi_index`, `s_`, `select`, `take`, `take_along_axis`, `unravel_index`, `where`
 
 `np.take_along_axis(arr, indices, axis=-1)` (NumPy `numpy/lib/_shape_base_impl.py`) is the per-slice
 gather: it matches 1-D index and data slices oriented along `axis` and looks each output element up
@@ -1107,6 +1107,29 @@ under **`same_kind`** (so a `uint64` index is allowed) while `put` uses **`safe`
 `uint64` too); each leaks its own rule name in the message. Integer/bool indices pass; float/complex are
 refused. Pinned by `SelectionTests` (`Take_FloatIndices_Throws_SameKind`, `Put_FloatIndices_Throws_Safe`,
 `Take_UInt64Indices_Allowed_But_Put_Rejects`) + the 16-byte-fidelity and cyclic-wrap tests.
+
+**`np.putmask(a, mask, values)` — the position-cursor sibling of `np.place`** (NumPy `PyArray_PutMask` /
+`npy_fastputmask`; `Indexing/np.putmask.cs`, kernel `DirectILKernelGenerator.PutMask.cs`). Writes
+`a.flat[i] = values.flat[i % values.size]` wherever `mask` is True, walking both in C-order. It shares
+`place`'s whole structure — the writeable-first check, the same-`size` (not shape) mask contract, the
+non-bool-mask→`!=0` cast (NaN/inf→True), the `ascontiguousarray`+`copyto` writeback for non-contiguous
+targets — and differs in exactly TWO probed ways (2.4.2): the values cursor advances by **POSITION**
+(every element, `j` in lockstep with `i`, wrapping at `nv`) rather than per-True, and an **empty
+`values` is a silent no-op** rather than `place`'s `ValueError`. The IL kernel mirrors Place's typed-MOV
+scatter but with the cursor advance OUTSIDE the mask-True branch, plus a cursor-free `nv==1` scalar-
+broadcast fast path (NumPy's own `if (nv==1)` branch). Errors are NumPy-verbatim: read-only →
+`"putmask: output array is read-only"` (reported first, before mask-size/nv), wrong size →
+`"putmask: mask and data must be the same size"`. Like `place`/`put`, `values` is unconditionally
+`astype`-cast to `a`'s dtype (the NumPy ndarray-`safe`-cast vs python-scalar-coercion error split is the
+documented sibling simplification — the oracle never feeds cross-dtype values). All 15 dtypes; scalars
+convert implicitly (`np.putmask(a, cond, 44)`). **Perf (NPY/NS, best-of-9, Release):** geomean **1.80×**,
+faster than NumPy on every cell; **2.0–3.07×** at 1K/100K and **1.59–1.77×** at 10M for 1/4-byte dtypes;
+the 8/16-byte 10M cells (int64/float64/complex128) compress to **1.08–1.36×** — the memory-bandwidth wall
+the whole scatter family hits (both sides RMW scattered wide-element writes). Gates:
+`Indexing/SelectionTests.cs` (`PutMask_*`, 24 — incl. the position-vs-place contrast, empty-values no-op,
+transposed/negstride writeback, NaN mask, char/decimal/complex) + the `putmask` fuzz tier
+(`putmask.jsonl`, 264 — 11 dtypes × 3 value modes {scalar nv==1 / cycle nv==3 / long nv==size} × 8
+layouts incl. the non-contiguous writeback path, all bit-exact vs NumPy 2.4.2).
 
 **Subshaped fancy-SET into a NON-contiguous destination (correctness fix — silent corruption).** A
 fancy assignment consuming FEWER axes than `ndim` (`arr[[0,2]] = v` on a 2-D+ array — each selected
@@ -1671,6 +1694,42 @@ construction for exactly this reason; splitting by array SLICE works today and m
 workers); and NumPy's unbuffered `external_loop` coalesces `[:, ::2]` into **1** chunk where NumSharp
 emits **500**. The first two are absorbed by `TypedIterHelpers.ReadInnerLoop`.
 
+### .NET interop — `nd.Unsafe` BCL views + safe bridges (NumSharp extension)
+
+Two ways to hand an `NDArray` to plain .NET code, both covering all 15 dtypes (generic `<T>` + a `typecode
+== InfoOf<T>.NPTypeCode` guard). Gate: `APIs/NDArrayUnsafeInterop.Test.cs` (18, incl. a 15-dtype alias
+sweep), green net8.0/net10.0.
+
+**`nd.Unsafe` — zero-copy BCL views that ALIAS the unmanaged buffer and do NOT root it** (`Backends/
+NDArray.Unsafe.Bcl.cs`, a second partial of the existing `NDArray._Unsafe` struct made `partial`; backed by
+`Backends/Unmanaged/UnmanagedMemoryManager.cs`). The whole point — and the danger — is that none takes an
+ARC reference on the memory holder: if the NDArray is disposed/GC'd while a view is live it dangles → keep
+the NDArray side by side. Surface: `Span<T>()`/`ReadOnlySpan<T>()`, `Memory<T>()`/`ReadOnlyMemory<T>()`
+(manager-backed — the `Memory` roots the tiny manager, never the NDArray), `Bytes()`/`ReadOnlyBytes()` (raw
+`size*itemsize`, dtype-agnostic), `Pointer<T>()` (logical element 0, ANY layout), `TryGetSpan<T>`/
+`TryGetMemory<T>` (non-throwing). **The method names ARE the return types** (`Span<T> Span<T>()`) — legal in
+C#, and unavoidable since the pre-existing `AsSpan<T>()` returns NumSharp's `UnmanagedSpan<T>` (long-indexable,
+the >2 GB path), not the BCL type. Span/Memory/Bytes require **C-contiguity** (an offset slice `a[2:5]`
+qualifies — it is C-contiguous with `Storage.Address` re-seated; F/transposed/strided/broadcast **throw**
+`InvalidOperationException`, TryGet* return false), the **exact dtype** (wrong `T` → `ArgumentException`), and
+**≤ int.MaxValue** elements (Span/Memory are 32-bit-length; larger → `AsSpan<T>()`/`Pointer<T>()`). The
+universal logical-start pointer is `(T*)Storage.Address + Shape.offset` (the documented rule: contiguous slice
+re-seats Address & offset 0, strided keeps base + non-zero offset). Writes through Span/Memory/Pointer mutate
+the array (verified). `Pointer<T>()` is raw — for a non-contiguous array it's just element 0 and the caller
+walks via `nd.strides`.
+
+**Safe bridges — COPY / enumerate into caller-owned storage (result outlives the NDArray)** (`APIs/
+NDArrayNetInterop.cs`, extension methods). `nd.AsEnumerable<T>()` → `IEnumerable<T>` for LINQ: logical C-order
+for EVERY layout (reads through strides via `GetAtIndex<T>`), unboxed elements, only the enumerator is a heap
+object (dtype check fires eagerly, before deferred enumeration). `nd.ToArray<T>()` (pre-existing) is the
+C-order copy. The typed iterators (`np.flat<T>`→C-order, `np.nditer<T>`→memory-order, `np.nditer_chunks<T>`)
+get `.ToArray()` (materialize → `T[]`) and `.CopyTo(Span<T>)` (fill a caller buffer, returns count, throws if
+short) — extensions on the `readonly struct` iterators (their Enumerators are the ref structs; the iterators
+themselves are plain structs, so extension-by-value is fine). The boxed iteration objects
+(`a.flatiter`/`np.ndenumerate`/`np.ndindex`) already implement `IEnumerable`, so LINQ works on them directly.
+`AsEnumerable` is an extension (not a `np.*` static), so the oracle surface guard is unaffected. Docs:
+`docs/website-src/docs/iterating-and-enumerating.md` → ".NET interop".
+
 ### Fused Expressions (NumSharp extension)
 `evaluate` — `np.evaluate(expr[, operands][, out])` compiles an `NDExpr` tree to ONE NDIter pass: every elementwise node runs inside a single inner-loop kernel, so chained expressions allocate no intermediates and read each operand once (NumPy-ecosystem equivalent: `numexpr.evaluate`; measured 3.2–6.1× faster than NumPy 2.4.2 on 4M chains, 1.2–4× over NumSharp's own unfused chains — gate: the `benchmark/fusion` subsystem of `benchmark/run_benchmark.py`).
 
@@ -2080,6 +2139,41 @@ library asserts axis texts with wildcards.
 
 **Perf (NPY/NS, best-of-rounds, Release):** geomean **1.83× at N=10M** (no cell below 1.0; min 1.13×) and **1.40× at N=100K**. `tril_indices`/`triu_indices` lead at 4.40×/4.55× (10M). `fill_diagonal` now **wins at every tier** through the `DiagWrite` IL kernel — **4.8× at 100K, 1.46× at 10M** (the 10M cell was 0.40× on the old `SetData` route, which paid `NDIter.Copy`'s per-strided-write overhead: 37.9 µs → 10.9 µs); it touches only `min(rows, cols)` elements, so a direct byte-width MOV loop is all the work there is. `diag`/`diagflat` **construct** win at small/large n but sit at **0.12–0.33× at 100K**, allocator-bound on the fresh-sparse-diagonal page faults documented above — a property of NumSharp's non-caching allocator, not the diag kernel (NumSharp's fresh alloc already matches NumPy's fresh; only NumPy's warm block cache pulls ahead in the tight benchmark loop). `diag_indices`/`diag_indices_from` are `arange`+wrap and win **2–3.6× / 9–14×** (a reported 0.54× on `diag_indices` was a contaminated snapshot — it is comfortably >1× on an idle host). The triangular fills pick their allocation strategy by size: below **64 MiB** the buffer comes back dirty so they allocate uninitialised and write every byte exactly once, above it `np.zeros` rides free OS zero-pages and only the retained run is touched (measured cliff — 64 MB: 6.0 ms vs 11.0 ms write-once; 72 MB: 18.9 ms vs 13.5 ms the other way; see `np.tri.cs` → `WriteOnceMaxBytes`).
 
+### Window functions
+`bartlett`, `blackman`, `hamming`, `hanning`, `kaiser`
+
+The five NumPy window generators (`numpy/lib/_function_base_impl.py`; all probed against 2.4.2). Each
+takes a scalar point count `M` (`kaiser` also a shape parameter `beta`) and returns a **1-D float64**
+taper — NumPy forces at-least-float64 via `np.array([0.0, M])`. **`M` is `double`, matching NumPy's own
+stub type `_FloatLike_co`** (NOT int): an int caller (`np.hanning(5)`) binds via the implicit int→double
+conversion and gets the identical result, while a **non-integer `M` reproduces NumPy's exact float-M
+behavior** — the length is `len(arange(1-M, M, 2))` (a fractional count, so `np.hanning(5.7)` is 6
+samples) and kaiser can carry a trailing NaN once `|(n-α)/α| > 1`. Output dtype is always float64.
+Shared edge cases for the **cosine windows** (bartlett/blackman/hamming/hanning): **`M < 1` → empty
+`(0,)`**, **`M == 1` → `ones(1,)`**. **kaiser has NO `M < 1` guard** (its one structural difference,
+ported verbatim): `arange(0, M)` is empty for `M ≤ 0` (→ empty) but a **single element for
+`0 < M < 1`** (→ a computed one-sample window, e.g. `np.kaiser(0.5, 5)` = `[0.0367…]`), while `M == 1`
+is special-cased only to dodge the `alpha == 0` division. Formulae, verbatim from NumPy with `n = arange(1-M, M, 2)`
+(kaiser uses `arange(0, M)`): bartlett `where(n≤0, 1+n/(M-1), 1-n/(M-1))`; hanning `0.5+0.5·cos(πn/(M-1))`;
+hamming `0.54+0.46·cos(πn/(M-1))`; blackman `0.42+0.5·cos(πn/(M-1))+0.08·cos(2πn/(M-1))`; kaiser
+`i0(β·√(1-((n-α)/α)²))/i0(β)` with `α=(M-1)/2` and `i0` the cephes Chebyshev modified-Bessel routine
+NumPy's `np.i0` uses (internal `np.BesselI0` scalar helper, the `_i0_1`/`_i0_2`/`_chbevl` port; **not**
+exposed as a public `np.i0` — kaiser is its only consumer).
+
+**BIT-IDENTICAL to NumPy 2.4.2** (verified across 152 `(M, beta)` cases + the differential-fuzz `windows`
+tier): the elementwise transform is built as an **`np.evaluate` fused expression in NumPy's exact
+operation order** (so `(π·n)/(M-1)` rounds the same two steps NumPy's ufunc chain does), and float64
+`add`/`sub`/`mul`/`div` are IEEE-exact while float64 `cos` is the same scalar `Math.Cos` the win-amd64
+`ucrtbase` CRT and NumPy both call (kaiser's `i0` likewise rides `Math.Exp`/`Math.Sqrt`). Because those
+transcendentals are host-libm, the oracle `windows` tier is **host-pinned** (`RunHostLibmCorpus` — strict
+on win-amd64, `Inconclusive` off-Windows, like the FFT tier); `bartlett` is pure IEEE arithmetic and is
+portable. **Fusion is the fast path, not just the clean one:** NumPy materializes ~6 intermediate arrays
+per window; NumSharp materializes only `n` and fuses the rest into ONE pass, so **NPY/NS ≈ 1.8×–9× at
+100K/10M** (bartlett's `where`-plus-two-divisions chain reaches 9× at 100K). At 1K the window sits at
+NumSharp's per-op NDIter-setup floor (window generation is a compute-once, amortized operation — real use
+generates one window and reuses it across many FFT frames). See `Math/np.windows.cs`; gates
+`Math/np.windows.Test.cs` (22) + the `windows` fuzz tier (322 cases, incl. float-M).
+
 ### Fourier / FFT (`np.fft.*`)
 `fft`, `ifft`, `fft2`, `ifft2`, `fftn`, `ifftn`, `rfft`, `irfft`, `rfft2`, `irfft2`, `rfftn`, `irfftn`, `hfft`, `ihfft`, `fftfreq`, `rfftfreq`, `fftshift`, `ifftshift` — plus the companion complex accessors `conjugate`/`conj`, `real`, `imag`, `angle`.
 
@@ -2365,13 +2459,14 @@ non-structured subset would only re-expose `loadtxt`.
 | np API | `APIs/np.cs` |
 | Diagonal / triangular family | `Creation/np.tri.cs`, `Indexing/np.{diag,tril,diag_indices,tril_indices,fill_diagonal}.cs` |
 | unique family | `Manipulation/NDArray.unique.cs` + `NDArray.unique.Kwargs.cs` (sort+mask core + axis path), `Manipulation/np.unique.cs` (`np.unique`), `Manipulation/np.unique_values.cs` (Array-API `unique_values`/`unique_counts`/`unique_inverse`/`unique_all` + result structs), `Manipulation/NDArray.unique.Hash.cs` (int + complex hash fast path, splitmix64). Design + measured perf decisions: `docs/UNIQUE_DESIGN.md` |
-| Selection family | `Indexing/np.{take,take_along_axis,put,place,select}.cs`; IL kernels `Backends/Kernels/Direct/DirectILKernelGenerator.{Take,TakeAlongAxis,Put,Place,Select}.cs` (`Select` = fused single-pass reverse-`ConditionalSelect` chain; `TakeAlongAxis` = whole-array strided-odometer gather, byte-width-keyed) |
+| Selection family | `Indexing/np.{take,take_along_axis,put,place,putmask,select}.cs`; IL kernels `Backends/Kernels/Direct/DirectILKernelGenerator.{Take,TakeAlongAxis,Put,Place,PutMask,Select}.cs` (`Select` = fused single-pass reverse-`ConditionalSelect` chain; `TakeAlongAxis` = whole-array strided-odometer gather, byte-width-keyed; `PutMask` = Place's typed-MOV scatter with a by-position cursor + `nv==1` scalar fast path) |
 | BLAS/LAPACK seam | `Backends/IBlasBackend.cs` + `IBlasBackend.LinearAlgebra.cs` (15 default `Try*`), `Backends/TensorEngine.LinearAlgebra.cs` (virtuals + `LinAlgHelper`); managed LU fallback (`det`/`slogdet`/`solve`/`inv`) in `Backends/Default/LinearAlgebra/ManagedLu.cs`; `Backends/ISlidingDotBackend.cs` (optional level-1 `?dot` seam for `correlate`/`convolve`, `OpenBlasEngine.SlidingDot`) |
 | ONNX Runtime interop (package) | `src/NumSharp.Interop.OnnxRuntime/NDArrayOnnxInterop.{cs,Export.cs,Import.cs}` (dtype maps, `AsOrtValue`/`ToOrtValue`/`AsDenseTensor`/`ToDenseTensor`, `ToNDArray`/`AsNDArray`), `OrtTensor.cs` (the `OrtTensor`/`OrtTensor<T>` handles + `ImportLease`), `UnmanagedMemoryManager.cs` (`Memory<T>` over the unmanaged buffer), `InferenceSessionExtensions.cs` (`session.Run(NDArray…)`), `Postprocess.cs`; ORT C# source for reference at `refs/onnxruntime/csharp/` (sparse submodule) + the official samples at `refs/onnxruntime-inference-examples/c_sharp/` |
 | ML.NET interop (package) | `src/NumSharp.Interop.MLNet/NDArrayMLNetInterop.{cs,Export.cs,Import.cs}` (dtype maps, `AsDataView`/`ToDataView`/`ToVBuffer`, `ToNDArray`, zero-copy `VBuffer.AsNDArray<T>` + `WrapExternal`/`Pin`/`Live{Exports,Imports}`), `NDArrayDataView.cs` (the NDArray-backed `IDataView` + strided lazy cursor + ARC-pin lifetime), `VBufferAccessor.cs` (compiled-expression getter for the private `VBuffer<T>._values`), `ImportLease.cs` (the last-view-releases GCHandle pin lease), `Postprocess.cs` (shared with ONNX). Depends on `Microsoft.ML.DataView` only |
 | CBLAS product family | `LinearAlgebra/np.{inner,vdot,vecdot,matvec,vecmat,tensordot}.cs`, `LinearAlgebra/GufuncGuard.cs` |
 | einsum | `LinearAlgebra/np.einsum.cs`, `LinearAlgebra/np.einsum.Contract.cs` (the contraction composition — pure `np`-layer, not on the engine), `LinearAlgebra/EinsumSubscripts.cs` (port of `einsum.cpp`'s parser) |
 | `np.linalg` module | `LinearAlgebra/linalg/np.linalg.cs` (class + `_assert_*`/`_commonType` ports) and `np.linalg.{solve,inv,det,eig,svd,qr,cholesky,lstsq,norm,multi_dot,matrix_power,arrayapi}.cs`; `Exceptions/LinAlgError.cs` |
+| Window functions | `Math/np.windows.cs` (bartlett/blackman/hamming/hanning/kaiser + the internal cephes `BesselI0`; fused via `np.evaluate`) |
 | Fourier / FFT (`np.fft.*`) | `Fourier/np.fft.cs` (`FourierModule` facade), `Fourier/np.fft.{Standard,Real,Hermitian,Helper}.cs` (the 18 funcs), `Fourier/np.fft.RawFft.cs` (layer-3 port: `_raw_fft`/`_raw_fftnd`/`_cook_nd_args`/`_swap_direction`), `Fourier/PocketFFTDriver.cs` (strided 1-D driver + FFTPACK packing), `Fourier/PocketFFT.{Twiddle,Complex,Real,Bluestein,Plan}.cs` (managed pocketfft engine); companion accessors `Math/np.{conjugate,real,imag,angle}.cs`. Design + parity ledger: `docs/FFT_PARITY.md` |
 | Grid / slice-expression DSL | `Creation/np.r_.cs` (`AxisConcatenator` + `RClass`), `Creation/np.c_.cs`, `Creation/np.ogrid.cs` (`OGridClass` + `OGridResult` + shared `nd_grid` helpers), `Creation/np.mgrid.cs` (`MGridClass` + `MGridResult`), `Creation/np.meshgrid.cs` (`MeshgridResult`), `Indexing/np.{ix_,s_}.cs` |
 | Array printing (NumPy parity) | `Backends/Printing/{PrintOptions,Dragon4,ElementFormatters,ArrayFormatter}.cs`, `APIs/np.array2string.cs`, `Casting/NDArray.ToString.cs` |

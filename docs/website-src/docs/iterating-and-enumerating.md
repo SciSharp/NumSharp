@@ -145,6 +145,53 @@ These are the fastest per-element and per-chunk walks by a wide margin, because 
 
 ---
 
+## .NET interop — `Span<T>` / `Memory<T>` / arrays / `IEnumerable<T>`
+
+Two ways to hand an `NDArray` to plain .NET code — a **zero-copy aliasing** side (`nd.Unsafe`) and a **safe copying / enumerable** side (extensions). Both cover all 15 dtypes.
+
+### `nd.Unsafe` — zero-copy BCL views (aliasing; you must keep the NDArray alive)
+
+`nd.Unsafe` exposes the array's unmanaged buffer as built-in .NET types **without copying**. They are called *unsafe* for one specific reason: **none of them takes a reference on the buffer**, so if the `NDArray` is disposed or garbage-collected while a view is still in use, the view dangles and corrupts memory. **Keep the NDArray alive (side by side) for the whole lifetime of the view.**
+
+```csharp
+var a = np.arange(6).astype(np.float64);       // keep `a` in scope while using any view below
+
+Span<double>          s   = a.Unsafe.Span<double>();          // aliases; writes go through
+ReadOnlySpan<double>  ro  = a.Unsafe.ReadOnlySpan<double>();
+Memory<double>        m   = a.Unsafe.Memory<double>();        // manager-backed; still does NOT root `a`
+ReadOnlyMemory<double> rm = a.Unsafe.ReadOnlyMemory<double>();
+Span<byte>            raw = a.Unsafe.Bytes();                 // the raw bytes (size * itemsize)
+unsafe { double* p = a.Unsafe.Pointer<double>(); }           // raw pointer to logical element 0
+
+s[2] = 99;                        // a[2] is now 99 — the Span IS the array's memory
+TensorPrimitives.Multiply(s, 2.0, s);   // feed .NET vector APIs directly, no copy
+```
+
+- **Alias, not copy** — writing through `Span`/`Memory`/`Pointer` mutates the array.
+- **C-contiguous, exact dtype, ≤ `int.MaxValue` elements** for `Span`/`ReadOnlySpan`/`Memory`/`ReadOnlyMemory`/`Bytes`. An **offset slice** (`a[2:5]`) qualifies — it is C-contiguous, and the view aliases exactly that logical window. A transposed / F-contiguous / strided / broadcast view has no single contiguous region, so these **throw** `InvalidOperationException` (copy first with `np.ascontiguousarray(a)` / `a.copy()`, or walk it with `np.nditer<T>`). A wrong `T` **throws** `ArgumentException`.
+- **`Pointer<T>()` works for any layout** — it returns the address of logical element 0; for a non-contiguous array you walk the rest yourself using `nd.strides` (byte strides). It does not root the buffer either.
+- **Non-throwing forms:** `bool TryGetSpan<T>(out Span<T>)` / `TryGetMemory<T>(out Memory<T>)` return `false` (instead of throwing) when the array is not C-contiguous, the dtype doesn't match, or it has more than `int.MaxValue` elements.
+- **Over 2 GB:** `Span<T>`/`Memory<T>` are 32-bit-length; for a larger array use `nd.Unsafe.AsSpan<T>()` (a long-indexable `UnmanagedSpan<T>`) or `Pointer<T>()`.
+
+### Safe bridges — copy / enumerate (result outlives the NDArray)
+
+Unlike the aliasing views, these **materialize or copy** into caller-owned .NET storage, so the result is safe once you have it. Elements are unboxed.
+
+```csharp
+double[] all      = a.ToArray<double>();                  // C-order copy (any layout) — already on NDArray
+double   mean     = a.AsEnumerable<double>().Average();   // LINQ / IEnumerable<T>, unboxed, any layout
+var      evens    = a.AsEnumerable<int>().Where(x => x % 2 == 0).ToList();
+
+double[] fromIter = np.flat<double>(a).ToArray();         // materialize any iterator (C-order here)
+int      copied   = np.nditer<double>(a).CopyTo(dest);    // pour an iterator into your own Span<T>/array
+```
+
+- **`nd.AsEnumerable<T>()`** walks logical C-order for **every layout** (reads through strides), so it needs no contiguity and never copies the whole array — only the enumerator is a heap object (one allocation, no per-element boxing). Reach for it when you need LINQ or an `IEnumerable<T>`-shaped API; for the fastest walk prefer `foreach (ref T x in np.flat<T>(a))`.
+- **`.ToArray()` / `.CopyTo(Span<T>)`** on the typed iterators (`np.flat<T>` → C-order, `np.nditer<T>` → memory order, `np.nditer_chunks<T>`) turn an in-progress walk into a `T[]` or fill a caller buffer. `CopyTo` returns the element count and throws if the destination is too short.
+- The **boxed** iteration objects (`a.flatiter`, `np.ndenumerate(a)`, `np.ndindex(...)`) already implement `IEnumerable`, so LINQ (`.ToArray()`, `.Select(...)`) works on them directly — boxed, for parity/convenience.
+
+---
+
 ## Index and `(index, value)` enumeration
 
 ### `np.ndindex(...)` — the index space of a shape
@@ -415,6 +462,21 @@ Dispose it (`using` or `close()`). Buffered and overlap write-backs flush on dis
 | `np.nditer(a, …)` | `NDIterator` | `NDArray[]` | K | yes |
 | `np.nested_iters(a, axes, …)` | `NDIterator[]` | `NDArray[]` per level | per level | yes |
 | `np.broadcast(a, b, …)` | `Broadcast` | `object[]` / `.iters[i]` | C | yes |
+
+### `.NET` interop
+
+| API | Returns | Copy or alias? | Notes |
+|-----|---------|----------------|-------|
+| `nd.Unsafe.Span<T>()` / `ReadOnlySpan<T>()` | `Span<T>` / `ReadOnlySpan<T>` | **alias** (doesn't root) | C-contiguous, exact dtype, ≤`int.MaxValue` |
+| `nd.Unsafe.Memory<T>()` / `ReadOnlyMemory<T>()` | `Memory<T>` / `ReadOnlyMemory<T>` | **alias** (doesn't root) | manager-backed; same constraints |
+| `nd.Unsafe.Bytes()` / `ReadOnlyBytes()` | `Span<byte>` / `ReadOnlySpan<byte>` | **alias** | raw `size*itemsize` bytes; C-contiguous |
+| `nd.Unsafe.Pointer<T>()` | `T*` | **alias** | logical element 0; **any layout** |
+| `nd.Unsafe.TryGetSpan<T>(out)` / `TryGetMemory<T>(out)` | `bool` | **alias** | non-throwing; `false` if not spannable |
+| `nd.Unsafe.AsSpan<T>()` | `UnmanagedSpan<T>` | **alias** | long-indexable (>2 GB); NumSharp type |
+| `nd.ToArray<T>()` | `T[]` | **copy** | C-order, any layout |
+| `nd.AsEnumerable<T>()` | `IEnumerable<T>` | walk (no full copy) | LINQ, C-order, any layout, unboxed |
+| `np.flat<T>(a).ToArray()` / `np.nditer<T>(a).ToArray()` / `np.nditer_chunks<T>(a).ToArray()` | `T[]` | **copy** | C / memory / memory order |
+| `(iter).CopyTo(Span<T>)` | `int` | **copy** | fills caller buffer; returns count |
 
 ### `FlatIterator` (a.flatiter)
 
