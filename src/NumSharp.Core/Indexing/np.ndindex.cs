@@ -174,6 +174,112 @@ namespace NumSharp
             }
 
             public void Dispose() { }
+
+            /// <summary>
+            ///     The allocation-free form of this odometer — the high-performance counterpart.
+            ///     Where iterating this object yields a FRESH <c>long[]</c> per step,
+            ///     <see cref="NDIndexSpans"/> yields a <see cref="ReadOnlySpan{T}"/> over a coordinate
+            ///     buffer REUSED each step, so a walk of the whole index space allocates nothing:
+            ///
+            ///     <code>
+            ///     foreach (var idx in np.ndindex(3, 2).AsSpans())   // idx is ReadOnlySpan&lt;long&gt;
+            ///         Sum += a.GetValue(idx);                       // idx valid until the next step
+            ///     </code>
+            ///
+            ///     <para>
+            ///     <c>ndindex</c> walks an index SPACE, not an array — there are no element values, so
+            ///     there is no <c>ref T</c> form (unlike <see cref="np.flat{T}(NDArray, bool)"/> or
+            ///     <see cref="NDEnumerate{T}.AsRef(bool)"/>, which reference an array's elements). This
+            ///     span form is its non-boxed, non-allocating equivalent. Copy the span
+            ///     (<c>.ToArray()</c>) to keep an index past the current iteration.
+            ///     </para>
+            /// </summary>
+            public NDIndexSpans AsSpans() => new NDIndexSpans(_shape);
+        }
+
+        /// <summary>
+        ///     The <c>foreach</c>-able returned by <see cref="NDIndex.AsSpans"/> — the allocation-free
+        ///     odometer. Yields the current multi-index as a <see cref="ReadOnlySpan{T}"/> over a
+        ///     buffer REUSED each step (C-order, last axis fastest — identical order to
+        ///     <see cref="NDIndex"/>), so an entire index-space walk allocates nothing per step.
+        ///
+        ///     <para>
+        ///     Re-enumeration RESTARTS (each <c>foreach</c> builds a fresh enumerator with its own
+        ///     buffer) — deliberately unlike <see cref="NDIndex"/>, which is its own iterator (NumPy's
+        ///     <c>iter(i) is i</c>) and resumes. Copy the span (<c>.ToArray()</c>) to keep an index
+        ///     past the current iteration; storing the span itself, or the whole enumeration, is a
+        ///     use-after-overwrite.
+        ///     </para>
+        /// </summary>
+        public readonly struct NDIndexSpans
+        {
+            private readonly long[] _shape;
+
+            internal NDIndexSpans(long[] shape) => _shape = shape ?? Array.Empty<long>();
+
+            /// <summary>Builds a fresh odometer with its own reused coordinate buffer.</summary>
+            public Enumerator GetEnumerator() => new Enumerator(_shape);
+
+            /// <summary>The cursor — one <see cref="ReadOnlySpan{T}"/> (over a reused buffer) per step.</summary>
+            public ref struct Enumerator
+            {
+                private readonly long[] _shape;
+                private readonly long[] _coords;   // reused; Current spans it
+                private bool _started;
+                private bool _finished;
+
+                internal Enumerator(long[] shape)
+                {
+                    _shape = shape;
+                    _coords = new long[shape.Length];
+                    _started = false;
+                    _finished = false;
+                }
+
+                /// <summary>The current index — a view over the reused buffer, valid until the next step.</summary>
+                public ReadOnlySpan<long> Current => _coords;
+
+                /// <summary>Advance the odometer (last axis fastest, C-order), reusing the buffer.</summary>
+                public bool MoveNext()
+                {
+                    if (_finished)
+                        return false;
+
+                    int ndim = _shape.Length;
+
+                    if (!_started)
+                    {
+                        _started = true;
+                        // A zero-length dimension makes the space empty (product over an empty range).
+                        for (int i = 0; i < ndim; i++)
+                        {
+                            if (_shape[i] == 0)
+                            {
+                                _finished = true;
+                                return false;
+                            }
+                        }
+
+                        // ndim == 0 falls through: one step, an empty index (NumPy's ()).
+                        // _coords is already all-zero from allocation.
+                        return true;
+                    }
+
+                    for (int axis = ndim - 1; axis >= 0; axis--)
+                    {
+                        if (++_coords[axis] < _shape[axis])
+                            return true;
+                        _coords[axis] = 0;
+                    }
+
+                    // Carried past axis 0 — or ndim == 0, whose single step is already spent.
+                    _finished = true;
+                    return false;
+                }
+
+                /// <summary>No unmanaged state; present so <c>foreach</c>'s dispose pattern is satisfied.</summary>
+                public void Dispose() { }
+            }
         }
     }
 }

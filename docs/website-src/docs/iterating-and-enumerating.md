@@ -5,7 +5,7 @@ There are many ways to walk an `NDArray` element by element, row by row, or oper
 Two rules run through all of it, and they trip people up:
 
 1. **Order is not uniform.** Most walks follow **logical C-order** (last axis fastest, honoring the array's strides) — `foreach`, `.flat`, `.flatiter`, `np.ndindex`, `np.ndenumerate`, `np.broadcast`. But **`np.nditer` and the typed `np.nditer<T>` default to memory order (`'K'`)**, matching NumPy. On a transposed or reversed view those two orders differ. See [Iteration order](#iteration-order-logical-c-order-vs-memory-k-order).
-2. **Boxing and per-element views cost.** The convenient `foreach`/`np.nditer` forms hand you a boxed `object` or an `NDArray` view per element; in a hot loop that dominates. The typed `np.nditer<T>` / `np.nditer_chunks<T>` hand out a `ref T` / `Span<T>` with neither. Reach for them when speed matters — or better, don't loop at all (see [Don't loop when you can vectorize](#dont-loop-when-you-can-vectorize)).
+2. **Prefer the unboxed forms — every value walk has one.** A boxed `object` or a per-element `NDArray` view dominates a hot loop, so the examples on this page use the **typed, by-`ref T`** walks throughout: `np.flat<T>` (C-order), `np.nditer<T>` (memory order), `np.nditer_chunks<T>` (a `Span<T>` per inner loop), and `np.ndenumerate<T>().AsRef()` (index + `ref T`). Index-only `np.ndindex` has a non-allocating `.AsSpans()`. The boxed spellings (`a.flat`, `a.flatiter`, `np.ndenumerate(a)`, the `np.nditer` object, `np.broadcast`) remain for NumPy parity and LINQ, but you should not reach for them in a loop that runs — or better, don't loop at all (see [Don't loop when you can vectorize](#dont-loop-when-you-can-vectorize)).
 
 This page is the user-facing guide. For the iterator *engine* — coalescing, buffering, casting, the kernel tiers, `NDIterRef` — see [NDIter](NDIter.md).
 
@@ -13,106 +13,61 @@ This page is the user-facing guide. For the iterator *engine* — coalescing, bu
 
 ## Which one should I use?
 
+The recommended, non-boxed forms first:
+
 | You want | Use | Yields | Order | Writes through? |
 |----------|-----|--------|-------|-----------------|
-| Rows / sub-arrays along axis 0 | `foreach (var row in a)` | `NDArray` (N-D) or boxed scalar (1-D) | C-order | views do (N-D); 1-D scalars are copies |
-| Every element, flat, convenient | `foreach (var x in a.flat)` | boxed `object` | C-order | **no** — `.flat` copies if non-contiguous |
-| Every element, flat, **write-through** | `a.flatiter[i]` / `foreach (var x in a.flatiter)` | boxed `object` | C-order | **yes**, any layout |
-| Every element, flat, **unboxed / by ref** | `foreach (ref T x in np.flat<T>(a))` | `ref T` | C-order | yes (`writeable: true`) |
-| Every element, **unboxed / by ref**, memory order | `foreach (ref T x in np.nditer<T>(a))` | `ref T` | memory (`'K'`) | yes (`writeable: true`) |
+| Every element, unboxed, by ref, C-order | `foreach (ref T x in np.flat<T>(a))` | `ref T` | C-order | yes (`writeable: true`) |
+| Every element, unboxed, by ref, memory order (fastest) | `foreach (ref T x in np.nditer<T>(a))` | `ref T` | memory (`'K'`) | yes (`writeable: true`) |
 | A `Span<T>` per inner loop (to vectorize) | `foreach (Span<T> c in np.nditer_chunks<T>(a))` | `Span<T>` | memory (`'K'`) | yes (`writeable: true`) |
-| `(index, value)` pairs | `foreach (var (idx, v) in np.ndenumerate(a))` | `(long[], object)` | C-order | no |
-| Just the index space of a shape | `foreach (var idx in np.ndindex(3, 2))` | `long[]` | C-order | — (no data) |
-| NumPy's full `nditer` (flags, multi-operand) | `using var it = np.nditer(a, flags: …)` | `NDArray[]` | memory (`'K'`) | yes (`readwrite`) |
-| Nested loops over disjoint axis groups | `np.nested_iters(a, axes)` | `NDIterator[]` | per level | yes (`readwrite`) |
-| Each operand of a broadcast | `np.broadcast(a, b, …)` | `object[]` tuples / `.iters[i]` | C-order | no |
+| `(index, ref value)` pairs, unboxed | `foreach (var e in np.ndenumerate<T>(a).AsRef())` | `ReadOnlySpan<long>` + `ref T` | C-order | yes (`writeable: true`) |
+| The index space of a shape, non-allocating | `foreach (var idx in np.ndindex(3, 2).AsSpans())` | `ReadOnlySpan<long>` | C-order | — (no data) |
+| Rows / sub-arrays along axis 0 | `foreach (NDArray row in a)` (N-D) | `NDArray` view | C-order | yes (views) |
 
-LINQ works too — `NDArray` is `IEnumerable`, so `a.Cast<double>().Sum()` etc. (boxed; see [foreach](#foreach--iterate-along-axis-0)).
+Boxed spellings, kept for NumPy parity and LINQ — **not for hot loops**:
+
+| API | Yields | Non-boxed equivalent |
+|-----|--------|----------------------|
+| `a.flat` (raveled `NDArray`) / `a.flatiter` | boxed `object` per element | `np.flat<T>(a)` / `a.flatiter.AsTyped<T>()` |
+| `np.ndenumerate(a)` | `(long[], object)` | `np.ndenumerate<T>(a).AsRef()` |
+| `np.ndindex(3, 2)` | fresh `long[]` per step | `np.ndindex(3, 2).AsSpans()` |
+| `np.nditer(a, flags: …)` (the full flag object) | `NDArray[]` (live views) | `np.nditer<T>` / `np.nditer_chunks<T>` for value walks; the object only when you need flags/multi-operand |
+| `np.nested_iters(a, axes)` | `NDIterator[]` per level | — (advanced/parity; no typed form) |
+| `np.broadcast(a, b, …)` | `object[]` / `.iters[i]` | `np.nditer<T>` over a `broadcast_to` view |
+
+`NDArray` is `IEnumerable`, so LINQ works (`a.Cast<double>().Sum()`) — but it boxes; use the typed walks above when it matters.
 
 ---
 
-## `foreach` — iterate along axis 0
+## `foreach` — iterate rows (sub-arrays) along axis 0
 
-`NDArray` implements `IEnumerable`, and — like NumPy — iterating it walks the **first axis**:
+`NDArray` implements `IEnumerable`, and — like NumPy — iterating an **N-D** array walks the **first axis**, handing you each sub-array as a **view** (not a boxed scalar — this is a non-boxed, write-through walk):
 
 ```csharp
 var m = np.arange(6).reshape(2, 3);
-foreach (var row in m)           // each `row` is an NDArray of shape (3,) — a VIEW of m
-    Console.WriteLine(row);      // [0 1 2]  then  [3 4 5]
+foreach (NDArray row in m)       // each `row` is an (N-1)-D VIEW of m — writes mutate m
+    row[":"] = row * 2;          // [0 2 4] then [6 8 10]
 ```
 
 - **N-D array** → each step is an `(N-1)`-D **view** along axis 0 (writing into it mutates the parent).
-- **1-D array** → each step is a **boxed scalar** (`object`), not an array.
 - **0-D array** → `foreach` throws `TypeError("iteration over a 0-d array")`, exactly as NumPy raises.
 - **Empty array** → zero iterations.
 
-Because the enumerator is non-generic, `var` gives you `object`. Cast per rank:
-
-```csharp
-foreach (NDArray row in m) { … }              // N-D: object → NDArray (OK)
-
-var v = np.array(new[] {10, 20, 30});
-foreach (var x in v) Console.WriteLine(x);    // 1-D: x is a boxed int (do NOT cast to NDArray)
-double sum = v.Cast<int>().Sum();             // LINQ: Cast<T> unboxes, then any LINQ operator
-```
-
-> A 1-D `foreach` materializes the elements once (contiguous fast path or a stride-aware walk) and yields them boxed. For an unboxed 1-D walk use `np.nditer<T>`.
+> A **1-D** `foreach` yields **boxed scalars** — don't use it. For a 1-D element walk use the unboxed `foreach (ref int x in np.nditer<int>(v))` (or `np.flat<int>(v)`), which hands out a `ref int` with no boxing.
 
 ---
 
 ## Flat element iteration
 
-### `a.flat` — a raveled view (read-friendly)
+### `np.flat<T>(a)` / `a.flatiter.AsTyped<T>()` — unboxed, by reference, C-order
 
-`NDArray.flat` returns a 1-D **`NDArray`** over the elements in C-order. It's handy for reading, but note the write caveat:
-
-```csharp
-var a = np.arange(6).reshape(2, 3);
-foreach (var x in a.flat) Console.WriteLine(x);   // 0 1 2 3 4 5 (boxed, C-order)
-var third = a.flat[2];                             // indexable
-```
-
-**`.flat` copies when the array is non-contiguous** (it reshapes), so `a.T.flat[i] = v` is silently lost. For flat *writes*, use `flatiter` instead.
-
-### `a.flatiter` / `np.flat(a)` — write-through, any layout
-
-`NDArray.flatiter` returns a `FlatIterator` (NumSharp's analog of NumPy's `flatiter`, the type of `a.flat` in NumPy). It reads **and writes through** to the base in logical C-order for *every* layout — transposed, sliced, strided, negative-stride, broadcast:
-
-```csharp
-var t = np.arange(6).reshape(2, 3).T;   // transposed (non-contiguous) view
-
-foreach (var x in t.flatiter) { … }     // 0 3 1 4 2 5 — logical C-order of the view (boxed)
-
-t.flatiter[5] = 99;                      // write-through in C-order
-t.flatiter["::2"] = 0;                   // slice assignment
-t.flatiter[new[] {0, 2}] = np.array(new[] {7, 8}); // fancy assignment
-
-long i    = t.flatiter.index;            // cursor: flat C-order position
-long[] c  = t.flatiter.coords;           // cursor: multi-index
-NDArray b = t.flatiter.Base;             // the array being iterated
-long n    = t.flatiter.size;
-NDArray f = t.flatiter.copy();           // a fresh 1-D C-order copy
-```
-
-Like NumPy's `flatiter`, a *captured* instance is **its own iterator** (`iter(f) is f`): the `foreach`/`next()` cursor is shared with `index`/`coords`, so a second pass over the same object **resumes** rather than restarting. Note that `a.flatiter` is a property that builds a **fresh** iterator on each access, so capture it first to see the resume behavior:
-
-```csharp
-var f = a.flatiter;             // capture the instance
-f.next(); f.next();             // consume two elements
-foreach (var x in f) { … }      // resumes from the third element (same cursor)
-```
-
-Scalar assignment follows the same [NEP50 coercion rules](getting-and-setting-values.md#value-coercion-on-assignment-nep50) as the setters (a weak out-of-range value raises rather than wrapping). See also [Getting & Setting Values → flatiter](getting-and-setting-values.md#10-ndarrayflatiter--write-through-the-flat-iterator-any-layout).
-
-### `np.flat<T>(a)` / `a.flatiter.AsTyped<T>()` — the same flat walk, unboxed and by reference
-
-When you need flat C-order iteration in a hot loop, the boxed `foreach (var x in a.flatiter)` hands you an `object` per element. The typed form hands you a **`ref T`** instead — no boxing, no per-element view — in the **same logical C-order**, writing through for every layout:
+The way to walk flat elements: a **`ref T`** in logical C-order — no boxing, no per-element view — writing through for *every* layout (transposed, sliced, strided, negative-stride, broadcast):
 
 ```csharp
 var a = np.arange(6).reshape(2, 3).T;      // transposed (non-contiguous) view
 
-// read by reference, C-order (0 3 1 4 2 5 — identical to a.flatiter's order)
-double total = 0;
+// read by reference, C-order (values 0 3 1 4 2 5)
+long total = 0;
 foreach (ref long x in np.flat<long>(a))
     total += x;
 
@@ -128,8 +83,29 @@ foreach (ref long x in a.flatiter.AsTyped<long>(writeable: true))
 - **`T` must be the array's exact dtype** — a `ref` cannot convert, so a mismatch throws (`astype` first). This is why the typed form can't do the NumPy scalar coercion the boxed setters do.
 - **`np.flat<T>(a)` is `np.nditer<T>(a, order: 'C')` with the C-order default baked in** — same `NDIterRef` engine, same `ref T`, but defaulting to logical C-order to match `a.flatiter` (the order-configurable `np.nditer<T>` defaults to memory `'K'` order instead — see [Iteration order](#iteration-order-logical-c-order-vs-memory-k-order)).
 - **The by-reference spelling `a.flatiter<T>` is impossible in C#** — a generic method can't share a name with the `flatiter` property — so the instance form is `a.flatiter.AsTyped<T>()`, and the static form `np.flat<T>(a)` (the typed overload of `np.flat(a)`).
-- **0-d yields its one element; an empty array iterates zero times** — matching the boxed `flatiter`.
-- **Re-enumeration restarts** (the value holds no cursor), deliberately unlike the boxed `flatiter`, which shares a cursor and resumes. A read-only broadcast view refuses `writeable: true` with NumPy's message.
+- **0-d yields its one element; an empty array iterates zero times.**
+- **Re-enumeration restarts** (the value holds no cursor). A read-only broadcast view refuses `writeable: true` with NumPy's message.
+
+### `a.flat` / `a.flatiter` — the boxed forms (NumPy parity; indexers, cursor)
+
+`a.flat` is a raveled **`NDArray`** and `a.flatiter` is a `FlatIterator` (NumSharp's analog of NumPy's `flatiter`). **Iterating either boxes** — use `np.flat<T>` above for that. What they offer beyond the typed walk is the **indexer / slice / fancy write-through** surface and the NumPy `flatiter` cursor:
+
+```csharp
+var t = np.arange(6).reshape(2, 3).T;   // transposed (non-contiguous) view
+
+t.flatiter[5] = 99;                      // write-through single element, C-order, any layout
+t.flatiter["::2"] = 0;                   // slice assignment
+t.flatiter[new[] {0, 2}] = np.array(new[] {7, 8}); // fancy assignment
+
+long i    = t.flatiter.index;            // cursor: flat C-order position
+long[] c  = t.flatiter.coords;           // cursor: multi-index
+NDArray b = t.flatiter.Base;             // the array being iterated
+NDArray f = t.flatiter.copy();           // a fresh 1-D C-order copy
+```
+
+- **`a.flat` copies when non-contiguous** (it reshapes), so `a.T.flat[i] = v` is silently lost — that's exactly the defect `a.flatiter` (and `np.flat<T>`) fixes.
+- The `flatiter[i]`/slice/fancy **setters** do NumPy's NEP50 scalar coercion (a weak out-of-range value raises rather than wrapping — see [Getting & Setting Values → flatiter](getting-and-setting-values.md#10-ndarrayflatiter--write-through-the-flat-iterator-any-layout)); the typed `ref` walk can't coerce (a `ref` can't convert), so use these setters when you need the coercion and `np.flat<T>` when you need speed.
+- A *captured* `flatiter` is its own iterator (NumPy's `iter(f) is f`): its cursor is shared with `index`/`coords`, so `next()`/a second pass **resume**. `a.flatiter` builds a fresh one per access.
 
 ---
 
@@ -173,56 +149,54 @@ These are the fastest per-element and per-chunk walks by a wide margin, because 
 
 ### `np.ndindex(...)` — the index space of a shape
 
-A pure C-order odometer over an index space — no operands, no data, just the coordinates:
+A pure C-order odometer over an index space — no operands, no data, just the coordinates. It walks an index *space*, not an array, so there are no element values and therefore **no `ref T` form** (unlike `np.flat<T>`); its non-boxed variant is `.AsSpans()`, which yields the multi-index as a **`ReadOnlySpan<long>` over a reused buffer** — an entire walk allocates nothing:
 
 ```csharp
-foreach (var idx in np.ndindex(3, 2))      // {0,0} {0,1} {1,0} {1,1} {2,0} {2,1}
-    Console.WriteLine(string.Join(",", idx));
+foreach (var idx in np.ndindex(3, 2).AsSpans())   // idx is ReadOnlySpan<long>: [0,0] [0,1] [1,0] …
+    Console.WriteLine($"{idx[0]},{idx[1]}");       // idx valid until the next step — copy to keep it
 
-foreach (var idx in np.ndindex(a.shape)) { … }  // both spellings bind (ints, or a shape array)
+foreach (var idx in np.ndindex(a.shape).AsSpans()) { … }  // both spellings bind (ints, or a shape array)
 ```
 
-Each step yields a fresh `long[]` (NumPy's `intp`). A zero-length dimension yields nothing; `np.ndindex()` yields exactly one empty index (the 0-d space). A negative dimension throws `ArgumentException` at construction. Like NumPy, it is its own iterator (a second `foreach` resumes).
+A zero-length dimension yields nothing; `np.ndindex().AsSpans()` yields exactly one empty index (the 0-d space). A negative dimension throws `ArgumentException` at construction. `.AsSpans()` **restarts** each `foreach`.
 
-### `np.ndenumerate(a)` — `(index, value)` pairs
+> The bare `np.ndindex(3, 2)` (without `.AsSpans()`) yields a fresh `long[]` per step and is its own iterator (a second `foreach` resumes) — kept for NumPy parity and LINQ (`np.ndindex(...).ToArray()`); prefer `.AsSpans()` in a loop.
 
-Walks an array in **logical C-order**, yielding the coordinate and the value at each element:
+### `np.ndenumerate<T>(a).AsRef()` — `(index, ref value)` pairs, unboxed
+
+Walks an array in **logical C-order**, handing you the coordinate and the value **by reference** — no boxing, no per-step allocation, write-through:
 
 ```csharp
 var a = np.array(new[,] {{1, 2}, {3, 4}});
-foreach (var (index, value) in np.ndenumerate(a))
-    Console.WriteLine($"{string.Join(",", index)} = {value}");
-// 0,0 = 1   0,1 = 2   1,0 = 3   1,1 = 4
+foreach (var e in np.ndenumerate<int>(a).AsRef(writeable: true))
+{
+    // e.Index is a ReadOnlySpan<long> (reused buffer); e.Value is a ref int
+    e.Value += (int)e.Index[0];      // writes through to a
+}
 ```
 
-Order is always C-order regardless of layout (an F-contiguous or reversed view reads through its strides), and a 0-d array yields one pair with an empty index. The value is boxed; for the unboxed form use `np.ndenumerate<T>(a)`:
+- Order is always C-order regardless of layout (an F-contiguous or reversed view reads through its strides); a 0-d array yields one pair with an empty index; an empty array yields nothing.
+- `e.Index` is a span over a buffer **reused each step** — copy it (`e.Index.ToArray()`) to keep it past the current iteration, exactly as with a `Span<T>` chunk.
+- `T` must be the exact dtype; `writeable: true` opens the array read-write (a read-only broadcast view is refused); re-enumeration restarts.
 
-```csharp
-foreach (var (index, value) in np.ndenumerate<int>(a))   // value is int, not object
-    { … }
-```
-
-`np.ndenumerate<T>` requires `T` to be the exact dtype.
+> The boxed `np.ndenumerate(a)` (→ `(long[], object)`) and the by-value `np.ndenumerate<T>(a)` (→ `(long[], T)`, T unboxed but copied, fresh `long[]` per step) remain for NumPy parity and LINQ (`.Select(...)`, `.ToArray()`); prefer `.AsRef()` in a loop.
 
 ---
 
-## The full `np.nditer` object
+## The full `np.nditer` object (advanced / NumPy parity — boxed)
 
-`np.nditer(...)` returns an `NDIterator` — the managed face of NumSharp's iterator engine and a port of NumPy's `numpy.nditer`. Use it when you need NumPy's flag surface: `multi_index`, `external_loop`, `buffered`, multiple operands, output allocation, or `readwrite` mutation.
+`np.nditer(...)` returns an `NDIterator` — the managed face of NumSharp's iterator engine and a port of NumPy's `numpy.nditer`. It yields **`NDArray[]`** (a live view per operand), so it **boxes** and allocates a per-element view. Reach for it **only** when you need NumPy's flag surface — `multi_index`, multiple operands, output allocation — that the typed walks can't express.
+
+> **For a plain value or element walk, do NOT use this — use `np.nditer<T>` / `np.nditer_chunks<T>` / `np.flat<T>`** (the typed section above). The single-operand `foreach (var vals in it) … vals[0] …` loop is the slowest walk on this page (an `NDArray` view per element); it exists for parity, not for use.
 
 ```csharp
 var a = np.arange(6).reshape(2, 3);
 
-// simplest: one operand, memory order (matches NumPy's `for x in np.nditer(a)`)
-using (var it = np.nditer(a))
-    foreach (var vals in it)         // vals is NDArray[]; vals[0] is a 0-d view of the current element
-        Console.WriteLine((long)vals[0]);
-
-// track the multi-index (imperative style, like NumPy)
+// the reason to use the object: track the multi-index (a flag the typed walks don't carry)
 using (var it = np.nditer(a, flags: new[] {"multi_index"}))
     while (!it.finished)
     {
-        Console.WriteLine($"{string.Join(",", it.multi_index)} = {(long)it[0]}");
+        Console.WriteLine($"{string.Join(",", it.multi_index)} = {(long)it[0]}");  // it[0] is a boxed view
         it.iternext();
     }
 ```
@@ -241,6 +215,7 @@ using (var it = np.nditer(a, flags: new[] {"multi_index"}))
 var a = np.arange(6).reshape(2, 3);
 
 // external_loop: the iterator hands you the largest contiguous chunk (a 1-D view) per step
+// (boxed; for an unboxed chunk walk use np.nditer_chunks<T>, which hands out a Span<T>)
 using (var it = np.nditer(a, flags: new[] {"external_loop"}))
     foreach (var vals in it) Console.WriteLine(vals[0]);   // one chunk: [0 1 2 3 4 5]
 
@@ -276,9 +251,9 @@ The full flag vocabulary (`c_index`/`f_index`, `common_dtype`, `reduce_ok`, `del
 
 ---
 
-## Nested loops — `np.nested_iters`
+## Nested loops — `np.nested_iters` (advanced / NumPy parity — boxed)
 
-`np.nested_iters(op, axes)` returns one `NDIterator` per entry in `axes` (outermost first), all iterating the **same** buffer over disjoint axis groups. Advancing an outer level re-bases its inner levels, so plain nested `foreach`es walk the array in nested loops:
+`np.nested_iters(op, axes)` returns one `NDIterator` per entry in `axes` (outermost first), all iterating the **same** buffer over disjoint axis groups. Advancing an outer level re-bases its inner levels, so plain nested `foreach`es walk the array in nested loops. It shares `np.nditer`'s boxed `NDArray[]`/`it[0]` surface (there is no typed form) — use it only when you genuinely need nested disjoint-axis loops with `multi_index`:
 
 ```csharp
 var a = np.arange(12).reshape(2, 3, 2);
@@ -296,9 +271,9 @@ foreach (var _ in outer)                     // walks axis 1
 
 ---
 
-## Broadcast iteration — `np.broadcast`
+## Broadcast iteration — `np.broadcast` (NumPy parity — boxed)
 
-`np.broadcast(a, b, …)` is NumPy's `numpy.broadcast`: it resolves the broadcast shape without materializing data and lets you iterate the operands together.
+`np.broadcast(a, b, …)` is NumPy's `numpy.broadcast`: it resolves the broadcast shape without materializing data and lets you iterate the operands together. Its per-operand streams and value-tuples **box**; for an unboxed walk, `broadcast_to` each operand to `bc.shape` and drive it with `np.nditer<T>` (order `'C'`). Use `np.broadcast` for the metadata (`shape`/`size`/`numiter`) and for parity.
 
 ```csharp
 var a = np.array(new long[] {1, 2, 3});          // (3,)
@@ -330,7 +305,7 @@ This is the single most common surprise. Take `arange(6).reshape(2,3)` and a rev
 
 | Technique | Default order | `a[:, ::-1]` yields |
 |-----------|---------------|---------------------|
-| `foreach`, `.flat`, `.flatiter`, `np.flat<T>`, `np.ndenumerate`, `np.ndindex`, `np.broadcast` | **logical C-order** | `2 1 0 5 4 3` |
+| `foreach`, `.flat`, `.flatiter`, `np.flat<T>`, `np.ndenumerate` (+`.AsRef()`), `np.ndindex` (+`.AsSpans()`), `np.broadcast` | **logical C-order** | `2 1 0 5 4 3` |
 | `np.nditer`, `np.nditer<T>`, `np.nditer_chunks<T>` | **memory order (`'K'`)** | `0 1 2 3 4 5` |
 
 Memory order is what lets the iterator coalesce reversed / F-contiguous / transposed views into a single fast chunk, and it matches NumPy's `nditer` exactly. When you need the two to agree, pass **`order: 'C'`** to the `nditer` family:
@@ -357,8 +332,9 @@ Conversely, `np.ndenumerate` always gives you logical C-order — use it (or `or
 | `a.flatiter` | **yes** — write-through, any layout |
 | `np.flat<T>(a, writeable: true)` / `a.flatiter.AsTyped<T>(true)` | **yes** — by `ref T`, any layout |
 | `np.nditer<T>(a, writeable: true)` | **yes** |
+| `np.ndenumerate<T>(a).AsRef(writeable: true)` | **yes** — by `ref T` (`e.Value`), any layout |
 | `np.nditer(a, op_flags: ["readwrite"])` | **yes** — mutate `vals[0]` via `SetAtIndex` |
-| `np.ndenumerate`, `np.ndindex`, `np.broadcast` | no — read-only walks |
+| `np.ndenumerate` (boxed/by-value), `np.ndindex` (+`.AsSpans()`), `np.broadcast` | no — read-only walks |
 
 A read-only **broadcast** view (stride-0) refuses write-enabled iteration: `np.nditer<T>(bc, writeable: true)` and `np.nditer(bc, op_flags: ["readwrite"])` throw the NumPy read-only message. Copy first if you must write.
 
@@ -389,8 +365,8 @@ Whether a second pass restarts or resumes depends on the technique — NumSharp 
 |-----------|------------------|
 | `np.nditer`, `np.nested_iters` levels | **resumes** (own iterator); `reset()` to rewind |
 | `a.flatiter` captured in a variable (`var f = a.flatiter`) | **resumes** (shares the `index`/`coords` cursor); each fresh `a.flatiter` access is a new iterator |
-| `np.ndindex`, `np.ndenumerate`, `np.broadcast` | **resumes** (own iterator); `broadcast.reset()` rewinds |
-| `np.flat<T>`, `a.flatiter.AsTyped<T>()`, `np.nditer<T>`, `np.nditer_chunks<T>` | **restarts** (fresh iterator each `foreach`) |
+| `np.ndindex`, `np.ndenumerate` (boxed/by-value), `np.broadcast` | **resumes** (own iterator); `broadcast.reset()` rewinds |
+| `np.flat<T>`, `a.flatiter.AsTyped<T>()`, `np.nditer<T>`, `np.nditer_chunks<T>`, `np.ndenumerate<T>().AsRef()`, `np.ndindex().AsSpans()` | **restarts** (fresh iterator each `foreach`) |
 | `foreach` over an `NDArray`, `a.flat` | **restarts** (fresh enumerator each `foreach`) |
 
 ---
@@ -433,7 +409,9 @@ Dispose it (`using` or `close()`). Buffered and overlap write-backs flush on dis
 | `np.nditer<T>(a, writeable, order)` | `NDRefIter<T>` | `ref T` | K | **no** |
 | `np.nditer_chunks<T>(a, writeable, order)` | `NDChunkIter<T>` | `Span<T>` | K | **no** |
 | `np.ndindex(shape…)` | `NDIndex` | `long[]` | C | — |
+| `np.ndindex(shape…).AsSpans()` | `NDIndexSpans` | `ReadOnlySpan<long>` (reused) | C | **no** |
 | `np.ndenumerate(a)` / `<T>` | `NDEnumerate` / `<T>` | `(long[], object)` / `(long[], T)` | C | yes / no |
+| `np.ndenumerate<T>(a).AsRef(writeable)` | `NDEnumerateRef<T>` | `ReadOnlySpan<long>` + `ref T` | C | **no** |
 | `np.nditer(a, …)` | `NDIterator` | `NDArray[]` | K | yes |
 | `np.nested_iters(a, axes, …)` | `NDIterator[]` | `NDArray[]` per level | per level | yes |
 | `np.broadcast(a, b, …)` | `Broadcast` | `object[]` / `.iters[i]` | C | yes |

@@ -1384,7 +1384,11 @@ step yields a FRESH index array, never a recycled buffer.
   dimension yields nothing; a negative dimension raises `ArgumentException "negative dimensions are
   not allowed"` at CONSTRUCTION, before a single index is produced. Deliberately **not** NDIter-backed
   — NumPy itself moved `ndindex` off `nditer` onto `itertools.product`, and there are no operands to
-  walk, only a counter. `Indexing/np.ndindex.cs`.
+  walk, only a counter. **`np.ndindex(...).AsSpans()` → `np.NDIndexSpans`** is the allocation-free form:
+  a `ref struct` enumerator yielding the multi-index as a `ReadOnlySpan<long>` over a REUSED buffer
+  (valid until the next step), so a whole index-space walk allocates nothing. `ndindex` walks an index
+  SPACE not an array, so there is NO `ref T` form (no element values); `.AsSpans()` is its non-boxed
+  equivalent, and it RESTARTS each foreach (holds no cursor). `Indexing/np.ndindex.cs`.
 - **`np.ndenumerate(arr)` → `np.NDEnumerate`** — yields `(index, value)` for every element. Port of
   NumPy's `asarray(arr).flat` + `flatiter.coords`, so the order is always LOGICAL C-order whatever the
   layout: F-contiguous, transposed, reversed, sliced and broadcast views all read through their own
@@ -1392,7 +1396,13 @@ step yields a FRESH index array, never a recycled buffer.
   empty array yields nothing. NumSharp's `NDArray.flat` is a raveled `NDArray` rather than a `flatiter`
   object (no `coords` cursor), so the coordinates come from an odometer advanced in lockstep with the
   flat position — which is what `flatiter.coords` is. `np.ndenumerate<T>(arr)` is a NumSharp extension
-  yielding unboxed `T`. `Indexing/np.ndenumerate.cs`.
+  yielding unboxed `T` (by VALUE, LINQ-capable). **`np.ndenumerate<T>(arr).AsRef(writeable=false)` →
+  `np.NDEnumerateRef<T>`** is the allocation-free, by-`ref T` form: each step yields an `Entry` ref
+  struct carrying `Index` (a `ReadOnlySpan<long>` over a REUSED buffer) and `Value` (a `ref T`, so
+  write-through). It COMPOSES the C-order value ref from `NDRefIter<T>.Enumerator` (the same engine
+  `np.flat<T>` drives) with a lockstep C-order coords odometer — since a C-order walk visits logical
+  positions 0..size-1, the k-th value and k-th unravelled coord always line up. `T` = exact dtype;
+  `writeable:true` refuses a read-only broadcast; restarts each foreach. `Indexing/np.ndenumerate.cs`.
 - **`np.nditer(...)` → `np.NDIterator`** — the public managed face of `NDIterRef`, i.e. the port of
   NumPy's `nditer_pywrap.c` (argument conversion, flag-string parsing, property surface, iteration
   protocol) over the C iterator NumSharp already had. Full signature parity

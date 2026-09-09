@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using NumSharp.Backends.Iteration;
 
 namespace NumSharp
 {
@@ -145,6 +146,146 @@ namespace NumSharp
             void IEnumerator.Reset() => _walker.Reset();
 
             public void Dispose() { }
+
+            /// <summary>
+            ///     The allocation-free, by-<c>ref T</c> form of this walk — the high-performance
+            ///     counterpart. Where iterating this object hands out a <c>(long[] index, T value)</c>
+            ///     tuple per step (T is unboxed, but the value is a COPY and each step allocates a
+            ///     fresh <c>long[]</c> for the index), <see cref="NDEnumerateRef{T}"/> hands out
+            ///     <c>ref T</c> straight into the array's memory plus a <see cref="ReadOnlySpan{T}"/>
+            ///     over a REUSED coordinate buffer — no per-element allocation, and write-through:
+            ///
+            ///     <code>
+            ///     foreach (var e in np.ndenumerate&lt;double&gt;(a).AsRef(writeable: true))
+            ///     {
+            ///         e.Value += e.Index[0];    // ref double — writes through to the array
+            ///     }
+            ///     </code>
+            ///
+            ///     Same logical C-order as the boxed/tuple walks (the value comes from the same
+            ///     <see cref="NDIterRef"/> C-order cursor <see cref="np.flat{T}(NDArray, bool)"/>
+            ///     uses, so the k-th step is the element at C-order position k, whatever the layout).
+            ///     <c>Index</c> is a span over a buffer reused each step — copy it (<c>e.Index.ToArray()</c>)
+            ///     if you need to keep it past the current iteration, exactly as with a
+            ///     <c>Span&lt;T&gt;</c> chunk.
+            /// </summary>
+            /// <param name="writeable">
+            ///     Open the array <c>readwrite</c> so assignments through <c>e.Value</c> reach it; a
+            ///     read-only broadcast view is refused with NumPy's message. Defaults to read.
+            /// </param>
+            public NDEnumerateRef<T> AsRef(bool writeable = false) => new NDEnumerateRef<T>(_arr, writeable);
+        }
+
+        /// <summary>
+        ///     The <c>foreach</c>-able returned by <see cref="NDEnumerate{T}.AsRef(bool)"/> — the
+        ///     typed, allocation-free, by-<c>ref T</c> ndenumerate. Yields, per element, a
+        ///     <see cref="Entry"/> carrying the coordinate (a <see cref="ReadOnlySpan{T}"/> over a
+        ///     reused buffer) and the value BY REFERENCE, in logical C-order (matching
+        ///     <see cref="ndenumerate(NDArray)"/>), write-through for every memory layout.
+        ///
+        ///     <para>
+        ///     It composes two things that are already correct: the value <c>ref</c> comes from
+        ///     <see cref="NDRefIter{T}.Enumerator"/> pinned to C-order (the same engine
+        ///     <see cref="np.flat{T}(NDArray, bool)"/> drives), and the coordinate comes from a
+        ///     C-order odometer advanced in lockstep — since a C-order walk visits logical positions
+        ///     <c>0, 1, …, size-1</c>, the k-th value and the k-th unravelled coordinate always line
+        ///     up. Everything documented on <see cref="NDRefIter{T}"/> about the <c>ref struct</c>
+        ///     enumerator, disposal under <c>foreach</c>, and restart-on-re-enumeration applies.
+        ///     </para>
+        /// </summary>
+        /// <typeparam name="T">The array's exact element type (a <c>ref</c> cannot convert).</typeparam>
+        [NDBorrowed] // a cursor over the caller's array; each GetEnumerator builds (and foreach disposes) its own NDIterRef
+        public readonly struct NDEnumerateRef<T> where T : unmanaged
+        {
+            private readonly NDArray _arr;
+            private readonly bool _writeable;
+
+            internal NDEnumerateRef(NDArray arr, bool writeable)
+            {
+                TypedIterHelpers.Validate<T>(arr, writeable, nameof(arr));
+                _arr = arr;
+                _writeable = writeable;
+            }
+
+            /// <summary>Builds a fresh C-order iterator; <c>foreach</c> disposes it for you.</summary>
+            public Enumerator GetEnumerator() => new Enumerator(_arr, _writeable);
+
+            /// <summary>One enumerated element: its coordinate and its value by reference.</summary>
+            public ref struct Entry
+            {
+                private readonly long[] _coords;
+                private readonly ref T _value;
+
+                internal Entry(long[] coords, ref T value)
+                {
+                    _coords = coords;
+                    _value = ref value;
+                }
+
+                /// <summary>
+                ///     The current element's multi-index, in C-order. A view over a buffer REUSED each
+                ///     step — copy it (<c>.ToArray()</c>) to keep it past the current iteration.
+                /// </summary>
+                public ReadOnlySpan<long> Index => _coords;
+
+                /// <summary>The current element BY REFERENCE — assign to it (e.g. <c>e.Value = x</c>) to write through.</summary>
+                public ref T Value => ref _value;
+            }
+
+            /// <summary>The cursor — pairs the C-order value <c>ref</c> with a lockstep coordinate odometer.</summary>
+            public ref struct Enumerator
+            {
+                private NDRefIter<T>.Enumerator _inner;   // the C-order ref walk (never buffered)
+                private readonly long[] _coords;          // reused odometer buffer (Index spans it)
+                private readonly long[] _dims;
+                private bool _started;
+
+                internal Enumerator(NDArray arr, bool writeable)
+                {
+                    _inner = new NDRefIter<T>.Enumerator(arr, writeable, NPY_ORDER.NPY_CORDER);
+                    int ndim = arr.ndim;
+                    _coords = new long[ndim];
+                    _dims = new long[ndim];
+                    var shp = arr.shape;
+                    for (int i = 0; i < ndim; i++)
+                        _dims[i] = shp[i];
+                    _started = false;
+                }
+
+                /// <summary>The current (coordinate, ref value) pair.</summary>
+                public Entry Current => new Entry(_coords, ref _inner.Current);
+
+                /// <summary>Advance one element, moving both the value ref and the coordinate odometer.</summary>
+                public bool MoveNext()
+                {
+                    if (!_inner.MoveNext())
+                        return false;
+
+                    // The first element is C-order position 0 -> coords already all-zero. Every later
+                    // step increments the last axis and carries left (C-order), REUSING _coords so no
+                    // per-step allocation occurs. _dims holds no zero here (an empty array never enters
+                    // this branch — _inner.MoveNext() returned false), and a 0-d array's empty loop
+                    // simply leaves the empty coords in place.
+                    if (_started)
+                    {
+                        for (int axis = _dims.Length - 1; axis >= 0; axis--)
+                        {
+                            if (++_coords[axis] < _dims[axis])
+                                break;
+                            _coords[axis] = 0;
+                        }
+                    }
+                    else
+                    {
+                        _started = true;
+                    }
+
+                    return true;
+                }
+
+                /// <summary>Frees the unmanaged iterator state (called by <c>foreach</c>).</summary>
+                public void Dispose() => _inner.Dispose();
+            }
         }
 
         /// <summary>

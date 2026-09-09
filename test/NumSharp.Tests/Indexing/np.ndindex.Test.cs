@@ -137,5 +137,48 @@ namespace NumSharp.Tests.Indexing
 
             np.ndindex(4, 3, 2).Select(Fmt).Should().Equal(expected);
         }
+
+        // --------------------------------------------- AsSpans() — allocation-free, non-boxed form
+
+        private static string FmtSpans(np.NDIndexSpans it)
+        {
+            var parts = new System.Collections.Generic.List<string>();
+            foreach (var idx in it) parts.Add(Fmt(idx.ToArray()));
+            return string.Join(" ", parts);
+        }
+
+        [TestMethod]
+        public void AsSpans_MatchesBoxedOrder_2D()
+            => FmtSpans(np.ndindex(3, 2).AsSpans()).Should().Be(Fmt(np.ndindex(3, 2)));
+
+        [TestMethod]
+        public void AsSpans_MatchesBoxedOrder_3D()
+            => FmtSpans(np.ndindex(4, 3, 2).AsSpans()).Should().Be(Fmt(np.ndindex(4, 3, 2)));
+
+        [TestMethod]
+        public void AsSpans_ZeroD_YieldsOneEmptyIndex()
+        {
+            int count = 0, len = -1;
+            foreach (var idx in np.ndindex().AsSpans()) { count++; len = idx.Length; }
+            count.Should().Be(1);
+            len.Should().Be(0);
+        }
+
+        [TestMethod]
+        public void AsSpans_ZeroLengthDimension_YieldsNothing()
+        {
+            int count = 0;
+            foreach (var idx in np.ndindex(0, 3).AsSpans()) count++;
+            count.Should().Be(0);
+        }
+
+        [TestMethod]
+        public void AsSpans_ReEnumeration_Restarts()
+        {
+            // Unlike the boxed NDIndex (own iterator, resumes), the span form restarts each foreach.
+            var sp = np.ndindex(2, 2).AsSpans();
+            FmtSpans(sp).Should().Be("(0,0) (0,1) (1,0) (1,1)");
+            FmtSpans(sp).Should().Be("(0,0) (0,1) (1,0) (1,1)");
+        }
     }
 }
