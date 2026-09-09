@@ -109,15 +109,12 @@ namespace NumSharp.Tests.Interop
                 {
                     using NDArray source = np.arange(3).astype(type);
                     using PyObject tensor = source.ToTorch(requireGIL: false);
-                    using PyObject dtype = tensor.GetAttr("dtype");
+                    using PyObject dtype = Python.torch.Tensor.dtype(tensor);
                     dtype.ToString().Should().Be(expected, type.ToString());
 
                     if (type == NPTypeCode.Decimal)
-                    {
-                        using PyObject dataPointer = tensor.InvokeMethod("data_ptr");
-                        dataPointer.As<long>().Should().NotBe((long)source.Storage.Address,
+                        Python.torch.Tensor.data_ptr_t(tensor).Should().NotBe((long)source.Storage.Address,
                             "Decimal has no NumPy/PyTorch dtype and must convert to independent float64 storage");
-                    }
                 }
             }
         }
@@ -292,8 +289,7 @@ namespace NumSharp.Tests.Interop
                 // pythonnet asks the registered encoder for a Python object; it receives NumPy, and
                 // torch.from_numpy consumes that object without an explicit ToNumpy call here.
                 using PyObject tensor = (PyObject)torch.from_numpy(source);
-                using PyObject pointer = tensor.InvokeMethod("data_ptr");
-                pointer.As<long>().Should().Be((long)source.Storage.Address);
+                Python.torch.Tensor.data_ptr_t(tensor).Should().Be((long)source.Storage.Address);
                 Scope.Set("implicit_tensor", tensor);
                 Scope.Exec("implicit_tensor[1] = 88.0");
                 ReadAt<double>(source, 1).Should().Be(88.0);

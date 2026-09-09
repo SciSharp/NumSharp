@@ -391,10 +391,8 @@ namespace NumSharp.Tests.Interop
                     {
                         using NDArray source = np.arange(12).astype(NPTypeCode.Double) + id;
                         using (Py.GIL())
-                        using (PyObject pandas = Py.Import("pandas"))
-                        using (PyObject constructor = pandas.GetAttr("Series"))
                         using (PyObject array = source.ToNumpy(requireGIL: false))
-                        using (PyObject series = constructor.Invoke(array))
+                        using (PyObject series = Python.pandas.Series(array))
                         using (NDArray view = series.AsNDArray(allowReadonly: true, requireGIL: false))
                         using (NDArray copy = series.ToNDArray(requireGIL: false))
                         {

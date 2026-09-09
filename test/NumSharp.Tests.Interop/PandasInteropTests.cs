@@ -221,8 +221,7 @@ namespace NumSharp.Tests.Interop
                 try
                 {
                     scope.Exec("import pandas as pd");
-                    using PyObject value = scope.Eval("str(pd.__version__)");
-                    version = value.As<string>();
+                    version = Python.pandas.version();
                 }
                 catch (PythonException)
                 {

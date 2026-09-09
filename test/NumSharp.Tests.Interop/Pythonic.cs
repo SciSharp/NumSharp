@@ -95,6 +95,61 @@ namespace Python
         internal static bool shares_memory(PyObject a, PyObject b)
         { using var m = Module; using var r = m.InvokeMethod("shares_memory", a, b); return r.As<bool>(); }
     }
+
+    /// <summary><c>import torch</c>, the test flavour — reach a tensor's members as the Python reads
+    /// (<c>Python.torch.Tensor.data_ptr_t(t)</c>). Sits beside <see cref="np"/> in the <c>Python</c>
+    /// namespace so torch tests read for what they drive. Call under the GIL.</summary>
+    internal static class torch
+    {
+        /// <summary><c>str(torch.__version__)</c> — the installed torch version string.</summary>
+        internal static string version()
+        {
+            using var scope = Runtime.Py.CreateScope();
+            scope.Exec("import torch");
+            using PyObject v = scope.Eval("str(torch.__version__)");
+            return v.As<string>();
+        }
+
+        /// <summary>The <c>torch.Tensor</c> instance members the tests reach, spelled unbound as Python
+        /// spells them (<c>torch.Tensor.data_ptr(t)</c>). Each returned <see cref="PyObject"/> is owned
+        /// by the caller (<c>using</c>).</summary>
+        internal static class Tensor
+        {
+            /// <summary><c>tensor.dtype</c> — the tensor's dtype object.</summary>
+            internal static PyObject dtype(PyObject t) => t.GetAttr("dtype");
+
+            /// <summary><c>tensor.data_ptr()</c> — the tensor's data address as a CLR long.</summary>
+            internal static long data_ptr_t(PyObject t)
+            { using PyObject p = t.InvokeMethod("data_ptr"); return p.As<long>(); }
+
+            /// <summary><c>tensor.resize_(n)</c> — in-place resize (raises when the storage is not resizable).</summary>
+            internal static PyObject resize_(PyObject t, long n)
+            { using PyObject size = n.ToPython(); return t.InvokeMethod("resize_", size); }
+        }
+    }
+
+    /// <summary><c>import pandas as pd</c>, the test flavour. Sits beside <see cref="np"/> in the
+    /// <c>Python</c> namespace. Call under the GIL.</summary>
+    internal static class pandas
+    {
+        /// <summary><c>str(pd.__version__)</c> — the installed pandas version string.</summary>
+        internal static string version()
+        {
+            using var scope = Runtime.Py.CreateScope();
+            scope.Exec("import pandas as pd");
+            using PyObject v = scope.Eval("str(pd.__version__)");
+            return v.As<string>();
+        }
+
+        /// <summary><c>pd.Series(data)</c> — a Series over the given array. The result outlives the
+        /// throwaway module handle; the caller owns it (<c>using</c>).</summary>
+        internal static PyObject Series(PyObject data)
+        {
+            using PyObject mod = Runtime.Py.Import("pandas");
+            using PyObject ctor = mod.GetAttr("Series");
+            return ctor.Invoke(data);
+        }
+    }
 }
 
 namespace NumSharp.Tests.Interop

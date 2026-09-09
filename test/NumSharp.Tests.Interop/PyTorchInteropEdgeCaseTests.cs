@@ -237,8 +237,7 @@ namespace NumSharp.Tests.Interop
                     using NDArray view = tensor.AsTorchNDArray(requireGIL: false);
                     view.typecode.Should().Be(numSharpType, torchDtype);
                     long first = (long)view.Storage.Address + view.Shape.Offset * view.dtypesize;
-                    using PyObject ptr = tensor.InvokeMethod("data_ptr");
-                    first.Should().Be(ptr.As<long>(), $"{torchDtype} must be a real view");
+                    first.Should().Be(Python.torch.Tensor.data_ptr_t(tensor), $"{torchDtype} must be a real view");
                 }
 
                 using PyObject complex64 = Scope.Eval("torch.tensor([1+2j, -3+4j], dtype=torch.complex64)");
@@ -408,8 +407,7 @@ namespace NumSharp.Tests.Interop
             {
                 new Action(() => source.resize(new Shape(8)))
                     .Should().Throw<Exception>().Which.GetType().Name.Should().Be("IncorrectShapeException");
-                using PyObject eight = 8L.ToPython();
-                new Action(() => { using var _ = tensor.InvokeMethod("resize_", eight); })
+                new Action(() => { using var _ = Python.torch.Tensor.resize_(tensor, 8L); })
                     .Should().Throw<PythonException>().WithMessage("*storage*not resizable*");
             }
 
@@ -819,8 +817,7 @@ namespace NumSharp.Tests.Interop
                 }
 
                 scope.Exec("import torch");
-                using PyObject versionObject = scope.Eval("str(torch.__version__)");
-                string version = versionObject.As<string>();
+                string version = Python.torch.version();
                 if (Parse(version) < MinimumTorchVersion)
                     Assert.Inconclusive(
                         $"PyTorch {version} is installed; the live compatibility gate needs {MinimumTorchVersion} or newer " +
