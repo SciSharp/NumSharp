@@ -63,9 +63,10 @@ runner and no POCO class.
 | `nd.AsDataView("Features")` | NumSharp → ML.NET | An `IDataView` with **one vector column** — the feature-matrix shape a model consumes. Reads the array lazily through its strides (any layout), ARC-pinned. |
 | `nd.AsDataView(new[]{"a","b",…})` | NumSharp → ML.NET | An `IDataView` with **one scalar column per feature** — the tabular / training-data shape. |
 | `nd.ToDataView(…)` | NumSharp → ML.NET | Same, over an independent snapshot (mutate/dispose the source freely afterward). |
-| `nd.ToVBuffer<T>()` | NumSharp → ML.NET | A dense `VBuffer<T>` (always a copy — see [Limits](#limits)). |
+| `nd.ToVBuffer<T>()` | NumSharp → ML.NET | A dense `VBuffer<T>` (a copy — export can't be zero-copy, see [Limits](#limits)). |
 | `view.ToNDArray("col")` | ML.NET → NumSharp | Materialize a column across all rows: a scalar column → 1-D `(R,)`; a fixed-size vector column → 2-D `(R, C)`. |
-| `vbuffer.ToNDArray()` | ML.NET → NumSharp | A dense 1-D `NDArray` (sparse buffers are densified: absent entries become zero). |
+| `vbuffer.AsNDArray<T>()` | ML.NET → NumSharp | A **zero-copy** 1-D view over a dense `VBuffer<T>`'s backing array (write-through, pinned); sparse/empty fall back to a copy. |
+| `vbuffer.ToNDArray()` | ML.NET → NumSharp | A dense 1-D `NDArray` copy (sparse buffers are densified: absent entries become zero). |
 
 The input view reads **any layout** through the array's strides — C-contiguous, Fortran, sliced,
 transposed, negative-stride and broadcast views all work with no densifying copy, because the cursor
@@ -175,11 +176,15 @@ leaves the native runtime to the consumer.
 
 ## Limits
 
-- **`VBuffer<T>` is copy-only, both ways.** `VBuffer<T>` exposes no public constructor over foreign memory
-  (its only public constructors take a managed `T[]`), by design — it is polymorphic between dense and
-  sparse and pools its buffers — so a zero-copy `VBuffer` over NumSharp's unmanaged buffer is not possible
-  through the public API. `ToVBuffer<T>` copies out; `vbuffer.ToNDArray()` copies in. The **`IDataView`**
-  path is where the sharing happens: the view holds the array live and reads it lazily.
+- **`VBuffer<T>` zero-copy is one-directional.** Reading a dense `VBuffer<T>` INTO NumSharp is zero-copy —
+  `vbuffer.AsNDArray<T>()` reaches the buffer's private `T[]` through a compiled-expression accessor, pins
+  it, and wraps it write-through. But the reverse (`NDArray → VBuffer`) cannot be: `VBuffer<T>` is backed by
+  a managed `T[]` at every ML.NET version (verified 2.0.0 / 3.0.0 / 4.0.2 — there is no `ReadOnlyMemory<T>`
+  and no non-public constructor), and a managed array cannot alias NumSharp's unmanaged buffer, so
+  `ToVBuffer<T>` copies. The bulk NumSharp→ML.NET path (`AsDataView`) is already zero-copy on its source;
+  the `VBuffer` is a per-vector convenience. **Aliasing caveat for `AsNDArray`:** the view shares the
+  VBuffer's array, so a VBuffer from a cursor getter (which reuses one buffer per row) must use `ToNDArray()`
+  instead; zero-copy is safe for a standalone VBuffer you own.
 - **Rank 1 or 2 only.** An `IDataView` is a table of rows; `AsDataView` accepts 1-D and 2-D arrays.
   Reshape higher-rank data first.
 - **No `Complex` column.** ML.NET has no complex type (see [Dtypes](#dtypes)).

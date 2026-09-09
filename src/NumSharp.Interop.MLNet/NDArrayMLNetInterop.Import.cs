@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using Microsoft.ML;
 using Microsoft.ML.Data;
+using NumSharp.Backends;
+using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.Interop.MLNet
 {
@@ -137,6 +140,54 @@ namespace NumSharp.Interop.MLNet
                     target[indices[i]] = values[i];
             }
             return nd;
+        }
+
+        /// <summary>
+        ///     View a DENSE ML.NET <see cref="VBuffer{T}"/> as a NumSharp array over the buffer's OWN backing store —
+        ///     <b>zero-copy</b>, mutations visible both ways. The 1-D array of length <see cref="VBuffer{T}.Length"/>
+        ///     wraps the private <c>T[]</c> that backs the buffer (reached through a compiled-expression accessor —
+        ///     <see cref="VBufferAccessor{T}"/>), pinned for the view's lifetime; the pin is released when the LAST
+        ///     NumSharp view over the memory (derived slices included) is disposed or collected.
+        ///
+        ///     <para><b>Aliasing hazard — read this.</b> The view shares the VBuffer's array, so it is valid only
+        ///     while that array is not refilled or reused. Getting a VBuffer from a cursor (<c>getter(ref buf)</c>)
+        ///     REUSES one buffer across rows, so a view taken there is invalidated by the next <c>MoveNext</c> —
+        ///     take <see cref="ToNDArray{T}(VBuffer{T})"/> (a copy) for cursor buffers. Zero-copy is safe for a
+        ///     STANDALONE buffer you own and will not refill. The view does not own its data (like <c>np.frombuffer</c>):
+        ///     a size-changing <c>ndarray.resize</c> refuses.</para>
+        ///
+        ///     <para>A SPARSE buffer, an empty buffer, or an ML.NET version whose <see cref="VBuffer{T}"/> is not the
+        ///     expected managed-array form falls back to <see cref="ToNDArray{T}(VBuffer{T})"/> (a copy) — never a
+        ///     wrong reinterpretation. <see cref="ushort"/> reads back as <see cref="NPTypeCode.UInt16"/>.</para>
+        /// </summary>
+        public static unsafe NDArray AsNDArray<T>(this VBuffer<T> buffer) where T : unmanaged
+        {
+            NPTypeCode tc = TypeCodeOf<T>();
+            int length = buffer.Length;
+            if (length == 0)
+                return new NDArray(tc, Shape.Vector(0), fillZeros: false);   // nothing to share
+
+            Func<VBuffer<T>, T[]> getValues = VBufferAccessor<T>.GetValuesArray;
+            T[] raw = getValues?.Invoke(buffer);
+            // Zero-copy only for a dense buffer whose backing array is at least Length long; else copy (densify).
+            if (getValues is null || !buffer.IsDense || raw is null || raw.Length < length)
+                return buffer.ToNDArray();
+
+            GCHandle handle = GCHandle.Alloc(raw, GCHandleType.Pinned);
+            var lease = new ImportLease(handle.Free, (long)length * sizeof(T));
+            try
+            {
+                void* p = (void*)handle.AddrOfPinnedObject();   // element 0 of the pinned T[]
+                IArraySlice slice = WrapExternal(tc, p, length, lease.Release);
+                // Alias() so the storage reports VIEW semantics (owndata == False): a size-changing resize refuses
+                // instead of silently detaching from the VBuffer's array.
+                return new NDArray(new UnmanagedStorage(slice, Shape.Vector(length)).Alias());
+            }
+            catch
+            {
+                lease.Release();
+                throw;
+            }
         }
 
         // ---- helpers ------------------------------------------------------------------------------

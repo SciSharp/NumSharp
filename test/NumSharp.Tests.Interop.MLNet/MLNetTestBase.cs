@@ -22,6 +22,7 @@ namespace NumSharp.Tests.Interop.MLNet
     public abstract class MLNetTestBase
     {
         private int _baseExports;
+        private int _baseImports;
 
         /// <summary>One shared, deterministic MLContext for the suite.</summary>
         protected static readonly MLContext Ml = new(seed: 0);
@@ -31,13 +32,17 @@ namespace NumSharp.Tests.Interop.MLNet
         {
             Settle();
             _baseExports = NDArrayMLNetInterop.LiveExports;
+            _baseImports = NDArrayMLNetInterop.LiveImports;
         }
 
         [TestCleanup]
         public void InteropCleanup()
         {
-            bool settled = WaitFor(() => NDArrayMLNetInterop.LiveExports <= _baseExports, 10_000);
-            Assert.IsTrue(settled, $"interop leaked views: LiveExports {_baseExports} -> {NDArrayMLNetInterop.LiveExports}");
+            bool settled = WaitFor(() => NDArrayMLNetInterop.LiveExports <= _baseExports &&
+                                         NDArrayMLNetInterop.LiveImports <= _baseImports, 10_000);
+            Assert.IsTrue(settled,
+                $"interop leaked: LiveExports {_baseExports} -> {NDArrayMLNetInterop.LiveExports}, " +
+                $"LiveImports {_baseImports} -> {NDArrayMLNetInterop.LiveImports}");
         }
 
         // ---- data ------------------------------------------------------------------------------------

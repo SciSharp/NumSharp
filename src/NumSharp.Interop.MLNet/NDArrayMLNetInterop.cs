@@ -41,18 +41,26 @@ namespace NumSharp.Interop.MLNet
     public static partial class NDArrayMLNetInterop
     {
         private static int _liveExports;
+        private static int _liveImports;
 
         /// <summary>
         ///     Number of live <see cref="Export.AsDataView(NDArray, string)"/> views — NumSharp buffers currently
         ///     shared into an ML.NET <see cref="IDataView"/>. Each <see cref="NDArrayDataView"/> increments it on
-        ///     creation and decrements it when disposed (or finalized); a steady non-zero count is a leak. (There is
-        ///     no import counter: every ML.NET → NumSharp verb copies — <see cref="VBuffer{T}"/> exposes no memory to
-        ///     lease — so nothing is ever pinned on the way back.)
+        ///     creation and decrements it when disposed (or finalized); a steady non-zero count is a leak.
         /// </summary>
         public static int LiveExports => Volatile.Read(ref _liveExports);
 
+        /// <summary>
+        ///     Number of live zero-copy import leases — NumSharp views (<see cref="Import.AsNDArray{T}(VBuffer{T})"/>)
+        ///     currently holding a <see cref="VBuffer{T}"/>'s backing array pinned. Released when the LAST NumSharp
+        ///     view over the memory — derived slices included — is disposed or collected.
+        /// </summary>
+        public static int LiveImports => Volatile.Read(ref _liveImports);
+
         internal static void ExportOpened() => Interlocked.Increment(ref _liveExports);
         internal static void ExportClosed() => Interlocked.Decrement(ref _liveExports);
+        internal static void ImportOpened() => Interlocked.Increment(ref _liveImports);
+        internal static void ImportClosed() => Interlocked.Decrement(ref _liveImports);
 
         // ===================================  the dtype map  ===================================
 
@@ -259,6 +267,34 @@ namespace NumSharp.Interop.MLNet
             if (dims is null || dims.Length == 0)
                 return Shape.Scalar;
             return new Shape(dims);
+        }
+
+        /// <summary>
+        ///     Wrap foreign (pinned managed) memory as a NumSharp <see cref="IArraySlice"/> whose memory-block
+        ///     Disposer invokes <paramref name="dispose"/> exactly once when the LAST NumSharp reference (any view
+        ///     sharing the block) is released — deterministically via <see cref="NDArray.Dispose"/> or by the
+        ///     finalizer safety net. The same primitive the ONNX / pythonnet bridges lease foreign buffers with.
+        /// </summary>
+        internal static unsafe IArraySlice WrapExternal(NPTypeCode tc, void* p, long count, Action dispose)
+        {
+            switch (tc)
+            {
+                case NPTypeCode.Boolean: return new ArraySlice<bool>(new UnmanagedMemoryBlock<bool>((bool*)p, count, dispose));
+                case NPTypeCode.Byte: return new ArraySlice<byte>(new UnmanagedMemoryBlock<byte>((byte*)p, count, dispose));
+                case NPTypeCode.SByte: return new ArraySlice<sbyte>(new UnmanagedMemoryBlock<sbyte>((sbyte*)p, count, dispose));
+                case NPTypeCode.Int16: return new ArraySlice<short>(new UnmanagedMemoryBlock<short>((short*)p, count, dispose));
+                case NPTypeCode.UInt16: return new ArraySlice<ushort>(new UnmanagedMemoryBlock<ushort>((ushort*)p, count, dispose));
+                case NPTypeCode.Int32: return new ArraySlice<int>(new UnmanagedMemoryBlock<int>((int*)p, count, dispose));
+                case NPTypeCode.UInt32: return new ArraySlice<uint>(new UnmanagedMemoryBlock<uint>((uint*)p, count, dispose));
+                case NPTypeCode.Int64: return new ArraySlice<long>(new UnmanagedMemoryBlock<long>((long*)p, count, dispose));
+                case NPTypeCode.UInt64: return new ArraySlice<ulong>(new UnmanagedMemoryBlock<ulong>((ulong*)p, count, dispose));
+                case NPTypeCode.Char: return new ArraySlice<char>(new UnmanagedMemoryBlock<char>((char*)p, count, dispose));
+                case NPTypeCode.Half: return new ArraySlice<Half>(new UnmanagedMemoryBlock<Half>((Half*)p, count, dispose));
+                case NPTypeCode.Single: return new ArraySlice<float>(new UnmanagedMemoryBlock<float>((float*)p, count, dispose));
+                case NPTypeCode.Double: return new ArraySlice<double>(new UnmanagedMemoryBlock<double>((double*)p, count, dispose));
+                case NPTypeCode.Complex: return new ArraySlice<Complex>(new UnmanagedMemoryBlock<Complex>((Complex*)p, count, dispose));
+                default: throw new NotSupportedException(tc.ToString());
+            }
         }
 
         /// <summary>
