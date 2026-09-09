@@ -48,6 +48,8 @@
     href: interop/onnxruntime.md
   - name: ML.NET
     href: interop/mlnet.md
+  - name: System.Numerics.Tensors
+    href: interop/system-numerics-tensors.md
 - name: NumPy API Coverage & Support
   href: coverage-support-dashboard.md
   expanded: true

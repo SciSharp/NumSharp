@@ -152,6 +152,7 @@ own gates.
 | **Numpy.NET coexistence** — drive real numpy's C# API over NumSharp buffers | + `Numpy.Bare` | ✅ `PyObject` handoff | [Numpy.NET](numpy-net.md) |
 | **ONNX Runtime inference** — `NDArray` ⇄ `OrtValue` / `DenseTensor<T>`, `session.Run(NDArray)`, softmax / argmax / top-k on the outputs | `NumSharp.Interop.OnnxRuntime` | ✅ inputs zero-copy (C-contiguous), outputs as owning copies or owning views; no Python, no GIL | [ONNX Runtime](onnxruntime.md) |
 | **ML.NET pipelines** — `NDArray` ⇄ `IDataView` / `VBuffer<T>`, `transformer.Transform(nd.AsDataView(...)).ToNDArray("Score")`, softmax / argmax / top-k on the outputs | `NumSharp.Interop.MLNet` | ✅ input `IDataView` shares the buffer lazily (any layout); `VBuffer` and output columns are copies; no Python | [ML.NET](mlnet.md) |
+| **System.Numerics.Tensors** — `NDArray` ⇄ `Tensor<T>` / `TensorSpan<T>` / `ReadOnlyTensorSpan<T>` | `NumSharp.Interop.System.Numerics.Tensors` | ✅ `AsTensorSpan` shares **any** non-negative-stride layout (strided/transposed/broadcast); `AsNDArray` views a tensor's buffer; all 15 dtypes cross as themselves; no Python, no native code | [System.Numerics.Tensors](system-numerics-tensors.md) |
 | **`.npy` / `.npz` files** — `np.save` / `np.load`, byte-for-byte identical to NumPy's own writer | `NumSharp` (core) | — files, not memory | [NumPy compliance](../compliance.md#npy-and-npz-interoperability) |
 
 Start with the page whose *consumer* matches yours: numpy code → the pythonnet page; a library
@@ -199,6 +200,8 @@ above applies to it; it has [its own page](openblas.md).
   outputs back, post-process with `np.*`
 - [ML.NET](mlnet.md) — expose an `NDArray` to a `Microsoft.ML` pipeline as an `IDataView`, read a
   transformer's output column back into an `NDArray`
+- [System.Numerics.Tensors](system-numerics-tensors.md) — view an `NDArray` as a `TensorSpan<T>` over the
+  same buffer (any non-negative-stride layout), read a `Tensor<T>` back into an `NDArray`
 - [Buffering & Memory](../buffering.md) — how NumSharp's own storage, slices and reference
   counting work underneath all of this
 
