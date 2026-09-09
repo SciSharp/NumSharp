@@ -61,8 +61,9 @@ namespace NumSharp.Interop.PythonNet
 
             // The default is copy=False on every supported Pandas to_numpy API. The downstream
             // ToNDArray copy bridge always takes its own C-contiguous copy, so requesting another
-            // eager Pandas copy here would only double-copy.
-            PyObject first = source.InvokeMethod("to_numpy");
+            // eager Pandas copy here would only double-copy. Spelled through the Pythonic facade
+            // (frame.to_numpy()) so this reads like the Python it drives.
+            PyObject first = source.to_numpy();
             if (allowCopy)
                 return first;
 
@@ -73,11 +74,10 @@ namespace NumSharp.Interop.PythonNet
                 // many extension arrays materialize a fresh result on every call. Two independently
                 // requested projections must overlap before the shared-memory bridge may call this a
                 // view. Empty arrays are safe: there is no addressable element or mutation to share.
-                using PyObject size = first.GetAttr("size");
-                if (size.As<long>() == 0)
+                if (first.size == 0)
                     return first;
 
-                using PyObject second = source.InvokeMethod("to_numpy");
+                using PyObject second = source.to_numpy();
                 if (!np.shares_memory(first, second))
                     throw new NotSupportedException(
                         "Pandas materialized the to_numpy(copy=False) result; a stable shared-memory " +

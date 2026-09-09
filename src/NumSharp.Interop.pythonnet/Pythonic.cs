@@ -150,11 +150,15 @@ namespace NumSharp.Interop.PythonNet
 
     /// <summary>
     ///     Python-shaped instance members on <see cref="PyObject"/> — the attribute reads and method
-    ///     calls the conversions make on memoryviews and ndarrays, spelled as they are in Python
-    ///     (<c>mv.format</c>, <c>mv.itemsize</c>, <c>mv.shape</c>, <c>mv.c_contiguous</c>,
-    ///     <c>flat.reshape(dims)</c>, <c>arr.setflags(write: false)</c>, <c>mv.cast("B")</c>,
-    ///     <c>mv.tobytes("C")</c>, <c>obj.__array_interface__</c>). Attribute names are the
-    ///     session-cached interned PyStrings; call under the GIL.
+    ///     calls the conversions make on memoryviews, ndarrays, torch tensors and pandas frames,
+    ///     spelled as they are in Python (<c>mv.format</c>, <c>mv.itemsize</c>, <c>mv.shape</c>,
+    ///     <c>mv.c_contiguous</c>, <c>flat.reshape(dims)</c>, <c>arr.setflags(write: false)</c>,
+    ///     <c>mv.cast("B")</c>, <c>mv.tobytes("C")</c>, <c>obj.__array_interface__</c>,
+    ///     <c>tensor.detach().cpu().resolve_conj().resolve_neg().numpy()</c>, <c>frame.to_numpy()</c>).
+    ///     This is the package's <b>instance-side</b> facade (its stated style — a namespace + extension
+    ///     members, distinct from a bridge's <c>Python.*</c> nested-class tree); only FIXED calls belong
+    ///     here — the adapters' runtime type probes (<c>__mro__</c> walks) stay raw at the call site.
+    ///     Attribute names are the session-cached interned PyStrings; call under the GIL.
     /// </summary>
     internal static class PyObjectPythonic
     {
@@ -208,6 +212,38 @@ namespace NumSharp.Interop.PythonNet
                 using var o = new PyString(order);
                 return method.Invoke(o);
             }
+
+            /// <summary><c>ndarray.size</c> — total element count (numpy's own attribute).</summary>
+            internal long size => NDArrayPythonInterop.GetLong(obj, PythonRuntimeInterop.NameSize);
+
+            // ---- torch.Tensor members — the import-side torch bridge, spelled as its Python source
+            //      (tensor.detach().cpu().resolve_conj().resolve_neg().numpy()). Each returns an owned
+            //      PyObject the caller disposes, so a chain never leaks an intermediate.
+
+            /// <summary><c>tensor.detach()</c> — a view outside autograd history.</summary>
+            internal PyObject detach()
+            { using PyObject method = obj.GetAttr(PythonRuntimeInterop.NameDetach); return method.Invoke(); }
+
+            /// <summary><c>tensor.cpu()</c> — the tensor on host memory (a no-op when already there).</summary>
+            internal PyObject cpu()
+            { using PyObject method = obj.GetAttr(PythonRuntimeInterop.NameCpu); return method.Invoke(); }
+
+            /// <summary><c>tensor.resolve_conj()</c> — materialize a conjugated view so <c>numpy()</c> accepts it.</summary>
+            internal PyObject resolve_conj()
+            { using PyObject method = obj.GetAttr(PythonRuntimeInterop.NameResolveConj); return method.Invoke(); }
+
+            /// <summary><c>tensor.resolve_neg()</c> — materialize a negated view so <c>numpy()</c> accepts it.</summary>
+            internal PyObject resolve_neg()
+            { using PyObject method = obj.GetAttr(PythonRuntimeInterop.NameResolveNeg); return method.Invoke(); }
+
+            /// <summary><c>tensor.numpy()</c> — the numpy interchange view of a CPU tensor.</summary>
+            internal PyObject numpy()
+            { using PyObject method = obj.GetAttr(PythonRuntimeInterop.NameNumpy); return method.Invoke(); }
+
+            /// <summary><c>frame.to_numpy()</c> — the numpy interchange array of a pandas
+            /// DataFrame/Series/Index/ExtensionArray.</summary>
+            internal PyObject to_numpy()
+            { using PyObject method = obj.GetAttr(PythonRuntimeInterop.NameToNumpy); return method.Invoke(); }
         }
     }
 }

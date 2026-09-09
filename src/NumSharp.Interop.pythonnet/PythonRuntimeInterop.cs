@@ -192,7 +192,9 @@ namespace NumSharp.Interop.PythonNet
         private static PyObject _trueLiteral, _falseLiteral, _strC, _strB;
         private static PyObject _nameFromAddress, _nameReshape, _nameSetflags, _nameCast, _nameTobytes,
                                 _nameFormat, _nameItemsize, _nameShape, _nameCContiguous, _nameReadonly,
-                                _nameArrayInterface, _nameTypestr, _nameData, _nameStrides;
+                                _nameArrayInterface, _nameTypestr, _nameData, _nameStrides,
+                                _nameDetach, _nameCpu, _nameResolveConj, _nameResolveNeg, _nameNumpy,
+                                _nameToNumpy, _nameSize;
         private static readonly PyObject[] _dtypeStrings = new PyObject[129]; // indexed by (int)NPTypeCode; max = Complex (128)
 
         /// <summary>Cached <c>numpy.empty</c>. Call under the GIL.</summary>
@@ -270,6 +272,17 @@ namespace NumSharp.Interop.PythonNet
         internal static PyObject NameData => GetCached(ref _nameData, static () => new PyString("data"));
         internal static PyObject NameStrides => GetCached(ref _nameStrides, static () => new PyString("strides"));
 
+        // Torch tensor / pandas frame instance-member names — the import-side adapters call these fixed
+        // methods, so they read through the Pythonic facade (tensor.detach(), frame.to_numpy()) instead
+        // of a per-call string InvokeMethod, exactly like the numpy instance members above.
+        internal static PyObject NameDetach => GetCached(ref _nameDetach, static () => new PyString("detach"));
+        internal static PyObject NameCpu => GetCached(ref _nameCpu, static () => new PyString("cpu"));
+        internal static PyObject NameResolveConj => GetCached(ref _nameResolveConj, static () => new PyString("resolve_conj"));
+        internal static PyObject NameResolveNeg => GetCached(ref _nameResolveNeg, static () => new PyString("resolve_neg"));
+        internal static PyObject NameNumpy => GetCached(ref _nameNumpy, static () => new PyString("numpy"));
+        internal static PyObject NameToNumpy => GetCached(ref _nameToNumpy, static () => new PyString("to_numpy"));
+        internal static PyObject NameSize => GetCached(ref _nameSize, static () => new PyString("size"));
+
         /// <summary>
         ///     Cached PyString of <see cref="NDArrayPythonInterop.ToNumpyDtypeStr"/> for <paramref name="tc"/>
         ///     (session-owned — callers must NOT dispose it). Call under the GIL.
@@ -330,6 +343,13 @@ namespace NumSharp.Interop.PythonNet
             DisposeModule(ref _nameTypestr);
             DisposeModule(ref _nameData);
             DisposeModule(ref _nameStrides);
+            DisposeModule(ref _nameDetach);
+            DisposeModule(ref _nameCpu);
+            DisposeModule(ref _nameResolveConj);
+            DisposeModule(ref _nameResolveNeg);
+            DisposeModule(ref _nameNumpy);
+            DisposeModule(ref _nameToNumpy);
+            DisposeModule(ref _nameSize);
             for (int i = 0; i < _dtypeStrings.Length; i++)
                 DisposeModule(ref _dtypeStrings[i]);
         }

@@ -51,15 +51,16 @@ namespace NumSharp.Interop.PythonNet
         {
             if (source is null) throw new ArgumentNullException(nameof(source));
             if (!allowCopy)
-                return source.InvokeMethod("numpy");
+                return source.numpy();
 
-            // Tensor.numpy(force=True), spelled as its documented expansion so this compiles against
-            // every supported pythonnet v3 without relying on keyword-argument Invoke overload details.
-            using PyObject detached = source.InvokeMethod("detach");
-            using PyObject cpu = detached.InvokeMethod("cpu");
-            using PyObject resolvedConjugate = cpu.InvokeMethod("resolve_conj");
-            using PyObject resolvedNegative = resolvedConjugate.InvokeMethod("resolve_neg");
-            return resolvedNegative.InvokeMethod("numpy");
+            // Tensor.numpy(force=True), spelled as its documented expansion (through the Pythonic facade,
+            // so it reads like the Python it drives) — compiles against every supported pythonnet v3
+            // without relying on keyword-argument Invoke overload details.
+            using PyObject detached = source.detach();
+            using PyObject cpu = detached.cpu();
+            using PyObject resolvedConjugate = cpu.resolve_conj();
+            using PyObject resolvedNegative = resolvedConjugate.resolve_neg();
+            return resolvedNegative.numpy();
         }
     }
 }
