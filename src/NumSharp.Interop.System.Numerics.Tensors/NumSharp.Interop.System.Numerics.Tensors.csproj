@@ -1,0 +1,70 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Frameworks we BUILD and ship an assembly for. net9.0 consumers are served by the net8.0 asset and
+         net11.0 consumers by the net10.0 asset (NuGet nearest-TFM selection + .NET roll-forward), so 9 and 11
+         are SUPPORTED at consumption WITHOUT producing (and CI-building) two more byte-identical assemblies —
+         the feature surface is System.Numerics.Tensors' own, which itself supports every one of these runtimes.
+         Opt in to ALSO emitting net9.0/net11.0 assets (e.g. a consumer that needs an exact-TFM asset):
+             dotnet build -p:BuildAllTfms=true   /   dotnet pack -p:BuildAllTfms=true -->
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <TargetFrameworks Condition="'$(BuildAllTfms)' == 'true'">net8.0;net9.0;net10.0;net11.0</TargetFrameworks>
+
+    <!-- Assembly/package identity is the full System.Numerics.Tensors name (matches the ecosystem it bridges);
+         the C# namespace is the collision-free NumSharp.Interop.Tensors (a namespace literally spelled
+         `NumSharp.Interop.System.Numerics.Tensors` would shadow the `System.Numerics.Tensors` types this
+         package USES — the compiler would resolve `System.*` relative to the current namespace). -->
+    <AssemblyName>NumSharp.Interop.System.Numerics.Tensors</AssemblyName>
+    <RootNamespace>NumSharp.Interop.Tensors</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+
+    <!-- System.Numerics.Tensors' Tensor<T>/TensorSpan<T>/ReadOnlyTensorSpan<T> are marked
+         [Experimental("SYSLIB5001")]. This package IS the acknowledgement of that experimental status on the
+         consumer's behalf — its own public API re-marks itself [Experimental("NUMSHARP_TENSORS")] (see
+         NDArrayTensorsInterop) so a consumer opts in ONCE at the seam rather than at every Tensor<T> touch. -->
+    <NoWarn>$(NoWarn);SYSLIB5001;NUMSHARP_TENSORS</NoWarn>
+
+    <!-- NuGet package (co-versioned with NumSharp via the repo-root Directory.Build.props VersionPrefix; no
+         version literal lives in this file, so the nuspec dependency on NumSharp cannot drift from our own). -->
+    <PackageId>NumSharp.Interop.System.Numerics.Tensors</PackageId>
+    <Authors>Eli Belash, Haiping Chen, Meinrad Recheis</Authors>
+    <Product>NumSharp</Product>
+    <Company>SciSharp STACK</Company>
+    <Copyright>2021 © SciSharp STACK Team</Copyright>
+    <Description>Zero-copy interop between NumSharp NDArray and System.Numerics.Tensors (Tensor&lt;T&gt;, TensorSpan&lt;T&gt;, ReadOnlyTensorSpan&lt;T&gt;). View an NDArray of any layout — contiguous, sliced, transposed, strided or broadcast — as a TensorSpan&lt;T&gt; over the very same unmanaged buffer (no copy), read a Tensor&lt;T&gt; back as an NDArray (copy or zero-copy view), and hand tensors to the BCL's SIMD TensorPrimitives without a fill loop. Conversion library only: no engine backend, no ModuleInitializer, no native dependency. All 15 NumSharp dtypes cross as their own CLR type (Half, Complex, Decimal, char included).</Description>
+    <PackageTags>NumSharp;NumPy;Tensor;TensorSpan;System.Numerics.Tensors;TensorPrimitives;interop;zero-copy;SIMD;scientific-computing</PackageTags>
+    <PackageProjectUrl>https://scisharp.github.io/NumSharp/docs/interop/system-numerics-tensors.html</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/SciSharp/NumSharp</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <!-- Packed explicitly (`dotnet pack`), never on build: see the release workflow. License acceptance and
+         the icon are repo-wide settings in ../../Directory.Build.props. -->
+    <PackageOutputPath>../../packages</PackageOutputPath>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Symbols: embed the .pdb in the .nupkg (matches NumSharp.Core / the other interop packages). -->
+    <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- In-repo: ProjectReference (packs as a NuGet dependency on "NumSharp" $(Version)). -->
+    <ProjectReference Include="../NumSharp.Core/NumSharp.Core.csproj" />
+
+    <!-- The ONLY external dependency: System.Numerics.Tensors, a purely MANAGED BCL package (no native asset).
+         Pinned to the 10.x line because Tensor<T>/TensorSpan<T> are [Experimental] and their surface shifted
+         across the 9.x previews: the ctors this package binds — TensorSpan<T>(T*, nint, ReadOnlySpan<nint>
+         lengths, ReadOnlySpan<nint> strides), Tensor.Create<T>(T[], ReadOnlySpan<nint>), Tensor<T>.FlattenTo /
+         GetPinnedHandle / Lengths / Strides / FlattenedLength — are verified against 10.0.0. The 10.0.0 package
+         ships assets for netstandard2.0 + net8.0..net10.0, so it restores on every TargetFramework above; the
+         upper bound keeps a future 11.x (free to break the experimental API) from resolving automatically. -->
+    <PackageReference Include="System.Numerics.Tensors" Version="[10.0.0,11.0.0)" />
+  </ItemGroup>
+
+</Project>

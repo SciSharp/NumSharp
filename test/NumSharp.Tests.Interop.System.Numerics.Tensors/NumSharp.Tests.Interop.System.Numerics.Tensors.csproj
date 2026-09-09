@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <LangVersion>latest</LangVersion>
+    <Platforms>AnyCPU</Platforms>
+    <!-- Strong-naming is set repo-wide in ../../Directory.Build.props. Signed because
+         NumSharp.Interop.System.Numerics.Tensors grants it InternalsVisibleTo, which names a PublicKey. -->
+    <Configurations>Debug;Release;Publish</Configurations>
+
+    <!-- This suite consumes the [Experimental] surface deliberately (it IS the acknowledgement). -->
+    <NoWarn>$(NoWarn);SYSLIB5001;NUMSHARP_TENSORS</NoWarn>
+
+    <RootNamespace>NumSharp.Tests.Interop.Tensors</RootNamespace>
+    <AssemblyName>NumSharp.Tests.Interop.System.Numerics.Tensors</AssemblyName>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Publish|AnyCPU'">
+    <DocumentationFile />
+    <Optimize>true</Optimize>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MSTest" Version="3.8.3" />
+    <PackageReference Include="AwesomeAssertions" Version="9.3.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\NumSharp.Core\NumSharp.Core.csproj" />
+    <ProjectReference Include="..\..\src\NumSharp.Interop.System.Numerics.Tensors\NumSharp.Interop.System.Numerics.Tensors.csproj" />
+  </ItemGroup>
+
+</Project>

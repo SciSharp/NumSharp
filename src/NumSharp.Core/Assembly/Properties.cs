@@ -44,6 +44,13 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("NumSharp.Interop.MLNet, PublicKey=" + NumSharpFriendKey.PublicKey)]
 [assembly: InternalsVisibleTo("NumSharp.Tests.Interop.MLNet, PublicKey=" + NumSharpFriendKey.PublicKey)]
 
+// The System.Numerics.Tensors interop bridge reads the same internal view (Storage.InternalArray for the ARC
+// pin, Shape's strides/offset/bufferSize for the zero-copy TensorSpan<T> view over any non-negative-stride
+// layout) to share NDArray buffers with System.Numerics.Tensors' Tensor<T>/TensorSpan<T> — and its test
+// assembly exercises those internals.
+[assembly: InternalsVisibleTo("NumSharp.Interop.System.Numerics.Tensors, PublicKey=" + NumSharpFriendKey.PublicKey)]
+[assembly: InternalsVisibleTo("NumSharp.Tests.Interop.System.Numerics.Tensors, PublicKey=" + NumSharpFriendKey.PublicKey)]
+
 [assembly: InternalsVisibleTo("NumSharp.Benchmark, PublicKey=" + NumSharpFriendKey.PublicKey)]
 
 // Cross-repo: TensorFlow.NET signs with the identical key, which is the reason NumSharp keeps using
