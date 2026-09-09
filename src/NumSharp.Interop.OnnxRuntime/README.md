@@ -25,7 +25,7 @@ NumSharp reads. So there is no `TensorEngine` seam, no `[ModuleInitializer]`, an
 changes nothing until a verb is called.
 
 > Verified against ONNX Runtime **1.16.0** (the package floor) and **1.29.0** (current) on net8.0 / net10.0,
-> by `test/NumSharp.Tests.Interop.OnnxRuntime` (141 tests over 20 committed `.onnx` models ORT actually executes).
+> by `test/NumSharp.Tests.Interop.OnnxRuntime` (148 tests over 23 committed `.onnx` models ORT actually executes).
 
 ## Install
 
@@ -52,6 +52,7 @@ Same convention as the pythonnet bridge: **`As…` shares memory** (zero-copy vi
 | ORT → NumSharp | `ortValue.ToNDArray()` → `NDArray` | a fresh **owning**, C-contiguous **copy** — the safe default; dispose the `OrtValue` whenever you like. |
 | ORT → NumSharp | `ortValue.AsNDArray(ownsValue = false)` → `NDArray` | a **zero-copy view** over ORT's own buffer (CPU tensors only), mutations visible both ways. `ownsValue: true` makes the last view dispose the `OrtValue`. |
 | ORT → NumSharp | `denseTensor.ToNDArray()` / `denseTensor.AsNDArray()` / `namedOnnxValue.ToNDArray()` | the legacy-surface twins (column-major tensors transpose back on copy, stay Fortran-ordered as a view; `NamedOnnxValue` dispatches on the element type at runtime). |
+| ORT → NumSharp | `ortValue.ToNDArrays()` / `ToMap()` / `ToMaps()` / `ReadStringTensor()` | **non-tensor** outputs: a sequence of tensors → `NDArray[]`; a map / a scikit-learn ZipMap `sequence(map(int64,float))` → `(keys, values)` NDArray copies; a string tensor → `string[]` (NumSharp has no string dtype). All copy — no lease. |
 
 Plus the dtype maps `ToTensorElementType` / `FromTensorElementType` (+ `Try…` forms, `ToTensorElementClrType`)
 and two counters, `NDArrayOnnxInterop.LiveExports` / `LiveImports`, that make every live crossing observable.
@@ -91,7 +92,8 @@ session.Run(inputs, outputs: new Dictionary<string, NDArray> { { "Y", preallocat
 | Char | UInt16 | zero-copy as UTF-16 code units; directional — an ORT UInt16 comes back as UInt16, not Char |
 | Decimal | — | no ONNX type: the array-producing verbs convert to Double (a float64 temporary the handle owns; lossy beyond ~16 digits); the low-level maps refuse it |
 | Complex | Complex64/128 exist in the enum but **no ORT API or kernel accepts them** | refused — split into `np.real` / `np.imag` |
-| — | BFloat16, String | no NumSharp dtype — refused with the ORT-side alternative named |
+| — | BFloat16 | no NumSharp dtype — refused with the ORT-side alternative named |
+| String | String | no NumSharp string/object dtype: a string **output** reads as `string[]` via `ortValue.ReadStringTensor()`; a string model **input** is refused |
 
 ## Post-processing
 
@@ -151,7 +153,9 @@ The one copy left — `stack` + `astype`/divide producing the planar normalized 
 
 ## Limits (stated up front)
 
-- **Complex** (ORT has no complex tensors), **BFloat16** / **String** / float8 / 4-bit (no NumSharp dtype).
+- **Complex** (ORT has no complex tensors), **BFloat16** / float8 / 4-bit (no NumSharp dtype). **String** has
+  no NumSharp dtype either, but string tensor OUTPUTS read as `string[]` via `ReadStringTensor()`; only a string
+  model INPUT is refused. Sequence / map outputs read via `ToNDArrays` / `ToMap` / `ToMaps`.
 - **GPU-resident tensors** cannot be viewed as `NDArray`s.
 - ORT's managed data API (`GetTensorMutableRawData`, spans) is `int`-indexed: copying a tensor over 2 GB
   through `ToOrtValue` / `ToNDArray` throws — share it zero-copy instead.
