@@ -16,7 +16,7 @@ frees what, dtypes and versions.
 [Versions](#versions) · [Limits](#limits) · [Claims](#claims-ledger)
 
 > Verified on ONNX Runtime 1.16.0 (the floor) and 1.29.0 · net8.0/net10.0 · Windows, Linux, macOS.
-> Every claim below is reproduced by a test in `NumSharp.Tests.Interop.OnnxRuntime` (73 tests over 20
+> Every claim below is reproduced by a test in `NumSharp.Tests.Interop.OnnxRuntime` (117 tests over 20
 > committed `.onnx` models ORT executes; no Python at test time).
 
 ---

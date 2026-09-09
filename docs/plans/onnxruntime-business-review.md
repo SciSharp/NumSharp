@@ -125,7 +125,7 @@ targets (`AsOrtValue`, `Run(inputs, outputs)` writing into NumSharp arrays).
 ## 5. Recommendation
 
 Ship `NumSharp.Interop.OnnxRuntime` as the third interop package (done on the `onnxruntime` branch:
-package, 73 tests, docs page, CI job, release wiring). Lead the messaging with the two loops every
+package, 117 tests, docs page, CI job, release wiring). Lead the messaging with the two loops every
 tutorial hand-writes, show the #512 and Stable-Diffusion examples, and open an issue on
 `microsoft/onnxruntime-inference-examples` offering a NumSharp-based variant of the ResNet50 sample
 once the package is on nuget.org.
