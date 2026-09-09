@@ -7,3 +7,9 @@
 [submodule "src/OpenBLAS"]
 	path = refs/OpenBLAS
 	url = https://github.com/OpenMathLib/OpenBLAS.git
+[submodule "refs/onnxruntime"]
+	path = refs/onnxruntime
+	url = https://github.com/microsoft/onnxruntime.git
+[submodule "refs/onnxruntime-inference-examples"]
+	path = refs/onnxruntime-inference-examples
+	url = https://github.com/microsoft/onnxruntime-inference-examples.git

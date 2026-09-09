@@ -1,0 +1,75 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <AssemblyName>NumSharp.Interop.OnnxRuntime</AssemblyName>
+    <RootNamespace>NumSharp.Interop.OnnxRuntime</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+
+    <!-- NuGet package (co-versioned with NumSharp: the version is the repo-root Directory.Build.props
+         VersionPrefix, never a number in this file, so the nuspec dependency on NumSharp and this
+         package's own version cannot drift apart). -->
+    <PackageId>NumSharp.Interop.OnnxRuntime</PackageId>
+    <Authors>Eli Belash, Haiping Chen, Meinrad Recheis</Authors>
+    <Product>NumSharp</Product>
+    <Company>SciSharp STACK</Company>
+    <Copyright>2021 © SciSharp STACK Team</Copyright>
+    <Description>Zero-copy interop between NumSharp NDArray and ONNX Runtime (Microsoft.ML.OnnxRuntime) tensors. Feed an NDArray to InferenceSession.Run as an OrtValue over the very same unmanaged buffer (no per-pixel fill loop, no copy), read outputs back as NDArrays (copy or zero-copy view), and post-process with NumSharp (softmax, argmax, top-k, clip) instead of hand-written loops. Conversion library only: no engine backend, no ModuleInitializer, no native dependency of its own — bring the ONNX Runtime native package (CPU, Gpu, DirectML, ...) you already use.</Description>
+    <PackageTags>NumSharp;NumPy;ONNX;onnxruntime;OrtValue;DenseTensor;inference;machine-learning;interop;zero-copy;scientific-computing</PackageTags>
+    <PackageProjectUrl>https://scisharp.github.io/NumSharp/docs/interop/onnxruntime.html</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/SciSharp/NumSharp</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <!-- Packed explicitly (`dotnet pack`), never on build: see the release workflow. License
+         acceptance and the icon are repo-wide settings in ../../Directory.Build.props. -->
+    <PackageOutputPath>../../packages</PackageOutputPath>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Symbols: embed the .pdb in the .nupkg (matches NumSharp.Core / NumSharp.Interop.pythonnet). The
+         release pipeline uploads/pushes only *.nupkg, so a separate .snupkg would be dropped. -->
+    <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- In-repo: ProjectReference (packs as a NuGet dependency on "NumSharp" $(Version)). -->
+    <ProjectReference Include="../NumSharp.Core/NumSharp.Core.csproj" />
+
+    <!-- The ONLY external dependency: the MANAGED half of ONNX Runtime — the C# API (OrtValue,
+         InferenceSession, DenseTensor, TensorElementType, Float16). Deliberately NOT the native
+         `Microsoft.ML.OnnxRuntime` package: ORT ships its native runtime as MUTUALLY EXCLUSIVE flavours
+         (`Microsoft.ML.OnnxRuntime` = CPU, `.Gpu` = CUDA/TensorRT, `.DirectML`, `.QNN`, ...; two of them
+         side by side is a documented misconfiguration), and every one of them depends on this same
+         `.Managed` package. Depending on `.Managed` alone composes with WHICHEVER flavour the consumer
+         already references — the consumer must reference exactly one, which they always do to run
+         inference at all. The tests reference the CPU flavour.
+
+         The range is BOTH knobs at once (the same lesson as NumSharp.Interop.pythonnet's pythonnet pin):
+
+         (a) FLOOR = what we compile against. The managed assembly is strong-named and bumps its
+             AssemblyVersion every release; .NET rolls FORWARD to a newer one but a consumer whose
+             resolved version is OLDER than the one we compiled against gets a hard FileLoadException.
+             So the compiled reference IS the real minimum, and it is the OLDEST release exposing every
+             member this package uses: 1.16.0 (Sept 2023) — the release that "expose[d] OrtValue API as
+             the new preferred API to run inference in C#" and made Float16/BFloat16 full-featured. Every
+             member used here (CreateTensorValueWithData, CreateAllocatedTensorValue, GetTensorMutableRawData,
+             GetTensorTypeAndShape, GetTensorMemoryInfo, the OrtValue Run overloads incl. pre-allocated
+             outputs, NodeMetadata.ElementDataType) was verified present at the v1.16.0 tag (refs/onnxruntime).
+         (b) FLOOR = what a bare consumer installs. NuGet resolves LOWEST-applicable, never latest — but a
+             consumer's native flavour reference (e.g. Microsoft.ML.OnnxRuntime 1.29.0) carries its own
+             `.Managed` dependency at the same version, so NuGet unifies upward to THAT. In practice the
+             consumer's ORT version wins; this floor only stops an ancient one from sneaking in.
+
+         The upper bound keeps a future ORT 2.x (free to break the API) from being resolved automatically.
+         Verified against 1.16.0 (the floor) and 1.29.0 (current) by the test project's OnnxRuntimeVersion
+         matrix. -->
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.Managed" Version="[1.16.0,2.0.0)" />
+  </ItemGroup>
+
+</Project>
