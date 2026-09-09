@@ -17,6 +17,13 @@ adapt the module/class names to whatever library your bridge drives.
   `eval`/`with`/`evalStmts` **snippet runner** — read them for the crossing and for flavor B. (NumSharp
   spells its own facade through a *namespace + C# extension members*; that is a different surface style —
   see §1/§7 — so copy it for the crossing, not for the tree.)
+  - **Scope: the `Python.*`-tree rules below (§6/§7 — no `Py.*` extension, object members as nested
+    classes, no public `PyObject` surface) constrain the BRIDGE you write, NOT this shared crossing
+    library.** By design the library ships a public extension surface you consume as-is: the data-crossing
+    verbs (`pyobj.ToNDArray()`, `nd.ToTorch()` — §4), an instance-side facade as `PyObject` extension
+    members (its `Pythonic.cs` spells `mv.tobytes("C")`, `tensor.detach()`, `frame.to_numpy()` that way),
+    and — its call to make — a one-shot registration switch. None of those are candidates to "fix"; only
+    reproducing that surface inside your own tree is.
 
 ---
 
@@ -245,8 +252,10 @@ NDArray back = r.As<NDArray>();           // numpy / torch / pandas / list -> ND
 Keep a **library-agnostic backend** (one per process) that owns: `Initialize()` (idempotent,
 process-scoped; honors `PYTHONNET_PYDLL`, else probes `python`/`python3` for libpython + injects
 site-packages so `pip install`ed packages import), `Run(Action)`/`Run<T>(Func<T>)` (the GIL entry),
-`Import(name)` (cached), `Builtins`. It does **no** startup imports and hangs **nothing** on pythonnet's
-`Py` — there is no `Py.*` extension; the pythonic surface is the `Python.*` tree. Library-specific
+`Import(name)` (cached), `Builtins`. **Your** backend does **no** startup imports and hangs **nothing** on
+pythonnet's `Py` — its pythonic surface is the `Python.*` tree, not a `Py.*` extension (a shared crossing
+library is free to differ — §1 — including a one-call registration switch on `Py`; that latitude is the
+library's, not your bridge's). Library-specific
 accessors (discovered versions, log-quieting, cached module handles) layer on top in their own runtime
 class. Give the bridge a typed exception base (e.g. `PythonInteropException`) and derive per-library ones
 from it.
@@ -257,12 +266,14 @@ Pin discovery when a machine has several interpreters: `PYTHONNET_PYDLL=/path/to
 
 ## 7 — Gotchas (each cost real time)
 
-- **Expose object members as a nested class under `Python`, NOT as extensions.** A tensor's `.size()` /
-  `.dim()` become `Python.torch.Tensor.size_t(t, -1)` / `Python.torch.Tensor.dim_t(t)` (unbound, taking the
-  object) — mirroring Python's own `torch.Tensor.size(t, -1)`. A `static` extension is allowed only as an
-  **`internal`** helper (never a public `Py.*` / `PyObject` surface). Prefer returning `PyObject`; add a
-  `_t`-suffixed typed variant only where a final CLR value leaves Python and it would otherwise be an
-  ambiguous return-type-only overload.
+- **In YOUR bridge's tree, expose object members as a nested class under `Python`, NOT as extensions.** A
+  tensor's `.size()` / `.dim()` become `Python.torch.Tensor.size_t(t, -1)` / `Python.torch.Tensor.dim_t(t)`
+  (unbound, taking the object) — mirroring Python's own `torch.Tensor.size(t, -1)`. In your tree a `static`
+  extension is allowed only as an **`internal`** helper, never a public `Py.*` / `PyObject` surface — that
+  public surface belongs to the shared crossing library (§1/§4: its `ToNDArray`/`ToTorch` crossing verbs
+  and its `PyObject`-extension instance facade are deliberate, not a violation to flag). Prefer returning
+  `PyObject`; add a `_t`-suffixed typed variant only where a final CLR value leaves Python and it would
+  otherwise be an ambiguous return-type-only overload.
 - **The root `static class Python` shadows the `Python.Runtime` namespace** in scope, so `Python.torch…`
   binds to the class. Reference pythonnet types via `Py` / `PyObject` (from `using Python.Runtime;`), never
   a `Python.Runtime.X` qualifier inside a file where `Python` is the class.
@@ -273,6 +284,12 @@ Pin discovery when a machine has several interpreters: `PYTHONNET_PYDLL=/path/to
   singleton; follow the reference code.
 - **`GetEnumerator()` must not return `this`** for an object that owns unmanaged/GIL state — `foreach`
   disposes the enumerator (closes the iterator). Hand out a thin wrapper (see NumSharp's `nditer`).
+- **A FIXED object-member call spelled raw is the smell — even inside a facade or the crossing library.**
+  `obj.InvokeMethod("detach")` / `obj.GetAttr("to_numpy")` at a call site should read as a facade row
+  (`tensor.detach()` / `frame.to_numpy()`), interning the name once — that is what "reads like Python"
+  means for instance-side calls, and it is exactly how the crossing library spells its own torch/pandas
+  conversions. Only RUNTIME-dispatched dispatch stays raw: an `__mro__` walk, a `CanAdapt`/`HasAttr`
+  presence probe, an arbitrary user-loaded class (§1's "Only FIXED calls" rule, applied inside a facade).
 - **Never build arrays/tensors element by element.** No PyList-append loops in, no `tolist()` loops out —
   §4's crossing does it as a view or one bulk copy.
 - **Keep the reference Python close.** Snippet bodies (flavor B) must diff 1:1 against the source Python you
