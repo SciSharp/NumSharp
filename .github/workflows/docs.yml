@@ -101,12 +101,8 @@ jobs:
           set -euo pipefail
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if git ls-remote --exit-code --heads origin data >/dev/null 2>&1; then
-            git fetch origin data --depth=1
-            git worktree add -B data /tmp/data origin/data
-          else
-            git worktree add --orphan -b data /tmp/data
-          fi
+          git fetch origin data --depth=1
+          git worktree add -B data /tmp/data origin/data
           python tools/dashboard_data/publish.py --type inventory \
             --from artifacts/numpy-numsharp-coverage --branch-worktree /tmp/data --sha "${GITHUB_SHA}" --commit
           python tools/dashboard_data/publish.py --type tests-oracle \

@@ -90,7 +90,6 @@ PROFILE_MERGE = HERE / "scripts" / "merge-backend-profiles.py"
 ARTIFACTS = CSHARP_DIR / "BenchmarkDotNet.Artifacts" / "results"
 OPENBLAS_ARTIFACTS = OPENBLAS_CSHARP_DIR / "BenchmarkDotNet.Artifacts" / "results"
 TFM = "net10.0"
-DOCS_BENCHMARK_JSON = HERE.parent / "docs" / "website-src" / "docs" / "data" / "benchmark-report.json"
 # The generated data lives on the orphan `data` branch, mounted as the refs/data submodule. A full
 # eligible run publishes its history snapshot straight into it (pull -> override latest -> commit).
 DATA_SUBMODULE = HERE.parent / "refs" / "data"
@@ -787,9 +786,6 @@ def execute_stages(args, directory, session, requested, eligible):
             src = directory / name
             if src.exists():
                 shutil.copy2(src, HERE / name)
-                if name.startswith("benchmark-report") and name.endswith(".json"):
-                    DOCS_BENCHMARK_JSON.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(src, DOCS_BENCHMARK_JSON.parent / name)
         if not args.no_history:
             session.stage = "history snapshot"
             run([sys.executable, HERE / "scripts" / "snapshot_history.py", "--results-dir", directory, "--no-stage"], check=True)

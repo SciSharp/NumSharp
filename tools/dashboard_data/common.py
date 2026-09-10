@@ -73,7 +73,7 @@ def refresh_latest_dir(type_dir: Path, stamp: str) -> None:
 
     The refs/data submodule presents ``<type>/latest`` as a plain folder the docs build reads, so
     ``latest`` MUST be a real directory (never a symlink) and carry no ``README.md`` — the per-type
-    README stays a sibling. Any previous ``latest`` (symlink or dir, from the old layout) is replaced.
+    README stays a sibling. Any previous ``latest`` is replaced.
     """
     latest = type_dir / "latest"
     if latest.is_symlink() or latest.is_file():

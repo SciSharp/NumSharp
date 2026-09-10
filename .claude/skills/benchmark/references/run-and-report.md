@@ -121,7 +121,7 @@ They drift — know which is which:
 ## Dashboard data delivery — the `data` branch (submodule)
 
 The three live docs dashboards fetch same-origin JSON that DocFX bakes at build time. That data lives
-**only** on the orphan **`data`** branch (renamed from `master-code-data`); `master` is code-only and
+**only** on the orphan **`data`** branch; `master` is code-only and
 keeps no committed copy. The docs build mounts the branch as a git submodule and reads it directly:
 
 - **Orphan `data` branch** — generated data as `<type>/<date>_<sha>/` snapshots plus a **real `latest/`
