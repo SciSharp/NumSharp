@@ -29,7 +29,7 @@ python benchmark/scripts/audit_coverage.py --check  # CI gate: fail if the commi
 ```bash
 python tools/dashboard_data/publish.py --type benchmark-coverage \
     --from benchmark/coverage/generated \
-    --branch-worktree ../NumSharp-master-code-data \
+    --branch-worktree ../NumSharp-data-wt \
     --commit
 ```
 

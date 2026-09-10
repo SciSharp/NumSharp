@@ -31,7 +31,7 @@ python coverage/generate_coverage.py --output coverage/generated   # needs numpy
 ```bash
 python tools/dashboard_data/publish.py --type inventory \
     --from coverage/generated \
-    --branch-worktree ../NumSharp-master-code-data \
+    --branch-worktree ../NumSharp-data-wt \
     --commit
 ```
 

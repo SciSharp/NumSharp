@@ -39,7 +39,7 @@ See `benchmark/CLAUDE.md` for options (`--suites`, `--skip-build`, subsystem tog
 ```bash
 python tools/dashboard_data/publish.py --type benchmark \
     --from benchmark/history/latest \
-    --branch-worktree ../NumSharp-master-code-data \
+    --branch-worktree ../NumSharp-data-wt \
     --commit
 ```
 

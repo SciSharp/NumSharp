@@ -32,7 +32,7 @@ Deterministic; builds the `NumSharp.Tools.TestInventory` reflection tool and rea
 ```bash
 python tools/dashboard_data/publish.py --type tests-oracle \
     --from test/inventory/generated \
-    --branch-worktree ../NumSharp-master-code-data \
+    --branch-worktree ../NumSharp-data-wt \
     --commit
 ```
 

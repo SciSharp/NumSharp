@@ -1,23 +1,26 @@
-# `master-code-data` — NumSharp docs dashboard data
+# `data` — NumSharp docs dashboard data
 
 This is an **orphan branch** (no shared history with `master`). It holds **only generated data**
-that the documentation website's dashboards consume — no source code. It exists so that large,
-frequently-regenerated data blobs live apart from the code branch's history.
+that the documentation website's dashboards consume — no source code. It is the **single source of
+truth** for that data: `master` carries only code and keeps no committed copy.
 
 ## Layout
 
-One folder per **data type**. Inside each, one **snapshot** folder per publish, named
+One folder per **data type**. Inside each: one **snapshot** folder per publish, named
 `<date>_<commithash>` (`YYYY-MM-DD_<shortsha>` — the source commit that produced the data;
-lexicographically sortable), plus a git symlink `latest` pointing at the newest snapshot.
+lexicographically sortable), plus a **real `latest/` directory** (a data-only copy of the newest
+snapshot, refreshed on every publish). `latest/` deliberately contains **no `README.md`** — the
+per-type README is its sibling — so a folder-clone of `latest/` is pure data.
 
 ```
 <data_type>/
   README.md                 # what the dataset is, its files, and how to (re)generate it
   2026-08-26_3c21b0d9/      # a snapshot; sortable name, source-commit provenance
     <data files…>
-  2026-08-28_6837c918/      # a newer snapshot
+  2026-08-29_9b200075/      # a newer snapshot
     <data files…>
-  latest -> 2026-08-28_6837c918   # git symlink (mode 120000), repointed on every publish
+  latest/                   # real directory = copy of the newest snapshot (data only, no README)
+    <data files…>
 ```
 
 The four data types:
@@ -29,35 +32,31 @@ The four data types:
 | [`inventory/`](inventory/README.md) | NumPy↔NumSharp public-API coverage / inventory | "NumPy API Coverage & Support" dashboard |
 | [`benchmark-coverage/`](benchmark-coverage/README.md) | Benchmark-wiring coverage ledger | "Raw Reports → API Coverage Ledger" |
 
-## How the site chooses data: date priority vs `master` (backwards compatible)
+## How the site consumes this data (submodule, always latest)
 
-The docs are built from the **code branch** (`master`), which still carries its own committed copies
-of every dataset. At docs-build time a resolver compares, **per data type**, the git **commit date**
-of master's canonical file against the commit date of this branch's `<type>/latest`, and bakes in
-whichever is **newer**. So:
+The code branch (`master`) mounts this branch as a **git submodule** at `refs/data/`. At docs-build
+time CI floats the submodule to this branch's tip (`git submodule update --init --remote refs/data`)
+and DocFX reads each dataset straight from `refs/data/<type>/latest/`. There is **no** date-priority
+resolver and **no** master-side fallback copy — this branch is the only source, and its tip is always
+what the site builds from.
 
-- The site still builds correctly from `master` alone (this branch is purely additive).
-- Any newer publish — to `master` *or* to this branch — wins by commit date.
-- `latest` is the "which snapshot is newest" pointer; if it is ever missing, consumers fall back to
-  the lexicographically-greatest `<date>_<commithash>` folder.
+The publisher lives on the **code branch**, not here:
 
-The resolver and publisher live on the **code branch**, not here:
-
-- `tools/dashboard_data/publish.py` — append a snapshot to a data type and repoint `latest`.
-- `tools/dashboard_data/resolve.py` — pick the newest of master-vs-branch and stage it for DocFX.
-- `tools/dashboard_data/common.py` — the shared per-type file/overlay map.
+- `tools/dashboard_data/publish.py` — append a `<date>_<sha>` snapshot to a data type and refresh its
+  real `latest/` directory.
+- `tools/dashboard_data/common.py` — the shared per-type file map + snapshot/`latest` helpers.
 
 CI publishes here automatically: `.github/workflows/docs.yml` publishes `inventory` + `tests-oracle`
-on pushes to `master`; `.github/workflows/benchmark.yml` publishes `benchmark` + `benchmark-coverage`
++ `benchmark-coverage` on pushes to `master`; `.github/workflows/benchmark.yml` publishes `benchmark`
 after a benchmark run.
 
 ### Publish by hand
 
 ```bash
-# from a checkout of the code branch, with this branch checked out at ../NumSharp-master-code-data
+# from a checkout of the code branch, with THIS branch checked out at ../NumSharp-data-wt
 python tools/dashboard_data/publish.py --type inventory \
     --from coverage/generated \
-    --branch-worktree ../NumSharp-master-code-data \
+    --branch-worktree ../NumSharp-data-wt \
     --commit
 ```
 
