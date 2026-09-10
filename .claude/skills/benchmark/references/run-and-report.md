@@ -128,10 +128,12 @@ keeps no committed copy. The docs build mounts the branch as a git submodule and
   directory** (a data-only copy of the newest snapshot, no README), one folder per type: `benchmark`,
   `tests-oracle`, `inventory` (NumPy API coverage), `benchmark-coverage`. The branch's top-level +
   per-type READMEs are the authoritative spec.
-- **`refs/data` submodule** — declared in `.gitmodules` (`branch = data`, shallow). At docs-build the
-  workflow floats it to the branch tip (`git submodule update --init --remote refs/data`), and
-  `docfx.json` reads each dataset straight from `refs/data/<type>/latest/`. No date-priority resolver
-  and no master-side fallback — the branch tip is always what the site builds from.
+- **`refs/data` submodule** — declared in `.gitmodules` (`branch = data`, shallow), gitlink kept as
+  provenance only (never bumped). At docs-build the workflow floats it to the branch tip by a **direct
+  shallow clone** (`git clone --depth 1 -b data … refs/data` — `submodule update --remote` can't resolve
+  the un-bumped gitlink, and origin/data has already advanced that run), and `docfx.json` reads each
+  dataset straight from `refs/data/<type>/latest/`. No date-priority resolver and no master-side
+  fallback — the branch tip is always what the site builds from.
 
 Publisher lives on the code branch in **`tools/dashboard_data/`** (stdlib-only):
 - `publish.py --type <t> --from <dir> --branch-worktree <wt> --sha <sha> --commit` — append a

@@ -71,7 +71,7 @@ def main(argv=None) -> int:
     data = Path(args.data_worktree).resolve()
     if not (data / ".git").exists():
         print(f"error: data worktree not initialized: {data}\n"
-              f"  git submodule update --init --remote refs/data", file=sys.stderr)
+              f"  git clone --depth 1 -b data https://github.com/SciSharp/NumSharp.git refs/data", file=sys.stderr)
         return 2
 
     want = {"inventory", "tests-oracle", "benchmark-coverage", "benchmark"} if args.type == "all" else {args.type}

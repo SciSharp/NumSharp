@@ -809,12 +809,13 @@ def publish_history_to_data():
     override its benchmark/latest/ with this run, and commit (locally, on branch `data`).
 
     Skipped when refs/data is not initialized (e.g. in CI's benchmark job, which publishes through
-    its own throwaway worktree) — initialize it with `git submodule update --init --remote refs/data`.
+    its own throwaway worktree) — initialize it with:
+      git clone --depth 1 -b data https://github.com/SciSharp/NumSharp.git refs/data
     Commits locally only; push refs/data when ready (CI's benchmark.yml pushes on its own path).
     """
     if not (DATA_SUBMODULE / ".git").exists():
-        print(f"\nrefs/data submodule not initialized ({DATA_SUBMODULE}); skipping data publish "
-              f"(git submodule update --init --remote refs/data)", flush=True)
+        print(f"\nrefs/data not initialized ({DATA_SUBMODULE}); skipping data publish "
+              f"(git clone --depth 1 -b data https://github.com/SciSharp/NumSharp.git refs/data)", flush=True)
         return
     latest = HISTORY_DIR / "latest"
     if not latest.exists():

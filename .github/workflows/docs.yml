@@ -146,11 +146,17 @@ jobs:
         with:
           fetch-depth: 0   # full history for DocFX per-page "last updated" git dates
 
-      # All dashboard data comes from the `data` branch via the refs/data submodule, floated to
-      # the branch tip (--remote) so the site always builds from the newest published snapshots.
-      # DocFX reads refs/data/<type>/latest directly (see docfx.json); there is NO master-side copy.
-      - name: Fetch dashboard data (data-branch submodule, latest)
-        run: git submodule update --init --remote --force refs/data
+      # All dashboard data comes from the `data` branch — checked out at its TIP by a direct shallow
+      # clone into the refs/data submodule path. The gitlink is provenance only and is intentionally
+      # never bumped, so `git submodule update --remote` cannot resolve it (and origin/data has already
+      # advanced this run via the publish job above); a direct clone always floats to the newest
+      # published snapshots. DocFX reads refs/data/<type>/latest directly (see docfx.json).
+      - name: Fetch dashboard data (data branch, latest)
+        run: |
+          set -euo pipefail
+          rm -rf refs/data
+          git clone --depth 1 --single-branch --branch data \
+            https://github.com/SciSharp/NumSharp.git refs/data
 
       - name: Render benchmark report pages from the data submodule
         run: |
