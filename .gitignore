@@ -370,6 +370,19 @@ benchmark/benchmark-report.csv
 benchmark/.claude_*.log
 /.claude/scripts
 
+# Generated dashboard DATA — lives ONLY on the orphan `data` branch (consumed at docs-build via
+# the refs/data submodule). master is code-only and keeps NO committed copy; these are regenerated
+# locally/CI and published to `data` (tools/dashboard_data/publish.py), so never re-commit them here.
+benchmark/history/
+coverage/generated/
+test/inventory/generated/
+benchmark/coverage/generated/
+docs/website-src/docs/data/
+benchmark/nditer/cards/
+# Report pages rendered at docs-build from refs/data/benchmark/latest (no longer committed)
+docs/website-src/docs/benchmark-matrix.md
+docs/website-src/docs/benchmark-iterator.md
+
 # Windows/MSYS crash dumps
 *.stackdump
 

@@ -118,40 +118,42 @@ They drift — know which is which:
   only the canonical combined JSON and computes effective rollups/backend drill-downs from measured rows.
 - **`benchmark/README.md`** is a static orientation guide, **not** the report — CI never refreshes it.
 
-## Dashboard data delivery — the `master-code-data` branch
+## Dashboard data delivery — the `data` branch (submodule)
 
-The three live docs dashboards fetch same-origin JSON that DocFX bakes at build time. That data now has
-**two sources, reconciled by date at build time** (`master` stays a backwards-compatible fallback):
+The three live docs dashboards fetch same-origin JSON that DocFX bakes at build time. That data lives
+**only** on the orphan **`data`** branch (renamed from `master-code-data`); `master` is code-only and
+keeps no committed copy. The docs build mounts the branch as a git submodule and reads it directly:
 
-- **Code branch (`master`)** — each dataset's committed copy (the historical path; still builds alone).
-- **Orphan `master-code-data` branch** — generated data as `<type>/<date>_<sha>/` snapshots + a git
-  symlink `latest`, one folder per type: `benchmark`, `tests-oracle`, `inventory` (NumPy API coverage),
-  `benchmark-coverage`. The branch's top-level + per-type READMEs are the authoritative spec.
+- **Orphan `data` branch** — generated data as `<type>/<date>_<sha>/` snapshots plus a **real `latest/`
+  directory** (a data-only copy of the newest snapshot, no README), one folder per type: `benchmark`,
+  `tests-oracle`, `inventory` (NumPy API coverage), `benchmark-coverage`. The branch's top-level +
+  per-type READMEs are the authoritative spec.
+- **`refs/data` submodule** — declared in `.gitmodules` (`branch = data`, shallow). At docs-build the
+  workflow floats it to the branch tip (`git submodule update --init --remote refs/data`), and
+  `docfx.json` reads each dataset straight from `refs/data/<type>/latest/`. No date-priority resolver
+  and no master-side fallback — the branch tip is always what the site builds from.
 
-Tooling lives on the code branch in **`tools/dashboard_data/`** (stdlib-only):
+Publisher lives on the code branch in **`tools/dashboard_data/`** (stdlib-only):
 - `publish.py --type <t> --from <dir> --branch-worktree <wt> --sha <sha> --commit` — append a
-  `<date>_<sha>` snapshot for a type and repoint `latest`.
-- `resolve.py --data-worktree <wt> --into .` — at docs-build time, per dataset pick the newer of
-  master-vs-branch by **git commit date** and overlay it onto the paths DocFX already reads (so the UI's
-  relative `data/…` fetch is unchanged). `latest` is the newest pointer; missing → max `<date>_<sha>` fallback.
-- `common.py` — the per-type file/overlay map + `latest`/fallback/date helpers.
+  `<date>_<sha>` snapshot for a type and refresh its real `latest/` directory.
+- `common.py` — the per-type file map + snapshot/`latest` helpers.
 
-CI: `benchmark.yml` publishes the fresh `benchmark` snapshot after a run; `docs.yml` publishes
-`inventory`/`tests-oracle`/`benchmark-coverage` on master pushes and runs `resolve.py` before `docfx build`.
-**`docfx.json` is unchanged** — the resolver stages winners into the paths its resource/content blocks already glob.
+CI: `benchmark.yml` publishes the fresh `benchmark` snapshot to `data` after a run (then triggers a docs
+redeploy); `docs.yml` publishes `inventory`/`tests-oracle`/`benchmark-coverage` to `data` on master
+pushes, and its build job inits the `refs/data` submodule (floated to tip) before `docfx build`.
 
-## History snapshots — what we commit
+## History snapshots — build outputs, published to the `data` branch
 
-| Path | Tracked? | Contents |
-|------|----------|----------|
+| Path | Tracked on master? | Contents |
+|------|--------------------|----------|
 | `benchmark/results/<ts>/` | ❌ gitignored | raw per-run scratch (per-suite NumPy JSON, BDN per-class reports, merged json/csv). |
-| `benchmark/history/<date>_<sha>/` | ✅ tracked | the snapshot: MANIFEST + combined/separate profile JSON + report/csv + NumPy input + subsystem results + cards. |
-| `benchmark/history/latest` | ✅ tracked symlink | → the newest snapshot. Stable path for docs/CI. |
+| `benchmark/history/<date>_<sha>/` | ❌ gitignored | the snapshot: MANIFEST + combined/separate profile JSON + report/csv + NumPy input + subsystem results + cards. Published to the `data` branch. |
+| `benchmark/history/latest` | ❌ gitignored symlink | → the newest local snapshot; the durable copy is `benchmark/latest/` on the `data` branch. |
 
-`benchmark/scripts/snapshot_history.py` assembles it (called by `run_benchmark.py`; `--commit` to also git-commit).
-**Publish ritual:** run → review → commit `benchmark/history/`. Reference `benchmark/history/latest/benchmark-report.md`,
-never the gitignored scratch. The same `benchmark/history/latest` snapshot is also published to the
-`master-code-data` branch (see *Dashboard data delivery* above) so the docs resolver can serve it to the site.
+`benchmark/scripts/snapshot_history.py` assembles it (called by `run_benchmark.py`). **Publish ritual:**
+run → review → `publish.py --type benchmark --from benchmark/history/latest` to the `data` branch (CI does
+this in `benchmark.yml`). master carries NO benchmark data — reference `benchmark/history/latest/benchmark-report.md`
+locally, and `refs/data/benchmark/latest/…` on the site (see *Dashboard data delivery* above).
 
 ## The Debug-taint reminder (bears repeating)
 

@@ -103,7 +103,7 @@ The most common task. Full worked example in **`references/add-benchmark.md`**. 
 
 ## Other tasks → where to go
 
-- **Run the suite (official / subset), interpret the report, the reports/UI surfaces + snapshots** → `references/run-and-report.md`. (The human-facing UI is the DocFX page `docs/website-src/docs/benchmarks-dashboard.md`; its Function Explorer data is generated, while narrative cards are curated. Generated dashboard data is delivered via the orphan **`master-code-data`** branch with a build-time date-priority resolver in `tools/dashboard_data/` — see `references/run-and-report.md`.)
+- **Run the suite (official / subset), interpret the report, the reports/UI surfaces + snapshots** → `references/run-and-report.md`. (The human-facing UI is the DocFX page `docs/website-src/docs/benchmarks-dashboard.md`; its Function Explorer data is generated, while narrative cards are curated. Generated dashboard data lives on the orphan **`data`** branch and is consumed at docs-build via the **`refs/data`** submodule (floated to the branch tip); publisher in `tools/dashboard_data/` — see `references/run-and-report.md`.)
 - **Add or edit a matrix subsystem or backend profile case** → `references/subsystems.md`.
 - **"Is `np.<foo>` benchmarked yet? What's still missing?"** → the generated coverage ledger
   `benchmark/coverage/generated/summary.md` (+ `coverage.{json,csv}`), refreshed by `scripts/audit_coverage.py`

@@ -22,7 +22,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write   # publish generated dashboard data to the master-code-data branch
+  contents: write   # publish generated dashboard data to the data branch
   pages: write
   id-token: write
 
@@ -60,17 +60,18 @@ jobs:
       - name: Audit latest NumPy documentation links
         run: python coverage/audit_documentation.py artifacts/numpy-numsharp-coverage/coverage.json
 
-      - name: Verify checked-in dashboard data
-        run: diff --recursive --unified coverage/generated artifacts/numpy-numsharp-coverage
-
+      # master carries NO committed dashboard data any more (it lives only on the `data` branch),
+      # so there is nothing to diff against — CI generates fresh here and publishes it below.
       - name: Generate Tests & Oracle inventory
         run: python test/inventory/generate_test_inventory.py --output artifacts/tests-oracle-inventory
 
-      - name: Verify checked-in Tests & Oracle dashboard data
-        run: diff --recursive --unified test/inventory/generated artifacts/tests-oracle-inventory
+      - name: Stage generated inventory locally (gitignored; audit_coverage reads coverage/generated)
+        run: |
+          mkdir -p coverage/generated
+          cp -r artifacts/numpy-numsharp-coverage/. coverage/generated/
 
-      - name: Verify benchmark API coverage artifact
-        run: python benchmark/scripts/audit_coverage.py --check
+      - name: Generate benchmark API coverage ledger
+        run: python benchmark/scripts/audit_coverage.py
 
       - name: Verify benchmark NumPy twin join keys
         run: |
@@ -89,30 +90,30 @@ jobs:
         # analyzer via a command-line global (a #:property in the .cs does not propagate to the ref).
         run: dotnet run -c Release -f net8.0 --no-cache -p:ReferenceNDArrayAnalyzer=false benchmark/scripts/smoke_benchmark_bodies.cs
 
-      # Publish the just-verified data to the orphan master-code-data branch as a new
-      # <date>_<sha> snapshot per type + repointed `latest`. Only on master pushes (never PRs),
-      # so PR builds cannot mutate the data branch. The freshly generated artifacts feed the
-      # publish; benchmark-coverage rides here (its audit_coverage.py --check gate ran above),
-      # while the heavy `benchmark` report is published by benchmark.yml after a benchmark run.
-      - name: Publish dashboard data to master-code-data
+      # Publish the freshly generated data to the orphan `data` branch as a new <date>_<sha>
+      # snapshot per type + a refreshed real `latest/` directory (publish.py). Only on master
+      # pushes (never PRs), so PR builds cannot mutate the data branch. inventory + tests-oracle
+      # + benchmark-coverage ride here; the heavy `benchmark` report is published by benchmark.yml
+      # after a benchmark run. The `data` branch is the ONLY home of this data (master keeps none).
+      - name: Publish dashboard data to the data branch
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         run: |
           set -euo pipefail
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if git ls-remote --exit-code --heads origin master-code-data >/dev/null 2>&1; then
-            git fetch origin master-code-data --depth=1
-            git worktree add -B master-code-data /tmp/mcd origin/master-code-data
+          if git ls-remote --exit-code --heads origin data >/dev/null 2>&1; then
+            git fetch origin data --depth=1
+            git worktree add -B data /tmp/data origin/data
           else
-            git worktree add --orphan -b master-code-data /tmp/mcd
+            git worktree add --orphan -b data /tmp/data
           fi
           python tools/dashboard_data/publish.py --type inventory \
-            --from artifacts/numpy-numsharp-coverage --branch-worktree /tmp/mcd --sha "${GITHUB_SHA}" --commit
+            --from artifacts/numpy-numsharp-coverage --branch-worktree /tmp/data --sha "${GITHUB_SHA}" --commit
           python tools/dashboard_data/publish.py --type tests-oracle \
-            --from artifacts/tests-oracle-inventory --branch-worktree /tmp/mcd --sha "${GITHUB_SHA}" --commit
+            --from artifacts/tests-oracle-inventory --branch-worktree /tmp/data --sha "${GITHUB_SHA}" --commit
           python tools/dashboard_data/publish.py --type benchmark-coverage \
-            --from benchmark/coverage/generated --branch-worktree /tmp/mcd --sha "${GITHUB_SHA}" --commit
-          git -C /tmp/mcd push origin master-code-data
+            --from benchmark/coverage/generated --branch-worktree /tmp/data --sha "${GITHUB_SHA}" --commit
+          git -C /tmp/data push origin data
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v7
@@ -143,37 +144,30 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          fetch-depth: 0   # full history so resolve.py can read master-side commit dates
+          fetch-depth: 0   # full history for DocFX per-page "last updated" git dates
 
-      - name: Use generated coverage artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: numpy-numsharp-api-coverage
-          path: coverage/generated
+      # All dashboard data comes from the `data` branch via the refs/data submodule, floated to
+      # the branch tip (--remote) so the site always builds from the newest published snapshots.
+      # DocFX reads refs/data/<type>/latest directly (see docfx.json); there is NO master-side copy.
+      - name: Fetch dashboard data (data-branch submodule, latest)
+        run: git submodule update --init --remote --force refs/data
 
-      - name: Use generated Tests & Oracle inventory artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: numsharp-tests-oracle-inventory
-          path: test/inventory/generated
+      - name: Render benchmark report pages from the data submodule
+        run: |
+          set -euo pipefail
+          { printf '# Operation Matrix — NumSharp vs NumPy (full report)\n\n'
+            printf '> _Auto-generated at docs-build from the `data` branch (refs/data/benchmark/latest) — do not edit by hand._\n\n'
+            tail -n +2 refs/data/benchmark/latest/benchmark-report.md
+          } > docs/website-src/docs/benchmark-matrix.md
+          { printf '# Iterator Benchmark — NDIter vs NumPy (full sheet)\n\n'
+            printf '> _Auto-generated at docs-build from the `data` branch (refs/data/benchmark/latest) — do not edit by hand._\n\n'
+            cat refs/data/benchmark/latest/nditer_results.md
+          } > docs/website-src/docs/benchmark-iterator.md
 
       - name: Setup Python
         uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-
-      # Bake the newest of master-vs-master-code-data per dataset into the DocFX inputs.
-      # master's committed copies (above) stay the fallback, so the site builds from master alone.
-      - name: Resolve newest dashboard data (master vs master-code-data)
-        run: |
-          set -euo pipefail
-          if git ls-remote --exit-code --heads origin master-code-data >/dev/null 2>&1; then
-            git fetch origin master-code-data --depth=1
-            git worktree add /tmp/mcd origin/master-code-data
-            python tools/dashboard_data/resolve.py --data-worktree /tmp/mcd --into .
-          else
-            echo "master-code-data not found on origin; building from master's committed data (fallback)."
-          fi
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v6

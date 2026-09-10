@@ -13,3 +13,8 @@
 [submodule "refs/onnxruntime-inference-examples"]
 	path = refs/onnxruntime-inference-examples
 	url = https://github.com/microsoft/onnxruntime-inference-examples.git
+[submodule "refs/data"]
+	path = refs/data
+	url = https://github.com/SciSharp/NumSharp.git
+	branch = data
+	shallow = true

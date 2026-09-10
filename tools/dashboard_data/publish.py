@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
-"""Append a dashboard-data snapshot to the ``master-code-data`` branch and repoint ``latest``.
+"""Append a dashboard-data snapshot to the ``data`` branch and refresh its ``latest/`` dir.
 
 Usage::
 
     python tools/dashboard_data/publish.py \
         --type <benchmark|tests-oracle|inventory|benchmark-coverage> \
         --from <generated-dir> \
-        --branch-worktree <checkout-of-master-code-data> \
+        --branch-worktree <checkout-of-the-data-branch> \
         [--sha <commithash>] [--date <YYYY-MM-DD>] [--commit]
 
-Copies the type's files from ``--from`` into ``<branch>/<type>/<date>_<sha>/``, repoints the
-``latest`` symlink, and (with ``--commit``) makes one small commit on the branch worktree.
-``--from`` for ``benchmark`` is the ``benchmark/history/latest`` snapshot dir (symlink ok).
+Copies the type's files from ``--from`` into ``<branch>/<type>/<date>_<sha>/``, refreshes the real
+``<type>/latest/`` directory (a data-only copy the docs build sparse-clones), and (with
+``--commit``) makes one small commit on the branch worktree. ``--from`` for ``benchmark`` is the
+``benchmark/history/latest`` snapshot dir (symlink ok).
 """
 from __future__ import annotations
 
@@ -48,7 +49,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--type", required=True, choices=sorted(common.TYPES))
     ap.add_argument("--from", dest="src", required=True, help="Directory of freshly generated files")
-    ap.add_argument("--branch-worktree", required=True, help="Checkout of the master-code-data branch")
+    ap.add_argument("--branch-worktree", required=True, help="Checkout of the data branch")
     ap.add_argument("--sha", default=None, help="Source commit hash (default: HEAD of --from's repo)")
     ap.add_argument("--date", default=None, help="Snapshot date YYYY-MM-DD (default: today UTC)")
     ap.add_argument("--commit", action="store_true", help="git add+commit the snapshot on the branch")
@@ -73,11 +74,10 @@ def main() -> int:
     if dest.exists():
         shutil.rmtree(dest)  # re-publish of the same date+commit overwrites
     copy_snapshot(args.type, src, dest)
-    common.repoint_latest(type_dir, stamp)
+    common.refresh_latest_dir(type_dir, stamp)
     print(f"published {args.type}: {stamp}")
 
     if args.commit:
-        common.git(["config", "core.symlinks", "true"], cwd=branch, check=False)
         common.git(["add", "-A", args.type], cwd=branch)
         if common.git(["status", "--porcelain"], cwd=branch, check=False):
             common.git(["commit", "-m", f"publish({args.type}): {stamp}"], cwd=branch)

@@ -849,8 +849,8 @@ reference*, distinct from the gitignored raw scratch:
 | Path | Tracked? | Contents |
 |------|----------|----------|
 | `benchmark/results/<timestamp>/` | ❌ gitignored | raw per-run scratch: per-suite NumPy JSONs, BenchmarkDotNet per-class reports, the merged json/csv. Ephemeral. |
-| `benchmark/history/<date>_<sha>/` | ✅ tracked | the snapshot: MANIFEST + combined/separate profile JSON + report/csv + NumPy input + subsystem results + cards. |
-| `benchmark/history/latest` | ✅ tracked symlink | relative symlink (git mode 120000) → the newest snapshot. The stable path for docs/CI: `benchmark/history/latest/benchmark-report.md`. |
+| `benchmark/history/<date>_<sha>/` | ❌ gitignored | the snapshot: MANIFEST + combined/separate profile JSON + report/csv + NumPy input + subsystem results + cards. Published to the orphan `data` branch (NOT committed to master). |
+| `benchmark/history/latest` | ❌ gitignored symlink | relative symlink → the newest LOCAL snapshot: `benchmark/history/latest/benchmark-report.md`. The durable copy the docs site reads is `benchmark/latest/` on the `data` branch (via the `refs/data` submodule). |
 
 `benchmark/scripts/snapshot_history.py` assembles the snapshot, repoints `latest`, and
 auto-generates `MANIFEST.md` (provenance, env, methodology, headline geomeans, NDIter/Cast
@@ -867,10 +867,12 @@ python benchmark/scripts/snapshot_history.py \
 
 The folder is `<date>_<HEAD-short-sha at snapshot time>` (the benchmarked commit; the MANIFEST
 records the dirty/WIP state when the tree isn't clean). Raw BenchmarkDotNet per-class JSON
-(~tens of MB) is **not** persisted — regenerable. **Publish ritual:** run → review → commit
-`benchmark/history/` together with the rendered root reports. The post-release
-`.github/workflows/benchmark.yml` does exactly this (`git add benchmark/history/`) and redeploys
-the docs.
+(~tens of MB) is **not** persisted — regenerable. **Publish ritual:** run → review →
+`python tools/dashboard_data/publish.py --type benchmark --from benchmark/history/latest
+--branch-worktree <data-branch-worktree> --commit` (append a `<date>_<sha>` snapshot + refresh the
+real `latest/` dir on the orphan `data` branch). The post-release `.github/workflows/benchmark.yml`
+does exactly this and then triggers a docs redeploy. master carries **no** benchmark data — the docs
+site reads it from the `data` branch via the `refs/data` submodule.
 
 ### Quick Start (PowerShell, Windows)
 

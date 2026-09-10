@@ -26,18 +26,18 @@
         "exclude": ["_site/**", "obj/**", "scripts/**", "filterConfig.yml", "templates/**", "api/overwrites/**", "docs/data/**"]
       },
       {
-        "src": "../../benchmark/history/latest",
+        "src": "../../refs/data/benchmark/latest",
         "files": ["*.md"],
         "exclude": ["benchmark-report.md"],
         "dest": "docs/reports"
       },
       {
-        "src": "../../benchmark/coverage/generated",
+        "src": "../../refs/data/benchmark-coverage/latest",
         "files": ["summary.md"],
         "dest": "docs/reports/coverage"
       },
       {
-        "src": "../../test/inventory/generated",
+        "src": "../../refs/data/tests-oracle/latest",
         "files": ["summary.md"],
         "dest": "docs/reports/tests-oracle"
       }
@@ -52,20 +52,22 @@
         "files": ["images/**"]
       },
       {
-        "files": ["docs/data/benchmark-report*.json"]
+        "src": "../../refs/data/benchmark/latest",
+        "files": ["benchmark-report*.json"],
+        "dest": "docs/data"
       },
       {
-        "src": "../../benchmark/history/latest",
+        "src": "../../refs/data/benchmark/latest",
         "files": ["benchmark-report.md"],
         "dest": "docs/reports"
       },
       {
-        "src": "../../coverage/generated",
+        "src": "../../refs/data/inventory/latest",
         "files": ["coverage.json", "manifest.json"],
         "dest": "docs/data"
       },
       {
-        "src": "../../test/inventory/generated",
+        "src": "../../refs/data/tests-oracle/latest",
         "files": ["tests-oracle-report.json", "tests-oracle-report.csv", "tests-oracle-manifest.json"],
         "dest": "docs/data"
       }
