@@ -91,6 +91,10 @@ ARTIFACTS = CSHARP_DIR / "BenchmarkDotNet.Artifacts" / "results"
 OPENBLAS_ARTIFACTS = OPENBLAS_CSHARP_DIR / "BenchmarkDotNet.Artifacts" / "results"
 TFM = "net10.0"
 DOCS_BENCHMARK_JSON = HERE.parent / "docs" / "website-src" / "docs" / "data" / "benchmark-report.json"
+# The generated data lives on the orphan `data` branch, mounted as the refs/data submodule. A full
+# eligible run publishes its history snapshot straight into it (pull -> override latest -> commit).
+DATA_SUBMODULE = HERE.parent / "refs" / "data"
+PUBLISH_PY = HERE.parent / "tools" / "dashboard_data" / "publish.py"
 
 # NDIter iterator benchmark (benchmark/nditer) — a complementary harness with a
 # different result model (aspect x tier, not op/dtype/N), appended to the report.
@@ -333,6 +337,9 @@ def parser():
         ap.add_argument(f"--skip-{name}", action="store_true")
     ap.add_argument("--quick", action="store_true", help="Deprecated alias for --depth light")
     ap.add_argument("--no-history", action="store_true")
+    ap.add_argument("--no-data-publish", action="store_true",
+                    help="Do not publish the snapshot into the refs/data submodule "
+                         "(default: pull refs/data, override its benchmark/latest, and commit when refs/data is initialized)")
     ap.add_argument("--run-dir", type=Path, help="New results directory (must not already contain a run)")
     ap.add_argument("--resume", nargs="?", const="latest", help="Resume a run directory, or latest")
     ap.add_argument("--rerun", choices=("failed", "bad", "degraded"), help="Create a new run of selected problem cells")
@@ -786,12 +793,43 @@ def execute_stages(args, directory, session, requested, eligible):
         if not args.no_history:
             session.stage = "history snapshot"
             run([sys.executable, HERE / "scripts" / "snapshot_history.py", "--results-dir", directory, "--no-stage"], check=True)
+            if not getattr(args, "no_data_publish", False):
+                session.stage = "publish to data submodule"
+                publish_history_to_data()
     session.stage = "finished"
     session.progress(force=True, status="incomplete" if incomplete else "complete")
     print(f"Report: {directory / 'benchmark-report.md'}\nRun state: {session.state_path}")
     if incomplete:
         print(f"Incomplete cases retained. Resume: python benchmark/run_benchmark.py --resume \"{directory}\"")
     return 1 if incomplete else 0
+
+
+def publish_history_to_data():
+    """Publish benchmark/history/latest into the refs/data submodule: pull it to the `data` tip,
+    override its benchmark/latest/ with this run, and commit (locally, on branch `data`).
+
+    Skipped when refs/data is not initialized (e.g. in CI's benchmark job, which publishes through
+    its own throwaway worktree) — initialize it with `git submodule update --init --remote refs/data`.
+    Commits locally only; push refs/data when ready (CI's benchmark.yml pushes on its own path).
+    """
+    if not (DATA_SUBMODULE / ".git").exists():
+        print(f"\nrefs/data submodule not initialized ({DATA_SUBMODULE}); skipping data publish "
+              f"(git submodule update --init --remote refs/data)", flush=True)
+        return
+    latest = HISTORY_DIR / "latest"
+    if not latest.exists():
+        print("\nno benchmark/history/latest to publish; skipping data publish", flush=True)
+        return
+    # Non-fatal: the run + history snapshot are already saved; a data-publish hiccup (e.g. a diverged
+    # refs/data) must not fail the run. Re-publish later with `refresh_data.py --type benchmark`.
+    try:
+        run([sys.executable, PUBLISH_PY, "--type", "benchmark", "--from", latest,
+             "--branch-worktree", DATA_SUBMODULE, "--pull", "--commit"], check=True)
+        print(f"\npublished benchmark into {DATA_SUBMODULE} (committed on branch 'data'; push refs/data when ready)",
+              flush=True)
+    except Exception as error:  # noqa: BLE001 — data publish is best-effort, never fails the run
+        print(f"\nwarn: data publish into refs/data failed ({error}); the run is fine — re-publish with: "
+              f"python tools/dashboard_data/refresh_data.py --type benchmark", flush=True)
 
 
 def numpy_command(args, requested, suite):

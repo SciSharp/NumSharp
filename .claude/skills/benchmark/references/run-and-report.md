@@ -150,9 +150,13 @@ pushes, and its build job inits the `refs/data` submodule (floated to tip) befor
 | `benchmark/history/<date>_<sha>/` | ❌ gitignored | the snapshot: MANIFEST + combined/separate profile JSON + report/csv + NumPy input + subsystem results + cards. Published to the `data` branch. |
 | `benchmark/history/latest` | ❌ gitignored symlink | → the newest local snapshot; the durable copy is `benchmark/latest/` on the `data` branch. |
 
-`benchmark/scripts/snapshot_history.py` assembles it (called by `run_benchmark.py`). **Publish ritual:**
-run → review → `publish.py --type benchmark --from benchmark/history/latest` to the `data` branch (CI does
-this in `benchmark.yml`). master carries NO benchmark data — reference `benchmark/history/latest/benchmark-report.md`
+`benchmark/scripts/snapshot_history.py` assembles it (called by `run_benchmark.py`). **Publishing to the
+`data` branch is automatic:** an eligible full `run_benchmark.py` then publishes the snapshot straight into
+the **`refs/data`** submodule — pull `data` to its tip, override `benchmark/latest/`, commit (locally, on
+branch `data`) — unless `--no-data-publish` is passed; push `refs/data` when ready (CI `benchmark.yml` pushes
+on its own path). The other three kinds get the same flow via
+`python tools/dashboard_data/refresh_data.py [--type <t>|all] [--push]` (regenerate + `publish.py --pull
+--commit` into `refs/data`). master carries NO data — reference `benchmark/history/latest/benchmark-report.md`
 locally, and `refs/data/benchmark/latest/…` on the site (see *Dashboard data delivery* above).
 
 ## The Debug-taint reminder (bears repeating)

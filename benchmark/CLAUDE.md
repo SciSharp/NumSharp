@@ -867,12 +867,14 @@ python benchmark/scripts/snapshot_history.py \
 
 The folder is `<date>_<HEAD-short-sha at snapshot time>` (the benchmarked commit; the MANIFEST
 records the dirty/WIP state when the tree isn't clean). Raw BenchmarkDotNet per-class JSON
-(~tens of MB) is **not** persisted — regenerable. **Publish ritual:** run → review →
-`python tools/dashboard_data/publish.py --type benchmark --from benchmark/history/latest
---branch-worktree <data-branch-worktree> --commit` (append a `<date>_<sha>` snapshot + refresh the
-real `latest/` dir on the orphan `data` branch). The post-release `.github/workflows/benchmark.yml`
-does exactly this and then triggers a docs redeploy. master carries **no** benchmark data — the docs
-site reads it from the `data` branch via the `refs/data` submodule.
+(~tens of MB) is **not** persisted — regenerable. **Publishing to the `data` branch is automatic:** an
+eligible full `run_benchmark.py` then publishes the snapshot straight into the **`refs/data`** submodule
+via `tools/dashboard_data/publish.py --pull --commit` — pull `data` to its tip, override `benchmark/latest/`,
+and commit locally on branch `data` (opt out with `--no-data-publish`); push `refs/data` when ready. The
+other three kinds get the same flow through `python tools/dashboard_data/refresh_data.py [--type <t>|all]
+[--push]`. The post-release `.github/workflows/benchmark.yml` publishes via its own throwaway worktree and
+pushes + redeploys the docs. master carries **no** benchmark data — the docs site reads it from the `data`
+branch via the `refs/data` submodule.
 
 ### Quick Start (PowerShell, Windows)
 

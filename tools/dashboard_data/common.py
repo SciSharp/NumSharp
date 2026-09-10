@@ -71,9 +71,9 @@ def copy_tree_contents(src_dir: Path, dst_dir: Path, skip: set[str] | None = Non
 def refresh_latest_dir(type_dir: Path, stamp: str) -> None:
     """Refresh the real ``latest/`` directory to mirror ``type_dir/stamp`` (data only, no README).
 
-    The docs build sparse-clones ``<type>/latest`` as a self-contained folder, so ``latest`` MUST
-    be a real directory (never a symlink) and carry no ``README.md`` — the per-type README stays a
-    sibling. Any previous ``latest`` (symlink or dir, from the old layout) is replaced.
+    The refs/data submodule presents ``<type>/latest`` as a plain folder the docs build reads, so
+    ``latest`` MUST be a real directory (never a symlink) and carry no ``README.md`` — the per-type
+    README stays a sibling. Any previous ``latest`` (symlink or dir, from the old layout) is replaced.
     """
     latest = type_dir / "latest"
     if latest.is_symlink() or latest.is_file():
