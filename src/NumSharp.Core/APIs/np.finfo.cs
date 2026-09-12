@@ -73,9 +73,13 @@ namespace NumSharp
         public int minexp { get; }
 
         /// <summary>
-        /// The NPTypeCode of this floating point type.
+        /// The dtype of this floating point type — NumPy's <c>finfo.dtype</c> (a <see cref="DType"/> descriptor,
+        /// like <c>np.finfo(np.float64).dtype</c>). For a complex input this is the underlying REAL float dtype
+        /// (<c>float64</c> for complex128), matching NumPy. Being a <see cref="DType"/> it exposes
+        /// <see cref="DType.kind"/> / <see cref="DType.name"/> / <see cref="DType.itemsize"/> and compares
+        /// structurally (<c>info.dtype == np.float64</c>); an <see cref="NPTypeCode"/> also converts back implicitly.
         /// </summary>
-        public NPTypeCode dtype { get; }
+        public DType dtype { get; }
 
         /// <summary>
         /// Create finfo for the specified dtype.
@@ -174,7 +178,7 @@ namespace NumSharp
         /// <inheritdoc />
         public override string ToString()
         {
-            return $"finfo(resolution={resolution}, min={min:E}, max={max:E}, dtype={dtype.AsNumpyDtypeName()})";
+            return $"finfo(resolution={resolution}, min={min:E}, max={max:E}, dtype={dtype.name})";
         }
 
         private static bool IsFloatType(NPTypeCode typeCode)

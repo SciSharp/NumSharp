@@ -435,6 +435,15 @@ namespace NumSharp
         public static DType Complex => DTypeRegistry.Complex128.Singleton;
 
         // ---- implicit conversions: DType is the single spelling Type / NPTypeCode / NumPy-string collapse into ----
+        //
+        // LOAD-BEARING — do not remove these operators. Every dtype-taking overload across the library declares ONE
+        // `DType` parameter; these conversions are what let a caller pass a `Type`, an `NPTypeCode` (or `NPTypeCode?`),
+        // or a dtype string to it UNCHANGED — the argument converts implicitly and binds that single overload. The
+        // whole np.* / NDArray surface AND the interop packages (System.Numerics.Tensors / OnnxRuntime / MLNet /
+        // pythonnet dtype maps take `DType` and rely on `nd.typecode` / `NPTypeCode.X` converting to it) depend on this
+        // for source-compatibility, so dropping an operator silently breaks every such call site. The forward direction
+        // (Type / NPTypeCode / string -> DType) is implicit by design; the reverse (DType -> Type) is EXPLICIT — see
+        // the operator below for why.
 
         /// <summary>A C# <see cref="System.Type"/> converts to its canonical descriptor (<see langword="null"/> ⇒ none).</summary>
         public static implicit operator DType(Type type) => type == null ? null : From(type);
