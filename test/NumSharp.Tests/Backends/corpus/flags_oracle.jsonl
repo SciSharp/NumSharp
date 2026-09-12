@@ -1077,6 +1077,11 @@
 {"id":"layout/parity.copy_t3d_K","recipe":"parity.copy_t3d_K","dtype":"int64","ops":[],"err":null,"f":{"C":0,"F":0,"O":1,"W":1,"A":1,"X":0,"fnc":0,"forc":0,"behaved":1,"carray":0,"farray":1,"num":1284}}
 {"id":"layout/parity.copy_bcast_K","recipe":"parity.copy_bcast_K","dtype":"int64","ops":[],"err":null,"f":{"C":0,"F":1,"O":1,"W":1,"A":1,"X":0,"fnc":1,"forc":1,"behaved":1,"carray":0,"farray":1,"num":1286}}
 {"id":"layout/parity.astype_bcast_K","recipe":"parity.astype_bcast_K","dtype":"int64","ops":[],"err":null,"f":{"C":0,"F":1,"O":1,"W":1,"A":1,"X":0,"fnc":1,"forc":1,"behaved":1,"carray":0,"farray":1,"num":1286}}
+{"id":"layout/parity.copy_bcast_C","recipe":"parity.copy_bcast_C","dtype":"int64","ops":[],"err":null,"f":{"C":1,"F":0,"O":1,"W":1,"A":1,"X":0,"fnc":0,"forc":1,"behaved":1,"carray":1,"farray":0,"num":1285}}
+{"id":"layout/parity.copy_bcast_F","recipe":"parity.copy_bcast_F","dtype":"int64","ops":[],"err":null,"f":{"C":0,"F":1,"O":1,"W":1,"A":1,"X":0,"fnc":1,"forc":1,"behaved":1,"carray":0,"farray":1,"num":1286}}
+{"id":"layout/parity.copy_bcast_A","recipe":"parity.copy_bcast_A","dtype":"int64","ops":[],"err":null,"f":{"C":1,"F":0,"O":1,"W":1,"A":1,"X":0,"fnc":0,"forc":1,"behaved":1,"carray":1,"farray":0,"num":1285}}
+{"id":"layout/parity.ascontig_bcast","recipe":"parity.ascontig_bcast","dtype":"int64","ops":[],"err":null,"f":{"C":1,"F":0,"O":1,"W":1,"A":1,"X":0,"fnc":0,"forc":1,"behaved":1,"carray":1,"farray":0,"num":1285}}
+{"id":"layout/parity.asfortran_bcast","recipe":"parity.asfortran_bcast","dtype":"int64","ops":[],"err":null,"f":{"C":0,"F":1,"O":1,"W":1,"A":1,"X":0,"fnc":1,"forc":1,"behaved":1,"carray":0,"farray":1,"num":1286}}
 {"id":"layout/parity.stack_f0","recipe":"parity.stack_f0","dtype":"int64","ops":[],"err":null,"f":{"C":0,"F":0,"O":1,"W":1,"A":1,"X":0,"fnc":0,"forc":0,"behaved":1,"carray":0,"farray":1,"num":1284}}
 {"id":"layout/parity.stack_f1","recipe":"parity.stack_f1","dtype":"int64","ops":[],"err":null,"f":{"C":0,"F":0,"O":1,"W":1,"A":1,"X":0,"fnc":0,"forc":0,"behaved":1,"carray":0,"farray":1,"num":1284}}
 {"id":"layout/parity.stack_f2","recipe":"parity.stack_f2","dtype":"int64","ops":[],"err":null,"f":{"C":0,"F":0,"O":1,"W":1,"A":1,"X":0,"fnc":0,"forc":0,"behaved":1,"carray":0,"farray":1,"num":1284}}
