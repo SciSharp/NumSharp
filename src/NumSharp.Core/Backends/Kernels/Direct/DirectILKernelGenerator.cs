@@ -749,6 +749,11 @@ namespace NumSharp.Backends.Kernels
             // into NaN instead of NumPy's -inf.
             public static readonly MethodInfo ComplexSquare = typeof(NumSharp.Utilities.NDComplexMath).GetMethod("Square", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
                 ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "Square");
+            // Multiply routes through NDComplexMath (FMA-contracted a*b == NumPy's simd_cmul): the BCL
+            // Complex.op_Multiply is the NAIVE a_re*b_re - a_im*b_im, which diverges from NumPy's fused
+            // vfmaddsub on ~14% of operands (up to ~2840 ULP in the cancellation regime).
+            public static readonly MethodInfo ComplexMultiply = typeof(NumSharp.Utilities.NDComplexMath).GetMethod("Multiply", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex), typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "Multiply");
             public static readonly MethodInfo ComplexLog1p = typeof(NumSharp.Utilities.NDComplexMath).GetMethod("Log1p", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
                 ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "Log1p");
             public static readonly MethodInfo ComplexExp2 = typeof(NumSharp.Utilities.NDComplexMath).GetMethod("Exp2", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
@@ -2034,11 +2039,18 @@ namespace NumSharp.Backends.Kernels
                 return;
             }
 
+            // Multiply goes through NDComplexMath.Multiply (FMA-contracted, == NumPy's simd_cmul)
+            // rather than the BCL's naive op_Multiply — see the ComplexMultiply cache comment.
+            if (op == BinaryOp.Multiply)
+            {
+                il.EmitCall(OpCodes.Call, CachedMethods.ComplexMultiply, null);
+                return;
+            }
+
             var method = op switch
             {
                 BinaryOp.Add => complexType.GetMethod("op_Addition", new[] { complexType, complexType }),
                 BinaryOp.Subtract => complexType.GetMethod("op_Subtraction", new[] { complexType, complexType }),
-                BinaryOp.Multiply => complexType.GetMethod("op_Multiply", new[] { complexType, complexType }),
                 _ => throw new NotSupportedException($"Operation {op} not supported for Complex")
             };
 
