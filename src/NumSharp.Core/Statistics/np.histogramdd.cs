@@ -145,6 +145,15 @@ namespace NumSharp
         /// <exception cref="ValueError">A dimension mismatch, a non-positive integer bin, or non-monotonic edges.</exception>
         private static HistogramddResult HistogramddImpl(NDArray[] cols, object bins, (double, double)?[] range, bool density, NDArray weights)
         {
+            // NumPy builds the internal sample via `atleast_2d(sample).T`, which STACKS the D coordinate
+            // columns into ONE array and thereby promotes every column to their common dtype. An (N, D)
+            // array (or any single-dtype sequence) is already uniform, so this is a no-op there; a sequence
+            // of DIFFERENTLY-typed columns — e.g. histogram2d(float32_x, float64_y) — must be promoted so its
+            // per-dimension edges AND the binning comparison run in the one common dtype, matching NumPy
+            // (whose stacked sample makes both edges float64). Done first, before any edge/bin computation
+            // reads cols[i].typecode.
+            cols = PromoteColumnsToCommon(cols);
+
             int D = cols.Length;
             long N = D == 0 ? 0 : cols[0].size;
 
@@ -180,10 +189,16 @@ namespace NumSharp
                     if (nb < 1)
                         throw new ValueError($"`bins[{i}]` must be positive, when an integer");
                     (double smin, double smax) = GetOuterEdges(cols[i], ri);
-                    // NumPy's `np.linspace(smin, smax, n+1)` runs in the sample dtype's float width:
-                    // int/float64 => float64, float32 => float32, float16 => float16 (NEP50 weak-float `num`
-                    // never widens a strong float column). Compute IN that width for bit-exact edges.
-                    edges[i] = HistogramLinspace(smin, smax, nb + 1, FloatPromoteBinType(cols[i].typecode));
+                    // histogramdd calls `np.linspace(smin, smax, n+1)` WITHOUT a dtype, so the edges take
+                    // result_type(smin, smax, n+1) — which, unlike np.histogram, has NO array to keep it strong.
+                    // The column's own float width survives ONLY when the endpoints are strong array scalars
+                    // (non-empty AND no range → smin/smax = col.min()/max()); a supplied range (Python floats) or an
+                    // empty column (the 0/1 int defaults) makes the endpoints weak, collapsing the edges to float64.
+                    // So a ranged or empty float32/float16 column yields float64 edges — matching NumPy (a
+                    // float32-column-with-strong-endpoints keeps float32). Compute AND result are the same dtype here.
+                    bool weakEndpoints = ri.HasValue || N == 0;
+                    NPTypeCode edgeType = weakEndpoints ? NPTypeCode.Double : FloatPromoteBinType(cols[i].typecode);
+                    edges[i] = HistogramLinspace(smin, smax, nb + 1, edgeType, edgeType);
                 }
 
                 nbin[i] = (int)edges[i].size + 1; // +1 for an outlier bin on each end (shared low+high span)
@@ -276,6 +291,39 @@ namespace NumSharp
         {
             if (sample is null) throw new ArgumentNullException(nameof(sample));
             return sample;
+        }
+
+        /// <summary>
+        ///     Promote a set of coordinate columns to their common dtype, reproducing the dtype promotion
+        ///     NumPy's <c>atleast_2d(sample).T</c> stacking performs. Columns that already share a dtype
+        ///     (the overwhelmingly common case, and always true for the <c>(N, D)</c>-array sample form) are
+        ///     returned UNCHANGED with no copy; only a genuinely mixed-dtype sequence — the case that
+        ///     otherwise diverges from NumPy, e.g. <c>histogram2d(float32, float64)</c> whose edges must both
+        ///     be float64 — is cast, each column to <c>result_type</c> of all columns. Promoting up front is
+        ///     what makes both the computed edges' dtype/values AND the per-dimension binning comparison run
+        ///     in the one dtype NumPy's stacked sample uses.
+        /// </summary>
+        /// <param name="cols">The coordinate columns (each 1-D); may be same- or mixed-dtype.</param>
+        /// <returns>The originals when already uniform; otherwise each column cast to their common dtype.</returns>
+        private static NDArray[] PromoteColumnsToCommon(NDArray[] cols)
+        {
+            if (cols.Length < 2) return cols; // 0-D/1-D histogramdd: nothing to promote against
+
+            // Fold the columns' dtypes through NEP50 promotion, exactly the result_type NumPy's stack uses.
+            NPTypeCode common = cols[0].typecode;
+            for (int i = 1; i < cols.Length; i++)
+                common = promote_types(common, cols[i].typecode);
+
+            // Uniform input needs no cast — return the originals so the common path allocates nothing.
+            bool needsCast = false;
+            for (int i = 0; i < cols.Length; i++)
+                if (cols[i].typecode != common) { needsCast = true; break; }
+            if (!needsCast) return cols;
+
+            var promoted = new NDArray[cols.Length];
+            for (int i = 0; i < cols.Length; i++)
+                promoted[i] = cols[i].typecode == common ? cols[i] : cols[i].astype(common);
+            return promoted;
         }
 
         /// <summary>

@@ -403,4 +403,111 @@ public class np_histogram_Tests
     public void Error_Histogram2D_LengthMismatch()
         => ((Action)(() => np.histogram2d(np.array(new[] { 1.0, 2 }), np.array(new[] { 1.0, 2, 3 }), 3)))
             .Should().Throw<ValueError>().WithMessage("x and y must have the same length.");
+
+    // ── mixed-dtype columns: NumPy stacks a sequence via atleast_2d(sample).T, promoting to a common dtype ──
+    // (regression for the histogram2d/histogramdd column-promotion fix)
+
+    [TestMethod]
+    public void Histogram2D_MixedDtype_PromotesBothEdgesToFloat64()
+    {
+        // np.histogram2d(float32, float64, 4) => xedges AND yedges are float64 (the stacked sample promotes).
+        var x = np.array(new float[] { 1, 2, 3, 4, 5 });
+        var y = np.array(new[] { 1.0, 1, 2, 2, 3 });
+        var (_, xe, ye) = np.histogram2d(x, y, 4);
+        xe.typecode.Should().Be(NPTypeCode.Double);
+        ye.typecode.Should().Be(NPTypeCode.Double);
+    }
+
+    [TestMethod]
+    public void Histogram2D_MixedDtype_HalfAndSingle_PromoteToSingle()
+    {
+        var x = np.array(new Half[] { (Half)1, (Half)2, (Half)3, (Half)4, (Half)5 });
+        var y = np.array(new float[] { 1, 1, 2, 2, 3 });
+        var (_, xe, ye) = np.histogram2d(x, y, 4);
+        xe.typecode.Should().Be(NPTypeCode.Single);
+        ye.typecode.Should().Be(NPTypeCode.Single);
+    }
+
+    [TestMethod]
+    public void HistogramDD_MixedDtypeColumns_PromoteToFloat64()
+    {
+        var x = np.array(new float[] { 1, 2, 3, 4, 5 });
+        var y = np.array(new[] { 1.0, 1, 2, 2, 3 });
+        var (_, edges) = np.histogramdd(new[] { x, y }, 4);
+        edges[0].typecode.Should().Be(NPTypeCode.Double);
+        edges[1].typecode.Should().Be(NPTypeCode.Double);
+    }
+
+    [TestMethod]
+    public void HistogramDD_SameDtypeColumns_StayFloat32()
+    {
+        // Regression guard: a same-dtype sequence must NOT be promoted (the common case).
+        var x = np.array(new float[] { 1, 2, 3, 4, 5 });
+        var (_, edges) = np.histogramdd(new[] { x, x.copy() }, 4);
+        edges[0].typecode.Should().Be(NPTypeCode.Single);
+        edges[1].typecode.Should().Be(NPTypeCode.Single);
+    }
+
+    // ── weak-endpoint edge dtype: histogramdd edges collapse to float64 for empty/range columns ──
+
+    [TestMethod]
+    public void HistogramDD_EmptyFloat32Column_EdgesFloat64()
+    {
+        // Empty column => endpoints are the int 0/1 defaults (weak) => float64 edges (NumPy: linspace has no
+        // array to keep it strong, so result_type(int,int,num) = float64).
+        var (_, edges) = np.histogramdd(new[] { np.array(new float[] { }) }, 4);
+        edges[0].typecode.Should().Be(NPTypeCode.Double);
+    }
+
+    [TestMethod]
+    public void Histogram2D_RangeFloat32_EdgesFloat64()
+    {
+        // A supplied range makes the endpoints weak python floats => float64 edges even for float32 columns.
+        var x = np.array(new float[] { 1, 2, 3, 4, 5 });
+        var (_, xe, ye) = np.histogram2d(x, x.copy(), 4, range: new (double, double)?[] { (0, 6), (0, 6) });
+        xe.typecode.Should().Be(NPTypeCode.Double);
+        ye.typecode.Should().Be(NPTypeCode.Double);
+    }
+
+    [TestMethod]
+    public void Histogram_Float32Range_EdgesFloat32ComputedInFloat64()
+    {
+        // np.histogram keeps the RESULT dtype float32 (the array is in result_type), but with a range the edge
+        // VALUES are computed in float64 then cast to float32 — bit-exact with NumPy 2.4.2.
+        var a = np.array(new float[] { 0.5f, 1.5f, 2.5f, 3.5f, 0.9f });
+        var e = np.histogram_bin_edges(a, 5, range: (0.0, 4.0));
+        e.typecode.Should().Be(NPTypeCode.Single);
+        // NumPy 2.4.2: [0, 0.800000011920929, 1.600000023841858, 2.4000000953674316, 3.200000047683716, 4]
+        var got = new float[6];
+        for (long i = 0; i < 6; i++) got[i] = e.GetAtIndex<float>(i);
+        got.Should().Equal(0f, 0.8f, 1.6f, 2.4f, 3.2f, 4f);
+    }
+
+    // ── complex weights through the uniform (int-bins) path: the imaginary part must survive ──
+    // Regression for the EnsureContiguousDtype offset fix: np.imag(size-1 weight) is a trivially-contiguous
+    // OFFSET view, so reading .Address (ignoring the offset) grabbed the REAL part — hist was <re, re>.
+
+    [TestMethod]
+    public void Histogram_ComplexWeights_UniformPath_ImaginaryPartPreserved()
+    {
+        var w = np.array(new Complex[] { new(0.586, 0.150) });
+        var (h, _) = np.histogram(np.array(new[] { 2.0 }), 16, weights: w); // INT bins => uniform path
+        h.typecode.Should().Be(NPTypeCode.Complex);
+        // The single weight lands whole in one bin; its imaginary part must be 0.150, not 0.586.
+        h.GetAtIndex<Complex>(8).Should().Be(new Complex(0.586, 0.150));
+    }
+
+    // ── FormatEdge: the non-finite range message renders bounds like Python's str(float) ──
+
+    [TestMethod]
+    public void Error_AutodetectNonFiniteRange_WholeNumberBound_VerbatimMessage()
+        => ((Action)(() => np.histogram(np.array(new[] { 1.0, double.PositiveInfinity }), 3)))
+            .Should().Throw<ValueError>()
+            .WithMessage("autodetected range of [1.0, inf] is not finite");
+
+    [TestMethod]
+    public void Error_SuppliedNonFiniteRange_WholeNumberBound_VerbatimMessage()
+        => ((Action)(() => np.histogram(np.linspace(0.0, 1.0, 20), 5, range: (1.0, double.PositiveInfinity))))
+            .Should().Throw<ValueError>()
+            .WithMessage("supplied range of [1.0, inf] is not finite");
 }
