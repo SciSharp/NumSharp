@@ -8,6 +8,10 @@
   href: dtypes.md
 - name: Broadcasting
   href: broadcasting.md
+- name: Getting & Setting Values
+  href: getting-and-setting-values.md
+- name: Iterating & Enumerating
+  href: iterating-and-enumerating.md
 - name: Buffering & Memory
   href: buffering.md
 - name: Exceptions
