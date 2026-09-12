@@ -35,11 +35,12 @@ namespace NumSharp.Tests.Fuzz
     ///          Python scalar literals are weak. NumSharp cannot distinguish the two (both are 0-D
     ///          NDArrays), and keeping `arr + 5` ergonomic was chosen over strict NEP50 parity.
     ///       2. Complex arithmetic ULP envelopes vs NumPy's npy_c* algorithms (each per-op,
-    ///          measured, and bounded — see the B2 branch): divide within 2 ULP (npy_cdivide
-    ///          scaling); add/subtract within 2 ULP (FMA contraction); multiply within 16 ULP of
-    ///          the ELEMENT magnitude (catastrophic-cancellation regime); power within 512
-    ///          element-magnitude ULP or at a documented inf/NaN edge (Complex.Pow vs npy_cpow,
-    ///          Bug Ledger L6). Every other complex-binary op is gated bit-exact.
+    ///          measured, and bounded — see the B2 branch): add/subtract within 2 ULP (FMA
+    ///          contraction); multiply within 16 ULP of the ELEMENT magnitude (catastrophic-
+    ///          cancellation regime); power within 512 element-magnitude ULP or at a documented
+    ///          inf/NaN edge (Complex.Pow vs npy_cpow, Bug Ledger L6). divide/true_divide are
+    ///          BIT-EXACT (ComplexDivideNumPy ports NumPy's CDOUBLE_divide Smith's algorithm) —
+    ///          no envelope. Every other complex-binary op is gated bit-exact.
     /// </summary>
     public static class MisalignedRegistry
     {
@@ -131,21 +132,23 @@ namespace NumSharp.Tests.Fuzz
             if (kind == DivergenceKind.Dtype && c.Operands.Length >= 2 && c.Operands.Any(o => o.Shape.Length == 0))
                 return "NEP50 weak-scalar: 0-D operand promoted weakly (NumPy promotes 0-D arrays fully)";
 
-            // (2) Complex true-division ~1 ULP. Excuse only divide, only complex result, only when every
-            //     differing element is within 2 ULP — a gross error still fails.
-            if (kind == DivergenceKind.Value && c.Op == "divide" && tc == NPTypeCode.Complex
-                && diffs.Count > 0 && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 2)))
-                return "complex division ~1 ULP (npy_cdivide vs System.Numerics.Complex)";
+            // (2) Complex true-division is now BIT-EXACT vs NumPy (no excuse). ComplexDivideNumPy is a
+            //     byte-for-byte transcription of NumPy's CDOUBLE_divide (Smith's algorithm, reciprocal-
+            //     multiply), so divide/true_divide on complex — including the complex/real-scalar path
+            //     np.divide(z, 3.0) — matches NumPy to the last bit for every finite/inf operand (proven
+            //     over a 5.4M random + full edge-grid differential). The former "~1 ULP (npy_cdivide vs
+            //     System.Numerics.Complex)" excuse was the .NET operator's divide-by-denom vs NumPy's
+            //     multiply-by-reciprocal, and it is GONE — a 1-ULP divide regression now fails the gate.
 
-            // corrcoef normalizes a complex covariance matrix with two in-place complex/real
-            // divisions, so it inherits the same npy_cdivide-vs-System.Numerics rounding as the
-            // direct divide ufunc. Keep this composition explicit — the former blanket complex-
-            // unary excuse hid the one-ULP diagonal cell despite corrcoef being documented exact.
+            // corrcoef normalizes a complex covariance matrix with two in-place complex/real divisions,
+            // but those divisions are now bit-exact (see (2)) — so any residual comes from the MANAGED
+            // complex GEMM inside cov's np.dot (complex accumulation is not associative, and Core's
+            // managed dot differs from the zgemm NumPy's oracle used), NOT from the division. Bounded at
+            // 2 ULP on the committed cases; a gross error still fails.
             if (kind == DivergenceKind.Value && c.Op == "corrcoef" && tc == NPTypeCode.Complex
                 && c.Operands.Any(o => o.Dtype == "complex128")
                 && diffs.Count > 0 && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 2)))
-                return "corrcoef(complex): normalization inherits npy_cdivide vs System.Numerics "
-                     + "rounding (bounded <=2 ULP) [documented]";
+                return "corrcoef(complex): cov's managed complex GEMM vs zgemm (bounded <=2 ULP) [documented]";
 
             // logaddexp / logaddexp2: log(exp(x1)+exp(x2)) / log2(2**x1+2**x2). Math.Exp / double.Exp2
             // / MathF.Exp are bit-identical to NumPy's ucrtbase exp/exp2/expf, but the compound uses
@@ -273,10 +276,10 @@ namespace NumSharp.Tests.Fuzz
 
             // (B2/F10) Complex BINARY arithmetic — PER-OP scopes. The former branch here excused ANY
             // value divergence of ANY magnitude for ANY 2-operand complex-result op (so a gross
-            // complex add/matmul/copyto regression passed silently). Dismantled: divide keeps its
-            // own 2-ULP branch at (2) above; add/subtract/multiply/power get the tight scopes below;
-            // every other complex-binary op (matmul/dot/outer/copyto/extrema/concatenate/...) must
-            // be bit-exact and now fails the gate on divergence.
+            // complex add/matmul/copyto regression passed silently). Dismantled: divide/true_divide are
+            // now bit-exact (see (2) above — no excuse); add/subtract/multiply/power get the tight
+            // scopes below; every other complex-binary op (matmul/dot/outer/copyto/extrema/
+            // concatenate/...) must be bit-exact and now fails the gate on divergence.
             if (kind == DivergenceKind.Value && tc == NPTypeCode.Complex && c.Operands.Length == 2)
             {
                 // add/subtract run the same naive component formulas on both sides; only FMA

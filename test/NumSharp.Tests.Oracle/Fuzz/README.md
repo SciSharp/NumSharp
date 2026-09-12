@@ -285,9 +285,10 @@ float-tier widening · `full_like` selecting the fill value's CLR dtype · integ
 truncating instead of flooring · Char ones/eye/identity writing `'1'` (0x31) ·
 `ascontiguousarray`/`asfortranarray` failing NumPy's ndim≥1 scalar contract · einsum's internal
 order materialization leaking that public scalar promotion into a `()` contraction result. The one
-algorithmic remainder is complex `corrcoef`: its two normalization divides inherit the existing
-`npy_cdivide` versus `System.Numerics.Complex` 1-ULP difference; it now has its own ≤2-ULP branch
-and paired tightness pins instead of hiding under the broad complex-unary envelope.
+algorithmic remainder is complex `corrcoef`: the complex true-division itself is now BIT-EXACT
+(`ComplexDivideNumPy` ports NumPy's `CDOUBLE_divide` Smith's algorithm), so corrcoef's residual comes
+solely from `cov`'s managed complex GEMM (`np.dot`) — it has its own ≤2-ULP branch scoped to that GEMM
+instead of hiding under the broad complex-unary envelope.
 
 ### Table 1 — live `MisalignedRegistry` excuse branches
 
@@ -300,8 +301,7 @@ and paired tightness pins instead of hiding under the broad complex-unary envelo
 | unary ~ULP (transcendental/magnitude algorithm difference) | single-operand × Value, every diff ≤2 ULP — **EXCEPT exp/log/sin/cos/rad2deg/deg2rad at a float32 result, which are gated bit-exact** (see below) | 563 |
 | complex unary within 3 ULP (full NumPy-algorithm port) — FINITE interior only; the NaN SIGN of these ops is now compared **raw-byte** (`ComplexNanContractOps`, `BitDiff.Compare(nanBitExact:true)`) and a pure NaN-sign / signed-zero flip HARD-FAILS via `DiffHasSignFlip` before any ULP excuse runs (NumSharp reproduces NumPy 2.4.2 win-amd64 / MSVC UCRT NaN signs bit-for-bit) | complex unary × Value, ≤3 ULP, no sign flip | 11 |
 | complex arccos/arccosh/sinh/cosh (+ sin/cos routing through sinh/cosh) pathological FINITE edge (sub-DBL_MIN denormal-real flush / \|x\|∈[710,710.13] overflow boundary) — the former "cos/sin NaN zero-sign" regime is GONE (now byte-exact) | those ops × complex × Value, finite | 0 |
-| complex division ~1 ULP (npy_cdivide vs System.Numerics.Complex) | divide × complex × Value, ≤2 ULP | 17 |
-| complex corrcoef normalization inherits complex-division rounding | corrcoef × complex input/result × Value, ≤2 ULP | 1 |
+| complex corrcoef: `cov`'s managed complex GEMM vs zgemm (division itself is now bit-exact) | corrcoef × complex input/result × Value, ≤2 ULP | 1 |
 | complex add/subtract within 2 ULP (FMA contraction) | add/subtract × complex × Value, ≤2 ULP | 0 |
 | complex multiply cancellation / ~ULP at element magnitude (#12) | multiply × complex × Value, ≤16 element-magnitude ULP | 16 |
 | complex power ~ULP / gross inf-NaN edge (Complex.Pow vs npy_cpow) (F5, ledger L6) | power × complex × Value, ≤512 element-magnitude ULP or non-finite | 30 |
@@ -539,7 +539,8 @@ across all 13 dtypes × the call-form matrix, and DEEP-TRUTH f32/f64 cases (K=20
 carrying `expected.truth`, adjudicated by the prefer-precise branches since NumPy routes those
 through BLAS. **397/408 bit-exact**; 8 deep cases prefer-precise-excused (NumSharp CLOSER to truth
 than BLAS), 2 f32 deep contractions in P3's bounded known-loss scope, and one complex corrcoef
-normalization cell in the explicit ≤2-ULP npy_cdivide envelope. The tier also caught its own
+normalization cell in the explicit ≤2-ULP managed-complex-GEMM envelope (its complex division is now
+bit-exact — `ComplexDivideNumPy` ports `CDOUBLE_divide`). The tier also caught its own
 harness trap on arrival: a positional `axis` int to `np.vecdot` silently binds `out=` via the
 int→NDArray implicit conversion — the registry passes it BY NAME (documented at the call).
 

@@ -2040,21 +2040,54 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// NumPy-compatible complex division. The .NET BCL's Complex.op_Division uses
-        /// Smith's algorithm, which returns (NaN, NaN) when the divisor is (0+0j).
-        /// NumPy instead produces IEEE component-wise division: (a.real/0, a.imag/0),
-        /// giving (±inf, NaN) / (±inf, ±inf) / (NaN, NaN) depending on a's components.
-        /// For all other cases we defer to the BCL operator — it's ULP-identical to
-        /// NumPy for finite inputs.
+        /// NumPy-compatible complex division — a byte-for-byte transcription of the CDOUBLE_divide
+        /// scalar loop in NumPy 2.4.2 (<c>numpy/_core/src/umath/loops.c.src</c>), Smith's algorithm.
         /// </summary>
+        /// <remarks>
+        /// This must NOT defer to the BCL's <see cref="System.Numerics.Complex"/> <c>op_Division</c>:
+        /// both use Smith's algorithm, but they differ in the last bit for finite inputs on ~33% of
+        /// random operands. Two differences, each observable:
+        /// <list type="bullet">
+        /// <item>NumPy computes the reciprocal <c>scl = 1/denom</c> ONCE and MULTIPLIES; the BCL DIVIDES
+        /// each component by <c>denom</c>. So <c>z / 3.0</c> is <c>z*(1.0/3.0)</c> in NumPy but <c>z/3.0</c>
+        /// in the BCL — a 1-ULP gap wherever <c>a*(1/c) != a/c</c> (the reported footgun; trapezoid dodged
+        /// it only because <c>/2.0</c> is a power of two, hence exact both ways).</item>
+        /// <item>The branch pivot is <c>|c| &gt;= |d|</c> (NumPy) vs the BCL's <c>|d| &lt; |c|</c>, which pick
+        /// different formulas exactly at <c>|c| == |d|</c>.</item>
+        /// </list>
+        /// The multiplications must stay un-fused (plain <c>*</c>/<c>+</c>, never <see cref="System.Math.FusedMultiplyAdd"/>):
+        /// NumPy's win-amd64 wheel builds this loop under MSVC <c>/fp:precise</c>, which does not contract,
+        /// and RyuJIT never introduces an FMA on its own — so the separate ops match bit-for-bit.
+        /// The divide-by-zero sub-branch divides by <c>|c|</c>/<c>|d|</c> (both <c>+0.0</c> via <see cref="System.Math.Abs(double)"/>),
+        /// so <c>z/(0+0j)</c> yields NumPy's component-wise IEEE result (±inf / NaN) rather than the BCL's (NaN, NaN).
+        /// </remarks>
         // Per-element op called from the binary IL kernel's inner loop — inline where possible,
         // full tier-1 codegen when invoked standalone via the kernel's Call.
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static System.Numerics.Complex ComplexDivideNumPy(System.Numerics.Complex a, System.Numerics.Complex b)
         {
-            if (b.Real == 0.0 && b.Imaginary == 0.0)
-                return new System.Numerics.Complex(a.Real / 0.0, a.Imaginary / 0.0);
-            return a / b;
+            double in1r = a.Real, in1i = a.Imaginary;
+            double in2r = b.Real, in2i = b.Imaginary;
+            double in2r_abs = System.Math.Abs(in2r);
+            double in2i_abs = System.Math.Abs(in2i);
+            if (in2r_abs >= in2i_abs)
+            {
+                // Divisor real part dominates (covers the real-scalar case, in2i == 0).
+                if (in2r_abs == 0.0 && in2i_abs == 0.0)
+                    // Divide by zero → component-wise IEEE division by +0.0 (NumPy's complex inf/nan).
+                    return new System.Numerics.Complex(in1r / in2r_abs, in1i / in2i_abs);
+
+                double rat = in2i / in2r;
+                double scl = 1.0 / (in2r + in2i * rat);
+                return new System.Numerics.Complex((in1r + in1i * rat) * scl, (in1i - in1r * rat) * scl);
+            }
+            else
+            {
+                // Divisor imaginary part dominates.
+                double rat = in2r / in2i;
+                double scl = 1.0 / (in2i + in2r * rat);
+                return new System.Numerics.Complex((in1r * rat + in1i) * scl, (in1i * rat - in1r) * scl);
+            }
         }
 
         /// <summary>
