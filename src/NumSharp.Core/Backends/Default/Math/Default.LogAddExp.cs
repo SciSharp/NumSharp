@@ -7,14 +7,14 @@ namespace NumSharp.Backends
     public partial class DefaultEngine
     {
         // =====================================================================
-        // np.logaddexp / np.logaddexp2 / np.nextafter
+        // np.logaddexp / np.logaddexp2 / np.nextafter / np.copysign / np.hypot
         //
         // Float-tier binary ufuncs whose loop signatures (ee->e, ff->f, dd->d, gg->g) and dtype
         // promotion are IDENTICAL to arctan2, so the promotion / path-classification / kernel-dispatch
         // machinery is shared with Default.ATan2.cs (PromoteATan2Binary, ClassifyATan2Path,
         // ExecuteATan2Kernel, ConvertToDouble/ConvertToDecimal). The only op-specific piece is the
         // scalar kernel, which the MixedTypeKernel resolves through EmitScalarOperation ->
-        // ResolveLogAddNextHelper -> NDLogAddExpMath.
+        // GetLogAddNextMethod -> NDLogAddExpMath (hypot -> NDHypotMath).
         // =====================================================================
 
         public override NDArray LogAddExp(NDArray x1, NDArray x2, DType dtype = null, NDArray @out = null, NDArray where = null)
@@ -28,6 +28,9 @@ namespace NumSharp.Backends
 
         public override NDArray CopySign(NDArray x1, NDArray x2, DType dtype = null, NDArray @out = null, NDArray where = null)
             => ExecuteFloatTierBinary(x1, x2, BinaryOp.CopySign, dtype?.GetTypeCode(), @out, where);
+
+        public override NDArray Hypot(NDArray x1, NDArray x2, DType dtype = null, NDArray @out = null, NDArray where = null)
+            => ExecuteFloatTierBinary(x1, x2, BinaryOp.Hypot, dtype?.GetTypeCode(), @out, where);
 
         // Valid loop dtypes for these ufuncs: the float family (NumPy ee/ff/dd + NumSharp's decimal
         // extension standing in for gg). Everything else -> NumPy's "No loop matching" TypeError.
@@ -95,6 +98,17 @@ namespace NumSharp.Backends
                 path = ClassifyATan2Path(aStrides, bStrides, shape, resultShape.NDim);
             }
 
+            // np.hypot has no SIMD in NumPy (a scalar BINARY_LOOP), so the correctly-rounded Borges kernel
+            // vectorizes cleanly and beats it several-fold. Take the C# SIMD driver for the contiguous /
+            // scalar-broadcast, same-dtype (no per-element cast) float32/float64 cases — bit-identical to
+            // the IL scalar kernel; every other layout/dtype falls through to it. (arctan2/logaddexp/… have
+            // no such fast path: they route through NDIter/scalar libm and stay on the IL kernel.)
+            if (op == BinaryOp.Hypot && NDHypotMath.SimdAvailable
+                && (resultType == NPTypeCode.Single || resultType == NPTypeCode.Double)
+                && t1 == resultType && t2 == resultType
+                && TryExecuteHypotSimd(x1, x2, result, s1, s2, path, resultType))
+                return result;
+
             var key = new MixedTypeKernelKey(t1, t2, resultType, op, path);
             var kernel = DirectILKernelGenerator.GetMixedTypeKernel(key);
             if (kernel == null)
@@ -103,6 +117,52 @@ namespace NumSharp.Backends
 
             ExecuteATan2Kernel(kernel, x1, x2, result, s1, s2);
             return result;
+        }
+
+        /// <summary>
+        /// The SIMD fast path for <c>np.hypot</c> (see the call site). Handles the contiguous
+        /// (<see cref="ExecutionPath.SimdFull"/>) and scalar-broadcast
+        /// (<see cref="ExecutionPath.SimdScalarLeft"/>/<see cref="ExecutionPath.SimdScalarRight"/>) cases;
+        /// returns false for strided/chunked/general layouts so they take the IL scalar kernel. hypot is
+        /// commutative, so a scalar-broadcast operand becomes the second argument regardless of side.
+        /// Logical-start pointers follow the house rule <c>Address + Shape.offset·itemsize</c>.
+        /// </summary>
+        private static unsafe bool TryExecuteHypotSimd(NDArray x1, NDArray x2, NDArray result,
+            Shape s1, Shape s2, ExecutionPath path, NPTypeCode resultType)
+        {
+            long n = result.size;
+            int elem = result.dtypesize;
+            bool f64 = resultType == NPTypeCode.Double;
+
+            switch (path)
+            {
+                case ExecutionPath.SimdFull:
+                {
+                    byte* p1 = (byte*)x1.Address + s1.offset * elem;
+                    byte* p2 = (byte*)x2.Address + s2.offset * elem;
+                    if (f64) NDHypotMath.HypotContiguousF64((double*)p1, (double*)p2, (double*)result.Address, n);
+                    else NDHypotMath.HypotContiguousF32((float*)p1, (float*)p2, (float*)result.Address, n);
+                    return true;
+                }
+                case ExecutionPath.SimdScalarRight:   // x2 scalar-broadcast, x1 contiguous
+                {
+                    byte* p1 = (byte*)x1.Address + s1.offset * elem;
+                    double sc = ConvertToDouble(x2, x2.GetTypeCode);
+                    if (f64) NDHypotMath.HypotScalarF64((double*)p1, sc, (double*)result.Address, n);
+                    else NDHypotMath.HypotScalarF32((float*)p1, (float)sc, (float*)result.Address, n);
+                    return true;
+                }
+                case ExecutionPath.SimdScalarLeft:    // x1 scalar-broadcast, x2 contiguous
+                {
+                    byte* p2 = (byte*)x2.Address + s2.offset * elem;
+                    double sc = ConvertToDouble(x1, x1.GetTypeCode);
+                    if (f64) NDHypotMath.HypotScalarF64((double*)p2, sc, (double*)result.Address, n);
+                    else NDHypotMath.HypotScalarF32((float*)p2, (float)sc, (float*)result.Address, n);
+                    return true;
+                }
+                default:
+                    return false;
+            }
         }
 
         /// <summary>Fold two 0-d operands at the loop dtype (scalar-if-both-scalar, NumPy parity).</summary>
@@ -117,6 +177,7 @@ namespace NumSharp.Backends
                     BinaryOp.LogAddExp => NDLogAddExpMath.LogAddExpDecimal(a, b),
                     BinaryOp.LogAddExp2 => NDLogAddExpMath.LogAddExp2Decimal(a, b),
                     BinaryOp.NextAfter => NDLogAddExpMath.NextAfterDecimal(a, b),
+                    BinaryOp.Hypot => NDHypotMath.HypotDecimal(a, b),
                     _ => NDLogAddExpMath.CopySignDecimal(a, b),
                 };
                 return NDArray.Scalar(r);
@@ -133,6 +194,7 @@ namespace NumSharp.Backends
                         BinaryOp.LogAddExp => NDLogAddExpMath.LogAddExpHalf((Half)xf, (Half)yf),
                         BinaryOp.LogAddExp2 => NDLogAddExpMath.LogAddExp2Half((Half)xf, (Half)yf),
                         BinaryOp.NextAfter => NDLogAddExpMath.NextAfterHalf((Half)xf, (Half)yf),
+                        BinaryOp.Hypot => NDHypotMath.HypotHalf((Half)xf, (Half)yf),
                         _ => NDLogAddExpMath.CopySignHalf((Half)xf, (Half)yf),
                     };
                     return NDArray.Scalar(r);
@@ -145,6 +207,7 @@ namespace NumSharp.Backends
                         BinaryOp.LogAddExp => NDLogAddExpMath.LogAddExpF(xf, yf),
                         BinaryOp.LogAddExp2 => NDLogAddExpMath.LogAddExp2F(xf, yf),
                         BinaryOp.NextAfter => NDLogAddExpMath.NextAfterF(xf, yf),
+                        BinaryOp.Hypot => NDHypotMath.HypotF(xf, yf),
                         _ => NDLogAddExpMath.CopySignF(xf, yf),
                     };
                     return NDArray.Scalar(r);
@@ -156,6 +219,7 @@ namespace NumSharp.Backends
                         BinaryOp.LogAddExp => NDLogAddExpMath.LogAddExp(xd, yd),
                         BinaryOp.LogAddExp2 => NDLogAddExpMath.LogAddExp2(xd, yd),
                         BinaryOp.NextAfter => NDLogAddExpMath.NextAfter(xd, yd),
+                        BinaryOp.Hypot => NDHypotMath.Hypot(xd, yd),
                         _ => NDLogAddExpMath.CopySign(xd, yd),
                     };
                     return NDArray.Scalar(r);

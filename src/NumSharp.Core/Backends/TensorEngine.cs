@@ -139,11 +139,13 @@ namespace NumSharp
 
         public abstract NDArray ATan(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray ATan2(NDArray y, NDArray x, DType dtype = null, NDArray @out = null, NDArray where = null);
-        // np.logaddexp / np.logaddexp2 / np.nextafter — float-tier binary ufuncs (same promotion as ATan2).
+        // np.logaddexp / np.logaddexp2 / np.nextafter / np.copysign / np.hypot — float-tier binary
+        // ufuncs (same promotion as ATan2).
         public abstract NDArray LogAddExp(NDArray x1, NDArray x2, DType dtype = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray LogAddExp2(NDArray x1, NDArray x2, DType dtype = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray NextAfter(NDArray x1, NDArray x2, DType dtype = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray CopySign(NDArray x1, NDArray x2, DType dtype = null, NDArray @out = null, NDArray where = null);
+        public abstract NDArray Hypot(NDArray x1, NDArray x2, DType dtype = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray ACos(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray ASin(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
 
