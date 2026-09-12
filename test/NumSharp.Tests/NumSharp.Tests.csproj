@@ -32,6 +32,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\examples\gist\NumSharp.GistExamples.csproj" />
     <ProjectReference Include="..\..\src\NumSharp.Bitmap\NumSharp.Bitmap.csproj" />
     <ProjectReference Include="..\..\src\NumSharp.Core\NumSharp.Core.csproj" />
     <!-- The optional external-CBLAS/LAPACK engine. The differential-fuzz oracle (incl. the
@@ -43,6 +44,11 @@
          backend is ABSENT), so this assembly opts out via NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL=0 in
          its own BlasEngineAutoInstallGuard and the engine tests enable it per-test instead. -->
     <ProjectReference Include="..\..\src\NumSharp.Interop.OpenBLAS\NumSharp.Interop.OpenBLAS.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="../../examples/gist/demo-output.txt" Link="GistDemoOutput.txt" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../examples/gist/karpathy/demo-output.txt" Link="KarpathyDemoOutput.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
