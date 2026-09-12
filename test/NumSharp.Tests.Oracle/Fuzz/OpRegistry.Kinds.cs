@@ -322,6 +322,16 @@ namespace NumSharp.Tests.Fuzz
                     var (quotient, remainder) = np.divmod(ops[0], ops[1]);
                     return new[] { quotient, remainder };
                 }
+                // Numerical gradient — one component per requested axis (a bare array for a single
+                // axis, a tuple otherwise). Recorded as a tuple so arity is asserted; the corpus uses
+                // unit spacing (x=None), so only edge_order/axis vary.
+                case "gradient":
+                {
+                    int eo = p.ContainsKey("edge_order") ? p["edge_order"].GetInt32() : 1;
+                    return p.ContainsKey("axis")
+                        ? (NDArray[])np.gradient(ops[0], null, p["axis"].GetInt32(), eo)
+                        : (NDArray[])np.gradient(ops[0], edge_order: eo);
+                }
                 case "average_returned":
                 {
                     int? axis = p["axis"].ValueKind == JsonValueKind.Null

@@ -148,6 +148,12 @@ namespace NumSharp.Tests.Fuzz
                 case "nancumsum": return np.nancumsum(ops[0], ParseAxis(p));
                 case "nancumprod": return np.nancumprod(ops[0], ParseAxis(p));
                 case "diff": return np.diff(ops[0], p["n"].GetInt32(), p["axis"].GetInt32());
+                // Composite trapezoidal integration (array/scalar result). x=None in the corpus, so
+                // only dx/axis vary; a 1-D operand reduces to a 0-d scalar.
+                case "trapezoid":
+                    return np.trapezoid(ops[0], null,
+                                        p.ContainsKey("dx") ? p["dx"].GetDouble() : 1.0,
+                                        p.ContainsKey("axis") ? p["axis"].GetInt32() : -1);
 
                 // In-place out= aliasing (W11): the output buffer IS an input operand.
                 case "maximum_out": np.maximum(ops[0], ops[1], ops[0]); return ops[0];
