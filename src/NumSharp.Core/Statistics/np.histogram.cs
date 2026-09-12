@@ -225,7 +225,13 @@ namespace NumSharp
 
             if (density)
             {
-                // db = float64 bin widths; result = n / db / n.sum(). n stays int/float/complex, promotes to float/complex.
+                // db = float64 bin widths; result = n / db / n.sum() — NumPy's exact density formula. n stays
+                // int/float/complex and promotes to float/complex. The raw histogram n, db and the edges are
+                // bit-identical to NumPy; the ONLY residual is that np.sum(n)'s reduction ORDER can differ from
+                // NumPy's pairwise summation by ≤ a few ULP (and complex division amplifies that in the imaginary
+                // quotient when n.sum()'s imaginary part is small), so a density result may sit within a handful of
+                // ULP of NumPy's. That is the library-wide np.sum reduction-order characteristic, not a histogram
+                // divergence — matching it would mean reimplementing NumPy's pairwise sum, an np.sum concern.
                 NDArray db = np.diff(binEdges).astype(NPTypeCode.Double);
                 NDArray dens = n / db / np.sum(n);
                 return new HistogramResult(dens, binEdges);
@@ -449,15 +455,23 @@ namespace NumSharp
 
             if (nEqualBins.HasValue)
             {
-                // Pin the bin/compute dtype B up front (gh-10322): float16 for float16 input, float32
-                // for float32, float64 for everything else. Weak-float endpoints never widen a strong
-                // float array, so this is the float-promotion of the input dtype.
-                NPTypeCode binType = FloatPromoteBinType(a.typecode);
+                // The edges' RESULT dtype (gh-10322): float16 for float16 input, float32 for float32, float64 for
+                // everything else — because the input array is in NumPy's result_type(first, last, a), so a weak
+                // endpoint never widens a strong float array. This is also the dtype the uniform fast-path kernel
+                // casts samples to (NumPy's `tmp_a.astype(bin_edges.dtype)`).
+                NPTypeCode resultType = FloatPromoteBinType(a.typecode);
+                // The COMPUTE dtype, however, is float64 whenever the endpoints are weak — a supplied range (Python
+                // floats) or an empty input (the 0/1 int defaults) — since those cannot widen the linspace past
+                // float64; only strong array-scalar endpoints (non-empty, no range → a.min()/a.max()) keep the
+                // arithmetic in the narrow float width. Getting this wrong left a ~1 ULP error on ranged/empty
+                // float32/float16 edges (NumPy computes them in float64, then casts to the result width).
+                bool weakEndpoints = range.HasValue || a.size == 0;
+                NPTypeCode computeType = weakEndpoints ? NPTypeCode.Double : resultType;
                 int nb = nEqualBins.Value;
-                NDArray edges = HistogramLinspace(first, last, nb + 1, binType);
+                NDArray edges = HistogramLinspace(first, last, nb + 1, computeType, resultType);
                 if (AnyNonIncreasing(edges))
                     throw new ValueError($"Too many bins for data range. Cannot create {nb} finite-sized bins.");
-                return new BinEdgesResult(edges, true, first, last, nb, binType);
+                return new BinEdgesResult(edges, true, first, last, nb, resultType);
             }
 
             return new BinEdgesResult(binEdges, false, 0, 0, 0, NPTypeCode.Double);
@@ -616,22 +630,51 @@ namespace NumSharp
         };
 
         /// <summary>
-        ///     Equal-width bin edges computed in the bin dtype B, matching NumPy's
-        ///     <c>linspace(first, last, nbins+1, dtype=B)</c> BIT-FOR-BIT. Float64 defers to <see cref="linspace"/>
-        ///     (already double-internal), but float32/float16 must run the linspace arithmetic in their OWN width —
-        ///     NumSharp's <c>linspace</c> computes in double and casts, which diverges from NumPy by ~1 ULP for the
-        ///     narrower floats (NumPy's endpoints are B-typed scalars, so its whole computation is in B).
+        ///     Equal-width bin edges reproducing NumPy's <c>linspace(first, last, num, dtype=resultType)</c>
+        ///     BIT-FOR-BIT, honouring the subtle split between the dtype the arithmetic RUNS in
+        ///     (<paramref name="computeType"/>) and the dtype the edges END UP in (<paramref name="resultType"/>).
+        /// </summary>
+        /// <remarks>
+        ///     NumPy's <c>linspace</c> computes internally in <c>result_type(first, last, num)</c> and only then
+        ///     casts to the requested dtype. The two dtypes DIVERGE exactly when the endpoints are "weak" — a
+        ///     supplied <c>range</c> (Python floats) or an empty input (the 0/1 defaults, Python ints) — because a
+        ///     weak scalar cannot widen the result past float64, so the arithmetic runs in float64 and is then cast
+        ///     down to a float32/float16 result. They COINCIDE when the endpoints are "strong" array scalars
+        ///     (non-empty, no range → <c>a.min()/a.max()</c>), where the whole computation stays in the array's own
+        ///     float width. Passing them separately is what makes both the strong path (in-width, e.g. a float32
+        ///     array's own edges) and the weak path (float64 arithmetic → float32/float16 cast) bit-exact; conflating
+        ///     them left a ~1 ULP error on ranged/empty float32/float16 histograms.
+        /// </remarks>
+        /// <param name="first">Lower outer edge.</param>
+        /// <param name="last">Upper outer edge.</param>
+        /// <param name="num">Number of edge points (<c>nbins + 1</c>).</param>
+        /// <param name="computeType">The dtype the linspace arithmetic runs in (Half/Single/Double).</param>
+        /// <param name="resultType">The dtype the returned edges must have (Half/Single/Double).</param>
+        /// <returns>The <paramref name="num"/> edges in dtype <paramref name="resultType"/>.</returns>
+        private static unsafe NDArray HistogramLinspace(double first, double last, int num, NPTypeCode computeType, NPTypeCode resultType)
+        {
+            // Compute in the arithmetic dtype, then cast to the result dtype (a no-op when they coincide).
+            NDArray computed = ComputeLinspaceInDtype(first, last, num, computeType);
+            return computeType == resultType ? computed : computed.astype(resultType);
+        }
+
+        /// <summary>
+        ///     The single-dtype linspace core: float64 defers to <see cref="linspace"/> (already double-internal),
+        ///     while float32/float16 run the arithmetic in their OWN width (widen-op-narrow for float16, matching
+        ///     NumPy's npy_half ufuncs) so a strong-endpoint narrow-float histogram is bit-exact rather than the
+        ///     ~1 ULP off a double-internal linspace would give.
         /// </summary>
         /// <param name="first">Lower outer edge.</param>
         /// <param name="last">Upper outer edge.</param>
         /// <param name="num">Number of edge points (<c>nbins + 1</c>).</param>
-        /// <param name="binType">The bin/compute dtype B (Half/Single/Double).</param>
-        /// <returns>The <paramref name="num"/> edges in dtype <paramref name="binType"/>.</returns>
-        private static unsafe NDArray HistogramLinspace(double first, double last, int num, NPTypeCode binType)
+        /// <param name="dtype">The dtype the arithmetic runs in AND the result has (Half/Single/Double).</param>
+        /// <returns>The <paramref name="num"/> edges in dtype <paramref name="dtype"/>.</returns>
+        private static unsafe NDArray ComputeLinspaceInDtype(double first, double last, int num, NPTypeCode dtype)
         {
-            if (binType == NPTypeCode.Double)
+            if (dtype == NPTypeCode.Double)
                 return np.linspace(first, last, num, endpoint: true, dtype: NPTypeCode.Double);
 
+            NPTypeCode binType = dtype;
             var edges = new NDArray(binType, Shape.Vector(num), false);
             int div = num - 1; // histogram always has endpoint=true and num = nbins+1 >= 2, so div >= 1
 
@@ -673,11 +716,27 @@ namespace NumSharp
         private static double ScalarDouble(NDArray nd)
             => nd.astype(NPTypeCode.Double).GetAtIndex<double>(0);
 
-        /// <summary>Ensure <paramref name="a"/> is a C-contiguous array of dtype <paramref name="tc"/> (copying only if needed).</summary>
+        /// <summary>
+        ///     Ensure <paramref name="a"/> is a C-contiguous array of dtype <paramref name="tc"/> whose
+        ///     <b>base address is its logical element 0</b>, so a kernel may read <c>(void*)result.Address</c>
+        ///     directly. Copies only when needed.
+        /// </summary>
+        /// <remarks>
+        ///     The <c>Shape.offset == 0</c> guard is load-bearing, not redundant with <see cref="Shape.IsContiguous"/>:
+        ///     a size-1 array is <em>trivially</em> contiguous whatever its stride/offset, and a strided view such as
+        ///     <c>np.imag(complexWeights)</c> (stride 2, offset 1) keeps the buffer's BASE address rather than
+        ///     re-seating it (only a simple contiguous SLICE re-seats the address and zeroes the offset). Without the
+        ///     guard, a single complex weight's imaginary part was read from offset 0 — the REAL part — so
+        ///     <c>np.histogram([x], bins, weights=[re+im·j])</c> returned <c>&lt;re, re&gt;</c> instead of
+        ///     <c>&lt;re, im&gt;</c>. Requiring offset 0 forces the copy that folds the offset into a fresh buffer.
+        /// </remarks>
+        /// <param name="a">The array to normalize.</param>
+        /// <param name="tc">The dtype the result must have.</param>
+        /// <returns><paramref name="a"/> itself when already contiguous-from-zero in dtype <paramref name="tc"/>; otherwise a fresh copy.</returns>
         private static NDArray EnsureContiguousDtype(NDArray a, NPTypeCode tc)
         {
             NDArray typed = a.typecode == tc ? a : a.astype(tc);
-            return typed.Shape.IsContiguous ? typed : typed.copy();
+            return (typed.Shape.IsContiguous && typed.Shape.offset == 0) ? typed : typed.copy();
         }
 
         /// <summary>Interpret a scalar <c>bins</c> value (C# int or a 0-d integer array) as a bin count.</summary>
@@ -724,13 +783,26 @@ namespace NumSharp
 
         private static bool IsFinite(double v) => !double.IsNaN(v) && !double.IsInfinity(v);
 
-        /// <summary>Render an edge value the way NumPy prints it inside the "range is not finite" messages.</summary>
+        /// <summary>
+        ///     Render an edge value the way NumPy's f-string prints it inside the "supplied/autodetected range
+        ///     of [.,.] is not finite" messages — i.e. Python's <c>str(float)</c> / <c>str(np.float64)</c>, NOT
+        ///     .NET's default <see cref="double.ToString()"/>. The difference is load-bearing for verbatim error
+        ///     parity: Python appends a trailing <c>.0</c> to whole numbers (<c>1.0</c>, <c>100.0</c>, <c>0.0</c>)
+        ///     and switches to <c>e±NN</c> for large/small magnitudes, where .NET's default drops the <c>.0</c>
+        ///     (<c>1.0</c> → "1"), so a non-finite range with a whole-number bound diverged from NumPy.
+        /// </summary>
+        /// <param name="v">The edge value to render.</param>
+        /// <returns>The NumPy/Python scalar-repr string for <paramref name="v"/>.</returns>
         private static string FormatEdge(double v)
         {
+            // Non-finite tokens are spelled the same by NumPy and are cheap to emit without allocating.
             if (double.IsNaN(v)) return "nan";
             if (double.IsPositiveInfinity(v)) return "inf";
             if (double.IsNegativeInfinity(v)) return "-inf";
-            return v.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            // A finite bound goes through NumSharp's 0-d scalar str, which is a byte-exact port of NumPy's
+            // float repr (verified to equal Python's str(float) across whole/decimal/scientific magnitudes).
+            using NDArray scalar = np.array(v);
+            return scalar.ToString(false);
         }
 
         /// <summary>
