@@ -326,6 +326,16 @@ namespace NumSharp.Backends.Kernels
             public static readonly MethodInfo CopySignH = LA(nameof(Utilities.NDLogAddExpMath.CopySignHalf), typeof(Half));
             public static readonly MethodInfo CopySignDec = LA(nameof(Utilities.NDLogAddExpMath.CopySignDecimal), typeof(decimal));
 
+            // np.hypot scalar kernels — same shape/family as the LogAddNext helpers above, resolved by
+            // GetLogAddNextMethod. Borges' correctly-rounded FMA hypot lives in NDHypotMath.
+            private static MethodInfo HY(string name, Type t) =>
+                typeof(Utilities.NDHypotMath).GetMethod(name, new[] { t, t })
+                ?? throw new MissingMethodException(typeof(Utilities.NDHypotMath).FullName, name);
+            public static readonly MethodInfo HypotD = HY(nameof(Utilities.NDHypotMath.Hypot), typeof(double));
+            public static readonly MethodInfo HypotF = HY(nameof(Utilities.NDHypotMath.HypotF), typeof(float));
+            public static readonly MethodInfo HypotH = HY(nameof(Utilities.NDHypotMath.HypotHalf), typeof(Half));
+            public static readonly MethodInfo HypotDec = HY(nameof(Utilities.NDHypotMath.HypotDecimal), typeof(decimal));
+
             // Integer power helpers (squared-exponentiation with native wrapping).
             // Used by EmitPowerOperation when result type is integer to preserve
             // NumPy's exact-wrap semantics that Math.Pow's double round-trip loses.
@@ -1307,12 +1317,13 @@ namespace NumSharp.Backends.Kernels
                 return;
             }
 
-            // np.logaddexp / np.logaddexp2 / np.nextafter — one static helper per (op, loop dtype).
-            // Operands arrive already in resultType (the generic binary loops converted both), and
-            // each helper is signatured (resultType, resultType) -> resultType, so the whole scalar
-            // op is a single Call. Intercept BEFORE the decimal/half routing (like min/max) so those
-            // dtypes flow through the shared helpers rather than EmitDecimal/HalfOperation.
-            if (op == BinaryOp.LogAddExp || op == BinaryOp.LogAddExp2 || op == BinaryOp.NextAfter || op == BinaryOp.CopySign)
+            // np.logaddexp / np.logaddexp2 / np.nextafter / np.copysign / np.hypot — one static helper
+            // per (op, loop dtype). Operands arrive already in resultType (the generic binary loops
+            // converted both), and each helper is signatured (resultType, resultType) -> resultType, so
+            // the whole scalar op is a single Call. Intercept BEFORE the decimal/half routing (like
+            // min/max) so those dtypes flow through the shared helpers rather than EmitDecimal/HalfOperation.
+            if (op == BinaryOp.LogAddExp || op == BinaryOp.LogAddExp2 || op == BinaryOp.NextAfter
+                || op == BinaryOp.CopySign || op == BinaryOp.Hypot)
             {
                 EmitLogAddNextOperation(il, op, resultType);
                 return;
@@ -1582,10 +1593,10 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// Emit np.logaddexp / np.logaddexp2 / np.nextafter / np.copysign via the
-        /// <see cref="Utilities.NDLogAddExpMath"/> scalar helpers. Stack: [x1, x2] (already in the loop
-        /// dtype) -> [result]. Mirrors <see cref="EmitFloorDivideOperation"/>: resolve the per-dtype
-        /// helper, then a single Call.
+        /// Emit np.logaddexp / np.logaddexp2 / np.nextafter / np.copysign / np.hypot via the
+        /// <see cref="Utilities.NDLogAddExpMath"/> (and, for hypot, <see cref="Utilities.NDHypotMath"/>)
+        /// scalar helpers. Stack: [x1, x2] (already in the loop dtype) -> [result]. Mirrors
+        /// <see cref="EmitFloorDivideOperation"/>: resolve the per-dtype helper, then a single Call.
         /// </summary>
         private static void EmitLogAddNextOperation(ILGenerator il, BinaryOp op, NPTypeCode resultType)
             => il.EmitCall(OpCodes.Call, GetLogAddNextMethod(op, resultType), null);
@@ -1625,6 +1636,14 @@ namespace NumSharp.Backends.Kernels
                         NPTypeCode.Single => CachedMethods.NextAfterF,
                         NPTypeCode.Decimal => CachedMethods.NextAfterDec,
                         _ => CachedMethods.NextAfterD,
+                    };
+                case BinaryOp.Hypot:
+                    return resultType switch
+                    {
+                        NPTypeCode.Half => CachedMethods.HypotH,
+                        NPTypeCode.Single => CachedMethods.HypotF,
+                        NPTypeCode.Decimal => CachedMethods.HypotDec,
+                        _ => CachedMethods.HypotD,
                     };
                 default: // BinaryOp.CopySign
                     return resultType switch

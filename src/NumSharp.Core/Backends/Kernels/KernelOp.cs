@@ -41,7 +41,10 @@ namespace NumSharp.Backends.Kernels
         /// <summary>Next representable value after x1 toward x2 (np.nextafter).</summary>
         NextAfter,
         /// <summary>Magnitude of x1 with the sign of x2 (np.copysign).</summary>
-        CopySign
+        CopySign,
+        /// <summary>sqrt(x1**2 + x2**2) without spurious overflow/underflow (np.hypot). Correctly-rounded
+        /// (Borges FMA); routed to NDHypotMath, scalar-only like the rest of this family.</summary>
+        Hypot
     }
 
     /// <summary>
