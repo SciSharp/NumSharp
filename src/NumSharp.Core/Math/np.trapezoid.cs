@@ -33,12 +33,28 @@ namespace NumSharp
     //
     // The elementwise half `d*(y[1:]+y[:-1])/2.0` is produced in ONE fused pass
     // via np.evaluate (three ops, no intermediate temporaries) and then reduced
-    // by np.sum — whose pairwise summation is already bit-identical to NumPy's
-    // `.sum(axis)`. Fusing avoids the three full-size temporaries NumPy itself
-    // allocates, so trapezoid is 2-9x faster than NumPy at 100K+ elements while
-    // staying byte-for-byte equal. Should the fused kernel ever reject an operand
-    // set, a bit-identical plain-operator composition is the fallback. There is
-    // no hand-written per-element loop: every loop lives in np.evaluate / np.sum.
+    // by np.sum — whose pairwise summation is bit-identical to NumPy's `.sum(axis)`
+    // for a C-contiguous reduction. Fusing avoids the three full-size temporaries
+    // NumPy itself allocates, so trapezoid is 2-9x faster than NumPy at 100K+
+    // elements while staying byte-for-byte equal. Should the fused kernel ever
+    // reject an operand set, a bit-identical plain-operator composition is the
+    // fallback. There is no hand-written per-element loop: every loop lives in
+    // np.evaluate / np.sum.
+    //
+    // ACCEPTED 1-ULP divergence, float16 / complex128 ONLY, non-C-contiguous input
+    // ONLY (float32/float64/integer are bit-exact on every layout): trapezoid ends
+    // in a reduction, and summation is not associative, so the result depends on the
+    // ORDER the axis is traversed. NumPy's `.sum` is itself layout-order-dependent —
+    // for an F-contiguous `y`, NumPy preserves the F layout of the intermediate
+    // `d*(y1+y2)/2` and sums it in F-order, whereas NumSharp's fused half is
+    // C-contiguous and sums in C-order. For float16 (widen-compute-narrow pairwise)
+    // and complex128 (scalar pairwise) those two orders round apart by a single ULP;
+    // for float32/float64 the multi-accumulator SIMD reduction lands on the same bits
+    // either way. This is the same class as the documented "order-dependent reduction
+    // rounding" — the value is correct to 1 ULP and only the last bit of an f16/c128
+    // result on a transposed/Fortran/strided input differs. Matching it would mean
+    // reproducing NumPy's intermediate-layout preservation AND its per-layout sum
+    // traversal bit-for-bit, abandoning the fused fast path for a non-contractual bit.
     public static partial class np
     {
         /// <summary>
