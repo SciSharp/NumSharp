@@ -398,6 +398,41 @@ namespace NumSharp.Backends.Kernels
             public static readonly MethodInfo RemSingle = NDDiv(nameof(Utilities.NDDivision.RemSingle), typeof(float));
             public static readonly MethodInfo RemDouble = NDDiv(nameof(Utilities.NDDivision.RemDouble), typeof(double));
 
+            // C-style fmod helpers (NDDivision, np.fmod) — truncated remainder, sign of dividend.
+            // Same 2-arg signature as the Rem* family, resolved via NDDiv.
+            public static readonly MethodInfo FmodSByte = NDDiv(nameof(Utilities.NDDivision.FmodSByte), typeof(sbyte));
+            public static readonly MethodInfo FmodByte = NDDiv(nameof(Utilities.NDDivision.FmodByte), typeof(byte));
+            public static readonly MethodInfo FmodInt16 = NDDiv(nameof(Utilities.NDDivision.FmodInt16), typeof(short));
+            public static readonly MethodInfo FmodUInt16 = NDDiv(nameof(Utilities.NDDivision.FmodUInt16), typeof(ushort));
+            public static readonly MethodInfo FmodChar = NDDiv(nameof(Utilities.NDDivision.FmodChar), typeof(char));
+            public static readonly MethodInfo FmodInt32 = NDDiv(nameof(Utilities.NDDivision.FmodInt32), typeof(int));
+            public static readonly MethodInfo FmodUInt32 = NDDiv(nameof(Utilities.NDDivision.FmodUInt32), typeof(uint));
+            public static readonly MethodInfo FmodInt64 = NDDiv(nameof(Utilities.NDDivision.FmodInt64), typeof(long));
+            public static readonly MethodInfo FmodUInt64 = NDDiv(nameof(Utilities.NDDivision.FmodUInt64), typeof(ulong));
+            public static readonly MethodInfo FmodSingle = NDDiv(nameof(Utilities.NDDivision.FmodSingle), typeof(float));
+            public static readonly MethodInfo FmodDouble = NDDiv(nameof(Utilities.NDDivision.FmodDouble), typeof(double));
+            public static readonly MethodInfo FmodDecimal = NDDiv(nameof(Utilities.NDDivision.FmodDecimal), typeof(decimal));
+
+            // Fused divmod helpers (NDDivision, np.divmod) — floored quotient (return) + floored
+            // remainder (out). Signature is (T, T, out T) -> T, so resolve with the by-ref third arg.
+            private static MethodInfo NDDiv3(string name, Type t) =>
+                typeof(Utilities.NDDivision).GetMethod(name, new[] { t, t, t.MakeByRefType() })
+                ?? throw new MissingMethodException(typeof(Utilities.NDDivision).FullName, name);
+
+            public static readonly MethodInfo DivmodSByte = NDDiv3(nameof(Utilities.NDDivision.DivmodSByte), typeof(sbyte));
+            public static readonly MethodInfo DivmodByte = NDDiv3(nameof(Utilities.NDDivision.DivmodByte), typeof(byte));
+            public static readonly MethodInfo DivmodInt16 = NDDiv3(nameof(Utilities.NDDivision.DivmodInt16), typeof(short));
+            public static readonly MethodInfo DivmodUInt16 = NDDiv3(nameof(Utilities.NDDivision.DivmodUInt16), typeof(ushort));
+            public static readonly MethodInfo DivmodChar = NDDiv3(nameof(Utilities.NDDivision.DivmodChar), typeof(char));
+            public static readonly MethodInfo DivmodInt32 = NDDiv3(nameof(Utilities.NDDivision.DivmodInt32), typeof(int));
+            public static readonly MethodInfo DivmodUInt32 = NDDiv3(nameof(Utilities.NDDivision.DivmodUInt32), typeof(uint));
+            public static readonly MethodInfo DivmodInt64 = NDDiv3(nameof(Utilities.NDDivision.DivmodInt64), typeof(long));
+            public static readonly MethodInfo DivmodUInt64 = NDDiv3(nameof(Utilities.NDDivision.DivmodUInt64), typeof(ulong));
+            public static readonly MethodInfo DivmodHalf = NDDiv3(nameof(Utilities.NDDivision.DivmodHalf), typeof(Half));
+            public static readonly MethodInfo DivmodSingle = NDDiv3(nameof(Utilities.NDDivision.DivmodSingle), typeof(float));
+            public static readonly MethodInfo DivmodDouble = NDDiv3(nameof(Utilities.NDDivision.DivmodDouble), typeof(double));
+            public static readonly MethodInfo DivmodDecimal = NDDiv3(nameof(Utilities.NDDivision.DivmodDecimal), typeof(decimal));
+
             // Decimal conversion methods (to decimal)
             public static readonly MethodInfo DecimalImplicitFromInt = typeof(decimal).GetMethod("op_Implicit", new[] { typeof(int) })
                 ?? throw new MissingMethodException(typeof(decimal).FullName, "op_Implicit(int)");
@@ -1372,6 +1407,14 @@ namespace NumSharp.Backends.Kernels
                 return;
             }
 
+            // Special handling for Fmod - C-style truncated remainder (sign of dividend),
+            // unlike Mod's floored (sign of divisor) convention.
+            if (op == BinaryOp.Fmod)
+            {
+                EmitFmodOperation(il, resultType);
+                return;
+            }
+
             // Special handling for ATan2 - requires Math.Atan2 call
             if (op == BinaryOp.ATan2)
             {
@@ -1593,6 +1636,47 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
+        /// Emit Fmod (np.fmod) via the <see cref="Utilities.NDDivision"/> Fmod* helpers, matching
+        /// NumPy's integer <c>@TYPE@_fmod</c> (÷0 -> 0, truncated sign-of-dividend) and the float
+        /// <c>npy_fmod</c> (C# <c>%</c> == C fmod). Stack: [dividend, divisor] -> [result].
+        /// </summary>
+        private static void EmitFmodOperation(ILGenerator il, NPTypeCode resultType)
+        {
+            var m = GetFmodMethod(resultType);
+            if (m != null)
+            {
+                il.EmitCall(OpCodes.Call, m, null);
+                return;
+            }
+            // Boolean (or any other) result reaching here: fall back to plain remainder.
+            il.Emit(IsUnsigned(resultType) ? OpCodes.Rem_Un : OpCodes.Rem);
+        }
+
+        /// <summary>
+        /// Return the <see cref="Utilities.NDDivision"/> fmod helper for <paramref name="resultType"/>,
+        /// or null if the dtype routes elsewhere (Half via <see cref="EmitHalfOperation"/>, Decimal via
+        /// <see cref="EmitDecimalOperation"/>, Complex unsupported).
+        /// </summary>
+        private static MethodInfo? GetFmodMethod(NPTypeCode resultType)
+        {
+            return resultType switch
+            {
+                NPTypeCode.SByte => CachedMethods.FmodSByte,
+                NPTypeCode.Byte => CachedMethods.FmodByte,
+                NPTypeCode.Int16 => CachedMethods.FmodInt16,
+                NPTypeCode.UInt16 => CachedMethods.FmodUInt16,
+                NPTypeCode.Char => CachedMethods.FmodChar,
+                NPTypeCode.Int32 => CachedMethods.FmodInt32,
+                NPTypeCode.UInt32 => CachedMethods.FmodUInt32,
+                NPTypeCode.Int64 => CachedMethods.FmodInt64,
+                NPTypeCode.UInt64 => CachedMethods.FmodUInt64,
+                NPTypeCode.Single => CachedMethods.FmodSingle,
+                NPTypeCode.Double => CachedMethods.FmodDouble,
+                _ => null
+            };
+        }
+
+        /// <summary>
         /// Emit np.logaddexp / np.logaddexp2 / np.nextafter / np.copysign / np.hypot via the
         /// <see cref="Utilities.NDLogAddExpMath"/> (and, for hypot, <see cref="Utilities.NDHypotMath"/>)
         /// scalar helpers. Stack: [x1, x2] (already in the loop dtype) -> [result]. Mirrors
@@ -1809,6 +1893,14 @@ namespace NumSharp.Backends.Kernels
                 return;
             }
 
+            // Fmod for decimal: C-style truncated remainder (decimal '%' truncates toward zero).
+            if (op == BinaryOp.Fmod)
+            {
+                // Stack: [dividend, divisor] -> NDDivision.FmodDecimal(a, b) == a % b
+                il.EmitCall(OpCodes.Call, CachedMethods.FmodDecimal, null);
+                return;
+            }
+
             // ATan2 for decimal uses DecimalEx.ATan2
             if (op == BinaryOp.ATan2)
             {
@@ -1836,6 +1928,35 @@ namespace NumSharp.Backends.Kernels
             // Bitwise operations not supported for Half
             if (op == BinaryOp.BitwiseAnd || op == BinaryOp.BitwiseOr || op == BinaryOp.BitwiseXor)
                 throw new NotSupportedException($"Bitwise operation {op} not supported for Half type");
+
+            // FloorDivide / Mod / Fmod: NumPy's HALF loops compute in FLOAT32 (astype 'e'->'f' —
+            // HALF_floor_divide/remainder/divmod call npy_floor_dividef/npy_remainderf/npy_fmodf),
+            // so route through the NDDivision *Single helpers rather than the generic double path.
+            // The old double `a - floor(a/b)*b` / `floor(a/b) with inf->NaN` diverged from NumPy on
+            // ÷0 (NaN vs the floored quotient / IEEE ±inf) — the W1-A known bug. A Half is exact in
+            // both float and double, so HalfToDouble+Conv_R4 is an exact (float) widen and
+            // Conv_R8+DoubleToHalf an exact narrow (== (Half)floatResult), keeping the arithmetic in
+            // float32 as NumPy does. Stack in: [half1, half2].
+            if (op == BinaryOp.FloorDivide || op == BinaryOp.Mod || op == BinaryOp.Fmod)
+            {
+                var locRhsHalf = il.DeclareLocal(typeof(Half));
+                il.Emit(OpCodes.Stloc, locRhsHalf);                 // [half1]
+                il.EmitCall(OpCodes.Call, CachedMethods.HalfToDouble, null);
+                il.Emit(OpCodes.Conv_R4);                            // [floatA]
+                il.Emit(OpCodes.Ldloc, locRhsHalf);
+                il.EmitCall(OpCodes.Call, CachedMethods.HalfToDouble, null);
+                il.Emit(OpCodes.Conv_R4);                            // [floatA, floatB]
+                var single = op switch
+                {
+                    BinaryOp.FloorDivide => CachedMethods.FloorDivSingle,
+                    BinaryOp.Mod => CachedMethods.RemSingle,
+                    _ => CachedMethods.FmodSingle,
+                };
+                il.EmitCall(OpCodes.Call, single, null);             // [floatResult]
+                il.Emit(OpCodes.Conv_R8);
+                il.EmitCall(OpCodes.Call, CachedMethods.DoubleToHalf, null); // [halfResult]
+                return;
+            }
 
             var halfToDouble = CachedMethods.HalfToDouble;
 
@@ -1869,27 +1990,8 @@ namespace NumSharp.Backends.Kernels
                 case BinaryOp.Power:
                     il.EmitCall(OpCodes.Call, CachedMethods.MathPow, null);
                     break;
-                case BinaryOp.Mod:
-                    // NumPy floored modulo: a - floor(a/b) * b
-                    var locB = il.DeclareLocal(typeof(double));
-                    var locA = il.DeclareLocal(typeof(double));
-                    il.Emit(OpCodes.Stloc, locB);
-                    il.Emit(OpCodes.Stloc, locA);
-                    il.Emit(OpCodes.Ldloc, locA);
-                    il.Emit(OpCodes.Ldloc, locA);
-                    il.Emit(OpCodes.Ldloc, locB);
-                    il.Emit(OpCodes.Div);
-                    il.EmitCall(OpCodes.Call, CachedMethods.MathFloor, null);
-                    il.Emit(OpCodes.Ldloc, locB);
-                    il.Emit(OpCodes.Mul);
-                    il.Emit(OpCodes.Sub);
-                    break;
-                case BinaryOp.FloorDivide:
-                    // NumPy rule: floor_divide returns NaN when a/b is non-finite (inf or -inf).
-                    // This matches numpy/core/src/umath/loops_arithmetic's npy_floor_divide_@type@.
-                    il.Emit(OpCodes.Div);
-                    EmitFloorWithInfToNaN(il);
-                    break;
+                // Mod / FloorDivide / Fmod are handled above via the float32 NDDivision path
+                // (NumPy's HALF loops compute in float32), so they never reach this double switch.
                 case BinaryOp.ATan2:
                     il.EmitCall(OpCodes.Call, CachedMethods.MathAtan2, null);
                     break;

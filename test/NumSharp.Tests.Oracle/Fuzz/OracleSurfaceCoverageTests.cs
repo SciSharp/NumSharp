@@ -30,6 +30,7 @@ namespace NumSharp.Tests.Fuzz
             ["concat"] = "concatenate",
             ["degrees"] = "rad2deg",
             ["radians"] = "deg2rad",
+            ["remainder"] = "mod",
             ["result_type"] = "result_type_arrays",
             ["true_divide"] = "divide",
         };

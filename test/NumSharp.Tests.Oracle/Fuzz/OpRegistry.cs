@@ -28,6 +28,7 @@ namespace NumSharp.Tests.Fuzz
                 case "divide": return ops[0] / ops[1];
                 case "floor_divide": return np.floor_divide(ops[0], ops[1]);
                 case "mod": return np.mod(ops[0], ops[1]);
+                case "fmod": return np.fmod(ops[0], ops[1]);
                 case "power": return np.power(ops[0], ops[1]);
 
                 // Unary.

@@ -662,7 +662,28 @@ texts differ in wording; `np.broadcast_to(a, (2^62, 6))` builds the view where N
 `are_broadcastable`, `broadcast`, `broadcast_arrays`, `broadcast_to`
 
 ### Math — Arithmetic
-`abs`, `absolute`, `acosh`, `add`, `arccos`, `arccosh`, `arcsin`, `arcsinh`, `arctan`, `arctan2`, `arctanh`, `asinh`, `atanh`, `cbrt`, `ceil`, `clip`, `convolve`, `correlate`, `cos`, `cosh`, `deg2rad`, `degrees`, `divide`, `exp`, `exp2`, `expm1`, `floor`, `floor_divide`, `log`, `log10`, `log1p`, `log2`, `mod`, `modf`, `multiply`, `negative`, `positive`, `power`, `rad2deg`, `radians`, `reciprocal`, `rint`, `sign`, `sin`, `sinh`, `sqrt`, `square`, `subtract`, `tan`, `tanh`, `true_divide`, `trunc`
+`abs`, `absolute`, `acosh`, `add`, `arccos`, `arccosh`, `arcsin`, `arcsinh`, `arctan`, `arctan2`, `arctanh`, `asinh`, `atanh`, `cbrt`, `ceil`, `clip`, `convolve`, `correlate`, `cos`, `cosh`, `deg2rad`, `degrees`, `divide`, `divmod`, `exp`, `exp2`, `expm1`, `floor`, `floor_divide`, `fmod`, `log`, `log10`, `log1p`, `log2`, `mod`, `modf`, `multiply`, `negative`, `positive`, `power`, `rad2deg`, `radians`, `reciprocal`, `remainder`, `rint`, `sign`, `sin`, `sinh`, `sqrt`, `square`, `subtract`, `tan`, `tanh`, `true_divide`, `trunc`
+
+**The divmod family** — `remainder`/`mod`, `fmod`, `divmod` (all probed against 2.4.2; gates the
+`divmod_power`/`multioutput` fuzz tiers + `Math` unit tests). `np.remainder` is an exact ALIAS of the existing
+`np.mod` (in NumPy `remainder` IS the `mod` ufunc — floored remainder, result takes the DIVISOR's sign). **`np.fmod`**
+is a NEW `BinaryOp.Fmod` — C-library remainder (truncated division, result takes the DIVIDEND's sign): `fmod(-7,3) ==
+-1` where `mod(-7,3) == 2`. It rides the exact `Mod`/`FloorDivide` seam (`ExecuteBinaryOp` → scalar-only per-element
+kernel `EmitFmodOperation` → `NDDivision.Fmod*`), so it inherits all layouts, NEP50 promotion (integer stays integer,
+bool→int8), out=/where=/dtype=, and every dtype for free; integer `fmod` is C# `%` with the ÷0→0 and int/long MIN%-1
+guards, float `fmod` is C# `a % b` (bit-identical to C `fmod`), Complex refused (NumPy TypeError). **`np.divmod`** is the
+two-output ufunc returning the tuple `(floor_divide(x1,x2), remainder(x1,x2))` — VERIFIED byte-for-byte across every
+edge (÷0→(±inf,nan)/(0,0)int, signed MIN/-1→(MIN,0), ±inf/nan/-0.0). Its `out=(q,r)`/`where=`/`dtype=` path composes
+the already-validated `FloorDivide`+`Mod`; the common path runs a **fused single-pass IL kernel**
+(`DirectILKernelGenerator.DivMod.cs`, a 4×-unrolled scalar two-in/two-out loop calling `NDDivision.Divmod*(a,b,out
+mod)->floordiv` over contiguous, promoted operands — the `np.modf` materialize pattern). The integer `Divmod*` helpers
+use the **one-idiv form** `q=n/d; r=n-q*d` (not a second `n%d`), halving the integer kernel cost. **Perf (NPY/NS,
+Release, best-of-11):** `divmod` 100K **2.1–2.3×**, 10M f64/i32 **1.7–1.8×** (10M i64 1.26×, memory-bandwidth-bound);
+`fmod` 100K **1.6–1.9×**, 10M **1.34–1.45×** (bandwidth-bound). **W1-A fix (rode along):** `EmitHalfOperation` now
+computes float16 `mod`/`floor_divide`/`fmod` in **float32** (NumPy's HALF loop `astype 'e'->'f'`) via the
+`NDDivision.*Single` helpers, so float16 ÷0 yields ±inf (was the NaN `[known bug]` W1-A) — float16 division is now
+bit-exact with NumPy, and the W1-A `MisalignedRegistry` excuse is removed. See `Math/np.{divmod,math}.cs`,
+`Backends/Default/Math/Default.{Fmod,DivMod}.cs`, `Utilities/NDDivision.{Fmod,Divmod}.cs`.
 
 **`correlate` / `convolve` — the sliding multiply-accumulate family** (NumPy `_pyarray_correlate` +
 `small_correlate`; `Math/NDArray.SlidingDot.cs`). `np.correlate(a, v, mode='valid')` is cross-correlation

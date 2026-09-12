@@ -198,14 +198,11 @@ namespace NumSharp.Tests.Fuzz
             // (op, dtype) cell so a regression in a neighbouring cell still fails the gate.
             // ----------------------------------------------------------------------------------
 
-            // (W1-A) floor_divide / mod producing a float16: NDDivision (F1) ported SByte..UInt64,
-            // Single, Double — but NOT Half. The Half floored-division falls back to a generic path
-            // that yields -0.0 / NaN where NumPy yields the floored quotient or IEEE ±inf. Scoped to
-            // a Half operand/result so int & float32/64 floor_divide stay gated bit-exact.
-            if ((c.Op == "floor_divide" || c.Op == "mod")
-                && (tc == NPTypeCode.Half || c.Operands.Any(o => o.Dtype == "float16"))
-                && (kind == DivergenceKind.Value || kind == DivergenceKind.Threw))
-                return "floor_divide/mod(float16): NDDivision has no Half path (wrong value/NaN) [known bug]";
+            // (W1-A FIXED 2026-09-12) floor_divide / mod / fmod / divmod on float16 are now bit-exact:
+            // EmitHalfOperation routes them through the float32 NDDivision *Single helpers (NumPy's
+            // HALF loops compute in float32 via astype 'e'->'f'), so ÷0 yields ±inf / the floored
+            // quotient exactly as NumPy does (was -0.0/NaN via the old double a-floor(a/b)*b path).
+            // The excuse is removed so any regression of the Half division family fails the gate.
 
             // (W1-B FIXED) power(float16) on the scalar-broadcast path used to throw
             // InvalidCastException because ReadScalarAsDouble called Convert.ToDouble on a boxed

@@ -75,6 +75,24 @@ namespace NumSharp
         public abstract NDArray Divide(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray Mod(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null);
 
+        /// <summary>
+        ///     np.fmod — C-style truncated remainder (result takes the DIVIDEND's sign), the
+        ///     complement of <see cref="Mod"/> (floored, divisor's sign). Same NEP50 promotion as
+        ///     Mod (integer stays integer, bool -> int8) and the same (inputs, dtype, out, where)
+        ///     house order.
+        /// </summary>
+        public abstract NDArray Fmod(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null);
+
+        /// <summary>
+        ///     np.divmod — the fused two-output ufunc returning
+        ///     <c>(floor_divide(lhs, rhs), remainder(lhs, rhs))</c> element-wise in a single pass.
+        ///     Item1 is the floored quotient, Item2 the floored remainder (divisor's sign). Same NEP50
+        ///     promotion as <see cref="Mod"/>/<see cref="FloorDivide"/>. When <paramref name="out"/>
+        ///     (a 2-tuple) or <paramref name="where"/> is supplied the op composes the two validated
+        ///     single-output ufuncs; otherwise it runs the fused kernel.
+        /// </summary>
+        public abstract (NDArray Quotient, NDArray Remainder) DivMod(NDArray lhs, NDArray rhs, DType dtype = null, (NDArray Quotient, NDArray Remainder) @out = default, NDArray where = null);
+
         // Element-wise min/max ufuncs (np.maximum / np.minimum / np.fmax / np.fmin).
         // Maximum/Minimum PROPAGATE NaN (a NaN operand wins); FMax/FMin IGNORE NaN
         // (the non-NaN operand wins). Same (inputs, dtype, out, where) house order.
