@@ -198,6 +198,7 @@ namespace NumSharp.Tests.Fuzz
                 case "logaddexp2": return np.logaddexp2(ops[0], ops[1]);
                 case "nextafter": return np.nextafter(ops[0], ops[1]);
                 case "copysign": return np.copysign(ops[0], ops[1]);
+                case "hypot": return np.hypot(ops[0], ops[1]);
 
                 // Group A Batch 3: predicates + whole-array bool reductions (wrapped to 0-D bool).
                 case "iscomplex": return np.iscomplex(ops[0]);
@@ -208,6 +209,7 @@ namespace NumSharp.Tests.Fuzz
                 // Selection.
                 case "where": return np.where(ops[0], ops[1], ops[2]);
                 case "place": np.place(ops[0], ops[1], ops[2]); return ops[0]; // mutates arr; result IS arr
+                case "putmask": np.putmask(ops[0], ops[1], ops[2]); return ops[0]; // mutates arr; result IS arr
 
                 // select — operands are [cond0..cond_{nc-1}, choice0..choice_{nc-1}, default];
                 // params "nc" gives the condition count. Choices are strong NDArrays here
@@ -219,6 +221,22 @@ namespace NumSharp.Tests.Fuzz
                     var choices = new object[nc];
                     for (int i = 0; i < nc; i++) { conds[i] = ops[i]; choices[i] = ops[nc + i]; }
                     return np.select(conds, choices, ops[2 * nc]);
+                }
+
+                // piecewise — operands are [x, cond0..cond_{nc-1}]; "nc" gives the condition count and
+                // "funcs" the SCALAR funclist (length nc or nc+1). Only constant (scalar) funcs ride the
+                // corpus (callables & weak-scalar edges are unit-tested); the ints stay in [0,255] so
+                // they are in-range for every dtype, cast into x's dtype by piecewise.
+                case "piecewise":
+                {
+                    int nc = p["nc"].GetInt32();
+                    var conds = new NDArray[nc];
+                    for (int i = 0; i < nc; i++) conds[i] = ops[1 + i];
+                    var fjson = p["funcs"];
+                    var funcs = new object[fjson.GetArrayLength()];
+                    int fi = 0;
+                    foreach (var fv in fjson.EnumerateArray()) funcs[fi++] = fv.GetInt32();
+                    return np.piecewise(ops[0], conds, funcs);
                 }
 
                 // choose — operands are [index, choice0..choice_{nc-1}]; params "nc" gives the choice
@@ -577,6 +595,17 @@ namespace NumSharp.Tests.Fuzz
                 case "diagflat": return np.diagflat(ops[0], ParseK(p));
                 case "tril": return np.tril(ops[0], ParseK(p));
                 case "triu": return np.triu(ops[0], ParseK(p));
+
+                // ---- window functions -----------------------------------------------------
+                // Pure generators (always float64): ops[0] is an ignored carrier; M (and beta
+                // for kaiser) come from params, like the tri generator above. M is read as a
+                // DOUBLE (NumPy's `_FloatLike_co`): integer cases carry an int JSON value that
+                // GetDouble reads losslessly, and the float-M cases carry a fractional value.
+                case "bartlett": return np.bartlett(p["M"].GetDouble());
+                case "blackman": return np.blackman(p["M"].GetDouble());
+                case "hamming": return np.hamming(p["M"].GetDouble());
+                case "hanning": return np.hanning(p["M"].GetDouble());
+                case "kaiser": return np.kaiser(p["M"].GetDouble(), p["beta"].GetDouble());
 
                 // Mutating: fill_diagonal writes into ops[0] and the mutated operand IS the result.
                 // The value is handed over as a RAW long[] rather than an NDArray on purpose —

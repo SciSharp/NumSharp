@@ -714,6 +714,10 @@ NEXTAFTER_OP = {"nextafter": np.nextafter}
 # copysign: magnitude of x1 with the sign of x2. Same float-tier promotion; BIT-EXACT
 # (Math.CopySign is the IEEE bit op), so no MisalignedRegistry excuse (NaN payloads are tokenized).
 COPYSIGN_OP = {"copysign": np.copysign}
+# hypot: sqrt(x1**2 + x2**2) without spurious overflow/underflow. Same float-tier promotion. float32/
+# float16 are BIT-EXACT; float64 is <=1 ULP (NumSharp's correctly-rounded Borges FMA vs NumPy's only
+# faithfully-rounded UCRT hypot) — excused Double-only in MisalignedRegistry.
+HYPOT_OP = {"hypot": np.hypot}
 
 
 # np.place(arr, mask, vals) mutates arr in-place where mask is True, cycling through vals.
@@ -748,6 +752,66 @@ def gen_place(dtypes, layout_names):
                 "valueclass": "mixed",
             })
             n += 1
+    if skipped:
+        print(f"  (skipped {skipped} cases where NumPy raised)")
+    return cases
+
+
+# np.putmask(a, mask, values) mutates a in-place where mask is True, walking both in C-order.
+# It is the sibling of np.place but differs in ONE probed way (NumPy 2.4.2): the values cursor
+# advances by POSITION (every element), so a.flat[i] = values.flat[i % nv] — NumPy's
+# npy_fastputmask, where j increments in lockstep with i (place advances only on True). The three
+# value modes exercise BOTH kernel branches: "scalar" (nv==1, the cursor-free fast path), "cycle"
+# (nv==3, the position cursor), and "long" (nv==size, cursor never resets — values indexed by
+# position). "scalar"/"long" use a FLAT mask (a different shape, same size — NumPy checks size, not
+# shape) while "cycle" uses arr's own shape; both align by C-order flat position. Non-contiguous
+# layouts drive the ascontiguousarray+copyto writeback path. Same-dtype values throughout (NumPy
+# casts values to a's dtype; the ndarray-vs-python casting-error split is a documented sibling
+# simplification shared with place/put — see np.putmask.Test.cs).
+PUTMASK_LAYOUTS = ["c_contiguous_1d", "c_contiguous_2d", "c_contiguous_3d",
+                   "f_contiguous_2d", "transposed_3d", "negstride_1d",
+                   "strided_step2_1d", "strided_2d_cols"]
+PUTMASK_DTYPES = ["bool", "int8", "uint8", "int16", "int32", "int64", "uint64",
+                  "float16", "float32", "float64", "complex128"]
+
+
+def gen_putmask(dtypes, layout_names):
+    cases = []
+    n = 0
+    skipped = 0
+    for ln in layout_names:
+        for s in dtypes:
+            arr_b, arr_v = LAYOUTS[ln](np.dtype(s))
+            if arr_v.size == 0:
+                continue
+            dt = np.dtype(s)
+            for vmode in ("scalar", "cycle", "long"):
+                if vmode == "scalar":
+                    mask = (np.arange(arr_v.size) % 2 == 0)                       # flat, different shape
+                    vals = np.arange(3, 4).astype(dt)                            # nv == 1 (bool -> [True])
+                elif vmode == "cycle":
+                    mask = (np.arange(arr_v.size).reshape(arr_v.shape) % 3 != 0)  # arr's own shape
+                    vals = np.arange(1, 4).astype(dt)                            # nv == 3
+                else:  # long: nv == size, cursor never wraps; values indexed by position
+                    mask = (np.arange(arr_v.size) % 4 == 1)                       # flat
+                    vals = np.arange(1, arr_v.size + 1).astype(dt)               # nv == size
+                arr_after = np.array(arr_v, copy=True)
+                try:
+                    np.putmask(arr_after, mask, vals)
+                except Exception:
+                    skipped += 1
+                    continue
+                cases.append({
+                    "id": f"putmask/{ln}/{s}/{vmode}/{n}",
+                    "op": "putmask",
+                    "params": {},
+                    "operands": [describe(arr_b, arr_v), describe(mask, mask), describe(vals, vals)],
+                    "expected": {"dtype": arr_after.dtype.name, "shape": [int(d) for d in arr_after.shape],
+                                 "buffer": np.ascontiguousarray(arr_after).tobytes().hex()},
+                    "layout": ln,
+                    "valueclass": "mixed",
+                })
+                n += 1
     if skipped:
         print(f"  (skipped {skipped} cases where NumPy raised)")
     return cases
@@ -3380,6 +3444,57 @@ def gen_groupa():
     emit("isin", {}, [describe(e1, e1[::-1]), describe(t2, t2)], np.isin(e1[::-1], t2))     # negative-stride
     e1s = np.arange(12, dtype=di)
     emit("isin", {}, [describe(e1s, e1s[::2]), describe(t2, t2)], np.isin(e1s[::2], t2))    # strided
+
+    # ---- piecewise (numpy/lib/_function_base_impl.py). --------------------------------------
+    # Output dtype = x's dtype (zeros_like), the LAST true condition wins (forward overwrite), and
+    # one extra function is the default (evaluated where every condition is false). Only SCALAR
+    # (constant) funcs ride the corpus — they are deterministic and bit-comparable; callables and
+    # the weak-scalar overflow / complex-into-real edges are unit-tested (as select's corpus does).
+    # Operands are [x, cond0..cond_{nc-1}]; "nc" is the condition count and "funcs" the scalar
+    # funclist (length nc or nc+1). Func values stay in [0,255] so they are in-range for every dtype
+    # (uint8 included). Conditions are standalone bool arrays, so complex x works too.
+    for dt in ["int32", "float64", "uint8", "complex128"]:
+        d = np.dtype(dt)
+        px = _cbase((8,), d)
+        pc0 = np.array([True, True, False, False, True, False, True, False])
+        pc1 = np.array([False, True, True, True, False, False, False, True])
+        # nc == n2 — one func per condition.
+        emit("piecewise", {"nc": 1, "funcs": [9]},
+             [describe(px, px), describe(pc0, pc0)],
+             np.piecewise(px, [pc0], [9]))
+        emit("piecewise", {"nc": 2, "funcs": [1, 7]},
+             [describe(px, px), describe(pc0, pc0), describe(pc1, pc1)],
+             np.piecewise(px, [pc0, pc1], [1, 7]))
+        # nc + 1 funcs — the extra is the default (the "otherwise" ~any(condlist) branch).
+        emit("piecewise", {"nc": 2, "funcs": [1, 7, 4]},
+             [describe(px, px), describe(pc0, pc0), describe(pc1, pc1)],
+             np.piecewise(px, [pc0, pc1], [1, 7, 4]))
+        # Overlapping conditions — LAST true wins (forward overwrite, the opposite of select).
+        pov0 = np.array([True, True, True, True, True, True, True, True])
+        pov1 = np.array([False, False, True, True, True, True, True, True])
+        emit("piecewise", {"nc": 2, "funcs": [3, 8]},
+             [describe(px, px), describe(pov0, pov0), describe(pov1, pov1)],
+             np.piecewise(px, [pov0, pov1], [3, 8]))
+
+    # piecewise — layout coverage (int32 payload; the composition is dtype-agnostic, so per-dtype
+    # value coverage is the loop above). A 2-D x with a default, a TRANSPOSED x + cond (the
+    # non-contiguous C-order gather/scatter, result compared C-contiguous via ResultBytes), and an
+    # all-false condition falling through to the default everywhere.
+    pdt = np.dtype("int32")
+    p2 = _cbase((3, 4), pdt)
+    pm0 = (np.arange(12).reshape(3, 4) % 3 == 0)
+    pm1 = (np.arange(12).reshape(3, 4) % 3 == 1)
+    emit("piecewise", {"nc": 2, "funcs": [5, 6, 2]},
+         [describe(p2, p2), describe(pm0, pm0), describe(pm1, pm1)],
+         np.piecewise(p2, [pm0, pm1], [5, 6, 2]))
+    emit("piecewise", {"nc": 1, "funcs": [9, 1]},
+         [describe(p2, p2.T), describe(pm0, pm0.T)],
+         np.piecewise(p2.T, [pm0.T], [9, 1]))
+    pfalse = np.zeros((6,), dtype=bool)
+    p1 = _cbase((6,), pdt)
+    emit("piecewise", {"nc": 1, "funcs": [0, 42]},
+         [describe(p1, p1), describe(pfalse, pfalse)],
+         np.piecewise(p1, [pfalse], [0, 42]))
 
     return cases
 
@@ -7203,6 +7318,54 @@ def gen_generator_parity():
     return portable, host
 
 
+def gen_windows():
+    """Window functions bartlett/blackman/hamming/hanning/kaiser — pure GENERATORS.
+
+    Output is ALWAYS float64 (NumPy forces it via np.array([0.0, M])), so there is no
+    dtype axis: the single carrier operand is a float64 placeholder the C# side ignores
+    (M / beta come from params, exactly like the tri generator). M sweeps the
+    empty / single / even / odd / multi-SIMD-chunk corners; kaiser additionally sweeps
+    beta (0 = rectangular ... 20 = very narrow), crossing i0's Chebyshev split at x == 8.
+    """
+    cases = []
+    n = 0
+    carrier = _cbase((1,), np.dtype("float64"))
+
+    def emit(opname, params, r):
+        nonlocal n
+        r = np.asarray(r)
+        cases.append({
+            "id": f"{opname}/{n}",
+            "op": opname,
+            "params": params,
+            "operands": [describe(carrier, carrier)],
+            "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                         "buffer": np.ascontiguousarray(r).tobytes().hex()},
+            "layout": "gen",
+            "valueclass": "mixed",
+        })
+        n += 1
+
+    Ms = [-2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 12, 13, 33, 64, 65, 128, 257]
+    # NumPy's stub types M as _FloatLike_co: a NON-integer M yields a fractional-length
+    # window (len == len(arange(1-M, M, 2))), and kaiser's 0 < M < 1 is a ONE-element array
+    # (no M<1 guard) while a cosine window's 0 < M < 1 is empty. These gate the double-M path.
+    FloatMs = [-0.5, 0.5, 0.999, 1.5, 2.5, 4.99, 5.5, 5.7, 12.3, 33.7]
+    for opname, fn in [("bartlett", np.bartlett), ("blackman", np.blackman),
+                       ("hamming", np.hamming), ("hanning", np.hanning)]:
+        for M in Ms:
+            emit(opname, {"M": M}, fn(M))
+        for M in FloatMs:
+            emit(opname, {"M": M}, fn(M))
+    for M in Ms:
+        for beta in [0.0, 0.5, 2.5, 5.0, 6.0, 8.0, 8.6, 10.0, 14.0, 20.0]:
+            emit("kaiser", {"M": M, "beta": beta}, np.kaiser(M, beta))
+    for M in FloatMs:
+        for beta in [0.0, 5.0, 14.0]:
+            emit("kaiser", {"M": M, "beta": beta}, np.kaiser(M, beta))
+    return cases
+
+
 def write_jsonl(path, cases):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", newline="\n") as f:
@@ -7273,6 +7436,9 @@ def main():
     elif mode == "place":
         cases = gen_place(PLACE_DTYPES, PLACE_LAYOUTS)
         write_jsonl(os.path.join(corpus_dir, "place.jsonl"), cases)
+    elif mode == "putmask":
+        cases = gen_putmask(PUTMASK_DTYPES, PUTMASK_LAYOUTS)
+        write_jsonl(os.path.join(corpus_dir, "putmask.jsonl"), cases)
     elif mode == "matmul":
         cases = gen_matmul(MATMUL_SHAPE_CASES, MATMUL_DTYPES, MATMUL_LAYOUTS)
         cases += gen_matmul_edges(MATMUL_EDGE_DTYPES)                  # G14: negstride + k=0
@@ -7335,6 +7501,7 @@ def main():
         cases += gen_binary(LOGADDEXP_OPS, ARCTAN2_PAIRS, list(PAIR_LAYOUTS.keys()))      # logaddexp/logaddexp2
         cases += gen_binary(NEXTAFTER_OP, ARCTAN2_PAIRS, list(PAIR_LAYOUTS.keys()))       # nextafter (bit-exact)
         cases += gen_binary(COPYSIGN_OP, ARCTAN2_PAIRS, list(PAIR_LAYOUTS.keys()))        # copysign (bit-exact)
+        cases += gen_binary(HYPOT_OP, ARCTAN2_PAIRS, list(PAIR_LAYOUTS.keys()))           # hypot (f32/f16 exact, f64 <=1 ULP)
         cases += gen_binary(ALLCLOSE_OPS, ALLCLOSE_PAIRS, list(PAIR_LAYOUTS.keys()))     # Group A B3
         cases += gen_unary(ISCOMPLEX_OPS, ISCOMPLEX_DTYPES, list(LAYOUTS.keys()))         # G5 (full)
         cases += char_tier("logic")                                                       # G9
@@ -7430,8 +7597,11 @@ def main():
     elif mode == "fft":
         cases = gen_fft()                                               # np.fft.* differential tier
         write_jsonl(os.path.join(corpus_dir, "fft.jsonl"), cases)
+    elif mode == "windows":
+        cases = gen_windows()                                           # bartlett/blackman/hamming/hanning/kaiser
+        write_jsonl(os.path.join(corpus_dir, "windows.jsonl"), cases)
     else:
-        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | rounding | bitwise | unary_extra | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft)")
+        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows)")
         sys.exit(2)
 
 

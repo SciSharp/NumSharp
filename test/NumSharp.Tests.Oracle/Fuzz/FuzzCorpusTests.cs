@@ -77,6 +77,13 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Place() => RunCorpus("place.jsonl");
 
+        // np.putmask — sibling of place, but the values cursor advances by POSITION (every element),
+        // so a.flat[i] = values.flat[i % nv]. 11 dtypes x 3 value modes (scalar nv==1 / cycle nv==3 /
+        // long nv==size) x 8 layouts incl. the non-contiguous writeback path (f/transposed/strided/negstride).
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void PutMask() => RunCorpus("putmask.jsonl");
+
         // T8 linear algebra: matmul / dot / outer across the gufunc shape space (2-D, 1-D promotion,
         // batched/broadcast stacks), 6 dtypes, and C/F operand layouts.
         [TestMethod]
@@ -391,6 +398,18 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Fft() => RunHostLibmCorpus("fft.jsonl");
 
+        // Window functions (np.bartlett/blackman/hamming/hanning/kaiser): pure float64 GENERATORS
+        // from a scalar M (kaiser also takes beta), swept over the empty/single/even/odd/multi-
+        // SIMD-chunk corners; kaiser's beta sweep crosses the Bessel i0 Chebyshev split at x == 8.
+        // The elementwise transform is fused into ONE np.evaluate pass in NumPy's exact operation
+        // order, so the result is bit-identical to NumPy's unfused ufunc chain. Host-libm gated
+        // like Fft: the trig windows call Math.Cos and kaiser's i0 calls Math.Exp (float64 == the
+        // win-amd64 ucrtbase NumPy uses; other platforms round the last bit differently), so this
+        // is HARD-GATED on Windows and INCONCLUSIVE elsewhere.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Windows() => RunHostLibmCorpus("windows.jsonl");
+
         // W12 parameter sweep: middle + negative axes (-1/-2/-3) for all reductions, ddof=1
         // sample std/var, and order='F' ravel across C/transposed/F-contiguous sources.
         [TestMethod]
@@ -576,6 +595,7 @@ namespace NumSharp.Tests.Fuzz
             ["unary.jsonl"] = 5969,
             ["unary_extra.jsonl"] = 6052,
             ["where.jsonl"] = 75,
+            ["windows.jsonl"] = 200,
         };
 
         // Corpus tiers authored against the win-amd64 CRT libm (ucrtbase) and NumSharp's host SIMD
