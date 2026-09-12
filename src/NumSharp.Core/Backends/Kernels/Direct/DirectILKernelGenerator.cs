@@ -2024,12 +2024,21 @@ namespace NumSharp.Backends.Kernels
                 return;
             }
 
+            // Power goes through a NumPy-compatible helper rather than the BCL's Complex.Pow: NumPy's
+            // npy_cpow special-cases integer exponents with EXACT repeated multiplication, whereas the
+            // BCL always takes the polar exp(b*log a) form — up to ~1e14 ULP off on z**3/z**5/z**-1
+            // (effectively wrong), and even z**2 diverges from np.square. See ComplexPowNumPy.
+            if (op == BinaryOp.Power)
+            {
+                il.EmitCall(OpCodes.Call, GetHelper(nameof(ComplexPowNumPy)), null);
+                return;
+            }
+
             var method = op switch
             {
                 BinaryOp.Add => complexType.GetMethod("op_Addition", new[] { complexType, complexType }),
                 BinaryOp.Subtract => complexType.GetMethod("op_Subtraction", new[] { complexType, complexType }),
                 BinaryOp.Multiply => complexType.GetMethod("op_Multiply", new[] { complexType, complexType }),
-                BinaryOp.Power => complexType.GetMethod("Pow", new[] { complexType, complexType }),
                 _ => throw new NotSupportedException($"Operation {op} not supported for Complex")
             };
 
@@ -2089,6 +2098,107 @@ namespace NumSharp.Backends.Kernels
                 return new System.Numerics.Complex((in1r * rat + in1i) * scl, (in1i * rat - in1r) * scl);
             }
         }
+
+        /// <summary>
+        /// Naive complex multiply — a byte-for-byte match of NumPy's internal <c>cmul</c>
+        /// (<c>npy_math_complex.c.src</c>: <c>(ar*br - ai*bi, ar*bi + ai*br)</c>, un-fused). Used by
+        /// <see cref="ComplexPowNumPy"/> so that integer-power repeated multiplication rounds exactly
+        /// as NumPy's does. Identical to the BCL <c>Complex.op_Multiply</c> for this scalar formula,
+        /// but written out so the power port does not depend on the BCL operator's internal shape.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        private static System.Numerics.Complex ComplexMulNumPy(System.Numerics.Complex a, System.Numerics.Complex b)
+        {
+            double ar = a.Real, ai = a.Imaginary, br = b.Real, bi = b.Imaginary;
+            return new System.Numerics.Complex(ar * br - ai * bi, ar * bi + ai * br);
+        }
+
+        /// <summary>
+        /// NumPy-compatible complex power — a transcription of NumPy 2.4.2's <c>npy_cpow</c>
+        /// (<c>numpy/_core/src/npymath/npy_math_complex.c.src</c>).
+        /// </summary>
+        /// <remarks>
+        /// This must NOT defer to the BCL's <see cref="System.Numerics.Complex"/> <c>Pow</c> for the
+        /// common cases: <c>Complex.Pow</c> ALWAYS evaluates the polar form <c>exp(b·log a)</c>, which
+        /// for an INTEGER exponent is catastrophically imprecise — measured up to ~1e14 raw ULP on
+        /// <c>z**3</c>/<c>z**5</c>/<c>z**-1</c> (effectively the wrong value), and even <c>z**2</c>
+        /// diverges from <see cref="System.Numerics.Complex"/>-free <c>np.square</c>. NumPy instead:
+        /// <list type="bullet">
+        /// <item><c>b == 0</c> → <c>1+0j</c> (incl. <c>0**0</c>).</item>
+        /// <item><c>a == 0</c>, <c>b != 0</c> → <c>0+0j</c> when <c>Re(b) &gt; 0</c>, else complex NaN
+        /// (<c>0</c> to a negative/imaginary power; NumPy raises the invalid flag via <c>inf-inf</c>).</item>
+        /// <item>Integer <c>Re(b)</c> in (-100, 100) with <c>Im(b) == 0</c> → EXACT repeated
+        /// multiplication (<c>z*z</c>, binary exponentiation via <see cref="ComplexMulNumPy"/>), with
+        /// <c>1/result</c> through the byte-exact <see cref="ComplexDivideNumPy"/> for a negative exponent.</item>
+        /// <item>Everything else (non-integer real / complex exponent) → the platform path
+        /// <see cref="System.Numerics.Complex.Pow(System.Numerics.Complex,System.Numerics.Complex)"/>;
+        /// NumPy uses the host <c>cpow</c> there, so a bounded ~ULP / libm divergence remains for that
+        /// branch only (documented in the oracle).</item>
+        /// </list>
+        /// The <c>a == 0</c> branch is checked BEFORE the integer branch, exactly as NumPy orders them —
+        /// otherwise <c>0**-1</c> would take the repeated-multiply path (<c>1/0 → inf/nan</c>) instead of
+        /// yielding NumPy's complex NaN. The complex-NaN result uses the POSITIVE quiet-NaN payload
+        /// NumPy's <c>NPY_NAN</c> carries (<c>0x7ff8…</c>, not .NET's negative <c>double.NaN</c>) so the
+        /// bytes match should complex-power NaN ever become contractual.
+        /// </remarks>
+        // Per-element op called from the binary IL kernel's inner loop.
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        private static System.Numerics.Complex ComplexPowNumPy(System.Numerics.Complex a, System.Numerics.Complex b)
+        {
+            double ar = a.Real, ai = a.Imaginary;
+            double br = b.Real, bi = b.Imaginary;
+
+            // a**0 == 1 for any a (including 0**0), by the definition of the logarithm.
+            if (br == 0.0 && bi == 0.0)
+                return new System.Numerics.Complex(1.0, 0.0);
+
+            // 0**b (b != 0): 0 for Re(b) > 0, otherwise complex NaN (negative / imaginary power of 0).
+            if (ar == 0.0 && ai == 0.0)
+            {
+                if (br > 0.0)
+                    return new System.Numerics.Complex(0.0, 0.0);
+                // Raise the IEEE invalid flag the way NumPy does (inf - inf), then return complex NaN.
+                double invalid = double.PositiveInfinity - double.PositiveInfinity;
+                _ = invalid;
+                return new System.Numerics.Complex(PositiveNaN, PositiveNaN);
+            }
+
+            // Integer real exponent strictly within (-100, 100): exact repeated multiplication.
+            long n;
+            if (bi == 0.0 && br > -100.0 && br < 100.0 && (n = (long)br) == br)
+            {
+                if (n == 1) return new System.Numerics.Complex(ar, ai);           // unroll (inf-friendly)
+                if (n == 2) return ComplexMulNumPy(a, a);                          // == np.square
+                if (n == 3) return ComplexMulNumPy(a, ComplexMulNumPy(a, a));
+
+                // General |n| < 100 via binary exponentiation over ComplexMulNumPy.
+                long nn = n < 0 ? -n : n;
+                var aa = new System.Numerics.Complex(1.0, 0.0);
+                var p = new System.Numerics.Complex(ar, ai);
+                long mask = 1;
+                while (true)
+                {
+                    if ((nn & mask) != 0)
+                        aa = ComplexMulNumPy(aa, p);
+                    mask <<= 1;
+                    if (nn < mask || mask <= 0)   // mask <= 0 guards the (theoretical) shift overflow
+                        break;
+                    p = ComplexMulNumPy(p, p);
+                }
+                // Negative exponent → reciprocal through the byte-exact complex divide (NumPy's cdiv(1, r)).
+                return br < 0.0 ? ComplexDivideNumPy(new System.Numerics.Complex(1.0, 0.0), aa) : aa;
+            }
+
+            // Non-integer real or complex exponent: NumPy uses the host cpow; the BCL's polar
+            // exp(b*log a) is the closest managed equivalent (documented bounded libm/~ULP divergence).
+            return System.Numerics.Complex.Pow(a, b);
+        }
+
+        /// <summary>NumPy's positive quiet NaN (<c>NPY_NAN</c>, <c>0x7ff8000000000000</c>) — .NET's
+        /// <see cref="double.NaN"/> is the NEGATIVE <c>0xfff8…</c>, so this constant is used where a
+        /// complex result must carry NumPy's NaN bytes.</summary>
+        private static readonly double PositiveNaN =
+            System.BitConverter.Int64BitsToDouble(unchecked((long)0x7ff8000000000000UL));
 
         /// <summary>
         /// SIMD lane type for NPTypeCode. Boolean maps to <c>byte</c> — there is no
