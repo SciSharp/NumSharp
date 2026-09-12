@@ -80,6 +80,7 @@ namespace NumSharp.Backends
             BinaryOp.Multiply => "multiply",
             BinaryOp.Divide => "divide",
             BinaryOp.Mod => "remainder",
+            BinaryOp.Fmod => "fmod",
             BinaryOp.Power => "power",
             BinaryOp.FloorDivide => "floor_divide",
             BinaryOp.BitwiseAnd => "bitwise_and",

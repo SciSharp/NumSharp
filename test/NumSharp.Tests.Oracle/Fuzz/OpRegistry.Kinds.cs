@@ -317,6 +317,11 @@ namespace NumSharp.Tests.Fuzz
                     var (fractional, integral) = np.modf(ops[0]);
                     return new[] { fractional, integral };
                 }
+                case "divmod":
+                {
+                    var (quotient, remainder) = np.divmod(ops[0], ops[1]);
+                    return new[] { quotient, remainder };
+                }
                 case "average_returned":
                 {
                     int? axis = p["axis"].ValueKind == JsonValueKind.Null

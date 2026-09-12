@@ -18,7 +18,7 @@ namespace NumSharp.Tests.Fuzz
     {
         private static readonly HashSet<string> ElementwiseOps = new()
         {
-            "astype", "add", "subtract", "multiply", "divide", "floor_divide", "mod", "power",
+            "astype", "add", "subtract", "multiply", "divide", "floor_divide", "mod", "fmod", "power",
             "equal", "not_equal", "less", "greater", "less_equal", "greater_equal",
             "negative", "abs", "sign", "sqrt", "cbrt", "square", "reciprocal",
             "floor", "ceil", "trunc", "sin", "cos", "tan", "exp", "log", "where",

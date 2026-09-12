@@ -82,6 +82,7 @@ BINARY_OPS = {
 DIVMOD_POWER_OPS = {
     "floor_divide": lambda a, b: a // b,
     "mod": lambda a, b: a % b,             # NumPy: floored remainder (sign of divisor)
+    "fmod": lambda a, b: np.fmod(a, b),    # C-style remainder (sign of dividend); truncated
     "power": lambda a, b: a ** b,
 }
 
@@ -4871,6 +4872,45 @@ def gen_multioutput():
         cases.append(_case("modf", {}, [describe(mbase, mrev)], _tuple_expected(np.modf(mrev)),
                            f"modf/neg/{dt}", "tuple", cid=f"modf/neg/{dt}/{n}"))
         n += 1
+
+    # np.divmod's two outputs are (floor_divide, remainder). Cover the sign/edge grid at every
+    # dtype NumPy has a divmod loop for (bb..QQ, ee/ff/dd), including integer ÷0 -> (0,0),
+    # signed MIN/-1 -> (MIN,0), and float ÷0 -> (±inf, nan) plus ±inf/nan operands. Both the fused
+    # kernel (contiguous) and the negative-stride materialize path are exercised.
+    _DM_INT_DT = ["int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64"]
+    for dt in _DM_INT_DT:
+        d = np.dtype(dt)
+        signed = np.issubdtype(d, np.signedinteger)
+        if signed:
+            a = np.array([7, -7, 6, -6, 0, 7, -20, 21, np.iinfo(d).min, 3, -9, 17], dtype=d)
+            b = np.array([3, 3, 3, 3, 3, 0, 7, -7, -1, -1, 3, -3], dtype=d)  # ÷0 and ÷-1 (incl MIN/-1)
+        else:
+            a = np.array([7, 6, 0, 7, 20, 21, 100, 3, 9, 17, 5, 11], dtype=d)
+            b = np.array([3, 3, 3, 0, 7, 7, 7, 3, 3, 3, 3, 0], dtype=d)      # ÷0
+        emit_tuple("divmod", {}, [a, b], np.divmod(a, b), f"divmod/c/{dt}")
+        cases.append(_case("divmod", {}, [describe(a, a[::-1]), describe(b, b[::-1])],
+                           _tuple_expected(np.divmod(a[::-1], b[::-1])),
+                           f"divmod/neg/{dt}", "tuple", cid=f"divmod/neg/{dt}/{n}"))
+        n += 1
+
+    for dt in ["float16", "float32", "float64"]:
+        d = np.dtype(dt)
+        a = np.array([7, -7, 5.3, -5.3, 6, -6, 0, 7, -0.0, np.inf, -np.inf, np.nan], dtype=d)
+        b = np.array([3, -3, 2, 2, 3, 3, 0, 0, 3, 3, 3, 3], dtype=d)          # ÷0, ±inf, nan
+        emit_tuple("divmod", {}, [a, b], np.divmod(a, b), f"divmod/c/{dt}")
+        cases.append(_case("divmod", {}, [describe(a, a[::-1]), describe(b, b[::-1])],
+                           _tuple_expected(np.divmod(a[::-1], b[::-1])),
+                           f"divmod/neg/{dt}", "tuple", cid=f"divmod/neg/{dt}/{n}"))
+        n += 1
+
+    # Broadcast (2-D dividend, scalar-column divisor) — exercises the materialize-broadcast path.
+    da = (np.arange(12, dtype=np.float64) + 1).reshape(3, 4)
+    dcol = np.array([[2.0], [-3.0], [5.0]], dtype=np.float64)
+    emit_tuple("divmod", {}, [da, dcol], np.divmod(da, dcol), "divmod/bcast/float64")
+    # Mixed dtype (NEP50 promotion to float64).
+    dia = np.array([7, -7, 8, -8, 9, -9], dtype=np.int32)
+    dfb = np.array([3.0, 3.0, 2.0, 2.0, 4.0, 4.0], dtype=np.float64)
+    emit_tuple("divmod", {}, [dia, dfb], np.divmod(dia, dfb), "divmod/mixed/i32_f64")
 
     # np.average(..., returned=True): the second slot (sum of weights) has its own shape/dtype
     # contract and was wholly invisible while only the first average result was gated.

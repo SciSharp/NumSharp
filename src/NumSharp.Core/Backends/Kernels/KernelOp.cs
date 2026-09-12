@@ -18,6 +18,9 @@ namespace NumSharp.Backends.Kernels
         // Future
         Power,
         FloorDivide,
+        /// <summary>C-style floating remainder (np.fmod): result takes the sign of the DIVIDEND,
+        /// unlike <see cref="Mod"/> (floored, sign of divisor). Scalar-only, all int+float dtypes.</summary>
+        Fmod,
         LeftShift,
         RightShift,
         // Transcendental binary
