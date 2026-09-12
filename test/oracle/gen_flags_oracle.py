@@ -412,6 +412,17 @@ def build_layout(name):
         if rest == "copy_t3d_K":     return _t3().copy(order="K")
         if rest == "copy_bcast_K":   return _bc().copy(order="K")
         if rest == "astype_bcast_K": return _bc().astype(np.int64, order="K", copy=True)
+        # copy(order=) of a broadcast view overrides KEEPORDER's source-mirroring: an explicit
+        # C/A flattens the stride-0 leading axis to a C-contiguous dense buffer, F to F-contiguous.
+        # These pin the CORRECT tools for "I need a C-contiguous dense copy of a broadcast" — the
+        # reporter's DR-4 zero-copy-crossing gate — against real NumPy, complementing copy_bcast_K
+        # (default order='K' -> F-contiguous for this row-broadcast, so c_contiguous is LEGITIMATELY
+        # false; it is NOT a missing flag recompute). np.copy default order='K'; use 'C'/ascontiguousarray.
+        if rest == "copy_bcast_C":   return _bc().copy(order="C")
+        if rest == "copy_bcast_F":   return _bc().copy(order="F")
+        if rest == "copy_bcast_A":   return _bc().copy(order="A")
+        if rest == "ascontig_bcast":  return np.ascontiguousarray(_bc())
+        if rest == "asfortran_bcast": return np.asfortranarray(_bc())
         # concatenate multi-operand stride vote (size-1 axes never vote -> neither-contig)
         if rest == "stack_f0":       return np.stack([_f2(), _f2()], axis=0)
         if rest == "stack_f1":       return np.stack([_f2(), _f2()], axis=1)
@@ -460,6 +471,8 @@ LAYOUTS = (
     + [f"fancy.{n}" for n in ("rows", "elem", "bmask2d", "take_along", "choose", "ix")]
     + [f"parity.{n}" for n in ("sort_f", "sort_t3d", "sort_bcast", "partition_f",
                                "copy_t3d_K", "copy_bcast_K", "astype_bcast_K",
+                               "copy_bcast_C", "copy_bcast_F", "copy_bcast_A",
+                               "ascontig_bcast", "asfortran_bcast",
                                "stack_f0", "stack_f1", "stack_f2",
                                "reshape_F", "reshape_nocopy", "reshape_copy",
                                "reshape_neg1d", "reshape_A_f",

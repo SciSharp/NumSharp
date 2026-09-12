@@ -307,6 +307,17 @@ namespace NumSharp.Tests.Backends
                         "copy_t3d_K" => T3().copy('K'),
                         "copy_bcast_K" => BC().copy('K'),
                         "astype_bcast_K" => BC().astype(NPTypeCode.Int64, copy: true, order: 'K'),
+                        // copy(order=) of a broadcast view overrides KEEPORDER's source-mirroring: an
+                        // explicit C/A flattens the stride-0 leading axis to a C-contiguous dense buffer,
+                        // F to F-contiguous. These pin the CORRECT tools for "I need a C-contiguous dense
+                        // copy of a broadcast" against real NumPy, complementing copy_bcast_K (default
+                        // order='K' => F-contiguous for this row-broadcast, so c_contiguous is LEGITIMATELY
+                        // false; NOT a missing flag recompute).
+                        "copy_bcast_C" => BC().copy('C'),
+                        "copy_bcast_F" => BC().copy('F'),
+                        "copy_bcast_A" => BC().copy('A'),
+                        "ascontig_bcast" => np.ascontiguousarray(BC()),
+                        "asfortran_bcast" => np.asfortranarray(BC()),
                         "stack_f0" => np.stack(new[] { F2(), F2() }, axis: 0),
                         "stack_f1" => np.stack(new[] { F2(), F2() }, axis: 1),
                         "stack_f2" => np.stack(new[] { F2(), F2() }, axis: 2),
@@ -818,7 +829,7 @@ namespace NumSharp.Tests.Backends
 
         [TestMethod]
         public void Corpus_LayoutMatrix_MatchNumpy()
-            => RunGroup(c => c.IsLayout, floor: 100);  // 70 pre-parity + the 32 `parity.` cases
+            => RunGroup(c => c.IsLayout, floor: 100);  // 70 pre-parity + the 37 `parity.` cases (incl. the 5 broadcast copy/ascontiguous pins)
 
         [TestMethod]
         public void Corpus_Floors_AllRecipesPresent_ManyErrorCases()
