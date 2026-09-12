@@ -1,0 +1,147 @@
+{
+  "schema_version": 1,
+  "scope": "Source-demonstration audit for ranks 4, 9 and 10; numerical cores only, not framework applications",
+  "coverage_status": "test cases implemented; execution is recorded by the central verification run, not inferred from this inventory",
+  "python_reference_probe": {
+    "interpreter": "C:/Users/ELI/.claude/python/python.exe",
+    "numpy_version": "2.4.2",
+    "method": "Executed independently written NumPy formulae and exact source-defined time-series datasets before adding C# assertions. No original framework scripts, checkpoints or media were executed/downloaded.",
+    "captured_facts": {
+      "latent_fixture": "RandomState(1337), two (1,4,64,64) arrays drawn as float64 then cast float32; this is not a Torch seed-equivalence claim",
+      "latent_fixture_pair_sha256": "48a704b1af85bb90e0fc8dcbbb1dff940ba359f7ae01f1b7a8cadcb1d22bf386",
+      "latent_timeline_numpy_bytes_sha256": "24208dadd6fe13423a1391d27e03d2c136e63cc89f91c0588f405b141538d102",
+      "rgb224_preprocessed_bytes_sha256": "53e786fefd6197ba82154680eaf45ad176a071c81d3e91144f4a22d25d74a458",
+      "decoded512_hwc_bytes_sha256": "52749db215039d0ee4baa6cb29e2d9912cd90f739d2be85f478d993b0632feee",
+      "decoded512_uint8_sum": 100041344,
+      "time_series_positive_window_sum": 23702500,
+      "time_series_positive_target_sum": 498275,
+      "time_series_positive_query_sum": 48725
+    }
+  },
+  "sources": [
+    {
+      "rank": 4,
+      "gist": "https://gist.github.com/karpathy/00103b0037c5aaea32fe1da1af553355",
+      "revision": "cfec3bb84900cc3abfe5539d6d69e3fb1f2921b8",
+      "files": [{"name": "stablediffusionwalk.py", "sha256": "cd5c47d7fbfa6d09fafbd6d6938c8a3217bf734c30ce9fb222b238aeb88c8451"}],
+      "cases": [
+        {
+          "case_id": "gist04.full_latent_timeline",
+          "source_file": "stablediffusionwalk.py",
+          "source_lines": [[35,36],[101,125],[134,134],[143,144],[169,180]],
+          "source_facts": "The documented latent tensor has shape (1,4,64,64), from a 512x512 image with spatial downsampling by eight. The default pair interpolation visits all 200 points in linspace(0,1,num_steps), converting each to a Python float.",
+          "fixture_adaptation": "Two deterministic Gaussian NumPy/NumSharp-shared float32 tensors replace external Torch random tensors. This tests the numerical interpolation at the original shape, not Torch RNG/device transfer or actual generated images.",
+          "managed_test": "NumSharp.Tests.Examples.GistTensorSourceDemonstrationsTests.StableWalk_Source200PointTimeline_OnFull64By64Latents",
+          "live_test": "NumSharp.Tests.Interop.GistTensorSourceDemonstrationsLiveTests.StableWalk_All200FullSizeLatentFrames_ExactLiveNumpy",
+          "assertions": ["All 200 timeline values and all 200 x 16384 output values compared to live NumPy by dtype, shape and canonical bytes", "Both endpoints equal their input tensors", "Every managed frame is finite, float32 and has source shape", "Managed frame-99 values agree with independently captured NumPy values within 2e-6; a broad norm bound is an additional invariant, not the live parity threshold"],
+          "additional_existing_tests": ["GistTensorLiveParityTests.Slerp_OrthogonalAndNearParallel_ByteExact", "GistTensorLiveParityTests.Slerp_StridedTensorAndZeroNorm_VsLiveNumpy"],
+          "parity_policy": "Exact bytes for the live finite fixture; existing explicitly undefined zero-norm case compares NaN classifications. Any failure at this larger shape must be investigated, not silently tolerated."
+        },
+        {
+          "case_id": "gist04.full_guidance_and_decoded_pixels",
+          "source_file": "stablediffusionwalk.py",
+          "source_lines": [[80,82],[94,99],[137,137],[143,149]],
+          "source_facts": "Guidance scale defaults to 7.5. Decoded images are divided by two, offset by one half, clamped, permuted from NCHW to NHWC, and the first image is scaled by 255 then cast to uint8.",
+          "fixture_adaptation": "Full-shape synthetic noise predictions and a decoded float32 image containing in-range and clipped pixels stand in for external UNet/VAE outputs.",
+          "managed_test": "NumSharp.Tests.Examples.GistTensorSourceDemonstrationsTests.StableWalk_SourceGuidanceAnd512PixelConversion_CoverEveryElement",
+          "live_test": "NumSharp.Tests.Interop.GistTensorSourceDemonstrationsLiveTests.StableWalk_SourceGuidanceAnd512DecodedPixels_ExactLiveNumpy",
+          "assertions": ["Every one of the 16384 guidance values matches the scalar formula", "All 512x512x3 image bytes match the captured NumPy SHA256", "uint8 sum is 100041344", "All guidance values and pixel bytes match live NumPy exactly"]
+        }
+      ],
+      "exclusions": [
+        {"case_id": "gist04.external_video_application", "source_lines": [[1,14],[32,78],[84,92],[130,145],[148,168],[173,194]], "status": "outside_approved_numerical_core_scope", "reason": "Prompt/tokenizer/text encoder (including 1x77x768 embeddings), CUDA availability, Torch seed 1337, pretrained UNet/VAE, LMS/DDIM/PNDM scheduler behavior, 50 denoising steps, checkpoint loading, 10000 actual generated JPEG frames, JPEG quality 90, output paths, CLI and FFmpeg video are not implemented, executed or claimed covered. The 200-step array interpolation segment is tested separately at full source shape."}
+      ]
+    },
+    {
+      "rank": 9,
+      "gist": "https://gist.github.com/jkleint/1d878d0401b28b281eb75016ed29f2ee",
+      "revision": "b12c675bed3be4126fd9f502f0cd9b33ec4b2186",
+      "files": [{"name": "timeseries_cnn.py", "sha256": "d94a17b2a3d76ae273fe4f43812bd31fb40a0a4ac37dfcf7c1646df14f629965"}],
+      "cases": [
+        {
+          "case_id": "gist09.documented_three_step_window",
+          "source_file": "timeseries_cnn.py",
+          "source_lines": [[22,29],[54,70]],
+          "source_facts": "The docstring gives a three-step, one-series input window [[0],[1],[2]]. The builder requires 0 < window_size < number of timesteps and returns independent window/query arrays plus sliced targets.",
+          "existing_managed_tests": ["GistTensorExamplesTests.Timeseries_VectorAndMatrix_KeepOriginalShapesAndOwnership", "GistTensorExamplesTests.InvalidTensorShapesAndWindows_AreExplicitErrors"],
+          "existing_live_test": "GistTensorLiveParityTests.Timeseries_WindowsTargetsQueryAndSplit_ByteExact",
+          "assertions": ["Exact initial three-step window is included in the live full-array comparison", "Vector versus matrix target ranks", "Invalid zero and full-length windows rejected", "Targets share input storage while X/query do not"]
+        },
+        {
+          "case_id": "gist09.both_complete_original_data_demonstrations",
+          "source_file": "timeseries_cnn.py",
+          "source_lines": [[80,95],[105,117]],
+          "source_facts": "The main function builds 1000 samples of f(t)=t, then 1000 paired samples [t,-t], with window_size=50. evaluate_timeseries converts a vector to a column and sets test_size=int(.01*1000)=10.",
+          "derived_expectations": {"instances": 950, "train_instances": 940, "test_instances": 10, "window_size": 50, "first_target": 50, "last_train_target": 989, "first_test_target": 990, "last_test_target": 999, "query_range": [950,999]},
+          "managed_test": "NumSharp.Tests.Examples.GistTensorSourceDemonstrationsTests.Timeseries_SourceThousandSampleDemonstrations_AssertAllWindowsAndSplits",
+          "live_test": "NumSharp.Tests.Interop.GistTensorSourceDemonstrationsLiveTests.Timeseries_BothThousandSampleSourceDatasets_ExactLiveNumpy",
+          "parameters": [{"seriesCount":1},{"seriesCount":2}],
+          "assertions": ["Every X, y and query element is checked against its analytical timestep/channel value", "All normalization, window, target, query, train and test array shapes are checked", "All eight arrays match the independently evaluated live NumPy source workflow byte-for-byte", "The split boundary uses 10 of 950 windows, not 1 percent of 950 rounded down"]
+        }
+      ],
+      "exclusions": [
+        {"case_id": "gist09.keras_predictions", "source_lines": [[16,51],[80,81],[88,90],[96,102]], "status": "outside_approved_numerical_core_scope", "reason": "The two Conv1D layers, max-pooling, dense regression, four learned filters of length five, Adam training for 25 epochs with batch size two, model summary, predicted-versus-actual printout and next-value prediction require Keras and learned weights. No prediction quality or training result is invented. Dataset/window/target preparation from both actual demonstrations is fully exercised."},
+        {"case_id": "gist09.print_formatting", "source_lines": [[87,93],[99,107],[111,117]], "status": "non_numerical_presentation", "reason": "Console headings and NumPy print threshold 25 do not change the numerical result; tests assert the underlying arrays rather than formatting."}
+      ]
+    },
+    {
+      "rank": 10,
+      "gist": "https://gist.github.com/joelouismarino/a2ede9ab3928f999575423b9887abd14",
+      "revision": "6c17b8dd160d1212f11a7918d00c7c0c0c85e812",
+      "files": [
+        {"name":"googlenet.py","sha256":"59833005f51947232b73beacd1047121aeeee275ac9fbaa8fcc3b65065f8a51d"},
+        {"name":"lrn.py","sha256":"74ef3eb3e1828da44eb35fd4ff83ba83f79598cac0188145c67d72b15961f815"},
+        {"name":"pool_helper.py","sha256":"5fc18f52fb9c9c4bf3fdcf7015c163d09a82cc1e75c7fae9a4d8abe2689946c5"}
+      ],
+      "cases": [
+        {
+          "case_id": "gist10.actual_size_image_preprocessing",
+          "source_file": "googlenet.py",
+          "source_lines": [[22,22],[185,193]],
+          "source_facts": "The image is resized externally to 224x224, then converted to float32, offset by RGB means 123.68/116.779/103.939, reordered BGR, transposed and batched to (1,3,224,224).",
+          "fixture_adaptation": "A full 224x224 synthetic RGB image cycling through every uint8 value replaces the unbundled cat.jpg; image decoding/resampling itself is not exercised.",
+          "managed_test": "NumSharp.Tests.Examples.GistTensorSourceDemonstrationsTests.GoogLeNet_Source224RgbPreparation_AssertEntireTensor",
+          "live_test": "NumSharp.Tests.Interop.GistTensorSourceDemonstrationsLiveTests.GoogLeNet_Source224RgbImageAndThirdHeadArgmax_ExactLiveNumpy",
+          "assertions": ["All 150528 float32 output values match a captured NumPy byte hash", "All output bytes, shape and dtype match live NumPy", "Input RGB bytes are unchanged"]
+        },
+        {
+          "case_id": "gist10.both_lrn_stage_shapes",
+          "source_files_and_lines": [{"file":"googlenet.py","lines":[[22,35]]},{"file":"lrn.py","lines":[[13,37]]}],
+          "source_facts": "Both LRN calls use defaults alpha=.0001, k=1, beta=.75, n=5, with padding only along channels.",
+          "derived_stage_shapes": [[1,64,56,56],[1,192,56,56]],
+          "derivation": "224+6 padded pixels pass through valid 7x7 stride-2 convolution ->112, pad+PoolHelper ->113, valid 3x3 stride-2 pool ->56. Subsequent same-padding convolutions preserve 56 and change channels from 64 to 192.",
+          "fixture_adaptation": "Bounded signed float32 activation patterns exercise both full layer shapes. They are not outputs of a trained GoogLeNet model.",
+          "managed_test": "NumSharp.Tests.Examples.GistTensorSourceDemonstrationsTests.GoogLeNet_SourceLrnStageShapes_NormalizeAllChannels",
+          "live_test": "NumSharp.Tests.Interop.GistTensorSourceDemonstrationsLiveTests.GoogLeNet_BothSourceLrnStageShapes_ExactLiveNumpy",
+          "parameters": [{"channels":64},{"channels":192}],
+          "assertions": ["Both complete activation tensors match live NumPy LRN math byte-for-byte", "Default channel-window padding, first/last channels and both full shapes are exercised", "All managed results are finite and their magnitude does not exceed input magnitude", "Captured first/last NumPy values are checked in managed tests"],
+          "existing_edge_test": "GistTensorLiveParityTests.GoogLeNet_LocalResponseNormalization_ByteExact"
+        },
+        {
+          "case_id": "gist10.all_four_pool_helper_calls",
+          "source_files_and_lines": [{"file":"googlenet.py","lines":[[24,28],[34,36],[60,62],[135,137]]},{"file":"pool_helper.py","lines":[[9,10]]}],
+          "derived_input_shapes": [[1,64,114,114],[1,192,58,58],[1,480,30,30],[1,832,16,16]],
+          "derivation": "The four source padding+pool-helper sites use channel counts 64,192,480,832 and the preceding spatial dimensions 112,56,28,14; one-cell padding adds two before the helper removes the first row/column.",
+          "managed_test": "NumSharp.Tests.Examples.GistTensorSourceDemonstrationsTests.GoogLeNet_AllFourPoolCropsAndThirdClassifierSelection_UseSourceDimensions",
+          "live_test": "NumSharp.Tests.Interop.GistTensorSourceDemonstrationsLiveTests.GoogLeNet_AllFourSourcePoolHelperStages_ExactLiveNumpy",
+          "assertions": ["All four cropped tensors compare byte-for-byte with x[:,:,1:,1:]", "All source-derived shapes and boundary positions checked", "Mutation proves shared-view semantics"]
+        },
+        {
+          "case_id": "gist10.third_thousand_class_head_selection",
+          "source_file": "googlenet.py",
+          "source_lines": [[80,81],[121,122],[164,167],[199,203]],
+          "source_facts": "The model has three outputs of width 1000; the demonstration chooses the argmax of out[2] and looks up its class name.",
+          "fixture_adaptation": "Three deliberately different synthetic score heads prove selection uses the third head, without claiming a cat classification or model prediction.",
+          "managed_test": "NumSharp.Tests.Examples.GistTensorSourceDemonstrationsTests.GoogLeNet_AllFourPoolCropsAndThirdClassifierSelection_UseSourceDimensions",
+          "live_test": "NumSharp.Tests.Interop.GistTensorSourceDemonstrationsLiveTests.GoogLeNet_Source224RgbImageAndThirdHeadArgmax_ExactLiveNumpy",
+          "assertions": ["1000-class third-head winner is exactly index 281 in both stacks", "Other synthetic heads have different winners, so selection is not accidentally using head zero or one"],
+          "existing_tie_test": "GistTensorExamplesTests.GoogLeNet_LrnAndPoolHelper_CoverChannelEdgesAndViews"
+        }
+      ],
+      "exclusions": [
+        {"case_id":"gist10.full_pretrained_classification","source_file":"googlenet.py","source_lines":[[20,182],[186,187],[195,203]],"status":"outside_approved_numerical_core_scope","reason":"Keras model construction, convolutions/pooling/dense/dropout/softmax, regularization, framework kernel conversion, loading googlenet_weights.h5, decoding/resizing cat.jpg, compiling SGD, actual network prediction, np.loadtxt of the unbundled synset_words.txt and the resulting predicted class name are not implemented or claimed verified. Ported preprocessing/LRN/crop/argmax are separately mapped above."},
+        {"case_id":"gist10.framework_layer_serialization","source_files_and_lines":[{"file":"lrn.py","lines":[[1,18],[39,45]]},{"file":"pool_helper.py","lines":[[1,7],[12,15]]}],"status":"outside_approved_numerical_core_scope","reason":"Keras backend selection, layer inheritance and get_config serialization are framework integration rather than NumSharp numerical calculations."}
+      ]
+    }
+  ]
+}

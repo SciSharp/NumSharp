@@ -1,0 +1,99 @@
+{
+  "schema_version": 1,
+  "selection": {
+    "owner": "karpathy",
+    "observed_public_catalog_size": 13,
+    "catalog": "outputs/karpathy-gists-2026-09-09/cache/user-gists-page-1.json",
+    "criterion": "Four substantive standalone learning algorithms, beyond existing NES and Stable Diffusion numerical ports. Editorial selection, not a refreshed popularity or usage ranking."
+  },
+  "acquisition": {
+    "workflow": "Claude curl + curl-research skills; python -m curl_get.get; responses saved to disk with JSON receipts",
+    "catalog_url": "https://api.github.com/users/karpathy/gists?per_page=100&page=1",
+    "pinning": "Immutable raw-file URLs from the author catalog; raw_file_revision is NOT claimed to be gist HEAD. Successful metadata for Pong/LSTM independently identifies gist_revision. RNN/microGPT unversioned metadata endpoints returned HTTP502 and no gist_revision is invented.",
+    "failures": "Failed head API receipts are retained. Initial Pong/LSTM raw URL extraction produced null locally (no HTTP request); corrected retrieval receipts are *-v2.json.",
+    "execution": "Original file bodies were read, not executed as unbounded framework/download/training applications. Python references and bounded local fixtures execute independently.",
+    "scope": "Full numerical algorithms and bounded training/inference demos; no Atari ROM/model downloads or original ML framework applications."
+  },
+  "sources": [
+    {
+      "key": "rnn",
+      "gist_url": "https://gist.github.com/karpathy/d4dee566867f8291f086",
+      "gist_id": "d4dee566867f8291f086",
+      "description": "Minimal character-level language model with a Vanilla Recurrent Neural Network, in Python/numpy",
+      "filename": "min-char-rnn.py",
+      "raw_url": "https://gist.githubusercontent.com/karpathy/d4dee566867f8291f086/raw/45350b64ab738fa1ca2bf170969494339eab5633/min-char-rnn.py",
+      "raw_file_revision": "45350b64ab738fa1ca2bf170969494339eab5633",
+      "gist_revision": null,
+      "path": "outputs/karpathy-gists-2026-09-09/cache/rnn.py",
+      "sha256": "98a0eaa61092f9541e883f3e8b6c02dae28b5658dbc5f692ffe0881be37a390a",
+      "bytes": 4515,
+      "receipt": "outputs/karpathy-gists-2026-09-09/receipts/rnn.json",
+      "receipt_sha256": "49c5cd3d2fe370e961aa15ab41437f78f5bd9c170dc1b59ab917e3562fc722ed",
+      "port_file": "examples/gist/karpathy/karpathy.MinimalCharacterRnn.cs",
+      "license_observation": "Header declares BSD License without identifying variant or supplying full license text."
+    },
+    {
+      "key": "pong",
+      "gist_url": "https://gist.github.com/karpathy/a4166c7fe253700972fcbc77e4ea32c5",
+      "gist_id": "a4166c7fe253700972fcbc77e4ea32c5",
+      "description": "Training a Neural Network ATARI Pong agent with Policy Gradients from raw pixels",
+      "filename": "pg-pong.py",
+      "raw_url": "https://gist.githubusercontent.com/karpathy/a4166c7fe253700972fcbc77e4ea32c5/raw/21358a21606ee9c389e5753ff09969238adb293b/pg-pong.py",
+      "raw_file_revision": "21358a21606ee9c389e5753ff09969238adb293b",
+      "gist_revision": "06d092624118444f7350a22653e8ba9d1c6e63d6",
+      "path": "outputs/karpathy-gists-2026-09-09/cache/pong.py",
+      "sha256": "cf764d11a0ebebb46d02c482c5a9c7c31081960d24b7c332757362735ad71a14",
+      "bytes": 5257,
+      "receipt": "outputs/karpathy-gists-2026-09-09/receipts/pong-v2.json",
+      "receipt_sha256": "dabfa474d0890d5d3ff098e27f03e6717281032e72ec17fbb73dee2e37b2dcf1",
+      "port_file": "examples/gist/karpathy/karpathy.PongPolicyGradient.cs",
+      "license_observation": "No explicit license declaration in this pinned source file; no grant inferred."
+    },
+    {
+      "key": "lstm",
+      "gist_url": "https://gist.github.com/karpathy/587454dc0146a6ae21fc",
+      "gist_id": "587454dc0146a6ae21fc",
+      "description": "An efficient, batched LSTM.",
+      "filename": "gistfile1.py",
+      "raw_url": "https://gist.githubusercontent.com/karpathy/587454dc0146a6ae21fc/raw/3dd03205cf6d92630f2b81f1a929730584ae5e28/gistfile1.py",
+      "raw_file_revision": "3dd03205cf6d92630f2b81f1a929730584ae5e28",
+      "gist_revision": "029a6e85048960fec169411f34eea304b42846a5",
+      "path": "outputs/karpathy-gists-2026-09-09/cache/lstm.py",
+      "sha256": "137a213cfe6ec6eb7c73dc73c18f356dfd676e6e36bb66d2be6667ca6be7a4c4",
+      "bytes": 8928,
+      "receipt": "outputs/karpathy-gists-2026-09-09/receipts/lstm-v2.json",
+      "receipt_sha256": "20bac2e3e835b2fabfa7336542d0ee06bed79d68a897d5b40db23294b6021951",
+      "port_file": "examples/gist/karpathy/karpathy.BatchedLstm.cs",
+      "license_observation": "No explicit license declaration in this pinned source file; no grant inferred."
+    },
+    {
+      "key": "microgpt",
+      "gist_url": "https://gist.github.com/karpathy/8627fe009c40f57531cb18360106ce95",
+      "gist_id": "8627fe009c40f57531cb18360106ce95",
+      "description": "microgpt",
+      "filename": "microgpt.py",
+      "raw_url": "https://gist.githubusercontent.com/karpathy/8627fe009c40f57531cb18360106ce95/raw/f42a9440467b4620bd6c178777e7a0209ef064d2/microgpt.py",
+      "raw_file_revision": "f42a9440467b4620bd6c178777e7a0209ef064d2",
+      "gist_revision": null,
+      "path": "outputs/karpathy-gists-2026-09-09/cache/microgpt.py",
+      "sha256": "d47d88c2fd432c8ebdc1048beab7f7eb64ea7e0e664e11b812d72a6d95ebccee",
+      "bytes": 9319,
+      "receipt": "outputs/karpathy-gists-2026-09-09/receipts/microgpt.json",
+      "receipt_sha256": "54ebca36ba93eb870938fa5b2c029fce004baf8f60c5b05432342298daa719ae",
+      "port_file": "examples/gist/karpathy/karpathy.MicroGpt.cs",
+      "license_observation": "No explicit license declaration in this pinned source file; no grant inferred."
+    }
+  ],
+  "existing_ports": [
+    {
+      "gist": "https://gist.github.com/karpathy/77fbb6a8dac5395f1b73e7a89300318d",
+      "file": "examples/gist/karpathy.NaturalEvolutionStrategies.cs",
+      "evidence": "examples/gist/coverage-learning.json"
+    },
+    {
+      "gist": "https://gist.github.com/karpathy/00103b0037c5aaea32fe1da1af553355",
+      "file": "examples/gist/karpathy.StableDiffusionWalk.cs",
+      "evidence": "examples/gist/coverage-tensor.json"
+    }
+  ]
+}
