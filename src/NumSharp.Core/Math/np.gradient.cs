@@ -34,6 +34,24 @@ namespace NumSharp
     //     coefficients (NumPy converts the coordinates to float64), so the
     //     stencil runs in float64 and is cast down to `otype` on store — exactly
     //     as NumPy pre-allocates `out` and assigns the computed slices into it.
+    //     A reduced-precision (float16/float32) input with NON-UNIFORM spacing
+    //     additionally widens the one-sided EDGE slices to float64 (see `edgeWiden`
+    //     below), because NumSharp demotes a 0-d float64 Scalar coefficient to weak
+    //     against a reduced-precision operand and would otherwise compute the edge
+    //     in reduced precision; the interior already runs in float64 via its 1-D
+    //     float64 coefficient arrays.
+    //
+    // ACCEPTED 1-ULP divergence, complex128 ONLY, with a spacing whose divisor is not
+    // a power of two (e.g. a per-axis scalar dx=1.5 → /3.0, or any non-uniform edge
+    // /dx): gradient divides the complex difference by a real spacing, and .NET's
+    // System.Numerics.Complex division (Smith's algorithm, which reduces a real
+    // divisor to the component-wise a/c) rounds the last bit differently from NumPy's
+    // complex divide loop (which computes (a·c+b·d)/(c²+d²) = 3a/9 for c=3). This is
+    // the pre-existing complex128-binary-op limitation (NumSharp's complex byte-
+    // exactness is contractual for UNARY ufuncs only), reproducible in isolation as
+    // `np.divide(complexArray, 3.0)`; gradient/trapezoid merely inherit it, and
+    // trapezoid avoids it because it only ever divides by the exact /2.0. float16/
+    // float32/float64 gradient is bit-exact.
     //
     // The API mirrors NumPy's `gradient(f, *varargs, axis=None, edge_order=1)`.
     // C# cannot express NumPy's keyword-only `axis`/`edge_order` alongside the
@@ -290,6 +308,21 @@ namespace NumSharp
             NDArray work = IsIntegerLike(ftc) ? f.astype(np.float64) : f;
             DType otype = work.dtype;
 
+            // Computation dtype for the NON-UNIFORM one-sided EDGES. NumPy forms those edges with
+            // float64 coordinate coefficients (`ax_dx[i]` is a float64 scalar — STRONG under NEP50),
+            // so a reduced-precision input is widened to result_type(float64, otype) == float64 for
+            // the edge arithmetic and the quotient/combination is rounded ONCE to `otype` on store.
+            // NumSharp treats a 0-D `NDArray.Scalar(double)` coefficient as a WEAK scalar, which would
+            // demote the edge product/quotient back to float16/float32 and compute the edge in reduced
+            // precision (observed 1–14 ULP off NumPy). Widening the edge slices to `edgeWiden`
+            // reproduces NumPy's float64 edge exactly; float64/complex128/Decimal inputs need no
+            // widening (the float64 scalar promotes up to them, and their edge already matches), so
+            // `edgeWiden` is null there. The INTERIOR already computes in float64 — it multiplies by
+            // 1-D float64 coefficient arrays, which NumSharp correctly keeps strong — so only the
+            // edges need this. The UNIFORM path is unaffected: there NumPy's `2.*ax_dx` is a weak
+            // Python float, so both libraries compute in the reduced dtype and already agree.
+            DType edgeWiden = (otype == np.float32 || otype == np.float16) ? np.float64 : null;
+
             var outvals = new NDArray[len_axes];
             for (int ai = 0; ai < len_axes; ai++)
             {
@@ -359,9 +392,9 @@ namespace NumSharp
                     double dx0v = uniform ? (double)ax_dx : ((NDArray)ax_dx).GetDouble(0);
                     double dxnv = uniform ? (double)ax_dx : ((NDArray)ax_dx).GetDouble(((NDArray)ax_dx).size - 1);
                     WriteEdge(outp, work, axis, N, 0,
-                        Edge1(SliceAlongAxis(work, axis, 1, 2), SliceAlongAxis(work, axis, 0, 1), dx0v, uniform));
+                        Edge1(SliceAlongAxis(work, axis, 1, 2), SliceAlongAxis(work, axis, 0, 1), dx0v, uniform, edgeWiden));
                     WriteEdge(outp, work, axis, N, M - 1,
-                        Edge1(SliceAlongAxis(work, axis, M - 1, M), SliceAlongAxis(work, axis, M - 2, M - 1), dxnv, uniform));
+                        Edge1(SliceAlongAxis(work, axis, M - 1, M), SliceAlongAxis(work, axis, M - 2, M - 1), dxnv, uniform, edgeWiden));
                 }
                 else
                 {
@@ -389,11 +422,11 @@ namespace NumSharp
                     // front: out[0] = a0*f[0] + b0*f[1] + c0*f[2]
                     WriteEdge(outp, work, axis, N, 0,
                         Edge2(SliceAlongAxis(work, axis, 0, 1), SliceAlongAxis(work, axis, 1, 2),
-                              SliceAlongAxis(work, axis, 2, 3), a0, b0, c0, uniform));
+                              SliceAlongAxis(work, axis, 2, 3), a0, b0, c0, uniform, edgeWiden));
                     // back: out[-1] = a1*f[-3] + b1*f[-2] + c1*f[-1]
                     WriteEdge(outp, work, axis, N, M - 1,
                         Edge2(SliceAlongAxis(work, axis, M - 3, M - 2), SliceAlongAxis(work, axis, M - 2, M - 1),
-                              SliceAlongAxis(work, axis, M - 1, M), a1, b1, c1, uniform));
+                              SliceAlongAxis(work, axis, M - 1, M), a1, b1, c1, uniform, edgeWiden));
                 }
 
                 outvals[ai] = outp;
@@ -402,17 +435,48 @@ namespace NumSharp
             return new GradientResult(outvals, single: len_axes == 1);
         }
 
-        // out[0]/out[-1] = (hi - lo) / d, weak (uniform) or strong (non-uniform) divisor.
-        private static NDArray Edge1(NDArray hi, NDArray lo, double d, bool uniform)
+        // out[0]/out[-1] = (hi - lo) / d. Uniform spacing uses the weak C# double `d` (so the quotient
+        // stays in the input dtype, matching NumPy's weak `ax_dx`); non-uniform spacing divides by the
+        // STRONG float64 coordinate scalar. When <paramref name="widenTo"/> is non-null (a reduced-
+        // precision float16/float32 input) the difference is widened to it (float64) BEFORE the divide,
+        // so the quotient is computed in float64 and rounded once to otype on store — reproducing NumPy,
+        // which a weak 0-D NDArray.Scalar(double) would otherwise demote back to the input precision.
+        // The subtraction is done first in the input dtype (as NumPy does — `f[s2]-f[s3]` is f32), then
+        // widened, because widening is exact and commuting it would not change the result.
+        private static NDArray Edge1(NDArray hi, NDArray lo, double d, bool uniform, DType widenTo)
         {
             NDArray num = hi - lo;
-            NDArray res = uniform ? num / d : num / NDArray.Scalar(d);   // strong 0-d scalar off the uniform path
+            NDArray res;
+            if (uniform)
+            {
+                res = num / d;
+            }
+            else if (widenTo is null)
+            {
+                // float64 / complex128 / Decimal input: the float64 scalar promotes up to the operand's
+                // dtype, so the edge already computes at full precision — keep the existing path.
+                using var sd = NDArray.Scalar(d);
+                res = num / sd;
+            }
+            else
+            {
+                using NDArray w = num.astype(widenTo);   // exact widen f16/f32 -> f64
+                using var sd = NDArray.Scalar(d);        // f64 / f64 -> f64 (no weak demotion)
+                res = w / sd;
+            }
             num.Dispose(); hi.Dispose(); lo.Dispose();
             return res;
         }
 
-        // a*f0 + b*f1 + c*f2, coefficients weak (uniform) or strong 0-d scalars (non-uniform).
-        private static NDArray Edge2(NDArray f0, NDArray f1, NDArray f2, double a, double b, double c, bool uniform)
+        // a*f0 + b*f1 + c*f2, left-associative exactly as NumPy evaluates it. Uniform spacing uses the
+        // weak C# double coefficients (so the combination stays in the input dtype, matching NumPy's
+        // weak coefficients); non-uniform spacing uses STRONG float64 coordinate coefficients. When
+        // <paramref name="widenTo"/> is non-null (a reduced-precision float16/float32 input) the three
+        // slices are widened to it (float64) BEFORE the products, so `a*f0` etc. are computed in float64
+        // (NumPy widens the f32 operand into the float64 multiply) and the float64 sum is rounded once to
+        // otype on store — a weak 0-D NDArray.Scalar(double) coefficient would instead demote each product
+        // back to the input precision and diverge by several ULP.
+        private static NDArray Edge2(NDArray f0, NDArray f1, NDArray f2, double a, double b, double c, bool uniform, DType widenTo)
         {
             NDArray res;
             if (uniform)
@@ -421,10 +485,24 @@ namespace NumSharp
                 NDArray s01 = t0 + t1; res = s01 + t2;
                 t0.Dispose(); t1.Dispose(); t2.Dispose(); s01.Dispose();
             }
-            else
+            else if (widenTo is null)
             {
+                // float64 / complex128 / Decimal input: the float64 scalar coefficients promote up to the
+                // operand dtype, so the edge already computes at full precision — keep the existing path.
                 NDArray na = NDArray.Scalar(a), nb = NDArray.Scalar(b), nc = NDArray.Scalar(c);
                 NDArray t0 = na * f0, t1 = nb * f1, t2 = nc * f2;
+                NDArray s01 = t0 + t1; res = s01 + t2;
+                na.Dispose(); nb.Dispose(); nc.Dispose();
+                t0.Dispose(); t1.Dispose(); t2.Dispose(); s01.Dispose();
+            }
+            else
+            {
+                // reduced precision: widen the slices to float64 so the products and sum run in float64
+                // (the f64 scalar coefficients no longer demote against an f32/f16 operand), then the
+                // caller's store rounds the float64 combination once to otype — bit-identical to NumPy.
+                using NDArray w0 = f0.astype(widenTo), w1 = f1.astype(widenTo), w2 = f2.astype(widenTo);
+                NDArray na = NDArray.Scalar(a), nb = NDArray.Scalar(b), nc = NDArray.Scalar(c);
+                NDArray t0 = na * w0, t1 = nb * w1, t2 = nc * w2;
                 NDArray s01 = t0 + t1; res = s01 + t2;
                 na.Dispose(); nb.Dispose(); nc.Dispose();
                 t0.Dispose(); t1.Dispose(); t2.Dispose(); s01.Dispose();

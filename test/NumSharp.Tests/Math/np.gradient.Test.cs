@@ -57,6 +57,51 @@ namespace NumSharp.Tests.Math
             AssertClose(r, new[] { 0.0, 2.0, 4.0, 6.0, 8.0 });
         }
 
+        // ---- non-uniform (coordinate) spacing on a reduced-precision input: the one-sided EDGES
+        //      must be computed in float64 and rounded ONCE to the input dtype, exactly as NumPy does
+        //      (regression pin: the edges used to compute in float32/float16 — a 0-d Scalar(double)
+        //      coefficient is demoted to weak against the reduced-precision operand — diverging from
+        //      NumPy by up to a few ULP at the two edge elements; the interior was always correct). ----
+
+        [TestMethod]
+        public void Gradient_NonUniform_Float32_EdgesMatchFloat64Cast()
+        {
+            // NumPy keeps the float64 coordinate coefficients STRONG, so a float32 non-uniform gradient
+            // is BIT-identical to the float64 gradient cast down to float32 — edges included.
+            var x = np.array(new double[] { 0, 1, 1.5, 3.5, 4, 6 });
+            var f32 = np.array(new float[] { 1, 2, 4, 7, 11, 16 });
+            var f64 = f32.astype(np.float64);
+            foreach (int eo in new[] { 1, 2 })
+            {
+                NDArray g32 = np.gradient(f32, x, edge_order: eo);
+                NDArray gRef = ((NDArray)np.gradient(f64, x, edge_order: eo)).astype(np.float32);
+                g32.dtype.Should().Be(np.float32);
+                g32.ToArray<float>().Should().Equal(gRef.ToArray<float>(),
+                    $"float32 non-uniform gradient (eo={eo}) must equal the float64 result cast to float32");
+            }
+            // Explicit NumPy 2.4.2 values for eo=2 (the back edge -1.8999999762 is the one the bug broke).
+            ((NDArray)np.gradient(f32, x, edge_order: 2)).astype(np.float64).Data<double>().ToArray()
+                .Should().Equal(new[] { -1.0, 3.0, 3.5, 6.699999809265137, 6.900000095367432, -1.899999976158142 });
+        }
+
+        [TestMethod]
+        public void Gradient_NonUniform_Float16_EdgesMatchFloat64Cast()
+        {
+            var x = np.array(new double[] { 0, 1, 1.5, 3.5, 4, 6 });
+            var f16 = np.array(new Half[] { (Half)1, (Half)2, (Half)4, (Half)7, (Half)11, (Half)16 });
+            var f64 = f16.astype(np.float64);
+            foreach (int eo in new[] { 1, 2 })
+            {
+                NDArray g16 = np.gradient(f16, x, edge_order: eo);
+                NDArray gRef = ((NDArray)np.gradient(f64, x, edge_order: eo)).astype(np.float16);
+                g16.dtype.Should().Be(np.float16);
+                g16.ToArray<Half>().Should().Equal(gRef.ToArray<Half>(),
+                    $"float16 non-uniform gradient (eo={eo}) must equal the float64 result cast to float16");
+            }
+            // NumPy 2.4.2 eo=2 back edge is -1.900390625 (float16); the pre-fix float16 edge was ~14 ULP off.
+            ((double)((NDArray)np.gradient(f16, x, edge_order: 2)).GetAtIndex<Half>(5)).Should().Be(-1.900390625);
+        }
+
         // ---------------------------- dtype tier ----------------------------
 
         [TestMethod]
