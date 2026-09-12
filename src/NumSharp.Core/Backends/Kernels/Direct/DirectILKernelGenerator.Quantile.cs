@@ -60,13 +60,17 @@ namespace NumSharp.Backends.Kernels
             public readonly NPTypeCode OutType;
             public readonly QuantileMethod Method;
             public readonly bool IgnoreNaN;
+            /// <summary>Bakes NumPy's mean-of-middle <c>np.median</c> reduction into the kernel (see
+            /// <see cref="QuantileEngine.Compute"/>'s <c>medianMean</c>). Part of the cache key so the
+            /// median and quantile(0.5) kernels are distinct compiled bodies.</summary>
+            public readonly bool MedianMean;
 
-            public QuantileKey(NPTypeCode srcType, NPTypeCode outType, QuantileMethod method, bool ignoreNaN)
-            { SrcType = srcType; OutType = outType; Method = method; IgnoreNaN = ignoreNaN; }
+            public QuantileKey(NPTypeCode srcType, NPTypeCode outType, QuantileMethod method, bool ignoreNaN, bool medianMean)
+            { SrcType = srcType; OutType = outType; Method = method; IgnoreNaN = ignoreNaN; MedianMean = medianMean; }
 
-            public bool Equals(QuantileKey o) => SrcType == o.SrcType && OutType == o.OutType && Method == o.Method && IgnoreNaN == o.IgnoreNaN;
+            public bool Equals(QuantileKey o) => SrcType == o.SrcType && OutType == o.OutType && Method == o.Method && IgnoreNaN == o.IgnoreNaN && MedianMean == o.MedianMean;
             public override bool Equals(object obj) => obj is QuantileKey o && Equals(o);
-            public override int GetHashCode() => ((int)SrcType << 17) | ((int)OutType << 9) | ((int)Method << 1) | (IgnoreNaN ? 1 : 0);
+            public override int GetHashCode() => ((int)SrcType << 18) | ((int)OutType << 10) | ((int)Method << 2) | (IgnoreNaN ? 2 : 0) | (MedianMean ? 1 : 0);
         }
 
         internal static readonly ConcurrentDictionary<QuantileKey, QuantileKernel> _quantileKernelCache = new();
@@ -76,15 +80,21 @@ namespace NumSharp.Backends.Kernels
         ///     tuple emits and caches the DynamicMethod; later calls jump straight into the
         ///     specialized native code.
         /// </summary>
+        /// <param name="medianMean">
+        ///     Reduce even-size slices with NumPy's mean-of-middle <c>np.median</c> rule
+        ///     (<c>(a+b)/2</c>) instead of the quantile <c>_lerp</c> at q=0.5 — the two differ
+        ///     by up to 1 ULP. Set only by <c>np.median</c>/<c>np.nanmedian</c>; baked into the
+        ///     cached kernel via <see cref="QuantileKey.MedianMean"/>.
+        /// </param>
         public static unsafe void Quantile(
             NPTypeCode srcType, NPTypeCode outType, QuantileMethod method,
             void* srcBase, void* scratchBase, long outer, int n,
             int* kSorted, int nKs,
             double* q, int nQs,
             void* dstBase, long dstOuterStride,
-            bool ignoreNaN = false, int* rowKScratch = null)
+            bool ignoreNaN = false, int* rowKScratch = null, bool medianMean = false)
         {
-            var key = new QuantileKey(srcType, outType, method, ignoreNaN);
+            var key = new QuantileKey(srcType, outType, method, ignoreNaN, medianMean);
             var kernel = _quantileKernelCache.GetOrAdd(key, k => EmitQuantileKernel(k));
             kernel(srcBase, scratchBase, outer, n, kSorted, nKs, q, nQs, dstBase, dstOuterStride,
                 ignoreNaN ? 1 : 0, rowKScratch);
@@ -183,11 +193,12 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);                      // dstBase + offset → void*
 
-            //   dstOuterStride, methodInt, ignoreNaN (baked), rowKScratch
-            il.Emit(OpCodes.Ldarg_S, (byte)9);              // dstOuterStride
-            il.Emit(OpCodes.Ldc_I4, (int)key.Method);       // method baked in
-            il.Emit(OpCodes.Ldc_I4, key.IgnoreNaN ? 1 : 0); // ignoreNaN baked in
-            il.Emit(OpCodes.Ldarg_S, (byte)11);             // rowKScratch
+            //   dstOuterStride, methodInt, ignoreNaN (baked), medianMean (baked), rowKScratch
+            il.Emit(OpCodes.Ldarg_S, (byte)9);               // dstOuterStride
+            il.Emit(OpCodes.Ldc_I4, (int)key.Method);        // method baked in
+            il.Emit(OpCodes.Ldc_I4, key.IgnoreNaN ? 1 : 0);  // ignoreNaN baked in
+            il.Emit(OpCodes.Ldc_I4, key.MedianMean ? 1 : 0); // medianMean baked in
+            il.Emit(OpCodes.Ldarg_S, (byte)11);              // rowKScratch
 
             il.Emit(OpCodes.Call, helperSpecialized);
 
@@ -225,7 +236,7 @@ namespace NumSharp.Backends.Kernels
             int* kSorted, int nKs,
             double* q, int nQs,
             void* dstCell, long dstOuterStride,
-            int methodInt, int ignoreNaN, int* rowKScratch)
+            int methodInt, int ignoreNaN, int medianMean, int* rowKScratch)
             where T : unmanaged, IComparable<T>
             where TOut : unmanaged
         {
@@ -233,6 +244,7 @@ namespace NumSharp.Backends.Kernels
             T* scratch = (T*)scratchBase;
             TOut* dst = (TOut*)dstCell;
             var method = (QuantileMethod)methodInt;
+            bool medianMeanB = medianMean != 0;   // NumPy np.median mean-of-middle rule (baked)
 
             // 1. memcpy
             Buffer.MemoryCopy(src, scratch, (long)n * sizeof(T), (long)n * sizeof(T));
@@ -246,7 +258,7 @@ namespace NumSharp.Backends.Kernels
             // (sized for n) cannot be reused; indices are recomputed into rowKScratch.
             if (ignoreNaN != 0)
             {
-                ProcessQuantileRowNaN<T, TOut>(scratch, n, q, nQs, dst, dstOuterStride, method, rowKScratch);
+                ProcessQuantileRowNaN<T, TOut>(scratch, n, q, nQs, dst, dstOuterStride, method, medianMeanB, rowKScratch);
                 return;
             }
 
@@ -274,7 +286,7 @@ namespace NumSharp.Backends.Kernels
                 if (hasNaN) { WriteNaNCell(outCell); continue; }
 
                 ComputeIndex(n, q[j], method, out int prevIdx, out int nextIdx, out double gamma);
-                WriteCell(scratch, prevIdx, nextIdx, gamma, method, outCell);
+                WriteCell(scratch, prevIdx, nextIdx, gamma, method, medianMeanB, outCell);
             }
         }
 
@@ -329,7 +341,7 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         private static unsafe void ProcessQuantileRowNaN<T, TOut>(
             T* scratch, int n, double* q, int nQs,
-            TOut* dst, long dstOuterStride, QuantileMethod method, int* rowKScratch)
+            TOut* dst, long dstOuterStride, QuantileMethod method, bool medianMean, int* rowKScratch)
             where T : unmanaged, IComparable<T>
             where TOut : unmanaged
         {
@@ -380,7 +392,7 @@ namespace NumSharp.Backends.Kernels
             for (int j = 0; j < nQs; j++)
             {
                 ComputeIndex(m, q[j], method, out int prevIdx, out int nextIdx, out double gamma);
-                WriteCell(scratch, prevIdx, nextIdx, gamma, method, dst + (long)j * dstOuterStride);
+                WriteCell(scratch, prevIdx, nextIdx, gamma, method, medianMean, dst + (long)j * dstOuterStride);
             }
         }
 
@@ -394,7 +406,7 @@ namespace NumSharp.Backends.Kernels
         internal static void ComputeIndex(int n, double q, QuantileMethod method,
             out int prevIdx, out int nextIdx, out double gamma)
         {
-            double vi;
+            double vi = 0;   // virtual index; the discrete cases below never read it back
             switch (method)
             {
                 case QuantileMethod.Linear:
@@ -423,7 +435,13 @@ namespace NumSharp.Backends.Kernels
                     {
                         double lo = Math.Floor(vi);
                         prevIdx = (int)lo;
-                        nextIdx = (int)Math.Ceiling(vi);
+                        // NumPy's _get_indexes uses next = prev + 1 ALWAYS — it never collapses to
+                        // Ceiling(vi) at an integer index. That distinction is invisible for finite
+                        // data (`a + (b-a)*0 == a`) but load-bearing on non-finite slices: with a
+                        // +inf/-inf neighbour `b - a` is ±inf, so `a + (b-a)*0 = a + inf*0 = NaN`,
+                        // matching np.percentile(..., method='midpoint') on ±inf slices (a plain
+                        // Ceiling collapse would leave diff = 0 and return the finite neighbour).
+                        nextIdx = prevIdx + 1;
                         gamma = (vi == lo) ? 0.0 : 0.5;
                     }
                     break;
@@ -492,6 +510,35 @@ namespace NumSharp.Backends.Kernels
                 default:
                     throw new ArgumentOutOfRangeException(nameof(method));
             }
+            // NumPy's `_get_indexes` + `_get_gamma` out-of-bounds clamp, for the interpolating
+            // methods whose `fix_gamma` is the IDENTITY (γ == the raw fractional weight). When the
+            // virtual index lands outside [0, n-1] the two interpolation endpoints fold onto a
+            // single sample (prev == next after the index clamp below, so diff == 0 and the VALUE
+            // is that endpoint regardless of γ) — but the γ NumPy derives from its CLAMPED index
+            // still selects the `_lerp` branch, and that branch is the sole observable effect
+            // there: it fixes the SIGN of a ±0 endpoint (e.g. percentile of a single -0.0, or q=1
+            // of an all-≤0 slice). NumPy sets prev = -1 above bounds, so γ = vi - (-1) = vi + 1 ≥
+            // 0.5 → the `b - diff*(1-t)` branch; and prev = 0 below bounds, so γ = vi - 0 = vi < 0
+            // → the `a + diff*t` branch.
+            //
+            // Excluded on purpose: the DISCRETE methods take a single sample without any lerp (they
+            // preserve the endpoint's sign directly); MIDPOINT's `fix_gamma` keys off vi's
+            // integer-ness (already applied in its case above, and independent of the clamp); and
+            // AVERAGED_INVERTED_CDF's `fix_gamma` transforms the raw γ, so a blanket rewrite would
+            // be wrong for both. Their rare ±0-endpoint sign is left to the documented
+            // signed-zero-sign divergence rather than mis-corrected here.
+            switch (method)
+            {
+                case QuantileMethod.Linear:
+                case QuantileMethod.Hazen:
+                case QuantileMethod.Weibull:
+                case QuantileMethod.MedianUnbiased:
+                case QuantileMethod.NormalUnbiased:
+                case QuantileMethod.InterpolatedInvertedCdf:
+                    if (vi >= n - 1)  gamma = vi + 1.0;   // above bounds → b-branch (γ ≥ 0.5)
+                    else if (vi < 0)  gamma = vi;         // below bounds → a-branch (γ < 0)
+                    break;
+            }
             // Clamp into [0, n-1] (matches numpy._get_indexes).
             if (prevIdx < 0) prevIdx = 0;
             if (prevIdx > n - 1) prevIdx = n - 1;
@@ -514,9 +561,16 @@ namespace NumSharp.Backends.Kernels
             else                                    *dst = default;   // ints / bool / char — NumPy stores 0
         }
 
+        /// <param name="medianMean">
+        ///     When true, a continuous even-size result (γ = 0.5, the two central samples) is the
+        ///     <b>mean</b> <c>(a+b)/2</c> at the output precision — NumPy's <c>np.median</c> rule,
+        ///     which differs from the quantile <c>_lerp</c> at q=0.5 by up to 1 ULP. γ = 0 (odd, a
+        ///     single central sample) already yields that sample, so it needs no special case. Set
+        ///     only by <c>np.median</c>/<c>np.nanmedian</c>; the discrete methods never see it.
+        /// </param>
         private static unsafe void WriteCell<T, TOut>(
             T* scratch, int prevIdx, int nextIdx, double gamma,
-            QuantileMethod method, TOut* dst)
+            QuantileMethod method, bool medianMean, TOut* dst)
             where T : unmanaged
             where TOut : unmanaged
         {
@@ -540,49 +594,192 @@ namespace NumSharp.Backends.Kernels
                 return;
             }
 
-            // Continuous methods (linear / midpoint / hazen / weibull / etc.).
+            // Continuous (interpolating) methods (linear / midpoint / hazen / weibull / …).
             //
-            // We pick the arithmetic-precision type by input T:
-            //   float  → float
-            //   decimal → decimal
-            //   anything else (int families, double, bool, char, Half lifted to float) → double
+            // NumPy's _lerp is TWO-BRANCH, not the naive `a + (b-a)*t`
+            // (numpy/lib/_function_base_impl.py::_lerp):
             //
-            // The JIT collapses the typeof guards to constant true/false per
-            // (T, TOut) specialization, so each instantiation is a single
-            // arithmetic body with no dispatch.
+            //     diff_b_a = b - a
+            //     result   = a + diff_b_a * t            # for every element
+            //     result   = b - diff_b_a * (1 - t)      # OVERWRITE where t >= 0.5
+            //
+            // The second branch is what keeps the interpolation monotone and correctly
+            // rounded toward b; using only the first branch diverges from NumPy by up to
+            // ~200 ULP on ~7 % of float64 inputs (the historical [known bug]). `gamma` is
+            // the float64 interpolation weight t, so the `t >= 0.5` test — and the
+            // `1 - t` term — are always evaluated in double, exactly as NumPy does.
+            //
+            // The arithmetic PRECISION per (T, TOut) mirrors NumPy's ufunc promotion of
+            // `_lerp(previous, next, gamma)` (all verified bit-exact against 2.4.2):
+            //   * float32 + scalar/weak q  → float32 throughout (weak t adopts float32).
+            //   * float16 + scalar/weak q  → float16 throughout; EVERY op rounds to f16
+            //     and the weak t is rounded to f16 BEFORE the multiply (NumPy's f16 loops
+            //     upcast to f32, compute, then round the result back to f16 per op).
+            //   * float32/float16 + array/strong q → float64, but `diff_b_a = b - a` is
+            //     computed in the INPUT dtype FIRST (rounding to f32/f16) and only then
+            //     widened — NumPy subtracts in the operand dtype before promoting with t.
+            //   * everything else (int / bool / char / float64) → float64.
+            //
+            // The JIT folds every `typeof(T)` / `typeof(TOut)` guard to a constant per
+            // (T, TOut) specialization, so each instantiation is one straight-line body.
+            bool hi = gamma >= 0.5;    // NumPy's `where = t >= 0.5`
+            double omt = 1.0 - gamma;  // (1 - t) in double, as NumPy computes it
 
             if (typeof(T) == typeof(float) && typeof(TOut) == typeof(float))
             {
-                // Weak (scalar-q) float32 → float32: NumPy keeps the whole lerp in float32.
+                // Weak (scalar-q) float32 → float32: the whole lerp stays in float32.
                 float prev = ((float*)scratch)[prevIdx];
                 float next = ((float*)scratch)[nextIdx];
-                *(float*)dst = prev + (next - prev) * (float)gamma;
+                if (medianMean)                                 // np.median: mean of the two central f32
+                {
+                    *(float*)dst = hi ? (prev + next) / 2f : prev;
+                    return;
+                }
+                float diff = next - prev;                       // f32 subtraction
+                *(float*)dst = hi ? next - diff * (float)omt    // b - diff*(1-t)
+                                  : prev + diff * (float)gamma; // a + diff*t
                 return;
             }
             if (typeof(T) == typeof(decimal))
             {
+                // Decimal is NumSharp-only (no NumPy dtype). Its independent oracle
+                // (test/oracle/gen_decimal_oracle.cs) is the sole source of truth and uses
+                // the single-branch lerp, so decimal stays single-branch on purpose:
+                // a two-branch change here has no parity benefit and would silently diverge
+                // from that committed oracle.
                 decimal prev = ((decimal*)scratch)[prevIdx];
                 decimal next = ((decimal*)scratch)[nextIdx];
-                decimal r = (gamma == 0) ? prev : prev + (next - prev) * (decimal)gamma;
+                decimal r = medianMean ? (hi ? (prev + next) / 2m : prev)     // np.median mean-of-middle
+                                       : (gamma == 0) ? prev : prev + (next - prev) * (decimal)gamma;
                 if (typeof(TOut) == typeof(decimal)) *(decimal*)dst = r;
                 else WriteAsTOut((double)r, dst);
                 return;
             }
             if (typeof(T) == typeof(Half) && typeof(TOut) == typeof(Half))
             {
-                // Weak (scalar-q) float16 → float16.
+                // Weak (scalar-q) float16 → float16. NumPy's f16 loops round each op back
+                // to f16, and the weak weight t is rounded to f16 before the multiply, so
+                // `prod` is taken in f16 (via f32) rather than kept in f32 to the end.
                 float prev = (float)((Half*)scratch)[prevIdx];
                 float next = (float)((Half*)scratch)[nextIdx];
-                *(Half*)dst = (Half)(prev + (next - prev) * (float)gamma);
+                if (medianMean)
+                {
+                    // np.median: mean of the two central f16. NumPy's f16 mean is
+                    // sum-then-halve rounding to f16 twice — sum16 = (Half)(a+b), then /2 in f16.
+                    if (hi) { Half sum = (Half)(prev + next); *(Half*)dst = (Half)((float)sum / 2f); }
+                    else    { *(Half*)dst = (Half)prev; }   // odd: the single central f16 sample
+                    return;
+                }
+                Half diff = (Half)(next - prev);               // f16 subtraction
+                if (hi)
+                {
+                    Half prod = (Half)((float)diff * (float)(Half)omt);
+                    *(Half*)dst = (Half)(next - (float)prod);
+                }
+                else
+                {
+                    Half prod = (Half)((float)diff * (float)(Half)gamma);
+                    *(Half*)dst = (Half)(prev + (float)prod);
+                }
                 return;
             }
 
-            // Default: lerp in double. Covers int / bool / char / double inputs and the
-            // strong-q (array-q) float16/float32 → float64 promotion, where NumPy widens
-            // to float64 before interpolating.
-            double dprev = ToDouble(scratch[prevIdx]);
-            double dnext = ToDouble(scratch[nextIdx]);
-            double dr = dprev + (dnext - dprev) * gamma;
+            // Default: lerp in double. Covers int / char / double inputs and the strong-q
+            // (array-q) float16/float32 → float64 promotion.
+            //
+            // NumPy computes `diff_b_a = b - a` in the OPERAND'S OWN dtype and only then promotes
+            // to float64 for `a + diff*t`. For the narrow types that rounds/WRAPS the subtraction
+            // before widening — a load-bearing divergence NumSharp must reproduce, not "fix":
+            //   * float32 / float16 → the subtraction ROUNDS to f32/f16 first, then widens.
+            //   * every integer width → the subtraction WRAPS (two's-complement / modular) at that
+            //     width, so e.g. int16 `1 - (-32768)` overflows to -32767 and its percentile is a
+            //     large POSITIVE value; computing the diff in double instead would give a
+            //     sign-flipped answer (the historical W6-B "gross error"). NumPy raises a
+            //     RuntimeWarning here but still returns the wrapped result, which is the contract.
+            // The endpoints `a`/`b` themselves are just widened (no arithmetic), matching NumPy's
+            // promotion of `previous`/`next` to float64.
+            double dprev, dnext, ddiff;
+            if (typeof(T) == typeof(float))
+            {
+                float fp = ((float*)scratch)[prevIdx];
+                float fn = ((float*)scratch)[nextIdx];
+                ddiff = (double)(fn - fp);          // f32 subtraction, then widen
+                dprev = fp; dnext = fn;
+            }
+            else if (typeof(T) == typeof(Half))
+            {
+                float fp = (float)((Half*)scratch)[prevIdx];
+                float fn = (float)((Half*)scratch)[nextIdx];
+                ddiff = (double)(Half)(fn - fp);    // f16 subtraction, then widen
+                dprev = fp; dnext = fn;
+            }
+            else if (typeof(T) == typeof(long))
+            {
+                long fp = ((long*)scratch)[prevIdx], fn = ((long*)scratch)[nextIdx];
+                ddiff = unchecked(fn - fp);         // int64 subtraction wraps, then widen
+                dprev = fp; dnext = fn;
+            }
+            else if (typeof(T) == typeof(ulong))
+            {
+                ulong fp = ((ulong*)scratch)[prevIdx], fn = ((ulong*)scratch)[nextIdx];
+                ddiff = unchecked(fn - fp);         // uint64 subtraction wraps, then widen
+                dprev = fp; dnext = fn;
+            }
+            else if (typeof(T) == typeof(int))
+            {
+                int fp = ((int*)scratch)[prevIdx], fn = ((int*)scratch)[nextIdx];
+                ddiff = unchecked(fn - fp);         // int32 wraps
+                dprev = fp; dnext = fn;
+            }
+            else if (typeof(T) == typeof(uint))
+            {
+                uint fp = ((uint*)scratch)[prevIdx], fn = ((uint*)scratch)[nextIdx];
+                ddiff = unchecked(fn - fp);         // uint32 wraps
+                dprev = fp; dnext = fn;
+            }
+            else if (typeof(T) == typeof(short))
+            {
+                short fp = ((short*)scratch)[prevIdx], fn = ((short*)scratch)[nextIdx];
+                ddiff = (short)(fn - fp);           // int16 wraps
+                dprev = fp; dnext = fn;
+            }
+            else if (typeof(T) == typeof(ushort))
+            {
+                ushort fp = ((ushort*)scratch)[prevIdx], fn = ((ushort*)scratch)[nextIdx];
+                ddiff = (ushort)(fn - fp);          // uint16 wraps
+                dprev = fp; dnext = fn;
+            }
+            else if (typeof(T) == typeof(sbyte))
+            {
+                sbyte fp = ((sbyte*)scratch)[prevIdx], fn = ((sbyte*)scratch)[nextIdx];
+                ddiff = (sbyte)(fn - fp);           // int8 wraps
+                dprev = fp; dnext = fn;
+            }
+            else if (typeof(T) == typeof(byte))
+            {
+                byte fp = ((byte*)scratch)[prevIdx], fn = ((byte*)scratch)[nextIdx];
+                ddiff = (byte)(fn - fp);            // uint8 wraps
+                dprev = fp; dnext = fn;
+            }
+            else if (typeof(T) == typeof(char))
+            {
+                char fp = ((char*)scratch)[prevIdx], fn = ((char*)scratch)[nextIdx];
+                ddiff = (ushort)(fn - fp);          // Char is 16-bit — wrap like uint16
+                dprev = fp; dnext = fn;
+            }
+            else
+            {
+                // double (and any future exact-widening type): subtract after widening.
+                dprev = ToDouble(scratch[prevIdx]);
+                dnext = ToDouble(scratch[nextIdx]);
+                ddiff = dnext - dprev;
+            }
+            if (medianMean)   // np.median: mean of the two central values in float64
+            {
+                WriteAsTOut(hi ? (dprev + dnext) / 2.0 : dprev, dst);
+                return;
+            }
+            double dr = hi ? dnext - ddiff * omt : dprev + ddiff * gamma;
             WriteAsTOut(dr, dst);
         }
 
