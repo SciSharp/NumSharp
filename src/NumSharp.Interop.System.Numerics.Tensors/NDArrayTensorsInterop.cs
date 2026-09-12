@@ -84,8 +84,9 @@ namespace NumSharp.Interop.Tensors
         ///     <see cref="System.Numerics.Complex"/> for <see cref="NPTypeCode.Complex"/>. Every dtype maps —
         ///     the containers are unconstrained generics, so none is refused.
         /// </summary>
-        public static Type ToTensorElementClrType(NPTypeCode code)
+        public static Type ToTensorElementClrType(DType dtype)
         {
+            NPTypeCode code = (dtype ?? throw new ArgumentNullException(nameof(dtype))).GetTypeCode();
             switch (code)
             {
                 case NPTypeCode.Boolean: return typeof(bool);
