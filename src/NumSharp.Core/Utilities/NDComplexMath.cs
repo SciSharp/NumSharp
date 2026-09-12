@@ -808,6 +808,58 @@ namespace NumSharp.Utilities
         }
 
         /// <summary>
+        /// Complex multiply matching NumPy's <c>np.multiply</c> / the <c>*</c> operator bit-for-bit —
+        /// the generalisation of <see cref="Square"/> to two distinct operands. NumPy's complex multiply
+        /// is the SIMD <c>simd_cmul</c> kernel (<c>loops_arithm_fp.dispatch.c.src</c>), a fused
+        /// <c>vfmaddsub</c>: <c>real = fused(a_re*b_re - a_im*b_im)</c>, <c>imag = fused(a_re*b_im +
+        /// a_im*b_re)</c> — and it is taken for EVERY normal layout (contiguous, strided, broadcast,
+        /// in-place, transposed; the naive scalar tail only runs on genuine src/dst overlap or a
+        /// non-loadable stride, which a fresh output never hits). The fused subtract/add is what keeps
+        /// <c>(1e-10+1e-10i)·(…)</c> cancellation and <c>1e300</c> overflow bit-identical to NumPy where
+        /// the BCL's naive <c>a_re*b_re - a_im*b_im</c> diverges by thousands of ULP (measured 14% of
+        /// random operands, up to ~2840 ULP).
+        /// </summary>
+        /// <remarks>
+        /// This must NOT be confused with the NAIVE <c>cmul</c> NumPy's <c>npy_cpow</c> uses for INTEGER
+        /// complex powers (that one is un-fused, and <c>np.power(z,2) != np.multiply(z,z)</c> in NumPy
+        /// itself) — see <c>ComplexPowNumPy</c>. Only the elementwise multiply / <c>*</c> takes this FMA
+        /// form. The lane arrangement is NumPy's <c>vfmaddsub</c> EXACTLY, and the fused/addend split is
+        /// load-bearing for the FINITE result — it must NOT be swapped the way <see cref="Square"/> can:
+        /// there <c>a_re*b_im</c> and <c>a_im*b_re</c> are the SAME product, so putting either in the
+        /// fused slot is finite-identical; for a GENERAL multiply they DIFFER, and the fused product is
+        /// evaluated to full precision while the addend is a pre-rounded product, so swapping them shifts
+        /// the last bit. NumPy fuses <c>a_re*b_re</c> (real) and <c>a_re*b_im</c> (imag), pre-rounding the
+        /// <c>a_im*·</c> products as the addend — reproduced here verbatim. Consequence: on a NaN input
+        /// the propagated NaN can differ from NumPy's (NumPy keeps the fused product's NaN, .NET's fma the
+        /// addend's), but complex-multiply NaN is NON-contractual (a binary op — the oracle tokenizes it),
+        /// so finite parity is chosen over NaN-sign parity here (unlike <see cref="Square"/>, which is
+        /// under the unary NaN-sign contract and so takes the swap). Off x86 the portable
+        /// <see cref="Math.FusedMultiplyAdd(double,double,double)"/> keeps the finite/overflow bits
+        /// identical.
+        /// </remarks>
+        /// <param name="a">Left operand.</param>
+        /// <param name="b">Right operand.</param>
+        /// <returns><c>a * b</c>, fused exactly as NumPy's <c>simd_cmul</c> computes it.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        public static Complex Multiply(Complex a, Complex b)
+        {
+            double ar = a.Real, ai = a.Imaginary, br = b.Real, bi = b.Imaginary;
+            if (Fma.IsSupported)
+            {
+                var arV = Vector128.CreateScalarUnsafe(ar);
+                // real = fused(a_re*b_re) - (a_im*b_im);  imag = fused(a_re*b_im) + (a_im*b_re)
+                // fused product a_re*b_{re,im} matches NumPy's muladdsub; the a_im*· term is the
+                // pre-rounded addend (a NumPy `ab_iiir` product), so the last bit matches simd_cmul.
+                double reOut = Fma.MultiplySubtractScalar(arV, Vector128.CreateScalarUnsafe(br), Vector128.CreateScalarUnsafe(ai * bi)).ToScalar();
+                double imOut = Fma.MultiplyAddScalar(arV, Vector128.CreateScalarUnsafe(bi), Vector128.CreateScalarUnsafe(ai * br)).ToScalar();
+                return new Complex(reOut, imOut);
+            }
+            return new Complex(
+                Math.FusedMultiplyAdd(ar, br, -(ai * bi)),
+                Math.FusedMultiplyAdd(ar, bi, ai * br));
+        }
+
+        /// <summary>
         /// Complex reciprocal matching NumPy — a verbatim port of the <c>CDOUBLE_reciprocal</c> ufunc
         /// loop (<c>numpy/_core/src/umath/loops.c.src</c>), the Smith-style branch on the larger
         /// component. This is overflow-safe (so <c>1/(huge)</c> doesn't prematurely flush to 0) and
