@@ -95,6 +95,15 @@ namespace NumSharp.Backends
             var rhsTc = rhs.GetTypeCode;
             var lhsTc = lhs.GetTypeCode;
 
+            // Complex power always goes through the faithful npy_cpow port (ComplexPowNumPy in the
+            // Power kernel), never these generic substitutions: NumPy routes EVERY complex power
+            // through npy_cpow, whose integer-exponent branch is EXACT repeated multiplication. The
+            // fast paths do NOT reproduce it for complex — z**2 must be cmul(a,a) (== np.square), not
+            // the complex Multiply kernel (measured ~4700 ULP off), and z**-1 must be cdiv(1,z), not
+            // CDOUBLE_reciprocal (1 ULP off). Bail so complex stays bit-exact vs NumPy.
+            if (lhsTc == NPTypeCode.Complex)
+                return null;
+
             // exp = 0 — works for integer or float exponent
             if (IsScalarValueZero(rhs))
             {

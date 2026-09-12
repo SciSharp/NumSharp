@@ -37,10 +37,12 @@ namespace NumSharp.Tests.Fuzz
     ///       2. Complex arithmetic ULP envelopes vs NumPy's npy_c* algorithms (each per-op,
     ///          measured, and bounded — see the B2 branch): add/subtract within 2 ULP (FMA
     ///          contraction); multiply within 16 ULP of the ELEMENT magnitude (catastrophic-
-    ///          cancellation regime); power within 512 element-magnitude ULP or at a documented
-    ///          inf/NaN edge (Complex.Pow vs npy_cpow, Bug Ledger L6). divide/true_divide are
-    ///          BIT-EXACT (ComplexDivideNumPy ports NumPy's CDOUBLE_divide Smith's algorithm) —
-    ///          no envelope. Every other complex-binary op is gated bit-exact.
+    ///          cancellation regime); power by a NON-integer/complex exponent within 512
+    ///          element-magnitude ULP or at a documented inf/NaN edge (Complex.Pow vs npy_cpow's
+    ///          host cpow, Bug Ledger L6). divide/true_divide are BIT-EXACT (ComplexDivideNumPy
+    ///          ports CDOUBLE_divide) and power by an INTEGER exponent is BIT-EXACT (ComplexPowNumPy
+    ///          ports npy_cpow's integer branch — exact repeated multiplication) — neither has an
+    ///          envelope. Every other complex-binary op is gated bit-exact.
     /// </summary>
     public static class MisalignedRegistry
     {
@@ -296,16 +298,20 @@ namespace NumSharp.Tests.Fuzz
                 if (c.Op == "multiply"
                     && diffs.Count > 0 && diffs.All(d => WithinComplexElementMagnitudeUlp(expected, actual, d.Index, 16)))
                     return "complex multiply cancellation / ~ULP at element magnitude (npy_cmul vs System.Numerics) [documented #12]";
-                // power: Complex.Pow (polar exp(w*log z)) vs npy_cpow (special-cases small integer
-                // exponents via repeated squaring) — measured on the corpus the finite interior
-                // diverges by up to ~350 ULP of the affected component, plus the documented gross
-                // inf/NaN edges (Phase-1 F5) where one side goes non-finite. Bound the finite side
-                // at 512 ULP of the ELEMENT's magnitude (same absolute-error anchor as multiply:
-                // still catches sign flips / wrong magnitudes) and excuse the non-finite edges.
+                // power: NumSharp now ports npy_cpow's INTEGER-exponent branch (exact repeated
+                // multiplication via ComplexMulNumPy, cdiv(1,·) for negatives), so complex power by an
+                // INTEGER exponent is BIT-EXACT — this excuse must NOT cover it (a regression there,
+                // ~350 element-magnitude ULP for small values, would otherwise hide under the 512
+                // bound). It is scoped to a NON-integer exponent dtype (float/complex), which NumPy
+                // computes through the host cpow / polar exp(w*log z) — the residual NumSharp still
+                // takes via Complex.Pow. That finite interior diverges up to ~350 element-magnitude
+                // ULP, plus the documented gross inf/NaN edges (Phase-1 F5). Bound the finite side at
+                // 512 ULP of the ELEMENT's magnitude and excuse the non-finite edges.
                 if (c.Op == "power"
+                    && c.Operands.Length >= 2 && !PowerExponentAllIntegerBranch(c.Operands[1])
                     && diffs.Count > 0 && diffs.All(d => WithinComplexElementMagnitudeUlp(expected, actual, d.Index, 512)
                                       || NonFiniteInvolved(expected, actual, d.Index)))
-                    return "complex power ~ULP / gross inf-NaN edge (Complex.Pow vs npy_cpow) [documented F5]";
+                    return "complex power, non-integer/out-of-range exponent ~ULP / inf-NaN edge (Complex.Pow vs npy_cpow's host cpow) [documented F5]";
             }
 
             // (3) NaN ordering in <= / >= was FIXED in Phase 1 F2 (the unordered Cgt_Un/Clt_Un
@@ -885,6 +891,59 @@ namespace NumSharp.Tests.Fuzz
         ///     at rounding scale of the products (~ the dominant component). Non-finite values are
         ///     never "cancellation".
         /// </summary>
+        /// <summary>
+        ///     True when EVERY value of a power exponent operand takes NumPy <c>npy_cpow</c>'s exact
+        ///     INTEGER branch — real, integral, and strictly within (-100, 100). Those exponents
+        ///     NumSharp computes bit-exactly (<c>ComplexPowNumPy</c>'s repeated multiplication), so the
+        ///     complex-power ULP excuse must stay OFF them (a regression fails the gate). When any
+        ///     value is non-integral, complex, or |n| >= 100, NumPy routes it through the host
+        ///     <c>cpow</c> instead (which NumSharp still approximates via <c>Complex.Pow</c>), so the
+        ///     bounded ULP excuse legitimately applies to the whole case. The whole-buffer scan is a
+        ///     conservative over-approximation of "has a cpow-branch element" (it ignores strides, so a
+        ///     broadcast/duplicated out-of-range value still trips it) — safe, because it only ever
+        ///     widens the excuse, never gates a genuinely divergent element.
+        /// </summary>
+        /// <param name="exp">The exponent operand (operand[1] of a power case).</param>
+        /// <returns>True iff every stored exponent value is a real integer with |value| &lt; 100.</returns>
+        private static bool PowerExponentAllIntegerBranch(FuzzCorpus.Operand exp)
+        {
+            byte[] b;
+            try { b = FuzzCorpus.FromHex(exp.Buffer); }
+            catch { return false; }                      // undecodable → be conservative, allow the excuse
+            if (b.Length == 0) return false;
+
+            // Local test of npy_cpow's integer-branch predicate for one real value.
+            static bool IntBranch(double v) => !double.IsNaN(v) && !double.IsInfinity(v)
+                                               && v > -100.0 && v < 100.0 && System.Math.Floor(v) == v;
+
+            switch (FuzzCorpus.DtypeToTC(exp.Dtype))
+            {
+                case NPTypeCode.Boolean:
+                case NPTypeCode.Byte:  for (int i = 0; i < b.Length; i++) if (!IntBranch(b[i])) return false; return true;
+                case NPTypeCode.SByte: for (int i = 0; i < b.Length; i++) if (!IntBranch((sbyte)b[i])) return false; return true;
+                case NPTypeCode.Int16:  for (int i = 0; i + 1 < b.Length; i += 2) if (!IntBranch(BitConverter.ToInt16(b, i)))  return false; return true;
+                case NPTypeCode.UInt16:
+                case NPTypeCode.Char:   for (int i = 0; i + 1 < b.Length; i += 2) if (!IntBranch(BitConverter.ToUInt16(b, i))) return false; return true;
+                case NPTypeCode.Int32:  for (int i = 0; i + 3 < b.Length; i += 4) if (!IntBranch(BitConverter.ToInt32(b, i)))  return false; return true;
+                case NPTypeCode.UInt32: for (int i = 0; i + 3 < b.Length; i += 4) if (!IntBranch(BitConverter.ToUInt32(b, i))) return false; return true;
+                case NPTypeCode.Int64:  for (int i = 0; i + 7 < b.Length; i += 8) if (!IntBranch(BitConverter.ToInt64(b, i)))  return false; return true;
+                case NPTypeCode.UInt64: for (int i = 0; i + 7 < b.Length; i += 8) if (!IntBranch(BitConverter.ToUInt64(b, i))) return false; return true;
+                case NPTypeCode.Half:   for (int i = 0; i + 1 < b.Length; i += 2) if (!IntBranch((double)BitConverter.ToHalf(b, i)))   return false; return true;
+                case NPTypeCode.Single: for (int i = 0; i + 3 < b.Length; i += 4) if (!IntBranch(BitConverter.ToSingle(b, i))) return false; return true;
+                case NPTypeCode.Double: for (int i = 0; i + 7 < b.Length; i += 8) if (!IntBranch(BitConverter.ToDouble(b, i))) return false; return true;
+                case NPTypeCode.Complex:
+                    // Integer branch requires a zero imaginary part AND an integral in-range real part.
+                    for (int i = 0; i + 15 < b.Length; i += 16)
+                    {
+                        double re = BitConverter.ToDouble(b, i);
+                        double im = BitConverter.ToDouble(b, i + 8);
+                        if (im != 0.0 || !IntBranch(re)) return false;
+                    }
+                    return true;
+                default: return false;                   // decimal / unknown → allow the excuse
+            }
+        }
+
         private static bool WithinComplexElementMagnitudeUlp(byte[] exp, byte[] act, int index, int maxUlp)
         {
             int o = index * 16;
