@@ -1113,7 +1113,11 @@ refused. Pinned by `SelectionTests` (`Take_FloatIndices_Throws_SameKind`, `Put_F
 `a.flat[i] = values.flat[i % values.size]` wherever `mask` is True, walking both in C-order. It shares
 `place`'s whole structure — the writeable-first check, the same-`size` (not shape) mask contract, the
 non-bool-mask→`!=0` cast (NaN/inf→True), the `ascontiguousarray`+`copyto` writeback for non-contiguous
-targets — and differs in exactly TWO probed ways (2.4.2): the values cursor advances by **POSITION**
+targets, and the `arrays_overlap`→ENSURECOPY guard (`NDMemOverlap.SolveMayShareMemory(maxWork:0)`, NumPy's
+`NPY_MAY_SHARE_BOUNDS` — a fresh copy of `a` when `values`/`mask` may alias it, so `putmask(a, m, a[2:8])`
+reads the ORIGINAL `a` for every cyclic value instead of an already-overwritten slot; probed against 2.4.2,
+this was a real bug the contiguous fast path had before the guard) — and differs in exactly TWO probed ways
+(2.4.2): the values cursor advances by **POSITION**
 (every element, `j` in lockstep with `i`, wrapping at `nv`) rather than per-True, and an **empty
 `values` is a silent no-op** rather than `place`'s `ValueError`. The IL kernel mirrors Place's typed-MOV
 scatter but with the cursor advance OUTSIDE the mask-True branch, plus a cursor-free `nv==1` scalar-
@@ -1126,8 +1130,10 @@ convert implicitly (`np.putmask(a, cond, 44)`). **Perf (NPY/NS, best-of-9, Relea
 faster than NumPy on every cell; **2.0–3.07×** at 1K/100K and **1.59–1.77×** at 10M for 1/4-byte dtypes;
 the 8/16-byte 10M cells (int64/float64/complex128) compress to **1.08–1.36×** — the memory-bandwidth wall
 the whole scatter family hits (both sides RMW scattered wide-element writes). Gates:
-`Indexing/SelectionTests.cs` (`PutMask_*`, 24 — incl. the position-vs-place contrast, empty-values no-op,
-transposed/negstride writeback, NaN mask, char/decimal/complex) + the `putmask` fuzz tier
+`Indexing/SelectionTests.cs` (`PutMask_*`, 30 — incl. the position-vs-place contrast, empty-values no-op,
+transposed/negstride writeback, operand-overlap (values/mask aliasing `a`, full self-alias `putmask(a,m,a)`),
+complex/float16 mask→bool (both parts / half-truthiness), mask-with-more-dims (size not shape), NaN mask,
+char/decimal/complex) + the `putmask` fuzz tier
 (`putmask.jsonl`, 264 — 11 dtypes × 3 value modes {scalar nv==1 / cycle nv==3 / long nv==size} × 8
 layouts incl. the non-contiguous writeback path, all bit-exact vs NumPy 2.4.2).
 
