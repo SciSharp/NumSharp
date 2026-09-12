@@ -396,3 +396,7 @@ docs/website/
 # are 186 MB and never belong in git).
 src/NumSharp.Interop.OpenBLAS/runtimes/
 src/NumSharp.Interop.OpenBLAS/tools/.wheel-cache/
+
+# Local run artifacts from the gist/Karpathy example runners (dated demonstration + parity
+# output; regenerable scratch, ~95 MB, not repo content).
+/outputs/
