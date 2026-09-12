@@ -157,6 +157,19 @@ namespace NumSharp.Tests.Fuzz
                 && diffs.Count > 0 && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 2)))
                 return "logaddexp/logaddexp2: managed fdlibm log1p <=2 ULP vs NumPy's closed ucrtbase log1p [documented]";
 
+            // hypot: sqrt(x1**2 + x2**2). NumPy calls the platform (win-amd64 UCRT) hypot, which is only
+            // FAITHFULLY rounded — it disagrees with the exact correctly-rounded result on 8.7% of float64
+            // inputs (measured: np.hypot vs an 80-digit Decimal reference). NumSharp's kernel is the
+            // CORRECTLY-rounded result (Borges' FMA algorithm, verified bit-identical to CPython's
+            // correctly-rounded math.hypot over 1.1M adversarial pairs incl. subnormals/overflow), so it is
+            // bit-exact with NumPy on ~91% of float64 inputs and within 1 ULP — MORE accurate — on the rest
+            // (prefer-precise). float32/float16 round the correctly-rounded double down to the narrower type,
+            // which reproduces UCRT's hypotf EXACTLY (no room for its double-precision quirk), so those stay
+            // BIT-EXACT and the excuse is Double-only. Bounded per element; a gross error still fails.
+            if (kind == DivergenceKind.Value && c.Op == "hypot" && tc == NPTypeCode.Double
+                && diffs.Count > 0 && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 1)))
+                return "hypot: correctly-rounded Borges FMA <=1 ULP vs NumPy's faithful UCRT hypot [documented, prefer-precise]";
+
             // (F1) np.fft over a float32/float16 input. NumSharp has ONE complex type (complex128) and
             //      no complex64, so it returns complex128 (fft/rfft/ihfft/the N-D forms) or float64
             //      (irfft/hfft) where NumPy 2.x returns complex64 / float32 / float16. A dtype-ONLY
