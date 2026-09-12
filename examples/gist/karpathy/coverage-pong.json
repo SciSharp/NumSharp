@@ -1,0 +1,452 @@
+{
+  "schema_version": 1,
+  "source": "https://gist.github.com/karpathy/a4166c7fe253700972fcbc77e4ea32c5",
+  "gist_revision": "06d092624118444f7350a22653e8ba9d1c6e63d6",
+  "source_file": "pg-pong.py",
+  "source_sha256": "cf764d11a0ebebb46d02c482c5a9c7c31081960d24b7c332757362735ad71a14",
+  "local_source": "outputs/karpathy-gists-2026-09-09/cache/pong.py",
+  "scope": "Complete float64 numerical policy-gradient pipeline and bounded full-dimension synthetic training. No Gym/Atari environment, checkpoints, rendering or unbounded training.",
+  "two_layer_validation": {
+    "source_loader": "test/NumSharp.Tests.Interop/KarpathyOriginalSource.cs:Load(Scope, pong)",
+    "source_mode": "Hash-verified original definitions are executed in an isolated dictionary; model, gamma and episode inputs are supplied explicitly. No source imports, environment creation, top-level assignments, IO or infinite loop execute.",
+    "original_functions": ["sigmoid", "prepro", "discount_rewards", "policy_forward", "policy_backward"],
+    "compatibility": [
+      "Python2 syntax is converted before selecting the five definitions; xrange becomes range.",
+      "The removed np.float alias is changed to np.float64 by AST transformation; the NumPy module is not monkey-patched.",
+      "The bounded harness uses a local RandomState(23) instead of unspecified global random state. C# and Python retain the same initialization-then-action draw sequence.",
+      "Hidden width is reduced to8 for the short loops; full210x160x3 frames and6400 inputs are retained. The existing full H200/D6400 byte gate remains separate.",
+      "Synthetic observations and action-dependent point rewards replace Gym only. Original normalization, accumulation, batch10 and RMSProp equations remain unchanged."
+    ],
+    "short_run": {
+      "category": "KarpathyShortRun",
+      "test": "KarpathyPongLiveTests.OriginalPong_ShortCompleteRunThroughPythonnet_ReimportsTrainedState",
+      "episodes": 10,
+      "frames": 40,
+      "expected_updates": 1,
+      "interop": "Each NumSharp RGB frame is exported zero-copy into the original Python preprocessing function; mutation is observed back through ndarray.item<byte>(). The trained W1 is imported into an owning NumSharp array.",
+      "assertions": "Finite per-step policy/hidden states, complete episode progression, finite standardized returns/gradients, a real parameter update, cleared gradient buffers, positive RMS cache and readable reimported trained state."
+    },
+    "byte_gate": {
+      "category": "KarpathyByteParity",
+      "test": "KarpathyPongLiveTests.ShortPong_AllStepsAndElevenEpisodes_ByteExactAgainstPinnedOriginal",
+      "episodes": 11,
+      "frames": 44,
+      "expected_updates": 1,
+      "purpose_of_extra_episode": "Episode11 uses the weights updated at episode10 and checks fresh accumulation after the prior gradient buffer was cleared.",
+      "comparison_points": [
+        "Initial W1/W2, gradient buffers and RMS caches",
+        "Every raw input snapshot, full mutated frame, preprocessed vector, difference vector, hidden state, probability, RNG draw, action, score derivative and point reward",
+        "Every stacked episode input/hidden/score/reward array, discounted return, normalized advantage, weighted score and both gradients",
+        "Every preupdate accumulated buffer and postepisode model, buffer, cache, reward total, running reward, episode count and update count"
+      ],
+      "finite_ulp_budget": 0,
+      "fallback": "None: every numeric array comparison requires identical dtype, shape and canonical bytes.",
+      "recorded_result": {
+        "artifact": "outputs/karpathy-parity-2026-09-09/karpathy-live-net10-v1.trx",
+        "test_outcome": "Passed",
+        "array_comparisons": 655,
+        "bytes_compared": 39398640,
+        "mismatches": 0,
+        "maximum_ulp": 0,
+        "scope": "This is the successful byte-ledger test only. The separate short-run test in this initial artifact stopped on a test-side missing channel index; that read was corrected to row,column,0 with explicit RGB shape checks for the next central run."
+      }
+    },
+    "original_numpy_probe": {
+      "seed": 23,
+      "hidden": 8,
+      "inputs": 6400,
+      "after_episode10": {"updates":1,"changed_w1_elements":216,"w1_change_l2":0.014507576516153385,"running_reward":-1.7897538988887032,"nonzero_w1_gradient_buffer":0},
+      "after_episode11": {"updates":1,"changed_w1_elements":216,"running_reward":-1.751856359899816,"nonzero_w1_gradient_buffer":20},
+      "meaning": "Measured with the reviewed original five definitions and the bounded harness before central C# test execution; invented point rewards are not Atari scores. Final C# test outcomes are reported by the central TRX artifacts."
+    }
+  },
+  "python_first": {
+    "numpy_version": "2.4.2",
+    "method": "Independent NumPy numerical expressions were executed before the C# implementation; no full source script or Gym loop was executed.",
+    "discount_fixture": {
+      "rewards": [
+        0,
+        0,
+        1,
+        0,
+        -1,
+        0,
+        0,
+        1
+      ],
+      "gamma": 0.5,
+      "discounted": [
+        0.25,
+        0.5,
+        1,
+        -0.5,
+        -1,
+        0.25,
+        0.5,
+        1
+      ]
+    },
+    "compact_forward_probabilities": [
+      0.5224848247918001,
+      0.48075950546841417,
+      0.5242310038524417
+    ],
+    "standardized_returns": [
+      0.70178357663704,
+      0.7124166611315407,
+      -1.414200237768581
+    ],
+    "preprocessing_nonzero_indices": [
+      0,
+      6399
+    ],
+    "interpretation": "These are explicitly chosen numerical fixtures, not measurements reported by the original unseeded training script."
+  },
+  "cases": [
+    {
+      "case_id": "pong-original-short-run-interop",
+      "source_lines": [27, 132],
+      "kind": "original_source_bounded_functional_run",
+      "category": "KarpathyShortRun",
+      "tests": ["KarpathyPongLiveTests.OriginalPong_ShortCompleteRunThroughPythonnet_ReimportsTrainedState"],
+      "assertions": ["All five original numerical functions execute through a complete10-episode/40-frame run with a real RMSProp update.","NumSharp.Interop.pythonnet exports frames zero-copy; original mutation is observed in NumSharp and trained weights are imported back into NumSharp."],
+      "limits": ["Synthetic environment, hidden8 and local seed23 are explicit bounded-test adaptations; no Atari capability or original unbounded training result is claimed."],
+      "status": "assertions_implemented"
+    },
+    {
+      "case_id": "pong-original-full-pipeline-byte-parity",
+      "source_lines": [21, 129],
+      "kind": "all_intermediate_and_state_byte_comparison",
+      "category": "KarpathyByteParity",
+      "tests": ["KarpathyPongLiveTests.ShortPong_AllStepsAndElevenEpisodes_ByteExactAgainstPinnedOriginal"],
+      "assertions": ["Every intermediate and persistent numeric state matches the original NumPy functions throughout11episodes/44frames, including the default10-episode update and a subsequent episode using updated weights.","Strict dtype/shape/byte comparisons, zero ULP budget, no tolerance fallback; original loader hash and selected-definition inventory asserted."],
+      "limits": ["Short loop uses hidden8 while retaining6400 inputs; original H200 is covered independently by Full200By6400_SeededInitializationForwardAndBackward_Exact.","Original functions are unchanged numerically; a bounded driver supplies observations/rewards and reproduces top-level normalization/batching/update equations without Gym/IO."],
+      "status": "assertions_implemented"
+    },
+    {
+      "case_id": "pong-original-dimensions-initialization",
+      "source_lines": [
+        6,
+        25
+      ],
+      "kind": "source_algorithm",
+      "tests": [
+        "KarpathyPongLiveTests.Full200By6400_SeededInitializationForwardAndBackward_Exact"
+      ],
+      "assertions": [
+        "All1280000 W1 and200 W2 coefficients match NumPy at original H200/D6400, using source sqrt-dimension scaling.",
+        "The next uniform draw also matches, proving initialization and action sampling share the same RNG stream."
+      ],
+      "limits": [
+        "Seed3 is an explicit reproducibility fixture; the source does not supply a fixed seed."
+      ],
+      "status": "assertions_implemented"
+    },
+    {
+      "case_id": "pong-preprocessing",
+      "source_lines": [
+        30,
+        37
+      ],
+      "kind": "source_algorithm",
+      "tests": [
+        "KarpathyPongTests.Preprocess_ExactCropStrideBackgroundAndSourceMutation",
+        "KarpathyPongLiveTests.PreprocessingAndDifference_FullRgbBufferAndMutations_Exact"
+      ],
+      "assertions": [
+        "210x160x3 uint8 input; rows35:195, stride2, red channel, background144/109 erased and other nonzero pixels binarized.",
+        "All6400 output values and all100800 bytes of the mutated source frame are checked; unsampled pixels/channels remain unchanged; returned float64 data owns its storage."
+      ],
+      "limits": [
+        "Original np.float alias is spelled float64 for current NumPy.",
+        "The original slice assignments mutate selected frame pixels; this side effect is intentionally preserved, not hidden."
+      ],
+      "status": "assertions_implemented"
+    },
+    {
+      "case_id": "pong-frame-difference",
+      "source_lines": [
+        74,
+        77
+      ],
+      "kind": "source_algorithm",
+      "tests": [
+        "KarpathyPongTests.FrameDifferences_ActionsAndSigmoidHaveExplicitBoundaries",
+        "KarpathyPongLiveTests.PreprocessingAndDifference_FullRgbBufferAndMutations_Exact"
+      ],
+      "assertions": [
+        "First observation produces an all-zero motion vector; later input is current minus previous with identical float64 values."
+      ],
+      "limits": [
+        "The bounded rollout resets its previous frame per episode, as the source does at line129."
+      ],
+      "status": "assertions_implemented"
+    },
+    {
+      "case_id": "pong-sigmoid-action-score",
+      "source_lines": [
+        27,
+        28
+      ],
+      "kind": "source_algorithm",
+      "tests": [
+        "KarpathyPongTests.FrameDifferences_ActionsAndSigmoidHaveExplicitBoundaries",
+        "KarpathyPongLiveTests.SigmoidAndActionBoundary_ExactIncludingSaturation",
+        "KarpathyPongLiveTests.Full200By6400_SeededInitializationForwardAndBackward_Exact"
+      ],
+      "assertions": [
+        "Sigmoid agrees exactly for finite inputs and saturated infinite/large-magnitude inputs.",
+        "Action2 is chosen only when uniform draw is strictly below probability; equal draw selects action3; log-policy derivative is selected-label minus probability."
+      ],
+      "limits": [
+        "Action-selection/log-gradient source lines80:87 supplement sigmoid lines27:28.",
+        "Invalid probabilities/draws/actions fail explicitly instead of silently propagating invalid policy state."
+      ],
+      "status": "assertions_implemented"
+    },
+    {
+      "case_id": "pong-policy-forward",
+      "source_lines": [
+        49,
+        54
+      ],
+      "kind": "source_algorithm",
+      "tests": [
+        "KarpathyPongLiveTests.Full200By6400_SeededInitializationForwardAndBackward_Exact"
+      ],
+      "assertions": [
+        "Every probability and every4x200 hidden state agrees with live NumPy over the same inputs/weights.",
+        "Per-frame matrix-vector dot is retained; it is not replaced by a potentially differently rounded batch matrix-matrix product."
+      ],
+      "limits": [
+        "Exact floating dot bytes require matching BLAS build, threads and CPU dispatch; tests use the interop suite's pinned backend."
+      ],
+      "status": "assertions_implemented"
+    },
+    {
+      "case_id": "pong-point-reset-discount",
+      "source_lines": [
+        39,
+        47
+      ],
+      "kind": "source_algorithm",
+      "tests": [
+        "KarpathyPongTests.DiscountRewards_ResetAtEachPointAndPreserveColumnShape",
+        "KarpathyPongLiveTests.DiscountAndSequentialStandardization_Exact"
+      ],
+      "assertions": [
+        "Backward recurrence resets before incorporating each nonzero point reward.",
+        "Both vector and actual stacked (T,1) shapes are tested; empty discount output and gamma validation are explicit."
+      ],
+      "limits": [
+        "Float64 returns are the numerical contract."
+      ],
+      "status": "assertions_implemented"
+    },
+    {
+      "case_id": "pong-return-standardization",
+      "source_lines": [
+        105,
+        109
+      ],
+      "kind": "source_algorithm",
+      "tests": [
+        "KarpathyPongTests.Standardization_IsCenteredUnitVarianceAndRejectsPoisoningUpdates",
+        "KarpathyPongLiveTests.DiscountAndSequentialStandardization_Exact"
+      ],
+      "assertions": [
+        "First subtract mean, then compute standard deviation of the already-centered values, matching the source's sequential in-place normalization.",
+        "Means and squared-residual reductions use the NumPy-compatible explicit-axis pairwise path; raw result bytes match."
+      ],
+      "limits": [
+        "Zero/nonfinite standard deviation is rejected rather than letting the original divide-by-zero produce NaN advantages and corrupt the model. This is an explicit robustness adaptation, not original error parity."
+      ],
+      "status": "assertions_implemented"
+    },
+    {
+      "case_id": "pong-backward-and-advantage-weighting",
+      "source_lines": [
+        56,
+        62
+      ],
+      "kind": "source_algorithm",
+      "tests": [
+        "KarpathyPongLiveTests.Full200By6400_SeededInitializationForwardAndBackward_Exact",
+        "KarpathyPongLiveTests.BatchedEpisodes_AllPersistentStateAndRewardMean_Exact"
+      ],
+      "assertions": [
+        "The weighted action-score signal, ReLU derivative mask, full200x6400 W1 gradient and200-element W2 gradient match actual NumPy.",
+        "Source lines111:113 advantage weighting and gradient accumulation are included in full episode state checks."
+      ],
+      "status": "assertions_implemented"
+    },
+    {
+      "case_id": "pong-independent-finite-differences",
+      "source_lines": [
+        49,
+        62
+      ],
+      "kind": "independent_calculus_check",
+      "tests": [
+        "KarpathyPongTests.Backward_AllFifteenParametersMatchFiniteDifferences"
+      ],
+      "assertions": [
+        "All15 parameters of a3-hidden/4-input reduced model are checked against central differences of the advantage-weighted log-policy objective.",
+        "Step1e-6, absolute gradient error bound5e-8; chosen preactivations stay away from ReLU's nondifferentiable zero."
+      ],
+      "limits": [
+        "Finite differences validate calculus, not byte parity. This reduced independent check supplements, and does not replace, full original-dimension byte tests."
+      ],
+      "status": "assertions_implemented"
+    },
+    {
+      "case_id": "pong-episode-stacking-and-batching",
+      "source_lines": [
+        95,
+        116
+      ],
+      "kind": "source_algorithm",
+      "tests": [
+        "KarpathyPongTests.TenEpisodeBatch_AccumulatesThenUpdatesAndClearsGradients",
+        "KarpathyPongLiveTests.BatchedEpisodes_AllPersistentStateAndRewardMean_Exact"
+      ],
+      "assertions": [
+        "Inputs/hidden states/log gradients/rewards have consistent time-major shapes.",
+        "The original default10-episode batch leaves weights unchanged for9 episodes and updates on10; buffer reset is asserted.",
+        "A separately configured two-episode batch compares all model weights, gradient buffers and RMS caches after each episode against NumPy."
+      ],
+      "limits": [
+        "The two-episode live case is an explicit smaller batch configuration, not a claim that the original default was2."
+      ],
+      "status": "assertions_implemented"
+    },
+    {
+      "case_id": "pong-rmsprop-ascent",
+      "source_lines": [
+        115,
+        121
+      ],
+      "kind": "source_algorithm",
+      "tests": [
+        "KarpathyPongLiveTests.RmsProp_TwoStateUpdatesAndGradientClears_Exact",
+        "KarpathyPongLiveTests.BatchedEpisodes_AllPersistentStateAndRewardMean_Exact",
+        "KarpathyPongTests.TenEpisodeBatch_AccumulatesThenUpdatesAndClearsGradients"
+      ],
+      "assertions": [
+        "Learning rate1e-4, decay0.99, cache=decay*cache+(1-decay)*gradient², ascent update divided by sqrt(cache)+1e-5.",
+        "Two successive updates assert every weight/cache element and zeroed gradient bytes."
+      ],
+      "limits": [
+        "The port updates stable cache/buffer objects in place rather than replacing Python dictionary entries; numerical state is identical."
+      ],
+      "status": "assertions_implemented"
+    },
+    {
+      "case_id": "pong-reward-bookkeeping",
+      "source_lines": [
+        123,
+        129
+      ],
+      "kind": "source_algorithm",
+      "tests": [
+        "KarpathyPongLiveTests.BatchedEpisodes_AllPersistentStateAndRewardMean_Exact",
+        "KarpathyPongTests.TenEpisodeBatch_AccumulatesThenUpdatesAndClearsGradients"
+      ],
+      "assertions": [
+        "Episode/update counters, episode reward total and initial/subsequent exponentially smoothed running reward are asserted."
+      ],
+      "limits": [
+        "Reward totals in these tests are supplied data, not measured Atari scores."
+      ],
+      "status": "assertions_implemented"
+    },
+    {
+      "case_id": "pong-persistent-ownership",
+      "kind": "port_contract",
+      "tests": [
+        "KarpathyPongTests.ModelAndOptimizerState_OutliveCallerScopesAndCopyInputs"
+      ],
+      "assertions": [
+        "Weights snapshot input arrays; long-lived model and optimizer state survive caller NDScope disposal.",
+        "Trainer owns its buffers/cache and borrows the separately disposable model."
+      ],
+      "status": "assertions_implemented"
+    },
+    {
+      "case_id": "pong-validation",
+      "kind": "port_contract",
+      "tests": [
+        "KarpathyPongTests.Validation_RejectsIncompatibleNetworkAndOptimizerInputs",
+        "KarpathyPongTests.Standardization_IsCenteredUnitVarianceAndRejectsPoisoningUpdates"
+      ],
+      "assertions": [
+        "Incompatible network/episode/optimizer shapes, unsupported dtype and invalid batching/discount/optimizer parameters are rejected."
+      ],
+      "limits": [
+        "Additional validation is a documented port API contract, not a claim of matching Python exception classes or all malformed-input behaviors."
+      ],
+      "status": "assertions_implemented"
+    },
+    {
+      "case_id": "pong-bounded-synthetic-rollout",
+      "source_lines": [
+        64,
+        132
+      ],
+      "kind": "ported_demo_not_original_environment",
+      "tests": [
+        "KarpathyPongTests.FullSourceDimensions_BoundedSyntheticTrainingActuallyUpdatesWeights"
+      ],
+      "assertions": [
+        "The full H200/D6400 model processes moving-pixel210x160 frames, samples actions, constructs advantages/gradients and completes2 episodes with1 real parameter update.",
+        "The parameter-change norm is finite and positive; final probability and running-reward bounds are asserted."
+      ],
+      "limits": [
+        "Observations and point rewards are deliberately fabricated; this is not Atari/Pong-v0, learned Pong ability, convergence, a benchmark or a reproduced score.",
+        "The original unbounded interaction loop is never executed. Demo batch2/steps6/seed0 are presentation defaults; the asserted reduced rollout uses explicitly stated seed7."
+      ],
+      "status": "assertions_implemented"
+    }
+  ],
+  "exclusions": [
+    {
+      "case_id": "pong-gym-atari-environment",
+      "source_lines": [
+        64,
+        93
+      ],
+      "status": "outside_numerical_scope",
+      "reason": "Pong-v0 creation/reset/step and Atari assets/ROMs are not reproduced. Policy inputs/rewards are supplied by the caller or by the explicitly synthetic demonstration."
+    },
+    {
+      "case_id": "pong-unbounded-learning-and-performance",
+      "source_lines": [
+        71,
+        132
+      ],
+      "status": "not_executed",
+      "reason": "The source runs forever and supplies no fixed seed, rollout recording, learned-score target, episode budget or timing claim. Passing numerical tests is not evidence of learning Pong or a runtime benchmark."
+    },
+    {
+      "case_id": "pong-checkpoint-resume-and-save",
+      "source_lines": [
+        17,
+        18,
+        126
+      ],
+      "status": "outside_numerical_scope",
+      "reason": "Python cPickle load/save and hundred-episode checkpoint scheduling are not ported; no checkpoint is downloaded, loaded or fabricated."
+    },
+    {
+      "case_id": "pong-render-and-print-format",
+      "source_lines": [
+        72,
+        125,
+        131,
+        132
+      ],
+      "status": "outside_numerical_scope",
+      "reason": "Environment rendering, Python2 print syntax and celebratory punctuation are presentation effects, not part of the numerical parity claim. Their reward/counter inputs are tested."
+    }
+  ]
+}

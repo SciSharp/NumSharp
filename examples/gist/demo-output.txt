@@ -1,0 +1,67 @@
+
+01. Forecasting metrics
+mse      7
+rmse     2.6457513110645907
+nrmse    0.042673408242977266
+me       0.66666666666666663
+mae      2.3333333333333335
+mad      2.1111111111111112
+gmae     2
+mdae     2
+mpe      0.062499999996565754
+mape     0.22916666666062824
+mdape    0.2499999999953125
+smape    0.25430960914373457
+smdape   0.222222222220679
+maape    0.22057020305712119
+mase     0.18817204301075269
+std_ae   3.3466401061363027
+std_ape  0.34308648082765625
+rmspe    0.27243118396196087
+rmdspe   0.2499999999953125
+rmsse    0.21336704121488634
+inrse    0.12216944435630522
+rrse     0.12216944435630522
+mre      -0.049999999996484377
+rae      0.12962962962950961
+mrae     0.34999999999101561
+mdrae    0.499999999975
+gmrae    0.28717458874369478
+mbrae    0.24444444444037039
+umbrae   0.32352941175756922
+mda      1
+
+02. Ranking metrics
+Average precision: 0.8441043083900226
+NDCG@10: 0.88249439953381748
+
+03. Frequency estimation
+384 Hz harmonic signal: crossings 384.017, FFT 384.000, autocorrelation 384.504, HPS 383.995 Hz
+Five-sample polynomial peak: position=3.100, value=4.205
+
+04. Stable Diffusion numerical routines
+Latent arc midpoint: [0.707107, 0.707107]; guided noise[0]=-6.50
+
+05. Catch environment and replay
+Catch: reward=1, transitions=4, terminal target=1
+
+06. Natural evolution strategies
+NES: solution=[0.491432, 0.107123, -0.297972], reward=-0.0001282627
+
+07. Peak detection
+Confirmed peaks (position, value): maxima [[ 3.  2.]
+ [11.  2.]]; minima [[ 7. -2.]
+ [15. -2.]]
+
+08. TensorBoard histogram payload
+Histogram: n=6, range=[0, 4], sum=11, sumSquares=31
+  upper=1, count=1
+  upper=2, count=2
+  upper=3, count=1
+  upper=4, count=2
+
+09. Time-series CNN data preparation
+Time-series windows: 8 x 4 x 1; train=6, test=2; next target=4
+
+10. GoogLeNet numerical routines
+GoogLeNet input shape: (1,3,1,2); BGR[0]=-103.939; normalized=-74.338; class=1

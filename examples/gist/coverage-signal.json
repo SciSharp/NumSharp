@@ -1,0 +1,913 @@
+{
+  "schema_version": 1,
+  "scope": "Gist ranks3 and7; all located demonstrations, numeric examples, printed measurements, substantive accuracy statements and relevant auxiliary notes are accounted for.",
+  "definition": "Accounted does not mean every claim reproduced: literal source fixtures, new synthetic experiments, port adaptations and unreproduced/out-of-scope claims are separated.",
+  "tests_claim": "Test methods listed here contain assertions, not only Demo-does-not-throw calls. Passing results must be taken from the current central test artifacts; this inventory does not manufacture a pass status.",
+  "source_inventory": "examples/gist/sources.json",
+  "original_application_execution": "No full audio/plotting script is executed. Numerical references are reviewed independent code evaluated with actual NumPy/SciPy over zero-copy NumSharp input.",
+  "source_gists": [
+    {
+      "rank": 3,
+      "url": "https://gist.github.com/endolith/255291",
+      "revision": "f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f"
+    },
+    {
+      "rank": 7,
+      "url": "https://gist.github.com/endolith/250860",
+      "revision": "bd0936f3983d43b37472f7b59991fdd4bcbb35c5"
+    }
+  ],
+  "case_count": 30,
+  "parity_diagnostics": {
+    "crossing_reduction": {
+      "original_failure_artifact": "outputs/gist-demonstrations-2026-09-09/source-demo-live-net10-v1.trx",
+      "original_failure": "The two new sine/harmonic frequency vectors each differed only in the zero-crossing estimate, by one float64 ULP; FFT, autocorrelation and HPS outputs were already exact.",
+      "cause": "The crossing positions and np.diff arrays match NumPy byte-for-byte. NumSharp's omitted-axis contiguous mean uses its flat Direct reduction order, whereas its explicit-axis mean uses NumPy-compatible NDIter PairwiseFold followed by division. The input is one-dimensional, so specifying axis=0 preserves the mathematical operation while selecting the matching reduction order.",
+      "implementation_evidence": [
+        "src/NumSharp.Core/Backends/Default/Math/DefaultEngine.ReductionOp.cs:ExecuteElementReduction and mean_elementwise_il",
+        "src/NumSharp.Core/Backends/Default/Math/Reduction/Default.Reduction.Add.cs:ExecuteAxisReduction",
+        "src/NumSharp.Core/Backends/Kernels/ILKernelGenerator.Reduction.cs:MeanDivideByCount",
+        "refs/numpy/numpy/_core/_methods.py:_mean"
+      ],
+      "measured_mean_bits": [
+        {
+          "fixture": "2048-sample 1000Hz sine, sample rate44100, phase0.4",
+          "period_count": 45,
+          "legacy_flat_mean": 44.09998629882047,
+          "legacy_flat_mean_bits": "40460CCC59DDBDB2",
+          "numpy_and_explicit_axis_mean": 44.09998629882046,
+          "numpy_and_explicit_axis_mean_bits": "40460CCC59DDBDB1"
+        },
+        {
+          "fixture": "1024-sample 384Hz harmonic demo, sample rate8192, harmonics1..7",
+          "period_count": 46,
+          "legacy_flat_mean": 21.332388363752482,
+          "legacy_flat_mean_bits": "40355517675FE34B",
+          "numpy_and_explicit_axis_mean": 21.33238836375248,
+          "numpy_and_explicit_axis_mean_bits": "40355517675FE34A"
+        }
+      ],
+      "resolution": "FrequencyEstimation.FromCrossings explicitly calls np.mean(np.diff(crossings), axis:0). No Core implementation or Python reference was changed; no tolerance was added.",
+      "stage_test": "GistSignalSourceDemonstrationsLiveTests.CrossingReductionStages_ExplicitAxisMatchesNumpyPairwiseMean (False/True)",
+      "remaining_finite_ulp_budget": 0,
+      "passing_live_artifact": "outputs/gist-demonstrations-2026-09-09/signal-pairwise-live-net10-v3.trx",
+      "passing_live_cases": 14,
+      "passing_managed_artifact": "outputs/gist-demonstrations-2026-09-09/signal-pairwise-unit-net10-v3.trx",
+      "passing_managed_cases": 23,
+      "environment_note": "The earlier signal-pairwise-live-net10-v2.trx is a retained Python discovery failure (numpy absent from the automatically selected embedded engine), not an algorithm run. v3 explicitly sets PYTHONNET_PYDLL=C:/Users/ELI/.claude/python/python312.dll and passes with the installed NumPy/SciPy."
+    }
+  },
+  "cases": [
+    {
+      "case_id": "G03-CROSS-ALGORITHM",
+      "gist_rank": 3,
+      "gist_url": "https://gist.github.com/endolith/255291",
+      "pin": "f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f",
+      "source_path": "frequency_estimator.py",
+      "line_start": 15,
+      "line_end": 32,
+      "source_sha256": "7be86bc481c64a7df601430b9ebc44e41224011eea65d6b02c7557972a8ac86d",
+      "source_url": "https://gist.github.com/endolith/255291/f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f#file-frequency_estimator-py",
+      "kind": "source_algorithm_on_synthetic_inputs",
+      "status": "asserted",
+      "test_methods": [
+        {
+          "file": "test/NumSharp.Tests.Interop/GistSignalLiveParityTests.cs",
+          "method": "GistSignalLiveParityTests.Crossings_ByteExactOnNonIntegerCrossingsAndReversedViews"
+        },
+        {
+          "file": "test/NumSharp.Tests/Examples/GistSignalSourceDemonstrationsTests.cs",
+          "method": "GistSignalSourceDemonstrationsTests.SyntheticCrossings_InterpolationImprovesThisSpecifiedSine"
+        },
+        {
+          "file": "test/NumSharp.Tests.Interop/GistSignalSourceDemonstrationsLiveTests.cs",
+          "method": "GistSignalSourceDemonstrationsLiveTests.SyntheticSine_MeasuredCrossingAndFftOutputs_ExactLiveNumpy"
+        },
+        {
+          "file": "test/NumSharp.Tests.Interop/GistSignalSourceDemonstrationsLiveTests.cs",
+          "method": "GistSignalSourceDemonstrationsLiveTests.CrossingReductionStages_ExplicitAxisMatchesNumpyPairwiseMean"
+        }
+      ],
+      "asserted_observables": [
+        "Rising crossings use sign change and linear intersample interpolation; C# result compared with live NumPy over identical bytes.",
+        "A specified 2048-sample, 44.1kHz, 1000Hz sine with phase 0.4 gives a smaller frequency error than integer crossing indices."
+      ],
+      "limits": [
+        "Synthetic waveform is newly specified, not the historical recording. Improvement is asserted only for this fixture."
+      ],
+      "related_source_locations": []
+    },
+    {
+      "case_id": "G03-CROSS-HISTORICAL-NUMBERS",
+      "gist_rank": 3,
+      "gist_url": "https://gist.github.com/endolith/255291",
+      "pin": "f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f",
+      "source_path": "frequency_estimator.py",
+      "line_start": 22,
+      "line_end": 26,
+      "source_sha256": "7be86bc481c64a7df601430b9ebc44e41224011eea65d6b02c7557972a8ac86d",
+      "source_url": "https://gist.github.com/endolith/255291/f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f#file-frequency_estimator-py",
+      "kind": "historical_measurement_without_fixture",
+      "status": "not_reproduced_missing_input",
+      "test_methods": [],
+      "asserted_observables": [
+        "Source reports 1000.185Hz for naive crossings and 1000.000129Hz for interpolated crossings on a 1000Hz example."
+      ],
+      "limits": [
+        "No samples, sample rate, duration, phase, noise, file or platform are provided. These numbers are retained as historical claims, not passed-test outputs.",
+        "The separate synthetic crossing experiment does not reproduce or validate these exact historical values."
+      ],
+      "related_source_locations": []
+    },
+    {
+      "case_id": "G03-FFT-ALGORITHM",
+      "gist_rank": 3,
+      "gist_url": "https://gist.github.com/endolith/255291",
+      "pin": "f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f",
+      "source_path": "frequency_estimator.py",
+      "line_start": 35,
+      "line_end": 48,
+      "source_sha256": "7be86bc481c64a7df601430b9ebc44e41224011eea65d6b02c7557972a8ac86d",
+      "source_url": "https://gist.github.com/endolith/255291/f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f#file-frequency_estimator-py",
+      "kind": "source_algorithm_on_synthetic_inputs",
+      "status": "asserted",
+      "test_methods": [
+        {
+          "file": "test/NumSharp.Tests.Interop/GistSignalLiveParityTests.cs",
+          "method": "GistSignalLiveParityTests.Window_ByteExactVersusLiveScipy"
+        },
+        {
+          "file": "test/NumSharp.Tests.Interop/GistSignalSourceDemonstrationsLiveTests.cs",
+          "method": "GistSignalSourceDemonstrationsLiveTests.SyntheticSine_MeasuredCrossingAndFftOutputs_ExactLiveNumpy"
+        },
+        {
+          "file": "test/NumSharp.Tests/Examples/GistSignalSourceDemonstrationsTests.cs",
+          "method": "GistSignalSourceDemonstrationsTests.SyntheticFft_InterpolationAndLongerRecordImproveThisSpecifiedSine"
+        }
+      ],
+      "asserted_observables": [
+        "Symmetric Blackman-Harris, real FFT, magnitude maximum, log-spectrum quadratic interpolation and Hz conversion.",
+        "Specified short/long records improve on raw FFT-bin selection and are evaluated independently from their known frequency."
+      ],
+      "limits": [
+        "No general guarantee for the largest peak to be the fundamental; a separate stronger-harmonic fixture demonstrates failure."
+      ],
+      "related_source_locations": []
+    },
+    {
+      "case_id": "G03-AUTOCORRELATION-ALGORITHM",
+      "gist_rank": 3,
+      "gist_url": "https://gist.github.com/endolith/255291",
+      "pin": "f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f",
+      "source_path": "frequency_estimator.py",
+      "line_start": 51,
+      "line_end": 70,
+      "source_sha256": "7be86bc481c64a7df601430b9ebc44e41224011eea65d6b02c7557972a8ac86d",
+      "source_url": "https://gist.github.com/endolith/255291/f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f#file-frequency_estimator-py",
+      "kind": "source_algorithm_and_stated_limitation",
+      "status": "asserted_on_explicit_fixtures",
+      "test_methods": [
+        {
+          "file": "test/NumSharp.Tests.Interop/GistSignalLiveParityTests.cs",
+          "method": "GistSignalLiveParityTests.FrequencyPipelines_MeasuredUlpVersusLiveNumpyAndScipy"
+        },
+        {
+          "file": "test/NumSharp.Tests/Examples/GistSignalSourceDemonstrationsTests.cs",
+          "method": "GistSignalSourceDemonstrationsTests.SyntheticDemoHarmonics_AllFourPrintedEstimatesHaveHonestErrorBounds"
+        },
+        {
+          "file": "test/NumSharp.Tests/Examples/GistSignalSourceDemonstrationsTests.cs",
+          "method": "GistSignalSourceDemonstrationsTests.SyntheticMissingFundamental_ExposesPeakPickingLimits"
+        },
+        {
+          "file": "test/NumSharp.Tests.Interop/GistSignalSourceDemonstrationsLiveTests.cs",
+          "method": "GistSignalSourceDemonstrationsLiveTests.SyntheticDemoHarmonics_AllFourMeasurements_ExactLiveNumpy"
+        }
+      ],
+      "asserted_observables": [
+        "Positive-lag autocorrelation, first rising difference, subsequent peak and quadratic-lag conversion.",
+        "The 384Hz demo's approximately 384.5035347504078Hz result is asserted as a biased estimate, not mislabeled exact frequency recovery."
+      ],
+      "limits": [
+        "NumSharp correlate is direct; SciPy may select FFT on long inputs. Same-input parity fixtures are small enough for SciPy's direct route.",
+        "Byte agreement establishes implementation agreement, not estimator accuracy."
+      ],
+      "related_source_locations": []
+    },
+    {
+      "case_id": "G03-HPS-PRINTED-PASSES",
+      "gist_rank": 3,
+      "gist_url": "https://gist.github.com/endolith/255291",
+      "pin": "f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f",
+      "source_path": "frequency_estimator.py",
+      "line_start": 73,
+      "line_end": 96,
+      "source_sha256": "7be86bc481c64a7df601430b9ebc44e41224011eea65d6b02c7557972a8ac86d",
+      "source_url": "https://gist.github.com/endolith/255291/f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f#file-frequency_estimator-py",
+      "kind": "source_plot_numerics_on_synthetic_input",
+      "status": "asserted_with_explicit_port_guard",
+      "test_methods": [
+        {
+          "file": "test/NumSharp.Tests.Interop/GistSignalLiveParityTests.cs",
+          "method": "GistSignalLiveParityTests.LegacyHps_AllPrintedPassesAndUndefinedPeaksAreChecked"
+        }
+      ],
+      "asserted_observables": [
+        "Six values correspond to passes h=2..7, measured before each multiplication of the recursively truncated spectrum.",
+        "On the supplied 16384-sample synthetic harmonic fixture, five finite outputs are byte-exact; the last undefined interpolation is NaN."
+      ],
+      "limits": [
+        "The source supplies no demonstration signal and returns no final frequency.",
+        "On the last two-bin spectrum in this fixture, the original unguarded interpolation indexes past the end; NaN is the documented port adaptation, not an original successful sixth measurement.",
+        "Matplotlib subplot rendering and printed formatting are outside numerical scope."
+      ],
+      "related_source_locations": []
+    },
+    {
+      "case_id": "G03-AUDIO-INPUT",
+      "gist_rank": 3,
+      "gist_url": "https://gist.github.com/endolith/255291",
+      "pin": "f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f",
+      "source_path": "frequency_estimator.py",
+      "line_start": 99,
+      "line_end": 105,
+      "source_sha256": "7be86bc481c64a7df601430b9ebc44e41224011eea65d6b02c7557972a8ac86d",
+      "source_url": "https://gist.github.com/endolith/255291/f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f#file-frequency_estimator-py",
+      "kind": "application_io",
+      "status": "outside_approved_numerical_scope",
+      "test_methods": [],
+      "asserted_observables": [
+        "Original application reads an externally supplied audio filename using soundfile or audiolab."
+      ],
+      "limits": [
+        "No audio file is supplied in the gist snapshot. File decoding/fallback behavior is not ported or claimed tested."
+      ],
+      "related_source_locations": []
+    },
+    {
+      "case_id": "G03-COMMANDLINE-ESTIMATES",
+      "gist_rank": 3,
+      "gist_url": "https://gist.github.com/endolith/255291",
+      "pin": "f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f",
+      "source_path": "frequency_estimator.py",
+      "line_start": 107,
+      "line_end": 125,
+      "source_sha256": "7be86bc481c64a7df601430b9ebc44e41224011eea65d6b02c7557972a8ac86d",
+      "source_url": "https://gist.github.com/endolith/255291/f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f#file-frequency_estimator-py",
+      "kind": "application_demonstration_with_unspecified_input",
+      "status": "numerical_paths_asserted_input_not_reproduced",
+      "test_methods": [
+        {
+          "file": "test/NumSharp.Tests/Examples/GistSignalSourceDemonstrationsTests.cs",
+          "method": "GistSignalSourceDemonstrationsTests.SyntheticDemoHarmonics_AllFourPrintedEstimatesHaveHonestErrorBounds"
+        },
+        {
+          "file": "test/NumSharp.Tests.Interop/GistSignalSourceDemonstrationsLiveTests.cs",
+          "method": "GistSignalSourceDemonstrationsLiveTests.SyntheticDemoHarmonics_AllFourMeasurements_ExactLiveNumpy"
+        },
+        {
+          "file": "test/NumSharp.Tests.Interop/GistSignalLiveParityTests.cs",
+          "method": "GistSignalLiveParityTests.LegacyHps_AllPrintedPassesAndUndefinedPeaksAreChecked"
+        }
+      ],
+      "asserted_observables": [
+        "Every numerical estimator invoked by the original application is exercised with asserted outputs using explicit replacement signals."
+      ],
+      "limits": [
+        "This is not execution of the complete original audio/plotting script or a reproduction of an unavailable recording."
+      ],
+      "related_source_locations": []
+    },
+    {
+      "case_id": "G03-WALLCLOCK-TIMINGS",
+      "gist_rank": 3,
+      "gist_url": "https://gist.github.com/endolith/255291",
+      "pin": "f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f",
+      "source_path": "frequency_estimator.py",
+      "line_start": 108,
+      "line_end": 125,
+      "source_sha256": "7be86bc481c64a7df601430b9ebc44e41224011eea65d6b02c7557972a8ac86d",
+      "source_url": "https://gist.github.com/endolith/255291/f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f#file-frequency_estimator-py",
+      "kind": "machine_dependent_measurement",
+      "status": "not_reproduced_missing_input_and_environment",
+      "test_methods": [],
+      "asserted_observables": [
+        "Four elapsed-time measurements bracket the FFT, crossings, autocorrelation and HPS calls."
+      ],
+      "limits": [
+        "The source records no fixed elapsed values, benchmark machine, audio samples or plotting cost. Tests do not fabricate timing values or assert performance from correctness runs."
+      ],
+      "related_source_locations": []
+    },
+    {
+      "case_id": "G03-PARABOLIC-DOCSTRING",
+      "gist_rank": 3,
+      "gist_url": "https://gist.github.com/endolith/255291",
+      "pin": "f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f",
+      "source_path": "parabolic.py",
+      "line_start": 14,
+      "line_end": 26,
+      "source_sha256": "38243bbbab3481a5839228bf71ddfedca79534fb49eaf921b6c644eb7367e5d0",
+      "source_url": "https://gist.github.com/endolith/255291/f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f#file-parabolic-py",
+      "kind": "literal_source_example",
+      "status": "asserted",
+      "test_methods": [
+        {
+          "file": "test/NumSharp.Tests/Examples/GistSignalTests.cs",
+          "method": "GistSignalTests.Frequency_ParabolicAndPolynomialCompanionAreFunctional"
+        },
+        {
+          "file": "test/NumSharp.Tests.Interop/GistSignalLiveParityTests.cs",
+          "method": "GistSignalLiveParityTests.QuadraticVertex_ByteExact"
+        }
+      ],
+      "asserted_observables": [
+        "Input [2,3,1,6,4,2,3,1], sampled peak at index3; quadratic vertex near (3.2142857142857144,6.160714285714286).",
+        "Live NumPy result bytes agree with the port."
+      ],
+      "limits": [
+        "Source decimal presentation is not asserted character-for-character."
+      ],
+      "related_source_locations": []
+    },
+    {
+      "case_id": "G03-PARABOLIC-PLOT-MAIN",
+      "gist_rank": 3,
+      "gist_url": "https://gist.github.com/endolith/255291",
+      "pin": "f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f",
+      "source_path": "parabolic.py",
+      "line_start": 43,
+      "line_end": 55,
+      "source_sha256": "38243bbbab3481a5839228bf71ddfedca79534fb49eaf921b6c644eb7367e5d0",
+      "source_url": "https://gist.github.com/endolith/255291/f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f#file-parabolic-py",
+      "kind": "literal_source_example",
+      "status": "asserted",
+      "test_methods": [
+        {
+          "file": "test/NumSharp.Tests/Examples/GistSignalSourceDemonstrationsTests.cs",
+          "method": "GistSignalSourceDemonstrationsTests.ParabolicMain_PlotMarkersHaveThePublishedInputGeometry"
+        },
+        {
+          "file": "test/NumSharp.Tests.Interop/GistSignalSourceDemonstrationsLiveTests.cs",
+          "method": "GistSignalSourceDemonstrationsLiveTests.ParabolicMain_PlotMarkers_ExactLiveNumpy"
+        }
+      ],
+      "asserted_observables": [
+        "Input [2,1,4,8,11,10,7,3,1,1]. Silver marker=(4,11); blue marker=(4.25,11.125).",
+        "Both marker coordinates compare byte-exactly with live NumPy."
+      ],
+      "limits": [
+        "Tests validate the data sent to the plot, not Matplotlib rendering or screenshot pixels."
+      ],
+      "related_source_locations": []
+    },
+    {
+      "case_id": "G03-POLYFIT-COMPANION",
+      "gist_rank": 3,
+      "gist_url": "https://gist.github.com/endolith/255291",
+      "pin": "f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f",
+      "source_path": "parabolic.py",
+      "line_start": 29,
+      "line_end": 40,
+      "source_sha256": "38243bbbab3481a5839228bf71ddfedca79534fb49eaf921b6c644eb7367e5d0",
+      "source_url": "https://gist.github.com/endolith/255291/f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f#file-parabolic-py",
+      "kind": "source_algorithm_on_explicit_inputs",
+      "status": "asserted",
+      "test_methods": [
+        {
+          "file": "test/NumSharp.Tests/Examples/GistSignalTests.cs",
+          "method": "GistSignalTests.Frequency_ParabolicAndPolynomialCompanionAreFunctional"
+        },
+        {
+          "file": "test/NumSharp.Tests.Interop/GistSignalLiveParityTests.cs",
+          "method": "GistSignalLiveParityTests.PolynomialVertex_ByteExactWithPinnedLapack"
+        },
+        {
+          "file": "test/NumSharp.Tests/Examples/GistSignalSourceDemonstrationsTests.cs",
+          "method": "GistSignalSourceDemonstrationsTests.ParabolicReadme_ThreePointPolyfitMatchesTheSameQuadratic"
+        },
+        {
+          "file": "test/NumSharp.Tests.Interop/GistSignalSourceDemonstrationsLiveTests.cs",
+          "method": "GistSignalSourceDemonstrationsLiveTests.ParabolicReadme_ThreePointPolyfit_ExactLiveNumpy"
+        }
+      ],
+      "asserted_observables": [
+        "Both three-point and five-point centered quadratic fits execute against LAPACK; coefficient-derived vertices agree with live NumPy."
+      ],
+      "limits": [
+        "The port explicitly accepts odd centered sample counts; boundary/even-count rejection is separately tested.",
+        "Byte equality requires matching LAPACK build, thread count and CPU dispatch."
+      ],
+      "related_source_locations": []
+    },
+    {
+      "case_id": "G03-PARABOLIC-README-POLYFIT",
+      "gist_rank": 3,
+      "gist_url": "https://gist.github.com/endolith/255291",
+      "pin": "f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f",
+      "source_path": "parabolic.md",
+      "line_start": 15,
+      "line_end": 27,
+      "source_sha256": "3e37b221daa0f8dea4018d32cf8c5d5af1809b2a52a904da3e5d91a30bf179fb",
+      "source_url": "https://gist.githubusercontent.com/endolith/255291/raw/f4c48f2fc3f468b4a98599a268a4f040584f0c5b/parabolic.md",
+      "kind": "literal_source_numeric_example",
+      "status": "asserted_current_oracle_historical_rounding_not_frozen",
+      "test_methods": [
+        {
+          "file": "test/NumSharp.Tests/Examples/GistSignalSourceDemonstrationsTests.cs",
+          "method": "GistSignalSourceDemonstrationsTests.ParabolicReadme_ThreePointPolyfitMatchesTheSameQuadratic"
+        },
+        {
+          "file": "test/NumSharp.Tests.Interop/GistSignalSourceDemonstrationsLiveTests.cs",
+          "method": "GistSignalSourceDemonstrationsLiveTests.ParabolicReadme_ThreePointPolyfit_ExactLiveNumpy"
+        }
+      ],
+      "asserted_observables": [
+        "The exact README points x=[2,3,4], y=[1,6,4] feed a THREE-point np.polyfit, distinct from the existing five-point fixture.",
+        "The fitted vertex is compared byte-for-byte with current NumPy and numerically with the direct quadratic geometry."
+      ],
+      "limits": [
+        "The historical displayed polyfit values 3.2142857142857695 and 6.1607142857143025 depend on the old solver/rounding environment; contemporary values are not forced to those text digits."
+      ],
+      "related_source_locations": []
+    },
+    {
+      "case_id": "G03-PARABOLIC-GAUSSIAN-MOTIVATION",
+      "gist_rank": 3,
+      "gist_url": "https://gist.github.com/endolith/255291",
+      "pin": "f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f",
+      "source_path": "parabolic.md",
+      "line_start": 1,
+      "line_end": 4,
+      "source_sha256": "3e37b221daa0f8dea4018d32cf8c5d5af1809b2a52a904da3e5d91a30bf179fb",
+      "source_url": "https://gist.githubusercontent.com/endolith/255291/raw/f4c48f2fc3f468b4a98599a268a4f040584f0c5b/parabolic.md",
+      "kind": "external_theoretical_motivation",
+      "status": "algebra_illustrated_external_claim_not_validated",
+      "test_methods": [
+        {
+          "file": "test/NumSharp.Tests/Examples/GistSignalSourceDemonstrationsTests.cs",
+          "method": "GistSignalSourceDemonstrationsTests.SyntheticLogGaussianQuadratic_HasAnExactInterpolatedVertex"
+        }
+      ],
+      "asserted_observables": [
+        "A newly specified log-magnitude quadratic y=5-2*(x-3.25)^2 has exactly recovered vertex (3.25,5)."
+      ],
+      "limits": [
+        "This tests quadratic interpolation algebra, not the cited continuous Gaussian Fourier theorem, finite-window approximation or a Gaussian-window FFT.",
+        "The frequency estimator itself uses Blackman-Harris, not Gaussian windowing."
+      ],
+      "related_source_locations": []
+    },
+    {
+      "case_id": "G03-PARABOLIC-ZERO-PADDING",
+      "gist_rank": 3,
+      "gist_url": "https://gist.github.com/endolith/255291",
+      "pin": "f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f",
+      "source_path": "parabolic.md",
+      "line_start": 6,
+      "line_end": 9,
+      "source_sha256": "3e37b221daa0f8dea4018d32cf8c5d5af1809b2a52a904da3e5d91a30bf179fb",
+      "source_url": "https://gist.githubusercontent.com/endolith/255291/raw/f4c48f2fc3f468b4a98599a268a4f040584f0c5b/parabolic.md",
+      "kind": "suggested_technique_without_source_fixture",
+      "status": "asserted_new_explicit_experiment",
+      "test_methods": [
+        {
+          "file": "test/NumSharp.Tests/Examples/GistSignalSourceDemonstrationsTests.cs",
+          "method": "GistSignalSourceDemonstrationsTests.SyntheticZeroPadding_RefinesThisInterpolatedFftPeak"
+        }
+      ],
+      "asserted_observables": [
+        "A specified 1024-sample sine, Blackman-Harris window and 8x FFT padding reduce interpolated peak error below .001Hz; compared against the same unpadded fixture."
+      ],
+      "limits": [
+        "The source suggests a technique but supplies no waveform or padding factor. This is new experimental data, not reproduction of published measurements.",
+        "No universal zero-bias or speed claim is inferred."
+      ],
+      "related_source_locations": []
+    },
+    {
+      "case_id": "G03-PARABOLIC-NONUNIFORM-PROPOSAL",
+      "gist_rank": 3,
+      "gist_url": "https://gist.github.com/endolith/255291",
+      "pin": "f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f",
+      "source_path": "parabolic.md",
+      "line_start": 29,
+      "line_end": 29,
+      "source_sha256": "3e37b221daa0f8dea4018d32cf8c5d5af1809b2a52a904da3e5d91a30bf179fb",
+      "source_url": "https://gist.githubusercontent.com/endolith/255291/raw/f4c48f2fc3f468b4a98599a268a4f040584f0c5b/parabolic.md",
+      "kind": "future_api_proposal",
+      "status": "not_implemented_proposal",
+      "test_methods": [],
+      "asserted_observables": [
+        "The note proposes extending interpolation to nonuniform coordinates."
+      ],
+      "limits": [
+        "The pinned parabolic_polyfit implementation constructs integer arange coordinates; the port follows that implemented centered-index API. An arbitrary-coordinate extension is not claimed."
+      ],
+      "related_source_locations": []
+    },
+    {
+      "case_id": "G03-PARABOLIC-EXTERNAL-ALTERNATIVES",
+      "gist_rank": 3,
+      "gist_url": "https://gist.github.com/endolith/255291",
+      "pin": "f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f",
+      "source_path": "parabolic.md",
+      "line_start": 31,
+      "line_end": 31,
+      "source_sha256": "3e37b221daa0f8dea4018d32cf8c5d5af1809b2a52a904da3e5d91a30bf179fb",
+      "source_url": "https://gist.githubusercontent.com/endolith/255291/raw/f4c48f2fc3f468b4a98599a268a4f040584f0c5b/parabolic.md",
+      "kind": "external_reference",
+      "status": "outside_pinned_source_scope",
+      "test_methods": [],
+      "asserted_observables": [
+        "An external page links alternative estimators."
+      ],
+      "limits": [
+        "Those external implementations and comparative claims are not included in the gist snapshot, ported, or benchmarked here."
+      ],
+      "related_source_locations": []
+    },
+    {
+      "case_id": "G03-README-PERIODIC-WAVEFORMS",
+      "gist_rank": 3,
+      "gist_url": "https://gist.github.com/endolith/255291",
+      "pin": "f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f",
+      "source_path": "readme.md",
+      "line_start": 16,
+      "line_end": 22,
+      "source_sha256": "10e01da6e1943b3e88d9918c1669303df5c911334b492cf0c3386cf87a2dd478",
+      "source_url": "https://gist.githubusercontent.com/endolith/255291/raw/6679e42fc357747241669f733b6dbd0b3a857909/readme.md",
+      "kind": "qualitative_claim_with_no_original_fixture",
+      "status": "asserted_selected_synthetic_examples",
+      "test_methods": [
+        {
+          "file": "test/NumSharp.Tests/Examples/GistSignalSourceDemonstrationsTests.cs",
+          "method": "GistSignalSourceDemonstrationsTests.SyntheticPeriodicWaveforms_CrossingsRecoverTheirKnownPeriod"
+        },
+        {
+          "file": "test/NumSharp.Tests/Examples/GistSignalSourceDemonstrationsTests.cs",
+          "method": "GistSignalSourceDemonstrationsTests.SyntheticCrossings_InterpolationImprovesThisSpecifiedSine"
+        }
+      ],
+      "asserted_observables": [
+        "Explicit noiseless sine, square and triangle periods recover their known 8Hz period.",
+        "A separate non-integer-period sine demonstrates interpolation improvement."
+      ],
+      "limits": [
+        "This does not assert correctness for every waveform, noisy recording or multiple-crossing case. No actual guitar tuner is tested."
+      ],
+      "related_source_locations": []
+    },
+    {
+      "case_id": "G03-README-SPEED-AND-TUNER-CLAIMS",
+      "gist_rank": 3,
+      "gist_url": "https://gist.github.com/endolith/255291",
+      "pin": "f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f",
+      "source_path": "readme.md",
+      "line_start": 18,
+      "line_end": 20,
+      "source_sha256": "10e01da6e1943b3e88d9918c1669303df5c911334b492cf0c3386cf87a2dd478",
+      "source_url": "https://gist.githubusercontent.com/endolith/255291/raw/6679e42fc357747241669f733b6dbd0b3a857909/readme.md",
+      "kind": "unquantified_external_and_performance_claim",
+      "status": "not_benchmarked",
+      "test_methods": [],
+      "asserted_observables": [
+        "The notes discuss tuner use and describe crossing estimation as fast."
+      ],
+      "limits": [
+        "No tuner, workload, comparative implementation or timing protocol is specified; neither claim is certified by the numerical test suite."
+      ],
+      "related_source_locations": []
+    },
+    {
+      "case_id": "G03-README-LENGTH-AND-FFT-INTERPOLATION",
+      "gist_rank": 3,
+      "gist_url": "https://gist.github.com/endolith/255291",
+      "pin": "f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f",
+      "source_path": "readme.md",
+      "line_start": 21,
+      "line_end": 26,
+      "source_sha256": "10e01da6e1943b3e88d9918c1669303df5c911334b492cf0c3386cf87a2dd478",
+      "source_url": "https://gist.githubusercontent.com/endolith/255291/raw/6679e42fc357747241669f733b6dbd0b3a857909/readme.md",
+      "kind": "qualitative_accuracy_claim",
+      "status": "asserted_selected_synthetic_experiment",
+      "test_methods": [
+        {
+          "file": "test/NumSharp.Tests/Examples/GistSignalSourceDemonstrationsTests.cs",
+          "method": "GistSignalSourceDemonstrationsTests.SyntheticFft_InterpolationAndLongerRecordImproveThisSpecifiedSine"
+        }
+      ],
+      "asserted_observables": [
+        "For the specified sine/phase, a 4096-sample record has smaller interpolated FFT error than 1024 samples; interpolation beats the raw bin."
+      ],
+      "limits": [
+        "Increasing record length is not asserted to improve every signal monotonically; results depend on bin alignment, window, phase and noise."
+      ],
+      "related_source_locations": []
+    },
+    {
+      "case_id": "G03-README-HARMONIC-LIMITATIONS",
+      "gist_rank": 3,
+      "gist_url": "https://gist.github.com/endolith/255291",
+      "pin": "f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f",
+      "source_path": "readme.md",
+      "line_start": 22,
+      "line_end": 35,
+      "source_sha256": "10e01da6e1943b3e88d9918c1669303df5c911334b492cf0c3386cf87a2dd478",
+      "source_url": "https://gist.githubusercontent.com/endolith/255291/raw/6679e42fc357747241669f733b6dbd0b3a857909/readme.md",
+      "kind": "qualitative_limitations",
+      "status": "illustrated_with_asserted_counterexample",
+      "test_methods": [
+        {
+          "file": "test/NumSharp.Tests/Examples/GistSignalSourceDemonstrationsTests.cs",
+          "method": "GistSignalSourceDemonstrationsTests.SyntheticMissingFundamental_ExposesPeakPickingLimits"
+        },
+        {
+          "file": "test/NumSharp.Tests/Examples/GistSignalSourceDemonstrationsTests.cs",
+          "method": "GistSignalSourceDemonstrationsTests.SyntheticDemoHarmonics_AllFourPrintedEstimatesHaveHonestErrorBounds"
+        }
+      ],
+      "asserted_observables": [
+        "A 128Hz-period signal with only harmonics2..7 makes FFT/crossings report approximately256Hz; autocorrelation reports128Hz.",
+        "The separately specified demo has a roughly0.504Hz autocorrelation bias despite matching Python."
+      ],
+      "limits": [
+        "Not an exhaustive noise/inharmonicity study or a universal guarantee about true-peak selection."
+      ],
+      "related_source_locations": []
+    },
+    {
+      "case_id": "G03-README-FFT-HISTORICAL-NUMBER",
+      "gist_rank": 3,
+      "gist_url": "https://gist.github.com/endolith/255291",
+      "pin": "f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f",
+      "source_path": "readme.md",
+      "line_start": 28,
+      "line_end": 28,
+      "source_sha256": "10e01da6e1943b3e88d9918c1669303df5c911334b492cf0c3386cf87a2dd478",
+      "source_url": "https://gist.githubusercontent.com/endolith/255291/raw/6679e42fc357747241669f733b6dbd0b3a857909/readme.md",
+      "kind": "historical_measurement_without_fixture",
+      "status": "not_reproduced_missing_input",
+      "test_methods": [],
+      "asserted_observables": [
+        "The source gives 1000.000004Hz for an unspecified1000Hz example."
+      ],
+      "limits": [
+        "Samples, sample rate, duration, phase, window size and machine are absent. No test is labeled a reproduction of that exact number."
+      ],
+      "related_source_locations": []
+    },
+    {
+      "case_id": "G03-README-MISSING-FUNDAMENTAL",
+      "gist_rank": 3,
+      "gist_url": "https://gist.github.com/endolith/255291",
+      "pin": "f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f",
+      "source_path": "readme.md",
+      "line_start": 30,
+      "line_end": 38,
+      "source_sha256": "10e01da6e1943b3e88d9918c1669303df5c911334b492cf0c3386cf87a2dd478",
+      "source_url": "https://gist.githubusercontent.com/endolith/255291/raw/6679e42fc357747241669f733b6dbd0b3a857909/readme.md",
+      "kind": "qualitative_algorithm_claim",
+      "status": "asserted_selected_synthetic_experiment",
+      "test_methods": [
+        {
+          "file": "test/NumSharp.Tests/Examples/GistSignalSourceDemonstrationsTests.cs",
+          "method": "GistSignalSourceDemonstrationsTests.SyntheticMissingFundamental_ExposesPeakPickingLimits"
+        }
+      ],
+      "asserted_observables": [
+        "For the explicitly synthesized harmonics2..7, autocorrelation recovers128Hz and the repaired return-valued HPS is within.01Hz."
+      ],
+      "limits": [
+        "The HPS result belongs to the documented repaired NumSharp variant, not an original return value (the gist has none).",
+        "This does not prove the broad 'best method' or all-repetitive-wave claims."
+      ],
+      "related_source_locations": []
+    },
+    {
+      "case_id": "G03-README-PERCEIVED-PITCH",
+      "gist_rank": 3,
+      "gist_url": "https://gist.github.com/endolith/255291",
+      "pin": "f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f",
+      "source_path": "readme.md",
+      "line_start": 32,
+      "line_end": 33,
+      "source_sha256": "10e01da6e1943b3e88d9918c1669303df5c911334b492cf0c3386cf87a2dd478",
+      "source_url": "https://gist.githubusercontent.com/endolith/255291/raw/6679e42fc357747241669f733b6dbd0b3a857909/readme.md",
+      "kind": "perceptual_claim",
+      "status": "outside_numerical_validation",
+      "test_methods": [],
+      "asserted_observables": [
+        "The note relates inharmonic pitch estimates to human perception."
+      ],
+      "limits": [
+        "No listening study, psychoacoustic model or instrument recording is supplied; tests make no human-perception claim."
+      ],
+      "related_source_locations": []
+    },
+    {
+      "case_id": "G03-README-CLOCK-AND-GENERAL-CONTEXT",
+      "gist_rank": 3,
+      "gist_url": "https://gist.github.com/endolith/255291",
+      "pin": "f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f",
+      "source_path": "readme.md",
+      "line_start": 3,
+      "line_end": 14,
+      "source_sha256": "10e01da6e1943b3e88d9918c1669303df5c911334b492cf0c3386cf87a2dd478",
+      "source_url": "https://gist.githubusercontent.com/endolith/255291/raw/6679e42fc357747241669f733b6dbd0b3a857909/readme.md",
+      "kind": "context_and_external_links",
+      "status": "documented_not_an_executable_example",
+      "test_methods": [],
+      "asserted_observables": [
+        "The author mentions clock-frequency measurement, related implementations, literature and offline rather than realtime usage."
+      ],
+      "limits": [
+        "No clock hardware measurement or realtime deadline is provided or reproduced. Links do not silently change the pinned revision under test."
+      ],
+      "related_source_locations": []
+    },
+    {
+      "case_id": "G07-PEAK-PLOT-MAIN",
+      "gist_rank": 7,
+      "gist_url": "https://gist.github.com/endolith/250860",
+      "pin": "bd0936f3983d43b37472f7b59991fdd4bcbb35c5",
+      "source_path": "peakdetect.py",
+      "line_start": 75,
+      "line_end": 82,
+      "source_sha256": "7e7f6a87e7e7479a8d2d080c9806ef0e9249faa957b23c9269d781d62c228e48",
+      "source_url": "https://gist.github.com/endolith/250860/bd0936f3983d43b37472f7b59991fdd4bcbb35c5#file-peakdetect-py",
+      "kind": "literal_source_example",
+      "status": "asserted",
+      "test_methods": [
+        {
+          "file": "test/NumSharp.Tests/Examples/GistSignalTests.cs",
+          "method": "GistSignalTests.PeakDetection_ReproducesPublishedDemonstration"
+        },
+        {
+          "file": "test/NumSharp.Tests/Examples/GistSignalSourceDemonstrationsTests.cs",
+          "method": "GistSignalSourceDemonstrationsTests.PeakMain_ScatterColumnsAreTheActualDemonstrationMarkers"
+        },
+        {
+          "file": "test/NumSharp.Tests.Interop/GistSignalSourceDemonstrationsLiveTests.cs",
+          "method": "GistSignalSourceDemonstrationsLiveTests.PeakMain_PlotScatterColumns_ExactLiveNumpy"
+        }
+      ],
+      "asserted_observables": [
+        "Exact17-value source series with delta.3 produces maxima[(3,2),(11,2)] and minima[(7,-2),(15,-2)].",
+        "The plotted x/y columns and complete arrays are asserted; live NumPy compares raw output bytes."
+      ],
+      "limits": [
+        "The original Python list infers integer arrays. The documented port normalizes values and coordinates to float64; tests retain the source's exact numeric values but compare identical float64 input buffers, not original-int64 output bytes.",
+        "Plot colors, rendering and the GUI event loop are outside approved numerical scope."
+      ],
+      "related_source_locations": []
+    },
+    {
+      "case_id": "G07-PEAK-CUSTOM-X",
+      "gist_rank": 7,
+      "gist_url": "https://gist.github.com/endolith/250860",
+      "pin": "bd0936f3983d43b37472f7b59991fdd4bcbb35c5",
+      "source_path": "peakdetect.py",
+      "line_start": 17,
+      "line_end": 38,
+      "source_sha256": "7e7f6a87e7e7479a8d2d080c9806ef0e9249faa957b23c9269d781d62c228e48",
+      "source_url": "https://gist.github.com/endolith/250860/bd0936f3983d43b37472f7b59991fdd4bcbb35c5#file-peakdetect-py",
+      "kind": "source_api_contract",
+      "status": "asserted",
+      "test_methods": [
+        {
+          "file": "test/NumSharp.Tests/Examples/GistSignalTests.cs",
+          "method": "GistSignalTests.PeakDetection_CustomCoordinatesPlateausAndTrailingPeak"
+        },
+        {
+          "file": "test/NumSharp.Tests.Interop/GistSignalLiveParityTests.cs",
+          "method": "GistSignalLiveParityTests.Peaks_ByteExactIncludingViewsTiesNaNsEmptyAndCustomCoordinates"
+        },
+        {
+          "file": "test/NumSharp.Tests/Examples/GistSignalSourceDemonstrationsTests.cs",
+          "method": "GistSignalSourceDemonstrationsTests.SyntheticThreshold_RequiresStrictReversalAndCustomPositions"
+        }
+      ],
+      "asserted_observables": [
+        "Custom coordinates replace indices, matching lengths are required, and views work with the same numerical results."
+      ],
+      "limits": [
+        "Synthetic coordinate fixtures supplement the original plot, which uses default indices."
+      ],
+      "related_source_locations": []
+    },
+    {
+      "case_id": "G07-PEAK-ERROR-CONTRACT",
+      "gist_rank": 7,
+      "gist_url": "https://gist.github.com/endolith/250860",
+      "pin": "bd0936f3983d43b37472f7b59991fdd4bcbb35c5",
+      "source_path": "peakdetect.py",
+      "line_start": 37,
+      "line_end": 44,
+      "source_sha256": "7e7f6a87e7e7479a8d2d080c9806ef0e9249faa957b23c9269d781d62c228e48",
+      "source_url": "https://gist.github.com/endolith/250860/bd0936f3983d43b37472f7b59991fdd4bcbb35c5#file-peakdetect-py",
+      "kind": "source_validation_branches",
+      "status": "asserted_with_typed_api_adaptation",
+      "test_methods": [
+        {
+          "file": "test/NumSharp.Tests/Examples/GistSignalTests.cs",
+          "method": "GistSignalTests.PeakDetection_RejectsInvalidThresholdAndCoordinates"
+        }
+      ],
+      "asserted_observables": [
+        "Mismatched coordinates and nonpositive delta are rejected; the C# double parameter makes nonscalar delta unrepresentable at the call boundary."
+      ],
+      "limits": [
+        "C# exceptions replace Python sys.exit, which would terminate an application.",
+        "The port additionally rejects NaN/infinite delta; that is documented validation, not original behavior."
+      ],
+      "related_source_locations": []
+    },
+    {
+      "case_id": "G07-PEAK-STATE-MACHINE",
+      "gist_rank": 7,
+      "gist_url": "https://gist.github.com/endolith/250860",
+      "pin": "bd0936f3983d43b37472f7b59991fdd4bcbb35c5",
+      "source_path": "peakdetect.py",
+      "line_start": 46,
+      "line_end": 73,
+      "source_sha256": "7e7f6a87e7e7479a8d2d080c9806ef0e9249faa957b23c9269d781d62c228e48",
+      "source_url": "https://gist.github.com/endolith/250860/bd0936f3983d43b37472f7b59991fdd4bcbb35c5#file-peakdetect-py",
+      "kind": "source_algorithm_contract",
+      "status": "asserted",
+      "test_methods": [
+        {
+          "file": "test/NumSharp.Tests/Examples/GistSignalTests.cs",
+          "method": "GistSignalTests.PeakDetection_EmptyAndFlatHaveOriginalEmptyShape"
+        },
+        {
+          "file": "test/NumSharp.Tests/Examples/GistSignalTests.cs",
+          "method": "GistSignalTests.PeakDetection_CustomCoordinatesPlateausAndTrailingPeak"
+        },
+        {
+          "file": "test/NumSharp.Tests.Interop/GistSignalLiveParityTests.cs",
+          "method": "GistSignalLiveParityTests.Peaks_ByteExactIncludingViewsTiesNaNsEmptyAndCustomCoordinates"
+        },
+        {
+          "file": "test/NumSharp.Tests/Examples/GistSignalSourceDemonstrationsTests.cs",
+          "method": "GistSignalSourceDemonstrationsTests.SyntheticThreshold_RequiresStrictReversalAndCustomPositions"
+        }
+      ],
+      "asserted_observables": [
+        "Strict threshold inequalities, first-position ties, alternating confirmed extrema, unconfirmed trailing extrema and original empty shape are asserted.",
+        "Zero-copy live cases include reversed/strided input and NaN comparisons."
+      ],
+      "limits": [
+        "The source's verbal 'preceded by a lower value' description is not used to override its actual initial-maximum state machine."
+      ],
+      "related_source_locations": []
+    },
+    {
+      "case_id": "G07-MATLAB-COORDINATE-CONVENTION",
+      "gist_rank": 7,
+      "gist_url": "https://gist.github.com/endolith/250860",
+      "pin": "bd0936f3983d43b37472f7b59991fdd4bcbb35c5",
+      "source_path": "peakdet.m",
+      "line_start": 22,
+      "line_end": 38,
+      "source_sha256": "a332fdf004496ffbf7c310fa4bfdf3e23964856fa8f8f621d9b23474e461db43",
+      "source_url": "https://gist.githubusercontent.com/endolith/250860/raw/44868ef91280735e881101a5850c0b131d4242df/peakdet.m",
+      "kind": "companion_reference_convention",
+      "status": "asserted_via_explicit_coordinates_not_matlab_runtime",
+      "test_methods": [
+        {
+          "file": "test/NumSharp.Tests/Examples/GistSignalSourceDemonstrationsTests.cs",
+          "method": "GistSignalSourceDemonstrationsTests.SyntheticThreshold_RequiresStrictReversalAndCustomPositions"
+        }
+      ],
+      "asserted_observables": [
+        "Explicit coordinates1..N reproduce the companion's coordinate convention; the Python/NumSharp default remains0..N-1."
+      ],
+      "limits": [
+        "No MATLAB/Octave runtime is executed. The NumSharp API intentionally requires a vector instead of silently flattening arbitrary matrices like MATLAB v(:)."
+      ],
+      "related_source_locations": []
+    },
+    {
+      "case_id": "G07-README-ATTRIBUTION-AND-EXTERNAL-LINKS",
+      "gist_rank": 7,
+      "gist_url": "https://gist.github.com/endolith/250860",
+      "pin": "bd0936f3983d43b37472f7b59991fdd4bcbb35c5",
+      "source_path": "readme.md",
+      "line_start": 1,
+      "line_end": 7,
+      "source_sha256": "b29014decaa82ef644b76832c853ecb6cdd0e952746044ede2ac36d92de5f684",
+      "source_url": "https://gist.githubusercontent.com/endolith/250860/raw/63205fa50e0cb7411ac82a93dc0db85f74fd2732/readme.md",
+      "kind": "provenance_and_external_references",
+      "status": "recorded_not_a_numerical_demonstration",
+      "test_methods": [],
+      "asserted_observables": [
+        "Public-domain translation declaration is retained in SOURCES.md/sources.json. The linked quadratic interpolation is separately ported and tested."
+      ],
+      "limits": [
+        "The externally linked stronger variant/PyPI repository is not substituted for this pinned gist or comparatively benchmarked."
+      ],
+      "related_source_locations": []
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+--- rnn ---
+RNN: characters=480, vocabulary=9, hidden=16, updates=40
+Loss: initial=54.929665653107975, final=0.69944287395149884
+Sample 0: hereeo hdlrhrhl ewlohhr\nlwh rdohwlr\nw\ndw
+Sample 20: elo worllo world\nlell\nhhello world\nhello
+
+--- pong ---
+Synthetic Pong-policy rollout (not Atari): H=200, D=6400, episodes=2, updates=1, ||delta W1||=0.0408186, last p(up)=0.493647
+
+--- lstm ---
+LSTM: time=5, batch=3, hidden=4; weighted loss=4.767046778; dX[0]=-0.204665241
+
+--- microgpt ---
+MicroGPT: 10 local names, vocabulary=13, parameters=3744, trained steps=1000
+First loss=2.5524; last loss=0.4878
+sample 01: ava
+sample 02: ada
+sample 03: eve
+sample 04: ella
+sample 05: emma
+sample 06: ada
+sample 07: anna
+sample 08: ada
+sample 09: emma
+sample 10: anna
+sample 11: emma
+sample 12: otto
+sample 13: mia
+sample 14: anna
+sample 15: anna
+sample 16: otto
+sample 17: eve
+sample 18: ada
+sample 19: ada
+sample 20: eve
+
+--- nes ---
+NES: solution=[0.491432, 0.107123, -0.297972], reward=-0.0001282627
+
+--- walk ---
+Latent arc midpoint: [0.707107, 0.707107]; guided noise[0]=-6.50
