@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <AssemblyName>NumSharp.Interop.ParquetNet</AssemblyName>
+    <RootNamespace>NumSharp.Interop.ParquetNet</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+
+    <!-- NuGet package (co-versioned with NumSharp: the version comes from the repo-root
+         Directory.Build.props VersionPrefix, never a number in this file). -->
+    <PackageId>NumSharp.Interop.ParquetNet</PackageId>
+    <Authors>Eli Belash, Haiping Chen, Meinrad Recheis</Authors>
+    <Product>NumSharp</Product>
+    <Company>SciSharp STACK</Company>
+    <Copyright>2021 © SciSharp STACK Team</Copyright>
+    <Description>Interop between NumSharp NDArray and Apache Parquet via the fully-managed Parquet.Net. Loads Parquet columns DIRECTLY into an NDArray's raw unmanaged memory — Parquet.Net's buffer-based reader decodes straight into the array buffer, with no intermediate managed array and no extra copy for required columns. Stream row groups with bounded memory, project columns, and address a file NpzFile-style (pf["col"], pf.f.col). Conversion library only: no engine backend, no ModuleInitializer, and no native dependency of its own — it brings the managed Parquet.Net (which is itself fully managed, no P/Invoke).</Description>
+    <PackageTags>NumSharp;NumPy;Parquet;Parquet.Net;columnar;dataframe;interop;scientific-computing;io</PackageTags>
+    <PackageProjectUrl>https://scisharp.github.io/NumSharp/docs/interop/parquet.html</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/SciSharp/NumSharp</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageOutputPath>../../packages</PackageOutputPath>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- In-repo: ProjectReference (packs as a NuGet dependency on "NumSharp" $(Version)). -->
+    <ProjectReference Include="../NumSharp.Core/NumSharp.Core.csproj" />
+
+    <!-- The only external dependency: the fully-managed Parquet.Net (no native code, no P/Invoke of its
+         own; it does pull managed compression/memory helpers — Snappier, ZstdSharp.Port, K4os.LZ4,
+         Microsoft.IO.RecyclableMemoryStream, CommunityToolkit.HighPerformance). 6.1.0 is the current stable
+         and exposes the buffer-based read API this bridge is built on:
+           ParquetRowGroupReader.ReadAsync<T>(DataField, Memory<T>, ...)          (required columns)
+           ParquetRowGroupReader.ReadAsync<T>(DataField, Memory<T?>, ...)         (nullable columns)
+         The range caps below 7.0.0 because a future major is free to break the API. -->
+    <PackageReference Include="Parquet.Net" Version="[6.1.0,7.0.0)" />
+  </ItemGroup>
+
+</Project>
