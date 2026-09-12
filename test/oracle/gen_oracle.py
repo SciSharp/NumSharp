@@ -4923,6 +4923,59 @@ def gen_multioutput():
                    [a, w], np.average(a, axis=1, weights=w, returned=True, keepdims=True),
                    f"average/weighted/{dt}")
 
+    # np.trapezoid (composite trapezoidal integration -> array/scalar) and np.gradient (numerical
+    # gradient -> a bare array for one axis, a tuple otherwise). Swept across layout × dtype so the
+    # weak/strong spacing precision (float32/float16 stay their dtype), the edge_order stencils and
+    # the multi-axis arity are all gated. Integer/bool tier to float64; gradient(bool) raises
+    # (skipped). trapezoid over a 1-D view yields a 0-d scalar array.
+    def _grad_tuple(r):
+        return list(r) if isinstance(r, tuple) else [r]
+
+    GRADTRAP_LAYOUTS = ["c_contiguous_1d", "c_contiguous_2d", "c_contiguous_3d", "f_contiguous_2d",
+                        "transposed_3d", "strided_2d_cols", "negstride_1d", "strided_step2_1d"]
+    GRADTRAP_DTYPES = ["float64", "float32", "float16", "int32", "int64", "uint8", "complex128"]
+    for ln in GRADTRAP_LAYOUTS:
+        fn = LAYOUTS[ln]
+        for dt in GRADTRAP_DTYPES:
+            base, view = fn(np.dtype(dt))
+            nd = view.ndim
+            op = describe(base, view)
+
+            # trapezoid: dx / axis variations (all single-operand, x=None).
+            trap_params = [{}, {"dx": 2.0}]
+            if nd >= 1:
+                trap_params.append({"axis": -1})
+            if nd >= 2:
+                trap_params.append({"axis": 0})
+            for params in trap_params:
+                try:
+                    r = np.asarray(np.trapezoid(view, dx=params.get("dx", 1.0),
+                                                axis=params.get("axis", -1)))
+                except Exception:
+                    continue
+                cases.append(_case("trapezoid", params, [op], _arr_expected(r), ln, "mixed",
+                                   cid=f"trapezoid/{ln}/{dt}/{n}"))
+                n += 1
+
+            # gradient: unit spacing, edge_order=2, single-axis. Recorded as a tuple so the arity
+            # (one component per axis) is gated too.
+            grad_params = [{}]
+            if nd >= 1:
+                grad_params.append({"edge_order": 2})
+                grad_params.append({"axis": 0})
+            for params in grad_params:
+                try:
+                    if "axis" in params:
+                        r = np.gradient(view, axis=params["axis"],
+                                        edge_order=params.get("edge_order", 1))
+                    else:
+                        r = np.gradient(view, edge_order=params.get("edge_order", 1))
+                except Exception:
+                    continue
+                cases.append(_case("gradient", params, [op], _tuple_expected(_grad_tuple(r)), ln,
+                                   "tuple", cid=f"gradient/{ln}/{dt}/{n}"))
+                n += 1
+
     return cases
 
 
