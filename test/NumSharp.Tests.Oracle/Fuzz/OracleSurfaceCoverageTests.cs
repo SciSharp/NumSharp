@@ -57,6 +57,14 @@ namespace NumSharp.Tests.Fuzz
             // docs/plans/dtype-system.md). Gated by test/NumSharp.Tests/DTypes/*, probed against NumPy 2.4.2.
             "datetime_data",
             "evaluate", "finfo", "flat",
+            // The histogram family returns TUPLES over POLYMORPHIC bins (int count / estimator string /
+            // explicit edge array) and, for dd/2d, MULTI-array samples — none of which fit the single-operand
+            // (dtype,shape,strides,bytes)->result corpus model (the same reason bmat and block need bespoke
+            // paths). They are gated by the dedicated np.histogram.Test.cs suite plus a large live .npy
+            // round-trip differential (histogram 1-D value/edges bit-exact across 11 dtypes × int/estimator/
+            // edge bins × range/weights/density; histogramdd + histogram2d H bit-exact across 1-3D × bin modes),
+            // all verified against NumPy 2.4.2.
+            "histogram", "histogram_bin_edges", "histogramdd", "histogram2d",
             "format_float_positional", "format_float_scientific",
             "get_printoptions", "iinfo", "load", "load_npy", "load_npz",
             "nditer_chunks", "printoptions", "save", "savez",

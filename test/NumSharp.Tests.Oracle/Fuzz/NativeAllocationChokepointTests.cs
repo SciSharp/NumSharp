@@ -43,6 +43,7 @@ namespace NumSharp.Tests.Fuzz
             ["Backends/Iterators/NDIter.State.cs"] = 2,                    // audit debt: iterator state blocks
             ["Backends/Iterators/NDIterBufferManager.cs"] = 3,             // audit debt: buffered-mode chunk buffers
             ["Sorting_Searching_Counting/np.bincount.cs"] = 1,             // audit debt: privatized counting table
+            ["Backends/Kernels/Direct/DirectILKernelGenerator.Histogram.cs"] = 1, // audit debt: histogram fused-count privatized accumulators (same pattern as bincount), alloc+free internal in try/finally
             ["Backends/Default/LinearAlgebra/ManagedLu.cs"] = 2,           // audit debt: LU scratch (factor copy + pivot vector), alloc+free per call in try/finally — landed 48b00e00 without this pin
             ["Backends/Default/Sorting/AxisSort.cs"] = 8,                  // audit debt: radix key/temp/histogram + argsort index columns, alloc+free per line in try/finally — UNMANAGED so a line may exceed int.MaxValue (64-bit sort core, ab15b165); the pool is int-capped
             ["Backends/Default/Sorting/AxisPartition.cs"] = 4,             // audit debt: introselect line scratch (+NaN tail) + argpartition index column, alloc+free per line in try/finally — same 64-bit >int.MaxValue reason as AxisSort
