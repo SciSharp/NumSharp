@@ -1094,17 +1094,29 @@ namespace NumSharp
         {
             var mask = (a as MaskedArray)?._mask;
             var d = AsData(a);
+            var tc = d.typecode;
+            // NumPy mean dtype (default): int/bool → float64; float16 is COMPUTED in float32 then cast BACK to
+            // float16; float32/float64/complex128 are preserved. A masked complex mean must stay complex.
+            DType compute = tc == NPTypeCode.Complex ? np.complex128 : tc == NPTypeCode.Half ? np.float32 : np.float64;
+            // NumPy's `dsum * 1.` promotes float32→float64, so ONLY float16 (cast back) and complex128 keep a
+            // non-f8 result; float32/float64/int/bool all yield float64.
+            DType outdt = dtype ?? (tc switch
+            {
+                NPTypeCode.Half => np.float16,
+                NPTypeCode.Complex => np.complex128,
+                _ => np.float64, // int/bool/float32/float64
+            });
             var filled0 = mask is null ? d : ((MaskedArray)a).filled(0);
-            var dsum = np.sum(filled0, axis, keepdims, dtype).astype(np.float64);
-            var cnt = CountUnmasked(mask, d.Shape, axis, keepdims).astype(np.float64);
-            var result = np.divide(dsum, cnt);               // count==0 slots → nan, masked below
+            var dsum = np.sum(filled0, axis, keepdims, dtype ?? compute).astype(compute);
+            var cnt = CountUnmasked(mask, d.Shape, axis, keepdims).astype(compute);
+            var result = np.divide(dsum, cnt).astype(outdt);     // count==0 slots → nan, masked below
             if (mask is null)
                 return new MaskedArray(result, null);
             var newmask = AllAlongAxis(mask, axis, keepdims);
             // NumPy computes the mean through MASKED arithmetic, so a fully-masked slice's .data is 0 (the
             // sum's identity), NOT the raw 0/0=NaN. Match it at the masked (count==0) positions.
             if (result.ndim != 0)
-                result = np.where(newmask, NDArray.Scalar(0.0), result);
+                result = np.where(newmask, NDArray.Scalar(0.0), result).astype(outdt);
             return Finalize(result, newmask);
         }
 
