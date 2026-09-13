@@ -5034,6 +5034,58 @@ def gen_multioutput():
                                    "tuple", cid=f"gradient/{ln}/{dt}/{n}"))
                 n += 1
 
+    # np.frexp(x) -> (mantissa in [0.5,1), int32 exponent), the two-output inverse of ldexp. The
+    # mantissa carries the input's float tier (int/bool promote: bool/int8/uint8 -> f16, int16/
+    # uint16 -> f32, int32+ -> f64); the exponent is ALWAYS int32. Special values follow the scalar
+    # C-runtime npy_frexp: frexp(±0)=(±0,0), frexp(±inf)=(±inf,-1), frexp(NaN)=(NaN,-1) with a
+    # signalling NaN quieted. Both slots are bit-compared by the tuple comparator.
+    for dt in ["float16", "float32", "float64"]:
+        d = np.dtype(dt)
+        fb = np.array([0.0, -0.0, 1.0, -8.5, 0.75, 1024.0, np.inf, -np.inf, np.nan], dtype=d)
+        emit_tuple("frexp", {}, [fb], np.frexp(fb), f"frexp/c/{dt}")
+        frev = fb[::-1]
+        cases.append(_case("frexp", {}, [describe(fb, frev)], _tuple_expected(np.frexp(frev)),
+                           f"frexp/neg/{dt}", "tuple", cid=f"frexp/neg/{dt}/{n}"))
+        n += 1
+    # Integer/bool inputs promote through the unary float tier (mantissa dtype varies by width).
+    for dt in ["bool", "int8", "uint8", "int16", "uint16", "int32", "int64", "uint64"]:
+        d = np.dtype(dt)
+        ib = np.array([1, 0, 1, 1] if dt == "bool" else [1, 2, 3, 8], dtype=d)
+        emit_tuple("frexp", {}, [ib], np.frexp(ib), f"frexp/int/{dt}")
+
+    # np.ldexp(x1, x2) == x1 * 2^x2 (the inverse of frexp). x1 is the float mantissa (int/bool
+    # promote through the same tier); x2 is an INTEGER exponent that does NOT widen x1's dtype, so
+    # the result is purely x1's float tier. The exponent is clamped to the C-int range (a huge
+    # magnitude overflows to ±inf / underflows to ±0). Single-array (kind="array") 2-operand cases.
+    for dt in ["float16", "float32", "float64"]:
+        d = np.dtype(dt)
+        xf = np.array([1.0, -1.0, 0.0, -0.0, 1.5, 3.0, np.inf, -np.inf, np.nan], dtype=d)
+        ef = np.array([0, 1, 5, -3, 2, -1, 1, 1, 1], dtype=np.int32)
+        cases.append(_case("ldexp", {}, [describe(xf, xf), describe(ef, ef)],
+                           _arr_expected(np.ldexp(xf, ef)), f"ldexp/c/{dt}", "array",
+                           cid=f"ldexp/c/{dt}/{n}")); n += 1
+        cases.append(_case("ldexp", {}, [describe(xf, xf[::-1]), describe(ef, ef[::-1])],
+                           _arr_expected(np.ldexp(xf[::-1], ef[::-1])), f"ldexp/neg/{dt}", "array",
+                           cid=f"ldexp/neg/{dt}/{n}")); n += 1
+    # Integer x tier + varied exponent dtypes (int8 / uint32 / int64 exponent loops).
+    for xdt, edt in [("int32", "int8"), ("int64", "uint32"), ("float64", "int64"), ("bool", "int16")]:
+        xa = np.array([1, 0, 1, 1] if xdt == "bool" else [1, 2, 4, 8], dtype=np.dtype(xdt))
+        ea = np.array([2, 3, 0, 1], dtype=np.dtype(edt))
+        cases.append(_case("ldexp", {}, [describe(xa, xa), describe(ea, ea)],
+                           _arr_expected(np.ldexp(xa, ea)), f"ldexp/xe/{xdt}-{edt}", "array",
+                           cid=f"ldexp/xe/{xdt}-{edt}/{n}")); n += 1
+    # int64 exponent clamp (huge magnitude -> overflow/underflow) and broadcasting.
+    xc = np.array([1.0, 1.0, 2.0, -3.0], dtype=np.float64)
+    nc = np.array([2**40, -2**40, 3, 4], dtype=np.int64)
+    cases.append(_case("ldexp", {}, [describe(xc, xc), describe(nc, nc)],
+                       _arr_expected(np.ldexp(xc, nc)), "ldexp/clamp64", "array",
+                       cid=f"ldexp/clamp64/{n}")); n += 1
+    xb = np.array([[1.0], [2.0], [4.0]], dtype=np.float64)
+    eb = np.array([0, 1, 2, 3], dtype=np.int32)
+    cases.append(_case("ldexp", {}, [describe(xb, xb), describe(eb, eb)],
+                       _arr_expected(np.ldexp(xb, eb)), "ldexp/bcast", "array",
+                       cid=f"ldexp/bcast/{n}")); n += 1
+
     return cases
 
 

@@ -220,6 +220,8 @@ namespace NumSharp.Tests.Fuzz
                 case "copysign": return np.copysign(ops[0], ops[1]);
                 case "hypot": return np.hypot(ops[0], ops[1]);
                 case "heaviside": return np.heaviside(ops[0], ops[1]);
+                // np.ldexp(x1, x2) = x1 * 2^x2 (single-array, 2-operand; result is x1's float tier).
+                case "ldexp": return np.ldexp(ops[0], ops[1]);
 
                 // Group A Batch 3: predicates + whole-array bool reductions (wrapped to 0-D bool).
                 case "iscomplex": return np.iscomplex(ops[0]);
