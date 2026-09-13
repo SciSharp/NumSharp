@@ -1,3 +1,5 @@
+using NumSharp.Backends.Kernels;
+
 namespace NumSharp {
     public static partial class np
     {
@@ -29,6 +31,14 @@ namespace NumSharp {
             // Non-broadcastable shapes short-circuit to False before any element comparison.
             if (!np.are_broadcastable(a1, a2))
                 return false;
+
+            // Equal-shape fast path: when the two operands are already the same shape (no broadcast
+            // needed), same dtype and dense-contiguous, one early-exiting SIMD pass (EqualityScan)
+            // replaces the bool temp + all(). Bit-identical to the composition (Vector.EqualsAll gives
+            // NaN != NaN / -0.0 == +0.0). A genuine broadcast (different shapes) returns false here and
+            // takes the composition below, where the == operator stretches the size-1 axes.
+            if (EqualityScan.TryAllEqual(a1, a2, out bool fused))
+                return fused;
 
             // The == operator broadcasts the operands to their common shape; all() then reduces to a
             // single bool. `using` reclaims the comparison result (all() only reads it).

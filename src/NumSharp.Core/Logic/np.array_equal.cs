@@ -1,3 +1,5 @@
+using NumSharp.Backends.Kernels;
+
 namespace NumSharp {
     public static partial class np
     {
@@ -24,6 +26,17 @@ namespace NumSharp {
             // NDArray == null convention). Guarding here also keeps a.array_equal(...) from throwing.
             if (a is null)
                 return b is null;
+
+            // Fused fast path for the common default (equal_nan=false): when both operands are the same
+            // shape, same dtype and dense-contiguous in the same order, ONE early-exiting SIMD pass
+            // (EqualityScan) replaces the full bool temp + separate all() reduction — ~2x at cache-resident
+            // sizes and instant on an early mismatch. Its Vector.EqualsAll gives NaN != NaN and
+            // -0.0 == +0.0, so the result is identical to the composition. TryAllEqual returns false for
+            // every ineligible case (broadcast/mixed-dtype/strided/Half/Decimal), and equal_nan=true keeps
+            // the instance path with its NaN-position logic.
+            if (!equal_nan && b is not null && EqualityScan.TryAllEqual(a, b, out bool fused))
+                return fused;
+
             return a.array_equal(b, equal_nan);
         }
     }
