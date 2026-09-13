@@ -29,6 +29,10 @@ namespace NumSharp.Tests.Fuzz
             ["common_type_code"] = "common_type",
             ["concat"] = "concatenate",
             ["degrees"] = "rad2deg",
+            // np.fix IS np.trunc (numpy/lib/_ufunclike_impl.py delegates verbatim: trunc(x, out=out));
+            // it has no where/dtype of its own, so trunc's unary-tier corpus already gates its arithmetic.
+            // Fix-specific API (the out= slot, the no-where/dtype signature) is gated by np.fix.Test.cs.
+            ["fix"] = "trunc",
             ["radians"] = "deg2rad",
             ["remainder"] = "mod",
             ["result_type"] = "result_type_arrays",

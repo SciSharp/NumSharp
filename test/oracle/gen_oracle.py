@@ -676,8 +676,11 @@ def gen_where(dt_pairs, layout_names):
 
 # T13 — logic & element-wise extrema. isnan/isinf/isfinite (unary -> bool); maximum/minimum
 # (NaN-propagating), fmax/fmin (NaN-ignoring), isclose (binary -> bool). NumPy is the oracle.
-LOGIC_UNARY_OPS = {"isnan": np.isnan, "isinf": np.isinf, "isfinite": np.isfinite}
-LOGIC_UNARY_DTYPES = list(ALL_DTYPES)  # widened: isnan/isinf/isfinite defined on every dtype
+# signbit joins isnan/isinf/isfinite (unary -> bool). Unlike them it has NO complex loop, so the
+# complex128 cases raise and gen_unary's per-case try/except skips them (the complex-error contract is
+# gated by the dedicated np.signbit.Test.cs suite instead). Every other dtype is covered here.
+LOGIC_UNARY_OPS = {"isnan": np.isnan, "isinf": np.isinf, "isfinite": np.isfinite, "signbit": np.signbit}
+LOGIC_UNARY_DTYPES = list(ALL_DTYPES)  # widened: isnan/isinf/isfinite/signbit defined on every dtype
 LOGIC_BIN_OPS = {
     "maximum": np.maximum, "minimum": np.minimum,
     "fmax": np.fmax, "fmin": np.fmin, "isclose": np.isclose,
@@ -1154,6 +1157,9 @@ BITWISE_BIN_OPS = {
     "bitwise_xor": np.bitwise_xor,
 }
 INVERT_OP = {"invert": np.invert}
+# np.bitwise_count (NumPy 2.0): popcount of |x|, integer/bool input -> uint8 output. Unlike invert
+# it is NOT carved for Char (its 2-byte SIMD path works), so char_tier weaves it in.
+BITWISE_COUNT_OP = {"bitwise_count": np.bitwise_count}
 INT_BOOL_DTYPES = ["bool", "int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64"]
 BITWISE_DT_PAIRS = [
     ("int32", "int32"), ("uint8", "uint8"), ("int8", "int8"), ("int16", "int16"),
@@ -3592,7 +3598,7 @@ _CHAR_UNARY_OPS  = {k: v for k, v in UNARY_OPS.items() if k != "reciprocal"}
 CHAR_WHERE_PAIRS = [(_C, _C), (_C, "int32"), ("float64", _C)]   # cond stays bool
 CHAR_EXTREMA_OPS = {"maximum": np.maximum, "minimum": np.minimum, "fmax": np.fmax, "fmin": np.fmin}
 CHAR_LOGIC_UNARY = {"isnan": np.isnan, "isinf": np.isinf, "isfinite": np.isfinite,
-                    "logical_not": np.logical_not}
+                    "logical_not": np.logical_not, "signbit": np.signbit}
 CHAR_COPYTO_CROSS = [(_C, "int32"), ("int32", _C), (_C, "float64"), ("float64", _C)]
 
 
@@ -3896,6 +3902,7 @@ def char_tier(mode):
         raw = gen_unary(UNARY_EXTRA_OPS, [_C], L)
     elif mode == "bitwise":
         raw = gen_binary(BITWISE_BIN_OPS, CHAR_BIT_PAIRS, PL)
+        raw += gen_unary(BITWISE_COUNT_OP, [_C], L)               # bitwise_count(char): 2-byte SIMD path works
         raw += gen_shift(SHIFT_OPS, [_C])                          # invert(char) carved (SIMD gap)
     elif mode == "gcd":
         # Char (uint16 proxy) rides gcd/lcm — every CHAR_BIT_PAIR promotes to a valid integer loop
@@ -7660,6 +7667,7 @@ def main():
     elif mode == "bitwise":
         cases = gen_binary(BITWISE_BIN_OPS, BITWISE_DT_PAIRS, list(PAIR_LAYOUTS.keys()))
         cases += gen_unary(INVERT_OP, INT_BOOL_DTYPES, list(LAYOUTS.keys()))
+        cases += gen_unary(BITWISE_COUNT_OP, INT_BOOL_DTYPES, list(LAYOUTS.keys()))
         cases += gen_shift(SHIFT_OPS, SHIFT_DTYPES)
         cases += char_tier("bitwise")
         write_jsonl(os.path.join(corpus_dir, "bitwise.jsonl"), cases)

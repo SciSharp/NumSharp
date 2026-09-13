@@ -80,6 +80,7 @@ namespace NumSharp.Tests.Fuzz
                 case "bitwise_or": return ops[0] | ops[1];
                 case "bitwise_xor": return ops[0] ^ ops[1];
                 case "invert": return np.invert(ops[0]);
+                case "bitwise_count": return np.bitwise_count(ops[0]);
                 case "left_shift": return np.left_shift(ops[0], ops[1]);
                 case "right_shift": return np.right_shift(ops[0], ops[1]);
 
@@ -202,6 +203,7 @@ namespace NumSharp.Tests.Fuzz
                 case "isnan": return np.isnan(ops[0]);
                 case "isinf": return np.isinf(ops[0]);
                 case "isfinite": return np.isfinite(ops[0]);
+                case "signbit": return np.signbit(ops[0]);
                 case "maximum": return np.maximum(ops[0], ops[1]);
                 case "minimum": return np.minimum(ops[0], ops[1]);
                 case "fmax": return np.fmax(ops[0], ops[1]);
