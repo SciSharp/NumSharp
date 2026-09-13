@@ -8173,7 +8173,14 @@ def gen_evaluate():
             red = params.get("reduce")
             if red:
                 rk = red["kind"]
-                if rk in ("var", "std"):   # the ddof-carrying kinds
+                if rk == "average":
+                    # Weighted average reduces over TWO trees: the values tree in "expr" and the
+                    # weights tree in red["weights"]. np.average(v, weights=w) IS the fused contract
+                    # (Σ(v·w)/Σ(w)); same-shape operands, so no 1-D-along-axis convenience is needed.
+                    w = _ev_eval(red["weights"], views)
+                    r = np.average(r, weights=w, axis=red.get("axis"),
+                                   keepdims=bool(red.get("keepdims", False)))
+                elif rk in ("var", "std"):   # the ddof-carrying kinds
                     r = _EV_REDUCE[rk](r, red.get("axis"), bool(red.get("keepdims", False)), int(red.get("ddof", 0)))
                 else:
                     r = _EV_REDUCE[rk](r, red.get("axis"), bool(red.get("keepdims", False)))
@@ -8699,6 +8706,92 @@ def gen_evaluate():
                         red["ddof"] = 0
                     emit(expr, [(nb, nv)], "c_contiguous_2d", params={"reduce": red},
                          cid_tag=f"m4csum/{dt}/{kind}[{ax},{int(kd)}]/{expr}")
+
+    # ---- C8. Weighted average: Σ(v·w)/Σ(w) over TWO trees (plan P2 M4c-average) ----------------
+    # The FIRST reduction over two operand trees. Host-computed with the SAME NumPy-exact pairwise sum
+    # the M1/M2 diverts use (ExactSumArray) — NOT the drifting multi-accumulator engine sum the library
+    # np.average itself uses, so the FUSED Average is BIT-EXACT with NumPy where np.average is only
+    # allclose at large N (this block's wide-N cases are the teeth). in0 = values, in1 = weights.
+    # Weights are POSITIVE (Σw ≠ 0 — the zero-weight DivideByZeroException is unit-tested, not corpus'd).
+    # Result dtype is float/complex; (float16,float16)→float16 and decimal are rejected (no pairwise
+    # kernel) and held out — every pair below resolves to Single/Double/Complex. Like C7, the strict-F
+    # multi-D AXIS corner is FLAT-only (M2's excused corner).
+    def _c8_values(N, npdt):
+        if npdt == np.bool_:
+            base = np.array([True, False, True, True, False, True, False, True])
+            return np.tile(base, (N + 7) // 8)[:N]
+        if npdt.kind in "iu":
+            base = np.array([3, -7, 1, 5, 2, 4, -2, 6], dtype=np.int64)
+            return np.tile(base, (N + 7) // 8)[:N].astype(npdt)       # int→int, no float→uint UB
+        if npdt.kind == "c":
+            base = np.array([1 + 2j, 3 - 1j, -2 + 0.5j, 4 + 4j, 1 + 0j, -3 - 2j, 2.5 + 1.5j, 5 - 3j])
+            return np.tile(base, (N + 7) // 8)[:N].astype(npdt)
+        base = np.array([3.0, -7.0, 1.5, 5.0, 2.0, 4.0, -2.5, 6.0], dtype=np.float64)
+        return np.tile(base, (N + 7) // 8)[:N].astype(npdt)
+
+    def _c8_weights(N, npdt):        # POSITIVE weights so the total weight is never zero
+        if npdt == np.bool_:
+            return np.ones(N, dtype=np.bool_)                          # bool weights: all True (Σ = N)
+        if npdt.kind in "iu":
+            base = np.array([2, 3, 4, 5, 1, 2, 3, 4], dtype=np.int64)
+            return np.tile(base, (N + 7) // 8)[:N].astype(npdt)
+        if npdt.kind == "c":
+            base = np.array([2 + 0j, 3 + 1j, 4 - 0.5j, 5 + 2j, 1 + 0j, 2 - 1j, 3 + 0.5j, 4 + 3j])
+            return np.tile(base, (N + 7) // 8)[:N].astype(npdt)
+        base = np.array([2.0, 3.0, 4.0, 5.0, 1.0, 2.0, 3.0, 4.0], dtype=np.float64)
+        return np.tile(base, (N + 7) // 8)[:N].astype(npdt)
+
+    # (values, weights) dtype pairs whose np.average result is Single / Double / Complex (never Half):
+    c8_pairs = [
+        ("float64", "float64"), ("float32", "float32"), ("float32", "float64"),
+        ("int64", "int64"), ("int32", "int32"), ("uint8", "uint8"), ("int8", "int8"),
+        ("int64", "float64"), ("float32", "int64"), ("bool", "int64"),
+        ("complex128", "complex128"), ("complex128", "float64"), ("float64", "complex128"),
+        ("float16", "float32"),   # f2 values with wider f4 weights → f4 (Single); result is not Half
+    ]
+    for ln in c5_layouts:
+        for (vt, wt) in c8_pairs:
+            vb, vv = LAYOUTS[ln](np.dtype(vt))
+            wb, wv = LAYOUTS[ln](np.dtype(wt))
+            vb.reshape(-1)[:] = _c8_values(vb.size, np.dtype(vt))
+            wb.reshape(-1)[:] = _c8_weights(wb.size, np.dtype(wt))
+            isFlayout = (ln == "f_contiguous_2d")
+            combos = [(None, False)]
+            if not isFlayout:
+                combos += [(ax, False) for ax in range(vv.ndim)]
+                if vv.ndim > 1:
+                    combos.append((1, True))
+            for ax, kd in combos:
+                red = {"kind": "average", "axis": ax, "keepdims": kd, "weights": "in1"}
+                emit("in0", [(vb, vv), (wb, wv)], ln, params={"reduce": red},
+                     cid_tag=f"m4cavg/{vt},{wt}[{ax},{int(kd)}]")
+
+    # WIDE-magnitude flat teeth: a naive / multi-accumulator sum diverges here where it matches on the
+    # benign pool above — so these prove BOTH sums take the pairwise path (crosses PW_BLOCKSIZE 128).
+    for N in (7, 8, 127, 128, 129, 257, 1000):
+        for dt in ("float32", "float64", "complex128"):
+            npdt = np.dtype(dt)
+            vv = _wide_sum_pool(N).astype(npdt)
+            if npdt.kind == "c":
+                vv = vv + 1j * _wide_sum_pool(N)[::-1].astype(np.float64)
+            ww = (np.abs(_wide_sum_pool(N)) + 0.5).astype(npdt)       # positive-real weights (Σ ≠ 0)
+            vb = np.ascontiguousarray(vv)
+            wb = np.ascontiguousarray(ww)
+            red = {"kind": "average", "axis": None, "keepdims": False, "weights": "in1"}
+            emit("in0", [(vb, vb), (wb, wb)], "c_contiguous_1d", params={"reduce": red},
+                 cid_tag=f"m4cavgwide/{dt}/N={N}")
+
+    # A FUSED values / weights tree (not identity) proves the materialize-then-average path end to end.
+    for dt in ("int64", "float64", "complex128"):
+        npdt = np.dtype(dt)
+        vb, vv = LAYOUTS["c_contiguous_2d"](npdt)
+        wb, wv = LAYOUTS["c_contiguous_2d"](npdt)
+        vb.reshape(-1)[:] = _c8_values(vb.size, npdt)
+        wb.reshape(-1)[:] = _c8_weights(wb.size, npdt)
+        for ax, kd in [(None, False), (0, False), (1, True)]:
+            red = {"kind": "average", "axis": ax, "keepdims": kd, "weights": "add(in1,in1)"}
+            emit("mul(in0,in0)", [(vb, vv), (wb, wv)], "c_contiguous_2d", params={"reduce": red},
+                 cid_tag=f"m4cavg/{dt}[{ax},{int(kd)}]/fused")
 
     # ---- D. out= (returned view + the whole base buffer behind out) -------------------------
     out_exprs = ["add(mul(in0,in1),in0)", "gt(in0,in1)", "where(gt(in0,in1),in0,in1)", "sqrt(abs(in0))"]

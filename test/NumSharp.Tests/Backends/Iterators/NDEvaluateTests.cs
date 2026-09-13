@@ -1000,5 +1000,174 @@ namespace NumSharp.Tests.Backends.Iterators
             var d = np.array(new double[] { 1, 2, 3 }).astype(np.@decimal);
             Assert.ThrowsException<NotSupportedException>(() => np.evaluate(NDExpr.Std(d)));
         }
+
+        // ===================================================================
+        // Plan P2 M4c-average — weighted np.average over TWO trees (host-computed
+        // with the M1/M2-exact pairwise sum; the FIRST two-operand reduction).
+        // ===================================================================
+
+        /// <summary>The weighted-average value, and the dtype tiers (int/bool→float64, float32 preserved).</summary>
+        [TestMethod]
+        public void M4cAvg_Value_And_DtypeTiers()
+        {
+            // Σ(v·w)/Σ(w) = (4+6+6+4)/(4+3+2+1) = 20/10 = 2.0
+            var v = np.array(new double[] { 1, 2, 3, 4 });
+            var w = np.array(new double[] { 4, 3, 2, 1 });
+            Assert.AreEqual(2.0, np.evaluate(NDExpr.Average((NDExpr)v, w)).GetDouble(0), 1e-12);
+
+            // int values / int weights → float64 (never a wrapping int64 product)
+            var vi = np.array(new int[] { 1, 2, 3, 4 });
+            var wi = np.array(new int[] { 4, 3, 2, 1 });
+            var ri = np.evaluate(NDExpr.Average((NDExpr)vi, wi));
+            Assert.AreEqual(NPTypeCode.Double, ri.typecode);
+            Assert.AreEqual(2.0, ri.GetDouble(0), 1e-12);
+
+            // float32 values / float32 weights → float32, bit-exact with NumPy (91/21)
+            var vf = np.array(new float[] { 1, 2, 3, 4, 5, 6 });
+            var wf = np.array(new float[] { 1, 2, 3, 4, 5, 6 });
+            var rf = np.evaluate(NDExpr.Average((NDExpr)vf, wf));
+            Assert.AreEqual(NPTypeCode.Single, rf.typecode);
+            Assert.AreEqual(4.3333335f, rf.GetSingle(0), 0f);   // 0x408aaaab — bit-exact
+        }
+
+        /// <summary>An unweighted-equivalent average (unit weights) equals the plain mean.</summary>
+        [TestMethod]
+        public void M4cAvg_UnitWeights_EqualsMean()
+        {
+            var v = np.array(new double[] { 1, 2, 3, 4, 5, 6 });
+            var ones = np.ones(6);
+            Assert.AreEqual(np.mean(v).GetDouble(0),
+                np.evaluate(NDExpr.Average((NDExpr)v, (NDExpr)ones)).GetDouble(0), 0.0);
+        }
+
+        /// <summary>A complex128 values tree yields a complex weighted average (real weights promote to complex128).</summary>
+        [TestMethod]
+        public void M4cAvg_Complex()
+        {
+            var z = np.array(new System.Numerics.Complex[] { new(1, 2), new(3, -1), new(-2, 0.5), new(4, 4) });
+            var w = np.array(new double[] { 1, 2, 3, 4 });
+            var r = np.evaluate(NDExpr.Average((NDExpr)z, (NDExpr)w));
+            Assert.AreEqual(NPTypeCode.Complex, r.typecode);
+            // Σ(z·w)/Σ(w) with Σw=10: re=1.7, im=1.75 (probed against np.average 2.4.2)
+            Assert.AreEqual(1.7, np.real(r).GetDouble(0), 1e-12);
+            Assert.AreEqual(1.75, np.imag(r).GetDouble(0), 1e-12);
+        }
+
+        /// <summary>Axis and keepdims forms over a 2-D values/weights pair, matching np.average.</summary>
+        [TestMethod]
+        public void M4cAvg_Axis_Forms()
+        {
+            var m = np.arange(1, 13).reshape(3, 4).astype(np.float64);
+            var wm = ((np.arange(1, 13).reshape(3, 4)) % 5 + 1).astype(np.float64);
+
+            var a0 = np.evaluate(NDExpr.Average((NDExpr)m, wm, 0));                 // (4,)
+            Assert.AreEqual(1, a0.ndim);
+            Assert.AreEqual(4, a0.shape[0]);
+            var e0 = new[] { 6.5, 4.666666666666667, 6.111111111111111, 7.333333333333333 };
+            for (int j = 0; j < 4; j++) Assert.AreEqual(e0[j], a0.GetDouble(j), 1e-9);
+
+            var a1 = np.evaluate(NDExpr.Average((NDExpr)m, wm, 1));                 // (3,)
+            var e1 = new[] { 2.857142857142857, 7.0, 10.272727272727273 };
+            for (int j = 0; j < 3; j++) Assert.AreEqual(e1[j], a1.GetDouble(j), 1e-9);
+
+            // negative axis == the last axis
+            var an = np.evaluate(NDExpr.Average((NDExpr)m, wm, -1));
+            for (int j = 0; j < 3; j++) Assert.AreEqual(e1[j], an.GetDouble(j), 1e-9);
+
+            var a1k = np.evaluate(NDExpr.Average((NDExpr)m, wm, 1, keepdims: true)); // (3,1)
+            Assert.AreEqual(2, a1k.ndim);
+            Assert.AreEqual(3, a1k.shape[0]);
+            Assert.AreEqual(1, a1k.shape[1]);
+        }
+
+        /// <summary>A fused values / weights tree (not a bare array) drives the materialize-then-average path.</summary>
+        [TestMethod]
+        public void M4cAvg_FusedChildren()
+        {
+            var a = np.array(new double[] { 1, 2, 3, 4 });
+            var b = np.array(new double[] { 1, 1, 2, 2 });
+            // Average(a*a, b+1) = Σ(a²·(b+1)) / Σ(b+1)
+            double num = 1 * 2 + 4 * 2 + 9 * 3 + 16 * 3;   // 2 + 8 + 27 + 48 = 85
+            double den = 2 + 2 + 3 + 3;                     // 10
+            Assert.AreEqual(num / den,
+                np.evaluate(NDExpr.Average((NDExpr)a * a, (NDExpr)b + 1.0)).GetDouble(0), 1e-12);
+        }
+
+        /// <summary>Weights that sum to zero (an empty input included) raise, with NumPy's verbatim message.</summary>
+        [TestMethod]
+        public void M4cAvg_ZeroWeights_Raises()
+        {
+            var v = np.array(new double[] { 1, 2, 3 });
+            var w = np.array(new double[] { 1, -1, 0 });   // Σw == 0
+            var ex = Assert.ThrowsException<DivideByZeroException>(
+                () => np.evaluate(NDExpr.Average((NDExpr)v, w)));
+            Assert.AreEqual("Weights sum to zero, can't be normalized", ex.Message);
+
+            // an empty input sums the weights to zero too → the same raise (the byte corpus can't reach this)
+            var e = np.array(new double[] { });
+            Assert.ThrowsException<DivideByZeroException>(
+                () => np.evaluate(NDExpr.Average((NDExpr)e, (NDExpr)e)));
+
+            // an AXIS slab whose weights sum to zero raises as well (NumPy checks any slab)
+            var m = np.array(new double[,] { { 1, 2 }, { 3, 4 } });
+            var wm = np.array(new double[,] { { 1, -1 }, { 1, 1 } });   // row 0 sums to 0
+            Assert.ThrowsException<DivideByZeroException>(
+                () => np.evaluate(NDExpr.Average((NDExpr)m, wm, 1)));
+        }
+
+        /// <summary>A NaN in either tree propagates to NaN — it is not a zero-weight raise (NaN != 0).</summary>
+        [TestMethod]
+        public void M4cAvg_NaN_Propagates()
+        {
+            var v = np.array(new double[] { 1, 2, 3 });
+            var wn = np.array(new double[] { 1, double.NaN, 1 });
+            Assert.IsTrue(double.IsNaN(np.evaluate(NDExpr.Average((NDExpr)v, wn)).GetDouble(0)));
+
+            var vn = np.array(new double[] { 1, double.NaN, 3 });
+            var w = np.array(new double[] { 1, 1, 1 });
+            Assert.IsTrue(double.IsNaN(np.evaluate(NDExpr.Average((NDExpr)vn, w)).GetDouble(0)));
+        }
+
+        /// <summary><c>out=</c> receives the average (a flat one requires a 0-d out).</summary>
+        [TestMethod]
+        public void M4cAvg_Out()
+        {
+            var v = np.array(new double[] { 1, 2, 3, 4 });
+            var w = np.array(new double[] { 4, 3, 2, 1 });
+            var dst = np.zeros(new Shape());                    // 0-d
+            var ret = np.evaluate(NDExpr.Average((NDExpr)v, w), @out: dst);
+            Assert.IsTrue(ReferenceEquals(ret, dst));
+            Assert.AreEqual(2.0, dst.GetDouble(0), 1e-12);
+
+            // a non-0-d out for a flat average is rejected (same message shape as the other reduce paths)
+            Assert.ThrowsException<ArgumentException>(() => np.evaluate(NDExpr.Average((NDExpr)v, w), @out: np.zeros(1)));
+
+            // axis out= takes the reduced shape
+            var m = np.arange(1, 13).reshape(3, 4).astype(np.float64);
+            var wm = ((np.arange(1, 13).reshape(3, 4)) % 5 + 1).astype(np.float64);
+            var od = np.zeros(4);
+            np.evaluate(NDExpr.Average((NDExpr)m, wm, 0), @out: od);
+            Assert.AreEqual(6.5, od.GetDouble(0), 1e-9);
+        }
+
+        /// <summary>
+        /// A float16 / decimal result dtype is rejected with a directed <see cref="NotSupportedException"/>
+        /// (a bit-exact reduction there needs a pairwise sum kernel that dtype lacks — the gap M1/M2/
+        /// M4c-summation share); a float16 values tree with WIDER float32 weights (result float32) is fine.
+        /// </summary>
+        [TestMethod]
+        public void M4cAvg_HalfAndDecimal_NotSupported()
+        {
+            var h = np.array(new double[] { 1, 2, 3 }).astype(np.float16);   // f2 · f2 → f2 result
+            Assert.ThrowsException<NotSupportedException>(() => np.evaluate(NDExpr.Average((NDExpr)h, (NDExpr)h)));
+
+            var d = np.array(new double[] { 1, 2, 3 }).astype(np.@decimal);
+            Assert.ThrowsException<NotSupportedException>(() => np.evaluate(NDExpr.Average((NDExpr)d, (NDExpr)d)));
+
+            // f2 values with wider f4 weights → f4 result: served (not Half)
+            var wf = np.array(new float[] { 1, 2, 3 });
+            var r = np.evaluate(NDExpr.Average((NDExpr)h, (NDExpr)wf));
+            Assert.AreEqual(NPTypeCode.Single, r.typecode);
+        }
     }
 }

@@ -306,4 +306,10 @@ namespace NumSharp.Backends.Iteration
     {
         internal override bool CanEmitVectorV2(NPTypeCode lane, IReadOnlyDictionary<NDExpr, NPTypeCode> types) => false;
     }
+
+    public sealed partial class WeightedAverageNode
+    {
+        // Host-driven (no elementwise vector body); the two child sub-programs vectorize on their own.
+        internal override bool CanEmitVectorV2(NPTypeCode lane, IReadOnlyDictionary<NDExpr, NPTypeCode> types) => false;
+    }
 }

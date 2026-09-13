@@ -542,6 +542,52 @@ namespace NumSharp.Backends.Iteration
         /// <summary>One-pass fused <c>np.std</c> along <paramref name="axis"/> with <paramref name="ddof"/> delta degrees of freedom.</summary>
         public static NDExpr Std(NDExpr x, int axis, bool keepdims = false, int ddof = 0) => new ReduceNode(NDExprReduceKind.Std, x, axis, keepdims, ddof);
 
+        // --- weighted average (plan P2 M4c-average) -----------------------------------------------
+        //
+        // np.average(values, weights) = Σ(values·weights) / Σ(weights) — the FIRST reduction that
+        // reduces over TWO operand trees, which the single-child ReduceNode cannot carry.  It is its
+        // own node (WeightedAverageNode) rather than a factory rewrite because both sums must run at
+        // ONE result dtype that neither child's natural dtype equals (NumPy forces the product AND both
+        // sums to `result_dtype`, e.g. int·int → a float64 product, never the wrapping int64 one), and
+        // because the division of two reductions is not itself an elementwise node.  The numerics are
+        // already available: both sums are the M1/M2-exact pairwise, so this is a node-shape change, not
+        // a new kernel — the host materializes both children once and reproduces NumPy's own average op
+        // for op (see DefaultEngine.EvaluateWeightedAverage), BIT-EXACT for the Single/Double/Complex
+        // result dtypes with NO MisalignedRegistry excuse; Half/Decimal are rejected (the "no float16
+        // pairwise kernel" gap M1/M2/M4c-summation share).
+
+        /// <summary>
+        /// One-pass fused <c>np.average</c>: the weighted mean <c>Σ(values·weights) / Σ(weights)</c> of
+        /// two expression trees (flattened). The two trees BROADCAST together like any fused binary, and
+        /// the result matches <c>np.average(V, weights=W)</c> on same-shape operands. The result dtype is
+        /// <b>float/complex</b> (NumPy's rule, keyed on the VALUES dtype: an integer/bool values tree
+        /// promotes to <c>result_type(values, weights, float64)</c>, else <c>result_type(values,
+        /// weights)</c>) — so an integer average is always at least float64, and the product/sums run at
+        /// that dtype (no integer wrap). A NaN in either tree PROPAGATES to NaN. Weights that sum to zero
+        /// (an empty input included) raise <see cref="DivideByZeroException"/> "Weights sum to zero, can't
+        /// be normalized", exactly as <see cref="np.average(NDArray,int?,NDArray,bool,bool)"/> does. A
+        /// float16 or decimal result dtype is rejected with a directed <see cref="NotSupportedException"/>
+        /// (a bit-exact reduction there needs a pairwise sum kernel that dtype lacks).
+        /// </summary>
+        /// <param name="values">The value expression to average.</param>
+        /// <param name="weights">The weight expression; each value is weighted by the aligned weight, and the sum is normalized by the total weight.</param>
+        /// <returns>The fused weighted-average node (root-only, like every reduction).</returns>
+        public static NDExpr Average(NDExpr values, NDExpr weights) => new WeightedAverageNode(values, weights);
+
+        /// <summary>
+        /// One-pass fused <c>np.average</c> along <paramref name="axis"/>: <c>Σ(values·weights) /
+        /// Σ(weights)</c> reduced over a single axis (the <see cref="Average(NDExpr,NDExpr)"/> twin — same
+        /// result dtype, NaN propagation, and zero-weight <see cref="DivideByZeroException"/>). Both sums
+        /// reduce along <paramref name="axis"/>; <paramref name="keepdims"/> re-inserts it as size 1.
+        /// </summary>
+        /// <param name="values">The value expression to average.</param>
+        /// <param name="weights">The weight expression aligned with <paramref name="values"/>.</param>
+        /// <param name="axis">The axis to reduce (negative counts from the end).</param>
+        /// <param name="keepdims">When true, the reduced axis is kept as a size-1 dimension.</param>
+        /// <returns>The fused weighted-average node reducing along <paramref name="axis"/>.</returns>
+        public static NDExpr Average(NDExpr values, NDExpr weights, int axis, bool keepdims = false)
+            => new WeightedAverageNode(values, weights, axis, keepdims);
+
         // ===================================================================
         // Binding
         // ===================================================================
@@ -1448,6 +1494,148 @@ namespace NumSharp.Backends.Iteration
             // lexicographic (real, imag) order for complex, Half / char / decimal covered. One body
             // for every dtype, shared with the elementwise kernels.
             DirectILKernelGenerator.EmitScalarOperation(il, isMin ? BinaryOp.Minimum : BinaryOp.Maximum, acc);
+        }
+    }
+
+    // =========================================================================
+    // Node: WeightedAverageNode — root-only weighted average over TWO trees
+    // (plan P2 M4c-average). np.average(values, weights) = Σ(values·weights) / Σ(weights).
+    //
+    // Unlike every other reduction it reduces over TWO operand trees, which the single-child
+    // ReduceNode cannot carry — so it is its own root node, host-computed. The host materializes
+    // BOTH children once (the M1/M2 route), casts each to the ONE result dtype (NumPy forces the
+    // product and both sums to `result_dtype`, so an int·int product is a float64 product, never a
+    // wrapping int64 one), forms the product, and reduces the product and the weights with the SAME
+    // NumPy-exact pairwise sum np.average runs (`ExactSumArray`, not the drifting multi-accumulator
+    // engine sum np.average itself uses — which is why the fused Average is bit-exact where the
+    // library np.average is only allclose at large N), then divides. See
+    // DefaultEngine.EvaluateWeightedAverage.
+    //
+    // dtype rule (NumPy _average, probed 2.4.2 — keyed on the VALUES dtype, NOT the combined type):
+    //   values integer/bool → result_type(values, weights, float64)   (int average is ≥ float64)
+    //   else                → result_type(values, weights)             (f2/f2 → f2 — rejected: no f16 kernel)
+    // =========================================================================
+
+    /// <summary>
+    /// A root-only fused weighted average <c>Σ(values·weights) / Σ(weights)</c> over two elementwise
+    /// sub-trees (<see cref="NDExpr.Average(NDExpr,NDExpr)"/>). Like <see cref="ReduceNode"/> it is
+    /// host-driven (no elementwise emit) and must be the root of the expression.
+    /// </summary>
+    public sealed partial class WeightedAverageNode : NDExpr
+    {
+        private readonly NDExpr _values;
+        private readonly NDExpr _weights;
+        private readonly int? _axis;       // null = flat (reduce-all); else reduce this axis
+        private readonly bool _keepdims;
+
+        /// <summary>Build a weighted-average node over <paramref name="values"/> and <paramref name="weights"/>.</summary>
+        /// <param name="values">The value expression (numerator's left factor).</param>
+        /// <param name="weights">The weight expression (numerator's right factor and the denominator).</param>
+        /// <param name="axis">The reduction axis, or null for a flat (reduce-all) average.</param>
+        /// <param name="keepdims">When true (axis form only), the reduced axis is kept as size 1.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="values"/> or <paramref name="weights"/> is null.</exception>
+        public WeightedAverageNode(NDExpr values, NDExpr weights, int? axis = null, bool keepdims = false)
+        {
+            _values = values ?? throw new ArgumentNullException(nameof(values));
+            _weights = weights ?? throw new ArgumentNullException(nameof(weights));
+            _axis = axis;
+            _keepdims = keepdims;
+        }
+
+        /// <summary>The value sub-tree.</summary>
+        internal NDExpr Values => _values;
+
+        /// <summary>The weight sub-tree.</summary>
+        internal NDExpr Weights => _weights;
+
+        /// <summary>The reduction axis, or null for a flat average.</summary>
+        internal int? Axis => _axis;
+
+        /// <summary>True when the reduced axis is kept as a size-1 dimension.</summary>
+        internal bool Keepdims => _keepdims;
+
+        /// <summary>Never SIMD — a reduction has no elementwise vector body; the host drives it.</summary>
+        public override bool SupportsSimd => false;
+
+        /// <summary>A weighted average is host-driven as the tree root; it emits no elementwise scalar value.</summary>
+        /// <param name="il">Unused.</param>
+        /// <param name="ctx">Unused.</param>
+        /// <exception cref="InvalidOperationException">Always — the node is driven by np.evaluate, never emitted.</exception>
+        public override void EmitScalar(ILGenerator il, NDExprCompileContext ctx)
+            => throw new InvalidOperationException(
+                "np.average is driven by np.evaluate as the tree root — it cannot be emitted as an elementwise value.");
+
+        /// <summary>A weighted average has no vector path — it is driven by np.evaluate.</summary>
+        /// <param name="il">Unused.</param>
+        /// <param name="ctx">Unused.</param>
+        /// <exception cref="InvalidOperationException">Always.</exception>
+        public override void EmitVector(ILGenerator il, NDExprCompileContext ctx)
+            => throw new InvalidOperationException(
+                "Weighted-average nodes have no vector path — they are driven by np.evaluate.");
+
+        /// <summary>Fold the node's identity into a structural signature (axis / keepdims + both children).</summary>
+        /// <param name="sb">The signature builder.</param>
+        public override void AppendSignature(StringBuilder sb)
+        {
+            // Axis / keepdims are read by the host per evaluation (flat vs axis path, output shape), so
+            // they are part of the identity even though the two child kernels are axis-independent.
+            sb.Append("WAvg");
+            if (_axis is int ax) sb.Append("_ax").Append(ax);
+            if (_keepdims) sb.Append("_kd");
+            sb.Append('(');
+            _values.AppendSignature(sb);
+            sb.Append(',');
+            _weights.AppendSignature(sb);
+            sb.Append(')');
+        }
+
+        internal override NDExpr BindArrays(NDExprBindContext ctx)
+        {
+            // Values FIRST, then weights — the order the structural hash and the two sub-programs
+            // (AvgValuesProgram / AvgWeightsProgram) rely on; changing it desynchronizes operand indices.
+            var v = _values.BindArrays(ctx);
+            var w = _weights.BindArrays(ctx);
+            return ReferenceEquals(v, _values) && ReferenceEquals(w, _weights)
+                ? this
+                : new WeightedAverageNode(v, w, _axis, _keepdims);
+        }
+
+        internal override bool ContainsReduce => true;
+
+        // np.evaluate dispatches on the first embedded array's engine; either child may hold it.
+        internal override NDArray FirstArray() => _values.FirstArray() ?? _weights.FirstArray();
+
+        internal override NDExprTypeInfo InferType(
+            NPTypeCode[] inputTypes, Dictionary<NDExpr, NPTypeCode> nodeTypes)
+        {
+            // Resolve each child to a strong dtype (a pure-constant child adopts its NEP50 default), the
+            // dtypes the two sub-programs will independently resolve to — so the result dtype computed
+            // here matches what the materialized children will be.
+            var vt = _values.InferType(inputTypes, nodeTypes);
+            var vType = ResolveChild(_values, vt, vt.IsWeak ? vt.DefaultCode : vt.Code, nodeTypes);
+            var wt = _weights.InferType(inputTypes, nodeTypes);
+            var wType = ResolveChild(_weights, wt, wt.IsWeak ? wt.DefaultCode : wt.Code, nodeTypes);
+
+            var result = ResolveAverageResultType(vType, wType);
+            nodeTypes[this] = result;
+            return NDExprTypeInfo.Strong(result);
+        }
+
+        /// <summary>
+        /// NumPy's <c>np.average</c> result dtype (probed 2.4.2), keyed on the VALUES dtype: an
+        /// integer/bool values tree lifts the pair to <c>result_type(values, weights, float64)</c> (so an
+        /// integer average is always at least float64 and the product never wraps), otherwise the plain
+        /// <c>result_type(values, weights)</c> (which can be float16 when both are float16 — the host then
+        /// rejects it). Always a float/complex/decimal dtype; the host serves Single/Double/Complex.
+        /// </summary>
+        /// <param name="values">The values sub-tree's resolved dtype.</param>
+        /// <param name="weights">The weights sub-tree's resolved dtype.</param>
+        /// <returns>The weighted average's result dtype.</returns>
+        internal static NPTypeCode ResolveAverageResultType(NPTypeCode values, NPTypeCode weights)
+        {
+            var common = NDExprTypeRules.PromoteStrong(values, weights);
+            bool valuesIntBool = values == NPTypeCode.Boolean || NDExprTypeRules.IsIntegerKind(values);
+            return valuesIntBool ? NDExprTypeRules.PromoteStrong(common, NPTypeCode.Double) : common;
         }
     }
 }

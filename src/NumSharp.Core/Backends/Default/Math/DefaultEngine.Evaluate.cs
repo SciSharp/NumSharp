@@ -194,6 +194,11 @@ namespace NumSharp.Backends
 
         private unsafe NDArray EvaluateCore(NDExprProgram program, NDArray[] inputs, NDArray @out)
         {
+            // A weighted average reduces over TWO sub-trees (values, weights); it is host-computed like
+            // the M4c summation kinds, so it precedes the elementwise + single-child-reduce dispatch.
+            if (program.Average is not null)
+                return EvaluateWeightedAverage(program, inputs, @out);
+
             if (program.Reduce is not null)
                 return EvaluateReduce(program, inputs, @out);
 
@@ -661,6 +666,152 @@ namespace NumSharp.Backends
 
             np.copyto(@out, computed);
             return @out;
+        }
+
+        // =====================================================================================
+        // Plan P2 M4c-average — weighted np.average, host-computed over the TWO materialized children.
+        //
+        // np.average(v, w) = Σ(v·w) / Σ(w), with BOTH sums and the product forced to ONE result dtype
+        // (NumPy's `np.multiply(v, w, dtype=rt).sum(dtype=rt) / w.sum(dtype=rt)`), so an integer average
+        // is a float64 computation with no integer wrap. The host materializes the two children once
+        // (the M1/M2 route — fresh, contiguous arrays at their natural dtypes), casts each to the result
+        // dtype, forms the product and reduces the product and the weights with the SAME NumPy-exact
+        // pairwise sum (`ExactSumArray`) the M1/M2 diverts use — NOT the drifting multi-accumulator
+        // engine sum the library `np.average` itself uses, which is exactly why the fused Average is
+        // BIT-EXACT with NumPy where the library `np.average` is only allclose at large N. Then divides.
+        //
+        // Zero total weight (an empty input included) raises DivideByZeroException with NumPy's verbatim
+        // "Weights sum to zero, can't be normalized" — checked BEFORE the divide, exactly as
+        // np.average does; a NaN weight makes the denominator NaN (NaN != 0), so it is not a zero and
+        // the result is NaN, matching NumPy. Half / Decimal result dtypes are rejected (no pairwise sum
+        // kernel — the gap M1/M2/M4c-summation share). Bit-exact vs NumPy 2.4.2 for Single/Double/
+        // Complex; NO MisalignedRegistry excuse.
+        // =====================================================================================
+        private unsafe NDArray EvaluateWeightedAverage(NDExprProgram program, NDArray[] inputs, NDArray @out)
+        {
+            var avg = program.Average;
+            NPTypeCode rt = program.ResultType;   // Single / Double / Complex (Half / Decimal rejected below)
+
+            // Validate the out cast up front (same order as every reduce path: the cast rule is checked
+            // before any compute), so an illegal out dtype fails with evaluate's message.
+            if (@out is not null)
+                ValidateOutCast(rt, @out.typecode, "evaluate");
+
+            // A bit-exact float16 / decimal average needs a pairwise sum kernel that dtype lacks (the
+            // "Half not diverted" gap M1/M2/M4c-summation share). Reject with a directed message rather
+            // than silently returning a divergent value — use np.average directly for those.
+            if (rt == NPTypeCode.Half || rt == NPTypeCode.Decimal)
+                throw new NotSupportedException(
+                    $"np.evaluate average does not support the {rt} result dtype yet " +
+                    "(a bit-exact float16/decimal reduction needs a pairwise sum kernel that dtype lacks; " +
+                    "use np.average directly). Plan P2 M-Half/M-Decimal.");
+
+            // Materialize both children once (fresh, contiguous, at their natural dtypes). `using`
+            // releases them after the product / weight-sum have read them.
+            using var vMat = EvaluateCore(program.AvgValuesProgram, inputs, null);
+            using var wMat = EvaluateCore(program.AvgWeightsProgram, inputs, null);
+
+            // Cast each child to the result dtype as a FRESH, C-contiguous array (so disposal never
+            // aliases vMat / wMat, and the pairwise sum reads a straight memory walk = NumPy's C-order).
+            NDArray vRt = ToResultContig(vMat, rt);
+            NDArray wRt = ToResultContig(wMat, rt);
+
+            // Product at the result dtype (the two children broadcast together, like any fused binary);
+            // guard C-contiguity for ExactSumArray (a C-input multiply is C, but stay defensive).
+            NDArray prod0 = vRt * wRt;
+            NDArray prod = prod0.Shape.IsContiguous ? prod0 : prod0.copy();
+            if (!ReferenceEquals(prod, prod0)) prod0.Dispose();
+            vRt.Dispose();
+
+            // Denominator weights at the result dtype, broadcast to the PRODUCT's shape so the total
+            // weight counts each element as many times as the numerator does (a same-shape average — the
+            // np.average contract — needs no broadcast; wForDen is then wRt itself).
+            NDArray wForDen = SameDims(wRt.Shape, prod.Shape)
+                ? wRt
+                : np.broadcast_to(wRt, prod.Shape).copy();
+
+            int? nax = avg.Axis is int rawAxis ? NormalizeAxis(rawAxis, prod.ndim) : (int?)null;
+
+            NDArray num = ExactSumArray(prod, nax, rt);        // Σ(v·w) at rt (pairwise / axis add.reduce)
+            NDArray den = ExactSumArray(wForDen, nax, rt);     // Σ(w)   at rt
+
+            prod.Dispose();
+            if (!ReferenceEquals(wForDen, wRt)) wForDen.Dispose();
+            wRt.Dispose();
+
+            // NumPy raises BEFORE dividing when any (per-slab) total weight is exactly zero.
+            if (AverageDenominatorHasZero(den, rt))
+            {
+                num.Dispose();
+                den.Dispose();
+                throw new DivideByZeroException("Weights sum to zero, can't be normalized");
+            }
+
+            NDArray computed = num / den;                      // rt/rt → rt (complex divide is bit-exact)
+            num.Dispose();
+            den.Dispose();
+
+            if (avg.Keepdims && nax is int kdAxis)
+            {
+                NDArray kd = np.expand_dims(computed, kdAxis);
+                computed = kd;
+            }
+
+            if (@out is null)
+                return computed;
+
+            // A flat average produces a 0-d scalar; NumPy rejects a non-0-d out here (same message shape
+            // as the fold / delegating / stat paths).
+            if (avg.Axis is null && @out.ndim != 0)
+                throw new ArgumentException(
+                    "output parameter for reduction operation average " +
+                    $"has the wrong number of dimensions: Found {@out.ndim} but expected 0");
+
+            np.copyto(@out, computed);
+            return @out;
+        }
+
+        /// <summary>Cast a materialized child to <paramref name="rt"/> as a FRESH, C-contiguous array (a copy even when already that dtype, so disposal never aliases the source).</summary>
+        /// <param name="m">The materialized child (any dtype, any contiguous layout).</param>
+        /// <param name="rt">The result dtype (Single / Double / Complex here).</param>
+        /// <returns>A fresh C-contiguous array of dtype <paramref name="rt"/>.</returns>
+        private static NDArray ToResultContig(NDArray m, NPTypeCode rt)
+            => m.typecode == rt ? m.copy() : m.astype(DType.From(rt));
+
+        /// <summary>Do two shapes have identical dimensions (so no broadcast is needed for the denominator sum)?</summary>
+        /// <param name="a">The first shape.</param>
+        /// <param name="b">The second shape.</param>
+        /// <returns>True when the dimension arrays match element for element.</returns>
+        private static bool SameDims(Shape a, Shape b)
+        {
+            var da = a.dimensions; var db = b.dimensions;
+            if (da.Length != db.Length) return false;
+            for (int i = 0; i < da.Length; i++)
+                if (da[i] != db[i]) return false;
+            return true;
+        }
+
+        /// <summary>
+        /// Does any element of the (fresh, C-contiguous) denominator <paramref name="den"/> equal exactly
+        /// zero — NumPy's <c>scl == 0.0</c> zero-weight check (per slab for the axis form)? A complex
+        /// denominator is zero iff BOTH components are zero; a NaN denominator is NOT zero (so a NaN weight
+        /// yields NaN, not a raise), matching NumPy.
+        /// </summary>
+        /// <param name="den">The denominator (total weight) array, dtype <paramref name="rt"/>.</param>
+        /// <param name="rt">The denominator dtype (Single / Double / Complex).</param>
+        /// <returns>True when any total weight is exactly zero.</returns>
+        /// <exception cref="NotSupportedException"><paramref name="rt"/> is not a served average dtype (a typing bug).</exception>
+        private static unsafe bool AverageDenominatorHasZero(NDArray den, NPTypeCode rt)
+        {
+            long n = den.size;
+            byte* p = (byte*)den.Address + (long)den.Shape.offset * rt.SizeOf();
+            switch (rt)
+            {
+                case NPTypeCode.Single: { float* f = (float*)p; for (long i = 0; i < n; i++) if (f[i] == 0f) return true; return false; }
+                case NPTypeCode.Double: { double* f = (double*)p; for (long i = 0; i < n; i++) if (f[i] == 0d) return true; return false; }
+                case NPTypeCode.Complex: { var z = (System.Numerics.Complex*)p; for (long i = 0; i < n; i++) if (z[i].Real == 0d && z[i].Imaginary == 0d) return true; return false; }
+                default: throw new NotSupportedException($"average denominator dtype {rt} — typing bug.");
+            }
         }
 
         /// <summary>

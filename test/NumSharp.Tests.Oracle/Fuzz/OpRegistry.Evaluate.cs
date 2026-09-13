@@ -53,6 +53,19 @@ namespace NumSharp.Tests.Fuzz
                 int? axis = red.TryGetProperty("axis", out var ax) && ax.ValueKind == JsonValueKind.Number ? ax.GetInt32() : null;
                 bool keepdims = red.TryGetProperty("keepdims", out var kd) && kd.ValueKind == JsonValueKind.True;
                 int ddof = red.TryGetProperty("ddof", out var ddj) && ddj.ValueKind == JsonValueKind.Number ? ddj.GetInt32() : 0;
+
+                // The weighted average reduces over TWO trees — the values tree already parsed above and a
+                // second WEIGHTS tree carried in red["weights"] — so it is built before the single-child
+                // reduce switch. Both trees bind against the SAME operand list (in0/in1/…).
+                if (kind == "average")
+                {
+                    var weightsExpr = red.GetProperty("weights").GetString();
+                    NDExpr weightsTree = new EvaluateExprParser(weightsExpr, ops, nInputs).Parse();
+                    return axis is int aAvg
+                        ? NDExpr.Average(tree, weightsTree, aAvg, keepdims)
+                        : NDExpr.Average(tree, weightsTree);
+                }
+
                 tree = (kind, axis) switch
                 {
                     ("sum", null) => NDExpr.Sum(tree),

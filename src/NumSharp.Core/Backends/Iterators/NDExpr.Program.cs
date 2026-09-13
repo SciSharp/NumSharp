@@ -85,12 +85,18 @@ namespace NumSharp.Backends.Iteration
         /// <summary>The reduction's accumulator dtype (see <see cref="ReduceNode.ResolveAccType"/>).</summary>
         public readonly NPTypeCode ReduceAccType;
 
+        /// <summary>The root weighted average, or null when the root is elementwise or an ordinary reduction.</summary>
+        public readonly WeightedAverageNode Average;
+
         private NDInnerLoopFunc _flatReduce;
         private NDInnerLoopFunc _axisReduce;
         private NDExprProgram _childElementwise;
+        private NDExprProgram _avgValues;
+        private NDExprProgram _avgWeights;
 
         private NDExprProgram(NDExpr bound, NPTypeCode[] inputTypes, bool[] isParam, bool forcedScalar,
-            NDInnerLoopFunc kernel, NPTypeCode resultType, ReduceNode reduce, NPTypeCode reduceAcc)
+            NDInnerLoopFunc kernel, NPTypeCode resultType, ReduceNode reduce, NPTypeCode reduceAcc,
+            WeightedAverageNode average = null)
         {
             Bound = bound;
             InputTypes = inputTypes;
@@ -101,6 +107,7 @@ namespace NumSharp.Backends.Iteration
             ResultType = resultType;
             Reduce = reduce;
             ReduceAccType = reduceAcc;
+            Average = average;
         }
 
         private static int CountTrue(bool[] mask)
@@ -137,6 +144,29 @@ namespace NumSharp.Backends.Iteration
             => Reduce is null
                 ? null
                 : _childElementwise ??= Build(Reduce.Child, InputTypes, IsParam);
+
+        /// <summary>
+        /// The weighted average's VALUES sub-tree as its own elementwise program (null when this is not a
+        /// weighted average). Built once and cached, sharing this program's input signature and parameter
+        /// mask — so the host materializes the values through the already-bit-exact elementwise engine at
+        /// the child's natural dtype (<see cref="EvaluateWeightedAverage"/> then casts it to the result
+        /// dtype before the product). Mirrors <see cref="ChildElementwiseProgram"/>.
+        /// </summary>
+        public NDExprProgram AvgValuesProgram
+            => Average is null
+                ? null
+                : _avgValues ??= Build(Average.Values, InputTypes, IsParam);
+
+        /// <summary>
+        /// The weighted average's WEIGHTS sub-tree as its own elementwise program (null when this is not a
+        /// weighted average). The twin of <see cref="AvgValuesProgram"/>: materializes the weights at
+        /// their natural dtype, which the host casts to the result dtype for BOTH the product and the
+        /// denominator sum (<c>Σ weights</c>).
+        /// </summary>
+        public NDExprProgram AvgWeightsProgram
+            => Average is null
+                ? null
+                : _avgWeights ??= Build(Average.Weights, InputTypes, IsParam);
 
         /// <summary>
         /// Does this program serve these inputs: same count, same typecode per slot, and every input the
@@ -267,6 +297,20 @@ namespace NumSharp.Backends.Iteration
                 var resolved = reduce.ResolveNumPyTypes(inputTypes, out _);
                 var acc = ReduceNode.ResolveAccType(reduce.Kind, resolved);
                 return new NDExprProgram(bound, inputTypes, isParam, forcedScalar, null, resolved, reduce, acc);
+            }
+
+            // The weighted average reduces over TWO sub-trees; like a ReduceNode it carries no kernel of
+            // its own (the host materializes the two children through AvgValuesProgram/AvgWeightsProgram
+            // and computes the average). Its children may not themselves reduce — a reduction is root-only.
+            if (bound is WeightedAverageNode avg)
+            {
+                if (avg.Values.ContainsReduce || avg.Weights.ContainsReduce)
+                    throw new NotSupportedException(
+                        "nested reductions are not supported — a reduction must be the root of the expression.");
+
+                var resolved = avg.ResolveNumPyTypes(inputTypes, out _);
+                return new NDExprProgram(bound, inputTypes, isParam, forcedScalar, null, resolved,
+                    reduce: null, reduceAcc: NPTypeCode.Empty, average: avg);
             }
 
             if (bound.ContainsReduce)
@@ -658,8 +702,8 @@ namespace NumSharp.Backends.Iteration
         /// <summary>True for a positional tree (<see cref="NDExpr.Input"/> leaves, operands supplied per call).</summary>
         public bool IsPositional => _inputs is null;
 
-        /// <summary>True when the root is a reduction (Sum / Prod / Min / Max / Mean).</summary>
-        public bool IsReduction => _program.Reduce is not null;
+        /// <summary>True when the root is a reduction (Sum / Prod / Min / Max / Mean / … or a weighted Average).</summary>
+        public bool IsReduction => _program.Reduce is not null || _program.Average is not null;
 
         /// <summary>Number of distinct inputs the kernel reads (embedded arrays are deduplicated by reference; hoisted 0-d parameters count).</summary>
         public int OperandCount => _program.InputTypes.Length;

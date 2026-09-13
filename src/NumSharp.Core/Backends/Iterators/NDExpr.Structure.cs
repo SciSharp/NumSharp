@@ -78,6 +78,7 @@ namespace NumSharp.Backends.Iteration
         Where = 7,
         Call = 8,
         Reduce = 9,
+        WeightedAverage = 10,
     }
 
     /// <summary>
@@ -400,5 +401,24 @@ namespace NumSharp.Backends.Iteration
             => bound is ReduceNode o && o._kind == _kind && o._axis == _axis && o._keepdims == _keepdims
                && o._ddof == _ddof
                && _child.StructureEquals(o._child, operands);
+    }
+
+    public sealed partial class WeightedAverageNode
+    {
+        internal override void HashStructure(ref NDExprStructureHasher h, NDExprOperandScratch operands)
+        {
+            // Axis / keepdims are read by the HOST per evaluation (flat vs axis path, output shape), so
+            // two averages that differ only there must be two programs. Values THEN weights — the
+            // BindArrays child order, so an ArrayNode hashes as the operand index it will bind to.
+            h.Add(NDExprNodeTag.WeightedAverage, _axis is int ax ? (long)ax : long.MinValue);
+            h.Add(_keepdims ? 1UL : 0UL);
+            _values.HashStructure(ref h, operands);
+            _weights.HashStructure(ref h, operands);
+        }
+
+        internal override bool StructureEquals(NDExpr bound, NDExprOperandScratch operands)
+            => bound is WeightedAverageNode o && o._axis == _axis && o._keepdims == _keepdims
+               && _values.StructureEquals(o._values, operands)
+               && _weights.StructureEquals(o._weights, operands);
     }
 }
