@@ -37,6 +37,17 @@ namespace NumSharp
         //   both call. Measured NPY/NS ≈ 1.8×–9× at 100K/10M; at 1K the window
         //   sits at NumSharp's per-op NDIter-setup floor (window generation is a
         //   compute-once, amortized operation).
+        //
+        // The M-dependent values (M-1, alpha, beta, i0(beta)) ride as 0-d float64
+        // OPERANDS, never as literals: a literal is baked into the fused kernel's
+        // IL (and its cache key), so every distinct M — the one parameter a window
+        // is called with — would JIT its own kernel (~1 ms) and hold its own
+        // program-cache entry. The parameter form serves every M with ONE kernel
+        // per window kind; the arithmetic is the same float64 arithmetic on a
+        // value loaded from memory instead of an IL constant, so the result is
+        // bit-identical (a 0-d float64 operand promotes exactly like a weak float
+        // literal meeting a float64 array). The fixed cost of a stride-0 operand
+        // (~0.25 µs, NDIter-level) is the price; the JIT it replaces is 4000× it.
         // =====================================================================
 
         /// <summary>
@@ -59,9 +70,12 @@ namespace NumSharp
 
             var n = arange(1.0 - M, (double)M, 2.0, float64);
             var e = (NDExpr)n;
+            // M-1 as a 0-d operand (see the header): one kernel for every M. The same instance on both
+            // branches dedups to one iterator stream.
+            var m1 = (NDExpr)NDArray.Scalar(M - 1);
             return evaluate(NDExpr.Where(NDExpr.LessEqual(e, 0.0),
-                                         1.0 + e / (M - 1),
-                                         1.0 - e / (M - 1)));
+                                         1.0 + e / m1,
+                                         1.0 - e / m1));
         }
 
         /// <summary>
@@ -83,8 +97,10 @@ namespace NumSharp
             // Operation order preserved verbatim from NumPy for bit-parity:
             //   pi * n / (M - 1)   ≡ (pi * n) / (M - 1)      (left-to-right)
             //   2.0 * pi * n / (M-1) ≡ ((2.0 * pi) * n) / (M-1)
-            var arg = pi * (NDExpr)n / (M - 1);
-            var arg2 = 2.0 * pi * (NDExpr)n / (M - 1);
+            // M-1 as a 0-d operand (see the header): one kernel for every M.
+            var m1 = (NDExpr)NDArray.Scalar(M - 1);
+            var arg = pi * (NDExpr)n / m1;
+            var arg2 = 2.0 * pi * (NDExpr)n / m1;
             return evaluate(0.42 + 0.5 * NDExpr.Cos(arg) + 0.08 * NDExpr.Cos(arg2));
         }
 
@@ -137,11 +153,14 @@ namespace NumSharp
             if (M == 1) return WindowOnes();
 
             var n = arange(0.0, M, 1.0, float64);
-            double alpha = (M - 1) / 2.0;
-            double denom = BesselI0(beta);
+            // alpha, beta and i0(beta) as 0-d operands (see the header): one kernel for every (M, beta)
+            // pair instead of one JIT per pair. `alpha` appears twice and dedups to one stream.
+            var alpha = (NDExpr)NDArray.Scalar((M - 1) / 2.0);
+            var betaOp = (NDExpr)NDArray.Scalar(beta);
+            var denom = (NDExpr)NDArray.Scalar(BesselI0(beta));
             var inner = ((NDExpr)n - alpha) / alpha;
             // beta * sqrt(1 - ((n-alpha)/alpha)**2), then i0(.) / i0(beta) — per element.
-            var arg = beta * NDExpr.Sqrt(1.0 - NDExpr.Power(inner, 2.0));
+            var arg = betaOp * NDExpr.Sqrt(1.0 - NDExpr.Power(inner, 2.0));
             return evaluate(NDExpr.Call(_besselI0, arg) / denom);
         }
 
@@ -157,7 +176,10 @@ namespace NumSharp
             if (M == 1) return WindowOnes();
 
             var n = arange(1.0 - M, (double)M, 2.0, float64);
-            return evaluate(a0 + a1 * NDExpr.Cos(pi * (NDExpr)n / (M - 1)));
+            // M-1 as a 0-d operand (see the header): one kernel per (a0, a1) pair — i.e. one for hanning
+            // and one for hamming — for every M.
+            var m1 = (NDExpr)NDArray.Scalar(M - 1);
+            return evaluate(a0 + a1 * NDExpr.Cos(pi * (NDExpr)n / m1));
         }
 
         /// <summary>NumPy's <c>array([], dtype=float64)</c> — the M &lt; 1 result.</summary>

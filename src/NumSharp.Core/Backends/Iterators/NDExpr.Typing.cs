@@ -380,60 +380,91 @@ namespace NumSharp.Backends.Iteration
         /// </summary>
         public NDInnerLoopFunc CompileNumPy(
             NPTypeCode[] inputTypes, out NPTypeCode resolvedType, string? cacheKey = null)
+            => CompileNumPy(inputTypes, null, out resolvedType, cacheKey);
+
+        /// <summary>
+        /// <see cref="CompileNumPy(NPTypeCode[], out NPTypeCode, string)"/> with a parameter mask:
+        /// an input flagged in <paramref name="isParam"/> is a 0-d array np.evaluate hoists into the
+        /// kernel's aux block (see NDExpr.Params.cs) — the kernel streams only the unflagged inputs
+        /// through the iterator and loads the parameters once in its prologue. The typing pass sees
+        /// every input alike (a parameter is the strong 0-d scalar it always was); only the emitted
+        /// loads and the kernel's operand list differ, which the cache key records.
+        /// </summary>
+        /// <param name="inputTypes">Every input's dtype, parameters included, in input order.</param>
+        /// <param name="isParam">Per input, whether it is a hoisted parameter; null for none.</param>
+        /// <param name="resolvedType">Receives the tree's NumPy result dtype.</param>
+        /// <param name="cacheKey">An explicit kernel cache key, or null to derive one from the tree.</param>
+        /// <returns>The compiled (cached) fused inner loop over the iterator operands.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="inputTypes"/> is null.</exception>
+        internal NDInnerLoopFunc CompileNumPy(
+            NPTypeCode[] inputTypes, bool[]? isParam, out NPTypeCode resolvedType, string? cacheKey = null)
         {
             if (inputTypes is null) throw new ArgumentNullException(nameof(inputTypes));
 
             var resolved = ResolveNumPyTypes(inputTypes, out var nodeTypes);
             resolvedType = resolved;
-            int nIn = inputTypes.Length;
+            var plan = NDExprParamPlan.Create(inputTypes, isParam);
+            int nOps = plan.OperandCount;
 
-            // The v2 vector plan: one compute lane dtype W (the unique non-bool operand dtype, or
-            // Boolean when every operand is bool), every node typed W or Boolean (a Boolean node
-            // rides as a lane mask), every node with a vector emit at W. See NDExpr.Vector.cs.
+            // The v2 vector plan: one compute lane dtype W (the unique non-bool INPUT dtype — a
+            // parameter counts, its vector must be Vector<W> too — or Boolean when every input is
+            // bool), every node typed W or Boolean (a Boolean node rides as a lane mask), every node
+            // with a vector emit at W. See NDExpr.Vector.cs.
             bool forceScalar = ForceScalar;
             NPTypeCode lane = NPTypeCode.Empty;
             bool wantSimd = !forceScalar && NDExprVectorPlan.TryPlan(this, inputTypes, nodeTypes, out lane);
 
+            // Parameter locals are declared by the prologue (emitted first, at kernel entry) and read
+            // by the bodies through the context — the arrays are shared by closure.
+            LocalBuilder[]? paramScalar = plan.ParamCount > 0 ? new LocalBuilder[plan.ParamCount] : null;
+            LocalBuilder[]? paramVector = plan.ParamCount > 0 && wantSimd ? new LocalBuilder[plan.ParamCount] : null;
+            var laneType = lane;
+            Action<ILGenerator>? prologue = plan.ParamCount == 0
+                ? null
+                : il => plan.EmitPrologue(il, paramScalar!, paramVector, laneType, auxByteOffset: 0);
+
             Action<ILGenerator> scalarBody = il =>
             {
-                var scalarLocals = new LocalBuilder[nIn];
-                for (int i = nIn - 1; i >= 0; i--)
+                // The shell delivers the ITERATOR operands on the stack (bottom = operand 0).
+                var scalarLocals = new LocalBuilder[nOps];
+                for (int i = nOps - 1; i >= 0; i--)
                 {
-                    scalarLocals[i] = il.DeclareLocal(DirectILKernelGenerator.GetClrType(inputTypes[i]));
+                    scalarLocals[i] = il.DeclareLocal(DirectILKernelGenerator.GetClrType(plan.OperandTypes[i]));
                     il.Emit(OpCodes.Stloc, scalarLocals[i]);
                 }
-                var ctx = new NDExprCompileContext(inputTypes, resolved, scalarLocals, vectorMode: false, nodeTypes);
+                var ctx = new NDExprCompileContext(inputTypes, resolved, scalarLocals, vectorMode: false, nodeTypes,
+                    NPTypeCode.Empty, plan.Slots, plan.ParamIndex, paramScalar);
                 EmitScalar(il, ctx);
             };
 
             Action<ILGenerator>? vectorBody = null;
             if (wantSimd)
             {
-                var laneType = lane;
                 vectorBody = il =>
                 {
                     // The fused shell hands every operand over as ONE CLR vector type — Vector<lane(W)>
                     // (a bool operand arrives as a lane MASK of W; byte mode uses the byte lanes).
-                    var vectorLocals = new LocalBuilder[nIn];
+                    var vectorLocals = new LocalBuilder[nOps];
                     var vecType = DirectILKernelGenerator.GetVectorType(DirectILKernelGenerator.GetSimdLaneType(laneType));
-                    for (int i = nIn - 1; i >= 0; i--)
+                    for (int i = nOps - 1; i >= 0; i--)
                     {
                         vectorLocals[i] = il.DeclareLocal(vecType);
                         il.Emit(OpCodes.Stloc, vectorLocals[i]);
                     }
-                    var ctx = new NDExprCompileContext(inputTypes, resolved, vectorLocals, vectorMode: true, nodeTypes, laneType);
+                    var ctx = new NDExprCompileContext(inputTypes, resolved, vectorLocals, vectorMode: true, nodeTypes,
+                        laneType, plan.Slots, plan.ParamIndex, paramVector);
                     EmitVector(il, ctx);
                 };
             }
 
-            var operandTypes = new NPTypeCode[nIn + 1];
-            Array.Copy(inputTypes, operandTypes, nIn);
-            operandTypes[nIn] = resolved;
+            var operandTypes = new NPTypeCode[nOps + 1];
+            Array.Copy(plan.OperandTypes, operandTypes, nOps);
+            operandTypes[nOps] = resolved;
 
-            // Distinct cache namespace from legacy Compile — same signature,
-            // different emission contract. A forced-scalar kernel is its own entry.
-            string key = (cacheKey ?? DeriveCacheKey(inputTypes, resolved)) + (forceScalar ? "|np|s" : "|np");
-            return DirectILKernelGenerator.CompileFusedInnerLoop(operandTypes, wantSimd ? lane : resolved, scalarBody, vectorBody, key);
+            // Distinct cache namespace from legacy Compile — same signature, different emission
+            // contract. A forced-scalar kernel is its own entry, and so is each parameter mask.
+            string key = (cacheKey ?? DeriveCacheKey(inputTypes, resolved)) + (forceScalar ? "|np|s" : "|np") + plan.KeySuffix;
+            return DirectILKernelGenerator.CompileFusedInnerLoop(operandTypes, wantSimd ? lane : resolved, scalarBody, vectorBody, key, prologue);
         }
     }
 

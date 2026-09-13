@@ -27,26 +27,221 @@ namespace NumSharp.Tests.Backends.Iterators
         // =====================================================================
 
         [TestMethod]
-        public void Program_Embedded_IsCachedPerRootInstance_AndSharesTheKernel()
+        public void Program_Embedded_IsCachedPerRoot_AndSharedStructurallyAcrossRoots()
         {
             var a = Vec(1, 2, 3, 4);
             var b = Vec(5, 6, 7, 8);
             var c = Vec(9, 10, 11, 12);
             var root = (NDExpr)a * b + c;
 
-            var p1 = root.GetProgram(null);
-            var p2 = root.GetProgram(null);
+            var p1 = root.GetProgram(null, out var ops1);
+            var p2 = root.GetProgram(null, out var ops2);
             Assert.AreSame(p1, p2, "the second call must reuse the root's program");
-            Assert.IsNotNull(p1.EmbeddedOperands);
-            Assert.AreEqual(3, p1.EmbeddedOperands.Length);
+            Assert.AreSame(ops1, ops2, "and the operand list resolved with it");
+            CollectionAssert.AreEqual(new[] { a, b, c }, ops1, "operands in binding (first-visit) order");
             Assert.AreEqual(NPTypeCode.Double, p1.ResultType);
 
-            // A NEW tree instance over the same arrays gets its own program (the cache is per root),
-            // but the kernel underneath is the same cached delegate (same structure + dtype signature).
+            // A NEW tree instance of the same structure — over the same arrays or over other arrays of
+            // the same dtypes — is served by the SAME program through the global structural cache; only
+            // the operand list is per root. This is what makes `np.evaluate((NDExpr)a * b + c)` inside a
+            // loop as cheap as a hoisted tree.
             var other = (NDExpr)a * b + c;
-            var p3 = other.GetProgram(null);
-            Assert.AreNotSame(p1, p3);
+            var p3 = other.GetProgram(null, out var ops3);
+            Assert.AreSame(p1, p3, "same structure + same dtype signature → one program");
             Assert.AreSame(p1.Kernel, p3.Kernel);
+            CollectionAssert.AreEqual(new[] { a, b, c }, ops3);
+
+            var x = Vec(1, 1, 1, 1);
+            var y = Vec(2, 2, 2, 2);
+            var z = Vec(3, 3, 3, 3);
+            var third = (NDExpr)x * y + z;
+            var p4 = third.GetProgram(null, out var ops4);
+            Assert.AreSame(p1, p4, "other arrays of the same dtypes share the program too");
+            CollectionAssert.AreEqual(new[] { x, y, z }, ops4, "but resolve their own operand list");
+            AssertSameArray(x * y + z, np.evaluate(third));
+            AssertSameArray(a * b + c, np.evaluate(other));
+        }
+
+        // =====================================================================
+        // The global structural cache (Phase 6.1): a tree rebuilt per call finds its program
+        // =====================================================================
+
+        [TestMethod]
+        public void StructuralCache_RebuiltTree_HitsTheProgram_WithoutABindOrTypingPass()
+        {
+            var a = Vec(1, 2, 3, 4);
+            var b = Vec(5, 6, 7, 8);
+            var c = Vec(9, 10, 11, 12);
+
+            np.evaluate((NDExpr)a * b + c);                          // primes the cache (or is already primed)
+            long hits = NDExprProgramCache.Hits;
+            long misses = NDExprProgramCache.Misses;
+            int kernels = GeneratedDelegates.InnerLoopCount;
+
+            for (int i = 0; i < 5; i++)
+                AssertSameArray(a * b + c, np.evaluate((NDExpr)a * b + c));   // a NEW root every call
+
+            Assert.AreEqual(hits + 5, NDExprProgramCache.Hits, "every rebuilt tree must be a verified hit");
+            Assert.AreEqual(misses, NDExprProgramCache.Misses, "and never a miss");
+            Assert.AreEqual(kernels, GeneratedDelegates.InnerLoopCount, "and compile nothing");
+        }
+
+        [TestMethod]
+        public void StructuralCache_DistinguishesWhatChangesTheKernel()
+        {
+            var a = Vec(1, 2, 3, 4);
+            var b = Vec(5, 6, 7, 8);
+            var c = Vec(9, 10, 11, 12);
+            var ai = np.array(new int[] { 1, 2, 3, 4 });
+
+            var p = ((NDExpr)a * b + c).GetProgram(null);
+
+            // child order (the kernel reads its operands in a different order)
+            Assert.AreNotSame(p, ((NDExpr)c + (NDExpr)a * b).GetProgram(null));
+            // the op
+            Assert.AreNotSame(p, ((NDExpr)a * b - c).GetProgram(null));
+            // the operand dedup pattern: a*b+c reads three streams, a*b+a reads two
+            Assert.AreNotSame(p, ((NDExpr)a * b + a).GetProgram(null));
+            // the dtype signature
+            Assert.AreNotSame(p, ((NDExpr)ai * b + c).GetProgram(null));
+            // a literal's value and its kind (2 and 2.0 type differently; -0.0 and 0.0 emit differently)
+            var lit = ((NDExpr)a * b + 2.0).GetProgram(null);
+            Assert.AreNotSame(lit, ((NDExpr)a * b + 3.0).GetProgram(null));
+            Assert.AreNotSame(lit, ((NDExpr)a * b + 2).GetProgram(null));
+            Assert.AreNotSame(((NDExpr)a * 0.0).GetProgram(null), ((NDExpr)a * -0.0).GetProgram(null));
+            // a reduction's kind, axis and keepdims are read by the host per evaluation
+            var a2 = np.arange(6).astype(NPTypeCode.Double).reshape(2, 3);
+            var s0 = NDExpr.Sum((NDExpr)a2 * a2, axis: 0).GetProgram(null);
+            Assert.AreNotSame(s0, NDExpr.Sum((NDExpr)a2 * a2, axis: 1).GetProgram(null));
+            Assert.AreNotSame(s0, NDExpr.Sum((NDExpr)a2 * a2, axis: 0, keepdims: true).GetProgram(null));
+            Assert.AreNotSame(s0, NDExpr.Max((NDExpr)a2 * a2, axis: 0).GetProgram(null));
+            Assert.AreNotSame(s0, NDExpr.Sum((NDExpr)a2 * a2).GetProgram(null));
+            Assert.AreSame(s0, NDExpr.Sum((NDExpr)a2 * a2, axis: 0).GetProgram(null));
+
+            // …and every one of them still computes its own answer.
+            AssertSameArray(c + a * b, np.evaluate((NDExpr)c + (NDExpr)a * b));
+            AssertSameArray(a * b - c, np.evaluate((NDExpr)a * b - c));
+            AssertSameArray(a * b + a, np.evaluate((NDExpr)a * b + a));
+            AssertSameArray(a * b + 3.0, np.evaluate((NDExpr)a * b + 3.0));
+            AssertSameArray(np.sum(a2 * a2, 1), np.evaluate(NDExpr.Sum((NDExpr)a2 * a2, axis: 1)));
+            AssertSameArray(np.max(a2 * a2, 0), np.evaluate(NDExpr.Max((NDExpr)a2 * a2, axis: 0)));
+        }
+
+        [TestMethod]
+        public void StructuralCache_EmbeddedAndPositionalSpellings_ShareOneProgram()
+        {
+            var a = Vec(1, 2, 3, 4);
+            var b = Vec(5, 6, 7, 8);
+
+            var embedded = ((NDExpr)a * b).GetProgram(null);
+            var positional = (NDExpr.Input(0) * NDExpr.Input(1)).GetProgram(new[] { a, b });
+            Assert.AreSame(embedded, positional, "same bound structure + signature → one program");
+
+            // A positional tree with a repeated input is NOT the dedup pattern of a*b (two streams vs one).
+            Assert.AreNotSame(embedded, (NDExpr.Input(0) * NDExpr.Input(0)).GetProgram(new[] { a }));
+            Assert.AreSame(((NDExpr)a * a).GetProgram(null), (NDExpr.Input(0) * NDExpr.Input(0)).GetProgram(new[] { a }));
+        }
+
+        [TestMethod]
+        public void StructuralCache_IsBounded_AndClearsWhenFull()
+        {
+            int capacity = NDExprProgramCache.Capacity;
+            try
+            {
+                NDExprProgramCache.Clear();
+                NDExprProgramCache.Capacity = 3;
+                var a = Vec(1, 2, 3, 4);
+                // Four distinct literals → four programs; the cap admits three, the fourth clears first.
+                for (int k = 1; k <= 4; k++)
+                {
+                    var r = np.evaluate((NDExpr)a * (1000.0 + k));
+                    AssertSameArray(a * (1000.0 + k), r);
+                    Assert.IsTrue(NDExprProgramCache.Count <= 3, $"count {NDExprProgramCache.Count} after literal {k}");
+                }
+
+                Assert.AreEqual(1, NDExprProgramCache.Count, "the clear happened on the fourth insert");
+                // Evaluations stay correct across the clear — the per-root slot and the kernel cache are untouched.
+                AssertSameArray(a * 1001.0, np.evaluate((NDExpr)a * 1001.0));
+            }
+            finally
+            {
+                NDExprProgramCache.Capacity = capacity;
+                NDExprProgramCache.Clear();
+            }
+        }
+
+        [TestMethod]
+        public void StructuralCache_ThreadSafe_ConcurrentRebuiltTreesStayCorrect()
+        {
+            var a = Vec(1, 2, 3, 4, 5, 6, 7, 8);
+            var b = Vec(8, 7, 6, 5, 4, 3, 2, 1);
+            var c = Vec(1, 1, 1, 1, 1, 1, 1, 1);
+            var expected1 = a * b + c;
+            var expected2 = (a - b) / (a + b);
+            var expected3 = np.where(a > b, a, b);
+
+            System.Threading.Tasks.Parallel.For(0, 2000, i =>
+            {
+                switch (i % 3)
+                {
+                    case 0: Assert.IsTrue(np.array_equal(expected1, np.evaluate((NDExpr)a * b + c))); break;
+                    case 1: Assert.IsTrue(np.array_equal(expected2, np.evaluate((NDExpr.Arr(a) - b) / (NDExpr.Arr(a) + b)))); break;
+                    default: Assert.IsTrue(np.array_equal(expected3, np.evaluate(NDExpr.Where(NDExpr.Greater(NDExpr.Arr(a), b), NDExpr.Arr(a), NDExpr.Arr(b))))); break;
+                }
+            });
+        }
+
+        // =====================================================================
+        // Call nodes: a delegate's slot is part of the kernel's identity
+        // =====================================================================
+
+        [TestMethod]
+        public void Call_TwoClosuresOfOneLambda_GetTheirOwnKernels()
+        {
+            var x = Vec(1, 2, 3, 4);
+            Func<double, double> Scale(double k) => v => v * k;      // one lambda body, two captured states
+            var twice = Scale(2.0);
+            var thrice = Scale(3.0);
+
+            // Both trees share the MethodInfo; before the slot joined the signature the second closure was
+            // served the first closure's kernel and returned x * 2.
+            AssertSameArray(x * 2.0, np.evaluate(NDExpr.Call(twice, NDExpr.Arr(x))));
+            AssertSameArray(x * 3.0, np.evaluate(NDExpr.Call(thrice, NDExpr.Arr(x))));
+            AssertSameArray(x * 2.0, np.evaluate(NDExpr.Call(twice, NDExpr.Arr(x))));
+        }
+
+        [TestMethod]
+        public void Call_SameDelegateInstanceRebuiltPerCall_KeepsOneSlotAndOneKernel()
+        {
+            var x = Vec(1, 2, 3, 4);
+            double k = 0.5;
+            Func<double, double> f = v => v * k;                       // a captured delegate held in a local
+
+            AssertSameArray(x * 0.5, np.evaluate(NDExpr.Call(f, NDExpr.Arr(x))));
+            int slots = DelegateSlots.RegisteredCount;
+            int kernels = GeneratedDelegates.InnerLoopCount;
+            for (int i = 0; i < 5; i++)
+                AssertSameArray(x * 0.5, np.evaluate(NDExpr.Call(f, NDExpr.Arr(x))));   // a NEW CallNode each time
+            Assert.AreEqual(slots, DelegateSlots.RegisteredCount, "the same delegate instance dedups to one slot");
+            Assert.AreEqual(kernels, GeneratedDelegates.InnerLoopCount, "and the kernel is reused");
+
+            // A bound instance target dedups by reference the same way.
+            var box = new Scaler(4.0);
+            var mi = typeof(Scaler).GetMethod(nameof(Scaler.Apply));
+            AssertSameArray(x * 4.0, np.evaluate(NDExpr.Call(mi, box, NDExpr.Arr(x))));
+            slots = DelegateSlots.RegisteredCount;
+            AssertSameArray(x * 4.0, np.evaluate(NDExpr.Call(mi, box, NDExpr.Arr(x))));
+            Assert.AreEqual(slots, DelegateSlots.RegisteredCount);
+            // A different instance is a different target: its own slot, its own answer.
+            AssertSameArray(x * 5.0, np.evaluate(NDExpr.Call(mi, new Scaler(5.0), NDExpr.Arr(x))));
+            Assert.AreEqual(slots + 1, DelegateSlots.RegisteredCount);
+        }
+
+        private sealed class Scaler
+        {
+            private readonly double _k;
+            public Scaler(double k) => _k = k;
+            public double Apply(double v) => v * _k;
         }
 
         [TestMethod]
@@ -79,15 +274,17 @@ namespace NumSharp.Tests.Backends.Iterators
 
             // int32 operands: a different signature → a fresh program with the int32 loop.
             var ri = np.evaluate(root, new[] { ai, bi });
-            var pi = root.GetProgram(new[] { ai, bi });
+            var pi = root.GetProgram(new[] { ai, bi }, out var opsI);
             Assert.AreEqual(NPTypeCode.Int32, ri.typecode);
             AssertSameArray(ai * bi, ri);
             Assert.AreNotSame(pf, pi);
-            Assert.IsNull(pi.EmbeddedOperands);
+            Assert.AreSame(opsI, ri is null ? null : opsI, "the positional form evaluates the operands it was given");
 
-            // Back to float64: recompiled (the slot holds one program), still correct.
+            // Back to float64: the root's slot holds one program, so this is a re-resolve — served by the
+            // global structural cache (the float64 program is still there), still correct.
             var rf2 = np.evaluate(root, new[] { af, bf });
             AssertSameArray(af * bf, rf2);
+            Assert.AreSame(pf, root.GetProgram(new[] { af, bf }), "the float64 program comes back from the structural cache");
             Assert.AreSame(root.GetProgram(new[] { af, bf }), root.GetProgram(new[] { af, bf }));
         }
 

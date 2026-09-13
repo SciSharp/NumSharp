@@ -74,12 +74,26 @@ namespace NumSharp.Backends.Kernels
         /// <paramref name="operandTypes"/> is [inputs..., output]; <paramref name="laneType"/> is the
         /// compute lane dtype W of the vector body (ignored when <paramref name="vectorBody"/> is null).
         /// </summary>
+        /// <param name="operandTypes">The ITERATOR operands' dtypes, [inputs..., output].</param>
+        /// <param name="laneType">The vector body's lane dtype W (ignored without a vector body).</param>
+        /// <param name="scalarBody">Stack [operand scalars…] → [result scalar].</param>
+        /// <param name="vectorBody">Stack [operand vectors…] → [result vector], or null for a scalar-only kernel.</param>
+        /// <param name="cacheKey">The kernel's identity — everything the emitted IL depends on.</param>
+        /// <param name="prologue">
+        /// Emitted ONCE at kernel entry, after the operand pointers/strides are in locals and before any
+        /// loop — where np.evaluate loads its parameters (0-d inputs hoisted into the aux block,
+        /// <c>Ldarg_3</c>) into locals the bodies then read. May declare locals; must leave the stack empty.
+        /// </param>
+        /// <returns>The compiled (cached) inner loop.</returns>
+        /// <exception cref="ArgumentNullException">A required argument is null.</exception>
+        /// <exception cref="ArgumentException">Fewer than one input plus the output.</exception>
         internal static NDInnerLoopFunc CompileFusedInnerLoop(
             NPTypeCode[] operandTypes,
             NPTypeCode laneType,
             Action<ILGenerator> scalarBody,
             Action<ILGenerator>? vectorBody,
-            string cacheKey)
+            string cacheKey,
+            Action<ILGenerator>? prologue = null)
         {
             if (operandTypes is null) throw new ArgumentNullException(nameof(operandTypes));
             if (operandTypes.Length < 2)
@@ -88,7 +102,7 @@ namespace NumSharp.Backends.Kernels
             if (cacheKey is null) throw new ArgumentNullException(nameof(cacheKey));
 
             return _innerLoopCache.GetOrAdd(cacheKey, _ =>
-                GenerateFusedInnerLoop(operandTypes, laneType, scalarBody, vectorBody, cacheKey));
+                GenerateFusedInnerLoop(operandTypes, laneType, scalarBody, vectorBody, cacheKey, prologue));
         }
 
         private static NDInnerLoopFunc GenerateFusedInnerLoop(
@@ -96,7 +110,8 @@ namespace NumSharp.Backends.Kernels
             NPTypeCode laneType,
             Action<ILGenerator> scalarBody,
             Action<ILGenerator>? vectorBody,
-            string cacheKey)
+            string cacheKey,
+            Action<ILGenerator>? prologue)
         {
             int nOp = operandTypes.Length;
             int nIn = nOp - 1;
@@ -119,6 +134,9 @@ namespace NumSharp.Backends.Kernels
                 strideLocals[op] = il.DeclareLocal(typeof(long));
             }
             EmitLoadInnerLoopArgs(il, nOp, ptrLocals, strideLocals);
+            // Parameters are loaded here, once per kernel call, ahead of the runtime dispatch — every
+            // path below (SIMD, gather, scalar) then reads them from locals.
+            prologue?.Invoke(il);
 
             var lblScalarStrided = il.DefineLabel();
             var lblEnd = il.DefineLabel();

@@ -399,6 +399,25 @@ namespace NumSharp.Backends.Iteration
 
         internal bool ByteMode => VectorLaneType == NPTypeCode.Boolean;
 
+        /// <summary>
+        /// Per input index: the position of that input among the kernel's ITERATOR operands (an
+        /// index into <see cref="InputLocals"/>), or -1 when the input is a PARAMETER — a 0-d array
+        /// np.evaluate hoists into the kernel's aux block once per call instead of streaming it
+        /// through the iterator (<see cref="ParamLocals"/>). Null = every input is an operand at its
+        /// own index (the legacy / positional-handle contract).
+        /// </summary>
+        internal int[]? InputSlots { get; }
+
+        /// <summary>Per input index: its index into <see cref="ParamLocals"/>, or -1 for an iterator operand. Null when there are no parameters.</summary>
+        internal int[]? InputParams { get; }
+
+        /// <summary>
+        /// The parameters' locals, loaded ONCE by the kernel prologue: the scalar value in scalar
+        /// mode, its broadcast <c>Vector&lt;lane(W)&gt;</c> (a lane mask for a bool parameter in
+        /// W-mode) in vector mode — so a parameter costs nothing per element, exactly like a literal.
+        /// </summary>
+        internal LocalBuilder[]? ParamLocals { get; }
+
         public NDExprCompileContext(
             NPTypeCode[] inputTypes, NPTypeCode outputType,
             LocalBuilder[] inputLocals, bool vectorMode)
@@ -411,6 +430,30 @@ namespace NumSharp.Backends.Iteration
             LocalBuilder[] inputLocals, bool vectorMode,
             IReadOnlyDictionary<NDExpr, NPTypeCode>? nodeTypes,
             NPTypeCode vectorLaneType = NPTypeCode.Empty)
+            : this(inputTypes, outputType, inputLocals, vectorMode, nodeTypes, vectorLaneType, null, null, null)
+        {
+        }
+
+        /// <summary>
+        /// The parameter-aware context np.evaluate compiles with: <paramref name="inputSlots"/> /
+        /// <paramref name="inputParams"/> route each <see cref="InputNode"/> to an iterator local or a
+        /// parameter local (see <see cref="InputSlots"/>).
+        /// </summary>
+        /// <param name="inputTypes">Every input's dtype, parameters included, in input order.</param>
+        /// <param name="outputType">The kernel's output dtype.</param>
+        /// <param name="inputLocals">The iterator operands' locals, in operand order.</param>
+        /// <param name="vectorMode">True when emitting the vector body.</param>
+        /// <param name="nodeTypes">The typing pass's node→dtype table (NumPy mode), or null (legacy).</param>
+        /// <param name="vectorLaneType">The vector body's lane dtype W (vector mode).</param>
+        /// <param name="inputSlots">Input → operand slot map, or null for the identity map.</param>
+        /// <param name="inputParams">Input → parameter index map, or null when there are no parameters.</param>
+        /// <param name="paramLocals">The parameters' prologue-loaded locals, or null.</param>
+        internal NDExprCompileContext(
+            NPTypeCode[] inputTypes, NPTypeCode outputType,
+            LocalBuilder[] inputLocals, bool vectorMode,
+            IReadOnlyDictionary<NDExpr, NPTypeCode>? nodeTypes,
+            NPTypeCode vectorLaneType,
+            int[]? inputSlots, int[]? inputParams, LocalBuilder[]? paramLocals)
         {
             InputTypes = inputTypes;
             OutputType = outputType;
@@ -418,6 +461,19 @@ namespace NumSharp.Backends.Iteration
             VectorMode = vectorMode;
             NodeTypes = nodeTypes;
             VectorLaneType = vectorLaneType == NPTypeCode.Empty ? outputType : vectorLaneType;
+            InputSlots = inputSlots;
+            InputParams = inputParams;
+            ParamLocals = paramLocals;
+        }
+
+        /// <summary>The local holding input <paramref name="index"/>'s current value (operand local or parameter local).</summary>
+        /// <param name="index">The input index (the <see cref="InputNode"/> index).</param>
+        /// <returns>The local to <c>Ldloc</c>.</returns>
+        internal LocalBuilder LocalOfInput(int index)
+        {
+            if (InputParams is not null && InputParams[index] >= 0)
+                return ParamLocals![InputParams[index]];
+            return InputLocals[InputSlots is null ? index : InputSlots[index]];
         }
 
         /// <summary>
@@ -456,7 +512,9 @@ namespace NumSharp.Backends.Iteration
                 throw new InvalidOperationException(
                     $"Input({_index}) out of range; compile provided {ctx.InputTypes.Length} inputs.");
 
-            il.Emit(OpCodes.Ldloc, ctx.InputLocals[_index]);
+            // An iterator operand's per-element local, or a parameter's once-loaded local (a 0-d
+            // array np.evaluate hoisted into the aux block) — the node cannot tell the two apart.
+            il.Emit(OpCodes.Ldloc, ctx.LocalOfInput(_index));
             // Leave this node's resolved dtype on the stack. Legacy mode
             // resolves every node to OutputType (auto-promote at load);
             // NumPy mode resolves to the operand's native dtype, so parents
@@ -472,8 +530,9 @@ namespace NumSharp.Backends.Iteration
                     $"Input({_index}) out of range; compile provided {ctx.InputTypes.Length} inputs.");
 
             // Vector mode is only used when all input types == output type
-            // (enforced by Compile), so no conversion is needed here.
-            il.Emit(OpCodes.Ldloc, ctx.InputLocals[_index]);
+            // (enforced by Compile), so no conversion is needed here. A parameter's local already
+            // holds its broadcast vector (or lane mask), created once by the prologue.
+            il.Emit(OpCodes.Ldloc, ctx.LocalOfInput(_index));
         }
 
         public override void AppendSignature(StringBuilder sb)
@@ -1704,8 +1763,14 @@ namespace NumSharp.Backends.Iteration
         public override void AppendSignature(StringBuilder sb)
         {
             sb.Append("Call[").Append(_signatureId);
-            if (_kind == Kind.BoundTarget)
-                sb.Append(",target#").Append(_slotId);
+            // The slot is part of the kernel's identity for BOTH slot-backed kinds: the IL bakes the slot
+            // id and calls whatever object sits there. Two closures over the same lambda body share the
+            // MethodInfo (hence the signature id) but capture different state — keying the kernel on the
+            // method alone handed the second closure the first one's kernel, i.e. the first closure's
+            // captured values. (DelegateSlots dedups by delegate identity, so the SAME delegate instance
+            // rebuilt into a fresh tree every call keeps one slot and one kernel.)
+            if (_kind != Kind.StaticMethod)
+                sb.Append(",slot#").Append(_slotId);
             sb.Append("](");
             for (int i = 0; i < _args.Length; i++)
             {
@@ -1722,8 +1787,12 @@ namespace NumSharp.Backends.Iteration
     //
     // The IL emitter stores an integer ID in the kernel's bytecode and looks
     // up the managed object at runtime. Strong references — entries live for
-    // the process lifetime. Users should register delegates once at startup
-    // (static field or DI singleton), not inside a hot loop.
+    // the process lifetime. Registration DEDUPS by identity (the same delegate
+    // instance / the same target object gets its first slot back), so a tree
+    // rebuilt per call around a delegate held in a field keeps ONE slot and ONE
+    // kernel; a NEW closure allocated per call is a new identity and gets a new
+    // slot (and, since the slot is baked into the kernel, a new kernel JIT) —
+    // hold delegates in a field, never allocate them inside the hot loop.
     //
     // Thread-safe: ConcurrentDictionary + Interlocked.Increment.
     // =========================================================================
@@ -1732,6 +1801,11 @@ namespace NumSharp.Backends.Iteration
     {
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, Delegate> _delegates = new();
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, object> _targets = new();
+        // Reverse maps for the identity dedup. A delegate's identity is (target reference, method):
+        // Delegate.Equals compares exactly that, but Delegate.GetHashCode ignores the target, so a
+        // custom comparer keeps distinct closures out of one bucket; targets dedup by reference.
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<Delegate, int> _delegateIds = new(DelegateIdentityComparer.Instance);
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<object, object> _targetIds = new(ReferenceEqualityComparer.Instance);
         private static int _nextId;
 
         public static readonly System.Reflection.MethodInfo LookupDelegateMethod =
@@ -1742,18 +1816,42 @@ namespace NumSharp.Backends.Iteration
             typeof(DelegateSlots).GetMethod(nameof(LookupTarget),
                 System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)!;
 
+        /// <summary>
+        /// The slot of <paramref name="d"/>: its existing slot when an identical delegate (same target
+        /// object, same method) was registered before, else a fresh one. The kernel bakes the slot id,
+        /// so this dedup is what lets a per-call rebuilt tree reuse its compiled kernel.
+        /// </summary>
+        /// <param name="d">The delegate a <see cref="CallNode"/> invokes through its slot.</param>
+        /// <returns>The slot id the emitted IL loads it by.</returns>
         public static int RegisterDelegate(Delegate d)
         {
+            if (_delegateIds.TryGetValue(d, out int existing))
+                return existing;
             int id = System.Threading.Interlocked.Increment(ref _nextId);
             _delegates[id] = d;
-            return id;
+            // Two threads registering the same delegate at once: the loser drops its orphan slot.
+            int winner = _delegateIds.GetOrAdd(d, id);
+            if (winner != id)
+                _delegates.TryRemove(id, out _);
+            return winner;
         }
 
+        /// <summary>
+        /// The slot of a bound instance target: its existing slot when the SAME object (by reference) was
+        /// registered before, else a fresh one.
+        /// </summary>
+        /// <param name="t">The instance a <see cref="CallNode"/> calls its method on.</param>
+        /// <returns>The slot id the emitted IL loads it by.</returns>
         public static int RegisterTarget(object t)
         {
+            if (_targetIds.TryGetValue(t, out var existing))
+                return (int)existing;
             int id = System.Threading.Interlocked.Increment(ref _nextId);
             _targets[id] = t;
-            return id;
+            object winner = _targetIds.GetOrAdd(t, id);
+            if ((int)winner != id)
+                _targets.TryRemove(id, out _);
+            return (int)winner;
         }
 
         // Called from emitted IL.
@@ -1767,6 +1865,30 @@ namespace NumSharp.Backends.Iteration
         {
             _delegates.Clear();
             _targets.Clear();
+            _delegateIds.Clear();
+            _targetIds.Clear();
+        }
+
+        /// <summary>
+        /// Delegate identity = (target reference, method): what decides which code a slot's callvirt
+        /// runs. <see cref="Delegate.GetHashCode"/> hashes the method only, which would chain every
+        /// closure of one lambda into a single bucket.
+        /// </summary>
+        private sealed class DelegateIdentityComparer : IEqualityComparer<Delegate>
+        {
+            public static readonly DelegateIdentityComparer Instance = new();
+
+            public bool Equals(Delegate x, Delegate y)
+                => ReferenceEquals(x, y)
+                   || (x is not null && y is not null
+                       && ReferenceEquals(x.Target, y.Target)
+                       && x.Method == y.Method
+                       && x.GetType() == y.GetType());
+
+            public int GetHashCode(Delegate d)
+                => System.HashCode.Combine(
+                    d.Target is null ? 0 : System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(d.Target),
+                    d.Method.GetHashCode());
         }
     }
 }

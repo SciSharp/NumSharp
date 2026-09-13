@@ -30,10 +30,12 @@ namespace NumSharp.Backends
     ///     materializes a*b.
     ///
     /// Per call, everything that depends only on the tree and the operand dtypes
-    /// — binding, the typing pass, the vector plan, the kernel — comes from the
-    /// root's cached <see cref="NDExprProgram"/> (built once per root instance);
-    /// the host does only what depends on the SHAPES: the iteration shape (an
-    /// identical-dims fast path skips the broadcast machinery), the result
+    /// — binding, the typing pass, the vector plan, the kernel — comes from a
+    /// cached <see cref="NDExprProgram"/>: the root's own slot for a hoisted tree,
+    /// or the global structural cache (<see cref="NDExprProgramCache"/>) for a tree
+    /// rebuilt per call, keyed by the tree's structural hash and verified node by
+    /// node. The host does only what depends on the SHAPES: the iteration shape
+    /// (an identical-dims fast path skips the broadcast machinery), the result
     /// allocation and the iterator.
     ///
     /// Known divergences from NumPy (documented, by design):
@@ -79,8 +81,10 @@ namespace NumSharp.Backends
         {
             if (expr is null) throw new ArgumentNullException(nameof(expr));
 
-            var program = expr.GetProgram(null);
-            return EvaluateCore(program, program.EmbeddedOperands, @out);
+            // The root's slot, else the global structural cache, else a build — and the distinct arrays the
+            // tree references in binding order (the operand list the program was compiled against).
+            var program = expr.GetProgram(null, out var operands);
+            return EvaluateCore(program, operands, @out);
         }
 
         /// <summary>
@@ -188,11 +192,14 @@ namespace NumSharp.Backends
             return new IncorrectShapeException(sb.ToString());
         }
 
-        private unsafe NDArray EvaluateCore(NDExprProgram program, NDArray[] ops, NDArray @out)
+        private unsafe NDArray EvaluateCore(NDExprProgram program, NDArray[] inputs, NDArray @out)
         {
             if (program.Reduce is not null)
-                return EvaluateReduce(program, ops, @out);
+                return EvaluateReduce(program, inputs, @out);
 
+            // The iterator streams the non-parameter inputs; a 0-d parameter reaches the kernel through
+            // the aux block instead (NDExpr.Params.cs) and never joins the broadcast — it has no dims.
+            var ops = program.IteratorOperands(inputs);
             var kernel = program.Kernel;
             var resolvedType = program.ResultType;
 
@@ -258,7 +265,19 @@ namespace NumSharp.Backends
                 EvalElementwiseFlags(ops.Length),
                 opDtypes);
 
-            iter.ForEach(kernel);
+            // Parameters: their single elements packed once, here, into the aux block the kernel's
+            // prologue loads (16 bytes per parameter) — read BEFORE the pass, so one aliasing `out`
+            // keeps its original value.
+            byte* aux = null;
+            if (program.ParamCount > 0)
+            {
+                // stackalloc memory lives until the METHOD returns, so the block-scoped declaration is safe.
+                byte* buf = stackalloc byte[NDExprParamPlan.SlotBytes * program.ParamCount];
+                program.PackParams(inputs, buf);
+                aux = buf;
+            }
+
+            iter.ForEach(kernel, aux);
             return target;
         }
 
@@ -305,12 +324,13 @@ namespace NumSharp.Backends
             _ => "mean",
         };
 
-        private unsafe NDArray EvaluateReduce(NDExprProgram program, NDArray[] ops, NDArray @out)
+        private unsafe NDArray EvaluateReduce(NDExprProgram program, NDArray[] inputs, NDArray @out)
         {
             var reduce = program.Reduce;
             if (reduce.Axis is int ax)
-                return EvaluateAxisReduce(program, ops, @out, ax);
+                return EvaluateAxisReduce(program, inputs, @out, ax);
 
+            var ops = program.IteratorOperands(inputs);
             var accType = program.ReduceAccType;
             var resultType = program.ResultType;
 
@@ -335,10 +355,13 @@ namespace NumSharp.Backends
                     n *= d;
             }
 
-            // 16 bytes covers the widest accumulators (decimal / Complex).
-            byte* slot = stackalloc byte[16];
+            // Slot 0 (16 bytes) is the accumulator — wide enough for decimal / Complex; the hoisted
+            // parameters follow it (NDExprParamPlan.ReduceParamOffset), packed once per call.
+            byte* slot = stackalloc byte[NDExprParamPlan.SlotBytes * (1 + program.ParamCount)];
             *(ulong*)slot = 0;
             *(ulong*)(slot + 8) = 0;
+            if (program.ParamCount > 0)
+                program.PackParams(inputs, slot + NDExprParamPlan.ReduceParamOffset);
 
             if (n == 0)
             {
@@ -409,9 +432,10 @@ namespace NumSharp.Backends
 
         // Axis-aware fused reduction: one pass over the inputs, accumulating into a per-output
         // operand under a REDUCE iterator. evaluate(Sum(a*b, axis:k)) never materializes a*b.
-        private unsafe NDArray EvaluateAxisReduce(NDExprProgram program, NDArray[] ops, NDArray @out, int axis)
+        private unsafe NDArray EvaluateAxisReduce(NDExprProgram program, NDArray[] inputs, NDArray @out, int axis)
         {
             var reduce = program.Reduce;
+            var ops = program.IteratorOperands(inputs);
 
             // Broadcast all inputs to one shape (same rule as the elementwise path).
             Shape inputShape = ResolveInputShape(ops);
@@ -479,7 +503,18 @@ namespace NumSharp.Backends
                         NDIterGlobalFlags.REDUCE_OK | NDIterGlobalFlags.EXTERNAL_LOOP,
                         NPY_ORDER.NPY_KEEPORDER, NPY_CASTING.NPY_NO_CASTING,
                         opFlags, null, ndim, opAxes);
-                    iter.ForEach(kernel);
+
+                    // Same aux layout as the flat kernel (slot 0 reserved, parameters after it).
+                    byte* aux = null;
+                    if (program.ParamCount > 0)
+                    {
+                        // stackalloc memory lives until the METHOD returns, so the block-scoped declaration is safe.
+                        byte* buf = stackalloc byte[NDExprParamPlan.SlotBytes * (1 + program.ParamCount)];
+                        program.PackParams(inputs, buf + NDExprParamPlan.ReduceParamOffset);
+                        aux = buf;
+                    }
+
+                    iter.ForEach(kernel, aux);
                 }
 
                 if (reduce.Kind == NDExprReduceKind.Mean)
