@@ -73,12 +73,21 @@ namespace NumSharp.Interop.ParquetNet
         // -------------------------------------------------------------- whole-column read (all row groups)
 
         /// <summary>Reads an entire column (across every row group) into one NDArray backed by pooled unmanaged memory.</summary>
+        /// <param name="reader">The open Parquet reader.</param>
+        /// <param name="field">The flat, supported column to read.</param>
+        /// <param name="options">Resolved (non-null) load options.</param>
+        /// <param name="ct">Cancellation token.</param>
+        /// <returns>The whole column as an <see cref="NDArray"/>.</returns>
+        /// <exception cref="NotSupportedException">The field is repeated/list or its CLR type has no NumSharp dtype.</exception>
         internal static ValueTask<NDArray> ReadColumnAsync(ParquetReader reader, DataField field, ParquetLoadOptions options, CancellationToken ct)
         {
             RejectIfUnloadable(field);
+            // Prefer the footer's row count; fall back to summing per-group counts if metadata is absent.
             long total = reader.Metadata?.NumRows ?? SumRows(reader);
             Type t = field.ClrType;
 
+            // Monomorphizing dispatch: turn the runtime CLR column type into the compile-time generic T so the
+            // whole read path (buffer allocation, the decode window, null-scatter) is strongly typed and unmanaged.
             if (t == typeof(bool)) return ReadTypedAsync<bool>(reader, field, total, options, ct);
             if (t == typeof(byte)) return ReadTypedAsync<byte>(reader, field, total, options, ct);
             if (t == typeof(sbyte)) return ReadTypedAsync<sbyte>(reader, field, total, options, ct);
@@ -136,11 +145,18 @@ namespace NumSharp.Interop.ParquetNet
         // -------------------------------------------------------------- single row-group read (streaming)
 
         /// <summary>Reads a single row group's column into an NDArray of that group's row count.</summary>
+        /// <param name="rg">The open row-group reader.</param>
+        /// <param name="field">The flat, supported column to read.</param>
+        /// <param name="options">Resolved (non-null) load options.</param>
+        /// <param name="ct">Cancellation token.</param>
+        /// <returns>This row group's slice of the column as an <see cref="NDArray"/>.</returns>
+        /// <exception cref="NotSupportedException">The field is repeated/list or its CLR type has no NumSharp dtype.</exception>
         internal static ValueTask<NDArray> ReadRowGroupColumnAsync(ParquetRowGroupReader rg, DataField field, ParquetLoadOptions options, CancellationToken ct)
         {
             RejectIfUnloadable(field);
             Type t = field.ClrType;
 
+            // Same monomorphizing dispatch as ReadColumnAsync, over a single row group's row count.
             if (t == typeof(bool)) return ReadOneGroupTypedAsync<bool>(rg, field, options, ct);
             if (t == typeof(byte)) return ReadOneGroupTypedAsync<byte>(rg, field, options, ct);
             if (t == typeof(sbyte)) return ReadOneGroupTypedAsync<sbyte>(rg, field, options, ct);
