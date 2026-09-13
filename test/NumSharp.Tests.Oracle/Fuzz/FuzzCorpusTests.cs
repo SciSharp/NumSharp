@@ -537,7 +537,7 @@ namespace NumSharp.Tests.Fuzz
             ["astype_full.jsonl"] = 4056,
             ["astype_smoke.jsonl"] = 249,
             ["binary_arith.jsonl"] = 1296,
-            ["binary_divmod_power.jsonl"] = 793,
+            ["binary_divmod_power.jsonl"] = 1360,
             ["bitwise.jsonl"] = 590,
             ["comparison.jsonl"] = 1857,
             ["creation.jsonl"] = 241,
@@ -574,7 +574,7 @@ namespace NumSharp.Tests.Fuzz
             ["nanscan.jsonl"] = 525,   // nancumsum all 13 dtypes; nancumprod carves complex128 (host-FMA multiply)
             ["numpy_f32_kernels.jsonl"] = 140,
             ["numpy_f64_kernels.jsonl"] = 24,
-            ["out_where.jsonl"] = 3500,
+            ["out_where.jsonl"] = 3700,
             ["params.jsonl"] = 966,
             ["place.jsonl"] = 12,
             ["products.jsonl"] = 326,
@@ -589,7 +589,7 @@ namespace NumSharp.Tests.Fuzz
             ["rounding.jsonl"] = 665,
             ["scan.jsonl"] = 907,
             ["sort.jsonl"] = 940,   // +102: searchsorted expansion (dup/mixed-promotion/sorter/nan/complex-lex/strided/empty)
-            ["specials.jsonl"] = 1866,
+            ["specials.jsonl"] = 1920,
             ["stat.jsonl"] = 3412,
             ["tail.jsonl"] = 1872,
             ["unary.jsonl"] = 5969,

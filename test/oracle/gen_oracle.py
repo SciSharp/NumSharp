@@ -84,6 +84,11 @@ DIVMOD_POWER_OPS = {
     "mod": lambda a, b: a % b,             # NumPy: floored remainder (sign of divisor)
     "fmod": lambda a, b: np.fmod(a, b),    # C-style remainder (sign of dividend); truncated
     "power": lambda a, b: a ** b,
+    # float_power: power at a MINIMUM precision of float64 (dd->d / DD->D loops only), so every real
+    # input promotes to float64 and a complex operand to complex128 — and, unlike power, a negative
+    # integer exponent is legal (float_power(2,-1)=0.5). Computed by NumSharp AS power on the forced
+    # float loop, so it is bit-identical to power on those loops (same Math.Pow / npy_cpow).
+    "float_power": lambda a, b: np.float_power(a, b),
 }
 
 # Comparison ops -> bool result. (NumPy raises TypeError for ordering complex; gen_binary skips those.)
@@ -3529,8 +3534,11 @@ CHAR_ARITH_PAIRS = [(_C, _C), (_C, "int32"), ("int32", _C), (_C, "int64"),
 CHAR_CMP_PAIRS   = [(_C, _C), (_C, "int32"), ("int32", _C), (_C, "float64"), ("float64", _C)]
 CHAR_BIT_PAIRS   = [(_C, _C), (_C, "int32"), (_C, "uint64")]
 
-# Power crashes on any char operand; reciprocal mis-types char -> excluded per-op.
-_CHAR_DIVMOD_OPS = {k: v for k, v in DIVMOD_POWER_OPS.items() if k != "power"}
+# Power crashes on any char operand; reciprocal mis-types char -> excluded per-op. float_power is
+# carved for a different reason: it promotes char (uint16) to float64 and a large char exponent
+# (e.g. 42**42) yields a finite NON-exact float64 whose last bit is host-libm dependent — the main
+# divmod_power tier already covers float_power across every NumPy dtype, so char adds only that risk.
+_CHAR_DIVMOD_OPS = {k: v for k, v in DIVMOD_POWER_OPS.items() if k not in ("power", "float_power")}
 _CHAR_UNARY_OPS  = {k: v for k, v in UNARY_OPS.items() if k != "reciprocal"}
 
 # G9 (F8) — pairs/op-sets for the additionally woven modes. The uint16 slot IS the Char;
@@ -5577,6 +5585,7 @@ OUT_BINARY_UFUNCS = {
     "multiply": ["int64", "float32"],
     "divide": ["float64", "int32"],
     "power": ["float64", "int32"],
+    "float_power": ["float64", "int32"],
     "mod": ["int32", "float64"],
     "floor_divide": ["int32", "float64"],
     "arctan2": ["float64", "float32"],
@@ -6022,7 +6031,8 @@ SPECIAL_UNARY_OPS = {
 }
 SPECIAL_BINARY_OPS = {
     "add": lambda a, b: a + b, "subtract": lambda a, b: a - b, "multiply": lambda a, b: a * b, "divide": lambda a, b: a / b,
-    "floor_divide": lambda a, b: a // b, "mod": lambda a, b: a % b, "power": lambda a, b: a ** b, "arctan2": np.arctan2,
+    "floor_divide": lambda a, b: a // b, "mod": lambda a, b: a % b, "power": lambda a, b: a ** b,
+    "float_power": lambda a, b: np.float_power(a, b), "arctan2": np.arctan2,
     "maximum": np.maximum, "minimum": np.minimum, "fmax": np.fmax, "fmin": np.fmin,
     "equal": lambda a, b: a == b, "not_equal": lambda a, b: a != b, "less": lambda a, b: a < b, "greater": lambda a, b: a > b,
     "less_equal": lambda a, b: a <= b, "greater_equal": lambda a, b: a >= b, "isclose": np.isclose,

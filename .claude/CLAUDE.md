@@ -662,7 +662,7 @@ texts differ in wording; `np.broadcast_to(a, (2^62, 6))` builds the view where N
 `are_broadcastable`, `broadcast`, `broadcast_arrays`, `broadcast_to`
 
 ### Math — Arithmetic
-`abs`, `absolute`, `acosh`, `add`, `arccos`, `arccosh`, `arcsin`, `arcsinh`, `arctan`, `arctan2`, `arctanh`, `asinh`, `atanh`, `cbrt`, `ceil`, `clip`, `convolve`, `correlate`, `cos`, `cosh`, `deg2rad`, `degrees`, `divide`, `divmod`, `exp`, `exp2`, `expm1`, `floor`, `floor_divide`, `fmod`, `log`, `log10`, `log1p`, `log2`, `mod`, `modf`, `multiply`, `negative`, `positive`, `power`, `rad2deg`, `radians`, `reciprocal`, `remainder`, `rint`, `sign`, `sin`, `sinh`, `sqrt`, `square`, `subtract`, `tan`, `tanh`, `true_divide`, `trunc`
+`abs`, `absolute`, `acosh`, `add`, `arccos`, `arccosh`, `arcsin`, `arcsinh`, `arctan`, `arctan2`, `arctanh`, `asinh`, `atanh`, `cbrt`, `ceil`, `clip`, `convolve`, `correlate`, `cos`, `cosh`, `deg2rad`, `degrees`, `divide`, `divmod`, `exp`, `exp2`, `expm1`, `float_power`, `floor`, `floor_divide`, `fmod`, `log`, `log10`, `log1p`, `log2`, `mod`, `modf`, `multiply`, `negative`, `positive`, `power`, `rad2deg`, `radians`, `reciprocal`, `remainder`, `rint`, `sign`, `sin`, `sinh`, `sqrt`, `square`, `subtract`, `tan`, `tanh`, `true_divide`, `trunc`
 
 **The divmod family** — `remainder`/`mod`, `fmod`, `divmod` (all probed against 2.4.2; gates the
 `divmod_power`/`multioutput` fuzz tiers + `Math` unit tests). `np.remainder` is an exact ALIAS of the existing
@@ -684,6 +684,26 @@ computes float16 `mod`/`floor_divide`/`fmod` in **float32** (NumPy's HALF loop `
 `NDDivision.*Single` helpers, so float16 ÷0 yields ±inf (was the NaN `[known bug]` W1-A) — float16 division is now
 bit-exact with NumPy, and the W1-A `MisalignedRegistry` excuse is removed. See `Math/np.{divmod,math}.cs`,
 `Backends/Default/Math/Default.{Fmod,DivMod}.cs`, `Utilities/NDDivision.{Fmod,Divmod}.cs`.
+
+**`np.float_power`** — power at a MINIMUM precision of float64 (NumPy's `dd->d`/`DD->D` loops ONLY, probed 2.4.2;
+gates the `divmod_power`/`out_where`/`specials` fuzz tiers + `Math/np.float_power.Test.cs`). It is NOT a new kernel:
+`Default.FloatPower` resolves the float loop (complex128 if either operand is complex, else float64) and DELEGATES
+to the bit-exact `Power` engine on that loop, so the arithmetic is byte-for-byte `power` on those loops (same
+`Math.Pow` / `ComplexPowNumPy`). The two behaviours that make it DIFFER from `power` are both loop-SELECTION and
+handled in the wrapper: every real input (bool/int/float16/float32/decimal/char) promotes to float64 and a complex
+operand to complex128 (so the result is always inexact float), and — because there is no integer loop — a negative
+integer exponent is LEGAL (`float_power(2,-1)=0.5`, where `power` raises "Integers to negative integer powers").
+`dtype=` may select ONLY float64/complex128 (else the verbatim "No loop matching…for ufunc float_power"); `out=`/
+`where=` and every layout ride `Power`'s existing machinery. **Error taxonomy + ORDER are NumPy's** (read-only out →
+non-bool where → dtype-no-loop → complex-input-can't-cast-to-float64 → out-cast → shape), raised in the wrapper with
+the `float_power` ufunc name reusing the shared validators. Complex `float_power` inherits the documented complex-power
+divergence (F5: `Complex.Pow`/`npy_cpow` host `cpow` ~ULP for non-integer/large-integer exponents, plus inf/NaN
+edges) — bit-exact on the integer-exponent branch, F5-excused otherwise (same scope as `power`). **Perf (NPY/NS,
+Release):** the scalar-exponent FAST PATH is preserved (operands already float64 → plain `Power`, so `float_power(x,
+2.0)` is `x*x` and `x**0.5` is `sqrt`) — **4.5–51×**; int→float64 **1.05–1.22×**; the general fractional-exponent
+path is **~parity (0.86–0.99×)**, the `Math.Pow` physical ceiling (NumPy is equally scalar-`pow`-bound, no SIMD
+`pow` exists — the same ceiling as `arcsinh`/`arccosh`). See `Math/np.float_power.cs`,
+`Backends/Default/Math/Default.FloatPower.cs`, `Backends/TensorEngine.cs` (`FloatPower`).
 
 **`correlate` / `convolve` — the sliding multiply-accumulate family** (NumPy `_pyarray_correlate` +
 `small_correlate`; `Math/NDArray.SlidingDot.cs`). `np.correlate(a, v, mode='valid')` is cross-correlation
