@@ -40,6 +40,17 @@ namespace NumSharp.Tests.Fuzz
         private static readonly HashSet<string> SiblingOwned = new()
         {
             "array2string",
+            // apply_along_axis / apply_over_axes take a CALLABLE (a C# Func) applied per 1-D slice /
+            // per axis — there is no NumPy-serializable operand form for an arbitrary delegate, so
+            // the differential corpus (which replays operand bytes) cannot express them (same reason
+            // as np.evaluate, which takes an NDExpr). Gated by the dedicated np.apply_along_axis.Test.cs
+            // / np.apply_over_axes.Test.cs suites, verified bit-exact against NumPy 2.4.2.
+            "apply_along_axis", "apply_over_axes",
+            // broadcast_shapes takes SHAPES (tuples of ints), not array operands, so it has no entry
+            // in the (dtype,shape,strides,bytes)->result operand corpus. Gated by the dedicated
+            // np.broadcast_shapes.Test.cs suite (happy path across argument forms + verbatim error
+            // messages), verified against NumPy 2.4.2.
+            "broadcast_shapes",
             // getbufsize/setbufsize configure the ufunc/NDIter default buffer size (NumPy's
             // NPY_BUFSIZE, 8192). They are a thread-local config getter/setter with no array
             // result and no deterministic value bytes — buffering only changes internal chunking,
