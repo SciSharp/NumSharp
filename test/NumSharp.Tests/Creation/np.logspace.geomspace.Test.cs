@@ -150,6 +150,44 @@ namespace NumSharp.Tests.Creation
         }
 
         [TestMethod]
+        public void Geomspace_NaNStart_IsAllNaN()
+        {
+            // np.sign(NaN) is NaN, and NumPy's trailing `result *= out_sign` then turns EVERY element — the
+            // finite stop endpoint included — into NaN. geomspace(nan, 1, 4) == [nan, nan, nan, nan] (NOT
+            // [nan, nan, nan, 1]). A NaN stop with a finite start keeps the finite start: [start, nan, ...].
+            foreach (var v in np.geomspace(double.NaN, 1.0, 4).ToArray<double>())
+                Assert.IsTrue(double.IsNaN(v));
+
+            var b = np.geomspace(2.0, double.NaN, 4).ToArray<double>();
+            b[0].Should().Be(2.0);
+            Assert.IsTrue(double.IsNaN(b[1]) && double.IsNaN(b[2]) && double.IsNaN(b[3]));
+        }
+
+        [TestMethod]
+        public void Geomspace_Infinities()
+        {
+            // sign(±inf) is ±1, so the finite/inf endpoints survive. geomspace(1, inf, 4) keeps start=1.
+            var a = np.geomspace(1.0, double.PositiveInfinity, 4).ToArray<double>();
+            a[0].Should().Be(1.0);
+            var c = np.geomspace(-1000.0, -1.0, 4);   // all-negative stays exact
+            ExactF64(c, -1000.0, -100.0, -10.0, -1.0);
+        }
+
+        [TestMethod]
+        public void Logspace_SpecialValues()
+        {
+            // Infinite exponents and special bases match NumPy (validated bit-exact adversarially). The endpoint
+            // is well-defined (10**3 == 1000); the interior at i=0 is NaN because NumPy's arange formula computes
+            // 0*inf == NaN there (both libraries agree — that's why it's validated, not asserted here).
+            np.logspace(double.NegativeInfinity, 3.0, 4).ToArray<double>()[3].Should().Be(1000.0); // 10**3
+            Assert.IsTrue(double.IsPositiveInfinity(np.logspace(3.0, double.PositiveInfinity, 4).ToArray<double>()[3]));
+            // base=1 -> all ones; base=0 with positive exponents -> zeros (10**? edge handled by pow).
+            ExactF64(np.logspace(1.0, 3.0, 3, @base: 1.0), 1.0, 1.0, 1.0);
+            // 10**400 overflows to +inf, matching NumPy.
+            Assert.IsTrue(double.IsPositiveInfinity(np.logspace(400.0, 400.0, 1).ToArray<double>()[0]));
+        }
+
+        [TestMethod]
         public void Geomspace_NumEdgeCases()
         {
             np.geomspace(1.0, 1000.0, 0).Should().BeShaped(0).And.BeOfType(NPTypeCode.Double);
