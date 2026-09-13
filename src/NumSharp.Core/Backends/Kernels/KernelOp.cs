@@ -75,6 +75,14 @@ namespace NumSharp.Backends.Kernels
         // Core operations (Phase 1)
         Negate,
         Abs,
+        /// <summary>
+        /// np.fabs — the float-only absolute value. The KERNEL is identical to <see cref="Abs"/> on
+        /// the float loops (clear the IEEE sign bit), so every emit site aliases Fabs to Abs; it is a
+        /// DISTINCT op only so it reports the ufunc name "fabs" (not "absolute") in errors and carries
+        /// its own float-tier dtype resolution (see <c>DefaultEngine.Fabs</c>). Never has complex/int
+        /// input at the kernel — <c>Fabs</c> rejects complex and promotes int→float before dispatch.
+        /// </summary>
+        Fabs,
         Sqrt,
         Exp,
         Log,

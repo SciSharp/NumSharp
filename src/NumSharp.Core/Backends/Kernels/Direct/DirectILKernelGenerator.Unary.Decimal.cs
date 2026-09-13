@@ -36,6 +36,7 @@ namespace NumSharp.Backends.Kernels
                     break;
 
                 case UnaryOp.Abs:
+                case UnaryOp.Fabs:   // np.fabs(decimal) — same as Abs (Math.Abs(decimal))
                     il.EmitCall(OpCodes.Call, CachedMethods.MathAbsDecimal, null);
                     break;
 
@@ -575,6 +576,7 @@ namespace NumSharp.Backends.Kernels
                     break;
 
                 case UnaryOp.Abs:
+                case UnaryOp.Fabs:   // np.fabs(f16) scalar/strided — same as Abs (Half sign-bit clear)
                     il.EmitCall(OpCodes.Call, CachedMethods.HalfAbs, null);
                     break;
 

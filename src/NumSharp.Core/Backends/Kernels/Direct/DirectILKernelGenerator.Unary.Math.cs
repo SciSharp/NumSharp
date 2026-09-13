@@ -92,6 +92,7 @@ namespace NumSharp.Backends.Kernels
                     break;
 
                 case UnaryOp.Abs:
+                case UnaryOp.Fabs:   // np.fabs — same op as Abs on the float loops (clear the sign bit)
                     EmitAbsCall(il, type);
                     break;
 

@@ -150,7 +150,8 @@ namespace NumSharp.Backends.Kernels
                 {
                     case UnaryOp.Sign:   return HalfSignContiguous;
                     case UnaryOp.Negate: return HalfNegateContiguous;
-                    case UnaryOp.Abs:    return HalfAbsContiguous;
+                    case UnaryOp.Abs:
+                    case UnaryOp.Fabs:   return HalfAbsContiguous;   // np.fabs(f16) — bit-level sign-bit clear, same as Abs
                     // floor/ceil/trunc/rint are exponent-based mantissa masking — every result
                     // is exactly representable, so the bit kernel is exactly NumPy's
                     // widen→roundf→narrow scalar loop, minus the conversions
@@ -319,7 +320,7 @@ namespace NumSharp.Backends.Kernels
             // emulates it via compare+xor+sub which is SLOWER than the scalar abs loop
             // (measured: 2222µs scalar → 2569µs SIMD on 1M int64). int32 and narrower
             // use PABSD/PABSW/PABSB which are single-cycle intrinsics.
-            if (key.Op == UnaryOp.Negate || key.Op == UnaryOp.Abs || key.Op == UnaryOp.Square)
+            if (key.Op == UnaryOp.Negate || key.Op == UnaryOp.Abs || key.Op == UnaryOp.Fabs || key.Op == UnaryOp.Square)
             {
                 return key.InputType == NPTypeCode.SByte ||
                        key.InputType == NPTypeCode.Byte ||

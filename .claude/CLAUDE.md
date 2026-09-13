@@ -715,9 +715,14 @@ corpus tiers). It is the float sibling of `abs`/`absolute` and differs in exactl
 it PROMOTES bool/int to float (NEP50 tier: bool/int8/uint8→float16, int16/uint16/char→float32,
 int32/uint32/int64/uint64→float64; float16/float32/float64/decimal preserved) — so `fabs(int)` is always a
 float where `abs(int)` preserves int — and it has NO complex loop (`abs` maps complex→magnitude; `fabs`
-REJECTS it). The **operation** is identical to `abs` on the float loops — clear the IEEE sign bit — so `fabs`
-REUSES the fully-SIMD `UnaryOp.Abs` kernel (`Default.Fabs` → `ExecuteUnaryOp(nd, UnaryOp.Abs, floatType, …,
-ufuncName:"fabs")`), inheriting every layout, `out=`/`where=`/`dtype=`, and the f16/decimal paths for free. The
+REJECTS it). The **operation** is identical to `abs` on the float loops — clear the IEEE sign bit — so `fabs` rides
+`UnaryOp.Fabs`, a distinct op that **aliases `UnaryOp.Abs` at every kernel emit site** (the 6 non-complex ones:
+scalar `EmitAbsCall`, `Vector.Abs` name-map, the SIMD gate, the f16 selector, decimal, f16-scalar), inheriting
+every layout, `out=`/`where=`/`dtype=`, and the f16/decimal paths for free. It is a separate enum value ONLY so
+`UfuncName(UnaryOp.Fabs) == "fabs"` — the op drives both kernel selection (~10 sites) and the ufunc name in errors,
+and a dedicated enum keeps fabs's specialness in the per-op dispatch layer rather than adding a name-override
+parameter to the shared `ExecuteUnaryOp` executor (`Default.Fabs` → `ExecuteUnaryOp(nd, UnaryOp.Fabs, floatType,
+out, where)`). The
 promoting path casts int→float BEFORE the abs, so `fabs(int.MinValue)` is the exact float magnitude, never the
 wrapped integer abs. **BIT-EXACT with NumPy 2.4.2** across all 12 NumPy-representable non-complex dtypes ×
 26 layouts, including `-0.0→+0.0`, `±inf→+inf`, and a negative/payload-bearing NaN whose sign bit is cleared
@@ -725,8 +730,8 @@ while the payload is preserved (`0xfff8…abcdef → 0x7ff8…abcdef`). **Comple
 error paths** (probed): no `dtype=` → `TypeError` "ufunc 'fabs' not supported for the input types…"; `dtype=`
 float → "Cannot cast ufunc 'fabs' input from complex128 to <float> with casting rule 'same_kind'"; `dtype=`
 complex/int → "No loop matching the specified signature and casting was found for ufunc fabs". The `out=` cast
-error correctly names `"fabs"` (not `"absolute"`) — `ExecuteUnaryOp`/`ExecuteUnaryUfuncInto` gained an optional
-`ufuncName` override for exactly this reuse-a-kernel-under-another-ufunc-name case. **Perf (NPY/NS, Release,
+error correctly names `"fabs"` (not `"absolute"`) because `UnaryOp.Fabs` is its own op with its own `UfuncName`
+entry — no name-override parameter on the shared executor. **Perf (NPY/NS, Release,
 best-of-15):** faster than NumPy on every measured cell — NumPy's `fabs` is a SCALAR CRT loop (no SIMD dispatch,
 unlike `absolute`), while NumSharp rides `Vector.Abs`: float16 **4.5–24.8×**, float64 **1.75–13.9×**, int32
 **1.6–10.8×**, `out=` paths 2.5–14× (the one sub-1.5× cell, fresh-alloc float32@100K at 1.19×, is the shared
