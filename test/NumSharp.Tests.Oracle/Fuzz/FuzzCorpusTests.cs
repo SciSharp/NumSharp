@@ -211,6 +211,17 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Sinc() => RunHostLibmCorpus("sinc.jsonl");
 
+        // np.i0 — modified Bessel I_0 over every REAL dtype (bool/all-ints/Char -> float64,
+        // float16/float32/float64 preserved) × all single-array layouts. HOST-PINNED to win-amd64
+        // (RunHostLibmCorpus, like the sibling Unary/Sinc tiers): the cephes routine composes exp/sqrt,
+        // so float64 (Math.Exp == win-amd64 ucrtbase) and float16 (BCL Half.Exp) reproduce bit-for-bit
+        // only on the host that generated the corpus (Inconclusive off-Windows) — float32 rides NumPy's
+        // OWN portable exp kernel but shares the tier. complex128 is absent (NumPy rejects it; the
+        // rejection is pinned by a unit test). Bit-exact vs NumPy 2.4.2 across every included dtype.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void I0() => RunHostLibmCorpus("i0.jsonl");
+
         // W4 NaN-aware reductions (T10): nansum/nanprod/nanmax/nanmin/nanmean/nanstd/nanvar/
         // nanmedian over NaN-laced float operands — must IGNORE NaN per NumPy contract.
         [TestMethod]
