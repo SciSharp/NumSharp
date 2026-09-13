@@ -125,6 +125,7 @@ namespace NumSharp.Backends
             UnaryOp.BitwiseNot => "invert",
             UnaryOp.LogicalNot => "logical_not",
             UnaryOp.Positive => "positive",
+            UnaryOp.Spacing => "spacing",
             _ => op.ToString().ToLowerInvariant(),
         };
 

@@ -45,6 +45,13 @@ namespace NumSharp.Backends.Kernels
                     il.EmitCall(OpCodes.Call, CachedMethods.DecimalImplicitFromInt, null);
                     break;
 
+                case UnaryOp.Spacing:
+                    // np.spacing on decimal (no NumPy analog): the double-bridge is packaged inside
+                    // NDSpacingMath.Spacing(decimal), so a single Call suffices (unlike the transcendental
+                    // block below which inlines the decimal->double->Math.*->decimal round-trip).
+                    il.EmitCall(OpCodes.Call, CachedMethods.SpacingDec, null);
+                    break;
+
                 case UnaryOp.Ceil:
                     // Math.Ceiling has decimal overload
                     il.EmitCall(OpCodes.Call, CachedMethods.MathCeilingDecimal, null);
@@ -649,6 +656,14 @@ namespace NumSharp.Backends.Kernels
                     // Half Sign with NaN handling: if NaN, return NaN; else return sign
                     // NumPy: sign(NaN) = NaN, sign(0) = 0, sign(+x) = 1, sign(-x) = -1
                     il.EmitCall(OpCodes.Call, GetHelper(nameof(HalfSignHelper)), null);
+                    break;
+
+                case UnaryOp.Spacing:
+                    // np.spacing at float16 is NumPy's SEPARATE npy_half_spacing routine (a raw 16-bit
+                    // bit-fiddle, ALWAYS non-negative, boundary-aware) — NOT the float32-bridge the
+                    // transcendentals above use, and NOT the signed float32/float64 formula. Ported
+                    // bit-for-bit in NDSpacingMath.Spacing(Half) (verified over all 65 536 patterns).
+                    il.EmitCall(OpCodes.Call, CachedMethods.SpacingH, null);
                     break;
 
                 case UnaryOp.IsNan:

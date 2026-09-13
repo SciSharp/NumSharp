@@ -71,6 +71,7 @@ namespace NumSharp.Tests.Fuzz
                 case "deg2rad": return np.deg2rad(ops[0]);
                 case "rad2deg": return np.rad2deg(ops[0]);
                 case "positive": return np.positive(ops[0]);
+                case "spacing": return np.spacing(ops[0]);
 
                 // Bitwise & shift (T9). Integer + bool dtypes; NumPy is the oracle.
                 case "bitwise_and": return ops[0] & ops[1];
