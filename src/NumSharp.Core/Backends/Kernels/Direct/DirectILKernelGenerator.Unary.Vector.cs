@@ -103,6 +103,8 @@ namespace NumSharp.Backends.Kernels
             {
                 UnaryOp.Negate => "op_UnaryNegation",
                 UnaryOp.Abs => "Abs",
+                UnaryOp.Fabs => "Abs",   // np.fabs — Vector.Abs, same as Abs on the float loops
+
                 UnaryOp.Sqrt => "Sqrt",
                 UnaryOp.Floor => "Floor",
                 UnaryOp.Ceil => "Ceiling",  // Vector uses "Ceiling" not "Ceil"

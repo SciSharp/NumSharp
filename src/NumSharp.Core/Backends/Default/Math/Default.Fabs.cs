@@ -50,9 +50,10 @@ namespace NumSharp.Backends
         ///     <c>TD(flts, f='fabs', astype={'e':'f'})</c> — float loops only, float16 via float32). fabs
         ///     IS <c>absolute</c> on the float loops — the C <c>fabs</c> clears the IEEE sign bit, so the
         ///     result is BIT-EXACT including NaN payloads (a negative NaN's sign is cleared, payload kept)
-        ///     and <c>-0.0 → +0.0</c>. It therefore reuses the fully-SIMD <see cref="UnaryOp.Abs"/> kernel;
-        ///     the float output type resolved here (not <c>Abs</c>'s dtype-preserving one) is what makes it
-        ///     fabs. The promoting path casts int→float BEFORE the abs (so <c>fabs(int.MinValue)</c> is the
+        ///     and <c>-0.0 → +0.0</c>. It therefore rides <see cref="UnaryOp.Fabs"/>, which aliases the
+        ///     fully-SIMD <see cref="UnaryOp.Abs"/> kernel at every emit site (a distinct op only so the
+        ///     ufunc name is "fabs"); the float output type resolved here (not <c>Abs</c>'s dtype-preserving
+        ///     one) is what makes it fabs. The promoting path casts int→float BEFORE the abs (so <c>fabs(int.MinValue)</c> is the
         ///     exact float magnitude, never the wrapped integer abs). Decimal (no NumPy analog) is preserved
         ///     and computed via <see cref="Math.Abs(decimal)"/>, consistent with the other float-tier unaries.
         /// </remarks>
@@ -91,9 +92,10 @@ namespace NumSharp.Backends
             // NOT take Abs's dtype-preserving branch — the abs kernel then casts int→float first and
             // clears the sign bit, i.e. fabs.
             var outputType = ResolveUnaryFloatReturnType(nd, typeCode, "fabs");
-            // Reuse the SIMD Abs kernel but keep the ufunc name "fabs" in the out= cast error
-            // (UfuncName(UnaryOp.Abs) is "absolute").
-            return ExecuteUnaryOp(nd, UnaryOp.Abs, outputType, @out, where, "fabs");
+            // UnaryOp.Fabs shares Abs's kernel at every emit site (clear the IEEE sign bit) but is a
+            // distinct op so UfuncName reports "fabs" (not "absolute") in the out= cast error. The
+            // resolved float output type — not Abs's dtype-preserving one — is what makes it fabs.
+            return ExecuteUnaryOp(nd, UnaryOp.Fabs, outputType, @out, where);
         }
     }
 }
