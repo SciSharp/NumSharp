@@ -10,7 +10,8 @@ namespace NumSharp.Tests.DTypes
     ///     oracle surface guard) — this suite IS its gate. Every expected string, and every KeyError message,
     ///     was produced by running the matching NumPy 2.4.2 call. Coverage: all 22 codes, the case-sensitivity
     ///     of the lookup, the distinct <c>"S1"</c>/<c>"S"</c> entries, the deliberately-absent <c>"e"</c>
-    ///     (half) code, and the KeyError message (Python <c>repr</c>) on every miss including a null argument.
+    ///     (half) code, and the KeyError message (Python <c>repr</c>) on every miss — including the quote
+    ///     selection, short escapes, non-printable \x/\u/\U escaping, and a null argument.
     /// </summary>
     [TestClass]
     public class TypenameTest
@@ -106,6 +107,39 @@ namespace NumSharp.Tests.DTypes
 
             var e3 = Assert.ThrowsException<KeyError>(() => np.typename(""));
             Assert.AreEqual("''", e3.Message);
+        }
+
+        /// <summary>The KeyError message reproduces Python <c>repr</c>'s quote selection and short escapes:
+        /// a string containing a single quote (and no double quote) is double-quoted, and backslash / newline
+        /// / tab / carriage-return use their short escapes — byte-for-byte with NumPy.</summary>
+        [TestMethod]
+        public void Typename_KeyError_Message_QuotesAndShortEscapes()
+        {
+            Assert.AreEqual("\"it's\"", Assert.ThrowsException<KeyError>(() => np.typename("it's")).Message);   // switches to double quotes
+            Assert.AreEqual("'a\"b'", Assert.ThrowsException<KeyError>(() => np.typename("a\"b")).Message);      // stays single-quoted
+            Assert.AreEqual("'\\\\'", Assert.ThrowsException<KeyError>(() => np.typename("\\")).Message);         // backslash -> \\
+            Assert.AreEqual("'\\n'", Assert.ThrowsException<KeyError>(() => np.typename("\n")).Message);          // newline -> \n
+            Assert.AreEqual("'\\t'", Assert.ThrowsException<KeyError>(() => np.typename("\t")).Message);          // tab -> \t
+            Assert.AreEqual("'\\r'", Assert.ThrowsException<KeyError>(() => np.typename("\r")).Message);          // CR -> \r
+        }
+
+        /// <summary>NON-printable characters escape as Python <c>repr</c> does — \xNN (&lt;0x100), \uNNNN
+        /// (&lt;0x10000), \UNNNNNNNN (supplementary) — while a PRINTABLE non-ASCII character (incl. an emoji)
+        /// is rendered verbatim. Pins the exact NumPy 2.4.2 KeyError text for control chars, NBSP, soft
+        /// hyphen, zero-width space and a non-printable supplementary code point (all differentially verified).
+        /// Inputs use \u/\U C# escapes (never raw control bytes) so the source stays legible and unambiguous.</summary>
+        [TestMethod]
+        public void Typename_KeyError_Message_EscapesNonPrintables_LikePythonRepr()
+        {
+            Assert.AreEqual("'\\x00'", Assert.ThrowsException<KeyError>(() => np.typename("\u0000")).Message);      // NUL control
+            Assert.AreEqual("'\\x1b'", Assert.ThrowsException<KeyError>(() => np.typename("\u001b")).Message);      // ESC control
+            Assert.AreEqual("'\\x7f'", Assert.ThrowsException<KeyError>(() => np.typename("\u007f")).Message);      // DEL
+            Assert.AreEqual("'\\xa0'", Assert.ThrowsException<KeyError>(() => np.typename("\u00a0")).Message);      // NBSP (Zs, not the 0x20 exception)
+            Assert.AreEqual("'\\xad'", Assert.ThrowsException<KeyError>(() => np.typename("\u00ad")).Message);      // soft hyphen (Cf)
+            Assert.AreEqual("'\\u200b'", Assert.ThrowsException<KeyError>(() => np.typename("\u200b")).Message);    // zero-width space (Cf)
+            Assert.AreEqual("'\\U000e0001'", Assert.ThrowsException<KeyError>(() => np.typename("\U000E0001")).Message); // TAG (Cf, supplementary) -> \U, lowercase hex
+            Assert.AreEqual("'\u00fc'", Assert.ThrowsException<KeyError>(() => np.typename("\u00fc")).Message);     // U+00FC '\u00fc' printable non-ASCII -> verbatim
+            Assert.AreEqual("'\U0001F600'", Assert.ThrowsException<KeyError>(() => np.typename("\U0001F600")).Message); // U+1F600 emoji printable -> verbatim
         }
 
         /// <summary>A null argument is Python's <c>None</c>: it must surface as <c>KeyError("None")</c>
