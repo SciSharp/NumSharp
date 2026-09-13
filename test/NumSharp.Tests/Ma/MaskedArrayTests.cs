@@ -1,0 +1,141 @@
+using System;
+using System.Linq;
+
+namespace NumSharp.Tests.Ma
+{
+    /// <summary>
+    /// Tests for the <c>np.ma</c> masked-array ufunc family. Every expected value/mask was probed against
+    /// NumPy 2.4.2 (<c>numpy.ma.*</c>) and bit-compared. The contract these pin: the underlying <c>np.*</c>
+    /// op runs on the DATA, and the mask propagates — pass-through for a domain-free unary, logical-OR of the
+    /// operand masks for a binary, and OR'd with the invalid-input domain for sqrt/log/divide; masked
+    /// positions have the input data restored into <c>.data</c> (NumPy's <c>copyto(result, d, where=m)</c>).
+    /// </summary>
+    [TestClass]
+    public class MaskedArrayTests
+    {
+        /// <summary>Data of a masked result as float64, in logical C-order (masked positions included).</summary>
+        private static double[] D(MaskedArray r) => np.ma.getdata(r).astype(np.float64).ToArray<double>();
+
+        /// <summary>Full boolean mask of a masked result (never the 0-d nomask sentinel).</summary>
+        private static bool[] M(MaskedArray r) => np.ma.getmaskarray(r).ToArray<bool>();
+
+        private static MaskedArray A() =>
+            np.ma.array(np.array(new double[] { 1, -2, 3, -4 }), np.array(new bool[] { false, true, false, false }));
+        private static MaskedArray B() =>
+            np.ma.array(np.array(new double[] { 10, 20, 30, 40 }), np.array(new bool[] { false, false, true, false }));
+
+        /// <summary>abs/absolute apply |·| to the data and carry the mask through UNCHANGED; the masked slot
+        /// keeps its (restored) input value, not |input|.</summary>
+        [TestMethod]
+        public void Abs_And_Absolute_PassMaskThrough()
+        {
+            foreach (var r in new[] { np.ma.abs(A()), np.ma.absolute(A()) })
+            {
+                // NumPy: data=[1,-2,3,4] (masked slot restored to input -2), mask=[F,T,F,F].
+                Assert.IsTrue(D(r).SequenceEqual(new double[] { 1, -2, 3, 4 }));
+                Assert.IsTrue(M(r).SequenceEqual(new[] { false, true, false, false }));
+            }
+        }
+
+        /// <summary>add masks a position wherever EITHER operand was masked (logical-OR), and restores the
+        /// LEFT operand's data at masked slots.</summary>
+        [TestMethod]
+        public void Add_OrsMasks_AndRestoresLeftData()
+        {
+            var r = np.ma.add(A(), B());
+            // NumPy: data=[11,-2,3,36] (slots 1,2 restored to a's data), mask=[F,T,T,F].
+            Assert.IsTrue(D(r).SequenceEqual(new double[] { 11, -2, 3, 36 }));
+            Assert.IsTrue(M(r).SequenceEqual(new[] { false, true, true, false }));
+        }
+
+        /// <summary>Two unmasked operands keep the nomask fast path: no mask is materialized and
+        /// <c>getmask</c> returns the shared nomask sentinel.</summary>
+        [TestMethod]
+        public void Add_TwoUnmasked_StaysNomask()
+        {
+            var r = np.ma.add(np.array(new double[] { 1, 2, 3 }), np.array(new double[] { 3, 4, 5 }));
+            Assert.IsTrue(D(r).SequenceEqual(new double[] { 4, 6, 8 }));
+            Assert.IsTrue(ReferenceEquals(np.ma.getmask(r), np.ma.nomask)); // nomask, not a False array
+            Assert.IsFalse(M(r).Any(x => x));                               // getmaskarray fills all-False
+        }
+
+        /// <summary>sqrt additionally MASKS inputs &lt; 0 (its domain) on top of the incoming mask, and the
+        /// masked slot's data is the restored input, not NaN.</summary>
+        [TestMethod]
+        public void Sqrt_MasksNegativeDomain()
+        {
+            // c = [-1, 0, 4, 9] with index 2 already masked.
+            var c = np.ma.array(np.array(new double[] { -1, 0, 4, 9 }), np.array(new bool[] { false, false, true, false }));
+            var r = np.ma.sqrt(c);
+            // NumPy: data=[-1,0,4,3] (idx0 negative→restored -1; idx2 restored 4), mask=[T,F,T,F].
+            Assert.IsTrue(D(r).SequenceEqual(new double[] { -1, 0, 4, 3 }));
+            Assert.IsTrue(M(r).SequenceEqual(new[] { true, false, true, false }));
+        }
+
+        /// <summary>divide masks positions where the denominator is (near) zero, so no inf/NaN leaks into an
+        /// unmasked slot.</summary>
+        [TestMethod]
+        public void Divide_MasksDivisionByZero()
+        {
+            var d = np.ma.array(np.array(new double[] { 1, 2, 3, 4 }));
+            var e = np.ma.array(np.array(new double[] { 0, 2, 0, 4 }));
+            var r = np.ma.divide(d, e);
+            // NumPy: quotient [_,1,_,1] with div-by-zero slots masked; masked data restored to numerator.
+            Assert.IsTrue(M(r).SequenceEqual(new[] { true, false, true, false }));
+            Assert.AreEqual(1.0, D(r)[1]);
+            Assert.AreEqual(1.0, D(r)[3]);
+        }
+
+        /// <summary>Comparisons return a masked boolean array whose mask is the OR of the operand masks.</summary>
+        [TestMethod]
+        public void Greater_ReturnsMaskedBool()
+        {
+            var r = np.ma.greater(A(), B());
+            // a>b is all False on the unmasked slots (0,3); mask=[F,T,T,F].
+            Assert.IsTrue(M(r).SequenceEqual(new[] { false, true, true, false }));
+            Assert.AreEqual(0.0, D(r)[0]);
+            Assert.AreEqual(0.0, D(r)[3]);
+        }
+
+        /// <summary><c>filled</c> substitutes the fill value at masked positions and returns a plain array of
+        /// the data dtype; unmasked positions are untouched.</summary>
+        [TestMethod]
+        public void Filled_SubstitutesAtMaskedPositions()
+        {
+            var filled = np.ma.add(A(), B()).filled(99.0).ToArray<double>();
+            // mask was [F,T,T,F] over data [11,-2,3,36] ⇒ [11, 99, 99, 36].
+            Assert.IsTrue(filled.SequenceEqual(new double[] { 11, 99, 99, 36 }));
+        }
+
+        /// <summary>An operation that reduces to a single fully-masked 0-D element returns the <c>masked</c>
+        /// singleton, exactly as NumPy's <c>np.ma.masked</c>.</summary>
+        [TestMethod]
+        public void ScalarFullyMasked_ReturnsMaskedSingleton()
+        {
+            var r = np.ma.add(np.ma.masked, NDArray.Scalar(5.0));
+            Assert.IsTrue(ReferenceEquals(r, np.ma.masked));
+        }
+
+        /// <summary>abs and absolute are the same op; both are domain-free (mask unchanged).</summary>
+        [TestMethod]
+        public void Mod_And_TrueDivide_AreAliases()
+        {
+            var x = np.array(new double[] { 7, 8 });
+            var y = np.array(new double[] { 3, 5 });
+            Assert.IsTrue(D(np.ma.mod(x, y)).SequenceEqual(D(np.ma.remainder(x, y))));
+            Assert.IsTrue(D(np.ma.true_divide(x, y)).SequenceEqual(D(np.ma.divide(x, y))));
+        }
+
+        /// <summary>getdata/getmask/getmaskarray behave as NumPy: a plain array has no mask; getmaskarray
+        /// still yields an all-False array of the right shape.</summary>
+        [TestMethod]
+        public void Substrate_GetdataGetmaskGetmaskarray()
+        {
+            var plain = np.array(new double[] { 1, 2, 3 });
+            Assert.IsTrue(ReferenceEquals(np.ma.getmask(plain), np.ma.nomask));
+            Assert.IsFalse(np.ma.getmaskarray(plain).ToArray<bool>().Any(x => x));
+            Assert.IsTrue(np.ma.getdata(A()).astype(np.float64).ToArray<double>()
+                .SequenceEqual(new double[] { 1, -2, 3, -4 }));
+        }
+    }
+}
