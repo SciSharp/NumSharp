@@ -588,6 +588,88 @@ namespace NumSharp.Backends.Iteration
         public static NDExpr Average(NDExpr values, NDExpr weights, int axis, bool keepdims = false)
             => new WeightedAverageNode(values, weights, axis, keepdims);
 
+        // --- axis=None + keepdims flat forms (plan P2 M5) -----------------------------------------
+        //
+        // NumPy's reductions take keepdims with axis=None too: np.sum(a, keepdims=True) reduces the
+        // whole array yet returns shape (1,)*a.ndim — the broadcast-friendly form behind idioms like
+        // `a / a.sum(axis=None, keepdims=True)`. The flat factories above return a 0-d scalar
+        // (keepdims=False); these are their keepdims twins. The bool is REQUIRED (no default) on
+        // purpose: `Sum(x)` must stay unambiguously the 0-d form, so `Sum(x, keepdims: true)` — a
+        // required argument — is the only way into the size-1-everywhere form (a defaulted overload
+        // would collide with `Sum(x)`). The host reshapes the 0-d result to (1,)*childNdim, so the
+        // VALUE is identical to the 0-d form and only the wrapper rank differs; a 0-d child stays 0-d
+        // (np.sum(scalar, keepdims=True) is 0-d), matching NumPy. TUPLE axis is deliberately NOT
+        // offered — every NumSharp reduction is single-axis (int?), so multi-axis is a library-wide
+        // gap, not an evaluate-specific one (plan P2 M5, deferred).
+
+        /// <summary>One-pass fused <c>np.sum(x, axis=None, keepdims=True)</c> — the whole-array sum kept as shape (1,…,1) for broadcasting back against the input.</summary>
+        public static NDExpr Sum(NDExpr x, bool keepdims) => new ReduceNode(NDExprReduceKind.Sum, x, null, keepdims);
+
+        /// <summary>One-pass fused <c>np.prod(x, axis=None, keepdims=True)</c> — the whole-array product kept as shape (1,…,1).</summary>
+        public static NDExpr Prod(NDExpr x, bool keepdims) => new ReduceNode(NDExprReduceKind.Prod, x, null, keepdims);
+
+        /// <summary>One-pass fused <c>np.min(x, axis=None, keepdims=True)</c> — the whole-array minimum kept as shape (1,…,1) (NaN-propagating).</summary>
+        public static NDExpr Min(NDExpr x, bool keepdims) => new ReduceNode(NDExprReduceKind.Min, x, null, keepdims);
+
+        /// <summary>One-pass fused <c>np.max(x, axis=None, keepdims=True)</c> — the whole-array maximum kept as shape (1,…,1) (NaN-propagating).</summary>
+        public static NDExpr Max(NDExpr x, bool keepdims) => new ReduceNode(NDExprReduceKind.Max, x, null, keepdims);
+
+        /// <summary>One-pass fused <c>np.mean(x, axis=None, keepdims=True)</c> — the whole-array mean kept as shape (1,…,1).</summary>
+        public static NDExpr Mean(NDExpr x, bool keepdims) => new ReduceNode(NDExprReduceKind.Mean, x, null, keepdims);
+
+        /// <summary>One-pass fused <c>np.any(x, axis=None, keepdims=True)</c> — the whole-array presence test kept as shape (1,…,1) (bool).</summary>
+        public static NDExpr Any(NDExpr x, bool keepdims) => new ReduceNode(NDExprReduceKind.Any, NotEqual(x, Const(0)), null, keepdims);
+
+        /// <summary>One-pass fused <c>np.all(x, axis=None, keepdims=True)</c> — the whole-array universal test kept as shape (1,…,1) (bool).</summary>
+        public static NDExpr All(NDExpr x, bool keepdims) => new ReduceNode(NDExprReduceKind.All, NotEqual(x, Const(0)), null, keepdims);
+
+        /// <summary>One-pass fused <c>np.count_nonzero(x, axis=None, keepdims=True)</c> — the whole-array nonzero count kept as shape (1,…,1) (int64).</summary>
+        public static NDExpr CountNonzero(NDExpr x, bool keepdims) => new ReduceNode(NDExprReduceKind.Sum, NotEqual(x, Const(0)), null, keepdims);
+
+        /// <summary>One-pass fused <c>np.nansum(x, axis=None, keepdims=True)</c> — the whole-array NaN-skipping sum kept as shape (1,…,1).</summary>
+        public static NDExpr NanSum(NDExpr x, bool keepdims) => new ReduceNode(NDExprReduceKind.Sum, Where(IsNaN(x), Const(0), x), null, keepdims);
+
+        /// <summary>One-pass fused <c>np.nanprod(x, axis=None, keepdims=True)</c> — the whole-array NaN-skipping product kept as shape (1,…,1).</summary>
+        public static NDExpr NanProd(NDExpr x, bool keepdims) => new ReduceNode(NDExprReduceKind.Prod, Where(IsNaN(x), Const(1), x), null, keepdims);
+
+        /// <summary>One-pass fused <c>np.ptp(x, axis=None, keepdims=True)</c> — the whole-array peak-to-peak range kept as shape (1,…,1) (dtype preserved, wrapping).</summary>
+        public static NDExpr Ptp(NDExpr x, bool keepdims) => new ReduceNode(NDExprReduceKind.Ptp, x, null, keepdims);
+
+        /// <summary>One-pass fused <c>np.nanmin(x, axis=None, keepdims=True)</c> — the whole-array NaN-skipping minimum kept as shape (1,…,1).</summary>
+        public static NDExpr NanMin(NDExpr x, bool keepdims) => new ReduceNode(NDExprReduceKind.NanMin, x, null, keepdims);
+
+        /// <summary>One-pass fused <c>np.nanmax(x, axis=None, keepdims=True)</c> — the whole-array NaN-skipping maximum kept as shape (1,…,1).</summary>
+        public static NDExpr NanMax(NDExpr x, bool keepdims) => new ReduceNode(NDExprReduceKind.NanMax, x, null, keepdims);
+
+        /// <summary>One-pass fused <c>np.argmax(x, axis=None, keepdims=True)</c> — the flat int64 index of the maximum kept as shape (1,…,1) (first-tie / first-NaN wins).</summary>
+        public static NDExpr ArgMax(NDExpr x, bool keepdims) => new ReduceNode(NDExprReduceKind.ArgMax, x, null, keepdims);
+
+        /// <summary>One-pass fused <c>np.argmin(x, axis=None, keepdims=True)</c> — the flat int64 index of the minimum kept as shape (1,…,1) (first-tie / first-NaN wins).</summary>
+        public static NDExpr ArgMin(NDExpr x, bool keepdims) => new ReduceNode(NDExprReduceKind.ArgMin, x, null, keepdims);
+
+        /// <summary>One-pass fused <c>np.nanmean(x, axis=None, keepdims=True)</c> — the whole-array NaN-skipping mean kept as shape (1,…,1).</summary>
+        public static NDExpr NanMean(NDExpr x, bool keepdims) => new ReduceNode(NDExprReduceKind.NanMean, x, null, keepdims);
+
+        /// <summary>One-pass fused <c>np.var(x, axis=None, keepdims=True, ddof=ddof)</c> — the whole-array variance kept as shape (1,…,1) (real float64 for a complex child).</summary>
+        /// <param name="x">The expression to reduce.</param>
+        /// <param name="keepdims">Kept for API shape; a flat variance kept as size-1 everywhere.</param>
+        /// <param name="ddof">Delta degrees of freedom; the divisor is <c>max(N − ddof, 0)</c>.</param>
+        public static NDExpr Var(NDExpr x, bool keepdims, int ddof = 0) => new ReduceNode(NDExprReduceKind.Var, x, null, keepdims, ddof);
+
+        /// <summary>One-pass fused <c>np.std(x, axis=None, keepdims=True, ddof=ddof)</c> — the whole-array standard deviation kept as shape (1,…,1).</summary>
+        /// <param name="x">The expression to reduce.</param>
+        /// <param name="keepdims">Kept for API shape; a flat std kept as size-1 everywhere.</param>
+        /// <param name="ddof">Delta degrees of freedom; the divisor is <c>max(N − ddof, 0)</c>.</param>
+        public static NDExpr Std(NDExpr x, bool keepdims, int ddof = 0) => new ReduceNode(NDExprReduceKind.Std, x, null, keepdims, ddof);
+
+        /// <summary>One-pass fused <c>np.average(values, weights=weights, axis=None, keepdims=True)</c> — the whole-array weighted mean kept as shape (1,…,1).</summary>
+        /// <param name="values">The value expression to average.</param>
+        /// <param name="weights">The weight expression aligned with <paramref name="values"/>.</param>
+        /// <param name="keepdims">Kept for API shape; a flat weighted average kept as size-1 everywhere.</param>
+        /// <returns>The fused weighted-average node reducing the whole array, result kept as shape (1,…,1).</returns>
+        public static NDExpr Average(NDExpr values, NDExpr weights, bool keepdims)
+            => new WeightedAverageNode(values, weights, null, keepdims);
+
         // ===================================================================
         // Binding
         // ===================================================================
@@ -1532,7 +1614,7 @@ namespace NumSharp.Backends.Iteration
         /// <param name="values">The value expression (numerator's left factor).</param>
         /// <param name="weights">The weight expression (numerator's right factor and the denominator).</param>
         /// <param name="axis">The reduction axis, or null for a flat (reduce-all) average.</param>
-        /// <param name="keepdims">When true (axis form only), the reduced axis is kept as size 1.</param>
+        /// <param name="keepdims">When true, the reduced axis (or every axis, for a flat average) is kept as size 1.</param>
         /// <exception cref="ArgumentNullException"><paramref name="values"/> or <paramref name="weights"/> is null.</exception>
         public WeightedAverageNode(NDExpr values, NDExpr weights, int? axis = null, bool keepdims = false)
         {

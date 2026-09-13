@@ -8358,10 +8358,13 @@ def gen_evaluate():
                     # the layout builders always hand back a fresh C-contiguous base the view aliases.
                     nb, nv = LAYOUTS[ln](np.dtype(dt))
                     nb[...] = benign_b if (benign_b is not None and kind in ("sum", "prod", "mean")) else b
-                    # flat, every axis, and keepdims on the first axis
+                    # flat, every axis, keepdims on the first axis, AND flat+keepdims (plan P2 M5 —
+                    # np.<reduce>(a, axis=None, keepdims=True) → shape (1,)*ndim, one element kept
+                    # broadcast-friendly).
                     combos = [(None, False)] + [(ax, False) for ax in range(nv.ndim)]
                     if nv.ndim > 0:
                         combos.append((0, True))
+                        combos.append((None, True))
                     for ax, kd in combos:
                         emit(expr, [(nb, nv)], ln, params={"reduce": {"kind": kind, "axis": ax, "keepdims": kd}},
                              cid_tag=f"{dt}/{kind}[{ax},{int(kd)}]/{expr}")
@@ -8482,6 +8485,7 @@ def gen_evaluate():
                 combos = [(None, False)] + [(ax, False) for ax in range(nv.ndim)]
                 if nv.ndim > 0:
                     combos.append((0, True))
+                    combos.append((None, True))              # flat + keepdims (plan P2 M5)
                 for ax, kd in combos:
                     emit("in0", [(nb, nv)], ln,
                          params={"reduce": {"kind": kind, "axis": ax, "keepdims": kd}},
@@ -8560,6 +8564,7 @@ def gen_evaluate():
                 combos = [(None, False)] + [(ax, False) for ax in range(nv.ndim)]
                 if nv.ndim > 0:
                     combos.append((0, True))
+                    combos.append((None, True))              # flat + keepdims (plan P2 M5)
                 for ax, kd in combos:
                     emit("in0", [(nb, nv)], ln,
                          params={"reduce": {"kind": kind, "axis": ax, "keepdims": kd}},
@@ -8601,6 +8606,7 @@ def gen_evaluate():
                 combos = [(None, False)] + [(ax, False) for ax in range(nv.ndim)]
                 if nv.ndim > 0:
                     combos.append((0, True))
+                    combos.append((None, True))              # flat + keepdims (plan P2 M5)
                 for ax, kd in combos:
                     emit("in0", [(nb, nv)], ln,
                          params={"reduce": {"kind": kind, "axis": ax, "keepdims": kd}},
@@ -8666,6 +8672,8 @@ def gen_evaluate():
                 nb, nv = LAYOUTS[ln](npdt)
                 nb.reshape(-1)[:] = _c7_pool(nb.size, npdt, with_nan)
                 combos = [(None, False)]
+                if nv.ndim > 0:
+                    combos.append((None, True))                       # flat + keepdims (plan P2 M5 — valid for every layout, incl. strict-F: a flat reduce of a contiguous child is memory-order exact)
                 if not isFlayout:
                     combos += [(ax, False) for ax in range(nv.ndim)]
                     if nv.ndim > 1:
@@ -8757,6 +8765,8 @@ def gen_evaluate():
             wb.reshape(-1)[:] = _c8_weights(wb.size, np.dtype(wt))
             isFlayout = (ln == "f_contiguous_2d")
             combos = [(None, False)]
+            if vv.ndim > 0:
+                combos.append((None, True))                          # flat + keepdims (plan P2 M5)
             if not isFlayout:
                 combos += [(ax, False) for ax in range(vv.ndim)]
                 if vv.ndim > 1:

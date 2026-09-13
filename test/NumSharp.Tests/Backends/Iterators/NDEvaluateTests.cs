@@ -1169,5 +1169,138 @@ namespace NumSharp.Tests.Backends.Iterators
             var r = np.evaluate(NDExpr.Average((NDExpr)h, (NDExpr)wf));
             Assert.AreEqual(NPTypeCode.Single, r.typecode);
         }
+
+        // =====================================================================================
+        // Plan P2 M5 — axis=None + keepdims flat reductions. NumPy's np.sum(a, keepdims=True) with
+        // axis=None returns shape (1,)*a.ndim; the flat factories' new `keepdims` overloads reshape the
+        // 0-d scalar result to that (the VALUE is identical to the 0-d form, only the wrapper rank
+        // differs). Tuple axis is NOT offered — every NumSharp reduction is single-axis (a library-wide
+        // gap). These pin the corpus-unreachable edges (out=, 0-d child, rank-per-input) and one value
+        // per host path (fold / delegating / stat / average).
+        // =====================================================================================
+
+        /// <summary>Flat keepdims across a host-path representative of each kind: shape (1,1) and the same VALUE as the 0-d form.</summary>
+        [TestMethod]
+        public void M5_FlatKeepdims_ShapeAndValue_AcrossKinds()
+        {
+            var a = (np.arange(12).reshape(3, 4).astype(np.float64) - 5);   // has negatives, no NaN
+
+            // (kind flat-keepdims tree, kind flat-0d tree) — the keepdims value must equal the 0-d value.
+            (NDExpr kd, NDExpr flat)[] pairs =
+            {
+                (NDExpr.Sum((NDExpr)a, true),  NDExpr.Sum((NDExpr)a)),      // fold path
+                (NDExpr.Prod((NDExpr)a, true), NDExpr.Prod((NDExpr)a)),
+                (NDExpr.Min((NDExpr)a, true),  NDExpr.Min((NDExpr)a)),
+                (NDExpr.Max((NDExpr)a, true),  NDExpr.Max((NDExpr)a)),
+                (NDExpr.Mean((NDExpr)a, true), NDExpr.Mean((NDExpr)a)),
+                (NDExpr.Ptp((NDExpr)a, true),  NDExpr.Ptp((NDExpr)a)),      // delegating path
+                (NDExpr.NanMin((NDExpr)a, true), NDExpr.NanMin((NDExpr)a)),
+                (NDExpr.NanMax((NDExpr)a, true), NDExpr.NanMax((NDExpr)a)),
+                (NDExpr.Var((NDExpr)a, true),  NDExpr.Var((NDExpr)a)),      // stat path
+                (NDExpr.Std((NDExpr)a, true),  NDExpr.Std((NDExpr)a)),
+                (NDExpr.NanMean((NDExpr)a, true), NDExpr.NanMean((NDExpr)a)),
+            };
+            foreach (var (kd, flat) in pairs)
+            {
+                var kr = np.evaluate(kd);
+                Assert.AreEqual(2, kr.ndim);
+                Assert.AreEqual(1, kr.shape[0]);
+                Assert.AreEqual(1, kr.shape[1]);
+                Assert.AreEqual(np.evaluate(flat).GetDouble(0), kr.GetDouble(0, 0), 1e-12);
+            }
+        }
+
+        /// <summary>The flat keepdims result's rank follows the reduced expression: 1-D→(1,), 3-D→(1,1,1).</summary>
+        [TestMethod]
+        public void M5_FlatKeepdims_RankMatchesChild()
+        {
+            var a1 = np.arange(6).astype(np.float64);
+            var s1 = np.evaluate(NDExpr.Sum((NDExpr)a1, true));
+            Assert.AreEqual(1, s1.ndim);
+            Assert.AreEqual(1, s1.shape[0]);
+            Assert.AreEqual(15.0, s1.GetDouble(0), 1e-12);
+
+            var a3 = np.arange(24).reshape(2, 3, 4).astype(np.float64);
+            var s3 = np.evaluate(NDExpr.Sum((NDExpr)a3, true));
+            Assert.AreEqual(3, s3.ndim);
+            Assert.AreEqual(1, s3.shape[0]);
+            Assert.AreEqual(1, s3.shape[1]);
+            Assert.AreEqual(1, s3.shape[2]);
+            Assert.AreEqual(276.0, s3.GetDouble(0, 0, 0), 1e-12);
+        }
+
+        /// <summary>The int64 INDEX kinds keep dims to (1,)*ndim int64, first-tie index unchanged.</summary>
+        [TestMethod]
+        public void M5_FlatKeepdims_ArgMaxMin_Int64Index()
+        {
+            var a = (np.arange(12).reshape(3, 4).astype(np.float64) - 5);
+            var am = np.evaluate(NDExpr.ArgMax((NDExpr)a, true));
+            Assert.AreEqual(2, am.ndim);
+            Assert.AreEqual(1, am.shape[0]);
+            Assert.AreEqual(1, am.shape[1]);
+            Assert.AreEqual(NPTypeCode.Int64, am.typecode);
+            Assert.AreEqual(np.evaluate(NDExpr.ArgMax((NDExpr)a)).GetInt64(0), am.GetInt64(0, 0));
+
+            var an = np.evaluate(NDExpr.ArgMin((NDExpr)a, true));
+            Assert.AreEqual(np.evaluate(NDExpr.ArgMin((NDExpr)a)).GetInt64(0), an.GetInt64(0, 0));
+        }
+
+        /// <summary>Weighted average keeps dims over the (broadcast) rank; value equals the 0-d form.</summary>
+        [TestMethod]
+        public void M5_FlatKeepdims_WeightedAverage()
+        {
+            var v = np.array(new double[] { 1, 2, 3, 4, 5, 6 }).reshape(2, 3);
+            var w = np.array(new double[] { 2, 1, 3, 1, 2, 1 }).reshape(2, 3);
+            var kd = np.evaluate(NDExpr.Average((NDExpr)v, (NDExpr)w, true));
+            Assert.AreEqual(2, kd.ndim);
+            Assert.AreEqual(1, kd.shape[0]);
+            Assert.AreEqual(1, kd.shape[1]);
+            Assert.AreEqual(np.evaluate(NDExpr.Average((NDExpr)v, (NDExpr)w)).GetDouble(0), kd.GetDouble(0, 0), 1e-12);
+        }
+
+        /// <summary>Var/Std keep dims with a ddof, and the ddof is part of the value.</summary>
+        [TestMethod]
+        public void M5_FlatKeepdims_VarStd_Ddof()
+        {
+            var a = (np.arange(12).reshape(3, 4).astype(np.float64) - 5);
+            var v1 = np.evaluate(NDExpr.Var((NDExpr)a, true, 1));
+            Assert.AreEqual(2, v1.ndim);
+            Assert.AreEqual(1, v1.shape[0]);
+            Assert.AreEqual(np.evaluate(NDExpr.Var((NDExpr)a, 1)).GetDouble(0), v1.GetDouble(0, 0), 1e-12);
+
+            var s1 = np.evaluate(NDExpr.Std((NDExpr)a, true, 1));
+            Assert.AreEqual(np.evaluate(NDExpr.Std((NDExpr)a, 1)).GetDouble(0), s1.GetDouble(0, 0), 1e-12);
+        }
+
+        /// <summary>A caller out= of the keepdims shape writes through; a wrong-rank out raises (each host path).</summary>
+        [TestMethod]
+        public void M5_FlatKeepdims_Out()
+        {
+            var a = (np.arange(12).reshape(3, 4).astype(np.float64) - 5);
+            var outKd = np.zeros(new Shape(1, 1), np.float64);
+            var r = np.evaluate(NDExpr.Sum((NDExpr)a, true), @out: outKd);
+            Assert.IsTrue(ReferenceEquals(r, outKd));
+            Assert.AreEqual(np.sum(a).GetDouble(), outKd.GetDouble(0, 0), 1e-12);
+
+            // Wrong-rank out (0-d) under keepdims raises, on the fold, delegating, stat and average paths.
+            Assert.ThrowsException<ArgumentException>(() => np.evaluate(NDExpr.Sum((NDExpr)a, true), @out: np.zeros(new Shape(), np.float64)));
+            Assert.ThrowsException<ArgumentException>(() => np.evaluate(NDExpr.Ptp((NDExpr)a, true), @out: np.zeros(new Shape(), np.float64)));
+            Assert.ThrowsException<ArgumentException>(() => np.evaluate(NDExpr.Var((NDExpr)a, true), @out: np.zeros(new Shape(), np.float64)));
+            var w = np.ones(new Shape(3, 4), np.float64);
+            Assert.ThrowsException<ArgumentException>(() => np.evaluate(NDExpr.Average((NDExpr)a, (NDExpr)w, true), @out: np.zeros(new Shape(), np.float64)));
+        }
+
+        /// <summary>A 0-d child stays 0-d under keepdims (np.sum(scalar, keepdims=True) is 0-d), and keepdims=false is unchanged.</summary>
+        [TestMethod]
+        public void M5_FlatKeepdims_ZeroDChild_And_NoKeepdimsUnchanged()
+        {
+            var scalar0d = np.array(7.0);
+            Assert.AreEqual(0, np.evaluate(NDExpr.Sum((NDExpr)scalar0d, true)).ndim);
+
+            // keepdims=false remains a 0-d scalar (regression guard on the pre-M5 behaviour).
+            var a = np.arange(6).reshape(2, 3).astype(np.float64);
+            Assert.AreEqual(0, np.evaluate(NDExpr.Sum((NDExpr)a)).ndim);
+            Assert.AreEqual(0, np.evaluate(NDExpr.Ptp((NDExpr)a)).ndim);
+        }
     }
 }

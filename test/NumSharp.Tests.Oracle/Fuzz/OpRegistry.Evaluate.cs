@@ -63,29 +63,33 @@ namespace NumSharp.Tests.Fuzz
                     NDExpr weightsTree = new EvaluateExprParser(weightsExpr, ops, nInputs).Parse();
                     return axis is int aAvg
                         ? NDExpr.Average(tree, weightsTree, aAvg, keepdims)
-                        : NDExpr.Average(tree, weightsTree);
+                        : keepdims ? NDExpr.Average(tree, weightsTree, true)   // flat + keepdims (P2 M5)
+                                   : NDExpr.Average(tree, weightsTree);
                 }
 
+                // Flat (axis=null) arms honor keepdims via the P2 M5 keepdims overloads: keepdims=false
+                // is the 0-d form, keepdims=true the (1,)*ndim form (the bool is REQUIRED on those
+                // overloads, so the ternary picks the intended one — never the 0-d form by default).
                 tree = (kind, axis) switch
                 {
-                    ("sum", null) => NDExpr.Sum(tree),
-                    ("prod", null) => NDExpr.Prod(tree),
-                    ("min", null) => NDExpr.Min(tree),
-                    ("max", null) => NDExpr.Max(tree),
-                    ("mean", null) => NDExpr.Mean(tree),
-                    ("any", null) => NDExpr.Any(tree),
-                    ("all", null) => NDExpr.All(tree),
-                    ("count_nonzero", null) => NDExpr.CountNonzero(tree),
-                    ("nansum", null) => NDExpr.NanSum(tree),
-                    ("nanprod", null) => NDExpr.NanProd(tree),
-                    ("ptp", null) => NDExpr.Ptp(tree),
-                    ("nanmin", null) => NDExpr.NanMin(tree),
-                    ("nanmax", null) => NDExpr.NanMax(tree),
-                    ("argmax", null) => NDExpr.ArgMax(tree),
-                    ("argmin", null) => NDExpr.ArgMin(tree),
-                    ("nanmean", null) => NDExpr.NanMean(tree),
-                    ("var", null) => NDExpr.Var(tree, ddof),
-                    ("std", null) => NDExpr.Std(tree, ddof),
+                    ("sum", null) => keepdims ? NDExpr.Sum(tree, true) : NDExpr.Sum(tree),
+                    ("prod", null) => keepdims ? NDExpr.Prod(tree, true) : NDExpr.Prod(tree),
+                    ("min", null) => keepdims ? NDExpr.Min(tree, true) : NDExpr.Min(tree),
+                    ("max", null) => keepdims ? NDExpr.Max(tree, true) : NDExpr.Max(tree),
+                    ("mean", null) => keepdims ? NDExpr.Mean(tree, true) : NDExpr.Mean(tree),
+                    ("any", null) => keepdims ? NDExpr.Any(tree, true) : NDExpr.Any(tree),
+                    ("all", null) => keepdims ? NDExpr.All(tree, true) : NDExpr.All(tree),
+                    ("count_nonzero", null) => keepdims ? NDExpr.CountNonzero(tree, true) : NDExpr.CountNonzero(tree),
+                    ("nansum", null) => keepdims ? NDExpr.NanSum(tree, true) : NDExpr.NanSum(tree),
+                    ("nanprod", null) => keepdims ? NDExpr.NanProd(tree, true) : NDExpr.NanProd(tree),
+                    ("ptp", null) => keepdims ? NDExpr.Ptp(tree, true) : NDExpr.Ptp(tree),
+                    ("nanmin", null) => keepdims ? NDExpr.NanMin(tree, true) : NDExpr.NanMin(tree),
+                    ("nanmax", null) => keepdims ? NDExpr.NanMax(tree, true) : NDExpr.NanMax(tree),
+                    ("argmax", null) => keepdims ? NDExpr.ArgMax(tree, true) : NDExpr.ArgMax(tree),
+                    ("argmin", null) => keepdims ? NDExpr.ArgMin(tree, true) : NDExpr.ArgMin(tree),
+                    ("nanmean", null) => keepdims ? NDExpr.NanMean(tree, true) : NDExpr.NanMean(tree),
+                    ("var", null) => keepdims ? NDExpr.Var(tree, true, ddof) : NDExpr.Var(tree, ddof),
+                    ("std", null) => keepdims ? NDExpr.Std(tree, true, ddof) : NDExpr.Std(tree, ddof),
                     ("sum", int a) => NDExpr.Sum(tree, a, keepdims),
                     ("prod", int a) => NDExpr.Prod(tree, a, keepdims),
                     ("min", int a) => NDExpr.Min(tree, a, keepdims),

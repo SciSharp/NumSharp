@@ -339,6 +339,71 @@ namespace NumSharp.Backends
             _ => "mean",
         };
 
+        // ---- flat keepdims (plan P2 M5) ----------------------------------------------------------
+        // NumPy's reductions honor keepdims with axis=None too: np.sum(a, axis=None, keepdims=True) is
+        // shape (1,)*a.ndim, one element kept broadcast-friendly. Every reduce host path (fold /
+        // delegating / stat / average) produces the flat result as a 0-d scalar, so keepdims is a pure
+        // SHAPE post-step — reshape that one element to (1,…,1). These three helpers keep it uniform
+        // across the four paths. Tuple axis is NOT offered (every NumSharp reduction is single-axis).
+
+        /// <summary>
+        /// The result shape for a FLAT (axis=None) reduction: the 0-d scalar shape without keepdims, or
+        /// (1,)*<paramref name="childNdim"/> with it (NumPy's <c>keepdims=True</c> shape). A 0-d child
+        /// (<paramref name="childNdim"/> 0) stays 0-d either way, matching <c>np.sum(scalar, keepdims=True)</c>.
+        /// </summary>
+        /// <param name="childNdim">The reduced expression's rank.</param>
+        /// <param name="keepdims">Whether the reduced axes are kept as size 1.</param>
+        /// <returns>A 0-d scalar shape, or the all-ones (1,…,1) shape of rank <paramref name="childNdim"/>.</returns>
+        private static Shape FlatReduceShape(int childNdim, bool keepdims)
+        {
+            if (!keepdims || childNdim == 0)
+                return Shape.NewScalar();
+            var dims = new long[childNdim];
+            for (int i = 0; i < childNdim; i++) dims[i] = 1;
+            return new Shape(dims);
+        }
+
+        /// <summary>
+        /// Reshape a FLAT reduction's 0-d result to (1,)*<paramref name="childNdim"/> when
+        /// <paramref name="keepdims"/> is set, else return it unchanged. The 0-d holds exactly one
+        /// element, so the reshape is a free view — the VALUE is identical, only the wrapper rank
+        /// differs; a 0-d child stays 0-d. Used by the delegating / stat / average paths, which produce
+        /// their flat result as a materialized <see cref="NDArray"/> (the fold path allocates the shape
+        /// directly via <see cref="FlatReduceShape"/>).
+        /// </summary>
+        /// <param name="reduced0d">The 0-d scalar result of a flat reduction.</param>
+        /// <param name="childNdim">The reduced expression's rank.</param>
+        /// <param name="keepdims">Whether to keep every axis as size 1.</param>
+        /// <returns><paramref name="reduced0d"/> itself, or a (1,…,1) view of it.</returns>
+        private static NDArray KeepdimsFlat(NDArray reduced0d, int childNdim, bool keepdims)
+        {
+            if (!keepdims || childNdim == 0)
+                return reduced0d;
+            var dims = new long[childNdim];
+            for (int i = 0; i < childNdim; i++) dims[i] = 1;
+            return reduced0d.reshape(dims);
+        }
+
+        /// <summary>
+        /// Validate a caller <c>out=</c> for a FLAT reduction: it must be 0-d without keepdims, or exactly
+        /// (1,)*<paramref name="childNdim"/> (one element, <paramref name="childNdim"/> axes) with it.
+        /// Raises NumPy's "wrong number of dimensions" message — the same text every reduce path used for
+        /// the 0-d-only check before M5.
+        /// </summary>
+        /// <param name="out">The caller-supplied output array.</param>
+        /// <param name="childNdim">The reduced expression's rank (the keepdims out rank).</param>
+        /// <param name="keepdims">Whether the reduction keeps every axis as size 1.</param>
+        /// <param name="ufuncName">The reduce ufunc name, for the message.</param>
+        /// <exception cref="ArgumentException">The out rank (or, under keepdims, its element count) does not match the flat result.</exception>
+        private static void ValidateFlatReduceOut(NDArray @out, int childNdim, bool keepdims, string ufuncName)
+        {
+            int expected = keepdims ? childNdim : 0;
+            if (@out.ndim != expected || (keepdims && @out.size != 1))
+                throw new ArgumentException(
+                    $"output parameter for reduction operation {ufuncName} " +
+                    $"has the wrong number of dimensions: Found {@out.ndim} but expected {expected}");
+        }
+
         private unsafe NDArray EvaluateReduce(NDExprProgram program, NDArray[] inputs, NDArray @out)
         {
             var reduce = program.Reduce;
@@ -371,25 +436,29 @@ namespace NumSharp.Backends
             var accType = program.ReduceAccType;
             var resultType = program.ResultType;
 
-            if (@out is not null)
-            {
-                ValidateOutCast(resultType, @out.typecode, "evaluate");
-                if (@out.ndim != 0)
-                    throw new ArgumentException(
-                        $"output parameter for reduction operation {ReduceUfuncName(reduce.Kind)} " +
-                        $"has the wrong number of dimensions: Found {@out.ndim} but expected 0");
-            }
-
+            // The element count AND the reduced expression's rank in one pass: a flat keepdims reduce
+            // returns shape (1,)*childNdim (plan P2 M5), so the rank must be known before the out check
+            // and the result allocation, not only for the reduction loop.
             long n;
+            int childNdim;
             if (AllSameDims(ops))
             {
                 n = ops[0].size;
+                childNdim = ops[0].ndim;
             }
             else
             {
+                var bdims = BroadcastInputDims(ops);
                 n = 1;
-                foreach (var d in BroadcastInputDims(ops))
+                foreach (var d in bdims)
                     n *= d;
+                childNdim = bdims.Length;
+            }
+
+            if (@out is not null)
+            {
+                ValidateOutCast(resultType, @out.typecode, "evaluate");
+                ValidateFlatReduceOut(@out, childNdim, reduce.Keepdims, ReduceUfuncName(reduce.Kind));
             }
 
             // -------------------------------------------------------------------------------------
@@ -440,7 +509,10 @@ namespace NumSharp.Backends
                     if (reduce.Kind == NDExprReduceKind.Mean)
                         DivideAccByCount(accSlot, exprType, n);              // np._mean: divide at result dtype
 
-                    var reduceResult = @out ?? new NDArray(resultType, Shape.NewScalar(), false);
+                    // Flat keepdims (plan P2 M5) allocates (1,)*childNdim — still ONE element at offset
+                    // 0, so the direct single-element write below is unchanged; only the wrapper rank
+                    // differs. A caller out= (already ValidateFlatReduceOut'd) is used as given.
+                    var reduceResult = @out ?? new NDArray(resultType, FlatReduceShape(childNdim, reduce.Keepdims), false);
                     byte* rDst = (byte*)reduceResult.Address
                                  + (long)reduceResult.Shape.offset * reduceResult.typecode.SizeOf();
                     NDIterCasting.ConvertValue(accSlot, rDst, exprType, reduceResult.typecode);
@@ -522,7 +594,9 @@ namespace NumSharp.Backends
                 }
             }
 
-            var result = @out ?? new NDArray(resultType, Shape.NewScalar(), false);
+            // Flat keepdims (plan P2 M5): (1,)*childNdim is one element at offset 0, so the direct write
+            // is unchanged — only the result's wrapper rank differs from the 0-d scalar form.
+            var result = @out ?? new NDArray(resultType, FlatReduceShape(childNdim, reduce.Keepdims), false);
             byte* dst = (byte*)result.Address
                         + (long)result.Shape.offset * result.typecode.SizeOf();
             NDIterCasting.ConvertValue(slot, dst, accType, result.typecode);
@@ -574,14 +648,17 @@ namespace NumSharp.Backends
             // subtract, np.nanmin/nanmax are reductions), so `computed` never aliases `materialized`.
             using var materialized = EvaluateCore(program.ChildElementwiseProgram, inputs, null);
 
+            // A FLAT reduce (axis == null) calls the engine reductions WITHOUT keepdims — they return a
+            // 0-d scalar, which KeepdimsFlat below reshapes to (1,)*childNdim when requested (plan P2 M5);
+            // the AXIS path passes keepdims straight through, since the engine reduction already keeps
+            // the reduced axis as size 1. (np.argmax/argmin's flat form is a scalar `long` regardless,
+            // wrapped into a 0-d int64 array.)
+            bool axisKd = reduce.Axis is int && reduce.Keepdims;
             NDArray computed = reduce.Kind switch
             {
-                NDExprReduceKind.Ptp    => np.ptp(materialized, reduce.Axis, keepdims: reduce.Keepdims),
-                NDExprReduceKind.NanMin => np.nanmin(materialized, reduce.Axis, reduce.Keepdims),
-                NDExprReduceKind.NanMax => np.nanmax(materialized, reduce.Axis, reduce.Keepdims),
-                // The index kinds return int64. np.argmax/argmin's flat form returns a scalar `long`
-                // (there is no int?-axis overload), so a flat reduce wraps it into a 0-d int64 array —
-                // the shape the flat-out ndim check and the caller both expect.
+                NDExprReduceKind.Ptp    => np.ptp(materialized, reduce.Axis, keepdims: axisKd),
+                NDExprReduceKind.NanMin => np.nanmin(materialized, reduce.Axis, axisKd),
+                NDExprReduceKind.NanMax => np.nanmax(materialized, reduce.Axis, axisKd),
                 NDExprReduceKind.ArgMax => reduce.Axis is int axMax
                     ? np.argmax(materialized, axMax, reduce.Keepdims)
                     : NDArray.Scalar(np.argmax(materialized)),
@@ -592,15 +669,19 @@ namespace NumSharp.Backends
                     $"EvaluateDelegatingReduce reached with non-delegating kind {reduce.Kind} — dispatch bug."),
             };
 
+            // Flat keepdims (plan P2 M5): keep every axis as size 1 → (1,)*childNdim over the
+            // materialized child's rank. A 0-d child stays 0-d; keepdims=false is a no-op.
+            if (reduce.Axis is null)
+                computed = KeepdimsFlat(computed, materialized.ndim, reduce.Keepdims);
+
             if (@out is null)
                 return computed;
 
-            // A flat reduction produces a 0-d scalar; NumPy rejects a non-0-d out here with this exact
-            // shape of message (the fold path raises the identical text — see EvaluateReduce).
-            if (reduce.Axis is null && @out.ndim != 0)
-                throw new ArgumentException(
-                    $"output parameter for reduction operation {ReduceUfuncName(reduce.Kind)} " +
-                    $"has the wrong number of dimensions: Found {@out.ndim} but expected 0");
+            // A flat reduction's out must be 0-d (or (1,)*childNdim under keepdims); NumPy rejects a
+            // wrong-rank out with this message (the fold path raises the identical text — see
+            // EvaluateReduce). The axis case's out shape is checked by np.copyto below.
+            if (reduce.Axis is null)
+                ValidateFlatReduceOut(@out, materialized.ndim, reduce.Keepdims, ReduceUfuncName(reduce.Kind));
 
             // copyto applies the (already-validated) same_kind cast and shape-checks the axis case,
             // matching the axis fold path's `np.copyto(@out, reduced)` tail.
@@ -654,15 +735,19 @@ namespace NumSharp.Backends
                 : ExactVarStd(materialized, reduce.Axis, reduce.Keepdims, reduce.Ddof,
                               sqrtResult: reduce.Kind == NDExprReduceKind.Std, resultType);
 
+            // ExactNanMean/ExactVarStd apply keepdims on the AXIS path (via FinishReduced); a FLAT reduce
+            // returns a 0-d scalar, so keep every axis as size 1 here → (1,)*childNdim (plan P2 M5).
+            if (reduce.Axis is null)
+                computed = KeepdimsFlat(computed, materialized.ndim, reduce.Keepdims);
+
             if (@out is null)
                 return computed;
 
-            // A flat reduction produces a 0-d scalar; NumPy rejects a non-0-d out here (same message
-            // shape as the fold / delegating paths).
-            if (reduce.Axis is null && @out.ndim != 0)
-                throw new ArgumentException(
-                    $"output parameter for reduction operation {ReduceUfuncName(reduce.Kind)} " +
-                    $"has the wrong number of dimensions: Found {@out.ndim} but expected 0");
+            // A flat reduction's out must be 0-d (or (1,)*childNdim under keepdims); NumPy rejects a
+            // wrong-rank out with this message (same shape as the fold / delegating paths). The axis
+            // out shape is checked by np.copyto below.
+            if (reduce.Axis is null)
+                ValidateFlatReduceOut(@out, materialized.ndim, reduce.Keepdims, ReduceUfuncName(reduce.Kind));
 
             np.copyto(@out, computed);
             return @out;
@@ -731,6 +816,7 @@ namespace NumSharp.Backends
                 : np.broadcast_to(wRt, prod.Shape).copy();
 
             int? nax = avg.Axis is int rawAxis ? NormalizeAxis(rawAxis, prod.ndim) : (int?)null;
+            int avgChildNdim = prod.ndim;                      // the (broadcast) rank — the flat keepdims result is (1,)*avgChildNdim
 
             NDArray num = ExactSumArray(prod, nax, rt);        // Σ(v·w) at rt (pairwise / axis add.reduce)
             NDArray den = ExactSumArray(wForDen, nax, rt);     // Σ(w)   at rt
@@ -756,16 +842,21 @@ namespace NumSharp.Backends
                 NDArray kd = np.expand_dims(computed, kdAxis);
                 computed = kd;
             }
+            else if (avg.Axis is null)
+            {
+                // Flat keepdims (plan P2 M5): keep every axis as size 1 → (1,)*avgChildNdim over the
+                // (broadcast) product's rank. keepdims=false is a no-op; a 0-d child stays 0-d.
+                computed = KeepdimsFlat(computed, avgChildNdim, avg.Keepdims);
+            }
 
             if (@out is null)
                 return computed;
 
-            // A flat average produces a 0-d scalar; NumPy rejects a non-0-d out here (same message shape
-            // as the fold / delegating / stat paths).
-            if (avg.Axis is null && @out.ndim != 0)
-                throw new ArgumentException(
-                    "output parameter for reduction operation average " +
-                    $"has the wrong number of dimensions: Found {@out.ndim} but expected 0");
+            // A flat average's out must be 0-d (or (1,)*avgChildNdim under keepdims); NumPy rejects a
+            // wrong-rank out here (same message shape as the fold / delegating / stat paths). The axis
+            // out shape is checked by np.copyto below.
+            if (avg.Axis is null)
+                ValidateFlatReduceOut(@out, avgChildNdim, avg.Keepdims, "average");
 
             np.copyto(@out, computed);
             return @out;
