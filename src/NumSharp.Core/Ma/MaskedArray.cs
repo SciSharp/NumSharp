@@ -147,6 +147,70 @@ namespace NumSharp
         /// <param name="a">The array to wrap; null yields null.</param>
         public static implicit operator MaskedArray(NDArray a) => a is null ? null : new MaskedArray(a, null);
 
+        // ── Mixed MaskedArray/NDArray operators. These EXPLICIT (MaskedArray, NDArray) / (NDArray, MaskedArray)
+        //    overloads are REQUIRED: without them `ma + nd` and `nd + ma` are CS0034-ambiguous, because the
+        //    implicit NDArray→MaskedArray conversion makes both the (…, MaskedArray) and (…, object) overloads
+        //    applicable with no better candidate. An exact NDArray parameter beats both, so these win cleanly
+        //    and return a mask-aware MaskedArray — matching NumPy, where `ma + nd`/`nd + ma` are MaskedArrays.
+        /// <summary>Masked sum with an NDArray operand (mask = the masked operand's).</summary>
+        /// <param name="a">Left.</param><param name="b">Right.</param><returns>a+b, masked.</returns>
+        public static MaskedArray operator +(MaskedArray a, NDArray b) => np.ma.add(a, b);
+        /// <summary>Masked sum with an NDArray left operand.</summary>
+        /// <param name="a">Left NDArray.</param><param name="b">Right masked array.</param><returns>a+b, masked.</returns>
+        public static MaskedArray operator +(NDArray a, MaskedArray b) => np.ma.add(a, b);
+        /// <summary>Masked difference with an NDArray operand.</summary>
+        /// <param name="a">Left.</param><param name="b">Right.</param><returns>a-b, masked.</returns>
+        public static MaskedArray operator -(MaskedArray a, NDArray b) => np.ma.subtract(a, b);
+        /// <summary>Masked difference with an NDArray left operand.</summary>
+        /// <param name="a">Left NDArray.</param><param name="b">Right masked array.</param><returns>a-b, masked.</returns>
+        public static MaskedArray operator -(NDArray a, MaskedArray b) => np.ma.subtract(a, b);
+        /// <summary>Masked product with an NDArray operand.</summary>
+        /// <param name="a">Left.</param><param name="b">Right.</param><returns>a*b, masked.</returns>
+        public static MaskedArray operator *(MaskedArray a, NDArray b) => np.ma.multiply(a, b);
+        /// <summary>Masked product with an NDArray left operand.</summary>
+        /// <param name="a">Left NDArray.</param><param name="b">Right masked array.</param><returns>a*b, masked.</returns>
+        public static MaskedArray operator *(NDArray a, MaskedArray b) => np.ma.multiply(a, b);
+        /// <summary>Masked division with an NDArray denominator.</summary>
+        /// <param name="a">Numerator.</param><param name="b">Denominator NDArray.</param><returns>a/b, masked.</returns>
+        public static MaskedArray operator /(MaskedArray a, NDArray b) => np.ma.divide(a, b);
+        /// <summary>Masked division with an NDArray numerator.</summary>
+        /// <param name="a">Numerator NDArray.</param><param name="b">Denominator masked array.</param><returns>a/b, masked.</returns>
+        public static MaskedArray operator /(NDArray a, MaskedArray b) => np.ma.divide(a, b);
+        /// <summary>Masked less-than with an NDArray operand.</summary>
+        /// <param name="a">Left.</param><param name="b">Right.</param><returns>a&lt;b, masked bool.</returns>
+        public static MaskedArray operator <(MaskedArray a, NDArray b) => np.ma.less(a, b);
+        /// <summary>Masked less-than with an NDArray left operand.</summary>
+        /// <param name="a">Left NDArray.</param><param name="b">Right masked array.</param><returns>a&lt;b, masked bool.</returns>
+        public static MaskedArray operator <(NDArray a, MaskedArray b) => np.ma.less(a, b);
+        /// <summary>Masked greater-than with an NDArray operand.</summary>
+        /// <param name="a">Left.</param><param name="b">Right.</param><returns>a&gt;b, masked bool.</returns>
+        public static MaskedArray operator >(MaskedArray a, NDArray b) => np.ma.greater(a, b);
+        /// <summary>Masked greater-than with an NDArray left operand.</summary>
+        /// <param name="a">Left NDArray.</param><param name="b">Right masked array.</param><returns>a&gt;b, masked bool.</returns>
+        public static MaskedArray operator >(NDArray a, MaskedArray b) => np.ma.greater(a, b);
+        /// <summary>Masked less-or-equal with an NDArray operand.</summary>
+        /// <param name="a">Left.</param><param name="b">Right.</param><returns>a&lt;=b, masked bool.</returns>
+        public static MaskedArray operator <=(MaskedArray a, NDArray b) => np.ma.less_equal(a, b);
+        /// <summary>Masked less-or-equal with an NDArray left operand.</summary>
+        /// <param name="a">Left NDArray.</param><param name="b">Right masked array.</param><returns>a&lt;=b, masked bool.</returns>
+        public static MaskedArray operator <=(NDArray a, MaskedArray b) => np.ma.less_equal(a, b);
+        /// <summary>Masked greater-or-equal with an NDArray operand.</summary>
+        /// <param name="a">Left.</param><param name="b">Right.</param><returns>a&gt;=b, masked bool.</returns>
+        public static MaskedArray operator >=(MaskedArray a, NDArray b) => np.ma.greater_equal(a, b);
+        /// <summary>Masked greater-or-equal with an NDArray left operand.</summary>
+        /// <param name="a">Left NDArray.</param><param name="b">Right masked array.</param><returns>a&gt;=b, masked bool.</returns>
+        public static MaskedArray operator >=(NDArray a, MaskedArray b) => np.ma.greater_equal(a, b);
+
+        /// <summary>
+        ///     Casts the DATA to <paramref name="dtype"/>, PRESERVING the mask (NumPy's <c>MaskedArray.astype</c>
+        ///     — the mask is boolean and dtype-independent, so it rides through unchanged). Returns a
+        ///     <see cref="MaskedArray"/>, unlike the underlying <see cref="NDArray.astype(DType,bool)"/>.
+        /// </summary>
+        /// <param name="dtype">Target element dtype.</param>
+        /// <param name="copy">Copy the data even when the dtype already matches (NumPy default true).</param>
+        /// <returns>A masked array of the new dtype with the same mask.</returns>
+        public MaskedArray astype(DType dtype, bool copy = true) => new MaskedArray(_data.astype(dtype, copy), _mask, _fill_value);
+
         // ── Arithmetic operators — compose the np.ma.* binary ufuncs; masks propagate (OR). ──
         /// <summary>Masked element-wise sum (mask = OR of operands').</summary>
         /// <param name="a">Left.</param><param name="b">Right.</param><returns>a+b, masked.</returns>
@@ -426,6 +490,29 @@ namespace NumSharp
         /// <returns>A new <see cref="MaskedArray"/>.</returns>
         public MaskedArray masked_array(object data, object mask = null, object fill_value = null, bool copy = false)
             => array(data, mask, fill_value, copy);
+
+        /// <summary>
+        ///     Converts an array-like to a <see cref="MaskedArray"/> WITHOUT copying (NumPy's <c>ma.asarray</c>):
+        ///     an incoming masked array keeps its mask, a plain array/scalar becomes unmasked. This is the
+        ///     explicit ndarray→MaskedArray entry point — NumSharp's implicit <c>NDArray→MaskedArray</c> does the
+        ///     same for the unmasked case, but this also honors an existing mask and an optional dtype cast.
+        /// </summary>
+        /// <param name="a">A <see cref="MaskedArray"/>, <see cref="NDArray"/>, or array-like/scalar.</param>
+        /// <param name="dtype">Optional dtype to cast the data to (no copy when it already matches).</param>
+        /// <returns>A masked array over <paramref name="a"/>'s data (aliased when possible).</returns>
+        public MaskedArray asarray(object a, DType dtype = null)
+        {
+            var d = AsData(a);
+            if (dtype != null)
+                d = d.astype(dtype, copy: false);
+            return new MaskedArray(d, (a as MaskedArray)?._mask);
+        }
+
+        /// <summary>Alias of <see cref="asarray"/> (NumPy's <c>ma.asanyarray</c> — NumSharp has no MaskedArray
+        /// subclasses to conserve, so it behaves identically).</summary>
+        /// <param name="a">Array-like.</param><param name="dtype">Optional dtype cast.</param>
+        /// <returns>A masked array over <paramref name="a"/>'s data.</returns>
+        public MaskedArray asanyarray(object a, DType dtype = null) => asarray(a, dtype);
 
         /// <summary>
         ///     The default fill value NumPy assigns per dtype kind (<c>default_fill_value</c>): <c>1e20</c> for
