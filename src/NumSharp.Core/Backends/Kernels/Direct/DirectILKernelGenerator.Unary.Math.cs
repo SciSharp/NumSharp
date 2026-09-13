@@ -318,6 +318,13 @@ namespace NumSharp.Backends.Kernels
                     EmitIsNegInfCall(il, type);
                     break;
 
+                case UnaryOp.SignBit:
+                    // Test the IEEE sign bit (np.signbit). Float/Double via IsNegative
+                    // (sign bit of the raw pattern — -0.0/-NaN True); signed integers via
+                    // x < 0; unsigned/bool always false. Half/Decimal handled above.
+                    EmitSignBitCall(il, type);
+                    break;
+
                 default:
                     throw new NotSupportedException($"Unary operation {op} not supported");
             }
