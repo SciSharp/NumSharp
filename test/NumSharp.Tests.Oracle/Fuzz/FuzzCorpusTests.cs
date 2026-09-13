@@ -376,6 +376,16 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Logic() => RunCorpus("logic.jsonl");
 
+        // np.real_if_close — collapse a near-real complex array to its float64 real lane (or leave it
+        // complex). Exercises BOTH outcomes across the tol modes (tol>1 => eps multiples, tol<=1 =>
+        // absolute, tol<=0 => nothing collapses) and every scan path (dense contiguous/F-contiguous,
+        // negative-stride, strided-inner gather, broadcast, 0-d, empty vacuous-all) + NaN/inf/boundary
+        // imaginary parts + non-complex passthrough. Result is pure copies of stored bits (real lane or
+        // the array unchanged), so it is host-INDEPENDENT and byte-exact everywhere (RunCorpus).
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void RealIfClose() => RunCorpus("real_if_close.jsonl");
+
         // W8 multi-output (T15): np.modf -> (fractional, integral), each output bit-compared,
         // with C-standard signed-zero/inf edges from the float pools.
         [TestMethod]

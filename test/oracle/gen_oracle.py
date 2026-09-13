@@ -8004,6 +8004,137 @@ def gen_evaluate():
     return cases
 
 
+# T-real_if_close — np.real_if_close (real_if_close.jsonl). The complex-collapse decision:
+# `if all(absolute(a.imag) < tol): a = a.real`. NumSharp fuses NumPy's absolute+<+all into ONE
+# early-exit scan over the imaginary lane (ImagCloseScan), so this tier must exercise BOTH outcomes
+# (collapse -> float64 real view, no-collapse -> complex128 unchanged) across the tol modes
+# (tol>1 => machine-epsilon multiples; tol<=1 => absolute; tol<=0 => nothing collapses) and every
+# scan path (dense contiguous / F-contiguous / negative-stride / strided-inner gather / broadcast /
+# 0-d / empty). The result is pure copies of stored bits (real lane or the array unchanged), so it is
+# host-INDEPENDENT and byte-exact everywhere -> the portable RunCorpus tier. NaN/inf imaginary parts
+# and the strict `<` boundary (imag == tol) are gated too.
+def gen_real_if_close():
+    cases = []
+    n = [0]
+    eps = float(np.finfo(np.complex128).eps)   # 2.22e-16 — the ONLY eps (NumSharp has one complex dtype)
+
+    def reals(count):
+        # Exact-float64 reals with alternating sign; (i+1)+0.5 is an exact binary fraction so the
+        # collapsed real lane round-trips bit-for-bit through the corpus buffer.
+        return np.array([((i + 1) + 0.5) * (1 if i % 2 == 0 else -1) for i in range(count)], dtype=np.float64)
+
+    # Imaginary-lane patterns over a length-`count` array. Each returns the imaginary values; the
+    # collapse outcome is decided per (pattern, tol) by NumPy itself when the case is emitted.
+    def imag_tiny(count):
+        # All strictly within eps*100 (2.22e-14): mix of +/- tiny, exact zero and NEGATIVE zero
+        # (|-0.0| == 0 collapses) — collapses for every tol > 0, stays complex for tol <= 0.
+        pool = [0.0, -0.0, 1e-15, -1e-16, 2e-15, -3e-15, 1e-14, -5e-16, 0.0, 4e-15, -2e-15, 7e-16]
+        return np.array([pool[i % len(pool)] for i in range(count)], dtype=np.float64)
+
+    def imag_onebig(count):
+        # Tiny everywhere except one 0.5 — out of band for tol=100 (2.22e-14) but within an absolute
+        # tol=1; exactly ON the boundary for tol=0.5 (strict `<` => still no collapse there).
+        im = imag_tiny(count)
+        im[count // 2] = 0.5
+        return im
+
+    def imag_nan(count):
+        im = imag_tiny(count)
+        im[min(2, count - 1)] = np.nan     # a NaN imaginary part -> never collapses
+        return im
+
+    def imag_inf(count):
+        im = imag_tiny(count)
+        im[min(1, count - 1)] = np.inf      # +inf / -inf imaginary parts -> never collapse
+        im[min(count - 1, 3)] = -np.inf
+        return im
+
+    def imag_boundary(count):
+        im = imag_tiny(count)
+        im[0] = eps * 100                   # exactly the resolved tol at tol=100 -> strict `<` fails
+        return im
+
+    PATTERNS = [
+        ("tiny", imag_tiny, False),          # collapses for tol>0
+        ("onebig", imag_onebig, False),
+        ("nan_imag", imag_nan, False),
+        ("inf_imag", imag_inf, False),
+        ("boundary", imag_boundary, False),
+        ("nan_real", imag_tiny, True),       # reals carry a NaN; imag tiny -> collapses to a real NaN
+    ]
+    TOLS = [100.0, 1000.0, 1e6, 1.0, 0.5, 0.1, 0.0, -5.0]
+
+    def emit(base, view, tol, layout):
+        # NumPy is the oracle for BOTH the collapse decision and the resulting dtype/shape/bytes.
+        r = np.real_if_close(view, tol=tol)
+        exp_shape = [int(d) for d in r.shape]                 # read BEFORE ascontiguousarray (0-D safe)
+        exp_buf = np.ascontiguousarray(r).tobytes().hex()
+        cases.append({
+            "id": f"real_if_close/{layout}/tol={tol}/{n[0]}",
+            "op": "real_if_close",
+            "params": {"tol": float(tol)},
+            "operands": [describe(base, view)],
+            "expected": {"dtype": r.dtype.name, "shape": exp_shape, "buffer": exp_buf},
+            "layout": layout,
+            "valueclass": "mixed",
+        })
+        n[0] += 1
+
+    def make_base(count, imag_fn, nan_real):
+        re = reals(count)
+        if nan_real and count > 0:
+            re[min(2, count - 1)] = np.nan
+        return (re + 1j * imag_fn(count)).astype(np.complex128)   # C-contiguous complex128
+
+    # ---- Main matrix: length-12 arrays across every scan path × pattern × tol ----------------
+    N = 12
+    for label, imag_fn, nan_real in PATTERNS:
+        a = make_base(N, imag_fn, nan_real)                        # C-contiguous 1-D
+        # Interleaved base whose EVEN elements are `a` and odd elements carry a large imag (0.9) that
+        # the ::2 view never addresses — proves the strided scan reads only the view's own elements.
+        inter = np.empty(2 * N, dtype=np.complex128)
+        inter[0::2] = a
+        inter[1::2] = np.array([9.0 + 0.9j] * N)
+        a2d = a.reshape(3, 4)                                      # C-contiguous 2-D
+        wide = np.empty((3, 8), dtype=np.complex128)               # for a strided-column view
+        wide[:, 0::2] = a2d
+        wide[:, 1::2] = np.array([9.0 + 0.9j])
+        for tol in TOLS:
+            emit(a, a, tol, f"c_1d/{label}")                       # dense contiguous
+            emit(a, a[::-1], tol, f"negstride_1d/{label}")         # reversed run (ScanRun stride -1)
+            emit(inter, inter[::2], tol, f"strided_step2_1d/{label}")  # inner stride 2 -> gather
+            emit(a2d, a2d, tol, f"c_2d/{label}")                   # dense 2-D
+            emit(a2d, a2d.T, tol, f"transposed_2d/{label}")        # transpose of C-contig => F-contig dense
+            emit(wide, wide[:, ::2], tol, f"strided_cols_2d/{label}")  # odometer + inner gather
+        # Broadcast: a single tiny-imag element stretched — collapses; a single big-imag element — stays.
+        one_tiny = np.array([1.5 + 1e-15j], dtype=np.complex128)
+        one_big = np.array([1.5 + 0.5j], dtype=np.complex128)
+        for tol in (100.0, 1.0, 0.0):
+            emit(one_tiny, np.broadcast_to(one_tiny, (6,)), tol, f"broadcast_1d/{label}")
+            emit(one_big, np.broadcast_to(one_big, (6,)), tol, f"broadcast_big_1d/{label}")
+
+    # ---- Edge lengths: 0-d scalar, empty, 1- and 2-element (SIMD tail / vacuous-all) ----------
+    for tol in (100.0, 1.0, 0.0):
+        z_tiny = np.array(1.5 + 1e-15j, dtype=np.complex128)       # 0-d, collapses (tol>0)
+        z_big = np.array(1.5 + 0.5j, dtype=np.complex128)          # 0-d, stays complex at tol=100
+        emit(z_tiny, z_tiny, tol, "scalar_0d_tiny")
+        emit(z_big, z_big, tol, "scalar_0d_big")
+        for count in (0, 1, 2, 3, 7):                              # empty (vacuous all -> collapse) + short tails
+            a = make_base(count, imag_tiny, False)
+            emit(a, a, tol, f"len{count}_tiny")
+        one_big = make_base(3, imag_onebig, False)                 # short array with an out-of-band imag
+        emit(one_big, one_big, tol, "len3_onebig")
+
+    # ---- Non-complex inputs: returned UNCHANGED (the collapse only applies to complex) ---------
+    for dt in ("int32", "int64", "float64", "float32", "bool", "uint8"):
+        base = _cbase((6,), np.dtype(dt))
+        for tol in (100.0, 0.0):
+            emit(base, base, tol, f"noncomplex_{dt}")
+
+    print(f"  (real_if_close: {n[0]} cases)")
+    return cases
+
+
 def write_jsonl(path, cases):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", newline="\n") as f:
@@ -8252,11 +8383,14 @@ def main():
     elif mode == "windows":
         cases = gen_windows()                                           # bartlett/blackman/hamming/hanning/kaiser
         write_jsonl(os.path.join(corpus_dir, "windows.jsonl"), cases)
+    elif mode == "real_if_close":
+        cases = gen_real_if_close()                                     # complex -> real collapse decision
+        write_jsonl(os.path.join(corpus_dir, "real_if_close.jsonl"), cases)
     elif mode == "evaluate":
         cases = gen_evaluate()                                          # np.evaluate / NDExpr fused trees
         write_jsonl(os.path.join(corpus_dir, "evaluate.jsonl"), cases)
     else:
-        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | sinc | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows | evaluate)")
+        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | sinc | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows | evaluate | real_if_close)")
         sys.exit(2)
 
 
