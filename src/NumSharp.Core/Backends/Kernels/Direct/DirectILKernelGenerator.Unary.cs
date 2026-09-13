@@ -189,15 +189,27 @@ namespace NumSharp.Backends.Kernels
 
             if (key.IsContiguous)
             {
-                // Check if we can use SIMD for this operation
-                bool canSimd = CanUseUnarySimd(key);
-                if (canSimd)
+                // np.bitwise_count: the contiguous whole-array route delegates to BitwiseCountKernel —
+                // a single vpshufb popcount for 1/2-byte inputs (where NumPy is weakest and 32/16 lanes
+                // per instruction win big) and a 4×-unrolled scalar POPCNT for 4/8-byte. It is cross-width
+                // (any int → uint8), so CanUseUnarySimd is false and the generic loops below cannot
+                // vectorize it; the emitter here is a single Call (the "helper-call" kernel shape).
+                if (key.Op == UnaryOp.BitwiseCount)
                 {
-                    EmitUnarySimdLoop(il, key, inputSize, outputSize);
+                    EmitBitwiseCountContiguous(il, key.InputType);
                 }
                 else
                 {
-                    EmitUnaryScalarLoop(il, key, inputSize, outputSize);
+                    // Check if we can use SIMD for this operation
+                    bool canSimd = CanUseUnarySimd(key);
+                    if (canSimd)
+                    {
+                        EmitUnarySimdLoop(il, key, inputSize, outputSize);
+                    }
+                    else
+                    {
+                        EmitUnaryScalarLoop(il, key, inputSize, outputSize);
+                    }
                 }
             }
             else
@@ -209,6 +221,36 @@ namespace NumSharp.Backends.Kernels
             return dm.CreateDelegate<UnaryKernel>();
         }
 
+        /// <summary><see cref="BitwiseCountKernel.Count(byte*,byte*,long,int,bool)"/> — the whole-array
+        /// popcount kernel the contiguous np.bitwise_count route delegates to.</summary>
+        private static readonly MethodInfo s_bitwiseCountKernel =
+            typeof(BitwiseCountKernel).GetMethod(
+                nameof(BitwiseCountKernel.Count),
+                BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("BitwiseCountKernel.Count not found");
+
+        /// <summary>
+        ///     Emit the contiguous <see cref="UnaryOp.BitwiseCount"/> kernel body: a single call to
+        ///     <see cref="BitwiseCountKernel.Count(byte*,byte*,long,int,bool)"/> with the input/output
+        ///     pointers, the element count (arg 5 = totalSize) and the compile-time
+        ///     (<paramref name="inputType"/>-derived) element byte-width and signedness. The kernel walks
+        ///     the whole array; the surrounding <see cref="UnaryKernel"/>'s stride/shape/ndim args are
+        ///     unused (a contiguous source is a straight linear map).
+        /// </summary>
+        /// <param name="il">The IL stream for the kernel's body.</param>
+        /// <param name="inputType">The integer/bool/char input dtype (selects element width and signedness).</param>
+        private static void EmitBitwiseCountContiguous(ILGenerator il, NPTypeCode inputType)
+        {
+            bool signed = inputType == NPTypeCode.SByte || inputType == NPTypeCode.Int16
+                       || inputType == NPTypeCode.Int32 || inputType == NPTypeCode.Int64;
+            il.Emit(OpCodes.Ldarg_0);                              // input  (byte*)
+            il.Emit(OpCodes.Ldarg_1);                              // output (byte*)
+            il.Emit(OpCodes.Ldarg_S, (byte)5);                    // totalSize (long)
+            il.Emit(OpCodes.Ldc_I4, GetTypeSize(inputType));      // elementSize (1/2/4/8)
+            il.Emit(signed ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0); // signed
+            il.EmitCall(OpCodes.Call, s_bitwiseCountKernel, null);
+        }
+
         /// <summary>
         /// Check if this is a predicate operation (returns bool based on input type).
         /// These operations should NOT convert input to output type before the operation.
@@ -218,6 +260,17 @@ namespace NumSharp.Backends.Kernels
             return op == UnaryOp.IsFinite || op == UnaryOp.IsNan || op == UnaryOp.IsInf
                 || op == UnaryOp.IsPosInf || op == UnaryOp.IsNegInf || op == UnaryOp.SignBit;
         }
+
+        /// <summary>
+        ///     Ops whose emitter CONSUMES the input dtype and itself yields the (different) output value, so
+        ///     the scalar/strided loops must NOT convert input→output before invoking the op. The float
+        ///     classification predicates (bool out) qualify, and so does <see cref="UnaryOp.BitwiseCount"/>
+        ///     (uint8 out) — converting a wide integer to uint8 first would truncate it to 8 bits before the
+        ///     popcount. Ordinary math ops instead compute in the output dtype after an
+        ///     <see cref="EmitConvertTo"/>.
+        /// </summary>
+        private static bool EmitsResultFromInputType(UnaryOp op)
+            => IsPredicateOp(op) || op == UnaryOp.BitwiseCount;
 
         /// <summary>
         /// Check if SIMD can be used for this unary operation.
@@ -544,7 +597,7 @@ namespace NumSharp.Backends.Kernels
             EmitLoadIndirect(il, key.InputType);
 
             // For predicate operations (IsFinite, IsNan, IsInf), operate on INPUT type
-            if (IsPredicateOp(key.Op))
+            if (EmitsResultFromInputType(key.Op))
             {
                 EmitUnaryScalarOperation(il, key.Op, key.InputType);
             }
@@ -663,7 +716,7 @@ namespace NumSharp.Backends.Kernels
 
             // For predicate operations (IsFinite, IsNan, IsInf), operate on INPUT type
             // and the operation itself produces bool. For other ops, convert first.
-            if (IsPredicateOp(key.Op))
+            if (EmitsResultFromInputType(key.Op))
             {
                 EmitUnaryScalarOperation(il, key.Op, key.InputType);
             }
@@ -806,7 +859,7 @@ namespace NumSharp.Backends.Kernels
             EmitLoadIndirect(il, key.InputType);
 
             // For predicate operations (IsFinite, IsNan, IsInf), operate on INPUT type
-            if (IsPredicateOp(key.Op))
+            if (EmitsResultFromInputType(key.Op))
             {
                 EmitUnaryScalarOperation(il, key.Op, key.InputType);
             }

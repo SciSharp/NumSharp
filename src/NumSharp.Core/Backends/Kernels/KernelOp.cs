@@ -140,7 +140,22 @@ namespace NumSharp.Backends.Kernels
         /// bit-increment <c>reinterpret(bits(x)+1) - x</c>; float16 is NumPy's separate always-positive
         /// <c>npy_half_spacing</c>. See <see cref="NumSharp.Utilities.NDSpacingMath"/>.
         /// </summary>
-        Spacing
+        Spacing,
+
+        /// <summary>
+        /// Population count of the absolute value — the number of set bits in <c>|x|</c> (np.bitwise_count),
+        /// NumPy's <c>npy_popcount(a &lt; 0 ? -a : a)</c>. INTEGER/BOOL ONLY: every supported dtype
+        /// (bool/byte/sbyte/int16/uint16/int32/uint32/int64/uint64/char) maps to a <b>uint8</b> result,
+        /// float/complex/decimal/half raise the no-loop TypeError at the np.* boundary. Two consequences
+        /// that make it behave like the float classification predicates (<see cref="IsNan"/> etc.) rather
+        /// than an ordinary math op: it CONSUMES the input dtype and the emitter itself yields the (byte)
+        /// result — the scalar/strided loops must NOT convert input→output first (which would truncate a
+        /// wide value to 8 bits before counting) — and the output dtype is fixed regardless of input width.
+        /// Signed negatives count the magnitude (<c>bitwise_count(-1)==1</c>, not 8; the min value's
+        /// two's-complement negation wraps to itself, so <c>bitwise_count(int8 -128)==1</c>), computed via
+        /// a branchless abs (<c>(x^(x&gt;&gt;w-1))-(x&gt;&gt;w-1)</c>) before <c>BitOperations.PopCount</c>.
+        /// </summary>
+        BitwiseCount
     }
 
     /// <summary>
