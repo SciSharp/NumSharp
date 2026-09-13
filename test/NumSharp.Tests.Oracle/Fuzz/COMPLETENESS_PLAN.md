@@ -434,10 +434,10 @@ Deduped across the 20 tier lines that printed `documented Misaligned divergences
 5. `complex multiply cancellation / ~ULP at element magnitude (npy_cmul vs System.Numerics) [documented #12]` — 16x (binary_arith 4, tail 12) — post-B2 scope
 6. `complex power ~ULP / gross inf-NaN edge (Complex.Pow vs npy_cpow) [documented F5]` — 30x — L6, ≤512 elem-mag ULP or non-finite
 7. `reduction summation/two-pass precision (algorithm order)` — 401x (reduce 320, params 74, random 6, tail 1) — post-B1 float-family scope
-8. `reduction result dtype differs (NEP50 accumulator / complex->real) [known bug]` — 239x (reduce 202, tail 14, random 12, decimal_reduce 11)
+8. `reduction result dtype differs (NEP50 accumulator / complex->real) [known bug]` — 85x (reduce 74, decimal_reduce 11) — DOWN from 239x: sum/prod size-<=1 NEP50 widening fixed 2026-09-13 (the 128 reduce + 14 tail + 12 random sum/prod cases now bit-exact) and EXCLUDED from the excuse (regression-guarded); residual = std/var complex->real (+decimal)
 9. `axis-reduction NaN propagation: axis SIMD min/max skips NaN [known bug; flat fixed]` — 8x
 10. `complex reduction/scan NaN ordering/propagation differs [documented]` — 35x (scan 17, reduce 16, random 2) — post-B7 NaN-token-gated
-11. `cumprod(size-1 int): skips NEP50 accumulator widening (int16/int32/uint8/uint16) [known bug]` — 14x — post-B3 size≤1 scope
+11. `cumprod(size-1 int): skips NEP50 accumulator widening` — RESOLVED 0x (fixed 2026-09-13; ReduceCumMul casts to GetAccumulatingType, excuse removed & regression-guarded; scan tier one_element_1d cumprod now bit-exact)
 12. nan-reduction family [known bugs]: shape 885x · value 526x · nanmedian-propagates-NaN 176x · dtype 184x · complex-1D-axis-throws 8x · empty-throws 4x (all nanreduce)
 13. `average: summation-order precision divergence (pairwise vs naive) [known bug]` — 30x
 14. `median/percentile/quantile: ±inf/NaN slice partition+interpolation NaN mismatch [known bug]` — 72x
