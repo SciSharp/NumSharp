@@ -171,6 +171,17 @@ SINC_OP = {"sinc": np.sinc}
 SINC_DTYPES = [d for d in ALL_DTYPES if d != "complex128"]
 
 
+# np.i0 — modified Bessel I_0, its own tier (like sinc, not folded into unary_extra): it is a
+# cephes Chebyshev routine composing exp/sqrt, so its bytes are host-libm sensitive at float64
+# (Math.Exp == win-amd64 ucrtbase) and float16 (BCL Half.Exp) — HOST-PINNED, Inconclusive
+# off-Windows. float32 rides NumPy's OWN exp kernel (portable) but shares the tier. complex128 is
+# EXCLUDED: NumPy raises TypeError("i0 not supported for complex values") for it (the rejection is
+# unit-test-pinned). Dtype follows the input float precision (NEP 50): bool/all-ints/Char ->
+# float64, float16/float32/float64 preserved. Every included dtype is BIT-EXACT vs NumPy 2.4.2.
+I0_OP = {"i0": np.i0}
+I0_DTYPES = [d for d in ALL_DTYPES if d != "complex128"]
+
+
 def gen_unary(ops, dtypes, layout_names):
     cases = []
     n = 0
@@ -3951,6 +3962,8 @@ def char_tier(mode):
         raw = gen_unary(UNARY_EXTRA_OPS, [_C], L)
     elif mode == "sinc":
         raw = gen_unary(SINC_OP, [_C], L)                         # Char (uint16 proxy) -> float64, bit-exact
+    elif mode == "i0":
+        raw = gen_unary(I0_OP, [_C], L)                           # Char (uint16 proxy) -> float64, bit-exact
     elif mode == "bitwise":
         raw = gen_binary(BITWISE_BIN_OPS, CHAR_BIT_PAIRS, PL)
         raw += gen_unary(BITWISE_COUNT_OP, [_C], L)               # bitwise_count(char): 2-byte SIMD path works
@@ -8244,6 +8257,11 @@ def main():
         cases = gen_unary(SINC_OP, SINC_DTYPES, list(LAYOUTS.keys()))
         cases += char_tier("sinc")
         write_jsonl(os.path.join(corpus_dir, "sinc.jsonl"), cases)
+    elif mode == "i0":
+        # i0 over every REAL dtype × all layouts (complex128 excluded — NumPy rejects it).
+        cases = gen_unary(I0_OP, I0_DTYPES, list(LAYOUTS.keys()))
+        cases += char_tier("i0")
+        write_jsonl(os.path.join(corpus_dir, "i0.jsonl"), cases)
     elif mode == "nanreduce":
         cases = gen_reduce(NAN_REDUCE_OPS, NAN_REDUCE_DTYPES, REDUCE_LAYOUTS)
         cases += gen_nanquantile(NANQ_DTYPES)                           # Group A: nanpercentile/nanquantile
@@ -8390,7 +8408,7 @@ def main():
         cases = gen_evaluate()                                          # np.evaluate / NDExpr fused trees
         write_jsonl(os.path.join(corpus_dir, "evaluate.jsonl"), cases)
     else:
-        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | sinc | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows | evaluate | real_if_close)")
+        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | sinc | i0 | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows | evaluate | real_if_close)")
         sys.exit(2)
 
 
