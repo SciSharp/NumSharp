@@ -178,6 +178,15 @@ namespace NumSharp
         public abstract NDArray Invert(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray Cbrt(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
         public abstract (NDArray Fractional, NDArray Intergral) ModF(NDArray nd, DType dtype = null);
+        // np.frexp — decompose x into (mantissa in [0.5,1), int32 exponent) with x == mantissa * 2^exponent
+        // (the two-output inverse of Ldexp). The mantissa carries x's float tier; the exponent is always int32.
+        // out1/out2 are the ufunc's two output operands (NumPy's positional out1,out2 / out=(o1,o2)); where= masks
+        // both (masked-off out slots keep prior contents). Each out takes a same_kind cast from its loop dtype.
+        public abstract (NDArray Mantissa, NDArray Exponent) Frexp(NDArray x, NDArray out1 = null, NDArray out2 = null, NDArray where = null);
+        // np.ldexp — compose x1 * 2^x2 (the inverse of Frexp). x1 is the float mantissa (int/bool promote to a
+        // float tier), x2 an INTEGER exponent that does NOT widen x1's dtype; the result is x1's float tier.
+        // out=/where= follow the single-output ufunc contract (same_kind cast into out, masked write).
+        public abstract NDArray Ldexp(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null);
 
         public abstract NDArray Tanh(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray Cosh(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
