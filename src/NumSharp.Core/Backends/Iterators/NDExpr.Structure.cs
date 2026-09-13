@@ -386,16 +386,19 @@ namespace NumSharp.Backends.Iteration
     {
         internal override void HashStructure(ref NDExprStructureHasher h, NDExprOperandScratch operands)
         {
-            // Axis and keepdims are read by the HOST per evaluation (flat vs axis path, output shape), so
-            // two roots that differ only there must be two programs even though the child kernel is shared.
+            // Axis, keepdims and ddof are read by the HOST per evaluation (flat vs axis path, output
+            // shape, the Var/Std divisor N-ddof), so two roots that differ only there must be two
+            // programs even though the child kernel is shared.
             h.Add(NDExprNodeTag.Reduce, (long)_kind);
             h.Add((ulong)(_axis is int ax ? (long)ax : long.MinValue));
             h.Add(_keepdims ? 1UL : 0UL);
+            h.Add((ulong)(long)_ddof);
             _child.HashStructure(ref h, operands);
         }
 
         internal override bool StructureEquals(NDExpr bound, NDExprOperandScratch operands)
             => bound is ReduceNode o && o._kind == _kind && o._axis == _axis && o._keepdims == _keepdims
+               && o._ddof == _ddof
                && _child.StructureEquals(o._child, operands);
     }
 }

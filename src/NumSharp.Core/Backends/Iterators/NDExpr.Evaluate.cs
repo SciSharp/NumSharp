@@ -100,6 +100,40 @@ namespace NumSharp.Backends.Iteration
         /// <see cref="np.argmin(NDArray,int,bool)"/> / <see cref="np.argmin(NDArray)"/>.
         /// </summary>
         ArgMin,
+
+        /// <summary>
+        /// <c>np.nanmean</c> — the arithmetic mean with NaNs skipped (the <see cref="Mean"/> twin over
+        /// the finite elements). Result dtype follows <see cref="Mean"/> (float16→float16 via a float32
+        /// intermediate, float32→float32, float64→float64, complex128→complex128, int/bool→float64), an
+        /// ALL-NaN input yields NaN and an integer/bool child — carrying no NaN — is exactly <c>Mean</c>.
+        /// Unlike <see cref="Sum"/>/<see cref="Mean"/> it is NOT a fold kind and NOT a factory rewrite
+        /// (its per-element NaN skip changes the divisor per slab): the host materializes the child once
+        /// and computes <c>nansum(child) / count_of_non_NaN</c> with the SAME NumPy-exact pairwise sum the
+        /// M1/M2 diverts use — see <c>DefaultEngine.EvaluateStatReduce</c>. Bit-exact vs NumPy 2.4.2, so
+        /// it carries NO MisalignedRegistry excuse.
+        /// </summary>
+        NanMean,
+
+        /// <summary>
+        /// <c>np.var</c> — the variance <c>Σ(x−mean)² / (N−ddof)</c> (population variance at the default
+        /// <c>ddof=0</c>). Result dtype: float16→float16 (computed in float32), float32→float32,
+        /// float64→float64, int/bool→float64, and — like NumPy — a complex128 child yields a <b>real</b>
+        /// float64 variance (the deviations are reduced as <c>|x−mean|²</c>). A NaN anywhere PROPAGATES
+        /// (var uses every element, unlike <see cref="NanMean"/>); <c>ddof ≥ N</c> divides by a clamped
+        /// zero → <c>+inf</c> (or NaN when the numerator is zero), and an empty input yields NaN. The host
+        /// materializes the child once, then runs NumPy's own two-pass <c>_var</c> op for op over the
+        /// exact pairwise sum (mean, then <c>Σ(x−mean)²</c>) — see <c>DefaultEngine.EvaluateStatReduce</c>.
+        /// The degrees-of-freedom offset is carried on the node (<see cref="ReduceNode.Ddof"/>) and is
+        /// part of the program identity. Bit-exact vs NumPy 2.4.2, NO excuse.
+        /// </summary>
+        Var,
+
+        /// <summary>
+        /// <c>np.std</c> — the standard deviation <c>sqrt(var)</c> (the <see cref="Var"/> twin, same
+        /// result dtypes / ddof / NaN-propagation / empty→NaN semantics), applied as a final elementwise
+        /// square root over the variance so it is bit-exact wherever <see cref="Var"/> is.
+        /// </summary>
+        Std,
     }
 
     /// <summary>
@@ -461,6 +495,53 @@ namespace NumSharp.Backends.Iteration
         /// <summary>One-pass fused <c>np.argmin</c> along <paramref name="axis"/> (int64 indices; first-tie / first-NaN wins).</summary>
         public static NDExpr ArgMin(NDExpr x, int axis, bool keepdims = false) => new ReduceNode(NDExprReduceKind.ArgMin, x, axis, keepdims);
 
+        // --- mean / variance / std reductions (plan P2 M4c summation kinds) -----------------------
+        //
+        // These are the summation-bound M4c kinds.  Unlike the M4-tail min/max (order-INDEPENDENT) they
+        // are two-pass and drift through the engine's own np.var/np.nanmean (whose flat sum is a
+        // multi-accumulator SIMD fold, not NumPy's pairwise), so they can NOT be delegated to those.
+        // Instead the host materializes the child once and reproduces NumPy's _var / nanmean op for op
+        // over the SAME NumPy-exact pairwise sum the M1/M2 diverts use — bit-exact by construction,
+        // needing no fold kernel (EmitFold is untouched) and carrying NO MisalignedRegistry excuse.
+        // (Weighted np.average is NOT here: it reduces over TWO operands — values and weights — which the
+        // single-child ReduceNode cannot carry; it awaits a two-operand reduce node.)
+
+        /// <summary>
+        /// One-pass fused <c>np.nanmean</c>: the arithmetic mean with NaNs skipped. Result dtype follows
+        /// <see cref="Mean(NDExpr)"/> (int/bool→float64, float16→float16, float32/float64 preserved,
+        /// complex128 preserved); an ALL-NaN input yields NaN, and an integer/bool child (no NaN) is
+        /// exactly <see cref="Mean(NDExpr)"/>.
+        /// </summary>
+        public static NDExpr NanMean(NDExpr x) => new ReduceNode(NDExprReduceKind.NanMean, x);
+
+        /// <summary>One-pass fused <c>np.nanmean</c> along <paramref name="axis"/> (NaNs skipped per slab).</summary>
+        public static NDExpr NanMean(NDExpr x, int axis, bool keepdims = false) => new ReduceNode(NDExprReduceKind.NanMean, x, axis, keepdims);
+
+        /// <summary>
+        /// One-pass fused <c>np.var</c>: the variance with <paramref name="ddof"/> delta degrees of
+        /// freedom (<c>Σ(x−mean)² / (N−ddof)</c>; <c>ddof=0</c> is the population variance). Result dtype:
+        /// int/bool→float64, float16→float16, float32/float64 preserved, and a complex128 child yields a
+        /// <b>real</b> float64 variance. A NaN PROPAGATES; <c>ddof ≥ N</c> → <c>+inf</c>; empty → NaN.
+        /// </summary>
+        /// <param name="x">The expression to reduce.</param>
+        /// <param name="ddof">Delta degrees of freedom; the divisor is <c>max(N − ddof, 0)</c>.</param>
+        public static NDExpr Var(NDExpr x, int ddof = 0) => new ReduceNode(NDExprReduceKind.Var, x, ddof: ddof);
+
+        /// <summary>One-pass fused <c>np.var</c> along <paramref name="axis"/> with <paramref name="ddof"/> delta degrees of freedom.</summary>
+        public static NDExpr Var(NDExpr x, int axis, bool keepdims = false, int ddof = 0) => new ReduceNode(NDExprReduceKind.Var, x, axis, keepdims, ddof);
+
+        /// <summary>
+        /// One-pass fused <c>np.std</c>: the standard deviation <c>sqrt(var)</c> with <paramref name="ddof"/>
+        /// delta degrees of freedom (the <see cref="Var(NDExpr,int)"/> twin — same dtypes, NaN-propagation
+        /// and empty→NaN semantics, a real float64 for a complex128 child).
+        /// </summary>
+        /// <param name="x">The expression to reduce.</param>
+        /// <param name="ddof">Delta degrees of freedom; the divisor is <c>max(N − ddof, 0)</c>.</param>
+        public static NDExpr Std(NDExpr x, int ddof = 0) => new ReduceNode(NDExprReduceKind.Std, x, ddof: ddof);
+
+        /// <summary>One-pass fused <c>np.std</c> along <paramref name="axis"/> with <paramref name="ddof"/> delta degrees of freedom.</summary>
+        public static NDExpr Std(NDExpr x, int axis, bool keepdims = false, int ddof = 0) => new ReduceNode(NDExprReduceKind.Std, x, axis, keepdims, ddof);
+
         // ===================================================================
         // Binding
         // ===================================================================
@@ -690,19 +771,24 @@ namespace NumSharp.Backends.Iteration
         private readonly NDExpr _child;
         private readonly int? _axis;       // null = flat (reduce-all); else reduce this axis
         private readonly bool _keepdims;
+        private readonly int _ddof;        // Var/Std delta degrees of freedom (divisor N-ddof); 0 for every other kind
 
-        public ReduceNode(NDExprReduceKind kind, NDExpr child, int? axis = null, bool keepdims = false)
+        public ReduceNode(NDExprReduceKind kind, NDExpr child, int? axis = null, bool keepdims = false, int ddof = 0)
         {
             _kind = kind;
             _child = child ?? throw new ArgumentNullException(nameof(child));
             _axis = axis;
             _keepdims = keepdims;
+            _ddof = ddof;
         }
 
         internal NDExprReduceKind Kind => _kind;
         internal NDExpr Child => _child;
         internal int? Axis => _axis;
         internal bool Keepdims => _keepdims;
+
+        /// <summary>Var/Std delta degrees of freedom — the divisor is <c>max(N − Ddof, 0)</c>. 0 for all other kinds.</summary>
+        internal int Ddof => _ddof;
 
         public override bool SupportsSimd => false;
 
@@ -717,7 +803,12 @@ namespace NumSharp.Backends.Iteration
 
         public override void AppendSignature(StringBuilder sb)
         {
-            sb.Append("Reduce").Append(_kind).Append('(');
+            // ddof is folded into the legacy string cache key so two Var/Std trees that differ only in
+            // ddof never share a compiled program (the structural cache guards this too — see
+            // NDExpr.Structure.cs — but the string key must be independent as well).
+            sb.Append("Reduce").Append(_kind);
+            if (_ddof != 0) sb.Append("_dd").Append(_ddof);
+            sb.Append('(');
             _child.AppendSignature(sb);
             sb.Append(')');
         }
@@ -725,7 +816,7 @@ namespace NumSharp.Backends.Iteration
         internal override NDExpr BindArrays(NDExprBindContext ctx)
         {
             var c = _child.BindArrays(ctx);
-            return ReferenceEquals(c, _child) ? this : new ReduceNode(_kind, c, _axis, _keepdims);
+            return ReferenceEquals(c, _child) ? this : new ReduceNode(_kind, c, _axis, _keepdims, _ddof);
         }
 
         internal override bool ContainsReduce => true;
@@ -779,11 +870,26 @@ namespace NumSharp.Backends.Iteration
                     return NPTypeCode.Int64;
 
                 case NDExprReduceKind.Mean:
+                case NDExprReduceKind.NanMean:
+                    // nanmean shares mean's dtype tier: the float widths are preserved (float16 via a
+                    // float32 intermediate), complex128 stays complex (its mean is complex), and every
+                    // integer/bool/char widens to float64.
                     return child switch
                     {
                         NPTypeCode.Half or NPTypeCode.Single or NPTypeCode.Double or
                         NPTypeCode.Decimal or NPTypeCode.Complex => child,
                         _ => NPTypeCode.Double,
+                    };
+
+                case NDExprReduceKind.Var:
+                case NDExprReduceKind.Std:
+                    // var/std preserve the float widths (float16 computed in float32), but — like NumPy —
+                    // a complex128 child yields a REAL float64 result (the variance of complex data is the
+                    // mean squared |deviation|). Integer/bool/char widen to float64.
+                    return child switch
+                    {
+                        NPTypeCode.Half or NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Decimal => child,
+                        _ => NPTypeCode.Double, // Complex → real float64; int/bool/char → float64
                     };
 
                 case NDExprReduceKind.Any:
@@ -806,10 +912,13 @@ namespace NumSharp.Backends.Iteration
             // Min/Max and the host-delegated M4-tail/M4c kinds (Ptp/NanMin/NanMax/ArgMax/ArgMin) never
             // run a widening summation — Min/Max fold in place and the delegated kinds bypass the fold
             // path entirely — so the accumulator dtype is simply the result dtype (no f16/f32 → f64
-            // widening; the index kinds' result is int64 regardless).
+            // widening; the index kinds' result is int64 regardless). The M4c summation kinds
+            // (NanMean/Var/Std) are host-computed in EvaluateStatReduce, which chooses its own compute
+            // dtype per input, so their fold accType is likewise unused — return the result dtype.
             if (kind == NDExprReduceKind.Min || kind == NDExprReduceKind.Max
                 || kind == NDExprReduceKind.Ptp || kind == NDExprReduceKind.NanMin || kind == NDExprReduceKind.NanMax
-                || kind == NDExprReduceKind.ArgMax || kind == NDExprReduceKind.ArgMin)
+                || kind == NDExprReduceKind.ArgMax || kind == NDExprReduceKind.ArgMin
+                || kind == NDExprReduceKind.NanMean || kind == NDExprReduceKind.Var || kind == NDExprReduceKind.Std)
                 return result;
             return result == NPTypeCode.Half || result == NPTypeCode.Single
                 ? NPTypeCode.Double

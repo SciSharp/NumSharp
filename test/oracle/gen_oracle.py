@@ -8057,10 +8057,17 @@ _EV_REDUCE = {
     "nanmax": lambda a, ax, kd: np.nanmax(a, axis=ax, keepdims=kd),
     # P2 M4c — the int64 INDEX kinds (an index, not a value → always intp). Their result depends on the
     # C-order tie/NaN rule (first maximum / first NaN wins), but NumSharp reduces the SAME fresh
-    # C-contiguous materialized child, so it is bit-exact — NO E1 excuse. (NanMean/Std/Var/Average, the
-    # summation-bound M4c kinds, wait on M3 and are absent here.)
+    # C-contiguous materialized child, so it is bit-exact — NO E1 excuse.
     "argmax": lambda a, ax, kd: np.argmax(a, axis=ax, keepdims=kd),
     "argmin": lambda a, ax, kd: np.argmin(a, axis=ax, keepdims=kd),
+    # P2 M4c summation kinds — NanMean / Var / Std. Host-computed over the materialized child with the
+    # SAME NumPy-exact pairwise sum the M1/M2 diverts use (NOT delegated to the engine's drifting
+    # np.nanmean/np.var), so they are BIT-EXACT for the 13 supported dtypes with NO E1 excuse. var/std
+    # carry a ddof; a complex128 var/std is a REAL float64. float16 + decimal are unsupported (a
+    # bit-exact reduction there needs a pairwise kernel that dtype lacks) and are held out of this tier.
+    "nanmean": lambda a, ax, kd: np.nanmean(a, axis=ax, keepdims=kd),
+    "var": lambda a, ax, kd, dd: np.var(a, axis=ax, keepdims=kd, ddof=dd),
+    "std": lambda a, ax, kd, dd: np.std(a, axis=ax, keepdims=kd, ddof=dd),
 }
 
 _EV_TOKEN = re.compile(r"\s*([A-Za-z_][A-Za-z0-9_]*(?::[^,()]+)?|[(),])")
@@ -8165,7 +8172,11 @@ def gen_evaluate():
             r = _ev_eval(expr, views)
             red = params.get("reduce")
             if red:
-                r = _EV_REDUCE[red["kind"]](r, red.get("axis"), bool(red.get("keepdims", False)))
+                rk = red["kind"]
+                if rk in ("var", "std"):   # the ddof-carrying kinds
+                    r = _EV_REDUCE[rk](r, red.get("axis"), bool(red.get("keepdims", False)), int(red.get("ddof", 0)))
+                else:
+                    r = _EV_REDUCE[rk](r, red.get("axis"), bool(red.get("keepdims", False)))
             r = np.asarray(r)
             if r.dtype.name == "complex64":
                 skipped += 1          # NumSharp has one complex width; skip the width-only cells
@@ -8608,6 +8619,86 @@ def gen_evaluate():
                 emit("in0", [(sb, sb)], "c_contiguous_1d",
                      params={"reduce": {"kind": kind, "axis": None, "keepdims": False}},
                      cid_tag=f"m4cwide/{dt}/{kind}/N={N}")
+
+    # ---- C7. M4c summation kinds: NanMean / Var / Std (plan P2 M4c summation) ------------------
+    # These are the summation-bound M4c kinds. Unlike the M4-tail/index kinds they SUM, so they can't
+    # delegate to the engine's drifting np.nanmean/np.var — the host materializes the child once and
+    # reproduces NumPy's nanmean / _var op for op over the SAME pairwise sum the M1/M2 diverts use
+    # (mean = pairwise_sum/N; var = pairwise_sum((x-mean)²)/max(N-ddof,0); std = sqrt(var); nanmean =
+    # pairwise_sum(NaN→0)/count). BIT-EXACT with NO E1 excuse, so this block is their teeth. The AXIS
+    # path rides the engine's C-contiguous axis add.reduce, so — like M2 — the strict-F multi-D AXIS
+    # corner is excluded here (only FLAT is emitted for f_contiguous_2d; a flat reduce of a contiguous
+    # child is memory-order bit-exact whatever the layout). float16 + decimal are unsupported (they need
+    # a pairwise kernel that dtype lacks — the "Half not diverted" gap M1/M2 share) and held out.
+    def _c7_pool(N, npdt, with_nan):
+        if npdt.kind in "iu":
+            base = np.array([3, -7, 1, 5, 0, 4, -2, 6], dtype=np.int64)
+            return np.tile(base, (N + 7) // 8)[:N].astype(npdt)     # int→int, no float→uint UB
+        if npdt.kind == "c":
+            base = np.array([1 + 2j, 3 - 1j, -2 + 0.5j, 4 + 4j, 0 + 0j, -3 - 2j, 2.5 + 1.5j, 5 - 3j])
+            a = np.tile(base, (N + 7) // 8)[:N].astype(npdt)
+        else:
+            base = np.array([3.0, -7.0, 1.5, 5.0, 0.0, 4.0, -2.5, 6.0], dtype=np.float64)
+            a = np.tile(base, (N + 7) // 8)[:N].astype(npdt)
+        if with_nan:
+            a[1::5] = np.nan                                          # scattered NaN (not a whole slice)
+        return a
+
+    c7_dtypes = ("bool", "uint8", "int32", "int64", "uint64", "float32", "float64", "complex128")
+    for ln in c5_layouts:
+        for dt in c7_dtypes:
+            npdt = np.dtype(dt)
+            isfloat = npdt.kind in "fc"
+            isFlayout = (ln == "f_contiguous_2d")   # strict-F multi-D AXIS is the excluded corner
+            # nanmean over a clean pool + (for float/complex) a scattered-NaN pool; var/std over a clean
+            # pool at ddof 0 and 1 (bool var has zero variance but is a legal float64 result).
+            specs = [("nanmean", False, 0), ("var", False, 0), ("var", False, 1), ("std", False, 0)]
+            if isfloat:
+                specs += [("nanmean", True, 0), ("var", True, 0)]    # NaN-skip mean; NaN-propagating var
+            for kind, with_nan, dd in specs:
+                nb, nv = LAYOUTS[ln](npdt)
+                nb.reshape(-1)[:] = _c7_pool(nb.size, npdt, with_nan)
+                combos = [(None, False)]
+                if not isFlayout:
+                    combos += [(ax, False) for ax in range(nv.ndim)]
+                    if nv.ndim > 1:
+                        combos.append((1, True))                      # keepdims on a non-flat axis
+                for ax, kd in combos:
+                    red = {"kind": kind, "axis": ax, "keepdims": kd}
+                    if kind in ("var", "std"):
+                        red["ddof"] = dd
+                    emit("in0", [(nb, nv)], ln, params={"reduce": red},
+                         cid_tag=f"m4csum/{dt}/{kind}{'_nan' if with_nan else ''}{'_dd'+str(dd) if dd else ''}[{ax},{int(kd)}]")
+
+    # WIDE-magnitude flat cases — the teeth for the pairwise summation (a naive/multi-accumulator sum
+    # would diverge here where it matches on the benign pool above; crosses PW_BLOCKSIZE 128 + the leaf).
+    for N in (7, 8, 127, 128, 129, 257, 1000):
+        for dt in ("float32", "float64", "complex128"):
+            npdt = np.dtype(dt)
+            arr = _wide_sum_pool(N).astype(npdt)
+            if npdt.kind == "c":
+                arr = arr + 1j * _wide_sum_pool(N)[::-1].astype(np.float64)  # non-trivial imaginary part
+            sb = np.ascontiguousarray(arr)
+            for kind in ("var", "std", "nanmean"):
+                red = {"kind": kind, "axis": None, "keepdims": False}
+                if kind in ("var", "std"):
+                    red["ddof"] = 0
+                emit("in0", [(sb, sb)], "c_contiguous_1d", params={"reduce": red},
+                     cid_tag=f"m4csumwide/{dt}/{kind}/N={N}")
+
+    # A FUSED child (not identity) proves the materialize-then-stat path end to end, flat + axis.
+    for expr in ("mul(in0,in0)", "sub(in0,lf:1.5)"):
+        for dt in ("int64", "float64", "complex128"):
+            npdt = np.dtype(dt)
+            nb, nv = LAYOUTS["c_contiguous_2d"](npdt)
+            nb.reshape(-1)[:] = _c7_pool(nb.size, npdt, False)
+            for kind in ("var", "std", "nanmean"):
+                for ax, kd in [(None, False), (0, False), (1, True)]:
+                    red = {"kind": kind, "axis": ax, "keepdims": kd}
+                    if kind in ("var", "std"):
+                        red["ddof"] = 0
+                    emit(expr, [(nb, nv)], "c_contiguous_2d", params={"reduce": red},
+                         cid_tag=f"m4csum/{dt}/{kind}[{ax},{int(kd)}]/{expr}")
 
     # ---- D. out= (returned view + the whole base buffer behind out) -------------------------
     out_exprs = ["add(mul(in0,in1),in0)", "gt(in0,in1)", "where(gt(in0,in1),in0,in1)", "sqrt(abs(in0))"]

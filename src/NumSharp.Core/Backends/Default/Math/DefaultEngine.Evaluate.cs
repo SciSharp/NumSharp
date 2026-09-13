@@ -328,6 +328,9 @@ namespace NumSharp.Backends
             NDExprReduceKind.NanMax => "nanmax",
             NDExprReduceKind.ArgMax => "argmax",
             NDExprReduceKind.ArgMin => "argmin",
+            NDExprReduceKind.NanMean => "nanmean",
+            NDExprReduceKind.Var => "var",
+            NDExprReduceKind.Std => "std",
             _ => "mean",
         };
 
@@ -346,6 +349,15 @@ namespace NumSharp.Backends
             if (reduce.Kind is NDExprReduceKind.Ptp or NDExprReduceKind.NanMin or NDExprReduceKind.NanMax
                 or NDExprReduceKind.ArgMax or NDExprReduceKind.ArgMin)
                 return EvaluateDelegatingReduce(program, inputs, @out);
+
+            // Plan P2 M4c (summation kinds) — NanMean/Var/Std. These are NOT order-independent (they
+            // sum), so they can't ride EvaluateDelegatingReduce's engine np.nanmean/np.var (whose flat
+            // sum is a drifting multi-accumulator fold). Instead the host materializes the child once and
+            // reproduces NumPy's nanmean / _var op for op over the SAME pairwise sum the M1/M2 diverts
+            // use — bit-exact, no fold kernel, handling BOTH flat and axis (so it precedes the axis
+            // dispatch, like the delegating kinds).
+            if (reduce.Kind is NDExprReduceKind.NanMean or NDExprReduceKind.Var or NDExprReduceKind.Std)
+                return EvaluateStatReduce(program, inputs, @out);
 
             if (reduce.Axis is int ax)
                 return EvaluateAxisReduce(program, inputs, @out, ax);
@@ -589,6 +601,481 @@ namespace NumSharp.Backends
             // matching the axis fold path's `np.copyto(@out, reduced)` tail.
             np.copyto(@out, computed);
             return @out;
+        }
+
+        // =====================================================================================
+        // Plan P2 M4c (summation kinds) — NanMean / Var / Std, host-computed over the materialized
+        // child with the SAME NumPy-exact pairwise sum the M1/M2 diverts use.
+        //
+        // These CANNOT delegate to the engine's np.nanmean/np.var (their flat sum is a drifting
+        // multi-accumulator SIMD fold, not NumPy's pairwise), and they CANNOT be tree rewrites
+        // (nanmean's divisor is a per-slab non-NaN count; var/std are two-pass with a ddof divisor).
+        // So the host materializes the child once and reproduces NumPy's own algorithm op for op:
+        //   NanMean = pairwise_sum(NaN→0) / count_of_non_NaN
+        //   Var     = pairwise_sum((x − mean)²) / max(N − ddof, 0),  mean = pairwise_sum(x) / N
+        //   Std     = sqrt(Var)
+        // A FLAT reduction folds the child's buffer in MEMORY order (bit-exact for a C- or
+        // F-contiguous child alike, since np.add.reduce over a contiguous buffer iterates memory
+        // order); the AXIS path rides the engine's own bit-exact axis add.reduce over the
+        // C-contiguous child (the strict-F multi-D axis corner is the same one M2 leaves excused).
+        // Float16 and Decimal are rejected — a bit-exact float16 var needs a float16 pairwise kernel
+        // (the "Half not diverted" gap M1/M2 share) and Decimal has neither a NumPy analog nor a
+        // pairwise kernel here. Bit-exact vs NumPy 2.4.2 for the other 13 dtypes; NO excuse.
+        // =====================================================================================
+        private unsafe NDArray EvaluateStatReduce(NDExprProgram program, NDArray[] inputs, NDArray @out)
+        {
+            var reduce = program.Reduce;
+            var resultType = program.ResultType;
+
+            // Validate the out cast up front (same order as every reduce path).
+            if (@out is not null)
+                ValidateOutCast(resultType, @out.typecode, "evaluate");
+
+            using var materialized = EvaluateCore(program.ChildElementwiseProgram, inputs, null);
+            NPTypeCode ct = materialized.typecode;
+
+            // Half needs a float16 pairwise sum kernel that does not exist (NumPy accumulates a float16
+            // variance IN float16 — a widen-to-float32 computation is NOT bit-exact, ~30% of inputs
+            // differ); Decimal has no NumPy analog and no pairwise kernel. Reject both with a directed
+            // message rather than silently returning a divergent value.
+            if (ct == NPTypeCode.Half || ct == NPTypeCode.Decimal)
+                throw new NotSupportedException(
+                    $"np.evaluate {ReduceUfuncName(reduce.Kind)} does not support the {ct} dtype yet " +
+                    $"(a bit-exact float16/decimal reduction needs a pairwise sum kernel that dtype lacks; " +
+                    $"use np.{ReduceUfuncName(reduce.Kind)} directly). Plan P2 M-Half/M-Decimal.");
+
+            NDArray computed = reduce.Kind == NDExprReduceKind.NanMean
+                ? ExactNanMean(materialized, reduce.Axis, reduce.Keepdims, resultType)
+                : ExactVarStd(materialized, reduce.Axis, reduce.Keepdims, reduce.Ddof,
+                              sqrtResult: reduce.Kind == NDExprReduceKind.Std, resultType);
+
+            if (@out is null)
+                return computed;
+
+            // A flat reduction produces a 0-d scalar; NumPy rejects a non-0-d out here (same message
+            // shape as the fold / delegating paths).
+            if (reduce.Axis is null && @out.ndim != 0)
+                throw new ArgumentException(
+                    $"output parameter for reduction operation {ReduceUfuncName(reduce.Kind)} " +
+                    $"has the wrong number of dimensions: Found {@out.ndim} but expected 0");
+
+            np.copyto(@out, computed);
+            return @out;
+        }
+
+        /// <summary>
+        /// <c>np.nanmean</c> over the freshly materialized child. Result dtype <paramref name="resultT"/>
+        /// (int/bool/char→float64, float32/float64 preserved, complex128 preserved). A float/complex
+        /// child skips NaN per element (an all-NaN slice → NaN); an integer/bool/char child carries no
+        /// NaN and is exactly the plain mean.
+        /// </summary>
+        private unsafe NDArray ExactNanMean(NDArray m, int? axis, bool keepdims, NPTypeCode resultT)
+        {
+            NPTypeCode ct = m.typecode;
+            bool floaty = ct == NPTypeCode.Single || ct == NPTypeCode.Double || ct == NPTypeCode.Complex;
+            // Compute dtype: complex stays complex, float32 stays float32, everything else → float64.
+            NPTypeCode accT = ct == NPTypeCode.Single ? NPTypeCode.Single
+                            : ct == NPTypeCode.Complex ? NPTypeCode.Complex
+                            : NPTypeCode.Double;
+
+            if (axis is null)
+            {
+                long n = m.size;
+                // A memory-order accT source buffer (m's buffer directly for a float/complex child;
+                // a widened float64 buffer for an integer/bool/char child).
+                using var srcHolder = StatFlatSource(m, accT, out byte* src);
+
+                if (!floaty)
+                {
+                    // No NaN — nanmean == mean: pairwise sum / n at accT (float64).
+                    return FlatMeanScalar(src, n, accT, n, resultT);
+                }
+
+                // Build the NaN-cleaned buffer and count the finite elements (memory order).
+                var cleaned = new NDArray(accT, new Shape(n), false);
+                byte* cp = (byte*)cleaned.Address;
+                long count = BuildCleanedFlat(src, cp, n, accT);
+
+                byte* slot = stackalloc byte[NDExprParamPlan.SlotBytes];
+                *(ulong*)slot = 0; *(ulong*)(slot + 8) = 0;
+                PairwiseSumInto(cp, n, accT, slot);
+                cleaned.Dispose();
+
+                DivideSlotByCount(slot, accT, count);              // total / count (Smith form for complex)
+                return ScalarFromSlot(slot, accT, resultT);
+            }
+
+            // ---- axis ----
+            int nd = m.ndim;
+            int ax = NormalizeAxis(axis.Value, nd);
+            long axisSize = m.Shape.dimensions[ax];
+            NDArray w = EnsureContiguous(m, accT);                 // C-contiguous accT child
+
+            NDArray reduced;
+            if (!floaty)
+            {
+                reduced = ExactSumArray(w, ax, accT);              // float64 axis sum (no NaN)
+                DivideByConst(reduced, accT, axisSize);            // / axisSize
+            }
+            else
+            {
+                // Per-slab: nansum(cleaned) / count(present). `cleaned` is NaN→0, `present` is 1.0/0.0.
+                var cleaned = new NDArray(accT, w.Shape.Clone(), false);
+                var present = new NDArray(NPTypeCode.Double, w.Shape.Clone(), false);
+                BuildCleanedAndPresent(
+                    (byte*)w.Address + (long)w.Shape.offset * accT.SizeOf(),
+                    (byte*)cleaned.Address, (double*)present.Address, w.size, accT);
+
+                NDArray totals = ExactSumArray(cleaned, ax, accT);
+                NDArray counts = ExactSumArray(present, ax, NPTypeCode.Double); // exact integer counts as float64
+                cleaned.Dispose(); present.Dispose();
+
+                DivideByCounts(totals, accT, counts);              // per-element total/count
+                counts.Dispose();
+                reduced = totals;
+            }
+
+            return FinishReduced(reduced, ax, keepdims, accT, resultT);
+        }
+
+        /// <summary>
+        /// <c>np.var</c> (or <c>np.std</c> when <paramref name="sqrtResult"/>) over the materialized
+        /// child: NumPy's two-pass <c>_var</c> — <c>mean = Σx / N</c>, then <c>Σ(x − mean)² / max(N −
+        /// ddof, 0)</c> — reproduced over the exact pairwise sum. A complex128 child yields a REAL
+        /// float64 result (<c>|x − mean|²</c>). NaN PROPAGATES (every element participates), and an
+        /// empty / degenerate divisor yields NaN / ±inf, matching NumPy.
+        /// </summary>
+        private unsafe NDArray ExactVarStd(NDArray m, int? axis, bool keepdims, int ddof, bool sqrtResult, NPTypeCode resultT)
+        {
+            NPTypeCode ct = m.typecode;
+            bool complexInput = ct == NPTypeCode.Complex;
+            // Mean/accumulate dtype and deviation (|x−mean|²) dtype.
+            NPTypeCode accT = ct == NPTypeCode.Single ? NPTypeCode.Single
+                            : complexInput ? NPTypeCode.Complex
+                            : NPTypeCode.Double;
+            NPTypeCode devT = complexInput ? NPTypeCode.Double : accT; // complex variance is real
+
+            if (axis is null)
+            {
+                long n = m.size;
+                using var srcHolder = StatFlatSource(m, accT, out byte* src);
+
+                // mean = Σx / n (Smith divide for complex).
+                byte* meanSlot = stackalloc byte[NDExprParamPlan.SlotBytes];
+                *(ulong*)meanSlot = 0; *(ulong*)(meanSlot + 8) = 0;
+                PairwiseSumInto(src, n, accT, meanSlot);
+                DivideSlotByCount(meanSlot, accT, n);
+
+                // d2[i] = (x−mean)² (real) or |x−mean|² (complex), in memory order → a devT buffer.
+                var d2flat = new NDArray(devT, new Shape(n), false);
+                BuildSquaredDeviationsFlat(src, (byte*)d2flat.Address, meanSlot, n, accT, devT);
+
+                byte* ssum = stackalloc byte[NDExprParamPlan.SlotBytes];
+                *(ulong*)ssum = 0; *(ulong*)(ssum + 8) = 0;
+                PairwiseSumInto((byte*)d2flat.Address, n, devT, ssum);
+                d2flat.Dispose();
+
+                DivideSlotByCount(ssum, devT, System.Math.Max(n - ddof, 0));
+                if (sqrtResult) SqrtSlot(ssum, devT);
+                return ScalarFromSlot(ssum, devT, resultT);
+            }
+
+            // ---- axis ----
+            int nd = m.ndim;
+            int ax = NormalizeAxis(axis.Value, nd);
+            long axisSize = m.Shape.dimensions[ax];
+            NDArray w = EnsureContiguous(m, accT);                 // C-contiguous accT child
+
+            // mean along axis, kept as size-1 for the broadcast subtract.
+            NDArray meanReduced = ExactSumArray(w, ax, accT);
+            DivideByConst(meanReduced, accT, axisSize);
+            NDArray meanKD = np.expand_dims(meanReduced, ax);
+            NDArray dOrig = w - meanKD;                            // broadcast subtract (elementwise-exact)
+            NDArray d = dOrig.Shape.IsContiguous ? dOrig : dOrig.copy(); // the sq-dev loop reads memory order
+            if (!ReferenceEquals(d, dOrig)) dOrig.Dispose();
+            meanReduced.Dispose();                                 // meanKD is a view of it; consumed by the subtract
+
+            // d2[i] = (x−mean)² / |x−mean|², memory order → devT buffer of d's shape.
+            var d2 = new NDArray(devT, d.Shape.Clone(), false);
+            BuildSquaredDeviationsContig(
+                (byte*)d.Address + (long)d.Shape.offset * accT.SizeOf(),
+                (byte*)d2.Address, d.size, accT, devT);
+            d.Dispose();
+
+            NDArray sumsq = ExactSumArray(d2, ax, devT);
+            d2.Dispose();
+            DivideByConst(sumsq, devT, System.Math.Max(axisSize - ddof, 0));
+            if (sqrtResult) SqrtInPlace(sumsq, devT);
+
+            return FinishReduced(sumsq, ax, keepdims, devT, resultT);
+        }
+
+        // ---- shared stat helpers -----------------------------------------------------------------
+
+        /// <summary>
+        /// Exact NumPy <c>add.reduce</c> of a fresh C-contiguous array (dtype <paramref name="accT"/> ∈
+        /// {Single, Double, Complex}) — flat (<paramref name="axis"/> null → 0-d) or along an axis
+        /// (→ reduced), reusing the pairwise (flat) / axis (M2) primitives.
+        /// </summary>
+        private unsafe NDArray ExactSumArray(NDArray a, int? axis, NPTypeCode accT)
+        {
+            if (axis is null)
+            {
+                byte* slot = stackalloc byte[NDExprParamPlan.SlotBytes];
+                *(ulong*)slot = 0; *(ulong*)(slot + 8) = 0;
+                byte* src = (byte*)a.Address + (long)a.Shape.offset * accT.SizeOf();
+                PairwiseSumInto(src, a.size, accT, slot);
+                var r = new NDArray(accT, Shape.NewScalar(), false);
+                NDIterCasting.ConvertValue(slot, (byte*)r.Address + (long)r.Shape.offset * accT.SizeOf(), accT, accT);
+                return r;
+            }
+
+            int nd = a.ndim;
+            int ax = NormalizeAxis(axis.Value, nd);
+            var reducedDims = new long[nd - 1];
+            for (int d = 0, rd = 0; d < nd; d++) if (d != ax) reducedDims[rd++] = a.Shape.dimensions[d];
+            Shape reducedShape = reducedDims.Length > 0 ? new Shape(reducedDims) : Shape.NewScalar();
+            return ExactAxisSum(a, ax, accT, reducedShape);
+        }
+
+        /// <summary>
+        /// A memory-order source buffer of dtype <paramref name="accT"/> over the FLAT child <paramref
+        /// name="m"/>: for a float/complex child (already accT) it points straight at the child's buffer
+        /// with no allocation (returns null holder); for an integer/bool/char child it allocates a
+        /// float64 buffer and widens the child's memory-order elements into it (via per-element
+        /// <see cref="NDIterCasting.ConvertValue"/>, so every source dtype is handled uniformly).
+        /// </summary>
+        private static unsafe NDArray StatFlatSource(NDArray m, NPTypeCode accT, out byte* src)
+        {
+            NPTypeCode ct = m.typecode;
+            if (ct == accT)
+            {
+                src = (byte*)m.Address + (long)m.Shape.offset * accT.SizeOf();
+                return null; // no buffer to dispose
+            }
+
+            long n = m.size;
+            var buf = new NDArray(accT, new Shape(n), false);
+            byte* srcB = (byte*)m.Address + (long)m.Shape.offset * ct.SizeOf();
+            byte* dstB = (byte*)buf.Address;
+            int ss = ct.SizeOf(), ds = accT.SizeOf();
+            for (long i = 0; i < n; i++)
+                NDIterCasting.ConvertValue(srcB + i * ss, dstB + i * ds, ct, accT);
+            src = dstB;
+            return buf;
+        }
+
+        /// <summary>Ensure a C-contiguous child of dtype <paramref name="accT"/> for the axis path.</summary>
+        private static NDArray EnsureContiguous(NDArray m, NPTypeCode accT)
+            => m.typecode == accT
+                ? (m.Shape.IsContiguous ? m : m.copy())
+                : m.astype(DType.From(accT)); // astype returns a fresh C-contiguous array
+
+        /// <summary>Flat mean of a real/complex source into a fresh 0-d scalar (accT) cast to <paramref name="resultT"/>.</summary>
+        private static unsafe NDArray FlatMeanScalar(byte* src, long n, NPTypeCode accT, long count, NPTypeCode resultT)
+        {
+            byte* slot = stackalloc byte[NDExprParamPlan.SlotBytes];
+            *(ulong*)slot = 0; *(ulong*)(slot + 8) = 0;
+            PairwiseSumInto(src, n, accT, slot);
+            DivideSlotByCount(slot, accT, count);
+            return ScalarFromSlot(slot, accT, resultT);
+        }
+
+        /// <summary>Wrap a 16-byte accumulator slot of dtype <paramref name="fromT"/> into a fresh 0-d array cast to <paramref name="toT"/>.</summary>
+        private static unsafe NDArray ScalarFromSlot(byte* slot, NPTypeCode fromT, NPTypeCode toT)
+        {
+            var r = new NDArray(toT, Shape.NewScalar(), false);
+            NDIterCasting.ConvertValue(slot, (byte*)r.Address + (long)r.Shape.offset * toT.SizeOf(), fromT, toT);
+            return r;
+        }
+
+        /// <summary>Divide a 16-byte accumulator slot (Single/Double/Complex) in place by an integer count.</summary>
+        private static unsafe void DivideSlotByCount(byte* slot, NPTypeCode tc, long count)
+        {
+            switch (tc)
+            {
+                case NPTypeCode.Single: *(float*)slot /= (float)count; break;
+                case NPTypeCode.Double: *(double*)slot /= (double)count; break;
+                case NPTypeCode.Complex:
+                    *(System.Numerics.Complex*)slot = ComplexDivideByCountLikeNumPy(*(System.Numerics.Complex*)slot, count);
+                    break;
+                default: throw new NotSupportedException($"stat divide for {tc} — typing bug.");
+            }
+        }
+
+        /// <summary>Square root of a 16-byte accumulator slot (Single/Double) in place.</summary>
+        private static unsafe void SqrtSlot(byte* slot, NPTypeCode tc)
+        {
+            switch (tc)
+            {
+                case NPTypeCode.Single: *(float*)slot = MathF.Sqrt(*(float*)slot); break;
+                case NPTypeCode.Double: *(double*)slot = System.Math.Sqrt(*(double*)slot); break;
+                default: throw new NotSupportedException($"stat sqrt for {tc} — typing bug.");
+            }
+        }
+
+        /// <summary>Divide every element of a fresh reduced array (Single/Double/Complex) by a constant integer count.</summary>
+        private static unsafe void DivideByConst(NDArray arr, NPTypeCode tc, long count)
+        {
+            long nEl = arr.size;
+            byte* p = (byte*)arr.Address + (long)arr.Shape.offset * tc.SizeOf();
+            switch (tc)
+            {
+                case NPTypeCode.Single: { float* f = (float*)p; float d = (float)count; for (long i = 0; i < nEl; i++) f[i] /= d; break; }
+                case NPTypeCode.Double: { double* f = (double*)p; double d = (double)count; for (long i = 0; i < nEl; i++) f[i] /= d; break; }
+                case NPTypeCode.Complex: { var f = (System.Numerics.Complex*)p; for (long i = 0; i < nEl; i++) f[i] = ComplexDivideByCountLikeNumPy(f[i], count); break; }
+                default: throw new NotSupportedException($"stat divide-by-const for {tc} — typing bug.");
+            }
+        }
+
+        /// <summary>Divide totals[i] (Single/Double/Complex) by the per-element float64 count[i] (nanmean's per-slab divisor).</summary>
+        private static unsafe void DivideByCounts(NDArray totals, NPTypeCode tc, NDArray counts)
+        {
+            long nEl = totals.size;
+            byte* p = (byte*)totals.Address + (long)totals.Shape.offset * tc.SizeOf();
+            double* c = (double*)((byte*)counts.Address + (long)counts.Shape.offset * sizeof(double));
+            switch (tc)
+            {
+                case NPTypeCode.Single: { float* f = (float*)p; for (long i = 0; i < nEl; i++) f[i] /= (float)c[i]; break; }
+                case NPTypeCode.Double: { double* f = (double*)p; for (long i = 0; i < nEl; i++) f[i] /= c[i]; break; }
+                case NPTypeCode.Complex: { var f = (System.Numerics.Complex*)p; for (long i = 0; i < nEl; i++) f[i] = ComplexDivideByCountLikeNumPy(f[i], (long)c[i]); break; }
+                default: throw new NotSupportedException($"stat divide-by-counts for {tc} — typing bug.");
+            }
+        }
+
+        /// <summary>Elementwise square root of a fresh reduced array (Single/Double) in place.</summary>
+        private static unsafe void SqrtInPlace(NDArray arr, NPTypeCode tc)
+        {
+            long nEl = arr.size;
+            byte* p = (byte*)arr.Address + (long)arr.Shape.offset * tc.SizeOf();
+            switch (tc)
+            {
+                case NPTypeCode.Single: { float* f = (float*)p; for (long i = 0; i < nEl; i++) f[i] = MathF.Sqrt(f[i]); break; }
+                case NPTypeCode.Double: { double* f = (double*)p; for (long i = 0; i < nEl; i++) f[i] = System.Math.Sqrt(f[i]); break; }
+                default: throw new NotSupportedException($"stat sqrt for {tc} — typing bug.");
+            }
+        }
+
+        /// <summary>Apply keepdims (re-insert the size-1 axis) and cast a fresh reduced array to <paramref name="resultT"/>.</summary>
+        private static NDArray FinishReduced(NDArray reduced, int axis, bool keepdims, NPTypeCode fromT, NPTypeCode resultT)
+        {
+            NDArray r = keepdims ? np.expand_dims(reduced, axis) : reduced;
+            return fromT == resultT ? r : r.astype(DType.From(resultT));
+        }
+
+        /// <summary>
+        /// Build the flat NaN-cleaned buffer (NaN→0) from a memory-order source and return the count of
+        /// finite elements. A complex element is NaN if EITHER component is NaN (np.isnan semantics).
+        /// </summary>
+        private static unsafe long BuildCleanedFlat(byte* src, byte* cleaned, long n, NPTypeCode accT)
+        {
+            long count = 0;
+            switch (accT)
+            {
+                case NPTypeCode.Single:
+                {
+                    float* s = (float*)src; float* d = (float*)cleaned;
+                    for (long i = 0; i < n; i++) { float v = s[i]; bool nan = float.IsNaN(v); d[i] = nan ? 0f : v; if (!nan) count++; }
+                    break;
+                }
+                case NPTypeCode.Double:
+                {
+                    double* s = (double*)src; double* d = (double*)cleaned;
+                    for (long i = 0; i < n; i++) { double v = s[i]; bool nan = double.IsNaN(v); d[i] = nan ? 0d : v; if (!nan) count++; }
+                    break;
+                }
+                case NPTypeCode.Complex:
+                {
+                    var s = (System.Numerics.Complex*)src; var d = (System.Numerics.Complex*)cleaned;
+                    for (long i = 0; i < n; i++) { var v = s[i]; bool nan = double.IsNaN(v.Real) || double.IsNaN(v.Imaginary); d[i] = nan ? System.Numerics.Complex.Zero : v; if (!nan) count++; }
+                    break;
+                }
+                default: throw new NotSupportedException($"nanmean clean for {accT} — typing bug.");
+            }
+            return count;
+        }
+
+        /// <summary>Build the C-contiguous NaN-cleaned buffer (NaN→0) and the parallel float64 present buffer (1.0 finite / 0.0 NaN) for the axis nanmean.</summary>
+        private static unsafe void BuildCleanedAndPresent(byte* src, byte* cleaned, double* present, long n, NPTypeCode accT)
+        {
+            switch (accT)
+            {
+                case NPTypeCode.Single:
+                {
+                    float* s = (float*)src; float* d = (float*)cleaned;
+                    for (long i = 0; i < n; i++) { float v = s[i]; bool nan = float.IsNaN(v); d[i] = nan ? 0f : v; present[i] = nan ? 0d : 1d; }
+                    break;
+                }
+                case NPTypeCode.Double:
+                {
+                    double* s = (double*)src; double* d = (double*)cleaned;
+                    for (long i = 0; i < n; i++) { double v = s[i]; bool nan = double.IsNaN(v); d[i] = nan ? 0d : v; present[i] = nan ? 0d : 1d; }
+                    break;
+                }
+                case NPTypeCode.Complex:
+                {
+                    var s = (System.Numerics.Complex*)src; var d = (System.Numerics.Complex*)cleaned;
+                    for (long i = 0; i < n; i++) { var v = s[i]; bool nan = double.IsNaN(v.Real) || double.IsNaN(v.Imaginary); d[i] = nan ? System.Numerics.Complex.Zero : v; present[i] = nan ? 0d : 1d; }
+                    break;
+                }
+                default: throw new NotSupportedException($"nanmean clean for {accT} — typing bug.");
+            }
+        }
+
+        /// <summary>Flat squared-deviation buffer from a memory-order source and a scalar mean slot (real: (x−m)²; complex: |x−m|² into a float64 buffer).</summary>
+        private static unsafe void BuildSquaredDeviationsFlat(byte* src, byte* d2, byte* meanSlot, long n, NPTypeCode accT, NPTypeCode devT)
+        {
+            switch (accT)
+            {
+                case NPTypeCode.Single:
+                {
+                    float* s = (float*)src; float* o = (float*)d2; float m = *(float*)meanSlot;
+                    for (long i = 0; i < n; i++) { float t = s[i] - m; o[i] = t * t; }
+                    break;
+                }
+                case NPTypeCode.Double:
+                {
+                    double* s = (double*)src; double* o = (double*)d2; double m = *(double*)meanSlot;
+                    for (long i = 0; i < n; i++) { double t = s[i] - m; o[i] = t * t; }
+                    break;
+                }
+                case NPTypeCode.Complex:
+                {
+                    var s = (System.Numerics.Complex*)src; double* o = (double*)d2; var m = *(System.Numerics.Complex*)meanSlot;
+                    // |x−m|² as re²+im² (two separate multiplies + add — NOT an FMA; verified to match
+                    // np.var(complex) bit-for-bit over 20,000 adversarial inputs, where an FMA does not).
+                    for (long i = 0; i < n; i++) { double tr = s[i].Real - m.Real; double ti = s[i].Imaginary - m.Imaginary; o[i] = tr * tr + ti * ti; }
+                    break;
+                }
+                default: throw new NotSupportedException($"var deviations for {accT} — typing bug.");
+            }
+        }
+
+        /// <summary>Squared-deviation buffer from an already-differenced C-contiguous buffer (real: x²; complex: |x|² into float64).</summary>
+        private static unsafe void BuildSquaredDeviationsContig(byte* d, byte* d2, long n, NPTypeCode accT, NPTypeCode devT)
+        {
+            switch (accT)
+            {
+                case NPTypeCode.Single:
+                {
+                    float* s = (float*)d; float* o = (float*)d2;
+                    for (long i = 0; i < n; i++) { float t = s[i]; o[i] = t * t; }
+                    break;
+                }
+                case NPTypeCode.Double:
+                {
+                    double* s = (double*)d; double* o = (double*)d2;
+                    for (long i = 0; i < n; i++) { double t = s[i]; o[i] = t * t; }
+                    break;
+                }
+                case NPTypeCode.Complex:
+                {
+                    var s = (System.Numerics.Complex*)d; double* o = (double*)d2;
+                    for (long i = 0; i < n; i++) { double tr = s[i].Real; double ti = s[i].Imaginary; o[i] = tr * tr + ti * ti; }
+                    break;
+                }
+                default: throw new NotSupportedException($"var deviations for {accT} — typing bug.");
+            }
         }
 
         // Axis-aware fused reduction: one pass over the inputs, accumulating into a per-output

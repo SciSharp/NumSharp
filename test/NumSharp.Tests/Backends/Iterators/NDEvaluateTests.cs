@@ -883,5 +883,122 @@ namespace NumSharp.Tests.Backends.Iterators
             Assert.ThrowsException<ArgumentException>(() => np.evaluate(NDExpr.ArgMax((NDExpr)e)));
             Assert.ThrowsException<ArgumentException>(() => np.evaluate(NDExpr.ArgMin((NDExpr)e)));
         }
+
+        // ===================================================================
+        // Plan P2 M4c summation kinds — NanMean / Var / Std (host-computed over
+        // the materialized child with the M1/M2-exact pairwise sum).
+        // ===================================================================
+
+        /// <summary>Var/Std values, the ddof divisor, and the dtype tiers (int→float64, float32 preserved).</summary>
+        [TestMethod]
+        public void M4cSum_Var_Std_Ddof_And_DtypeTiers()
+        {
+            var a = np.array(new double[] { 1, 2, 3, 4, 5 });
+            Assert.AreEqual(2.0, np.evaluate(NDExpr.Var(a)).GetDouble(0), 1e-12);          // population variance
+            Assert.AreEqual(2.5, np.evaluate(NDExpr.Var(a, ddof: 1)).GetDouble(0), 1e-12); // sample variance
+            Assert.AreEqual(System.Math.Sqrt(2.0), np.evaluate(NDExpr.Std(a)).GetDouble(0), 1e-12);
+
+            var i = np.array(new int[] { 1, 2, 3, 4, 5 });                                  // int → float64
+            var vi = np.evaluate(NDExpr.Var(i));
+            Assert.AreEqual(NPTypeCode.Double, vi.typecode);
+            Assert.AreEqual(2.0, vi.GetDouble(0), 1e-12);
+
+            var f = np.array(new float[] { 1, 2, 3, 4, 5 });                                // float32 preserved
+            var vf = np.evaluate(NDExpr.Var(f));
+            Assert.AreEqual(NPTypeCode.Single, vf.typecode);
+            Assert.AreEqual(2.0f, vf.GetSingle(0), 1e-5f);
+        }
+
+        /// <summary>NanMean skips NaN, an all-NaN input yields NaN, and an integer child (no NaN) is the plain mean (float64).</summary>
+        [TestMethod]
+        public void M4cSum_NanMean_SkipsNaN_And_IntPassthrough()
+        {
+            var a = np.array(new double[] { 1.0, double.NaN, 3.0, double.NaN, 5.0 });
+            Assert.AreEqual(3.0, np.evaluate(NDExpr.NanMean(a)).GetDouble(0), 1e-12);       // (1+3+5)/3
+
+            var allnan = np.array(new double[] { double.NaN, double.NaN });
+            Assert.IsTrue(double.IsNaN(np.evaluate(NDExpr.NanMean(allnan)).GetDouble(0)));  // all-NaN slice → NaN
+
+            var i = np.array(new int[] { 2, 4, 6 });
+            var r = np.evaluate(NDExpr.NanMean(i));
+            Assert.AreEqual(NPTypeCode.Double, r.typecode);
+            Assert.AreEqual(4.0, r.GetDouble(0), 1e-12);
+        }
+
+        /// <summary>A complex128 child yields a REAL float64 var/std (the variance of complex data), while its nanmean stays complex.</summary>
+        [TestMethod]
+        public void M4cSum_ComplexVar_IsRealFloat64_NanMean_IsComplex()
+        {
+            var z = np.array(new System.Numerics.Complex[] { new(1, 2), new(3, -1), new(-2, 0.5), new(4, 4) });
+
+            var v = np.evaluate(NDExpr.Var(z));
+            Assert.AreEqual(NPTypeCode.Double, v.typecode);                                 // REAL variance
+            Assert.AreEqual(8.671875, v.GetDouble(0), 1e-12);                               // Σ|z-mean|² / 4
+
+            var s = np.evaluate(NDExpr.Std(z));
+            Assert.AreEqual(NPTypeCode.Double, s.typecode);
+            Assert.AreEqual(System.Math.Sqrt(8.671875), s.GetDouble(0), 1e-12);
+
+            var nm = np.evaluate(NDExpr.NanMean(z));                                        // no NaN → == mean, complex
+            Assert.AreEqual(NPTypeCode.Complex, nm.typecode);
+            Assert.AreEqual(1.5, np.real(nm).GetDouble(0), 1e-12);                          // (1+3-2+4)/4
+            Assert.AreEqual(1.375, np.imag(nm).GetDouble(0), 1e-12);                        // (2-1+0.5+4)/4
+        }
+
+        /// <summary>An empty input yields NaN for all three (the divisor is zero) — the edge the byte corpus can't pin cleanly.</summary>
+        [TestMethod]
+        public void M4cSum_EmptyInput_YieldsNaN()
+        {
+            var e = np.array(new double[] { });
+            Assert.IsTrue(double.IsNaN(np.evaluate(NDExpr.Var(e)).GetDouble(0)));
+            Assert.IsTrue(double.IsNaN(np.evaluate(NDExpr.Std(e)).GetDouble(0)));
+            Assert.IsTrue(double.IsNaN(np.evaluate(NDExpr.NanMean(e)).GetDouble(0)));
+        }
+
+        /// <summary><c>ddof ≥ N</c> divides by a clamped-zero divisor → <c>+inf</c> (positive sum of squares), matching NumPy.</summary>
+        [TestMethod]
+        public void M4cSum_DdofClampsToInf()
+        {
+            var a = np.array(new double[] { 1, 2, 3 });
+            Assert.IsTrue(double.IsPositiveInfinity(np.evaluate(NDExpr.Var(a, ddof: 3)).GetDouble(0))); // N-ddof = 0
+            Assert.IsTrue(double.IsPositiveInfinity(np.evaluate(NDExpr.Var(a, ddof: 5)).GetDouble(0))); // clamped to 0
+        }
+
+        /// <summary>Axis var/std/nanmean and keepdims, over a 2-D child.</summary>
+        [TestMethod]
+        public void M4cSum_Axis_Forms()
+        {
+            var m = np.arange(12).reshape(3, 4).astype(np.float64);
+
+            var v0 = np.evaluate(NDExpr.Var(m, axis: 0));                                   // (4,)
+            Assert.AreEqual(1, v0.ndim);
+            Assert.AreEqual(4, v0.shape[0]);
+            for (int j = 0; j < 4; j++) Assert.AreEqual(32.0 / 3.0, v0.GetDouble(j), 1e-9); // var([j,j+4,j+8])
+
+            var v1k = np.evaluate(NDExpr.Var(m, axis: 1, keepdims: true));                  // (3,1)
+            Assert.AreEqual(2, v1k.ndim);
+            Assert.AreEqual(3, v1k.shape[0]);
+            Assert.AreEqual(1, v1k.shape[1]);
+
+            var nm0 = np.evaluate(NDExpr.NanMean(m, axis: 0));                              // mean of col j = j+4
+            for (int j = 0; j < 4; j++) Assert.AreEqual(4.0 + j, nm0.GetDouble(j), 1e-12);
+        }
+
+        /// <summary>
+        /// float16 and decimal are rejected — a bit-exact float16 variance needs a float16 pairwise sum
+        /// kernel that dtype lacks (the "Half not diverted" gap M1/M2 share), and decimal has no NumPy
+        /// analog / pairwise kernel here. A directed <see cref="NotSupportedException"/> rather than a
+        /// silent divergence (use np.var / np.std / np.nanmean directly for those).
+        /// </summary>
+        [TestMethod]
+        public void M4cSum_HalfAndDecimal_NotSupported()
+        {
+            var h = np.array(new double[] { 1, 2, 3 }).astype(np.float16);
+            Assert.ThrowsException<NotSupportedException>(() => np.evaluate(NDExpr.Var(h)));
+            Assert.ThrowsException<NotSupportedException>(() => np.evaluate(NDExpr.NanMean(h)));
+
+            var d = np.array(new double[] { 1, 2, 3 }).astype(np.@decimal);
+            Assert.ThrowsException<NotSupportedException>(() => np.evaluate(NDExpr.Std(d)));
+        }
     }
 }

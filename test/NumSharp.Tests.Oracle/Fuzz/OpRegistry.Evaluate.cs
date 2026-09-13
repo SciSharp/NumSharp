@@ -52,6 +52,7 @@ namespace NumSharp.Tests.Fuzz
                 string kind = red.GetProperty("kind").GetString();
                 int? axis = red.TryGetProperty("axis", out var ax) && ax.ValueKind == JsonValueKind.Number ? ax.GetInt32() : null;
                 bool keepdims = red.TryGetProperty("keepdims", out var kd) && kd.ValueKind == JsonValueKind.True;
+                int ddof = red.TryGetProperty("ddof", out var ddj) && ddj.ValueKind == JsonValueKind.Number ? ddj.GetInt32() : 0;
                 tree = (kind, axis) switch
                 {
                     ("sum", null) => NDExpr.Sum(tree),
@@ -69,6 +70,9 @@ namespace NumSharp.Tests.Fuzz
                     ("nanmax", null) => NDExpr.NanMax(tree),
                     ("argmax", null) => NDExpr.ArgMax(tree),
                     ("argmin", null) => NDExpr.ArgMin(tree),
+                    ("nanmean", null) => NDExpr.NanMean(tree),
+                    ("var", null) => NDExpr.Var(tree, ddof),
+                    ("std", null) => NDExpr.Std(tree, ddof),
                     ("sum", int a) => NDExpr.Sum(tree, a, keepdims),
                     ("prod", int a) => NDExpr.Prod(tree, a, keepdims),
                     ("min", int a) => NDExpr.Min(tree, a, keepdims),
@@ -84,6 +88,9 @@ namespace NumSharp.Tests.Fuzz
                     ("nanmax", int a) => NDExpr.NanMax(tree, a, keepdims),
                     ("argmax", int a) => NDExpr.ArgMax(tree, a, keepdims),
                     ("argmin", int a) => NDExpr.ArgMin(tree, a, keepdims),
+                    ("nanmean", int a) => NDExpr.NanMean(tree, a, keepdims),
+                    ("var", int a) => NDExpr.Var(tree, a, keepdims, ddof),
+                    ("std", int a) => NDExpr.Std(tree, a, keepdims, ddof),
                     _ => throw new NotSupportedException($"evaluate reduce kind '{kind}'"),
                 };
             }
