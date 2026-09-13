@@ -375,6 +375,16 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void NanScan() => RunCorpus("nanscan.jsonl");
 
+        // np.unwrap: the phase-unwrapping composition (diff -> fused mod/where -> cumsum), swept over
+        // the scan layouts x every dtype x {default period, float period, discont, integer period
+        // even/odd} x axes. Values are pure arithmetic (subtract/mod/add/cumsum, no libm), so it is a
+        // PORTABLE tier — bit-exact vs NumPy 2.4.2 including the integer-preserving path, with NaN
+        // results (from the catalog's nan/inf pool) tokenized by the comparator. Complex (TypeError)
+        // and unsigned integer-period (OverflowError) are gated by np.unwrap.Test.cs, not here.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Unwrap() => RunCorpus("unwrap.jsonl");
+
         // W6 statistics (T12): median/average/ptp (axis+keepdims), count_nonzero, percentile/
         // quantile (q in {0,25,50,75,100}/{0,.25,.5,.75,1}, axis None/0/last), clip (a,min,max).
         [TestMethod]
