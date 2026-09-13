@@ -207,6 +207,7 @@ namespace NumSharp.Tests.Fuzz
                 case "nextafter": return np.nextafter(ops[0], ops[1]);
                 case "copysign": return np.copysign(ops[0], ops[1]);
                 case "hypot": return np.hypot(ops[0], ops[1]);
+                case "heaviside": return np.heaviside(ops[0], ops[1]);
 
                 // Group A Batch 3: predicates + whole-array bool reductions (wrapped to 0-D bool).
                 case "iscomplex": return np.iscomplex(ops[0]);

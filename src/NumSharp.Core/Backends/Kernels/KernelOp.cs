@@ -47,7 +47,13 @@ namespace NumSharp.Backends.Kernels
         CopySign,
         /// <summary>sqrt(x1**2 + x2**2) without spurious overflow/underflow (np.hypot). Correctly-rounded
         /// (Borges FMA); routed to NDHypotMath, scalar-only like the rest of this family.</summary>
-        Hypot
+        Hypot,
+        /// <summary>The Heaviside step function (np.heaviside): 0 if x1&lt;0, x2 if x1==0, 1 if x1&gt;0, and
+        /// the positive canonical NaN if x1 is NaN. NOT commutative — x1 selects the branch, x2 is only the
+        /// x1==0 fill (its exact bits, NaN sign included, pass through). Float-tier promotion like the rest
+        /// of this family (ATan2), but unlike them it has a branchless SIMD fast path (compare + select,
+        /// no libm) because every output is an exact value; routed to NDHeavisideMath.</summary>
+        Heaviside
     }
 
     /// <summary>

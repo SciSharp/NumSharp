@@ -724,6 +724,12 @@ COPYSIGN_OP = {"copysign": np.copysign}
 # float16 are BIT-EXACT; float64 is <=1 ULP (NumSharp's correctly-rounded Borges FMA vs NumPy's only
 # faithfully-rounded UCRT hypot) — excused Double-only in MisalignedRegistry.
 HYPOT_OP = {"hypot": np.hypot}
+# heaviside(x1, x2): 0 if x1<0, x2 if x1==0, 1 if x1>0, +NaN if x1 is NaN. Same float-tier promotion
+# (ee/ff/dd/gg). BIT-EXACT at every dtype (the step is a port of npy_heaviside; the x1==0 fill passes
+# x2's exact bits, a NaN x1 gives the canonical +NaN) — so NO MisalignedRegistry excuse. The x1==0 / NaN
+# branches are gated by the `specials` tier (SPECIAL_BINARY_OPS), where the aligned pairs include
+# (±0, ±inf), (±0, ±0) and (nan, *).
+HEAVISIDE_OP = {"heaviside": np.heaviside}
 
 
 # np.place(arr, mask, vals) mutates arr in-place where mask is True, cycling through vals.
@@ -6032,7 +6038,7 @@ SPECIAL_UNARY_OPS = {
 SPECIAL_BINARY_OPS = {
     "add": lambda a, b: a + b, "subtract": lambda a, b: a - b, "multiply": lambda a, b: a * b, "divide": lambda a, b: a / b,
     "floor_divide": lambda a, b: a // b, "mod": lambda a, b: a % b, "power": lambda a, b: a ** b,
-    "float_power": lambda a, b: np.float_power(a, b), "arctan2": np.arctan2,
+    "float_power": lambda a, b: np.float_power(a, b), "arctan2": np.arctan2, "heaviside": np.heaviside,
     "maximum": np.maximum, "minimum": np.minimum, "fmax": np.fmax, "fmin": np.fmin,
     "equal": lambda a, b: a == b, "not_equal": lambda a, b: a != b, "less": lambda a, b: a < b, "greater": lambda a, b: a > b,
     "less_equal": lambda a, b: a <= b, "greater_equal": lambda a, b: a >= b, "isclose": np.isclose,
@@ -7605,6 +7611,7 @@ def main():
         cases += gen_binary(NEXTAFTER_OP, ARCTAN2_PAIRS, list(PAIR_LAYOUTS.keys()))       # nextafter (bit-exact)
         cases += gen_binary(COPYSIGN_OP, ARCTAN2_PAIRS, list(PAIR_LAYOUTS.keys()))        # copysign (bit-exact)
         cases += gen_binary(HYPOT_OP, ARCTAN2_PAIRS, list(PAIR_LAYOUTS.keys()))           # hypot (f32/f16 exact, f64 <=1 ULP)
+        cases += gen_binary(HEAVISIDE_OP, ARCTAN2_PAIRS, list(PAIR_LAYOUTS.keys()))       # heaviside (bit-exact, all dtypes)
         cases += gen_binary(ALLCLOSE_OPS, ALLCLOSE_PAIRS, list(PAIR_LAYOUTS.keys()))     # Group A B3
         cases += gen_unary(ISCOMPLEX_OPS, ISCOMPLEX_DTYPES, list(LAYOUTS.keys()))         # G5 (full)
         cases += char_tier("logic")                                                       # G9

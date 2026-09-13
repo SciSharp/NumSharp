@@ -336,6 +336,18 @@ namespace NumSharp.Backends.Kernels
             public static readonly MethodInfo HypotH = HY(nameof(Utilities.NDHypotMath.HypotHalf), typeof(Half));
             public static readonly MethodInfo HypotDec = HY(nameof(Utilities.NDHypotMath.HypotDecimal), typeof(decimal));
 
+            // np.heaviside scalar kernels — same (op, loop dtype) -> one 2-arg Call family shape as the
+            // LogAddNext/hypot helpers above, but backed by NDHeavisideMath (the step function). Used by
+            // the strided / mixed-dtype / f16 / decimal IL path; the contiguous & scalar-broadcast f32/f64
+            // cases take NDHeavisideMath's SIMD driver in Default.LogAddExp.cs instead.
+            private static MethodInfo HV(string name, Type t) =>
+                typeof(Utilities.NDHeavisideMath).GetMethod(name, new[] { t, t })
+                ?? throw new MissingMethodException(typeof(Utilities.NDHeavisideMath).FullName, name);
+            public static readonly MethodInfo HeavisideD = HV(nameof(Utilities.NDHeavisideMath.Heaviside), typeof(double));
+            public static readonly MethodInfo HeavisideF = HV(nameof(Utilities.NDHeavisideMath.HeavisideF), typeof(float));
+            public static readonly MethodInfo HeavisideH = HV(nameof(Utilities.NDHeavisideMath.HeavisideHalf), typeof(Half));
+            public static readonly MethodInfo HeavisideDec = HV(nameof(Utilities.NDHeavisideMath.HeavisideDecimal), typeof(decimal));
+
             // Integer power helpers (squared-exponentiation with native wrapping).
             // Used by EmitPowerOperation when result type is integer to preserve
             // NumPy's exact-wrap semantics that Math.Pow's double round-trip loses.
@@ -1363,7 +1375,7 @@ namespace NumSharp.Backends.Kernels
             // the whole scalar op is a single Call. Intercept BEFORE the decimal/half routing (like
             // min/max) so those dtypes flow through the shared helpers rather than EmitDecimal/HalfOperation.
             if (op == BinaryOp.LogAddExp || op == BinaryOp.LogAddExp2 || op == BinaryOp.NextAfter
-                || op == BinaryOp.CopySign || op == BinaryOp.Hypot)
+                || op == BinaryOp.CopySign || op == BinaryOp.Hypot || op == BinaryOp.Heaviside)
             {
                 EmitLogAddNextOperation(il, op, resultType);
                 return;
@@ -1682,20 +1694,22 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// Emit np.logaddexp / np.logaddexp2 / np.nextafter / np.copysign / np.hypot via the
-        /// <see cref="Utilities.NDLogAddExpMath"/> (and, for hypot, <see cref="Utilities.NDHypotMath"/>)
-        /// scalar helpers. Stack: [x1, x2] (already in the loop dtype) -> [result]. Mirrors
-        /// <see cref="EmitFloorDivideOperation"/>: resolve the per-dtype helper, then a single Call.
+        /// Emit np.logaddexp / np.logaddexp2 / np.nextafter / np.copysign / np.hypot / np.heaviside via the
+        /// <see cref="Utilities.NDLogAddExpMath"/> (hypot -> <see cref="Utilities.NDHypotMath"/>, heaviside
+        /// -> <see cref="Utilities.NDHeavisideMath"/>) scalar helpers. Stack: [x1, x2] (already in the loop
+        /// dtype) -> [result]. Mirrors <see cref="EmitFloorDivideOperation"/>: resolve the per-dtype helper,
+        /// then a single Call.
         /// </summary>
         private static void EmitLogAddNextOperation(ILGenerator il, BinaryOp op, NPTypeCode resultType)
             => il.EmitCall(OpCodes.Call, GetLogAddNextMethod(op, resultType), null);
 
         /// <summary>
-        /// Return the <see cref="Utilities.NDLogAddExpMath"/> scalar helper for
+        /// Return the scalar helper (<see cref="Utilities.NDLogAddExpMath"/>, or
+        /// <see cref="Utilities.NDHypotMath"/> / <see cref="Utilities.NDHeavisideMath"/> for those ops) for
         /// (<paramref name="op"/>, <paramref name="resultType"/>). Every loop dtype resolves to
         /// Half / Single / Double / Decimal (float-tier promotion, same as ATan2), so exactly one of
         /// four signatures applies per op. Parallels <see cref="GetFloorDivideMethod"/> /
-        /// <see cref="GetRemainderMethod"/>, but the four ops are one family (intercepted together like
+        /// <see cref="GetRemainderMethod"/>, but these ops are one family (intercepted together like
         /// maximum/minimum), so they share a single op-keyed resolver.
         /// </summary>
         private static MethodInfo GetLogAddNextMethod(BinaryOp op, NPTypeCode resultType)
@@ -1733,6 +1747,14 @@ namespace NumSharp.Backends.Kernels
                         NPTypeCode.Single => CachedMethods.HypotF,
                         NPTypeCode.Decimal => CachedMethods.HypotDec,
                         _ => CachedMethods.HypotD,
+                    };
+                case BinaryOp.Heaviside:
+                    return resultType switch
+                    {
+                        NPTypeCode.Half => CachedMethods.HeavisideH,
+                        NPTypeCode.Single => CachedMethods.HeavisideF,
+                        NPTypeCode.Decimal => CachedMethods.HeavisideDec,
+                        _ => CachedMethods.HeavisideD,
                     };
                 default: // BinaryOp.CopySign
                     return resultType switch
