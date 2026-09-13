@@ -283,5 +283,19 @@ namespace NumSharp.Tests.Ma
             Assert.IsTrue(np.ma.allclose(np.ma.array(np.array(new double[] { 1, 2, 3 }), np.array(new bool[] { false, false, true })),
                                          np.array(new double[] { 1, 2, 99 }))); // masked position ignored
         }
+
+        /// <summary>mean's result dtype follows NumPy exactly: int/bool/float32→float64 (NumPy's <c>dsum*1.</c>
+        /// promotes float32), float16→float16 (computed in float32, cast back), complex128 preserved.</summary>
+        [TestMethod]
+        public void Mean_ResultDtype_MatchesNumPy()
+        {
+            MaskedArray Mk<T>(T[] v) => np.ma.array(np.array(v), np.array(new bool[] { false, true, false }));
+            Assert.AreEqual(np.float64, np.ma.getdata(np.ma.mean(Mk(new int[] { 1, 2, 3 }))).dtype);
+            Assert.AreEqual(np.float64, np.ma.getdata(np.ma.mean(Mk(new float[] { 1, 2, 3 }))).dtype);   // f4 → f8 (dsum*1.)
+            Assert.AreEqual(np.float64, np.ma.getdata(np.ma.mean(Mk(new double[] { 1, 2, 3 }))).dtype);
+            Assert.AreEqual(np.complex128, np.ma.getdata(np.ma.mean(Mk(new System.Numerics.Complex[] { 1, 2, 3 }))).dtype);
+            Assert.AreEqual(np.float16, np.ma.getdata(np.ma.mean(np.ma.array(np.array(new double[] { 1, 2, 3 }).astype(np.float16),
+                                                                             np.array(new bool[] { false, true, false })))).dtype);
+        }
     }
 }
