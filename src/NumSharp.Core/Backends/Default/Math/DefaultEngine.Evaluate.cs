@@ -510,88 +510,144 @@ namespace NumSharp.Backends
             for (int d = 0, rd = 0; d < ndim; d++) if (d != axis) reducedDims[rd++] = inputShape[d];
             Shape reducedShape = reducedDims.Length > 0 ? new Shape(reducedDims) : Shape.NewScalar();
 
-            var outAcc = new NDArray(accType, reducedShape, false);
-            if (outAcc.size != 0)
+            // -------------------------------------------------------------------------------------
+            // Plan P2 M2 — axis Sum/Mean/Prod at NumPy-EXACT precision (mirrors the flat M1 divert).
+            //
+            // program.AxisReduceKernel below is the 4-accumulator fold: an order-of-summation drift
+            // from NumPy's add.reduce (pairwise on a contiguous reduced axis, sequential otherwise)
+            // and a lane-interleaved product that reorders the non-associative float multiply —
+            // MisalignedRegistry E1. For the dtypes NumPy reduces through a well-defined schedule we
+            // reproduce it BIT-FOR-BIT: materialize the child through the already-bit-exact
+            // elementwise engine (a fresh, C-contiguous K-order array — the same intermediate NumPy's
+            // own unfused np.<reduce>(a*b, axis) would build) and reduce THAT buffer with the exact
+            // schedule np.sum · np.prod use. Sum/Mean ride the engine's own axis add.reduce (the
+            // IL-emitted pairwise kernel — bit-for-bit np.add.reduce on every layout, PINNED for a
+            // contiguous reduced axis, SLAB-sequential for an outer one); Prod runs a sequential
+            // memory-order fold (np.multiply.reduce is never pairwise).
+            //
+            // Gated to a C-contiguous materialized child (!all-strict-F): a fresh child is C-contig
+            // unless every input is strictly F-contiguous, in which case NumPy's own reduce would
+            // pairwise the (F-contiguous) axis-0 and yield an F-ordered result — an F-layout corner
+            // left on the folded path (still E1-excused, and value-exact over the corpus's benign
+            // pools). Deliberately NOT diverted (each a later milestone): Half at any axis (no float16
+            // pairwise kernel yet); complex Prod (a complex-multiply chain, npy_cmul FMA-contracted on
+            // NumPy's win-amd64 build, not on .NET's — the documented multiply gap #12, which an order
+            // fix cannot close). Empty reductions (axisSize == 0 / reducedShape.size == 0) stay on the
+            // folded path — its seeded 0/1 identities are order-independent and already value-exact.
+            var childProgram = program.ChildElementwiseProgram;
+            var childType = childProgram.ResultType;
+            bool diverts = axisSize > 0 && reducedShape.size > 0
+                           && !AreAllInputsStrictFContig(ops, inputShape)
+                           && (((reduce.Kind == NDExprReduceKind.Sum || reduce.Kind == NDExprReduceKind.Mean)
+                                && (childType == NPTypeCode.Single || childType == NPTypeCode.Double || childType == NPTypeCode.Complex))
+                               || (reduce.Kind == NDExprReduceKind.Prod
+                                   && (childType == NPTypeCode.Single || childType == NPTypeCode.Double)));
+
+            // The dtype of the reduced accumulator (outAcc): the child dtype on the divert path
+            // (NumPy accumulates a float sum at the INPUT precision — f32 stays f32, never the f64
+            // accType the fold path widens to), else the folded path's accType.
+            NPTypeCode redType = diverts ? childType : accType;
+            NDArray outAcc;
+
+            if (diverts)
             {
-                // Seed the accumulator with the reduction identity (Mean accumulates a Sum).
-                var seedOp = reduce.Kind switch
+                // Materialize the child once (fresh + C-contiguous); `using` releases it after the
+                // reduce — outAcc is a fresh array, never a view into it, so this is safe.
+                using var materialized = EvaluateCore(childProgram, inputs, null);
+                outAcc = reduce.Kind == NDExprReduceKind.Prod
+                    ? SequentialAxisProd(materialized, axis, childType, reducedShape)   // np.multiply.reduce order
+                    : ExactAxisSum(materialized, axis, childType, reducedShape);        // np.add.reduce (pairwise / SLAB)
+            }
+            else
+            {
+                outAcc = new NDArray(accType, reducedShape, false);
+                if (outAcc.size != 0)
                 {
-                    NDExprReduceKind.Prod => ReductionOp.Prod,
-                    NDExprReduceKind.Min => ReductionOp.Min,
-                    NDExprReduceKind.Max => ReductionOp.Max,
-                    _ => ReductionOp.Sum, // Sum / Mean
-                };
-                ILKernelGenerator.SeedReduceIdentity(outAcc, seedOp);
-
-                if (axisSize != 0)
-                {
-                    var kernel = program.AxisReduceKernel;
-
-                    // op_axes: identity for every input; output maps reduce axis → -1 (stride 0).
-                    var opAxes = new int[ops.Length + 1][];
-                    for (int i = 0; i < ops.Length; i++)
+                    // Seed the accumulator with the reduction identity (Mean accumulates a Sum).
+                    var seedOp = reduce.Kind switch
                     {
-                        var a = new int[ndim];
-                        for (int d = 0; d < ndim; d++) a[d] = d;
-                        opAxes[i] = a;
-                    }
-                    var outAxes = new int[ndim];
-                    for (int d = 0, oc = 0; d < ndim; d++) outAxes[d] = (d == axis) ? -1 : oc++;
-                    opAxes[ops.Length] = outAxes;
+                        NDExprReduceKind.Prod => ReductionOp.Prod,
+                        NDExprReduceKind.Min => ReductionOp.Min,
+                        NDExprReduceKind.Max => ReductionOp.Max,
+                        _ => ReductionOp.Sum, // Sum / Mean
+                    };
+                    ILKernelGenerator.SeedReduceIdentity(outAcc, seedOp);
 
-                    var operands = new NDArray[ops.Length + 1];
-                    for (int i = 0; i < ops.Length; i++)
+                    if (axisSize != 0)
                     {
-                        bool same = ops[i].ndim == ndim;
-                        if (same)
-                            for (int d = 0; d < ndim; d++)
-                                if (ops[i].shape[d] != inputShape[d]) { same = false; break; }
-                        operands[i] = same ? ops[i] : np.broadcast_to(ops[i], inputShape);
-                    }
-                    operands[ops.Length] = outAcc;
+                        var kernel = program.AxisReduceKernel;
 
-                    var opFlags = new NDIterPerOpFlags[ops.Length + 1];
-                    for (int i = 0; i < ops.Length; i++) opFlags[i] = NDIterPerOpFlags.READONLY;
-                    opFlags[ops.Length] = NDIterPerOpFlags.READWRITE;
+                        // op_axes: identity for every input; output maps reduce axis → -1 (stride 0).
+                        var opAxes = new int[ops.Length + 1][];
+                        for (int i = 0; i < ops.Length; i++)
+                        {
+                            var a = new int[ndim];
+                            for (int d = 0; d < ndim; d++) a[d] = d;
+                            opAxes[i] = a;
+                        }
+                        var outAxes = new int[ndim];
+                        for (int d = 0, oc = 0; d < ndim; d++) outAxes[d] = (d == axis) ? -1 : oc++;
+                        opAxes[ops.Length] = outAxes;
 
-                    using var iter = NDIterRef.AdvancedNew(
-                        operands.Length, operands,
-                        NDIterGlobalFlags.REDUCE_OK | NDIterGlobalFlags.EXTERNAL_LOOP,
-                        NPY_ORDER.NPY_KEEPORDER, NPY_CASTING.NPY_NO_CASTING,
-                        opFlags, null, ndim, opAxes);
+                        var operands = new NDArray[ops.Length + 1];
+                        for (int i = 0; i < ops.Length; i++)
+                        {
+                            bool same = ops[i].ndim == ndim;
+                            if (same)
+                                for (int d = 0; d < ndim; d++)
+                                    if (ops[i].shape[d] != inputShape[d]) { same = false; break; }
+                            operands[i] = same ? ops[i] : np.broadcast_to(ops[i], inputShape);
+                        }
+                        operands[ops.Length] = outAcc;
 
-                    // Same aux layout as the flat kernel (slot 0 reserved, parameters after it).
-                    byte* aux = null;
-                    if (program.ParamCount > 0)
-                    {
-                        // stackalloc memory lives until the METHOD returns, so the block-scoped declaration is safe.
-                        byte* buf = stackalloc byte[NDExprParamPlan.SlotBytes * (1 + program.ParamCount)];
-                        program.PackParams(inputs, buf + NDExprParamPlan.ReduceParamOffset);
-                        aux = buf;
-                    }
+                        var opFlags = new NDIterPerOpFlags[ops.Length + 1];
+                        for (int i = 0; i < ops.Length; i++) opFlags[i] = NDIterPerOpFlags.READONLY;
+                        opFlags[ops.Length] = NDIterPerOpFlags.READWRITE;
 
-                    iter.ForEach(kernel, aux);
-                }
+                        using var iter = NDIterRef.AdvancedNew(
+                            operands.Length, operands,
+                            NDIterGlobalFlags.REDUCE_OK | NDIterGlobalFlags.EXTERNAL_LOOP,
+                            NPY_ORDER.NPY_KEEPORDER, NPY_CASTING.NPY_NO_CASTING,
+                            opFlags, null, ndim, opAxes);
 
-                if (reduce.Kind == NDExprReduceKind.Mean)
-                {
-                    if (accType == NPTypeCode.Complex)
-                    {
-                        // np.mean divides the complex sum by the count through the COMPLEX true_divide
-                        // loop, not component-wise — see ComplexDivideByCountLikeNumPy.
-                        for (long i = 0; i < outAcc.size; i++)
-                            outAcc.SetAtIndex(ComplexDivideByCountLikeNumPy((System.Numerics.Complex)outAcc.GetAtIndex(i), axisSize), i);
-                    }
-                    else
-                    {
-                        ILKernelGenerator.MeanDivideByCount(outAcc, axisSize);
+                        // Same aux layout as the flat kernel (slot 0 reserved, parameters after it).
+                        byte* aux = null;
+                        if (program.ParamCount > 0)
+                        {
+                            // stackalloc memory lives until the METHOD returns, so the block-scoped declaration is safe.
+                            byte* buf = stackalloc byte[NDExprParamPlan.SlotBytes * (1 + program.ParamCount)];
+                            program.PackParams(inputs, buf + NDExprParamPlan.ReduceParamOffset);
+                            aux = buf;
+                        }
+
+                        iter.ForEach(kernel, aux);
                     }
                 }
             }
 
-            // Cast accumulator dtype → result dtype (no-op when equal — e.g. f16/f32 mean
-            // accumulates in double then narrows here).
-            NDArray reduced = accType == resultType ? outAcc : Cast(outAcc, resultType, copy: true);
+            // Mean: divide by the reduced-axis count at the accumulator dtype (redType), matching
+            // NumPy's _methods._mean — f32 divides in f32, complex through the Smith-form
+            // reciprocal-multiply (component-wise division keeps the other part finite and diverges
+            // on a NaN slice). Shared by both paths.
+            if (reduce.Kind == NDExprReduceKind.Mean && outAcc.size != 0)
+            {
+                if (redType == NPTypeCode.Complex)
+                {
+                    // np.mean divides the complex sum by the count through the COMPLEX true_divide
+                    // loop, not component-wise — see ComplexDivideByCountLikeNumPy.
+                    for (long i = 0; i < outAcc.size; i++)
+                        outAcc.SetAtIndex(ComplexDivideByCountLikeNumPy((System.Numerics.Complex)outAcc.GetAtIndex(i), axisSize), i);
+                }
+                else
+                {
+                    ILKernelGenerator.MeanDivideByCount(outAcc, axisSize);
+                }
+            }
+
+            // Cast accumulator dtype → result dtype (no-op when equal — the divert path already
+            // reduces at the result precision; the fold path's f16/f32 mean accumulates in double
+            // and narrows here).
+            NDArray reduced = redType == resultType ? outAcc : Cast(outAcc, resultType, copy: true);
 
             if (reduce.Keepdims)
             {
@@ -714,6 +770,146 @@ namespace NumSharp.Backends
                 default:
                     throw new NotSupportedException($"Mean divide for {tc} is not diverted here.");
             }
+        }
+
+        /// <summary>
+        /// NumPy-exact axis <c>add.reduce</c> of a FRESH, C-contiguous <paramref name="child"/> along
+        /// <paramref name="axis"/> (plan P2 M2), returning a fresh reduced array of dtype
+        /// <paramref name="tc"/> and shape <paramref name="reducedShape"/>. A 1-D child (reduce-to-
+        /// scalar) folds through the flat pairwise helper — which also covers Complex, dodging the
+        /// engine's complex 1-D axis-reduce throw; a multi-D child delegates to the engine's own axis
+        /// <see cref="DefaultEngine.ReduceAdd"/>, whose IL-emitted pairwise kernel is bit-for-bit
+        /// identical to NumPy's <c>pairwise_sum</c> on a contiguous input (pairwise when the reduced
+        /// axis is contiguous, sequential streaming when it is outer) and allocates a C-order result
+        /// (C input → C output), so the bytes equal <c>np.add.reduce(materialized child, axis)</c>.
+        /// Only Single / Double / Complex reach here (the M2 divert gate); <paramref name="tc"/> is
+        /// passed as the loop dtype so the reduction accumulates at the child's precision (a float sum
+        /// stays float, never the widened f64 accType the fold path uses).
+        /// </summary>
+        /// <param name="child">The freshly materialized, C-contiguous child expression result.</param>
+        /// <param name="axis">The already-normalized reduction axis.</param>
+        /// <param name="tc">The child (and reduced) dtype — Single, Double or Complex.</param>
+        /// <param name="reducedShape">The output shape (input shape with <paramref name="axis"/> removed; scalar for a 1-D child).</param>
+        /// <returns>A fresh reduced array; a writeable 0-d scalar for a 1-D child, else the engine's axis-reduce result.</returns>
+        private unsafe NDArray ExactAxisSum(NDArray child, int axis, NPTypeCode tc, Shape reducedShape)
+        {
+            if (child.ndim == 1)
+            {
+                // Reduce-all over the only axis → a scalar; the flat pairwise fold IS np.add.reduce and
+                // handles Complex (unlike the engine's 1-D complex axis path, which throws).
+                byte* accSlot = stackalloc byte[NDExprParamPlan.SlotBytes];
+                *(ulong*)accSlot = 0;
+                *(ulong*)(accSlot + 8) = 0;
+                byte* src = (byte*)child.Address + (long)child.Shape.offset * tc.SizeOf();
+                PairwiseSumInto(src, child.size, tc, accSlot);
+                var scalar = new NDArray(tc, reducedShape, false);
+                NDIterCasting.ConvertValue(accSlot,
+                    (byte*)scalar.Address + (long)scalar.Shape.offset * tc.SizeOf(), tc, tc);
+                return scalar;
+            }
+
+            // Multi-D: the engine's axis add.reduce over the C-contiguous child rides the same pairwise
+            // kernel np.add.reduce runs — bit-exact on every layout — and returns a C-order result the
+            // size of reducedShape. The explicit dtype keeps the accumulation at the child precision.
+            return ReduceAdd(child, axis, keepdims: false, dtype: DType.From(tc), @out: null);
+        }
+
+        /// <summary>
+        /// NumPy-exact axis <c>multiply.reduce</c> of a FRESH, C-contiguous <paramref name="child"/>
+        /// along <paramref name="axis"/> (plan P2 M2). NumPy's product reduction is never pairwise —
+        /// it accumulates in increasing axis-coordinate order — so this is a plain sequential fold in
+        /// that order, which the child's C-contiguous layout makes a straight memory walk:
+        /// <list type="bullet">
+        ///   <item>innermost axis (<c>inner == 1</c>): each output is the sequential product of one
+        ///         contiguous <c>axisSize</c>-stripe.</item>
+        ///   <item>outer axis (<c>inner &gt; 1</c>): SLAB — seed the output run to 1, then stream
+        ///         <c>out[o·inner+i] *= child[(o·axisSize+j)·inner+i]</c> over increasing j, exactly
+        ///         NumPy's outer-axis reduce loop.</item>
+        /// </list>
+        /// Both are bit-identical to <c>np.multiply.reduce(child, axis)</c>. Only Single / Double reach
+        /// here — complex Prod stays folded (npy_cmul FMA gap #12, not an order artifact this can fix).
+        /// </summary>
+        /// <param name="child">The freshly materialized, C-contiguous child expression result.</param>
+        /// <param name="axis">The already-normalized reduction axis.</param>
+        /// <param name="tc">The child (and reduced) dtype — Single or Double.</param>
+        /// <param name="reducedShape">The output shape (input shape with <paramref name="axis"/> removed).</param>
+        /// <returns>A fresh C-contiguous reduced array holding the sequential products.</returns>
+        /// <exception cref="NotSupportedException"><paramref name="tc"/> is not Single or Double.</exception>
+        private static unsafe NDArray SequentialAxisProd(NDArray child, int axis, NPTypeCode tc, Shape reducedShape)
+        {
+            var dims = child.Shape.dimensions;
+            int nd = dims.Length;
+            long axisSize = dims[axis];
+            long inner = 1; for (int d = axis + 1; d < nd; d++) inner *= dims[d];
+            long outer = 1; for (int d = 0; d < axis; d++) outer *= dims[d];
+
+            var result = new NDArray(tc, reducedShape, false); // C-contiguous, outer*inner elements
+            byte* srcB = (byte*)child.Address + (long)child.Shape.offset * tc.SizeOf();
+            byte* dstB = (byte*)result.Address + (long)result.Shape.offset * tc.SizeOf();
+
+            switch (tc)
+            {
+                case NPTypeCode.Single:
+                {
+                    float* src = (float*)srcB;
+                    float* dst = (float*)dstB;
+                    if (inner == 1)
+                    {
+                        for (long o = 0; o < outer; o++)
+                        {
+                            float acc = 1f;
+                            long baseIdx = o * axisSize;
+                            for (long j = 0; j < axisSize; j++) acc *= src[baseIdx + j];
+                            dst[o] = acc;
+                        }
+                    }
+                    else
+                    {
+                        long outCount = outer * inner;
+                        for (long k = 0; k < outCount; k++) dst[k] = 1f;
+                        for (long o = 0; o < outer; o++)
+                            for (long j = 0; j < axisSize; j++)
+                            {
+                                long b = (o * axisSize + j) * inner;
+                                long ob = o * inner;
+                                for (long i = 0; i < inner; i++) dst[ob + i] *= src[b + i];
+                            }
+                    }
+                    break;
+                }
+                case NPTypeCode.Double:
+                {
+                    double* src = (double*)srcB;
+                    double* dst = (double*)dstB;
+                    if (inner == 1)
+                    {
+                        for (long o = 0; o < outer; o++)
+                        {
+                            double acc = 1d;
+                            long baseIdx = o * axisSize;
+                            for (long j = 0; j < axisSize; j++) acc *= src[baseIdx + j];
+                            dst[o] = acc;
+                        }
+                    }
+                    else
+                    {
+                        long outCount = outer * inner;
+                        for (long k = 0; k < outCount; k++) dst[k] = 1d;
+                        for (long o = 0; o < outer; o++)
+                            for (long j = 0; j < axisSize; j++)
+                            {
+                                long b = (o * axisSize + j) * inner;
+                                long ob = o * inner;
+                                for (long i = 0; i < inner; i++) dst[ob + i] *= src[b + i];
+                            }
+                    }
+                    break;
+                }
+                default:
+                    throw new NotSupportedException($"Sequential axis product for {tc} is not diverted here.");
+            }
+
+            return result;
         }
 
         private static unsafe void WriteOne(byte* slot, NPTypeCode accType)

@@ -8364,6 +8364,46 @@ def gen_evaluate():
                      params={"reduce": {"kind": "prod", "axis": None, "keepdims": False}},
                      cid_tag=f"bigN/{dt}/prod/N={N}")
 
+    # ---- C3. large-N AXIS reductions at the pairwise-schedule boundaries (plan P2 M2) ---------
+    # Block C's AXIS cells use <=24-element benign pools where pairwise and the 4-accumulator fold
+    # round IDENTICALLY, so they cannot tell a NumPy-exact axis reduction from a drifting one. These
+    # 2-D / 3-D cells cross PW_BLOCKSIZE (128) ALONG the reduced axis with WIDE-magnitude pools, so
+    # the summation ORDER changes the rounded bits and the axis float32/float64/complex Sum · Mean and
+    # the axis float Prod must reproduce NumPy bit-for-bit (M2 materializes the child and reduces the
+    # C-contiguous result with np.add.reduce's pairwise / np.multiply.reduce's sequential schedule).
+    # A reduced axis that is INNERMOST (contiguous) exercises the PINNED pairwise route; an OUTER one
+    # the SLAB sequential route; the 3-D shape drives the inner-slab (inner > 1) sequential prod.
+    # Half, complex Prod, and the all-F-contiguous corner stay folded (still E1-excused) and are
+    # deliberately absent. All inputs are C-contiguous (the M2 divert's gate).
+    axis_shapes = [
+        (3, 200),        # innermost axis 1 (len 200 > 128) → PINNED pairwise; outer axis 0 (len 3)
+        (200, 3),        # outer axis 0 (len 200 > 128) → SLAB sequential; innermost axis 1 (len 3)
+        (2, 3, 60),      # 3-D: axis 2 innermost (len 60), axes 0/1 outer/mid drive inner>1 slab
+    ]
+    for shp in axis_shapes:
+        N = int(np.prod(shp))
+        lay = f"c_contiguous_{len(shp)}d"
+        for dt in ("float32", "float64", "complex128"):
+            npdt = np.dtype(dt)
+            if npdt.kind == "c":
+                sflat = (_wide_sum_pool(N) + 1j * np.roll(_wide_sum_pool(N), 3)).astype(npdt)
+            else:
+                sflat = _wide_sum_pool(N).astype(npdt)
+            s2d = np.ascontiguousarray(sflat.reshape(shp))
+            for ax in range(len(shp)):
+                for kind in ("sum", "mean"):
+                    sb = np.ascontiguousarray(s2d)
+                    emit("in0", [(sb, sb)], lay,
+                         params={"reduce": {"kind": kind, "axis": ax, "keepdims": False}},
+                         cid_tag=f"bigNaxis/{dt}/{kind}[{ax}]/{'x'.join(map(str, shp))}")
+            if npdt.kind == "f":  # complex Prod stays folded (npy_cmul FMA gap #12) — not diverted
+                p2d = np.ascontiguousarray(_near_one_prod_pool(N).astype(npdt).reshape(shp))
+                for ax in range(len(shp)):
+                    pb = np.ascontiguousarray(p2d)
+                    emit("in0", [(pb, pb)], lay,
+                         params={"reduce": {"kind": "prod", "axis": ax, "keepdims": False}},
+                         cid_tag=f"bigNaxis/{dt}/prod[{ax}]/{'x'.join(map(str, shp))}")
+
     # ---- D. out= (returned view + the whole base buffer behind out) -------------------------
     out_exprs = ["add(mul(in0,in1),in0)", "gt(in0,in1)", "where(gt(in0,in1),in0,in1)", "sqrt(abs(in0))"]
     for shape in [(8,), (4, 5)]:

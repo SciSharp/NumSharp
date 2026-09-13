@@ -771,27 +771,35 @@ namespace NumSharp.Tests.Fuzz
                     && evRed.ValueKind == System.Text.Json.JsonValueKind.Object
                     && evRed.GetProperty("kind").GetString() is "sum" or "prod" or "mean";
                 string reduceKind = isReduceKind ? evRed.GetProperty("kind").GetString() : null;
-                // An explicit numeric axis ⇒ the axis kernel (still the 4-accumulator fold, M2); a null
-                // / absent axis ⇒ the FLAT path, which M1 made NumPy-exact for the dtypes below.
+                // An explicit numeric axis ⇒ the axis path; a null / absent axis ⇒ the FLAT path.
                 bool reduceHasAxis = isReduceKind
                     && evRed.TryGetProperty("axis", out var evAxis)
                     && evAxis.ValueKind == System.Text.Json.JsonValueKind.Number;
-                // Cases M1 closed (no longer excused): flat float32/float64 Sum/Prod/Mean, and flat
-                // complex Sum/Mean. Everything else in the float-reduce family is still folded.
-                bool m1FixesReduce = isReduceKind && !reduceHasAxis
-                    && (tc == NPTypeCode.Single || tc == NPTypeCode.Double
-                        || (tc == NPTypeCode.Complex && (reduceKind == "sum" || reduceKind == "mean")));
+                // Cases M1 (flat) + M2 (axis) closed — no longer excused: the engine materializes the
+                // child and reduces it with NumPy's OWN schedule (pairwise add.reduce / sequential
+                // multiply.reduce), so float32/float64/complex Sum·Mean and float32/float64 Prod are
+                // BIT-EXACT. FLAT is exact on any layout (the materialized child is contiguous); AXIS
+                // is exact when that child is C-contiguous — i.e. the input is NOT strictly
+                // F-contiguous multi-D, the one corner still folded. Half (no f16 pairwise kernel) and
+                // complex Prod (a complex-multiply chain, npy_cmul FMA-contracted on NumPy's win-amd64
+                // build but not on .NET's — the multiply gap #12) are never diverted and stay excused.
+                bool matDtypeSumMean = (reduceKind == "sum" || reduceKind == "mean")
+                    && (tc == NPTypeCode.Single || tc == NPTypeCode.Double || tc == NPTypeCode.Complex);
+                bool matDtypeProd = reduceKind == "prod"
+                    && (tc == NPTypeCode.Single || tc == NPTypeCode.Double);
+                bool matExactReduce = isReduceKind && (matDtypeSumMean || matDtypeProd)
+                    && (!reduceHasAxis || !IsStrictFContiguousMultiD(c.Operands[0]));
                 bool floatReduce = isReduceKind
                     && (tc == NPTypeCode.Half || tc == NPTypeCode.Single || tc == NPTypeCode.Double || tc == NPTypeCode.Complex)
-                    && !m1FixesReduce;
+                    && !matExactReduce;
                 // complex: a Prod is a chain of complex multiplies, each FMA-contracted on NumPy's
                 // side (npy_cmul under MSVC) and not on .NET's — bound at the element's magnitude
                 // like the multiply excuse, wider for the chain.
                 if (floatReduce && diffs.All(d => tc == NPTypeCode.Complex
                         ? WithinComplexElementMagnitudeUlp(expected, actual, d.Index, 64)
                         : BitDiff.WithinUlp(expected, actual, d.Index, tc, 16)))
-                    return "evaluate: fused float Sum/Prod/Mean 4-accumulator fold vs NumPy pairwise/sequential, ≤16 ULP (complex ≤64 ULP of magnitude) "
-                         + "[PENDING ndexpr-evaluate.md Phase 2 — axis path / Half / complex-Prod still fold; flat f32/f64 + complex sum/mean landed in M1]";
+                    return "evaluate: fused float reduction 4-accumulator fold vs NumPy pairwise/sequential, ≤16 ULP (complex ≤64 ULP of magnitude) "
+                         + "[PENDING ndexpr-evaluate.md Phase 2 — Half, complex-Prod & the strict-F-contiguous axis corner still fold; flat f32/f64 + complex sum/mean (M1) and C-contiguous axis sum/mean/prod (M2) landed]";
 
                 bool libm = evOps.Overlaps(EvaluateLibmOps)
                     && !(tc == NPTypeCode.Single && evOps.IsSubsetOf(NumPyPortedFloat32KernelsAsEvaluateOps))
@@ -1189,6 +1197,36 @@ namespace NumSharp.Tests.Fuzz
         /// </summary>
         /// <param name="exp">The exponent operand (operand[1] of a power case).</param>
         /// <returns>True iff every stored exponent value is a real integer with |value| &lt; 100.</returns>
+        /// <summary>
+        /// True when <paramref name="op"/> is a STRICTLY F-contiguous, multi-dimensional view — the
+        /// one layout where np.evaluate's axis reduction still folds (M2 diverts a reduction only when
+        /// the materialized child is C-contiguous, which the engine allocates unless every input is
+        /// strictly F-contiguous multi-D). Judged from the operand's element-strides: multi-D, total
+        /// size &gt; 1, and strides that match the F-contiguous pattern (<c>strides[0] == 1</c>,
+        /// <c>strides[i] == strides[i-1] · dims[i-1]</c>) — which, for a size&gt;1 multi-D shape, is
+        /// necessarily NOT the C-contiguous pattern. A 1-D / 0-d / size-1 operand is never
+        /// "strictly F" (both C and F, so it does not force the F-layout preference) → returns false.
+        /// </summary>
+        /// <param name="op">The single input operand of an <c>evaluate</c> reduce case.</param>
+        /// <returns>true iff the operand is a strict-F multi-D layout (the still-folded axis corner).</returns>
+        private static bool IsStrictFContiguousMultiD(FuzzCorpus.Operand op)
+        {
+            var dims = op?.Shape;
+            var st = op?.Strides;
+            if (dims == null || st == null || dims.Length < 2 || st.Length != dims.Length)
+                return false;
+            long size = 1;
+            foreach (var d in dims) size *= d;
+            if (size <= 1) return false;                 // size-1 → both C and F; not layout-forcing
+            long exp = 1;                                // F-contiguous element strides: 1, d0, d0·d1, …
+            for (int i = 0; i < dims.Length; i++)
+            {
+                if (st[i] != exp) return false;
+                exp *= dims[i];
+            }
+            return true;                                  // matches F; for size>1 multi-D that is not C
+        }
+
         private static bool PowerExponentAllIntegerBranch(FuzzCorpus.Operand exp)
         {
             byte[] b;

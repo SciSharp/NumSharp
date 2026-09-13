@@ -58,7 +58,7 @@
 | **P3** fixed cost | landed | `feat(evaluate): NDExpr Phase 3 — per-root compiled program, CompiledExpression handle, N-ary input broadcast` | `NDExprProgram` per-root cache (`NDExpr.Program.cs`), identical-dims fast path, single-allocation N-ary input broadcast with NumPy's every-operand error text, `NDExpr.Compile()` / `Compile(params NPTypeCode[])` → `CompiledExpression` (strict signature), the 0-d-operand parameter form pinned (`NDEvaluateProgramTests`, 14). Numbers below. |
 | **6.1** structural program cache | landed | (2026-09-13 landing) | `NDExprProgramCache` + `NDExpr.Structure.cs`: a tree rebuilt per call finds its program by structural hash + node-by-node verification — rebuilt `a*b+c` 995 → **464–508 ns / 864 B** at n = 8, fused ≥ unfused on **13/15** rows at 1K (was 5/15). `Call` slot identity fixed. Numbers under "Both residuals closed" below. |
 | **3.3** parameters (0-d inputs hoisted into the kernel aux block) | landed | (2026-09-13 landing) | `NDExpr.Params.cs`: a 0-d input is a kernel parameter, not a stride-0 operand — `a*b+k` 681 → **388 ns**, zero per-element cost, one kernel per structure (the windows compile 0 kernels over 20 distinct M). `NDEvaluateParamTests` (12). |
-| P2 reductions (NumPy-exact pairwise, SIMD folds, Any/All/Arg/Std/Var/Nan*/Ptp/Average, tuple axis) | open | | E1/E5 excuses wait on it; `sum(af*bf)` f32 0.60× unfused and `max(a*b)` 0.44× NumPy at 100K are its cells. |
+| P2 reductions (NumPy-exact pairwise, SIMD folds, Any/All/Arg/Std/Var/Nan*/Ptp/Average, tuple axis) | **M1 + M2 landed** (branch `exprs`); M3–M5 open | M1 `7ac2c7b5`, M2 (this landing) | **M1** — flat float32/float64/complex Sum·Mean + float Prod bit-exact (materialize the child, reduce with the pairwise/sequential kernel np.sum·np.prod use). **M2** — the same for **axis** Sum·Mean·Prod when the materialized child is **C-contiguous** (`EvaluateAxisReduce` diverts to `ExactAxisSum`, which rides the engine's own IL pairwise axis add.reduce, and `SequentialAxisProd`, a coordinate-order fold = np.multiply.reduce). E1 now excuses only Half (no f16 pairwise), complex Prod (npy_cmul FMA gap #12) and the strict-F-contiguous axis corner. See the milestone ledger below. **Open:** M3 (streaming pairwise — no temp, restore perf), M4 (Any/All/Arg/Std/Var/Nan*/Ptp/Average), M5 (tuple axis / axis=None keepdims / direct out=). `sum(af*bf)` f32 0.60× unfused and `max(a*b)` 0.44× NumPy at 100K are M3's cells. |
 | P4 coverage (Cast, Positive/Conjugate/Real/Imag/…, FMax/FMin/CopySign/NextAfter/LogAddExp/shifts, logical and/or/xor, Select/Clip, `< > <= >=` operators, `where=`/`casting=`/`order=`/`dtype=`) | open | | |
 | P5 Half + mixed-width SIMD | open | | `f2*f2+f2` 0.15× unfused; `i4*2+f8` scalar. |
 | P6 optimizer (CSE / constant folding / unary-only delegation / opt-in threading / string front-end / `Explain`) | open | | the structural hash (6.1) is also what would make the inline-rebuilt spelling below cheap. |
@@ -131,6 +131,30 @@ optional). Gates: `NDEvaluateProgramTests` (21 — structural cache identity, ca
 `Call` slots), `NDEvaluateParamTests` (12 — every dtype × both kernel paths, reductions, aliasing `out`,
 the all-0-d fallback, the resize guard, positional forms, 16-byte slots), the `evaluate.jsonl` tier
 (its `pp_scalar_*` pair layouts and `scalar_0d` drive the parameter path bit-exact).
+
+### 0.2 Phase 2 milestone ledger (reductions)
+
+Phase 2 is split into five milestones, executed in order. The parity approach is uniform — **materialize
+the child through the already-bit-exact elementwise engine, then reduce that fresh buffer with NumPy's OWN
+schedule** (the fold that `FlatReduceKernel` / `AxisReduceKernel` emit is the E1 order-of-summation drift).
+Materialization regresses reduction PERF (an intermediate is allocated); M3's streaming pairwise (the plan's
+"recommended" form, no temp) restores it. The FLAT `np.sum` / axis pairwise the engine already runs is
+bit-exact (`ILKernelGenerator.Reduction.Pairwise.cs`); only the fused reduce paths folded.
+
+| M | Scope | Status | How / evidence |
+|---|---|---|---|
+| **M1** | FLAT float32/float64/complex Sum·Mean + float32/float64 Prod, bit-exact | landed `7ac2c7b5` | `DefaultEngine.EvaluateReduce` flat path: `PairwiseSumInto` (reuses `TryEmitPairwiseSumKernel` via its PINNED stride-0 route = np.add.reduce) / `SequentialProductInto` (np.multiply.reduce). Oracle block C2 (56 flat bigN cases at N∈{7,8,127,128,129,257,1000}, wide-magnitude). |
+| **M2** | AXIS float32/float64/complex Sum·Mean + float32/float64 Prod, bit-exact, when the materialized child is **C-contiguous** | landed (this) | `EvaluateAxisReduce` diverts: `ExactAxisSum` (1-D → `PairwiseSumInto`; multi-D → the engine's own `ReduceAdd` on the C-contiguous child, whose IL pairwise kernel is bit-for-bit np.add.reduce — PINNED for a contiguous reduced axis, SLAB-sequential for an outer one) and `SequentialAxisProd` (a C-order coordinate-order fold = np.multiply.reduce, layout-independent for a sequential product). Gated to `!AreAllInputsStrictFContig` (a fresh child is C-contig unless every input is strictly F-contig multi-D). Oracle block C3 (56 axis bigN cases, 2-D `(3,200)` / `(200,3)` + 3-D `(2,3,60)`, axes 0/1/2). **Teeth:** divert OFF → 18 wide-magnitude cases hard-diverge (>16 ULP) + the ≤16-ULP ones fall to E1; divert ON → 0. |
+| **M3** | Streaming pairwise / SIMD folds — no temp; restore reduction perf | open | Fold the value stream through the pairwise schedule during the ONE fused pass (leaf boundaries precomputed from n; the 8 accumulators = 8 lanes). Restores `sum(af*bf)` ≥ 1.2× unfused, `max(a*b)` ≥ 1.0× NumPy. |
+| **M4** | New kinds — `Any/All`, `ArgMax/ArgMin`, `Std/Var(ddof)`, `Nan*`, `CountNonzero`, `Ptp`, weighted `Average` | open | `Nan*` / `Ptp` / `Average` are node rewrites (Where / max−min / two-accumulator WeightedSum); `Any/All/Arg/Std/Var/CountNonzero` need kernels. |
+| **M5** | Axis forms — tuple `axis`, `axis=None` keepdims, direct `out=` (no copyto) | open | |
+
+**Remaining E1 fold surface (still excused, `MisalignedRegistry`):** Half at any axis (no float16 pairwise
+kernel — M-Half), complex Prod (a complex-multiply chain, npy_cmul FMA-contracted on NumPy's win-amd64 build
+but not on .NET's — the documented multiply gap #12, which an order fix cannot close), and the **strict-F-contiguous
+axis corner** (all-F-input multi-D — M2 leaves it folded, value-exact over the corpus's benign pools). E5
+(complex min/max NaN identity) is a separate min/max milestone. The excuse's `matExactReduce` predicate now
+un-excuses everything M1+M2 fix, so a regression there turns the gate red.
 
 ---
 
@@ -474,6 +498,11 @@ Acceptance (probe §2.3 rows): `a>0.5` ≥ 1.0× NumPy at 100K and 4M (target �
 NumPy; bit-exact against the Phase-0 oracle across all layouts.
 
 ### Phase 2 — Reductions: NumPy-exact, SIMD, and the missing kinds
+
+> **Status (see §0.2 for the milestone ledger):** M1 (flat) landed `7ac2c7b5`; M2 (axis, C-contiguous
+> child) landed. Both take the "scratch materialization" route in 2.1 below — materialize the child,
+> then reduce it with the exact schedule. M3 (streaming pairwise, no temp — 2.1/2.2), M4 (missing kinds
+> — 2.3) and M5 (axis forms — 2.4) are open.
 
 2.1 **Parity contract**: `evaluate(Sum(expr)) == np.sum(materialized expr)` **bit-for-bit** for
 f32/f64/complex128. NumPy's `add.reduce` over a contiguous 1-D temp is ONE `pairwise_sum(n)`
