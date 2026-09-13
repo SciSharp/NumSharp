@@ -105,39 +105,90 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     True if two arrays have the same shape and elements, False otherwise.
+        ///     True if this array and <paramref name="rhs"/> have the same shape and all elements are equal.
         /// </summary>
-        /// <param name="a">Input array.</param>
-        /// <param name="rhs">Input array.</param>
+        /// <param name="rhs">The array to compare against.</param>
+        /// <param name="equal_nan">
+        ///     When <c>false</c> (the NumPy default) NaN never compares equal — an array holding a NaN is NOT
+        ///     equal even to itself, so <c>a.array_equal(a)</c> is <c>false</c> when <c>a</c> contains a NaN.
+        ///     When <c>true</c>, NaNs at matching positions are treated as equal, and for a complex dtype a
+        ///     value counts as NaN when EITHER component is NaN.
+        /// </param>
         /// <returns>Returns True if the arrays are equal.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array_equal.html</remarks>
-        public bool array_equal(NDArray rhs)
+        /// <remarks>
+        ///     Faithful port of NumPy 2.4.2's <c>array_equal</c>. Shape must match EXACTLY (no broadcasting;
+        ///     see <see cref="np.array_equiv(NDArray,NDArray)"/> for the broadcasting variant), and the shape
+        ///     check runs FIRST. The default path is <c>all(this == rhs)</c> — deliberately WITHOUT a
+        ///     same-reference short-circuit, because NaN ≠ NaN means an array with a NaN is not equal to itself
+        ///     here; a same-reference short-circuit is only valid under <paramref name="equal_nan"/>. Dtypes
+        ///     that cannot hold NaN (bool / all integer widths / char / decimal) skip the NaN machinery: their
+        ///     <c>isnan</c> is uniformly false, so the fast path yields the identical result NumPy would (this
+        ///     also sidesteps calling <c>isnan</c> on Char/Decimal, which have no NumPy analog).
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.array_equal.html
+        /// </remarks>
+        public bool array_equal(NDArray rhs, bool equal_nan = false)
         {
-            unsafe
+            // A null operand can never match a real array.
+            if (rhs is null)
+                return false;
+
+            // NumPy checks shape equality before anything else; differing shapes are never equal
+            // (array_equal does NOT broadcast — that is array_equiv's job).
+            if (Shape != rhs.Shape)
+                return false;
+
+            // Default (equal_nan == false): pure element-wise equality reduced with all(). NaN != NaN,
+            // so an array containing NaN is not equal even to itself — which is exactly why NO
+            // reference/storage short-circuit is taken here (one would wrongly report such arrays equal).
+            if (!equal_nan)
             {
-                if (ReferenceEquals(this, rhs))
-                    return true;
+                using var eq = this == rhs;
+                return np.all(eq);
+            }
 
-                if (ReferenceEquals(Storage, rhs.Storage))
-                    return true;
-
-                //this is the same memory block
-                if ((IntPtr)this.Address == (IntPtr)rhs.Address && this.size == rhs.size && this.typecode == rhs.typecode)
-                    return true;
-
-                //if shape is different
-                if (Shape != rhs.Shape)
-                    return false;
-
-                //compare all values
-                using var cmp = (this == rhs);
-                var len = cmp.size;
-                var ptr = cmp.Address; //this never a slice so we can use unmanaged memory.
-                for (long i = 0; i < len; i++)
-                    if (!*(ptr + i))
-                        return false;
-
+            // equal_nan == true from here on.
+            // Same object: NaN compares equal to itself, so an array always equals itself.
+            if (ReferenceEquals(this, rhs))
                 return true;
+
+            // Dtypes that cannot hold NaN take the plain comparison: their isnan is all-false, so the
+            // NaN-aware branch below would reduce to exactly this. Result-identical to NumPy's structure.
+            if (!CanHoldNaN(this) && !CanHoldNaN(rhs))
+            {
+                using var eq = this == rhs;
+                return np.all(eq);
+            }
+
+            // NaN-aware path: NaN must occur at the SAME positions in both operands...
+            using var a1nan = np.isnan(this);
+            using var a2nan = np.isnan(rhs);
+            using var nanPositionsEq = a1nan == a2nan;
+            if (!np.all(nanPositionsEq))
+                return false;
+
+            // ...and every finite slot must be equal, while a NaN slot passes (a1nan is true there, and
+            // the positions were just proven to coincide). This `all((this == rhs) | isnan(this))` form is
+            // algebraically identical to NumPy's `all(this[~a1nan] == rhs[~a1nan])` once the positions
+            // agree, but needs no gather/copy and handles empty / 0-d inputs uniformly.
+            using var elementsEq = this == rhs;
+            using var okOrNan = elementsEq | a1nan;
+            return np.all(okOrNan);
+        }
+
+        // True only for the dtypes whose values can be NaN (the float family plus complex). Every other
+        // NumSharp dtype — bool, the signed/unsigned integer widths, char and decimal — cannot, so
+        // array_equal's equal_nan path safely skips isnan for them.
+        private static bool CanHoldNaN(NDArray a)
+        {
+            switch (a.typecode)
+            {
+                case NPTypeCode.Half:
+                case NPTypeCode.Single:
+                case NPTypeCode.Double:
+                case NPTypeCode.Complex:
+                    return true;
+                default:
+                    return false;
             }
         }
 
