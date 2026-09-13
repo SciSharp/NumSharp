@@ -36,13 +36,12 @@ namespace NumSharp.Tests.Fuzz
     ///          NDArrays), and keeping `arr + 5` ergonomic was chosen over strict NEP50 parity.
     ///       2. Complex arithmetic ULP envelopes vs NumPy's npy_c* algorithms (each per-op,
     ///          measured, and bounded — see the B2 branch): add/subtract within 2 ULP (FMA
-    ///          contraction); multiply within 16 ULP of the ELEMENT magnitude (catastrophic-
-    ///          cancellation regime); power by a NON-integer/complex exponent within 512
-    ///          element-magnitude ULP or at a documented inf/NaN edge (Complex.Pow vs npy_cpow's
-    ///          host cpow, Bug Ledger L6). divide/true_divide are BIT-EXACT (ComplexDivideNumPy
-    ///          ports CDOUBLE_divide) and power by an INTEGER exponent is BIT-EXACT (ComplexPowNumPy
-    ///          ports npy_cpow's integer branch — exact repeated multiplication) — neither has an
-    ///          envelope. Every other complex-binary op is gated bit-exact.
+    ///          contraction); power by a NON-integer/complex exponent within 512 element-magnitude
+    ///          ULP or at a documented inf/NaN edge (Complex.Pow vs npy_cpow's host cpow, Bug Ledger
+    ///          L6). BIT-EXACT (no envelope): divide/true_divide (ComplexDivideNumPy ports
+    ///          CDOUBLE_divide), multiply/square (NDComplexMath.Multiply/Square port the fused
+    ///          simd_cmul), and power by an INTEGER exponent (ComplexPowNumPy ports npy_cpow's
+    ///          integer branch). Every other complex-binary op is gated bit-exact.
     /// </summary>
     public static class MisalignedRegistry
     {
@@ -282,10 +281,11 @@ namespace NumSharp.Tests.Fuzz
 
             // (B2/F10) Complex BINARY arithmetic — PER-OP scopes. The former branch here excused ANY
             // value divergence of ANY magnitude for ANY 2-operand complex-result op (so a gross
-            // complex add/matmul/copyto regression passed silently). Dismantled: divide/true_divide are
-            // now bit-exact (see (2) above — no excuse); add/subtract/multiply/power get the tight
-            // scopes below; every other complex-binary op (matmul/dot/outer/copyto/extrema/
-            // concatenate/...) must be bit-exact and now fails the gate on divergence.
+            // complex add/matmul/copyto regression passed silently). Dismantled: divide/true_divide AND
+            // multiply/square are now bit-exact (see (2) above and NDComplexMath.Multiply — no excuse);
+            // add/subtract and non-integer power get the tight scopes below; every other complex-binary
+            // op (matmul/dot/outer/copyto/extrema/concatenate/...) must be bit-exact and now fails the
+            // gate on divergence.
             if (kind == DivergenceKind.Value && tc == NPTypeCode.Complex && c.Operands.Length == 2)
             {
                 // add/subtract run the same naive component formulas on both sides; only FMA
@@ -293,15 +293,12 @@ namespace NumSharp.Tests.Fuzz
                 if ((c.Op == "add" || c.Op == "subtract")
                     && diffs.Count > 0 && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 2)))
                     return "complex add/subtract within 2 ULP (FMA contraction) [documented]";
-                // multiply: npy_cmul vs System.Numerics.Complex round (ac-bd)/(ad+bc) differently
-                // (FMA contraction). In the catastrophic-cancellation regime (ac ~ bd) the RELATIVE
-                // error of the cancelled component is unbounded, but the ABSOLUTE error stays at
-                // rounding scale of the products — i.e. of the element's dominant component. So the
-                // detection: every differing component within 16 ULP *of the element's own
-                // magnitude* (not of itself). A divergence larger than that is a real kernel bug.
-                if (c.Op == "multiply"
-                    && diffs.Count > 0 && diffs.All(d => WithinComplexElementMagnitudeUlp(expected, actual, d.Index, 16)))
-                    return "complex multiply cancellation / ~ULP at element magnitude (npy_cmul vs System.Numerics) [documented #12]";
+                // multiply is BIT-EXACT (no excuse): NDComplexMath.Multiply ports NumPy's fused
+                // simd_cmul (vfmaddsub) exactly, matching it byte-for-byte on every layout — including
+                // the catastrophic-cancellation regime the old naive `ac-bd` diverged in (up to ~2840
+                // ULP). A 1-ULP multiply regression now fails the gate. (NumPy's np.complex128 SCALAR
+                // multiply is the un-fused scalarmath instead, a scalar/array split NumSharp's one
+                // array multiply can't mirror — the polydiv scalar coefficient handles it locally.)
                 // power: NumSharp now ports npy_cpow's INTEGER-exponent branch (exact repeated
                 // multiplication via ComplexMulNumPy, cdiv(1,·) for negatives), so complex power by an
                 // INTEGER exponent is BIT-EXACT — this excuse must NOT cover it (a regression there,
@@ -375,22 +372,39 @@ namespace NumSharp.Tests.Fuzz
             // (DirectILKernelGenerator.cs). The classifier branches are removed so the matrix verifies
             // maximum_out / minimum_out / clip_out NaN propagation bit-exact.
 
-            // --- T12 statistics: the QuantileEngine ops (median/percentile/quantile) diverge on
-            //     non-finite slices and on the integer axis path; average has summation-order drift.
-            //     ptp / count_nonzero / clip are bit-exact. ---
-            if (QuantileOps.Contains(c.Op) && kind == DivergenceKind.Value)
+            // --- T12 statistics: the QuantileEngine ops (median/percentile/quantile) ---
+            //   FIXED (were W6-A/B/C, now bit-exact vs NumPy 2.4.2 — verified over tens of
+            //   thousands of differential cases across every dtype × method × axis × layout):
+            //     * W6-C float interpolation precision — the _lerp is now NumPy's TWO-branch form
+            //       (a + (b-a)t for t<0.5, else b - (b-a)(1-t)) at the exact per-dtype precision.
+            //     * W6-B integer path — was a probe artifact (strong vs weak q); int is bit-exact.
+            //     * W6-A ±inf/NaN slices — the two-branch _lerp reproduces NumPy's inf*0 → NaN, and
+            //       midpoint now uses next = prev+1 (never the ceil collapse) so an inf neighbour
+            //       yields NaN exactly as NumPy does. np.median/nanmedian use the mean-of-middle
+            //       reduction (not the q=0.5 lerp), matching NumPy's distinct code path.
+            //   Two narrow residuals remain, both non-contractual:
+            //   (1) the SIGN of a ±0 float result — NumPy's introselect partition orders -0.0 before
+            //       +0.0 (a non-IEEE total order NumSharp's QuickSelect does not replicate) and its
+            //       clamped-index fix_gamma picks the opposite _lerp branch for
+            //       midpoint/averaged_inverted_cdf on a ±0 endpoint; in every such case the VALUE is
+            //       zero on both sides, only the sign bit differs (exactly like the fmax/fmin ±0-tie
+            //       sign above).
+            //   (2) COMPLEX np.median on a slice carrying a NaN — NumPy's `_median_nancheck`
+            //       propagates NaN through the sort/mean in a way (`nan+0j`, `nan+<imag>j`, …) that
+            //       NumSharp's mean-of-middle complex path does not reproduce. This is median-ONLY:
+            //       complex is not a NumPy percentile/quantile dtype (those raise TypeError), and a
+            //       finite complex median is bit-exact — so the excuse fires only when every
+            //       differing element carries a NaN.
+            //   Both are scoped razor-tight, so any real value divergence still fails the gate.
+            if (QuantileOps.Contains(c.Op) && kind == DivergenceKind.Value && diffs.Count > 0)
             {
-                // (W6-A) a slice containing ±inf / NaN: the partition + linear interpolation
-                // ((a+b)/2 or a+(b-a)*frac) produces a NaN where NumPy does not (or vice-versa) —
-                // e.g. (+inf + -inf)/2. Either direction is excused.
-                if (diffs.Any(d => d.Expected == "NaN" || d.Actual == "NaN"))
-                    return "median/percentile/quantile: ±inf/NaN slice partition+interpolation NaN mismatch [known bug]";
-                // (W6-B) integer input on the axis path: GROSS interpolation value error (sign flips,
-                // wrong magnitude) — a genuine QuantileEngine defect, not a rounding difference.
-                if (c.Operands[0].Dtype.StartsWith("int") || c.Operands[0].Dtype.StartsWith("uint"))
-                    return "percentile/quantile(int): gross interpolation value error on the axis path [known bug]";
-                // float input, finite: interpolation order / partition selection differs by a few ULP.
-                return "median/percentile/quantile: float interpolation order/precision divergence [known bug]";
+                if (diffs.All(d => IsSignedZeroPairFloat(d, tc)))
+                    return "median/percentile/quantile: sign of a ±0 result (NumPy's -0<+0 partition "
+                         + "order / clamped-index fix_gamma branch) [documented non-contractual]";
+                if (tc == NPTypeCode.Complex
+                    && diffs.All(d => d.Expected.Contains("NaN") || d.Actual.Contains("NaN")))
+                    return "complex median: NumPy _median_nancheck NaN-propagation vs NumSharp "
+                         + "mean-of-middle [documented non-contractual]";
             }
             // (W6-C) np.average: pairwise (NumPy) vs naive (NumSharp) summation order on large-magnitude
             // slices -> precision drift.
@@ -898,6 +912,30 @@ namespace NumSharp.Tests.Fuzz
         private static bool IsSignedZeroPairSingle(BitDiff.Diff d) =>
             (d.Expected == "00000000" || d.Expected == "00000080")
             && (d.Actual == "00000000" || d.Actual == "00000080");
+
+        /// <summary>
+        ///     Both the expected and actual tokens are a signed zero at the float dtype
+        ///     <paramref name="tc"/> (Double / Single / Half). BitDiff prints bytes low-to-high, so
+        ///     the sign bit sits in the LAST byte: +0.0 is all-zero and -0.0 has a trailing "80"
+        ///     (Double 0x…80, Single "00000080", Half "0080"). Only the float output dtypes of the
+        ///     quantile family are relevant — integer/bool/char results are exact and never ±0-signed.
+        /// </summary>
+        private static bool IsSignedZeroPairFloat(BitDiff.Diff d, NPTypeCode tc)
+        {
+            switch (tc)
+            {
+                case NPTypeCode.Double:
+                    return (d.Expected == "0000000000000000" || d.Expected == "0000000000000080")
+                        && (d.Actual   == "0000000000000000" || d.Actual   == "0000000000000080");
+                case NPTypeCode.Single:
+                    return IsSignedZeroPairSingle(d);
+                case NPTypeCode.Half:
+                    return (d.Expected == "0000" || d.Expected == "0080")
+                        && (d.Actual   == "0000" || d.Actual   == "0080");
+                default:
+                    return false;
+            }
+        }
 
         /// <summary>
         ///     True when both differing complex components at <paramref name="index"/> lie within
