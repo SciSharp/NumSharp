@@ -1165,6 +1165,19 @@ BITWISE_DT_PAIRS = [
 SHIFT_OPS = {"left_shift": np.left_shift, "right_shift": np.right_shift}
 SHIFT_DTYPES = ["int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64"]
 
+# gcd / lcm — number-theoretic binary ufuncs, INTEGER-ONLY (no bool/float/complex loop; a bool+bool
+# or any float/complex operand, and the uint64+signed -> float64 NEP50 pair, raise the no-loop error
+# — gen_binary skips those, error-parity is gated in errors_full). Both operands + output share one
+# promoted integer dtype (NumPy's uniform resolver). A bool paired with an integer promotes to that
+# integer loop and IS valid, so ("bool","int32") stays in the pair list.
+GCDLCM_OPS = {"gcd": np.gcd, "lcm": np.lcm}
+GCDLCM_DT_PAIRS = [
+    ("int32", "int32"), ("uint8", "uint8"), ("int8", "int8"), ("int16", "int16"),
+    ("uint16", "uint16"), ("uint32", "uint32"), ("int64", "int64"), ("uint64", "uint64"),
+    ("int32", "int64"), ("uint8", "int8"), ("int32", "uint32"), ("int8", "int16"),
+    ("uint16", "uint32"), ("bool", "int32"),
+]
+
 
 def gen_shift(ops, dtypes):
     """Shift kernels with shift-count edges that straddle the bit width — tests NumPy's
@@ -1227,9 +1240,24 @@ def gen_manip(dtypes, layout_names):
                 # ndarray METHOD (no np.byteswap); not-inplace never raises, so no nd/sz guard.
                 # Complex swaps its two halves; 1-byte dtypes are a value no-op (still a copy).
                 ("byteswap", {}, lambda v: v.byteswap()),
+                # packbits: bool/integer -> uint8 bit-pack (float/complex/decimal RAISE -> skipped by
+                # the try/except below; Char rides char_tier via the uint16 proxy). axis=None flattens
+                # in C order. unpackbits: uint8 ONLY (every other dtype raises -> skipped), axis=None.
+                ("packbits", {}, lambda v: np.packbits(v)),
+                ("packbits", {"bitorder": "little"}, lambda v: np.packbits(v, bitorder="little")),
+                ("unpackbits", {}, lambda v: np.unpackbits(v)),
+                ("unpackbits", {"bitorder": "little"}, lambda v: np.unpackbits(v, bitorder="little")),
             ]
             if sz > 0:
                 jobs.append(("reshape", {"shape": [sz]}, lambda v, sz=sz: v.reshape(sz)))
+                # unpackbits count (truncate / trim-from-end). GUARDED to sz > 0: NumPy leaks
+                # UNINITIALISED memory for a count-forced non-empty output over an EMPTY input (its
+                # IterAllButAxis never runs the zeroing loop), a divergence NumSharp intentionally does
+                # NOT reproduce (it returns the documented zeros) — so those cases are excluded from the
+                # byte-exact corpus and pinned by np.packbits.Test.cs instead. count=-3 needs >=3 bits,
+                # which any sz>0 uint8 (>=8 bits) has.
+                jobs.append(("unpackbits", {"count": 5}, lambda v: np.unpackbits(v, count=5)))
+                jobs.append(("unpackbits", {"count": -3}, lambda v: np.unpackbits(v, count=-3)))
             if nd >= 1:
                 # flipud (>= 1-d) + single-axis flip (int overload). trim_zeros is value-dependent:
                 # the int/uint pools are front-loaded with 0 and the float pool carries 0.0/-0.0 amid
@@ -1241,6 +1269,14 @@ def gen_manip(dtypes, layout_names):
                 jobs.append(("trim_zeros", {"trim": "b"}, lambda v: np.trim_zeros(v, "b")))
                 jobs.append(("trim_zeros", {"trim": "fb", "axis": 0},
                              lambda v: np.trim_zeros(v, "fb", axis=0)))
+                # packbits/unpackbits along an explicit axis (first + innermost, both bit orders).
+                # nd>=1 so the axis is valid; unpackbits stays uint8-only via the try/except skip.
+                jobs.append(("packbits", {"axis": 0}, lambda v: np.packbits(v, axis=0)))
+                jobs.append(("packbits", {"axis": nd - 1, "bitorder": "little"},
+                             lambda v, nd=nd: np.packbits(v, axis=nd - 1, bitorder="little")))
+                jobs.append(("unpackbits", {"axis": 0}, lambda v: np.unpackbits(v, axis=0)))
+                jobs.append(("unpackbits", {"axis": nd - 1, "bitorder": "little"},
+                             lambda v, nd=nd: np.unpackbits(v, axis=nd - 1, bitorder="little")))
                 # tril/triu apply to the LAST TWO axes; a 1-D input squares up to (n, n)
                 # (NumPy's `tri(*m.shape[-2:])` quirk) and a 0-d input raises, so nd >= 1.
                 # Same-shape for nd >= 2, so no corpus blow-up; k spans keep/drop/saturate.
@@ -3861,6 +3897,10 @@ def char_tier(mode):
     elif mode == "bitwise":
         raw = gen_binary(BITWISE_BIN_OPS, CHAR_BIT_PAIRS, PL)
         raw += gen_shift(SHIFT_OPS, [_C])                          # invert(char) carved (SIMD gap)
+    elif mode == "gcd":
+        # Char (uint16 proxy) rides gcd/lcm — every CHAR_BIT_PAIR promotes to a valid integer loop
+        # (char+char->char, char+int32->int32, char+uint64->uint64), all NumSharp-supported.
+        raw = gen_binary(GCDLCM_OPS, CHAR_BIT_PAIRS, PL)
     elif mode == "reduce":
         raw = gen_reduce(REDUCE_OPS, [_C], REDUCE_LAYOUTS)
     elif mode == "scan":
@@ -7571,6 +7611,13 @@ def main():
         cases += gen_shift(SHIFT_OPS, SHIFT_DTYPES)
         cases += char_tier("bitwise")
         write_jsonl(os.path.join(corpus_dir, "bitwise.jsonl"), cases)
+    elif mode == "gcd":
+        # np.gcd / np.lcm — integer-only binary ufuncs across every valid integer dtype pair × layout.
+        # Invalid pairs (float/complex/bool+bool, uint64+signed -> float64) are skipped by gen_binary;
+        # their no-loop errors are gated in errors_full. Char woven via char_tier.
+        cases = gen_binary(GCDLCM_OPS, GCDLCM_DT_PAIRS, list(PAIR_LAYOUTS.keys()))
+        cases += char_tier("gcd")
+        write_jsonl(os.path.join(corpus_dir, "gcd.jsonl"), cases)
     elif mode == "unary_extra":
         cases = gen_unary(UNARY_EXTRA_OPS, ALL_DTYPES, list(LAYOUTS.keys()))
         cases += char_tier("unary_extra")

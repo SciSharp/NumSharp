@@ -29,6 +29,8 @@ namespace NumSharp.Tests.Fuzz
                 case "floor_divide": return np.floor_divide(ops[0], ops[1]);
                 case "mod": return np.mod(ops[0], ops[1]);
                 case "fmod": return np.fmod(ops[0], ops[1]);
+                case "gcd": return np.gcd(ops[0], ops[1]);
+                case "lcm": return np.lcm(ops[0], ops[1]);
                 case "power": return np.power(ops[0], ops[1]);
                 case "float_power": return np.float_power(ops[0], ops[1]);
 
@@ -120,6 +122,15 @@ namespace NumSharp.Tests.Fuzz
                     return p.ContainsKey("axis")
                         ? np.trim_zeros(ops[0], p["trim"].GetString(), p["axis"].GetInt32())
                         : np.trim_zeros(ops[0], p["trim"].GetString());
+                // packbits/unpackbits: dtype-agnostic bit transforms -> uint8. "axis" absent => axis=None
+                // (flatten). unpackbits "count" is a nullable long. Bitorder defaults to "big".
+                case "packbits":
+                    return np.packbits(ops[0], ParseAxis(p),
+                        p.ContainsKey("bitorder") ? p["bitorder"].GetString() : "big");
+                case "unpackbits":
+                    return np.unpackbits(ops[0], ParseAxis(p),
+                        p.ContainsKey("count") ? p["count"].GetInt64() : (long?)null,
+                        p.ContainsKey("bitorder") ? p["bitorder"].GetString() : "big");
                 case "delete": return np.delete(ops[0], p["obj"].GetInt32(), p["axis"].GetInt32());
                 case "atleast_1d": return np.atleast_1d(ops[0]);
                 case "atleast_2d": return np.atleast_2d(ops[0]);
