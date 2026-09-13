@@ -175,6 +175,21 @@ namespace NumSharp.Tests.Fuzz
                 case "nancumsum": return np.nancumsum(ops[0], ParseAxis(p));
                 case "nancumprod": return np.nancumprod(ops[0], ParseAxis(p));
                 case "diff": return np.diff(ops[0], p["n"].GetInt32(), p["axis"].GetInt32());
+                // np.unwrap: period_is_int selects the integer-preserving overload (long period);
+                // otherwise the float-period overload (with or without an explicit period). discont
+                // is optional (null => period/2). axis is always present.
+                case "unwrap":
+                {
+                    double? unwDiscont = p.TryGetValue("discont", out var pud) && pud.ValueKind != JsonValueKind.Null
+                        ? pud.GetDouble() : (double?)null;
+                    int unwAxis = p.TryGetValue("axis", out var pua) ? pua.GetInt32() : -1;
+                    bool unwPeriodIsInt = p.TryGetValue("period_is_int", out var pupi) && pupi.GetBoolean();
+                    if (unwPeriodIsInt)
+                        return np.unwrap(ops[0], p["period"].GetInt64(), unwDiscont, unwAxis);
+                    if (p.TryGetValue("period", out var pup))
+                        return np.unwrap(ops[0], unwDiscont, unwAxis, pup.GetDouble());
+                    return np.unwrap(ops[0], unwDiscont, unwAxis);
+                }
                 // Composite trapezoidal integration (array/scalar result). x=None in the corpus, so
                 // only dx/axis vary; a 1-D operand reduces to a 0-d scalar.
                 case "trapezoid":

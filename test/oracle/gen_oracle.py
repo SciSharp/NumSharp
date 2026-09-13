@@ -668,6 +668,60 @@ def gen_diff(dtypes, layout_names):
     return cases
 
 
+def gen_unwrap(dtypes, layout_names):
+    # np.unwrap differential coverage: SCAN layouts x dtypes x a small parameter sweep.
+    # Data comes from the layout catalog (nan/inf/extremes with large jumps that trigger the
+    # correction / discont / boundary paths on the finite pairs, NaN tokenized on the rest).
+    # A FLOAT-typed period keeps the float path (float input -> same width, integer input ->
+    # float64); an INTEGER-typed period (period_is_int) selects NumPy's integer path for
+    # integer/bool inputs. Complex (TypeError) and unsigned integer-period (OverflowError)
+    # calls raise inside np.unwrap and are skipped here — their error parity is gated by the
+    # unit tests — exactly as gen_scan/gen_diff skip cases where NumPy raises.
+    cases = []
+    n = 0
+    skipped = 0
+    for ln in layout_names:
+        fn = LAYOUTS[ln]
+        for s in dtypes:
+            dt = np.dtype(s)
+            base, view = fn(dt)
+            if view.ndim == 0:
+                continue
+            operand = describe(base, view)
+            axes = [0] if view.ndim == 1 else [0, view.ndim - 1]
+            is_int_like = np.issubdtype(dt, np.integer) or dt == np.bool_
+            # (call-kwargs, recorded-params). A Python int period flags the integer path.
+            variants = [
+                ({}, {"period_is_int": False}),
+                ({"period": 4.0}, {"period": 4.0, "period_is_int": False}),
+                ({"discont": 5.0}, {"discont": 5.0, "period_is_int": False}),
+            ]
+            if is_int_like:
+                variants += [
+                    ({"period": 4}, {"period": 4, "period_is_int": True}),   # even -> boundary ambiguous
+                    ({"period": 5}, {"period": 5, "period_is_int": True}),   # odd  -> boundary NOT ambiguous
+                    ({"period": 6}, {"period": 6, "period_is_int": True}),   # even
+                ]
+            for (kw, prec) in variants:
+                for axis in axes:
+                    callkw = dict(kw)
+                    callkw["axis"] = axis
+                    try:
+                        r = np.asarray(np.unwrap(view, **callkw))
+                    except Exception:
+                        skipped += 1
+                        continue
+                    params = dict(prec)
+                    params["axis"] = axis
+                    ptag = f"p={prec.get('period', 'def')}{'i' if prec['period_is_int'] else ''}"
+                    cases.append(_case("unwrap", params, [operand], _arr_expected(r), ln,
+                                       "mixed", cid=f"unwrap/{ln}/{s}/{ptag}/axis={axis}/{n}"))
+                    n += 1
+    if skipped:
+        print(f"  (skipped {skipped} unwrap cases where NumPy raised)")
+    return cases
+
+
 def gen_where(dt_pairs, layout_names):
     cases = []
     n = 0
@@ -3976,6 +4030,8 @@ def char_tier(mode):
         raw = gen_reduce(REDUCE_OPS, [_C], REDUCE_LAYOUTS)
     elif mode == "scan":
         raw = gen_scan(SCAN_OPS, [_C], SCAN_LAYOUTS) + gen_diff([_C], SCAN_LAYOUTS)
+    elif mode == "unwrap":
+        raw = gen_unwrap([_C], SCAN_LAYOUTS)                          # Char (uint16 proxy): float-period only
     elif mode == "stat":
         raw = gen_reduce(STAT_REDUCE_OPS, [_C], STAT_LAYOUTS)
         raw += gen_count_nonzero([_C], STAT_LAYOUTS)
@@ -8262,6 +8318,13 @@ def main():
         cases = gen_unary(I0_OP, I0_DTYPES, list(LAYOUTS.keys()))
         cases += char_tier("i0")
         write_jsonl(os.path.join(corpus_dir, "i0.jsonl"), cases)
+    elif mode == "unwrap":
+        # np.unwrap over the scan layouts x every dtype x the period/discont/axis sweep.
+        # Char rides the uint16 proxy (float-period cases; its integer-period cases OverflowError
+        # like every unsigned and are skipped in-generator).
+        cases = gen_unwrap(SCAN_DTYPES, SCAN_LAYOUTS)
+        cases += char_tier("unwrap")
+        write_jsonl(os.path.join(corpus_dir, "unwrap.jsonl"), cases)
     elif mode == "nanreduce":
         cases = gen_reduce(NAN_REDUCE_OPS, NAN_REDUCE_DTYPES, REDUCE_LAYOUTS)
         cases += gen_nanquantile(NANQ_DTYPES)                           # Group A: nanpercentile/nanquantile
