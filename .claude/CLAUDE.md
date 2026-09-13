@@ -1177,7 +1177,7 @@ and `Type t = np.float64` need a cast; `a.dtype.Name` → `a.dtype.name` (NumPy)
 30/30 + Oracle 176/176 (dtype_text tier unchanged), Interop 638/638.
 
 ### Selection
-`choose`, `compress`, `extract`, `index_exp`, `indices`, `ix_`, `place`, `put`, `putmask`, `ravel_multi_index`, `s_`, `select`, `take`, `take_along_axis`, `unravel_index`, `where`
+`choose`, `compress`, `extract`, `index_exp`, `indices`, `ix_`, `place`, `put`, `put_along_axis`, `putmask`, `ravel_multi_index`, `s_`, `select`, `take`, `take_along_axis`, `unravel_index`, `where`
 
 `np.take_along_axis(arr, indices, axis=-1)` (NumPy `numpy/lib/_shape_base_impl.py`) is the per-slice
 gather: it matches 1-D index and data slices oriented along `axis` and looks each output element up
@@ -1219,6 +1219,34 @@ carry) and a branch-light unsigned-bounds resolve.
 
 Gates: `Indexing/TakeAlongAxisTests.cs` (37) + 44 `take_along_axis` cases in the `groupa` differential-fuzz
 tier. See `Indexing/np.take_along_axis.cs`.
+
+`np.put_along_axis(arr, indices, values, axis)` (NumPy `numpy/lib/_shape_base_impl.py`) is the SETTER twin
+of `take_along_axis`: for every position in the (broadcast) iteration space it reads one index and writes one
+value into `arr` along `axis`. **In-place** — mutates `arr`, returns `void`. NumPy is `arr[_make_along_axis_idx(
+...)] = values`, an advanced ASSIGNMENT; NumSharp reproduces it as the exact mirror of the take gather — a
+whole-array strided odometer (`DirectILKernelGenerator.PutAlongAxis.cs`), dtype-agnostic via a byte-width-keyed
+element copy. `axis` is **required** (no default, as in NumPy). It shares take's iteration-shape /
+`arrStrides` / non-axis-broadcast machinery (so `J != M`, negative-wrap, index-broadcast, and the identical
+fancy-index `IndexError` all fall out), and adds three setter-only behaviours, all probed against 2.4.2: (1)
+**`values` is BROADCAST — not cycled** — to the indexing result shape (right-aligned, extra LEADING size-1 dims
+stripped, more lenient than `broadcast_to`); a mismatch raises NumPy's verbatim `shape mismatch: value array of
+shape … could not be broadcast to indexing result of shape …`. It is cast to `arr`'s dtype (assignment cast:
+floats truncate toward zero, over/underflow wraps — the put/place/putmask sibling convention). Where several
+positions collapse onto one element (a size-1 `arr` dim, or duplicate indices), the **last write in C-order
+wins**. (2) **ATOMICITY** — every index is validated against the axis bound BEFORE the first store (NumPy's
+`PyArray_MapIterCheckIndices`), so an out-of-bounds index leaves `arr` completely untouched; this is TWO IL
+kernels — a dtype-agnostic `PutAlongAxisValidate` pass then a bounds-check-free `PutAlongAxisScatter` — rather
+than one, which also keeps the scatter's hot loop branch-free on the bound. (3) **`axis=None`** treats `arr` as
+`np.array(arr.flat)`, whose view-vs-copy split is load-bearing: a **C-contiguous** `arr` is written back through
+the flat view (aliased storage), while a **non-contiguous** `arr` raises read-only (NumPy's flat copy is
+read-only there — the dtype check still fires first). A **COPY_IF_OVERLAP** guard snapshots `values` when it may
+alias `arr` (`put_along_axis(a, reversing_idx, a)` reverses via a copy). The validation ORDER mirrors NumPy
+exactly: axis → dtype → ndim → writeable → non-axis broadcast → value broadcast → per-index bounds. **Perf
+(NPY/NS, Release, best-of-15):** the argsort/argmax-along-axis reconstruction (put_along_axis's purpose) is
+**1.68–2.18×** (NumPy builds `_make_along_axis_idx`'s arange grids + a MapIter; NumSharp is a direct odometer);
+the degenerate `axis=None` flat 1-D case is **~1.03–1.11×**, the memory-bandwidth ceiling the whole scatter
+family (`put`/`place`/`putmask`) hits. Gates: `Indexing/PutAlongAxisTests.cs` (41) + 48 `put_along_axis` cases
+in the `groupa` differential-fuzz tier. See `Indexing/np.put_along_axis.cs`.
 
 `np.select(condlist, choicelist, default=0)` (NumPy `numpy/lib/_function_base_impl.py`) draws each
 output element from the choice whose condition is true, FIRST matching condition winning; positions
@@ -2645,7 +2673,7 @@ non-structured subset would only re-expose `loadtxt`.
 | np API | `APIs/np.cs` |
 | Diagonal / triangular family | `Creation/np.tri.cs`, `Indexing/np.{diag,tril,diag_indices,tril_indices,fill_diagonal}.cs` |
 | unique family | `Manipulation/NDArray.unique.cs` + `NDArray.unique.Kwargs.cs` (sort+mask core + axis path), `Manipulation/np.unique.cs` (`np.unique`), `Manipulation/np.unique_values.cs` (Array-API `unique_values`/`unique_counts`/`unique_inverse`/`unique_all` + result structs), `Manipulation/NDArray.unique.Hash.cs` (int + complex hash fast path, splitmix64). Design + measured perf decisions: `docs/UNIQUE_DESIGN.md` |
-| Selection family | `Indexing/np.{take,take_along_axis,put,place,putmask,select}.cs`; IL kernels `Backends/Kernels/Direct/DirectILKernelGenerator.{Take,TakeAlongAxis,Put,Place,PutMask,Select}.cs` (`Select` = fused single-pass reverse-`ConditionalSelect` chain; `TakeAlongAxis` = whole-array strided-odometer gather, byte-width-keyed; `PutMask` = Place's typed-MOV scatter with a by-position cursor + `nv==1` scalar fast path) |
+| Selection family | `Indexing/np.{take,take_along_axis,put,put_along_axis,place,putmask,select}.cs`; IL kernels `Backends/Kernels/Direct/DirectILKernelGenerator.{Take,TakeAlongAxis,Put,PutAlongAxis,Place,PutMask,Select}.cs` (`Select` = fused single-pass reverse-`ConditionalSelect` chain; `TakeAlongAxis` = whole-array strided-odometer gather, byte-width-keyed; `PutAlongAxis` = the scatter mirror — a dtype-agnostic validate pass + a bounds-free scatter pass for NumPy's all-or-nothing assignment; `PutMask` = Place's typed-MOV scatter with a by-position cursor + `nv==1` scalar fast path) |
 | BLAS/LAPACK seam | `Backends/IBlasBackend.cs` + `IBlasBackend.LinearAlgebra.cs` (15 default `Try*`), `Backends/TensorEngine.LinearAlgebra.cs` (virtuals + `LinAlgHelper`); managed LU fallback (`det`/`slogdet`/`solve`/`inv`) in `Backends/Default/LinearAlgebra/ManagedLu.cs`; `Backends/ISlidingDotBackend.cs` (optional level-1 `?dot` seam for `correlate`/`convolve`, `OpenBlasEngine.SlidingDot`) |
 | ONNX Runtime interop (package) | `src/NumSharp.Interop.OnnxRuntime/NDArrayOnnxInterop.{cs,Export.cs,Import.cs}` (dtype maps, `AsOrtValue`/`ToOrtValue`/`AsDenseTensor`/`ToDenseTensor`, `ToNDArray`/`AsNDArray`), `OrtTensor.cs` (the `OrtTensor`/`OrtTensor<T>` handles + `ImportLease`), `UnmanagedMemoryManager.cs` (`Memory<T>` over the unmanaged buffer), `InferenceSessionExtensions.cs` (`session.Run(NDArray…)`), `Postprocess.cs`; ORT C# source for reference at `refs/onnxruntime/csharp/` (sparse submodule) + the official samples at `refs/onnxruntime-inference-examples/c_sharp/` |
 | ML.NET interop (package) | `src/NumSharp.Interop.MLNet/NDArrayMLNetInterop.{cs,Export.cs,Import.cs}` (dtype maps, `AsDataView`/`ToDataView`/`ToVBuffer`, `ToNDArray`, zero-copy `VBuffer.AsNDArray<T>` + `WrapExternal`/`Pin`/`Live{Exports,Imports}`), `NDArrayDataView.cs` (the NDArray-backed `IDataView` + strided lazy cursor + ARC-pin lifetime), `VBufferAccessor.cs` (compiled-expression getter for the private `VBuffer<T>._values`), `ImportLease.cs` (the last-view-releases GCHandle pin lease), `Postprocess.cs` (shared with ONNX). Depends on `Microsoft.ML.DataView` only |
