@@ -595,17 +595,37 @@ namespace NumSharp.Backends.Iteration
             NPTypeCode[] inputTypes,
             out NPTypeCode accType, out NPTypeCode resultType,
             string? cacheKey = null)
+            => CompileReduceKernel(inputTypes, null, out accType, out resultType, cacheKey);
+
+        /// <summary>
+        /// <see cref="CompileReduceKernel(NPTypeCode[], out NPTypeCode, out NPTypeCode, string)"/> with a
+        /// parameter mask (NDExpr.Params.cs): flagged inputs are loaded once from the aux block —
+        /// AFTER the accumulator slot, at <see cref="NDExprParamPlan.ReduceParamOffset"/> — and only
+        /// the unflagged inputs are iterator operands.
+        /// </summary>
+        /// <param name="inputTypes">Every input's dtype, parameters included, in input order.</param>
+        /// <param name="isParam">Per input, whether it is a hoisted parameter; null for none.</param>
+        /// <param name="accType">Receives the accumulator dtype the host seeds and reads back.</param>
+        /// <param name="resultType">Receives the reduction's NumPy result dtype.</param>
+        /// <param name="cacheKey">An explicit kernel cache key, or null to derive one from the tree.</param>
+        /// <returns>The compiled (cached) accumulating inner loop.</returns>
+        internal NDInnerLoopFunc CompileReduceKernel(
+            NPTypeCode[] inputTypes, bool[]? isParam,
+            out NPTypeCode accType, out NPTypeCode resultType,
+            string? cacheKey = null)
         {
             var resolved = ResolveNumPyTypes(inputTypes, out var nodeTypes);
             resultType = resolved;
             var acc = ResolveAccType(_kind, resolved);
             accType = acc;
             var exprType = nodeTypes[_child];
-            int nIn = inputTypes.Length;
+            var plan = NDExprParamPlan.Create(inputTypes, isParam);
+            var opTypes = plan.OperandTypes;
+            int nIn = plan.OperandCount;                  // iterator operands only
             var kind = _kind;
             var child = _child;
 
-            string key = (cacheKey ?? DeriveCacheKey(inputTypes, resolved)) + "|npreduce";
+            string key = (cacheKey ?? DeriveCacheKey(inputTypes, resolved)) + "|npreduce" + plan.KeySuffix;
 
             return DirectILKernelGenerator.CompileRawInnerLoop(il =>
             {
@@ -617,7 +637,7 @@ namespace NumSharp.Backends.Iteration
                 {
                     ptrLocals[j] = il.DeclareLocal(typeof(byte*));
                     strideLocals[j] = il.DeclareLocal(typeof(long));
-                    inputLocals[j] = il.DeclareLocal(DirectILKernelGenerator.GetClrType(inputTypes[j]));
+                    inputLocals[j] = il.DeclareLocal(DirectILKernelGenerator.GetClrType(opTypes[j]));
                 }
 
                 var accClr = DirectILKernelGenerator.GetClrType(acc);
@@ -628,7 +648,16 @@ namespace NumSharp.Backends.Iteration
                 var locI = il.DeclareLocal(typeof(long));
                 var locN4 = il.DeclareLocal(typeof(long));
 
-                var ctx = new NDExprCompileContext(inputTypes, exprType, inputLocals, vectorMode: false, nodeTypes);
+                // Parameters: loaded once, here, from aux + 16 (slot 0 is the accumulator).
+                LocalBuilder[]? paramLocals = null;
+                if (plan.ParamCount > 0)
+                {
+                    paramLocals = new LocalBuilder[plan.ParamCount];
+                    plan.EmitPrologue(il, paramLocals, null, NPTypeCode.Empty, NDExprParamPlan.ReduceParamOffset);
+                }
+
+                var ctx = new NDExprCompileContext(inputTypes, exprType, inputLocals, vectorMode: false, nodeTypes,
+                    NPTypeCode.Empty, plan.Slots, plan.ParamIndex, paramLocals);
 
                 // ---- prologue: unpack dataptrs / strides --------------------
                 for (int j = 0; j < nIn; j++)
@@ -709,7 +738,7 @@ namespace NumSharp.Backends.Iteration
                             il.Emit(OpCodes.Add);
                         }
 
-                        DirectILKernelGenerator.EmitLoadIndirect(il, inputTypes[j]);
+                        DirectILKernelGenerator.EmitLoadIndirect(il, opTypes[j]);
                         il.Emit(OpCodes.Stloc, inputLocals[j]);
                     }
 
@@ -808,17 +837,37 @@ namespace NumSharp.Backends.Iteration
         internal NDInnerLoopFunc CompileAxisReduceKernel(
             NPTypeCode[] inputTypes, out NPTypeCode accType, out NPTypeCode resultType,
             string? cacheKey = null)
+            => CompileAxisReduceKernel(inputTypes, null, out accType, out resultType, cacheKey);
+
+        /// <summary>
+        /// <see cref="CompileAxisReduceKernel(NPTypeCode[], out NPTypeCode, out NPTypeCode, string)"/> with
+        /// a parameter mask (NDExpr.Params.cs): flagged inputs are loaded once from the aux block at
+        /// <see cref="NDExprParamPlan.ReduceParamOffset"/> (the same layout as the flat kernel, so the
+        /// host packs one buffer for both), and only the unflagged inputs are iterator operands.
+        /// </summary>
+        /// <param name="inputTypes">Every input's dtype, parameters included, in input order.</param>
+        /// <param name="isParam">Per input, whether it is a hoisted parameter; null for none.</param>
+        /// <param name="accType">Receives the accumulator dtype the host seeds the output with.</param>
+        /// <param name="resultType">Receives the reduction's NumPy result dtype.</param>
+        /// <param name="cacheKey">An explicit kernel cache key, or null to derive one from the tree.</param>
+        /// <returns>The compiled (cached) axis-aware accumulating inner loop.</returns>
+        internal NDInnerLoopFunc CompileAxisReduceKernel(
+            NPTypeCode[] inputTypes, bool[]? isParam,
+            out NPTypeCode accType, out NPTypeCode resultType,
+            string? cacheKey = null)
         {
             var resolved = ResolveNumPyTypes(inputTypes, out var nodeTypes);
             resultType = resolved;
             var acc = ResolveAccType(_kind, resolved);
             accType = acc;
             var exprType = nodeTypes[_child];
-            int nIn = inputTypes.Length;
+            var plan = NDExprParamPlan.Create(inputTypes, isParam);
+            var opTypes = plan.OperandTypes;
+            int nIn = plan.OperandCount;                  // iterator operands only
             var kind = _kind;
             var child = _child;
 
-            string key = (cacheKey ?? DeriveCacheKey(inputTypes, resolved)) + "|npaxisreduce";
+            string key = (cacheKey ?? DeriveCacheKey(inputTypes, resolved)) + "|npaxisreduce" + plan.KeySuffix;
 
             return DirectILKernelGenerator.CompileRawInnerLoop(il =>
             {
@@ -830,7 +879,7 @@ namespace NumSharp.Backends.Iteration
                 {
                     ptrLocals[j] = il.DeclareLocal(typeof(byte*));
                     strideLocals[j] = il.DeclareLocal(typeof(long));
-                    inputLocals[j] = il.DeclareLocal(DirectILKernelGenerator.GetClrType(inputTypes[j]));
+                    inputLocals[j] = il.DeclareLocal(DirectILKernelGenerator.GetClrType(opTypes[j]));
                 }
                 var outPtr = il.DeclareLocal(typeof(byte*));
                 var outStride = il.DeclareLocal(typeof(long));
@@ -839,7 +888,17 @@ namespace NumSharp.Backends.Iteration
                 var accLocals = new LocalBuilder[4];
                 for (int l = 0; l < 4; l++) accLocals[l] = il.DeclareLocal(accClr);
 
-                var ctx = new NDExprCompileContext(inputTypes, exprType, inputLocals, vectorMode: false, nodeTypes);
+                // Parameters: loaded once, here, from aux + 16 (the flat kernel's accumulator slot is
+                // reserved in both layouts so the host packs one buffer).
+                LocalBuilder[]? paramLocals = null;
+                if (plan.ParamCount > 0)
+                {
+                    paramLocals = new LocalBuilder[plan.ParamCount];
+                    plan.EmitPrologue(il, paramLocals, null, NPTypeCode.Empty, NDExprParamPlan.ReduceParamOffset);
+                }
+
+                var ctx = new NDExprCompileContext(inputTypes, exprType, inputLocals, vectorMode: false, nodeTypes,
+                    NPTypeCode.Empty, plan.Slots, plan.ParamIndex, paramLocals);
 
                 // prologue: unpack input ptrs/strides (0..nIn-1) and the output ptr/stride (nIn).
                 for (int j = 0; j <= nIn; j++)
@@ -866,7 +925,7 @@ namespace NumSharp.Backends.Iteration
                             il.Emit(OpCodes.Ldc_I4, lane); il.Emit(OpCodes.Conv_I8); il.Emit(OpCodes.Mul);
                             il.Emit(OpCodes.Conv_I); il.Emit(OpCodes.Add);
                         }
-                        DirectILKernelGenerator.EmitLoadIndirect(il, inputTypes[j]);
+                        DirectILKernelGenerator.EmitLoadIndirect(il, opTypes[j]);
                         il.Emit(OpCodes.Stloc, inputLocals[j]);
                     }
                 }
