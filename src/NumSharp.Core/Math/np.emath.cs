@@ -36,10 +36,17 @@ namespace NumSharp
     ///     Every function is a PURE COMPOSITION over the existing <c>np.*</c> ufuncs — a domain scan
     ///     (<c>np.any</c> of a comparison), an optional cast to complex128, then the standard real/complex
     ///     ufunc — a line-for-line port of NumPy 2.4.2 <c>numpy/lib/_scimath_impl.py</c>. Because the
-    ///     numerics are the already-validated <c>np.sqrt</c>/<c>np.log</c>/<c>np.arccos</c>/… kernels, the
-    ///     results are <b>bit-identical</b> to NumPy on every real path and on every complex path whose
-    ///     underlying complex ufunc is bit-exact (all of them except <see cref="power"/> with a non-integer
-    ///     exponent, which inherits the documented complex-<c>power</c> ULP divergence — see that method).
+    ///     numerics ARE the already-validated <c>np.sqrt</c>/<c>np.log</c>/<c>np.arccos</c>/… kernels,
+    ///     <b>emath introduces no divergence of its own</b> — every difference from NumPy traces to a
+    ///     documented property of the underlying ufunc (validated by an 897-case layout-aware
+    ///     differential, 775 bit-exact + 122 accounted). Results are <b>bit-identical</b> to NumPy on
+    ///     every REAL path and on the bit-exact COMPLEX paths (complex <c>sqrt</c>/<c>log</c>/
+    ///     <c>log10</c>/<c>log2</c>); the remaining complex paths inherit the underlying complex ufunc's
+    ///     precision: <see cref="arccos"/>/<see cref="arcsin"/>/<see cref="arctanh"/> ride the
+    ///     complex-unary ≤~1-ULP envelope (a property of <c>np.arccos</c> etc. itself — e.g. plain
+    ///     <c>np.arccos(-0.5+0j)</c> is already 1 ULP from NumPy — not something emath adds), and
+    ///     <see cref="power"/> with a non-integer exponent is <c>allclose</c> (the F5 complex-<c>power</c>
+    ///     divergence, see that method).
     ///     </para>
     ///     <para>
     ///     <b>ONE dtype-only divergence (F1):</b> NumSharp has a single complex type (complex128) and no
