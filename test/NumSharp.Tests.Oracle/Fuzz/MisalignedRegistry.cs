@@ -327,14 +327,13 @@ namespace NumSharp.Tests.Fuzz
             //     compare now yields False for a NaN operand, matching IEEE/NumPy). The classifier
             //     branch is intentionally removed so the comparison matrix verifies it bit-exact.
 
-            // (W5-A) cumprod on a SIZE-1 / empty / 0-d array skips the NEP50 accumulator widening —
-            // it preserves the narrow integer input dtype on the one-element fast path instead of
-            // int16/int32 -> int64, uint8/uint16 -> uint64. cumsum was fixed (ReduceCumAdd now
-            // promotes + reshapes every trivial case to match np.add.accumulate); cumprod still
-            // carries the bug in ReduceCumMul. Scoped to a cumprod dtype mismatch ON THAT size-<=1
-            // fast path only (B3/F11) — a full-size cumprod widening miss is a real bug and fails.
-            if (c.Op == "cumprod" && kind == DivergenceKind.Dtype && ElementCount(c.Operands[0]) <= 1)
-                return "cumprod(size-1 int): skips NEP50 accumulator widening (int16/int32/uint8/uint16) [known bug]";
+            // (W5-A RESOLVED) cumprod on a SIZE-1 / empty / 0-d array now applies the NEP50
+            // accumulator widening (int16/int32->int64, uint8/uint16->uint64) — ReduceCumMul's
+            // size-<=1 and empty branches cast to GetAccumulatingType (matching the long-fixed
+            // ReduceCumAdd). The excuse that stood here is REMOVED so a regression that drops the
+            // widening again turns the gate red; the scan tier's one_element_1d cumprod cases now
+            // pass bit-exact on dtype. (Sibling of the flat size-<=1 sum/prod fix — see the
+            // reduction Dtype excuse below, which is likewise narrowed to exclude sum/prod.)
 
             // --- T13 element-wise extrema (maximum/minimum/fmax/fmin) + isclose ---
             // (W7-B FIXED) maximum/minimum/fmax/fmin are now DIRECT binary ufuncs (BinaryOp.Maximum
@@ -873,15 +872,6 @@ namespace NumSharp.Tests.Fuzz
         {
             "cbrt", "floor", "ceil", "trunc", "deg2rad", "rad2deg", "floor_divide", "mod"
         };
-
-        /// <summary>Element count of a corpus operand (0-d shape [] counts as 1).</summary>
-        private static long ElementCount(FuzzCorpus.Operand o)
-        {
-            long n = 1;
-            foreach (var d in o.Shape)
-                n *= d;
-            return n;
-        }
 
         /// <summary>
         ///     The prefer-precise threshold: NumSharp's ULP distance to truth may exceed NumPy's by
