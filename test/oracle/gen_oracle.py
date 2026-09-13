@@ -124,7 +124,7 @@ DT_PAIRS = [
 
 # Unary ops. NumPy is the oracle for result dtype (e.g. sqrt(int)->float64, abs(complex)->float64).
 UNARY_OPS = {
-    "negative": np.negative, "abs": np.abs, "sign": np.sign,
+    "negative": np.negative, "abs": np.abs, "fabs": np.fabs, "sign": np.sign,
     "sqrt": np.sqrt, "cbrt": np.cbrt, "square": np.square, "reciprocal": np.reciprocal,
     "floor": np.floor, "ceil": np.ceil, "trunc": np.trunc,
     "sin": np.sin, "cos": np.cos, "tan": np.tan, "exp": np.exp, "log": np.log,

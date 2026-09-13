@@ -697,7 +697,7 @@ texts differ in wording; `np.broadcast_to(a, (2^62, 6))` builds the view where N
 `are_broadcastable`, `broadcast`, `broadcast_arrays`, `broadcast_to`
 
 ### Math — Arithmetic
-`abs`, `absolute`, `acosh`, `add`, `arccos`, `arccosh`, `arcsin`, `arcsinh`, `arctan`, `arctan2`, `arctanh`, `asinh`, `atanh`, `cbrt`, `ceil`, `clip`, `convolve`, `correlate`, `cos`, `cosh`, `deg2rad`, `degrees`, `divide`, `divmod`, `exp`, `exp2`, `expm1`, `fix`, `float_power`, `floor`, `floor_divide`, `fmod`, `gcd`, `lcm`, `log`, `log10`, `log1p`, `log2`, `mod`, `modf`, `multiply`, `negative`, `positive`, `power`, `rad2deg`, `radians`, `reciprocal`, `remainder`, `rint`, `sign`, `sin`, `sinc`, `sinh`, `spacing`, `sqrt`, `square`, `subtract`, `tan`, `tanh`, `true_divide`, `trunc`
+`abs`, `absolute`, `acosh`, `add`, `arccos`, `arccosh`, `arcsin`, `arcsinh`, `arctan`, `arctan2`, `arctanh`, `asinh`, `atanh`, `cbrt`, `ceil`, `clip`, `convolve`, `correlate`, `cos`, `cosh`, `deg2rad`, `degrees`, `divide`, `divmod`, `exp`, `exp2`, `expm1`, `fabs`, `fix`, `float_power`, `floor`, `floor_divide`, `fmod`, `gcd`, `lcm`, `log`, `log10`, `log1p`, `log2`, `mod`, `modf`, `multiply`, `negative`, `positive`, `power`, `rad2deg`, `radians`, `reciprocal`, `remainder`, `rint`, `sign`, `sin`, `sinc`, `sinh`, `spacing`, `sqrt`, `square`, `subtract`, `tan`, `tanh`, `true_divide`, `trunc`
 
 **`np.fix`** — round toward zero, dtype-preserving (NumPy `numpy/lib/_ufunclike_impl.py`, gated by the
 `unary`-tier `trunc` corpus via the `fix→trunc` alias + `Math/np.fix.Test.cs`). In NumPy 2.4.2 `fix(x, out=None)`
@@ -708,6 +708,29 @@ which is what NumPy's `fix` leaks too since it also delegates). Unlike a true uf
 parameter — the signature is `fix(x, out=null)`, `out` positional as in NumPy. One inherited `trunc` divergence:
 `fix(complex)` raises `NotSupportedException` where NumPy raises `TypeError` (pre-existing in `trunc`, shared).
 See `Math/np.fix.cs`.
+
+**`np.fabs`** — the FLOAT-ONLY absolute value (NumPy `fabs` ufunc, `TD(flts, f='fabs', astype={'e':'f'})` —
+float loops `efdg` only; probed against 2.4.2; gates `Math/np.fabs.Test.cs` (21) + the `unary`/`errors_full`
+corpus tiers). It is the float sibling of `abs`/`absolute` and differs in exactly two ways, both dtype-level:
+it PROMOTES bool/int to float (NEP50 tier: bool/int8/uint8→float16, int16/uint16/char→float32,
+int32/uint32/int64/uint64→float64; float16/float32/float64/decimal preserved) — so `fabs(int)` is always a
+float where `abs(int)` preserves int — and it has NO complex loop (`abs` maps complex→magnitude; `fabs`
+REJECTS it). The **operation** is identical to `abs` on the float loops — clear the IEEE sign bit — so `fabs`
+REUSES the fully-SIMD `UnaryOp.Abs` kernel (`Default.Fabs` → `ExecuteUnaryOp(nd, UnaryOp.Abs, floatType, …,
+ufuncName:"fabs")`), inheriting every layout, `out=`/`where=`/`dtype=`, and the f16/decimal paths for free. The
+promoting path casts int→float BEFORE the abs, so `fabs(int.MinValue)` is the exact float magnitude, never the
+wrapped integer abs. **BIT-EXACT with NumPy 2.4.2** across all 12 NumPy-representable non-complex dtypes ×
+26 layouts, including `-0.0→+0.0`, `±inf→+inf`, and a negative/payload-bearing NaN whose sign bit is cleared
+while the payload is preserved (`0xfff8…abcdef → 0x7ff8…abcdef`). **Complex is refused with NumPy's exact three
+error paths** (probed): no `dtype=` → `TypeError` "ufunc 'fabs' not supported for the input types…"; `dtype=`
+float → "Cannot cast ufunc 'fabs' input from complex128 to <float> with casting rule 'same_kind'"; `dtype=`
+complex/int → "No loop matching the specified signature and casting was found for ufunc fabs". The `out=` cast
+error correctly names `"fabs"` (not `"absolute"`) — `ExecuteUnaryOp`/`ExecuteUnaryUfuncInto` gained an optional
+`ufuncName` override for exactly this reuse-a-kernel-under-another-ufunc-name case. **Perf (NPY/NS, Release,
+best-of-15):** faster than NumPy on every measured cell — NumPy's `fabs` is a SCALAR CRT loop (no SIMD dispatch,
+unlike `absolute`), while NumSharp rides `Vector.Abs`: float16 **4.5–24.8×**, float64 **1.75–13.9×**, int32
+**1.6–10.8×**, `out=` paths 2.5–14× (the one sub-1.5× cell, fresh-alloc float32@100K at 1.19×, is the shared
+allocation floor — its `out=` variant is 12.2×). See `Math/np.fabs.cs`, `Backends/Default/Math/Default.Fabs.cs`.
 
 **The divmod family** — `remainder`/`mod`, `fmod`, `divmod` (all probed against 2.4.2; gates the
 `divmod_power`/`multioutput` fuzz tiers + `Math` unit tests). `np.remainder` is an exact ALIAS of the existing

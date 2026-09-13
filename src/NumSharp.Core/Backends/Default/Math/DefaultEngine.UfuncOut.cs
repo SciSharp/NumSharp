@@ -623,7 +623,7 @@ namespace NumSharp.Backends
         private unsafe NDArray ExecuteUnaryUfuncInto(
             NDArray nd, UnaryOp op,
             NPTypeCode inputType, NPTypeCode outputType,
-            NDArray? @out, NDArray? where)
+            NDArray? @out, NDArray? where, string ufuncName = null)
         {
             // Read-only out is rejected before where/cast/shape (see the binary path).
             if (@out is not null)
@@ -631,7 +631,9 @@ namespace NumSharp.Backends
 
             ValidateWhereMask(where);
 
-            string name = UfuncName(op);
+            // A single UnaryOp kernel can back several NumPy ufuncs (fabs reuses Abs), so the caller
+            // may override the error name; otherwise derive it from the op.
+            string name = ufuncName ?? UfuncName(op);
             if (@out is not null)
                 ValidateOutCast(outputType, @out.typecode, name);
 

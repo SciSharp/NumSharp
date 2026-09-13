@@ -37,6 +37,7 @@ namespace NumSharp.Tests.Fuzz
                 // Unary.
                 case "negative": return np.negative(ops[0]);
                 case "abs": return np.abs(ops[0]);
+                case "fabs": return np.fabs(ops[0]);
                 case "sign": return np.sign(ops[0]);
                 case "sqrt": return np.sqrt(ops[0]);
                 case "cbrt": return np.cbrt(ops[0]);
