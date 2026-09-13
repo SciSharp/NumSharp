@@ -84,6 +84,35 @@ namespace NumSharp
         public abstract NDArray Fmod(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null);
 
         /// <summary>
+        ///     np.gcd — element-wise greatest common divisor of |lhs| and |lhs|. INTEGER-ONLY: a
+        ///     bool/float/complex/decimal operand (or a uint64+signed pair promoting to float64) has no
+        ///     loop and raises NumPy's no-loop <see cref="TypeError"/>. Uniform NEP50 promotion
+        ///     (both operands + output share one integer dtype); a negative result is possible only where
+        ///     the magnitude wraps the signed range (gcd(-128,-128)==-128). Same (inputs, dtype, out, where)
+        ///     house order as the rest of the binary ufunc surface.
+        /// </summary>
+        /// <param name="lhs">First input array.</param>
+        /// <param name="rhs">Second input array.</param>
+        /// <param name="dtype">Explicit loop dtype (NumPy ufunc dtype=); must name an integer loop.</param>
+        /// <param name="out">Output location (NumPy ufunc out=); returned as-is when supplied.</param>
+        /// <param name="where">Boolean mask (NumPy ufunc where=); masked-off elements keep their prior value.</param>
+        /// <returns>The element-wise gcd, in the promoted integer dtype.</returns>
+        public abstract NDArray Gcd(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null);
+
+        /// <summary>
+        ///     np.lcm — element-wise lowest common multiple of |lhs| and |rhs| (0 when either is 0). Shares
+        ///     every rule with <see cref="Gcd"/> (integer-only loops, uniform NEP50 promotion, same house
+        ///     order); the product |lhs|/gcd*|rhs| WRAPS the dtype on overflow, matching NumPy.
+        /// </summary>
+        /// <param name="lhs">First input array.</param>
+        /// <param name="rhs">Second input array.</param>
+        /// <param name="dtype">Explicit loop dtype (NumPy ufunc dtype=); must name an integer loop.</param>
+        /// <param name="out">Output location (NumPy ufunc out=); returned as-is when supplied.</param>
+        /// <param name="where">Boolean mask (NumPy ufunc where=); masked-off elements keep their prior value.</param>
+        /// <returns>The element-wise lcm, in the promoted integer dtype.</returns>
+        public abstract NDArray Lcm(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null);
+
+        /// <summary>
         ///     np.divmod — the fused two-output ufunc returning
         ///     <c>(floor_divide(lhs, rhs), remainder(lhs, rhs))</c> element-wise in a single pass.
         ///     Item1 is the floored quotient, Item2 the floored remainder (divisor's sign). Same NEP50

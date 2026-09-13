@@ -87,6 +87,8 @@ namespace NumSharp.Backends
             BinaryOp.BitwiseOr => "bitwise_or",
             BinaryOp.BitwiseXor => "bitwise_xor",
             BinaryOp.ATan2 => "arctan2",
+            BinaryOp.Gcd => "gcd",
+            BinaryOp.Lcm => "lcm",
             _ => op.ToString().ToLowerInvariant(),
         };
 
