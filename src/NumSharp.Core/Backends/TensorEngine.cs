@@ -202,6 +202,10 @@ namespace NumSharp
         public abstract NDArray ACosh(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray ATanh(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
 
+        // np.spacing — distance to the adjacent representable value away from zero (one ULP). Float-only
+        // unary ufunc (ee/ff/dd loops + NumSharp's decimal extension); complex has NO loop.
+        public abstract NDArray Spacing(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
+
         public abstract NDArray ClipNDArray(NDArray lhs, NDArray min, NDArray max, DType dtype = null, NDArray @out = null);
 
         /// <summary>

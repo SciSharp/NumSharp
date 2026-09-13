@@ -159,6 +159,11 @@ namespace NumSharp.Backends.Kernels
                     case UnaryOp.Ceil:     return HalfCeilContiguous;
                     case UnaryOp.Truncate: return HalfTruncContiguous;
                     case UnaryOp.Round:    return HalfRintContiguous;
+                    // np.spacing: NumPy's npy_half_spacing is a pure ushort bit-fiddle (always
+                    // non-negative, halves the ULP at negative power-of-2 boundaries), so it vectorizes
+                    // over raw lanes and BEATS NumPy's scalar f16 loop (Unary.Spacing.Half.cs; probed
+                    // over all 65,536 patterns). Strided / int-promoted-to-Half keep the scalar path.
+                    case UnaryOp.Spacing:  return HalfSpacingContiguous;
                 }
             }
 
@@ -303,8 +308,16 @@ namespace NumSharp.Backends.Kernels
                 key.Op == UnaryOp.Tanh)
                 return NumPyFloatKernelSimdAvailable(key.Op, key.InputType);
 
+            // spacing vectorizes for float32/float64 as a pure bit-increment + zero-mask (no BCL
+            // transcendental, no FMA): reinterpret the lane to integer, +1, reinterpret back, subtract,
+            // then select +Epsilon where x==0. ±inf/NaN fall out of the arithmetic (bits+1 of an
+            // infinity is a NaN pattern, NaN - x = NaN), so no special lane is needed. This block is
+            // reached only for Single/Double (line 277 rejected the rest) and only for same-type keys
+            // (line 223), so an int-promoted spacing (e.g. int32->float64) correctly takes the scalar
+            // path instead. See EmitVectorSpacing.
             return key.Op == UnaryOp.Sqrt || key.Op == UnaryOp.Reciprocal ||
-                   key.Op == UnaryOp.Deg2Rad || key.Op == UnaryOp.Rad2Deg;
+                   key.Op == UnaryOp.Deg2Rad || key.Op == UnaryOp.Rad2Deg ||
+                   key.Op == UnaryOp.Spacing;
         }
 
         /// <summary>

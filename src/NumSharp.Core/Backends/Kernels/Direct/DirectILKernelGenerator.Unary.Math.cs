@@ -277,6 +277,16 @@ namespace NumSharp.Backends.Kernels
                     EmitMathCall(il, "Cbrt", type);
                     break;
 
+                case UnaryOp.Spacing:
+                    // np.spacing: distance to the adjacent representable value away from zero (one ULP).
+                    // No Math.* analog — a bit-increment helper (NDSpacingMath.Spacing). Reached only for
+                    // Single/Double here (Decimal/Complex/Half are redirected above); the SIMD body
+                    // (EmitVectorSpacing) computes the SAME bits a whole vector at a time, this is its
+                    // scalar tail plus the strided / int-promoted path.
+                    il.EmitCall(OpCodes.Call,
+                        type == NPTypeCode.Single ? CachedMethods.SpacingF : CachedMethods.SpacingD, null);
+                    break;
+
                 case UnaryOp.IsFinite:
                     // Test for finiteness (not infinity and not NaN)
                     // For integer types: always true

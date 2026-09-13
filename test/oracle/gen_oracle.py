@@ -152,6 +152,10 @@ UNARY_EXTRA_OPS = {
     "deg2rad": np.deg2rad, "rad2deg": np.rad2deg,
     "positive": np.positive,
     "rint": np.rint,   # round-half-to-even; float-tier dtype like the others in this group
+    # spacing: distance to the adjacent representable value away from zero (one ULP). Float-tier
+    # like the rest of this group, but a pure bit-fiddle (npy_spacing / npy_half_spacing) — held
+    # BIT-EXACT, carved out of the "unary ~ULP" excuse (MisalignedRegistry.ByteExactArithmeticUnaryOps).
+    "spacing": np.spacing,
 }
 
 

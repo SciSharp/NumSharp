@@ -326,6 +326,18 @@ namespace NumSharp.Backends.Kernels
             public static readonly MethodInfo CopySignH = LA(nameof(Utilities.NDLogAddExpMath.CopySignHalf), typeof(Half));
             public static readonly MethodInfo CopySignDec = LA(nameof(Utilities.NDLogAddExpMath.CopySignDecimal), typeof(decimal));
 
+            // np.spacing scalar kernels — the UNARY IEEE-step sibling of nextafter (one loop-dtype
+            // param, so resolved by a single-type GetMethod rather than the binary LA above). All four
+            // overloads are named Spacing; the correct one is bound by its parameter type. Backs the
+            // SIMD kernel's scalar tail (float32/float64) and the strided / Half / Decimal paths.
+            private static MethodInfo SP(Type t) =>
+                typeof(Utilities.NDSpacingMath).GetMethod(nameof(Utilities.NDSpacingMath.Spacing), new[] { t })
+                ?? throw new MissingMethodException(typeof(Utilities.NDSpacingMath).FullName, nameof(Utilities.NDSpacingMath.Spacing));
+            public static readonly MethodInfo SpacingD = SP(typeof(double));
+            public static readonly MethodInfo SpacingF = SP(typeof(float));
+            public static readonly MethodInfo SpacingH = SP(typeof(Half));
+            public static readonly MethodInfo SpacingDec = SP(typeof(decimal));
+
             // np.hypot scalar kernels — same shape/family as the LogAddNext helpers above, resolved by
             // GetLogAddNextMethod. Borges' correctly-rounded FMA hypot lives in NDHypotMath.
             private static MethodInfo HY(string name, Type t) =>

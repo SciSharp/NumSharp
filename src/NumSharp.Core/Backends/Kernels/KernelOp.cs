@@ -123,7 +123,16 @@ namespace NumSharp.Backends.Kernels
         /// flips the sign of the imaginary part for Complex (via <c>System.Numerics.Complex.Conjugate</c>).
         /// Dtype is preserved (never promoted), matching NumPy's per-dtype conjugate loops.
         /// </summary>
-        Conjugate
+        Conjugate,
+
+        /// <summary>
+        /// Distance to the adjacent representable value away from zero — one ULP (np.spacing).
+        /// Float-only ufunc (ee/ff/dd loops + NumSharp's decimal extension; complex has NO loop).
+        /// float32/float64 are SIGNED (carry the sign of x, +minsubnormal at ±0) via the raw
+        /// bit-increment <c>reinterpret(bits(x)+1) - x</c>; float16 is NumPy's separate always-positive
+        /// <c>npy_half_spacing</c>. See <see cref="NumSharp.Utilities.NDSpacingMath"/>.
+        /// </summary>
+        Spacing
     }
 
     /// <summary>

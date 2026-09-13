@@ -120,7 +120,11 @@ namespace NumSharp.Tests.Fuzz
         private static readonly System.Collections.Generic.HashSet<string> ByteExactArithmeticUnaryOps = new()
         {
             "poly", "polyder", "polyint", "vander", "poly1d_coeffs", "poly1d_fromroots",
-            "cov", "conjugate", "real", "imag", "vector_norm", "matrix_norm"
+            "cov", "conjugate", "real", "imag", "vector_norm", "matrix_norm",
+            // spacing is a pure bit-fiddle (npy_spacing / npy_half_spacing), bit-exact vs NumPy at
+            // every width incl. float16 exhaustively — no transcendental-libm reason to drift, so a
+            // ≤2-ULP change is a regression, not algorithm noise. Held strict.
+            "spacing"
         };
 
         public static string Classify(
