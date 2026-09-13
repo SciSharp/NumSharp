@@ -74,6 +74,14 @@ namespace NumSharp.Tests.Fuzz
             // (both funcs), differentially verified against NumPy 2.4.2 across ±2^100 magnitudes, every
             // width/base/padding and the ValueError/TypeError edges.
             "binary_repr", "base_repr",
+            // typename is a type-CODE -> description dict lookup (NumPy's _namefromtype[char],
+            // numpy/lib/_type_check_impl.py): its input is a single array-protocol type-code STRING
+            // ('i', 'D', 'S1', ...), not an array, so it has no (dtype,shape,strides,bytes)->result
+            // operand form in the corpus — the same reason binary_repr/base_repr are sibling-owned.
+            // Gated by the dedicated np.typename.Test.cs suite (all 22 codes + case-sensitivity, the
+            // 'S1'/'S' split, the absent-'e' parity, and the KeyError message on every miss incl. null),
+            // verified against NumPy 2.4.2.
+            "typename",
             // datetime_data reads the (unit, count) parameter off a datetime64/timedelta64 DESCRIPTOR — a dtype-level
             // accessor with no array operand or result bytes (the datetime classes have no storage yet, Stage A of
             // docs/plans/dtype-system.md). Gated by test/NumSharp.Tests/DTypes/*, probed against NumPy 2.4.2.
