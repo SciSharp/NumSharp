@@ -87,6 +87,7 @@ namespace NumSharp.Backends.Iteration
 
         private NDInnerLoopFunc _flatReduce;
         private NDInnerLoopFunc _axisReduce;
+        private NDExprProgram _childElementwise;
 
         private NDExprProgram(NDExpr bound, NPTypeCode[] inputTypes, bool[] isParam, bool forcedScalar,
             NDInnerLoopFunc kernel, NPTypeCode resultType, ReduceNode reduce, NPTypeCode reduceAcc)
@@ -117,6 +118,25 @@ namespace NumSharp.Backends.Iteration
         /// <summary>The axis-aware accumulating kernel (axis-independent), compiled on first use.</summary>
         public NDInnerLoopFunc AxisReduceKernel
             => _axisReduce ??= Reduce.CompileAxisReduceKernel(InputTypes, IsParam, out _, out _);
+
+        /// <summary>
+        /// The reduction's CHILD sub-tree as its own elementwise program (null when this is not a
+        /// reduction). Built once and cached — this program is itself per-root cached, so the child's
+        /// binding, typing and kernel JIT are paid once, not per call.
+        /// <para>
+        /// Used by the flat float/complex <c>Sum</c>/<c>Mean</c>/<c>Prod</c> path (plan P2.1): the host
+        /// materializes the child through this program (the already-bit-exact elementwise engine) and
+        /// then reduces the contiguous result with NumPy's own pairwise / sequential schedule, which the
+        /// straight 4-accumulator fold in <see cref="ReduceNode.CompileReduceKernel(NPTypeCode[], bool[],
+        /// out NPTypeCode, out NPTypeCode, string)"/> does not reproduce (MisalignedRegistry E1). The
+        /// child shares this program's input signature and parameter mask, so it is driven with the SAME
+        /// inputs array; <see cref="ResultType"/> of the returned program is the child expression's dtype.
+        /// </para>
+        /// </summary>
+        public NDExprProgram ChildElementwiseProgram
+            => Reduce is null
+                ? null
+                : _childElementwise ??= Build(Reduce.Child, InputTypes, IsParam);
 
         /// <summary>
         /// Does this program serve these inputs: same count, same typecode per slot, and every input the

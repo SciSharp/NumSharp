@@ -753,6 +753,13 @@ namespace NumSharp.Tests.Fuzz
             //          bounded to 16 ULP over these ≤36-element pools. Phase 2 of
             //          docs/plans/ndexpr-evaluate.md replaces the fold with NumPy's pairwise schedule
             //          and DELETES this branch (it is a pending fix, not an accepted difference).
+            //          Phase 2 M1 landed the FLAT float32/float64 Sum/Prod/Mean and the FLAT complex
+            //          Sum/Mean bit-for-bit (DefaultEngine materializes the child and reduces it with
+            //          the same pairwise / sequential kernel np.sum · np.prod use), so those are gone
+            //          from the excuse. What still folds — each a later M2/M-Half milestone — is: ANY
+            //          axis reduction; Half at any axis; and complex Prod (a complex-multiply chain,
+            //          npy_cmul FMA-contracted on NumPy's win-amd64 build but not on .NET's — the
+            //          documented multiply gap #12, which an order fix cannot close).
             //     (E2) a transcendental / libm node (the same set the unary tier excuses in (5)
             //          below, minus the bit-exact float32 ports) within 2 ULP.
             //     (E3) expm1 / log1p composed as Exp(x)-1 / Log(1+x) — the (S1) envelope.
@@ -760,18 +767,31 @@ namespace NumSharp.Tests.Fuzz
                 && c.Params != null && c.Params.TryGetValue("expr", out var evExpr))
             {
                 var evOps = EvaluateExprOps(evExpr.GetString());
-                bool floatReduce = c.Params.TryGetValue("reduce", out var evRed)
+                bool isReduceKind = c.Params.TryGetValue("reduce", out var evRed)
                     && evRed.ValueKind == System.Text.Json.JsonValueKind.Object
-                    && evRed.GetProperty("kind").GetString() is "sum" or "prod" or "mean"
-                    && (tc == NPTypeCode.Half || tc == NPTypeCode.Single || tc == NPTypeCode.Double || tc == NPTypeCode.Complex);
+                    && evRed.GetProperty("kind").GetString() is "sum" or "prod" or "mean";
+                string reduceKind = isReduceKind ? evRed.GetProperty("kind").GetString() : null;
+                // An explicit numeric axis ⇒ the axis kernel (still the 4-accumulator fold, M2); a null
+                // / absent axis ⇒ the FLAT path, which M1 made NumPy-exact for the dtypes below.
+                bool reduceHasAxis = isReduceKind
+                    && evRed.TryGetProperty("axis", out var evAxis)
+                    && evAxis.ValueKind == System.Text.Json.JsonValueKind.Number;
+                // Cases M1 closed (no longer excused): flat float32/float64 Sum/Prod/Mean, and flat
+                // complex Sum/Mean. Everything else in the float-reduce family is still folded.
+                bool m1FixesReduce = isReduceKind && !reduceHasAxis
+                    && (tc == NPTypeCode.Single || tc == NPTypeCode.Double
+                        || (tc == NPTypeCode.Complex && (reduceKind == "sum" || reduceKind == "mean")));
+                bool floatReduce = isReduceKind
+                    && (tc == NPTypeCode.Half || tc == NPTypeCode.Single || tc == NPTypeCode.Double || tc == NPTypeCode.Complex)
+                    && !m1FixesReduce;
                 // complex: a Prod is a chain of complex multiplies, each FMA-contracted on NumPy's
                 // side (npy_cmul under MSVC) and not on .NET's — bound at the element's magnitude
                 // like the multiply excuse, wider for the chain.
                 if (floatReduce && diffs.All(d => tc == NPTypeCode.Complex
                         ? WithinComplexElementMagnitudeUlp(expected, actual, d.Index, 64)
                         : BitDiff.WithinUlp(expected, actual, d.Index, tc, 16)))
-                    return "evaluate: fused float Sum/Prod/Mean 4-accumulator fold vs NumPy pairwise, ≤16 ULP (complex ≤64 ULP of magnitude) "
-                         + "[PENDING ndexpr-evaluate.md Phase 2 — delete this excuse when the pairwise schedule lands]";
+                    return "evaluate: fused float Sum/Prod/Mean 4-accumulator fold vs NumPy pairwise/sequential, ≤16 ULP (complex ≤64 ULP of magnitude) "
+                         + "[PENDING ndexpr-evaluate.md Phase 2 — axis path / Half / complex-Prod still fold; flat f32/f64 + complex sum/mean landed in M1]";
 
                 bool libm = evOps.Overlaps(EvaluateLibmOps)
                     && !(tc == NPTypeCode.Single && evOps.IsSubsetOf(NumPyPortedFloat32KernelsAsEvaluateOps))

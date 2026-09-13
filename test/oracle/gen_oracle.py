@@ -8323,6 +8323,47 @@ def gen_evaluate():
                         emit(expr, [(nb, nv)], ln, params={"reduce": {"kind": kind, "axis": ax, "keepdims": kd}},
                              cid_tag=f"{dt}/{kind}[{ax},{int(kd)}]/{expr}")
 
+    # ---- C2. large-N FLAT reductions at the pairwise-schedule boundaries (plan P2.1 / M1) ------
+    # Block C's pools are <=24 elements of LOW dynamic range, where NumPy's pairwise add.reduce and a
+    # naive / 4-accumulator fold round IDENTICALLY — so they cannot tell a NumPy-exact reduction from a
+    # drifting one (this is why the benign twin above kept the old fold "within 16 ULP" yet nothing red).
+    # These cells cross PW_BLOCKSIZE (128) and the 8-accumulator leaf with WIDE-magnitude finite pools,
+    # so the summation ORDER changes the rounded bits: the flat float32/float64/complex Sum · Mean and the
+    # flat float Prod must reproduce NumPy bit-for-bit (M1 materializes the child and reduces with the same
+    # pairwise / sequential schedule np.sum · np.prod use). Half, complex Prod, and every AXIS reduction
+    # stay on the folded path (still E1-excused) and are deliberately absent here.
+    def _wide_sum_pool(N):
+        # Wide but finite magnitudes with sign changes → order-sensitive rounding (never inf / nan), so
+        # pairwise (fix) and the 4-accumulator fold (old) round to DIFFERENT bits at every N below.
+        base = np.array([1e7, 1.0, -1e7, 3.5, 1e-3, -2.0, 1e5, 0.25, -1e5, 7.0, 1e-2, -4.5, 9e6, 0.75, -9e6],
+                        dtype=np.float64)
+        return np.tile(base, (N + len(base) - 1) // len(base))[:N]
+
+    def _near_one_prod_pool(N):
+        # Products near 1 so the running product stays finite and normal at N = 1000, while the low bits
+        # still depend on multiply ORDER (sequential vs a lane-interleaved fold).
+        base = np.array([1.1, 0.9, 1.05, 0.95, 2.0, 0.5, 1.25, 0.8, 1.0, 0.75, 4.0 / 3.0, 3.0 / 4.0],
+                        dtype=np.float64)
+        return np.tile(base, (N + len(base) - 1) // len(base))[:N]
+
+    for N in (7, 8, 127, 128, 129, 257, 1000):
+        for dt in ("float32", "float64", "complex128"):
+            npdt = np.dtype(dt)
+            if npdt.kind == "c":
+                sp = (_wide_sum_pool(N) + 1j * np.roll(_wide_sum_pool(N), 3)).astype(npdt)
+            else:
+                sp = _wide_sum_pool(N).astype(npdt)
+            for kind in ("sum", "mean"):
+                sb = np.ascontiguousarray(sp)
+                emit("in0", [(sb, sb)], "c_contiguous_1d",
+                     params={"reduce": {"kind": kind, "axis": None, "keepdims": False}},
+                     cid_tag=f"bigN/{dt}/{kind}/N={N}")
+            if npdt.kind == "f":  # complex Prod stays folded (npy_cmul FMA gap #12) — not diverted
+                pb = np.ascontiguousarray(_near_one_prod_pool(N).astype(npdt))
+                emit("in0", [(pb, pb)], "c_contiguous_1d",
+                     params={"reduce": {"kind": "prod", "axis": None, "keepdims": False}},
+                     cid_tag=f"bigN/{dt}/prod/N={N}")
+
     # ---- D. out= (returned view + the whole base buffer behind out) -------------------------
     out_exprs = ["add(mul(in0,in1),in0)", "gt(in0,in1)", "where(gt(in0,in1),in0,in1)", "sqrt(abs(in0))"]
     for shape in [(8,), (4, 5)]:

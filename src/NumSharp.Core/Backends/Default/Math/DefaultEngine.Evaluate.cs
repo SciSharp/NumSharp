@@ -355,6 +355,62 @@ namespace NumSharp.Backends
                     n *= d;
             }
 
+            // -------------------------------------------------------------------------------------
+            // Plan P2.1 — flat Sum/Mean/Prod at NumPy-EXACT precision.
+            //
+            // The 4-accumulator fold that FlatReduceKernel emits below is an order-of-summation drift
+            // from NumPy's pairwise add.reduce (and its lane-interleaved product is wrong for a
+            // non-associative float multiply) — MisalignedRegistry E1. For the dtypes NumPy reduces
+            // through a well-defined pairwise (sum) or sequential (prod) schedule we reproduce it
+            // BIT-FOR-BIT: materialize the child sub-tree through the already-bit-exact elementwise
+            // engine — a fresh, contiguous array in NumPy's own K-order layout — then reduce that
+            // buffer IN MEMORY ORDER with the same pairwise kernel np.sum runs, or a sequential
+            // product for np.prod. Because the materialized layout matches the intermediate NumPy
+            // itself would build, the memory-order reduction equals np.<reduce>(materialized child).
+            //
+            // Deliberately NOT diverted (still folded below, still E1/#12-excused — each a later
+            // milestone): Half (no float16 pairwise kernel yet); complex Prod (a complex-multiply
+            // chain, npy_cmul FMA-contracted on NumPy's win-amd64 build, not on .NET's — gap #12);
+            // Min/Max (the clamp fold is value-exact; the complex-NaN-order case E5 is separate).
+            if (n > 0)
+            {
+                var childProgram = program.ChildElementwiseProgram;
+                var exprType = childProgram.ResultType;            // the child expression's dtype
+                bool pairwiseSum = (reduce.Kind == NDExprReduceKind.Sum || reduce.Kind == NDExprReduceKind.Mean)
+                    && (exprType == NPTypeCode.Single || exprType == NPTypeCode.Double || exprType == NPTypeCode.Complex);
+                bool sequentialProd = reduce.Kind == NDExprReduceKind.Prod
+                    && (exprType == NPTypeCode.Single || exprType == NPTypeCode.Double);
+
+                if (pairwiseSum || sequentialProd)
+                {
+                    // Materialize the child once (fresh + contiguous); `using` releases it after the
+                    // reduce — it never escapes.
+                    using var materialized = EvaluateCore(childProgram, inputs, null);
+
+                    // The reduction runs at the materialized (== result) dtype; a 16-byte slot holds
+                    // any scalar including Complex.
+                    byte* accSlot = stackalloc byte[NDExprParamPlan.SlotBytes];
+                    *(ulong*)accSlot = 0;
+                    *(ulong*)(accSlot + 8) = 0;
+                    byte* mSrc = (byte*)materialized.Address
+                                 + (long)materialized.Shape.offset * exprType.SizeOf();
+
+                    if (sequentialProd)
+                        SequentialProductInto(mSrc, n, exprType, accSlot);   // np.multiply.reduce order
+                    else
+                        PairwiseSumInto(mSrc, n, exprType, accSlot);         // np.add.reduce (pairwise)
+
+                    if (reduce.Kind == NDExprReduceKind.Mean)
+                        DivideAccByCount(accSlot, exprType, n);              // np._mean: divide at result dtype
+
+                    var reduceResult = @out ?? new NDArray(resultType, Shape.NewScalar(), false);
+                    byte* rDst = (byte*)reduceResult.Address
+                                 + (long)reduceResult.Shape.offset * reduceResult.typecode.SizeOf();
+                    NDIterCasting.ConvertValue(accSlot, rDst, exprType, reduceResult.typecode);
+                    return reduceResult;
+                }
+            }
+
             // Slot 0 (16 bytes) is the accumulator — wide enough for decimal / Complex; the hoisted
             // parameters follow it (NDExprParamPlan.ReduceParamOffset), packed once per call.
             byte* slot = stackalloc byte[NDExprParamPlan.SlotBytes * (1 + program.ParamCount)];
@@ -561,6 +617,103 @@ namespace NumSharp.Backends
             double scl = 1.0 / n;
             double re = z.Real, im = z.Imaginary;
             return new System.Numerics.Complex((re + im * 0.0) * scl, (im - re * 0.0) * scl);
+        }
+
+        /// <summary>
+        /// NumPy-exact pairwise sum of <paramref name="n"/> CONTIGUOUS <paramref name="tc"/> elements at
+        /// <paramref name="src"/> into the 16-byte accumulator at <paramref name="dst"/> (which the caller
+        /// pre-zeroes). Reuses the SAME kernel np.add.reduce runs
+        /// (<see cref="ILKernelGenerator.TryEmitPairwiseSumKernel"/>) through its PINNED route — a
+        /// stride-0 output makes the kernel fold the whole input into the single slot
+        /// (<c>*dst += fold(src, n, 1)</c>) — so the result is bit-identical to NumPy's <c>pairwise_sum</c>.
+        /// Only float32 / float64 / complex128 have a pairwise kernel; the flat-reduce divert gates on
+        /// exactly those, so a missing kernel here is a wiring bug, not a runtime input case.
+        /// </summary>
+        /// <param name="src">Base of the contiguous source buffer (logical element 0).</param>
+        /// <param name="n">Element count (must be &gt; 0).</param>
+        /// <param name="tc">The element dtype (Single, Double or Complex).</param>
+        /// <param name="dst">The pre-zeroed 16-byte accumulator slot the sum is written into.</param>
+        /// <exception cref="NotSupportedException">No pairwise sum kernel exists for <paramref name="tc"/>.</exception>
+        private static unsafe void PairwiseSumInto(byte* src, long n, NPTypeCode tc, byte* dst)
+        {
+            var kernel = ILKernelGenerator.TryEmitPairwiseSumKernel(tc)
+                ?? throw new NotSupportedException($"No pairwise sum kernel for {tc}.");
+            // The pairwise kernel is an NDInnerLoopFunc over operands [in, out]: a stride-0 OUTPUT
+            // selects its PINNED route, which reduces the whole `n`-element contiguous input into the
+            // single (pre-zeroed) accumulator slot.
+            void** dataptrs = stackalloc void*[2];
+            long* strides = stackalloc long[2];
+            dataptrs[0] = src;
+            dataptrs[1] = dst;
+            strides[0] = tc.SizeOf();   // contiguous input
+            strides[1] = 0;             // stride 0 ⇒ reduce into dst
+            kernel(dataptrs, strides, n, null);
+        }
+
+        /// <summary>
+        /// NumPy-exact sequential product of <paramref name="n"/> contiguous elements into
+        /// <paramref name="dst"/> — a plain scalar <c>acc *= x</c> chain, matching np.multiply.reduce
+        /// exactly (a lane-interleaved fold would REORDER the non-associative float multiply and diverge).
+        /// float32 / float64 only; complex Prod stays on the folded path (its npy_cmul FMA gap is
+        /// documented as #12, not an order artifact this can fix).
+        /// </summary>
+        /// <param name="src">Base of the contiguous source buffer.</param>
+        /// <param name="n">Element count (must be &gt; 0).</param>
+        /// <param name="tc">The element dtype (Single or Double).</param>
+        /// <param name="dst">The accumulator slot the product is written into.</param>
+        /// <exception cref="NotSupportedException"><paramref name="tc"/> is not Single or Double.</exception>
+        private static unsafe void SequentialProductInto(byte* src, long n, NPTypeCode tc, byte* dst)
+        {
+            switch (tc)
+            {
+                case NPTypeCode.Single:
+                {
+                    float* p = (float*)src;
+                    float acc = 1f;
+                    for (long i = 0; i < n; i++) acc *= p[i];
+                    *(float*)dst = acc;
+                    break;
+                }
+                case NPTypeCode.Double:
+                {
+                    double* p = (double*)src;
+                    double acc = 1d;
+                    for (long i = 0; i < n; i++) acc *= p[i];
+                    *(double*)dst = acc;
+                    break;
+                }
+                default:
+                    throw new NotSupportedException($"Sequential product for {tc} is not diverted here.");
+            }
+        }
+
+        /// <summary>
+        /// Divide the mean accumulator in place by the element count at the RESULT dtype, matching
+        /// NumPy's <c>_methods._mean</c>: float32 divides in float32 (the count cast to float32) and
+        /// float64 in float64, and complex divides through the same Smith-form reciprocal-multiply np
+        /// uses (<see cref="ComplexDivideByCountLikeNumPy"/>, which poisons BOTH components on a NaN part).
+        /// </summary>
+        /// <param name="acc">The accumulator slot holding the sum on entry, the mean on return.</param>
+        /// <param name="tc">The accumulator dtype (Single, Double or Complex).</param>
+        /// <param name="n">The element count the mean divides by.</param>
+        /// <exception cref="NotSupportedException"><paramref name="tc"/> is not a diverted mean dtype.</exception>
+        private static unsafe void DivideAccByCount(byte* acc, NPTypeCode tc, long n)
+        {
+            switch (tc)
+            {
+                case NPTypeCode.Single:
+                    *(float*)acc /= (float)n;    // np.float32 / n → float32 (n cast to float32, as NumPy does)
+                    break;
+                case NPTypeCode.Double:
+                    *(double*)acc /= (double)n;
+                    break;
+                case NPTypeCode.Complex:
+                    *(System.Numerics.Complex*)acc =
+                        ComplexDivideByCountLikeNumPy(*(System.Numerics.Complex*)acc, n);
+                    break;
+                default:
+                    throw new NotSupportedException($"Mean divide for {tc} is not diverted here.");
+            }
         }
 
         private static unsafe void WriteOne(byte* slot, NPTypeCode accType)
