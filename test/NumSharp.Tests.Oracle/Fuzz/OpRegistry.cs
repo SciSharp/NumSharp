@@ -163,6 +163,9 @@ namespace NumSharp.Tests.Fuzz
                 case "imag": return np.imag(ops[0]);
                 case "angle": return np.angle(ops[0]);
                 case "angle_deg": return np.angle(ops[0], deg: true);
+                // real_if_close: collapse a near-real complex array to its float64 real lane (or the
+                // array unchanged). tol is the ONLY parameter; the collapse decision is whole-array.
+                case "real_if_close": return np.real_if_close(ops[0], p["tol"].GetDouble());
 
                 // Cumulative scans + finite differences (T11).
                 case "cumsum": return np.cumsum(ops[0], ParseAxis(p));
