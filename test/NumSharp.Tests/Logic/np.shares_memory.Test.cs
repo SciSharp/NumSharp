@@ -187,5 +187,102 @@ namespace NumSharp.Tests.Logic
             Assert.IsTrue(s);
             Assert.IsTrue(m);
         }
+
+        // ----------------------------------------------------------- candidate-cap DFS ----
+
+        [TestMethod]
+        public void CandidateCap_ThresholdMatchesNumPy()
+        {
+            // NumPy's own test (numpy/_core/tests/test_mem_overlap.py): two strided 3-D views of one
+            // buffer genuinely overlap, but the exact solver needs >2 candidate solutions to prove it.
+            // A small max_work budget therefore leaves the answer undecided.
+            // >>> x = np.zeros([4,5,6], np.int8); a = x[:, ::2, ::3]; b = x[:, ::3, ::2]
+            // shares/may default -> True; shares raises TooHardError at max_work 0..2, decides True at >=3.
+            var x = np.zeros(new Shape(4, 5, 6)).astype(NPTypeCode.SByte);
+            var a = x[":, ::2, ::3"];
+            var b = x[":, ::3, ::2"];
+            Assert.IsTrue(np.shares_memory(a, b));                 // default -1 (exact) decides True
+            Assert.IsTrue(np.may_share_memory(a, b));              // default 0 (bounds) -> conservative True
+            for (long mw = 0; mw <= 2; mw++)
+                Assert.ThrowsException<TooHardError>(() => np.shares_memory(a, b, mw),
+                    $"max_work={mw} should exhaust the candidate budget");
+            for (long mw = 3; mw <= 8; mw++)
+                Assert.IsTrue(np.shares_memory(a, b, mw), $"max_work={mw} should decide True");
+            // may_share_memory never raises here — the undecided outcome folds into True.
+            for (long mw = 0; mw <= 8; mw++)
+                Assert.IsTrue(np.may_share_memory(a, b, mw));
+        }
+
+        // ------------------------------------------------------------- flag-state coverage ----
+
+        [TestMethod]
+        public void BroadcastViews_ShareByCollapsedExtent()
+        {
+            // A broadcast view's byte extent is only the SOURCE row it repeats (stride-0 axes add nothing),
+            // so two broadcasts of the SAME row share, but broadcasts of DISJOINT rows do not even by bounds.
+            var m = np.arange(24).reshape(4, 6);
+            var row0a = np.broadcast_to(m["0:1, :"], new Shape(4, 6));
+            var row0b = np.broadcast_to(m["0:1, :"], new Shape(4, 6));
+            var row3 = np.broadcast_to(m["3:4, :"], new Shape(4, 6));
+            Assert.IsFalse(row0a.flags.writeable);                 // broadcast views are read-only
+            Assert.IsTrue(np.shares_memory(row0a, row0b));         // same source row -> share
+            Assert.IsFalse(np.shares_memory(row0a, row3));         // rows 0 and 3 never touch
+            Assert.IsFalse(np.may_share_memory(row0a, row3));      // disjoint extents -> bounds also False
+        }
+
+        [TestMethod]
+        public void ReadOnlyView_SharesLikeWriteable()
+        {
+            // The WRITEABLE flag is irrelevant to memory sharing — the functions only read strides.
+            var a = np.arange(12);
+            var ro = a[":"];
+            ro.flags.writeable = false;
+            Assert.IsFalse(ro.flags.writeable);
+            Assert.IsTrue(np.shares_memory(ro, a));
+            Assert.IsFalse(np.shares_memory(ro, a.copy()));
+        }
+
+        [TestMethod]
+        public void FContiguousLayouts_ShareOnlyWhenAView()
+        {
+            // A transpose is an F-contiguous VIEW (shares); asfortranarray of a C-contiguous 2-D array is a
+            // fresh F-contiguous COPY (does not share) — the OWNDATA flag distinguishes them.
+            var m = np.arange(12).reshape(3, 4);
+            var t = m.T;
+            Assert.IsTrue(t.flags.f_contiguous);
+            Assert.IsFalse(t.flags.owndata);
+            Assert.IsTrue(np.shares_memory(m, t));
+
+            var f = np.asfortranarray(m);
+            Assert.IsTrue(f.flags.f_contiguous);
+            Assert.IsTrue(f.flags.owndata);
+            Assert.IsFalse(np.shares_memory(m, f));
+        }
+
+        [TestMethod]
+        public void MaxWork_LongMaxValue_IsValidHugeBudget()
+        {
+            // NumPy raises OverflowError for max_work=10**100 (it exceeds Py_ssize_t); that value is
+            // unrepresentable in C#'s long, so the analogous extreme is long.MaxValue — a legitimate,
+            // effectively-unlimited budget that decides exactly and never overflows.
+            var a = np.arange(24);
+            Assert.IsTrue(np.shares_memory(a, a["::2"], long.MaxValue));
+            Assert.IsFalse(np.shares_memory(a["::2"], a["1::2"], long.MaxValue));
+        }
+
+        [TestMethod]
+        [Misaligned]
+        public void IntIndexZeroD_SharesInNumSharp_ButNumPyReturnsScalarCopy()
+        {
+            // DELIBERATE indexing-semantics divergence (NOT a shares_memory difference): a single-int index
+            // returns a 0-d VIEW in NumSharp (shares storage) but a scalar COPY in NumPy (shares nothing).
+            // The comparable 0-d VIEW built via reshape(()) shares in BOTH libraries.
+            var a = np.arange(24);
+            var zi = a["3"];                                       // NumSharp: 0-d view; NumPy a[3]: scalar copy
+            Assert.AreEqual(0, zi.ndim);
+            Assert.IsTrue(np.shares_memory(zi, a));                // NumSharp view shares; NumPy scalar would be False
+            var zv = a["3:4"].reshape(new int[] { });             // 0-d view -> shares in NumPy too
+            Assert.IsTrue(np.shares_memory(zv, a));
+        }
     }
 }
