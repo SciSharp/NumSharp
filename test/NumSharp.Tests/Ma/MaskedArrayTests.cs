@@ -297,5 +297,42 @@ namespace NumSharp.Tests.Ma
             Assert.AreEqual(np.float16, np.ma.getdata(np.ma.mean(np.ma.array(np.array(new double[] { 1, 2, 3 }).astype(np.float16),
                                                                              np.array(new bool[] { false, true, false })))).dtype);
         }
+
+        /// <summary>Mixed MaskedArray/NDArray operators (both orders) compile and return a mask-aware
+        /// MaskedArray — matching NumPy where <c>ma+nd</c>/<c>nd+ma</c> are MaskedArrays. (These were
+        /// CS0034-ambiguous before the explicit (MaskedArray,NDArray)/(NDArray,MaskedArray) overloads.)</summary>
+        [TestMethod]
+        public void Operators_MixedWithNDArray_AreMaskAware()
+        {
+            var m = np.ma.array(np.array(new double[] { 1, 2, 3, 4 }), np.array(new bool[] { false, true, false, true }));
+            var nd = np.array(new double[] { 10, 20, 30, 40 });
+            foreach (var r in new[] { m + nd, nd + m })
+            {
+                Assert.IsTrue(np.ma.getmaskarray(r).ToArray<bool>().SequenceEqual(new[] { false, true, false, true }));
+                Assert.AreEqual(11.0, np.ma.getdata(r).GetDouble(0)); // 1+10
+                Assert.AreEqual(33.0, np.ma.getdata(r).GetDouble(2)); // 3+30
+            }
+            Assert.AreEqual(90.0, np.ma.getdata(m * nd).GetDouble(2));                 // 3*30
+            Assert.IsTrue(np.ma.getmaskarray(m < nd).ToArray<bool>().SequenceEqual(new[] { false, true, false, true }));
+            Assert.AreEqual(1.0, np.ma.getdata(m < nd).astype(np.float64).GetDouble(0)); // 1<10 True
+        }
+
+        /// <summary>astype casts the DATA and PRESERVES the mask (NumPy's MaskedArray.astype); asarray/asanyarray
+        /// wrap an ndarray as unmasked and keep an incoming mask.</summary>
+        [TestMethod]
+        public void Astype_And_Asarray_MatchNumPy()
+        {
+            var m = np.ma.array(np.array(new double[] { 1, 2, 3, 4 }), np.array(new bool[] { false, true, false, true }));
+            var asI = m.astype(np.int32);
+            Assert.AreEqual(np.int32, np.ma.getdata(asI).dtype);
+            Assert.IsTrue(np.ma.getmaskarray(asI).ToArray<bool>().SequenceEqual(new[] { false, true, false, true }));
+
+            var nd = np.array(new double[] { 5, 6, 7 });
+            Assert.IsTrue(ReferenceEquals(np.ma.getmask(np.ma.asarray(nd)), np.ma.nomask)); // plain → unmasked
+            Assert.IsTrue(np.ma.getmaskarray(np.ma.asarray(m)).ToArray<bool>()               // masked → mask kept
+                .SequenceEqual(new[] { false, true, false, true }));
+            MaskedArray implicitlyWrapped = nd;                                              // implicit NDArray→MaskedArray
+            Assert.IsTrue(ReferenceEquals(np.ma.getmask(implicitlyWrapped), np.ma.nomask));
+        }
     }
 }
