@@ -63,15 +63,35 @@ namespace NumSharp.Interop.ParquetNet
 
         // ------------------------------------------------------------------ factories
 
-        /// <summary>Open a Parquet file by path (synchronous).</summary>
+        /// <summary>
+        /// Open a Parquet file by path (synchronous wrapper over <see cref="LoadAsync(string, ParquetLoadOptions, CancellationToken)"/>).
+        /// This instance owns the file stream and closes it on <see cref="Dispose"/>.
+        /// </summary>
+        /// <param name="path">Filesystem path to the <c>.parquet</c> file.</param>
+        /// <param name="options">Load options (projection, null policy, caching); <c>null</c> uses the defaults.</param>
+        /// <returns>An open <see cref="ParquetFile"/> ready for lazy column access.</returns>
         public static ParquetFile Load(string path, ParquetLoadOptions options = null)
             => RunSync(() => LoadAsync(path, options));
 
-        /// <summary>Open a Parquet file over an existing stream (synchronous). The stream is left open by default.</summary>
+        /// <summary>
+        /// Open a Parquet file over an existing stream (synchronous wrapper over
+        /// <see cref="LoadAsync(Stream, ParquetLoadOptions, bool, CancellationToken)"/>).
+        /// </summary>
+        /// <param name="stream">A readable, seekable stream positioned at the start of a Parquet file.</param>
+        /// <param name="options">Load options; <c>null</c> uses the defaults.</param>
+        /// <param name="leaveOpen">
+        /// When true (default) the caller keeps ownership and <paramref name="stream"/> stays open after
+        /// <see cref="Dispose"/>; when false this instance closes it on dispose.
+        /// </param>
+        /// <returns>An open <see cref="ParquetFile"/> ready for lazy column access.</returns>
         public static ParquetFile Load(Stream stream, ParquetLoadOptions options = null, bool leaveOpen = true)
             => RunSync(() => LoadAsync(stream, options, leaveOpen));
 
-        /// <summary>Open a Parquet file by path.</summary>
+        /// <summary>Open a Parquet file by path. This instance owns the file stream and closes it on <see cref="Dispose"/>.</summary>
+        /// <param name="path">Filesystem path to the <c>.parquet</c> file.</param>
+        /// <param name="options">Load options; <c>null</c> uses the defaults.</param>
+        /// <param name="ct">Token to cancel opening the file.</param>
+        /// <returns>An open <see cref="ParquetFile"/> ready for lazy column access.</returns>
         public static async Task<ParquetFile> LoadAsync(string path, ParquetLoadOptions options = null, CancellationToken ct = default)
         {
             FileStream fs = File.OpenRead(path);
@@ -82,12 +102,22 @@ namespace NumSharp.Interop.ParquetNet
             }
             catch
             {
+                // Reader creation failed (not a Parquet file, truncated footer, cancellation): close the stream
+                // we opened so the failed Load leaks no file handle, then propagate the original exception.
                 fs.Dispose();
                 throw;
             }
         }
 
         /// <summary>Open a Parquet file over an existing stream. The stream is left open on dispose unless <paramref name="leaveOpen"/> is false.</summary>
+        /// <param name="stream">A readable, seekable stream positioned at the start of a Parquet file.</param>
+        /// <param name="options">Load options; <c>null</c> uses the defaults.</param>
+        /// <param name="leaveOpen">
+        /// When true (default) the caller retains ownership of <paramref name="stream"/>; when false this instance
+        /// closes it on <see cref="Dispose"/>.
+        /// </param>
+        /// <param name="ct">Token to cancel opening the file.</param>
+        /// <returns>An open <see cref="ParquetFile"/> ready for lazy column access.</returns>
         public static async Task<ParquetFile> LoadAsync(Stream stream, ParquetLoadOptions options = null, bool leaveOpen = true, CancellationToken ct = default)
         {
             ParquetReader reader = await ParquetReader.CreateAsync(stream, cancellationToken: ct).ConfigureAwait(false);
@@ -111,6 +141,10 @@ namespace NumSharp.Interop.ParquetNet
         // ------------------------------------------------------------------ column access
 
         /// <summary>Materialize a column as an NDArray (lazy + cached). Shorthand for <see cref="Column(string, object)"/>.</summary>
+        /// <param name="name">The loadable column's name.</param>
+        /// <returns>The column as an <see cref="NDArray"/> backed by raw unmanaged memory.</returns>
+        /// <exception cref="ObjectDisposedException">This <see cref="ParquetFile"/> has been disposed.</exception>
+        /// <exception cref="ArgumentException"><paramref name="name"/> is unknown or not loadable.</exception>
         public NDArray this[string name] => Column(name);
 
         /// <summary>
@@ -119,6 +153,14 @@ namespace NumSharp.Interop.ParquetNet
         /// returns the same instance. Pass <paramref name="nullFill"/> to override the null-fill value for this
         /// call only (such calls are never cached).
         /// </summary>
+        /// <param name="name">The loadable column's name.</param>
+        /// <param name="nullFill">
+        /// Per-call null-fill override for a nullable column; <c>null</c> keeps the file-level
+        /// <see cref="ParquetLoadOptions.NullFill"/>. A non-null value forces a fresh, uncached read.
+        /// </param>
+        /// <returns>The column as an <see cref="NDArray"/> backed by raw unmanaged memory.</returns>
+        /// <exception cref="ObjectDisposedException">This <see cref="ParquetFile"/> has been disposed.</exception>
+        /// <exception cref="ArgumentException"><paramref name="name"/> is unknown or not loadable (message lists the available columns).</exception>
         public NDArray Column(string name, object nullFill = null)
         {
             ThrowIfDisposed();
@@ -151,9 +193,14 @@ namespace NumSharp.Interop.ParquetNet
             }
         }
 
-        /// <summary>Try to materialize a column; returns false when the name is unknown / not loadable.</summary>
+        /// <summary>Try to materialize a column; returns false when the name is unknown / not loadable instead of throwing.</summary>
+        /// <param name="name">The column name to look up.</param>
+        /// <param name="value">On success, the column as an <see cref="NDArray"/>; otherwise <c>null</c>.</param>
+        /// <returns>True if the column exists and was materialized; false if the name is unknown or not loadable.</returns>
         public bool TryGetColumn(string name, out NDArray value)
         {
+            // Membership is checked against the pre-filtered loadable-field map, so a name that exists in the
+            // schema but is not loadable (repeated/unsupported dtype) also returns false here — never throws.
             if (!_fields.ContainsKey(name))
             {
                 value = null;
@@ -164,8 +211,12 @@ namespace NumSharp.Interop.ParquetNet
         }
 
         /// <summary>Materialize several columns into a name → NDArray dictionary (all loadable columns when none are named).</summary>
+        /// <param name="names">The columns to materialize; pass none (or an empty array) to take every loadable column.</param>
+        /// <returns>A dictionary mapping each requested name to its <see cref="NDArray"/>.</returns>
+        /// <exception cref="ArgumentException">One of the named columns is unknown or not loadable.</exception>
         public IReadOnlyDictionary<string, NDArray> ToDictionary(params string[] names)
         {
+            // No names given ⇒ every loadable column; otherwise exactly the requested set (Column throws on a miss).
             IEnumerable<string> keys = names is { Length: > 0 } ? names : _fields.Keys;
             var result = new Dictionary<string, NDArray>(StringComparer.Ordinal);
             foreach (string k in keys)
@@ -173,7 +224,10 @@ namespace NumSharp.Interop.ParquetNet
             return result;
         }
 
-        /// <summary>Dynamic dot-access to columns, e.g. <c>pf.f.close</c> (mirrors NpzFile's <c>f</c>).</summary>
+        /// <summary>
+        /// Dynamic dot-access to columns, e.g. <c>pf.f.close</c> (mirrors <c>NpzFile</c>'s <c>f</c> accessor). Each
+        /// member access resolves to <see cref="this[string]"/>, so the same lazy-load + cache rules apply.
+        /// </summary>
         public dynamic f => new BagObj(this);
 
         // ------------------------------------------------------------------ streaming
@@ -260,6 +314,9 @@ namespace NumSharp.Interop.ParquetNet
         public long RowCount => _rg.RowCount;
 
         /// <summary>Materialize one column of this row group as an NDArray of <see cref="RowCount"/> elements.</summary>
+        /// <param name="name">The loadable column's name.</param>
+        /// <returns>This row group's slice of the column as an <see cref="NDArray"/> backed by raw unmanaged memory.</returns>
+        /// <exception cref="ArgumentException"><paramref name="name"/> is unknown or not loadable (message lists the available columns).</exception>
         public NDArray Column(string name)
         {
             if (!_fields.TryGetValue(name, out DataField field))
