@@ -78,7 +78,7 @@ namespace NumSharp.Tests.Fuzz
             // accessor with no array operand or result bytes (the datetime classes have no storage yet, Stage A of
             // docs/plans/dtype-system.md). Gated by test/NumSharp.Tests/DTypes/*, probed against NumPy 2.4.2.
             "datetime_data",
-            "evaluate", "finfo", "flat",
+            "finfo", "flat",
             // The histogram family returns TUPLES over POLYMORPHIC bins (int count / estimator string /
             // explicit edge array) and, for dd/2d, MULTI-array samples — none of which fit the single-operand
             // (dtype,shape,strides,bytes)->result corpus model (the same reason bmat and block need bespoke
