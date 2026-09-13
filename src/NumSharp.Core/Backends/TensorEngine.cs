@@ -192,6 +192,9 @@ namespace NumSharp
         public abstract NDArray NextAfter(NDArray x1, NDArray x2, DType dtype = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray CopySign(NDArray x1, NDArray x2, DType dtype = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray Hypot(NDArray x1, NDArray x2, DType dtype = null, NDArray @out = null, NDArray where = null);
+        // np.heaviside — float-tier binary ufunc (same promotion as ATan2/Hypot); NOT commutative, and the
+        // only family member with a branchless SIMD fast path (step is compare+select, no libm).
+        public abstract NDArray Heaviside(NDArray x1, NDArray x2, DType dtype = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray ACos(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray ASin(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
 
