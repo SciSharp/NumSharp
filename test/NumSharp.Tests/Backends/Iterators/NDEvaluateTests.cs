@@ -1302,5 +1302,28 @@ namespace NumSharp.Tests.Backends.Iterators
             Assert.AreEqual(0, np.evaluate(NDExpr.Sum((NDExpr)a)).ndim);
             Assert.AreEqual(0, np.evaluate(NDExpr.Ptp((NDExpr)a)).ndim);
         }
+
+        /// <summary>
+        /// A flat reduce of a SIZE-1 1-D input is a 0-d scalar (keepdims=false) — surfaced by the live
+        /// NumPy differential: the delegating path's np.nanmin/np.nanmax return shape (1,) for a size-1
+        /// 1-D input (a pre-existing engine quirk), so evaluate must normalize the flat result to 0-d
+        /// (KeepdimsFlat), matching np.nanmin(np.array([5.]), keepdims=False).shape == (). keepdims=True
+        /// gives (1,).
+        /// </summary>
+        [TestMethod]
+        public void M5_FlatDelegatingReduce_SizeOne_NormalizesTo0d()
+        {
+            var one = np.array(new double[] { 5.0 });   // shape (1,)
+            foreach (var flat in new[] { NDExpr.NanMin((NDExpr)one), NDExpr.NanMax((NDExpr)one), NDExpr.Ptp((NDExpr)one) })
+                Assert.AreEqual(0, np.evaluate(flat).ndim, "flat reduce of a size-1 1-D input must be 0-d");
+
+            Assert.AreEqual(5.0, np.evaluate(NDExpr.NanMin((NDExpr)one)).GetDouble(), 1e-12);
+
+            // keepdims → (1,), still one element with the same value.
+            var kd = np.evaluate(NDExpr.NanMin((NDExpr)one, true));
+            Assert.AreEqual(1, kd.ndim);
+            Assert.AreEqual(1, kd.shape[0]);
+            Assert.AreEqual(5.0, kd.GetDouble(0), 1e-12);
+        }
     }
 }

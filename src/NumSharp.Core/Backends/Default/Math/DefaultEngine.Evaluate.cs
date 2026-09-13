@@ -364,24 +364,35 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// Reshape a FLAT reduction's 0-d result to (1,)*<paramref name="childNdim"/> when
-        /// <paramref name="keepdims"/> is set, else return it unchanged. The 0-d holds exactly one
-        /// element, so the reshape is a free view — the VALUE is identical, only the wrapper rank
-        /// differs; a 0-d child stays 0-d. Used by the delegating / stat / average paths, which produce
-        /// their flat result as a materialized <see cref="NDArray"/> (the fold path allocates the shape
-        /// directly via <see cref="FlatReduceShape"/>).
+        /// Normalize a FLAT reduction's single-element result to its NumPy shape: (1,)*<paramref
+        /// name="childNdim"/> when <paramref name="keepdims"/> is set, else a 0-d scalar. The result
+        /// holds exactly one element, so this is a free reshape — the VALUE is identical, only the
+        /// wrapper rank differs; a 0-d child stays 0-d. Used by the delegating / stat / average paths,
+        /// which produce their flat result as a materialized <see cref="NDArray"/> (the fold path
+        /// allocates the shape directly via <see cref="FlatReduceShape"/>).
+        /// <para>
+        /// The <c>keepdims=false</c> branch reshapes to 0-d rather than passing the input through — a
+        /// FLAT reduce is a scalar, and a DELEGATED engine reduction can hand back a spurious rank:
+        /// <c>np.nanmin</c>/<c>np.nanmax</c> on a size-1 1-D input return shape <c>(1,)</c>, not <c>()</c>
+        /// (a pre-existing engine quirk the fold/ptp/argmax paths do not have). Normalizing here keeps
+        /// evaluate's flat contract 0-d regardless of the delegate's shape.
+        /// </para>
         /// </summary>
-        /// <param name="reduced0d">The 0-d scalar result of a flat reduction.</param>
+        /// <param name="reduced">The single-element result of a flat reduction (0-d or a spurious (1,)).</param>
         /// <param name="childNdim">The reduced expression's rank.</param>
         /// <param name="keepdims">Whether to keep every axis as size 1.</param>
-        /// <returns><paramref name="reduced0d"/> itself, or a (1,…,1) view of it.</returns>
-        private static NDArray KeepdimsFlat(NDArray reduced0d, int childNdim, bool keepdims)
+        /// <returns>A 0-d scalar (keepdims off), or a (1,…,1) view (keepdims on).</returns>
+        private static NDArray KeepdimsFlat(NDArray reduced, int childNdim, bool keepdims)
         {
-            if (!keepdims || childNdim == 0)
-                return reduced0d;
-            var dims = new long[childNdim];
-            for (int i = 0; i < childNdim; i++) dims[i] = 1;
-            return reduced0d.reshape(dims);
+            if (keepdims && childNdim > 0)
+            {
+                var dims = new long[childNdim];
+                for (int i = 0; i < childNdim; i++) dims[i] = 1;
+                return reduced.reshape(dims);
+            }
+            // A flat reduce is a 0-d scalar; normalize away any spurious rank from a delegated reduction
+            // (Shape.NewScalar() is the canonical 0-d shape the fold path allocates via FlatReduceShape).
+            return reduced.ndim == 0 ? reduced : reduced.reshape(Shape.NewScalar());
         }
 
         /// <summary>
