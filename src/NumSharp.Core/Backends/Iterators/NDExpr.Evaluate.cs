@@ -30,6 +30,16 @@ using NumSharp.Backends.Kernels;
 namespace NumSharp.Backends.Iteration
 {
     /// <summary>Reduction kinds supported by <see cref="ReduceNode"/>.</summary>
+    /// <remarks>
+    /// <see cref="Any"/> / <see cref="All"/> are their OWN kinds, not <see cref="Max"/> / <see cref="Min"/>
+    /// over a boolean child: <c>logical_or</c> / <c>logical_and</c> carry the identities <c>False</c> /
+    /// <c>True</c>, so a reduction over an EMPTY input is <c>False</c> / <c>True</c> — where
+    /// <c>maximum.reduce</c> / <c>minimum.reduce</c> raise "zero-size array … which has no identity". They
+    /// also return <c>bool</c> where a bool <see cref="Sum"/> would widen to int64. The value fold is a
+    /// bitwise OR / AND on a bool accumulator, which is associative AND idempotent — so the 4-accumulator
+    /// unroll reorders it freely and stays bit-exact (unlike float <see cref="Sum"/> / <see cref="Prod"/>,
+    /// whose order matters — the M1/M2 divert).
+    /// </remarks>
     public enum NDExprReduceKind : byte
     {
         Sum,
@@ -37,6 +47,12 @@ namespace NumSharp.Backends.Iteration
         Min,
         Max,
         Mean,
+
+        /// <summary><c>logical_or.reduce</c> of the nonzero-test of the child (identity <c>False</c>; bool result).</summary>
+        Any,
+
+        /// <summary><c>logical_and.reduce</c> of the nonzero-test of the child (identity <c>True</c>; bool result).</summary>
+        All,
     }
 
     /// <summary>
@@ -255,6 +271,72 @@ namespace NumSharp.Backends.Iteration
 
         /// <summary>One-pass fused arithmetic mean of the expression along <paramref name="axis"/>.</summary>
         public static NDExpr Mean(NDExpr x, int axis, bool keepdims = false) => new ReduceNode(NDExprReduceKind.Mean, x, axis, keepdims);
+
+        // --- presence / count / NaN-aware reductions (plan P2 M4) --------------------------------
+        //
+        // Any/All are their OWN kinds (bool result, logical OR/AND fold, False/True identity — the empty
+        // input is False/True, not the "no identity" throw of max/min); the child is the nonzero-test
+        // NotEqual(x, 0), so the reduce just folds a bool stream.  CountNonzero/NanSum/NanProd are pure
+        // COMPOSITIONS over the (M1/M2-exact) Sum/Prod, so they inherit flat+axis+bit-exactness for free:
+        // a rewrite is the whole implementation, no new kernel or host path.
+
+        /// <summary>
+        /// One-pass fused <c>np.any</c>: <c>True</c> iff any element of the expression is truthy
+        /// (nonzero). Result is <c>bool</c> and the identity is <c>False</c>, so <c>Any</c> of an EMPTY
+        /// input is <c>False</c> — unlike <see cref="Max(NDExpr)"/>, which raises on a zero-size input.
+        /// NaN is truthy (<c>nan != 0</c>), so <c>Any([nan])</c> is <c>True</c>, matching NumPy.
+        /// </summary>
+        public static NDExpr Any(NDExpr x) => new ReduceNode(NDExprReduceKind.Any, NotEqual(x, Const(0)));
+
+        /// <summary>
+        /// One-pass fused <c>np.all</c>: <c>True</c> iff every element of the expression is truthy
+        /// (nonzero). Result is <c>bool</c> and the identity is <c>True</c>, so <c>All</c> of an EMPTY
+        /// input is <c>True</c> (vacuous truth) — unlike <see cref="Min(NDExpr)"/>, which raises on a
+        /// zero-size input.
+        /// </summary>
+        public static NDExpr All(NDExpr x) => new ReduceNode(NDExprReduceKind.All, NotEqual(x, Const(0)));
+
+        /// <summary>
+        /// One-pass fused <c>np.count_nonzero</c>: the int64 count of truthy (nonzero) elements. Composed
+        /// as <c>Sum(x != 0)</c> — a sum over the bool nonzero-test — so the result is int64 (NumPy's
+        /// <c>intp</c>) at every child dtype, and an empty input counts to 0.
+        /// </summary>
+        public static NDExpr CountNonzero(NDExpr x) => new ReduceNode(NDExprReduceKind.Sum, NotEqual(x, Const(0)));
+
+        /// <summary>
+        /// One-pass fused <c>np.nansum</c>: the sum with NaNs treated as 0. Composed as
+        /// <c>Sum(Where(IsNaN(x), 0, x))</c>, so it is BIT-EXACT wherever the plain <see cref="Sum(NDExpr)"/>
+        /// is (float32/float64/complex via the M1 pairwise divert). An integer/bool child never carries a
+        /// NaN — <c>IsNaN</c> is all-false there and the <c>Where</c> passes the child through unchanged —
+        /// so <c>NanSum(int)</c> is exactly <c>Sum(int)</c> (int64), matching NumPy. An empty / all-NaN
+        /// input sums to 0.
+        /// </summary>
+        public static NDExpr NanSum(NDExpr x) => new ReduceNode(NDExprReduceKind.Sum, Where(IsNaN(x), Const(0), x));
+
+        /// <summary>
+        /// One-pass fused <c>np.nanprod</c>: the product with NaNs treated as 1. Composed as
+        /// <c>Prod(Where(IsNaN(x), 1, x))</c> — bit-exact wherever the plain <see cref="Prod(NDExpr)"/> is
+        /// (float32/float64 via the M1 sequential divert), an identity pass-through for integer children,
+        /// and 1 for an empty / all-NaN input, matching NumPy.
+        /// </summary>
+        public static NDExpr NanProd(NDExpr x) => new ReduceNode(NDExprReduceKind.Prod, Where(IsNaN(x), Const(1), x));
+
+        // --- axis-aware forms of the M4 reductions (one pass along `axis`) ------------------------
+
+        /// <summary>One-pass fused <c>np.any</c> along <paramref name="axis"/> (bool result; identity <c>False</c>).</summary>
+        public static NDExpr Any(NDExpr x, int axis, bool keepdims = false) => new ReduceNode(NDExprReduceKind.Any, NotEqual(x, Const(0)), axis, keepdims);
+
+        /// <summary>One-pass fused <c>np.all</c> along <paramref name="axis"/> (bool result; identity <c>True</c>).</summary>
+        public static NDExpr All(NDExpr x, int axis, bool keepdims = false) => new ReduceNode(NDExprReduceKind.All, NotEqual(x, Const(0)), axis, keepdims);
+
+        /// <summary>One-pass fused <c>np.count_nonzero</c> along <paramref name="axis"/> (int64 count).</summary>
+        public static NDExpr CountNonzero(NDExpr x, int axis, bool keepdims = false) => new ReduceNode(NDExprReduceKind.Sum, NotEqual(x, Const(0)), axis, keepdims);
+
+        /// <summary>One-pass fused <c>np.nansum</c> along <paramref name="axis"/> (NaNs treated as 0).</summary>
+        public static NDExpr NanSum(NDExpr x, int axis, bool keepdims = false) => new ReduceNode(NDExprReduceKind.Sum, Where(IsNaN(x), Const(0), x), axis, keepdims);
+
+        /// <summary>One-pass fused <c>np.nanprod</c> along <paramref name="axis"/> (NaNs treated as 1).</summary>
+        public static NDExpr NanProd(NDExpr x, int axis, bool keepdims = false) => new ReduceNode(NDExprReduceKind.Prod, Where(IsNaN(x), Const(1), x), axis, keepdims);
 
         // ===================================================================
         // Binding
@@ -567,6 +649,12 @@ namespace NumSharp.Backends.Iteration
                         _ => NPTypeCode.Double,
                     };
 
+                case NDExprReduceKind.Any:
+                case NDExprReduceKind.All:
+                    // logical_or / logical_and always produce bool — the child is the bool nonzero-test
+                    // (NotEqual(x, 0)), so `child` is already Boolean here, but be explicit.
+                    return NPTypeCode.Boolean;
+
                 default:
                     throw new NotSupportedException($"Unknown reduce kind {kind}.");
             }
@@ -703,6 +791,12 @@ namespace NumSharp.Backends.Iteration
                         case NDExprReduceKind.Prod:
                             il.Emit(OpCodes.Ldc_I4_1);
                             DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Int32, acc);
+                            break;
+                        case NDExprReduceKind.Any:
+                            il.Emit(OpCodes.Ldc_I4_0); // logical_or per-chunk identity: False
+                            break;
+                        case NDExprReduceKind.All:
+                            il.Emit(OpCodes.Ldc_I4_1); // logical_and per-chunk identity: True
                             break;
                         default: // Min / Max
                             il.Emit(OpCodes.Ldloc, accLocals[0]);
@@ -967,6 +1061,12 @@ namespace NumSharp.Backends.Iteration
                             il.Emit(OpCodes.Ldc_I4_1);
                             DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Int32, acc);
                             break;
+                        case NDExprReduceKind.Any:
+                            il.Emit(OpCodes.Ldc_I4_0); // logical_or per-chunk identity: False
+                            break;
+                        case NDExprReduceKind.All:
+                            il.Emit(OpCodes.Ldc_I4_1); // logical_and per-chunk identity: True
+                            break;
                         default:
                             il.Emit(OpCodes.Ldloc, accLocals[0]);
                             break;
@@ -1070,6 +1170,15 @@ namespace NumSharp.Backends.Iteration
                     }
 
                     DirectILKernelGenerator.EmitScalarOperation(il, BinaryOp.Multiply, acc);
+                    return;
+
+                // logical_or / logical_and over the bool accumulator: a bitwise OR / AND on 0/1 lanes.
+                // Associative AND idempotent, so the 4-accumulator unroll reorders it with no drift.
+                case NDExprReduceKind.Any:
+                    il.Emit(OpCodes.Or);
+                    return;
+                case NDExprReduceKind.All:
+                    il.Emit(OpCodes.And);
                     return;
             }
 

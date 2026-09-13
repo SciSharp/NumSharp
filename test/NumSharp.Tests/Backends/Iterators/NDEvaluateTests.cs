@@ -520,5 +520,101 @@ namespace NumSharp.Tests.Backends.Iterators
                 StringAssert.Contains(ex.Message, "EXTERNAL_LOOP");
             }
         }
+
+        // =====================================================================
+        // P2 M4 — presence / count / NaN-aware reductions
+        // (any / all / count_nonzero / nansum / nanprod), probed against NumPy 2.4.2
+        // =====================================================================
+
+        [TestMethod]
+        public void M4_AnyAllCountNonzero_ValuesAndDtypes()
+        {
+            var a = np.array(new double[] { 0, 1, 2, 0, 3 });
+
+            var any = np.evaluate(NDExpr.Any((NDExpr)a));
+            Assert.AreEqual(NPTypeCode.Boolean, any.typecode);   // np.any → bool
+            Assert.IsTrue(any.GetBoolean(0));                    // a nonzero present
+
+            var all = np.evaluate(NDExpr.All((NDExpr)a));
+            Assert.AreEqual(NPTypeCode.Boolean, all.typecode);
+            Assert.IsFalse(all.GetBoolean(0));                   // zeros present
+
+            var cnz = np.evaluate(NDExpr.CountNonzero((NDExpr)a));
+            Assert.AreEqual(NPTypeCode.Int64, cnz.typecode);     // np.count_nonzero → intp (int64)
+            Assert.AreEqual(3L, cnz.GetInt64(0));
+        }
+
+        [TestMethod]
+        public void M4_Any_NaNIsTruthy()
+        {
+            // np.any([nan]) == True, np.all([nan]) == True (NaN is truthy); count_nonzero counts it.
+            var f = np.array(new double[] { double.NaN, 0.0 });
+            Assert.IsTrue(np.evaluate(NDExpr.Any((NDExpr)f)).GetBoolean(0));
+            Assert.IsFalse(np.evaluate(NDExpr.All((NDExpr)f)).GetBoolean(0)); // the 0.0 is falsy
+            Assert.AreEqual(1L, np.evaluate(NDExpr.CountNonzero((NDExpr)f)).GetInt64(0));
+
+            var allNaN = np.array(new double[] { double.NaN, double.NaN });
+            Assert.IsTrue(np.evaluate(NDExpr.All((NDExpr)allNaN)).GetBoolean(0)); // both truthy
+        }
+
+        [TestMethod]
+        public void M4_NanSumProd_SkipNaN_PreserveDtype()
+        {
+            // nansum treats NaN as 0, nanprod treats it as 1 — bit-exact via the M1 Sum/Prod divert.
+            var f = np.array(new double[] { 1.0, double.NaN, 2.0, 0.0 });
+            var ns = np.evaluate(NDExpr.NanSum((NDExpr)f));
+            Assert.AreEqual(NPTypeCode.Double, ns.typecode);
+            Assert.AreEqual(3.0, ns.GetDouble(0), 0.0);          // 1 + 0(nan) + 2 + 0
+            Assert.AreEqual(0.0, np.evaluate(NDExpr.NanProd((NDExpr)f)).GetDouble(0), 0.0); // 1*1(nan)*2*0
+
+            // A fused child: nansum(f*f) skips the NaN in the product.
+            Assert.AreEqual(5.0, np.evaluate(NDExpr.NanSum((NDExpr)f * f)).GetDouble(0), 0.0); // 1 + 4
+
+            // Integer child carries no NaN → nansum is exactly sum, and stays int64 (NEP50).
+            var i = np.array(new int[] { 0, 5, 0, 7 });
+            var nsi = np.evaluate(NDExpr.NanSum((NDExpr)i));
+            Assert.AreEqual(NPTypeCode.Int64, nsi.typecode);
+            Assert.AreEqual(12L, nsi.GetInt64(0));
+        }
+
+        [TestMethod]
+        public void M4_EmptyInput_Identities()
+        {
+            // The identity is what separates any/all from max/min: max/min RAISE on a zero-size input,
+            // but any([]) == False, all([]) == True, count_nonzero([]) == 0, nansum([]) == 0,
+            // nanprod([]) == 1 (probed 2.4.2). This is the case the fuzz corpus does not reach.
+            var e = np.array(new double[] { });
+            Assert.IsFalse(np.evaluate(NDExpr.Any((NDExpr)e)).GetBoolean(0));
+            Assert.IsTrue(np.evaluate(NDExpr.All((NDExpr)e)).GetBoolean(0));
+            Assert.AreEqual(0L, np.evaluate(NDExpr.CountNonzero((NDExpr)e)).GetInt64(0));
+            Assert.AreEqual(0.0, np.evaluate(NDExpr.NanSum((NDExpr)e)).GetDouble(0), 0.0);
+            Assert.AreEqual(1.0, np.evaluate(NDExpr.NanProd((NDExpr)e)).GetDouble(0), 0.0);
+        }
+
+        [TestMethod]
+        public void M4_Axis_Forms()
+        {
+            var m = np.array(new double[] { 0, 1, 2, 0, 0, 0 }).reshape(3, 2); // [[0,1],[2,0],[0,0]]
+
+            var any1 = np.evaluate(NDExpr.Any((NDExpr)m, 1));   // per row: [T, T, F]
+            Assert.AreEqual(NPTypeCode.Boolean, any1.typecode);
+            Assert.IsTrue(any1.GetBoolean(0));
+            Assert.IsTrue(any1.GetBoolean(1));
+            Assert.IsFalse(any1.GetBoolean(2));
+
+            var cnz0 = np.evaluate(NDExpr.CountNonzero((NDExpr)m, 0)); // per col: [1, 1]
+            Assert.AreEqual(NPTypeCode.Int64, cnz0.typecode);
+            Assert.AreEqual(1L, cnz0.GetInt64(0));
+            Assert.AreEqual(1L, cnz0.GetInt64(1));
+
+            // nansum along each axis, NaN-skipped: g = [[1,nan],[2,3]]
+            var g = np.array(new double[] { 1, double.NaN, 2, 3 }).reshape(2, 2);
+            var ns0 = np.evaluate(NDExpr.NanSum((NDExpr)g, 0)); // cols: [1+2, 0+3] = [3, 3]
+            Assert.AreEqual(3.0, ns0.GetDouble(0), 0.0);
+            Assert.AreEqual(3.0, ns0.GetDouble(1), 0.0);
+            var ns1 = np.evaluate(NDExpr.NanSum((NDExpr)g, 1)); // rows: [1+0, 2+3] = [1, 5]
+            Assert.AreEqual(1.0, ns1.GetDouble(0), 0.0);
+            Assert.AreEqual(5.0, ns1.GetDouble(1), 0.0);
+        }
     }
 }

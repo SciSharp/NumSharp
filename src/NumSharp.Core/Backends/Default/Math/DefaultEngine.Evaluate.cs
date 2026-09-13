@@ -321,6 +321,8 @@ namespace NumSharp.Backends
             NDExprReduceKind.Prod => "multiply",
             NDExprReduceKind.Min => "minimum",
             NDExprReduceKind.Max => "maximum",
+            NDExprReduceKind.Any => "logical_or",
+            NDExprReduceKind.All => "logical_and",
             _ => "mean",
         };
 
@@ -433,7 +435,10 @@ namespace NumSharp.Backends
                     case NDExprReduceKind.Mean:
                         WriteMeanOfEmpty(slot, accType); // NaN, like np.mean([]) (NumPy warns)
                         break;
-                        // Sum: identity 0 already in the slot.
+                    case NDExprReduceKind.All:
+                        *slot = 1; // np.all([]) == True (vacuous truth); Any([]) keeps the zeroed slot (False)
+                        break;
+                        // Sum / Any: identity 0 already in the slot.
                 }
             }
             else
@@ -447,7 +452,10 @@ namespace NumSharp.Backends
                     case NDExprReduceKind.Max:
                         WriteMinMaxIdentity(slot, accType, isMin: reduce.Kind == NDExprReduceKind.Min);
                         break;
-                        // Sum / Mean: identity 0 already in the slot.
+                    case NDExprReduceKind.All:
+                        *slot = 1; // logical_and identity True; the kernel folds AND into it (Any: 0 already)
+                        break;
+                        // Sum / Mean / Any: identity 0 already in the slot.
                 }
 
                 var kernel = program.FlatReduceKernel;
@@ -569,6 +577,10 @@ namespace NumSharp.Backends
                         NDExprReduceKind.Prod => ReductionOp.Prod,
                         NDExprReduceKind.Min => ReductionOp.Min,
                         NDExprReduceKind.Max => ReductionOp.Max,
+                        // logical_or / logical_and: SeedReduceIdentity writes False / True per output slot
+                        // (GetIdentity(Any) == false, GetIdentity(All) == true); the kernel folds OR / AND.
+                        NDExprReduceKind.Any => ReductionOp.Any,
+                        NDExprReduceKind.All => ReductionOp.All,
                         _ => ReductionOp.Sum, // Sum / Mean
                     };
                     ILKernelGenerator.SeedReduceIdentity(outAcc, seedOp);

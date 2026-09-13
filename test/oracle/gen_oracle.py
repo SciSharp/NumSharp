@@ -8040,6 +8040,14 @@ _EV_REDUCE = {
     "min": lambda a, ax, kd: np.min(a, axis=ax, keepdims=kd),
     "max": lambda a, ax, kd: np.max(a, axis=ax, keepdims=kd),
     "mean": lambda a, ax, kd: np.mean(a, axis=ax, keepdims=kd),
+    # P2 M4 — presence / count / NaN-aware reductions. any/all/count_nonzero are order-independent
+    # (bool / int64 result), so they are EXACT at every dtype. nansum/nanprod compose Sum/Prod over
+    # Where(isnan, 0/1, x): bit-exact where the plain Sum/Prod diverts (float32/float64 + complex SUM).
+    "any": lambda a, ax, kd: np.any(a, axis=ax, keepdims=kd),
+    "all": lambda a, ax, kd: np.all(a, axis=ax, keepdims=kd),
+    "count_nonzero": lambda a, ax, kd: np.count_nonzero(a, axis=ax, keepdims=kd),
+    "nansum": lambda a, ax, kd: np.nansum(a, axis=ax, keepdims=kd),
+    "nanprod": lambda a, ax, kd: np.nanprod(a, axis=ax, keepdims=kd),
 }
 
 _EV_TOKEN = re.compile(r"\s*([A-Za-z_][A-Za-z0-9_]*(?::[^,()]+)?|[(),])")
@@ -8310,7 +8318,11 @@ def gen_evaluate():
                     continue
                 if dt == "complex128" and _ev_ops_in_expr(expr) & {"gt"}:
                     continue
-                for kind in _EV_REDUCE:
+                # The five base kinds + the order-independent presence trio (any/all/count_nonzero —
+                # bool / int64 result, EXACT at every dtype so no benign twin). nansum/nanprod are NOT
+                # swept here: they need a NaN-carrying pool (block C4) and are folded/E1-excused for
+                # float16 + complex prod, which this generic sweep would trip.
+                for kind in ("sum", "prod", "min", "max", "mean", "any", "all", "count_nonzero"):
                     # Rebuild (base, view) with the SAME layout recipe over the pool this kind uses:
                     # the layout builders always hand back a fresh C-contiguous base the view aliases.
                     nb, nv = LAYOUTS[ln](np.dtype(dt))
@@ -8403,6 +8415,46 @@ def gen_evaluate():
                     emit("in0", [(pb, pb)], lay,
                          params={"reduce": {"kind": "prod", "axis": ax, "keepdims": False}},
                          cid_tag=f"bigNaxis/{dt}/prod[{ax}]/{'x'.join(map(str, shp))}")
+
+    # ---- C4. M4 reductions: NaN-aware sum/prod + the presence trio on a mixed pool (plan P2 M4) --
+    # any/all/count_nonzero are order-independent (bool / int64 result) and already swept broadly in
+    # block C; this block pins them — AND the NaN-aware sum/prod — on a pool that actually carries the
+    # discriminating values: zeros (so any/all/count split), and NaN (truthy → any is True; skipped by
+    # nansum/nanprod). nansum/nanprod are bit-exact only where the underlying Sum/Prod diverts
+    # (float32/float64 + complex SUM via M1/M2); float16 (no f16 pairwise) and complex PROD (npy_cmul
+    # gap #12) stay folded/E1-excused and are deliberately ABSENT.
+    def _mixed_nan_pool(N, npdt):
+        base = np.array([0, 1, -2, 0, 3, 0, -4, 5], dtype=np.float64)
+        a = np.tile(base, (N + 7) // 8)[:N].astype(npdt)
+        if npdt.kind in "fc":
+            a[1::5] = np.nan          # scatter NaN through the pool (truthy; nan-skipped by nansum/nanprod)
+        return a
+
+    m4_layouts = ["c_contiguous_1d", "c_contiguous_2d", "f_contiguous_2d", "negstride_1d"]
+    m4_dt_kinds = [
+        ("bool",       ("any", "all", "count_nonzero")),
+        ("int32",      ("any", "all", "count_nonzero")),
+        ("uint64",     ("any", "all", "count_nonzero")),
+        ("float32",    ("any", "all", "count_nonzero", "nansum", "nanprod")),
+        ("float64",    ("any", "all", "count_nonzero", "nansum", "nanprod")),
+        ("complex128", ("any", "all", "count_nonzero", "nansum")),  # complex prod folded (#12)
+    ]
+    for ln in m4_layouts:
+        for dt, kinds in m4_dt_kinds:
+            npdt = np.dtype(dt)
+            for kind in kinds:
+                nb, nv = LAYOUTS[ln](npdt)
+                pool = _mixed_nan_pool(nb.size, npdt)
+                if npdt.kind == "c":
+                    pool = pool + 1j * np.roll(pool, 2)   # NaN in either component ⇒ isnan True
+                nb.reshape(-1)[:] = pool
+                combos = [(None, False)] + [(ax, False) for ax in range(nv.ndim)]
+                if nv.ndim > 0:
+                    combos.append((0, True))
+                for ax, kd in combos:
+                    emit("in0", [(nb, nv)], ln,
+                         params={"reduce": {"kind": kind, "axis": ax, "keepdims": kd}},
+                         cid_tag=f"m4/{dt}/{kind}[{ax},{int(kd)}]")
 
     # ---- D. out= (returned view + the whole base buffer behind out) -------------------------
     out_exprs = ["add(mul(in0,in1),in0)", "gt(in0,in1)", "where(gt(in0,in1),in0,in1)", "sqrt(abs(in0))"]
