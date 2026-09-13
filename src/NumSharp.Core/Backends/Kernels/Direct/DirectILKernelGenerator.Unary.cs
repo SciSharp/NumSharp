@@ -216,7 +216,7 @@ namespace NumSharp.Backends.Kernels
         private static bool IsPredicateOp(UnaryOp op)
         {
             return op == UnaryOp.IsFinite || op == UnaryOp.IsNan || op == UnaryOp.IsInf
-                || op == UnaryOp.IsPosInf || op == UnaryOp.IsNegInf;
+                || op == UnaryOp.IsPosInf || op == UnaryOp.IsNegInf || op == UnaryOp.SignBit;
         }
 
         /// <summary>

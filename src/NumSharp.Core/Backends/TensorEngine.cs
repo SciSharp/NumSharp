@@ -273,6 +273,10 @@ namespace NumSharp
         // predicate never sees Complex.
         public abstract NDArray IsPosInf(NDArray a, DType dtype = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray IsNegInf(NDArray a, DType dtype = null, NDArray @out = null, NDArray where = null);
+        // np.signbit — a full ufunc (unlike isposinf/isneginf): out=/where=/dtype= all honoured, same
+        // single-member predicate rule as isnan/isinf (bool loop, validate-only dtype, plain-NDArray
+        // return, a plain call returns an NDArray<bool> instance). Complex has no loop (rejected here).
+        public abstract NDArray SignBit(NDArray a, DType dtype = null, NDArray @out = null, NDArray where = null);
 
         #endregion
 

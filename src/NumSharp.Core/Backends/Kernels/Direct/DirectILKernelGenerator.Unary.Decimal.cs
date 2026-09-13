@@ -217,6 +217,17 @@ namespace NumSharp.Backends.Kernels
                     il.Emit(OpCodes.Ldc_I4_0);
                     break;
 
+                case UnaryOp.SignBit:
+                    // np.signbit on decimal (no NumPy analog): strictly-negative test via
+                    // Math.Sign(x) < 0. Math.Sign(decimal) returns 0 for BOTH +0m and a
+                    // negative-zero -0.0m, so a negative-zero decimal reports False (the raw
+                    // sign flag is not consulted). Documented divergence from the float rule
+                    // (where -0.0 → True); decimal -0.0m is exotic and has no NumPy counterpart.
+                    il.EmitCall(OpCodes.Call, CachedMethods.MathSignDecimal, null);
+                    il.Emit(OpCodes.Ldc_I4_0);
+                    il.Emit(OpCodes.Clt);
+                    break;
+
                 default:
                     throw new NotSupportedException($"Unary operation {op} not supported for decimal");
             }
@@ -688,6 +699,13 @@ namespace NumSharp.Backends.Kernels
                 case UnaryOp.IsFinite:
                     il.EmitCall(OpCodes.Call,
                         ScalarMethodCache.Predicate(typeof(Half), "IsFinite"), null);
+                    break;
+
+                case UnaryOp.SignBit:
+                    // np.signbit at float16: the raw f16 sign bit via Half.IsNegative (computes in
+                    // the 16-bit domain, no float round-trip) — -0.0/-NaN True, +0.0/+NaN False.
+                    il.EmitCall(OpCodes.Call,
+                        ScalarMethodCache.Predicate(typeof(Half), "IsNegative"), null);
                     break;
 
                 default:

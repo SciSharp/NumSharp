@@ -116,6 +116,14 @@ namespace NumSharp.Backends.Kernels
         IsPosInf,
         /// <summary>Test element-wise for negative infinity (np.isneginf). x == -inf.</summary>
         IsNegInf,
+        /// <summary>
+        /// Test element-wise whether the IEEE sign bit is set (np.signbit). Returns bool.
+        /// This is NOT <c>x &lt; 0</c>: it is defined on the raw bit pattern, so <c>-0.0</c> and a
+        /// negative NaN are True while <c>+0.0</c>, <c>+inf</c> and a positive NaN are False. For
+        /// signed integers it coincides with <c>x &lt; 0</c> (the two's-complement MSB); for unsigned
+        /// integers / bool it is always False; complex has no loop (rejected at the np.* layer).
+        /// </summary>
+        SignBit,
 
         /// <summary>
         /// Complex conjugate (np.conjugate / np.conj). Identity at every real dtype

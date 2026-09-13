@@ -93,6 +93,32 @@ namespace NumSharp
             => a.TensorEngine.IsInf(a, dtype, @out, where);
 
         /// <summary>
+        /// Return element-wise True where the sign bit is set (negative numbers, and — for floats —
+        /// <c>-0.0</c> and a negative NaN). Mirrors NumPy's ufunc signature:
+        /// <c>signbit(x, /, out=None, *, where=True, dtype=None)</c>. A plain call returns a bool-dtype
+        /// array (the instance is an <see cref="NDArray{T}"/> of bool).
+        /// </summary>
+        /// <param name="x">Input array. Complex is unsupported (raises <see cref="TypeError"/>).</param>
+        /// <param name="out">A location into which the result is stored; any numeric dtype (bool casts same_kind to all, True→1); returned as-is.</param>
+        /// <param name="where">Boolean mask: only mask-true elements are computed/written; masked-off out slots keep prior contents.</param>
+        /// <param name="dtype">Validate-only (NumPy parity): the predicate has bool loops only — any non-bool request raises the no-loop TypeError.</param>
+        /// <returns>A boolean array (or <paramref name="out"/>), True where <paramref name="x"/>'s sign bit is set.</returns>
+        /// <exception cref="TypeError"><paramref name="x"/> is complex — signbit has no complex loop (NumPy raises the same, its signbit is ambiguous on complex).</exception>
+        /// <remarks>
+        /// https://numpy.org/doc/stable/reference/generated/numpy.signbit.html
+        /// <para>
+        /// This is NOT <c>x &lt; 0</c>: it tests the raw sign bit, so on floats <c>-0.0</c> → True and a
+        /// negative NaN → True while <c>+0.0</c>/<c>+inf</c>/positive NaN → False. Signed integers follow
+        /// <c>x &lt; 0</c> (their two's-complement MSB IS the sign bit); unsigned integers and bool are
+        /// always False; float16/float32/float64 test the IEEE sign bit. It is the primitive
+        /// <see cref="isposinf"/>/<see cref="isneginf"/> are defined on (<c>isinf(x) &amp; ~signbit(x)</c>
+        /// / <c>isinf(x) &amp; signbit(x)</c>).
+        /// </para>
+        /// </remarks>
+        public static NDArray signbit(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
+            => x.TensorEngine.SignBit(x, dtype, @out, where);
+
+        /// <summary>
         ///     Returns true incase of a number, bool or string. If null, returns false.
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.isscalar.html</remarks>
