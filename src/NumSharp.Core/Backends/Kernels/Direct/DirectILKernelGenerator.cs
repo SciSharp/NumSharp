@@ -437,6 +437,33 @@ namespace NumSharp.Backends.Kernels
             public static readonly MethodInfo FmodDouble = NDDiv(nameof(Utilities.NDDivision.FmodDouble), typeof(double));
             public static readonly MethodInfo FmodDecimal = NDDiv(nameof(Utilities.NDDivision.FmodDecimal), typeof(decimal));
 
+            // gcd/lcm helpers (NDGcdLcm, np.gcd / np.lcm) — integer-only, same 2-arg (T,T)->T shape as
+            // the Rem*/Fmod* families but resolved from NDGcdLcm. NO float/decimal/complex entries: those
+            // dtypes have no gcd/lcm loop and are rejected at the np.* boundary before a kernel is built.
+            private static MethodInfo NDGcd(string name, Type t) =>
+                typeof(Utilities.NDGcdLcm).GetMethod(name, new[] { t, t })
+                ?? throw new MissingMethodException(typeof(Utilities.NDGcdLcm).FullName, name);
+
+            public static readonly MethodInfo GcdSByte = NDGcd(nameof(Utilities.NDGcdLcm.GcdSByte), typeof(sbyte));
+            public static readonly MethodInfo GcdByte = NDGcd(nameof(Utilities.NDGcdLcm.GcdByte), typeof(byte));
+            public static readonly MethodInfo GcdInt16 = NDGcd(nameof(Utilities.NDGcdLcm.GcdInt16), typeof(short));
+            public static readonly MethodInfo GcdUInt16 = NDGcd(nameof(Utilities.NDGcdLcm.GcdUInt16), typeof(ushort));
+            public static readonly MethodInfo GcdChar = NDGcd(nameof(Utilities.NDGcdLcm.GcdChar), typeof(char));
+            public static readonly MethodInfo GcdInt32 = NDGcd(nameof(Utilities.NDGcdLcm.GcdInt32), typeof(int));
+            public static readonly MethodInfo GcdUInt32 = NDGcd(nameof(Utilities.NDGcdLcm.GcdUInt32), typeof(uint));
+            public static readonly MethodInfo GcdInt64 = NDGcd(nameof(Utilities.NDGcdLcm.GcdInt64), typeof(long));
+            public static readonly MethodInfo GcdUInt64 = NDGcd(nameof(Utilities.NDGcdLcm.GcdUInt64), typeof(ulong));
+
+            public static readonly MethodInfo LcmSByte = NDGcd(nameof(Utilities.NDGcdLcm.LcmSByte), typeof(sbyte));
+            public static readonly MethodInfo LcmByte = NDGcd(nameof(Utilities.NDGcdLcm.LcmByte), typeof(byte));
+            public static readonly MethodInfo LcmInt16 = NDGcd(nameof(Utilities.NDGcdLcm.LcmInt16), typeof(short));
+            public static readonly MethodInfo LcmUInt16 = NDGcd(nameof(Utilities.NDGcdLcm.LcmUInt16), typeof(ushort));
+            public static readonly MethodInfo LcmChar = NDGcd(nameof(Utilities.NDGcdLcm.LcmChar), typeof(char));
+            public static readonly MethodInfo LcmInt32 = NDGcd(nameof(Utilities.NDGcdLcm.LcmInt32), typeof(int));
+            public static readonly MethodInfo LcmUInt32 = NDGcd(nameof(Utilities.NDGcdLcm.LcmUInt32), typeof(uint));
+            public static readonly MethodInfo LcmInt64 = NDGcd(nameof(Utilities.NDGcdLcm.LcmInt64), typeof(long));
+            public static readonly MethodInfo LcmUInt64 = NDGcd(nameof(Utilities.NDGcdLcm.LcmUInt64), typeof(ulong));
+
             // Fused divmod helpers (NDDivision, np.divmod) — floored quotient (return) + floored
             // remainder (out). Signature is (T, T, out T) -> T, so resolve with the by-ref third arg.
             private static MethodInfo NDDiv3(string name, Type t) =>
@@ -1393,6 +1420,17 @@ namespace NumSharp.Backends.Kernels
                 return;
             }
 
+            // np.gcd / np.lcm — one NDGcdLcm helper per integer dtype, signatured (resultType, resultType)
+            // -> resultType, so the whole scalar op is a single Call. Intercepted BEFORE the decimal/half/
+            // complex routing because gcd/lcm have integer loops ONLY: those dtypes are rejected at the
+            // np.* boundary (Default.Gcd/Lcm) and can never reach here as a resultType, so routing them
+            // through EmitDecimal/Half/ComplexOperation (which have no gcd/lcm branch) would be wrong.
+            if (op == BinaryOp.Gcd || op == BinaryOp.Lcm)
+            {
+                EmitGcdLcmOperation(il, op, resultType);
+                return;
+            }
+
             // Special handling for decimal (uses operator methods)
             if (resultType == NPTypeCode.Decimal)
             {
@@ -1701,6 +1739,69 @@ namespace NumSharp.Backends.Kernels
                 NPTypeCode.UInt64 => CachedMethods.FmodUInt64,
                 NPTypeCode.Single => CachedMethods.FmodSingle,
                 NPTypeCode.Double => CachedMethods.FmodDouble,
+                _ => null
+            };
+        }
+
+        /// <summary>
+        /// Emit np.gcd / np.lcm via the <see cref="Utilities.NDGcdLcm"/> integer helpers. Stack:
+        /// [x1, x2] (both already in the integer <paramref name="resultType"/> — the generic binary loops
+        /// convert both operands) -> [result]. A single <c>call</c> to the per-(op,dtype) helper, mirroring
+        /// <see cref="EmitFmodOperation"/>. The <paramref name="resultType"/> is always an integer dtype
+        /// here (bool/float/complex/decimal are rejected in <c>Default.Gcd</c>/<c>Default.Lcm</c> before any
+        /// kernel is generated), so an unresolved dtype is a real bug and throws rather than silently
+        /// producing wrong bytes.
+        /// </summary>
+        /// <param name="il">The kernel's IL stream.</param>
+        /// <param name="op"><see cref="BinaryOp.Gcd"/> or <see cref="BinaryOp.Lcm"/>.</param>
+        /// <param name="resultType">The integer loop dtype both operands were converted to.</param>
+        /// <exception cref="System.NotSupportedException">The (op, dtype) pair has no helper — only reachable
+        /// if a non-integer dtype bypassed the np.* validation (a defect).</exception>
+        private static void EmitGcdLcmOperation(ILGenerator il, BinaryOp op, NPTypeCode resultType)
+        {
+            var m = GetGcdLcmMethod(op, resultType)
+                ?? throw new NotSupportedException(
+                    $"np.{(op == BinaryOp.Gcd ? "gcd" : "lcm")} has no loop for dtype {resultType} " +
+                    "(only the integer dtypes are supported).");
+            il.EmitCall(OpCodes.Call, m, null);
+        }
+
+        /// <summary>
+        /// Return the <see cref="Utilities.NDGcdLcm"/> helper for (<paramref name="op"/>,
+        /// <paramref name="resultType"/>), or null when the dtype has no gcd/lcm loop (every non-integer
+        /// dtype — the np.* boundary raises the no-loop error for those, so null here is a defect signal).
+        /// Char rides along as the NumSharp unsigned-16-bit integer extension.
+        /// </summary>
+        /// <param name="op"><see cref="BinaryOp.Gcd"/> or <see cref="BinaryOp.Lcm"/>.</param>
+        /// <param name="resultType">The integer loop dtype.</param>
+        /// <returns>The cached 2-arg helper <see cref="MethodInfo"/>, or null if unsupported.</returns>
+        private static MethodInfo? GetGcdLcmMethod(BinaryOp op, NPTypeCode resultType)
+        {
+            if (op == BinaryOp.Gcd)
+                return resultType switch
+                {
+                    NPTypeCode.SByte => CachedMethods.GcdSByte,
+                    NPTypeCode.Byte => CachedMethods.GcdByte,
+                    NPTypeCode.Int16 => CachedMethods.GcdInt16,
+                    NPTypeCode.UInt16 => CachedMethods.GcdUInt16,
+                    NPTypeCode.Char => CachedMethods.GcdChar,
+                    NPTypeCode.Int32 => CachedMethods.GcdInt32,
+                    NPTypeCode.UInt32 => CachedMethods.GcdUInt32,
+                    NPTypeCode.Int64 => CachedMethods.GcdInt64,
+                    NPTypeCode.UInt64 => CachedMethods.GcdUInt64,
+                    _ => null
+                };
+            return resultType switch
+            {
+                NPTypeCode.SByte => CachedMethods.LcmSByte,
+                NPTypeCode.Byte => CachedMethods.LcmByte,
+                NPTypeCode.Int16 => CachedMethods.LcmInt16,
+                NPTypeCode.UInt16 => CachedMethods.LcmUInt16,
+                NPTypeCode.Char => CachedMethods.LcmChar,
+                NPTypeCode.Int32 => CachedMethods.LcmInt32,
+                NPTypeCode.UInt32 => CachedMethods.LcmUInt32,
+                NPTypeCode.Int64 => CachedMethods.LcmInt64,
+                NPTypeCode.UInt64 => CachedMethods.LcmUInt64,
                 _ => null
             };
         }

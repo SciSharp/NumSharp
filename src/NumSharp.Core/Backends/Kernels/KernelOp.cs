@@ -53,7 +53,18 @@ namespace NumSharp.Backends.Kernels
         /// x1==0 fill (its exact bits, NaN sign included, pass through). Float-tier promotion like the rest
         /// of this family (ATan2), but unlike them it has a branchless SIMD fast path (compare + select,
         /// no libm) because every output is an exact value; routed to NDHeavisideMath.</summary>
-        Heaviside
+        Heaviside,
+        // Number-theoretic binary — INTEGER-ONLY (no bool/float/complex/decimal loop; those raise the
+        // no-loop error at the np.* boundary). Data-dependent scalar Euclidean loop per element, so — like
+        // NumPy itself ("It may be nice to vectorize these, OTOH…") — there is NO SIMD path: absent from
+        // CanUseSimdForOp, they route through the scalar per-element kernel (NDGcdLcm helpers). Uniform
+        // NEP50 promotion (both operands + output share one integer dtype); uint64+signed → float64 → no loop.
+        /// <summary>Greatest common divisor of |x1| and |x2| (np.gcd). Result is non-negative except where
+        /// the magnitude wraps the signed range (gcd(int8 -128,-128) == -128). gcd(0,0) == 0.</summary>
+        Gcd,
+        /// <summary>Lowest common multiple of |x1| and |x2| (np.lcm): 0 if either is 0, else |x1|/gcd*|x2|
+        /// (divide-before-multiply; the product WRAPS the dtype on overflow, matching NumPy).</summary>
+        Lcm
     }
 
     /// <summary>

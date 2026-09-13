@@ -167,6 +167,13 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Bitwise() => RunCorpus("bitwise.jsonl");
 
+        // np.gcd / np.lcm — number-theoretic binary ufuncs, integer-only. Every valid integer dtype
+        // pair × pairwise layout (bit-exact incl. signed-MIN wrap and lcm overflow wrap); Char woven
+        // via char_tier. Invalid-dtype no-loop errors are gated in errors_full.jsonl.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void GcdLcm() => RunCorpus("gcd.jsonl");
+
         // Char dtype (NumSharp-only, bit-identical to uint16) is WOVEN into the applicable tiers:
         // each Char op is generated through the uint16 NumPy proxy and relabelled uint16->char
         // (gen_oracle.char_tier), appended into its native tier file (binary_arith/divmod_power/
@@ -539,6 +546,7 @@ namespace NumSharp.Tests.Fuzz
             ["binary_arith.jsonl"] = 1296,
             ["binary_divmod_power.jsonl"] = 1360,
             ["bitwise.jsonl"] = 590,
+            ["gcd.jsonl"] = 244,
             ["comparison.jsonl"] = 1857,
             ["creation.jsonl"] = 241,
             ["conversion.jsonl"] = 862,
