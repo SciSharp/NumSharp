@@ -168,9 +168,11 @@ namespace NumSharp
         /// </remarks>
         private static NDArray GeomspaceRealCore(double start, double stop, long num, bool endpoint)
         {
-            // out_sign = sign(start); start != 0 is guaranteed, and -0.0 was rejected by the ==0.0 check.
-            double outSign = start < 0.0 ? -1.0 : 1.0;
-            double startR = start / outSign;                 // |start| on the positive real axis
+            // out_sign = np.sign(start): ±1 for a finite/inf non-zero, but NaN for a NaN start (start != 0 is
+            // guaranteed and -0.0 was rejected by the ==0.0 check). Propagating NaN here is load-bearing — NumPy's
+            // trailing `result *= out_sign` turns EVERY element (endpoints included) into NaN for a NaN start.
+            double outSign = double.IsNaN(start) ? start : start < 0.0 ? -1.0 : 1.0;
+            double startR = start / outSign;                 // |start| on the positive real axis (NaN if start is NaN)
             double stopR = stop / outSign;                   // may be negative if start,stop have opposite signs
             double logStart = Math.Log10(startR);
             double logStop = Math.Log10(stopR);              // NaN when stopR < 0 (mixed-sign inputs)
@@ -187,14 +189,19 @@ namespace NumSharp
                 double* addr = (double*)ret.Address;
                 for (long i = 0; i < num; i++)
                 {
-                    double v;
+                    // NumPy computes the ROTATED sequence (startR at 0, stopR at the endpoint, 10**exponent in
+                    // between) and only THEN does `result *= out_sign` — so the multiply is applied UNIFORMLY,
+                    // including the endpoints. For out_sign = ±1 this is bit-identical to writing the original
+                    // start/stop (startR*out_sign == start exactly — double negation is exact), and for out_sign =
+                    // NaN it correctly yields NaN everywhere, matching NumPy's NaN-start behaviour.
+                    double baseV;
                     if (i == 0)
-                        v = start;                           // == startR * out_sign, exact
+                        baseV = startR;
                     else if (endpoint && i == num - 1)
-                        v = stop;                            // == stopR * out_sign, exact
+                        baseV = stopR;
                     else
-                        v = outSign * Math.Pow(10.0, logStart + i * step);
-                    addr[i] = v;
+                        baseV = Math.Pow(10.0, logStart + i * step);
+                    addr[i] = baseV * outSign;
                 }
             }
 
