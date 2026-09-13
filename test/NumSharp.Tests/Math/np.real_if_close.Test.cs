@@ -256,5 +256,122 @@ namespace NumSharp.Tests.Math
             var rs = np.real_if_close(np.array(vals));
             Assert.AreEqual(NPTypeCode.Complex, rs.typecode);
         }
+
+        // ---- Validation-hardening: edges the 360-case oracle tier does not reach (all probed 2.4.2) --
+
+        [TestMethod]
+        public void TolPositiveInfinity_CollapsesEveryFiniteImag()
+        {
+            // tol=+inf is > 1, so tol = eps*inf = +inf; every FINITE |imag| < inf -> collapse, even a
+            // large imaginary part (probed against NumPy 2.4.2).
+            var r = np.real_if_close(np.array(new[] { C(1, 1e-15), C(2, 5.0), C(3, -100.0) }), tol: double.PositiveInfinity);
+            Assert.AreEqual(NPTypeCode.Double, r.typecode);
+            Assert.IsTrue(Enumerable.SequenceEqual(r.Data<double>(), new[] { 1.0, 2.0, 3.0 }));
+
+            // ...but an infinite imaginary part is NOT < inf, so it still does not collapse.
+            var r2 = np.real_if_close(np.array(new[] { C(1, double.PositiveInfinity), C(2, 0) }), tol: double.PositiveInfinity);
+            Assert.AreEqual(NPTypeCode.Complex, r2.typecode);
+        }
+
+        [TestMethod]
+        public void TolNaN_And_TolSubnormal_DoNotCollapse()
+        {
+            // tol=NaN: NaN > 1 is false -> tol stays NaN -> |imag| < NaN is always false -> no collapse.
+            Assert.AreEqual(NPTypeCode.Complex,
+                np.real_if_close(np.array(new[] { C(1, 1e-15), C(2, 0) }), tol: double.NaN).typecode);
+
+            // tol = smallest subnormal (<= 1 -> absolute): 1e-15 >> 5e-324, so nothing is within band.
+            Assert.AreEqual(NPTypeCode.Complex,
+                np.real_if_close(np.array(new[] { C(1, 1e-15), C(2, 0) }), tol: double.Epsilon).typecode);
+        }
+
+        [TestMethod]
+        public void ImagBoundary_JustUnderCollapses_JustOverDoesNot()
+        {
+            // The resolved tol at tol=100 is eps*100; strict `<` splits the two adjacent doubles.
+            double tol100 = Eps * 100.0;
+            var under = np.real_if_close(np.array(new[] { C(1, System.Math.BitDecrement(tol100)), C(2, 1e-16) }), tol: 100);
+            Assert.AreEqual(NPTypeCode.Double, under.typecode);
+            var over = np.real_if_close(np.array(new[] { C(1, System.Math.BitIncrement(tol100)), C(2, 1e-16) }), tol: 100);
+            Assert.AreEqual(NPTypeCode.Complex, over.typecode);
+        }
+
+        [TestMethod]
+        public void SpecialRealParts_SurviveCollapse_BitExact()
+        {
+            // The band test is on the imaginary part only, so a NaN / +-inf / -0.0 REAL part collapses
+            // and survives into the float64 real lane exactly (probed against NumPy 2.4.2).
+            var r = np.real_if_close(np.array(new[]
+            {
+                C(1.5, 1e-15), C(-0.0, 1e-15), C(double.NaN, 1e-15),
+                C(double.PositiveInfinity, 1e-15), C(double.NegativeInfinity, 1e-15)
+            }), tol: 100);
+            Assert.AreEqual(NPTypeCode.Double, r.typecode);
+            var v = r.Data<double>();
+            Assert.AreEqual(1.5, v[0]);
+            Assert.IsTrue(v[1] == 0.0 && double.IsNegative(v[1]));   // -0.0 sign bit preserved
+            Assert.IsTrue(double.IsNaN(v[2]));
+            Assert.IsTrue(double.IsPositiveInfinity(v[3]));
+            Assert.IsTrue(double.IsNegativeInfinity(v[4]));
+        }
+
+        [TestMethod]
+        public void Rank3_And_Rank4_CollapseAndNoCollapse()
+        {
+            foreach (var rank in new[] { 3, 4 })
+            {
+                int n = rank == 3 ? 8 : 16;
+                var tiny = Enumerable.Range(0, n).Select(i => C(i + 1, 1e-15)).ToArray();
+                var dims = rank == 3 ? new[] { 2, 2, 2 } : new[] { 2, 2, 2, 2 };
+                var rc = np.real_if_close(np.array(tiny).reshape(dims));
+                Assert.AreEqual(NPTypeCode.Double, rc.typecode, $"rank {rank} collapse");
+                Assert.AreEqual(string.Join(",", dims), string.Join(",", rc.shape), $"rank {rank} shape");
+
+                var big = (Complex[])tiny.Clone();
+                big[n / 2] = C(big[n / 2].Real, 0.5);
+                var rs = np.real_if_close(np.array(big).reshape(dims));
+                Assert.AreEqual(NPTypeCode.Complex, rs.typecode, $"rank {rank} no-collapse");
+            }
+        }
+
+        [TestMethod]
+        public void FContiguous_And_OffsetSlice_Collapse()
+        {
+            var src = np.array(Enumerable.Range(0, 12).Select(i => C(i + 1, 1e-15)).ToArray()).reshape(3, 4);
+
+            // Genuine F-contiguous (asfortranarray, not a transpose) still takes the dense scan path.
+            var rf = np.real_if_close(np.asfortranarray(src));
+            Assert.AreEqual(NPTypeCode.Double, rf.typecode);
+            rf.shape.Should().Equal(3, 4);
+
+            // Positive-offset slice (offset != 0) — the scan honours Shape.offset.
+            var flat = np.array(Enumerable.Range(0, 12).Select(i => C(i + 1, 1e-15)).ToArray());
+            var ro = np.real_if_close(flat["2:9"]);
+            Assert.AreEqual(NPTypeCode.Double, ro.typecode);
+            Assert.IsTrue(Enumerable.SequenceEqual(ro.Data<double>(), new[] { 3.0, 4, 5, 6, 7, 8, 9 }));
+        }
+
+        [TestMethod]
+        public void BroadcastReadOnly_Collapse_ReturnsReadOnlyView()
+        {
+            // A broadcast complex view is read-only; NumPy's a.real of it is read-only too, so the
+            // collapse result must stay non-writeable (matching NumPy).
+            var b = np.broadcast_to(np.array(new[] { C(1.5, 1e-15) }), new Shape(5));
+            var r = np.real_if_close(b);
+            Assert.AreEqual(NPTypeCode.Double, r.typecode);
+            Assert.IsFalse(r.Shape.IsWriteable);
+        }
+
+        [TestMethod]
+        public void DoesNotMutateInput()
+        {
+            // real_if_close itself never writes to the array (collapse returns a read-through view).
+            var a = np.array(new[] { C(1.5, 1e-15), C(2.5, 3e-15) });
+            var before0 = a.GetComplex(0);
+            var before1 = a.GetComplex(1);
+            np.real_if_close(a);
+            Assert.AreEqual(before0, a.GetComplex(0));
+            Assert.AreEqual(before1, a.GetComplex(1));
+        }
     }
 }
