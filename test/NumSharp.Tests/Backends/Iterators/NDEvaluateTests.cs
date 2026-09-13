@@ -1325,5 +1325,189 @@ namespace NumSharp.Tests.Backends.Iterators
             Assert.AreEqual(1, kd.shape[0]);
             Assert.AreEqual(5.0, kd.GetDouble(0), 1e-12);
         }
+
+        // =====================================================================
+        // Phase 4 — binary node coverage (the engine binary ufuncs that gained
+        // an NDExpr node). Values probed from NumPy 2.4.2; the fused kernel is
+        // the SAME per-op scalar emitter the engine's own ufuncs use.
+        // =====================================================================
+
+        /// <summary>fmax/fmin IGNORE NaN (the number wins) while maximum/minimum PROPAGATE it — the
+        /// one behavioural split that makes the two families distinct nodes.</summary>
+        [TestMethod]
+        public void P4_FMaxFMin_IgnoreNaN_WhileMaximumMinimumPropagate()
+        {
+            var a = np.array(new double[] { 1, double.NaN, 3 });
+            var b = np.array(new double[] { 2, 2, double.NaN });
+
+            var fmax = np.evaluate(NDExpr.FMax(NDExpr.Arr(a), NDExpr.Arr(b)));
+            Assert.AreEqual(2.0, fmax.GetDouble(0), 0);
+            Assert.AreEqual(2.0, fmax.GetDouble(1), 0);   // NaN ignored -> the number
+            Assert.AreEqual(3.0, fmax.GetDouble(2), 0);   // NaN ignored -> the number
+
+            var fmin = np.evaluate(NDExpr.FMin(NDExpr.Arr(a), NDExpr.Arr(b)));
+            Assert.AreEqual(1.0, fmin.GetDouble(0), 0);
+            Assert.AreEqual(2.0, fmin.GetDouble(1), 0);
+            Assert.AreEqual(3.0, fmin.GetDouble(2), 0);
+
+            // Maximum/Minimum are exact aliases of Max/Min — NaN PROPAGATES.
+            var mx = np.evaluate(NDExpr.Maximum(NDExpr.Arr(a), NDExpr.Arr(b)));
+            Assert.AreEqual(2.0, mx.GetDouble(0), 0);
+            Assert.IsTrue(double.IsNaN(mx.GetDouble(1)));
+            Assert.IsTrue(double.IsNaN(mx.GetDouble(2)));
+            var mn = np.evaluate(NDExpr.Minimum(NDExpr.Arr(a), NDExpr.Arr(b)));
+            Assert.IsTrue(double.IsNaN(mn.GetDouble(1)));
+        }
+
+        /// <summary>fmod takes the DIVIDEND's sign (C fmod), unlike Mod (floored, divisor's sign).</summary>
+        [TestMethod]
+        public void P4_Fmod_TakesDividendSign()
+        {
+            var a = np.array(new double[] { -7, 7, -7, 7 });
+            var b = np.array(new double[] { 3, 3, -3, -3 });
+            var r = np.evaluate(NDExpr.Fmod(NDExpr.Arr(a), NDExpr.Arr(b)));
+            Assert.AreEqual(-1.0, r.GetDouble(0), 0);   // np.fmod(-7,3)  == -1  (Mod → 2)
+            Assert.AreEqual(1.0, r.GetDouble(1), 0);    // np.fmod( 7,3)  ==  1
+            Assert.AreEqual(-1.0, r.GetDouble(2), 0);   // np.fmod(-7,-3) == -1
+            Assert.AreEqual(1.0, r.GetDouble(3), 0);    // np.fmod( 7,-3) ==  1
+
+            // integer stays integer; a bool pair falls to the int8 loop.
+            Assert.AreEqual(NPTypeCode.Int32, np.evaluate(NDExpr.Fmod(NDExpr.Arr(np.array(new[] { 7 })), NDExpr.Arr(np.array(new[] { 3 })))).typecode);
+            Assert.AreEqual(NPTypeCode.SByte, np.evaluate(NDExpr.Fmod(NDExpr.Arr(np.array(new[] { true })), NDExpr.Arr(np.array(new[] { true })))).typecode);
+        }
+
+        /// <summary>copysign is an EXACT sign-bit copy (so -0.0 flips the sign); nextafter is an exact
+        /// one-ULP step. Both are float-only, so int inputs PROMOTE to the tier float.</summary>
+        [TestMethod]
+        public void P4_CopySign_NextAfter_ExactAndFloatTier()
+        {
+            var mag = np.array(new double[] { 3, 3, 3 });
+            var sgn = np.array(new double[] { -1, -0.0, 1 });
+            var cs = np.evaluate(NDExpr.CopySign(NDExpr.Arr(mag), NDExpr.Arr(sgn)));
+            Assert.AreEqual(-3.0, cs.GetDouble(0), 0);
+            Assert.AreEqual(-3.0, cs.GetDouble(1), 0);   // sign of -0.0 is copied
+            Assert.AreEqual(3.0, cs.GetDouble(2), 0);
+
+            var na = np.evaluate(NDExpr.NextAfter(NDExpr.Arr(np.array(new double[] { 1.0 })), NDExpr.Arr(np.array(new double[] { 2.0 }))));
+            Assert.AreEqual(double.BitIncrement(1.0), na.GetDouble(0), 0);   // bit-exact
+
+            // float-tier promotion (per input, like arctan2): int8×uint8→f16, int32×int32→f64, bool→f16.
+            Assert.AreEqual(NPTypeCode.Half, np.evaluate(NDExpr.CopySign(NDExpr.Arr(np.array(new sbyte[] { 1 })), NDExpr.Arr(np.array(new byte[] { 2 })))).typecode);
+            Assert.AreEqual(NPTypeCode.Double, np.evaluate(NDExpr.CopySign(NDExpr.Arr(np.array(new[] { 1 })), NDExpr.Arr(np.array(new[] { 2 })))).typecode);
+            Assert.AreEqual(NPTypeCode.Half, np.evaluate(NDExpr.CopySign(NDExpr.Arr(np.array(new[] { true })), NDExpr.Arr(np.array(new[] { true })))).typecode);
+        }
+
+        /// <summary>logaddexp/logaddexp2/hypot/heaviside — values + float-tier dtype.</summary>
+        [TestMethod]
+        public void P4_LogAddExp_Hypot_Heaviside_Values()
+        {
+            var z = np.array(new double[] { 0.0 });
+            Assert.AreEqual(System.Math.Log(2.0), np.evaluate(NDExpr.LogAddExp(NDExpr.Arr(z), NDExpr.Arr(z))).GetDouble(0), 1e-12);
+            Assert.AreEqual(1.0, np.evaluate(NDExpr.LogAddExp2(NDExpr.Arr(z), NDExpr.Arr(z))).GetDouble(0), 1e-12);   // log2(2)
+
+            var h = np.evaluate(NDExpr.Hypot(NDExpr.Arr(np.array(new double[] { 3 })), NDExpr.Arr(np.array(new double[] { 4 }))));
+            Assert.AreEqual(5.0, h.GetDouble(0), 1e-12);
+
+            // heaviside(x, h0): 0 if x<0, h0 if x==0, 1 if x>0. NOT commutative.
+            var x = np.array(new double[] { -2, 0, 2 });
+            var half = np.array(new double[] { 0.5, 0.5, 0.5 });
+            var hv = np.evaluate(NDExpr.Heaviside(NDExpr.Arr(x), NDExpr.Arr(half)));
+            Assert.AreEqual(0.0, hv.GetDouble(0), 0);
+            Assert.AreEqual(0.5, hv.GetDouble(1), 0);   // the x==0 fill
+            Assert.AreEqual(1.0, hv.GetDouble(2), 0);
+
+            // all float-tier: an int pair → f64.
+            Assert.AreEqual(NPTypeCode.Double, np.evaluate(NDExpr.Hypot(NDExpr.Arr(np.array(new[] { 3 })), NDExpr.Arr(np.array(new[] { 4 })))).typecode);
+        }
+
+        /// <summary>gcd/lcm — integer values (incl. NumPy's magnitude-wrap) and the integer dtype.</summary>
+        [TestMethod]
+        public void P4_GcdLcm_IntegerValuesAndDtype()
+        {
+            var a = np.array(new[] { 12, 15, 0 });
+            var b = np.array(new[] { 8, 10, 0 });
+            var g = np.evaluate(NDExpr.Gcd(NDExpr.Arr(a), NDExpr.Arr(b)));
+            Assert.AreEqual(4, g.GetInt32(0));
+            Assert.AreEqual(5, g.GetInt32(1));
+            Assert.AreEqual(0, g.GetInt32(2));   // gcd(0,0) == 0
+
+            var l = np.evaluate(NDExpr.Lcm(NDExpr.Arr(np.array(new[] { 4, 6 })), NDExpr.Arr(np.array(new[] { 6, 10 }))));
+            Assert.AreEqual(12, l.GetInt32(0));
+            Assert.AreEqual(30, l.GetInt32(1));
+
+            // int8×uint8 → int16 (per-input promotion); bool+int32 is a VALID integer loop → int32.
+            Assert.AreEqual(NPTypeCode.Int16, np.evaluate(NDExpr.Gcd(NDExpr.Arr(np.array(new sbyte[] { 12 })), NDExpr.Arr(np.array(new byte[] { 8 })))).typecode);
+            Assert.AreEqual(NPTypeCode.Int32, np.evaluate(NDExpr.Gcd(NDExpr.Arr(np.array(new[] { true })), NDExpr.Arr(np.array(new[] { 6 })))).typecode);
+        }
+
+        /// <summary>left_shift/right_shift — values, the bool→int8 loop, and the overflow rule.</summary>
+        [TestMethod]
+        public void P4_Shifts_ValuesAndBoolToInt8()
+        {
+            var v = np.array(new[] { 1, 2, 16 });
+            var c = np.array(new[] { 3, 1, 2 });
+            var ls = np.evaluate(NDExpr.LeftShift(NDExpr.Arr(v), NDExpr.Arr(c)));
+            Assert.AreEqual(8, ls.GetInt32(0));    // 1<<3
+            Assert.AreEqual(4, ls.GetInt32(1));    // 2<<1
+            var rs = np.evaluate(NDExpr.RightShift(NDExpr.Arr(v), NDExpr.Arr(c)));
+            Assert.AreEqual(0, rs.GetInt32(0));    // 1>>3
+            Assert.AreEqual(1, rs.GetInt32(1));    // 2>>1
+            Assert.AreEqual(4, rs.GetInt32(2));    // 16>>2
+
+            // a bool pair falls to the int8 loop: True<<True == 2.
+            var bshift = np.evaluate(NDExpr.LeftShift(NDExpr.Arr(np.array(new[] { true })), NDExpr.Arr(np.array(new[] { true }))));
+            Assert.AreEqual(NPTypeCode.SByte, bshift.typecode);
+        }
+
+        /// <summary>The new nodes compose as SUB-trees in the fused kernel (not only as a root).</summary>
+        [TestMethod]
+        public void P4_NodesComposeAsSubtrees()
+        {
+            var a = np.array(new double[] { 1, 5, 3 });
+            var b = np.array(new double[] { 4, 2, 3 });
+            // add(fmax(a,b), a) == [1+4, 5+5, 3+3] = [5, 10, 6]
+            var r = np.evaluate(NDExpr.Add(NDExpr.FMax(NDExpr.Arr(a), NDExpr.Arr(b)), NDExpr.Arr(a)));
+            Assert.AreEqual(5.0, r.GetDouble(0), 0);
+            Assert.AreEqual(10.0, r.GetDouble(1), 0);
+            Assert.AreEqual(6.0, r.GetDouble(2), 0);
+        }
+
+        /// <summary>The no-loop error taxonomy, reproduced from NumPy 2.4.2 (probed): the coercion
+        /// "not supported for the input types" form for shift/fmod/copysign-family, and the
+        /// signature-specific "did not contain a loop" form for gcd/lcm (incl. the bool/bool corner,
+        /// which IS a no-loop even though bool+integer is fine).</summary>
+        [TestMethod]
+        public void P4_NoLoop_ErrorTaxonomy()
+        {
+            var f = np.array(new double[] { 1, 2 });
+            var cx = np.array(new System.Numerics.Complex[] { new(1, 1) });
+
+            // shift / fmod / copysign-family over a no-loop dtype → "not supported for the input types".
+            StringAssert.Contains(
+                Assert.ThrowsException<NotSupportedException>(() => np.evaluate(NDExpr.LeftShift(NDExpr.Arr(f), NDExpr.Arr(f)))).Message,
+                "ufunc 'left_shift' not supported for the input types");
+            StringAssert.Contains(
+                Assert.ThrowsException<NotSupportedException>(() => np.evaluate(NDExpr.Fmod(NDExpr.Arr(cx), NDExpr.Arr(cx)))).Message,
+                "ufunc 'fmod' not supported for the input types");
+            StringAssert.Contains(
+                Assert.ThrowsException<NotSupportedException>(() => np.evaluate(NDExpr.CopySign(NDExpr.Arr(cx), NDExpr.Arr(cx)))).Message,
+                "ufunc 'copysign' not supported for the input types");
+
+            // uint64 + signed shift → float64 → no loop (the same "not supported" form).
+            StringAssert.Contains(
+                Assert.ThrowsException<NotSupportedException>(() => np.evaluate(
+                    NDExpr.LeftShift(NDExpr.Arr(np.array(new ulong[] { 1 })), NDExpr.Arr(np.array(new long[] { 1 }))))).Message,
+                "not supported for the input types");
+
+            // gcd/lcm no-loop uses the signature-specific "did not contain a loop" form.
+            StringAssert.Contains(
+                Assert.ThrowsException<NotSupportedException>(() => np.evaluate(NDExpr.Gcd(NDExpr.Arr(f), NDExpr.Arr(f)))).Message,
+                "ufunc 'gcd' did not contain a loop with signature matching types");
+            // bool/bool gcd is a no-loop (unlike bool+integer) — the NumPy corner.
+            StringAssert.Contains(
+                Assert.ThrowsException<NotSupportedException>(() => np.evaluate(
+                    NDExpr.Lcm(NDExpr.Arr(np.array(new[] { true })), NDExpr.Arr(np.array(new[] { true }))))).Message,
+                "ufunc 'lcm' did not contain a loop with signature matching types");
+        }
     }
 }

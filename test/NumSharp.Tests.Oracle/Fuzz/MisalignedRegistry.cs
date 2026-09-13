@@ -136,6 +136,12 @@ namespace NumSharp.Tests.Fuzz
             "sqrt", "cbrt", "exp", "exp2", "expm1", "log", "log2", "log10", "log1p",
             "sin", "cos", "tan", "sinh", "cosh", "tanh", "asin", "acos", "atan",
             "asinh", "acosh", "atanh", "deg2rad", "rad2deg", "pow", "atan2", "div", "recip",
+            // Phase 4 binary transcendentals — the SAME ~ULP envelope as the unary tier (documented
+            // per-op in the ufunc corpus): logaddexp/logaddexp2 ≤2 ULP (managed fdlibm log1p vs the
+            // closed UCRT log1p), hypot ≤1 ULP at float64 (correctly-rounded Borges FMA vs faithful
+            // UCRT hypot; f32/f16 are bit-exact and need no excuse). copysign/nextafter/heaviside/fmod
+            // are BIT-EXACT and are deliberately NOT here — a 1-ULP regression there must turn red.
+            "logaddexp", "logaddexp2", "hypot",
         };
 
         /// <summary>The bit-exact float32 ports, in the evaluate grammar's spelling (see NumPyPortedFloat32Kernels).</summary>

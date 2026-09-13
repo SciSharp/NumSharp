@@ -8018,6 +8018,18 @@ _EV_BINARY = {
     "min": np.minimum, "max": np.maximum,
     "eq": np.equal, "ne": np.not_equal, "lt": np.less, "le": np.less_equal,
     "gt": np.greater, "ge": np.greater_equal,
+    # Phase 4 binary node coverage. min/max already cover the NaN-propagating maximum/minimum;
+    # these are the NaN-ignoring fmax/fmin, the float-tier family (copysign/nextafter/logaddexp/
+    # logaddexp2/hypot/heaviside), the integer-only gcd/lcm + shifts, and C-style fmod. Cells where
+    # NumPy has no loop (float shift, complex copysign, bool-bool gcd, ...) either RAISE a verbatim
+    # error (recorded — the "not supported for the input types" family) or a non-verbatim error
+    # (auto-skipped — gcd/lcm's "did not contain a loop"), so ok_for needs no per-op integer filter.
+    "fmax": np.fmax, "fmin": np.fmin, "fmod": np.fmod,
+    "copysign": np.copysign, "nextafter": np.nextafter,
+    "logaddexp": np.logaddexp, "logaddexp2": np.logaddexp2,
+    "hypot": np.hypot, "heaviside": np.heaviside,
+    "gcd": np.gcd, "lcm": np.lcm,
+    "lshift": np.left_shift, "rshift": np.right_shift,
 }
 _EV_UNARY = {
     "neg": np.negative, "abs": np.absolute, "sqrt": np.sqrt, "square": np.square,
@@ -8219,8 +8231,11 @@ def gen_evaluate():
         if ops & {"and", "or", "xor", "not"} and not allintbool:
             return "err"                              # NumPy no-loop TypeError (verbatim) — keep as error cell
         if anycomplex and ops & {"floor", "ceil", "round", "trunc", "mod", "floordiv", "atan2",
-                                  "lt", "le", "gt", "ge", "min", "max", "cbrt", "deg2rad", "rad2deg"}:
+                                  "lt", "le", "gt", "ge", "min", "max", "fmax", "fmin",
+                                  "cbrt", "deg2rad", "rad2deg"}:
             return False                              # complex: no such NumPy loop / ordering
+            # (fmax/fmin: NumPy computes complex lexicographically, but the NaN-identity divergence is
+            #  the same E5 class as min/max — excluded here and unit-test-pinned instead.)
         if any(t.startswith("lc:") for t in toks) and not (allintbool or "float64" in dts or anycomplex):
             return False                              # f16/f32 + complex literal -> complex64 (width only)
         if any(t.startswith("lu:") for t in toks) and not all(d in ("uint64", "float64") for d in dts):
@@ -8273,6 +8288,29 @@ def gen_evaluate():
             for expr in templates_a:
                 verdict = ok_for(expr, sa, sb)
                 if verdict is False:
+                    continue
+                emit(expr, [(ba, va), (bb, vb)], ln, cid_tag=f"{sa},{sb}/{expr}")
+
+    # ---- A2. Phase 4 binary node coverage (the engine binary ufuncs that gained an NDExpr node) ----
+    # Same pair layouts × dtypes as A; ok_for + the emit try/except drop the no-loop / width-only /
+    # E5-complex cells. copysign/nextafter/heaviside/fmod/fmax/fmin/gcd/lcm/shifts are BIT-EXACT;
+    # logaddexp/logaddexp2 (≤2 ULP) and hypot@f64 (≤1 ULP) ride the EvaluateLibmOps ~ULP excuse.
+    templates_a2 = [
+        "fmax(in0,in1)", "fmin(in0,in1)", "fmod(in0,in1)",
+        "copysign(in0,in1)", "nextafter(in0,in1)",
+        "logaddexp(in0,in1)", "logaddexp2(in0,in1)",
+        "hypot(in0,in1)", "heaviside(in0,in1)",
+        "gcd(in0,in1)", "lcm(in0,in1)",
+        "lshift(in0,in1)", "rshift(in0,in1)",
+        # the new nodes as SUB-trees (prove they compose in the fused kernel, not only as a root)
+        "add(fmax(in0,in1),in0)",
+        "mul(hypot(in0,in1),lf:2.0)",
+    ]
+    for ln, fn in PAIR_LAYOUTS.items():
+        for (sa, sb) in pair_dts:
+            ba, va, bb, vb = fn(np.dtype(sa), np.dtype(sb))
+            for expr in templates_a2:
+                if ok_for(expr, sa, sb) is False:
                     continue
                 emit(expr, [(ba, va), (bb, vb)], ln, cid_tag=f"{sa},{sb}/{expr}")
 

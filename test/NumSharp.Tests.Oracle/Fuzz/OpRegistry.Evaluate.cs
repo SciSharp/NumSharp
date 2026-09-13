@@ -235,6 +235,20 @@ namespace NumSharp.Tests.Fuzz
                     case "xor": return NDExpr.BitwiseXor(a[0], a[1]);
                     case "min": return NDExpr.Min(a[0], a[1]);
                     case "max": return NDExpr.Max(a[0], a[1]);
+                    // Phase 4 binary family (min/max already cover NaN-propagating maximum/minimum).
+                    case "fmax": return NDExpr.FMax(a[0], a[1]);
+                    case "fmin": return NDExpr.FMin(a[0], a[1]);
+                    case "fmod": return NDExpr.Fmod(a[0], a[1]);
+                    case "copysign": return NDExpr.CopySign(a[0], a[1]);
+                    case "nextafter": return NDExpr.NextAfter(a[0], a[1]);
+                    case "logaddexp": return NDExpr.LogAddExp(a[0], a[1]);
+                    case "logaddexp2": return NDExpr.LogAddExp2(a[0], a[1]);
+                    case "hypot": return NDExpr.Hypot(a[0], a[1]);
+                    case "heaviside": return NDExpr.Heaviside(a[0], a[1]);
+                    case "gcd": return NDExpr.Gcd(a[0], a[1]);
+                    case "lcm": return NDExpr.Lcm(a[0], a[1]);
+                    case "lshift": return NDExpr.LeftShift(a[0], a[1]);
+                    case "rshift": return NDExpr.RightShift(a[0], a[1]);
                     case "eq": return NDExpr.Equal(a[0], a[1]);
                     case "ne": return NDExpr.NotEqual(a[0], a[1]);
                     case "lt": return NDExpr.Less(a[0], a[1]);

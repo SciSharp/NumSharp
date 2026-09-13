@@ -235,6 +235,176 @@ namespace NumSharp.Backends.Iteration
         public static NDExpr Where(NDExpr cond, NDExpr a, NDExpr b) => new WhereNode(cond, a, b);
 
         // ===================================================================
+        // Elementwise binary ufunc family (Phase 4 coverage) — every node here
+        // rides the shared BinaryNode kernel; the scalar emit is the SAME per-op
+        // emitter the engine's own ufuncs use (DirectILKernelGenerator.
+        // EmitScalarOperation), so results are byte-for-byte the unfused chain.
+        // ===================================================================
+
+        /// <summary>
+        /// NaN-PROPAGATING element-wise maximum (np.maximum) — an exact alias of <see cref="Max"/>.
+        /// A NaN operand WINS (the result is NaN if either input is NaN); contrast <see cref="FMax"/>,
+        /// which ignores NaN. Provided so <c>np.maximum</c> ports verbatim; identical node, cost and
+        /// dtype to <see cref="Max"/> (plain result_type promotion, complex compares lexicographically).
+        /// </summary>
+        /// <param name="a">First operand.</param>
+        /// <param name="b">Second operand.</param>
+        /// <returns>An expression node computing the NaN-propagating maximum of <paramref name="a"/> and <paramref name="b"/>.</returns>
+        public static NDExpr Maximum(NDExpr a, NDExpr b) => Max(a, b);
+
+        /// <summary>
+        /// NaN-PROPAGATING element-wise minimum (np.minimum) — an exact alias of <see cref="Min"/>.
+        /// A NaN operand WINS; contrast <see cref="FMin"/>. See <see cref="Maximum"/>.
+        /// </summary>
+        /// <param name="a">First operand.</param>
+        /// <param name="b">Second operand.</param>
+        /// <returns>An expression node computing the NaN-propagating minimum of <paramref name="a"/> and <paramref name="b"/>.</returns>
+        public static NDExpr Minimum(NDExpr a, NDExpr b) => Min(a, b);
+
+        /// <summary>
+        /// NaN-IGNORING element-wise maximum (np.fmax): when exactly one operand is NaN the OTHER
+        /// (the number) is returned — the opposite of <see cref="Maximum"/>/<see cref="Max"/>, which
+        /// propagate NaN. Dtype-preserving (plain result_type promotion, like maximum). Scalar-only in
+        /// the fused kernel (no SIMD lane), so a tree containing it runs scalar end-to-end.
+        /// </summary>
+        /// <param name="a">First operand.</param>
+        /// <param name="b">Second operand.</param>
+        /// <returns>An expression node computing the NaN-ignoring maximum.</returns>
+        public static NDExpr FMax(NDExpr a, NDExpr b) => new BinaryNode(BinaryOp.FMax, a, b);
+
+        /// <summary>
+        /// NaN-IGNORING element-wise minimum (np.fmin): the non-NaN operand wins. See <see cref="FMax"/>.
+        /// </summary>
+        /// <param name="a">First operand.</param>
+        /// <param name="b">Second operand.</param>
+        /// <returns>An expression node computing the NaN-ignoring minimum.</returns>
+        public static NDExpr FMin(NDExpr a, NDExpr b) => new BinaryNode(BinaryOp.FMin, a, b);
+
+        /// <summary>
+        /// C-style floating remainder (np.fmod): the result takes the sign of the DIVIDEND
+        /// (<paramref name="a"/>), unlike <see cref="Mod"/> which is floored and takes the divisor's
+        /// sign — so <c>Fmod(-7,3) == -1</c> where <c>Mod(-7,3) == 2</c>. Promotion follows Mod:
+        /// integer stays integer, a bool pair falls to the int8 loop; there is NO complex loop, so a
+        /// complex operand throws a no-loop <see cref="NotSupportedException"/> at typing time.
+        /// </summary>
+        /// <param name="a">Dividend (its sign is the result's sign).</param>
+        /// <param name="b">Divisor.</param>
+        /// <returns>An expression node computing the truncated remainder.</returns>
+        public static NDExpr Fmod(NDExpr a, NDExpr b) => new BinaryNode(BinaryOp.Fmod, a, b);
+
+        /// <summary>
+        /// Magnitude of <paramref name="a"/> with the sign of <paramref name="b"/> (np.copysign) — an
+        /// EXACT sign-bit copy, so <c>CopySign(3, -0.0)</c> is <c>-3</c> and the sign of ±0/±NaN is
+        /// honoured bit-for-bit. Float-only ufunc: bool/int operands PROMOTE to their tier float
+        /// (bool/i8/u8→f16, i16/u16→f32, i32+→f64, chosen per input like arctan2), and a complex
+        /// operand has no loop (throws at typing time).
+        /// </summary>
+        /// <param name="a">The value whose magnitude is kept.</param>
+        /// <param name="b">The value whose sign is copied.</param>
+        /// <returns>An expression node computing the copysign.</returns>
+        public static NDExpr CopySign(NDExpr a, NDExpr b) => new BinaryNode(BinaryOp.CopySign, a, b);
+
+        /// <summary>
+        /// The next representable value after <paramref name="a"/> toward <paramref name="b"/>
+        /// (np.nextafter) — an EXACT one-ULP bit step (bit-exact with NumPy). Same float-tier promotion
+        /// as <see cref="CopySign"/>; complex has no loop (throws at typing time).
+        /// </summary>
+        /// <param name="a">Start value.</param>
+        /// <param name="b">Direction to step toward.</param>
+        /// <returns>An expression node computing nextafter.</returns>
+        public static NDExpr NextAfter(NDExpr a, NDExpr b) => new BinaryNode(BinaryOp.NextAfter, a, b);
+
+        /// <summary>
+        /// Numerically stable <c>log(exp(a)+exp(b))</c> (np.logaddexp). Same float-tier promotion as
+        /// <see cref="CopySign"/> (complex has no loop). NOT bit-exact with NumPy — the managed fdlibm
+        /// <c>log1p</c> it composes over differs ≤2 ULP from NumPy's closed UCRT <c>log1p</c> (the same
+        /// documented ~ULP envelope as the unary transcendentals), so it is gated within 2 ULP, not
+        /// byte-for-byte.
+        /// </summary>
+        /// <param name="a">First log-domain value.</param>
+        /// <param name="b">Second log-domain value.</param>
+        /// <returns>An expression node computing logaddexp.</returns>
+        public static NDExpr LogAddExp(NDExpr a, NDExpr b) => new BinaryNode(BinaryOp.LogAddExp, a, b);
+
+        /// <summary>
+        /// Base-2 stable log-sum-exp <c>log2(2**a + 2**b)</c> (np.logaddexp2). See
+        /// <see cref="LogAddExp"/> — ≤2 ULP vs NumPy (the extra LOG2E product), not bit-exact.
+        /// </summary>
+        /// <param name="a">First value.</param>
+        /// <param name="b">Second value.</param>
+        /// <returns>An expression node computing logaddexp2.</returns>
+        public static NDExpr LogAddExp2(NDExpr a, NDExpr b) => new BinaryNode(BinaryOp.LogAddExp2, a, b);
+
+        /// <summary>
+        /// <c>sqrt(a**2 + b**2)</c> without spurious overflow/underflow (np.hypot). Same float-tier
+        /// promotion as <see cref="CopySign"/> (complex has no loop). float32/float16 are bit-exact with
+        /// NumPy; float64 is NumSharp's correctly-rounded Borges-FMA result, which is MORE accurate than
+        /// NumPy's faithfully-rounded UCRT hypot and so differs ≤1 ULP on ~9 % of inputs (gated within
+        /// that envelope, not byte-for-byte at float64).
+        /// </summary>
+        /// <param name="a">First leg.</param>
+        /// <param name="b">Second leg.</param>
+        /// <returns>An expression node computing the hypotenuse.</returns>
+        public static NDExpr Hypot(NDExpr a, NDExpr b) => new BinaryNode(BinaryOp.Hypot, a, b);
+
+        /// <summary>
+        /// The Heaviside step function (np.heaviside): <c>0</c> if <paramref name="x"/>&lt;0,
+        /// <paramref name="h0"/> if <paramref name="x"/>==0, <c>1</c> if <paramref name="x"/>&gt;0, and
+        /// the positive canonical NaN if <paramref name="x"/> is NaN. NOT commutative — <paramref name="x"/>
+        /// selects the branch and <paramref name="h0"/> is ONLY the exact-zero fill (its bits, NaN sign
+        /// included, pass through). Same float-tier promotion as <see cref="CopySign"/>; complex has no
+        /// loop. Bit-exact with NumPy at every supported dtype.
+        /// </summary>
+        /// <param name="x">The value whose sign selects the step branch.</param>
+        /// <param name="h0">The fill returned where <paramref name="x"/> is exactly zero.</param>
+        /// <returns>An expression node computing the Heaviside step.</returns>
+        public static NDExpr Heaviside(NDExpr x, NDExpr h0) => new BinaryNode(BinaryOp.Heaviside, x, h0);
+
+        /// <summary>
+        /// Greatest common divisor of |a| and |b| (np.gcd). INTEGER-ONLY: valid only when the two
+        /// operands promote to a real integer dtype (a bool paired with an integer is fine, but a
+        /// bool/bool pair, any float/complex/decimal, and the uint64+signed pair — which promotes to
+        /// float64 — all have NO loop and throw a "did not contain a loop" <see cref="NotSupportedException"/>
+        /// at typing time). The result can be NEGATIVE where the magnitude wraps the signed range
+        /// (<c>Gcd(int8 -128, -128) == -128</c>); <c>Gcd(0,0) == 0</c>. Scalar-only in the fused kernel.
+        /// </summary>
+        /// <param name="a">First operand.</param>
+        /// <param name="b">Second operand.</param>
+        /// <returns>An expression node computing the GCD.</returns>
+        public static NDExpr Gcd(NDExpr a, NDExpr b) => new BinaryNode(BinaryOp.Gcd, a, b);
+
+        /// <summary>
+        /// Lowest common multiple of |a| and |b| (np.lcm): 0 if either is 0, else <c>|a|/gcd*|b|</c>
+        /// (divide-before-multiply, so the product WRAPS the dtype on overflow, matching NumPy).
+        /// Same INTEGER-ONLY loop coverage / no-loop errors as <see cref="Gcd"/>.
+        /// </summary>
+        /// <param name="a">First operand.</param>
+        /// <param name="b">Second operand.</param>
+        /// <returns>An expression node computing the LCM.</returns>
+        public static NDExpr Lcm(NDExpr a, NDExpr b) => new BinaryNode(BinaryOp.Lcm, a, b);
+
+        /// <summary>
+        /// Bit shift left (np.left_shift). Integer loops only: a bool pair falls to the int8 loop, an
+        /// integer pair keeps its promoted integer dtype, and float/complex — plus the uint64+signed
+        /// pair (which promotes to float64) — have NO loop and throw a "not supported for the input
+        /// types" <see cref="NotSupportedException"/> at typing time. A shift count outside
+        /// <c>[0, bitwidth)</c> follows NumPy's overflow rule at the result width. Scalar-only.
+        /// </summary>
+        /// <param name="a">The value to shift.</param>
+        /// <param name="b">The shift count.</param>
+        /// <returns>An expression node computing the left shift.</returns>
+        public static NDExpr LeftShift(NDExpr a, NDExpr b) => new BinaryNode(BinaryOp.LeftShift, a, b);
+
+        /// <summary>
+        /// Bit shift right (np.right_shift) — arithmetic for signed, logical for unsigned. Same integer
+        /// loop coverage / no-loop errors and overflow rule as <see cref="LeftShift"/>.
+        /// </summary>
+        /// <param name="a">The value to shift.</param>
+        /// <param name="b">The shift count.</param>
+        /// <returns>An expression node computing the right shift.</returns>
+        public static NDExpr RightShift(NDExpr a, NDExpr b) => new BinaryNode(BinaryOp.RightShift, a, b);
+
+        // ===================================================================
         // Unary factories
         // ===================================================================
 

@@ -547,18 +547,38 @@ namespace NumSharp.Backends.Iteration
                 // (NumPy's TrueDivision resolver — even int8/int8 → f64).
                 BinaryOp.Divide when intish => NPTypeCode.Double,
 
-                // power/remainder/floor_divide have no bool loop; bool inputs
-                // fall to the int8 loop (probed: power(?,?)→i8,
-                // remainder(?,?)→i8, floor_divide(?,?)→i8).
-                BinaryOp.Power or BinaryOp.Mod or BinaryOp.FloorDivide
+                // power/remainder/floor_divide/fmod have no bool loop; bool inputs
+                // fall to the int8 loop (probed: power(?,?)→i8, remainder(?,?)→i8,
+                // floor_divide(?,?)→i8, fmod(?,?)→i8).
+                BinaryOp.Power or BinaryOp.Mod or BinaryOp.FloorDivide or BinaryOp.Fmod
                     when common == NPTypeCode.Boolean => NPTypeCode.SByte,
 
-                // arctan2 is float-only: int/bool promote to their tier float (i1→f16, i2→f32,
-                // i4+→f64) — unlike divide's flat f64. The loop is picked PER INPUT (the default
-                // type resolver takes the first 'ee'/'ff'/'dd' loop both inputs cast safely into),
-                // not from result_type: arctan2(int8, uint8) is float16, though int8+uint8 is int16.
-                BinaryOp.ATan2 when intish => WidestFloatTier(
-                    lt.IsWeak ? common : lt.Code, rt.IsWeak ? common : rt.Code),
+                // Float-only ufuncs whose loop is picked PER INPUT (the widest tier float, the same
+                // resolver arctan2 uses): int/bool promote to their tier float (i1→f16, i2→f32,
+                // i4+→f64) — unlike divide's flat f64. arctan2(int8, uint8) is float16, though
+                // int8+uint8 is int16. copysign/nextafter/logaddexp/logaddexp2/hypot/heaviside share
+                // arctan2's ee/ff/dd loop set exactly (probed 2.4.2).
+                (BinaryOp.ATan2 or BinaryOp.CopySign or BinaryOp.NextAfter or BinaryOp.LogAddExp
+                    or BinaryOp.LogAddExp2 or BinaryOp.Hypot or BinaryOp.Heaviside) when intish
+                    => WidestFloatTier(lt.IsWeak ? common : lt.Code, rt.IsWeak ? common : rt.Code),
+
+                // The same float-only family (and fmod) has NO complex loop: NumPy raises the
+                // coercion TypeError (recorded verbatim in the evaluate oracle's error tier). arctan2
+                // itself is left on `_ => common` (its complex cells are oracle-excluded, not thrown —
+                // unchanged pre-existing behavior).
+                (BinaryOp.CopySign or BinaryOp.NextAfter or BinaryOp.LogAddExp or BinaryOp.LogAddExp2
+                    or BinaryOp.Hypot or BinaryOp.Heaviside or BinaryOp.Fmod)
+                    when common == NPTypeCode.Complex => throw NoLoopNotSupported(_op),
+
+                // Bit shifts: integer loops only — a bool pair falls to the int8 loop, an integer
+                // pair keeps its promoted integer dtype, and float/complex/decimal (plus uint64+signed,
+                // which promotes to float64) have no loop.
+                BinaryOp.LeftShift or BinaryOp.RightShift => ShiftResult(_op, common),
+
+                // gcd/lcm: integer loops ONLY. A bool pair (common == Boolean) has no loop — unlike the
+                // shifts — but bool+integer is valid (bool promotes to the integer). The no-loop message
+                // is the signature-specific "did not contain a loop" form carrying the INPUT dtype tuple.
+                BinaryOp.Gcd or BinaryOp.Lcm => GcdLcmResult(_op, common, lt, rt),
 
                 BinaryOp.Subtract when common == NPTypeCode.Boolean
                     => throw new NotSupportedException(
@@ -600,6 +620,95 @@ namespace NumSharp.Backends.Iteration
             var tr = NDExprTypeRules.FloatTier(r);
             return DirectILKernelGenerator.GetTypeSize(tl) >= DirectILKernelGenerator.GetTypeSize(tr) ? tl : tr;
         }
+
+        /// <summary>
+        /// Result dtype of a bit shift (left_shift / right_shift). A bool pair falls to the int8 loop
+        /// (NumPy: left_shift(?,?) → int8); an integer common keeps its promoted dtype; anything else —
+        /// float, complex, decimal, and the uint64+signed pair (which <see cref="NDExprTypeRules.PromoteStrong"/>
+        /// sends to float64) — has NO shift loop and throws the coercion TypeError NumPy raises.
+        /// </summary>
+        /// <param name="op">The shift op (for the ufunc name in the no-loop message).</param>
+        /// <param name="common">The operands' promoted dtype.</param>
+        /// <returns>int8 for a bool pair, else the integer <paramref name="common"/>.</returns>
+        /// <exception cref="NotSupportedException"><paramref name="common"/> is not an integer dtype (no loop).</exception>
+        private static NPTypeCode ShiftResult(BinaryOp op, NPTypeCode common)
+        {
+            if (common == NPTypeCode.Boolean) return NPTypeCode.SByte;
+            if (NDExprTypeRules.IsIntegerKind(common)) return common;
+            throw NoLoopNotSupported(op);
+        }
+
+        /// <summary>
+        /// Result dtype of gcd / lcm. Valid only when the operands promote to a REAL integer dtype
+        /// (<see cref="NDExprTypeRules.IsIntegerKind"/> excludes Boolean, so a bool/bool pair is a
+        /// no-loop even though a bool+integer pair is fine — the bool promotes to the integer). Every
+        /// other common — Boolean, float, complex, decimal, and the uint64+signed pair (float64) — has
+        /// no loop and throws the signature-specific "did not contain a loop" TypeError that names the
+        /// two INPUT dtypes (NumPy reports the operands, not the promoted common).
+        /// </summary>
+        /// <param name="op">The op (gcd / lcm) for the ufunc name in the no-loop message.</param>
+        /// <param name="common">The operands' promoted dtype.</param>
+        /// <param name="lt">Left operand's typing result (its dtype names the message tuple).</param>
+        /// <param name="rt">Right operand's typing result.</param>
+        /// <returns>The integer <paramref name="common"/>.</returns>
+        /// <exception cref="NotSupportedException"><paramref name="common"/> is not a real integer dtype (no loop).</exception>
+        private static NPTypeCode GcdLcmResult(BinaryOp op, NPTypeCode common, in NDExprTypeInfo lt, in NDExprTypeInfo rt)
+        {
+            if (NDExprTypeRules.IsIntegerKind(common)) return common;
+            throw NoLoopDidNotContain(op, lt.IsWeak ? lt.DefaultCode : lt.Code, rt.IsWeak ? rt.DefaultCode : rt.Code);
+        }
+
+        /// <summary>The coercion-form no-loop TypeError NumPy raises for shift/fmod/copysign-family cells
+        /// (verbatim, minus the input-dtype tuple — the same simplification the bitwise branch uses).</summary>
+        private static NotSupportedException NoLoopNotSupported(BinaryOp op)
+            => new($"ufunc '{UfuncName(op)}' not supported for the input types, and the inputs could not " +
+                   "be safely coerced to any supported types according to the casting rule ''safe''");
+
+        /// <summary>The signature-specific no-loop TypeError NumPy raises for gcd/lcm, carrying the two
+        /// INPUT dtype class names (e.g. <c>(Float32DType, Float64DType) -> None</c>).</summary>
+        private static NotSupportedException NoLoopDidNotContain(BinaryOp op, NPTypeCode l, NPTypeCode r)
+            => new($"ufunc '{UfuncName(op)}' did not contain a loop with signature matching types " +
+                   $"(<class 'numpy.dtypes.{NumPyDTypeClassName(l)}'>, <class 'numpy.dtypes.{NumPyDTypeClassName(r)}'>) -> None");
+
+        /// <summary>NumPy's ufunc name for the Phase-4 binary ops (used only in the no-loop error texts).</summary>
+        private static string UfuncName(BinaryOp op) => op switch
+        {
+            BinaryOp.Fmod => "fmod",
+            BinaryOp.CopySign => "copysign",
+            BinaryOp.NextAfter => "nextafter",
+            BinaryOp.LogAddExp => "logaddexp",
+            BinaryOp.LogAddExp2 => "logaddexp2",
+            BinaryOp.Hypot => "hypot",
+            BinaryOp.Heaviside => "heaviside",
+            BinaryOp.Gcd => "gcd",
+            BinaryOp.Lcm => "lcm",
+            BinaryOp.LeftShift => "left_shift",
+            BinaryOp.RightShift => "right_shift",
+            _ => op.ToString().ToLowerInvariant(),
+        };
+
+        /// <summary>The <c>numpy.dtypes.*DType</c> class name for a dtype (the speller NumPy's no-loop
+        /// error messages use). Byte→UInt8 / SByte→Int8 mirror NumPy's naming; the NumSharp-only Char /
+        /// Decimal keep their own names (they never appear in an oracle-gated message).</summary>
+        private static string NumPyDTypeClassName(NPTypeCode tc) => (tc switch
+        {
+            NPTypeCode.Boolean => "Bool",
+            NPTypeCode.Byte => "UInt8",
+            NPTypeCode.SByte => "Int8",
+            NPTypeCode.Int16 => "Int16",
+            NPTypeCode.UInt16 => "UInt16",
+            NPTypeCode.Int32 => "Int32",
+            NPTypeCode.UInt32 => "UInt32",
+            NPTypeCode.Int64 => "Int64",
+            NPTypeCode.UInt64 => "UInt64",
+            NPTypeCode.Half => "Float16",
+            NPTypeCode.Single => "Float32",
+            NPTypeCode.Double => "Float64",
+            NPTypeCode.Complex => "Complex128",
+            NPTypeCode.Decimal => "Decimal",
+            NPTypeCode.Char => "Char",
+            _ => tc.ToString(),
+        }) + "DType";
     }
 
     public sealed partial class UnaryNode
