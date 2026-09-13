@@ -137,5 +137,98 @@ namespace NumSharp.Tests.Ma
             Assert.IsTrue(np.ma.getdata(A()).astype(np.float64).ToArray<double>()
                 .SequenceEqual(new double[] { 1, -2, 3, -4 }));
         }
+
+        // m = [1, 2(masked), 3, 4(masked)] — reductions see only {1, 3}.
+        private static MaskedArray M13() =>
+            np.ma.array(np.array(new double[] { 1, 2, 3, 4 }), np.array(new bool[] { false, true, false, true }));
+
+        /// <summary>Reductions exclude masked elements: sum/mean/min/max/prod/count/ptp over {1,3}.</summary>
+        [TestMethod]
+        public void Reductions_ExcludeMaskedElements()
+        {
+            Assert.AreEqual(4.0, np.ma.sum(M13()).data.GetDouble(0));   // 1+3
+            Assert.AreEqual(2.0, np.ma.mean(M13()).data.GetDouble(0));  // (1+3)/2
+            Assert.AreEqual(1.0, np.ma.min(M13()).data.GetDouble(0));
+            Assert.AreEqual(3.0, np.ma.max(M13()).data.GetDouble(0));
+            Assert.AreEqual(3.0, np.ma.prod(M13()).data.GetDouble(0));  // 1*3
+            Assert.AreEqual(2L, np.ma.count(M13()).GetInt64(0));        // two unmasked
+            Assert.AreEqual(2.0, np.ma.ptp(M13()).data.GetDouble(0));   // 3-1
+            Assert.AreEqual(1.0, np.ma.var(M13()).data.GetDouble(0));   // mean 2 → ((1-2)²+(3-2)²)/2
+            Assert.AreEqual(1.0, np.ma.std(M13()).data.GetDouble(0));
+        }
+
+        /// <summary>A reduction whose every element is masked returns the <c>masked</c> singleton.</summary>
+        [TestMethod]
+        public void Reduction_AllMasked_ReturnsMaskedSingleton()
+        {
+            var allMasked = np.ma.array(np.array(new double[] { 1, 2, 3 }), np.array(new bool[] { true, true, true }));
+            Assert.IsTrue(ReferenceEquals(np.ma.sum(allMasked), np.ma.masked));
+            Assert.IsTrue(ReferenceEquals(np.ma.mean(allMasked), np.ma.masked));
+        }
+
+        /// <summary>cumsum treats masked slots as 0 for the running total but keeps their POSITIONS masked.</summary>
+        [TestMethod]
+        public void Cumsum_PreservesMaskedPositions()
+        {
+            var m = np.ma.array(np.array(new double[] { 1, 2, 3 }), np.array(new bool[] { false, true, false }));
+            var r = np.ma.cumsum(m);
+            Assert.IsTrue(np.ma.getdata(r).astype(np.float64).ToArray<double>().SequenceEqual(new double[] { 1, 1, 4 }));
+            Assert.IsTrue(np.ma.getmaskarray(r).ToArray<bool>().SequenceEqual(new[] { false, true, false }));
+        }
+
+        /// <summary>argmin/argmax skip masked elements (masked filled with the dtype's extreme).</summary>
+        [TestMethod]
+        public void ArgMinMax_IgnoreMasked()
+        {
+            var m = np.ma.array(np.array(new double[] { 5, 1, 3 }), np.array(new bool[] { false, true, false }));
+            Assert.AreEqual(2L, np.ma.argmin(m).GetInt64(0)); // min of {5,3} is 3 at index 2 (1 is masked)
+            Assert.AreEqual(0L, np.ma.argmax(m).GetInt64(0)); // max of {5,3} is 5 at index 0
+        }
+
+        /// <summary>masked_greater/masked_invalid build masks from a predicate, OR'ing onto any existing mask.</summary>
+        [TestMethod]
+        public void MaskedConstructors_Build_Masks()
+        {
+            var g = np.ma.masked_greater(np.array(new double[] { 1, 5, 2, 9 }), 3.0);
+            Assert.IsTrue(np.ma.getmaskarray(g).ToArray<bool>().SequenceEqual(new[] { false, true, false, true }));
+
+            var inv = np.ma.masked_invalid(np.array(new double[] { 1, double.NaN, double.PositiveInfinity, 4 }));
+            Assert.IsTrue(np.ma.getmaskarray(inv).ToArray<bool>().SequenceEqual(new[] { false, true, true, false }));
+        }
+
+        /// <summary>Element-wise maximum picks the larger per position; a masked slot yields the other operand.</summary>
+        [TestMethod]
+        public void Maximum_ElementWise()
+        {
+            var a = np.ma.array(np.array(new double[] { 1, 8 }), np.array(new bool[] { false, true }));
+            var b = np.array(new double[] { 5, 2 });
+            var r = np.ma.maximum(a, b);
+            Assert.AreEqual(5.0, np.ma.getdata(r).GetDouble(0)); // max(1,5)
+            Assert.AreEqual(2.0, np.ma.getdata(r).GetDouble(1)); // a masked → b's 2
+        }
+
+        /// <summary>Instance methods and arithmetic operators mirror the module functions.</summary>
+        [TestMethod]
+        public void InstanceMethods_And_Operators()
+        {
+            Assert.AreEqual(4.0, M13().sum().data.GetDouble(0));
+            Assert.AreEqual(2.0, M13().mean().data.GetDouble(0));
+            var s = M13() + M13();                                 // [2, --, 6, --]
+            Assert.IsTrue(np.ma.getmaskarray(s).ToArray<bool>().SequenceEqual(new[] { false, true, false, true }));
+            Assert.AreEqual(2.0, np.ma.getdata(s).GetDouble(0));
+        }
+
+        /// <summary>Creation makes fresh UNMASKED arrays; shape manip keeps mask aligned; compressed drops masked.</summary>
+        [TestMethod]
+        public void Creation_Manip_Compressed()
+        {
+            Assert.IsFalse(np.ma.getmaskarray(np.ma.zeros(new Shape(2, 2))).ToArray<bool>().Any(x => x));
+            Assert.IsTrue(np.ma.arange(4).data.astype(np.float64).ToArray<double>().SequenceEqual(new double[] { 0, 1, 2, 3 }));
+            // compressed drops the masked elements (M13 → {1,3}).
+            Assert.IsTrue(np.ma.compressed(M13()).astype(np.float64).ToArray<double>().SequenceEqual(new double[] { 1, 3 }));
+            // transpose keeps the mask aligned.
+            var x = np.ma.array(np.array(new double[,] { { 1, 2 }, { 3, 4 } }), np.array(new bool[,] { { false, true }, { false, false } }));
+            Assert.IsTrue(np.ma.getmaskarray(np.ma.transpose(x)).ToArray<bool>().SequenceEqual(new[] { false, false, true, false }));
+        }
     }
 }
