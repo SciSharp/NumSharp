@@ -44,6 +44,11 @@
   passes (CSE, constant folding, parameter leaves), opt-in threading, string front-end, diagnostics.
   Each phase has acceptance numbers a re-run of the probe verifies.
 
+> **Beyond this plan:** the capabilities NDExpr still cannot express — multi-output passes,
+> reductions inside trees, scans/recurrences/shifts, gather, vectorizable `Call`, macro nodes,
+> fixed-cost dispatch, cache management, AOT, the public tree API and an ONNX export — are planned
+> separately in `docs/plans/ndexpr-capabilities.md` (C1–C14, ordered by value ÷ effort).
+
 ### 0.1 Landed status (2026-09-08, branch `exprs`; the half point — P0 → P1 → P3 done, P2 → P4 → P5 → P6 open)
 
 | Phase | Status | Commit | What landed / evidence |
