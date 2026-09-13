@@ -1245,8 +1245,13 @@ exactly: axis → dtype → ndim → writeable → non-axis broadcast → value 
 (NPY/NS, Release, best-of-15):** the argsort/argmax-along-axis reconstruction (put_along_axis's purpose) is
 **1.68–2.18×** (NumPy builds `_make_along_axis_idx`'s arange grids + a MapIter; NumSharp is a direct odometer);
 the degenerate `axis=None` flat 1-D case is **~1.03–1.11×**, the memory-bandwidth ceiling the whole scatter
-family (`put`/`place`/`putmask`) hits. Gates: `Indexing/PutAlongAxisTests.cs` (41) + 48 `put_along_axis` cases
-in the `groupa` differential-fuzz tier. See `Indexing/np.put_along_axis.cs`.
+family (`put`/`place`/`putmask`) hits. **One inherited divergence** (`[Misaligned]`, the same benign class as
+`take_along_axis`): for a NON-contiguous `indices` with MULTIPLE out-of-bounds values, the reported offending
+index VALUE follows the validation odometer's C-order while NumPy's follows its MapIter (memory/axis) order — the
+error TYPE, axis and size always match, and argsort/argmax output (contiguous) is exact, so it never arises in
+practice (validated: 10,200 randomized cases + 142 metamorphic layout invariants, 0 unexplained). Gates:
+`Indexing/PutAlongAxisTests.cs` (41) + 48 `put_along_axis` cases in the `groupa` differential-fuzz tier. See
+`Indexing/np.put_along_axis.cs`.
 
 `np.select(condlist, choicelist, default=0)` (NumPy `numpy/lib/_function_base_impl.py`) draws each
 output element from the choice whose condition is true, FIRST matching condition winning; positions
