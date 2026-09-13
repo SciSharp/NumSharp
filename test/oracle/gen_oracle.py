@@ -3328,6 +3328,43 @@ def gen_groupa():
         emit("take_along_axis", {"axis": 2}, [describe(a3, t3b), describe(ti, ti)],
              np.take_along_axis(t3b, ti, axis=2))
 
+        # put_along_axis — SETTER twin of take_along_axis (mutate a COPY; result IS the mutated
+        # array, exactly like `put` above). Mirrors take_along_axis's index families, now scattering
+        # `vals` into `arr`. Operands are CONTIGUOUS (non-contiguous WRITE-THROUGH is unit-tested);
+        # `vals` is BROADCAST — not cycled — to the indexing result shape, so full-shape, (M,)-row,
+        # 0-d scalar and arr-broadcast (several positions collapsing onto one element, LAST write in
+        # C-order winning) forms all appear. `axis=None` scatters into the C-order flat view. NumPy
+        # is the oracle for every collision.
+        def emit_pla(arr, idx, vals, axis):
+            ac = arr.copy()
+            np.put_along_axis(ac, idx, vals, axis=axis)
+            emit("put_along_axis", {"axis": (None if axis is None else int(axis))},
+                 [describe(arr, arr), describe(idx, idx), describe(vals, vals)], ac)
+
+        pB1 = _cbase((6,), d)
+        emit_pla(pB1, np.argsort(pB1).astype(np.int64), _cbase((6,), d) + 7, 0)                # 1-D argsort scatter
+        pA2 = _cbase((3, 4), d)
+        emit_pla(pA2, np.argsort(pA2, axis=1).astype(np.int64), _cbase((3, 4), d) + 7, 1)      # axis 1
+        emit_pla(_cbase((3, 4), d), np.argsort(pA2, axis=0).astype(np.int64), _cbase((3, 4), d) + 7, 0)  # axis 0
+        pflat = np.array([5, 0, 3, 3, 1, 2, 0, 8, 11, 4, 9, 6], dtype=np.int64)                # axis=None (12 idx)
+        emit_pla(_cbase((3, 4), d), pflat, _cbase((12,), d) + 7, None)
+        pj = np.array([[0, 3, 1, 2, 0], [3, 3, 2, 1, 0], [1, 0, 2, 3, 3]], dtype=np.int64)     # (3,5) J=5 != M=4
+        emit_pla(_cbase((3, 4), d), pj, _cbase((3, 5), d) + 7, -1)
+        pneg = np.array([[-1, -2, -3, -4], [-4, -3, -2, -1], [0, -1, 0, -1]], dtype=np.int64)  # neg-wrap
+        emit_pla(_cbase((3, 4), d), pneg, _cbase((3, 4), d) + 7, 1)
+        pb0 = np.array([[0, 1, 2, 0]], dtype=np.int64)                                         # (1,4) idx bcast over NON-axis dim 0
+        emit_pla(_cbase((3, 4), d), pb0, _cbase((3, 4), d) + 7, 1)                              # -> result (3,4), idx row broadcast
+        pb1 = np.array([[2], [0], [1]], dtype=np.int64)                                        # (3,1) keepdims-argmax style
+        emit_pla(_cbase((3, 4), d), pb1, _cbase((3, 1), d) + 7, 1)
+        pA3 = _cbase((2, 3, 4), d)                                                             # 3-D axis 2
+        emit_pla(pA3, np.argsort(pA3, axis=2).astype(np.int64), _cbase((2, 3, 4), d) + 7, 2)
+        # scalar (0-d) value broadcast, and a (4,)-row value broadcast over the axis-1 slices.
+        emit_pla(_cbase((3, 4), d), np.argsort(pA2, axis=1).astype(np.int64), _cbase((), d) + 9, 1)
+        emit_pla(_cbase((3, 4), d), np.argsort(pA2, axis=1).astype(np.int64), _cbase((4,), d) + 9, 1)
+        # arr broadcast dim: arr (1,4), idx (3,4) -> 3 iteration rows collapse onto arr row 0 (last wins).
+        emit_pla(_cbase((1, 4), d), np.array([[0, 1, 2, 3], [3, 2, 1, 0], [1, 1, 1, 1]], dtype=np.int64),
+                 _cbase((3, 4), d) + 7, 1)
+
         # put — NEGATIVE indices under RAISE (same normalization as take).
         npa = _cbase((6,), d)
         npidx = np.array([-1, -6], dtype=np.int64)

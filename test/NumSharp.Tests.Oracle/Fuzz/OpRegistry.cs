@@ -369,6 +369,13 @@ namespace NumSharp.Tests.Fuzz
                     int? tlaAx = axEl.ValueKind == JsonValueKind.Null ? (int?)null : axEl.GetInt32();
                     return np.take_along_axis(ops[0], ops[1], tlaAx);
                 }
+                case "put_along_axis":
+                {
+                    var axEl = p["axis"];
+                    int? plaAx = axEl.ValueKind == JsonValueKind.Null ? (int?)null : axEl.GetInt32();
+                    np.put_along_axis(ops[0], ops[1], ops[2], plaAx);
+                    return ops[0]; // mutates ops[0] (arr) in place, IS the result
+                }
                 case "compress": return np.compress(ops[0], ops[1], p["axis"].GetInt32());
                 case "extract": return np.extract(ops[0], ops[1]);
                 case "convolve": return np.convolve(ops[0], ops[1], p["mode"].GetString());
