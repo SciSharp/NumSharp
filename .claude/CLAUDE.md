@@ -662,7 +662,17 @@ texts differ in wording; `np.broadcast_to(a, (2^62, 6))` builds the view where N
 `are_broadcastable`, `broadcast`, `broadcast_arrays`, `broadcast_to`
 
 ### Math — Arithmetic
-`abs`, `absolute`, `acosh`, `add`, `arccos`, `arccosh`, `arcsin`, `arcsinh`, `arctan`, `arctan2`, `arctanh`, `asinh`, `atanh`, `cbrt`, `ceil`, `clip`, `convolve`, `correlate`, `cos`, `cosh`, `deg2rad`, `degrees`, `divide`, `divmod`, `exp`, `exp2`, `expm1`, `float_power`, `floor`, `floor_divide`, `fmod`, `log`, `log10`, `log1p`, `log2`, `mod`, `modf`, `multiply`, `negative`, `positive`, `power`, `rad2deg`, `radians`, `reciprocal`, `remainder`, `rint`, `sign`, `sin`, `sinh`, `spacing`, `sqrt`, `square`, `subtract`, `tan`, `tanh`, `true_divide`, `trunc`
+`abs`, `absolute`, `acosh`, `add`, `arccos`, `arccosh`, `arcsin`, `arcsinh`, `arctan`, `arctan2`, `arctanh`, `asinh`, `atanh`, `cbrt`, `ceil`, `clip`, `convolve`, `correlate`, `cos`, `cosh`, `deg2rad`, `degrees`, `divide`, `divmod`, `exp`, `exp2`, `expm1`, `fix`, `float_power`, `floor`, `floor_divide`, `fmod`, `gcd`, `lcm`, `log`, `log10`, `log1p`, `log2`, `mod`, `modf`, `multiply`, `negative`, `positive`, `power`, `rad2deg`, `radians`, `reciprocal`, `remainder`, `rint`, `sign`, `sin`, `sinc`, `sinh`, `spacing`, `sqrt`, `square`, `subtract`, `tan`, `tanh`, `true_divide`, `trunc`
+
+**`np.fix`** — round toward zero, dtype-preserving (NumPy `numpy/lib/_ufunclike_impl.py`, gated by the
+`unary`-tier `trunc` corpus via the `fix→trunc` alias + `Math/np.fix.Test.cs`). In NumPy 2.4.2 `fix(x, out=None)`
+is a VERBATIM delegation to `trunc(x, out=out)`, so `np.fix` is `np.trunc` by another name and inherits it
+exactly — dtype preservation (int/bool identity, floats truncated), NaN/±inf pass-through, the sign of `-0.0`,
+and the error surface (a complex input and an incompatible `out` dtype both leak the underlying `trunc` ufunc,
+which is what NumPy's `fix` leaks too since it also delegates). Unlike a true ufunc it has NO `where`/`dtype`
+parameter — the signature is `fix(x, out=null)`, `out` positional as in NumPy. One inherited `trunc` divergence:
+`fix(complex)` raises `NotSupportedException` where NumPy raises `TypeError` (pre-existing in `trunc`, shared).
+See `Math/np.fix.cs`.
 
 **The divmod family** — `remainder`/`mod`, `fmod`, `divmod` (all probed against 2.4.2; gates the
 `divmod_power`/`multioutput` fuzz tiers + `Math` unit tests). `np.remainder` is an exact ALIAS of the existing
@@ -705,6 +715,26 @@ path is **~parity (0.86–0.99×)**, the `Math.Pow` physical ceiling (NumPy is e
 `pow` exists — the same ceiling as `arcsinh`/`arccosh`). See `Math/np.float_power.cs`,
 `Backends/Default/Math/Default.FloatPower.cs`, `Backends/TensorEngine.cs` (`FloatPower`).
 
+**`np.gcd` / `np.lcm` — the number-theoretic pair** (NumPy `npy_gcd@c@`/`npy_lcm@c@` in
+`npymath/npy_math_internal.h.src` + the `@TYPE@_gcd`/`@TYPE@_lcm` integer loops; gates `Math/np.gcd.Test.cs`
+(16) + the differential-fuzz `gcd` tier, 306 cases bit-exact). **INTEGER-ONLY** — bool/half/single/double/
+decimal/complex, and the **uint64+signed → float64** NEP50 pair, name no loop and raise NumPy's verbatim
+`ufunc '{name}' did not contain a loop with signature matching types (…, …) -> None` (as `TypeError`; the
+`dtype=`-path variant closes with `-> {dtype}DType`). Uniform NEP50 promotion (both operands + output share
+ONE integer dtype); a bool paired with an integer promotes to that integer loop (valid). New `BinaryOp.Gcd`/
+`BinaryOp.Lcm` ride the exact `Fmod` seam — `Default.{Gcd,Lcm}` → `ExecuteBinaryOp` → the scalar per-element
+kernel `EmitGcdLcmOperation` → `Utilities/NDGcdLcm.{Gcd,Lcm}*` (one helper per integer dtype incl. Char) — so
+they inherit every layout, `out=`/`where=`/`dtype=`, and weak-scalar binding for free. The helpers port NumPy
+exactly: unsigned Euclidean core (`while(a!=0){c=a;a=b%a;b=c;}`), signed = the core on operand MAGNITUDES then
+reinterpret back, lcm = `gcd==0?0:|a|/gcd*|b|`. Two NumPy-exact wrapping behaviours pinned: a signed result can
+be **negative** when the magnitude wraps (`gcd(int8 -128,-128)==-128`, `lcm(int32.Min,1)==int32.Min`) and the
+lcm product **wraps** the dtype on overflow (`lcm(int16 21000,14000)==-23536`). **NO SIMD** (data-dependent
+Euclidean loop) — like NumPy, which explicitly does not vectorize these. **Perf (NPY/NS, Release, best-of, 100K/
+10M): ~parity (0.99–1.06×)** — the physical ceiling (measured: binary/Stein's GCD is SLOWER than division-based
+Euclid on modern x86, there is no vector integer division or vector TZCNT, and the IL kernel already matches a
+hand-inlined C# loop), the same class of ceiling as `arcsinh`/`float_power`-general. See `Math/np.gcd.cs`,
+`Backends/Default/Math/Default.GcdLcm.cs`, `Utilities/NDGcdLcm.cs`.
+
 **`correlate` / `convolve` — the sliding multiply-accumulate family** (NumPy `_pyarray_correlate` +
 `small_correlate`; `Math/NDArray.SlidingDot.cs`). `np.correlate(a, v, mode='valid')` is cross-correlation
 `c_k = Σ_n a_{n+k}·conj(v_n)`; `np.convolve(a, v, mode='full')` is `correlate(a, v[::-1])` (no conjugation).
@@ -745,6 +775,34 @@ managed path stays the `groupa` fuzz default.
 `NumSharp.Interop.OpenBLAS/OpenBlasEngine.SlidingDot.cs`.
 
 **Inverse hyperbolic** `arcsinh`/`arccosh`/`arctanh` (+ NumPy 2.0 Array-API aliases `asinh`/`acosh`/`atanh`, same ufunc) follow the `arcsin`/`sinh` engine seam (`ASinh`/`ACosh`/`ATanh` → `ExecuteUnaryOp` → `UnaryOp.{Asinh,Acosh,Atanh}` IL kernels) with the `f(x, out=, where=, dtype=)` ufunc surface + positional-dtype convenience overloads. **Real float32/float64 are BYTE-IDENTICAL to NumPy 2.4.2** — `Math.Asinh/Acosh/Atanh` and the `MathF` twins call the same MSVC `ucrtbase` CRT as `npy_asinh/acosh/atanh` (verified 0-diff over 4521 adversarial inputs at both widths, specials/±inf/NaN/subnormals/±0 included), same class as the platform-libm `expm1`/`log1p` cells. **Perf (NPY/NS, Release, best-of-11 warm, `out=`, 10M on byte-identical inputs):** `arcsinh` **0.99×**, `arccosh` **1.00×**, `arctanh` **0.97×** — parity, and this is the correct ceiling rather than a shortfall. These three are the ONE arc-family NumPy has **no active SIMD kernel** for on win-amd64 (its SVML `asinh`/`acosh`/`atanh` are AVX-512/Linux-gated, never compiled into the 2.4.2 wheel), so — unlike `exp`/`log`/`sin`/`cos`/`tanh`, which NumSharp ports bit-exactly and BEATS — there is nothing to port and byte-parity REQUIRES the same scalar `ucrtbase` CRT on both sides. The kernel is a **non-unrolled scalar loop** (`EmitUnaryScalarLoop`; these three fall through every `CanUseUnarySimd` branch, as they must — there is no `Vector<double>.Asinh`); its only edge over a naive managed loop is a raw-pointer direct `call` with no bounds checks, and that alone is enough to BEAT `System.Numerics.Tensors.TensorPrimitives.Asinh`, .NET's own SIMD transcendental library (one-process warm best-of-15, f64 10M, same array: NumSharp IL kernel **97.3 ms** < TensorPrimitives 101.1 ms < naive `Math.Asinh` loop 105.5 ms). Two speedup levers were POC'd and REJECTED: (1) 4×/8× **unrolling** the CRT-call loop does not help — the `ucrtbase` call latency dominates and the extra body is a wash-to-slightly-slower for asinh/atanh (measured); (2) **SIMD buys nothing byte-exactly** — TensorPrimitives is itself **0-ULP** vs NumPy over 10M f64 AND f32 inputs *precisely because it does NOT vectorize these three* (no correctly-rounded vector asinh/acosh/atanh exists, so it falls to the scalar CRT), which is the direct proof that a vector kernel would necessarily DIVERGE. The only faster route is a divergent SIMD polynomial (SLEEF/Cephes, ~1–4 ULP off), which breaks byte-parity and is therefore rejected. So there is no NumSharp-side overhead left to reclaim. Integer/bool tier to float per `ResolveUnaryFloatReturnType` (bool/i8/u8→f16, i16/u16/char→f32, i32+→f64); **float16 is BYTE-EXACT** via native `Half.Asinh/Acosh/Atanh` (which compute in float32 = NumPy's `astype 'e'->'f'`, `(Half)asinhf((float)h)` — verified 0 finite-diffs over all 65536 f16 values, and faster than the double bridge the rest of the arc-trig f16 tier still uses); Decimal via the decimal→double bridge (valid-domain 15-sig-fig; out-of-domain NaN/inf throws `OverflowException` on `(decimal)NaN` — a pre-existing bridge limitation shared by ALL decimal transcendentals: `arcsin(2m)`/`sqrt(-1m)`/`log(0m)` behave identically, no NumPy decimal analog). **Complex128** is derived from the byte-exact `Asin`/`Acos`/`Atan`(=`Catanh`) ports through NumPy's own msun involution `I·conj(·)` — a pure component-swap (`(z.Im, z.Re)`, zero arithmetic): `asinh(z)=swap(asin(swap z))`, `atanh(z)=catanh(z)` (already ported, drives `atan`), `acosh(z)=cacosh_formula(acos(z))` — so they inherit the whole complex-unary family's documented **≤3 ULP** envelope (the three identities are bit-exact inside NumPy itself, verified 0-diff over 20,036 inputs). `arccosh` inherits `arccos`'s one sub-DBL_MIN-imaginary pathological edge (`[Misaligned]` branch 7). Gates: `Math/InverseHyperbolicTests.cs` (16) + `NpApiOverloadTests_UnaryMath` regions + the `unary_extra`/`specials` fuzz tiers (all 14 dtypes × layouts). See `Math/np.{arcsinh,arccosh,arctanh}.cs`, `Utilities/NDComplexMath.cs`.
+
+**`np.sinc`** — the normalized sinc `sin(pi*x)/(pi*x)`, a port of NumPy 2.4.2 `numpy/lib/_function_base_impl.py::sinc`
+(probed against 2.4.2; gate `Math/np.sinc.Test.cs` (15) + the differential-fuzz `sinc` tier). It is a plain FUNCTION,
+not a ufunc — the signature is `sinc(x)` with NO `out=`/`where=`/`dtype=`. NumPy's five-line composition is
+`y = pi*x; eps = finfo(y.dtype).eps if y.dtype.kind=='f' else 1e-20; y = where(y!=0, y, eps); sin(y)/y` — where the
+zero-replacement fills the removable singularity at every EXACT zero of `pi*x` (x==±0, plus any x so tiny that `pi*x`
+underflows) with its limit value 1. **Two behaviours are load-bearing:** (1) DTYPE follows `pi*x`, a NEP 50 weak-float
+promotion — bool / EVERY integer width / Char all → **float64** (NOT np.sin's i8→f16 / i16→f32 tiers), while
+float16/float32/float64 are **preserved** and complex → complex128; (2) the zero test is on `pi*x`, not `x`
+(the `!= 0` condition is verbatim, so sub-underflow denormals are handled exactly like NumPy). **Implementation is
+ONE fused `np.evaluate` pass** — the pi multiply, the zero→eps select, `sin`, and the divide are folded into a single
+inner-loop kernel over the shared `t=pi*x` subtree, so the operand is read once and the result written once (NumPy
+materializes ~3 intermediates). **BIT-EXACT with NumPy 2.4.2 for every REAL dtype** — validated EXHAUSTIVELY on all 65,536 float16 inputs and over
+1,000,000 adversarial float32 AND float64 inputs (subnormals / any-bit-pattern / near-integer-multiples / specials),
+plus exhaustive int8/uint8/int16/uint16 — 0 diffs, because float64 arithmetic + divide are IEEE-exact and NumSharp's
+`sin` is a bit-exact port of NumPy's float32 kernel / shares the scalar `ucrtbase` `Math.Sin` at float64.
+**COMPLEX128's per-component BITS are NOT reproducible** and it is EXCLUDED from the byte corpus (pinned by an
+`allclose` unit test): sinc composes `sin ∘ divide`, and NumSharp's complex sin differs from NumPy's UCRT `csin`
+within its ≤3-ULP-relative envelope, so the individual re/im bits differ. The complex VALUE is nonetheless
+ACCURATE — validated **≤~2.5 ULP RELATIVE** (max 5.65e-16 relative error) with **np.allclose(rtol=1e-5,atol=1e-8)
+passing on ALL 200,000 random samples**; a raw per-component ULP only looks large (thousands) where one component
+is tiny relative to `|z|`, which is a byte-reproducibility fact, not an accuracy one.
+Decimal (no NumPy analog) rides the same fused expression through the decimal→double bridge. Because sinc is a
+`sin`-composition, its float64 cells are host-libm-sensitive at the near-zero-crossings (`sin(pi*k) ≈ 0`), so the
+`sinc` fuzz tier is **HOST-PINNED** to win-amd64 (`RunHostLibmCorpus` — `Inconclusive` off-Windows), like the sibling
+`unary` tier. **Perf (NPY/NS, Release, best-of, warm):** **≈1.5–2.5× at 100K and 10M** (f64/int 2.2–2.5×, f32
+~1.5–2.0× — the single-pass fusion halves NumPy's memory traffic); at 1K sinc sits at the per-op NDIter-setup floor
+(~parity), sin being the dominant cost on both sides there. See `Math/np.sinc.cs`.
 
 **ufunc `out=` / `where=` parameters** are supported on the elementwise core (NumPy semantics, probed against 2.4.2): binary `add`/`subtract`/`multiply`/`divide`/`true_divide`/`mod`/`power`/`floor_divide`/`arctan2`/`bitwise_and`/`bitwise_or`/`bitwise_xor`, unary `sqrt`/`exp`/`log`/`sin`/`cos`/`tan`/`abs`/`absolute`/`negative`/`square`/`log2`/`log10`/`log1p`/`exp2`/`expm1`/`cbrt`/`sign`/`floor`/`ceil`/`trunc`/`reciprocal`/`sinh`/`cosh`/`tanh`/`arcsin`/`arccos`/`arctan`/`deg2rad`(`radians`)/`rad2deg`(`degrees`)/`invert`(`bitwise_not`)/`rint`. `round_`/`around` take `out=` ONLY (np.round is a function, not a ufunc — no where/dtype; decimals≠0 cast errors name ufunc 'multiply' per NumPy's composition). `rint` is the TRUE ufunc form of round-half-to-even: unlike `round_`/`around` (which preserve integer dtype) it is float-tier (bool/i8/u8→f16, i16/u16→f32, i32+→f64, floats/complex preserved) and reuses `UnaryOp.Round`'s kernel (complex rounds real+imag; `dtype=<int>`→no-loop). floor/ceil/trunc have IDENTITY loops on every bool/int dtype (dtype preserved; np.round's int path is an identity copy); the loop dtype comes from the input tier (`sinh(i1, out=f8)` stores float16-precision values); reciprocal int 1/0 → signed MinValue (NumPy 2.4.2); sign/positive reject bool with the verbatim no-loop UFuncTypeError; bitwise/invert raise the no-loop TypeError for float inputs (probed order: bad where → no-loop → out-cast → shape). `out` joins the broadcast but is never stretched, requires a same_kind cast from the loop dtype (resolved from inputs), returns the same instance, and may alias an input (overlap-safe via COPY_IF_OVERLAP). `where` must be bool, broadcasts and joins the output shape; masked-off `out` slots keep prior contents. Engine plumbing: `Backends/Default/Math/DefaultEngine.UfuncOut.cs`.
 
@@ -887,7 +945,24 @@ backend present, 1–8 ULP off NumPy on 29/36 elements). Gate: `Statistics/np.co
 `bitwise_and`, `bitwise_or`, `bitwise_xor` (ufunc `out=`/`where=`/`dtype=` supported; float/complex/decimal INPUTS raise NumPy's coercion TypeError while a float/complex/decimal `dtype=` raises the no-loop text — distinct messages, both probed; probed order: bad `where` → no-loop → out-cast → shape), `invert`, `left_shift`, `right_shift`
 
 ### Comparison & Logic
-`all`, `allclose`, `any`, `array_equal`, `equal`, `fmax`, `fmin`, `greater`, `greater_equal`, `isclose`, `iscomplex`, `iscomplexobj`, `isfinite`, `isin`, `isinf`, `isnan`, `isreal`, `isrealobj`, `isscalar`, `iterable`, `less`, `less_equal`, `logical_and`, `logical_not`, `logical_or`, `logical_xor`, `maximum`, `minimum`, `not_equal`
+`all`, `allclose`, `any`, `array_equal`, `equal`, `fmax`, `fmin`, `greater`, `greater_equal`, `isclose`, `iscomplex`, `iscomplexobj`, `isfinite`, `isin`, `isinf`, `isnan`, `isreal`, `isrealobj`, `isscalar`, `iterable`, `less`, `less_equal`, `logical_and`, `logical_not`, `logical_or`, `logical_xor`, `maximum`, `minimum`, `not_equal`, `signbit`
+
+**`np.signbit(x, out=None, where=True, dtype=None)`** — the IEEE sign-bit predicate (a full ufunc, unlike
+`isposinf`/`isneginf`; result always **bool**), the primitive those two are defined on (`isinf(x) & ~signbit(x)` /
+`isinf(x) & signbit(x)`). It is NOT `x < 0`: it reads the raw sign bit, so on floats `-0.0` → True and a
+**negative** NaN → True while `+0.0`/`+inf`/positive NaN → False (probed 2.4.2). Per dtype: **Half/Single/Double**
+test the IEEE sign bit; **signed integers** use `x < 0` (the two's-complement MSB IS the sign bit); **unsigned
+integers / bool / char** are always False; **Decimal** (no NumPy analog) is strictly-negative (`Math.Sign < 0`, so
+`-0.0m` → False, documented); **Complex** has no loop and raises NumPy's verbatim `ufunc 'signbit' not supported
+for the input types…` `TypeError`. Rides the SAME fused predicate kernel as `isnan`/`isinf` — Single/Double **and**
+signed Int32/Int64 vectorize via a per-lane `ExtractMostSignificantBits` + PDEP bool store (the mask IS the loaded
+vector; no compare, no constant), narrow/unsigned/Half/Decimal take the scalar route (which already beats NumPy's
+own scalar signbit loops). `dtype=` is validate-only (bool loops only). **Perf (NPY/NS, plain call):** faster than
+NumPy on every dtype — i8/u8 **7–11×**, i32 **3.3–6.9×**, i64 **1.8–3.3×**, f32 **1.3–2.4×**; f64 **~1.4×**
+(memory-bandwidth-bound reading the full 8-byte lanes, the shared DRAM ceiling). Gate: `Logic/np.signbit.Test.cs`
+(19) + 338 cases in the differential-fuzz `logic` tier (all 13 dtypes × 26 layouts, bit-exact vs NumPy 2.4.2).
+See `Logic/np.is.cs` (`signbit`), `Backends/Default/Logic/Default.SignBit.cs`,
+`Backends/Kernels/Direct/DirectILKernelGenerator.Unary.Predicate.cs` (`EmitSignBitCall` + the extended SIMD gate).
 
 `np.isin(element, test_elements, assume_unique=false, invert=false, kind=null)` is the element-wise membership
 test — a bool array of `element`'s shape, True where `element[i]` is a value in the (flattened) `test_elements`
