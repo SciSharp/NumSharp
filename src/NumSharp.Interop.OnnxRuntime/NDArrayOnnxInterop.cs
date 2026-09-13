@@ -239,7 +239,7 @@ namespace NumSharp.Interop.OnnxRuntime
             {
                 case TensorElementType.String:
                     return "ORT string tensors have no NumSharp dtype (NumSharp has no string/object arrays). Read them with " +
-                           "OrtValue.GetStringTensorAsArray() / GetStringElement(i).";
+                           "ortValue.ReadStringTensor() (or OrtValue.GetStringTensorAsArray() / GetStringElement(i)).";
                 case TensorElementType.BFloat16:
                     return "ORT BFloat16 has no NumSharp dtype (NumSharp has no bfloat16). Cast the tensor to float32 or float16 " +
                            "inside the model graph, or read the raw 16-bit patterns with GetTensorDataAsSpan<BFloat16>().";
@@ -267,8 +267,8 @@ namespace NumSharp.Interop.OnnxRuntime
             if (kind == OnnxValueType.ONNX_TYPE_TENSOR)
                 return;
             throw new NotSupportedException(
-                $"{verb} needs a dense tensor OrtValue, but this value is {kind}. Sequences and maps are read element by element " +
-                "with OrtValue.GetValueCount() / GetValue(i, allocator) or the ProcessSequence / ProcessMap visitors; " +
+                $"{verb} needs a dense tensor OrtValue, but this value is {kind}. A sequence of tensors is read with ToNDArrays(); " +
+                "a single map with ToMap(); a sequence of maps (the scikit-learn ZipMap shape) with ToMaps(); " +
                 "sparse tensors and optionals have no NumSharp analog.");
         }
 
