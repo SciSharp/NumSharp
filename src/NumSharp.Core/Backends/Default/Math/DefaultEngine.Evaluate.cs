@@ -326,6 +326,8 @@ namespace NumSharp.Backends
             NDExprReduceKind.Ptp => "ptp",
             NDExprReduceKind.NanMin => "nanmin",
             NDExprReduceKind.NanMax => "nanmax",
+            NDExprReduceKind.ArgMax => "argmax",
+            NDExprReduceKind.ArgMin => "argmin",
             _ => "mean",
         };
 
@@ -333,13 +335,16 @@ namespace NumSharp.Backends
         {
             var reduce = program.Reduce;
 
-            // Plan P2 M4-tail — the order-independent range / NaN-aware min-max kinds are host-delegated:
-            // materialize the child and reduce THAT buffer through the already-NumPy-exact engine
-            // reduction, which is bit-identical to NumPy regardless of layout because min/max (and their
-            // difference) do not depend on summation order — so they need neither the fold kernel below
-            // nor the pairwise divert the summation kinds do. Handles BOTH flat and axis, so it must run
-            // before the axis dispatch.
-            if (reduce.Kind is NDExprReduceKind.Ptp or NDExprReduceKind.NanMin or NDExprReduceKind.NanMax)
+            // Plan P2 M4-tail + M4c — the range / NaN-aware min-max kinds AND the int64 index kinds are
+            // host-delegated: materialize the child and reduce THAT buffer through the already-NumPy-exact
+            // engine reduction. The min/max/ptp kinds are bit-identical regardless of layout because their
+            // VALUE does not depend on summation order; argmax/argmin's index does depend on the C-order
+            // tie/NaN rule, but the materialized child is the fresh C-contiguous buffer NumPy's own argmax
+            // builds, so it matches too. Either way they need neither the fold kernel below nor the
+            // pairwise divert the summation kinds do. Handles BOTH flat and axis, so it must run before
+            // the axis dispatch.
+            if (reduce.Kind is NDExprReduceKind.Ptp or NDExprReduceKind.NanMin or NDExprReduceKind.NanMax
+                or NDExprReduceKind.ArgMax or NDExprReduceKind.ArgMin)
                 return EvaluateDelegatingReduce(program, inputs, @out);
 
             if (reduce.Axis is int ax)
@@ -508,19 +513,28 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// Host-delegated reductions (plan P2 M4-tail): <c>Ptp</c> / <c>NanMin</c> / <c>NanMax</c>.
-        /// Materializes the reduction's child once (the M1/M2 route — a fresh, contiguous array in
-        /// NumPy's own K-order layout) and reduces THAT buffer through the corresponding public engine
-        /// reduction (<see cref="np.ptp(NDArray,int?,NDArray,bool)"/> /
-        /// <see cref="np.nanmin(NDArray,int?,bool)"/> / <see cref="np.nanmax(NDArray,int?,bool)"/>),
-        /// which are themselves NumPy-exact. These three are ORDER-INDEPENDENT — a minimum, a maximum,
-        /// or their difference is the same value whatever order the elements are visited in — so reducing
-        /// the materialized buffer is bit-identical to <c>np.&lt;kind&gt;(child)</c> for ANY input layout,
-        /// the property the summation kinds (Sum/Mean/Prod, and the still-open NanMean/Std/Var) lack and
-        /// why they need the pairwise divert instead. The child dtype is preserved
-        /// (<see cref="ReduceNode.ResolveReduceResultType"/> returns <c>child</c>), so the engine
-        /// reduction's result dtype already equals <paramref name="program"/>.ResultType and no post-cast
-        /// is needed except into a caller <paramref name="out"/> of a different (same_kind-castable) dtype.
+        /// Host-delegated reductions (plan P2 M4-tail + M4c): the value kinds <c>Ptp</c> / <c>NanMin</c> /
+        /// <c>NanMax</c> and the int64 index kinds <c>ArgMax</c> / <c>ArgMin</c>. Materializes the
+        /// reduction's child once (the M1/M2 route — a fresh, contiguous array in NumPy's own K-order
+        /// layout) and reduces THAT buffer through the corresponding public engine reduction
+        /// (<see cref="np.ptp(NDArray,int?,NDArray,bool)"/> / <see cref="np.nanmin(NDArray,int?,bool)"/> /
+        /// <see cref="np.nanmax(NDArray,int?,bool)"/> / <see cref="np.argmax(NDArray,int,bool)"/> /
+        /// <see cref="np.argmin(NDArray,int,bool)"/>), which are themselves NumPy-exact.
+        /// <para>
+        /// Ptp/NanMin/NanMax are ORDER-INDEPENDENT — a minimum, a maximum, or their difference is the same
+        /// value whatever order the elements are visited in — so reducing the materialized buffer is
+        /// bit-identical to <c>np.&lt;kind&gt;(child)</c> for ANY input layout. ArgMax/ArgMin are the
+        /// subtler M4c case: their index DOES depend on the C-order tie/NaN rule (first maximum / first
+        /// NaN wins), but the materialized child is exactly the fresh C-contiguous buffer NumPy's own
+        /// <c>argmax</c> would build and reduce, so their index matches too. Both properties are what the
+        /// summation kinds (Sum/Mean/Prod, and the still-open NanMean/Std/Var) lack — why those need the
+        /// pairwise divert instead.
+        /// </para>
+        /// The value kinds preserve the child dtype and the index kinds always yield int64, so
+        /// (<see cref="ReduceNode.ResolveReduceResultType"/>) already equals the engine reduction's own
+        /// result dtype — no post-cast is needed except into a caller <paramref name="out"/> of a
+        /// different (same_kind-castable) dtype. A flat <c>argmax</c>/<c>argmin</c> returns a scalar
+        /// <c>long</c>, wrapped into a 0-d int64 array here.
         /// </summary>
         /// <param name="program">The compiled reduction program; its <c>Reduce</c> carries the kind, axis and keepdims.</param>
         /// <param name="inputs">The call's operand arrays, driving the child's materialization.</param>
@@ -548,6 +562,15 @@ namespace NumSharp.Backends
                 NDExprReduceKind.Ptp    => np.ptp(materialized, reduce.Axis, keepdims: reduce.Keepdims),
                 NDExprReduceKind.NanMin => np.nanmin(materialized, reduce.Axis, reduce.Keepdims),
                 NDExprReduceKind.NanMax => np.nanmax(materialized, reduce.Axis, reduce.Keepdims),
+                // The index kinds return int64. np.argmax/argmin's flat form returns a scalar `long`
+                // (there is no int?-axis overload), so a flat reduce wraps it into a 0-d int64 array —
+                // the shape the flat-out ndim check and the caller both expect.
+                NDExprReduceKind.ArgMax => reduce.Axis is int axMax
+                    ? np.argmax(materialized, axMax, reduce.Keepdims)
+                    : NDArray.Scalar(np.argmax(materialized)),
+                NDExprReduceKind.ArgMin => reduce.Axis is int axMin
+                    ? np.argmin(materialized, axMin, reduce.Keepdims)
+                    : NDArray.Scalar(np.argmin(materialized)),
                 _ => throw new NotSupportedException(
                     $"EvaluateDelegatingReduce reached with non-delegating kind {reduce.Kind} — dispatch bug."),
             };

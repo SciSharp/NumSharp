@@ -8055,6 +8055,12 @@ _EV_REDUCE = {
     "ptp": lambda a, ax, kd: np.ptp(a, axis=ax, keepdims=kd),
     "nanmin": lambda a, ax, kd: np.nanmin(a, axis=ax, keepdims=kd),
     "nanmax": lambda a, ax, kd: np.nanmax(a, axis=ax, keepdims=kd),
+    # P2 M4c — the int64 INDEX kinds (an index, not a value → always intp). Their result depends on the
+    # C-order tie/NaN rule (first maximum / first NaN wins), but NumSharp reduces the SAME fresh
+    # C-contiguous materialized child, so it is bit-exact — NO E1 excuse. (NanMean/Std/Var/Average, the
+    # summation-bound M4c kinds, wait on M3 and are absent here.)
+    "argmax": lambda a, ax, kd: np.argmax(a, axis=ax, keepdims=kd),
+    "argmin": lambda a, ax, kd: np.argmin(a, axis=ax, keepdims=kd),
 }
 
 _EV_TOKEN = re.compile(r"\s*([A-Za-z_][A-Za-z0-9_]*(?::[^,()]+)?|[(),])")
@@ -8551,6 +8557,57 @@ def gen_evaluate():
             emit("in0", [(sb, sb)], "c_contiguous_1d",
                  params={"reduce": {"kind": "ptp", "axis": None, "keepdims": False}},
                  cid_tag=f"m4tailwide/{dt}/ptp/N={N}")
+
+    # ---- C6. M4c: the int64 INDEX kinds argmax / argmin (plan P2 M4c) --------------------------
+    # These are the M4c kinds that land NOW (the summation-bound NanMean/Std/Var/Average wait on M3).
+    # Like the M4-tail min/max they are host-DELEGATED (materialize the child, then np.argmax /
+    # np.argmin over it), but the property is subtler than order-independence: an index DOES depend on
+    # the C-order tie/NaN rule (first maximum / first NaN wins). It is nonetheless BIT-EXACT with NO E1
+    # excuse because the materialized child is the fresh C-contiguous buffer NumPy's own argmax builds
+    # and reduces — so this block is their teeth. It sweeps every layout {C-1d, C-2d, F-2d, negstride}
+    # (a wrong strided/reversed read of the materialized child, OR a memory-order rather than
+    # logical-C-order tie walk, turns it red — the `_c5_pool` tiles a max/min that REPEATS, so a
+    # first-tie regression is caught); every axis + keepdims; int (result still int64, proving the index
+    # kinds are dtype-independent) and float; and — for floats — a NaN pool so the first-NaN-wins index
+    # is pinned. The result dtype the oracle records is int64 on both sides.
+    for ln in c5_layouts:
+        for dt in ("int32", "int64", "uint64", "float32", "float64"):
+            npdt = np.dtype(dt)
+            isfloat = npdt.kind == "f"
+            specs = [("argmax", False), ("argmin", False)]
+            if isfloat:
+                specs += [("argmax", True), ("argmin", True)]     # first-NaN-wins index
+            for kind, with_nan in specs:
+                nb, nv = LAYOUTS[ln](npdt)
+                nb.reshape(-1)[:] = _c5_pool(nb.size, npdt, with_nan)
+                combos = [(None, False)] + [(ax, False) for ax in range(nv.ndim)]
+                if nv.ndim > 0:
+                    combos.append((0, True))
+                for ax, kd in combos:
+                    emit("in0", [(nb, nv)], ln,
+                         params={"reduce": {"kind": kind, "axis": ax, "keepdims": kd}},
+                         cid_tag=f"m4c/{dt}/{kind}{'_nan' if with_nan else ''}[{ax},{int(kd)}]")
+
+    # A FUSED child (not identity) proves the materialize-then-argmax path end to end, and a wide-N flat
+    # case pins the large-N materialize (argmax is a selection, so order-exact regardless of N).
+    for expr in ("mul(in0,in0)", "sub(in0,li:1)"):
+        for dt in ("int64", "float64"):
+            npdt = np.dtype(dt)
+            nb, nv = LAYOUTS["c_contiguous_2d"](npdt)
+            nb.reshape(-1)[:] = _c5_pool(nb.size, npdt, False)
+            for kind in ("argmax", "argmin"):
+                for ax, kd in [(None, False), (0, False), (1, True)]:
+                    emit(expr, [(nb, nv)], "c_contiguous_2d",
+                         params={"reduce": {"kind": kind, "axis": ax, "keepdims": kd}},
+                         cid_tag=f"m4c/{dt}/{kind}[{ax},{int(kd)}]/{expr}")
+    for N in (129, 1000):
+        for dt in ("float64", "int64"):
+            npdt = np.dtype(dt)
+            sb = np.ascontiguousarray(_wide_sum_pool(N).astype(npdt))
+            for kind in ("argmax", "argmin"):
+                emit("in0", [(sb, sb)], "c_contiguous_1d",
+                     params={"reduce": {"kind": kind, "axis": None, "keepdims": False}},
+                     cid_tag=f"m4cwide/{dt}/{kind}/N={N}")
 
     # ---- D. out= (returned view + the whole base buffer behind out) -------------------------
     out_exprs = ["add(mul(in0,in1),in0)", "gt(in0,in1)", "where(gt(in0,in1),in0,in1)", "sqrt(abs(in0))"]

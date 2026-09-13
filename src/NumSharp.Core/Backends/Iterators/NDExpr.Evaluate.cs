@@ -79,6 +79,27 @@ namespace NumSharp.Backends.Iteration
         /// Host-delegated to <see cref="np.nanmax(NDArray,int?,bool)"/> over the materialized child.
         /// </summary>
         NanMax,
+
+        /// <summary>
+        /// <c>np.argmax</c> — the index of the maximum. Unlike every value reduction above, the result
+        /// dtype is <b>int64</b> (NumPy's <c>intp</c>), NOT the child dtype. It is host-delegated to
+        /// <see cref="np.argmax(NDArray,int,bool)"/> (flat: <see cref="np.argmax(NDArray)"/>) over the
+        /// materialized child. This is bit-exact for the same reason the M4-tail value kinds are —
+        /// but the property in play is subtler than order-independence: argmax's index DOES depend on
+        /// visiting order at a tie (the FIRST maximum wins, and a NaN is treated as the largest so the
+        /// FIRST NaN wins), yet the materialized child is a fresh C-CONTIGUOUS buffer holding exactly
+        /// NumPy's own C-order intermediate, and <c>np.argmax</c> walks it in that same C-order — so the
+        /// tie/NaN index is deterministic and identical to <c>np.argmax(child)</c>. There is NO empty
+        /// identity (a zero-size input raises, like <see cref="Max"/>). See <c>EvaluateDelegatingReduce</c>.
+        /// </summary>
+        ArgMax,
+
+        /// <summary>
+        /// <c>np.argmin</c> — the index of the minimum (the <see cref="ArgMax"/> twin: int64 result,
+        /// first-tie / first-NaN wins over the C-order materialized child). Host-delegated to
+        /// <see cref="np.argmin(NDArray,int,bool)"/> / <see cref="np.argmin(NDArray)"/>.
+        /// </summary>
+        ArgMin,
     }
 
     /// <summary>
@@ -382,6 +403,32 @@ namespace NumSharp.Backends.Iteration
         /// </summary>
         public static NDExpr NanMax(NDExpr x) => new ReduceNode(NDExprReduceKind.NanMax, x);
 
+        // --- index reductions (plan P2 M4c) -------------------------------------------------------
+        //
+        // ArgMax/ArgMin are the M4c kinds that land NOW (unlike NanMean/Std/Var/weighted Average, which
+        // are summation-bound and wait on M3's streaming pairwise): they are ORDER-DETERMINISTIC over a
+        // C-order buffer rather than value-order-independent, so they ride the SAME host-delegation the
+        // M4-tail min/max kinds do — materialize the child once, then reduce it through the engine's
+        // already-NumPy-exact np.argmax / np.argmin.  Two things set them apart from the value kinds:
+        // the result dtype is int64 (an INDEX, not a child-typed value), and the answer depends on the
+        // C-order tie/NaN rule (first maximum / first NaN wins) — which is bit-exact only because the
+        // materialized child is the fresh C-contiguous buffer NumPy's own argmax would build.  Because
+        // that index is deterministic, they carry NO MisalignedRegistry excuse.
+
+        /// <summary>
+        /// One-pass fused <c>np.argmax</c>: the <b>int64</b> index of the maximum element of the
+        /// expression (flattened). Ties break to the FIRST occurrence and a NaN is treated as the
+        /// largest value (so the first NaN's index wins), matching NumPy over the C-order materialized
+        /// child. A zero-size input raises (no identity), like <see cref="Max(NDExpr)"/>.
+        /// </summary>
+        public static NDExpr ArgMax(NDExpr x) => new ReduceNode(NDExprReduceKind.ArgMax, x);
+
+        /// <summary>
+        /// One-pass fused <c>np.argmin</c>: the <b>int64</b> index of the minimum element of the
+        /// expression (flattened) — the <see cref="ArgMax(NDExpr)"/> twin (first-tie / first-NaN wins).
+        /// </summary>
+        public static NDExpr ArgMin(NDExpr x) => new ReduceNode(NDExprReduceKind.ArgMin, x);
+
         // --- axis-aware forms of the M4 reductions (one pass along `axis`) ------------------------
 
         /// <summary>One-pass fused <c>np.any</c> along <paramref name="axis"/> (bool result; identity <c>False</c>).</summary>
@@ -407,6 +454,12 @@ namespace NumSharp.Backends.Iteration
 
         /// <summary>One-pass fused <c>np.nanmax</c> along <paramref name="axis"/> (NaNs ignored; all-NaN slice → NaN).</summary>
         public static NDExpr NanMax(NDExpr x, int axis, bool keepdims = false) => new ReduceNode(NDExprReduceKind.NanMax, x, axis, keepdims);
+
+        /// <summary>One-pass fused <c>np.argmax</c> along <paramref name="axis"/> (int64 indices; first-tie / first-NaN wins).</summary>
+        public static NDExpr ArgMax(NDExpr x, int axis, bool keepdims = false) => new ReduceNode(NDExprReduceKind.ArgMax, x, axis, keepdims);
+
+        /// <summary>One-pass fused <c>np.argmin</c> along <paramref name="axis"/> (int64 indices; first-tie / first-NaN wins).</summary>
+        public static NDExpr ArgMin(NDExpr x, int axis, bool keepdims = false) => new ReduceNode(NDExprReduceKind.ArgMin, x, axis, keepdims);
 
         // ===================================================================
         // Binding
@@ -719,6 +772,12 @@ namespace NumSharp.Backends.Iteration
                     // the materialized child, so the result dtype IS the child dtype.
                     return child;
 
+                case NDExprReduceKind.ArgMax:
+                case NDExprReduceKind.ArgMin:
+                    // an INDEX, not a value — always int64 (NumPy's intp), regardless of the child dtype.
+                    // Host-delegated to np.argmax / np.argmin over the materialized child.
+                    return NPTypeCode.Int64;
+
                 case NDExprReduceKind.Mean:
                     return child switch
                     {
@@ -744,11 +803,13 @@ namespace NumSharp.Backends.Iteration
         /// </summary>
         internal static NPTypeCode ResolveAccType(NDExprReduceKind kind, NPTypeCode result)
         {
-            // Min/Max and the host-delegated M4-tail kinds (Ptp/NanMin/NanMax) never run a widening
-            // summation — Min/Max fold in place and the delegated kinds bypass the fold path entirely —
-            // so the accumulator dtype is simply the result dtype (no f16/f32 → f64 widening).
+            // Min/Max and the host-delegated M4-tail/M4c kinds (Ptp/NanMin/NanMax/ArgMax/ArgMin) never
+            // run a widening summation — Min/Max fold in place and the delegated kinds bypass the fold
+            // path entirely — so the accumulator dtype is simply the result dtype (no f16/f32 → f64
+            // widening; the index kinds' result is int64 regardless).
             if (kind == NDExprReduceKind.Min || kind == NDExprReduceKind.Max
-                || kind == NDExprReduceKind.Ptp || kind == NDExprReduceKind.NanMin || kind == NDExprReduceKind.NanMax)
+                || kind == NDExprReduceKind.Ptp || kind == NDExprReduceKind.NanMin || kind == NDExprReduceKind.NanMax
+                || kind == NDExprReduceKind.ArgMax || kind == NDExprReduceKind.ArgMin)
                 return result;
             return result == NPTypeCode.Half || result == NPTypeCode.Single
                 ? NPTypeCode.Double

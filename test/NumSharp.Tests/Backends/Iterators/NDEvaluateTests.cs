@@ -779,5 +779,109 @@ namespace NumSharp.Tests.Backends.Iterators
             Assert.IsTrue(double.IsNaN(np.evaluate(NDExpr.NanMin((NDExpr)e)).GetDouble(0)));
             Assert.IsTrue(double.IsNaN(np.evaluate(NDExpr.NanMax((NDExpr)e)).GetDouble(0)));
         }
+
+        // ===================================================================
+        // Plan P2 M4c — the int64 INDEX kinds ArgMax / ArgMin (host-delegated)
+        // ===================================================================
+
+        /// <summary>
+        /// <c>ArgMax</c>/<c>ArgMin</c> return the FIRST-occurrence index of the extreme (NumPy's tie rule),
+        /// and the result is always <b>int64</b> — an index, not a value — regardless of the child dtype.
+        /// The 0-d result of a flat reduce is pinned too. This is the property that sets the index kinds
+        /// apart from the M4-tail value kinds, which preserve the child dtype.
+        /// </summary>
+        [TestMethod]
+        public void M4c_ArgMaxMin_ValuesAndInt64Result()
+        {
+            // max 9 first appears at index 1 (repeats at 3); min 1 first at index 5 (repeats at 6).
+            var a = np.array(new double[] { 3, 9, 4, 9, 5, 1, 1 });
+            var amax = np.evaluate(NDExpr.ArgMax((NDExpr)a * 1.0));   // a fused (non-identity) child
+            var amin = np.evaluate(NDExpr.ArgMin((NDExpr)a * 1.0));
+            Assert.AreEqual(NPTypeCode.Int64, amax.typecode);        // int64 result, not the child's float64
+            Assert.AreEqual(0, amax.ndim);                            // flat reduce → 0-d scalar
+            Assert.AreEqual(1L, amax.GetInt64(0));                    // FIRST maximum wins
+            Assert.AreEqual(5L, amin.GetInt64(0));                    // FIRST minimum wins
+
+            // Child dtype is irrelevant to the result dtype: an integer child still yields an int64 index.
+            var i = np.array(new int[] { 7, 2, 9, 4 });
+            var imax = np.evaluate(NDExpr.ArgMax((NDExpr)i));
+            Assert.AreEqual(NPTypeCode.Int64, imax.typecode);
+            Assert.AreEqual(2L, imax.GetInt64(0));
+        }
+
+        /// <summary>
+        /// A NaN is treated as the largest value by BOTH argmax and argmin (NumPy's first-NaN-wins rule),
+        /// so the index of the FIRST NaN is returned. Bit-exact here because the delegating path reduces
+        /// the fresh C-contiguous materialized child, exactly the buffer <c>np.argmax(child)</c> reduces.
+        /// </summary>
+        [TestMethod]
+        public void M4c_ArgMaxMin_FirstNaNWins()
+        {
+            var g = np.array(new double[] { 3, double.NaN, 1, double.NaN, 5 });
+            Assert.AreEqual(np.argmax(g), np.evaluate(NDExpr.ArgMax((NDExpr)g + 0.0)).GetInt64(0));
+            Assert.AreEqual(np.argmin(g), np.evaluate(NDExpr.ArgMin((NDExpr)g + 0.0)).GetInt64(0));
+            Assert.AreEqual(1L, np.evaluate(NDExpr.ArgMax((NDExpr)g + 0.0)).GetInt64(0));   // first NaN at index 1
+        }
+
+        /// <summary>
+        /// The axis + keepdims forms reduce along one axis to an int64 index array, matching
+        /// <c>np.argmax</c>/<c>np.argmin</c> along that axis (keepdims leaves the reduced axis as size 1).
+        /// </summary>
+        [TestMethod]
+        public void M4c_ArgMaxMin_Axis_Forms()
+        {
+            var m = np.arange(12).reshape(3, 4).astype(np.float64);
+            var mc = m * 1.0;
+
+            var a0 = np.evaluate(NDExpr.ArgMax((NDExpr)m * 1.0, 0));  // per column, max is the last row → 2
+            Assert.AreEqual(NPTypeCode.Int64, a0.typecode);
+            Assert.IsTrue(a0.array_equal(np.argmax(mc, 0)));
+
+            var a1 = np.evaluate(NDExpr.ArgMax((NDExpr)m * 1.0, 1, keepdims: true)); // per row, max is col 3
+            Assert.AreEqual(2, a1.ndim);
+            Assert.AreEqual(1L, a1.shape[1]);
+            Assert.IsTrue(a1.array_equal(np.argmax(mc, 1, keepdims: true)));
+
+            var i1 = np.evaluate(NDExpr.ArgMin((NDExpr)m * 1.0, 1));  // per row, min is col 0
+            Assert.IsTrue(i1.array_equal(np.argmin(mc, 1)));
+        }
+
+        /// <summary>
+        /// <c>out=</c> follows evaluate's contract: the int64 index is written (same_kind-cast) into the
+        /// caller's array and that SAME instance returns — a 0-d out for a flat reduce, the reduced shape
+        /// for an axis one — and a flat reduce into a non-0-d out is rejected.
+        /// </summary>
+        [TestMethod]
+        public void M4c_ArgMaxMin_Out()
+        {
+            var a = np.array(new double[] { 3, 9, 4, 9, 5 });
+
+            var o = NDArray.Scalar(0L);                              // 0-d int64
+            var r = np.evaluate(NDExpr.ArgMax((NDExpr)a * 1.0), @out: o);
+            Assert.IsTrue(ReferenceEquals(r, o));                    // returns the out instance
+            Assert.AreEqual(1L, o.GetInt64(0));
+
+            var m = np.arange(12).reshape(3, 4).astype(np.float64);
+            var oa = np.zeros(new Shape(4), np.int64);               // axis-0 result shape
+            np.evaluate(NDExpr.ArgMax((NDExpr)m * 1.0, 0), @out: oa);
+            Assert.IsTrue(oa.array_equal(np.argmax(m * 1.0, 0)));
+
+            // A flat reduction demands a 0-d out (NumPy's wrong-dimensions message).
+            Assert.ThrowsException<ArgumentException>(
+                () => np.evaluate(NDExpr.ArgMax((NDExpr)a * 1.0), @out: np.zeros(new Shape(3), np.int64)));
+        }
+
+        /// <summary>
+        /// A zero-size input has no identity for an index reduction, so <c>ArgMax</c>/<c>ArgMin</c> RAISE —
+        /// exactly as <c>np.argmax([])</c> does — rather than returning a sentinel index. (Unlike
+        /// nanmin/nanmax, whose empty behaviour is the engine's 0-d NaN.)
+        /// </summary>
+        [TestMethod]
+        public void M4c_ArgMaxMin_EmptyRaises()
+        {
+            var e = np.array(new double[] { });
+            Assert.ThrowsException<ArgumentException>(() => np.evaluate(NDExpr.ArgMax((NDExpr)e)));
+            Assert.ThrowsException<ArgumentException>(() => np.evaluate(NDExpr.ArgMin((NDExpr)e)));
+        }
     }
 }
