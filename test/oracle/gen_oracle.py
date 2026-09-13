@@ -159,6 +159,17 @@ UNARY_EXTRA_OPS = {
 }
 
 
+# np.sinc — sin(pi*x)/(pi*x), its own tier (not folded into unary_extra) for ONE reason:
+# sinc composes sin ∘ divide, and complex128 sinc amplifies NumSharp's complex-sin ≤3-ULP
+# envelope through the division (and the exponential growth of sinh/cosh) to tens of ULP on
+# interior points — beyond the tight 3-ULP complex-unary gate — so complex128 is EXCLUDED from
+# the byte corpus (computed and allclose, pinned by a unit test instead). Every REAL dtype is
+# bit-exact vs NumPy 2.4.2. Dtype follows `pi*x` (weak-float NEP 50): bool/all-ints/Char ->
+# float64, float16/float32/float64 preserved.
+SINC_OP = {"sinc": np.sinc}
+SINC_DTYPES = [d for d in ALL_DTYPES if d != "complex128"]
+
+
 def gen_unary(ops, dtypes, layout_names):
     cases = []
     n = 0
@@ -3900,6 +3911,8 @@ def char_tier(mode):
         raw = gen_unary(_CHAR_UNARY_OPS, [_C], L)                  # reciprocal carved
     elif mode == "unary_extra":
         raw = gen_unary(UNARY_EXTRA_OPS, [_C], L)
+    elif mode == "sinc":
+        raw = gen_unary(SINC_OP, [_C], L)                         # Char (uint16 proxy) -> float64, bit-exact
     elif mode == "bitwise":
         raw = gen_binary(BITWISE_BIN_OPS, CHAR_BIT_PAIRS, PL)
         raw += gen_unary(BITWISE_COUNT_OP, [_C], L)               # bitwise_count(char): 2-byte SIMD path works
@@ -7682,6 +7695,11 @@ def main():
         cases = gen_unary(UNARY_EXTRA_OPS, ALL_DTYPES, list(LAYOUTS.keys()))
         cases += char_tier("unary_extra")
         write_jsonl(os.path.join(corpus_dir, "unary_extra.jsonl"), cases)
+    elif mode == "sinc":
+        # sinc over every REAL dtype × all layouts (complex128 excluded — see SINC_DTYPES).
+        cases = gen_unary(SINC_OP, SINC_DTYPES, list(LAYOUTS.keys()))
+        cases += char_tier("sinc")
+        write_jsonl(os.path.join(corpus_dir, "sinc.jsonl"), cases)
     elif mode == "nanreduce":
         cases = gen_reduce(NAN_REDUCE_OPS, NAN_REDUCE_DTYPES, REDUCE_LAYOUTS)
         cases += gen_nanquantile(NANQ_DTYPES)                           # Group A: nanpercentile/nanquantile
@@ -7822,7 +7840,7 @@ def main():
         cases = gen_windows()                                           # bartlett/blackman/hamming/hanning/kaiser
         write_jsonl(os.path.join(corpus_dir, "windows.jsonl"), cases)
     else:
-        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows)")
+        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | sinc | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows)")
         sys.exit(2)
 
 

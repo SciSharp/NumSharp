@@ -75,6 +75,9 @@ namespace NumSharp.Tests.Fuzz
                 case "positive": return np.positive(ops[0]);
                 case "spacing": return np.spacing(ops[0]);
 
+                // sinc — sin(pi*x)/(pi*x); its own tier (real dtypes only, complex excluded). NumPy is the oracle.
+                case "sinc": return np.sinc(ops[0]);
+
                 // Bitwise & shift (T9). Integer + bool dtypes; NumPy is the oracle.
                 case "bitwise_and": return ops[0] & ops[1];
                 case "bitwise_or": return ops[0] | ops[1];

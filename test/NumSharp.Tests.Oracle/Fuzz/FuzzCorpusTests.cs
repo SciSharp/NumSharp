@@ -189,6 +189,17 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void UnaryExtra() => RunCorpus("unary_extra.jsonl");
 
+        // np.sinc — sin(pi*x)/(pi*x) over every REAL dtype (bool/all-ints/Char -> float64,
+        // float16/float32/float64 preserved) × all single-array layouts. HOST-PINNED to win-amd64
+        // (RunHostLibmCorpus, like the sibling Unary tier): sinc's near-zero-crossing results
+        // (sin(pi*integer) ≈ 0) are catastrophically sensitive to the exact libm/CRT sin bits, so
+        // they reproduce bit-for-bit only on the host that generated the corpus (Inconclusive
+        // off-Windows). complex128 is deliberately absent — it amplifies the complex-sin ULP
+        // envelope past the byte-reproducible threshold (pinned by an allclose unit test instead).
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Sinc() => RunHostLibmCorpus("sinc.jsonl");
+
         // W4 NaN-aware reductions (T10): nansum/nanprod/nanmax/nanmin/nanmean/nanstd/nanvar/
         // nanmedian over NaN-laced float operands — must IGNORE NaN per NumPy contract.
         [TestMethod]
@@ -596,6 +607,7 @@ namespace NumSharp.Tests.Fuzz
             ["reduce.jsonl"] = 9004,
             ["rounding.jsonl"] = 665,
             ["scan.jsonl"] = 907,
+            ["sinc.jsonl"] = 338,   // sin(pi*x)/(pi*x): 12 real dtypes + Char × 26 layouts (complex excluded)
             ["sort.jsonl"] = 940,   // +102: searchsorted expansion (dup/mixed-promotion/sorter/nan/complex-lex/strided/empty)
             ["specials.jsonl"] = 1920,
             ["stat.jsonl"] = 3412,
