@@ -230,5 +230,58 @@ namespace NumSharp.Tests.Ma
             var x = np.ma.array(np.array(new double[,] { { 1, 2 }, { 3, 4 } }), np.array(new bool[,] { { false, true }, { false, false } }));
             Assert.IsTrue(np.ma.getmaskarray(np.ma.transpose(x)).ToArray<bool>().SequenceEqual(new[] { false, false, true, false }));
         }
+
+        /// <summary>average (uniform + weighted), median, and ediff1d over unmasked elements.</summary>
+        [TestMethod]
+        public void Extras_Average_Median_Ediff1d()
+        {
+            Assert.AreEqual(2.0, np.ma.average(M13()).data.GetDouble(0));   // mean of {1,3}
+            // weighted: [1, 2, 3(masked)] with weights [1,2,3] → (1·1 + 2·2)/(1+2) = 5/3
+            var wa = np.ma.average(np.ma.array(np.array(new double[] { 1, 2, 3 }), np.array(new bool[] { false, false, true })),
+                                   weights: np.array(new double[] { 1, 2, 3 }));
+            Assert.AreEqual(5.0 / 3.0, wa.data.GetDouble(0), 1e-12);
+            // median of {1,2,3,4} (100 masked) = 2.5
+            var med = np.ma.median(np.ma.array(np.array(new double[] { 1, 2, 3, 4, 100 }), np.array(new bool[] { false, false, false, false, true })));
+            Assert.AreEqual(2.5, med.data.GetDouble(0));
+            Assert.IsTrue(np.ma.ediff1d(np.array(new double[] { 1, 2, 4, 7, 0 })).data.astype(np.float64).ToArray<double>()
+                .SequenceEqual(new double[] { 1, 2, 3, -7 }));
+        }
+
+        /// <summary>ma.sort pushes masked entries to the end (keeping their data) and re-masks them; argsort
+        /// treats masked as the largest.</summary>
+        [TestMethod]
+        public void Sort_And_Argsort_MaskedToEnd()
+        {
+            var m = np.ma.array(np.array(new double[] { 3, 1, 2 }), np.array(new bool[] { false, true, false }));
+            var s = np.ma.sort(m);
+            Assert.IsTrue(np.ma.getdata(s).astype(np.float64).ToArray<double>().SequenceEqual(new double[] { 2, 3, 1 }));
+            Assert.IsTrue(np.ma.getmaskarray(s).ToArray<bool>().SequenceEqual(new[] { false, false, true }));
+            Assert.IsTrue(np.ma.argsort(m).astype(np.int64).ToArray<long>().SequenceEqual(new long[] { 2, 0, 1 }));
+        }
+
+        /// <summary>ma.unique returns the sorted unique unmasked values, plus one trailing masked entry when
+        /// any element was masked.</summary>
+        [TestMethod]
+        public void Unique_UnmaskedValues_PlusOneMasked()
+        {
+            var u = np.ma.unique(np.ma.array(np.array(new double[] { 1, 2, 2, 3 }), np.array(new bool[] { false, false, true, false })));
+            // unmasked values {1,2,3} (idx2's 2 is masked) → [1,2,3] + 1 masked slot.
+            Assert.IsTrue(np.ma.getmaskarray(u).ToArray<bool>().SequenceEqual(new[] { false, false, false, true }));
+            var vals = np.ma.getdata(u).astype(np.float64).ToArray<double>();
+            Assert.IsTrue(vals.Take(3).SequenceEqual(new double[] { 1, 2, 3 })); // trailing masked entry's data is a hidden don't-care
+        }
+
+        /// <summary>count_masked/masked_all/dot/allclose behave with masked semantics.</summary>
+        [TestMethod]
+        public void CountMasked_MaskedAll_Dot_Allclose()
+        {
+            Assert.AreEqual(2L, np.ma.count_masked(M13()).GetInt64(0)); // 2 masked
+            Assert.IsTrue(np.ma.getmaskarray(np.ma.masked_all(new Shape(3))).ToArray<bool>().All(x => x));
+            // dot treats masked as 0: [1(m),2]·[3,4] = 0·3 + 2·4 = 8
+            var dot = np.ma.dot(np.ma.array(np.array(new double[] { 1, 2 }), np.array(new bool[] { true, false })), np.array(new double[] { 3, 4 }));
+            Assert.AreEqual(8.0, np.ma.getdata(dot).GetDouble(0));
+            Assert.IsTrue(np.ma.allclose(np.ma.array(np.array(new double[] { 1, 2, 3 }), np.array(new bool[] { false, false, true })),
+                                         np.array(new double[] { 1, 2, 99 }))); // masked position ignored
+        }
     }
 }

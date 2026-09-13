@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using NumSharp.Backends;
@@ -1606,6 +1607,382 @@ namespace NumSharp
             var flat = np.ravel(AsData(a));
             var m = (a as MaskedArray)?._mask;
             return m is null ? flat.copy() : flat[np.logical_not(np.ravel(m))];
+        }
+
+        // ─────────────────────────────────────────────────────────────────────────────
+        //  extras.py — masked-aware statistics, products, set/diff helpers, clump/edges
+        // ─────────────────────────────────────────────────────────────────────────────
+
+        /// <summary>Data of <paramref name="a"/> with masked slots filled by 0 (for a product/reduction that
+        /// must treat masked as absent); a null-mask operand is returned unchanged.</summary>
+        private static NDArray Filled0(object a) => (a as MaskedArray)?._mask is null ? AsData(a) : ((MaskedArray)a).filled(0);
+
+        /// <summary>Number of MASKED elements along the axis (NumPy's <c>count_masked</c>) — a plain int64 array.</summary>
+        /// <param name="a">Operand.</param><param name="axis">Axis or null.</param>
+        /// <returns>An int64 count of masked elements.</returns>
+        public NDArray count_masked(object a, int? axis = null)
+        {
+            var m = (a as MaskedArray)?._mask ?? np.zeros(AsData(a).Shape, np.@bool);
+            return np.sum(m, axis, false, np.int64);
+        }
+
+        /// <summary>An empty masked array of the given shape with EVERY element masked (NumPy's <c>masked_all</c>) —
+        /// the standard "fill me in" accumulator.</summary>
+        /// <param name="shape">Result shape.</param><param name="dtype">Element dtype (null ⇒ float64).</param>
+        /// <returns>A fully-masked array.</returns>
+        public MaskedArray masked_all(Shape shape, DType dtype = null)
+            => new MaskedArray(np.empty(shape, dtype ?? np.float64), np.ones(shape, np.@bool));
+
+        /// <summary>A fully-masked array shaped and typed like <paramref name="a"/> (NumPy's <c>masked_all_like</c>).</summary>
+        /// <param name="a">Prototype array-like.</param>
+        /// <returns>A fully-masked array.</returns>
+        public MaskedArray masked_all_like(object a)
+        {
+            var d = AsData(a);
+            return new MaskedArray(np.empty_like(d), np.ones(d.Shape, np.@bool));
+        }
+
+        /// <summary>Weighted average over unmasked elements (NumPy's <c>average</c>): with no weights this is the
+        /// mean; otherwise <c>sum(a·w)/sum(w)</c> with masked slots dropped from BOTH sums.</summary>
+        /// <param name="a">Data.</param><param name="axis">Axis or null.</param>
+        /// <param name="weights">Weights (same shape as <paramref name="a"/>, or 1-D along <paramref name="axis"/>); null ⇒ uniform.</param>
+        /// <returns>The masked (weighted) average.</returns>
+        public MaskedArray average(object a, int? axis = null, object weights = null)
+        {
+            if (weights is null)
+                return mean(a, axis);
+            var d = AsData(a).astype(np.float64);
+            var mask = (a as MaskedArray)?._mask;
+            var wgt = AsData(weights).astype(np.float64);
+            // 1-D weights along an axis broadcast to (1,…,len,…,1).
+            if (axis is not null && !wgt.Shape.Equals(d.Shape))
+            {
+                var shp = Enumerable.Repeat(1L, d.ndim).ToArray();
+                shp[axis.Value] = d.shape[axis.Value];
+                wgt = np.reshape(wgt, new Shape(shp));
+            }
+            var w = np.broadcast_to(wgt, d.Shape).copy();
+            if (mask is not null)
+                w = np.where(mask, NDArray.Scalar(0.0), w); // masked ⇒ zero weight
+            var scl = np.sum(w, axis, false, np.float64);
+            var num = np.sum(np.multiply(d, w), axis, false, np.float64);
+            var avg = np.divide(num, scl);
+            var newmask = mask is null ? null : AllAlongAxis(mask, axis, false);
+            return Finalize(avg, newmask);
+        }
+
+        /// <summary>Median over unmasked elements (NumPy's <c>median</c>). Supports the flat case and the
+        /// unmasked-axis case; a masked array with an explicit axis needs the masked sort core and is not yet
+        /// implemented.</summary>
+        /// <param name="a">Data.</param><param name="axis">Axis or null (flatten).</param>
+        /// <returns>The masked median.</returns>
+        /// <exception cref="NotSupportedException">A MASKED array with an explicit <paramref name="axis"/>.</exception>
+        public MaskedArray median(object a, int? axis = null)
+        {
+            var mask = (a as MaskedArray)?._mask;
+            var d = AsData(a);
+            if (mask is null)
+                return new MaskedArray(axis is null ? np.median(d) : np.median(d, new[] { axis.Value }), null);
+            if (axis is null)
+            {
+                var comp = compressed(a);
+                return comp.size == 0 ? masked : new MaskedArray(np.median(comp), null);
+            }
+            throw new NotSupportedException(
+                "np.ma.median with an explicit axis on a MASKED array is not yet implemented (requires the masked sort core); flat and unmasked-axis medians are supported.");
+        }
+
+        /// <summary>Differences between consecutive UNMASKED-aware elements of the flattened input (NumPy's
+        /// <c>ediff1d</c>), optionally bracketed by <paramref name="to_begin"/>/<paramref name="to_end"/>.</summary>
+        /// <param name="arr">Data.</param>
+        /// <param name="to_end">Values appended to the end (array-like), or null.</param>
+        /// <param name="to_begin">Values prepended (array-like), or null.</param>
+        /// <returns>The masked consecutive differences.</returns>
+        public MaskedArray ediff1d(object arr, object to_end = null, object to_begin = null)
+        {
+            var flat = ravel(arr);
+            var ed = subtract(Map1(flat, x => x["1:"]), Map1(flat, x => x[":-1"]));
+            if (to_begin is null && to_end is null)
+                return ed;
+            var parts = new List<object>();
+            if (to_begin is not null) parts.Add(ravel(to_begin));
+            parts.Add(ed);
+            if (to_end is not null) parts.Add(ravel(to_end));
+            return concatenate(parts.ToArray());
+        }
+
+        /// <summary>True iff every corresponding pair of elements is equal, with masked positions treated as
+        /// equal when <paramref name="fill_value"/> is true (NumPy's <c>allequal</c>).</summary>
+        /// <param name="a">First operand.</param><param name="b">Second operand.</param>
+        /// <param name="fill_value">Treat masked positions as equal (true) or unequal (false).</param>
+        /// <returns>A single bool.</returns>
+        public bool allequal(object a, object b, bool fill_value = true)
+        {
+            NDArray eq = np.equal(AsData(a), AsData(b));
+            var mu = Or((a as MaskedArray)?._mask, (b as MaskedArray)?._mask);
+            if (mu is not null)
+                eq = fill_value ? (eq | mu) : (eq & np.logical_not(mu));
+            return np.all(eq);
+        }
+
+        /// <summary>True iff all corresponding elements are within tolerance, with masked positions treated as
+        /// equal when <paramref name="masked_equal"/> is true (NumPy's <c>allclose</c>).</summary>
+        /// <param name="a">First operand.</param><param name="b">Second operand.</param>
+        /// <param name="masked_equal">Treat masked positions as equal.</param>
+        /// <param name="rtol">Relative tolerance.</param><param name="atol">Absolute tolerance.</param>
+        /// <returns>A single bool.</returns>
+        public bool allclose(object a, object b, bool masked_equal = true, double rtol = 1e-5, double atol = 1e-8)
+        {
+            NDArray close = np.isclose(AsData(a), AsData(b), rtol, atol);
+            var mu = Or((a as MaskedArray)?._mask, (b as MaskedArray)?._mask);
+            if (mu is not null)
+                close = masked_equal ? (close | mu) : (close & np.logical_not(mu));
+            return np.all(close);
+        }
+
+        /// <summary>Dot product with masked slots treated as 0; a result element is masked only if NO valid
+        /// (both-unmasked) term contributed to it (NumPy's <c>ma.dot</c>, strict=False).</summary>
+        /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
+        /// <returns>The masked dot product.</returns>
+        public MaskedArray dot(object a, object b)
+        {
+            var product = np.dot(Filled0(a), Filled0(b));
+            var ma_ = (a as MaskedArray)?._mask;
+            var mb_ = (b as MaskedArray)?._mask;
+            if (ma_ is null && mb_ is null)
+                return new MaskedArray(product, null);
+            var va = (ma_ is null ? np.ones(AsData(a).Shape, np.@bool) : np.logical_not(ma_)).astype(np.float64);
+            var vb = (mb_ is null ? np.ones(AsData(b).Shape, np.@bool) : np.logical_not(mb_)).astype(np.float64);
+            var valid = np.dot(va, vb); // count of valid contributing pairs
+            var m = np.equal(valid, NDArray.Scalar(0.0));
+            return new MaskedArray(product, np.any(m) ? m : null);
+        }
+
+        /// <summary>Inner product with masked slots treated as 0 (NumPy's <c>ma.inner</c>).</summary>
+        /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
+        /// <returns>The masked inner product (mask dropped — result treats masked as 0).</returns>
+        public MaskedArray inner(object a, object b) => new MaskedArray(np.inner(Filled0(a), Filled0(b)), null);
+
+        /// <summary>Outer product with masked slots treated as 0; result[i,j] is masked iff a[i] or b[j] was
+        /// masked (NumPy's <c>ma.outer</c>).</summary>
+        /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
+        /// <returns>The masked outer product.</returns>
+        public MaskedArray outer(object a, object b)
+        {
+            var da = AsData(a); var db = AsData(b);
+            var product = np.outer(Filled0(a), Filled0(b));
+            var ma_ = (a as MaskedArray)?._mask;
+            var mb_ = (b as MaskedArray)?._mask;
+            if (ma_ is null && mb_ is null)
+                return new MaskedArray(product, null);
+            var maf = ma_ is null ? np.zeros(new Shape(da.size), np.@bool) : np.ravel(ma_);
+            var mbf = mb_ is null ? np.zeros(new Shape(db.size), np.@bool) : np.ravel(mb_);
+            var mask = np.reshape(maf, new Shape(da.size, 1)) | np.reshape(mbf, new Shape(1, db.size));
+            return new MaskedArray(product, mask);
+        }
+
+        /// <summary>Vandermonde matrix of a 1-D input; a masked input element ZEROES its whole row and the
+        /// result is a PLAIN array (NumPy's <c>ma.vander</c>: "masked values result in rows of zeros").</summary>
+        /// <param name="x">1-D data.</param><param name="N">Number of columns (null ⇒ len(x)).</param>
+        /// <returns>A plain <see cref="NDArray"/> Vandermonde matrix with masked rows zeroed.</returns>
+        public NDArray vander(object x, int? N = null)
+        {
+            var d = AsData(x);
+            var v = np.vander(d, N);
+            var m = (x as MaskedArray)?._mask;
+            if (m is not null)
+            {
+                var col = np.reshape(m, new Shape(d.size, 1));
+                np.copyto(v, NDArray.Scalar(0), casting: "unsafe", where: np.broadcast_to(col, v.Shape));
+            }
+            return v;
+        }
+
+        /// <summary>Element-wise membership test (NumPy's <c>ma.isin</c>): True where <paramref name="element"/>'s
+        /// value is in <paramref name="test_elements"/>, carrying <paramref name="element"/>'s mask.</summary>
+        /// <param name="element">Values to test.</param><param name="test_elements">The set to test against.</param>
+        /// <param name="invert">Invert the membership test.</param>
+        /// <returns>A masked boolean array shaped like <paramref name="element"/>.</returns>
+        public MaskedArray isin(object element, object test_elements, bool invert = false)
+        {
+            NDArray data = np.isin(AsData(element), AsData(test_elements), invert: invert);
+            var em = (element as MaskedArray)?._mask;
+            // A masked element is not a valid value, so its membership answer is definite: `invert`
+            // (False normally, True for invert). NumPy's unique-based isin yields the same, unmasked.
+            if (em is not null)
+                data = np.where(em, NDArray.Scalar(invert), data);
+            return new MaskedArray(data, null);
+        }
+
+        /// <summary>1-D membership test (NumPy's <c>ma.in1d</c>): the flattened <see cref="isin"/>.</summary>
+        /// <param name="element">Values to test.</param><param name="test_elements">The set to test against.</param>
+        /// <param name="invert">Invert the membership test.</param>
+        /// <returns>A 1-D masked boolean array.</returns>
+        public MaskedArray in1d(object element, object test_elements, bool invert = false)
+            => isin(ravel(element), test_elements, invert);
+
+        /// <summary>Contiguous UNMASKED runs of a 1-D array as slices (NumPy's <c>clump_unmasked</c>).</summary>
+        /// <param name="a">1-D operand.</param>
+        /// <returns>One <see cref="Slice"/> per contiguous unmasked run.</returns>
+        public Slice[] clump_unmasked(object a)
+        {
+            var m = (a as MaskedArray)?._mask;
+            if (m is null)
+                return new[] { new Slice(0, (int)AsData(a).size) };
+            return EzClump(np.logical_not(np.ravel(m)));
+        }
+
+        /// <summary>Contiguous MASKED runs of a 1-D array as slices (NumPy's <c>clump_masked</c>).</summary>
+        /// <param name="a">1-D operand.</param>
+        /// <returns>One <see cref="Slice"/> per contiguous masked run (empty when unmasked).</returns>
+        public Slice[] clump_masked(object a)
+        {
+            var m = (a as MaskedArray)?._mask;
+            return m is null ? Array.Empty<Slice>() : EzClump(np.ravel(m));
+        }
+
+        /// <summary>Finds the contiguous True-runs of a 1-D boolean array as half-open slices.</summary>
+        private static Slice[] EzClump(NDArray boolMask)
+        {
+            var m = boolMask.ToArray<bool>();
+            var res = new List<Slice>();
+            int i = 0, n = m.Length;
+            while (i < n)
+            {
+                if (m[i]) { int s = i; while (i < n && m[i]) i++; res.Add(new Slice(s, i)); }
+                else i++;
+            }
+            return res.ToArray();
+        }
+
+        /// <summary>First and last UNMASKED flat indices (NumPy's <c>flatnotmasked_edges</c>), or null when every
+        /// element is masked.</summary>
+        /// <param name="a">Operand.</param>
+        /// <returns>A 2-element <c>[first, last]</c> int64 array, or null.</returns>
+        public long[] flatnotmasked_edges(object a)
+        {
+            var d = AsData(a);
+            var m = (a as MaskedArray)?._mask;
+            if (m is null)
+                return d.size == 0 ? null : new long[] { 0, d.size - 1 };
+            var um = np.logical_not(np.ravel(m)).ToArray<bool>();
+            int first = -1, last = -1;
+            for (int i = 0; i < um.Length; i++)
+                if (um[i]) { if (first < 0) first = i; last = i; }
+            return first < 0 ? null : new long[] { first, last };
+        }
+
+        /// <summary>Contiguous UNMASKED runs of the flattened array (NumPy's <c>flatnotmasked_contiguous</c>);
+        /// same as <see cref="clump_unmasked"/> for a 1-D input.</summary>
+        /// <param name="a">Operand.</param>
+        /// <returns>One <see cref="Slice"/> per contiguous unmasked run.</returns>
+        public Slice[] flatnotmasked_contiguous(object a) => clump_unmasked(ravel(a));
+
+        /// <summary>Drops the ROWS of a 2-D array that contain ANY masked element (NumPy's <c>compress_rows</c>) —
+        /// a plain <see cref="NDArray"/>.</summary>
+        /// <param name="a">2-D operand.</param>
+        /// <returns>The surviving rows.</returns>
+        public NDArray compress_rows(object a)
+        {
+            var keep = np.logical_not(np.any(getmaskarray(a), 1, null, false));
+            return np.compress(keep, AsData(a), 0);
+        }
+
+        /// <summary>Drops the COLUMNS of a 2-D array that contain ANY masked element (NumPy's <c>compress_cols</c>).</summary>
+        /// <param name="a">2-D operand.</param>
+        /// <returns>The surviving columns.</returns>
+        public NDArray compress_cols(object a)
+        {
+            var keep = np.logical_not(np.any(getmaskarray(a), 0, null, false));
+            return np.compress(keep, AsData(a), 1);
+        }
+
+        /// <summary>Masks the ENTIRE rows of a 2-D array that contain any masked element (NumPy's <c>mask_rows</c>).</summary>
+        /// <param name="a">2-D operand.</param>
+        /// <returns>The row-masked array.</returns>
+        public MaskedArray mask_rows(object a)
+        {
+            var rows = np.any(getmaskarray(a), 1, null, true);
+            return masked_where(np.broadcast_to(rows, AsData(a).Shape), a);
+        }
+
+        /// <summary>Masks the ENTIRE columns of a 2-D array that contain any masked element (NumPy's <c>mask_cols</c>).</summary>
+        /// <param name="a">2-D operand.</param>
+        /// <returns>The column-masked array.</returns>
+        public MaskedArray mask_cols(object a)
+        {
+            var cols = np.any(getmaskarray(a), 0, null, true);
+            return masked_where(np.broadcast_to(cols, AsData(a).Shape), a);
+        }
+
+        // ─────────────────────────────────────────────────────────────────────────────
+        //  Sorting / unique — masked entries sort to the END (filled with the dtype's largest
+        //  value) and the trailing k slots (k = masked count along the axis) are re-masked.
+        // ─────────────────────────────────────────────────────────────────────────────
+
+        /// <summary>Sorts along an axis with masked entries pushed to the END and re-masked there (NumPy's
+        /// <c>ma.sort</c>). Masked slots are filled with the dtype's largest value so they sort last (ascending).</summary>
+        /// <param name="a">Operand.</param><param name="axis">Sort axis (default last).</param>
+        /// <param name="fill_value">Override the masked fill; null uses <see cref="minimum_fill_value"/>.</param>
+        /// <returns>The sorted masked array.</returns>
+        public MaskedArray sort(object a, int axis = -1, object fill_value = null)
+        {
+            var mask = (a as MaskedArray)?._mask;
+            var d = AsData(a);
+            if (mask is null)
+                return new MaskedArray(np.sort(d, axis), null);
+            // Sort by the argsort of the FILLED keys (masked→largest⇒last), then reorder BOTH data and mask by
+            // that permutation — so masked slots keep their original data at the end, exactly as NumPy does
+            // (not the fill value a plain sort-of-filled would leave behind).
+            var order = np.argsort(((MaskedArray)a).filled(fill_value ?? minimum_fill_value(a)), axis);
+            return new MaskedArray(np.take_along_axis(d, order, axis), np.take_along_axis(mask, order, axis));
+        }
+
+        /// <summary>Indices that would sort the array with masked entries treated as the dtype's largest value
+        /// (NumPy's <c>ma.argsort</c>) — a PLAIN int64 index array (masked entries land at the end).</summary>
+        /// <param name="a">Operand.</param><param name="axis">Sort axis (default last).</param>
+        /// <param name="fill_value">Override the masked fill; null uses <see cref="minimum_fill_value"/>.</param>
+        /// <returns>An int64 <see cref="NDArray"/> of sort indices.</returns>
+        public NDArray argsort(object a, int axis = -1, object fill_value = null)
+        {
+            var d = (a as MaskedArray)?._mask is null ? AsData(a) : ((MaskedArray)a).filled(fill_value ?? minimum_fill_value(a));
+            return np.argsort(d, axis);
+        }
+
+        /// <summary>Sorted unique values over the UNMASKED elements, plus ONE trailing masked entry if any
+        /// element was masked (NumPy's <c>ma.unique</c>, values only).</summary>
+        /// <param name="ar">Operand.</param>
+        /// <returns>The masked array of unique values.</returns>
+        public MaskedArray unique(object ar)
+        {
+            NDArray uvals = np.unique(compressed(ar));
+            var mask = (ar as MaskedArray)?._mask;
+            if (mask is null || !np.any(mask))
+                return new MaskedArray(uvals, null);
+            // Append a single masked slot (NumPy keeps one masked value in the unique set).
+            var data = np.concatenate(new[] { uvals, np.zeros(new Shape(1), uvals.dtype) }, 0);
+            var m = np.concatenate(new[] { np.zeros(uvals.Shape, np.@bool), np.ones(new Shape(1), np.@bool) }, 0);
+            return new MaskedArray(data, m);
+        }
+
+        // ── Mask hardness — NumSharp has no hard/soft mask distinction (masks are plain boolean
+        //    arrays), so these are accepted for API parity and are effectively no-ops. ──
+
+        /// <summary>Accepted for NumPy parity; NumSharp masks have no hard/soft state, so this returns the
+        /// array unchanged.</summary>
+        /// <param name="a">Operand.</param><returns>The same masked array.</returns>
+        public MaskedArray harden_mask(object a) => array(a);
+
+        /// <summary>Accepted for NumPy parity; a no-op in NumSharp (no hard/soft mask state).</summary>
+        /// <param name="a">Operand.</param><returns>The same masked array.</returns>
+        public MaskedArray soften_mask(object a) => array(a);
+
+        /// <summary>Drops an all-False mask back to nomask (NumPy's <c>shrink_mask</c>); otherwise unchanged.</summary>
+        /// <param name="a">Operand.</param><returns>The masked array, with a redundant all-False mask removed.</returns>
+        public MaskedArray shrink_mask(object a)
+        {
+            var m = (a as MaskedArray)?._mask;
+            return (m is not null && !np.any(m)) ? new MaskedArray(AsData(a), null) : array(a);
         }
     }
 }
