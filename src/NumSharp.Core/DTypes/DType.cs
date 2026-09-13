@@ -302,8 +302,19 @@ namespace NumSharp
         /// <summary>A unique character code for each of the built-in types (<c>'?' 'b' 'B' 'h' 'H' 'i' 'I' 'l' 'L' 'e' 'f' 'd' 'D' 'M' 'm'</c>).</summary>
         public char @char => Meta.TypeChar;
 
-        /// <summary>NumPy's unique type number (<c>dtype.num</c>).</summary>
+        /// <summary>NumPy's unique type number (<c>dtype.num</c>) as a raw <see cref="int"/> — exactly what NumPy's Python surface returns.</summary>
         public int num => Meta.TypeNum;
+
+        /// <summary>
+        ///     The same number as <see cref="num"/>, typed as NumPy's C <see cref="NPY_TYPES"/> enum — the NumPy-facing
+        ///     dtype IDENTITY that rides alongside the storage/kernel discriminator <see cref="typecode"/>
+        ///     (<see cref="NPTypeCode"/>). Byte-identical to <c>np.dtype(...).num</c> on the host it runs on, including
+        ///     the platform-dependent integer resolution (on Windows/LLP64 <c>int32.type_num</c> is
+        ///     <see cref="NPY_TYPES.NPY_LONG"/> and <c>int64.type_num</c> is <see cref="NPY_TYPES.NPY_LONGLONG"/>; on LP64
+        ///     they are <see cref="NPY_TYPES.NPY_INT"/> and <see cref="NPY_TYPES.NPY_LONG"/>). NumSharp's two non-NumPy
+        ///     dtypes report the user-range <see cref="NPY_TYPES.NUMSHARP_DECIMAL"/> / <see cref="NPY_TYPES.NUMSHARP_CHAR"/>.
+        /// </summary>
+        public NPY_TYPES type_num => (NPY_TYPES)Meta.TypeNum;
 
         /// <summary>The required alignment (bytes) of this data-type (<c>dtype.alignment</c>).</summary>
         public int alignment => Meta.Alignment;
@@ -384,6 +395,48 @@ namespace NumSharp
         public static DType From(string dtype) => np.dtype(dtype);
 
         /// <summary>
+        ///     NumPy's <c>PyArray_DescrFromType</c>: the descriptor for a NumPy type number. The rough reverse of
+        ///     <see cref="type_num"/>, but deliberately <b>many-to-one on the C integers</b>: NumPy keeps DISTINCT
+        ///     descriptors for <c>intc</c>/<c>long</c>/<c>longlong</c> even when several share a width and accepts every
+        ///     one of their numbers on every platform (<c>np.dtype(NPY_INT)</c> and <c>np.dtype(NPY_LONGLONG)</c> both
+        ///     succeed), whereas NumSharp collapses each width to ONE type. So every C-integer number is mapped to the
+        ///     NumSharp type of that WIDTH+signedness — <see cref="NPY_TYPES.NPY_INT"/> and <see cref="NPY_TYPES.NPY_LONGLONG"/>
+        ///     resolve on ALL platforms (to int32 / int64), and <see cref="NPY_TYPES.NPY_LONG"/> follows C <c>long</c>
+        ///     (int32 on LLP64/Windows, int64 on LP64). The returned descriptor's own <see cref="num"/> is therefore
+        ///     NumSharp's platform-canonical value, which is a genuine round-trip only for that canonical spelling — the
+        ///     same folding NumSharp applies to intc/int32. Numbers with NO NumSharp type at all
+        ///     (<see cref="NPY_TYPES.NPY_CFLOAT"/> complex64, <see cref="NPY_TYPES.NPY_OBJECT"/>, <see cref="NPY_TYPES.NPY_VOID"/>,
+        ///     extended precision, the sentinels) are rejected, matching how the parser refuses a dtype NumSharp cannot
+        ///     represent.
+        /// </summary>
+        /// <param name="type_num">A NumPy type number.</param>
+        /// <returns>The class's canonical instance (for the datetime pair, the generic-unit descriptor).</returns>
+        /// <exception cref="NotSupportedException">NumSharp has no type of this number's width/kind (complex64, object, void, extended precision, or a sentinel).</exception>
+        public static DType From(NPY_TYPES type_num)
+        {
+            // Map EVERY C-integer number to the NumSharp type of that width+signedness (NumSharp has one type per
+            // width; NumPy has intc/long/longlong). This makes np.dtype(NPY_INT) / np.dtype(NPY_LONGLONG) resolve on
+            // every platform instead of throwing where that spelling is not the platform-canonical one (e.g. NPY_INT=5
+            // is unregistered on Windows, where NumSharp's Int32 is NPY_LONG=7). NPY_LONG/NPY_ULONG follow C `long`.
+            switch (type_num)
+            {
+                case NPY_TYPES.NPY_INT: return DTypeRegistry.Int32.Singleton;
+                case NPY_TYPES.NPY_UINT: return DTypeRegistry.UInt32.Singleton;
+                case NPY_TYPES.NPY_LONGLONG: return DTypeRegistry.Int64.Singleton;
+                case NPY_TYPES.NPY_ULONGLONG: return DTypeRegistry.UInt64.Singleton;
+                case NPY_TYPES.NPY_LONG: return (DTypeRegistry.CLongIs32Bit ? DTypeRegistry.Int32 : DTypeRegistry.Int64).Singleton;
+                case NPY_TYPES.NPY_ULONG: return (DTypeRegistry.CLongIs32Bit ? DTypeRegistry.UInt32 : DTypeRegistry.UInt64).Singleton;
+            }
+
+            var meta = DTypeRegistry.FromTypeNum((int)type_num);
+            if (meta == null)
+                throw new NotSupportedException(
+                    $"NumPy type number {(int)type_num} (NPY_TYPES.{type_num}) has no NumSharp dtype class: " +
+                    "NumSharp has no complex64/object/void/extended-precision types, a single complex width, and no bytes/void storage.");
+            return meta.Singleton;
+        }
+
+        /// <summary>
         ///     Returns this descriptor's <see cref="NPTypeCode"/>. Combined with a nullable <see cref="DType"/>
         ///     this keeps the old <c>Type dtype</c> idiom drop-in: <c>dtype?.GetTypeCode()</c> yields
         ///     <c>NPTypeCode?</c> (<see langword="null"/> for the none/infer state where <c>dtype == null</c>).
@@ -459,6 +512,20 @@ namespace NumSharp
         ///     case-sensitive spelling (<c>"f4"</c>, <c>"float32"</c>, <c>"&lt;f8"</c>, <c>"M8[ns]"</c>). <see langword="null"/> ⇒ none.
         /// </summary>
         public static implicit operator DType(string dtype) => dtype == null ? null : np.dtype(dtype);
+
+        /// <summary>
+        ///     A NumPy type number (<see cref="NPY_TYPES"/>) converts to its canonical descriptor — the fifth dtype
+        ///     spelling, so <c>np.zeros(3, NPY_TYPES.NPY_DOUBLE)</c> binds the one <c>DType</c> overload like the others.
+        ///     Delegates to <see cref="From(NPY_TYPES)"/>, so a number with no NumSharp class on this platform
+        ///     (e.g. <see cref="NPY_TYPES.NPY_CFLOAT"/>) throws <see cref="NotSupportedException"/> — the same
+        ///     throw-on-invalid the string conversion has (a bad <c>"complex64"</c> string). Unlike the reference-type
+        ///     spellings there is no <see langword="null"/> case: <see cref="NPY_TYPES"/> is a value type, which is also
+        ///     why it cannot reintroduce the <c>null</c>-literal binding hazard that bars <c>==(DType, string)</c>
+        ///     operators. The reverse direction is the <see cref="type_num"/> property (not an operator, to keep
+        ///     <c>DType</c>'s back-conversions to <see cref="System.Type"/>/<see cref="NPTypeCode"/> unambiguous).
+        /// </summary>
+        /// <exception cref="NotSupportedException">The number has no NumSharp dtype class on the current platform.</exception>
+        public static implicit operator DType(NPY_TYPES type_num) => From(type_num);
 
         /// <summary>
         ///     A descriptor converts back to its <see cref="System.Type"/> (none/<see langword="null"/> ⇒ null) — EXPLICITLY:
