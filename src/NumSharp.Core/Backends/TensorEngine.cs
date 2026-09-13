@@ -182,6 +182,11 @@ namespace NumSharp
         public abstract NDArray Matmul(NDArray lhs, NDArray rhs);
 
         public abstract NDArray Abs(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
+        // np.fabs — the FLOAT-ONLY absolute value: promotes int/bool to float (NEP50 tier) and has NO
+        // complex loop (unlike Abs, which preserves int and maps complex→magnitude). The operation IS
+        // Abs on the float loops (clear the IEEE sign bit); Fabs differs only in dtype resolution + the
+        // complex rejection, so the engine reuses the SIMD UnaryOp.Abs kernel.
+        public abstract NDArray Fabs(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray Sqrt(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray Log(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray Log2(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);

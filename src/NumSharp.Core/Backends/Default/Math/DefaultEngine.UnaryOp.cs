@@ -30,9 +30,15 @@ namespace NumSharp.Backends
         /// <param name="@out">Optional provided output (NumPy ufunc out=).</param>
         /// <param name="where">Optional bool write mask (NumPy ufunc where=).</param>
         /// <returns>Result array with specified or promoted type (or <paramref name="@out"/>)</returns>
+        /// <param name="ufuncName">
+        ///     Optional NumPy ufunc name for error messages (the <c>out=</c> cast text). When null the
+        ///     name is derived from <paramref name="op"/> via <c>UfuncName</c>. Needed when one
+        ///     <see cref="UnaryOp"/> kernel backs several NumPy ufuncs — e.g. <c>fabs</c> reuses
+        ///     <see cref="UnaryOp.Abs"/> yet must report "fabs", not "absolute".
+        /// </param>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         internal unsafe NDArray ExecuteUnaryOp(NDArray nd, UnaryOp op, NPTypeCode? typeCode = null,
-            NDArray @out = null, NDArray where = null)
+            NDArray @out = null, NDArray where = null, string ufuncName = null)
         {
             if (nd.size == 0 && @out is null && where is null)
             {
@@ -72,7 +78,7 @@ namespace NumSharp.Backends
             // (ufunc_object.c:2213) — same here, straight to the iterator.
             if (@out is not null || where is not null)
             {
-                return ExecuteUnaryUfuncInto(nd, op, inputType, outputType, @out, where);
+                return ExecuteUnaryUfuncInto(nd, op, inputType, outputType, @out, where, ufuncName);
             }
 
             // Handle scalar case
