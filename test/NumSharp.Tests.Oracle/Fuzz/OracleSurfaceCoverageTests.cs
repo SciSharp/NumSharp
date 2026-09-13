@@ -108,6 +108,16 @@ namespace NumSharp.Tests.Fuzz
             // np.shares_memory.Test.cs suite, verified against NumPy 2.4.2 across view/copy/interleaved/
             // transposed layouts and the max_work / TooHardError / ValueError edges.
             "may_share_memory", "shares_memory",
+            // array_equiv's VALUE path is identical to array_equal's — both reduce all(a == b) — and
+            // array_equal is already a direct corpus op (logic.jsonl via ALLCLOSE_OPS), so the elementwise
+            // comparison + all-reduction is fuzzed across every dtype/layout there. array_equiv's ONLY
+            // distinguishing behavior is the broadcast-shape gate (shape-consistent rather than exact),
+            // which the single-operand-per-slot differential corpus cannot express (it reconstructs each
+            // operand independently and can't stage a genuine (M,)-vs-(N,M) broadcast pair) — the same
+            // structural reason the set routines and broadcast predicates are sibling-owned. Gated by the
+            // dedicated np.array_equiv.Test.cs suite (broadcast-consistent / non-broadcastable / scalar +
+            // column broadcast / empty / NaN / mixed-dtype), verified against NumPy 2.4.2.
+            "array_equiv",
         };
 
         // NumSharp compatibility/convenience APIs with no NumPy 2.4.2 callable of the same name.
