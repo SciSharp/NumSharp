@@ -441,9 +441,44 @@ nd["..., -1"]     // Ellipsis fills dimensions
 Tested against NumPy 2.x.
 
 ### Array Creation
-`arange`, `array`, `asanyarray`, `asarray`, `asarray_chkfinite`, `ascontiguousarray`, `asfortranarray`, `asmatrix`, `copy`, `empty`, `empty_like`, `eye`, `frombuffer`, `full`, `full_like`, `identity`, `linspace`, `meshgrid`, `mgrid`, `ogrid`, `ones`, `ones_like`, `require`, `tri`, `zeros`, `zeros_like`
+`arange`, `array`, `asanyarray`, `asarray`, `asarray_chkfinite`, `ascontiguousarray`, `asfortranarray`, `asmatrix`, `copy`, `empty`, `empty_like`, `eye`, `frombuffer`, `full`, `full_like`, `geomspace`, `identity`, `linspace`, `logspace`, `meshgrid`, `mgrid`, `ogrid`, `ones`, `ones_like`, `require`, `tri`, `zeros`, `zeros_like`
 
 The `as*` conversion family mirrors NumPy: `asarray_chkfinite(a, dtype=None, order='K')` = `asarray` then raise `ValueError("array must not contain infs or NaNs")` if a **float-family** dtype (Half/Single/Double/Complex — NumPy's `typecodes['AllFloat']`; Decimal/int/bool skip the check) holds any inf/NaN, via a **fused single-pass NaN-poison SIMD reduction** (`Backends/Kernels/FiniteScan.cs`: `acc += v - v` — +0 for finite, absorbing-NaN for non-finite; AVX2 gather + reversed-contiguous fast path for strided/negative-stride views; ~2–27× NumPy contiguous, ≥1× strided). `require(a, dtype=None, requirements=None)` parses C/F/A/W/O/E flags (+aliases; single-string requirements iterate by char like NumPy, so `"F_CONTIGUOUS"` as one string raises), resolves an order and copies only if a remaining ALIGNED/WRITEABLE/OWNDATA flag is unsatisfied (ALIGNED is always true in NumSharp, so only broadcast-non-writeable and views force a copy). `asmatrix(data, dtype=None)` returns a **2-D view** (NumSharp has no `matrix` subclass — the deprecated NumPy one; no `*`-as-matmul/`.H`/`.I`): 0-D→(1,1), 1-D→(1,N), 2-D unchanged, >2-D drops length-1 axes and must land on 2-D else `ValueError("shape too large to be a matrix.")`; also parses matrix strings (`"1 2; 3 4"`). See `Creation/np.{asarray_chkfinite,require,asmatrix}.cs`.
+
+**`np.logspace` / `np.geomspace` — the log-scale linspace family** (NumPy 2.4.2 `numpy/_core/function_base.py`;
+all probed against 2.4.2; gates `Creation/np.logspace.geomspace.Test.cs` (20) + the `creation` oracle tier —
+28 logspace + 13 geomspace cases, 343/343 bit-exact). **Scalar `start`/`stop`/`base` (double), like NumSharp's
+existing scalar `linspace`** — array-like `start`/`stop`/`base` is OUT of scope (the whole family is scalar-only;
+that's a separate, larger feature). Full parameter parity otherwise: `num=50`, `endpoint=true`, `base=10.0`
+(logspace only), `dtype=null`, `axis=0` (int + long `num` overloads). `axis` is a **no-op for scalar inputs** (the
+output is always 1-D) but is still validated exactly like NumPy's trailing `moveaxis(y, 0, axis)`: only 0 and -1
+are in range, else `AxisError("destination: axis {a} is out of bounds for array of dimension 1")` (verbatim,
+reporting the original axis). `num<0` → `ValueError("Number of samples, {num}, must be non-negative.")`.
+- **`logspace(start, stop, num, endpoint, base, dtype, axis)`** = `power(base, linspace(start, stop, num,
+  endpoint))` then `.astype(dtype)`. The computation is ALWAYS float64 (scalar-double inputs) and only THEN cast —
+  so an integer dtype **TRUNCATES toward zero** (unlike `linspace`, which FLOORS), and even `dtype=complex128` is
+  float64-compute-then-cast (real + 0j), NOT a complex-domain computation. **BIT-EXACT vs NumPy** at every dtype:
+  `Math.Pow`==`npy_pow` and the `start + i*step` interior commutes with NumPy's `arange*step + start` (win-amd64).
+  A negative `base` with fractional exponents yields NaN (real power of a negative base), matching NumPy. Fused
+  single-pass fill loop — no intermediate `linspace` array (`LogspaceCore`).
+- **`geomspace(start, stop, num, endpoint, dtype, axis)`** — a geometric progression, endpoints given directly.
+  Ported op-for-op from NumPy: `out_sign = sign(start)`, rotate `start`/`stop` onto the positive real axis,
+  `logspace(log10(start), log10(stop), num, endpoint, base=10)`, overwrite the endpoints, `result *= out_sign`.
+  The REAL path is **BIT-EXACT** (out_sign is ±1, so the rotate + final multiply are exact and the endpoints land
+  the original `start`/`stop` byte-for-byte); decreasing, all-negative, and **mixed-sign** inputs (`geomspace(-1,1)
+  → [-1, nan, nan, 1]`, log10 of the rotated-negative endpoint poisoning the interior) all fall out automatically.
+  Zero endpoints → `ValueError("Geometric sequence cannot include zero")`, checked FIRST (before num, before axis —
+  NumPy's order). A `Complex` start/stop **overload** and a real-input **`dtype=complex128`** both compute in the
+  complex128 domain (the interior genuinely differs — `geomspace(1,8,4,dtype=complex)[1]==1.9999999999999998`, not
+  the real path's exact 2.0 — so the domain is load-bearing); these compose NumSharp's NumPy-tuned complex power
+  (`npy_cpow` port) + complex log10, so they are **ACCURATE within the documented ≤3-ULP complex-unary envelope but
+  NOT byte-reproducible** (allclose, unit-test-pinned + EXCLUDED from the byte corpus — the `np.sinc` complex
+  policy; verified worst relative error 1.0e-15 over the spiral/circle/dtype cases).
+- **Perf (NPY/NS, Release, best-of-15, warm): ~parity at 1K (NDArray-construction floor), 1.2–1.3× at 100K–10M**
+  (the single-pass fusion avoids NumPy's intermediate `linspace` passes). This is the **physical ceiling**: both
+  are `Math.Pow`-bound (a bare `Math.Pow` loop of 1M measures 8.17 ms vs logspace's 8.29 ms — 98 % pure pow), and
+  no bit-exact SIMD `pow` exists, so the 1.5× target is unreachable without abandoning parity — the same class as
+  `arcsinh`/`float_power`-general/`gcd`. See `Creation/np.{logspace,geomspace}.cs`.
 
 ### Shape Manipulation
 `append`, `array_split`, `atleast_1d`, `atleast_2d`, `atleast_3d`, `block`, `c_`, `column_stack`, `concat`, `concatenate`, `delete`, `dsplit`, `dstack`, `expand_dims`, `flatten`, `flip`, `fliplr`, `flipud`, `hsplit`, `hstack`, `insert`, `intersect1d`, `matrix_transpose`, `moveaxis`, `pad`, `permute_dims`, `r_`, `ravel`, `repeat`, `reshape`, `resize`, `roll`, `rollaxis`, `rot90`, `setdiff1d`, `setxor1d`, `split`, `squeeze`, `stack`, `swapaxes`, `tile`, `transpose`, `trim_zeros`, `union1d`, `unique`, `unique_all`, `unique_counts`, `unique_inverse`, `unique_values`, `unstack`, `vsplit`, `vstack`
