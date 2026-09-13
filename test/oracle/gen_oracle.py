@@ -8048,6 +8048,13 @@ _EV_REDUCE = {
     "count_nonzero": lambda a, ax, kd: np.count_nonzero(a, axis=ax, keepdims=kd),
     "nansum": lambda a, ax, kd: np.nansum(a, axis=ax, keepdims=kd),
     "nanprod": lambda a, ax, kd: np.nanprod(a, axis=ax, keepdims=kd),
+    # P2 M4-tail — ORDER-INDEPENDENT range / NaN-aware min-max. Bit-exact at EVERY dtype (min / max /
+    # their difference do not depend on summation order), so they carry NO E1 excuse — a regression is
+    # red. ptp preserves dtype (integer/unsigned overflow wraps) and PROPAGATES a NaN; nanmin/nanmax
+    # SKIP NaN (an all-NaN slice → NaN).
+    "ptp": lambda a, ax, kd: np.ptp(a, axis=ax, keepdims=kd),
+    "nanmin": lambda a, ax, kd: np.nanmin(a, axis=ax, keepdims=kd),
+    "nanmax": lambda a, ax, kd: np.nanmax(a, axis=ax, keepdims=kd),
 }
 
 _EV_TOKEN = re.compile(r"\s*([A-Za-z_][A-Za-z0-9_]*(?::[^,()]+)?|[(),])")
@@ -8492,6 +8499,58 @@ def gen_evaluate():
         emit("in0", [(sb, sb)], "c_contiguous_2d",
              params={"reduce": {"kind": "nansum", "axis": 1, "keepdims": False}},
              cid_tag=f"m4wideaxis/{dt}/nansum[1]/3x200")
+
+    # ---- C5. M4-tail: the ORDER-INDEPENDENT range / NaN-aware min-max family (plan P2 M4-tail) --
+    # ptp / nanmin / nanmax are host-DELEGATED (the engine materializes the child, then reduces it with
+    # np.ptp / np.nanmin / np.nanmax). Because a minimum, a maximum and their difference are the same
+    # value in ANY visiting order, they are BIT-EXACT at every dtype with NO E1 excuse — so this block
+    # is their teeth, not a "within N ULP" cushion. It sweeps every layout {C-1d, C-2d, F-2d, negstride}
+    # so a wrong strided/reversed read of the materialized child turns it red; every axis + keepdims; and
+    # both integer (dtype preserved, unsigned/signed overflow WRAPS) and float (NaN scattered → nanmin/
+    # nanmax SKIP it; ptp PROPAGATES it → NaN) pools. Integer pools are built int→int (never float→uint,
+    # a host-dependent conversion) so uint64's wrap is well-defined parity.
+    def _c5_pool(N, npdt, with_nan):
+        if npdt.kind in "iu":
+            base = np.array([3, -7, 1, 5, 0, 4, -2, 6], dtype=np.int64)
+            return np.tile(base, (N + 7) // 8)[:N].astype(npdt)   # modular int→int, no float→uint UB
+        base = np.array([3.0, -7.0, 1.5, 5.0, 0.0, 4.0, -2.5, 6.0], dtype=np.float64)
+        a = np.tile(base, (N + 7) // 8)[:N].astype(npdt)
+        if with_nan:
+            a[1::5] = np.nan                                       # scattered NaN (never a whole all-NaN slice here)
+        return a
+
+    c5_layouts = ["c_contiguous_1d", "c_contiguous_2d", "f_contiguous_2d", "negstride_1d"]
+    for ln in c5_layouts:
+        for dt in ("int32", "int64", "uint64", "float32", "float64"):
+            npdt = np.dtype(dt)
+            isfloat = npdt.kind == "f"
+            # ptp over a NaN-FREE pool (a real finite range); nanmin/nanmax over a NaN pool on floats
+            # (plain min/max on ints, which carry no NaN); plus ptp over a NaN pool on floats to pin the
+            # NaN-propagation → NaN result.
+            specs = [("ptp", False), ("nanmin", isfloat), ("nanmax", isfloat)]
+            if isfloat:
+                specs.append(("ptp", True))
+            for kind, with_nan in specs:
+                nb, nv = LAYOUTS[ln](npdt)
+                nb.reshape(-1)[:] = _c5_pool(nb.size, npdt, with_nan)
+                combos = [(None, False)] + [(ax, False) for ax in range(nv.ndim)]
+                if nv.ndim > 0:
+                    combos.append((0, True))
+                for ax, kd in combos:
+                    emit("in0", [(nb, nv)], ln,
+                         params={"reduce": {"kind": kind, "axis": ax, "keepdims": kd}},
+                         cid_tag=f"m4tail/{dt}/{kind}{'_nan' if with_nan else ''}[{ax},{int(kd)}]")
+
+    # And one WIDE-magnitude flat ptp per float width (crosses PW_BLOCKSIZE — though ptp is a max/min
+    # selection, not a sum, so it is order-exact regardless; this pins the large-N materialize path).
+    for N in (129, 1000):
+        for dt in ("float32", "float64", "int64"):
+            npdt = np.dtype(dt)
+            arr = _wide_sum_pool(N).astype(npdt)
+            sb = np.ascontiguousarray(arr)
+            emit("in0", [(sb, sb)], "c_contiguous_1d",
+                 params={"reduce": {"kind": "ptp", "axis": None, "keepdims": False}},
+                 cid_tag=f"m4tailwide/{dt}/ptp/N={N}")
 
     # ---- D. out= (returned view + the whole base buffer behind out) -------------------------
     out_exprs = ["add(mul(in0,in1),in0)", "gt(in0,in1)", "where(gt(in0,in1),in0,in1)", "sqrt(abs(in0))"]

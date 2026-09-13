@@ -323,12 +323,25 @@ namespace NumSharp.Backends
             NDExprReduceKind.Max => "maximum",
             NDExprReduceKind.Any => "logical_or",
             NDExprReduceKind.All => "logical_and",
+            NDExprReduceKind.Ptp => "ptp",
+            NDExprReduceKind.NanMin => "nanmin",
+            NDExprReduceKind.NanMax => "nanmax",
             _ => "mean",
         };
 
         private unsafe NDArray EvaluateReduce(NDExprProgram program, NDArray[] inputs, NDArray @out)
         {
             var reduce = program.Reduce;
+
+            // Plan P2 M4-tail — the order-independent range / NaN-aware min-max kinds are host-delegated:
+            // materialize the child and reduce THAT buffer through the already-NumPy-exact engine
+            // reduction, which is bit-identical to NumPy regardless of layout because min/max (and their
+            // difference) do not depend on summation order — so they need neither the fold kernel below
+            // nor the pairwise divert the summation kinds do. Handles BOTH flat and axis, so it must run
+            // before the axis dispatch.
+            if (reduce.Kind is NDExprReduceKind.Ptp or NDExprReduceKind.NanMin or NDExprReduceKind.NanMax)
+                return EvaluateDelegatingReduce(program, inputs, @out);
+
             if (reduce.Axis is int ax)
                 return EvaluateAxisReduce(program, inputs, @out, ax);
 
@@ -492,6 +505,67 @@ namespace NumSharp.Backends
                         + (long)result.Shape.offset * result.typecode.SizeOf();
             NDIterCasting.ConvertValue(slot, dst, accType, result.typecode);
             return result;
+        }
+
+        /// <summary>
+        /// Host-delegated reductions (plan P2 M4-tail): <c>Ptp</c> / <c>NanMin</c> / <c>NanMax</c>.
+        /// Materializes the reduction's child once (the M1/M2 route — a fresh, contiguous array in
+        /// NumPy's own K-order layout) and reduces THAT buffer through the corresponding public engine
+        /// reduction (<see cref="np.ptp(NDArray,int?,NDArray,bool)"/> /
+        /// <see cref="np.nanmin(NDArray,int?,bool)"/> / <see cref="np.nanmax(NDArray,int?,bool)"/>),
+        /// which are themselves NumPy-exact. These three are ORDER-INDEPENDENT — a minimum, a maximum,
+        /// or their difference is the same value whatever order the elements are visited in — so reducing
+        /// the materialized buffer is bit-identical to <c>np.&lt;kind&gt;(child)</c> for ANY input layout,
+        /// the property the summation kinds (Sum/Mean/Prod, and the still-open NanMean/Std/Var) lack and
+        /// why they need the pairwise divert instead. The child dtype is preserved
+        /// (<see cref="ReduceNode.ResolveReduceResultType"/> returns <c>child</c>), so the engine
+        /// reduction's result dtype already equals <paramref name="program"/>.ResultType and no post-cast
+        /// is needed except into a caller <paramref name="out"/> of a different (same_kind-castable) dtype.
+        /// </summary>
+        /// <param name="program">The compiled reduction program; its <c>Reduce</c> carries the kind, axis and keepdims.</param>
+        /// <param name="inputs">The call's operand arrays, driving the child's materialization.</param>
+        /// <param name="out">Optional destination; must be 0-d for a flat reduction and the reduced shape for an axis one. Null allocates a fresh result.</param>
+        /// <returns>The reduced array (a fresh 0-d scalar / reduced-shape array, or <paramref name="out"/> itself when supplied).</returns>
+        /// <exception cref="ArgumentException">A flat reduction was given a non-0-d <paramref name="out"/>; or the engine reduction rejects a zero-size input (no identity), an out shape mismatch, or an out dtype not reachable by a same_kind cast.</exception>
+        private unsafe NDArray EvaluateDelegatingReduce(NDExprProgram program, NDArray[] inputs, NDArray @out)
+        {
+            var reduce = program.Reduce;
+            var resultType = program.ResultType;
+
+            // Validate the out cast up front (same order as the fold paths: the cast rule is checked
+            // before any compute), so an illegal out dtype fails with evaluate's message, not the
+            // engine reduction's.
+            if (@out is not null)
+                ValidateOutCast(resultType, @out.typecode, "evaluate");
+
+            // Materialize the child once (fresh + contiguous). `using` releases it after the delegated
+            // reduction has read it; every delegated reduction allocates a FRESH result (np.ptp is a
+            // subtract, np.nanmin/nanmax are reductions), so `computed` never aliases `materialized`.
+            using var materialized = EvaluateCore(program.ChildElementwiseProgram, inputs, null);
+
+            NDArray computed = reduce.Kind switch
+            {
+                NDExprReduceKind.Ptp    => np.ptp(materialized, reduce.Axis, keepdims: reduce.Keepdims),
+                NDExprReduceKind.NanMin => np.nanmin(materialized, reduce.Axis, reduce.Keepdims),
+                NDExprReduceKind.NanMax => np.nanmax(materialized, reduce.Axis, reduce.Keepdims),
+                _ => throw new NotSupportedException(
+                    $"EvaluateDelegatingReduce reached with non-delegating kind {reduce.Kind} — dispatch bug."),
+            };
+
+            if (@out is null)
+                return computed;
+
+            // A flat reduction produces a 0-d scalar; NumPy rejects a non-0-d out here with this exact
+            // shape of message (the fold path raises the identical text — see EvaluateReduce).
+            if (reduce.Axis is null && @out.ndim != 0)
+                throw new ArgumentException(
+                    $"output parameter for reduction operation {ReduceUfuncName(reduce.Kind)} " +
+                    $"has the wrong number of dimensions: Found {@out.ndim} but expected 0");
+
+            // copyto applies the (already-validated) same_kind cast and shape-checks the axis case,
+            // matching the axis fold path's `np.copyto(@out, reduced)` tail.
+            np.copyto(@out, computed);
+            return @out;
         }
 
         // Axis-aware fused reduction: one pass over the inputs, accumulating into a per-output

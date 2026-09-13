@@ -616,5 +616,168 @@ namespace NumSharp.Tests.Backends.Iterators
             Assert.AreEqual(1.0, ns1.GetDouble(0), 0.0);
             Assert.AreEqual(5.0, ns1.GetDouble(1), 0.0);
         }
+
+        // =====================================================================
+        // P2 M4-tail — the ORDER-INDEPENDENT range / NaN-aware min-max family
+        // (ptp / nanmin / nanmax), host-delegated to np.ptp/np.nanmin/np.nanmax
+        // over the materialized child. Probed against NumPy 2.4.2.
+        // =====================================================================
+
+        /// <summary>
+        /// <c>Ptp</c> is <c>max - min</c> at the CHILD dtype, so an integer result WRAPS exactly as
+        /// NumPy's does — the case the fuzz corpus covers only at 32/64-bit widths. Pins the two narrow
+        /// widths where the wrap is visible in a single byte, plus dtype preservation.
+        /// </summary>
+        [TestMethod]
+        public void M4Tail_Ptp_WrapsAtChildDtype()
+        {
+            // 127 - (-128) = 255, which wraps int8 to -1 (np.ptp(int8[-128,127]) == -1).
+            var i8 = np.array(new sbyte[] { -128, 0, 127 });
+            var p8 = np.evaluate(NDExpr.Ptp((NDExpr)i8));
+            Assert.AreEqual(NPTypeCode.SByte, p8.typecode);      // dtype preserved (not widened)
+            // 255 wrapped into int8 → -1. Read the raw byte (GetInt32 would reinterpret 4 bytes off a
+            // 1-byte cell) and reinterpret it as the sbyte it is.
+            Assert.AreEqual((sbyte)(-1), (sbyte)p8.GetByte(0));
+
+            // uint8 range is exact: 255 - 0 = 255.
+            var u8 = np.array(new byte[] { 0, 128, 255 });
+            var pu = np.evaluate(NDExpr.Ptp((NDExpr)u8));
+            Assert.AreEqual(NPTypeCode.Byte, pu.typecode);
+            Assert.AreEqual((byte)255, pu.GetByte(0));
+
+            // float64: an ordinary finite range, dtype preserved.
+            var f = np.array(new double[] { 3, -7, 1.5, 5, 0 });
+            var pf = np.evaluate(NDExpr.Ptp((NDExpr)f));
+            Assert.AreEqual(NPTypeCode.Double, pf.typecode);
+            Assert.AreEqual(12.0, pf.GetDouble(0), 0.0);         // 5 - (-7)
+        }
+
+        /// <summary>
+        /// A NaN anywhere in a <c>Ptp</c> child propagates to the result (both <c>amax</c> and
+        /// <c>amin</c> propagate NaN, and <c>nan - nan == nan</c>), matching NumPy — the opposite of the
+        /// NaN-SKIPPING nanmin/nanmax below.
+        /// </summary>
+        [TestMethod]
+        public void M4Tail_Ptp_PropagatesNaN()
+        {
+            var g = np.array(new double[] { 1.0, double.NaN, 3.0, 2.0 });
+            Assert.IsTrue(double.IsNaN(np.evaluate(NDExpr.Ptp((NDExpr)g)).GetDouble(0)));
+        }
+
+        /// <summary>
+        /// <c>NanMin</c>/<c>NanMax</c> IGNORE NaN on a float child (so the extreme comes from the finite
+        /// values) but preserve the child dtype, and an INTEGER child — which carries no NaN — folds as a
+        /// plain minimum/maximum. This is the type-awareness the ±inf-sentinel tree rewrite could not give
+        /// for free; it comes from delegating to the engine's np.nanmin/np.nanmax.
+        /// </summary>
+        [TestMethod]
+        public void M4Tail_NanMinMax_SkipNaN_PreserveDtype()
+        {
+            var g = np.array(new double[] { 1.0, double.NaN, 3.0, 2.0, double.NaN, 5.0 });
+            var mn = np.evaluate(NDExpr.NanMin((NDExpr)g));
+            Assert.AreEqual(NPTypeCode.Double, mn.typecode);
+            Assert.AreEqual(1.0, mn.GetDouble(0), 0.0);          // NaNs skipped → min of {1,3,2,5}
+            Assert.AreEqual(5.0, np.evaluate(NDExpr.NanMax((NDExpr)g)).GetDouble(0), 0.0);
+
+            // A fused child: nanmin over (g - 1) skips the NaN slots the subtract carries through.
+            Assert.AreEqual(0.0, np.evaluate(NDExpr.NanMin((NDExpr)g - 1.0)).GetDouble(0), 0.0);
+
+            // Integer child (no NaN possible) → plain min/max, int dtype preserved.
+            var i = np.array(new int[] { 7, 2, 9, 4 });
+            var mni = np.evaluate(NDExpr.NanMin((NDExpr)i));
+            Assert.AreEqual(NPTypeCode.Int32, mni.typecode);
+            Assert.AreEqual(2, mni.GetInt32(0));
+            Assert.AreEqual(9, np.evaluate(NDExpr.NanMax((NDExpr)i)).GetInt32(0));
+        }
+
+        /// <summary>
+        /// An ALL-NaN reduction yields NaN for nanmin/nanmax (NumPy's all-NaN-slice contract, which it
+        /// warns on but still returns NaN), and ptp of an all-NaN input is likewise NaN — verified here
+        /// because the fuzz corpus's C5 pools always keep a non-NaN value in every slice.
+        /// </summary>
+        [TestMethod]
+        public void M4Tail_AllNaN_YieldsNaN()
+        {
+            var allNaN = np.array(new[] { double.NaN, double.NaN, double.NaN });
+            Assert.IsTrue(double.IsNaN(np.evaluate(NDExpr.NanMin((NDExpr)allNaN)).GetDouble(0)));
+            Assert.IsTrue(double.IsNaN(np.evaluate(NDExpr.NanMax((NDExpr)allNaN)).GetDouble(0)));
+            Assert.IsTrue(double.IsNaN(np.evaluate(NDExpr.Ptp((NDExpr)allNaN)).GetDouble(0)));
+        }
+
+        /// <summary>
+        /// Axis + keepdims forms reduce along one axis and (optionally) keep it as size 1, matching
+        /// np.ptp/np.nanmin/np.nanmax along that axis, with NaNs skipped by nanmin/nanmax and propagated
+        /// by ptp per row.
+        /// </summary>
+        [TestMethod]
+        public void M4Tail_Axis_Forms()
+        {
+            // g = [[1, nan], [2, 3]]
+            var g = np.array(new double[] { 1, double.NaN, 2, 3 }).reshape(2, 2);
+
+            var mn0 = np.evaluate(NDExpr.NanMin((NDExpr)g, 0));   // cols: [min(1,2), min(nan,3)] = [1, 3]
+            Assert.AreEqual(1.0, mn0.GetDouble(0), 0.0);
+            Assert.AreEqual(3.0, mn0.GetDouble(1), 0.0);
+
+            var mx1 = np.evaluate(NDExpr.NanMax((NDExpr)g, 1, keepdims: true)); // rows: [[1],[3]]
+            Assert.AreEqual(2, mx1.ndim);
+            Assert.AreEqual(1L, mx1.shape[1]);
+            Assert.AreEqual(1.0, mx1.GetDouble(0), 0.0);         // row 0 has only the finite 1
+            Assert.AreEqual(3.0, mx1.GetDouble(1), 0.0);
+
+            // ptp along axis 1 of an int matrix: rows [0..3] and [4..7] → range 3 each, int dtype.
+            var m = np.arange(8).reshape(2, 4);
+            var pm = np.evaluate(NDExpr.Ptp((NDExpr)m, 1));
+            Assert.AreEqual(3L, pm.GetInt64(0));
+            Assert.AreEqual(3L, pm.GetInt64(1));
+        }
+
+        /// <summary>
+        /// <c>out=</c> follows evaluate's ufunc contract: the (same_kind-cast) result is written into the
+        /// caller's array and that SAME instance is returned — a 0-d out for a flat reduction, the reduced
+        /// shape for an axis one. A flat reduction into a non-0-d out is rejected with NumPy's
+        /// wrong-dimensions message.
+        /// </summary>
+        [TestMethod]
+        public void M4Tail_Out()
+        {
+            var f = np.array(new double[] { 3, -7, 1.5, 5, 0 });
+
+            var o = np.zeros(new Shape());                       // 0-d
+            var r = np.evaluate(NDExpr.Ptp((NDExpr)f), @out: o);
+            Assert.IsTrue(ReferenceEquals(r, o));                // returns the out instance
+            Assert.AreEqual(12.0, o.GetDouble(0), 0.0);
+
+            var oa = np.zeros(2);
+            var g = np.array(new double[] { 1, double.NaN, 2, 3 }).reshape(2, 2);
+            np.evaluate(NDExpr.NanMin((NDExpr)g, 1), @out: oa);  // rows: [1, 2]
+            Assert.AreEqual(1.0, oa.GetDouble(0), 0.0);
+            Assert.AreEqual(2.0, oa.GetDouble(1), 0.0);
+
+            // A flat reduction demands a 0-d out.
+            Assert.ThrowsException<ArgumentException>(
+                () => np.evaluate(NDExpr.Ptp((NDExpr)f), @out: np.zeros(3)));
+        }
+
+        /// <summary>
+        /// Empty-input behaviour: <c>Ptp</c> RAISES (it composes <c>amax - amin</c>, and a zero-size
+        /// max/min has no identity — NumPy raises here too), while <c>NanMin</c>/<c>NanMax</c> return NaN
+        /// because they delegate to the engine's <c>np.nanmin</c>/<c>np.nanmax</c>, whose empty behaviour
+        /// (a 0-d NaN) is a PRE-EXISTING NumSharp quirk that diverges from NumPy's raise — evaluate
+        /// faithfully mirrors the engine reduction rather than adding parity np.nanmin itself lacks.
+        /// </summary>
+        [TestMethod]
+        public void M4Tail_EmptyInput()
+        {
+            var e = np.array(new double[] { });
+
+            Assert.ThrowsException<ArgumentException>(   // zero-size max/min has no identity, like np.ptp([])
+                () => np.evaluate(NDExpr.Ptp((NDExpr)e)));
+
+            // np.nanmin([]) / np.nanmax([]) return a 0-d NaN in NumSharp (a documented engine quirk vs
+            // NumPy's ValueError); the delegating evaluate path returns exactly what the engine does.
+            Assert.IsTrue(double.IsNaN(np.evaluate(NDExpr.NanMin((NDExpr)e)).GetDouble(0)));
+            Assert.IsTrue(double.IsNaN(np.evaluate(NDExpr.NanMax((NDExpr)e)).GetDouble(0)));
+        }
     }
 }

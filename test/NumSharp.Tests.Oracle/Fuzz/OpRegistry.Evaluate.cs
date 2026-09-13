@@ -64,6 +64,9 @@ namespace NumSharp.Tests.Fuzz
                     ("count_nonzero", null) => NDExpr.CountNonzero(tree),
                     ("nansum", null) => NDExpr.NanSum(tree),
                     ("nanprod", null) => NDExpr.NanProd(tree),
+                    ("ptp", null) => NDExpr.Ptp(tree),
+                    ("nanmin", null) => NDExpr.NanMin(tree),
+                    ("nanmax", null) => NDExpr.NanMax(tree),
                     ("sum", int a) => NDExpr.Sum(tree, a, keepdims),
                     ("prod", int a) => NDExpr.Prod(tree, a, keepdims),
                     ("min", int a) => NDExpr.Min(tree, a, keepdims),
@@ -74,6 +77,9 @@ namespace NumSharp.Tests.Fuzz
                     ("count_nonzero", int a) => NDExpr.CountNonzero(tree, a, keepdims),
                     ("nansum", int a) => NDExpr.NanSum(tree, a, keepdims),
                     ("nanprod", int a) => NDExpr.NanProd(tree, a, keepdims),
+                    ("ptp", int a) => NDExpr.Ptp(tree, a, keepdims),
+                    ("nanmin", int a) => NDExpr.NanMin(tree, a, keepdims),
+                    ("nanmax", int a) => NDExpr.NanMax(tree, a, keepdims),
                     _ => throw new NotSupportedException($"evaluate reduce kind '{kind}'"),
                 };
             }

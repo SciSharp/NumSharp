@@ -53,6 +53,32 @@ namespace NumSharp.Backends.Iteration
 
         /// <summary><c>logical_and.reduce</c> of the nonzero-test of the child (identity <c>True</c>; bool result).</summary>
         All,
+
+        /// <summary>
+        /// <c>np.ptp</c> — peak-to-peak (<c>max - min</c>) of the child. Result dtype is the child's
+        /// (integer/unsigned overflow WRAPS exactly as NumPy's, since it is a plain subtract of two
+        /// same-dtype reductions), a NaN in the child propagates to the result, and there is NO empty
+        /// identity (a zero-size input raises, like <see cref="Max"/>/<see cref="Min"/>). Unlike the
+        /// fold-driven kinds above it is host-delegated: <see cref="np.ptp(NDArray,int?,NDArray,bool)"/>
+        /// runs over the materialized child — see the host divert in <c>DefaultEngine.EvaluateReduce</c>.
+        /// </summary>
+        Ptp,
+
+        /// <summary>
+        /// <c>np.nanmin</c> — minimum ignoring NaN. Result dtype is the child's; a float/complex child
+        /// has its NaNs skipped (an ALL-NaN input yields NaN, matching NumPy's all-NaN-slice contract),
+        /// while an integer/bool child carries no NaN and folds as a plain minimum. Host-delegated to
+        /// <see cref="np.nanmin(NDArray,int?,bool)"/> over the materialized child, which is why it is
+        /// TYPE-AWARE for free (the ±inf NaN-replacement sentinel that would promote an int child to
+        /// float64 lives inside the engine reduction, not in an NDExpr rewrite).
+        /// </summary>
+        NanMin,
+
+        /// <summary>
+        /// <c>np.nanmax</c> — maximum ignoring NaN (the <see cref="NanMin"/> twin, all-NaN → NaN).
+        /// Host-delegated to <see cref="np.nanmax(NDArray,int?,bool)"/> over the materialized child.
+        /// </summary>
+        NanMax,
     }
 
     /// <summary>
@@ -321,6 +347,41 @@ namespace NumSharp.Backends.Iteration
         /// </summary>
         public static NDExpr NanProd(NDExpr x) => new ReduceNode(NDExprReduceKind.Prod, Where(IsNaN(x), Const(1), x));
 
+        // --- range / NaN-aware min-max reductions (plan P2 M4-tail) -------------------------------
+        //
+        // Unlike NanSum/NanProd these are NOT tree rewrites: they are their OWN kinds whose child is the
+        // RAW expression, because their semantics need machinery an NDExpr cannot carry.  Ptp is two
+        // reductions (max - min) and cannot be spelled as one root reduce; NanMin/NanMax must be
+        // TYPE-AWARE (a float child's NaNs are replaced with the ±inf sentinel, an int child's are not —
+        // an NDExpr rewrite spelling `Where(IsNaN(x), +inf, x)` would promote every int child to float64,
+        // which NumPy does not).  All three are ORDER-INDEPENDENT (min / max / their difference are the
+        // same whatever the summation order), so the host materializes the child once and reduces it
+        // through the already-NumPy-exact engine reduction (np.ptp / np.nanmin / np.nanmax) — bit-exact
+        // by construction, needing no pairwise divert and carrying no MisalignedRegistry excuse (unlike
+        // the summation kinds).  See the host divert in DefaultEngine.EvaluateReduce.
+
+        /// <summary>
+        /// One-pass fused <c>np.ptp</c>: the peak-to-peak range <c>max - min</c> of the expression. The
+        /// result dtype is the child's, so integer/unsigned overflow WRAPS exactly as NumPy's does, and a
+        /// NaN anywhere in the child propagates to the result. There is NO empty identity — a zero-size
+        /// input raises, like <see cref="Max(NDExpr)"/>.
+        /// </summary>
+        public static NDExpr Ptp(NDExpr x) => new ReduceNode(NDExprReduceKind.Ptp, x);
+
+        /// <summary>
+        /// One-pass fused <c>np.nanmin</c>: the minimum of the expression with NaNs ignored. On a
+        /// float/complex child NaNs are skipped (an ALL-NaN input yields NaN); on an integer/bool child —
+        /// which carries no NaN — it is exactly the plain minimum, preserving the child dtype. A zero-size
+        /// input raises (no identity), like <see cref="Min(NDExpr)"/>.
+        /// </summary>
+        public static NDExpr NanMin(NDExpr x) => new ReduceNode(NDExprReduceKind.NanMin, x);
+
+        /// <summary>
+        /// One-pass fused <c>np.nanmax</c>: the maximum of the expression with NaNs ignored — the
+        /// <see cref="NanMin(NDExpr)"/> twin.
+        /// </summary>
+        public static NDExpr NanMax(NDExpr x) => new ReduceNode(NDExprReduceKind.NanMax, x);
+
         // --- axis-aware forms of the M4 reductions (one pass along `axis`) ------------------------
 
         /// <summary>One-pass fused <c>np.any</c> along <paramref name="axis"/> (bool result; identity <c>False</c>).</summary>
@@ -337,6 +398,15 @@ namespace NumSharp.Backends.Iteration
 
         /// <summary>One-pass fused <c>np.nanprod</c> along <paramref name="axis"/> (NaNs treated as 1).</summary>
         public static NDExpr NanProd(NDExpr x, int axis, bool keepdims = false) => new ReduceNode(NDExprReduceKind.Prod, Where(IsNaN(x), Const(1), x), axis, keepdims);
+
+        /// <summary>One-pass fused <c>np.ptp</c> along <paramref name="axis"/> (max − min; dtype preserved, wrapping).</summary>
+        public static NDExpr Ptp(NDExpr x, int axis, bool keepdims = false) => new ReduceNode(NDExprReduceKind.Ptp, x, axis, keepdims);
+
+        /// <summary>One-pass fused <c>np.nanmin</c> along <paramref name="axis"/> (NaNs ignored; all-NaN slice → NaN).</summary>
+        public static NDExpr NanMin(NDExpr x, int axis, bool keepdims = false) => new ReduceNode(NDExprReduceKind.NanMin, x, axis, keepdims);
+
+        /// <summary>One-pass fused <c>np.nanmax</c> along <paramref name="axis"/> (NaNs ignored; all-NaN slice → NaN).</summary>
+        public static NDExpr NanMax(NDExpr x, int axis, bool keepdims = false) => new ReduceNode(NDExprReduceKind.NanMax, x, axis, keepdims);
 
         // ===================================================================
         // Binding
@@ -641,6 +711,14 @@ namespace NumSharp.Backends.Iteration
                     // ComplexMinNaN/ComplexMaxNaN clamp (see EmitFold).
                     return child;
 
+                case NDExprReduceKind.Ptp:
+                case NDExprReduceKind.NanMin:
+                case NDExprReduceKind.NanMax:
+                    // dtype preserved (np.ptp is amax-amin at the input dtype; np.nanmin/nanmax skip
+                    // NaN without changing width) — the host delegates to those engine reductions over
+                    // the materialized child, so the result dtype IS the child dtype.
+                    return child;
+
                 case NDExprReduceKind.Mean:
                     return child switch
                     {
@@ -666,7 +744,11 @@ namespace NumSharp.Backends.Iteration
         /// </summary>
         internal static NPTypeCode ResolveAccType(NDExprReduceKind kind, NPTypeCode result)
         {
-            if (kind == NDExprReduceKind.Min || kind == NDExprReduceKind.Max)
+            // Min/Max and the host-delegated M4-tail kinds (Ptp/NanMin/NanMax) never run a widening
+            // summation — Min/Max fold in place and the delegated kinds bypass the fold path entirely —
+            // so the accumulator dtype is simply the result dtype (no f16/f32 → f64 widening).
+            if (kind == NDExprReduceKind.Min || kind == NDExprReduceKind.Max
+                || kind == NDExprReduceKind.Ptp || kind == NDExprReduceKind.NanMin || kind == NDExprReduceKind.NanMax)
                 return result;
             return result == NPTypeCode.Half || result == NPTypeCode.Single
                 ? NPTypeCode.Double
