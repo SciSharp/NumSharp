@@ -265,6 +265,15 @@ namespace NumSharp.Backends.Kernels
                     il.Emit(OpCodes.Not);
                     break;
 
+                case UnaryOp.BitwiseCount:
+                    // np.bitwise_count: number of set bits in |x|. Consumes the INPUT dtype (the caller
+                    // does NOT convert to the uint8 output first — that would truncate a wide value to 8
+                    // bits before counting), leaves the count (int32) on the stack, and the caller stores
+                    // it as uint8. Reached only for bool/integer/char here (float/complex/decimal are
+                    // rejected at the np.* boundary; Decimal/Complex/Half are redirected above).
+                    EmitBitwiseCount(il, type);
+                    break;
+
                 case UnaryOp.LogicalNot:
                     // Logical NOT: x == 0 (for boolean: !x)
                     // Compare to zero and return 1 if equal, 0 otherwise
@@ -327,6 +336,75 @@ namespace NumSharp.Backends.Kernels
 
                 default:
                     throw new NotSupportedException($"Unary operation {op} not supported");
+            }
+        }
+
+        /// <summary><see cref="System.Numerics.BitOperations.PopCount(uint)"/> — JITs to the hardware
+        /// <c>POPCNT</c> where available, software fallback otherwise (NumPy uses the same builtin/fallback split).</summary>
+        private static readonly MethodInfo s_popCountUInt32 =
+            typeof(BitOperations).GetMethod(nameof(BitOperations.PopCount), new[] { typeof(uint) })
+            ?? throw new InvalidOperationException("BitOperations.PopCount(uint) not found");
+
+        /// <summary><see cref="System.Numerics.BitOperations.PopCount(ulong)"/> for the 64-bit path.</summary>
+        private static readonly MethodInfo s_popCountUInt64 =
+            typeof(BitOperations).GetMethod(nameof(BitOperations.PopCount), new[] { typeof(ulong) })
+            ?? throw new InvalidOperationException("BitOperations.PopCount(ulong) not found");
+
+        /// <summary>
+        ///     Emit the scalar per-element body of <see cref="UnaryOp.BitwiseCount"/> (np.bitwise_count) for
+        ///     the strided / NDIter / 0-d / out=/where= routes (the contiguous route uses the whole-array
+        ///     <see cref="BitwiseCountKernel"/>). The input value is already on the stack in its own dtype
+        ///     (<paramref name="type"/> is the INPUT dtype); this leaves the popcount of its magnitude as an
+        ///     int32, which the caller stores as uint8 (a count ≤ 64 fits in the low byte).
+        /// </summary>
+        /// <param name="il">The IL stream, with the loaded input value on top of the stack.</param>
+        /// <param name="type">The INPUT dtype (bool/byte/sbyte/int16/uint16/int32/uint32/int64/uint64/char).</param>
+        /// <remarks>
+        ///     Signed inputs (sbyte/int16/int32/int64) apply a branchless two's-complement abs
+        ///     (<c>m = x &gt;&gt; (w-1); |x| = (x ^ m) - m</c>) so the magnitude is counted — matching NumPy's
+        ///     <c>a &lt; 0 ? -a : a</c>, including the signed minimum whose negation overflows to itself
+        ///     (popcount 1). Narrower types arrive already sign/zero-extended to int32 by the caller's
+        ///     <c>EmitLoadIndirect</c>, so counting them as uint32 is correct (the extension bits are 0 for
+        ///     a non-negative magnitude). uint64/int64 count via the 64-bit overload.
+        /// </remarks>
+        private static void EmitBitwiseCount(ILGenerator il, NPTypeCode type)
+        {
+            bool is64 = type == NPTypeCode.Int64 || type == NPTypeCode.UInt64;
+            bool signed = type == NPTypeCode.SByte || type == NPTypeCode.Int16
+                       || type == NPTypeCode.Int32 || type == NPTypeCode.Int64;
+
+            if (is64)
+            {
+                if (signed)
+                {
+                    // (x ^ (x >> 63)) - (x >> 63), the arithmetic (signed) shift filling the sign.
+                    var m = il.DeclareLocal(typeof(long));
+                    il.Emit(OpCodes.Dup);
+                    il.Emit(OpCodes.Ldc_I4_S, (sbyte)63);
+                    il.Emit(OpCodes.Shr);            // signed >> = arithmetic
+                    il.Emit(OpCodes.Stloc, m);
+                    il.Emit(OpCodes.Ldloc, m);
+                    il.Emit(OpCodes.Xor);
+                    il.Emit(OpCodes.Ldloc, m);
+                    il.Emit(OpCodes.Sub);
+                }
+                il.EmitCall(OpCodes.Call, s_popCountUInt64, null);  // (ulong)value on stack -> int32 count
+            }
+            else
+            {
+                if (signed)
+                {
+                    var m = il.DeclareLocal(typeof(int));
+                    il.Emit(OpCodes.Dup);
+                    il.Emit(OpCodes.Ldc_I4_S, (sbyte)31);
+                    il.Emit(OpCodes.Shr);
+                    il.Emit(OpCodes.Stloc, m);
+                    il.Emit(OpCodes.Ldloc, m);
+                    il.Emit(OpCodes.Xor);
+                    il.Emit(OpCodes.Ldloc, m);
+                    il.Emit(OpCodes.Sub);
+                }
+                il.EmitCall(OpCodes.Call, s_popCountUInt32, null);  // (uint)value on stack -> int32 count
             }
         }
 

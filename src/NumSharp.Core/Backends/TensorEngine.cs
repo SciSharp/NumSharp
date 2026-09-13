@@ -176,6 +176,8 @@ namespace NumSharp
         public abstract NDArray Deg2Rad(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray Rad2Deg(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray Invert(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
+        // np.bitwise_count — set-bit count of |x|; integer/bool input, uint8 output (dtype= accepts only uint8).
+        public abstract NDArray BitwiseCount(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray Cbrt(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
         public abstract (NDArray Fractional, NDArray Intergral) ModF(NDArray nd, DType dtype = null);
         // np.frexp — decompose x into (mantissa in [0.5,1), int32 exponent) with x == mantissa * 2^exponent

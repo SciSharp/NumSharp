@@ -465,6 +465,16 @@ namespace NumSharp.Backends
                || op == UnaryOp.IsPosInf || op == UnaryOp.IsNegInf || op == UnaryOp.SignBit;
 
         /// <summary>
+        ///     Ops the NDIter routes must run ON THE INPUT dtype without a preceding input→output convert
+        ///     (mirror of <c>DirectILKernelGenerator.EmitsResultFromInputType</c>): the float classification
+        ///     predicates AND <see cref="UnaryOp.BitwiseCount"/> (uint8 out). Used to exclude them from the
+        ///     buffered-promoting cast route and to select the input-typed scalar body.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        private static bool UnaryOpReadsInputType(UnaryOp op)
+            => IsUnaryPredicateOp(op) || op == UnaryOp.BitwiseCount;
+
+        /// <summary>
         ///     <see cref="NumSharp.Utilities.NDComplexMath.Abs"/> — resolved once and
         ///     cached. Routes the Complex-magnitude special case in
         ///     <see cref="TryExecuteUnaryOpViaNDIter"/> without depending on
@@ -536,7 +546,7 @@ namespace NumSharp.Backends
             // body. Predicate ops (IsNan/IsInf/...) operate on the INPUT type
             // and Complex Abs has its own scalar special case — both excluded.
             bool bufferedPromoting = inputType != outputType
-                && !IsUnaryPredicateOp(op)
+                && !UnaryOpReadsInputType(op)
                 && !(op == UnaryOp.Abs && inputType == NPTypeCode.Complex)
                 && DirectILKernelGenerator.CanUseUnarySimd(
                        new UnaryKernelKey(outputType, outputType, op, IsContiguous: true))
@@ -571,7 +581,7 @@ namespace NumSharp.Backends
             {
                 scalarBody = il =>
                 {
-                    if (IsUnaryPredicateOp(capOp))
+                    if (UnaryOpReadsInputType(capOp))
                     {
                         DirectILKernelGenerator.EmitUnaryScalarOperation(il, capOp, capIn);
                     }

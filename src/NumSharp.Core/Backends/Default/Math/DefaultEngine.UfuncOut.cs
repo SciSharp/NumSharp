@@ -655,7 +655,7 @@ namespace NumSharp.Backends
             bool simdViable = DirectILKernelGenerator.CanUseUnarySimd(key);
 
             bool bufferedPromoting = inputType != outputType
-                && !IsUnaryPredicateOp(op)
+                && !UnaryOpReadsInputType(op)
                 && !(op == UnaryOp.Abs && inputType == NPTypeCode.Complex)
                 && DirectILKernelGenerator.CanUseUnarySimd(
                        new UnaryKernelKey(outputType, outputType, op, IsContiguous: true))
@@ -676,7 +676,7 @@ namespace NumSharp.Backends
             {
                 scalarBody = il =>
                 {
-                    if (IsUnaryPredicateOp(capOp))
+                    if (UnaryOpReadsInputType(capOp))
                     {
                         DirectILKernelGenerator.EmitUnaryScalarOperation(il, capOp, capIn);
                     }
