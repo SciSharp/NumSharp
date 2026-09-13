@@ -541,6 +541,7 @@ namespace NumSharp.Tests.Fuzz
                 "multiply" => np.multiply(a, b, o, w),
                 "divide" => np.divide(a, b, o, w),
                 "power" => np.power(a, b, o, w),
+                "float_power" => np.float_power(a, b, o, w),
                 "mod" => np.mod(a, b, o, w),
                 "floor_divide" => np.floor_divide(a, b, o, w),
                 "arctan2" => np.arctan2(a, b, o, w),

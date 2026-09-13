@@ -30,6 +30,7 @@ namespace NumSharp.Tests.Fuzz
                 case "mod": return np.mod(ops[0], ops[1]);
                 case "fmod": return np.fmod(ops[0], ops[1]);
                 case "power": return np.power(ops[0], ops[1]);
+                case "float_power": return np.float_power(ops[0], ops[1]);
 
                 // Unary.
                 case "negative": return np.negative(ops[0]);

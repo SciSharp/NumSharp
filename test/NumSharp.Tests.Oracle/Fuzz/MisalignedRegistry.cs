@@ -307,7 +307,15 @@ namespace NumSharp.Tests.Fuzz
                 // takes via Complex.Pow. That finite interior diverges up to ~350 element-magnitude
                 // ULP, plus the documented gross inf/NaN edges (Phase-1 F5). Bound the finite side at
                 // 512 ULP of the ELEMENT's magnitude and excuse the non-finite edges.
-                if (c.Op == "power"
+                //
+                // float_power shares the SAME excuse: np.float_power is computed AS power on the forced
+                // complex128 loop (Default.FloatPower delegates to Power, whose complex kernel IS
+                // ComplexPowNumPy), so complex float_power has the IDENTICAL divergence as complex
+                // power — bit-exact on the integer-exponent branch (PowerExponentAllIntegerBranch stays
+                // the gate there), ~ULP/inf-NaN-edge otherwise. The exponent operand it reads is the
+                // ORIGINAL (pre-cast) operand[1] (int/float/complex), which the predicate already
+                // handles for power's own (complex128,int32)/(complex128,float64) pairs.
+                if ((c.Op == "power" || c.Op == "float_power")
                     && c.Operands.Length >= 2 && !PowerExponentAllIntegerBranch(c.Operands[1])
                     && diffs.Count > 0 && diffs.All(d => WithinComplexElementMagnitudeUlp(expected, actual, d.Index, 512)
                                       || NonFiniteInvolved(expected, actual, d.Index)))

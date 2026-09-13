@@ -103,6 +103,34 @@ namespace NumSharp
 
         public abstract NDArray Mean(NDArray nd, int? axis = null, DType dtype = null, bool keepdims = false);
         public abstract NDArray Power(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null);
+
+        /// <summary>
+        ///     Element-wise power with a MINIMUM precision of float64 (np.float_power). Unlike
+        ///     <see cref="Power"/>, float_power has ONLY the float64 (<c>dd->d</c>) and complex128
+        ///     (<c>DD->D</c>) loops, so every real input (bool/int/float16/float32/decimal/char)
+        ///     promotes to float64 and a complex operand promotes to complex128 — the result is
+        ///     therefore always an inexact float. That absence of an integer loop is exactly why
+        ///     float_power does NOT raise Power's "Integers to negative integer powers are not
+        ///     allowed" (<c>float_power(2, -1) == 0.5</c>). The computation itself is bit-identical
+        ///     to <see cref="Power"/> on those two loops.
+        /// </summary>
+        /// <param name="lhs">The bases (any dtype; promoted to the float loop).</param>
+        /// <param name="rhs">The exponents (any dtype; promoted to the float loop).</param>
+        /// <param name="dtype">Explicit loop dtype (NumPy ufunc <c>dtype=</c>). Only float64 or
+        ///     complex128 select a loop; any other request raises NumPy's "No loop matching the
+        ///     specified signature and casting was found for ufunc float_power".</param>
+        /// <param name="out">Destination (NumPy ufunc <c>out=</c>): joins the broadcast without being
+        ///     stretched, must be same_kind-castable from the float loop dtype; returned as-is.</param>
+        /// <param name="where">Boolean write-mask (NumPy ufunc <c>where=</c>): only mask-true slots are
+        ///     computed/written; false slots keep the prior <paramref name="out"/> contents.</param>
+        /// <returns>The bases raised to the exponents at float64/complex128 precision (or
+        ///     <paramref name="out"/> when supplied).</returns>
+        /// <exception cref="IncorrectTypeException">A <paramref name="dtype"/> other than float64 or
+        ///     complex128 was requested (no such loop exists).</exception>
+        /// <exception cref="System.ArgumentException"><paramref name="where"/> is non-bool; a complex
+        ///     input cannot same_kind-cast to a requested float64 loop; <paramref name="out"/> is
+        ///     read-only or not same_kind-castable from the loop dtype; or the shapes do not broadcast.</exception>
+        public abstract NDArray FloatPower(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray FloorDivide(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray Sum(NDArray nd, int? axis = null, DType dtype = null, bool keepdims = false);
         public abstract NDArray Negate(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
