@@ -24,8 +24,14 @@ namespace NumSharp.Backends
             if (shape.size == 0)
                 return HandleEmptyArrayReduction(arr, axis_, keepdims, typeCode, @out, ReductionOp.Sum);
 
+            // Degenerate flat reduction (0-d scalar or single-element 1-D). NumPy still applies the
+            // NEP50 sum accumulator here — sum(int32)->int64, sum(bool)->int64 — REGARDLESS of size,
+            // so resolve the accumulating dtype at the call site (the n>=2 path below does the same via
+            // GetAccumulatingType). HandleScalarReduction is shared with amin/amax, which must PRESERVE
+            // the input dtype and therefore keep passing the raw (possibly-null) typeCode; the widening
+            // is a property of sum/prod, not of the helper.
             if (shape.IsScalar || (shape.size == 1 && shape.NDim == 1))
-                return HandleScalarReduction(arr, keepdims, typeCode, @out);
+                return HandleScalarReduction(arr, keepdims, typeCode ?? arr.GetTypeCode.GetAccumulatingType(), @out);
 
             if (axis_ == null)
                 return HandleElementWiseSum(arr, keepdims, typeCode, @out);
@@ -351,6 +357,19 @@ namespace NumSharp.Backends
             return result;
         }
 
+        /// <summary>
+        ///     Degenerate flat reduction of a 0-d scalar or single-element 1-D array: the result is the
+        ///     lone element, reshaped to a numpy scalar (0-d) or, under <paramref name="keepdims"/>, to
+        ///     all-ones. Shared by sum/prod (which pass their RESOLVED accumulating dtype, so the element
+        ///     is cast/widened) and amin/amax (which pass <c>null</c> to PRESERVE the input dtype) — the
+        ///     helper does not decide widening, the caller does. A null <paramref name="typeCode"/>
+        ///     therefore clones the input verbatim; a non-null one casts to it.
+        /// </summary>
+        /// <param name="arr">The size-&#8804;1 operand.</param>
+        /// <param name="keepdims">When true, the result keeps the input rank with every axis length 1.</param>
+        /// <param name="typeCode">The resolved output dtype (already widened for sum/prod), or null to preserve <paramref name="arr"/>'s dtype (amin/amax).</param>
+        /// <param name="out">Optional pre-allocated output; when non-null the single value is written into slot 0 and it is returned.</param>
+        /// <returns>The reduced scalar as an <see cref="NDArray"/> — a read-only numpy scalar on the 0-d exit, or the writeable <paramref name="out"/> when supplied.</returns>
         private NDArray HandleScalarReduction(NDArray arr, bool keepdims, NPTypeCode? typeCode, NDArray @out)
         {
             var r = typeCode.HasValue ? Cast(arr, typeCode.Value, true) : arr.Clone();
