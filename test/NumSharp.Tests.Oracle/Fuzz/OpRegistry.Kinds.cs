@@ -182,6 +182,10 @@ namespace NumSharp.Tests.Fuzz
         {
             switch (op)
             {
+                // np.evaluate(expr, out=): [returned view, whole out base buffer] — the out_where shape.
+                case "evaluate":
+                    return EvaluateOutFromCorpus(p, ops);
+
                 // (index, value) for every element, in flatiter C-order whatever the layout.
                 case "ndenumerate":
                 {

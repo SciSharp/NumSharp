@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Text;
 using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 
@@ -28,13 +29,17 @@ namespace NumSharp.Backends
     ///     accumulating kernel over the inputs only: sum(a*b) never
     ///     materializes a*b.
     ///
+    /// Per call, everything that depends only on the tree and the operand dtypes
+    /// — binding, the typing pass, the vector plan, the kernel — comes from the
+    /// root's cached <see cref="NDExprProgram"/> (built once per root instance);
+    /// the host does only what depends on the SHAPES: the iteration shape (an
+    /// identical-dims fast path skips the broadcast machinery), the result
+    /// allocation and the iterator.
+    ///
     /// Known divergences from NumPy (documented, by design):
     ///   • float32/float16 sum/prod/mean accumulate in float64 (NumPy uses
     ///     pairwise accumulation at the input dtype) — fused results can
     ///     differ in the last ulps, usually MORE accurate.
-    ///   • power with a negative integer exponent ARRAY computes a wrapped
-    ///     value where NumPy raises per element (literal exponents are
-    ///     checked at compile time with NumPy's exact error).
     /// </summary>
     public partial class DefaultEngine
     {
@@ -74,15 +79,8 @@ namespace NumSharp.Backends
         {
             if (expr is null) throw new ArgumentNullException(nameof(expr));
 
-            var bind = new NDExprBindContext();
-            var bound = expr.BindArrays(bind);
-            if (bind.Operands.Count == 0)
-                throw new ArgumentException(
-                    "expression references no arrays — embed NDArrays in the tree " +
-                    "(NDExpr.Arr / implicit conversion) or use the (expr, operands) overload with NDExpr.Input(i) leaves.",
-                    nameof(expr));
-
-            return EvaluateCore(bound, bind.Operands.ToArray(), @out);
+            var program = expr.GetProgram(null);
+            return EvaluateCore(program, program.EmbeddedOperands, @out);
         }
 
         /// <summary>
@@ -99,47 +97,115 @@ namespace NumSharp.Backends
                 if (op is null)
                     throw new ArgumentNullException(nameof(operands), "no operand may be null.");
 
-            var bind = new NDExprBindContext();
-            var bound = expr.BindArrays(bind);
-            if (bind.Operands.Count != 0)
-                throw new ArgumentException(
-                    "expression mixes embedded array leaves with a positional operand list — use one binding style.",
-                    nameof(expr));
-
-            return EvaluateCore(bound, operands, @out);
+            var program = expr.GetProgram(operands);
+            return EvaluateCore(program, operands, @out);
         }
 
-        private unsafe NDArray EvaluateCore(NDExpr bound, NDArray[] ops, NDArray @out)
+        /// <summary>
+        /// The <see cref="CompiledExpression"/> entry: a program compiled ahead of time, evaluated
+        /// against <paramref name="operands"/> (the program's own embedded arrays, or a positional list
+        /// the handle has already matched to the compiled dtype signature).
+        /// </summary>
+        internal override NDArray Evaluate(NDExprProgram program, NDArray[] operands, NDArray @out)
+            => EvaluateCore(program, operands, @out);
+
+        /// <summary>True when every operand has exactly the same dimensions (no broadcasting to resolve).</summary>
+        private static bool AllSameDims(NDArray[] ops)
         {
-            if (bound is ReduceNode reduce)
+            var d0 = ops[0].Shape.dimensions;
+            for (int i = 1; i < ops.Length; i++)
             {
-                if (reduce.Child.ContainsReduce)
-                    throw new NotSupportedException(
-                        "nested reductions are not supported — a reduction must be the root of the expression.");
-                return EvaluateReduce(reduce, ops, @out);
+                var d = ops[i].Shape.dimensions;
+                if (d.Length != d0.Length)
+                    return false;
+                for (int k = 0; k < d.Length; k++)
+                    if (d[k] != d0[k])
+                        return false;
             }
 
-            if (bound.ContainsReduce)
-                throw new NotSupportedException(
-                    "reduction nodes must be the root of the expression — " +
-                    "elementwise use of a reduced value needs two np.evaluate calls.");
+            return true;
+        }
 
-            var inputTypes = new NPTypeCode[ops.Length];
+        /// <summary>
+        /// The clean (C-strided, offset 0) shape every input operand broadcasts to. Identical dims — the
+        /// common case, and the only one for a single operand — is one clone of the first operand's
+        /// dims; anything else runs <see cref="BroadcastInputDims"/>.
+        /// </summary>
+        private static Shape ResolveInputShape(NDArray[] ops)
+            => AllSameDims(ops) ? ops[0].Shape.Clean() : new Shape(BroadcastInputDims(ops));
+
+        /// <summary>
+        /// The broadcast of every input operand's dimensions, computed NumPy's way (aligned from the
+        /// right; a 1 stretches, any other extent must agree) into ONE fresh <c>long[]</c>. The pairwise
+        /// <see cref="Broadcast(Shape, Shape)"/> fold this replaces built two Shapes per operand (dims
+        /// and strides each) and the host then cloned the result twice more through
+        /// <see cref="Shape.Clean"/> — ~450 ns and ~1 KB per call, the whole gap between <c>a*b+c</c>
+        /// (identical dims, 404 ns at n = 8) and <c>a*b+k</c> with a 0-d <c>k</c> (823 ns), i.e. the
+        /// parameter form a sweep uses so ONE kernel serves every constant. A mismatch raises the
+        /// ufunc-layer text with EVERY operand's shape listed, as NumPy does (<c>operands could not be
+        /// broadcast together with shapes (2,3) (2,3) (4,) </c> — trailing space included); the fold
+        /// could only name its running shape and the offending operand.
+        /// </summary>
+        private static long[] BroadcastInputDims(NDArray[] ops)
+        {
+            int nd = 0;
             for (int i = 0; i < ops.Length; i++)
-                inputTypes[i] = ops[i].typecode;
+            {
+                int n = ops[i].Shape.NDim;
+                if (n > nd)
+                    nd = n;
+            }
 
-            var kernel = bound.CompileNumPy(inputTypes, out var resolvedType);
+            var dims = new long[nd];
+            for (int d = 0; d < nd; d++)
+                dims[d] = 1;
+
+            for (int i = 0; i < ops.Length; i++)
+            {
+                var od = ops[i].Shape.dimensions;
+                int off = nd - od.Length;
+                for (int k = 0; k < od.Length; k++)
+                {
+                    long v = od[k];
+                    if (v == 1)
+                        continue;
+                    ref long cur = ref dims[off + k];
+                    if (cur == 1)
+                        cur = v;
+                    else if (cur != v)
+                        throw EvaluateBroadcastError(ops);
+                }
+            }
+
+            return dims;
+        }
+
+        private static IncorrectShapeException EvaluateBroadcastError(NDArray[] ops)
+        {
+            var sb = new StringBuilder("operands could not be broadcast together with shapes ");
+            foreach (var op in ops)
+                sb.Append(op.Shape.ToPythonTuple()).Append(' ');
+            return new IncorrectShapeException(sb.ToString());
+        }
+
+        private unsafe NDArray EvaluateCore(NDExprProgram program, NDArray[] ops, NDArray @out)
+        {
+            if (program.Reduce is not null)
+                return EvaluateReduce(program, ops, @out);
+
+            var kernel = program.Kernel;
+            var resolvedType = program.ResultType;
 
             if (@out is not null)
                 ValidateOutCast(resolvedType, @out.typecode, "evaluate");
 
-            // Broadcast all inputs together (pairwise fold raises the standard
-            // broadcast error), then let out join per the ufunc rules.
-            Shape inputShape = ops[0].Shape.Clean();
-            for (int i = 1; i < ops.Length; i++)
-                (inputShape, _) = Broadcast(inputShape, ops[i].Shape);
-
-            var iterShape = ResolveUfuncIterationShape(inputShape.Clean(), ops, @out, null).Clean();
+            // Iteration shape: the inputs' broadcast (one clone for identical dims, one fresh dims
+            // array otherwise — ResolveInputShape), then out joins per the ufunc rules (never
+            // stretched; its verbatim errors live in ResolveUfuncIterationShape).
+            Shape inputShape = ResolveInputShape(ops);
+            Shape iterShape = @out is null
+                ? inputShape
+                : ResolveUfuncIterationShape(inputShape, ops, @out, null).Clean();
 
             // NumPy-aligned layout preservation (mirrors TryExecuteBinaryOpViaNDIter):
             // when every input operand is strictly F-contiguous, allocate the result
@@ -178,7 +244,7 @@ namespace NumSharp.Backends
                              | NDIterGlobalFlags.DELAY_BUFALLOC;
                 casting = NPY_CASTING.NPY_UNSAFE_CASTING;
                 opDtypes = new NPTypeCode[ops.Length + 1];
-                Array.Copy(inputTypes, opDtypes, ops.Length);
+                Array.Copy(program.InputTypes, opDtypes, ops.Length);
                 opDtypes[ops.Length] = resolvedType;
             }
 
@@ -239,16 +305,14 @@ namespace NumSharp.Backends
             _ => "mean",
         };
 
-        private unsafe NDArray EvaluateReduce(ReduceNode reduce, NDArray[] ops, NDArray @out)
+        private unsafe NDArray EvaluateReduce(NDExprProgram program, NDArray[] ops, NDArray @out)
         {
+            var reduce = program.Reduce;
             if (reduce.Axis is int ax)
-                return EvaluateAxisReduce(reduce, ops, @out, ax);
+                return EvaluateAxisReduce(program, ops, @out, ax);
 
-            var inputTypes = new NPTypeCode[ops.Length];
-            for (int i = 0; i < ops.Length; i++)
-                inputTypes[i] = ops[i].typecode;
-
-            var kernel = reduce.CompileReduceKernel(inputTypes, out var accType, out var resultType);
+            var accType = program.ReduceAccType;
+            var resultType = program.ResultType;
 
             if (@out is not null)
             {
@@ -259,11 +323,17 @@ namespace NumSharp.Backends
                         $"has the wrong number of dimensions: Found {@out.ndim} but expected 0");
             }
 
-            Shape inputShape = ops[0].Shape.Clean();
-            for (int i = 1; i < ops.Length; i++)
-                (inputShape, _) = Broadcast(inputShape, ops[i].Shape);
-
-            long n = inputShape.size;
+            long n;
+            if (AllSameDims(ops))
+            {
+                n = ops[0].size;
+            }
+            else
+            {
+                n = 1;
+                foreach (var d in BroadcastInputDims(ops))
+                    n *= d;
+            }
 
             // 16 bytes covers the widest accumulators (decimal / Complex).
             byte* slot = stackalloc byte[16];
@@ -301,6 +371,7 @@ namespace NumSharp.Backends
                         // Sum / Mean: identity 0 already in the slot.
                 }
 
+                var kernel = program.FlatReduceKernel;
                 using var iter = NDIterRef.MultiNew(
                     ops.Length, ops,
                     NDIterGlobalFlags.EXTERNAL_LOOP, NPY_ORDER.NPY_KEEPORDER,
@@ -321,7 +392,7 @@ namespace NumSharp.Backends
                             *(decimal*)slot /= n;
                             break;
                         case NPTypeCode.Complex:
-                            *(System.Numerics.Complex*)slot /= n;
+                            *(System.Numerics.Complex*)slot = ComplexDivideByCountLikeNumPy(*(System.Numerics.Complex*)slot, n);
                             break;
                         default:
                             throw new NotSupportedException($"mean accumulator {accType} — typing bug.");
@@ -338,20 +409,17 @@ namespace NumSharp.Backends
 
         // Axis-aware fused reduction: one pass over the inputs, accumulating into a per-output
         // operand under a REDUCE iterator. evaluate(Sum(a*b, axis:k)) never materializes a*b.
-        private unsafe NDArray EvaluateAxisReduce(ReduceNode reduce, NDArray[] ops, NDArray @out, int axis)
+        private unsafe NDArray EvaluateAxisReduce(NDExprProgram program, NDArray[] ops, NDArray @out, int axis)
         {
-            var inputTypes = new NPTypeCode[ops.Length];
-            for (int i = 0; i < ops.Length; i++)
-                inputTypes[i] = ops[i].typecode;
+            var reduce = program.Reduce;
 
             // Broadcast all inputs to one shape (same rule as the elementwise path).
-            Shape inputShape = ops[0].Shape.Clean();
-            for (int i = 1; i < ops.Length; i++)
-                (inputShape, _) = Broadcast(inputShape, ops[i].Shape);
+            Shape inputShape = ResolveInputShape(ops);
             int ndim = inputShape.NDim;
             axis = NormalizeAxis(axis, ndim);
 
-            var kernel = reduce.CompileAxisReduceKernel(inputTypes, out var accType, out var resultType);
+            var accType = program.ReduceAccType;
+            var resultType = program.ResultType;
 
             if (@out is not null)
                 ValidateOutCast(resultType, @out.typecode, "evaluate");
@@ -377,6 +445,8 @@ namespace NumSharp.Backends
 
                 if (axisSize != 0)
                 {
+                    var kernel = program.AxisReduceKernel;
+
                     // op_axes: identity for every input; output maps reduce axis → -1 (stride 0).
                     var opAxes = new int[ops.Length + 1][];
                     for (int i = 0; i < ops.Length; i++)
@@ -413,7 +483,19 @@ namespace NumSharp.Backends
                 }
 
                 if (reduce.Kind == NDExprReduceKind.Mean)
-                    ILKernelGenerator.MeanDivideByCount(outAcc, axisSize);
+                {
+                    if (accType == NPTypeCode.Complex)
+                    {
+                        // np.mean divides the complex sum by the count through the COMPLEX true_divide
+                        // loop, not component-wise — see ComplexDivideByCountLikeNumPy.
+                        for (long i = 0; i < outAcc.size; i++)
+                            outAcc.SetAtIndex(ComplexDivideByCountLikeNumPy((System.Numerics.Complex)outAcc.GetAtIndex(i), axisSize), i);
+                    }
+                    else
+                    {
+                        ILKernelGenerator.MeanDivideByCount(outAcc, axisSize);
+                    }
+                }
             }
 
             // Cast accumulator dtype → result dtype (no-op when equal — e.g. f16/f32 mean
@@ -429,6 +511,21 @@ namespace NumSharp.Backends
 
             if (@out is not null) { np.copyto(@out, reduced); return @out; }
             return reduced;
+        }
+
+        /// <summary>
+        /// np.mean's final <c>true_divide(sum, count)</c> runs NumPy's COMPLEX division loop (Smith's
+        /// method with the real divisor: <c>rat = 0, scl = 1/n</c>), so <c>out_r = (re + im*0)*scl</c>
+        /// and <c>out_i = (im - re*0)*scl</c> — a NaN or inf in EITHER part poisons BOTH
+        /// (<c>nan*0 = nan</c>). System.Numerics' component-wise <c>z / n</c> keeps the other part
+        /// finite and diverged from np.mean on every NaN-carrying complex slice (probed 2.4.2:
+        /// <c>np.mean([nan+1j, 2+3j]) == nan+nanj</c>).
+        /// </summary>
+        private static System.Numerics.Complex ComplexDivideByCountLikeNumPy(System.Numerics.Complex z, long n)
+        {
+            double scl = 1.0 / n;
+            double re = z.Real, im = z.Imaginary;
+            return new System.Numerics.Complex((re + im * 0.0) * scl, (im - re * 0.0) * scl);
         }
 
         private static unsafe void WriteOne(byte* slot, NPTypeCode accType)
@@ -475,6 +572,13 @@ namespace NumSharp.Backends
                 case NPTypeCode.Single: *(float*)slot = isMin ? float.PositiveInfinity : float.NegativeInfinity; break;
                 case NPTypeCode.Double: *(double*)slot = isMin ? double.PositiveInfinity : double.NegativeInfinity; break;
                 case NPTypeCode.Decimal: *(decimal*)slot = isMin ? decimal.MaxValue : decimal.MinValue; break;
+                case NPTypeCode.Complex:
+                    // (±inf, ±inf) is the identity under the lexicographic (real, imag) order the
+                    // complex clamp folds with — mirrors ILKernelGenerator.SeedReduceIdentity.
+                    *(System.Numerics.Complex*)slot = isMin
+                        ? new System.Numerics.Complex(double.PositiveInfinity, double.PositiveInfinity)
+                        : new System.Numerics.Complex(double.NegativeInfinity, double.NegativeInfinity);
+                    break;
                 default:
                     throw new NotSupportedException($"min/max accumulator {accType} — typing bug.");
             }

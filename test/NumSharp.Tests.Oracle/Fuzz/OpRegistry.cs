@@ -21,6 +21,11 @@ namespace NumSharp.Tests.Fuzz
                 case "astype":
                     return ops[0].astype(FuzzCorpus.DtypeToTC(p["dtype"].GetString()));
 
+                // np.evaluate over the prefix-grammar tree in params.expr (OpRegistry.Evaluate.cs);
+                // NumPy's unfused node-by-node chain is the oracle.
+                case "evaluate":
+                    return EvaluateFromCorpus(p, ops);
+
                 // Binary arithmetic (NEP50 promotion). NumPy is the oracle for the result dtype.
                 case "add": return ops[0] + ops[1];
                 case "subtract": return ops[0] - ops[1];

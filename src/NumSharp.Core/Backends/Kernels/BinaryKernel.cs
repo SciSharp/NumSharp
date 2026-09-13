@@ -142,9 +142,22 @@ namespace NumSharp.Backends.Kernels
         /// Determine the common type to use for comparison between two types.
         /// Both operands should be promoted to this type before comparison.
         /// </summary>
-        private static NPTypeCode GetComparisonType(NPTypeCode lhs, NPTypeCode rhs)
+        /// <remarks>
+        /// One deliberate departure from binary promotion: NumPy 2.x registers dedicated
+        /// <c>qQ</c>/<c>Qq</c> comparison loops (generate_umath.py), so an int64 compared with a
+        /// uint64 is EXACT where result_type would route both through float64 and call
+        /// 2^63+1 == 2^63-1 past 2^53. Decimal holds every int64 and uint64 exactly, so comparing
+        /// at Decimal reproduces those loops with no new comparator (the mixed pair never
+        /// vectorizes). Shared with the fused-expression typing (NDExprTypeRules.ComparisonType)
+        /// and the scalar-scalar key so every comparison route agrees.
+        /// </remarks>
+        internal static NPTypeCode GetComparisonType(NPTypeCode lhs, NPTypeCode rhs)
         {
             if (lhs == rhs) return lhs;
+
+            if ((lhs == NPTypeCode.Int64 && rhs == NPTypeCode.UInt64) ||
+                (lhs == NPTypeCode.UInt64 && rhs == NPTypeCode.Int64))
+                return NPTypeCode.Decimal;
 
             // Use the same type promotion rules as binary operations
             // Prefer wider types and floating point over integer
