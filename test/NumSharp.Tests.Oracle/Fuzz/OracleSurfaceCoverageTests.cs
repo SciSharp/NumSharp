@@ -63,6 +63,13 @@ namespace NumSharp.Tests.Fuzz
             // corpus representation (the same reason block needs a bespoke multi-operand oracle path);
             // gated by the dedicated np.bmat.Tests.cs suite verified against NumPy 2.4.2.
             "bmat",
+            // binary_repr / base_repr are SCALAR integer -> string formatters (NumPy takes a single
+            // Python int via operator.index / int(), not an array), so they have no operand form in the
+            // (dtype,shape,strides,bytes)->result corpus — the same reason format_float_positional /
+            // format_float_scientific are sibling-owned. Gated by the dedicated np.base_repr.Test.cs suite
+            // (both funcs), differentially verified against NumPy 2.4.2 across ±2^100 magnitudes, every
+            // width/base/padding and the ValueError/TypeError edges.
+            "binary_repr", "base_repr",
             // datetime_data reads the (unit, count) parameter off a datetime64/timedelta64 DESCRIPTOR — a dtype-level
             // accessor with no array operand or result bytes (the datetime classes have no storage yet, Stage A of
             // docs/plans/dtype-system.md). Gated by test/NumSharp.Tests/DTypes/*, probed against NumPy 2.4.2.
