@@ -317,6 +317,13 @@ namespace NumSharp.Tests.Fuzz
                     var (fractional, integral) = np.modf(ops[0]);
                     return new[] { fractional, integral };
                 }
+                case "frexp":
+                {
+                    // (mantissa in [0.5,1) in x's float tier, int32 exponent); the tuple comparator
+                    // bit-checks BOTH slots (mantissa dtype and the always-int32 exponent).
+                    var (mantissa, exponent) = np.frexp(ops[0]);
+                    return new[] { mantissa, exponent };
+                }
                 case "divmod":
                 {
                     var (quotient, remainder) = np.divmod(ops[0], ops[1]);
