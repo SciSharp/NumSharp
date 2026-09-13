@@ -8456,6 +8456,43 @@ def gen_evaluate():
                          params={"reduce": {"kind": kind, "axis": ax, "keepdims": kd}},
                          cid_tag=f"m4/{dt}/{kind}[{ax},{int(kd)}]")
 
+    # ---- C4b. WIDE-magnitude NaN pools: prove NanSum/NanProd take the M1/M2 divert -------------
+    # The mixed pool above is LOW dynamic range, where pairwise and the 4-accumulator fold round
+    # identically — so it pins the nan-SKIP but NOT that NanSum/NanProd actually reduce with NumPy's
+    # pairwise/sequential schedule (a regression that silently took the fold path would still pass).
+    # These cross PW_BLOCKSIZE with the same wide / near-one pools blocks C2/C3 use, then scatter NaN:
+    # they match NumPy ONLY if the nan-replaced child is reduced pairwise (Sum) / sequentially (Prod).
+    def _scatter_nan(a):
+        a = a.copy()
+        a[3::17] = np.nan
+        return a
+
+    for N in (129, 1000):
+        for dt in ("float32", "float64", "complex128"):
+            npdt = np.dtype(dt)
+            wp = _scatter_nan(_wide_sum_pool(N))
+            arr = (wp + 1j * np.roll(wp, 5)).astype(npdt) if npdt.kind == "c" else wp.astype(npdt)
+            sb = np.ascontiguousarray(arr)
+            emit("in0", [(sb, sb)], "c_contiguous_1d",
+                 params={"reduce": {"kind": "nansum", "axis": None, "keepdims": False}},
+                 cid_tag=f"m4wide/{dt}/nansum/N={N}")
+            if npdt.kind == "f":  # complex nanprod stays folded (npy_cmul gap #12) — not diverted
+                pp = np.ascontiguousarray(_scatter_nan(_near_one_prod_pool(N)).astype(npdt))
+                emit("in0", [(pp, pp)], "c_contiguous_1d",
+                     params={"reduce": {"kind": "nanprod", "axis": None, "keepdims": False}},
+                     cid_tag=f"m4wide/{dt}/nanprod/N={N}")
+
+    # And one AXIS case per divert-exact dtype (the M2 route: C-contiguous child, PINNED inner axis > 128).
+    for dt in ("float32", "float64", "complex128"):
+        npdt = np.dtype(dt)
+        shp = (3, 200)  # axis 1 (len 200 > 128) → PINNED pairwise add.reduce
+        wp = _scatter_nan(_wide_sum_pool(int(np.prod(shp))))
+        arr = (wp + 1j * np.roll(wp, 5)).astype(npdt) if npdt.kind == "c" else wp.astype(npdt)
+        sb = np.ascontiguousarray(arr.reshape(shp))
+        emit("in0", [(sb, sb)], "c_contiguous_2d",
+             params={"reduce": {"kind": "nansum", "axis": 1, "keepdims": False}},
+             cid_tag=f"m4wideaxis/{dt}/nansum[1]/3x200")
+
     # ---- D. out= (returned view + the whole base buffer behind out) -------------------------
     out_exprs = ["add(mul(in0,in1),in0)", "gt(in0,in1)", "where(gt(in0,in1),in0,in1)", "sqrt(abs(in0))"]
     for shape in [(8,), (4, 5)]:
