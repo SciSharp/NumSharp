@@ -514,7 +514,12 @@ namespace NumSharp.Tests.Fuzz
             if (ReduceOps.Contains(c.Op))
             {
                 // Reduction result dtype differs (NEP50 accumulator width / complex->real for std/var).
-                if (kind == DivergenceKind.Dtype)
+                // sum/prod now apply NEP50 accumulator widening on EVERY size — including the degenerate
+                // 0-d scalar / single-element 1-D flat path (fixed 2026-09-13: HandleScalarReduction was
+                // cloning the input dtype instead of casting to GetAccumulatingType) — so they are BIT-
+                // EXACT on dtype and are NO LONGER excused: a regression that drops the widening again
+                // must turn the gate red. The residual excuse is std/var's complex->real result dtype.
+                if (kind == DivergenceKind.Dtype && c.Op != "sum" && c.Op != "prod")
                     return "reduction result dtype differs (NEP50 accumulator / complex->real) [known bug]";
                 // Complex axis reduction on a 2-D+ array now works (resolved); but reducing a 1-D
                 // complex array along its only axis still throws "NDCoordinatesAxisIncrementor with a
