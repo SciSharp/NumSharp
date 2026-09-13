@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import importlib
 import inspect
 import io
 import json
@@ -19,7 +20,7 @@ from urllib.parse import quote
 
 ROOT = Path(__file__).resolve().parents[1]
 PINNED_NUMPY_VERSION = "2.4.2"
-GENERATOR_VERSION = "1.6.0"
+GENERATOR_VERSION = "1.7.0"
 OUTPUT_FILES = ("coverage.json", "coverage.csv", "summary.md", "manifest.json")
 NUMSHARP_SOURCE_BASE_URL = "https://github.com/SciSharp/NumSharp/blob/master/"
 
@@ -104,6 +105,60 @@ DTYPE.update({"astype", "isdtype"})
 MANIPULATION.update({"broadcast_shapes", "ndim", "shape", "size"})
 SELECTION.add("putmask")
 SORTING.add("sort_complex")
+
+
+# ---------------------------------------------------------------------------
+# Extended (out-of-headline) NumPy submodule catalog.
+#
+# public_exports() enumerates exactly five surfaces — the headline scope. But NumPy ALSO ships
+# large PUBLIC submodules that scope deliberately excludes, and scanning NONE of them is precisely
+# how whole families (numpy.emath, the numpy.polynomial package, numpy.lib.stride_tricks) stayed
+# invisible to the artifact entirely rather than showing up as gaps. These rows are catalogued with
+# in_default_scope=False: they make a scan SEE the family (and auto-credit the day NumSharp adds a
+# matching [ModuleName] facade) WITHOUT moving the headline percentage — which would be dishonest
+# for subsystems NumSharp intentionally lacks (masked arrays, string/record arrays, the test harness).
+#
+# Each entry is (numpy import path, display surface, category, disposition). The disposition records
+# WHY the family is out of headline scope so the summary can rank real opportunities above non-goals.
+EXTENDED_SUBMODULES = [
+    ("lib.scimath",           "emath",                 "Complex-domain math",       "candidate"),
+    ("lib.stride_tricks",     "lib.stride_tricks",     "Stride tricks",             "candidate"),
+    ("lib.array_utils",       "lib.array_utils",       "Array utilities",           "candidate"),
+    ("polynomial.polynomial", "polynomial.polynomial", "Polynomial package",        "candidate"),
+    ("polynomial.chebyshev",  "polynomial.chebyshev",  "Polynomial package",        "candidate"),
+    ("polynomial.legendre",   "polynomial.legendre",   "Polynomial package",        "candidate"),
+    ("polynomial.hermite",    "polynomial.hermite",    "Polynomial package",        "candidate"),
+    ("polynomial.hermite_e",  "polynomial.hermite_e",  "Polynomial package",        "candidate"),
+    ("polynomial.laguerre",   "polynomial.laguerre",   "Polynomial package",        "candidate"),
+    ("ma",                    "ma",                    "Masked arrays",             "subsystem"),
+    ("char",                  "char",                  "String operations",         "subsystem"),
+    ("strings",               "strings",               "String operations",         "subsystem"),
+    ("rec",                   "rec",                   "Record arrays",             "subsystem"),
+    ("lib.recfunctions",      "lib.recfunctions",      "Structured-array helpers",  "subsystem"),
+    ("testing",               "testing",               "Test support",              "tooling"),
+    ("ctypeslib",             "ctypeslib",             "ctypes interop",            "tooling"),
+    ("lib.format",            "lib.format",            "npy/npz format internals",  "tooling"),
+]
+
+# ndarray interop-protocol dunders. public_exports() drops every '_'-prefixed ndarray member, so
+# these zero-copy / array-protocol hooks were invisible too. Catalogued out-of-headline against the
+# NDArray host so a scan sees them; several (__array_interface__, __dlpack__, __array__) are genuine
+# interop surface NumSharp could implement.
+EXTENDED_NDARRAY_DUNDERS = [
+    "__array__", "__array_interface__", "__array_ufunc__", "__array_function__",
+    "__array_wrap__", "__array_finalize__", "__array_priority__",
+    "__dlpack__", "__dlpack_device__", "__buffer__",
+    "__index__", "__complex__", "__int__", "__float__",
+]
+
+# Why each extended family is out of headline scope — surfaced in summary.md so the reader can rank
+# implementable "candidate" families above intentional non-goals.
+DISPOSITION_NOTE = {
+    "candidate": "Implementable NumPy submodule NumSharp does not expose yet (out of headline scope).",
+    "subsystem": "Requires a NumSharp subsystem that does not exist yet (out of headline scope).",
+    "tooling":   "Python-runtime tooling with no NumSharp analog (out of headline scope).",
+    "interop":   "ndarray interop-protocol hook, absent in NumSharp (out of headline scope).",
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -432,6 +487,111 @@ def public_exports(np: Any) -> list[dict[str, Any]]:
     return exports
 
 
+def resolve_submodule(np: Any, path: str) -> Any:
+    """Return the numpy.<path> submodule, or None if this NumPy build does not ship it.
+
+    Tries a real import first, then an attribute walk from the top package — numpy.emath is exposed
+    as an ATTRIBUTE aliasing numpy.lib.scimath and is not importable by that name on every build, so
+    the attribute fallback keeps the catalog complete without hard-coding aliases.
+
+    :param np: the imported numpy module.
+    :param path: dotted submodule path relative to numpy (e.g. "polynomial.chebyshev").
+    :returns: the resolved module object, or None when it is absent (never raises).
+    """
+    try:
+        return importlib.import_module("numpy." + path)
+    except Exception:
+        obj: Any = np
+        for part in path.split("."):
+            obj = getattr(obj, part, None)
+            if obj is None:
+                return None
+        return obj if inspect.ismodule(obj) else None
+
+
+def extended_surface_rows(np: Any, inventory: dict[str, Any], seen_ids: set[str]) -> list[dict[str, Any]]:
+    """Catalog public callables of the NumPy submodules the headline scope excludes.
+
+    These rows carry in_default_scope=False, so they never move the headline percentage; their only
+    job is to make a scan SEE families (numpy.emath, numpy.polynomial.*, numpy.lib.stride_tricks,
+    numpy.ma, numpy.char/strings, numpy.testing, ...) that the five-surface enumerator is structurally
+    blind to. A member is credited "available" ONLY when NumSharp exposes a member of the SAME name on
+    a [ModuleName]-annotated facade for that exact submodule (e.g. an eventual np.emath) — never via a
+    top-level np namesake, whose semantics differ (numpy.emath.sqrt(-1) == 1j while np.sqrt(-1) == nan).
+    Today no such facade exists, so every extended member reads "missing"; adding the facade later
+    credits them automatically with no change here.
+
+    :param np: the imported numpy module (the oracle surface).
+    :param inventory: the reflected NumSharp inventory (its ``modules`` map supplies facade members).
+    :param seen_ids: the running set of emitted row ids; mutated to keep ids globally unique.
+    :returns: the list of extended catalog rows (may be empty if a NumPy build ships none of them).
+    """
+    # Top-level NumSharp np members — used ONLY to annotate a namesake (informational), never to credit.
+    np_module = inventory["modules"].get("np", {"methods": [], "properties": [], "fields": []})
+    np_toplevel = {m["name"] for grp in ("methods", "properties", "fields") for m in np_module[grp]}
+    # ModuleName -> set(member names), so a future np.emath / np.polynomial.* facade credits by surface.
+    facade_members: dict[str, set[str]] = {}
+    for module_name, data in inventory["modules"].items():
+        facade_members[module_name] = {
+            m["name"] for grp in ("methods", "properties", "fields") for m in data[grp]
+        }
+
+    rows: list[dict[str, Any]] = []
+
+    def emit(surface: str, name: str, kind: str, category: str, disposition: str,
+             host_module: str, doc_url: str) -> None:
+        # Row id mirrors the NumPy dotted path so it is stable and collision-free across submodules.
+        row_id = f"numpy.{surface}.{name}"
+        if row_id in seen_ids:  # a name can appear under both a module and its re-export; keep the first.
+            return
+        seen_ids.add(row_id)
+        # Credit only a same-surface facade member (none exist yet -> missing). The top-level namesake
+        # is recorded as prose so the emath.sqrt / char.upper false-positive class is visible, not hidden.
+        matched = name in facade_members.get(host_module, set())
+        note = DISPOSITION_NOTE[disposition]
+        if not matched and name in np_toplevel:
+            note += f" NumSharp has a top-level np.{name} (distinct surface/semantics; not credited here)."
+        rows.append({
+            "id": row_id, "origin": "numpy", "surface": surface, "name": name, "kind": kind,
+            "numpy_signature": "", "documentation_url": doc_url, "in_default_scope": False,
+            "extended": True, "disposition": disposition,
+            "category": category, "availability": "exact" if matched else "missing",
+            "support": "declared" if matched else "missing",
+            "status": "available" if matched else "missing",
+            "numsharp_target": None, "numsharp_signatures": [], "numsharp_obsolete": False,
+            "numsharp_source_paths": [], "numsharp_source_urls": [], "notes": note,
+        })
+
+    for path, surface, category, disposition in EXTENDED_SUBMODULES:
+        module = resolve_submodule(np, path)
+        if module is None:  # a NumPy build without this submodule simply contributes no rows.
+            continue
+        # Prefer __all__ (the module's own public contract) and fall back to non-underscore dir().
+        names = getattr(module, "__all__", None) or [n for n in dir(module) if not n.startswith("_")]
+        host_module = "np." + surface  # the [ModuleName] a NumSharp facade for this family would carry.
+        for name in sorted(set(names)):
+            try:
+                obj = getattr(module, name)
+            except Exception:  # a listed-but-unresolvable export (lazy/removed) is skipped, not fatal.
+                continue
+            # Functions/ufuncs only — classes (Polynomial, MaskedArray, chararray) are noted in the
+            # summary prose rather than catalogued as member rows, matching the "functions" question.
+            is_call = (isinstance(obj, np.ufunc) or inspect.isfunction(obj) or inspect.isbuiltin(obj)
+                       or (callable(obj) and not inspect.isclass(obj) and not inspect.ismodule(obj)))
+            if not is_call:
+                continue
+            doc = f"https://numpy.org/doc/stable/reference/generated/numpy.{path}.{name}.html"
+            emit(surface, name, "function", category, disposition, host_module, doc)
+
+    # ndarray interop dunders — public_exports() drops these via its '_'-prefix filter.
+    for name in EXTENDED_NDARRAY_DUNDERS:
+        if not hasattr(np.ndarray, name):  # dunder set drifts across NumPy versions; skip absent ones.
+            continue
+        emit("ndarray.interop", name, "method", "Array interop protocol", "interop", "ndarray", "")
+
+    return rows
+
+
 def direct_target(row: dict[str, Any], targets: dict[str, dict[str, Any]], prefixes: dict[str, str]) -> str | None:
     surface = row["surface"]
     name = row["name"]
@@ -658,6 +818,11 @@ def resolve_rows(np: Any, inventory: dict[str, Any], overrides: dict[str, Any]) 
                 "notes": "NumSharp-only public API with no matching export on the compared NumPy surface.",
             })
 
+    # Extended (out-of-headline) submodule catalog: appended AFTER the five headline surfaces and the
+    # NumSharp-only extensions so every existing row is byte-identical — these rows only ADD coverage,
+    # they never perturb the headline (each carries in_default_scope=False).
+    rows.extend(extended_surface_rows(np, inventory, seen_ids))
+
     rows.sort(key=lambda row: (row["origin"] != "numpy", row["surface"], row["name"].lower(), row["id"]))
     missing_extension_sources = [
         row["id"] for row in rows
@@ -698,10 +863,21 @@ def build_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
         category: status_counts([row for row in default_rows if row["category"] == category])
         for category in sorted({row["category"] for row in default_rows})
     }
+    # Extended submodules are catalogued out-of-headline; summarise them SEPARATELY so they are
+    # visible/searchable without diluting the default-scope percentage the headline reports.
+    extended_rows = [row for row in rows if row.get("extended")]
+    by_extended = {
+        surface: {
+            **status_counts([row for row in extended_rows if row["surface"] == surface]),
+            "disposition": next((row["disposition"] for row in extended_rows if row["surface"] == surface), ""),
+        }
+        for surface in sorted({row["surface"] for row in extended_rows})
+    }
     return {
         "default_scope": status_counts(default_rows),
         "by_surface": by_surface,
         "by_category": by_category,
+        "extended_surfaces": {"total": len(extended_rows), "by_surface": by_extended},
         "all_numpy_exports": len(numpy_rows),
         "numsharp_extensions": sum(row["origin"] == "numsharp" for row in rows),
         "catalog_rows": len(rows),
@@ -792,11 +968,48 @@ def markdown_text(summary: dict[str, Any], rows: list[dict[str, Any]], numpy_ver
     else:
         lines.append("_None detected._")
 
+    # Extended-submodule section: the families the headline scope excludes, listed so a scan cannot
+    # miss them. Ranked candidate -> subsystem -> tooling -> interop so implementable gaps read first.
+    extended = [row for row in rows if row.get("extended")]
+    lines.extend([
+        "",
+        "## Extended NumPy submodules (out of headline scope)",
+        "",
+        "Public NumPy submodules the headline scope excludes, catalogued so a scan cannot miss them. "
+        "`candidate` = implementable and not yet exposed; `subsystem` = needs a NumSharp subsystem that "
+        "does not exist (masked/string/record arrays); `tooling` = Python-runtime tooling with no analog; "
+        "`interop` = ndarray array-protocol hooks. None affect the headline percentage.",
+        "",
+    ])
+    if extended:
+        disposition_rank = {"candidate": 0, "subsystem": 1, "tooling": 2, "interop": 3}
+        lines.append("| Submodule | Disposition | Available | Missing | Total | Notable missing |")
+        lines.append("|---|---|---:|---:|---:|---|")
+        surfaces = sorted(
+            {row["surface"] for row in extended},
+            key=lambda s: (disposition_rank.get(
+                next((r["disposition"] for r in extended if r["surface"] == s), "interop"), 9), s),
+        )
+        for surface in surfaces:
+            members = [row for row in extended if row["surface"] == surface]
+            disposition = members[0].get("disposition", "")
+            available = sum(1 for row in members if row["status"] == "available")
+            missing = [row["name"] for row in members if row["status"] == "missing"]
+            sample = ", ".join(f"`{name}`" for name in missing[:6]) + (" …" if len(missing) > 6 else "")
+            lines.append(
+                f"| numpy.{surface} | {disposition} | {available} | {len(missing)} | {len(members)} | {sample} |"
+            )
+        lines.append("")
+        lines.append(
+            "> Also absent as classes (not counted above): the `Polynomial`/`Chebyshev`/`Legendre`/"
+            "`Hermite`/`HermiteE`/`Laguerre` bases, `MaskedArray`, `chararray`, and `recarray`."
+        )
+
     lines.extend([
         "",
         "## Counting rules",
         "",
-        "The default scope is NumPy top-level callables, ndarray public methods/properties, and callables in numpy.random, numpy.linalg, and numpy.fft. Types, constants, modules, and NumSharp-only APIs remain searchable in the JSON artifact but do not affect the headline percentage.",
+        "The default scope is NumPy top-level callables, ndarray public methods/properties, and callables in numpy.random, numpy.linalg, and numpy.fft. Types, constants, modules, and NumSharp-only APIs remain searchable in the JSON artifact but do not affect the headline percentage. Extended submodules (numpy.emath, numpy.polynomial.*, numpy.ma, numpy.char/strings, numpy.lib.*, numpy.testing, numpy.ctypeslib, and the ndarray interop dunders) are catalogued with in_default_scope=false and are likewise excluded from the headline.",
         "",
     ])
     return "\n".join(lines)
@@ -827,6 +1040,9 @@ def render_outputs(np: Any, inventory: dict[str, Any], overrides: dict[str, Any]
         "numsharp_assembly_version": inventory["assemblyVersion"],
         "artifact_files": list(OUTPUT_FILES),
         "source_surfaces": ["numpy", "numpy.ndarray", "numpy.random", "numpy.linalg", "numpy.fft"],
+        # Out-of-headline families the scan also catalogs (in_default_scope=false), so a whole
+        # submodule can no longer go missing the way numpy.fft/emath/polynomial once did.
+        "extended_surfaces": ["numpy." + path for path, *_ in EXTENDED_SUBMODULES] + ["numpy.ndarray.interop"],
         "numsharp_source_base_url": NUMSHARP_SOURCE_BASE_URL,
         "summary": summary,
     }

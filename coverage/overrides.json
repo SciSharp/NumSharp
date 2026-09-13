@@ -45,10 +45,6 @@
       "target": "NumSharp.np.power",
       "notes": "NumSharp exposes the ufunc name power."
     },
-    "numpy.remainder": {
-      "target": "NumSharp.np.mod",
-      "notes": "NumSharp exposes the equivalent ufunc name mod."
-    },
     "numpy.round": {
       "target": "NumSharp.np.round_",
       "notes": "C# uses round_ to avoid a naming collision while preserving NumPy round semantics."
