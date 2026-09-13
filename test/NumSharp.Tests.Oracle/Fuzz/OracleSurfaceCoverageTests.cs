@@ -99,6 +99,15 @@ namespace NumSharp.Tests.Fuzz
             // predicates additionally ride the same fused predicate kernel already fuzzed for
             // isinf/isnan (complex rejected up front with NumPy's verbatim TypeError).
             "isposinf", "isneginf", "nan_to_num",
+            // may_share_memory / shares_memory are MEMORY-LAYOUT predicates: their answer depends on the
+            // two operands being views of ONE underlying buffer (or not). The differential corpus replays
+            // each operand from a serialized (dtype,shape,strides,offset,bytes) tuple and reconstructs them
+            // as INDEPENDENT arrays, so it has no way to express "b is a view of a" — the exact relationship
+            // these functions test — and every replayed pair would trivially not overlap. Same structural
+            // reason the iteration protocols (nditer/ndindex/ndenumerate) are absent. Gated by the dedicated
+            // np.shares_memory.Test.cs suite, verified against NumPy 2.4.2 across view/copy/interleaved/
+            // transposed layouts and the max_work / TooHardError / ValueError edges.
+            "may_share_memory", "shares_memory",
         };
 
         // NumSharp compatibility/convenience APIs with no NumPy 2.4.2 callable of the same name.
