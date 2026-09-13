@@ -553,6 +553,12 @@ namespace NumSharp.Tests.Fuzz
                 case "linspace": return np.linspace(p["start"].GetDouble(), p["stop"].GetDouble(),
                     p["num"].GetInt32(), p["endpoint"].GetBoolean(),
                     FuzzCorpus.DtypeToTC(p["dtype"].GetString()));
+                case "logspace": return np.logspace(p["start"].GetDouble(), p["stop"].GetDouble(),
+                    p["num"].GetInt32(), p["endpoint"].GetBoolean(), p["base"].GetDouble(),
+                    FuzzCorpus.DtypeToTC(p["dtype"].GetString()));
+                case "geomspace": return np.geomspace(p["start"].GetDouble(), p["stop"].GetDouble(),
+                    p["num"].GetInt32(), p["endpoint"].GetBoolean(),
+                    FuzzCorpus.DtypeToTC(p["dtype"].GetString()));
                 case "zeros": return np.zeros(new Shape(ParseLongArray(p["shape"])),
                     FuzzCorpus.DtypeToTC(p["dtype"].GetString()));
                 case "ones": return np.ones(new Shape(ParseLongArray(p["shape"])),

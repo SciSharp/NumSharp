@@ -5140,6 +5140,21 @@ def gen_creation(dtypes):
         emit("linspace", {"start": 0.0, "stop": 1.0, "num": 5, "endpoint": False, "dtype": dt}, [],
              np.linspace(0.0, 1.0, 5, endpoint=False, dtype=d), f"linspace_noend/{dt}")
 
+        # logspace == power(base, linspace(...)).astype(dtype): float64 compute then cast (integer dtype
+        # TRUNCATES). Small positive values (base=2 over [0,2] -> [1..4]) so no int dtype hits an
+        # out-of-range float->int cast (that cell is platform-divergent — Fuzz/README "Host-dependent
+        # values"). Bit-exact for every dtype incl. complex128 (real + 0j).
+        emit("logspace", {"start": 0.0, "stop": 2.0, "num": 5, "endpoint": True, "base": 2.0, "dtype": dt}, [],
+             np.logspace(0.0, 2.0, 5, endpoint=True, base=2.0, dtype=d), f"logspace/{dt}")
+        emit("logspace", {"start": 0.0, "stop": 2.0, "num": 4, "endpoint": False, "base": 2.0, "dtype": dt}, [],
+             np.logspace(0.0, 2.0, 4, endpoint=False, base=2.0, dtype=d), f"logspace_noend/{dt}")
+        # geomspace REAL path is bit-exact (out_sign=±1 exact, endpoints=original). The complex128 dtype
+        # computes in the complex128 domain (allclose within the ≤3-ULP complex-unary envelope, NOT
+        # byte-reproducible) and is EXCLUDED here — unit-test-pinned, like np.sinc's complex path.
+        if d.kind != "c":
+            emit("geomspace", {"start": 1.0, "stop": 16.0, "num": 5, "endpoint": True, "dtype": dt}, [],
+                 np.geomspace(1.0, 16.0, 5, endpoint=True, dtype=d), f"geomspace/{dt}")
+
         shape = [2, 3]
         emit("zeros", {"shape": shape, "dtype": dt}, [], np.zeros(shape, dtype=d), f"zeros/{dt}")
         emit("ones", {"shape": shape, "dtype": dt}, [], np.ones(shape, dtype=d), f"ones/{dt}")
