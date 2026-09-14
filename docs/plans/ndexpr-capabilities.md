@@ -502,10 +502,17 @@ bits is a deliberate, tested decision, not a drift).
 
 ### Landed (2026-09-14, `NDExpr.Combinators.cs`)
 
-The macro/decision half of C6 is complete — 40 static factories on `NDExpr`, every one a pure
-composition of the primitive nodes (no new node type, no IL, no typing/structure/vector change), so
-each fuses into the same `np.evaluate` pass, is correct by construction, and inherits whatever SIMD
-path its underlying `Where`/`Min`/`Max`/arithmetic nodes have:
+The macro/decision half of C6 is complete — 39 static factories on `NDExpr`, every one a pure
+composition of the primitive nodes (no new node type, no new IL emitter, no typing/structure/vector
+change), so each fuses into the same `np.evaluate` pass, is correct by construction, and inherits
+whatever SIMD path its underlying `Where`/`Min`/`Max`/arithmetic nodes have. Verified by
+disassembling each scalar body (persisted-assembly round-trip): **22 compile to PURE inline IL**
+(the selection family via `brfalse`/`br`, boolean logic via bitwise ops, comparisons/predicates via
+`ceq`/`clt`/`cgt`, arithmetic like `Lerp`), and **17 emit exactly one shared helper `call`** — the
+min/max family to `Double{Max,Min}NaN` (the np.maximum/minimum body, so fused == unfused == NumPy),
+the transcendental activations to `Math.Exp`/`NDFloatMath.Tanh`/`Math.Log`, and the predicates that
+need one primitive to `Double.IsNaN`/`IsFinite`/`Math.Floor`/`Math.Abs`. The call is the same
+per-element work the equivalent `np.*` does; fusion still removes the intermediate arrays around it:
 
 - **Selection & masking**: `If`, `IfNot`, `When`, `Unless`, `Switch` (multi-way, first-match-wins),
   `Mux` (integer-indexed).
