@@ -2064,6 +2064,142 @@ namespace NumSharp
             return new MaskedArray(data, m);
         }
 
+        // ─────────────────────────────────────────────────────────────────────────────
+        //  Set operations (extras.py arraysetops) — masked values are all considered EQUAL
+        //  to one another (and unequal to every real value), so every masked element in the
+        //  inputs collapses to at most ONE masked entry that sorts to the very end of the
+        //  result. NumPy builds these by unique/concatenate/sort over the MaskedArray subclass;
+        //  NumSharp has no subclass dispatch, so each is reformulated as the identical-output
+        //  composition: run the plain np.* set op over the UNMASKED values, then decide from a
+        //  boolean masked-presence rule whether the single collapsed masked entry belongs in
+        //  the result. Both formulations are verified bit-identical to NumPy 2.4.2 (values,
+        //  mask, dtype) across masked/unmasked/all-masked/empty/promotion cases.
+        // ─────────────────────────────────────────────────────────────────────────────
+
+        /// <summary>
+        ///     True iff <paramref name="a"/> is a masked array with AT LEAST ONE element actually masked
+        ///     (a plain array, a <c>nomask</c> operand, or an all-False mask all count as "not masked").
+        ///     This is the predicate that decides whether a set operation carries the single collapsed
+        ///     masked value into its result — the whole masked/unmasked branch of the set ops turns on it.
+        /// </summary>
+        /// <param name="a">Any accepted operand.</param>
+        /// <returns>True when the operand contributes a masked value to the set.</returns>
+        private static bool HasMasked(object a)
+        {
+            // `is not null` — a `!= null` here would run NDArray's ELEMENTWISE `!=` (see the file-wide trap).
+            var m = (a as MaskedArray)?._mask;
+            return m is not null && np.any(m);
+        }
+
+        /// <summary>
+        ///     Assembles a set-operation result: the sorted unmasked-unique <paramref name="values"/> already
+        ///     in the promoted dtype, plus — when <paramref name="includeMasked"/> — ONE trailing masked slot
+        ///     (NumPy collapses every masked element to a single masked value that sorts last). Mirrors the
+        ///     append pattern <see cref="unique"/> uses and is the shared tail of all four set ops.
+        /// </summary>
+        /// <param name="values">The 1-D sorted unmasked-unique values, already cast to the result dtype.</param>
+        /// <param name="includeMasked">Append the single trailing masked entry when true.</param>
+        /// <returns>An unmasked (<c>nomask</c>) masked array when <paramref name="includeMasked"/> is false;
+        /// otherwise the values followed by one masked slot.</returns>
+        private static MaskedArray WithTrailingMasked(NDArray values, bool includeMasked)
+        {
+            if (!includeMasked)
+                return new MaskedArray(values, null);
+            // The datum at the masked slot is arbitrary — the mask hides it and NumPy's own raw value there is
+            // whatever its sort/concatenate left (not the fill). A zero of the result dtype keeps `.filled()`
+            // (the observable value) consistent with the dtype default, matching NumPy's contract.
+            var data = np.concatenate(new[] { values, np.zeros(new Shape(1), values.dtype) }, 0);
+            var m = np.concatenate(new[] { np.zeros(values.Shape, np.@bool), np.ones(new Shape(1), np.@bool) }, 0);
+            return new MaskedArray(data, m);
+        }
+
+        /// <summary>
+        ///     The promoted result dtype of a two-operand set op (NumPy's implicit
+        ///     <c>result_type</c> from its <c>concatenate</c>). Computed from the DATA dtypes so it is correct
+        ///     even when both operands compress to nothing — the plain <c>np.*</c> set op would otherwise fall
+        ///     to float64 for two empty inputs and lose the integer dtype NumPy keeps.
+        /// </summary>
+        /// <param name="a">First operand.</param><param name="b">Second operand.</param>
+        /// <returns>The dtype the result values must carry.</returns>
+        private static DType SetOpDtype(object a, object b) => np.result_type(AsData(a), AsData(b));
+
+        /// <summary>
+        ///     Sorted values common to BOTH inputs among their UNMASKED elements, plus a single masked entry
+        ///     iff BOTH inputs contained a masked element (NumPy's <c>ma.intersect1d</c>: masked values are
+        ///     equal only to one another, so a masked value is "shared" precisely when both sides carry one).
+        ///     The result is ALWAYS a masked array, even when neither input is masked.
+        /// </summary>
+        /// <param name="ar1">First operand (<see cref="MaskedArray"/>/<see cref="NDArray"/>/scalar/array-like).</param>
+        /// <param name="ar2">Second operand.</param>
+        /// <param name="assume_unique">Speed hint passed to the underlying set op that the inputs already hold
+        /// unique elements; when it is false but the inputs are not unique, the result is undefined (matching NumPy).</param>
+        /// <returns>The masked array of shared unique values (sorted; the promoted dtype is preserved even for an
+        /// empty/all-masked result).</returns>
+        /// <exception cref="ArgumentNullException">Either operand is null.</exception>
+        public MaskedArray intersect1d(object ar1, object ar2, bool assume_unique = false)
+        {
+            var dt = SetOpDtype(ar1, ar2);
+            // Compress to the unmasked values, run the plain set op, then FORCE the promoted dtype (astype is a
+            // no-op copy on the non-empty path since the set op already promoted; it only bites when both inputs
+            // compress to empty, where np.intersect1d would otherwise return float64).
+            var values = np.intersect1d(compressed(ar1), compressed(ar2), assume_unique).astype(dt, copy: false);
+            return WithTrailingMasked(values, HasMasked(ar1) && HasMasked(ar2));
+        }
+
+        /// <summary>
+        ///     Sorted union of the UNMASKED values of both inputs, plus a single masked entry iff EITHER input
+        ///     contained a masked element (NumPy's <c>ma.union1d</c>). Always returns a masked array.
+        /// </summary>
+        /// <param name="ar1">First operand.</param><param name="ar2">Second operand.</param>
+        /// <returns>The masked array of unique values from either input (sorted; promoted dtype preserved).</returns>
+        /// <exception cref="ArgumentNullException">Either operand is null.</exception>
+        public MaskedArray union1d(object ar1, object ar2)
+        {
+            var dt = SetOpDtype(ar1, ar2);
+            var values = np.union1d(compressed(ar1), compressed(ar2)).astype(dt, copy: false);
+            return WithTrailingMasked(values, HasMasked(ar1) || HasMasked(ar2));
+        }
+
+        /// <summary>
+        ///     Sorted values present in EXACTLY ONE of the inputs among their UNMASKED elements (the symmetric
+        ///     difference), plus a single masked entry iff exactly one input contained a masked element (NumPy's
+        ///     <c>ma.setxor1d</c> — a masked value is "in" an input iff that input has one, so it survives the
+        ///     xor precisely when the two sides disagree on having a masked element). Always returns a masked array.
+        /// </summary>
+        /// <param name="ar1">First operand.</param><param name="ar2">Second operand.</param>
+        /// <param name="assume_unique">Speed hint passed through; results are undefined (as in NumPy) if false but
+        /// the inputs are not unique.</param>
+        /// <returns>The masked array of the symmetric difference (sorted; promoted dtype preserved).</returns>
+        /// <exception cref="ArgumentNullException">Either operand is null.</exception>
+        public MaskedArray setxor1d(object ar1, object ar2, bool assume_unique = false)
+        {
+            var dt = SetOpDtype(ar1, ar2);
+            var values = np.setxor1d(compressed(ar1), compressed(ar2), assume_unique).astype(dt, copy: false);
+            // XOR of masked presence: the collapsed masked value is in exactly one side ⇒ survives the xor.
+            return WithTrailingMasked(values, HasMasked(ar1) ^ HasMasked(ar2));
+        }
+
+        /// <summary>
+        ///     Sorted UNMASKED values of <paramref name="ar1"/> that are NOT in <paramref name="ar2"/>, plus a
+        ///     single masked entry iff <paramref name="ar1"/> had a masked element and <paramref name="ar2"/> did
+        ///     NOT (NumPy's <c>ma.setdiff1d</c> — the collapsed masked value is removed by the diff exactly when
+        ///     the right side also carries one). Always returns a masked array.
+        /// </summary>
+        /// <param name="ar1">The operand to keep values from.</param>
+        /// <param name="ar2">The operand whose values are removed.</param>
+        /// <param name="assume_unique">Speed hint passed through; results are undefined (as in NumPy) if false but
+        /// the inputs are not unique.</param>
+        /// <returns>The masked array of <paramref name="ar1"/>-only unique values (sorted; <paramref name="ar1"/>'s
+        /// promotion preserved).</returns>
+        /// <exception cref="ArgumentNullException">Either operand is null.</exception>
+        public MaskedArray setdiff1d(object ar1, object ar2, bool assume_unique = false)
+        {
+            var dt = SetOpDtype(ar1, ar2);
+            var values = np.setdiff1d(compressed(ar1), compressed(ar2), assume_unique).astype(dt, copy: false);
+            // ar1's masked value survives the diff iff ar2 does not also carry one (masked == masked removes it).
+            return WithTrailingMasked(values, HasMasked(ar1) && !HasMasked(ar2));
+        }
+
         // ── Mask hardness — NumSharp has no hard/soft mask distinction (masks are plain boolean
         //    arrays), so these are accepted for API parity and are effectively no-ops. ──
 

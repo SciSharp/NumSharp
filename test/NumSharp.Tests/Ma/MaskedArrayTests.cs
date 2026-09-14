@@ -334,5 +334,106 @@ namespace NumSharp.Tests.Ma
             MaskedArray implicitlyWrapped = nd;                                              // implicit NDArray→MaskedArray
             Assert.IsTrue(ReferenceEquals(np.ma.getmask(implicitlyWrapped), np.ma.nomask));
         }
+
+        // ── Set operations. Every masked element in the inputs collapses to at most ONE trailing masked
+        //    entry (masked values are equal only to one another). The observable value at that slot is its
+        //    fill, so these compare via FILLED values + the mask + the dtype (the raw masked datum is
+        //    arbitrary and hidden, matching NumPy). Expected outputs probed against NumPy 2.4.2. ──
+
+        /// <summary>Filled values (masked slot → dtype default) as float64, for value comparison that
+        /// normalizes the arbitrary hidden datum exactly as NumPy's <c>.filled()</c> does.</summary>
+        private static double[] FD(MaskedArray r) => r.filled().astype(np.float64).ToArray<double>();
+
+        private static MaskedArray MaL(long[] d, bool[] m) => np.ma.array(np.array(d), np.array(m));
+
+        /// <summary>intersect1d keeps values UNMASKED in BOTH inputs; a masked entry survives only when BOTH
+        /// inputs carry a masked element (masked == masked). Result is always a masked array.</summary>
+        [TestMethod]
+        public void Intersect1d_MatchesNumPy()
+        {
+            var x = MaL(new long[] { 1, 3, 3, 3 }, new[] { false, false, false, true });
+            var y = MaL(new long[] { 3, 1, 1, 1 }, new[] { false, false, false, true });
+            var r = np.ma.intersect1d(x, y);                                    // both masked ⇒ trailing masked
+            Assert.IsTrue(FD(r).SequenceEqual(new double[] { 1, 3, 999999 }));
+            Assert.IsTrue(M(r).SequenceEqual(new[] { false, false, true }));
+            Assert.AreEqual(np.int64, r.dtype);
+
+            // masked in only ONE input ⇒ NO trailing masked entry.
+            var a = MaL(new long[] { 1, 2, 3, 9 }, new[] { false, false, false, true });
+            var b = MaL(new long[] { 2, 3, 4 }, new[] { false, false, false });
+            var r2 = np.ma.intersect1d(a, b);
+            Assert.IsTrue(FD(r2).SequenceEqual(new double[] { 2, 3 }));
+            Assert.IsFalse(M(r2).Any(v => v));
+
+            // Disjoint unmasked sets ⇒ empty, dtype preserved (int64, not float64).
+            var r3 = np.ma.intersect1d(MaL(new long[] { 1, 2 }, new[] { false, false }),
+                                       MaL(new long[] { 3, 4 }, new[] { false, false }));
+            Assert.AreEqual(0, r3.size);
+            Assert.AreEqual(np.int64, r3.dtype);
+        }
+
+        /// <summary>union1d keeps every UNMASKED value from either input; a masked entry survives when EITHER
+        /// input carries a masked element. int+float promotes to float64; two all-masked inputs collapse to a
+        /// single masked int64 entry (dtype preserved through the empty compression).</summary>
+        [TestMethod]
+        public void Union1d_MatchesNumPy()
+        {
+            var x = MaL(new long[] { 1, 3, 3, 3 }, new[] { false, false, false, true });
+            var y = MaL(new long[] { 3, 1, 1, 1 }, new[] { false, false, false, true });
+            var r = np.ma.union1d(x, y);
+            Assert.IsTrue(FD(r).SequenceEqual(new double[] { 1, 3, 999999 }));
+            Assert.IsTrue(M(r).SequenceEqual(new[] { false, false, true }));
+
+            // Promotion: int ∪ float ⇒ float64, no masked entry.
+            var rp = np.ma.union1d(np.array(new long[] { 1, 2 }), np.array(new double[] { 2.5, 3.0 }));
+            Assert.IsTrue(FD(rp).SequenceEqual(new double[] { 1, 2, 2.5, 3 }));
+            Assert.AreEqual(np.float64, rp.dtype);
+            Assert.IsFalse(M(rp).Any(v => v));
+
+            // Both fully masked ⇒ ONE masked entry, int64 preserved (not float64 from an empty concatenate).
+            var am = MaL(new long[] { 1, 2 }, new[] { true, true });
+            var bm = MaL(new long[] { 3 }, new[] { true });
+            var ra = np.ma.union1d(am, bm);
+            Assert.AreEqual(1, ra.size);
+            Assert.IsTrue(M(ra).SequenceEqual(new[] { true }));
+            Assert.AreEqual(np.int64, ra.dtype);
+        }
+
+        /// <summary>setxor1d keeps values in EXACTLY ONE input's unmasked set; the masked entry survives iff
+        /// exactly one input carries a masked element (XOR of masked-presence).</summary>
+        [TestMethod]
+        public void Setxor1d_MatchesNumPy()
+        {
+            // masked in exactly one ⇒ trailing masked entry.
+            var a = MaL(new long[] { 1, 2, 3, 9 }, new[] { false, false, false, true });
+            var b = MaL(new long[] { 2, 3, 4 }, new[] { false, false, false });
+            var r = np.ma.setxor1d(a, b);
+            Assert.IsTrue(FD(r).SequenceEqual(new double[] { 1, 4, 999999 }));
+            Assert.IsTrue(M(r).SequenceEqual(new[] { false, false, true }));
+
+            // masked in BOTH ⇒ NO masked entry (masked cancels itself out of the xor).
+            var c = MaL(new long[] { 1, 2, 9 }, new[] { false, false, true });
+            var d = MaL(new long[] { 2, 3, 9 }, new[] { false, false, true });
+            var r2 = np.ma.setxor1d(c, d);
+            Assert.IsTrue(FD(r2).SequenceEqual(new double[] { 1, 3 }));
+            Assert.IsFalse(M(r2).Any(v => v));
+        }
+
+        /// <summary>setdiff1d keeps ar1's unmasked values absent from ar2; ar1's masked entry survives iff ar2
+        /// does NOT also carry a masked element (masked in ar2 removes it). Directional.</summary>
+        [TestMethod]
+        public void Setdiff1d_MatchesNumPy()
+        {
+            var a = MaL(new long[] { 1, 2, 3, 9 }, new[] { false, false, false, true });  // has masked
+            var b = MaL(new long[] { 2, 3, 4 }, new[] { false, false, false });           // no masked
+            var r = np.ma.setdiff1d(a, b);                                                // masked survives
+            Assert.IsTrue(FD(r).SequenceEqual(new double[] { 1, 999999 }));
+            Assert.IsTrue(M(r).SequenceEqual(new[] { false, true }));
+
+            // Reverse direction: b has no masked ⇒ result has none, and only b's extra value 4 survives.
+            var r2 = np.ma.setdiff1d(b, a);
+            Assert.IsTrue(FD(r2).SequenceEqual(new double[] { 4 }));
+            Assert.IsFalse(M(r2).Any(v => v));
+        }
     }
 }
