@@ -4,6 +4,7 @@ using System.Linq;
 using System.Numerics;
 using System.Text;
 using NumSharp.Backends;
+using NumSharp.Backends.Printing;
 using NumSharp.Generic;
 
 namespace NumSharp
@@ -117,6 +118,19 @@ namespace NumSharp
         /// <summary>Total element count (NumPy's <c>.size</c>).</summary>
         public long size => _data.size;
 
+        /// <summary>Bytes per data element (NumPy's <c>.itemsize</c>). Describes the DATA buffer; the mask is a
+        /// separate boolean array and does not contribute.</summary>
+        public int itemsize => _data.itemsize;
+
+        /// <summary>Total bytes consumed by the DATA (NumPy's <c>.nbytes</c>): <c>size × itemsize</c>. Matches
+        /// NumPy in EXCLUDING the mask's bytes — the mask is tracked separately, so a masked array reports the
+        /// same <c>nbytes</c> as its unmasked data.</summary>
+        public long nbytes => _data.nbytes;
+
+        /// <summary>Per-axis strides of the DATA, in BYTES (NumPy's <c>.strides</c>; NumSharp reports byte strides
+        /// to match NumPy). The mask, when present, shares the data's shape but has its own boolean strides.</summary>
+        public long[] strides => _data.strides;
+
         /// <summary>
         ///     Returns a fresh data array with every masked element replaced by <paramref name="fill_value"/>
         ///     (NumPy's <c>MaskedArray.filled</c>). This is the standard way to hand masked data to code that
@@ -143,19 +157,196 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Renders the array in a <c>masked_array(data=…, mask=…, fill_value=…)</c> shape with masked
-        ///     elements shown as <c>--</c> for 0-D/1-D (the common case), falling back to separate data/mask
-        ///     blocks for higher rank. NOTE: this is a readable approximation, NOT byte-identical to NumPy's
-        ///     aligned masked repr — value/mask parity is the contract here, not print layout.
+        ///     The NumPy <c>str()</c> form of the masked array — the data with masked slots shown inline as the
+        ///     <see cref="MaskedArrayModule.masked_print_option"/> token (default <c>--</c>), e.g.
+        ///     <c>[1 -- 3 --]</c>. This is a BYTE-EXACT port of NumPy 2.4.2's <c>MaskedArray.__str__</c> (see
+        ///     <see cref="ToString(bool)"/> for the full algorithm/caveats). Mirrors <see cref="NDArray.ToString()"/>'s
+        ///     convention: <c>ToString()</c> is the <c>str</c> form, <c>ToString(true)</c> the <c>repr</c> form.
         /// </summary>
-        /// <returns>A human-readable multi-line string.</returns>
-        public override string ToString()
+        /// <returns>The masked <c>str()</c> rendering.</returns>
+        public override string ToString() => ToString(flat: false);
+
+        /// <summary>
+        ///     Renders the masked array as NumPy 2.4.2 does — a BYTE-EXACT port of <c>MaskedArray.__str__</c>
+        ///     (<paramref name="flat"/> false) and <c>MaskedArray.__repr__</c> (<paramref name="flat"/> true).
+        ///     <para>
+        ///     <b>Why masked prints look UNALIGNED.</b> When a mask is present and
+        ///     <see cref="MaskedArrayModule.masked_print_option"/> is enabled, NumPy converts the data to an OBJECT
+        ///     array, substitutes the display token at masked slots, and prints via object-array formatting — each
+        ///     element its own Python-scalar repr with NO numeric column alignment (so <c>[1 -- 3 --]</c>, not the
+        ///     padded numeric form). A <c>nomask</c> array (or a disabled print option, which fills the masked slots
+        ///     with the fill value instead) prints the numeric array with normal alignment.
+        ///     </para>
+        ///     <para>
+        ///     <b>repr envelope.</b> The <c>masked_array(data=…, mask=…, fill_value=…[, dtype=…])</c> template,
+        ///     indents, one-row-vs-multi-row layout, and the <c>dtype=</c>-shown rule (non-implied dtype, or an
+        ///     all-masked/empty array) all match NumPy exactly. The <c>fill_value=</c> line is byte-exact for the
+        ///     DEFAULT fill value across every dtype (including the <c>np.&lt;type&gt;(value)</c> wrapper NumPy 2.x
+        ///     shows when the fill's promoted dtype differs from the data dtype); a caller-SET custom fill of a
+        ///     mismatched dtype is rendered against the data dtype and may differ in that one line only.
+        ///     </para>
+        /// </summary>
+        /// <param name="flat">False ⇒ the NumPy <c>str()</c> form (data only); true ⇒ the <c>repr()</c> form.</param>
+        /// <returns>The rendered string.</returns>
+        public string ToString(bool flat)
         {
-            var fv = _fill_value ?? np.ma.default_fill_value(_data.dtype);
-            // Show data and mask as their own array reprs. Rendering "--" inline (NumPy's aligned masked repr)
-            // is deliberately not attempted here — value/mask parity is the contract, not print layout.
-            string maskStr = _mask is null ? "False" : _mask.ToString(false);
-            return $"masked_array(data={_data.ToString(false)},\n             mask={maskStr},\n       fill_value={fv})";
+            var opts = PrintOptions.Current;
+            // str() is just the data body (object layout with `--`, or the numeric/filled layout); repr() wraps it
+            // in the masked_array(...) template with the mask, fill value and (when needed) dtype lines.
+            return flat ? ReprString(opts) : InsertMaskedPrintBody(" ", "", "", opts);
+        }
+
+        /// <summary>
+        ///     Produces the <c>data=</c> body exactly as NumPy's <c>str(self._insert_masked_print())</c>: the
+        ///     object-array layout with the display token at masked slots when a mask is present and the print
+        ///     option is enabled, otherwise the plain numeric layout of the data (nomask) or of
+        ///     <see cref="filled(object)"/> (disabled). Shared by both <c>str</c> (separator <c>" "</c>, no
+        ///     prefix/suffix) and <c>repr</c> (separator <c>", "</c>, with the alignment prefix and <c>","</c> suffix).
+        /// </summary>
+        /// <param name="separator">Element separator.</param>
+        /// <param name="prefix">Alignment prefix (length only) for line wrapping.</param>
+        /// <param name="suffix">Trailing text (length only) reserved on the last line.</param>
+        /// <param name="opts">The active print options.</param>
+        /// <returns>The rendered data body (no prefix/suffix text, just the bracketed array).</returns>
+        private string InsertMaskedPrintBody(string separator, string prefix, string suffix, PrintOptions opts)
+        {
+            var mpo = np.ma.masked_print_option;
+            // nomask OR the print option disabled ⇒ a real numeric array (data, or the fill-substituted data)
+            // printed with normal aligned formatting — NumPy's `_insert_masked_print` returns `self._data` /
+            // `self.filled(fill_value)` there.
+            if (_mask is null || !mpo.enabled())
+            {
+                var numeric = _mask is null ? _data : filled();
+                return numeric.ndim == 0
+                    ? ArrayFormatter.ScalarStr(numeric.GetAtIndex(0), numeric.typecode)
+                    : ArrayFormatter.Array2String(numeric, opts, separator, prefix, suffix);
+            }
+            // masked + enabled ⇒ object-array layout with the display token at masked slots.
+            string display = mpo.display();
+            if (_data.ndim == 0)
+                return Convert.ToBoolean(_mask.GetAtIndex(0))
+                    ? display
+                    : ArrayFormatter.ScalarStr(_data.GetAtIndex(0), _data.typecode);
+            return ArrayFormatter.MaskedObjectArray2String(_data, _mask, display, opts, separator, prefix, suffix);
+        }
+
+        /// <summary>Builds the <c>masked_array(...)</c> repr — a line-for-line port of NumPy 2.4.2's
+        /// <c>MaskedArray.__repr__</c> (modern print mode): the one-row-vs-multi-row indent scheme, the
+        /// <c>data=</c>/<c>mask=</c>/<c>fill_value=</c> lines, and the conditional <c>dtype=</c> line.</summary>
+        /// <param name="opts">The active print options.</param>
+        /// <returns>The multi-line repr string.</returns>
+        private string ReprString(PrintOptions opts)
+        {
+            const string prefix = "masked_array(";
+            // dtype is shown when it is not implied by the repr, OR the whole array is masked, OR it is empty —
+            // NumPy's exact condition (an all-masked array shows dtype because its data values never appear).
+            bool dtypeNeeded = !DtypeIsImplied(_data.typecode)
+                               || (_mask is not null && np.all(_mask))
+                               || _data.size == 0;
+
+            // is_one_row: every axis but the last is length 1 (so 0-D/1-D/(1,…,N) put the first key on the type
+            // line and align the rest by '='; otherwise each key goes on its own 2-space-indented line).
+            bool isOneRow = true;
+            for (int i = 0; i < _data.ndim - 1; i++)
+                if (_data.shape[i] != 1) { isOneRow = false; break; }
+
+            string dataIndent, maskIndent, fillIndent, dtypeIndent, lead;
+            if (isOneRow)
+            {
+                // First key ('data') sits right after "masked_array("; the rest align so their '=' lines up under
+                // "data"'s (n = max(2, len("masked_array(data") - len(key))).
+                dataIndent = prefix;
+                int anchor = prefix.Length + "data".Length; // len("masked_array(data") == 17
+                maskIndent = new string(' ', Math.Max(2, anchor - "mask".Length));
+                fillIndent = new string(' ', Math.Max(2, anchor - "fill_value".Length));
+                dtypeIndent = new string(' ', Math.Max(2, anchor - "dtype".Length));
+                lead = "";
+            }
+            else
+            {
+                dataIndent = maskIndent = fillIndent = dtypeIndent = "  ";
+                lead = prefix + "\n";
+            }
+
+            // data= : the object/numeric body, wrap-aligned under its own "…data=" prefix.
+            string dataRepr = InsertMaskedPrintBody(", ", dataIndent + "data=", ",", opts);
+            // mask= : the boolean mask printed normally; a nomask array shows the bare scalar "False".
+            string maskRepr = _mask is null
+                ? "False"
+                : ArrayFormatter.Array2String(_mask, opts, ", ", maskIndent + "mask=", ",");
+            string fillRepr = FillValueRepr();
+
+            var sb = new StringBuilder();
+            sb.Append(lead);
+            sb.Append(dataIndent).Append("data=").Append(dataRepr).Append(",\n");
+            sb.Append(maskIndent).Append("mask=").Append(maskRepr).Append(",\n");
+            sb.Append(fillIndent).Append("fill_value=").Append(fillRepr);
+            if (dtypeNeeded)
+                sb.Append(",\n").Append(dtypeIndent).Append("dtype=").Append(_data.typecode.AsNumpyDtypeName());
+            sb.Append(')');
+            return sb.ToString();
+        }
+
+        /// <summary>NumPy's <c>_typelessdata</c> membership: dtypes whose repr does not need an explicit
+        /// <c>dtype=</c> suffix (the four defaults int64/float64/complex128/bool). Mirrors
+        /// <c>ArrayFormatter</c>'s private check so the masked repr agrees with the plain-array repr.</summary>
+        /// <param name="tc">The data typecode.</param>
+        /// <returns>True when the dtype is implied (no <c>dtype=</c> line needed on that ground alone).</returns>
+        private static bool DtypeIsImplied(NPTypeCode tc) =>
+            tc == NPTypeCode.Int64 || tc == NPTypeCode.Double ||
+            tc == NPTypeCode.Complex || tc == NPTypeCode.Boolean;
+
+        /// <summary>
+        ///     Renders the <c>fill_value=</c> value exactly as NumPy 2.4.2's repr: the plain scalar string when the
+        ///     fill's effective dtype matches the data dtype, else the NumPy-2.x <c>np.&lt;dtype&gt;(value)</c>
+        ///     wrapper. For the DEFAULT fill the effective dtype follows NumPy's <c>_check_fill_value</c> promotion
+        ///     (signed→int64, unsigned→uint64, float→float64, complex→complex128, bool→bool), which only differs
+        ///     from the data dtype for a non-implied data dtype (int8/16/32, uint8/16/32, float16/32) — precisely
+        ///     the arrays that also show a <c>dtype=</c> line. A caller-SET custom fill is rendered against the data
+        ///     dtype (the plain form), matching NumPy whenever the value fits that dtype.
+        /// </summary>
+        /// <returns>The fill-value display string.</returns>
+        private string FillValueRepr()
+        {
+            object fv = _fill_value ?? np.ma.default_fill_value(_data.dtype);
+            NPTypeCode dtc = _data.typecode;
+            // Effective fill dtype: a default fill promotes by kind; a user-set fill is shown against the data dtype.
+            NPTypeCode ftc = _fill_value is not null ? dtc : CanonicalFillTypecode(dtc);
+            string valStr = ArrayFormatter.ScalarStr(fv, ftc);
+            if (ftc == dtc)
+                return valStr;
+            // Non-matching promoted dtype ⇒ NumPy shows np.<name>(value); a complex value's str carries outer
+            // parens that the wrapped form drops (np.complex128(1e+20+0j), not np.complex128((1e+20+0j))).
+            string inner = ftc == NPTypeCode.Complex && valStr.Length >= 2 && valStr[0] == '(' && valStr[^1] == ')'
+                ? valStr.Substring(1, valStr.Length - 2)
+                : valStr;
+            return "np." + ftc.AsNumpyDtypeName() + "(" + inner + ")";
+        }
+
+        /// <summary>The dtype NumPy's <c>default_fill_value</c> scalar carries per data kind (its repr dtype):
+        /// signed integers → int64, unsigned integers → uint64, any float → float64, complex → complex128, bool →
+        /// bool. NumSharp-only Char/Decimal (no NumPy analog) map to themselves so their fill shows the plain form.</summary>
+        /// <param name="tc">The data typecode.</param>
+        /// <returns>The fill scalar's effective typecode for repr.</returns>
+        private static NPTypeCode CanonicalFillTypecode(NPTypeCode tc)
+        {
+            switch (tc)
+            {
+                case NPTypeCode.Boolean: return NPTypeCode.Boolean;
+                case NPTypeCode.SByte:
+                case NPTypeCode.Int16:
+                case NPTypeCode.Int32:
+                case NPTypeCode.Int64: return NPTypeCode.Int64;
+                case NPTypeCode.Byte:
+                case NPTypeCode.UInt16:
+                case NPTypeCode.UInt32:
+                case NPTypeCode.UInt64: return NPTypeCode.UInt64;
+                case NPTypeCode.Half:
+                case NPTypeCode.Single:
+                case NPTypeCode.Double: return NPTypeCode.Double;
+                case NPTypeCode.Complex: return NPTypeCode.Complex;
+                default: return tc; // Char/Decimal — NumSharp extensions with no NumPy fill-dtype promotion
+            }
         }
 
         /// <summary>
@@ -523,6 +714,97 @@ namespace NumSharp
                 return np.ma.masked;
             return _data.GetAtIndex(0);
         }
+
+        // ── Instance members that operate on the DATA only (NumPy inherits these straight from ndarray, so
+        //    they see through the mask). Each mirrors NumPy's MaskedArray member exactly, including the two
+        //    that NumPy itself warns are mask-oblivious (partition/argpartition). ──
+
+        /// <summary>
+        ///     Overwrites EVERY data slot with <paramref name="value"/> in place and leaves the mask untouched
+        ///     (NumPy's <c>MaskedArray.fill</c>). A masked slot therefore still reads as <c>masked</c> while its
+        ///     hidden data becomes <paramref name="value"/> — <c>fill</c> is a data operation, NOT an unmask, so
+        ///     it does not clear the mask (unlike an indexer assignment on a soft mask). The mask's hardness is
+        ///     irrelevant here (it never gates the data buffer).
+        /// </summary>
+        /// <param name="value">The scalar written into every data element; cast to the data dtype like NumPy.</param>
+        /// <exception cref="System.InvalidOperationException">The underlying data buffer is not writeable
+        /// (e.g. a broadcast view), surfaced by the base <see cref="NDArray.fill(object)"/>.</exception>
+        public void fill(object value) => _data.fill(value);
+
+        /// <summary>
+        ///     Finds the insertion indices that keep the (assumed-sorted) DATA sorted (NumPy's
+        ///     <c>MaskedArray.searchsorted</c>, inherited from ndarray). It reads the raw data and IGNORES the
+        ///     mask entirely — a masked entry is treated as its underlying value, so the caller is responsible
+        ///     for masked slots not distorting the sorted order. Returns a PLAIN <see cref="NDArray"/> (integer
+        ///     indices), never a masked array, matching NumPy.
+        /// </summary>
+        /// <param name="v">The value(s) to insert.</param>
+        /// <param name="side">"left" (first suitable index) or "right" (last), as in NumPy.</param>
+        /// <param name="sorter">Optional integer index array giving a sort order for the data (an argsort result).</param>
+        /// <returns>An integer <see cref="NDArray"/> of insertion indices.</returns>
+        public NDArray searchsorted(NDArray v, string side = "left", NDArray sorter = null)
+            => _data.searchsorted(v, side, sorter);
+
+        /// <summary>
+        ///     Returns the array with each data element's bytes reversed (NumPy's <c>MaskedArray.byteswap</c>),
+        ///     carrying the mask through UNCHANGED (a byteswap is a pure data reinterpretation). With
+        ///     <paramref name="inplace"/> the existing data buffer is swapped and THIS instance is returned;
+        ///     otherwise a fresh masked array over swapped data is returned.
+        /// </summary>
+        /// <param name="inplace">Swap the data buffer in place and return this instance (true), or return a new
+        /// masked array over a swapped copy (false, the default).</param>
+        /// <returns>This instance when <paramref name="inplace"/>, else a new <see cref="MaskedArray"/> whose data
+        /// is byteswapped and whose mask/fill value are carried over (the result starts with a SOFT mask, per this
+        /// type's copy-result policy).</returns>
+        public MaskedArray byteswap(bool inplace = false)
+        {
+            // In place: mutate the shared data buffer and hand back the same instance (mask + hardmask intact),
+            // matching NumPy's `byteswap(inplace=True)` returning self. Otherwise wrap the swapped copy.
+            var swapped = _data.byteswap(inplace);
+            return inplace ? this : new MaskedArray(swapped, _mask, _fill_value);
+        }
+
+        /// <summary>
+        ///     Partitions the DATA in place around the <paramref name="kth"/>-th element (NumPy's
+        ///     <c>MaskedArray.partition</c>). <b>FOOTGUN — this IGNORES the mask</b>: NumPy itself emits a
+        ///     <c>UserWarning</c> here and delegates to <c>ndarray.partition</c>, which reorders only the data
+        ///     while the mask array stays in its ORIGINAL positions — so after partitioning the mask no longer
+        ///     lines up with the values it marked. NumSharp reproduces that behavior (there is no warning channel).
+        ///     Prefer <see cref="sort(int,bool,object)"/>, which moves the mask with the data.
+        /// </summary>
+        /// <param name="kth">Index (or, in the sibling overload, indices) whose element(s) land in final sorted
+        /// position; negatives count from the end.</param>
+        /// <param name="axis">Axis to partition along; null flattens first. Default last axis.</param>
+        /// <param name="kind">Selection algorithm — only "introselect".</param>
+        /// <param name="order">Field order (structured dtypes only; unused here).</param>
+        public void partition(int kth, int? axis = -1, string kind = "introselect", string order = null)
+            => _data.partition(kth, axis, kind, order);
+
+        /// <summary>Multi-<paramref name="kth"/> overload of <see cref="partition(int,int?,string,string)"/> —
+        /// same mask-oblivious footgun; each listed element lands in final sorted position.</summary>
+        /// <param name="kth">Indices whose elements land in final sorted position.</param>
+        /// <param name="axis">Axis to partition along; null flattens first.</param>
+        /// <param name="kind">Selection algorithm — only "introselect".</param>
+        /// <param name="order">Field order (unused).</param>
+        public void partition(int[] kth, int? axis = -1, string kind = "introselect", string order = null)
+            => _data.partition(kth, axis, kind, order);
+
+        /// <summary>
+        ///     Returns the indices that would partition the DATA around the <paramref name="kth"/>-th element
+        ///     (NumPy's <c>MaskedArray.argpartition</c>). <b>FOOTGUN — this IGNORES the mask</b> exactly as
+        ///     <see cref="partition(int,int?,string,string)"/> does (NumPy warns and delegates to
+        ///     <c>ndarray.argpartition</c>): the index permutation is computed from the raw data, and the result
+        ///     carries THIS array's mask UNMOVED (positionally), so a masked input position shows as masked in the
+        ///     result even though the result holds indices, not values. Reproduced for parity; prefer
+        ///     <see cref="argsort(int,bool,object)"/>.
+        /// </summary>
+        /// <param name="kth">Index whose element lands in final sorted position; negatives count from the end.</param>
+        /// <param name="axis">Axis to partition along; null flattens first. Default last axis.</param>
+        /// <param name="kind">Selection algorithm — only "introselect".</param>
+        /// <param name="order">Field order (unused).</param>
+        /// <returns>A masked array of int64 indices carrying this array's mask in its original positions.</returns>
+        public MaskedArray argpartition(int kth, int? axis = -1, string kind = "introselect", string order = null)
+            => new MaskedArray(np.argpartition(_data, kth, axis, kind, order), _mask, _fill_value);
 
         // ── The indexer (NumPy's MaskedArray.__getitem__/__setitem__) — the keystone that makes element/slice
         //    access idiomatic and unblocks put/putmask/mask_rowcols. GET applies the SAME index to data and mask
@@ -935,6 +1217,58 @@ namespace NumSharp
     }
 
     /// <summary>
+    ///     NumPy's <c>numpy.ma.masked_print_option</c>: the mutable, process-global object controlling how masked
+    ///     elements are DISPLAYED and whether that display happens at all. Reach for it to change the two-character
+    ///     <c>--</c> placeholder (<see cref="set_display"/>) or to turn the placeholder off entirely
+    ///     (<see cref="enable"/>) so masked slots print their FILL value instead — the two ways NumPy lets you tune
+    ///     a masked repr globally.
+    ///     <para>
+    ///     It is a single shared instance behind <see cref="MaskedArrayModule.masked_print_option"/> — mutating it
+    ///     (like NumPy's module global) changes every subsequent <see cref="MaskedArray.ToString()"/>, so it is a
+    ///     global side effect: set it back if you only meant a local change.
+    ///     </para>
+    /// </summary>
+    /// <remarks>https://numpy.org/doc/stable/reference/maskedarray.baseclass.html</remarks>
+    public sealed class MaskedPrintOption
+    {
+        /// <summary>The token shown at masked positions; NumPy's default is the two-char <c>--</c>.</summary>
+        private string _display;
+
+        /// <summary>Whether masked slots are shown as <see cref="_display"/> (true) or the fill value (false).
+        /// NumPy's default is true.</summary>
+        private bool _enabled = true;
+
+        /// <summary>Builds the option with an initial display token (the module seeds it with <c>--</c>).</summary>
+        /// <param name="display">Initial masked-slot token; null falls back to <c>--</c>.</param>
+        internal MaskedPrintOption(string display) => _display = display ?? "--";
+
+        /// <summary>The current masked-slot token (NumPy's <c>display()</c>).</summary>
+        /// <returns>The display string, e.g. <c>--</c>.</returns>
+        public string display() => _display;
+
+        /// <summary>Replaces the masked-slot token (NumPy's <c>set_display</c>). Affects all later masked prints —
+        /// a GLOBAL change, since there is one shared option object.</summary>
+        /// <param name="s">The new token (any string; NumPy does not validate it).</param>
+        public void set_display(string s) => _display = s;
+
+        /// <summary>Whether the masked-slot substitution is active (NumPy's <c>enabled()</c>). When false, a masked
+        /// print substitutes the array's FILL value at masked slots and prints numeric-aligned (the
+        /// <c>filled(fill_value)</c> path) instead of showing <see cref="display"/>.</summary>
+        /// <returns>True when masked slots render as <see cref="display"/>.</returns>
+        public bool enabled() => _enabled;
+
+        /// <summary>Turns the masked-slot substitution on or off (NumPy's <c>enable(shrink=1)</c>; the parameter is
+        /// named <c>shrink</c> in NumPy but simply sets the enabled flag).</summary>
+        /// <param name="shrink">True enables the <c>--</c> substitution (default); false makes masked slots print
+        /// their fill value.</param>
+        public void enable(bool shrink = true) => _enabled = shrink;
+
+        /// <summary>Renders as the display token, matching NumPy's <c>str(masked_print_option)</c>.</summary>
+        /// <returns>The current display string.</returns>
+        public override string ToString() => _display;
+    }
+
+    /// <summary>
     ///     The masked counterpart of <see cref="np.r_"/> — NumPy's <c>numpy.ma.mr_</c> (an <c>MAxisConcatenator</c>):
     ///     concatenates masked arrays / slices / scalars along the first axis, propagating the mask, with the SAME
     ///     slice-expression grammar as <see cref="np.r_"/> (a colon-string is a slice, a leading directive string
@@ -1109,6 +1443,12 @@ namespace NumSharp
         /// counterpart of <see cref="np.r_"/>). Use as <c>np.ma.mr_[a, b]</c> / <c>np.ma.mr_["1", A, B]</c>.
         /// See <see cref="MrClass"/>.</summary>
         public MrClass mr_ { get; } = new MrClass();
+
+        /// <summary>NumPy's <c>masked_print_option</c>: the shared, mutable object controlling the masked-slot
+        /// display token (default <c>--</c>) and whether masked slots are shown as that token or as the fill value.
+        /// Mutating it changes every subsequent <see cref="MaskedArray.ToString()"/> — a process-global side effect.
+        /// See <see cref="MaskedPrintOption"/>.</summary>
+        public MaskedPrintOption masked_print_option { get; } = new MaskedPrintOption("--");
 
         /// <summary>
         ///     Returns the data of <paramref name="a"/> as a plain <see cref="NDArray"/> — the underlying data

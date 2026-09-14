@@ -1420,5 +1420,147 @@ namespace NumSharp.Tests.Ma
                 Assert.AreEqual("Unavailable for masked array.", ex.Message);
             }
         }
+
+        // ── Masked printing (str/repr) + masked_print_option — byte-exact port of NumPy 2.4.2's
+        //    MaskedArray.__str__/__repr__ (object-array substitution of the `--` display token). All expected
+        //    strings were probed against NumPy 2.4.2. C# int[] → int32, so int64-default cases cast explicitly. ──
+
+        /// <summary>The <c>str()</c> form shows masked slots inline as <c>--</c> via object-array formatting
+        /// (unaligned), covering int/float/complex/bool, 2-D, 0-D, nomask, all-False mask and summarization —
+        /// each byte-exact vs NumPy 2.4.2.</summary>
+        [TestMethod]
+        public void MaskedPrint_Str_BitExact()
+        {
+            MaskedArray mi(int[] d, bool[] m) => np.ma.array(np.array(d).astype(np.int64), np.array(m));
+            Assert.AreEqual("[1 -- 3 --]", mi(new[] { 1, 2, 3, 4 }, new[] { false, true, false, true }).ToString());
+            // masked slots are NOT padded to the wide value's width (object layout, not numeric alignment).
+            Assert.AreEqual("[1 -- 3 --]", mi(new[] { 1, 200, 3, 40000 }, new[] { false, true, false, true }).ToString());
+            Assert.AreEqual("[1.5 -- 3.5]", np.ma.array(np.array(new[] { 1.5, 2.5, 3.5 }), np.array(new[] { false, true, false })).ToString());
+            Assert.AreEqual("[[1 --]\n [3 4]]", np.ma.array(np.array(new[,] { { 1, 2 }, { 3, 4 } }), np.array(new[,] { { false, true }, { false, false } })).ToString());
+            // nomask → normal (aligned) numeric print; all-False real mask → unaligned object print.
+            Assert.AreEqual("[1 2 3]", np.ma.array(np.array(new[] { 1, 2, 3 })).ToString());
+            Assert.AreEqual("[1 200 3 40000]", mi(new[] { 1, 200, 3, 40000 }, new[] { false, false, false, false }).ToString());
+            Assert.AreEqual("--", np.ma.array(np.array(5).astype(np.int64), np.array(true)).ToString());
+            Assert.AreEqual("5", np.ma.array(np.array(5).astype(np.int64), np.array(false)).ToString());
+            Assert.AreEqual("[(1+2j) --]", np.ma.array(np.array(new[] { new System.Numerics.Complex(1, 2), new System.Numerics.Complex(3, 4) }), np.array(new[] { false, true })).ToString());
+            Assert.AreEqual("[True -- True]", np.ma.array(np.array(new[] { true, false, true }), np.array(new[] { false, true, false })).ToString());
+            // summarization threads through the mask (edgeitems=3): [first3 ... last3].
+            var big = np.ma.array(np.arange(2000), (np.arange(2000) % 2).astype(np.@bool));
+            Assert.AreEqual("[0 -- 2 ... -- 1998 --]", big.ToString());
+        }
+
+        /// <summary>The <c>repr()</c> form (<c>ToString(true)</c>) reproduces NumPy's
+        /// <c>masked_array(data=…, mask=…, fill_value=…[, dtype=…])</c> template exactly — one-row vs 2-D layout,
+        /// the <c>dtype=</c> line for non-implied/all-masked dtypes, and the <c>np.&lt;type&gt;(value)</c> fill
+        /// wrapper.</summary>
+        [TestMethod]
+        public void MaskedPrint_Repr_BitExact()
+        {
+            MaskedArray mi(int[] d, bool[] m) => np.ma.array(np.array(d).astype(np.int64), np.array(m));
+            Assert.AreEqual(
+                "masked_array(data=[1, --, 3, --],\n             mask=[False,  True, False,  True],\n       fill_value=999999)",
+                mi(new[] { 1, 2, 3, 4 }, new[] { false, true, false, true }).ToString(true));
+            Assert.AreEqual(
+                "masked_array(\n  data=[[1, --],\n        [3, 4]],\n  mask=[[False,  True],\n        [False, False]],\n  fill_value=999999)",
+                np.ma.array(np.array(new[,] { { 1, 2 }, { 3, 4 } }).astype(np.int64), np.array(new[,] { { false, true }, { false, false } })).ToString(true));
+            Assert.AreEqual(
+                "masked_array(data=[1, 2, 3],\n             mask=False,\n       fill_value=999999)",
+                np.ma.array(np.array(new[] { 1, 2, 3 }).astype(np.int64)).ToString(true));
+            // all-masked → dtype shown even though int64 is implied (values never appear).
+            Assert.AreEqual(
+                "masked_array(data=[--, --, --],\n             mask=[ True,  True,  True],\n       fill_value=999999,\n            dtype=int64)",
+                mi(new[] { 1, 2, 3 }, new[] { true, true, true }).ToString(true));
+            // non-implied dtype → dtype line + promoted-fill wrapper np.<type>(value).
+            Assert.AreEqual(
+                "masked_array(data=[1.5, --, 3.5],\n             mask=[False,  True, False],\n       fill_value=np.float64(1e+20),\n            dtype=float32)",
+                np.ma.array(np.array(new[] { 1.5f, 2.5f, 3.5f }), np.array(new[] { false, true, false })).ToString(true));
+            Assert.AreEqual(
+                "masked_array(data=[1, --, 3],\n             mask=[False,  True, False],\n       fill_value=np.int64(999999),\n            dtype=int32)",
+                np.ma.array(np.array(new[] { 1, 2, 3 }), np.array(new[] { false, true, false })).ToString(true));
+            Assert.AreEqual(
+                "masked_array(data=[],\n             mask=[],\n       fill_value=1e+20,\n            dtype=float64)",
+                np.ma.array(np.array(new double[] { }), np.array(new bool[] { })).ToString(true));
+            Assert.AreEqual(
+                "masked_array(data=--,\n             mask=True,\n       fill_value=999999,\n            dtype=int64)",
+                np.ma.array(np.array(5).astype(np.int64), np.array(true)).ToString(true));
+        }
+
+        /// <summary><c>masked_print_option</c> is a live global: <c>set_display</c> changes the token and
+        /// <c>enable(false)</c> switches to the fill-value (aligned) rendering — both observable through
+        /// <c>ToString()</c>, restored afterward so the shared option does not leak into other tests.</summary>
+        [TestMethod]
+        public void MaskedPrintOption_DisplayAndEnable()
+        {
+            var mpo = np.ma.masked_print_option;
+            Assert.AreEqual("--", mpo.display());
+            Assert.IsTrue(mpo.enabled());
+            Assert.AreEqual("--", mpo.ToString());
+
+            var a = np.ma.array(np.array(new[] { 1, 2, 3, 4 }).astype(np.int64), np.array(new[] { false, true, false, true }));
+            try
+            {
+                mpo.enable(false); // disabled → masked slots print the fill value, numeric-aligned.
+                Assert.AreEqual("[     1 999999      3 999999]", a.ToString());
+                mpo.enable(true);
+                mpo.set_display("N/A");
+                Assert.AreEqual("[1 N/A 3 N/A]", a.ToString());
+            }
+            finally
+            {
+                mpo.set_display("--"); // restore the shared global regardless of assertion outcome.
+                mpo.enable(true);
+            }
+        }
+
+        /// <summary>The DATA-only instance members inherited from ndarray: <c>fill</c> overwrites the data and
+        /// keeps the mask, <c>searchsorted</c> reads the data and returns a plain array, <c>byteswap</c> swaps the
+        /// data and carries the mask into a fresh array.</summary>
+        [TestMethod]
+        public void Instance_Fill_Searchsorted_Byteswap()
+        {
+            var af = np.ma.array(np.array(new[] { 1, 2, 3, 4 }).astype(np.int64), np.array(new[] { false, true, false, true }));
+            af.fill(99);
+            Assert.IsTrue(D(af).SequenceEqual(new double[] { 99, 99, 99, 99 })); // data overwritten…
+            Assert.IsTrue(M(af).SequenceEqual(new[] { false, true, false, true })); // …mask untouched.
+
+            var ss = np.ma.array(np.array(new[] { 1, 2, 3, 4, 5 }), np.array(new[] { false, false, true, false, false }));
+            Assert.AreEqual(2, ss.searchsorted(np.array(3)).GetInt32(0));
+            Assert.IsTrue(ss.searchsorted(np.array(new[] { 2.5, 4.5 })).ToArray<long>().SequenceEqual(new long[] { 2, 4 }));
+
+            var bs = np.ma.array(np.array(new short[] { 1, 2, 3 }), np.array(new[] { false, true, false }));
+            var bsr = bs.byteswap();
+            Assert.IsTrue(D(bsr).SequenceEqual(new double[] { 256, 512, 768 }));
+            Assert.IsTrue(M(bsr).SequenceEqual(new[] { false, true, false }));
+            Assert.IsTrue(D(bs).SequenceEqual(new double[] { 1, 2, 3 })); // non-inplace: source unchanged.
+        }
+
+        /// <summary><c>partition</c>/<c>argpartition</c> reorder only the DATA and leave the mask in its ORIGINAL
+        /// positions (NumPy's documented mask-oblivious footgun — it warns, NumSharp has no warning channel).</summary>
+        [TestMethod]
+        public void Instance_Partition_Argpartition_IgnoreMask()
+        {
+            var pt = np.ma.array(np.array(new[] { 5, 3, 8, 1, 9, 2 }), np.array(new[] { false, false, true, false, false, false }));
+            pt.partition(2);
+            Assert.IsTrue(D(pt).SequenceEqual(new double[] { 1, 2, 3, 5, 8, 9 })); // data partitioned…
+            Assert.IsTrue(M(pt).SequenceEqual(new[] { false, false, true, false, false, false })); // …mask NOT moved.
+
+            var ap = np.ma.array(np.array(new[] { 5, 3, 8, 1, 9, 2 }), np.array(new[] { false, false, true, false, false, false }));
+            var apr = ap.argpartition(2);
+            Assert.IsTrue(np.ma.getdata(apr).astype(np.int64).ToArray<long>().SequenceEqual(new long[] { 3, 5, 1, 0, 2, 4 }));
+            Assert.IsTrue(M(apr).SequenceEqual(new[] { false, false, true, false, false, false }));
+        }
+
+        /// <summary>The data-describing instance properties (<c>itemsize</c>/<c>nbytes</c>/<c>strides</c>) mirror
+        /// the DATA buffer and EXCLUDE the mask, matching NumPy (a masked array's <c>nbytes</c> equals its unmasked
+        /// data's; strides are reported in bytes).</summary>
+        [TestMethod]
+        public void Instance_DataDescribingProperties()
+        {
+            // int32 (2,3): itemsize 4, nbytes 24 (mask's 6 bytes excluded), strides (12, 4) in bytes.
+            var a = np.ma.array(np.arange(6).astype(np.int32).reshape(2, 3), np.array(new[,] { { false, true, false }, { false, false, true } }));
+            Assert.AreEqual(4, a.itemsize);
+            Assert.AreEqual(24L, a.nbytes);
+            Assert.IsTrue(a.strides.SequenceEqual(new long[] { 12, 4 }));
+        }
     }
 }
