@@ -435,5 +435,296 @@ namespace NumSharp.Tests.Ma
             Assert.IsTrue(FD(r2).SequenceEqual(new double[] { 4 }));
             Assert.IsFalse(M(r2).Any(v => v));
         }
+
+        // ── New coverage (audit MA_MODULE_AUDIT.md §6): predicates, shape queries, aliases, mask helpers,
+        //    fill-value surface, functional gaps, parameter parity, operators, and the instance surface.
+        //    Every expected value was probed against NumPy 2.4.2. ──
+
+        private static MaskedArray Ma(double[] d, bool[] m) => np.ma.array(np.array(d), np.array(m));
+
+        /// <summary><c>is_masked</c> is the VALUE predicate (any element masked?), distinct from the
+        /// <c>isMaskedArray</c> TYPE check: an all-False mask and a plain array both read False.</summary>
+        [TestMethod]
+        public void IsMasked_ValuePredicate()
+        {
+            Assert.IsFalse(np.ma.is_masked(np.ma.array(np.array(new double[] { 1, 2, 3 }))));
+            Assert.IsTrue(np.ma.is_masked(Ma(new double[] { 1, 2, 3 }, new[] { false, true, false })));
+            Assert.IsFalse(np.ma.is_masked(Ma(new double[] { 1, 2, 3 }, new[] { false, false, false })));
+            Assert.IsFalse(np.ma.is_masked(np.array(new double[] { 1, 2, 3 })));
+            Assert.IsTrue(np.ma.is_masked(np.ma.masked)); // the singleton is masked
+        }
+
+        /// <summary>Module-level <c>ndim</c>/<c>shape</c>/<c>size</c> mirror the instance props and accept a
+        /// plain array too; <c>copy</c> deep-copies data AND mask.</summary>
+        [TestMethod]
+        public void ShapeQueries_And_Copy()
+        {
+            var x = np.ma.array(np.array(new double[,] { { 1, 2 }, { 3, 4 } }), np.array(new bool[,] { { false, true }, { false, false } }));
+            Assert.AreEqual(2, np.ma.ndim(x));
+            Assert.IsTrue(np.ma.shape(x).SequenceEqual(new long[] { 2, 2 }));
+            Assert.AreEqual(4L, np.ma.size(x));
+            Assert.AreEqual(1, np.ma.ndim(np.array(new double[] { 1, 2, 3 })));
+
+            var c = np.ma.copy(x);
+            Assert.IsTrue(np.ma.is_masked(c));
+            Assert.IsTrue(np.ma.getmaskarray(c).ToArray<bool>().SequenceEqual(new[] { false, true, false, false }));
+        }
+
+        /// <summary>The deprecated/renamed aliases forward to their canonical op (amax/amin/alltrue/sometrue/
+        /// round_/innerproduct/outerproduct/isMA/isarray).</summary>
+        [TestMethod]
+        public void Aliases_ForwardToCanonical()
+        {
+            Assert.AreEqual(5.0, np.ma.amax(Ma(new double[] { 1, 5, 3 }, new[] { false, false, true })).data.GetDouble(0));
+            Assert.AreEqual(3.0, np.ma.amin(Ma(new double[] { 1, 5, 3 }, new[] { true, false, false })).data.GetDouble(0));
+            Assert.IsTrue(np.ma.alltrue(Ma(new double[] { 1, 1, 0 }, new[] { false, false, true })).data.GetBoolean(0));
+            Assert.IsFalse(np.ma.sometrue(Ma(new double[] { 0, 0, 1 }, new[] { false, false, true })).data.GetBoolean(0));
+            var rnd = np.ma.round_(Ma(new double[] { 1.4, 2.6 }, new[] { false, true }));
+            Assert.IsTrue(np.ma.getmaskarray(rnd).ToArray<bool>().SequenceEqual(new[] { false, true }));
+            Assert.AreEqual(32.0, np.ma.innerproduct(np.array(new double[] { 1, 2, 3 }), np.array(new double[] { 4, 5, 6 })).data.GetDouble(0));
+            Assert.IsTrue(np.ma.getdata(np.ma.outerproduct(np.array(new long[] { 1, 2 }), np.array(new long[] { 3, 4 })))
+                .astype(np.float64).ToArray<double>().SequenceEqual(new double[] { 3, 4, 6, 8 }));
+            Assert.IsTrue(np.ma.isMA(Ma(new double[] { 1 }, new[] { false })));
+            Assert.IsTrue(np.ma.isarray(Ma(new double[] { 1 }, new[] { false })));
+        }
+
+        /// <summary>Complex fill values are COMPLEX, not a bare real (NumPy: 1e20+0j / inf+infj / -inf-infj).</summary>
+        [TestMethod]
+        public void ComplexFillValues_AreComplex()
+        {
+            Assert.AreEqual(new System.Numerics.Complex(1e20, 0), (System.Numerics.Complex)np.ma.default_fill_value(np.complex128));
+            var cplx = np.array(new System.Numerics.Complex[] { System.Numerics.Complex.ImaginaryOne });
+            Assert.AreEqual(new System.Numerics.Complex(double.PositiveInfinity, double.PositiveInfinity), (System.Numerics.Complex)np.ma.minimum_fill_value(cplx));
+            Assert.AreEqual(new System.Numerics.Complex(double.NegativeInfinity, double.NegativeInfinity), (System.Numerics.Complex)np.ma.maximum_fill_value(cplx));
+            Assert.AreEqual(1e20, (double)np.ma.default_fill_value(np.float64)); // float unchanged
+        }
+
+        /// <summary>make_mask coerces by non-zero-ness and shrinks an all-False result to nomask; make_mask_none
+        /// is an all-False array; mask_or is the nomask-aware OR.</summary>
+        [TestMethod]
+        public void MaskConstruction_MakeMask_MaskOr()
+        {
+            Assert.IsTrue(np.ma.make_mask(np.array(new[] { 1, 0, 1 })).ToArray<bool>().SequenceEqual(new[] { true, false, true }));
+            Assert.IsTrue(ReferenceEquals(np.ma.make_mask(np.array(new[] { 0, 0, 0 })), np.ma.nomask)); // shrinks
+            Assert.IsTrue(np.ma.make_mask(np.array(new[] { 0, 0, 0 }), shrink: false).ToArray<bool>().SequenceEqual(new[] { false, false, false }));
+            Assert.IsTrue(np.ma.make_mask_none(new Shape(3)).ToArray<bool>().SequenceEqual(new[] { false, false, false }));
+            Assert.IsTrue(np.ma.mask_or(np.ma.nomask, np.array(new[] { true, false })).ToArray<bool>().SequenceEqual(new[] { true, false }));
+            Assert.IsTrue(np.ma.mask_or(np.array(new[] { true, false }), np.array(new[] { false, true })).ToArray<bool>().SequenceEqual(new[] { true, true }));
+            Assert.IsTrue(ReferenceEquals(np.ma.mask_or(np.ma.nomask, np.ma.nomask), np.ma.nomask));
+        }
+
+        /// <summary>fill_value get/set is per-instance; common_fill_value returns the shared fill or null;
+        /// set_fill_value mutates in place.</summary>
+        [TestMethod]
+        public void FillValue_Surface()
+        {
+            var z = np.ma.array(np.array(new long[] { 1, 2, 3 }), np.array(new[] { false, true, false }));
+            Assert.AreEqual(999999L, Convert.ToInt64(z.fill_value));
+            z.fill_value = 42L;
+            Assert.AreEqual(42L, Convert.ToInt64(z.fill_value));
+            Assert.IsTrue(z.filled().astype(np.float64).ToArray<double>().SequenceEqual(new double[] { 1, 42, 3 }));
+
+            var a = np.ma.array(np.array(new long[] { 1, 2 }), fill_value: 999L);
+            var b = np.ma.array(np.array(new long[] { 3, 4 }), fill_value: 999L);
+            Assert.AreEqual(999L, Convert.ToInt64(np.ma.common_fill_value(a, b)));
+            Assert.IsNull(np.ma.common_fill_value(a, np.ma.array(np.array(new long[] { 3, 4 }), fill_value: 7L)));
+
+            var w = np.ma.array(np.array(new double[] { 1, 2, 3 }));
+            np.ma.set_fill_value(w, 7.0);
+            Assert.AreEqual(7.0, Convert.ToDouble(w.fill_value));
+        }
+
+        /// <summary>fix_invalid masks NaN/±inf AND writes the fill into their data slots (the array's own
+        /// fill_value attribute is left at the dtype default).</summary>
+        [TestMethod]
+        public void FixInvalid_MasksAndFillsData()
+        {
+            var fi = np.ma.fix_invalid(np.array(new[] { 1.0, double.NaN, double.PositiveInfinity, 4 }));
+            Assert.IsTrue(np.ma.getmaskarray(fi).ToArray<bool>().SequenceEqual(new[] { false, true, true, false }));
+            var data = fi.data.ToArray<double>();
+            Assert.AreEqual(1.0, data[0]);
+            Assert.AreEqual(1e20, data[1]); // default fill written into the masked (invalid) slot
+            var fi2 = np.ma.fix_invalid(np.array(new[] { 1.0, double.NaN, double.PositiveInfinity }), fill_value: -1.0);
+            Assert.IsTrue(fi2.data.ToArray<double>().SequenceEqual(new[] { 1.0, -1.0, -1.0 }));
+        }
+
+        /// <summary>left_shift/right_shift are mask-OR binary ufuncs.</summary>
+        [TestMethod]
+        public void BitShift_Ufuncs()
+        {
+            var ls = np.ma.left_shift(np.ma.array(np.array(new long[] { 1, 2, 3 }), np.array(new[] { false, true, false })), 2);
+            Assert.AreEqual(4.0, D(ls)[0]);
+            Assert.AreEqual(12.0, D(ls)[2]);
+            Assert.IsTrue(M(ls).SequenceEqual(new[] { false, true, false }));
+            var rs = np.ma.right_shift(np.ma.array(np.array(new long[] { 8, 16, 32 }), np.array(new[] { false, true, false })), 1);
+            Assert.AreEqual(4.0, D(rs)[0]);
+            Assert.AreEqual(16.0, D(rs)[2]);
+            Assert.IsTrue(M(rs).SequenceEqual(new[] { false, true, false }));
+        }
+
+        /// <summary>clip preserves the mask; choose picks the chosen element's mask; compress drops by
+        /// condition keeping mask; diagonal/trace/nonzero treat masked appropriately.</summary>
+        [TestMethod]
+        public void FunctionalGaps_Clip_Choose_Compress_Diagonal_Trace_Nonzero()
+        {
+            var cl = np.ma.clip(np.ma.array(np.array(new long[] { 1, 5, 10, 15 }), np.array(new[] { false, true, false, false })), 3, 12);
+            Assert.IsTrue(D(cl).SequenceEqual(new double[] { 3, 5, 10, 12 }));
+            Assert.IsTrue(M(cl).SequenceEqual(new[] { false, true, false, false }));
+
+            // choose: [0,1,0] over {maskedArr, plainArr} → [1, 20, 3], unmasked (chosen elements all unmasked).
+            var ch = np.ma.choose(np.array(new[] { 0, 1, 0 }),
+                new object[] { np.ma.array(np.array(new long[] { 1, 2, 3 }), np.array(new[] { false, true, false })), np.array(new long[] { 10, 20, 30 }) });
+            Assert.IsTrue(D(ch).SequenceEqual(new double[] { 1, 20, 3 }));
+            Assert.IsFalse(M(ch).Any(v => v));
+            // choose picking a masked element propagates its mask.
+            var ch2 = np.ma.choose(np.array(new[] { 0, 0 }),
+                new object[] { np.ma.array(np.array(new long[] { 1, 2 }), np.array(new[] { true, false })), np.array(new long[] { 10, 20 }) });
+            Assert.IsTrue(M(ch2).SequenceEqual(new[] { true, false }));
+
+            var cmp = np.ma.compress(np.array(new[] { true, false, true }), np.ma.array(np.array(new long[] { 1, 2, 3 }), np.array(new[] { false, false, true })));
+            Assert.AreEqual(1.0, D(cmp)[0]);
+            Assert.IsTrue(M(cmp).SequenceEqual(new[] { false, true }));
+
+            var mat = np.ma.array(np.array(new long[] { 1, 2, 3, 4, 5, 6, 7, 8, 9 }).reshape(3, 3),
+                                  np.array(new[] { false, true, false, false, false, false, false, false, true }).reshape(3, 3));
+            var dg = np.ma.diagonal(mat);
+            Assert.AreEqual(1.0, D(dg)[0]);
+            Assert.AreEqual(5.0, D(dg)[1]);
+            Assert.IsTrue(M(dg).SequenceEqual(new[] { false, false, true }));
+
+            var tr = np.ma.trace(mat);          // 1 + 5 + (masked→0) = 6, float64 (astype(None) quirk)
+            Assert.AreEqual(6.0, tr.GetDouble(0));
+            Assert.AreEqual(np.float64, tr.dtype);
+
+            var nz = np.ma.nonzero(np.ma.array(np.array(new long[] { 0, 1, 0, 2, 3 }), np.array(new[] { false, true, false, false, false })));
+            Assert.IsTrue(nz[0].ToArray<long>().SequenceEqual(new long[] { 3, 4 })); // index 1 (value 1) masked → excluded
+        }
+
+        /// <summary>diff propagates the mask (a window with any masked element is masked); append flattens and
+        /// concatenates, masks aligned.</summary>
+        [TestMethod]
+        public void Diff_And_Append()
+        {
+            var df = np.ma.diff(np.ma.array(np.array(new long[] { 1, 2, 4, 7, 11 }), np.array(new[] { false, true, false, false, false })));
+            Assert.AreEqual(3.0, D(df)[2]);
+            Assert.AreEqual(4.0, D(df)[3]);
+            Assert.IsTrue(M(df).SequenceEqual(new[] { true, true, false, false }));
+
+            var df2 = np.ma.diff(np.ma.array(np.array(new long[] { 1, 2, 4, 7, 11 })), n: 2);
+            Assert.IsTrue(D(df2).SequenceEqual(new double[] { 1, 1, 1 }));
+            Assert.IsFalse(M(df2).Any(v => v));
+
+            var ap = np.ma.append(np.ma.array(np.array(new long[] { 1, 2 }), np.array(new[] { false, true })),
+                                  np.ma.array(np.array(new long[] { 3, 4 }), np.array(new[] { true, false })));
+            Assert.IsTrue(M(ap).SequenceEqual(new[] { false, true, true, false }));
+        }
+
+        /// <summary>sort/argsort endwith=False sends masked entries to the FRONT (filled with the dtype's
+        /// smallest key), the mirror of the endwith=True default.</summary>
+        [TestMethod]
+        public void Sort_Argsort_Endwith()
+        {
+            var s = Ma(new double[] { 3, 1, 2 }, new[] { false, true, false });
+            var sEnd = np.ma.sort(s, endwith: true);
+            Assert.AreEqual(2.0, D(sEnd)[0]);
+            Assert.AreEqual(3.0, D(sEnd)[1]);
+            Assert.IsTrue(M(sEnd).SequenceEqual(new[] { false, false, true }));
+
+            var sFront = np.ma.sort(s, endwith: false);
+            Assert.IsTrue(M(sFront).SequenceEqual(new[] { true, false, false }));
+            Assert.AreEqual(2.0, D(sFront)[1]);
+            Assert.AreEqual(3.0, D(sFront)[2]);
+
+            Assert.IsTrue(np.ma.argsort(s, endwith: false).astype(np.int64).ToArray<long>().SequenceEqual(new long[] { 1, 2, 0 }));
+            Assert.IsTrue(np.ma.argsort(s, endwith: true).astype(np.int64).ToArray<long>().SequenceEqual(new long[] { 2, 0, 1 }));
+        }
+
+        /// <summary>average keepdims keeps the reduced axis; average_returned yields (avg, sum-of-weights) —
+        /// the sum-of-weights being the unmasked count (uniform) or Σweights (weighted).</summary>
+        [TestMethod]
+        public void Average_Keepdims_And_Returned()
+        {
+            var av = np.ma.average(np.ma.array(np.array(new double[,] { { 1, 2 }, { 3, 4 } }), np.array(new bool[,] { { false, true }, { false, false } })),
+                                   axis: 1, keepdims: true);
+            Assert.IsTrue(av.shape.SequenceEqual(new long[] { 2, 1 }));
+            Assert.AreEqual(1.0, av.data.GetDouble(0)); // row0: only col0 unmasked
+            Assert.AreEqual(3.5, av.data.GetDouble(1));
+
+            var (avg, sws) = np.ma.average_returned(Ma(new double[] { 1, 2, 3 }, new[] { false, false, true }));
+            Assert.AreEqual(1.5, avg.data.GetDouble(0));
+            Assert.AreEqual(2.0, sws.GetDouble(0)); // 2 unmasked
+
+            var (avgW, swsW) = np.ma.average_returned(Ma(new double[] { 1, 2, 3 }, new[] { false, false, true }),
+                                                      weights: np.array(new double[] { 1, 2, 3 }));
+            Assert.AreEqual(5.0 / 3.0, avgW.data.GetDouble(0), 1e-12);
+            Assert.AreEqual(3.0, swsW.GetDouble(0)); // 1 + 2 (masked weight dropped)
+        }
+
+        /// <summary>median keepdims on the flat path yields an all-ones shape of the input rank.</summary>
+        [TestMethod]
+        public void Median_Keepdims()
+        {
+            var m = np.ma.median(np.array(new double[] { 1, 2, 3 }), keepdims: true);
+            Assert.IsTrue(m.shape.SequenceEqual(new long[] { 1 }));
+            Assert.AreEqual(2.0, m.data.GetDouble(0));
+        }
+
+        /// <summary>array(dtype=…) casts the data; isin(assume_unique=…) is accepted (result unchanged).</summary>
+        [TestMethod]
+        public void Array_Dtype_And_Isin_AssumeUnique()
+        {
+            Assert.AreEqual(np.float32, np.ma.array(np.array(new double[] { 1, 2, 3 }), np.array(new[] { false, true, false }), dtype: np.float32).dtype);
+            var r = np.ma.isin(Ma(new double[] { 1, 2, 3 }, new[] { false, true, false }), np.array(new double[] { 1, 3 }), assume_unique: true);
+            Assert.IsTrue(np.ma.getdata(r).ToArray<bool>().SequenceEqual(new[] { true, false, true }));
+        }
+
+        /// <summary>The %/&amp;/|/^/~ operators wire to the np.ma.* funcs (mask = OR of operands', division-domain
+        /// for %; invert carries the mask through).</summary>
+        [TestMethod]
+        public void Operators_Modulo_Bitwise_Invert()
+        {
+            MaskedArray L(long[] d, bool[] m) => np.ma.array(np.array(d), np.array(m));
+            var modr = L(new long[] { 7, 8, 9 }, new[] { false, true, false }) % L(new long[] { 3, 5, 2 }, new[] { false, false, true });
+            Assert.AreEqual(1.0, D(modr)[0]);
+            Assert.IsTrue(M(modr).SequenceEqual(new[] { false, true, true }));
+
+            var andr = L(new long[] { 6, 7 }, new[] { false, true }) & L(new long[] { 3, 5 }, new[] { false, false });
+            Assert.AreEqual(2.0, D(andr)[0]);
+            Assert.IsTrue(M(andr).SequenceEqual(new[] { false, true }));
+
+            var orr = L(new long[] { 6, 7 }, new[] { false, true }) | L(new long[] { 1, 8 }, new[] { false, false });
+            Assert.AreEqual(7.0, D(orr)[0]);
+
+            var xorr = L(new long[] { 6, 7 }, new[] { false, true }) ^ L(new long[] { 3, 5 }, new[] { false, false });
+            Assert.AreEqual(5.0, D(xorr)[0]);
+
+            var inv = ~L(new long[] { 6, 7 }, new[] { false, true });
+            Assert.AreEqual(-7.0, D(inv)[0]);
+            Assert.IsTrue(M(inv).SequenceEqual(new[] { false, true }));
+        }
+
+        /// <summary>Instance surface: compressed/ravel/reshape/T/clip/round/item/real/imag mirror the module
+        /// funcs; item on a masked singleton returns the masked constant.</summary>
+        [TestMethod]
+        public void InstanceSurface_WiresThrough()
+        {
+            var inst = Ma(new double[] { 1, 2, 3, 4 }, new[] { false, true, false, true });
+            Assert.IsTrue(inst.compressed().astype(np.float64).ToArray<double>().SequenceEqual(new double[] { 1, 3 }));
+            Assert.AreEqual(4L, inst.ravel().size);
+            Assert.IsTrue(inst.reshape(2, 2).shape.SequenceEqual(new long[] { 2, 2 }));
+
+            var mat = np.ma.array(np.array(new double[,] { { 1, 2 }, { 3, 4 } }), np.array(new bool[,] { { false, true }, { false, false } }));
+            Assert.IsTrue(np.ma.getmaskarray(mat.T).ToArray<bool>().SequenceEqual(new[] { false, false, true, false }));
+
+            Assert.AreEqual(4, D(inst.clip(2, 3)).Length);
+            Assert.AreEqual(4L, inst.round().size);
+
+            Assert.IsTrue(ReferenceEquals(np.ma.array(np.array(new double[] { 5 }), np.array(new[] { true })).item(), np.ma.masked));
+            Assert.AreEqual(5.0, Convert.ToDouble(np.ma.array(np.array(new double[] { 5 }), np.array(new[] { false })).item()));
+
+            var cplx = np.ma.array(np.array(new System.Numerics.Complex[] { new System.Numerics.Complex(1, 2), new System.Numerics.Complex(3, 4) }), np.array(new[] { false, true }));
+            Assert.IsTrue(cplx.real.data.astype(np.float64).ToArray<double>().SequenceEqual(new double[] { 1, 3 }));
+            Assert.IsTrue(cplx.imag.data.astype(np.float64).ToArray<double>().SequenceEqual(new double[] { 2, 4 }));
+        }
     }
 }
