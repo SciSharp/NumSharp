@@ -527,6 +527,17 @@ per-element work the equivalent `np.*` does; fusion still removes the intermedia
 - **Multi-way/interp**: `Bucketize` (np.digitize; sums INTEGER `Where(…,1,0)`, since `bool+bool` is
   logical OR, not a count), `Median3` (branch-free), `Threshold`, `Lerp`.
 
+**ML hot path (float32) is fully vectorized** (verified by disassembling the vector body). On a
+float32 array `Relu`/`LeakyRelu`/`HardSigmoid`/`Step` are PURE hardware intrinsics (`Avx.Max`/`Min`/
+`Add`/`Mul` + `Vector256.ConditionalSelect`/`GreaterThan` — one machine instruction each, no real
+call), and `Sigmoid`/`Swish`/`Elu`/`Softplus`/`Gelu` are hardware intrinsics plus ONE call per 8-lane
+group into the NumPy-ported `NDFloatMath.Exp`/`Log`/`Tanh` SIMD kernel (the same per-group approach
+NumPy uses). To keep it that way, `Elu` is composed over `exp(x)-1` (NOT `expm1`) and `Softplus` over
+`log(1+…)` (NOT `log1p`): `expm1`/`log1p` have no SIMD emit, so a single such node would force the
+whole activation onto the per-ELEMENT scalar path (bounded, documented precision give-up per method).
+The remaining `call` — a scalar `Math.Exp`/`Log`/`Tanh` on a **float64** activation — is a dtype
+limit, not this item's: no bit-exact vector f64 transcendental exists, and NumPy is scalar there too.
+
 **Deliberately deferred to P4**, NOT composed here so they never collide when P4 adds them as
 first-class (vectorizable) ufunc nodes: `fmax`/`fmin`, `copysign`, `nextafter`, `logaddexp`, the
 shifts, and the `np.select`/`np.clip` nodes (which is why the multi-way selector is named `Switch`
