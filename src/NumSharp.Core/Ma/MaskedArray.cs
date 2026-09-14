@@ -418,15 +418,17 @@ namespace NumSharp
 
         /// <summary>Remove size-1 axes (mask squeezed alike).</summary>
         /// <returns>The squeezed masked array.</returns>
-        public MaskedArray squeeze() => np.ma.squeeze(this);
+        public MaskedArray squeeze(int? axis = null) => np.ma.squeeze(this, axis);
 
         /// <summary>Repeat elements (mask repeated alike, so repeated masked entries stay masked).</summary>
         /// <param name="repeats">Repeat count.</param><param name="axis">Axis or null (flatten).</param><returns>The masked array.</returns>
         public MaskedArray repeat(int repeats, int? axis = null) => np.ma.repeat(this, repeats, axis);
 
         /// <summary>Gather elements by index (mask gathered alike, so a taken element keeps its masked-ness).</summary>
-        /// <param name="indices">Integer index array.</param><param name="axis">Axis or null.</param><returns>The masked array.</returns>
-        public MaskedArray take(NDArray indices, int? axis = null) => np.ma.take(this, indices, axis);
+        /// <param name="indices">Integer index array.</param><param name="axis">Axis or null.</param>
+        /// <param name="mode">Out-of-bounds policy: "raise" (default)/"wrap"/"clip".</param>
+        /// <returns>The masked array.</returns>
+        public MaskedArray take(NDArray indices, int? axis = null, string mode = "raise") => np.ma.take(this, indices, axis, mode);
 
         /// <summary>The 1-D array of the UNMASKED values in C-order (NumPy's <c>MaskedArray.compressed</c>) —
         /// a plain <see cref="NDArray"/>, since a compressed result has no mask.</summary>
@@ -472,9 +474,13 @@ namespace NumSharp
         /// <returns>A masked array of conj(data).</returns>
         public MaskedArray conjugate() => np.ma.conjugate(this);
 
-        /// <summary>Dot product with masked slots treated as 0 (NumPy's <c>MaskedArray.dot</c>).</summary>
-        /// <param name="b">Right operand.</param><returns>The masked dot product.</returns>
-        public MaskedArray dot(object b) => np.ma.dot(this, b);
+        /// <summary>Dot product with masked slots treated as 0 (NumPy's <c>MaskedArray.dot</c>); with
+        /// <paramref name="strict"/> the mask is propagated along the contracted axes first (see
+        /// <see cref="MaskedArrayModule.dot(object,object,bool)"/>).</summary>
+        /// <param name="b">Right operand.</param>
+        /// <param name="strict">Propagate masks along the contracted axes before the product (default false).</param>
+        /// <returns>The masked dot product.</returns>
+        public MaskedArray dot(object b, bool strict = false) => np.ma.dot(this, b, strict);
 
         /// <summary>Extracts the <paramref name="offset"/>-th diagonal (mask alike); NumPy's <c>MaskedArray.diagonal</c>.</summary>
         /// <param name="offset">Diagonal offset (0 = main).</param><param name="axis1">First plane axis.</param><param name="axis2">Second plane axis.</param>
@@ -1311,6 +1317,28 @@ namespace NumSharp
             if (x is null) return y;
             if (y is null) return x;
             return x | y;
+        }
+
+        /// <summary>
+        ///     Masks every 1-D vector of <paramref name="a"/> along <paramref name="axis"/> that contains ANY
+        ///     masked value (NumPy's <c>_mask_propagate</c>): the mask is OR'd with its own <c>any(axis)</c>
+        ///     reduction broadcast back, so a single masked entry taints the whole line. Used by the strict
+        ///     <see cref="dot(object,object,bool)"/> path. An operand with no mask (or none set along the axis)
+        ///     is returned unchanged.
+        /// </summary>
+        /// <param name="a">Operand (masked array or plain array-like).</param>
+        /// <param name="axis">The axis whose lines are tainted wholesale by any masked element.</param>
+        /// <returns>A masked array whose mask has been propagated along <paramref name="axis"/>.</returns>
+        private MaskedArray MaskPropagate(object a, int axis)
+        {
+            var ma_ = array(a);
+            var m = ma_._mask;
+            if (m is null || !np.any(m))
+                return ma_;
+            // any(m, axis, keepdims) has size 1 on `axis`; broadcasting it back and OR-ing taints the whole line.
+            var line = np.any(m, axis, null, true);
+            var newmask = np.logical_or(m, np.broadcast_to(line, m.Shape));
+            return new MaskedArray(ma_._data, newmask);
         }
 
         /// <summary>
@@ -2514,9 +2542,14 @@ namespace NumSharp
         /// <param name="a">Operand.</param><param name="source">Source axis.</param><param name="destination">Destination axis.</param><returns>The masked array.</returns>
         public MaskedArray moveaxis(object a, int source, int destination) => Map1(a, d => np.moveaxis(d, source, destination));
 
-        /// <summary>Remove size-1 axes (mask squeezed alike).</summary>
-        /// <param name="a">Operand.</param><returns>The squeezed masked array.</returns>
-        public MaskedArray squeeze(object a) => Map1(a, d => np.squeeze(d));
+        /// <summary>Remove size-1 axes (mask squeezed alike). With <paramref name="axis"/> null EVERY size-1 axis
+        /// is dropped; an explicit axis drops ONLY that one (and errors if it is not size 1, via
+        /// <see cref="np.squeeze(NDArray,int)"/>) — NumPy's <c>squeeze(axis=…)</c>.</summary>
+        /// <param name="a">Operand.</param>
+        /// <param name="axis">The single size-1 axis to drop, or null to drop all size-1 axes.</param>
+        /// <returns>The squeezed masked array.</returns>
+        public MaskedArray squeeze(object a, int? axis = null)
+            => Map1(a, d => axis is null ? np.squeeze(d) : np.squeeze(d, axis.Value));
 
         /// <summary>Insert a size-1 axis at <paramref name="axis"/> (mask expanded alike).</summary>
         /// <param name="a">Operand.</param><param name="axis">Axis position.</param><returns>The masked array.</returns>
@@ -2526,9 +2559,15 @@ namespace NumSharp
         /// <param name="a">Operand.</param><param name="repeats">Repeat count.</param><param name="axis">Axis or null (flatten).</param><returns>The masked array.</returns>
         public MaskedArray repeat(object a, int repeats, int? axis = null) => Map1(a, d => np.repeat(d, repeats, axis));
 
-        /// <summary>Gather elements by index (mask gathered alike, so a taken element keeps its masked-ness).</summary>
-        /// <param name="a">Operand.</param><param name="indices">Integer index array.</param><param name="axis">Axis or null.</param><returns>The masked array.</returns>
-        public MaskedArray take(object a, NDArray indices, int? axis = null) => Map1(a, d => np.take(d, indices, axis));
+        /// <summary>Gather elements by index (mask gathered alike, so a taken element keeps its masked-ness).
+        /// <paramref name="mode"/> selects the out-of-bounds policy ("raise"/"wrap"/"clip"), applied identically
+        /// to the data and the mask gather so they stay aligned — NumPy's <c>ma.take(..., mode=…)</c>.</summary>
+        /// <param name="a">Operand.</param><param name="indices">Integer index array.</param>
+        /// <param name="axis">Axis or null.</param>
+        /// <param name="mode">Out-of-bounds policy: "raise" (default)/"wrap"/"clip".</param>
+        /// <returns>The masked array.</returns>
+        public MaskedArray take(object a, NDArray indices, int? axis = null, string mode = "raise")
+            => Map1(a, d => np.take(d, indices, axis, null, mode));
 
         /// <summary>Diagonal: 1-D input CONSTRUCTS a matrix with the values (and mask) on the k-th diagonal;
         /// 2-D input EXTRACTS the k-th diagonal (and its mask). NumPy's <c>ma.diag</c>.</summary>
@@ -2829,13 +2868,13 @@ namespace NumSharp
             return (Finalize(avg, newmask), sclW);
         }
 
-        /// <summary>Median over unmasked elements (NumPy's <c>median</c>). Supports the flat case and the
-        /// unmasked-axis case; a masked array with an explicit axis needs the masked sort core and is not yet
-        /// implemented.</summary>
+        /// <summary>Median over unmasked elements (NumPy's <c>median</c>). Supports the flat case, the
+        /// unmasked-axis case, AND a masked array with an explicit axis (the per-slice masked median — the axis is
+        /// masked-sorted, then the low/high middle of each slice's unmasked count is averaged).</summary>
         /// <param name="a">Data.</param><param name="axis">Axis or null (flatten).</param>
         /// <param name="keepdims">Keep the reduced axes as size-1 (NumPy 2.0 <c>keepdims</c>).</param>
-        /// <returns>The masked median.</returns>
-        /// <exception cref="NotSupportedException">A MASKED array with an explicit <paramref name="axis"/>.</exception>
+        /// <returns>The masked median (a slice with no unmasked element is <see cref="masked"/>; an unmasked NaN in
+        /// a slice makes that slice's median NaN, matching NumPy).</returns>
         public MaskedArray median(object a, int? axis = null, bool keepdims = false)
         {
             var mask = (a as MaskedArray)?._mask;
@@ -2853,9 +2892,117 @@ namespace NumSharp
                     med = np.reshape(med, new Shape(Enumerable.Repeat(1L, d.ndim).ToArray()));
                 return new MaskedArray(med, null);
             }
-            throw new NotSupportedException(
-                "np.ma.median with an explicit axis on a MASKED array is not yet implemented (requires the masked sort core); flat and unmasked-axis medians are supported.");
+            return MedianAxisMasked((MaskedArray)a, axis.Value, keepdims);
         }
+
+        /// <summary>
+        ///     Per-slice median of a MASKED array along an explicit axis — a port of NumPy's
+        ///     <c>numpy.ma.extras._median</c> (the axis branch). Masked entries are sorted BEHIND the valid ones
+        ///     (so they never win the middle), the low/high middle indices are derived from each slice's UNMASKED
+        ///     count, and the two middles are averaged; an all-masked slice stays masked, and an unmasked NaN
+        ///     (which sorts even past the fill value) forces that slice's median to NaN.
+        /// </summary>
+        /// <param name="self">The masked operand (guaranteed to carry a mask by the caller).</param>
+        /// <param name="axis">The reduction axis (may be negative).</param>
+        /// <param name="keepdims">Re-insert the reduced axis as size 1.</param>
+        /// <returns>The per-slice masked median.</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range for the operand's rank.</exception>
+        private MaskedArray MedianAxisMasked(MaskedArray self, int axis, bool keepdims)
+        {
+            NDArray data = self._data;
+            int nd = data.ndim;
+            int ax = axis < 0 ? axis + nd : axis;
+            if (ax < 0 || ax >= nd)
+                throw new AxisError(axis, nd); // report the ORIGINAL axis, NumPy-style
+
+            // Masked entries sort to the END (endwith default → minimum_fill_value key = +inf for float, dtype-max
+            // for int), reproducing NumPy's fill_value=inf/None so a masked slot can never be picked as a middle.
+            MaskedArray asorted = sort(self, ax);
+            NDArray sdata = asorted._data;
+            NDArray smask = asorted._mask;
+
+            // Empty reduced axis: the median of an empty slice is NaN (NumPy takes the mean of the 0-length slice).
+            if (sdata.shape[ax] == 0)
+                return mean(asorted, ax, null, keepdims);
+
+            bool inexact = IsInexact(data.typecode);
+
+            // Middle indices from each slice's UNMASKED count (keepdims so they broadcast along `ax`). Integer
+            // floor-division/modulo are spelled explicitly — `/` on an int NDArray is TRUE division here.
+            NDArray counts = CountUnmasked(smask, sdata.Shape, ax, true);
+            NDArray two = NDArray.Scalar(2L);
+            NDArray h = np.floor_divide(counts, two);                          // counts // 2
+            NDArray odd = np.equal(np.remainder(counts, two), NDArray.Scalar(1L));
+            NDArray l = np.where(odd, h, np.subtract(h, NDArray.Scalar(1L)));  // odd → h, even → h-1
+            NDArray lh = np.concatenate(new[] { l, h }, ax);                   // the two middles, size 2 along `ax`
+
+            NDArray lhData = np.take_along_axis(sdata, lh, ax);
+            NDArray lhMask = smask is null ? null : np.take_along_axis(smask, lh, ax);
+
+            // replace_masked: a gathered middle can still be masked when a real value sorted past the fill value
+            // (e.g. [4, --, inf]). Where that happens AND the slice is not all-masked, substitute the fill value
+            // and unmask so a valid median is produced; an all-masked slice is left masked.
+            if (lhMask is not null && np.any(lhMask))
+            {
+                NDArray notAll = np.logical_not(np.all(smask, ax, null, true));
+                NDArray rep = np.logical_and(np.broadcast_to(notAll, lhMask.Shape), lhMask);
+                if (np.any(rep))
+                {
+                    np.copyto(lhData, NDArray.Scalar(minimum_fill_value(asorted)), casting: "unsafe", where: rep);
+                    np.copyto(lhMask, NDArray.Scalar(false), casting: "unsafe", where: rep);
+                }
+            }
+
+            var lowHigh = new MaskedArray(lhData, lhMask);
+
+            // Average the two middles across `ax`. Inexact: sum then /2 (avoids the masked inf/x pitfall) plus the
+            // NaN-propagation check; integer/bool: a straight mean (which widens to float64 like NumPy).
+            MaskedArray s;
+            if (inexact)
+            {
+                s = sum(lowHigh, ax);
+                s = new MaskedArray(np.true_divide(s._data, NDArray.Scalar(2.0)), s._mask);
+                s = MedianNanCheck(sdata, s, ax);
+            }
+            else
+            {
+                s = mean(lowHigh, ax);
+            }
+
+            if (keepdims)
+                s = new MaskedArray(np.expand_dims(s._data, ax), s._mask is null ? null : np.expand_dims(s._mask, ax));
+            return s;
+        }
+
+        /// <summary>
+        ///     Forces a slice's median to NaN when the SORTED slice ends in an unmasked NaN (NumPy's
+        ///     <c>_median_nancheck</c>): masked entries were sorted behind the fill value, but a real NaN sorts
+        ///     even further, so the last element along <paramref name="axis"/> being NaN means an unmasked NaN was
+        ///     present and the median is undefined.
+        /// </summary>
+        /// <param name="sortedData">The masked-sorted data (masked entries and NaNs pushed to the tail).</param>
+        /// <param name="result">The computed per-slice median.</param>
+        /// <param name="axis">The reduced axis of <paramref name="sortedData"/>.</param>
+        /// <returns><paramref name="result"/> with NaN copied into the slices whose sorted tail is NaN.</returns>
+        private MaskedArray MedianNanCheck(NDArray sortedData, MaskedArray result, int axis)
+        {
+            if (sortedData.size == 0)
+                return result;
+            NDArray potentialNans = np.take(sortedData, -1L, axis); // last element along axis → axis removed
+            NDArray n = np.isnan(potentialNans);
+            if (!np.any(n))
+                return result;
+            NDArray rd = result._data.copy();
+            np.copyto(rd, potentialNans, casting: "unsafe", where: n);
+            return new MaskedArray(rd, result._mask);
+        }
+
+        /// <summary>True for the inexact (float/complex) dtypes, where median averages in floating point and the
+        /// NaN-propagation check applies; false for the exact integer/bool dtypes.</summary>
+        /// <param name="tc">The element type code.</param>
+        /// <returns>Whether <paramref name="tc"/> is Half/Single/Double/Complex.</returns>
+        private static bool IsInexact(NPTypeCode tc)
+            => tc is NPTypeCode.Half or NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Complex;
 
         /// <summary>Differences between consecutive UNMASKED-aware elements of the flattened input (NumPy's
         /// <c>ediff1d</c>), optionally bracketed by <paramref name="to_begin"/>/<paramref name="to_end"/>.</summary>
@@ -2906,11 +3053,27 @@ namespace NumSharp
         }
 
         /// <summary>Dot product with masked slots treated as 0; a result element is masked only if NO valid
-        /// (both-unmasked) term contributed to it (NumPy's <c>ma.dot</c>, strict=False).</summary>
+        /// (both-unmasked) term contributed to it (NumPy's <c>ma.dot</c>). With <paramref name="strict"/> the
+        /// mask is PROPAGATED first — any masked value in a contracted row/column masks that whole vector — so a
+        /// result element is masked whenever a masked value touched it (NumPy's <c>strict=True</c>).</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
+        /// <param name="strict">Propagate masks along the contracted axes before the product (default false =
+        /// treat masked as 0).</param>
         /// <returns>The masked dot product.</returns>
-        public MaskedArray dot(object a, object b)
+        public MaskedArray dot(object a, object b, bool strict = false)
         {
+            if (strict)
+            {
+                // Propagate the mask along the axes being contracted, mirroring NumPy's ma.dot: for a matrix @
+                // matrix that is a's last axis and b's second-to-last; for a matrix @ vector, b's last axis;
+                // scalars have no axis to propagate along.
+                int nda = AsData(a).ndim, ndb = AsData(b).ndim;
+                if (nda != 0 && ndb != 0)
+                {
+                    a = MaskPropagate(a, nda - 1);
+                    b = MaskPropagate(b, ndb == 1 ? ndb - 1 : ndb - 2);
+                }
+            }
             var product = np.dot(Filled0(a), Filled0(b));
             var ma_ = (a as MaskedArray)?._mask;
             var mb_ = (b as MaskedArray)?._mask;
@@ -2962,6 +3125,76 @@ namespace NumSharp
                 np.copyto(v, NDArray.Scalar(0), casting: "unsafe", where: np.broadcast_to(col, v.Shape));
             }
             return v;
+        }
+
+        /// <summary>
+        ///     Least-squares polynomial fit that DROPS masked observations first (NumPy's <c>ma.polyfit</c>):
+        ///     a masked <paramref name="x"/> or <paramref name="w"/> entry — or, for 2-D <paramref name="y"/>, a
+        ///     masked entry ANYWHERE in a row — removes that whole observation, and the surviving
+        ///     <c>(x, y[, w])</c> rows are handed to <see cref="np.polyfit(NDArray,NDArray,int,double?,bool,NDArray,object)"/>.
+        ///     Because it composes on <see cref="np.polyfit(NDArray,NDArray,int,double?,bool,NDArray,object)"/> —
+        ///     which solves through <c>np.linalg.lstsq</c> — it inherits that method's backend requirement: with
+        ///     no LAPACK-capable BLAS installed it throws exactly as <c>np.polyfit</c> does (an
+        ///     <c>OpenBlasMissingBackendException</c>), never a silently-wrong fit. The coefficients are PLAIN
+        ///     arrays, as in NumPy (the masked rows are gone, so nothing in the result is masked).
+        /// </summary>
+        /// <param name="x">x-coordinates, shape <c>(M,)</c>; a masked entry drops its observation.</param>
+        /// <param name="y">y-coordinates, shape <c>(M,)</c> or <c>(M, K)</c>; for 2-D <paramref name="y"/> a masked
+        /// entry anywhere in a row drops that row (NumPy's <c>mask_rows</c> reduction).</param>
+        /// <param name="deg">Degree of the fitting polynomial.</param>
+        /// <param name="rcond">Relative condition number (null ⇒ <c>len(x)·eps</c>), forwarded to <c>np.polyfit</c>.</param>
+        /// <param name="full">When true the <see cref="PolyfitResult"/> also carries the SVD diagnostics.</param>
+        /// <param name="w">Optional weights, shape <c>(M,)</c>; a masked entry drops its observation.</param>
+        /// <param name="cov">null/false, true, or the string <c>"unscaled"</c> — forwarded to <c>np.polyfit</c>'s
+        /// covariance return.</param>
+        /// <returns>The <see cref="PolyfitResult"/> of the fit over the UNMASKED observations; it converts
+        /// implicitly to the coefficient array and deconstructs to the <c>full</c>/<c>cov</c> tuples.</returns>
+        /// <exception cref="TypeError"><paramref name="y"/> is not 1-D or 2-D, or <paramref name="w"/> is not 1-D
+        /// or has a length differing from <paramref name="y"/> (NumPy's verbatim texts).</exception>
+        public PolyfitResult polyfit(object x, object y, int deg, double? rcond = null,
+            bool full = false, object w = null, object cov = null)
+        {
+            NDArray xd = AsData(x);
+            NDArray yd = AsData(y);
+
+            // Union every operand's mask into ONE per-observation mask (null = nothing masked). For 2-D y a masked
+            // element masks its whole ROW (NumPy's mask_rows), so reduce y's mask across columns to one bit/row.
+            NDArray m = (x as MaskedArray)?._mask;
+            if (yd.ndim == 1)
+                m = Or(m, (y as MaskedArray)?._mask);
+            else if (yd.ndim == 2)
+            {
+                NDArray ymask = (y as MaskedArray)?._mask;
+                if (ymask is not null)
+                    m = Or(m, np.any(ymask, 1, null, false)); // (M,) — True where any column of the row is masked
+            }
+            else
+                throw new TypeError("Expected a 1D or 2D array for y!");
+
+            if (w is not null)
+            {
+                NDArray wcheck = AsData(w);
+                if (wcheck.ndim != 1)
+                    throw new TypeError("expected a 1-d array for weights");
+                if (wcheck.shape[0] != yd.shape[0])
+                    throw new TypeError("expected w and y to have the same length");
+                m = Or(m, (w as MaskedArray)?._mask);
+            }
+
+            NDArray wd = w is null ? null : AsData(w);
+
+            // With any observation masked, keep only the unmasked rows (a boolean row-index selects them on
+            // every operand) before delegating; otherwise hand the data straight through. The selected rows are
+            // all unmasked, so their DATA is exactly the values NumPy's `x[~m]` would carry.
+            if (m is not null && np.any(m))
+            {
+                NDArray keep = np.logical_not(m);
+                NDArray xs = xd[keep];
+                NDArray ys = yd[keep];
+                NDArray ws = wd is null ? null : wd[keep];
+                return np.polyfit(xs, ys, deg, rcond, full, ws, cov);
+            }
+            return np.polyfit(xd, yd, deg, rcond, full, wd, cov);
         }
 
         /// <summary>Element-wise membership test (NumPy's <c>ma.isin</c>): True where <paramref name="element"/>'s
