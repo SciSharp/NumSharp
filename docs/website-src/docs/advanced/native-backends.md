@@ -4,6 +4,8 @@ NumPy's advanced section includes **F2PY**, the tool that bridges Python to comp
 
 This page explains that seam — `IBlasBackend` on `TensorEngine.Blas` — the flagship backend that uses it, and how to write your own.
 
+<!-- Tests: NumSharp.Tests.Documentation.AdvancedNativeBackendsDocTests — the backend-INDEPENDENT code examples on this page are asserted in test/NumSharp.Tests/Documentation/AdvancedNativeBackendsDocTests.cs (integer products compute bit-exact; the LU family computes). The OpenBLAS-specific claims (byte-identical products with a backend; a factorisation raising NotSupportedException without one) depend on the global TensorEngine.Blas state and are gated by LinAlgEngineSeamTests + the NumSharp.Interop.OpenBLAS test project — see interop/openblas.md. -->
+
 ---
 
 ## The default: 100% managed, no native anything

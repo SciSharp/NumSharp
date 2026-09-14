@@ -6,6 +6,31 @@ This is the on-ramp. Each topic here has a deeper companion in [Fundamentals and
 
 > **The one thing to know up front:** C# has no `a[1:5]` slice syntax, so NumSharp writes slices as **strings** — `a["1:5"]`. Whole-number coordinates stay normal: `a[1, 3]`. That's the biggest surface difference from NumPy; everything else is close.
 
+<!-- Tests: NumSharp.Tests.Documentation.AbsoluteBasicsDocTests — every code example on this page is executed and asserted in test/NumSharp.Tests/Documentation/AbsoluteBasicsDocTests.cs. Section → method:
+     Array fundamentals → Fundamentals_CreateIndexMutateSliceView
+     Array attributes → Attributes_NdimShapeSizeDtype
+     How to create a basic array → Create_ZerosOnesEmptyArangeLinspace
+     Adding, removing, and sorting → SortAndConcatenate
+     How do you know the shape and size (3-D) → ShapeSizeNdim_3D
+     Can you reshape an array → Reshape
+     Convert 1D to 2D (newaxis/expand_dims) → NewAxis_RowAndColumn
+     Indexing and slicing (boolean/nonzero) → BooleanMasksAndNonzero
+     Create from existing data (stack/split/view/copy) → Stack_Split_ViewCopy
+     Basic array operations → BasicOps_And_SumAxis
+     Broadcasting → Broadcasting_Scalar
+     More useful array operations → Aggregations_WithAxis
+     Creating matrices → Matrices_IndexAggregateBroadcast
+     Generating random numbers → Random_SeededDeterministic
+     Unique items and counts → Unique_ValuesIndexCounts_And_Axis
+     Transposing → TransposeAndT
+     Reversing an array (flip) → Flip_And_InPlaceColumn
+     Reshaping and flattening → FlattenIsCopy_RavelIsView
+     Working with mathematical formulas → MseFormula
+     Save and load → SaveLoad_Npy_And_Text
+     Importing and exporting a CSV → SaveTxt_WithFmtDelimiterHeader
+     Plotting arrays → ToArray_ForPlotting
+     (How to reference NumSharp, Why NumSharp, What is an array, Reading examples, Getting help: no executable code.) -->
+
 ---
 
 ## How to reference NumSharp
@@ -26,7 +51,7 @@ Examples show a C# expression followed by its result in a comment:
 
 ```csharp
 var a = np.array(new[,] { { 1, 2, 3 }, { 4, 5, 6 } });
-a.shape;    // (2, 3) → int[] { 2, 3 }
+a.shape;    // (2, 3) → long[] { 2, 3 }
 ```
 
 Run them in a `dotnet run` file-based app, LINQPad, a console project, or a C# notebook. The `// →`/`//` text is the output, not code.
@@ -122,7 +147,7 @@ a[1, 3];        // a 0-D array printing 8
 var a = np.array(new[,] { { 1, 2, 3, 4 }, { 5, 6, 7, 8 }, { 9, 10, 11, 12 } });
 
 a.ndim;    // 2      number of axes
-a.shape;   // (3, 4) → int[] { 3, 4 }
+a.shape;   // (3, 4) → long[] { 3, 4 }
 a.size;    // 12     total number of elements (product of the shape)
 a.dtype;   // int32
 ```
@@ -194,7 +219,7 @@ To *remove* elements, index the ones you want to keep (see [Indexing](#indexing-
 
 - `arr.ndim` — the number of axes.
 - `arr.size` — the total number of elements (product of the shape).
-- `arr.shape` — an `int[]` of the element count along each axis.
+- `arr.shape` — a `long[]` of the element count along each axis.
 
 ```csharp
 var example = np.array(new[,,] {
@@ -373,7 +398,7 @@ var ones = np.ones(2, np.int32);
 data + ones;   // [2 3]
 data - ones;   // [0 1]
 data * data;   // [1 4]
-data / data;   // [1 1]
+data / data;   // [1. 1.]   (/ is true division → float64, matching NumPy)
 ```
 
 Aggregate with `sum` (works for any rank), as an instance method or `np.sum`:

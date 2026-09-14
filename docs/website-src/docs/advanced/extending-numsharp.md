@@ -4,6 +4,13 @@ NumPy is extended through its **C-API**: you write a C extension module to creat
 
 This page maps the extension seams along two axes: the **API surface** — add your own `np.*` functions and `NDArray` methods with C# 14 extension members — and the **computation** — custom kernels, fused ops, or a replacement backend. Each seam has a dedicated deep-dive; this is the map.
 
+<!-- Tests: NumSharp.Tests.Documentation.AdvancedExtendingDocTests — the executable code examples on this page are asserted in test/NumSharp.Tests/Documentation/AdvancedExtendingDocTests.cs. Section → method:
+     API surface (C# 14 extension members) → CSharp14_ExtensionMembers_ExtendNpAndNDArray (net10.0 only)
+     1. Write your own element loop → TypedIteration_NditerAndChunks; Unsafe_SpanAndPointer
+     2. Compose a custom op with np.evaluate → FusedExpressions_Evaluate
+     7. Turn on threaded kernels → Multithreading_Toggle
+     (Sections 3-6 — NDIter / IL generation / the backend seam / NumSharp.Build — are conceptual or covered by the NDIter, il-generation and numsharp-build-compiler pages.) -->
+
 ---
 
 ## The seams at a glance

@@ -4,6 +4,14 @@ This is a low-level look at how an `NDArray` is built, for people extending NumS
 
 For the gentle version of this, read [Introduction](../intro.md) first; for the memory-lifetime mechanics, [Buffering & Memory](../buffering.md).
 
+<!-- Tests: NumSharp.Tests.Documentation.AdvancedUnderTheHoodDocTests — the executable code examples on this page are asserted in test/NumSharp.Tests/Documentation/AdvancedUnderTheHoodDocTests.cs. Section → method:
+     Views: metadata-only reinterpretation → Views_AreMetadataOnly_ShareBuffer
+     Strides: Shape.Strides (elements) vs nd.strides (bytes) → Strides_BytesVsElements
+     ArrayFlags (O(1) reads) → Flags_AreO1_ContiguityTracked
+     Broadcast views are read-only → BroadcastView_IsReadOnly
+     Inspecting the internals + @base/shares_memory → Inspection_PublicMetadata; Base_And_SharesMemory
+     (The two-components and indexing-order sections are prose.) -->
+
 ---
 
 ## The two components
@@ -73,14 +81,14 @@ Cached at construction, mirroring NumPy's `ndarraytypes.h`:
 
 So `Shape.IsContiguous`, `IsFContiguous`, `IsBroadcasted`, `IsWriteable`, `IsSliced`, `IsSimpleSlice` are all **O(1)** flag reads, not walks.
 
-### Strides: elements internally, bytes publicly ⚠️
+### Strides: `Shape.Strides` counts elements, `nd.strides` counts bytes ⚠️
 
-This is the one internals detail that bites: the **internal `Shape.strides` are in ELEMENTS**, but the **public `ndarray.strides` property is in BYTES** — matching NumPy's `ndarray.strides`:
+This is the one detail that bites: there are **two** stride properties, in **different units**. `nd.strides` (the NumPy-facing property) is in **BYTES**, matching NumPy's `ndarray.strides`; `nd.Shape.Strides` is in **ELEMENTS**:
 
 ```csharp
 var a = np.arange(24).reshape(4, 6).astype(np.float64);
-a.strides;          // [48, 8]   ← BYTES  (public, NumPy-parity)
-a.Shape.strides;    // [6, 1]    ← ELEMENTS (internal)
+a.strides;          // [48, 8]   ← BYTES    (public, NumPy-parity)
+a.Shape.Strides;    // [6, 1]    ← ELEMENTS (public)
 ```
 
 When you write a backend or a kernel and read `a.Shape.Strides`, they are element counts — multiply by `itemsize` to get bytes (NumPy's C-API gives you bytes directly). Getting this wrong is the classic off-by-`itemsize` bug.
@@ -132,19 +140,18 @@ Everything the [Extending NumSharp](extending-numsharp.md) seams expose is built
 
 ## Inspecting the internals
 
-From a `dotnet run` script (with the internals-visible signing directives) you can read the raw metadata:
+`Shape` exposes the raw metadata through public properties, so you can read it with no special access:
 
 ```csharp
-a.Shape.dimensions;   // long[] dimension sizes
-a.Shape.strides;      // long[] strides in ELEMENTS (0 = broadcast)
-a.Shape.offset;       // base offset into storage
-a.Shape.bufferSize;   // underlying buffer element count
+a.Shape.Dimensions;   // long[] dimension sizes
+a.Shape.Strides;      // long[] strides in ELEMENTS (0 = broadcast)
+a.Shape.Offset;       // base offset into storage
+a.Shape.BufferSize;   // underlying buffer element count
 a.Shape.IsContiguous; // O(1) flag
-a.Storage.IsView;     // is this a view?
-a.@base;              // owning array, or null
+a.@base;              // owning array, or null (view detection)
 
-// public (no internals access needed):
-a.shape; a.strides;   // strides in BYTES (NumPy parity)
+// the NumPy-facing surface:
+a.shape; a.strides;   // shape is long[]; strides in BYTES (NumPy parity)
 a.ndim; a.size; a.dtype;
 ```
 
@@ -170,10 +177,10 @@ A view still holds the shared, refcounted block. The buffer frees on the *last* 
 | `NDArray.Storage` (`UnmanagedStorage`) | the unmanaged data buffer + refcounted block |
 | `NDArray.Shape` (`readonly struct`) | dimensions, strides (elements), offset, flags, size |
 | `NDArray.strides` | strides in **bytes** (public, NumPy parity) |
-| `Shape.strides` | strides in **elements** (internal) |
+| `Shape.Strides` | strides in **elements** (public) |
 | `Shape.{IsContiguous,IsFContiguous,IsBroadcasted,IsWriteable,IsSliced}` | O(1) `ArrayFlags` reads |
 | `ArrayFlags` | `C_CONTIGUOUS`/`F_CONTIGUOUS`/`OWNDATA`/`ALIGNED`/`WRITEABLE`/`BROADCASTED` |
-| `NDArray.@base` / `Storage.IsView` | view detection |
+| `NDArray.@base` / `np.shares_memory` | view detection |
 
 ---
 

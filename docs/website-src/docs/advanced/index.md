@@ -4,6 +4,8 @@ These pages are the NumSharp counterparts of NumPy's [*Advanced usage and intero
 
 If the [Fundamentals](../fundamentals/index.md) pages are about *using* `NDArray`, these are about *extending* it, *understanding* it, and *connecting* it.
 
+<!-- Tests: this landing page has no executable code. Each article's snippets are covered by its own NumSharp.Tests.Documentation class: Extending NumSharp → AdvancedExtendingDocTests, Native code & backends → AdvancedNativeBackendsDocTests, Under the hood → AdvancedUnderTheHoodDocTests. Interoperability is covered by the interop/* pages' own suites. -->
+
 ---
 
 ## The articles
