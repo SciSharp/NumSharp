@@ -28,6 +28,14 @@ namespace NumSharp
         ///     under <paramref name="casting"/>; may alias an input — overlap-safe).
         ///     Mutually exclusive with <paramref name="dtype"/>.
         /// </param>
+        /// <param name="where">
+        ///     Optional boolean write mask (ufunc where= convention, plan P4.5): the fused kernel writes the
+        ///     result only where the mask is True, so masked-off slots of <paramref name="out"/> keep their
+        ///     prior contents (and without <paramref name="out"/> the unmasked slots of the fresh result are
+        ///     left uninitialised, exactly as NumPy's ufuncs leave them). It broadcasts with the inputs and
+        ///     <paramref name="out"/> but never stretches a provided <paramref name="out"/>, and must be a
+        ///     boolean array. NOT supported on a reduction tree (a masked reduction is a different operation).
+        /// </param>
         /// <param name="dtype">
         ///     Optional result dtype — an implicit root cast (plan P4.5): the tree still COMPUTES at its
         ///     natural per-node NEP50 dtypes and the RESULT is cast to this, so
@@ -54,10 +62,10 @@ namespace NumSharp
         ///     (<see cref="NDExpr.Sum(NDExpr)"/> / Prod / Min / Max / Mean)
         ///     return a 0-d scalar array.
         /// </returns>
-        /// <exception cref="ArgumentException">Both <paramref name="dtype"/> and <paramref name="out"/> were given; or <paramref name="out"/> is not reachable from the result dtype under <paramref name="casting"/>.</exception>
+        /// <exception cref="ArgumentException">Both <paramref name="dtype"/> and <paramref name="out"/> were given; <paramref name="out"/> is not reachable from the result dtype under <paramref name="casting"/>; or <paramref name="where"/> is not a boolean array (NumPy's verbatim "Cannot cast … to dtype('bool') according to the rule 'safe'").</exception>
         /// <exception cref="ValueError"><paramref name="casting"/> is not a legal rule, or <paramref name="order"/> is not one of 'C'/'F'/'A'/'K'.</exception>
-        /// <exception cref="System.NotSupportedException"><paramref name="dtype"/> or a non-'K' <paramref name="order"/> was given for a reduction tree.</exception>
-        public static NDArray evaluate(NDExpr expr, NDArray @out = null,
+        /// <exception cref="System.NotSupportedException"><paramref name="dtype"/>, a non-'K' <paramref name="order"/>, or a <paramref name="where"/> mask was given for a reduction tree.</exception>
+        public static NDArray evaluate(NDExpr expr, NDArray @out = null, NDArray where = null,
             DType dtype = null, string casting = null, char order = 'K')
         {
             // The fused inner loop writes @out through the iterator, bypassing the guarded setters
@@ -65,7 +73,7 @@ namespace NumSharp
             // as the ufuncs this fuses do.
             if (@out is not null)
                 NumSharpException.ThrowIfNotWriteable(@out.Shape, "output array");
-            var options = BuildEvaluateOptions(dtype, casting, order, @out is not null);
+            var options = BuildEvaluateOptions(dtype, casting, order, @out is not null, where);
             return ResolveEngine(expr, null).Evaluate(expr, @out, options);
         }
 
@@ -86,13 +94,13 @@ namespace NumSharp
         ///     <see cref="NDExpr.Input"/> leaves against an explicit operand
         ///     list: <c>np.evaluate(NDExpr.Input(0) * NDExpr.Input(1), new[] { a, b })</c>.
         /// </summary>
-        /// <inheritdoc cref="evaluate(NDExpr, NDArray, DType, string, char)" path="/param[@name='dtype' or @name='casting' or @name='order']"/>
-        public static NDArray evaluate(NDExpr expr, NDArray[] operands, NDArray @out = null,
+        /// <inheritdoc cref="evaluate(NDExpr, NDArray, NDArray, DType, string, char)" path="/param[@name='out' or @name='where' or @name='dtype' or @name='casting' or @name='order']"/>
+        public static NDArray evaluate(NDExpr expr, NDArray[] operands, NDArray @out = null, NDArray where = null,
             DType dtype = null, string casting = null, char order = 'K')
         {
             if (@out is not null)
                 NumSharpException.ThrowIfNotWriteable(@out.Shape, "output array");
-            var options = BuildEvaluateOptions(dtype, casting, order, @out is not null);
+            var options = BuildEvaluateOptions(dtype, casting, order, @out is not null, where);
             return ResolveEngine(expr, operands).Evaluate(expr, operands, @out, options);
         }
 
@@ -106,10 +114,11 @@ namespace NumSharp
         /// <param name="casting">The out= cast rule string, or null for <c>same_kind</c>.</param>
         /// <param name="order">The fresh-result order char ('C'/'F'/'A'/'K', case-insensitive).</param>
         /// <param name="hasOut">Whether a caller <c>out=</c> was supplied (which fixes the result dtype, conflicting with <paramref name="dtype"/>).</param>
+        /// <param name="where">The optional boolean write mask (validated for boolean-ness at the engine, alongside the reduction-tree rejection), or null for an unmasked pass.</param>
         /// <returns>The resolved keyword bundle to thread to the engine.</returns>
         /// <exception cref="ArgumentException">Both <paramref name="dtype"/> and an <c>out=</c> were given.</exception>
         /// <exception cref="ValueError"><paramref name="casting"/> is not a legal rule, or <paramref name="order"/> is not one of 'C'/'F'/'A'/'K'.</exception>
-        private static NDEvaluateOptions BuildEvaluateOptions(DType dtype, string casting, char order, bool hasOut)
+        private static NDEvaluateOptions BuildEvaluateOptions(DType dtype, string casting, char order, bool hasOut, NDArray where = null)
         {
             // out= already pins the result dtype, so a second pin via dtype= is contradictory — reject the
             // pair rather than silently double-casting (NumPy's ufunc lets both differ because dtype= is a
@@ -125,9 +134,11 @@ namespace NumSharp
                 throw new ValueError($"order must be one of 'C', 'F', 'A', 'K' (got '{order}')");
 
             // ParseCasting raises NumPy's verbatim "casting must be one of …" for a bad string; null keeps
-            // the same_kind default the struct supplies.
+            // the same_kind default the struct supplies. The where= mask's boolean-ness (and its rejection
+            // on a reduction tree) is checked at the engine, next to the identical dtype=/order= guards, so
+            // the whole reduction-tree keyword contract lives in one place.
             NPY_CASTING? c = casting is null ? (NPY_CASTING?)null : DTypeCasting.ParseCasting(casting);
-            return new NDEvaluateOptions(dtype?.typecode, c, order);
+            return new NDEvaluateOptions(dtype?.typecode, c, order, where);
         }
     }
 }

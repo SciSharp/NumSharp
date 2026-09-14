@@ -6042,6 +6042,46 @@ def _where_mask(shape, kind):
     raise ValueError(kind)
 
 
+def _mask_view(shape, kind):
+    """
+    A (base, view) BOOL-mask pair whose VIEW broadcasts to `shape` — the np.evaluate where= analogue
+    of _out_view (plan P4.5). The base is always C-contiguous (describe() serializes it with
+    base.tobytes(), a C-order walk, against the recorded PHYSICAL strides/offset), so a strided /
+    reversed view reads back exactly. "row"/"col" keep a SMALLER contiguous mask that np.evaluate
+    broadcasts up (the recorded view is the small array itself). Returns None for a kind that does not
+    apply to the rank (e.g. "col" on a 1-D shape).
+    """
+    n = int(np.prod(shape)) if shape else 1
+    if kind == "all_true":
+        b = np.ones(shape, dtype=bool);  return b, b
+    if kind == "all_false":
+        b = np.zeros(shape, dtype=bool); return b, b
+    if kind == "checker":                          # ~2/3 True, a non-trivial dense pattern
+        b = np.ascontiguousarray((np.arange(n) % 3 != 0).reshape(shape)); return b, b
+    if kind == "alt":                              # strict alternation (run-length-1 mask)
+        b = np.ascontiguousarray((np.arange(n) % 2 == 0).reshape(shape)); return b, b
+    if kind == "strided":                          # every-other-col of a doubly-wide contiguous base
+        wide = np.zeros(tuple(shape[:-1]) + (shape[-1] * 2,), dtype=bool)
+        wide[..., ::4] = True
+        return wide, wide[..., ::2]
+    if kind == "negstride":                        # reversed last axis (negative stride + offset)
+        b = np.ascontiguousarray((np.arange(n) % 2 == 0).reshape(shape))
+        return b, b[..., ::-1]
+    if kind == "row":                              # (1,…,C) broadcasting down the leading axes
+        if len(shape) < 2:
+            return None
+        m = np.zeros((1,) * (len(shape) - 1) + (shape[-1],), dtype=bool)
+        m[..., ::2] = True
+        b = np.ascontiguousarray(m); return b, b
+    if kind == "col":                              # (R,1) broadcasting across the last axis (2-D)
+        if len(shape) != 2:
+            return None
+        m = np.zeros((shape[0], 1), dtype=bool)
+        m[::2, :] = True
+        b = np.ascontiguousarray(m); return b, b
+    raise ValueError(kind)
+
+
 def gen_out_where():
     cases = []
     n = 0
@@ -8204,8 +8244,9 @@ def gen_evaluate():
     n = 0
     skipped = 0
 
-    def emit(expr, operands_bv, layout, params=None, out=None, cid_tag=""):
-        """operands_bv: list of (base, view). out: (base, view) or None."""
+    def emit(expr, operands_bv, layout, params=None, out=None, where=None, cid_tag=""):
+        """operands_bv: list of (base, view). out: (base, view) or None. where: (base, view) bool
+        mask or None (plan P4.5, out= only — masked writes leave masked-off out slots at prior)."""
         nonlocal n, skipped
         views = [v for (_, v) in operands_bv]
         params = dict(params or {})
@@ -8245,8 +8286,23 @@ def gen_evaluate():
                     return
                 ops_desc.append(describe(ob, ov))
                 params["out"] = True
-                # PRIOR out contents are what ops_desc recorded above; run the write now.
-                np.copyto(ov, r, casting="same_kind")
+                if where is not None:
+                    # Plan P4.5 where=: the mask rides as the LAST operand (after out), and the write is
+                    # masked so masked-off slots keep the PRIOR out contents (recorded by describe above).
+                    # Skip a mask that does not broadcast to the result — NumPy would raise, and this tier
+                    # gates values, not the broadcast error (that is unit-tested).
+                    wb, wv = where
+                    try:
+                        np.broadcast_shapes(wv.shape, r.shape)
+                    except ValueError:
+                        skipped += 1
+                        return
+                    ops_desc.append(describe(wb, wv))
+                    params["where"] = True
+                    np.copyto(ov, r, where=wv, casting="same_kind")
+                else:
+                    # PRIOR out contents are what ops_desc recorded above; run the write now.
+                    np.copyto(ov, r, casting="same_kind")
                 cases.append(_case("evaluate", params, ops_desc,
                                    _tuple_expected([np.asarray(ov), ob.ravel()]), layout, "mixed", cid=cid))
             else:
@@ -9025,6 +9081,45 @@ def gen_evaluate():
                             continue
                         emit(expr, [(a, a), (b2, b2)], f"out_{out_kind}", out=(ob, ov),
                              cid_tag=f"{dt}->{out_dt}/{'x'.join(map(str, shape))}/{expr}")
+
+    # ---- D2. where= — masked writes into out= (plan P4.5) ------------------------------------
+    # np.evaluate(expr, out=dst, where=mask) writes the fused result only where the mask is True,
+    # leaving masked-off dst slots at their PRIOR contents — NumPy's ufunc where= convention (the mask
+    # rides the iterator as a trailing ARRAYMASK operand, the output is WRITEMASKED, and ForEach's
+    # masked driver runs the fused kernel per mask-true run). The tuple result records BOTH the returned
+    # view AND the whole out base, so a kernel that ignored the mask (wrote every slot) turns the gate
+    # red. A FRESH out view is built per case so each starts from clean prior contents. The out dtype
+    # stays same-kind-castable from the result (a widening float→float64 out gates the WRITEMASKED +
+    # buffered-flush cast path; the C-undefined float→int mask+cast edge is unit-tested, not byte-gated,
+    # matching the B5/out block policy). The mask sweep covers dense/alternating/all-true/all-false plus
+    # strided, negative-stride, and — at rank 2 — broadcasting row/column masks.
+    where_exprs = ["add(mul(in0,in1),in0)", "sqrt(abs(in0))"]
+    where_masks_1d = ["checker", "alt", "all_true", "all_false", "strided", "negstride"]
+    where_masks_2d = where_masks_1d + ["row", "col"]
+    for shape in [(8,), (4, 5)]:
+        cnt = int(np.prod(shape))
+        mask_kinds = where_masks_2d if len(shape) == 2 else where_masks_1d
+        for dt in ["float64", "float32", "int32", "int64"]:
+            a = _fill(cnt, np.dtype(dt)).reshape(shape)
+            b2 = np.roll(_fill(cnt, np.dtype(dt)), 1).reshape(shape)
+            for expr in where_exprs:
+                probe = np.asarray(_ev_eval(expr, [a, b2]))
+                out_dts = {probe.dtype.name}
+                if probe.dtype.kind == "f":
+                    out_dts.add("float64")            # the masked buffered-flush cast path
+                for out_dt in sorted(out_dts):
+                    if not np.can_cast(probe.dtype, np.dtype(out_dt), casting="same_kind"):
+                        continue
+                    for out_kind in ["c", "strided"]:
+                        for mk in mask_kinds:
+                            built = _out_view(shape, np.dtype(out_dt), out_kind)  # FRESH prior per case
+                            if built is None:
+                                continue
+                            mv = _mask_view(shape, mk)
+                            if mv is None:
+                                continue
+                            emit(expr, [(a, a), (b2, b2)], f"where_{out_kind}", out=built, where=mv,
+                                 cid_tag=f"{dt}->{out_dt}/{mk}/{'x'.join(map(str, shape))}/{expr}")
 
     if skipped:
         print(f"  (skipped {skipped} evaluate cells: NumPy raised a non-verbatim error, or complex64 width)")

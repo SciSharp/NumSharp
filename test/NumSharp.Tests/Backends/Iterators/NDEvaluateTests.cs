@@ -2482,5 +2482,190 @@ namespace NumSharp.Tests.Backends.Iterators
             var pof = np.evaluate(NDExpr.Input(0) + NDExpr.Input(1), new[] { a, b }, order: 'F');
             Assert.IsTrue(pof.Shape.IsFContiguous && !pof.Shape.IsContiguous);
         }
+
+        // =====================================================================
+        // Phase 4.5 — where= (the masked-WRITE keyword)
+        // =====================================================================
+
+        /// <summary>
+        /// The load-bearing where= contract (plan P4.5): with out=, the fused kernel writes only the
+        /// mask-True slots and leaves every masked-off destination slot at its PRIOR contents — exactly
+        /// NumPy's <c>np.add(a, b, out=dst, where=mask)</c>. This is the whole reason where= is not
+        /// "compute then select": the destination's untouched slots must survive byte-for-byte, and the
+        /// returned array IS the out instance. A kernel that ignored the mask (wrote every slot) would
+        /// leave <c>[11,22,33,44,55,66]</c> here instead of the interleaved prior values.
+        /// </summary>
+        [TestMethod]
+        public void P45Where_MaskedWriteKeepsPriorOutSlots()
+        {
+            var a = np.array(new double[] { 1, 2, 3, 4, 5, 6 });
+            var b = np.array(new double[] { 10, 20, 30, 40, 50, 60 });
+            var mask = np.array(new bool[] { true, false, true, false, true, false });
+            var dst = np.array(new double[] { -1, -2, -3, -4, -5, -6 });   // distinctive prior contents
+
+            var ret = np.evaluate((NDExpr)a + b, @out: dst, where: mask);
+
+            // masked-in = a+b (11,33,55); masked-off = the prior dst (-2,-4,-6).
+            Assert.IsTrue(np.array_equal(dst, np.array(new double[] { 11, -2, 33, -4, 55, -6 })));
+            Assert.AreSame(dst, ret);   // returns the out instance, like the ufunc where= path
+        }
+
+        /// <summary>
+        /// where= without out= (the fresh-result form): NumPy leaves masked-off slots of the fresh
+        /// allocation UNINITIALISED (it warns; the values are unobservable), so only the mask-True slots
+        /// carry a meaningful value. This pins that those slots hold the fused result — the masked-off
+        /// slots are deliberately NOT asserted (they are garbage on both NumSharp and NumPy).
+        /// </summary>
+        [TestMethod]
+        public void P45Where_WithoutOut_MaskedInSlotsAreComputed()
+        {
+            var a = np.array(new double[] { 1, 2, 3, 4 });
+            var b = np.array(new double[] { 10, 20, 30, 40 });
+            var mask = np.array(new bool[] { true, true, false, false });
+
+            var r = np.evaluate((NDExpr)a * b, where: mask).astype(np.float64);
+
+            Assert.AreEqual(4, r.size);
+            Assert.AreEqual(10.0, r.GetDouble(0), 0);   // 1*10
+            Assert.AreEqual(40.0, r.GetDouble(1), 0);   // 2*20
+        }
+
+        /// <summary>
+        /// The mask broadcasts with the inputs (and out=) but is never stretched onto a provided out — a
+        /// <c>(1, C)</c> mask gates whole COLUMNS across every row. Verifies the trailing ARRAYMASK
+        /// operand's stride-0 broadcast is driven correctly by ForEach's masked inner loop (a broadcast
+        /// mask reads one byte per chunk, not per element).
+        /// </summary>
+        [TestMethod]
+        public void P45Where_BroadcastMask()
+        {
+            var a = np.arange(6).reshape(2, 3).astype(np.float64);
+            var b = np.ones(new Shape(2, 3), np.float64);
+            var mask = np.array(new bool[] { true, false, true }).reshape(1, 3);   // columns 0,2 written
+            var dst = np.full(new Shape(2, 3), -9.0);
+
+            np.evaluate((NDExpr)a + b, @out: dst, where: mask);
+
+            Assert.IsTrue(np.array_equal(dst, np.array(new double[,] { { 1, -9, 3 }, { 4, -9, 6 } })));
+        }
+
+        /// <summary>
+        /// The two degenerate masks: all-True writes every slot (equivalent to no mask), all-False writes
+        /// nothing (the out is returned byte-identical to its prior contents). These pin the mask driver's
+        /// run boundaries at the extremes — a mask driver that mis-handled a full or empty run would fail
+        /// exactly one of these.
+        /// </summary>
+        [TestMethod]
+        public void P45Where_AllTrue_AllFalse()
+        {
+            var a = np.array(new double[] { 1, 2, 3 });
+            var b = np.array(new double[] { 4, 5, 6 });
+
+            var dstT = np.zeros(new Shape(3), np.float64);
+            np.evaluate((NDExpr)a + b, @out: dstT, where: np.array(new bool[] { true, true, true }));
+            Assert.IsTrue(np.array_equal(dstT, np.array(new double[] { 5, 7, 9 })));
+
+            var dstF = np.array(new double[] { 7, 8, 9 });
+            np.evaluate((NDExpr)a + b, @out: dstF, where: np.array(new bool[] { false, false, false }));
+            Assert.IsTrue(np.array_equal(dstF, np.array(new double[] { 7, 8, 9 })));
+        }
+
+        /// <summary>
+        /// where= composes with a dtype-mismatched out (the WRITEMASKED + BUFFERED-flush path): a float64
+        /// result cast into an int32 out under <c>casting='unsafe'</c> truncates toward zero in the
+        /// mask-True slots and leaves the int prior in the masked-off ones. This is the one place the
+        /// windowed cast flush must ALSO honour the mask — a plain full-array flush would overwrite the
+        /// masked-off slots with cast garbage.
+        /// </summary>
+        [TestMethod]
+        public void P45Where_CastAndMaskCompose()
+        {
+            var a = np.array(new double[] { 1.9, 2.9, 3.9, 4.9 });
+            var b = np.array(new double[] { 0.0, 0.0, 0.0, 0.0 });
+            var mask = np.array(new bool[] { true, false, true, false });
+            var dst = np.array(new int[] { -1, -2, -3, -4 });
+
+            np.evaluate((NDExpr)a + b, @out: dst, where: mask, casting: "unsafe");
+
+            // masked-in truncates (1.9→1, 3.9→3); masked-off keep the int prior (-2, -4).
+            Assert.IsTrue(np.array_equal(dst, np.array(new int[] { 1, -2, 3, -4 })));
+        }
+
+        /// <summary>
+        /// where= composes with a 0-d PARAMETER (a scalar hoisted into the kernel aux block, not a
+        /// stride-0 operand): the masked driver runs the fused kernel per mask-true run and the kernel's
+        /// prologue still loads the parameter each run. Pins that the parameter + mask machinery do not
+        /// interfere (the aux block is invariant across runs).
+        /// </summary>
+        [TestMethod]
+        public void P45Where_ComposesWith0dParameter()
+        {
+            var a = np.array(new double[] { 1, 2, 3, 4 });
+            var b = np.array(new double[] { 5, 6, 7, 8 });
+            var k = NDArray.Scalar(100.0);   // 0-d parameter
+            var mask = np.array(new bool[] { true, false, true, false });
+            var dst = np.full(new Shape(4), -1.0);
+
+            np.evaluate((NDExpr)a * b + k, @out: dst, where: mask);
+
+            // a*b+100 where True (105, 121); prior -1 where False.
+            Assert.IsTrue(np.array_equal(dst, np.array(new double[] { 105, -1, 121, -1 })));
+        }
+
+        /// <summary>
+        /// where= is REJECTED on a reduction tree (a masked reduction is a different operation — skip
+        /// masked-off elements from the accumulation with the right per-kind identity, which np.evaluate's
+        /// host-computed reductions do not do). The message points at the remedy (mask the inputs before
+        /// reducing). Same class as the dtype=/order= reduction rejection.
+        /// </summary>
+        [TestMethod]
+        public void P45Where_RejectedOnReductionTree()
+        {
+            var a = np.array(new double[] { 1, 2, 3, 4 });
+            var mask = np.array(new bool[] { true, false, true, false });
+
+            var ex = Assert.ThrowsException<NotSupportedException>(
+                () => np.evaluate(NDExpr.Sum((NDExpr)a + 1), where: mask));
+            StringAssert.Contains(ex.Message, "reduction tree");
+
+            // A weighted average (the two-tree reduction) rejects it too.
+            var w = np.array(new double[] { 1, 1, 1, 1 });
+            Assert.ThrowsException<NotSupportedException>(
+                () => np.evaluate(NDExpr.Average((NDExpr)a, (NDExpr)w), where: mask));
+        }
+
+        /// <summary>
+        /// The mask must be exactly boolean (NumPy's <c>_wheremask_converter</c> casts with the 'safe'
+        /// rule, which only bool→bool passes) — a non-bool mask raises NumPy's verbatim cast text. Guards
+        /// against silently reinterpreting an int/float array's bytes as a mask.
+        /// </summary>
+        [TestMethod]
+        public void P45Where_NonBoolMaskThrows()
+        {
+            var a = np.array(new double[] { 1, 2, 3, 4 });
+            var b = np.array(new double[] { 5, 6, 7, 8 });
+
+            var ex = Assert.ThrowsException<ArgumentException>(
+                () => np.evaluate((NDExpr)a + b, where: np.array(new int[] { 1, 0, 1, 0 })));
+            StringAssert.Contains(ex.Message, "dtype('bool')");
+        }
+
+        /// <summary>
+        /// The positional-operand overload (NDExpr.Input leaves) honors where= identically — the mask
+        /// rides the same options bundle regardless of which np.evaluate overload built the program.
+        /// </summary>
+        [TestMethod]
+        public void P45Where_PositionalOverload()
+        {
+            var a = np.array(new double[] { 1, 2, 3, 4 });
+            var b = np.array(new double[] { 10, 20, 30, 40 });
+            var mask = np.array(new bool[] { false, true, false, true });
+            var dst = np.array(new double[] { -1, -2, -3, -4 });
+
+            np.evaluate(NDExpr.Input(0) + NDExpr.Input(1), new[] { a, b }, @out: dst, where: mask);
+
+            // masked-in = a+b (22, 44); masked-off keep prior (-1, -3).
+            Assert.IsTrue(np.array_equal(dst, np.array(new double[] { -1, 22, -3, 44 })));
+        }
     }
 }

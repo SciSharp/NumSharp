@@ -63,6 +63,27 @@ namespace NumSharp.Backends
                 return flags;
             });
 
+        // Per-arity flag arrays for the MASKED (where=) evaluate config — the same input flags as
+        // EvalElementwiseFlags, but the output is WRITEMASKED (so ForEach's masked driver only writes
+        // its mask-true runs, leaving masked-off slots untouched) and a trailing ARRAYMASK mask operand
+        // is appended (NumPy's ufunc where= layout: the mask rides as op[nop], outputs WRITEMASKED —
+        // ufunc_object.c:2190-2226). The array is nIn+2 long: [inputs…, masked output, mask].
+        private static readonly ConcurrentDictionary<int, NDIterPerOpFlags[]> s_evalElementwiseMaskedFlags = new();
+
+        private static NDIterPerOpFlags[] EvalElementwiseMaskedFlags(int nIn)
+            => s_evalElementwiseMaskedFlags.GetOrAdd(nIn, static n =>
+            {
+                var flags = new NDIterPerOpFlags[n + 2];
+                for (int i = 0; i < n; i++)
+                    flags[i] = NDIterPerOpFlags.READONLY | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP;
+                flags[n] = NDIterPerOpFlags.WRITEONLY
+                           | NDIterPerOpFlags.WRITEMASKED
+                           | NDIterPerOpFlags.NO_BROADCAST
+                           | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP;
+                flags[n + 1] = NDIterPerOpFlags.READONLY | NDIterPerOpFlags.ARRAYMASK;
+                return flags;
+            });
+
         private static NDIterPerOpFlags[] EvalReduceFlags(int nIn)
             => s_evalReduceFlags.GetOrAdd(nIn, static n =>
             {
@@ -199,11 +220,23 @@ namespace NumSharp.Backends
             // NumPy's reductions carry no order= parameter). casting= governs out= VALIDATION and threads
             // through to the reduce paths unchanged. Reject the two result-shaping keywords up front, before
             // any work; a bare/explicit 'K' order is the no-op default and does not trip this.
-            if ((program.Average is not null || program.Reduce is not null) && (options.HasDtype || options.HasExplicitOrder))
+            bool isReduction = program.Average is not null || program.Reduce is not null;
+            if (isReduction && (options.HasDtype || options.HasExplicitOrder))
                 throw new NotSupportedException(
                     "np.evaluate: dtype= and order= are not supported on a reduction tree (a reduction " +
                     "fixes its result dtype and layout). Cast the reduction result instead: " +
                     "np.evaluate(expr).astype(dtype).");
+
+            // where= is the ufunc masked-WRITE convention (write the result only where the mask is True),
+            // which is meaningful only for a per-element result. A masked REDUCTION is a different operation
+            // (skip masked-off elements from the accumulation, which needs the right per-kind identity), and
+            // np.evaluate's reduction kinds are host-computed without it — so reject where= on a reduction
+            // rather than silently ignore it. The remedy is to mask the inputs before reducing.
+            if (isReduction && options.HasWhere)
+                throw new NotSupportedException(
+                    "np.evaluate: where= is not supported on a reduction tree (a masked reduction is a " +
+                    "different operation). Mask the inputs before reducing instead, e.g. " +
+                    "np.evaluate(NDExpr.Sum(NDExpr.Where(mask, expr, NDExpr.Const(0)))).");
 
             // A weighted average reduces over TWO sub-trees (values, weights); it is host-computed like
             // the M4c summation kinds, so it precedes the elementwise + single-child-reduce dispatch.
@@ -225,16 +258,27 @@ namespace NumSharp.Backends
             // API rejects both), so this only ever widens a fresh allocation's dtype.
             var targetType = options.Dtype ?? resolvedType;
 
+            // where= (plan P4.5): the boolean write mask. NumPy requires it to be exactly bool (its
+            // _wheremask_converter casts with the 'safe' rule, which only bool→bool passes) — validate it
+            // with the same check the ufunc where= path uses, so the verbatim TypeError text matches. When
+            // present it rides the iterator as a trailing ARRAYMASK operand below and ForEach's masked driver
+            // runs the fused kernel per mask-true run, leaving masked-off destination slots untouched.
+            NDArray where = options.Where;
+            if (where is not null)
+                ValidateWhereMask(where);
+
             if (@out is not null)
                 ValidateOutCast(resolvedType, @out.typecode, "evaluate", options.Casting);
 
             // Iteration shape: the inputs' broadcast (one clone for identical dims, one fresh dims
-            // array otherwise — ResolveInputShape), then out joins per the ufunc rules (never
-            // stretched; its verbatim errors live in ResolveUfuncIterationShape).
+            // array otherwise — ResolveInputShape), then out and the where mask join per the ufunc rules
+            // (both broadcast in, but a provided out is never stretched — its verbatim errors live in
+            // ResolveUfuncIterationShape). A where= without out= still joins the mask so the fresh result's
+            // shape includes it (NumPy: where broadcasts with everything).
             Shape inputShape = ResolveInputShape(ops);
-            Shape iterShape = @out is null
+            Shape iterShape = (@out is null && where is null)
                 ? inputShape
-                : ResolveUfuncIterationShape(inputShape, ops, @out, null).Clean();
+                : ResolveUfuncIterationShape(inputShape, ops, @out, where).Clean();
 
             // NumPy-aligned layout preservation (mirrors TryExecuteBinaryOpViaNDIter):
             // by default ('K') the result is column-major only when every input operand is
@@ -262,6 +306,12 @@ namespace NumSharp.Backends
                 ? NPY_ORDER.NPY_FORTRANORDER
                 : NPY_ORDER.NPY_CORDER;
 
+            // where= appends ONE more operand (the mask) and flips the output to WRITEMASKED, so the
+            // operand/flag/dtype arrays are all one slot longer and the output is followed by the mask.
+            bool masked = where is not null;
+            int nData = ops.Length;              // input operands (the mask/out are extras)
+            int nOps = nData + (masked ? 2 : 1); // inputs + output [+ mask]
+
             bool outNeedsCast = target.typecode != resolvedType;
             var globalFlags = NDIterGlobalFlags.EXTERNAL_LOOP | NDIterGlobalFlags.COPY_IF_OVERLAP;
             var casting = NPY_CASTING.NPY_SAFE_CASTING;
@@ -270,24 +320,29 @@ namespace NumSharp.Backends
             {
                 // The kernel writes the resolved dtype into the out operand's
                 // buffer; the windowed flush casts (same_kind was validated, so
-                // the iterator runs UNSAFE exactly like NumPy's ufunc layer).
+                // the iterator runs UNSAFE exactly like NumPy's ufunc layer, and
+                // under WRITEMASKED the same flush also honours the mask).
                 globalFlags |= NDIterGlobalFlags.BUFFERED
                              | NDIterGlobalFlags.GROWINNER
                              | NDIterGlobalFlags.DELAY_BUFALLOC;
                 casting = NPY_CASTING.NPY_UNSAFE_CASTING;
-                opDtypes = new NPTypeCode[ops.Length + 1];
-                Array.Copy(program.InputTypes, opDtypes, ops.Length);
-                opDtypes[ops.Length] = resolvedType;
+                opDtypes = new NPTypeCode[nOps];
+                Array.Copy(program.InputTypes, opDtypes, nData);
+                opDtypes[nData] = resolvedType;
+                if (masked)
+                    opDtypes[nData + 1] = NPTypeCode.Empty; // the mask is never cast (bool → nonzero test)
             }
 
-            var operands = new NDArray[ops.Length + 1];
-            Array.Copy(ops, operands, ops.Length);
-            operands[ops.Length] = target;
+            var operands = new NDArray[nOps];
+            Array.Copy(ops, operands, nData);
+            operands[nData] = target;
+            if (masked)
+                operands[nData + 1] = where;
 
             using var iter = NDIterRef.MultiNew(
-                operands.Length, operands,
+                nOps, operands,
                 globalFlags, order, casting,
-                EvalElementwiseFlags(ops.Length),
+                masked ? EvalElementwiseMaskedFlags(nData) : EvalElementwiseFlags(nData),
                 opDtypes);
 
             // Parameters: their single elements packed once, here, into the aux block the kernel's

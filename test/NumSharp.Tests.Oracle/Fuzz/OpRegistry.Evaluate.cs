@@ -23,7 +23,10 @@ namespace NumSharp.Tests.Fuzz
     ///     </code>
     ///     params["reduce"] = {kind, axis, keepdims} wraps the tree in a root reduction;
     ///     params["out"] = true names the LAST operand as the out= target (tuple result:
-    ///     [returned, whole out base buffer], the out_where convention).
+    ///     [returned, whole out base buffer], the out_where convention);
+    ///     params["where"] = true (plan P4.5) additionally appends a boolean mask AFTER out, so the
+    ///     operand list is [inputs…, out, mask] and the masked write leaves masked-off out slots at
+    ///     their prior contents (the whole-out-base slot of the tuple proves it).
     /// </summary>
     public static partial class OpRegistry
     {
@@ -47,9 +50,15 @@ namespace NumSharp.Tests.Fuzz
 
         internal static NDArray[] EvaluateOutFromCorpus(IReadOnlyDictionary<string, JsonElement> p, NDArray[] ops)
         {
-            var target = ops[ops.Length - 1];
-            var expr = BuildEvaluateTree(p, ops, ops.Length - 1);
-            var returned = np.evaluate(expr, @out: target);
+            // params["where"]=true (plan P4.5) appends the boolean mask as the LAST operand, AFTER out:
+            // the operand list is [inputs…, out, mask]. Without it, out is the last operand.
+            bool hasWhere = p.TryGetValue("where", out var w) && w.ValueKind == JsonValueKind.True;
+            int outIdx = hasWhere ? ops.Length - 2 : ops.Length - 1;
+            var target = ops[outIdx];
+            var expr = BuildEvaluateTree(p, ops, outIdx);   // inputs are [0, outIdx)
+            var returned = hasWhere
+                ? np.evaluate(expr, @out: target, where: ops[ops.Length - 1])
+                : np.evaluate(expr, @out: target);
             return new[] { returned, BaseBuffer(target) };
         }
 
