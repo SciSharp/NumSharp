@@ -29,13 +29,17 @@ This is a living checklist. Techniques used are recorded so a later pass can re-
 > pairwise-mask + bias + rowvar), 1 more `MaskedArrayTests` case (**56 total**).
 > **Pass 5:** `convolve`/`correlate` (mask propagated by sliding the boolean masks against ones — the exact
 > `_convolve_or_correlate` composition, `propagate_mask` both ways) and `apply_over_axes` (repeated masked
-> reduction over each axis, re-expanding a keepdims-less result). 2 more `MaskedArrayTests` cases (**58 total**).
-> **The np.ma module is now as complete as NumSharp.Core allows.** The remaining 14 `__all__` names are: the
-> type refs `MAError`/`MaskError`/`MaskedArray` (all EXIST as C# types), the submodule/config refs `core`/`extras`/
-> `masked_print_option` (N/A in C#), the structured/record family
-> (`mvoid`/`mr_`/`fromflex`/`flatten_mask`/`flatten_structured_array`/`make_mask_descr` — no structured dtypes in
-> NumSharp), and just **two** genuine functional gaps: `apply_along_axis` (needs the ~86-line masked-1-D-slice
-> iteration reimplementation) and `polyfit` (LAPACK lstsq — backend-only, so masked polyfit is backend-dependent).
+> reduction over each axis, re-expanding a keepdims-less result).
+> **Pass 6:** `apply_along_axis` — hands each 1-D masked slice (via the indexer) to the function and assembles
+> the results; a scalar per-slice result drops the axis (an all-masked slice → `masked`), a 1-D result replaces
+> it (mask preserved), a rank ≥ 2 result throws (needs the object-array assembly NumSharp lacks).
+> **✅ THE np.ma MODULE IS NOW FUNCTIONALLY COMPLETE FOR NumSharp.Core (59 `MaskedArrayTests`, green).** The 13
+> remaining `__all__` names are NONE-of-them-a-functional-gap: `MAError`/`MaskError`/`MaskedArray` all EXIST as C#
+> types; `core`/`extras`/`masked_print_option` are submodule/config refs (N/A in C#); the structured/record family
+> (`mvoid`/`mr_`/`fromflex`/`flatten_mask`/`flatten_structured_array`/`make_mask_descr`) needs structured dtypes
+> NumSharp has no analog for; and `polyfit` is blocked on `np.polyfit` (which doesn't exist in Core — it needs
+> the backend-only LAPACK lstsq, a Core-linalg gap, not an ma gap). The only non-`__all__` deferrals are N-D-axis
+> `notmasked_edges`/`notmasked_contiguous` (list-of-lists) and masked-axis `median` (masked sort core).
 
 ---
 
@@ -43,8 +47,8 @@ This is a living checklist. Techniques used are recorded so a later pass can re-
 
 | Surface | NumSharp | NumPy 2.4.2 | Gap |
 |---|---|---|---|
-| `np.ma.*` module names (`__all__`) | **212** (of 216 public) | 226 | **14 names** (was 62; only `apply_along_axis`/`polyfit` are functional — the rest are type/submodule refs or structured dtypes) |
-| `MaskedArray` instance members | **57** (+ the indexer) | 94 | **~37 members** (was 69) |
+| `np.ma.*` module names (`__all__`) | **213** (of 217 public) | 226 | **13 names** — NONE a functional gap: 3 are C# types that exist (`MAError`/`MaskError`/`MaskedArray`), 3 are N/A submodule/config refs, 6 need structured dtypes, `polyfit` is backend-blocked |
+| `MaskedArray` instance members | **57** (+ the indexer) | 94 | **~37 members** (was 69; the rest are structured/record `torecords`/`toflex`, the hard/soft-mask flags NumSharp has no analog for, and low-value `tolist`/`tobytes`/`view`/`flat`) |
 
 **Behavioral correctness of what IS implemented:** a 186-case differential (3 dtypes × reductions[×3 axes]/ufuncs/constructors/extras/sort/unique/set-ops) found **0 real value/mask/dtype mismatches**, plus 79 + 33 checks of every 2026-09-14 addition against probed NumPy 2.4.2 output (0 failures). The only divergence is the intentional scalar-vs-0d return-type choice (§5.1). Set operations (`intersect1d`/`union1d`/`setxor1d`/`setdiff1d`, added 2026-09-14, commit 566fd303) are bit-exact.
 
@@ -102,14 +106,16 @@ This is a living checklist. Techniques used are recorded so a later pass can re-
 ### C. Machinery-blocked (deferred — need infra NumSharp lacks)
 | Missing | Blocker |
 |---|---|
-| `apply_along_axis` | the ~86-line masked-1-D-slice iteration (the output shape is inferred from the first slice's result); `apply_over_axes` DONE (composes cleanly — func takes the whole array) |
-| `polyfit` | LAPACK lstsq (backend-only) — masked polyfit is backend-dependent |
+| `polyfit` | blocked on `np.polyfit` — which doesn't exist in NumSharp.Core (it needs the backend-only LAPACK lstsq). A Core-linalg gap, not an ma gap: `ma.polyfit` is a ~15-line composition (combine masks → filter observations → delegate to `np.polyfit`) the moment `np.polyfit` lands. |
 | `median` (explicit axis on MASKED input) | masked sort core |
+| `notmasked_edges`/`notmasked_contiguous` (explicit axis on >1-D) | the per-line list-of-lists (the axis=None / 1-D case IS done) |
 | `mr_`, `mvoid`, `fromflex`, `flatten_mask`, `flatten_structured_array`, `make_mask_descr` | structured/record dtypes — NumSharp has NONE |
 
 **✅ Moved OUT of machinery-blocked (2026-09-14):** `cov`/`corrcoef` (pass 4 — composable over `dot`/`filled`/
 masked-`mean`/`diagonal`/`outer`), `convolve`/`correlate` and `apply_over_axes` (pass 5 — the machinery
-`np.convolve`/`np.correlate`/`np.apply_over_axes` already existed, and the mask propagation is a clean composition).
+`np.convolve`/`np.correlate`/`np.apply_over_axes` already existed, and the mask propagation is a clean composition),
+and `apply_along_axis` (pass 6 — the indexer made extracting the masked 1-D slices possible; scalar and 1-D
+per-slice results assemble via `stack`/`reshape`/`moveaxis`, no object dtype needed).
 
 **✅ Moved OUT of machinery-blocked (2026-09-14, pass 2 — the indexer unblocked them):** `compress_nd`,
 `compress_rowcols`, `mask_rowcols` (done via mask-broadcast + `np.compress`), and `notmasked_edges`/
@@ -226,7 +232,7 @@ The fix closes the latent divergence: a complex masked `min`/`max` now fills mas
    `resize`, `mask_rowcols`, `compress_rowcols`/`compress_nd`, `notmasked_edges`/`notmasked_contiguous` (axis=None/1-D),
    and `ids`.
 7. ✅ **DONE** — Real functional gaps §1.B: `fix_invalid`, `diff`, `append`, `clip`, `choose`, `compress`, `diagonal`, `nonzero`, `trace`, `make_mask`/`make_mask_none`, `mask_or`, `common_fill_value`, `set_fill_value`, `left_shift`/`right_shift`, `put`/`putmask`/`resize`, `ids`, `frombuffer`, `fromfunction`, `hsplit`, `ndenumerate`, plus the `MAError`/`MaskError` types. *(Left: the `vsplit`/`array_split`/`split`/`dsplit` split family.)*
-8. ⛔ **Remaining §1.C** (deferred — need infra NumSharp lacks): `apply_along_axis` (masked-1-D-slice iteration), `polyfit` (LAPACK lstsq — backend-only), N-D-axis `notmasked_*`, masked-axis `median` (masked sort core), and the structured/record family (`mvoid`/`mr_`/`fromflex`/`flatten_mask`/`flatten_structured_array`/`make_mask_descr` — no structured dtypes in NumSharp). *(`cov`/`corrcoef` moved out pass 4; `convolve`/`correlate`/`apply_over_axes` pass 5.)*
+8. ⛔ **Remaining §1.C** (deferred — need infra NumSharp lacks): `polyfit` (blocked on `np.polyfit`, which needs backend-only LAPACK lstsq — a Core-linalg gap), N-D-axis `notmasked_*` (list-of-lists), masked-axis `median` (masked sort core), and the structured/record family (`mvoid`/`mr_`/`fromflex`/`flatten_mask`/`flatten_structured_array`/`make_mask_descr` — no structured dtypes in NumSharp). *(`cov`/`corrcoef` moved out pass 4; `convolve`/`correlate`/`apply_over_axes` pass 5; `apply_along_axis` pass 6.)* **All other backlog items are DONE.**
 
 ---
 
