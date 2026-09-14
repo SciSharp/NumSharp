@@ -44,14 +44,54 @@ namespace NumSharp.Backends.Kernels
         // `call` sites (the kernel below, and the fold's own self-recursion) stay alive.
         internal static readonly ConcurrentDictionary<NPTypeCode, DynamicMethod> _pwFolds = new();
 
+        // The COMPILED per-chunk pairwise-sum kernels, one per dtype — memoized like _pwFolds so the
+        // ~0.2 ms DynamicMethod JIT stays off the per-call path. See TryEmitPairwiseSumKernel's remarks.
+        internal static readonly ConcurrentDictionary<NPTypeCode, NDInnerLoopFunc> _pwKernels = new();
+
         /// <summary>
-        /// Try to build an IL-emitted SIMD pairwise Sum per-chunk kernel for
-        /// <paramref name="tc"/> (same-type accumulation). Returns null when the dtype
-        /// has no clean SIMD pairwise form (caller keeps the generic scalar fold).
-        /// Currently emitted for the IEEE binary floats (Single/Double); the same
-        /// emitter generalizes to any (clrType, elemSize) whose lane count divides 8.
+        /// The IL-emitted SIMD pairwise Sum per-chunk kernel for <paramref name="tc"/> (same-type
+        /// accumulation) — bit-for-bit NumPy's <c>pairwise_sum</c>, cached per dtype. Returns null when the
+        /// dtype has no clean SIMD pairwise form (Complex / Single / Double only) or the host has no SIMD /
+        /// dynamic codegen, so the caller keeps the generic scalar fold.
         /// </summary>
+        /// <remarks>
+        /// The compiled delegate is a PURE function of the dtype: every build input derives from
+        /// <paramref name="tc"/>, and the recursive fold it <c>call</c>s is itself cached in
+        /// <see cref="_pwFolds"/> — so it is memoized in <see cref="_pwKernels"/> exactly as the fold is.
+        /// Without this cache the per-call flat-sum divert (<c>DefaultEngine.PairwiseSumInto</c>, added with
+        /// plan P2 M1) re-emitted a fresh <see cref="DynamicMethod"/> on EVERY <c>np.evaluate(Sum(float…))</c>
+        /// call — a ~0.22 ms JIT that dominated small/medium flat reductions (measured 0.00× / 0.05× NumPy at
+        /// 1K / 100K, amortized away only at 4M). The axis / general reduce callers
+        /// (<see cref="CreateReduceInnerLoop"/>) already cache their result per <c>ReduceKernelKey</c>, so they
+        /// reach this at most once per key and are unaffected. Two threads racing on a fresh dtype compile the
+        /// same immutable kernel and one wins — a benign race, mirroring the fold cache.
+        /// </remarks>
+        /// <param name="tc">The element dtype (Single, Double or Complex); any other returns null.</param>
+        /// <returns>The cached pairwise-sum kernel, or null when unavailable for this dtype/host.</returns>
         internal static unsafe NDInnerLoopFunc TryEmitPairwiseSumKernel(NPTypeCode tc)
+        {
+            // A hit is the whole point — the flat-sum divert calls this once per np.evaluate(Sum) call.
+            if (_pwKernels.TryGetValue(tc, out var cached))
+                return cached;
+
+            var kernel = EmitPairwiseSumKernelUncached(tc);
+            // Cache only a successful emission: a null (no SIMD / AOT / unsupported dtype) is the cheap
+            // early-return path below, so leaving it uncached costs nothing and never stores a null.
+            if (kernel != null)
+                _pwKernels[tc] = kernel;
+            return kernel;
+        }
+
+        /// <summary>
+        /// The cold path behind <see cref="TryEmitPairwiseSumKernel"/>: bind the fold and emit a fresh
+        /// per-chunk kernel for <paramref name="tc"/>. Emitted for the IEEE binary floats (Single / Double)
+        /// and Complex; the same emitter generalizes to any (clrType, elemSize) whose lane count divides 8.
+        /// Never throws — returns null on any unsupported dtype/host or emission failure (the caller then
+        /// keeps the generic scalar fold).
+        /// </summary>
+        /// <param name="tc">The element dtype to emit for.</param>
+        /// <returns>A freshly compiled kernel, or null when none applies.</returns>
+        private static unsafe NDInnerLoopFunc EmitPairwiseSumKernelUncached(NPTypeCode tc)
         {
             if (!DirectILKernelGenerator.Enabled) return null;
             if (DirectILKernelGenerator.VectorBits < 128) return null; // no SIMD host → keep generic fold
