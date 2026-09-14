@@ -4,6 +4,34 @@
 `benchmark/collections/probes/compact_ordered_dict_probe.cs` (five prototype layouts + today's type + the
 baselines; a 20K-op structural sanity check against a `List` oracle gates each run).
 
+**Implemented the same day as `ConcurrentOrderedCompactDict<TKey,TValue>`** (`ConcurrentOrderedCompactDict.cs`
+beside this file; same public surface and thread-safety contract as `ConcurrentOrderedDict`, so it is a
+drop-in sibling). The port follows §4 and §8 exactly: 8-byte index words `(tag<<32)|(slot+1)` with the key's
+own bits as the tag for ≤4-byte primitive/enum keys under the default comparer (`float` excluded, a custom
+comparer disables it) and the comparer's hash otherwise; dense `keys[]`/`values[]`; generation holders with
+the count/floor rules plus a dummy count; the validated read with a width-dispatched acquire value load; a
+full-fence (`Interlocked.Exchange`) dummy store before the in-place swap-back overwrite; write-atomic guards
+(wide keys or values take the copy path); whole-generation copies for wide-value replaces; growth and rebuilds
+from the old index words (no re-hashing). **Gates:** the sibling's four suites mirrored verbatim onto the new
+type (functional, memory contracts with the append bound tightened to `== 0`, concurrency gun, adversarial
+tier) plus `ConcurrentOrderedCompactDictSpecificTests` (bit-tag types and exclusions, tag collisions, a
+constant-hash worst case, dummy/rebuild churn, wide types, three swap-back guns) — **85 tests green on net8.0
+and net10.0, Debug and Release**; the probe's gun on the shipped type (`cocd`): **0 failures over 1.9 billion
+reads**; `COCD.*` rows in the BDN suite beside every `COD.*` row. Shipped-type numbers in the fair regime
+(presized `<int,int>`, permuted build keys, independent lookup order):
+
+| N | B/entry (today → shipped) | build ns/add | key hit ns | key miss ns | rm @0 ms | rm @n−2 ms | pop drain ns |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 100K | 56.6 → **29.0** | 33.2 → **19.1** | 3.45 → **2.58** | 3.31 → **1.62** | 0.39 → 0.52 | 0.07 → 0.47 | 65 → **42** |
+| 1M | 57.3 → **24.8** | 119 → **33.9** | 14.1 → **6.9** | 12.2 → **5.4** | 7.4 → **3.4** | 0.83 → 3.3 | 165 → **82** |
+| 10M | 56.0 → **21.4** | 219 → **46.3** | 25.0 → 23.7 | 22.4 → **16.3** | 151 → **30** | 8.9 → 30 | 310 → **116** |
+
+Two port findings not in the discovery, both caught by the gates: in the wide-type swap-back copy the two
+index words must be located BEFORE the slot is overwritten (the probe compares keys through the slot, so the
+removed key's word stops matching once the moved key sits there — the mirrored `decimal`-key test caught it),
+and `AddRange` must hand its LOCAL count to the copy instead of storing it onto the published generation (a
+plain store there would leak a partial batch to list readers).
+
 **Verdict.** The Store can be folded into a compact, insertion-ordered hash table **without copy-on-write on
 any structural change that is not already copy-on-write today**. Append, tail pop, atomic value replace and
 swap-back stay in-place and allocation-free (or one small holder); interior order-preserving removal,

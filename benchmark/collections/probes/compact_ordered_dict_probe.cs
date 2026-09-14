@@ -14,8 +14,9 @@
 //                              and flatter the chaining layouts' builds/drains by 3x)
 //   PROBE_ONLY=OA,no-hash,COD  contender filter (substring match on the row name)
 //
-//   dotnet run -c Release benchmark/collections/probes/compact_ordered_dict_probe.cs -- gun 8 8 cod,chained,oa-novalidate,oa
-//                              the CONCURRENCY GUN (no core pin): <seconds> <readers> <modes>. Readers hammer the
+//   dotnet run -c Release benchmark/collections/probes/compact_ordered_dict_probe.cs -- gun 8 8 cod,cocd,chained,oa-novalidate,oa
+//                              the CONCURRENCY GUN (no core pin): <seconds> <readers> <modes>; `cocd` is the shipped
+//                              ConcurrentOrderedCompactDict (the production port of the `oa` prototype). Readers hammer the
 //                              key path while writers swap-back/re-add hot keys, append pinned keys that swap-backs
 //                              move, and churn interior removals (COW generations). Oracles: value == F(key) on
 //                              every hit, a published pinned key is never absent (TryGetValue and IndexOf), and
@@ -89,7 +90,7 @@ foreach (int n in sizes)
 
     IContender[] contenders =
     [
-        new ListC(), new DictC(), new SysCdC(), new CloneCdC(), new CodC(), new SoAC(), new SoANHC(), new AoSC(), new SplitC(), new OAC(),
+        new ListC(), new DictC(), new SysCdC(), new CloneCdC(), new CodC(), new CocdC(), new SoAC(), new SoANHC(), new AoSC(), new SplitC(), new OAC(),
     ];
     if (Environment.GetEnvironmentVariable("PROBE_ONLY") is { Length: > 0 } only)
         contenders = contenders.Where(c => only.Split(',').Any(o => c.Name.Contains(o, StringComparison.OrdinalIgnoreCase))).ToArray();
@@ -591,6 +592,44 @@ sealed class CodC : IContender
     public void SwapBack(object d, int key) => ((ConcurrentOrderedDict<int, int>)d).TryRemoveSwapBack(key, out _);
 }
 
+/// <summary>The shipped <see cref="ConcurrentOrderedCompactDict{TKey,TValue}" /> — the production port of the open-addressed prototype (validated read, write-atomic guards, generation rules), measured on the same rows.</summary>
+sealed class CocdC : IContender
+{
+    ConcurrentOrderedCompactDict<int, int> _d;
+    /// <inheritdoc />
+    public string Name => "COCD (shipped)";
+    /// <inheritdoc />
+    public bool SupportsKey => true;
+    /// <inheritdoc />
+    public bool SupportsIndex => true;
+    /// <inheritdoc />
+    public bool SupportsBuild => true;
+    /// <inheritdoc />
+    public bool SupportsRemove => true;
+    /// <inheritdoc />
+    public bool SupportsSwapBack => true;
+    /// <inheritdoc />
+    public void Build(int n) { _d = (ConcurrentOrderedCompactDict<int, int>)NewBuilt(n); }
+    /// <inheritdoc />
+    public object NewBuilt(int n) { var d = new ConcurrentOrderedCompactDict<int, int>(n); for (int i = 0; i < n; i++) d.TryAdd(Probe.BuildKeys[i], i * 2); return d; }
+    /// <inheritdoc />
+    public void Drop() => _d = null;
+    /// <inheritdoc />
+    public long KeyGetSum(int[] keys) { long s = 0; var d = _d; for (int i = 0; i < keys.Length; i++) { d.TryGetValue(keys[i], out int v); s += v; } return s; }
+    /// <inheritdoc />
+    public long KeyMissCount(int[] keys) { long s = 0; var d = _d; for (int i = 0; i < keys.Length; i++) if (d.TryGetValue(keys[i], out _)) s++; return s; }
+    /// <inheritdoc />
+    public long EnumSum() { long s = 0; foreach (int v in _d) s += v; return s; }
+    /// <inheritdoc />
+    public long IndexSum() { long s = 0; var d = _d; int n = d.Count; for (int i = 0; i < n; i++) s += d[i]; return s; }
+    /// <inheritdoc />
+    public void RemoveAt(object d, int index) => ((ConcurrentOrderedCompactDict<int, int>)d).RemoveAt(index);
+    /// <inheritdoc />
+    public void PopBack(object d) { var c = (ConcurrentOrderedCompactDict<int, int>)d; c.TryRemove(c.GetKeyAt(c.Count - 1), out _); }
+    /// <inheritdoc />
+    public void SwapBack(object d, int key) => ((ConcurrentOrderedCompactDict<int, int>)d).TryRemoveSwapBack(key, out _);
+}
+
 /// <summary>Prototype: chained hash index over parallel <c>hashes/next/keys/values</c> arrays (structure-of-arrays; keeps every span surface).</summary>
 sealed class SoAC : IContender
 {
@@ -819,6 +858,7 @@ static class Gun
         IGunTable t = mode switch
         {
             "cod" => new CodGun(),
+            "cocd" => new CocdGun(),
             "chained" => new SoaGun(),
             "oa-novalidate" => new OaGun(false),
             "oa" => new OaGun(true),
@@ -937,6 +977,24 @@ interface IGunTable
 sealed class CodGun : IGunTable
 {
     readonly ConcurrentOrderedDict<int, int> _d = new(4096);
+    /// <inheritdoc />
+    public bool TryGet(int k, out int v) => _d.TryGetValue(k, out v);
+    /// <inheritdoc />
+    public bool TryAdd(int k, int v) => _d.TryAdd(k, v);
+    /// <inheritdoc />
+    public bool SwapBack(int k) => _d.TryRemoveSwapBack(k, out _);
+    /// <inheritdoc />
+    public bool TryRemoveKey(int k) => _d.TryRemove(k, out _);
+    /// <inheritdoc />
+    public int IndexOf(int k) => _d.IndexOf(k);
+    /// <inheritdoc />
+    public long ScanDecodeFailures() { long f = 0; foreach (int v in _d) if ((v - 3) % 7 != 0) f++; return f; }
+}
+
+/// <summary>The shipped <see cref="ConcurrentOrderedCompactDict{TKey,TValue}" /> under the gun — the production port of the open-addressed design, expected clean like <c>cod</c>.</summary>
+sealed class CocdGun : IGunTable
+{
+    readonly ConcurrentOrderedCompactDict<int, int> _d = new(4096);
     /// <inheritdoc />
     public bool TryGet(int k, out int v) => _d.TryGetValue(k, out v);
     /// <inheritdoc />

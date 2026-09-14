@@ -411,7 +411,7 @@ Console.WriteLine($"view scan: {Ms(()=>{ long s=0; foreach(var v in cod.Snapshot
 
 ---
 
-## Next — folding the Store into a compact table (discovery 2026-09-14, no product code changed)
+## The compact sibling — `ConcurrentOrderedCompactDict` (discovery 2026-09-14, SHIPPED the same day)
 
 `ConcurrentOrderedDict.COMPACT.md` (beside this file) is the discovery ledger; the numbers reproduce with
 `benchmark/collections/probes/compact_ordered_dict_probe.cs`. In one paragraph: the Store CAN be absorbed
@@ -427,3 +427,15 @@ and the only layout whose in-place `TryRemoveSwapBack` keeps the key path tear-f
 layout lets a reader of the removed key pair its old key with the moved value; the open-addressed reader
 re-validates the single index word after the value load, ABA-free because dummied positions are never
 reused within a generation). Implementation plan and the port traps are in §7–§8 of that document.
+
+**Shipped as `ConcurrentOrderedCompactDict<TKey,TValue>`** (`ConcurrentOrderedCompactDict.cs`, same public
+surface and contract as this type): open-addressed index of 8-byte words `(tag<<32)|(slot+1)` (the tag is the
+key's own bits for ≤4-byte primitive/enum keys under the default comparer, else the comparer's hash), dense
+`keys[]`/`values[]`, generation holders with the same count/floor rules plus a dummy count, the validated read
+(acquire value load + word re-read), a full-fence dummy store before the in-place swap-back overwrite,
+write-atomic guards (wide keys/values take the copy path), and whole-generation copies for wide-value replaces
+(no cross-generation aliasing). Gates: the four suites of this type mirrored verbatim onto it +
+`ConcurrentOrderedCompactDictSpecificTests` (bit-tag types, float/custom-comparer exclusions, tag collisions,
+constant-hash worst case, dummy/rebuild churn, wide types, the swap-back gun) — 85 tests green on net8.0 and
+net10.0, Debug and Release; the probe's `-- gun` with the `cocd` mode: 0 failures over 1.9 G reads. BDN rows
+`COCD.*` sit beside the `COD.*` rows in every group.
