@@ -623,6 +623,89 @@ the bucket table); `ctor(source)` O(m) (delegates to `AddRange`).
 
 ---
 
+## 12. COD vs COCD — every member, side by side, classified (measured 2026-09-14)
+
+The compact table shipped as `ConcurrentOrderedCompactDict<TKey,TValue>` (commit 6e2869ef) with the
+IDENTICAL public surface of `ConcurrentOrderedDict` — a drop-in sibling. This section measures EVERY public
+member of BOTH shipping types through one adapter and one driver, so the complexity classes and the constant
+factors are directly comparable. Probe: `benchmark/collections/probes/ordered_dict_vs_compact_per_member.cs`
+(same host discipline as §10/§11; <int,int>, per-CALL cost, hot-set point reads, best-of).
+
+### 12.1 The classification is the SAME for every member — it is a drop-in sibling
+
+| member (measured path) | complexity — BOTH types | COCD ÷ COD speed @10M | note |
+|---|---|---:|---|
+| `TryGetValue`, `ContainsKey`, `GetByKey`, `this[TKey]` get, `GetOrAdd`(hit), `AddOrUpdate`(hit), `Comparer` | **O(1)** | 1.0–1.25x | flat across N both ways |
+| `IndexOf`, `TryGetIndex` | **O(1)** | 1.33x | |
+| `this[int]` get, `TryGetAt`, `GetKeyAt`, `Count`, `IsEmpty`, `ValuesView` indexer/`AsSpan`/`KeysAsSpan` | **O(1)** | 1.0x | one array/field load |
+| `SetByKey`(existing), `this[TKey]` set(existing), `SetAt`, `TryUpdate`, `AddOrUpdate`(update) | **O(1)** | 1.0x | ~14.5 ns both (lock + guard dominate) |
+| `Snapshot()`, `GetEnumerator()` | **O(1)** | — | free (struct capture) both |
+| `TryAdd`, `Add`, set(new), `SetByKey`(new), `GetOrAdd`(miss), `AddOrUpdate`(add) | **amortized O(1)** | **12.18x** | COCD: 0 B/append (no node); COD: 40 B node |
+| `TryRemove`/`Remove`/`RemoveAt` (tail), pop-back | **O(1)** | **1.78x** | |
+| `TryRemoveSwapBack` | **O(1)** | **1.59x** | |
+| `TryRemove`/`Remove`/`RemoveAt` (interior, non-last) | **O(n − p)** | 0.75x | COCD copies the index too => a touch slower at the front @10M; = `List.RemoveAt` both |
+| `ToArray`, `Values`, `Keys`, `CopyTo`, `foreach`, `Pairs` | **O(n)** | 1.0–1.85x | dense-array scan both |
+| `RemoveWhere` | **O(n)** | 1.11x | one compaction pass both |
+| `AddRange`, `ctor(IEnumerable)` | **O(m)** | **9.46x** | COCD: 0-B appends dominate the win |
+| `ctor()`, `ctor(comparer)` | **O(1)** | — | |
+| `ctor(capacity)` | **O(capacity)** | — | allocates arrays + index |
+
+**Not one member changes complexity class between the two types.** Every keyed read, positional read and value
+replace is O(1) on both; append is amortized O(1) on both; tail pop and swap-back are O(1) on both; interior
+order-preserving removal is O(n−p) on both (= `List<T>.RemoveAt`); the bulk operations are O(n)/O(m) on both.
+What differs is the CONSTANT: COCD is 1.0–1.33x on reads and 1.6–12.2x on writes/builds at 10M (no per-entry
+node to allocate, no vendored `ConcurrentDictionary` underneath).
+
+### 12.2 The ONE class difference — `Clear`
+
+| | `Clear` | why |
+|---|---|---|
+| `ConcurrentOrderedDict` (COD) | **O(initial capacity)** | routes to the vendored `ConcurrentDictionary.Clear`, which allocates a fresh `GetPrime(_initialCapacity)` bucket array (§11.2) — O(1) for a default-constructed instance, O(N) for one presized to N, regardless of current count |
+| `ConcurrentOrderedCompactDict` (COCD) | **O(1)** always | `_tables = Tables.Empty` — the compact type owns its whole state in one generation object, so clearing is a single field publish with no bucket array to rebuild (measured 17.5x faster than COD's presized `Clear` at 10M) |
+
+So the compact sibling not only matches COD's complexity on every other member, it **removes** COD's one
+capacity-dependent wart: `Clear` on a presized-then-emptied COCD is O(1) where the same on COD is O(N).
+
+### 12.3 Constant-factor summary at N = 1,000,000 (per call; ns unless ms)
+
+| member | COD | COCD | winner |
+|---|---:|---:|---|
+| `TryGetValue` | 1.56 ns | 1.56 ns | tie |
+| `IndexOf` | 1.56 ns | 1.17 ns | COCD 1.3x |
+| `this[int]` get | 0.39 ns | 0.39 ns | tie |
+| `SetByKey`(existing) | 14.84 ns | 14.45 ns | tie |
+| `TryAdd` (amortized) | 253.7 ns | 43.2 ns | **COCD 5.9x** |
+| `TryRemove` tail/pop | 113.8 ns | 42.2 ns | **COCD 2.7x** |
+| `TryRemoveSwapBack` | 116.5 ns | 50.1 ns | **COCD 2.3x** |
+| `TryRemove` interior@0 | 4.05 ms | 3.56 ms | COCD 1.14x |
+| `AddRange` | 210.5 ms* | 29.4 ms* | **COCD 7.2x** |
+| `RemoveWhere` all | 16.2 ms | 5.3 ms | **COCD 3.0x** |
+| `Clear` presized | 0.02 ms | ~0 ms | **COCD (O(1) vs O(cap))** |
+
+(* `AddRange` builds the 1M-pair source array inside the timed region on both sides — the ratio is the point.)
+
+### 12.4 Memory — bytes per entry (presized, <int,int>)
+
+| N | COD | COCD | reduction |
+|---:|---:|---:|---:|
+| 100,000 | 56.6 | 29.0 | 1.95x |
+| 1,000,000 | 57.3 | 24.8 | 2.31x |
+| 10,000,000 | 56.0 | 21.4 | 2.62x |
+
+COCD is 2.0–2.6x smaller — the 40-byte hash node per entry is gone. (Its per-entry bytes fall as N rises
+because its power-of-two index sits at lower load at the smaller sizes; COD's node footprint is flat.)
+
+### 12.5 Verdict
+
+Same type, same contract, same complexity on every member but one — and on that one (`Clear`) the compact
+sibling is strictly better. Everywhere else the compact table is equal or faster by a constant and uses less
+than half the memory. The `<int,int>` figures are COCD's best case (a ≤4-byte primitive key is bit-tagged
+into the index word, so a hit never touches `keys[]`); a wide or custom-compared key costs COCD one extra
+cache line per hit — still O(1), still ≤ COD's footprint. Prefer COCD as the default; COD remains the choice
+only where a caller depends on the vendored `ConcurrentDictionary` node identity (nothing in the library does).
+
+---
+
 ## 9. Reproduction
 
 ```
