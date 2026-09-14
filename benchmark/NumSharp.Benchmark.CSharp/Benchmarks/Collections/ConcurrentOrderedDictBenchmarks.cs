@@ -51,6 +51,9 @@ public class ConcurrentOrderedDictBenchmarks
     /// <summary>Prebuilt ordered dict under test.</summary>
     private ConcurrentOrderedDict<int, int> _cod = null!;
 
+    /// <summary>Prebuilt compact ordered dict (open-addressed index over dense key/value arrays, no per-entry node) — the memory-lean sibling measured on every row.</summary>
+    private ConcurrentOrderedCompactDict<int, int> _cocd = null!;
+
     /// <summary>The keys 0..N-1 in one fixed shuffled order, so every key-get contender pays the same cache-miss pattern.</summary>
     private int[] _shuffledKeys = null!;
 
@@ -81,12 +84,14 @@ public class ConcurrentOrderedDictBenchmarks
         _sysCd = new SysCd(Environment.ProcessorCount, N);
         _cloneCd = new CloneCd(1, N, null);
         _cod = new ConcurrentOrderedDict<int, int>(N);
+        _cocd = new ConcurrentOrderedCompactDict<int, int>(N);
         for (int i = 0; i < N; i++)
         {
             _list.Add(i * 2);
             _sysCd[i] = i * 2;
             _cloneCd[i] = i * 2;
             _cod.Add(i, i * 2);
+            _cocd.Add(i, i * 2);
         }
     }
 
@@ -98,6 +103,7 @@ public class ConcurrentOrderedDictBenchmarks
         _sysCd = null!;
         _cloneCd = null!;
         _cod = null!;
+        _cocd = null!;
         _shuffledKeys = null!;
         _pairs = null!;
         GC.Collect();
@@ -186,6 +192,43 @@ public class ConcurrentOrderedDictBenchmarks
     [BenchmarkCategory("Build")]
     public int Cod_CtorFromPairs() => new ConcurrentOrderedDict<int, int>(_pairs).Count;
 
+    /// <summary>Sequential TryAdd into an unsized compact dict — no per-add node; growth copies arrays and rebuilds the index from its own words.</summary>
+    [Benchmark(Description = "COCD.TryAdd (unsized)")]
+    [BenchmarkCategory("Build")]
+    public int Cocd_TryAdd()
+    {
+        var d = new ConcurrentOrderedCompactDict<int, int>();
+        for (int i = 0; i < N; i++)
+            d.TryAdd(i, i);
+        return d.Count;
+    }
+
+    /// <summary>Presized compact dict — an in-capacity append allocates nothing at all.</summary>
+    [Benchmark(Description = "COCD.TryAdd (presized)")]
+    [BenchmarkCategory("Build")]
+    public int Cocd_TryAdd_Presized()
+    {
+        var d = new ConcurrentOrderedCompactDict<int, int>(N);
+        for (int i = 0; i < N; i++)
+            d.TryAdd(i, i);
+        return d.Count;
+    }
+
+    /// <summary>Batch upsert into the compact dict under one lock.</summary>
+    [Benchmark(Description = "COCD.AddRange (batch)")]
+    [BenchmarkCategory("Build")]
+    public int Cocd_AddRange()
+    {
+        var d = new ConcurrentOrderedCompactDict<int, int>();
+        d.AddRange(_pairs);
+        return d.Count;
+    }
+
+    /// <summary>The compact dict's pairs constructor — pre-sizes the arrays and the index from the countable source.</summary>
+    [Benchmark(Description = "COCD ctor(pairs) (presizes both)")]
+    [BenchmarkCategory("Build")]
+    public int Cocd_CtorFromPairs() => new ConcurrentOrderedCompactDict<int, int>(_pairs).Count;
+
     // ------------------------------------------------------------------ Key get (baseline: framework dictionary)
 
     /// <summary>Baseline: lock-free TryGetValue over the shuffled key order.</summary>
@@ -248,6 +291,34 @@ public class ConcurrentOrderedDictBenchmarks
         return s;
     }
 
+    /// <summary>Compact-dict key get — the validated open-addressed probe (index line + values line for int keys).</summary>
+    [Benchmark(Description = "COCD.TryGetValue")]
+    [BenchmarkCategory("KeyGet")]
+    public long Cocd_TryGetValue()
+    {
+        long s = 0;
+        int[] keys = _shuffledKeys;
+        for (int i = 0; i < keys.Length; i++)
+        {
+            _cocd.TryGetValue(keys[i], out int v);
+            s += v;
+        }
+
+        return s;
+    }
+
+    /// <summary>Compact-dict key→index — the slot number carried by the index word, no stored position field.</summary>
+    [Benchmark(Description = "COCD.IndexOf")]
+    [BenchmarkCategory("KeyGet")]
+    public long Cocd_IndexOf()
+    {
+        long s = 0;
+        int[] keys = _shuffledKeys;
+        for (int i = 0; i < keys.Length; i++)
+            s += _cocd.IndexOf(keys[i]);
+        return s;
+    }
+
     // ------------------------------------------------------------------ Enumerate (baseline: List)
 
     /// <summary>Baseline: foreach over a list.</summary>
@@ -283,6 +354,28 @@ public class ConcurrentOrderedDictBenchmarks
         return s;
     }
 
+    /// <summary>Compact-dict struct enumerator over the dense values array.</summary>
+    [Benchmark(Description = "COCD foreach")]
+    [BenchmarkCategory("Enumerate")]
+    public long Cocd_Foreach()
+    {
+        long s = 0;
+        foreach (int v in _cocd)
+            s += v;
+        return s;
+    }
+
+    /// <summary>Compact-dict snapshot-view foreach (span enumerator).</summary>
+    [Benchmark(Description = "COCD snapshot foreach (span)")]
+    [BenchmarkCategory("Enumerate")]
+    public long Cocd_SnapshotForeach()
+    {
+        long s = 0;
+        foreach (int v in _cocd.Snapshot())
+            s += v;
+        return s;
+    }
+
     /// <summary>Context row: the framework dictionary's enumerator (unordered, node-walking — structurally slower by design, shown for scale).</summary>
     [Benchmark(Description = "SysCD foreach (unordered)")]
     [BenchmarkCategory("Enumerate")]
@@ -305,6 +398,11 @@ public class ConcurrentOrderedDictBenchmarks
     [Benchmark(Description = "COD.ToArray")]
     [BenchmarkCategory("ToArray")]
     public int Cod_ToArray() => _cod.ToArray().Length;
+
+    /// <summary>Compact-dict snapshot copy — the same contiguous block copy of the live prefix.</summary>
+    [Benchmark(Description = "COCD.ToArray")]
+    [BenchmarkCategory("ToArray")]
+    public int Cocd_ToArray() => _cocd.ToArray().Length;
 
     // ------------------------------------------------------------------ Index get (baseline: List)
 
@@ -354,6 +452,29 @@ public class ConcurrentOrderedDictBenchmarks
         return s;
     }
 
+    /// <summary>Compact-dict live indexer loop (one volatile generation read per call).</summary>
+    [Benchmark(Description = "COCD[i] loop (live)")]
+    [BenchmarkCategory("IndexGet")]
+    public long Cocd_IndexLoop()
+    {
+        long s = 0;
+        for (int i = 0; i < N; i++)
+            s += _cocd[i];
+        return s;
+    }
+
+    /// <summary>Compact-dict snapshot-view indexer loop.</summary>
+    [Benchmark(Description = "COCD.Snapshot()[i] loop")]
+    [BenchmarkCategory("IndexGet")]
+    public long Cocd_SnapshotIndexLoop()
+    {
+        long s = 0;
+        ConcurrentOrderedCompactDict<int, int>.ValuesView view = _cocd.Snapshot();
+        for (int i = 0; i < view.Count; i++)
+            s += view[i];
+        return s;
+    }
+
     // ------------------------------------------------------------------ Replace existing (baseline: framework dictionary)
 
     /// <summary>Baseline: indexer upsert of existing keys (the framework dictionary's in-place atomic update).</summary>
@@ -375,6 +496,17 @@ public class ConcurrentOrderedDictBenchmarks
         int[] keys = _shuffledKeys;
         for (int i = 0; i < keys.Length; i++)
             _cod.SetByKey(keys[i], i);
+        return keys.Length;
+    }
+
+    /// <summary>Compact-dict upsert of existing keys — one in-place store into the single value copy.</summary>
+    [Benchmark(Description = "COCD.SetByKey (existing)")]
+    [BenchmarkCategory("Replace")]
+    public int Cocd_SetByKey()
+    {
+        int[] keys = _shuffledKeys;
+        for (int i = 0; i < keys.Length; i++)
+            _cocd.SetByKey(keys[i], i);
         return keys.Length;
     }
 
@@ -425,6 +557,43 @@ public class ConcurrentOrderedDictBenchmarks
     public int Cod_BuildRemoveWhereAll()
     {
         var d = new ConcurrentOrderedDict<int, int>(N);
+        for (int i = 0; i < N; i++)
+            d.TryAdd(i, i);
+        return d.RemoveWhere(static (k, v) => true);
+    }
+
+    /// <summary>Compact dict: build N then pop every entry from the back (one dummied index word + one holder per pop).</summary>
+    [Benchmark(Description = "COCD build+popBackAll")]
+    [BenchmarkCategory("Remove")]
+    public int Cocd_BuildPopBackAll()
+    {
+        var d = new ConcurrentOrderedCompactDict<int, int>(N);
+        for (int i = 0; i < N; i++)
+            d.TryAdd(i, i);
+        for (int i = N - 1; i >= 0; i--)
+            d.TryRemove(i, out _);
+        return d.Count;
+    }
+
+    /// <summary>Compact dict: build N then swap-back-remove every entry in FRONT order (in place: dummy, slot overwrite, one re-pointing word store).</summary>
+    [Benchmark(Description = "COCD build+swapBackAll (front order)")]
+    [BenchmarkCategory("Remove")]
+    public int Cocd_BuildSwapBackAll()
+    {
+        var d = new ConcurrentOrderedCompactDict<int, int>(N);
+        for (int i = 0; i < N; i++)
+            d.TryAdd(i, i);
+        for (int i = 0; i < N; i++)
+            d.TryRemoveSwapBack(i, out _);
+        return d.Count;
+    }
+
+    /// <summary>Compact dict: build N then remove everything in ONE pass (fresh arrays + one sequential index renumber).</summary>
+    [Benchmark(Description = "COCD build+RemoveWhere(all)")]
+    [BenchmarkCategory("Remove")]
+    public int Cocd_BuildRemoveWhereAll()
+    {
+        var d = new ConcurrentOrderedCompactDict<int, int>(N);
         for (int i = 0; i < N; i++)
             d.TryAdd(i, i);
         return d.RemoveWhere(static (k, v) => true);
