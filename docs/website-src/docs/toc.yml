@@ -4,10 +4,28 @@
   href: intro.md
 - name: NDArray
   href: NDArray.md
-- name: Dtypes
-  href: dtypes.md
-- name: Broadcasting
-  href: broadcasting.md
+- name: Fundamentals and usage
+  href: fundamentals/index.md
+  expanded: true
+  items:
+  - name: Array creation
+    href: fundamentals/array-creation.md
+  - name: Indexing on NDArray
+    href: fundamentals/indexing.md
+  - name: I/O with NumSharp
+    href: fundamentals/io.md
+  - name: Data types
+    href: dtypes.md
+  - name: Broadcasting
+    href: broadcasting.md
+  - name: Copies and views
+    href: fundamentals/copies-and-views.md
+  - name: Arrays of strings and bytes
+    href: fundamentals/strings-and-bytes.md
+  - name: Structured arrays
+    href: fundamentals/structured-arrays.md
+  - name: Universal functions (ufunc) basics
+    href: fundamentals/ufuncs.md
 - name: Getting & Setting Values
   href: getting-and-setting-values.md
 - name: Iterating & Enumerating
