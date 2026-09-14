@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using NumSharp.Interop.OpenBLAS;
 
 namespace NumSharp.Tests.Ma
 {
@@ -978,6 +979,112 @@ namespace NumSharp.Tests.Ma
             Assert.IsTrue(c1.shape.SequenceEqual(new long[] { 3, 4 }));
             Assert.IsTrue(D(c1).SequenceEqual(new double[] { 0, 0, 2, 5, 4, 4, 10, 17, 8, 8, 18, 29 }));
             Assert.IsTrue(M(c1).SequenceEqual(new[] { false, true, false, false, false, true, false, false, false, true, false, false }));
+        }
+
+        /// <summary>Per-slice masked median along an explicit axis (NumPy's <c>ma.median</c> axis branch): masked
+        /// entries are sorted behind the valid ones, so the middle is taken over each slice's UNMASKED count; an
+        /// all-masked slice → masked, an integer input promotes to float64, an unmasked NaN forces the slice's
+        /// median to NaN, and keepdims re-inserts the reduced axis.</summary>
+        [TestMethod]
+        public void MedianMaskedAxis()
+        {
+            var a = np.ma.array(np.array(new double[,] { { 3, 1, 2, 8 }, { 9, 5, 4, 7 }, { 1, 2, 3, 4 } }),
+                                np.array(new bool[,] { { false, true, false, false }, { false, false, true, false }, { true, true, true, true } }));
+            // axis 1: median of {3,2,8}=3, {9,5,7}=7, all-masked → masked.
+            var r1 = np.ma.median(a, 1);
+            Assert.IsTrue(D(r1).SequenceEqual(new double[] { 3, 7, 0 }));
+            Assert.IsTrue(M(r1).SequenceEqual(new[] { false, false, true }));
+            // axis 0: columns, the fully-masked slice contributes nothing.
+            var r0 = np.ma.median(a, 0);
+            Assert.IsTrue(D(r0).SequenceEqual(new double[] { 6, 5, 2, 7.5 }));
+            Assert.IsFalse(M(r0).Any(v => v));
+            // negative axis and keepdims.
+            Assert.IsTrue(D(np.ma.median(a, -1)).SequenceEqual(new double[] { 3, 7, 0 }));
+            Assert.IsTrue(np.ma.median(a, 1, keepdims: true).shape.SequenceEqual(new long[] { 3, 1 }));
+
+            // integer input → float64.
+            var ai = np.ma.array(np.array(new int[,] { { 3, 1, 2, 8 }, { 9, 5, 4, 7 } }),
+                                 np.array(new bool[,] { { false, true, false, false }, { false, false, false, false } }));
+            var ri = np.ma.median(ai, 1);
+            Assert.IsTrue(D(ri).SequenceEqual(new double[] { 3, 6 }));
+            Assert.AreEqual(np.float64, ri.data.dtype);
+
+            // an unmasked NaN in a slice makes that slice's median NaN.
+            var an = np.ma.array(np.array(new double[,] { { 1, double.NaN, 3 }, { 4, 5, 6 } }),
+                                 np.array(new bool[,] { { false, false, false }, { false, true, false } }));
+            var rn = D(np.ma.median(an, 1));
+            Assert.IsTrue(double.IsNaN(rn[0]) && rn[1] == 5.0);
+
+            // a 1-D masked array with axis=0 (the general path also handles rank 1).
+            var d1 = Ma(new double[] { 3, 1, 2, 8, 5 }, new[] { false, true, false, false, false });
+            Assert.AreEqual(4.0, np.ma.median(d1, 0).data.GetDouble(0));
+        }
+
+        /// <summary>ma.dot's strict flag PROPAGATES the mask along the contracted axes first — any masked value in a
+        /// row/column masks that whole vector — so a result entry is masked whenever a masked value touched it
+        /// (NumPy's <c>ma.dot(..., strict=True)</c>); the default treats masked as 0.</summary>
+        [TestMethod]
+        public void Dot_Strict()
+        {
+            var a = np.ma.array(np.array(new int[,] { { 1, 2, 3 }, { 4, 5, 6 } }),
+                                np.array(new bool[,] { { true, false, false }, { false, false, false } }));
+            var b = np.ma.array(np.array(new int[,] { { 1, 2 }, { 3, 4 }, { 5, 6 } }),
+                                np.array(new bool[,] { { true, false }, { false, false }, { false, false } }));
+            var loose = np.ma.dot(a, b);
+            Assert.IsTrue(D(loose).SequenceEqual(new double[] { 21, 26, 45, 64 }));
+            Assert.IsFalse(M(loose).Any(v => v));
+            // strict: a's row 0 and b's column 0 are tainted, so only result[1,1] survives.
+            Assert.IsTrue(M(np.ma.dot(a, b, strict: true)).SequenceEqual(new[] { true, true, true, false }));
+        }
+
+        /// <summary>ma.take honors the out-of-bounds mode (wrap/clip) on BOTH the data and the mask gather, so a
+        /// wrapped index carries the wrapped element's masked-ness (NumPy's <c>ma.take(..., mode=…)</c>).</summary>
+        [TestMethod]
+        public void Take_Mode()
+        {
+            var t = Ma(new double[] { 10, 20, 30, 40 }, new[] { false, true, false, false });
+            var idx = np.array(new int[] { 0, 3, 5 });
+            var w = np.ma.take(t, idx, mode: "wrap");   // index 5 wraps to 1 (masked)
+            Assert.IsTrue(D(w).SequenceEqual(new double[] { 10, 40, 20 }));
+            Assert.IsTrue(M(w).SequenceEqual(new[] { false, false, true }));
+            var c = np.ma.take(t, idx, mode: "clip");   // index 5 clips to 3 (unmasked)
+            Assert.IsTrue(D(c).SequenceEqual(new double[] { 10, 40, 40 }));
+            Assert.IsFalse(M(c).Any(v => v));
+        }
+
+        /// <summary>ma.squeeze with an explicit axis drops ONLY that size-1 axis (mask squeezed alike), matching
+        /// NumPy's <c>squeeze(axis=…)</c>; the default drops every size-1 axis.</summary>
+        [TestMethod]
+        public void Squeeze_Axis()
+        {
+            var sq = np.ma.array(np.array(new int[, ,] { { { 1 }, { 2 } } }),   // shape (1, 2, 1)
+                                 np.array(new bool[, ,] { { { false }, { true } } }));
+            Assert.IsTrue(np.ma.squeeze(sq, 0).shape.SequenceEqual(new long[] { 2, 1 }));
+            Assert.IsTrue(np.ma.squeeze(sq, 2).shape.SequenceEqual(new long[] { 1, 2 }));
+            Assert.IsTrue(np.ma.squeeze(sq).shape.SequenceEqual(new long[] { 2 })); // drop all size-1 axes
+        }
+
+        /// <summary>ma.polyfit DROPS the masked observations, then fits the survivors through <c>np.polyfit</c>
+        /// (which needs the LAPACK backend). A clean line with one masked outlier recovers slope 2, intercept 1.
+        /// Skips loudly if no LAPACK-capable BLAS is present.</summary>
+        [TestMethod]
+        public void Polyfit_DropsMaskedObservations()
+        {
+            try { OpenBlasEngine.Enable(); }
+            catch (Exception e) { Assert.Inconclusive("no CBLAS on this host: " + e.Message.Split('\n')[0]); }
+            if (!OpenBlasEngine.LapackAvailable)
+                Assert.Inconclusive("the loaded BLAS exports no LAPACK lstsq (a bare reference CBLAS).");
+            try
+            {
+                // The masked entry at index 2 (data 999) is a wild outlier; dropping it recovers y = 2x + 1.
+                var x = np.ma.array(np.array(new double[] { 0, 1, 2, 3, 4, 5 }), np.array(new bool[] { false, false, true, false, false, false }));
+                var y = np.ma.array(np.array(new double[] { 1, 3, 999, 7, 9, 11 }), np.array(new bool[] { false, false, true, false, false, false }));
+                NDArray c = np.ma.polyfit(x, y, 1);
+                var cv = c.ravel().ToArray<double>();
+                Assert.AreEqual(2.0, cv[0], 1e-9);
+                Assert.AreEqual(1.0, cv[1], 1e-9);
+            }
+            finally { OpenBlasEngine.Disable(); }
         }
     }
 }
