@@ -408,3 +408,22 @@ Console.WriteLine($"view scan: {Ms(()=>{ long s=0; foreach(var v in cod.Snapshot
 4. [x] **`RemoveWhere` / `TryRemoveSwapBack` / O(1) tail removal + `_floor`** — Gap B3 amortized/opted out.
 5. [x] **Value-inline map** (Gap B1, via the clone ref seam) — key get at CD parity; add allocates like CD.
 6. [x] ~~`ReaderWriterLockSlim`~~ — rejected (see Locking).
+
+---
+
+## Next — folding the Store into a compact table (discovery 2026-09-14, no product code changed)
+
+`ConcurrentOrderedDict.COMPACT.md` (beside this file) is the discovery ledger; the numbers reproduce with
+`benchmark/collections/probes/compact_ordered_dict_probe.cs`. In one paragraph: the Store CAN be absorbed
+into a compact insertion-ordered hash table (slot == index, one copy of each key/value, no per-entry node)
+**without adding copy-on-write to any operation that is not COW today** — append/tail-pop/atomic-replace/
+swap-back stay in place, interior removal/non-atomic replace/growth stay COW. What goes away is the 40 B
+hash node and the vendored clone: `<int,int>` 57.3 → 16–21 B/entry (below the plain CD's 49.3), builds
+3.4–4.3× faster, drains ~3× faster, front interior removals 5× faster (a streaming renumber replaces the
+per-key hash-walk re-index). Costs: near-tail interior removal ~3× slower (the index is copied too) and the
+layout decides the DRAM-scale key-hit cost. **Recommended layout: open addressing** (CPython's `dk_indices`
+shape with the key embedded in an 8-byte index word) — at parity/faster on every read path at every size,
+and the only layout whose in-place `TryRemoveSwapBack` keeps the key path tear-free (a chained compact
+layout lets a reader of the removed key pair its old key with the moved value; the open-addressed reader
+re-validates the single index word after the value load, ABA-free because dummied positions are never
+reused within a generation). Implementation plan and the port traps are in §7–§8 of that document.
