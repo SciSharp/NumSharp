@@ -4,6 +4,11 @@ In NumPy a **structured array** is an `ndarray` whose dtype is a composition of 
 
 This page explains why, and gives the .NET-idiomatic replacements for the things structured arrays are used for.
 
+<!-- Tests: NumSharp.Tests.Documentation.FundamentalsStructuredArraysDocTests — the code examples on this page are executed and asserted in test/NumSharp.Tests/Documentation/FundamentalsStructuredArraysDocTests.cs. Section → method(s):
+     Structured dtype strings throw → StructuredDtypeStrings_Throw
+     Replacement 1: parallel NDArrays → ParallelArrays_ColumnarReplacement
+     Replacement 2: .NET record arrays → RecordArrays_BuildColumnFromField -->
+
 ---
 
 ## Not supported
