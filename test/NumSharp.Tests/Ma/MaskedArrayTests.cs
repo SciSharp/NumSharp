@@ -856,8 +856,9 @@ namespace NumSharp.Tests.Ma
         public void NotmaskedEdges_Contiguous_Ids()
         {
             var h = Ma(new double[] { 1, 2, 3, 4, 5 }, new[] { true, false, false, true, false });
-            Assert.IsTrue(np.ma.notmasked_edges(h).SequenceEqual(new long[] { 1, 4 }));
-            Assert.AreEqual(2, np.ma.notmasked_contiguous(h).Length);
+            // The flat/1-D forms return long[] / Slice[] boxed as object (NumPy's return is polymorphic).
+            Assert.IsTrue(((long[])np.ma.notmasked_edges(h)).SequenceEqual(new long[] { 1, 4 }));
+            Assert.AreEqual(2, ((Slice[])np.ma.notmasked_contiguous(h)).Length);
 
             var (dp, mp) = np.ma.ids(h);
             Assert.AreNotEqual(0L, dp);
@@ -1085,6 +1086,94 @@ namespace NumSharp.Tests.Ma
                 Assert.AreEqual(1.0, cv[1], 1e-9);
             }
             finally { OpenBlasEngine.Disable(); }
+        }
+
+        /// <summary>notmasked_edges with an explicit axis on a >1-D array returns NumPy's <c>[tuple(mins),
+        /// tuple(maxs)]</c> — one compressed first/last-unmasked coordinate array per dimension (returned as
+        /// NDArray[][] boxed in object, mirroring NumPy's polymorphic list return).</summary>
+        [TestMethod]
+        public void NotmaskedEdges_NDAxis()
+        {
+            // 3x3 with [1:,1:] masked → unmasked coords {(0,0),(0,1),(0,2),(1,0),(2,0)}.
+            var a = np.arange(9).reshape(3, 3);
+            var m = np.zeros(new Shape(3, 3), np.@bool);
+            m[1, 1] = true; m[1, 2] = true; m[2, 1] = true; m[2, 2] = true;
+            var am = np.ma.array(a, m);
+
+            var e0 = (NDArray[][])np.ma.notmasked_edges(am, 0);
+            Assert.IsTrue(e0[0][0].ToArray<long>().SequenceEqual(new long[] { 0, 0, 0 }));   // mins, dim0
+            Assert.IsTrue(e0[0][1].ToArray<long>().SequenceEqual(new long[] { 0, 1, 2 }));   // mins, dim1
+            Assert.IsTrue(e0[1][0].ToArray<long>().SequenceEqual(new long[] { 2, 0, 0 }));   // maxs, dim0
+            Assert.IsTrue(e0[1][1].ToArray<long>().SequenceEqual(new long[] { 0, 1, 2 }));   // maxs, dim1
+
+            var e1 = (NDArray[][])np.ma.notmasked_edges(am, 1);
+            Assert.IsTrue(e1[0][0].ToArray<long>().SequenceEqual(new long[] { 0, 1, 2 }));
+            Assert.IsTrue(e1[1][0].ToArray<long>().SequenceEqual(new long[] { 0, 1, 2 }));
+            Assert.IsTrue(e1[1][1].ToArray<long>().SequenceEqual(new long[] { 2, 0, 0 }));
+
+            // The flat form still yields the plain [first, last] (boxed).
+            Assert.IsTrue(((long[])np.ma.notmasked_edges(am)).SequenceEqual(new long[] { 0, 6 }));
+        }
+
+        /// <summary>notmasked_contiguous with an explicit axis on a 2-D array returns NumPy's list-of-lists — one
+        /// inner Slice[] of contiguous unmasked runs per line along the OTHER axis (empty for a fully-masked
+        /// line); >2-D raises NumPy's "Currently limited to at most 2D array." (NotSupportedException here).</summary>
+        [TestMethod]
+        public void NotmaskedContiguous_2DAxis()
+        {
+            var a = np.arange(12).reshape(3, 4);
+            var mask = np.zeros(new Shape(3, 4), np.@bool);
+            mask[1, 0] = true; mask[1, 1] = true; mask[1, 2] = true; mask[2, 1] = true; mask[2, 2] = true; mask[0, 1] = true;
+            var ma = np.ma.array(a, mask);
+
+            var c0 = (Slice[][])np.ma.notmasked_contiguous(ma, 0);  // per column
+            Assert.AreEqual(4, c0.Length);
+            Assert.AreEqual("0:1,2:3", string.Join(",", c0[0].Select(s => $"{s.Start}:{s.Stop}")));
+            Assert.AreEqual(0, c0[1].Length);                       // fully-masked column → []
+            Assert.AreEqual("0:1", string.Join(",", c0[2].Select(s => $"{s.Start}:{s.Stop}")));
+            Assert.AreEqual("0:3", string.Join(",", c0[3].Select(s => $"{s.Start}:{s.Stop}")));
+
+            var c1 = (Slice[][])np.ma.notmasked_contiguous(ma, 1);  // per row
+            Assert.AreEqual(3, c1.Length);
+            Assert.AreEqual("0:1,2:4", string.Join(",", c1[0].Select(s => $"{s.Start}:{s.Stop}")));
+            Assert.AreEqual("3:4", string.Join(",", c1[1].Select(s => $"{s.Start}:{s.Stop}")));
+
+            Assert.ThrowsException<NotSupportedException>(
+                () => np.ma.notmasked_contiguous(np.ma.array(np.arange(8).reshape(2, 2, 2)), 0));
+        }
+
+        /// <summary>ma.power's third (modulus) argument is rejected with NumPy's MaskError "3-argument power not
+        /// supported." — the slot exists only for signature parity.</summary>
+        [TestMethod]
+        public void Power_ThirdArg_Throws()
+        {
+            var ex = Assert.ThrowsException<MaskError>(() => np.ma.power(np.ma.array(np.array(new int[] { 2, 3 })), 2, 3));
+            Assert.AreEqual("3-argument power not supported.", ex.Message);
+        }
+
+        /// <summary>var's NumPy-2.0 `mean` param centers by the SUPPLIED mean instead of the slice mean; std
+        /// ACCEPTS `mean` but IGNORES it (a NumPy quirk — ma.std forwards only keepdims to var, so ma.std(mean=X)
+        /// is the PLAIN std). Both are reproduced exactly.</summary>
+        [TestMethod]
+        public void VarStd_MeanParam()
+        {
+            var a = Ma(new double[] { 1, 2, 3, 4 }, new[] { false, true, false, false }); // [1,--,3,4]
+            // var centered by 2.0: devs [-1,_,1,2] → (1+1+4)/3 = 2.0.
+            Assert.AreEqual(2.0, np.ma.var(a, mean: 2.0).data.GetDouble(0), 1e-12);
+            // std IGNORES mean → plain std = sqrt(var()) (NOT sqrt(var(mean=2.0))).
+            double plain = np.ma.std(a).data.GetDouble(0);
+            Assert.AreEqual(plain, np.ma.std(a, mean: 2.0).data.GetDouble(0), 1e-12);
+            Assert.AreNotEqual(System.Math.Sqrt(2.0), np.ma.std(a, mean: 2.0).data.GetDouble(0), 1e-6);
+
+            // axis form: per-row keepdims mean centers each row.
+            var d = np.ma.array(np.array(new double[,] { { 1, 2, 3 }, { 4, 5, 6 } }),
+                                np.array(new bool[,] { { false, true, false }, { false, false, false } }));
+            var vr = np.ma.var(d, 1, mean: np.array(new double[,] { { 2.0 }, { 5.0 } })).data.astype(np.float64).ToArray<double>();
+            Assert.AreEqual(1.0, vr[0], 1e-12);
+            Assert.AreEqual(2.0 / 3.0, vr[1], 1e-12);
+
+            // unregressed: plain var (no mean) unchanged.
+            Assert.AreEqual(14.0 / 9.0, np.ma.var(a).data.GetDouble(0), 1e-12);
         }
     }
 }

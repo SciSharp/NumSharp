@@ -60,6 +60,23 @@ This is a living checklist. Techniques used are recorded so a later pass can re-
 > are RETURN-TYPE-impedance deferrals: NumPy returns a polymorphic Python list (`ndarray`-or-list /
 > list-or-list-of-lists) that C# cannot express without either an `object` return that breaks the already-gated
 > typed flat form (`long[]`/`Slice[]`) or a result-struct over-engineered for two niche functions.
+>
+> **Progress — 2026-09-14 (pass 8 — the return-type-impedance and last-param findings CLOSED).** Chose the honest
+> mirror of NumPy's own polymorphism (the project accepts breaking changes for parity) and closed the flagship
+> remaining functional gap: **N-D-axis `notmasked_edges` and 2-D-axis `notmasked_contiguous`** now return
+> `object` — the flat/1-D case still yields the same `long[]`/`Slice[]` VALUES (boxed; the one flat test casts),
+> and the axis case yields `NDArray[][]` (`{mins, maxs}`, one compressed coord array per dimension) /
+> `Slice[][]` (one run-list per line), byte-for-byte NumPy's `[tuple(mins), tuple(maxs)]` /
+> list-of-lists (`>2-D` raises NumPy's "Currently limited to at most 2D array."). Plus the last two real param
+> gaps: **`power`'s third (modulus) arg** (rejected with NumPy's `MaskError "3-argument power not supported."` —
+> the `MaskError` type added pass 3 now has its first raiser), and **`var`/`std`'s NumPy-2.0 `mean`** — `var`
+> centers by the supplied mean, while **`std` ACCEPTS but IGNORES it** (a genuine NumPy quirk: `ma.std` forwards
+> only `keepdims` to `var`, so `ma.std(mean=X)` is the PLAIN std — reproduced exactly). All verified bit-exact
+> against probed NumPy 2.4.2 (7 N-D/power + 8 var-mean checks, 0 fail) and gated by **4 more `MaskedArrayTests`
+> (68 total, green net8.0/net10.0)**. **What is left is now ONLY the genuinely-blocked or policy items:** the
+> structured/record family (no structured dtypes in NumSharp), the library-wide `out=`/`subok`/`order` gaps, and
+> the low-value instance `tolist`/`tobytes`/`view`/`flat` (semantic mismatches — `tolist` needs object/None
+> arrays, `view` a dtype reinterpret, `tobytes` a bytes path — none a masked-array behavior).
 
 ---
 
@@ -128,10 +145,12 @@ This is a living checklist. Techniques used are recorded so a later pass can re-
 |---|---|
 | `mr_`, `mvoid`, `fromflex`, `flatten_mask`, `flatten_structured_array`, `make_mask_descr` | structured/record dtypes — NumSharp has NONE |
 
-**Return-type impedance (deferred — NumSharp HAS the machinery; C# cannot express NumPy's polymorphic return):**
-| Missing | Why deferred |
-|---|---|
-| `notmasked_edges`/`notmasked_contiguous` (explicit axis on >1-D) | NumPy returns a polymorphic Python **list** — `ndarray`-or-list for `notmasked_edges`, list-or-**list-of-lists** for `notmasked_contiguous` — and C# cannot switch a method's return type on the runtime axis. The gated flat/1-D/axis=None forms already return the typed `long[]`/`Slice[]`, so the >1-D case can only be added by (a) widening the return to `object` (breaks every typed flat caller) or (b) a result-struct over-engineered for two niche functions. The *algorithm* is trivial here (`np.indices` + masked min/max + `compressed` for edges; a per-line `flatnotmasked_contiguous` loop for contiguous), so this is a C#-surface decision, NOT a missing capability. |
+**✅ Moved OUT of the return-type-impedance deferral (2026-09-14, pass 8):** N-D-axis `notmasked_edges` and
+2-D-axis `notmasked_contiguous` now RETURN `object` — the honest mirror of NumPy's own polymorphic list return.
+The flat/1-D/axis=None case still yields the typed `long[]`/`Slice[]` VALUES (boxed), and the axis case yields
+`NDArray[][]` (`{mins, maxs}`) / `Slice[][]` (list-of-lists), verified byte-for-byte against NumPy 2.4.2
+(`>2-D` raises NumPy's "Currently limited to at most 2D array."). The one flat-form test casts the boxed return;
+the breaking change is acceptable per the project's parity-over-ergonomics policy for such niche functions.
 
 **✅ Moved OUT of machinery-blocked (2026-09-14, pass 7):** `polyfit` (the audit premise was STALE — `np.polyfit`
 DOES exist in `Polynomial/np.polyfit.cs`; `ma.polyfit` is now the faithful NumPy port that composes on it, so it
@@ -206,11 +225,11 @@ Meaningful, result-changing params — most now closed (2026-09-14):
 | `array` | **`dtype`** | ✅ added |
 | `average` | `returned`,`keepdims` | ✅ (`keepdims` + `average_returned`) |
 | `median` | `keepdims` | ✅ (flat/unmasked-axis) |
-| `std`, `var` | **`mean`** (NumPy 2.0) | ⛔ precomputed-mean fast path — not added (low value) |
+| `std`, `var` | **`mean`** (NumPy 2.0) | ✅ added (pass 8) — `var` centers by the supplied mean; `std` ACCEPTS but IGNORES it (NumPy's own quirk: `ma.std` forwards only `keepdims` to `var`, so `ma.std(mean=X)` is the PLAIN std — reproduced) |
 | `take` | **`mode`** | ✅ `clip`/`wrap`/`raise` added (pass 7) — applied to the data AND mask gather alike |
 | `dot` | **`strict`** | ✅ added (pass 7) — masks propagated along the contracted axes (NumPy's `_mask_propagate`) before the product |
 | `squeeze` | **`axis`** | ✅ added (pass 7) — drop one named size-1 axis (mask squeezed alike) |
-| `power` | **`third`** | ⛔ 3-arg `pow(a,b,mod)` — not added |
+| `power` | **`third`** | ✅ added (pass 8) — the modulus slot exists for signature parity and rejects a non-null value with NumPy's `MaskError "3-argument power not supported."` |
 | `sort`/`argsort` | `kind`,`stable`,`order` | ⛔ not added (NumSharp sort is always stable radix) |
 
 **Parameter NAME mismatches — ✅ FIXED (2026-09-14):**
@@ -253,7 +272,7 @@ The fix closes the latent divergence: a complex masked `min`/`max` now fills mas
 ## 6. Prioritized backlog (recommended order)
 
 1. ✅ **DONE** — `is_masked` + module `ndim`/`shape`/`size` + `copy` + alias tier (§1.A).
-2. ✅ **DONE** — Parameter parity: `average.keepdims`+`average_returned`, `median.keepdims`, `sort`/`argsort` `endwith`, `array.dtype`, `isin.assume_unique`, `vander` `N`→`n`, `reshape` `new_shape` (§5.1), and (pass 7) `take.mode`, `dot.strict`, `squeeze.axis`. *(Left: `std`/`var`.`mean`, `power.third` — low-value.)*
+2. ✅ **DONE** — Parameter parity: `average.keepdims`+`average_returned`, `median.keepdims`, `sort`/`argsort` `endwith`, `array.dtype`, `isin.assume_unique`, `vander` `N`→`n`, `reshape` `new_shape` (§5.1), (pass 7) `take.mode`, `dot.strict`, `squeeze.axis`, and (pass 8) `std`/`var`.`mean` + `power.third`. *(The only param NOT added is `sort`/`argsort`'s `kind`/`stable`/`order` — NumSharp's sort is always stable radix, so they're inexpressible/no-op.)*
 3. ✅ **DONE** — Operators `%` `&` `|` `^` `~` on MaskedArray (§5.2). `==`/`!=` kept as documented reference-equality (use `np.ma.equal`/`not_equal`).
 4. ✅ **DONE** — Complex fill values → complex (§5.3).
 5. ✅ **DONE** — Instance surface: `fill_value` (get/set) + `T`/`mT`/`real`/`imag`/`ravel`/`flatten`/`reshape`/`transpose`/`swapaxes`/`squeeze`/`repeat`/`take`/`compressed`/`compress`/`sort`/`argsort`/`clip`/`round`/`conj`/`dot`/`diagonal`/`trace`/`nonzero`/`item` (§2). *(Left: `tolist`, `tobytes`, `view`.)*
@@ -262,7 +281,8 @@ The fix closes the latent divergence: a complex masked `min`/`max` now fills mas
    and `ids`.
 7. ✅ **DONE** — Real functional gaps §1.B: `fix_invalid`, `diff`, `append`, `clip`, `choose`, `compress`, `diagonal`, `nonzero`, `trace`, `make_mask`/`make_mask_none`, `mask_or`, `common_fill_value`, `set_fill_value`, `left_shift`/`right_shift`, `put`/`putmask`/`resize`, `ids`, `frombuffer`, `fromfunction`, `hsplit`, `ndenumerate`, plus the `MAError`/`MaskError` types. *(The `vsplit`/`array_split`/`split`/`dsplit` "split family" was a non-gap — `numpy.ma` exports only `hsplit`; corrected pass 7.)*
 8. ✅ **DONE (pass 7)** — `polyfit` (the `np.polyfit`-doesn't-exist premise was stale — it does; `ma.polyfit` composes on it), masked-axis `median` (a composition over `ma.sort`/`count`/`take_along_axis`, no bespoke masked-sort core needed), `dot.strict`, `take.mode`, `squeeze.axis`.
-9. ⛔ **Genuinely remaining** — the structured/record family (`mvoid`/`mr_`/`fromflex`/`flatten_mask`/`flatten_structured_array`/`make_mask_descr` — no structured dtypes in NumSharp), and the N-D-axis `notmasked_edges`/`notmasked_contiguous` (return-type impedance, §1.C — the algorithm is trivial; the blocker is C# expressing NumPy's polymorphic list return without breaking the gated typed flat form). Low-value params `std`/`var`.`mean` and `power.third`, and the library-wide `out=`/`subok`/`order` policy gaps (§5.5), remain by choice. **All other backlog items are DONE.**
+9. ✅ **DONE (pass 8)** — N-D-axis `notmasked_edges` + 2-D-axis `notmasked_contiguous` (return `object`, the honest mirror of NumPy's polymorphic list; flat form still typed-but-boxed), `power.third` (rejects with `MaskError`), and `std`/`var`.`mean` (var uses it; std reproduces NumPy's ignore-it quirk).
+10. ⛔ **Genuinely remaining — all either infra-blocked or by-policy, NONE a closeable functional gap:** the structured/record family (`mvoid`/`mr_`/`fromflex`/`flatten_mask`/`flatten_structured_array`/`make_mask_descr` — no structured dtypes in NumSharp); the low-value instance `tolist`/`tobytes`/`view`/`flat` (semantic mismatches — `tolist` needs object/None arrays, `view` a dtype reinterpret, `tobytes` a bytes path, `flat` collides with NumSharp's raveled `.flat`); and the library-wide `out=`/`subok`/`order` policy gaps (§5.5). **Every other backlog item is DONE.**
 
 ---
 
@@ -281,4 +301,6 @@ The fix closes the latent divergence: a complex masked `min`/`max` now fills mas
 9. **2026-09-14 verification pass** — every addition was cross-checked with a 79-assertion `dotnet run` script (`#:project NumSharp.Core`, signed with `Open.snk`, `AssemblyName=NumSharp.DotNetRunScript` to reach internals) comparing against the probed NumPy 2.4.2 values (0 failures), then gated by 16 new MSTest cases. **Parallel-session isolation trap:** the shared working tree held an untracked, half-written `src/NumSharp.Core/APIs/np.vectorize.cs` (a different session's WIP) that broke the whole-Core test build with an unrelated CS1503 — the *incremental* Core builds skipped it, but the test project's fuller rebuild hit it. The fix: build/test in a throwaway `git worktree add <scratch> HEAD` (untracked files are NOT carried into a new worktree), copy in only the two edited files (`Ma/MaskedArray.cs`, `Ma/MaskedArrayTests.cs`), and run there — never touch the other session's file.
 
 10. **2026-09-14 pass 7** — before writing anything, probed `numpy.ma.__all__` (only `hsplit` in the split family) and confirmed `np.polyfit` exists in Core, invalidating two stale premises. Every pass-7 addition (`polyfit`, masked-axis `median` incl. NaN-propagation/keepdims/neg-axis/int→float64/1-D, `dot.strict`, `take.mode`, `squeeze.axis`) was captured as a NumPy 2.4.2 reference block and bit-compared by a 22-assertion signed `dotnet run` script — **22/22 pass** — then gated by 5 new `MaskedArrayTests` (64 total, green net8.0 + net10.0). `polyfit`'s live gate enables the OpenBLAS backend per-test (Inconclusive if no LAPACK-capable BLAS), mirroring `LapackFactorisationTests.RequireLapack`. This session's parallel-WIP files (`NDExpr.Combinators.cs` + its test) compiled cleanly, so the in-place build was safe — the worktree quarantine from technique 9 was not needed this pass, but stays the fallback if a sibling's WIP ever fails to compile.
+
+11. **2026-09-14 pass 8** — closed the return-type-impedance and last-param findings. Key discovery from `inspect.getsource(numpy.ma.MaskedArray.std)`: **`ma.std` accepts `mean` but never forwards it to `var`** (its `kwargs` carries only `keepdims`), so `ma.std(mean=X)` silently returns the PLAIN std — a NumPy quirk that a naive `sqrt(var(…, mean))` would have gotten WRONG (my first cut did; the probe `sqrt(var(mean=2))=1.414` ≠ `std(mean=2)=1.247` caught it). Reproduced by making `std` ignore `mean`. The N-D `notmasked_*` return `object` (NumPy's own return there is a dynamically-typed Python list, so `object` is the faithful mirror, not a compromise); the flat test casts the boxed `long[]`/`Slice[]`. Verified by two signed `dotnet run` scripts (7 N-D/power checks + 8 var-mean checks, all pass) against NumPy 2.4.2 reference blocks, gated by 4 new `MaskedArrayTests` (68 total, green both TFMs). Probed the indexer forms (`ma[i, Slice.All]` / `ma[Slice.All, i]`), `np.indices`, and masked `min(axis)`+`compressed` up front to confirm the composition before writing it.
 
