@@ -1562,5 +1562,72 @@ namespace NumSharp.Tests.Ma
             Assert.AreEqual(24L, a.nbytes);
             Assert.IsTrue(a.strides.SequenceEqual(new long[] { 12, 4 }));
         }
+
+        /// <summary>numpy.ma treats a bare scalar operand of a binary op as a STRONG default-width array (python
+        /// int→int64, float→float64), so a narrow-dtype array op a scalar WIDENS — unlike the plain-np weak-scalar
+        /// path. The inputs are widened (not the result), so a value that would overflow the narrow dtype is
+        /// computed wide, exactly as NumPy does. Probed against NumPy 2.4.2.</summary>
+        [TestMethod]
+        public void MaBinary_ScalarOperand_PromotesLikeNumPy()
+        {
+            var i32 = np.ma.array(np.array(new[] { 1, 2, 3 }).astype(np.int32), np.array(new[] { false, true, false }));
+            var i8 = np.ma.array(np.array(new[] { 1, 2, 3 }).astype(np.int8), np.array(new[] { false, true, false }));
+            var f32 = np.ma.array(np.array(new[] { 1f, 2f, 3f }), np.array(new[] { false, true, false }));
+            var i64 = np.ma.array(np.array(new[] { 1L, 2L, 3L }), np.array(new[] { false, true, false }));
+
+            // Integer array × C# int scalar → int64 (NumPy's ma wraps the scalar as a strong int64 array).
+            np.ma.multiply(i32, 2).dtype.Should().Be(np.int64);
+            np.ma.add(i8, 2).dtype.Should().Be(np.int64);
+            np.ma.floor_divide(i32, 2).dtype.Should().Be(np.int64);   // DomainedBinary path
+            np.ma.bitwise_and(i32, 2).dtype.Should().Be(np.int64);
+            np.ma.power(i32, 2).dtype.Should().Be(np.int64);          // own path
+            // Float array (or float scalar) → float64; int64 array unchanged.
+            np.ma.multiply(f32, 2).dtype.Should().Be(np.float64);
+            np.ma.multiply(i32, 2.5).dtype.Should().Be(np.float64);
+            np.ma.multiply(i64, 2).dtype.Should().Be(np.int64);
+            // maximum/minimum/where route through np.where and widen the same way.
+            np.ma.maximum(i32, 2).dtype.Should().Be(np.int64);
+            np.ma.minimum(i32, 2).dtype.Should().Be(np.int64);
+            np.ma.where(np.array(new[] { true, false, true }), i32, 2).dtype.Should().Be(np.int64);
+            // array × array is UNTOUCHED — int32 × int32 stays int32 (no scalar operand).
+            np.ma.multiply(i32, i32).dtype.Should().Be(np.int32);
+            // Inputs widened BEFORE the op: 2e9 (int32) * 2 = 4e9 computed at int64, not the int32-wrapped value.
+            var big = np.ma.array(np.array(new[] { 2_000_000_000 }).astype(np.int32), np.array(new[] { false }));
+            var r = np.ma.multiply(big, 2);
+            r.dtype.Should().Be(np.int64);
+            Assert.AreEqual(4_000_000_000L, Convert.ToInt64(np.ma.getdata(r).GetAtIndex(0)));
+        }
+
+        /// <summary>The instance wrappers over module functions the surface diff found missing: <c>copy()</c> deep-copies
+        /// data+mask (independent), <c>product()</c> aliases <c>prod</c>, and <c>choose()</c> selects from choices by
+        /// this array's (masked) indices. Probed against NumPy 2.4.2.</summary>
+        [TestMethod]
+        public void Instance_Copy_Choose_Product()
+        {
+            var a = np.ma.array(np.array(new[] { 1, 2, 3, 4 }).astype(np.int64), np.array(new[] { false, true, false, true }));
+            var c = a.copy();
+            c[0] = 99;                                        // mutate the copy
+            Assert.IsTrue(D(a).SequenceEqual(new double[] { 1, 2, 3, 4 })); // original untouched → deep copy
+            Assert.IsTrue(D(c).SequenceEqual(new double[] { 99, 2, 3, 4 }));
+            Assert.IsTrue(M(c).SequenceEqual(new[] { false, true, false, true })); // slot 0 was already unmasked → mask unchanged
+
+            // product == prod (of the unmasked elements: 1*3 = 3; slots 1,3 masked).
+            Assert.AreEqual(3L, Convert.ToInt64(np.ma.getdata(a.product()).GetAtIndex(0)));
+
+            // choose: idx [0,1,2,1,0] (slots 2,4 masked) selects choices[idx][pos]; masked idx → masked result.
+            var idx = np.ma.array(np.array(new[] { 0, 1, 2, 1, 0 }).astype(np.int64), np.array(new[] { false, false, true, false, true }));
+            var choices = new object[]
+            {
+                np.array(new[]{10,11,12,13,14}).astype(np.int64),
+                np.array(new[]{20,21,22,23,24}).astype(np.int64),
+                np.array(new[]{30,31,32,33,34}).astype(np.int64),
+            };
+            var ch = idx.choose(choices);
+            // unmasked picks: pos0→choices[0][0]=10, pos1→choices[1][1]=21, pos3→choices[1][3]=23; pos2,4 masked.
+            Assert.IsTrue(M(ch).SequenceEqual(new[] { false, false, true, false, true }));
+            Assert.AreEqual(10L, Convert.ToInt64(np.ma.getdata(ch).GetAtIndex(0)));
+            Assert.AreEqual(21L, Convert.ToInt64(np.ma.getdata(ch).GetAtIndex(1)));
+            Assert.AreEqual(23L, Convert.ToInt64(np.ma.getdata(ch).GetAtIndex(3)));
+        }
     }
 }

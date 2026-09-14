@@ -508,6 +508,14 @@ namespace NumSharp
         /// <summary>Product over unmasked elements.</summary>
         /// <param name="axis">Axis or null.</param><param name="dtype">Accumulator dtype.</param><param name="keepdims">Keep reduced axes.</param><returns>Masked product.</returns>
         public MaskedArray prod(int? axis = null, DType dtype = null, bool keepdims = false) => np.ma.prod(this, axis, dtype, keepdims);
+
+        /// <summary>Alias of <see cref="prod(int?,DType,bool)"/> (NumPy's <c>MaskedArray.product</c>) — the product
+        /// of the UNMASKED elements; a fully-masked slice yields <c>masked</c>.</summary>
+        /// <param name="axis">Reduction axis, or null to reduce the whole array.</param>
+        /// <param name="dtype">Accumulator/result dtype; null follows NumPy's product-widening rule.</param>
+        /// <param name="keepdims">Keep the reduced axis as size 1.</param>
+        /// <returns>The masked product.</returns>
+        public MaskedArray product(int? axis = null, DType dtype = null, bool keepdims = false) => np.ma.product(this, axis, dtype, keepdims);
         /// <summary>Mean over unmasked elements.</summary>
         /// <param name="axis">Axis or null.</param><param name="dtype">Accumulator dtype.</param><param name="keepdims">Keep reduced axes.</param><returns>Masked mean.</returns>
         public MaskedArray mean(int? axis = null, DType dtype = null, bool keepdims = false) => np.ma.mean(this, axis, dtype, keepdims);
@@ -643,6 +651,23 @@ namespace NumSharp
         /// <param name="axis">Axis to compress along, or null to flatten first.</param>
         /// <returns>The compressed masked array.</returns>
         public MaskedArray compress(object condition, int? axis = null) => np.ma.compress(condition, this, axis);
+
+        /// <summary>A DEEP copy of this masked array — data AND mask duplicated, sharing no memory with the source
+        /// (NumPy's <c>MaskedArray.copy</c>). Reach for it before mutating a view/slice you must not disturb.</summary>
+        /// <returns>An independent <see cref="MaskedArray"/> with the same values, mask and fill value.</returns>
+        public MaskedArray copy() => np.ma.copy(this);
+
+        /// <summary>Uses THIS array's elements as indices to select from <paramref name="choices"/> (NumPy's
+        /// <c>MaskedArray.choose</c>); the result is masked wherever this index was masked (and where a chosen
+        /// element is). Reproduces the module <see cref="MaskedArrayModule.choose"/> — a masked INDEX slot's hidden
+        /// data may differ from NumPy's instance form (the module fills a masked index with 0 before selecting,
+        /// NumPy's instance keeps the raw index), but the slot is masked either way, so the observable
+        /// values+mask match.</summary>
+        /// <param name="choices">The choice arrays (an <see cref="NDArray"/>[] binds via covariance; scalars need
+        /// <c>new object[]{…}</c>).</param>
+        /// <param name="mode">Out-of-bounds index policy: "raise" (default)/"wrap"/"clip".</param>
+        /// <returns>The selected, masked array.</returns>
+        public MaskedArray choose(object[] choices, string mode = "raise") => np.ma.choose(this, choices, mode);
 
         /// <summary>Sorts along an axis with masked entries pushed to the end (or front) and re-masked there.</summary>
         /// <param name="axis">Sort axis (default last).</param>
@@ -1908,6 +1933,9 @@ namespace NumSharp
         {
             var da = AsData(a);
             var db = AsData(b);
+            // numpy.ma treats a bare scalar as a STRONG default-width array (int→int64, float→float64), so a
+            // binary op with a scalar operand widens like NumPy's ma rather than NumSharp's weak-scalar np path.
+            PromoteMaScalar(a, b, ref da, ref db);
             var result = f(da, db);
             // OR the two operand masks (nomask fast path: both absent ⇒ no result mask at all).
             var m = Or((a as MaskedArray)?._mask, (b as MaskedArray)?._mask);
@@ -1930,6 +1958,8 @@ namespace NumSharp
         {
             var da = AsData(a);
             var db = AsData(b);
+            // Same scalar-strong promotion as Binary (e.g. ma.floor_divide(int32, 2) → int64).
+            PromoteMaScalar(a, b, ref da, ref db);
             var result = f(da, db);
             var m = Or(NonFiniteMask(result), domain(da, db));
             m = Or(m, (a as MaskedArray)?._mask);
@@ -2028,6 +2058,59 @@ namespace NumSharp
                 case Array arr: return np.array(arr); // C# array-like (double[], int[,], …)
                 default: return NDArray.Scalar(a);    // boxed C# scalar (int/double/bool/…)
             }
+        }
+
+        /// <summary>
+        ///     The dtype numpy.ma gives a BARE scalar operand of a binary op — its STRONG default width (python
+        ///     int→int64, python float→float64, bool→bool, complex→complex128). numpy.ma wraps a scalar as
+        ///     <c>np.asarray(scalar)</c> (a STRONG array) rather than a weak NEP50 scalar, which is why
+        ///     <c>ma.multiply(int32, 2)</c> is int64 while the plain-np <c>np.multiply(int32, 2)</c> is int32.
+        ///     Returns null for a non-scalar operand (<see cref="NDArray"/>/<see cref="MaskedArray"/>/C# array/null),
+        ///     whose own dtype already applies.
+        /// </summary>
+        /// <param name="x">A binary-op operand.</param>
+        /// <returns>The scalar's strong dtype, or null when <paramref name="x"/> is not a bare scalar.</returns>
+        private static NPTypeCode? BareScalarStrongDtype(object x) => x switch
+        {
+            NDArray => null,
+            MaskedArray => null,
+            Array => null,
+            null => null,
+            bool => NPTypeCode.Boolean,
+            // Every C# integer type maps to int64 (python int's width) and every C# float type to float64
+            // (python float's), the closest analogs of NumPy's scalar-wrapping — the common int/long/double/float
+            // literal cases are exact; the odd narrow-scalar cases (byte/short) have no python literal analog.
+            sbyte or byte or short or ushort or int or uint or long or ulong or char => NPTypeCode.Int64,
+            Half or float or double or decimal => NPTypeCode.Double,
+            Complex => NPTypeCode.Complex,
+            _ => null
+        };
+
+        /// <summary>
+        ///     Reproduces numpy.ma's scalar promotion for a binary op: when EITHER operand is a bare scalar, both
+        ///     data arrays are widened to <c>promote_types(effective a, effective b)</c>, where a bare scalar
+        ///     contributes its <see cref="BareScalarStrongDtype"/> and an array its own dtype — so
+        ///     <c>ma.multiply(int32, 2)</c> computes at (and returns) int64, matching NumPy. The INPUTS are widened
+        ///     (not just the result) so a value that overflows the narrow dtype is computed wide, as NumPy does
+        ///     (<c>ma.multiply(int32 2e9, 2) == 4_000_000_000</c>, not the int32-wrapped value). A no-op for
+        ///     array×array (each operand keeps its own dtype, and the underlying op already promotes them).
+        /// </summary>
+        /// <param name="a">Left operand (the original object, to detect a bare scalar).</param>
+        /// <param name="b">Right operand.</param>
+        /// <param name="da">Left data array — widened in place when promotion applies.</param>
+        /// <param name="db">Right data array — widened in place when promotion applies.</param>
+        private static void PromoteMaScalar(object a, object b, ref NDArray da, ref NDArray db)
+        {
+            var sa = BareScalarStrongDtype(a);
+            var sb = BareScalarStrongDtype(b);
+            if (sa is null && sb is null)
+                return; // array×array: nothing to widen — the underlying op promotes them itself.
+            NPTypeCode ea = sa ?? da.typecode;
+            NPTypeCode eb = sb ?? db.typecode;
+            var td = np.promote_types(ea, eb);
+            // astype(copy:false) is a no-op when the dtype already matches, so no redundant allocation.
+            da = da.astype(td, copy: false);
+            db = db.astype(td, copy: false);
         }
 
         /// <summary>
@@ -3184,6 +3267,8 @@ namespace NumSharp
             var m = Or((a as MaskedArray)?._mask, (b as MaskedArray)?._mask);
             var fa = AsData(a);
             var fb = AsData(b);
+            // ma.power(int32, 2) → int64 (scalar-strong promotion, like the other binary ops).
+            PromoteMaScalar(a, b, ref fa, ref fb);
             var pw = np.power(fa, fb);
             // At operand-masked positions NumPy keeps the base's data (where(m, fa, power)).
             var result = m is null ? pw : np.where(m, fa, pw);
@@ -3214,6 +3299,9 @@ namespace NumSharp
             var cf = (cond?._mask is null ? AsData(condition) : cond.filled(false)).astype(np.@bool);
             var xd = AsData(x);
             var yd = AsData(y);
+            // Scalar-strong promotion (like the binary ufuncs): ma.where(cond, int32, 2) → int64, which also
+            // widens ma.maximum/ma.minimum (they route through where) to match NumPy.
+            PromoteMaScalar(x, y, ref xd, ref yd);
             var cm = getmaskarray(condition);
             var xm = getmaskarray(x);
             var ym = getmaskarray(y);
