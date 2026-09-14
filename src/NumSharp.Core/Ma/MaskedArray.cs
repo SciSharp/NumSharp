@@ -3043,6 +3043,92 @@ namespace NumSharp
         }
 
         // ─────────────────────────────────────────────────────────────────────────────
+        //  Creation / split / iteration wrappers (frombuffer / fromfunction / hsplit / ndenumerate)
+        // ─────────────────────────────────────────────────────────────────────────────
+
+        /// <summary>Interprets a byte buffer as a 1-D array (NumPy's <c>ma.frombuffer</c>) — an UNMASKED masked
+        /// array wrapping <see cref="np.frombuffer(byte[],DType,long,long)"/>.</summary>
+        /// <param name="buffer">The source bytes.</param><param name="dtype">Element dtype (null ⇒ float64).</param>
+        /// <param name="count">Elements to read (-1 = all).</param><param name="offset">Start byte offset.</param>
+        /// <returns>An unmasked masked array over the buffer's values.</returns>
+        public MaskedArray frombuffer(byte[] buffer, DType dtype = null, long count = -1, long offset = 0)
+            => new MaskedArray(np.frombuffer(buffer, dtype, count, offset), null);
+
+        /// <summary>
+        ///     Builds an array by applying <paramref name="function"/> to the coordinate grids of
+        ///     <paramref name="shape"/> (NumPy's <c>ma.fromfunction</c>) — an UNMASKED result. The delegate
+        ///     receives one <see cref="NDArray"/> per axis (the i-th being that axis's index grid), matching
+        ///     NumPy's <c>function(*indices)</c>; it must be vectorized (operate on the whole grids at once).
+        /// </summary>
+        /// <param name="function">Vectorized function of the per-axis index grids.</param>
+        /// <param name="shape">Output shape (the grids' shape).</param>
+        /// <param name="dtype">Index-grid dtype (null ⇒ int).</param>
+        /// <returns>An unmasked masked array of <paramref name="function"/>'s result.</returns>
+        public MaskedArray fromfunction(Func<NDArray[], NDArray> function, Shape shape, DType dtype = null)
+        {
+            var dims = shape.dimensions.Select(x => (int)x).ToArray();
+            var grid = np.indices(dims, dtype); // shape (ndim, *dims); grid[i] is the i-th coordinate grid
+            var args = new NDArray[dims.Length];
+            for (int i = 0; i < dims.Length; i++)
+                args[i] = grid[i];
+            return new MaskedArray(function(args), null);
+        }
+
+        /// <summary>Two-axis convenience for <see cref="fromfunction(Func{NDArray[],NDArray},Shape,DType)"/> —
+        /// matches NumPy's <c>fromfunction(lambda i, j: …, (m, n))</c>.</summary>
+        /// <param name="function">Vectorized function of the row and column index grids.</param>
+        /// <param name="shape">Output 2-D shape.</param><param name="dtype">Index-grid dtype (null ⇒ int).</param>
+        /// <returns>An unmasked masked array.</returns>
+        public MaskedArray fromfunction(Func<NDArray, NDArray, NDArray> function, Shape shape, DType dtype = null)
+            => fromfunction(idx => function(idx[0], idx[1]), shape, dtype);
+
+        /// <summary>Splits <paramref name="a"/> COLUMN-wise into <paramref name="sections"/> equal parts (NumPy's
+        /// <c>ma.hsplit</c>); data AND mask are split alike so each part keeps its masked-ness.</summary>
+        /// <param name="a">Operand (rank ≥ 1; splits along axis 1, or axis 0 for a 1-D input).</param>
+        /// <param name="sections">Number of equal parts.</param>
+        /// <returns>The masked-array parts.</returns>
+        public MaskedArray[] hsplit(object a, int sections)
+            => ZipSplit(np.hsplit(AsData(a), sections), (a as MaskedArray)?._mask is null ? null : np.hsplit(((MaskedArray)a)._mask, sections));
+
+        /// <summary>Splits <paramref name="a"/> COLUMN-wise at the given cut points (NumPy's <c>ma.hsplit</c>
+        /// with an index list); data AND mask split alike.</summary>
+        /// <param name="a">Operand.</param><param name="indices">Column cut points.</param>
+        /// <returns>The masked-array parts.</returns>
+        public MaskedArray[] hsplit(object a, int[] indices)
+            => ZipSplit(np.hsplit(AsData(a), indices), (a as MaskedArray)?._mask is null ? null : np.hsplit(((MaskedArray)a)._mask, indices));
+
+        /// <summary>Pairs the split data parts with their (optional) mask parts into masked arrays.</summary>
+        private static MaskedArray[] ZipSplit(NDArray[] dataParts, NDArray[] maskParts)
+        {
+            var res = new MaskedArray[dataParts.Length];
+            for (int i = 0; i < dataParts.Length; i++)
+                res[i] = new MaskedArray(dataParts[i], maskParts?[i]);
+            return res;
+        }
+
+        /// <summary>
+        ///     Enumerates <c>(index, value)</c> pairs for the UNMASKED elements only, in C-order (NumPy's
+        ///     <c>ma.ndenumerate</c> — masked positions are SKIPPED, unlike <see cref="np.ndenumerate(NDArray)"/>
+        ///     which yields every element). Each index is a fresh <c>long[]</c> coordinate.
+        /// </summary>
+        /// <param name="a">Operand.</param>
+        /// <returns>The unmasked <c>(index, value)</c> pairs.</returns>
+        public IEnumerable<(long[] index, object value)> ndenumerate(object a)
+        {
+            var d = AsData(a);
+            var m = (a as MaskedArray)?._mask;
+            // np.ndenumerate walks C-order, so the k-th pair aligns with the k-th C-order mask element.
+            var mflat = m is null ? null : np.ravel(m).ToArray<bool>();
+            long k = 0;
+            foreach (var pair in np.ndenumerate(d))
+            {
+                if (mflat is null || !mflat[k])
+                    yield return pair;
+                k++;
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────────────────────────
         //  Sorting / unique — masked entries sort to the END (filled with the dtype's largest
         //  value) and the trailing k slots (k = masked count along the axis) are re-masked.
         // ─────────────────────────────────────────────────────────────────────────────

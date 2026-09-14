@@ -863,5 +863,39 @@ namespace NumSharp.Tests.Ma
             Assert.AreNotEqual(0L, mp);
             Assert.AreEqual(0L, np.ma.ids(np.ma.array(np.array(new double[] { 1, 2 }))).mask); // nomask → 0
         }
+
+        /// <summary>frombuffer/fromfunction build UNMASKED arrays; hsplit splits data AND mask alike;
+        /// ndenumerate yields (index, value) for the UNMASKED elements only.</summary>
+        [TestMethod]
+        public void QuickWins_Frombuffer_Fromfunction_Hsplit_Ndenumerate()
+        {
+            var buf = np.array(new double[] { 1, 2, 3, 4 }).tobytes();
+            var fb = np.ma.frombuffer(buf, np.float64);
+            Assert.IsTrue(D(fb).SequenceEqual(new double[] { 1, 2, 3, 4 }) && !M(fb).Any(v => v));
+
+            var ff = np.ma.fromfunction((i, j) => i + j, new Shape(2, 3), np.int64);
+            Assert.IsTrue(D(ff).SequenceEqual(new double[] { 0, 1, 2, 1, 2, 3 }) && !M(ff).Any(v => v));
+
+            var g = np.ma.array(np.array(new double[,] { { 1, 2, 3, 4 }, { 5, 6, 7, 8 } }),
+                                np.array(new bool[,] { { false, true, false, false }, { false, false, false, true } }));
+            var parts = np.ma.hsplit(g, 2);
+            Assert.AreEqual(2, parts.Length);
+            Assert.IsTrue(M(parts[0]).SequenceEqual(new[] { false, true, false, false }));
+            Assert.IsTrue(M(parts[1]).SequenceEqual(new[] { false, false, false, true }));
+
+            var x = Ma(new double[] { 1, 2, 3 }, new[] { false, true, false });
+            var pairs = np.ma.ndenumerate(x).ToList();
+            Assert.AreEqual(2, pairs.Count); // the masked element is skipped
+            Assert.IsTrue(pairs[0].index.SequenceEqual(new long[] { 0 }) && Convert.ToDouble(pairs[0].value) == 1.0);
+            Assert.IsTrue(pairs[1].index.SequenceEqual(new long[] { 2 }) && Convert.ToDouble(pairs[1].value) == 3.0);
+        }
+
+        /// <summary>MAError/MaskError exception types match NumPy's hierarchy (MaskError : MAError : Exception).</summary>
+        [TestMethod]
+        public void ExceptionTypes_Hierarchy()
+        {
+            Assert.IsTrue(new MaskError("x") is MAError);
+            Assert.IsTrue(new MAError("x") is Exception);
+        }
     }
 }
