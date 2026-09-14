@@ -14,6 +14,15 @@
 //                              and flatter the chaining layouts' builds/drains by 3x)
 //   PROBE_ONLY=OA,no-hash,COD  contender filter (substring match on the row name)
 //
+//   dotnet run -c Release benchmark/collections/probes/compact_ordered_dict_probe.cs -- gun 8 8 cod,chained,oa-novalidate,oa
+//                              the CONCURRENCY GUN (no core pin): <seconds> <readers> <modes>. Readers hammer the
+//                              key path while writers swap-back/re-add hot keys, append pinned keys that swap-backs
+//                              move, and churn interior removals (COW generations). Oracles: value == F(key) on
+//                              every hit, a published pinned key is never absent (TryGetValue and IndexOf), and
+//                              every list-path value decodes. Measured 2026-09-14 (8 s, 8 readers, i9-13900K):
+//                              cod 0/0, chained 3,172 wrong pairs + 1 transient absence, oa-novalidate 2,862
+//                              wrong pairs, oa 0/0 — the chained key-path tear and the validated read's fix, live.
+//
 // Findings + the design they support: src/NumSharp.Core/Collections/Concurrent/ConcurrentOrderedDict.COMPACT.md
 //
 // Five compact-layout prototypes (one copy of each key/value; slot == insertion-order index; no per-entry heap
@@ -40,6 +49,14 @@ using NumSharp.Collections;
 using NumSharp.Collections.Concurrent;
 using SysCd = System.Collections.Concurrent.ConcurrentDictionary<int, int>;
 using CloneCd = NumSharp.Collections.Concurrent.ConcurrentDictionary<int, int>;
+
+// Concurrency-gun mode runs BEFORE the core pin — it needs every core.
+if (args.Length > 0 && args[0] == "gun")
+{
+    Gun.Run(args.Length > 1 ? int.Parse(args[1]) : 8, args.Length > 2 ? int.Parse(args[2]) : 8,
+        args.Length > 3 ? args[3].Split(',') : new[] { "cod", "chained", "oa-novalidate", "oa" });
+    return;
+}
 
 // One P-core (0x4 = logical CPU 2 on a hybrid part): an unpinned thread can land on an E-core and read 2-3x
 // slower for everything. Then spin the clock up — the pinned core idles at a low P-state for the first ~100 ms
@@ -764,6 +781,215 @@ sealed class SplitC : IContender
     public void SwapBack(object d, int key) => ((CompactSplit<int, int>)d).TryRemoveSwapBack(key);
 }
 
+// ============================================================================================ concurrency gun
+
+/// <summary>
+///     The reader/writer gun: readers hammer the key path on 16 hot keys plus the latest published pinned key
+///     while writer 1 swap-back-removes/re-adds hot keys and appends fresh pinned keys at the tail (so the next
+///     swap-back MOVES them into the hole) and writer 2 churns interior order-preserving removals of fill keys
+///     (copy-on-write generations + growth). It exists to make the chained layout's key-path tear observable and
+///     to prove the open-addressed validated read closes it.
+/// </summary>
+static class Gun
+{
+    /// <summary>The value law every stored value obeys, so a reader can tell a value that belongs to another key.</summary>
+    /// <param name="k">The key.</param>
+    /// <returns>The only value that may ever be stored under <paramref name="k" />.</returns>
+    public static int F(int k) => k * 7 + 3;
+
+    /// <summary>Runs every mode for <paramref name="seconds" /> and prints one row per mode.</summary>
+    /// <param name="seconds">Duration per mode.</param>
+    /// <param name="readerCount">Reader threads (two writers are always added).</param>
+    /// <param name="modes">Any of <c>cod</c>, <c>chained</c>, <c>oa-novalidate</c>, <c>oa</c>.</param>
+    public static void Run(int seconds, int readerCount, string[] modes)
+    {
+        Console.WriteLine($"cores={Environment.ProcessorCount} seconds={seconds} readers={readerCount}");
+        Console.WriteLine("| mode | reader ops | writer ops | swap-backs | wrong-pair hits | pinned absent | pinned IndexOf<0 | scan decode fails |");
+        Console.WriteLine("|---|---:|---:|---:|---:|---:|---:|---:|");
+        foreach (string mode in modes) RunMode(mode, seconds, readerCount);
+    }
+
+    /// <summary>One mode: builds the table, arms the threads, runs, joins and prints the failure counters.</summary>
+    /// <param name="mode">The table under fire.</param>
+    /// <param name="seconds">Duration.</param>
+    /// <param name="readerCount">Reader threads.</param>
+    /// <exception cref="ArgumentException">Unknown mode.</exception>
+    static void RunMode(string mode, int seconds, int readerCount)
+    {
+        IGunTable t = mode switch
+        {
+            "cod" => new CodGun(),
+            "chained" => new SoaGun(),
+            "oa-novalidate" => new OaGun(false),
+            "oa" => new OaGun(true),
+            _ => throw new ArgumentException(mode),
+        };
+        for (int k = 0; k < 16; k++) t.TryAdd(k, F(k));                       // hot keys 0..15
+        for (int k = 100_000; k < 102_000; k++) t.TryAdd(k, F(k));            // fill keys (writer 2's churn)
+        int pinnedCounter = 1_000_000;
+        int movedCandidate = 0;
+        bool stop = false;
+        long readerOps = 0, writerOps = 0, swapBacks = 0, wrongPair = 0, pinnedAbsent = 0, pinnedIdx = 0, scanFails = 0;
+
+        var readerThreads = new Thread[readerCount];
+        for (int r = 0; r < readerCount; r++)
+        {
+            int seed = 1000 + r;
+            readerThreads[r] = new Thread(() =>
+            {
+                var rng = new Random(seed);
+                long ops = 0, wp = 0, pa = 0, pi = 0, sf = 0;
+                while (!Volatile.Read(ref stop))
+                {
+                    int k = rng.Next(16);
+                    if (t.TryGet(k, out int v) && v != F(k)) wp++;           // a hit must carry ITS key's value
+                    int p = Volatile.Read(ref movedCandidate);
+                    if (p != 0)
+                    {
+                        if (!t.TryGet(p, out int pv)) pa++;                   // a published pinned key is never removed
+                        else if (pv != F(p)) wp++;
+                        if (t.IndexOf(p) < 0) pi++;
+                    }
+                    if ((++ops & 4095) == 0) sf += t.ScanDecodeFailures();
+                }
+                Interlocked.Add(ref readerOps, ops); Interlocked.Add(ref wrongPair, wp);
+                Interlocked.Add(ref pinnedAbsent, pa); Interlocked.Add(ref pinnedIdx, pi); Interlocked.Add(ref scanFails, sf);
+            });
+        }
+
+        var w1 = new Thread(() =>
+        {
+            var rng = new Random(7);
+            long ops = 0, sb = 0;
+            while (!Volatile.Read(ref stop))
+            {
+                int k = rng.Next(16);
+                if (t.SwapBack(k)) sb++; else t.TryAdd(k, F(k));
+                if ((++ops & 63) == 0)
+                {
+                    int p = ++pinnedCounter;
+                    t.TryAdd(p, F(p));
+                    Volatile.Write(ref movedCandidate, p);   // readers may assert p from here on; p is never removed
+                }
+            }
+            Interlocked.Add(ref writerOps, ops); Interlocked.Add(ref swapBacks, sb);
+        });
+
+        var w2 = new Thread(() =>
+        {
+            var rng = new Random(99);
+            long ops = 0;
+            while (!Volatile.Read(ref stop))
+            {
+                int k = 100_000 + rng.Next(2_000);
+                if (t.TryRemoveKey(k)) t.TryAdd(k, F(k));   // interior order-preserving remove (COW) + re-append
+                ops++;
+            }
+            Interlocked.Add(ref writerOps, ops);
+        });
+
+        foreach (var th in readerThreads) th.Start();
+        w1.Start(); w2.Start();
+        Thread.Sleep(seconds * 1000);
+        Volatile.Write(ref stop, true);
+        foreach (var th in readerThreads) th.Join();
+        w1.Join(); w2.Join();
+        Console.WriteLine($"| {mode} | {readerOps:N0} | {writerOps:N0} | {swapBacks:N0} | {wrongPair:N0} | {pinnedAbsent:N0} | {pinnedIdx:N0} | {scanFails:N0} |");
+    }
+}
+
+/// <summary>The surface the gun drives on every table under fire.</summary>
+interface IGunTable
+{
+    /// <summary>Lock-free key lookup.</summary>
+    /// <param name="k">The key.</param>
+    /// <param name="v">The value on a hit.</param>
+    /// <returns>Whether found.</returns>
+    bool TryGet(int k, out int v);
+
+    /// <summary>Appends if absent.</summary>
+    /// <param name="k">The key.</param>
+    /// <param name="v">The value.</param>
+    /// <returns>Whether added.</returns>
+    bool TryAdd(int k, int v);
+
+    /// <summary>Order-breaking O(1) removal (moves the last entry into the hole).</summary>
+    /// <param name="k">The key.</param>
+    /// <returns>Whether removed.</returns>
+    bool SwapBack(int k);
+
+    /// <summary>Order-preserving removal by key (copy-on-write for interior positions).</summary>
+    /// <param name="k">The key.</param>
+    /// <returns>Whether removed.</returns>
+    bool TryRemoveKey(int k);
+
+    /// <summary>Lock-free key → position.</summary>
+    /// <param name="k">The key.</param>
+    /// <returns>The position, or -1.</returns>
+    int IndexOf(int k);
+
+    /// <summary>Scans the list path and counts values that violate <see cref="Gun.F" /> (torn or garbage slots).</summary>
+    /// <returns>The violation count.</returns>
+    long ScanDecodeFailures();
+}
+
+/// <summary>Today's <see cref="ConcurrentOrderedDict{TKey,TValue}" /> under the gun — the node key path is the reference that must stay clean.</summary>
+sealed class CodGun : IGunTable
+{
+    readonly ConcurrentOrderedDict<int, int> _d = new(4096);
+    /// <inheritdoc />
+    public bool TryGet(int k, out int v) => _d.TryGetValue(k, out v);
+    /// <inheritdoc />
+    public bool TryAdd(int k, int v) => _d.TryAdd(k, v);
+    /// <inheritdoc />
+    public bool SwapBack(int k) => _d.TryRemoveSwapBack(k, out _);
+    /// <inheritdoc />
+    public bool TryRemoveKey(int k) => _d.TryRemove(k, out _);
+    /// <inheritdoc />
+    public int IndexOf(int k) => _d.IndexOf(k);
+    /// <inheritdoc />
+    public long ScanDecodeFailures() { long f = 0; foreach (int v in _d) if ((v - 3) % 7 != 0) f++; return f; }
+}
+
+/// <summary>The chained SoA prototype under the gun — expected to show the swap-back key-path tear.</summary>
+sealed class SoaGun : IGunTable
+{
+    readonly CompactSoA<int, int> _d = new(4096);
+    /// <inheritdoc />
+    public bool TryGet(int k, out int v) => _d.TryGetValue(k, out v);
+    /// <inheritdoc />
+    public bool TryAdd(int k, int v) => _d.TryAdd(k, v);
+    /// <inheritdoc />
+    public bool SwapBack(int k) => _d.TryRemoveSwapBack(k);
+    /// <inheritdoc />
+    public bool TryRemoveKey(int k) => _d.TryRemoveKey(k);
+    /// <inheritdoc />
+    public int IndexOf(int k) => _d.IndexOf(k);
+    /// <inheritdoc />
+    public long ScanDecodeFailures() { long f = 0; foreach (int v in _d.ValuesSpan()) if ((v - 3) % 7 != 0) f++; return f; }
+}
+
+/// <summary>The open-addressed prototype under the gun, with the validated read on or off (the A/B that isolates the fix).</summary>
+sealed class OaGun : IGunTable
+{
+    readonly CompactOA<int> _d = new(4096);
+    /// <summary>Arms the table with or without the post-value re-validation.</summary>
+    /// <param name="validate">Whether readers re-validate the index word after the value load.</param>
+    public OaGun(bool validate) { CompactOA<int>.Validate = validate; }
+    /// <inheritdoc />
+    public bool TryGet(int k, out int v) => _d.TryGetValue(k, out v);
+    /// <inheritdoc />
+    public bool TryAdd(int k, int v) => _d.TryAdd(k, v);
+    /// <inheritdoc />
+    public bool SwapBack(int k) => _d.TryRemoveSwapBack(k);
+    /// <inheritdoc />
+    public bool TryRemoveKey(int k) => _d.TryRemoveKey(k);
+    /// <inheritdoc />
+    public int IndexOf(int k) => _d.IndexOf(k);
+    /// <inheritdoc />
+    public long ScanDecodeFailures() { long f = 0; foreach (int v in _d.ValuesSpan()) if ((v - 3) % 7 != 0) f++; return f; }
+}
+
 // ============================================================================================ prototypes
 // Shared conventions of the four CHAINED prototypes: buckets[] holds 1-based slot indices (0 = empty), chains
 // run through `next` (-1 terminates), slot == insertion-order index (no holes ever: interior removal compacts
@@ -999,6 +1225,20 @@ sealed class CompactSoA<TKey, TValue> where TKey : notnull
             Volatile.Write(ref t.buckets[b], i + 1);
             Unlink(t, last);
             _t = new Tables(t.buckets, t.hashes, t.next, t.keys, t.values, n - 1, Math.Max(t.floor, n));
+            return true;
+        }
+    }
+
+    /// <summary>Order-preserving removal by key — the gun's interior-churn primitive (re-enters the reentrant Monitor through <see cref="RemoveAt" />).</summary>
+    /// <param name="key">The key.</param>
+    /// <returns>Whether an entry was removed.</returns>
+    public bool TryRemoveKey(TKey key)
+    {
+        lock (_lock)
+        {
+            int i = IndexOfUnderLock(_t, key);
+            if (i < 0) return false;
+            RemoveAt(i);
             return true;
         }
     }
@@ -1252,6 +1492,24 @@ sealed class CompactOA<TValue>
     volatile Tables _t;
     readonly object _lock = new();
 
+    /// <summary>When false the reader skips the post-value re-validation of the index word — the gun's A/B that shows the swap-back tear return.</summary>
+    public static bool Validate = true;
+
+    /// <summary>Order-preserving removal by key — the gun's interior-churn primitive.</summary>
+    /// <param name="key">The key.</param>
+    /// <returns>Whether an entry was removed.</returns>
+    public bool TryRemoveKey(int key)
+    {
+        lock (_lock)
+        {
+            Tables t = _t;
+            int p = ProbeFor(t, key);
+            if (p < 0) return false;
+            RemoveAt((int)t.index[p] - 1);
+            return true;
+        }
+    }
+
     /// <summary>Creates a table presized for <paramref name="capacity" /> entries (index = next power of two above 1.5x, so load stays ≤ 2/3).</summary>
     /// <param name="capacity">Entry capacity; at least 4.</param>
     public CompactOA(int capacity)
@@ -1295,7 +1553,7 @@ sealed class CompactOA<TValue>
             if (s > 0 && (int)(e >> 32) == key)
             {
                 value = t.values[s - 1];
-                if (Volatile.Read(ref index[p]) == e) return true;
+                if (!Validate || Volatile.Read(ref index[p]) == e) return true;
                 p = Home(t, key);
                 continue;
             }
