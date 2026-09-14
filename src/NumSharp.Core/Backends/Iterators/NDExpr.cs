@@ -615,6 +615,40 @@ namespace NumSharp.Backends.Iteration
         /// <returns>An expression node computing the element-wise phase angle of <paramref name="x"/> in radians.</returns>
         public static NDExpr Angle(NDExpr x) => new UnaryNode(UnaryOp.Angle, x);
 
+        /// <summary>
+        /// Convert to <paramref name="dtype"/> (np.ndarray.astype with the default <c>casting='unsafe'</c>) —
+        /// the fused analog of <c>expr.astype(dtype)</c>. Computes <paramref name="x"/> at its own dtype,
+        /// then converts each element to <paramref name="dtype"/> with the SAME per-element conversion the
+        /// engine's own casts use, so the RESULT dtype is exactly <paramref name="dtype"/> regardless of the
+        /// child. Every conversion is allowed (float→int TRUNCATES toward zero, over/underflow WRAPS, a
+        /// complex→real cast drops the imaginary part), matching NumPy's default-unsafe astype. Cast is the
+        /// building block for <c>Round(decimals)</c> (which must cast a float round back to an integer dtype)
+        /// and for a future root <c>dtype=</c> keyword.
+        /// </summary>
+        /// <remarks>
+        /// <b>Scalar-only in the fused kernel</b> for now: a tree containing a <c>Cast</c> runs scalar
+        /// end-to-end (the SIMD-widening cast lanes are Phase 5). <b>Parity envelope:</b> bit-exact vs
+        /// NumPy's <c>astype</c> for IN-RANGE, non-NaN conversions; the C-undefined edges (NaN/±inf/
+        /// out-of-range → integer, complex→real) inherit the engine's own documented cast behaviour
+        /// (host-dependent, the <c>astype_full</c> class), not a distinct guarantee.
+        /// </remarks>
+        /// <param name="x">The operand to convert.</param>
+        /// <param name="dtype">The target element dtype (any of the 15 NumSharp types).</param>
+        /// <returns>An expression node evaluating <paramref name="x"/> converted to <paramref name="dtype"/>.</returns>
+        public static NDExpr Cast(NDExpr x, NPTypeCode dtype) => new CastNode(x, dtype);
+
+        /// <summary>
+        /// Convert to the dtype of <paramref name="dtype"/> (the <see cref="System.Type"/> overload of
+        /// <see cref="Cast(NDExpr, NPTypeCode)"/>, e.g. <c>NDExpr.Cast(x, typeof(float))</c>). See that
+        /// overload for the full astype semantics and parity envelope.
+        /// </summary>
+        /// <param name="x">The operand to convert.</param>
+        /// <param name="dtype">The target element type, mapped to its <see cref="NPTypeCode"/>.</param>
+        /// <returns>An expression node evaluating <paramref name="x"/> converted to <paramref name="dtype"/>'s dtype.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is null.</exception>
+        public static NDExpr Cast(NDExpr x, Type dtype)
+            => new CastNode(x, (dtype ?? throw new ArgumentNullException(nameof(dtype))).GetTypeCode());
+
         // ===================================================================
         // Comparison factories (produce 0/1 at output dtype)
         // ===================================================================
@@ -1568,6 +1602,102 @@ namespace NumSharp.Backends.Iteration
         public override void AppendSignature(StringBuilder sb)
         {
             sb.Append(_op).Append('(');
+            _child.AppendSignature(sb);
+            sb.Append(')');
+        }
+    }
+
+    /// <summary>
+    /// Cast node — <c>expr.astype(target)</c> in the fused tree. Wraps a child and carries the TARGET
+    /// dtype (which a plain <see cref="UnaryOp"/> enum cannot, having no payload), so it is a distinct
+    /// node type rather than a <see cref="UnaryNode"/>. Its result dtype is the target; the child is
+    /// computed at its own dtype and converted per element with <see cref="DirectILKernelGenerator.EmitConvertTo"/>
+    /// — the exact conversion the engine's casts and every other node edge already use, which is why a
+    /// <c>Cast</c> is byte-for-byte <c>np.evaluate(child).astype(target)</c> for in-range values.
+    /// SCALAR-ONLY for now (<see cref="CanEmitVectorV2"/> is false), deferring the widening cast lanes to
+    /// Phase 5; a tree containing a <c>Cast</c> therefore runs scalar end-to-end.
+    /// </summary>
+    public sealed partial class CastNode : NDExpr
+    {
+        private readonly NDExpr _child;
+        private readonly NPTypeCode _target;
+
+        /// <summary>Construct a cast of <paramref name="child"/> to <paramref name="target"/>.</summary>
+        /// <param name="child">The sub-expression to convert.</param>
+        /// <param name="target">The target element dtype.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="child"/> is null.</exception>
+        public CastNode(NDExpr child, NPTypeCode target)
+        {
+            _child = child ?? throw new ArgumentNullException(nameof(child));
+            _target = target;
+        }
+
+        /// <summary>The target dtype this node converts to (its result dtype).</summary>
+        internal NPTypeCode Target => _target;
+
+        // NDComplexMath.RealPart(Complex)->double — np.astype's complex→real rule is "take the real
+        // part" (with a ComplexWarning), so a complex source is reduced to its real lane BEFORE the
+        // numeric convert. Static pass-by-value (a Complex on the IL stack consumed with one call).
+        private static readonly System.Reflection.MethodInfo s_complexRealForCast =
+            typeof(NumSharp.Utilities.NDComplexMath).GetMethod("RealPart", new[] { typeof(System.Numerics.Complex) })
+            ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "RealPart");
+
+        // Scalar-only: the SIMD-widening cast lanes are Phase 5. Keeping SupportsSimd false is
+        // consistent with CanEmitVectorV2 (the gate np.evaluate actually consults) returning false.
+        public override bool SupportsSimd => false;
+
+        public override void EmitScalar(ILGenerator il, NDExprCompileContext ctx)
+        {
+            var childType = ctx.TypeOf(_child);
+
+            // Identity — nothing to convert.
+            if (_target == childType)
+            {
+                _child.EmitScalar(il, ctx);
+                return;
+            }
+
+            // astype-to-bool is a NONZERO test at the SOURCE dtype (np: 0→False, everything else incl.
+            // NaN/±inf→True; complex → any-part-nonzero). EmitConvertTo's to==Boolean branch does
+            // `ldc.i4.0; cgt.un`, which is a stack-type mismatch for a float/double/complex source (it
+            // was only ever reached from a 0/1 Int32 at node edges — this Cast is its first float/complex
+            // caller). Emit the type-correct `child != 0` via the comparison kernel instead, which leaves
+            // a 0/1 the Boolean store writes as-is.
+            if (_target == NPTypeCode.Boolean)
+            {
+                _child.EmitScalar(il, ctx);
+                WhereNode.EmitPushZeroPublic(il, childType);
+                DirectILKernelGenerator.EmitComparisonOperation(il, ComparisonOp.NotEqual, childType);
+                return;
+            }
+
+            // complex → a NON-complex, NON-bool target: NumPy takes the REAL part (ComplexWarning), then
+            // converts real→target. EmitConvertTo has no complex-source path here (it mis-handles
+            // complex→int and ACCESS-VIOLATES on complex→Half), so extract the real lane to a double
+            // first and let EmitConvertTo do the real→target step it already handles bit-exactly.
+            if (childType == NPTypeCode.Complex)
+            {
+                _child.EmitScalar(il, ctx);
+                il.EmitCall(OpCodes.Call, s_complexRealForCast, null);        // Complex -> double (real part)
+                DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Double, _target);
+                return;
+            }
+
+            // Everything else — real→real, int→int, float→int (NumPy-faithful Converts.*), any→complex,
+            // real↔half, decimal — is what EmitConvertTo handles bit-exactly at node edges.
+            _child.EmitScalar(il, ctx);
+            DirectILKernelGenerator.EmitConvertTo(il, childType, _target);
+        }
+
+        // Never invoked: CanEmitVectorV2 returns false, so no tree containing a CastNode takes the
+        // vector body. Kept as an explicit guard rather than a silent scalar fallback.
+        public override void EmitVector(ILGenerator il, NDExprCompileContext ctx)
+            => throw new InvalidOperationException(
+                "CastNode is scalar-only (Phase 5 adds the widening cast lanes); it must not reach the vector body.");
+
+        public override void AppendSignature(StringBuilder sb)
+        {
+            sb.Append("cast").Append((int)_target).Append('(');
             _child.AppendSignature(sb);
             sb.Append(')');
         }

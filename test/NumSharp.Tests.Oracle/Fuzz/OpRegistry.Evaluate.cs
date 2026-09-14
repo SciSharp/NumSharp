@@ -219,6 +219,10 @@ namespace NumSharp.Tests.Fuzz
 
             private static NDExpr BuildNode(string name, List<NDExpr> a)
             {
+                // Phase 4.1b Cast: cast_<dtype>(child) → NDExpr.Cast(child, dtype). Handled before the
+                // switch because the target dtype is baked into the token name (cast_float32, cast_int8…).
+                if (name.StartsWith("cast_", StringComparison.Ordinal))
+                    return NDExpr.Cast(a[0], FuzzCorpus.DtypeToTC(name.Substring("cast_".Length)));
                 switch (name)
                 {
                     // binary

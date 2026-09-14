@@ -855,6 +855,23 @@ namespace NumSharp.Backends.Iteration
         }
     }
 
+    public sealed partial class CastNode
+    {
+        internal override NDExprTypeInfo InferType(
+            NPTypeCode[] inputTypes, Dictionary<NDExpr, NPTypeCode> nodeTypes)
+        {
+            // astype: the result IS the target, independent of the child. A WEAK child resolves to its
+            // OWN default (int→int64, float→float64, …) and is THEN converted — matching
+            // np.array(5).astype('f4') == 5.0f (the 5 is an int64 array first, not adopted to float),
+            // so we adopt the child's default code, NOT the target.
+            var ct = _child.InferType(inputTypes, nodeTypes);
+            var childType = ct.IsWeak ? ct.DefaultCode : ct.Code;
+            ResolveChild(_child, ct, childType, nodeTypes);
+            nodeTypes[this] = _target;
+            return NDExprTypeInfo.Strong(_target);
+        }
+    }
+
     public sealed partial class ComparisonNode
     {
         internal override NDExprTypeInfo InferType(

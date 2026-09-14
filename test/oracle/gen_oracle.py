@@ -8155,6 +8155,9 @@ def _ev_eval(expr, operands):
             assert sep == ",", f"expected ',' in {expr}"
         if tok == "where":
             return np.where(*args)
+        if tok.startswith("cast_"):
+            # cast_<dtype>(child) == child.astype(<dtype>) with NumPy's default casting='unsafe'.
+            return np.asarray(args[0]).astype(np.dtype(tok[len("cast_"):]))
         if tok in _EV_BINARY:
             return _EV_BINARY[tok](*args)
         if tok in _EV_UNARY:
@@ -8386,6 +8389,37 @@ def gen_evaluate():
                 if verdict is False:
                     continue
                 emit(expr, [(b, v)], ln, cid_tag=f"{dt}/{expr}")
+
+    # ---- B3. Cast(child, target) — the astype node (Phase 4.1b), src×target×layouts -----------
+    # A controlled NON-NEGATIVE pool (small integers + positive fractionals) that every target dtype
+    # represents WITHOUT overflow / negative-to-unsigned / NaN — so every cell is portable, bit-exact
+    # NumPy parity with NO host-dependent conversion (the C-undefined float→int edges — NaN/±inf/
+    # out-of-range/negative→unsigned — are covered by NDEvaluateTests.P41bCast_* against the engine's
+    # own host-pinned Converts.* table instead). float→int TRUNCATION is still exercised (2.5→2, 4.5→4).
+    cast_pool = np.array([0.0, 1.0, 2.0, 3.0, 2.5, 4.5, 6.0, 7.0])
+    cast_src = ["bool", "int8", "uint8", "int16", "uint32", "int64", "uint64",
+                "float16", "float32", "float64", "complex128"]
+    cast_dst = ALL_DTYPES                       # 13 targets (bool..complex128; char/decimal via unit tests)
+    cast_layouts = ["c_contiguous_1d", "c_contiguous_2d", "f_contiguous_2d",
+                    "negstride_1d", "strided_step2_1d"]
+    for ln in cast_layouts:
+        for s in cast_src:
+            b, v = LAYOUTS[ln](np.dtype(s))
+            # Overwrite the layout's random data with the safe pool (tiled to b's size), in the source
+            # dtype; v is a VIEW of b, so it reads the same values through its own strides.
+            flat = b.reshape(-1)
+            src_vals = np.resize(cast_pool, flat.size)
+            flat[:] = (src_vals + 0j).astype(b.dtype) if np.dtype(s).kind == "c" else src_vals.astype(b.dtype)
+            for d in cast_dst:
+                emit(f"cast_{d}(in0)", [(b, v)], ln, cid_tag=f"{s}->{d}")
+    # Cast as a SUB-tree: cast(a+b, int32) truncates a fused sum; add(cast(a, f4), 1.0) casts then
+    # continues arithmetic — proving Cast composes (not only as a root), still over the safe pool.
+    for ln in ["pp_contig_contig", "pp_contig_fortran"]:
+        ba, va, bb, vb = PAIR_LAYOUTS[ln](np.dtype("float64"), np.dtype("float64"))
+        ba.reshape(-1)[:] = np.resize(cast_pool, ba.size)
+        bb.reshape(-1)[:] = np.resize(np.array([0.4, 0.6, 0.5, 0.1]), bb.size)
+        emit("cast_int32(add(in0,in1))", [(ba, va), (bb, vb)], ln, cid_tag="f64,f64/cast_i4")
+        emit("add(cast_float32(in0),lf:1.0)", [(ba, va), (bb, vb)], ln, cid_tag="f64,f64/cast_f4")
 
     # ---- C. root reductions over fused trees (flat + axis + keepdims) -------------------------
     reduce_layouts = ["c_contiguous_1d", "c_contiguous_2d", "c_contiguous_3d", "f_contiguous_2d",

@@ -274,6 +274,13 @@ namespace NumSharp.Backends.Iteration
         }
     }
 
+    public sealed partial class CastNode
+    {
+        // Scalar-only: the SIMD-widening cast lanes are Phase 5. Returning false forces the whole
+        // tree scalar (a subtree's false propagates up through the ANDed root gate).
+        internal override bool CanEmitVectorV2(NPTypeCode lane, IReadOnlyDictionary<NDExpr, NPTypeCode> types) => false;
+    }
+
     public sealed partial class ComparisonNode
     {
         internal override bool CanEmitVectorV2(NPTypeCode lane, IReadOnlyDictionary<NDExpr, NPTypeCode> types)

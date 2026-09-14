@@ -1927,5 +1927,107 @@ namespace NumSharp.Tests.Backends.Iterators
             Assert.AreEqual(7.0, rec.GetDouble(0), 0);   // 3 + 4
             Assert.AreEqual(1.0, rec.GetDouble(1), 0);   // -1 + 2
         }
+
+        // ---------------------------------------------------------------------
+        // Phase 4.1b — the Cast node (np.ndarray.astype, casting='unsafe'). The safe-pool
+        // oracle sweep (src×target, non-negative values) covers the common matrix bit-exactly;
+        // these pin the edges it deliberately excludes — the two conversions EmitConvertTo
+        // mis-handled at node edges (float→bool, complex→real) and the C-undefined float→int
+        // cells (verified ≡ the engine's own host-pinned astype, i.e. NumPy on win-amd64).
+        // ---------------------------------------------------------------------
+
+        /// <summary><c>Cast(float, bool)</c> is the NONZERO test (0→False, everything else incl. NaN/±inf→True).
+        /// EmitConvertTo's <c>to==Boolean</c> branch did a double-vs-int stack compare (only ever reached from a
+        /// 0/1 Int32 at node edges); Cast is its first float/complex caller, so CastNode emits the type-correct
+        /// <c>child != 0</c> via the comparison kernel. NumPy-probed: <c>[0,5,-2,nan,inf].astype(bool)</c> =
+        /// [F,T,T,T,T].</summary>
+        [TestMethod]
+        public void P41bCast_FloatToBool_IsNonzeroTest_NaNIsTrue()
+        {
+            var r = np.evaluate(NDExpr.Cast(NDExpr.Arr(np.array(new double[] { 0.0, 5.0, -2.0, double.NaN, double.PositiveInfinity })), NPTypeCode.Boolean));
+            Assert.AreEqual(NPTypeCode.Boolean, r.typecode);
+            CollectionAssert.AreEqual(new[] { false, true, true, true, true },
+                new[] { r.GetBoolean(0), r.GetBoolean(1), r.GetBoolean(2), r.GetBoolean(3), r.GetBoolean(4) });
+            // -0.0 is still zero → False (the sign bit does not make it nonzero).
+            Assert.IsFalse(np.evaluate(NDExpr.Cast(NDExpr.Arr(np.array(new double[] { -0.0 })), NPTypeCode.Boolean)).GetBoolean(0));
+        }
+
+        /// <summary><c>Cast(complex, real/int)</c> takes the REAL part then converts (NumPy's ComplexWarning rule):
+        /// <c>[3+4j,-2.7+9j,0+1j].astype(int32)</c> = [3,-2,0] (real part truncated toward zero), <c>[3.9+4j]
+        /// .astype(float32)</c> = the float32 real part. <c>Cast(complex, bool)</c> is any-part-nonzero:
+        /// <c>[0+0j,0+1j,2+0j].astype(bool)</c> = [F,T,T]. EmitConvertTo mis-handled complex→int and
+        /// ACCESS-VIOLATED on complex→Half; CastNode extracts the real lane first.</summary>
+        [TestMethod]
+        public void P41bCast_ComplexToReal_TakesRealPart_AndToBool_AnyPart()
+        {
+            var ci = np.evaluate(NDExpr.Cast(NDExpr.Arr(np.array(new System.Numerics.Complex[] { new(3, 4), new(-2.7, 9), new(0, 1) })), NPTypeCode.Int32));
+            Assert.AreEqual(NPTypeCode.Int32, ci.typecode);
+            Assert.AreEqual(3, ci.GetInt32(0));
+            Assert.AreEqual(-2, ci.GetInt32(1));   // real part -2.7 truncated toward zero
+            Assert.AreEqual(0, ci.GetInt32(2));
+
+            var cf = np.evaluate(NDExpr.Cast(NDExpr.Arr(np.array(new System.Numerics.Complex[] { new(3.9, 4) })), NPTypeCode.Single));
+            Assert.AreEqual(NPTypeCode.Single, cf.typecode);
+            Assert.AreEqual((double)(float)3.9, cf.astype(NPTypeCode.Double).GetDouble(0), 0);   // real part as float32
+
+            // complex → Half no longer AVs (extract real → double → Half).
+            var ch = np.evaluate(NDExpr.Cast(NDExpr.Arr(np.array(new System.Numerics.Complex[] { new(2.5, 9) })), NPTypeCode.Half));
+            Assert.AreEqual(NPTypeCode.Half, ch.typecode);
+            Assert.AreEqual(2.5, ch.astype(NPTypeCode.Double).GetDouble(0), 0);
+
+            var cb = np.evaluate(NDExpr.Cast(NDExpr.Arr(np.array(new System.Numerics.Complex[] { new(0, 0), new(0, 1), new(2, 0) })), NPTypeCode.Boolean));
+            CollectionAssert.AreEqual(new[] { false, true, true }, new[] { cb.GetBoolean(0), cb.GetBoolean(1), cb.GetBoolean(2) });
+        }
+
+        /// <summary>The C-undefined float→integer edges (NaN/±inf/out-of-range/negative→unsigned) go through the
+        /// SAME NumPy-faithful <c>Converts.*</c> table the engine's <c>astype</c> uses, so a fused <c>Cast</c> is
+        /// bit-identical to <c>expr.astype(target)</c> — the host-pinned NumPy answer on win-amd64. Pinned as a
+        /// metamorphic identity (fused == engine) plus the NumPy-probed wrap values.</summary>
+        [TestMethod]
+        public void P41bCast_FloatToInt_CUndefinedEdges_MatchEngineAstype()
+        {
+            var edge = np.array(new double[] { double.NaN, double.PositiveInfinity, double.NegativeInfinity, 300.0, -300.0, -2.9, 2.9 });
+            foreach (var (tc, _) in new[] { (NPTypeCode.SByte, 0), (NPTypeCode.Byte, 0), (NPTypeCode.Int32, 0), (NPTypeCode.UInt32, 0), (NPTypeCode.Int64, 0), (NPTypeCode.UInt64, 0) })
+            {
+                var fused = np.evaluate(NDExpr.Cast(NDExpr.Arr(edge), tc)).astype(NPTypeCode.Int64);
+                var eng = edge.astype(tc).astype(NPTypeCode.Int64);   // the host-pinned answer (astype_full-gated)
+                for (int i = 0; i < edge.size; i++)
+                    Assert.AreEqual(eng.GetInt64(i), fused.GetInt64(i), $"{tc}[{i}] fused≠engine");
+            }
+            // NumPy-probed wrap pins (win-amd64): 300→int8 44, -300→int8 -44, -2.9→int32 -2, 300→uint8 44, -1→uint8 255.
+            var i8 = np.evaluate(NDExpr.Cast(NDExpr.Arr(np.array(new double[] { 300.0, -300.0 })), NPTypeCode.SByte)).astype(NPTypeCode.Int64);
+            Assert.AreEqual(44L, i8.GetInt64(0)); Assert.AreEqual(-44L, i8.GetInt64(1));
+            var u8 = np.evaluate(NDExpr.Cast(NDExpr.Arr(np.array(new double[] { 300.0, -1.0 })), NPTypeCode.Byte)).astype(NPTypeCode.Int64);
+            Assert.AreEqual(44L, u8.GetInt64(0)); Assert.AreEqual(255L, u8.GetInt64(1));
+        }
+
+        /// <summary>Cast covers the dtypes the ALL_DTYPES oracle sweep omits (char / decimal, as source AND target),
+        /// wraps integer overflow (NumPy modular), is the identity to the same dtype, and COMPOSES in the fused
+        /// kernel — <c>Cast(a+b, int32)</c> truncates a fused sum.</summary>
+        [TestMethod]
+        public void P41bCast_CharDecimal_Wrap_Identity_And_Composes()
+        {
+            // int32 → char (code unit) and char → int32.
+            Assert.AreEqual('A', (char)np.evaluate(NDExpr.Cast(NDExpr.Arr(np.array(new[] { 65 })), NPTypeCode.Char)).GetAtIndex<char>(0));
+            Assert.AreEqual(90, np.evaluate(NDExpr.Cast(NDExpr.Arr(np.array(new[] { 'Z' })), NPTypeCode.Int32)).GetInt32(0));
+            // float64 → decimal → float64 (exact for 2.5).
+            var dec = np.evaluate(NDExpr.Cast(NDExpr.Arr(np.array(new double[] { 2.5 })), NPTypeCode.Decimal));
+            Assert.AreEqual(NPTypeCode.Decimal, dec.typecode);
+            Assert.AreEqual(2.5m, dec.GetAtIndex<decimal>(0));
+            // Integer overflow WRAPS (int32 300 → int8 44, -1 → uint8 255) — NumPy modular.
+            Assert.AreEqual(44L, np.evaluate(NDExpr.Cast(NDExpr.Arr(np.array(new[] { 300 })), NPTypeCode.SByte)).astype(NPTypeCode.Int64).GetInt64(0));
+            Assert.AreEqual(255L, np.evaluate(NDExpr.Cast(NDExpr.Arr(np.array(new[] { -1 })), NPTypeCode.Byte)).astype(NPTypeCode.Int64).GetInt64(0));
+            // Identity: Cast to the same dtype is a value-preserving no-op.
+            var id = np.evaluate(NDExpr.Cast(NDExpr.Arr(np.array(new[] { 1, 2, 3 })), NPTypeCode.Int32));
+            Assert.AreEqual(NPTypeCode.Int32, id.typecode);
+            CollectionAssert.AreEqual(new[] { 1, 2, 3 }, new[] { id.GetInt32(0), id.GetInt32(1), id.GetInt32(2) });
+            // Composition: cast(a+b, int32) truncates the fused sum toward zero.
+            var a = np.array(new double[] { 1.7, 2.3, 3.9 }); var b = np.array(new double[] { 0.4, 0.4, 0.4 });
+            var comp = np.evaluate(NDExpr.Cast((NDExpr)a + (NDExpr)b, NPTypeCode.Int32));
+            Assert.AreEqual(NPTypeCode.Int32, comp.typecode);
+            CollectionAssert.AreEqual(new[] { 2, 2, 4 }, new[] { comp.GetInt32(0), comp.GetInt32(1), comp.GetInt32(2) }); // 2.1→2, 2.7→2, 4.3→4
+            // The Type overload resolves the same node.
+            Assert.AreEqual(NPTypeCode.Single, np.evaluate(NDExpr.Cast(NDExpr.Arr(np.array(new[] { 1 })), typeof(float))).typecode);
+        }
     }
 }

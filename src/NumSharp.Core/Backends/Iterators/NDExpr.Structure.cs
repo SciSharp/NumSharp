@@ -79,6 +79,7 @@ namespace NumSharp.Backends.Iteration
         Call = 8,
         Reduce = 9,
         WeightedAverage = 10,
+        Cast = 11,
     }
 
     /// <summary>
@@ -304,6 +305,20 @@ namespace NumSharp.Backends.Iteration
 
         internal override bool StructureEquals(NDExpr bound, NDExprOperandScratch operands)
             => bound is UnaryNode o && o._op == _op && _child.StructureEquals(o._child, operands);
+    }
+
+    public sealed partial class CastNode
+    {
+        internal override void HashStructure(ref NDExprStructureHasher h, NDExprOperandScratch operands)
+        {
+            // The TARGET dtype is part of the program identity — Cast(x, f4) and Cast(x, i4) are
+            // different kernels, so it must fold into the hash (like ReduceNode's kind/ddof).
+            h.Add(NDExprNodeTag.Cast, (long)_target);
+            _child.HashStructure(ref h, operands);
+        }
+
+        internal override bool StructureEquals(NDExpr bound, NDExprOperandScratch operands)
+            => bound is CastNode o && o._target == _target && _child.StructureEquals(o._child, operands);
     }
 
     public sealed partial class ComparisonNode

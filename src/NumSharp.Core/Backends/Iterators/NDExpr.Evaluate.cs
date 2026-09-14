@@ -730,6 +730,18 @@ namespace NumSharp.Backends.Iteration
         internal override NDArray FirstArray() => _child.FirstArray();
     }
 
+    public sealed partial class CastNode
+    {
+        internal override NDExpr BindArrays(NDExprBindContext ctx)
+        {
+            var c = _child.BindArrays(ctx);
+            return ReferenceEquals(c, _child) ? this : new CastNode(c, _target);
+        }
+
+        internal override bool ContainsReduce => _child.ContainsReduce;
+        internal override NDArray FirstArray() => _child.FirstArray();
+    }
+
     public sealed partial class ComparisonNode
     {
         internal override NDExpr BindArrays(NDExprBindContext ctx)
