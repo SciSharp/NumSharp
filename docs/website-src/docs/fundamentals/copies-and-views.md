@@ -4,6 +4,15 @@ An `NDArray` is two parts: a **data buffer** (the elements, in unmanaged memory)
 
 Knowing which operations return which is the single most important thing to internalize about NumSharp: a write through a view mutates the original; a write through a copy does not. This is identical to NumPy, and it is what makes slicing cheap.
 
+<!-- Tests: NumSharp.Tests.Documentation.FundamentalsCopiesViewsDocTests — every code example on this page is executed and asserted in test/NumSharp.Tests/Documentation/FundamentalsCopiesViewsDocTests.cs. Section → method(s):
+     View shares buffer / Copy independent → View_SharesBuffer_WriteThrough; Copy_IsIndependent
+     Basic → view, advanced → copy → Indexing_BasicIsView_AdvancedIsCopy
+     reshape/ravel/flatten/T → Reshape_Ravel_Flatten_ViewVsCopy
+     Broadcast views are read-only → Broadcast_IsReadOnly
+     How to tell (@base / shares_memory) → HowToTell_Base_And_SharesMemory
+     In-place modification → InPlace_CompoundAssignIsNotInPlace_SliceAssignIs
+     ascontiguousarray → AsContiguousArray_MaterializesWhenNeeded -->
+
 ---
 
 ## View
@@ -100,19 +109,20 @@ var x = np.arange(9);
 var v = x.reshape(3, 3);            // view
 var c = x[np.array(new[] { 0, 2 })]; // copy
 
-v.Storage.IsView;                   // true   ← the simple boolean check
-c.Storage.IsView;                   // false
+(v.@base is not null);              // true   ← the simple boolean check (pattern match)
+(c.@base is not null);              // false
 ```
 
 `arr.@base` is NumPy's `ndarray.base` — `null` when the array owns its data, otherwise an `NDArray` wrapping the base storage; views chain to the **ultimate owner**, not intermediate views:
 
 ```csharp
-var a = np.arange(10);              // a.@base == null            (owns data)
-var b = a["2:5"];                   // b.@base.Storage == a.Storage (view)
-var d = a.copy();                   // d.@base == null            (copy owns data)
+var a = np.arange(10);              // a.@base is null      (owns data)
+var b = a["2:5"];                   // b.@base is not null  (view of a)
+var d = a.copy();                   // d.@base is null      (copy owns data)
+np.shares_memory(a, b);             // true — b really does share a's buffer
 ```
 
-> **Prefer `arr.Storage.IsView` for a boolean test.** Writing `arr.@base != null` can trip NDArray's `!=` operator (elementwise comparison) rather than a null check. `@base` differs from NumPy in one way: it builds a fresh wrapper each call, so `ReferenceEquals(b.@base, a)` is `false` — but `b.@base.Storage == a.Storage` is `true`. Use `@base` to reach the owner, `Storage.IsView` to ask the yes/no question.
+> **Use `arr.@base is not null` for a boolean test, written with the `is`/`is not` pattern** — not `arr.@base != null`, because `!=` on `NDArray` is the elementwise-comparison operator, not a null check. `@base` differs from NumPy in one way: it builds a fresh wrapper each call, so `ReferenceEquals(b.@base, a)` is `false` even though they share memory (confirm the sharing with `np.shares_memory`). (NumSharp also has an internal `Storage.IsView` that says the same thing, but `Storage` is not part of the public API.)
 
 To ask whether two arrays could share memory, use `np.shares_memory` / `np.may_share_memory`:
 
@@ -184,7 +194,7 @@ You are writing to a broadcast view (stride 0). Copy first: `var w = b.copy();`.
 C# compound assignment rebinds; it does not mutate. Use `x[":"] = x + 1`.
 
 ### "`arr.@base != null` gave a weird array instead of true/false"
-`!=` on `NDArray` is elementwise. Use `arr.Storage.IsView` for a boolean.
+`!=` on `NDArray` is elementwise. Use `arr.@base is not null` (the `is not` pattern) for a boolean.
 
 ---
 
@@ -194,7 +204,7 @@ C# compound assignment rebinds; it does not mutate. Use `x[":"] = x + 1`.
 |--------|---------|---------|
 | `arr.copy()` / `np.copy(arr)` | `NDArray` | force an independent copy |
 | `arr.@base` | `NDArray?` | the owning array (null if it owns its data); chains to the ultimate owner |
-| `arr.Storage.IsView` | `bool` | simple view check (preferred boolean test) |
+| `arr.@base is not null` | `bool` | simple public view check (use the `is not` pattern, not `!=`) |
 | `np.shares_memory(a, b, max_work)` | `bool` | exact overlap solver |
 | `np.may_share_memory(a, b, max_work)` | `bool` | fast bounds-based check |
 | `arr.Shape.IsContiguous` / `.IsSliced` / `.IsBroadcasted` / `.IsWriteable` / `.IsFContiguous` | `bool` | layout flags |

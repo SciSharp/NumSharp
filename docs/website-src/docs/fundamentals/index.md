@@ -4,6 +4,16 @@ These pages clarify the concepts, design decisions, and behavioral rules behind 
 
 If you have written NumPy before, these pages are the fastest way to map that knowledge onto `NDArray`. If you have not, they are the place to build a mental model before reaching for the [API reference](../../api/index.md).
 
+<!-- Tests: every code example in the articles below is executed and asserted by a matching class in test/NumSharp.Tests/Documentation/ (NumSharp.Tests.Documentation namespace):
+     array-creation.md → FundamentalsArrayCreationDocTests
+     indexing.md → FundamentalsIndexingDocTests
+     io.md → FundamentalsIoDocTests
+     copies-and-views.md → FundamentalsCopiesViewsDocTests
+     strings-and-bytes.md → FundamentalsStringsBytesDocTests
+     structured-arrays.md → FundamentalsStructuredArraysDocTests
+     ufuncs.md → FundamentalsUfuncsDocTests
+     (Data types → dtypes.md and Broadcasting → broadcasting.md are the pre-existing pages, covered by NDArrayDocExamplesTests and their own suites.) -->
+
 ---
 
 ## The articles

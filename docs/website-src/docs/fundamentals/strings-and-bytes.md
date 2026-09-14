@@ -4,6 +4,12 @@ NumPy has a family of text and byte dtypes — fixed-width `str_` (`U`), `bytes_
 
 This page explains what NumSharp offers, why the NumPy string dtypes are deliberately absent, and how to port code that used them.
 
+<!-- Tests: NumSharp.Tests.Documentation.FundamentalsStringsBytesDocTests — every code example on this page is executed and asserted in test/NumSharp.Tests/Documentation/FundamentalsStringsBytesDocTests.cs. Section → method(s):
+     The Char dtype → Char_IsTwoByteUtf16CodeUnit
+     NumPy string/bytes dtypes throw → UnsupportedStringDtypes_Throw
+     Text stays .NET (string[] + LINQ) → Text_StaysDotNet_LengthsViaLinq
+     Byte streams via np.frombuffer → Bytes_ViaFrombuffer -->
+
 ---
 
 ## The `Char` dtype

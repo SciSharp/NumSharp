@@ -11,6 +11,18 @@ There are six general ways to create an `NDArray` in NumSharp — the same six N
 
 This page covers the general mechanisms. For element types and how they are inferred, see [Data types](../dtypes.md); for the memory-sharing rules that govern step 3, see [Copies and views](copies-and-views.md).
 
+<!-- Tests: NumSharp.Tests.Documentation.FundamentalsArrayCreationDocTests — every code example on this page is executed and asserted in test/NumSharp.Tests/Documentation/FundamentalsArrayCreationDocTests.cs. Section → method(s):
+     Converting .NET sequences → Sequences_RankFollowsNesting; Sequences_DtypeInferredFromElementType; Sequences_ExplicitDtypeOverload
+     int32-vs-int64 gotcha → Sequences_Int32VsInt64_Gotcha
+     Weak scalars vs strong arrays → Sequences_StrongArrayWrapsOnDowncast
+     1-D ranges → Intrinsic_1D_Ranges
+     2-D constructors (+ diag read-only view) → Intrinsic_2D_Constructors; Intrinsic_Diag2D_IsReadOnlyView
+     N-D constructors / indices → Intrinsic_ND_Fills_DefaultFloat64; Intrinsic_Indices_TakesIntArray
+     Replicating/joining → Replicate_SliceIsView_CopyIsIndependent; Replicate_Block4x4
+     From raw bytes → RawBytes_Frombuffer_ReinterpretsFloat32
+     Random (seed parity) → Random_ShapesAndSeedReproducibility
+     Common patterns → Patterns_ZerosLike_And_Meshgrid -->
+
 ---
 
 ## 1. Converting .NET sequences to NDArrays
@@ -121,7 +133,7 @@ np.zeros((2, 3), np.int32);            // dtype override
 `np.indices(shape)` returns one grid array per dimension (stacked), useful for evaluating functions on a regular grid:
 
 ```csharp
-np.indices((3, 3));
+np.indices(new[] { 3, 3 });   // takes an int[] of dimensions (not a tuple)
 // [[[0 0 0] [1 1 1] [2 2 2]],
 //  [[0 1 2] [0 1 2] [0 1 2]]]
 ```
