@@ -1,0 +1,333 @@
+# `ConcurrentOrderedDict` — folding the Store into a compact table (discovery, 2026-09-14)
+
+**Status:** discovery complete, no product code changed. Every number below is reproducible with
+`benchmark/collections/probes/compact_ordered_dict_probe.cs` (five prototype layouts + today's type + the
+baselines; a 20K-op structural sanity check against a `List` oracle gates each run).
+
+**Verdict.** The Store can be folded into a compact, insertion-ordered hash table **without copy-on-write on
+any structural change that is not already copy-on-write today**. Append, tail pop, atomic value replace and
+swap-back stay in-place and allocation-free (or one small holder); interior order-preserving removal,
+non-atomic value replace and growth stay COW — exactly today's COW set. What disappears is the **40 B hash
+node per entry and the vendored `ConcurrentDictionary` underneath it**, not the arrays: `<int,int>` drops
+from **57.3 → 16–21 B/entry** (2.7–3.5× smaller, and *below* the plain `ConcurrentDictionary`'s 49.3),
+`<int,decimal>` from 85.2 → 33–37, `<string,string>` structure from 81 → ~29–33. Builds get 3–4× faster
+(no per-add node, no node-recreating `GrowTable`), pop/swap-back drains 3× faster, front/middle interior
+removals 1.4–5× faster (the O(tail) hash-walk re-index is replaced by a streaming renumber). Two costs are
+real and quantified: **near-tail interior removal is ~3× slower** (the hash index is copied along with the
+arrays), and the **layout decides the key-path cache-line count** — the parallel-arrays layout is 7–40 %
+slower per DRAM-scale hit, the open-addressed layout is at parity or faster. So the brief's "merely renamed
+the Store" outcome did **not** happen: the Store is *absorbed* (it becomes the hash entries), the node layer
+is deleted, and every O(1) guarantee survives.
+
+**The one genuinely new hazard** — found by reasoning, confirmed by construction — is that a *chained*
+compact layout cannot keep the key path tear-free under the in-place `TryRemoveSwapBack`: overwriting a slot
+a lock-free key-path reader may be standing on lets a reader of the *removed* key pair its old key with the
+moved entry's value (a wrong-value hit, which the node design can never produce). The **open-addressed
+layout closes it structurally** (one 8-byte index word is the sole publication point, so the reader
+re-validates it after the value load; dummied positions are never reused within a generation, so there is
+no ABA). That, plus DRAM-scale parity, makes **open addressing the recommended layout**.
+
+---
+
+## 1. The central tension, answered
+
+A compact table gets its single-copy contiguous storage from a dense `entries` array it *resizes and
+compacts wholesale*; `ConcurrentDictionary` gets lock-free reads from immutable-ish nodes published one
+volatile pointer at a time. The question was whether the two can coexist without copy-on-write of the whole
+entries array on every structural change. Operation by operation, under today's three Store rules (count
+only grows on an instance; slots a reader can see are never structurally rewritten; value slots rewritten
+in place only for single-store-atomic `TValue`) extended to the hash index:
+
+| operation | today (node + Store) | compact table | COW? | alloc |
+|---|---|---|---|---|
+| append, in capacity | node alloc; slots written above `count`; map insert; release count | slot fields written above `count` (invisible); **release-store the index word / chain head** (key path) then **release-store `count`** (list path) — a fresh slot is published exactly like a fresh node | no | **0 B** (today 40 B) |
+| append, growth | COW both arrays + `CD.GrowTable` **re-creates every node** | COW arrays; index rebuilt sequentially from stored hashes (or recomputed for trivially-hashed keys) — no node churn | yes (as today) | arrays only |
+| append below the floor (after a tail pop) | COW both arrays (floor rule) | same rule, same trigger | yes (as today) | arrays |
+| replace value, atomic `TValue` | in-place node field + array slot (two stores, the "cross-path value clock" relaxation) | **one** in-place store — there is one copy, so relaxation #2 of the contract disappears | no | 0 |
+| replace value, non-atomic `TValue` | node swap + values-array clone | values-array clone only (index arrays shared, unchanged) — see the aliasing guard in §7 | yes (as today) | values array |
+| tail pop | `CD.TryRemove` (stripe lock, node unlink) + lower-count holder + floor | **one store** (dummy the index word / relink the chain head) + holder + floor; the vacated slot's fields stay intact for readers standing on them | no | one holder (56–72 B; today 40 B) |
+| interior removal, order-preserving | COW both arrays + **O(tail) per-key hash walks** rewriting `_index` | COW arrays **and** the index, repaired by a **streaming renumber** (`slot > i → slot−1`, `slot == i → dummy/skip`) — no hashing, no walks | yes (as today) | arrays + index |
+| `RemoveWhere` | COW + per-survivor re-index walks | COW + one sequential index rebuild | yes (as today) | arrays + index |
+| `TryRemoveSwapBack` | node `_index` rewrite + in-place slot swap (list-path relaxation) | open addressing: dummy the removed word, overwrite slot i, **one atomic index store** re-points the moved key; chaining: a 4-step relink | no | one holder |
+| `Clear` | new empty Store + `CD.Clear` (all stripe locks) | new empty generation | — | — |
+| reads (`TryGetValue`/`ContainsKey`/`IndexOf`/`this[int]`/`Count`/enumeration/`Snapshot`) | lock-free | lock-free, same acquire discipline | — | 0 |
+
+So COW is confined to the operations that are COW today. The difference is *how much* is copied (the index
+rides along: 2–2.9× today's bytes for an interior removal, measured 1.42–1.61 MB vs 0.56 MB at 70K
+capacity) and *what is no longer done at all* (no node per entry, no per-key hash walk on removal, no node
+re-creation on growth, no second value copy on replace).
+
+---
+
+## 2. Capability matrix — which structure serves each public member
+
+| member | today | compact table | note |
+|---|---|---|---|
+| `Count`, `IsEmpty` | `Store._count` | `Tables.count` | trivially one int in both |
+| `this[TKey]` get, `GetByKey`, `TryGetValue`, `ContainsKey`, `GetOrAdd` fast path, `AddOrUpdate` fast path | node (`ValueIndex._value`) | index probe → `values[slot]` | the value is read from the same array the list path scans |
+| `this[TKey]` set, `SetByKey`, `TryUpdate`, `AddOrUpdate` slow path | node + `Store._values[idx]` | `values[slot]` (one store) | non-atomic `TValue`: values-array clone, as today |
+| `TryAdd`, `Add`, `AddRange`, `GetOrAdd` miss path | node alloc + slots + count | slots + index word + count | 0 B in capacity |
+| `IndexOf`, `TryGetIndex` | node (`ValueIndex._index`) | **the slot number the probe lands on** | no stored index field: slot *is* the position (holes never exist, §3) |
+| `this[int]` get, `TryGetAt`, `GetKeyAt` | `Store._values`/`_keys` | `values[i]` / `keys[i]` | unchanged (a strided load only in the AoS layout) |
+| `SetAt` | `Store._keys[i]` → node lookup → both paths | `values[i]` directly | **no key lookup needed** — one store |
+| `TryRemove`, `Remove`, `RemoveAt` | `CD.TryRemove` + Store tail/interior paths | §1 rows | tail O(1), interior COW |
+| `TryRemoveSwapBack` | node `_index` rewrite + slot swap | §1 row | validated read keeps the key path clean (open addressing) |
+| `RemoveWhere` | COW + per-survivor walks | COW + rebuild | — |
+| `Clear` | both | new generation | — |
+| `ToArray`, `CopyTo`, `Keys`, `Values`, `Pairs`, `Enumerator` | `Store` arrays | the same dense `keys`/`values` arrays | AoS layout would gather from strided entries |
+| `Snapshot()` / `ValuesView` (`this[int]`, `GetKeyAt`, `AsSpan`, `KeysAsSpan`, span `foreach`) | `Store` arrays | dense `keys`/`values` arrays | **`AsSpan`/`KeysAsSpan` need dense key/value arrays** — the AoS layout cannot offer them (an API break), the split layout loses `KeysAsSpan` |
+| `Comparer` | `CD.Comparer` | the table's own comparer field | — |
+| `ValueIndex` struct, `Store` class, the vendored clone + ref seam | — | **gone** | the clone (2,297 + 291 + 43 lines) has no other consumer in `src/` |
+
+Directional skew: today "the key path leads" (map insert, then count publish). A compact append publishes
+the index word before the count, so the direction is preserved; `AddRange`'s list-path batch atomicity is
+unchanged. `IndexOf` can still be stale by concurrent removals (a reader may hold an older generation).
+
+---
+
+## 3. The removal-hole decision — the crux, decided
+
+In a compact table `entries[i]` equals insertion position `i` only until the first interior delete. Four
+ways to handle the hole, and what each costs this type's contract (strict dense `this[int]`, O(1) `IndexOf`,
+`AsSpan`, lock-free snapshot-pure readers):
+
+| option | reference | verdict |
+|---|---|---|
+| **Compact-on-delete** (shift the tail down, into fresh arrays) | today's `RemoveCoreUnderLock` | **Adopted.** O(n) COW, as today. The hash index must be repaired, but since slot indices are the chain/word payload the repair is a *pure renumbering*: `j > i → j−1`, `j == i → skip to its chain successor` (chaining) / `→ dummy` (open addressing). A streaming pass with no hashing and no per-key walks — which is why front removals get **5× faster** at 10M under hashed keys (today's per-key re-index becomes 10M random node walks: 153 ms; the renumber: 24–30 ms). The in-place variant is **not** an option: a lock-free reader standing on a half-moved slot could match the old key against the new value (a wrong-value hit, not merely a miss), so the shift MUST land in fresh arrays. |
+| **Tombstone + lazy compaction** (CPython) | `dictobject.c` `delitem_common` sets `DKIX_DUMMY` in the index and NULLs the entry; `dictresize` skips dead entries; `popitem` is the tail-pop special case | **Rejected.** Holes break every positional guarantee: `this[int]`/`IndexOf` would need a rank/select structure over a hole bitmap (O(1) only with popcount blocks — several dependent loads per access, 5–10× a raw array read, i.e. Target A gone), `AsSpan()` becomes impossible, enumeration needs a skip branch. CPython can afford holes because `dict` has no positional access at all. Note CPython's own free-threading rule, which is exactly the constraint here: *"In free-threaded builds dummy slots are not re-used to allow lock-free lookups to proceed safely."* |
+| **Free-list slot reuse** (.NET `Dictionary`) | `Dictionary.cs` `Remove`: `entry.next = StartOfFreeList - _freeList`, key/value cleared, `_freeList = i`; `TryInsert` pops it | **Impossible under lock-free readers.** Reusing a slot rewrites a slot a reader can see — a torn key/value pairing on the *key path*, which never tears today. (`Dictionary` also overwrites the removed entry's `next` with the free-list encoding, which would send a concurrent chain walker to a garbage index.) |
+| **Swap-back tombstone** | today's `TryRemoveSwapBack` | **Kept as the explicit opt-in**, order-breaking O(1). In open addressing it is literally one atomic index store after the slot overwrite. |
+
+**Decision:** strict-dense `this[int]` survives the compact table by keeping compact-on-delete, i.e. the
+same O(n) copy-on-write the type already pays; holes never exist, so `Count` is one int and `IndexOf` is the
+probe's slot number. The compact table changes *what* is copied (more) and *removes* the per-key re-index.
+
+---
+
+## 4. Lock-free publication protocol (the rules a port must keep)
+
+1. **A fresh slot is published like a fresh node.** Write `keys[idx]`, `values[idx]` (and `hashes[idx]`,
+   `next[idx]` in chaining) while `idx ≥ count` (invisible to list-path readers); `Volatile.Write` the index
+   word / chain head (key path becomes able to reach the slot); `Volatile.Write(count)` (list path). Readers
+   acquire-read whichever they enter through. A reader that reaches a slot through the key path reads fields
+   written before the release store.
+2. **Never rewrite a slot a reader can see.** Removed slots keep their fields (a reader may be standing on
+   them); the only in-place slot rewrites are the atomic value store (documented live-value semantics) and the
+   swap-back overwrite of slot `i` *after* its own key has been removed from the index.
+3. **Count is monotonic per generation; shrinking transitions publish a new holder** over the same arrays with
+   the floor raised (today's rule 1); an append below the floor copies (today's rule 2).
+4. **Index positions are never reused within a generation** (open addressing: a dummied word stays dummy; a
+   rebuild = a new generation). This is what makes the validated read ABA-free: a reader that loaded word `w`
+   at position `p`, read `values[slot]`, and re-reads position `p` cannot see `w` again unless nothing changed —
+   a re-added key lands at a *different* position, because `p` is a dummy, not empty.
+5. **The validated read** (open addressing): `e = Volatile.Read(index[p]); match → v = values[slot]; if
+   (Volatile.Read(index[p]) == e) return v; else restart`. Cost measured: 21.85 → 22.11 ns at 10M (noise).
+   This is the whole fix for the swap-back key-path tear; chaining has no equivalent single word to validate.
+6. **Interior removal, non-atomic replace and growth are COW into a fresh generation**; the old generation is
+   frozen the moment the new one is published (readers holding it continue on it, the GC keeps it alive).
+7. **A generation that shares its index arrays with an older generation must not let that older generation
+   see new slots through them** — see §7 (aliasing guard) for the two ways to honour this.
+
+---
+
+## 5. Layouts measured
+
+All five prototypes keep slot == insertion index and the protocol above; they differ only in where the hash
+index lives and therefore in cache lines touched per random hit (`b` = bucket/index line, `e` = entry line):
+
+| layout | per-entry arrays | random hit touches | `AsSpan` | `KeysAsSpan` |
+|---|---|---|---|---|
+| **SoA** (chained; `hashes`, `next`, `keys`, `values`, `buckets`) | 16 B + buckets | b + hashes + keys + values = 4 | yes | yes |
+| **SoA no-hash** (same, no stored hash for trivially-hashed keys) | 12 B + buckets | b + keys + values = 3 | yes | yes |
+| **AoS** (chained; one `Entry{hash,next,key,value}[]` — .NET `Dictionary`'s layout) | 16 B + buckets | b + e = 2 | **no** | **no** |
+| **split** (chained; `IndexEntry{hash,next,key}[]` + `values`) | 16 B + buckets | b + e + values = 3 | yes | no |
+| **OA** (open-addressed `long[]` index word = `(key<<32)|(slot+1)`, + `keys`, `values`) | 8 B + 8 B × 2^k/N | index + values = 2 | yes | yes |
+
+### 5.1 Fair regime — presized `<int,int>`, build keys a random permutation, lookup order an *independent*
+permutation, one P-core, best-of-N after a 150 ms tier-1 warm (`PROBE_KEYS=perm`)
+
+**N = 100,000** (everything L2/L3-resident)
+
+| contender | B/entry | build ns/add | hit ns | miss ns | foreach ns/el | this[i] ns/el | rm @0 ms | rm @n/2 | rm @n−2 | pop drain ns | swap drain ns |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| CloneCD | 48.5 | 18.1 | 3.14 | 3.23 | 1.81 | — | — | — | — | — | — |
+| **COD today** | 56.6 | 32.8 | 3.42 | 3.28 | 0.32 | 0.36 | 0.368 | 0.233 | 0.069 | 66 | 70 |
+| compact SoA | 20.4 | 16.0 | 2.78 | 2.57 | 0.18 | 0.35 | 0.400 | 0.505 | 0.240 | 34 | 39 |
+| compact SoA no-hash | 16.3 | 13.9 | 1.86 | 2.49 | 0.18 | 0.35 | 0.308 | 0.567 | 0.207 | 33 | 40 |
+| compact AoS | 20.3 | 14.4 | 2.17 | 2.51 | 0.18 | 0.41 | 0.391 | 0.679 | 0.308 | 30 | 34 |
+| **compact OA** | 29.0 | 17.0 | 2.40 | 1.35 | 0.18 | 0.35 | 0.507 | 0.624 | 0.324 | 38 | 44 |
+
+**N = 1,000,000** (compact tables ~L3-resident, node tables not)
+
+| contender | B/entry | build | hit | miss | foreach | this[i] | rm @0 | rm @n/2 | rm @n−2 | pop drain | swap drain |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| CloneCD | 49.3 | 93.5 | 14.17 | 11.45 | 6.25 | — | — | — | — | — | — |
+| **COD today** | 57.3 | 112.5 | 14.09 | 12.54 | 0.32 | 0.36 | 7.00 | 4.34 | 0.854 | 158 | 242 |
+| compact SoA | 20.7 | 17.2 | 7.75 | 6.35 | 0.18 | 0.36 | 2.89 | 5.50 | 3.10 | 53 | 76 |
+| compact SoA no-hash | 16.7 | 17.8 | 5.17 | 5.33 | 0.18 | 0.36 | 2.20 | 5.22 | 2.18 | 39 | 52 |
+| compact AoS | 20.7 | 17.3 | 5.99 | 7.85 | 0.30 | 0.61 | 3.35 | 6.40 | 3.68 | 36 | 50 |
+| **compact OA** | 24.8 | 38.4 | 12.34 | 4.44 | 0.18 | 0.36 | 3.68 | 6.11 | 3.35 | 82 | 119 |
+
+**N = 10,000,000** (DRAM-bound everywhere)
+
+| contender | B/entry | build | hit | miss | foreach | this[i] | rm @0 | rm @n/2 | rm @n−2 | pop drain | swap drain |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| CloneCD | 48.0 | 128.5 | 19.96 | 21.57 | 9.82 | — | — | — | — | — | — |
+| **COD today** | 56.0 | 146.7 | 25.00 | 22.39 | 0.37 | 0.41 | 152.7 | 79.8 | 8.57 | 318 | 377 |
+| compact SoA | 20.0 | 41.3 | 35.09 | 25.93 | 0.26 | 0.40 | 32.6 | 55.3 | 29.4 | 106 | 162 |
+| compact SoA no-hash | 16.0 | 39.7 | 26.83 | 25.12 | 0.27 | 0.41 | 23.8 | 50.7 | 21.8 | 99 | 122 |
+| compact AoS | 20.0 | 40.0 | 22.95 | 20.57 | **0.74** | **1.00** | 44.5 | 64.4 | 37.2 | 110 | 126 |
+| **compact OA** | 21.4 | 42.6 | **23.63** | **14.31** | 0.26 | 0.41 | 29.7 | 55.8 | 27.7 | 109 | 128 |
+
+**N = 1,000** (cache-resident; sequential keys; 100 ns timer quantum over 1–2 µs runs): every contender
+sits at 0.9–1.6 ns per hit, 0.2–0.5 ns per scanned element, builds 13–17 ns/add (COD 30) — parity within
+quantization.
+
+### 5.2 Reading the tables
+
+* **Memory** is layout-independent for the chained variants (20.0–20.7 B; no-hash 16.0–16.7) and load-dependent
+  for OA (21.4 at 10M → 29.0 at 100K: the power-of-two index sits at 0.38–0.60 load). Today: 56–57.
+* **Key hit.** Below DRAM scale every compact layout is faster than today (the whole table fits L3; the node
+  table does not). At 10M the line count decides: AoS/OA (2 lines) are at parity (23.0/23.6 vs 25.0),
+  no-hash (3 lines) is 7 % slower, SoA (4 lines) 40 % slower. **Key miss** at 10M: OA 1.55× faster (a miss
+  ends at an empty word in the probed line; a chain miss touches entry lines).
+* **List path.** SoA/no-hash/OA scan the dense `values` array — 0.18–0.27 ns/element, *faster* than `List<int>`
+  in this harness (0.33–0.39) and than today (0.32–0.37); `this[int]` unchanged. **AoS loses Target A at
+  scale** (0.74 / 1.00 ns at 10M: a 16 B stride reads 4× the bytes) and cannot offer `AsSpan` at all — rejected.
+* **Build.** 3.4–4.3× faster than today at 1M–10M (no node, no stripe lock, no `GrowTable` node churn); OA
+  builds at chaining speed under hashed keys (its 3× deficit in the sequential-key regime was an artifact —
+  see §5.3).
+* **Drains.** Pop-back and swap-back 2.9–3.2× faster than today (one random line instead of the stripe-locked
+  node unlink plus the holder); OA and chaining converge under hashed keys.
+* **Interior removal.** Front: compact 5× faster at 10M (today's re-index is 10M random node walks under hashed
+  keys). Middle: 1.3–1.6× faster. **Near the tail: 2.5–4× slower** — today copies 8 B/entry and re-indexes a
+  tiny tail; the compact table copies 16–24 B/entry regardless of position. This is the cost to accept; it is
+  the operation the type already documents as O(n) and steers users away from (`RemoveWhere`, swap-back,
+  tail pops — all of which get faster).
+
+### 5.3 Two harness traps that would have inverted the conclusions
+
+1. **Tier-0 timing.** The first sweep measured every JIT-from-IL contender (the clone, today's COD, the
+   prototypes) at 15–25 ns per cache-resident hit against the BCL `Dictionary`'s 5.9 — because a 2 ms
+   measurement window over 400 reps completes before tier-1 code is installed, while the BCL types are
+   ReadyToRun-precompiled. A 150 ms warm per op fixed it (1.0–1.6 ns for everyone).
+2. **Key/slot correlation.** With sequential `int` keys, mod-prime chaining puts key `k` in bucket `k`: builds
+   and pop-back drains become *sequential* bucket walks (chaining built at 14–16 ns/add and drained at 33 ns/op
+   at 10M; OA, whose Fibonacci hash scatters them, at 44 and 113). And probing a table in its own build order
+   turns a "random" lookup into a prefetch stream (every table's 10M hit halved). Building from a random
+   permutation and looking up in an *independent* permutation is the fair regime reported above; the
+   sequential-key numbers are the chaining layouts' best case, not their expectation.
+
+---
+
+## 6. Memory ledger against 539e9c05
+
+| shape | `List<T>` | CD | **COD today** | compact chained (SoA / no-hash) | compact OA | reduction |
+|---|---:|---:|---:|---:|---:|---:|
+| `<int,int>` presized 1M | 4.0 | 49.3 | **57.3** | 20.7 / **16.7** | 24.8 (21.4 at 10M) | 2.3–3.4× |
+| `<int,long>` | 8 | 49.3 | **69.3** | 24.6 / ~20.7 | 28.8 | 2.4–3.3× |
+| `<int,decimal>` | 16 | 57.3 | **85.2** | 32.6 / ~28.7 | 36.8 | 2.3–3.0× |
+| `<string,string>` structure (analytic) | 8 | 57.0 | **81.0** | 28.7 (hash stored) | ~32.8 (hash embedded) | 2.5–2.8× |
+| `<int,int>` unsized, 600K (near-worst doubling) | — | 49.0 | **63.0** | 35.7 | 42.0 | 1.5–1.8× |
+| `<int,int>` unsized, 1M (near-best) | — | 51.2 | **59.6** | 21.4 | 25.2 | 2.4–2.8× |
+
+Decomposition `<int,int>` presized: chained = 4 (hash) + 4 (next) + 4 + 4 + buckets 4 × 1.16 (prime ≥ N)
+= 20.7; no-hash drops the 4; OA = 4 + 4 + 8 × 2^k/N (index words at 0.34–0.67 load → 12–24 B). Today = node
+40 + buckets ~9 + arrays 8. The whole "double storage" premium the brief targeted was the 8 B of arrays; the
+node was the 40.
+
+Churn per op (presized 70K holding 64K, thread-local counter, min-of-rounds):
+
+| op | COD today | compact chained | compact OA |
+|---|---:|---:|---:|
+| append in capacity | 40 B (node) | **0** | **0** |
+| tail pop | 40 B (Store holder) | 72 B (holder) | 56 B |
+| swap-back in place | 40 B | 72 B | 56 B |
+| interior removal @1000 (COW) | 560,088 B (2 arrays) | 1,421,920 B (5 arrays) | 1,608,704 B (index + 2 arrays) |
+| non-atomic replace | values clone + 48 B node | values clone | values clone |
+
+Retention: unchanged in kind — a tail-popped value stays reachable until the next append's floor copy (the
+slot is not scrubbed), an interior-removed value is released with the old generation, a held enumerator/view
+pins the two dense arrays it captured (never the index). A reader mid-lookup pins its whole generation for the
+duration of one probe, as `ConcurrentDictionary`'s does its `Tables`.
+
+---
+
+## 7. What a port must get right (traps found while prototyping)
+
+* **The swap-back key-path tear (chaining).** The 4-step relink (unlink i from its chain → overwrite slot i
+  with the last entry → release-link i as head of key_last's chain → unlink the old tail) keeps key_last
+  resolvable throughout, but a reader that loaded slot i *before* step 1 and is preempted between its key
+  compare and its value load returns key_i paired with value_last. No store order avoids it (key and value are
+  separate words). Chaining therefore needs either a COW swap-back (O(n), today's wide-type degrade path — the
+  O(1) guarantee is lost) or a per-slot version word (+4 B, two extra loads per read). **Open addressing avoids
+  it with the validated read (§4.5) at zero measured cost — the deciding argument for OA.**
+* **Values-array aliasing after a non-atomic replace.** A values-only COW yields a generation that shares its
+  index arrays with the previous one; an in-place append afterwards publishes the new slot through the
+  *shared* index, so a reader still holding the previous generation can find the new key and read the new
+  slot from its *own, stale* values array. Two fixes: (a) key-path readers treat `slot ≥ their generation's
+  count` as absent and continue the probe (one compare per hit; it makes the list path lead instead of the key
+  path — a benign contract flip that also makes `AddRange` batches atomic on *both* paths); or (b) mark the
+  values-only generation so the next append performs a full COW. (a) is the robust one.
+* **Unsized ctor / `Clear`.** The index needs at least one word for the mask/`FastMod`; keep an empty
+  singleton generation whose first append grows (today's `Store.Empty` pattern).
+* **Reference-type keys.** Embed the **hash** in the index word instead of the key (`(hash<<32)|slot`);
+  compare `keys[slot]` on a hash match. A hit then costs index + keys + string deref + values, inherent to
+  reference keys. For ≤ 4-byte value-type keys embed the key itself; for 8-byte keys embed the xor-folded hash.
+* **Dummies accumulate under pop/swap-back churn** (they are never reused in place): count them and rebuild
+  when `(count + dummies) > 2/3 · index`; the floor-rule COW after a pop already rebuilds and clears them.
+* **Fibonacci hashing** (`(uint)key * 0x9E3779B97F4A7C15 >> shift`) for the power-of-two index — patterned and
+  sequential int keys spread evenly; mod-prime is not needed once the key is embedded in the word.
+* **Growth rebuilds the index from the dense keys** (hashes stored or recomputed); it never reads the old index.
+* **`Volatile.Read` on an `int[]`/`long[]` element** is fine — the clone's `VolatileNode` wrapper exists only
+  for reference arrays (`ldelema` + `CastHelpers.LdelemaRef`).
+* **Benchmarking**: 150 ms tier-1 warm per op; independent build/lookup permutations; one P-core pinned; a
+  2.5 s clock spin-up (the first 1K rows of the first run were 4–5× slow from a low P-state alone).
+
+---
+
+## 8. Recommendation and plan
+
+**Adopt the open-addressed compact table** (`long[]` index words embedding the key/hash + dense `keys[]`,
+`values[]`; generation holder with `count`/`floor`/`dummies`; the §4 protocol with the validated read).
+Expected against today, from the fair-regime numbers: memory 2.3–2.8× smaller (below the plain
+`ConcurrentDictionary`), builds 3.4–4.3× faster, pop/swap-back drains ~3× faster, key hits at parity at DRAM
+scale and 1.1–1.5× faster below it, key misses 1.5–2.8× faster, list path at `List<T>` parity with every
+span surface intact, `IndexOf` with no stored field, one value copy (contract relaxation #2 removed), the
+swap-back key path clean; interior single removals 5× faster at the front, ~1.4× in the middle, ~3× slower
+near the tail. The chained no-hash layout is the alternative if 16 B/entry matters more than the swap-back
+guarantee (it would have to make `TryRemoveSwapBack` a COW).
+
+Implementation sketch (a follow-up session; the tests are the spec):
+
+1. `Tables` generation class replacing `Store` and `_byKey`; delete `ValueIndex`; `TryGetValue`/`ContainsKey`/
+   `IndexOf`/`GetOrAdd`/`AddOrUpdate` fast paths on the validated probe (`AggressiveInlining`, as today).
+2. Every mutator ported row-by-row from §1, keeping the reentrancy guard, strand-proofing (allocate before any
+   publish), the `finally` publishes of `AddRange`/`RemoveWhere`, and the aliasing guard (§7, option a).
+3. Gates: the 4 existing test classes (2,854 lines: functional, concurrency gun, adversarial tier, memory
+   contracts) should pass with three memory-contract edits — presized append `≤ 72 B` becomes `== 0`, the
+   tail-pop/swap-back holder bound stays `≤ 96 B`, the interior-vs-tail ratio pin still holds (more bytes) —
+   plus new pins: the validated read under a racing swap-back (key_last never absent, key_i never returns
+   value_last), the renumber pass vs a `List` oracle, dummy accounting/rebuild, and the aliasing guard.
+4. The BDN suite (`ConcurrentOrderedDictBenchmarks`) needs no new rows; this probe stays the reproduction.
+5. The vendored `ConcurrentDictionary` clone + `ConcurrentDictionaryInternals` + the ref seam
+   (`ConcurrentDictionary.NumSharp.cs`) become unused by `src/` and can be retired with the benchmark's
+   `CloneCD` rows.
+
+---
+
+## 9. Reproduction
+
+```
+DOTNET_TC_CallCountingDelayMs=0 PROBE_KEYS=perm \
+  dotnet run -c Release benchmark/collections/probes/compact_ordered_dict_probe.cs -- 1000 100000 1000000 10000000
+# PROBE_ONLY=OA,no-hash,COD   restricts the rows; omit PROBE_KEYS for the sequential-key regime
+```
+
+References read for this discovery: `ConcurrentOrderedDict.cs` (the Store rules, `ValueIndex`, every
+mutator), the vendored `ConcurrentDictionary.cs` (`Tables`/`Node`/`VolatileNode`, `TryAddInternal`,
+`TryRemoveInternal`, `GrowTable`), dotnet/runtime `Dictionary.cs` (`Entry`, `_buckets` 1-based indices,
+`StartOfFreeList = -3` free-list encoding in `Remove`/`TryInsert`, `Resize`), CPython `Objects/dictobject.c`
+(compact dict layout comment, `DKIX_DUMMY`, `delitem_common`, `dictresize`, `USABLE_FRACTION`/`GROWTH_RATE`,
+the free-threaded no-reuse rule), and the measured baseline in `ConcurrentOrderedDict.TODO.md` § Memory
+analysis (commit 539e9c05).
