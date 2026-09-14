@@ -345,6 +345,55 @@ namespace NumSharp.Tests.Fuzz
                     case "real": return NDExpr.Real(a[0]);
                     case "imag": return NDExpr.Imag(a[0]);
                     case "angle": return NDExpr.Angle(a[0]);
+                    // C6 combinators (NDExpr.Combinators.cs) — pure compositions; the generator's
+                    // _EV_COMBINATOR references reproduce each one's exact NumPy chain. Heaviside is NOT
+                    // here: it is the Phase-4.2 binary node ("heaviside", above), not a combinator.
+                    case "if": return NDExpr.If(a[0], a[1], a[2]);
+                    case "ifnot": return NDExpr.IfNot(a[0], a[1], a[2]);
+                    case "when": return NDExpr.When(a[0], a[1]);
+                    case "unless": return NDExpr.Unless(a[0], a[1]);
+                    case "clampmin": return NDExpr.ClampMin(a[0], a[1]);
+                    case "clampmax": return NDExpr.ClampMax(a[0], a[1]);
+                    case "saturate": return NDExpr.Saturate(a[0]);
+                    case "nanto": return NDExpr.NanTo(a[0], a[1]);
+                    case "coalesce": return NDExpr.Coalesce(a[0], a[1]);
+                    case "relu": return NDExpr.Relu(a[0]);
+                    case "leakyrelu": return NDExpr.LeakyRelu(a[0], a[1]);
+                    case "elu": return NDExpr.Elu(a[0], a[1]);
+                    case "sigmoid": return NDExpr.Sigmoid(a[0]);
+                    case "swish": return NDExpr.Swish(a[0]);
+                    case "softplus": return NDExpr.Softplus(a[0]);
+                    case "gelu": return NDExpr.Gelu(a[0]);
+                    case "hardsigmoid": return NDExpr.HardSigmoid(a[0]);
+                    case "step": return NDExpr.Step(a[0]);
+                    case "nand": return NDExpr.Nand(a[0], a[1]);
+                    case "nor": return NDExpr.Nor(a[0], a[1]);
+                    case "xnor": return NDExpr.Xnor(a[0], a[1]);
+                    case "implies": return NDExpr.Implies(a[0], a[1]);
+                    case "majority3": return NDExpr.Majority3(a[0], a[1], a[2]);
+                    case "ispositive": return NDExpr.IsPositive(a[0]);
+                    case "isnegative": return NDExpr.IsNegative(a[0]);
+                    case "isinteger": return NDExpr.IsInteger(a[0]);
+                    case "isclose": return NDExpr.IsClose(a[0], a[1], a[2], a[3]);
+                    case "samesign": return NDExpr.SameSign(a[0], a[1]);
+                    case "between": return NDExpr.Between(a[0], a[1], a[2]);
+                    case "cmp": return NDExpr.Cmp(a[0], a[1]);
+                    case "steptoward": return NDExpr.StepToward(a[0], a[1], a[2]);
+                    case "maxmagnitude": return NDExpr.MaxMagnitude(a[0], a[1]);
+                    case "median3": return NDExpr.Median3(a[0], a[1], a[2]);
+                    case "threshold": return NDExpr.Threshold(a[0], a[1], a[2]);
+                    case "lerp": return NDExpr.Lerp(a[0], a[1], a[2]);
+                    // Variadic combinators: reconstruct the trailing operands. switch(default, c0, v0,
+                    // c1, v1, …) folds into (cond, value) pairs; mux(index, v0, v1, …) and
+                    // bucketize(x, e0, e1, …) take the tail as a params array.
+                    case "switch":
+                    {
+                        var cases = new List<(NDExpr, NDExpr)>();
+                        for (int i = 1; i + 1 < a.Count; i += 2) cases.Add((a[i], a[i + 1]));
+                        return NDExpr.Switch(a[0], cases.ToArray());
+                    }
+                    case "mux": return NDExpr.Mux(a[0], a.GetRange(1, a.Count - 1).ToArray());
+                    case "bucketize": return NDExpr.Bucketize(a[0], a.GetRange(1, a.Count - 1).ToArray());
                     default: throw new NotSupportedException($"evaluate node '{name}' has no NDExpr mapping");
                 }
             }

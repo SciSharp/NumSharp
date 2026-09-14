@@ -8146,6 +8146,100 @@ _EV_REDUCE = {
     "std": lambda a, ax, kd, dd: np.std(a, axis=ax, keepdims=kd, ddof=dd),
 }
 
+
+# C6 combinators (NDExpr.Combinators.cs) — the macro / decision vocabulary. Each combinator is a PURE
+# COMPOSITION of the primitive nodes, so its NumPy reference here is the SAME composition spelled with
+# NumPy ufuncs, honoring the WEAK Python scalars the C# factory bakes in: Const(0) is a weak int and
+# Const(0.0) a weak float, so NEP50 promotion matches the fused per-node typing exactly (e.g. relu uses
+# Const(0), hence np.maximum(x, 0) — not 0.0 — so an int input stays int). The operators map: `&`/`|`/`^`
+# are bitwise (BitwiseAnd/Or/Xor) and `!` is LogicalNot (verified on BOTH master and the exprs branch),
+# so the boolean-logic family is logical_not(bitwise_...). Heaviside is intentionally ABSENT — on the
+# exprs branch it is the Phase-4.2 first-class binary NODE (token "heaviside" in _EV_BINARY), not a
+# combinator, and it propagates NaN where the master composition would return h0.
+def _c_switch(*a):
+    # switch(default, c0, v0, c1, v1, ...): the first true case wins, so case 0 is the OUTERMOST where.
+    default, rest = a[0], a[1:]
+    pairs = [(rest[i], rest[i + 1]) for i in range(0, len(rest), 2)]
+    acc = default
+    for c, v in reversed(pairs):
+        acc = np.where(c, v, acc)
+    return acc
+
+
+def _c_mux(*a):
+    # mux(index, v0, v1, ...): values[k] where index == k (weak-int k), else 0; index 0 outermost.
+    index, vals = a[0], a[1:]
+    acc = 0
+    for k in range(len(vals) - 1, -1, -1):
+        acc = np.where(np.equal(index, k), vals[k], acc)
+    return acc
+
+
+def _c_bucketize(*a):
+    # bucketize(x, e0, e1, ...): count of edges met/exceeded = Σ INTEGER Where(x>=e, 1, 0) (a bool sum
+    # would be logical OR under NEP50, not a count — so the acc seeds with the weak int 0).
+    x, edges = a[0], a[1:]
+    acc = 0
+    for e in edges:
+        acc = acc + np.where(np.greater_equal(x, e), 1, 0)
+    return acc
+
+
+_EV_COMBINATOR = {
+    # selection & masking
+    "if": lambda c, t, f: np.where(c, t, f),
+    "ifnot": lambda c, t, f: np.where(c, f, t),
+    "when": lambda c, t: np.where(c, t, 0),
+    "unless": lambda c, t: np.where(c, 0, t),
+    "switch": _c_switch,
+    "mux": _c_mux,
+    # clamp & saturation
+    "clampmin": lambda x, lo: np.maximum(x, lo),
+    "clampmax": lambda x, hi: np.minimum(x, hi),
+    "saturate": lambda x: np.minimum(np.maximum(x, 0.0), 1.0),
+    "nanto": lambda x, fb: np.where(np.isnan(x), fb, x),
+    "coalesce": lambda a, b: np.where(np.isfinite(a), a, b),
+    # activations
+    "relu": lambda x: np.maximum(x, 0),
+    "leakyrelu": lambda x, s: np.where(x > 0.0, x, x * s),
+    "elu": lambda x, al: np.where(x > 0.0, x, al * (np.exp(x) - 1.0)),
+    "sigmoid": lambda x: 1.0 / (1.0 + np.exp(-x)),
+    "swish": lambda x: x * (1.0 / (1.0 + np.exp(-x))),
+    "softplus": lambda x: np.maximum(x, 0.0) + np.log(1.0 + np.exp(-np.abs(x))),
+    "gelu": lambda x: 0.5 * x * (1.0 + np.tanh(0.7978845608028654 * (x + 0.044715 * x * x * x))),
+    "hardsigmoid": lambda x: np.minimum(np.maximum(x / 6.0 + 0.5, 0.0), 1.0),
+    "step": lambda x: np.where(x > 0.0, 1, 0),
+    # boolean logic (int / bool only — & | ^ are bitwise, ! is LogicalNot → a bool result)
+    "nand": lambda a, b: np.logical_not(np.bitwise_and(a, b)),
+    "nor": lambda a, b: np.logical_not(np.bitwise_or(a, b)),
+    "xnor": lambda a, b: np.logical_not(np.bitwise_xor(a, b)),
+    "implies": lambda a, b: np.bitwise_or(np.logical_not(a), b),
+    "majority3": lambda a, b, c: np.bitwise_or(np.bitwise_or(np.bitwise_and(a, b), np.bitwise_and(a, c)),
+                                               np.bitwise_and(b, c)),
+    # predicates
+    "ispositive": lambda x: np.greater(x, 0.0),
+    "isnegative": lambda x: np.less(x, 0.0),
+    "isinteger": lambda x: np.equal(np.floor(x), x),
+    "isclose": lambda a, b, rt, at: np.where(np.bitwise_and(np.isfinite(a), np.isfinite(b)),
+                                             np.less_equal(np.abs(a - b), at + rt * np.abs(b)),
+                                             np.equal(a, b)),
+    "samesign": lambda a, b: np.equal(np.less(a, 0.0), np.less(b, 0.0)),
+    "between": lambda x, lo, hi: np.bitwise_and(np.greater_equal(x, lo), np.less_equal(x, hi)),
+    # directional / sign
+    "cmp": lambda a, b: np.where(np.greater(a, b), 1, np.where(np.less(a, b), -1, 0)),
+    # np.negative(d) — NOT the folded literal -d — mirrors the `-delta` NEGATE NODE in the C# tree,
+    # which (like np.negative) promotes a WEAK scalar delta to strong float64, so steptoward over
+    # float32 inputs with a weak-float delta resolves to float64 on BOTH sides (a Negate node is a
+    # ufunc, not a source-level literal fold). For an array delta both spellings agree (no promotion).
+    "steptoward": lambda x, tg, d: x + np.minimum(np.maximum(tg - x, np.negative(d)), d),
+    "maxmagnitude": lambda a, b: np.where(np.greater_equal(np.abs(a), np.abs(b)), a, b),
+    # multi-way decision & interpolation
+    "bucketize": _c_bucketize,
+    "median3": lambda a, b, c: np.maximum(np.minimum(a, b), np.minimum(np.maximum(a, b), c)),
+    "threshold": lambda x, t, v: np.where(np.greater(x, t), x, v),
+    "lerp": lambda a, b, t: a + (b - a) * t,
+}
+
 _EV_TOKEN = re.compile(r"\s*([A-Za-z_][A-Za-z0-9_]*(?::[^,()]+)?|[(),])")
 
 
@@ -8212,6 +8306,8 @@ def _ev_eval(expr, operands):
             return _EV_BINARY[tok](*args)
         if tok in _EV_UNARY:
             return _EV_UNARY[tok](*args)
+        if tok in _EV_COMBINATOR:
+            return _EV_COMBINATOR[tok](*args)
         raise ValueError(f"unknown node {tok!r} in {expr}")
 
     r = parse()
@@ -8602,6 +8698,87 @@ def gen_evaluate():
         bb.reshape(-1)[:] = np.resize(np.array([0.4, 0.6, 0.5, 0.1]), bb.size)
         for d in ("int32", "float32", "complex128"):
             emit("add(in0,in1)", [(ba, va), (bb, vb)], ln, params={"dtype": d}, cid_tag=f"f64,f64/dtype:{d}")
+
+    # ---- E. C6 combinators (NDExpr.Combinators.cs) — the macro / decision vocabulary ----------
+    # Each combinator is a PURE COMPOSITION of primitive nodes, so this tier proves the FACTORY builds
+    # the right tree by bit-comparing np.evaluate(NDExpr.X(...)) against NumPy's SAME composition
+    # (_EV_COMBINATOR). Grouped by dtype policy: the transcendental activations stay float32/float64
+    # (the exp/log/tanh ports are bit-exact there on the host-pinned tier; f16 has a 17-value exp edge
+    # and is held out); the bitwise boolean-logic family is int/bool ONLY (a float operand is a NumPy
+    # no-loop); everything else takes a real int+float mix. COMPLEX is excluded across the board — the
+    # Max/Min/comparison/floor nodes these compose over have no complex loop.
+    comb_real = ["float64", "float32", "int32", "int8"]
+    comb_pred = ["float64", "float32", "int32"]
+    comb_trans = ["float64", "float32"]
+    comb_bool = ["bool", "int8", "uint8", "int32"]
+
+    # E1. single-array roots (one operand in0, literals baked in) over the single layouts.
+    comb_unary = {
+        "saturate(in0)": comb_real, "relu(in0)": comb_real, "step(in0)": comb_real,
+        "hardsigmoid(in0)": comb_real, "leakyrelu(in0,lf:0.01)": comb_real,
+        "elu(in0,lf:1.0)": comb_trans, "sigmoid(in0)": comb_trans, "swish(in0)": comb_trans,
+        "softplus(in0)": comb_trans, "gelu(in0)": comb_trans,
+        "ispositive(in0)": comb_pred, "isnegative(in0)": comb_pred, "isinteger(in0)": comb_pred,
+        "between(in0,lf:0.2,lf:0.8)": comb_pred,
+        "threshold(in0,lf:0.0,lf:-1.0)": comb_real,
+        "bucketize(in0,lf:0.0,lf:1.0,lf:5.0)": comb_real,
+        "mux(in0,lf:10.0,lf:20.0,lf:30.0)": comb_real,
+    }
+    comb_unary_layouts = ["c_contiguous_1d", "c_contiguous_2d", "f_contiguous_2d",
+                          "negstride_1d", "strided_step2_1d", "scalar_0d"]
+    for ln in comb_unary_layouts:
+        for expr, dts in comb_unary.items():
+            for dt in dts:
+                b, v = LAYOUTS[ln](np.dtype(dt))
+                emit(expr, [(b, v)], ln, cid_tag=f"{dt}/{expr}")
+
+    # E2. two-operand roots (in0, in1) — the ternary combinators reuse the two operands via subtrees /
+    # literals so the pair layouts suffice. The boolean-logic family runs the int/bool pool.
+    comb_binary = {
+        "clampmin(in0,in1)": comb_real, "clampmax(in0,in1)": comb_real,
+        "nanto(in0,in1)": comb_real, "coalesce(in0,in1)": comb_real,
+        "maxmagnitude(in0,in1)": comb_real, "cmp(in0,in1)": comb_real,
+        "samesign(in0,in1)": comb_pred,
+        "when(in0,in1)": comb_real, "unless(in0,in1)": comb_real,
+        "steptoward(in0,in1,lf:1.0)": comb_real,
+        "if(gt(in0,in1),in0,in1)": comb_real, "ifnot(gt(in0,in1),in0,in1)": comb_real,
+        "median3(in0,in1,mul(in0,in1))": comb_real,
+        "lerp(in0,in1,lf:0.5)": comb_real,
+        "isclose(in0,in1,lf:0.001,lf:0.0)": comb_pred,
+        "nand(in0,in1)": comb_bool, "nor(in0,in1)": comb_bool, "xnor(in0,in1)": comb_bool,
+        "implies(in0,in1)": comb_bool,
+        "majority3(gt(in0,li:0),lt(in1,li:0),gt(in0,in1))": comb_real,   # 3 bool subtrees from 2 operands
+        "switch(li:0,gt(in0,in1),in0,lt(in0,in1),in1)": comb_real,       # default + 2 (cond,value) cases
+    }
+    comb_pair_layouts = ["pp_contig_contig", "pp_contig_fortran", "pp_strided_strided",
+                         "pp_negstride_both", "pp_scalar_right", "pp_broadcast_row"]
+    for ln in comb_pair_layouts:
+        for expr, dts in comb_binary.items():
+            for dt in dts:
+                ba, va, bb, vb = PAIR_LAYOUTS[ln](np.dtype(dt), np.dtype(dt))
+                emit(expr, [(ba, va), (bb, vb)], ln, cid_tag=f"{dt},{dt}/{expr}")
+
+    # E3. COMBINATIONS — combinators nested inside primitives AND inside each other, proving they fold
+    # into the surrounding fused pass (the "doing combinations as well" coverage). Run over float32/64
+    # (a safe superset for the transcendental members); the predicate→boolean-logic tree stays bool by
+    # construction regardless of the float inputs.
+    comb_combos = [
+        "add(relu(in0),in1)",
+        "mul(sigmoid(in0),lf:2.0)",
+        "max(relu(in0),clampmin(in1,lf:0.0))",
+        "step(sub(saturate(in0),lf:0.5))",                # the C# Combinators_ComposeWithEachOther shape
+        "where(ispositive(in0),in0,in1)",
+        "lerp(relu(in0),sigmoid(in1),lf:0.5)",            # combinator args feeding a combinator
+        "add(cmp(in0,in1),clampmin(in0,in1))",
+        "nand(ispositive(in0),isnegative(in1))",          # predicate → boolean-logic (bool operands)
+        "sub(gelu(in0),softplus(in1))",
+        "mul(hardsigmoid(in0),relu(in1))",
+    ]
+    for ln in ["pp_contig_contig", "pp_contig_fortran", "pp_strided_strided"]:
+        for dt in ("float64", "float32"):
+            ba, va, bb, vb = PAIR_LAYOUTS[ln](np.dtype(dt), np.dtype(dt))
+            for expr in comb_combos:
+                emit(expr, [(ba, va), (bb, vb)], ln, cid_tag=f"{dt},{dt}/{expr}")
 
     # ---- C. root reductions over fused trees (flat + axis + keepdims) -------------------------
     reduce_layouts = ["c_contiguous_1d", "c_contiguous_2d", "c_contiguous_3d", "f_contiguous_2d",
