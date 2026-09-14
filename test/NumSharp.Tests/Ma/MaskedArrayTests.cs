@@ -1175,5 +1175,171 @@ namespace NumSharp.Tests.Ma
             // unregressed: plain var (no mean) unchanged.
             Assert.AreEqual(14.0 / 9.0, np.ma.var(a).data.GetDouble(0), 1e-12);
         }
+
+        // ── Conversion / export + flag-surface instance members (pass 9). Every value probed vs NumPy 2.4.2. ──
+
+        /// <summary>tolist returns the nested data with <c>null</c> at masked positions by default (NumPy's None),
+        /// the fill substituted when given, the plain nested data for nomask, and a bare scalar/null for 0-D.</summary>
+        [TestMethod]
+        public void Tolist_NestedNullAtMasked_AndFill()
+        {
+            static string Str(object o) => o switch
+            {
+                null => "None",
+                object[] arr => "[" + string.Join(", ", arr.Select(Str)) + "]",
+                _ => System.Convert.ToString(o, System.Globalization.CultureInfo.InvariantCulture)
+            };
+            var d = np.array(new int[,] { { 1, 2, 3 }, { 4, 5, 6 }, { 7, 8, 9 } });
+            var m = np.array(new bool[] { false, true, false, true, false, true, false, true, false }).reshape(3, 3);
+            var x = np.ma.array(d, m);
+            Assert.AreEqual("[[1, None, 3], [None, 5, None], [7, None, 9]]", Str(x.tolist()));
+            Assert.AreEqual("[[1, -999, 3], [-999, 5, -999], [7, -999, 9]]", Str(x.tolist(-999)));
+            Assert.AreEqual("[1.5, 2.5, 3.5]", Str(np.ma.array(np.array(new double[] { 1.5, 2.5, 3.5 })).tolist()));
+            Assert.AreEqual("None", Str(np.ma.array(np.array(7), np.array(true)).tolist()));
+            Assert.AreEqual("7", Str(np.ma.array(np.array(7), np.array(false)).tolist()));
+        }
+
+        /// <summary>tobytes fills masked slots FIRST (default fill or the given one) then encodes — byte-identical
+        /// to NumPy; F-order reorders the (asymmetric) elements.</summary>
+        [TestMethod]
+        public void Tobytes_FillsThenEncodes()
+        {
+            var b = np.ma.array(np.array(new int[,] { { 1, 2 }, { 3, 4 } }),
+                                np.array(new bool[] { false, true, true, false }).reshape(2, 2));
+            Assert.AreEqual("010000003f420f003f420f0004000000", System.Convert.ToHexString(b.tobytes()).ToLowerInvariant());
+            Assert.AreEqual("01000000ffffffffffffffff04000000", System.Convert.ToHexString(b.tobytes(-1)).ToLowerInvariant());
+            // F-order of [[1,2],[3,4]] int32 (no mask): columns 1,3 then 2,4.
+            var fo = np.ma.array(np.array(new int[,] { { 1, 2 }, { 3, 4 } }));
+            Assert.AreEqual("01000000030000000200000004000000", System.Convert.ToHexString(fo.tobytes(order: 'F')).ToLowerInvariant());
+        }
+
+        /// <summary>view reinterprets the data dtype (same-itemsize keeps the shape, so the mask rides through and
+        /// the bytes round-trip); an itemsize-changing view of a MASKED array is refused.</summary>
+        [TestMethod]
+        public void View_ReinterpretsDtype_MaskCarried()
+        {
+            var v = np.ma.array(np.array(new int[] { 1, 2, 3, 4 }), np.array(new bool[] { false, true, false, true }));
+            var vv = v.view(np.float32);
+            Assert.AreEqual(np.float32, vv.dtype);
+            Assert.IsTrue(M(vv).SequenceEqual(new[] { false, true, false, true }));
+            Assert.IsTrue(vv.data.view(np.int32).ToArray<int>().SequenceEqual(new[] { 1, 2, 3, 4 }));
+            // Itemsize change (int32 -> int8) with a live mask: refused (the bool mask can't be reinterpreted).
+            Assert.ThrowsException<NotSupportedException>(() => v.view(np.int8));
+        }
+
+        /// <summary>iscontiguous reads the CONTIGUOUS flag (True for a fresh 1-D, False for a transpose); ids
+        /// returns nonzero data/mask pointers when masked and a zero mask pointer for nomask; baseclass/hardmask/
+        /// recordmask report the fixed non-structured, soft-mask surface.</summary>
+        [TestMethod]
+        public void Flags_Ids_Iscontiguous_Baseclass()
+        {
+            Assert.IsTrue(np.ma.array(np.array(new int[] { 1, 2, 3 })).iscontiguous());
+            Assert.IsFalse(np.ma.array(np.array(new int[,] { { 1, 2 }, { 3, 4 } })).T.iscontiguous());
+
+            var h = np.ma.array(np.array(new int[] { 1, 2, 3 }), np.array(new bool[] { false, true, false }));
+            var (dp, mp) = h.ids();
+            Assert.IsTrue(dp != 0 && mp != 0);
+            Assert.AreEqual(0L, np.ma.array(np.array(new int[] { 1, 2, 3 })).ids().mask); // nomask -> 0
+
+            Assert.IsFalse(h.hardmask);
+            Assert.IsTrue(h.recordmask.ToArray<bool>().SequenceEqual(new[] { false, true, false }));
+            Assert.AreEqual(typeof(NDArray), h.baseclass);
+        }
+
+        /// <summary>Instance putmask writes values where the mask is True and UNMASKS those slots (plain values),
+        /// leaving the others' masks intact — the mutating instance form.</summary>
+        [TestMethod]
+        public void Putmask_Instance_WritesAndUnmasks()
+        {
+            var p = np.ma.array(np.array(new int[] { 1, 2, 3, 4 }), np.array(new bool[] { false, true, false, true }));
+            p.putmask(np.array(new bool[] { true, false, true, false }), np.array(new int[] { 10, 20, 30, 40 }));
+            Assert.IsTrue(p.data.ToArray<int>().SequenceEqual(new[] { 10, 2, 30, 4 }));
+            Assert.IsTrue(M(p).SequenceEqual(new[] { false, true, false, true }));
+        }
+
+        /// <summary>flat returns a raveled masked VIEW (NumSharp's NDArray.flat house convention, not NumPy's
+        /// iterator) — data and mask flattened in C-order.</summary>
+        [TestMethod]
+        public void Flat_RaveledMaskedView()
+        {
+            var f = np.ma.array(np.array(new int[,] { { 1, 2 }, { 3, 4 } }),
+                                np.array(new bool[] { false, true, false, false }).reshape(2, 2));
+            var flat = f.flat;
+            Assert.IsTrue(flat.data.ToArray<int>().SequenceEqual(new[] { 1, 2, 3, 4 }));
+            Assert.IsTrue(M(flat).SequenceEqual(new[] { false, true, false, false }));
+        }
+
+        /// <summary>Instance resize refuses in place exactly as NumPy does (a masked array does not own its data);
+        /// unshare_mask copies the mask so a later in-place mask write on a view cannot reach the source.</summary>
+        [TestMethod]
+        public void Resize_Raises_And_UnshareMask_Isolates()
+        {
+            var ex = Assert.ThrowsException<NotSupportedException>(
+                () => np.ma.array(np.array(new int[] { 1, 2, 3 })).resize(new Shape(2, 3)));
+            Assert.AreEqual(
+                "A masked array does not own its data and therefore cannot be resized.\n" +
+                "Use the numpy.ma.resize function instead.", ex.Message);
+
+            // A view shares the source's mask reference — a masking write propagates WITHOUT unshare.
+            var src2 = np.ma.array(np.array(new int[] { 1, 2, 3 }), np.array(new bool[] { false, true, false }));
+            var view2 = src2.view();
+            view2[0] = np.ma.masked;
+            Assert.IsTrue(src2.mask.GetBoolean(0));
+
+            // After unshare_mask the view owns its mask, so the same write leaves the source alone.
+            var src = np.ma.array(np.array(new int[] { 1, 2, 3 }), np.array(new bool[] { false, true, false }));
+            var view = src.view();
+            view.unshare_mask();
+            view[0] = np.ma.masked;
+            Assert.IsFalse(src.mask.GetBoolean(0));
+        }
+
+        /// <summary>harden_mask makes the mask HARD: a plain-value assignment (indexer/put) no longer unmasks a
+        /// slot (masked slots keep their data AND mask), while `= masked` still masks and soften_mask restores
+        /// unmasking. putmask under hard WRITES data everywhere but FREEZES the mask (no unmask). Every value
+        /// probed against NumPy 2.4.2.</summary>
+        [TestMethod]
+        public void HardMask_BlocksUnmasking()
+        {
+            static MaskedArray Mk() => np.ma.array(np.array(new int[] { 1, 2, 3, 4 }), np.array(new bool[] { false, true, false, true }));
+            static int[] DI(MaskedArray r) => r.data.ToArray<int>();
+
+            // Indexer: a masked slot is ignored (data & mask unchanged); an unmasked slot writes.
+            var x = Mk().harden_mask();
+            Assert.IsTrue(x.hardmask);
+            x[1] = 99; x[0] = 88;
+            Assert.IsTrue(DI(x).SequenceEqual(new[] { 88, 2, 3, 4 }));
+            Assert.IsTrue(M(x).SequenceEqual(new[] { false, true, false, true }));
+
+            // Slice/broadcast assign honors hard: only unmasked positions change.
+            var y = Mk().harden_mask(); y[":"] = 7;
+            Assert.IsTrue(DI(y).SequenceEqual(new[] { 7, 2, 7, 4 }));
+            Assert.IsTrue(M(y).SequenceEqual(new[] { false, true, false, true }));
+
+            // Masking a slot is still allowed under a hard mask.
+            var z = Mk().harden_mask(); z[0] = np.ma.masked;
+            Assert.IsTrue(DI(z).SequenceEqual(new[] { 1, 2, 3, 4 }));
+            Assert.IsTrue(M(z).SequenceEqual(new[] { true, true, false, true }));
+
+            // put under hard: masked targets are dropped (both slots masked → whole call is a no-op).
+            var p = Mk().harden_mask(); p.put(np.array(new int[] { 1, 3 }), np.array(new int[] { 50, 60 }));
+            Assert.IsTrue(DI(p).SequenceEqual(new[] { 1, 2, 3, 4 }));
+            Assert.IsTrue(M(p).SequenceEqual(new[] { false, true, false, true }));
+
+            // putmask under hard: the DATA is written even at a masked slot, but the mask is frozen (no unmask).
+            var q = Mk().harden_mask();
+            np.ma.putmask(q, np.array(new bool[] { true, true, false, false }), np.array(new int[] { 50, 60, 70, 80 }));
+            Assert.IsTrue(DI(q).SequenceEqual(new[] { 50, 60, 3, 4 }));
+            Assert.IsTrue(M(q).SequenceEqual(new[] { false, true, false, true }));
+
+            // soften_mask restores unmasking; the module harden_mask mutates the SAME instance in place.
+            var s = Mk().harden_mask().soften_mask();
+            Assert.IsFalse(s.hardmask);
+            s[1] = 99;
+            Assert.IsTrue(M(s).SequenceEqual(new[] { false, false, false, true }));
+            var m2 = Mk();
+            Assert.IsTrue(ReferenceEquals(m2, np.ma.harden_mask(m2)));
+            Assert.IsTrue(m2.hardmask);
+        }
     }
 }
