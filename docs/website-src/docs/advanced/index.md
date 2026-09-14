@@ -23,7 +23,7 @@ If the [Fundamentals](../fundamentals/index.md) pages are about *using* `NDArray
 
 NumPy's advanced section is largely about escaping Python into C — writing C extension modules, custom ufuncs in C, subtyping the ndarray in C, and F2PY's Fortran bridge. NumSharp does not have, and does not need, any of that:
 
-- **There is no C-API.** You extend NumSharp in **managed C#**, through the seams documented in [Extending NumSharp](extending-numsharp.md) — the same performance is reached with runtime **IL generation + SIMD**, not hand-written C.
+- **There is no C-API.** You extend NumSharp in **managed C#**, through the seams documented in [Extending NumSharp](extending-numsharp.md) — the same performance is reached with runtime **IL generation + SIMD**, not hand-written C. And with **C# 14 extension members** (in the `NumSharp` namespace) you can grow the `np.*` / `NDArray` surface itself — adding static `np.your_func(...)` functions and `NDArray` methods/properties that read like built-ins, something NumPy's `np` namespace can't cleanly do.
 - **Native code is opt-in and curated, not hand-rolled.** The only native path is an optional package implementing the [`IBlasBackend`](native-backends.md) seam (e.g. `NumSharp.Interop.OpenBLAS`, which binds the very OpenBLAS/LAPACK binary NumPy ships). You reference a package; you do not write P/Invoke into Core.
 - **The internals are all managed too** — `UnmanagedStorage` is raw unmanaged memory managed by an atomic reference count, `Shape` is a `readonly struct`, and views are metadata-only reinterpretations, exactly as NumPy's are, but with no CPython object machinery.
 

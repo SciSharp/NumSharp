@@ -2,7 +2,7 @@
 
 NumPy is extended through its **C-API**: you write a C extension module to create and consume `ndarray`s, hand-code a custom ufunc in C, or subtype the array in C. NumSharp has **no C-API** — `NumSharp.Core` is 100% managed C# — and it does not need one. You extend it in managed code, and you still reach SIMD speed, because the hot loops are generated as IL at runtime rather than compiled from C ahead of time.
 
-This page maps the extension seams, from "compute over an array in a tight loop" to "replace the whole compute backend". Each seam has a dedicated deep-dive; this is the map.
+This page maps the extension seams along two axes: the **API surface** — add your own `np.*` functions and `NDArray` methods with C# 14 extension members — and the **computation** — custom kernels, fused ops, or a replacement backend. Each seam has a dedicated deep-dive; this is the map.
 
 ---
 
@@ -10,6 +10,7 @@ This page maps the extension seams, from "compute over an array in a tight loop"
 
 | You want to… | Use | NumPy C-API analog |
 |--------------|-----|--------------------|
+| Add `np.*` functions / `NDArray` methods that read like built-ins | C# 14 extension members in `namespace NumSharp` | — (NumPy can't cleanly extend `np`) |
 | Loop over elements yourself, fast, unboxed | `np.nditer<T>` / `np.nditer_chunks<T>` / `nd.Unsafe` | iterate a buffer via `NpyIter` / `PyArray_DATA` |
 | Compose a custom elementwise/reduction op with no temporaries | `np.evaluate` / `NDExpr` | write a custom ufunc |
 | Drive multi-operand, broadcasting, buffered traversal | `NDIter` | the `NpyIter` C iterator |
@@ -17,6 +18,54 @@ This page maps the extension seams, from "compute over an array in a tight loop"
 | Swap the compute backend (e.g. native BLAS) | `TensorEngine.Blas` (`IBlasBackend`) | link a different C/Fortran library |
 | Weave ownership/lifetime at build time | `NumSharp.Build` | — (no analog) |
 | Turn on threaded kernels | `np.multithreading` | OpenMP in a C loop |
+
+---
+
+## Add to the API surface with C# 14 extension members
+
+The seams below extend *computation*. To extend the **callable surface** — add your own `np.*` functions or `NDArray` methods and properties that read exactly like built-ins — use **C# 14 extension members** and declare them in the `NumSharp` namespace. Every NumSharp consumer already has `using NumSharp;` in scope, so your additions appear on `np` and `NDArray` with no extra import:
+
+```csharp
+namespace NumSharp;   // the key move: your extensions land next to np and NDArray
+
+public static class MyNumSharpExtras
+{
+    // Static extension members on the `np` static class → new np.* functions
+    extension(np)
+    {
+        public static NDArray sumsq(NDArray a) => np.sum(a * a);
+    }
+
+    // Instance extension members on NDArray → new methods and properties
+    extension(NDArray a)
+    {
+        public NDArray doubled() => a * 2.0;
+        public double  total    => (double)np.sum(a);
+    }
+}
+```
+
+Any code with `using NumSharp;` now calls them as if they shipped with the library (verified end-to-end on the .NET 10 SDK):
+
+```csharp
+var x = np.array(new[] { 1.0, 2.0, 3.0, 4.0 });
+np.sumsq(x);      // 30.0        ← static extension on np
+x.doubled();      // [2. 4. 6. 8.] ← instance extension method
+x.total;          // 10           ← instance extension property
+```
+
+**What C# 14 adds here.** Before C# 14, an extension could only be an *instance method* (`this NDArray a`) — you could add `x.doubled()`, but not `np.sumsq(...)` and not a `x.total` *property*. C# 14 `extension(...)` blocks lift both limits:
+
+- **`extension(np) { public static … }`** — static members on a **static class**, so `np.your_func(...)` becomes possible. NumPy users cannot cleanly add to the `np` namespace at all (they monkeypatch or ship a separate module); here a ported `np.your_func` call compiles and reads native.
+- **`extension(NDArray a) { … }`** — instance **methods and properties**, so `x.total` is a real property (not `x.total()`).
+- **`extension(NDArray) { public static … }`** — static members on the `NDArray` *type*, e.g. a custom `NDArray.FromWhatever(...)` factory.
+
+**Requirements & notes:**
+
+- Needs the **.NET 10 SDK** (C# 14). Set `<LangVersion>14</LangVersion>` (or `latest`) if your project doesn't already default to it — extension members are a language feature, so the *target framework* can still be `net8.0`.
+- Declaring the class in `namespace NumSharp` is what makes the members resolve through the consumer's existing `using NumSharp;`, so ported code reads identically. Use your own namespace instead if you'd rather they appear only where *that* namespace is imported.
+- Extensions are **purely additive and compile-time** — no runtime cost, no fork of NumSharp, and they live in *your* assembly. They can call any public `np.*`/`NDArray` API, so they compose with every compute seam below.
+- When printing an `NDArray` in a quick test, use interpolation (`$"{nd}"`) or a bare `Console.WriteLine(nd)` — `"label " + nd` binds NumSharp's implicit `string → NDArray` conversion and the `+` *operator*, not string concatenation.
 
 ---
 
@@ -159,6 +208,7 @@ The Span/Memory/Bytes views require C-contiguity, the exact dtype, and ≤ `int.
 
 | Seam | Entry points |
 |------|--------------|
+| API-surface extension (C# 14) | `extension(np) { public static … }` / `extension(NDArray a) { … }` in `namespace NumSharp` |
 | Typed iteration | `np.nditer<T>`, `np.nditer_chunks<T>`, `np.flat<T>`, `nd.Unsafe.{Span,Memory,Bytes,Pointer}<T>` |
 | Fused expressions | `np.evaluate`, `NDExpr.{Arr,Sum,Prod,Min,Max,Mean,Call}`, `expr.Compile()` |
 | General iterator | `np.nditer`, `NDIter` |
