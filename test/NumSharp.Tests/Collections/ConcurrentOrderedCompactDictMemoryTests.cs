@@ -388,5 +388,63 @@ namespace NumSharp.Tests.Collections
             WeakReference wr = HoldEnumeratorCheckPinnedThenDrop(d);
             Assert.IsTrue(WaitCollected(wr), "the snapshot arrays stayed reachable after the enumerator was dropped");
         }
+
+        [TestMethod]
+        public void AddRange_AfterTailRemoval_DoesNotCompoundBufferCapacity()
+        {
+            // Regression (surfaced by the randomized concurrency storm, then reduced to this deterministic
+            // single-threaded pin): an AddRange copy-on-write forced ONLY by the floor rule (or by accumulated
+            // dummies) — a tail removal raised the floor, but the compact generation still has room — must NOT
+            // double the capacity the way a genuine out-of-room grow does. Before the fix it did, so every AddRange
+            // that followed a tail removal doubled the index/slot arrays; with the floor re-raised each round the
+            // doublings COMPOUNDED (up toward the compact index's ~715M ceiling) for a working set that never
+            // exceeded ~500 entries, throwing ArgumentOutOfRangeException. It is pinned as a cumulative-allocation
+            // ceiling checked every round so a reintroduction trips deterministically around round 14 — long before
+            // it can exhaust the index or the host — rather than as an internal-capacity assertion that would
+            // couple the gate to a private field name.
+            const int Seed = 500;
+            var d = new ConcurrentOrderedCompactDict<int, long>();
+            for (int k = 0; k < Seed; k++)
+            {
+                d.Add(k, k);
+            }
+
+            var batch = new KeyValuePair<int, long>[1];
+
+            // Warm up a few churn rounds so JIT and one-time costs are outside the measured region, and so the
+            // floor is already raised before the first measured AddRange.
+            for (int w = 0; w < 8; w++)
+            {
+                int key = 100_000 + w;
+                batch[0] = new KeyValuePair<int, long>(key, key);
+                d.AddRange(batch);
+                d.TryRemove(key, out _);
+            }
+
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            for (int round = 0; round < 4_000; round++)
+            {
+                // Append one fresh tail key: because the previous round's tail removal raised the floor, this
+                // AddRange must copy-on-write even though the arrays have room — exactly the path that used to
+                // double the capacity.
+                int key = 1_000_000 + round;
+                batch[0] = new KeyValuePair<int, long>(key, key);
+                d.AddRange(batch);
+
+                // Remove it through the O(1) tail path, re-raising the floor for the next round.
+                Assert.IsTrue(d.TryRemove(key, out _));
+
+                long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+                Assert.IsTrue(allocated < 128L * 1024 * 1024,
+                    $"round {round}: AddRange-after-tail-removal has allocated {allocated / (1024 * 1024)} MB for a {d.Count}-element map — the floor-forced copy is compounding the buffer capacity (the doubling bug is back)");
+            }
+
+            // The working set never grew, and the map is still fully intact — capacity stayed bounded.
+            Assert.AreEqual(Seed, d.Count);
+            for (int k = 0; k < Seed; k++)
+            {
+                Assert.IsTrue(d.TryGetValue(k, out long v) && v == k, $"seeded key {k} was lost");
+            }
+        }
     }
 }

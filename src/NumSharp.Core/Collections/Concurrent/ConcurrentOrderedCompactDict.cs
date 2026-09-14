@@ -782,7 +782,15 @@ public sealed class ConcurrentOrderedCompactDict<TKey, TValue> : IReadOnlyList<T
                 long needed = (long)count + incoming;
                 if (needed > target.Capacity || count < target._floor || OverLoad((int)Math.Min(needed, int.MaxValue), target._dummies, target._index.Length))
                 {
-                    int newCap = (int)Math.Min(Math.Max(needed, target.Capacity == 0 ? DefaultCapacity : (long)target.Capacity * 2), Array.MaxLength);
+                    // Grow (amortized-double) ONLY when genuinely out of capacity. A rebuild forced merely by the
+                    // floor rule or by accumulated dummies (OverLoad) — while `needed` still fits the current
+                    // capacity — already has room, and the fresh generation drops the dummies on its own. Doubling
+                    // there would compound the capacity on every batch that follows a removal (which raises the
+                    // floor / leaves dummies), running the compact index up to its ~715M ceiling while the live
+                    // count stays flat. Keep the capacity — the same split the new-key branch below already makes.
+                    int newCap = needed > target.Capacity
+                        ? (int)Math.Min(Math.Max(needed, target.Capacity == 0 ? DefaultCapacity : (long)target.Capacity * 2), Array.MaxLength)
+                        : target.Capacity;
                     target = CopyGeneration(target, count, newCap);
                     fresh = true;
                 }

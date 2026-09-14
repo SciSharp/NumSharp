@@ -489,7 +489,17 @@ public sealed class ConcurrentOrderedDict<TKey, TValue> : IReadOnlyList<TValue>
                 long needed = (long)count + incoming;
                 if (needed > values.Length || count < s._floor)
                 {
-                    int newCap = (int)Math.Min(Math.Max(needed, values.Length == 0 ? DefaultCapacity : (long)values.Length * 2), Array.MaxLength);
+                    // Two DIFFERENT reasons to build fresh arrays, needing DIFFERENT capacities (the same split
+                    // TryAppendUnderLock makes). Genuinely out of room (needed > capacity) → amortized-double so a
+                    // build-once loop pays log2(n) grows, not n. But a copy forced ONLY by the floor rule
+                    // (count < floor while needed <= capacity) already has room: growing there would DOUBLE the
+                    // capacity on every batch that follows a tail removal/swap-back (which raises the floor), and
+                    // since the floor is re-raised by the next removal the doublings compound without bound —
+                    // the buffer balloons (4K→…→hundreds of millions) while the live count stays flat, ending in
+                    // OutOfMemory. Keep the capacity when the copy is floor-driven.
+                    int newCap = needed > values.Length
+                        ? (int)Math.Min(Math.Max(needed, values.Length == 0 ? DefaultCapacity : (long)values.Length * 2), Array.MaxLength)
+                        : values.Length;
                     keys = CopyArray(s._keys, newCap, count);
                     values = CopyArray(s._values, newCap, count);
                     fresh = true;
@@ -509,9 +519,12 @@ public sealed class ConcurrentOrderedDict<TKey, TValue> : IReadOnlyList<TValue>
                     // the same live content either way).
                     if (count == values.Length || (!fresh && count < s._floor))
                     {
-                        int newCap = values.Length == 0
-                            ? DefaultCapacity
-                            : (int)Math.Min((long)Math.Max(values.Length, count + 1) * 2, Array.MaxLength);
+                        // Same split as the pre-size step above: double only when actually full; a copy forced
+                        // only by the floor rule (count < floor, but a slot is still free) keeps its capacity, so
+                        // repeated post-removal batches cannot compound the buffer upward without bound.
+                        int newCap = count == values.Length
+                            ? (values.Length == 0 ? DefaultCapacity : (int)Math.Min((long)values.Length * 2, Array.MaxLength))
+                            : values.Length;
                         keys = CopyArray(keys, newCap, count);
                         values = CopyArray(values, newCap, count);
                         fresh = true;
