@@ -786,6 +786,22 @@ namespace NumSharp.Backends.Iteration
                         "safely coerced to any supported types according to the casting rule ''safe''");
                 result = NPTypeCode.Byte;
             }
+            else if (_op == UnaryOp.Real || _op == UnaryOp.Imag)
+            {
+                // np.real / np.imag — the complex→real component extractors (NOT ufuncs). A complex128
+                // child extracts a float64 lane; every REAL dtype is PRESERVED (real→identity,
+                // imag→zeros, both keep the input dtype — probed 2.4.2). They are NOT float-promoting
+                // (an int child stays int), which is why they cannot ride IsFloatPromoting below.
+                result = childType == NPTypeCode.Complex ? NPTypeCode.Double : childType;
+            }
+            else if (_op == UnaryOp.Angle)
+            {
+                // np.angle — complex128 → float64 (arctan2(imag, real)); a REAL input takes NumPy's
+                // per-dtype float tier of arctan2(0, x) (bool/int32+/f64→f64, int8/uint8/f16→f16,
+                // int16/uint16/char/f32→f32), reusing np.angle's OWN table so the fused node and the
+                // library function resolve the dtype identically. Char rides uint16→float32; Decimal→f64.
+                result = childType == NPTypeCode.Complex ? NPTypeCode.Double : np.AngleRealTier(childType);
+            }
             else if (IsFloatPromoting(_op))
             {
                 result = NDExprTypeRules.UnaryFloatResult(childType);

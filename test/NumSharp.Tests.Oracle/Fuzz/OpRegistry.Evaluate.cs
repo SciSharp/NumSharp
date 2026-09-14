@@ -304,6 +304,10 @@ namespace NumSharp.Tests.Fuzz
                     case "isposinf": return NDExpr.IsPosInf(a[0]);
                     case "isneginf": return NDExpr.IsNegInf(a[0]);
                     case "bitwise_count": return NDExpr.BitwiseCount(a[0]);
+                    // Phase 4.1b — the complex→real component extractors (np.real/imag/angle).
+                    case "real": return NDExpr.Real(a[0]);
+                    case "imag": return NDExpr.Imag(a[0]);
+                    case "angle": return NDExpr.Angle(a[0]);
                     default: throw new NotSupportedException($"evaluate node '{name}' has no NDExpr mapping");
                 }
             }

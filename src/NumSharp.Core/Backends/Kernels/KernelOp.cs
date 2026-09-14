@@ -188,7 +188,38 @@ namespace NumSharp.Backends.Kernels
         /// for the fused expression engine (<see cref="NumSharp.Backends.Iteration.NDExpr"/>), whose one-op-per-node
         /// model needs a distinct node to carry rint's float-tier typing while sharing Round's kernel.
         /// </summary>
-        Rint
+        Rint,
+
+        /// <summary>
+        /// Real part (np.real). complex128 → float64 (extract the real lane); every REAL dtype is the
+        /// IDENTITY with its dtype PRESERVED (the real part of a real number is itself). NOT a ufunc, so
+        /// there is NO engine kernel for this op — it exists ONLY for the fused expression engine
+        /// (<see cref="NumSharp.Backends.Iteration.NDExpr"/>), which handles it entirely in
+        /// <c>UnaryNode.EmitScalar</c> (a complex child calls <see cref="NumSharp.Utilities.NDComplexMath.RealPart"/>;
+        /// a real child is emitted unchanged) and never reaches <c>DirectILKernelGenerator.EmitUnaryScalarOperation</c>.
+        /// </summary>
+        Real,
+
+        /// <summary>
+        /// Imaginary part (np.imag). complex128 → float64 (extract the imaginary lane); every REAL dtype
+        /// yields ZERO with its dtype PRESERVED (the imaginary part of a real number is zero). Like
+        /// <see cref="Real"/> it is NOT a ufunc and has NO engine kernel — the fused expression engine
+        /// handles it in <c>UnaryNode.EmitScalar</c> (a complex child calls
+        /// <see cref="NumSharp.Utilities.NDComplexMath.ImagPart"/>; a real child pushes a zero of the
+        /// preserved dtype, the input VALUE unread — matching np.imag's <c>zeros_like</c>).
+        /// </summary>
+        Imag,
+
+        /// <summary>
+        /// Phase angle in radians (np.angle, radians only — no <c>deg=</c> in the fused primitive).
+        /// complex128 → float64 as <c>atan2(imag, real)</c>; a REAL input is <c>atan2(0, x)</c> (0 for
+        /// x ≥ 0, pi for x &lt; 0, NaN → NaN) at NumPy's per-dtype float tier (<see cref="np.AngleRealTier"/>:
+        /// bool/int32+/f64 → f64, int8/uint8/f16 → f16, int16/uint16/char/f32 → f32). NOT a ufunc / no
+        /// engine kernel — the fused expression engine handles it in <c>UnaryNode.EmitScalar</c>
+        /// (<see cref="NumSharp.Utilities.NDComplexMath.Angle"/> for a complex child, <c>Math.Atan2(0, x)</c>
+        /// for a real one). Host-libm (<c>atan2</c>), so bit-exact only within the host-pinned evaluate tier.
+        /// </summary>
+        Angle
     }
 
     /// <summary>

@@ -578,6 +578,43 @@ namespace NumSharp.Backends.Iteration
         /// <returns>An expression node computing the per-element set-bit count of <c>|x|</c> as uint8.</returns>
         public static NDExpr BitwiseCount(NDExpr x) => new UnaryNode(UnaryOp.BitwiseCount, x);
 
+        /// <summary>
+        /// Real part (np.real) — the complex→real component extractor. A COMPLEX child yields its real
+        /// lane as <b>float64</b>; every REAL child is the IDENTITY with its dtype PRESERVED (the real
+        /// part of a real number is itself), so <c>Real(int32)</c> is int32, not a float. Unlike the
+        /// standalone <c>np.real</c> (which returns a writeable VIEW onto a complex array's real lane),
+        /// the fused node produces a fresh value stream — a read, not an alias. Scalar-only in the fused
+        /// kernel (the complex path has no SIMD lane), so a tree containing it runs scalar end-to-end.
+        /// </summary>
+        /// <param name="x">The operand.</param>
+        /// <returns>An expression node computing the element-wise real part of <paramref name="x"/>.</returns>
+        public static NDExpr Real(NDExpr x) => new UnaryNode(UnaryOp.Real, x);
+
+        /// <summary>
+        /// Imaginary part (np.imag) — the complex→real component extractor. A COMPLEX child yields its
+        /// imaginary lane as <b>float64</b>; every REAL child yields <b>zero</b> with its dtype PRESERVED
+        /// (the imaginary part of a real number is zero, so <c>Imag(int32)</c> is int32 zeros) — and the
+        /// child's VALUE is not read on that path (the result does not depend on it), matching np.imag's
+        /// <c>zeros_like</c>. Scalar-only in the fused kernel.
+        /// </summary>
+        /// <param name="x">The operand.</param>
+        /// <returns>An expression node computing the element-wise imaginary part of <paramref name="x"/>.</returns>
+        public static NDExpr Imag(NDExpr x) => new UnaryNode(UnaryOp.Imag, x);
+
+        /// <summary>
+        /// Phase angle in radians (np.angle) — the counterclockwise angle from the positive real axis in
+        /// <c>(-pi, pi]</c>. A COMPLEX child yields <c>atan2(imag, real)</c> as <b>float64</b>; a REAL
+        /// child yields <c>atan2(0, x)</c> — <c>0</c> for x ≥ 0, <c>pi</c> for x &lt; 0, <c>NaN</c> for
+        /// NaN — at NumPy's per-dtype float tier (bool/int32+/f64→f64, int8/uint8/f16→f16,
+        /// int16/uint16/char/f32→f32). <b>Radians only</b>: the fused primitive has no <c>deg=</c> — a
+        /// caller wanting degrees composes <c>Angle(x) * (180/pi)</c>. Uses the host <c>atan2</c>, so it
+        /// is bit-exact vs NumPy only within the host-pinned evaluate tier (win-amd64 shares MSVC
+        /// <c>ucrtbase</c>). Scalar-only in the fused kernel.
+        /// </summary>
+        /// <param name="x">The operand.</param>
+        /// <returns>An expression node computing the element-wise phase angle of <paramref name="x"/> in radians.</returns>
+        public static NDExpr Angle(NDExpr x) => new UnaryNode(UnaryOp.Angle, x);
+
         // ===================================================================
         // Comparison factories (produce 0/1 at output dtype)
         // ===================================================================
@@ -1264,6 +1301,24 @@ namespace NumSharp.Backends.Iteration
             typeof(NumSharp.Utilities.NDComplexMath).GetMethod("Abs", new[] { typeof(System.Numerics.Complex) })
             ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "Abs");
 
+        // np.real / np.imag / np.angle over a COMPLEX child — static pass-by-value extractors so the
+        // Complex already on the IL stack is consumed with one call (no local/address), mirroring the
+        // s_complexAbs pattern above. Real/Imag are lane extracts (→double); Angle is atan2(im,re) (host-libm).
+        private static readonly System.Reflection.MethodInfo s_complexReal =
+            typeof(NumSharp.Utilities.NDComplexMath).GetMethod("RealPart", new[] { typeof(System.Numerics.Complex) })
+            ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "RealPart");
+        private static readonly System.Reflection.MethodInfo s_complexImag =
+            typeof(NumSharp.Utilities.NDComplexMath).GetMethod("ImagPart", new[] { typeof(System.Numerics.Complex) })
+            ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "ImagPart");
+        private static readonly System.Reflection.MethodInfo s_complexAngle =
+            typeof(NumSharp.Utilities.NDComplexMath).GetMethod("Angle", new[] { typeof(System.Numerics.Complex) })
+            ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "Angle");
+
+        // Math.Atan2(y, x) for the REAL-input np.angle path: atan2(0, x).
+        private static readonly System.Reflection.MethodInfo s_atan2 =
+            typeof(System.Math).GetMethod("Atan2", new[] { typeof(double), typeof(double) })
+            ?? throw new MissingMethodException(typeof(System.Math).FullName, "Atan2");
+
         public override void EmitScalar(ILGenerator il, NDExprCompileContext ctx)
         {
             var my = ctx.TypeOf(this);
@@ -1309,6 +1364,63 @@ namespace NumSharp.Backends.Iteration
                 _child.EmitScalar(il, ctx);
                 il.EmitCall(OpCodes.Call, s_complexAbs, null);   // Complex -> double (npy_cabs)
                 DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Double, my);
+                return;
+            }
+
+            // np.real / np.imag / np.angle — the complex→real component extractors (NOT ufuncs, so no
+            // engine kernel; handled entirely here before the generic EmitUnaryScalarOperation tail,
+            // which would throw for these ops). For a COMPLEX child the value is extracted as a double
+            // (real lane / imag lane / atan2(im,re)); for a REAL child the op degenerates — real is the
+            // identity (dtype preserved), imag is a constant zero (the child value is NOT read), and
+            // angle is atan2(0, x) computed in double then narrowed to the AngleRealTier `my`. Complex
+            // never reaches the SIMD path (scalar-only), so these live only in the scalar emit.
+            if (_op == UnaryOp.Real)
+            {
+                _child.EmitScalar(il, ctx);
+                if (childType == NPTypeCode.Complex)
+                {
+                    il.EmitCall(OpCodes.Call, s_complexReal, null);          // Complex -> double (z.Real)
+                    DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Double, my);   // my == Double: no-op
+                }
+                // else: my == childType (dtype preserved), the loaded value IS the result — identity.
+                return;
+            }
+            if (_op == UnaryOp.Imag)
+            {
+                if (childType == NPTypeCode.Complex)
+                {
+                    _child.EmitScalar(il, ctx);
+                    il.EmitCall(OpCodes.Call, s_complexImag, null);          // Complex -> double (z.Imaginary)
+                    DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Double, my);   // my == Double: no-op
+                }
+                else
+                {
+                    // imag(real) is zeros_like — the result does not depend on the child value, so the
+                    // child is NOT emitted (its operand pointer is still advanced by the iterator). Push
+                    // a zero of the preserved dtype `my`.
+                    WhereNode.EmitPushZeroPublic(il, my);
+                }
+                return;
+            }
+            if (_op == UnaryOp.Angle)
+            {
+                if (childType == NPTypeCode.Complex)
+                {
+                    _child.EmitScalar(il, ctx);
+                    il.EmitCall(OpCodes.Call, s_complexAngle, null);         // Complex -> double atan2(im,re)
+                    DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Double, my);   // my == Double: no-op
+                }
+                else
+                {
+                    // atan2(0, x): 0 for x >= 0, pi for x < 0, NaN for NaN. Compute in double (the only
+                    // possible outputs {+0, pi, NaN} narrow to the AngleRealTier exactly, so this matches
+                    // NumPy computing arctan2 directly at that tier — the engine np.angle route).
+                    il.Emit(OpCodes.Ldc_R8, 0.0);                            // y = 0
+                    _child.EmitScalar(il, ctx);
+                    DirectILKernelGenerator.EmitConvertTo(il, childType, NPTypeCode.Double);   // x -> double
+                    il.EmitCall(OpCodes.Call, s_atan2, null);               // Math.Atan2(0, x)
+                    DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Double, my);
+                }
                 return;
             }
 

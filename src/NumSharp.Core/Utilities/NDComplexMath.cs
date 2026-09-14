@@ -138,6 +138,42 @@ namespace NumSharp.Utilities
             return Math.Sqrt(Math.FusedMultiplyAdd(ratio, ratio, 1.0)) * larger;
         }
 
+        /// <summary>
+        /// The real part of <paramref name="z"/> (<c>z.Real</c>) — <c>np.real</c>'s complex loop
+        /// (complex128 → float64). A <b>static</b> pass-by-value helper (not the instance
+        /// <see cref="Complex.Real"/> property) so a caller with a <see cref="Complex"/> already on the
+        /// evaluation stack can extract the lane with a single <c>call</c>, no local/address — the shape
+        /// the fused <c>NDExpr</c> kernel emits (mirroring <see cref="Abs(Complex)"/>).
+        /// </summary>
+        /// <param name="z">The complex value.</param>
+        /// <returns><c>z.Real</c>.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        public static double RealPart(Complex z) => z.Real;
+
+        /// <summary>
+        /// The imaginary part of <paramref name="z"/> (<c>z.Imaginary</c>) — <c>np.imag</c>'s complex loop
+        /// (complex128 → float64). A <b>static</b> pass-by-value helper for the same reason as
+        /// <see cref="RealPart"/>: it is called on a <see cref="Complex"/> value sitting on the fused
+        /// kernel's IL stack.
+        /// </summary>
+        /// <param name="z">The complex value.</param>
+        /// <returns><c>z.Imaginary</c>.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        public static double ImagPart(Complex z) => z.Imaginary;
+
+        /// <summary>
+        /// The phase angle of <paramref name="z"/> in radians, <c>atan2(im, re)</c> — <c>np.angle</c>'s
+        /// complex loop (complex128 → float64), the counterclockwise angle from the positive real axis in
+        /// <c>(-pi, pi]</c>. Bit-identical to <c>np.angle(complex)</c> on win-amd64 because both this
+        /// <see cref="Math.Atan2(double, double)"/> and NumPy's <c>npy_atan2</c> resolve to the same MSVC
+        /// <c>ucrtbase</c> routine (the arctanh/arctan2 host-libm class). A <b>static</b> pass-by-value
+        /// helper, called on a <see cref="Complex"/> value on the fused kernel's IL stack.
+        /// </summary>
+        /// <param name="z">The complex value.</param>
+        /// <returns><c>atan2(z.Imaginary, z.Real)</c>.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        public static double Angle(Complex z) => Math.Atan2(z.Imaginary, z.Real);
+
         #region helpers
 
         /// <summary>True when <paramref name="d"/> is negative zero (<c>-0.0</c>).</summary>

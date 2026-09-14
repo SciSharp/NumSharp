@@ -1807,5 +1807,125 @@ namespace NumSharp.Tests.Backends.Iterators
             Assert.AreEqual(5.0, comp.GetDouble(2), 0);   // rint(4.5)=4 (even) +1
             Assert.AreEqual(7.0, comp.GetDouble(3), 0);   // rint(6.0)=6 +1
         }
+
+        // ---------------------------------------------------------------------
+        // Phase 4.1b — the complex→real component extractors (np.real/imag/angle).
+        // NOT ufuncs: complex128 → float64 (lane extract / atan2), while a REAL child
+        // degenerates — real is the identity (dtype PRESERVED), imag is zeros (dtype
+        // PRESERVED, value unread), angle is atan2(0,x) at NumPy's per-dtype float tier.
+        // ---------------------------------------------------------------------
+
+        /// <summary><c>Real</c>: a complex child yields its real lane as float64; every REAL child is the
+        /// IDENTITY with its dtype PRESERVED (real(int32) is int32, not a float) — the value AND dtype the
+        /// fused node must reproduce. Covers the two typing branches and the extraction/identity emit.</summary>
+        [TestMethod]
+        public void P41b_Real_ComplexLaneFloat64_RealIdentityDtypePreserved()
+        {
+            // Complex → float64 real lane (extraction), including a NaN part passing through.
+            var rc = np.evaluate(NDExpr.Real(NDExpr.Arr(np.array(new System.Numerics.Complex[]
+                { new(3, 4), new(-2.5, 7), new(double.NaN, 1) }))));
+            Assert.AreEqual(NPTypeCode.Double, rc.typecode);
+            Assert.AreEqual(3.0, rc.GetDouble(0), 0);
+            Assert.AreEqual(-2.5, rc.GetDouble(1), 0);
+            Assert.IsTrue(double.IsNaN(rc.GetDouble(2)));
+
+            // Real int → int32 IDENTITY (dtype preserved, values unchanged incl. negatives).
+            var ri = np.evaluate(NDExpr.Real(NDExpr.Arr(np.array(new[] { -5, 0, 7 }))));
+            Assert.AreEqual(NPTypeCode.Int32, ri.typecode);
+            Assert.AreEqual(-5, ri.GetInt32(0));
+            Assert.AreEqual(0, ri.GetInt32(1));
+            Assert.AreEqual(7, ri.GetInt32(2));
+
+            // Real float32 preserves float32 (not promoted to double).
+            var rf = np.evaluate(NDExpr.Real(NDExpr.Arr(np.array(new[] { 1.5f, -2.5f }))));
+            Assert.AreEqual(NPTypeCode.Single, rf.typecode);
+            Assert.AreEqual(1.5, rf.astype(NPTypeCode.Double).GetDouble(0), 0);
+        }
+
+        /// <summary><c>Imag</c>: a complex child yields its imaginary lane as float64; every REAL child yields
+        /// ZERO with its dtype PRESERVED (imag(int32) is int32 zeros) — and the result does not depend on the
+        /// child value, matching np.imag's <c>zeros_like</c>.</summary>
+        [TestMethod]
+        public void P41b_Imag_ComplexLaneFloat64_RealZerosDtypePreserved()
+        {
+            var ic = np.evaluate(NDExpr.Imag(NDExpr.Arr(np.array(new System.Numerics.Complex[]
+                { new(3, 4), new(-2.5, -7), new(1, double.NaN) }))));
+            Assert.AreEqual(NPTypeCode.Double, ic.typecode);
+            Assert.AreEqual(4.0, ic.GetDouble(0), 0);
+            Assert.AreEqual(-7.0, ic.GetDouble(1), 0);
+            Assert.IsTrue(double.IsNaN(ic.GetDouble(2)));
+
+            // Imag int → int32 ZEROS (dtype preserved), regardless of the input values.
+            var ii = np.evaluate(NDExpr.Imag(NDExpr.Arr(np.array(new[] { -5, 99, 7 }))));
+            Assert.AreEqual(NPTypeCode.Int32, ii.typecode);
+            Assert.AreEqual(0, ii.GetInt32(0));
+            Assert.AreEqual(0, ii.GetInt32(1));
+            Assert.AreEqual(0, ii.GetInt32(2));
+
+            // Imag float32 → float32 zeros.
+            var iflt = np.evaluate(NDExpr.Imag(NDExpr.Arr(np.array(new[] { 1.5f, -2.5f }))));
+            Assert.AreEqual(NPTypeCode.Single, iflt.typecode);
+            Assert.AreEqual(0.0, iflt.astype(NPTypeCode.Double).GetDouble(0), 0);
+            Assert.AreEqual(0.0, iflt.astype(NPTypeCode.Double).GetDouble(1), 0);
+        }
+
+        /// <summary><c>Angle</c> (radians): a complex child is <c>atan2(imag, real)</c> → float64; a REAL child
+        /// is <c>atan2(0, x)</c> (0 for x ≥ 0, pi for x &lt; 0, incl. <c>-0.0</c> → pi) at NumPy's per-dtype
+        /// float tier — int8/uint8/f16 → f16, int16/uint16/char/f32 → f32, bool/int32+/f64 → f64. Radians only:
+        /// the deg-style scale is a caller composition, verified here too.</summary>
+        [TestMethod]
+        public void P41b_Angle_Radians_ComplexAndRealFloatTier()
+        {
+            double pi = System.Math.PI;
+            // Complex → float64 atan2(im, re).
+            var ac = np.evaluate(NDExpr.Angle(NDExpr.Arr(np.array(new System.Numerics.Complex[]
+                { new(1, 0), new(0, 1), new(-1, 0), new(0, -1) }))));
+            Assert.AreEqual(NPTypeCode.Double, ac.typecode);
+            Assert.AreEqual(0.0, ac.GetDouble(0), 0);
+            Assert.AreEqual(pi / 2, ac.GetDouble(1), 0);
+            Assert.AreEqual(pi, ac.GetDouble(2), 0);
+            Assert.AreEqual(-pi / 2, ac.GetDouble(3), 0);
+
+            // Real tier: int8 → float16, int16 → float32, int32 → float64. atan2(0, x) is 0 / pi.
+            Assert.AreEqual(NPTypeCode.Half, np.evaluate(NDExpr.Angle(NDExpr.Arr(np.array(new sbyte[] { -1 })))).typecode);
+            Assert.AreEqual(NPTypeCode.Single, np.evaluate(NDExpr.Angle(NDExpr.Arr(np.array(new short[] { -1 })))).typecode);
+            var ai = np.evaluate(NDExpr.Angle(NDExpr.Arr(np.array(new[] { -3, 0, 5 }))));
+            Assert.AreEqual(NPTypeCode.Double, ai.typecode);
+            Assert.AreEqual(pi, ai.GetDouble(0), 0);      // x < 0 → pi
+            Assert.AreEqual(0.0, ai.GetDouble(1), 0);     // x == 0 → 0
+            Assert.AreEqual(0.0, ai.GetDouble(2), 0);     // x > 0 → 0
+
+            // A NEGATIVE ZERO takes the negative branch: atan2(0, -0.0) == pi (not 0).
+            var az = np.evaluate(NDExpr.Angle(NDExpr.Arr(np.array(new double[] { 0.0, -0.0, 2.0 }))));
+            Assert.AreEqual(0.0, az.GetDouble(0), 0);
+            Assert.AreEqual(pi, az.GetDouble(1), 0);
+            Assert.AreEqual(0.0, az.GetDouble(2), 0);
+
+            // Deg-style composition (fused primitive is radians): angle(x) * (180/pi).
+            var deg = np.evaluate(NDExpr.Angle(NDExpr.Arr(np.array(new[] { -1 }))) * (180.0 / pi));
+            Assert.AreEqual(180.0, deg.GetDouble(0), 1e-12);
+        }
+
+        /// <summary>The component extractors over NumSharp's <c>Char</c> dtype (no NumPy analog): real/imag
+        /// preserve char (identity / zeros), angle takes the uint16-tier float32; and they COMPOSE in the
+        /// fused kernel — <c>real(z) + imag(z)</c> recombines the two float64 lanes of a complex child in one
+        /// pass. Both pin cells the ALL_DTYPES oracle sweep cannot reach (char) or only reaches as a sub-tree.</summary>
+        [TestMethod]
+        public void P41b_Components_Char_And_ComposeInOnePass()
+        {
+            var cs = np.array(new[] { 'A', 'z' });                    // char = uint16-like
+            Assert.AreEqual(NPTypeCode.Char, np.evaluate(NDExpr.Real(NDExpr.Arr(cs))).typecode);   // real(char)=char identity
+            var ic = np.evaluate(NDExpr.Imag(NDExpr.Arr(cs)));
+            Assert.AreEqual(NPTypeCode.Char, ic.typecode);                                          // imag(char)=char zeros
+            Assert.AreEqual('\0', (char)ic.GetAtIndex<char>(0));
+            Assert.AreEqual(NPTypeCode.Single, np.evaluate(NDExpr.Angle(NDExpr.Arr(cs))).typecode); // angle(char)→float32 (uint16 tier)
+
+            // Fused recombination: add(real, imag) reads a complex child's two lanes and sums them in one pass.
+            var z = np.array(new System.Numerics.Complex[] { new(3, 4), new(-1, 2) });
+            var rec = np.evaluate(NDExpr.Real(NDExpr.Arr(z)) + NDExpr.Imag(NDExpr.Arr(z)));
+            Assert.AreEqual(NPTypeCode.Double, rec.typecode);
+            Assert.AreEqual(7.0, rec.GetDouble(0), 0);   // 3 + 4
+            Assert.AreEqual(1.0, rec.GetDouble(1), 0);   // -1 + 2
+        }
     }
 }

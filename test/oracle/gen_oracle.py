@@ -8058,6 +8058,12 @@ _EV_UNARY = {
     "positive": np.positive, "conj": np.conjugate, "fabs": np.fabs, "spacing": np.spacing,
     "signbit": np.signbit, "isposinf": np.isposinf, "isneginf": np.isneginf,
     "bitwise_count": np.bitwise_count,
+    # Phase 4.1b — the complex→real component extractors (NOT ufuncs). complex128 → float64 (real lane
+    # / imag lane / atan2(im,re)); a REAL input is real=identity (dtype PRESERVED), imag=zeros (dtype
+    # PRESERVED), angle=arctan2(0,x) at NumPy's per-dtype float tier. real/imag are BIT-EXACT (pure lane
+    # extract / identity / zeros — no host-libm); angle rides atan2 (host-libm), bit-exact only within the
+    # host-pinned evaluate tier (win-amd64 shares MSVC ucrtbase). No dtype has a no-loop / rejection cell.
+    "real": np.real, "imag": np.imag, "angle": np.angle,
 }
 _EV_REDUCE = {
     "sum": lambda a, ax, kd: np.sum(a, axis=ax, keepdims=kd),
@@ -8362,6 +8368,12 @@ def gen_evaluate():
         # non-integer product half-to-even, then +1 — a genuine fused rint (not the identity an
         # integer input would give the root sweep).
         "add(rint(mul(in0,lf:1.5)),lf:1.0)",
+        # Phase 4.1b component extractors as SUB-trees. add(real,imag) recombines the two lanes (over a
+        # complex child both are float64; over a real child it is identity + zeros = the value, dtype
+        # preserved). mul(angle,2.0) is the radians→(scaled) composition — angle feeds arithmetic, the
+        # deg-style scale a caller writes since the fused primitive is radians-only.
+        "add(real(in0),imag(in0))",
+        "mul(angle(in0),lf:2.0)",
     ]
     # Every layout the catalog has, at every third position (the unary set above already walks
     # the contiguity / stride / offset axes; this pass is about the tree shapes).
