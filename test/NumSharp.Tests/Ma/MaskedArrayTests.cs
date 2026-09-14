@@ -726,5 +726,142 @@ namespace NumSharp.Tests.Ma
             Assert.IsTrue(cplx.real.data.astype(np.float64).ToArray<double>().SequenceEqual(new double[] { 1, 3 }));
             Assert.IsTrue(cplx.imag.data.astype(np.float64).ToArray<double>().SequenceEqual(new double[] { 2, 4 }));
         }
+
+        // ── The indexer (§6 item 6, the keystone) + put/putmask/resize/mask_rowcols/compress_rowcols/
+        //    notmasked_*/ids that it unblocks. Every expected value probed against NumPy 2.4.2. ──
+
+        /// <summary>Indexer GET: a scalar index yields the bare value (unmasked) or the masked singleton; a slice
+        /// yields a sub-MaskedArray VIEW that writes through; boolean/fancy indices yield COPIES; 2-D reduces per axis.</summary>
+        [TestMethod]
+        public void Indexer_Get()
+        {
+            var x = Ma(new double[] { 1, 2, 3, 4 }, new[] { false, true, false, true });
+            Assert.AreEqual(1.0, Convert.ToDouble(x[0]));                 // unmasked scalar
+            Assert.IsTrue(ReferenceEquals(x[1], np.ma.masked));          // masked scalar → singleton
+
+            var xs = (MaskedArray)x["1:3"];                              // slice → sub-MaskedArray
+            Assert.IsTrue(D(xs).SequenceEqual(new double[] { 2, 3 }));
+            Assert.IsTrue(M(xs).SequenceEqual(new[] { true, false }));
+            xs[0] = 99.0;                                                // VIEW: writes through to x[1] + unmasks
+            Assert.AreEqual(99.0, np.ma.getdata(x).astype(np.float64).ToArray<double>()[1]);
+            Assert.IsTrue(M(x).SequenceEqual(new[] { false, false, false, true }));
+
+            var x2 = Ma(new double[] { 1, 2, 3, 4 }, new[] { false, true, false, true });
+            var bsel = (MaskedArray)x2[np.array(new[] { true, false, true, false })];
+            Assert.IsTrue(D(bsel).SequenceEqual(new double[] { 1, 3 }) && !M(bsel).Any(v => v));
+            var fsel = (MaskedArray)x2[np.array(new[] { 1, 3 })];
+            Assert.IsTrue(M(fsel).SequenceEqual(new[] { true, true }));
+
+            var m2 = np.ma.array(np.array(new double[,] { { 1, 2 }, { 3, 4 } }), np.array(new bool[,] { { false, true }, { false, false } }));
+            var row = (MaskedArray)m2[0];
+            Assert.IsTrue(D(row).SequenceEqual(new double[] { 1, 2 }) && M(row).SequenceEqual(new[] { false, true }));
+            Assert.IsTrue(ReferenceEquals(m2[0, 1], np.ma.masked));      // masked element
+            Assert.AreEqual(3.0, Convert.ToDouble(m2[1, 0]));            // unmasked element
+        }
+
+        /// <summary>Indexer SET: a plain value writes+UNMASKS; <c>= masked</c> masks in place (data untouched);
+        /// a masked-array value propagates its mask; masking a nomask array creates the mask.</summary>
+        [TestMethod]
+        public void Indexer_Set()
+        {
+            var y = Ma(new double[] { 1, 2, 3, 4 }, new[] { false, true, false, true });
+            y[0] = 100.0;
+            Assert.IsTrue(D(y)[0] == 100.0 && M(y)[0] == false);
+            y[1] = 200.0;                                                // masked slot → value UNMASKS
+            Assert.IsTrue(D(y)[1] == 200.0 && M(y)[1] == false);
+            y[2] = np.ma.masked;                                        // mask (data unchanged)
+            Assert.IsTrue(D(y)[2] == 3.0 && M(y)[2] == true);
+
+            var z = np.ma.array(np.array(new double[] { 1, 2, 3 }));    // nomask
+            Assert.IsTrue(ReferenceEquals(np.ma.getmask(z), np.ma.nomask));
+            z[1] = np.ma.masked;                                        // creates a mask
+            Assert.IsTrue(M(z).SequenceEqual(new[] { false, true, false }));
+
+            var w = Ma(new double[] { 1, 2, 3, 4 }, new[] { false, true, false, true });
+            w["1:3"] = 0.0;                                             // slice assign unmasks
+            Assert.IsTrue(D(w).SequenceEqual(new double[] { 1, 0, 0, 4 }) && M(w).SequenceEqual(new[] { false, false, false, true }));
+
+            var v = np.ma.array(np.array(new double[] { 1, 2, 3, 4 }));
+            v["0:2"] = np.ma.array(np.array(new double[] { 10, 20 }), np.array(new[] { true, false }));
+            Assert.IsTrue(M(v).SequenceEqual(new[] { true, false, false, false }) && D(v)[1] == 20.0);
+        }
+
+        /// <summary>put scatters into the flat data (cycling short values); masked values mask the slots, a
+        /// masked-array propagates, a plain value unmasks.</summary>
+        [TestMethod]
+        public void Put_MaskAware()
+        {
+            var pa = Ma(new double[] { 1, 2, 3, 4, 5 }, new[] { false, true, false, true, false });
+            np.ma.put(pa, np.array(new[] { 0, 2 }), np.array(new double[] { 100, 300 }));
+            Assert.IsTrue(D(pa).SequenceEqual(new double[] { 100, 2, 300, 4, 5 }));
+            Assert.IsTrue(M(pa).SequenceEqual(new[] { false, true, false, true, false }));
+
+            var pb = np.ma.array(np.array(new double[] { 1, 2, 3, 4, 5 }));
+            np.ma.put(pb, np.array(new[] { 1, 3 }), np.ma.masked);
+            Assert.IsTrue(M(pb).SequenceEqual(new[] { false, true, false, true, false }));
+
+            var pc = np.ma.array(np.array(new double[] { 1, 2, 3, 4, 5 }));
+            np.ma.put(pc, np.array(new[] { 1, 3 }), np.ma.array(np.array(new double[] { 20, 40 }), np.array(new[] { true, false })));
+            Assert.IsTrue(M(pc).SequenceEqual(new[] { false, true, false, false, false }) && D(pc)[3] == 40.0);
+        }
+
+        /// <summary>putmask writes values where the mask is True and unmasks those slots (masked-off slots
+        /// untouched, so a pre-masked one stays masked).</summary>
+        [TestMethod]
+        public void PutMask_MaskAware()
+        {
+            var d = Ma(new double[] { 1, 2, 3, 4 }, new[] { false, true, false, false });
+            np.ma.putmask(d, np.array(new[] { true, false, true, false }), np.array(new double[] { 10, 20, 30, 40 }));
+            Assert.IsTrue(D(d).SequenceEqual(new double[] { 10, 2, 30, 4 }));
+            Assert.IsTrue(M(d).SequenceEqual(new[] { false, true, false, false }));
+        }
+
+        /// <summary>resize tiles BOTH data and mask into the new shape (never in place); shrinking truncates.</summary>
+        [TestMethod]
+        public void Resize_TilesDataAndMask()
+        {
+            var e = Ma(new double[] { 1, 2, 3 }, new[] { false, true, false });
+            var rl = np.ma.resize(e, new Shape(2, 3));
+            Assert.IsTrue(rl.shape.SequenceEqual(new long[] { 2, 3 }));
+            Assert.IsTrue(M(rl).SequenceEqual(new[] { false, true, false, false, true, false }));
+            var rs = np.ma.resize(e, new Shape(2));
+            Assert.IsTrue(D(rs).SequenceEqual(new double[] { 1, 2 }) && M(rs).SequenceEqual(new[] { false, true }));
+        }
+
+        private static MaskedArray G() => np.ma.array(np.array(new double[,] { { 1, 2, 3 }, { 4, 5, 6 }, { 7, 8, 9 } }),
+                                                      np.array(new bool[,] { { false, false, false }, { false, true, false }, { false, false, false } }));
+
+        /// <summary>mask_rowcols masks whole rows and/or cols (from the ORIGINAL mask) containing any masked
+        /// element: axis=None both, 0 rows, 1 cols.</summary>
+        [TestMethod]
+        public void MaskRowcols()
+        {
+            Assert.IsTrue(M(np.ma.mask_rowcols(G())).SequenceEqual(new[] { false, true, false, true, true, true, false, true, false }));
+            Assert.IsTrue(M(np.ma.mask_rowcols(G(), 0)).SequenceEqual(new[] { false, false, false, true, true, true, false, false, false }));
+            Assert.IsTrue(M(np.ma.mask_rowcols(G(), 1)).SequenceEqual(new[] { false, true, false, false, true, false, false, true, false }));
+        }
+
+        /// <summary>compress_rowcols drops rows and/or cols with any masked value, returning a plain array.</summary>
+        [TestMethod]
+        public void CompressRowcols()
+        {
+            Assert.IsTrue(np.ma.compress_rowcols(G()).astype(np.float64).ToArray<double>().SequenceEqual(new double[] { 1, 3, 7, 9 }));
+            Assert.IsTrue(np.ma.compress_rowcols(G(), 0).astype(np.float64).ToArray<double>().SequenceEqual(new double[] { 1, 2, 3, 7, 8, 9 }));
+        }
+
+        /// <summary>notmasked_edges gives the first/last unmasked flat indices; notmasked_contiguous the unmasked
+        /// runs; ids returns the (data, mask) buffer addresses (mask 0 for nomask).</summary>
+        [TestMethod]
+        public void NotmaskedEdges_Contiguous_Ids()
+        {
+            var h = Ma(new double[] { 1, 2, 3, 4, 5 }, new[] { true, false, false, true, false });
+            Assert.IsTrue(np.ma.notmasked_edges(h).SequenceEqual(new long[] { 1, 4 }));
+            Assert.AreEqual(2, np.ma.notmasked_contiguous(h).Length);
+
+            var (dp, mp) = np.ma.ids(h);
+            Assert.AreNotEqual(0L, dp);
+            Assert.AreNotEqual(0L, mp);
+            Assert.AreEqual(0L, np.ma.ids(np.ma.array(np.array(new double[] { 1, 2 }))).mask); // nomask → 0
+        }
     }
 }

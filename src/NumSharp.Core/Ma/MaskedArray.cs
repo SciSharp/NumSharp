@@ -48,8 +48,11 @@ namespace NumSharp
         internal readonly NDArray _data;
 
         /// <summary>The boolean mask (True = masked/ignored), or <c>null</c> for NumPy's <c>nomask</c>
-        /// (no element masked). When non-null its shape equals <see cref="_data"/>'s shape.</summary>
-        internal readonly NDArray _mask;
+        /// (no element masked). When non-null its shape equals <see cref="_data"/>'s shape. NOT readonly:
+        /// the indexer's <c>x[i] = masked</c> path, <see cref="MaskedArrayModule.put"/> and
+        /// <see cref="MaskedArrayModule.putmask"/> CREATE or mutate the mask in place (NumPy's <c>__setitem__</c>
+        /// promotes a <c>nomask</c> array to a real mask on the first masking write).</summary>
+        internal NDArray _mask;
 
         /// <summary>The value substituted for masked elements by <see cref="filled(object)"/> when the caller
         /// gives none; null means "use the dtype default" (<see cref="MaskedArrayModule.default_fill_value"/>).
@@ -503,6 +506,98 @@ namespace NumSharp
                 return np.ma.masked;
             return _data.GetAtIndex(0);
         }
+
+        // ── The indexer (NumPy's MaskedArray.__getitem__/__setitem__) — the keystone that makes element/slice
+        //    access idiomatic and unblocks put/putmask/mask_rowcols. GET applies the SAME index to data and mask
+        //    (a basic slice is a VIEW sharing both buffers; a fancy/boolean index is a COPY); a scalar-reducing
+        //    index returns the bare value, or the `masked` singleton when that element is masked. SET writes the
+        //    data and reconciles the mask — `= masked` masks in place (data untouched), a plain value UNMASKS the
+        //    assigned slots, a MaskedArray value PROPAGATES its mask. ──
+        /// <summary>
+        ///     Indexes the masked array (NumPy's <c>x[key]</c> / <c>x[key] = value</c>). GET returns the bare
+        ///     scalar for an index that reduces to a single UNMASKED element, the <see cref="MaskedArrayModule.masked"/>
+        ///     singleton for a single MASKED element, or a sub-<see cref="MaskedArray"/> otherwise (a VIEW sharing
+        ///     memory for a basic slice, a COPY for a fancy/boolean index — matching NumPy). SET accepts a scalar,
+        ///     array-like, <see cref="NDArray"/>, <see cref="MaskedArray"/>, or the <c>masked</c> singleton
+        ///     (which masks the slots without touching their data).
+        /// </summary>
+        /// <param name="indices">Mixed index objects — ints (coordinate), slice strings ("1:3"), <see cref="Slice"/>s,
+        /// boolean/integer <see cref="NDArray"/> masks/fancy indices — exactly as <see cref="NDArray"/>'s own
+        /// <c>this[params object[]]</c> accepts.</param>
+        /// <returns>A boxed scalar, the <c>masked</c> singleton, or a <see cref="MaskedArray"/>.</returns>
+        /// <remarks>Returns <see cref="object"/> because NumPy's indexer is polymorphic (scalar vs masked vs
+        /// sub-array) and a C# indexer cannot switch its type on the runtime index; a slice read is a
+        /// <see cref="MaskedArray"/> to cast. A mask created here for a previously-<c>nomask</c> VIEW is local to
+        /// the view (it cannot alias a parent that has no mask buffer) — the one place this differs from NumPy's
+        /// shared-base masks.</remarks>
+        public object this[params object[] indices]
+        {
+            get
+            {
+                // Apply the identical index to data and (if present) mask — the two stay aligned by construction.
+                var subData = _data[indices];
+                var subMask = _mask is null ? null : _mask[indices];
+                // Scalar-reducing index (x[0] on 1-D, x[i,j] on 2-D): return the value or the masked singleton.
+                if (subData.ndim == 0)
+                {
+                    if (subMask is not null && np.any(subMask))
+                        return np.ma.masked;
+                    return subData.GetAtIndex(0);
+                }
+                return new MaskedArray(subData, subMask, _fill_value);
+            }
+            set => SetItem(indices, value);
+        }
+
+        /// <summary>The setter half of the indexer — reconciles the mask with the assigned value per NumPy's
+        /// <c>__setitem__</c>: <c>masked</c> masks (data untouched), a plain value unmasks, a masked value
+        /// propagates its mask.</summary>
+        /// <param name="indices">The index expression.</param>
+        /// <param name="value">Scalar/array/NDArray/MaskedArray/the masked singleton.</param>
+        private void SetItem(object[] indices, object value)
+        {
+            // `x[i] = masked`: set the mask True at the slots, leave the DATA as-is (NumPy hides but keeps it).
+            if (value is MaskedConstant)
+            {
+                EnsureMask();
+                _mask[indices] = NDArray.Scalar(true);
+                return;
+            }
+            // `x[i] = maskedArray`: write its data, then propagate its mask (or unmask if it has none).
+            if (value is MaskedArray mv)
+            {
+                _data[indices] = mv._data;
+                if (mv._mask is not null)
+                {
+                    EnsureMask();
+                    _mask[indices] = mv._mask;
+                }
+                else if (_mask is not null)
+                {
+                    _mask[indices] = NDArray.Scalar(false);
+                }
+                return;
+            }
+            // `x[i] = value` (scalar/array-like/NDArray): write the data and UNMASK the assigned slots.
+            // `np.ma.getdata` is the public face of the module's operand normalizer (scalar→0-d, array-like→array).
+            _data[indices] = np.ma.getdata(value);
+            if (_mask is not null)
+                _mask[indices] = NDArray.Scalar(false);
+        }
+
+        /// <summary>Promotes a <c>nomask</c> array to a real all-False boolean mask (NumPy's implicit
+        /// <c>_mask = make_mask_none(...)</c> on the first masking write). No-op when a mask already exists.</summary>
+        internal void EnsureMask()
+        {
+            if (_mask is null)
+                _mask = np.zeros(_data.Shape, np.@bool);
+        }
+
+        /// <summary>Sets <c>x.flat[indices] = values</c> (mask-aware) — the instance form of
+        /// <see cref="MaskedArrayModule.put"/>. Masked <paramref name="values"/> mask the slots; plain values unmask.</summary>
+        /// <param name="indices">Flat integer indices.</param><param name="values">Scalar/array/masked values.</param>
+        /// <param name="mode">Out-of-bounds policy: "raise" (default)/"wrap"/"clip".</param>
+        public void put(NDArray indices, object values, string mode = "raise") => np.ma.put(this, indices, values, mode);
 
         /// <summary>Accepted for NumPy parity; NumSharp masks carry no hard/soft state, so this returns THIS
         /// array unchanged (NumPy's <c>harden_mask</c> would forbid unmasking).</summary>
@@ -2714,6 +2809,237 @@ namespace NumSharp
         {
             var cols = np.any(getmaskarray(a), 0, null, true);
             return masked_where(np.broadcast_to(cols, AsData(a).Shape), a);
+        }
+
+        /// <summary>
+        ///     Masks whole rows and/or columns of a 2-D array that contain any masked element (NumPy's
+        ///     <c>mask_rowcols</c>): <paramref name="axis"/> null masks BOTH, 0 masks rows, 1/-1 masks columns.
+        ///     The row/column sets are computed from the ORIGINAL mask (so masking a row does not spill into
+        ///     "every column now has a masked element") — the two are OR'd onto a fresh mask over the shared data.
+        /// </summary>
+        /// <param name="a">2-D operand.</param>
+        /// <param name="axis">null (rows AND cols), 0 (rows), or 1/-1 (cols).</param>
+        /// <returns>The row/column-masked array (an all-unmasked input is returned unchanged).</returns>
+        /// <exception cref="NotImplementedException"><paramref name="a"/> is not 2-D.</exception>
+        public MaskedArray mask_rowcols(object a, int? axis = null)
+        {
+            var ma_ = array(a);
+            if (ma_.ndim != 2)
+                throw new NotImplementedException("mask_rowcols works for 2D arrays only.");
+            var m = ma_._mask;
+            if (m is null || !np.any(m))
+                return ma_;
+            var newmask = m.copy();
+            // `not axis` in NumPy is truthy for None AND 0, so rows are masked for axis ∈ {null, 0}; columns for
+            // axis ∈ {null, 1, -1}. Both sets read the ORIGINAL mask m.
+            bool doRows = axis is null || axis == 0;
+            bool doCols = axis is null || axis == 1 || axis == -1;
+            if (doRows)
+                newmask = np.logical_or(newmask, np.broadcast_to(np.any(m, 1, null, true), m.Shape));
+            if (doCols)
+                newmask = np.logical_or(newmask, np.broadcast_to(np.any(m, 0, null, true), m.Shape));
+            return new MaskedArray(ma_._data, newmask);
+        }
+
+        /// <summary>
+        ///     Suppresses the slices (along each requested axis) that contain any masked value and returns the
+        ///     surviving DATA as a PLAIN array (NumPy's <c>compress_nd</c>). <paramref name="axis"/> null
+        ///     compresses along EVERY axis; an explicit axis compresses only that one. The keep-mask for each
+        ///     axis is computed from the full original mask, so an N-D box is trimmed to the sub-block with no
+        ///     masked element on any face.
+        /// </summary>
+        /// <param name="x">Operand.</param>
+        /// <param name="axis">null (all axes) or a single axis (negative allowed).</param>
+        /// <returns>A plain <see cref="NDArray"/> of the surviving data (an unmasked input returns its data;
+        /// a fully-masked input returns an empty array).</returns>
+        public NDArray compress_nd(object x, int? axis = null)
+        {
+            var data = AsData(x);
+            var m = (x as MaskedArray)?._mask;
+            if (m is null || !np.any(m))
+                return data;
+            if (np.all(m))
+                return np.array(Array.Empty<double>());
+            int nd = data.ndim;
+            int[] axes = axis is null
+                ? Enumerable.Range(0, nd).ToArray()
+                : new[] { axis.Value < 0 ? axis.Value + nd : axis.Value };
+            var result = data;
+            foreach (var ax in axes)
+            {
+                // Keep the slices along `ax` that have NO masked element (reduce the mask over every OTHER axis).
+                var keep = np.logical_not(AnyOverComplement(m, ax, nd));
+                result = np.compress(keep, result, ax);
+            }
+            return result;
+        }
+
+        /// <summary>Reduces a boolean mask over every axis EXCEPT <paramref name="ax"/>, leaving a 1-D bool of
+        /// length <c>shape[ax]</c> — True where that slice holds any masked element. Reduces highest-axis-first so
+        /// <paramref name="ax"/>'s position stays put.</summary>
+        private static NDArray AnyOverComplement(NDArray m, int ax, int nd)
+        {
+            var acc = m;
+            for (int d = nd - 1; d >= 0; d--)
+                if (d != ax)
+                    acc = np.any(acc, d, null, false);
+            return acc;
+        }
+
+        /// <summary>Drops the rows AND/OR columns of a 2-D array that contain any masked value (NumPy's
+        /// <c>compress_rowcols</c>) — the 2-D specialization of <see cref="compress_nd"/>. Returns a plain array.</summary>
+        /// <param name="x">2-D operand.</param>
+        /// <param name="axis">null (rows AND cols), 0 (rows), or 1 (cols).</param>
+        /// <returns>The surviving data as a plain <see cref="NDArray"/>.</returns>
+        /// <exception cref="NotImplementedException"><paramref name="x"/> is not 2-D.</exception>
+        public NDArray compress_rowcols(object x, int? axis = null)
+        {
+            if (AsData(x).ndim != 2)
+                throw new NotImplementedException("compress_rowcols works for 2D arrays only.");
+            return compress_nd(x, axis);
+        }
+
+        /// <summary>First and last UNMASKED indices along the flattened array (NumPy's <c>notmasked_edges</c> for
+        /// <paramref name="axis"/> null / a 1-D input) — a 2-element <c>[first, last]</c>, or null when every
+        /// element is masked.</summary>
+        /// <param name="a">Operand.</param><param name="axis">null or (for a 1-D input) any axis.</param>
+        /// <returns>The <c>[first, last]</c> flat edge indices, or null.</returns>
+        /// <exception cref="NotSupportedException">An explicit <paramref name="axis"/> on a &gt;1-D array (the
+        /// per-axis edge-grid form is not yet implemented).</exception>
+        public long[] notmasked_edges(object a, int? axis = null)
+        {
+            if (axis is null || AsData(a).ndim == 1)
+                return flatnotmasked_edges(a);
+            throw new NotSupportedException(
+                "np.ma.notmasked_edges with an explicit axis on a >1-D array is not yet implemented; axis=None / 1-D is supported.");
+        }
+
+        /// <summary>Contiguous UNMASKED runs of the flattened array as slices (NumPy's <c>notmasked_contiguous</c>
+        /// for <paramref name="axis"/> null / a 1-D input) — the same as <see cref="flatnotmasked_contiguous"/>.</summary>
+        /// <param name="a">Operand.</param><param name="axis">null or (for a 1-D input) any axis.</param>
+        /// <returns>One <see cref="Slice"/> per contiguous unmasked run.</returns>
+        /// <exception cref="NotSupportedException">An explicit <paramref name="axis"/> on a &gt;1-D array (the
+        /// list-of-lists-per-slice form is not yet implemented).</exception>
+        public Slice[] notmasked_contiguous(object a, int? axis = null)
+        {
+            if (axis is null || AsData(a).ndim == 1)
+                return flatnotmasked_contiguous(a);
+            throw new NotSupportedException(
+                "np.ma.notmasked_contiguous with an explicit axis on a >1-D array returns a list-of-lists and is not yet implemented; axis=None / 1-D is supported.");
+        }
+
+        /// <summary>The raw buffer addresses of the data and mask areas (NumPy's <c>ids</c>) — the mask address
+        /// is 0 when the array is <c>nomask</c>. Diagnostic only; the values are unmanaged pointers into
+        /// NumSharp's own buffers, not comparable across processes.</summary>
+        /// <param name="a">Operand.</param>
+        /// <returns>A tuple of the data-buffer and mask-buffer addresses (mask 0 for nomask).</returns>
+        public unsafe (long data, long mask) ids(object a)
+        {
+            long dataPtr = (long)AsData(a).Storage.Address;
+            var m = (a as MaskedArray)?._mask;
+            long maskPtr = m is null ? 0L : (long)m.Storage.Address;
+            return (dataPtr, maskPtr);
+        }
+
+        // ─────────────────────────────────────────────────────────────────────────────
+        //  In-place scatter / resize (NumPy's put / putmask / resize)
+        // ─────────────────────────────────────────────────────────────────────────────
+
+        /// <summary>
+        ///     IN-PLACE flat scatter (NumPy's <c>ma.put</c>): sets <c>a.flat[indices] = values</c>, cycling
+        ///     <paramref name="values"/> when shorter. A masked <paramref name="values"/> (the <c>masked</c>
+        ///     singleton or a masked-array's mask) masks the written slots; a plain value UNMASKS them. The mask
+        ///     is created on demand and shrunk back to <c>nomask</c> if it ends up all-False.
+        /// </summary>
+        /// <param name="a">The <see cref="MaskedArray"/> (or plain array) to mutate.</param>
+        /// <param name="indices">Flat integer target indices.</param>
+        /// <param name="values">Scalar/array/<see cref="MaskedArray"/>/the <c>masked</c> singleton.</param>
+        /// <param name="mode">Out-of-bounds policy: "raise" (default)/"wrap"/"clip".</param>
+        public void put(object a, NDArray indices, object values, string mode = "raise")
+        {
+            var ma_ = a as MaskedArray;
+            var data = AsData(a);
+            if (values is MaskedConstant)
+            {
+                // Mask the slots; leave the data (hidden). A plain array carries no mask, so nothing to do there.
+                if (ma_ is not null)
+                {
+                    ma_.EnsureMask();
+                    np.put(ma_._mask, indices, NDArray.Scalar(true), mode);
+                }
+                return;
+            }
+            if (values is MaskedArray mv)
+            {
+                np.put(data, indices, mv._data, mode);
+                if (mv._mask is not null && ma_ is not null)
+                {
+                    ma_.EnsureMask();
+                    np.put(ma_._mask, indices, mv._mask, mode);
+                }
+                else if (ma_?._mask is not null)
+                {
+                    np.put(ma_._mask, indices, NDArray.Scalar(false), mode); // unmask
+                }
+            }
+            else
+            {
+                np.put(data, indices, AsData(values), mode);
+                if (ma_?._mask is not null)
+                    np.put(ma_._mask, indices, NDArray.Scalar(false), mode); // unmask
+            }
+            // NumPy shrinks the mask after put: an all-False mask collapses to nomask.
+            if (ma_?._mask is not null && !np.any(ma_._mask))
+                ma_._mask = null;
+        }
+
+        /// <summary>
+        ///     IN-PLACE conditional write (NumPy's <c>ma.putmask</c>): writes <paramref name="values"/> into
+        ///     <paramref name="a"/>'s data wherever <paramref name="mask"/> is True, and reconciles the mask
+        ///     there — masked <paramref name="values"/> mask those slots, plain values UNMASK them. Unlike
+        ///     <see cref="put"/>, alignment is by <see cref="np.copyto"/> broadcast (not cycling).
+        /// </summary>
+        /// <param name="a">The <see cref="MaskedArray"/> (or plain array) to mutate.</param>
+        /// <param name="mask">Boolean array-like selecting the write positions.</param>
+        /// <param name="values">Scalar/array/<see cref="MaskedArray"/> supplying the data (and, if masked, the mask).</param>
+        public void putmask(object a, object mask, object values)
+        {
+            var ma_ = a as MaskedArray;
+            var data = AsData(a);
+            var maskArr = AsData(mask).astype(np.@bool);
+            var valdata = AsData(values);
+            var valmask = (values as MaskedArray)?._mask;
+            if (ma_ is null || ma_._mask is null)
+            {
+                // No existing mask: only create one if the VALUES bring a mask (else stay nomask).
+                if (valmask is not null && ma_ is not null)
+                {
+                    ma_._mask = np.zeros(data.Shape, np.@bool);
+                    np.copyto(ma_._mask, valmask, casting: "unsafe", where: maskArr);
+                }
+            }
+            else
+            {
+                // Existing mask: unmasked values (nomask) become all-False so the written slots unmask.
+                var vm = valmask ?? np.zeros(valdata.Shape, np.@bool);
+                np.copyto(ma_._mask, vm, casting: "unsafe", where: maskArr);
+            }
+            np.copyto(data, valdata, casting: "unsafe", where: maskArr);
+        }
+
+        /// <summary>
+        ///     Returns a NEW masked array of <paramref name="new_shape"/> filled with repeated copies of
+        ///     <paramref name="x"/>'s data AND mask (NumPy's <c>ma.resize</c>) — always a masked array, never in
+        ///     place. Enlarging TILES the input (data and mask alike, so a masked element recurs masked);
+        ///     shrinking truncates.
+        /// </summary>
+        /// <param name="x">Operand.</param><param name="new_shape">Target shape.</param>
+        /// <returns>A fresh masked array of <paramref name="new_shape"/>.</returns>
+        public MaskedArray resize(object x, Shape new_shape)
+        {
+            var data = np.resize(AsData(x), new_shape);
+            var m = (x as MaskedArray)?._mask;
+            return new MaskedArray(data, m is null ? null : np.resize(m, new_shape));
         }
 
         // ─────────────────────────────────────────────────────────────────────────────
