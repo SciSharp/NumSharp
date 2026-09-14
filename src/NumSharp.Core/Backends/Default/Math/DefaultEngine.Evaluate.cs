@@ -977,15 +977,24 @@ namespace NumSharp.Backends
                     "(a bit-exact float16/decimal reduction needs a pairwise sum kernel that dtype lacks; " +
                     "use np.average directly). Plan P2 M-Half/M-Decimal.");
 
-            // Materialize both children once (fresh, contiguous, at their natural dtypes). `using`
-            // releases them after the product / weight-sum have read them.
-            using var vMat = EvaluateCore(program.AvgValuesProgram, inputs, null);
-            using var wMat = EvaluateCore(program.AvgWeightsProgram, inputs, null);
+            // Materialize both children once (fresh, contiguous, at their natural dtypes). NOT `using`:
+            // ToResultContig REUSES the materialized array when it is already result-dtype and
+            // C-contiguous (the common case — v/w bare arrays or a same-dtype expression), so vRt/wRt
+            // then ALIAS vMat/wMat and ownership is tracked by the ReferenceEquals guards below rather
+            // than a scope disposer that would double-dispose the shared array. The enclosing
+            // [NDScoped] Evaluate reclaims either on an exception between here and the disposes.
+            NDArray vMat = EvaluateCore(program.AvgValuesProgram, inputs, null);
+            NDArray wMat = EvaluateCore(program.AvgWeightsProgram, inputs, null);
 
-            // Cast each child to the result dtype as a FRESH, C-contiguous array (so disposal never
-            // aliases vMat / wMat, and the pairwise sum reads a straight memory walk = NumPy's C-order).
+            // Bring each child to the result dtype as a C-contiguous array — REUSED when the
+            // materialize already produced one (no redundant copy; the whole ~23x-at-100K cost of the
+            // bare-array average was two such copies), else a fresh copy/astype. A fresh array leaves
+            // the now-spent materialize intermediate to dispose here; a reused one aliases it, so the
+            // single dispose of vRt/wRt below (995 / 1012) frees it exactly once.
             NDArray vRt = ToResultContig(vMat, rt);
             NDArray wRt = ToResultContig(wMat, rt);
+            if (!ReferenceEquals(vRt, vMat)) vMat.Dispose();
+            if (!ReferenceEquals(wRt, wMat)) wMat.Dispose();
 
             // Product at the result dtype (the two children broadcast together, like any fused binary);
             // guard C-contiguity for ExactSumArray (a C-input multiply is C, but stay defensive).
@@ -1052,8 +1061,26 @@ namespace NumSharp.Backends
         /// <param name="m">The materialized child (any dtype, any contiguous layout).</param>
         /// <param name="rt">The result dtype (Single / Double / Complex here).</param>
         /// <returns>A fresh C-contiguous array of dtype <paramref name="rt"/>.</returns>
+        /// <summary>
+        /// A C-contiguous view of <paramref name="m"/> at dtype <paramref name="rt"/> for the weighted-average
+        /// pairwise sums: <paramref name="m"/> ITSELF when it is already result-dtype and C-contiguous (the
+        /// common case — the materialize already produced exactly that, so no copy is made), a C-order
+        /// <c>copy()</c> when it is result-dtype but not C-contiguous (F/strided — normalize so the memory-order
+        /// pairwise sum equals NumPy's C-order sum), or a fresh <c>astype(rt)</c> for a different dtype.
+        /// <para>
+        /// CALLER CONTRACT: the return value ALIASES <paramref name="m"/> in the first case, so the caller must
+        /// test <c>ReferenceEquals(result, m)</c> before disposing <paramref name="m"/> — disposing both would
+        /// double-free the shared array. Mirrors the reuse pattern of <see cref="EnsureContiguous"/>. The result
+        /// is always C-contiguous, which <see cref="ExactSumArray"/> requires for its memory-order fold.
+        /// </para>
+        /// </summary>
+        /// <param name="m">A freshly materialized child (any dtype/layout).</param>
+        /// <param name="rt">The average's result dtype.</param>
+        /// <returns><paramref name="m"/> reused, or a fresh C-contiguous array at <paramref name="rt"/>.</returns>
         private static NDArray ToResultContig(NDArray m, NPTypeCode rt)
-            => m.typecode == rt ? m.copy() : m.astype(DType.From(rt));
+            => m.typecode == rt
+                ? (m.Shape.IsContiguous ? m : m.copy())   // already rt + C-contiguous → reuse (was a redundant copy); F/strided → normalize to C
+                : m.astype(DType.From(rt));               // a dtype change always yields a fresh C-contiguous array
 
         /// <summary>Do two shapes have identical dimensions (so no broadcast is needed for the denominator sum)?</summary>
         /// <param name="a">The first shape.</param>
