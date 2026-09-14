@@ -935,6 +935,126 @@ namespace NumSharp
     }
 
     /// <summary>
+    ///     The masked counterpart of <see cref="np.r_"/> — NumPy's <c>numpy.ma.mr_</c> (an <c>MAxisConcatenator</c>):
+    ///     concatenates masked arrays / slices / scalars along the first axis, propagating the mask, with the SAME
+    ///     slice-expression grammar as <see cref="np.r_"/> (a colon-string is a slice, a leading directive string
+    ///     sets axis/ndmin/matrix — the library-wide convention). Reach for it to stitch masked pieces together
+    ///     the way <c>np.r_</c> stitches plain arrays.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///     <b>Not structured-blocked.</b> The audit long listed <c>mr_</c> under the structured/record family;
+    ///     that was wrong. NumPy's <c>MAxisConcatenator</c> is structured only in its de-activated matrix-string
+    ///     path — its real job is masked concatenation, which composes cleanly here.
+    ///     </para>
+    ///     <para>
+    ///     <b>How it works.</b> The result DATA is exactly <c>np.r_[key]</c> over the same entries (a masked entry
+    ///     contributes its <c>data</c>); the result MASK is <c>np.r_[maskKey]</c> where each entry is replaced by
+    ///     its boolean-mask contribution of the SAME natural shape (a masked entry → its full mask, a plain
+    ///     array/scalar → all-False, a colon-slice → all-False of the arange's shape, a directive string passes
+    ///     through). Because both streams run the identical <c>np.r_</c> grammar, every directive (axis / ndmin /
+    ///     <c>r</c>/<c>c</c> matrix) lays the mask out to match the data. When NO entry carries a mask the result
+    ///     is <c>nomask</c> (the fast path), exactly as the sibling stacking wrappers do.
+    ///     </para>
+    ///     <para>
+    ///     <b>Lone string → <see cref="MAError"/>.</b> NumPy's <c>mr_</c> rejects a lone string key (its dangerous
+    ///     frame-based matrix builder) with <c>MAError("Unavailable for masked array.")</c>; reproduced verbatim.
+    ///     A lone masked array / scalar, or any multi-entry key, is fine.
+    ///     </para>
+    ///     <para>
+    ///     <b>One documented divergence.</b> A colon-slice entry combined with a <c>trans1d</c> directive
+    ///     (<c>"axis,ndmin,trans1d"</c> with <c>trans1d != -1</c>) lays the DATA out via <c>np.r_</c>'s slice
+    ///     branch but the MASK via its array branch, whose axis permutations differ only in that rare case; every
+    ///     realistic usage (concatenation, scalars, axis and matrix directives, ndmin with the default
+    ///     <c>trans1d=-1</c>) is bit-exact.
+    ///     </para>
+    ///     https://numpy.org/doc/stable/reference/generated/numpy.ma.mr_.html
+    /// </remarks>
+    public sealed class MrClass
+    {
+        /// <summary>There is one shared instance behind <see cref="MaskedArrayModule.mr_"/>.</summary>
+        internal MrClass() { }
+
+        /// <summary>
+        ///     Expands and concatenates the masked index expression along the first axis.
+        /// </summary>
+        /// <param name="key">Masked arrays, plain arrays, scalars, slice-expression strings and leading
+        /// directive strings — in any mix, following <see cref="np.r_"/>'s grammar.</param>
+        /// <returns>A <see cref="MaskedArray"/> whose data is <c>np.r_[key]</c> and whose mask is the matching
+        /// concatenation of the entries' masks (or <see cref="MaskedArrayModule.nomask"/> when none is masked).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="key"/> (or an entry) is null.</exception>
+        /// <exception cref="MAError"><paramref name="key"/> is a lone string (NumPy's rejection).</exception>
+        public MaskedArray this[params object[] key]
+        {
+            get
+            {
+                if (key is null)
+                    throw new ArgumentNullException(nameof(key));
+                // NumPy's mr_ refuses a LONE string (its frame-based matrix-builder syntax). NumSharp has no such
+                // builder, so a lone string could only be a would-be directive or the colon-slice spelling — reject
+                // it exactly as NumPy does. Every OTHER form follows np.r_'s grammar.
+                if (key.Length == 1 && key[0] is string)
+                    throw new MAError("Unavailable for masked array.");
+
+                // DATA stream: unwrap a masked entry to its data; every other entry (slice/directive strings,
+                // scalars, arrays) passes straight to np.r_ so its dtype/layout resolution is untouched.
+                var dataKey = new object[key.Length];
+                bool anyMask = false;
+                for (int i = 0; i < key.Length; i++)
+                {
+                    if (key[i] is MaskedArray m)
+                    {
+                        dataKey[i] = m._data;
+                        // A real (non-nomask) mask on ANY entry forces the mask stream; else stay on nomask.
+                        if (m._mask is not null)
+                            anyMask = true;
+                    }
+                    else
+                        dataKey[i] = key[i];
+                }
+                NDArray dataResult = np.r_[dataKey];
+                if (!anyMask)
+                    return new MaskedArray(dataResult, null);
+
+                // MASK stream: same np.r_ grammar over each entry's boolean-mask contribution.
+                var maskKey = new object[key.Length];
+                for (int i = 0; i < key.Length; i++)
+                    maskKey[i] = MaskEntry(key[i]);
+                NDArray maskResult = np.r_[maskKey];
+                return new MaskedArray(dataResult, maskResult);
+            }
+        }
+
+        /// <summary>Maps a key entry to its boolean-mask contribution of the SAME natural shape it feeds the data
+        /// stream: a directive string passes through unchanged (it lays out both streams identically), a
+        /// colon-slice materializes an all-False array of the arange's shape, and everything else
+        /// (masked array / plain array / scalar) routes through <see cref="MaskedArrayModule.getmaskarray"/>,
+        /// which yields the mask for a masked array and an all-False array for a plain one.</summary>
+        /// <param name="item">A key entry.</param>
+        /// <returns>The mask-stream stand-in for <paramref name="item"/>.</returns>
+        private static object MaskEntry(object item)
+        {
+            switch (item)
+            {
+                case null:
+                    throw new ArgumentNullException(nameof(item), "index expression entries must not be null.");
+                // A directive string (no colon) is a layout control token — it must pass through so the mask
+                // stream gets the same axis/ndmin/matrix directive as the data stream.
+                case string s when s.IndexOf(':') < 0:
+                    return s;
+                // A colon-slice → all-False of the arange's own shape (np.r_ re-applies any ndmin directive to it).
+                case string:
+                case Slice:
+                case Slice[]:
+                    return np.zeros(np.r_[item].Shape, np.@bool);
+                // Masked array → its mask; plain array/scalar → an all-False array of its shape.
+                default:
+                    return np.ma.getmaskarray(item);
+            }
+        }
+    }
+
+    /// <summary>
     ///     The <c>numpy.ma</c> module surface, reachable as <see cref="np.ma"/>. Holds the masked-array
     ///     substrate (<see cref="getdata"/>/<see cref="getmask"/>/<see cref="getmaskarray"/>/<see cref="filled"/>/
     ///     <see cref="masked"/>/<see cref="nomask"/>) and the masked <b>ufunc family</b> — every unary/binary
@@ -984,6 +1104,11 @@ namespace NumSharp
         /// <summary>NumPy's <c>bool_</c>: the boolean dtype (same as <see cref="MaskType"/>), exported by
         /// <c>numpy.ma</c> for building masks explicitly.</summary>
         public DType bool_ => np.@bool;
+
+        /// <summary>NumPy's <c>mr_</c>: the masked concatenation index-expression object (the masked
+        /// counterpart of <see cref="np.r_"/>). Use as <c>np.ma.mr_[a, b]</c> / <c>np.ma.mr_["1", A, B]</c>.
+        /// See <see cref="MrClass"/>.</summary>
+        public MrClass mr_ { get; } = new MrClass();
 
         /// <summary>
         ///     Returns the data of <paramref name="a"/> as a plain <see cref="NDArray"/> — the underlying data
@@ -1292,6 +1417,32 @@ namespace NumSharp
                     return b.typecode == NPTypeCode.Boolean ? b : np.not_equal(b, NDArray.Scalar(0));
             }
         }
+
+        /// <summary>
+        ///     Ravels a mask to a flat 1-D boolean array (NumPy's <c>flatten_mask</c>). In NumPy this collapses
+        ///     the nested per-field masks of a STRUCTURED dtype into one flat sequence of booleans; NumSharp has
+        ///     no structured dtypes, so the recursion never branches and this is exactly "ravel in C-order, then
+        ///     coerce to bool" — which is precisely what NumPy's own non-structured path does
+        ///     (<c>np.array([...raveled...], dtype=bool)</c>). Non-boolean input is coerced by non-zero-ness
+        ///     (<c>astype(bool)</c> ≡ <c>!= 0</c>), so an integer/float mask flattens like NumPy's.
+        /// </summary>
+        /// <param name="mask">A mask array-like (<see cref="NDArray"/>, C# array, scalar, or the
+        /// <see cref="nomask"/> sentinel). A 0-D input flattens to a length-1 array (matching NumPy).</param>
+        /// <returns>A fresh 1-D boolean <see cref="NDArray"/> in C-order.</returns>
+        /// <remarks>Returns a fresh array (never a view), matching NumPy which builds a new <c>np.array</c>.</remarks>
+        public NDArray flatten_mask(object mask) => np.ravel(AsData(mask)).astype(np.@bool);
+
+        /// <summary>
+        ///     The dtype of the mask for a data dtype (NumPy's <c>make_mask_descr</c>) — ALWAYS boolean here.
+        ///     In NumPy this recurses over a STRUCTURED dtype to build a matching boolean-field mask descriptor;
+        ///     NumSharp has no structured dtypes, so every data dtype maps to the single scalar boolean mask
+        ///     descriptor NumPy returns for a non-structured dtype (<c>dtype('bool')</c>).
+        /// </summary>
+        /// <param name="dtype">The data dtype (a <see cref="Type"/>, <see cref="NPTypeCode"/>, dtype string or
+        /// <see cref="DType"/> all convert in). Any invalid spelling throws at the <see cref="DType"/> boundary,
+        /// as NumPy raises for a bad dtype.</param>
+        /// <returns>The boolean <see cref="DType"/> (<see cref="np.@bool"/>).</returns>
+        public DType make_mask_descr(DType dtype) => np.@bool;
 
         // ─────────────────────────────────────────────────────────────────────────────
         //  Fill-value helpers (common_fill_value / set_fill_value / fix_invalid)
