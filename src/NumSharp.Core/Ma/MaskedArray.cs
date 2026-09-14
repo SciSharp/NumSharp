@@ -2063,6 +2063,82 @@ namespace NumSharp
         public MaskedArray apply_over_axes(Func<MaskedArray, int, MaskedArray> func, object a, int axis)
             => apply_over_axes(func, a, new[] { axis });
 
+        /// <summary>
+        ///     Applies <paramref name="func1d"/> to each 1-D MASKED slice of <paramref name="arr"/> taken along
+        ///     <paramref name="axis"/>, assembling the results (NumPy's <c>ma.apply_along_axis</c>). The slice is
+        ///     handed over as a <see cref="MaskedArray"/> (via the indexer), so the mask rides through the
+        ///     function; the output shape is <paramref name="arr"/>'s shape with the <paramref name="axis"/> entry
+        ///     replaced by <paramref name="func1d"/>'s result shape (dropped entirely for a scalar result).
+        /// </summary>
+        /// <param name="func1d">The per-slice function; may return a scalar (0-d) or a 1-D masked array.</param>
+        /// <param name="axis">The axis along which the 1-D slices are taken.</param>
+        /// <param name="arr">Operand.</param>
+        /// <returns>The assembled masked array.</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
+        /// <exception cref="NotSupportedException"><paramref name="func1d"/> returns a result of rank ≥ 2 (NumSharp
+        /// supports the scalar- and 1-D-result cases; a higher-rank per-slice result needs the object-array
+        /// assembly NumSharp lacks).</exception>
+        public MaskedArray apply_along_axis(Func<MaskedArray, MaskedArray> func1d, int axis, object arr)
+        {
+            var a = asanyarray(arr);
+            int nd = a.ndim;
+            int ax = axis < 0 ? axis + nd : axis;
+            if (ax < 0 || ax >= nd)
+                throw new AxisError($"axis {axis} is out of bounds for array of dimension {nd}");
+            var shape = a.shape;
+            var outerAxes = Enumerable.Range(0, nd).Where(d => d != ax).ToArray();
+            var outerShape = outerAxes.Select(d => shape[d]).ToArray();
+
+            // One masked 1-D slice at the given outer coordinate: ints on the outer axes, ":" on `axis`.
+            MaskedArray SliceAt(long[] outer)
+            {
+                var idx = new object[nd];
+                idx[ax] = Slice.All;
+                for (int j = 0; j < outerAxes.Length; j++)
+                    idx[outerAxes[j]] = (int)outer[j];
+                return (MaskedArray)a[idx];
+            }
+
+            // C-order odometer over the outer index space (last outer axis fastest) so the flat result order
+            // matches a reshape to outerShape.
+            var results = new List<MaskedArray>();
+            var coord = new long[outerAxes.Length];
+            while (true)
+            {
+                results.Add(func1d(SliceAt(coord)));
+                int p = outerAxes.Length - 1;
+                for (; p >= 0; p--)
+                {
+                    if (++coord[p] < outerShape[p]) break;
+                    coord[p] = 0;
+                }
+                if (p < 0) break;
+            }
+
+            var datas = results.Select(r => getdata(r)).ToArray();
+            var masks = results.Select(r => getmaskarray(r)).ToArray();
+            int resNd = results[0].ndim;
+            if (resNd == 0)
+            {
+                // Scalar per slice → output shape is exactly the outer shape.
+                var d = np.reshape(np.stack(datas, 0), new Shape(outerShape));
+                var m = np.reshape(np.stack(masks, 0), new Shape(outerShape));
+                return new MaskedArray(d, np.any(m) ? m : null);
+            }
+            if (resNd == 1)
+            {
+                // 1-D result of length L per slice → stack to (outerSize, L), reshape to (outerShape…, L), then
+                // move that trailing L axis into the original `axis` position (a.shape with axis → L).
+                var resLen = results[0].shape[0];
+                var newShape = outerShape.Concat(new[] { resLen }).ToArray();
+                var d = np.moveaxis(np.reshape(np.stack(datas, 0), new Shape(newShape)), outerAxes.Length, ax);
+                var m = np.moveaxis(np.reshape(np.stack(masks, 0), new Shape(newShape)), outerAxes.Length, ax);
+                return new MaskedArray(d, np.any(m) ? m : null);
+            }
+            throw new NotSupportedException(
+                "np.ma.apply_along_axis supports a scalar or 1-D per-slice result; a rank-{resNd} result needs the object-array assembly NumSharp lacks.".Replace("{resNd}", resNd.ToString()));
+        }
+
         /// <summary>Cumulative sum along the axis; masked slots contribute 0 to the running total but their
         /// POSITIONS stay masked in the result (NumPy semantics).</summary>
         /// <param name="a">Operand.</param><param name="axis">Axis or null (flatten, C-order).</param><param name="dtype">Accumulator dtype.</param>

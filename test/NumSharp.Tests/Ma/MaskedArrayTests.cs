@@ -956,5 +956,28 @@ namespace NumSharp.Tests.Ma
             Assert.IsTrue(np.ma.getdata(r).astype(np.float64).ToArray<double>().SequenceEqual(new double[] { 45, 87, 94 }));
             Assert.IsFalse(np.ma.getmaskarray(r).ToArray<bool>().Any(x => x));
         }
+
+        /// <summary>apply_along_axis hands each 1-D masked slice to the function and assembles the results — a
+        /// scalar result drops the axis (an all-masked slice → masked), a 1-D result replaces it (mask preserved).</summary>
+        [TestMethod]
+        public void ApplyAlongAxis()
+        {
+            var data = np.arange(12).reshape(3, 4).astype(np.float64);
+            var mask = np.array(Enumerable.Range(0, 12).Select(i => i % 4 == 1).ToArray()).reshape(3, 4);
+            var a = np.ma.array(data, mask);
+
+            // scalar result: sum along axis 1 / axis 0 (all-masked column → masked).
+            var s1 = np.ma.apply_along_axis(m => np.ma.sum(m), 1, a);
+            Assert.IsTrue(D(s1).SequenceEqual(new double[] { 5, 17, 29 }) && s1.shape.SequenceEqual(new long[] { 3 }));
+            var s0 = np.ma.apply_along_axis(m => np.ma.sum(m), 0, a);
+            Assert.IsTrue(D(s0).SequenceEqual(new double[] { 12, 0, 18, 21 }));
+            Assert.IsTrue(M(s0)[1]); // the all-masked column reduces to masked
+
+            // 1-D result: cumsum along axis 1 keeps the masked positions masked.
+            var c1 = np.ma.apply_along_axis(m => np.ma.cumsum(m), 1, a);
+            Assert.IsTrue(c1.shape.SequenceEqual(new long[] { 3, 4 }));
+            Assert.IsTrue(D(c1).SequenceEqual(new double[] { 0, 0, 2, 5, 4, 4, 10, 17, 8, 8, 18, 29 }));
+            Assert.IsTrue(M(c1).SequenceEqual(new[] { false, true, false, false, false, true, false, false, false, true, false, false }));
+        }
     }
 }
