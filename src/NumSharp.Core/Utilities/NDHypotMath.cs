@@ -61,6 +61,7 @@ namespace NumSharp.Utilities
         /// contract NumPy inherits from UCRT: an infinite operand yields <c>+inf</c> even when the other
         /// is NaN; otherwise a NaN operand yields NaN; the result is always non-negative.
         /// </summary>
+        [MethodImpl(OptimizeAndInline)]
         public static double Hypot(double x, double y)
         {
             x = Math.Abs(x);
@@ -90,18 +91,21 @@ namespace NumSharp.Utilities
         /// <c>hypotf</c> (float). NumPy's <c>ff->f</c> loop; bit-exact with UCRT's <c>hypotf</c> because
         /// rounding the correctly-rounded double result down to float coincides with it.
         /// </summary>
+        [MethodImpl(OptimizeAndInline)]
         public static float HypotF(float x, float y) => (float)Hypot(x, y);
 
         /// <summary>
         /// Half computes in float32, matching NumPy's <c>ee->e</c> loop (<c>astype e->f</c>: half→float,
         /// <c>hypotf</c>, float→half). Bit-exact with NumPy.
         /// </summary>
+        [MethodImpl(OptimizeAndInline)]
         public static Half HypotHalf(Half x, Half y) => (Half)HypotF((float)x, (float)y);
 
         /// <summary>
         /// Decimal (no NumPy analog): the overflow-safe scaled form <c>|x|·sqrt(1+(|y|/|x|)²)</c> keeps
         /// the radicand in [1,2] so only a genuine out-of-range result overflows (decimal has no infinity).
         /// </summary>
+        [MethodImpl(OptimizeAndInline)]
         public static decimal HypotDecimal(decimal x, decimal y)
         {
             x = Math.Abs(x);
