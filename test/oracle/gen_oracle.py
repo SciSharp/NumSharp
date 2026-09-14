@@ -8425,6 +8425,35 @@ def gen_evaluate():
                     continue
                 emit(expr, [(ba, va), (bb, vb)], ln, cid_tag=f"{sa},{sb}/{expr}")
 
+    # ---- A4. Phase 5.2 mixed-width SIMD ("lane groups") — the ratio-2 dtype pairs -------------
+    # The pairs the mixed-width vector plan admits beyond what A already sweeps: every half-lane
+    # widen direction (int → wider-int sign/zero-extend, int → float, float → double, and the
+    # uint32→float64 sign-bias edge, which has no AVX2 instruction) plus the both-widen NEP50
+    # promotions (i4+u4→i8, i2+u2→i4, i1+u1→i2). The composites pin the per-node-dtype contract:
+    # mul(in0,li:2) WRAPS at in0's own dtype BEFORE the edge widens into the sum — NumPy's unfused
+    # sequence does the same, and computing the product at the lane dtype instead would diverge.
+    pair_dts_a4 = [
+        ("uint32", "float64"), ("int32", "float32"), ("uint32", "float32"),
+        ("int16", "float32"), ("uint16", "float32"),
+        ("int32", "int64"), ("uint32", "int64"), ("uint32", "uint64"), ("int32", "uint32"),
+        ("int16", "int32"), ("uint16", "uint32"), ("int16", "uint16"),
+        ("int8", "int16"), ("uint8", "uint16"),
+    ]
+    templates_a4 = [
+        "add(in0,in1)", "sub(in0,in1)", "mul(in0,in1)", "div(in0,in1)",
+        "add(mul(in0,li:2),in1)",           # the acceptance tree: narrow wrap → widen → add
+        "add(mul(in0,in1),in0)",            # one leaf consumed at two dtypes (own + widened)
+        "mul(add(in0,in1),sub(in1,in0))",
+        "or(and(in0,in1),in0)",             # bitwise through widen edges (ok_for drops float cells)
+    ]
+    for ln, fn in PAIR_LAYOUTS.items():
+        for (sa, sb) in pair_dts_a4:
+            ba, va, bb, vb = fn(np.dtype(sa), np.dtype(sb))
+            for expr in templates_a4:
+                if ok_for(expr, sa, sb) is False:
+                    continue
+                emit(expr, [(ba, va), (bb, vb)], ln, cid_tag=f"{sa},{sb}/{expr}")
+
     # ---- B. single-operand trees over the single layouts -------------------------------------
     unary_layouts = ["c_contiguous_1d", "c_contiguous_2d", "f_contiguous_2d", "strided_step2_1d",
                      "negstride_1d", "simple_slice_offset_1d"]

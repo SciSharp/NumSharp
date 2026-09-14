@@ -142,8 +142,11 @@ namespace NumSharp.Backends.Iteration
         /// <param name="vectorLocals">Receives one local per parameter (the broadcast vector / lane mask), or null when the kernel has no vector body.</param>
         /// <param name="lane">The vector body's lane dtype W (byte mode = Boolean); ignored without vector locals.</param>
         /// <param name="auxByteOffset">Byte offset of parameter slot 0 inside the aux block.</param>
+        /// <param name="mixedWidth">P5.2 mixed-width mode: a non-lane parameter broadcasts at its OWN
+        /// dtype's partial container (<c>Vector128</c> for a half-lane dtype) instead of the lane's —
+        /// the consuming node's edge widens it, exactly as for a streamed operand.</param>
         /// <exception cref="InvalidOperationException">A parameter dtype the vector plan should have rejected reached the vector prologue.</exception>
-        public void EmitPrologue(ILGenerator il, LocalBuilder[] scalarLocals, LocalBuilder[]? vectorLocals, NPTypeCode lane, int auxByteOffset)
+        public void EmitPrologue(ILGenerator il, LocalBuilder[] scalarLocals, LocalBuilder[]? vectorLocals, NPTypeCode lane, int auxByteOffset, bool mixedWidth = false)
         {
             for (int j = 0; j < ParamTypes.Length; j++)
             {
@@ -162,6 +165,21 @@ namespace NumSharp.Backends.Iteration
 
                 if (vectorLocals is null)
                     continue;
+
+                // Mixed-width: the parameter's vector is its OWN dtype's container (the input-node
+                // local contract), so the tree's edges widen it exactly like a streamed operand —
+                // one representation for both, which is what keeps 0-d-vs-array metamorphic pairs
+                // bit-identical. (No bool/Half parameters here: the mixed plan excludes both.)
+                if (mixedWidth && t != lane)
+                {
+                    int bits = DirectILKernelGenerator.VectorBits * DirectILKernelGenerator.GetTypeSize(t)
+                               / DirectILKernelGenerator.GetTypeSize(lane);
+                    vectorLocals[j] = il.DeclareLocal(VectorMethodCache.V(bits, DirectILKernelGenerator.GetClrType(t)));
+                    il.Emit(OpCodes.Ldloc, scalarLocals[j]);
+                    DirectILKernelGenerator.EmitVectorCreateAt(il, t, bits);
+                    il.Emit(OpCodes.Stloc, vectorLocals[j]);
+                    continue;
+                }
 
                 // The vector body sees every input as ONE CLR vector type, Vector<lane(W)>: a W-typed
                 // parameter broadcasts its value; a bool parameter in W-mode is a constant lane mask

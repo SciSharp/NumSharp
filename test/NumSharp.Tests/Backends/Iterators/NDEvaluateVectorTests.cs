@@ -294,10 +294,37 @@ namespace NumSharp.Tests.Backends.Iterators
             Assert.AreEqual(DirectILKernelGenerator.FusedBoolLanesAvailable, Plan(NDExpr.Greater(NDExpr.Input(0), 0.5), new[] { NPTypeCode.Double }, out lane), "bool output needs no x86 expansion");
             // all-bool -> byte mode
             Assert.IsTrue(Plan(NDExpr.Input(0) & !NDExpr.Input(1), new[] { NPTypeCode.Boolean, NPTypeCode.Boolean }, out lane) && lane == NPTypeCode.Boolean);
-            // mixed lanes (i4 + f8) -> scalar
-            Assert.IsFalse(Plan(NDExpr.Input(0) + NDExpr.Input(1), new[] { NPTypeCode.Int32, NPTypeCode.Double }, out _));
-            // int true_divide types the node to f64 off the int32 lane -> scalar
-            Assert.IsFalse(Plan(NDExpr.Input(0) / NDExpr.Input(1), new[] { NPTypeCode.Int32, NPTypeCode.Int32 }, out _));
+            // P5.2: mixed lanes now take the MIXED-WIDTH plan on a 256-bit AVX2 host — lane = the
+            // root dtype, the narrow operand rides a partial Vector128 and the edge widens exactly;
+            // elsewhere (no AVX2 / 512-bit) they keep the pre-P5.2 scalar fallback.
+            if (DirectILKernelGenerator.FusedMixedWidthAvailable)
+            {
+                // i4 + f8 -> mixed at lane f8 (the acceptance pair: i4 loads V128<int>, widens i4->f8)
+                Assert.IsTrue(PlanMixed(NDExpr.Input(0) + NDExpr.Input(1), new[] { NPTypeCode.Int32, NPTypeCode.Double }, out lane, out var mixed) && lane == NPTypeCode.Double && mixed);
+                // int true_divide types the DIVIDE node to f64 over int32 leaves -> mixed at f8 too
+                Assert.IsTrue(PlanMixed(NDExpr.Input(0) / NDExpr.Input(1), new[] { NPTypeCode.Int32, NPTypeCode.Int32 }, out lane, out mixed) && lane == NPTypeCode.Double && mixed);
+                // f4 + f8 -> mixed (float->double widen)
+                Assert.IsTrue(PlanMixed(NDExpr.Input(0) + NDExpr.Input(1), new[] { NPTypeCode.Single, NPTypeCode.Double }, out lane, out mixed) && lane == NPTypeCode.Double && mixed);
+                // i1 + u1 -> i2: BOTH children widen (sign- and zero-extend)
+                Assert.IsTrue(PlanMixed(NDExpr.Input(0) * NDExpr.Input(1), new[] { NPTypeCode.SByte, NPTypeCode.Byte }, out lane, out mixed) && lane == NPTypeCode.Int16 && mixed);
+                // i8 + f8 -> the int64->float64 edge ROUNDS (no exact vector widen) -> stays scalar
+                Assert.IsFalse(PlanMixed(NDExpr.Input(0) + NDExpr.Input(1), new[] { NPTypeCode.Int64, NPTypeCode.Double }, out _, out _));
+                // i1 + i4 -> the sbyte container would be 64-bit under an i4 lane (ratio 4) -> scalar
+                Assert.IsFalse(PlanMixed(NDExpr.Input(0) + NDExpr.Input(1), new[] { NPTypeCode.SByte, NPTypeCode.Int32 }, out _, out _));
+                // a comparison root (bool-typed node) keeps a mixed tree scalar in this increment
+                Assert.IsFalse(PlanMixed(NDExpr.Greater(NDExpr.Input(0), NDExpr.Input(1)), new[] { NPTypeCode.Int32, NPTypeCode.Double }, out _, out _));
+                // a bool operand keeps a mixed tree scalar in this increment
+                Assert.IsFalse(PlanMixed(NDExpr.Input(0) + NDExpr.Input(1) + NDExpr.Input(2), new[] { NPTypeCode.Boolean, NPTypeCode.Int32, NPTypeCode.Double }, out _, out _));
+                // a unary node in a mixed tree has no mixed emit -> scalar
+                Assert.IsFalse(PlanMixed(NDExpr.Negate(NDExpr.Input(0)) + NDExpr.Input(1), new[] { NPTypeCode.Int32, NPTypeCode.Double }, out _, out _));
+                // uniform-input tree lifted by a weak float literal (i4 + 2.5 -> f8) -> mixed
+                Assert.IsTrue(PlanMixed(NDExpr.Input(0) + 2.5, new[] { NPTypeCode.Int32 }, out lane, out mixed) && lane == NPTypeCode.Double && mixed);
+            }
+            else
+            {
+                Assert.IsFalse(Plan(NDExpr.Input(0) + NDExpr.Input(1), new[] { NPTypeCode.Int32, NPTypeCode.Double }, out _));
+                Assert.IsFalse(Plan(NDExpr.Input(0) / NDExpr.Input(1), new[] { NPTypeCode.Int32, NPTypeCode.Int32 }, out _));
+            }
             // Half ARITHMETIC vectorizes (Phase 5, Vector256<ushort> widen-compute-narrow) on a 256-bit
             // AVX2 host — but only arithmetic: a Half comparison / transcendental keeps its tree scalar.
             if (DirectILKernelGenerator.FusedHalfArithAvailable)
@@ -314,7 +341,8 @@ namespace NumSharp.Tests.Backends.Iterators
 
         /// <summary>
         /// Resolve <paramref name="tree"/>'s NumPy types and ask the v2 planner whether it vectorizes
-        /// on THIS host.
+        /// on THIS host — through the uniform OR the P5.2 mixed-width plan; use
+        /// <see cref="PlanMixed"/> to also learn which one answered.
         /// </summary>
         /// <param name="tree">The expression tree to plan.</param>
         /// <param name="inputs">Every input's dtype, in input order.</param>
@@ -322,10 +350,22 @@ namespace NumSharp.Tests.Backends.Iterators
         /// <param name="isParam">Per input, whether it is a hoisted 0-d parameter; null = all streamed.</param>
         /// <returns>The planner's verdict: true = vector kernel, false = scalar shell.</returns>
         private static bool Plan(NDExpr tree, NPTypeCode[] inputs, out NPTypeCode lane, bool[] isParam = null)
+            => PlanMixed(tree, inputs, out lane, out _, isParam);
+
+        /// <summary>
+        /// <see cref="Plan"/>, also reporting whether the verdict came from the P5.2 mixed-width plan.
+        /// </summary>
+        /// <param name="tree">The expression tree to plan.</param>
+        /// <param name="inputs">Every input's dtype, in input order.</param>
+        /// <param name="lane">Receives the planned lane dtype (the root dtype for a mixed plan; Empty when the plan fails).</param>
+        /// <param name="mixedWidth">Receives true when the tree took the mixed-width plan.</param>
+        /// <param name="isParam">Per input, whether it is a hoisted 0-d parameter; null = all streamed.</param>
+        /// <returns>The planner's verdict: true = vector kernel, false = scalar shell.</returns>
+        private static bool PlanMixed(NDExpr tree, NPTypeCode[] inputs, out NPTypeCode lane, out bool mixedWidth, bool[] isParam = null)
         {
             var resolved = tree.ResolveNumPyTypes(inputs, out var types);
             _ = resolved;
-            return NDExprVectorPlan.TryPlan(tree, inputs, types, out lane, isParam);
+            return NDExprVectorPlan.TryPlan(tree, inputs, types, out lane, out mixedWidth, isParam);
         }
 
         /// <summary>
@@ -347,6 +387,174 @@ namespace NumSharp.Tests.Backends.Iterators
             }
             Assert.IsFalse(DirectILKernelGenerator.InlineMaskCreationSupported(128, 3), "no expansion for a 3-byte lane");
             Assert.IsFalse(DirectILKernelGenerator.InlineMaskCreationSupported(128, 16), "no expansion for a 16-byte lane");
+        }
+
+        // ---- P5.2 mixed-width ("lane groups") ---------------------------------------------------
+        //
+        // A tree over TWO distinct dtypes (or lifted past its inputs by a weak literal) now
+        // vectorizes: lane = the root dtype, half-lane operands/nodes ride partial Vector128s,
+        // every edge an exact widening. The vector path must reproduce the SCALAR body byte for
+        // byte — the scalar body being what the evaluate.jsonl tier holds to NumPy — across every
+        // admitted dtype pair, both widen directions, layouts and vector/tail boundary sizes.
+
+        /// <summary>The admitted ratio-2 dtype pairs the mixed sweep drives (operand A narrow, B wide, plus both-widen pairs).</summary>
+        private static readonly (NPTypeCode a, NPTypeCode b)[] MixedPairs =
+        {
+            (NPTypeCode.Int32, NPTypeCode.Double),
+            (NPTypeCode.UInt32, NPTypeCode.Double),      // the sign-bias u4→f8 edge
+            (NPTypeCode.Single, NPTypeCode.Double),
+            (NPTypeCode.Int32, NPTypeCode.Single),       // both widen → f8
+            (NPTypeCode.Int32, NPTypeCode.Int64),
+            (NPTypeCode.UInt32, NPTypeCode.UInt64),
+            (NPTypeCode.Int32, NPTypeCode.UInt32),       // both widen → i8
+            (NPTypeCode.Int16, NPTypeCode.Single),
+            (NPTypeCode.UInt16, NPTypeCode.Single),
+            (NPTypeCode.Int16, NPTypeCode.Int32),
+            (NPTypeCode.UInt16, NPTypeCode.UInt32),
+            (NPTypeCode.Int16, NPTypeCode.UInt16),       // both widen → i4
+            (NPTypeCode.SByte, NPTypeCode.Byte),         // both widen → i2
+            (NPTypeCode.SByte, NPTypeCode.Int16),
+            (NPTypeCode.Byte, NPTypeCode.UInt16),
+        };
+
+        /// <summary>
+        /// Mixed trees over operands (a, b) of DIFFERENT dtypes: arithmetic + bitwise compositions,
+        /// a leaf consumed at two dtypes (a in both the narrow product and the wide sum), and the
+        /// weak-literal forms. Ops outside the mixed op set (comparisons, where, min/max) are also
+        /// present — they must fall back to the scalar plan and still match trivially.
+        /// </summary>
+        private static IEnumerable<(string name, Func<NDArray, NDArray, NDExpr> build)> MixedTrees(bool intPair)
+        {
+            yield return ("a+b", (a, b) => (NDExpr)a + b);
+            yield return ("a-b", (a, b) => (NDExpr)a - b);
+            yield return ("a*b", (a, b) => (NDExpr)a * b);
+            yield return ("a/b", (a, b) => (NDExpr)a / b);
+            yield return ("a*b+a", (a, b) => (NDExpr)a * b + a);            // `a` read at its own AND the wide dtype
+            yield return ("a*2+b", (a, b) => (NDExpr)a * 2 + b);            // weak literal wraps at a's dtype (the acceptance tree)
+            yield return ("(a+b)*(a-b)", (a, b) => ((NDExpr)a + b) * ((NDExpr)a - b));
+            yield return ("b+a*a", (a, b) => (NDExpr)b + (NDExpr)a * a);    // narrow product wraps, then widens
+            if (intPair)
+                yield return ("a&b|a", (a, b) => ((NDExpr)a & b) | a);      // bitwise through widen edges
+            yield return ("a>b", (a, b) => NDExpr.Greater(a, b));           // bool root → scalar fallback, still must match
+            yield return ("where(a>b,b,a+b)", (a, b) => NDExpr.Where(NDExpr.Greater(a, b), NDExpr.Arr(b), (NDExpr)a + b));
+        }
+
+        [TestMethod]
+        public void MixedWidth_VectorMatchesScalar()
+        {
+            var failures = new List<string>();
+            foreach (var (ta, tb) in MixedPairs)
+            {
+                bool intPair = !IsFloatLane(ta) && !IsFloatLane(tb);
+                foreach (var (layout, n, wrap) in new (string, int, Func<NDArray, NDArray>)[]
+                {
+                    ("contig", N, x => x),
+                    ("contig149", 149, x => x),
+                    ("strided", 2 * N, x => x["::2"]),
+                    ("negstride", N, x => x["::-1"]),
+                })
+                {
+                    NDArray MakeOp(NPTypeCode tc, int seed)
+                        => wrap(IsFloatLane(tc) ? Floats(tc, n, seed) : Ints(tc, n, seed));
+
+                    var a = MakeOp(ta, 0);
+                    var b = MakeOp(tb, 3);
+                    foreach (var (name, build) in MixedTrees(intPair))
+                    {
+                        try { AssertVectorMatchesScalar($"mixed/{layout}/{ta}+{tb}/{name}", () => build(a, b)); }
+                        catch (Exception e) { failures.Add($"mixed/{layout}/{ta}+{tb}/{name}: {e.Message}"); }
+                    }
+
+                    // The wide operand as a 0-d PARAMETER (hoisted into the kernel aux block) and as
+                    // a broadcast column — the two stride-0 representations of the same value.
+                    var b0d = MakeOp(tb, 3)["0"].reshape();
+                    try { AssertVectorMatchesScalar($"mixed/{layout}/{ta}+{tb}0d/a*b+a", () => (NDExpr)a * b0d + a); }
+                    catch (Exception e) { failures.Add($"mixed/{layout}/{ta}+{tb}0d: {e.Message}"); }
+                    var a0d = MakeOp(ta, 0)["0"].reshape();
+                    try { AssertVectorMatchesScalar($"mixed/{layout}/{ta}0d+{tb}/a*b+a", () => (NDExpr)a0d * b + b); }
+                    catch (Exception e) { failures.Add($"mixed/{layout}/{ta}0d+{tb}: {e.Message}"); }
+                }
+            }
+
+            Assert.AreEqual(0, failures.Count, string.Join("\n", failures));
+        }
+
+        [TestMethod]
+        public void MixedWidth_ValuePins_MatchNumPy()
+        {
+            // Every expected value below is the literal NumPy 2.4.2 output (probed).
+            // i4*2 WRAPS at int32 BEFORE promoting to f8 — the per-node-dtype contract.
+            var a = np.array(new[] { 2_000_000_000, -2_000_000_000, 7, -1 });
+            var b = np.array(new[] { 0.5, 1.5, 2.5, 3.5 });
+            var r = np.evaluate((NDExpr)a * 2 + b);
+            Assert.AreEqual(NPTypeCode.Double, r.typecode);
+            CollectionAssert.AreEqual(new[] { -294967295.5, 294967297.5, 16.5, 1.5 },
+                Enumerable.Range(0, 4).Select(i => r.GetDouble(i)).ToArray());
+
+            // u4 → f8 is value-exact up to uint.MaxValue (the sign-bias widen must not lose a bit).
+            var u = np.array(new[] { 4294967295u, 2147483648u, 3000000000u, 0u });
+            r = np.evaluate((NDExpr)u + b);
+            CollectionAssert.AreEqual(new[] { 4294967295.5, 2147483649.5, 3000000002.5, 3.5 },
+                Enumerable.Range(0, 4).Select(i => r.GetDouble(i)).ToArray());
+
+            // i1 * u1 → i2: BOTH children widen (sign- and zero-extend) before the int16 multiply.
+            var i1 = np.array(new sbyte[] { -128, 100, -7, 127 });
+            var u1 = np.array(new byte[] { 2, 3, 255, 255 });
+            r = np.evaluate((NDExpr)i1 * u1);
+            Assert.AreEqual(NPTypeCode.Int16, r.typecode);
+            CollectionAssert.AreEqual(new short[] { -256, 300, -1785, 32385 },
+                Enumerable.Range(0, 4).Select(i => r.GetAtIndex<short>(i)).ToArray());
+
+            // i4 + u4 → i8 (NEP50's signed×unsigned same-size promotion).
+            var i4 = np.array(new[] { -1, 5, -100, 7 });
+            var u4 = np.array(new[] { 4294967295u, 10u, 3u, 2u });
+            r = np.evaluate((NDExpr)i4 + u4);
+            Assert.AreEqual(NPTypeCode.Int64, r.typecode);
+            CollectionAssert.AreEqual(new long[] { 4294967294, 15, -97, 9 },
+                Enumerable.Range(0, 4).Select(i => r.GetInt64(i)).ToArray());
+
+            // i4 / i4 → f8 (true divide lifts a UNIFORM int tree to a mixed-width kernel).
+            var num = np.array(new[] { 7, -7, 9, 1 });
+            var den = np.array(new[] { 2, 2, 4, 8 });
+            r = np.evaluate((NDExpr)num / den);
+            Assert.AreEqual(NPTypeCode.Double, r.typecode);
+            CollectionAssert.AreEqual(new[] { 3.5, -3.5, 2.25, 0.125 },
+                Enumerable.Range(0, 4).Select(i => r.GetDouble(i)).ToArray());
+
+            // i2 + f4 → f4 (a HALF-LANE pair whose lane is float32, sub-word widen chain).
+            var i2 = np.array(new short[] { 1000, -32768, 77, 3 });
+            var f4 = np.array(new[] { 0.5f, 0.25f, -1.5f, 2.0f });
+            r = np.evaluate((NDExpr)i2 + f4);
+            Assert.AreEqual(NPTypeCode.Single, r.typecode);
+            CollectionAssert.AreEqual(new[] { 1000.5f, -32767.75f, 75.5f, 5.0f },
+                Enumerable.Range(0, 4).Select(i => r.GetSingle(i)).ToArray());
+        }
+
+        [TestMethod]
+        public void MixedWidth_ComposesWithOutWhereAndDtype()
+        {
+            var a = np.array(Enumerable.Range(0, 40).ToArray());                       // int32
+            var b = np.array(Enumerable.Range(0, 40).Select(i => i * 0.5).ToArray());  // float64
+            var expr = (NDExpr)a * 2 + b;
+
+            // out= at the natural dtype
+            var dst = np.full(new Shape(40), -1.0);
+            var r = np.evaluate(expr, @out: dst);
+            Assert.AreSame(dst, r);
+            Assert.AreEqual(2 * 2 + 1.0, r.GetDouble(2));
+
+            // where= masks the write; masked-off slots keep prior contents
+            var prior = np.full(new Shape(40), -1.0);
+            var mask = np.array(Enumerable.Range(0, 40).Select(i => i % 2 == 0).ToArray());
+            r = np.evaluate((NDExpr)a * 2 + b, @out: prior, where: mask);
+            Assert.AreEqual(0.0, r.GetDouble(0));
+            Assert.AreEqual(-1.0, r.GetDouble(1));
+            Assert.AreEqual(4 * 2 + 2.0, r.GetDouble(4));
+
+            // dtype= casts the fused result (compute at f8, store f4)
+            r = np.evaluate((NDExpr)a * 2 + b, dtype: NPTypeCode.Single);
+            Assert.AreEqual(NPTypeCode.Single, r.typecode);
+            Assert.AreEqual((float)(3 * 2 + 1.5), r.GetSingle(3));
         }
     }
 }

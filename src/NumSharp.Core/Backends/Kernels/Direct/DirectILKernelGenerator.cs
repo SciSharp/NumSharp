@@ -2434,6 +2434,113 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
+        /// Width-explicit <see cref="EmitVectorLoad"/>: emit a vector load of <paramref name="bits"/>
+        /// (128/256/512) at CLR lane type <paramref name="clrType"/>, regardless of the module-wide
+        /// <see cref="VectorBits"/>. The fused MIXED-WIDTH path (ndexpr-evaluate.md P5.2) needs this
+        /// because a half-lane operand (e.g. int32 under a float64 lane) loads a PARTIAL vector —
+        /// <c>Vector128&lt;int&gt;</c> on a 256-bit host — of exactly <c>elemCount·sizeof(T)</c> bytes,
+        /// so the load never over-reads past the operand's last element.
+        /// </summary>
+        /// <param name="il">The IL generator; stack [T*] → [Vector{bits}&lt;T&gt;].</param>
+        /// <param name="bits">The container width in bits (128/256/512).</param>
+        /// <param name="clrType">The CLR element type of the vector.</param>
+        internal static void EmitVectorLoadAt(ILGenerator il, int bits, Type clrType)
+        {
+            // Same x86-preference rationale as EmitVectorLoad: the JIT generates ~1.8x faster code
+            // for Avx/Sse loads than for the cross-platform Vector{N}.Load path.
+            var x86 = VectorMethodCache.LoadX86(bits, clrType);
+            if (x86 != null)
+            {
+                il.EmitCall(OpCodes.Call, x86, null);
+                return;
+            }
+            il.EmitCall(OpCodes.Call, VectorMethodCache.Load(bits, clrType), null);
+        }
+
+        /// <summary>
+        /// Width-explicit <see cref="EmitVectorCreate"/>: broadcast the scalar on the stack into a
+        /// vector of <paramref name="bits"/> at <paramref name="type"/>'s SIMD lane type. Used by the
+        /// fused mixed-width path, where a half-lane constant / broadcast operand / hoisted parameter
+        /// builds a <c>Vector128</c> while the kernel's full lane rides <c>Vector256</c>.
+        /// </summary>
+        /// <param name="il">The IL generator; stack [scalar] → [Vector{bits}&lt;lane(type)&gt;].</param>
+        /// <param name="type">The element dtype whose SIMD lane type the broadcast targets.</param>
+        /// <param name="bits">The container width in bits (128/256/512).</param>
+        internal static void EmitVectorCreateAt(ILGenerator il, NPTypeCode type, int bits)
+            => il.EmitCall(OpCodes.Call, VectorMethodCache.CreateBroadcast(bits, GetSimdLaneType(type)), null);
+
+        /// <summary>
+        /// Width-explicit <see cref="EmitVectorOperation"/>: the binary vector op at an EXPLICIT
+        /// container width. At <paramref name="bits"/> == <see cref="VectorBits"/> it forwards to
+        /// <see cref="EmitVectorOperation"/> byte-for-byte (so uniform-lane callers see zero change);
+        /// a NARROWER container serves the fused mixed-width path's half-lane interior nodes —
+        /// e.g. the int32 multiply of <c>i4*2+f8</c> runs at <c>Vector128&lt;int&gt;</c> so it WRAPS at
+        /// int32 exactly like NumPy's unfused sequence, before the edge widens to the f8 lane.
+        /// </summary>
+        /// <param name="il">The IL generator; stack [a, b] (both Vector{bits}&lt;T&gt;) → [result].</param>
+        /// <param name="op">The binary op — the mixed plan admits only the arithmetic four and the
+        /// bitwise three at a narrow container (min/max/other ops decline the whole tree to scalar).</param>
+        /// <param name="type">The node's element dtype (never Boolean/Half at a narrow container —
+        /// the mixed plan excludes bool-typed nodes and Half trees take the dedicated P5.1 path).</param>
+        /// <param name="bits">The container width in bits.</param>
+        /// <exception cref="NotSupportedException">The op has no vector body at a narrow container.</exception>
+        internal static void EmitVectorOperationAt(ILGenerator il, BinaryOp op, NPTypeCode type, int bits)
+        {
+            // The full-width call must remain byte-identical to the pre-P5.2 emission (it carries the
+            // Boolean byte-lane logical remap and the NaN-aware min/max wrappers the narrow path
+            // never needs), so forward rather than duplicate.
+            if (bits == VectorBits)
+            {
+                EmitVectorOperation(il, op, type);
+                return;
+            }
+
+            var clrType = GetClrType(type);
+            if (op == BinaryOp.BitwiseAnd || op == BinaryOp.BitwiseOr || op == BinaryOp.BitwiseXor)
+            {
+                string methodName = op switch
+                {
+                    BinaryOp.BitwiseAnd => "BitwiseAnd",
+                    BinaryOp.BitwiseOr => "BitwiseOr",
+                    BinaryOp.BitwiseXor => "Xor",
+                    _ => throw new NotSupportedException()
+                };
+                var x86Bit = VectorMethodCache.BinaryX86(bits, methodName, clrType);
+                if (x86Bit != null)
+                {
+                    il.EmitCall(OpCodes.Call, x86Bit, null);
+                    return;
+                }
+                il.EmitCall(OpCodes.Call, VectorMethodCache.Generic(bits, methodName, clrType, paramCount: 2), null);
+                return;
+            }
+
+            string arithName = op switch
+            {
+                BinaryOp.Add => "Add",
+                BinaryOp.Subtract => "Subtract",
+                BinaryOp.Multiply => "Multiply",
+                BinaryOp.Divide => "Divide",
+                _ => throw new NotSupportedException($"Operation {op} not supported for a narrow SIMD container"),
+            };
+            var x86Arith = VectorMethodCache.BinaryX86(bits, arithName, clrType);
+            if (x86Arith != null)
+            {
+                il.EmitCall(OpCodes.Call, x86Arith, null);
+                return;
+            }
+            string operatorName = op switch
+            {
+                BinaryOp.Add => "op_Addition",
+                BinaryOp.Subtract => "op_Subtraction",
+                BinaryOp.Multiply => "op_Multiply",
+                BinaryOp.Divide => "op_Division",
+                _ => throw new NotSupportedException($"Operation {op} not supported for a narrow SIMD container"),
+            };
+            il.EmitCall(OpCodes.Call, VectorMethodCache.Operator(bits, clrType, operatorName), null);
+        }
+
+        /// <summary>
         /// Emit Vector min/max (width-adaptive). Stack must hold two vectors;
         /// result is one vector. Prefers Avx/Avx2/Sse2 intrinsics on x86; falls back
         /// to the cross-platform <c>Vector{N}.Min/Max</c> for unsupported (op, T) — e.g.

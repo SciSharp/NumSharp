@@ -907,6 +907,29 @@ namespace NumSharp.Backends.Iteration
         internal bool ByteMode => VectorLaneType == NPTypeCode.Boolean;
 
         /// <summary>
+        /// P5.2 mixed-width vector mode (ndexpr-evaluate.md): nodes compute at their OWN dtype in a
+        /// container of <c>elemCount·sizeof(dtype)</c> bytes — <c>Vector128</c> for a half-lane
+        /// dtype, the full <c>Vector256</c> for a lane-sized one — and each node edge widens exactly
+        /// (<see cref="NDExprVec.EmitWidenEdge"/>). False = the uniform v2 contract, where every node
+        /// emits one shared <c>Vector&lt;W&gt;</c>. Only meaningful when <see cref="VectorMode"/>.
+        /// </summary>
+        internal bool MixedWidth { get; }
+
+        /// <summary>
+        /// The vector container width (bits) a node of dtype <paramref name="t"/> emits at: the
+        /// full <see cref="DirectILKernelGenerator.VectorBits"/> in uniform mode, or — in mixed-width
+        /// mode — the lane's element count times <paramref name="t"/>'s size (always 128 or 256; the
+        /// plan's container rule admits nothing else).
+        /// </summary>
+        /// <param name="t">The node's dtype (never Boolean/Half in mixed mode — the plan excludes them).</param>
+        /// <returns>The container width in bits.</returns>
+        internal int ContainerBits(NPTypeCode t)
+            => MixedWidth
+                ? DirectILKernelGenerator.VectorBits * DirectILKernelGenerator.GetTypeSize(t)
+                    / DirectILKernelGenerator.GetTypeSize(VectorLaneType)
+                : DirectILKernelGenerator.VectorBits;
+
+        /// <summary>
         /// Per input index: the position of that input among the kernel's ITERATOR operands (an
         /// index into <see cref="InputLocals"/>), or -1 when the input is a PARAMETER — a 0-d array
         /// np.evaluate hoists into the kernel's aux block once per call instead of streaming it
@@ -955,12 +978,14 @@ namespace NumSharp.Backends.Iteration
         /// <param name="inputSlots">Input → operand slot map, or null for the identity map.</param>
         /// <param name="inputParams">Input → parameter index map, or null when there are no parameters.</param>
         /// <param name="paramLocals">The parameters' prologue-loaded locals, or null.</param>
+        /// <param name="mixedWidth">P5.2 mixed-width vector mode (see <see cref="MixedWidth"/>); false = uniform v2.</param>
         internal NDExprCompileContext(
             NPTypeCode[] inputTypes, NPTypeCode outputType,
             LocalBuilder[] inputLocals, bool vectorMode,
             IReadOnlyDictionary<NDExpr, NPTypeCode>? nodeTypes,
             NPTypeCode vectorLaneType,
-            int[]? inputSlots, int[]? inputParams, LocalBuilder[]? paramLocals)
+            int[]? inputSlots, int[]? inputParams, LocalBuilder[]? paramLocals,
+            bool mixedWidth = false)
         {
             InputTypes = inputTypes;
             OutputType = outputType;
@@ -971,6 +996,7 @@ namespace NumSharp.Backends.Iteration
             InputSlots = inputSlots;
             InputParams = inputParams;
             ParamLocals = paramLocals;
+            MixedWidth = mixedWidth;
         }
 
         /// <summary>The local holding input <paramref name="index"/>'s current value (operand local or parameter local).</summary>
@@ -1036,9 +1062,12 @@ namespace NumSharp.Backends.Iteration
                 throw new InvalidOperationException(
                     $"Input({_index}) out of range; compile provided {ctx.InputTypes.Length} inputs.");
 
-            // Vector mode is only used when all input types == output type
-            // (enforced by Compile), so no conversion is needed here. A parameter's local already
-            // holds its broadcast vector (or lane mask), created once by the prologue.
+            // The local already holds this input's vector in the representation the plan chose:
+            // the shared Vector<lane(W)> (uniform v2 — a bool operand's local is its lane mask), or
+            // the input's OWN-dtype, possibly partial, vector in mixed-width mode. Any conversion
+            // to the CONSUMING node's dtype happens at that parent's edge (EmitVectorChildAs), never
+            // here — a leaf read twice by nodes of different dtypes widens per edge. A parameter's
+            // local likewise holds its prologue-built broadcast vector.
             il.Emit(OpCodes.Ldloc, ctx.LocalOfInput(_index));
         }
 
@@ -1148,8 +1177,12 @@ namespace NumSharp.Backends.Iteration
                 return;
             }
 
+            // The literal's container follows its ADOPTED dtype: the full lane vector in uniform
+            // mode (ContainerBits == VectorBits there, so this is the pre-P5.2 emission verbatim),
+            // or the partial Vector128 of a half-lane dtype in mixed-width mode (e.g. the int32 `2`
+            // of `i4*2+f8` — the parent's edge widens the PRODUCT, never the literal).
             EmitLoadTyped(il, t);
-            DirectILKernelGenerator.EmitVectorCreate(il, t);
+            DirectILKernelGenerator.EmitVectorCreateAt(il, t, ctx.ContainerBits(t));
         }
 
         // ---- the literal's value in the widest carrier of each family --------------------
@@ -1399,10 +1432,14 @@ namespace NumSharp.Backends.Iteration
                 return;
             }
 
-            // my == lane: children arrive at the lane dtype (a bool child becomes exact 1/0 lanes).
+            // Uniform mode: my == lane, children arrive at the lane dtype (a bool child becomes
+            // exact 1/0 lanes) and ContainerBits == VectorBits, so the op emission is the pre-P5.2
+            // one verbatim. Mixed-width mode: children arrive at their OWN dtype and the edge
+            // widens exactly; the op runs at THIS node's dtype in its own container — a half-lane
+            // node at Vector128, which is what keeps e.g. an int32 multiply wrapping at int32.
             EmitVectorChildAs(il, ctx, _left, my);
             EmitVectorChildAs(il, ctx, _right, my);
-            DirectILKernelGenerator.EmitVectorOperation(il, _op, my);
+            DirectILKernelGenerator.EmitVectorOperationAt(il, _op, my, ctx.ContainerBits(my));
         }
 
         public override void AppendSignature(StringBuilder sb)
