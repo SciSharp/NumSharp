@@ -4,6 +4,8 @@
   href: intro.md
 - name: The absolute basics for beginners
   href: absolute-basics.md
+- name: Quickstart
+  href: quickstart.md
 - name: NDArray
   href: NDArray.md
 - name: Fundamentals and usage
