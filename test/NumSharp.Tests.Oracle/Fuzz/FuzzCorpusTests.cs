@@ -428,8 +428,10 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Sort() => RunCorpus("sort.jsonl");
 
-        // Group A: np.round_/around with decimals in {0,1,2,-1} over every layout (banker's rounding;
-        // int + negative-decimals genuinely rounds to tens).
+        // Group A: np.round_/around with decimals in {-2,-1,0,1,2} over every layout and dtype (banker's
+        // rounding via the PyArray_Round port). Negative decimals genuinely round to tens/hundreds (int
+        // computes in float64 then wraps back), float16 fractional and complex dec!=0 are bit-exact, bool
+        // is float16 at dec=0 and RAISES at dec!=0 (those cells skipped by the generator, as NumPy raises).
         [TestMethod]
         [TestCategory("FuzzMatrix")]
         public void Rounding() => RunCorpus("rounding.jsonl");
@@ -648,7 +650,7 @@ namespace NumSharp.Tests.Fuzz
             ["nan.jsonl"] = 100,   // NaN-parity grid (gen_nan_oracle.py): 27 complex + 3×31 float
             ["random_smoke.jsonl"] = 1600,
             ["reduce.jsonl"] = 9004,
-            ["rounding.jsonl"] = 665,
+            ["rounding.jsonl"] = 1372,
             ["scan.jsonl"] = 907,
             ["sinc.jsonl"] = 338,   // sin(pi*x)/(pi*x): 12 real dtypes + Char × 26 layouts (complex excluded)
             ["sort.jsonl"] = 940,   // +102: searchsorted expansion (dup/mixed-promotion/sorter/nan/complex-lex/strided/empty)

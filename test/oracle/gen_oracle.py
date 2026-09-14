@@ -2565,14 +2565,13 @@ def _relabel_dtype(cases, frm, to):
 # ---------------------------------------------------------------------------
 # Group A Batch 2 generators: sort / round_ / trace / diagonal / ediff1d / nan-quantile.
 # ---------------------------------------------------------------------------
-# bool is CARVED OUT: np.round(bool, 0) -> float16 [0,1] in NumPy (rint float-tier), while
-# NumSharp's round_ resolves bool -> Double — dtype divergence pinned under [OpenBugs]
-# (OpenBugs.FuzzGaps.cs: Round_Bool_Dtype_Diverges). (bool with decimals!=0 raises in NumPy.)
-# complex128 is included at decimals=0 ONLY: NumSharp's round_ with decimals!=0 is a NO-OP
-# identity for Complex (NumPy rounds re+im via multiply->rint->divide: round(1.55+2.45j, 1)
-# -> 1.6+2.4j) — pinned under [OpenBugs] (OpenBugs.FuzzGaps.cs: Round_Complex_NonzeroDecimals_NoOp);
-# the dec!=0 complex carve lives in gen_round.
-ROUND_DTYPES = ["int8", "uint8", "int16", "int32", "int64", "uint16", "uint32", "uint64",
+# np.round is dtype-PRESERVING except bool: np.round(bool, 0) -> float16 (the rint float-tier),
+# now matched by NumSharp (Default.Round remaps bool -> Half at decimals==0). bool with decimals!=0
+# RAISES in NumPy (the multiply/divide -> bool same_kind cast fails), so gen_round's try/except skips
+# those cells. complex128 and float16 with decimals!=0 are NO LONGER carved: NumSharp ports
+# PyArray_Round's op2(rint(op1(x, 10^|d|)), 10^|d|) at the input precision, so both are BIT-EXACT
+# (formerly the complex dec!=0 no-op and the float16 fractional divergence were [OpenBugs]).
+ROUND_DTYPES = ["bool", "int8", "uint8", "int16", "int32", "int64", "uint16", "uint32", "uint64",
                 "float16", "float32", "float64", "complex128"]
 # uint8 CARVED: trace of an unsigned dtype upcasts to Int64 in NumSharp but uint64 in NumPy -> [OpenBugs].
 TRACE_DTYPES = ["int16", "int32", "int64", "float16", "float32", "float64", "complex128"]
@@ -2896,10 +2895,11 @@ def gen_unique(dtypes):
 
 def gen_round(dtypes, layout_names):
     """np.round_/around with decimals; every layout. NumPy is the oracle (banker's rounding).
-    CARVE-OUTS (-> [OpenBugs]): dec=-1 (NumSharp's Math.Round rejects negative digits for ints and
-    mis-rounds floats), float16 with dec>=1 (float16 fractional rounding diverges), and
-    complex128 with dec>=1 (NumSharp round_ is a no-op identity for Complex when decimals!=0;
-    OpenBugs.FuzzGaps.cs: Round_Complex_NonzeroDecimals_NoOp)."""
+    Since the Default.Round rewrite (port of PyArray_Round: op2(rint(op1(x, 10^|decimals|)), 10^|decimals|)
+    at the input precision), NEGATIVE decimals, float16 fractional rounding and complex128 dec!=0 are all
+    BIT-EXACT — the former carve-outs are gone. The remaining try/except skips only the cells NumPy itself
+    RAISES on: bool with decimals!=0 (the multiply/divide -> bool same_kind cast fails). Negative decimals on
+    integers compute in float64 and cast back (wrapping), also bit-exact."""
     cases = []
     n = 0
     skipped = 0
@@ -2908,15 +2908,11 @@ def gen_round(dtypes, layout_names):
         for s in dtypes:
             base, view = fn(np.dtype(s))
             operand = describe(base, view)
-            for dec in (0, 1, 2):                         # dec=-1 carved (negative-decimals bug)
-                if s == "float16" and dec != 0:           # float16 fractional rounding carved
-                    continue
-                if s == "complex128" and dec != 0:        # complex dec!=0 carved (NumSharp no-op bug)
-                    continue
+            for dec in (-2, -1, 0, 1, 2):                 # negative decimals now bit-exact (was carved)
                 try:
                     r = np.asarray(np.round(view, dec))
                 except Exception:
-                    skipped += 1
+                    skipped += 1                          # e.g. bool with decimals!=0 (NumPy raises)
                     continue
                 cases.append({
                     "id": f"round_/{ln}/{s}/dec={dec}/{n}",
