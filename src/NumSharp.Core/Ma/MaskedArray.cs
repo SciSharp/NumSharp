@@ -1867,6 +1867,106 @@ namespace NumSharp
         /// <returns>The masked anomalies.</returns>
         public MaskedArray anomalies(object a, int? axis = null, DType dtype = null) => anom(a, axis, dtype);
 
+        // ─────────────────────────────────────────────────────────────────────────────
+        //  Covariance / correlation — PAIRWISE-COMPLETE over the mask (NumPy's ma.cov/corrcoef,
+        //  a port of extras._covhelper + cov + corrcoef): each variable is centered by its own
+        //  UNMASKED mean, and each covariance entry divides by the count of observations where
+        //  BOTH variables are unmasked (so a missing value only drops the pairs it touches).
+        // ─────────────────────────────────────────────────────────────────────────────
+
+        /// <summary>Port of NumPy's <c>_covhelper</c>: returns the FILLED (masked→0) mean-CENTERED data, the
+        /// float "not-masked" indicator matrix, and the resolved <paramref name="rowvar"/>. Centering uses the
+        /// per-variable masked mean; the fill-to-0 is safe because the covariance product multiplies those
+        /// positions against a 0 in the not-mask count anyway.</summary>
+        private (NDArray filledCentered, NDArray xnotmask, bool rowvar) CovHelper(object x, object y, bool rowvar, bool allow_masked)
+        {
+            var xd = np.atleast_2d(AsData(x).astype(np.float64)).copy();
+            var xmask = np.atleast_2d(getmaskarray(x));
+            if (!allow_masked && np.any(xmask))
+                throw new ValueError("Cannot process masked data.");
+            if (y != null)
+            {
+                var yd = np.atleast_2d(AsData(y).astype(np.float64));
+                var ymask = np.atleast_2d(getmaskarray(y));
+                if (!allow_masked && np.any(ymask))
+                    throw new ValueError("Cannot process masked data.");
+                // Same-shape masked pairs get a COMMON mask (a value masked in one masks it in both).
+                if ((np.any(xmask) || np.any(ymask)) && xd.Shape.Equals(yd.Shape))
+                {
+                    var common = np.logical_or(xmask, ymask);
+                    xmask = common; ymask = common;
+                }
+                int catAxis = rowvar ? 0 : 1;
+                xd = np.concatenate(new[] { xd, yd }, catAxis);
+                xmask = np.concatenate(new[] { xmask, ymask }, catAxis);
+            }
+            if (xd.shape[0] == 1)
+                rowvar = true;
+            int meanAxis = rowvar ? 1 : 0;
+            // Per-variable masked mean, broadcast back for the centering subtraction.
+            var meanMa = mean(new MaskedArray(xd, np.any(xmask) ? xmask : null), meanAxis);
+            var meanData = getdata(meanMa).astype(np.float64);
+            NDArray meanB = rowvar
+                ? np.reshape(meanData, new Shape(meanData.size, 1))
+                : np.reshape(meanData, new Shape(1, meanData.size));
+            var centered = np.subtract(xd, meanB);
+            var filledCentered = np.any(xmask) ? np.where(xmask, NDArray.Scalar(0.0), centered) : centered;
+            var xnotmask = np.logical_not(xmask).astype(np.float64);
+            return (filledCentered, xnotmask, rowvar);
+        }
+
+        /// <summary>
+        ///     Estimates the covariance matrix, PAIRWISE-COMPLETE over the mask (NumPy's <c>ma.cov</c>): each
+        ///     entry divides by the number of observations where both variables are unmasked, minus
+        ///     <c>ddof</c>. Any entry whose pairwise count is ≤ 0 (no complete observation) is MASKED.
+        /// </summary>
+        /// <param name="x">Observations (rows are variables when <paramref name="rowvar"/>, else columns).</param>
+        /// <param name="y">Optional additional variables, stacked onto <paramref name="x"/> (a common mask is
+        /// taken when same-shape).</param>
+        /// <param name="rowvar">True (default): each ROW is a variable. False: each column is.</param>
+        /// <param name="bias">Normalize by N (true) instead of N-1 — overridden by <paramref name="ddof"/>.</param>
+        /// <param name="allow_masked">When false, raise if any value is masked (NumPy's flag).</param>
+        /// <param name="ddof">Explicit delta DOF (divisor is pairwise-count − ddof); null uses bias.</param>
+        /// <returns>The masked covariance matrix (squeezed to a scalar for a single variable).</returns>
+        /// <exception cref="ValueError"><paramref name="allow_masked"/> is false and data is masked.</exception>
+        public MaskedArray cov(object x, object y = null, bool rowvar = true, bool bias = false, bool allow_masked = true, int? ddof = null)
+        {
+            int dd = ddof ?? (bias ? 0 : 1);
+            var (centered, xnotmask, rv) = CovHelper(x, y, rowvar, allow_masked);
+            NDArray fact, data;
+            if (rv)
+            {
+                // fact[i,j] = # observations where variables i AND j are both unmasked, minus ddof.
+                fact = np.subtract(np.dot(xnotmask, xnotmask.T), NDArray.Scalar((double)dd));
+                data = np.divide(np.dot(centered, centered.T), fact);
+            }
+            else
+            {
+                fact = np.subtract(np.dot(xnotmask.T, xnotmask), NDArray.Scalar((double)dd));
+                data = np.divide(np.dot(centered.T, centered), fact);
+            }
+            var mask = np.less_equal(fact, NDArray.Scalar(0.0));
+            return squeeze(new MaskedArray(data, np.any(mask) ? mask : null));
+        }
+
+        /// <summary>
+        ///     Pearson correlation coefficients from the pairwise-complete covariance (NumPy's <c>ma.corrcoef</c>):
+        ///     <c>cov(x)</c> normalized by the outer product of the per-variable standard deviations.
+        /// </summary>
+        /// <param name="x">Observations (see <see cref="cov"/>).</param>
+        /// <param name="y">Optional additional variables.</param>
+        /// <param name="rowvar">True (default): each row is a variable.</param>
+        /// <param name="allow_masked">When false, raise if any value is masked.</param>
+        /// <returns>The masked correlation matrix.</returns>
+        /// <exception cref="ValueError"><paramref name="allow_masked"/> is false and data is masked.</exception>
+        public MaskedArray corrcoef(object x, object y = null, bool rowvar = true, bool allow_masked = true)
+        {
+            var corr = cov(x, y, rowvar, false, allow_masked);
+            // std = sqrt(diagonal(cov)); corr /= outer(std, std).
+            var std = sqrt(diagonal(corr));
+            return divide(corr, outer(std, std));
+        }
+
         /// <summary>Cumulative sum along the axis; masked slots contribute 0 to the running total but their
         /// POSITIONS stay masked in the result (NumPy semantics).</summary>
         /// <param name="a">Operand.</param><param name="axis">Axis or null (flatten, C-order).</param><param name="dtype">Accumulator dtype.</param>

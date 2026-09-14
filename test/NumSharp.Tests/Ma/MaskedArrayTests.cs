@@ -897,5 +897,29 @@ namespace NumSharp.Tests.Ma
             Assert.IsTrue(new MaskError("x") is MAError);
             Assert.IsTrue(new MAError("x") is Exception);
         }
+
+        /// <summary>cov is PAIRWISE-COMPLETE over the mask (each entry divides by the count of both-unmasked
+        /// observations); corrcoef normalizes it by the outer product of the per-variable std deviations.</summary>
+        [TestMethod]
+        public void Cov_And_Corrcoef_PairwiseComplete()
+        {
+            var x = np.ma.array(np.array(new double[,] { { 1, 2, 3, 4 }, { 2, 4, 6, 8 } }));
+            Assert.IsTrue(D(np.ma.cov(x)).Zip(new double[] { 5.0 / 3, 10.0 / 3, 10.0 / 3, 20.0 / 3 }, (a, e) => System.Math.Abs(a - e) < 1e-9).All(v => v));
+
+            // pairwise mask: dropping x[0,2] changes only the pairs that use it.
+            var xm = np.ma.array(np.array(new double[,] { { 1, 2, 3, 4 }, { 2, 4, 6, 8 } }),
+                                 np.array(new bool[,] { { false, false, true, false }, { false, false, false, false } }));
+            Assert.IsTrue(D(np.ma.cov(xm)).Zip(new double[] { 7.0 / 3, 14.0 / 3, 14.0 / 3, 20.0 / 3 }, (a, e) => System.Math.Abs(a - e) < 1e-9).All(v => v));
+            Assert.IsFalse(M(np.ma.cov(xm)).Any(v => v));
+
+            Assert.IsTrue(D(np.ma.cov(x, bias: true)).Zip(new double[] { 1.25, 2.5, 2.5, 5.0 }, (a, e) => System.Math.Abs(a - e) < 1e-9).All(v => v));
+
+            // rowvar=False: variables are columns.
+            var xt = np.ma.array(np.array(new double[,] { { 1, 2 }, { 2, 4 }, { 3, 6 }, { 4, 8 } }));
+            Assert.IsTrue(D(np.ma.cov(xt, rowvar: false)).Zip(new double[] { 5.0 / 3, 10.0 / 3, 10.0 / 3, 20.0 / 3 }, (a, e) => System.Math.Abs(a - e) < 1e-9).All(v => v));
+
+            // corrcoef: perfectly correlated variables → all 1.
+            Assert.IsTrue(D(np.ma.corrcoef(x)).All(v => System.Math.Abs(v - 1.0) < 1e-9));
+        }
     }
 }
