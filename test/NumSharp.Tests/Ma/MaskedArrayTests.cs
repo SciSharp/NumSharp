@@ -921,5 +921,40 @@ namespace NumSharp.Tests.Ma
             // corrcoef: perfectly correlated variables → all 1.
             Assert.IsTrue(D(np.ma.corrcoef(x)).All(v => System.Math.Abs(v - 1.0) < 1e-9));
         }
+
+        /// <summary>convolve/correlate propagate the mask by sliding the boolean masks against ones: with
+        /// propagate_mask a result is masked if ANY masked cell contributed; without it, only if NO unmasked
+        /// cell did (and the data comes from the 0-filled inputs).</summary>
+        [TestMethod]
+        public void Convolve_And_Correlate_MaskPropagation()
+        {
+            var a = Ma(new double[] { 1, 2, 3, 4 }, new[] { false, true, false, false });
+            var v = np.array(new double[] { 0.5, 0.5 });
+
+            var cp = np.ma.convolve(a, v);
+            Assert.IsTrue(D(cp).Zip(new double[] { 0.5, 1.5, 2.5, 3.5, 2.0 }, (x, e) => System.Math.Abs(x - e) < 1e-9).All(b => b));
+            Assert.IsTrue(M(cp).SequenceEqual(new[] { false, true, true, false, false }));
+
+            var cn = np.ma.convolve(a, v, propagate_mask: false);
+            Assert.IsTrue(D(cn).Zip(new double[] { 0.5, 0.5, 1.5, 3.5, 2.0 }, (x, e) => System.Math.Abs(x - e) < 1e-9).All(b => b));
+            Assert.IsFalse(M(cn).Any(x => x));
+
+            var cr = np.ma.correlate(a, v, mode: "full");
+            Assert.IsTrue(M(cr).SequenceEqual(new[] { false, true, true, false, false }));
+        }
+
+        /// <summary>apply_over_axes applies a masked reduction over each axis in turn, re-expanding a
+        /// keepdims-less result so the passes compose (NumPy's ma.apply_over_axes).</summary>
+        [TestMethod]
+        public void ApplyOverAxes()
+        {
+            var data = np.arange(24).reshape(2, 3, 4).astype(np.float64);
+            var mask = np.array(Enumerable.Range(0, 24).Select(i => i % 5 == 0).ToArray()).reshape(2, 3, 4);
+            var a = np.ma.array(data, mask);
+            var r = np.ma.apply_over_axes((m, ax) => np.ma.sum(m, ax), a, new[] { 0, 2 });
+            Assert.IsTrue(r.shape.SequenceEqual(new long[] { 1, 3, 1 }));
+            Assert.IsTrue(np.ma.getdata(r).astype(np.float64).ToArray<double>().SequenceEqual(new double[] { 45, 87, 94 }));
+            Assert.IsFalse(np.ma.getmaskarray(r).ToArray<bool>().Any(x => x));
+        }
     }
 }

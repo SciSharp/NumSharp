@@ -1967,6 +1967,102 @@ namespace NumSharp
             return divide(corr, outer(std, std));
         }
 
+        // ─────────────────────────────────────────────────────────────────────────────
+        //  Sliding products — convolve / correlate with mask propagation (NumPy's
+        //  _convolve_or_correlate): the mask is computed by convolving/correlating the
+        //  boolean masks against ones, so a result element's masked-ness follows exactly
+        //  which input cells contributed to its sum.
+        // ─────────────────────────────────────────────────────────────────────────────
+
+        /// <summary>Shared core of <see cref="convolve"/>/<see cref="correlate"/> (port of NumPy's
+        /// <c>_convolve_or_correlate</c>). With <paramref name="propagate_mask"/> a result element is masked if
+        /// ANY masked cell contributed to it (mask = the boolean masks slid against ones); without it, a result
+        /// is masked only when NO unmasked cell contributed (and the data is computed from the 0-filled inputs).</summary>
+        private MaskedArray ConvolveOrCorrelate(Func<NDArray, NDArray, string, NDArray> f, object a, object v, string mode, bool propagate_mask)
+        {
+            var da = getdata(a);
+            var dv = getdata(v);
+            NDArray data, mask;
+            if (propagate_mask)
+            {
+                // Slide each operand's mask (as 0/1) against ones — a nonzero count means a masked cell contributed.
+                var m1 = np.not_equal(f(getmaskarray(a).astype(np.int32), np.ones(dv.Shape, np.int32), mode), NDArray.Scalar(0));
+                var m2 = np.not_equal(f(np.ones(da.Shape, np.int32), getmaskarray(v).astype(np.int32), mode), NDArray.Scalar(0));
+                mask = np.logical_or(m1, m2);
+                data = f(da, dv, mode);
+            }
+            else
+            {
+                // Masked iff NO unmasked pair contributed: ~(slide of the not-masks). Data from the 0-filled inputs.
+                var contributed = np.not_equal(f(np.logical_not(getmaskarray(a)).astype(np.int32), np.logical_not(getmaskarray(v)).astype(np.int32), mode), NDArray.Scalar(0));
+                mask = np.logical_not(contributed);
+                data = f(filled(a, 0), filled(v, 0), mode);
+            }
+            return new MaskedArray(data, np.any(mask) ? mask : null);
+        }
+
+        /// <summary>Discrete linear convolution of two 1-D sequences, propagating the mask (NumPy's
+        /// <c>ma.convolve</c>). Default <paramref name="mode"/> is "full".</summary>
+        /// <param name="a">First sequence.</param><param name="v">Second sequence.</param>
+        /// <param name="mode">"full" (default), "same", or "valid".</param>
+        /// <param name="propagate_mask">Mask a result if ANY masked cell contributed (true) vs only if NO
+        /// unmasked cell did (false).</param>
+        /// <returns>The masked convolution.</returns>
+        public MaskedArray convolve(object a, object v, string mode = "full", bool propagate_mask = true)
+            => ConvolveOrCorrelate((x, y, m) => np.convolve(x, y, m), a, v, mode, propagate_mask);
+
+        /// <summary>Cross-correlation of two 1-D sequences, propagating the mask (NumPy's <c>ma.correlate</c>).
+        /// Default <paramref name="mode"/> is "valid" (unlike <see cref="convolve"/>).</summary>
+        /// <param name="a">First sequence.</param><param name="v">Second sequence.</param>
+        /// <param name="mode">"valid" (default), "same", or "full".</param>
+        /// <param name="propagate_mask">Mask a result if ANY masked cell contributed (true) vs only if NO
+        /// unmasked cell did (false).</param>
+        /// <returns>The masked cross-correlation.</returns>
+        public MaskedArray correlate(object a, object v, string mode = "valid", bool propagate_mask = true)
+            => ConvolveOrCorrelate((x, y, m) => np.correlate(x, y, m), a, v, mode, propagate_mask);
+
+        /// <summary>
+        ///     Applies <paramref name="func"/> repeatedly over the given <paramref name="axes"/> (NumPy's
+        ///     <c>ma.apply_over_axes</c>): each pass calls <c>func(val, axis)</c> and — when the result dropped
+        ///     the reduced axis — re-expands it, so a keepdims-less reduction still composes. <paramref name="func"/>
+        ///     receives (and returns) a whole <see cref="MaskedArray"/>, so the mask is handled by the reduction
+        ///     itself (this is why it composes cleanly, unlike per-1-D-slice <c>apply_along_axis</c>).
+        /// </summary>
+        /// <param name="func">The reduction, e.g. <c>(m, ax) =&gt; np.ma.sum(m, ax)</c>.</param>
+        /// <param name="a">Operand.</param>
+        /// <param name="axes">The axes to apply <paramref name="func"/> over, in order.</param>
+        /// <returns>The successively-reduced masked array.</returns>
+        /// <exception cref="ValueError"><paramref name="func"/> returns an array of the wrong rank.</exception>
+        public MaskedArray apply_over_axes(Func<MaskedArray, int, MaskedArray> func, object a, int[] axes)
+        {
+            MaskedArray val = asanyarray(a);
+            foreach (var ax in axes)
+            {
+                int axis = ax < 0 ? ax + val.ndim : ax;
+                var res = func(val, axis);
+                if (res.ndim == val.ndim)
+                {
+                    val = res;
+                }
+                else
+                {
+                    // NumPy re-expands a keepdims-less result along the reduced axis so the next pass lines up.
+                    res = expand_dims(res, axis);
+                    if (res.ndim == val.ndim)
+                        val = res;
+                    else
+                        throw new ValueError("function is not returning an array of the correct shape");
+                }
+            }
+            return val;
+        }
+
+        /// <summary>Single-axis convenience for <see cref="apply_over_axes"/>.</summary>
+        /// <param name="func">The reduction.</param><param name="a">Operand.</param><param name="axis">The axis.</param>
+        /// <returns>The reduced masked array.</returns>
+        public MaskedArray apply_over_axes(Func<MaskedArray, int, MaskedArray> func, object a, int axis)
+            => apply_over_axes(func, a, new[] { axis });
+
         /// <summary>Cumulative sum along the axis; masked slots contribute 0 to the running total but their
         /// POSITIONS stay masked in the result (NumPy semantics).</summary>
         /// <param name="a">Operand.</param><param name="axis">Axis or null (flatten, C-order).</param><param name="dtype">Accumulator dtype.</param>
