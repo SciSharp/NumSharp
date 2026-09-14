@@ -174,7 +174,8 @@ namespace NumSharp.Tests.Backends.Iterators
         public void Elu_MatchesWhereForm()
         {
             var x = np.array(new double[] { -2, -0.5, 0, 0.5, 2 });
-            Close(np.evaluate(NDExpr.Elu(x, 1.0)), np.where(x > 0.0, x, 1.0 * np.expm1(x)));
+            // Elu is defined over exp(x)-1 (vectorizable), not expm1; the eager reference matches that.
+            Close(np.evaluate(NDExpr.Elu(x, 1.0)), np.where(x > 0.0, x, 1.0 * (np.exp(x) - 1.0)));
         }
 
         [TestMethod]
@@ -197,6 +198,25 @@ namespace NumSharp.Tests.Backends.Iterators
         {
             var x = np.array(new double[] { -2, -0.5, 0, 0.5, 2 });
             V(np.evaluate(NDExpr.Step(x)), 0, 0, 0, 1, 1);
+        }
+
+        /// <summary>
+        /// The ML activations at float32 — the vectorizing hot path (min/max via hardware intrinsics,
+        /// exp/log/tanh via the ported NDFloatMath SIMD kernels). Elu/Softplus MUST stay composed over
+        /// Exp/Log (never Expm1/Log1p, which have no SIMD kernel and would scalarize the whole tree);
+        /// this exercises that path and pins correctness against the eager float32 chain.
+        /// </summary>
+        [TestMethod]
+        public void MlActivations_Float32_VectorPath_Correct()
+        {
+            var x = np.array(new float[] { -3f, -1f, -0.25f, 0f, 0.5f, 2f, 5f });
+            Close(np.evaluate(NDExpr.Relu(x)), np.maximum(x, 0f));
+            Close(np.evaluate(NDExpr.LeakyRelu(x, 0.1f)), np.where(x > 0f, x, 0.1f * x));
+            Close(np.evaluate(NDExpr.Sigmoid(x)), 1f / (1f + np.exp(-x)));
+            Close(np.evaluate(NDExpr.Swish(x)), x * (1f / (1f + np.exp(-x))));
+            Close(np.evaluate(NDExpr.Elu(x, 1f)), np.where(x > 0f, x, 1f * (np.exp(x) - 1f)));
+            Close(np.evaluate(NDExpr.Softplus(x)), np.maximum(x, 0f) + np.log(1f + np.exp(-np.abs(x))));
+            Close(np.evaluate(NDExpr.HardSigmoid(x)), np.clip(x / 6f + 0.5f, 0f, 1f));
         }
 
         // =====================================================================

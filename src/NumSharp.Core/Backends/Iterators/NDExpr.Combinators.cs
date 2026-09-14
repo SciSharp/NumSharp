@@ -32,6 +32,17 @@ using System;
 //
 // NEP50 note that bites here: `bool + bool` is logical OR, not a count. Anything
 // that COUNTS (Bucketize) must sum integer Where(cond, 1, 0) values, never bools.
+//
+// ML / VECTORIZATION RULE: the activations must stay composed over VECTORIZABLE nodes
+// so the whole tree SIMD-izes on the float32 hot path (min/max → hardware intrinsics,
+// exp/log/tanh → the ported NDFloatMath SIMD kernels — one call per lane group, not per
+// element). Do NOT reach for Expm1/Log1p (or Mod/Power/FloorDivide) inside an activation:
+// they have no SIMD emit, so a single such node forces the ENTIRE tree onto the
+// per-element scalar path. That is why Elu is exp(x)-1 (not expm1) and Softplus is
+// log(1+…) (not log1p) — the tiny precision give-up is bounded and documented per method.
+// float64 activations are still scalar Math.* per element (no bit-exact vector f64
+// transcendental exists — NumPy is scalar there too); that is a dtype limit, not this
+// file's. Verify with benchmark/fusion probes or the persisted-assembly IL disassembler.
 // =============================================================================
 
 namespace NumSharp.Backends.Iteration
@@ -182,10 +193,17 @@ namespace NumSharp.Backends.Iteration
         /// <returns>A fused select.</returns>
         public static NDExpr LeakyRelu(NDExpr x, NDExpr slope) => Where(Greater(x, Const(0.0)), x, x * slope);
 
-        /// <summary>Exponential linear unit: <c>x</c> where <c>x &gt; 0</c>, else <c>alpha*(exp(x)-1)</c> (uses expm1 for small-x accuracy).</summary>
+        /// <summary>
+        /// Exponential linear unit: <c>x</c> where <c>x &gt; 0</c>, else <c>alpha*(exp(x)-1)</c>. Spelled
+        /// with <see cref="Exp"/>-then-minus-one rather than <c>expm1</c> ON PURPOSE — <c>expm1</c> has no
+        /// SIMD kernel, so an <c>expm1</c> node forces the WHOLE tree onto the per-element scalar path;
+        /// <see cref="Exp"/> vectorizes (float32), so this whole activation SIMD-izes. The cost is a bounded
+        /// precision loss on the negative branch near <c>x = 0</c> (<c>exp(x)-1</c> cancels where the output
+        /// is already ≈ <c>x</c>, so the ABSOLUTE error stays ~ulp) — the standard NN tradeoff.
+        /// </summary>
         /// <param name="x">Pre-activation.</param><param name="alpha">Saturation scale for the negative branch (typically 1).</param>
-        /// <returns>A fused select over <see cref="Expm1"/>.</returns>
-        public static NDExpr Elu(NDExpr x, NDExpr alpha) => Where(Greater(x, Const(0.0)), x, alpha * Expm1(x));
+        /// <returns>A fused, vectorizable select over <see cref="Exp"/>.</returns>
+        public static NDExpr Elu(NDExpr x, NDExpr alpha) => Where(Greater(x, Const(0.0)), x, alpha * (Exp(x) - Const(1.0)));
 
         /// <summary>Logistic sigmoid: <c>1 / (1 + exp(-x))</c>.</summary>
         /// <param name="x">Input.</param><returns>A fused reciprocal-of-one-plus-exp node.</returns>
@@ -196,12 +214,16 @@ namespace NumSharp.Backends.Iteration
         public static NDExpr Swish(NDExpr x) => x * Sigmoid(x);
 
         /// <summary>
-        /// Softplus <c>log(1 + exp(x))</c> in the numerically STABLE form <c>max(x,0) + log1p(exp(-|x|))</c>
-        /// (algebraically identical, but never overflows for large <c>x</c> — the naive <c>log(1+exp(x))</c>
-        /// saturates to +inf around x≈710 at float64).
+        /// Softplus <c>log(1 + exp(x))</c> in the numerically STABLE form <c>max(x,0) + log(1 + exp(-|x|))</c>
+        /// — never overflows for large <c>x</c> (the naive <c>log(1+exp(x))</c> saturates to +inf around
+        /// x≈710 at float64). Uses <see cref="Log"/> of <c>1 + …</c> rather than <c>log1p</c> ON PURPOSE:
+        /// <c>log1p</c> has no SIMD kernel and would force the whole activation onto the per-element scalar
+        /// path, whereas <see cref="Log"/>/<see cref="Exp"/> vectorize (float32). The precision difference is
+        /// negligible here — the <c>log1p</c>-vs-<c>log(1+·)</c> gap only bites when its argument is tiny
+        /// (large <c>|x|</c>), exactly where that whole term is dominated by <c>max(x,0)</c>.
         /// </summary>
-        /// <param name="x">Input.</param><returns>A fused stable-softplus node.</returns>
-        public static NDExpr Softplus(NDExpr x) => Max(x, Const(0.0)) + Log1p(Exp(-Abs(x)));
+        /// <param name="x">Input.</param><returns>A fused, vectorizable stable-softplus node.</returns>
+        public static NDExpr Softplus(NDExpr x) => Max(x, Const(0.0)) + Log(Const(1.0) + Exp(-Abs(x)));
 
         /// <summary>
         /// GELU, the tanh approximation: <c>0.5·x·(1 + tanh(√(2/π)·(x + 0.044715·x³)))</c> (the form
