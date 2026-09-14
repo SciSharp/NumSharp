@@ -254,6 +254,76 @@ path). That is the deliberate price of converting silent corruption into a deter
 
 ---
 
+## Memory analysis (measured 2026-09-14; x64, Release, N=1M footprint / thread-local alloc counter)
+
+### Steady-state footprint (bytes/entry, presized, full-GC deltas)
+
+| Shape | `List<T>` (values only) | `ConcurrentDictionary` | `ConcurrentOrderedDict` | COD premium vs CD |
+|---|---:|---:|---:|---:|
+| `<int,int>` | 4.0 | 49.3 | **57.3** | +16% |
+| `<int,long>` | 8 | 49.3 | **69.3** | +41% |
+| `<int,decimal>` | 16 | 57.3 | **85.3** | +49% |
+| `<string,string>` (structure only, strings shared) | 8 | 57.0 | **81.0** | +42% |
+
+Decomposition for `<int,int>`: hash node 40 B (identical to CD's — the inline `ValueIndex` rides node
+padding when `TValue` ≤ 4 B) + buckets ~9 B + the two contiguous arrays 8 B. **The arrays ARE the
+List-parity read path and the +8 B is their entire cost**; for 8-byte-plus values the node grows a
+further 8 B (`ValueIndex` alignment), which is where the bigger premiums come from. Unsized
+`<int,int>` measured 59.6 B/entry (N=1M sits near a power of two; worst-case doubling slack is the
+usual up-to-2× on the array portion, like `List<T>`). The old `Entry`-object design would have added
+a fourth component (~24 B/entry + a second pointer chase) — folding it into the node removed it.
+
+### Allocation churn per operation (thread-local counter, min-of-rounds)
+
+| Operation | `List<T>` | `ConcurrentDictionary` | `ConcurrentOrderedDict` |
+|---|---:|---:|---:|
+| read / `IndexOf` / `this[int]` / `Count` | 0 | 0 | **0** |
+| full enumeration | 0 | **56 B** (iterator class) | **0** (struct); `Pairs` = one iterator object |
+| `Snapshot()` + span scan | — | — | **0** |
+| replace existing, atomic `TValue` | 4 (List set: 0) | 0 | **0** (ref-seam in-place) |
+| replace existing, `decimal` (non-atomic) | 0 | 48 B (node swap) | **16 B × capacity** (values-array clone; 1.6 MB at 100K) |
+| — same, batched via `AddRange` (1000 dups) | — | — | **~4 KB/op amortized** (ONE copy-on-write per batch — ~400× less) |
+| add, fully presized (amortized) | 4 | 48.7 | **56.7** (node 40 + the ctor's buckets/arrays amortized; steady-state in-capacity add = node only, pinned ≤64 B by test) |
+| add, unsized build (amortized, incl. growth churn) | ~8 | 121.4 (GrowTable RE-CREATES every node) | 143.3 (that same node churn + array doubling) |
+| `ToArray` / `Keys` | N×elem | N×elem (+ all stripe locks) | N×elem |
+| remove: tail pop | — | 40 B | **40 B** (one Store holder) |
+| remove: swap-back (in-place) | — | — | **40 B** |
+| remove: interior, order-preserving | **0** (in-place shift) | ~0 | **2 × capacity-sized arrays** (800 KB at 100K int) |
+| `RemoveWhere` (any match count) | — | — | **the same 2 arrays once** (800,152 B measured at 100K — k interior removes cost k×, one bulk pass costs 1×) |
+
+The interior-removal column is the concurrency price stated in memory terms: `List<T>` shifts in
+place because it has no lock-free readers to protect; COD must give readers immutable snapshots, so
+an order-preserving interior removal buys that safety with two fresh arrays. **LOH note:** the
+arrays cross the large-object threshold at ~21K `int` entries (85 KB), so interior-removal churn at
+large N is gen2/LOH churn — use `RemoveWhere` (one pass for any count), `TryRemoveSwapBack` (40 B),
+or tail pops; and batch wide-value (`decimal`-class) replacements through `AddRange`, or prefer
+atomic-width/reference values for update-heavy workloads.
+
+### Retention semantics (verified with WeakReference probes; pinned by `ConcurrentOrderedDictMemoryTests`)
+
+* A **tail-popped** value stays reachable through the shared arrays until the next append's
+  copy-on-write (the floor rule), a compaction, or `Clear` — the slot is deliberately not scrubbed
+  because an enumerator captured at the old count must still read valid data. Released exactly at
+  the first append after the pop (verified).
+* An **interior-removed** value is released immediately (fresh arrays exclude it; the old snapshot
+  becomes garbage once unreferenced). `Clear` releases everything.
+* A **held enumerator or `ValuesView` pins BOTH captured arrays** (2 × capacity × element size) for
+  its lifetime — bound snapshot lifetimes at large N. The framework dictionary's enumerator, by
+  contrast, pins only the node chain it walks; that is the flip side of COD's contiguous snapshots.
+* Probe-writing trap (cost a false "leak" during this analysis): under tier-0/Debug codegen,
+  untracked caller-frame stack temps keep a dropped enumerator reachable — retention probes must
+  hold AND drop the reference inside one `NoInlining` helper frame.
+
+### Where the comparative measurements live
+
+`benchmark`'s BDN suite reports the `Allocated` column for every composite scenario
+(MemoryDiagnoser is on in the shared config); the per-entry/footprint script used for the tables
+above is reproducible via the recipe in "How to measure". The pairs constructor now pre-sizes the
+hash map as well as the arrays from a countable source (`TryGetNonEnumeratedCount`), because map
+growth re-creates every node it holds — fully pre-sized builds allocate exactly the live bytes.
+
+---
+
 ## Vendored `ConcurrentDictionary` clone — deviations from the BCL
 
 The clone in `ConcurrentDictionary.cs` is faithful to dotnet/runtime's source; the concurrency core

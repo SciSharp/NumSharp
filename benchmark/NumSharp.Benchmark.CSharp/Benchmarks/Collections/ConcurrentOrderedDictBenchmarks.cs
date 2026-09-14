@@ -181,6 +181,11 @@ public class ConcurrentOrderedDictBenchmarks
         return d.Count;
     }
 
+    /// <summary>The pairs constructor — the optimal build path: pre-sizes BOTH the hash map and the arrays from the countable source, so the build allocates exactly the live bytes (no growth churn on either representation).</summary>
+    [Benchmark(Description = "COD ctor(pairs) (presizes both)")]
+    [BenchmarkCategory("Build")]
+    public int Cod_CtorFromPairs() => new ConcurrentOrderedDict<int, int>(_pairs).Count;
+
     // ------------------------------------------------------------------ Key get (baseline: framework dictionary)
 
     /// <summary>Baseline: lock-free TryGetValue over the shuffled key order.</summary>
