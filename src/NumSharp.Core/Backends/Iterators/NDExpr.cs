@@ -235,6 +235,117 @@ namespace NumSharp.Backends.Iteration
         public static NDExpr Where(NDExpr cond, NDExpr a, NDExpr b) => new WhereNode(cond, a, b);
 
         // ===================================================================
+        // Logical / N-ary selection / clip (Phase 4.3)
+        //
+        // LogicalAnd/Or/Xor are a DEDICATED node (LogicalNode), not the 4.2
+        // mechanical BinaryOp route: their result is always Boolean via a
+        // NONZERO-TEST of each operand at its OWN dtype (`(a != 0) op (b != 0)`),
+        // which no engine BinaryOp expresses. Select and Clip are pure LOWERINGS
+        // over the existing WhereNode / MinMaxNode kernels — no new node.
+        // ===================================================================
+
+        /// <summary>
+        /// Element-wise logical AND (np.logical_and): the result is ALWAYS Boolean, formed by
+        /// nonzero-testing each operand at its OWN dtype — <c>(a != 0) &amp; (b != 0)</c> — so it is
+        /// NOT the bitwise <see cref="BitwiseAnd"/> (<c>&amp;</c>). Every dtype is accepted, complex
+        /// included (a complex is truthy iff either component is nonzero); a NaN is truthy
+        /// (<c>NaN != 0</c>), and ±0 is falsy. Vectorizes on a SIMD lane (each operand becomes a
+        /// truthiness mask, combined by a vector AND).
+        /// </summary>
+        /// <param name="a">First operand (nonzero-tested).</param>
+        /// <param name="b">Second operand (nonzero-tested).</param>
+        /// <returns>A Boolean-typed expression node computing the logical AND.</returns>
+        public static NDExpr LogicalAnd(NDExpr a, NDExpr b) => new LogicalNode(LogicalOp.And, a, b);
+
+        /// <summary>
+        /// Element-wise logical OR (np.logical_or) — <c>(a != 0) | (b != 0)</c>, always Boolean. See
+        /// <see cref="LogicalAnd"/> for the nonzero-test / dtype / NaN semantics; NOT the bitwise
+        /// <see cref="BitwiseOr"/>.
+        /// </summary>
+        /// <param name="a">First operand (nonzero-tested).</param>
+        /// <param name="b">Second operand (nonzero-tested).</param>
+        /// <returns>A Boolean-typed expression node computing the logical OR.</returns>
+        public static NDExpr LogicalOr(NDExpr a, NDExpr b) => new LogicalNode(LogicalOp.Or, a, b);
+
+        /// <summary>
+        /// Element-wise logical XOR (np.logical_xor) — <c>(a != 0) ^ (b != 0)</c>, always Boolean. See
+        /// <see cref="LogicalAnd"/>; NOT the bitwise <see cref="BitwiseXor"/>.
+        /// </summary>
+        /// <param name="a">First operand (nonzero-tested).</param>
+        /// <param name="b">Second operand (nonzero-tested).</param>
+        /// <returns>A Boolean-typed expression node computing the logical XOR.</returns>
+        public static NDExpr LogicalXor(NDExpr a, NDExpr b) => new LogicalNode(LogicalOp.Xor, a, b);
+
+        /// <summary>
+        /// Piecewise selection (np.select): each output element is drawn from the choice whose condition
+        /// is true, the FIRST matching condition winning; positions where every condition is false take
+        /// <paramref name="default"/>. Lowered to a reverse <see cref="Where"/> chain
+        /// (<c>where(c0, v0, where(c1, v1, … where(cN, vN, default)))</c>), so the result dtype is
+        /// <c>result_type(*choices, default)</c> (the nested where nodes compose the same promotion) and
+        /// the conditions are nonzero-tested at their own dtype exactly like <see cref="Where"/>'s
+        /// condition — in practice each is a Boolean comparison, matching np.select's bool condlist.
+        /// </summary>
+        /// <param name="condlist">The conditions, outermost (highest priority) first.</param>
+        /// <param name="choicelist">The choices, aligned with <paramref name="condlist"/>.</param>
+        /// <param name="default">The fill where no condition is true; <c>null</c> ≙ NumPy's default weak-int <c>0</c>.</param>
+        /// <returns>An expression node selecting per element from the first true condition's choice.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="condlist"/> or <paramref name="choicelist"/> (or an element) is null.</exception>
+        /// <exception cref="ArgumentException">The lists differ in length (NumPy "list of cases must be same length as list of conditions"), or <paramref name="condlist"/> is empty (NumPy "select with an empty condition list is not possible").</exception>
+        public static NDExpr Select(NDExpr[] condlist, NDExpr[] choicelist, NDExpr @default = null)
+        {
+            if (condlist is null) throw new ArgumentNullException(nameof(condlist));
+            if (choicelist is null) throw new ArgumentNullException(nameof(choicelist));
+            // NumPy validation ORDER + verbatim text: length mismatch before emptiness.
+            if (condlist.Length != choicelist.Length)
+                throw new ArgumentException("list of cases must be same length as list of conditions");
+            if (condlist.Length == 0)
+                throw new ArgumentException("select with an empty condition list is not possible");
+
+            // First-true-wins ⇒ fold from the LAST pair inward so condlist[0] is the OUTERMOST where.
+            NDExpr result = @default ?? Const(0);
+            for (int i = condlist.Length - 1; i >= 0; i--)
+            {
+                var cond = condlist[i] ?? throw new ArgumentNullException(nameof(condlist));
+                var choice = choicelist[i] ?? throw new ArgumentNullException(nameof(choicelist));
+                result = new WhereNode(cond, choice, result);
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Clip (limit) the values of <paramref name="x"/> to a range (np.clip). Either bound may be
+        /// <c>null</c> (NumPy's <c>None</c>): a one-sided clip lowers to the NaN-propagating
+        /// <see cref="Max"/>/<see cref="Min"/> (<c>np.clip(x, lo, None) ≡ np.maximum(x, lo)</c>,
+        /// <c>np.clip(x, None, hi) ≡ np.minimum(x, hi)</c>), and a two-sided clip to
+        /// <c>Min(Max(x, lo), hi)</c> (= <see cref="Clamp"/>), which is the exact general clip ufunc
+        /// (<c>_NPY_MIN(_NPY_MAX(x, lo), hi)</c>). Result dtype is <c>result_type(x, lo, hi)</c>.
+        /// </summary>
+        /// <param name="x">The values to clip.</param>
+        /// <param name="lo">Lower bound, or <c>null</c> for no lower bound.</param>
+        /// <param name="hi">Upper bound, or <c>null</c> for no upper bound.</param>
+        /// <returns>An expression node clipping <paramref name="x"/> to <c>[lo, hi]</c>.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="x"/> is null.</exception>
+        /// <exception cref="ArgumentException">Both bounds are null (NumPy "One of max or min must be given").</exception>
+        /// <remarks>
+        /// Bit-exact with NumPy 2.4.2 for one-sided clips and for two-sided clips with ARRAY bounds. A
+        /// two-sided clip with SCALAR (0-d) bounds differs from NumPy ONLY in the pathological
+        /// signed-zero-exactly-at-a-finite-bound corner (e.g. <c>clip(-0.0, -inf, +0.0)</c>): NumPy's
+        /// const-scalar fast path returns <c>-0.0</c> while the general min(max) path — which NumSharp
+        /// always takes — returns <c>+0.0</c>; NaN-sign-of-bound corners are float-NaN differences the
+        /// oracle tokenizes.
+        /// </remarks>
+        public static NDExpr Clip(NDExpr x, NDExpr lo, NDExpr hi)
+        {
+            if (x is null) throw new ArgumentNullException(nameof(x));
+            if (lo is null && hi is null)
+                throw new ArgumentException("One of max or min must be given");
+            if (lo is null) return Min(x, hi);          // np.clip(x, None, hi) ≡ np.minimum(x, hi)
+            if (hi is null) return Max(x, lo);          // np.clip(x, lo, None) ≡ np.maximum(x, lo)
+            return Min(Max(x, lo), hi);                 // _NPY_MIN(_NPY_MAX(x, lo), hi)
+        }
+
+        // ===================================================================
         // Elementwise binary ufunc family (Phase 4 coverage) — every node here
         // rides the shared BinaryNode kernel; the scalar emit is the SAME per-op
         // emitter the engine's own ufuncs use (DirectILKernelGenerator.
@@ -750,6 +861,20 @@ namespace NumSharp.Backends.Iteration
         public static NDExpr operator -(NDExpr a) => Negate(a);
         public static NDExpr operator ~(NDExpr a) => BitwiseNot(a);
         public static NDExpr operator !(NDExpr a) => LogicalNot(a);
+
+        // Comparison operators (Phase 4.4). These build a Boolean-typed ComparisonNode and RETURN an
+        // NDExpr (not a bool) — the numexpr / expression-builder convention, so `a < b` composes into a
+        // larger tree. C# requires `<`/`>` and `<=`/`>=` in pairs. `==`/`!=` are deliberately NOT
+        // overloaded (they would hijack `expr == null` reference checks); use Equal/NotEqual instead.
+        // An NDArray or scalar operand converts implicitly to NDExpr, so `expr < 0.5` and `arr < expr`
+        // both bind here.
+        public static NDExpr operator <(NDExpr a, NDExpr b) => Less(a, b);
+        public static NDExpr operator >(NDExpr a, NDExpr b) => Greater(a, b);
+        public static NDExpr operator <=(NDExpr a, NDExpr b) => LessEqual(a, b);
+        public static NDExpr operator >=(NDExpr a, NDExpr b) => GreaterEqual(a, b);
+
+        /// <summary>Unary plus (np's <c>+a</c>): the identity copy <see cref="Positive"/> — dtype-preserving, no bool loop.</summary>
+        public static NDExpr operator +(NDExpr a) => Positive(a);
     }
 
     // =========================================================================
@@ -2237,6 +2362,116 @@ namespace NumSharp.Backends.Iteration
             _a.AppendSignature(sb);
             sb.Append(',');
             _b.AppendSignature(sb);
+            sb.Append(')');
+        }
+    }
+
+    // =========================================================================
+    // Node: Logical — element-wise logical_and / logical_or / logical_xor
+    //
+    // Result is ALWAYS Boolean, formed by NONZERO-TESTING each operand at its
+    // own dtype (`(a != 0) op (b != 0)`) — NumPy's logical-ufunc semantics, and
+    // the reason this is a dedicated node rather than a BinaryOp: no engine op
+    // both nonzero-tests and yields bool. Every dtype is accepted, complex
+    // included; a NaN is truthy, ±0 falsy. Vectorizes: each child becomes a
+    // truthiness lane mask, combined by a vector AND/OR/XOR (byte mode uses the
+    // engine's canonical-bool logical op).
+    // =========================================================================
+
+    /// <summary>The three logical combinators of <see cref="LogicalNode"/>.</summary>
+    public enum LogicalOp : byte
+    {
+        /// <summary>logical_and — <c>(a != 0) &amp; (b != 0)</c>.</summary>
+        And = 0,
+        /// <summary>logical_or — <c>(a != 0) | (b != 0)</c>.</summary>
+        Or = 1,
+        /// <summary>logical_xor — <c>(a != 0) ^ (b != 0)</c>.</summary>
+        Xor = 2,
+    }
+
+    public sealed partial class LogicalNode : NDExpr
+    {
+        private readonly LogicalOp _op;
+        private readonly NDExpr _left;
+        private readonly NDExpr _right;
+
+        public LogicalNode(LogicalOp op, NDExpr left, NDExpr right)
+        {
+            _op = op;
+            _left = left ?? throw new ArgumentNullException(nameof(left));
+            _right = right ?? throw new ArgumentNullException(nameof(right));
+        }
+
+        public override bool SupportsSimd => false;
+
+        public override void EmitScalar(ILGenerator il, NDExprCompileContext ctx)
+        {
+            var my = ctx.TypeOf(this); // Boolean in NumPy mode; OutputType in legacy mode.
+
+            // Each operand nonzero-tested at its OWN dtype: `child != 0` leaves an I4 (0/1) on the
+            // stack (EmitComparisonOperation covers every dtype — Boolean by truth value, Complex by
+            // `z != 0+0i`, Decimal/Half by their operators). Two I4 0/1 values combine with the plain
+            // integer And/Or/Xor opcode (identical to the logical combination on 0/1).
+            EmitNonzero(il, ctx, _left);
+            EmitNonzero(il, ctx, _right);
+            switch (_op)
+            {
+                case LogicalOp.And: il.Emit(OpCodes.And); break;
+                case LogicalOp.Or: il.Emit(OpCodes.Or); break;
+                default: il.Emit(OpCodes.Xor); break;
+            }
+
+            // The result is an I4 0/1; normalize to `my` (a no-op for Boolean, whose stack form IS an
+            // I4 0/1 — reached from an Int32 source so EmitConvertTo's →bool path is safe here).
+            DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Int32, my);
+        }
+
+        /// <summary>Emit <paramref name="child"/> then <c>!= 0</c> at the child's own dtype, leaving an I4 0/1.</summary>
+        private static void EmitNonzero(ILGenerator il, NDExprCompileContext ctx, NDExpr child)
+        {
+            var ct = ctx.TypeOf(child);
+            child.EmitScalar(il, ctx);
+            WhereNode.EmitPushZeroPublic(il, ct);
+            DirectILKernelGenerator.EmitComparisonOperation(il, ComparisonOp.NotEqual, ct);
+        }
+
+        public override void EmitVector(ILGenerator il, NDExprCompileContext ctx)
+        {
+            // Each child → a Boolean lane mask (a comparison child already IS one; a numeric child is
+            // nonzero-tested via EmitValueToMask; byte mode carries canonical 0/1 bytes). The masks
+            // combine with the vector AND/OR/XOR — canonical all-ones/zero masks stay canonical, so the
+            // root packs a correct bool output.
+            EmitVectorChildAs(il, ctx, _left, NPTypeCode.Boolean);
+            EmitVectorChildAs(il, ctx, _right, NPTypeCode.Boolean);
+
+            if (ctx.ByteMode)
+            {
+                // Every operand is bool: the engine's canonical-bool logical op (xor → not_equal).
+                var boolOp = _op switch
+                {
+                    LogicalOp.And => BinaryOp.BitwiseAnd,
+                    LogicalOp.Or => BinaryOp.BitwiseOr,
+                    _ => BinaryOp.BitwiseXor,
+                };
+                DirectILKernelGenerator.EmitVectorOperation(il, boolOp, NPTypeCode.Boolean);
+                return;
+            }
+
+            var clr = DirectILKernelGenerator.GetClrType(ctx.VectorLaneType);
+            switch (_op)
+            {
+                case LogicalOp.And: NDExprVec.EmitAnd(il, clr); break;
+                case LogicalOp.Or: NDExprVec.EmitOr(il, clr); break;
+                default: NDExprVec.EmitXor(il, clr); break;
+            }
+        }
+
+        public override void AppendSignature(StringBuilder sb)
+        {
+            sb.Append("Logical").Append(_op).Append('(');
+            _left.AppendSignature(sb);
+            sb.Append(',');
+            _right.AppendSignature(sb);
             sb.Append(')');
         }
     }

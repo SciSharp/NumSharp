@@ -960,6 +960,23 @@ namespace NumSharp.Backends.Iteration
         }
     }
 
+    public sealed partial class LogicalNode
+    {
+        internal override NDExprTypeInfo InferType(
+            NPTypeCode[] inputTypes, Dictionary<NDExpr, NPTypeCode> nodeTypes)
+        {
+            // Each operand is nonzero-tested at its OWN dtype (like Where's condition — no promotion
+            // between the two): resolve each child at its own dtype, a weak literal at its default.
+            // The result is ALWAYS Boolean regardless of the operand dtypes (np.logical_* semantics).
+            var lt = _left.InferType(inputTypes, nodeTypes);
+            ResolveChild(_left, lt, lt.IsWeak ? lt.DefaultCode : lt.Code, nodeTypes);
+            var rt = _right.InferType(inputTypes, nodeTypes);
+            ResolveChild(_right, rt, rt.IsWeak ? rt.DefaultCode : rt.Code, nodeTypes);
+            nodeTypes[this] = NPTypeCode.Boolean;
+            return NDExprTypeInfo.Strong(NPTypeCode.Boolean);
+        }
+    }
+
     public sealed partial class CallNode
     {
         internal override NDExprTypeInfo InferType(

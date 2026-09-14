@@ -800,6 +800,21 @@ namespace NumSharp.Backends.Iteration
         internal override NDArray FirstArray() => _cond.FirstArray() ?? _a.FirstArray() ?? _b.FirstArray();
     }
 
+    public sealed partial class LogicalNode
+    {
+        internal override NDExpr BindArrays(NDExprBindContext ctx)
+        {
+            var l = _left.BindArrays(ctx);
+            var r = _right.BindArrays(ctx);
+            return ReferenceEquals(l, _left) && ReferenceEquals(r, _right)
+                ? this
+                : new LogicalNode(_op, l, r);
+        }
+
+        internal override bool ContainsReduce => _left.ContainsReduce || _right.ContainsReduce;
+        internal override NDArray FirstArray() => _left.FirstArray() ?? _right.FirstArray();
+    }
+
     public sealed partial class CallNode
     {
         /// <summary>Clone with new args — reuses the registered slot/method, no re-registration.</summary>

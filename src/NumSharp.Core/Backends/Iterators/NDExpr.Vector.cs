@@ -311,6 +311,15 @@ namespace NumSharp.Backends.Iteration
             => _cond.CanEmitVectorV2(lane, types) && _a.CanEmitVectorV2(lane, types) && _b.CanEmitVectorV2(lane, types);
     }
 
+    public sealed partial class LogicalNode
+    {
+        // Bool result via mask AND/OR/XOR; vectorizes whenever both operands do (each becomes a
+        // truthiness lane mask). The plan gates the lane to a SIMD-capable dtype, so complex/decimal/
+        // Half operands never reach the vector path (their lane is not SIMD-capable → whole tree scalar).
+        internal override bool CanEmitVectorV2(NPTypeCode lane, IReadOnlyDictionary<NDExpr, NPTypeCode> types)
+            => _left.CanEmitVectorV2(lane, types) && _right.CanEmitVectorV2(lane, types);
+    }
+
     public sealed partial class CallNode
     {
         internal override bool CanEmitVectorV2(NPTypeCode lane, IReadOnlyDictionary<NDExpr, NPTypeCode> types) => false;

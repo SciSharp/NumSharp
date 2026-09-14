@@ -262,6 +262,10 @@ namespace NumSharp.Tests.Fuzz
                     case "lcm": return NDExpr.Lcm(a[0], a[1]);
                     case "lshift": return NDExpr.LeftShift(a[0], a[1]);
                     case "rshift": return NDExpr.RightShift(a[0], a[1]);
+                    // Phase 4.3 logical nodes — bool result via a per-operand nonzero test (NOT bitwise).
+                    case "land": return NDExpr.LogicalAnd(a[0], a[1]);
+                    case "lor": return NDExpr.LogicalOr(a[0], a[1]);
+                    case "lxor": return NDExpr.LogicalXor(a[0], a[1]);
                     case "eq": return NDExpr.Equal(a[0], a[1]);
                     case "ne": return NDExpr.NotEqual(a[0], a[1]);
                     case "lt": return NDExpr.Less(a[0], a[1]);

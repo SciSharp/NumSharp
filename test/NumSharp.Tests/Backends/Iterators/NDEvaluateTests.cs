@@ -2119,5 +2119,169 @@ namespace NumSharp.Tests.Backends.Iterators
             Assert.AreEqual(NPTypeCode.Decimal, dec.typecode);
             Assert.AreEqual(1.2m, dec.GetAtIndex<decimal>(0));
         }
+
+        // =====================================================================
+        // Phase 4.3 — logical nodes (LogicalNode) + N-ary lowerings (Select / Clip)
+        // + comparison operators. Values probed from NumPy 2.4.2. The logical
+        // nodes are a NEW node (bool result via a per-operand nonzero test, all
+        // dtypes incl. complex); Select and Clip are pure LOWERINGS to the
+        // already-gated WhereNode / MinMaxNode. These pin the corpus-unreachable
+        // edges: complex/NaN truthiness, first-true-wins, one-sided clip, and
+        // every error path.
+        // =====================================================================
+
+        /// <summary>np.logical_and/or/xor: the result is ALWAYS bool, formed by nonzero-testing each
+        /// operand at its own dtype — NaN is truthy (<c>nan != 0</c>), ±0 is falsy, and a complex is
+        /// truthy iff either component is nonzero. NOT the bitwise <c>&amp;</c>/<c>|</c>/<c>^</c>.</summary>
+        [TestMethod]
+        public void P43_Logical_NonzeroTest_AllDtypes_BoolResult()
+        {
+            var f = np.array(new double[] { 0.0, 1.0, double.NaN, 2.0 });
+            var g = np.array(new double[] { 0.0, 0.0, 1.0, 3.0 });
+            var land = np.evaluate(NDExpr.LogicalAnd((NDExpr)f, (NDExpr)g));
+            var lor = np.evaluate(NDExpr.LogicalOr((NDExpr)f, (NDExpr)g));
+            var lxor = np.evaluate(NDExpr.LogicalXor((NDExpr)f, (NDExpr)g));
+            Assert.AreEqual(NPTypeCode.Boolean, land.typecode);
+            CollectionAssert.AreEqual(new[] { false, false, true, true }, new[] { land.GetBoolean(0), land.GetBoolean(1), land.GetBoolean(2), land.GetBoolean(3) });
+            CollectionAssert.AreEqual(new[] { false, true, true, true }, new[] { lor.GetBoolean(0), lor.GetBoolean(1), lor.GetBoolean(2), lor.GetBoolean(3) });
+            CollectionAssert.AreEqual(new[] { false, true, false, false }, new[] { lxor.GetBoolean(0), lxor.GetBoolean(1), lxor.GetBoolean(2), lxor.GetBoolean(3) });
+
+            // complex: a complex is truthy iff a component is nonzero (0+2j is truthy, 0+0j falsy).
+            var cz = np.array(new System.Numerics.Complex[] { new(0, 0), new(1, 0), new(0, 2) });
+            var cw = np.array(new System.Numerics.Complex[] { new(1, 0), new(0, 0), new(3, 0) });
+            var cland = np.evaluate(NDExpr.LogicalAnd((NDExpr)cz, (NDExpr)cw));
+            Assert.AreEqual(NPTypeCode.Boolean, cland.typecode);
+            CollectionAssert.AreEqual(new[] { false, false, true }, new[] { cland.GetBoolean(0), cland.GetBoolean(1), cland.GetBoolean(2) });
+
+            // mixed dtype still yields bool; a comparison sub-tree composes (logical_and of two masks).
+            var mix = np.evaluate(NDExpr.LogicalAnd(NDExpr.Greater((NDExpr)f, (NDExpr)NDExpr.Const(0.0)), NDExpr.Less((NDExpr)g, (NDExpr)NDExpr.Const(2.0))));
+            CollectionAssert.AreEqual(new[] { false, true, false, false }, new[] { mix.GetBoolean(0), mix.GetBoolean(1), mix.GetBoolean(2), mix.GetBoolean(3) });
+        }
+
+        /// <summary>LogicalNode vectorizes (each operand becomes a truthiness lane mask combined by a
+        /// vector AND/OR/XOR); the vector body must be bit-identical to the scalar body.</summary>
+        [TestMethod]
+        public void P43_Logical_VectorizesBitExact()
+        {
+            var poolA = new double[128];
+            var poolB = new double[128];
+            for (int i = 0; i < poolA.Length; i++)
+            {
+                poolA[i] = (i % 5 == 0) ? 0.0 : (i % 7) - 2.5;
+                poolB[i] = (i % 3 == 0) ? 0.0 : (i % 4) + 0.5;
+            }
+            var a = np.array(poolA);
+            var b = np.array(poolB);
+            foreach (var factory in new Func<NDExpr, NDExpr, NDExpr>[] { NDExpr.LogicalAnd, NDExpr.LogicalOr, NDExpr.LogicalXor })
+            {
+                var vec = np.evaluate(factory(NDExpr.Arr(a), NDExpr.Arr(b)));
+                NDArray sca;
+                NDExpr.ForceScalar = true;
+                try { sca = np.evaluate(factory(NDExpr.Arr(a), NDExpr.Arr(b))); }
+                finally { NDExpr.ForceScalar = false; }
+                for (int i = 0; i < poolA.Length; i++)
+                    Assert.AreEqual(sca.GetBoolean(i), vec.GetBoolean(i), $"vector≠scalar at {i}");
+            }
+        }
+
+        /// <summary>np.select: the FIRST true condition wins; positions where no condition is true take
+        /// the default (weak-int 0 when omitted). Lowered to a reverse Where chain, so the result dtype
+        /// is result_type(*choices, default). Empty / length-mismatch raise NumPy's verbatim text.</summary>
+        [TestMethod]
+        public void P43_Select_FirstTrueWins_Default_And_Errors()
+        {
+            var i1 = np.array(new[] { 10, 20, 30 });
+            var i2 = np.array(new[] { 40, 50, 60 });
+            var c0 = np.array(new[] { true, true, false });
+            var c1 = np.array(new[] { true, false, true });
+            // Overlap at index 0 (both true) → c0 wins (10); index 2 → only c1 → 60.
+            var sel = np.evaluate(NDExpr.Select(
+                new NDExpr[] { NDExpr.Arr(c0), NDExpr.Arr(c1) },
+                new NDExpr[] { NDExpr.Arr(i1), NDExpr.Arr(i2) },
+                NDExpr.Const(-1)));
+            Assert.AreEqual(NPTypeCode.Int32, sel.typecode);   // result_type(int32, int32, weak -1) = int32
+            CollectionAssert.AreEqual(new[] { 10, 20, 60 }, new[] { sel.GetInt32(0), sel.GetInt32(1), sel.GetInt32(2) });
+
+            // Default omitted ⇒ weak 0 fill; float choices ⇒ float64 result.
+            var d = np.array(new double[] { 1.5, 2.5, 3.5 });
+            var selDef = np.evaluate(NDExpr.Select(
+                new NDExpr[] { NDExpr.Arr(np.array(new[] { false, true, false })) },
+                new NDExpr[] { NDExpr.Arr(d) }));
+            Assert.AreEqual(NPTypeCode.Double, selDef.typecode);
+            CollectionAssert.AreEqual(new[] { 0.0, 2.5, 0.0 }, new[] { selDef.GetDouble(0), selDef.GetDouble(1), selDef.GetDouble(2) });
+
+            // Errors — factory-time, NumPy's verbatim order (length mismatch before emptiness).
+            StringAssert.Contains(
+                Assert.ThrowsException<ArgumentException>(() => NDExpr.Select(
+                    new NDExpr[] { NDExpr.Arr(c0) }, new NDExpr[] { NDExpr.Arr(i1), NDExpr.Arr(i2) })).Message,
+                "list of cases must be same length as list of conditions");
+            StringAssert.Contains(
+                Assert.ThrowsException<ArgumentException>(() => NDExpr.Select(
+                    Array.Empty<NDExpr>(), Array.Empty<NDExpr>())).Message,
+                "select with an empty condition list is not possible");
+        }
+
+        /// <summary>np.clip: one-sided bounds lower to the NaN-propagating np.maximum / np.minimum,
+        /// two-sided to Min(Max(x, lo), hi) (the general clip ufunc). Result dtype is
+        /// result_type(x, lo, hi). Both bounds null raises NumPy's "One of max or min must be given".</summary>
+        [TestMethod]
+        public void P43_Clip_OneSided_TwoSided_And_BothNullRaises()
+        {
+            var x = np.array(new double[] { -5, -1, 0, 3, 8 });
+            var lo = np.array(new double[] { -2, -2, -2, -2, -2 });
+            var hi = np.array(new double[] { 4, 4, 4, 4, 4 });
+
+            var both = np.evaluate(NDExpr.Clip((NDExpr)x, (NDExpr)lo, (NDExpr)hi));
+            CollectionAssert.AreEqual(new[] { -2.0, -1, 0, 3, 4 }, new[] { both.GetDouble(0), both.GetDouble(1), both.GetDouble(2), both.GetDouble(3), both.GetDouble(4) });
+
+            var onlyLo = np.evaluate(NDExpr.Clip((NDExpr)x, (NDExpr)lo, null));   // ≡ np.maximum(x, lo)
+            CollectionAssert.AreEqual(new[] { -2.0, -1, 0, 3, 8 }, new[] { onlyLo.GetDouble(0), onlyLo.GetDouble(1), onlyLo.GetDouble(2), onlyLo.GetDouble(3), onlyLo.GetDouble(4) });
+
+            var onlyHi = np.evaluate(NDExpr.Clip((NDExpr)x, null, (NDExpr)hi));   // ≡ np.minimum(x, hi)
+            CollectionAssert.AreEqual(new[] { -5.0, -1, 0, 3, 4 }, new[] { onlyHi.GetDouble(0), onlyHi.GetDouble(1), onlyHi.GetDouble(2), onlyHi.GetDouble(3), onlyHi.GetDouble(4) });
+
+            // Integer clip preserves the integer dtype (result_type(int32, int32, int32)).
+            var xi = np.array(new[] { -5, -1, 0, 3, 8 });
+            var iclip = np.evaluate(NDExpr.Clip((NDExpr)xi, (NDExpr)np.array(new[] { 1, 1, 1, 1, 1 }), (NDExpr)np.array(new[] { 5, 5, 5, 5, 5 })));
+            Assert.AreEqual(NPTypeCode.Int32, iclip.typecode);
+            CollectionAssert.AreEqual(new[] { 1, 1, 1, 3, 5 }, new[] { iclip.GetInt32(0), iclip.GetInt32(1), iclip.GetInt32(2), iclip.GetInt32(3), iclip.GetInt32(4) });
+
+            StringAssert.Contains(
+                Assert.ThrowsException<ArgumentException>(() => NDExpr.Clip((NDExpr)x, null, null)).Message,
+                "One of max or min must be given");
+        }
+
+        /// <summary>The comparison operators <c>&lt; &gt; &lt;= &gt;=</c> build a Boolean ComparisonNode and
+        /// RETURN an NDExpr (composable), and unary <c>+</c> is np.positive (identity). <c>==</c>/<c>!=</c>
+        /// are deliberately NOT overloaded, so <c>expr == null</c> stays a reference check.</summary>
+        [TestMethod]
+        public void P43_ComparisonOperators_And_UnaryPlus()
+        {
+            var f = np.array(new double[] { 1, 2, 3 });
+            var g = np.array(new double[] { 2, 2, 2 });
+            var lt = np.evaluate((NDExpr)f < (NDExpr)g);
+            var gt = np.evaluate((NDExpr)f > (NDExpr)g);
+            var le = np.evaluate((NDExpr)f <= (NDExpr)g);
+            var ge = np.evaluate((NDExpr)f >= (NDExpr)g);
+            CollectionAssert.AreEqual(new[] { true, false, false }, new[] { lt.GetBoolean(0), lt.GetBoolean(1), lt.GetBoolean(2) });
+            CollectionAssert.AreEqual(new[] { false, false, true }, new[] { gt.GetBoolean(0), gt.GetBoolean(1), gt.GetBoolean(2) });
+            CollectionAssert.AreEqual(new[] { true, true, false }, new[] { le.GetBoolean(0), le.GetBoolean(1), le.GetBoolean(2) });
+            CollectionAssert.AreEqual(new[] { false, true, true }, new[] { ge.GetBoolean(0), ge.GetBoolean(1), ge.GetBoolean(2) });
+
+            // Scalar RHS binds through the implicit double→NDExpr conversion.
+            var ltScalar = np.evaluate((NDExpr)f < 2.0);
+            CollectionAssert.AreEqual(new[] { true, false, false }, new[] { ltScalar.GetBoolean(0), ltScalar.GetBoolean(1), ltScalar.GetBoolean(2) });
+
+            // Unary + is the dtype-preserving identity (np.positive).
+            var i = np.array(new[] { -3, 0, 7 });
+            var pos = np.evaluate(+(NDExpr)i);
+            Assert.AreEqual(NPTypeCode.Int32, pos.typecode);
+            CollectionAssert.AreEqual(new[] { -3, 0, 7 }, new[] { pos.GetInt32(0), pos.GetInt32(1), pos.GetInt32(2) });
+
+            // == / != are NOT overloaded → reference-null checks (a comparison uses Equal/NotEqual).
+            NDExpr e = (NDExpr)f;
+            Assert.IsFalse(e == null);
+            Assert.IsTrue(e != null);
+        }
     }
 }

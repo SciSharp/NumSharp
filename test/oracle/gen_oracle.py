@@ -8030,6 +8030,11 @@ _EV_BINARY = {
     "hypot": np.hypot, "heaviside": np.heaviside,
     "gcd": np.gcd, "lcm": np.lcm,
     "lshift": np.left_shift, "rshift": np.right_shift,
+    # Phase 4.3 logical nodes (LogicalNode): a NONZERO-TEST of each operand at its own dtype, result
+    # ALWAYS bool — `(a != 0) op (b != 0)` — so they accept EVERY dtype (complex included) with no
+    # no-loop cell, unlike the bitwise and/or/xor. Bit-exact vs NumPy (an integer/mask combination, no
+    # host-libm), no ULP excuse.
+    "land": np.logical_and, "lor": np.logical_or, "lxor": np.logical_xor,
 }
 _EV_UNARY = {
     "neg": np.negative, "abs": np.absolute, "sqrt": np.sqrt, "square": np.square,
@@ -8337,6 +8342,23 @@ def gen_evaluate():
         for (sa, sb) in pair_dts:
             ba, va, bb, vb = fn(np.dtype(sa), np.dtype(sb))
             for expr in templates_a2:
+                if ok_for(expr, sa, sb) is False:
+                    continue
+                emit(expr, [(ba, va), (bb, vb)], ln, cid_tag=f"{sa},{sb}/{expr}")
+
+    # ---- A3. Phase 4.3 logical nodes (LogicalNode) — bool result via a per-operand nonzero test ----
+    # Accept every dtype (complex included), no no-loop cell; the input pools include ±0 / NaN / inf
+    # rows (via PAIR_LAYOUTS' fills) so the truthiness edges are exercised. The sub-trees prove they
+    # compose (feeding a where mask and OR-of-comparisons) inside the fused kernel.
+    templates_a3 = [
+        "land(in0,in1)", "lor(in0,in1)", "lxor(in0,in1)",
+        "where(land(gt(in0,li:0),lt(in1,li:5)),in0,in1)",
+        "lor(land(in0,in1),lxor(in0,in1))",
+    ]
+    for ln, fn in PAIR_LAYOUTS.items():
+        for (sa, sb) in pair_dts:
+            ba, va, bb, vb = fn(np.dtype(sa), np.dtype(sb))
+            for expr in templates_a3:
                 if ok_for(expr, sa, sb) is False:
                     continue
                 emit(expr, [(ba, va), (bb, vb)], ln, cid_tag=f"{sa},{sb}/{expr}")

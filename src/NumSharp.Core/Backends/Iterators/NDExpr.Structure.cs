@@ -81,6 +81,7 @@ namespace NumSharp.Backends.Iteration
         WeightedAverage = 10,
         Cast = 11,
         Round = 12,
+        Logical = 13,
     }
 
     /// <summary>
@@ -381,6 +382,21 @@ namespace NumSharp.Backends.Iteration
                && _cond.StructureEquals(o._cond, operands)
                && _a.StructureEquals(o._a, operands)
                && _b.StructureEquals(o._b, operands);
+    }
+
+    public sealed partial class LogicalNode
+    {
+        internal override void HashStructure(ref NDExprStructureHasher h, NDExprOperandScratch operands)
+        {
+            h.Add(NDExprNodeTag.Logical, (long)_op);
+            _left.HashStructure(ref h, operands);
+            _right.HashStructure(ref h, operands);
+        }
+
+        internal override bool StructureEquals(NDExpr bound, NDExprOperandScratch operands)
+            => bound is LogicalNode o && o._op == _op
+               && _left.StructureEquals(o._left, operands)
+               && _right.StructureEquals(o._right, operands);
     }
 
     public sealed partial class CallNode
