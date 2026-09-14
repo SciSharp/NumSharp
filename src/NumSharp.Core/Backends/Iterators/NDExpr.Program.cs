@@ -88,6 +88,15 @@ namespace NumSharp.Backends.Iteration
         /// <summary>The root weighted average, or null when the root is elementwise or an ordinary reduction.</summary>
         public readonly WeightedAverageNode Average;
 
+        /// <summary>
+        /// Phase 6.3 (NDExpr.DirectOp.cs): the engine-kernel delegation plan when the elementwise root is
+        /// a SINGLE op over array leaves, or <c>default</c> (<see cref="NDExprDirectKind.None"/>) otherwise.
+        /// A plain call (no out=/where=/dtype=/non-'K' order) over C-contiguous inputs bypasses the fused
+        /// NDIter pass for that op's own whole-array kernel — bit-exact, lower fixed cost. Always None for a
+        /// reduction/average program.
+        /// </summary>
+        public readonly NDExprDirectOp DirectOp;
+
         private NDInnerLoopFunc _flatReduce;
         private NDInnerLoopFunc _axisReduce;
         private NDExprProgram _childElementwise;
@@ -96,7 +105,7 @@ namespace NumSharp.Backends.Iteration
 
         private NDExprProgram(NDExpr bound, NPTypeCode[] inputTypes, bool[] isParam, bool forcedScalar,
             NDInnerLoopFunc kernel, NPTypeCode resultType, ReduceNode reduce, NPTypeCode reduceAcc,
-            WeightedAverageNode average = null)
+            WeightedAverageNode average = null, NDExprDirectOp directOp = default)
         {
             Bound = bound;
             InputTypes = inputTypes;
@@ -108,6 +117,7 @@ namespace NumSharp.Backends.Iteration
             Reduce = reduce;
             ReduceAccType = reduceAcc;
             Average = average;
+            DirectOp = directOp;
         }
 
         private static int CountTrue(bool[] mask)
@@ -319,7 +329,11 @@ namespace NumSharp.Backends.Iteration
                     "elementwise use of a reduced value needs two np.evaluate calls.");
 
             var kernel = bound.CompileNumPy(inputTypes, isParam, out var resultType);
-            return new NDExprProgram(bound, inputTypes, isParam, forcedScalar, kernel, resultType, null, NPTypeCode.Empty);
+            // Phase 6.3: recognise a single-op-over-array-leaves root ONCE, here, so a cached program
+            // carries the delegation plan and the per-call hot path is a single Kind != None check.
+            var directOp = bound.AsDirectSingleOp();
+            return new NDExprProgram(bound, inputTypes, isParam, forcedScalar, kernel, resultType, null, NPTypeCode.Empty,
+                average: null, directOp: directOp);
         }
 
         /// <summary>NumPy-style rendering of a dtype signature: <c>(float64, int32)</c>.</summary>

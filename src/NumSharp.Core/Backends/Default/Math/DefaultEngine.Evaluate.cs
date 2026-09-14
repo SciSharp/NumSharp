@@ -246,6 +246,24 @@ namespace NumSharp.Backends
             if (program.Reduce is not null)
                 return EvaluateReduce(program, inputs, @out, options);
 
+            // Plan P6.3 — a tree that is ONE elementwise op over array leaves (abs(a), maximum(a, b),
+            // a + b) has nothing to fuse, so the fused NDIter pass only ADDS fixed cost over the engine's
+            // own whole-array kernel (measured: it LOST at 1K — maximum(a,b) 0.59×, abs(a) 0.63×).
+            // Delegate that op to ExecuteUnaryOp/ExecuteBinaryOp on a PLAIN call (no out=/where=/dtype=/
+            // non-'K' order — those shape the result and stay on the general path) when every leaf input
+            // is C-contiguous. The C-contiguity guard is load-bearing, not incidental: it makes the result
+            // C-contiguous on BOTH paths (the fused strict-F heuristic never fires for C inputs), so the
+            // delegated bytes match the fused ones — and both paths are already gated bit-exact to NumPy,
+            // so equal-to-NumPy makes them equal to each other. Any input that fails the guard (F/strided/
+            // transposed/broadcast) returns null and falls through to the fused pass below (still correct).
+            if (program.DirectOp.Kind != NDExprDirectKind.None && !NDExpr.DisableDirectOp
+                && @out is null && !options.HasWhere && !options.HasDtype && !options.HasExplicitOrder)
+            {
+                var direct = TryDelegateDirectSingleOp(program, inputs);
+                if (direct is not null)
+                    return direct;
+            }
+
             // The iterator streams the non-parameter inputs; a 0-d parameter reaches the kernel through
             // the aux block instead (NDExpr.Params.cs) and never joins the broadcast — it has no dims.
             var ops = program.IteratorOperands(inputs);
@@ -359,6 +377,57 @@ namespace NumSharp.Backends
 
             iter.ForEach(kernel, aux);
             return target;
+        }
+
+        /// <summary>
+        /// Plan P6.3: delegate a single-op-over-array-leaves program to the engine's own whole-array
+        /// kernel (<see cref="ExecuteUnaryOp"/>/<see cref="ExecuteBinaryOp"/>), or return null to keep the
+        /// fused pass. Called only after the caller confirmed a plain call with a delegatable
+        /// <see cref="NDExprProgram.DirectOp"/>; this method adds the last gate — every leaf input must be
+        /// C-contiguous, so the result is C-contiguous on both paths and the delegated bytes match the
+        /// fused ones exactly. A unary op forces the fused-resolved dtype through <c>typeCode</c> (the
+        /// engine op then resolves the same NumPy dtype it always would); a binary op lets
+        /// <c>ExecuteBinaryOp</c> promote the two strong operands (identical to the fused typing).
+        /// </summary>
+        /// <param name="program">The built program whose <see cref="NDExprProgram.DirectOp"/> is non-None.</param>
+        /// <param name="inputs">The call's inputs, indexed by <see cref="NDExprDirectOp.Input0"/>/<see cref="NDExprDirectOp.Input1"/>.</param>
+        /// <returns>The delegated result (a fresh array), or null when a leaf input is not C-contiguous.</returns>
+        private unsafe NDArray TryDelegateDirectSingleOp(NDExprProgram program, NDArray[] inputs)
+        {
+            var d = program.DirectOp;
+            var a = inputs[d.Input0];
+            // A non-C-contiguous leaf (F/transposed/strided/negative-stride/broadcast) would let the two
+            // paths disagree on the RESULT layout (the fused strict-F heuristic vs the engine kernel), so
+            // it is not delegated — the fused pass handles every layout correctly.
+            if (!a.Shape.IsContiguous)
+                return null;
+
+            if (d.Kind == NDExprDirectKind.Unary)
+            {
+                NDExpr.DirectOpDelegations++;
+                // typeCode = the fused-resolved result dtype: for a single op this equals the dtype the
+                // engine op resolves on its own, so it merely pins the shared answer (and keeps the two
+                // promotion engines from ever drifting on an edge dtype).
+                return ExecuteUnaryOp(a, d.UnOp, program.ResultType);
+            }
+
+            var b = inputs[d.Input1];
+            if (!b.Shape.IsContiguous)
+                return null;
+
+            // A 0-d array operand is the ONE case where ExecuteBinaryOp's own promotion diverges from the
+            // fused typing: its _FindCommonType still applies value-based scalar promotion to a 0-d array
+            // (int32 + int64-0d → int32) where the fused NEP50 pass treats a 0-d array as a STRONG
+            // participant (→ int64). For two ndim ≥ 1 strong arrays the two promotion engines agree, so the
+            // delegated dtype needs no forcing — and NOT forcing it is what keeps ExecuteBinaryOp's own
+            // guards intact (a forced dtype= bypassed the "Integers to negative integer powers" check that
+            // the fused path raises). So delegate only when neither operand is 0-d; a 0-d-operand binary
+            // (a rare single-op form) stays on the fused pass.
+            if (a.ndim == 0 || b.ndim == 0)
+                return null;
+
+            NDExpr.DirectOpDelegations++;
+            return ExecuteBinaryOp(a, b, d.BinOp);
         }
 
         /// <summary>

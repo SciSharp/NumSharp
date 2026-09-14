@@ -2806,5 +2806,299 @@ namespace NumSharp.Tests.Backends.Iterators
                 CollectionAssert.AreEqual(HalfBits(forced), HalfBits(def), $"{name}: a non-arithmetic Half node must keep the tree scalar (default == ForceScalar)");
             }
         }
+
+        // =====================================================================
+        // Phase 6.3 — single-op trees delegate to the engine's direct kernel
+        // (NDExpr.DirectOp.cs). A one-op-over-array-leaves tree has nothing to
+        // fuse, so on a PLAIN call over C-contiguous inputs np.evaluate hands it
+        // to ExecuteUnaryOp/ExecuteBinaryOp (lower fixed cost than an NDIter
+        // pass). Delegation must be BIT-IDENTICAL to the fused path — proven
+        // here by toggling NDExpr.DisableDirectOp — and must NOT fire outside
+        // that envelope (non-contiguous / options / weak scalar / multi-op).
+        // =====================================================================
+
+        /// <summary>Logical C-order raw bytes of any dtype — the bit-exact comparison currency for the P63 pins.</summary>
+        private static byte[] EvalBytes(NDArray a) => np.ascontiguousarray(a).Unsafe.ReadOnlyBytes().ToArray();
+
+        /// <summary>
+        /// Evaluate <paramref name="make"/> BOTH ways — delegation on (the default) and off
+        /// (<see cref="NDExpr.DisableDirectOp"/>, forcing the fused pass) — reporting whether delegation
+        /// actually fired the first time. The tree is rebuilt per call because a program (and its
+        /// delegation plan) is cached by structure, not by instance.
+        /// </summary>
+        private static (NDArray delegated, NDArray fused, bool fired) EvalBothWays(Func<NDExpr> make)
+        {
+            NDExpr.DirectOpDelegations = 0;
+            var del = np.evaluate(make());
+            bool fired = NDExpr.DirectOpDelegations > 0;
+            NDExpr.DisableDirectOp = true;
+            try { return (del, np.evaluate(make()), fired); }
+            finally { NDExpr.DisableDirectOp = false; }
+        }
+
+        [TestMethod]
+        public void P63_SingleOp_Delegates_ByteIdenticalToFused_AndEngine()
+        {
+            var af = (np.arange(24).astype(np.float64).reshape(4, 6)) - 10.0;   // C-contig, mixed sign
+            var bf = ((np.arange(24).astype(np.float64).reshape(4, 6)) - 5.0) * 0.5;
+            var ai = (np.arange(24).astype(np.int32).reshape(4, 6)) - 10;
+            var bi = (np.arange(24).astype(np.int32).reshape(4, 6)) + 3;
+            var row = (np.arange(6).astype(np.float64)) - 2.0;                   // (6,) → broadcasts
+
+            // unary: preserve-dtype, float-promote, and predicate-free math all delegate and match fused + np.*
+            var (d1, f1, fired1) = EvalBothWays(() => NDExpr.Abs(af));
+            Assert.IsTrue(fired1, "abs(af) must delegate");
+            CollectionAssert.AreEqual(EvalBytes(f1), EvalBytes(d1), "abs(af): delegated must equal fused");
+            CollectionAssert.AreEqual(EvalBytes(np.abs(af)), EvalBytes(d1), "abs(af): delegated must equal np.abs");
+
+            var (d2, f2, fired2) = EvalBothWays(() => NDExpr.Sqrt(ai));           // int32 → float64 (float-promote)
+            Assert.IsTrue(fired2, "sqrt(ai) must delegate");
+            Assert.AreEqual(NPTypeCode.Double, d2.typecode, "sqrt(int32) is float64");
+            CollectionAssert.AreEqual(EvalBytes(f2), EvalBytes(d2), "sqrt(ai): delegated must equal fused");
+
+            // binary + min/max over two arrays, incl. a broadcast pair
+            var (d3, f3, fired3) = EvalBothWays(() => NDExpr.Maximum(af, bf));
+            Assert.IsTrue(fired3, "maximum(af,bf) must delegate");
+            CollectionAssert.AreEqual(EvalBytes(f3), EvalBytes(d3), "maximum(af,bf): delegated must equal fused");
+            CollectionAssert.AreEqual(EvalBytes(np.maximum(af, bf)), EvalBytes(d3), "maximum(af,bf): delegated must equal np.maximum");
+
+            var (d4, f4, fired4) = EvalBothWays(() => (NDExpr)ai * bi);
+            Assert.IsTrue(fired4, "ai*bi must delegate");
+            CollectionAssert.AreEqual(EvalBytes(f4), EvalBytes(d4), "ai*bi: delegated must equal fused");
+
+            var (d5, f5, fired5) = EvalBothWays(() => NDExpr.Maximum(af, row));    // (4,6) op (6,) broadcast
+            Assert.IsTrue(fired5, "maximum(af,row) broadcast must delegate");
+            CollectionAssert.AreEqual(EvalBytes(f5), EvalBytes(d5), "maximum(af,row): delegated must equal fused");
+        }
+
+        [TestMethod]
+        public void P63_ZeroDArrayOperand_DoesNotDelegate_ButStaysCorrect()
+        {
+            // A 0-d ARRAY operand is the one case a binary delegation excludes: ExecuteBinaryOp's own
+            // _FindCommonType applies value-based scalar promotion to a 0-d array (int32 + int64-0d →
+            // int32) where the fused NEP50 pass keeps it STRONG (→ int64). Rather than force the dtype
+            // (which would bypass ExecuteBinaryOp's own guards, e.g. power's negative-int-exponent check),
+            // a 0-d-operand binary stays on the fused pass — still correct: int32 + int64-0d → int64.
+            var ai = (np.arange(6).astype(np.int32)) - 3;
+            var (d, f, fired) = EvalBothWays(() => (NDExpr)ai + NDArray.Scalar(2L));
+            Assert.IsFalse(fired, "ai + Scalar(2L) (0-d operand) must NOT delegate");
+            Assert.AreEqual(NPTypeCode.Int64, d.typecode, "int32 + int64-0d → int64 (strong promotion, fused)");
+            CollectionAssert.AreEqual(EvalBytes(f), EvalBytes(d), "delegated-disabled == default (both fused)");
+        }
+
+        [TestMethod]
+        public void P63_OutsideEnvelope_DoesNotDelegate_ButStaysCorrect()
+        {
+            var af = (np.arange(24).astype(np.float64).reshape(4, 6)) - 10.0;
+            var ai = (np.arange(6).astype(np.int32)) - 3;
+
+            // non-contiguous (transposed / F-contiguous) leaf → fused path (its layout heuristic differs
+            // from the engine kernel's, so delegating could change the RESULT layout).
+            NDExpr.DirectOpDelegations = 0;
+            var t = af.T;
+            var rt = np.evaluate(NDExpr.Abs(t));
+            Assert.AreEqual(0, NDExpr.DirectOpDelegations, "abs(af.T) must NOT delegate (non-contiguous input)");
+            CollectionAssert.AreEqual(EvalBytes(np.abs(t)), EvalBytes(rt), "abs(af.T) still correct via fused path");
+
+            // weak literal (ConstNode) → fused (its NEP50 weak promotion is not the engine op's)
+            NDExpr.DirectOpDelegations = 0;
+            var rw = np.evaluate((NDExpr)ai + 2);
+            Assert.AreEqual(0, NDExpr.DirectOpDelegations, "ai + 2 (weak literal) must NOT delegate");
+            Assert.AreEqual(NPTypeCode.Int32, rw.typecode, "int32 + weak-int stays int32");
+            CollectionAssert.AreEqual(EvalBytes(ai + 2), EvalBytes(rw), "ai + 2 still correct");
+
+            // multi-op root (the '+' child is a '*') → not a single op
+            NDExpr.DirectOpDelegations = 0;
+            _ = np.evaluate((NDExpr)af * af + af);
+            Assert.AreEqual(0, NDExpr.DirectOpDelegations, "af*af+af must NOT delegate (multi-op)");
+
+            // out= / dtype= shape the result → general path
+            NDExpr.DirectOpDelegations = 0;
+            using var dst = np.zeros(new Shape(4, 6), np.float64);
+            var ro = np.evaluate(NDExpr.Abs(af), @out: dst);
+            Assert.AreEqual(0, NDExpr.DirectOpDelegations, "abs(af, out=) must NOT delegate");
+            CollectionAssert.AreEqual(EvalBytes(np.abs(af)), EvalBytes(ro), "abs(af, out=) still correct");
+
+            NDExpr.DirectOpDelegations = 0;
+            var rd = np.evaluate(NDExpr.Abs(af), dtype: np.float32);
+            Assert.AreEqual(0, NDExpr.DirectOpDelegations, "abs(af, dtype=) must NOT delegate");
+            Assert.AreEqual(NPTypeCode.Single, rd.typecode, "abs(af, dtype=f32) is float32");
+        }
+
+        [TestMethod]
+        public void P63_UnaryAllowList_DelegatedEqualsFused_AcrossOpsAndDtypes()
+        {
+            // The definitive allow-list gate: EVERY delegatable UnaryOp over EVERY dtype must give the
+            // byte-identical result whether delegated or fused. Real/Imag/Angle are the only ops with no
+            // engine kernel (IsDelegatableUnary excludes them); they must NOT fire, and must stay correct.
+            var dtypes = new[]
+            {
+                NPTypeCode.Boolean, NPTypeCode.Byte, NPTypeCode.SByte, NPTypeCode.Int16, NPTypeCode.UInt16,
+                NPTypeCode.Int32, NPTypeCode.UInt32, NPTypeCode.Int64, NPTypeCode.UInt64, NPTypeCode.Char,
+                NPTypeCode.Half, NPTypeCode.Single, NPTypeCode.Double, NPTypeCode.Decimal, NPTypeCode.Complex,
+            };
+
+            int matched = 0, bothThrew = 0, delegatedCells = 0;
+            foreach (UnaryOp op in Enum.GetValues(typeof(UnaryOp)))
+            {
+                foreach (var tc in dtypes)
+                {
+                    var arr = P63Pool(tc);
+
+                    (bool threw, NPTypeCode dt, byte[] bytes) Run(bool disable)
+                    {
+                        NDExpr.DisableDirectOp = disable;
+                        NDExpr.DirectOpDelegations = 0;
+                        try
+                        {
+                            var r = np.evaluate(new UnaryNode(op, (NDExpr)arr));
+                            if (!disable && NDExpr.IsDelegatableUnary(op) && NDExpr.DirectOpDelegations > 0) delegatedCells++;
+                            return (false, r.typecode, EvalBytes(r));
+                        }
+                        catch (Exception) { return (true, NPTypeCode.Empty, null); }
+                        finally { NDExpr.DisableDirectOp = false; }
+                    }
+
+                    var on = Run(false);   // delegation on (default)
+                    var off = Run(true);   // fused reference
+
+                    Assert.AreEqual(off.threw, on.threw, $"{op}/{tc}: throw parity (delegated vs fused)");
+                    if (on.threw) { bothThrew++; continue; }
+                    Assert.AreEqual(off.dt, on.dt, $"{op}/{tc}: dtype parity");
+                    CollectionAssert.AreEqual(off.bytes, on.bytes, $"{op}/{tc}: bytes parity (delegated must equal fused)");
+                    matched++;
+
+                    // Real/Imag/Angle are the only ops that must never delegate.
+                    if (!NDExpr.IsDelegatableUnary(op))
+                    {
+                        NDExpr.DirectOpDelegations = 0;
+                        _ = np.evaluate(new UnaryNode(op, (NDExpr)arr));
+                        Assert.AreEqual(0, NDExpr.DirectOpDelegations, $"{op}/{tc}: NDExpr-only op must NOT delegate");
+                    }
+                }
+            }
+
+            Assert.IsTrue(matched > 0, "the sweep must actually compare cases");
+            Assert.IsTrue(delegatedCells > 0, "delegation must have fired on some cells (the fast path is live)");
+        }
+
+        [TestMethod]
+        public void P63_BinaryAllowList_DelegatedEqualsFused_AcrossOpsAndDtypes()
+        {
+            // The binary counterpart: EVERY BinaryOp (and both MinMax kinds) over same-dtype pairs plus
+            // representative MIXED pairs must be byte-identical whether delegated or fused. The non-allow-
+            // list ops (Power's guard, the float-tier promoting ops) must NOT fire, and both paths must
+            // still agree (delegation simply doesn't engage → both run the fused pass).
+            var all = new[]
+            {
+                NPTypeCode.Boolean, NPTypeCode.Byte, NPTypeCode.SByte, NPTypeCode.Int16, NPTypeCode.UInt16,
+                NPTypeCode.Int32, NPTypeCode.UInt32, NPTypeCode.Int64, NPTypeCode.UInt64, NPTypeCode.Char,
+                NPTypeCode.Half, NPTypeCode.Single, NPTypeCode.Double, NPTypeCode.Decimal, NPTypeCode.Complex,
+            };
+            var pairs = new System.Collections.Generic.List<(NPTypeCode, NPTypeCode)>();
+            foreach (var t in all) pairs.Add((t, t));
+            foreach (var m in new (NPTypeCode, NPTypeCode)[]
+            {
+                (NPTypeCode.Int32, NPTypeCode.Double), (NPTypeCode.Single, NPTypeCode.Double),
+                (NPTypeCode.SByte, NPTypeCode.Int32), (NPTypeCode.Boolean, NPTypeCode.Int32),
+                (NPTypeCode.Int32, NPTypeCode.Single), (NPTypeCode.UInt16, NPTypeCode.Int64),
+                (NPTypeCode.Half, NPTypeCode.Single), (NPTypeCode.Double, NPTypeCode.Complex),
+            }) pairs.Add(m);
+
+            int matched = 0, bothThrew = 0, delegatedCells = 0;
+
+            void SweepOp(Func<NDArray, NDArray, NDExpr> make)
+            {
+                foreach (var (ta, tb) in pairs)
+                {
+                    var a = P63Pool(ta);
+                    var b = P63PoolB(tb);
+
+                    (bool threw, NPTypeCode dt, byte[] bytes) Run(bool disable)
+                    {
+                        NDExpr.DisableDirectOp = disable;
+                        NDExpr.DirectOpDelegations = 0;
+                        try { var r = np.evaluate(make(a, b)); if (!disable && NDExpr.DirectOpDelegations > 0) delegatedCells++; return (false, r.typecode, EvalBytes(r)); }
+                        catch (Exception) { return (true, NPTypeCode.Empty, null); }
+                        finally { NDExpr.DisableDirectOp = false; }
+                    }
+
+                    var on = Run(false);
+                    var off = Run(true);
+                    Assert.AreEqual(off.threw, on.threw, $"{ta}x{tb}: throw parity");
+                    if (on.threw) { bothThrew++; continue; }
+                    Assert.AreEqual(off.dt, on.dt, $"{ta}x{tb}: dtype parity");
+                    CollectionAssert.AreEqual(off.bytes, on.bytes, $"{ta}x{tb}: bytes parity");
+                    matched++;
+                }
+            }
+
+            foreach (BinaryOp op in Enum.GetValues(typeof(BinaryOp)))
+            {
+                var captured = op;
+                SweepOp((a, b) => new BinaryNode(captured, (NDExpr)a, (NDExpr)b));
+            }
+            SweepOp((a, b) => new MinMaxNode(true, (NDExpr)a, (NDExpr)b));
+            SweepOp((a, b) => new MinMaxNode(false, (NDExpr)a, (NDExpr)b));
+
+            Assert.IsTrue(matched > 0, "the sweep must actually compare cases");
+            Assert.IsTrue(delegatedCells > 0, "binary delegation must have fired on some cells");
+        }
+
+        /// <summary>A second small C-contiguous input per dtype for the P63 binary sweep (distinct values from <see cref="P63Pool"/>).</summary>
+        private static NDArray P63PoolB(NPTypeCode tc)
+        {
+            switch (tc)
+            {
+                case NPTypeCode.Boolean: return np.array(new bool[] { false, true, true, false, true, false, false, true });
+                case NPTypeCode.Byte: return np.array(new byte[] { 3, 1, 4, 1, 5, 9, 2, 6 });
+                case NPTypeCode.SByte: return np.array(new sbyte[] { 3, -1, 4, -1, 5, -9, 2, -6 });
+                case NPTypeCode.Int16: return np.array(new short[] { 3, -1, 4, -1, 5, -9, 2, -6 });
+                case NPTypeCode.UInt16: return np.array(new ushort[] { 3, 1, 4, 1, 5, 9, 2, 6 });
+                case NPTypeCode.Int32: return np.array(new int[] { 3, -1, 4, -1, 5, -9, 2, -6 });
+                case NPTypeCode.UInt32: return np.array(new uint[] { 3, 1, 4, 1, 5, 9, 2, 6 });
+                case NPTypeCode.Int64: return np.array(new long[] { 3, -1, 4, -1, 5, -9, 2, -6 });
+                case NPTypeCode.UInt64: return np.array(new ulong[] { 3, 1, 4, 1, 5, 9, 2, 6 });
+                case NPTypeCode.Char: return np.array(new char[] { 'h', 'g', 'f', 'e', 'd', 'c', 'b', 'a' });
+                case NPTypeCode.Half: return np.array(new double[] { 1.0, 3.0, 2.0, 4.0, 5.0, 1.0, 7.0, 2.0 }).astype(np.float16);
+                case NPTypeCode.Single: return np.array(new double[] { 1.0, 3.0, 2.0, 4.0, 5.0, 1.0, 7.0, 2.0 }).astype(np.float32);
+                case NPTypeCode.Double: return np.array(new double[] { 1.0, 3.0, 2.0, 4.0, 5.0, 1.0, 7.0, 2.0 });
+                case NPTypeCode.Decimal: return np.array(new double[] { 1.0, 3.0, 2.0, 4.0, 5.0, 1.0, 7.0, 2.0 }).astype(np.@decimal);
+                case NPTypeCode.Complex:
+                    return np.array(new System.Numerics.Complex[]
+                    {
+                        new(1, 2), new(3, -1), new(2, 1), new(4, 1), new(5, -2), new(1, .5), new(7, -.5), new(2, 3),
+                    });
+                default: throw new NotSupportedException();
+            }
+        }
+
+        /// <summary>A small C-contiguous input per dtype for the P63 unary allow-list sweep (mixed sign, some specials).</summary>
+        private static NDArray P63Pool(NPTypeCode tc)
+        {
+            switch (tc)
+            {
+                case NPTypeCode.Boolean: return np.array(new bool[] { true, false, true, true, false, false, true, false });
+                case NPTypeCode.Byte: return np.array(new byte[] { 0, 1, 2, 3, 200, 5, 255, 7 });
+                case NPTypeCode.SByte: return np.array(new sbyte[] { -2, -1, 0, 1, 2, 3, -128, 127 });
+                case NPTypeCode.Int16: return np.array(new short[] { -2, -1, 0, 1, 2, 3, -30000, 30000 });
+                case NPTypeCode.UInt16: return np.array(new ushort[] { 0, 1, 2, 3, 40000, 5, 65535, 7 });
+                case NPTypeCode.Int32: return np.array(new int[] { -2, -1, 0, 1, 2, 3, -100, 100 });
+                case NPTypeCode.UInt32: return np.array(new uint[] { 0, 1, 2, 3, 100, 5, 4000000000u, 7 });
+                case NPTypeCode.Int64: return np.array(new long[] { -2, -1, 0, 1, 2, 3, -100, 100 });
+                case NPTypeCode.UInt64: return np.array(new ulong[] { 0, 1, 2, 3, 100, 5, 9000000000000000000ul, 7 });
+                case NPTypeCode.Char: return np.array(new char[] { 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h' });
+                case NPTypeCode.Half: return np.array(new double[] { -2.0, -0.5, 0.0, 0.5, 1.0, 2.0, 3.0, 9.0 }).astype(np.float16);
+                case NPTypeCode.Single: return np.array(new double[] { -2.0, -0.5, 0.0, 0.5, 1.0, 2.0, 3.0, 9.0 }).astype(np.float32);
+                case NPTypeCode.Double: return np.array(new double[] { -2.0, -0.5, 0.0, 0.5, 1.0, 2.0, 3.0, 9.0 });
+                case NPTypeCode.Decimal: return np.array(new double[] { -2.0, -0.5, 0.0, 0.5, 1.0, 2.0, 3.0, 9.0 }).astype(np.@decimal);
+                case NPTypeCode.Complex:
+                    return np.array(new System.Numerics.Complex[]
+                    {
+                        new(-2, 1), new(-.5, -1), new(0, 0), new(.5, 2), new(1, -3), new(2, .5), new(3, -.5), new(9, 4),
+                    });
+                default: throw new NotSupportedException();
+            }
+        }
     }
 }
