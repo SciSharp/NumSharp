@@ -287,9 +287,14 @@ function installTocStatePersistence() {
       return
     }
     const key = keyOf(li)
-    // docfx re-renders synchronously in its handler (which runs after this
-    // capture handler); rAF fires after that, so the DOM reflects the new state.
-    requestAnimationFrame(() => {
+    // docfx re-renders synchronously in its own bubble-phase handler, which runs
+    // after this capture handler within the same click dispatch. A microtask
+    // therefore runs AFTER that re-render (so the DOM shows the new state) yet
+    // still before any following task — crucially before a navigation started by
+    // this same click, so toggling a section and immediately clicking a link
+    // inside it still persists. (requestAnimationFrame would defer the save to a
+    // future frame that never runs once the page starts unloading.)
+    queueMicrotask(() => {
       let current = null
       const expanders = toc.querySelectorAll('li.expander')
       for (const el of expanders) {
