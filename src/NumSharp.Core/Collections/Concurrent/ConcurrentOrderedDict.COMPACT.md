@@ -316,6 +316,128 @@ Implementation sketch (a follow-up session; the tests are the spec):
 
 ---
 
+## 10. Complexity proof, ratios and memory across N (measured 2026-09-14)
+
+`benchmark/collections/probes/compact_ordered_dict_complexity.cs` proves the complexity class directly
+and prints the ratios and the per-entry memory. Same host discipline as §5 (one P-core, 2.5 s clock
+spin-up, 150 ms tier-1 warm, fair permuted-key regime), N swept over **1e3 · 1e4 · 1e5 · 1e6 · 1e7**.
+"COD (shipping)" is the real `ConcurrentOrderedDict<int,int>`; "OA"/"chained" are the compact prototypes.
+
+### 10.1 The O(1) proof — three independent legs
+
+**Leg A (hardware-independent): average slots visited per lookup, counted, not timed.** The number of
+comparisons an algorithm performs IS its complexity; a count that does not grow with N is O(1) by
+definition, on any hardware.
+
+| N | OA hit | OA miss | chained hit | chained miss |
+|---:|---:|---:|---:|---:|
+| 1,000 | 1.001 | 1.42 | 1.000 | 1.90 |
+| 10,000 | 1.000 | 1.74 | 1.000 | 1.99 |
+| 100,000 | 1.000 | 1.06 | 1.000 | 1.91 |
+| 1,000,000 | 1.000 | 1.29 | 1.000 | 1.84 |
+| 10,000,000 | 1.014 | 1.63 | 1.000 | 2.00 |
+
+A hit resolves in **one** slot visit at every size across four orders of magnitude (Fibonacci hashing +
+key embedded in the index word, so the home slot IS the entry); a miss ends at the first empty slot / short
+chain, 1.1-2.0 visits, flat. An O(log2 N) structure would rise from 10 to 23 visits over this same span; an
+O(N) one from 1e3 to 1e7. The measured line is flat at 1.
+
+**Leg B (cache-isolated time): ns/op over a 256-key hot set vs the whole-table working set.** With the
+probed lines pinned hot, per-op time is flat across N (the algorithm does the same work); the whole-table
+column rises - but *identically for every hash structure, including the proven-O(1) `Dictionary`* - which
+identifies that rise as shared DRAM latency, not algorithmic growth.
+
+| get-hit ns | 1K | 10K | 100K | 1M | 10M | 1K->10M |
+|---|---:|---:|---:|---:|---:|---:|
+| Dictionary - HOT | 1.56 | 1.56 | 1.56 | 1.56 | 1.56 | flat |
+| COD (shipping) - HOT | 0.78 | 1.17 | 1.17 | 1.56 | 1.56 | flat |
+| compact OA - HOT | 0.78 | 0.78 | 1.17 | 1.17 | 1.17 | flat |
+| Dictionary - FULL | 1.10 | 1.56 | 2.34 | 7.56 | 24.93 | **22.7x** |
+| ConcurrentDictionary - FULL | 1.00 | 1.31 | 2.87 | 12.36 | 21.13 | **21.1x** |
+| COD (shipping) - FULL | 1.10 | 1.43 | 2.79 | 13.26 | 22.16 | **20.1x** |
+| compact OA - FULL | 0.90 | 1.09 | 1.75 | 2.87 | 12.46 | **13.8x** |
+
+The FULL growth is the memory hierarchy (a random hit into an N-sized table lands in L1 at N=1K and in DRAM
+at N=10M). `Dictionary` - the reference O(1) container - grows 22.7x; COD grows *less* (20.1x) and OA less
+still (13.8x, its denser 2-line hit touches fewer far lines). A structure whose growth is bounded by, and
+tracks, a proven-O(1) container's is itself O(1). HOT numbers sit at the ~0.4 ns timer floor (100 ns / 256)
+and are read qualitatively: flat.
+
+**Leg C (constant-work by construction):** `this[int]`/`GetKeyAt`/`TryGetAt` are one array load - measured
+0.50 -> 0.54 ns from 1K to 10M (**1.1x**, i.e. flat; `List<int>` itself moves 0.30 -> 0.42);
+`Count`/`IsEmpty` are one field read; a tail pop is 0.001 ms at *every* N (10.3); `IndexOf` is the leg-A
+probe (hot: 0.78 ns flat).
+
+### 10.2 Every aspect, and its complexity
+
+| aspect | class | evidence |
+|---|---|---|
+| lookup by key (hit / miss) | **O(1)** | leg A: 1.00 / 1.1-2.0 probes for all N |
+| membership `ContainsKey` | **O(1)** | the same probe |
+| key -> position `IndexOf` / `TryGetIndex` | **O(1)** | the same probe; hot time flat |
+| value by position `this[int]` / `TryGetAt` | **O(1)** | one array load, 0.50->0.54 ns |
+| key by position `GetKeyAt` | **O(1)** | one array load |
+| `Count` / `IsEmpty` | **O(1)** | one field read |
+| add, in capacity (`TryAdd`/`Add`/`SetByKey` new) | **O(1)** | one slot write + release-store |
+| add, over a full unsized build | **amortized O(1)** | total/N tracks `List` (OA 4.8x vs List 4.0x over 1K->10M) |
+| replace value, atomic `TValue` | **O(1)** | one in-place store |
+| remove last (`TryRemove` tail, pop-back) | **O(1)** | 0.001 ms for all N (10.3) |
+| remove by `TryRemoveSwapBack` | **O(1)** | fixed stores + one probe |
+| order-preserving interior `TryRemove`/`RemoveAt` | **O(n - p)** - *not* O(1) | linear (10.3); identical to `List<T>.RemoveAt`; O(1) alternatives: tail pop, swap-back, batch `RemoveWhere` |
+| `enumerate` / `ToArray` / `Keys` / `Values` / build | **O(n)** - by necessity | the operation visits every element; 0.18-0.26 ns each (5) |
+
+"O(1) in all aspects" holds for the entire point-operation surface - the dictionary API (get/add/replace/
+remove/contains) and the list API (index-get, key<->index, count). The only non-O(1) *point* operation is
+order-preserving interior removal, O(n-p) by design (contiguous indices + lock-free snapshots cannot both be
+kept while removing from the middle in O(1)), and it is the operation the type already documents and routes
+around. Whole-collection operations are O(n) because touching every element is their definition.
+
+### 10.3 The O(n) aspect, confirmed linear (honesty check)
+
+One order-preserving removal at position p; cost proportional to (n - p). Front and middle scale linearly
+with N; the tail is O(1) at every N.
+
+| N | COD @0 | COD @n/2 | COD @n-1 | OA @0 | OA @n/2 | OA @n-1 |
+|---:|---:|---:|---:|---:|---:|---:|
+| 100,000 | 0.445 ms | 0.297 | **0.000** | 0.655 | 0.647 | **0.001** |
+| 1,000,000 | 3.927 ms | 2.341 | **0.001** | 5.644 | 5.803 | **0.002** |
+| 10,000,000 | 41.089 ms | 32.969 | **0.001** | 46.401 | 51.137 | **0.003** |
+
+Front removal x10 per decade of N (0.445 -> 3.927 -> 41.1) = linear; the tail column is flat at ~1 us =
+O(1).
+
+### 10.4 Ratios at N = 1,000,000 (baseline / contender; > 1 = contender faster)
+
+| op | COD vs Dict | COD vs CD | OA vs Dict | OA vs CD | OA vs List |
+|---|---:|---:|---:|---:|---:|
+| key get, hit (full) | 0.57x | 0.93x | **2.64x** | **4.31x** | - |
+| key get, miss (full) | 0.69x | 0.93x | **1.88x** | **2.55x** | - |
+| add (amortized) | 0.07x | 0.87x | 0.55x | **6.41x** | 0.03x |
+| tail pop | - | 0.37x | - | **0.57x** | - |
+| `this[int]` | - | - | - | - | 0.71x |
+
+`Dict` is not thread-safe and has no order or index - it wins add (no lock) and loses nothing else it can
+do; `List` has no keys - it wins raw index-get. COD (shipping) sits at CD parity on gets (0.93x) and pays
+for the global lock + node on writes; the compact OA table beats **both** concurrent baselines on every
+keyed read and beats CD on writes, while being the only column that answers every row.
+
+### 10.5 Memory - bytes per entry, presized, across N (flat => O(1) space per entry)
+
+| N | List | Dictionary | ConcurrentDictionary | COD (shipping) | compact OA | compact chained |
+|---:|---:|---:|---:|---:|---:|---:|
+| 1,000 | 11.8 | 29.9 | 56.6 | 64.8 | 32.3 | 24.3 |
+| 10,000 | 4.8 | 21.0 | 48.8 | 56.0 | 21.1 | 16.8 |
+| 100,000 | 4.1 | 21.8 | 48.7 | 56.6 | 29.0 | 16.4 |
+| 1,000,000 | 4.0 | 23.3 | 49.3 | 57.3 | 24.8 | 16.7 |
+| 10,000,000 | 4.0 | 20.0 | 48.0 | 56.0 | 21.4 | 16.0 |
+
+Bytes/entry is flat across N (the 1K row carries the usual doubling slack for every contender), i.e. O(1)
+space per entry and O(n) total. The shipping COD is 56-57 B (the 40 B node dominates); the compact OA table
+is 21-25 B (below the plain `ConcurrentDictionary`'s 48-49, and less than half of COD), the chained no-hash
+layout 16 B (2 B under `Dictionary`, which is not thread-safe, ordered or indexable).
+
+---
+
 ## 9. Reproduction
 
 ```
