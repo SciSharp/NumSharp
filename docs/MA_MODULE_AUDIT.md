@@ -77,6 +77,32 @@ This is a living checklist. Techniques used are recorded so a later pass can re-
 > structured/record family (no structured dtypes in NumSharp), the library-wide `out=`/`subok`/`order` gaps, and
 > the low-value instance `tolist`/`tobytes`/`view`/`flat` (semantic mismatches — `tolist` needs object/None
 > arrays, `view` a dtype reinterpret, `tobytes` a bytes path — none a masked-array behavior).
+>
+> **Progress — 2026-09-14 (pass 9 — the instance conversion/export surface + REAL hard-mask semantics CLOSED).**
+> The "low-value instance members" and "hard/soft mask is a no-op" findings were both closeable after all — the
+> first three of the four so-called semantic mismatches turned out to be plain value exports, and hard-mask has a
+> clean snapshot/restore implementation. Added, every value probed bit-exact vs NumPy 2.4.2: **`tolist`**
+> (nested `object[]` with `null` at masked / the fill / a bare scalar for 0-D — walks by logical C-order index so
+> any layout works), **`tobytes`** (`filled(fill).tobytes(order)`, byte-identical), **`tofile`** (throws NumPy's
+> `NotImplementedError` — a masked array can't be binary-serialized), **`view`** (dtype reinterpret; same-itemsize
+> carries the mask, an itemsize change with a live mask is refused), **`ids`**/**`iscontiguous`**/**`putmask`**
+> (instance) / **`resize`** (instance — throws NumPy's verbatim "cannot be resized" refusal, pointing at
+> `np.ma.resize`), **`flat`** (a raveled masked VIEW — NumSharp's `NDArray.flat` house convention, not NumPy's
+> iterator), and the flag surface **`recordmask`**/**`baseclass`**/**`unshare_mask`** (which now genuinely copies
+> the mask, since a view/`real`/`imag`/`view` DOES alias it). **`sharedmask` is deliberately NOT offered** — it is
+> the one flag with no faithful value (NumPy reports True right after `array(data, mask=…)`, False after an op) and
+> a bogus `False` would invite mutating a shared mask, so the guidance is just to call `unshare_mask()`. **And the
+> keystone: `harden_mask`/`soften_mask` are now REAL, not no-ops** — a hard mask makes a plain-value assignment
+> (indexer / `put`) skip masked slots entirely and never unmask, `= masked` still masks, and `putmask` under hard
+> WRITES the data even at a masked slot but FREEZES the mask (NumPy's three distinct branches, all ported and
+> probed: `put` drops masked indices, `putmask` does `a.mask |= …`). Implemented by snapshot+restore around the
+> soft write (correct for every index kind because the fancy/boolean SET scatters through). Verified by 25 + 19
+> signed `dotnet run` checks (0 fail) and gated by **8 more `MaskedArrayTests` (76 total, green net8.0/net10.0)**.
+> **THE ONLY REMAINDERS ARE NOW INFRA- OR POLICY-BLOCKED, none a closeable functional gap:** the structured/record
+> family (no structured dtypes — `mvoid`/`mr_`/`fromflex`/`flatten_*`/`make_mask_descr`/`torecords`/`toflex`), the
+> `get_fill_value`/`set_fill_value` METHOD spellings (CS0082 — a C# `fill_value` property reserves those exact
+> names; the property + module `set_fill_value` cover the behavior), `sharedmask` (unmodelable), and the
+> library-wide `out=`/`subok`/`order` gaps.
 
 ---
 
@@ -85,9 +111,9 @@ This is a living checklist. Techniques used are recorded so a later pass can re-
 | Surface | NumSharp | NumPy 2.4.2 | Gap |
 |---|---|---|---|
 | `np.ma.*` module names (`__all__`) | **214** (of 218 public; +`polyfit`) | 226 | **12 names** — NONE a functional gap: 3 are C# types that exist (`MAError`/`MaskError`/`MaskedArray`), 3 are N/A submodule/config refs, 6 need structured dtypes. (`polyfit` CLOSED pass 7 — it composes on the now-present `np.polyfit`.) |
-| `MaskedArray` instance members | **57** (+ the indexer) | 94 | **~37 members** (was 69; the rest are structured/record `torecords`/`toflex`, the hard/soft-mask flags NumSharp has no analog for, and low-value `tolist`/`tobytes`/`view`/`flat`) |
+| `MaskedArray` instance members | **70** (+ the indexer) | 94 | **~24 members** — all infra/policy-blocked: structured/record `torecords`/`toflex`, the `get_fill_value`/`set_fill_value` METHOD spellings (CS0082 property-name collision), `sharedmask` (unmodelable), and NumPy-internal members. (Pass 9 added `tolist`/`tobytes`/`tofile`/`view`/`ids`/`iscontiguous`/`putmask`/`resize`/`flat`/`recordmask`/`baseclass`/`unshare_mask` + REAL `hardmask`.) |
 
-**Behavioral correctness of what IS implemented:** a 186-case differential (3 dtypes × reductions[×3 axes]/ufuncs/constructors/extras/sort/unique/set-ops) found **0 real value/mask/dtype mismatches**, plus 79 + 33 + 22 checks of every 2026-09-14 addition (incl. the pass-7 `polyfit`/masked-axis `median`/`dot.strict`/`take.mode`/`squeeze.axis`) against probed NumPy 2.4.2 output (0 failures). The only divergence is the intentional scalar-vs-0d return-type choice (§5.1). Set operations (`intersect1d`/`union1d`/`setxor1d`/`setdiff1d`, added 2026-09-14, commit 566fd303) are bit-exact.
+**Behavioral correctness of what IS implemented:** a 186-case differential (3 dtypes × reductions[×3 axes]/ufuncs/constructors/extras/sort/unique/set-ops) found **0 real value/mask/dtype mismatches**, plus 79 + 33 + 22 + 25 + 19 checks of every 2026-09-14 addition (incl. the pass-7 `polyfit`/masked-axis `median`/`dot.strict`/`take.mode`/`squeeze.axis` and the pass-9 conversion/export + hard-mask surface) against probed NumPy 2.4.2 output (0 failures). The only divergence is the intentional scalar-vs-0d return-type choice (§5.1). Set operations (`intersect1d`/`union1d`/`setxor1d`/`setdiff1d`, added 2026-09-14, commit 566fd303) are bit-exact.
 
 > **Audit-harness trap (do not re-chase):** reading an op result lazily — `nd.astype(f64).GetDouble(i)` in a loop, interleaved with other allocations — returns recycled-buffer GARBAGE (non-deterministic `e+257` values). This is the *harness's* fault, not the library: an inline check of the identical op sequence showed 0 corruption, and materializing each result with `.ToArray<T>()` **before the next allocation** made the diff clean. Rule: differential harnesses MUST snapshot each result to a managed array immediately.
 
@@ -178,7 +204,7 @@ config) and `core`/`extras` (submodule refs — N/A in C#).
 
 ---
 
-## 2. MaskedArray INSTANCE-surface gaps (57 present of 94, + the indexer)
+## 2. MaskedArray INSTANCE-surface gaps (70 present of 94, + the indexer)
 
 **✅ THE INDEXER LANDED (2026-09-14, pass 2).** `object this[params object[]] { get; set; }`: GET returns the bare
 scalar for an unmasked scalar index, the `masked` singleton for a masked one, or a sub-`MaskedArray` (a VIEW for a
@@ -188,11 +214,21 @@ previously-`nomask` array gains a real mask on the first masking write). Returns
 is polymorphic and a C# indexer can't switch its return type on the runtime index — a slice read is cast to
 `MaskedArray`. This unblocked `put`/`putmask`/`resize`/`mask_rowcols`/`compress_rowcols`/`notmasked_*`.
 
-**Present (57):** `all any anom argmax argmin argsort astype clip compress compressed conj conjugate count cumprod cumsum data diagonal dot dtype fill_value filled flatten harden_mask imag item mask max mean min mT ndim nonzero prod ptp put ravel real repeat reshape round shape shrink_mask size soften_mask sort squeeze std sum swapaxes T take trace transpose typecode var` (+ the `this[...]` indexer + operators `+ - * / % & | ^ ~ < > <= >=`).
+**Present (70):** `all any anom argmax argmin argsort astype baseclass clip compress compressed conj conjugate count cumprod cumsum data diagonal dot dtype fill_value filled flat flatten harden_mask hardmask ids imag iscontiguous item mask max mean min mT ndim nonzero prod ptp put putmask ravel real recordmask repeat reshape resize round shape shrink_mask size soften_mask sort squeeze std sum swapaxes T take tobytes tofile tolist trace transpose typecode unshare_mask var view` (+ the `this[...]` indexer + operators `+ - * / % & | ^ ~ < > <= >=`).
 
-**✅ Wired through 2026-09-14:** `T mT flatten ravel reshape transpose swapaxes squeeze repeat take compress compressed sort argsort clip round conj conjugate dot trace diagonal nonzero real imag item fill_value(get/set) harden_mask soften_mask shrink_mask`. NumPy's METHOD forms `get_fill_value()`/`set_fill_value()` are deliberately NOT offered — a C# property named `fill_value` reserves those exact accessor names (CS0082), so the property + the module-level `set_fill_value(a, v)` cover them.
+**✅ Pass 9 (2026-09-14) — conversion/export + flag surface + REAL hard mask:**
+- **`tolist(fill_value=null)`** → nested `object[]` (`null` at masked / the fill / a bare scalar for 0-D); walks by logical C-order index so any layout is handled without a copy.
+- **`tobytes(fill_value=null, order='C')`** = `filled(fill).tobytes(order)`, byte-identical to NumPy (the `order='A'` corner resolves via the C-contiguous filled copy — a documented masked nuance).
+- **`tofile`** throws NumPy's `NotImplementedError` (a masked array can't be binary-serialized).
+- **`view(dtype=null)`** reinterprets the data dtype — a same-itemsize/no-dtype view keeps the shape and carries the mask (aliased); an itemsize-changing view of a MASKED array is refused (the bool mask can't be reinterpreted).
+- **`ids()`/`iscontiguous()`/`putmask(mask,values)`** instance forms; **`resize(new_shape)`** throws NumPy's verbatim "does not own its data … cannot be resized" refusal (use `np.ma.resize`).
+- **`flat`** returns a raveled masked VIEW — NumSharp's `NDArray.flat` house convention (a view for contiguous, a copy otherwise), NOT NumPy's `flat` iterator object.
+- **`hardmask`/`recordmask`/`baseclass`** flag properties + **`unshare_mask()`** (which genuinely COPIES the mask, since `view`/`real`/`imag` alias it). **`sharedmask` deliberately omitted** — no faithful value (NumPy: True after `array(data,mask=…)`, False after an op) and a bogus `False` would invite mutating a shared mask; call `unshare_mask()` instead.
+- **REAL hard mask (`harden_mask`/`soften_mask` no longer no-ops):** a hard mask makes a plain-value assignment (indexer / `put`) skip masked slots and never unmask; `= masked` still masks; `putmask` under hard writes data everywhere but freezes the mask (`a.mask |= …`). All three NumPy branches ported (snapshot+restore for the indexer/`put`, the three-way mask branch for `putmask`), probed bit-exact.
 
-**Still missing instance members:** `flat` (would collide with NumSharp's raveled-array `.flat`), `tolist`, `tobytes`, `view`, `ids`, `iscontiguous`, `put`/`putmask`/`resize` (need mutation), the `hardmask`/`sharedmask`/`recordmask` flags (NumSharp masks carry no hard/soft state — `harden_mask`/`soften_mask` are accepted no-ops), `torecords`/`toflex` (structured/record — NumSharp has none).
+**✅ Earlier wired-through (2026-09-14):** `T mT flatten ravel reshape transpose swapaxes squeeze repeat take compress compressed sort argsort clip round conj conjugate dot trace diagonal nonzero real imag item fill_value(get/set) harden_mask soften_mask shrink_mask`. NumPy's METHOD forms `get_fill_value()`/`set_fill_value()` are deliberately NOT offered — a C# property named `fill_value` reserves those exact accessor names (CS0082), so the property + the module-level `set_fill_value(a, v)` cover them.
+
+**Still missing instance members (all infra/policy-blocked):** `torecords`/`toflex` and the `mvoid` record machinery (structured/record dtypes — NumSharp has none); the `get_fill_value`/`set_fill_value` METHOD spellings (CS0082 — covered by the `fill_value` property + module `set_fill_value`); `sharedmask` (unmodelable, see above); and the NumPy-internal/policy members (`out=` on reductions, `_optinfo`, etc.).
 
 ---
 
@@ -203,7 +239,7 @@ is polymorphic and a C# indexer can't switch its return type on the runtime inde
 | `average` | ✅ `keepdims` added; `returned` covered by the sibling `average_returned` → `(avg, sumOfWeights)` tuple (the base-library convention, since C# can't switch return type on a flag) |
 | `median` | ✅ `keepdims` added (flat + unmasked-axis paths); ✅ **masked-axis DONE (pass 7)** — the per-slice masked median (`_median` axis-branch port). `out`/`overwrite_input` still absent (the library-wide `out=` policy gap, §5.5) |
 | `sum`/`prod`/`mean`/… | `out=` still absent (the library-wide policy gap, §5.5 — NumSharp models no `out=` on any masked reduction) |
-| `array`/`masked_array` | ✅ **`dtype`** added; `keep_mask`/`hard_mask`/`shrink`/`ndmin`/`order`/`subok` still absent (hard/soft-mask and ndmin have no NumSharp analog) |
+| `array`/`masked_array` | ✅ **`dtype`** added; ✅ **`hard_mask`** added (pass 9 — bakes the hard mask in at construction, now that hard mask is real); `keep_mask`/`shrink`/`ndmin`/`order`/`subok` still absent (`ndmin`/`order`/`subok` have no NumSharp analog) |
 
 ---
 
@@ -275,14 +311,15 @@ The fix closes the latent divergence: a complex masked `min`/`max` now fills mas
 2. ✅ **DONE** — Parameter parity: `average.keepdims`+`average_returned`, `median.keepdims`, `sort`/`argsort` `endwith`, `array.dtype`, `isin.assume_unique`, `vander` `N`→`n`, `reshape` `new_shape` (§5.1), (pass 7) `take.mode`, `dot.strict`, `squeeze.axis`, and (pass 8) `std`/`var`.`mean` + `power.third`. *(The only param NOT added is `sort`/`argsort`'s `kind`/`stable`/`order` — NumSharp's sort is always stable radix, so they're inexpressible/no-op.)*
 3. ✅ **DONE** — Operators `%` `&` `|` `^` `~` on MaskedArray (§5.2). `==`/`!=` kept as documented reference-equality (use `np.ma.equal`/`not_equal`).
 4. ✅ **DONE** — Complex fill values → complex (§5.3).
-5. ✅ **DONE** — Instance surface: `fill_value` (get/set) + `T`/`mT`/`real`/`imag`/`ravel`/`flatten`/`reshape`/`transpose`/`swapaxes`/`squeeze`/`repeat`/`take`/`compressed`/`compress`/`sort`/`argsort`/`clip`/`round`/`conj`/`dot`/`diagonal`/`trace`/`nonzero`/`item` (§2). *(Left: `tolist`, `tobytes`, `view`.)*
+5. ✅ **DONE** — Instance surface: `fill_value` (get/set) + `T`/`mT`/`real`/`imag`/`ravel`/`flatten`/`reshape`/`transpose`/`swapaxes`/`squeeze`/`repeat`/`take`/`compressed`/`compress`/`sort`/`argsort`/`clip`/`round`/`conj`/`dot`/`diagonal`/`trace`/`nonzero`/`item` (§2). *(The rest — `tolist`/`tobytes`/`tofile`/`view`/`ids`/`iscontiguous`/`putmask`/`resize`/`flat`/`recordmask`/`baseclass`/`unshare_mask` — DONE pass 9.)*
 6. ✅ **DONE (pass 2)** — the `MaskedArray this[...]` indexer get/set (§2), plus the mutation trio `put`/`putmask`/
    `resize`, `mask_rowcols`, `compress_rowcols`/`compress_nd`, `notmasked_edges`/`notmasked_contiguous` (axis=None/1-D),
    and `ids`.
 7. ✅ **DONE** — Real functional gaps §1.B: `fix_invalid`, `diff`, `append`, `clip`, `choose`, `compress`, `diagonal`, `nonzero`, `trace`, `make_mask`/`make_mask_none`, `mask_or`, `common_fill_value`, `set_fill_value`, `left_shift`/`right_shift`, `put`/`putmask`/`resize`, `ids`, `frombuffer`, `fromfunction`, `hsplit`, `ndenumerate`, plus the `MAError`/`MaskError` types. *(The `vsplit`/`array_split`/`split`/`dsplit` "split family" was a non-gap — `numpy.ma` exports only `hsplit`; corrected pass 7.)*
 8. ✅ **DONE (pass 7)** — `polyfit` (the `np.polyfit`-doesn't-exist premise was stale — it does; `ma.polyfit` composes on it), masked-axis `median` (a composition over `ma.sort`/`count`/`take_along_axis`, no bespoke masked-sort core needed), `dot.strict`, `take.mode`, `squeeze.axis`.
 9. ✅ **DONE (pass 8)** — N-D-axis `notmasked_edges` + 2-D-axis `notmasked_contiguous` (return `object`, the honest mirror of NumPy's polymorphic list; flat form still typed-but-boxed), `power.third` (rejects with `MaskError`), and `std`/`var`.`mean` (var uses it; std reproduces NumPy's ignore-it quirk).
-10. ⛔ **Genuinely remaining — all either infra-blocked or by-policy, NONE a closeable functional gap:** the structured/record family (`mvoid`/`mr_`/`fromflex`/`flatten_mask`/`flatten_structured_array`/`make_mask_descr` — no structured dtypes in NumSharp); the low-value instance `tolist`/`tobytes`/`view`/`flat` (semantic mismatches — `tolist` needs object/None arrays, `view` a dtype reinterpret, `tobytes` a bytes path, `flat` collides with NumSharp's raveled `.flat`); and the library-wide `out=`/`subok`/`order` policy gaps (§5.5). **Every other backlog item is DONE.**
+10. ✅ **DONE (pass 9)** — the instance conversion/export surface (`tolist`/`tobytes`/`tofile`/`view`/`ids`/`iscontiguous`/`putmask`/`resize`/`flat`/`recordmask`/`baseclass`/`unshare_mask`) + the `array`/`masked_array` `hard_mask` param, AND **REAL hard-mask semantics** — `harden_mask`/`soften_mask` are no longer no-ops: a hard mask blocks unmasking on a plain-value assignment (indexer/`put`), `= masked` still masks, and `putmask` under hard writes data but freezes the mask (all three NumPy branches ported, probed bit-exact). The `tolist`/`tobytes`/`view`/`flat` "semantic mismatch" premise was mostly stale — only `flat`'s NumPy-iterator-vs-NumSharp-raveled-view difference is real, and `flat` follows the house convention.
+11. ⛔ **Genuinely remaining — all infra-blocked or by-policy, NONE a closeable functional gap:** the structured/record family (`mvoid`/`mr_`/`fromflex`/`flatten_mask`/`flatten_structured_array`/`make_mask_descr`/`torecords`/`toflex` — no structured dtypes in NumSharp); `sharedmask` (no faithful value — unmodelable; use `unshare_mask()` instead); the `get_fill_value`/`set_fill_value` METHOD spellings (CS0082 — the `fill_value` property + module `set_fill_value` cover the behavior); and the library-wide `out=`/`subok`/`order` policy gaps (§5.5). **Every other backlog item is DONE — the module is functionally complete for NumSharp.Core bar structured dtypes.**
 
 ---
 
@@ -303,4 +340,6 @@ The fix closes the latent divergence: a complex masked `min`/`max` now fills mas
 10. **2026-09-14 pass 7** — before writing anything, probed `numpy.ma.__all__` (only `hsplit` in the split family) and confirmed `np.polyfit` exists in Core, invalidating two stale premises. Every pass-7 addition (`polyfit`, masked-axis `median` incl. NaN-propagation/keepdims/neg-axis/int→float64/1-D, `dot.strict`, `take.mode`, `squeeze.axis`) was captured as a NumPy 2.4.2 reference block and bit-compared by a 22-assertion signed `dotnet run` script — **22/22 pass** — then gated by 5 new `MaskedArrayTests` (64 total, green net8.0 + net10.0). `polyfit`'s live gate enables the OpenBLAS backend per-test (Inconclusive if no LAPACK-capable BLAS), mirroring `LapackFactorisationTests.RequireLapack`. This session's parallel-WIP files (`NDExpr.Combinators.cs` + its test) compiled cleanly, so the in-place build was safe — the worktree quarantine from technique 9 was not needed this pass, but stays the fallback if a sibling's WIP ever fails to compile.
 
 11. **2026-09-14 pass 8** — closed the return-type-impedance and last-param findings. Key discovery from `inspect.getsource(numpy.ma.MaskedArray.std)`: **`ma.std` accepts `mean` but never forwards it to `var`** (its `kwargs` carries only `keepdims`), so `ma.std(mean=X)` silently returns the PLAIN std — a NumPy quirk that a naive `sqrt(var(…, mean))` would have gotten WRONG (my first cut did; the probe `sqrt(var(mean=2))=1.414` ≠ `std(mean=2)=1.247` caught it). Reproduced by making `std` ignore `mean`. The N-D `notmasked_*` return `object` (NumPy's own return there is a dynamically-typed Python list, so `object` is the faithful mirror, not a compromise); the flat test casts the boxed `long[]`/`Slice[]`. Verified by two signed `dotnet run` scripts (7 N-D/power checks + 8 var-mean checks, all pass) against NumPy 2.4.2 reference blocks, gated by 4 new `MaskedArrayTests` (68 total, green both TFMs). Probed the indexer forms (`ma[i, Slice.All]` / `ma[Slice.All, i]`), `np.indices`, and masked `min(axis)`+`compressed` up front to confirm the composition before writing it.
+
+12. **2026-09-14 pass 9** — closed the instance conversion/export surface and REAL hard-mask semantics. Two of the "genuinely remaining" findings were re-examined and fell: `tolist`/`tobytes`/`view` are plain value exports (only `flat`'s iterator-vs-raveled-view difference is a true semantic mismatch, resolved by the house convention), and `harden_mask`/`soften_mask` being no-ops is a fixable *bug*, not a missing analog. The hard-mask semantics were read out of `refs/numpy/numpy/ma/core.py` — the two probes that shaped the impl: **`put` and `putmask` under hard are DIFFERENT** (`put` at lines 4896–4903 drops the masked indices before writing, so masked data is untouched; the module `putmask` at 7579–7588 does `np.copyto(a._data, valdata, where=mask)` UNCONDITIONALLY and only `a.mask |= m` — so it WRITES data at masked slots but never unmasks). My first putmask cut copied `put`'s "restore masked data" and was wrong; the probe `hard_putmask → [50,60,3,4]` (data 60 at the masked slot) caught it. Snapshot+restore for the indexer/`put` is correct for every index kind because the fancy/boolean SET scatters through the array (unlike the COPY the getter returns). Verified by 25 (export/flags) + 19 (hard-mask) signed `dotnet run` checks against probed NumPy 2.4.2 (0 fail), gated by 8 new `MaskedArrayTests` (**76 total**, green net8.0 + net10.0). No worktree quarantine needed — the only untracked `.cs` in the tree (`ConcurrentOrderedDictRandomizedConcurrencyTests.cs`) compiled clean.
 

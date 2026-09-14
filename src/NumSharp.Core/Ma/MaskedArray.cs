@@ -60,6 +60,17 @@ namespace NumSharp
         /// <see cref="MaskedArrayModule.set_fill_value"/> mutate it in place on the SAME instance.</summary>
         internal object _fill_value;
 
+        /// <summary>Whether the mask is HARD (NumPy's <c>hardmask</c>): when true, a plain-value assignment
+        /// (the indexer, <see cref="MaskedArrayModule.put"/>, <see cref="MaskedArrayModule.putmask"/>) does NOT
+        /// unmask a masked slot nor overwrite its data — only currently-UNmasked positions change (masking a slot
+        /// via the <c>masked</c> singleton is still allowed). Set by <see cref="harden_mask()"/>/
+        /// <see cref="soften_mask()"/>; default false (soft, so assignment unmasks — NumPy's default).</summary>
+        /// <remarks>Scope: the flag lives on the instance and gates the direct assignment paths. It is NOT
+        /// propagated through ufuncs/reductions or the view-returning members (<see cref="view(DType)"/>/
+        /// <see cref="real"/>/<see cref="imag"/>/reshape/transpose) — each result/view starts soft — a documented
+        /// simplification vs NumPy, which threads hardmask through <c>__array_wrap__</c> and shared-base views.</remarks>
+        internal bool _hardmask;
+
         /// <summary>
         ///     Wraps a data array and (optional) mask into a masked array WITHOUT copying either — the arrays
         ///     are aliased, so later writes to them are visible here and vice-versa. Pass <paramref name="mask"/>
@@ -563,13 +574,24 @@ namespace NumSharp
         private void SetItem(object[] indices, object value)
         {
             // `x[i] = masked`: set the mask True at the slots, leave the DATA as-is (NumPy hides but keeps it).
+            // Masking a slot is ALWAYS allowed, even under a hard mask (hardening only forbids UNmasking).
             if (value is MaskedConstant)
             {
                 EnsureMask();
                 _mask[indices] = NDArray.Scalar(true);
                 return;
             }
-            // `x[i] = maskedArray`: write its data, then propagate its mask (or unmask if it has none).
+
+            // HARD MASK: a data write must not reach a currently-masked slot nor unmask it. Snapshot data+mask,
+            // do the ordinary (soft) write below, then restore the originally-masked positions and re-OR any
+            // masking the write introduced (a masked-array value's own mask). Snapshotting the WHOLE arrays makes
+            // this correct for every index kind — the fancy/boolean SET scatters through the array (unlike the
+            // COPY the getter returns), so the write always lands, and the restore is index-agnostic.
+            bool hard = _hardmask && _mask is not null;
+            NDArray savedMask = hard ? _mask.copy() : null;
+            NDArray savedData = hard ? _data.copy() : null;
+
+            // `x[i] = maskedArray`: write its data, then propagate its mask (or unmask if it has none — soft only).
             if (value is MaskedArray mv)
             {
                 _data[indices] = mv._data;
@@ -578,17 +600,27 @@ namespace NumSharp
                     EnsureMask();
                     _mask[indices] = mv._mask;
                 }
-                else if (_mask is not null)
+                else if (!hard && _mask is not null)
                 {
                     _mask[indices] = NDArray.Scalar(false);
                 }
-                return;
             }
-            // `x[i] = value` (scalar/array-like/NDArray): write the data and UNMASK the assigned slots.
-            // `np.ma.getdata` is the public face of the module's operand normalizer (scalar→0-d, array-like→array).
-            _data[indices] = np.ma.getdata(value);
-            if (_mask is not null)
-                _mask[indices] = NDArray.Scalar(false);
+            else
+            {
+                // `x[i] = value` (scalar/array-like/NDArray): write the data and UNMASK the assigned slots (soft).
+                // `np.ma.getdata` is the public face of the module's operand normalizer (scalar→0-d, array-like→array).
+                _data[indices] = np.ma.getdata(value);
+                if (!hard && _mask is not null)
+                    _mask[indices] = NDArray.Scalar(false);
+            }
+
+            if (hard)
+            {
+                // Restore data where it was masked, then keep every originally-masked slot masked (no unmask)
+                // while retaining any slots the write freshly masked.
+                np.copyto(_data, savedData, casting: "unsafe", where: savedMask);
+                _mask = np.logical_or(savedMask, _mask);
+            }
         }
 
         /// <summary>Promotes a <c>nomask</c> array to a real all-False boolean mask (NumPy's implicit
@@ -605,18 +637,214 @@ namespace NumSharp
         /// <param name="mode">Out-of-bounds policy: "raise" (default)/"wrap"/"clip".</param>
         public void put(NDArray indices, object values, string mode = "raise") => np.ma.put(this, indices, values, mode);
 
-        /// <summary>Accepted for NumPy parity; NumSharp masks carry no hard/soft state, so this returns THIS
-        /// array unchanged (NumPy's <c>harden_mask</c> would forbid unmasking).</summary>
-        /// <returns>This masked array.</returns>
-        public MaskedArray harden_mask() => this;
+        /// <summary>Makes the mask HARD (NumPy's <c>harden_mask</c>): from now on a plain-value assignment cannot
+        /// unmask a slot — only currently-unmasked positions change. Mutates and returns THIS array.</summary>
+        /// <returns>This masked array (now hard-masked).</returns>
+        public MaskedArray harden_mask() { _hardmask = true; return this; }
 
-        /// <summary>Accepted for NumPy parity; a no-op in NumSharp (no hard/soft mask state).</summary>
-        /// <returns>This masked array.</returns>
-        public MaskedArray soften_mask() => this;
+        /// <summary>Makes the mask SOFT again (NumPy's <c>soften_mask</c>, the default): a plain-value assignment
+        /// unmasks the assigned slots. Mutates and returns THIS array.</summary>
+        /// <returns>This masked array (now soft-masked).</returns>
+        public MaskedArray soften_mask() { _hardmask = false; return this; }
 
         /// <summary>Drops an all-False mask back to nomask (NumPy's <c>shrink_mask</c>); otherwise unchanged.</summary>
         /// <returns>A masked array with a redundant all-False mask removed.</returns>
         public MaskedArray shrink_mask() => np.ma.shrink_mask(this);
+
+        // ── Conversion / export + the hard/shared-mask flag surface (NumPy's tolist/tobytes/tofile/view +
+        //    hardmask/sharedmask/recordmask/baseclass/unshare_mask/ids/iscontiguous). tolist and tobytes are
+        //    genuine value exports; view reinterprets the data dtype; the flag properties exist for surface
+        //    parity — NumSharp masks carry no hard/soft/shared state, so they report the fixed values NumPy
+        //    would after a default construction (hardmask/sharedmask False) and treat every array as
+        //    non-structured (recordmask == the plain mask). ──
+
+        /// <summary>
+        ///     Returns the array as a nested list structure (NumPy's <c>MaskedArray.tolist</c>): a boxed scalar
+        ///     for a 0-D array, otherwise a jagged <see cref="object"/>[] whose leaves are the boxed CLR element
+        ///     values. Masked positions become <paramref name="fill_value"/>, or <c>null</c> when it is null —
+        ///     NumPy fills masked entries with <c>None</c> by default — so the result is the "data with holes"
+        ///     view a non-NumSharp consumer wants.
+        /// </summary>
+        /// <param name="fill_value">Value substituted at masked positions; null ⇒ <c>null</c> in the output
+        /// (NumPy's <c>None</c>). When non-null the array is <see cref="filled(object)"/> first, so no nulls
+        /// appear and the value is cast into the data dtype exactly as NumPy coerces it.</param>
+        /// <returns>The bare boxed scalar for a 0-D array, else a nested <see cref="object"/>[] (one level per
+        /// dimension); leaves are boxed element values, or <c>null</c>/<paramref name="fill_value"/> where masked.</returns>
+        public object tolist(object fill_value = null)
+        {
+            // No mask ⇒ the plain data's nested list (no holes to punch).
+            if (_mask is null)
+                return BuildNestedList(_data, null);
+            // Explicit fill ⇒ bake it in and list the filled data (still no nulls, matching NumPy).
+            if (fill_value is not null)
+                return BuildNestedList(filled(fill_value), null);
+            // Default ⇒ null at masked positions (NumPy's None).
+            return BuildNestedList(_data, _mask);
+        }
+
+        /// <summary>Materializes <paramref name="data"/> into a boxed scalar (0-D) or nested <see cref="object"/>[]
+        /// (rank ≥ 1), emitting <c>null</c> wherever <paramref name="mask"/> is True.</summary>
+        /// <param name="data">The data array to convert.</param>
+        /// <param name="mask">The boolean mask (True ⇒ emit null), or null for no holes.</param>
+        /// <returns>The nested representation (bare boxed scalar for a 0-D input).</returns>
+        private static object BuildNestedList(NDArray data, NDArray mask)
+        {
+            long flat = 0;
+            return BuildNestedRec(data, mask, data.shape, 0, ref flat);
+        }
+
+        /// <summary>Recursion behind <see cref="BuildNestedList"/>: <paramref name="dim"/> walks the axes while
+        /// <paramref name="flat"/> is the running C-order element counter, read through
+        /// <see cref="NDArray.GetAtIndex(long)"/> (which transforms the logical index through the shape's
+        /// strides/offset, so any layout — strided/transposed/reversed — is handled with no prior copy).</summary>
+        /// <param name="data">The data array.</param>
+        /// <param name="mask">The boolean mask, or null.</param>
+        /// <param name="shape">The data shape (axis extents).</param>
+        /// <param name="dim">The current axis (0 = outermost); equals <c>shape.Length</c> at a scalar leaf.</param>
+        /// <param name="flat">The running logical C-order index, advanced once per leaf.</param>
+        /// <returns>The boxed leaf value/null, or an <see cref="object"/>[] for this axis.</returns>
+        private static object BuildNestedRec(NDArray data, NDArray mask, long[] shape, int dim, ref long flat)
+        {
+            if (dim == shape.Length) // scalar leaf: null when masked, else the boxed element
+            {
+                object v = (mask is not null && mask.GetAtIndex<bool>(flat)) ? null : data.GetAtIndex(flat);
+                flat++;
+                return v;
+            }
+            var arr = new object[shape[dim]];
+            for (long i = 0; i < shape[dim]; i++)
+                arr[i] = BuildNestedRec(data, mask, shape, dim + 1, ref flat);
+            return arr;
+        }
+
+        /// <summary>
+        ///     Returns the raw bytes of the array (NumPy's <c>MaskedArray.tobytes</c>) — the array is
+        ///     <see cref="filled(object)"/> FIRST, so masked slots carry the fill sentinel and the mask itself is
+        ///     NOT encoded (as NumPy documents, shape/dtype/fill_value are all lost).
+        /// </summary>
+        /// <param name="fill_value">Sentinel written at masked positions before encoding; null uses this array's
+        /// <see cref="fill_value"/> (the dtype default when unset).</param>
+        /// <param name="order">Byte order of the copy: 'C' (row-major, default), 'F' (column-major), 'A'/'K'
+        /// (resolved via the C-contiguous filled copy, so they equal 'C' here — a masked-array nuance vs NumPy,
+        /// which can keep 'F' for an F-contiguous source under 'A').</param>
+        /// <returns>A fresh <see cref="byte"/>[] of length <c>size * itemsize</c>.</returns>
+        /// <exception cref="ArgumentException"><paramref name="order"/> is not one of C/F/A/K.</exception>
+        public byte[] tobytes(object fill_value = null, char order = 'C') => filled(fill_value).tobytes(order);
+
+        /// <summary>
+        ///     NOT IMPLEMENTED — raises exactly as NumPy's <c>MaskedArray.tofile</c> does. A masked array cannot
+        ///     be written to a binary file without losing the mask, so NumPy declines; the parameters exist only
+        ///     to mirror its signature. Use <see cref="tobytes(object,char)"/> (with a fill value) to serialize.
+        /// </summary>
+        /// <param name="fid">Ignored (NumPy's file id).</param>
+        /// <param name="sep">Ignored (NumPy's separator).</param>
+        /// <param name="format">Ignored (NumPy's format).</param>
+        /// <exception cref="NotImplementedException">Always — matching NumPy's <c>NotImplementedError</c>.</exception>
+        public void tofile(string fid, string sep = "", string format = "%s")
+            => throw new NotImplementedException("MaskedArray.tofile() not implemented yet.");
+
+        /// <summary>
+        ///     Reinterprets the data buffer as another dtype (NumPy's <c>MaskedArray.view</c>) — a VIEW sharing
+        ///     memory, writes through. A same-itemsize dtype (e.g. int32↔uint32↔float32) or the no-dtype call
+        ///     keeps the shape, so the boolean mask still aligns and rides through unchanged.
+        /// </summary>
+        /// <param name="dtype">Target dtype; null ⇒ a same-dtype alias.</param>
+        /// <returns>A masked array over the reinterpreted data; the mask is carried when the shape is preserved,
+        /// and is absent (nomask) for an itemsize-changing view of an already-unmasked array.</returns>
+        /// <exception cref="NotSupportedException">The target dtype has a different itemsize AND this array has an
+        /// active mask — a boolean (itemsize-1) mask has no sound reinterpretation to the new element count, so
+        /// the view is refused rather than silently dropping or misaligning it (fill or drop the mask first).</exception>
+        public MaskedArray view(DType dtype = null)
+        {
+            var nd = _data.view(dtype);
+            // Same element count ⇒ shape preserved (no-op alias or same-itemsize reinterpret): the bool mask
+            // still lines up element-for-element, so carry it (aliased, exactly like .real/.imag do).
+            if (nd.size == _data.size)
+                return new MaskedArray(nd, _mask, _fill_value);
+            // Itemsize changed ⇒ the trailing axis was rescaled. With no mask the reinterpreted data stands
+            // alone; with a live mask there is no meaningful reinterpretation of the boolean mask, so refuse.
+            if (_mask is null)
+                return new MaskedArray(nd, null, _fill_value);
+            throw new NotSupportedException(
+                "view() to a dtype of a different itemsize is not supported on a masked array with an active " +
+                "mask: the boolean mask cannot be reinterpreted to the new element count. Fill or drop the mask first.");
+        }
+
+        /// <summary>The addresses of the data and mask buffers (NumPy's <c>MaskedArray.ids</c>); the mask address
+        /// is 0 when there is no mask (NumPy returns <c>id(nomask)</c> there — an arbitrary sentinel either way).</summary>
+        /// <returns>A <c>(data, mask)</c> tuple of buffer addresses as <see cref="long"/>s.</returns>
+        public (long data, long mask) ids() => np.ma.ids(this);
+
+        /// <summary>Whether the data is C-contiguous (NumPy's <c>MaskedArray.iscontiguous</c> — the CONTIGUOUS
+        /// flag), an O(1) flag read.</summary>
+        /// <returns>True iff the data laid out row-major-contiguous.</returns>
+        public bool iscontiguous() => _data.Shape.IsContiguous;
+
+        /// <summary>IN-PLACE conditional write (the instance form of <see cref="MaskedArrayModule.putmask"/>):
+        /// writes <paramref name="values"/> where <paramref name="mask"/> is True and reconciles the mask there
+        /// (masked values mask the slots, plain values unmask them).</summary>
+        /// <param name="mask">Boolean array-like selecting the write positions.</param>
+        /// <param name="values">Scalar/array/<see cref="MaskedArray"/> supplying the data (and, if masked, the mask).</param>
+        public void putmask(object mask, object values) => np.ma.putmask(this, mask, values);
+
+        /// <summary>
+        ///     NOT SUPPORTED in place — raises exactly as NumPy's <c>MaskedArray.resize</c> does: a masked array
+        ///     does not own its data, so it cannot be resized in place. Use the module function
+        ///     <see cref="MaskedArrayModule.resize(object,Shape)"/> (which returns a NEW tiled masked array).
+        /// </summary>
+        /// <param name="new_shape">Ignored (NumPy's target shape).</param>
+        /// <param name="refcheck">Ignored (NumPy's reference-count check flag).</param>
+        /// <exception cref="NotSupportedException">Always — NumPy raises <c>ValueError</c> with this verbatim text
+        /// (the .NET exception type differs by the house convention; the message is byte-identical).</exception>
+        public void resize(Shape new_shape, bool refcheck = true) => throw new NotSupportedException(
+            "A masked array does not own its data and therefore cannot be resized.\n" +
+            "Use the numpy.ma.resize function instead.");
+
+        /// <summary>
+        ///     A flattened row-major VIEW of the array (mask flattened alike). NOTE: this follows NumSharp's
+        ///     <see cref="NDArray.flat"/> house convention — a raveled ARRAY (a view for a contiguous source, a
+        ///     copy otherwise) — NOT NumPy's <c>flat</c> iterator object. It writes through only when
+        ///     <see cref="ravel(char)"/> returned a view (a C-contiguous source).
+        /// </summary>
+        public MaskedArray flat => np.ma.ravel(this, 'C');
+
+        /// <summary>Whether the mask is HARD (NumPy's read-only <c>hardmask</c> property): true once
+        /// <see cref="harden_mask()"/> has been called, so a plain-value assignment can no longer unmask a slot;
+        /// false (the default) after <see cref="soften_mask()"/>. See <see cref="_hardmask"/> for the honored
+        /// assignment paths and the propagation-scope limits.</summary>
+        /// <remarks>NumPy's <c>sharedmask</c> flag is deliberately NOT offered: NumSharp cannot track whether a
+        /// mask is shared (a view/<see cref="real"/>/<see cref="imag"/>/<see cref="view(DType)"/> aliases it), and
+        /// no fixed value is faithful — NumPy reports True right after <c>array(data, mask=…)</c> yet False after
+        /// an op or <see cref="unshare_mask()"/>. Since a bogus False would invite mutating a shared mask, just
+        /// call <see cref="unshare_mask()"/> before an in-place mask write on a possibly-aliased array.</remarks>
+        public bool hardmask => _hardmask;
+
+        /// <summary>The record mask (NumPy's <c>MaskedArray.recordmask</c>): for a non-structured array — every
+        /// array in NumSharp, which has no structured dtypes — this is just the element mask (the
+        /// <see cref="MaskedArrayModule.nomask"/> sentinel when nothing is masked).</summary>
+        public NDArray recordmask => mask;
+
+        /// <summary>The class of the underlying data (NumPy's read-only <c>MaskedArray.baseclass</c>); always
+        /// <see cref="NDArray"/> in NumSharp, whose masked array wraps a plain <see cref="NDArray"/>.</summary>
+        public Type baseclass => typeof(NDArray);
+
+        /// <summary>
+        ///     Ensures the mask is not shared with any other array (NumPy's <c>unshare_mask</c>) by COPYING it,
+        ///     then returns this array. Reach for it before a mutating write when the mask may be aliased — the
+        ///     view-returning members (<see cref="real"/>/<see cref="imag"/>/<see cref="view(DType)"/> and a
+        ///     basic-slice index) share the mask reference, so an in-place mask write would otherwise reach the
+        ///     source. A no-op for a <c>nomask</c> array.
+        /// </summary>
+        /// <returns>This masked array (with an owned mask).</returns>
+        /// <remarks>NumSharp cannot track whether a mask is actually shared (there is no <c>sharedmask</c> state),
+        /// so — unlike NumPy, which copies only WHEN shared — this copies unconditionally when a mask is present;
+        /// the end state (an unshared mask) is identical, only a redundant copy of an already-owned mask differs.</remarks>
+        public MaskedArray unshare_mask()
+        {
+            if (_mask is not null)
+                _mask = _mask.copy();
+            return this;
+        }
 
         // ── Bitwise / modulo operators — wire to the np.ma.* funcs (mask = OR of operands', division-domain
         //    for %). NumPy defines all of these on MaskedArray; without them `ma % b`, `ma & b`, `~ma` throw. ──
@@ -826,8 +1054,11 @@ namespace NumSharp
         /// <param name="mask">Optional boolean mask array-like; null/omitted ⇒ inherit <paramref name="data"/>'s mask or none.</param>
         /// <param name="fill_value">Optional default fill value for <see cref="MaskedArray.filled(object)"/>.</param>
         /// <param name="copy">When true, copies the data (NumPy's <c>copy=</c>); default false aliases it.</param>
+        /// <param name="dtype">Optional dtype to cast the data to.</param>
+        /// <param name="hard_mask">When true, the result's mask is HARD (NumPy's <c>hard_mask=</c>): a later
+        /// plain-value assignment cannot unmask a slot (see <see cref="MaskedArray.harden_mask()"/>). Default false (soft).</param>
         /// <returns>A new <see cref="MaskedArray"/>.</returns>
-        public MaskedArray array(object data, object mask = null, object fill_value = null, bool copy = false, DType dtype = null)
+        public MaskedArray array(object data, object mask = null, object fill_value = null, bool copy = false, DType dtype = null, bool hard_mask = false)
         {
             var d = AsData(data);
             // dtype cast happens first (and subsumes the copy — astype makes a new buffer on a real cast, and
@@ -838,7 +1069,11 @@ namespace NumSharp
                 d = d.copy();
             // Explicit mask wins; otherwise inherit an incoming MaskedArray's mask (NumPy semantics).
             NDArray m = mask != null ? AsData(mask).astype(np.@bool) : (data as MaskedArray)?._mask;
-            return new MaskedArray(d, m, fill_value);
+            var result = new MaskedArray(d, m, fill_value);
+            // hard_mask=true bakes the hardness in at construction (NumPy's ctor flag), so the very first
+            // assignment already refuses to unmask — no separate harden_mask() call needed.
+            result._hardmask = hard_mask;
+            return result;
         }
 
         /// <summary>Alias of <see cref="array"/> matching NumPy's <c>ma.masked_array</c> name.</summary>
@@ -847,9 +1082,10 @@ namespace NumSharp
         /// <param name="fill_value">Optional default fill value.</param>
         /// <param name="copy">Copy the data when true.</param>
         /// <param name="dtype">Optional dtype to cast the data to.</param>
+        /// <param name="hard_mask">When true, the result's mask is HARD (see <see cref="array"/>).</param>
         /// <returns>A new <see cref="MaskedArray"/>.</returns>
-        public MaskedArray masked_array(object data, object mask = null, object fill_value = null, bool copy = false, DType dtype = null)
-            => array(data, mask, fill_value, copy, dtype);
+        public MaskedArray masked_array(object data, object mask = null, object fill_value = null, bool copy = false, DType dtype = null, bool hard_mask = false)
+            => array(data, mask, fill_value, copy, dtype, hard_mask);
 
         /// <summary>
         ///     Converts an array-like to a <see cref="MaskedArray"/> WITHOUT copying (NumPy's <c>ma.asarray</c>):
@@ -3551,6 +3787,11 @@ namespace NumSharp
                 }
                 return;
             }
+            // HARD MASK: a plain put must not reach masked slots nor unmask them (NumPy leaves a hard-masked
+            // target untouched). Snapshot data+mask, do the ordinary put, then restore the masked positions.
+            bool hard = ma_ is not null && ma_._hardmask && ma_._mask is not null;
+            NDArray savedMask = hard ? ma_._mask.copy() : null;
+            NDArray savedData = hard ? data.copy() : null;
             if (values is MaskedArray mv)
             {
                 np.put(data, indices, mv._data, mode);
@@ -3559,16 +3800,22 @@ namespace NumSharp
                     ma_.EnsureMask();
                     np.put(ma_._mask, indices, mv._mask, mode);
                 }
-                else if (ma_?._mask is not null)
+                else if (!hard && ma_?._mask is not null)
                 {
-                    np.put(ma_._mask, indices, NDArray.Scalar(false), mode); // unmask
+                    np.put(ma_._mask, indices, NDArray.Scalar(false), mode); // unmask (soft only)
                 }
             }
             else
             {
                 np.put(data, indices, AsData(values), mode);
-                if (ma_?._mask is not null)
-                    np.put(ma_._mask, indices, NDArray.Scalar(false), mode); // unmask
+                if (!hard && ma_?._mask is not null)
+                    np.put(ma_._mask, indices, NDArray.Scalar(false), mode); // unmask (soft only)
+            }
+            if (hard)
+            {
+                // Restore data where originally masked and keep those slots masked (retain any freshly-masked ones).
+                np.copyto(data, savedData, casting: "unsafe", where: savedMask);
+                ma_._mask = np.logical_or(savedMask, ma_._mask);
             }
             // NumPy shrinks the mask after put: an all-False mask collapses to nomask.
             if (ma_?._mask is not null && !np.any(ma_._mask))
@@ -3591,6 +3838,8 @@ namespace NumSharp
             var maskArr = AsData(mask).astype(np.@bool);
             var valdata = AsData(values);
             var valmask = (values as MaskedArray)?._mask;
+            // NumPy's ma.putmask has three mask branches; the DATA is ALWAYS written at the end (even at masked
+            // slots — putmask does NOT protect data, unlike put; the hard mask only freezes the MASK).
             if (ma_ is null || ma_._mask is null)
             {
                 // No existing mask: only create one if the VALUES bring a mask (else stay nomask).
@@ -3600,9 +3849,21 @@ namespace NumSharp
                     np.copyto(ma_._mask, valmask, casting: "unsafe", where: maskArr);
                 }
             }
+            else if (ma_._hardmask)
+            {
+                // HARD: never UNmask — only OR in a masked value's own mask at the written slots; a plain
+                // (unmasked) value leaves the mask untouched. (Data is still written below, keeping masked
+                // slots masked but with new hidden data — exactly NumPy's `a.mask |= m` branch.)
+                if (valmask is not null)
+                {
+                    var m = ma_._mask.copy();
+                    np.copyto(m, valmask, casting: "unsafe", where: maskArr);
+                    ma_._mask = np.logical_or(ma_._mask, m);
+                }
+            }
             else
             {
-                // Existing mask: unmasked values (nomask) become all-False so the written slots unmask.
+                // SOFT: unmasked values (nomask) become all-False so the written slots unmask.
                 var vm = valmask ?? np.zeros(valdata.Shape, np.@bool);
                 np.copyto(ma_._mask, vm, casting: "unsafe", where: maskArr);
             }
@@ -3909,17 +4170,23 @@ namespace NumSharp
             return WithTrailingMasked(values, HasMasked(ar1) && !HasMasked(ar2));
         }
 
-        // ── Mask hardness — NumSharp has no hard/soft mask distinction (masks are plain boolean
-        //    arrays), so these are accepted for API parity and are effectively no-ops. ──
+        // ── Mask hardness (NumPy's harden_mask/soften_mask): a HARD mask forbids UNmasking via a plain-value
+        //    assignment (indexer/put/putmask), so masked slots survive `x[i] = v`. Masking a slot (`x[i] = masked`)
+        //    is always allowed. The module functions delegate to the instance methods, mutating IN PLACE and
+        //    returning the SAME masked array (NumPy's `np.ma.harden_mask(a)` is `a.harden_mask()`). ──
 
-        /// <summary>Accepted for NumPy parity; NumSharp masks have no hard/soft state, so this returns the
-        /// array unchanged.</summary>
-        /// <param name="a">Operand.</param><returns>The same masked array.</returns>
-        public MaskedArray harden_mask(object a) => array(a);
+        /// <summary>Makes <paramref name="a"/>'s mask HARD in place (NumPy's <c>ma.harden_mask</c>): a later
+        /// plain-value assignment can no longer unmask a slot. A plain (unmasked) array is wrapped and returned
+        /// (hardening a nomask array is inert until it gains a mask).</summary>
+        /// <param name="a">Operand (a <see cref="MaskedArray"/> is mutated in place).</param>
+        /// <returns>The same masked array, now hard-masked.</returns>
+        public MaskedArray harden_mask(object a) => a is MaskedArray ma_ ? ma_.harden_mask() : array(a);
 
-        /// <summary>Accepted for NumPy parity; a no-op in NumSharp (no hard/soft mask state).</summary>
-        /// <param name="a">Operand.</param><returns>The same masked array.</returns>
-        public MaskedArray soften_mask(object a) => array(a);
+        /// <summary>Makes <paramref name="a"/>'s mask SOFT again in place (NumPy's <c>ma.soften_mask</c>, the
+        /// default): a plain-value assignment unmasks the assigned slots.</summary>
+        /// <param name="a">Operand (a <see cref="MaskedArray"/> is mutated in place).</param>
+        /// <returns>The same masked array, now soft-masked.</returns>
+        public MaskedArray soften_mask(object a) => a is MaskedArray ma_ ? ma_.soften_mask() : array(a);
 
         /// <summary>Drops an all-False mask back to nomask (NumPy's <c>shrink_mask</c>); otherwise unchanged.</summary>
         /// <param name="a">Operand.</param><returns>The masked array, with a redundant all-False mask removed.</returns>
