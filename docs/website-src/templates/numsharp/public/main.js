@@ -195,10 +195,15 @@ function installTocStatePersistence() {
 
   /**
    * Find the first expander whose remembered state disagrees with what docfx
-   * currently renders. Nodes with no remembered state are skipped, so docfx's
-   * defaults (e.g. auto-expanding the active page's path) are preserved for
-   * everything the reader never touched.
-   * @returns {Element|null} the mismatched `<li>`, or null when the DOM already matches memory.
+   * currently renders AND that we are allowed to change. Two things are left
+   * alone: nodes with no remembered state (so docfx's defaults stand for
+   * anything the reader never touched), and a remembered COLLAPSE of a node on
+   * the active page's path — docfx marks that whole chain `active` and expands
+   * it, and re-collapsing it here would hide the very page the reader just
+   * opened. That collapse still applies on every other page where the node is
+   * not the active branch, and the reader can still collapse it by hand on this
+   * page (which is recorded normally).
+   * @returns {Element|null} the mismatched `<li>` to toggle, or null when the DOM already matches the (allowed) remembered state.
    */
   function findMismatchedExpander() {
     const expanders = toc.querySelectorAll('li.expander')
@@ -207,8 +212,14 @@ function installTocStatePersistence() {
       if (!(key in nodeStates)) {
         continue
       }
+      const wanted = nodeStates[key]
+      // Keep the current page reachable: never collapse a node docfx flagged as
+      // being on the active page's path.
+      if (wanted === false && li.classList.contains('active')) {
+        continue
+      }
       const isExpanded = li.classList.contains('expanded')
-      if (isExpanded !== nodeStates[key]) {
+      if (isExpanded !== wanted) {
         return li
       }
     }
