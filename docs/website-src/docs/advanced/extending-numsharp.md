@@ -200,8 +200,8 @@ OpenBlasEngine.Enable();     // reference NumSharp.Interop.OpenBLAS; products no
 
 ## Troubleshooting
 
-### "`np.frompyfunc` / `np.vectorize` doesn't exist"
-Correct — NumSharp has no Python-function-wrapping ufunc factory. Use `np.evaluate` with `NDExpr.Call` for a fused per-element function, or an `np.nditer<T>` loop.
+### "How do I wrap a C# function into a broadcasting op? (`np.vectorize` / `np.frompyfunc`)"
+Both exist. `np.vectorize((int a, int b) => a > b ? a - b : a + b)` returns a `Func<NDArray, NDArray, NDArray>` that reads like NumPy's `vfunc(a, b)` and broadcasts element-wise; a tuple-returning delegate (multi-output) or a gufunc `signature:` returns a `Vectorized` object you call with `.Call(...)` / `.CallMany(...)`. `np.frompyfunc(func, nin, nout)` is the typed sibling (NumSharp has no object dtype, so it produces typed arrays). The element-wise path is a fused `np.evaluate` + `NDExpr.Call` pass — a C# delegate call is ~50–100× cheaper than NumPy's per-element Python call, so it beats NumPy's for-loop `vectorize` by 3–30×. For a hot inner loop, drop to `np.evaluate` with `NDExpr.Call` or an `np.nditer<T>` loop directly.
 
 ### "My `np.evaluate` recompiles every call"
 A `Call` delegate captured in a per-call closure is a new identity each time. Hold the delegate in a field. Also prefer a 0-d `NDArray` over a literal for a runtime-varying scalar (a literal bakes one kernel per value).
