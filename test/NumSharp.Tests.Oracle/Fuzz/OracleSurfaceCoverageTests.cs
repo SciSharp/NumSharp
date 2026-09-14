@@ -50,6 +50,14 @@ namespace NumSharp.Tests.Fuzz
             // as np.evaluate, which takes an NDExpr). Gated by the dedicated np.apply_along_axis.Test.cs
             // / np.apply_over_axes.Test.cs suites, verified bit-exact against NumPy 2.4.2.
             "apply_along_axis", "apply_over_axes",
+            // vectorize / frompyfunc wrap an arbitrary C# DELEGATE (returning a Func / a Vectorized
+            // object, not an array), exactly like apply_along_axis — there is no NumPy-serializable
+            // operand form for a user function, so the differential corpus (which replays operand
+            // bytes) cannot express them. Gated by the dedicated np.vectorize.Test.cs suite (both
+            // modes, multi-output, otypes, broadcasting, and the error parity), verified bit-exact
+            // against NumPy 2.4.2. The element-wise path additionally rides np.evaluate's fused
+            // NDExpr.Call machinery, already fuzzed via evaluate.jsonl.
+            "vectorize", "frompyfunc",
             // broadcast_shapes takes SHAPES (tuples of ints), not array operands, so it has no entry
             // in the (dtype,shape,strides,bytes)->result operand corpus. Gated by the dedicated
             // np.broadcast_shapes.Test.cs suite (happy path across argument forms + verbatim error

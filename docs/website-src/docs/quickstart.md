@@ -224,9 +224,9 @@ var C = np.array(new[] { 2.0, -1.0, 4.0 });
 np.add(B, C);      // [2. 0. 6.]
 ```
 
-NumSharp exposes ufuncs as direct `np.*` functions (and operators), with `out=`/`where=`/`dtype=` — see [Universal functions](fundamentals/ufuncs.md). NumSharp also has `all`, `any`, `argmax`, `argsort`, `mean`, `median`, `clip`, `cross`, `dot`, `sort`, `std`, `sum`, `var`, `where`, `apply_along_axis`, `bincount`, `corrcoef`, and the rest of the aggregation family.
+NumSharp exposes ufuncs as direct `np.*` functions (and operators), with `out=`/`where=`/`dtype=` — see [Universal functions](fundamentals/ufuncs.md). NumSharp also has `all`, `any`, `argmax`, `argsort`, `mean`, `median`, `clip`, `cross`, `dot`, `sort`, `std`, `sum`, `var`, `where`, `apply_along_axis`, `bincount`, `corrcoef`, `vectorize`, `frompyfunc`, and the rest of the aggregation family.
 
-> **No `np.vectorize` / `np.frompyfunc`.** NumSharp has no ufunc factory that wraps an arbitrary scalar function. Compose a per-element function into a fused pass with `np.evaluate` + `NDExpr.Call`, or write an unboxed loop with `np.nditer<T>` — see [Extending NumSharp](advanced/extending-numsharp.md).
+> **`np.vectorize` / `np.frompyfunc` wrap a C# delegate.** `var vf = np.vectorize((int a, int b) => a > b ? a - b : a + b); vf(arrA, 2)` reads like NumPy and broadcasts element-wise; a gufunc `signature:` applies the delegate per core sub-array (`np.vectorize(x => np.sum(x), "(n)->()")`). The element-wise path is a fused `np.evaluate` + `NDExpr.Call` pass, so it runs 3–30× faster than NumPy's Python-loop `vectorize`. For a hot inner loop you can still write `np.evaluate` / `np.nditer<T>` directly — see [Extending NumSharp](advanced/extending-numsharp.md).
 
 ---
 
