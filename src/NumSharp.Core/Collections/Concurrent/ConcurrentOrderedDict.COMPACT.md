@@ -438,6 +438,103 @@ layout 16 B (2 B under `Dictionary`, which is not thread-safe, ordered or indexa
 
 ---
 
+## 11. Per-member complexity — every public member measured and classified (2026-09-14)
+
+`benchmark/collections/probes/concurrent_ordered_dict_per_member.cs` times every public member of the
+**shipping** `ConcurrentOrderedDict<int,int>` across N = 1e3 .. 1e7, one P-core, 150 ms tier-1 warm, per-CALL
+cost. Members sharing one implementation path are measured once by a representative (mapped below). Unit is
+one call: an O(1) member's per-call cost is flat (bounded by the cache tier); an O(n) member's grows ~10x
+per decade. Point reads are timed over a 256-key hot set to isolate the call from cache-warming.
+
+### 11.1 Measured (per call; ns unless the row says ms)
+
+| member (measured path) | 1K | 10K | 100K | 1M | 10M | 1K->10M | class |
+|---|---:|---:|---:|---:|---:|---:|---|
+| `TryGetValue` | 1.17 | 1.17 | 1.17 | 1.56 | 1.56 | 1.3x | **O(1)** |
+| `ContainsKey` | 1.17 | 1.17 | 1.56 | 1.17 | 1.56 | 1.3x | **O(1)** |
+| `IndexOf` | 1.56 | 1.17 | 1.17 | 1.56 | 1.56 | 1.0x | **O(1)** |
+| `this[int]` get | 0.39 | 0.39 | 0.39 | 0.39 | 0.39 | 1.0x | **O(1)** |
+| `GetKeyAt` | 0.39 | 0.78 | 0.39 | 0.39 | 0.39 | 1.0x | **O(1)** |
+| `TryGetAt` | 0.39 | 0.39 | <0.4 | <0.4 | 0.39 | 1.0x | **O(1)** |
+| `Count` | <0.4 | <0.4 | <0.4 | <0.4 | 0.39 | flat | **O(1)** |
+| `SetByKey` (existing) | 15.23 | 15.62 | 14.45 | 14.84 | 14.45 | 0.9x | **O(1)** |
+| `SetAt` | 15.62 | 14.84 | 14.45 | 14.45 | 14.45 | 0.9x | **O(1)** |
+| `TryUpdate` | 15.62 | 14.45 | 14.84 | 14.45 | 14.45 | 0.9x | **O(1)** |
+| `Snapshot()` | <0.4 | <0.4 | <0.4 | <0.4 | <0.4 | flat | **O(1)** |
+| `GetEnumerator()` | <0.4 | <0.4 | <0.4 | <0.4 | <0.4 | flat | **O(1)** |
+| `TryAdd` (build/N) | 49.9 | 47.3 | 153.1 | 343.6 | 770.9 | 15.4x | **amortized O(1)** |
+| `TryRemove` tail / pop | 42.4 | 35.8 | 35.7 | 69.3 | 157.4 | 3.7x | **O(1)** |
+| `TryRemoveSwapBack` | 32.4 | 33.0 | 32.4 | 81.9 | 153.4 | 4.7x | **O(1)** |
+| `TryRemove` interior @0 (ms) | 0.000 | 0.03 | 0.38 | 4.12 | 54.39 | 2e4x | **O(n)** |
+| `ToArray` (ms) | <.001 | <.001 | 0.08 | 0.47 | 7.91 | 1e4x | **O(n)** |
+| `Keys` (ms) | <.001 | <.001 | 0.08 | 0.47 | 7.59 | 1e4x | **O(n)** |
+| `foreach` consume (ms) | <.001 | <.001 | 0.03 | 0.32 | 3.82 | 1e4x | **O(n)** |
+| `Pairs` consume (ms) | <.001 | 0.05 | 0.46 | 4.59 | 48.62 | 1e4x | **O(n)** |
+| `CopyTo` (ms) | <.001 | <.001 | 0.06 | 0.49 | 6.83 | 1e4x | **O(n)** |
+| `AddRange` (ms) | 0.07 | 0.43 | 14.0 | 251.4 | 6372.5 | 1e5x | **O(m)** |
+| `RemoveWhere` all (ms) | 0.02 | 0.16 | 1.55 | 17.35 | 163.83 | 1e4x | **O(n)** |
+| `Clear` presized-to-N (ms) | <.001 | <.001 | 0.02 | 0.03 | 0.05 | - | **O(initial capacity)** |
+| `Clear` default-grown (ms) | <.001 | <.001 | <.001 | <.001 | <.001 | flat | **O(1)** |
+
+Reads are flat 1.0-1.3x (`~1.2 ns` key path, `~0.4 ns` positional / count — the ~0.4 ns floor is the 100 ns
+timer over 256 iterations, so `<0.4` means "unmeasurably small, one field/array load"). Replaces are flat at
+~15 ns (the write-lock acquire + reentrancy guard + one seam store). `Snapshot()`/`GetEnumerator()` are free
+(a struct that captures the arrays + count, no copy). `TryAdd`'s 15.4x rise is NOT super-linear over a 10,000x
+data span — it is the per-add DRAM + GC-gen2 constant rising with the footprint, the same step
+`ConcurrentDictionary`'s own unsized build shows (19.5x) and `List` shows (4.0x); the algorithm is one hash
+walk + one node + amortized array doubling = amortized O(1). The two O(1) removals rise 3.7-4.7x (again the
+shared memory step), never with N. The O(n) block grows a clean ~10x per decade (interior removal 4.12 ->
+54.4 ms across the last decade; `ToArray` 0.47 -> 7.9). `AddRange`'s measurement builds the N-pair array
+inside the timed region, so its tail is inflated by an 80 MB allocation + GC at 10M, but it is O(m): one
+presize (`TryGetNonEnumeratedCount`) + one `TryAdd` per pair.
+
+### 11.2 The finding on `Clear`
+
+`Clear()` calls the vendored `ConcurrentDictionary.Clear`, which allocates a fresh bucket array of
+`GetPrime(_initialCapacity)` slots (`ConcurrentDictionary.cs:697`), and `_initialCapacity` is the CAPACITY the
+map was constructed with (`:244`). So **`Clear` costs O(initial capacity), not O(current count)**: a collection
+`new ConcurrentOrderedDict(1_000_000)` that has been emptied down to a handful of entries still allocates a
+~1e6-slot bucket array on every `Clear` (measured 0.05 ms at N=10M — the bucket array is large-object
+zero-paged, so wall-time is well under the O(N) allocation's nominal cost, but the work is O(initial
+capacity)). A default-constructed instance keeps the tiny initial capacity, so its `Clear` is O(1) even after
+growing to millions. The COD side of `Clear` (`_store = Store.Empty`) is O(1) either way.
+
+### 11.3 Full roster — every public member mapped to a measured path and its class
+
+**O(1) — key reads** (all share `TryGetValue`'s one hash-node visit, ~1.2 ns, flat across N):
+`TryGetValue`, `ContainsKey`, `GetByKey`, `this[TKey]` get, `GetOrAdd`(hit), `AddOrUpdate`(hit read),
+`IndexOf`, `TryGetIndex`, `Comparer`.
+
+**O(1) — positional reads** (one array index / field read, ~0.4 ns, flat): `this[int]` get, `TryGetAt`,
+`GetKeyAt`, `Count`, `IsEmpty`, `ValuesView.this[int]` / `.GetKeyAt` / `.AsSpan` / `.KeysAsSpan` / `.Count`.
+
+**O(1) — value replace** (one in-place store under the lock, ~15 ns, flat): `SetByKey`(existing key),
+`this[TKey]` set(existing), `SetAt`, `TryUpdate`, `AddOrUpdate`(update branch). (Non-atomic `TValue` such as
+`decimal` clones the value array => that specific case is O(n); atomic `TValue` is O(1).)
+
+**O(1) — structural capture** (a `readonly struct` over the current arrays + count, no copy, free):
+`Snapshot()`, `GetEnumerator()`, `IEnumerable<TValue>.GetEnumerator()`.
+
+**Amortized O(1) — append** (one hash walk + one node + amortized array doubling): `TryAdd`, `Add`,
+`this[TKey]` set(new), `SetByKey`(new), `GetOrAdd`(miss), `AddOrUpdate`(add branch).
+
+**O(1) — removal that does not preserve order-position of others**: `TryRemove`/`Remove`/`RemoveAt` when the
+target is the LAST entry (tail pop); `TryRemoveSwapBack` at any position.
+
+**O(n) — order-preserving interior removal** (shifts the tail, O(n - p)): `TryRemove`/`Remove`/`RemoveAt` of a
+non-last entry.
+
+**O(n) — bulk / whole-collection** (touch every element): `RemoveWhere`, `ToArray`, `Values`, `Keys`,
+`CopyTo`, `foreach` / enumeration, `Pairs`. `AddRange(source)` and `ctor(IEnumerable)` are **O(m)** in the
+source length (one presize + per-item append).
+
+**O(initial capacity) — `Clear`** (O(1) default-constructed, O(N) presized-to-N; see 11.2).
+
+**Constructors**: `ctor()` / `ctor(comparer)` O(1); `ctor(capacity)` O(capacity) (allocates the two arrays +
+the bucket table); `ctor(source)` O(m) (delegates to `AddRange`).
+
+---
+
 ## 9. Reproduction
 
 ```
