@@ -195,6 +195,65 @@ tail re-index — exactly like `List<T>.RemoveAt`.
 
 ---
 
+## Thread-safety contract (audited 2026-09-14)
+
+The honest answer to "are we absolutely thread-safe": **yes, for the stated contract** — every
+guarantee below is either structurally enforced, exception-enforced, or a *named* relaxation. There
+is no undefined behavior left for well-formed use; the one formerly-UB corner (user callbacks writing
+back under the lock) is now detected and refused.
+
+**Guaranteed, always (any thread mix, any interleaving):**
+
+* **No torn reads, ever.** Keys and values are only ever written where a single aligned ≤word store
+  is atomic; wide (`decimal`/`Guid`/large-struct) keys and values are never written in place — node
+  swap on the key path, array clone / fresh arrays on the list path (hunted by the `long`-bit-pattern
+  and `decimal` torn-read guns).
+* **Per-location coherence:** no read path ever observes a single key's value "going back in time"
+  (single-writer monotonic-register gun, all three read paths).
+* **Publication order (happens-before):** a reader that observes `Count == c` can read every slot
+  below `c` fully written, and every entry visible on the list path already resolves on the key path
+  — the skew between the two paths is *directional*, key path first (release map-insert →
+  release count-publish, acquire on the reader side; pinned by the append-only happens-before gun).
+* **Snapshot integrity:** an enumerator/`Snapshot()` sees a frozen (array, count) pair: exact count,
+  no duplicates, no phantoms, no structural rewrites of visible slots — across appends, interior
+  removals, tail removals + re-appends (the `_floor` rule), `Clear`, and `AddRange`.
+* **Pair integrity per snapshot** under every order-preserving operation: `Pairs`/the view never
+  combine a key with a value that was not stored under it (swap-back excepted, below).
+* **Exactly-once effects:** racing `TryAdd`/`TryRemove`/`TryRemoveSwapBack` on the same key have one
+  winner; `TryUpdate` is a true CAS (per-key `final value == success count`, exactly);
+  `GetOrAdd` returns one winner to every caller and only ever a value a factory actually produced;
+  `AddOrUpdate` loses no increments; `AddRange` batches appear on the list path atomically.
+* **Exception-tightness:** every fallible allocation happens before the key map is touched, and the
+  batch operations publish in `finally` — a throw (source enumerator, predicate, OOM) always lands in
+  a consistent "applied everything up to the failure" state, never a key that resolves but does not
+  enumerate.
+
+**Named relaxations (documented on the members, asserted as-relaxed by the tests):**
+
+1. **Cross-path skew** while a write is in flight (key path leads; `IndexOf` may be momentarily
+   stale under concurrent removals). Directional, bounded by one operation.
+2. **Cross-path value-clock:** an atomic in-place value replace hits the hash node a hair before the
+   array slot — each path is monotonic on its own, alternating paths is not (register gun pins both
+   facts).
+3. **`TryRemoveSwapBack` only:** a concurrent enumerator over the same arrays can see the moved
+   entry twice / the removed entry not at all, and a reader combining that ONE slot's key+value
+   during the swap window can transiently pair them mixed. Individual reads still never tear; the
+   key path is unaffected; the order-preserving removals keep full purity — that split is the whole
+   reason both removal families exist.
+
+**Enforced (turned from silent corruption into `LockRecursionException`):** user code that the
+collection itself runs *inside* the write lock — an `AddRange` source enumerator, a `RemoveWhere`
+predicate, or a key comparer — attempting any write back into the collection. `Monitor` is
+reentrant, so before the guard this would have interleaved two half-applied mutations; now every
+public mutator checks `Monitor.IsEntered(_writeLock)` before locking (the whole mutating surface is
+swept by a per-mutator attack test). `GetOrAdd`/`AddOrUpdate` factories run outside the lock and may
+call back freely; lock-free reads are legal from anywhere, including inside predicates. Measured
+cost of the guard (within-process A/B, 20M iterations): **2.84 ns per mutation** — ~2–3% of a real
+add and invisible under host noise on the sweep benchmarks; reads pay nothing (no guard on any read
+path). That is the deliberate price of converting silent corruption into a deterministic exception.
+
+---
+
 ## Vendored `ConcurrentDictionary` clone — deviations from the BCL
 
 The clone in `ConcurrentDictionary.cs` is faithful to dotnet/runtime's source; the concurrency core
@@ -239,6 +298,21 @@ The clone in `ConcurrentDictionary.cs` is faithful to dotnet/runtime's source; t
   `AddRange` batch-atomicity (observed counts are batch multiples), swap-back survivor sets, index
   readers under structural churn, `Clear` vs everything, and a mixed-chaos soak with a value-law
   readers verify on every observation.
+- **Advanced/adversarial tier:** `test/NumSharp.Tests/Collections/ConcurrentOrderedDictAdvancedConcurrencyTests.cs`
+  — each scenario targets one clause of the thread-safety contract above: `Barrier`-phased storms
+  with rotating roles and a FULL quiescent audit at every post-phase point (oversubscribed threads
+  so the scheduler preempts inside locks), the single-writer monotonic register (per-path
+  no-time-travel on all three read surfaces), the append-only happens-before probe (list visibility
+  ⇒ key visibility; `Count` ⇒ readable correct slots, boundary slot probed every pass), exact
+  `TryUpdate` CAS accounting (final value == wins, per key), `GetOrAdd` stampede provenance (stored
+  value must decode to a factory that really ran), pair-integrity under ordered churn (swap-back-free
+  by design — the contract split), enumerator no-duplicate/no-phantom under interior churn,
+  two-instances-of-one-closed-type isolation (the shared `Store.Empty` static under `Clear` storms),
+  the full per-mutator reentrancy attack sweep (all 15 mutators refused with
+  `LockRecursionException` from inside a predicate), the evil-comparer write-back attack, and a
+  partitioned all-ops chaos (AddRange + racing swap-backs with single-winner accounting + interior
+  churn + tail stack cycles + `RemoveWhere` cycles + full-surface readers) with an exactly computable
+  final oracle.
 
 ## How to measure (reproduce the table)
 

@@ -75,12 +75,26 @@ namespace NumSharp.Collections;
 ///         <b>Consistency.</b> A lock-free reader always sees valid, untorn keys and values and never corrupts
 ///         state. In the absence of concurrent <i>writers</i> the key and list paths are exactly consistent.
 ///         While a writer runs, a reader may briefly observe a just-added or just-removed element through the key
-///         path a hair before the list path (writes touch the key map first), an <see cref="IndexOf" /> off by
+///         path a hair before the list path (writes touch the key map first — the skew is directional: an entry
+///         visible on the list path is always already visible on the key path), an <see cref="IndexOf" /> off by
 ///         concurrent removals, or (for atomically-written values) a value update in one path before the other —
 ///         snapshot semantics, in the spirit of the plain concurrent dictionary. An enumerator captures the value
 ///         array and count when enumeration begins and structural changes never rewrite the slots it can see; the
 ///         one documented exception is <see cref="TryRemoveSwapBack" />, which trades that purity for O(1)
 ///         removal (a concurrent enumerator can see the moved element at both its old and new position).
+///     </para>
+///     <para>
+///         <b>Enforced callback contract.</b> User code that this type itself runs <i>inside</i> the write lock —
+///         an <see cref="AddRange" /> source enumerator, a <see cref="RemoveWhere" /> predicate, or a key
+///         comparer — must not write back into the collection; because <see cref="System.Threading.Monitor" /> is
+///         reentrant such a write would interleave two half-applied mutations rather than deadlock, so it is
+///         detected and refused with <see cref="System.Threading.LockRecursionException" /> instead of being
+///         allowed to corrupt. <see cref="GetOrAdd(TKey, Func{TKey, TValue})" />/<see cref="AddOrUpdate" />
+///         factories run <b>outside</b> the lock and may freely call back in. Lock-free reads are always legal
+///         from anywhere. Mutations are also exception-tight: every fallible allocation happens before the
+///         key map is touched, and batch operations publish in <c>finally</c>, so a throw (from a source
+///         enumerator, a predicate, or out-of-memory) always lands the collection in a consistent
+///         "applied everything up to the failure" state — never with a key that resolves but does not enumerate.
 ///     </para>
 /// </remarks>
 /// <typeparam name="TKey">The non-null key type; uniqueness and lookups use the configured comparer.</typeparam>
@@ -320,9 +334,12 @@ public sealed class ConcurrentOrderedDict<TKey, TValue> : IReadOnlyList<TValue>
     /// <param name="key">The key to write.</param>
     /// <param name="value">The value to store.</param>
     /// <exception cref="ArgumentNullException"><paramref name="key" /> is <see langword="null" />.</exception>
+    /// <exception cref="LockRecursionException">Invoked reentrantly from user code running inside the collection's write lock — an <see cref="AddRange" /> source enumerator, a <see cref="RemoveWhere" /> predicate, or a key comparer (see <see cref="ThrowIfReentrantWrite" />).</exception>
     public void SetByKey(TKey key, TValue value)
     {
         NullCheck(key);
+
+        ThrowIfReentrantWrite();
 
         lock (_writeLock)
         {
@@ -375,6 +392,7 @@ public sealed class ConcurrentOrderedDict<TKey, TValue> : IReadOnlyList<TValue>
     /// <param name="value">The value to add.</param>
     /// <returns><see langword="true" /> if the entry was added; <see langword="false" /> if the key already existed.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="key" /> is <see langword="null" />.</exception>
+    /// <exception cref="LockRecursionException">Invoked reentrantly from user code running inside the collection's write lock — an <see cref="AddRange" /> source enumerator, a <see cref="RemoveWhere" /> predicate, or a key comparer (see <see cref="ThrowIfReentrantWrite" />).</exception>
     public bool TryAdd(TKey key, TValue value)
     {
         NullCheck(key);
@@ -382,6 +400,8 @@ public sealed class ConcurrentOrderedDict<TKey, TValue> : IReadOnlyList<TValue>
         // No lock-free pre-check: like the framework dictionary's TryAdd, the single map walk inside the append
         // answers "already exists" itself. A pre-check would cost a full extra bucket walk on the common
         // absent-key path (a build loop) to save only a brief uncontended lock acquisition on the duplicate path.
+        ThrowIfReentrantWrite();
+
         lock (_writeLock)
         {
             return TryAppendUnderLock(key, value);
@@ -393,6 +413,7 @@ public sealed class ConcurrentOrderedDict<TKey, TValue> : IReadOnlyList<TValue>
     /// <param name="value">The value to add.</param>
     /// <exception cref="ArgumentNullException"><paramref name="key" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">An entry with the same key already exists.</exception>
+    /// <exception cref="LockRecursionException">Invoked reentrantly from user code running inside the collection's write lock — an <see cref="AddRange" /> source enumerator, a <see cref="RemoveWhere" /> predicate, or a key comparer (see <see cref="ThrowIfReentrantWrite" />).</exception>
     public void Add(TKey key, TValue value)
     {
         if (!TryAdd(key, value))
@@ -411,18 +432,29 @@ public sealed class ConcurrentOrderedDict<TKey, TValue> : IReadOnlyList<TValue>
     /// </summary>
     /// <param name="source">The key/value pairs to upsert; consumed once, in order.</param>
     /// <remarks>
-    ///     The source is enumerated <b>inside</b> the write lock (that is what makes the batch atomic), so it must
-    ///     not call back into this collection's write operations — the lock is reentrant on the same thread and a
-    ///     reentrant structural write would corrupt the batch in progress. Feeding it a materialized array or list
-    ///     is the intended use.
+    ///     <para>
+    ///         The source is enumerated <b>inside</b> the write lock (that is what makes the batch atomic), so it
+    ///         must not call back into this collection's write operations — such a callback is detected and
+    ///         refused with <see cref="LockRecursionException" /> (a reentrant structural write would otherwise
+    ///         corrupt the batch in progress). Feeding it a materialized array or list is the intended use.
+    ///     </para>
+    ///     <para>
+    ///         Batch atomicity is a <b>list-path</b> guarantee (appended entries become enumerable together).
+    ///         The key path leads per pair, as it does for every write: a concurrent
+    ///         <see cref="TryGetValue" />/<see cref="ContainsKey" /> may see a pair — including a duplicate key's
+    ///         replacement value — before the batch publishes to the list path.
+    ///     </para>
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="source" /> or a key inside it is <see langword="null" />.</exception>
+    /// <exception cref="LockRecursionException">Invoked reentrantly from user code running inside the collection's write lock — an <see cref="AddRange" /> source enumerator, a <see cref="RemoveWhere" /> predicate, or a key comparer (see <see cref="ThrowIfReentrantWrite" />).</exception>
     public void AddRange(IEnumerable<KeyValuePair<TKey, TValue>> source)
     {
         if (source is null)
         {
             throw new ArgumentNullException(nameof(source));
         }
+
+        ThrowIfReentrantWrite();
 
         lock (_writeLock)
         {
@@ -456,20 +488,23 @@ public sealed class ConcurrentOrderedDict<TKey, TValue> : IReadOnlyList<TValue>
                 {
                     NullCheck(kv.Key);
 
+                    // Copy/grow BEFORE the map insert (mirroring TryAppendUnderLock's strand-proofing): if the
+                    // allocation throws, the map was not touched for this pair, so the finally-publish below
+                    // leaves both paths exactly consistent. The copy is wasted only when this pair turns out to
+                    // be a duplicate exactly at a capacity/floor boundary — rare and harmless (the arrays carry
+                    // the same live content either way).
+                    if (count == values.Length || (!fresh && count < s._floor))
+                    {
+                        int newCap = values.Length == 0
+                            ? DefaultCapacity
+                            : (int)Math.Min((long)Math.Max(values.Length, count + 1) * 2, Array.MaxLength);
+                        keys = CopyArray(keys, newCap, count);
+                        values = CopyArray(values, newCap, count);
+                        fresh = true;
+                    }
+
                     if (_byKey.TryAdd(kv.Key, new ValueIndex(kv.Value, count)))
                     {
-                        // New key: append. Copy-on-demand when out of room, or when an in-place append would land
-                        // in a floor-frozen slot a live enumerator may still be reading.
-                        if (count == values.Length || (!fresh && count < s._floor))
-                        {
-                            int newCap = values.Length == 0
-                                ? DefaultCapacity
-                                : (int)Math.Min((long)Math.Max(values.Length, count + 1) * 2, Array.MaxLength);
-                            keys = CopyArray(keys, newCap, count);
-                            values = CopyArray(values, newCap, count);
-                            fresh = true;
-                        }
-
                         keys[count] = kv.Key;
                         values[count] = kv.Value;
                         count++;
@@ -487,16 +522,19 @@ public sealed class ConcurrentOrderedDict<TKey, TValue> : IReadOnlyList<TValue>
                         }
                         else
                         {
-                            // Non-atomic value: swap the node (tear-free key path) and never write a live array
-                            // slot in place — if we are still on the published arrays, go copy-on-write for the
-                            // rest of the batch.
-                            _byKey[kv.Key] = new ValueIndex(kv.Value, idx);
+                            // Non-atomic value: never write a live array slot in place — if we are still on the
+                            // published arrays, go copy-on-write for the rest of the batch, and do it BEFORE the
+                            // node swap so an allocation failure cannot leave the key path holding a value the
+                            // list path will never publish. Then swap the node (the clone's tear-free discipline
+                            // for wide values).
                             if (!fresh)
                             {
-                                keys = CopyArray(keys, values.Length, count);
+                                keys = CopyArray(keys, keys.Length, count);
                                 values = CopyArray(values, values.Length, count);
                                 fresh = true;
                             }
+
+                            _byKey[kv.Key] = new ValueIndex(kv.Value, idx);
                         }
 
                         if (idx < count)
@@ -530,6 +568,7 @@ public sealed class ConcurrentOrderedDict<TKey, TValue> : IReadOnlyList<TValue>
     /// <param name="value">The value to append if the key is absent.</param>
     /// <returns>The existing value, or the newly added <paramref name="value" />.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="key" /> is <see langword="null" />.</exception>
+    /// <exception cref="LockRecursionException">Invoked reentrantly from user code running inside the collection's write lock — an <see cref="AddRange" /> source enumerator, a <see cref="RemoveWhere" /> predicate, or a key comparer (see <see cref="ThrowIfReentrantWrite" />).</exception>
     public TValue GetOrAdd(TKey key, TValue value)
     {
         // Lock-free hit is the hot path for a cache-shaped workload (ref-read of the value field only — see
@@ -539,6 +578,8 @@ public sealed class ConcurrentOrderedDict<TKey, TValue> : IReadOnlyList<TValue>
         {
             return hit._value;
         }
+
+        ThrowIfReentrantWrite();
 
         lock (_writeLock)
         {
@@ -559,6 +600,7 @@ public sealed class ConcurrentOrderedDict<TKey, TValue> : IReadOnlyList<TValue>
     /// <param name="valueFactory">Invoked with the key to produce the value when the key is absent. Runs <b>outside</b> the write lock (writers are never blocked on it); under contention it may be called on more than one thread, like the framework concurrent dictionary, with the losing result discarded.</param>
     /// <returns>The existing value, or the newly produced and added value.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="key" /> or <paramref name="valueFactory" /> is <see langword="null" />.</exception>
+    /// <exception cref="LockRecursionException">Invoked reentrantly from user code running inside the collection's write lock — an <see cref="AddRange" /> source enumerator, a <see cref="RemoveWhere" /> predicate, or a key comparer (see <see cref="ThrowIfReentrantWrite" />).</exception>
     public TValue GetOrAdd(TKey key, Func<TKey, TValue> valueFactory)
     {
         NullCheck(key);
@@ -576,6 +618,8 @@ public sealed class ConcurrentOrderedDict<TKey, TValue> : IReadOnlyList<TValue>
         // Run the factory OUTSIDE the lock so writers are never blocked on user code. As in the framework
         // dictionary, under contention the factory may run on several threads; only one result is kept.
         TValue value = valueFactory(key);
+
+        ThrowIfReentrantWrite();
 
         lock (_writeLock)
         {
@@ -596,6 +640,7 @@ public sealed class ConcurrentOrderedDict<TKey, TValue> : IReadOnlyList<TValue>
     /// <param name="updateValueFactory">Invoked with the key and current value to produce the replacement. Runs <b>outside</b> the write lock (writers are never blocked on it); the result is applied with a compare-and-swap and, like the framework concurrent dictionary, the factory may run more than once under contention.</param>
     /// <returns>The value now stored for the key (the added or the updated value).</returns>
     /// <exception cref="ArgumentNullException"><paramref name="key" /> or <paramref name="updateValueFactory" /> is <see langword="null" />.</exception>
+    /// <exception cref="LockRecursionException">Invoked reentrantly from user code running inside the collection's write lock — an <see cref="AddRange" /> source enumerator, a <see cref="RemoveWhere" /> predicate, or a key comparer (see <see cref="ThrowIfReentrantWrite" />).</exception>
     public TValue AddOrUpdate(TKey key, TValue addValue, Func<TKey, TValue, TValue> updateValueFactory)
     {
         NullCheck(key);
@@ -621,6 +666,8 @@ public sealed class ConcurrentOrderedDict<TKey, TValue> : IReadOnlyList<TValue>
                 continue; // the value changed, or the key was removed, before our swap; recompute and retry
             }
 
+            ThrowIfReentrantWrite();
+
             lock (_writeLock)
             {
                 if (TryAppendUnderLock(key, addValue))
@@ -639,9 +686,12 @@ public sealed class ConcurrentOrderedDict<TKey, TValue> : IReadOnlyList<TValue>
     /// <param name="comparisonValue">The value the current value must equal (by the default value comparer) for the update to occur.</param>
     /// <returns><see langword="true" /> if the value was replaced; otherwise <see langword="false" />.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="key" /> is <see langword="null" />.</exception>
+    /// <exception cref="LockRecursionException">Invoked reentrantly from user code running inside the collection's write lock — an <see cref="AddRange" /> source enumerator, a <see cref="RemoveWhere" /> predicate, or a key comparer (see <see cref="ThrowIfReentrantWrite" />).</exception>
     public bool TryUpdate(TKey key, TValue newValue, TValue comparisonValue)
     {
         NullCheck(key);
+
+        ThrowIfReentrantWrite();
 
         lock (_writeLock)
         {
@@ -666,6 +716,7 @@ public sealed class ConcurrentOrderedDict<TKey, TValue> : IReadOnlyList<TValue>
     /// <param name="value">On success, the removed value; otherwise the default of <typeparamref name="TValue" />.</param>
     /// <returns><see langword="true" /> if an entry was removed; otherwise <see langword="false" />.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="key" /> is <see langword="null" />.</exception>
+    /// <exception cref="LockRecursionException">Invoked reentrantly from user code running inside the collection's write lock — an <see cref="AddRange" /> source enumerator, a <see cref="RemoveWhere" /> predicate, or a key comparer (see <see cref="ThrowIfReentrantWrite" />).</exception>
     public bool TryRemove(TKey key, out TValue value)
     {
         NullCheck(key);
@@ -677,6 +728,8 @@ public sealed class ConcurrentOrderedDict<TKey, TValue> : IReadOnlyList<TValue>
             value = default!;
             return false;
         }
+
+        ThrowIfReentrantWrite();
 
         lock (_writeLock)
         {
@@ -699,6 +752,7 @@ public sealed class ConcurrentOrderedDict<TKey, TValue> : IReadOnlyList<TValue>
     /// <param name="key">The key to remove.</param>
     /// <returns><see langword="true" /> if an entry was removed; otherwise <see langword="false" />.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="key" /> is <see langword="null" />.</exception>
+    /// <exception cref="LockRecursionException">Invoked reentrantly from user code running inside the collection's write lock — an <see cref="AddRange" /> source enumerator, a <see cref="RemoveWhere" /> predicate, or a key comparer (see <see cref="ThrowIfReentrantWrite" />).</exception>
     public bool Remove(TKey key) => TryRemove(key, out _);
 
     /// <summary>
@@ -720,12 +774,25 @@ public sealed class ConcurrentOrderedDict<TKey, TValue> : IReadOnlyList<TValue>
     ///         and <typeparamref name="TValue" /> are atomically writable, where the swap is done in place): an
     ///         enumerator already running over the same arrays can observe the moved entry at both its old and
     ///         its new position, and will not observe the removed entry at all. Keys and values are still never
-    ///         torn (the in-place swap is taken only when both types are single-store atomic). When either type
-    ///         is not atomically writable the swap copies the arrays instead — pure snapshots, O(n) memcpy, but
-    ///         still no per-entry re-indexing.
+    ///         torn (the in-place swap is taken only when both types are single-store atomic). Additionally,
+    ///         because the swapped slot's key and value are two separate atomic stores, a reader that COMBINES
+    ///         that one slot's key and value during the swap window (<see cref="GetKeyAt" /> +
+    ///         <see cref="TryGetAt" />, or <see cref="Pairs" /> passing the slot) can transiently see the removed
+    ///         entry's key paired with the moved entry's value or vice versa — each individual datum is real and
+    ///         untorn, only the pairing at that single slot is momentarily mixed, and the key path
+    ///         (<see cref="TryGetValue" />) is never affected. When either type is not atomically writable the
+    ///         swap copies the arrays instead — pure snapshots and pure pairs, O(n) memcpy, but still no
+    ///         per-entry re-indexing.
+    ///     </para>
+    ///     <para>
+    ///         Code that asserts key↔value pairing invariants across the LIST path while racing removals must
+    ///         therefore use the order-preserving <see cref="TryRemove" />/<see cref="RemoveWhere" /> (whose
+    ///         fresh-array discipline keeps every published pair exact) — that is the contract split the two
+    ///         removal families exist for.
     ///     </para>
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="key" /> is <see langword="null" />.</exception>
+    /// <exception cref="LockRecursionException">Invoked reentrantly from user code running inside the collection's write lock — an <see cref="AddRange" /> source enumerator, a <see cref="RemoveWhere" /> predicate, or a key comparer (see <see cref="ThrowIfReentrantWrite" />).</exception>
     public bool TryRemoveSwapBack(TKey key, out TValue value)
     {
         NullCheck(key);
@@ -735,6 +802,8 @@ public sealed class ConcurrentOrderedDict<TKey, TValue> : IReadOnlyList<TValue>
             value = default!;
             return false; // lock-free fast negative
         }
+
+        ThrowIfReentrantWrite();
 
         lock (_writeLock)
         {
@@ -750,12 +819,14 @@ public sealed class ConcurrentOrderedDict<TKey, TValue> : IReadOnlyList<TValue>
             Store s = _store;
             int n = s._count;
 
-            _byKey.TryRemove(key, out _); // key path first (same skew direction as every removal)
-
             if (idx == n - 1)
             {
                 // Removing the last entry needs no move at all — identical to the tail fast path of TryRemove.
-                _store = new Store(s._keys, s._values, n - 1, Math.Max(s._floor, n));
+                // Successor allocated BEFORE the map removal (strand-proofing: after the key stops resolving,
+                // only throw-free operations remain).
+                Store next = new(s._keys, s._values, n - 1, Math.Max(s._floor, n));
+                _byKey.TryRemove(key, out _); // key path first (same skew direction as every removal)
+                _store = next;
                 return true;
             }
 
@@ -765,30 +836,36 @@ public sealed class ConcurrentOrderedDict<TKey, TValue> : IReadOnlyList<TValue>
             if (ConcurrentDictionaryTypeProps<TKey>.IsWriteAtomic && ConcurrentDictionaryTypeProps<TValue>.IsWriteAtomic)
             {
                 // In-place swap: single atomic stores per slot, so concurrent readers can never tear a key or a
-                // value — they can only see the documented duplicate/missing anomaly for this one entry.
+                // value — they can only see the documented duplicate/missing anomaly for this one entry, plus
+                // the transiently mixed key/value pairing at this one slot (two separate stores; see remarks).
+                Store next = new(s._keys, s._values, n - 1, Math.Max(s._floor, n)); // alloc before any mutation
+                _byKey.TryRemove(key, out _); // key path first (same skew direction as every removal)
                 s._keys[idx] = movedKey;
                 s._values[idx] = movedValue;
+
+                // Publish the shrunken snapshot; the floor freezes the vacated last slot against in-place reuse
+                // so an enumerator that captured count == n keeps reading valid (old) data there.
+                RewriteIndexUnderLock(movedKey, idx);
+                _store = next;
+                return true;
             }
             else
             {
                 // A wide key or value would tear under an in-place slot write, so degrade to copying arrays:
-                // still order-breaking and re-index-free, but snapshot-pure and O(n) memcpy.
+                // still order-breaking and re-index-free, but snapshot-pure and O(n) memcpy. Allocations happen
+                // before the map removal (strand-proofing, as above).
                 var keys = new TKey[s._keys.Length];
                 var values = new TValue[s._values.Length];
                 Array.Copy(s._keys, keys, n - 1);
                 Array.Copy(s._values, values, n - 1);
                 keys[idx] = movedKey;
                 values[idx] = movedValue;
-                _store = new Store(keys, values, n - 1);
+                Store next = new(keys, values, n - 1);
+                _byKey.TryRemove(key, out _); // key path first (same skew direction as every removal)
                 RewriteIndexUnderLock(movedKey, idx);
+                _store = next;
                 return true;
             }
-
-            // Publish the shrunken snapshot; the floor freezes the vacated last slot against in-place reuse so an
-            // enumerator that captured count == n keeps reading valid (old) data there.
-            RewriteIndexUnderLock(movedKey, idx);
-            _store = new Store(s._keys, s._values, n - 1, Math.Max(s._floor, n));
-            return true;
         }
     }
 
@@ -800,16 +877,21 @@ public sealed class ConcurrentOrderedDict<TKey, TValue> : IReadOnlyList<TValue>
     /// <returns>The number of entries removed.</returns>
     /// <remarks>
     ///     The predicate runs <b>inside</b> the write lock (that is what makes the removal one atomic pass), so it
-    ///     must be fast, must not throw, and must not call back into this collection's write operations — the lock
-    ///     is reentrant on the same thread and a reentrant structural write would corrupt the pass in progress.
+    ///     must be fast and must not call back into this collection's write operations — such a callback is
+    ///     detected and refused with <see cref="LockRecursionException" /> (it would otherwise corrupt the pass in
+    ///     progress). A predicate that throws is survivable: the pass lands in the consistent "removed everything
+    ///     matched so far" state and the exception propagates.
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="match" /> is <see langword="null" />.</exception>
+    /// <exception cref="LockRecursionException">Invoked reentrantly from user code running inside the collection's write lock — an <see cref="AddRange" /> source enumerator, a <see cref="RemoveWhere" /> predicate, or a key comparer (see <see cref="ThrowIfReentrantWrite" />).</exception>
     public int RemoveWhere(Func<TKey, TValue, bool> match)
     {
         if (match is null)
         {
             throw new ArgumentNullException(nameof(match));
         }
+
+        ThrowIfReentrantWrite();
 
         lock (_writeLock)
         {
@@ -921,8 +1003,11 @@ public sealed class ConcurrentOrderedDict<TKey, TValue> : IReadOnlyList<TValue>
     /// <param name="index">The zero-based position in insertion order.</param>
     /// <param name="value">The replacement value.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="index" /> is negative or not less than <see cref="Count" />.</exception>
+    /// <exception cref="LockRecursionException">Invoked reentrantly from user code running inside the collection's write lock — an <see cref="AddRange" /> source enumerator, a <see cref="RemoveWhere" /> predicate, or a key comparer (see <see cref="ThrowIfReentrantWrite" />).</exception>
     public void SetAt(int index, TValue value)
     {
+        ThrowIfReentrantWrite();
+
         lock (_writeLock)
         {
             Store s = _store;
@@ -1009,8 +1094,11 @@ public sealed class ConcurrentOrderedDict<TKey, TValue> : IReadOnlyList<TValue>
     /// <summary>Removes the entry at position <paramref name="index" />, shifting later entries down. O(1) for the last position, <b>O(n)</b> otherwise.</summary>
     /// <param name="index">The zero-based position in insertion order to remove.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="index" /> is negative or not less than <see cref="Count" />.</exception>
+    /// <exception cref="LockRecursionException">Invoked reentrantly from user code running inside the collection's write lock — an <see cref="AddRange" /> source enumerator, a <see cref="RemoveWhere" /> predicate, or a key comparer (see <see cref="ThrowIfReentrantWrite" />).</exception>
     public void RemoveAt(int index)
     {
+        ThrowIfReentrantWrite();
+
         lock (_writeLock)
         {
             Store s = _store;
@@ -1024,8 +1112,11 @@ public sealed class ConcurrentOrderedDict<TKey, TValue> : IReadOnlyList<TValue>
     }
 
     /// <summary>Removes all entries and resets both paths to empty.</summary>
+    /// <exception cref="LockRecursionException">Invoked reentrantly from user code running inside the collection's write lock — an <see cref="AddRange" /> source enumerator, a <see cref="RemoveWhere" /> predicate, or a key comparer (see <see cref="ThrowIfReentrantWrite" />).</exception>
     public void Clear()
     {
+        ThrowIfReentrantWrite();
+
         lock (_writeLock)
         {
             _byKey.Clear();
@@ -1410,10 +1501,6 @@ public sealed class ConcurrentOrderedDict<TKey, TValue> : IReadOnlyList<TValue>
         Store s = _store;
         int n = s._count;
 
-        // Key path first: the key stops resolving before it stops enumerating (the same skew direction as adds,
-        // where the key path leads).
-        _byKey.TryRemove(key, out _);
-
         if (idx == n - 1)
         {
             // Tail removal: nothing shifts, so share the arrays and only lower the count — via a NEW store,
@@ -1421,17 +1508,28 @@ public sealed class ConcurrentOrderedDict<TKey, TValue> : IReadOnlyList<TValue>
             // a later append cannot overwrite the vacated slot while an old enumerator can still read it. The
             // slot itself is deliberately not cleared: an enumerator captured at count n must still find valid
             // data there (the removed value stays reachable until the slot is reused or the arrays replaced).
-            _store = new Store(s._keys, s._values, n - 1, Math.Max(s._floor, n));
+            // The successor is allocated BEFORE the map removal: once the key stops resolving, only throw-free
+            // publishes remain, so an allocation failure can never strand a key that stops resolving on the key
+            // path yet keeps enumerating forever.
+            Store next = new(s._keys, s._values, n - 1, Math.Max(s._floor, n));
+            _byKey.TryRemove(key, out _); // key path leads (the same skew direction as adds)
+            _store = next;
             return;
         }
 
         // Interior removal: fresh arrays so concurrent readers of the old snapshot are undisturbed by the shift.
+        // All allocations happen before the map removal, for the same strand-proofing reason as the tail path.
         var keys = new TKey[s._keys.Length];
         var values = new TValue[s._values.Length];
         Array.Copy(s._keys, keys, idx);                       // keep [0, idx)
         Array.Copy(s._keys, idx + 1, keys, idx, n - idx - 1); // shift (idx, n) down
         Array.Copy(s._values, values, idx);
         Array.Copy(s._values, idx + 1, values, idx, n - idx - 1);
+        Store shifted = new(keys, values, n - 1);
+
+        // Key path first: the key stops resolving before it stops enumerating (the same skew direction as adds,
+        // where the key path leads).
+        _byKey.TryRemove(key, out _);
 
         // Repair the recorded positions of the shifted entries so IndexOf stays correct. In-place atomic int
         // stores through the ref seam — no node allocation per shifted key.
@@ -1440,7 +1538,7 @@ public sealed class ConcurrentOrderedDict<TKey, TValue> : IReadOnlyList<TValue>
             RewriteIndexUnderLock(keys[i], i);
         }
 
-        _store = new Store(keys, values, n - 1);
+        _store = shifted;
     }
 
     /// <summary>Rewrites the recorded insertion-order position of <paramref name="key" /> in place (an atomic <c>int</c> store into its hash node — safe for any <typeparamref name="TValue" />, allocation-free).</summary>
@@ -1478,6 +1576,35 @@ public sealed class ConcurrentOrderedDict<TKey, TValue> : IReadOnlyList<TValue>
         if (key is null)
         {
             throw new ArgumentNullException(nameof(key));
+        }
+    }
+
+    /// <summary>
+    ///     Refuses a write operation issued by the thread that is ALREADY inside this collection's write lock —
+    ///     which can only happen from user code the collection itself invoked under the lock: an
+    ///     <see cref="AddRange" /> source enumerator, a <see cref="RemoveWhere" /> predicate, or a key
+    ///     comparer / <c>GetHashCode</c> override running inside a locked lookup.
+    /// </summary>
+    /// <remarks>
+    ///     <see cref="Monitor" /> is reentrant, so without this guard such a callback would NOT deadlock — it
+    ///     would silently interleave a second structural mutation inside a half-applied one (both operations
+    ///     working from stale local snapshots of the store) and corrupt the collection. Turning that into a
+    ///     deterministic exception is the whole point: undefined corruption becomes a clear, immediate contract
+    ///     violation at the exact call site. Factories handed to <see cref="GetOrAdd(TKey, Func{TKey, TValue})" />
+    ///     and <see cref="AddOrUpdate" /> run OUTSIDE the lock and therefore may legitimately call back into any
+    ///     operation — this guard passes for them. Lock-free reads are always legal from anywhere.
+    /// </remarks>
+    /// <exception cref="LockRecursionException">The current thread already holds the write lock (a reentrant write from user code running under it).</exception>
+    private void ThrowIfReentrantWrite()
+    {
+        // Monitor.IsEntered answers for the CURRENT thread only; another thread holding the lock returns false
+        // and we simply block on the lock as usual.
+        if (Monitor.IsEntered(_writeLock))
+        {
+            throw new LockRecursionException(
+                "ConcurrentOrderedDict does not support reentrant writes: a mutating operation was invoked from user code " +
+                "running inside the collection's write lock (an AddRange source enumerator, a RemoveWhere predicate, or a " +
+                "key comparer). Perform the mutation after the enclosing operation returns.");
         }
     }
 }

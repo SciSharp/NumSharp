@@ -1,0 +1,1086 @@
+#nullable enable
+
+using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+using NumSharp.Collections;
+
+namespace NumSharp.Tests.Collections
+{
+    /// <summary>
+    ///     The second, adversarial tier of concurrency stress for <see cref="ConcurrentOrderedDict{TKey,TValue}" />.
+    ///     Where <see cref="ConcurrentOrderedDictConcurrencyTests" /> fires broad storms, every scenario here
+    ///     targets ONE precise clause of the thread-safety contract with an assertion that would catch its
+    ///     violation deterministically: per-location read coherence (no time travel), the release/acquire
+    ///     happens-before edge between the count publish and the key map ("list visibility implies key
+    ///     visibility"), exact compare-and-swap accounting (no lost and no phantom updates), key↔value pair
+    ///     integrity under ordered churn (the guarantee <see cref="ConcurrentOrderedDict{TKey,TValue}.TryRemoveSwapBack" />
+    ///     alone is allowed to relax), snapshot distinctness under interior removals, factory-result provenance in
+    ///     <c>GetOrAdd</c> stampedes, cross-instance isolation of the shared empty-store static, the enforced
+    ///     <see cref="LockRecursionException" /> reentrancy contract, and repeated barrier-synchronized storms with
+    ///     a full quiescent audit between every volley.
+    /// </summary>
+    /// <remarks>
+    ///     Threads are deliberately oversubscribed past the core count in the chaos scenarios — preemption inside
+    ///     the write lock and inside lock-free read sequences is exactly what widens the race windows these tests
+    ///     hunt in. No timing is asserted anywhere; only invariants.
+    /// </remarks>
+    [TestClass]
+    public class ConcurrentOrderedDictAdvancedConcurrencyTests
+    {
+        /// <summary>Baseline gun width: hard contention even on small CI boxes, bounded so the box is not drowned.</summary>
+        private static int GunThreads => System.Math.Max(4, System.Math.Min(Environment.ProcessorCount, 8));
+
+        /// <summary>Oversubscribed gun width for the chaos scenarios: more runnable threads than cores forces the scheduler to preempt inside critical windows.</summary>
+        private static int OversubscribedThreads => System.Math.Min(GunThreads + 4, 12);
+
+        /// <summary>
+        ///     The concurrency gun (same protocol as the base suite): arm <paramref name="threads" /> threads, wait
+        ///     until every one is parked on the shared gate, release them with a single signal, join, and rethrow
+        ///     everything any of them threw so no failure is swallowed.
+        /// </summary>
+        /// <param name="threads">How many shooters to arm.</param>
+        /// <param name="body">Per-thread workload; receives the 0-based thread id for partitioning.</param>
+        /// <exception cref="AssertFailedException">A shooter failed to finish within the hang-detection ceiling.</exception>
+        /// <exception cref="AggregateException">One or more shooter bodies threw; carries every captured exception.</exception>
+        private static void FireGun(int threads, Action<int> body)
+        {
+            using var go = new ManualResetEventSlim(false);
+            using var ready = new CountdownEvent(threads);
+            var errors = new ConcurrentQueue<Exception>();
+
+            var shooters = new Thread[threads];
+            for (int t = 0; t < threads; t++)
+            {
+                int id = t; // capture per-thread, not the loop variable
+                shooters[t] = new Thread(() =>
+                {
+                    ready.Signal();
+                    go.Wait();
+                    try
+                    {
+                        body(id);
+                    }
+                    catch (Exception ex)
+                    {
+                        errors.Enqueue(ex);
+                    }
+                })
+                {
+                    IsBackground = true,
+                    Name = $"cod-adv-{t}",
+                };
+                shooters[t].Start();
+            }
+
+            ready.Wait();
+            go.Set();
+
+            foreach (Thread s in shooters)
+            {
+                Assert.IsTrue(s.Join(TimeSpan.FromMinutes(2)), $"{s.Name} did not finish — deadlock or livelock");
+            }
+
+            if (!errors.IsEmpty)
+            {
+                throw new AggregateException(errors);
+            }
+        }
+
+        /// <summary>The shared value law: a value legally stored under <paramref name="key" /> encodes the key in its high bits, so any (key, value) observation is self-checking without knowing the interleaving.</summary>
+        /// <param name="key">The key the value belongs to.</param>
+        /// <param name="generation">A churn counter folded into the low 20 bits.</param>
+        /// <returns>The encoded legal value.</returns>
+        private static long Law(int key, int generation) => ((long)key << 20) | (uint)(generation & 0xFFFFF);
+
+        /// <summary>Extracts the key a law-encoded value claims to belong to.</summary>
+        /// <param name="value">A value produced by <see cref="Law" />.</param>
+        /// <returns>The encoded key.</returns>
+        private static int LawKey(long value) => (int)(value >> 20);
+
+        /// <summary>Quiescent full audit shared by the scenarios: key↔index round-trip and both value paths agree at every position.</summary>
+        /// <typeparam name="TKey">The dictionary's key type.</typeparam>
+        /// <typeparam name="TValue">The dictionary's value type.</typeparam>
+        /// <param name="d">The instance to audit (no concurrent writers may be running).</param>
+        private static void AssertFullyConsistent<TKey, TValue>(ConcurrentOrderedDict<TKey, TValue> d)
+            where TKey : notnull
+        {
+            int n = d.Count;
+            for (int i = 0; i < n; i++)
+            {
+                TKey k = d.GetKeyAt(i);
+                Assert.AreEqual(i, d.IndexOf(k), $"IndexOf(GetKeyAt({i})) must round-trip");
+                Assert.IsTrue(d.TryGetValue(k, out TValue byKey));
+                Assert.IsTrue(d.TryGetAt(i, out TValue byIndex));
+                Assert.AreEqual(byKey, byIndex, $"key path and list path disagree at {i}");
+            }
+        }
+
+        // ==========================================================================================================
+        // 1. Barrier-phased storms: repeated simultaneous volleys with a TRUE quiescent audit between every volley.
+        // ==========================================================================================================
+
+        [TestMethod]
+        public void Barrier_PhasedStorms_RotatingRoles_FullAuditAtEveryQuiescentPoint()
+        {
+            // A Barrier's post-phase action runs on exactly ONE thread while every participant is parked inside
+            // SignalAndWait — a genuine quiescent point in the middle of the battle. Auditing the FULL contract
+            // there, every round, catches corruption that only accumulates across volleys (a single-shot gun
+            // would only see the final state). Roles rotate each round so every thread exercises every code path,
+            // and the thread count is oversubscribed so the scheduler preempts inside locks and read sequences.
+            const int Rounds = 10;
+            const int HotKeys = 64;
+            const int AppendsPerRole = 500;
+            const int ChurnBandSize = 200;
+            int threads = OversubscribedThreads;
+
+            var d = new ConcurrentOrderedDict<int, long>();
+            for (int k = 0; k < HotKeys; k++)
+            {
+                d.Add(k, Law(k, 0)); // the hot update targets
+            }
+
+            // One disjoint churn band per THREAD ID (any thread may draw the churn role in some round).
+            const int ChurnBase = 100_000;
+            for (int id = 0; id < threads; id++)
+            {
+                for (int k = ChurnBase + id * 1_000; k < ChurnBase + id * 1_000 + ChurnBandSize; k++)
+                {
+                    d.Add(k, Law(k, 0));
+                }
+            }
+
+            int seeded = d.Count;
+            long appended = 0;   // grown only by the appender role; the audit checks Count against it
+            long auditFailures = 0;
+
+            using var barrier = new Barrier(threads, _ =>
+            {
+                // Post-phase quiescent audit — every participant is parked, so this sees a frozen collection.
+                try
+                {
+                    Assert.AreEqual(seeded + Interlocked.Read(ref appended), d.Count, "entries were lost or duplicated across a volley");
+                    foreach (KeyValuePair<int, long> pair in d.Pairs)
+                    {
+                        Assert.AreEqual(pair.Key, LawKey(pair.Value), $"pair mixed at quiescence: key {pair.Key} holds {pair.Value:X}");
+                    }
+
+                    AssertFullyConsistent(d);
+                }
+                catch
+                {
+                    // Barrier wraps this into BarrierPostPhaseException for every participant; count it too so a
+                    // swallowed wrapper can never hide the audit failure.
+                    Interlocked.Increment(ref auditFailures);
+                    throw;
+                }
+            });
+
+            FireGun(threads, id =>
+            {
+                var rng = new System.Random(1000 + id);
+                for (int round = 0; round < Rounds; round++)
+                {
+                    switch ((id + round) % 4)
+                    {
+                        case 0: // appender: fresh disjoint keys, law-tagged
+                        {
+                            int lo = 1_000_000 + (id * Rounds + round) * AppendsPerRole;
+                            for (int k = lo; k < lo + AppendsPerRole; k++)
+                            {
+                                Assert.IsTrue(d.TryAdd(k, Law(k, 0)));
+                            }
+
+                            Interlocked.Add(ref appended, AppendsPerRole);
+                            break;
+                        }
+
+                        case 1: // hot updater: churn the shared keys through both update entry points
+                        {
+                            for (int i = 0; i < 2_000; i++)
+                            {
+                                int k = rng.Next(HotKeys);
+                                if ((i & 1) == 0)
+                                {
+                                    d.SetByKey(k, Law(k, i));
+                                }
+                                else if (d.TryGetValue(k, out long cur))
+                                {
+                                    d.TryUpdate(k, Law(k, i), cur); // losing the CAS is fine; corrupting is not
+                                }
+                            }
+
+                            break;
+                        }
+
+                        case 2: // interior churner: remove + re-add every key of this thread's own band
+                        {
+                            int lo = ChurnBase + id * 1_000;
+                            for (int k = lo; k < lo + ChurnBandSize; k++)
+                            {
+                                Assert.IsTrue(d.TryRemove(k, out long v), $"band key {k} vanished");
+                                Assert.AreEqual(k, LawKey(v));
+                                Assert.IsTrue(d.TryAdd(k, Law(k, round + 1)));
+                            }
+
+                            break;
+                        }
+
+                        default: // reader: full-surface sweeps with the pair law
+                        {
+                            for (int pass = 0; pass < 25; pass++)
+                            {
+                                foreach (KeyValuePair<int, long> pair in d.Pairs)
+                                {
+                                    Assert.AreEqual(pair.Key, LawKey(pair.Value), "mixed pair observed under ordered churn");
+                                }
+
+                                var view = d.Snapshot();
+                                for (int i = 0; i < view.Count; i += 17)
+                                {
+                                    Assert.AreEqual(view.GetKeyAt(i), LawKey(view[i]), "view pair mixed");
+                                }
+                            }
+
+                            break;
+                        }
+                    }
+
+                    barrier.SignalAndWait(); // volley over; the post-phase audit runs while everyone is parked here
+                }
+            });
+
+            Assert.AreEqual(0, Interlocked.Read(ref auditFailures), "a quiescent audit failed mid-battle");
+            Assert.AreEqual(seeded + appended, d.Count);
+            AssertFullyConsistent(d);
+        }
+
+        // ==========================================================================================================
+        // 2. Memory-model probes.
+        // ==========================================================================================================
+
+        [TestMethod]
+        public void Gun_SingleWriterMonotonicRegister_NoReadPathTravelsBackInTime()
+        {
+            // ONE writer stores strictly increasing values into one key. Per-location coherence then requires
+            // every reader to observe a non-decreasing sequence THROUGH EACH PATH: the key path (the hash node's
+            // value field) and the list path (the value array slot) are each a single memory location written in
+            // program order. A reader observing v then v' < v on the SAME path would prove a broken publication
+            // (e.g. a missing volatile letting a stale cached read surface). NOTE the contract deliberately does
+            // NOT promise cross-path monotonicity — the node is written a hair before the array slot — so each
+            // path tracks its own watermark.
+            const int Writes = 250_000;
+            int threads = GunThreads;
+            var d = new ConcurrentOrderedDict<int, long>();
+            d.Add(7, 0);
+            long done = 0;
+
+            FireGun(threads, id =>
+            {
+                if (id == 0)
+                {
+                    try
+                    {
+                        for (long v = 1; v <= Writes; v++)
+                        {
+                            d.SetByKey(7, v);
+                        }
+                    }
+                    finally
+                    {
+                        Interlocked.Exchange(ref done, 1); // release the readers even if an assert threw
+                    }
+                }
+                else
+                {
+                    long lastKeyPath = 0;
+                    long lastListPath = 0;
+                    while (Interlocked.Read(ref done) == 0)
+                    {
+                        Assert.IsTrue(d.TryGetValue(7, out long byKey));
+                        Assert.IsTrue(byKey >= lastKeyPath, $"key path went back in time: {byKey} after {lastKeyPath}");
+                        lastKeyPath = byKey;
+
+                        Assert.IsTrue(d.TryGetAt(0, out long byIndex));
+                        Assert.IsTrue(byIndex >= lastListPath, $"list path went back in time: {byIndex} after {lastListPath}");
+                        lastListPath = byIndex;
+
+                        // The snapshot view shares the live array slot, so it belongs to the list-path clock.
+                        long byView = d.Snapshot()[0];
+                        Assert.IsTrue(byView >= lastListPath, $"view read went back in time: {byView} after {lastListPath}");
+                        lastListPath = byView;
+                    }
+                }
+            });
+
+            Assert.IsTrue(d.TryGetValue(7, out long final) && final == Writes);
+        }
+
+        [TestMethod]
+        public void Gun_AppendOnly_ListVisibilityImpliesKeyVisibility_AndCountImpliesReadableSlots()
+        {
+            // The publication order contract, asserted as a happens-before chain: the appender inserts into the
+            // key map (a release publish inside the clone) BEFORE release-publishing the list count; a reader
+            // that acquire-reads Count == c is therefore guaranteed (a) every slot below c is fully written with
+            // the correct pair, and (b) every key visible on the list path already resolves on the key path.
+            // Either assertion failing would be a genuine memory-model bug (or a broken publish order), not noise.
+            const int Appends = 150_000;
+            int threads = GunThreads;
+            var d = new ConcurrentOrderedDict<int, int>();
+            long done = 0;
+
+            FireGun(threads, id =>
+            {
+                if (id == 0)
+                {
+                    try
+                    {
+                        for (int k = 0; k < Appends; k++)
+                        {
+                            d.Add(k, k); // append-only, key == value == index: every observation is self-checking
+                        }
+                    }
+                    finally
+                    {
+                        Interlocked.Exchange(ref done, 1);
+                    }
+                }
+                else
+                {
+                    var rng = new System.Random(31 + id);
+                    while (Interlocked.Read(ref done) == 0)
+                    {
+                        int c = d.Count; // the acquire
+                        if (c == 0)
+                        {
+                            continue;
+                        }
+
+                        int i = rng.Next(c);
+                        Assert.IsTrue(d.TryGetAt(i, out int v), $"Count said {c} but slot {i} was not readable");
+                        Assert.AreEqual(i, v, $"slot {i} was readable before its content was published");
+                        Assert.AreEqual(i, d.GetKeyAt(i), "key slot published out of order with the count");
+                        Assert.IsTrue(d.ContainsKey(i), $"list path shows index {i} but the key path cannot resolve it — the leading-path contract is broken");
+                        Assert.IsTrue(d.TryGetValue(i, out int kv) && kv == i);
+                        Assert.AreEqual(i, d.IndexOf(i), "append-only index drifted");
+
+                        // The boundary slot is the freshest publish — probe it every pass, not just random slots.
+                        Assert.IsTrue(d.TryGetAt(c - 1, out int last) && last == c - 1, "the just-published boundary slot was torn or empty");
+                    }
+                }
+            });
+
+            Assert.AreEqual(Appends, d.Count);
+            AssertFullyConsistent(d);
+        }
+
+        // ==========================================================================================================
+        // 3. Exact accounting under contention.
+        // ==========================================================================================================
+
+        [TestMethod]
+        public void Gun_TryUpdateCas_FinalValueEqualsSuccessCountExactly()
+        {
+            // The strongest lost-update/phantom-update detector: every successful TryUpdate increments a key's
+            // value by exactly 1 from the compared base, so per-key `final value == number of CAS wins` must hold
+            // EXACTLY. One lost write (two winners from the same base) or one phantom (a write that bypassed the
+            // compare) breaks the equality. This hammers the ref-seam in-place update under maximal contention.
+            const int AttemptsPerThread = 60_000;
+            const int Keys = 8;
+            int threads = GunThreads;
+            var d = new ConcurrentOrderedDict<int, long>();
+            for (int k = 0; k < Keys; k++)
+            {
+                d.Add(k, 0);
+            }
+
+            var wins = new long[Keys];
+            FireGun(threads, id =>
+            {
+                var rng = new System.Random(7 + id);
+                for (int i = 0; i < AttemptsPerThread; i++)
+                {
+                    int k = rng.Next(Keys);
+                    Assert.IsTrue(d.TryGetValue(k, out long cur));
+                    if (d.TryUpdate(k, cur + 1, cur))
+                    {
+                        Interlocked.Increment(ref wins[k]);
+                    }
+                }
+            });
+
+            for (int k = 0; k < Keys; k++)
+            {
+                Assert.IsTrue(d.TryGetValue(k, out long final));
+                Assert.AreEqual(wins[k], final, $"key {k}: {wins[k]} CAS wins but final value {final} — an update was lost or fabricated");
+            }
+        }
+
+        [TestMethod]
+        public void Gun_GetOrAddStampede_StoredValueProvablyCameFromAnInvokedFactory()
+        {
+            // Cache-stampede provenance: every thread races GetOrAdd with a factory producing a thread-tagged
+            // value and recording that it ran. Afterwards (a) all threads got the stored winner, (b) the winner
+            // decodes to a thread whose factory REALLY ran for that key (a value nobody produced would prove the
+            // append published something other than a computed result), (c) at least one factory ran per key.
+            const int Keys = 3_000;
+            int threads = GunThreads;
+            var d = new ConcurrentOrderedDict<int, long>();
+            var produced = new bool[Keys, 16];   // [key, thread] — thread ids are < 16 here
+            var invocations = new int[Keys];
+            var observed = new long[threads][];
+
+            FireGun(threads, id =>
+            {
+                var mine = new long[Keys];
+                for (int k = 0; k < Keys; k++)
+                {
+                    int key = k;
+                    mine[k] = d.GetOrAdd(key, _ =>
+                    {
+                        produced[key, id] = true; // written before the factory returns, so a stored value implies a visible flag
+                        Interlocked.Increment(ref invocations[key]);
+                        return (long)key * 100 + id;
+                    });
+                }
+
+                observed[id] = mine;
+            });
+
+            Assert.AreEqual(Keys, d.Count);
+            for (int k = 0; k < Keys; k++)
+            {
+                Assert.IsTrue(d.TryGetValue(k, out long stored));
+                Assert.AreEqual(k, (int)(stored / 100), $"key {k} stored a value produced for another key");
+                int winner = (int)(stored % 100);
+                Assert.IsTrue(produced[k, winner], $"key {k} stored a value no factory invocation produced (phantom result)");
+                Assert.IsTrue(invocations[k] >= 1);
+                for (int t = 0; t < threads; t++)
+                {
+                    Assert.AreEqual(stored, observed[t][k], $"thread {t} observed a non-winner value for key {k}");
+                }
+            }
+        }
+
+        // ==========================================================================================================
+        // 4. Pair integrity and snapshot integrity under churn.
+        // ==========================================================================================================
+
+        [TestMethod]
+        public void Gun_OrderedChurn_PairsAndViewsNeverExposeAMixedKeyValuePair()
+        {
+            // The pair-integrity clause: under ORDER-PRESERVING operations (append, in-place value replace,
+            // interior remove + re-add) every (key, value) a reader combines from the list path must satisfy the
+            // law — appends publish both slots before the count, removals compact into fresh arrays, and value
+            // replaces keep the slot's key. Only TryRemoveSwapBack is allowed to transiently mix a pair, and it
+            // is deliberately ABSENT here, making any mixed observation a hard failure.
+            const int Seed = 4_000;
+            const int HotKeys = 48;
+            int threads = OversubscribedThreads;
+            var d = new ConcurrentOrderedDict<int, long>();
+            for (int k = 0; k < Seed; k++)
+            {
+                d.Add(k, Law(k, 0));
+            }
+
+            long writersDone = 0;
+            int writers = 0;
+            FireGun(threads, id =>
+            {
+                switch (id % 3)
+                {
+                    case 0: // value churner on the hot keys
+                        Interlocked.Increment(ref writers);
+                        try
+                        {
+                            for (int g = 1; g <= 50_000; g++)
+                            {
+                                int k = g % HotKeys;
+                                d.SetByKey(k, Law(k, g));
+                            }
+                        }
+                        finally
+                        {
+                            Interlocked.Increment(ref writersDone);
+                        }
+
+                        break;
+
+                    case 1: // interior structural churner on a disjoint band (ordered removals only)
+                        Interlocked.Increment(ref writers);
+                        try
+                        {
+                            int lo = HotKeys + (id % 7) * 300;
+                            for (int round = 0; round < 40; round++)
+                            {
+                                for (int k = lo; k < lo + 150; k++)
+                                {
+                                    if (d.TryRemove(k, out long v))
+                                    {
+                                        Assert.AreEqual(k, LawKey(v));
+                                        Assert.IsTrue(d.TryAdd(k, Law(k, round + 1)));
+                                    }
+                                }
+                            }
+                        }
+                        finally
+                        {
+                            Interlocked.Increment(ref writersDone);
+                        }
+
+                        break;
+
+                    default: // pair auditors on every combining surface
+                        while (Interlocked.Read(ref writersDone) < Volatile.Read(ref writers) || Volatile.Read(ref writers) == 0)
+                        {
+                            foreach (KeyValuePair<int, long> pair in d.Pairs)
+                            {
+                                Assert.AreEqual(pair.Key, LawKey(pair.Value), $"Pairs exposed a mixed pair: ({pair.Key}, {pair.Value:X})");
+                            }
+
+                            var view = d.Snapshot();
+                            for (int i = 0; i < view.Count; i++)
+                            {
+                                Assert.AreEqual(view.GetKeyAt(i), LawKey(view[i]), "Snapshot view exposed a mixed pair");
+                            }
+
+                            // Deliberately NOT asserted here: manually combining GetKeyAt(i) + TryGetAt(i) across
+                            // two separate calls reads two DIFFERENT snapshots by contract (each call re-reads the
+                            // volatile store), so a compaction between them can legally pair different entries —
+                            // that is index skew, not pair mixing. Pair integrity is only promised per snapshot,
+                            // which is exactly what Pairs and the view (asserted above) provide.
+                        }
+
+                        break;
+                }
+            });
+
+            AssertFullyConsistent(d);
+        }
+
+        [TestMethod]
+        public void Gun_EnumeratorSnapshots_NeverContainDuplicatesOrPhantoms_UnderInteriorChurn()
+        {
+            // The fresh-array discipline of ordered removals means any (array, count) an enumerator captures holds
+            // each key AT MOST once and only ever legal values — a duplicate in one enumeration pass would prove a
+            // slot was structurally reused under a live snapshot (the floor rule failing), a phantom would prove a
+            // half-published slot leaked. Keys double as values so the observations are self-identifying.
+            const int Universe = 3_000;
+            int threads = GunThreads;
+            var d = new ConcurrentOrderedDict<int, int>();
+            for (int k = 0; k < Universe; k++)
+            {
+                d.Add(k, k);
+            }
+
+            long done = 0;
+            FireGun(threads, id =>
+            {
+                if (id == 0)
+                {
+                    try
+                    {
+                        var rng = new System.Random(11);
+                        for (int i = 0; i < 25_000; i++)
+                        {
+                            int k = rng.Next(Universe);
+                            if (d.TryRemove(k, out _))
+                            {
+                                Assert.IsTrue(d.TryAdd(k, k)); // same key returns, appended at the end
+                            }
+                        }
+                    }
+                    finally
+                    {
+                        Interlocked.Exchange(ref done, 1);
+                    }
+                }
+                else
+                {
+                    var seen = new HashSet<int>();
+                    while (Interlocked.Read(ref done) == 0)
+                    {
+                        seen.Clear();
+                        int yielded = 0;
+                        foreach (int v in d)
+                        {
+                            Assert.IsTrue((uint)v < Universe, $"phantom value {v} enumerated");
+                            Assert.IsTrue(seen.Add(v), $"key {v} enumerated TWICE in one snapshot — a live slot was structurally reused");
+                            yielded++;
+                        }
+
+                        Assert.IsTrue(yielded <= Universe);
+                    }
+                }
+            });
+
+            Assert.AreEqual(Universe, d.Count);
+            AssertFullyConsistent(d);
+        }
+
+        // ==========================================================================================================
+        // 5. Cross-instance isolation.
+        // ==========================================================================================================
+
+        [TestMethod]
+        public void Gun_TwoInstancesOfTheSameClosedType_ShareNoObservableState()
+        {
+            // Store.Empty is a static shared by every instance of a closed generic type, and Clear() publishes it.
+            // Storm instance A with add/Clear cycles while instance B runs a law-checked append-only workload:
+            // any crosstalk through the shared static (or any other accidental static) breaks B's law or count.
+            const int BAppends = 60_000;
+            int threads = GunThreads;
+            var a = new ConcurrentOrderedDict<int, long>();
+            var b = new ConcurrentOrderedDict<int, long>();
+            long done = 0;
+
+            FireGun(threads, id =>
+            {
+                if (id == 0)
+                {
+                    try
+                    {
+                        for (int k = 0; k < BAppends; k++)
+                        {
+                            b.Add(k, Law(k, 0));
+                        }
+                    }
+                    finally
+                    {
+                        Interlocked.Exchange(ref done, 1);
+                    }
+                }
+                else if ((id & 1) == 1)
+                {
+                    // A-team: fill a little, Clear, repeat — hammers the shared Empty publish.
+                    while (Interlocked.Read(ref done) == 0)
+                    {
+                        for (int k = 0; k < 256; k++)
+                        {
+                            a.SetByKey(k, Law(k, k));
+                        }
+
+                        a.Clear();
+                    }
+                }
+                else
+                {
+                    // B-auditors: B must look like a healthy append-only dict at every instant.
+                    while (Interlocked.Read(ref done) == 0)
+                    {
+                        int c = b.Count;
+                        Assert.IsTrue(c <= BAppends);
+                        if (c > 0)
+                        {
+                            Assert.IsTrue(b.TryGetAt(c - 1, out long v) && LawKey(v) == c - 1, "instance B was disturbed by instance A's storm");
+                        }
+                    }
+                }
+            });
+
+            a.Clear();
+            Assert.AreEqual(0, a.Count);
+            Assert.AreEqual(BAppends, b.Count);
+            for (int k = 0; k < BAppends; k++)
+            {
+                Assert.IsTrue(b.TryGetValue(k, out long v) && LawKey(v) == k);
+            }
+
+            AssertFullyConsistent(b);
+        }
+
+        // ==========================================================================================================
+        // 6. The enforced reentrancy contract: corruption vectors must throw LockRecursionException, consistently.
+        // ==========================================================================================================
+
+        [TestMethod]
+        public void Reentrancy_WriteInsideRemoveWherePredicate_ThrowsLockRecursion_AndStateIsTheConsistentPrefix()
+        {
+            var d = new ConcurrentOrderedDict<int, int>();
+            for (int k = 0; k < 6; k++)
+            {
+                d.Add(k, k);
+            }
+
+            // The predicate removes 0 and 1, then tries to WRITE back into the collection at k == 2. Monitor
+            // reentrancy would let that write interleave into the half-applied pass; the guard must throw instead,
+            // and the pass must land in the documented "removed everything matched so far" state.
+            Assert.ThrowsExactly<LockRecursionException>(() => d.RemoveWhere((k, v) =>
+            {
+                if (k == 2)
+                {
+                    d.TryAdd(999, 999); // the attack
+                }
+
+                return k < 2;
+            }));
+
+            CollectionAssert.AreEqual(new[] { 2, 3, 4, 5 }, d.Keys, "the throwing pass must keep every not-yet-matched entry");
+            Assert.IsFalse(d.ContainsKey(999), "the reentrant write must not have been applied");
+            AssertFullyConsistent(d);
+
+            // The collection remains fully usable after refusing the attack.
+            Assert.IsTrue(d.TryAdd(999, 999));
+            Assert.AreEqual(999, d.GetByKey(999));
+        }
+
+        [TestMethod]
+        public void Reentrancy_WriteInsideAddRangeSource_ThrowsLockRecursion_AndAppliedPrefixIsConsistent()
+        {
+            var d = new ConcurrentOrderedDict<int, int>();
+
+            // A lazy source whose enumeration writes back into the collection between elements.
+            static IEnumerable<KeyValuePair<int, int>> EvilSource(ConcurrentOrderedDict<int, int> target)
+            {
+                yield return new KeyValuePair<int, int>(1, 10);
+                target.SetByKey(777, 7); // the attack — runs inside AddRange's write lock
+                yield return new KeyValuePair<int, int>(2, 20);
+            }
+
+            Assert.ThrowsExactly<LockRecursionException>(() => d.AddRange(EvilSource(d)));
+
+            // The pair yielded before the attack must be fully applied on BOTH paths; nothing after it may exist.
+            CollectionAssert.AreEqual(new[] { 1 }, d.Keys);
+            Assert.AreEqual(10, d.GetByKey(1));
+            Assert.IsFalse(d.ContainsKey(2));
+            Assert.IsFalse(d.ContainsKey(777));
+            AssertFullyConsistent(d);
+        }
+
+        [TestMethod]
+        public void Reentrancy_EveryMutator_IsGuardedInsideThePredicate()
+        {
+            // Sweep the whole mutating surface from inside a RemoveWhere predicate: each one must refuse with
+            // LockRecursionException (not deadlock, not corrupt, not silently succeed).
+            var attacks = new (string Name, Action<ConcurrentOrderedDict<int, int>> Attack)[]
+            {
+                ("SetByKey", t => t.SetByKey(50, 1)),
+                ("indexer key set", t => t[50] = 1),          // TKey == int: this binds to the INDEX setter → SetAt
+                ("TryAdd", t => t.TryAdd(999, 1)),
+                ("Add", t => t.Add(999, 1)),
+                ("AddRange", t => t.AddRange(new[] { new KeyValuePair<int, int>(999, 1) })),
+                ("GetOrAdd", t => t.GetOrAdd(999, 1)),
+                ("GetOrAdd factory", t => t.GetOrAdd(999, _ => 1)),
+                ("AddOrUpdate", t => t.AddOrUpdate(999, 1, (_, v) => v)),
+                ("TryUpdate", t => t.TryUpdate(0, 1, 0)),
+                ("TryRemove", t => t.TryRemove(0, out _)),
+                ("TryRemoveSwapBack", t => t.TryRemoveSwapBack(0, out _)),
+                ("RemoveAt", t => t.RemoveAt(0)),
+                ("SetAt", t => t.SetAt(0, 1)),
+                ("RemoveWhere", t => t.RemoveWhere((_, _) => false)),
+                ("Clear", t => t.Clear()),
+            };
+
+            foreach ((string name, Action<ConcurrentOrderedDict<int, int>> attack) in attacks)
+            {
+                var d = new ConcurrentOrderedDict<int, int>();
+                for (int k = 0; k < 4; k++)
+                {
+                    d.Add(k, k);
+                }
+
+                Exception? observed = null;
+                try
+                {
+                    d.RemoveWhere((k, v) =>
+                    {
+                        attack(d);
+                        return false;
+                    });
+                }
+                catch (Exception ex)
+                {
+                    observed = ex;
+                }
+
+                Assert.IsNotNull(observed, $"attack '{name}' silently succeeded — the reentrancy guard is missing on that mutator");
+                Assert.AreEqual(typeof(LockRecursionException), observed.GetType(), $"attack '{name}' was refused with {observed.GetType().Name}, expected LockRecursionException");
+                Assert.AreEqual(4, d.Count, $"attack '{name}' changed the collection");
+                AssertFullyConsistent(d);
+            }
+        }
+
+        [TestMethod]
+        public void Reentrancy_EvilComparerWritingDuringALockedLookup_Throws_AndStateIsUntouched()
+        {
+            // The sneakiest vector: a key comparer that writes back into the collection. Its Equals runs inside
+            // every locked bucket walk, so an unguarded design would corrupt from a place no caller can see.
+            var comparer = new EvilComparer();
+            var d = new ConcurrentOrderedDict<string, int>(comparer);
+            comparer.Owner = d;
+            d.Add("a", 1);
+            d.Add("b", 2);
+
+            comparer.Armed = true;
+            try
+            {
+                Assert.ThrowsExactly<LockRecursionException>(() => d.SetByKey("a", 99));
+            }
+            finally
+            {
+                comparer.Armed = false;
+            }
+
+            Assert.AreEqual(1, d.GetByKey("a"), "the refused update must have left the old value");
+            Assert.IsFalse(d.ContainsKey("evil"));
+            AssertFullyConsistent(d);
+
+            // Disarmed, the same call works.
+            d.SetByKey("a", 99);
+            Assert.AreEqual(99, d.GetByKey("a"));
+        }
+
+        /// <summary>A comparer that, when armed, mutates its owning collection from inside <see cref="Equals" /> — the comparer-reentrancy attack vector.</summary>
+        private sealed class EvilComparer : IEqualityComparer<string>
+        {
+            /// <summary>The collection to attack; set after construction because the comparer is needed to build it.</summary>
+            internal ConcurrentOrderedDict<string, int>? Owner;
+
+            /// <summary>Armed only for the attack window so seeding and the final audit use sane semantics.</summary>
+            internal bool Armed;
+
+            /// <summary>Ordinal equality, plus the attack when armed.</summary>
+            /// <param name="x">Left key.</param>
+            /// <param name="y">Right key.</param>
+            /// <returns>Ordinal equality of the keys.</returns>
+            public bool Equals(string? x, string? y)
+            {
+                if (Armed)
+                {
+                    Owner!.TryAdd("evil", -1); // must be refused by the reentrancy guard when called under the write lock
+                }
+
+                return string.Equals(x, y, StringComparison.Ordinal);
+            }
+
+            /// <summary>Ordinal hash (never attacks — hashing runs before bucket locks in some paths and the attack belongs in the locked walk).</summary>
+            /// <param name="obj">The key to hash.</param>
+            /// <returns>The ordinal hash code.</returns>
+            public int GetHashCode(string obj) => StringComparer.Ordinal.GetHashCode(obj);
+        }
+
+        // ==========================================================================================================
+        // 7. Everything at once, with an exact final oracle.
+        // ==========================================================================================================
+
+        [TestMethod]
+        public void Gun_PartitionedAllOpsChaos_FinalMembershipIsExactlyComputable()
+        {
+            // Every operation family runs simultaneously, each confined to its own key partition so the final
+            // membership is exactly computable despite total interleaving freedom:
+            //   P0 [1M..)      AddRange appenders            → every batch key present
+            //   P1 [10k..20k)  swap-back removers (evens)    → odds survive (order explicitly forfeited)
+            //   P2 [20k..30k)  interior remove + re-add      → all present
+            //   P3 [30k..40k)  tail push/pop stack cycles    → balanced, none of the pushed keys survive
+            //   P4 [40k..50k)  RemoveWhere + re-add cycles   → all present
+            // Readers hammer every surface with law checks the whole time. NOTE: pair-combination assertions are
+            // deliberately absent here because P1 runs TryRemoveSwapBack, whose single-slot transient mixed pair
+            // is documented; the pair law has its own swapback-free scenario above.
+            int threads = OversubscribedThreads;
+            const int P1Lo = 10_000, P2Lo = 20_000, P4Lo = 40_000, Band = 1_000;
+
+            var d = new ConcurrentOrderedDict<int, long>();
+            for (int k = P1Lo; k < P1Lo + Band; k++) d.Add(k, Law(k, 0));
+            for (int k = P2Lo; k < P2Lo + Band; k++) d.Add(k, Law(k, 0));
+            for (int k = P4Lo; k < P4Lo + Band; k++) d.Add(k, Law(k, 0));
+
+            long writersDone = 0;
+            int writers = 0;
+            long addRangeKeys = 0;
+            long swapBackWins = 0;
+
+            FireGun(threads, id =>
+            {
+                var rng = new System.Random(500 + id);
+                switch (id % 6)
+                {
+                    case 0: // P0: AddRange batches of fresh keys
+                        Interlocked.Increment(ref writers);
+                        try
+                        {
+                            const int BatchSize = 400;
+                            for (int b = 0; b < 25; b++)
+                            {
+                                int lo = 1_000_000 + (id * 25 + b) * BatchSize;
+                                var batch = new KeyValuePair<int, long>[BatchSize];
+                                for (int i = 0; i < BatchSize; i++)
+                                {
+                                    batch[i] = new KeyValuePair<int, long>(lo + i, Law(lo + i, 0));
+                                }
+
+                                d.AddRange(batch);
+                                Interlocked.Add(ref addRangeKeys, BatchSize);
+                            }
+                        }
+                        finally
+                        {
+                            Interlocked.Increment(ref writersDone);
+                        }
+
+                        break;
+
+                    case 1: // P1: every case-1 thread races to swap-back-remove ALL even keys — exactly one wins each
+                        Interlocked.Increment(ref writers);
+                        try
+                        {
+                            long wins = 0;
+                            for (int k = P1Lo; k < P1Lo + Band; k += 2)
+                            {
+                                if (d.TryRemoveSwapBack(k, out long v))
+                                {
+                                    Assert.AreEqual(k, LawKey(v), $"swap-back handed back a foreign value for {k}");
+                                    wins++;
+                                }
+                            }
+
+                            Interlocked.Add(ref swapBackWins, wins);
+                        }
+                        finally
+                        {
+                            Interlocked.Increment(ref writersDone);
+                        }
+
+                        break;
+
+                    case 2: // P2: interior churn — remove and immediately re-add, all keys end present
+                        Interlocked.Increment(ref writers);
+                        try
+                        {
+                            for (int round = 0; round < 15; round++)
+                            {
+                                int lo = P2Lo + (id % 4) * 250;
+                                for (int k = lo; k < lo + 250; k++)
+                                {
+                                    if (d.TryRemove(k, out long v))
+                                    {
+                                        Assert.AreEqual(k, LawKey(v));
+                                        Assert.IsTrue(d.TryAdd(k, Law(k, round + 1)));
+                                    }
+                                }
+                            }
+                        }
+                        finally
+                        {
+                            Interlocked.Increment(ref writersDone);
+                        }
+
+                        break;
+
+                    case 3: // P3: stack pattern — push a fresh run at the tail, pop it all back off
+                        Interlocked.Increment(ref writers);
+                        try
+                        {
+                            for (int cycle = 0; cycle < 200; cycle++)
+                            {
+                                int lo = 30_000 + id * 400 + (cycle % 4) * 100;
+                                for (int k = lo; k < lo + 25; k++)
+                                {
+                                    Assert.IsTrue(d.TryAdd(k, Law(k, cycle)));
+                                }
+
+                                for (int k = lo + 24; k >= lo; k--)
+                                {
+                                    Assert.IsTrue(d.TryRemove(k, out long v) && LawKey(v) == k, "a pushed key vanished or corrupted before its pop");
+                                }
+                            }
+                        }
+                        finally
+                        {
+                            Interlocked.Increment(ref writersDone);
+                        }
+
+                        break;
+
+                    case 4: // P4: bulk RemoveWhere over its own slice, then re-add what it removed
+                        Interlocked.Increment(ref writers);
+                        try
+                        {
+                            int lo = P4Lo + (id % 4) * 250;
+                            int hi = lo + 250;
+                            for (int round = 0; round < 12; round++)
+                            {
+                                int removed = d.RemoveWhere((k, v) => k >= lo && k < hi && (k % 3) == round % 3);
+                                Assert.IsTrue(removed >= 0);
+                                for (int k = lo; k < hi; k++)
+                                {
+                                    if ((k % 3) == round % 3)
+                                    {
+                                        d.TryAdd(k, Law(k, round + 1)); // some may have been re-added by a sibling slice-sharer; TryAdd dedups
+                                    }
+                                }
+                            }
+                        }
+                        finally
+                        {
+                            Interlocked.Increment(ref writersDone);
+                        }
+
+                        break;
+
+                    default: // readers: every surface, law-checked, race-tolerant
+                        while (Interlocked.Read(ref writersDone) < Volatile.Read(ref writers) || Volatile.Read(ref writers) == 0)
+                        {
+                            int probe = rng.Next(3) switch
+                            {
+                                0 => P1Lo + rng.Next(Band),
+                                1 => P2Lo + rng.Next(Band),
+                                _ => P4Lo + rng.Next(Band),
+                            };
+                            if (d.TryGetValue(probe, out long v))
+                            {
+                                Assert.AreEqual(probe, LawKey(v), $"key {probe} exposed a foreign value {v:X}");
+                            }
+
+                            var view = d.Snapshot();
+                            if (view.Count > 0)
+                            {
+                                int i = rng.Next(view.Count);
+                                Assert.IsTrue(LawKey(view[i]) >= 0); // value is always SOME law-shaped datum, never garbage
+                                _ = view.GetKeyAt(i);
+                            }
+
+                            foreach (long value in d)
+                            {
+                                Assert.IsTrue(LawKey(value) >= 0, $"garbage value enumerated: {value:X}");
+                            }
+
+                            _ = d.ToArray();
+                            Thread.Yield(); // widen preemption diversity
+                        }
+
+                        break;
+                }
+            });
+
+            // Exact final oracle, partition by partition. Every even P1 key must have been removed by EXACTLY one
+            // of the racing swap-back threads (single-winner accounting), leaving exactly the odds.
+            Assert.AreEqual(Band / 2, Interlocked.Read(ref swapBackWins), "racing swap-backs double-won or missed a key");
+            for (int k = P1Lo; k < P1Lo + Band; k++)
+            {
+                Assert.AreEqual((k & 1) == 1, d.ContainsKey(k), $"P1 key {k} wrong survival");
+            }
+
+            for (int k = P2Lo; k < P2Lo + Band; k++)
+            {
+                Assert.IsTrue(d.TryGetValue(k, out long v) && LawKey(v) == k, $"P2 key {k} lost");
+            }
+
+            for (int k = 30_000; k < 40_000; k++)
+            {
+                Assert.IsFalse(d.ContainsKey(k), $"P3 stack key {k} leaked past its pop");
+            }
+
+            for (int k = P4Lo; k < P4Lo + Band; k++)
+            {
+                Assert.IsTrue(d.TryGetValue(k, out long v) && LawKey(v) == k, $"P4 key {k} lost");
+            }
+
+            long expected = (Band / 2) /*P1 odds*/ + Band /*P2*/ + Band /*P4*/ + Interlocked.Read(ref addRangeKeys);
+            Assert.AreEqual(expected, d.Count, "final count does not match the partition oracle");
+            AssertFullyConsistent(d);
+        }
+    }
+}
