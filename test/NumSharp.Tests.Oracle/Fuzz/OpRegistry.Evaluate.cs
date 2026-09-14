@@ -223,6 +223,15 @@ namespace NumSharp.Tests.Fuzz
                 // switch because the target dtype is baked into the token name (cast_float32, cast_int8…).
                 if (name.StartsWith("cast_", StringComparison.Ordinal))
                     return NDExpr.Cast(a[0], FuzzCorpus.DtypeToTC(name.Substring("cast_".Length)));
+                // Phase 4.1b Round(decimals): round_<d>(child) → NDExpr.Round(child, d); d spelled m<n> = -n.
+                if (name.StartsWith("round_", StringComparison.Ordinal))
+                {
+                    string s = name.Substring("round_".Length);
+                    int d = s.StartsWith("m", StringComparison.Ordinal)
+                        ? -int.Parse(s.Substring(1), CultureInfo.InvariantCulture)
+                        : int.Parse(s, CultureInfo.InvariantCulture);
+                    return NDExpr.Round(a[0], d);
+                }
                 switch (name)
                 {
                     // binary

@@ -872,6 +872,31 @@ namespace NumSharp.Backends.Iteration
         }
     }
 
+    public sealed partial class RoundNode
+    {
+        internal override NDExprTypeInfo InferType(
+            NPTypeCode[] inputTypes, Dictionary<NDExpr, NPTypeCode> nodeTypes)
+        {
+            var ct = _child.InferType(inputTypes, nodeTypes);
+            var childType = ct.IsWeak ? ct.DefaultCode : ct.Code;
+
+            // np.round(bool, decimals != 0) RAISES: the mul→rint→div path produces a float64 that cannot
+            // cast back to bool (same_kind). NumPy's UFuncTypeError names the FIRST op (multiply for
+            // positive decimals, divide for negative). Reproduced verbatim (probed 2.4.2). Bool with
+            // decimals == 0 never reaches here — the factory routes it to the UnaryOp.Round node (→ f16).
+            if (childType == NPTypeCode.Boolean)
+                throw new NotSupportedException(
+                    $"Cannot cast ufunc '{(_decimals > 0 ? "multiply" : "divide")}' output from dtype('float64') " +
+                    "to dtype('bool') with casting rule 'same_kind'");
+
+            // Otherwise np.round PRESERVES the input dtype (float/complex/integer/char/decimal). A WEAK
+            // child resolves to its own default first (np.round rounds an int64/float64 array).
+            ResolveChild(_child, ct, childType, nodeTypes);
+            nodeTypes[this] = childType;
+            return NDExprTypeInfo.Strong(childType);
+        }
+    }
+
     public sealed partial class ComparisonNode
     {
         internal override NDExprTypeInfo InferType(

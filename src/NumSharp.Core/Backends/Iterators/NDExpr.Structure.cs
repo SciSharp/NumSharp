@@ -80,6 +80,7 @@ namespace NumSharp.Backends.Iteration
         Reduce = 9,
         WeightedAverage = 10,
         Cast = 11,
+        Round = 12,
     }
 
     /// <summary>
@@ -319,6 +320,20 @@ namespace NumSharp.Backends.Iteration
 
         internal override bool StructureEquals(NDExpr bound, NDExprOperandScratch operands)
             => bound is CastNode o && o._target == _target && _child.StructureEquals(o._child, operands);
+    }
+
+    public sealed partial class RoundNode
+    {
+        internal override void HashStructure(ref NDExprStructureHasher h, NDExprOperandScratch operands)
+        {
+            // The decimals count is part of the program identity — round(x,2) and round(x,-1) compile
+            // different kernels (different f, different op order), so it must fold into the hash.
+            h.Add(NDExprNodeTag.Round, (long)_decimals);
+            _child.HashStructure(ref h, operands);
+        }
+
+        internal override bool StructureEquals(NDExpr bound, NDExprOperandScratch operands)
+            => bound is RoundNode o && o._decimals == _decimals && _child.StructureEquals(o._child, operands);
     }
 
     public sealed partial class ComparisonNode

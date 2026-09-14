@@ -448,6 +448,26 @@ namespace NumSharp.Backends.Iteration
         public static NDExpr Round(NDExpr x) => new UnaryNode(UnaryOp.Round, x);
 
         /// <summary>
+        /// Round to <paramref name="decimals"/> decimal places (np.round(x, decimals) / np.around) — a
+        /// DTYPE-PRESERVING port of NumPy's <c>PyArray_Round</c>. For <c>decimals == 0</c> this is exactly
+        /// <see cref="Round(NDExpr)"/> (banker's rint); for <c>decimals != 0</c> it composes
+        /// <c>op2(rint(op1(x, 10^|decimals|)), 10^|decimals|)</c> (mul→div for positive, div→mul for
+        /// negative). Every dtype behaves as NumPy 2.4.2 does:
+        /// <list type="bullet">
+        /// <item>float / complex: computed at the input's own float dtype (complex rounds each lane), dtype PRESERVED;</item>
+        /// <item>INTEGER, <c>decimals ≥ 0</c>: the IDENTITY (an integer has no fractional part — no float round-trip, so a huge int64 is untouched);</item>
+        /// <item>INTEGER, <c>decimals &lt; 0</c>: the round runs in float64 and is CAST BACK to the integer dtype, so an out-of-range result WRAPS (e.g. <c>round(uint8 255, -1)</c> → 4);</item>
+        /// <item>BOOL with <c>decimals != 0</c>: THROWS NumPy's <c>UFuncTypeError</c> "Cannot cast ufunc 'multiply'/'divide' output from dtype('float64') to dtype('bool')…" (the multiply/divide output cannot cast back to bool).</item>
+        /// </list>
+        /// Scalar-only in the fused kernel (the multi-step composition's SIMD form is deferred).
+        /// </summary>
+        /// <param name="x">The operand to round.</param>
+        /// <param name="decimals">The number of decimal places (negative rounds to tens/hundreds/…).</param>
+        /// <returns>An expression node computing <paramref name="x"/> rounded to <paramref name="decimals"/> places, dtype preserved.</returns>
+        public static NDExpr Round(NDExpr x, int decimals)
+            => decimals == 0 ? new UnaryNode(UnaryOp.Round, x) : new RoundNode(x, decimals);
+
+        /// <summary>
         /// Round to the nearest integer, half-to-even (np.rint) — the TRUE ufunc form of round-half-to-even.
         /// The VALUE is identical to <see cref="Round"/> (both are banker's rounding, and Rint aliases Round
         /// at every kernel emit site), but the DTYPE differs: where <see cref="Round"/> PRESERVES the input
@@ -1698,6 +1718,155 @@ namespace NumSharp.Backends.Iteration
         public override void AppendSignature(StringBuilder sb)
         {
             sb.Append("cast").Append((int)_target).Append('(');
+            _child.AppendSignature(sb);
+            sb.Append(')');
+        }
+    }
+
+    /// <summary>
+    /// Round-to-decimals node — <c>np.round(x, decimals)</c> with <c>decimals != 0</c> (the
+    /// <c>decimals == 0</c> case is the plain <see cref="UnaryOp.Round"/> node, so the factory only
+    /// builds a <c>RoundNode</c> for a nonzero <c>decimals</c>, which is baked into the node and folded
+    /// into its identity). A DTYPE-PRESERVING port of NumPy's <c>PyArray_Round</c>: it composes
+    /// <c>op2(rint(op1(x, f)), f)</c> with <c>f = 10^|decimals|</c> (mul→div for positive decimals,
+    /// div→mul for negative), at the input's own float dtype for a float/complex child, at float64 (then
+    /// cast back, wrapping) for an integer child with negative decimals, and as the identity for an
+    /// integer child with positive decimals. Scalar-only (<see cref="CanEmitVectorV2"/> false) — the
+    /// multi-step composition's SIMD form is deferred.
+    /// </summary>
+    public sealed partial class RoundNode : NDExpr
+    {
+        private readonly NDExpr _child;
+        private readonly int _decimals;   // guaranteed != 0 (the factory routes 0 to UnaryOp.Round)
+
+        /// <summary>Construct <c>round(child, decimals)</c>; <paramref name="decimals"/> must be nonzero.</summary>
+        /// <param name="child">The sub-expression to round.</param>
+        /// <param name="decimals">The number of decimal places (nonzero).</param>
+        /// <exception cref="ArgumentNullException"><paramref name="child"/> is null.</exception>
+        public RoundNode(NDExpr child, int decimals)
+        {
+            _child = child ?? throw new ArgumentNullException(nameof(child));
+            _decimals = decimals;
+        }
+
+        /// <summary>The decimals this node rounds to (part of its program identity).</summary>
+        internal int Decimals => _decimals;
+
+        // NDComplexMath.RealPart/ImagPart(Complex)->double and the Complex(double,double) ctor — the
+        // complex child is rounded LANE BY LANE at float64 (its real/imag parts are float64), then
+        // reassembled, matching NumPy's `arr.real = a.real.round(); arr.imag = a.imag.round()`.
+        private static readonly System.Reflection.MethodInfo s_realPart =
+            typeof(NumSharp.Utilities.NDComplexMath).GetMethod("RealPart", new[] { typeof(System.Numerics.Complex) })
+            ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "RealPart");
+        private static readonly System.Reflection.MethodInfo s_imagPart =
+            typeof(NumSharp.Utilities.NDComplexMath).GetMethod("ImagPart", new[] { typeof(System.Numerics.Complex) })
+            ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "ImagPart");
+        private static readonly System.Reflection.ConstructorInfo s_complexCtor =
+            typeof(System.Numerics.Complex).GetConstructor(new[] { typeof(double), typeof(double) })
+            ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, ".ctor(double,double)");
+        private static readonly System.Reflection.MethodInfo s_floatToHalf =
+            typeof(Half).GetMethod("op_Explicit", new[] { typeof(float) })
+            ?? throw new MissingMethodException(typeof(Half).FullName, "op_Explicit(float)");
+
+        public override bool SupportsSimd => false;
+
+        // NumPy's power_of_ten (calculation.c): a small exact table for n < 9, then 1e9 multiplied by
+        // 10 exactly (n-9) more times — reproduced so `f` is bit-identical to NumPy's (Math.Pow(10,n)
+        // can be 1 ULP off, and f is applied then un-applied, so the error would not fully cancel).
+        // n is always the NON-negative magnitude |decimals|.
+        private static readonly double[] s_p10 = { 1e0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8 };
+        private static double PowerOfTen(int n)
+        {
+            if (n < 9)
+                return s_p10[n];
+            double ret = 1e9;
+            for (int k = 9; k < n; k++)
+                ret *= 10.0;
+            return ret;
+        }
+
+        // The 8 integer widths + Char (NOT bool — a bool child with decimals != 0 throws at typing).
+        private static bool IsIntType(NPTypeCode t)
+            => t == NPTypeCode.Byte || t == NPTypeCode.SByte ||
+               t == NPTypeCode.Int16 || t == NPTypeCode.UInt16 || t == NPTypeCode.Char ||
+               t == NPTypeCode.Int32 || t == NPTypeCode.UInt32 ||
+               t == NPTypeCode.Int64 || t == NPTypeCode.UInt64;
+
+        // Push the constant f (a double) onto the stack at working dtype w (Double / Single / Half only —
+        // integer/decimal children round via the Double bridge, so w is never those here).
+        private static void EmitPushConst(ILGenerator il, double f, NPTypeCode w)
+        {
+            switch (w)
+            {
+                case NPTypeCode.Double: il.Emit(OpCodes.Ldc_R8, f); break;
+                case NPTypeCode.Single: il.Emit(OpCodes.Ldc_R4, (float)f); break;
+                case NPTypeCode.Half: il.Emit(OpCodes.Ldc_R4, (float)f); il.EmitCall(OpCodes.Call, s_floatToHalf, null); break;
+                default: throw new InvalidOperationException($"RoundNode constant push unsupported for {w}.");
+            }
+        }
+
+        // Given a value of dtype w on the stack, leave `op2(rint(op1(value, f)), f)` (dtype w). This IS
+        // NumPy's PyArray_Round inner sequence at precision w: multiply→rint→divide (decimals > 0) or
+        // divide→rint→multiply (decimals < 0), reusing the SAME per-element multiply/divide (BinaryNode)
+        // and rint (UnaryOp.Round) emitters the engine's own ufuncs use.
+        private void EmitRoundSequence(ILGenerator il, NPTypeCode w)
+        {
+            double f = PowerOfTen(System.Math.Abs(_decimals));
+            var op1 = _decimals > 0 ? BinaryOp.Multiply : BinaryOp.Divide;
+            var op2 = _decimals > 0 ? BinaryOp.Divide : BinaryOp.Multiply;
+            EmitPushConst(il, f, w);
+            DirectILKernelGenerator.EmitScalarOperation(il, op1, w);        // value op1 f
+            DirectILKernelGenerator.EmitUnaryScalarOperation(il, UnaryOp.Round, w);   // rint (banker's)
+            EmitPushConst(il, f, w);
+            DirectILKernelGenerator.EmitScalarOperation(il, op2, w);        // (rinted) op2 f
+        }
+
+        public override void EmitScalar(ILGenerator il, NDExprCompileContext ctx)
+        {
+            var ct = ctx.TypeOf(_child);
+            var my = ctx.TypeOf(this);   // == ct (dtype-preserving); bool threw at typing.
+
+            // Complex: round each float64 lane and reassemble (NumPy rounds .real and .imag separately).
+            if (ct == NPTypeCode.Complex)
+            {
+                _child.EmitScalar(il, ctx);
+                var zloc = il.DeclareLocal(typeof(System.Numerics.Complex));
+                il.Emit(OpCodes.Stloc, zloc);
+                il.Emit(OpCodes.Ldloc, zloc); il.EmitCall(OpCodes.Call, s_realPart, null);   // -> double (real)
+                EmitRoundSequence(il, NPTypeCode.Double);
+                il.Emit(OpCodes.Ldloc, zloc); il.EmitCall(OpCodes.Call, s_imagPart, null);   // -> double (imag)
+                EmitRoundSequence(il, NPTypeCode.Double);
+                il.Emit(OpCodes.Newobj, s_complexCtor);                                       // new Complex(rr, ri)
+                return;
+            }
+
+            // Integer / char with POSITIVE decimals: the identity (no fractional part — and no float
+            // round-trip, so a huge int64 is untouched). Result dtype = the integer dtype.
+            if (IsIntType(ct) && _decimals > 0)
+            {
+                _child.EmitScalar(il, ctx);
+                return;
+            }
+
+            // Everything else — float (at its own dtype), integer with negative decimals (float64 bridge
+            // then cast BACK, wrapping), decimal (float64 bridge). Working dtype w: a float child rounds
+            // at its own precision; an integer/decimal child rounds in float64.
+            NPTypeCode w = (ct == NPTypeCode.Half || ct == NPTypeCode.Single || ct == NPTypeCode.Double)
+                ? ct : NPTypeCode.Double;
+            _child.EmitScalar(il, ctx);
+            DirectILKernelGenerator.EmitConvertTo(il, ct, w);   // int/decimal -> double; float ct==w no-op
+            EmitRoundSequence(il, w);
+            DirectILKernelGenerator.EmitConvertTo(il, w, my);   // double -> int (WRAP) / decimal; float w==my no-op
+        }
+
+        // Never invoked: CanEmitVectorV2 returns false, so no tree containing a RoundNode vectorizes.
+        public override void EmitVector(ILGenerator il, NDExprCompileContext ctx)
+            => throw new InvalidOperationException(
+                "RoundNode is scalar-only; it must not reach the vector body.");
+
+        public override void AppendSignature(StringBuilder sb)
+        {
+            sb.Append("round").Append(_decimals).Append('(');
             _child.AppendSignature(sb);
             sb.Append(')');
         }

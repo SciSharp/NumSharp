@@ -8158,6 +8158,11 @@ def _ev_eval(expr, operands):
         if tok.startswith("cast_"):
             # cast_<dtype>(child) == child.astype(<dtype>) with NumPy's default casting='unsafe'.
             return np.asarray(args[0]).astype(np.dtype(tok[len("cast_"):]))
+        if tok.startswith("round_"):
+            # round_<d>(child) == np.round(child, d); d is spelled m<n> for the negative -n.
+            s = tok[len("round_"):]
+            d = -int(s[1:]) if s.startswith("m") else int(s)
+            return np.round(np.asarray(args[0]), d)
         if tok in _EV_BINARY:
             return _EV_BINARY[tok](*args)
         if tok in _EV_UNARY:
@@ -8420,6 +8425,40 @@ def gen_evaluate():
         bb.reshape(-1)[:] = np.resize(np.array([0.4, 0.6, 0.5, 0.1]), bb.size)
         emit("cast_int32(add(in0,in1))", [(ba, va), (bb, vb)], ln, cid_tag="f64,f64/cast_i4")
         emit("add(cast_float32(in0),lf:1.0)", [(ba, va), (bb, vb)], ln, cid_tag="f64,f64/cast_f4")
+
+    # ---- B4. Round(child, decimals != 0) — np.round(x, d), the RoundNode (Phase 4.1b) ----------
+    # A controlled MODERATE pool (fractional floats for the multiply→rint→divide, small integers whose
+    # negative-decimals float64 round-trip stays well within range) so every cell is portable bit-exact
+    # NumPy parity: NO C-undefined float→int cast (the integer round-trip never leaves the int-representable
+    # range) and NO overflow to ±inf. bool is EXCLUDED (decimals != 0 raises the multiply/divide cast error,
+    # NDEvaluateTests.P41bRound_* pins that); float/int/complex/char all preserve dtype. NB: the ENGINE's
+    # np.around is BROKEN for negative decimals (Math.Round rejects them) and does not round complex — the
+    # FUSED RoundNode is the CORRECT port, so this tier is validated against NumPy directly (the oracle),
+    # never the engine.
+    round_pool = np.array([1.2345, 2.5, -2.675, 3.15, 15.0, -25.0, 12.0, -100.0, 0.0, 60.0])
+    round_src = ["int8", "uint8", "int16", "uint16", "int32", "int64", "uint64",
+                 "float16", "float32", "float64", "complex128"]
+    round_layouts = ["c_contiguous_1d", "c_contiguous_2d", "f_contiguous_2d",
+                     "negstride_1d", "strided_step2_1d"]
+    round_decimals = ["2", "1", "m1", "m2", "3", "m3"]     # m<n> == -n
+    for ln in round_layouts:
+        for s in round_src:
+            b, v = LAYOUTS[ln](np.dtype(s))
+            flat = b.reshape(-1)
+            vals = np.resize(round_pool, flat.size)
+            if np.dtype(s).kind == "u":               # unsigned: keep the pool non-negative
+                vals = np.abs(vals)
+            flat[:] = (vals + 1j * np.resize(np.array([0.5, -1.25, 2.55, -3.15]), flat.size)).astype(b.dtype) \
+                if np.dtype(s).kind == "c" else vals.astype(b.dtype)
+            for d in round_decimals:
+                emit(f"round_{d}(in0)", [(b, v)], ln, cid_tag=f"{s}/d={d}")
+    # Round as a SUB-tree: round(a+b, 2) rounds a fused sum; add(round(a, 1), 1.0) rounds then continues.
+    for ln in ["pp_contig_contig", "pp_contig_fortran"]:
+        ba, va, bb, vb = PAIR_LAYOUTS[ln](np.dtype("float64"), np.dtype("float64"))
+        ba.reshape(-1)[:] = np.resize(round_pool, ba.size)
+        bb.reshape(-1)[:] = np.resize(np.array([0.111, 0.222, 0.333, 0.444]), bb.size)
+        emit("round_2(add(in0,in1))", [(ba, va), (bb, vb)], ln, cid_tag="f64,f64/round2")
+        emit("add(round_1(in0),lf:1.0)", [(ba, va), (bb, vb)], ln, cid_tag="f64,f64/round1")
 
     # ---- C. root reductions over fused trees (flat + axis + keepdims) -------------------------
     reduce_layouts = ["c_contiguous_1d", "c_contiguous_2d", "c_contiguous_3d", "f_contiguous_2d",

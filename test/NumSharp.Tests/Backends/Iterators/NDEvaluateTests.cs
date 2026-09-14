@@ -2029,5 +2029,95 @@ namespace NumSharp.Tests.Backends.Iterators
             // The Type overload resolves the same node.
             Assert.AreEqual(NPTypeCode.Single, np.evaluate(NDExpr.Cast(NDExpr.Arr(np.array(new[] { 1 })), typeof(float))).typecode);
         }
+
+        // ---------------------------------------------------------------------
+        // Phase 4.1b — Round(x, decimals) (np.round with decimals != 0). A dtype-PRESERVING port of
+        // PyArray_Round. NB: NumSharp's ENGINE np.around is buggy (negative decimals throw, complex not
+        // rounded), so the fused RoundNode is the CORRECT reference; these pins are NumPy-probed values.
+        // ---------------------------------------------------------------------
+
+        /// <summary>Float rounding is <c>op2(rint(op1(x, 10^|d|)), 10^|d|)</c> AT THE INPUT'S OWN FLOAT dtype,
+        /// dtype preserved: <c>round([1.2345,2.5,-2.675,3.15], 2)</c> = [1.23, 2.5, -2.68, 3.15] (banker's),
+        /// negative decimals round to tens (<c>round([123.456,250], -2)</c> = [100, 200]), and float32 rounds
+        /// at float32 precision (<c>round(float32 1.005, 2)</c> = 1.0, where float64 gives 1.0 too here).</summary>
+        [TestMethod]
+        public void P41bRound_Float_AtInputPrecision_DtypePreserved()
+        {
+            var r = np.evaluate(NDExpr.Round(NDExpr.Arr(np.array(new double[] { 1.2345, 2.5, -2.675, 3.15 })), 2));
+            Assert.AreEqual(NPTypeCode.Double, r.typecode);
+            CollectionAssert.AreEqual(new[] { 1.23, 2.5, -2.68, 3.15 }, new[] { r.GetDouble(0), r.GetDouble(1), r.GetDouble(2), r.GetDouble(3) });
+            var rn = np.evaluate(NDExpr.Round(NDExpr.Arr(np.array(new double[] { 123.456, 250.0 })), -2));
+            CollectionAssert.AreEqual(new[] { 100.0, 200.0 }, new[] { rn.GetDouble(0), rn.GetDouble(1) });
+            // float32 preserves float32 and rounds at float32 precision.
+            var rf = np.evaluate(NDExpr.Round(NDExpr.Arr(np.array(new[] { 1.005f })), 2));
+            Assert.AreEqual(NPTypeCode.Single, rf.typecode);
+            Assert.AreEqual(1.0, rf.astype(NPTypeCode.Double).GetDouble(0), 0);
+            // float16 preserves float16.
+            Assert.AreEqual(NPTypeCode.Half, np.evaluate(NDExpr.Round(NDExpr.Arr(np.array(new[] { (System.Half)1.2345f })), 2)).typecode);
+        }
+
+        /// <summary>Integer + decimals ≥ 0 is the IDENTITY (no fractional part — and NO float round-trip, so a
+        /// huge int64 is untouched); integer + decimals &lt; 0 runs in float64 and CASTS BACK to the integer
+        /// dtype, so an out-of-range result WRAPS. NumPy-probed: <c>round(int64 2^60, 2)</c> = 2^60,
+        /// <c>round(int32 [12345,-6789], -2)</c> = [12300,-6800], <c>round(int8 127, -1)</c> = -126,
+        /// <c>round(uint8 255, -1)</c> = 4.</summary>
+        [TestMethod]
+        public void P41bRound_Integer_IdentityForNonneg_WrapForNegativeDecimals()
+        {
+            var big = np.evaluate(NDExpr.Round(NDExpr.Arr(np.array(new long[] { 1L << 60 })), 2));
+            Assert.AreEqual(NPTypeCode.Int64, big.typecode);
+            Assert.AreEqual(1L << 60, big.GetInt64(0));                    // identity, no float64 corruption
+
+            var i32 = np.evaluate(NDExpr.Round(NDExpr.Arr(np.array(new[] { 12345, -6789 })), -2)).astype(NPTypeCode.Int64);
+            CollectionAssert.AreEqual(new[] { 12300L, -6800L }, new[] { i32.GetInt64(0), i32.GetInt64(1) });
+
+            // negative-decimals WRAP on cast-back (int8 127 → 130 → -126; uint8 255 → 260 → 4).
+            Assert.AreEqual(-126L, np.evaluate(NDExpr.Round(NDExpr.Arr(np.array(new sbyte[] { 127 })), -1)).astype(NPTypeCode.Int64).GetInt64(0));
+            Assert.AreEqual(4L, np.evaluate(NDExpr.Round(NDExpr.Arr(np.array(new byte[] { 255 })), -1)).astype(NPTypeCode.Int64).GetInt64(0));
+        }
+
+        /// <summary>Complex rounds each float64 lane separately (dtype preserved): <c>round([1.25+2.55j,
+        /// -3.5-4.5j], 1)</c> = [1.2+2.6j, -3.5-4.5j]. BOOL with <c>decimals != 0</c> RAISES NumPy's
+        /// <c>UFuncTypeError</c> (multiply for d&gt;0, divide for d&lt;0) — the composition's float64 output
+        /// cannot cast back to bool; <c>decimals == 0</c> is the plain Round node (→ float16, unchanged).</summary>
+        [TestMethod]
+        public void P41bRound_Complex_PerLane_And_Bool_Raises()
+        {
+            var rc = np.evaluate(NDExpr.Round(NDExpr.Arr(np.array(new System.Numerics.Complex[] { new(1.25, 2.55), new(-3.5, -4.5) })), 1));
+            Assert.AreEqual(NPTypeCode.Complex, rc.typecode);
+            var re = np.real(rc).astype(NPTypeCode.Double); var im = np.imag(rc).astype(NPTypeCode.Double);
+            Assert.AreEqual(1.2, re.GetDouble(0), 0); Assert.AreEqual(2.6, im.GetDouble(0), 0);
+            Assert.AreEqual(-3.5, re.GetDouble(1), 0); Assert.AreEqual(-4.5, im.GetDouble(1), 0);
+
+            // bool + decimals == 0 → the existing Round node (float16), NOT a RoundNode.
+            Assert.AreEqual(NPTypeCode.Half, np.evaluate(NDExpr.Round(NDExpr.Arr(np.array(new[] { true, false })), 0)).typecode);
+            // bool + decimals != 0 → throws, op-named (multiply for +, divide for -).
+            var exPos = Assert.ThrowsException<NotSupportedException>(() => np.evaluate(NDExpr.Round(NDExpr.Arr(np.array(new[] { true })), 1)));
+            StringAssert.Contains(exPos.Message, "Cannot cast ufunc 'multiply' output from dtype('float64') to dtype('bool')");
+            var exNeg = Assert.ThrowsException<NotSupportedException>(() => np.evaluate(NDExpr.Round(NDExpr.Arr(np.array(new[] { true })), -1)));
+            StringAssert.Contains(exNeg.Message, "Cannot cast ufunc 'divide' output from dtype('float64') to dtype('bool')");
+        }
+
+        /// <summary>The <c>decimals == 0</c> factory returns the plain <see cref="UnaryOp.Round"/> node (so
+        /// <c>Round(x, 0)</c> ≡ <c>Round(x)</c>); Round COMPOSES in the fused kernel — <c>round(a+b, 2)</c>
+        /// rounds a fused sum; and Decimal (no NumPy analog) rounds via the double bridge.</summary>
+        [TestMethod]
+        public void P41bRound_ZeroDelegates_Composes_Decimal()
+        {
+            // Round(x, 0) is the plain rint node: integer identity, float banker's rint, same as Round(x).
+            var r0 = np.evaluate(NDExpr.Round(NDExpr.Arr(np.array(new double[] { 0.5, 1.5, 2.5 })), 0));
+            CollectionAssert.AreEqual(new[] { 0.0, 2.0, 2.0 }, new[] { r0.GetDouble(0), r0.GetDouble(1), r0.GetDouble(2) });   // banker's
+            Assert.AreEqual(NPTypeCode.Int32, np.evaluate(NDExpr.Round(NDExpr.Arr(np.array(new[] { 5 })), 0)).typecode);      // int identity
+
+            // Composition: round(a+b, 2) rounds the fused sum.
+            var a = np.array(new double[] { 1.111, 2.226, 3.335 }); var b = np.array(new double[] { 0.004, 0.004, 0.004 });
+            var comp = np.evaluate(NDExpr.Round((NDExpr)a + (NDExpr)b, 2));
+            CollectionAssert.AreEqual(new[] { 1.12, 2.23, 3.34 }, new[] { comp.GetDouble(0), comp.GetDouble(1), comp.GetDouble(2) });
+
+            // Decimal via the double bridge (round(1.25m, 1) → 1.2m).
+            var dec = np.evaluate(NDExpr.Round(NDExpr.Arr(np.array(new[] { 1.25m })), 1));
+            Assert.AreEqual(NPTypeCode.Decimal, dec.typecode);
+            Assert.AreEqual(1.2m, dec.GetAtIndex<decimal>(0));
+        }
     }
 }

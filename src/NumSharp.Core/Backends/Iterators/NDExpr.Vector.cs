@@ -281,6 +281,13 @@ namespace NumSharp.Backends.Iteration
         internal override bool CanEmitVectorV2(NPTypeCode lane, IReadOnlyDictionary<NDExpr, NPTypeCode> types) => false;
     }
 
+    public sealed partial class RoundNode
+    {
+        // Scalar-only: the multi-step mul→rint→div composition (and the integer float64 round-trip /
+        // complex per-lane path) is not vectorized here. Forces the whole tree scalar.
+        internal override bool CanEmitVectorV2(NPTypeCode lane, IReadOnlyDictionary<NDExpr, NPTypeCode> types) => false;
+    }
+
     public sealed partial class ComparisonNode
     {
         internal override bool CanEmitVectorV2(NPTypeCode lane, IReadOnlyDictionary<NDExpr, NPTypeCode> types)
