@@ -25,7 +25,17 @@ a lock-free key-path reader may be standing on lets a reader of the *removed* ke
 moved entry's value (a wrong-value hit, which the node design can never produce). The **open-addressed
 layout closes it structurally** (one 8-byte index word is the sole publication point, so the reader
 re-validates it after the value load; dummied positions are never reused within a generation, so there is
-no ABA). That, plus DRAM-scale parity, makes **open addressing the recommended layout**.
+no ABA). That, plus DRAM-scale parity, makes **open addressing the recommended layout**. **The concurrency
+gun confirms it (§5.4):** 8 readers + 2 writers for 8 s — today's type 0 failures over 2.06 billion reads,
+the chained prototype 3,172 wrong-value hits plus one transient absence of a moved key, the open-addressed
+prototype 2,862 wrong-value hits with validation off and **0 with it on** over 1.72 billion reads.
+
+**Are the prototypes themselves thread-safe? No — and they are not meant to be.** They implement the
+publication ORDER a port would use (release-store the index word, then the count; acquire-read both; holder
+per shrink; floor rule) but omit the guards that make today's type heavy-duty: the write-atomic guards
+(in-place value/slot stores for any `TValue`/`TKey`, where wide types must take the COW path), the
+reentrancy guard, the memory-model-correct validated read (§4.5), the no-aliasing rule (§4.7), and every
+concurrency test. §4 is the contract a heavy-duty port must satisfy; §5.4 is the gun that will gate it.
 
 ---
 
@@ -123,10 +133,28 @@ probe's slot number. The compact table changes *what* is copied (more) and *remo
 5. **The validated read** (open addressing): `e = Volatile.Read(index[p]); match → v = values[slot]; if
    (Volatile.Read(index[p]) == e) return v; else restart`. Cost measured: 21.85 → 22.11 ns at 10M (noise).
    This is the whole fix for the swap-back key-path tear; chaining has no equivalent single word to validate.
+   **Memory-model obligations the prototype does not yet meet** (it is correct on x64 only because TSO keeps
+   loads ordered and RyuJIT does not move accesses across volatile ones): (a) the value load must be an
+   **acquire** load — `Volatile.Read` for primitives/references (a plain `ldr` on ARM64 may complete after
+   the validating `ldar`, which would validate before reading), and for a non-atomic `TValue` a plain read
+   followed by `Interlocked.MemoryBarrier()` before the re-read; (b) **every index-word access goes through
+   `Volatile.Read`/`Volatile.Write`** — that is also what makes the 8-byte word atomic on 32-bit runtimes,
+   where a plain `long` store tears into "key 0 with a valid slot"; (c) the writer's **dummy store must be a
+   full fence** (`Interlocked.Exchange`) when it precedes the slot overwrite (swap-back): a release store
+   only orders EARLIER stores before it, so on a weak machine the overwrite could become visible before the
+   dummy and a reader could validate a word that should already be dead.
 6. **Interior removal, non-atomic replace and growth are COW into a fresh generation**; the old generation is
    frozen the moment the new one is published (readers holding it continue on it, the GC keeps it alive).
-7. **A generation that shares its index arrays with an older generation must not let that older generation
-   see new slots through them** — see §7 (aliasing guard) for the two ways to honour this.
+7. **No cross-generation array aliasing with different values arrays** — a non-atomic replace COWs the
+   WHOLE generation (index + keys + values), never the values array alone. The values-only clone this
+   document first proposed is unsound: the new generation would share `keys`/index with the old one, and a
+   later in-place swap-back rewrites `keys[i]` below `count` in the shared array while the old generation's
+   `values[i]` still holds the removed key's value — an old-generation reader of the moved key gets the wrong
+   value. A reader-side count guard fixes the append case but not that one; a full COW fixes both. (Holders
+   that share EVERY array — tail pop, swap-back — stay safe: there is one values array.)
+8. **In-place swap-back only when `TKey` and `TValue` are both single-store atomic**
+   (`ConcurrentDictionaryTypeProps<T>.IsWriteAtomic`, today's guard); wide types take the COW path, exactly as
+   today. The prototype writes in place unconditionally.
 
 ---
 
@@ -218,6 +246,29 @@ quantization.
    permutation and looking up in an *independent* permutation is the fair regime reported above; the
    sequential-key numbers are the chaining layouts' best case, not their expectation.
 
+### 5.4 The concurrency gun
+
+`… -- gun 8 8 cod,chained,oa-novalidate,oa` (probe mode; no core pin). Readers loop over 16 hot keys and
+the latest published pinned key; writer 1 swap-back-removes/re-adds hot keys and every 64 ops appends a
+fresh pinned key at the tail — the next swap-back moves it into a hole; writer 2 churns interior
+order-preserving removals of 2,000 fill keys (COW generations). Values obey `v = 7k + 3`, so a value that
+belongs to another key is detectable. 8 s per mode, 8 readers + 2 writers, i9-13900K, x64:
+
+| mode | reader ops | swap-backs | wrong-value hits | pinned key absent (`TryGetValue`) | pinned key absent (`IndexOf`) | list-path decode failures |
+|---|---:|---:|---:|---:|---:|---:|
+| COD today | 2,061,084,648 | 191,248 | 0 | 0 | 0 | 0 |
+| compact chained (4-step relink) | 2,045,933,426 | 88,918 | **3,172** | 0 | **1** | 0 |
+| compact OA, validation off | 1,554,941,407 | 74,596 | **2,862** | 0 | 0 | 0 |
+| **compact OA, validated read** | 1,717,423,535 | 72,424 | **0** | 0 | 0 | 0 |
+
+Three things the gun settles. (1) The chained tear is not theoretical: a few-nanosecond window between a
+reader's key compare and value load is hit thousands of times per 8 s on 16 hot keys. (2) The validated read
+is exactly the fix — same table, same load, validation off/on. (3) The chained 4-step relink has a SECOND
+flaw the analysis had argued away: linking the moved entry at the chain HEAD does not help a walker that
+entered the chain before the link and reaches the old tail slot after its unlink — it misses both copies
+(the one `IndexOf` absence). The repair is to link slot `i` immediately BEFORE the old tail slot in its
+chain, not at the head; that closes the absence but not the tear, so it does not rescue chaining.
+
 ---
 
 ## 6. Memory ledger against 539e9c05
@@ -262,13 +313,18 @@ duration of one probe, as `ConcurrentDictionary`'s does its `Tables`.
   separate words). Chaining therefore needs either a COW swap-back (O(n), today's wide-type degrade path — the
   O(1) guarantee is lost) or a per-slot version word (+4 B, two extra loads per read). **Open addressing avoids
   it with the validated read (§4.5) at zero measured cost — the deciding argument for OA.**
-* **Values-array aliasing after a non-atomic replace.** A values-only COW yields a generation that shares its
-  index arrays with the previous one; an in-place append afterwards publishes the new slot through the
-  *shared* index, so a reader still holding the previous generation can find the new key and read the new
-  slot from its *own, stale* values array. Two fixes: (a) key-path readers treat `slot ≥ their generation's
-  count` as absent and continue the probe (one compare per hit; it makes the list path lead instead of the key
-  path — a benign contract flip that also makes `AddRange` batches atomic on *both* paths); or (b) mark the
-  values-only generation so the next append performs a full COW. (a) is the robust one.
+* **Values-array aliasing after a non-atomic replace — full COW, not a values-only clone (§4.7).** A
+  values-only clone leaves the new generation sharing `keys` and the index with the old one. An append then
+  publishes a new slot through the shared index that an old-generation reader resolves against its stale
+  values array (fixable with a `slot ≥ count` reader guard), and — the case the guard cannot fix — a later
+  in-place swap-back overwrites `keys[i]` below `count` in the shared array while the old generation's
+  `values[i]` still holds the removed key's value, so an old-generation reader of the moved key returns the
+  wrong value. Rule: a non-atomic replace copies the whole generation; generations may share arrays only when
+  they share ALL of them (tail pop, swap-back holders).
+* **The chained relink's transient absence.** Linking the moved entry at the chain head lets a walker that
+  entered before the link and reaches the old tail after its unlink miss both copies (observed once in 2
+  billion reads). Link before the old tail slot instead. Academic for the recommended layout — open
+  addressing re-points one word.
 * **Unsized ctor / `Clear`.** The index needs at least one word for the mask/`FastMod`; keep an empty
   singleton generation whose first append grows (today's `Store.Empty` pattern).
 * **Reference-type keys.** Embed the **hash** in the index word instead of the key (`(hash<<32)|slot`);
@@ -303,12 +359,16 @@ Implementation sketch (a follow-up session; the tests are the spec):
 1. `Tables` generation class replacing `Store` and `_byKey`; delete `ValueIndex`; `TryGetValue`/`ContainsKey`/
    `IndexOf`/`GetOrAdd`/`AddOrUpdate` fast paths on the validated probe (`AggressiveInlining`, as today).
 2. Every mutator ported row-by-row from §1, keeping the reentrancy guard, strand-proofing (allocate before any
-   publish), the `finally` publishes of `AddRange`/`RemoveWhere`, and the aliasing guard (§7, option a).
+   publish), the `finally` publishes of `AddRange`/`RemoveWhere`, the write-atomic guards (§4.8), the
+   full-COW rule for non-atomic replace (§4.7), and the three memory-model obligations of the validated read
+   (§4.5: acquire value load, volatile index words, fenced dummy store).
 3. Gates: the 4 existing test classes (2,854 lines: functional, concurrency gun, adversarial tier, memory
    contracts) should pass with three memory-contract edits — presized append `≤ 72 B` becomes `== 0`, the
    tail-pop/swap-back holder bound stays `≤ 96 B`, the interior-vs-tail ratio pin still holds (more bytes) —
    plus new pins: the validated read under a racing swap-back (key_last never absent, key_i never returns
-   value_last), the renumber pass vs a `List` oracle, dummy accounting/rebuild, and the aliasing guard.
+   value_last — the §5.4 gun as an MSTest scenario in the adversarial tier), the renumber pass vs a `List`
+   oracle, dummy accounting/rebuild, the full-COW rule, and wide-`TKey`/`TValue` swap-back taking the COW
+   path.
 4. The BDN suite (`ConcurrentOrderedDictBenchmarks`) needs no new rows; this probe stays the reproduction.
 5. The vendored `ConcurrentDictionary` clone + `ConcurrentDictionaryInternals` + the ref seam
    (`ConcurrentDictionary.NumSharp.cs`) become unused by `src/` and can be retired with the benchmark's
