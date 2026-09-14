@@ -6,65 +6,82 @@
 
 This is a living checklist. Techniques used are recorded so a later pass can re-run them. **Nothing here is "done" until it is bit-exact vs NumPy 2.4.2 and gated.**
 
+> **Progress — 2026-09-14 pass (backlog §6 items 1–5, 7 largely closed).** Added ~34 module functions and
+> ~30 instance members, all probed against NumPy 2.4.2 and gated by 16 new `MaskedArrayTests` cases (45 total,
+> green net8.0/net10.0). Landed: the predicate/shape-query/copy/alias tier (§1.A), complex fill values (§5.3),
+> the mask-construction family (`make_mask`/`make_mask_none`/`mask_or`), the fill-value surface
+> (`fill_value` get/set, `common_fill_value`, `set_fill_value`, `fix_invalid`), the functional gaps
+> `left_shift`/`right_shift`/`clip`/`choose`/`compress`/`diagonal`/`nonzero`/`trace`/`diff`/`append` (§1.B),
+> the parameter-parity fixes (`average.keepdims`+`average_returned`, `median.keepdims`, `sort`/`argsort`
+> `endwith`, `array.dtype`, `isin.assume_unique`, `vander` `N`→`n`, `reshape` `new_shape`), the `%`/`&`/`|`/`^`/`~`
+> operators (§5.2), and a broad instance surface (`T`/`mT`/`real`/`imag`/`ravel`/`flatten`/`reshape`/`transpose`/
+> `swapaxes`/`squeeze`/`repeat`/`take`/`compressed`/`compress`/`sort`/`argsort`/`clip`/`round`/`conj`/`dot`/
+> `diagonal`/`trace`/`nonzero`/`item`/`fill_value`). `default_fill_value` was also made an INSTANCE method (was
+> static — so `np.ma.default_fill_value(dtype)` now ports verbatim, consistent with `minimum/maximum_fill_value`).
+> **Still open:** the `MaskedArray` indexer `this[...]` (§6 item 6 — the keystone that unblocks `put`/`putmask`/
+> `resize`/`notmasked_contiguous`/`mask_rowcols`), the machinery-blocked §1.C set, and the structured/record family.
+
 ---
 
 ## 0. Headline coverage
 
 | Surface | NumSharp | NumPy 2.4.2 | Gap |
 |---|---|---|---|
-| `np.ma.*` module names (`__all__`) | 164 | 226 | 62 names |
-| `MaskedArray` instance members | 25 | 94 | 69 members |
+| `np.ma.*` module names (`__all__`) | **194** (of 198 public) | 226 | **32 names** (was 62) |
+| `MaskedArray` instance members | **55** | 94 | **39 members** (was 69) |
 
-**Behavioral correctness of what IS implemented:** a 186-case differential (3 dtypes × reductions[×3 axes]/ufuncs/constructors/extras/sort/unique/set-ops) found **0 real value/mask/dtype mismatches**. The only divergence is the intentional scalar-vs-0d return-type choice (§5.1). Set operations (`intersect1d`/`union1d`/`setxor1d`/`setdiff1d`, added 2026-09-14, commit 566fd303) are bit-exact.
+**Behavioral correctness of what IS implemented:** a 186-case differential (3 dtypes × reductions[×3 axes]/ufuncs/constructors/extras/sort/unique/set-ops) found **0 real value/mask/dtype mismatches**, plus a 79-check verification of every 2026-09-14 addition against probed NumPy 2.4.2 output (0 failures). The only divergence is the intentional scalar-vs-0d return-type choice (§5.1). Set operations (`intersect1d`/`union1d`/`setxor1d`/`setdiff1d`, added 2026-09-14, commit 566fd303) are bit-exact.
 
 > **Audit-harness trap (do not re-chase):** reading an op result lazily — `nd.astype(f64).GetDouble(i)` in a loop, interleaved with other allocations — returns recycled-buffer GARBAGE (non-deterministic `e+257` values). This is the *harness's* fault, not the library: an inline check of the identical op sequence showed 0 corruption, and materializing each result with `.ToArray<T>()` **before the next allocation** made the diff clean. Rule: differential harnesses MUST snapshot each result to a managed array immediately.
 
 ---
 
-## 1. MISSING module functions (62)
+## 1. MISSING module functions (was 62 → now 32)
 
-### A. Trivial aliases of already-implemented ops — quick wins
-| Missing | Alias of | Notes |
+### A. Trivial aliases of already-implemented ops — ✅ DONE (2026-09-14)
+| Was missing | Alias of | Status |
 |---|---|---|
-| `amax` | `max` | not `is`-identical in NumPy but functionally equal |
-| `amin` | `min` | |
-| `alltrue` | `all` | deprecated in NumPy, still exported |
-| `sometrue` | `any` | deprecated |
-| `round_` | `round` | true alias |
-| `row_stack` | `vstack` | true alias |
-| `innerproduct` | `inner` | true alias |
-| `outerproduct` | `outer` | true alias |
-| `isMA`, `isarray` | `isMaskedArray` | true aliases |
+| `amax` | `max` | ✅ (with `axis`/`fill_value`/`keepdims`) |
+| `amin` | `min` | ✅ |
+| `alltrue` | `all` | ✅ (deprecated, exported) |
+| `sometrue` | `any` | ✅ |
+| `round_` | `round` | ✅ |
+| `row_stack` | `vstack` | ✅ |
+| `innerproduct` | `inner` | ✅ |
+| `outerproduct` | `outer` | ✅ |
+| `isMA`, `isarray` | `isMaskedArray` | ✅ |
+| `masked_singleton` | `masked` (same object) | ✅ |
+| `bool_` | `MaskType` (the bool dtype) | ✅ |
 
-### B. Real functional gaps — implementable now (compositions over existing np.*/np.ma.*)
-| Missing | What it does | Note |
+### B. Real functional gaps — mostly ✅ DONE (2026-09-14)
+| Was missing | What it does | Status |
 |---|---|---|
-| `is_masked` | **True iff ANY element is masked** | DISTINCT from `isMaskedArray` (a type check). `np.ma.is_masked(nomask array)` → False. |
-| `common_fill_value` | common fill of two arrays, else null | |
-| `set_fill_value` | set `.fill_value` in place | needs settable fill_value |
-| `make_mask` | coerce array-like → bool mask (shrink) | |
-| `make_mask_none` | all-False mask of a shape | |
-| `mask_or` | OR two masks (nomask-aware) | we have private `Or`; expose it |
-| `fix_invalid` | mask nan/inf, keep data/fill | like `masked_invalid` but returns filled data at masked |
-| `ndim`, `shape`, `size` | module-level shape queries | exist only as instance props |
-| `copy` | `ma.copy(a)` | |
-| `diff` | masked `np.diff` (n, axis, prepend, append) | |
-| `append` | masked `np.append` | |
-| `left_shift`, `right_shift` | bitwise-shift ufuncs | binary ufunc family |
-| `clip` | masked clip | |
-| `choose` | masked choose | |
-| `compress` | masked compress (base of compress_rows/cols) | |
-| `diagonal` | masked diagonal | |
-| `nonzero` | masked nonzero | |
-| `trace` | masked trace | |
-| `put` | in-place scatter (mask-aware) | needs instance indexing or data/mask write |
-| `putmask` | in-place masked put | |
-| `resize` | masked resize | |
-| `hsplit` | masked hsplit | (we have vsplit? verify) |
-| `frombuffer` | masked frombuffer | |
-| `fromfunction` | masked fromfunction | |
-| `ids` | `(data ptr, mask ptr)` | low value |
-| `ndenumerate` | `(index, value)` skipping masked | iterator |
+| `is_masked` | **True iff ANY element is masked** (distinct from the `isMaskedArray` type check) | ✅ |
+| `common_fill_value` | common fill of two arrays, else null | ✅ |
+| `set_fill_value` | set `.fill_value` in place | ✅ (`_fill_value` made settable; `fill_value` get/set property) |
+| `make_mask` | coerce array-like → bool mask (shrink) | ✅ |
+| `make_mask_none` | all-False mask of a shape | ✅ |
+| `mask_or` | OR two masks (nomask-aware) | ✅ |
+| `fix_invalid` | mask nan/inf, write fill into data | ✅ |
+| `ndim`, `shape`, `size` | module-level shape queries | ✅ |
+| `copy` | `ma.copy(a)` (deep-copies data+mask) | ✅ |
+| `diff` | masked `np.diff` (n, axis, prepend, append) | ✅ (data via `np.diff`; mask via n-fold adjacent-OR) |
+| `append` | masked `np.append` | ✅ (= masked `concatenate`; axis=None flattens) |
+| `left_shift`, `right_shift` | bitwise-shift ufuncs | ✅ |
+| `clip` | masked clip | ✅ |
+| `choose` | masked choose | ✅ (mask chosen by the same index; OR'd with the index's mask) |
+| `compress` | masked compress (base of compress_rows/cols) | ✅ |
+| `diagonal` | masked diagonal | ✅ |
+| `nonzero` | masked nonzero (masked→0, excluded) | ✅ |
+| `trace` | masked trace | ✅ (float64 by default — NumPy's `astype(None)` quirk) |
+| `put` | in-place scatter (mask-aware) | ⛔ needs the `this[...]` indexer/mutation (§6 item 6) |
+| `putmask` | in-place masked put | ⛔ needs mutation |
+| `resize` | masked resize | ⛔ needs mutation |
+| `hsplit` | masked hsplit | ⛔ TODO (returns `MaskedArray[]`; the whole split family — `vsplit`/`array_split`/`split` — is also absent) |
+| `frombuffer` | masked frombuffer | ⛔ TODO (thin unmasked wrapper) |
+| `fromfunction` | masked fromfunction | ⛔ TODO (thin unmasked wrapper) |
+| `ids` | `(data ptr, mask ptr)` | ⛔ TODO (low value; needs raw address access) |
+| `ndenumerate` | `(index, value)` skipping masked | ⛔ TODO (iterator) |
 
 ### C. Machinery-blocked (deferred — need infra NumSharp lacks)
 | Missing | Blocker |
@@ -83,26 +100,26 @@ This is a living checklist. Techniques used are recorded so a later pass can re-
 
 ---
 
-## 2. MaskedArray INSTANCE-surface gaps (25 present of 94)
+## 2. MaskedArray INSTANCE-surface gaps (55 present of 94)
 
-**Biggest gap — no indexer.** `MaskedArray` has NO `this[...]` get/set. NumPy: `x[1]`→`masked`, `x[0]`→scalar, `x[::2]`→sub-masked-array, `x[mask]`→compressed, `x[i]=v` / `x[i]=masked`. This blocks `notmasked_contiguous`, `mask_rowcols`, `put`, and idiomatic use.
+**Biggest remaining gap — still no indexer.** `MaskedArray` has NO `this[...]` get/set. NumPy: `x[1]`→`masked`, `x[0]`→scalar, `x[::2]`→sub-masked-array, `x[mask]`→compressed, `x[i]=v` / `x[i]=masked`. This blocks `notmasked_contiguous`, `mask_rowcols`, `put`/`putmask`/`resize`, and idiomatic use. **This is the keystone next item (§6 item 6).**
 
-**Present (25):** `all any anom argmax argmin astype count cumprod cumsum data dtype filled mask max mean min ndim prod ptp shape size std sum typecode var` (+ operators).
+**Present (55):** `all any anom argmax argmin argsort astype clip compress compressed conj conjugate count cumprod cumsum data diagonal dot dtype fill_value filled flatten harden_mask imag item mask max mean min mT ndim nonzero prod ptp ravel real repeat reshape round shape shrink_mask size soften_mask sort squeeze std sum swapaxes T take trace transpose typecode var` (+ operators `+ - * / % & | ^ ~ < > <= >=`).
 
-**Missing instance members that exist as `np.ma.*` module funcs (wire through):** `T mT flat flatten ravel reshape transpose swapaxes squeeze repeat take compress compressed sort argsort clip round conj conjugate dot trace nonzero put harden_mask soften_mask shrink_mask`.
+**✅ Wired through 2026-09-14:** `T mT flatten ravel reshape transpose swapaxes squeeze repeat take compress compressed sort argsort clip round conj conjugate dot trace diagonal nonzero real imag item fill_value(get/set) harden_mask soften_mask shrink_mask`. NumPy's METHOD forms `get_fill_value()`/`set_fill_value()` are deliberately NOT offered — a C# property named `fill_value` reserves those exact accessor names (CS0082), so the property + the module-level `set_fill_value(a, v)` cover them.
 
-**Missing instance members with no module equivalent:** `fill_value` (get/set), `get_fill_value`/`set_fill_value`, `real`, `imag`, `item`, `tolist`, `tobytes`, `view`, `count` (have), `ids`, `iscontiguous`, `hardmask`/`sharedmask`/`recordmask` flags, `torecords`/`toflex` (structured).
+**Still missing instance members:** `flat` (would collide with NumSharp's raveled-array `.flat`), `tolist`, `tobytes`, `view`, `ids`, `iscontiguous`, `put`/`putmask`/`resize` (need mutation), the `hardmask`/`sharedmask`/`recordmask` flags (NumSharp masks carry no hard/soft state — `harden_mask`/`soften_mask` are accepted no-ops), `torecords`/`toflex` (structured/record — NumSharp has none).
 
 ---
 
 ## 3. Parameter-parity gaps on IMPLEMENTED functions
 
-| Function | NumSharp params | NumPy params | Missing |
-|---|---|---|---|
-| `average` | `a, axis, weights` | `a, axis, weights, returned, keepdims` | **`returned`**, `keepdims` |
-| `median` | `a, axis` | `a, axis, out, overwrite_input, keepdims` | **`keepdims`**, `out`, `overwrite_input` |
-| `sum`/`prod`/`mean`/… | `a, axis, dtype, keepdims` | `+ out` | `out=` |
-| `array`/`masked_array` | `data, mask, fill_value, copy` | `+ dtype, order, keep_mask, hard_mask, shrink, ndmin, subok` | **`dtype`**, `keep_mask`, `hard_mask`, `shrink`, `ndmin` |
+| Function | Status |
+|---|---|
+| `average` | ✅ `keepdims` added; `returned` covered by the sibling `average_returned` → `(avg, sumOfWeights)` tuple (the base-library convention, since C# can't switch return type on a flag) |
+| `median` | ✅ `keepdims` added (flat + unmasked-axis paths). `out`/`overwrite_input` still absent; masked-axis still `NotSupportedException` (needs the masked sort core) |
+| `sum`/`prod`/`mean`/… | `out=` still absent (the library-wide policy gap, §5.5 — NumSharp models no `out=` on any masked reduction) |
+| `array`/`masked_array` | ✅ **`dtype`** added; `keep_mask`/`hard_mask`/`shrink`/`ndmin`/`order`/`subok` still absent (hard/soft-mask and ndmin have no NumSharp analog) |
 
 ---
 
@@ -116,40 +133,44 @@ This is a living checklist. Techniques used are recorded so a later pass can re-
 ## 5. Additional findings — deeper techniques (round 2)
 
 ### 5.1 Behavioral parameter gaps (from full signature sweep of all 148 shared functions)
-Meaningful, result-changing params NumSharp lacks (excludes the library-wide policy gaps in §5.5):
-| Function | Missing param | Effect |
+Meaningful, result-changing params — most now closed (2026-09-14):
+| Function | Param | Status |
 |---|---|---|
-| `sort`, `argsort` | **`endwith`** (+`kind`,`stable`,`order`) | `endwith=False` sorts masked to the FRONT; NumSharp only does the `True` default |
-| `isin` | **`assume_unique`** | speed hint (result same); NumSharp lacks the overload |
-| `std`, `var` | **`mean`** (NumPy 2.0) | precomputed-mean fast path |
-| `take` | **`mode`** | `clip`/`wrap`/`raise` out-of-bounds behavior |
-| `dot` | **`strict`** | strict mask propagation |
-| `squeeze` | **`axis`** | squeeze a specific axis only |
-| `power` | **`third`** | 3-arg `pow(a,b,mod)` |
-| `median` | `keepdims`,`out`,`overwrite_input` | (also §3) |
-| `average` | `returned`,`keepdims` | (also §3) |
+| `sort`, `argsort` | **`endwith`** | ✅ `endwith=False` fills masked with `maximum_fill_value` → sorts to FRONT (mirror of the `True` default) |
+| `isin` | **`assume_unique`** | ✅ added (speed hint; result unchanged) |
+| `array` | **`dtype`** | ✅ added |
+| `average` | `returned`,`keepdims` | ✅ (`keepdims` + `average_returned`) |
+| `median` | `keepdims` | ✅ (flat/unmasked-axis) |
+| `std`, `var` | **`mean`** (NumPy 2.0) | ⛔ precomputed-mean fast path — not added (low value) |
+| `take` | **`mode`** | ⛔ `clip`/`wrap`/`raise` — not added |
+| `dot` | **`strict`** | ⛔ strict mask propagation — not added |
+| `squeeze` | **`axis`** | ⛔ squeeze a specific axis — not added |
+| `power` | **`third`** | ⛔ 3-arg `pow(a,b,mod)` — not added |
+| `sort`/`argsort` | `kind`,`stable`,`order` | ⛔ not added (NumSharp sort is always stable radix) |
 
-**Parameter NAME mismatches (a NumPy-spelled keyword call won't compile):**
-- `vander(x, N=…)` — NumPy spells it **`n`** (lowercase). `np.ma.vander(x, n=3)` fails in NumSharp.
-- `reshape(a, shape=…)` — NumPy spells it **`new_shape`**.
+**Parameter NAME mismatches — ✅ FIXED (2026-09-14):**
+- `vander(x, n=…)` — was `N`; now lowercase **`n`**, so `np.ma.vander(x, n: 3)` ports verbatim.
+- `reshape(a, new_shape=…)` — the param is now **`new_shape`** (`np.ma.reshape(a, new_shape: …)`).
 
-### 5.2 Operator-surface gaps on `MaskedArray`
-| Operator | Status | NumPy | Note |
-|---|---|---|---|
-| `%` | **THROWS** (no operator) | elementwise mod | `np.ma.mod`/`remainder` methods exist |
-| `&` `|` `^` | **THROW** (no operators) | bitwise elementwise | `np.ma.bitwise_and`/`or`/`xor` methods exist |
-| `~` | **THROWS** (no operator) | bitwise invert | no `np.ma.invert` function EITHER |
-| `==` `!=` | **REFERENCE equality → scalar bool** | elementwise **masked bool array** | **Silent porting footgun.** Deliberately not overloaded (avoids the `==null` elementwise trap); use `np.ma.equal`/`not_equal`. NumPy `ma1==ma2` returns a masked bool array. |
-| `//` `**` | n/a (C# has no such operator) | — | `np.ma.floor_divide`/`power` cover them |
+### 5.2 Operator-surface gaps on `MaskedArray` — ✅ MOSTLY FIXED (2026-09-14)
+| Operator | Status |
+|---|---|
+| `%` | ✅ added → `np.ma.remainder` (division-domain: div-by-zero masked) |
+| `&` `|` `^` | ✅ added → `np.ma.bitwise_and`/`or`/`xor` (mask = OR of operands') |
+| `~` | ✅ added → internal `Invert` = `np.bitwise_not` on the data (NumPy has no `np.ma.invert` module function, so the operator is the only spelling) |
+| `==` `!=` | **STILL reference equality → scalar bool** — deliberately not overloaded (avoids the `==null` elementwise trap); use `np.ma.equal`/`not_equal`. Documented porting footgun, unchanged. |
+| `//` `**` | n/a (C# has no such operator) — `np.ma.floor_divide`/`power` cover them |
 
-### 5.3 Complex fill values return a REAL scalar, not complex
-| Call | NumSharp | NumPy 2.4.2 |
+All the mixed `(MaskedArray, NDArray)` / `(…, object)` overloads are provided for each new operator, matching the existing arithmetic-operator pattern (avoids the CS0034 ambiguity the implicit `NDArray→MaskedArray` conversion would otherwise cause).
+
+### 5.3 Complex fill values — ✅ FIXED (2026-09-14): now COMPLEX
+| Call | Now returns | NumPy 2.4.2 |
 |---|---|---|
-| `default_fill_value(complex)` | `1e20` (double) | `(1e20+0j)` |
-| `minimum_fill_value(complex)` | `inf` (double) | `(inf+infj)` |
-| `maximum_fill_value(complex)` | `-inf` (double) | `(-inf-infj)` |
+| `default_fill_value(complex)` | `new Complex(1e20, 0)` | `(1e20+0j)` ✅ |
+| `minimum_fill_value(complex)` | `new Complex(+inf, +inf)` | `(inf+infj)` ✅ |
+| `maximum_fill_value(complex)` | `new Complex(-inf, -inf)` | `(-inf-infj)` ✅ |
 
-**Latent effect:** a complex masked `min`/`max`/`filled` fills masked slots with `inf+0j` (from the real `inf`) where NumPy uses `inf+infj` — can diverge for complex masked reductions whose extremum sits under the mask. **Worth fixing.** (int64/uint64 min/max fills were verified EXACT — an earlier "diff" was double-rounding in the audit formatter.)
+The fix closes the latent divergence: a complex masked `min`/`max` now fills masked slots with `inf+infj` (both components +inf), so a masked slot sorts strictly last in NumPy's real-then-imag lexicographic order and can never be wrongly selected as the extremum when a real `inf+kj` value is present. `default_fill_value` was also made an INSTANCE method (was `static`), so `np.ma.default_fill_value(dtype)` now works and it's consistent with `minimum/maximum_fill_value`.
 
 ### 5.4 Error-type divergences (message verbatim, .NET type differs — house convention)
 - `negative(bool)` → `NotSupportedException` vs NumPy `TypeError` (**message byte-identical**).
@@ -166,14 +187,14 @@ Meaningful, result-changing params NumSharp lacks (excludes the library-wide pol
 
 ## 6. Prioritized backlog (recommended order)
 
-1. **`is_masked`** + module `ndim`/`shape`/`size` + `copy` + alias tier (§1.A) — trivial, high-parity-yield.
-2. **Parameter parity** on hot functions: `average.returned`/`keepdims`, `median.keepdims`, `std`/`var`/`sort`/`argsort` (`endwith`), `array.dtype`, `isin.assume_unique`, and the `vander` `N`→`n` / `reshape` `shape`→`new_shape` name fixes (§5.1).
-3. **Operators** `%` `&` `|` `^` `~` on MaskedArray (§5.2) — wire to existing `np.ma.*` funcs. Decide `==`/`!=` policy (document loudly or add a named method).
-4. **Complex fill values** → complex (§5.3).
-5. **Instance surface**: `fill_value` (get/set) + wire `T`/`flatten`/`ravel`/`reshape`/`sort`/`compressed`/`round`/`clip`/`conj`/`real`/`imag`/`tolist`/`item` through to the module funcs (§2).
-6. **The `MaskedArray` indexer** `this[...]` get/set (§2) — unlocks `notmasked_contiguous`, `mask_rowcols`, `put`.
-7. Real functional gaps §1.B (`fix_invalid`, `diff`, `clip`, `choose`, `compress`, `diagonal`, `nonzero`, `trace`, `make_mask*`, `mask_or`, `common_fill_value`, `set_fill_value`, `left_shift`/`right_shift`, …).
-8. Machinery-blocked §1.C (deferred): `cov`/`corrcoef`, `polyfit`, `apply_along/over_axes`, `convolve`/`correlate`, `notmasked_*`, structured/record family.
+1. ✅ **DONE** — `is_masked` + module `ndim`/`shape`/`size` + `copy` + alias tier (§1.A).
+2. ✅ **DONE** — Parameter parity: `average.keepdims`+`average_returned`, `median.keepdims`, `sort`/`argsort` `endwith`, `array.dtype`, `isin.assume_unique`, `vander` `N`→`n`, `reshape` `new_shape` (§5.1). *(Left: `std`/`var`.`mean`, `take.mode`, `dot.strict`, `squeeze.axis`, `power.third` — low-value.)*
+3. ✅ **DONE** — Operators `%` `&` `|` `^` `~` on MaskedArray (§5.2). `==`/`!=` kept as documented reference-equality (use `np.ma.equal`/`not_equal`).
+4. ✅ **DONE** — Complex fill values → complex (§5.3).
+5. ✅ **DONE** — Instance surface: `fill_value` (get/set) + `T`/`mT`/`real`/`imag`/`ravel`/`flatten`/`reshape`/`transpose`/`swapaxes`/`squeeze`/`repeat`/`take`/`compressed`/`compress`/`sort`/`argsort`/`clip`/`round`/`conj`/`dot`/`diagonal`/`trace`/`nonzero`/`item` (§2). *(Left: `tolist`, `tobytes`, `view`.)*
+6. ⏭️ **NEXT — the `MaskedArray` indexer** `this[...]` get/set (§2). The keystone: unlocks `put`/`putmask`/`resize`, `notmasked_edges`/`notmasked_contiguous`, `mask_rowcols`, and idiomatic element access. Needs careful NumPy semantics (`x[i]`→scalar-or-`masked`, `x[slice]`→sub-masked-array VIEW with a mask view, `x[i]=masked`→set mask, view aliasing of the mask). Deferred from the 2026-09-14 pass because it's large and touches view/aliasing semantics.
+7. ✅ **MOSTLY DONE** — Real functional gaps §1.B: `fix_invalid`, `diff`, `append`, `clip`, `choose`, `compress`, `diagonal`, `nonzero`, `trace`, `make_mask`/`make_mask_none`, `mask_or`, `common_fill_value`, `set_fill_value`, `left_shift`/`right_shift`. *(Left: `hsplit`/split family, `frombuffer`, `fromfunction`, `ids`, `ndenumerate`, and the mutation trio `put`/`putmask`/`resize` which wait on item 6.)*
+8. ⛔ **Machinery-blocked §1.C** (deferred): `cov`/`corrcoef`, `polyfit`, `apply_along/over_axes`, `convolve`/`correlate`, `notmasked_*`, `compress_nd`/`compress_rowcols`/`mask_rowcols`, masked-axis `median`, structured/record family (`mvoid`/`mr_`/`fromflex`/`flatten_mask`/`make_mask_descr`).
 
 ---
 
@@ -188,4 +209,6 @@ Meaningful, result-changing params NumSharp lacks (excludes the library-wide pol
 8. **Exact fill values** — `default_fill_value`/`minimum_fill_value`/`maximum_fill_value` × 15 dtypes.
 
 **Harness rule (learned the hard way):** every NumSharp op result MUST be snapshot to a managed array (`.ToArray<T>()`) **before the next allocation** — a lazy `nd.astype(f64).GetDouble(i)` loop straddling later allocations reads recycled-buffer GARBAGE (non-deterministic). This is a *harness* pitfall, verified NOT a library bug (identical op sequences checked inline showed 0 corruption).
+
+9. **2026-09-14 verification pass** — every addition was cross-checked with a 79-assertion `dotnet run` script (`#:project NumSharp.Core`, signed with `Open.snk`, `AssemblyName=NumSharp.DotNetRunScript` to reach internals) comparing against the probed NumPy 2.4.2 values (0 failures), then gated by 16 new MSTest cases. **Parallel-session isolation trap:** the shared working tree held an untracked, half-written `src/NumSharp.Core/APIs/np.vectorize.cs` (a different session's WIP) that broke the whole-Core test build with an unrelated CS1503 — the *incremental* Core builds skipped it, but the test project's fuller rebuild hit it. The fix: build/test in a throwaway `git worktree add <scratch> HEAD` (untracked files are NOT carried into a new worktree), copy in only the two edited files (`Ma/MaskedArray.cs`, `Ma/MaskedArrayTests.cs`), and run there — never touch the other session's file.
 
