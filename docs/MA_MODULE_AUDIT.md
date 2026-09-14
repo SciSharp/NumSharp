@@ -18,9 +18,14 @@ This is a living checklist. Techniques used are recorded so a later pass can re-
 > `put`/`putmask`/`resize`, `mask_rowcols`, `compress_rowcols`/`compress_nd`, `notmasked_edges`/`notmasked_contiguous`
 > (axis=None / 1-D), and `ids`. All probed against NumPy 2.4.2, verified by 33 more differential checks (0 fail),
 > gated by 8 more `MaskedArrayTests` cases (**53 total**, green net8.0/net10.0).
-> **Still open:** the machinery-blocked §1.C set (`cov`/`corrcoef`/`polyfit`/`apply_*_axis`/`convolve`/`correlate`,
-> N-D-axis `notmasked_*`, masked-axis `median`), the structured/record family, and the quick wins
-> `frombuffer`/`fromfunction`/`hsplit`/`ndenumerate`.
+> **Pass 3 (quick wins):** `frombuffer`, `fromfunction` (Func-of-index-grids + a 2-D convenience), `hsplit`
+> (data+mask split), `ndenumerate` (unmasked `(index, value)` pairs), and the exception types `MAError`/`MaskError`
+> (`MaskError : MAError : Exception`, NumPy's hierarchy). Gated by 2 more `MaskedArrayTests` cases (**55 total**).
+> **Still open — all either machinery-blocked or N/A:** masked `cov`/`corrcoef` (pairwise-complete),
+> `polyfit` (LAPACK lstsq — backend-only), `apply_along/over_axes` (callable-over-axis), `convolve`/`correlate`
+> (sliding masks), N-D-axis `notmasked_*` / masked-axis `median` (masked sort core), the structured/record
+> family (`mvoid`/`mr_`/`fromflex`/`flatten_mask`/`flatten_structured_array`/`make_mask_descr` — NumSharp has no
+> structured dtypes), and the config ref `masked_print_option` / submodule refs `core`/`extras` (N/A in C#).
 
 ---
 
@@ -28,7 +33,7 @@ This is a living checklist. Techniques used are recorded so a later pass can re-
 
 | Surface | NumSharp | NumPy 2.4.2 | Gap |
 |---|---|---|---|
-| `np.ma.*` module names (`__all__`) | **203** (of 207 public) | 226 | **23 names** (was 62) |
+| `np.ma.*` module names (`__all__`) | **207** (of 211 public) | 226 | **19 names** (was 62; the rest machinery-blocked / structured / type-or-submodule refs) |
 | `MaskedArray` instance members | **57** (+ the indexer) | 94 | **~37 members** (was 69) |
 
 **Behavioral correctness of what IS implemented:** a 186-case differential (3 dtypes × reductions[×3 axes]/ufuncs/constructors/extras/sort/unique/set-ops) found **0 real value/mask/dtype mismatches**, plus 79 + 33 checks of every 2026-09-14 addition against probed NumPy 2.4.2 output (0 failures). The only divergence is the intentional scalar-vs-0d return-type choice (§5.1). Set operations (`intersect1d`/`union1d`/`setxor1d`/`setdiff1d`, added 2026-09-14, commit 566fd303) are bit-exact.
@@ -79,10 +84,10 @@ This is a living checklist. Techniques used are recorded so a later pass can re-
 | `putmask` | in-place masked put | ✅ (copyto-broadcast; masked values mask, plain values unmask) |
 | `resize` | masked resize | ✅ (tiles data AND mask; new array, not in place) |
 | `ids` | `(data ptr, mask ptr)` | ✅ (buffer addresses; mask 0 for nomask) |
-| `hsplit` | masked hsplit | ⛔ TODO (returns `MaskedArray[]`; the whole split family — `vsplit`/`array_split`/`split` — is also absent) |
-| `frombuffer` | masked frombuffer | ⛔ TODO (thin unmasked wrapper) |
-| `fromfunction` | masked fromfunction | ⛔ TODO (thin unmasked wrapper) |
-| `ndenumerate` | `(index, value)` skipping masked | ⛔ TODO (iterator) |
+| `hsplit` | masked hsplit | ✅ (data+mask split → `MaskedArray[]`; `vsplit`/`array_split`/`split`/`dsplit` still absent) |
+| `frombuffer` | masked frombuffer | ✅ (unmasked wrapper over `np.frombuffer`) |
+| `fromfunction` | masked fromfunction | ✅ (`Func<NDArray[],NDArray>` of index grids + a 2-D `Func<NDArray,NDArray,NDArray>` convenience) |
+| `ndenumerate` | `(index, value)` skipping masked | ✅ (`IEnumerable<(long[], object)>`, unmasked only) |
 
 ### C. Machinery-blocked (deferred — need infra NumSharp lacks)
 | Missing | Blocker |
@@ -100,7 +105,10 @@ This is a living checklist. Techniques used are recorded so a later pass can re-
 the one remaining piece, `NotSupportedException` with a clear message).
 
 ### D. Types / exceptions / config (not functions)
-`MaskedArray` (class ref — exists as a type, not on `np.ma`), `MAError`, `MaskError` (exception types — missing), `bool_` (dtype alias), `masked_print_option` (print config), `core`/`extras` (submodule refs — N/A in C#).
+`MaskedArray` (class ref — exists as a type). ✅ **`MAError`/`MaskError` NOW EXIST** as C# exception types
+(`Exceptions/MAError.cs`, `MaskError : MAError : Exception` — NumPy's hierarchy; not yet raised by any `np.ma`
+op, so present for type parity). ✅ `bool_` (dtype alias) added. Still absent: `masked_print_option` (print
+config) and `core`/`extras` (submodule refs — N/A in C#).
 
 ---
 
@@ -205,8 +213,8 @@ The fix closes the latent divergence: a complex masked `min`/`max` now fills mas
 6. ✅ **DONE (pass 2)** — the `MaskedArray this[...]` indexer get/set (§2), plus the mutation trio `put`/`putmask`/
    `resize`, `mask_rowcols`, `compress_rowcols`/`compress_nd`, `notmasked_edges`/`notmasked_contiguous` (axis=None/1-D),
    and `ids`.
-7. ✅ **MOSTLY DONE** — Real functional gaps §1.B: `fix_invalid`, `diff`, `append`, `clip`, `choose`, `compress`, `diagonal`, `nonzero`, `trace`, `make_mask`/`make_mask_none`, `mask_or`, `common_fill_value`, `set_fill_value`, `left_shift`/`right_shift`, `put`/`putmask`/`resize`, `ids`. *(Left quick wins: `hsplit`/split family, `frombuffer`, `fromfunction`, `ndenumerate`.)*
-8. ⛔ **NEXT / Machinery-blocked §1.C** (deferred): `cov`/`corrcoef` (composable but need masked pairwise), `polyfit` (LAPACK lstsq), `apply_along/over_axes`, `convolve`/`correlate`, N-D-axis `notmasked_*`, masked-axis `median`, structured/record family (`mvoid`/`mr_`/`fromflex`/`flatten_mask`/`make_mask_descr`), and the exception types `MAError`/`MaskError`.
+7. ✅ **DONE** — Real functional gaps §1.B: `fix_invalid`, `diff`, `append`, `clip`, `choose`, `compress`, `diagonal`, `nonzero`, `trace`, `make_mask`/`make_mask_none`, `mask_or`, `common_fill_value`, `set_fill_value`, `left_shift`/`right_shift`, `put`/`putmask`/`resize`, `ids`, `frombuffer`, `fromfunction`, `hsplit`, `ndenumerate`, plus the `MAError`/`MaskError` types. *(Left: the `vsplit`/`array_split`/`split`/`dsplit` split family.)*
+8. ⛔ **NEXT / Machinery-blocked §1.C** (deferred — need infra NumSharp lacks): masked `cov`/`corrcoef` (pairwise-complete covariance), `polyfit` (LAPACK lstsq — backend-only), `apply_along/over_axes` (callable-over-axis), `convolve`/`correlate` (sliding masks), N-D-axis `notmasked_*`, masked-axis `median` (masked sort core), and the structured/record family (`mvoid`/`mr_`/`fromflex`/`flatten_mask`/`flatten_structured_array`/`make_mask_descr` — no structured dtypes in NumSharp).
 
 ---
 
