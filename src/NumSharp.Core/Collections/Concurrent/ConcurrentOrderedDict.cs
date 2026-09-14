@@ -277,12 +277,25 @@ public sealed class ConcurrentOrderedDict<TKey, TValue> : IReadOnlyList<TValue>
     /// </summary>
     /// <param name="source">The key/value pairs to copy; repeated keys replace the value without moving the key.</param>
     /// <param name="comparer">The comparer used for key uniqueness and lookups, or <see langword="null" /> for the default.</param>
+    /// <remarks>
+    ///     When the source can report its length without enumerating (<see cref="Enumerable.TryGetNonEnumeratedCount{TSource}" /> —
+    ///     arrays, lists, collections), BOTH representations are pre-sized to it. Pre-sizing the hash map matters as
+    ///     much as the arrays for build memory churn: the map's growth re-creates every node it already holds
+    ///     (measured: an unsized 100K-entry int build allocates ~2.5× the entry bytes in dead nodes and dead
+    ///     doubled arrays; a fully pre-sized build allocates exactly the live bytes).
+    /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="source" /> is <see langword="null" />.</exception>
     public ConcurrentOrderedDict(IEnumerable<KeyValuePair<TKey, TValue>> source, IEqualityComparer<TKey>? comparer = null)
-        : this(comparer)
+        : this(PreSizeOf(source), comparer)
     {
         AddRange(source);
     }
+
+    /// <summary>Reads a capacity hint from a countable pairs source without enumerating it (0 when unknown — the paths grow as usual).</summary>
+    /// <param name="source">The constructor's source; a null slips through as 0 so <see cref="AddRange" /> can raise the contract's <see cref="ArgumentNullException" />.</param>
+    /// <returns>The source's count when knowable without enumeration; otherwise 0.</returns>
+    private static int PreSizeOf(IEnumerable<KeyValuePair<TKey, TValue>>? source)
+        => source is not null && source.TryGetNonEnumeratedCount(out int count) ? count : 0;
 
     /// <summary>Gets the number of entries — a moment-in-time snapshot, consistent with lock-free enumeration.</summary>
     public int Count => Volatile.Read(ref _store._count);
@@ -357,11 +370,12 @@ public sealed class ConcurrentOrderedDict<TKey, TValue> : IReadOnlyList<TValue>
         }
     }
 
-    /// <summary>Determines whether <paramref name="key" /> is present. Lock-free and O(1).</summary>
+    /// <summary>Determines whether <paramref name="key" /> is present. Lock-free, O(1) and allocation-free.</summary>
     /// <param name="key">The key to test.</param>
     /// <returns><see langword="true" /> if the key exists; otherwise <see langword="false" />.</returns>
+    /// <remarks>Routed through the ref seam rather than the vendored map's own <c>ContainsKey</c> so the membership test is allocation-free in Debug builds too (the vendored method's verbatim <c>key is null</c> boxes value-type keys under unoptimized codegen — see <see cref="NullCheck" />).</remarks>
     /// <exception cref="ArgumentNullException"><paramref name="key" /> is <see langword="null" />.</exception>
-    public bool ContainsKey(TKey key) => _byKey.ContainsKey(key);
+    public bool ContainsKey(TKey key) => !Unsafe.IsNullRef(ref _byKey.GetValueRefOrNullRef(key));
 
     /// <summary>Attempts to read the value for <paramref name="key" /> without throwing. Lock-free and O(1) — one hash-node visit, like the plain concurrent dictionary.</summary>
     /// <param name="key">The key to look up.</param>
@@ -654,7 +668,10 @@ public sealed class ConcurrentOrderedDict<TKey, TValue> : IReadOnlyList<TValue>
         // lock is entered only to append an absent key or (via TryUpdate) to perform the swap itself.
         while (true)
         {
-            if (_byKey.TryGetValue(key, out ValueIndex vi))
+            // Ref-read of the value field only (see TryGetValue for the race-safety argument); seam-routed so
+            // the lock-free fast path is allocation-free in Debug too.
+            ref ValueIndex vi = ref _byKey.GetValueRefOrNullRef(key);
+            if (!Unsafe.IsNullRef(ref vi))
             {
                 TValue old = vi._value;
                 TValue updated = updateValueFactory(key, old);
@@ -723,7 +740,8 @@ public sealed class ConcurrentOrderedDict<TKey, TValue> : IReadOnlyList<TValue>
 
         // Lock-free fast negative: the interior-removal work under the lock is O(n), so keeping absent-key
         // callers out of the lock entirely is worth the one extra bucket walk on the present path (noise there).
-        if (!_byKey.ContainsKey(key))
+        // Seam-routed so the probe is allocation-free in Debug too (see NullCheck).
+        if (Unsafe.IsNullRef(ref _byKey.GetValueRefOrNullRef(key)))
         {
             value = default!;
             return false;
@@ -797,10 +815,10 @@ public sealed class ConcurrentOrderedDict<TKey, TValue> : IReadOnlyList<TValue>
     {
         NullCheck(key);
 
-        if (!_byKey.ContainsKey(key))
+        if (Unsafe.IsNullRef(ref _byKey.GetValueRefOrNullRef(key)))
         {
             value = default!;
-            return false; // lock-free fast negative
+            return false; // lock-free fast negative (seam-routed: allocation-free in Debug too)
         }
 
         ThrowIfReentrantWrite();
@@ -1570,10 +1588,20 @@ public sealed class ConcurrentOrderedDict<TKey, TValue> : IReadOnlyList<TValue>
 
     /// <summary>Throws <see cref="ArgumentNullException" /> if <paramref name="key" /> is null (guards the reference-key case).</summary>
     /// <param name="key">The key to validate.</param>
+    /// <remarks>
+    ///     The <c>typeof</c> guard is load-bearing for allocation-freedom: a bare <c>key is null</c> on a generic
+    ///     <typeparamref name="TKey" /> compiles to <c>box</c>+compare IL, and under unoptimized (Debug) codegen
+    ///     that box EXECUTES for value-type keys — 24 B allocated per null-check on every hot path (Release JIT
+    ///     elides it, which is why only Debug measurements exposed it). Short-circuiting on
+    ///     <c>typeof(TKey).IsValueType</c> means the box IL is never reached for value types (and boxing a
+    ///     reference type is a no-op by ECMA-335), so every configuration is allocation-free; Release codegen is
+    ///     unchanged (the JIT folds the guard to a constant). A <c>Nullable&lt;T&gt;</c> key — already excluded by
+    ///     the <c>notnull</c> constraint — would skip this check and fail later at hashing instead.
+    /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="key" /> is <see langword="null" />.</exception>
     private static void NullCheck(TKey key)
     {
-        if (key is null)
+        if (!typeof(TKey).IsValueType && key is null)
         {
             throw new ArgumentNullException(nameof(key));
         }

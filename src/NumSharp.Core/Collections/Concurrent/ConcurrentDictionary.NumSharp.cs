@@ -58,7 +58,11 @@ namespace NumSharp.Collections.Concurrent
         [MethodImpl(MethodImplOptions.AggressiveInlining)] // hot seam: inlining folds the bucket walk into the ordered dict's readers, matching the BCL's one-call depth
         internal ref TValue GetValueRefOrNullRef(TKey key)
         {
-            if (key is null)
+            // typeof guard: a bare `key is null` on generic TKey is box+compare IL, and unoptimized (Debug)
+            // codegen executes the box for value-type keys — 24 B per lookup. The short-circuit keeps the box
+            // unreached for value types (boxing a reference type is a no-op), so the seam is allocation-free in
+            // every configuration; Release codegen is identical (the JIT folds the guard).
+            if (!typeof(TKey).IsValueType && key is null)
             {
                 ThrowHelper.ThrowArgumentNullException(ExceptionArgument.key);
             }
