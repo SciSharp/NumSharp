@@ -8041,8 +8041,12 @@ _EV_UNARY = {
     "asinh": np.arcsinh, "acosh": np.arccosh, "atanh": np.arctanh,
     "deg2rad": np.deg2rad, "rad2deg": np.rad2deg,
     # round = np.round(x) (decimals=0): dtype-PRESERVING like NDExpr.Round / np.round_, an identity on
-    # integers; the float-tier np.rint is a separate node (Phase 4).
-    "floor": np.floor, "ceil": np.ceil, "round": lambda x: np.round(x), "trunc": np.trunc,
+    # integers. rint = np.rint(x): the TRUE ufunc form of round-half-to-even — same VALUE (banker's
+    # rounding, and NDExpr.Rint aliases Round's kernel), but float-TIER (bool/i1/u1->f16, i2/u2->f32,
+    # i4+->f64; float/complex/decimal preserved), so rint(int32) is a float64 where round(int32) is the
+    # int32 identity. Both cells are BIT-EXACT (Math.Round is portable), no ULP excuse; complex rounds
+    # both lanes. rint has a loop for every dtype (no rejection cell).
+    "floor": np.floor, "ceil": np.ceil, "round": lambda x: np.round(x), "rint": np.rint, "trunc": np.trunc,
     "not": np.invert, "lnot": np.logical_not,
     "isnan": np.isnan, "isfinite": np.isfinite, "isinf": np.isinf,
     # Phase 4 unary node coverage — the engine unary ufuncs that gained an NDExpr node. Every VALUE
@@ -8354,6 +8358,10 @@ def gen_evaluate():
         # raises the recorded "not supported" error cell (fabs/spacing have no complex loop).
         "mul(fabs(in0),lf:2.0)",
         "add(spacing(in0),in0)",
+        # rint as a SUB-tree: the float-tier promote feeds arithmetic. rint(in0*1.5) rounds a
+        # non-integer product half-to-even, then +1 — a genuine fused rint (not the identity an
+        # integer input would give the root sweep).
+        "add(rint(mul(in0,lf:1.5)),lf:1.0)",
     ]
     # Every layout the catalog has, at every third position (the unary set above already walks
     # the contiguity / stride / offset axes; this pass is about the tree shapes).

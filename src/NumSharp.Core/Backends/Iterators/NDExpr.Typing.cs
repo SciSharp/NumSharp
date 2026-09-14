@@ -722,7 +722,11 @@ namespace NumSharp.Backends.Iteration
             UnaryOp.Sinh or UnaryOp.Cosh or UnaryOp.Tanh or
             UnaryOp.ASin or UnaryOp.ACos or UnaryOp.ATan or
             UnaryOp.Asinh or UnaryOp.Acosh or UnaryOp.Atanh or
-            UnaryOp.Deg2Rad or UnaryOp.Rad2Deg => true,
+            UnaryOp.Deg2Rad or UnaryOp.Rad2Deg or
+            // np.rint is float-tier (unlike np.round, which preserves the input dtype) — its result
+            // dtype is exactly UnaryFloatResult (bool/i1/u1→f16, i2/u2→f32, i4+→f64; float/complex/decimal
+            // preserved, probed 2.4.2), so it rides this branch. Its KERNEL is still Round (aliased at emit).
+            UnaryOp.Rint => true,
             _ => false,
         };
 

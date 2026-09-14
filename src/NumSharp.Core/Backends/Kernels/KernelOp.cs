@@ -174,7 +174,21 @@ namespace NumSharp.Backends.Kernels
         /// two's-complement negation wraps to itself, so <c>bitwise_count(int8 -128)==1</c>), computed via
         /// a branchless abs (<c>(x^(x&gt;&gt;w-1))-(x&gt;&gt;w-1)</c>) before <c>BitOperations.PopCount</c>.
         /// </summary>
-        BitwiseCount
+        BitwiseCount,
+
+        /// <summary>
+        /// Round to the nearest integer, half-to-even (np.rint) — the TRUE ufunc form of round-half-to-even.
+        /// The VALUE computation is IDENTICAL to <see cref="Round"/> (both are <c>Math.Round</c>'s default
+        /// banker's rounding), so every emit site ALIASES Rint to Round (the <see cref="Fabs"/>/<see cref="Abs"/>
+        /// pattern); it is a DISTINCT op only because its DTYPE rule differs — unlike <see cref="Round"/>
+        /// (which preserves the input dtype: an integer array stays that integer type), <c>rint</c> PROMOTES
+        /// to a float tier (bool/int8/uint8→float16, int16/uint16→float32, int32+→float64; float/complex/decimal
+        /// preserved), so it never has an integer <c>type</c> at the kernel. NumSharp's engine <c>np.rint</c>
+        /// reaches Round's kernel through <see cref="Round"/> with a float return type; this separate op exists
+        /// for the fused expression engine (<see cref="NumSharp.Backends.Iteration.NDExpr"/>), whose one-op-per-node
+        /// model needs a distinct node to carry rint's float-tier typing while sharing Round's kernel.
+        /// </summary>
+        Rint
     }
 
     /// <summary>

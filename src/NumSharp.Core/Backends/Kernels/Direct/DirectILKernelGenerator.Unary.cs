@@ -440,6 +440,7 @@ namespace NumSharp.Backends.Kernels
             UnaryOp.Floor => "Floor",
             UnaryOp.Ceil => "Ceiling",   // Vector container spells it "Ceiling", not "Ceil"
             UnaryOp.Round => "Round",
+            UnaryOp.Rint => "Round",     // np.rint probes the same Vector.Round the emitter binds
             UnaryOp.Truncate => "Truncate",
             _ => throw new ArgumentOutOfRangeException(nameof(op), op, "not a rounding-family op")
         };

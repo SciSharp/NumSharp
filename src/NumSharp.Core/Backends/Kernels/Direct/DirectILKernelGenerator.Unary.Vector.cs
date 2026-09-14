@@ -109,6 +109,7 @@ namespace NumSharp.Backends.Kernels
                 UnaryOp.Floor => "Floor",
                 UnaryOp.Ceil => "Ceiling",  // Vector uses "Ceiling" not "Ceil"
                 UnaryOp.Round => "Round",
+                UnaryOp.Rint => "Round",   // np.rint — Vector.Round, same kernel as Round
                 UnaryOp.Truncate => "Truncate",
                 _ => throw new NotSupportedException($"SIMD operation {op} not supported")
             };
@@ -122,7 +123,7 @@ namespace NumSharp.Backends.Kernels
                     null, new[] { VectorMethodCache.V(VectorBits, clrType) }, null)
                     ?? throw new InvalidOperationException($"Could not find {methodName} for Vector{VectorBits}<{clrType.Name}>");
             }
-            else if (op == UnaryOp.Floor || op == UnaryOp.Ceil || op == UnaryOp.Round || op == UnaryOp.Truncate)
+            else if (op == UnaryOp.Floor || op == UnaryOp.Ceil || op == UnaryOp.Round || op == UnaryOp.Rint || op == UnaryOp.Truncate)
             {
                 // Floor/Ceiling/Round/Truncate are NOT generic — overloaded per-type, and only
                 // exist for some (runtime, width) combinations (Floor/Ceiling .NET 7+, Round/

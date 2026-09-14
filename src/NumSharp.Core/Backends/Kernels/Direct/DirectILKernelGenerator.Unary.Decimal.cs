@@ -64,6 +64,7 @@ namespace NumSharp.Backends.Kernels
                     break;
 
                 case UnaryOp.Round:
+                case UnaryOp.Rint:   // np.rint — same Math.Round(decimal), differs only in dtype tier
                     // Math.Round has decimal overload
                     il.EmitCall(OpCodes.Call, CachedMethods.MathRoundDecimal, null);
                     break;
@@ -410,6 +411,7 @@ namespace NumSharp.Backends.Kernels
                 // TypeError for complex inputs, so falling through to the default throw keeps parity.
 
                 case UnaryOp.Round:
+                case UnaryOp.Rint:   // np.rint(complex) — same real/imag half-to-even, complex128 preserved
                     // NumPy rint(complex) / around(complex) rounds the real and imaginary parts
                     // SEPARATELY, half-to-even (Math.Round default). floor/ceil/trunc have no complex
                     // loop in NumPy (TypeError), so Round is the only rounding op handled here.
@@ -601,6 +603,7 @@ namespace NumSharp.Backends.Kernels
                     break;
 
                 case UnaryOp.Round:
+                case UnaryOp.Rint:   // np.rint(f16) — same Half→double→Round→Half roundtrip as Round
                 case UnaryOp.Deg2Rad:
                 case UnaryOp.Rad2Deg:
                     // The three ops NOT covered by the float32 fast path above (Round is bit-preserving,

@@ -288,6 +288,7 @@ namespace NumSharp.Tests.Fuzz
                     case "floor": return NDExpr.Floor(a[0]);
                     case "ceil": return NDExpr.Ceil(a[0]);
                     case "round": return NDExpr.Round(a[0]);
+                    case "rint": return NDExpr.Rint(a[0]);
                     case "trunc": return NDExpr.Truncate(a[0]);
                     case "not": return NDExpr.BitwiseNot(a[0]);
                     case "lnot": return NDExpr.LogicalNot(a[0]);

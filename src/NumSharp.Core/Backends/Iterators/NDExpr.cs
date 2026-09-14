@@ -446,6 +446,21 @@ namespace NumSharp.Backends.Iteration
         public static NDExpr Floor(NDExpr x) => new UnaryNode(UnaryOp.Floor, x);
         public static NDExpr Ceil(NDExpr x) => new UnaryNode(UnaryOp.Ceil, x);
         public static NDExpr Round(NDExpr x) => new UnaryNode(UnaryOp.Round, x);
+
+        /// <summary>
+        /// Round to the nearest integer, half-to-even (np.rint) — the TRUE ufunc form of round-half-to-even.
+        /// The VALUE is identical to <see cref="Round"/> (both are banker's rounding, and Rint aliases Round
+        /// at every kernel emit site), but the DTYPE differs: where <see cref="Round"/> PRESERVES the input
+        /// dtype (an integer array rounds to itself unchanged), <c>Rint</c> PROMOTES to a float tier
+        /// (bool/int8/uint8→float16, int16/uint16→float32, int32+→float64; float/complex/decimal preserved) —
+        /// so <c>Rint(int32)</c> is a float64 while <c>Round(int32)</c> is the int32 identity. Complex rounds
+        /// the real and imaginary parts separately. Vectorizes at float32/float64 on a capable runtime, exactly
+        /// like <see cref="Round"/>.
+        /// </summary>
+        /// <param name="x">The operand.</param>
+        /// <returns>An expression node computing <paramref name="x"/> rounded half-to-even, at the promoted float tier.</returns>
+        public static NDExpr Rint(NDExpr x) => new UnaryNode(UnaryOp.Rint, x);
+
         public static NDExpr Truncate(NDExpr x) => new UnaryNode(UnaryOp.Truncate, x);
 
         // Bitwise / logical
@@ -1228,9 +1243,14 @@ namespace NumSharp.Backends.Iteration
 
         // NumPy preserves integer dtypes through floor/ceil/round/trunc — the op
         // is an identity there (and Math.Floor has no integer overloads to call).
+        // Rint shares Round's kernel, so it belongs to the rounding family for the SIMD gate
+        // (IsSimdUnaryAt → RoundingVectorSimdAvailable) and the identity-early-returns. Those
+        // early-returns fire only for an INTEGER result dtype, which Rint never has (it promotes
+        // int→float), so including it here is correct AND inert on that branch — it matters only for
+        // routing the SIMD-availability probe to the Vector.Round path (which Rint vectorizes through).
         private static bool IsRoundingOp(UnaryOp op)
             => op == UnaryOp.Floor || op == UnaryOp.Ceil ||
-               op == UnaryOp.Round || op == UnaryOp.Truncate;
+               op == UnaryOp.Round || op == UnaryOp.Rint || op == UnaryOp.Truncate;
 
         private static bool IsIntegerKind(NPTypeCode t)
             => t == NPTypeCode.Boolean || t == NPTypeCode.Byte || t == NPTypeCode.SByte ||

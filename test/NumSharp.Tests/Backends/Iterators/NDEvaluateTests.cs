@@ -1725,5 +1725,87 @@ namespace NumSharp.Tests.Backends.Iterators
                                     $"vector≠scalar at {i}");
             }
         }
+
+        // ===================================================================
+        // Phase 4.1b — dtype-CHANGING unary nodes (this milestone: Rint)
+        // ===================================================================
+
+        /// <summary>np.rint is the TRUE ufunc round-half-to-even. Its VALUE equals <see cref="NDExpr.Round"/>
+        /// (both banker's rounding; Rint aliases Round's kernel), but its DTYPE is a float TIER
+        /// (bool/int8/uint8→float16, int16/uint16→float32, int32+→float64; float/complex/decimal preserved)
+        /// where <c>Round</c> PRESERVES the input dtype — so <c>Rint(int32)</c> is a float64 while
+        /// <c>Round(int32)</c> is the int32 identity. Complex rounds both lanes.</summary>
+        [TestMethod]
+        public void P41b_Rint_FloatTier_HalfToEven_ComplexBothLanes()
+        {
+            // int32 → float64 (PROMOTES, unlike Round which keeps int32) — the defining difference.
+            var ri = np.evaluate(NDExpr.Rint(NDExpr.Arr(np.array(new[] { 1, 2, 3 }))));
+            Assert.AreEqual(NPTypeCode.Double, ri.typecode);
+            Assert.AreEqual(2.0, ri.GetDouble(1), 0);
+            // Contrast: Round on the same int32 preserves int32 (the identity).
+            Assert.AreEqual(NPTypeCode.Int32, np.evaluate(NDExpr.Round(NDExpr.Arr(np.array(new[] { 1, 2, 3 })))).typecode);
+
+            // int8 → float16, bool → float16 (the low tiers).
+            Assert.AreEqual(NPTypeCode.Half, np.evaluate(NDExpr.Rint(NDExpr.Arr(np.array(new sbyte[] { 5 })))).typecode);
+            Assert.AreEqual(NPTypeCode.Half, np.evaluate(NDExpr.Rint(NDExpr.Arr(np.array(new[] { 1 }).astype(NPTypeCode.Boolean)))).typecode);
+            // int16 → float32.
+            Assert.AreEqual(NPTypeCode.Single, np.evaluate(NDExpr.Rint(NDExpr.Arr(np.array(new short[] { 5 })))).typecode);
+
+            // Half-to-even (banker's) on float64, preserved dtype: 0.5→0, 2.5→2, 3.5→4, -2.5→-2, -1.5→-2.
+            var rf = np.evaluate(NDExpr.Rint(NDExpr.Arr(np.array(new double[] { 0.5, 2.5, 3.5, -2.5, -1.5 }))));
+            Assert.AreEqual(NPTypeCode.Double, rf.typecode);
+            Assert.AreEqual(0.0, rf.GetDouble(0), 0);
+            Assert.AreEqual(2.0, rf.GetDouble(1), 0);
+            Assert.AreEqual(4.0, rf.GetDouble(2), 0);
+            Assert.AreEqual(-2.0, rf.GetDouble(3), 0);
+            Assert.AreEqual(-2.0, rf.GetDouble(4), 0);
+
+            // Complex rounds real and imaginary separately (complex128 preserved).
+            var rc = np.evaluate(NDExpr.Rint(NDExpr.Arr(np.array(new System.Numerics.Complex[] { new(2.5, 3.5) }))));
+            Assert.AreEqual(NPTypeCode.Complex, rc.typecode);
+            var z = rc.GetAtIndex<System.Numerics.Complex>(0);
+            Assert.AreEqual(2.0, z.Real, 0);
+            Assert.AreEqual(4.0, z.Imaginary, 0);
+
+            // ±inf / NaN / -0.0 pass through the rounding unchanged (float64 preserved).
+            var rs = np.evaluate(NDExpr.Rint(NDExpr.Arr(np.array(new double[] { double.PositiveInfinity, -0.0 }))));
+            Assert.IsTrue(double.IsPositiveInfinity(rs.GetDouble(0)));
+            Assert.AreEqual(long.MinValue, BitConverter.DoubleToInt64Bits(rs.GetDouble(1)));  // -0.0 sign preserved
+        }
+
+        /// <summary>Rint vectorizes at float32/float64 (it shares Round's Vector.Round body) — the vector
+        /// and scalar paths agree bit-for-bit over a pool full of .5 ties — and it composes as a sub-tree
+        /// (a genuine fused rint of a non-integer product).</summary>
+        [TestMethod]
+        public void P41b_Rint_VectorizesBitExact_And_Composes()
+        {
+            // A pool of exact half-integers so banker's rounding is exercised on every element.
+            var pool = new double[128];
+            for (int i = 0; i < pool.Length; i++) pool[i] = (i - 64) * 0.5;
+            var big = np.array(pool);
+            foreach (var tc in new[] { NPTypeCode.Single, NPTypeCode.Double })
+            {
+                var a = big.astype(tc);
+                var vec = np.evaluate(NDExpr.Rint(NDExpr.Arr(a)));
+                NDArray sca;
+                NDExpr.ForceScalar = true;
+                try { sca = np.evaluate(NDExpr.Rint(NDExpr.Arr(a))); }
+                finally { NDExpr.ForceScalar = false; }
+                Assert.AreEqual(tc, vec.typecode);
+                // Read through the element's OWN width (up-cast to double) — GetDouble on a float32 array
+                // would index as 8-byte elements and read garbage past the buffer.
+                var vd = vec.astype(NPTypeCode.Double); var sd = sca.astype(NPTypeCode.Double);
+                for (int i = 0; i < pool.Length; i++)
+                    Assert.AreEqual(sd.GetDouble(i), vd.GetDouble(i), 0, $"{tc} vector≠scalar at {i}");
+            }
+
+            // Sub-tree: rint(a*1.5) + 1 — the product is non-integer, so rint does real work here.
+            var v = np.array(new double[] { 1, 2, 3, 4 });                 // *1.5 → 1.5, 3.0, 4.5, 6.0
+            var comp = np.evaluate(NDExpr.Rint((NDExpr)v * 1.5) + (NDExpr)1.0);
+            Assert.AreEqual(3.0, comp.GetDouble(0), 0);   // rint(1.5)=2 (even) +1
+            Assert.AreEqual(4.0, comp.GetDouble(1), 0);   // rint(3.0)=3 +1
+            Assert.AreEqual(5.0, comp.GetDouble(2), 0);   // rint(4.5)=4 (even) +1
+            Assert.AreEqual(7.0, comp.GetDouble(3), 0);   // rint(6.0)=6 +1
+        }
     }
 }

@@ -233,6 +233,7 @@ namespace NumSharp.Backends.Kernels
                     break;
 
                 case UnaryOp.Round:
+                case UnaryOp.Rint:   // np.rint — same kernel as Round (half-to-even); differs only in dtype tier
                     EmitMathCall(il, "Round", type);
                     break;
 
