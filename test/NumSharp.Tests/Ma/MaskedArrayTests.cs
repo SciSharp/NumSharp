@@ -1341,5 +1341,84 @@ namespace NumSharp.Tests.Ma
             Assert.IsTrue(ReferenceEquals(m2, np.ma.harden_mask(m2)));
             Assert.IsTrue(m2.hardmask);
         }
+
+        /// <summary>flatten_mask ravels any mask to a fresh 1-D BOOL array in C-order (non-bool coerced by
+        /// non-zero-ness); a 0-D input flattens to length 1, an empty to length 0. Values probed against
+        /// NumPy 2.4.2 (whose structured recursion never branches without structured dtypes, so this is
+        /// exactly its non-structured path).</summary>
+        [TestMethod]
+        public void FlattenMask_RavelsToBool()
+        {
+            // 2-D integer mask → raveled, coerced != 0.
+            var r = np.ma.flatten_mask(np.array(new[,] { { 0, 2 }, { 0, 0 } }));
+            Assert.AreEqual(1, r.ndim);
+            Assert.IsTrue(r.dtype == np.@bool);
+            Assert.IsTrue(r.ToArray<bool>().SequenceEqual(new[] { false, true, false, false }));
+
+            Assert.IsTrue(np.ma.flatten_mask(np.array(new[] { true, false, true })).ToArray<bool>()
+                .SequenceEqual(new[] { true, false, true }));
+            Assert.IsTrue(np.ma.flatten_mask(false).ToArray<bool>().SequenceEqual(new[] { false }));   // 0-D → len 1
+            Assert.AreEqual(0, np.ma.flatten_mask(np.array(new bool[0])).ToArray<bool>().Length);       // empty → len 0
+            Assert.IsTrue(np.ma.flatten_mask(np.array(new[] { 0.0, 1.5, 0.0, -2.0 })).ToArray<bool>()
+                .SequenceEqual(new[] { false, true, false, true }));                                     // float !=0
+        }
+
+        /// <summary>make_mask_descr returns the BOOLEAN dtype for every data dtype — NumSharp has no structured
+        /// dtypes, so the recursion NumPy uses over a structured dtype never branches and every dtype maps to
+        /// the single scalar bool descriptor NumPy returns for a non-structured dtype.</summary>
+        [TestMethod]
+        public void MakeMaskDescr_AlwaysBool()
+        {
+            Assert.IsTrue(np.ma.make_mask_descr(np.float64) == np.@bool);
+            Assert.IsTrue(np.ma.make_mask_descr(np.int32) == np.@bool);
+            Assert.IsTrue(np.ma.make_mask_descr(np.complex128) == np.@bool);
+            Assert.IsTrue(np.ma.make_mask_descr("i4") == np.@bool);          // dtype-string converts in
+            Assert.IsTrue(np.ma.make_mask_descr(typeof(int)) == np.@bool);   // CLR Type converts in
+        }
+
+        /// <summary>mr_ is the masked counterpart of np.r_: concatenates masked arrays / slices / scalars along
+        /// the first axis (or a directive axis), propagating the mask; two unmasked operands stay nomask; a lone
+        /// string raises MAError (NumPy's rejection). Data uses NumSharp's colon-string slice spelling and every
+        /// value/mask was probed against NumPy 2.4.2 (its real-slice form).</summary>
+        [TestMethod]
+        public void Mr_ConcatenatesMasked()
+        {
+            var a = np.ma.array(np.array(new[] { 1, 2, 3 }), np.array(new[] { false, true, false }));
+            var b = np.ma.array(np.array(new[] { 4, 5, 6 }), np.array(new[] { true, false, false }));
+
+            var r = np.ma.mr_[a, b];
+            Assert.IsTrue(D(r).SequenceEqual(new double[] { 1, 2, 3, 4, 5, 6 }));
+            Assert.IsTrue(M(r).SequenceEqual(new[] { false, true, false, true, false, false }));
+
+            // scalar entry → one unmasked slot.
+            var r2 = np.ma.mr_[a, 7, b];
+            Assert.IsTrue(D(r2).SequenceEqual(new double[] { 1, 2, 3, 7, 4, 5, 6 }));
+            Assert.IsTrue(M(r2).SequenceEqual(new[] { false, true, false, false, true, false, false }));
+
+            // colon-slice (NumSharp spelling) + masked  ≙ numpy mr_[0:3, a].
+            var r3 = np.ma.mr_["0:3", a];
+            Assert.IsTrue(D(r3).SequenceEqual(new double[] { 0, 1, 2, 1, 2, 3 }));
+            Assert.IsTrue(M(r3).SequenceEqual(new[] { false, false, false, false, true, false }));
+
+            // axis directive over 2-D.
+            var A2 = np.ma.array(np.array(new[,] { { 1, 2 }, { 3, 4 } }), np.array(new[,] { { false, true }, { false, false } }));
+            var B2 = np.ma.array(np.array(new[,] { { 5, 6 }, { 7, 8 } }), np.array(new[,] { { true, false }, { false, true } }));
+            var r4 = np.ma.mr_["1", A2, B2];
+            Assert.AreEqual(4L, r4.shape[1]);
+            Assert.IsTrue(D(r4).SequenceEqual(new double[] { 1, 2, 5, 6, 3, 4, 7, 8 }));
+            Assert.IsTrue(M(r4).SequenceEqual(new[] { false, true, true, false, false, false, false, true }));
+
+            // no mask anywhere → nomask fast path.
+            var r5 = np.ma.mr_[np.array(new[] { 1, 2 }), np.array(new[] { 3, 4 })];
+            Assert.IsFalse(np.ma.is_masked(r5));
+            Assert.IsTrue(D(r5).SequenceEqual(new double[] { 1, 2, 3, 4 }));
+
+            // lone string → MAError verbatim.
+            foreach (var k in new[] { "r", "0:3", "0" })
+            {
+                var ex = Assert.ThrowsException<MAError>(() => { var _ = np.ma.mr_[k]; });
+                Assert.AreEqual("Unavailable for masked array.", ex.Message);
+            }
+        }
     }
 }
