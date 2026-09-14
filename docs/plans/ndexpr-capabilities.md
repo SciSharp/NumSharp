@@ -33,7 +33,7 @@ missing ufunc:
 | C3 | **Scan / recurrence / shift nodes** | `cumsum(a*b)`, EMA / IIR recurrences, `diff`, central-difference stencils | 4–6 d | — |
 | C4 | **Gather (`Take`) nodes** | lookup tables, embeddings, piecewise-linear interpolation | 3 d | P4 `Cast` (float index rejection text) |
 | C5 | **Vectorizable `Call` + partial vectorization** | a user special function no longer scalarizes the whole tree; integer `Mod`/`Power` subtrees stop forcing the scalar path | 3–4 d | — |
-| C6 | **Macro nodes** (activations) and **special-function hooks** | readable NN trees with parity by construction; `erf`/`gamma`/`i0` nodes once the Cephes ufuncs exist | 1–2 d (+ scipy-plan ports) | `docs/plans/scipy.md` §5 |
+| C6 | **Macro / decision combinators** (activations, selectors, boolean logic, predicates, directional, multi-way) — ✅ **LANDED 2026-09-14** (`NDExpr.Combinators.cs`); special-function hooks (`erf`/`gamma`/`i0`) still pending the Cephes ufuncs | readable NN / decision trees with parity by construction | 1–2 d (+ scipy-plan ports) | `docs/plans/scipy.md` §5 |
 | C7 | **Complex construction** `Complex(re, im)` | FFT pre/post-processing trees | 0.5 d | P4 `Real/Imag/Conj/Angle` |
 | C8 | **Ergonomics**: `np.*` overloads over `NDExpr`, explicit `Eval()`; NO implicit `NDExpr→NDArray` (reason inside) | trees that read like NumPy code | 1–2 d | — |
 | C9 | **Fixed cost**: direct kernel dispatch (skip NDIter for identical contiguous operands), the same for all-0-d trees | every small-array call: prebuilt ~0.41 → ≤ 0.30 µs | 1–2 d | — |
@@ -499,6 +499,39 @@ is one line per function once those exist: a `UnaryNode` factory + the float-tie
 Oracle: each macro as its composition in the grammar (e.g. `sigmoid(in0)` expands generator-side to
 `1/(1+exp(-x))`); unit tests pin the exact composition (so a future "faster sigmoid" that changes
 bits is a deliberate, tested decision, not a drift).
+
+### Landed (2026-09-14, `NDExpr.Combinators.cs`)
+
+The macro/decision half of C6 is complete — 40 static factories on `NDExpr`, every one a pure
+composition of the primitive nodes (no new node type, no IL, no typing/structure/vector change), so
+each fuses into the same `np.evaluate` pass, is correct by construction, and inherits whatever SIMD
+path its underlying `Where`/`Min`/`Max`/arithmetic nodes have:
+
+- **Selection & masking**: `If`, `IfNot`, `When`, `Unless`, `Switch` (multi-way, first-match-wins),
+  `Mux` (integer-indexed).
+- **Clamp/saturate**: `ClampMin`, `ClampMax`, `Saturate`.
+- **Robustness**: `NanTo`, `Coalesce` (first-finite).
+- **Activations**: `Relu`, `LeakyRelu`, `Elu`, `Sigmoid`, `Swish`, `Softplus` (stable
+  `max(x,0)+log1p(exp(-|x|))`), `Gelu` (tanh form), `HardSigmoid`, `Step`.
+- **Boolean logic**: `Nand`, `Nor`, `Xnor`, `Implies`, `Majority3`.
+- **Predicates**: `IsPositive`, `IsNegative`, `IsInteger`, `IsClose` (np.isclose relation, equal_nan=False),
+  `SameSign`, `Between`.
+- **Directional/sign**: `Cmp` (3-way), `Heaviside`, `StepToward`, `MaxMagnitude`.
+- **Multi-way/interp**: `Bucketize` (np.digitize; sums INTEGER `Where(…,1,0)`, since `bool+bool` is
+  logical OR, not a count), `Median3` (branch-free), `Threshold`, `Lerp`.
+
+**Deliberately deferred to P4**, NOT composed here so they never collide when P4 adds them as
+first-class (vectorizable) ufunc nodes: `fmax`/`fmin`, `copysign`, `nextafter`, `logaddexp`, the
+shifts, and the `np.select`/`np.clip` nodes (which is why the multi-way selector is named `Switch`
+and one-sided clamps ride `Min`/`Max`). Special functions (`erf`/`gamma`/`i0`/`expit`) still wait on
+the Cephes ports (`docs/plans/scipy.md` §5); each is then one `UnaryNode` factory line.
+
+**Gate**: `NDExprCombinatorTests` (36) — the metamorphic gate C14 allows for composition nodes:
+each fused combinator compared to its eager `np.*` reference (or a hand-verified NumPy 2.4.2 output),
+discrete results bit-exact, transcendental activations within allclose; plus fusion-parity (a
+combinator inside a chain equals the unfused `np.*` chain) and cross-combinator composition. The
+oracle-grammar tokens (`sigmoid(in0)` → its composition in `gen_evaluate`) remain the one open
+follow-up for this item; the metamorphic gate is airtight for compositions in the meantime.
 
 ---
 
