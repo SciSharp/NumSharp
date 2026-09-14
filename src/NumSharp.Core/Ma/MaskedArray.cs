@@ -319,11 +319,11 @@ namespace NumSharp
         /// <param name="axis">Axis or null.</param><param name="fill_value">Masked fill override.</param><param name="keepdims">Keep reduced axes.</param><returns>Masked range.</returns>
         public MaskedArray ptp(int? axis = null, object fill_value = null, bool keepdims = false) => np.ma.ptp(this, axis, fill_value, keepdims);
         /// <summary>Standard deviation over unmasked elements.</summary>
-        /// <param name="axis">Axis or null.</param><param name="dtype">Accumulator dtype.</param><param name="ddof">Delta DOF.</param><param name="keepdims">Keep reduced axes.</param><returns>Masked std.</returns>
-        public MaskedArray std(int? axis = null, DType dtype = null, int ddof = 0, bool keepdims = false) => np.ma.std(this, axis, dtype, ddof, keepdims);
+        /// <param name="axis">Axis or null.</param><param name="dtype">Accumulator dtype.</param><param name="ddof">Delta DOF.</param><param name="keepdims">Keep reduced axes.</param><param name="mean">Precomputed centering mean (NumPy 2.0), or null.</param><returns>Masked std.</returns>
+        public MaskedArray std(int? axis = null, DType dtype = null, int ddof = 0, bool keepdims = false, object mean = null) => np.ma.std(this, axis, dtype, ddof, keepdims, mean);
         /// <summary>Variance over unmasked elements.</summary>
-        /// <param name="axis">Axis or null.</param><param name="dtype">Accumulator dtype.</param><param name="ddof">Delta DOF.</param><param name="keepdims">Keep reduced axes.</param><returns>Masked variance.</returns>
-        public MaskedArray var(int? axis = null, DType dtype = null, int ddof = 0, bool keepdims = false) => np.ma.var(this, axis, dtype, ddof, keepdims);
+        /// <param name="axis">Axis or null.</param><param name="dtype">Accumulator dtype.</param><param name="ddof">Delta DOF.</param><param name="keepdims">Keep reduced axes.</param><param name="mean">Precomputed centering mean (NumPy 2.0), or null.</param><returns>Masked variance.</returns>
+        public MaskedArray var(int? axis = null, DType dtype = null, int ddof = 0, bool keepdims = false, object mean = null) => np.ma.var(this, axis, dtype, ddof, keepdims, mean);
         /// <summary>Count of unmasked elements.</summary>
         /// <param name="axis">Axis or null.</param><param name="keepdims">Keep reduced axes.</param><returns>int64 count array.</returns>
         public NDArray count(int? axis = null, bool keepdims = false) => np.ma.count(this, axis, keepdims);
@@ -1840,33 +1840,43 @@ namespace NumSharp
         }
 
         /// <summary>Variance over unmasked elements (masked contribute nothing); a cell is masked where its
-        /// whole slice was masked OR the unmasked count minus <paramref name="ddof"/> is ≤ 0.</summary>
+        /// whole slice was masked OR the unmasked count minus <paramref name="ddof"/> is ≤ 0. When
+        /// <paramref name="mean"/> is supplied (NumPy 2.0's keyword-only <c>mean</c>) it is used as the centering
+        /// value INSTEAD of the computed slice mean — it must already broadcast to the keepdims-reduced shape.</summary>
         /// <param name="a">Operand.</param><param name="axis">Axis or null.</param><param name="dtype">Accumulator dtype.</param>
         /// <param name="ddof">Delta degrees of freedom (divisor is count − ddof).</param><param name="keepdims">Keep reduced axes.</param>
+        /// <param name="mean">Precomputed centering mean (broadcast to the keepdims shape), or null to compute it.</param>
         /// <returns>The masked variance (real-valued, even for complex input).</returns>
-        public MaskedArray var(object a, int? axis = null, DType dtype = null, int ddof = 0, bool keepdims = false)
+        public MaskedArray var(object a, int? axis = null, DType dtype = null, int ddof = 0, bool keepdims = false, object mean = null)
         {
             var mask = (a as MaskedArray)?._mask;
             var d = AsData(a);
             bool cplx = d.typecode == NPTypeCode.Complex;
             var computeType = cplx ? np.complex128 : np.float64;
 
-            if (mask is null)
+            // Fast path only when there is NOTHING to special-case: no mask AND no supplied mean.
+            if (mask is null && mean is null)
             {
                 var rn = axis is null ? np.var(d, keepdims, ddof, dtype) : np.var(d, axis.Value, keepdims, ddof, dtype);
                 return new MaskedArray(rn, null);
             }
 
-            var filled0 = ((MaskedArray)a).filled(0);
-            // keepdims mean for centering, then squared deviations with masked slots contributing 0.
+            // `maskEff` is the real mask, or an all-false stand-in when only a supplied mean took us off the fast
+            // path — so every mask-driven step (where/AllAlongAxis) has a non-null operand and, with no real mask,
+            // zeroes nothing and masks nothing.
+            var maskEff = mask ?? np.zeros(d.Shape, np.@bool);
+            var filled0 = mask is null ? d : ((MaskedArray)a).filled(0);
             var cntK = CountUnmasked(mask, d.Shape, axis, true).astype(computeType);
-            var meanK = np.divide(np.sum(filled0, axis, true, dtype).astype(computeType), cntK);
+            // keepdims mean for centering — the SUPPLIED mean if given, else the unmasked slice mean.
+            var meanK = mean is null
+                ? np.divide(np.sum(filled0, axis, true, dtype).astype(computeType), cntK)
+                : AsData(mean).astype(computeType);
             var dev = np.subtract(d.astype(computeType), meanK);
             var devsq = cplx ? np.multiply(np.abs(dev), np.abs(dev)) : np.multiply(dev, dev);
-            devsq = np.where(mask, NDArray.Scalar(0.0), devsq.astype(np.float64)); // masked → 0 contribution
+            devsq = np.where(maskEff, NDArray.Scalar(0.0), devsq.astype(np.float64)); // masked → 0 contribution
             var cnt = np.subtract(CountUnmasked(mask, d.Shape, axis, keepdims).astype(np.float64), NDArray.Scalar((double)ddof));
             var dvar = np.divide(np.sum(devsq, axis, keepdims, np.float64), cnt);
-            var newmask = np.logical_or(AllAlongAxis(mask, axis, keepdims), np.less_equal(cnt, NDArray.Scalar(0.0)));
+            var newmask = np.logical_or(AllAlongAxis(maskEff, axis, keepdims), np.less_equal(cnt, NDArray.Scalar(0.0)));
             // As with mean, masked (all-masked / cnt<=0) slices carry .data 0, not the raw NaN.
             if (dvar.ndim != 0)
                 dvar = np.where(newmask, NDArray.Scalar(0.0), dvar);
@@ -1876,9 +1886,14 @@ namespace NumSharp
         /// <summary>Standard deviation = sqrt(<see cref="var"/>), preserving the variance's mask.</summary>
         /// <param name="a">Operand.</param><param name="axis">Axis or null.</param><param name="dtype">Accumulator dtype.</param>
         /// <param name="ddof">Delta degrees of freedom.</param><param name="keepdims">Keep reduced axes.</param>
+        /// <param name="mean">Accepted for signature parity but IGNORED — NumPy's <c>ma.std</c> forwards only
+        /// <c>keepdims</c> to <c>var</c>, never <c>mean</c> (a NumPy quirk: <c>ma.std(mean=X)</c> yields the PLAIN
+        /// std, unlike <c>ma.var(mean=X)</c>). Reproduced here so a ported call behaves identically.</param>
         /// <returns>The masked standard deviation.</returns>
-        public MaskedArray std(object a, int? axis = null, DType dtype = null, int ddof = 0, bool keepdims = false)
+        public MaskedArray std(object a, int? axis = null, DType dtype = null, int ddof = 0, bool keepdims = false, object mean = null)
         {
+            // NumPy's ma.std deliberately does NOT pass `mean` to var (only keepdims), so a supplied mean is a
+            // no-op here too — matching ma.std(mean=X) == plain std, byte-for-byte.
             var v = var(a, axis, dtype, ddof, keepdims);
             return ReferenceEquals(v, masked) ? masked : sqrt(v);
         }
@@ -2427,11 +2442,18 @@ namespace NumSharp
             => b is null ? min(a) : where(greater(b, a), a, b); // a<b ≡ b>a (routes around the np.less scalar quirk)
 
         /// <summary>Masked power (NumPy's <c>ma.power</c>): masked positions take the base's data; a non-finite
-        /// result is additionally masked and its data set to the fill value.</summary>
+        /// result is additionally masked and its data set to the fill value. The <paramref name="third"/> modulus
+        /// slot exists ONLY for signature parity — NumPy rejects a 3-argument masked power, and so does this.</summary>
         /// <param name="a">Base.</param><param name="b">Exponent.</param>
+        /// <param name="third">Must be null — a non-null modulus raises <see cref="MaskError"/>, matching NumPy.</param>
         /// <returns>The masked power (or the <see cref="masked"/> scalar for a fully-masked 0-D result).</returns>
-        public MaskedArray power(object a, object b)
+        /// <exception cref="MaskError"><paramref name="third"/> is non-null (NumPy's
+        /// "3-argument power not supported.").</exception>
+        public MaskedArray power(object a, object b, object third = null)
         {
+            // NumPy's ma.power raises on a modulus argument rather than computing pow(a, b, mod).
+            if (third is not null)
+                throw new MaskError("3-argument power not supported.");
             var m = Or((a as MaskedArray)?._mask, (b as MaskedArray)?._mask);
             var fa = AsData(a);
             var fb = AsData(b);
@@ -3404,33 +3426,88 @@ namespace NumSharp
             return compress_nd(x, axis);
         }
 
-        /// <summary>First and last UNMASKED indices along the flattened array (NumPy's <c>notmasked_edges</c> for
-        /// <paramref name="axis"/> null / a 1-D input) — a 2-element <c>[first, last]</c>, or null when every
-        /// element is masked.</summary>
-        /// <param name="a">Operand.</param><param name="axis">null or (for a 1-D input) any axis.</param>
-        /// <returns>The <c>[first, last]</c> flat edge indices, or null.</returns>
-        /// <exception cref="NotSupportedException">An explicit <paramref name="axis"/> on a &gt;1-D array (the
-        /// per-axis edge-grid form is not yet implemented).</exception>
-        public long[] notmasked_edges(object a, int? axis = null)
+        /// <summary>
+        ///     First and last UNMASKED indices along an axis (NumPy's <c>notmasked_edges</c>). Its return is
+        ///     POLYMORPHIC, exactly like NumPy's (which returns a Python list): for <paramref name="axis"/> null or
+        ///     a 1-D input it is the flat <c>long[] {first, last}</c> (or <c>null</c> when every element is masked);
+        ///     for an explicit axis on a &gt;1-D array it is <c>NDArray[][]</c> = <c>{ mins, maxs }</c>, where
+        ///     <c>mins</c>/<c>maxs</c> each hold ONE <see cref="NDArray"/> per dimension — the compressed first/last
+        ///     unmasked coordinate along that dimension — matching NumPy's <c>[tuple(mins), tuple(maxs)]</c>.
+        /// </summary>
+        /// <param name="a">Operand.</param>
+        /// <param name="axis">null (flatten) or the axis along which to find the edges.</param>
+        /// <returns><c>long[]</c> (or <c>null</c>) for the flat/1-D case; <c>NDArray[][]</c> <c>{mins, maxs}</c> for
+        /// a &gt;1-D explicit axis. Returned as <see cref="object"/> because the shape depends on the runtime axis,
+        /// as it does in NumPy — cast at the call site.</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range for the operand's rank.</exception>
+        public object notmasked_edges(object a, int? axis = null)
         {
-            if (axis is null || AsData(a).ndim == 1)
+            var d = AsData(a);
+            if (axis is null || d.ndim == 1)
                 return flatnotmasked_edges(a);
-            throw new NotSupportedException(
-                "np.ma.notmasked_edges with an explicit axis on a >1-D array is not yet implemented; axis=None / 1-D is supported.");
+
+            int nd = d.ndim;
+            int ax = axis.Value < 0 ? axis.Value + nd : axis.Value;
+            if (ax < 0 || ax >= nd)
+                throw new AxisError(axis.Value, nd);
+
+            // NumPy: idx = array(np.indices(a.shape), mask=[m]*a.ndim); then per dimension i, the compressed
+            // min/max of idx[i] along `axis`. idx[i] is the i-th coordinate grid, masked wherever a is masked.
+            var mArr = getmaskarray(a);
+            var indices = np.indices(d.shape.Select(x => (int)x).ToArray()); // (nd, *shape); indices[i] = grid i
+            var mins = new NDArray[nd];
+            var maxs = new NDArray[nd];
+            for (int i = 0; i < nd; i++)
+            {
+                var gi = new MaskedArray(indices[i], mArr); // the i-th coordinate grid, masked like a
+                mins[i] = compressed(gi.min(ax));
+                maxs[i] = compressed(gi.max(ax));
+            }
+            return new NDArray[][] { mins, maxs };
         }
 
-        /// <summary>Contiguous UNMASKED runs of the flattened array as slices (NumPy's <c>notmasked_contiguous</c>
-        /// for <paramref name="axis"/> null / a 1-D input) — the same as <see cref="flatnotmasked_contiguous"/>.</summary>
-        /// <param name="a">Operand.</param><param name="axis">null or (for a 1-D input) any axis.</param>
-        /// <returns>One <see cref="Slice"/> per contiguous unmasked run.</returns>
-        /// <exception cref="NotSupportedException">An explicit <paramref name="axis"/> on a &gt;1-D array (the
-        /// list-of-lists-per-slice form is not yet implemented).</exception>
-        public Slice[] notmasked_contiguous(object a, int? axis = null)
+        /// <summary>
+        ///     Contiguous UNMASKED runs of the array as slices (NumPy's <c>notmasked_contiguous</c>). Its return is
+        ///     POLYMORPHIC, exactly like NumPy's: for <paramref name="axis"/> null or a 1-D input it is a flat
+        ///     <c>Slice[]</c> (one <see cref="Slice"/> per run); for a 2-D array with an explicit axis it is a
+        ///     <c>Slice[][]</c> — one inner <c>Slice[]</c> per line along the OTHER axis (NumPy's list-of-lists),
+        ///     an empty inner array for a fully-masked line. Only ≤ 2-D is supported (NumPy's own limit).
+        /// </summary>
+        /// <param name="a">Operand.</param>
+        /// <param name="axis">null (flatten) or the axis along which each line's runs are collected.</param>
+        /// <returns><c>Slice[]</c> for the flat/1-D case; <c>Slice[][]</c> for a 2-D explicit axis. Returned as
+        /// <see cref="object"/> because the nesting depends on the runtime axis, as it does in NumPy — cast at the
+        /// call site.</returns>
+        /// <exception cref="NotSupportedException">The input has more than 2 dimensions (NumPy's
+        /// <c>NotImplementedError("Currently limited to at most 2D array.")</c>).</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range for the operand's rank.</exception>
+        public object notmasked_contiguous(object a, int? axis = null)
         {
-            if (axis is null || AsData(a).ndim == 1)
+            var d = AsData(a);
+            int nd = d.ndim;
+            if (nd > 2)
+                throw new NotSupportedException("Currently limited to at most 2D array."); // NumPy's message
+            if (axis is null || nd == 1)
                 return flatnotmasked_contiguous(a);
-            throw new NotSupportedException(
-                "np.ma.notmasked_contiguous with an explicit axis on a >1-D array returns a list-of-lists and is not yet implemented; axis=None / 1-D is supported.");
+
+            int ax = axis.Value < 0 ? axis.Value + nd : axis.Value;
+            if (ax < 0 || ax >= nd)
+                throw new AxisError(axis.Value, nd);
+
+            // Walk each line along the OTHER axis (NumPy fixes `other`=i and slices the full `axis`), collecting
+            // that 1-D line's contiguous unmasked runs — one inner list per line.
+            int other = (ax + 1) % 2;
+            var ma_ = array(a);
+            long n = d.shape[other];
+            var result = new Slice[n][];
+            for (int i = 0; i < n; i++)
+            {
+                MaskedArray line = other == 0
+                    ? (MaskedArray)ma_[i, Slice.All]  // fix row i, vary the columns (axis 1)
+                    : (MaskedArray)ma_[Slice.All, i]; // fix column i, vary the rows (axis 0)
+                result[i] = flatnotmasked_contiguous(line);
+            }
+            return result;
         }
 
         /// <summary>The raw buffer addresses of the data and mask areas (NumPy's <c>ids</c>) — the mask address
