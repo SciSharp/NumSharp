@@ -1509,5 +1509,221 @@ namespace NumSharp.Tests.Backends.Iterators
                     NDExpr.Lcm(NDExpr.Arr(np.array(new[] { true })), NDExpr.Arr(np.array(new[] { true }))))).Message,
                 "ufunc 'lcm' did not contain a loop with signature matching types");
         }
+
+        // =====================================================================
+        // Phase 4.1 — unary node coverage (the engine unary ufuncs that gained
+        // an NDExpr node). Values probed from NumPy 2.4.2; every fused cell is
+        // BIT-EXACT (identity / sign-bit clear / popcount / pure-bit-increment
+        // spacing), so no ULP excuse. These pin the corpus-unreachable edges:
+        // signed zero, ±inf, the NaN sign bit, exact int→float magnitudes, and
+        // the two distinct complex-rejection messages.
+        // =====================================================================
+
+        /// <summary>np.positive is the identity at every numeric dtype — but it is dtype-PRESERVING (it
+        /// forces the operand's dtype onto the result), and it has NO bool loop (probed 2.4.2), so a
+        /// bool child throws the "did not contain a loop" TypeError, not an all-True identity.</summary>
+        [TestMethod]
+        public void P41_Positive_Identity_And_BoolNoLoop()
+        {
+            var a = np.array(new double[] { -2.5, 0.0, 3.0 });
+            var r = np.evaluate(NDExpr.Positive(NDExpr.Arr(a)));
+            Assert.AreEqual(NPTypeCode.Double, r.typecode);
+            Assert.AreEqual(-2.5, r.GetDouble(0), 0);
+            Assert.AreEqual(3.0, r.GetDouble(2), 0);
+            // dtype-preserving: positive(int32) is int32 (not the widened int64 a reduction would give).
+            Assert.AreEqual(NPTypeCode.Int32, np.evaluate(NDExpr.Positive(NDExpr.Arr(np.array(new[] { 5 })))).typecode);
+
+            StringAssert.Contains(
+                Assert.ThrowsException<NotSupportedException>(() => np.evaluate(
+                    NDExpr.Positive(NDExpr.Arr(np.array(new[] { true }))))).Message,
+                "ufunc 'positive' did not contain a loop with signature matching types");
+        }
+
+        /// <summary>np.conjugate flips the imaginary sign for Complex, is the identity for every real
+        /// float/int dtype — with ONE NumPy quirk: a bool child PROMOTES to int8 (probed 2.4.2), it
+        /// does not stay bool.</summary>
+        [TestMethod]
+        public void P41_Conjugate_Complex_Real_BoolToInt8()
+        {
+            var z = np.array(new System.Numerics.Complex[] { new(1, 2), new(-3, 4) });
+            var cz = np.evaluate(NDExpr.Conjugate(NDExpr.Arr(z)));
+            Assert.AreEqual(NPTypeCode.Complex, cz.typecode);
+            Assert.AreEqual(new System.Numerics.Complex(1, -2), cz.GetAtIndex<System.Numerics.Complex>(0));
+            Assert.AreEqual(new System.Numerics.Complex(-3, -4), cz.GetAtIndex<System.Numerics.Complex>(1));
+
+            // real identity (dtype preserved); Conj is the alias.
+            var f = np.array(new double[] { -2.5, 3.0 });
+            Assert.AreEqual(-2.5, np.evaluate(NDExpr.Conj(NDExpr.Arr(f))).GetDouble(0), 0);
+
+            // conjugate(bool) → int8 (the promotion quirk).
+            var cb = np.evaluate(NDExpr.Conjugate(NDExpr.Arr(np.array(new[] { true, false }))));
+            Assert.AreEqual(NPTypeCode.SByte, cb.typecode);
+            Assert.AreEqual((sbyte)1, cb.GetAtIndex<sbyte>(0));
+            Assert.AreEqual((sbyte)0, cb.GetAtIndex<sbyte>(1));
+        }
+
+        /// <summary>np.fabs PROMOTES int/bool to the tier float (unlike Abs, which preserves int) and
+        /// has NO complex loop. Because the promotion happens BEFORE the sign clear, fabs(int.MinValue)
+        /// is the exact float magnitude, never the wrapped integer abs.</summary>
+        [TestMethod]
+        public void P41_Fabs_FloatPromote_ExactMagnitude_ComplexRejected()
+        {
+            // int8 → float16; the exact magnitude of int8 min (128), not the wrapped -128.
+            var r8 = np.evaluate(NDExpr.Fabs(NDExpr.Arr(np.array(new sbyte[] { -128, -1, 5 }))));
+            Assert.AreEqual(NPTypeCode.Half, r8.typecode);
+            Assert.AreEqual(128.0f, (float)r8.GetAtIndex<Half>(0), 0);
+            Assert.AreEqual(1.0f, (float)r8.GetAtIndex<Half>(1), 0);
+
+            // int32 min → float64 magnitude 2147483648.0 (not the wrapped int abs).
+            var r32 = np.evaluate(NDExpr.Fabs(NDExpr.Arr(np.array(new[] { int.MinValue }))));
+            Assert.AreEqual(NPTypeCode.Double, r32.typecode);
+            Assert.AreEqual(2147483648.0, r32.GetDouble(0), 0);
+
+            // -0.0 → +0.0 (sign cleared); float64 preserved.
+            var rf = np.evaluate(NDExpr.Fabs(NDExpr.Arr(np.array(new double[] { -0.0, -2.5 }))));
+            Assert.AreEqual(0L, BitConverter.DoubleToInt64Bits(rf.GetDouble(0)));   // exactly +0.0
+            Assert.AreEqual(2.5, rf.GetDouble(1), 0);
+
+            StringAssert.Contains(
+                Assert.ThrowsException<NotSupportedException>(() => np.evaluate(
+                    NDExpr.Fabs(NDExpr.Arr(np.array(new System.Numerics.Complex[] { new(1, 1) }))))).Message,
+                "ufunc 'fabs' not supported for the input types");
+        }
+
+        /// <summary>np.spacing is a FLOAT-only ufunc (int/bool promote to the tier float, complex has no
+        /// loop). float32/float64 are SIGNED and the value is a pure bit increment — so a subnormal
+        /// (spacing(0.0) == 5e-324) and a signed zero round-trip exactly.</summary>
+        [TestMethod]
+        public void P41_Spacing_SignedSubnormal_IntPromote_ComplexRejected()
+        {
+            var a = np.array(new double[] { 0.0, 1.0, -2.5 });
+            var r = np.evaluate(NDExpr.Spacing(NDExpr.Arr(a)));
+            Assert.AreEqual(NPTypeCode.Double, r.typecode);
+            Assert.AreEqual(BitConverter.Int64BitsToDouble(1L), r.GetDouble(0));                 // 5e-324 (smallest subnormal)
+            Assert.AreEqual(System.Math.Pow(2, -52), r.GetDouble(1), 0);                          // spacing(1.0) == 2^-52
+            Assert.IsTrue(r.GetDouble(2) < 0);                                                    // signed: spacing carries x's sign
+
+            // int → tier float (int32 → float64); the value is the float64 spacing of the promoted input.
+            Assert.AreEqual(NPTypeCode.Double, np.evaluate(NDExpr.Spacing(NDExpr.Arr(np.array(new[] { 1 })))).typecode);
+
+            StringAssert.Contains(
+                Assert.ThrowsException<NotSupportedException>(() => np.evaluate(
+                    NDExpr.Spacing(NDExpr.Arr(np.array(new System.Numerics.Complex[] { new(1, 1) }))))).Message,
+                "ufunc 'spacing' not supported for the input types");
+        }
+
+        /// <summary>np.signbit reads the RAW IEEE sign bit — result always bool. NOT <c>x &lt; 0</c>: a
+        /// signed zero and a negative NaN are True while +0.0, +inf and a positive NaN are False.
+        /// Signed integers use the two's-complement MSB; unsigned are always False; complex has no
+        /// loop.</summary>
+        [TestMethod]
+        public void P41_SignBit_RawSignBit_IncludingSignedZeroAndNaN()
+        {
+            double negNaN = BitConverter.Int64BitsToDouble(unchecked((long)0xFFF8000000000000UL));
+            double posNaN = BitConverter.Int64BitsToDouble(0x7FF8000000000000L);
+            var a = np.array(new double[] { -0.0, 0.0, negNaN, posNaN, double.PositiveInfinity, double.NegativeInfinity, -2.5 });
+            var r = np.evaluate(NDExpr.SignBit(NDExpr.Arr(a)));
+            Assert.AreEqual(NPTypeCode.Boolean, r.typecode);
+            Assert.IsTrue(r.GetBoolean(0));    // -0.0  → True (sign bit set)
+            Assert.IsFalse(r.GetBoolean(1));   // +0.0  → False
+            Assert.IsTrue(r.GetBoolean(2));    // -NaN  → True
+            Assert.IsFalse(r.GetBoolean(3));   // +NaN  → False
+            Assert.IsFalse(r.GetBoolean(4));   // +inf  → False
+            Assert.IsTrue(r.GetBoolean(5));    // -inf  → True
+            Assert.IsTrue(r.GetBoolean(6));    // -2.5  → True
+
+            // signed int MSB; unsigned always False.
+            var ri = np.evaluate(NDExpr.SignBit(NDExpr.Arr(np.array(new[] { -5, 0, 7 }))));
+            Assert.IsTrue(ri.GetBoolean(0));
+            Assert.IsFalse(ri.GetBoolean(1));
+            Assert.IsFalse(np.evaluate(NDExpr.SignBit(NDExpr.Arr(np.array(new byte[] { 200 })))).GetBoolean(0));
+
+            StringAssert.Contains(
+                Assert.ThrowsException<NotSupportedException>(() => np.evaluate(
+                    NDExpr.SignBit(NDExpr.Arr(np.array(new System.Numerics.Complex[] { new(1, 1) }))))).Message,
+                "ufunc 'signbit' not supported for the input types");
+        }
+
+        /// <summary>np.isposinf / np.isneginf are FUNCTIONS (bool result, integers all-False). A complex
+        /// input raises the AMBIGUITY TypeError — a DIFFERENT message from the ufunc no-loop family.</summary>
+        [TestMethod]
+        public void P41_IsPosInf_IsNegInf_IntegerFalse_ComplexAmbiguity()
+        {
+            var a = np.array(new double[] { double.PositiveInfinity, double.NegativeInfinity, 3.0, double.NaN });
+            var pos = np.evaluate(NDExpr.IsPosInf(NDExpr.Arr(a)));
+            var neg = np.evaluate(NDExpr.IsNegInf(NDExpr.Arr(a)));
+            Assert.AreEqual(NPTypeCode.Boolean, pos.typecode);
+            Assert.IsTrue(pos.GetBoolean(0));  Assert.IsFalse(pos.GetBoolean(1)); Assert.IsFalse(pos.GetBoolean(3));
+            Assert.IsFalse(neg.GetBoolean(0)); Assert.IsTrue(neg.GetBoolean(1));  Assert.IsFalse(neg.GetBoolean(3));
+
+            // integer input → all-False (no infinity).
+            Assert.IsFalse(np.evaluate(NDExpr.IsPosInf(NDExpr.Arr(np.array(new[] { 7 })))).GetBoolean(0));
+
+            var cx = np.array(new System.Numerics.Complex[] { new(1, 1) });
+            StringAssert.Contains(
+                Assert.ThrowsException<NotSupportedException>(() => np.evaluate(NDExpr.IsPosInf(NDExpr.Arr(cx)))).Message,
+                "not supported for complex128 values because it would be ambiguous");
+            StringAssert.Contains(
+                Assert.ThrowsException<NotSupportedException>(() => np.evaluate(NDExpr.IsNegInf(NDExpr.Arr(cx)))).Message,
+                "not supported for complex128 values because it would be ambiguous");
+        }
+
+        /// <summary>np.bitwise_count counts the set bits of |x| into a uint8, INTEGER/BOOL/CHAR only. A
+        /// signed negative counts the MAGNITUDE (bitwise_count(-1) == 1, not 8); float/float16/complex
+        /// have no loop.</summary>
+        [TestMethod]
+        public void P41_BitwiseCount_Popcount_IntegerOnly()
+        {
+            var r = np.evaluate(NDExpr.BitwiseCount(NDExpr.Arr(np.array(new[] { -1, 0, int.MaxValue, -2147483648 }))));
+            Assert.AreEqual(NPTypeCode.Byte, r.typecode);
+            Assert.AreEqual((byte)1, r.GetByte(0));    // |-1| == 1 bit
+            Assert.AreEqual((byte)0, r.GetByte(1));
+            Assert.AreEqual((byte)31, r.GetByte(2));   // 2^31-1
+            Assert.AreEqual((byte)1, r.GetByte(3));    // int32 min → magnitude wraps to itself, 1 bit
+
+            // bool → 1/0; uint8 255 → 8.
+            var rb = np.evaluate(NDExpr.BitwiseCount(NDExpr.Arr(np.array(new[] { true, false }))));
+            Assert.AreEqual((byte)1, rb.GetByte(0));
+            Assert.AreEqual((byte)0, rb.GetByte(1));
+            Assert.AreEqual((byte)8, np.evaluate(NDExpr.BitwiseCount(NDExpr.Arr(np.array(new byte[] { 255 })))).GetByte(0));
+
+            // float / float16 / complex have no loop.
+            foreach (var op in new[] { NDExpr.BitwiseCount(NDExpr.Arr(np.array(new double[] { 1 }))),
+                                       NDExpr.BitwiseCount(NDExpr.Arr(np.array(new Half[] { (Half)1 }))),
+                                       NDExpr.BitwiseCount(NDExpr.Arr(np.array(new System.Numerics.Complex[] { new(1, 1) }))) })
+                StringAssert.Contains(
+                    Assert.ThrowsException<NotSupportedException>(() => np.evaluate(op)).Message,
+                    "ufunc 'bitwise_count' not supported for the input types");
+        }
+
+        /// <summary>The unary nodes compose as SUB-trees in the fused kernel, and the two SIMD-enabled
+        /// ones (Positive/Fabs) produce bit-identical results on the vector and scalar paths — the
+        /// metamorphic contract that gates the vectorized emit.</summary>
+        [TestMethod]
+        public void P41_UnaryNodes_ComposeAndVectorizeBitExact()
+        {
+            // composition: mul(fabs(a), 2) promotes int→float then multiplies.
+            var comp = np.evaluate(NDExpr.Multiply(NDExpr.Fabs(NDExpr.Arr(np.array(new double[] { -3, 4, -1.5 }))), (NDExpr)2.0));
+            Assert.AreEqual(6.0, comp.GetDouble(0), 0);
+            Assert.AreEqual(8.0, comp.GetDouble(1), 0);
+            Assert.AreEqual(3.0, comp.GetDouble(2), 0);
+
+            // vector == scalar, bit-for-bit, over an array large enough to engage SIMD (Positive/Fabs).
+            var pool = new double[100];
+            for (int i = 0; i < pool.Length; i++) pool[i] = (i % 7) - 3.25 + (i % 3 == 0 ? -0.0 : 0.0);
+            var big = np.array(pool);
+            foreach (var op in new Func<NDExpr, NDExpr>[] { NDExpr.Positive, NDExpr.Fabs })
+            {
+                var vec = np.evaluate(op(NDExpr.Arr(big)));
+                NDArray sca;
+                NDExpr.ForceScalar = true;
+                try { sca = np.evaluate(op(NDExpr.Arr(big))); }
+                finally { NDExpr.ForceScalar = false; }
+                for (int i = 0; i < pool.Length; i++)
+                    Assert.AreEqual(BitConverter.DoubleToInt64Bits(sca.GetDouble(i)),
+                                    BitConverter.DoubleToInt64Bits(vec.GetDouble(i)),
+                                    $"vector≠scalar at {i}");
+            }
+        }
     }
 }

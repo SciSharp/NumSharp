@@ -738,6 +738,50 @@ namespace NumSharp.Backends.Iteration
                 // np.absolute's complex loop is D->d: |z| is a float64 magnitude (probed 2.4.2).
                 result = NPTypeCode.Double;
             }
+            else if (_op == UnaryOp.Fabs || _op == UnaryOp.Spacing)
+            {
+                // np.fabs / np.spacing — FLOAT-only ufuncs (ee/ff/dd loops + NumSharp's decimal
+                // extension): int/bool promote to their tier float (i1→f16, i2→f32, i4+→f64), floats
+                // and decimal are preserved, and COMPLEX has NO loop (NumPy raises the coercion
+                // TypeError, recorded verbatim in the evaluate oracle's error tier). They cannot ride
+                // IsFloatPromoting below, which PRESERVES complex (sqrt(complex) → complex).
+                if (childType == NPTypeCode.Complex)
+                    throw new NotSupportedException(
+                        $"ufunc '{(_op == UnaryOp.Fabs ? "fabs" : "spacing")}' not supported for the input types, " +
+                        "and the inputs could not be safely coerced to any supported types according to the casting rule ''safe''");
+                result = NDExprTypeRules.UnaryFloatResult(childType);
+            }
+            else if (_op == UnaryOp.SignBit)
+            {
+                // np.signbit — bool result at every REAL dtype (signed-int two's-complement MSB;
+                // unsigned/bool/char always False; float raw sign bit). COMPLEX has NO loop.
+                if (childType == NPTypeCode.Complex)
+                    throw new NotSupportedException(
+                        "ufunc 'signbit' not supported for the input types, and the inputs could not be safely " +
+                        "coerced to any supported types according to the casting rule ''safe''");
+                result = NPTypeCode.Boolean;
+            }
+            else if (_op == UnaryOp.IsPosInf || _op == UnaryOp.IsNegInf)
+            {
+                // np.isposinf / np.isneginf are FUNCTIONS (not ufuncs): bool result at every real dtype
+                // (integers all-False), and a COMPLEX input raises the AMBIGUITY TypeError — a DIFFERENT
+                // message from the ufunc no-loop family (auto-skipped by the oracle; unit-test-pinned).
+                if (childType == NPTypeCode.Complex)
+                    throw new NotSupportedException(
+                        "This operation is not supported for complex128 values because it would be ambiguous.");
+                result = NPTypeCode.Boolean;
+            }
+            else if (_op == UnaryOp.BitwiseCount)
+            {
+                // np.bitwise_count — INTEGER/BOOL/CHAR only → uint8; float/float16/complex/decimal have
+                // NO loop. Uses the LOCAL IsIntegerKind (which, unlike NDExprTypeRules.IsIntegerKind,
+                // includes bool and char — exactly the dtypes NumPy's bitwise_count accepts).
+                if (!IsIntegerKind(childType))
+                    throw new NotSupportedException(
+                        "ufunc 'bitwise_count' not supported for the input types, and the inputs could not be " +
+                        "safely coerced to any supported types according to the casting rule ''safe''");
+                result = NPTypeCode.Byte;
+            }
             else if (IsFloatPromoting(_op))
             {
                 result = NDExprTypeRules.UnaryFloatResult(childType);
@@ -765,6 +809,13 @@ namespace NumSharp.Backends.Iteration
                     UnaryOp.Sign => throw new NotSupportedException(
                         "ufunc 'sign' did not contain a loop with signature matching types " +
                         "<class 'numpy.dtypes.BoolDType'> -> None"),
+                    // np.positive has NO bool loop (probed 2.4.2) and there is no dtype= escape in the
+                    // fused tier, so a bool child is a hard error — the same shape as sign's rejection.
+                    UnaryOp.Positive => throw new NotSupportedException(
+                        "ufunc 'positive' did not contain a loop with signature matching types " +
+                        "<class 'numpy.dtypes.BoolDType'> -> None"),
+                    // np.conjugate PROMOTES bool → int8 (probed 2.4.2), it does not stay bool.
+                    UnaryOp.Conjugate => NPTypeCode.SByte,
                     UnaryOp.Square or UnaryOp.Reciprocal => NPTypeCode.SByte,
                     // np.round is a function, not a ufunc: on bool it takes the float16 tier
                     // (probed 2.4.2: np.round(bool_arr).dtype == float16) while the floor/ceil/

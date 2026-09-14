@@ -458,6 +458,112 @@ namespace NumSharp.Backends.Iteration
         public static NDExpr IsInf(NDExpr x) => new UnaryNode(UnaryOp.IsInf, x);
 
         // ===================================================================
+        // Elementwise unary ufunc family (Phase 4 coverage) — every node here
+        // rides the shared UnaryNode kernel; the scalar/vector emit is the SAME
+        // per-op emitter the engine's own ufuncs use (DirectILKernelGenerator.
+        // EmitUnary{Scalar,Vector}Operation), so a fused unary node is
+        // byte-for-byte the unfused chain. Real/Imag/Angle/Rint/Round(decimals)/
+        // Cast (the dtype-CHANGING unary set) are a separate follow-up.
+        // ===================================================================
+
+        /// <summary>
+        /// Identity at every numeric dtype (np.positive). The loaded value IS the result — a fused
+        /// tree wrapping an operand in <see cref="Positive"/> compiles to a pure copy (and vectorizes
+        /// as one). Its only observable effect is dtype: it is dtype-PRESERVING, so unlike a bare
+        /// operand it forces the result to that operand's dtype. **BOOL has no loop** — NumPy rejects
+        /// <c>np.positive</c> on a boolean array (there is no <c>dtype=</c> escape in the fused tier),
+        /// so a bool child throws at typing.
+        /// </summary>
+        /// <param name="x">The operand.</param>
+        /// <returns>An expression node evaluating to <paramref name="x"/> unchanged (dtype preserved).</returns>
+        public static NDExpr Positive(NDExpr x) => new UnaryNode(UnaryOp.Positive, x);
+
+        /// <summary>
+        /// Complex conjugate (np.conjugate). For Complex it flips the sign of the imaginary part; for
+        /// every REAL float/int dtype it is the identity (dtype preserved) — with ONE NumPy quirk: a
+        /// <b>bool</b> child promotes to <b>int8</b> (probed 2.4.2: <c>np.conjugate(bool_).dtype ==
+        /// int8</c>), it does not stay bool. Scalar-only in the fused kernel (the complex path has no
+        /// SIMD lane), so a tree containing it runs scalar end-to-end.
+        /// </summary>
+        /// <param name="x">The operand.</param>
+        /// <returns>An expression node computing the element-wise complex conjugate of <paramref name="x"/>.</returns>
+        public static NDExpr Conjugate(NDExpr x) => new UnaryNode(UnaryOp.Conjugate, x);
+
+        /// <summary>NumPy alias of <see cref="Conjugate"/> (np.conj). Identical node, cost and dtype.</summary>
+        /// <param name="x">The operand.</param>
+        /// <returns>An expression node computing the element-wise complex conjugate of <paramref name="x"/>.</returns>
+        public static NDExpr Conj(NDExpr x) => new UnaryNode(UnaryOp.Conjugate, x);
+
+        /// <summary>
+        /// Float-only absolute value (np.fabs). Differs from <see cref="Abs"/> in two dtype-level ways:
+        /// it PROMOTES bool/int to the tier float (bool/int8/uint8→float16, int16/uint16→float32,
+        /// int32+→float64; floats/decimal preserved) — so <c>Fabs(int)</c> is always a float where
+        /// <c>Abs(int)</c> preserves int — and it has NO COMPLEX loop (a complex child throws at typing
+        /// with NumPy's coercion TypeError). The operation itself is <see cref="Abs"/>'s (clear the IEEE
+        /// sign bit), applied AFTER the int→float promotion, so <c>Fabs(int.MinValue)</c> is the exact
+        /// float magnitude, never the wrapped integer abs.
+        /// </summary>
+        /// <param name="x">The operand.</param>
+        /// <returns>An expression node computing the float-valued absolute value of <paramref name="x"/>.</returns>
+        public static NDExpr Fabs(NDExpr x) => new UnaryNode(UnaryOp.Fabs, x);
+
+        /// <summary>
+        /// Distance to the adjacent representable value away from zero — one ULP (np.spacing). A
+        /// float-only ufunc: it PROMOTES bool/int to the tier float (like <see cref="Fabs"/>), preserves
+        /// floats/decimal, and has NO COMPLEX loop (a complex child throws at typing). float32/float64
+        /// are SIGNED (carry the sign of x); float16 is NumPy's separate always-positive
+        /// <c>npy_half_spacing</c>. Pure bit-arithmetic (no transcendental), so it is IEEE-exact and
+        /// portable — no host-libm dependence.
+        /// </summary>
+        /// <param name="x">The operand.</param>
+        /// <returns>An expression node computing the one-ULP spacing at each element of <paramref name="x"/>.</returns>
+        public static NDExpr Spacing(NDExpr x) => new UnaryNode(UnaryOp.Spacing, x);
+
+        /// <summary>
+        /// IEEE sign-bit predicate (np.signbit) — result is always <b>bool</b>. NOT <c>x &lt; 0</c>: it
+        /// reads the raw sign bit, so <c>-0.0</c> and a NEGATIVE NaN are True while <c>+0.0</c>, <c>+inf</c>
+        /// and a positive NaN are False. Signed integers use the two's-complement MSB (<c>x &lt; 0</c>);
+        /// unsigned/bool/char are always False; COMPLEX has no loop (a complex child throws at typing).
+        /// Scalar-only in the fused kernel (bool result, no vector body here), so a tree containing it
+        /// runs scalar end-to-end.
+        /// </summary>
+        /// <param name="x">The operand.</param>
+        /// <returns>An expression node evaluating True where <paramref name="x"/>'s sign bit is set.</returns>
+        public static NDExpr SignBit(NDExpr x) => new UnaryNode(UnaryOp.SignBit, x);
+
+        /// <summary>
+        /// Test for positive infinity (np.isposinf) — result is <b>bool</b>, True only where <c>x == +inf</c>.
+        /// Integer/bool inputs are all-False (no infinity). A COMPLEX child throws at typing with NumPy's
+        /// ambiguity TypeError ("…not supported for complex128 values because it would be ambiguous.") —
+        /// a DIFFERENT message from the ufunc no-loop family, because isposinf is a FUNCTION, not a ufunc.
+        /// Scalar-only in the fused kernel.
+        /// </summary>
+        /// <param name="x">The operand.</param>
+        /// <returns>An expression node evaluating True where <paramref name="x"/> is positive infinity.</returns>
+        public static NDExpr IsPosInf(NDExpr x) => new UnaryNode(UnaryOp.IsPosInf, x);
+
+        /// <summary>
+        /// Test for negative infinity (np.isneginf) — result is <b>bool</b>, True only where <c>x == -inf</c>.
+        /// See <see cref="IsPosInf"/> for the integer/bool (all-False) and complex (ambiguity TypeError)
+        /// behavior. Scalar-only in the fused kernel.
+        /// </summary>
+        /// <param name="x">The operand.</param>
+        /// <returns>An expression node evaluating True where <paramref name="x"/> is negative infinity.</returns>
+        public static NDExpr IsNegInf(NDExpr x) => new UnaryNode(UnaryOp.IsNegInf, x);
+
+        /// <summary>
+        /// Population count of the absolute value — the number of set bits in <c>|x|</c> (np.bitwise_count).
+        /// INTEGER/BOOL ONLY: every integer/bool/char dtype maps to a <b>uint8</b> result, while
+        /// float/float16/complex/decimal have NO loop and throw at typing. It CONSUMES the input dtype
+        /// (a wide value is counted at its own width, never truncated to the uint8 output first) and a
+        /// signed negative counts the magnitude (<c>bitwise_count(-1) == 1</c>, not 8). Scalar-only in
+        /// the fused kernel.
+        /// </summary>
+        /// <param name="x">The operand.</param>
+        /// <returns>An expression node computing the per-element set-bit count of <c>|x|</c> as uint8.</returns>
+        public static NDExpr BitwiseCount(NDExpr x) => new UnaryNode(UnaryOp.BitwiseCount, x);
+
+        // ===================================================================
         // Comparison factories (produce 0/1 at output dtype)
         // ===================================================================
 
@@ -1097,9 +1203,22 @@ namespace NumSharp.Backends.Iteration
         // Structural SIMD set used by the type-independent SupportsSimd. The rounding family
         // (Floor/Ceil/Round/Truncate) is gated per type+runtime by IsSimdUnaryAt instead, so it is
         // omitted here — SupportsSimdAt is the gate the compiler actually consults.
+        //
+        // Positive (identity vector = a load→store copy) and Fabs (Vector.Abs, same as Abs) have a
+        // proven vector body in EmitUnaryVectorOperation, and each only ever reaches a float/int SIMD
+        // lane where that body is bit-identical to its scalar body: identity copies bits exactly, and
+        // sign-bit-clear (Fabs=Abs) is exact incl. inf/NaN; Fabs PROMOTES int→float so the plan declines
+        // the mixed-dtype tree before asking (my=float ≠ int lane), and Half is never a SIMD lane
+        // (CanUseSimd(Half) is false), so a f16 tree stays scalar regardless.
+        //
+        // Spacing is deliberately SCALAR-ONLY: EmitVectorSpacing and the scalar SpacingD produce a
+        // DIFFERENT NaN PAYLOAD at an inf/NaN input (7ff8…0001 vs C#'s fff8…0000) — both NaN, but the
+        // difference surfaces bit-for-bit through composition (spacing(inf)+inf), which the fused-vs-
+        // scalar metamorphic contract would flag. The scalar path is bit-exact vs NumPy for finite
+        // values (NaN is tokenized by the oracle), and spacing is rare, so parity beats the SIMD win.
         private static bool IsSimdUnary(UnaryOp op)
-            => op == UnaryOp.Negate || op == UnaryOp.Abs || op == UnaryOp.Sqrt ||
-               op == UnaryOp.Square || op == UnaryOp.Reciprocal ||
+            => op == UnaryOp.Negate || op == UnaryOp.Abs || op == UnaryOp.Fabs || op == UnaryOp.Sqrt ||
+               op == UnaryOp.Square || op == UnaryOp.Reciprocal || op == UnaryOp.Positive ||
                op == UnaryOp.Deg2Rad || op == UnaryOp.Rad2Deg || op == UnaryOp.BitwiseNot;
 
         // Predicates leave a bool (I4 0/1) on the stack — not outputType. The wrapper
@@ -1144,9 +1263,16 @@ namespace NumSharp.Backends.Iteration
                 return;
             }
 
-            // Predicates also run at the child's dtype (NumPy: isnan(int) is
-            // all-False without promoting the input).
-            if (IsPredicateResult(_op))
+            // The "emit at the child's dtype, then convert the result" family: the classification
+            // predicates (isnan/isinf/isfinite — NumPy inspects the input at its own dtype without
+            // promoting it), the sign-bit / ±inf predicates (signbit/isposinf/isneginf, bool result),
+            // and bitwise_count (a uint8 count that must NOT pre-convert the input to the output width,
+            // which would truncate a wide value before counting). All leave an I4 on the stack — a 0/1
+            // bool for the predicates, the int32 count for bitwise_count — which EmitConvertTo casts to
+            // `my` (Boolean for the predicates, Byte for bitwise_count). Complex children of the ops
+            // without a complex loop are rejected at typing, so this path only ever sees a valid dtype.
+            if (IsPredicateResult(_op) || _op == UnaryOp.SignBit ||
+                _op == UnaryOp.IsPosInf || _op == UnaryOp.IsNegInf || _op == UnaryOp.BitwiseCount)
             {
                 _child.EmitScalar(il, ctx);
                 DirectILKernelGenerator.EmitUnaryScalarOperation(il, _op, childType);

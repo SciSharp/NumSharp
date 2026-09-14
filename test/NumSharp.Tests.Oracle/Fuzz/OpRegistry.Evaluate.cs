@@ -294,6 +294,15 @@ namespace NumSharp.Tests.Fuzz
                     case "isnan": return NDExpr.IsNaN(a[0]);
                     case "isfinite": return NDExpr.IsFinite(a[0]);
                     case "isinf": return NDExpr.IsInf(a[0]);
+                    // Phase 4 unary node coverage (the engine unary ufuncs that gained an NDExpr node).
+                    case "positive": return NDExpr.Positive(a[0]);
+                    case "conj": return NDExpr.Conjugate(a[0]);
+                    case "fabs": return NDExpr.Fabs(a[0]);
+                    case "spacing": return NDExpr.Spacing(a[0]);
+                    case "signbit": return NDExpr.SignBit(a[0]);
+                    case "isposinf": return NDExpr.IsPosInf(a[0]);
+                    case "isneginf": return NDExpr.IsNegInf(a[0]);
+                    case "bitwise_count": return NDExpr.BitwiseCount(a[0]);
                     default: throw new NotSupportedException($"evaluate node '{name}' has no NDExpr mapping");
                 }
             }

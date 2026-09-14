@@ -8045,6 +8045,15 @@ _EV_UNARY = {
     "floor": np.floor, "ceil": np.ceil, "round": lambda x: np.round(x), "trunc": np.trunc,
     "not": np.invert, "lnot": np.logical_not,
     "isnan": np.isnan, "isfinite": np.isfinite, "isinf": np.isinf,
+    # Phase 4 unary node coverage — the engine unary ufuncs that gained an NDExpr node. Every VALUE
+    # cell is BIT-EXACT (identity / sign-bit clear / popcount / pure-bit-increment spacing — no
+    # host-libm), so NO ULP excuse. The no-loop cells split by message: positive(bool) and
+    # isposinf/isneginf(complex) raise a NON-verbatim message (auto-skipped by emit(); unit-test-
+    # pinned), while signbit/spacing/fabs(complex) and bitwise_count(float/half/complex) raise the
+    # RECORDED "not supported for the input types" family (the C# typing reproduces it verbatim).
+    "positive": np.positive, "conj": np.conjugate, "fabs": np.fabs, "spacing": np.spacing,
+    "signbit": np.signbit, "isposinf": np.isposinf, "isneginf": np.isneginf,
+    "bitwise_count": np.bitwise_count,
 }
 _EV_REDUCE = {
     "sum": lambda a, ax, kd: np.sum(a, axis=ax, keepdims=kd),
@@ -8340,6 +8349,11 @@ def gen_evaluate():
         "mul(in0,lb:1)",
         "not(in0)",
         "where(in0,li:1,li:0)",
+        # Phase 4 unary nodes as SUB-trees (prove they compose in the fused kernel, not only as a
+        # root): the float-tier fabs/spacing promote int→float then feed arithmetic; a complex child
+        # raises the recorded "not supported" error cell (fabs/spacing have no complex loop).
+        "mul(fabs(in0),lf:2.0)",
+        "add(spacing(in0),in0)",
     ]
     # Every layout the catalog has, at every third position (the unary set above already walks
     # the contiguity / stride / offset axes; this pass is about the tree shapes).
