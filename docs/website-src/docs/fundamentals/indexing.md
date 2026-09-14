@@ -8,6 +8,18 @@
 
 This page explains the concepts and the one syntactic difference from NumPy that matters most (Python slice literals become C# **strings**). For the full catalogue of accessors — every getter and setter, with the conversion and write-through rules — see [Getting & Setting Values](../getting-and-setting-values.md).
 
+<!-- Tests: NumSharp.Tests.Documentation.FundamentalsIndexingDocTests — every code example on this page is executed and asserted in test/NumSharp.Tests/Documentation/FundamentalsIndexingDocTests.cs. Section → method(s):
+     Single-element indexing → Basic_SingleElement_NegativeAndCoordinate
+     Partial index (sub-array view) → Basic_PartialIndex_ReturnsSubArrayView
+     Slicing and striding → Basic_SliceAndStride
+     Ellipsis and newaxis → Basic_EllipsisAndNewaxis
+     Integer-array indexing → Advanced_IntegerArray_NegativeAllowed; Advanced_PairedIndexArrays_IterateAsOne; Advanced_IxUnderscore_MakesAGrid
+     Raw int[] sole index is fancy → Advanced_RawIntArraySoleIndex_IsFancy_SelectsRows
+     Coordinate access via GetData → Advanced_CoordinateAccess_UsesGetData
+     Boolean-array indexing → Advanced_BooleanMask; Advanced_BooleanMask_FewerDims_SelectsLeadingAxes
+     Flat iteration (write-through) → Flat_Flatiter_WritesThroughAnyLayout
+     Assignment → Assignment_SliceFillAndBroadcast; Assignment_FancyDuplicates_LastWriteWins -->
+
 ---
 
 ## The one big syntax difference: slices are strings
@@ -128,10 +140,10 @@ a[new[] { 0, 2 }];         // rows 0 and 2 → shape (2, 4)   ← FANCY, a copy
 a[0, 2];                   // the element at (0, 2)          ← coordinate
 ```
 
-To access an element (or sub-array) **by a coordinate array**, use `a.GetData(coords)`, not `a[coordArray]`:
+To access an element (or sub-array) **by a coordinate array**, use `a.GetData(int[])`, not `a[coordArray]`:
 
 ```csharp
-a.GetData(0, 2);           // sub-array/element at coordinate (0, 2)
+a.GetData(new[] { 0, 2 }); // sub-array/element at coordinate (0, 2) → value 2
 ```
 
 This is the single most common porting surprise. When in doubt: separate integers = coordinate; an array object = fancy.
@@ -145,7 +157,7 @@ var x = np.array(new[,] { { 1.0, 2.0 }, { double.NaN, 3.0 } });
 x[!np.isnan(x)];           // [1. 2. 3.]  (drops NaN)
 
 var v = np.array(new[] { 1.0, -1.0, -2.0, 3.0 });
-v[v < 0] = 20;             // assignment writes through: [1, 20, 20, 3] after add... see below
+v[v < 0] = 20;             // masked assignment writes through → [1, 20, 20, 3]
 ```
 
 A mask with the same shape as `x` yields a 1-D result of the `True` elements. A mask with fewer dimensions selects along the leading axes (equivalent to `x[mask, ...]`):
@@ -153,7 +165,7 @@ A mask with the same shape as `x` yields a 1-D result of the `True` elements. A 
 ```csharp
 var x = np.arange(35).reshape(5, 7);
 var b = x > 20;
-x[b["... , 5"]];      // rows where column 5 exceeds 20
+x[b["..., 5"]];       // rows where column 5 exceeds 20
 ```
 
 ### Combining basic and advanced indexing
@@ -247,7 +259,7 @@ m[np.ix_(np.array(new[]{0,1}), np.array(new[]{2,3}))]; // 2×2 block — meshed
 ## Troubleshooting
 
 ### "`a[new[]{0,2}]` returned rows, not the element at (0,2)"
-A raw array as the sole index is **fancy**. Use `a.GetData(0, 2)` for coordinate access, or separate integers `a[0, 2]`.
+A raw array as the sole index is **fancy**. Use `a.GetData(new[] { 0, 2 })` for coordinate access, or separate integers `a[0, 2]`.
 
 ### "My slice write didn't stick" / "the original changed unexpectedly"
 Basic slices are **views** (writes stick and affect the parent); fancy/boolean *reads* are **copies**. Copy with `.copy()` when you want independence. See [Copies and views](copies-and-views.md).
@@ -270,7 +282,7 @@ That's NEP 50 coercion — weak scalars range-check, strong arrays wrap. See [Ge
 | Ellipsis / newaxis | `x["..., 0]"`, `x[np.newaxis]` | basic | view |
 | Integer array | `x[np.array(new[]{0,2})]` | advanced | copy |
 | Raw `int[]` sole index | `x[new[]{0,2}]` | advanced | copy (selects rows) |
-| Coordinate array | `x.GetData(0, 2)` | — | element/sub-array |
+| Coordinate array | `x.GetData(new[]{0,2})` | — | element/sub-array |
 | Boolean mask | `x[mask]` | advanced | 1-D copy |
 | `np.ix_(...)` | `x[np.ix_(r, c)]` | advanced | meshed block |
 | Flat write-through | `x.flatiter[i] = v` | — | any layout |

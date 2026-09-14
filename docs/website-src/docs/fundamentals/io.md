@@ -8,6 +8,15 @@ NumSharp reads and writes the same file formats NumPy does, and — for the `.np
 
 > NumPy's own *I/O* fundamentals article is entirely about `genfromtxt`, which NumSharp does **not** implement (it requires structured/masked dtypes NumSharp has no analog for). This page instead documents the I/O surface NumSharp actually provides. See [What is not implemented](#what-is-not-implemented) at the end.
 
+<!-- Tests: NumSharp.Tests.Documentation.FundamentalsIoDocTests — every code example on this page is executed and asserted in test/NumSharp.Tests/Documentation/FundamentalsIoDocTests.cs. Section → method(s):
+     .npy save/load round-trip → Npy_SaveLoad_RoundTrip
+     .npz dictionary keys + npz.f dot access → Npz_DictionaryKeys_And_DotAccess
+     np.load returns object dispatched on kind → Load_ReturnsObject_DispatchedOnKind
+     mmap_mode 'r' is read-only → Mmap_Mode_R_IsReadOnly
+     savetxt/loadtxt round-trip → SaveTxt_LoadTxt_RoundTrip
+     fromstring (+ binary-mode-removed throw) → FromString_ParsesNumbers; FromString_BinaryModeRemoved_Throws
+     raw tofile/fromfile → Raw_TofileFromfile_RoundTrip -->
+
 ---
 
 ## `.npy` and `.npz` — the native format

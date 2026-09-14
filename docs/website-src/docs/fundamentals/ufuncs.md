@@ -4,6 +4,17 @@ A **universal function** (ufunc) operates on an `NDArray` element by element, wi
 
 NumSharp implements the ufunc *model* — elementwise semantics, broadcasting, NEP 50 casting, `out=`/`where=`/`dtype=` — but exposes each ufunc as a **direct `np.*` function** (and operator), not as a NumPy-style ufunc *object* with `.reduce`/`.accumulate`/`.at` methods. This page covers the model and the porting differences.
 
+<!-- Tests: NumSharp.Tests.Documentation.FundamentalsUfuncsDocTests — every code example on this page is executed and asserted in test/NumSharp.Tests/Documentation/FundamentalsUfuncsDocTests.cs. Section → method(s):
+     Elementwise operation → Elementwise_OperatorAndNamedForm
+     Broadcasting → Broadcasting_RowAcrossRows
+     Type casting (weak/strong NEP 50) → Casting_PromotionAndWeakScalars
+     out= / where= / dtype= → OutWhereDtype
+     Reductions (axis/all-axes) → Reductions_AxisAndAllAxes
+     Reduce upcast rule (int64/uint64) → Reductions_UpcastRule
+     Pairwise maximum → Pairwise_MaximumIsElementwise
+     Fused np.evaluate → Fused_Evaluate
+     Common patterns (in-place/masked/outer) → Patterns_InPlaceAndMaskedAndOverflowSafe -->
+
 ---
 
 ## Elementwise operation
@@ -55,7 +66,7 @@ A key NEP 50 subtlety: **weak scalars** (C# primitive literals) adopt the array'
 ```csharp
 var x = np.array(new[] { 1, 2, 3 }, np.int8);
 (x + 1).dtype;                             // int8  — weak scalar 1 does not upcast
-(x + np.array(new[] { 1 })).dtype;         // int16 — strong array promotes
+(x + np.array(new[] { 1 })).dtype;         // int32 — the int32 array (strong) forces promotion
 ```
 
 Full promotion rules and the 15×15 table are in [Data types → Type promotion](../dtypes.md#type-promotion) and [NumPy Compliance](../compliance.md).
@@ -91,20 +102,22 @@ A reduction collapses an axis with a binary ufunc (sum, product, min, max, …).
 ```csharp
 var x = np.arange(9).reshape(3, 3);
 np.sum(x, axis: 1);                 // [3 12 21]  — reduce along axis 1
-np.sum(x, axis: (0, 1));            // 36         — reduce all axes (tuple)
+np.sum(x);                          // 36         — reduce all axes (no axis)
 np.prod(x.astype(np.float64), axis: 0);
 np.max(x, axis: 0, keepdims: true); // shape (1, 3)
 ```
 
+> **One divergence from NumPy:** the reductions take a **single** `int?` axis (or none — all axes). NumPy's multi-axis tuple form (`axis=(0, 1)`) is not supported; pass no axis to reduce everything, or reduce one axis at a time.
+
 ### The reduce upcast rule
 
-For **`sum`/`prod`/`cumsum`/`cumprod`** with no explicit `dtype`, an integer or boolean input **smaller than the default integer** is upcast to int64 to avoid overflow — matching NumPy:
+For **`sum`/`prod`/`cumsum`/`cumprod`** with no explicit `dtype`, an integer or boolean input **smaller than the default integer** is upcast to int64 — **uint64 for unsigned inputs** — to avoid overflow, matching NumPy:
 
 ```csharp
-np.array(new[] { 1, 2, 3 }, np.int32);
-np.sum(...).dtype;      // int64  — int32 sum widens
-np.mean(...).dtype;     // float64
-np.max(...).dtype;      // int32  — min/max/amax preserve the input dtype
+var x = np.array(new[] { 1, 2, 3 }, np.int32);
+np.sum(x).dtype;        // int64  — accumulating reductions widen (uint64 for unsigned)
+np.mean(x).dtype;       // float64
+np.max(x).dtype;        // int32  — min/max/amax preserve the input dtype
 ```
 
 `abs`, `sign`, `min`, `max`, and the comparisons **preserve** the dtype; only the accumulating reductions widen. This is NEP 50 alignment — see the [DirectILKernelGenerator NEP50 table](../il-generation.md) and [Data types](../dtypes.md).
@@ -125,7 +138,7 @@ NumPy attaches `reduce`, `accumulate`, `reduceat`, `outer`, and `at` to the ufun
 | `np.add.accumulate(x)` | `np.cumsum(x)` |
 | `np.multiply.accumulate(x)` | `np.cumprod(x)` |
 | `np.add.at(x, idx, v)` (unbuffered scatter-add) | `np.add(x, v, @out: ...)` / `np.put`/`np.place` (note: no *accumulating* scatter) |
-| `np.add.outer(a, b)` | `a[":, np.newaxis"] + b` (broadcast) |
+| `np.add.outer(a, b)` | `a[Slice.All, np.newaxis] + b` (broadcast; `newaxis` is an index object, not a slice-string token) |
 
 `np.maximum`/`np.minimum` (the elementwise pairwise ufuncs) exist as direct functions and are distinct from `np.max`/`np.min` (the reductions), exactly as in NumPy.
 
@@ -161,7 +174,7 @@ np.add(a, 100, @out: a, where: a < 0);   // add 100 only to negative elements
 ### Reduce with overflow safety
 
 ```csharp
-np.sum(np.array(new byte[] { 200, 200, 200 }));   // int64 result — no uint8 overflow
+np.sum(np.array(new byte[] { 200, 200, 200 }));   // uint64 result (600) — no uint8 overflow
 ```
 
 ---
