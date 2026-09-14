@@ -263,14 +263,16 @@ namespace NumSharp
         ///     pass (np.evaluate, roadmap Wave 6.1). Virtual with a
         ///     NotSupported default so alternative engines opt in explicitly.
         /// </summary>
-        public virtual NDArray Evaluate(NDExpr expr, NDArray @out = null)
+        /// <param name="options">Resolved <c>dtype=</c>/<c>casting=</c>/<c>order=</c> keywords (plan P4.5); <c>default</c> = no override.</param>
+        public virtual NDArray Evaluate(NDExpr expr, NDArray @out = null, in NDEvaluateOptions options = default)
             => throw new NotSupportedException($"{GetType().Name} does not support fused expression evaluation.");
 
         /// <summary>
         ///     Fused evaluation against an explicit operand list
         ///     (<see cref="NDExpr.Input"/> leaves reference operands by position).
         /// </summary>
-        public virtual NDArray Evaluate(NDExpr expr, NDArray[] operands, NDArray @out = null)
+        /// <param name="options">Resolved <c>dtype=</c>/<c>casting=</c>/<c>order=</c> keywords (plan P4.5); <c>default</c> = no override.</param>
+        public virtual NDArray Evaluate(NDExpr expr, NDArray[] operands, NDArray @out = null, in NDEvaluateOptions options = default)
             => throw new NotSupportedException($"{GetType().Name} does not support fused expression evaluation.");
 
         /// <summary>
@@ -279,7 +281,8 @@ namespace NumSharp
         ///     <c>Evaluate(NDExpr, …)</c> members above resolve the program from the tree's cache and
         ///     land here.
         /// </summary>
-        internal virtual NDArray Evaluate(NDExprProgram program, NDArray[] operands, NDArray @out)
+        /// <param name="options">Resolved <c>dtype=</c>/<c>casting=</c>/<c>order=</c> keywords (plan P4.5); <c>default</c> = no override.</param>
+        internal virtual NDArray Evaluate(NDExprProgram program, NDArray[] operands, NDArray @out, in NDEvaluateOptions options = default)
             => throw new NotSupportedException($"{GetType().Name} does not support fused expression evaluation.");
 
         #endregion

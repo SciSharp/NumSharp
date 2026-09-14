@@ -2283,5 +2283,204 @@ namespace NumSharp.Tests.Backends.Iterators
             Assert.IsFalse(e == null);
             Assert.IsTrue(e != null);
         }
+
+        // =====================================================================
+        // Phase 4.5 keywords — dtype= / casting= / order=
+        // =====================================================================
+
+        /// <summary>
+        /// dtype= is an implicit ROOT cast on the elementwise path: the tree computes at its natural
+        /// NEP50 result type and the RESULT is cast to dtype, so <c>evaluate(expr, dtype: X)</c> is
+        /// bit-identical to <c>evaluate(expr).astype(X)</c> — proven here across float / int / widen /
+        /// narrow / real→complex targets on both C and F layouts, and that the result's typecode is X.
+        /// </summary>
+        [TestMethod]
+        public void P45_Dtype_ElementwiseIsImplicitRootCast()
+        {
+            var a = np.arange(6).reshape(2, 3).astype(np.float64) + 0.5;
+            var b = np.arange(6).reshape(2, 3).astype(np.float64) * 2.0;
+
+            foreach (var dt in new[] { np.float32, np.int32, np.int64, np.float16, np.complex128, np.uint8 })
+            {
+                var withDtype = np.evaluate((NDExpr)a + b, dtype: dt);
+                var astyped = np.evaluate((NDExpr)a + b).astype(dt);
+                Assert.AreEqual(dt, withDtype.dtype, $"dtype= result typecode for {dt}");
+                Assert.IsTrue(np.array_equal(withDtype, astyped), $"evaluate(dtype: {dt}) == evaluate().astype({dt})");
+            }
+
+            // dtype= over an F-contiguous input pair — the cast rides the same buffered path regardless of
+            // layout, still equal to the astype of the natural result.
+            var af = np.asfortranarray(a);
+            var withF = np.evaluate((NDExpr)af + b, dtype: np.int32);
+            Assert.AreEqual(np.int32, withF.dtype);
+            Assert.IsTrue(np.array_equal(withF, np.evaluate((NDExpr)af + b).astype(np.int32)));
+
+            // dtype= equal to the natural result type is a no-op (still the natural bit-exact result).
+            var noop = np.evaluate((NDExpr)a + b, dtype: np.float64);
+            Assert.AreEqual(np.float64, noop.dtype);
+            Assert.IsTrue(np.array_equal(noop, np.evaluate((NDExpr)a + b)));
+        }
+
+        /// <summary>
+        /// dtype= truncates toward zero exactly like <c>astype</c> (never floors): a fused float result
+        /// cast to an integer dtype matches NumPy's C-style truncation.
+        /// </summary>
+        [TestMethod]
+        public void P45_Dtype_TruncatesTowardZeroLikeAstype()
+        {
+            var a = np.array(new double[] { 2.7, -2.7, 4.5, -4.5, 0.0 });
+            var di = np.evaluate((NDExpr)a + 0.0, dtype: np.int32);
+            Assert.AreEqual(np.int32, di.dtype);
+            CollectionAssert.AreEqual(new[] { 2, -2, 4, -4, 0 },
+                new[] { di.GetInt32(0), di.GetInt32(1), di.GetInt32(2), di.GetInt32(3), di.GetInt32(4) });
+        }
+
+        /// <summary>
+        /// dtype= and out= both fix the result dtype, so they are mutually exclusive — the API rejects the
+        /// pair with an ArgumentException before any work (a reduction is never reached, so the guard is at
+        /// the API boundary, not the engine).
+        /// </summary>
+        [TestMethod]
+        public void P45_Dtype_And_Out_AreMutuallyExclusive()
+        {
+            var a = np.arange(6).reshape(2, 3).astype(np.float64);
+            var outX = np.zeros(new Shape(2, 3), np.float32);
+            var ex = Assert.ThrowsException<ArgumentException>(
+                () => np.evaluate((NDExpr)a + a, @out: outX, dtype: np.float32));
+            StringAssert.Contains(ex.Message, "either dtype= or out=");
+        }
+
+        /// <summary>
+        /// order= chooses the FRESH result's memory layout: 'C' forces row-major, 'F' column-major (even
+        /// from C-contiguous inputs), 'K'/'A' keep today's heuristic (F only when every input is strictly
+        /// F-contiguous). The VALUES are identical across all four — order= is a layout choice, never a
+        /// value one.
+        /// </summary>
+        [TestMethod]
+        public void P45_Order_ControlsFreshResultLayout()
+        {
+            var a = np.arange(6).reshape(2, 3).astype(np.float64) + 0.5;   // C-contiguous inputs
+            var b = np.arange(6).reshape(2, 3).astype(np.float64) * 2.0;
+
+            var oc = np.evaluate((NDExpr)a + b, order: 'C');
+            var of = np.evaluate((NDExpr)a + b, order: 'F');
+            var ok = np.evaluate((NDExpr)a + b);                            // default 'K'
+            var oa = np.evaluate((NDExpr)a + b, order: 'A');
+
+            Assert.IsTrue(oc.Shape.IsContiguous && !oc.Shape.IsFContiguous, "order='C' → C-contiguous");
+            Assert.IsTrue(of.Shape.IsFContiguous && !of.Shape.IsContiguous, "order='F' → F-contiguous");
+            Assert.IsTrue(ok.Shape.IsContiguous, "'K' on all-C inputs → C-contiguous");
+            Assert.IsTrue(oa.Shape.IsContiguous, "'A' on all-C inputs → C-contiguous");
+
+            // lowercase is accepted (case-insensitive), same layout.
+            Assert.IsTrue(np.evaluate((NDExpr)a + b, order: 'f').Shape.IsFContiguous);
+
+            // Values are identical regardless of order.
+            foreach (var r in new[] { oc, of, ok, oa })
+                Assert.IsTrue(np.array_equal(r, ok), "order= changes layout, not values");
+
+            // 'K' on strictly-F inputs → F (unchanged pre-4.5 heuristic).
+            var af = np.asfortranarray(a);
+            var bf = np.asfortranarray(b);
+            Assert.IsTrue(np.evaluate((NDExpr)af + bf).Shape.IsFContiguous, "'K' on all-F inputs → F");
+        }
+
+        /// <summary>A bad order char raises NumPy's verbatim "order must be one of …" ValueError.</summary>
+        [TestMethod]
+        public void P45_Order_BadCharThrows()
+        {
+            var a = np.arange(4).astype(np.float64);
+            var ex = Assert.ThrowsException<ValueError>(() => np.evaluate((NDExpr)a + a, order: 'Q'));
+            StringAssert.Contains(ex.Message, "order must be one of 'C', 'F', 'A', 'K'");
+        }
+
+        /// <summary>
+        /// casting= governs the out= cast rule (default same_kind): 'unsafe' admits a float→int out that
+        /// same_kind rejects, 'no' rejects any real cast, and the message names the rule that failed.
+        /// </summary>
+        [TestMethod]
+        public void P45_Casting_GovernsOutCastRule()
+        {
+            var a = np.arange(6).reshape(2, 3).astype(np.float64) + 0.25;
+
+            // default same_kind: f64 → i32 out is float→int (NOT same_kind) → rejected.
+            var outI = np.zeros(new Shape(2, 3), np.int32);
+            var sk = Assert.ThrowsException<ArgumentException>(() => np.evaluate((NDExpr)a + a, @out: outI));
+            StringAssert.Contains(sk.Message, "'same_kind'");
+
+            // casting='unsafe' admits it (values truncate into the i32 out).
+            var outI2 = np.zeros(new Shape(2, 3), np.int32);
+            var r = np.evaluate((NDExpr)a + a, @out: outI2, casting: "unsafe");
+            Assert.AreSame(outI2, r);
+            Assert.IsTrue(np.array_equal(outI2, np.evaluate((NDExpr)a + a).astype(np.int32)));
+
+            // casting='no' rejects even a same_kind float→float narrowing, naming 'no'.
+            var outF = np.zeros(new Shape(2, 3), np.float32);
+            var no = Assert.ThrowsException<ArgumentException>(
+                () => np.evaluate((NDExpr)a + a, @out: outF, casting: "no"));
+            StringAssert.Contains(no.Message, "'no'");
+
+            // casting='same_kind' (explicit) admits f64 → f32 out (float→float).
+            var outF2 = np.zeros(new Shape(2, 3), np.float32);
+            var rf = np.evaluate((NDExpr)a + a, @out: outF2, casting: "same_kind");
+            Assert.AreSame(outF2, rf);
+        }
+
+        /// <summary>A bad casting string raises NumPy's verbatim "casting must be one of …" ValueError.</summary>
+        [TestMethod]
+        public void P45_Casting_BadStringThrows()
+        {
+            var a = np.arange(4).astype(np.float64);
+            var ex = Assert.ThrowsException<ValueError>(() => np.evaluate((NDExpr)a + a, casting: "bogus"));
+            StringAssert.Contains(ex.Message, "casting must be one of");
+        }
+
+        /// <summary>
+        /// dtype= and a non-'K' order= are result-shaping keywords, so a REDUCTION tree (which fixes its
+        /// own result dtype and layout) rejects them with NotSupportedException. A bare/explicit 'K' order
+        /// and a plain reduction are unaffected, and casting= DOES thread through to a reduction's out=.
+        /// </summary>
+        [TestMethod]
+        public void P45_Reduce_RejectsResultShapingKeywords()
+        {
+            var a = np.arange(6).reshape(2, 3).astype(np.float64) + 0.5;
+
+            var dEx = Assert.ThrowsException<NotSupportedException>(
+                () => np.evaluate(NDExpr.Sum((NDExpr)a + a), dtype: np.float32));
+            StringAssert.Contains(dEx.Message, "reduction tree");
+
+            Assert.ThrowsException<NotSupportedException>(
+                () => np.evaluate(NDExpr.Sum((NDExpr)a + a), order: 'F'));
+
+            // Plain reduction, and an explicit no-op 'K', both still work.
+            var expected = np.evaluate((NDExpr)a + a).sum().GetDouble(0);
+            Assert.AreEqual(expected, np.evaluate(NDExpr.Sum((NDExpr)a + a)).GetDouble(0), 1e-9);
+            Assert.AreEqual(expected, np.evaluate(NDExpr.Sum((NDExpr)a + a), order: 'K').GetDouble(0), 1e-9);
+
+            // casting= threads into a reduction's out= validation: 'no' rejects f64 → i32, default ok f64 → f32.
+            var rOutI = np.zeros(new Shape(), np.int32);
+            Assert.ThrowsException<ArgumentException>(
+                () => np.evaluate(NDExpr.Sum((NDExpr)a + a), @out: rOutI, casting: "no"));
+            var rOutF = np.zeros(new Shape(), np.float32);
+            Assert.AreSame(rOutF, np.evaluate(NDExpr.Sum((NDExpr)a + a), @out: rOutF));
+        }
+
+        /// <summary>
+        /// The positional-operand overload (NDExpr.Input leaves) honors the same keywords: dtype= casts the
+        /// result and order= lays it out.
+        /// </summary>
+        [TestMethod]
+        public void P45_PositionalOverload_Keywords()
+        {
+            var a = np.arange(6).reshape(2, 3).astype(np.float64) + 0.5;
+            var b = np.arange(6).reshape(2, 3).astype(np.float64) * 2.0;
+
+            var pdt = np.evaluate(NDExpr.Input(0) + NDExpr.Input(1), new[] { a, b }, dtype: np.float32);
+            Assert.AreEqual(np.float32, pdt.dtype);
+            Assert.IsTrue(np.array_equal(pdt, np.evaluate((NDExpr)a + b).astype(np.float32)));
+
+            var pof = np.evaluate(NDExpr.Input(0) + NDExpr.Input(1), new[] { a, b }, order: 'F');
+            Assert.IsTrue(pof.Shape.IsFContiguous && !pof.Shape.IsContiguous);
+        }
     }
 }

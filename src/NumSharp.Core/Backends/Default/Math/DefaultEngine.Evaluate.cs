@@ -77,21 +77,21 @@ namespace NumSharp.Backends
         /// (<see cref="NDExpr.Arr"/> / implicit conversion).
         /// </summary>
         [NDScoped] // engine boundary: any leaf wrappers BindArrays mints are reclaimed; the fused result (or @out) is yielded
-        public override unsafe NDArray Evaluate(NDExpr expr, NDArray @out = null)
+        public override unsafe NDArray Evaluate(NDExpr expr, NDArray @out = null, in NDEvaluateOptions options = default)
         {
             if (expr is null) throw new ArgumentNullException(nameof(expr));
 
             // The root's slot, else the global structural cache, else a build — and the distinct arrays the
             // tree references in binding order (the operand list the program was compiled against).
             var program = expr.GetProgram(null, out var operands);
-            return EvaluateCore(program, operands, @out);
+            return EvaluateCore(program, operands, @out, options);
         }
 
         /// <summary>
         /// Evaluate a tree built over positional <see cref="NDExpr.Input"/>
         /// leaves against an explicit operand list.
         /// </summary>
-        public override unsafe NDArray Evaluate(NDExpr expr, NDArray[] operands, NDArray @out = null)
+        public override unsafe NDArray Evaluate(NDExpr expr, NDArray[] operands, NDArray @out = null, in NDEvaluateOptions options = default)
         {
             if (expr is null) throw new ArgumentNullException(nameof(expr));
             if (operands is null) throw new ArgumentNullException(nameof(operands));
@@ -102,7 +102,7 @@ namespace NumSharp.Backends
                     throw new ArgumentNullException(nameof(operands), "no operand may be null.");
 
             var program = expr.GetProgram(operands);
-            return EvaluateCore(program, operands, @out);
+            return EvaluateCore(program, operands, @out, options);
         }
 
         /// <summary>
@@ -110,8 +110,8 @@ namespace NumSharp.Backends
         /// against <paramref name="operands"/> (the program's own embedded arrays, or a positional list
         /// the handle has already matched to the compiled dtype signature).
         /// </summary>
-        internal override NDArray Evaluate(NDExprProgram program, NDArray[] operands, NDArray @out)
-            => EvaluateCore(program, operands, @out);
+        internal override NDArray Evaluate(NDExprProgram program, NDArray[] operands, NDArray @out, in NDEvaluateOptions options = default)
+            => EvaluateCore(program, operands, @out, options);
 
         /// <summary>True when every operand has exactly the same dimensions (no broadcasting to resolve).</summary>
         private static bool AllSameDims(NDArray[] ops)
@@ -192,15 +192,26 @@ namespace NumSharp.Backends
             return new IncorrectShapeException(sb.ToString());
         }
 
-        private unsafe NDArray EvaluateCore(NDExprProgram program, NDArray[] inputs, NDArray @out)
+        private unsafe NDArray EvaluateCore(NDExprProgram program, NDArray[] inputs, NDArray @out, in NDEvaluateOptions options = default)
         {
+            // Plan P4.5 — dtype= and order= shape a FRESH elementwise result, so they are unsupported on a
+            // reduction tree (a reduction fixes its own result dtype — its accumulator — and layout, and
+            // NumPy's reductions carry no order= parameter). casting= governs out= VALIDATION and threads
+            // through to the reduce paths unchanged. Reject the two result-shaping keywords up front, before
+            // any work; a bare/explicit 'K' order is the no-op default and does not trip this.
+            if ((program.Average is not null || program.Reduce is not null) && (options.HasDtype || options.HasExplicitOrder))
+                throw new NotSupportedException(
+                    "np.evaluate: dtype= and order= are not supported on a reduction tree (a reduction " +
+                    "fixes its result dtype and layout). Cast the reduction result instead: " +
+                    "np.evaluate(expr).astype(dtype).");
+
             // A weighted average reduces over TWO sub-trees (values, weights); it is host-computed like
             // the M4c summation kinds, so it precedes the elementwise + single-child-reduce dispatch.
             if (program.Average is not null)
-                return EvaluateWeightedAverage(program, inputs, @out);
+                return EvaluateWeightedAverage(program, inputs, @out, options);
 
             if (program.Reduce is not null)
-                return EvaluateReduce(program, inputs, @out);
+                return EvaluateReduce(program, inputs, @out, options);
 
             // The iterator streams the non-parameter inputs; a 0-d parameter reaches the kernel through
             // the aux block instead (NDExpr.Params.cs) and never joins the broadcast — it has no dims.
@@ -208,8 +219,14 @@ namespace NumSharp.Backends
             var kernel = program.Kernel;
             var resolvedType = program.ResultType;
 
+            // dtype= is an implicit root cast (plan P4.5): the tree still COMPUTES at its natural NEP50
+            // result type, and the result is cast to the requested dtype on the way to a FRESH buffer — the
+            // exact out= buffered-cast machinery below. dtype= and a caller out= are mutually exclusive (the
+            // API rejects both), so this only ever widens a fresh allocation's dtype.
+            var targetType = options.Dtype ?? resolvedType;
+
             if (@out is not null)
-                ValidateOutCast(resolvedType, @out.typecode, "evaluate");
+                ValidateOutCast(resolvedType, @out.typecode, "evaluate", options.Casting);
 
             // Iteration shape: the inputs' broadcast (one clone for identical dims, one fresh dims
             // array otherwise — ResolveInputShape), then out joins per the ufunc rules (never
@@ -220,25 +237,28 @@ namespace NumSharp.Backends
                 : ResolveUfuncIterationShape(inputShape, ops, @out, null).Clean();
 
             // NumPy-aligned layout preservation (mirrors TryExecuteBinaryOpViaNDIter):
-            // when every input operand is strictly F-contiguous, allocate the result
-            // column-major and iterate F-order so the iterator coalesces to ONE
-            // contiguous inner loop. Forcing C-order here made np.evaluate stride across
-            // rows on F/transposed operands — ~16x slower than the unfused chain (the
-            // fused F/T cliff). Only the fresh-alloc case re-orders; a provided out keeps
-            // its own layout.
+            // by default ('K') the result is column-major only when every input operand is
+            // strictly F-contiguous, so the iterator coalesces to ONE contiguous inner loop.
+            // Forcing C-order here made np.evaluate stride across rows on F/transposed
+            // operands — ~16x slower than the unfused chain (the fused F/T cliff). order=
+            // (plan P4.5) overrides that heuristic for the FRESH result: 'C' forces C, 'F'
+            // forces F even from C inputs, 'A'/'K' keep the heuristic. A provided out keeps
+            // its own layout (order= applies to a fresh alloc only).
             bool allStrictFContig = AreAllInputsStrictFContig(ops, iterShape);
-            Shape targetShape = (@out is null && allStrictFContig)
+            bool wantFOrder = @out is null && ResolveEvalOrder(options.Order, allStrictFContig);
+            Shape targetShape = wantFOrder
                 ? new Shape((long[])iterShape.dimensions.Clone(), 'F')
                 : iterShape;
 
-            var target = @out ?? new NDArray(resolvedType, targetShape, false);
+            var target = @out ?? new NDArray(targetType, targetShape, false);
             if (target.size == 0)
                 return target;
 
-            // F-order iteration only when the result buffer is actually F-contig (fresh
-            // F-alloc above, or a provided F-contig out); else the output writes would
-            // themselves stride. C-order everywhere else (unchanged default).
-            var order = (allStrictFContig && target.Shape.IsFContiguous && !target.Shape.IsContiguous)
+            // Iterate in the RESULT buffer's own contiguity order so the output writes never
+            // stride — F when the target is strictly F-contig (a fresh 'F'/heuristic alloc or a
+            // provided F-contig out), C otherwise. Elementwise results are order-independent, so
+            // this changes only traversal (perf), never values.
+            var order = (target.Shape.IsFContiguous && !target.Shape.IsContiguous)
                 ? NPY_ORDER.NPY_FORTRANORDER
                 : NPY_ORDER.NPY_CORDER;
 
@@ -314,6 +334,37 @@ namespace NumSharp.Backends
             }
 
             return anyPureF;
+        }
+
+        /// <summary>
+        /// Resolve np.evaluate's <c>order=</c> (plan P4.5) to whether the FRESH elementwise result is
+        /// allocated F-contiguous: <c>'C'</c> → never (row-major), <c>'F'</c> → always (column-major, even
+        /// from C-contiguous inputs), <c>'A'</c>/<c>'K'</c> → today's heuristic (<paramref
+        /// name="allStrictFContig"/> — F only when every input is strictly F-contiguous). The order char is
+        /// already validated at the API boundary, so the default arm is unreachable for a legal call and is
+        /// only a defensive C fallback.
+        /// </summary>
+        /// <param name="order">The (API-validated) order char: 'C'/'F'/'A'/'K', case-insensitive.</param>
+        /// <param name="allStrictFContig">Whether the input operands make the <c>'K'</c> heuristic prefer F.</param>
+        /// <returns>True to allocate the fresh result column-major (F), false for row-major (C).</returns>
+        private static bool ResolveEvalOrder(char order, bool allStrictFContig)
+        {
+            switch (order)
+            {
+                case 'C':
+                case 'c':
+                    return false;
+                case 'F':
+                case 'f':
+                    return true;
+                case 'A':
+                case 'a':
+                case 'K':
+                case 'k':
+                    return allStrictFContig;
+                default:
+                    return allStrictFContig; // API-validated; defensive
+            }
         }
 
         // =====================================================================
@@ -415,7 +466,7 @@ namespace NumSharp.Backends
                     $"has the wrong number of dimensions: Found {@out.ndim} but expected {expected}");
         }
 
-        private unsafe NDArray EvaluateReduce(NDExprProgram program, NDArray[] inputs, NDArray @out)
+        private unsafe NDArray EvaluateReduce(NDExprProgram program, NDArray[] inputs, NDArray @out, in NDEvaluateOptions options = default)
         {
             var reduce = program.Reduce;
 
@@ -429,7 +480,7 @@ namespace NumSharp.Backends
             // the axis dispatch.
             if (reduce.Kind is NDExprReduceKind.Ptp or NDExprReduceKind.NanMin or NDExprReduceKind.NanMax
                 or NDExprReduceKind.ArgMax or NDExprReduceKind.ArgMin)
-                return EvaluateDelegatingReduce(program, inputs, @out);
+                return EvaluateDelegatingReduce(program, inputs, @out, options);
 
             // Plan P2 M4c (summation kinds) — NanMean/Var/Std. These are NOT order-independent (they
             // sum), so they can't ride EvaluateDelegatingReduce's engine np.nanmean/np.var (whose flat
@@ -438,10 +489,10 @@ namespace NumSharp.Backends
             // use — bit-exact, no fold kernel, handling BOTH flat and axis (so it precedes the axis
             // dispatch, like the delegating kinds).
             if (reduce.Kind is NDExprReduceKind.NanMean or NDExprReduceKind.Var or NDExprReduceKind.Std)
-                return EvaluateStatReduce(program, inputs, @out);
+                return EvaluateStatReduce(program, inputs, @out, options);
 
             if (reduce.Axis is int ax)
-                return EvaluateAxisReduce(program, inputs, @out, ax);
+                return EvaluateAxisReduce(program, inputs, @out, ax, options);
 
             var ops = program.IteratorOperands(inputs);
             var accType = program.ReduceAccType;
@@ -468,7 +519,7 @@ namespace NumSharp.Backends
 
             if (@out is not null)
             {
-                ValidateOutCast(resultType, @out.typecode, "evaluate");
+                ValidateOutCast(resultType, @out.typecode, "evaluate", options.Casting);
                 ValidateFlatReduceOut(@out, childNdim, reduce.Keepdims, ReduceUfuncName(reduce.Kind));
             }
 
@@ -643,7 +694,7 @@ namespace NumSharp.Backends
         /// <param name="out">Optional destination; must be 0-d for a flat reduction and the reduced shape for an axis one. Null allocates a fresh result.</param>
         /// <returns>The reduced array (a fresh 0-d scalar / reduced-shape array, or <paramref name="out"/> itself when supplied).</returns>
         /// <exception cref="ArgumentException">A flat reduction was given a non-0-d <paramref name="out"/>; or the engine reduction rejects a zero-size input (no identity), an out shape mismatch, or an out dtype not reachable by a same_kind cast.</exception>
-        private unsafe NDArray EvaluateDelegatingReduce(NDExprProgram program, NDArray[] inputs, NDArray @out)
+        private unsafe NDArray EvaluateDelegatingReduce(NDExprProgram program, NDArray[] inputs, NDArray @out, in NDEvaluateOptions options = default)
         {
             var reduce = program.Reduce;
             var resultType = program.ResultType;
@@ -652,7 +703,7 @@ namespace NumSharp.Backends
             // before any compute), so an illegal out dtype fails with evaluate's message, not the
             // engine reduction's.
             if (@out is not null)
-                ValidateOutCast(resultType, @out.typecode, "evaluate");
+                ValidateOutCast(resultType, @out.typecode, "evaluate", options.Casting);
 
             // Materialize the child once (fresh + contiguous). `using` releases it after the delegated
             // reduction has read it; every delegated reduction allocates a FRESH result (np.ptp is a
@@ -719,14 +770,14 @@ namespace NumSharp.Backends
         // (the "Half not diverted" gap M1/M2 share) and Decimal has neither a NumPy analog nor a
         // pairwise kernel here. Bit-exact vs NumPy 2.4.2 for the other 13 dtypes; NO excuse.
         // =====================================================================================
-        private unsafe NDArray EvaluateStatReduce(NDExprProgram program, NDArray[] inputs, NDArray @out)
+        private unsafe NDArray EvaluateStatReduce(NDExprProgram program, NDArray[] inputs, NDArray @out, in NDEvaluateOptions options = default)
         {
             var reduce = program.Reduce;
             var resultType = program.ResultType;
 
             // Validate the out cast up front (same order as every reduce path).
             if (@out is not null)
-                ValidateOutCast(resultType, @out.typecode, "evaluate");
+                ValidateOutCast(resultType, @out.typecode, "evaluate", options.Casting);
 
             using var materialized = EvaluateCore(program.ChildElementwiseProgram, inputs, null);
             NPTypeCode ct = materialized.typecode;
@@ -783,7 +834,7 @@ namespace NumSharp.Backends
         // kernel — the gap M1/M2/M4c-summation share). Bit-exact vs NumPy 2.4.2 for Single/Double/
         // Complex; NO MisalignedRegistry excuse.
         // =====================================================================================
-        private unsafe NDArray EvaluateWeightedAverage(NDExprProgram program, NDArray[] inputs, NDArray @out)
+        private unsafe NDArray EvaluateWeightedAverage(NDExprProgram program, NDArray[] inputs, NDArray @out, in NDEvaluateOptions options = default)
         {
             var avg = program.Average;
             NPTypeCode rt = program.ResultType;   // Single / Double / Complex (Half / Decimal rejected below)
@@ -791,7 +842,7 @@ namespace NumSharp.Backends
             // Validate the out cast up front (same order as every reduce path: the cast rule is checked
             // before any compute), so an illegal out dtype fails with evaluate's message.
             if (@out is not null)
-                ValidateOutCast(rt, @out.typecode, "evaluate");
+                ValidateOutCast(rt, @out.typecode, "evaluate", options.Casting);
 
             // A bit-exact float16 / decimal average needs a pairwise sum kernel that dtype lacks (the
             // "Half not diverted" gap M1/M2/M4c-summation share). Reject with a directed message rather
@@ -1333,7 +1384,7 @@ namespace NumSharp.Backends
 
         // Axis-aware fused reduction: one pass over the inputs, accumulating into a per-output
         // operand under a REDUCE iterator. evaluate(Sum(a*b, axis:k)) never materializes a*b.
-        private unsafe NDArray EvaluateAxisReduce(NDExprProgram program, NDArray[] inputs, NDArray @out, int axis)
+        private unsafe NDArray EvaluateAxisReduce(NDExprProgram program, NDArray[] inputs, NDArray @out, int axis, in NDEvaluateOptions options = default)
         {
             var reduce = program.Reduce;
             var ops = program.IteratorOperands(inputs);
@@ -1347,7 +1398,7 @@ namespace NumSharp.Backends
             var resultType = program.ResultType;
 
             if (@out is not null)
-                ValidateOutCast(resultType, @out.typecode, "evaluate");
+                ValidateOutCast(resultType, @out.typecode, "evaluate", options.Casting);
 
             // Output (reduced) shape = input shape with `axis` removed; reduce-all on 1-D → scalar.
             long axisSize = inputShape[axis];

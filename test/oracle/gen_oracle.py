@@ -8229,6 +8229,12 @@ def gen_evaluate():
                 else:
                     r = _EV_REDUCE[rk](r, red.get("axis"), bool(red.get("keepdims", False)))
             r = np.asarray(r)
+            # Phase 4.5 dtype= — the implicit root cast: np.evaluate(expr, dtype=X) computes the tree at its
+            # natural NEP50 result type, then casts the RESULT to X (== np.evaluate(expr).astype(X)). Only the
+            # elementwise blocks set it (a reduction rejects dtype= in NumSharp), so this never runs after a
+            # reduce. The out= path is mutually exclusive with dtype=, so it likewise never combines.
+            if params.get("dtype") is not None:
+                r = np.asarray(r).astype(np.dtype(params["dtype"]))
             if r.dtype.name == "complex64":
                 skipped += 1          # NumSharp has one complex width; skip the width-only cells
                 return
@@ -8481,6 +8487,36 @@ def gen_evaluate():
         bb.reshape(-1)[:] = np.resize(np.array([0.111, 0.222, 0.333, 0.444]), bb.size)
         emit("round_2(add(in0,in1))", [(ba, va), (bb, vb)], ln, cid_tag="f64,f64/round2")
         emit("add(round_1(in0),lf:1.0)", [(ba, va), (bb, vb)], ln, cid_tag="f64,f64/round1")
+
+    # ---- B5. dtype= keyword — the implicit root cast (Phase 4.5) --------------------------------
+    # np.evaluate(expr, dtype=X) computes the FUSED tree at its natural NEP50 result type and casts the
+    # RESULT to X in ONE pass — the out= buffered-cast machinery, DISTINCT from the Cast NODE (B3) whose
+    # per-element EmitConvertTo runs a different loop. Gated independently over the same safe NON-NEGATIVE
+    # pool so every cell is portable bit-exact NumPy parity (the C-undefined float→int edges — NaN/±inf/
+    # out-of-range — are unit-tested against the engine's host-pinned astype, and a complex→real DROP is
+    # left to the Cast node, so B5 keeps a REAL result tree and sweeps real + complex TARGETS only). The
+    # tree is a genuine fused elementwise (mul by a weak-float literal), so int sources promote to float
+    # before the cast, exercising the fused-then-cast path, not a bare astype.
+    dt_pool = np.array([0.0, 1.0, 2.0, 3.0, 2.5, 4.5, 6.0, 7.0])
+    dt_src = ["float64", "float32", "int32", "int64", "uint8"]
+    dt_dst = ["bool", "int8", "uint8", "int16", "int32", "int64", "uint64",
+              "float16", "float32", "float64", "complex128"]
+    dt_layouts = ["c_contiguous_1d", "c_contiguous_2d", "f_contiguous_2d",
+                  "negstride_1d", "strided_step2_1d"]
+    for ln in dt_layouts:
+        for s in dt_src:
+            b, v = LAYOUTS[ln](np.dtype(s))
+            b.reshape(-1)[:] = np.resize(dt_pool, b.size).astype(b.dtype)
+            for d in dt_dst:
+                emit("mul(in0,lf:2.0)", [(b, v)], ln, params={"dtype": d}, cid_tag=f"dtype:{s}->{d}")
+    # dtype= over a genuine two-operand fused sum, and over a where-tree — proving the keyword casts the
+    # WHOLE resolved tree, not just a single node.
+    for ln in ["pp_contig_contig", "pp_contig_fortran"]:
+        ba, va, bb, vb = PAIR_LAYOUTS[ln](np.dtype("float64"), np.dtype("float64"))
+        ba.reshape(-1)[:] = np.resize(dt_pool, ba.size)
+        bb.reshape(-1)[:] = np.resize(np.array([0.4, 0.6, 0.5, 0.1]), bb.size)
+        for d in ("int32", "float32", "complex128"):
+            emit("add(in0,in1)", [(ba, va), (bb, vb)], ln, params={"dtype": d}, cid_tag=f"f64,f64/dtype:{d}")
 
     # ---- C. root reductions over fused trees (flat + axis + keepdims) -------------------------
     reduce_layouts = ["c_contiguous_1d", "c_contiguous_2d", "c_contiguous_3d", "f_contiguous_2d",

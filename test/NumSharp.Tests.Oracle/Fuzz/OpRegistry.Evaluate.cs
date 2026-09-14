@@ -31,7 +31,18 @@ namespace NumSharp.Tests.Fuzz
         {
             bool hasOut = p.TryGetValue("out", out var o) && o.ValueKind == JsonValueKind.True;
             var expr = BuildEvaluateTree(p, ops, hasOut ? ops.Length - 1 : ops.Length);
-            return hasOut ? np.evaluate(expr, @out: ops[ops.Length - 1]) : np.evaluate(expr);
+            if (hasOut)
+                return np.evaluate(expr, @out: ops[ops.Length - 1]);
+
+            // Phase 4.5 keywords: dtype= (implicit root cast) and order= (fresh-result layout), mutually
+            // exclusive with out= so they only ride the non-out path. casting= governs out= only, so it
+            // rides the tuple out-path (EvaluateOutFromCorpus) when a case carries it.
+            DType dtype = null;
+            if (p.TryGetValue("dtype", out var dt) && dt.ValueKind == JsonValueKind.String)
+                dtype = FuzzCorpus.DtypeToTC(dt.GetString());   // NPTypeCode → DType (implicit)
+            char order = p.TryGetValue("order", out var ord) && ord.ValueKind == JsonValueKind.String
+                ? ord.GetString()[0] : 'K';
+            return np.evaluate(expr, dtype: dtype, order: order);
         }
 
         internal static NDArray[] EvaluateOutFromCorpus(IReadOnlyDictionary<string, JsonElement> p, NDArray[] ops)

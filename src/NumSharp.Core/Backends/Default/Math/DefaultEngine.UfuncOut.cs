@@ -163,20 +163,27 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// out must be reachable from the loop result dtype by a same_kind cast
-        /// (NumPy's default ufunc casting rule). Error text verbatim
-        /// (UFuncTypeError in NumPy).
+        /// out must be reachable from the loop result dtype under <paramref name="casting"/>
+        /// (NumPy's default ufunc rule is same_kind; np.evaluate's <c>casting=</c> keyword can
+        /// tighten it to safe/equiv/no or loosen it to unsafe). Error text verbatim
+        /// (UFuncTypeError in NumPy), naming the rule that failed.
         /// </summary>
-        private static void ValidateOutCast(NPTypeCode resultType, NPTypeCode outType, string ufuncName)
+        /// <param name="resultType">The computed (loop) result dtype the write must cast FROM.</param>
+        /// <param name="outType">The caller <c>out=</c> dtype the write must cast TO.</param>
+        /// <param name="ufuncName">The ufunc name for the message ("evaluate" for the fused path).</param>
+        /// <param name="casting">The cast rule to enforce; defaults to NumPy's ufunc <c>same_kind</c>.</param>
+        /// <exception cref="ArgumentException"><paramref name="resultType"/> is not castable to <paramref name="outType"/> under <paramref name="casting"/>.</exception>
+        private static void ValidateOutCast(NPTypeCode resultType, NPTypeCode outType, string ufuncName,
+            NPY_CASTING casting = NPY_CASTING.NPY_SAME_KIND_CASTING)
         {
             if (resultType == outType)
                 return;
-            if (NDIterCasting.CanCast(resultType, outType, NPY_CASTING.NPY_SAME_KIND_CASTING))
+            if (NDIterCasting.CanCast(resultType, outType, casting))
                 return;
             throw new ArgumentException(
                 $"Cannot cast ufunc '{ufuncName}' output from " +
                 $"dtype('{resultType.AsNumpyDtypeName()}') to " +
-                $"dtype('{outType.AsNumpyDtypeName()}') with casting rule 'same_kind'");
+                $"dtype('{outType.AsNumpyDtypeName()}') with casting rule '{DTypeCasting.CastingToString(casting)}'");
         }
 
         /// <summary>
