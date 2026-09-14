@@ -1,5 +1,6 @@
 using System;
 using System.Reflection.Emit;
+using System.Runtime.Intrinsics.X86;
 using NumSharp.Backends.Iteration;
 
 // =============================================================================
@@ -63,6 +64,15 @@ namespace NumSharp.Backends.Kernels
             => FusedBoolLanesAvailable && InlineMaskCreationSupported(VectorBits, GetTypeSize(laneType));
 
         /// <summary>
+        /// Whether the fused shell can vectorize a <b>float16</b> arithmetic tree. f16 has no BCL
+        /// vector arithmetic, so the lane rides as <c>Vector256&lt;ushort&gt;</c> (16 raw f16 patterns)
+        /// and each arithmetic node widens to two <c>Vector256&lt;float&gt;</c>, computes, and narrows
+        /// (RTNE) — <see cref="HalfArithVec256"/>, whose primitives are AVX2 / SSE4.1 256-bit. On a
+        /// 512-bit host (or without AVX2) a Half tree stays scalar (still correct), so this is exact.
+        /// </summary>
+        internal static bool FusedHalfArithAvailable => VectorBits == 256 && Avx2.IsSupported && Sse41.IsSupported;
+
+        /// <summary>
         /// Whether the fused shell can run a vector body for these operands at lane dtype
         /// <paramref name="laneType"/>. Mirrors the NDExpr plan gate; re-checked here so a
         /// mismatched caller gets the scalar shell rather than malformed IL.
@@ -82,6 +92,19 @@ namespace NumSharp.Backends.Kernels
             {
                 foreach (var t in operandTypes)
                     if (t != NPTypeCode.Boolean)
+                        return false;
+                return true;
+            }
+
+            // A Half tree: every operand AND the output must be Half (the plan keeps any Half tree
+            // with a comparison / where / bool operand / transcendental scalar, so only pure f16
+            // arithmetic reaches the vector shell — no bool masks to widen here).
+            if (laneType == NPTypeCode.Half)
+            {
+                if (!FusedHalfArithAvailable)
+                    return false;
+                foreach (var t in operandTypes)
+                    if (t != NPTypeCode.Half)
                         return false;
                 return true;
             }
@@ -440,6 +463,17 @@ namespace NumSharp.Backends.Kernels
         /// <summary>Stack: [] → [Vector&lt;lane&gt;] — the broadcast of one operand's single element.</summary>
         private static void EmitFusedBroadcastScalar(ILGenerator il, NPTypeCode opType, NPTypeCode laneType, LocalBuilder ptr)
         {
+            // A Half operand's lane is Vector256<ushort> of its raw f16 bits, so the broadcast reads the
+            // 2 bytes AS ushort (Ldind_U2) — EmitLoadIndirect(Half) would leave a Half struct, which
+            // Vector256.Create(ushort) can't consume. (opType == Half is guaranteed by FusedSimdViable.)
+            if (laneType == NPTypeCode.Half)
+            {
+                il.Emit(OpCodes.Ldloc, ptr);
+                il.Emit(OpCodes.Ldind_U2);
+                EmitVectorCreate(il, NPTypeCode.Half);   // Vector256.Create(ushort)
+                return;
+            }
+
             if (laneType == NPTypeCode.Boolean || opType == laneType)
             {
                 il.Emit(OpCodes.Ldloc, ptr);

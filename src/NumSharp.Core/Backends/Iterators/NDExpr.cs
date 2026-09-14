@@ -1136,6 +1136,18 @@ namespace NumSharp.Backends.Iteration
                 return;
             }
 
+            if (t == NPTypeCode.Half)
+            {
+                // The f16 tree's lane is Vector256<ushort> of raw f16 bits, so a Half literal broadcasts
+                // its bit pattern — computed as (Half)AsDouble(), the SAME narrow EmitLoadTyped's scalar
+                // Half case runs — rather than a Half struct (which Vector256.Create(ushort) can't take).
+                ushort bits = System.BitConverter.HalfToUInt16Bits((Half)AsDouble());
+                il.Emit(OpCodes.Ldc_I4, (int)bits);
+                il.Emit(OpCodes.Conv_U2);
+                DirectILKernelGenerator.EmitVectorCreate(il, NPTypeCode.Half);   // Vector256.Create(ushort)
+                return;
+            }
+
             EmitLoadTyped(il, t);
             DirectILKernelGenerator.EmitVectorCreate(il, t);
         }
@@ -1370,6 +1382,21 @@ namespace NumSharp.Backends.Iteration
                     case BinaryOp.BitwiseAnd: NDExprVec.EmitAnd(il, clr); return;
                     default: NDExprVec.EmitXor(il, clr); return;
                 }
+            }
+
+            if (my == NPTypeCode.Half)
+            {
+                // f16 arithmetic lane: both children arrive as Vector256<ushort> (raw f16 bits, the
+                // Half tree's lane). HalfArithVec256 widens to float32, runs one Avx.Add/Sub/Mul/Div,
+                // and narrows (RTNE) with the operand-order NaN pin — round-to-f16 PER NODE, exactly as
+                // the scalar HalfArithScalarStruct and NumPy's HALF loop (astype 'e'->'f') do, so the
+                // vector body is bit-for-bit the scalar body (the vector==scalar contract).
+                EmitVectorChildAs(il, ctx, _left, NPTypeCode.Half);
+                EmitVectorChildAs(il, ctx, _right, NPTypeCode.Half);
+                il.Emit(OpCodes.Ldc_I4, (int)_op);
+                il.EmitCall(OpCodes.Call,
+                    DirectILKernelGenerator.GetHelper(nameof(DirectILKernelGenerator.HalfArithVec256)), null);
+                return;
             }
 
             // my == lane: children arrive at the lane dtype (a bool child becomes exact 1/0 lanes).

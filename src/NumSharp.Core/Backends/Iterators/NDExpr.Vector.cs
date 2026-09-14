@@ -163,6 +163,15 @@ namespace NumSharp.Backends.Iteration
 
             if (lane == NPTypeCode.Empty)
                 lane = NPTypeCode.Boolean;                       // byte mode
+            else if (lane == NPTypeCode.Half)
+            {
+                // f16 rides a widen-compute-narrow Vector256<ushort> lane (Phase 5): only PURE
+                // arithmetic vectorizes, on a 256-bit AVX2 host. Any comparison / where / min-max /
+                // transcendental / unary Half node returns false from CanEmitVectorV2 below, which
+                // (ANDed up through the root) keeps such a tree scalar — as does a non-256-bit host.
+                if (!DirectILKernelGenerator.FusedHalfArithAvailable)
+                    return false;
+            }
             else if (!DirectILKernelGenerator.CanUseSimd(lane))
                 return false;
 
@@ -240,6 +249,12 @@ namespace NumSharp.Backends.Iteration
 
     public sealed partial class BinaryNode
     {
+        /// <summary>The float16 binary ops the fused vector path serves (<see cref="NDExprVec"/> /
+        /// <c>HalfArithVec256</c>): the widen-compute-narrow arithmetic four. Every other op keeps a
+        /// Half tree scalar.</summary>
+        internal static bool IsHalfVectorArith(BinaryOp op)
+            => op == BinaryOp.Add || op == BinaryOp.Subtract || op == BinaryOp.Multiply || op == BinaryOp.Divide;
+
         internal override bool CanEmitVectorV2(NPTypeCode lane, IReadOnlyDictionary<NDExpr, NPTypeCode> types)
         {
             if (!_left.CanEmitVectorV2(lane, types) || !_right.CanEmitVectorV2(lane, types))
@@ -247,6 +262,10 @@ namespace NumSharp.Backends.Iteration
             if (types[this] == NPTypeCode.Boolean)
                 return _op == BinaryOp.Add || _op == BinaryOp.Multiply ||
                        _op == BinaryOp.BitwiseAnd || _op == BinaryOp.BitwiseOr || _op == BinaryOp.BitwiseXor;
+            // A Half tree vectorizes only the arithmetic four (widen-compute-narrow); a mixed op
+            // (power/mod/floor_divide/min-max/bitwise on Half) has no Vector256<ushort> body → scalar.
+            if (lane == NPTypeCode.Half)
+                return types[this] == NPTypeCode.Half && IsHalfVectorArith(_op);
             return IsSimdOp(_op);
         }
     }
@@ -255,6 +274,10 @@ namespace NumSharp.Backends.Iteration
     {
         internal override bool CanEmitVectorV2(NPTypeCode lane, IReadOnlyDictionary<NDExpr, NPTypeCode> types)
         {
+            // Phase 5 vectorizes only f16 ARITHMETIC (BinaryNode); a Half unary (abs/negate/square/
+            // rounding/transcendental) has no Vector256<ushort> body, so it keeps its whole tree scalar.
+            if (lane == NPTypeCode.Half)
+                return false;
             if (!_child.CanEmitVectorV2(lane, types))
                 return false;
             var my = types[this];
@@ -292,6 +315,10 @@ namespace NumSharp.Backends.Iteration
     {
         internal override bool CanEmitVectorV2(NPTypeCode lane, IReadOnlyDictionary<NDExpr, NPTypeCode> types)
         {
+            // A comparison in a Half tree (its lane is the Vector256<ushort> f16 arithmetic lane) has
+            // no vector body here — keep the whole tree scalar (Phase 5 is f16 arithmetic only).
+            if (lane == NPTypeCode.Half)
+                return false;
             if (!_left.CanEmitVectorV2(lane, types) || !_right.CanEmitVectorV2(lane, types))
                 return false;
             var cmp = NDExprTypeRules.ComparisonType(types[_left], types[_right]);
@@ -302,13 +329,15 @@ namespace NumSharp.Backends.Iteration
     public sealed partial class MinMaxNode
     {
         internal override bool CanEmitVectorV2(NPTypeCode lane, IReadOnlyDictionary<NDExpr, NPTypeCode> types)
-            => _left.CanEmitVectorV2(lane, types) && _right.CanEmitVectorV2(lane, types);
+            => lane != NPTypeCode.Half   // no f16 min/max vector body (Phase 5 = f16 arithmetic only)
+               && _left.CanEmitVectorV2(lane, types) && _right.CanEmitVectorV2(lane, types);
     }
 
     public sealed partial class WhereNode
     {
         internal override bool CanEmitVectorV2(NPTypeCode lane, IReadOnlyDictionary<NDExpr, NPTypeCode> types)
-            => _cond.CanEmitVectorV2(lane, types) && _a.CanEmitVectorV2(lane, types) && _b.CanEmitVectorV2(lane, types);
+            => lane != NPTypeCode.Half   // no f16 select vector body (Phase 5 = f16 arithmetic only)
+               && _cond.CanEmitVectorV2(lane, types) && _a.CanEmitVectorV2(lane, types) && _b.CanEmitVectorV2(lane, types);
     }
 
     public sealed partial class LogicalNode
@@ -317,7 +346,8 @@ namespace NumSharp.Backends.Iteration
         // truthiness lane mask). The plan gates the lane to a SIMD-capable dtype, so complex/decimal/
         // Half operands never reach the vector path (their lane is not SIMD-capable → whole tree scalar).
         internal override bool CanEmitVectorV2(NPTypeCode lane, IReadOnlyDictionary<NDExpr, NPTypeCode> types)
-            => _left.CanEmitVectorV2(lane, types) && _right.CanEmitVectorV2(lane, types);
+            => lane != NPTypeCode.Half   // no f16 logical vector body (Phase 5 = f16 arithmetic only)
+               && _left.CanEmitVectorV2(lane, types) && _right.CanEmitVectorV2(lane, types);
     }
 
     public sealed partial class CallNode

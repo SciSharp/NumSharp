@@ -88,8 +88,16 @@ namespace NumSharp.Tests.Backends.Iterators
             }
         }
 
-        private static readonly NPTypeCode[] FloatLanes = { NPTypeCode.Double, NPTypeCode.Single };
+        // Half joins the float lanes: its PURE ARITHMETIC trees vectorize (Vector256<ushort>
+        // widen-compute-narrow, Phase 5) and must match the scalar body; every other Half tree
+        // (comparison / where / min-max / transcendental / unary) stays scalar, so vec==scalar is
+        // then trivially the same scalar code — still a worthwhile pin that the plan gate is right.
+        private static readonly NPTypeCode[] FloatLanes = { NPTypeCode.Double, NPTypeCode.Single, NPTypeCode.Half };
         private static readonly NPTypeCode[] IntLanes = { NPTypeCode.Int64, NPTypeCode.Int32, NPTypeCode.Int16, NPTypeCode.SByte, NPTypeCode.Byte, NPTypeCode.UInt32 };
+
+        /// <summary>The lanes whose data comes from the adversarial FLOAT pool (NaN / ±inf / exponent-gap).</summary>
+        private static bool IsFloatLane(NPTypeCode lane)
+            => lane == NPTypeCode.Single || lane == NPTypeCode.Double || lane == NPTypeCode.Half;
 
         // ---- shapes of the tree ------------------------------------------------------------
 
@@ -147,7 +155,7 @@ namespace NumSharp.Tests.Backends.Iterators
 
         private static bool Applicable(string name, NPTypeCode lane)
         {
-            bool isFloat = lane == NPTypeCode.Single || lane == NPTypeCode.Double;
+            bool isFloat = IsFloatLane(lane);
             if (!isFloat && (name.Contains("0.5") || name.Contains("0.2") || name == "leaky" || name.Contains("(a-b)/(a+b)")))
                 return false;   // float literals / true_divide would type the tree off the integer lane (scalar anyway)
             if (!isFloat && (name.StartsWith("isnan") || name.StartsWith("isinf") || name.StartsWith("isfinite") || name.StartsWith("where(isnan")))
@@ -173,7 +181,7 @@ namespace NumSharp.Tests.Backends.Iterators
 
         private static (NDArray, NDArray, NDArray, NDArray, NDArray) Make(NPTypeCode lane, int n, Func<NDArray, NDArray> shape, Func<NDArray, NDArray> maskShape = null)
         {
-            bool isFloat = lane == NPTypeCode.Single || lane == NPTypeCode.Double;
+            bool isFloat = IsFloatLane(lane);
             NDArray a = shape(isFloat ? Floats(lane, n) : Ints(lane, n));
             NDArray b = shape(isFloat ? Floats(lane, n, 3) : Ints(lane, n, 3));
             NDArray c = shape(isFloat ? Floats(lane, n, 8) : Ints(lane, n, 8));
@@ -216,7 +224,7 @@ namespace NumSharp.Tests.Backends.Iterators
             // masks: (7,19) and a (7,1) column mask.
             RunAll("bcast", lane =>
             {
-                bool isFloat = lane == NPTypeCode.Single || lane == NPTypeCode.Double;
+                bool isFloat = IsFloatLane(lane);
                 NDArray a = (isFloat ? Floats(lane, 133) : Ints(lane, 133)).reshape(7, 19);
                 NDArray b = (isFloat ? Floats(lane, 7, 3) : Ints(lane, 7, 3)).reshape(7, 1);
                 NDArray c = (isFloat ? Floats(lane, 7, 8) : Ints(lane, 7, 8)).reshape(7, 1);
@@ -229,7 +237,7 @@ namespace NumSharp.Tests.Backends.Iterators
         {
             RunAll("scalar0d", lane =>
             {
-                bool isFloat = lane == NPTypeCode.Single || lane == NPTypeCode.Double;
+                bool isFloat = IsFloatLane(lane);
                 NDArray a = isFloat ? Floats(lane, N) : Ints(lane, N);
                 NDArray b = (isFloat ? Floats(lane, 1, 3) : Ints(lane, 1, 3)).reshape();
                 NDArray c = isFloat ? Floats(lane, N, 8) : Ints(lane, N, 8);
@@ -290,8 +298,15 @@ namespace NumSharp.Tests.Backends.Iterators
             Assert.IsFalse(Plan(NDExpr.Input(0) + NDExpr.Input(1), new[] { NPTypeCode.Int32, NPTypeCode.Double }, out _));
             // int true_divide types the node to f64 off the int32 lane -> scalar
             Assert.IsFalse(Plan(NDExpr.Input(0) / NDExpr.Input(1), new[] { NPTypeCode.Int32, NPTypeCode.Int32 }, out _));
-            // Half / Decimal / Complex lanes never vectorize
-            Assert.IsFalse(Plan(NDExpr.Input(0) + NDExpr.Input(0), new[] { NPTypeCode.Half }, out _));
+            // Half ARITHMETIC vectorizes (Phase 5, Vector256<ushort> widen-compute-narrow) on a 256-bit
+            // AVX2 host — but only arithmetic: a Half comparison / transcendental keeps its tree scalar.
+            if (DirectILKernelGenerator.FusedHalfArithAvailable)
+            {
+                Assert.IsTrue(Plan(NDExpr.Input(0) + NDExpr.Input(1), new[] { NPTypeCode.Half, NPTypeCode.Half }, out lane) && lane == NPTypeCode.Half);
+                Assert.IsFalse(Plan(NDExpr.Sqrt(NDExpr.Input(0)), new[] { NPTypeCode.Half }, out _));
+                Assert.IsFalse(Plan(NDExpr.Greater(NDExpr.Input(0), NDExpr.Input(1)), new[] { NPTypeCode.Half, NPTypeCode.Half }, out _));
+            }
+            // Decimal / Complex lanes never vectorize.
             Assert.IsFalse(Plan(NDExpr.Input(0) + NDExpr.Input(0), new[] { NPTypeCode.Complex }, out _));
             // a Call node keeps its tree scalar
             Assert.IsFalse(Plan(NDExpr.Call<double, double>(System.Math.Sqrt, NDExpr.Input(0)) + NDExpr.Input(0), new[] { NPTypeCode.Double }, out _));

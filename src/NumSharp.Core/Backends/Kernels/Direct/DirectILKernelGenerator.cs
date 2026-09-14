@@ -2099,6 +2099,19 @@ namespace NumSharp.Backends.Kernels
                 return;
             }
 
+            // Add / Subtract / Multiply / Divide: NumPy's HALF loops compute in FLOAT32
+            // (astype 'e'->'f'), NOT double. The double bridge below double-rounds where NumPy
+            // single-rounds (exponent-gap sums — a real 1-ULP divergence) and BCL-quiets sNaN, so
+            // route them through HalfArithScalarStruct (== HalfArithBits, the float32 + RTNE-narrow +
+            // operand-order NaN pin the engine's own Half kernel and np.evaluate's vector path use).
+            // Stack in: [Half a, Half b] -> push op -> [Half a, Half b, op] -> [Half result].
+            if (op == BinaryOp.Add || op == BinaryOp.Subtract || op == BinaryOp.Multiply || op == BinaryOp.Divide)
+            {
+                il.Emit(OpCodes.Ldc_I4, (int)op);
+                il.EmitCall(OpCodes.Call, GetHelper(nameof(HalfArithScalarStruct)), null);
+                return;
+            }
+
             var halfToDouble = CachedMethods.HalfToDouble;
 
             // For all other operations, convert to double, perform operation, convert back
@@ -2356,8 +2369,15 @@ namespace NumSharp.Backends.Kernels
         /// type. Only the vector load/store/create helpers consult this; scalar loads keep
         /// <see cref="GetClrType"/>.
         /// </summary>
+        // Boolean rides byte lanes; Half rides its raw 16-bit (ushort) lanes — Vector{N}&lt;Half&gt;
+        // throws (no BCL f16 vector arithmetic), so every SIMD Half kernel in the codebase works on
+        // the bit patterns and widens to float32 on demand. No caller passes Half here except the
+        // np.evaluate fused Half-arithmetic path (CanUseSimd(Half) is false, so the engine's own
+        // per-op SIMD gates never reach Half), which is exactly the path that needs the ushort lane.
         internal static Type GetSimdLaneType(NPTypeCode type)
-            => type == NPTypeCode.Boolean ? typeof(byte) : GetClrType(type);
+            => type == NPTypeCode.Boolean ? typeof(byte)
+             : type == NPTypeCode.Half ? typeof(ushort)
+             : GetClrType(type);
 
         /// <summary>
         /// Emit Vector.Load for NPTypeCode (adapts to V128/V256/V512).

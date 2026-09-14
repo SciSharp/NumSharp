@@ -53,6 +53,12 @@ namespace NumSharp.Backends.Iteration
         /// </summary>
         internal const int ReduceParamOffset = SlotBytes;
 
+        /// <summary><c>BitConverter.HalfToUInt16Bits</c> — reinterprets a f16 parameter's <see cref="Half"/>
+        /// struct to its raw bits for the Vector256&lt;ushort&gt; lane a Half tree broadcasts (see <see cref="EmitPrologue"/>).</summary>
+        private static readonly System.Reflection.MethodInfo s_halfToUInt16Bits =
+            typeof(BitConverter).GetMethod(nameof(BitConverter.HalfToUInt16Bits), new[] { typeof(Half) })
+            ?? throw new MissingMethodException(typeof(BitConverter).FullName, "HalfToUInt16Bits(Half)");
+
         /// <summary>Input index → iterator operand slot, or -1 for a parameter (null = identity, no parameters).</summary>
         public readonly int[]? Slots;
 
@@ -161,7 +167,16 @@ namespace NumSharp.Backends.Iteration
                 // parameter broadcasts its value; a bool parameter in W-mode is a constant lane mask
                 // (all-ones / zero), the same representation the shell gives a broadcast bool operand.
                 vectorLocals[j] = il.DeclareLocal(VectorMethodCache.V(DirectILKernelGenerator.VectorBits, DirectILKernelGenerator.GetSimdLaneType(lane)));
-                if (lane == NPTypeCode.Boolean || t == lane)
+                if (lane == NPTypeCode.Half)
+                {
+                    // A Half tree's lane is Vector256<ushort> of raw f16 bits; the scalar local is a
+                    // Half STRUCT, so reinterpret it to its ushort pattern before broadcasting (the
+                    // plan only admits Half operands into a Half tree, so t == Half here).
+                    il.Emit(OpCodes.Ldloc, scalarLocals[j]);
+                    il.EmitCall(OpCodes.Call, s_halfToUInt16Bits, null);
+                    DirectILKernelGenerator.EmitVectorCreate(il, NPTypeCode.Half);
+                }
+                else if (lane == NPTypeCode.Boolean || t == lane)
                 {
                     il.Emit(OpCodes.Ldloc, scalarLocals[j]);
                     DirectILKernelGenerator.EmitVectorCreate(il, lane);

@@ -265,5 +265,70 @@ namespace NumSharp.Backends.Kernels
             };
             return SingleToHalfBits(r);
         }
+
+        /// <summary>
+        /// <see cref="Half"/>-struct wrapper over <see cref="HalfArithBits"/> for the emitted scalar
+        /// path (the np.evaluate fused kernel and any other <c>EmitScalarOperation(op, Half)</c> caller):
+        /// reinterprets each operand to its raw f16 bits, runs the float32-compute + RTNE-narrow +
+        /// NaN-priority pipeline, and reinterprets the result back. Add/Subtract/Multiply/Divide ONLY —
+        /// the caller (<c>EmitHalfOperation</c>) keeps power/atan2/mod/floordivide/fmod on their own paths.
+        /// <para>
+        /// This is the float32 model NumPy's HALF loops run (<c>astype 'e'->'f'</c>); the older emitted
+        /// path widened to <b>double</b>, which double-rounds where NumPy single-rounds (exponent-gap
+        /// sums — a real 1-ULP divergence class) and BCL-quiets sNaN, so routing through this restores
+        /// bit-for-bit NumPy parity AND makes the emitted scalar Half arithmetic identical to
+        /// <see cref="HalfArithVec256"/>, which the fused vector==scalar contract requires.
+        /// </para>
+        /// </summary>
+        /// <param name="a">The left operand.</param>
+        /// <param name="b">The right operand.</param>
+        /// <param name="op">Add, Subtract, Multiply or Divide (any other op is a caller bug).</param>
+        /// <returns>The f16 result, float32-computed and RTNE-narrowed, NaN-priority-exact.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static Half HalfArithScalarStruct(Half a, Half b, BinaryOp op)
+            => BitConverter.UInt16BitsToHalf(
+                HalfArithBits(BitConverter.HalfToUInt16Bits(a), BitConverter.HalfToUInt16Bits(b), op));
+
+        /// <summary>
+        /// Vector lane for the np.evaluate fused kernel: 16 f16 patterns (as a <see cref="Vector256{T}"/>
+        /// of <see cref="ushort"/>) → 16 f16 result patterns, running the SAME widen-compute-narrow +
+        /// explicit NaN-priority fixup as <see cref="HalfArithFull"/> on each 8-lane half. Bit-identical
+        /// to <see cref="HalfArithScalarStruct"/> (hence to the scalar body the evaluate.jsonl oracle
+        /// holds to NumPy) by construction — both compute in float32 with the same proven Giesen
+        /// primitives and encode the same operand-order NaN priority.
+        /// <para>
+        /// The fused shell carries a Half tree's lane as raw <c>Vector256&lt;ushort&gt;</c> (f16 bits),
+        /// so a Half arithmetic node consumes two such vectors and produces one — the round-to-f16 lives
+        /// HERE, per node, exactly as NumPy's <c>npy_float_to_half(npy_half_to_float(a) OP …)</c> rounds
+        /// after every op. Add/Subtract/Multiply/Divide only.
+        /// </para>
+        /// </summary>
+        /// <param name="ha">The left operand's 16 f16 bit patterns.</param>
+        /// <param name="hb">The right operand's 16 f16 bit patterns.</param>
+        /// <param name="op">Add, Subtract, Multiply or Divide.</param>
+        /// <returns>The 16 f16 result bit patterns.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static Vector256<ushort> HalfArithVec256(Vector256<ushort> ha, Vector256<ushort> hb, BinaryOp op)
+        {
+            // in2First mirrors the wheel's probed commutative-vs-natural NaN order (HalfArithFull).
+            bool in2First = op == BinaryOp.Add || op == BinaryOp.Multiply;
+            var m7fff = Vector128.Create((short)0x7FFF);
+            var vinf = Vector128.Create((short)0x7C00);
+
+            // Lower / upper 8 lanes each go through the proven 8-lane pipeline; recombine the two
+            // 128-bit halves. Splitting is free (GetLower/GetUpper are register moves) and lets the
+            // whole 16-lane op reuse HalfArithFull's exact primitives rather than duplicating them.
+            var haLo = ha.GetLower(); var hbLo = hb.GetLower();
+            var resLo = HalfNarrow8V(HalfArithOp(HalfWiden8V(haLo), HalfWiden8V(hbLo), op));
+            resLo = HalfArithNaNFix(resLo, haLo, hbLo,
+                HalfNaNMask8(haLo, m7fff, vinf), HalfNaNMask8(hbLo, m7fff, vinf), in2First);
+
+            var haHi = ha.GetUpper(); var hbHi = hb.GetUpper();
+            var resHi = HalfNarrow8V(HalfArithOp(HalfWiden8V(haHi), HalfWiden8V(hbHi), op));
+            resHi = HalfArithNaNFix(resHi, haHi, hbHi,
+                HalfNaNMask8(haHi, m7fff, vinf), HalfNaNMask8(hbHi, m7fff, vinf), in2First);
+
+            return Vector256.Create(resLo, resHi);
+        }
     }
 }

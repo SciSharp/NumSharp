@@ -1,5 +1,6 @@
 using System;
 using NumSharp.Backends.Iteration;
+using NumSharp.Backends.Kernels;
 
 namespace NumSharp.Tests.Backends.Iterators
 {
@@ -2666,6 +2667,144 @@ namespace NumSharp.Tests.Backends.Iterators
 
             // masked-in = a+b (22, 44); masked-off keep prior (-1, -3).
             Assert.IsTrue(np.array_equal(dst, np.array(new double[] { -1, 22, -3, 44 })));
+        }
+
+        // =====================================================================
+        // Phase 5.1 — float16 arithmetic SIMD (widen-compute-narrow), AND the
+        // fix it forced: the fused SCALAR Half arithmetic now computes in FLOAT32
+        // (astype 'e'->'f', NumPy's HALF loop) instead of the divergent double bridge.
+        // =====================================================================
+
+        /// <summary>Raw f16 bit patterns of a (contiguous) Half array — bit compare, so NaN payloads count.</summary>
+        private static ushort[] HalfBits(NDArray a)
+        {
+            var c = np.ascontiguousarray(a.astype(NPTypeCode.Half));
+            var r = new ushort[c.size];
+            for (int i = 0; i < c.size; i++) r[i] = BitConverter.HalfToUInt16Bits(c.GetHalf(i));
+            return r;
+        }
+
+        /// <summary>
+        /// The adversarial f16 pool: exponent-gap sums (where a double bridge double-rounds but NumPy's
+        /// float32 loop single-rounds), the f16 range boundary, subnormals, ±0, ±inf and NaN.
+        /// </summary>
+        private static NDArray HalfPool(int shift = 0)
+        {
+            var p = new Half[]
+            {
+                (Half)0.1f, (Half)0.2f, (Half)0.3f, (Half)1.5f, (Half)2048f, (Half)0.0009765625f,
+                (Half)(-0.0f), (Half)0.0f, (Half)1024f, (Half)0.001f, (Half)65504f, (Half)0.00006103515625f,
+                Half.PositiveInfinity, Half.NegativeInfinity, Half.NaN, (Half)(-3.14159f),
+                (Half)7.0f, (Half)0.03125f, (Half)999f, (Half)(-999f), (Half)0.5f, (Half)0.25f,
+                (Half)12345.0f, (Half)(-0.7f), (Half)33.3f, (Half)0.0001f, (Half)60000f, (Half)2.0f,
+                (Half)4.0f, (Half)8.0f, (Half)100.0f, (Half)0.015625f, (Half)(-60000f), (Half)(-0.03125f), (Half)5.0f,
+            };
+            if (shift != 0)
+            {
+                var q = new Half[p.Length];
+                for (int i = 0; i < p.Length; i++) q[i] = p[(i + shift) % p.Length];
+                p = q;
+            }
+            return np.array(p);
+        }
+
+        /// <summary>
+        /// The fused float16 arithmetic tree is BIT-FOR-BIT the engine's own NumPy-gated Half kernel
+        /// (np.multiply / np.add, which compute in float32 with the operand-order NaN pin) — proving
+        /// both the double→float32 fix on the fused SCALAR path AND that the SIMD widen-compute-narrow
+        /// vector path reproduces it. NaN payloads and exponent-gap sums are the discriminating cases.
+        /// </summary>
+        [TestMethod]
+        public void P51_HalfArithmetic_FusedEqualsEngineKernel()
+        {
+            var a = HalfPool();
+            var b = HalfPool(shift: 13);
+            var c = HalfPool(shift: 7);
+
+            // a*b+c
+            var fused = np.evaluate((NDExpr)a * b + c);
+            var engine = np.add(np.multiply(a, b), c);
+            CollectionAssert.AreEqual(HalfBits(engine), HalfBits(fused), "a*b+c: fused f16 must equal the engine's float32 Half kernel");
+
+            // (a-b)/(a+b)
+            fused = np.evaluate((NDExpr.Arr(a) - b) / (NDExpr.Arr(a) + b));
+            engine = (a - b) / (a + b);
+            CollectionAssert.AreEqual(HalfBits(engine), HalfBits(fused), "(a-b)/(a+b): fused f16 must equal the engine kernel");
+        }
+
+        /// <summary>
+        /// The fused SCALAR Half path (ForceScalar) alone is bit-exact with the engine — the point of
+        /// the double→float32 correctness fix (the old double bridge diverged on exponent-gap sums).
+        /// </summary>
+        [TestMethod]
+        public void P51_HalfArithmetic_ScalarPath_Float32Exact()
+        {
+            var a = HalfPool();
+            var b = HalfPool(shift: 13);
+
+            foreach (var (name, buildFused, engine) in new (string, Func<NDArray>, NDArray)[]
+            {
+                ("a+b", () => np.evaluate((NDExpr)a + b), np.add(a, b)),
+                ("a-b", () => np.evaluate((NDExpr)a - b), a - b),
+                ("a*b", () => np.evaluate((NDExpr)a * b), np.multiply(a, b)),
+                ("a/b", () => np.evaluate((NDExpr)a / b), a / b),
+            })
+            {
+                NDArray scalar;
+                NDExpr.ForceScalar = true;
+                try { scalar = buildFused(); }
+                finally { NDExpr.ForceScalar = false; }
+                CollectionAssert.AreEqual(HalfBits(engine), HalfBits(scalar), $"{name}: fused SCALAR f16 must be float32-exact (== engine)");
+            }
+        }
+
+        /// <summary>
+        /// The vector path reproduces the scalar body byte for byte across a strided (non-contiguous)
+        /// layout — the vector==scalar contract the metamorphic sweep pins broadly, pinned here for f16
+        /// specifically so a Half-kernel regression is visible in this file too.
+        /// </summary>
+        [TestMethod]
+        public void P51_HalfArithmetic_VectorEqualsScalar_Strided()
+        {
+            var a = HalfPool()["::2"];
+            var b = HalfPool(shift: 5)["::2"];
+            var c = HalfPool(shift: 9)["::2"];
+
+            var vec = np.evaluate((NDExpr)a * b + c);
+            NDArray sca;
+            NDExpr.ForceScalar = true;
+            try { sca = np.evaluate((NDExpr)a * b + c); }
+            finally { NDExpr.ForceScalar = false; }
+            CollectionAssert.AreEqual(HalfBits(sca), HalfBits(vec));
+        }
+
+        /// <summary>
+        /// The plan gate: only PURE f16 arithmetic vectorizes (256-bit AVX2 host); a comparison, where,
+        /// min/max, or transcendental in a Half tree keeps the WHOLE tree scalar — so a tree mixing
+        /// arithmetic with a non-arithmetic node computes IDENTICALLY with and without <c>ForceScalar</c>
+        /// (it was never on the vector path), which is exactly the safety property that must hold.
+        /// </summary>
+        [TestMethod]
+        public void P51_HalfArithmetic_NonArithmeticNodeKeepsTreeScalar()
+        {
+            var a = HalfPool();
+            var b = HalfPool(shift: 11);
+
+            foreach (var (name, build) in new (string, Func<NDExpr>)[]
+            {
+                ("max(a,b)", () => NDExpr.Max(a, b)),
+                ("sqrt(a)", () => NDExpr.Sqrt(a)),
+                ("a*b+sqrt(a)", () => (NDExpr)a * b + NDExpr.Sqrt(a)),   // arithmetic + transcendental → whole tree scalar
+                ("where(a>b,a,b)", () => NDExpr.Where(NDExpr.Greater(a, b), a, b)),
+            })
+            {
+                var def = np.evaluate(build());
+                NDArray forced;
+                NDExpr.ForceScalar = true;
+                try { forced = np.evaluate(build()); }
+                finally { NDExpr.ForceScalar = false; }
+                CollectionAssert.AreEqual(HalfBits(forced), HalfBits(def), $"{name}: a non-arithmetic Half node must keep the tree scalar (default == ForceScalar)");
+            }
         }
     }
 }
