@@ -1629,5 +1629,67 @@ namespace NumSharp.Tests.Ma
             Assert.AreEqual(21L, Convert.ToInt64(np.ma.getdata(ch).GetAtIndex(1)));
             Assert.AreEqual(23L, Convert.ToInt64(np.ma.getdata(ch).GetAtIndex(3)));
         }
+
+        // ── Pass-13 audit fixes (found by a 6055-case behavioral differential fuzz). ──
+
+        /// <summary>
+        ///     REGRESSION FIX: <c>ma.left_shift</c>/<c>right_shift</c> keep the value operand's dtype for a bare
+        ///     scalar shift-count (NumPy's shifts are plain functions, NOT <c>_MaskedBinaryOperation</c>, so —
+        ///     unlike add/multiply/bitwise — the scalar is NOT widened to int64). Pass-12's blanket scalar-strong
+        ///     promotion had wrongly widened them; verified bit-exact vs NumPy 2.4.2.
+        /// </summary>
+        [TestMethod]
+        public void MaShift_ScalarCount_KeepsArrayDtype()
+        {
+            foreach (var (dt, name) in new[] { (np.int8, "int8"), (np.int16, "int16"), (np.int32, "int32"), (np.uint64, "uint64") })
+            {
+                var a = np.ma.array(np.array(new[] { 3, 5, 6 }).astype(dt), np.array(new[] { false, true, false }));
+                np.ma.left_shift(a, 1).dtype.Should().Be(dt);  // stays the array dtype, NOT int64
+                np.ma.right_shift(a, 1).dtype.Should().Be(dt);
+                // unmasked values (positions 0,2): 3<<1=6, 6<<1=12 (slot 1 is masked).
+                Assert.IsTrue(np.ma.compressed(np.ma.left_shift(a, 1)).astype(np.int64).ToArray<long>().SequenceEqual(new long[] { 6, 12 }));
+            }
+            // contrast: a non-shift binary op DOES widen a scalar to int64 (the pass-12 behavior, unchanged).
+            var i16 = np.ma.array(np.array(new[] { 3, 5, 6 }).astype(np.int16), np.array(new[] { false, true, false }));
+            np.ma.add(i16, 1).dtype.Should().Be(np.int64);
+        }
+
+        /// <summary>
+        ///     CRASH FIX: <c>arctan2</c> on complex inputs must throw cleanly, not corrupt memory. arctan2 is a
+        ///     float-only ufunc (NumPy raises <c>TypeError</c> for complex); NumSharp's kernel previously lacked
+        ///     the complex-input guard and fatally crashed the CLR (<c>ExecutionEngineException</c> in
+        ///     <c>ExecuteATan2Kernel</c> — found by the differential fuzz). Both the plain <c>np.arctan2</c> and the
+        ///     masked <c>np.ma.arctan2</c> paths now raise the NumPy-verbatim message.
+        /// </summary>
+        [TestMethod]
+        public void Arctan2_Complex_ThrowsCleanly_NoCrash()
+        {
+            var ca = np.array(new[] { new System.Numerics.Complex(1, -1), new System.Numerics.Complex(-2, 3) });
+            var cb = np.array(new[] { new System.Numerics.Complex(2, 0), new System.Numerics.Complex(3, 1) });
+            // Plain np path (the core fix).
+            Assert.ThrowsException<IncorrectTypeException>(() => np.arctan2(ca, cb));
+            // Masked path (delegates to np.arctan2).
+            var ma = np.ma.array(ca);
+            var mb = np.ma.array(cb);
+            Assert.ThrowsException<IncorrectTypeException>(() => np.ma.arctan2(ma, mb));
+        }
+
+        /// <summary>
+        ///     DTYPE FIX: masked <c>median</c> along an axis of a 1-D narrow-float array preserves the input float
+        ///     dtype (float16/float32), matching NumPy. The 1-D result is 0-D, and NumSharp's 0-D-is-weak rule had
+        ///     widened the <c>/2</c> to float64 (the 2-D path kept the dtype — an internal asymmetry). Dividing a
+        ///     float by 2 is exact, so the restore is bit-exact.
+        /// </summary>
+        [TestMethod]
+        public void MaMedian_1D_NarrowFloat_PreservesDtype()
+        {
+            foreach (var dt in new[] { np.float16, np.float32, np.float64 })
+            {
+                var a = np.ma.array(np.array(new[] { 5f, 6f, 7f, 8f }).astype(dt), np.array(new[] { false, false, true, false }));
+                var med = np.ma.median(a, axis: -1);            // unmasked {5,6,8} → median 6
+                med.dtype.Should().Be(dt);                       // preserves float16/float32/float64
+                Assert.AreEqual(6.0, Convert.ToDouble(np.ma.getdata(med).astype(np.float64).GetAtIndex(0)));
+            }
+        }
     }
 }
