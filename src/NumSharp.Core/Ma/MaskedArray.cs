@@ -1929,13 +1929,17 @@ namespace NumSharp
         /// <param name="a">Left operand.</param>
         /// <param name="b">Right operand.</param>
         /// <returns>The masked result, or the <see cref="masked"/> constant for a fully-masked 0-D result.</returns>
-        private MaskedArray Binary(Func<NDArray, NDArray, NDArray> f, object a, object b)
+        private MaskedArray Binary(Func<NDArray, NDArray, NDArray> f, object a, object b, bool promoteScalar = true)
         {
             var da = AsData(a);
             var db = AsData(b);
             // numpy.ma treats a bare scalar as a STRONG default-width array (int→int64, float→float64), so a
             // binary op with a scalar operand widens like NumPy's ma rather than NumSharp's weak-scalar np path.
-            PromoteMaScalar(a, b, ref da, ref db);
+            // EXCEPTION: left_shift/right_shift are plain functions in numpy.ma (NOT _MaskedBinaryOperation), so
+            // they do NOT wrap the shift-count scalar as strong — they keep the array's dtype
+            // (ma.left_shift(int16, 1) → int16, not int64). Those callers pass promoteScalar:false.
+            if (promoteScalar)
+                PromoteMaScalar(a, b, ref da, ref db);
             var result = f(da, db);
             // OR the two operand masks (nomask fast path: both absent ⇒ no result mask at all).
             var m = Or((a as MaskedArray)?._mask, (b as MaskedArray)?._mask);
@@ -2411,15 +2415,20 @@ namespace NumSharp
         /// <returns>A masked array of a^b.</returns>
         public MaskedArray bitwise_xor(object a, object b) => Binary((x, y) => np.bitwise_xor(x, y), a, b);
 
-        /// <summary>Bit shift left (<c>a &lt;&lt; b</c>); masked where either operand was (NumPy's <c>left_shift</c>).</summary>
+        /// <summary>Bit shift left (<c>a &lt;&lt; b</c>); masked where either operand was (NumPy's <c>left_shift</c>).
+        /// Unlike the arithmetic/bitwise ma ops, NumPy's <c>left_shift</c> is a plain function (not a
+        /// <c>_MaskedBinaryOperation</c>), so a bare shift-count scalar is NOT widened to int64 — the result keeps
+        /// the value operand's dtype (<c>ma.left_shift(int16, 1)</c> → int16). Hence <c>promoteScalar:false</c>.</summary>
         /// <param name="a">Value to shift.</param><param name="b">Shift amount.</param>
-        /// <returns>A masked array of a&lt;&lt;b.</returns>
-        public MaskedArray left_shift(object a, object b) => Binary((x, y) => np.left_shift(x, y), a, b);
+        /// <returns>A masked array of a&lt;&lt;b in <paramref name="a"/>'s dtype.</returns>
+        public MaskedArray left_shift(object a, object b) => Binary((x, y) => np.left_shift(x, y), a, b, promoteScalar: false);
 
-        /// <summary>Bit shift right (<c>a &gt;&gt; b</c>); masked where either operand was (NumPy's <c>right_shift</c>).</summary>
+        /// <summary>Bit shift right (<c>a &gt;&gt; b</c>); masked where either operand was (NumPy's <c>right_shift</c>).
+        /// Keeps the value operand's dtype for a bare scalar shift-count (see <see cref="left_shift"/>);
+        /// <c>promoteScalar:false</c>.</summary>
         /// <param name="a">Value to shift.</param><param name="b">Shift amount.</param>
-        /// <returns>A masked array of a&gt;&gt;b.</returns>
-        public MaskedArray right_shift(object a, object b) => Binary((x, y) => np.right_shift(x, y), a, b);
+        /// <returns>A masked array of a&gt;&gt;b in <paramref name="a"/>'s dtype.</returns>
+        public MaskedArray right_shift(object a, object b) => Binary((x, y) => np.right_shift(x, y), a, b, promoteScalar: false);
 
         // ─────────────────────────────────────────────────────────────────────────────
         //  Domained binary ufuncs — division family (unsafe divides are masked)
@@ -3805,6 +3814,15 @@ namespace NumSharp
             {
                 s = mean(lowHigh, ax);
             }
+
+            // A 1-D input reduces to a 0-D result, and NumSharp treats a 0-D operand as WEAK — so the
+            // `true_divide(_, 2.0)` above widens a narrow float (float16/float32) to float64, while a 2-D input
+            // (whose result is a 1-D STRONG array) keeps its dtype. NumPy's median PRESERVES the input float
+            // dtype in every path; dividing a float by 2 is exact (exponent decrement, no rounding), so this cast
+            // back is byte-exact, and it is a no-op whenever the dtype already matches (integers stay float64 via
+            // the `mean` branch, guarded by `inexact`).
+            if (inexact && s._data.typecode != data.typecode)
+                s = new MaskedArray(s._data.astype(data.dtype), s._mask);
 
             if (keepdims)
                 s = new MaskedArray(np.expand_dims(s._data, ax), s._mask is null ? null : np.expand_dims(s._mask, ax));
