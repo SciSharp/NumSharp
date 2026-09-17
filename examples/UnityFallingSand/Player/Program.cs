@@ -33,9 +33,13 @@ namespace NumSharp.Examples.FallingSand.Player
         // Material → RGB, from the shared Cell colour table so every renderer matches Unity.
         private static readonly (byte r, byte g, byte b)[] Lut = BuildLut();
 
-        // Glyphs for --ascii (Empty Wall Sand Water Oil Smoke).
-        private static readonly char[] Glyph = { ' ', '#', '.', '~', 'o', '"' };
+        // Glyphs for --ascii (Empty Wall Sand Water Oil Smoke Fire Lava).
+        private static readonly char[] Glyph = { ' ', '#', '.', '~', 'o', '"', '*', '@' };
         private static bool UseAscii;
+
+        // The template to start/showcase, chosen by --template; -1 means "use the built-in timeline showcase"
+        // (and, in the interactive mode, a Waterfall starting scene).
+        private static int Template = -1;
 
         // Terminal preview budget (characters). Half-blocks pack two grid rows per text row.
         private const int MaxCols = 180;
@@ -54,6 +58,16 @@ namespace NumSharp.Examples.FallingSand.Player
             EnableAnsi();
             int argW = ArgInt(args, "--width", -1);
             int argH = ArgInt(args, "--height", -1);
+
+            // --list-templates just prints the presaved-scene menu and exits.
+            if (args.Contains("--list-templates"))
+            {
+                Console.WriteLine("Templates (use --template <n>):");
+                for (int i = 0; i < FallingSandWorld.TemplateCount; i++)
+                    Console.WriteLine($"  {i}  {FallingSandWorld.TemplateNames[i]}");
+                return;
+            }
+            Template = ArgInt(args, "--template", -1);   // starting/showcase scene for the modes below
 
             if (args.Contains("--bench"))
             {
@@ -189,6 +203,26 @@ namespace NumSharp.Examples.FallingSand.Player
             return $"{One(Cell.Smoke)}  {One(Cell.Oil)}  {One(Cell.Water)}  {One(Cell.Sand)}";
         }
 
+        /// <summary>
+        /// Loads the chosen <see cref="Template"/> into <paramref name="world"/> and plays it forward,
+        /// snapshotting at "loaded", "flowing" and "settled" milestones — the template counterpart to
+        /// <see cref="RunTimeline"/>, used by the PNG and terminal showcases when <c>--template</c> is given.
+        /// </summary>
+        /// <param name="world">The world to build the template into and step.</param>
+        /// <param name="onSnap">Called with a label at each milestone worth capturing.</param>
+        private static void PlayTemplate(FallingSandWorld world, Action<string> onSnap)
+        {
+            world.LoadTemplate(Template);
+            string name = FallingSandWorld.TemplateNames[Math.Max(0, Math.Min(FallingSandWorld.TemplateCount - 1, Template))];
+            void Adv(int frames) { for (int i = 0; i < frames; i++) world.Step(2); }
+
+            onSnap($"{name} — loaded");
+            Adv(Math.Max(60, H));
+            onSnap($"{name} — flowing");
+            Adv(Math.Max(120, H));
+            onSnap($"{name} — settled");
+        }
+
         // ---------------- terminal rendering ----------------
 
         /// <summary>The terminal showcase: plays the timeline, printing a labelled (downscaled) frame at each milestone.</summary>
@@ -196,13 +230,15 @@ namespace NumSharp.Examples.FallingSand.Player
         {
             var world = new FallingSandWorld(H, W, seed: 1, withBoundary: true);
             Console.WriteLine($"NumSharp Falling-Sand — self-driving demo at {W}x{H} (preview downscaled to fit; run with --play to control it, or --png for a full-resolution image)\n");
-            RunTimeline(world, label =>
+            Action<string> draw = label =>
             {
                 Console.WriteLine($"== {label} ==");
                 var (buf, bw, bh, _) = Preview(world.Grid.Snapshot());
                 Console.Write(UseAscii ? RenderAsciiBuf(buf, bw, bh) : RenderColorBuf(buf, bw, bh, -1, -1));
                 Console.WriteLine(Reset);
-            });
+            };
+            // --template plays one presaved scene; otherwise the built-in pour/smoke/settle showcase.
+            if (Template >= 0) PlayTemplate(world, draw); else RunTimeline(world, draw);
             Console.WriteLine("Layers by mean height (smaller = higher):  " + HeightReport(world));
         }
 
@@ -237,13 +273,15 @@ namespace NumSharp.Examples.FallingSand.Player
         private static int ScaleFor() =>
             Math.Max(1, Math.Max((W + MaxCols - 1) / MaxCols, (H + MaxTextRows * 2 - 1) / (MaxTextRows * 2)));
 
-        /// <summary>Rendering priority for downsampling: prefer solids/liquids over gas over empty so features pop in a preview.</summary>
+        /// <summary>Rendering priority for downsampling: prefer solids/liquids/lava over gas over empty so features pop in a preview.</summary>
         private static int Priority(int id) => id switch
         {
-            Cell.Wall => 5,
-            Cell.Sand => 4,
-            Cell.Water => 3,
-            Cell.Oil => 2,
+            Cell.Wall => 7,
+            Cell.Lava => 6,
+            Cell.Sand => 5,
+            Cell.Water => 4,
+            Cell.Oil => 3,
+            Cell.Fire => 2,
             Cell.Smoke => 1,
             _ => 0,
         };
@@ -305,12 +343,14 @@ namespace NumSharp.Examples.FallingSand.Player
             var world = new FallingSandWorld(H, W, seed: 1, withBoundary: true);
             Console.WriteLine($"Rendering the falling-sand sim at {W}x{H} (×{scale} → {W * scale}x{H * scale} px)…");
             int idx = 0;
-            RunTimeline(world, label =>
+            Action<string> writeFrame = label =>
             {
                 string p = FrameName(path, idx++);
                 WritePng(p, ToPixels(world.Grid.Snapshot(), scale), W * scale, H * scale);
                 Console.WriteLine($"  wrote {p}  —  {label}");
-            });
+            };
+            // --template renders one presaved scene evolving; otherwise the built-in pour/smoke/settle showcase.
+            if (Template >= 0) PlayTemplate(world, writeFrame); else RunTimeline(world, writeFrame);
             Console.WriteLine("Layers by mean height (smaller = higher):  " + HeightReport(world));
         }
 
@@ -425,6 +465,7 @@ namespace NumSharp.Examples.FallingSand.Player
         private static void RunInteractive()
         {
             var world = new FallingSandWorld(H, W, seed: 1, withBoundary: true);
+            world.LoadTemplate(Template >= 0 ? Template : 0);   // open on a scene (default Waterfall) — Wipe (X) for a blank canvas
             world.BrushMaterial = Cell.Sand;
             int brush = Math.Max(1, W / 60); world.BrushRadius = brush;
             int curR = H / 2, curC = W / 2;
@@ -472,8 +513,17 @@ namespace NumSharp.Examples.FallingSand.Player
                 case ConsoleKey.D2: world.BrushMaterial = Cell.Water; break;
                 case ConsoleKey.D3: world.BrushMaterial = Cell.Oil; break;
                 case ConsoleKey.D4: world.BrushMaterial = Cell.Smoke; break;
-                case ConsoleKey.D5: world.BrushMaterial = Cell.Wall; break;
-                case ConsoleKey.D6: world.BrushMaterial = Cell.Empty; break;
+                case ConsoleKey.D5: world.BrushMaterial = Cell.Fire; break;
+                case ConsoleKey.D6: world.BrushMaterial = Cell.Lava; break;
+                case ConsoleKey.D7: world.BrushMaterial = Cell.Wall; break;
+                case ConsoleKey.D8: world.BrushMaterial = Cell.Empty; break;
+                case ConsoleKey.B: world.BrushShape = world.BrushShape == BrushShape.Disk ? BrushShape.Square : BrushShape.Disk; break;
+                case ConsoleKey.F1: world.LoadTemplate(0); break;
+                case ConsoleKey.F2: world.LoadTemplate(1); break;
+                case ConsoleKey.F3: world.LoadTemplate(2); break;
+                case ConsoleKey.F4: world.LoadTemplate(3); break;
+                case ConsoleKey.F5: world.LoadTemplate(4); break;
+                case ConsoleKey.F6: world.LoadTemplate(5); break;
                 case ConsoleKey.E: world.AddEmitter(curR, curC, world.BrushMaterial); break;
                 case ConsoleKey.F: world.ClearEmitters(); break;
                 case ConsoleKey.P: paused = !paused; break;
@@ -491,8 +541,8 @@ namespace NumSharp.Examples.FallingSand.Player
         {
             string state = paused ? " [PAUSED]" : (pen ? " [PEN DOWN]" : "");
             return Reset +
-                $"{W}x{H}  material:{Cell.Name[world.BrushMaterial]}  brush:{brush}  substeps:{subSteps}  faucets:{world.EmitterCount}{state}\n" +
-                "WASD move · Space pen · 1-6 material · E faucet · F clear-faucets · [ ] brush · P pause · C clear · X wipe · Q quit   ";
+                $"{W}x{H}  material:{Cell.Name[world.BrushMaterial]}  brush:{brush}/{world.BrushShape}  substeps:{subSteps}  faucets:{world.EmitterCount}{state}\n" +
+                "WASD move · Space pen · 1-8 material · B shape · E faucet · F clear-faucets · [ ] brush · F1-F6 template · P pause · C clear · X wipe · Q quit   ";
         }
 
         // ---------------- Windows ANSI enablement ----------------

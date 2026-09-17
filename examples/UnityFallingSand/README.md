@@ -23,10 +23,13 @@ Because the physics is Unity-independent NumSharp, there's a standalone terminal
 
 ```bash
 cd Player
-dotnet run -c Release -- --png out.png # render the sim at NATIVE 1000×500 to real PNG images (the high-pixel output)
-dotnet run -c Release -- --play        # interactive: WASD/arrows move · Space pen · 1-6 material · E faucet · [ ] brush · Q quit
-dotnet run -c Release -- --demo        # self-driving terminal showcase, 24-bit colour
-dotnet run -c Release -- --ascii       # self-driving terminal showcase, plain text (for terminals without ANSI colour)
+dotnet run -c Release -- --png out.png            # render the sim at NATIVE 1000×500 to real PNG images (the high-pixel output)
+dotnet run -c Release -- --play                   # interactive: WASD/arrows move · Space pen · 1-8 material · B shape · E faucet · [ ] brush · F1-F6 template · Q quit
+dotnet run -c Release -- --template 0 --play      # start on a presaved scene (0=Waterfall … 5=Sandbox)
+dotnet run -c Release -- --template 2 --png v.png # render a template evolving (2=Volcano) to real PNGs
+dotnet run -c Release -- --list-templates         # print the template menu
+dotnet run -c Release -- --demo                   # self-driving terminal showcase, 24-bit colour
+dotnet run -c Release -- --ascii                  # self-driving terminal showcase, plain text (for terminals without ANSI colour)
 ```
 
 Pick the resolution with `--width`/`--height` (and upscale the PNG with `--scale`); `--png` defaults to
@@ -64,6 +67,18 @@ The Unity version below is the same simulation with a mouse-painted, GPU-rendere
   created or destroyed (verified over long random runs).
 - **Emergent water leveling** via a *randomized* flow direction — a lone surface cell random-walks to a
   drop instead of oscillating in place (the subtle bug that otherwise freezes water into a ramp).
+- **Fire and lava with reactions.** Fire (lighter than air, rises) and lava (heavier than sand, sinks)
+  move by the same density rule, but a separate transformation pass gives them chemistry: **oil ignites**
+  next to fire or lava, **fire burns out** to smoke, and **lava quenches** against water into obsidian
+  while the water flashes to **steam**. Reactions transform material (they don't conserve mass, by design,
+  like emitters) and only run when fire or lava is present — so the classic-material physics is untouched.
+- **Presaved templates you load from an icon.** A strip of clickable thumbnails drops you into a ready-made
+  scene — a **Waterfall** (water cascading down offset ledges), an **Hourglass**, a **Volcano** (a glowing
+  lava column over water moats), a **Fountain** (oil floating on a pool), a **Rain** tank, or a blank
+  **Sandbox**. Each icon is a live miniature of the scene it loads, and every one is built from the same
+  paintable walls, faucets and material you can place by hand.
+- **Brushes with a size and a shape.** Paint with a round **disk** (natural for pouring) or a **square**
+  (crisp for drawing walls), at any radius, and a mouse drag lays a continuous stroke between frames.
 
 The full derivation, including the mass-conservation argument and the water-leveling story, is in
 **[docs/PHYSICS.md](docs/PHYSICS.md)**.
@@ -94,6 +109,14 @@ Behaviors:
 Reproducibility:
   [PASS] two runs with the same seed produce identical grids
   [PASS] boundary contains material: loose count 209 → 209
+Templates:
+  [PASS] template 0..5 built + stepped (Waterfall, Hourglass, Volcano, Fountain, Rain, Sandbox)
+Reactions:
+  [PASS] reactions inert without fire/lava (counts invariant)
+  [PASS] fire ignited oil (oil 99 → 56) and produced fire/smoke
+  [PASS] lava froze to obsidian on water (wall 232 → 244) and water flashed to steam
+Brushes:
+  [PASS] square brush r=3 paints 49 cells · FillRect exact · PaintStroke draws a continuous line
 
 ALL CHECKS PASSED.
 ```
@@ -109,15 +132,17 @@ Unity game runs. If a change breaks mass conservation (or any behaviour), this g
 ```
 UnityProject/Assets/Scripts/
 ├── Simulation/        ← pure C# + NumSharp, NO UnityEngine  ← the "backend to reality"
-│   ├── Cell.cs             material ids + the density/fluid tables that ARE the physics
+│   ├── Cell.cs             material ids + the density/fluid tables that ARE the physics (incl. fire/lava)
+│   ├── BrushShape.cs       the brush footprint (disk / square)
 │   ├── GridOps.cs          whole-grid shifts + the conflict-free, mass-conserving swap
-│   ├── PowderGrid.cs       the cellular automaton: vertical density, sand diagonal, fluid spread
-│   └── FallingSandWorld.cs the game facade: brush, faucets, boundary walls, stepping
+│   ├── PowderGrid.cs       the cellular automaton: density move, sand diagonal, fluid spread, reactions
+│   ├── SandScenes.cs       the presaved templates (waterfall, hourglass, volcano, fountain, rain, sandbox)
+│   └── FallingSandWorld.cs the game facade: brush/shape, strokes, faucets, boundary walls, templates, stepping
 │
 └── Game/              ← the Unity view (UnityEngine)
     ├── FallingSandGame.cs  ONE self-bootstrapping MonoBehaviour — the whole game
     ├── SandRenderer.cs     grid → a Texture2D (one texel per cell), uploaded each frame
-    └── SandHud.cs          material palette + live stats overlay
+    └── SandHud.cs          material palette + brush controls + generated template-icon strip + live stats
 
 Verification/          ← standalone console harness (references NumSharp.Core, compiles Simulation/)
 ```
@@ -162,9 +187,11 @@ Handling** includes the legacy Input Manager.
 
 | Input | Action |
 |---|---|
-| `1`–`6` | pick material: Sand · Water · Oil · Smoke · Wall · Erase |
-| Left-drag | paint / **pour** (hold to keep pouring) |
-| `[` / `]` | smaller / larger brush |
+| `1`–`8` | pick material: Sand · Water · Oil · Smoke · Fire · Lava · Wall · Erase |
+| Left-drag | paint / **pour** (hold to keep pouring; a drag lays a continuous stroke) |
+| `[` / `]` | smaller / larger brush (or the **−** / **+** buttons in the HUD) |
+| `B` | toggle brush **shape**: disk (pour) ↔ square (draw crisp walls) |
+| `F1`–`F6` | load a **template** scene (or click an icon in the bottom strip) |
 | `,` / `.` | fewer / more physics substeps per frame (faster settling) |
 | `E` | place a **faucet** of the current material at the cursor |
 | `F` | remove all faucets |
@@ -173,17 +200,34 @@ Handling** includes the legacy Input Manager.
 
 Try: pour a **sand** heap and watch it form a cone; pour **water** beside it and watch it seep around and
 level; drop **oil** on the water (it floats); bury **smoke** and watch it bubble up; build a **wall** funnel
-and place a **faucet** above it.
+and place a **faucet** above it; set an oil pool alight with a spark of **fire**; pour **lava** onto water and
+watch it freeze into obsidian in a puff of steam.
+
+### Templates
+
+A strip of icons along the bottom loads a presaved, animated scene (also `F1`–`F6`, or `--template <n>` in
+the Player). Each icon is a live miniature of the scene it loads.
+
+| # | Template | What it shows |
+|---|---|---|
+| 0 | **Waterfall** | water cascading down a field of offset ledges — "water flowing down" |
+| 1 | **Hourglass** | sand draining through a wall funnel's neck into a growing cone |
+| 2 | **Volcano** | a glowing lava column in a mountain, with water moats at its feet |
+| 3 | **Fountain** | a basin of water under a floating oil layer, topped up by a drip |
+| 4 | **Rain** | faucets raining sand/water/oil that pile and pool |
+| 5 | **Sandbox** | a clean walled canvas to build your own |
 
 ### Materials
 
 | Material | Behaviour |
 |---|---|
 | **Sand** | granular — falls, piles at ~45°, sinks through liquids |
-| **Water** | liquid — falls, levels flat, sits below oil |
-| **Oil** | lighter liquid — floats on water, levels flat |
+| **Water** | liquid — falls, levels flat, sits below oil; flashes to steam on lava |
+| **Oil** | lighter liquid — floats on water, levels flat; **flammable** |
 | **Smoke** | gas — rises through everything, spreads under ceilings |
-| **Wall** | immovable — build basins, funnels and dividers |
+| **Fire** | gas — rises fastest, **ignites oil**, burns out to smoke |
+| **Lava** | liquid — heavier than sand, sinks; **ignites oil**, freezes to obsidian on water |
+| **Wall** | immovable — build basins, funnels and dividers (also cooled-lava obsidian) |
 | **Erase** | paints empty (removes material) |
 
 ---

@@ -39,6 +39,11 @@ namespace NumSharp.Examples.FallingSand
         private bool _paused;
         private float _fps = 60f;
 
+        // Drag state: the last cell painted this stroke, so a fast mouse drag paints a continuous line
+        // (PaintStroke) between frames instead of leaving gaps at the sampled cursor positions.
+        private int _lastR, _lastC;
+        private bool _hasLast;
+
         /// <summary>Builds the camera, world, renderer and HUD from code, and seeds an initial pile so the screen isn't blank.</summary>
         private void Start()
         {
@@ -58,13 +63,12 @@ namespace NumSharp.Examples.FallingSand
             SeedDemoScene();
         }
 
-        /// <summary>Paints a small starter arrangement (a sand heap and a splash of water) so the world shows something on launch.</summary>
+        /// <summary>Opens on the Waterfall template ("water flowing down") so the world greets the player with a pretty, animated scene instead of a blank basin. Any template icon swaps it out.</summary>
         private void SeedDemoScene()
         {
-            int cx = GridWidth / 2;
-            _world.BrushMaterial = Cell.Sand; _world.BrushRadius = 10; _world.Paint(GridHeight / 3, cx - 20);
-            _world.BrushMaterial = Cell.Water; _world.BrushRadius = 10; _world.Paint(GridHeight / 4, cx + 20);
-            _world.BrushMaterial = Cell.Sand; _world.BrushRadius = _brushRadius;   // restore default brush
+            _world.LoadTemplate(0);   // 0 = Waterfall
+            _world.BrushMaterial = Cell.Sand;   // restore a sensible default brush after the template's own edits
+            _world.BrushRadius = _brushRadius;
         }
 
         /// <summary>Per-frame: input, then advance the simulation, then upload the grid to the render texture.</summary>
@@ -79,17 +83,23 @@ namespace NumSharp.Examples.FallingSand
         /// <summary>Reads the keyboard and mouse: material picking, brush/step tuning, painting/pouring, and faucet placement.</summary>
         private void HandleInput()
         {
-            // Material selection (1-6).
+            // Material selection (1-8): the classic four, then fire and lava, then wall and the eraser.
             if (Input.GetKeyDown(KeyCode.Alpha1)) _world.BrushMaterial = Cell.Sand;
             if (Input.GetKeyDown(KeyCode.Alpha2)) _world.BrushMaterial = Cell.Water;
             if (Input.GetKeyDown(KeyCode.Alpha3)) _world.BrushMaterial = Cell.Oil;
             if (Input.GetKeyDown(KeyCode.Alpha4)) _world.BrushMaterial = Cell.Smoke;
-            if (Input.GetKeyDown(KeyCode.Alpha5)) _world.BrushMaterial = Cell.Wall;
-            if (Input.GetKeyDown(KeyCode.Alpha6)) _world.BrushMaterial = Cell.Empty;   // eraser
+            if (Input.GetKeyDown(KeyCode.Alpha5)) _world.BrushMaterial = Cell.Fire;
+            if (Input.GetKeyDown(KeyCode.Alpha6)) _world.BrushMaterial = Cell.Lava;
+            if (Input.GetKeyDown(KeyCode.Alpha7)) _world.BrushMaterial = Cell.Wall;
+            if (Input.GetKeyDown(KeyCode.Alpha8)) _world.BrushMaterial = Cell.Empty;   // eraser
 
             if (Input.GetKeyDown(KeyCode.LeftBracket)) _brushRadius = Mathf.Max(0, _brushRadius - 1);
-            if (Input.GetKeyDown(KeyCode.RightBracket)) _brushRadius = Mathf.Min(30, _brushRadius + 1);
+            if (Input.GetKeyDown(KeyCode.RightBracket)) _brushRadius = Mathf.Min(40, _brushRadius + 1);
             _world.BrushRadius = _brushRadius;
+
+            // B toggles the brush footprint (disk for pouring, square for drawing crisp walls).
+            if (Input.GetKeyDown(KeyCode.B))
+                _world.BrushShape = _world.BrushShape == BrushShape.Disk ? BrushShape.Square : BrushShape.Disk;
 
             if (Input.GetKeyDown(KeyCode.Comma)) SubStepsPerFrame = Mathf.Max(1, SubStepsPerFrame - 1);
             if (Input.GetKeyDown(KeyCode.Period)) SubStepsPerFrame = Mathf.Min(10, SubStepsPerFrame + 1);
@@ -99,14 +109,24 @@ namespace NumSharp.Examples.FallingSand
             if (Input.GetKeyDown(KeyCode.C))
                 _world.Clear(keepWalls: !(Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift)));
 
+            // F1..F6 load a presaved template scene (waterfall, hourglass, volcano, fountain, rain, sandbox).
+            for (int t = 0; t < FallingSandWorld.TemplateCount; t++)
+                if (Input.GetKeyDown(KeyCode.F1 + t)) _world.LoadTemplate(t);
+
             // Faucets: E places one of the current material at the cursor; F removes them all.
             if (Input.GetKeyDown(KeyCode.E) && TryCellAtMouse(out int er, out int ec))
                 _world.AddEmitter(er, ec, _world.BrushMaterial);
             if (Input.GetKeyDown(KeyCode.F)) _world.ClearEmitters();
 
-            // Left-drag paints / pours (holding pours a continuous stream).
+            // Left-drag paints / pours; a drag interpolates a continuous stroke between the two sampled cells
+            // so a fast swipe leaves an unbroken line rather than dots.
             if (Input.GetMouseButton(0) && !IsOverHud(Input.mousePosition) && TryCellAtMouse(out int r, out int c))
-                _world.Paint(r, c);
+            {
+                if (_hasLast) _world.PaintStroke(_lastR, _lastC, r, c);
+                else _world.Paint(r, c);
+                _lastR = r; _lastC = c; _hasLast = true;
+            }
+            if (Input.GetMouseButtonUp(0)) _hasLast = false;   // end the stroke so the next drag starts fresh
         }
 
         /// <summary>Draws the world texture (aspect-fit) and the HUD on top.</summary>
@@ -116,10 +136,14 @@ namespace NumSharp.Examples.FallingSand
             Rect rect = ComputeDrawRect();
             GUI.DrawTexture(rect, _renderer.Texture);
 
-            var result = _hud.Draw(_world, _world.BrushMaterial, _brushRadius, SubStepsPerFrame, _paused, _fps);
+            var result = _hud.Draw(_world, _world.BrushMaterial, _brushRadius, _world.BrushShape, SubStepsPerFrame, _paused, _fps);
             _world.BrushMaterial = result.SelectedMaterial;      // palette click overrides
+            _brushRadius = result.BrushRadius;                   // +/- buttons override
+            _world.BrushRadius = _brushRadius;
+            _world.BrushShape = result.BrushShape;               // shape toggle overrides
             if (result.ClearRequested) _world.Clear(keepWalls: true);
             if (result.ClearAllRequested) _world.Clear(keepWalls: false);
+            if (result.TemplateRequested >= 0) _world.LoadTemplate(result.TemplateRequested);   // icon click loads a scene
         }
 
         /// <summary>Destroys the runtime render texture on teardown.</summary>
@@ -164,13 +188,14 @@ namespace NumSharp.Examples.FallingSand
 
         /// <summary>Whether the cursor is over a HUD panel (so a click shouldn't also paint into the world).</summary>
         /// <param name="mouse">Mouse position in input coordinates (bottom-left origin).</param>
-        /// <returns>True over the left palette strip or the top-right stats panel.</returns>
+        /// <returns>True over the left palette strip, the top-right stats panel, or the bottom template strip.</returns>
         private bool IsOverHud(Vector3 mouse)
         {
             float guiY = Screen.height - mouse.y;
             bool overPalette = mouse.x < SandHud.PaletteWidth;
-            bool overStats = guiY < 160f && mouse.x > Screen.width - 580f;
-            return overPalette || overStats;
+            bool overStats = guiY < 160f && mouse.x > Screen.width - 620f;
+            bool overTemplates = guiY > Screen.height - SandHud.TemplateStripHeight;
+            return overPalette || overStats || overTemplates;
         }
     }
 }
