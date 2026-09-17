@@ -88,6 +88,30 @@ rise — the whole world is a cellular automaton stepped through vectorized NumS
   oscillates forever and freezes water into a sand-like ramp; a **random per-cell flow direction** turns
   that into a random walk that finds a drop and levels out. (This bug was hit and fixed during
   development — see PHYSICS.md §4.)
+- **Fire & lava with reactions.** Fire (lighter than air, rises fastest) and lava (heavier than sand,
+  sinks) move by the very same density rule — no new movement code, they just drop out of the tables — and
+  a separate **reaction pass** gives them chemistry: oil ignites next to fire/lava, fire burns out to
+  smoke, and lava quenches against water into **obsidian** while the water flashes to **steam**. Reactions
+  transform material (they don't conserve mass, by design, like emitters) and run only when fire or lava is
+  present, so the classic-material mass conservation is provably untouched.
+
+### 3c. The fun layer — templates, brushes, paintable walls
+
+The game is meant to be played with, so on top of the physics it adds:
+
+- **Presaved templates from small icons.** A strip of clickable thumbnails (also `F1`–`F6`, or
+  `--template <n>` in the Player) drops you into a ready-made scene — **Waterfall** (water cascading down a
+  field of offset ledges — "water flowing down"), **Hourglass**, **Volcano** (a glowing lava column over
+  water moats), **Fountain** (oil floating on a pool), **Rain**, and a blank **Sandbox**. Each is defined in
+  the Unity-independent `Simulation/SandScenes.cs` as size-relative walls/faucets/material, so it builds
+  correctly at an icon's 64×40 and the game's 1000×500 alike — and each icon is a genuine live miniature of
+  the scene it loads.
+- **Brushes with a size and a shape.** Paint with a round **disk** (natural for pouring) or a **square**
+  (crisp for drawing walls), at any radius (`[` / `]` or HUD `−`/`+`), and a mouse **drag lays a continuous
+  stroke** so a fast swipe leaves an unbroken line.
+- **Paintable walls the materials interact with.** Walls are the load-bearing element of every scene —
+  ledges to cascade off, funnels to pour through, a mountain to run down, basins to pool in — and they are
+  the same `Cell.Wall` the player draws by hand (cooled lava becomes wall too).
 
 **Verification** (`cd UnityFallingSand/Verification && dotnet run -c Release`) — **all checks pass**:
 - **Mass conservation**: all 6 material counts invariant over 300 steps on a busy random grid.
@@ -95,6 +119,8 @@ rise — the whole world is a cellular automaton stepped through vectorized NumS
 - Water levels: a 12-tall column pools into 2 rows (its flat depth).
 - Disk brush paints ~πr² cells centred; emitter (faucet) adds mass and its stream reaches the floor.
 - Determinism: same seed → bit-identical grid. Boundary walls contain loose material.
+- All 6 templates build + step; reactions inert without fire/lava (mass still conserved); fire ignites oil;
+  lava + water → obsidian + steam; square brush / FillRect / PaintStroke stamp exact footprints.
 
 ### 3a. Resolution & the high-pixel render
 
@@ -114,7 +140,10 @@ Unity view (GPU) and the standalone Player render it at full resolution:
 cd UnityFallingSand/Player
 dotnet run -c Release -- --png out.png                 # native 1000×500 PNGs (the high-pixel output)
 dotnet run -c Release -- --png big.png --scale 2       # 2000×1000 pixels
-dotnet run -c Release -- --play                        # interactive: WASD move · Space pen · 1-6 material · E faucet · Q quit
+dotnet run -c Release -- --play                        # interactive: WASD move · Space pen · 1-8 material · B shape · F1-F6 template · E faucet · Q quit
+dotnet run -c Release -- --template 0 --play           # start on a presaved scene (0=Waterfall … 5=Sandbox)
+dotnet run -c Release -- --template 2 --png v.png      # render a template evolving (2=Volcano)
+dotnet run -c Release -- --list-templates              # print the template menu
 dotnet run -c Release -- --demo                        # self-driving colour terminal showcase (downscaled preview)
 dotnet run -c Release -- --ascii                       # plain-text showcase
 dotnet run -c Release -- --bench --width 1000 --height 500   # time the step cost
@@ -146,6 +175,8 @@ Unity **is** installed here (`2022.3.62f3` and `6000.4.3f1`). To run either game
 | `2b67f296` | Falling-sand powder game on a NumSharp mass-conserving cellular automaton |
 | `6847cd7f` | Standalone terminal Player to launch the falling-sand game without Unity |
 | `25e85362` | Falling-sand high-resolution 1000×500 — Unity default + native PNG renderer |
+| `02da9ddc` | This RUNDOWN — a summary of both games |
+| `d837dedd` | Falling-sand fun pass: templates via icons, brushes + size/shape, paintable-wall scenes, fire/lava reactions |
 
 Each example's `Verification` project is in `SciSharp.NumSharp.sln` (under the `examples` folder), plus
 the falling-sand `Player`.
