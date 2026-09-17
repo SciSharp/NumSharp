@@ -238,6 +238,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NumSharp.Tests.Interop.Parq
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Verification", "examples\UnityGravitySandbox\Verification\Verification.csproj", "{305A5C85-46FD-4986-B24B-74C590587205}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FallingSand.Verification", "examples\UnityFallingSand\Verification\FallingSand.Verification.csproj", "{F3EF045B-19C9-4427-9CED-67F98773D25C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -769,6 +771,24 @@ Global
 		{305A5C85-46FD-4986-B24B-74C590587205}.Release|x64.Build.0 = Release|Any CPU
 		{305A5C85-46FD-4986-B24B-74C590587205}.Release|x86.ActiveCfg = Release|Any CPU
 		{305A5C85-46FD-4986-B24B-74C590587205}.Release|x86.Build.0 = Release|Any CPU
+		{F3EF045B-19C9-4427-9CED-67F98773D25C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F3EF045B-19C9-4427-9CED-67F98773D25C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F3EF045B-19C9-4427-9CED-67F98773D25C}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{F3EF045B-19C9-4427-9CED-67F98773D25C}.Debug|x64.Build.0 = Debug|Any CPU
+		{F3EF045B-19C9-4427-9CED-67F98773D25C}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{F3EF045B-19C9-4427-9CED-67F98773D25C}.Debug|x86.Build.0 = Debug|Any CPU
+		{F3EF045B-19C9-4427-9CED-67F98773D25C}.Publish|Any CPU.ActiveCfg = Debug|Any CPU
+		{F3EF045B-19C9-4427-9CED-67F98773D25C}.Publish|Any CPU.Build.0 = Debug|Any CPU
+		{F3EF045B-19C9-4427-9CED-67F98773D25C}.Publish|x64.ActiveCfg = Debug|Any CPU
+		{F3EF045B-19C9-4427-9CED-67F98773D25C}.Publish|x64.Build.0 = Debug|Any CPU
+		{F3EF045B-19C9-4427-9CED-67F98773D25C}.Publish|x86.ActiveCfg = Debug|Any CPU
+		{F3EF045B-19C9-4427-9CED-67F98773D25C}.Publish|x86.Build.0 = Debug|Any CPU
+		{F3EF045B-19C9-4427-9CED-67F98773D25C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F3EF045B-19C9-4427-9CED-67F98773D25C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F3EF045B-19C9-4427-9CED-67F98773D25C}.Release|x64.ActiveCfg = Release|Any CPU
+		{F3EF045B-19C9-4427-9CED-67F98773D25C}.Release|x64.Build.0 = Release|Any CPU
+		{F3EF045B-19C9-4427-9CED-67F98773D25C}.Release|x86.ActiveCfg = Release|Any CPU
+		{F3EF045B-19C9-4427-9CED-67F98773D25C}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -820,6 +840,7 @@ Global
 		{C1A4C01C-F5B8-4BF0-B76E-5F434E49B915} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{5B5C46F7-F00A-47ED-A197-1A8144959996} = {0C88DD14-F956-CE84-757C-A364CCF449FC}
 		{305A5C85-46FD-4986-B24B-74C590587205} = {FB0CB349-D4C7-4C09-BCC5-679F2ABEC6B4}
+		{F3EF045B-19C9-4427-9CED-67F98773D25C} = {FB0CB349-D4C7-4C09-BCC5-679F2ABEC6B4}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {4E76C21C-C7A8-4A7B-B408-D5F551E83BDD}
