@@ -240,6 +240,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Verification", "examples\Un
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FallingSand.Verification", "examples\UnityFallingSand\Verification\FallingSand.Verification.csproj", "{F3EF045B-19C9-4427-9CED-67F98773D25C}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FallingSand.Player", "examples\UnityFallingSand\Player\FallingSand.Player.csproj", "{2F723B96-321B-4D19-ACE0-AAE193EAD436}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -789,6 +791,24 @@ Global
 		{F3EF045B-19C9-4427-9CED-67F98773D25C}.Release|x64.Build.0 = Release|Any CPU
 		{F3EF045B-19C9-4427-9CED-67F98773D25C}.Release|x86.ActiveCfg = Release|Any CPU
 		{F3EF045B-19C9-4427-9CED-67F98773D25C}.Release|x86.Build.0 = Release|Any CPU
+		{2F723B96-321B-4D19-ACE0-AAE193EAD436}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2F723B96-321B-4D19-ACE0-AAE193EAD436}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2F723B96-321B-4D19-ACE0-AAE193EAD436}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{2F723B96-321B-4D19-ACE0-AAE193EAD436}.Debug|x64.Build.0 = Debug|Any CPU
+		{2F723B96-321B-4D19-ACE0-AAE193EAD436}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{2F723B96-321B-4D19-ACE0-AAE193EAD436}.Debug|x86.Build.0 = Debug|Any CPU
+		{2F723B96-321B-4D19-ACE0-AAE193EAD436}.Publish|Any CPU.ActiveCfg = Debug|Any CPU
+		{2F723B96-321B-4D19-ACE0-AAE193EAD436}.Publish|Any CPU.Build.0 = Debug|Any CPU
+		{2F723B96-321B-4D19-ACE0-AAE193EAD436}.Publish|x64.ActiveCfg = Debug|Any CPU
+		{2F723B96-321B-4D19-ACE0-AAE193EAD436}.Publish|x64.Build.0 = Debug|Any CPU
+		{2F723B96-321B-4D19-ACE0-AAE193EAD436}.Publish|x86.ActiveCfg = Debug|Any CPU
+		{2F723B96-321B-4D19-ACE0-AAE193EAD436}.Publish|x86.Build.0 = Debug|Any CPU
+		{2F723B96-321B-4D19-ACE0-AAE193EAD436}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2F723B96-321B-4D19-ACE0-AAE193EAD436}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2F723B96-321B-4D19-ACE0-AAE193EAD436}.Release|x64.ActiveCfg = Release|Any CPU
+		{2F723B96-321B-4D19-ACE0-AAE193EAD436}.Release|x64.Build.0 = Release|Any CPU
+		{2F723B96-321B-4D19-ACE0-AAE193EAD436}.Release|x86.ActiveCfg = Release|Any CPU
+		{2F723B96-321B-4D19-ACE0-AAE193EAD436}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -841,6 +861,7 @@ Global
 		{5B5C46F7-F00A-47ED-A197-1A8144959996} = {0C88DD14-F956-CE84-757C-A364CCF449FC}
 		{305A5C85-46FD-4986-B24B-74C590587205} = {FB0CB349-D4C7-4C09-BCC5-679F2ABEC6B4}
 		{F3EF045B-19C9-4427-9CED-67F98773D25C} = {FB0CB349-D4C7-4C09-BCC5-679F2ABEC6B4}
+		{2F723B96-321B-4D19-ACE0-AAE193EAD436} = {FB0CB349-D4C7-4C09-BCC5-679F2ABEC6B4}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {4E76C21C-C7A8-4A7B-B408-D5F551E83BDD}

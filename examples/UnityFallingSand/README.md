@@ -16,6 +16,35 @@ water and sand."
 
 ---
 
+## Play it now — no Unity required
+
+Because the physics is Unity-independent NumSharp, there's a standalone terminal front-end that drives the
+**exact same engine** and renders it live — you can play immediately without opening Unity:
+
+```bash
+cd Player
+dotnet run -c Release                 # interactive: WASD/arrows move · Space pen · 1-6 material · E faucet · [ ] brush · Q quit
+dotnet run -c Release -- --demo       # self-driving showcase, 24-bit colour
+dotnet run -c Release -- --ascii      # self-driving showcase, plain text (for terminals without ANSI colour)
+```
+
+The `--ascii` showcase settles a random mix into clean density layers — smoke on top, then oil, water and
+sand at the bottom:
+
+```
+##""""""""""""""""""""""""""""""""""""""""""""""""""##   " = smoke  (lightest, rises)
+##oooooooooooooooooooooooooooooooooooooooooooooooooo##   o = oil    (floats on water)
+##~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##   ~ = water
+##.................................................. ##   . = sand   (heaviest, sinks)
+######################################################   # = wall
+Layers by mean height (smaller = higher):
+  Smoke:3.5  Oil:17.4  Water:29.9  Sand:43.2
+```
+
+The Unity version below is the same simulation with a mouse-painted, GPU-rendered front-end.
+
+---
+
 ## What's sophisticated about it
 
 - **Multi-material density stratification.** One rule — "a cell sinks past a lighter cell below it"
