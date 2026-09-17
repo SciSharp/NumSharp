@@ -188,4 +188,7 @@ to RK4 and speed up time to watch energy slowly drift instead.
 - **[docs/PHYSICS.md](docs/PHYSICS.md)** — the full derivations: vectorized gravity, softening,
   symplectic integration, conserved quantities, the 1PN relativistic correction, the figure-eight,
   and the unit systems.
+- **[../UnityFallingSand/](../UnityFallingSand/)** — the companion falling-sand powder game: a
+  mass-conserving cellular automaton with sand, water, oil and smoke (density stratification, piling,
+  leveling), also NumSharp-powered.
 - **[../../README.md](../../README.md)** — NumSharp itself.
