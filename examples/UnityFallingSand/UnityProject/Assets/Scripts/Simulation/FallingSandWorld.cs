@@ -31,6 +31,9 @@ namespace NumSharp.Examples.FallingSand.Simulation
         /// <summary>The brush radius in cells. Larger paints (and pours) more per stroke.</summary>
         public int BrushRadius { get; set; } = 3;
 
+        /// <summary>The brush footprint. Disk is natural for pouring; square draws crisp walls (see <see cref="BrushShape"/>).</summary>
+        public BrushShape BrushShape { get; set; } = BrushShape.Disk;
+
         // Persistent emitters: each drips its material into its cell every substep, so the player can set
         // up a faucet and walk away. Emitters ADD mass (by design), unlike the mass-conserving physics.
         private readonly List<(int row, int col, int material)> _emitters = new List<(int, int, int)>();
@@ -67,10 +70,37 @@ namespace NumSharp.Examples.FallingSand.Simulation
             }
         }
 
-        /// <summary>Paints the current brush at a grid cell (the game maps the mouse to a cell and calls this).</summary>
+        /// <summary>Paints the current brush (material, radius and shape) at a grid cell (the game maps the mouse to a cell and calls this).</summary>
         /// <param name="row">Grid row (0 = top).</param>
         /// <param name="col">Grid column (0 = left).</param>
-        public void Paint(int row, int col) => Grid.Paint(row, col, BrushRadius, BrushMaterial);
+        public void Paint(int row, int col) => Grid.Paint(row, col, BrushRadius, BrushMaterial, BrushShape);
+
+        /// <summary>
+        /// Paints a continuous stroke of the current brush from one cell to another — what a mouse DRAG uses,
+        /// so a quick swipe leaves an unbroken line rather than dots at the two frames the cursor happened to
+        /// be sampled at.
+        /// </summary>
+        /// <param name="fromRow">Stroke start row.</param>
+        /// <param name="fromCol">Stroke start column.</param>
+        /// <param name="toRow">Stroke end row.</param>
+        /// <param name="toCol">Stroke end column.</param>
+        public void PaintStroke(int fromRow, int fromCol, int toRow, int toCol) =>
+            Grid.PaintLine(fromRow, fromCol, toRow, toCol, BrushRadius, BrushMaterial, BrushShape);
+
+        /// <summary>
+        /// Replaces the whole scene with a presaved <see cref="SandScenes"/> template (a waterfall, hourglass,
+        /// volcano, …). This wipes the current world — loose material, walls AND emitters — and rebuilds it,
+        /// scaled to this world's size, so the same template looks right at an icon's resolution and at the
+        /// full game grid.
+        /// </summary>
+        /// <param name="index">Template index in <c>0 .. <see cref="TemplateCount"/>-1</c>; out-of-range is clamped.</param>
+        public void LoadTemplate(int index) => SandScenes.Apply(index, this);
+
+        /// <summary>The display names of the available templates, index-aligned with <see cref="LoadTemplate"/>.</summary>
+        public static string[] TemplateNames => SandScenes.Names;
+
+        /// <summary>How many templates <see cref="LoadTemplate"/> accepts.</summary>
+        public static int TemplateCount => SandScenes.Count;
 
         /// <summary>Places a persistent emitter that drips <paramref name="material"/> at the given cell every step.</summary>
         /// <param name="row">Emitter row.</param>

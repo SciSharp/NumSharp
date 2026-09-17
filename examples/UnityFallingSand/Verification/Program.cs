@@ -29,6 +29,11 @@ namespace NumSharp.Examples.FallingSand.Verification
             CheckEmitter();
             CheckDeterminism();
             CheckBoundaryContains();
+            CheckTemplates();
+            CheckReactionsAreNoopWithoutFireLava();
+            CheckFireIgnitesOil();
+            CheckLavaQuenches();
+            CheckBrushShapes();
 
             Console.WriteLine();
             if (_failures == 0) Console.WriteLine("ALL CHECKS PASSED.");
@@ -199,6 +204,85 @@ namespace NumSharp.Examples.FallingSand.Verification
             world.Step(600);
             int looseAfter = world.Count(Cell.Sand) + world.Count(Cell.Water);
             Check(loose == looseAfter, $"boundary contains material: loose count {loose} → {looseAfter}");
+        }
+
+        /// <summary>Every presaved template must build and step without error, laying down walls and (where it uses faucets) material.</summary>
+        private static void CheckTemplates()
+        {
+            Console.WriteLine("Templates:");
+            for (int i = 0; i < FallingSandWorld.TemplateCount; i++)
+            {
+                var world = new FallingSandWorld(80, 120, seed: 1, withBoundary: true);
+                world.LoadTemplate(i);
+                world.Step(60);
+                int walls = world.Count(Cell.Wall);
+                Check(walls > 0, $"template {i} '{FallingSandWorld.TemplateNames[i]}' built + stepped (walls={walls})");
+            }
+        }
+
+        /// <summary>
+        /// The reaction pass must be inert without fire or lava — a world of the classic materials is left
+        /// exactly as the movement passes produced it, so its counts are invariant. This is what keeps the
+        /// mass-conservation guarantee intact once reactions exist.
+        /// </summary>
+        private static void CheckReactionsAreNoopWithoutFireLava()
+        {
+            Console.WriteLine("Reactions:");
+            int h = 40, w = 40;
+            var world = new FallingSandWorld(h, w, seed: 4, withBoundary: true);
+            for (int r = 10; r < 20; r++) for (int c = 6; c < 34; c++) world.Grid.SetCell(r, c, Cell.Oil);
+            for (int r = 24; r < 34; r++) for (int c = 6; c < 34; c++) world.Grid.SetCell(r, c, Cell.Water);
+            int oil = world.Count(Cell.Oil), water = world.Count(Cell.Water);
+            world.Step(200);
+            Check(world.Count(Cell.Oil) == oil && world.Count(Cell.Water) == water,
+                $"reactions inert without fire/lava (oil {oil}, water {water} invariant)");
+        }
+
+        /// <summary>Fire dropped into an oil slick must ignite it — oil is consumed and combustion products (fire/smoke) appear.</summary>
+        private static void CheckFireIgnitesOil()
+        {
+            int h = 40, w = 40;
+            var world = new FallingSandWorld(h, w, seed: 2, withBoundary: true);
+            for (int r = 15; r < 25; r++) for (int c = 15; c < 25; c++) world.Grid.SetCell(r, c, Cell.Oil);
+            world.Grid.SetCell(20, 20, Cell.Fire);
+            int oilBefore = world.Count(Cell.Oil);
+            world.Step(30);
+            int oilAfter = world.Count(Cell.Oil), products = world.Count(Cell.Fire) + world.Count(Cell.Smoke);
+            Check(oilAfter < oilBefore, $"fire ignited oil (oil {oilBefore} → {oilAfter})");
+            Check(products > 0, $"combustion produced fire/smoke ({products})");
+        }
+
+        /// <summary>Lava meeting water must freeze to obsidian (a wall) while the water flashes to steam (smoke).</summary>
+        private static void CheckLavaQuenches()
+        {
+            int h = 40, w = 40;
+            var world = new FallingSandWorld(h, w, seed: 3, withBoundary: true);
+            for (int r = 30; r < 36; r++) for (int c = 4; c < 36; c++) world.Grid.SetCell(r, c, Cell.Water);
+            for (int r = 6; r < 10; r++) for (int c = 18; c < 22; c++) world.Grid.SetCell(r, c, Cell.Lava);
+            int wallBefore = world.Count(Cell.Wall);
+            world.Step(60);
+            int wallAfter = world.Count(Cell.Wall), smoke = world.Count(Cell.Smoke);
+            Check(wallAfter > wallBefore, $"lava froze to obsidian on water (wall {wallBefore} → {wallAfter})");
+            Check(smoke > 0, $"water flashed to steam (smoke {smoke})");
+        }
+
+        /// <summary>The brush shapes and the FillRect/PaintStroke primitives must stamp the exact footprints scenes and the drag tool rely on.</summary>
+        private static void CheckBrushShapes()
+        {
+            Console.WriteLine("Brushes:");
+            var sq = new FallingSandWorld(60, 60, seed: 1, withBoundary: false);
+            sq.BrushMaterial = Cell.Wall; sq.BrushRadius = 3; sq.BrushShape = BrushShape.Square;
+            sq.Paint(30, 30);
+            Check(sq.Count(Cell.Wall) == 49, $"square brush r=3 paints (2r+1)²=49 cells ({sq.Count(Cell.Wall)})");
+
+            var rect = new FallingSandWorld(20, 40, seed: 1, withBoundary: false);
+            rect.Grid.FillRect(5, 5, 10, 35, Cell.Wall);
+            Check(rect.Count(Cell.Wall) == 150, $"FillRect fills exact area 5×30=150 ({rect.Count(Cell.Wall)})");
+
+            var line = new FallingSandWorld(40, 40, seed: 1, withBoundary: false);
+            line.BrushMaterial = Cell.Wall; line.BrushRadius = 0; line.BrushShape = BrushShape.Disk;
+            line.PaintStroke(5, 5, 5, 30);
+            Check(line.Count(Cell.Wall) == 26, $"PaintStroke draws a continuous 26-cell line ({line.Count(Cell.Wall)})");
         }
     }
 }
