@@ -23,10 +23,17 @@ Because the physics is Unity-independent NumSharp, there's a standalone terminal
 
 ```bash
 cd Player
-dotnet run -c Release                 # interactive: WASD/arrows move · Space pen · 1-6 material · E faucet · [ ] brush · Q quit
-dotnet run -c Release -- --demo       # self-driving showcase, 24-bit colour
-dotnet run -c Release -- --ascii      # self-driving showcase, plain text (for terminals without ANSI colour)
+dotnet run -c Release -- --png out.png # render the sim at NATIVE 1000×500 to real PNG images (the high-pixel output)
+dotnet run -c Release -- --play        # interactive: WASD/arrows move · Space pen · 1-6 material · E faucet · [ ] brush · Q quit
+dotnet run -c Release -- --demo        # self-driving terminal showcase, 24-bit colour
+dotnet run -c Release -- --ascii       # self-driving terminal showcase, plain text (for terminals without ANSI colour)
 ```
+
+Pick the resolution with `--width`/`--height` (and upscale the PNG with `--scale`); `--png` defaults to
+**1000×500**. A terminal can't show 1000×500 as text, so the terminal modes downscale to a readable
+preview — use `--png` for a full-resolution image. Example (settled density layers, 1000×500):
+
+![settled layers](docs/settled-1000x500.png)
 
 The `--ascii` showcase settles a random mix into clean density layers — smoke on top, then oil, water and
 sand at the bottom:
@@ -183,9 +190,10 @@ and place a **faucet** above it.
 
 ## Notes & limitations
 
-- **Performance.** The update is pure-vectorized, so each step allocates several full-grid arrays. That is
-  ideal at a few-hundred cells per side; keep `GridWidth/GridHeight` modest and `SubStepsPerFrame` small.
-  Defaults (200×140, 2 substeps) run smoothly.
+- **Performance.** The update is pure-vectorized, so each step allocates several full-grid arrays. Measured
+  cost: **~31 ms/step at 1000×500** (500k cells) and ~3.4 ms at 300×160. The Unity game defaults to
+  **1000×500 with 1 substep/frame (~32 fps)**; lower the resolution or raise substeps to taste. Offline PNG
+  rendering (`--png`) is unconstrained by frame rate, so it always runs at full resolution.
 - **The Unity C# is written against the Unity 6 API but is not compiled here** (no editor in this repo); it
   was type-checked against a faithful `UnityEngine` shim. The *physics* it drives is machine-verified — see
   [above](#verify-the-physics).

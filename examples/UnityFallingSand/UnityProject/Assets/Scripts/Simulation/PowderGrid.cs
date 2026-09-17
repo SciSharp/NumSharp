@@ -166,6 +166,26 @@ namespace NumSharp.Examples.FallingSand.Simulation
             Cells[$"{r0}:{r1}, {c0}:{c1}"] = np.where(mask, material, sub);
         }
 
+        /// <summary>
+        /// Stamps a rectangular block of material ids into the grid at <c>(r0, c0)</c> in ONE vectorized
+        /// assignment. This is the fast way to build a scene or fill a large region — a per-cell
+        /// <see cref="SetCell"/> loop over hundreds of thousands of cells costs seconds, while this is a
+        /// single slice-assignment.
+        /// </summary>
+        /// <param name="r0">Top row where the block's row 0 lands.</param>
+        /// <param name="c0">Left column where the block's column 0 lands.</param>
+        /// <param name="block">An <c>[h, w]</c> array of material ids; must fit within the grid at <c>(r0, c0)</c>.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="block"/> is null.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">The block does not fit within the grid at <c>(r0, c0)</c>.</exception>
+        public void Blit(int r0, int c0, int[,] block)
+        {
+            if (block is null) throw new ArgumentNullException(nameof(block));
+            int bh = block.GetLength(0), bw = block.GetLength(1);
+            if (r0 < 0 || c0 < 0 || r0 + bh > Height || c0 + bw > Width)
+                throw new ArgumentOutOfRangeException(nameof(block), "block does not fit within the grid.");
+            Cells[$"{r0}:{r0 + bh}, {c0}:{c0 + bw}"] = np.array(block);
+        }
+
         /// <summary>Writes a single cell (used by emitters). No-op if out of range.</summary>
         /// <param name="row">Row.</param>
         /// <param name="col">Column.</param>

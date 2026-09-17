@@ -19,14 +19,14 @@ namespace NumSharp.Examples.FallingSand
     public sealed class FallingSandGame : MonoBehaviour
     {
         [Header("Grid")]
-        [Tooltip("Simulation resolution in cells. Larger is prettier but costs more per step (pure-vectorized O(cells)).")]
-        public int GridWidth = 200;
+        [Tooltip("Simulation resolution in cells. 1000×500 is a high-detail default; each step is pure-vectorized O(cells) NumSharp (~31 ms at 1000×500), so drop this if you want a higher frame rate.")]
+        public int GridWidth = 1000;
         [Tooltip("Simulation height in cells.")]
-        public int GridHeight = 140;
+        public int GridHeight = 500;
 
         [Header("Simulation")]
-        [Tooltip("Physics steps run per rendered frame. More settles material faster at higher CPU cost.")]
-        public int SubStepsPerFrame = 2;
+        [Tooltip("Physics steps run per rendered frame. 1 keeps 1000×500 responsive (~32 fps); raise it (at lower resolutions) to settle material faster.")]
+        public int SubStepsPerFrame = 1;
         [Tooltip("Random seed for reproducible fluid flow.")]
         public int Seed = 1;
 
