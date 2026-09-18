@@ -90,32 +90,36 @@ namespace NumSharp.Tests.Math
         [TestMethod]
         public void Family_OutSmoke_AllSixOps()
         {
-            // equal/not_equal/less/less_equal/greater/greater_equal with i4 out.
+            // equal/not_equal/less/less_equal/greater/greater_equal with i4 out — now also asserting
+            // the out= reference identity (the provided instance is returned) per op, and the out size
+            // and int32 dtype via CollectionAssertInts. Bool True->1 casts same_kind into the int out.
             var x = np.array(new[] { 0.0, 1, 2, 3 });
             var y = np.array(new[] { 0.0, 2, 2, 1 });
             var o = np.empty(new Shape(4), np.int32);
 
-            np.equal(x, y, o);
+            Assert.IsTrue(ReferenceEquals(np.equal(x, y, o), o));
             CollectionAssertInts(o, 1, 0, 1, 0);
 
-            np.not_equal(x, y, o);
+            Assert.IsTrue(ReferenceEquals(np.not_equal(x, y, o), o));
             CollectionAssertInts(o, 0, 1, 0, 1);
 
-            np.less(x, y, o);
+            Assert.IsTrue(ReferenceEquals(np.less(x, y, o), o));
             CollectionAssertInts(o, 0, 1, 0, 0);
 
-            np.less_equal(x, y, o);
+            Assert.IsTrue(ReferenceEquals(np.less_equal(x, y, o), o));
             CollectionAssertInts(o, 1, 1, 1, 0);
 
-            np.greater(x, y, o);
+            Assert.IsTrue(ReferenceEquals(np.greater(x, y, o), o));
             CollectionAssertInts(o, 0, 0, 0, 1);
 
-            np.greater_equal(x, y, o);
+            Assert.IsTrue(ReferenceEquals(np.greater_equal(x, y, o), o));
             CollectionAssertInts(o, 1, 0, 1, 1);
         }
 
         private static void CollectionAssertInts(NDArray o, params int[] expected)
         {
+            Assert.AreEqual(expected.Length, (int)o.size, "size");
+            Assert.AreEqual(NPTypeCode.Int32, o.typecode, "dtype");
             for (int i = 0; i < expected.Length; i++)
                 Assert.AreEqual(expected[i], o.GetInt32(i), $"index {i}");
         }
