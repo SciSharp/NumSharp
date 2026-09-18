@@ -165,6 +165,15 @@ namespace NumSharp
 
             // ── 3) index → int64 under the 'safe' rule ────────────────────────────────────
             NDArray idx64 = CastChooseIndexToInt64(a);
+            // idx64 is EITHER `a` itself (already int64 — caller-owned, must NOT be disposed) OR a fresh
+            // int64 astype we allocated from the buffer pool. In the fresh case it must be disposed once
+            // every read completes (its only consumers are the broadcast idxView and the gather kernel,
+            // all done before any return), otherwise the pooled buffer leaks on EVERY non-int64 index —
+            // the zero-leak gate flags exactly that. The try/finally also covers the out-of-range throw.
+            bool idx64Owned = !ReferenceEquals(idx64, a);
+            NDArray idxView = null;   // step-7 broadcast view of idx64; retains idx64's (possibly fresh) block
+            try
+            {
 
             // ── 4) common broadcast shape of (all choices + index) ────────────────────────
             var shapes = new Shape[n + 1];
@@ -199,7 +208,7 @@ namespace NumSharp
                 chViews[i] = v;
                 if (!v.Shape.IsContiguous) allContig = false;
             }
-            NDArray idxView = broadcast_to(idx64, common);
+            idxView = broadcast_to(idx64, common);
             if (!idxView.Shape.IsContiguous) allContig = false;
 
             // ── 8) run the IL kernel (flat when every operand is C-contiguous, else strided) ─
@@ -211,6 +220,22 @@ namespace NumSharp
                 throw new ValueError("invalid entry in choice array");
 
             return FinishChoose(result, @out);
+            }
+            finally
+            {
+                // Release the pooled int64 index buffer we allocated (never `a`, the caller's array).
+                // When idx64 is fresh its broadcast VIEW also references that pooled block, so the view
+                // must be released FIRST or the buffer never returns to the pool (the leak the zero-leak
+                // gate flagged for a non-int64 index). Guarded to a fresh idx64 AND a distinct view
+                // object, so a caller array (idx64 == a) and the no-broadcast identity (idxView == idx64)
+                // are never double-disposed or wrongly freed. The choice views (chViews) alias the
+                // caller's own choice arrays, so they take no pooled buffer and need no disposal here.
+                if (idx64Owned)
+                {
+                    if (idxView is not null && !ReferenceEquals(idxView, idx64)) idxView.Dispose();
+                    idx64.Dispose();
+                }
+            }
         }
 
         /// <summary>
