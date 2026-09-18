@@ -290,6 +290,75 @@ algorithmic remainder is complex `corrcoef`: the complex true-division itself is
 solely from `cov`'s managed complex GEMM (`np.dot`) — it has its own ≤2-ULP branch scoped to that GEMM
 instead of hiding under the broad complex-unary envelope.
 
+### The 2026-09-18 coverage expansion (docs/plans/oracle-coverage-expansion.md, phases P0–P3)
+
+The assertion-kind and parameter axes were systematically widened; every cell below is now GATED
+(surface + applicability), not just present.
+
+**New tiers.** `instance.jsonl` (5,410 — the whole `ndarray.*` INSTANCE surface, row G0: dual-form
+methods through their instance defaults, instance-only members `item`/`tobytes`/`view`/`getfield`/
+`byteswap`/`__len__`, the D4 property reads `T`/`mT`/`real`/`imag`/`flat`/`nbytes`/`itemsize`/
+`ndim`/`size`/`strides`, `nonzero`'s tuple, and the IN-PLACE mutators `sort`/`fill`/`put`/`resize`
+compared as **[post-call view, post-call whole base buffer]** — the out_where two-slot contract, so
+a mutator writing outside a strided view's window is caught; op keys carry the `ndarray.` prefix and
+`MisalignedRegistry` strips it so the shared excuses apply) and `emath.jsonl` (327 — the scimath
+module promoted into the corpus: the real→complex promotion DECISION over the complex128/float64
+lanes; int8/16/uint16/float32/float16 promote to NumPy's complex64 and stay sibling-owned, #569).
+
+**Widened tiers.** `out_where.jsonl` +240: `out=` beyond the elementwise ufuncs — `out_scan`
+(cumsum/cumprod; complex cumPROD carved exactly as nanscan carves it), `out_round`, `out_clip`
+(scalar 0-D bounds; the read-only broadcast out refusal included), `out_nanarg` (nanargmax/
+nanargmin). `params.jsonl` +288: the §C1 multi-axis cells — `axes` int[] for the reductions with a
+tuple-axis overload (median/average/nanmedian; sum/prod/min/max have NO int[] overload yet — a
+tracked feature gap the applicability matrix warns on, deliberately NOT generated). `errors_full.jsonl`
+714→801 over 22→50 distinct messages: curated §B1 recipes (reshape rejection family, expand_dims OOB
+both signs, flip axis/repeated-axis, matrix_transpose ndim, take/put OOB + float-index dtype
+rejection, partition kth OOB, percentile/quantile q-range, linalg 1-D/non-square/float16 validation,
+fft n-guard). `nan.jsonl` 120→176: the §B3 BINARY special-pair CROSS grid (FLOAT_VALS × FLOAT_VALS,
+both NaN signs) over 19 f64/f32 ops + a 13-op f16 subset (the widen-compute-narrow/bit-level lanes)
++ 5 complex128 binaries against a rolled grid.
+
+**Schema addition — `operand.writeable`.** `layout_catalog.describe()` now serializes
+`"writeable": false` for a read-only view whose read-onlyness the strides CANNOT convey — a
+SAME-SHAPE `np.broadcast_to` keeps ordinary strides — and `FuzzCorpus.Reconstruct` clears the flag
+via the public `setflags(write: false)` route. This closed a REAL gate hole: since the K10 excuse
+deletion (60024b44), the 293 one-D `out=broadcast` refusal cells reconstructed WRITEABLE, NumSharp
+computed a result where NumPy raises, and the OutWhere tier had been silently red. Emitted only when
+False, so every pre-flag corpus row stays byte-identical.
+
+**Real bugs found + fixed by the new coverage** (each with its corpus cells retained as regression
+proof): `np.trace`/`ndarray.trace` promoted **unsigned** narrow lanes (uint8/uint16/Char) to int64
+where NumPy's add.reduce rule gives **uint64** — the pre-existing trace corpus covered only signed/
+float lanes, so the wrong dtype AND wrong wrap point were invisible (`DirectILKernelGenerator.Trace`
+both maps fixed); `ndarray.flat` over a **0-d** array returned 0-d where NumPy yields shape (1,);
+`np.fmod` with a complex operand leaked the kernel `NotSupportedException` instead of NumPy's
+verbatim no-loop `TypeError` (fmod landed after the K4/K5 sweep and missed the guard); `np.take`
+mode='raise' OOB said "for axis with size" — NumPy says "for axis {n} with size" on an axis take
+and drops the clause entirely on a flat one (both spellings now exact); `ndarray.item()` on size>1
+and `__len__()` on 0-d now raise NumPy's verbatim texts ("can only convert an array of size 1 to a
+Python scalar" / "len() of unsized object").
+
+**New/extended excuse branches** (Table 1 additions): *argsort tie order* — NumPy's default
+introsort is UNSTABLE, so ±0.0/duplicate ties resolve arbitrarily while NumSharp's radix argsort is
+stable; excused ONLY when `ArgsortPermutationsEquivalent` re-derives from the operand bytes that
+both index vectors are in-range permutations selecting pairwise IEEE-equal values (the main sort
+tier uses distinct values and never reaches it). *K13 extended to `out_clip`* — clip IS
+maximum(minimum(x, hi), lo), so a ±0-sign result inherits the same non-contractual lane-dependence;
+still guarded by every-diff-is-a-pure-±0-flip. The `ndarray.`/`emath.` prefixes are stripped at
+`Classify` entry (the `ma.` convention), so instance/emath spellings ride the shared branches.
+
+**New gates.** `OracleSurfaceCoverageTests` now reflects ALL 8 `[ModuleName]` facades: `ndarray`
+(lowercase = NumPy-named and must be corpus/`ndarray.*`-covered or classified; PascalCase = C#
+infra by convention; the property row included), `np.emath` (100% corpus-covered — no
+classifications allowed), `np.ma` (`ma.*` keys + aliases + sibling ledger), `np.dtypes` (the 29
+class properties, DTypes-suite-owned), each with the stale-classification self-retirement rule.
+`OracleApplicabilityTests` is the plan's §M1–M3 mechanization: a 22-row declarative manifest of
+(group × assertion-kind) cells — Enforced cells assert op-count floors (MinCases-style ratchets),
+Warn cells PRINT their missing ops (the driven checklist for the next session), NotApplicable
+requires a reason and fails if coverage appears anyway; kinds a row omits are covered by its
+one-line `InapplicableNote`. Applied kinds are computed from the corpus itself (out_* vehicle keys
+credit the ufunc named in their params; masked kinds normalize to array/tuple).
+
 ### Table 1 — live `MisalignedRegistry` excuse branches
 
 **Intended / algorithmic differences (permanent):**

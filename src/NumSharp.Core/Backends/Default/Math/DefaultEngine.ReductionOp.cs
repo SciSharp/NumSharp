@@ -921,11 +921,22 @@ namespace NumSharp.Backends
                 return BitConverter.UInt16BitsToHalf(Kernels.DirectILKernelGenerator.SingleToHalfBits(acc));
             }
             // Strided / transposed / broadcast → materialize C-contiguous (Giesen SIMD copy is exact
-            // on the values), then fold in C order.
+            // on the values), then fold in C order. The materialized copy is this method's own
+            // intermediate — only the boxed scalar leaves — so it must be disposed here or every
+            // strided/negstride f16 flat sum strands one pooled buffer per call (caught by
+            // UndisposedIntermediateTests once the instance oracle tier replayed a.sum() over
+            // those layouts, 2026-09-18; the leak predated that tier).
             var c = np.ascontiguousarray(arr);
-            ushort* cp = (ushort*)((byte*)c.Address + c.Shape.offset * 2);
-            float acc2 = Kernels.ILKernelGenerator.PairwiseFoldHalf(cp, c.size, 1);
-            return BitConverter.UInt16BitsToHalf(Kernels.DirectILKernelGenerator.SingleToHalfBits(acc2));
+            try
+            {
+                ushort* cp = (ushort*)((byte*)c.Address + c.Shape.offset * 2);
+                float acc2 = Kernels.ILKernelGenerator.PairwiseFoldHalf(cp, c.size, 1);
+                return BitConverter.UInt16BitsToHalf(Kernels.DirectILKernelGenerator.SingleToHalfBits(acc2));
+            }
+            finally
+            {
+                c.Dispose();
+            }
         }
 
         /// <summary>

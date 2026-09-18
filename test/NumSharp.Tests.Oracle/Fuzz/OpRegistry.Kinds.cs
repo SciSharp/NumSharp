@@ -180,6 +180,11 @@ namespace NumSharp.Tests.Fuzz
         /// </summary>
         public static NDArray[] ApplyTuple(string op, IReadOnlyDictionary<string, JsonElement> p, NDArray[] ops)
         {
+            // ndarray.* tuple keys — a.nonzero() plus the IN-PLACE mutators whose two slots are
+            // [post-call view, post-call whole base buffer] (OpRegistry.Instance.cs).
+            if (op.StartsWith("ndarray.", StringComparison.Ordinal))
+                return ApplyInstanceTuple(op.Substring("ndarray.".Length), p, ops);
+
             switch (op)
             {
                 // np.evaluate(expr, out=): [returned view, whole out base buffer] — the out_where shape.
@@ -387,6 +392,46 @@ namespace NumSharp.Tests.Fuzz
                         ? ApplyBinaryOut(ufunc, ops[0], ops[1], target, mask)
                         : ApplyUnaryOut(ufunc, ops[0], target, mask);
 
+                    return new[] { returned, BaseBuffer(target) };
+                }
+
+                // ---- out= beyond the elementwise ufuncs (coverage plan §B2) ---------------
+                //
+                // Same two-slot contract, over the non-ufunc APIs that DO expose out= in
+                // NumSharp: the scans (cumsum/cumprod), round_, clip, and nanargmax/nanargmin.
+                // The out operand is always the LAST slot; its prior contents were recorded by
+                // the generator, so out-of-window writes into a strided/offset/transposed out
+                // view are caught exactly as for the ufuncs.
+                case "out_scan":
+                {
+                    var target = ops[1];
+                    int? axis = p["axis"].ValueKind == JsonValueKind.Null ? (int?)null : p["axis"].GetInt32();
+                    var returned = p["ufunc"].GetString() == "cumsum"
+                        ? np.cumsum(ops[0], axis, null, target)
+                        : np.cumprod(ops[0], axis, null, target);
+                    return new[] { returned, BaseBuffer(target) };
+                }
+                case "out_round":
+                {
+                    var target = ops[1];
+                    var returned = np.round_(ops[0], p["decimals"].GetInt32(), target);
+                    return new[] { returned, BaseBuffer(target) };
+                }
+                case "out_clip":
+                {
+                    // operands: [a, lo(0-d), hi(0-d), out] — the scalar bounds ride as 0-d
+                    // operands so their dtype travels with the case (the registry clip shape).
+                    var target = ops[3];
+                    var returned = np.clip(ops[0], ops[1], ops[2], target);
+                    return new[] { returned, BaseBuffer(target) };
+                }
+                case "out_nanarg":
+                {
+                    var target = ops[1];
+                    int axis = p["axis"].GetInt32();
+                    var returned = p["ufunc"].GetString() == "nanargmax"
+                        ? np.nanargmax(ops[0], axis, target)
+                        : np.nanargmin(ops[0], axis, target);
                     return new[] { returned, BaseBuffer(target) };
                 }
 

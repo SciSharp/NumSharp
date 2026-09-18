@@ -493,7 +493,13 @@ namespace NumSharp
         {
             get
             {
-                if (ndim == 1 || Shape.IsScalar) //because it is already flat, there is no need to clone even if it is already sliced.
+                // NumPy's a.flat over a 0-d array yields exactly ONE element with 1-D shape (1,)
+                // — np.asarray(a.flat).shape == (1,), matching np.ravel(0-d) — so the raveled
+                // image must be a length-1 vector, never the 0-d view itself (oracle-gated by
+                // the instance tier's ndarray.flat scalar_0d cells).
+                if (Shape.IsScalar)
+                    return this.reshape(new Shape(1));
+                if (ndim == 1) //because it is already flat, there is no need to clone even if it is already sliced.
                     return new NDArray(Storage);
                 // flat's documented contract is the raveled C-order IMAGE — a materialized copy
                 // for ANY non-contiguous layout (its ~15 internal consumers walk the buffer

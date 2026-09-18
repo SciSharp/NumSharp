@@ -64,9 +64,16 @@ namespace NumSharp.Utilities
             var lo = Vector256.Min(a, b);
             var res = Core256(hi, lo);
 
-            // safe <=> hi in [SafeLo, SafeHi]; a NaN hi fails both compares -> unsafe (scalarised).
+            // safe <=> hi in [SafeLo, SafeHi] AND both operands are ordered. The range compares
+            // alone are NOT NaN-safe on every TFM: .NET 8's Vector256.Max/Min lower to the raw
+            // x86 vmaxpd/vminpd, which return the SECOND operand on an unordered compare — so a
+            // NaN operand yields a FINITE hi inside the safe band and the lane silently computed
+            // hypot(|other|, |other|) = |other|*sqrt(2) (caught by the nan tier's binary
+            // cross-grid, net8-only; .NET 9+ Max propagates NaN and hid it). Equals(v, v) is
+            // false ONLY for NaN on every TFM, so it forces NaN lanes to the scalar kernel.
             var safe = Vector256.GreaterThanOrEqual(hi, Vector256.Create(SafeLo))
-                     & Vector256.LessThanOrEqual(hi, Vector256.Create(SafeHi));
+                     & Vector256.LessThanOrEqual(hi, Vector256.Create(SafeHi))
+                     & Vector256.Equals(a, a) & Vector256.Equals(b, b);
             uint mask = Vector256.ExtractMostSignificantBits(safe);
             if (mask != 0b1111u)
             {
@@ -153,8 +160,11 @@ namespace NumSharp.Utilities
             var hi = Vector256.Max(a, b);
             var lo = Vector256.Min(a, b);
             var res = Core256(hi, lo);
+            // Ordered-operand guard: see Hypot256 — net8's raw vmaxpd/vminpd lowering can hand a
+            // NaN lane a finite hi, so NaN lanes must be forced to the scalar completion here too.
             var safe = Vector256.GreaterThanOrEqual(hi, Vector256.Create(SafeLo))
-                     & Vector256.LessThanOrEqual(hi, Vector256.Create(SafeHi));
+                     & Vector256.LessThanOrEqual(hi, Vector256.Create(SafeHi))
+                     & Vector256.Equals(a, a) & Vector256.Equals(b, b);
             uint mask = Vector256.ExtractMostSignificantBits(safe);
             if (mask != 0b1111u)
                 for (int lane = 0; lane < 4; lane++)
@@ -172,8 +182,11 @@ namespace NumSharp.Utilities
             var hi = Vector256.Max(a, b);
             var lo = Vector256.Min(a, b);
             var res = Core256(hi, lo);
+            // Ordered-operand guard: see Hypot256 — net8's raw vmaxpd/vminpd lowering can hand a
+            // NaN lane a finite hi, so NaN lanes must be forced to the scalar completion here too.
             var safe = Vector256.GreaterThanOrEqual(hi, Vector256.Create(SafeLo))
-                     & Vector256.LessThanOrEqual(hi, Vector256.Create(SafeHi));
+                     & Vector256.LessThanOrEqual(hi, Vector256.Create(SafeHi))
+                     & Vector256.Equals(a, a) & Vector256.Equals(b, b);
             uint mask = Vector256.ExtractMostSignificantBits(safe);
             if (mask != 0b1111u)
                 for (int lane = 0; lane < 4; lane++)

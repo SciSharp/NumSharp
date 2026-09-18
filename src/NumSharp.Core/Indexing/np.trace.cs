@@ -21,9 +21,10 @@ namespace NumSharp
         /// <param name="axis2">Second axis of the 2-D sub-array. Default 1.</param>
         /// <param name="dtype">
         ///     Output dtype. <c>null</c> (default) preserves <c>a.dtype</c>,
-        ///     except integer dtypes narrower than <see cref="long"/> promote
-        ///     to <see cref="long"/> (NEP50 / matches NumPy's "default platform
-        ///     integer" rule). Bool input promotes to <see cref="long"/>.
+        ///     except narrow integer dtypes widen per NumPy's add.reduce rule:
+        ///     signed ints and bool promote to <see cref="long"/>, UNSIGNED ints
+        ///     (and Char, the uint16 twin) promote to <see cref="ulong"/> —
+        ///     trace(uint8) is uint64, exactly as in NumPy.
         /// </param>
         /// <param name="out">
         ///     Optional output array. Shape must equal the natural reduction
@@ -66,9 +67,9 @@ namespace NumSharp
             // a 1-D-extended view (the diagonal axis is the last dim of the result).
             var diag = np.diagonal(a, offset, axis1, axis2);
 
-            // dtype rule: when not specified, promote bool/int<int64 to int64;
-            // otherwise preserve. np.sum (via the TensorEngine reduction) already
-            // does NEP50 promotion when typeCode is null.
+            // dtype rule: when not specified, the engine Sum's NEP50 promotion applies
+            // (signed/bool -> int64, unsigned -> uint64, floats preserved) — the same
+            // split the 2-D/3-D fast path's TraceTypeInfo encodes.
             NPTypeCode? sumDtype = dtype?.GetTypeCode();
 
             // The diagonal is a strided view (stride[axis1] + stride[axis2]); its

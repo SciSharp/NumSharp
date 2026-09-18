@@ -85,7 +85,21 @@ namespace NumSharp.Backends
                 result2 = ExecuteAxisReduction(arr, axis2, keepdims, outputType2, null, ReductionOp.Mean);
 
             if (needsCast)
-                result2 = Cast(result2, inputTc, copy: true);
+            {
+                // The double-precision intermediate is consumed by the narrowing COPY cast — leaving
+                // it undisposed stranded one pooled buffer per f16 axis mean (the sum path's twin
+                // leak, caught by UndisposedIntermediateTests via the instance oracle tier,
+                // 2026-09-18).
+                var wide2 = result2;
+                try
+                {
+                    result2 = Cast(result2, inputTc, copy: true);
+                }
+                finally
+                {
+                    wide2.Dispose();
+                }
+            }
             return result2;
         }
 

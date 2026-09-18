@@ -53,10 +53,29 @@ namespace NumSharp.Backends
             // real divergence this fixes. An explicit dtype request is honored by the normal path.
             if (arr.typecode == NPTypeCode.Half && typeCode == null)
             {
+                // Both temporaries are this branch's own intermediates: `wide` is consumed by the
+                // narrowing astype COPY, and `halfResult` is element-copied into @out when one is
+                // given — leaving either undisposed stranded a pooled buffer per f16 axis sum
+                // (caught by UndisposedIntermediateTests via the instance oracle tier, 2026-09-18).
                 var wide = ExecuteAxisReduction(arr, axis, keepdims, NPTypeCode.Single, null, ReductionOp.Sum);
-                var halfResult = wide.astype(NPTypeCode.Half);
+                NDArray halfResult;
+                try
+                {
+                    halfResult = wide.astype(NPTypeCode.Half);
+                }
+                finally
+                {
+                    wide.Dispose();
+                }
                 if (@out is null) return halfResult;
-                for (long i = 0; i < halfResult.size; i++) @out.SetAtIndex(halfResult.GetAtIndex(i), i);
+                try
+                {
+                    for (long i = 0; i < halfResult.size; i++) @out.SetAtIndex(halfResult.GetAtIndex(i), i);
+                }
+                finally
+                {
+                    halfResult.Dispose();
+                }
                 return @out;
             }
 

@@ -353,7 +353,10 @@ namespace NumSharp.Tests.Fuzz
             {
                 "ArgumentException", "ArgumentNullException", "ArgumentOutOfRangeException",
                 "IncorrectShapeException", "AxisOutOfRangeException", "InvalidOperationException",
-                "FormatException", "OverflowException", "NotSupportedException"
+                "FormatException", "OverflowException", "NotSupportedException",
+                // ndarray.item's size guard (NumPy: ValueError "can only convert an array of
+                // size 1 to a Python scalar") is the house IncorrectSizeException.
+                "IncorrectSizeException"
             },
             ["TypeError"] = new[]
             {

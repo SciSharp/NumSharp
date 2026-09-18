@@ -258,5 +258,305 @@ namespace NumSharp.Tests.Fuzz
                 .Distinct(StringComparer.Ordinal)
                 .OrderBy(name => name, StringComparer.Ordinal)
                 .ToArray();
+
+        /// <summary>Declared public property names — np.dtypes and the ndarray property row are
+        ///     property-only surfaces that <see cref="Surface"/> (methods) cannot see.</summary>
+        /// <param name="type">The facade type to reflect.</param>
+        /// <param name="flags">Instance or Static, per the facade's shape.</param>
+        /// <returns>Distinct ordinal-sorted property names.</returns>
+        private static string[] Properties(Type type, BindingFlags flags)
+            => type.GetProperties(flags | BindingFlags.Public | BindingFlags.DeclaredOnly)
+                .Select(p => p.Name)
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(name => name, StringComparer.Ordinal)
+                .ToArray();
+
+        /// <summary>All distinct op keys in the committed corpus (host pins excluded) — the same
+        ///     discovery the np-surface gate uses, shared by the four facade gates below.</summary>
+        /// <returns>The op-key set, ordinal-compared.</returns>
+        private static HashSet<string> CorpusOps()
+        {
+            var ops = new HashSet<string>(StringComparer.Ordinal);
+            string directory = Path.GetDirectoryName(FuzzCorpus.CorpusPath("unused"));
+            foreach (string path in Directory.EnumerateFiles(directory, "*.jsonl"))
+            {
+                if (path.EndsWith(".host.jsonl", StringComparison.Ordinal))
+                    continue;
+                foreach (var c in FuzzCorpus.Load(Path.GetFileName(path)))
+                    if (!string.IsNullOrEmpty(c.Op))
+                        ops.Add(c.Op);
+            }
+            return ops;
+        }
+
+        // ================= ndarray (the instance surface, coverage plan §A1 / row G0) =========
+
+        // NumSharp conveniences with NO NumPy 2.4.2 ndarray member of that name, whose VALUE path
+        // is nevertheless a corpus op (the np.* twin or an instance key): the alias target must
+        // exist, so a renamed op breaks this map instead of rotting.
+        private static readonly Dictionary<string, string> NdarrayAliases = new()
+        {
+            ["amax"] = "ndarray.max",           // alias of ndarray.max (np.amax == np.max)
+            ["amin"] = "ndarray.min",
+            ["conjugate"] = "ndarray.conj",     // same method, NumPy exposes both names
+            // partition/argpartition ARE NumPy methods, but whole-output bytes between kth anchors
+            // are introselect-implementation-specific on BOTH sides — the np.* corpus pins the
+            // DERIVED kth-values instead, and the instance spelling delegates to that same kernel.
+            ["argpartition"] = "argpartition",
+            ["partition"] = "partition",
+            // NumSharp-only instance conveniences (no ndarray.<name> in NumPy) delegating to the
+            // fuzzed np.* op of the same name:
+            ["array_equal"] = "array_equal",
+            ["convolve"] = "convolve",
+            ["correlate"] = "correlate",
+            ["delete"] = "delete",
+            ["dstack"] = "dstack",
+            ["hstack"] = "hstack",
+            ["vstack"] = "vstack",
+            ["matrix_power"] = "matrix_power",
+            ["negative"] = "negative",
+            ["positive"] = "positive",
+            ["roll"] = "roll",
+            ["unique"] = "unique",
+        };
+
+        // Members whose stronger gate lives elsewhere, or which the operand corpus structurally
+        // cannot express (IO, Python-protocol plumbing, device placement).
+        private static readonly HashSet<string> NdarraySiblingOwned = new()
+        {
+            // IO / host-object conversions: text bytes and nested CLR lists have their own
+            // byte-exact suites (PrintfFormatter/tofile; ToJaggedArray/tolist tests).
+            "tofile", "tolist",
+            // flags mutation is gated by the dedicated flags oracle (#5, FlagsOracleTests).
+            "setflags",
+            // setfield writes THROUGH a dtype window — gated with getfield by the
+            // NDArray.getfield/setfield suite (the read half IS corpus-gated: ndarray.getfield).
+            "setfield",
+            // Array-API device placement: no value bytes (np.device conformance suite).
+            "to_device",
+            // Python protocol: indexing rides the advanced-indexing oracle (#2); iteration order
+            // rides the iter tier (nditer/flatiter semantics); containment/hash are container
+            // tests (NDArray.Container).
+            "__getitem__", "__setitem__", "__iter__", "__contains__", "__hash__",
+        };
+
+        // NumSharp-only members with no NumPy 2.4.2 counterpart at all (itemset was REMOVED in
+        // NumPy 2.0; negate/reshape_unsafe are C#-side conveniences).
+        private static readonly HashSet<string> NdarrayCompatibilityOnly = new()
+        {
+            "itemset", "negate", "reshape_unsafe",
+        };
+
+        // Property row (plan §D4): NumPy-named properties NOT carried as ndarray.<prop> corpus
+        // keys, each with a sibling gate; NumSharp-only properties are compatibility surface.
+        private static readonly HashSet<string> NdarrayPropSiblingOwned = new()
+        {
+            "base",     // view lineage: layout-parity oracle (#6) + view/property validation suite
+            "data",     // memoryview bridge: NDArray.data/MemoryView suite
+            "device",   // Array-API conformance suite
+            "dtype",    // the DTypes suite + every corpus case's expected-dtype comparison
+            "flags",    // the flags oracle (#5)
+            "shape",    // asserted by EVERY corpus case's result-shape comparison
+        };
+
+        private static readonly HashSet<string> NdarrayPropCompatibilityOnly = new()
+        {
+            "dtypesize", "typecode", "order", "flatiter",
+        };
+
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void NdarraySurface_IsCoveredOrExplicitlyClassified()
+        {
+            var corpusOps = CorpusOps();
+            var failures = new List<string>();
+
+            // Methods. The C#-infrastructure half of NDArray (GetAtIndex/SetData/Clone/ToString/…)
+            // is uniformly PascalCase while every NumPy-named member is lowercase (NumPy's own
+            // convention; T/mT are PROPERTIES, handled below) — so an uppercase first letter IS
+            // the infra classification, and a future NumPy-named member (always lowercase) can
+            // never hide behind it.
+            var methods = Surface(typeof(NDArray), BindingFlags.Instance | BindingFlags.Static);
+            foreach (string name in methods)
+            {
+                if (char.IsUpper(name[0]))
+                    continue;                                   // C# infrastructure by convention
+                if (corpusOps.Contains("ndarray." + name))
+                    continue;                                   // direct instance coverage
+                if (NdarrayAliases.TryGetValue(name, out string target))
+                {
+                    if (!corpusOps.Contains(target))
+                        failures.Add($"ndarray.{name}: alias target corpus op '{target}' is absent");
+                    continue;
+                }
+                if (NdarraySiblingOwned.Contains(name) || NdarrayCompatibilityOnly.Contains(name))
+                    continue;
+                failures.Add($"ndarray.{name}: unclassified instance surface");
+            }
+
+            // Properties (the D4 row): reads are ordinary values, so NumPy-named ones must be
+            // corpus keys (ndarray.T/mT/real/imag/flat/nbytes/itemsize/ndim/size/strides) or
+            // explicitly sibling-owned; uppercase C#-infra properties (Shape/Unsafe/…) are exempt
+            // EXCEPT T, which is NumPy's transpose property and must be corpus-covered.
+            foreach (string name in Properties(typeof(NDArray), BindingFlags.Instance | BindingFlags.Static))
+            {
+                if (corpusOps.Contains("ndarray." + name))
+                    continue;
+                if (name != "T" && char.IsUpper(name[0]))
+                    continue;
+                if (NdarrayPropSiblingOwned.Contains(name) || NdarrayPropCompatibilityOnly.Contains(name))
+                    continue;
+                failures.Add($"ndarray.{name} (property): unclassified instance surface");
+            }
+
+            // Classification self-retirement (the A3 rule): a stale entry fails instead of rotting.
+            foreach (string name in NdarrayAliases.Keys
+                         .Concat(NdarraySiblingOwned).Concat(NdarrayCompatibilityOnly))
+            {
+                if (!methods.Contains(name))
+                    failures.Add($"stale ndarray classification: {name}");
+                if (corpusOps.Contains("ndarray." + name))
+                    failures.Add($"stale ndarray classification: {name} now has a direct instance corpus op");
+            }
+
+            Console.WriteLine($"[NdarraySurface] methods={methods.Length}, " +
+                              $"instance_ops={corpusOps.Count(o => o.StartsWith("ndarray.", StringComparison.Ordinal))}, " +
+                              $"aliases={NdarrayAliases.Count}, sibling={NdarraySiblingOwned.Count}, " +
+                              $"compat={NdarrayCompatibilityOnly.Count}");
+            if (failures.Count > 0)
+                Assert.Fail($"{failures.Count} ndarray surface classification failures:\n  " +
+                            string.Join("\n  ", failures));
+        }
+
+        // ================= np.emath (coverage plan §A2/E5) =====================================
+
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void EmathSurface_IsFullyCorpusCovered()
+        {
+            // The whole scimath module is promoted into the differential corpus (emath.jsonl) —
+            // no sibling/alias classifications at all, so ANY new emath member must gain corpus
+            // cases before this gate passes.
+            var corpusOps = CorpusOps();
+            var missing = Surface(typeof(EmathModule), BindingFlags.Instance)
+                .Where(name => !corpusOps.Contains("emath." + name))
+                .ToArray();
+            Assert.AreEqual(0, missing.Length,
+                "np.emath members without an emath.* corpus op: " + string.Join(", ", missing));
+        }
+
+        // ================= np.ma (coverage plan §A2) ===========================================
+
+        // NumPy-side aliases whose canonical spelling carries the ma corpus cases.
+        private static readonly Dictionary<string, string> MaAliases = new()
+        {
+            ["alltrue"] = "ma.all",
+            ["sometrue"] = "ma.any",
+            ["amax"] = "ma.max",
+            ["amin"] = "ma.min",
+            ["anomalies"] = "ma.anom",
+            ["product"] = "ma.prod",
+            ["round"] = "ma.around",
+            ["round_"] = "ma.around",
+            ["row_stack"] = "ma.vstack",
+            ["innerproduct"] = "ma.inner",
+            ["outerproduct"] = "ma.outer",
+            ["asanyarray"] = "ma.asarray",
+            // The returned=True twin of ma.average — same weighted-average value path, plus the
+            // sum-of-weights slot pinned by MaskedArrayTests.
+            ["average_returned"] = "ma.average",
+        };
+
+        // Gated by the MaskedArrayTests suite + the ledger in docs/MA_ORACLE_DESIGN.md: creation
+        // helpers returning plain/unmasked arrays, callable-taking wrappers, fill-value plumbing,
+        // mask-structure helpers with no serializable operand form, and predicates.
+        private static readonly HashSet<string> MaSiblingOwned = new()
+        {
+            "apply_along_axis", "apply_over_axes",              // C# callable — not serializable
+            "arange", "empty", "empty_like", "ones", "ones_like", "zeros", "zeros_like",
+            "identity", "indices", "frombuffer", "fromfunction", // creation (plain np twins fuzzed)
+            "clump_masked", "clump_unmasked", "column_stack", "common_fill_value",
+            "compress_nd", "compress_rowcols", "convolve", "corrcoef", "correlate", "cov",
+            "default_fill_value", "diagflat", "dstack",
+            "flatnotmasked_contiguous", "flatnotmasked_edges",
+            "getmask",                                          // nomask (null) has no byte form; getmaskarray is corpus-gated
+            "harden_mask", "hsplit", "ids", "isMA", "isMaskedArray", "is_mask", "isarray",
+            "masked_object", "maximum_fill_value", "minimum_fill_value", "moveaxis",
+            "ndenumerate", "ndim", "nonzero", "notmasked_contiguous", "notmasked_edges",
+            "polyfit", "putmask", "resize", "set_fill_value", "shape", "shrink_mask", "size",
+            "soften_mask",
+        };
+
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void MaSurface_IsCoveredOrExplicitlyClassified()
+        {
+            var corpusOps = CorpusOps();
+            var failures = new List<string>();
+            var methods = Surface(typeof(MaskedArrayModule), BindingFlags.Instance | BindingFlags.Static);
+            foreach (string name in methods)
+            {
+                if (corpusOps.Contains("ma." + name))
+                    continue;
+                if (MaAliases.TryGetValue(name, out string target))
+                {
+                    if (!corpusOps.Contains(target))
+                        failures.Add($"np.ma.{name}: alias target corpus op '{target}' is absent");
+                    continue;
+                }
+                if (MaSiblingOwned.Contains(name))
+                    continue;
+                failures.Add($"np.ma.{name}: unclassified surface");
+            }
+
+            // Self-retirement: an entry for a member that no longer exists — or that gained a
+            // direct corpus op — must fail so the classification tracks reality.
+            foreach (string name in MaAliases.Keys.Concat(MaSiblingOwned))
+            {
+                if (!methods.Contains(name))
+                    failures.Add($"stale np.ma classification: {name}");
+                if (corpusOps.Contains("ma." + name))
+                    failures.Add($"stale np.ma classification: {name} now has a direct corpus op");
+            }
+
+            Console.WriteLine($"[MaSurface] methods={methods.Length}, " +
+                              $"ma_ops={corpusOps.Count(o => o.StartsWith("ma.", StringComparison.Ordinal))}, " +
+                              $"aliases={MaAliases.Count}, sibling={MaSiblingOwned.Count}");
+            if (failures.Count > 0)
+                Assert.Fail($"{failures.Count} np.ma surface classification failures:\n  " +
+                            string.Join("\n  ", failures));
+        }
+
+        // ================= np.dtypes (coverage plan §A2) =======================================
+
+        // The 29 DType-class accessor properties, all gated by the DTypes suites
+        // (test/NumSharp.Tests/DTypes/*) and the dtype_text tier's np.dtype(string) coverage —
+        // they return the registry's class singletons, not array values, so the operand corpus
+        // has nothing to bit-compare. A NEW property must be added here (with its gate) or fail.
+        private static readonly HashSet<string> DtypesKnownProperties = new()
+        {
+            "BoolDType", "ByteDType", "CLongDoubleDType", "CharDType", "Complex128DType",
+            "DateTime64DType", "DecimalDType", "Float16DType", "Float32DType", "Float64DType",
+            "Int16DType", "Int32DType", "Int64DType", "Int8DType", "IntDType", "LongDType",
+            "LongDoubleDType", "LongLongDType", "ShortDType", "TimeDelta64DType", "UByteDType",
+            "UInt16DType", "UInt32DType", "UInt64DType", "UInt8DType", "UIntDType", "ULongDType",
+            "ULongLongDType", "UShortDType",
+        };
+
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void DtypesSurface_IsExplicitlyClassified()
+        {
+            var props = Properties(typeof(np.dtypes), BindingFlags.Static);
+            var failures = new List<string>();
+            foreach (string name in props)
+                if (!DtypesKnownProperties.Contains(name))
+                    failures.Add($"np.dtypes.{name}: unclassified DType-class property (add its gate + classification)");
+            foreach (string name in DtypesKnownProperties)
+                if (!props.Contains(name))
+                    failures.Add($"stale np.dtypes classification: {name}");
+            Assert.AreEqual(0, failures.Count,
+                string.Join("\n  ", failures));
+        }
     }
 }
