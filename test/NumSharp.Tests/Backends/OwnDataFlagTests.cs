@@ -16,13 +16,25 @@ namespace NumSharp.Tests.Backends
     ///     <c>nd.flags.owndata</c> reads the Shape bit — so the flags oracle gates the mirror.
     ///
     ///     <para>
-    ///     Deliberately NOT asserted here — the five KNOWN open op-level ownership divergences vs NumPy
-    ///     (each returns an owned copy where NumPy returns a view of an internal temp, or vice versa;
-    ///     values are identical, only ownership/layout observables differ): <c>np.squeeze</c> no-op on an
-    ///     owner (NumPy returns SELF), the <c>np.resize</c> FUNCTION (NumPy: reshape-of-concatenate view),
-    ///     <c>np.flatnonzero</c> / <c>np.argwhere</c> (NumPy: views into nonzero's shared buffer), and
-    ///     trailing-advanced-axis fancy indexing <c>X[:, [i,j]]</c> (NumPy: F-contiguous transposed-back
-    ///     view of a temp). Do not add green assertions for them without fixing the ops first.
+    ///     The op-level ownership divergences vs NumPy — where NumSharp returns a clean owned copy and
+    ///     NumPy returns a non-owning view of an internal temp (or vice versa); values are always
+    ///     identical, only the ownership/layout observable differs — are no longer SILENTLY untested:
+    ///     they are pinned (regression-gated, current NumSharp value asserted with NumPy's documented)
+    ///     in <see cref="OwnDataDivergences_NumpyInternalRepresentations_Documented"/> [Misaligned].
+    ///     They stay out of the bit-exact <c>flags_oracle.jsonl</c> corpus deliberately: matching NumPy
+    ///     would mean pessimizing correct owned results into views of composition temps (e.g.
+    ///     <c>np.flatnonzero</c>'s owned index buffer, whose value/values NumSharp computes directly),
+    ///     or returning <c>self</c> from a no-op <c>np.squeeze</c> (which would change ARC disposal
+    ///     semantics NumSharp deliberately keeps distinct). <c>np.cov</c> inherits the squeeze-no-op
+    ///     view through its terminal <c>np.squeeze(c)</c>.
+    ///     </para>
+    ///     <para>
+    ///     One entry in the former exclusion list WAS a genuine bug and is now FIXED (asserted green
+    ///     below in <see cref="BooleanPartialMask_NowOwns_LikeNumpy"/>): a boolean PARTIAL
+    ///     (row/prefix) mask <c>arr[boolmask]</c> where <c>mask.ndim &lt; arr.ndim</c> returned a VIEW of
+    ///     its internal gather buffer (owndata=False) although the buffer is a genuine independent copy —
+    ///     <c>Default.BooleanMask</c> now reshapes that owned buffer IN PLACE, so it owns like NumPy and
+    ///     like the leading-integer fancy / full-element-mask paths.
     ///     </para>
     /// </summary>
     [TestClass]
@@ -478,6 +490,86 @@ namespace NumSharp.Tests.Backends
             np.arange(10)["::2"].flags.num.Should().Be(1280);                // strided view
             np.broadcast_to(np.arange(10), new Shape(3, 10)).flags.num.Should().Be(256); // read-only broadcast
             np.arange(12).reshape(3, 4).diagonal().flags.num.Should().Be(256);           // read-only diagonal
+        }
+
+        // ---- the boolean PARTIAL-mask OWNDATA fix (was a bug, now owns) --------------------------
+
+        [TestMethod]
+        public void BooleanPartialMask_NowOwns_LikeNumpy()
+        {
+            // A boolean mask whose ndim is LESS than the array's (a row / prefix mask) selects the
+            // trailing sub-tensors into a fresh, independent copy — NumPy owndata=True (num=1285 for a
+            // 2-D result). This USED to return a VIEW of the internal gather buffer (owndata=False,
+            // num=1281) although the buffer is a genuine copy; Default.BooleanMask now reshapes the
+            // owned buffer IN PLACE, so it owns like the leading-integer fancy and full-element-mask
+            // paths. Live-probed vs NumPy 2.4.2.
+            var m = np.arange(12).astype(NPTypeCode.Int64).reshape(3, 4);
+            var rows = m[np.array(new bool[] { true, false, true })];
+            AssertOwns(rows, "boolean row-mask on 2-D is an owned copy (NumPy num=1285)");
+            rows.flags.num.Should().Be(1285);
+
+            var a3 = np.arange(24).astype(NPTypeCode.Int64).reshape(2, 3, 4);
+            AssertOwns(a3[np.array(new bool[] { true, false })], "3-D boolean row-mask owns (NumPy num=1285)");
+            AssertOwns(
+                a3[np.array(new bool[,] { { true, false, true }, { false, true, false } })],
+                "ndim-2 partial mask owns (NumPy num=1285)");
+
+            // the full-element mask path (mask.ndim == arr.ndim) was already correct and still owns
+            AssertOwns(m[m > (NDArray)5L], "full element mask owns (NumPy num=1287)");
+            m[m > (NDArray)5L].flags.num.Should().Be(1287);
+
+            // independence: the fixed result must NOT alias the source (it is a genuine copy)
+            var src = np.arange(12).astype(NPTypeCode.Int64).reshape(3, 4);
+            var sel = src[np.array(new bool[] { true, false, true })];
+            sel.SetAtIndex(777L, 0);
+            src.GetInt64(0).Should().Be(0, "the boolean-mask copy is independent of the source");
+        }
+
+        // ---- the intended op-level ownership divergences, pinned as known [Misaligned] ----------
+
+        [TestMethod]
+        [Misaligned]
+        public void OwnDataDivergences_NumpyInternalRepresentations_Documented()
+        {
+            // Each op below returns a clean OWNED copy where NumPy returns a non-owning view of an
+            // internal composition temp (flatnonzero/argwhere/resize, and the advanced-index
+            // "transpose-back" family — any fancy/boolean advanced index that is NOT a single leading
+            // block), or a fresh alias VIEW where NumPy returns SELF (a no-op np.squeeze; np.cov, which
+            // ends in np.squeeze(c)). Values are identical; only the ownership/layout flag observable
+            // differs. Pinning the CURRENT NumSharp num keeps the surface regression-gated: a change
+            // that alters these records (an accidental view leak, or a deliberate op fix) turns this red
+            // and must be re-evaluated. NumPy 2.4.2 values live-probed 2026-09-18.
+            NDArray M() => np.arange(12).astype(NPTypeCode.Int64).reshape(3, 4);
+            NDArray A3() => np.arange(24).astype(NPTypeCode.Int64).reshape(2, 3, 4);
+            NDArray ZS() => np.arange(12).astype(NPTypeCode.Int64).reshape(3, 4) % (NDArray)3L;
+
+            var cases = new (string name, Func<NDArray> build, int nsNum, int npNum)[]
+            {
+                ("flatnonzero",              () => np.flatnonzero(ZS()),                                                1287, 1283),
+                ("argwhere",                 () => np.argwhere(ZS()),                                                   1285, 1282),
+                ("resize(func)",             () => np.resize(np.arange(6).astype(NPTypeCode.Int64), new Shape(3, 4)),   1285, 1281),
+                ("squeeze no-op owner 2-D",  () => np.squeeze(np.zeros(new Shape(3, 4), NPTypeCode.Int64)),             1281, 1285),
+                ("squeeze no-op owner 1-D",  () => np.squeeze(np.arange(6).astype(NPTypeCode.Int64)),                   1283, 1287),
+                ("cov (inherits squeeze)",   () => np.cov(M().astype(NPTypeCode.Double)),                               1281, 1285),
+                ("fancy X[:,[i,j]]",         () => M()[Slice.All, np.array(new int[] { 1, 3 })],                        1285, 1282),
+                ("fancy X[:,[i]] 1-col",     () => M()[Slice.All, np.array(new int[] { 1 })],                           1287, 1283),
+                ("col bool X[:,mask]",       () => M()[Slice.All, np.array(new bool[] { true, true, false, true })],    1285, 1282),
+                ("mid-axis A[:,[i,j],:]",    () => A3()[Slice.All, np.array(new int[] { 0, 2 }), Slice.All],            1285, 1280),
+                ("ellipsis A[...,[i,j]]",    () => A3()[Slice.Ellipsis, np.array(new int[] { 0, 2 })],                  1285, 1280),
+                ("slice+fancy A[0:2,[i,j]]", () => A3()[new Slice("0:2"), np.array(new int[] { 0, 2 })],                1285, 1280),
+                ("newaxis+fancy M[na,[i,j]]",() => M()[Slice.NewAxis, np.array(new int[] { 0, 2 })],                    1285, 1281),
+            };
+
+            foreach (var (name, build, nsNum, npNum) in cases)
+            {
+                var a = build();
+                a.flags.num.Should().Be(nsNum,
+                    $"[{name}] NumSharp pins num={nsNum} (owned/clean); NumPy 2.4.2 diverges with num={npNum} " +
+                    "(a non-owning view of a composition temp, or self) — intended representation difference, values identical");
+                // The divergence is C/F/OWNDATA only; every case stays WRITEABLE and ALIGNED.
+                a.flags.writeable.Should().BeTrue($"[{name}] writeable");
+                a.flags.aligned.Should().BeTrue($"[{name}] aligned");
+            }
         }
     }
 }
