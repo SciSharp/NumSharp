@@ -1747,7 +1747,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     </article>
     <article class="metric-card">
       <div class="metric-label">Effective geomean</div>
-      <div class="metric-value metric-good" data-effective-geomean>—</div>
+      <div class="metric-value metric-good" data-effective-geomean>-</div>
       <p class="metric-note">Best valid implementation selected per comparable cell</p>
     </article>
     <article class="metric-card">
@@ -2116,15 +2116,15 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       <p class="section-note">Detailed tables remain available for traceability</p>
     </div>
     <ul class="report-list">
-      <li><a href="../../../benchmark/history/latest/MANIFEST.md">Snapshot manifest</a> — snapshot provenance, versions, commit, and artifact inventory.</li>
-      <li><a href="../../../benchmark/history/latest/benchmark-report.md">Unified report</a> — unified operation matrix and subsystem results.</li>
-      <li><a href="../../../benchmark/history/latest/cast_results.md">Cast matrix</a> — source/destination dtype and layout cast matrix.</li>
-      <li><a href="../../../benchmark/history/latest/nditer_results.md">NDIter results</a> — NDIter construction, traversal, and operation timings.</li>
-      <li><a href="../../../benchmark/history/latest/layout_results.md">Layout matrix</a> — memory-layout benchmark matrix.</li>
-      <li><a href="../../../benchmark/history/latest/operand_results.md">Operand layouts</a> — scalar, mixed, broadcast, and operand-layout results.</li>
-      <li><a href="../../../benchmark/history/latest/fusion_results.md">Fusion results</a> — fused versus unfused expression timings.</li>
-      <li><a href="../../../benchmark/history/latest/openblas_results.md">OpenBLAS results</a> — native product, sliding-dot, and LAPACK timings.</li>
-      <li><a href="il-generation.md">IL generation</a> — IL-generation implementation and performance notes.</li>
+      <li><a href="../../../benchmark/history/latest/MANIFEST.md">Snapshot manifest</a> - snapshot provenance, versions, commit, and artifact inventory.</li>
+      <li><a href="../../../benchmark/history/latest/benchmark-report.md">Unified report</a> - unified operation matrix and subsystem results.</li>
+      <li><a href="../../../benchmark/history/latest/cast_results.md">Cast matrix</a> - source/destination dtype and layout cast matrix.</li>
+      <li><a href="../../../benchmark/history/latest/nditer_results.md">NDIter results</a> - NDIter construction, traversal, and operation timings.</li>
+      <li><a href="../../../benchmark/history/latest/layout_results.md">Layout matrix</a> - memory-layout benchmark matrix.</li>
+      <li><a href="../../../benchmark/history/latest/operand_results.md">Operand layouts</a> - scalar, mixed, broadcast, and operand-layout results.</li>
+      <li><a href="../../../benchmark/history/latest/fusion_results.md">Fusion results</a> - fused versus unfused expression timings.</li>
+      <li><a href="../../../benchmark/history/latest/openblas_results.md">OpenBLAS results</a> - native product, sliding-dot, and LAPACK timings.</li>
+      <li><a href="il-generation.md">IL generation</a> - IL-generation implementation and performance notes.</li>
     </ul>
   </section>
 </div>

@@ -159,7 +159,7 @@ because the name already exists.
 | # | Claim | Gate |
 |---|---|---|
 | 1 | validated runtime is Pandas 3.0.5 | [`Runtime_IsLatestStablePandas305`][gate] |
-| 2 | built-in recognition covers frames, series, indexes, extension arrays and subclasses—not scalars | [`BuiltInAdapter_RecognizesFrameSeriesIndexExtensionAndSubclasses_NotScalars`][gate] |
+| 2 | built-in recognition covers frames, series, indexes, extension arrays and subclasses-not scalars | [`BuiltInAdapter_RecognizesFrameSeriesIndexExtensionAndSubclasses_NotScalars`][gate] |
 | 3 | implicit NumSharp encoding plus explicit Pandas `copy=False` shares storage | [`NumSharpToPandas_ImplicitEncoderSharesInput_WhenCopyFalseIsExplicit`][gate] |
 | 4 | numeric Series enters the existing read-only view bridge with exact pointer/layout | [`NumericSeries_UsesExistingReadonlyViewBridge_WithExactPointerAndLayout`][gate] |
 | 5 | homogeneous frame preserves its F-strided matrix and pointer through implicit decode | [`HomogeneousDataFrame_ImplicitDecoderPreservesFortranStridesAndPointer`][gate] |

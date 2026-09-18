@@ -52,7 +52,7 @@
     href: il-generation.md
   - name: NumSharp.Build Compiler
     href: numsharp-build-compiler.md
-  - name: Under the hood — internals
+  - name: Under the hood - internals
     href: advanced/under-the-hood.md
 - name: Interoperability
   href: interop/index.md

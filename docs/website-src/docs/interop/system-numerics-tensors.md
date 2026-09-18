@@ -1,10 +1,10 @@
-# System.Numerics.Tensors — NDArray as a Tensor&lt;T&gt;/TensorSpan&lt;T&gt;, and back
+# System.Numerics.Tensors - NDArray as a Tensor&lt;T&gt;/TensorSpan&lt;T&gt;, and back
 
 `NumSharp.Interop.System.Numerics.Tensors` connects `NDArray` to the BCL's
-[`System.Numerics.Tensors`](https://learn.microsoft.com/dotnet/api/system.numerics.tensors) types —
-`Tensor<T>`, `TensorSpan<T>` and `ReadOnlyTensorSpan<T>` — without copying. An array of **any** layout
+[`System.Numerics.Tensors`](https://learn.microsoft.com/dotnet/api/system.numerics.tensors) types -
+`Tensor<T>`, `TensorSpan<T>` and `ReadOnlyTensorSpan<T>` - without copying. An array of **any** layout
 (contiguous, sliced, transposed, strided, even broadcast) becomes a `TensorSpan<T>` over the very same
-unmanaged bytes; a `Tensor<T>` produced anywhere comes back as an `NDArray` — an owning copy, or a
+unmanaged bytes; a `Tensor<T>` produced anywhere comes back as an `NDArray` - an owning copy, or a
 zero-copy view over the tensor's pinned buffer. It is a **conversion library**, the sibling of the
 [ONNX Runtime](onnxruntime.md) and [ML.NET](mlnet.md) bridges: no `TensorEngine` seam, no
 `[ModuleInitializer]`, **no native dependency**. This page is its reference: setup, the verbs, what
@@ -26,7 +26,7 @@ crosses zero-copy and what cannot, who frees what, dtypes, frameworks.
 dotnet add package NumSharp.Interop.System.Numerics.Tensors
 ```
 
-That is the whole dependency — `System.Numerics.Tensors` is a purely managed BCL package and comes with
+That is the whole dependency - `System.Numerics.Tensors` is a purely managed BCL package and comes with
 it. Nothing else to install, no native runtime to pick.
 
 ```csharp
@@ -49,7 +49,7 @@ using (var h = nd.AsTensorSpan<float>())
 // A Tensor<T> produced elsewhere, read back as an NDArray with no copy.
 var output = Tensor.Create(new[] { 0.1f, 0.7f, 0.2f }, new nint[] { 3 });
 using NDArray probs = output.AsNDArray();
-long best = np.argmax(probs);                        // 1 — NumSharp reductions on the shared buffer
+long best = np.argmax(probs);                        // 1 - NumSharp reductions on the shared buffer
 ```
 
 > **Experimental.** `Tensor<T>`/`TensorSpan<T>` are `[Experimental("SYSLIB5001")]` in the BCL. This package
@@ -64,9 +64,9 @@ methods). The naming is the house convention: **`As…` shares memory, `To…` c
 
 | Direction | Verb | Semantics |
 |---|---|---|
-| NumSharp → Tensors | `nd.AsTensorSpan<T>()` → `TensorSpanHandle<T>` | **zero-copy** `TensorSpan<T>` / `ReadOnlyTensorSpan<T>` over the array's buffer; **any non-negative-stride layout**. The handle owns the buffer pin — take the span from `.Span` / `.ReadOnlySpan` inside a `using` |
+| NumSharp → Tensors | `nd.AsTensorSpan<T>()` → `TensorSpanHandle<T>` | **zero-copy** `TensorSpan<T>` / `ReadOnlyTensorSpan<T>` over the array's buffer; **any non-negative-stride layout**. The handle owns the buffer pin - take the span from `.Span` / `.ReadOnlySpan` inside a `using` |
 | NumSharp → Tensors | `nd.ToTensor<T>()` → `Tensor<T>` | independent, dense **copy**; any layout, read in logical (C) order; no lifetime coupling |
-| Tensors → NumSharp | `tensor.ToNDArray()` | fresh **owning** C-contiguous **copy** — the safe default |
+| Tensors → NumSharp | `tensor.ToNDArray()` | fresh **owning** C-contiguous **copy** - the safe default |
 | Tensors → NumSharp | `tensor.AsNDArray()` | **zero-copy view** over the tensor's pinned backing store; dense → a C-contiguous view, strided → a strided view (no densifying copy) |
 | Tensors → NumSharp | `span.ToNDArray()` | **copy** of a `TensorSpan<T>` / `ReadOnlyTensorSpan<T>` (a `ref struct` span cannot be leased) |
 
@@ -90,7 +90,7 @@ using NDArray view = t.AsNDArray();              // zero-copy view over t's buff
 outlive the pin that keeps its memory valid. So `AsTensorSpan` returns a small `IDisposable`
 `TensorSpanHandle<T>` that owns the ARC reference on the NumSharp buffer and rebuilds the span on each
 `.Span` / `.ReadOnlySpan` access (unmanaged memory never moves, so the pointer is stable). Wrap it in a
-`using` and take the span from it — the same shape as keeping a pinned buffer alive across a native call.
+`using` and take the span from it - the same shape as keeping a pinned buffer alive across a native call.
 
 ## Zero-copy: the rules
 
@@ -100,7 +100,7 @@ strides), a strided NumSharp view can be shared as-is:
 - **Every non-negative-stride layout shares.** Contiguous, an offset slice (`nd["2:5"]`), a transpose
   (`nd.T`), a stepped slice (`nd["::2"]`), a Fortran-contiguous array, and a **broadcast** view (stride-0
   dimensions) all cross zero-copy. A broadcast (or otherwise read-only) view is exposed through
-  `.ReadOnlySpan` only — `.Span` throws, because writing through overlapping stride-0 lanes would corrupt
+  `.ReadOnlySpan` only - `.Span` throws, because writing through overlapping stride-0 lanes would corrupt
   data, exactly as NumSharp forbids writing a broadcast view.
 - **A negative-stride view is the one refusal.** `System.Numerics.Tensors` forbids negative strides (its
   `TensorSpan` ctor throws *"Strides cannot be less than 0"*), so a reversed slice `nd["::-1"]` is refused
@@ -108,19 +108,19 @@ strides), a strided NumSharp view can be shared as-is:
   layout in logical order and copies).
 - **A length-≤1 axis is normalized to stride 0.** NumSharp assigns a unit axis a nonzero element stride;
   `System.Numerics.Tensors` requires such an axis to have stride 0 (a nonzero stride there reads as
-  over-claiming the buffer). The bridge normalizes it — safe, because a single-element axis is never
+  over-claiming the buffer). The bridge normalizes it - safe, because a single-element axis is never
   stepped, so the addressing is identical.
-- **A 0-d scalar crosses as a rank-1 `[1]` span**, and an **empty array as `TensorSpan<T>.Empty`** — the
+- **A 0-d scalar crosses as a rank-1 `[1]` span**, and an **empty array as `TensorSpan<T>.Empty`** - the
   BCL's pointer ctor cannot express rank 0 and rejects a zero-length backing, so these two shapes take the
   documented fallback.
 - **No 2 GB limit on `AsTensorSpan`.** The span fronts a native pointer with an `nint` length, unlike a
   `Memory<T>`-backed tensor; arrays over 2 GB share fine. (`ToTensor` / `ToNDArray` copy into a managed
-  `T[]`, which is `int`-indexed — see [Limits](#limits).)
+  `T[]`, which is `int`-indexed - see [Limits](#limits).)
 
 Under the hood the export is `new TensorSpan<T>(pointer, dataLength, lengths, strides)` on
 `slice.Address + Shape.Offset × itemsize` with the element strides from `Shape.Strides`; the import pins
 the tensor's backing array (`Tensor<T>.GetPinnedHandle()`) and wraps the pointer as a NumSharp memory
-block with a release hook — the same "wrap foreign memory" primitive the whole [interop family](index.md)
+block with a release hook - the same "wrap foreign memory" primitive the whole [interop family](index.md)
 is built on.
 
 ## Lifetime: who frees what
@@ -130,26 +130,26 @@ is built on.
   drops the reference; a forgotten handle is released by a finalizer safety net. `LiveExports` counts open
   handles.
 - **Imports.** `AsNDArray` leases the tensor's pinned backing through NumSharp's memory-block reference
-  count: the lease fires (unpinning the array) when the *last* NumSharp view over the memory — slices
-  derived from it included — is disposed or collected. The view roots the `Tensor<T>` so its backing cannot
+  count: the lease fires (unpinning the array) when the *last* NumSharp view over the memory - slices
+  derived from it included - is disposed or collected. The view roots the `Tensor<T>` so its backing cannot
   move underneath it, and does not own its data (`owndata == false`), so a size-changing `resize` refuses
   instead of detaching. `LiveImports` counts open leases.
 - **No GIL, no interpreter, no native handles.** The verbs are plain managed calls; the one rule is the
-  handle rule — **keep the `TensorSpanHandle<T>` alive while you use its span, and dispose it.**
+  handle rule - **keep the `TensorSpanHandle<T>` alive while you use its span, and dispose it.**
 
 ## Dtypes
 
-`System.Numerics.Tensors` containers are **unconstrained generics** over an unmanaged `T` — there is no
+`System.Numerics.Tensors` containers are **unconstrained generics** over an unmanaged `T` - there is no
 dtype enum and no fixed element-type table. So **all 15 NumSharp dtypes cross zero-copy as their own CLR
 type**; nothing is refused and nothing is converted:
 
 | NumSharp | Crosses as | Note |
 |---|---|---|
 | Boolean, Byte, SByte, Int16, UInt16, Int32, UInt32, Int64, UInt64, Single, Double | `bool`, `byte`, `sbyte`, `short`, `ushort`, `int`, `uint`, `long`, `ulong`, `float`, `double` | zero-copy |
-| Half | `System.Half` | **directly** — no `Float16` wrapper (unlike ONNX); NaN payloads and subnormals cross untouched |
-| Char | `char` | zero-copy, UTF-16 code units; **directional** — a `ushort` element type reads back as `UInt16`, never `Char` |
-| Decimal | `System.Decimal` | zero-copy (a 16-byte unmanaged struct) — no conversion, unlike the ONNX/ML.NET bridges |
-| Complex | `System.Numerics.Complex` | zero-copy (a 16-byte unmanaged struct) — no refusal, unlike the ONNX/ML.NET bridges |
+| Half | `System.Half` | **directly** - no `Float16` wrapper (unlike ONNX); NaN payloads and subnormals cross untouched |
+| Char | `char` | zero-copy, UTF-16 code units; **directional** - a `ushort` element type reads back as `UInt16`, never `Char` |
+| Decimal | `System.Decimal` | zero-copy (a 16-byte unmanaged struct) - no conversion, unlike the ONNX/ML.NET bridges |
+| Complex | `System.Numerics.Complex` | zero-copy (a 16-byte unmanaged struct) - no refusal, unlike the ONNX/ML.NET bridges |
 
 `T` must be the array's own element type: a mismatch (`AsTensorSpan<int>()` on a `float` array) is refused
 up front rather than silently reinterpreting the bytes.
@@ -157,7 +157,7 @@ up front rather than silently reinterpreting the bytes.
 ## Frameworks
 
 The package builds an assembly for **net8.0** and **net10.0**. **net9.0** and **net11.0** consumers are
-served by the net8.0 / net10.0 assets through NuGet nearest-TFM selection and .NET roll-forward — that is
+served by the net8.0 / net10.0 assets through NuGet nearest-TFM selection and .NET roll-forward - that is
 how 9 and 11 are supported without producing two more byte-identical assemblies. An opt-in
 `-p:BuildAllTfms=true` additionally emits the net9.0/net11.0 assets (once those SDKs are installed).
 
@@ -168,14 +168,14 @@ future 11.x (free to break the experimental API) from resolving automatically.
 
 ## Limits
 
-- **Negative-stride views** cannot be shared zero-copy (the BCL forbids negative strides) — `ToTensor` /
+- **Negative-stride views** cannot be shared zero-copy (the BCL forbids negative strides) - `ToTensor` /
   `ascontiguousarray` them.
 - **`ToTensor` / `ToNDArray` copy into a managed array**, which is `int`-indexed: over `int.MaxValue`
   elements they throw. Share zero-copy with `AsTensorSpan` (a native pointer, no such limit) instead.
 - **A `ref struct` span cannot be leased**: importing a `TensorSpan<T>` / `ReadOnlyTensorSpan<T>` always
   copies (`span.ToNDArray()`). Only a `Tensor<T>` (a heap object whose backing can be pinned) supports the
   zero-copy `AsNDArray` view.
-- **A 0-d scalar crosses as rank-1 `[1]`** and an **empty array as `TensorSpan<T>.Empty`** — the BCL's
+- **A 0-d scalar crosses as rank-1 `[1]`** and an **empty array as `TensorSpan<T>.Empty`** - the BCL's
   rank-0 / zero-length handling forces these two documented shapes.
 
 ## Not a compute backend
@@ -183,7 +183,7 @@ future 11.x (free to break the experimental API) from resolving automatically.
 This bridge moves *data*, not *computation*. Do **not** route NumSharp's operations through
 `System.Numerics.Tensors`' `TensorPrimitives` / `Tensor.Add` surface: NumSharp's own kernels are bit-exact
 with NumPy (and frequently faster than `TensorPrimitives`), and swapping them out would trade that parity
-away. `System.Numerics.Tensors` does not compute NumSharp operations — which is exactly why there is no
+away. `System.Numerics.Tensors` does not compute NumSharp operations - which is exactly why there is no
 `TensorEngine` seam here. The bridge is for handing a NumSharp buffer to code that already speaks
 `Tensor<T>`/`TensorSpan<T>`, and reading such tensors back.
 
@@ -206,9 +206,9 @@ away. `System.Numerics.Tensors` does not compute NumSharp operations — which i
 
 ## See also
 
-- [Interoperability overview](index.md) — the contract every bridge builds on
-- [ONNX Runtime](onnxruntime.md) — the sibling bridge whose handle / lease lifetime model this one mirrors
-- [ML.NET](mlnet.md) — the other conversion bridge (an `IDataView` over an `NDArray`)
+- [Interoperability overview](index.md) - the contract every bridge builds on
+- [ONNX Runtime](onnxruntime.md) - the sibling bridge whose handle / lease lifetime model this one mirrors
+- [ML.NET](mlnet.md) - the other conversion bridge (an `IDataView` over an `NDArray`)
 - Package README: `src/NumSharp.Interop.System.Numerics.Tensors/README.md`
 
 [gate]: https://github.com/SciSharp/NumSharp/tree/master/test/NumSharp.Tests.Interop.System.Numerics.Tensors

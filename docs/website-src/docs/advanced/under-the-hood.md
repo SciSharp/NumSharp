@@ -1,10 +1,10 @@
-# Under the hood — internals
+# Under the hood - internals
 
-This is a low-level look at how an `NDArray` is built, for people extending NumSharp or reasoning about its performance. It mirrors NumPy's [*Internal organization*](https://numpy.org/doc/stable/dev/underthehood.html) chapter: an array is a **raw data buffer** plus **metadata that says how to read it**, and almost everything cheap NumSharp does — slicing, transpose, reshape, broadcast — is a change to the metadata with the buffer left untouched.
+This is a low-level look at how an `NDArray` is built, for people extending NumSharp or reasoning about its performance. It mirrors NumPy's [*Internal organization*](https://numpy.org/doc/stable/dev/underthehood.html) chapter: an array is a **raw data buffer** plus **metadata that says how to read it**, and almost everything cheap NumSharp does - slicing, transpose, reshape, broadcast - is a change to the metadata with the buffer left untouched.
 
 For the gentle version of this, read [Introduction](../intro.md) first; for the memory-lifetime mechanics, [Buffering & Memory](../buffering.md).
 
-<!-- Tests: NumSharp.Tests.Documentation.AdvancedUnderTheHoodDocTests — the executable code examples on this page are asserted in test/NumSharp.Tests/Documentation/AdvancedUnderTheHoodDocTests.cs. Section → method:
+<!-- Tests: NumSharp.Tests.Documentation.AdvancedUnderTheHoodDocTests - the executable code examples on this page are asserted in test/NumSharp.Tests/Documentation/AdvancedUnderTheHoodDocTests.cs. Section → method:
      Views: metadata-only reinterpretation → Views_AreMetadataOnly_ShareBuffer
      Strides: Shape.Strides (elements) vs nd.strides (bytes) → Strides_BytesVsElements
      ArrayFlags (O(1) reads) → Flags_AreO1_ContiguityTracked
@@ -20,12 +20,12 @@ An `NDArray` is three parts, but two carry the data model:
 
 ```
 NDArray
-├── Storage   UnmanagedStorage  — the raw data buffer (unmanaged memory)
-├── Shape     readonly struct   — the metadata (how to interpret the buffer)
-└── TensorEngine                — the compute backend (DefaultEngine = pure C#)
+├── Storage   UnmanagedStorage  - the raw data buffer (unmanaged memory)
+├── Shape     readonly struct   - the metadata (how to interpret the buffer)
+└── TensorEngine                - the compute backend (DefaultEngine = pure C#)
 ```
 
-The **data buffer** is what you'd think of as an array in C: one contiguous, fixed block of unmanaged memory holding fixed-size elements. Everything else is the **metadata** that describes how to read that block — and, exactly as in NumPy, it contains:
+The **data buffer** is what you'd think of as an array in C: one contiguous, fixed block of unmanaged memory holding fixed-size elements. Everything else is the **metadata** that describes how to read that block - and, exactly as in NumPy, it contains:
 
 1. the element size in bytes (`itemsize`);
 2. the start of the data within the buffer (`offset`);
@@ -35,21 +35,21 @@ The **data buffer** is what you'd think of as an array in C: one contiguous, fix
 6. the dtype (how to interpret each element);
 7. whether the array is C-order or Fortran-order contiguous.
 
-Byte order is item (5)'s NumPy sibling, but NumSharp is **always host-endian** — big-endian data is byte-swapped to native on read (e.g. from a `.npy`), so there is no non-native byte-order state to carry.
+Byte order is item (5)'s NumPy sibling, but NumSharp is **always host-endian** - big-endian data is byte-swapped to native on read (e.g. from a `.npy`), so there is no non-native byte-order state to carry.
 
 ---
 
-## `UnmanagedStorage` — the buffer
+## `UnmanagedStorage` - the buffer
 
 NumSharp stores element data in **unmanaged memory**, not a managed `T[]` (benchmarked fastest; it avoids the GC and pins nothing). The buffer is owned by an **atomically reference-counted** memory block:
 
-- Multiple arrays can share one block — every **view** (slice, transpose, reshape) holds the *same* block, so disposing one array frees nothing while another view lives.
-- Release is deterministic when you `Dispose`, and the GC finalizer is the safety net: `~NDArray` **abandons** its reference (decrements the count) rather than freeing directly — `Release` is the eager path, `Abandon` the finalizer path.
-- This refcount is what powers the resize guard and the interop lifetime contract — see [Interoperability → the contract](../interop/index.md#the-contract) and [Buffering & Memory](../buffering.md).
+- Multiple arrays can share one block - every **view** (slice, transpose, reshape) holds the *same* block, so disposing one array frees nothing while another view lives.
+- Release is deterministic when you `Dispose`, and the GC finalizer is the safety net: `~NDArray` **abandons** its reference (decrements the count) rather than freeing directly - `Release` is the eager path, `Abandon` the finalizer path.
+- This refcount is what powers the resize guard and the interop lifetime contract - see [Interoperability → the contract](../interop/index.md#the-contract) and [Buffering & Memory](../buffering.md).
 
 ---
 
-## `Shape` — the metadata
+## `Shape` - the metadata
 
 `Shape` is a `readonly struct` (immutable after construction, NumPy-aligned) that carries the metadata and precomputes what it can:
 
@@ -91,13 +91,13 @@ a.strides;          // [48, 8]   ← BYTES    (public, NumPy-parity)
 a.Shape.Strides;    // [6, 1]    ← ELEMENTS (public)
 ```
 
-When you write a backend or a kernel and read `a.Shape.Strides`, they are element counts — multiply by `itemsize` to get bytes (NumPy's C-API gives you bytes directly). Getting this wrong is the classic off-by-`itemsize` bug.
+When you write a backend or a kernel and read `a.Shape.Strides`, they are element counts - multiply by `itemsize` to get bytes (NumPy's C-API gives you bytes directly). Getting this wrong is the classic off-by-`itemsize` bug.
 
 ---
 
 ## Views: metadata-only reinterpretation
 
-Because the buffer and the metadata are separate, a new "way of looking at" the same bytes is just a new `Shape` (and a shared `Storage`). Slicing, transpose, reshape (where possible), and broadcast all do exactly this — **no data moves**:
+Because the buffer and the metadata are separate, a new "way of looking at" the same bytes is just a new `Shape` (and a shared `Storage`). Slicing, transpose, reshape (where possible), and broadcast all do exactly this - **no data moves**:
 
 ```csharp
 var a = np.arange(12).reshape(3, 4);
@@ -107,7 +107,7 @@ var s = a["1:3, ::2"];     // slice: new strides + offset, same buffer
 
 - **Transpose** reverses the stride order; the data doesn't move, only the index→address mapping changes.
 - **Slicing** sets a new `offset` and strides into the same buffer.
-- **Broadcast** sets a stride of **0** on a stretched axis — one stored element is read for every logical position along it — which is why broadcast views are marked `WRITEABLE = false` (writing would corrupt every aliasing position).
+- **Broadcast** sets a stride of **0** on a stretched axis - one stored element is read for every logical position along it - which is why broadcast views are marked `WRITEABLE = false` (writing would corrupt every aliasing position).
 
 A view increments the buffer's reference count, so the buffer outlives the original array if any view remains. Forcing an independent buffer requires `.copy()`. This is the full story in [Copies and views](../fundamentals/copies-and-views.md).
 
@@ -121,7 +121,7 @@ The confusion NumPy documents is real and worth restating: matrix convention (fi
 
 - The default is **C-order**, so `a[0]` (a row) is contiguous and cheap, while `a[:, 0]` (a column) is strided.
 - `Shape` also tracks **F-contiguity**, and APIs with an `order` parameter resolve NumPy's `C`/`F`/`A`/`K` modes through `OrderResolver`, so column-major layouts are first-class where you ask for them.
-- Kernels don't care about the *label* order — `NDIter` determines which axis is most rapidly varying in memory and makes that the inner loop, so a ufunc over a transposed view is as efficient as over a contiguous one.
+- Kernels don't care about the *label* order - `NDIter` determines which axis is most rapidly varying in memory and makes that the inner loop, so a ufunc over a transposed view is as efficient as over a contiguous one.
 
 The practical consequence: iterate with the memory order in mind. `a.flat` / the typed iterators walk in **logical C-order**; a fast per-chunk kernel should follow the array's actual strides (which `NDIter` and `np.nditer_chunks<T>` do for you). See [Indexing](../fundamentals/indexing.md) and [Iterating & Enumerating](../iterating-and-enumerating.md).
 
@@ -131,8 +131,8 @@ The practical consequence: iterate with the memory order in mind. `a.flat` / the
 
 Two managed subsystems turn this metadata into computation:
 
-- **`NDIter`** — the multi-operand iterator (NumSharp's `NpyIter`): C/F/A/K order, broadcasting, buffering, casting, external loops, reductions. It picks the inner-loop axis from the strides. See [NDIter](../NDIter.md).
-- **`ILKernelGenerator` / `DirectILKernelGenerator`** — runtime IL emission with SIMD (V128/V256/V512), so the inner loops run at native speed with no C. See [IL Generation](../il-generation.md).
+- **`NDIter`** - the multi-operand iterator (NumSharp's `NpyIter`): C/F/A/K order, broadcasting, buffering, casting, external loops, reductions. It picks the inner-loop axis from the strides. See [NDIter](../NDIter.md).
+- **`ILKernelGenerator` / `DirectILKernelGenerator`** - runtime IL emission with SIMD (V128/V256/V512), so the inner loops run at native speed with no C. See [IL Generation](../il-generation.md).
 
 Everything the [Extending NumSharp](extending-numsharp.md) seams expose is built on these two over the buffer/metadata split described here.
 
@@ -163,7 +163,7 @@ a.ndim; a.size; a.dtype;
 `a.Shape.Strides` are in **elements**; `a.strides` are in **bytes**. Backends read element strides and scale by `itemsize` themselves.
 
 ### "Writing to a broadcast view threw"
-Broadcast axes have stride 0 and are `WRITEABLE = false` by design. Copy first — see [Copies and views](../fundamentals/copies-and-views.md#broadcast-views-are-read-only).
+Broadcast axes have stride 0 and are `WRITEABLE = false` by design. Copy first - see [Copies and views](../fundamentals/copies-and-views.md#broadcast-views-are-read-only).
 
 ### "The buffer wasn't freed when I disposed the array"
 A view still holds the shared, refcounted block. The buffer frees on the *last* reference (or the GC finalizer as backstop). See [Buffering & Memory](../buffering.md).
@@ -186,9 +186,9 @@ A view still holds the shared, refcounted block. The buffer frees on the *last* 
 
 ## Related reading
 
-- [Introduction](../intro.md) — the same model, gently.
-- [Buffering & Memory](../buffering.md) — the ARC block, slices, and lifetime.
-- [Copies and views](../fundamentals/copies-and-views.md) — metadata-only reinterpretation in practice.
-- [NDIter](../NDIter.md) · [IL Generation](../il-generation.md) — how kernels traverse and compile.
+- [Introduction](../intro.md) - the same model, gently.
+- [Buffering & Memory](../buffering.md) - the ARC block, slices, and lifetime.
+- [Copies and views](../fundamentals/copies-and-views.md) - metadata-only reinterpretation in practice.
+- [NDIter](../NDIter.md) · [IL Generation](../il-generation.md) - how kernels traverse and compile.
 - [Extending NumSharp](extending-numsharp.md) · [Native code & backends](native-backends.md).
-- [NumPy internals](https://numpy.org/doc/stable/dev/underthehood.html) — the upstream article this converts.
+- [NumPy internals](https://numpy.org/doc/stable/dev/underthehood.html) - the upstream article this converts.

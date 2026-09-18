@@ -2,7 +2,7 @@
 
 If you've ever tried to write code that works with NumPy, PyTorch, JAX, and CuPy, you know the pain. They all do similar things, but the APIs are just different enough that your code breaks when you switch libraries. The **Python Array API Standard** exists to fix this.
 
-NumSharp is working toward Array API compliance because it means your code can be more portable—not just between Python libraries, but between Python and C#.
+NumSharp is working toward Array API compliance because it means your code can be more portable-not just between Python libraries, but between Python and C#.
 
 ---
 
@@ -16,12 +16,12 @@ Think of it like USB for arrays. Before USB, every device had its own connector.
 
 By 2020, Python had accumulated a zoo of array libraries:
 
-- **NumPy** — The original, CPU-only
-- **PyTorch** — Deep learning, GPU support
-- **TensorFlow** — Deep learning, different API
-- **JAX** — Functional, JIT compilation
-- **CuPy** — NumPy clone for NVIDIA GPUs
-- **Dask** — Distributed/parallel arrays
+- **NumPy** - The original, CPU-only
+- **PyTorch** - Deep learning, GPU support
+- **TensorFlow** - Deep learning, different API
+- **JAX** - Functional, JIT compilation
+- **CuPy** - NumPy clone for NVIDIA GPUs
+- **Dask** - Distributed/parallel arrays
 - **MXNet**, **PaddlePaddle**, and more...
 
 Each library evolved independently. They all have `reshape()`, but the parameters are slightly different. They all have `sum()`, but the axis handling varies. Code written for NumPy rarely works on PyTorch without modification.
@@ -53,7 +53,7 @@ If you're porting Python ML code to C#, Array API compliance means fewer surpris
 
 ### For Library Authors
 
-If you're building a C# library that consumes arrays, coding against the Array API subset means your library works with any compliant array type—not just NumSharp.
+If you're building a C# library that consumes arrays, coding against the Array API subset means your library works with any compliant array type-not just NumSharp.
 
 ### For Cross-Platform Development
 
@@ -151,16 +151,16 @@ Every array object must have these properties:
 
 ### What's `device`?
 
-The `device` attribute tells you where the array lives—CPU, GPU, TPU, etc. For NumSharp (CPU-only), this would always return a CPU device object. We need to implement this for compliance, even though we only support one device.
+The `device` attribute tells you where the array lives-CPU, GPU, TPU, etc. For NumSharp (CPU-only), this would always return a CPU device object. We need to implement this for compliance, even though we only support one device.
 
 ### What's `mT`?
 
-The `mT` property is "matrix transpose"—it only transposes the last two dimensions. This matters for batched matrix operations:
+The `mT` property is "matrix transpose"-it only transposes the last two dimensions. This matters for batched matrix operations:
 
 ```python
 # x has shape (batch, rows, cols)
-x.T    # Transposes ALL dimensions → (cols, rows, batch) — usually wrong!
-x.mT   # Transposes last two only → (batch, cols, rows) — what you want
+x.T    # Transposes ALL dimensions → (cols, rows, batch) - usually wrong!
+x.mT   # Transposes last two only → (batch, cols, rows) - what you want
 ```
 
 NumPy 2.0 added `mT` for Array API compliance. NumSharp needs it too.
@@ -217,7 +217,7 @@ These create new arrays from scratch or from existing data.
 | `zeros` | Filled with zeros | ✅ |
 | `zeros_like` | Same shape, zeros | ✅ |
 
-**Coverage: 81%** — Missing `tril`, `triu`, `from_dlpack`
+**Coverage: 81%** - Missing `tril`, `triu`, `from_dlpack`
 
 ### Element-wise Functions (67)
 
@@ -246,7 +246,7 @@ The largest category. Mathematical operations applied to each element.
 We're missing:
 - `copysign`, `hypot`, `logaddexp` (math functions)
 - `nextafter`, `signbit` (floating-point utilities)
-- `conj`, `imag`, `real` (complex number functions—blocked on complex type support)
+- `conj`, `imag`, `real` (complex number functions-blocked on complex type support)
 - Named bitwise functions (we have the operators, not the functions)
 
 ### Statistical Functions (9)
@@ -263,7 +263,7 @@ We're missing:
 | `cumulative_sum` | Cumulative sum | ✅ (`cumsum`) |
 | `cumulative_prod` | Cumulative product | ❌ |
 
-**Coverage: 89%** — Missing `cumulative_prod`
+**Coverage: 89%** - Missing `cumulative_prod`
 
 **Note:** The Array API uses a `correction` parameter for `std`/`var`:
 ```python
@@ -293,7 +293,7 @@ np.std(x, ddof=1)      # Same thing, different name
 | `tile` | Repeat whole array | ❌ |
 | `unstack` | Split along axis | ❌ |
 
-**Coverage: ~79%** — Missing `tile`, `unstack`; `roll` is partial
+**Coverage: ~79%** - Missing `tile`, `unstack`; `roll` is partial
 
 ### Set Functions (4)
 
@@ -350,7 +350,7 @@ NumPy 2.x still allows it (promoting to float), but the Array API deliberately l
 
 ### Scalar Promotion
 
-When you mix a Python scalar with an array, the scalar is "weak"—it adopts the array's type:
+When you mix a Python scalar with an array, the scalar is "weak"-it adopts the array's type:
 
 ```python
 uint8_array + 2  → uint8_array  # Scalar becomes uint8
@@ -428,15 +428,15 @@ The Array API deliberately excludes some things to remain implementable across d
 
 ### Out of Scope
 
-- **I/O operations** — No `save`, `load`, `fromfile`
-- **String dtypes** — No `StringDType` or fixed-width strings
-- **Datetime dtypes** — No `datetime64`, `timedelta64`
-- **Object dtype** — No arrays of arbitrary Python objects
-- **Specific error types** — Error handling is implementation-defined
-- **C API** — Only Python-level interface specified
-- **Execution semantics** — Eager vs. lazy, parallelization, etc.
+- **I/O operations** - No `save`, `load`, `fromfile`
+- **String dtypes** - No `StringDType` or fixed-width strings
+- **Datetime dtypes** - No `datetime64`, `timedelta64`
+- **Object dtype** - No arrays of arbitrary Python objects
+- **Specific error types** - Error handling is implementation-defined
+- **C API** - Only Python-level interface specified
+- **Execution semantics** - Eager vs. lazy, parallelization, etc.
 
-This means NumSharp can have these features (and we do—`np.save`, `np.load` work), they're just outside the Array API specification.
+This means NumSharp can have these features (and we do-`np.save`, `np.load` work), they're just outside the Array API specification.
 
 ---
 
@@ -446,7 +446,7 @@ The specification documents several motivating use cases:
 
 ### SciPy Without Dependencies
 
-SciPy's signal processing functions are pure Python but tied to NumPy. With Array API compliance, `scipy.signal.welch(x)` could work on GPU arrays (CuPy), distributed arrays (Dask), or NumSharp arrays—without SciPy depending on any of them.
+SciPy's signal processing functions are pure Python but tied to NumPy. With Array API compliance, `scipy.signal.welch(x)` could work on GPU arrays (CuPy), distributed arrays (Dask), or NumSharp arrays-without SciPy depending on any of them.
 
 ### einops Without Backend Code
 
@@ -479,11 +479,11 @@ Numba and other JIT compilers struggle with NumPy's value-dependent type rules. 
 
 ### Priority Items
 
-1. **Complex number types** — Blocks FFT extension and many math functions
-2. **`device` and `mT` properties** — Simple to add
-3. **Set functions** (`unique_*` family) — Moderate effort
-4. **Missing element-wise functions** — Incremental work
-5. **Indexing functions** (`take`, `take_along_axis`) — Moderate effort
+1. **Complex number types** - Blocks FFT extension and many math functions
+2. **`device` and `mT` properties** - Simple to add
+3. **Set functions** (`unique_*` family) - Moderate effort
+4. **Missing element-wise functions** - Incremental work
+5. **Indexing functions** (`take`, `take_along_axis`) - Moderate effort
 
 ### Tracking
 
@@ -493,9 +493,9 @@ See [Array API Standard Milestone](https://github.com/SciSharp/NumSharp/mileston
 
 ## References
 
-- [Array API Standard Specification](https://data-apis.org/array-api/latest/) — The full specification
-- [Type Promotion Rules](https://data-apis.org/array-api/latest/API_specification/type_promotion.html) — How types combine
-- [Linear Algebra Extension](https://data-apis.org/array-api/latest/extensions/linear_algebra_functions.html) — All linalg functions
-- [FFT Extension](https://data-apis.org/array-api/latest/extensions/fourier_transform_functions.html) — All FFT functions
-- [Consortium for Python Data API Standards](https://data-apis.org/) — The organization behind the standard
-- [NumPy Array API Support](https://numpy.org/doc/stable/reference/array_api.html) — NumPy's implementation notes
+- [Array API Standard Specification](https://data-apis.org/array-api/latest/) - The full specification
+- [Type Promotion Rules](https://data-apis.org/array-api/latest/API_specification/type_promotion.html) - How types combine
+- [Linear Algebra Extension](https://data-apis.org/array-api/latest/extensions/linear_algebra_functions.html) - All linalg functions
+- [FFT Extension](https://data-apis.org/array-api/latest/extensions/fourier_transform_functions.html) - All FFT functions
+- [Consortium for Python Data API Standards](https://data-apis.org/) - The organization behind the standard
+- [NumPy Array API Support](https://numpy.org/doc/stable/reference/array_api.html) - NumPy's implementation notes
