@@ -428,7 +428,7 @@ namespace NumSharp.Tests.Selection
             // assigning into a broadcast (read-only) view -> NumPy ValueError
             var a = np.broadcast_to(Iota(4), new Shape(3, 4));
             Action act = () => a[(a % 2) == 0] = (NDArray)(-1L);
-            act.Should().Throw<NumSharpException>();
+            act.Should().Throw<ValueError>();
         }
 
         [TestMethod]

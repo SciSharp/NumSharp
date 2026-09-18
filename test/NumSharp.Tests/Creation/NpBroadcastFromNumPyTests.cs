@@ -1391,7 +1391,7 @@ namespace NumSharp.Tests.Creation
         ///     NumPy raises ValueError: assignment destination is read-only.
         ///
         ///     NumSharp now correctly enforces read-only semantics on broadcast views.
-        ///     Writing to the broadcast view throws NumSharpException.
+        ///     Writing to the broadcast view throws NumPy's ValueError.
         ///
         ///     >>> x = np.array([1, 2, 3, 4])
         ///     >>> y = np.broadcast_to(x, (2, 4))
@@ -1405,7 +1405,7 @@ namespace NumSharp.Tests.Creation
 
             // NumSharp correctly prevents writing to broadcast views (like NumPy).
             Action write = () => bx.SetInt32(999, 0, 0);
-            write.Should().Throw<NumSharpException>()
+            write.Should().Throw<ValueError>()
                 .WithMessage("assignment destination is read-only");
 
             // Verify original was not modified

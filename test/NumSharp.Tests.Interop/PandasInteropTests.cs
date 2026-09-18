@@ -115,7 +115,7 @@ namespace NumSharp.Tests.Interop
 
                 using NDArray replacement = np.zeros(new Shape(6), NPTypeCode.Int64);
                 new Action(() => np.copyto(view, replacement))
-                    .Should().Throw<NumSharpException>().WithMessage("*read-only*");
+                    .Should().Throw<ValueError>().WithMessage("*read-only*");
             }
         }
 

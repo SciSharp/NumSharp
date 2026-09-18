@@ -98,7 +98,7 @@ public class PutAlongAxisTests
         // np.array(arr.flat) is a READ-ONLY copy for a non-contiguous source, so the assignment fails.
         var a = np.arange(6).reshape(2, 3).T;   // transposed non-contiguous
         Action act = () => np.put_along_axis(a, np.array(new long[] { 0, 1 }), (NDArray)9, axis: null);
-        act.Should().Throw<NumSharpException>().WithMessage("assignment destination is read-only");
+        act.Should().Throw<ValueError>().WithMessage("assignment destination is read-only");
     }
 
     [TestMethod]
@@ -405,7 +405,7 @@ public class PutAlongAxisTests
     {
         var ro = np.broadcast_to(np.zeros(new Shape(3), NPTypeCode.Double), new Shape(2, 3));   // read-only
         Action act = () => np.put_along_axis(ro, np.array(new int[,] { { 0 }, { 1 } }), (NDArray)9, axis: 1);
-        act.Should().Throw<NumSharpException>().WithMessage("assignment destination is read-only");
+        act.Should().Throw<ValueError>().WithMessage("assignment destination is read-only");
     }
 
     [TestMethod]

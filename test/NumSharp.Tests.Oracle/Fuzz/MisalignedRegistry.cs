@@ -908,15 +908,14 @@ namespace NumSharp.Tests.Fuzz
                 return "result_type(mixed signed/unsigned, 0-D operand): throws instead of resolving "
                      + "a promotion [known bug]";
 
-            // (K10) ufunc out=/where= with a read-only BROADCAST out. NumPy refuses it
-            // ("non-broadcastable output operand …" / read-only output). NumSharp either raises
-            // with different wording or — worse — WRITES THROUGH IT, which contradicts its own
-            // design rule that a broadcast view is non-writeable (Shape.IsWriteable == false).
-            if ((kind == DivergenceKind.ErrorText || kind == DivergenceKind.Value
-                 || kind == DivergenceKind.Arity || kind == DivergenceKind.Shape)
-                && c.Layout == "out_broadcast")
-                return "ufunc out= on a read-only broadcast view: NumSharp writes through it (or "
-                     + "refuses with different wording) where NumPy raises [known bug]";
+            // (K10) RESOLVED — no excuse. A ufunc out=/where= with a read-only BROADCAST out now
+            // raises the SAME exception as NumPy: ValueError("output array is read-only"), verbatim.
+            // NumSharp's ThrowIfNotWriteable used to raise NumSharpException with the identical text
+            // (the sole read-only hold-out; np.choose/nditer/byteswap/getfield already used
+            // ValueError), so only the exception TYPE diverged. ThrowReadOnly now throws ValueError,
+            // so these 983 out_broadcast cases pass on their own — the branch that excused them is
+            // deleted, not merely narrowed, and a regression (write-through, wrong type, or wrong
+            // wording) turns the OutWhere tier red instead of being silently absorbed.
 
             // (K12) A unary FLOAT-CLASSIFICATION PREDICATE (isnan / isinf / isfinite / signbit) into
             // a rank>=2 [..., ::2]-STRIDED bool `out`: NumSharp writes the CORRECT full overwrite,

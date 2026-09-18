@@ -15,8 +15,8 @@ namespace NumSharp.Tests.Backends
     ///     it silently corrupted the shared source (e.g. an immutable Python <c>bytes</c>) and, on a
     ///     read-only <c>mmap('r')</c> whose pages are <c>PROT_READ</c>, took the whole process down with
     ///     an access violation. NumPy raises <c>ValueError: output array is read-only</c> instead; the
-    ///     messages here are verbatim NumPy 2.4.2 (NumSharp maps the ValueError onto
-    ///     <see cref="NumSharpException"/>, the house convention for read-only writes).</para>
+    ///     messages here are verbatim NumPy 2.4.2 and NumSharp raises the same
+    ///     <see cref="ValueError"/> type (its read-only guard, ThrowIfNotWriteable).</para>
     /// </summary>
     [TestClass]
     public class ReadonlyWriteGuardTests
@@ -25,7 +25,7 @@ namespace NumSharp.Tests.Backends
         private static NDArray Ro(NDArray a) => np.broadcast_to(a, a.Shape);
 
         private static void ShouldThrowReadonly(Action act, string message)
-            => act.Should().Throw<NumSharpException>().WithMessage(message);
+            => act.Should().Throw<ValueError>().WithMessage(message);
 
         // =====================================================================
         //  np.broadcast_to writeability — NumPy parity: ALWAYS read-only
@@ -64,7 +64,7 @@ namespace NumSharp.Tests.Backends
         {
             var src = np.arange(3).astype(NPTypeCode.Double);      // owns its data
             var view = np.broadcast_to(src, src.Shape);            // read-only view sharing src's memory
-            try { np.add(view, view, view); } catch (NumSharpException) { }
+            try { np.add(view, view, view); } catch (ValueError) { }
             src.GetDouble(0).Should().Be(0.0);
             src.GetDouble(1).Should().Be(1.0);
             src.GetDouble(2).Should().Be(2.0);
@@ -216,7 +216,7 @@ namespace NumSharp.Tests.Backends
         {
             var src = np.arange(3).astype(NPTypeCode.Int32);
             var ro = np.broadcast_to(src, src.Shape);
-            try { np.put(ro, np.array(new long[] { 0 }), np.array(new int[] { 99 })); } catch (NumSharpException) { }
+            try { np.put(ro, np.array(new long[] { 0 }), np.array(new int[] { 99 })); } catch (ValueError) { }
             src.GetInt32(0).Should().Be(0);
         }
 
