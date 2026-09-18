@@ -17,7 +17,7 @@ This page explains what NumSharp offers, why the NumPy string dtypes are deliber
 `NPTypeCode.Char` wraps .NET's `System.Char` — a **2-byte UTF-16 code unit**. It exists so an array of individual characters can carry "these are characters, not `ushort`s" in the type system:
 
 ```csharp
-var letters = np.array(new[] { 'a', 'b', 'c' });
+var letters = np.array(['a', 'b', 'c']);
 letters.typecode;        // NPTypeCode.Char
 InfoOf<char>.Size;       // 2  (actual memory footprint)
 ```
@@ -98,7 +98,7 @@ NumPy code that used `S`/`V` to read a fixed-width binary field should read the 
 | `arr.astype("U10")` | not supported — keep text as `string` |
 | `np.char.upper(arr)` | `labels.Select(s => s.ToUpper())` (LINQ on `string[]`) |
 | `StringDType()` array | `string[]` / `List<string>` |
-| `np.array(['a','b','c'])` (single chars) | `np.array(new[] { 'a', 'b', 'c' })` → `Char` |
+| `np.array(['a','b','c'])` (single chars) | `np.array(['a', 'b', 'c'])` → `Char` |
 
 ---
 

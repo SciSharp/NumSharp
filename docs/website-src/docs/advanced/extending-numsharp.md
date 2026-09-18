@@ -55,7 +55,7 @@ public static class MyNumSharpExtras
 Any code with `using NumSharp;` now calls them as if they shipped with the library (verified end-to-end on the .NET 10 SDK):
 
 ```csharp
-var x = np.array(new[] { 1.0, 2.0, 3.0, 4.0 });
+var x = np.array([1.0, 2.0, 3.0, 4.0]);
 np.sumsq(x);      // 30.0        ← static extension on np
 x.doubled();      // [2. 4. 6. 8.] ← instance extension method
 x.total;          // 10           ← instance extension property

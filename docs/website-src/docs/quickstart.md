@@ -39,7 +39,7 @@ a.itemsize;     // 8
 a.size;         // 15
 a.GetType();    // NumSharp.NDArray
 
-var b = np.array(new[] { 6, 7, 8 });
+var b = np.array([6, 7, 8]);
 b;              // [6 7 8]
 b.GetType();    // NumSharp.NDArray
 ```
@@ -51,13 +51,13 @@ b.GetType();    // NumSharp.NDArray
 Create an array from a .NET sequence; the dtype is deduced from the element type:
 
 ```csharp
-var a = np.array(new[] { 2, 3, 4 });
+var a = np.array([2, 3, 4]);
 a.dtype;                              // int32   (see note below)
-var b = np.array(new[] { 1.2, 3.5, 5.1 });
+var b = np.array([1.2, 3.5, 5.1]);
 b.dtype;                              // float64
 ```
 
-> **⚠️ Divergence — integer default.** `np.array(new[]{2,3,4})` follows the .NET `int` type, so it's **int32**, where NumPy's `np.array([2,3,4])` is int64. `np.arange` *does* give int64. Pass a dtype when it matters. See [Array creation → int32-vs-int64](fundamentals/array-creation.md#the-int32-vs-int64-gotcha).
+> **⚠️ Divergence — integer default.** `np.array([2,3,4])` follows the .NET `int` type, so it's **int32**, where NumPy's `np.array([2,3,4])` is int64. `np.arange` *does* give int64. Pass a dtype when it matters. See [Array creation → int32-vs-int64](fundamentals/array-creation.md#the-int32-vs-int64-gotcha).
 
 Nested sequences become 2-D (and deeper), and the dtype can be set explicitly:
 
@@ -125,7 +125,7 @@ Change the behaviour (e.g. print everything) with `np.set_printoptions` / `np.ge
 Arithmetic operators apply **elementwise**, producing a new array:
 
 ```csharp
-var a = np.array(new[] { 20, 30, 40, 50 });
+var a = np.array([20, 30, 40, 50]);
 var b = np.arange(4);         // [0 1 2 3]
 a - b;                        // [20 29 38 47]
 np.power(b, 2);               // [0 1 4 9]     (C# has no ** operator)
@@ -190,7 +190,7 @@ d.dtype.name;                            // "complex128"
 Many aggregations are `NDArray` methods:
 
 ```csharp
-var a = np.array(new[] { 0.5, 0.4, 0.55, 0.03, 0.75, 0.53 });
+var a = np.array([0.5, 0.4, 0.55, 0.03, 0.75, 0.53]);
 a.sum();   // 2.76
 a.min();   // 0.03
 a.max();   // 0.75
@@ -220,7 +220,7 @@ Familiar math functions (`sin`, `cos`, `exp`, `sqrt`, …) operate elementwise a
 var B = np.arange(3);
 np.exp(B);         // [1. 2.71828183 7.3890561 ]
 np.sqrt(B);        // [0. 1. 1.41421356]
-var C = np.array(new[] { 2.0, -1.0, 4.0 });
+var C = np.array([2.0, -1.0, 4.0]);
 np.add(B, C);      // [2. 0. 6.]
 ```
 
@@ -327,8 +327,8 @@ np.hstack(a, b);   // stack along axis 1
 `np.column_stack` stacks 1-D arrays as columns of a 2-D array (equivalent to `hstack` only for 2-D inputs). A 1-D array becomes a column with `[:, np.newaxis]`:
 
 ```csharp
-var x = np.array(new[] { 4.0, 2.0 });
-var y = np.array(new[] { 3.0, 8.0 });
+var x = np.array([4.0, 2.0]);
+var y = np.array([3.0, 8.0]);
 np.column_stack(x, y);   // [[4. 3.] [2. 8.]]
 np.hstack(x, y);         // [4. 2. 3. 8.]  (different — 1-D concat)
 x[Slice.All, np.newaxis]; // [[4.] [2.]]  (column view)
@@ -349,7 +349,7 @@ See [Array creation → grid/slice DSL](fundamentals/array-creation.md) and [Bro
 ```csharp
 var a = np.floor(10 * np.random.rand(2, 12));
 np.hsplit(a, 3);              // 3 equal parts
-np.hsplit(a, new[] { 3, 4 }); // split after columns 3 and 4 → 3 parts
+np.hsplit(a, [3, 4]); // split after columns 3 and 4 → 3 parts
 np.vsplit(np.arange(16).reshape(4, 4), 2);  // 2 parts along axis 0
 ```
 
@@ -430,7 +430,7 @@ Arrays can be indexed by **arrays of integers** and **arrays of booleans**, beyo
 
 ```csharp
 var a = np.power(np.arange(12), 2);          // the first 12 squares
-var i = np.array(new[] { 1, 1, 3, 8, 5 });
+var i = np.array([1, 1, 3, 8, 5]);
 a[i];                                         // [1 1 9 64 25]  (elements at positions i)
 
 var j = np.array(new[,] { { 3, 4 }, { 9, 7 } });
@@ -474,7 +474,7 @@ var a = np.arange(5);
 a[new[] { 1, 3, 4 }] = 0;              // [0 0 2 0 0]
 
 var b = np.arange(5);
-b[new[] { 0, 0, 2 }] = np.array(new[] { 1, 2, 3 });   // [2 1 3 3 4]  (index 0 written twice, last wins)
+b[new[] { 0, 0, 2 }] = np.array([1, 2, 3]);   // [2 1 3 3 4]  (index 0 written twice, last wins)
 ```
 
 > As with the [in-place divergence](#in-place-operations-behave-differently-in-c) above, `a[new[]{0,0,2}] += 1` does **not** increment index 0 twice — C# expands it to `a[...] = a[...] + 1`.
@@ -494,8 +494,8 @@ You can also give a **1-D boolean per axis** (its length must match that axis):
 
 ```csharp
 var a = np.arange(12).reshape(3, 4);
-var b1 = np.array(new[] { false, true, true });          // selects rows
-var b2 = np.array(new[] { true, false, true, false });   // selects columns
+var b1 = np.array([false, true, true]);          // selects rows
+var b2 = np.array([true, false, true, false]);   // selects columns
 a[b1, Slice.All];   // rows 1,2 → [[4 5 6 7] [8 9 10 11]]
 a[b1];              // same
 a[Slice.All, b2];   // columns 0,2 → [[0 2] [4 6] [8 10]]
@@ -509,9 +509,9 @@ More at [Indexing on NDArray](fundamentals/indexing.md).
 `np.ix_` combines vectors so you get a result for every n-tuple — e.g. all `a + b*c` over triplets, via broadcasting (no full-size intermediate):
 
 ```csharp
-var a = np.array(new[] { 2, 3, 4, 5 });
-var b = np.array(new[] { 8, 5, 4 });
-var c = np.array(new[] { 5, 4, 6, 8, 3 });
+var a = np.array([2, 3, 4, 5]);
+var b = np.array([8, 5, 4]);
+var c = np.array([5, 4, 6, 8, 3]);
 var ix = np.ix_(a, b, c);              // NDArray[] { ax (4,1,1), bx (1,3,1), cx (1,1,5) }
 var result = ix[0] + ix[1] * ix[2];    // shape (4, 3, 5)
 result[3, 2, 4];                        // 17  == a[3] + b[2]*c[4]
@@ -569,6 +569,6 @@ NumSharp has no built-in plotting (neither does NumPy — Matplotlib is separate
 
 - [The absolute basics for beginners](absolute-basics.md) — the gentler introduction.
 - [Fundamentals and usage](fundamentals/index.md) — array creation, indexing, dtypes, broadcasting, copies/views, ufuncs, I/O.
-- [Advanced usage and interoperability](advanced/index.md) — extending NumSharp, native backends, internals, interop.
+- [Advanced usage](advanced/index.md) — extending NumSharp, native backends, internals, interop.
 - [NumPy API Coverage & Support](coverage-support-dashboard.md) · [API reference](../api/index.md).
 - [NumPy quickstart](https://numpy.org/doc/stable/user/quickstart.html) — the upstream article this converts.
