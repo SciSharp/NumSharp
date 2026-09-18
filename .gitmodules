@@ -21,3 +21,6 @@
 [submodule "refs/parquet-dotnet"]
 	path = refs/parquet-dotnet
 	url = https://github.com/aloneguid/parquet-dotnet.git
+[submodule "refs/TensorSharp2"]
+	path = refs/TensorSharp2
+	url = https://github.com/SciSharp/TensorSharp2.git
