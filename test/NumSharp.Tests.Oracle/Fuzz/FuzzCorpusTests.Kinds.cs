@@ -358,7 +358,11 @@ namespace NumSharp.Tests.Fuzz
             ["TypeError"] = new[]
             {
                 "NotSupportedException", "InvalidCastException", "ArgumentException",
-                "ArgumentNullException", "InvalidOperationException", "UFuncTypeException"
+                "ArgumentNullException", "InvalidOperationException", "UFuncTypeException",
+                // IncorrectTypeException now derives from TypeError (the ufunc "No loop matching…" /
+                // "not supported for the input types" / digitize / i0 messages are all NumPy TypeErrors),
+                // but its .GetType().Name stays "IncorrectTypeException", so name it here explicitly.
+                "IncorrectTypeException"
             },
             ["IndexError"] = new[]
             {
