@@ -5611,8 +5611,16 @@ def gen_iter():
     cases = gen_ndindex()
     cases += gen_ndenumerate(ITER_DTYPES, ITER_LAYOUTS)
     cases += gen_nditer(ITER_DTYPES, ITER_LAYOUTS, ITER_ORDERS)
-    cases += gen_nditer_pair(DT_PAIRS[:12], list(PAIR_LAYOUTS.keys()), ["C", "K"])
-    cases += gen_broadcast(DT_PAIRS[:12], list(PAIR_LAYOUTS.keys()))
+    # complex128 pair-iteration: DT_PAIRS[:12] is all-real, so pairwise nditer / np.broadcast over a
+    # complex operand was untested — yet iteration ORDER has no other gate and a 16-byte complex
+    # element exercises the iterator's stride/coalesce handling differently from an 8-byte scalar. The
+    # per-operand value stream is a pure COPY in traversal order (no arithmetic), so it is bit-exact by
+    # construction (the single-operand nditer already gates complex via ITER_DTYPES; mixed-dtype pairs
+    # like int32/float64 are already gated too — a complex/float pair is the same mechanism). Add a
+    # complex-complex and a complex/float mixed pair.
+    iter_pairs = DT_PAIRS[:12] + [("complex128", "complex128"), ("complex128", "float64")]
+    cases += gen_nditer_pair(iter_pairs, list(PAIR_LAYOUTS.keys()), ["C", "K"])
+    cases += gen_broadcast(iter_pairs, list(PAIR_LAYOUTS.keys()))
     cases += gen_nested_iters()
     return cases
 
