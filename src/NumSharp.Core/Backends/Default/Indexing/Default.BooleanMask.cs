@@ -83,9 +83,18 @@ namespace NumSharp.Backends
                 BooleanMaskGather(arr, gatherMask, result);
             }
 
-            return leadNdim == arr.ndim
-                ? result
-                : result.reshape(BooleanMaskResultShape(trueCount, arr, leadNdim));
+            if (leadNdim == arr.ndim)
+                return result; // full element mask -> the owned 1-D gather buffer IS the result
+
+            // Partial/row mask (mask.ndim < arr.ndim): the flat gather buffer needs its trailing
+            // axes restored. Reshape the OWNED result IN PLACE (a pure relabel of the already
+            // C-contiguous buffer, preserving OWNDATA) and return it — NOT result.reshape(...),
+            // which returns a VIEW of this internal buffer (owndata=False) and so diverged from
+            // NumPy, whose boolean-mask selection is an owned copy (probed 2.4.2:
+            // np.arange(12).reshape(3,4)[[True,False,True]].flags.owndata is True). This mirrors
+            // the full-mask branch above and the leading-integer fancy path, which already own.
+            result.Storage.Reshape(BooleanMaskResultShape(trueCount, arr, leadNdim).dimensions);
+            return result;
         }
 
         // =====================================================================
