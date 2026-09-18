@@ -37,6 +37,12 @@ from layout_catalog import LAYOUTS, PAIR_LAYOUTS, describe, _cbase, _fill  # noq
 # ---------------------------------------------------------------------------------------------
 MA_LAYOUTS = ["c_contiguous_1d", "c_contiguous_2d", "f_contiguous_2d", "transposed_2d",
               "strided_step2_1d", "negstride_1d", "simple_slice_offset_1d"]
+# PASS 2 — edge layouts that exercise rank>2, broadcast (read-only) views, degenerate shapes and
+# 2-D non-contiguity, the paths most likely to hide more strided/rank/empty mask bugs (the DimsOf
+# class). Run these through the non-mutating tiers (unary/reduce/manip) on top of MA_LAYOUTS.
+MA_LAYOUTS_EDGE = ["c_contiguous_3d", "transposed_3d", "f_contiguous_3d",
+                   "broadcast_1d_to_2d", "scalar_0d", "one_element_1d",
+                   "empty_2d", "negstride_2d_offset", "strided_2d_cols", "reshape_view_2d"]
 MA_DTYPES = ["bool", "uint8", "int32", "int64", "float16", "float32", "float64", "complex128"]
 MA_MASKS = ["none", "some", "all"]
 
@@ -45,9 +51,15 @@ MA_MASKS = ["none", "some", "all"]
 # broadcast-row). Mask COMBOS exercise OR-propagation: neither / both / one-sided / all|some.
 MA_DT_PAIRS = [("int32", "int32"), ("int32", "float64"), ("float32", "float32"),
                ("float64", "float64"), ("complex128", "complex128"), ("int64", "int64"),
-               ("uint8", "uint8"), ("float16", "float16"), ("bool", "int32")]
+               ("uint8", "uint8"), ("float16", "float16"), ("bool", "int32"),
+               # PASS 2 — narrow-int width mixing, signed/unsigned crossing, int/complex + float widths
+               ("int8", "int8"), ("int16", "uint16"), ("uint32", "int64"),
+               ("int32", "complex128"), ("float16", "float64"), ("uint8", "int8")]
+# PASS 2 — pp_broadcast_col (the other broadcast direction) + pp_scalar_right/left (a 0-d operand,
+# the strong-scalar-widening path pass 12 found a bug in — more coverage across all ops/dtypes).
 MA_PAIR_LAYOUTS = ["pp_contig_contig", "pp_contig_fortran", "pp_contig_strided",
-                   "pp_negstride_both", "pp_broadcast_row"]
+                   "pp_negstride_both", "pp_broadcast_row", "pp_broadcast_col",
+                   "pp_scalar_right", "pp_scalar_left"]
 MA_MASK_COMBOS = [("none", "none"), ("some", "some"), ("some", "none"), ("all", "some")]
 
 
@@ -166,7 +178,7 @@ def _binary_fns():
 def gen_ma_unary():
     cases, n, skipped = [], _N(), 0
     ops = _unary_fns()
-    for ln in MA_LAYOUTS:
+    for ln in MA_LAYOUTS + MA_LAYOUTS_EDGE:
         fn = LAYOUTS[ln]
         for s in MA_DTYPES:
             base, view = fn(np.dtype(s))
@@ -245,7 +257,7 @@ def gen_ma_reduce():
         "argmin": lambda m, ax: ma.argmin(m, axis=ax),
         "argmax": lambda m, ax: ma.argmax(m, axis=ax),
     }
-    for ln in MA_LAYOUTS:
+    for ln in MA_LAYOUTS + MA_LAYOUTS_EDGE:
         fn = LAYOUTS[ln]
         for s in MA_DTYPES:
             base, view = fn(np.dtype(s))
@@ -290,7 +302,7 @@ def gen_ma_reduce():
 def gen_ma_scan():
     cases, n, skipped = [], _N(), 0
     ma = np.ma
-    for ln in MA_LAYOUTS:
+    for ln in MA_LAYOUTS + MA_LAYOUTS_EDGE:
         fn = LAYOUTS[ln]
         for s in MA_DTYPES:
             base, view = fn(np.dtype(s))
@@ -303,11 +315,14 @@ def gen_ma_scan():
                         ("ediff1d", {}, lambda mm: ma.ediff1d(mm))]
                 if view.ndim >= 1:
                     jobs += [("diff", {"n": 1}, lambda mm: ma.diff(mm, 1)),
-                             ("diff", {"n": 2}, lambda mm: ma.diff(mm, 2))]
+                             ("diff", {"n": 2}, lambda mm: ma.diff(mm, 2)),
+                             ("diff", {"n": 3}, lambda mm: ma.diff(mm, 3))]
                     if view.ndim >= 2:
                         jobs += [("cumsum", {"axis": 0}, lambda mm: ma.cumsum(mm, axis=0)),
                                  ("cumprod", {"axis": 1}, lambda mm: ma.cumprod(mm, axis=1)),
-                                 ("diff", {"axis": 0}, lambda mm: ma.diff(mm, 1, axis=0))]
+                                 ("diff", {"axis": 0}, lambda mm: ma.diff(mm, 1, axis=0)),
+                                 ("cumsum", {"axis": 1}, lambda mm: ma.cumsum(mm, axis=1)),
+                                 ("diff", {"n": 2, "axis": 1}, lambda mm: ma.diff(mm, 2, axis=1))]
                 for opname, p, f in jobs:
                     try:
                         r = f(m)
@@ -323,7 +338,7 @@ def gen_ma_scan():
 def gen_ma_manip():
     cases, n, skipped = [], _N(), 0
     ma = np.ma
-    for ln in MA_LAYOUTS:
+    for ln in MA_LAYOUTS + MA_LAYOUTS_EDGE:
         fn = LAYOUTS[ln]
         for s in MA_DTYPES:
             base, view = fn(np.dtype(s))
@@ -345,13 +360,20 @@ def gen_ma_manip():
                     ("reshape", {"shape": [sz]}, lambda mm: ma.reshape(mm, (sz,))),
                     ("expand_dims", {"axis": 0}, lambda mm: ma.expand_dims(mm, 0)),
                     ("repeat", {"repeats": 2}, lambda mm: ma.repeat(mm, 2)),
+                    ("diag", {"k": 0}, lambda mm: ma.diag(mm)),
                 ]
                 if nd >= 1:
                     jobs += [("moveaxis", {"source": 0, "destination": nd - 1},
-                              lambda mm, nd=nd: ma.moveaxis(mm, 0, nd - 1))]
+                              lambda mm, nd=nd: ma.moveaxis(mm, 0, nd - 1)),
+                             ("expand_dims", {"axis": nd}, lambda mm, nd=nd: ma.expand_dims(mm, nd))]  # trailing axis
+                if nd == 1:
+                    jobs += [("diag", {"k": 1}, lambda mm: ma.diag(mm, 1))]   # 1-D -> offset diagonal matrix
                 if nd >= 2:
                     jobs += [("swapaxes", {"axis1": 0, "axis2": 1}, lambda mm: ma.swapaxes(mm, 0, 1)),
-                             ("diagonal", {}, lambda mm: ma.diagonal(mm))]
+                             ("diagonal", {}, lambda mm: ma.diagonal(mm)),
+                             ("diagonal", {"offset": 1}, lambda mm: ma.diagonal(mm, 1)),
+                             ("moveaxis", {"source": nd - 1, "destination": 0},
+                              lambda mm, nd=nd: ma.moveaxis(mm, nd - 1, 0))]
                 for opname, p, f in jobs:
                     try:
                         r = f(m)
@@ -419,7 +441,7 @@ def gen_ma_construct():
     cases, n, skipped = [], _N(), 0
     ma = np.ma
     # constructors operate on a base (mostly nomask, plus a pre-masked base to test composition)
-    for ln in MA_LAYOUTS:
+    for ln in MA_LAYOUTS + MA_LAYOUTS_EDGE:
         fn = LAYOUTS[ln]
         for s in MA_DTYPES:
             base, view = fn(np.dtype(s))
@@ -508,6 +530,15 @@ def gen_ma_select():
                                        _ma_expected(ma.compress(cond, m)), ln, f"{s}.{mp}", n))
                 except Exception:
                     skipped += 1
+                # take with OUT-OF-RANGE indices under wrap/clip modes (raise mode is the default take above)
+                oob = np.array([0, sz, sz + 1, -1, -(sz + 1)], dtype=np.int32)
+                oob_op = _ma_operand(np.ascontiguousarray(oob), oob, None)
+                for mode in ("wrap", "clip"):
+                    try:
+                        cases.append(_case("take", {"mode": mode}, [operand, oob_op],
+                                           _ma_expected(ma.take(m, oob, mode=mode)), ln, f"{s}.{mp}", n))
+                    except Exception:
+                        skipped += 1
     # where(cond, x, y): 3 masked operands over a contiguous shape
     for ln in ["c_contiguous_1d", "c_contiguous_2d"]:
         fn = LAYOUTS[ln]
@@ -526,6 +557,22 @@ def gen_ma_select():
                 cases.append(_case("where", {}, [cond_op, ox, oy], _ma_expected(r), ln, f"{s}.wh", n))
             except Exception:
                 skipped += 1
+    # choose(indices, [choice arrays]) — index selects among N masked choice arrays (1-D)
+    for s in ["int32", "float64", "complex128", "uint8"]:
+        base, view = LAYOUTS["c_contiguous_1d"](np.dtype(s))
+        szc = int(view.size)
+        idxc = (np.arange(szc) % 3).astype(np.int32)
+        idxc_op = _ma_operand(np.ascontiguousarray(idxc), idxc, None)
+        chs, ch_ops = [], []
+        for k in range(3):
+            cv = _fill(szc, np.dtype(s))
+            cm = _ma_mask(cv.shape, "some" if k == 1 else "none")   # one masked choice exercises mask-OR
+            chs.append(_ma_build(cv, cm)); ch_ops.append(_ma_operand(np.ascontiguousarray(cv), cv, cm))
+        try:
+            r = ma.choose(np.ma.array(idxc), chs)
+            cases.append(_case("choose", {}, [idxc_op] + ch_ops, _ma_expected(r), "c_contiguous_1d", f"{s}.choose", n))
+        except Exception:
+            skipped += 1
     # put / putmask (mutating -> compare the mutated masked array)
     for ln in ["c_contiguous_1d"]:
         fn = LAYOUTS[ln]
@@ -566,7 +613,7 @@ def gen_ma_select():
 def gen_ma_sortsetops():
     cases, n, skipped = [], _N(), 0
     ma = np.ma
-    for ln in MA_LAYOUTS:
+    for ln in MA_LAYOUTS + MA_LAYOUTS_EDGE:
         fn = LAYOUTS[ln]
         for s in MA_DTYPES:
             base, view = fn(np.dtype(s))
