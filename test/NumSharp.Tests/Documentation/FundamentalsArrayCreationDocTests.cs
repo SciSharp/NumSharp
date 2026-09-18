@@ -109,10 +109,27 @@ namespace NumSharp.Tests.Documentation
         }
 
         [TestMethod]
-        public void Intrinsic_Indices_TakesIntArray()
+        public void Intrinsic_Indices_AcceptsAllShapeSpellings()
         {
-            // np.indices takes an int[] of dimensions (NOT a tuple).
-            np.indices(new[] { 3, 3 }).shape.Should().Equal(new long[] { 2, 3, 3 });
+            // The doc shows every .NET shape spelling reaching np.indices — a collection
+            // expression (int[]), a value tuple, a long[], and an array's own .shape (long[],
+            // no cast) — and they all agree on the (2, 3, 3) grid.
+            var expected = new long[] { 2, 3, 3 };
+            np.indices([3, 3]).shape.Should().Equal(expected);                 // collection expression -> int[]
+            np.indices((3, 3)).shape.Should().Equal(expected);                 // value tuple -> Shape
+            np.indices(new long[] { 3, 3 }).shape.Should().Equal(expected);    // long[] (house shape type)
+            np.indices(np.zeros((3, 3)).shape).shape.Should().Equal(expected); // an array's own long[] shape
+
+            // Documented values: grid[0] = row indices, grid[1] = col indices.
+            var g = np.indices((3, 3));
+            g[0].ToArray<long>().Should().Equal(0L, 0, 0, 1, 1, 1, 2, 2, 2);
+            g[1].ToArray<long>().Should().Equal(0L, 1, 2, 0, 1, 2, 0, 1, 2);
+
+            // The sparse form: one broadcast-shaped array per dimension, shapes (3,1) and (1,3).
+            var sp = np.indices_sparse((3, 3));
+            sp.Length.Should().Be(2);
+            sp[0].shape.Should().Equal(new long[] { 3, 1 });
+            sp[1].shape.Should().Equal(new long[] { 1, 3 });
         }
 
         // ── 3. Replicating, joining, mutating ──────────────────────────────────────────────────────
