@@ -265,8 +265,8 @@ row is scoped in `MisalignedRegistry` branches K1–K9, so each is counted and p
 | `external_loop` coalesces fewer dimensions → more/shorter chunks (values agree, chunk lengths do not) | K1 | known bug |
 | `isscalar(0-d array)` → True, NumPy False | K2 | known bug |
 | `nonzero(0-d)` returns a tuple, NumPy raises | K3 | known bug |
-| complex-input ufunc rejection: same refusal, NumSharp's own wording/type | K4 | known gap |
-| …and the rejection is **skipped entirely** on a zero-size complex operand (NumPy validates the loop, not the data) | K5 | known bug |
+| complex-input ufunc rejection (cbrt/floor/ceil/trunc/deg2rad/rad2deg/floor_divide/mod) | K4 | **FIXED** — each `Default.<Op>` guard now raises NumPy's exact `TypeError("ufunc '<name>' not supported for the input types…")` (mod→'remainder') instead of a kernel `NotSupportedException`; excuse deleted |
+| …and the rejection on a **zero-size** complex operand | K5 | **FIXED** — the K4 guard keys off the input DTYPE, not the data, so a zero-size complex operand is rejected too (NumPy validates the loop, not the data); excuse deleted |
 | `power(bool, negative int)` misses the integer-power guard | K6 | known bug |
 | `power(int, negative int)` trips `Debug.Fail("index < Count, Memory corruption expected")` instead of NumPy's ValueError — in Release that path has no assert | K8 | known bug (memory safety) |
 | `result_type(mixed signed/unsigned, 0-D operand)` throws instead of resolving | K9 | known bug |

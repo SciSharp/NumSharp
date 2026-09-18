@@ -872,24 +872,15 @@ namespace NumSharp.Tests.Fuzz
             if (c.Op == "nonzero_all" && c.Operands.Length == 1 && c.Operands[0].Shape.Length == 0)
                 return "nonzero(0-d): NumPy raises ValueError, NumSharp returns a tuple [known bug]";
 
-            // (K4) Complex-input ufunc rejection — the WORDING, not the decision. Both sides refuse
-            // cbrt/floor/ceil/trunc/deg2rad/rad2deg/floor_divide/mod on complex input; NumPy raises
-            // its ufunc TypeError, NumSharp a NotSupportedException with its own text. (The bitwise
-            // and invert loops DO produce NumPy's message verbatim, so the machinery exists — these
-            // kernels simply do not use it.)
-            if (kind == DivergenceKind.ErrorText && ComplexRejectOps.Contains(c.Op)
-                && c.Operands.Any(o => o.Dtype == "complex128"))
-                return "complex ufunc rejection wording: NotSupportedException('operation X not supported "
-                     + "for Complex') vs NumPy's ufunc TypeError [known gap]";
-
-            // (K5) …and on a ZERO-SIZE complex operand the rejection is skipped ENTIRELY: NumSharp
-            // returns an empty result because the kernel never runs, where NumPy still raises —
-            // NumPy validates the LOOP (can this dtype be handled at all?), not the data.
-            if (kind == DivergenceKind.Value && ComplexRejectOps.Contains(c.Op)
-                && c.Operands.Any(o => o.Dtype == "complex128")
-                && c.Operands.Any(o => o.Shape.Any(d => d == 0)))
-                return "complex ufunc rejection SKIPPED on a zero-size operand (NumPy validates the "
-                     + "loop, not the data) [known bug]";
+            // (K4/K5) RESOLVED — no excuse. cbrt/floor/ceil/trunc/deg2rad/rad2deg/floor_divide/mod on
+            // complex input now raise NumPy's EXACT ufunc TypeError verbatim
+            // ("ufunc '<name>' not supported for the input types, and the inputs could not be safely
+            // coerced to any supported types according to the casting rule ''safe''"; mod's ufunc name
+            // is 'remainder'), instead of a kernel NotSupportedException with NumSharp wording (K4).
+            // The guard sits at each Default.<Op> method and keys off the INPUT DTYPE, not the data, so
+            // a ZERO-SIZE complex operand is rejected too — NumPy validates the loop, not the data (K5).
+            // Both excuse branches and the ComplexRejectOps set are deleted, not narrowed; a regression
+            // (wrong type, wrong wording, or a zero-size skip) turns the errors_full tier red.
 
             // (K6/K8 RETIRED) power with a negative integer exponent — for BOTH an integer base and
             // a bool base (which promotes to an integer loop) — now raises NumPy's clean
@@ -969,15 +960,6 @@ namespace NumSharp.Tests.Fuzz
 
             return null;
         }
-
-        /// <summary>
-        ///     The ufuncs NumPy has no complex loop for. NumSharp refuses them too, but with its own
-        ///     exception type and wording — see branches (K4)/(K5).
-        /// </summary>
-        private static readonly System.Collections.Generic.HashSet<string> ComplexRejectOps = new()
-        {
-            "cbrt", "floor", "ceil", "trunc", "deg2rad", "rad2deg", "floor_divide", "mod"
-        };
 
         /// <summary>
         ///     The prefer-precise threshold: NumSharp's ULP distance to truth may exceed NumPy's by
