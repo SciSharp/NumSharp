@@ -62,6 +62,15 @@ namespace NumSharp.Tests.Fuzz
             public long Offset { get; set; }
             public long BufferSize { get; set; }
             public string Buffer { get; set; }
+
+            /// <summary>
+            ///     MASKED-ARRAY corpus only: hex of a C-contiguous bool buffer (one byte per element,
+            ///     <c>product(Shape)</c> bytes) giving the mask at the DATA view's logical C-order
+            ///     positions. Absent (null) means <c>nomask</c> — NumPy's fast path where an operand
+            ///     is an ordinary unmasked array. Ordinary (non-ma) tiers never set this, so their
+            ///     operand serialization is byte-identical to before.
+            /// </summary>
+            public string Mask { get; set; }
         }
 
         /// <summary>
@@ -104,7 +113,17 @@ namespace NumSharp.Tests.Fuzz
             /// <summary>Expected dtype name (kind=dtype) or expected string (kind=text).</summary>
             public string Value { get; set; }
 
-            /// <summary>Per-slot results for kind=tuple, in NumPy's tuple order.</summary>
+            /// <summary>
+            ///     MASKED-ARRAY corpus only (kind=masked / masked_tuple slots): hex of the result's
+            ///     <c>getmaskarray</c> — a C-contiguous bool buffer of <c>product(Shape)</c> bytes.
+            ///     <see cref="Buffer"/> then holds the <c>filled(0)</c> data (masked slots zeroed), so
+            ///     the pair together is the observable masked value: unmasked data bit-for-bit + the
+            ///     mask bit-for-bit, with masked-slot underlying data left a wildcard (it is
+            ///     implementation-defined for unique/set-ops and merely input-restored for ufuncs).
+            /// </summary>
+            public string Mask { get; set; }
+
+            /// <summary>Per-slot results for kind=tuple / masked_tuple, in NumPy's tuple order.</summary>
             public Expected[] Slots { get; set; }
 
             /// <summary>Normalized kind — legacy cases carry none and mean "array".</summary>
@@ -193,6 +212,27 @@ namespace NumSharp.Tests.Fuzz
             var storage = new UnmanagedStorage(slice, baseShape);
             var viewShape = new Shape(o.Shape, o.Strides, o.Offset, o.BufferSize); // operand view (alias, no checks)
             return new NDArray(storage, viewShape);
+        }
+
+        /// <summary>
+        ///     Rebuild the C-contiguous bool mask NDArray a masked operand carries, from its hex and
+        ///     the DATA view's logical shape. The bytes are one-per-element in C-order, so the mask is
+        ///     a plain contiguous array (never strided) even when the data view is — exactly how NumPy
+        ///     stores <c>MaskedArray._mask</c> and how <c>np.ma.array(view, mask=cmask)</c> pairs them.
+        /// </summary>
+        /// <param name="shape">The data view's shape (the mask has the same shape).</param>
+        /// <param name="maskHex">Hex of the C-contiguous bool buffer, or null for nomask.</param>
+        /// <returns>The bool mask NDArray, or null when <paramref name="maskHex"/> is null (nomask).</returns>
+        public static NDArray ReconstructMask(long[] shape, string maskHex)
+        {
+            if (maskHex == null)
+                return null;                                     // nomask: keep _mask == null (the fast path)
+            for (int i = 0; i < shape.Length; i++)
+                if (shape[i] == 0)
+                    return new NDArray(NPTypeCode.Boolean, new Shape(shape), false);   // empty: no bytes
+            var bytes = FromHex(maskHex);
+            var slice = ArraySlice.FromBuffer<bool>(bytes, true);
+            return new NDArray(new UnmanagedStorage(slice, new Shape(shape)), new Shape(shape));
         }
 
         /// <summary>Materialize an op result to C-contiguous, offset-0 logical bytes for bit comparison.</summary>

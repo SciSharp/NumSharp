@@ -935,7 +935,10 @@ namespace NumSharp
         internal void EnsureMask()
         {
             if (_mask is null)
-                _mask = np.zeros(_data.Shape, np.@bool);
+                // DIMENSIONS only, never _data.Shape: a strided/offset _data view carries strides + a
+                // larger bufferSize, and np.zeros(that Shape) builds a strided zeros over the base buffer
+                // whose materialized tail is garbage (see MaskedArrayModule.DimsOf). Size the mask by dims.
+                _mask = np.zeros(new Shape(_data.shape), np.@bool);
         }
 
         /// <summary>Sets <c>x.flat[indices] = values</c> (mask-aware) — the instance form of
@@ -1405,7 +1408,9 @@ namespace NumSharp
                 case string:
                 case Slice:
                 case Slice[]:
-                    return np.zeros(np.r_[item].Shape, np.@bool);
+                    // DIMENSIONS only (see MaskedArrayModule.DimsOf): a non-contiguous r_ result Shape
+                    // would make np.zeros build a garbage strided mask; size by dims instead.
+                    return np.zeros(new Shape(np.r_[item].shape), np.@bool);
                 // Masked array → its mask; plain array/scalar → an all-False array of its shape.
                 default:
                     return np.ma.getmaskarray(item);
@@ -1506,7 +1511,7 @@ namespace NumSharp
             var m = (a as MaskedArray)?._mask;
             if (m is not null)
                 return m;
-            return np.zeros(AsData(a).Shape, np.@bool);
+            return np.zeros(DimsOf(AsData(a)), np.@bool);
         }
 
         /// <summary>
@@ -1860,7 +1865,7 @@ namespace NumSharp
         {
             var d = AsData(a);
             // The invalid mask is ~isfinite for a float/complex dtype, else nothing (integers are all finite).
-            var invalid = NonFiniteMask(d) ?? np.zeros(d.Shape, np.@bool);
+            var invalid = NonFiniteMask(d) ?? np.zeros(DimsOf(d), np.@bool);
             var existing = (a as MaskedArray)?._mask;
             var extra = mask is null ? null : AsData(mask).astype(np.@bool);
             // Full mask = existing | extra | invalid (nomask-aware).
@@ -2154,6 +2159,23 @@ namespace NumSharp
             var newmask = np.logical_or(m, np.broadcast_to(line, m.Shape));
             return new MaskedArray(ma_._data, newmask);
         }
+
+        /// <summary>
+        ///     A fresh C-contiguous <see cref="Shape"/> of <paramref name="a"/>'s DIMENSIONS only — never its
+        ///     strides/offset/bufferSize. Use this for EVERY mask/scratch allocation over an operand's shape.
+        /// </summary>
+        /// <remarks>
+        ///     Allocating a mask with <c>np.zeros(a.Shape)</c> is a silent-corruption FOOTGUN: for a
+        ///     NON-CONTIGUOUS <paramref name="a"/> (a slice / transpose / strided or offset view) the full
+        ///     <see cref="Shape"/> carries the view's strides AND the larger base bufferSize, so
+        ///     <c>np.zeros</c> builds a STRIDED zeros array over that base buffer and materializing it reads the
+        ///     uninitialized tail as garbage — e.g. <c>getmaskarray</c> of a nomask <c>[::2]</c> view returned
+        ///     <c>01</c> bytes instead of all-False, which every manip/constructor op then inherited. The mask
+        ///     must be sized by the DIMENSIONS, exactly as NumPy allocates it (<c>make_mask_none(a.shape)</c>).
+        /// </remarks>
+        /// <param name="a">The array whose logical dimensions the allocation should match.</param>
+        /// <returns>A fresh contiguous <see cref="Shape"/> with <paramref name="a"/>'s dimensions, stride 0 offset.</returns>
+        private static Shape DimsOf(NDArray a) => new Shape(a.shape);
 
         /// <summary>
         ///     The <c>~isfinite(result)</c> term of a domained op's mask, but only for inexact (float/complex)
@@ -2621,7 +2643,10 @@ namespace NumSharp
         /// <param name="a">Operand.</param><param name="axis">Axis or null.</param><param name="keepdims">Keep reduced axes.</param>
         /// <returns>An int64 <see cref="NDArray"/> (0-D for a flat count).</returns>
         public NDArray count(object a, int? axis = null, bool keepdims = false)
-            => CountUnmasked((a as MaskedArray)?._mask, AsData(a).Shape, axis, keepdims);
+            // DimsOf, not AsData(a).Shape: for a nomask NON-CONTIGUOUS operand the strided Shape made
+            // CountUnmasked size/iterate over the base buffer and undercount (a [::2] view of 8 counted 6).
+            // The count is over the logical DIMENSIONS. See DimsOf.
+            => CountUnmasked((a as MaskedArray)?._mask, DimsOf(AsData(a)), axis, keepdims);
 
         /// <summary>Mean over unmasked elements = sum/count (masked slots excluded from BOTH). A cell whose
         /// whole slice was masked is masked. Result is float (int/bool promote to float64).</summary>
@@ -2683,7 +2708,7 @@ namespace NumSharp
             // `maskEff` is the real mask, or an all-false stand-in when only a supplied mean took us off the fast
             // path — so every mask-driven step (where/AllAlongAxis) has a non-null operand and, with no real mask,
             // zeroes nothing and masks nothing.
-            var maskEff = mask ?? np.zeros(d.Shape, np.@bool);
+            var maskEff = mask ?? np.zeros(DimsOf(d), np.@bool);
             var filled0 = mask is null ? d : ((MaskedArray)a).filled(0);
             var cntK = CountUnmasked(mask, d.Shape, axis, true).astype(computeType);
             // keepdims mean for centering — the SUPPLIED mean if given, else the unmasked slice mean.
@@ -2848,8 +2873,8 @@ namespace NumSharp
             if (propagate_mask)
             {
                 // Slide each operand's mask (as 0/1) against ones — a nonzero count means a masked cell contributed.
-                var m1 = np.not_equal(f(getmaskarray(a).astype(np.int32), np.ones(dv.Shape, np.int32), mode), NDArray.Scalar(0));
-                var m2 = np.not_equal(f(np.ones(da.Shape, np.int32), getmaskarray(v).astype(np.int32), mode), NDArray.Scalar(0));
+                var m1 = np.not_equal(f(getmaskarray(a).astype(np.int32), np.ones(DimsOf(dv), np.int32), mode), NDArray.Scalar(0));
+                var m2 = np.not_equal(f(np.ones(DimsOf(da), np.int32), getmaskarray(v).astype(np.int32), mode), NDArray.Scalar(0));
                 mask = np.logical_or(m1, m2);
                 data = f(da, dv, mode);
             }
@@ -3213,7 +3238,7 @@ namespace NumSharp
         public MaskedArray masked_invalid(object a, bool copy = true)
         {
             var d = AsData(a);
-            var cond = NonFiniteMask(d) ?? np.zeros(d.Shape, np.@bool);
+            var cond = NonFiniteMask(d) ?? np.zeros(DimsOf(d), np.@bool);
             return masked_where(cond, a, copy);
         }
 
@@ -3642,7 +3667,7 @@ namespace NumSharp
         /// <returns>An int64 count of masked elements.</returns>
         public NDArray count_masked(object a, int? axis = null)
         {
-            var m = (a as MaskedArray)?._mask ?? np.zeros(AsData(a).Shape, np.@bool);
+            var m = (a as MaskedArray)?._mask ?? np.zeros(DimsOf(AsData(a)), np.@bool);
             return np.sum(m, axis, false, np.int64);
         }
 
@@ -3659,7 +3684,7 @@ namespace NumSharp
         public MaskedArray masked_all_like(object a)
         {
             var d = AsData(a);
-            return new MaskedArray(np.empty_like(d), np.ones(d.Shape, np.@bool));
+            return new MaskedArray(np.empty_like(d), np.ones(DimsOf(d), np.@bool));
         }
 
         /// <summary>Weighted average over unmasked elements (NumPy's <c>average</c>): with no weights this is the
@@ -3934,8 +3959,8 @@ namespace NumSharp
             var mb_ = (b as MaskedArray)?._mask;
             if (ma_ is null && mb_ is null)
                 return new MaskedArray(product, null);
-            var va = (ma_ is null ? np.ones(AsData(a).Shape, np.@bool) : np.logical_not(ma_)).astype(np.float64);
-            var vb = (mb_ is null ? np.ones(AsData(b).Shape, np.@bool) : np.logical_not(mb_)).astype(np.float64);
+            var va = (ma_ is null ? np.ones(DimsOf(AsData(a)), np.@bool) : np.logical_not(ma_)).astype(np.float64);
+            var vb = (mb_ is null ? np.ones(DimsOf(AsData(b)), np.@bool) : np.logical_not(mb_)).astype(np.float64);
             var valid = np.dot(va, vb); // count of valid contributing pairs
             var m = np.equal(valid, NDArray.Scalar(0.0));
             return new MaskedArray(product, np.any(m) ? m : null);
@@ -4442,7 +4467,7 @@ namespace NumSharp
                 // No existing mask: only create one if the VALUES bring a mask (else stay nomask).
                 if (valmask is not null && ma_ is not null)
                 {
-                    ma_._mask = np.zeros(data.Shape, np.@bool);
+                    ma_._mask = np.zeros(DimsOf(data), np.@bool);
                     np.copyto(ma_._mask, valmask, casting: "unsafe", where: maskArr);
                 }
             }
@@ -4461,7 +4486,7 @@ namespace NumSharp
             else
             {
                 // SOFT: unmasked values (nomask) become all-False so the written slots unmask.
-                var vm = valmask ?? np.zeros(valdata.Shape, np.@bool);
+                var vm = valmask ?? np.zeros(DimsOf(valdata), np.@bool);
                 np.copyto(ma_._mask, vm, casting: "unsafe", where: maskArr);
             }
             np.copyto(data, valdata, casting: "unsafe", where: maskArr);
@@ -4627,7 +4652,7 @@ namespace NumSharp
                 return new MaskedArray(uvals, null);
             // Append a single masked slot (NumPy keeps one masked value in the unique set).
             var data = np.concatenate(new[] { uvals, np.zeros(new Shape(1), uvals.dtype) }, 0);
-            var m = np.concatenate(new[] { np.zeros(uvals.Shape, np.@bool), np.ones(new Shape(1), np.@bool) }, 0);
+            var m = np.concatenate(new[] { np.zeros(DimsOf(uvals), np.@bool), np.ones(new Shape(1), np.@bool) }, 0);
             return new MaskedArray(data, m);
         }
 
@@ -4676,7 +4701,7 @@ namespace NumSharp
             // whatever its sort/concatenate left (not the fill). A zero of the result dtype keeps `.filled()`
             // (the observable value) consistent with the dtype default, matching NumPy's contract.
             var data = np.concatenate(new[] { values, np.zeros(new Shape(1), values.dtype) }, 0);
-            var m = np.concatenate(new[] { np.zeros(values.Shape, np.@bool), np.ones(new Shape(1), np.@bool) }, 0);
+            var m = np.concatenate(new[] { np.zeros(DimsOf(values), np.@bool), np.ones(new Shape(1), np.@bool) }, 0);
             return new MaskedArray(data, m);
         }
 
