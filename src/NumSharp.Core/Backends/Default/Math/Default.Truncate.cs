@@ -21,6 +21,17 @@ namespace NumSharp.Backends
             // raises the input cast error; dtype=i8/f4 on i4 are fine) --
             // all probed on 2.4.2.
             var inputType = nd.GetTypeCode;
+
+            // trunc has no complex loop (float + identity-int loops only). A complex input with no
+            // explicit dtype reaches no loop, so NumPy raises the generic ufunc TypeError (NOT a
+            // NotSupportedException from the kernel) and validates the LOOP, not the data — so a
+            // zero-size complex operand is rejected too (probed 2.4.2). Same guard shape as np.fabs;
+            // resolves the oracle K4 (wording/type) and K5 (zero-size skip) excuses at once.
+            if (!typeCode.HasValue && inputType == NPTypeCode.Complex)
+                throw new TypeError(
+                    "ufunc 'trunc' not supported for the input types, and the inputs " +
+                    "could not be safely coerced to any supported types according to the casting rule ''safe''");
+
             if (typeCode.HasValue)
                 ValidateUnaryInputCast(inputType, typeCode.Value, "trunc");
 
