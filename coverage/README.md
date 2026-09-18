@@ -15,9 +15,17 @@ Members are reflected with both `Static` and `Instance` flags (per-member `stati
 
 **Matching is case-sensitive** — NumPy's public API is case-sensitive, so a NumSharp member is credited only when the spelling is identical (every match is an exact lookup). The generator additionally folds case to *detect* near-misses — an in-scope NumPy API left missing for which NumSharp exposes a same-surface member differing only by case — and reports them in `summary.md` under "Case-insensitive near-misses", per row via a `case_insensitive_matches` field (JSON/CSV), and on the console. They are **never** counted as available: this guards against silently satisfying NumPy's `histogram` with a C#-style `Histogram`. Close one by renaming to the exact NumPy spelling or recording a reviewed alias in `overrides.json`.
 
-## Extended submodules (out of headline scope)
+## Expanded API scope and object members
 
-The five headline surfaces above are not the whole of NumPy's public API. NumPy also ships large public **submodules** the headline deliberately excludes — but scanning *none* of them is how whole families (`numpy.emath`, the `numpy.polynomial` package, `numpy.lib.stride_tricks`) went missing from the artifact entirely rather than surfacing as gaps. The generator therefore also catalogs these as `in_default_scope=false` rows (surfaced in `summary.md` → "Extended NumPy submodules" and in the JSON `summary.extendedSurfaces`), so a scan can no longer miss a family, **without** moving the headline percentage — which would be dishonest for subsystems NumSharp intentionally lacks. Each carries a **disposition**: `candidate` (implementable, not yet exposed — `emath`, `polynomial.*`, `lib.stride_tricks`, `lib.array_utils`), `subsystem` (needs a NumSharp subsystem that does not exist — `ma`, `char`/`strings`, `rec`, `lib.recfunctions`), `tooling` (Python-runtime tooling with no analog — `testing`, `ctypeslib`, `lib.format`), or `interop` (the ndarray array-protocol dunders `__array__`/`__array_interface__`/`__dlpack__`/… that the `_`-prefix filter otherwise hides). A member is credited only against a NumSharp facade of the **same** submodule (e.g. an eventual `[ModuleName("np.emath")]`); a top-level `np` namesake with different semantics (`np.sqrt` vs `emath.sqrt`) is noted, never counted. Object-method surfaces (ufunc methods `.reduce`/`.at`/`.outer`, `Generator`/`SeedSequence` methods) are still out of scope — see `coverage/generate_coverage.py` for the enumeration boundary.
+The existing DocFX dashboard defaults to **All NumPy APIs**: the five historical headline surfaces plus public extended submodules and object members. The scope selector also offers the historical headline, extended APIs, full NumPy catalog (including types/constants/modules), and NumSharp extensions. Every summary, surface card, capability category, and explorer result uses that selected scope. Types/constants/modules remain searchable but never enter an API availability denominator.
+
+Extended namespaces cover complex-domain math, polynomials, masked arrays, legacy and modern strings, records, and object contracts. Each carries `extended=true`, `in_default_scope=false`, and a disposition. `summary.api_scope` reports the expanded counts and categories; `summary.default_scope` preserves the historical comparison.
+
+The final `dashboard_rows` projection in `generate_coverage.py` applies the dashboard's reviewed scope **after** resolving support against original owners. It removes the ignored interop, library, testing, ctypes, and namespace-introspection surfaces (including root exports) from emitted JSON/CSV and all summary counts. The underlying NumPy extraction remains comprehensive so inventory regression checks can detect missing discovery. Nothing about ignored surfaces is displayed in the dashboard. MaskedArray members share the `ma` surface and **Masked arrays** category; legacy polynomial functions, `poly1d`, and the entire polynomial package share the `polynomial` surface and **Polynomials** category. Canonical IDs, signatures, implementation targets, and documentation links remain intact.
+
+`object_surfaces.py` discovers methods, properties, selected protocols, and instance-only attributes from actual pinned NumPy classes/objects. It includes ufuncs, modern and legacy RNGs, seed sequences and bit generators, polynomial classes, masked/record/string/matrix arrays, iterators, dtype/limits/flags, archives, memory maps, and other public object contracts. The five ufunc methods (`reduce`, `accumulate`, `reduceat`, `outer`, `at`) are also catalogued for each top-level ufunc export. These describe exposed protocols: unary reductions and some generalized-ufunc methods reject calls in NumPy, as recorded in their notes. Aliases are separate exported names, and inherited members are separate contracts on each owner type.
+
+The reflection inventory's schema v5 `objectTypes` map contains public members **including inherited members**, with declaring-type evidence. Object members match only their explicitly mapped CLR owner, using exact spelling or a reviewed adapter in `object_surfaces.py`. A top-level `np.sqrt`, `np.sum`, or an ordinary NDArray member cannot confer support on `emath.sqrt`, `add.reduce`, or `MaskedArray.sum`. A class being available does not mark its methods available. Missing methods, signatures, source links, and reviewed spelling differences are visible individually.
 
 ## Generate or verify
 
@@ -26,20 +34,33 @@ python -m pip install numpy==2.4.2
 python coverage/generate_coverage.py
 python coverage/generate_coverage.py --check
 python coverage/audit_documentation.py
+python -m unittest discover -s coverage -p 'test_*.py'
+node --test coverage/test_dashboard.cjs
 ```
 
-Generated, reviewable outputs live in `coverage/generated/`:
+Generated, reviewable outputs live in gitignored `coverage/generated/`:
 
 - `coverage.json` — complete machine-readable inventory used by the documentation dashboard.
 - `coverage.csv` — flat data for spreadsheets and downstream tooling.
 - `summary.md` — human-readable totals and the highest-priority gaps.
 - `manifest.json` — schema, tool versions, scope, and counting rules.
 
-CI generates a fresh copy under `artifacts/numpy-numsharp-coverage/`, validates every headline-scope link against NumPy's official latest-stable Sphinx inventory, compares the result byte-for-byte with the checked-in dashboard data, and uploads the fresh directory as the `numpy-numsharp-api-coverage` artifact.
+CI generates a fresh copy under `artifacts/numpy-numsharp-coverage/`, validates documentation links across **all catalog scopes**, and uploads it as `numpy-numsharp-api-coverage`. Master builds publish snapshots to the repository's `data` branch. Generated data is not committed on master.
+
+DocFX reads **`refs/data/inventory/latest/`**, not `coverage/generated/`. To preview fresh data locally, generate directly into that directory and build the existing website:
+
+```bash
+python coverage/generate_coverage.py --output refs/data/inventory/latest
+docfx docs/website-src/docfx.json
+```
+
+`tools/dashboard_data/refresh_data.py --type inventory` performs the repository's snapshot publication flow (pull and local commit on the data branch). It is separate from a local preview.
+
+Documentation URLs resolve from `numpy_documentation_inventory.json`, a checked-in index of identifiers and URLs from NumPy's official Sphinx inventory. Exact API targets are preferred; undocumented standalone exports link to their nearest documented parent. No guessed generated-page URLs are emitted. The live audit validates both pages and anchors. Refresh the offline link index explicitly with `python coverage/audit_documentation.py --refresh-inventory`; this does not change the pinned runtime NumPy version.
 
 ## What the numbers mean
 
-The default denominator includes NumPy top-level callables, `ndarray` methods and properties, and callables from `numpy.random`, `numpy.linalg`, and `numpy.fft`. NumPy types, constants, and modules are catalogued but do not affect the headline percentage. NumSharp-only APIs are catalogued separately and also do not affect it.
+The historical headline denominator includes NumPy top-level callables, `ndarray` methods and properties, and callables from `numpy.random`, `numpy.linalg`, and `numpy.fft`. The dashboard's expanded denominator adds extended function and object-member contracts. NumPy types, constants, modules, and NumSharp-only APIs are catalogued separately and affect neither percentage.
 
 A NumPy **class** export (for example `numpy.random.Generator`, `PCG64`, `SeedSequence`, `BitGenerator`, `MT19937`) is credited when NumSharp exports a public type of the same name — a `"type"` availability match against the inventory's `exportedTypes` index. This carries the type existence the member-name index cannot (a class such as `BitGenerator` has no public members of its own), and, being out of default scope, it fixes the Types catalog without moving the headline.
 

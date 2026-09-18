@@ -190,6 +190,25 @@ def build(recipe, dtype="int64"):
         x = np.arange(6).astype(dt)
         x.setflags(write=False)
         return x.astype(dt, copy=False)
+    # --- wave 4: currently-uncovered producers whose result flags MATCH NumSharp (a
+    #     second-pass differential sweep, 2026-09-18). bmask_rows/bmask_3d_rows pin the
+    #     boolean-partial-mask OWNDATA fix (Default.BooleanMask now reshapes the owned gather
+    #     buffer in place instead of returning a view of it); the rest fill catalog holes for
+    #     the view/copy-returning manipulation ops (flip variants, roll, tile, repeat, offset
+    #     diagonal, multi-axis moveaxis, rot90 k=2, axis take, broadcast-binary output). -----
+    if recipe == "bmask_rows":    return np.arange(12).astype(dt).reshape(3, 4)[np.array([True, False, True])]
+    if recipe == "bmask_3d_rows": return np.arange(24).astype(dt).reshape(2, 3, 4)[np.array([True, False])]
+    if recipe == "fliplr":        return np.fliplr(np.arange(12).astype(dt).reshape(3, 4))
+    if recipe == "flipud":        return np.flipud(np.arange(12).astype(dt).reshape(3, 4))
+    if recipe == "roll1d":        return np.roll(np.arange(6).astype(dt), 2)
+    if recipe == "roll2d":        return np.roll(np.arange(12).astype(dt).reshape(3, 4), 1, axis=0)
+    if recipe == "tile1d":        return np.tile(np.arange(3).astype(dt), 2)
+    if recipe == "repeat_ax":     return np.repeat(np.arange(12).astype(dt).reshape(3, 4), 2, axis=1)
+    if recipe == "diagonal_off":  return np.arange(12).astype(dt).reshape(3, 4).diagonal(offset=1)
+    if recipe == "moveaxis_m":    return np.moveaxis(np.arange(24).astype(dt).reshape(2, 3, 4), [0, 1], [2, 0])
+    if recipe == "rot90_k2":      return np.rot90(np.arange(12).astype(dt).reshape(3, 4), 2)
+    if recipe == "take_ax1":      return np.take(np.arange(12).astype(dt).reshape(3, 4), [0, 2], axis=1)
+    if recipe == "bcast_add":     return np.arange(12).astype(dt).reshape(3, 4) + np.arange(4).astype(dt)
     raise KeyError(recipe)
 
 
@@ -212,6 +231,9 @@ RECIPES = [
     # wave 3 (split children / imag-of-complex / read-only-source producers):
     "split2d_row", "split2d_ax1", "split_f3d_ax0", "split_bcast_end", "imag_complex",
     "ro_T", "ro_owner_T", "ro_reshape_copy", "ro_fancy", "ro_ascontig", "ro_astype_nocopy",
+    # wave 4 (second-pass sweep: boolean-partial-mask owndata fix + uncovered view/copy ops):
+    "bmask_rows", "bmask_3d_rows", "fliplr", "flipud", "roll1d", "roll2d", "tile1d",
+    "repeat_ax", "diagonal_off", "moveaxis_m", "rot90_k2", "take_ax1", "bcast_add",
 ]
 
 # Identity-vs-copy consumers: NumPy's asarray family DECIDES from the flags whether to return the
