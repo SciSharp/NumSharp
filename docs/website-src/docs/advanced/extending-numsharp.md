@@ -1,15 +1,15 @@
 # Extending NumSharp
 
-NumPy is extended through its **C-API**: you write a C extension module to create and consume `ndarray`s, hand-code a custom ufunc in C, or subtype the array in C. NumSharp has **no C-API** — `NumSharp.Core` is 100% managed C# — and it does not need one. You extend it in managed code, and you still reach SIMD speed, because the hot loops are generated as IL at runtime rather than compiled from C ahead of time.
+NumPy is extended through its **C-API**: you write a C extension module to create and consume `ndarray`s, hand-code a custom ufunc in C, or subtype the array in C. NumSharp has **no C-API** - `NumSharp.Core` is 100% managed C# - and it does not need one. You extend it in managed code, and you still reach SIMD speed, because the hot loops are generated as IL at runtime rather than compiled from C ahead of time.
 
-This page maps the extension seams along two axes: the **API surface** — add your own `np.*` functions and `NDArray` methods with C# 14 extension members — and the **computation** — custom kernels, fused ops, or a replacement backend. Each seam has a dedicated deep-dive; this is the map.
+This page maps the extension seams along two axes: the **API surface** - add your own `np.*` functions and `NDArray` methods with C# 14 extension members - and the **computation** - custom kernels, fused ops, or a replacement backend. Each seam has a dedicated deep-dive; this is the map.
 
-<!-- Tests: NumSharp.Tests.Documentation.AdvancedExtendingDocTests — the executable code examples on this page are asserted in test/NumSharp.Tests/Documentation/AdvancedExtendingDocTests.cs. Section → method:
+<!-- Tests: NumSharp.Tests.Documentation.AdvancedExtendingDocTests - the executable code examples on this page are asserted in test/NumSharp.Tests/Documentation/AdvancedExtendingDocTests.cs. Section → method:
      API surface (C# 14 extension members) → CSharp14_ExtensionMembers_ExtendNpAndNDArray (net10.0 only)
      1. Write your own element loop → TypedIteration_NditerAndChunks; Unsafe_SpanAndPointer
      2. Compose a custom op with np.evaluate → FusedExpressions_Evaluate
      7. Turn on threaded kernels → Multithreading_Toggle
-     (Sections 3-6 — NDIter / IL generation / the backend seam / NumSharp.Build — are conceptual or covered by the NDIter, il-generation and numsharp-build-compiler pages.) -->
+     (Sections 3-6 - NDIter / IL generation / the backend seam / NumSharp.Build - are conceptual or covered by the NDIter, il-generation and numsharp-build-compiler pages.) -->
 
 ---
 
@@ -17,20 +17,20 @@ This page maps the extension seams along two axes: the **API surface** — add y
 
 | You want to… | Use | NumPy C-API analog |
 |--------------|-----|--------------------|
-| Add `np.*` functions / `NDArray` methods that read like built-ins | C# 14 extension members in `namespace NumSharp` | — (NumPy can't cleanly extend `np`) |
+| Add `np.*` functions / `NDArray` methods that read like built-ins | C# 14 extension members in `namespace NumSharp` | - (NumPy can't cleanly extend `np`) |
 | Loop over elements yourself, fast, unboxed | `np.nditer<T>` / `np.nditer_chunks<T>` / `nd.Unsafe` | iterate a buffer via `NpyIter` / `PyArray_DATA` |
 | Compose a custom elementwise/reduction op with no temporaries | `np.evaluate` / `NDExpr` | write a custom ufunc |
 | Drive multi-operand, broadcasting, buffered traversal | `NDIter` | the `NpyIter` C iterator |
 | Emit a specialized SIMD kernel at runtime | `ILKernelGenerator` / `DirectILKernelGenerator` | a hand-written C inner loop |
 | Swap the compute backend (e.g. native BLAS) | `TensorEngine.Blas` (`IBlasBackend`) | link a different C/Fortran library |
-| Weave ownership/lifetime at build time | `NumSharp.Build` | — (no analog) |
+| Weave ownership/lifetime at build time | `NumSharp.Build` | - (no analog) |
 | Turn on threaded kernels | `np.multithreading` | OpenMP in a C loop |
 
 ---
 
 ## Add to the API surface with C# 14 extension members
 
-The seams below extend *computation*. To extend the **callable surface** — add your own `np.*` functions or `NDArray` methods and properties that read exactly like built-ins — use **C# 14 extension members** and declare them in the `NumSharp` namespace. Every NumSharp consumer already has `using NumSharp;` in scope, so your additions appear on `np` and `NDArray` with no extra import:
+The seams below extend *computation*. To extend the **callable surface** - add your own `np.*` functions or `NDArray` methods and properties that read exactly like built-ins - use **C# 14 extension members** and declare them in the `NumSharp` namespace. Every NumSharp consumer already has `using NumSharp;` in scope, so your additions appear on `np` and `NDArray` with no extra import:
 
 ```csharp
 namespace NumSharp;   // the key move: your extensions land next to np and NDArray
@@ -61,31 +61,31 @@ x.doubled();      // [2. 4. 6. 8.] ← instance extension method
 x.total;          // 10           ← instance extension property
 ```
 
-**What C# 14 adds here.** Before C# 14, an extension could only be an *instance method* (`this NDArray a`) — you could add `x.doubled()`, but not `np.sumsq(...)` and not a `x.total` *property*. C# 14 `extension(...)` blocks lift both limits:
+**What C# 14 adds here.** Before C# 14, an extension could only be an *instance method* (`this NDArray a`) - you could add `x.doubled()`, but not `np.sumsq(...)` and not a `x.total` *property*. C# 14 `extension(...)` blocks lift both limits:
 
-- **`extension(np) { public static … }`** — static members on a **static class**, so `np.your_func(...)` becomes possible. NumPy users cannot cleanly add to the `np` namespace at all (they monkeypatch or ship a separate module); here a ported `np.your_func` call compiles and reads native.
-- **`extension(NDArray a) { … }`** — instance **methods and properties**, so `x.total` is a real property (not `x.total()`).
-- **`extension(NDArray) { public static … }`** — static members on the `NDArray` *type*, e.g. a custom `NDArray.FromWhatever(...)` factory.
+- **`extension(np) { public static … }`** - static members on a **static class**, so `np.your_func(...)` becomes possible. NumPy users cannot cleanly add to the `np` namespace at all (they monkeypatch or ship a separate module); here a ported `np.your_func` call compiles and reads native.
+- **`extension(NDArray a) { … }`** - instance **methods and properties**, so `x.total` is a real property (not `x.total()`).
+- **`extension(NDArray) { public static … }`** - static members on the `NDArray` *type*, e.g. a custom `NDArray.FromWhatever(...)` factory.
 
 **Requirements & notes:**
 
-- Needs the **.NET 10 SDK** (C# 14). Set `<LangVersion>14</LangVersion>` (or `latest`) if your project doesn't already default to it — extension members are a language feature, so the *target framework* can still be `net8.0`.
+- Needs the **.NET 10 SDK** (C# 14). Set `<LangVersion>14</LangVersion>` (or `latest`) if your project doesn't already default to it - extension members are a language feature, so the *target framework* can still be `net8.0`.
 - Declaring the class in `namespace NumSharp` is what makes the members resolve through the consumer's existing `using NumSharp;`, so ported code reads identically. Use your own namespace instead if you'd rather they appear only where *that* namespace is imported.
-- Extensions are **purely additive and compile-time** — no runtime cost, no fork of NumSharp, and they live in *your* assembly. They can call any public `np.*`/`NDArray` API, so they compose with every compute seam below.
-- When printing an `NDArray` in a quick test, use interpolation (`$"{nd}"`) or a bare `Console.WriteLine(nd)` — `"label " + nd` binds NumSharp's implicit `string → NDArray` conversion and the `+` *operator*, not string concatenation.
+- Extensions are **purely additive and compile-time** - no runtime cost, no fork of NumSharp, and they live in *your* assembly. They can call any public `np.*`/`NDArray` API, so they compose with every compute seam below.
+- When printing an `NDArray` in a quick test, use interpolation (`$"{nd}"`) or a bare `Console.WriteLine(nd)` - `"label " + nd` binds NumSharp's implicit `string → NDArray` conversion and the `+` *operator*, not string concatenation.
 
 ---
 
 ## 1. Write your own element loop
 
-The lowest-friction extension point: iterate the array's elements in C# and do whatever you like. Prefer the **typed, unboxed** iterators — they yield `ref T` (or a `Span<T>` per chunk) straight into the array's memory, write-through, with no allocation:
+The lowest-friction extension point: iterate the array's elements in C# and do whatever you like. Prefer the **typed, unboxed** iterators - they yield `ref T` (or a `Span<T>` per chunk) straight into the array's memory, write-through, with no allocation:
 
 ```csharp
-// element-wise, by reference — writes land in the array
+// element-wise, by reference - writes land in the array
 foreach (ref double x in np.nditer<double>(a, writeable: true))
     x = MyTransform(x);
 
-// chunk-wise — a Span<T> per inner loop, ideal for TensorPrimitives / your own SIMD
+// chunk-wise - a Span<T> per inner loop, ideal for TensorPrimitives / your own SIMD
 foreach (Span<double> chunk in np.nditer_chunks<double>(a, writeable: true))
     System.Numerics.Tensors.TensorPrimitives.Multiply(chunk, 2.0, chunk);
 ```
@@ -103,35 +103,35 @@ See [Iterating & Enumerating](../iterating-and-enumerating.md) for the full set 
 
 ## 2. Compose a custom op with `np.evaluate` / `NDExpr`
 
-The managed analog of "write a custom ufunc" is to build an **expression tree** and let NumSharp compile it into one fused pass — every elementwise node runs inside a single inner loop, reading each operand once and allocating no intermediates:
+The managed analog of "write a custom ufunc" is to build an **expression tree** and let NumSharp compile it into one fused pass - every elementwise node runs inside a single inner loop, reading each operand once and allocating no intermediates:
 
 ```csharp
 // a fused (a*b + c) with no temporary arrays:
 NDArray r = np.evaluate((NDExpr)a * b + c);
 
-// a fused reduction — sum(a*b) in one pass, no temp:
+// a fused reduction - sum(a*b) in one pass, no temp:
 NDArray s = np.evaluate(NDExpr.Sum((NDExpr)a * b));
 
 // call your own scalar function per element inside the fused loop:
 NDArray t = np.evaluate(NDExpr.Call(a, x => MyScalarFn(x)));
 ```
 
-`np.evaluate` compiles **once per (tree structure, input dtype signature)** and caches, so building the tree inside a loop is cheap. Per-node dtypes follow the same NEP 50 rules as the built-in ufuncs. This is NumSharp's equivalent of `numexpr` and the closest thing to authoring a ufunc — see the fused-expressions section of [Universal functions](../fundamentals/ufuncs.md).
+`np.evaluate` compiles **once per (tree structure, input dtype signature)** and caches, so building the tree inside a loop is cheap. Per-node dtypes follow the same NEP 50 rules as the built-in ufuncs. This is NumSharp's equivalent of `numexpr` and the closest thing to authoring a ufunc - see the fused-expressions section of [Universal functions](../fundamentals/ufuncs.md).
 
-> Hold `Call` delegates in a field, not a per-call closure — a closure allocated per call is a new delegate identity and forces a fresh kernel JIT. See the `NDExpr` notes in the API reference.
+> Hold `Call` delegates in a field, not a per-call closure - a closure allocated per call is a new delegate identity and forces a fresh kernel JIT. See the `NDExpr` notes in the API reference.
 
 ---
 
 ## 3. Drive `NDIter` for a full custom kernel
 
-For a kernel that needs broadcasting, multiple operands, buffered casting, or reductions — the jobs NumPy solves with the `NpyIter` C-API — NumSharp exposes `NDIter`, the same iterator its own engine uses. It handles C/F/A/K order, broadcasting, external loops, buffering, casting, masks, and synchronized traversal. This is the seam to reach for when the typed iterators above are too simple:
+For a kernel that needs broadcasting, multiple operands, buffered casting, or reductions - the jobs NumPy solves with the `NpyIter` C-API - NumSharp exposes `NDIter`, the same iterator its own engine uses. It handles C/F/A/K order, broadcasting, external loops, buffering, casting, masks, and synchronized traversal. This is the seam to reach for when the typed iterators above are too simple:
 
 ```csharp
 using var it = np.nditer(new[] { a, b, null }, ...);   // allocate an output operand
 // drive the inner loop; write into operand 2
 ```
 
-See [NDIter (Kerneling NDArray)](../NDIter.md) for the full contract, and note the disposal rules (`NDIter` owns unmanaged state — use `using`).
+See [NDIter (Kerneling NDArray)](../NDIter.md) for the full contract, and note the disposal rules (`NDIter` owns unmanaged state - use `using`).
 
 ---
 
@@ -139,22 +139,22 @@ See [NDIter (Kerneling NDArray)](../NDIter.md) for the full contract, and note t
 
 NumSharp reaches C-speed without C by generating kernels as IL at runtime via `System.Reflection.Emit`, with SIMD (V128/V256/V512) chosen at startup. Two generators split by contract:
 
-- **`DirectILKernelGenerator`** — whole-array kernels (the kernel walks dimensions/strides itself). Carries most elementwise, reduction, scan, cast, and selection kernels.
-- **`ILKernelGenerator`** — per-chunk kernels driven as an `NDIter` inner loop (NumPy's `PyUFuncGenericFunction` model).
+- **`DirectILKernelGenerator`** - whole-array kernels (the kernel walks dimensions/strides itself). Carries most elementwise, reduction, scan, cast, and selection kernels.
+- **`ILKernelGenerator`** - per-chunk kernels driven as an `NDIter` inner loop (NumPy's `PyUFuncGenericFunction` model).
 
-You rarely emit kernels by hand — the engine does it for the built-in ops — but understanding which generator owns a kernel is how you add one to the engine. See [IL Generation](../il-generation.md).
+You rarely emit kernels by hand - the engine does it for the built-in ops - but understanding which generator owns a kernel is how you add one to the engine. See [IL Generation](../il-generation.md).
 
 ---
 
 ## 5. Replace the compute backend (`TensorEngine.Blas`)
 
-The heaviest extension: change *which* implementation computes an operation. NumSharp exposes exactly one settable seam on the engine — `TensorEngine.Blas`, an `IBlasBackend` — so an optional package can route products and factorisations through a native library while everything else stays managed. This is how `NumSharp.Interop.OpenBLAS` makes `np.dot`/`np.matmul` byte-identical to NumPy. Writing your own backend is a matter of implementing `IBlasBackend` and assigning the property. This is covered in full in [Native code & backends](native-backends.md).
+The heaviest extension: change *which* implementation computes an operation. NumSharp exposes exactly one settable seam on the engine - `TensorEngine.Blas`, an `IBlasBackend` - so an optional package can route products and factorisations through a native library while everything else stays managed. This is how `NumSharp.Interop.OpenBLAS` makes `np.dot`/`np.matmul` byte-identical to NumPy. Writing your own backend is a matter of implementing `IBlasBackend` and assigning the property. This is covered in full in [Native code & backends](native-backends.md).
 
 ---
 
 ## 6. Weave lifetime at build time (`NumSharp.Build`)
 
-`NumSharp.Build` is a Roslyn-based source weaver/analyzer package that enforces `NDArray` ownership and disposal at compile time (the `[NDScoped]` family of rules). It is the tooling seam for authoring NumSharp-consuming code correctly — see [NumSharp.Build Compiler](../numsharp-build-compiler.md).
+`NumSharp.Build` is a Roslyn-based source weaver/analyzer package that enforces `NDArray` ownership and disposal at compile time (the `[NDScoped]` family of rules). It is the tooling seam for authoring NumSharp-consuming code correctly - see [NumSharp.Build Compiler](../numsharp-build-compiler.md).
 
 ---
 
@@ -201,7 +201,7 @@ OpenBlasEngine.Enable();     // reference NumSharp.Interop.OpenBLAS; products no
 ## Troubleshooting
 
 ### "How do I wrap a C# function into a broadcasting op? (`np.vectorize` / `np.frompyfunc`)"
-Both exist. `np.vectorize((int a, int b) => a > b ? a - b : a + b)` returns a `Func<NDArray, NDArray, NDArray>` that reads like NumPy's `vfunc(a, b)` and broadcasts element-wise; a tuple-returning delegate (multi-output) or a gufunc `signature:` returns a `Vectorized` object you call with `.Call(...)` / `.CallMany(...)`. `np.frompyfunc(func, nin, nout)` is the typed sibling (NumSharp has no object dtype, so it produces typed arrays). The element-wise path is a fused `np.evaluate` + `NDExpr.Call` pass — a C# delegate call is ~50–100× cheaper than NumPy's per-element Python call, so it beats NumPy's for-loop `vectorize` by 3–30×. For a hot inner loop, drop to `np.evaluate` with `NDExpr.Call` or an `np.nditer<T>` loop directly.
+Both exist. `np.vectorize((int a, int b) => a > b ? a - b : a + b)` returns a `Func<NDArray, NDArray, NDArray>` that reads like NumPy's `vfunc(a, b)` and broadcasts element-wise; a tuple-returning delegate (multi-output) or a gufunc `signature:` returns a `Vectorized` object you call with `.Call(...)` / `.CallMany(...)`. `np.frompyfunc(func, nin, nout)` is the typed sibling (NumSharp has no object dtype, so it produces typed arrays). The element-wise path is a fused `np.evaluate` + `NDExpr.Call` pass - a C# delegate call is ~50–100× cheaper than NumPy's per-element Python call, so it beats NumPy's for-loop `vectorize` by 3–30×. For a hot inner loop, drop to `np.evaluate` with `NDExpr.Call` or an `np.nditer<T>` loop directly.
 
 ### "My `np.evaluate` recompiles every call"
 A `Call` delegate captured in a per-call closure is a new identity each time. Hold the delegate in a field. Also prefer a 0-d `NDArray` over a literal for a runtime-varying scalar (a literal bakes one kernel per value).
@@ -228,8 +228,8 @@ The Span/Memory/Bytes views require C-contiguity, the exact dtype, and ≤ `int.
 
 ## Related reading
 
-- [Native code & backends](native-backends.md) — the `IBlasBackend` seam in full.
-- [Under the hood — internals](under-the-hood.md) — the memory model your kernels run over.
+- [Native code & backends](native-backends.md) - the `IBlasBackend` seam in full.
+- [Under the hood - internals](under-the-hood.md) - the memory model your kernels run over.
 - [NDIter (Kerneling NDArray)](../NDIter.md) · [IL Generation](../il-generation.md) · [NumSharp.Build Compiler](../numsharp-build-compiler.md) · [Iterating & Enumerating](../iterating-and-enumerating.md).
-- [Universal functions](../fundamentals/ufuncs.md) — the ufunc model these seams extend.
-- [Using NumPy C-API](https://numpy.org/doc/stable/user/c-info.html) — the upstream article this converts.
+- [Universal functions](../fundamentals/ufuncs.md) - the ufunc model these seams extend.
+- [Using NumPy C-API](https://numpy.org/doc/stable/user/c-info.html) - the upstream article this converts.
