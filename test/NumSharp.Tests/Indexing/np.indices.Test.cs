@@ -147,5 +147,76 @@ namespace NumSharp.Tests.Indexing
             string.Join(",", np.ma.indices(new long[] { 2, 3 }).filled().Shape.Dimensions).Should().Be("2,2,3");
             string.Join(",", np.ma.indices((2, 3)).filled().Shape.Dimensions).Should().Be("2,2,3");
         }
+
+        // ─────────────────────────────────────────────────────────── .NET-friendly idioms
+
+        [TestMethod]
+        public void Indices_CollectionExpression_BindsIntAndLong()
+        {
+            // A C# 12 collection expression of int literals binds int[] (no ambiguity with the
+            // long[] overload — an identity element conversion beats the implicit int->long one),
+            // while long literals bind long[]. Both must compile AND agree.
+            np.array_equal(np.indices([2, 3]), np.indices(new int[] { 2, 3 })).Should().BeTrue();
+            np.array_equal(np.indices([2L, 3L]), np.indices(new long[] { 2, 3 })).Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void Indices_RowColUnpackIdiom()
+        {
+            // NumPy's `row, col = np.indices((2, 3))` unpacks the leading axis; in C# the dense
+            // result is one NDArray indexed by the leading axis.
+            var g = np.indices((2, 3));
+            var row = g[0];
+            var col = g[1];
+            row.ToArray<long>().Should().Equal(0L, 0, 0, 1, 1, 1);
+            col.ToArray<long>().Should().Equal(0L, 1, 2, 0, 1, 2);
+        }
+
+        [TestMethod]
+        public void Indices_ResultIsChainableNDArray()
+        {
+            // The result is an ordinary NDArray, so it flows into the fluent surface.
+            var flat = np.indices((2, 3))[1].reshape(6L);
+            flat.ToArray<long>().Should().Equal(0L, 1, 2, 0, 1, 2);
+        }
+
+        [TestMethod]
+        public void IndicesSparse_ForeachAndLinq()
+        {
+            // The sparse result is a plain NDArray[] — foreach- and LINQ-able.
+            var sp = np.indices_sparse((2, 3));
+            System.Linq.Enumerable.Select(sp, a => string.Join("x", a.Shape.Dimensions))
+                .Should().Equal("2x1", "1x3");
+
+            long total = 0;
+            foreach (var a in sp) total += a.size;
+            total.Should().Be(5); // 2 + 3
+        }
+
+        [TestMethod]
+        public void Indices_DtypeSpellings_AllNetForms()
+        {
+            // dtype accepts every .NET spelling NumSharp offers — a Type, an NPTypeCode, a dtype
+            // string, or a DType descriptor — all resolving to the same int32 grid.
+            np.indices((2, 2), typeof(int)).dtype.Should().Be(NPTypeCode.Int32);
+            np.indices((2, 2), NPTypeCode.Int32).dtype.Should().Be(NPTypeCode.Int32);
+            np.indices((2, 2), "i4").dtype.Should().Be(NPTypeCode.Int32);
+            np.indices((2, 2), np.int32).dtype.Should().Be(NPTypeCode.Int32);
+        }
+
+        [TestMethod]
+        public void Indices_ScalarConvenience_And1DSpellings()
+        {
+            // Documented NumSharp convenience (Shape overload): a scalar converts implicitly to a
+            // 1-D Shape, so np.indices(5) is the (1, 5) grid. NumPy's np.indices(5) raises (an int
+            // is not a sequence) — this is a deliberate, documented divergence.
+            var s = np.indices(5);
+            string.Join(",", s.Shape.Dimensions).Should().Be("1,5");
+            s.ToArray<long>().Should().Equal(0L, 1, 2, 3, 4);
+
+            // C# has no 1-element tuple, so a 1-D grid is spelled [5] or new long[]{5} (both agree).
+            np.array_equal(np.indices([5]), s).Should().BeTrue();
+            np.array_equal(np.indices(new long[] { 5 }), s).Should().BeTrue();
+        }
     }
 }

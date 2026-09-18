@@ -130,12 +130,18 @@ np.full((2, 2), 7.5);                  // filled with 7.5
 np.zeros((2, 3), np.int32);            // dtype override
 ```
 
-`np.indices(shape)` returns one grid array per dimension (stacked), useful for evaluating functions on a regular grid:
+`np.indices(shape)` returns one grid array per dimension (stacked), useful for evaluating functions on a regular grid. The shape accepts any .NET spelling — an `int[]`/`long[]`, a value tuple (reads like NumPy), or an array's own `.shape` (which is `long[]`, so no cast is needed):
 
 ```csharp
-np.indices([3, 3]);   // takes an int[] of dimensions (not a tuple)
+np.indices([3, 3]);            // collection expression (int[])
+np.indices((3, 3));            // value tuple — like NumPy's np.indices((3, 3))
+np.indices(new long[]{ 3, 3 });
+np.indices(other.shape);       // feed an array's own long[] shape directly
 // [[[0 0 0] [1 1 1] [2 2 2]],
 //  [[0 1 2] [0 1 2] [0 1 2]]]
+
+// The sparse form returns one broadcast-shaped array per dimension:
+np.indices_sparse((3, 3));     // shapes (3,1) and (1,3)
 ```
 
 Coordinate grids also come from `np.meshgrid`, `np.mgrid`, and `np.ogrid` (open mesh). See the [API reference](../../api/index.md).

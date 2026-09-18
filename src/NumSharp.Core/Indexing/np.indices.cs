@@ -90,8 +90,8 @@ namespace NumSharp
         ///     <para>
         ///     Because a scalar converts implicitly to a 1-D <see cref="Shape"/>, <c>np.indices(5)</c>
         ///     is accepted here as the 1-D grid <c>(1, 5)</c> — a NumSharp convenience; NumPy's
-        ///     <c>np.indices(5)</c> raises (an int is not a sequence). Spell a 1-D grid as
-        ///     <c>np.indices((5,))</c> or <c>np.indices(new long[]{5})</c> to stay verbatim.
+        ///     <c>np.indices(5)</c> raises (an int is not a sequence). C# has no 1-element tuple,
+        ///     so spell a 1-D grid as <c>np.indices([5])</c> or <c>np.indices(new long[]{5})</c>.
         ///     </para>
         /// </remarks>
         public static NDArray indices(Shape dimensions, DType dtype = null)
