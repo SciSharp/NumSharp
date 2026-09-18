@@ -1,7 +1,5 @@
 - name: Home
   href: ../index.md
-- name: Introduction
-  href: intro.md
 - name: The absolute basics for beginners
   href: absolute-basics.md
 - name: Quickstart
@@ -10,18 +8,22 @@
   href: NDArray.md
 - name: Fundamentals and usage
   href: fundamentals/index.md
-  expanded: true
+  expanded: false
   items:
   - name: Array creation
     href: fundamentals/array-creation.md
   - name: Indexing on NDArray
     href: fundamentals/indexing.md
+  - name: Getting & Setting Values
+    href: getting-and-setting-values.md
   - name: I/O with NumSharp
     href: fundamentals/io.md
   - name: Data types
     href: dtypes.md
   - name: Broadcasting
     href: broadcasting.md
+  - name: Buffering & Memory
+    href: buffering.md
   - name: Copies and views
     href: fundamentals/copies-and-views.md
   - name: Arrays of strings and bytes
@@ -30,71 +32,61 @@
     href: fundamentals/structured-arrays.md
   - name: Universal functions (ufunc) basics
     href: fundamentals/ufuncs.md
-- name: Getting & Setting Values
-  href: getting-and-setting-values.md
-- name: Iterating & Enumerating
-  href: iterating-and-enumerating.md
-- name: Buffering & Memory
-  href: buffering.md
-- name: Exceptions
-  href: exceptions.md
-- name: NumPy Compliance & Compatibility
-  href: compliance.md
-- name: Array API Standard
-  href: array-api-standard.md
-- name: NDIter (Kerneling NDArray)
-  href: NDIter.md
-- name: IL Generation
-  href: il-generation.md
-- name: NumSharp.Build Compiler
-  href: numsharp-build-compiler.md
-- name: Extending Libraries
-  href: extensions/index.md
-  expanded: false
-  items:
-  - name: NumSharp.Bitmap
-    href: extensions/bitmap.md
-- name: Advanced usage and interoperability
+  - name: Iterating & Enumerating
+    href: iterating-and-enumerating.md
+  - name: Exceptions
+    href: exceptions.md
+- name: Advanced usage
   href: advanced/index.md
-  expanded: true
+  expanded: false
   items:
   - name: Extending NumSharp
     href: advanced/extending-numsharp.md
   - name: Native code & backends
     href: advanced/native-backends.md
+  - name: Array API Standard
+    href: array-api-standard.md
+  - name: NDIter (Kerneling NDArray)
+    href: NDIter.md
+  - name: IL Generation
+    href: il-generation.md
+  - name: NumSharp.Build Compiler
+    href: numsharp-build-compiler.md
   - name: Under the hood — internals
     href: advanced/under-the-hood.md
-  - name: Interoperability
-    href: interop/index.md
-    expanded: false
-    items:
-    - name: Python & numpy (pythonnet)
-      href: interop/pythonnet-numpy.md
-    - name: PyTorch
-      href: interop/pytorch.md
-    - name: Pandas
-      href: interop/pandas.md
-    - name: Any library via np.frombuffer
-      href: interop/np-frombuffer.md
-    - name: Numpy.NET
-      href: interop/numpy-net.md
-    - name: OpenBLAS
-      href: interop/openblas.md
-    - name: ONNX Runtime
-      href: interop/onnxruntime.md
-    - name: ML.NET
-      href: interop/mlnet.md
-    - name: System.Numerics.Tensors
-      href: interop/system-numerics-tensors.md
+- name: Interoperability
+  href: interop/index.md
+  expanded: true
+  items:
+  - name: Python & numpy (pythonnet)
+    href: interop/pythonnet-numpy.md
+  - name: PyTorch
+    href: interop/pytorch.md
+  - name: Pandas
+    href: interop/pandas.md
+  - name: Any library via np.frombuffer
+    href: interop/np-frombuffer.md
+  - name: Numpy.NET
+    href: interop/numpy-net.md
+  - name: OpenBLAS
+    href: interop/openblas.md
+  - name: ONNX Runtime
+    href: interop/onnxruntime.md
+  - name: ML.NET
+    href: interop/mlnet.md
+  - name: System.Numerics.Tensors
+    href: interop/system-numerics-tensors.md
+  - name: System.Drawing
+    href: extensions/bitmap.md
 - name: NumPy API Coverage & Support
   href: coverage-support-dashboard.md
-  expanded: true
+  expanded: false
   items:
   - name: Dashboard
     href: coverage-support-dashboard.md
 - name: Unit Tests & Oracle
   href: tests-oracle-dashboard.md
-  expanded: true
+  expanded: false
   items:
   - name: Dashboard
     href: tests-oracle-dashboard.md
@@ -102,7 +94,7 @@
     href: ../../../test/inventory/generated/summary.md
 - name: Benchmarks
   href: benchmarks-dashboard.md
-  expanded: true
+  expanded: false
   items:
   - name: Dashboard
     href: benchmarks-dashboard.md
