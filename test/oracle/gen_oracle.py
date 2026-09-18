@@ -5858,30 +5858,61 @@ OUT_BINARY_UFUNCS = {
     "float_power": ["float64", "int32"],
     "mod": ["int32", "float64"],
     "floor_divide": ["int32", "float64"],
+    "fmod": ["int32", "float64"],                          # C truncated remainder (a % b) — bit-exact/portable
     "arctan2": ["float64", "float32"],
     "bitwise_and": ["int32", "uint8", "bool"],
     "bitwise_or": ["int64"],
     "bitwise_xor": ["uint16"],
+    # min/max family — pure compare-and-select (no libm), NaN handling matches NumPy, so
+    # bit-exact AND portable across platforms (safe for the strict RunCorpus tier). maximum/
+    # minimum PROPAGATE NaN, fmax/fmin IGNORE it. The engine already routed out=/where=; only
+    # the np.* overloads gained the params (2026-09-18), so these had zero fuzz coverage before.
+    "maximum": ["float64", "int32"],
+    "minimum": ["float64", "int32"],
+    "fmax": ["float64", "int32"],
+    "fmin": ["float64", "int32"],
+    "gcd": ["int32"],                                      # Euclidean — integer, bit-exact/portable
+    "lcm": ["int32"],                                      # |a|/gcd*|b| (wraps on overflow, matches NumPy)
+    "copysign": ["float64"],                              # |a| with sign(b) — bit op, portable
+    "nextafter": ["float64"],                            # IEEE nextafter — bit op, portable
+    "heaviside": ["float64"],                            # compare+select — portable (x1==NaN -> NaN)
     "less": ["int32", "float64", "complex128"],           # lexicographic on complex -> bool out
     "greater_equal": ["float32", "complex128"],
     "equal": ["int32", "complex128"],
 }
 
 OUT_UNARY_UFUNCS = {
-    "sqrt": ["float64", "float32"],
+    "sqrt": ["float64", "float32"],                       # IEEE hardware sqrt — bit-exact/portable
     "negative": ["int32", "float64", "complex128"],        # pure component negate — bit-exact
     "abs": ["int32", "float64"],
+    "fabs": ["float64", "int32"],                         # float |x| (sign-bit clear) — portable
     "square": ["float64", "int32", "complex128"],          # fused simd_cmul (z*z) — bit-exact
-    "exp": ["float64", "float32"],
-    "log": ["float64"],
-    "sin": ["float64", "float32"],
-    "floor": ["float64"],
+    "positive": ["int32", "float64"],                    # identity copy — portable
+    # exp/log/sin: float32 ONLY. NumSharp's float32 exp/log/sin are BIT-EXACT ports of NumPy's own
+    # SIMD kernels (NDFloatMath), so they reproduce byte-for-byte on EVERY platform (pure managed,
+    # no libm). float64 exp/log/sin are Math.Exp/Log/Sin == the host CRT libm, bit-exact vs NumPy
+    # ONLY on win-amd64 (ucrtbase) — they belong in the host-pinned unary.jsonl tier, NOT this
+    # strict all-platform RunCorpus tier (they would go red on Linux/macOS CI). Dropped 2026-09-18.
+    "exp": ["float32"],
+    "log": ["float32"],
+    "sin": ["float32"],
+    "floor": ["float64"],                                # round toward -inf — exact/portable
     "ceil": ["float32"],
+    "trunc": ["float64"],                                # round toward 0 — exact/portable
     "rint": ["float64", "complex128"],                     # rounds each component — bit-exact
     "sign": ["int32", "float64"],
     "reciprocal": ["float64", "int32", "complex128"],      # CDOUBLE_reciprocal (-1/d) — bit-exact
+    "conjugate": ["complex128"],                          # negate imag — bit op, portable
     "invert": ["int32", "uint8"],
+    # Float-classification predicates (bool out). Bit tests (exponent / sign bit), no libm, so
+    # bit-exact AND portable. They expose NumPy 2.4.2's OWN strided-bool-out buffering BUG at
+    # rank >= 2 (leaks prior `out` contents into a [..., ::2] view — see MisalignedRegistry K12);
+    # NumSharp overwrites correctly, so those specific cells are an excused NumSharp-is-correct
+    # divergence, bit-exact everywhere else.
     "isnan": ["float64", "complex128"],                    # True iff either lane is NaN -> bool out
+    "isinf": ["float64"],                                 # |x| == +inf -> bool out
+    "isfinite": ["float64"],                              # |x| < +inf -> bool out
+    "signbit": ["float64", "int32"],                      # IEEE / two's-complement sign bit -> bool out
 }
 
 
