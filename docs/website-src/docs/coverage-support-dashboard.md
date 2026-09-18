@@ -14,7 +14,7 @@
   --cov-bad-soft: #ffe1e4;
   --cov-ext: #7256b5;
   --cov-ext-soft: #eee8ff;
-  --cov-quiet: #66737e;
+  --cov-quiet: var(--bs-secondary-color, #66737e);
   --cov-line: var(--bs-border-color);
   --cov-panel: var(--bs-body-bg);
   --cov-muted: rgba(108, 117, 125, 0.09);
@@ -163,6 +163,7 @@
 .ns-coverage-dashboard .cov-status-segment[data-status="partial"] { background: var(--cov-partial); }
 .ns-coverage-dashboard .cov-status-segment[data-status="unsupported"],
 .ns-coverage-dashboard .cov-status-segment[data-status="missing"] { background: var(--cov-bad); }
+.ns-coverage-dashboard .cov-status-segment[data-status="extension"] { background: var(--cov-ext); }
 .ns-coverage-dashboard .cov-status-segment:hover,
 .ns-coverage-dashboard .cov-status-segment:focus-visible {
   box-shadow: inset 0 0 0 2px rgba(255,255,255,.52), 0 8px 20px rgba(20, 27, 34, .24);
@@ -202,6 +203,7 @@
 .ns-coverage-dashboard .cov-mini-segment.is-available { background: var(--cov-good); }
 .ns-coverage-dashboard .cov-mini-segment.is-partial { background: var(--cov-partial); }
 .ns-coverage-dashboard .cov-mini-segment.is-gap { background: var(--cov-bad); }
+.ns-coverage-dashboard .cov-mini-segment.is-extension { background: var(--cov-ext); }
 .ns-coverage-dashboard .cov-small { color: var(--cov-quiet); font-size: .75rem; overflow-wrap: anywhere; }
 .ns-coverage-dashboard .cov-card-breakdown { display: grid; gap: .35rem; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: .58rem; }
 .ns-coverage-dashboard .cov-card-stat { background: var(--cov-muted); border: 1px solid color-mix(in srgb, var(--status-color), transparent 68%); border-radius: .42rem; color: var(--status-color); min-width: 0; padding: .38rem .42rem; }
@@ -213,6 +215,8 @@
 .ns-coverage-dashboard .cov-compact-breakdown span::before { background: var(--status-color); border-radius: 50%; content: ""; height: .4rem; width: .4rem; }
 
 .ns-coverage-dashboard .cov-category-grid { display: grid; gap: .55rem; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.ns-coverage-dashboard .cov-surface-grid[data-scrollable="true"],
+.ns-coverage-dashboard .cov-category-grid[data-scrollable="true"] { max-height: 32rem; overflow-y: auto; overscroll-behavior: contain; padding: .1rem .35rem .4rem .1rem; scrollbar-gutter: stable; }
 .ns-coverage-dashboard .cov-surface { min-height: 8.25rem; }
 .ns-coverage-dashboard .cov-category { min-height: 5.8rem; }
 
@@ -241,6 +245,9 @@
 }
 .ns-coverage-dashboard .cov-control { display: grid; flex: 1 1 8.25rem; gap: .24rem; min-width: 0; }
 .ns-coverage-dashboard .cov-control:first-child { flex: 2 1 16rem; }
+.ns-coverage-dashboard .cov-scope-controls { align-items: end; display: flex; flex-wrap: wrap; gap: .75rem 1.1rem; margin: 1.15rem 0; }
+.ns-coverage-dashboard .cov-scope-controls .cov-control { flex: 0 1 20rem; }
+.ns-coverage-dashboard .cov-scope-note { color: var(--cov-quiet); flex: 1 1 20rem; font-size: .84rem; margin: 0 0 .25rem; }
 .ns-coverage-dashboard .cov-control label { color: var(--cov-quiet); font-size: .7rem; font-weight: 750; letter-spacing: .05em; text-transform: uppercase; }
 .ns-coverage-dashboard .cov-control input,
 .ns-coverage-dashboard .cov-control select {
@@ -361,7 +368,7 @@
   <section class="cov-intro" aria-labelledby="cov-dashboard-title">
     <div class="cov-kicker">NumPy 2.x parity · compiled API inventory</div>
     <h2 class="cov-title" id="cov-dashboard-title">See the supported surface. Find the next gap.</h2>
-    <p class="cov-lede">Explore every public NumPy API in scope, its NumSharp equivalent, known limitations, C# overloads, and the math behind the coverage score. The page is generated from the same artifact published by CI.</p>
+    <p class="cov-lede">Explore the NumPy catalog across functions, modules, and object members, with NumSharp equivalents, known limitations, and C# overloads. The page is generated from the same artifact published by CI.</p>
     <div class="cov-meta" id="cov-meta" aria-label="Artifact metadata"></div>
   </section>
 
@@ -369,10 +376,14 @@
   <div class="cov-error" id="cov-error" role="alert" hidden></div>
 
   <div id="cov-content" hidden>
+    <div class="cov-scope-controls">
+      <div class="cov-control"><label for="cov-scope">Dashboard scope</label><select id="cov-scope" aria-describedby="cov-scope-note"><option value="numpy">All NumPy APIs</option><option value="default">Headline comparison</option><option value="extended">Extended NumPy APIs</option><option value="catalog">Full NumPy catalog</option><option value="extensions">NumSharp-only APIs</option><option value="all">Everything</option></select></div>
+      <p class="cov-scope-note" id="cov-scope-note" aria-live="polite"></p>
+    </div>
     <section class="cov-metrics" id="cov-metrics" aria-label="Coverage summary"></section>
     <div class="cov-definition">
       <strong>Coverage math</strong>
-      <p><code>available ÷ default-scope APIs</code>. “Available” means an exact public member or a reviewed alias exists and is not marked partial/unsupported. Types, constants, modules, and NumSharp-only APIs stay searchable but do not inflate the headline. API presence is not a blanket edge-case, dtype, layout, or signature parity claim.</p>
+      <p><span id="cov-headline-reference"></span> Summaries, cards, and the explorer follow the selected scope. Availability is <code>available ÷ NumPy APIs in that scope</code>; supporting types, constants, modules, and NumSharp-only APIs do not enter this percentage. “Available” means an exact public member or a reviewed alias exists and is not marked partial/unsupported. The headline comparison also excludes extended APIs. API presence is not a blanket edge-case, dtype, layout, or signature parity claim. <span id="cov-applicability-note"></span></p>
     </div>
     <section class="cov-section" aria-labelledby="cov-status-heading">
       <div class="cov-section-head">
@@ -383,7 +394,7 @@
     </section>
     <section class="cov-section" aria-labelledby="cov-surfaces-heading">
       <div class="cov-section-head">
-        <div><h2 id="cov-surfaces-heading">Surface scoreboard</h2><p class="cov-section-copy">The denominator follows how users discover NumPy: top-level functions, ndarray members, random, linear algebra, and FFT.</p></div>
+        <div><h2 id="cov-surfaces-heading">Surface scoreboard</h2><p class="cov-section-copy">Every module and object surface in the selected scope. Select a card to explore its APIs.</p></div>
         <span class="cov-section-count" id="cov-surface-count"></span>
       </div>
       <div class="cov-surface-grid" id="cov-surface-grid"></div>
@@ -402,15 +413,15 @@
       <div class="cov-panel cov-explorer">
         <div class="cov-toolbar">
           <div class="cov-control"><label for="cov-search">Search</label><input id="cov-search" type="search" placeholder="np.add, ndarray.astype, FFT…" autocomplete="off"></div>
-          <div class="cov-control"><label for="cov-scope">Scope</label><select id="cov-scope"><option value="default">Headline scope</option><option value="numpy">All NumPy exports</option><option value="extensions">NumSharp-only APIs</option><option value="all">Everything</option></select></div>
           <div class="cov-control"><label for="cov-surface">Surface</label><select id="cov-surface"><option value="all">All surfaces</option></select></div>
           <div class="cov-control"><label for="cov-category">Category</label><select id="cov-category"><option value="all">All categories</option></select></div>
           <div class="cov-control"><label for="cov-status">Status</label><select id="cov-status"><option value="all">All statuses</option></select></div>
           <div class="cov-control"><label for="cov-kind">Kind</label><select id="cov-kind"><option value="all">All kinds</option></select></div>
+          <div class="cov-control"><label for="cov-mapping">Mapping</label><select id="cov-mapping"><option value="all">All mappings</option></select></div>
           <div class="cov-control"><label for="cov-sort">Sort</label><select id="cov-sort"><option value="gap">Gaps first</option><option value="name">API name</option><option value="surface">Surface</option><option value="coverage">Available first</option></select></div>
-          <button class="cov-reset" id="cov-reset" type="button">Reset</button>
+          <button class="cov-reset" id="cov-reset" type="button">Clear filters</button>
         </div>
-        <div class="cov-explorer-meta"><span class="cov-result-count" id="cov-result-count" aria-live="polite"></span><button class="cov-quick-gap" id="cov-quick-gap" type="button">Show missing APIs</button></div>
+        <div class="cov-explorer-meta"><span class="cov-result-count" id="cov-result-count" aria-live="polite"></span><button class="cov-quick-gap" id="cov-quick-gap" type="button">Show open gaps</button></div>
         <div class="cov-explorer-body">
           <div class="cov-results" id="cov-results" role="list" aria-label="Coverage APIs"></div>
           <article class="cov-detail" id="cov-detail" aria-live="polite"></article>
@@ -431,30 +442,53 @@
   const escapeHtml = (value) => String(value ?? "")
     .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;").replaceAll("'", "&#039;");
-  const surfaceLabels = { np: "np.*", ndarray: "ndarray.*", random: "np.random.*", linalg: "np.linalg.*", fft: "np.fft.*" };
-  const statusLabels = { available: "Available", partial: "Partial", unsupported: "Unsupported", missing: "Missing", extension: "NumSharp-only" };
+  const surfaceLabels = { np: "np.*", ndarray: "ndarray.*", random: "np.random.*", linalg: "np.linalg.*", fft: "np.fft.*", ufunc: "np.ufunc.*", ma: "np.ma.*", polynomial: "np.polynomial.*" };
+  const scopeLabels = { numpy: "All NumPy APIs", default: "Headline comparison", extended: "Extended NumPy APIs", catalog: "Full NumPy catalog", extensions: "NumSharp-only APIs", all: "Everything" };
+  const statusLabels = { available: "Available", partial: "Partial", unsupported: "Unsupported", missing: "Missing", extension: "NumSharp-only", gaps: "Open gaps (missing + unsupported)" };
   const statusOrder = { unsupported: 0, partial: 1, missing: 2, available: 3, extension: 4 };
+  const mappingLabels = { exact: "Exact public name", alias: "Reviewed alias", missing: "No public mapping", extension: "NumSharp-only" };
+  const dispositionLabels = { object: "Object members", type: "Type", constant: "Constant", module: "Module", extension: "NumSharp-only API", extended: "Extended catalog" };
   const number = (value) => Number.isFinite(Number(value)) ? Number(value) : 0;
   const percent = (part, whole) => whole ? (part * 100 / whole) : 0;
   const apiLabel = (row) => row.id.startsWith("numpy.ndarray.")
     ? row.id.replace("numpy.ndarray.", "ndarray.")
     : row.id.startsWith("numpy.") ? row.id.replace("numpy.", "np.") : row.id;
 
-  const state = { rows: [], filtered: [], selectedId: null, visible: 120, tooltipInstances: [] };
+  const state = { rows: [], filtered: [], selectedId: null, visible: 120, tooltipInstances: [], activeTooltip: null };
+
+  function surfaceLabel(surface) {
+    if (surfaceLabels[surface]) return surfaceLabels[surface];
+    const sample = state.rows.find((row) => row.surface === surface && row.origin === "numpy");
+    const prefix = sample?.id?.endsWith(`.${sample.name}`) ? sample.id.slice(0, -sample.name.length - 1) : "";
+    const namespace = prefix || (surface.startsWith("numpy.") ? surface : `numpy.${surface}`);
+    return surfaceLabels[surface] = `${namespace.replace(/^numpy\.ndarray(?=\.|$)/, "ndarray").replace(/^numpy\./, "np.")}.*`;
+  }
+
+  function scopedRows() {
+    return state.rows.filter((row) => rowInScope(row, byId("cov-scope").value));
+  }
+
+  function isComparableApi(row) {
+    return row.origin === "numpy" && (row.in_default_scope || (row.extended && !["class", "constant", "module"].includes(row.kind)));
+  }
 
   function summarize(rows) {
-    const counts = { total: rows.length, available: 0, partial: 0, unsupported: 0, missing: 0, extension: 0, exact: 0, alias: 0 };
+    const counts = { total: rows.length, numpy: rows.filter(isComparableApi).length, availableApis: 0, available: 0, partial: 0, unsupported: 0, missing: 0, extension: 0, exact: 0, alias: 0 };
     rows.forEach((row) => {
       if (counts[row.status] !== undefined) counts[row.status] += 1;
+      if (isComparableApi(row) && row.status === "available") counts.availableApis += 1;
       if (row.availability === "exact" || row.availability === "alias") counts[row.availability] += 1;
     });
-    counts.coverage = percent(counts.available, counts.total);
-    counts.addressed = percent(counts.available + counts.partial, counts.total);
+    counts.coverage = percent(counts.availableApis, counts.numpy);
     return counts;
   }
 
   function defaultRows() {
     return state.rows.filter((row) => row.origin === "numpy" && row.in_default_scope);
+  }
+
+  function coverageLabel(counts) {
+    return counts.numpy ? `${counts.coverage.toFixed(1)}%` : "—";
   }
 
   function statusBadge(status, text = statusLabels[status] || status) {
@@ -472,9 +506,10 @@
     const segments = [
       ["available", counts.available],
       ["partial", counts.partial],
-      ["gap", gaps]
+      ["gap", gaps],
+      ["extension", counts.extension]
     ];
-    const label = `${counts.available} available, ${counts.partial} partial, ${gaps} gaps`;
+    const label = `${counts.available} available, ${counts.partial} partial, ${gaps} gaps, ${counts.extension} NumSharp-only`;
     return `<div class="cov-mini-track" role="img" aria-label="${escapeHtml(label)}">${segments.filter(([, count]) => count > 0).map(([status, count]) => `<span class="cov-mini-segment is-${status}" style="width:${percent(count, counts.total)}%"></span>`).join("")}</div>`;
   }
 
@@ -484,7 +519,7 @@
       <div class="cov-card-stat is-available"><strong>${counts.available}</strong><span>available</span></div>
       <div class="cov-card-stat is-partial"><strong>${counts.partial}</strong><span>partial</span></div>
       <div class="cov-card-stat is-missing"><strong>${gaps}</strong><span>gaps</span></div>
-    </div><div class="cov-small cov-card-foot">${counts.exact} direct names · ${counts.alias} aliases · ${counts.total} total</div>`;
+    </div><div class="cov-small cov-card-foot">${counts.exact} direct names · ${counts.alias} aliases · ${counts.total} total${counts.extension ? ` · ${counts.extension} NumSharp-only` : ""}</div>`;
   }
 
   function compactCardBreakdown(counts) {
@@ -493,12 +528,12 @@
       <span class="is-available">${counts.available} available</span>
       <span class="is-partial">${counts.partial} partial</span>
       <span class="is-missing">${gaps} gaps</span>
+      ${counts.extension ? `<span class="is-extension">${counts.extension} NumSharp-only</span>` : ""}
     </div>`;
   }
 
-  function renderSummary(data) {
-    const rows = defaultRows();
-    const stats = summarize(rows);
+  function initializeMetadata(data) {
+    const stats = summarize(defaultRows());
     const published = data.summary.default_scope;
     if (stats.total !== number(published.total) || stats.available !== number(published.available)) {
       throw new Error("Coverage summary does not match its row inventory.");
@@ -511,40 +546,59 @@
       `schema v${data.schema_version}`
     ].map((item) => `<span class="cov-pill">${escapeHtml(item)}</span>`).join("");
 
+    byId("cov-headline-reference").textContent = `Headline comparison: ${coverageLabel(stats)} (${stats.available}/${stats.total} APIs).`;
+  }
+
+  function renderSummary() {
+    const rows = scopedRows();
+    const stats = summarize(rows);
+    const scope = byId("cov-scope").value;
+    const surfaces = [...new Set(rows.map((row) => row.surface))];
+    const categories = [...new Set(rows.map((row) => row.category))].sort((a, b) => a.localeCompare(b));
+    const rejectedContracts = rows.filter((row) => row.applicability === "not_applicable").length;
+    byId("cov-scope-note").textContent = `${scopeLabels[scope]}: ${stats.total.toLocaleString()} entries across ${surfaces.length} surfaces and ${categories.length} capability areas. This selection updates every summary and the explorer.`;
+    byId("cov-applicability-note").textContent = rejectedContracts ? `This scope includes ${rejectedContracts.toLocaleString()} declared ufunc contract${rejectedContracts === 1 ? "" : "s"} whose calls NumPy rejects; gaps describe public API presence, not a count of computable operations.` : "";
+
     byId("cov-metrics").innerHTML = [
-      metricCard("API availability", `${stats.coverage.toFixed(1)}%`, `${stats.available} of ${stats.total} default-scope APIs`),
-      metricCard("Exact names", stats.exact.toLocaleString(), `${stats.alias} reviewed aliases bridge C#/NumPy naming`, "exact"),
+      metricCard("Scoped API availability", coverageLabel(stats), stats.numpy ? `${stats.availableApis} of ${stats.numpy} comparable NumPy APIs` : "No comparable NumPy APIs in this scope"),
+      metricCard("Exact names", stats.exact.toLocaleString(), `${stats.alias} reviewed aliases bridge C#/NumPy naming`, stats.exact ? "exact" : ""),
       metricCard("Open gaps", (stats.missing + stats.unsupported).toLocaleString(), `${stats.partial} additional API${stats.partial === 1 ? " is" : "s are"} partial`, "gaps"),
-      metricCard("NumSharp-only APIs", number(data.summary.numsharp_extensions).toLocaleString(), "Public NumSharp members with no matching NumPy export", "extensions")
+      metricCard("Entries in scope", stats.total.toLocaleString(), `${surfaces.length} public surfaces · ${categories.length} capability areas`)
     ].join("");
 
-    const statuses = ["available", "partial", "unsupported", "missing"];
+    const statuses = ["available", "partial", "unsupported", "missing", "extension"];
     byId("cov-status-track").innerHTML = statuses.filter((status) => stats[status] > 0).map((status) => {
       const width = percent(stats[status], stats.total);
       const text = width >= 8 ? `<span>${statusLabels[status]} · ${stats[status]}</span>` : `<span>${stats[status]}</span>`;
       return `<button class="cov-status-segment" type="button" data-status="${status}" data-tooltip-group="status:${status}" style="width:${width}%" aria-label="Filter ${statusLabels[status]}: ${stats[status]} APIs">${text}</button>`;
     }).join("");
-    byId("cov-legend").innerHTML = statuses.map((status) => statusBadge(status, `${statusLabels[status]} ${stats[status]}`)).join("");
+    byId("cov-legend").innerHTML = statuses.filter((status) => status !== "extension" || stats.extension).map((status) => statusBadge(status, `${statusLabels[status]} ${stats[status]}`)).join("");
 
-    const surfaceOrder = ["np", "ndarray", "random", "linalg", "fft"].filter((surface) => rows.some((row) => row.surface === surface));
-    byId("cov-surface-count").textContent = `${surfaceOrder.length} compared public surfaces`;
+    const priority = ["np", "ndarray", "random", "linalg", "fft"];
+    const surfaceOrder = surfaces.sort((a, b) => {
+      const ai = priority.includes(a) ? priority.indexOf(a) : priority.length;
+      const bi = priority.includes(b) ? priority.indexOf(b) : priority.length;
+      return ai - bi || surfaceLabel(a).localeCompare(surfaceLabel(b));
+    });
+    byId("cov-surface-count").textContent = `${surfaceOrder.length} public surfaces${surfaceOrder.length > 12 ? " · scroll to explore" : ""}`;
+    byId("cov-surface-grid").dataset.scrollable = String(surfaceOrder.length > 12);
     byId("cov-surface-grid").innerHTML = surfaceOrder.map((surface) => {
       const subset = rows.filter((row) => row.surface === surface);
       const counts = summarize(subset);
-      return `<button class="cov-surface" type="button" data-surface="${surface}" data-tooltip-group="surface:${surface}">
-        <div class="cov-surface-title"><code>${escapeHtml(surfaceLabels[surface])}</code><span class="cov-percent">${counts.coverage.toFixed(1)}%</span></div>
+      return `<button class="cov-surface" type="button" data-surface="${escapeHtml(surface)}" data-tooltip-group="surface:${escapeHtml(surface)}">
+        <div class="cov-surface-title"><code>${escapeHtml(surfaceLabel(surface))}</code><span class="cov-percent">${coverageLabel(counts)}</span></div>
         ${miniSupportTrack(counts)}
         ${cardBreakdown(counts)}
       </button>`;
     }).join("");
 
-    const categories = [...new Set(rows.map((row) => row.category))].sort((a, b) => a.localeCompare(b));
-    byId("cov-category-count").textContent = `${categories.length} capability areas`;
+    byId("cov-category-count").textContent = `${categories.length} capability areas${categories.length > 12 ? " · scroll to explore" : ""}`;
+    byId("cov-category-grid").dataset.scrollable = String(categories.length > 12);
     byId("cov-category-grid").innerHTML = categories.map((category) => {
       const subset = rows.filter((row) => row.category === category);
       const counts = summarize(subset);
       return `<button class="cov-category" type="button" data-category="${escapeHtml(category)}" data-tooltip-group="category:${escapeHtml(category)}">
-        <div class="cov-category-title"><span>${escapeHtml(category)}</span><span class="cov-percent">${counts.coverage.toFixed(1)}%</span></div>
+        <div class="cov-category-title"><span>${escapeHtml(category)}</span><span class="cov-percent">${coverageLabel(counts)}</span></div>
         ${miniSupportTrack(counts)}
         ${compactCardBreakdown(counts)}
       </button>`;
@@ -560,16 +614,20 @@
     values.forEach((value) => {
       const option = document.createElement("option");
       option.value = value;
-      option.textContent = labels[value] || value;
+      option.textContent = typeof labels === "function" ? labels(value) : labels[value] || value;
       select.appendChild(option);
     });
   }
 
   function initializeFilters() {
-    populateSelect("cov-surface", [...new Set(state.rows.map((row) => row.surface))].sort(), surfaceLabels);
-    populateSelect("cov-category", [...new Set(state.rows.map((row) => row.category))].sort());
-    populateSelect("cov-status", [...new Set(state.rows.map((row) => row.status))].sort((a, b) => statusOrder[a] - statusOrder[b]), statusLabels);
-    populateSelect("cov-kind", [...new Set(state.rows.map((row) => row.kind))].sort());
+    const rows = scopedRows();
+    populateSelect("cov-surface", [...new Set(rows.map((row) => row.surface))].sort(), surfaceLabel);
+    populateSelect("cov-category", [...new Set(rows.map((row) => row.category))].sort());
+    const statuses = [...new Set(rows.map((row) => row.status))].sort((a, b) => statusOrder[a] - statusOrder[b]);
+    statuses.unshift("gaps");
+    populateSelect("cov-status", statuses, statusLabels);
+    populateSelect("cov-kind", [...new Set(rows.map((row) => row.kind))].sort());
+    populateSelect("cov-mapping", [...new Set(rows.map((row) => row.availability))].sort(), mappingLabels);
   }
 
   function currentFilters() {
@@ -580,13 +638,16 @@
       category: byId("cov-category").value,
       status: byId("cov-status").value,
       kind: byId("cov-kind").value,
+      mapping: byId("cov-mapping").value,
       sort: byId("cov-sort").value,
     };
   }
 
   function rowInScope(row, scope) {
     if (scope === "default") return row.origin === "numpy" && row.in_default_scope;
-    if (scope === "numpy") return row.origin === "numpy";
+    if (scope === "numpy") return isComparableApi(row);
+    if (scope === "extended") return isComparableApi(row) && row.extended;
+    if (scope === "catalog") return row.origin === "numpy";
     if (scope === "extensions") return row.origin === "numsharp";
     return true;
   }
@@ -598,10 +659,12 @@
       if (!rowInScope(row, filters.scope)) return false;
       if (filters.surface !== "all" && row.surface !== filters.surface) return false;
       if (filters.category !== "all" && row.category !== filters.category) return false;
-      if (filters.status !== "all" && row.status !== filters.status) return false;
+      if (filters.status === "gaps" && row.status !== "missing" && row.status !== "unsupported") return false;
+      if (filters.status !== "all" && filters.status !== "gaps" && row.status !== filters.status) return false;
       if (filters.kind !== "all" && row.kind !== filters.kind) return false;
+      if (filters.mapping !== "all" && row.availability !== filters.mapping) return false;
       if (!terms.length) return true;
-      const haystack = [row.id, row.name, row.category, row.kind, row.status, row.availability, row.numsharp_target, row.numpy_signature, row.notes, ...(row.numsharp_signatures || [])].join(" ").toLowerCase();
+      const haystack = [row.id, apiLabel(row), row.name, row.surface, surfaceLabel(row.surface), row.category, row.kind, row.disposition, row.status, row.availability, row.numsharp_target, row.numpy_signature, row.notes, ...(row.numsharp_signatures || [])].join(" ").toLowerCase();
       return terms.every((term) => haystack.includes(term));
     });
     results.sort((a, b) => {
@@ -620,7 +683,7 @@
   function renderResults() {
     const target = byId("cov-results");
     const visible = state.filtered.slice(0, state.visible);
-    byId("cov-result-count").textContent = `${state.filtered.length.toLocaleString()} matching API${state.filtered.length === 1 ? "" : "s"}`;
+    byId("cov-result-count").textContent = `${state.filtered.length.toLocaleString()} of ${scopedRows().length.toLocaleString()} entries · ${scopeLabels[byId("cov-scope").value]}`;
     if (!visible.length) {
       target.innerHTML = `<div class="cov-empty">No API matches these filters.</div>`;
       return;
@@ -634,7 +697,7 @@
         : `<span class="cov-result-name">${name}</span>`;
       return `<div class="cov-result" role="listitem" tabindex="0" data-row-id="${escapeHtml(row.id)}" aria-current="${row.id === state.selectedId}">
       <div class="cov-result-main">${nameMarkup}<span class="cov-result-status is-${escapeHtml(row.status)}">${escapeHtml(statusLabels[row.status] || row.status)}</span></div>
-      <div class="cov-result-sub"><span>${escapeHtml(surfaceLabels[row.surface] || row.surface)}</span><span>·</span><span>${escapeHtml(row.category)}</span><span>·</span><span>${escapeHtml(row.kind)}</span></div>
+      <div class="cov-result-sub"><span>${escapeHtml(surfaceLabel(row.surface))}</span><span>·</span><span>${escapeHtml(row.category)}</span><span>·</span><span>${escapeHtml(row.kind)}</span></div>
     </div>`;
     }).join("") + (state.filtered.length > visible.length ? `<button class="cov-more" id="cov-more" type="button">Show ${Math.min(120, state.filtered.length - visible.length)} more</button>` : "");
   }
@@ -664,10 +727,11 @@
     target.innerHTML = `
       <div class="cov-detail-head"><h3>${detailHeading}</h3>${statusBadge(row.status)}</div>
       <div class="cov-detail-grid">
-        <div class="cov-detail-fact"><div class="cov-detail-label">Surface</div><div class="cov-detail-value">${escapeHtml(surfaceLabels[row.surface] || row.surface)}</div></div>
+        <div class="cov-detail-fact"><div class="cov-detail-label">Surface</div><div class="cov-detail-value">${escapeHtml(surfaceLabel(row.surface))}</div></div>
         <div class="cov-detail-fact"><div class="cov-detail-label">Category</div><div class="cov-detail-value">${escapeHtml(row.category)}</div></div>
         <div class="cov-detail-fact"><div class="cov-detail-label">Availability</div><div class="cov-detail-value">${escapeHtml(mapping)}</div></div>
-        <div class="cov-detail-fact"><div class="cov-detail-label">Headline denominator</div><div class="cov-detail-value">${row.in_default_scope ? "Included" : "Excluded"}</div></div>
+        <div class="cov-detail-fact"><div class="cov-detail-label">Inventory group</div><div class="cov-detail-value">${row.in_default_scope ? "Headline comparison" : isComparableApi(row) ? "Extended NumPy API" : row.origin === "numsharp" ? "NumSharp-only API" : "Supporting NumPy export"}${row.disposition ? ` · ${escapeHtml(dispositionLabels[row.disposition] || row.disposition)}` : ""}</div></div>
+        ${row.applicability ? `<div class="cov-detail-fact"><div class="cov-detail-label">NumPy applicability</div><div class="cov-detail-value">${escapeHtml(row.applicability === "not_applicable" ? "NumPy rejects this ufunc method" : row.applicability === "conditional" ? "Depends on operands and dtype" : row.applicability)}</div></div>` : ""}
       </div>
       ${row.origin === "numpy" ? `<h4>NumPy signature</h4><div class="cov-code-block">${escapeHtml(row.numpy_signature)}</div>` : ""}
       <h4>NumSharp target</h4><div class="cov-code-block">${escapeHtml(row.numsharp_target || "Not available")}</div>
@@ -679,21 +743,31 @@
   }
 
   function applyPreset(preset, value = "") {
+    clearExplorerFilters();
     if (preset === "status") byId("cov-status").value = value;
     if (preset === "surface") byId("cov-surface").value = value;
     if (preset === "category") byId("cov-category").value = value;
-    if (preset === "gaps") { byId("cov-scope").value = "default"; byId("cov-status").value = "missing"; }
-    if (preset === "extensions") { byId("cov-scope").value = "extensions"; byId("cov-status").value = "all"; }
-    if (preset === "exact") { byId("cov-scope").value = "default"; byId("cov-search").value = "exact"; }
+    if (preset === "gaps") byId("cov-status").value = "gaps";
+    if (preset === "exact") byId("cov-mapping").value = "exact";
     filterRows();
     byId("cov-explorer-heading").scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
-  function resetFilters() {
+  function clearExplorerFilters() {
     byId("cov-search").value = "";
-    byId("cov-scope").value = "default";
-    ["cov-surface", "cov-category", "cov-status", "cov-kind"].forEach((id) => byId(id).value = "all");
+    ["cov-surface", "cov-category", "cov-status", "cov-kind", "cov-mapping"].forEach((id) => byId(id).value = "all");
     byId("cov-sort").value = "gap";
+  }
+
+  function resetFilters() {
+    clearExplorerFilters();
+    filterRows();
+  }
+
+  function changeScope() {
+    clearExplorerFilters();
+    initializeFilters();
+    renderSummary();
     filterRows();
   }
 
@@ -710,27 +784,35 @@
   }
 
   function tooltipContent(element) {
-    const [type, value] = element.dataset.tooltipGroup.split(":");
-    let rows = defaultRows();
+    const separator = element.dataset.tooltipGroup.indexOf(":");
+    const type = element.dataset.tooltipGroup.slice(0, separator);
+    const value = element.dataset.tooltipGroup.slice(separator + 1);
+    let rows = scopedRows();
     if (type === "status") rows = rows.filter((row) => row.status === value);
     if (type === "surface") rows = rows.filter((row) => row.surface === value);
     if (type === "category") rows = rows.filter((row) => row.category === value);
     const available = rows.filter((row) => row.status === "available");
-    const gaps = rows.filter((row) => row.status !== "available");
+    const gaps = rows.filter((row) => row.status === "missing" || row.status === "unsupported");
+    const other = rows.filter((row) => row.status === "partial" || row.status === "extension");
     const counts = summarize(rows);
-    const title = type === "status" ? statusLabels[value] : type === "surface" ? surfaceLabels[value] : value;
-    return `<div class="ns-cov-tip"><div class="ns-cov-tip-head"><strong>${escapeHtml(title)}</strong><span>${counts.available}/${counts.total} available · ${counts.coverage.toFixed(1)}%</span></div>
-      <div class="ns-cov-tip-tabs" role="tablist"><button class="ns-cov-tip-tab" role="tab" aria-selected="true" data-tip-tab="available">Available (${available.length})</button><button class="ns-cov-tip-tab" role="tab" aria-selected="false" data-tip-tab="gaps">Gaps (${gaps.length})</button></div>
-      <div class="ns-cov-tip-panel" data-tip-panel="available">${tooltipRowsHtml(available)}</div><div class="ns-cov-tip-panel" data-tip-panel="gaps" hidden>${tooltipRowsHtml(gaps)}</div></div>`;
+    const title = type === "status" ? statusLabels[value] : type === "surface" ? surfaceLabel(value) : value;
+    const tabs = [["available", "Available", available], ["gaps", "Gaps", gaps]];
+    if (other.length) tabs.push(["other", "Partial / NumSharp-only", other]);
+    const initialTab = tabs.find(([, , items]) => items.length)?.[0] || "available";
+    return `<div class="ns-cov-tip"><div class="ns-cov-tip-head"><strong>${escapeHtml(title)}</strong><span>${counts.total} entries · ${counts.numpy ? `${counts.availableApis}/${counts.numpy} NumPy APIs available · ${coverageLabel(counts)}` : "No comparable NumPy APIs"}</span></div>
+      <div class="ns-cov-tip-tabs" role="tablist">${tabs.map(([key, label, items]) => `<button class="ns-cov-tip-tab" role="tab" aria-selected="${key === initialTab}" data-tip-tab="${key}">${label} (${items.length})</button>`).join("")}</div>
+      ${tabs.map(([key, , items]) => `<div class="ns-cov-tip-panel" data-tip-panel="${key}"${key === initialTab ? "" : " hidden"}>${tooltipRowsHtml(items)}</div>`).join("")}</div>`;
   }
 
   function initializeTooltips() {
+    state.tooltipInstances.forEach((instance) => instance.destroy());
+    state.tooltipInstances = [];
+    state.activeTooltip = null;
     const elements = [...root.querySelectorAll("[data-tooltip-group]")];
     if (!window.tippy) {
       elements.forEach((element) => element.title = "Select to filter this breakdown in the explorer.");
       return;
     }
-    let active = null;
     elements.forEach((element) => {
       let timer = null;
       let pinned = false;
@@ -743,8 +825,9 @@
         placement: "auto",
         theme: "ns-coverage",
         trigger: "manual",
-        onShow(current) { if (active && active !== current) active.hide(); active = current; },
-        onHidden(current) { if (active === current) active = null; pinned = false; }
+        onShow(current) { if (state.activeTooltip && state.activeTooltip !== current) state.activeTooltip.hide(); state.activeTooltip = current; },
+        onHidden(current) { if (state.activeTooltip === current) state.activeTooltip = null; pinned = false; },
+        onDestroy() { window.clearTimeout(timer); }
       });
       const showSoon = () => { window.clearTimeout(timer); timer = window.setTimeout(() => instance.show(), 700); };
       const hideSoon = () => { window.clearTimeout(timer); if (!pinned) timer = window.setTimeout(() => instance.hide(), 120); };
@@ -766,17 +849,19 @@
       });
       state.tooltipInstances.push(instance);
     });
-    document.addEventListener("click", (event) => {
-      if (!active || active.reference.contains(event.target) || active.popper.contains(event.target)) return;
-      active.hide();
-    });
-    document.addEventListener("keydown", (event) => { if (event.key === "Escape") active?.hide(); });
   }
 
   function bindEvents() {
-    ["cov-search", "cov-scope", "cov-surface", "cov-category", "cov-status", "cov-kind", "cov-sort"].forEach((id) => {
+    ["cov-search", "cov-surface", "cov-category", "cov-status", "cov-kind", "cov-mapping", "cov-sort"].forEach((id) => {
       byId(id).addEventListener(id === "cov-search" ? "input" : "change", filterRows);
     });
+    byId("cov-scope").addEventListener("change", changeScope);
+    document.addEventListener("click", (event) => {
+      const active = state.activeTooltip;
+      if (!active || active.reference.contains(event.target) || active.popper.contains(event.target)) return;
+      active.hide();
+    });
+    document.addEventListener("keydown", (event) => { if (event.key === "Escape") state.activeTooltip?.hide(); });
     byId("cov-reset").addEventListener("click", resetFilters);
     byId("cov-quick-gap").addEventListener("click", () => applyPreset("gaps"));
     byId("cov-metrics").addEventListener("click", (event) => {
@@ -816,10 +901,10 @@
       const next = event.key === "ArrowDown" ? Math.min(buttons.length - 1, index + 1) : Math.max(0, index - 1);
       if (buttons[next]) {
         event.preventDefault();
-        buttons[next].focus();
         state.selectedId = buttons[next].dataset.rowId;
         renderResults();
         renderDetail();
+        byId("cov-results").querySelectorAll("[data-row-id]")[next]?.focus();
       }
     });
   }
@@ -832,8 +917,9 @@
       const data = await response.json();
       if (data.schema_version !== 1 || !Array.isArray(data.rows)) throw new Error("Coverage artifact has an unsupported schema.");
       state.rows = data.rows;
-      renderSummary(data);
+      initializeMetadata(data);
       initializeFilters();
+      renderSummary();
       bindEvents();
       filterRows();
       byId("cov-loading").hidden = true;
@@ -841,7 +927,7 @@
     } catch (error) {
       byId("cov-loading").hidden = true;
       byId("cov-error").hidden = false;
-      byId("cov-error").textContent = `${error.message} Regenerate the artifact with: python coverage/generate_coverage.py`;
+      byId("cov-error").textContent = "Coverage data could not be loaded. Reload this page to try again.";
       console.error(error);
     }
   }

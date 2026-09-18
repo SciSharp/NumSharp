@@ -196,6 +196,22 @@ namespace NumSharp.Tests.Backends
                     x.setflags(write: false);
                     return x.astype(tc, copy: false);
                 }
+                // --- wave 4: second-pass sweep. bmask_rows/bmask_3d_rows pin the boolean-partial-
+                //     mask OWNDATA fix (Default.BooleanMask reshapes the owned gather buffer in
+                //     place); the rest fill catalog holes for uncovered view/copy manipulation ops.
+                case "bmask_rows": return np.arange(12).astype(tc).reshape(3, 4)[np.array(new bool[] { true, false, true })];
+                case "bmask_3d_rows": return np.arange(24).astype(tc).reshape(2, 3, 4)[np.array(new bool[] { true, false })];
+                case "fliplr": return np.fliplr(np.arange(12).astype(tc).reshape(3, 4));
+                case "flipud": return np.flipud(np.arange(12).astype(tc).reshape(3, 4));
+                case "roll1d": return np.roll(np.arange(6).astype(tc), 2);
+                case "roll2d": return np.roll(np.arange(12).astype(tc).reshape(3, 4), 1, 0);
+                case "tile1d": return np.tile(np.arange(3).astype(tc), 2);
+                case "repeat_ax": return np.repeat(np.arange(12).astype(tc).reshape(3, 4), 2, 1);
+                case "diagonal_off": return np.arange(12).astype(tc).reshape(3, 4).diagonal(1);
+                case "moveaxis_m": return np.moveaxis(np.arange(24).astype(tc).reshape(2, 3, 4), new int[] { 0, 1 }, new int[] { 2, 0 });
+                case "rot90_k2": return np.rot90(np.arange(12).astype(tc).reshape(3, 4), 2);
+                case "take_ax1": return np.take(np.arange(12).astype(tc).reshape(3, 4), np.array(new int[] { 0, 2 }), 1);
+                case "bcast_add": return np.arange(12).astype(tc).reshape(3, 4) + np.arange(4).astype(tc);
                 default: throw new ArgumentException($"unknown recipe '{recipe}'");
             }
         }
@@ -835,7 +851,7 @@ namespace NumSharp.Tests.Backends
         public void Corpus_Floors_AllRecipesPresent_ManyErrorCases()
         {
             Assert.IsTrue(_cases.Count >= 1100, $"corpus shrank: {_cases.Count} < 1100");
-            Assert.AreEqual(87, _cases.Where(c => !c.Shared.HasValue && !c.IsChain && !c.IsLayout).Select(c => c.Recipe).Distinct().Count(), "recipe catalog changed size");
+            Assert.AreEqual(100, _cases.Where(c => !c.Shared.HasValue && !c.IsChain && !c.IsLayout).Select(c => c.Recipe).Distinct().Count(), "recipe catalog changed size");
             Assert.IsTrue(_cases.Count(c => c.Err.HasValue) >= 190, "error-case floor");
             // every scenario token family is represented
             foreach (var op in new[] { "w0", "w1", "a0", "a1", "u1", "w0a0", "a0u1", "a0w1", "u0" })

@@ -17,10 +17,13 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
+from numpy_documentation import documentation_url
+from object_surfaces import OBJECT_SURFACE_PATHS, enrich_object_classes, object_surface_rows
+
 
 ROOT = Path(__file__).resolve().parents[1]
 PINNED_NUMPY_VERSION = "2.4.2"
-GENERATOR_VERSION = "1.7.0"
+GENERATOR_VERSION = "1.9.0"
 OUTPUT_FILES = ("coverage.json", "coverage.csv", "summary.md", "manifest.json")
 NUMSHARP_SOURCE_BASE_URL = "https://github.com/SciSharp/NumSharp/blob/master/"
 
@@ -97,6 +100,16 @@ CATEGORY_OVERRIDES = {
     **dict.fromkeys({"bincount", "corrcoef", "correlate", "cov", "digitize", "histogram", "histogram2d", "histogram_bin_edges", "histogramdd"}, "Statistics & histograms"),
     **dict.fromkeys({"array2string", "array_repr", "array_str", "base_repr", "binary_repr", "format_float_positional", "format_float_scientific", "get_printoptions", "printoptions", "set_printoptions", "typename"}, "Text & formatting"),
     **dict.fromkeys({"bartlett", "blackman", "hamming", "hanning", "kaiser"}, "Window functions"),
+    **dict.fromkeys({"acos", "arccos", "arcsin", "arctan", "arctan2", "asin", "atan", "atan2", "cos", "deg2rad", "degrees", "hypot", "rad2deg", "radians", "sin", "sinc", "tan", "unwrap"}, "Trigonometric functions"),
+    **dict.fromkeys({"acosh", "arccosh", "arcsinh", "arctanh", "asinh", "atanh", "cosh", "sinh", "tanh"}, "Hyperbolic functions"),
+    **dict.fromkeys({"exp", "exp2", "expm1", "log", "log10", "log1p", "log2", "logaddexp", "logaddexp2"}, "Exponentials & logarithms"),
+    **dict.fromkeys({"around", "ceil", "fix", "floor", "rint", "round", "trunc"}, "Rounding"),
+    **dict.fromkeys({"bitwise_and", "bitwise_count", "bitwise_invert", "bitwise_left_shift", "bitwise_not", "bitwise_or", "bitwise_right_shift", "bitwise_xor", "invert", "left_shift", "packbits", "right_shift", "unpackbits"}, "Bitwise operations"),
+    **dict.fromkeys({"angle", "conj", "conjugate", "imag", "real", "real_if_close"}, "Complex numbers"),
+    **dict.fromkeys({"convolve", "diff", "ediff1d", "gradient", "interp", "trapezoid"}, "Differences & integration"),
+    **dict.fromkeys({"dot", "inner", "kron", "matmul", "outer", "trace", "cross"}, "Linear algebra"),
+    **dict.fromkeys({"copysign", "frexp", "ldexp", "nextafter", "signbit", "spacing"}, "Floating-point handling"),
+    "frompyfunc": "Function utilities",
 }
 
 MATH.update({"angle", "around", "float_power", "frompyfunc", "gradient", "i0", "imag", "interp", "packbits", "piecewise", "real", "real_if_close", "trapezoid", "unpackbits", "unwrap"})
@@ -110,13 +123,9 @@ SORTING.add("sort_complex")
 # ---------------------------------------------------------------------------
 # Extended (out-of-headline) NumPy submodule catalog.
 #
-# public_exports() enumerates exactly five surfaces — the headline scope. But NumPy ALSO ships
-# large PUBLIC submodules that scope deliberately excludes, and scanning NONE of them is precisely
-# how whole families (numpy.emath, the numpy.polynomial package, numpy.lib.stride_tricks) stayed
-# invisible to the artifact entirely rather than showing up as gaps. These rows are catalogued with
-# in_default_scope=False: they make a scan SEE the family (and auto-credit the day NumSharp adds a
-# matching [ModuleName] facade) WITHOUT moving the headline percentage — which would be dishonest
-# for subsystems NumSharp intentionally lacks (masked arrays, string/record arrays, the test harness).
+# The historical headline covers five surfaces. The dashboard defaults to all API rows,
+# including these public submodules and object_surfaces.py's member contracts. Keeping
+# in_default_scope=False preserves a comparable headline without hiding wider API gaps.
 #
 # Each entry is (numpy import path, display surface, category, disposition). The disposition records
 # WHY the family is out of headline scope so the summary can rank real opportunities above non-goals.
@@ -124,20 +133,23 @@ EXTENDED_SUBMODULES = [
     ("lib.scimath",           "emath",                 "Complex-domain math",       "candidate"),
     ("lib.stride_tricks",     "lib.stride_tricks",     "Stride tricks",             "candidate"),
     ("lib.array_utils",       "lib.array_utils",       "Array utilities",           "candidate"),
-    ("polynomial.polynomial", "polynomial.polynomial", "Polynomial package",        "candidate"),
-    ("polynomial.chebyshev",  "polynomial.chebyshev",  "Polynomial package",        "candidate"),
-    ("polynomial.legendre",   "polynomial.legendre",   "Polynomial package",        "candidate"),
-    ("polynomial.hermite",    "polynomial.hermite",    "Polynomial package",        "candidate"),
-    ("polynomial.hermite_e",  "polynomial.hermite_e",  "Polynomial package",        "candidate"),
-    ("polynomial.laguerre",   "polynomial.laguerre",   "Polynomial package",        "candidate"),
+    ("polynomial",            "polynomial",            "Polynomial utilities",      "candidate"),
+    ("polynomial.polyutils",  "polynomial.polyutils",  "Polynomial utilities",      "candidate"),
+    ("polynomial.polynomial", "polynomial.polynomial", "Power-series polynomials",  "candidate"),
+    ("polynomial.chebyshev",  "polynomial.chebyshev",  "Chebyshev polynomials",     "candidate"),
+    ("polynomial.legendre",   "polynomial.legendre",   "Legendre polynomials",      "candidate"),
+    ("polynomial.hermite",    "polynomial.hermite",    "Hermite polynomials",       "candidate"),
+    ("polynomial.hermite_e",  "polynomial.hermite_e",  "HermiteE polynomials",      "candidate"),
+    ("polynomial.laguerre",   "polynomial.laguerre",   "Laguerre polynomials",      "candidate"),
     ("ma",                    "ma",                    "Masked arrays",             "subsystem"),
-    ("char",                  "char",                  "String operations",         "subsystem"),
+    ("char",                  "char",                  "Legacy string operations",  "subsystem"),
     ("strings",               "strings",               "String operations",         "subsystem"),
     ("rec",                   "rec",                   "Record arrays",             "subsystem"),
     ("lib.recfunctions",      "lib.recfunctions",      "Structured-array helpers",  "subsystem"),
     ("testing",               "testing",               "Test support",              "tooling"),
     ("ctypeslib",             "ctypeslib",             "ctypes interop",            "tooling"),
     ("lib.format",            "lib.format",            "npy/npz format internals",  "tooling"),
+    ("lib.introspect",        "lib.introspect",        "Runtime & diagnostics",     "tooling"),
 ]
 
 # ndarray interop-protocol dunders. public_exports() drops every '_'-prefixed ndarray member, so
@@ -159,6 +171,50 @@ DISPOSITION_NOTE = {
     "tooling":   "Python-runtime tooling with no NumSharp analog (out of headline scope).",
     "interop":   "ndarray interop-protocol hook, absent in NumSharp (out of headline scope).",
 }
+
+
+IGNORED_DASHBOARD_ROOTS = (
+    "ndarray.interop", "__array_namespace_info__", "lib", "ctypeslib", "testing",
+)
+LEGACY_POLYNOMIAL_APIS = {
+    "poly", "poly1d", "polyadd", "polyder", "polydiv", "polyfit", "polyint",
+    "polymul", "polysub", "polyval", "roots",
+}
+LEGACY_POLYNOMIAL_IDS = {"numpy." + name for name in LEGACY_POLYNOMIAL_APIS}
+
+
+def within_namespace(value: str, root: str) -> bool:
+    return value == root or value.startswith(root + ".")
+
+
+def ignored_dashboard_id(api_id: str) -> bool:
+    return any(within_namespace(api_id, "numpy." + root) for root in IGNORED_DASHBOARD_ROOTS)
+
+
+def dashboard_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Apply presentation scope after matching, before emitting any dashboard data.
+
+    IDs and implementation evidence remain canonical. Grouping never aliases a
+    method to another owner or changes support; ignored rows never reach any UI
+    scope, count, search result, or tooltip.
+    """
+    result = []
+    for row in rows:
+        if ignored_dashboard_id(row["id"]) or any(
+            within_namespace(row["surface"], root) for root in IGNORED_DASHBOARD_ROOTS
+        ):
+            continue
+        group = None
+        if within_namespace(row["id"], "numpy.ma") or within_namespace(row["surface"], "ma"):
+            group = ("ma", "Masked arrays")
+        elif (within_namespace(row["id"], "numpy.polynomial")
+              or within_namespace(row["id"], "numpy.poly1d")
+              or within_namespace(row["surface"], "polynomial")
+              or row["surface"] == "poly1d"
+              or row["id"] in LEGACY_POLYNOMIAL_IDS):
+            group = ("polynomial", "Polynomials")
+        result.append({**row, "surface": group[0], "category": group[1]} if group else row)
+    return result
 
 
 def parse_args() -> argparse.Namespace:
@@ -206,12 +262,14 @@ def load_numsharp_inventory() -> dict[str, Any]:
         data = json.loads(completed.stdout)
     except json.JSONDecodeError as error:
         raise SystemExit(f"NumSharp inventory emitted invalid JSON: {error}") from error
-    if data.get("schemaVersion") != 4 or not isinstance(data.get("modules"), dict) or not data["modules"]:
-        raise SystemExit("NumSharp inventory schema mismatch: expected schemaVersion 4 with a non-empty 'modules' map.")
+    if data.get("schemaVersion") != 5 or not isinstance(data.get("modules"), dict) or not data["modules"]:
+        raise SystemExit("NumSharp inventory schema mismatch: expected schemaVersion 5 with a non-empty 'modules' map.")
     if not isinstance(data.get("unannotatedSurface"), dict):
-        raise SystemExit("NumSharp inventory schema mismatch: schemaVersion 4 must carry the 'unannotatedSurface' index.")
+        raise SystemExit("NumSharp inventory schema mismatch: schemaVersion 5 must carry the 'unannotatedSurface' index.")
     if not isinstance(data.get("exportedTypes"), list):
-        raise SystemExit("NumSharp inventory schema mismatch: schemaVersion 4 must carry the 'exportedTypes' index.")
+        raise SystemExit("NumSharp inventory schema mismatch: schemaVersion 5 must carry the 'exportedTypes' index.")
+    if not isinstance(data.get("objectTypes"), dict):
+        raise SystemExit("NumSharp inventory schema mismatch: schemaVersion 5 must carry the 'objectTypes' index.")
     return data
 
 
@@ -265,35 +323,6 @@ def numpy_kind(np: Any, obj: Any) -> str:
     if callable(obj):
         return "function"
     return "constant"
-
-
-def documentation_url(surface: str, name: str, kind: str) -> str:
-    prefix = {
-        "np": "numpy",
-        "ndarray": "numpy.ndarray",
-        "random": "numpy.random",
-        "linalg": "numpy.linalg",
-        "fft": "numpy.fft",
-    }[surface]
-    canonical_aliases = {
-        "numpy.abs": "numpy.absolute",
-        "numpy.bitwise_not": "numpy.invert",
-        "numpy.row_stack": "numpy.vstack",
-    }
-    api_id = f"{prefix}.{name}"
-    api_id = canonical_aliases.get(api_id, api_id)
-
-    if surface == "random":
-        if kind not in CALLABLE_KINDS:
-            return ""
-        if name == "default_rng":
-            return "https://numpy.org/doc/stable/reference/random/generator.html#numpy.random.default_rng"
-        return f"https://numpy.org/doc/stable/reference/random/generated/{api_id}.html"
-    if surface == "np" and name == "test":
-        return "https://numpy.org/doc/stable/reference/testing.html"
-    if surface == "np" and kind not in CALLABLE_KINDS:
-        return ""
-    return f"https://numpy.org/doc/stable/reference/generated/{api_id}.html"
 
 
 class SourceLocator:
@@ -384,6 +413,8 @@ def category_for(surface: str, name: str, kind: str) -> str:
         return {"module": "Namespaces", "class": "Types", "constant": "Types & constants"}.get(kind, "Other")
     if name in CATEGORY_OVERRIDES:
         return CATEGORY_OVERRIDES[name]
+    if name in IO:
+        return "Input & output"
     if name in CREATION:
         return "Array creation"
     if name in MANIPULATION:
@@ -398,8 +429,6 @@ def category_for(surface: str, name: str, kind: str) -> str:
         return "Indexing & selection"
     if name in SORTING:
         return "Sorting & searching"
-    if name in IO:
-        return "Input & output"
     if name in MATH:
         return "Math"
     return "Other"
@@ -509,7 +538,10 @@ def resolve_submodule(np: Any, path: str) -> Any:
         return obj if inspect.ismodule(obj) else None
 
 
-def extended_surface_rows(np: Any, inventory: dict[str, Any], seen_ids: set[str]) -> list[dict[str, Any]]:
+def extended_surface_rows(
+    np: Any, inventory: dict[str, Any], seen_ids: set[str],
+    members_by_surface: dict[str, list[dict[str, Any]]] | None = None,
+) -> list[dict[str, Any]]:
     """Catalog public callables of the NumPy submodules the headline scope excludes.
 
     These rows carry in_default_scope=False, so they never move the headline percentage; their only
@@ -529,17 +561,13 @@ def extended_surface_rows(np: Any, inventory: dict[str, Any], seen_ids: set[str]
     # Top-level NumSharp np members — used ONLY to annotate a namesake (informational), never to credit.
     np_module = inventory["modules"].get("np", {"methods": [], "properties": [], "fields": []})
     np_toplevel = {m["name"] for grp in ("methods", "properties", "fields") for m in np_module[grp]}
-    # ModuleName -> set(member names), so a future np.emath / np.polynomial.* facade credits by surface.
-    facade_members: dict[str, set[str]] = {}
-    for module_name, data in inventory["modules"].items():
-        facade_members[module_name] = {
-            m["name"] for grp in ("methods", "properties", "fields") for m in data[grp]
-        }
+    if members_by_surface is None:
+        _, members_by_surface, _ = member_maps(inventory)
 
     rows: list[dict[str, Any]] = []
 
     def emit(surface: str, name: str, kind: str, category: str, disposition: str,
-             host_module: str, doc_url: str) -> None:
+             host_module: str, obj: Any) -> None:
         # Row id mirrors the NumPy dotted path so it is stable and collision-free across submodules.
         row_id = f"numpy.{surface}.{name}"
         if row_id in seen_ids:  # a name can appear under both a module and its re-export; keep the first.
@@ -547,47 +575,51 @@ def extended_surface_rows(np: Any, inventory: dict[str, Any], seen_ids: set[str]
         seen_ids.add(row_id)
         # Credit only a same-surface facade member (none exist yet -> missing). The top-level namesake
         # is recorded as prose so the emath.sqrt / char.upper false-positive class is visible, not hidden.
-        matched = name in facade_members.get(host_module, set())
-        note = DISPOSITION_NOTE[disposition]
+        matched = next((member for member in members_by_surface.get(surface_for_module(host_module), [])
+                        if member["name"] == name), None)
+        note = ("Matched against the same NumPy submodule facade; behavioral parity requires tests."
+                if matched else DISPOSITION_NOTE[disposition])
         if not matched and name in np_toplevel:
             note += f" NumSharp has a top-level np.{name} (distinct surface/semantics; not credited here)."
         rows.append({
             "id": row_id, "origin": "numpy", "surface": surface, "name": name, "kind": kind,
-            "numpy_signature": "", "documentation_url": doc_url, "in_default_scope": False,
+            "numpy_signature": numpy_signature(obj, name),
+            "documentation_url": documentation_url(surface, name, kind), "in_default_scope": False,
             "extended": True, "disposition": disposition,
             "category": category, "availability": "exact" if matched else "missing",
             "support": "declared" if matched else "missing",
             "status": "available" if matched else "missing",
-            "numsharp_target": None, "numsharp_signatures": [], "numsharp_obsolete": False,
-            "numsharp_source_paths": [], "numsharp_source_urls": [], "notes": note,
+            "numsharp_target": matched["target"] if matched else None,
+            "numsharp_signatures": matched["signatures"] if matched else [],
+            "numsharp_obsolete": matched.get("obsolete", False) if matched else False,
+            "numsharp_source_paths": matched.get("sourcePaths", []) if matched else [],
+            "numsharp_source_urls": matched.get("sourceUrls", []) if matched else [], "notes": note,
         })
 
     for path, surface, category, disposition in EXTENDED_SUBMODULES:
         module = resolve_submodule(np, path)
-        if module is None:  # a NumPy build without this submodule simply contributes no rows.
-            continue
+        if module is None:
+            raise SystemExit(f"Required NumPy catalog submodule is absent: numpy.{path}")
         # Prefer __all__ (the module's own public contract) and fall back to non-underscore dir().
         names = getattr(module, "__all__", None) or [n for n in dir(module) if not n.startswith("_")]
         host_module = "np." + surface  # the [ModuleName] a NumSharp facade for this family would carry.
         for name in sorted(set(names)):
-            try:
-                obj = getattr(module, name)
-            except Exception:  # a listed-but-unresolvable export (lazy/removed) is skipped, not fatal.
-                continue
+            obj = getattr(module, name)
             # Functions/ufuncs only — classes (Polynomial, MaskedArray, chararray) are noted in the
             # summary prose rather than catalogued as member rows, matching the "functions" question.
             is_call = (isinstance(obj, np.ufunc) or inspect.isfunction(obj) or inspect.isbuiltin(obj)
                        or (callable(obj) and not inspect.isclass(obj) and not inspect.ismodule(obj)))
             if not is_call:
                 continue
-            doc = f"https://numpy.org/doc/stable/reference/generated/numpy.{path}.{name}.html"
-            emit(surface, name, "function", category, disposition, host_module, doc)
+            emit(surface, name, numpy_kind(np, obj), category, disposition, host_module, obj)
 
     # ndarray interop dunders — public_exports() drops these via its '_'-prefix filter.
     for name in EXTENDED_NDARRAY_DUNDERS:
         if not hasattr(np.ndarray, name):  # dunder set drifts across NumPy versions; skip absent ones.
             continue
-        emit("ndarray.interop", name, "method", "Array interop protocol", "interop", "ndarray", "")
+        obj = inspect.getattr_static(np.ndarray, name)
+        kind = "method" if callable(getattr(np.ndarray, name)) else "property"
+        emit("ndarray.interop", name, kind, "Array interop protocol", "interop", "ndarray", obj)
 
     return rows
 
@@ -818,10 +850,17 @@ def resolve_rows(np: Any, inventory: dict[str, Any], overrides: dict[str, Any]) 
                 "notes": "NumSharp-only public API with no matching export on the compared NumPy surface.",
             })
 
-    # Extended (out-of-headline) submodule catalog: appended AFTER the five headline surfaces and the
-    # NumSharp-only extensions so every existing row is byte-identical — these rows only ADD coverage,
-    # they never perturb the headline (each carries in_default_scope=False).
-    rows.extend(extended_surface_rows(np, inventory, seen_ids))
+    rows.extend(extended_surface_rows(np, inventory, seen_ids, surfaces))
+    rows.extend(object_surface_rows(
+        np, inventory, seen_ids, root=ROOT, source_base_url=NUMSHARP_SOURCE_BASE_URL,
+        signature=numpy_signature, documentation_url=documentation_url,
+    ))
+    enrich_object_classes(rows, inventory, ROOT, NUMSHARP_SOURCE_BASE_URL)
+
+    # A facade member used by an extended mapping is no longer a NumSharp-only extension.
+    consumed_targets.update(row["numsharp_target"] for row in rows
+                            if row["origin"] == "numpy" and row["numsharp_target"])
+    rows = [row for row in rows if row["origin"] == "numpy" or row["numsharp_target"] not in consumed_targets]
 
     rows.sort(key=lambda row: (row["origin"] != "numpy", row["surface"], row["name"].lower(), row["id"]))
     missing_extension_sources = [
@@ -866,6 +905,8 @@ def build_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     # Extended submodules are catalogued out-of-headline; summarise them SEPARATELY so they are
     # visible/searchable without diluting the default-scope percentage the headline reports.
     extended_rows = [row for row in rows if row.get("extended")]
+    api_rows = [row for row in numpy_rows if is_api_row(row)]
+    object_rows = [row for row in api_rows if row.get("object_surface")]
     by_extended = {
         surface: {
             **status_counts([row for row in extended_rows if row["surface"] == surface]),
@@ -878,10 +919,29 @@ def build_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "by_surface": by_surface,
         "by_category": by_category,
         "extended_surfaces": {"total": len(extended_rows), "by_surface": by_extended},
+        "api_scope": {
+            **status_counts(api_rows),
+            "by_surface": {surface: status_counts([row for row in api_rows if row["surface"] == surface])
+                           for surface in sorted({row["surface"] for row in api_rows})},
+            "by_category": {category: status_counts([row for row in api_rows if row["category"] == category])
+                            for category in sorted({row["category"] for row in api_rows})},
+        },
+        "object_surfaces": status_counts(object_rows),
+        "ufunc_protocols": {
+            "total": sum("applicability" in row for row in object_rows),
+            "conditional": sum(row.get("applicability") == "conditional" for row in object_rows),
+            "not_applicable": sum(row.get("applicability") == "not_applicable" for row in object_rows),
+        },
         "all_numpy_exports": len(numpy_rows),
         "numsharp_extensions": sum(row["origin"] == "numsharp" for row in rows),
         "catalog_rows": len(rows),
     }
+
+
+def is_api_row(row: dict[str, Any]) -> bool:
+    """Supporting classes/constants/modules remain catalogued outside API percentages."""
+    return row["origin"] == "numpy" and (row["in_default_scope"] or
+        (row.get("extended", False) and row["kind"] not in {"class", "constant", "module"}))
 
 
 def json_text(value: Any) -> str:
@@ -890,7 +950,8 @@ def json_text(value: Any) -> str:
 
 def csv_text(rows: list[dict[str, Any]]) -> str:
     columns = [
-        "id", "origin", "surface", "category", "name", "kind", "in_default_scope", "status", "availability",
+        "id", "origin", "surface", "category", "name", "kind", "in_default_scope", "extended", "disposition",
+        "object_surface", "object_type", "applicability", "status", "availability",
         "support", "numpy_signature", "numsharp_target", "numsharp_signatures", "numsharp_source_paths",
         "numsharp_source_urls", "numsharp_obsolete", "case_insensitive_matches", "notes", "documentation_url"
     ]
@@ -909,10 +970,20 @@ def csv_text(rows: list[dict[str, Any]]) -> str:
 
 def markdown_text(summary: dict[str, Any], rows: list[dict[str, Any]], numpy_version: str, assembly_version: str) -> str:
     headline = summary["default_scope"]
+    all_apis = summary["api_scope"]
     lines = [
         "# NumPy ↔ NumSharp API coverage",
         "",
         f"Compared with NumPy **{numpy_version}** using NumSharp assembly **{assembly_version}**.",
+        "",
+        f"Expanded API availability (dashboard default): **{all_apis['coverage_percent']:.1f}%** "
+        f"({all_apis['available']} of {all_apis['total']} APIs across "
+        f"{len(all_apis['by_surface'])} surfaces and {len(all_apis['by_category'])} categories). "
+        f"**{all_apis['missing']} missing**, **{all_apis['partial']} partial**.",
+        "",
+        f"The catalog includes **{summary['ufunc_protocols']['total']} per-ufunc protocol methods**; "
+        f"**{summary['ufunc_protocols']['not_applicable']}** describe methods whose calls NumPy rejects "
+        "for that ufunc. These count as exposed API contracts, not computable operations.",
         "",
         f"Headline API availability: **{headline['coverage_percent']:.1f}%** "
         f"({headline['available']} of {headline['total']} default-scope APIs). "
@@ -921,7 +992,7 @@ def markdown_text(summary: dict[str, Any], rows: list[dict[str, Any]], numpy_ver
         "| Surface | Available | Partial | Unsupported | Missing | Total | Coverage |",
         "|---|---:|---:|---:|---:|---:|---:|",
     ]
-    labels = {"np": "np.*", "ndarray": "ndarray.*", "random": "np.random.*", "linalg": "np.linalg.*", "fft": "np.fft.*"}
+    labels = {"np": "np.*", "ndarray": "ndarray.*", "random": "np.random.*", "linalg": "np.linalg.*", "fft": "np.fft.*", "ma": "np.ma.*", "polynomial": "np.polynomial.*"}
     for surface, counts in summary["by_surface"].items():
         lines.append(
             f"| {labels.get(surface, surface)} | {counts['available']} | {counts['partial']} | "
@@ -973,17 +1044,18 @@ def markdown_text(summary: dict[str, Any], rows: list[dict[str, Any]], numpy_ver
     extended = [row for row in rows if row.get("extended")]
     lines.extend([
         "",
-        "## Extended NumPy submodules (out of headline scope)",
+        "## Extended NumPy submodules and object contracts",
         "",
-        "Public NumPy submodules the headline scope excludes, catalogued so a scan cannot miss them. "
-        "`candidate` = implementable and not yet exposed; `subsystem` = needs a NumSharp subsystem that "
-        "does not exist (masked/string/record arrays); `tooling` = Python-runtime tooling with no analog; "
-        "`interop` = ndarray array-protocol hooks. None affect the headline percentage.",
+        "These surfaces appear in the dashboard by default. `candidate` denotes numeric APIs and "
+        "object contracts; `subsystem` denotes a separate object model such as masked/string/record "
+        "arrays or ufuncs; `tooling` denotes Python tooling; `interop` denotes array protocols. "
+        "Class existence is catalogued separately from member availability. The historical headline "
+        "remains unchanged by these additions.",
         "",
     ])
     if extended:
         disposition_rank = {"candidate": 0, "subsystem": 1, "tooling": 2, "interop": 3}
-        lines.append("| Submodule | Disposition | Available | Missing | Total | Notable missing |")
+        lines.append("| Surface | Disposition | Available | Missing | Total | Notable missing |")
         lines.append("|---|---|---:|---:|---:|---|")
         surfaces = sorted(
             {row["surface"] for row in extended},
@@ -1000,16 +1072,22 @@ def markdown_text(summary: dict[str, Any], rows: list[dict[str, Any]], numpy_ver
                 f"| numpy.{surface} | {disposition} | {available} | {len(missing)} | {len(members)} | {sample} |"
             )
         lines.append("")
-        lines.append(
-            "> Also absent as classes (not counted above): the `Polynomial`/`Chebyshev`/`Legendre`/"
-            "`Hermite`/`HermiteE`/`Laguerre` bases, `MaskedArray`, `chararray`, and `recarray`."
-        )
+
+    lines.extend([
+        "",
+        "## Expanded capability categories",
+        "",
+        "| Category | Available | Partial | Missing | Total |",
+        "|---|---:|---:|---:|---:|",
+    ])
+    for category, counts in all_apis["by_category"].items():
+        lines.append(f"| {category} | {counts['available']} | {counts['partial']} | {counts['missing']} | {counts['total']} |")
 
     lines.extend([
         "",
         "## Counting rules",
         "",
-        "The default scope is NumPy top-level callables, ndarray public methods/properties, and callables in numpy.random, numpy.linalg, and numpy.fft. Types, constants, modules, and NumSharp-only APIs remain searchable in the JSON artifact but do not affect the headline percentage. Extended submodules (numpy.emath, numpy.polynomial.*, numpy.ma, numpy.char/strings, numpy.lib.*, numpy.testing, numpy.ctypeslib, and the ndarray interop dunders) are catalogued with in_default_scope=false and are likewise excluded from the headline.",
+        "The historical headline is NumPy top-level callables, ndarray public methods/properties, and callables in numpy.random, numpy.linalg, and numpy.fft. The expanded API scope adds public extended-submodule callables and object methods/properties/protocols. Types, constants, modules, and NumSharp-only APIs remain searchable in the full catalog but do not enter either API denominator. Aliases are separate exported names; inherited members are separate contracts on each object type. A ufunc method row records the exposed protocol even when that ufunc rejects the operation (for example, unary reductions). Matching a namespace function never credits a ufunc or a different object type's member.",
         "",
     ])
     return "\n".join(lines)
@@ -1017,6 +1095,7 @@ def markdown_text(summary: dict[str, Any], rows: list[dict[str, Any]], numpy_ver
 
 def render_outputs(np: Any, inventory: dict[str, Any], overrides: dict[str, Any]) -> dict[str, str]:
     rows, _ = resolve_rows(np, inventory, overrides)
+    rows = dashboard_rows(rows)
     summary = build_summary(rows)
     payload = {
         "schema_version": 1,
@@ -1026,6 +1105,8 @@ def render_outputs(np: Any, inventory: dict[str, Any], overrides: dict[str, Any]
         "methodology": {
             "headline": "Available default-scope APIs divided by all default-scope NumPy APIs.",
             "default_scope": "Top-level NumPy callables; ndarray public methods and properties; callable exports of numpy.random, numpy.linalg, and numpy.fft.",
+            "api_scope": "Dashboard default: headline APIs plus extended public submodule callables and object methods/properties/protocols. Supporting class, constant and module exports are catalogued but excluded from API percentages.",
+            "object_members": "Object members match only their explicit NumSharp owner type. Inherited members and ufunc protocols are catalogued per owner; namespace namesakes never confer support. Protocol existence does not imply applicability to every ufunc.",
             "availability_note": "Compiled API availability is distinct from fully verified behavioral parity.",
             "case_sensitivity": "NumPy API names are matched case-sensitively for parity. Case-insensitive near-misses are detected and reported (row field 'case_insensitive_matches'; the 'Case-insensitive near-misses' section of summary.md) but never counted as available.",
         },
@@ -1042,7 +1123,8 @@ def render_outputs(np: Any, inventory: dict[str, Any], overrides: dict[str, Any]
         "source_surfaces": ["numpy", "numpy.ndarray", "numpy.random", "numpy.linalg", "numpy.fft"],
         # Out-of-headline families the scan also catalogs (in_default_scope=false), so a whole
         # submodule can no longer go missing the way numpy.fft/emath/polynomial once did.
-        "extended_surfaces": ["numpy." + path for path, *_ in EXTENDED_SUBMODULES] + ["numpy.ndarray.interop"],
+        "extended_surfaces": ["numpy." + surface for surface in sorted({row["surface"] for row in rows if row.get("extended")})],
+        "object_surfaces": [path for path in OBJECT_SURFACE_PATHS if not ignored_dashboard_id(path)],
         "numsharp_source_base_url": NUMSHARP_SOURCE_BASE_URL,
         "summary": summary,
     }
@@ -1092,10 +1174,13 @@ def main() -> None:
         print(f"Coverage artifact is current ({args.output}).")
     else:
         write_outputs(args.output, rendered)
-        summary = json.loads(rendered["coverage.json"])["summary"]["default_scope"]
+        summary = json.loads(rendered["coverage.json"])["summary"]
+        expanded = summary["api_scope"]
+        headline = summary["default_scope"]
         print(
-            f"Wrote {args.output}: {summary['available']}/{summary['total']} available "
-            f"({summary['coverage_percent']:.1f}%)."
+            f"Wrote {args.output}: {summary['catalog_rows']} catalog rows; "
+            f"expanded {expanded['available']}/{expanded['total']} available ({expanded['coverage_percent']:.1f}%); "
+            f"headline {headline['available']}/{headline['total']} ({headline['coverage_percent']:.1f}%)."
         )
 
 
