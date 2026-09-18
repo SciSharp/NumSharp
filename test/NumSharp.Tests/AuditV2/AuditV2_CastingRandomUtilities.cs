@@ -121,14 +121,16 @@ public class AuditV2_CastingRandomUtilities
     //   Public API typo carried throughout. Surface via TupleElementNamesAttribute
     //   on the method's return type.
     // -----------------------------------------------------------------------
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.32")]
+    [TestMethod]
     public void T1_32_Modf_TupleElementNameTypo()
     {
+        // The modf signature gained the ufunc out=/where=/dtype= parameters
+        // (NDArray outFrac, NDArray outIntegral, NDArray where, DType dtype); look it up by that shape.
         var modf = typeof(np).GetMethod(
             nameof(np.modf),
             BindingFlags.Public | BindingFlags.Static,
             null,
-            new[] { typeof(NDArray), typeof(NPTypeCode?) },
+            new[] { typeof(NDArray), typeof(NDArray), typeof(NDArray), typeof(NDArray), typeof(DType) },
             null);
         modf.Should().NotBeNull();
 

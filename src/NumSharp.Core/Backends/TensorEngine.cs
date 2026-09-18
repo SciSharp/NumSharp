@@ -213,7 +213,12 @@ namespace NumSharp
         // np.bitwise_count — set-bit count of |x|; integer/bool input, uint8 output (dtype= accepts only uint8).
         public abstract NDArray BitwiseCount(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray Cbrt(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract (NDArray Fractional, NDArray Intergral) ModF(NDArray nd, DType dtype = null);
+        // np.modf — the two-output (fractional, integral) ufunc. dtype selects the float loop (e/f/d/g;
+        // int/bool/char promote to the narrowest float per width — bool/i8/u8->f16, i16/u16/char->f32,
+        // i32+->f64; complex has no loop); outFrac/outIntegral are the two ufunc outputs (either may be
+        // null to auto-allocate); where masks BOTH outputs.
+        public abstract (NDArray Fractional, NDArray Integral) ModF(NDArray nd, DType dtype = null,
+            NDArray outFrac = null, NDArray outIntegral = null, NDArray where = null);
         // np.frexp — decompose x into (mantissa in [0.5,1), int32 exponent) with x == mantissa * 2^exponent
         // (the two-output inverse of Ldexp). The mantissa carries x's float tier; the exponent is always int32.
         // out1/out2 are the ufunc's two output operands (NumPy's positional out1,out2 / out=(o1,o2)); where= masks
@@ -305,9 +310,12 @@ namespace NumSharp
         public abstract NDArray BitwiseOr(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray BitwiseXor(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null);
 
-        // Bit shift operations (integer types only)
-        public abstract NDArray LeftShift(NDArray lhs, NDArray rhs);
-        public abstract NDArray RightShift(NDArray lhs, NDArray rhs);
+        // Bit shift operations (integer types only). dtype (ufunc dtype=) selects the loop among the
+        // bool/integer loops; a float/complex/decimal request raises NumPy's no-loop TypeError (shifts
+        // have no such loops). out/where follow the standard ufunc contract (same_kind cast into out,
+        // masked write). A uint64×signed pair promotes to float64 (no loop) and raises "not supported".
+        public abstract NDArray LeftShift(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null);
+        public abstract NDArray RightShift(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null);
 
         public abstract bool All(NDArray nd);
         public abstract NDArray<bool> All(NDArray nd, int axis);
