@@ -185,7 +185,7 @@ var t = np.arange(6).reshape(2, 3).T;   // transposed (non-contiguous) view
 
 t.flatiter[5] = 99;                      // write-through single element, C-order, any layout
 t.flatiter["::2"] = 0;                   // slice assignment
-t.flatiter[new[] {0, 2}] = np.array(new[] {7, 8}); // fancy assignment
+t.flatiter[new[] {0, 2}] = np.array([7, 8]); // fancy assignment
 
 long i    = t.flatiter.index;            // cursor: flat C-order position
 long[] c  = t.flatiter.coords;           // cursor: multi-index
@@ -303,7 +303,7 @@ using (var it = np.nditer(c, op_flags: new[] {"readwrite"}))
 
 ```csharp
 // broadcast two operands together, like np.nditer([a, b])
-using (var it = np.nditer(new[] {np.array(new[] {1, 2, 3}), np.array(new[,] {{10}, {20}})}))
+using (var it = np.nditer(new[] {np.array([1, 2, 3]), np.array([[10], [20]])}))
     foreach (var vals in it)
         Console.Write($"{(long)vals[0]}/{(long)vals[1]} ");   // 1/10 2/10 3/10 1/20 2/20 3/20
 
@@ -348,8 +348,8 @@ foreach (var _ in outer)                     // walks axis 1
 `np.broadcast(a, b, …)` is NumPy's `numpy.broadcast`: it resolves the broadcast shape without materializing data and lets you iterate the operands together. Its per-operand streams and value-tuples **box** (~3.3 ms / 12–16 MB for a 100K two-operand walk); for an unboxed walk, `broadcast_to` each operand to `bc.shape` and drive it with `np.nditer<T>` (order `'C'`). Use `np.broadcast` for the metadata (`shape`/`size`/`numiter`) and for parity.
 
 ```csharp
-var a = np.array(new long[] {1, 2, 3});          // (3,)
-var b = np.array(new long[,] {{10}, {20}});       // (2, 1)
+var a = np.array([1L, 2L, 3L]);          // (3,)
+var b = np.array([[10L], [20L]]);        // (2, 1)
 var bc = np.broadcast(a, b);
 
 bc.shape;      // (2, 3)

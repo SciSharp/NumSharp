@@ -41,8 +41,8 @@ The closest analog, and usually the *fastest* for analytics — one array per fi
 ```csharp
 // NumPy: x = np.array([('Rex', 9, 81.0)], dtype=[('name','U10'),('age','i4'),('weight','f4')])
 var names   = new[] { "Rex", "Fido" };            // string[]  (text stays .NET)
-var age     = np.array(new[] { 9, 3 });           // int32 column
-var weight  = np.array(new[] { 81.0f, 27.0f });   // float32 column
+var age     = np.array([9, 3]);           // int32 column
+var weight  = np.array([81.0f, 27.0f]);   // float32 column
 
 // "x['age']" → the age column directly:
 age;                                              // [9 3]

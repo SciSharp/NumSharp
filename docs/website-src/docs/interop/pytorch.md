@@ -207,7 +207,7 @@ A tensor created from NumSharp is a normal PyTorch leaf tensor. Autograd can ope
 result can return as an owning NumSharp array:
 
 ```csharp
-using NDArray x = np.array(new[] { -2.0, 1.5, 3.0 });
+using NDArray x = np.array([-2.0, 1.5, 3.0]);
 
 using (Py.GIL())
 using (PyObject tensor = x.ToTorch())

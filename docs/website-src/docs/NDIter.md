@@ -1287,7 +1287,7 @@ Every intermediate value flows through the output dtype: `Input(i)` loads the i-
 
 ```csharp
 // Input is int32, output is float64. The DSL handles the promotion automatically.
-var a = np.array(new int[] { 1, 4, 9, 16, 25 });
+var a = np.array([1, 4, 9, 16, 25]);
 var r = np.empty(new Shape(5), np.float64);
 
 using var iter = NDIterRef.MultiNew(2, new[] { a, r }, ...);

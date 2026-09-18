@@ -83,7 +83,7 @@ Meeting these conditions is what lets NumSharp make the array fast and memory-ef
 Create an array from a .NET sequence:
 
 ```csharp
-var a = np.array(new[] { 1, 2, 3, 4, 5, 6 });
+var a = np.array([1, 2, 3, 4, 5, 6]);
 a;          // [1 2 3 4 5 6]
 ```
 
@@ -152,7 +152,7 @@ a.size;    // 12     total number of elements (product of the shape)
 a.dtype;   // int32
 ```
 
-> **⚠️ Divergence — the default integer dtype.** In NumPy `np.array([1,2,3])` is **int64**; in NumSharp `np.array(new[]{1,2,3})` is **int32**, because it follows the .NET `int` type. (`np.arange` and most intrinsic integer functions *do* give int64.) Pass a dtype explicitly when it matters: `np.array(new[]{1,2,3}, np.int64)`. See [Array creation → the int32-vs-int64 gotcha](fundamentals/array-creation.md#the-int32-vs-int64-gotcha).
+> **⚠️ Divergence — the default integer dtype.** In NumPy `np.array([1,2,3])` is **int64**; in NumSharp `np.array([1,2,3])` is **int32**, because it follows the .NET `int` type. (`np.arange` and most intrinsic integer functions *do* give int64.) Pass a dtype explicitly when it matters: `np.array([1,2,3], np.int64)`. See [Array creation → the int32-vs-int64 gotcha](fundamentals/array-creation.md#the-int32-vs-int64-gotcha).
 
 `a.dtype` is a `DType` descriptor (`a.dtype.type` is the CLR `Type`, `(Type)a.dtype` the explicit cast). More in [Data types](dtypes.md).
 
@@ -188,22 +188,22 @@ More at [Array creation](fundamentals/array-creation.md).
 *Covers `np.sort`, `np.concatenate`.*
 
 ```csharp
-var arr = np.array(new[] { 2, 1, 5, 3, 7, 4, 6, 8 });
+var arr = np.array([2, 1, 5, 3, 7, 4, 6, 8]);
 np.sort(arr);   // [1 2 3 4 5 6 7 8]  (returns a sorted copy)
 ```
 
 NumSharp also has `argsort` (indirect sort), `lexsort` (stable multi-key), `searchsorted` (find in a sorted array), and `partition` (partial sort) — see [Sorting & Searching](../api/index.md).
 
-Join arrays with `np.concatenate`. In C# the arrays are passed as an **array** (`new[] { … }`), not a Python tuple:
+Join arrays with `np.concatenate`. In C# the arrays are passed as an **array** (`[ … ]`), not a Python tuple:
 
 ```csharp
-var a = np.array(new[] { 1, 2, 3, 4 });
-var b = np.array(new[] { 5, 6, 7, 8 });
-np.concatenate(new[] { a, b });   // [1 2 3 4 5 6 7 8]
+var a = np.array([1, 2, 3, 4]);
+var b = np.array([5, 6, 7, 8]);
+np.concatenate([a, b]);   // [1 2 3 4 5 6 7 8]
 
-var x = np.array(new[,] { { 1, 2 }, { 3, 4 } });
-var y = np.array(new[,] { { 5, 6 } });
-np.concatenate(new[] { x, y }, axis: 0);
+var x = np.array([[1, 2], [3, 4]]);
+var y = np.array([[5, 6]]);
+np.concatenate([x, y], axis: 0);
 // [[1 2]
 //  [3 4]
 //  [5 6]]
@@ -265,7 +265,7 @@ np.reshape(a, (1, 6));   // [[0 1 2 3 4 5]]
 `np.newaxis` inserts one length-1 axis; where you put it decides row vs column:
 
 ```csharp
-var a = np.array(new[] { 1, 2, 3, 4, 5, 6 });
+var a = np.array([1, 2, 3, 4, 5, 6]);
 a.shape;                       // (6,)
 
 a[np.newaxis].shape;           // (1, 6)   — a row vector (axis prepended)
@@ -288,7 +288,7 @@ More at [Indexing → ellipsis and newaxis](fundamentals/indexing.md#dimensional
 Index and slice much like a .NET collection, but with string slices and comma coordinates:
 
 ```csharp
-var data = np.array(new[] { 1, 2, 3 });
+var data = np.array([1, 2, 3]);
 data[1];        // 2 (0-D)
 data["0:2"];    // [1 2]
 data["1:"];     // [2 3]
@@ -336,7 +336,7 @@ More at [Indexing on NDArray](fundamentals/indexing.md).
 Slice out a section:
 
 ```csharp
-var a = np.array(new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 });
+var a = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
 a["3:8"];   // [4 5 6 7 8]   (index 3 through 7)
 ```
 
@@ -362,7 +362,7 @@ Split with `np.hsplit` — by count, or at given columns (returns an `NDArray[]`
 ```csharp
 var x = np.arange(1, 25).reshape(2, 12);
 np.hsplit(x, 3);                // 3 equal parts
-np.hsplit(x, new[] { 3, 4 });   // split after columns 3 and 4 → 3 parts
+np.hsplit(x, [3, 4]);   // split after columns 3 and 4 → 3 parts
 ```
 
 **Views vs copies.** Slicing returns a *view* — a new array object over the same data — so writing through it changes the original:
@@ -392,7 +392,7 @@ More at [Copies and views](fundamentals/copies-and-views.md).
 Arithmetic is elementwise:
 
 ```csharp
-var data = np.array(new[] { 1, 2 });
+var data = np.array([1, 2]);
 var ones = np.ones(2, np.int32);
 
 data + ones;   // [2 3]
@@ -404,7 +404,7 @@ data / data;   // [1. 1.]   (/ is true division → float64, matching NumPy)
 Aggregate with `sum` (works for any rank), as an instance method or `np.sum`:
 
 ```csharp
-var a = np.array(new[] { 1, 2, 3, 4 });
+var a = np.array([1, 2, 3, 4]);
 a.sum();        // 10
 ```
 
@@ -425,7 +425,7 @@ More at [Universal functions](fundamentals/ufuncs.md).
 You can operate between an array and a single number, or between arrays of different-but-compatible shapes. Convert miles to kilometers:
 
 ```csharp
-var data = np.array(new[] { 1.0, 2.0 });
+var data = np.array([1.0, 2.0]);
 data * 1.6;   // [1.6 3.2]
 ```
 
@@ -438,7 +438,7 @@ NumSharp *broadcasts* the scalar across every element. Dimensions are compatible
 *Covers `max`, `min`, `sum`, `mean`, `prod`, `std`, and the `axis` parameter.*
 
 ```csharp
-var data = np.array(new[] { 1, 2, 3 });
+var data = np.array([1, 2, 3]);
 data.max();    // 3
 data.min();    // 1
 data.sum();    // 6
@@ -518,7 +518,7 @@ More in the [random API](../api/index.md).
 *Covers `np.unique`.*
 
 ```csharp
-var a = np.array(new[] { 11, 11, 12, 13, 14, 15, 16, 17, 12, 13, 11, 14, 18, 19, 20 });
+var a = np.array([11, 11, 12, 13, 14, 15, 16, 17, 12, 13, 11, 14, 18, 19, 20]);
 np.unique(a);   // [11 12 13 14 15 16 17 18 19 20]
 ```
 
@@ -574,7 +574,7 @@ arr.T;   // same as transpose()
 *Covers `np.flip`.*
 
 ```csharp
-var arr = np.array(new[] { 1, 2, 3, 4, 5, 6, 7, 8 });
+var arr = np.array([1, 2, 3, 4, 5, 6, 7, 8]);
 np.flip(arr);   // [8 7 6 5 4 3 2 1]
 ```
 
@@ -635,8 +635,8 @@ There's no runtime `help()` call; the type system and IDE tooling replace it.
 Implementing array math reads like the formula. Here's mean squared error, `MSE = (1/n) · Σ (prediction − label)²`:
 
 ```csharp
-var predictions = np.array(new[] { 1.0, 1.0, 1.0 });
-var labels      = np.array(new[] { 1.0, 2.0, 3.0 });
+var predictions = np.array([1.0, 1.0, 1.0]);
+var labels      = np.array([1.0, 2.0, 3.0]);
 
 var error = np.mean(np.square(predictions - labels));   // 1.6666666666666665
 // equivalently: (1.0 / labels.size) * np.sum(np.square(predictions - labels))
@@ -653,7 +653,7 @@ var error = np.mean(np.square(predictions - labels));   // 1.6666666666666665
 The **`.npy`** binary format stores the data, shape, and dtype so an array round-trips exactly — and NumSharp's output is **byte-for-byte identical to NumPy's `np.save`**, so files interchange with Python:
 
 ```csharp
-var a = np.array(new[] { 1, 2, 3, 4, 5, 6 });
+var a = np.array([1, 2, 3, 4, 5, 6]);
 np.save("filename.npy", a);
 var b = np.load_npy("filename.npy");   // [1 2 3 4 5 6]
 ```
@@ -663,7 +663,7 @@ Use `np.savez` for several arrays in one `.npz` archive (and `np.savez_compresse
 Save to plain text (CSV/TXT) with `np.savetxt`, and read it back with `np.loadtxt`:
 
 ```csharp
-var csv = np.array(new[] { 1.0, 2, 3, 4, 5, 6, 7, 8 });
+var csv = np.array([1.0, 2, 3, 4, 5, 6, 7, 8]);
 np.savetxt("new_file.csv", csv);
 np.loadtxt("new_file.csv");   // [1. 2. 3. 4. 5. 6. 7. 8.]
 ```
@@ -698,7 +698,7 @@ np.savetxt("np.csv", a, fmt: "%.2f", delimiter: ",", header: "1,2,3,4");
 NumSharp has **no built-in plotting** (NumPy relies on Matplotlib, a separate library, too). To visualize an `NDArray`, hand its values to a .NET charting library — **ScottPlot**, **OxyPlot**, or **Plotly.NET** all take `double[]` / `double[,]`, which you get from `arr.ToArray<double>()` or `arr.Unsafe.Span<double>()`:
 
 ```csharp
-var y = np.array(new[] { 2.0, 1, 5, 7, 4, 6, 8, 14, 10, 9, 18, 20, 22 });
+var y = np.array([2.0, 1, 5, 7, 4, 6, 8, 14, 10, 9, 18, 20, 22]);
 double[] values = y.ToArray<double>();
 // hand `values` to ScottPlot / OxyPlot / Plotly.NET
 ```

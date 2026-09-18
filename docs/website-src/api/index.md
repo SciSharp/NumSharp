@@ -26,7 +26,7 @@ The essential types for working with NumSharp.
 using NumSharp;
 
 // Create arrays
-var a = np.array(new[] { 1, 2, 3, 4, 5 });
+var a = np.array([1, 2, 3, 4, 5]);
 var b = np.zeros((3, 4));
 var c = np.arange(10);
 
@@ -224,7 +224,7 @@ a["..., -1"]     // Ellipsis fills dimensions
 ### Boolean Masking
 
 ```csharp
-var a = np.array(new[] { 1, 2, 3, 4, 5 });
+var a = np.array([1, 2, 3, 4, 5]);
 var mask = a > 2;        // [false, false, true, true, true]
 var filtered = a[mask];  // [3, 4, 5]
 ```

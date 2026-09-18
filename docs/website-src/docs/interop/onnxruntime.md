@@ -41,7 +41,7 @@ using var session = new InferenceSession("resnet50-v2-7.onnx");
 
 // preprocessing as array ops: (H,W,3) uint8 -> (1,3,224,224) float32, normalized
 NDArray rgb   = np.frombuffer(pixels, NPTypeCode.Byte).reshape(224, 224, 3);
-NDArray chw   = np.transpose(rgb, new[] { 2, 0, 1 }).astype(NPTypeCode.Single) / 255f;
+NDArray chw   = np.transpose(rgb, [2, 0, 1]).astype(NPTypeCode.Single) / 255f;
 NDArray input = ((chw - mean.reshape(3, 1, 1)) / std.reshape(3, 1, 1)).reshape(1, 3, 224, 224);
 
 using NDArray logits = session.Run(input);           // zero-copy in (C-contiguous f32), owning NDArray out

@@ -22,8 +22,8 @@ NumSharp implements the ufunc *model* — elementwise semantics, broadcasting, N
 The simplest ufunc is addition:
 
 ```csharp
-np.array(new[] { 0, 2, 3, 4 }) + np.array(new[] { 1, 1, -1, 2 });   // [1 3 2 6]
-np.add(np.array(new[] { 0, 2, 3, 4 }), np.array(new[] { 1, 1, -1, 2 }));  // same
+np.array([0, 2, 3, 4]) + np.array([1, 1, -1, 2]);   // [1 3 2 6]
+np.add(np.array([0, 2, 3, 4]), np.array([1, 1, -1, 2]));  // same
 ```
 
 Every arithmetic (`+ - * / %`, unary `-`), comparison (`== != < > <= >=`), and logical (`& | !`) operator is a ufunc, and each has a named function form:
@@ -43,7 +43,7 @@ Ufuncs apply [broadcasting](../broadcasting.md) so inputs of different shapes st
 
 ```csharp
 var a = np.ones((3, 4));
-var b = np.array(new[] { 1, 2, 3, 4 });   // (4,)
+var b = np.array([1, 2, 3, 4]);   // (4,)
 a + b;                                     // (3, 4) — b broadcast across rows
 ```
 
@@ -56,17 +56,17 @@ See [Broadcasting](../broadcasting.md) for the full shape rules.
 When a ufunc's inputs have different dtypes, NumSharp picks a result dtype with NumPy 2.x's promotion rules (NEP 50): the inputs are cast to a common type, the loop runs there, and the result carries that dtype.
 
 ```csharp
-var i = np.array(new[] { 1, 2, 3 });       // int32
-var f = np.array(new[] { 1.5, 2.5, 3.5 }); // float64
+var i = np.array([1, 2, 3]);       // int32
+var f = np.array([1.5, 2.5, 3.5]); // float64
 (i + f).dtype;                             // float64  — int32 promoted
 ```
 
 A key NEP 50 subtlety: **weak scalars** (C# primitive literals) adopt the array's dtype rather than upcasting it, while **strong** operands (arrays, 0-d `NDArray`) promote normally:
 
 ```csharp
-var x = np.array(new[] { 1, 2, 3 }, np.int8);
+var x = np.array([1, 2, 3], np.int8);
 (x + 1).dtype;                             // int8  — weak scalar 1 does not upcast
-(x + np.array(new[] { 1 })).dtype;         // int32 — the int32 array (strong) forces promotion
+(x + np.array([1])).dtype;         // int32 — the int32 array (strong) forces promotion
 ```
 
 Full promotion rules and the 15×15 table are in [Data types → Type promotion](../dtypes.md#type-promotion) and [NumPy Compliance](../compliance.md).
@@ -78,7 +78,7 @@ Full promotion rules and the 15×15 table are in [Data types → Type promotion]
 The elementwise ufuncs take NumPy's three keyword-style options, exposed as one overload shaped like NumPy's signature — `f(x[, x2], NDArray out = null, NDArray where = null, DType dtype = null)`:
 
 ```csharp
-var a = np.array(new[] { 1.0, 2.0, 3.0, 4.0 });
+var a = np.array([1.0, 2.0, 3.0, 4.0]);
 var dst = np.zeros(4);
 
 np.sqrt(a, @out: dst);                          // write into dst, return it
@@ -114,7 +114,7 @@ np.max(x, axis: 0, keepdims: true); // shape (1, 3)
 For **`sum`/`prod`/`cumsum`/`cumprod`** with no explicit `dtype`, an integer or boolean input **smaller than the default integer** is upcast to int64 — **uint64 for unsigned inputs** — to avoid overflow, matching NumPy:
 
 ```csharp
-var x = np.array(new[] { 1, 2, 3 }, np.int32);
+var x = np.array([1, 2, 3], np.int32);
 np.sum(x).dtype;        // int64  — accumulating reductions widen (uint64 for unsigned)
 np.mean(x).dtype;       // float64
 np.max(x).dtype;        // int32  — min/max/amax preserve the input dtype
@@ -191,7 +191,7 @@ That's the reduce upcast rule (NEP 50) — accumulating reductions widen small i
 With `where`, the `false` positions keep whatever `out` held before — initialize `out` (e.g. from a copy) so masked-off slots are meaningful.
 
 ### "A weak scalar didn't upcast my array"
-By design (NEP 50): `int8_array + 1` stays int8. Use a strong operand (`+ np.array(new[]{1})`) or an explicit dtype to promote.
+By design (NEP 50): `int8_array + 1` stays int8. Use a strong operand (`+ np.array([1])`) or an explicit dtype to promote.
 
 ---
 

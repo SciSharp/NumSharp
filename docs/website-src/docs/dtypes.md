@@ -236,7 +236,7 @@ Two types in NumSharp have no NumPy equivalent. They exist for .NET-idiomatic us
 .NET's `System.Decimal` is a 16-byte fixed-point number with 28-29 significant digits. It's the right type for **money and financial computation** where binary floating-point's representation errors are unacceptable (`0.1 + 0.2 != 0.3` is a non-starter for an accounting ledger).
 
 ```csharp
-var prices = np.array(new[] { 19.99m, 29.99m, 5.00m });
+var prices = np.array([19.99m, 29.99m, 5.00m]);
 prices.typecode;                // NPTypeCode.Decimal
 InfoOf<decimal>.Size;           // 16 (actual memory footprint)
 var total = np.sum(prices);     // exact decimal sum, no float drift
@@ -264,7 +264,7 @@ var total = np.sum(prices);     // exact decimal sum, no float drift
 `System.Char` is a 2-byte Unicode UTF-16 code unit. NumSharp preserves it as a dtype mostly for arrays of characters where the type system benefits from knowing "these are characters, not shorts."
 
 ```csharp
-var letters = np.array(new[] { 'a', 'b', 'c' });
+var letters = np.array(['a', 'b', 'c']);
 letters.typecode;               // NPTypeCode.Char
 InfoOf<char>.Size;              // 2 (actual memory footprint)
 ```
@@ -350,19 +350,21 @@ var e = np.empty(new Shape(100), np.complex128);       // uninitialized complex
 `np.array(T[])` infers the dtype from the .NET array type:
 
 ```csharp
-np.array(new[] { 1, 2, 3 });                    // dtype=int32 (from int[])
-np.array(new[] { 1.0, 2.0 });                   // dtype=float64 (from double[])
-np.array(new[] { (Half)1, (Half)2 });           // dtype=float16
-np.array(new[] { new Complex(1,2), new Complex(3,4) });  // dtype=complex128
-np.array(new sbyte[] { -1, 0, 1 });             // dtype=int8
+np.array([1, 2, 3]);                    // dtype=int32   (int literals)
+np.array([1.0, 2.0]);                   // dtype=float64 (double literals)
+np.array([(Half)1, (Half)2]);           // dtype=float16
+np.array([new Complex(1,2), new Complex(3,4)]);  // dtype=complex128
+np.array(new sbyte[] { -1, 0, 1 });     // dtype=int8    (explicit — see note)
 ```
+
+> **Narrow integer types need the explicit `new T[]` form.** A collection-expression literal `[…]` infers its element type from the values, and `sbyte`/`byte`/`short`/`ushort` have **no C# literal suffix**, so `[-1, 0, 1]` is `int` (→ int32), not `sbyte`. Use `new sbyte[] { -1, 0, 1 }` (or cast every element) when you need one of those. Types **with** a suffix are fine inline — `[1L, 2L, 3L]` → int64, `[1u, 2u, 3u]` → uint32, `[1f, 2f]` → float32, `[1m, 2m]` → decimal.
 
 ### Converting between dtypes
 
 Use `.astype()` for array-level conversions:
 
 ```csharp
-var doubles = np.array(new[] { 1.5, 2.7, 3.9 });
+var doubles = np.array([1.5, 2.7, 3.9]);
 var ints    = doubles.astype(NPTypeCode.Int32);      // [1, 2, 3] (truncated)
 var halfs   = doubles.astype(NPTypeCode.Half);       // [1.5, 2.7, 3.9] (float16)
 var cplxs   = doubles.astype(NPTypeCode.Complex);    // [1.5+0j, 2.7+0j, 3.9+0j]
@@ -381,10 +383,10 @@ NDArray s3 = new Complex(1, 2); // 0-d complex128 scalar
 Explicit casts back to .NET scalars require a 0-dimensional array (`ndim == 0`):
 
 ```csharp
-var scalar = np.array(new[] { 42 })[0];  // 0-d view
+var scalar = np.array([42])[0];  // 0-d view
 int x = (int)scalar;                     // works
 
-var oneD = np.array(new[] { 42 });
+var oneD = np.array([42]);
 int y = (int)oneD;   // throws IncorrectShapeException (ndim == 1)
 ```
 
@@ -434,8 +436,8 @@ np.finfo(np.float64).max;              // double.MaxValue
 When you combine two dtypes (e.g., `int32 + float32`), NumSharp picks a result dtype following NumPy 2.x rules (NEP 50). The result type is the smallest type that can hold both inputs' values:
 
 ```csharp
-var a = np.array(new int[] { 1, 2, 3 });
-var b = np.array(new[] { 1.5, 2.5, 3.5 });
+var a = np.array([1, 2, 3]);
+var b = np.array([1.5, 2.5, 3.5]);
 var c = a + b;
 c.dtype;  // Double — int32 + float64 promotes to float64
 ```
@@ -540,7 +542,7 @@ var sameType = np.ones_like(template);
 
 ```csharp
 // Force: silently wraps/truncates — fastest
-var forced = np.array(new[] { 300.0 }).astype(NPTypeCode.Byte);
+var forced = np.array([300.0]).astype(NPTypeCode.Byte);
 // forced[0] == 44 (300 wrapped modulo 256)
 
 // Safe: raise on overflow (if NumSharp had this; currently matches NumPy's behavior

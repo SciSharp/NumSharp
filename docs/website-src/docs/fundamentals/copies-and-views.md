@@ -22,7 +22,7 @@ A **view** reuses the original data buffer and only changes metadata — a diffe
 ```csharp
 var x = np.arange(10);              // [0 1 2 3 4 5 6 7 8 9]
 var y = x["1:3"];                   // a view
-x["1:3"] = np.array(new[] { 10, 11 });
+x["1:3"] = np.array([10, 11]);
 // x → [0 10 11 3 4 5 6 7 8 9]
 // y → [10 11]   ← the view sees the change
 ```
@@ -54,7 +54,7 @@ var x = np.arange(10);
 var v = x["1:3"];                   // basic → view      (v.@base is x's storage)
 
 var m = np.arange(9).reshape(3, 3);
-var c = m[np.array(new[] { 1, 2 })]; // advanced → copy   (c.@base is null)
+var c = m[np.array([1, 2])]; // advanced → copy   (c.@base is null)
 ```
 
 > **The assignment asymmetry.** *Reading* `x[mask]` or `x[idx]` returns a copy — writing into that copy does nothing to `x`. But *assigning* `x[mask] = v` / `x[idx] = v` scatters back into `x` through the setter. So `var picked = x[mask]; picked[0] = 9;` leaves `x` unchanged, while `x[mask] = 9` changes it. This matches NumPy exactly. See [Indexing → Views vs copies](indexing.md#views-vs-copies-at-a-glance).
@@ -88,7 +88,7 @@ x.reshape(-1);      // view where possible
 A broadcast view has a **stride of 0** on the stretched axis — one stored element is read for many logical positions. Writing to it would corrupt every position that aliases that element, so NumSharp makes broadcast views **non-writeable**:
 
 ```csharp
-var small = np.array(new[] { 1, 2, 3 });
+var small = np.array([1, 2, 3]);
 var big = np.broadcast_to(small, (1000000, 3));   // read-only view, ~3 elements of memory
 big.Shape.IsBroadcasted;    // true
 big.Shape.IsWriteable;      // false
@@ -107,7 +107,7 @@ NumSharp mirrors NumPy's `ndarray.base` and adds explicit checks:
 ```csharp
 var x = np.arange(9);
 var v = x.reshape(3, 3);            // view
-var c = x[np.array(new[] { 0, 2 })]; // copy
+var c = x[np.array([0, 2])]; // copy
 
 (v.@base is not null);              // true   ← the simple boolean check (pattern match)
 (c.@base is not null);              // false
@@ -140,7 +140,7 @@ The `Shape` flags expose the layout that decides all of this: `IsContiguous`, `I
 Writing through a view mutates shared memory. But C#'s **compound-assignment operators are not in-place** — the compiler expands `x += 1` into `x = x + 1`, allocating a new array and rebinding the variable. Other references keep seeing the old data:
 
 ```csharp
-var x = np.array(new[] { 1, 2, 3 });
+var x = np.array([1, 2, 3]);
 var alias = x;
 x += 10;                 // x → NEW array [11, 12, 13]
 // alias is still [1, 2, 3]   ← differs from NumPy, where += is in-place!

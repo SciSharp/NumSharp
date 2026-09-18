@@ -26,7 +26,7 @@
     <div class="ns-code-grid">
       <pre><code class="lang-bash">dotnet add package NumSharp</code></pre>
       <pre><code class="lang-csharp">using NumSharp;
-var a = np.array(new[] { 1, 2, 3, 4, 5 });
+var a = np.array([1, 2, 3, 4, 5]);
 var b = np.arange(5);
 Console.WriteLine(a + b);  // [1 3 5 7 9]</code></pre>
     </div>
