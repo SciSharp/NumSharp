@@ -159,6 +159,36 @@ namespace NumSharp.Tests.Fuzz
             byte[] expected, byte[] actual, NPTypeCode tc, IReadOnlyList<BitDiff.Diff> diffs,
             byte[] truth = null)
         {
+            // The ndarray.* / emath.* namespaced tiers delegate to the SAME kernels as their np.*
+            // twins (a.std() -> the var/std engine, emath.sqrt -> np.sqrt over the promoted
+            // operand), so every excuse branch below must apply to the namespaced spelling too —
+            // strip the prefix once and classify the bare op (the ma.* tier's convention,
+            // FuzzCorpusTests.Ma). A shallow copy keeps the caller's Case untouched.
+            foreach (string ns in new[] { "ndarray.", "emath." })
+            {
+                if (!c.Op.StartsWith(ns, StringComparison.Ordinal))
+                    continue;
+                var stripped = new FuzzCorpus.Case
+                {
+                    Id = c.Id, Op = c.Op.Substring(ns.Length), Params = c.Params,
+                    Operands = c.Operands, Expected = c.Expected, Layout = c.Layout,
+                    Valueclass = c.Valueclass, Alias = c.Alias, Expects_Throw = c.Expects_Throw,
+                    Error = c.Error,
+                };
+                return Classify(stripped, kind, expected, actual, tc, diffs, truth);
+            }
+
+            // argsort TIE order: NumPy's default kind='quicksort' (introsort) is NOT stable, so
+            // where two elements compare equal (the value pools carry both +0.0 and -0.0, which
+            // are IEEE-equal) the tie order is a NumPy implementation artifact, while NumSharp's
+            // radix argsort is STABLE. Excused ONLY when the two index vectors are provably
+            // equivalent sorts of the same 1-D operand — element-for-element the indexed values
+            // compare IEEE-equal — so a genuinely wrong ordering still fails. The main sort tier
+            // generates distinct values on purpose and never reaches this branch.
+            if (kind == DivergenceKind.Value && c.Op == "argsort" && expected != null && actual != null
+                && c.Operands.Length == 1 && c.Operands[0].Shape.Length == 1
+                && ArgsortPermutationsEquivalent(c.Operands[0], expected, actual))
+                return "argsort tie order under NumPy's unstable default introsort (equivalent permutation verified; NumSharp's radix argsort is stable)";
             // (1) NEP50 weak-scalar promotion. Any multi-operand op with a 0-D operand: NumSharp
             //     promotes it weakly (the array operand's dtype drives the result), where NumPy makes
             //     0-D arrays full participants. Covers binary pp_scalar_* and np.where wh_bcast_xy.
@@ -937,9 +967,15 @@ namespace NumSharp.Tests.Fuzz
             // happened to record. Excused ONLY when EVERY diff is a pure ±0 sign flip (both values
             // exactly zero) — a wrong NON-zero result, or a NaN-bit flip, is NOT a signed zero and
             // falls through to fail. Same class as the documented float32-sum NaN-bit order excuse.
-            if (kind == DivergenceKind.Value && c.Op == "out_binary"
-                && c.Params != null && c.Params.TryGetValue("ufunc", out var mmUf)
-                && mmUf.GetString() is "maximum" or "minimum" or "fmax" or "fmin"
+            // out_clip joins the same class: clip IS maximum(minimum(x, hi), lo), so the sign of a
+            // ±0 result (input -0.0 against a +0.0 bound) inherits the identical non-contractual
+            // lane-dependence — NumPy's clip kernel keeps the input's zero where NumSharp's
+            // composition keeps the bound's; both are IEEE-equal zeros.
+            if (kind == DivergenceKind.Value
+                && (c.Op == "out_clip"
+                    || (c.Op == "out_binary"
+                        && c.Params != null && c.Params.TryGetValue("ufunc", out var mmUf)
+                        && mmUf.GetString() is "maximum" or "minimum" or "fmax" or "fmin"))
                 && diffs.Count > 0 && diffs.All(d => BitDiff.IsSignedZeroFlip(expected, actual, d.Index, tc)))
                 return "min/max family signed-zero: the sign of a ±0 result is non-contractual "
                      + "(NumPy varies it by SIMD lane) — every diff is a pure +0/-0 flip [non-contractual]";
@@ -1122,5 +1158,77 @@ namespace NumSharp.Tests.Fuzz
                 || !double.IsFinite(BitConverter.ToDouble(act, o))
                 || !double.IsFinite(BitConverter.ToDouble(act, o + 8));
         }
+
+        /// <summary>
+        ///     Prove two int64 argsort index vectors are EQUIVALENT sorts of the same 1-D operand:
+        ///     both must be permutations of [0, n) and, position for position, must select values
+        ///     that compare IEEE-equal (so a +0.0/-0.0 or duplicate-value tie may resolve either
+        ///     way, but a genuinely different ORDERING of distinct values still fails). This is
+        ///     the self-limiting guard behind the argsort tie-order excuse — it re-derives the
+        ///     claim from the operand bytes instead of trusting the branch condition.
+        /// </summary>
+        /// <param name="operand">The case's single 1-D operand descriptor (buffer + view layout).</param>
+        /// <param name="expected">NumPy's index vector, raw int64 little-endian bytes.</param>
+        /// <param name="actual">NumSharp's index vector, raw int64 little-endian bytes.</param>
+        /// <returns>True when both are in-range permutations selecting pairwise-equal values.</returns>
+        private static bool ArgsortPermutationsEquivalent(FuzzCorpus.Operand operand, byte[] expected, byte[] actual)
+        {
+            if (expected.Length != actual.Length || expected.Length % 8 != 0)
+                return false;
+            int n = expected.Length / 8;
+
+            var view = FuzzCorpus.Reconstruct(operand);
+            try
+            {
+                if (view.size != n)
+                    return false;
+                var seenExp = new bool[n];
+                var seenAct = new bool[n];
+                for (int i = 0; i < n; i++)
+                {
+                    long ei = BitConverter.ToInt64(expected, i * 8);
+                    long ai = BitConverter.ToInt64(actual, i * 8);
+                    // Out-of-range or repeated indices mean it is NOT a permutation — never excuse.
+                    if (ei < 0 || ei >= n || ai < 0 || ai >= n || seenExp[ei] || seenAct[ai])
+                        return false;
+                    seenExp[ei] = seenAct[ai] = true;
+                    // The same index on both sides is the same slot — trivially equivalent, and
+                    // it MUST short-circuit: an agreed NaN position would otherwise fail the IEEE
+                    // equality below (NaN != NaN) and veto the whole excuse.
+                    if (ei == ai)
+                        continue;
+                    // IEEE == (not bitwise): -0.0 == +0.0 is exactly the tie being excused; a NaN
+                    // never equals anything, so a NaN placed DIFFERENTLY is NOT excused here.
+                    if (!TieEqual(view.GetAtIndex(ei), view.GetAtIndex(ai)))
+                        return false;
+                }
+                return true;
+            }
+            finally
+            {
+                view.Dispose();
+            }
+        }
+
+        /// <summary>
+        ///     IEEE-equality over the boxed elements <see cref="NDArray.GetAtIndex(long)"/> hands
+        ///     out, per dtype family: Half widens exactly to double, Complex compares both lanes,
+        ///     every IConvertible lane (bool/ints/floats) compares as double — so a signed-zero or
+        ///     duplicate-value tie reads equal while NaN (never equal to anything) and any distinct
+        ///     values read unequal.
+        /// </summary>
+        /// <param name="a">First boxed element.</param>
+        /// <param name="b">Second boxed element.</param>
+        /// <returns>True when the two elements compare IEEE-equal.</returns>
+        private static bool TieEqual(object a, object b) => (a, b) switch
+        {
+            (Half ha, Half hb) => (double)ha == (double)hb,
+            (System.Numerics.Complex ca, System.Numerics.Complex cb) =>
+                ca.Real == cb.Real && ca.Imaginary == cb.Imaginary,
+            (IConvertible ia, IConvertible ib) =>
+                ia.ToDouble(System.Globalization.CultureInfo.InvariantCulture)
+                == ib.ToDouble(System.Globalization.CultureInfo.InvariantCulture),
+            _ => false,
+        };
     }
 }

@@ -473,10 +473,33 @@ namespace NumSharp.Tests.Fuzz
         public void Windows() => RunHostLibmCorpus("windows.jsonl");
 
         // W12 parameter sweep: middle + negative axes (-1/-2/-3) for all reductions, ddof=1
-        // sample std/var, and order='F' ravel across C/transposed/F-contiguous sources.
+        // sample std/var, order='F' ravel across C/transposed/F-contiguous sources, and the §C1
+        // multi-axis (tuple-axis) cells for the reductions with an int[] overload
+        // (median/average/nanmedian).
         [TestMethod]
         [TestCategory("FuzzMatrix")]
         public void Params() => RunCorpus("params.jsonl");
+
+        // ndarray.* INSTANCE surface (coverage plan §D / row G0): the dual-form methods through
+        // their instance defaults (a.max(axis), a.reshape(-1), a.round(n), a.astype/view/byteswap/
+        // getfield), the instance-only members (item/tobytes/__len__/property reads), nonzero's
+        // tuple, and the IN-PLACE mutators (sort/partition/fill/put/resize) compared as
+        // [post-call view, post-call whole base buffer] — NumPy's post-call operand is the oracle.
+        // Portable: the covered methods are arithmetic/manipulation (no libm), so the tier is
+        // strict on every host exactly like Reduce/Manip.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Instance() => RunCorpus("instance.jsonl");
+
+        // np.emath scimath module (plan §A2/E5): the real->complex promotion DECISION (any(x<0),
+        // |x|>1) and the promoted complex values, over the dtype lanes whose NumPy promotion lands
+        // on complex128/float64 (int8/16/uint16/float32/float16 promote to complex64 — NumSharp
+        // has no complex64 (#569), so those lanes stay on the np.emath.Test.cs sibling suite).
+        // HOST-PINNED like Unary: the complex sqrt/log/arc family and float64 log/arccos are
+        // win-amd64 CRT-libm cells.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Emath() => RunHostLibmCorpus("emath.jsonl");
 
         // W11 operand-relationship flags (section C): input aliasing (a op a, same buffer) and
         // in-place out= (maximum/minimum/clip writing into an input operand).
@@ -667,7 +690,7 @@ namespace NumSharp.Tests.Fuzz
             ["decimal_search.jsonl"] = 7,
             ["dtype_text.jsonl"] = 2094,
             ["errors.jsonl"] = 8,
-            ["errors_full.jsonl"] = 650,
+            ["errors_full.jsonl"] = 720,   // +87: curated §B1 recipes (reshape/expand_dims/flip/take/put/partition/linalg/fft), 50 distinct messages
             ["evaluate.jsonl"] = 11800,   // np.evaluate fused-tree tier (14,742 at 2026-09-08)
             ["fft.jsonl"] = 1700,
             ["groupa.jsonl"] = 237,
@@ -685,8 +708,10 @@ namespace NumSharp.Tests.Fuzz
             ["nanscan.jsonl"] = 525,   // nancumsum all 13 dtypes; nancumprod carves complex128 (host-FMA multiply)
             ["numpy_f32_kernels.jsonl"] = 140,
             ["numpy_f64_kernels.jsonl"] = 24,
-            ["out_where.jsonl"] = 4600,   // incl. the complex128 out=/where= arithmetic + comparison tier
-            ["params.jsonl"] = 966,
+            ["out_where.jsonl"] = 6200,   // +240 §B2: out_scan/out_round/out_clip/out_nanarg (out= beyond the ufuncs)
+            ["params.jsonl"] = 1190,      // +288 §C1: multi-axis median/average/nanmedian (tuple-axis int[] overloads)
+            ["instance.jsonl"] = 4400,    // §D: ndarray.* instance surface (dual-forms, item/len/props, in-place mutators)
+            ["emath.jsonl"] = 260,        // §A2/E5: np.emath scimath promotion (complex128/float64 lanes)
             ["place.jsonl"] = 12,
             ["products.jsonl"] = 326,
             ["precision.jsonl"] = 80,
@@ -694,7 +719,7 @@ namespace NumSharp.Tests.Fuzz
             ["random_parity_host.jsonl"] = 86,
             ["generator_parity.jsonl"] = 68,
             ["generator_parity_host.jsonl"] = 32,
-            ["nan.jsonl"] = 100,   // NaN-parity grid (gen_nan_oracle.py): 27 complex + 3×31 float
+            ["nan.jsonl"] = 140,   // NaN-parity grid (gen_nan_oracle.py): 27 complex + 3×31 float unary + 56 §B3 binary cross-grid
             ["random_smoke.jsonl"] = 1600,
             ["reduce.jsonl"] = 9004,
             ["rounding.jsonl"] = 1372,

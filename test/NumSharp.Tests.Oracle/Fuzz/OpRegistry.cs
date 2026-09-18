@@ -16,6 +16,14 @@ namespace NumSharp.Tests.Fuzz
     {
         public static NDArray Apply(string op, IReadOnlyDictionary<string, JsonElement> p, NDArray[] ops)
         {
+            // Namespaced surfaces route to their own dispatchers (OpRegistry.Instance.cs): the
+            // ndarray.* keys call INSTANCE methods on ops[0] (coverage plan §D — different code
+            // paths from the np.* twins), the emath.* keys the np.emath scimath module (§A2/E5).
+            if (op.StartsWith("ndarray.", StringComparison.Ordinal))
+                return ApplyInstance(op.Substring("ndarray.".Length), p, ops);
+            if (op.StartsWith("emath.", StringComparison.Ordinal))
+                return ApplyEmath(op.Substring("emath.".Length), p, ops);
+
             switch (op)
             {
                 case "astype":
@@ -210,8 +218,16 @@ namespace NumSharp.Tests.Fuzz
                 case "ravel_f": return np.ravel(ops[0], 'F');
 
                 // Statistics (T12).
-                case "median": return np.median(ops[0], ParseAxis(p), keepdims: ParseKeepdims(p));
-                case "average": return np.average(ops[0], ParseAxis(p), null, ParseKeepdims(p));
+                // median/average/nanmedian carry a scalar "axis" OR — the multi-axis §C1 cells —
+                // an "axes" int[] that binds NumSharp's tuple-axis (int[]) overloads.
+                case "median":
+                    return p.ContainsKey("axes")
+                        ? np.median(ops[0], ParseIntArray(p["axes"]), keepdims: ParseKeepdims(p))
+                        : np.median(ops[0], ParseAxis(p), keepdims: ParseKeepdims(p));
+                case "average":
+                    return p.ContainsKey("axes")
+                        ? np.average(ops[0], ParseIntArray(p["axes"]), null, ParseKeepdims(p))
+                        : np.average(ops[0], ParseAxis(p), null, ParseKeepdims(p));
                 case "ptp": return np.ptp(ops[0], ParseAxis(p), null, ParseKeepdims(p));
                 case "count_nonzero": return np.count_nonzero(ops[0], ParseAxis(p).Value, ParseKeepdims(p));
                 case "percentile": return np.percentile(ops[0], p["q"].GetDouble(), ParseAxis(p),
@@ -795,6 +811,11 @@ namespace NumSharp.Tests.Fuzz
                 case "nansum": case "nanprod": case "nanmax": case "nanmin": case "nanmean":
                 case "nanstd": case "nanvar": case "nanmedian":
                 case "nanargmax": case "nanargmin":
+                    // The §C1 multi-axis cells ("axes" int[]) exist only for the reductions with a
+                    // tuple-axis overload — today nanmedian (median/average are handled above);
+                    // the rest of the family has no int[] overload and never receives "axes".
+                    if (op == "nanmedian" && p.ContainsKey("axes"))
+                        return np.nanmedian(ops[0], ParseIntArray(p["axes"]), keepdims: ParseKeepdims(p));
                     return ApplyReduce(op, ParseAxis(p), ParseKeepdims(p), ops[0]);
 
                 // np.random byte-parity (random_parity tiers): seed -> draw -> compare the raw

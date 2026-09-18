@@ -2297,6 +2297,34 @@ def gen_params(dtypes):
                                            "buffer": np.ascontiguousarray(r).tobytes().hex()},
                               "layout": "ddof1", "valueclass": "param"})
                 n += 1
+    # Multi-axis (tuple-axis) reductions — plan §C1. Exactly the reductions NumSharp exposes an
+    # int[]-axis overload for (median / average / nanmedian; sum/prod/min/max/mean have NO tuple-axis
+    # overload yet — a tracked feature gap, deliberately NOT generated so the gate stays honest).
+    # The params key is "axes" (int[]), the registry's array-form convention, so OpRegistry binds the
+    # int[] overload rather than mis-reading a scalar "axis".
+    multiaxis_ops = {
+        "median": lambda a, ax, kd: np.median(a, axis=ax, keepdims=kd),
+        "average": lambda a, ax, kd: np.average(a, axis=ax, keepdims=kd),
+        "nanmedian": lambda a, ax, kd: np.nanmedian(a, axis=ax, keepdims=kd),
+    }
+    for s in ["int32", "uint8", "float32", "float64"]:
+        for ln in ["c_contiguous_3d", "f_contiguous_3d", "transposed_3d"]:
+            base, view = LAYOUTS[ln](np.dtype(s))
+            operand = describe(base, view)
+            for opname, f in multiaxis_ops.items():
+                for axes in ([0, 1], [-2, -1], [0, 2], [0, 1, 2]):
+                    for kd in (False, True):
+                        try:
+                            r = np.asarray(f(view, tuple(axes), kd))
+                        except Exception:
+                            skipped += 1
+                            continue
+                        cases.append({"id": f"{opname}/multiaxis/{ln}/{s}/axes={axes}/kd={int(kd)}/{n}",
+                                      "op": opname, "params": {"axes": axes, "keepdims": kd},
+                                      "operands": [operand],
+                                      "expected": _arr_expected(r),
+                                      "layout": ln, "valueclass": "param"})
+                        n += 1
     # order='F' ravel across C-contig, transposed, and F-contig sources.
     for s in dtypes:
         for ln in ["c_contiguous_2d", "transposed_2d", "f_contiguous_2d", "c_contiguous_3d"]:
@@ -6058,6 +6086,92 @@ def gen_out_where():
                     for wk in wheres:
                         emit("out_unary", ufunc, f, (x,), shape, out_kind, wk, s)
 
+    # ---- out= beyond the elementwise ufuncs (coverage plan §B2) -------------------------
+    # NumSharp exposes out= on cumsum/cumprod, round_, clip and nanargmax/nanargmin (the np.sum
+    # reduction family has NO out= overload yet — a tracked feature gap, deliberately absent so
+    # the tier gates only implemented surface). Same two-slot contract as out_binary/out_unary:
+    # slot 0 the returned view, slot 1 the ENTIRE base buffer behind `out`, with the out
+    # operand's PRIOR contents recorded — so an out-kernel writing outside a strided/offset
+    # window is caught, exactly as for the ufuncs. `where=` is not offered by any of these.
+    def emit_extra(opname, params, inputs, probe, out_kind, tag, run):
+        """Record one non-ufunc out= case. `probe` fixes the out view's dtype+shape (the natural
+        result, so the out-cast axis stays out of scope); `run(out_view)` performs the call."""
+        nonlocal n
+        built = _out_view(list(probe.shape), probe.dtype, out_kind)
+        if built is None:
+            return
+        out_base, out_view = built
+        if out_view.shape != tuple(probe.shape):
+            return
+        operands = [describe(b, v) for (b, v) in inputs]
+        operands.append(describe(out_base, out_view))
+        cid = f"{opname}/{tag}/out={out_kind}/{n}"
+        try:
+            with np.errstate(all="ignore"):
+                returned = run(out_view)
+        except Exception as e:
+            cases.append(_error_case(opname, params, operands, e, f"out_{out_kind}",
+                                     kind="tuple", cid=cid))
+            n += 1
+            return
+        cases.append(_case(opname, params, operands,
+                           _tuple_expected([np.asarray(returned), out_base.ravel()]),
+                           f"out_{out_kind}", "outwhere", cid=cid))
+        n += 1
+
+    extra_kinds = ["c", "strided", "negstride", "offset", "transposed"]
+    for shape in [(6,), (4, 5)]:
+        cnt = int(np.prod(shape))
+        for s in ["int32", "float64", "complex128"]:
+            # .copy() so `a` OWNS its buffer (base is None): describe(base, view) demands the
+            # view alias the base's buffer, and a reshape of _fill would smuggle a hidden base.
+            a = _fill(cnt, np.dtype(s)).reshape(shape).copy()
+            apair = (a, a)
+            axes = [None] + list(range(len(shape)))
+            # Scans: NEP50 accumulator dtype (int32 -> int64) with axis=None flattening.
+            # complex128 cumPROD is CARVED exactly as the nanscan tier carves it: the win-amd64
+            # NumPy complex product chain is MSVC-FMA-contracted (and copies element 0 where a
+            # 1*z seed poisons both lanes through NaN), so its bytes are not portably
+            # reproducible — complex cumSUM (exact addition) stays.
+            for ax in axes:
+                scan_jobs = [("cumsum", np.cumsum)] + ([] if s == "complex128"
+                                                       else [("cumprod", np.cumprod)])
+                for ufname, f in scan_jobs:
+                    probe = f(a, axis=ax)
+                    for ok in extra_kinds:
+                        emit_extra("out_scan", {"ufunc": ufname, "axis": ax}, [apair], probe, ok,
+                                   f"{ufname}/{'x'.join(map(str, shape))}/{s}/axis={ax}",
+                                   lambda o, f=f, ax=ax: f(a, axis=ax, out=o))
+            # round_(decimals, out=) — dtype-preserving banker's rounding into a view.
+            for dec in (0, 1):
+                probe = np.round(a, dec)
+                for ok in extra_kinds:
+                    emit_extra("out_round", {"decimals": dec}, [apair], probe, ok,
+                               f"{'x'.join(map(str, shape))}/{s}/dec={dec}",
+                               lambda o, dec=dec: np.round(a, dec, out=o))
+            # clip(min, max, out=) — scalar bounds as 0-D operands (the registry's clip shape).
+            if s != "complex128":                       # NumPy clip on complex with real bounds raises
+                lo = np.array(0, dtype=a.dtype)
+                hi = np.array(2, dtype=a.dtype)
+                probe = np.clip(a, lo, hi)
+                for ok in OUT_VIEW_KINDS:
+                    emit_extra("out_clip", {}, [apair, (lo, lo), (hi, hi)], probe, ok,
+                               f"{'x'.join(map(str, shape))}/{s}",
+                               lambda o: np.clip(a, lo, hi, out=o))
+            # nanargmax/nanargmin(axis, out=) — int64 indices scattered into an out view.
+            if len(shape) == 2:
+                for ufname, f in (("nanargmax", np.nanargmax), ("nanargmin", np.nanargmin)):
+                    for ax in (0, 1):
+                        try:
+                            with np.errstate(all="ignore"):
+                                probe = np.asarray(f(a, axis=ax))
+                        except Exception:
+                            continue                     # all-NaN slice: unit-test-pinned, not here
+                        for ok in extra_kinds:
+                            emit_extra("out_nanarg", {"ufunc": ufname, "axis": ax}, [apair], probe, ok,
+                                       f"{ufname}/{'x'.join(map(str, shape))}/{s}/axis={ax}",
+                                       lambda o, f=f, ax=ax: np.asarray(f(a, axis=ax, out=o)))
+
     return cases
 
 
@@ -6183,6 +6297,85 @@ def gen_errors_full():
                                          [describe(base, view)], e, ln,
                                          cid=f"nditer_values/{ln}/empty/{order}/err/{n}"))
                 n += 1
+
+    # ---- curated raising cells beyond the elementwise/reduce matrices (coverage plan §B1) ----
+    # Each recipe re-uses a REGISTERED op name with params OpRegistry already parses, so the only
+    # new claim per case is the raising cell itself (exception type + verbatim NumPy message).
+    # Recipes are restricted to ops whose error texts NumSharp ports verbatim (reshape/expand_dims/
+    # flip/take/put/partition/linalg validation/fft n-guard) plus a few probe cells whose parity is
+    # adjudicated by the gate itself (percentile q-range, matrix_transpose ndim).
+    def curated(op, params, operand_pairs, f, tag):
+        """Run f(); if NumPy raises, record the cell with the given params/operands."""
+        nonlocal n
+        try:
+            with np.errstate(all="ignore"):
+                f()
+        except Exception as e:
+            if not keep(op, e):
+                return
+            cases.append(_error_case(op, params, [describe(b, v) for (b, v) in operand_pairs],
+                                     e, "curated", cid=f"{op}/curated/{tag}/err/{n}"))
+            n += 1
+
+    a2 = LAYOUTS["c_contiguous_2d"](np.dtype("int32"))          # (4, 5)
+    a1f = LAYOUTS["c_contiguous_1d"](np.dtype("float64"))       # (8,)
+    a1i = LAYOUTS["c_contiguous_1d"](np.dtype("int32"))         # (8,)
+
+    # G7 manipulation — reshape rejection family (verbatim `cannot reshape…` + one-unknown rule).
+    for shape in ([7], [3, 3], [-1, -2], [0, -1]):
+        curated("reshape", {"shape": shape}, [a2],
+                lambda shape=shape: np.reshape(a2[1], tuple(shape)), f"shape={shape}")
+    # expand_dims axis out of bounds, both signs (validated against OUTPUT ndim, reported as given).
+    for ax in (5, -5):
+        curated("expand_dims", {"axis": ax}, [a2],
+                lambda ax=ax: np.expand_dims(a2[1], ax), f"axis={ax}")
+    # flip: axis out of bounds (verbatim AxisError) + repeated axis (checked after the full pass).
+    curated("flip", {"axis": 5}, [a2], lambda: np.flip(a2[1], 5), "axis=5")
+    curated("flip", {"axes": [0, 0]}, [a2], lambda: np.flip(a2[1], (0, 0)), "axes=0,0")
+    # matrix_transpose demands ndim >= 2 (probe cell: NumPy wording vs NumSharp's port).
+    curated("matrix_transpose", {}, [a1i], lambda: np.matrix_transpose(a1i[1]), "1d")
+
+    # G11 selection — take/put out-of-bounds index (mode='raise', post-wrap check) and the
+    # float-index dtype rejection (same_kind for take, safe for put — each names its rule).
+    oob = np.array([0, 99], dtype=np.int64)
+    fidx = np.array([0.0, 1.0], dtype=np.float64)
+    vals = np.array([1, 2], dtype=np.int32)
+    curated("take", {"axis": 0, "mode": "raise"}, [a1i, (oob, oob)],
+            lambda: np.take(a1i[1], oob, axis=0, mode="raise"), "oob")
+    curated("take", {"axis": 0, "mode": "raise"}, [a1i, (fidx, fidx)],
+            lambda: np.take(a1i[1], fidx, axis=0, mode="raise"), "floatidx")
+    curated("put", {"mode": "raise"}, [a1i, (oob, oob), (vals, vals)],
+            lambda: np.put(a1i[1], oob, vals, mode="raise"), "oob")
+    curated("put", {"mode": "raise"}, [a1i, (fidx, fidx), (vals, vals)],
+            lambda: np.put(a1i[1], fidx, vals, mode="raise"), "floatidx")
+
+    # G12 sorting — partition kth out of bounds (verbatim `kth(=N) out of bounds (M)`).
+    curated("partition", {"kth": [99], "axis": -1}, [a1i],
+            lambda: np.partition(a1i[1], 99), "kth-oob")
+
+    # G5 statistics — percentile/quantile out-of-range q (probe cells).
+    curated("percentile", {"q": 101.0, "axis": None}, [a1f],
+            lambda: np.percentile(a1f[1], 101.0), "q101")
+    curated("quantile", {"q": 1.5, "axis": None}, [a1f],
+            lambda: np.quantile(a1f[1], 1.5), "q1.5")
+
+    # G10 linalg — the validation family raises BEFORE any factorisation, so these cells are
+    # backend-free: 1-D operand, non-square trailing dims, and the float16-unsupported TypeError.
+    m1 = np.arange(3, dtype=np.float64)
+    m23 = np.arange(6, dtype=np.float64).reshape(2, 3)
+    mh = np.eye(2, dtype=np.float16)
+    for op in ("det", "inv"):
+        curated(op, {}, [(m1, m1)], lambda op=op: getattr(np.linalg, op)(m1), "1d")
+        curated(op, {}, [(m23, m23)], lambda op=op: getattr(np.linalg, op)(m23), "nonsquare")
+        curated(op, {}, [(mh, mh)], lambda op=op: getattr(np.linalg, op)(mh), "float16")
+    curated("solve", {}, [(m23, m23), (m1, m1)], lambda: np.linalg.solve(m23, m1), "nonsquare")
+
+    # G16 FFT — the n-guard (verbatim `Invalid number of FFT data points (0) specified.`).
+    cfft = np.arange(8, dtype=np.float64)
+    curated("fft", {"n": 0, "axis": -1, "norm": None}, [(cfft, cfft)],
+            lambda: np.fft.fft(cfft, n=0), "n0")
+    curated("ifft", {"n": -3, "axis": -1, "norm": None}, [(cfft, cfft)],
+            lambda: np.fft.ifft(cfft, n=-3), "nneg")
 
     distinct = len({(c["op"], c["error"]["type"], c["error"]["text"]) for c in cases})
     dropped = sum(max(0, v - ERROR_INSTANCES_PER_MESSAGE) for v in seen.values())
@@ -8269,6 +8462,327 @@ def write_jsonl(path, cases):
     print(f"wrote {len(cases)} cases -> {path}")
 
 
+# ---- ndarray INSTANCE surface (coverage plan §D / G0) --------------------------------------
+#
+# The registry dispatched np.foo(a) ~300 times vs a.foo() ~5 — so instance-default and
+# overload divergences (a.max(axis) vs np.max, a.reshape(-1), a.round(n), in-place a.sort())
+# had NO differential coverage. Op keys carry the "ndarray." prefix (the ma.* convention), so
+# OracleSurfaceCoverageTests can discover instance coverage from the corpus, and
+# MisalignedRegistry strips the prefix so the shared excuse branches (float var/std order,
+# complex ULP envelopes) apply to the instance spelling exactly as to the np.* one.
+#
+# Result kinds: plain methods -> array; a.item()/len(a)/property scalars -> scalar; a.nonzero()
+# -> tuple; IN-PLACE mutators (sort/partition/fill/put) -> tuple of [post-call view bytes,
+# post-call WHOLE base buffer] — the out_where two-slot contract, so a mutator that writes
+# outside a strided view's window is caught, and NumPy's post-call operand IS the oracle
+# (plan §D3's operand-after comparator, expressed with the existing tuple machinery).
+
+INSTANCE_LAYOUTS = [
+    "c_contiguous_1d", "c_contiguous_2d", "c_contiguous_3d", "f_contiguous_2d",
+    "transposed_2d", "strided_step2_1d", "negstride_1d", "simple_slice_offset_1d",
+    "scalar_0d", "one_element_1d",
+]
+INSTANCE_DTYPES = ["bool", "uint8", "int32", "int64", "float16", "float32", "float64", "complex128"]
+
+
+def gen_instance():
+    cases = []
+    n = 0
+    skipped = 0
+
+    def emit(op, params, operand_pairs, layout, dtname, tag, run, kind=None):
+        """Record one instance case: run() returns the numpy result (an ndarray for kind=array,
+        a python scalar for kind=scalar, a prebuilt expected dict for kind=tuple), or raises —
+        raising cells become error-parity rows exactly like the errors_full tier."""
+        nonlocal n, skipped
+        operands = [describe(b, v) for (b, v) in operand_pairs]
+        cid = f"{op}/{layout}/{dtname}/{tag}/{n}"
+        try:
+            with np.errstate(all="ignore"):
+                r = run()
+        except Exception as e:
+            cases.append(_error_case(op, params, operands, e, layout, cid=cid, kind=kind))
+            n += 1
+            return
+        if kind == "tuple":
+            expected = r                      # prebuilt by the caller (_tuple_expected)
+        elif kind == "scalar":
+            expected = _arr_expected(np.asarray(r), kind="scalar")
+        else:
+            expected = _arr_expected(r)
+        cases.append(_case(op, params, operands, expected, layout, "instance", cid=cid))
+        n += 1
+
+    # ---- dual-form value methods (plan §D1) + property reads (§D4) ----
+    for ln in INSTANCE_LAYOUTS:
+        for s in INSTANCE_DTYPES:
+            dt = np.dtype(s)
+            base, view = LAYOUTS[ln](dt)
+            pair = [(base, view)]
+
+            # reductions through the INSTANCE defaults (a.max(axis=…) etc.)
+            for opname in ("all", "any", "max", "min", "mean", "sum", "prod", "std", "var"):
+                for ax in (None, 0):
+                    if ax is not None and view.ndim == 0:
+                        continue
+                    emit(f"ndarray.{opname}", {"axis": ax}, pair, ln, s, f"axis={ax}",
+                         lambda v=view, o=opname, ax=ax: np.asarray(getattr(v, o)(axis=ax)))
+            for opname in ("argmax", "argmin", "argsort"):
+                if view.ndim == 0:
+                    continue                          # instance argmax/argmin need an axis in NumSharp
+                for ax in (0, -1):
+                    emit(f"ndarray.{opname}", {"axis": ax}, pair, ln, s, f"axis={ax}",
+                         lambda v=view, o=opname, ax=ax: np.asarray(getattr(v, o)(axis=ax)))
+            # ndarray.partition/argpartition are deliberately ABSENT: the arrangement BETWEEN kth
+            # anchors is introselect-implementation-specific on BOTH sides (whole-output bytes are
+            # not contractual — the sort tier pins the DERIVED kth-values instead), and the
+            # instance spelling delegates to the same introselect np.partition already gates.
+
+            # conversions / copies / reshapes
+            for target in ("float64", "int32"):
+                if s == "complex128" and target == "int32":
+                    continue                          # complex->int discards imag (warning path)
+                emit("ndarray.astype", {"dtype": target}, pair, ln, s, f"to={target}",
+                     lambda v=view, t=target: v.astype(t))
+            emit("ndarray.copy", {}, pair, ln, s, "c", lambda v=view: v.copy())
+            emit("ndarray.ravel", {}, pair, ln, s, "c", lambda v=view: v.ravel())
+            for order in ("C", "F"):
+                emit("ndarray.flatten", {"order": order}, pair, ln, s, f"order={order}",
+                     lambda v=view, o=order: v.flatten(order=o))
+            emit("ndarray.reshape", {"shape": [-1]}, pair, ln, s, "flat",
+                 lambda v=view: v.reshape(-1))
+            if view.size >= 2 and view.size % 2 == 0:
+                emit("ndarray.reshape", {"shape": [2, -1]}, pair, ln, s, "2xhalf",
+                     lambda v=view: v.reshape(2, -1))
+            emit("ndarray.squeeze", {}, pair, ln, s, "all", lambda v=view: v.squeeze())
+            emit("ndarray.transpose", {}, pair, ln, s, "rev", lambda v=view: v.transpose())
+            if view.ndim >= 2:
+                emit("ndarray.swapaxes", {"a1": 0, "a2": 1}, pair, ln, s, "01",
+                     lambda v=view: v.swapaxes(0, 1))
+                perm = list(range(view.ndim))[::-1]
+                emit("ndarray.transpose", {"axes": perm}, pair, ln, s, "perm",
+                     lambda v=view, p=perm: v.transpose(p))
+                for off in (0, 1):
+                    emit("ndarray.diagonal", {"offset": off}, pair, ln, s, f"off={off}",
+                         lambda v=view, o=off: np.asarray(v.diagonal(offset=o)))
+                    emit("ndarray.trace", {"offset": off}, pair, ln, s, f"off={off}",
+                         lambda v=view, o=off: np.asarray(v.trace(offset=o)))
+
+            # elementwise / scan / selection instance forms
+            emit("ndarray.conj", {}, pair, ln, s, "c", lambda v=view: v.conj())
+            for ax in (None, 0):
+                if ax is not None and view.ndim == 0:
+                    continue
+                emit("ndarray.cumsum", {"axis": ax}, pair, ln, s, f"axis={ax}",
+                     lambda v=view, ax=ax: v.cumsum(axis=ax))
+                emit("ndarray.cumprod", {"axis": ax}, pair, ln, s, f"axis={ax}",
+                     lambda v=view, ax=ax: v.cumprod(axis=ax))
+            if s not in ("complex128",):
+                emit("ndarray.clip", {"lo": 0, "hi": 2}, pair, ln, s, "0..2",
+                     lambda v=view: v.clip(0, 2))
+            dec_ok = s not in ("bool",)               # bool round raises at any decimals in NumPy? dec=0 ok
+            if dec_ok:
+                for dec in (0, 1):
+                    emit("ndarray.round", {"decimals": dec}, pair, ln, s, f"dec={dec}",
+                         lambda v=view, d=dec: v.round(d))
+            emit("ndarray.repeat", {"repeats": 2}, pair, ln, s, "r2",
+                 lambda v=view: v.repeat(2))
+            if view.ndim >= 1 and view.size > 0:
+                cond = np.tile(np.array([True, False, True], dtype=bool),
+                               (view.shape[0] + 2) // 3)[:view.shape[0]].copy()
+                emit("ndarray.compress", {"axis": 0}, [(base, view), (cond, cond)], ln, s, "ax0",
+                     lambda v=view, c=cond: v.compress(c, axis=0))
+                idx = np.array([0, int(view.shape[0]) - 1], dtype=np.int64)
+                emit("ndarray.take", {"axis": 0}, [(base, view), (idx, idx)], ln, s, "ends",
+                     lambda v=view, i=idx: v.take(i, axis=0))
+
+            # reinterpret family
+            emit("ndarray.view", {}, pair, ln, s, "same", lambda v=view: v.view())
+            reinterp = {"int32": "float32", "int64": "float64", "float32": "int32",
+                        "float64": "int64", "float16": "uint16", "uint8": "bool"}
+            if s in reinterp:
+                emit("ndarray.view", {"dtype": reinterp[s]}, pair, ln, s, f"as={reinterp[s]}",
+                     lambda v=view, t=reinterp[s]: v.view(t))
+            emit("ndarray.byteswap", {}, pair, ln, s, "c", lambda v=view: v.byteswap())
+            if s == "complex128":
+                for off in (0, 8):
+                    emit("ndarray.getfield", {"dtype": "float64", "offset": off}, pair, ln, s,
+                         f"off={off}", lambda v=view, o=off: v.getfield(np.float64, o))
+
+            # scalar-kind: item() (size-1 only -> value; otherwise NumPy raises -> error cell),
+            # item(k), len(a) (0-d raises), and the D4 property scalars.
+            if s != "uint64":
+                emit("ndarray.item", {}, pair, ln, s, "flat", lambda v=view: v.item(),
+                     kind="scalar")
+                if view.size > 0 and view.ndim >= 1:
+                    for k in (0, int(view.size) - 1):
+                        emit("ndarray.item", {"index": k}, pair, ln, s, f"k={k}",
+                             lambda v=view, k=k: v.item(k), kind="scalar")
+            emit("ndarray.__len__", {}, pair, ln, s, "len", lambda v=view: len(view),
+                 kind="scalar")
+            emit("ndarray.nbytes", {}, pair, ln, s, "p", lambda v=view: v.nbytes, kind="scalar")
+            emit("ndarray.itemsize", {}, pair, ln, s, "p", lambda v=view: v.itemsize, kind="scalar")
+            emit("ndarray.ndim", {}, pair, ln, s, "p", lambda v=view: v.ndim, kind="scalar")
+            emit("ndarray.size", {}, pair, ln, s, "p", lambda v=view: v.size, kind="scalar")
+            emit("ndarray.strides", {}, pair, ln, s, "p",
+                 lambda v=view: np.asarray(v.strides, dtype=np.int64))
+
+            # D4 array-kind property reads
+            emit("ndarray.T", {}, pair, ln, s, "p", lambda v=view: v.T)
+            emit("ndarray.mT", {}, pair, ln, s, "p", lambda v=view: v.mT)
+            emit("ndarray.real", {}, pair, ln, s, "p", lambda v=view: np.asarray(v.real))
+            emit("ndarray.imag", {}, pair, ln, s, "p", lambda v=view: np.asarray(v.imag))
+            emit("ndarray.flat", {}, pair, ln, s, "p", lambda v=view: np.asarray(v.flat))
+
+            # tobytes: the raw C-order (and F-order) bytes as a uint8 vector.
+            for order in (("C",) if view.ndim < 2 else ("C", "F")):
+                emit("ndarray.tobytes", {"order": order}, pair, ln, s, f"order={order}",
+                     lambda v=view, o=order: np.frombuffer(v.tobytes(order=o), dtype=np.uint8))
+
+            # tuple-kind: nonzero (arity == ndim, asserted by CompareTuple).
+            if view.ndim >= 1:
+                emit("ndarray.nonzero", {}, pair, ln, s, "t",
+                     lambda v=view: _tuple_expected(list(v.nonzero())), kind="tuple")
+
+            # ---- in-place mutators (§D3): fresh (base, view) per job, operand described
+            # BEFORE the call, expected = [post-call view, post-call WHOLE base buffer].
+            def inplace(op, params, tag, mutate, extra_pairs=(), dtname=s, layout=ln):
+                b2, v2 = LAYOUTS[layout](dt)
+                pairs = [(b2, v2)] + list(extra_pairs)
+                emit(op, params, pairs, layout, dtname, tag,
+                     lambda: (mutate(v2), _tuple_expected([v2, b2.ravel()]))[1], kind="tuple")
+
+            for ax in (-1, 0):
+                if view.ndim == 0 and ax == 0:
+                    continue
+                inplace("ndarray.sort", {"axis": ax}, f"axis={ax}",
+                        lambda v, ax=ax: v.sort(axis=ax))
+            fillv = True if s == "bool" else 7
+            inplace("ndarray.fill", {"value": (True if s == "bool" else 7)}, "v7",
+                    lambda v, fv=fillv: v.fill(fv))
+            if view.ndim >= 1 and view.size >= 2:
+                pidx = np.array([0, int(view.size) - 1], dtype=np.int64)
+                pval = np.array([3, 1], dtype=dt) if s != "bool" else np.array([True, False])
+                inplace("ndarray.put", {"mode": "raise"}, "ends",
+                        lambda v, i=pidx, w=pval: v.put(i, w, mode="raise"),
+                        extra_pairs=[(pidx, pidx), (pval, pval)])
+
+    # ---- dedicated small-exact jobs that need custom operands ----
+    # uint8 joins so dot/choose clear the strength gate's >=4-cases floor (and it exercises the
+    # unsigned lanes of the small-exact product/gather paths).
+    for s in ("int32", "uint8", "float64", "complex128"):
+        dt = np.dtype(s)
+        A = np.arange(6, dtype=np.float64).reshape(2, 3)
+        B = (np.arange(6, dtype=np.float64) + 1).reshape(3, 2)
+        if s == "complex128":
+            A = (A + 1j * (A + 1)).astype(dt)
+            B = (B - 1j * B).astype(dt)
+        else:
+            A = A.astype(dt)
+            B = B.astype(dt)
+        emit("ndarray.dot", {}, [(A, A), (B, B)], "mm_2x3_3x2", s, "d",
+             lambda A=A, B=B: A.dot(B))
+
+        sorted_a = np.sort(_fill(8, dt)) if s != "complex128" else np.sort(_fill(8, dt))
+        probes = sorted_a[[0, 3, 7]].copy()
+        for side in ("left", "right"):
+            emit("ndarray.searchsorted", {"side": side}, [(sorted_a, sorted_a), (probes, probes)],
+                 "sorted_1d", s, side,
+                 lambda a=sorted_a, v=probes, sd=side: a.searchsorted(v, side=sd))
+
+        idx = np.array([0, 1, 1, 0, 1, 0], dtype=np.int64)
+        c0 = _fill(6, dt)
+        c1 = _fill(6, dt)[::-1].copy()
+        emit("ndarray.choose", {}, [(idx, idx), (c0, c0), (c1, c1)], "choose_1d", s, "2c",
+             lambda i=idx, a=c0, b=c1: i.choose((a, b)))
+
+    # resize: own-data contiguous only (a non-owning view raises on the NumPy side, and the
+    # reconstructed NumSharp operand always owns its buffer — an asymmetric cell). The operand
+    # is built directly so base IS the array being resized; numpy needs refcheck=False because
+    # the generator's locals hold references. Result kind is ARRAY: the mutated array IS the
+    # whole observable state after resize (the old base buffer no longer exists).
+    for s in ("int32", "float64"):
+        dt = np.dtype(s)
+        for newshape in ([3], [12], [2, 4]):
+            own = _fill(8, dt)
+            emit("ndarray.resize", {"shape": newshape}, [(own, own)], "own_1d", s,
+                 f"to={newshape}",
+                 lambda v=own, ns=newshape: (v.resize(tuple(ns), refcheck=False), v)[1])
+
+    if skipped:
+        print(f"  (skipped {skipped})")
+    print(f"  ({len(cases)} instance cases, "
+          f"{sum(1 for c in cases if c.get('expects_throw'))} raising)")
+    return cases
+
+
+# ---- np.emath — the scimath module (coverage plan §A2/E5) ----------------------------------
+#
+# Promoted into the differential corpus rather than left sibling-owned: emath's whole point is
+# the real->complex promotion DECISION (any(x<0) / |x|>1), which is exactly the kind of
+# branchy, dtype-dependent contract the byte corpus gates best. Dtypes are restricted to the
+# lanes whose NumPy promotion lands on complex128/float64 — int8/16/uint16/float32/float16
+# promote to complex64 (numpy/lib/_scimath_impl._tocomplex), which NumSharp cannot represent
+# (issue #569); those lanes stay on the np.emath.Test.cs sibling suite.
+EMATH_UNARY = ["sqrt", "log", "log2", "log10", "arccos", "arcsin", "arctanh"]
+EMATH_DTYPES = ["float64", "int32", "int64", "uint8", "bool", "complex128"]
+EMATH_LAYOUTS = ["c_contiguous_1d", "c_contiguous_2d", "f_contiguous_2d", "negstride_1d",
+                 "strided_step2_1d", "scalar_0d", "one_element_1d", "empty_2d"]
+
+
+def gen_emath():
+    cases = []
+    n = 0
+    skipped = 0
+    for ln in EMATH_LAYOUTS:
+        for s in EMATH_DTYPES:
+            base, view = LAYOUTS[ln](np.dtype(s))
+            operand = describe(base, view)
+            for opname in EMATH_UNARY:
+                try:
+                    with np.errstate(all="ignore"):
+                        r = np.asarray(getattr(np.emath, opname)(view))
+                except Exception:
+                    skipped += 1
+                    continue
+                if r.dtype.name not in ("float16", "float32", "float64", "complex128",
+                                        "int32", "int64", "bool", "uint8"):
+                    skipped += 1                       # complex64 lane — sibling-owned (#569)
+                    continue
+                cases.append(_case(f"emath.{opname}", {}, [operand], _arr_expected(r), ln,
+                                   "emath", cid=f"emath.{opname}/{ln}/{s}/{n}"))
+                n += 1
+
+    # logn(n, x) and power(x, p): pair operands (n/p as real arrays; negatives force complex).
+    # Four dtypes so each op clears OracleCoverageStrengthTests' >=4-cases floor.
+    for s in ("float64", "int32", "int64", "complex128"):
+        dt = np.dtype(s)
+        x = _fill(8, dt)
+        nbase = np.array([2.0, 10.0, 0.5, 3.0, 2.0, 8.0, 4.0, 9.0], dtype=np.float64)
+        for opname, second in (("logn", nbase), ("power", np.array([2, 3, 0, 1, 2, 3, 1, 2],
+                                                                   dtype=np.int64))):
+            try:
+                with np.errstate(all="ignore"):
+                    r = (np.asarray(np.emath.logn(second, x)) if opname == "logn"
+                         else np.asarray(np.emath.power(x, second)))
+            except Exception:
+                skipped += 1
+                continue
+            if r.dtype.name not in ("float16", "float32", "float64", "complex128"):
+                skipped += 1
+                continue
+            operands = ([describe(second, second), describe(np.ascontiguousarray(x), x)]
+                        if opname == "logn"
+                        else [describe(np.ascontiguousarray(x), x), describe(second, second)])
+            cases.append(_case(f"emath.{opname}", {}, operands, _arr_expected(r),
+                               "pp_contig", "emath", cid=f"emath.{opname}/pp/{s}/{n}"))
+            n += 1
+
+    if skipped:
+        print(f"  (skipped {skipped} cells — NumPy raised or complex64 lane)")
+    return cases
+
+
 def main():
     here = os.path.dirname(os.path.abspath(__file__))
     corpus_dir = os.path.normpath(os.path.join(here, "..", "NumSharp.Tests.Oracle", "Fuzz", "corpus"))
@@ -8527,8 +9041,14 @@ def main():
     elif mode == "evaluate":
         cases = gen_evaluate()                                          # np.evaluate / NDExpr fused trees
         write_jsonl(os.path.join(corpus_dir, "evaluate.jsonl"), cases)
+    elif mode == "instance":
+        cases = gen_instance()                                          # ndarray.* instance surface (plan §D)
+        write_jsonl(os.path.join(corpus_dir, "instance.jsonl"), cases)
+    elif mode == "emath":
+        cases = gen_emath()                                             # np.emath scimath module (plan §A2/E5)
+        write_jsonl(os.path.join(corpus_dir, "emath.jsonl"), cases)
     else:
-        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | sinc | i0 | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows | evaluate | real_if_close)")
+        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | sinc | i0 | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows | evaluate | real_if_close | instance | emath)")
         sys.exit(2)
 
 

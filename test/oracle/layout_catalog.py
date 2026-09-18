@@ -256,7 +256,7 @@ def describe(base, view):
             raise ValueError(
                 f"layout produced a non-view operand: offset={offset_elem} addressed=[{lo},{hi}] "
                 f"base.size={base.size}; shape={view.shape} strides={strides_elem}")
-    return {
+    d = {
         "dtype": view.dtype.name,
         "shape": [int(d) for d in view.shape],
         "strides": strides_elem,
@@ -264,6 +264,15 @@ def describe(base, view):
         "bufferSize": int(base.size),
         "buffer": base.tobytes().hex(),
     }
+    # A read-only view whose read-onlyness is NOT derivable from its strides — a SAME-SHAPE
+    # np.broadcast_to keeps the source's ordinary strides, so the (shape, strides) tuple looks
+    # writeable — must carry the flag explicitly (the out_where broadcast-out refusal cells rely
+    # on it; without this, 293 1-D broadcast-out error cells silently reconstructed writeable and
+    # the C# side computed a result where NumPy refuses). Emitted ONLY when False so every
+    # writeable row's serialization stays byte-identical to the pre-flag corpus.
+    if not view.flags.writeable:
+        d["writeable"] = False
+    return d
 
 
 # ---------------------------------------------------------------------------

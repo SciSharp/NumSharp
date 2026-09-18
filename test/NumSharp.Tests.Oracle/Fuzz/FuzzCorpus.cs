@@ -71,6 +71,16 @@ namespace NumSharp.Tests.Fuzz
             ///     operand serialization is byte-identical to before.
             /// </summary>
             public string Mask { get; set; }
+
+            /// <summary>
+            ///     Explicit writeable flag, serialized by <c>layout_catalog.describe()</c> ONLY when
+            ///     the NumPy view was READ-ONLY in a way its strides cannot convey — a SAME-SHAPE
+            ///     <c>np.broadcast_to</c> keeps ordinary strides, so without this the reconstructed
+            ///     operand was silently writeable and the out_where broadcast-out refusal cells
+            ///     (NumPy: ValueError "output array is read-only") could never pass. Absent (null)
+            ///     means writeable — every pre-flag corpus row deserializes exactly as before.
+            /// </summary>
+            public bool? Writeable { get; set; }
         }
 
         /// <summary>
@@ -204,14 +214,31 @@ namespace NumSharp.Tests.Fuzz
             // Empty operands: strides/offset are vacuous (0 elements). Build a plain empty array.
             for (int i = 0; i < o.Shape.Length; i++)
                 if (o.Shape[i] == 0)
-                    return new NDArray(tc, new Shape(o.Shape), false);
+                    return ApplyWriteable(new NDArray(tc, new Shape(o.Shape), false), o);
 
             var bytes = FromHex(o.Buffer);
             var slice = SliceFromBytes(bytes, tc);                       // Count == bufferSize
             var baseShape = new Shape(new[] { o.BufferSize });          // 1-D contiguous, size == Count
             var storage = new UnmanagedStorage(slice, baseShape);
             var viewShape = new Shape(o.Shape, o.Strides, o.Offset, o.BufferSize); // operand view (alias, no checks)
-            return new NDArray(storage, viewShape);
+            return ApplyWriteable(new NDArray(storage, viewShape), o);
+        }
+
+        /// <summary>
+        ///     Honor the operand's explicit <see cref="Operand.Writeable"/> flag: a same-shape
+        ///     broadcast view is read-only in NumPy while its (shape, strides) reconstruction looks
+        ///     writeable, so the flag is cleared through the public <c>setflags</c> route (the same
+        ///     path the flags oracle audits). Stride-derived read-onlyness (a genuine stride-0
+        ///     broadcast dim) needs no flag and is untouched.
+        /// </summary>
+        /// <param name="nd">The freshly reconstructed operand.</param>
+        /// <param name="o">Its corpus descriptor (carries the optional flag).</param>
+        /// <returns><paramref name="nd"/>, non-writeable when the descriptor says so.</returns>
+        private static NDArray ApplyWriteable(NDArray nd, Operand o)
+        {
+            if (o.Writeable == false)
+                nd.setflags(write: false);
+            return nd;
         }
 
         /// <summary>

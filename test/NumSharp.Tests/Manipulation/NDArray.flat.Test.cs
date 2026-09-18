@@ -39,8 +39,11 @@ namespace NumSharp.Tests.Manipulation
             var sliced = nd["..."];   // scalar[:] is invalid in NumPy ("too many indices"); ellipsis gives the 0-d view
             var flat = sliced.flat;
             Console.WriteLine((string)flat);
+            // NumPy parity (probed 2.4.2): flat over ANY 0-d view — an ellipsis-sliced one
+            // included — is the length-1 vector np.ravel(0-d) yields, never a 0-d result.
             flat.size.Should().Be(1);
-            flat.ndim.Should().Be(0);
+            flat.ndim.Should().Be(1);
+            flat.Shape.Should().Be(new Shape(1));
             flat.item<int>().Should().Be(1);
         }
 
@@ -84,12 +87,16 @@ namespace NumSharp.Tests.Manipulation
         [TestMethod]
         public void flat_scalar()
         {
+            // NumPy parity (probed 2.4.2): a.flat over a 0-d array yields ONE element with 1-D
+            // shape (1,) — np.asarray(np.array(1).flat).shape == (1,) — matching np.ravel(0-d).
+            // The old pin (0-d in, 0-d out) was the divergence; oracle-gated by the instance
+            // tier's ndarray.flat scalar_0d cells.
             var nd = NDArray.Scalar(1);
             var flat = nd.flat;
             Console.WriteLine((string)flat);
             flat.size.Should().Be(1);
-            flat.ndim.Should().Be(0);
-            flat.Shape.Should().BeScalar();
+            flat.ndim.Should().Be(1);
+            flat.Shape.Should().Be(new Shape(1));
             flat.item<int>().Should().Be(1);
         }
 

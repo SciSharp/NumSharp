@@ -331,7 +331,10 @@ namespace NumSharp.Tests.Selection
             Assert.IsTrue(np.array_equal(np.take(a, i32, mode: "clip"), np.take(a, i64, mode: "clip")));
             Doubles(np.take(a, np.array(new[] { 5, -1 }))).Should().Equal(5, 99);
             Action raise = () => np.take(a, i32);
-            raise.Should().Throw<ArgumentOutOfRangeException>().WithMessage("*index 150 is out of bounds for axis with size 100*");
+            // NumPy's FLAT (axis=None) take drops the axis clause entirely — "for size 100", not
+            // "for axis 0 with size 100" (probed 2.4.2; the old "for axis with size" wording
+            // matched neither spelling and is oracle-gated by errors_full's curated take cells).
+            raise.Should().Throw<ArgumentOutOfRangeException>().WithMessage("*index 150 is out of bounds for size 100*");
 
             var m = np.arange(24, dtype: np.int64).reshape(6, 4);
             Assert.IsTrue(np.array_equal(np.take(m, np.array(new[] { 5, 0 }), axis: 0), np.take(m, np.array(new long[] { 5, 0 }), axis: 0)));
