@@ -165,3 +165,49 @@ gate is green AND every divergence is catalogued and printed at run time).
 (GEMM-bound, allclose), `convolve`/`correlate` (long-kernel float), `apply_along_axis`/`apply_over_axes`/
 `fromfunction` (delegate-taking), `ndenumerate`, `notmasked_*`/`clump_*`/`mr_`/`masked_object` (polymorphic
 / index-DSL returns). These remain covered by `MaskedArrayTests`.
+
+## Pass 2 (2026-09-18) — deeper assertions, more discrepancies
+
+Broadened the corpus from **26,586 → 68,860 cases** to hit the paths pass 1 did not:
+**edge layouts** (`c_contiguous_3d`/`transposed_3d`/`f_contiguous_3d`/`broadcast_1d_to_2d`/`scalar_0d`/
+`one_element_1d`/`empty_2d`/`negstride_2d_offset`/`strided_2d_cols`/`reshape_view_2d`) across
+unary/reduce/scan/manip/construct/sortsetops; **scalar + broadcast pair layouts** (`pp_broadcast_col`,
+`pp_scalar_right`/`left`) and **6 more dtype pairs** in binary; the skipped ops **`choose`** and **`take`
+mode=wrap/clip**; and parameter variations (`diagonal` offset, `diag` k, `moveaxis`, `diff` n/axis,
+`cumsum` axis, second `expand_dims` axis). It surfaced:
+
+### FIXED (real bugs)
+
+- **`ma.median` on an EMPTY array — intermittent HEAP-CORRUPTION CRASH** (fatal, uncatchable
+  `AccessViolation`, same class as the pass-13 `arctan2(complex)` OOB). `MedianAxisMasked` guarded only the
+  *reduced* axis being 0-length, so `median(axis=1)` of a `(0,3)` array (0 rows, reduced axis length 3)
+  slipped past and ran `sort` / `take_along_axis` / middle-averaging on 0-row data, writing out of bounds —
+  cumulative corruption that faulted a later allocation (needed op diversity + ~2000 complex128 reduces to
+  surface; localized by op-exclusion bisection to `median`, then to the `empty_2d` layout). Fixed with a top
+  guard: **any** empty dimension short-circuits to `mean` (NumPy's `_median` empty-slice value) BEFORE the
+  OOB-prone path. `src/NumSharp.Core/Ma/MaskedArray.cs` `MedianAxisMasked`.
+- **`ma.around` dispatch (harness)** — NumPy's `ma.around` IS the round ufunc, which collapses a 0-d
+  all-masked input to the float64 `masked` singleton; the registry called the two-arg `around(a, decimals)`
+  = round path, which preserves the input dtype. Routed decimals=0 to the one-arg ufunc (`OpRegistry.Ma.cs`).
+  The two-arg `ma.round`/`around(a, decimals)` NOT collapsing a 0-d all-masked to the singleton is a latent
+  library inconsistency (only the ufunc form is corpus-tested; noted here for a future fix).
+
+### Documented KNOWN GAPS added
+
+| Area | Divergence | Disposition |
+|------|-----------|-------------|
+| `anom`/`median` value on 2-D non-contiguous (`strided_2d_cols`/`negstride_2d_offset`) | internal mean/sort over a strided view reads the wrong stride (anom yields -inf) | extended the pass-1 anom/median non-contiguous `[known gap]` excuse |
+| complex128 `cumprod` | ~ULP per component — host-FMA-contracted `npy_cmul` vs .NET `Complex operator*` (bounded ≤256 ULP/component) | `[documented]` the nanscan complex-cumprod carve-out class |
+
+### Noted (identified by code-read, not corpus-plumbed)
+
+- **`minimum`/`maximum`/`default_fill_value` widen a FLOAT fill to `double`** (`float16`/`float32` inputs)
+  where NumPy returns the input float width. A minor scalar-dtype gap; the complex fills (a real pass-1-era
+  bug) are correct. Left for a future pass (boxed-scalar wrapping + a dtype excuse).
+
+### Clean (broadened with NO new divergence)
+
+manip/construct/select/sortsetops/binary all stayed byte-exact across the edge layouts, scalar/broadcast
+operands and new params — notably the pass-12 strong-scalar-widening fix holds across the 6 added dtype
+pairs and the 0-d scalar-operand layouts, and complex128 `sort`/`unique` on empty/edge shapes did NOT crash
+(only `median` did).

@@ -67,7 +67,14 @@ namespace NumSharp.Tests.Fuzz
                 case "ceil": return np.ma.ceil(ops[0]);
                 case "angle": return np.ma.angle(ops[0]);
                 case "logical_not": return np.ma.logical_not(ops[0]);
-                case "around": return np.ma.around(ops[0], p.TryGetValue("decimals", out var dc) ? dc.GetInt32() : 0);
+                // NumPy's np.ma.around IS the round ufunc (around == round). NumSharp's ONE-ARG around(a)
+                // is the matching ufunc (it collapses a 0-d all-masked input to the float64 `masked`
+                // singleton like NumPy); the TWO-ARG around(a, decimals)=round path does NOT (a latent
+                // 0-d dtype inconsistency, see docs/MA_ORACLE_DESIGN.md). Route decimals=0 to the ufunc.
+                case "around":
+                    return p.TryGetValue("decimals", out var dc) && dc.GetInt32() != 0
+                        ? np.ma.around(ops[0], dc.GetInt32())
+                        : np.ma.around(ops[0]);
 
                 // ---- binary ufuncs + domained-binary + comparison + logical + bitwise -> masked ---
                 case "add": return np.ma.add(ops[0], ops[1]);

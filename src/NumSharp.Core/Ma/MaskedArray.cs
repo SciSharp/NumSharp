@@ -3786,6 +3786,16 @@ namespace NumSharp
             if (ax < 0 || ax >= nd)
                 throw new AxisError(axis, nd); // report the ORIGINAL axis, NumPy-style
 
+            // ANY empty dimension ⇒ every slice is empty. NumPy's _median takes the mean of a 0-length
+            // slice (→ NaN where the reduced axis has 0 valid elements, or an empty result when a DIFFERENT
+            // axis is 0). Short-circuit to mean BEFORE the sort / take_along_axis / middle-averaging below:
+            // those index into 0-row data and write OUT OF BOUNDS on an empty operand (a heap-corrupting
+            // crash on empty complex128, found by the ma_reduce edge-layout corpus — the (0,3)/axis=1 case
+            // that slips past the reduced-axis-only guard further down). mean is the correct empty-slice
+            // value AND is already the empty-reduced-axis handler below.
+            if (data.size == 0)
+                return mean(self, ax, null, keepdims);
+
             // Masked entries sort to the END (endwith default → minimum_fill_value key = +inf for float, dtype-max
             // for int), reproducing NumPy's fill_value=inf/None so a masked slot can never be picked as a middle.
             MaskedArray asorted = sort(self, ax);
