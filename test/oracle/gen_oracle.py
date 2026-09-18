@@ -2316,10 +2316,12 @@ def gen_params(dtypes):
 # W11 — operand-relationship flags (section C): input aliasing (a op a, SAME buffer both sides)
 # and in-place out= (the output buffer IS an input). Exercises read-before-write within the kernel.
 # widened: out=/overlap aliasing across every dtype EXCEPT bool (gen_aliasing subtracts; NumPy bans
-# bool `-`) and complex128 (the a*a self-multiply of a large _cbase value hits catastrophic
-# cancellation in a^2-b^2, where NumPy's ARRAY ufunc and the naive ac-bd formula round differently;
-# NumSharp matches NumPy's SCALAR multiply exactly, so this is a ULP/ill-conditioned artifact, NOT a bug).
-ALIAS_DTYPES = [d for d in ALL_DTYPES if d not in ("bool", "complex128")]
+# bool `-`). complex128 is now INCLUDED: the old exclusion feared the a*a self-multiply's
+# catastrophic cancellation (a^2-b^2) diverging from NumPy's ARRAY ufunc, but NDComplexMath.Multiply
+# now ports NumPy's fused simd_cmul (vfmaddsub) byte-for-byte — matching the ARRAY multiply exactly,
+# including that cancellation regime (MisalignedRegistry branch (321)) — so multiply(a,a) is bit-exact
+# and add/subtract/maximum/minimum/clip are pure IEEE / lexicographic. The whole tier stays strict.
+ALIAS_DTYPES = [d for d in ALL_DTYPES if d != "bool"]
 
 
 def gen_aliasing(dtypes):
@@ -5030,6 +5032,15 @@ def gen_multioutput():
             emit_tuple("meshgrid", {"indexing": indexing, "sparse": sparse, "copy": True},
                        [mx, my], np.meshgrid(mx, my, indexing=indexing, sparse=sparse, copy=True),
                        f"meshgrid/{indexing}/sparse={int(sparse)}")
+    # complex128 meshgrid: the grids are a pure broadcast COPY of each operand (no arithmetic) and
+    # PRESERVE each input's dtype, so a complex operand round-trips bit-exact — both the dense and
+    # the sparse (open-mesh) slot layouts. Two complex operands so every output slot is complex128.
+    mc = np.array([1 + 1j, 2 - 1j, 0 + 3j], dtype=np.complex128)
+    md = np.array([0.5 - 2j, 1.5 + 0j], dtype=np.complex128)
+    for sparse in [False, True]:
+        emit_tuple("meshgrid", {"indexing": "xy", "sparse": sparse, "copy": True},
+                   [mc, md], np.meshgrid(mc, md, indexing="xy", sparse=sparse, copy=True),
+                   f"meshgrid/complex/sparse={int(sparse)}")
 
     # unravel_index returns one coordinate array per dimension.
     flat = np.array([0, 5, 11, 7], dtype=np.int64)
@@ -5819,11 +5830,22 @@ WHERE_KINDS = [None, "all_true", "all_false", "alternating", "checker", "row_bro
 OUT_SHAPES = [(6,), (4, 5), (2, 3, 4)]
 
 # ufunc -> the input dtypes to drive it with (its natural domain).
+#
+# complex128 is added ONLY to the ufuncs whose complex loop is BIT-EXACT-and-PORTABLE (pure IEEE
+# arithmetic / lexicographic comparison), never to the transcendentals (sqrt/exp/log/sin) or the
+# magnitude ops (abs/sign): those compose the host CRT libm, so they are held bit-exact ONLY on
+# win-amd64 and only within the ≤3-ULP complex-unary envelope (MisalignedRegistry branch 6b) — an
+# envelope scoped to Operands.Length == 1, which the out=/where= operands (out buffer + optional
+# mask) push past, so a complex transcendental here would fail the STRICT (all-platform) OutWhere
+# gate. The arithmetic loops below run the SAME kernel with or without out=/where= (only the store
+# target and the mask change), so their complex parity is inherited from the strict binary_arith /
+# unary_extra / specials tiers that already gate it bit-exact. mod/floor_divide/arctan2/bitwise_*
+# raise TypeError for complex in NumPy (the emit() probe skips them), so they stay real-only.
 OUT_BINARY_UFUNCS = {
-    "add": ["int32", "float64", "float32", "uint8"],
-    "subtract": ["int32", "float64"],
-    "multiply": ["int64", "float32"],
-    "divide": ["float64", "int32"],
+    "add": ["int32", "float64", "float32", "uint8", "complex128"],
+    "subtract": ["int32", "float64", "complex128"],
+    "multiply": ["int64", "float32", "complex128"],
+    "divide": ["float64", "int32", "complex128"],
     "power": ["float64", "int32"],
     "float_power": ["float64", "int32"],
     "mod": ["int32", "float64"],
@@ -5832,26 +5854,26 @@ OUT_BINARY_UFUNCS = {
     "bitwise_and": ["int32", "uint8", "bool"],
     "bitwise_or": ["int64"],
     "bitwise_xor": ["uint16"],
-    "less": ["int32", "float64"],
-    "greater_equal": ["float32"],
-    "equal": ["int32"],
+    "less": ["int32", "float64", "complex128"],           # lexicographic on complex -> bool out
+    "greater_equal": ["float32", "complex128"],
+    "equal": ["int32", "complex128"],
 }
 
 OUT_UNARY_UFUNCS = {
     "sqrt": ["float64", "float32"],
-    "negative": ["int32", "float64"],
+    "negative": ["int32", "float64", "complex128"],        # pure component negate — bit-exact
     "abs": ["int32", "float64"],
-    "square": ["float64", "int32"],
+    "square": ["float64", "int32", "complex128"],          # fused simd_cmul (z*z) — bit-exact
     "exp": ["float64", "float32"],
     "log": ["float64"],
     "sin": ["float64", "float32"],
     "floor": ["float64"],
     "ceil": ["float32"],
-    "rint": ["float64"],
+    "rint": ["float64", "complex128"],                     # rounds each component — bit-exact
     "sign": ["int32", "float64"],
-    "reciprocal": ["float64", "int32"],
+    "reciprocal": ["float64", "int32", "complex128"],      # CDOUBLE_reciprocal (-1/d) — bit-exact
     "invert": ["int32", "uint8"],
-    "isnan": ["float64"],
+    "isnan": ["float64", "complex128"],                    # True iff either lane is NaN -> bool out
 }
 
 

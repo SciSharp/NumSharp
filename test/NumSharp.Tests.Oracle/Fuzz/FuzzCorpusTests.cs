@@ -638,7 +638,7 @@ namespace NumSharp.Tests.Fuzz
             ["nanscan.jsonl"] = 525,   // nancumsum all 13 dtypes; nancumprod carves complex128 (host-FMA multiply)
             ["numpy_f32_kernels.jsonl"] = 140,
             ["numpy_f64_kernels.jsonl"] = 24,
-            ["out_where.jsonl"] = 3700,
+            ["out_where.jsonl"] = 4600,   // incl. the complex128 out=/where= arithmetic + comparison tier
             ["params.jsonl"] = 966,
             ["place.jsonl"] = 12,
             ["products.jsonl"] = 326,
