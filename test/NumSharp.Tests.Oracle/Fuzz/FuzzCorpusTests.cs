@@ -587,6 +587,47 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void DecimalManip() => RunCorpus("decimal_manip.jsonl");
 
+        // G14 (2026-09-18) coverage-audit expansion — decimal is the ONLY dtype scope this whole
+        // pipeline exercises for the ops below (no other corpus file carries a decimal operand), so an
+        // unexercised branch here is a live silent-bug risk (the class that hid the G13 flat-argmax bug).
+
+        // Extended unary decimal->decimal (reciprocal/positive/fabs/rint/spacing/deg2rad/rad2deg/modf
+        // split) + signbit (->bool, strictly-negative) + round_ at decimals {-1,0,1,2} (the PyArray_Round
+        // path, DISTINCT from rint's UnaryOp.Round). All exact or portable-arithmetic -> strict tier.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void DecimalExtra() => RunCorpus("decimal_extra.jsonl");
+
+        // sqrt/cbrt/exp/log/trig/... via the kernel's EXACT (decimal)Math.X((double)v) double-bridge —
+        // the oracle replicates that bridge per logical element, so a divergence is a decimal iteration
+        // bug, not a math difference. HOST-PINNED (RunHostLibmCorpus): Math.Exp/Log/Sin/... are the
+        // win-amd64 CRT libm, so the cast-to-decimal bytes reproduce only on the authoring host
+        // (Inconclusive off-Windows — the sibling Unary/Sinc/I0 tier policy).
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void DecimalTranscend() => RunHostLibmCorpus("decimal_transcend.jsonl");
+
+        // The 16-byte gather/scatter/conditional-copy family: take/put/place/putmask/select/choose/
+        // compress/extract/take_along_axis. Only `where` was covered — yet these share the widest,
+        // least-tested byte-width-keyed copy kernels (16-byte = decimal/Complex; Complex has a NumPy
+        // oracle, decimal does not, so this is the only differential coverage of the 16-byte path).
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void DecimalSelect() => RunCorpus("decimal_select.jsonl");
+
+        // dot/inner/outer/vdot/tensordot/trace/kron — matmul was the ONLY covered product, yet each of
+        // these routes through a DIFFERENT decimal accumulate/iterate path (the same 16-byte scalar-
+        // compare/accumulate class as the argmax bug). decimal + is exact -> byte-reproducible.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void DecimalProducts() => RunCorpus("decimal_products.jsonl");
+
+        // argsort/searchsorted/unique/nonzero/flatnonzero/lexsort — the decimal compare-driven sort/
+        // search paths (Bgt/Blt on a 16-byte struct is exactly what silently mis-answered in flat argmax).
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void DecimalSearch() => RunCorpus("decimal_search.jsonl");
+
         // B9 (F26): minimum case-count floor per corpus file, ~80 % of the committed count at
         // 2026-07-07 (post G1-G5/G11/G12 regenerations). `Count > 0` alone would let a silently
         // TRUNCATED regeneration (encoding hiccup, generator early-exit, partial copy) pass the
@@ -618,6 +659,12 @@ namespace NumSharp.Tests.Fuzz
             ["decimal_unary.jsonl"] = 72,
             ["decimal_varstd.jsonl"] = 17,
             ["decimal_where.jsonl"] = 3,
+            // G14 coverage-audit expansion (2026-09-18): ~80% of the committed counts.
+            ["decimal_extra.jsonl"] = 45,
+            ["decimal_transcend.jsonl"] = 50,
+            ["decimal_select.jsonl"] = 8,
+            ["decimal_products.jsonl"] = 9,
+            ["decimal_search.jsonl"] = 7,
             ["dtype_text.jsonl"] = 2094,
             ["errors.jsonl"] = 8,
             ["errors_full.jsonl"] = 650,
