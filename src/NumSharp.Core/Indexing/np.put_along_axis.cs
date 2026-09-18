@@ -54,7 +54,7 @@ namespace NumSharp
         ///     written — every index is validated before the first store (NumPy's atomicity).
         /// </exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range for <paramref name="arr"/>'s rank.</exception>
-        /// <exception cref="NumSharpException"><paramref name="arr"/> (or the non-contiguous <c>axis=null</c> flat copy) is read-only.</exception>
+        /// <exception cref="ValueError"><paramref name="arr"/> (or the non-contiguous <c>axis=null</c> flat copy) is read-only — NumPy's "assignment destination is read-only".</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.put_along_axis.html</remarks>
         [NDScoped]
         public static unsafe void put_along_axis(NDArray arr, NDArray indices, NDArray values, int? axis)
@@ -126,7 +126,7 @@ namespace NumSharp
         /// <param name="ax">The resolved (non-negative) axis.</param>
         /// <exception cref="IndexError"><paramref name="indices"/> non-integer / non-axis broadcast conflict / out-of-bounds.</exception>
         /// <exception cref="ValueError">rank mismatch, or <paramref name="values"/> not broadcastable to the result shape.</exception>
-        /// <exception cref="NumSharpException"><paramref name="arr"/> is read-only.</exception>
+        /// <exception cref="ValueError"><paramref name="arr"/> is read-only — NumPy's "assignment destination is read-only".</exception>
         /// <exception cref="NotSupportedException">the IL kernels are unavailable (e.g. codegen disabled).</exception>
         private static unsafe void PutAlongAxisCore(NDArray arr, NDArray indices, NDArray values, int ax)
         {

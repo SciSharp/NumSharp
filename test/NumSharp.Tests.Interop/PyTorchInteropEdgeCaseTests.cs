@@ -131,7 +131,7 @@ namespace NumSharp.Tests.Interop
                     "let two logical coordinates blindly overwrite one element");
                 using NDArray zeros = np.zeros(new Shape(2, 3));
                 new Action(() => np.copyto(expanded, zeros))
-                    .Should().Throw<NumSharpException>().WithMessage("*read-only*");
+                    .Should().Throw<ValueError>().WithMessage("*read-only*");
                 PyStr("edge_expanded_base.tolist()").Should().Be("[0.0, 1.0, 2.0]");
             }
         }
@@ -318,7 +318,7 @@ namespace NumSharp.Tests.Interop
 
                 using NDArray ones = np.ones(new Shape(4, 3));
                 new Action(() => np.copyto(view, ones))
-                    .Should().Throw<NumSharpException>().WithMessage("*read-only*");
+                    .Should().Throw<ValueError>().WithMessage("*read-only*");
                 new Action(() => { using var _ = view.ToTorch(requireGIL: false); })
                     .Should().Throw<InvalidOperationException>().WithMessage("*non-writeable*copy:true*");
 

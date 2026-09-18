@@ -38,8 +38,8 @@ namespace NumSharp
         /// <param name="value">The scalar to fill with. A C# primitive (weak) or a 0-d <see cref="NDArray"/> (strong).</param>
         /// <exception cref="ArgumentNullException"><paramref name="value"/> is null (NumSharp house convention,
         ///     as in <see cref="np.fill_diagonal"/>; NumPy instead yields NaN for a float array / TypeError otherwise).</exception>
-        /// <exception cref="NumSharpException">This array is read-only (broadcast view / read-only memmap);
-        ///     NumPy raises <c>ValueError: assignment destination is read-only</c>.</exception>
+        /// <exception cref="ValueError">This array is read-only (broadcast view / read-only memmap);
+        ///     raises NumPy's exact <c>ValueError: assignment destination is read-only</c>.</exception>
         /// <exception cref="OverflowException">A weak integer/float value is out of range for an integer dtype,
         ///     or a ±inf value is assigned to an integer dtype (NumPy's <c>OverflowError</c>).</exception>
         /// <exception cref="ValueError"><paramref name="value"/> is a multi-element array (a sequence), or a NaN

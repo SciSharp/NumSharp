@@ -81,8 +81,8 @@ namespace NumSharp.Tests
             // The flag is enforced: writing through any view of a read-only array raises rather than
             // corrupting the shared/backing memory.
             var b = Broadcast();
-            Assert.ThrowsException<NumSharpException>(() => b["1:3"][0, 0] = 9);
-            Assert.ThrowsException<NumSharpException>(() => b.T[0, 0] = 9);
+            Assert.ThrowsException<ValueError>(() => b["1:3"][0, 0] = 9);
+            Assert.ThrowsException<ValueError>(() => b.T[0, 0] = 9);
         }
 
         [TestMethod]

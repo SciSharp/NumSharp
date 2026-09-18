@@ -271,7 +271,7 @@ row is scoped in `MisalignedRegistry` branches K1–K9, so each is counted and p
 | `power(int, negative int)` trips `Debug.Fail("index < Count, Memory corruption expected")` instead of NumPy's ValueError — in Release that path has no assert | K8 | known bug (memory safety) |
 | `result_type(mixed signed/unsigned, 0-D operand)` throws instead of resolving | K9 | known bug |
 | NEP50 weak-scalar reached via the error path (int64+uint64 succeeds where NumPy refuses) | K7 | intended |
-| ufunc `out=` on a read-only **broadcast** view: NumSharp writes through it (587 cases), contradicting its own `Shape.IsWriteable == false` rule | K10 | known bug |
+| ufunc `out=` on a read-only **broadcast** view (983 cases) | K10 | **FIXED** — `ThrowReadOnly` now raises NumPy's exact `ValueError("output array is read-only")` (was `NumSharpException`, same text) so these pass without an excuse; the write-through was already prevented by `ThrowIfNotWriteable` |
 | `isnan` into a **strided bool `out`**: results land on the wrong elements (contiguous out is correct) | K12 | known bug |
 | `exp(1.0f)` in a (4,5) float32 array returns `0x402df854` from `np.exp(x)`, `np.exp(x, out)` and `np.exp(x, out, where)` alike, while NumPy **and the committed `unary.jsonl` expectation for the same values/shape/dtype** say `0x402df855` — the unary tier is green, so the same op on the same data disagrees depending on how the array was built | K11 | **open question** |
 

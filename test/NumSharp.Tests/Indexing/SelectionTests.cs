@@ -1412,7 +1412,7 @@ public class SelectionTests
         // Broadcast views are read-only; putmask reports it FIRST (before mask-size / nv checks).
         var ro = np.broadcast_to(np.array(new[] { 1, 2, 3 }), new Shape(2, 3));
         var act = () => np.putmask(ro, np.ones(6, np.@bool), 0);
-        act.Should().Throw<NumSharpException>()
+        act.Should().Throw<ValueError>()
            .WithMessage("putmask: output array is read-only*");
     }
 
@@ -1421,7 +1421,7 @@ public class SelectionTests
     {
         var ro = np.broadcast_to(np.array(new[] { 1, 2, 3 }), new Shape(2, 3));
         var act = () => np.putmask(ro, np.zeros(6, np.@bool), 0);
-        act.Should().Throw<NumSharpException>()
+        act.Should().Throw<ValueError>()
            .WithMessage("putmask: output array is read-only*");
     }
 

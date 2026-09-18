@@ -943,27 +943,28 @@ namespace NumSharp.Tests.Backends
 
         // ---- write-guard enforcement across the setflags toggle ----------------------------
 
-        // Most write paths refuse through NumSharpException ("… is read-only", the house mapping of
-        // NumPy's ValueError); sort/partition/byteswap raise NumSharp's ValueError type with NumPy
-        // 2.4.2's per-API texts verbatim ("sort array is read-only" / "partition array is read-only" /
-        // "array to be byte-swapped is read-only" — probed).
+        // Every write path refuses through ValueError — NumPy's exact exception TYPE and per-API
+        // text. The general guard (ThrowIfNotWriteable) and the sort/partition/byteswap paths all
+        // raise NumSharp's ValueError now, so this whole matrix is homogeneous: "… is read-only"
+        // ("output array is read-only" / "sort array is read-only" / "partition array is read-only" /
+        // "array to be byte-swapped is read-only" — probed 2.4.2).
         private static readonly (string name, Action<NDArray> write, Type exception)[] WriteApis =
         {
-            ("indexer int set", a => a[0] = (NDArray)9L, typeof(NumSharpException)),
-            ("indexer slice set", a => a["1:3"] = (NDArray)9L, typeof(NumSharpException)),
-            ("fancy set", a => a[new int[] { 0, 2 }] = (NDArray)9L, typeof(NumSharpException)),
-            ("mask set", a => a[a > 2] = (NDArray)9L, typeof(NumSharpException)),
-            ("fill", a => a.fill(5L), typeof(NumSharpException)),
-            ("copyto", a => np.copyto(a, np.zeros(new Shape(6), NPTypeCode.Int64)), typeof(NumSharpException)),
-            ("ufunc add out=", a => np.add(a, a, a), typeof(NumSharpException)),
-            ("ufunc negative out=", a => np.negative(np.ones(new Shape(6), NPTypeCode.Int64), a), typeof(NumSharpException)),
-            ("put", a => np.put(a, (NDArray)0L, (NDArray)9L), typeof(NumSharpException)),
-            ("place", a => np.place(a, np.ones(new Shape(6), NPTypeCode.Boolean), new long[] { 7 }), typeof(NumSharpException)),
+            ("indexer int set", a => a[0] = (NDArray)9L, typeof(ValueError)),
+            ("indexer slice set", a => a["1:3"] = (NDArray)9L, typeof(ValueError)),
+            ("fancy set", a => a[new int[] { 0, 2 }] = (NDArray)9L, typeof(ValueError)),
+            ("mask set", a => a[a > 2] = (NDArray)9L, typeof(ValueError)),
+            ("fill", a => a.fill(5L), typeof(ValueError)),
+            ("copyto", a => np.copyto(a, np.zeros(new Shape(6), NPTypeCode.Int64)), typeof(ValueError)),
+            ("ufunc add out=", a => np.add(a, a, a), typeof(ValueError)),
+            ("ufunc negative out=", a => np.negative(np.ones(new Shape(6), NPTypeCode.Int64), a), typeof(ValueError)),
+            ("put", a => np.put(a, (NDArray)0L, (NDArray)9L), typeof(ValueError)),
+            ("place", a => np.place(a, np.ones(new Shape(6), NPTypeCode.Boolean), new long[] { 7 }), typeof(ValueError)),
             ("sort() in-place", a => a.sort(), typeof(ValueError)),
             ("partition() in-place", a => a.partition(2), typeof(ValueError)),
             ("byteswap(inplace)", a => a.byteswap(inplace: true), typeof(ValueError)),
-            ("random.shuffle", a => np.random.shuffle(a), typeof(NumSharpException)),
-            ("flatiter set", a => a.flatiter[0] = 5L, typeof(NumSharpException)),
+            ("random.shuffle", a => np.random.shuffle(a), typeof(ValueError)),
+            ("flatiter set", a => a.flatiter[0] = 5L, typeof(ValueError)),
         };
 
         [TestMethod]
@@ -997,7 +998,7 @@ namespace NumSharp.Tests.Backends
             // A re-enabled broadcast view accepts writes (NumPy parity), and they alias.
             var src = np.arange(3);
             var bc = np.broadcast_to(src, new Shape(4, 3));
-            ((Action)(() => bc.fill(7L))).Should().Throw<NumSharpException>().WithMessage("*read-only*");
+            ((Action)(() => bc.fill(7L))).Should().Throw<ValueError>().WithMessage("*read-only*");
             bc.setflags(write: true);
             bc.fill(7L);
             src.GetInt64(0).Should().Be(7);
@@ -1099,12 +1100,12 @@ namespace NumSharp.Tests.Backends
             // destination"); message identical here (probed on 2.4.2 for complex AND real targets).
             var z = np.arange(4).astype(NPTypeCode.Complex);
             z.setflags(write: false);
-            ((Action)(() => z.real = (NDArray)1.0)).Should().Throw<NumSharpException>().WithMessage("assignment destination is read-only");
-            ((Action)(() => z.imag = (NDArray)1.0)).Should().Throw<NumSharpException>().WithMessage("assignment destination is read-only");
+            ((Action)(() => z.real = (NDArray)1.0)).Should().Throw<ValueError>().WithMessage("assignment destination is read-only");
+            ((Action)(() => z.imag = (NDArray)1.0)).Should().Throw<ValueError>().WithMessage("assignment destination is read-only");
 
             var r = np.arange(4.0);
             r.setflags(write: false);
-            ((Action)(() => r.real = (NDArray)1.0)).Should().Throw<NumSharpException>().WithMessage("assignment destination is read-only");
+            ((Action)(() => r.real = (NDArray)1.0)).Should().Throw<ValueError>().WithMessage("assignment destination is read-only");
         }
 
         [TestMethod]
@@ -1160,7 +1161,7 @@ namespace NumSharp.Tests.Backends
             // FIRST (its message wins even when the shape is ALSO wrong); take validates shape,
             // then castability, then read-only — and its read-only text is the WRITEBACKIFCOPY
             // wording (PyArray_TakeFrom wraps out in a writeback view); compress inherits take's.
-            // House mapping: NumPy's ValueError type arrives as NumSharpException, texts verbatim.
+            // NumPy's ValueError type AND texts verbatim (the read-only guard raises ValueError).
             var a = np.arange(6).astype(NPTypeCode.Double);
 
             NDArray Ro(Shape s, NPTypeCode tc = NPTypeCode.Double)
@@ -1172,31 +1173,31 @@ namespace NumSharp.Tests.Backends
 
             // cumsum / cumprod — read-only first, then NumPy's accumulation-size text.
             ((Action)(() => np.cumsum(a, @out: Ro(new Shape(6)))))
-                .Should().Throw<NumSharpException>().WithMessage("output array is read-only");
+                .Should().Throw<ValueError>().WithMessage("output array is read-only");
             ((Action)(() => np.cumprod(a, @out: Ro(new Shape(6)))))
-                .Should().Throw<NumSharpException>().WithMessage("output array is read-only");
+                .Should().Throw<ValueError>().WithMessage("output array is read-only");
             ((Action)(() => np.cumsum(a, @out: Ro(new Shape(9)))))
-                .Should().Throw<NumSharpException>().WithMessage("output array is read-only", "read-only wins over wrong size (probed)");
+                .Should().Throw<ValueError>().WithMessage("output array is read-only", "read-only wins over wrong size (probed)");
             ((Action)(() => np.cumsum(a, @out: np.zeros(new Shape(9)))))
                 .Should().Throw<IncorrectShapeException>().WithMessage("provided out is the wrong size for the accumulation.");
 
             // clip — read-only first, even when the out shape could not broadcast.
             ((Action)(() => np.clip(a, (NDArray)1, (NDArray)4, @out: Ro(new Shape(6)))))
-                .Should().Throw<NumSharpException>().WithMessage("output array is read-only");
+                .Should().Throw<ValueError>().WithMessage("output array is read-only");
             ((Action)(() => np.clip(a, (NDArray)1, (NDArray)4, @out: Ro(new Shape(2)))))
-                .Should().Throw<NumSharpException>().WithMessage("output array is read-only");
+                .Should().Throw<ValueError>().WithMessage("output array is read-only");
 
             // matmul — read-only first, ahead of the core-dimension mismatch.
             var m = np.eye(3);
             ((Action)(() => np.matmul(m, m, @out: Ro(new Shape(3, 3)))))
-                .Should().Throw<NumSharpException>().WithMessage("output array is read-only");
+                .Should().Throw<ValueError>().WithMessage("output array is read-only");
             ((Action)(() => np.matmul(m, m, @out: Ro(new Shape(4, 4)))))
-                .Should().Throw<NumSharpException>().WithMessage("output array is read-only");
+                .Should().Throw<ValueError>().WithMessage("output array is read-only");
 
             // take — shape error FIRST, castability second, read-only LAST with take's own text.
             var idx = np.array(new long[] { 0, 1, 2, 3, 4, 5 });
             ((Action)(() => np.take(a, idx, @out: Ro(new Shape(6)))))
-                .Should().Throw<NumSharpException>().WithMessage("WRITEBACKIFCOPY base is read-only");
+                .Should().Throw<ValueError>().WithMessage("WRITEBACKIFCOPY base is read-only");
             ((Action)(() => np.take(a, idx, @out: Ro(new Shape(9)))))
                 .Should().Throw<ArgumentException>().WithMessage("*output array does not match result of ndarray.take*");
             ((Action)(() => np.take(a, idx, @out: Ro(new Shape(6), NPTypeCode.Complex))))
@@ -1205,20 +1206,20 @@ namespace NumSharp.Tests.Backends
             // compress rides take's out dispatch — same writeback wording.
             var cond = np.array(new[] { true, true, true, true, true, true });
             ((Action)(() => np.compress(cond, a, @out: Ro(new Shape(6)))))
-                .Should().Throw<NumSharpException>().WithMessage("WRITEBACKIFCOPY base is read-only");
+                .Should().Throw<ValueError>().WithMessage("WRITEBACKIFCOPY base is read-only");
 
             // fft family — wrong shape FIRST (_raw_fft's Python-level check), read-only second;
             // one guard in RawFft covers fft/ifft/rfft/irfft (probed each on 2.4.2).
             ((Action)(() => np.fft.fft(a, @out: Ro(new Shape(6), NPTypeCode.Complex))))
-                .Should().Throw<NumSharpException>().WithMessage("output array is read-only");
+                .Should().Throw<ValueError>().WithMessage("output array is read-only");
             ((Action)(() => np.fft.fft(a, @out: Ro(new Shape(9), NPTypeCode.Complex))))
                 .Should().Throw<ValueError>().WithMessage("output array has wrong shape.");
             ((Action)(() => np.fft.ifft(a, @out: Ro(new Shape(6), NPTypeCode.Complex))))
-                .Should().Throw<NumSharpException>().WithMessage("output array is read-only");
+                .Should().Throw<ValueError>().WithMessage("output array is read-only");
             ((Action)(() => np.fft.rfft(a, @out: Ro(new Shape(4), NPTypeCode.Complex))))
-                .Should().Throw<NumSharpException>().WithMessage("output array is read-only");
+                .Should().Throw<ValueError>().WithMessage("output array is read-only");
             ((Action)(() => np.fft.irfft(np.fft.rfft(a), @out: Ro(new Shape(6)))))
-                .Should().Throw<NumSharpException>().WithMessage("output array is read-only");
+                .Should().Throw<ValueError>().WithMessage("output array is read-only");
 
             // Re-enabled targets accept every one of the calls the guard refused.
             var o6 = np.zeros(new Shape(6)); o6.setflags(write: false); o6.setflags(write: true);

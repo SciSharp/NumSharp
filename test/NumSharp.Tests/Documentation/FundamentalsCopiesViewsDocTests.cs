@@ -83,7 +83,7 @@ namespace NumSharp.Tests.Documentation
             big.Shape.IsWriteable.Should().BeFalse();
 
             Action write = () => big[0, 0] = 9;
-            write.Should().Throw<NumSharpException>().WithMessage("*read-only*");
+            write.Should().Throw<ValueError>().WithMessage("*read-only*");
         }
 
         // ── How to tell a view from a copy ─────────────────────────────────────────────────────────

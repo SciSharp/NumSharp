@@ -103,7 +103,7 @@ namespace NumSharp.Tests.IO
         {
             string p = Write("a.npy", Arange(6));
             var m = (NDArray)np.load(p, mmap_mode: "r");
-            Assert.ThrowsException<NumSharpException>(() => m[0] = 5);
+            Assert.ThrowsException<ValueError>(() => m[0] = 5);
             m.Dispose();
         }
 
@@ -177,7 +177,7 @@ namespace NumSharp.Tests.IO
             var row = m["0"];      // row sub-array view (GetData, contiguous)
             Assert.IsFalse(row.Shape.IsWriteable, "m[0] row view");
             Assert.IsFalse(m["1, 2"].Shape.IsWriteable, "m[1,2] element view");
-            Assert.ThrowsException<NumSharpException>(() => row[0] = 9);
+            Assert.ThrowsException<ValueError>(() => row[0] = 9);
             m.Dispose();
         }
 
@@ -204,7 +204,7 @@ namespace NumSharp.Tests.IO
             var view = m["1:4"];
             // Guard: assert read-only FIRST so the write below can't reach the read-only pages.
             Assert.IsFalse(view.Shape.IsWriteable, "a slice of an 'r' memmap must be read-only");
-            Assert.ThrowsException<NumSharpException>(() => view[0] = 99);
+            Assert.ThrowsException<ValueError>(() => view[0] = 99);
             m.Dispose();
         }
 
@@ -274,9 +274,9 @@ namespace NumSharp.Tests.IO
         {
             string p = Write("a.npy", Arange(6));
             var m = (NDArray)np.load(p, mmap_mode: "r");
-            // np.copyto routes through the standard write guard (NumSharpException:
+            // np.copyto routes through the standard write guard (ValueError:
             // "assignment destination is read-only"), same as every other write path.
-            Assert.ThrowsException<NumSharpException>(() => np.copyto(m, np.zeros(new Shape(6), NPTypeCode.Int32)));
+            Assert.ThrowsException<ValueError>(() => np.copyto(m, np.zeros(new Shape(6), NPTypeCode.Int32)));
             m.Dispose();
         }
 

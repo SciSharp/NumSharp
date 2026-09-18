@@ -30,7 +30,7 @@ namespace NumSharp.Tests.Backends
             var a = np.arange(6);
             a.setflags(write: false);
             a.flags.writeable.Should().BeFalse();
-            ((Action)(() => a[0] = (NDArray)9L)).Should().Throw<NumSharpException>().WithMessage("*read-only*");
+            ((Action)(() => a[0] = (NDArray)9L)).Should().Throw<ValueError>().WithMessage("*read-only*");
             a.setflags(write: true);
             a.flags.writeable.Should().BeTrue();
             a[0] = (NDArray)9L;
