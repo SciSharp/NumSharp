@@ -462,6 +462,7 @@ namespace NumSharp.Tests.Fuzz
             var files = Directory.GetFiles(corpusDir, "*.jsonl")
                 .Select(Path.GetFileName)
                 .Where(f => !f.StartsWith("index_", StringComparison.Ordinal))    // index oracle: different case schema (IndexOracleTests)
+                .Where(f => !f.StartsWith("ma_", StringComparison.Ordinal))       // masked-array oracle: MaskedArray operands + ApplyMasked, not OpRegistry.Apply (FuzzCorpusTests.Ma)
                 .Where(f => !f.EndsWith(".host.jsonl", StringComparison.Ordinal)) // host pins: not case files
                 .OrderBy(f => f, StringComparer.Ordinal)
                 .ToArray();

@@ -23,8 +23,11 @@ namespace NumSharp.Tests.Fuzz
             {
                 string file = Path.GetFileName(path);
                 if (file.EndsWith(".host.jsonl", StringComparison.Ordinal) ||
-                    file.StartsWith("index_", StringComparison.Ordinal))
-                    continue; // host metadata and the separate advanced-indexing schema
+                    file.StartsWith("index_", StringComparison.Ordinal) ||
+                    file.StartsWith("ma_", StringComparison.Ordinal))
+                    continue; // host metadata, the advanced-indexing schema, and the masked-array
+                              // schema (MaskedArray operands + ApplyMasked; gated by FuzzCorpusTests.Ma
+                              // with its own coverage model — many ma helper ops legitimately have <4 cases)
 
                 foreach (var c in FuzzCorpus.Load(file))
                 {
