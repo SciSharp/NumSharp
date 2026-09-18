@@ -92,7 +92,7 @@ DType exceptions occur when an operation doesn't support the array's data type.
 Raised when an operation cannot handle the given dtype.
 
 ```csharp
-var a = np.array(new[] { 1m, 2m, 3m });  // decimal
+var a = np.array([1m, 2m, 3m]);  // decimal
 var b = np.sin(a);  // UnsupportedDTypeException: sin() doesn't support decimal
 ```
 
@@ -214,7 +214,7 @@ attempt to get argmax of an empty sequence
 Raised when converting a non-scalar array to a scalar value.
 
 ```csharp
-var a = np.array(new[] { 1, 2, 3 });
+var a = np.array([1, 2, 3]);
 int x = (int)a;  // ScalarConversionException
 ```
 
@@ -256,7 +256,7 @@ cannot create Span over non-contiguous storage
 Raised when attempting to modify a read-only array (such as a broadcast view).
 
 ```csharp
-var a = np.array(new[] { 1, 2, 3 });
+var a = np.array([1, 2, 3]);
 var b = np.broadcast_to(a, new Shape(3, 3));  // b is read-only
 b[0, 0] = 999;  // ReadOnlyArrayException
 ```

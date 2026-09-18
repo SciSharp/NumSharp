@@ -110,22 +110,22 @@ Select arbitrary elements by index. Negative values are allowed; out-of-range ra
 
 ```csharp
 var x = np.arange(10, 1, -1);          // [10 9 8 7 6 5 4 3 2]
-x[np.array(new[] { 3, 3, 1, 8 })];     // [7 7 9 2]
-x[np.array(new[] { 3, 3, -3, 8 })];    // [7 7 4 2]
+x[np.array([3, 3, 1, 8])];     // [7 7 9 2]
+x[np.array([3, 3, -3, 8])];    // [7 7 4 2]
 ```
 
 With one index array per dimension, the arrays are **broadcast together and iterated as one** — the result has the broadcast index shape:
 
 ```csharp
 var y = np.arange(35).reshape(5, 7);
-y[np.array(new[] {0, 2, 4}), np.array(new[] {0, 1, 2})];   // [0 15 30]  (y[0,0], y[2,1], y[4,2])
+y[np.array([0, 2, 4]), np.array([0, 1, 2])];   // [0 15 30]  (y[0,0], y[2,1], y[4,2])
 ```
 
 To select a **grid** (the outer combination) rather than the diagonal, broadcast the indices or use `np.ix_`:
 
 ```csharp
-var rows = np.array(new[] { 0, 3 });
-var cols = np.array(new[] { 0, 2 });
+var rows = np.array([0, 3]);
+var cols = np.array([0, 2]);
 x[np.ix_(rows, cols)];      // the 2×2 corner block
 // x[rows, cols] alone would select only the diagonal [x[0,0], x[3,2]]
 ```
@@ -156,7 +156,7 @@ A boolean mask selects the elements where it is `True`, in C-order, returning a 
 var x = np.array(new[,] { { 1.0, 2.0 }, { double.NaN, 3.0 } });
 x[!np.isnan(x)];           // [1. 2. 3.]  (drops NaN)
 
-var v = np.array(new[] { 1.0, -1.0, -2.0, 3.0 });
+var v = np.array([1.0, -1.0, -2.0, 3.0]);
 v[v < 0] = 20;             // masked assignment writes through → [1, 20, 20, 3]
 ```
 
@@ -205,7 +205,7 @@ var x = np.arange(10);
 x["2:7"] = 1;                        // fill a slice with a scalar
 x["2:7"] = np.arange(5);             // or a shaped RHS (broadcasts)
 x[x > 5] = 0;                        // masked assignment writes through
-x[np.array(new[] {0, 2})] = -1;      // fancy assignment
+x[np.array([0, 2])] = -1;      // fancy assignment
 ```
 
 Two behaviors to keep in mind:
@@ -213,7 +213,7 @@ Two behaviors to keep in mind:
 - **Cross-dtype assignment coerces.** Writing a float into an int array truncates; an out-of-range *weak* scalar raises `OverflowException`. Full rules: [Getting & Setting Values → coercion](../getting-and-setting-values.md#value-coercion-on-assignment-nep50).
 - **C# `+=` is not in-place.** `x += 1` rebinds `x` to a new array; other references do not see the change. NumPy's "buffered `x[[1,1,3,1]] += 1` increments once" example does not translate directly — in C# write through a slice (`x[":"] = x + 1`) to mutate memory. See [Getting & Setting Values → in-place](../getting-and-setting-values.md#in-place-vs-reassignment).
 
-Duplicate fancy indices follow **last-write-wins** on assignment (`x[np.array(new[]{1,1})] = ...` keeps the last), and the iteration order of advanced assignment is otherwise unspecified — do not rely on it when an element is written more than once.
+Duplicate fancy indices follow **last-write-wins** on assignment (`x[np.array([1,1])] = ...` keeps the last), and the iteration order of advanced assignment is otherwise unspecified — do not rely on it when an element is written more than once.
 
 ---
 
@@ -222,7 +222,7 @@ Duplicate fancy indices follow **last-write-wins** on assignment (`x[np.array(ne
 | Index form | Returns | Writing through it… |
 |------------|---------|---------------------|
 | `x[0]`, `x["1:3"]`, `x["..., -1"]`, `x.T` | **view** | mutates the parent |
-| `x[np.array(new[]{0,2})]` (fancy read) | **copy** | does nothing to the parent — but `x[idx] = v` (setter) does |
+| `x[np.array([0,2])]` (fancy read) | **copy** | does nothing to the parent — but `x[idx] = v` (setter) does |
 | `x[mask]` (boolean read) | **copy** | same asymmetry — `x[mask] = v` writes through |
 | `np.broadcast_to(x, shape)` | **read-only view** | throws (`assignment destination is read-only`) |
 
@@ -235,7 +235,7 @@ This is the rule that governs everything — see [Copies and views](copies-and-v
 ### Filter by condition
 
 ```csharp
-var data = np.array(new[] { 1.0, -1.0, 2.0, -2.0 });
+var data = np.array([1.0, -1.0, 2.0, -2.0]);
 var positive = data[data > 0];       // [1., 2.]  (copy)
 data[data < 0] = 0;                  // clamp negatives in place
 ```
@@ -244,14 +244,14 @@ data[data < 0] = 0;                  // clamp negatives in place
 
 ```csharp
 var m = np.arange(20).reshape(4, 5);
-var picked = m[np.array(new[] { 0, 2, 3 })];   // rows 0, 2, 3 → (3, 5)
+var picked = m[np.array([0, 2, 3])];   // rows 0, 2, 3 → (3, 5)
 ```
 
 ### Take a diagonal grid vs a mesh
 
 ```csharp
-m[np.array(new[]{0,1}), np.array(new[]{2,3})];      // [m[0,2], m[1,3]] — paired
-m[np.ix_(np.array(new[]{0,1}), np.array(new[]{2,3}))]; // 2×2 block — meshed
+m[np.array([0,1]), np.array([2,3])];      // [m[0,2], m[1,3]] — paired
+m[np.ix_(np.array([0,1]), np.array([2,3]))]; // 2×2 block — meshed
 ```
 
 ---
@@ -280,7 +280,7 @@ That's NEP 50 coercion — weak scalars range-check, strong arrays wrap. See [Ge
 | Integer (partial) | `x[0]` | basic | sub-array view |
 | Slice string | `x["1:3, :2"]` | basic | view |
 | Ellipsis / newaxis | `x["..., 0]"`, `x[np.newaxis]` | basic | view |
-| Integer array | `x[np.array(new[]{0,2})]` | advanced | copy |
+| Integer array | `x[np.array([0,2])]` | advanced | copy |
 | Raw `int[]` sole index | `x[new[]{0,2}]` | advanced | copy (selects rows) |
 | Coordinate array | `x.GetData(new[]{0,2})` | — | element/sub-array |
 | Boolean mask | `x[mask]` | advanced | 1-D copy |

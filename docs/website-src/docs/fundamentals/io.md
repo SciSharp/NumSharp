@@ -88,7 +88,7 @@ A port of NumPy 2.4.2's `savetxt`, **byte-identical to NumPy's output**. A 1-D a
 
 ```csharp
 var m = np.loadtxt("data.csv", delimiter: ",", skiprows: 1);
-var cols = np.loadtxt("data.txt", usecols: new[] { 0, 2 }, dtype: np.float64);
+var cols = np.loadtxt("data.txt", usecols: [0, 2], dtype: np.float64);
 ```
 
 Round-trips `savetxt` (byte-exact values). Parameters mirror NumPy: `dtype` (default float64), `comments`, `delimiter` (whitespace-runs when unset), `converters`, `skiprows`, `usecols`, `unpack`, `ndmin`, `max_rows`, `quotechar`. Inputs: filename (`.gz` transparent), `Stream`, `TextReader`, or `IEnumerable<string>`. Parsers match NumPy's C reader — bool via int, range-checked integers, `PyOS_string_to_double` float semantics, and lowercase-`j` complex.

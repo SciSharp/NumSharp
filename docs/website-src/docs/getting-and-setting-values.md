@@ -52,12 +52,12 @@ a["..., -1"];      // np.a[..., -1]    ellipsis + last column
 Boolean and fancy indexing return copies:
 
 ```csharp
-var arr = np.array(new[] {10, 20, 30, 40, 50});
+var arr = np.array([10, 20, 30, 40, 50]);
 
 var mask = arr > 20;              // NDArray<bool>
 arr[mask];                        // arr[mask]  → [30, 40, 50] (copy)
 
-var idx = np.array(new[] {0, 2, 4});
+var idx = np.array([0, 2, 4]);
 arr[idx];                         // arr[idx]   → [10, 30, 50] (copy)
 arr[new[] {0, 2, 4}];             // same — a raw int[] as the SOLE index is fancy
 ```
@@ -147,7 +147,7 @@ var a = np.arange(20).reshape(4, 5);
 a["1:3"] = 0;                          // a[1:3] = 0        fill rows 1-2 with 0
 a[0] = 7;                              // a[0] = 7          fill first row (scalar broadcasts)
 a[0] = np.zeros(5);                    // a[0] = np.zeros(5)  assign a whole row
-a["1:3, :"] = np.array(new[] {1,2,3,4,5});  // row vector broadcasts down the two rows
+a["1:3, :"] = np.array([1,2,3,4,5]);  // row vector broadcasts down the two rows
 a["::2"] = -1;                         // every other row
 ```
 
@@ -156,11 +156,11 @@ The right-hand side must broadcast to the target's shape (see [Broadcasting](bro
 ### 3. Boolean mask
 
 ```csharp
-var arr = np.array(new[] {10, 20, 30, 40, 50});
+var arr = np.array([10, 20, 30, 40, 50]);
 arr[arr > 20] = -1;                        // arr[arr > 20] = -1  → [10, 20, -1, -1, -1]
 
 var mask = arr < 0;                        // [F, F, T, T, T]
-arr[mask] = np.array(new[] {1, 2, 3});     // one value per True position → [10, 20, 1, 2, 3]
+arr[mask] = np.array([1, 2, 3]);     // one value per True position → [10, 20, 1, 2, 3]
 ```
 
 The value count must match the number of `True` positions (or be a single scalar, which fills all of them). Unlike the *read* `arr[mask]` (a copy), the *assignment* `arr[mask] = …` writes through to `arr`.
@@ -168,9 +168,9 @@ The value count must match the number of `True` positions (or be a single scalar
 ### 4. Fancy indices
 
 ```csharp
-var arr = np.array(new[] {10, 20, 30, 40, 50});
-arr[np.array(new[] {0, 2, 4})] = 0;                          // arr[[0,2,4]] = 0 → [0, 20, 0, 40, 0]
-arr[np.array(new[] {0, 2, 4})] = np.array(new[] {1, 2, 3});  // one value per index
+var arr = np.array([10, 20, 30, 40, 50]);
+arr[np.array([0, 2, 4])] = 0;                          // arr[[0,2,4]] = 0 → [0, 20, 0, 40, 0]
+arr[np.array([0, 2, 4])] = np.array([1, 2, 3]);  // one value per index
 ```
 
 Duplicate indices follow last-write-wins, matching NumPy.
@@ -188,20 +188,20 @@ a.fill(7);                             // a.fill(7)   — every element = 7, IN 
 
 ```csharp
 var a = np.arange(5);
-a.put(np.array(new[] {0, 2}), np.array(new[] {10, 20}));         // a.put([0,2], [10,20]) → [10,1,20,3,4]
-np.put(a, np.array(new[] {0, 2}), np.array(new[] {10, 20}));
-np.put(a, np.array(new[] {4}), np.array(new[] {99}), "clip");    // out-of-range handled by mode
+a.put(np.array([0, 2]), np.array([10, 20]));         // a.put([0,2], [10,20]) → [10,1,20,3,4]
+np.put(a, np.array([0, 2]), np.array([10, 20]));
+np.put(a, np.array([4]), np.array([99]), "clip");    // out-of-range handled by mode
 ```
 
 Indices are flat (C-order). `mode` controls out-of-range handling — **`"raise"`** (default; negative indices normalize once, then out-of-range throws), **`"wrap"`**, or **`"clip"`** — matching NumPy. Values shorter than the index list are reused cyclically.
 
-> **Pass the indices/values as `NDArray`.** Because a bare C# `int` converts implicitly to both `long` and `NDArray`, the fully-literal single-index call `np.put(a, 4, 99)` is *ambiguous* and won't compile — wrap them (`np.put(a, np.array(new[]{4}), np.array(new[]{99}))`), as above.
+> **Pass the indices/values as `NDArray`.** Because a bare C# `int` converts implicitly to both `long` and `NDArray`, the fully-literal single-index call `np.put(a, 4, 99)` is *ambiguous* and won't compile — wrap them (`np.put(a, np.array([4]), np.array([99]))`), as above.
 
 ### 7. `np.place` — fill mask positions from a value list
 
 ```csharp
 var a = np.arange(6);
-np.place(a, a > 2, np.array(new[] {100, 200}));   // → [0, 1, 2, 100, 200, 100]
+np.place(a, a > 2, np.array([100, 200]));   // → [0, 1, 2, 100, 200, 100]
 ```
 
 `np.place(arr, mask, vals)` writes `vals` into the True positions of `mask`, **cycling** through `vals` (not broadcasting) and truncating an over-long list — `a.flat[mask] = vals` semantics.
@@ -221,7 +221,7 @@ np.copyto(dst, src, casting: "unsafe");           // relax the cast rule
 ```csharp
 var m = np.zeros((4, 4));
 np.fill_diagonal(m, 5);                            // np.fill_diagonal(m, 5)  — 5 on the diagonal
-np.fill_diagonal(m, np.array(new[] {1, 2, 3, 4})); // one value per diagonal slot
+np.fill_diagonal(m, np.array([1, 2, 3, 4])); // one value per diagonal slot
 ```
 
 Values **tile cyclically and truncate** (they do not broadcast); `wrap: true` continues the diagonal on tall matrices. Returns `void`, mutates in place, and writes correctly through transposed / sliced / F-order / negative-stride views.
@@ -232,7 +232,7 @@ Values **tile cyclically and truncate** (they do not broadcast); `wrap: true` co
 var t = np.arange(6).reshape(2, 3).T;   // a transposed (non-contiguous) view
 t.flatiter[5] = 99;                      // t.flat[5] = 99  — writes through in logical C-order
 t.flatiter["::2"] = 0;                   // slice assignment
-t.flatiter[new[] {0, 2}] = np.array(new[] {7, 8}); // fancy assignment
+t.flatiter[new[] {0, 2}] = np.array([7, 8]); // fancy assignment
 ```
 
 `arr.flatiter` is NumSharp's `flatiter` (the type of NumPy's `arr.flat`). It reads and writes **through to the base** in logical C-order for *every* layout — including transposed, sliced, strided, negative-stride, and broadcast views. Negative flat indices wrap; out-of-range raises `IndexError`.
@@ -264,7 +264,7 @@ a.fill(NDArray.Scalar<int>(300)); // OK — strong scalar wraps → stores 44
 C# compound operators (`+=`, `*=`, …) are **not in-place** on an `NDArray` — the compiler expands `a += 1` into `a = a + 1`, producing a new array and rebinding the variable. Other references to the original do not see the change:
 
 ```csharp
-var x = np.array(new[] {1, 2, 3});
+var x = np.array([1, 2, 3]);
 var alias = x;
 x += 10;                 // x → NEW array [11, 12, 13]
 // alias                 // still [1, 2, 3] — unlike NumPy!
@@ -289,7 +289,7 @@ See [NDArray → Compound assignment](NDArray.md#compound-assignment).
 | `arr[0,1] = 5` | `[]` element | `arr[0,1] = 5` (value → 0-d NDArray, converts); or `arr.SetValue(5L,0,1)` (exact) / `arr.SetDouble(5,0,1)` (exact, double array) |
 | `arr[1:3] = 0` | `[]` slice | `arr["1:3"] = 0` |
 | `arr[mask] = 0` | `[]` bool mask | `arr[mask] = 0` |
-| `arr[[0,2]] = [1,2]` | `[]` fancy | `arr[np.array(new[]{0,2})] = np.array(new[]{1,2})` (or a raw `int[]` index) |
+| `arr[[0,2]] = [1,2]` | `[]` fancy | `arr[np.array([0,2])] = np.array([1,2])` (or a raw `int[]` index) |
 | `arr.fill(5)` | method | `arr.fill(5)` |
 | `arr.put([k],[v])` / `np.put` | method / func | `arr.put(...)` / `np.put(...)` |
 | `np.place(arr, mask, vals)` | func | `np.place(...)` |

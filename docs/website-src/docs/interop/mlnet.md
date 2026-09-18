@@ -37,7 +37,7 @@ using NumSharp.Interop.MLNet;
 using Microsoft.ML;
 
 // A (rows, features) matrix in NumSharp.
-NDArray features = np.array(new float[,] { { 5.1f, 3.5f }, { 4.9f, 3.0f }, { 6.3f, 3.3f } });
+NDArray features = np.array([[5.1f, 3.5f], [4.9f, 3.0f], [6.3f, 3.3f]]);
 
 // Feed it to a trained pipeline as an IDataView, read the Score column straight back into NumSharp.
 using NDArrayDataView input = features.AsDataView("Features");
@@ -61,7 +61,7 @@ runner and no POCO class.
 | Verb | Direction | What it does |
 |------|-----------|--------------|
 | `nd.AsDataView("Features")` | NumSharp → ML.NET | An `IDataView` with **one vector column** — the feature-matrix shape a model consumes. Reads the array lazily through its strides (any layout), ARC-pinned. |
-| `nd.AsDataView(new[]{"a","b",…})` | NumSharp → ML.NET | An `IDataView` with **one scalar column per feature** — the tabular / training-data shape. |
+| `nd.AsDataView(["a","b",…])` | NumSharp → ML.NET | An `IDataView` with **one scalar column per feature** — the tabular / training-data shape. |
 | `nd.ToDataView(…)` | NumSharp → ML.NET | Same, over an independent snapshot (mutate/dispose the source freely afterward). |
 | `nd.ToVBuffer<T>()` | NumSharp → ML.NET | A dense `VBuffer<T>` (a copy — export can't be zero-copy, see [Limits](#limits)). |
 | `view.ToNDArray("col")` | ML.NET → NumSharp | Materialize a column across all rows: a scalar column → 1-D `(R,)`; a fixed-size vector column → 2-D `(R, C)`. |
@@ -93,7 +93,7 @@ feeding pipelines that reference named scalar columns (then `Concatenate` them i
 rows and one scalar column.
 
 ```csharp
-using var t = data.AsDataView(new[] { "SepalLength", "SepalWidth", "Label" });   // (150, 3) table
+using var t = data.AsDataView(["SepalLength", "SepalWidth", "Label"]);   // (150, 3) table
 var pipeline = ml.Transforms.Concatenate("Features", "SepalLength", "SepalWidth")
     .Append(ml.Regression.Trainers.Sdca(labelColumnName: "Label"));
 var model = pipeline.Fit(t);

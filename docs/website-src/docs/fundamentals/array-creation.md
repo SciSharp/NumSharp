@@ -30,7 +30,7 @@ This page covers the general mechanisms. For element types and how they are infe
 NumSharp reads .NET arrays the way NumPy reads Python lists. A 1-D array becomes a vector, a rectangular 2-D array a matrix, and so on:
 
 ```csharp
-var a1D = np.array(new[] { 1, 2, 3, 4 });
+var a1D = np.array([1, 2, 3, 4]);
 var a2D = np.array(new[,] { { 1, 2 }, { 3, 4 } });
 var a3D = np.array(new[,,] { { { 1, 2 }, { 3, 4 } }, { { 5, 6 }, { 7, 8 } } });
 ```
@@ -38,18 +38,18 @@ var a3D = np.array(new[,,] { { { 1, 2 }, { 3, 4 } }, { { 5, 6 }, { 7, 8 } } });
 The **dtype is inferred from the .NET element type** — this is the first thing to internalize, because it differs from NumPy in one important way:
 
 ```csharp
-np.array(new[] { 1, 2, 3 });                 // int32  (from int[])
-np.array(new[] { 1.0, 2.0 });                // float64 (from double[])
-np.array(new sbyte[] { -1, 0, 1 });          // int8
-np.array(new[] { (Half)1, (Half)2 });        // float16
-np.array(new[] { new Complex(1, 2) });       // complex128
+np.array([1, 2, 3]);                 // int32   (int literals)
+np.array([1.0, 2.0]);                // float64 (double literals)
+np.array(new sbyte[] { -1, 0, 1 });  // int8    (narrow type: no literal suffix, so keep new sbyte[])
+np.array([(Half)1, (Half)2]);        // float16
+np.array([new Complex(1, 2)]);       // complex128
 ```
 
 To pin a dtype explicitly, pass it as the second argument:
 
 ```csharp
-np.array(new[] { 1, 2, 3 }, np.float64);     // [1. 2. 3.] as float64
-np.array(new[] { 1, 2, 3 }, np.int8);        // int8
+np.array([1, 2, 3], np.float64);     // [1. 2. 3.] as float64
+np.array([1, 2, 3], np.int8);        // int8
 ```
 
 ### The int32-vs-int64 gotcha
@@ -57,7 +57,7 @@ np.array(new[] { 1, 2, 3 }, np.int8);        // int8
 `np.array(int[])` produces **int32** (it follows the .NET `int` type), but `np.arange` and most intrinsic integer functions produce **int64** (NumPy 2.x's integer default):
 
 ```csharp
-np.array(new[] { 0, 1, 2 }).dtype;   // int32   ← from int[]
+np.array([0, 1, 2]).dtype;   // int32   ← int literals (.NET int)
 np.arange(3).dtype;                  // int64   ← NumPy 2.x integer default
 ```
 
@@ -68,7 +68,7 @@ If a downstream operation is dtype-sensitive, make the intent explicit rather th
 NumPy raises when a Python *list* literal overflows the requested dtype (`np.array([127, 128, 129], dtype=np.int8)` → `OverflowError`). In NumSharp a C# **`int[]` is a strong array**, so a downcast **wraps** instead of raising — the weak/strong distinction that governs NEP 50:
 
 ```csharp
-np.array(new[] { 127, 128, 129 }, np.int8);  // [127, -128, -127]  ← wraps (strong array)
+np.array([127, 128, 129], np.int8);  // [127, -128, -127]  ← wraps (strong array)
 ```
 
 A *weak* C# scalar assigned into an integer array **does** range-check and raise (`OverflowException`). The full rules are in [Getting & Setting Values → Value coercion](../getting-and-setting-values.md#value-coercion-on-assignment-nep50).
@@ -111,9 +111,9 @@ As in NumPy, prefer `linspace` when you need a guaranteed element count and both
 ```csharp
 np.eye(3);                     // 3×3 identity (float64)
 np.eye(3, 5);                  // 3×5, 1s on the main diagonal
-np.diag(np.array(new[] {1, 2, 3}));       // 3×3 with [1,2,3] on the diagonal
-np.diag(np.array(new[,] {{1,2},{3,4}}));  // [1, 4]  (the diagonal, as a view)
-np.vander(np.array(new[] {1, 2, 3, 4}), 3);
+np.diag(np.array([1, 2, 3]));       // 3×3 with [1,2,3] on the diagonal
+np.diag(np.array([[1, 2], [3, 4]]));  // [1, 4]  (the diagonal, as a view)
+np.vander(np.array([1, 2, 3, 4]), 3);
 ```
 
 > `np.diag` on a 2-D input returns a **read-only view** of the diagonal (shared memory), matching NumPy — the docstring's "returns a copy" is wrong upstream too. See [Copies and views](copies-and-views.md).
@@ -133,7 +133,7 @@ np.zeros((2, 3), np.int32);            // dtype override
 `np.indices(shape)` returns one grid array per dimension (stacked), useful for evaluating functions on a regular grid:
 
 ```csharp
-np.indices(new[] { 3, 3 });   // takes an int[] of dimensions (not a tuple)
+np.indices([3, 3]);   // takes an int[] of dimensions (not a tuple)
 // [[[0 0 0] [1 1 1] [2 2 2]],
 //  [[0 1 2] [0 1 2] [0 1 2]]]
 ```
@@ -147,7 +147,7 @@ Coordinate grids also come from `np.meshgrid`, `np.mgrid`, and `np.ogrid` (open 
 Assigning an array or slicing it does **not** copy — you get a view sharing memory. Copy explicitly with `.copy()` (or `np.copy`):
 
 ```csharp
-var a = np.array(new[] { 1, 2, 3, 4, 5, 6 });
+var a = np.array([1, 2, 3, 4, 5, 6]);
 var b = a["0:2"];        // a VIEW of the first two elements
 b[":"] = b + 1;          // writes through — a is now [2, 3, 3, 4, 5, 6]
 
@@ -163,7 +163,7 @@ Join existing arrays with `np.concatenate` / `np.stack` / `np.vstack` / `np.hsta
 var A = np.ones((2, 2));
 var B = np.eye(2, 2);
 var C = np.zeros((2, 2));
-var D = np.diag(np.array(new[] { -3, -4 }));
+var D = np.diag(np.array([-3, -4]));
 np.block(new object[] { new object[] { A, B }, new object[] { C, D } });  // 4×4
 ```
 
@@ -248,7 +248,7 @@ var (xx, yy) = np.meshgrid(np.arange(3), np.arange(4));
 `np.arange`/`np.zeros(..., no dtype)` integer results are **int64**; `np.array(int[])` is **int32**. Pass an explicit dtype when it matters.
 
 ### "Downcasting an array didn't raise like NumPy"
-A C# `int[]` is a *strong* array and **wraps** on downcast (`np.array(new[]{300}, np.int8)` → `44`). Only *weak* scalar assignments range-check. See [Data types → Type promotion](../dtypes.md#type-promotion).
+A C# `int[]` is a *strong* array and **wraps** on downcast (`np.array([300], np.int8)` → `44`). Only *weak* scalar assignments range-check. See [Data types → Type promotion](../dtypes.md#type-promotion).
 
 ### "I changed a slice and the original changed too"
 Slices are views. Use `.copy()` when you need independence — see [Copies and views](copies-and-views.md).

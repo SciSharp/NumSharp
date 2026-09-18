@@ -28,8 +28,8 @@ You rarely touch Storage or TensorEngine directly — `NDArray` exposes everythi
 The usual ways, with their `numpy` counterparts:
 
 ```csharp
-np.array(new[] {1, 2, 3});                 // np.array([1, 2, 3])
-np.array(new int[,] {{1, 2}, {3, 4}});     // np.array([[1, 2], [3, 4]])
+np.array([1, 2, 3]);                       // np.array([1, 2, 3])
+np.array([[1, 2], [3, 4]]);                // np.array([[1, 2], [3, 4]])
 
 np.zeros((3, 4));                          // np.zeros((3, 4))
 np.ones(5);                                // np.ones(5)
@@ -189,12 +189,12 @@ a["..., -1"];      // ellipsis + last column
 Boolean and fancy indexing work like NumPy:
 
 ```csharp
-var arr = np.array(new[] {10, 20, 30, 40, 50});
+var arr = np.array([10, 20, 30, 40, 50]);
 
 var mask = arr > 20;           // NDArray<bool>
 arr[mask];                     // [30, 40, 50]
 
-var idx = np.array(new[] {0, 2, 4});
+var idx = np.array([0, 2, 4]);
 arr[idx];                      // [10, 30, 50] — fancy indexing
 ```
 
@@ -311,7 +311,7 @@ np.left_shift(2, arr);        // use the function instead
 `+=`, `-=`, `*=`, `/=`, `%=`, `&=`, `|=`, `^=`, `<<=`, `>>=` all work. **But**: C# synthesizes them as `a = a op b` — they produce a new array and reassign the variable. They are **not in-place** like NumPy's compound operators. Other references to the original array do not see the change:
 
 ```csharp
-var x = np.array(new[] {1, 2, 3});
+var x = np.array([1, 2, 3]);
 var alias = x;
 x += 10;                 // x  →  new array [11, 12, 13]
 // alias                 // still [1, 2, 3] — different from NumPy!
@@ -326,7 +326,7 @@ This is a C# language constraint — compound operators on reference types canno
 Three ways to change an array's type:
 
 ```csharp
-var a = np.array(new[] {1, 2, 3});
+var a = np.array([1, 2, 3]);
 
 // astype — allocates a new array (default) or rewrites in place (copy: false)
 var b = a.astype(np.float64);
@@ -482,7 +482,7 @@ All three return a view when the source is contiguous and a copy otherwise.
 
 ```csharp
 a.T;                           // full transpose (view)
-a.transpose(new[] {1, 0, 2});  // permute axes
+a.transpose([1, 0, 2]);        // permute axes
 np.swapaxes(a, 0, 1);
 np.moveaxis(a, 0, -1);
 ```
