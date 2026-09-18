@@ -702,16 +702,16 @@ namespace NumSharp.Tests.Fuzz
             ["linalg_parity.jsonl"] = 340,   // +90: LU family (solve/inv/det/slogdet/tensorinv/tensorsolve) + matrix_power(n<0)
             ["poly.jsonl"] = 60,
             ["einsum.jsonl"] = 35,
-            ["modf.jsonl"] = 51,
+            ["modf.jsonl"] = 165,   // all non-complex lanes + char (the 59f99320 per-width promotion, dtype-spread gate)
             ["multioutput.jsonl"] = 51,
-            ["nanreduce.jsonl"] = 6692,
+            ["nanreduce.jsonl"] = 8300,   // + nanpercentile/nanquantile integer/bool degenerate lanes (dtype-spread gate)
             ["nanscan.jsonl"] = 525,   // nancumsum all 13 dtypes; nancumprod carves complex128 (host-FMA multiply)
             ["numpy_f32_kernels.jsonl"] = 140,
             ["numpy_f64_kernels.jsonl"] = 24,
-            ["out_where.jsonl"] = 6200,   // +240 §B2: out_scan/out_round/out_clip/out_nanarg (out= beyond the ufuncs)
+            ["out_where.jsonl"] = 6300,   // §B2 out_scan/out_round/out_clip/out_nanarg + the f16/uint8 lanes (dtype-spread gate)
             ["params.jsonl"] = 1190,      // +288 §C1: multi-axis median/average/nanmedian (tuple-axis int[] overloads)
-            ["instance.jsonl"] = 4400,    // §D: ndarray.* instance surface (dual-forms, item/len/props, in-place mutators)
-            ["emath.jsonl"] = 260,        // §A2/E5: np.emath scimath promotion (complex128/float64 lanes)
+            ["instance.jsonl"] = 7500,    // §D: ndarray.* instance surface — 13 NumPy dtypes + the char proxy weave (dtype-spread gate)
+            ["emath.jsonl"] = 385,        // §A2/E5: np.emath scimath promotion (+ the unsigned lanes, dtype-spread gate)
             ["place.jsonl"] = 12,
             ["products.jsonl"] = 326,
             ["precision.jsonl"] = 80,

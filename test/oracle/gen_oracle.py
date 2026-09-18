@@ -1838,7 +1838,11 @@ def gen_pad(dtypes):
 # T15 — multi-output. np.modf(x) -> (fractional, integral). Split into two corpus ops so the
 # harness bit-compares EACH output buffer. NumPy is the oracle for value, dtype, and the C-standard
 # sign rules (modf(-0.0)=(-0.0,-0.0), modf(inf)=(0.0,inf), modf(nan)=(nan,nan)).
-MODF_DTYPES = ["float16", "float32", "float64", "int32"]
+# Every non-complex NumPy lane: the 59f99320 per-width promotion tier (bool/int8/uint8->f16,
+# int16/uint16->f32, int32+->f64) made the integer/bool cells computable - complex raises (its
+# no-loop TypeError is unit-gated) and Char rides char_tier("modf").
+MODF_DTYPES = ["bool", "int8", "uint8", "int16", "uint16", "int32", "uint32", "int64",
+               "uint64", "float16", "float32", "float64"]
 MODF_LAYOUTS = ["c_contiguous_1d", "c_contiguous_2d", "c_contiguous_3d", "f_contiguous_2d",
                 "transposed_3d", "strided_2d_cols", "negstride_1d", "one_element_1d"]
 
@@ -2582,8 +2586,16 @@ def _relabel_dtype(cases, frm, to):
             if o.get("dtype") == frm:
                 o["dtype"] = to
         exp = c.get("expected")
-        if isinstance(exp, dict) and exp.get("dtype") == frm:
-            exp["dtype"] = to
+        if isinstance(exp, dict):
+            if exp.get("dtype") == frm:
+                exp["dtype"] = to
+            # kind=tuple carries per-slot descriptors — without this the instance tier's in-place
+            # mutators (sort/fill/put: slots [post-call view, base buffer], both proxy-dtyped)
+            # kept "uint16" slots after the relabel and every char cell failed on a dtype
+            # mismatch (found the moment char_tier("instance") landed).
+            for slot in exp.get("slots") or []:
+                if isinstance(slot, dict) and slot.get("dtype") == frm:
+                    slot["dtype"] = to
         for k, v in list(c.get("params", {}).items()):
             if v == frm:
                 c["params"][k] = to
@@ -2606,7 +2618,9 @@ ROUND_DTYPES = ["bool", "int8", "uint8", "int16", "int32", "int64", "uint16", "u
 # uint8 CARVED: trace of an unsigned dtype upcasts to Int64 in NumSharp but uint64 in NumPy -> [OpenBugs].
 TRACE_DTYPES = ["int16", "int32", "int64", "float16", "float32", "float64", "complex128"]
 EDIFF_DTYPES = ["int16", "int32", "int64", "uint8", "float32", "float64", "complex128"]  # no bool (NumPy bans bool `-`)
-NANQ_DTYPES = ["float16", "float32", "float64"]  # NaN only exists in float; pools already carry NaN/inf
+NANQ_DTYPES = ["float16", "float32", "float64",  # NaN-laced float pools (the tier's point)
+               "bool", "uint8", "int32", "int64"]  # + integer/bool lanes: no NaN can occur, so
+                                                   # NumPy degenerates to percentile - gated too
 
 # Group A Batch 3: searching (flatnonzero/argwhere -> int64 coords) + whole-array bool reductions
 # (allclose/array_equal, wrapped to a 0-D bool via np.asarray). All GREEN.
@@ -3215,7 +3229,14 @@ def gen_nanquantile(dtypes):
              ("nanquantile", np.nanquantile, [0.0, 0.25, 0.5, 0.75, 1.0])]
     for s in dtypes:
         dt = np.dtype(s)
-        base1 = np.array([3.5, -2.0, np.nan, 7.25, 0.0, -9.5, 4.0, np.nan, 1.5, 6.0, -3.0, 2.5], dtype=dt)
+        if dt.kind == "f":
+            base1 = np.array([3.5, -2.0, np.nan, 7.25, 0.0, -9.5, 4.0, np.nan, 1.5, 6.0, -3.0, 2.5], dtype=dt)
+        else:
+            # Integer/bool lanes: no NaN can exist, so nanpercentile degenerates to percentile —
+            # the point of gating them. NaN/negative literals would RAISE at construction for
+            # unsigned/bool (NumPy 2.x bounds-checks python ints), and a float→uint astype is
+            # C-undefined — so the pool is built as int64 and astype'd (well-defined modular).
+            base1 = np.array([3, 250, 7, 0, 9, 4, 200, 1, 6, 255, 2, 5], dtype=np.int64).astype(dt)
         base2 = base1.reshape(3, 4)
         jobs = [(base1, None), (base1, 0)] + [(base2, ax) for ax in (None, 0, 1)]
         for (a, axis) in jobs:
@@ -4088,6 +4109,10 @@ def char_tier(mode):
         raw = gen_round([_C], L)
     elif mode == "copyto":                                         # G9: overlap + int32/float64 cross
         raw = gen_copyto([_C], CHAR_COPYTO_CROSS)
+    elif mode == "instance":                                       # ndarray.* instance surface on the proxy
+        raw = gen_instance([_C])
+    elif mode == "modf":                                           # modf(char) -> (float32, float32) per the
+        raw = gen_modf([_C], MODF_LAYOUTS)                         # 59f99320 per-width promotion tier
     return _relabel_dtype(raw, _C, "char")
 
 
@@ -6122,7 +6147,7 @@ def gen_out_where():
     extra_kinds = ["c", "strided", "negstride", "offset", "transposed"]
     for shape in [(6,), (4, 5)]:
         cnt = int(np.prod(shape))
-        for s in ["int32", "float64", "complex128"]:
+        for s in ["int32", "uint8", "float16", "float64", "complex128"]:
             # .copy() so `a` OWNS its buffer (base is None): describe(base, view) demands the
             # view alias the base's buffer, and a reshape of _fill would smuggle a hidden base.
             a = _fill(cnt, np.dtype(s)).reshape(shape).copy()
@@ -8482,13 +8507,22 @@ INSTANCE_LAYOUTS = [
     "transposed_2d", "strided_step2_1d", "negstride_1d", "simple_slice_offset_1d",
     "scalar_0d", "one_element_1d",
 ]
-INSTANCE_DTYPES = ["bool", "uint8", "int32", "int64", "float16", "float32", "float64", "complex128"]
+# All 13 NumPy-expressible dtypes (dtype-spread gate): Char is woven via char_tier("instance")
+# on the uint16 proxy; Decimal has no NumPy oracle - its instance coverage rides the same engine
+# paths the decimal_* tiers gate (documented in OracleCoverageStrengthTests.FixedDtypeOps).
+INSTANCE_DTYPES = ["bool", "int8", "uint8", "int16", "uint16", "int32", "uint32", "int64",
+                   "uint64", "float16", "float32", "float64", "complex128"]
 
 
-def gen_instance():
+def gen_instance(dtypes=None):
+    """dtypes=None sweeps INSTANCE_DTYPES; char_tier("instance") passes ["uint16"] so the whole
+    tier re-runs on the Char proxy (dedicated dot/searchsorted/choose + resize jobs included)."""
     cases = []
     n = 0
     skipped = 0
+    sweep = dtypes if dtypes is not None else INSTANCE_DTYPES
+    dedicated = dtypes if dtypes is not None else ("int32", "uint8", "float64", "complex128")
+    resize_dts = dtypes if dtypes is not None else ("int32", "float64", "float16", "complex128")
 
     def emit(op, params, operand_pairs, layout, dtname, tag, run, kind=None):
         """Record one instance case: run() returns the numpy result (an ndarray for kind=array,
@@ -8515,7 +8549,7 @@ def gen_instance():
 
     # ---- dual-form value methods (plan §D1) + property reads (§D4) ----
     for ln in INSTANCE_LAYOUTS:
-        for s in INSTANCE_DTYPES:
+        for s in sweep:
             dt = np.dtype(s)
             base, view = LAYOUTS[ln](dt)
             pair = [(base, view)]
@@ -8599,7 +8633,9 @@ def gen_instance():
             # reinterpret family
             emit("ndarray.view", {}, pair, ln, s, "same", lambda v=view: v.view())
             reinterp = {"int32": "float32", "int64": "float64", "float32": "int32",
-                        "float64": "int64", "float16": "uint16", "uint8": "bool"}
+                        "float64": "int64", "float16": "uint16", "uint8": "bool",
+                        "int16": "uint16", "uint16": "int16", "uint32": "float32",
+                        "uint64": "float64"}
             if s in reinterp:
                 emit("ndarray.view", {"dtype": reinterp[s]}, pair, ln, s, f"as={reinterp[s]}",
                      lambda v=view, t=reinterp[s]: v.view(t))
@@ -8670,7 +8706,7 @@ def gen_instance():
     # ---- dedicated small-exact jobs that need custom operands ----
     # uint8 joins so dot/choose clear the strength gate's >=4-cases floor (and it exercises the
     # unsigned lanes of the small-exact product/gather paths).
-    for s in ("int32", "uint8", "float64", "complex128"):
+    for s in dedicated:
         dt = np.dtype(s)
         A = np.arange(6, dtype=np.float64).reshape(2, 3)
         B = (np.arange(6, dtype=np.float64) + 1).reshape(3, 2)
@@ -8701,7 +8737,7 @@ def gen_instance():
     # is built directly so base IS the array being resized; numpy needs refcheck=False because
     # the generator's locals hold references. Result kind is ARRAY: the mutated array IS the
     # whole observable state after resize (the old base buffer no longer exists).
-    for s in ("int32", "float64"):
+    for s in resize_dts:
         dt = np.dtype(s)
         for newshape in ([3], [12], [2, 4]):
             own = _fill(8, dt)
@@ -8725,7 +8761,8 @@ def gen_instance():
 # promote to complex64 (numpy/lib/_scimath_impl._tocomplex), which NumSharp cannot represent
 # (issue #569); those lanes stay on the np.emath.Test.cs sibling suite.
 EMATH_UNARY = ["sqrt", "log", "log2", "log10", "arccos", "arcsin", "arctanh"]
-EMATH_DTYPES = ["float64", "int32", "int64", "uint8", "bool", "complex128"]
+EMATH_DTYPES = ["float64", "int32", "int64", "uint8", "uint16", "uint32", "uint64",
+                "bool", "complex128"]
 EMATH_LAYOUTS = ["c_contiguous_1d", "c_contiguous_2d", "f_contiguous_2d", "negstride_1d",
                  "strided_step2_1d", "scalar_0d", "one_element_1d", "empty_2d"]
 
@@ -8943,6 +8980,7 @@ def main():
         write_jsonl(os.path.join(corpus_dir, "logic.jsonl"), cases)
     elif mode == "modf":
         cases = gen_modf(MODF_DTYPES, MODF_LAYOUTS)
+        cases += char_tier("modf")
         write_jsonl(os.path.join(corpus_dir, "modf.jsonl"), cases)
     elif mode == "manip":
         cases = gen_manip(MANIP_DTYPES, list(LAYOUTS.keys()))
@@ -9043,6 +9081,7 @@ def main():
         write_jsonl(os.path.join(corpus_dir, "evaluate.jsonl"), cases)
     elif mode == "instance":
         cases = gen_instance()                                          # ndarray.* instance surface (plan §D)
+        cases += char_tier("instance")
         write_jsonl(os.path.join(corpus_dir, "instance.jsonl"), cases)
     elif mode == "emath":
         cases = gen_emath()                                             # np.emath scimath module (plan §A2/E5)
