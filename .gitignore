@@ -400,3 +400,4 @@ src/NumSharp.Interop.OpenBLAS/tools/.wheel-cache/
 # Local run artifacts from the gist/Karpathy example runners (dated demonstration + parity
 # output; regenerable scratch, ~95 MB, not repo content).
 /outputs/
+/optimize-runs
