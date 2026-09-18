@@ -73,7 +73,7 @@ function installTocStatePersistence() {
 
   // Scope the record to THIS page's toc.json. Two reasons: (1) folders with
   // their own toc keep independent state; (2) localStorage is per-ORIGIN, not
-  // per-path, so NumSharp and OptunaSharp docs served from the same
+  // per-path, so OptunaSharp and NumSharp docs served from the same
   // *.github.io host would otherwise share (and clobber) one record.
   const tocRelMeta = document.querySelector('meta[name="docfx:tocrel"]')
   const tocRel = tocRelMeta ? tocRelMeta.content || '' : ''
@@ -112,14 +112,15 @@ function installTocStatePersistence() {
    * @returns {{[nodeKey: string]: boolean}} map of node key -> expanded flag; empty when nothing valid is stored.
    */
   function loadNodes() {
+    const nodes = Object.create(null)
     let raw
     try {
       raw = store.getItem(storageKey)
     } catch {
-      return {}
+      return nodes
     }
     if (!raw) {
-      return {}
+      return nodes
     }
     let data
     try {
@@ -127,17 +128,22 @@ function installTocStatePersistence() {
     } catch {
       // A corrupt blob is unrecoverable; drop it so it cannot keep erroring.
       removeRecord()
-      return {}
+      return nodes
     }
     const expired = !data ||
       data.v !== TOC_STATE_SCHEMA ||
-      typeof data.expiresAt !== 'number' ||
-      data.expiresAt < Date.now()
+      !Number.isFinite(data.expiresAt) ||
+      data.expiresAt <= Date.now()
     if (expired) {
       removeRecord()
-      return {}
+      return nodes
     }
-    return data.nodes && typeof data.nodes === 'object' ? data.nodes : {}
+    if (data.nodes && typeof data.nodes === 'object' && !Array.isArray(data.nodes)) {
+      for (const [key, value] of Object.entries(data.nodes)) {
+        if (typeof value === 'boolean') nodes[key] = value
+      }
+    }
+    return nodes
   }
 
   /**
@@ -165,8 +171,9 @@ function installTocStatePersistence() {
     }
   }
 
-  /** Remembered node states for this scope, loaded once and mutated on toggles. */
-  const nodeStates = loadNodes()
+  /** Remembered node states, refreshed before restore and each reader toggle. */
+  let nodeStates = loadNodes()
+  if (Object.keys(nodeStates).length > 0) saveNodes(nodeStates)
 
   /**
    * The label text of an `<li>`'s own node (its direct `<a>`, or the
@@ -284,11 +291,10 @@ function installTocStatePersistence() {
     }
   }
 
-  // Record real reader toggles. Capture phase on the persistent #toc container
-  // runs before docfx's own bubble-phase @click handler, so we can identify the
-  // node while its element is still attached, then read the ACTUAL resulting
-  // state after docfx re-renders on the next frame (storing ground truth rather
-  // than a prediction of the toggle).
+  // Capture the identity before DocFX can replace the clicked element. Read the
+  // result in the BUBBLE listener, after its target handler renders. A microtask
+  // queued in capture can run BEFORE the target handler for native user input.
+  const toggles = new WeakMap()
   toc.addEventListener('click', event => {
     // Ignore our restore clicks (untrusted) and any stray untrusted events.
     if (applyingRestore || !event.isTrusted) {
@@ -310,30 +316,23 @@ function installTocStatePersistence() {
     if (!li) {
       return
     }
-    const key = keyOf(li)
-    // docfx re-renders synchronously in its own bubble-phase handler, which runs
-    // after this capture handler within the same click dispatch. A microtask
-    // therefore runs AFTER that re-render (so the DOM shows the new state) yet
-    // still before any following task — crucially before a navigation started by
-    // this same click, so toggling a section and immediately clicking a link
-    // inside it still persists. (requestAnimationFrame would defer the save to a
-    // future frame that never runs once the page starts unloading.)
-    queueMicrotask(() => {
-      let current = null
-      const expanders = toc.querySelectorAll('li.expander')
-      for (const el of expanders) {
-        if (keyOf(el) === key) {
-          current = el
-          break
-        }
-      }
-      if (!current) {
-        return
-      }
+    toggles.set(event, keyOf(li))
+  }, true)
+
+  toc.addEventListener('click', event => {
+    if (!toggles.has(event)) return
+    const key = toggles.get(event)
+    toggles.delete(event)
+    for (const current of toc.querySelectorAll('li.expander')) {
+      if (keyOf(current) !== key) continue
+      // Merge this one choice into the latest record. Another open page may
+      // have changed a different branch since this page initially loaded.
+      nodeStates = loadNodes()
       nodeStates[key] = current.classList.contains('expanded')
       saveNodes(nodeStates)
-    })
-  }, true)
+      break
+    }
+  })
 
   /**
    * True once we have restored for this page load, so the MutationObserver's
@@ -343,14 +342,16 @@ function installTocStatePersistence() {
   let booted = false
 
   /**
-   * Restore once the TOC has rendered its first expander, then slide the 48h
-   * window forward for this visit. Idempotent and cheap to call repeatedly.
+   * Restore once the unfiltered TOC has rendered. DocFX restores its title
+   * filter across reloads; hidden branches cannot be reconciled until cleared.
    * @returns {void}
    */
   async function boot() {
     if (booted) {
       return
     }
+    const filter = toc.querySelector('input')
+    if (filter && filter.value.trim()) return
     if (!toc.querySelector('li.expander')) {
       // TOC not populated yet; wait for the next mutation.
       return
@@ -360,12 +361,15 @@ function installTocStatePersistence() {
     // this callback.
     observer.disconnect()
     defaultStates = await defaultsReady
-    restore()
-    // Re-stamp the expiry on every visit, even when nothing was toggled, so
-    // simply browsing keeps a remembered layout alive.
-    if (Object.keys(nodeStates).length > 0) {
-      saveNodes(nodeStates)
+    // The reader may have started filtering while the defaults were loading.
+    if (filter && filter.value.trim()) {
+      booted = false
+      observer.observe(toc, { childList: true, subtree: true })
+      return
     }
+    // A restored filter can postpone boot while another tab changes the layout.
+    nodeStates = loadNodes()
+    restore()
   }
 
   // #toc is filled asynchronously after toc.json loads, so observe it for the
