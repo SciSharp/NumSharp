@@ -1,12 +1,12 @@
 # NumSharp: the absolute basics for beginners
 
-Welcome to the absolute beginner's guide to NumSharp — the .NET port of NumPy. NumSharp gives C# the same thing NumPy gives Python: a multidimensional array type (`NDArray`) and a large library of functions (`np.*`) that operate on it efficiently. If you know NumPy, this reads almost identically; if you don't, this page builds the mental model from scratch.
+Welcome to the absolute beginner's guide to NumSharp - the .NET port of NumPy. NumSharp gives C# the same thing NumPy gives Python: a multidimensional array type (`NDArray`) and a large library of functions (`np.*`) that operate on it efficiently. If you know NumPy, this reads almost identically; if you don't, this page builds the mental model from scratch.
 
 This is the on-ramp. Each topic here has a deeper companion in [Fundamentals and usage](fundamentals/index.md), linked as we go.
 
-> **The one thing to know up front:** C# has no `a[1:5]` slice syntax, so NumSharp writes slices as **strings** — `a["1:5"]`. Whole-number coordinates stay normal: `a[1, 3]`. That's the biggest surface difference from NumPy; everything else is close.
+> **The one thing to know up front:** C# has no `a[1:5]` slice syntax, so NumSharp writes slices as **strings** - `a["1:5"]`. Whole-number coordinates stay normal: `a[1, 3]`. That's the biggest surface difference from NumPy; everything else is close.
 
-<!-- Tests: NumSharp.Tests.Documentation.AbsoluteBasicsDocTests — every code example on this page is executed and asserted in test/NumSharp.Tests/Documentation/AbsoluteBasicsDocTests.cs. Section → method:
+<!-- Tests: NumSharp.Tests.Documentation.AbsoluteBasicsDocTests - every code example on this page is executed and asserted in test/NumSharp.Tests/Documentation/AbsoluteBasicsDocTests.cs. Section → method:
      Array fundamentals → Fundamentals_CreateIndexMutateSliceView
      Array attributes → Attributes_NdimShapeSizeDtype
      How to create a basic array → Create_ZerosOnesEmptyArangeLinspace
@@ -60,19 +60,19 @@ Run them in a `dotnet run` file-based app, LINQPad, a console project, or a C# n
 
 ## Why use NumSharp?
 
-.NET arrays (`int[]`, `double[,]`) and `List<T>` are excellent general-purpose containers. But for **large quantities of same-type numeric data** processed with whole-array math, an `NDArray` is faster and far more convenient: one type holds any rank, operations vectorize (SIMD) with no explicit loops, and slicing shares memory instead of copying. NumSharp shines exactly where NumPy does — bulk homogeneous numeric work on the CPU.
+.NET arrays (`int[]`, `double[,]`) and `List<T>` are excellent general-purpose containers. But for **large quantities of same-type numeric data** processed with whole-array math, an `NDArray` is faster and far more convenient: one type holds any rank, operations vectorize (SIMD) with no explicit loops, and slicing shares memory instead of copying. NumSharp shines exactly where NumPy does - bulk homogeneous numeric work on the CPU.
 
 ---
 
 ## What is an "array"?
 
-An array stores data in a grid. A **1-D** array is like a list; a **2-D** array like a table; a **3-D** array like a stack of tables; and so on to any number of dimensions — which is why the type is called `NDArray` (**N-D**imensional array).
+An array stores data in a grid. A **1-D** array is like a list; a **2-D** array like a table; a **3-D** array like a stack of tables; and so on to any number of dimensions - which is why the type is called `NDArray` (**N-D**imensional array).
 
 NumSharp arrays have the same restrictions NumPy's do:
 
 - **All elements share one data type** (the array is *homogeneous*).
 - **The total size is fixed** once created.
-- **The shape is rectangular**, not jagged — every row of a 2-D array has the same number of columns.
+- **The shape is rectangular**, not jagged - every row of a 2-D array has the same number of columns.
 
 Meeting these conditions is what lets NumSharp make the array fast and memory-efficient.
 
@@ -107,7 +107,7 @@ Slicing uses **string** notation (`start:stop:step`, stop exclusive):
 a["0:3"];    // [10 2 3]
 ```
 
-A major difference from a .NET array: slicing an `NDArray` returns a **view** — an object referring to the *same* data. Mutating the view mutates the original:
+A major difference from a .NET array: slicing an `NDArray` returns a **view** - an object referring to the *same* data. Mutating the view mutates the original:
 
 ```csharp
 var b = a["3:"];
@@ -128,7 +128,7 @@ a;
 //  [ 9 10 11 12]]
 ```
 
-A dimension is sometimes called an **axis**. Index along each axis with commas inside **one** set of brackets — the element `8` is in row `1`, column `3`:
+A dimension is sometimes called an **axis**. Index along each axis with commas inside **one** set of brackets - the element `8` is in row `1`, column `3`:
 
 ```csharp
 a[1, 3];        // a 0-D array printing 8
@@ -152,7 +152,7 @@ a.size;    // 12     total number of elements (product of the shape)
 a.dtype;   // int32
 ```
 
-> **⚠️ Divergence — the default integer dtype.** In NumPy `np.array([1,2,3])` is **int64**; in NumSharp `np.array([1,2,3])` is **int32**, because it follows the .NET `int` type. (`np.arange` and most intrinsic integer functions *do* give int64.) Pass a dtype explicitly when it matters: `np.array([1,2,3], np.int64)`. See [Array creation → the int32-vs-int64 gotcha](fundamentals/array-creation.md#the-int32-vs-int64-gotcha).
+> **⚠️ Divergence - the default integer dtype.** In NumPy `np.array([1,2,3])` is **int64**; in NumSharp `np.array([1,2,3])` is **int32**, because it follows the .NET `int` type. (`np.arange` and most intrinsic integer functions *do* give int64.) Pass a dtype explicitly when it matters: `np.array([1,2,3], np.int64)`. See [Array creation → the int32-vs-int64 gotcha](fundamentals/array-creation.md#the-int32-vs-int64-gotcha).
 
 `a.dtype` is a `DType` descriptor (`a.dtype.type` is the CLR `Type`, `(Type)a.dtype` the explicit cast). More in [Data types](dtypes.md).
 
@@ -165,13 +165,13 @@ a.dtype;   // int32
 ```csharp
 np.zeros(2);          // [0. 0.]     (default dtype is float64)
 np.ones(2);           // [1. 1.]
-np.empty(2);          // uninitialized — content is whatever was in memory; fill it yourself
+np.empty(2);          // uninitialized - content is whatever was in memory; fill it yourself
 np.arange(4);         // [0 1 2 3]
 np.arange(2, 9, 2);   // [2 4 6 8]   (start, stop-exclusive, step)
 np.linspace(0, 10, 5); // [ 0. 2.5 5. 7.5 10. ]  (evenly spaced, endpoints included)
 ```
 
-`empty` is faster than `zeros` because it skips initialization — just be sure to fill every element afterward.
+`empty` is faster than `zeros` because it skips initialization - just be sure to fill every element afterward.
 
 Specify the dtype explicitly with the second argument (the default is float64):
 
@@ -192,7 +192,7 @@ var arr = np.array([2, 1, 5, 3, 7, 4, 6, 8]);
 np.sort(arr);   // [1 2 3 4 5 6 7 8]  (returns a sorted copy)
 ```
 
-NumSharp also has `argsort` (indirect sort), `lexsort` (stable multi-key), `searchsorted` (find in a sorted array), and `partition` (partial sort) — see [Sorting & Searching](../api/index.md).
+NumSharp also has `argsort` (indirect sort), `lexsort` (stable multi-key), `searchsorted` (find in a sorted array), and `partition` (partial sort) - see [Sorting & Searching](../api/index.md).
 
 Join arrays with `np.concatenate`. In C# the arrays are passed as an **array** (`[ … ]`), not a Python tuple:
 
@@ -217,9 +217,9 @@ To *remove* elements, index the ones you want to keep (see [Indexing](#indexing-
 
 *Covers `ndim`, `size`, `shape`.*
 
-- `arr.ndim` — the number of axes.
-- `arr.size` — the total number of elements (product of the shape).
-- `arr.shape` — a `long[]` of the element count along each axis.
+- `arr.ndim` - the number of axes.
+- `arr.size` - the total number of elements (product of the shape).
+- `arr.shape` - a `long[]` of the element count along each axis.
 
 ```csharp
 var example = np.array(new[,,] {
@@ -238,7 +238,7 @@ example.shape;   // (3, 2, 4)
 
 *Covers `reshape`.*
 
-**Yes.** `reshape` gives an array a new shape without changing its data — the new shape must have the same number of elements as the original.
+**Yes.** `reshape` gives an array a new shape without changing its data - the new shape must have the same number of elements as the original.
 
 ```csharp
 var a = np.arange(6);   // [0 1 2 3 4 5]
@@ -254,7 +254,7 @@ var b = a.reshape(3, 2);
 np.reshape(a, (1, 6));   // [[0 1 2 3 4 5]]
 ```
 
-`order` is `C` (row-major, the default), `F` (column-major), or `A`. It controls how indices map to memory order — see [Under the hood → indexing order](advanced/under-the-hood.md#multidimensional-array-indexing-order).
+`order` is `C` (row-major, the default), `F` (column-major), or `A`. It controls how indices map to memory order - see [Under the hood → indexing order](advanced/under-the-hood.md#multidimensional-array-indexing-order).
 
 ---
 
@@ -268,8 +268,8 @@ np.reshape(a, (1, 6));   // [[0 1 2 3 4 5]]
 var a = np.array([1, 2, 3, 4, 5, 6]);
 a.shape;                       // (6,)
 
-a[np.newaxis].shape;           // (1, 6)   — a row vector (axis prepended)
-a[Slice.All, np.newaxis].shape; // (6, 1)  — a column vector (Slice.All is Python's `:`)
+a[np.newaxis].shape;           // (1, 6)   - a row vector (axis prepended)
+a[Slice.All, np.newaxis].shape; // (6, 1)  - a column vector (Slice.All is Python's `:`)
 ```
 
 `np.expand_dims` does the same by explicit axis position:
@@ -315,14 +315,14 @@ The `&` and `|` operators combine boolean arrays and can also produce a boolean 
 //  [ True  True  True  True]]
 ```
 
-`np.nonzero` returns the indices where a condition holds — one index array per axis:
+`np.nonzero` returns the indices where a condition holds - one index array per axis:
 
 ```csharp
 var idx = np.nonzero(a < 5);   // NDArray[] of length 2 (rows, cols)
 // idx[0] = [0 0 0 0]   (row indices)
 // idx[1] = [0 1 2 3]   (column indices)
 
-a[idx[0], idx[1]];             // [1 2 3 4]  — gather those elements
+a[idx[0], idx[1]];             // [1 2 3 4]  - gather those elements
 ```
 
 More at [Indexing on NDArray](fundamentals/indexing.md).
@@ -357,7 +357,7 @@ np.hstack(a1, a2);
 //  [2 2 4 4]]
 ```
 
-Split with `np.hsplit` — by count, or at given columns (returns an `NDArray[]`):
+Split with `np.hsplit` - by count, or at given columns (returns an `NDArray[]`):
 
 ```csharp
 var x = np.arange(1, 25).reshape(2, 12);
@@ -365,11 +365,11 @@ np.hsplit(x, 3);                // 3 equal parts
 np.hsplit(x, [3, 4]);   // split after columns 3 and 4 → 3 parts
 ```
 
-**Views vs copies.** Slicing returns a *view* — a new array object over the same data — so writing through it changes the original:
+**Views vs copies.** Slicing returns a *view* - a new array object over the same data - so writing through it changes the original:
 
 ```csharp
 var a = np.array(new[,] { { 1, 2, 3, 4 }, { 5, 6, 7, 8 }, { 9, 10, 11, 12 } });
-var b1 = a[0];      // first row — a view
+var b1 = a[0];      // first row - a view
 b1[0] = 99;
 a;
 // [[99  2  3  4]
@@ -447,7 +447,7 @@ data.prod();   // 6
 data.std();    // 0.816496580927726
 ```
 
-By default these aggregate the whole array. Pass `axis` to aggregate along one axis — e.g. the minimum of each column with `axis: 0`:
+By default these aggregate the whole array. Pass `axis` to aggregate along one axis - e.g. the minimum of each column with `axis: 0`:
 
 ```csharp
 var a = np.array(new[,] { { 1, 2 }, { 5, 3 }, { 4, 6 } });
@@ -506,7 +506,7 @@ NumSharp's `np.random` reproduces NumPy's sequences bit-for-bit for a given seed
 ```csharp
 np.random.seed(42);
 np.random.rand(2, 3);            // uniform [0, 1)
-np.random.randint(0, 5, (2, 4)); // random ints in [0, 5) — low inclusive, high exclusive
+np.random.randint(0, 5, (2, 4)); // random ints in [0, 5) - low inclusive, high exclusive
 ```
 
 More in the [random API](../api/index.md).
@@ -622,9 +622,9 @@ More at [Copies and views](fundamentals/copies-and-views.md).
 
 NumPy uses `help()` and IPython's `?`/`??`. In C# the equivalents are richer and live in the IDE:
 
-- **IntelliSense / hover / F12** — every `np.*` function and `NDArray` member carries XML doc comments that surface as tooltips, parameter hints, and go-to-definition in Visual Studio, VS Code, and Rider.
-- **The API reference** — the generated [NumSharp API docs](../api/index.md) list every type, method, and overload.
-- **This documentation** — the [Fundamentals](fundamentals/index.md) and [Advanced](advanced/index.md) guides.
+- **IntelliSense / hover / F12** - every `np.*` function and `NDArray` member carries XML doc comments that surface as tooltips, parameter hints, and go-to-definition in Visual Studio, VS Code, and Rider.
+- **The API reference** - the generated [NumSharp API docs](../api/index.md) list every type, method, and overload.
+- **This documentation** - the [Fundamentals](fundamentals/index.md) and [Advanced](advanced/index.md) guides.
 
 There's no runtime `help()` call; the type system and IDE tooling replace it.
 
@@ -642,7 +642,7 @@ var error = np.mean(np.square(predictions - labels));   // 1.6666666666666665
 // equivalently: (1.0 / labels.size) * np.sum(np.square(predictions - labels))
 ```
 
-`predictions` and `labels` can hold one value or a million — they only need the same size. The subtraction, squaring, and reduction all vectorize.
+`predictions` and `labels` can hold one value or a million - they only need the same size. The subtraction, squaring, and reduction all vectorize.
 
 ---
 
@@ -650,7 +650,7 @@ var error = np.mean(np.square(predictions - labels));   // 1.6666666666666665
 
 *Covers `np.save`, `np.savez`, `np.savetxt`, `np.load`, `np.loadtxt`.*
 
-The **`.npy`** binary format stores the data, shape, and dtype so an array round-trips exactly — and NumSharp's output is **byte-for-byte identical to NumPy's `np.save`**, so files interchange with Python:
+The **`.npy`** binary format stores the data, shape, and dtype so an array round-trips exactly - and NumSharp's output is **byte-for-byte identical to NumPy's `np.save`**, so files interchange with Python:
 
 ```csharp
 var a = np.array([1, 2, 3, 4, 5, 6]);
@@ -668,7 +668,7 @@ np.savetxt("new_file.csv", csv);
 np.loadtxt("new_file.csv");   // [1. 2. 3. 4. 5. 6. 7. 8.]
 ```
 
-`.npy`/`.npz` are smaller and faster; text files are easier to share. Full details — versions, `fortran_order`, big-endian, `mmap_mode` — at [I/O with NumSharp](fundamentals/io.md).
+`.npy`/`.npz` are smaller and faster; text files are easier to share. Full details - versions, `fortran_order`, big-endian, `mmap_mode` - at [I/O with NumSharp](fundamentals/io.md).
 
 ---
 
@@ -687,7 +687,7 @@ np.savetxt("np.csv", a, fmt: "%.2f", delimiter: ",", header: "1,2,3,4");
 // 0.99,1.17,0.94,-0.15
 ```
 
-`np.loadtxt` reads columns with `usecols`, skips headers with `skiprows`, and takes a `delimiter` — see [I/O with NumSharp](fundamentals/io.md).
+`np.loadtxt` reads columns with `usecols`, skips headers with `skiprows`, and takes a `delimiter` - see [I/O with NumSharp](fundamentals/io.md).
 
 > **Mixed / labeled CSVs** (string *and* numeric columns, like a `music.csv` with an `Artist` name column) don't fit a single homogeneous `NDArray`, and NumSharp has no structured/string dtype. For those, use a .NET CSV/dataframe library, [ML.NET](interop/mlnet.md), or pandas through the [pythonnet bridge](interop/pandas.md), then hand the numeric columns to NumSharp. See [Structured arrays](fundamentals/structured-arrays.md) for why and the alternatives.
 
@@ -695,7 +695,7 @@ np.savetxt("np.csv", a, fmt: "%.2f", delimiter: ",", header: "1,2,3,4");
 
 ## Plotting arrays
 
-NumSharp has **no built-in plotting** (NumPy relies on Matplotlib, a separate library, too). To visualize an `NDArray`, hand its values to a .NET charting library — **ScottPlot**, **OxyPlot**, or **Plotly.NET** all take `double[]` / `double[,]`, which you get from `arr.ToArray<double>()` or `arr.Unsafe.Span<double>()`:
+NumSharp has **no built-in plotting** (NumPy relies on Matplotlib, a separate library, too). To visualize an `NDArray`, hand its values to a .NET charting library - **ScottPlot**, **OxyPlot**, or **Plotly.NET** all take `double[]` / `double[,]`, which you get from `arr.ToArray<double>()` or `arr.Unsafe.Span<double>()`:
 
 ```csharp
 var y = np.array([2.0, 1, 5, 7, 4, 6, 8, 14, 10, 9, 18, 20, 22]);
@@ -709,7 +709,7 @@ Or drive Matplotlib itself over your NumSharp arrays through the [pythonnet brid
 
 ## Where to next
 
-You now have the whole surface. For depth, read the [Fundamentals and usage](fundamentals/index.md) articles — each expands a section above:
+You now have the whole surface. For depth, read the [Fundamentals and usage](fundamentals/index.md) articles - each expands a section above:
 
 - [Array creation](fundamentals/array-creation.md) · [Indexing on NDArray](fundamentals/indexing.md) · [Copies and views](fundamentals/copies-and-views.md)
 - [Data types](dtypes.md) · [Broadcasting](broadcasting.md) · [Universal functions](fundamentals/ufuncs.md)

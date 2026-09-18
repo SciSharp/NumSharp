@@ -1,16 +1,16 @@
 # NumSharp quickstart
 
-A fast overview of `NDArray` for people who already program in C#. It shows how 1-, 2-, and n-dimensional arrays are represented and manipulated — how to apply whole-array operations without `for` loops, and how `axis`/`shape` behave. It is the NumSharp counterpart of NumPy's [quickstart](https://numpy.org/doc/stable/user/quickstart.html); if you want the gentler on-ramp first, read [The absolute basics for beginners](absolute-basics.md).
+A fast overview of `NDArray` for people who already program in C#. It shows how 1-, 2-, and n-dimensional arrays are represented and manipulated - how to apply whole-array operations without `for` loops, and how `axis`/`shape` behave. It is the NumSharp counterpart of NumPy's [quickstart](https://numpy.org/doc/stable/user/quickstart.html); if you want the gentler on-ramp first, read [The absolute basics for beginners](absolute-basics.md).
 
 > **Two syntax facts up front, because C# lacks two Python operators:**
-> - Python slices `a[1:5:2]` are written as **strings** — `a["1:5:2"]`. Comma coordinates stay normal: `a[1, 3]`.
+> - Python slices `a[1:5:2]` are written as **strings** - `a["1:5:2"]`. Comma coordinates stay normal: `a[1, 3]`.
 > - Python has `**` (power) and `@` (matmul); C# has neither on arrays. Use **`np.power(a, 2)`** and **`np.matmul(a, b)`** / **`a.dot(b)`**.
 
 ---
 
 ## The basics
 
-NumSharp's main object is the homogeneous multidimensional array `NDArray` — a table of same-type elements indexed by non-negative integers. Dimensions are called **axes**. `[[1., 0., 0.], [0., 1., 2.]]` has 2 axes: the first of length 2, the second of length 3.
+NumSharp's main object is the homogeneous multidimensional array `NDArray` - a table of same-type elements indexed by non-negative integers. Dimensions are called **axes**. `[[1., 0., 0.], [0., 1., 2.]]` has 2 axes: the first of length 2, the second of length 3.
 
 The important attributes of an `NDArray`:
 
@@ -21,7 +21,7 @@ The important attributes of an `NDArray`:
 | `size` | total number of elements (product of `shape`) |
 | `dtype` | a `DType` describing the element type (`np.int32`, `np.float64`, …); `dtype.name` is the NumPy name, `dtype.type` the CLR `Type` |
 | `itemsize` | bytes per element (e.g. 8 for float64); == `dtype.itemsize` |
-| `Storage` | the underlying data buffer — you rarely touch it; use indexing |
+| `Storage` | the underlying data buffer - you rarely touch it; use indexing |
 
 ### An example
 
@@ -57,7 +57,7 @@ var b = np.array([1.2, 3.5, 5.1]);
 b.dtype;                              // float64
 ```
 
-> **⚠️ Divergence — integer default.** `np.array([2,3,4])` follows the .NET `int` type, so it's **int32**, where NumPy's `np.array([2,3,4])` is int64. `np.arange` *does* give int64. Pass a dtype when it matters. See [Array creation → int32-vs-int64](fundamentals/array-creation.md#the-int32-vs-int64-gotcha).
+> **⚠️ Divergence - integer default.** `np.array([2,3,4])` follows the .NET `int` type, so it's **int32**, where NumPy's `np.array([2,3,4])` is int64. `np.arange` *does* give int64. Pass a dtype when it matters. See [Array creation → int32-vs-int64](fundamentals/array-creation.md#the-int32-vs-int64-gotcha).
 
 Nested sequences become 2-D (and deeper), and the dtype can be set explicitly:
 
@@ -76,7 +76,7 @@ Fill functions take a shape (default dtype **float64**):
 ```csharp
 np.zeros((3, 4));
 np.ones((2, 3, 4), np.int16);   // dtype int16
-np.empty((2, 3));               // uninitialized — fill it yourself
+np.empty((2, 3));               // uninitialized - fill it yourself
 ```
 
 Sequences of numbers come from `arange` (like a stepped range) and `linspace` (a fixed count):
@@ -110,7 +110,7 @@ np.arange(12).reshape(4, 3);  // 2-D → matrix
 np.arange(24).reshape(2, 3, 4); // 3-D → list of matrices
 ```
 
-NumSharp's array printing is a byte-exact port of NumPy's, so a large array is **truncated the same way** — the middle is skipped and only the corners shown:
+NumSharp's array printing is a byte-exact port of NumPy's, so a large array is **truncated the same way** - the middle is skipped and only the corners shown:
 
 ```csharp
 np.arange(10000);   // [   0    1    2 ... 9997 9998 9999]
@@ -145,7 +145,7 @@ A.dot(B);         // same → [[5 4] [3 4]]
 
 ### In-place operations behave differently in C#
 
-In NumPy `a *= 3` and `b += a` mutate the array **in place**. In C#, compound-assignment operators **rebind the variable** — `a *= 3` compiles to `a = a * 3`, allocating a *new* array — so other references keep seeing the old data:
+In NumPy `a *= 3` and `b += a` mutate the array **in place**. In C#, compound-assignment operators **rebind the variable** - `a *= 3` compiles to `a = a * 3`, allocating a *new* array - so other references keep seeing the old data:
 
 ```csharp
 var a = np.ones((2, 3), np.int32);
@@ -214,7 +214,7 @@ More at [Universal functions](fundamentals/ufuncs.md).
 
 ## Universal functions
 
-Familiar math functions (`sin`, `cos`, `exp`, `sqrt`, …) operate elementwise and return an array — these are the *universal functions* (ufuncs):
+Familiar math functions (`sin`, `cos`, `exp`, `sqrt`, …) operate elementwise and return an array - these are the *universal functions* (ufuncs):
 
 ```csharp
 var B = np.arange(3);
@@ -224,15 +224,15 @@ var C = np.array([2.0, -1.0, 4.0]);
 np.add(B, C);      // [2. 0. 6.]
 ```
 
-NumSharp exposes ufuncs as direct `np.*` functions (and operators), with `out=`/`where=`/`dtype=` — see [Universal functions](fundamentals/ufuncs.md). NumSharp also has `all`, `any`, `argmax`, `argsort`, `mean`, `median`, `clip`, `cross`, `dot`, `sort`, `std`, `sum`, `var`, `where`, `apply_along_axis`, `bincount`, `corrcoef`, `vectorize`, `frompyfunc`, and the rest of the aggregation family.
+NumSharp exposes ufuncs as direct `np.*` functions (and operators), with `out=`/`where=`/`dtype=` - see [Universal functions](fundamentals/ufuncs.md). NumSharp also has `all`, `any`, `argmax`, `argsort`, `mean`, `median`, `clip`, `cross`, `dot`, `sort`, `std`, `sum`, `var`, `where`, `apply_along_axis`, `bincount`, `corrcoef`, `vectorize`, `frompyfunc`, and the rest of the aggregation family.
 
-> **`np.vectorize` / `np.frompyfunc` wrap a C# delegate.** `var vf = np.vectorize((int a, int b) => a > b ? a - b : a + b); vf(arrA, 2)` reads like NumPy and broadcasts element-wise; a gufunc `signature:` applies the delegate per core sub-array (`np.vectorize(x => np.sum(x), "(n)->()")`). The element-wise path is a fused `np.evaluate` + `NDExpr.Call` pass, so it runs 3–30× faster than NumPy's Python-loop `vectorize`. For a hot inner loop you can still write `np.evaluate` / `np.nditer<T>` directly — see [Extending NumSharp](advanced/extending-numsharp.md).
+> **`np.vectorize` / `np.frompyfunc` wrap a C# delegate.** `var vf = np.vectorize((int a, int b) => a > b ? a - b : a + b); vf(arrA, 2)` reads like NumPy and broadcasts element-wise; a gufunc `signature:` applies the delegate per core sub-array (`np.vectorize(x => np.sum(x), "(n)->()")`). The element-wise path is a fused `np.evaluate` + `NDExpr.Call` pass, so it runs 3–30× faster than NumPy's Python-loop `vectorize`. For a hot inner loop you can still write `np.evaluate` / `np.nditer<T>` directly - see [Extending NumSharp](advanced/extending-numsharp.md).
 
 ---
 
 ## Indexing, slicing and iterating
 
-**1-D** arrays index, slice, and iterate like C# sequences — with string slices:
+**1-D** arrays index, slice, and iterate like C# sequences - with string slices:
 
 ```csharp
 var a = np.power(np.arange(10), 3);   // [0 1 8 27 64 125 216 343 512 729]
@@ -257,10 +257,10 @@ b[2, 3];        // 23
 b["0:5, 1"];    // [1 11 21 31 41]   (column 1 of every row)
 b[":, 1"];      // same
 b["1:3, :"];    // rows 1 and 2
-b[-1];          // last row — same as b[-1, :]
+b[-1];          // last row - same as b[-1, :]
 ```
 
-When fewer indices than axes are given, the rest are complete slices. **Dots** (`...`) fill the missing axes — write them inside the index string:
+When fewer indices than axes are given, the rest are complete slices. **Dots** (`...`) fill the missing axes - write them inside the index string:
 
 ```csharp
 var c = np.array(new[,,] { { { 0, 1, 2 }, { 10, 12, 13 } }, { { 100, 101, 102 }, { 110, 112, 113 } } });
@@ -269,14 +269,14 @@ c["1, ..."];    // same as c[1, :, :] → [[100 101 102] [110 112 113]]
 c["..., 2"];    // same as c[:, :, 2] → [[2 13] [102 113]]
 ```
 
-**Iterating** is with respect to the first axis — `foreach` over an `NDArray` yields the sub-arrays along axis 0:
+**Iterating** is with respect to the first axis - `foreach` over an `NDArray` yields the sub-arrays along axis 0:
 
 ```csharp
 foreach (var row in b)      // each row is an NDArray
     Console.WriteLine(row);
 ```
 
-To visit every element regardless of shape, iterate `b.flat` (boxed, C-order), or — for fast, unboxed element work — use `np.nditer<T>` (see [Iterating & Enumerating](iterating-and-enumerating.md)):
+To visit every element regardless of shape, iterate `b.flat` (boxed, C-order), or - for fast, unboxed element work - use `np.nditer<T>` (see [Iterating & Enumerating](iterating-and-enumerating.md)):
 
 ```csharp
 foreach (var element in b.flat)
@@ -330,7 +330,7 @@ np.hstack(a, b);   // stack along axis 1
 var x = np.array([4.0, 2.0]);
 var y = np.array([3.0, 8.0]);
 np.column_stack(x, y);   // [[4. 3.] [2. 8.]]
-np.hstack(x, y);         // [4. 2. 3. 8.]  (different — 1-D concat)
+np.hstack(x, y);         // [4. 2. 3. 8.]  (different - 1-D concat)
 x[Slice.All, np.newaxis]; // [[4.] [2.]]  (column view)
 ```
 
@@ -344,7 +344,7 @@ See [Array creation → grid/slice DSL](fundamentals/array-creation.md) and [Bro
 
 ### Splitting one array into several smaller ones
 
-`np.hsplit` splits along the horizontal axis — by count, or after given columns. `np.vsplit` splits vertically; `np.array_split` takes the axis to split along.
+`np.hsplit` splits along the horizontal axis - by count, or after given columns. `np.vsplit` splits vertically; `np.array_split` takes the axis to split along.
 
 ```csharp
 var a = np.floor(10 * np.random.rand(2, 12));
@@ -357,14 +357,14 @@ np.vsplit(np.arange(16).reshape(4, 4), 2);  // 2 parts along axis 0
 
 ## Copies and views
 
-Three cases, often a source of confusion — the full treatment is in [Copies and views](fundamentals/copies-and-views.md).
+Three cases, often a source of confusion - the full treatment is in [Copies and views](fundamentals/copies-and-views.md).
 
 **No copy at all.** A plain assignment is a second reference to the same object (a C# reference), not a new array:
 
 ```csharp
 var a = np.arange(12).reshape(3, 4);
 var b = a;
-ReferenceEquals(a, b);   // true — two names for one NDArray
+ReferenceEquals(a, b);   // true - two names for one NDArray
 ```
 
 **View / shallow copy.** `view()` (and slicing) makes a new array object over the *same* data:
@@ -372,7 +372,7 @@ ReferenceEquals(a, b);   // true — two names for one NDArray
 ```csharp
 var c = a.view();
 ReferenceEquals(c, a);   // false
-c.flags.owndata;         // false — c is a view
+c.flags.owndata;         // false - c is a view
 np.shares_memory(a, c);  // true
 
 var s = a[":, 1:3"];     // slicing returns a view
@@ -437,13 +437,13 @@ var j = np.array(new[,] { { 3, 4 }, { 9, 7 } });
 a[j];                                         // result has j's shape → [[9 16] [81 49]]
 ```
 
-For a multidimensional target, a single index array indexes the **first** axis — the palette→color-image trick:
+For a multidimensional target, a single index array indexes the **first** axis - the palette→color-image trick:
 
 ```csharp
 var palette = np.array(new[,] {
     { 0, 0, 0 }, { 255, 0, 0 }, { 0, 255, 0 }, { 0, 0, 255 }, { 255, 255, 255 } });
 var image = np.array(new[,] { { 0, 1, 2, 0 }, { 0, 3, 4, 0 } });
-palette[image].shape;                         // (2, 4, 3) — a color image
+palette[image].shape;                         // (2, 4, 3) - a color image
 ```
 
 Give an index array per dimension (they must share a shape):
@@ -457,7 +457,7 @@ a[i, 2];        // [[2 6] [6 10]]  (index array + scalar)
 a[Slice.All, j].shape;   // (3, 2, 2)
 ```
 
-Finding the maxima of time series — `argmax(axis:)` then gather:
+Finding the maxima of time series - `argmax(axis:)` then gather:
 
 ```csharp
 var data = np.sin(np.arange(20).astype(np.float64)).reshape(5, 4);
@@ -477,7 +477,7 @@ var b = np.arange(5);
 b[new[] { 0, 0, 2 }] = np.array([1, 2, 3]);   // [2 1 3 3 4]  (index 0 written twice, last wins)
 ```
 
-> As with the [in-place divergence](#in-place-operations-behave-differently-in-c) above, `a[new[]{0,0,2}] += 1` does **not** increment index 0 twice — C# expands it to `a[...] = a[...] + 1`.
+> As with the [in-place divergence](#in-place-operations-behave-differently-in-c) above, `a[new[]{0,0,2}] += 1` does **not** increment index 0 twice - C# expands it to `a[...] = a[...] + 1`.
 
 ### Indexing with boolean arrays
 
@@ -506,7 +506,7 @@ More at [Indexing on NDArray](fundamentals/indexing.md).
 
 ### The `ix_` function
 
-`np.ix_` combines vectors so you get a result for every n-tuple — e.g. all `a + b*c` over triplets, via broadcasting (no full-size intermediate):
+`np.ix_` combines vectors so you get a result for every n-tuple - e.g. all `a + b*c` over triplets, via broadcasting (no full-size intermediate):
 
 ```csharp
 var a = np.array([2, 3, 4, 5]);
@@ -519,7 +519,7 @@ result[3, 2, 4];                        // 17  == a[3] + b[2]*c[4]
 
 ### Indexing with strings
 
-NumPy indexes structured arrays by field name (`x['age']`). NumSharp has no structured dtype — see [Structured arrays](fundamentals/structured-arrays.md).
+NumPy indexes structured arrays by field name (`x['age']`). NumSharp has no structured dtype - see [Structured arrays](fundamentals/structured-arrays.md).
 
 ---
 
@@ -548,7 +548,7 @@ np.hstack(x, y);               // [0 2 4 6 8 0 1 2 3 4]
 
 ### Histograms
 
-`np.histogram` returns the histogram values **and** the bin edges (it computes, it does not plot — plotting is a separate library, see below):
+`np.histogram` returns the histogram values **and** the bin edges (it computes, it does not plot - plotting is a separate library, see below):
 
 ```csharp
 var v = np.random.normal(2, 0.5, 10000);            // 10000 normal deviates, mean 2, σ 0.5
@@ -561,14 +561,14 @@ binEdges.shape;   // (51,)
 
 ### Plotting
 
-NumSharp has no built-in plotting (neither does NumPy — Matplotlib is separate). Hand an `NDArray`'s values (`arr.ToArray<double>()`) to a .NET charting library — **ScottPlot**, **OxyPlot**, **Plotly.NET** — or drive Matplotlib over your arrays through the [pythonnet bridge](interop/pythonnet-numpy.md).
+NumSharp has no built-in plotting (neither does NumPy - Matplotlib is separate). Hand an `NDArray`'s values (`arr.ToArray<double>()`) to a .NET charting library - **ScottPlot**, **OxyPlot**, **Plotly.NET** - or drive Matplotlib over your arrays through the [pythonnet bridge](interop/pythonnet-numpy.md).
 
 ---
 
 ## Further reading
 
-- [The absolute basics for beginners](absolute-basics.md) — the gentler introduction.
-- [Fundamentals and usage](fundamentals/index.md) — array creation, indexing, dtypes, broadcasting, copies/views, ufuncs, I/O.
-- [Advanced usage](advanced/index.md) — extending NumSharp, native backends, internals, interop.
+- [The absolute basics for beginners](absolute-basics.md) - the gentler introduction.
+- [Fundamentals and usage](fundamentals/index.md) - array creation, indexing, dtypes, broadcasting, copies/views, ufuncs, I/O.
+- [Advanced usage](advanced/index.md) - extending NumSharp, native backends, internals, interop.
 - [NumPy API Coverage & Support](coverage-support-dashboard.md) · [API reference](../api/index.md).
-- [NumPy quickstart](https://numpy.org/doc/stable/user/quickstart.html) — the upstream article this converts.
+- [NumPy quickstart](https://numpy.org/doc/stable/user/quickstart.html) - the upstream article this converts.

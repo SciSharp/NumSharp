@@ -1,14 +1,14 @@
 # I/O with NumSharp
 
-NumSharp reads and writes the same file formats NumPy does, and — for the `.npy`/`.npz` binary format — its output is **byte-for-byte identical** to `np.save`, not merely readable by NumPy. This page covers the three families of I/O:
+NumSharp reads and writes the same file formats NumPy does, and - for the `.npy`/`.npz` binary format - its output is **byte-for-byte identical** to `np.save`, not merely readable by NumPy. This page covers the three families of I/O:
 
-- **`.npy` / `.npz`** — NumPy's native binary array format (the default choice).
-- **Text** — `loadtxt` / `savetxt` for CSV/TSV and other delimited data.
-- **Raw binary / bytes** — `fromfile` / `tofile` / `frombuffer` / `fromstring`.
+- **`.npy` / `.npz`** - NumPy's native binary array format (the default choice).
+- **Text** - `loadtxt` / `savetxt` for CSV/TSV and other delimited data.
+- **Raw binary / bytes** - `fromfile` / `tofile` / `frombuffer` / `fromstring`.
 
 > NumPy's own *I/O* fundamentals article is entirely about `genfromtxt`, which NumSharp does **not** implement (it requires structured/masked dtypes NumSharp has no analog for). This page instead documents the I/O surface NumSharp actually provides. See [What is not implemented](#what-is-not-implemented) at the end.
 
-<!-- Tests: NumSharp.Tests.Documentation.FundamentalsIoDocTests — every code example on this page is executed and asserted in test/NumSharp.Tests/Documentation/FundamentalsIoDocTests.cs. Section → method(s):
+<!-- Tests: NumSharp.Tests.Documentation.FundamentalsIoDocTests - every code example on this page is executed and asserted in test/NumSharp.Tests/Documentation/FundamentalsIoDocTests.cs. Section → method(s):
      .npy save/load round-trip → Npy_SaveLoad_RoundTrip
      .npz dictionary keys + npz.f dot access → Npz_DictionaryKeys_And_DotAccess
      np.load returns object dispatched on kind → Load_ReturnsObject_DispatchedOnKind
@@ -19,7 +19,7 @@ NumSharp reads and writes the same file formats NumPy does, and — for the `.np
 
 ---
 
-## `.npy` and `.npz` — the native format
+## `.npy` and `.npz` - the native format
 
 ### Writing
 
@@ -32,14 +32,14 @@ np.savez_compressed("bundle.npz", a, b);         // deflate-compressed .npz
 np.savez("bundle.npz", new Dictionary<string, NDArray> { ["weights"] = w, ["bias"] = bias });
 ```
 
-The writer is a port of NumPy 2.4.2's `_format_impl.py`, so a saved file is **exactly** what `np.save` would produce — format versions 1.0/2.0/3.0, 64-byte data alignment (mmap-ready), `fortran_order`, and the same header bytes. NumPy can read NumSharp's output and vice versa.
+The writer is a port of NumPy 2.4.2's `_format_impl.py`, so a saved file is **exactly** what `np.save` would produce - format versions 1.0/2.0/3.0, 64-byte data alignment (mmap-ready), `fortran_order`, and the same header bytes. NumPy can read NumSharp's output and vice versa.
 
 ### Reading
 
 ```csharp
 object loaded = np.load("array.npy");            // NDArray for .npy, NpzFile for .npz
-NDArray arr   = np.load_npy("array.npy");        // typed — no cast
-using NpzFile npz = np.load_npz("bundle.npz");   // typed — IDisposable
+NDArray arr   = np.load_npy("array.npy");        // typed - no cast
+using NpzFile npz = np.load_npz("bundle.npz");   // typed - IDisposable
 
 NDArray w = npz["weights"];                       // by key
 NDArray b = npz.f.bias;                            // BagObj dot-access (NumPy's npz.f.name)
@@ -49,7 +49,7 @@ NDArray b = npz.f.bias;                            // BagObj dot-access (NumPy's
 
 ### Memory-mapping large files
 
-`mmap_mode` returns an `NDArray` backed by a memory-mapped view — zero-copy, released with the array:
+`mmap_mode` returns an `NDArray` backed by a memory-mapped view - zero-copy, released with the array:
 
 ```csharp
 var big = (NDArray)np.load("huge.npy", mmap_mode: "r");   // read-only view
@@ -66,7 +66,7 @@ Modes match what NumPy does through `np.load`: `"r"`/`"readonly"`, `"r+"` (read-
 | `<i2`…`<u8`, `<f2`, `<f4`, `<f8` | Int16…UInt64, Half, Single, Double | direct |
 | `<c16` | Complex | `<c8` (complex64) widens to Complex on read |
 | `<U1` | Char | 2-byte UTF-16 ↔ 4-byte UCS-4; non-BMP rejected |
-| — | Decimal | **`NotSupportedException`** — no NumPy dtype |
+| - | Decimal | **`NotSupportedException`** - no NumPy dtype |
 
 Big-endian files are byte-swapped to native on read. Object arrays, structured/subarray dtypes, `datetime64`/`timedelta64`, `S`/`U`(n>1)/`V`, `<f16`/`<c32` parse and then raise a precise message.
 
@@ -74,7 +74,7 @@ Big-endian files are byte-swapped to native on read. Object arrays, structured/s
 
 ## Text I/O
 
-### `np.savetxt` — write delimited text
+### `np.savetxt` - write delimited text
 
 ```csharp
 np.savetxt("out.csv", arr);                                  // default fmt "%.18e", space delimiter
@@ -84,16 +84,16 @@ np.savetxt("out.csv", arr, fmt: "%d", header: "x,y", comments: "# ");
 
 A port of NumPy 2.4.2's `savetxt`, **byte-identical to NumPy's output**. A 1-D array writes one value per line; a 2-D array one row per line; 0-D/≥3-D raise `ValueError`. `fmt` is a Python `%`-format spec (single spec repeated per column, a multi-`%` template, or a per-column list). Targets: a filename (`.gz` → gzip), a `Stream`, or a `TextWriter`.
 
-### `np.loadtxt` — read delimited text
+### `np.loadtxt` - read delimited text
 
 ```csharp
 var m = np.loadtxt("data.csv", delimiter: ",", skiprows: 1);
 var cols = np.loadtxt("data.txt", usecols: [0, 2], dtype: np.float64);
 ```
 
-Round-trips `savetxt` (byte-exact values). Parameters mirror NumPy: `dtype` (default float64), `comments`, `delimiter` (whitespace-runs when unset), `converters`, `skiprows`, `usecols`, `unpack`, `ndmin`, `max_rows`, `quotechar`. Inputs: filename (`.gz` transparent), `Stream`, `TextReader`, or `IEnumerable<string>`. Parsers match NumPy's C reader — bool via int, range-checked integers, `PyOS_string_to_double` float semantics, and lowercase-`j` complex.
+Round-trips `savetxt` (byte-exact values). Parameters mirror NumPy: `dtype` (default float64), `comments`, `delimiter` (whitespace-runs when unset), `converters`, `skiprows`, `usecols`, `unpack`, `ndmin`, `max_rows`, `quotechar`. Inputs: filename (`.gz` transparent), `Stream`, `TextReader`, or `IEnumerable<string>`. Parsers match NumPy's C reader - bool via int, range-checked integers, `PyOS_string_to_double` float semantics, and lowercase-`j` complex.
 
-### `np.fromstring` — parse numbers from a string
+### `np.fromstring` - parse numbers from a string
 
 ```csharp
 np.fromstring("1 2 3 4", sep: " ");         // [1. 2. 3. 4.]
@@ -114,7 +114,7 @@ byte[] buf = File.ReadAllBytes("data.bin");
 var view = np.frombuffer(buf, np.float32);    // reinterpret bytes (no copy of the format)
 ```
 
-`tofile`/`fromfile` are the headerless raw path — you must know the dtype and byte order yourself (there is no self-describing header, unlike `.npy`). `np.frombuffer` reinterprets an existing .NET buffer as an array of a given dtype and is the general bridge for interop — see [Any library via np.frombuffer](../interop/np-frombuffer.md).
+`tofile`/`fromfile` are the headerless raw path - you must know the dtype and byte order yourself (there is no self-describing header, unlike `.npy`). `np.frombuffer` reinterprets an existing .NET buffer as an array of a given dtype and is the general bridge for interop - see [Any library via np.frombuffer](../interop/np-frombuffer.md).
 
 ---
 
@@ -130,7 +130,7 @@ The `.npy`/`.npz` path streams in 256 KB chunks and round-trips files **larger t
 |----------------|--------|-------------|
 | `np.genfromtxt` | **not implemented** | `np.loadtxt` (needs no missing-value/structured support), or parse yourself |
 | `np.fromregex` | **not implemented** | requires structured dtypes; parse with .NET regex + `np.array` |
-| Structured/record `.npy` files | **read raises** | `.npy` files with a structured dtype are rejected — NumSharp has no structured dtype ([Structured arrays](structured-arrays.md)) |
+| Structured/record `.npy` files | **read raises** | `.npy` files with a structured dtype are rejected - NumSharp has no structured dtype ([Structured arrays](structured-arrays.md)) |
 
 Both `genfromtxt` and `fromregex` are built on NumPy's structured-dtype and masked-array machinery, which NumSharp does not model. Their non-structured subset is already covered by `loadtxt`.
 
@@ -173,7 +173,7 @@ Cast it, or use the typed loader: `np.load_npy(path)` → `NDArray`, `np.load_np
 Decimal has no NumPy dtype, so it cannot be written to `.npy`. Cast to `Double` first (`arr.astype(np.float64)`), accepting the precision change.
 
 ### "`fromfile` gave garbage"
-`fromfile`/`tofile` are headerless — you must pass the exact dtype the data was written with, and the byte order must match. Prefer `.npy` (`np.save`/`np.load`) for self-describing round-trips.
+`fromfile`/`tofile` are headerless - you must pass the exact dtype the data was written with, and the byte order must match. Prefer `.npy` (`np.save`/`np.load`) for self-describing round-trips.
 
 ---
 
@@ -195,7 +195,7 @@ Decimal has no NumPy dtype, so it cannot be written to `.npy`. Cast to `Double` 
 
 ## Related reading
 
-- [Array creation](array-creation.md) — I/O is creation mechanism #4/#5.
-- [Data types](../dtypes.md) — the dtype map and which types round-trip.
-- [Any library via np.frombuffer](../interop/np-frombuffer.md) — the buffer bridge.
-- [NumPy I/O guide](https://numpy.org/doc/stable/user/basics.io.html) — the upstream article (genfromtxt).
+- [Array creation](array-creation.md) - I/O is creation mechanism #4/#5.
+- [Data types](../dtypes.md) - the dtype map and which types round-trip.
+- [Any library via np.frombuffer](../interop/np-frombuffer.md) - the buffer bridge.
+- [NumPy I/O guide](https://numpy.org/doc/stable/user/basics.io.html) - the upstream article (genfromtxt).

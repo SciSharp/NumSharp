@@ -350,9 +350,9 @@ scalar, and dtype edge cases.
 
 ## References
 
-- [NumPy API Coverage & Support](coverage-support-dashboard.md) — generated compiled-API inventory
-- [Unit Tests & Oracle](tests-oracle-dashboard.md) — generated correctness-evidence inventory
-- [Dtypes](dtypes.md) — NumSharp dtype and casting details
+- [NumPy API Coverage & Support](coverage-support-dashboard.md) - generated compiled-API inventory
+- [Unit Tests & Oracle](tests-oracle-dashboard.md) - generated correctness-evidence inventory
+- [Dtypes](dtypes.md) - NumSharp dtype and casting details
 - [NumPy 2.0 migration guide](https://numpy.org/doc/stable/numpy_2_0_migration_guide.html)
 - [NEP 50: Promotion rules for Python scalars](https://numpy.org/neps/nep-0050-scalar-promotion.html)
 - [NEP 52: Python API cleanup for NumPy 2.0](https://numpy.org/neps/nep-0052-python-api-cleanup.html)

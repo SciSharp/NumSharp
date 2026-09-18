@@ -1,10 +1,10 @@
 # Copies and views
 
-An `NDArray` is two parts: a **data buffer** (the elements, in unmanaged memory) and **metadata** (dtype, shape, strides, offset). Two arrays can share the same buffer while presenting it differently through their metadata — that shared-buffer array is a **view**. An array with its own duplicated buffer is a **copy**.
+An `NDArray` is two parts: a **data buffer** (the elements, in unmanaged memory) and **metadata** (dtype, shape, strides, offset). Two arrays can share the same buffer while presenting it differently through their metadata - that shared-buffer array is a **view**. An array with its own duplicated buffer is a **copy**.
 
 Knowing which operations return which is the single most important thing to internalize about NumSharp: a write through a view mutates the original; a write through a copy does not. This is identical to NumPy, and it is what makes slicing cheap.
 
-<!-- Tests: NumSharp.Tests.Documentation.FundamentalsCopiesViewsDocTests — every code example on this page is executed and asserted in test/NumSharp.Tests/Documentation/FundamentalsCopiesViewsDocTests.cs. Section → method(s):
+<!-- Tests: NumSharp.Tests.Documentation.FundamentalsCopiesViewsDocTests - every code example on this page is executed and asserted in test/NumSharp.Tests/Documentation/FundamentalsCopiesViewsDocTests.cs. Section → method(s):
      View shares buffer / Copy independent → View_SharesBuffer_WriteThrough; Copy_IsIndependent
      Basic → view, advanced → copy → Indexing_BasicIsView_AdvancedIsCopy
      reshape/ravel/flatten/T → Reshape_Ravel_Flatten_ViewVsCopy
@@ -17,7 +17,7 @@ Knowing which operations return which is the single most important thing to inte
 
 ## View
 
-A **view** reuses the original data buffer and only changes metadata — a different `Shape` (strides, offset) or `dtype`. Because the buffer is shared, **writing through a view changes the original**:
+A **view** reuses the original data buffer and only changes metadata - a different `Shape` (strides, offset) or `dtype`. Because the buffer is shared, **writing through a view changes the original**:
 
 ```csharp
 var x = np.arange(10);              // [0 1 2 3 4 5 6 7 8 9]
@@ -57,7 +57,7 @@ var m = np.arange(9).reshape(3, 3);
 var c = m[np.array([1, 2])]; // advanced → copy   (c.@base is null)
 ```
 
-> **The assignment asymmetry.** *Reading* `x[mask]` or `x[idx]` returns a copy — writing into that copy does nothing to `x`. But *assigning* `x[mask] = v` / `x[idx] = v` scatters back into `x` through the setter. So `var picked = x[mask]; picked[0] = 9;` leaves `x` unchanged, while `x[mask] = 9` changes it. This matches NumPy exactly. See [Indexing → Views vs copies](indexing.md#views-vs-copies-at-a-glance).
+> **The assignment asymmetry.** *Reading* `x[mask]` or `x[idx]` returns a copy - writing into that copy does nothing to `x`. But *assigning* `x[mask] = v` / `x[idx] = v` scatters back into `x` through the setter. So `var picked = x[mask]; picked[0] = 9;` leaves `x` unchanged, while `x[mask] = 9` changes it. This matches NumPy exactly. See [Indexing → Views vs copies](indexing.md#views-vs-copies-at-a-glance).
 
 ---
 
@@ -85,7 +85,7 @@ x.reshape(-1);      // view where possible
 
 ## Broadcast views are read-only
 
-A broadcast view has a **stride of 0** on the stretched axis — one stored element is read for many logical positions. Writing to it would corrupt every position that aliases that element, so NumSharp makes broadcast views **non-writeable**:
+A broadcast view has a **stride of 0** on the stretched axis - one stored element is read for many logical positions. Writing to it would corrupt every position that aliases that element, so NumSharp makes broadcast views **non-writeable**:
 
 ```csharp
 var small = np.array([1, 2, 3]);
@@ -113,22 +113,22 @@ var c = x[np.array([0, 2])]; // copy
 (c.@base is not null);              // false
 ```
 
-`arr.@base` is NumPy's `ndarray.base` — `null` when the array owns its data, otherwise an `NDArray` wrapping the base storage; views chain to the **ultimate owner**, not intermediate views:
+`arr.@base` is NumPy's `ndarray.base` - `null` when the array owns its data, otherwise an `NDArray` wrapping the base storage; views chain to the **ultimate owner**, not intermediate views:
 
 ```csharp
 var a = np.arange(10);              // a.@base is null      (owns data)
 var b = a["2:5"];                   // b.@base is not null  (view of a)
 var d = a.copy();                   // d.@base is null      (copy owns data)
-np.shares_memory(a, b);             // true — b really does share a's buffer
+np.shares_memory(a, b);             // true - b really does share a's buffer
 ```
 
-> **Use `arr.@base is not null` for a boolean test, written with the `is`/`is not` pattern** — not `arr.@base != null`, because `!=` on `NDArray` is the elementwise-comparison operator, not a null check. `@base` differs from NumPy in one way: it builds a fresh wrapper each call, so `ReferenceEquals(b.@base, a)` is `false` even though they share memory (confirm the sharing with `np.shares_memory`). (NumSharp also has an internal `Storage.IsView` that says the same thing, but `Storage` is not part of the public API.)
+> **Use `arr.@base is not null` for a boolean test, written with the `is`/`is not` pattern** - not `arr.@base != null`, because `!=` on `NDArray` is the elementwise-comparison operator, not a null check. `@base` differs from NumPy in one way: it builds a fresh wrapper each call, so `ReferenceEquals(b.@base, a)` is `false` even though they share memory (confirm the sharing with `np.shares_memory`). (NumSharp also has an internal `Storage.IsView` that says the same thing, but `Storage` is not part of the public API.)
 
 To ask whether two arrays could share memory, use `np.shares_memory` / `np.may_share_memory`:
 
 ```csharp
-np.shares_memory(x, v);             // true  — exact overlap solver
-np.may_share_memory(x, c);          // false — fast bounds check
+np.shares_memory(x, v);             // true  - exact overlap solver
+np.may_share_memory(x, c);          // false - fast bounds check
 ```
 
 The `Shape` flags expose the layout that decides all of this: `IsContiguous`, `IsSliced`, `IsBroadcasted`, `IsWriteable`, `IsFContiguous`. See [NDArray](../NDArray.md).
@@ -137,7 +137,7 @@ The `Shape` flags expose the layout that decides all of this: `IsContiguous`, `I
 
 ## In-place modification
 
-Writing through a view mutates shared memory. But C#'s **compound-assignment operators are not in-place** — the compiler expands `x += 1` into `x = x + 1`, allocating a new array and rebinding the variable. Other references keep seeing the old data:
+Writing through a view mutates shared memory. But C#'s **compound-assignment operators are not in-place** - the compiler expands `x += 1` into `x = x + 1`, allocating a new array and rebinding the variable. Other references keep seeing the old data:
 
 ```csharp
 var x = np.array([1, 2, 3]);
@@ -146,7 +146,7 @@ x += 10;                 // x → NEW array [11, 12, 13]
 // alias is still [1, 2, 3]   ← differs from NumPy, where += is in-place!
 ```
 
-To mutate the buffer in place (so aliases and views observe the change), **assign through a slice** — the setter path:
+To mutate the buffer in place (so aliases and views observe the change), **assign through a slice** - the setter path:
 
 ```csharp
 x[":"] = x + 1;          // rewrites x's buffer; alias sees it
@@ -185,7 +185,7 @@ arr[":"] = arr * 2;      // in-place double; views/aliases observe it
 ## Troubleshooting
 
 ### "I modified a slice and the original array changed"
-Basic slices are views — that is by design. Use `.copy()` for independence.
+Basic slices are views - that is by design. Use `.copy()` for independence.
 
 ### "assignment destination is read-only"
 You are writing to a broadcast view (stride 0). Copy first: `var w = b.copy();`. See [Broadcasting](../broadcasting.md#memory-behavior).
@@ -220,8 +220,8 @@ C# compound assignment rebinds; it does not mutate. Use `x[":"] = x + 1`.
 
 ## Related reading
 
-- [Indexing on NDArray](indexing.md) — which index forms view and which copy.
-- [Getting & Setting Values](../getting-and-setting-values.md) — the write-through rules in full.
-- [Broadcasting](../broadcasting.md) — why broadcast views are read-only.
-- [NDArray](../NDArray.md) — storage, shape, and the anatomy behind views.
-- [NumPy copies-and-views guide](https://numpy.org/doc/stable/user/basics.copies.html) — the upstream article.
+- [Indexing on NDArray](indexing.md) - which index forms view and which copy.
+- [Getting & Setting Values](../getting-and-setting-values.md) - the write-through rules in full.
+- [Broadcasting](../broadcasting.md) - why broadcast views are read-only.
+- [NDArray](../NDArray.md) - storage, shape, and the anatomy behind views.
+- [NumPy copies-and-views guide](https://numpy.org/doc/stable/user/basics.copies.html) - the upstream article.

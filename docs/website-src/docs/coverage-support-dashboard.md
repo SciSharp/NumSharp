@@ -488,7 +488,7 @@
   }
 
   function coverageLabel(counts) {
-    return counts.numpy ? `${counts.coverage.toFixed(1)}%` : "—";
+    return counts.numpy ? `${counts.coverage.toFixed(1)}%` : "-";
   }
 
   function statusBadge(status, text = statusLabels[status] || status) {

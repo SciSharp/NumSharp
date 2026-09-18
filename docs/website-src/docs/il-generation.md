@@ -3,7 +3,7 @@
 Most numerical libraries face the same fork in the road: write generic managed
 loops that are portable but slow, or bind to a native backend that is fast but
 opaque. NumSharp takes a third path. It ships a small compiler inside the
-library — a code generator that, the first time you ask for `a + b` on two
+library - a code generator that, the first time you ask for `a + b` on two
 `float64` arrays, emits a `DynamicMethod` specialized for exactly that operation,
 dtype pair, memory layout, and SIMD width, hands the raw IL to the .NET JIT to
 lower into native vector code, and caches the resulting delegate for the rest of
@@ -14,7 +14,7 @@ That layer is the performance backbone behind elementwise ufuncs, reductions,
 scans, casts, selection and indexing, `np.where`, `np.average`, `np.evaluate`,
 and the NDIter custom-operation bridge. This page is its specification: what the
 two generators are, how a request becomes a kernel, how layout and SIMD width are
-chosen, and — the part that makes it more than an optimizer — how NumPy's dtype
+chosen, and - the part that makes it more than an optimizer - how NumPy's dtype
 and edge-case semantics survive the trip into hand-written machine code.
 
 ## At a Glance
@@ -26,9 +26,9 @@ never estimated:
 | The system in numbers | |
 | --- | ---: |
 | Kernel source files | 84 |
-| &nbsp;&nbsp;— whole-array `DirectILKernelGenerator` partials | 64 |
-| &nbsp;&nbsp;— NDIter `ILKernelGenerator` partials | 5 |
-| &nbsp;&nbsp;— shared infrastructure | 15 |
+| &nbsp;&nbsp;- whole-array `DirectILKernelGenerator` partials | 64 |
+| &nbsp;&nbsp;- NDIter `ILKernelGenerator` partials | 5 |
+| &nbsp;&nbsp;- shared infrastructure | 15 |
 | `DynamicMethod` kernel factories | 57 |
 | Distinct generated-kernel caches | 45 |
 | Binary / unary / reduction / comparison ops | 17 / 35 / 20 / 6 |
@@ -39,7 +39,7 @@ never estimated:
 
 Read the last two rows together: roughly 48,000 lines of C# exist to hand-emit
 about 7,000 raw IL instructions across 57 factories. The ratio is the whole
-story — most of the code is not the loops themselves but the decisions *around*
+story - most of the code is not the loops themselves but the decisions *around*
 the loops: which dtype promotion applies, which of the five layout paths the
 strides demand, whether a SIMD path is legal on this hardware, and what NumPy
 does at the edges. The emitted IL is small and hot; the C# that decides which IL
@@ -62,7 +62,7 @@ There are two physically separate generator classes, and the reason is not
 historical accident or arbitrary partitioning. It is a single question: **who
 drives the loop?**
 
-### `DirectILKernelGenerator` — the kernel owns the array
+### `DirectILKernelGenerator` - the kernel owns the array
 
 *Location: `src/NumSharp.Core/Backends/Kernels/Direct/`*
 
@@ -87,9 +87,9 @@ This is the right model when the operation genuinely owns its traversal: casts,
 same-type and mixed-type binary ops, whole-array unary loops, axis reductions,
 `take`/`put`/`place`/`search`, `trace`, `matmul`, `repeat`, `quantile`, and the
 rest of the mature, directly-dispatched surface. It carries the bulk of the
-system — 64 partials, ~42,500 lines, 52 of the 57 factories.
+system - 64 partials, ~42,500 lines, 52 of the 57 factories.
 
-### `ILKernelGenerator` — the iterator owns the loop
+### `ILKernelGenerator` - the iterator owns the loop
 
 *Location: `src/NumSharp.Core/Backends/Kernels/`*
 
@@ -106,7 +106,7 @@ unsafe delegate void NDInnerLoopFunc(
     void*  auxdata);    // op-specific extras (e.g. axis index)
 ```
 
-Note the strides are **byte** strides, matching NumPy's C convention — a small
+Note the strides are **byte** strides, matching NumPy's C convention - a small
 but load-bearing difference from the Direct contract's element strides. This is
 the migration target for new iterator-driven ufunc work. Today it backs the
 chunked `np.where` inner loop, the per-chunk reductions (including the
@@ -115,14 +115,14 @@ the scheduling layer that feeds these kernels.
 
 ### The exception that proves the split
 
-The tidy story — "Direct owns arrays, NDIter owns chunks" — has exactly two
+The tidy story - "Direct owns arrays, NDIter owns chunks" - has exactly two
 deliberate exceptions, and knowing them saves an hour of confusion. Two *Direct*
 partials emit the per-chunk `NDInnerLoopFunc` contract rather than a whole-array
 kernel:
 
-- **`DirectILKernelGenerator.InnerLoop.cs`** — the reusable inner-loop factory
+- **`DirectILKernelGenerator.InnerLoop.cs`** - the reusable inner-loop factory
   behind `np.evaluate` (the `NDExpr` DSL) and custom NDIter operations.
-- **`DirectILKernelGenerator.WeightedSum.cs`** — the kernel behind `np.average`.
+- **`DirectILKernelGenerator.WeightedSum.cs`** - the kernel behind `np.average`.
 
 So the class a kernel lives in tells you its *file neighborhood*, but the
 delegate signature tells you its *driving contract*. When in doubt, look at the
@@ -176,7 +176,7 @@ Across the tree: **7,012** raw `Emit(...)` calls, **390** `EmitCall(...)` sites,
 ### Direct generator by category
 
 The 64 Direct partials group cleanly by what they do. The line counts are less
-interesting than the silhouette they form — casts and axis reductions alone are a
+interesting than the silhouette they form - casts and axis reductions alone are a
 third of the generator, because that is where NumPy hides most of its corner
 cases.
 
@@ -221,7 +221,7 @@ cases.
 
 ### Refreshing the inventory
 
-The headline figures drift every time a kernel is added — this document has gone
+The headline figures drift every time a kernel is added - this document has gone
 stale before. Re-derive them after large kernel changes; these snippets are the
 source of truth for the numbers above.
 
@@ -251,7 +251,7 @@ $text  = ($files | ForEach-Object { Get-Content $_.FullName -Raw }) -join "`n"
 
 The Direct-generator cache-field count uses a narrower scope. The regex is
 anchored to declaration sites so the two `ConcurrentDictionary<...>` mentions
-that appear only in comments are not counted — it yields all 43 declared fields,
+that appear only in comments are not counted - it yields all 43 declared fields,
 of which 41 hold generated kernels and 2 hold reflection results:
 
 ```powershell
@@ -262,7 +262,7 @@ $directText = ($direct | ForEach-Object { Get-Content $_.FullName -Raw }) -join 
 
 ## The Life of a Kernel
 
-Every generated kernel — Direct or NDIter — travels the same road from a user
+Every generated kernel - Direct or NDIter - travels the same road from a user
 call to native code:
 
 ```text
@@ -278,27 +278,27 @@ call to native code:
 
 On a warm path only steps 5 and 8 run: a dictionary lookup, then a direct call
 into JIT-compiled native code. The first call of a given shape pays the emit-and-JIT
-cost — microseconds — and every call after it is free of that overhead.
+cost - microseconds - and every call after it is free of that overhead.
 
 **Correctness never depends on the fast path existing.** Kernel entry points
 follow a `TryGet*Kernel` discipline: if IL generation is disabled, the dtype is
 unsupported, or reflection/emit throws for any reason, the method returns `null`
 and the caller drops to a scalar reference loop. This catch-all-return-`null`
 pattern appears at 14 sites across the Direct partials. It is why the generator
-can be aggressive — a path that only ever makes things faster, and quietly steps
+can be aggressive - a path that only ever makes things faster, and quietly steps
 aside when it cannot, is a path you can trust.
 
 ## Anatomy of a Kernel: a Guided Tour in IL
 
 The lifecycle above is abstract. This section builds a real kernel from the
-ground up — atom, operation, factory, loop, intrinsic, and finally the plug-in
+ground up - atom, operation, factory, loop, intrinsic, and finally the plug-in
 point that fusion and custom operations use. Every snippet is distilled from the
 actual source; the parenthetical names point to the full versions.
 
 ### 1. The atom: load one typed element
 
 IL is a stack machine, and the smallest thing a kernel does is push one element
-from a pointer. There is no generic "load" — the value's dtype picks the opcode
+from a pointer. There is no generic "load" - the value's dtype picks the opcode
 (`EmitLoadIndirect`):
 
 ```csharp
@@ -341,7 +341,7 @@ il.Emit(opcode);
 
 "Usually" is load-bearing. `Power`, `Mod`, `FloorDivide`, the shifts, and
 `maximum`/`minimum` are intercepted *before* this switch and routed to
-NumPy-faithful helpers, because the naive opcode disagrees with NumPy — C#'s `%`
+NumPy-faithful helpers, because the naive opcode disagrees with NumPy - C#'s `%`
 takes the dividend's sign where NumPy takes the divisor's, and IL has no integer
 power at all. Even plain division needs a different opcode for unsigned operands
 (`Div_Un`). The switch is the fast common case; the interceptions are where
@@ -389,7 +389,7 @@ il.Emit(OpCodes.Conv_I);
 il.Emit(OpCodes.Add);               // base + i*elemSize
 ```
 
-Those addresses drive the canonical throughput shape — a vector main loop that
+Those addresses drive the canonical throughput shape - a vector main loop that
 advances `vectorCount` elements at a time, then a scalar tail that mops up the
 `count % vectorCount` remainder:
 
@@ -409,7 +409,7 @@ while i < count:                # scalar tail
 ```
 
 The loop guards are emitted with `DefineLabel`/`MarkLabel` and a `Bgt`/`Bge`
-branch — the 524 labels across the tree are almost all doing exactly this. The
+branch - the 524 labels across the tree are almost all doing exactly this. The
 tail is not optional: `count` is rarely a whole number of vectors.
 
 ### 5. Calling a SIMD intrinsic through the reflection cache
@@ -440,7 +440,7 @@ time.
 ### 6. The plug-in point: supply the element math, inherit the loop
 
 Everything above is reusable machinery. A caller adding a new elementwise
-operation does *not* re-emit loops and addresses — it supplies only the
+operation does *not* re-emit loops and addresses - it supplies only the
 per-element (and optional per-vector) math as `Action<ILGenerator>` closures and
 lets the factory wrap them. This is exactly how `np.evaluate` compiles an
 expression tree (`NDExpr.Compile`):
@@ -453,7 +453,7 @@ Action<ILGenerator> scalarBody = il =>
     EmitScalar(il, ctx);          // for a*b+2 → Mul, Ldc_R8 2, Add
 };
 
-// vectorBody is null when the op or dtype can't vectorize — the factory then
+// vectorBody is null when the op or dtype can't vectorize - the factory then
 // silently uses the scalar path, with no branch required at the call site.
 Action<ILGenerator>? vectorBody = wantSimd
     ? il => { ...; EmitVector(il, ctx); }
@@ -488,7 +488,7 @@ strides and shape and returns one `ExecutionPath`, in priority order:
 
 The chosen path is then **part of the cache key**:
 `MixedTypeKernelKey(lhsType, rhsType, resultType, op, path)`. Each combination
-gets its own branch-free specialized kernel — up to 12 × 12 × 5 × 5 = 3,600
+gets its own branch-free specialized kernel - up to 12 × 12 × 5 × 5 = 3,600
 possible binary kernels, and 12 × 12 × 6 × 5 = 4,320 comparison kernels, though
 in practice only the handful your program actually exercises are ever emitted.
 Because the path is decided before the kernel is even looked up, the hot loop
@@ -510,7 +510,7 @@ not be the same shape.
 
 ### The NDIter model: dispatch at runtime
 
-The inner-loop factory (`DirectILKernelGenerator.InnerLoop.cs` — a Direct partial
+The inner-loop factory (`DirectILKernelGenerator.InnerLoop.cs` - a Direct partial
 that emits the per-chunk contract, per [the exception above](#the-exception-that-proves-the-split))
 cannot bake the path into the key, because a single compiled kernel is reused
 across chunks whose strides differ from one call to the next. So it emits the dispatch *into the kernel*: cheap integer compares at the
@@ -535,33 +535,33 @@ loops from one body pair: an all-contiguous SIMD loop (4× unrolled, plus a
 one-vector remainder and a scalar tail), a broadcast-binary SIMD loop that
 pre-broadcasts the scalar operand once via `Vector.Create` outside the loop, an
 AVX2 hardware-gather loop for genuinely strided inputs, a mixed-dtype scalar
-contiguous loop, and — always present, the floor everything falls to — a
+contiguous loop, and - always present, the floor everything falls to - a
 scalar-strided loop. Two dispatch philosophies, one classification; the split
 mirrors the loop-ownership split exactly.
 
 ## SIMD Strategy
 
 The vector layer adapts to the hardware it finds at startup.
-`DirectILKernelGenerator.VectorBits` is set once to 512, 256, 128, or **0** — and
+`DirectILKernelGenerator.VectorBits` is set once to 512, 256, 128, or **0** - and
 that 0 matters: it forces the scalar path everywhere, so the whole system
 degrades cleanly on a machine with no SIMD at all.
 
 `VectorMethodCache` is the pivot. Reflection over `Vector128/256/512` is
 expensive and easy to get subtly wrong, so the cache resolves each `MethodInfo`
 once, already closed over dtype and width, and hands back the same handle to
-every emitter that asks — loads, stores, operators, comparisons, the various
+every emitter that asks - loads, stores, operators, comparisons, the various
 `Create` overloads, narrows, widens, `As<TFrom,TTo>`, `Zero`, and the x86
 intrinsic entry points.
 
 That last category is a genuine performance lever, not a portability footnote.
 The portable `Vector256.*` helpers JIT-emit roughly **1.8–2× slower** code than
 the platform-specific `System.Runtime.Intrinsics.X86.Avx/Avx2.*` methods on the
-same AVX2 host — same IL `call` instruction, different code-gen path. So when the
+same AVX2 host - same IL `call` instruction, different code-gen path. So when the
 host supports them (`UseX86_256/128/512`), the cache routes load, store, add,
 sub, mul, div, min, max, sqrt, and the bitwise ops through the x86 intrinsic
 `MethodInfo`. The routing table also encodes where the hardware simply has no
-instruction — there is no integer SIMD divide, and AVX2 lacks int64 min/max and
-multiply (those need AVX-512) — and returns `null` so the caller falls back
+instruction - there is no integer SIMD divide, and AVX2 lacks int64 min/max and
+multiply (those need AVX-512) - and returns `null` so the caller falls back
 rather than emitting invalid IL.
 
 On top of that routing, the emitted loops use the classic throughput repertoire:
@@ -577,8 +577,8 @@ On top of that routing, the emitted loops use the classic throughput repertoire:
 ## NumPy Semantics in the Fast Path
 
 Here is the claim that separates this generator from a generic SIMD loop
-compiler: **it carries NumPy's behavior — including the parts NumPy itself is
-slightly embarrassed by — into specialized machine code.** Speed with the wrong
+compiler: **it carries NumPy's behavior - including the parts NumPy itself is
+slightly embarrassed by - into specialized machine code.** Speed with the wrong
 answer is a bug; the fast path is only allowed to exist because it is also the
 correct path.
 
@@ -586,8 +586,8 @@ correct path.
 
 Kernel keys carry input, accumulator, and result dtypes separately, so a kernel
 can compute at a different width than it stores. Reductions and scans honor
-NumPy's widened-accumulator rules — integer `sum` and `prod` accumulate into
-64-bit, integer `mean` accumulates in `double` — and the widened axis path in
+NumPy's widened-accumulator rules - integer `sum` and `prod` accumulate into
+64-bit, integer `mean` accumulates in `double` - and the widened axis path in
 `DirectILKernelGenerator.Reduction.Axis.Widening.cs` does the sign/zero extension
 and float conversion in AVX2. It streams input rows through an 8192-element
 output-slab block that stays L2-resident, mirroring NumPy's own buffer-size
@@ -601,11 +601,11 @@ gathering a strided column per output element.
 error; a naive C# port matched NumPy's summation order bit-for-bit but was
 scalar, because the .NET JIT will not auto-vectorize an eight-accumulator loop
 the way GCC does. The emitter's trick is to map NumPy's eight accumulators onto
-SIMD lanes so accumulator `r[k]` still gathers elements `{k, k+8, k+16, …}` — the
+SIMD lanes so accumulator `r[k]` still gathers elements `{k, k+8, k+16, …}` - the
 result is *independent of vector width*, so V128, V256, and V512 all produce
 identical bits, bit-for-bit equal to `np.add.reduce`. The file records the
 measurement: for `float64`, `axis=1`, on a 1000×1000 array on an AVX2 host,
-scalar pairwise ran at 0.267 ms and the emitted SIMD pairwise at 0.123 ms — a
+scalar pairwise ran at 0.267 ms and the emitted SIMD pairwise at 0.123 ms - a
 2.18× self-speedup that also beats NumPy 2.4.2's 0.207 ms by 1.69×.
 
 ### NaN, predicate, and edge semantics
@@ -625,7 +625,7 @@ NaN/overflow, where the IL `conv` opcodes would saturate and yield 0).
 A representative small trap: a `bool` array is *logically* only `{0, 1}`, but a
 `np.frombuffer` view or foreign interop buffer can legally hold a byte like 255.
 So `EmitConvertTo` normalizes `!= 0 → 1` **before** widening a bool to any
-numeric type — otherwise `sum` over such a buffer would add 255 instead of
+numeric type - otherwise `sum` over such a buffer would add 255 instead of
 counting a True:
 
 ```csharp
@@ -657,10 +657,10 @@ ndarray/view layer, because a broadcast view is read-only by construction.
 
 ## Technique Highlights
 
-### Cast kernels — where the corner cases live
+### Cast kernels - where the corner cases live
 
-The cast subsystem is the densest part of the generator — 15 files, ~7,000 lines
-— for the same reason casting is where NumPy keeps its strangest behavior. The
+The cast subsystem is the densest part of the generator - 15 files, ~7,000 lines
+- for the same reason casting is where NumPy keeps its strangest behavior. The
 notable pieces:
 
 - `float`/`double` → signed integer through truncating paths that match NumPy's
@@ -676,7 +676,7 @@ notable pieces:
 - unsupported-pair caches, so a dtype combination that failed to emit once is
   never retried.
 
-### Axis reductions — not one loop but ten
+### Axis reductions - not one loop but ten
 
 Reducing along an axis is not a single fallback. The Direct generator carries
 separate paths for same-dtype SIMD reductions, widening reductions, arg
@@ -687,7 +687,7 @@ general fallback. The leading-axis case is the one that pays off most: reducing
 `axis=0` of a C-contiguous array streams whole rows sequentially while the output
 slab stays hot, instead of chasing a strided column for every output element.
 
-### `np.where` — read the bool, don't cast it
+### `np.where` - read the bool, don't cast it
 
 The NDIter `np.where` inner loop is deliberately not a reuse of `NDExpr.Where`.
 It reads the condition operand as a raw bool byte and selects directly: on an
@@ -695,7 +695,7 @@ inner-contiguous chunk it emits SIMD mask expansion plus `ConditionalSelect`;
 otherwise it runs scalar-strided IL. The point is to skip a per-element
 bool-to-output-dtype cast on the common path.
 
-### Custom inner loops — the factory behind `np.evaluate`
+### Custom inner loops - the factory behind `np.evaluate`
 
 `DirectILKernelGenerator.InnerLoop.cs` is a reusable inner-loop factory, shared by
 NDIter custom operations and `np.evaluate`. Its templated tier wraps
@@ -713,14 +713,14 @@ return
 ```
 
 That gives a custom operation the same generated loop shape as a built-in ufunc
-without hand-writing any pointer arithmetic — see
+without hand-writing any pointer arithmetic - see
 [Anatomy §6](#6-the-plug-in-point-supply-the-element-math-inherit-the-loop) for
 the caller side. The gather path is worth a note: its lane-index budget is
 `GatherStrideLimit = int.MaxValue / 8` (the largest lane offset is 7× the
-stride), and it applies only to 32- and 64-bit dtypes at 256-bit width —
+stride), and it applies only to 32- and 64-bit dtypes at 256-bit width -
 precisely the set NumPy's own `npyv_loadn` gathers.
 
-### Reflection caches — one source of truth
+### Reflection caches - one source of truth
 
 Runtime IL emission needs a `MethodInfo` for every intrinsic it calls.
 `VectorMethodCache` and `ScalarMethodCache` keep those lookups centralized and
@@ -748,13 +748,13 @@ kernels, and so are not counted here.) They group by family:
 | Custom inner loops | `_innerLoopCache`, surfaced through `GeneratedDelegates` for tests |
 
 Every key is structural: it encodes exactly enough to make one emitted body valid
-— operation, dtype tuple, accumulator/result dtype, execution path, copy mode,
+- operation, dtype tuple, accumulator/result dtype, execution path, copy mode,
 quantile method, or a caller-supplied custom key. Two requests that would emit
 identical IL share a key; two that would not, don't.
 
 `GeneratedDelegates` exposes a public live count per cache (and a `TotalCount`)
 plus internal clear hooks for tests. The reflection caches are deliberately
-excluded from that registry — they hold `MethodInfo` lookups, not generated
+excluded from that registry - they hold `MethodInfo` lookups, not generated
 executable kernels, and counting them would blur the one number tests actually
 care about: how many kernels this process has compiled.
 
@@ -771,18 +771,18 @@ care about: how many kernels this process has compiled.
 3. **Define the cache key before the emitter.** If a decision changes the emitted
    IL, it belongs in the key. A missing field silently reuses the wrong body.
 4. **Keep the generated signature narrow.** Raw pointers, strides, shape, axis,
-   sizes — no managed allocations in the hot body.
+   sizes - no managed allocations in the hot body.
 5. **Separate path selection from loop emission.** The house style is a
    dispatcher, then path-specific `Generate*` methods, then `Emit*Loop` helpers.
 6. **Handle all 15 dtypes,** or document the unsupported ones and give them a
    clear fallback.
 7. **Preserve view semantics.** Offset is already in the base pointer; strides
    must handle non-contiguous, negative, and broadcast cases.
-8. **Add NumPy-derived tests** — contiguous, strided, broadcast, empty/scalar,
+8. **Add NumPy-derived tests** - contiguous, strided, broadcast, empty/scalar,
    NaN, and promotion cases, scaled to the operation's risk.
 9. **Benchmark in Release only.** Debug JIT and intrinsic behavior differ enough
    to invalidate kernel timings. Ratios follow the project convention
-   `NumPy_ms / NumSharp_ms`, so a value above `1.0` means NumSharp is faster —
+   `NumPy_ms / NumSharp_ms`, so a value above `1.0` means NumSharp is faster -
    see the [Benchmarks dashboard](benchmarks-dashboard.md).
 
 ### Debugging one
@@ -790,14 +790,14 @@ care about: how many kernels this process has compiled.
 When a generated path misbehaves:
 
 - Confirm `DirectILKernelGenerator.Enabled` and `VectorBits`.
-- Inspect the cache key — a missing field is the classic "wrong IL" bug.
+- Inspect the cache key - a missing field is the classic "wrong IL" bug.
 - Check which layout path was chosen *before* the generator ran.
 - For NDIter kernels, inspect the current chunk's byte strides; a natural byte
   stride is required before the SIMD chunk path fires.
 - Use `GeneratedDelegates.InnerLoopCount` and the reset hooks to prove a custom
   inner loop is cached (or regenerated).
 - If a `TryGet*Kernel` returns `null`, read the fallback path before assuming the
-  bug is in emitted IL — the fast path may simply have declined.
+  bug is in emitted IL - the fast path may simply have declined.
 - Remember `DynamicMethod` IL is not step-through friendly. Log around path
   selection, or temporarily emit into a debuggable assembly, rather than trying
   to single-step the delegate.
@@ -805,7 +805,7 @@ When a generated path misbehaves:
 ## What Makes This System Unusual
 
 Most managed numerical libraries pick a lane: generic managed loops, or a native
-backend. NumSharp sits between them on purpose — it generates managed IL at
+backend. NumSharp sits between them on purpose - it generates managed IL at
 runtime, lets the .NET JIT lower that IL to native machine code, and keeps NumPy
 layout and dtype semantics *inside* the generated body. No single ingredient is
 novel; the combination is:
@@ -819,10 +819,10 @@ novel; the combination is:
 - NDIter inner-loop kernels for iterator-style execution and fusion.
 - Pairwise floating reductions that preserve NumPy's summation order while
   recovering SIMD throughput.
-- Cast kernels that encode NumPy's odd corners — modular unsigned float casts,
+- Cast kernels that encode NumPy's odd corners - modular unsigned float casts,
   half conversion, complex deinterleaving, subword lanes, masked output.
 
 That is why the IL generator is not merely an optimization layer bolted onto a
 correct-but-slow core. It is the layer where NumSharp turns NumPy's compatibility
-rules into specialized machine code — and the reason a managed array library can
+rules into specialized machine code - and the reason a managed array library can
 answer exactly like NumPy while running at native speed.

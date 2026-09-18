@@ -334,8 +334,8 @@ html[data-bs-theme="dark"] .ns-bench-dashboard {
     </p>
     <div class="snapshot-strip" aria-label="Inventory details">
       <span class="snapshot-meta">Committed generated inventory</span>
-      <span class="snapshot-meta" data-numpy-version>NumPy —</span>
-      <span class="snapshot-meta" data-schema-version>Schema —</span>
+      <span class="snapshot-meta" data-numpy-version>NumPy -</span>
+      <span class="snapshot-meta" data-schema-version>Schema -</span>
       <span class="snapshot-meta">Reflected net8.0 assemblies</span>
     </div>
   </section>
@@ -343,22 +343,22 @@ html[data-bs-theme="dark"] .ns-bench-dashboard {
   <section class="metric-grid" aria-label="Headline test and oracle metrics">
     <article class="metric-card">
       <div class="metric-label">Unit tests</div>
-      <div class="metric-value metric-good" data-test-declarations>—</div>
+      <div class="metric-value metric-good" data-test-declarations>-</div>
       <p class="metric-note" data-test-note>One reflected method declaration; not an executed result</p>
     </article>
     <article class="metric-card">
       <div class="metric-label">Unit test classes</div>
-      <div class="metric-value metric-good" data-test-classes>—</div>
+      <div class="metric-value metric-good" data-test-classes>-</div>
       <p class="metric-note" data-class-note>Grouped ownership surface across the reflected assemblies</p>
     </article>
     <article class="metric-card">
       <div class="metric-label">Oracle test cases</div>
-      <div class="metric-value metric-good" data-oracle-test-cases>—</div>
+      <div class="metric-value metric-good" data-oracle-test-cases>-</div>
       <p class="metric-note" data-oracle-case-note>Corpus plus specialized flags, layout, and NPY/NPZ cases</p>
     </article>
     <article class="metric-card">
       <div class="metric-label">Oracle test classes</div>
-      <div class="metric-value metric-good" data-oracle-test-classes>—</div>
+      <div class="metric-value metric-good" data-oracle-test-classes>-</div>
       <p class="metric-note" data-oracle-class-note>Classes that run committed Oracle cases and harness checks</p>
     </article>
   </section>
@@ -441,8 +441,8 @@ html[data-bs-theme="dark"] .ns-bench-dashboard {
   <section>
     <div class="section-head"><h2>Full Reports</h2><p class="section-note">Generated data and the human-maintained oracle ledgers</p></div>
     <ul class="report-list">
-      <li><a href="../../../test/inventory/generated/tests-oracle-report.csv">Full unit test inventory CSV</a> — one row per reflected unit-test method.</li>
-      <li><a href="../../../test/inventory/generated/summary.md">Generated inventory summary</a> — headline counts and strength queue.</li>
+      <li><a href="../../../test/inventory/generated/tests-oracle-report.csv">Full unit test inventory CSV</a> - one row per reflected unit-test method.</li>
+      <li><a href="../../../test/inventory/generated/summary.md">Generated inventory summary</a> - headline counts and strength queue.</li>
       <li><a href="https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Oracle/Fuzz/README.md">Oracle architecture and divergence ledger</a>.</li>
       <li><a href="https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Oracle/Fuzz/COVERAGE_GAPS.md">Coverage map and expansion techniques</a>.</li>
       <li><a href="https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Oracle/Fuzz/JOURNEY3_TOUCHED_FUNCTIONS.md">Journey3 touched-function receipt</a>.</li>

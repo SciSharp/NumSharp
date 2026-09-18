@@ -1,10 +1,10 @@
-# Any Python library, zero-copy — via `np.frombuffer`
+# Any Python library, zero-copy - via `np.frombuffer`
 
 NumSharp keeps every array in raw unmanaged memory, and CPython has a protocol for passing raw
 memory between libraries that have never heard of each other: PEP 3118, the buffer protocol.
 `nd.ToMemoryView()` puts a NumSharp array on that protocol as a writable Python `memoryview`, and
 from there `np.frombuffer` re-types those same bytes as a numpy array without copying one of them.
-Anything numpy can reach — PyTorch, Pillow, Arrow, pandas, polars, OpenCV — you can now reach, and
+Anything numpy can reach - PyTorch, Pillow, Arrow, pandas, polars, OpenCV - you can now reach, and
 so can everything that reads a buffer without involving numpy at all: `struct`, `hashlib`, `zlib`,
 a socket, a C extension you wrote yesterday.
 
@@ -56,12 +56,12 @@ using (Py.GIL())
     scope.Exec("a[0, 0] = -5.0");                                       // Python writes...
 }
 
-// ...and NumSharp sees it — same memory:
+// ...and NumSharp sees it - same memory:
 Console.WriteLine(nd);        // [[-5. 1. 2.] [3. 4. 5.]]
 ```
 
 `ToNumpyDtypeStr` is public and total over the dtypes numpy can express, so the recipe generalises
-without a switch statement of your own. `np.frombuffer` always produces a **1-D** array — the
+without a switch statement of your own. `np.frombuffer` always produces a **1-D** array - the
 `reshape` is what gives it back its dimensions, and it costs nothing.
 
 <sub>See here [`Recipe_RoundTripsThroughFrombuffer`][gate], [`DtypeStrings_AreTotalOverNumpyExpressibleDtypes`][gate]</sub>
@@ -74,13 +74,13 @@ NumSharp memory to Python, and they are good at different things:
 | | `nd.ToNumpy()` | `nd.ToMemoryView()` + `np.frombuffer` |
 |---|---|---|
 | Result | a `numpy.ndarray` the bridge built | raw bytes you type yourself |
-| Layouts | **every** layout — slices, transposes, F-order, negative strides, broadcasts | C-contiguous only |
+| Layouts | **every** layout - slices, transposes, F-order, negative strides, broadcasts | C-contiguous only |
 | Needs numpy importable | yes | **no** |
-| Reaches non-numpy consumers | only via `np.asarray` round-trips | directly — `struct`, `hashlib`, sockets, `PIL.Image.frombuffer`, `torch.frombuffer`, `pa.py_buffer` |
+| Reaches non-numpy consumers | only via `np.asarray` round-trips | directly - `struct`, `hashlib`, sockets, `PIL.Image.frombuffer`, `torch.frombuffer`, `pa.py_buffer` |
 | Shape/dtype | carried automatically | you supply both |
 
 Use `ToNumpy()` when the destination wants a numpy array and your data may be strided. Use
-`ToMemoryView()` when the destination wants *bytes* — which is what this page is about.
+`ToMemoryView()` when the destination wants *bytes* - which is what this page is about.
 
 ---
 
@@ -98,12 +98,12 @@ lifetime hook; nothing is read, so the size of the array never enters the cost.
 | 10,000,000 | 0.0070 ms | 0.0067 ms | 12.8216 ms |
 
 Best of 7, warm engine, on the stack named in the banner. At ten million elements the buffer route
-is roughly **1,800× cheaper** than copying, and it will keep pulling away — the left two columns are
+is roughly **1,800× cheaper** than copying, and it will keep pulling away - the left two columns are
 constants.
 
 **Read the first row again, though: at a thousand elements the copy wins.** Sharing has a fixed
-setup cost of about seven microseconds — a `ctypes` window, a `frombuffer` call, a `weakref.finalize`
-registration — and copying eight kilobytes is faster than that. The crossover sits somewhere around
+setup cost of about seven microseconds - a `ctypes` window, a `frombuffer` call, a `weakref.finalize`
+registration - and copying eight kilobytes is faster than that. The crossover sits somewhere around
 ten thousand elements. Below it, if you have no reason to share, don't: a copy is simpler, it locks
 nothing, and it outlives the interpreter.
 
@@ -135,7 +135,7 @@ misrepresent it. Materialize first: np.ascontiguousarray(nd) or nd.copy().
 | 0-d scalar | ✅ 8 bytes | ✅ `shape=()` |
 | empty `(0,3)` | ✅ 0 bytes | ✅ `shape=(0,3)` |
 
-Row slices pass because a contiguous window at an offset is still a contiguous window — the
+Row slices pass because a contiguous window at an offset is still a contiguous window - the
 memoryview covers exactly that window, not the parent buffer. The two ways out of a `❌` are
 `np.ascontiguousarray(nd)`, which copies once into a layout the protocol can describe, or
 `ToNumpy()`, which describes the strides exactly and stays zero-copy.
@@ -155,8 +155,8 @@ Fourteen of NumSharp's fifteen dtypes cross. Both maps are public, so you never 
 | `Int64` / `UInt64` | `<i8` / `<u8` | `q` / `Q` | `int64` / `uint64` |
 | `Half` / `Single` / `Double` | `<f2` / `<f4` / `<f8` | `e` / `f` / `d` | `float16` / `float32` / `float64` |
 | `Complex` | `<c16` | `Zd` | `complex128` |
-| `Char` | `<u2` | `H` | `uint16` — a C# `char` is a UTF-16 code unit; numpy has no char dtype |
-| `Decimal` | *throws* | *throws* | — |
+| `Char` | `<u2` | `H` | `uint16` - a C# `char` is a UTF-16 code unit; numpy has no char dtype |
+| `Decimal` | *throws* | *throws* | - |
 
 `Decimal` is sixteen bytes of non-IEEE decimal float. Nothing in numpy or PEP 3118 describes it, so
 both maps refuse rather than invent something:
@@ -173,7 +173,7 @@ Convert first: nd.astype(NPTypeCode.Double).
 ## Reading Python's memory
 
 The protocol runs both ways. Anything on the Python side that exports a buffer becomes a NumSharp
-array — and `AsNDArray()` shares it rather than copying:
+array - and `AsNDArray()` shares it rather than copying:
 
 ```csharp
 using (Py.GIL())
@@ -198,18 +198,18 @@ convention, and both accept **any** exporter, not just numpy arrays:
 | `io.BytesIO(...).getbuffer()` | view · `Byte[8]` · writable |
 | `np.arange(6).reshape(2,3).T` | view · `Int64[3,2]` · writable |
 | `np.broadcast_to(np.arange(3), (2,3))` | view · `Int64[2,3]` · **read-only** |
-| `np.array([1+2j], dtype='c8')` | **copy** — complex64 widens to `Complex` |
-| `np.array(['a','b'], dtype='U1')` | **copy** — UCS-4 text narrows to `Char` |
-| `np.arange(4, dtype='>i4')` | **copy** — big-endian byte-reversed to native |
+| `np.array([1+2j], dtype='c8')` | **copy** - complex64 widens to `Complex` |
+| `np.array(['a','b'], dtype='U1')` | **copy** - UCS-4 text narrows to `Char` |
+| `np.arange(4, dtype='>i4')` | **copy** - big-endian byte-reversed to native |
 
 Strided sources view too, including transposes and negative strides: NumSharp reconstructs the
 layout rather than flattening it. Only three things stop a zero-copy *view*, and each is a width or
-byte-order mismatch that no reinterpretation can fix — complex64 is two 4-byte floats where
+byte-order mismatch that no reinterpretation can fix - complex64 is two 4-byte floats where
 NumSharp's `Complex` is two 8-byte doubles, `<U1` is a 4-byte code point where `Char` is a 2-byte
 UTF-16 unit, and big-endian data would byte-swap every value if read natively. But the **copy**
 path (`ToNDArray`) handles all three: complex64 widens, UCS-4 narrows, and big-endian byte-reverses
-each element to a value-correct native array. Only the *view* path still refuses big-endian — a
-native-endian shared view is impossible — with the fix in the message:
+each element to a value-correct native array. Only the *view* path still refuses big-endian - a
+native-endian shared view is impossible - with the fix in the message:
 
 ```text
 NotSupportedException: big-endian buffer format '>l' cannot be mapped onto a native-endian
@@ -220,7 +220,7 @@ NumSharp buffer. Byte-swap first: arr.astype(arr.dtype.newbyteorder('<')).
 
 ### Can I view a read-only object?
 
-**Yes, if you ask — and the view comes back non-writeable.** By default a read-only source is
+**Yes, if you ask - and the view comes back non-writeable.** By default a read-only source is
 refused outright, so you cannot accidentally take a view you have no right to write through:
 
 ```text
@@ -229,7 +229,7 @@ would corrupt an immutable Python object. Use ToNDArray (copy), or pass allowRea
 take a NON-WRITEABLE view (guarded writes through it throw).
 ```
 
-Pass `allowReadonly: true` and you get a view whose `Shape.IsWriteable` is `false` — numpy's own
+Pass `allowReadonly: true` and you get a view whose `Shape.IsWriteable` is `false` - numpy's own
 `writeable=False`, carried across the boundary. Reads are free; a write raises rather than
 corrupting a `bytes` object:
 
@@ -252,7 +252,7 @@ last reference on the far side lets go**, never when the near side happens to ti
 ### Can Python outlive my `NDArray`?
 
 **Yes.** Exporting takes an independent reference on the NumSharp buffer, so the memory survives
-even when every C# reference to it — the `NDArray`, the `PyObject` wrapper, all of them — is
+even when every C# reference to it - the `NDArray`, the `PyObject` wrapper, all of them - is
 disposed or collected. Python's own garbage collector decides when it ends:
 
 ```csharp
@@ -271,7 +271,7 @@ void ExportAndAbandon()
 ExportAndAbandon();
 GC.Collect(); GC.WaitForPendingFinalizers();
 
-// Python still reads — and writes — valid memory:
+// Python still reads - and writes - valid memory:
 //   a           ->  [0. 1. 2. 3.]
 //   a[0] = 7.0  ->  [7. 1. 2. 3.]
 ```
@@ -282,7 +282,7 @@ when the last of them dies. Delete them on the Python side and the NumSharp memo
 
 ### Can my `NDArray` outlive Python's object?
 
-**Yes — that is what the lease is for.** An imported view holds the Python exporter alive through
+**Yes - that is what the lease is for.** An imported view holds the Python exporter alive through
 NumSharp's own reference counting, and the lease is released when the last NumSharp view over the
 memory is disposed or collected. That includes views *derived* from it: disposing the array you
 imported while a slice of it lives frees nothing. The reference count decides, not the order you
@@ -300,7 +300,7 @@ int leased = NDArrayPythonInterop.LiveImports;   // Python buffers held by NumSh
 ### What does sharing cost the Python object?
 
 **It gets pinned: nothing may reallocate it while your view is alive.** That is CPython enforcing
-the protocol, not NumSharp being cautious — a `bytearray` that moved its storage would leave your
+the protocol, not NumSharp being cautious - a `bytearray` that moved its storage would leave your
 pointer dangling:
 
 ```text
@@ -340,7 +340,7 @@ using (Py.GIL())                                                  // one acquisi
 immediate access violation, the same as any raw C-API misuse. The process-wide default is
 `NDArrayPythonInterop.RequireGIL`, and `null` (the parameter's default) follows it.
 
-> **The trap.** A .NET method or delegate invoked *from* Python does **not** hold the GIL —
+> **The trap.** A .NET method or delegate invoked *from* Python does **not** hold the GIL -
 > pythonnet's binder releases it around managed bodies. Inside a Python → .NET callback, leave GIL
 > management on.
 
@@ -387,7 +387,7 @@ using (Py.GIL())
 Console.WriteLine(nd);      // [42. 1. 2. 3. 4. 5.]
 ```
 
-`torch.from_numpy(np.frombuffer(mv, '<f4'))` reaches the identical address — both report the same
+`torch.from_numpy(np.frombuffer(mv, '<f4'))` reaches the identical address - both report the same
 `data_ptr`. Results come home the same way: `resultTensor.numpy()` is a numpy array, and
 `AsNDArray()` leases it.
 
@@ -438,7 +438,7 @@ using (Py.GIL())
     scope.Set("im", im);
     scope.Exec("cv2.circle(im, (320, 240), 40, (255, 0, 0), -1)");
 }
-// frame now holds the circle — cv2 rendered straight into NumSharp memory.
+// frame now holds the circle - cv2 rendered straight into NumSharp memory.
 ```
 
 ### No numpy required
@@ -464,7 +464,7 @@ Console.WriteLine(pcm);     // [77 1 2 3 4 5 6 7]
 ```
 
 `memoryview.cast` re-types the window without copying, which is how a raw-byte export becomes typed
-elements for a consumer that wants them. `bytes(mv)`, by contrast, **is** a copy — reach for it when
+elements for a consumer that wants them. `bytes(mv)`, by contrast, **is** a copy - reach for it when
 you want one.
 
 <sub>See here [`Torch_SharesTheDataPointer`][gate] †, [`Pillow_ReadsTheExportedBuffer`][gate] †, [`Pillow_ImageItselfIsNotImportable`][gate] †, [`PyArrow_WrapsTheMemoryViewZeroCopy`][gate] †, [`Pandas_DataFrameSharesMemory`][gate] †, [`Polars_SeriesSharesMemory`][gate] †, [`OpenCv_DrawsIntoNumSharpMemory`][gate] †, [`Stdlib_ConsumersReadAndWriteTheMemoryView`][gate]</sub>
@@ -479,13 +479,13 @@ you want one.
 | `ValueError: buffer size must be a multiple of element size` | The dtype you passed `np.frombuffer` does not divide the byte count. Use `ToNumpyDtypeStr(nd.typecode)` rather than a literal |
 | `decimal has no PEP 3118 format (16-byte, non-IEEE)` | No dtype in numpy or PEP 3118 describes it. `nd.astype(NPTypeCode.Double)` first |
 | `the exporter's buffer is read-only` | You asked for a writable view of `bytes` or a `writeable=False` array. Pass `allowReadonly: true`, or `ToNDArray()` to copy |
-| `assignment destination is read-only` | You wrote through a non-writeable view — a read-only or broadcast source. Copy it first if you need to mutate |
+| `assignment destination is read-only` | You wrote through a non-writeable view - a read-only or broadcast source. Copy it first if you need to mutate |
 | `BufferError: Existing exports of data: object cannot be re-sized` | A live NumSharp view leases that object. `Dispose()` the view to release the lock |
 | `big-endian buffer format '>l' cannot be mapped` | Only the zero-copy *view* refuses big-endian. `ToNDArray()` copies it, byte-reversing each value automatically; or byte-swap on the Python side first: `arr.astype(arr.dtype.newbyteorder('<'))` |
-| `the object does not export a PEP 3118 buffer` | Not every object is an exporter — a `dict`, a PIL `Image`. `np.asarray(obj)` first if numpy understands it |
+| `the object does not export a PEP 3118 buffer` | Not every object is an exporter - a `dict`, a PIL `Image`. `np.asarray(obj)` first if numpy understands it |
 | `Python engine is not initialized` | `Runtime.PythonDLL` and `PythonEngine.Initialize()` before any conversion |
 | A Python write did not show up in NumSharp | You copied. `ToMemoryView`/`ToNumpy`/`AsNDArray` share; `ToNumpyCopy`/`ToNDArray` do not |
-| Access violation around a conversion | `requireGIL: false` on a thread that does not hold the GIL — including inside a Python → .NET callback, where pythonnet releases it |
+| Access violation around a conversion | `requireGIL: false` on a thread that does not hold the GIL - including inside a Python → .NET callback, where pythonnet releases it |
 
 ---
 
@@ -500,7 +500,7 @@ you want one.
 | 5 | Contiguous windows, scalars and empties export | 192 / 96 / 8 / 0 bytes | [`MemoryView_AcceptsContiguousWindowsScalarsAndEmpty`][gate] |
 | 6 | `Decimal` is refused with conversion guidance | verbatim `NotSupportedException` | [`Decimal_ThrowsWithConversionGuidance`][gate] |
 | 7 | Every buffer-exporter variety imports as a view | 8 of 12 probes view, incl. strided and transposed | [`Import_ViewsEveryExporterVariety`][gate] |
-| 8 | complex64 widens, UCS-4 narrows — on copy, never as a view | `c8` → `Complex`, `<U1` → `Char` | [`Import_WidensComplex64AndNarrowsUcs4OnCopy`][gate] |
+| 8 | complex64 widens, UCS-4 narrows - on copy, never as a view | `c8` → `Complex`, `<U1` → `Char` | [`Import_WidensComplex64AndNarrowsUcs4OnCopy`][gate] |
 | 9 | Big-endian: the view refuses, the copy byte-reverses to native | view throws; copy round-trips value-exact | [`Import_ViewRefusesBigEndian_CopyByteSwaps`][gate] |
 | 10 | Read-only sources are refused by default, viewable on opt-in | throws; then `IsWriteable == false` | [`ReadonlySource_RefusedByDefault_ViewableOnOptIn`][gate] |
 | 11 | Writing a read-only view throws instead of corrupting | `assignment destination is read-only` | [`ReadonlyView_ThrowsOnGuardedWrite`][gate] |
@@ -523,9 +523,9 @@ on an image without it.
 
 ## See also
 
-- [Python & numpy (pythonnet)](pythonnet-numpy.md) — the full bridge: every layout exported with its
+- [Python & numpy (pythonnet)](pythonnet-numpy.md) - the full bridge: every layout exported with its
   strides intact, the auto-marshaling codec, and the engine lifecycle
-- [Numpy.NET](numpy-net.md) — sharing these same buffers with SciSharp's `Numpy` / `Numpy.Bare`
-- [Interoperability](index.md) — the contract underneath every NumSharp bridge
+- [Numpy.NET](numpy-net.md) - sharing these same buffers with SciSharp's `Numpy` / `Numpy.Bare`
+- [Interoperability](index.md) - the contract underneath every NumSharp bridge
 
 [gate]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/DocExamples.NpFrombufferPage.cs
