@@ -3146,9 +3146,22 @@ namespace NumSharp
         public MaskedArray identity(int n, DType dtype = null) => new MaskedArray(np.identity(n, dtype), null);
 
         /// <summary>Masked grid-index array for <paramref name="dimensions"/> (no element masked).</summary>
-        /// <param name="dimensions">Grid shape.</param><param name="dtype">Index dtype.</param>
+        /// <param name="dimensions">Grid shape (32-bit spelling).</param><param name="dtype">Index dtype.</param>
         /// <returns>An unmasked masked index grid.</returns>
         public MaskedArray indices(int[] dimensions, DType dtype = null) => new MaskedArray(np.indices(dimensions, dtype), null);
+
+        /// <summary>Masked grid-index array for <paramref name="dimensions"/> (no element masked) —
+        ///     the house <see cref="long"/> shape spelling, so an <see cref="NDArray"/>'s own <c>shape</c>
+        ///     binds without a down-cast.</summary>
+        /// <param name="dimensions">Grid shape.</param><param name="dtype">Index dtype.</param>
+        /// <returns>An unmasked masked index grid.</returns>
+        public MaskedArray indices(long[] dimensions, DType dtype = null) => new MaskedArray(np.indices(dimensions, dtype), null);
+
+        /// <summary>Masked grid-index array for <paramref name="dimensions"/> (no element masked) —
+        ///     <see cref="Shape"/> spelling (accepts an <see cref="NDArray.Shape"/> or a value tuple).</summary>
+        /// <param name="dimensions">Grid shape.</param><param name="dtype">Index dtype.</param>
+        /// <returns>An unmasked masked index grid.</returns>
+        public MaskedArray indices(Shape dimensions, DType dtype = null) => new MaskedArray(np.indices(dimensions, dtype), null);
 
         // ─────────────────────────────────────────────────────────────────────────────
         //  masked_* constructors — build a mask from a condition/value and OR it onto any
@@ -4322,7 +4335,7 @@ namespace NumSharp
             // NumPy: idx = array(np.indices(a.shape), mask=[m]*a.ndim); then per dimension i, the compressed
             // min/max of idx[i] along `axis`. idx[i] is the i-th coordinate grid, masked wherever a is masked.
             var mArr = getmaskarray(a);
-            var indices = np.indices(d.shape.Select(x => (int)x).ToArray()); // (nd, *shape); indices[i] = grid i
+            var indices = np.indices(d.shape); // (nd, *shape); indices[i] = grid i — d.shape is long[], no down-cast
             var mins = new NDArray[nd];
             var maxs = new NDArray[nd];
             for (int i = 0; i < nd; i++)
