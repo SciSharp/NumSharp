@@ -86,6 +86,11 @@ namespace NumSharp.Backends
             BinaryOp.BitwiseAnd => "bitwise_and",
             BinaryOp.BitwiseOr => "bitwise_or",
             BinaryOp.BitwiseXor => "bitwise_xor",
+            // NumPy spells the shift ufuncs with an underscore ("left_shift"/"right_shift"); without
+            // these the switch would fall to op.ToString().ToLowerInvariant() = "leftshift", so a
+            // dtype=/out= cast error on a shift routed through ExecuteBinaryOp would leak the wrong name.
+            BinaryOp.LeftShift => "left_shift",
+            BinaryOp.RightShift => "right_shift",
             BinaryOp.ATan2 => "arctan2",
             BinaryOp.Gcd => "gcd",
             BinaryOp.Lcm => "lcm",
@@ -400,9 +405,18 @@ namespace NumSharp.Backends
                 scalarBody = il => EmitMixedScalarBody(il, capLhs, capRhs, capRes, capOp);
             }
 
+            // Shifts are excluded from CanUseSimdBinary (CanUseSimdForOp lists no shift), so simdViable is
+            // false for them — but the same-dtype case has a per-lane VARIABLE shift kernel
+            // (EmitShiftVectorBody, the one ExecuteShiftViaNDIter drives). Supply it here too so the hot
+            // out= / where= shift path vectorizes instead of falling to the scalar body (the count operand
+            // is broadcast or an array; a variable shift covers both, and the overflow rule is baked in).
+            bool shiftSimd = sameDtype && (op == BinaryOp.LeftShift || op == BinaryOp.RightShift)
+                             && DirectILKernelGenerator.ShiftVariableSupported(resultType, op == BinaryOp.LeftShift);
             Action<ILGenerator>? vectorBody = simdViable
                 ? il => DirectILKernelGenerator.EmitVectorOperation(il, op, resultType)
-                : null;
+                : shiftSimd
+                    ? il => DirectILKernelGenerator.EmitShiftVectorBody(il, resultType, op == BinaryOp.LeftShift)
+                    : null;
 
             // Packed key (no per-call string): npy_binop_{op}_{lhsType}_{rhsType}_{resultType}.
             var cacheKey = InnerLoopKernelKey.Binary(op, lhsType, rhsType, resultType);

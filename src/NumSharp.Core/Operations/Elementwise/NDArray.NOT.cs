@@ -23,8 +23,10 @@ namespace NumSharp
             // order, not logical order, and the fresh C-contiguous `result` then holds scrambled
             // values. Route those through the layout-aware logical_not ufunc, which honours strides and
             // offset (correctness over the raw-loop speed; the contiguous hot path is unchanged).
+            // np.logical_not now returns the untyped NDArray (its out=/where= overload shape); a plain
+            // call still yields a bool array, so re-view it as the typed NDArray<bool> the operator returns.
             if (!self.Shape.IsContiguous || self.Shape.offset != 0)
-                return np.logical_not(self);
+                return np.logical_not(self).MakeGeneric<bool>();
 
             var result = new NDArray(typeof(bool), self.shape);
             NpFunc.Invoke(self.GetTypeCode, NotExecute<int>, (nint)self.Address, (nint)result.Address, result.size);
