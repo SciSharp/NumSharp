@@ -359,6 +359,53 @@ requires a reason and fails if coverage appears anyway; kinds a row omits are co
 one-line `InapplicableNote`. Applied kinds are computed from the corpus itself (out_* vehicle keys
 credit the ufunc named in their params; masked kinds normalize to array/tuple).
 
+### The dtype-spread validation (2026-09-18, follow-up pass) — "do all oracles cover all 15 dtypes?"
+
+A full per-op × dtype scan of every committed corpus (612 op keys) answered the question and made
+the answer a GATE. The model: the NumPy corpus expresses 13 dtypes directly, **Char** rides the
+uint16 proxy weave, **Decimal** rides the independent C# oracle (`decimal_*.jsonl`) — and a dtype
+counts as covered for an op when it appears as an operand of a value OR error cell (a gated
+rejection IS coverage of the combination).
+
+**Axes widened by the scan** (all bit-exact on regeneration — no new NumSharp bugs, which is
+itself a result: the char instance weave alone re-proved Char ≡ uint16 across ~50 instance
+methods, in-place mutators included):
+`instance.jsonl` 5,414→9,463 (8→13 dtypes + `char_tier("instance")` — the whole tier re-runs on
+the proxy, dedicated dot/searchsorted/choose + resize jobs included; `_relabel_dtype` now recurses
+into tuple `slots`, without which every char in-place mutator kept "uint16" slot dtypes and failed);
+`modf.jsonl` 128→208 (the 59f99320 per-width promotion made every non-complex lane computable —
+the old 4-dtype list predated it; + `char_tier("modf")`); `nanreduce.jsonl` +4,150
+(nanpercentile/nanquantile integer/bool lanes — legal NumPy, degenerates to percentile; the
+generator's NaN-laced float pool would RAISE at construction for unsigned/bool, so integer lanes
+get an int64-built modular-astype pool — a float→uint astype is C-undefined and must never seed an
+oracle); `emath.jsonl` 329→482 (unsigned lanes — no negatives means the `any(x<0)` trigger never
+promotes, and `|x|>1` cells that would land complex64 auto-skip); `out_where.jsonl` +168
+(float16/uint8 lanes through out_scan/out_round/out_clip/out_nanarg); `ndarray.view` gained the
+int16/uint16/uint32/uint64 same-size reinterpret pairs.
+
+**The gate** — `OracleCoverageStrengthTests.EveryOrdinaryOp_MeetsItsDtypeSpreadFloor` (same file
+skips as the case-count gate: host pins, `index_`, `ma_`): every op must reach **≥ 4 distinct
+dtypes** or carry a one-line entry in `FixedDtypeOps` (61 reviewed reasons in five classes:
+fixed-output generators — windows/fftfreq/index-coordinate builders; dtype-axis-in-PARAMS —
+can_cast/promote_types/min_scalar_type sweep dtype pairs the operand metric cannot see; PRNG
+protocol; the host-pinned LAPACK/CBLAS f32/f64/c128 family; variant keys whose primary op carries
+the axis — modf-tuple/std_ddof/average_returned; plus per-op semantics like einsum's small-exact
+lanes and unique_values' [Misaligned] hash-order carve). The ledger is self-retiring BOTH ways: an
+entry whose op vanished or whose spread grew past the floor fails. Rule 2 is 15 per-dtype GLOBAL
+op-count floors (bool 298 … char 216 … decimal 117 … complex128 369 — ~95 % of the post-widening
+spread), so a regeneration that silently drops a dtype axis turns the gate red.
+
+**The sibling oracles' posture** (validated, no changes needed): the **.npy format oracle** covers
+every expressible dtype map entry incl. `<U1`/Char, big-endian variants and the `<c8` widening,
+with Decimal's rejection itself gated; the **advanced-indexing oracle** carries a dedicated
+13-dtype tier (`index_dtype.jsonl`, 8 cases each) + a setter-dtype tier; the **flags** and
+**layout-parity** oracles spot-sweep all 13 NumPy dtypes (×6 / ×1-6) around an int64/f64 bulk —
+correct for their contract, since flags/view semantics depend on itemsize, not lane type (Char and
+Decimal behave as uint16/16-byte lanes; the flags oracle is under active work in a parallel
+session). **Decimal** remains gated exclusively by `decimal_*.jsonl` (124 op keys) — by design,
+per the decimal-coverage expansion; ops absent there raise or ride shared engine paths, and
+widening that set is C#-oracle work tracked in its own memory topic.
+
 ### Table 1 — live `MisalignedRegistry` excuse branches
 
 **Intended / algorithmic differences (permanent):**
