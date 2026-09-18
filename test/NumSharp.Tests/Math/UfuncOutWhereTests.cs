@@ -300,58 +300,76 @@ namespace NumSharp.Tests.Math
         [TestMethod]
         public void Ufunc_Family_OutSmoke()
         {
-            // One value-pinned call per shipped out=-capable ufunc.
-            var af = Af();
-            var bf = Bf();
+            // One value-pinned call per shipped out=-capable ufunc — now checking EVERY element
+            // (not just [3]), the out= reference identity (the provided instance is returned), and
+            // that the loop wrote the float64 out. Full arrays probed against NumPy 2.4.2.
+            var af = Af();  // [0,1,2,3]
+            var bf = Bf();  // [0.5,1.5,2.5,3.5]
             var o = np.empty(new Shape(4), np.float64);
 
-            np.subtract(bf, af, o);
-            Assert.AreEqual(0.5, o.GetDouble(3));
+            // Reference identity is the out= contract; AssertRow re-checks size/dtype/every element.
+            Assert.IsTrue(ReferenceEquals(np.subtract(bf, af, o), o));
+            AssertRow(o, 0.5, 0.5, 0.5, 0.5);
 
-            np.multiply(af, bf, o);
-            Assert.AreEqual(10.5, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.multiply(af, bf, o), o));
+            AssertRow(o, 0.0, 1.5, 5.0, 10.5);
 
-            np.divide(bf, af + 1.0, o);
-            Assert.AreEqual(0.875, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.divide(bf, af + 1.0, o), o));
+            AssertRow(o, 0.5, 0.75, 0.8333333333333334, 0.875);
 
-            np.mod(bf, af + 1.0, o);
-            Assert.AreEqual(3.5, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.mod(bf, af + 1.0, o), o));
+            AssertRow(o, 0.5, 1.5, 2.5, 3.5);
 
-            np.power(af, np.full(new Shape(4), 2.0, np.float64), o);
-            Assert.AreEqual(9.0, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.power(af, np.full(new Shape(4), 2.0, np.float64), o), o));
+            AssertRow(o, 0.0, 1.0, 4.0, 9.0);
 
-            np.floor_divide(bf, af + 1.0, o);
-            Assert.AreEqual(0.0, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.floor_divide(bf, af + 1.0, o), o));
+            AssertRow(o, 0.0, 0.0, 0.0, 0.0);
 
-            np.negative(af, o);
-            Assert.AreEqual(-3.0, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.negative(af, o), o));
+            AssertRow(o, -0.0, -1.0, -2.0, -3.0);
 
-            np.abs(np.negative(af), o);
-            Assert.AreEqual(3.0, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.abs(np.negative(af), o), o));
+            AssertRow(o, 0.0, 1.0, 2.0, 3.0);
 
-            np.absolute(np.negative(af), o);
-            Assert.AreEqual(3.0, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.absolute(np.negative(af), o), o));
+            AssertRow(o, 0.0, 1.0, 2.0, 3.0);
 
-            np.exp(np.zeros(new Shape(4), np.float64), o);
-            Assert.AreEqual(1.0, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.exp(np.zeros(new Shape(4), np.float64), o), o));
+            AssertRow(o, 1.0, 1.0, 1.0, 1.0);
 
-            np.log(np.ones(new Shape(4), np.float64), o);
-            Assert.AreEqual(0.0, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.log(np.ones(new Shape(4), np.float64), o), o));
+            AssertRow(o, 0.0, 0.0, 0.0, 0.0);
 
-            np.sin(np.zeros(new Shape(4), np.float64), o);
-            Assert.AreEqual(0.0, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.sin(np.zeros(new Shape(4), np.float64), o), o));
+            AssertRow(o, 0.0, 0.0, 0.0, 0.0);
 
-            np.cos(np.zeros(new Shape(4), np.float64), o);
-            Assert.AreEqual(1.0, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.cos(np.zeros(new Shape(4), np.float64), o), o));
+            AssertRow(o, 1.0, 1.0, 1.0, 1.0);
 
-            np.tan(np.zeros(new Shape(4), np.float64), o);
-            Assert.AreEqual(0.0, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.tan(np.zeros(new Shape(4), np.float64), o), o));
+            AssertRow(o, 0.0, 0.0, 0.0, 0.0);
 
-            np.square(af, o);
-            Assert.AreEqual(9.0, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.square(af, o), o));
+            AssertRow(o, 0.0, 1.0, 4.0, 9.0);
 
-            np.sqrt(np.array(new[] { 0.0, 1, 4, 9 }), o);
-            Assert.AreEqual(3.0, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.sqrt(np.array(new[] { 0.0, 1, 4, 9 }), o), o));
+            AssertRow(o, 0.0, 1.0, 2.0, 3.0);
+        }
+
+        /// <summary>
+        /// Assert a float64 <paramref name="o"/> has exactly <paramref name="expected"/>.Length elements,
+        /// is float64 dtype, and matches every element within a tight tolerance — the shared checker that
+        /// turns the family smoke test from a single-element pin into a full-row assertion.
+        /// </summary>
+        /// <param name="o">The out array to check.</param>
+        /// <param name="expected">The full expected row (probed against NumPy 2.4.2).</param>
+        private static void AssertRow(NDArray o, params double[] expected)
+        {
+            Assert.AreEqual(expected.Length, (int)o.size, "size");
+            Assert.AreEqual(NPTypeCode.Double, o.typecode, "dtype");
+            for (int i = 0; i < expected.Length; i++)
+                Assert.AreEqual(expected[i], o.GetDouble(i), 1e-12, $"element {i}");
         }
 
         [TestMethod]
