@@ -85,6 +85,27 @@ function installTocStatePersistence() {
   }
   const storageKey = 'docfx:tocExpanded:' + scope
 
+  // DocFX overwrites configured expansion when it marks the active branch.
+  // Read the original defaults so section landing pages honor toc.yml too.
+  const defaultsReady = fetch(scope.replace(/\.html(?=$|[?#])/i, '.json'))
+    .then(response => response.ok ? response.json() : null)
+    .then(data => {
+      const defaults = Object.create(null)
+      function visit(items, ancestors = []) {
+        for (const item of items || []) {
+          const path = [...ancestors, item.name]
+          if (typeof item.expanded === 'boolean') {
+            defaults[path.join(TOC_KEY_SEP)] = item.expanded
+          }
+          visit(item.items, path)
+        }
+      }
+      visit(data?.items)
+      return defaults
+    })
+    .catch(() => Object.create(null))
+  let defaultStates = Object.create(null)
+
   /**
    * Read the remembered per-node states, discarding an expired, malformed, or
    * wrong-version record (any of which is treated as "nothing remembered").
@@ -194,28 +215,34 @@ function installTocStatePersistence() {
   let applyingRestore = false
 
   /**
-   * Find the first expander whose remembered state disagrees with what docfx
-   * currently renders AND that we are allowed to change. Two things are left
-   * alone: nodes with no remembered state (so docfx's defaults stand for
-   * anything the reader never touched), and a remembered COLLAPSE of a node on
-   * the active page's path — docfx marks that whole chain `active` and expands
-   * it, and re-collapsing it here would hide the very page the reader just
-   * opened. That collapse still applies on every other page where the node is
-   * not the active branch, and the reader can still collapse it by hand on this
-   * page (which is recorded normally).
+   * Find an expander whose state needs restoring. DocFX opens active sections
+   * even when toc.yml says expanded:false. When a section links to the current
+   * page itself, restore its configured default: its own visible label already
+   * reaches that page (including dashboards with a duplicate child link). A
+   * remembered choice overrides that default. Keep ancestors of an active child
+   * open so the current page remains visible; leave other defaults untouched.
    * @returns {Element|null} the mismatched `<li>` to toggle, or null when the DOM already matches the (allowed) remembered state.
    */
   function findMismatchedExpander() {
     const expanders = toc.querySelectorAll('li.expander')
     for (const li of expanders) {
       const key = keyOf(li)
-      if (!(key in nodeStates)) {
+      const anchor = li.querySelector(':scope > a')
+      const url = anchor && anchor.getAttribute('href') !== '#'
+        ? new URL(anchor.href, window.location.href)
+        : null
+      // Match DocFX's equivalence for index pages and extensionless URLs.
+      const normalize = path => path.replace(/\/index\.html$/gi, '/')
+        .replace(/\.html$/gi, '').replace(/\/$/g, '').toLowerCase()
+      const isCurrentPage = url && url.origin === window.location.origin &&
+        normalize(url.pathname) === normalize(window.location.pathname)
+      const remembered = Object.hasOwn(nodeStates, key)
+      if (!remembered && (!isCurrentPage || !Object.hasOwn(defaultStates, key))) {
         continue
       }
-      const wanted = nodeStates[key]
-      // Keep the current page reachable: never collapse a node docfx flagged as
-      // being on the active page's path.
-      if (wanted === false && li.classList.contains('active')) {
+      const wanted = remembered ? nodeStates[key] : defaultStates[key]
+      // Only a true ancestor needs to stay open to reveal the current page.
+      if (wanted === false && li.classList.contains('active') && !isCurrentPage) {
         continue
       }
       const isExpanded = li.classList.contains('expanded')
@@ -237,9 +264,6 @@ function installTocStatePersistence() {
    * @returns {void}
    */
   function restore() {
-    if (Object.keys(nodeStates).length === 0) {
-      return
-    }
     applyingRestore = true
     try {
       const budget = toc.querySelectorAll('li.expander').length * 2 + 8
@@ -323,7 +347,7 @@ function installTocStatePersistence() {
    * window forward for this visit. Idempotent and cheap to call repeatedly.
    * @returns {void}
    */
-  function boot() {
+  async function boot() {
     if (booted) {
       return
     }
@@ -335,6 +359,7 @@ function installTocStatePersistence() {
     // Stop observing BEFORE restoring so our own restore mutations don't re-fire
     // this callback.
     observer.disconnect()
+    defaultStates = await defaultsReady
     restore()
     // Re-stamp the expiry on every visit, even when nothing was toggled, so
     // simply browsing keeps a remembered layout alive.

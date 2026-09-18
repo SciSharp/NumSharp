@@ -1,4 +1,4 @@
-# Advanced usage and interoperability
+# Advanced usage
 
 These pages are the NumSharp counterparts of NumPy's [*Advanced usage and interoperability*](https://numpy.org/doc/stable/user/index.html) section — one NumSharp article per NumPy article. Where NumPy's advanced story is dominated by dropping into **C** (the C-API, F2PY's Fortran bridge, the CPython internals), NumSharp's is the opposite: `NumSharp.Core` is **100% managed C# with no native dependency and no P/Invoke**, so "advanced" here means the managed seams you extend through, the internals that make views cheap, the one place native code *can* plug in, and the buffer contract that lets any .NET ecosystem share an array.
 

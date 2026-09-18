@@ -1,4 +1,4 @@
-# NumSharp.Bitmap
+# System.Drawing
 
 The **NumSharp.Bitmap** package provides seamless conversion between `System.Drawing.Bitmap` and `NDArray`. If you're working with images in .NET—loading them, processing pixels, applying filters, or feeding them to ML models—this extension makes it easy to move data between the image world and the array world.
 
