@@ -12,17 +12,17 @@ namespace NumSharp.Tests.Ma
     /// positions have the input data restored into <c>.data</c> (NumPy's <c>copyto(result, d, where=m)</c>).
     /// </summary>
     [TestClass]
-    public class MaskedArrayTests
+    public class NDMaskedArrayTests
     {
         /// <summary>Data of a masked result as float64, in logical C-order (masked positions included).</summary>
-        private static double[] D(MaskedArray r) => np.ma.getdata(r).astype(np.float64).ToArray<double>();
+        private static double[] D(NDMaskedArray r) => np.ma.getdata(r).astype(np.float64).ToArray<double>();
 
         /// <summary>Full boolean mask of a masked result (never the 0-d nomask sentinel).</summary>
-        private static bool[] M(MaskedArray r) => np.ma.getmaskarray(r).ToArray<bool>();
+        private static bool[] M(NDMaskedArray r) => np.ma.getmaskarray(r).ToArray<bool>();
 
-        private static MaskedArray A() =>
+        private static NDMaskedArray A() =>
             np.ma.array(np.array(new double[] { 1, -2, 3, -4 }), np.array(new bool[] { false, true, false, false }));
-        private static MaskedArray B() =>
+        private static NDMaskedArray B() =>
             np.ma.array(np.array(new double[] { 10, 20, 30, 40 }), np.array(new bool[] { false, false, true, false }));
 
         /// <summary>abs/absolute apply |·| to the data and carry the mask through UNCHANGED; the masked slot
@@ -113,8 +113,43 @@ namespace NumSharp.Tests.Ma
         [TestMethod]
         public void ScalarFullyMasked_ReturnsMaskedSingleton()
         {
-            var r = np.ma.add(np.ma.masked, NDArray.Scalar(5.0));
-            Assert.IsTrue(ReferenceEquals(r, np.ma.masked));
+            var r = np.ma.add(np.ma.NDMasked, NDArray.Scalar(5.0));
+            Assert.IsTrue(ReferenceEquals(r, np.ma.NDMasked));
+        }
+
+        /// <summary>
+        ///     NumPy's names <c>np.ma.masked</c> / <c>np.ma.masked_singleton</c> and NumSharp's <c>ND*</c> names
+        ///     <c>np.ma.NDMasked</c> / <c>np.ma.NDMaskedSingleton</c> are ONE object, so an identity check written
+        ///     against any spelling agrees with what the ufuncs and reductions return. Probed against NumPy 2.4.2:
+        ///     <c>masked is masked_singleton</c> → True, <c>type(masked).__name__</c> → <c>MaskedConstant</c>, a 0-D
+        ///     float64 <c>0.0</c> under a <c>True</c> mask, <c>repr(masked)</c> → <c>masked</c>, and
+        ///     <c>ma.array([1., 2.], mask=[1, 1]).sum() is masked</c> → True.
+        /// </summary>
+        [TestMethod]
+        public void MaskedConstant_NumPyNames_AliasTheNDMaskedSingleton()
+        {
+            Assert.IsTrue(ReferenceEquals(np.ma.masked, np.ma.NDMasked));
+            Assert.IsTrue(ReferenceEquals(np.ma.masked_singleton, np.ma.NDMasked));
+            Assert.IsTrue(ReferenceEquals(np.ma.NDMaskedSingleton, np.ma.NDMasked));
+            Assert.IsInstanceOfType(np.ma.masked, typeof(NDMaskedConstant));
+            Assert.AreEqual("masked", np.ma.masked.ToString());                // NumPy repr(np.ma.masked)
+
+            // The singleton's payload: a 0-D float64 0.0 datum under a 0-D True mask.
+            var data = np.ma.getdata(np.ma.masked);
+            Assert.AreEqual(0, data.ndim);
+            Assert.AreEqual(np.float64, data.dtype);
+            Assert.AreEqual(0.0, data.GetAtIndex<double>(0));
+            Assert.IsTrue(np.ma.getmaskarray(np.ma.masked).GetAtIndex<bool>(0));
+
+            // A fully-masked reduction returns the NumPy-named constant too — identity, not mere equality.
+            var allMasked = np.ma.array(np.array(new double[] { 1, 2 }), np.array(new[] { true, true }));
+            Assert.IsTrue(ReferenceEquals(np.ma.sum(allMasked), np.ma.masked));
+
+            // Assigning the NumPy-named constant masks the slot (creating the mask) and leaves the data alone.
+            var y = np.ma.array(np.array(new double[] { 1, 2, 3 }));
+            y[1] = np.ma.masked;
+            Assert.IsTrue(M(y).SequenceEqual(new[] { false, true, false }));
+            Assert.IsTrue(D(y).SequenceEqual(new double[] { 1, 2, 3 }));
         }
 
         /// <summary>abs and absolute are the same op; both are domain-free (mask unchanged).</summary>
@@ -140,7 +175,7 @@ namespace NumSharp.Tests.Ma
         }
 
         // m = [1, 2(masked), 3, 4(masked)] — reductions see only {1, 3}.
-        private static MaskedArray M13() =>
+        private static NDMaskedArray M13() =>
             np.ma.array(np.array(new double[] { 1, 2, 3, 4 }), np.array(new bool[] { false, true, false, true }));
 
         /// <summary>Reductions exclude masked elements: sum/mean/min/max/prod/count/ptp over {1,3}.</summary>
@@ -163,8 +198,8 @@ namespace NumSharp.Tests.Ma
         public void Reduction_AllMasked_ReturnsMaskedSingleton()
         {
             var allMasked = np.ma.array(np.array(new double[] { 1, 2, 3 }), np.array(new bool[] { true, true, true }));
-            Assert.IsTrue(ReferenceEquals(np.ma.sum(allMasked), np.ma.masked));
-            Assert.IsTrue(ReferenceEquals(np.ma.mean(allMasked), np.ma.masked));
+            Assert.IsTrue(ReferenceEquals(np.ma.sum(allMasked), np.ma.NDMasked));
+            Assert.IsTrue(ReferenceEquals(np.ma.mean(allMasked), np.ma.NDMasked));
         }
 
         /// <summary>cumsum treats masked slots as 0 for the running total but keeps their POSITIONS masked.</summary>
@@ -290,7 +325,7 @@ namespace NumSharp.Tests.Ma
         [TestMethod]
         public void Mean_ResultDtype_MatchesNumPy()
         {
-            MaskedArray Mk<T>(T[] v) => np.ma.array(np.array(v), np.array(new bool[] { false, true, false }));
+            NDMaskedArray Mk<T>(T[] v) => np.ma.array(np.array(v), np.array(new bool[] { false, true, false }));
             Assert.AreEqual(np.float64, np.ma.getdata(np.ma.mean(Mk(new int[] { 1, 2, 3 }))).dtype);
             Assert.AreEqual(np.float64, np.ma.getdata(np.ma.mean(Mk(new float[] { 1, 2, 3 }))).dtype);   // f4 → f8 (dsum*1.)
             Assert.AreEqual(np.float64, np.ma.getdata(np.ma.mean(Mk(new double[] { 1, 2, 3 }))).dtype);
@@ -299,9 +334,9 @@ namespace NumSharp.Tests.Ma
                                                                              np.array(new bool[] { false, true, false })))).dtype);
         }
 
-        /// <summary>Mixed MaskedArray/NDArray operators (both orders) compile and return a mask-aware
-        /// MaskedArray — matching NumPy where <c>ma+nd</c>/<c>nd+ma</c> are MaskedArrays. (These were
-        /// CS0034-ambiguous before the explicit (MaskedArray,NDArray)/(NDArray,MaskedArray) overloads.)</summary>
+        /// <summary>Mixed NDMaskedArray/NDArray operators (both orders) compile and return a mask-aware
+        /// NDMaskedArray — matching NumPy where <c>ma+nd</c>/<c>nd+ma</c> are MaskedArrays. (These were
+        /// CS0034-ambiguous before the explicit (NDMaskedArray,NDArray)/(NDArray,NDMaskedArray) overloads.)</summary>
         [TestMethod]
         public void Operators_MixedWithNDArray_AreMaskAware()
         {
@@ -332,7 +367,7 @@ namespace NumSharp.Tests.Ma
             Assert.IsTrue(ReferenceEquals(np.ma.getmask(np.ma.asarray(nd)), np.ma.nomask)); // plain → unmasked
             Assert.IsTrue(np.ma.getmaskarray(np.ma.asarray(m)).ToArray<bool>()               // masked → mask kept
                 .SequenceEqual(new[] { false, true, false, true }));
-            MaskedArray implicitlyWrapped = nd;                                              // implicit NDArray→MaskedArray
+            NDMaskedArray implicitlyWrapped = nd;                                            // implicit NDArray→NDMaskedArray
             Assert.IsTrue(ReferenceEquals(np.ma.getmask(implicitlyWrapped), np.ma.nomask));
         }
 
@@ -343,9 +378,9 @@ namespace NumSharp.Tests.Ma
 
         /// <summary>Filled values (masked slot → dtype default) as float64, for value comparison that
         /// normalizes the arbitrary hidden datum exactly as NumPy's <c>.filled()</c> does.</summary>
-        private static double[] FD(MaskedArray r) => r.filled().astype(np.float64).ToArray<double>();
+        private static double[] FD(NDMaskedArray r) => r.filled().astype(np.float64).ToArray<double>();
 
-        private static MaskedArray MaL(long[] d, bool[] m) => np.ma.array(np.array(d), np.array(m));
+        private static NDMaskedArray MaL(long[] d, bool[] m) => np.ma.array(np.array(d), np.array(m));
 
         /// <summary>intersect1d keeps values UNMASKED in BOTH inputs; a masked entry survives only when BOTH
         /// inputs carry a masked element (masked == masked). Result is always a masked array.</summary>
@@ -441,7 +476,7 @@ namespace NumSharp.Tests.Ma
         //    fill-value surface, functional gaps, parameter parity, operators, and the instance surface.
         //    Every expected value was probed against NumPy 2.4.2. ──
 
-        private static MaskedArray Ma(double[] d, bool[] m) => np.ma.array(np.array(d), np.array(m));
+        private static NDMaskedArray Ma(double[] d, bool[] m) => np.ma.array(np.array(d), np.array(m));
 
         /// <summary><c>is_masked</c> is the VALUE predicate (any element masked?), distinct from the
         /// <c>isMaskedArray</c> TYPE check: an all-False mask and a plain array both read False.</summary>
@@ -452,7 +487,7 @@ namespace NumSharp.Tests.Ma
             Assert.IsTrue(np.ma.is_masked(Ma(new double[] { 1, 2, 3 }, new[] { false, true, false })));
             Assert.IsFalse(np.ma.is_masked(Ma(new double[] { 1, 2, 3 }, new[] { false, false, false })));
             Assert.IsFalse(np.ma.is_masked(np.array(new double[] { 1, 2, 3 })));
-            Assert.IsTrue(np.ma.is_masked(np.ma.masked)); // the singleton is masked
+            Assert.IsTrue(np.ma.is_masked(np.ma.NDMasked)); // the singleton is masked
         }
 
         /// <summary>Module-level <c>ndim</c>/<c>shape</c>/<c>size</c> mirror the instance props and accept a
@@ -684,7 +719,7 @@ namespace NumSharp.Tests.Ma
         [TestMethod]
         public void Operators_Modulo_Bitwise_Invert()
         {
-            MaskedArray L(long[] d, bool[] m) => np.ma.array(np.array(d), np.array(m));
+            NDMaskedArray L(long[] d, bool[] m) => np.ma.array(np.array(d), np.array(m));
             var modr = L(new long[] { 7, 8, 9 }, new[] { false, true, false }) % L(new long[] { 3, 5, 2 }, new[] { false, false, true });
             Assert.AreEqual(1.0, D(modr)[0]);
             Assert.IsTrue(M(modr).SequenceEqual(new[] { false, true, true }));
@@ -720,7 +755,7 @@ namespace NumSharp.Tests.Ma
             Assert.AreEqual(4, D(inst.clip(2, 3)).Length);
             Assert.AreEqual(4L, inst.round().size);
 
-            Assert.IsTrue(ReferenceEquals(np.ma.array(np.array(new double[] { 5 }), np.array(new[] { true })).item(), np.ma.masked));
+            Assert.IsTrue(ReferenceEquals(np.ma.array(np.array(new double[] { 5 }), np.array(new[] { true })).item(), np.ma.NDMasked));
             Assert.AreEqual(5.0, Convert.ToDouble(np.ma.array(np.array(new double[] { 5 }), np.array(new[] { false })).item()));
 
             var cplx = np.ma.array(np.array(new System.Numerics.Complex[] { new System.Numerics.Complex(1, 2), new System.Numerics.Complex(3, 4) }), np.array(new[] { false, true }));
@@ -732,15 +767,15 @@ namespace NumSharp.Tests.Ma
         //    notmasked_*/ids that it unblocks. Every expected value probed against NumPy 2.4.2. ──
 
         /// <summary>Indexer GET: a scalar index yields the bare value (unmasked) or the masked singleton; a slice
-        /// yields a sub-MaskedArray VIEW that writes through; boolean/fancy indices yield COPIES; 2-D reduces per axis.</summary>
+        /// yields a sub-NDMaskedArray VIEW that writes through; boolean/fancy indices yield COPIES; 2-D reduces per axis.</summary>
         [TestMethod]
         public void Indexer_Get()
         {
             var x = Ma(new double[] { 1, 2, 3, 4 }, new[] { false, true, false, true });
             Assert.AreEqual(1.0, Convert.ToDouble(x[0]));                 // unmasked scalar
-            Assert.IsTrue(ReferenceEquals(x[1], np.ma.masked));          // masked scalar → singleton
+            Assert.IsTrue(ReferenceEquals(x[1], np.ma.NDMasked));        // masked scalar → singleton
 
-            var xs = (MaskedArray)x["1:3"];                              // slice → sub-MaskedArray
+            var xs = (NDMaskedArray)x["1:3"];                            // slice → sub-NDMaskedArray
             Assert.IsTrue(D(xs).SequenceEqual(new double[] { 2, 3 }));
             Assert.IsTrue(M(xs).SequenceEqual(new[] { true, false }));
             xs[0] = 99.0;                                                // VIEW: writes through to x[1] + unmasks
@@ -748,15 +783,15 @@ namespace NumSharp.Tests.Ma
             Assert.IsTrue(M(x).SequenceEqual(new[] { false, false, false, true }));
 
             var x2 = Ma(new double[] { 1, 2, 3, 4 }, new[] { false, true, false, true });
-            var bsel = (MaskedArray)x2[np.array(new[] { true, false, true, false })];
+            var bsel = (NDMaskedArray)x2[np.array(new[] { true, false, true, false })];
             Assert.IsTrue(D(bsel).SequenceEqual(new double[] { 1, 3 }) && !M(bsel).Any(v => v));
-            var fsel = (MaskedArray)x2[np.array(new[] { 1, 3 })];
+            var fsel = (NDMaskedArray)x2[np.array(new[] { 1, 3 })];
             Assert.IsTrue(M(fsel).SequenceEqual(new[] { true, true }));
 
             var m2 = np.ma.array(np.array(new double[,] { { 1, 2 }, { 3, 4 } }), np.array(new bool[,] { { false, true }, { false, false } }));
-            var row = (MaskedArray)m2[0];
+            var row = (NDMaskedArray)m2[0];
             Assert.IsTrue(D(row).SequenceEqual(new double[] { 1, 2 }) && M(row).SequenceEqual(new[] { false, true }));
-            Assert.IsTrue(ReferenceEquals(m2[0, 1], np.ma.masked));      // masked element
+            Assert.IsTrue(ReferenceEquals(m2[0, 1], np.ma.NDMasked));    // masked element
             Assert.AreEqual(3.0, Convert.ToDouble(m2[1, 0]));            // unmasked element
         }
 
@@ -770,12 +805,12 @@ namespace NumSharp.Tests.Ma
             Assert.IsTrue(D(y)[0] == 100.0 && M(y)[0] == false);
             y[1] = 200.0;                                                // masked slot → value UNMASKS
             Assert.IsTrue(D(y)[1] == 200.0 && M(y)[1] == false);
-            y[2] = np.ma.masked;                                        // mask (data unchanged)
+            y[2] = np.ma.NDMasked;                                      // mask (data unchanged)
             Assert.IsTrue(D(y)[2] == 3.0 && M(y)[2] == true);
 
             var z = np.ma.array(np.array(new double[] { 1, 2, 3 }));    // nomask
             Assert.IsTrue(ReferenceEquals(np.ma.getmask(z), np.ma.nomask));
-            z[1] = np.ma.masked;                                        // creates a mask
+            z[1] = np.ma.NDMasked;                                      // creates a mask
             Assert.IsTrue(M(z).SequenceEqual(new[] { false, true, false }));
 
             var w = Ma(new double[] { 1, 2, 3, 4 }, new[] { false, true, false, true });
@@ -798,7 +833,7 @@ namespace NumSharp.Tests.Ma
             Assert.IsTrue(M(pa).SequenceEqual(new[] { false, true, false, true, false }));
 
             var pb = np.ma.array(np.array(new double[] { 1, 2, 3, 4, 5 }));
-            np.ma.put(pb, np.array(new[] { 1, 3 }), np.ma.masked);
+            np.ma.put(pb, np.array(new[] { 1, 3 }), np.ma.NDMasked);
             Assert.IsTrue(M(pb).SequenceEqual(new[] { false, true, false, true, false }));
 
             var pc = np.ma.array(np.array(new double[] { 1, 2, 3, 4, 5 }));
@@ -829,7 +864,7 @@ namespace NumSharp.Tests.Ma
             Assert.IsTrue(D(rs).SequenceEqual(new double[] { 1, 2 }) && M(rs).SequenceEqual(new[] { false, true }));
         }
 
-        private static MaskedArray G() => np.ma.array(np.array(new double[,] { { 1, 2, 3 }, { 4, 5, 6 }, { 7, 8, 9 } }),
+        private static NDMaskedArray G() => np.ma.array(np.array(new double[,] { { 1, 2, 3 }, { 4, 5, 6 }, { 7, 8, 9 } }),
                                                       np.array(new bool[,] { { false, false, false }, { false, true, false }, { false, false, false } }));
 
         /// <summary>mask_rowcols masks whole rows and/or cols (from the ORIGINAL mask) containing any masked
@@ -1283,14 +1318,14 @@ namespace NumSharp.Tests.Ma
             // A view shares the source's mask reference — a masking write propagates WITHOUT unshare.
             var src2 = np.ma.array(np.array(new int[] { 1, 2, 3 }), np.array(new bool[] { false, true, false }));
             var view2 = src2.view();
-            view2[0] = np.ma.masked;
+            view2[0] = np.ma.NDMasked;
             Assert.IsTrue(src2.mask.GetBoolean(0));
 
             // After unshare_mask the view owns its mask, so the same write leaves the source alone.
             var src = np.ma.array(np.array(new int[] { 1, 2, 3 }), np.array(new bool[] { false, true, false }));
             var view = src.view();
             view.unshare_mask();
-            view[0] = np.ma.masked;
+            view[0] = np.ma.NDMasked;
             Assert.IsFalse(src.mask.GetBoolean(0));
         }
 
@@ -1301,8 +1336,8 @@ namespace NumSharp.Tests.Ma
         [TestMethod]
         public void HardMask_BlocksUnmasking()
         {
-            static MaskedArray Mk() => np.ma.array(np.array(new int[] { 1, 2, 3, 4 }), np.array(new bool[] { false, true, false, true }));
-            static int[] DI(MaskedArray r) => r.data.ToArray<int>();
+            static NDMaskedArray Mk() => np.ma.array(np.array(new int[] { 1, 2, 3, 4 }), np.array(new bool[] { false, true, false, true }));
+            static int[] DI(NDMaskedArray r) => r.data.ToArray<int>();
 
             // Indexer: a masked slot is ignored (data & mask unchanged); an unmasked slot writes.
             var x = Mk().harden_mask();
@@ -1317,7 +1352,7 @@ namespace NumSharp.Tests.Ma
             Assert.IsTrue(M(y).SequenceEqual(new[] { false, true, false, true }));
 
             // Masking a slot is still allowed under a hard mask.
-            var z = Mk().harden_mask(); z[0] = np.ma.masked;
+            var z = Mk().harden_mask(); z[0] = np.ma.NDMasked;
             Assert.IsTrue(DI(z).SequenceEqual(new[] { 1, 2, 3, 4 }));
             Assert.IsTrue(M(z).SequenceEqual(new[] { true, true, false, true }));
 
@@ -1431,7 +1466,7 @@ namespace NumSharp.Tests.Ma
         [TestMethod]
         public void MaskedPrint_Str_BitExact()
         {
-            MaskedArray mi(int[] d, bool[] m) => np.ma.array(np.array(d).astype(np.int64), np.array(m));
+            NDMaskedArray mi(int[] d, bool[] m) => np.ma.array(np.array(d).astype(np.int64), np.array(m));
             Assert.AreEqual("[1 -- 3 --]", mi(new[] { 1, 2, 3, 4 }, new[] { false, true, false, true }).ToString());
             // masked slots are NOT padded to the wide value's width (object layout, not numeric alignment).
             Assert.AreEqual("[1 -- 3 --]", mi(new[] { 1, 200, 3, 40000 }, new[] { false, true, false, true }).ToString());
@@ -1456,7 +1491,7 @@ namespace NumSharp.Tests.Ma
         [TestMethod]
         public void MaskedPrint_Repr_BitExact()
         {
-            MaskedArray mi(int[] d, bool[] m) => np.ma.array(np.array(d).astype(np.int64), np.array(m));
+            NDMaskedArray mi(int[] d, bool[] m) => np.ma.array(np.array(d).astype(np.int64), np.array(m));
             Assert.AreEqual(
                 "masked_array(data=[1, --, 3, --],\n             mask=[False,  True, False,  True],\n       fill_value=999999)",
                 mi(new[] { 1, 2, 3, 4 }, new[] { false, true, false, true }).ToString(true));

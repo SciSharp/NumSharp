@@ -1,8 +1,12 @@
 # `numpy.ma` (masked-array) module — parity audit & gap register
 
-**Scope:** NumSharp `np.ma` / `MaskedArray` vs **NumPy 2.4.2**.
+**Scope:** NumSharp `np.ma` / `NDMaskedArray` vs **NumPy 2.4.2**.
 **Source of truth:** NumPy 2.4.2 (`refs/numpy/numpy/ma/{core,extras}.py`), probed live.
-**Implementation:** `src/NumSharp.Core/Ma/MaskedArray.cs` (single file). Gate: `test/NumSharp.Tests/Ma/MaskedArrayTests.cs`.
+**Implementation:** `src/NumSharp.Core/Ma/NDMaskedArray.cs` (single file). Gate: `test/NumSharp.Tests/Ma/NDMaskedArrayTests.cs`.
+**Renamed 2026-09-23:** `MaskedArray` → `NDMaskedArray`, `MaskedConstant` → `NDMaskedConstant`, `MaskedArrayTests` →
+`NDMaskedArrayTests` (the `ND*` convention of `NDArray`); the masked constant is `np.ma.NDMasked` with NumPy's
+`np.ma.masked` / `np.ma.masked_singleton` kept as aliases of the same instance. The pass log below keeps the names
+in use at the time.
 
 This is a living checklist. Techniques used are recorded so a later pass can re-run them. **Nothing here is "done" until it is bit-exact vs NumPy 2.4.2 and gated.**
 

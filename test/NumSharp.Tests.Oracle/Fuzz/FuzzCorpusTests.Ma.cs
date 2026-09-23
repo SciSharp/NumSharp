@@ -117,7 +117,7 @@ namespace NumSharp.Tests.Fuzz
 
         /// <summary>
         ///     Replay a committed <c>ma_*.jsonl</c> tier: rebuild each masked operand (data view +
-        ///     optional contiguous bool mask -> <see cref="MaskedArray"/>), run the <c>ma.*</c> op, and
+        ///     optional contiguous bool mask -> <see cref="NDMaskedArray"/>), run the <c>ma.*</c> op, and
         ///     compare by result kind. A failure lists every divergent cell (not first-failure-wins).
         /// </summary>
         /// <param name="file">The corpus file name under Fuzz/corpus/.</param>
@@ -139,7 +139,7 @@ namespace NumSharp.Tests.Fuzz
                 var sc = StripMa(c);
                 try
                 {
-                    var ops = new MaskedArray[c.Operands.Length];
+                    var ops = new NDMaskedArray[c.Operands.Length];
                     for (int i = 0; i < ops.Length; i++)
                     {
                         var data = FuzzCorpus.Reconstruct(c.Operands[i]);
@@ -152,7 +152,7 @@ namespace NumSharp.Tests.Fuzz
                     switch (c.Expected.KindOrArray)
                     {
                         case "masked":
-                            CompareMasked(sc, (MaskedArray)OpRegistry.ApplyMasked(c.Op, c.Params, ops),
+                            CompareMasked(sc, (NDMaskedArray)OpRegistry.ApplyMasked(c.Op, c.Params, ops),
                                           c.Expected, null, failures, documented);
                             break;
                         case "masked_tuple":
@@ -208,7 +208,7 @@ namespace NumSharp.Tests.Fuzz
         ///     shared registry under the bare op name; a mask divergence is a HARD failure.
         /// </summary>
         private static void CompareMasked(
-            FuzzCorpus.Case sc, MaskedArray result, FuzzCorpus.Expected exp, string slot,
+            FuzzCorpus.Case sc, NDMaskedArray result, FuzzCorpus.Expected exp, string slot,
             List<string> failures, Dictionary<string, int> documented)
         {
             var empty = Array.Empty<BitDiff.Diff>();
@@ -468,7 +468,7 @@ namespace NumSharp.Tests.Fuzz
             bool b => NDArray.Scalar(b),
             long l => NDArray.Scalar(l),
             int i => NDArray.Scalar((long)i),
-            MaskedArray m => m.filled((object)0),      // defensive: an array-kind case that yields a MaskedArray
+            NDMaskedArray m => m.filled((object)0),    // defensive: an array-kind case that yields an NDMaskedArray
             _ => throw new NotSupportedException($"ma array/scalar result of type {r?.GetType().Name ?? "null"}"),
         };
 

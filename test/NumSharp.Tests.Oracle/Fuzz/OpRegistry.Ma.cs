@@ -8,7 +8,7 @@ namespace NumSharp.Tests.Fuzz
 {
     /// <summary>
     ///     The MASKED-ARRAY half of the registry: maps a <c>ma.*</c> corpus op-name to the
-    ///     <see cref="np.ma"/> call it names, over reconstructed <see cref="MaskedArray"/> operands.
+    ///     <see cref="np.ma"/> call it names, over reconstructed <see cref="NDMaskedArray"/> operands.
     ///     Pairs 1:1 with gen_oracle.py's <c>gen_ma_*</c> generators, exactly as <see cref="Apply"/>
     ///     pairs with the ordinary tiers.
     ///
@@ -16,25 +16,25 @@ namespace NumSharp.Tests.Fuzz
     ///     Op keys are prefixed <c>ma.</c> so they never collide with the identically-named <c>np.*</c>
     ///     key (<c>sum</c> lives in BOTH registries). The prefix is stripped once here and the bare
     ///     name switched; the harness (<see cref="FuzzCorpusTests"/>.RunMaCorpus) then compares the
-    ///     returned object by its declared result kind — a <see cref="MaskedArray"/> (masked),
-    ///     a <see cref="MaskedArray"/>[] (masked_tuple), a bare <see cref="NDArray"/> (array), or a
+    ///     returned object by its declared result kind — a <see cref="NDMaskedArray"/> (masked),
+    ///     a <see cref="NDMaskedArray"/>[] (masked_tuple), a bare <see cref="NDArray"/> (array), or a
     ///     boxed scalar / <see cref="DType"/>.
     ///     </para>
     /// </summary>
     public static partial class OpRegistry
     {
         /// <summary>
-        ///     Dispatch a masked op. Returns the raw op result (MaskedArray / MaskedArray[] / NDArray /
+        ///     Dispatch a masked op. Returns the raw op result (NDMaskedArray / NDMaskedArray[] / NDArray /
         ///     boxed bool / DType) — the caller compares it against the recorded NumPy result by kind.
         ///     Mutating ops (<c>put</c>/<c>putmask</c>) return the mutated operand, so the corpus can
         ///     bit-compare the post-mutation masked array (the place/put/copyto pattern in Apply).
         /// </summary>
         /// <param name="op">The <c>ma.</c>-prefixed corpus op key.</param>
         /// <param name="p">The op params (axis/keepdims/value/…), read the same way as <see cref="Apply"/>.</param>
-        /// <param name="ops">The reconstructed MaskedArray operands, in corpus order.</param>
+        /// <param name="ops">The reconstructed NDMaskedArray operands, in corpus order.</param>
         /// <returns>The op result as <see cref="object"/>, dispatched on kind by the caller.</returns>
         /// <exception cref="NotSupportedException">The op key is not registered (a corpus/registry drift).</exception>
-        public static object ApplyMasked(string op, IReadOnlyDictionary<string, JsonElement> p, MaskedArray[] ops)
+        public static object ApplyMasked(string op, IReadOnlyDictionary<string, JsonElement> p, NDMaskedArray[] ops)
         {
             // Every masked key carries the "ma." namespace prefix; switch on the bare name below.
             string name = op.StartsWith("ma.", StringComparison.Ordinal) ? op.Substring(3) : op;
@@ -243,10 +243,10 @@ namespace NumSharp.Tests.Fuzz
         /// <summary>Dispatch a masked op whose result is a tuple of masked arrays (currently <c>hsplit</c>).</summary>
         /// <param name="op">The <c>ma.</c>-prefixed corpus op key.</param>
         /// <param name="p">Op params (the split count/indices).</param>
-        /// <param name="ops">The reconstructed MaskedArray operands.</param>
-        /// <returns>The per-slot MaskedArray results, in NumPy tuple order.</returns>
+        /// <param name="ops">The reconstructed NDMaskedArray operands.</param>
+        /// <returns>The per-slot NDMaskedArray results, in NumPy tuple order.</returns>
         /// <exception cref="NotSupportedException">The op key is not a registered masked-tuple op.</exception>
-        public static MaskedArray[] ApplyMaskedTuple(string op, IReadOnlyDictionary<string, JsonElement> p, MaskedArray[] ops)
+        public static NDMaskedArray[] ApplyMaskedTuple(string op, IReadOnlyDictionary<string, JsonElement> p, NDMaskedArray[] ops)
         {
             string name = op.StartsWith("ma.", StringComparison.Ordinal) ? op.Substring(3) : op;
             switch (name)

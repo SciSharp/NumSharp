@@ -6,12 +6,18 @@ with no Python at test time. Until now `np.ma` was byte-validated only by **thro
 differentials (the pass-13 6055-case run, `docs/MA_MODULE_AUDIT.md`) plus 90 `MaskedArrayTests`; nothing
 committed replays NumPy bytes for it in CI.
 
-Source of truth: NumPy 2.4.2. Implementation under test: `src/NumSharp.Core/Ma/MaskedArray.cs`. This doc is
+Source of truth: NumPy 2.4.2. Implementation under test: `src/NumSharp.Core/Ma/NDMaskedArray.cs`. This doc is
 the map of **what** masked op goes in **which** tier and **how** a masked case is serialized/compared.
+
+> **Renamed 2026-09-23:** NumSharp's port of `numpy.ma.MaskedArray` is the class `NDMaskedArray` (the `ND*`
+> convention of `NDArray`), its constant type `NDMaskedConstant`, and the gate `NDMaskedArrayTests` — formerly
+> `MaskedArray` / `MaskedConstant` / `MaskedArrayTests`. The masked constant is `np.ma.NDMasked`, with NumPy's
+> `np.ma.masked` / `np.ma.masked_singleton` kept as aliases of the same instance. Historical notes below keep
+> the names in use at the time; `MaskedArray` qualified by NumPy (`numpy.ma.MaskedArray`) is NumPy's class.
 
 ## Why a NEW corpus family (not a fold into the existing tiers)
 
-A `MaskedArray` is `NDArray _data` + an optional bool `NDArray _mask` (`_mask == null` IS NumPy's `nomask`
+An `NDMaskedArray` is `NDArray _data` + an optional bool `NDArray _mask` (`_mask == null` IS NumPy's `nomask`
 fast path). The existing corpus can express only ONE buffer per operand and ONE buffer per result, so it
 cannot carry a mask. The masked corpus therefore extends the schema, minimally and additively:
 
