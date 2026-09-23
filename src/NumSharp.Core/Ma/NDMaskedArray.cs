@@ -141,6 +141,10 @@ namespace NumSharp
         /// <see cref="MaskedArrayModule.default_fill_value"/>). It is cast to the data dtype (unsafe cast, like NumPy).</param>
         /// <returns>A new C-contiguous <see cref="NDArray"/> of the data dtype; when there is no mask it is a
         /// copy of the data unchanged.</returns>
+        /// <remarks>Scoped (<c>[NDScoped]</c>): the 0-D fill scalar handed to <see cref="np.copyto"/> is reclaimed
+        /// on return; only the filled copy leaves. The result is ALWAYS a fresh array the caller owns (never the
+        /// data itself), so internal callers may dispose it freely.</remarks>
+        [NDScoped]
         public NDArray filled(object fill_value = null)
         {
             var result = _data.copy();
@@ -188,6 +192,10 @@ namespace NumSharp
         /// </summary>
         /// <param name="flat">False ⇒ the NumPy <c>str()</c> form (data only); true ⇒ the <c>repr()</c> form.</param>
         /// <returns>The rendered string.</returns>
+        /// <remarks>Scoped (<c>[NDScoped]</c>): printing a masked array builds throwaway arrays (the filled copy a
+        /// disabled print option renders, the <c>np.all(mask)</c> probe of the <c>dtype=</c> rule); all of them are
+        /// reclaimed before the string is returned.</remarks>
+        [NDScoped]
         public string ToString(bool flat)
         {
             var opts = PrintOptions.Current;
@@ -858,6 +866,10 @@ namespace NumSharp
         {
             get
             {
+                // Scoped by hand (an object-returning accessor the weaver cannot yield through): the scalar path
+                // reads its value out of two 0-D index views and must reclaim both; the sub-array path hands its
+                // views back through Yield so they outlive the scope.
+                using var scope = NDScope.Open();
                 // Apply the identical index to data and (if present) mask — the two stay aligned by construction.
                 var subData = _data[indices];
                 var subMask = _mask is null ? null : _mask[indices];
@@ -868,7 +880,7 @@ namespace NumSharp
                         return np.ma.NDMasked;
                     return subData.GetAtIndex(0);
                 }
-                return new NDMaskedArray(subData, subMask, _fill_value);
+                return MaskedArrayModule.Yield(scope, new NDMaskedArray(subData, subMask, _fill_value));
             }
             set => SetItem(indices, value);
         }
@@ -878,8 +890,18 @@ namespace NumSharp
         /// propagates its mask.</summary>
         /// <param name="indices">The index expression.</param>
         /// <param name="value">Scalar/array/NDArray/NDMaskedArray/the masked singleton.</param>
+        /// <remarks>
+        ///     Scoped by hand: the 0-D True/False scalars, the value normalized from a scalar/array-like, and the
+        ///     hard-mask snapshots are all transient and reclaimed on return (exceptions included). A mask this
+        ///     write has to CREATE (<see cref="EnsureMask"/>) is a field store and is detached instead, so it lives
+        ///     as long as this array rather than as long as the scope. Under a hard mask the restored mask is
+        ///     written back INTO the existing mask buffer (NumPy's <c>_mask[indx] = mindx</c> is in place too), so
+        ///     the mask keeps its identity — no replacement array is created and the old one is never orphaned.
+        /// </remarks>
         private void SetItem(object[] indices, object value)
         {
+            using var scope = NDScope.Open();
+
             // `x[i] = masked`: set the mask True at the slots, leave the DATA as-is (NumPy hides but keeps it).
             // Masking a slot is ALWAYS allowed, even under a hard mask (hardening only forbids UNmasking).
             if (value is NDMaskedConstant)
@@ -897,6 +919,9 @@ namespace NumSharp
             bool hard = _hardmask && _mask is not null;
             NDArray savedMask = hard ? _mask.copy() : null;
             NDArray savedData = hard ? _data.copy() : null;
+            // Whether the write below reached the MASK buffer; without such a write the mask still equals its
+            // snapshot, so the hard-mask OR-restore would be an identity and is skipped.
+            bool maskWritten = false;
 
             // `x[i] = maskedArray`: write its data, then propagate its mask (or unmask if it has none — soft only).
             if (value is NDMaskedArray mv)
@@ -906,6 +931,7 @@ namespace NumSharp
                 {
                     EnsureMask();
                     _mask[indices] = mv._mask;
+                    maskWritten = true;
                 }
                 else if (!hard && _mask is not null)
                 {
@@ -923,22 +949,32 @@ namespace NumSharp
 
             if (hard)
             {
-                // Restore data where it was masked, then keep every originally-masked slot masked (no unmask)
-                // while retaining any slots the write freshly masked.
-                np.copyto(_data, savedData, casting: "unsafe", where: savedMask);
-                _mask = np.logical_or(savedMask, _mask);
+                // NumPy's hard-mask __setitem__ writes DATA only where neither the existing mask nor the value's
+                // own mask is set (`copyto(dindx, dval, where=~mindx)` with `mindx = mask_or(_mask[indx], mval)`),
+                // so a slot the value MASKS keeps its old (now hidden) data. The mask is therefore settled FIRST —
+                // every originally-masked slot kept masked, plus any the write freshly masked, OR'd back into the
+                // mask's own buffer — and the data snapshot is then restored wherever that FINAL mask is set.
+                // Without a mask write the mask still equals its snapshot, so restoring under it is the plain
+                // "never touch a masked slot" rule. (Restoring under the old mask alone left the value's data in
+                // the freshly-masked slots: x[0:3] = ma([7,7,7], mask=[0,0,1]) gave data 7 at slot 2, NumPy 3.)
+                if (maskWritten)
+                    np.logical_or(savedMask, _mask, @out: _mask);
+                np.copyto(_data, savedData, casting: "unsafe", where: _mask);
             }
         }
 
         /// <summary>Promotes a <c>nomask</c> array to a real all-False boolean mask (NumPy's implicit
         /// <c>_mask = make_mask_none(...)</c> on the first masking write). No-op when a mask already exists.</summary>
+        /// <remarks>The new mask is a FIELD store, so it is detached from every ambient scope
+        /// (<see cref="MaskedArrayModule.Own"/>): it must live as long as this array, not as long as whichever
+        /// scope happened to be open when the first masking write arrived.</remarks>
         internal void EnsureMask()
         {
             if (_mask is null)
                 // DIMENSIONS only, never _data.Shape: a strided/offset _data view carries strides + a
                 // larger bufferSize, and np.zeros(that Shape) builds a strided zeros over the base buffer
                 // whose materialized tail is garbage (see MaskedArrayModule.DimsOf). Size the mask by dims.
-                _mask = np.zeros(new Shape(_data.shape), np.@bool);
+                _mask = MaskedArrayModule.Own(np.zeros(new Shape(_data.shape), np.@bool));
         }
 
         /// <summary>Sets <c>x.flat[indices] = values</c> (mask-aware) — the instance form of
@@ -985,9 +1021,14 @@ namespace NumSharp
             // No mask ⇒ the plain data's nested list (no holes to punch).
             if (_mask is null)
                 return BuildNestedList(_data, null);
-            // Explicit fill ⇒ bake it in and list the filled data (still no nulls, matching NumPy).
+            // Explicit fill ⇒ bake it in and list the filled data (still no nulls, matching NumPy). The filled copy
+            // only feeds the boxed-leaf walk — nothing in the returned object graph references it — so it is
+            // released as soon as the list is built.
             if (fill_value is not null)
-                return BuildNestedList(filled(fill_value), null);
+            {
+                using var filledData = filled(fill_value);
+                return BuildNestedList(filledData, null);
+            }
             // Default ⇒ null at masked positions (NumPy's None).
             return BuildNestedList(_data, _mask);
         }
@@ -1039,7 +1080,13 @@ namespace NumSharp
         /// which can keep 'F' for an F-contiguous source under 'A').</param>
         /// <returns>A fresh <see cref="byte"/>[] of length <c>size * itemsize</c>.</returns>
         /// <exception cref="ArgumentException"><paramref name="order"/> is not one of C/F/A/K.</exception>
-        public byte[] tobytes(object fill_value = null, char order = 'C') => filled(fill_value).tobytes(order);
+        public byte[] tobytes(object fill_value = null, char order = 'C')
+        {
+            // filled() always returns a FRESH copy this call owns; the bytes are copied out of it, so the copy is
+            // released on the way out (on a bad `order` throw too) rather than left to the finalizer.
+            using var filledData = filled(fill_value);
+            return filledData.tobytes(order);
+        }
 
         /// <summary>
         ///     NOT IMPLEMENTED — raises exactly as NumPy's <c>MaskedArray.tofile</c> does. A masked array cannot
@@ -1066,15 +1113,18 @@ namespace NumSharp
         /// the view is refused rather than silently dropping or misaligning it (fill or drop the mask first).</exception>
         public NDMaskedArray view(DType dtype = null)
         {
+            // Scoped by hand: the reinterpreted view is built BEFORE the mask check that may refuse it, so the
+            // refusal path must reclaim it; the success paths hand it back through Yield.
+            using var scope = NDScope.Open();
             var nd = _data.view(dtype);
             // Same element count ⇒ shape preserved (no-op alias or same-itemsize reinterpret): the bool mask
             // still lines up element-for-element, so carry it (aliased, exactly like .real/.imag do).
             if (nd.size == _data.size)
-                return new NDMaskedArray(nd, _mask, _fill_value);
+                return MaskedArrayModule.Yield(scope, new NDMaskedArray(nd, _mask, _fill_value));
             // Itemsize changed ⇒ the trailing axis was rescaled. With no mask the reinterpreted data stands
             // alone; with a live mask there is no meaningful reinterpretation of the boolean mask, so refuse.
             if (_mask is null)
-                return new NDMaskedArray(nd, null, _fill_value);
+                return MaskedArrayModule.Yield(scope, new NDMaskedArray(nd, null, _fill_value));
             throw new NotSupportedException(
                 "view() to a dtype of a different itemsize is not supported on a masked array with an active " +
                 "mask: the boolean mask cannot be reinterpreted to the new element count. Fill or drop the mask first.");
@@ -1146,13 +1196,23 @@ namespace NumSharp
         ///     source. A no-op for a <c>nomask</c> array.
         /// </summary>
         /// <returns>This masked array (with an owned mask).</returns>
-        /// <remarks>NumSharp cannot track whether a mask is actually shared (there is no <c>sharedmask</c> state),
-        /// so — unlike NumPy, which copies only WHEN shared — this copies unconditionally when a mask is present;
-        /// the end state (an unshared mask) is identical, only a redundant copy of an already-owned mask differs.</remarks>
+        /// <remarks>
+        ///     NumSharp cannot track whether a mask is actually shared (there is no <c>sharedmask</c> state),
+        ///     so — unlike NumPy, which copies only WHEN shared — this copies unconditionally when a mask is present;
+        ///     the end state (an unshared mask) is identical, only a redundant copy of an already-owned mask differs.
+        ///     <para>
+        ///     <b>Ownership.</b> The new copy is a field store: it is detached from every ambient scope
+        ///     (<see cref="MaskedArrayModule.Own"/>) so it lives as long as this array — a scope open around the call
+        ///     must not dispose the mask this array now holds. The SUPERSEDED mask is deliberately NOT disposed: the
+        ///     whole point of unsharing is that other arrays may still read it, so it stays with whoever created it
+        ///     (released when they dispose it, else by the finalizer). A caller that knows it was the only holder can
+        ///     read <c>mask</c> first and dispose that buffer itself after the call.
+        ///     </para>
+        /// </remarks>
         public NDMaskedArray unshare_mask()
         {
             if (_mask is not null)
-                _mask = _mask.copy();
+                _mask = MaskedArrayModule.Own(_mask.copy());
             return this;
         }
 
@@ -1245,7 +1305,10 @@ namespace NumSharp
     {
         /// <summary>Builds the constant as a 0-D <c>0.0</c> datum under a 0-D <c>True</c> mask, i.e. one masked
         /// scalar — the same internal shape NumPy's <c>masked_singleton</c> carries.</summary>
-        internal NDMaskedConstant() : base(NDArray.Scalar(0.0d), NDArray.Scalar(true)) { }
+        /// <remarks>Both scalars are detached from every scope (<see cref="MaskedArrayModule.Own"/>): the single
+        /// instance is built during <c>np</c>'s static initialization, which may run inside a caller's open
+        /// <see cref="NDScope"/>; left tracked, that scope would dispose the singleton's buffers on close.</remarks>
+        internal NDMaskedConstant() : base(MaskedArrayModule.Own(NDArray.Scalar(0.0d)), MaskedArrayModule.Own(NDArray.Scalar(true))) { }
 
         /// <summary>Renders as the bare token <c>masked</c>, as NumPy prints its singleton.</summary>
         /// <returns>The string <c>"masked"</c>.</returns>
@@ -1366,6 +1429,11 @@ namespace NumSharp
                 if (key.Length == 1 && key[0] is string)
                     throw new MAError("Unavailable for masked array.");
 
+                // Scoped by hand (a masked-array return the weaver cannot yield): the per-entry mask stand-ins —
+                // all-False arrays for plain/slice entries, the throwaway r_ probe that sizes a slice's stand-in —
+                // only feed the concatenation and are reclaimed on return.
+                using var scope = NDScope.Open();
+
                 // DATA stream: unwrap a masked entry to its data; every other entry (slice/directive strings,
                 // scalars, arrays) passes straight to np.r_ so its dtype/layout resolution is untouched.
                 var dataKey = new object[key.Length];
@@ -1384,14 +1452,14 @@ namespace NumSharp
                 }
                 NDArray dataResult = np.r_[dataKey];
                 if (!anyMask)
-                    return new NDMaskedArray(dataResult, null);
+                    return MaskedArrayModule.Yield(scope, new NDMaskedArray(dataResult, null));
 
                 // MASK stream: same np.r_ grammar over each entry's boolean-mask contribution.
                 var maskKey = new object[key.Length];
                 for (int i = 0; i < key.Length; i++)
                     maskKey[i] = MaskEntry(key[i]);
                 NDArray maskResult = np.r_[maskKey];
-                return new NDMaskedArray(dataResult, maskResult);
+                return MaskedArrayModule.Yield(scope, new NDMaskedArray(dataResult, maskResult));
             }
         }
 
@@ -1460,7 +1528,11 @@ namespace NumSharp
         /// <summary>NumPy's <c>nomask</c>: the shared 0-D <c>False</c> that <see cref="NDMaskedArray.mask"/>
         /// returns when nothing is masked. Internally "no mask" is stored as a null mask; this is only the
         /// public face of that state.</summary>
-        public NDArray nomask { get; } = NDArray.Scalar(false);
+        /// <remarks>Detached from every scope at construction (<see cref="Own"/>): this module is built by
+        /// <c>np</c>'s static constructor, which runs wherever <c>np</c> is FIRST touched — possibly inside a
+        /// caller's open <see cref="NDScope"/>, which would otherwise track this process-wide singleton and dispose
+        /// it when that scope closed (probed: every later read was a use-after-dispose).</remarks>
+        public NDArray nomask { get; } = Own(NDArray.Scalar(false));
 
         /// <summary>
         ///     The masked constant in NumSharp's <c>ND*</c> spelling: the ONE <see cref="NDMaskedConstant"/> instance
@@ -1544,6 +1616,10 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">A <see cref="NDMaskedArray"/>, <see cref="NDArray"/>, or array-like/scalar.</param>
         /// <returns>A boolean <see cref="NDArray"/> matching the data shape.</returns>
+        /// <remarks>Scoped (<c>[NDScoped]</c>): a scalar/array-like operand is materialized only to read its shape,
+        /// and that materialization is reclaimed; the returned mask is either <paramref name="a"/>'s own (owned by
+        /// its masked array — the caller must NOT dispose it) or a fresh all-False array the caller owns.</remarks>
+        [NDScoped]
         public NDArray getmaskarray(object a)
         {
             var m = (a as NDMaskedArray)?._mask;
@@ -1591,8 +1667,12 @@ namespace NumSharp
         /// <param name="hard_mask">When true, the result's mask is HARD (NumPy's <c>hard_mask=</c>): a later
         /// plain-value assignment cannot unmask a slot (see <see cref="NDMaskedArray.harden_mask()"/>). Default false (soft).</param>
         /// <returns>A new <see cref="NDMaskedArray"/>.</returns>
+        /// <remarks>Scoped by hand: a scalar/array-like <paramref name="data"/> or <paramref name="mask"/> is first
+        /// materialized, then (on a dtype cast / boolean coercion) replaced by the converted array — the
+        /// superseded materializations are reclaimed on return and only the arrays the result carries leave.</remarks>
         public NDMaskedArray array(object data, object mask = null, object fill_value = null, bool copy = false, DType dtype = null, bool hard_mask = false)
         {
+            using var scope = NDScope.Open();
             var d = AsData(data);
             // dtype cast happens first (and subsumes the copy — astype makes a new buffer on a real cast, and
             // copy=true forces one even when the dtype already matches); mask stays boolean regardless of dtype.
@@ -1606,7 +1686,7 @@ namespace NumSharp
             // hard_mask=true bakes the hardness in at construction (NumPy's ctor flag), so the very first
             // assignment already refuses to unmask — no separate harden_mask() call needed.
             result._hardmask = hard_mask;
-            return result;
+            return Yield(scope, result);
         }
 
         /// <summary>Alias of <see cref="array"/> matching NumPy's <c>ma.masked_array</c> name.</summary>
@@ -1629,12 +1709,15 @@ namespace NumSharp
         /// <param name="a">A <see cref="NDMaskedArray"/>, <see cref="NDArray"/>, or array-like/scalar.</param>
         /// <param name="dtype">Optional dtype to cast the data to (no copy when it already matches).</param>
         /// <returns>A masked array over <paramref name="a"/>'s data (aliased when possible).</returns>
+        /// <remarks>Scoped by hand: a scalar/array-like operand that is materialized and then CAST leaves its
+        /// pre-cast materialization behind, which is reclaimed on return.</remarks>
         public NDMaskedArray asarray(object a, DType dtype = null)
         {
+            using var scope = NDScope.Open();
             var d = AsData(a);
             if (dtype != null)
                 d = d.astype(dtype, copy: false);
-            return new NDMaskedArray(d, (a as NDMaskedArray)?._mask);
+            return Yield(scope, new NDMaskedArray(d, (a as NDMaskedArray)?._mask));
         }
 
         /// <summary>Alias of <see cref="asarray"/> (NumPy's <c>ma.asanyarray</c> — NumSharp has no NDMaskedArray
@@ -1691,26 +1774,39 @@ namespace NumSharp
         /// <summary>Number of dimensions of the data (NumPy's module-level <c>ma.ndim</c>).</summary>
         /// <param name="a">Array-like/masked-array/scalar.</param>
         /// <returns>The rank of the data (0 for a scalar).</returns>
+        /// <remarks>Scoped (<c>[NDScoped]</c>): a scalar/array-like operand is materialized only to be measured.</remarks>
+        [NDScoped]
         public int ndim(object a) => AsData(a).ndim;
 
         /// <summary>Data shape as a <c>long[]</c> (NumPy's module-level <c>ma.shape</c>; NumSharp dims are 64-bit).</summary>
         /// <param name="a">Array-like/masked-array/scalar.</param>
         /// <returns>The shape (empty for a scalar).</returns>
-        public long[] shape(object a) => AsData(a).shape;
+        public long[] shape(object a)
+        {
+            // Scoped by hand (a long[] return is not a shape the weaver yields): a scalar/array-like operand is
+            // materialized only to read its dimensions, and is reclaimed; an array operand is untouched.
+            using var scope = NDScope.Open();
+            return AsData(a).shape;
+        }
 
         /// <summary>Total element count (NumPy's module-level <c>ma.size</c>).</summary>
         /// <param name="a">Array-like/masked-array/scalar.</param>
         /// <returns>The element count (1 for a scalar).</returns>
+        /// <remarks>Scoped (<c>[NDScoped]</c>): a scalar/array-like operand is materialized only to be measured.</remarks>
+        [NDScoped]
         public long size(object a) => AsData(a).size;
 
         /// <summary>Deep copy of <paramref name="a"/> as a masked array (NumPy's module-level <c>ma.copy</c>):
         /// the data AND the mask are copied, so mutating either the source or the copy never affects the other.</summary>
         /// <param name="a">Array-like/masked-array to copy.</param>
         /// <returns>A masked array over a fresh copy of the data (mask copied when present).</returns>
+        /// <remarks>Scoped by hand: a scalar/array-like operand's materialization (the source of the copy) is
+        /// reclaimed; only the copies leave.</remarks>
         public NDMaskedArray copy(object a)
         {
+            using var scope = NDScope.Open();
             var m = (a as NDMaskedArray)?._mask;
-            return new NDMaskedArray(AsData(a).copy(), m?.copy(), (a as NDMaskedArray)?._fill_value);
+            return Yield(scope, new NDMaskedArray(AsData(a).copy(), m?.copy(), (a as NDMaskedArray)?._fill_value));
         }
 
         /// <summary>Maximum over unmasked elements — alias of <see cref="max"/> (NumPy's deprecated-but-exported
@@ -1771,6 +1867,10 @@ namespace NumSharp
         /// <param name="m">Array-like to coerce (numeric/boolean; non-zero ⇒ masked).</param>
         /// <param name="shrink">Collapse an all-False mask to <see cref="nomask"/> (default true).</param>
         /// <returns>A boolean mask array, or <see cref="nomask"/> when it shrinks to empty.</returns>
+        /// <remarks>Scoped (<c>[NDScoped]</c>): the operand's materialization and a coerced mask that shrinks to
+        /// <see cref="nomask"/> are reclaimed. The shared <see cref="nomask"/> sentinel must never be disposed by
+        /// the caller; a non-shrunk result is a fresh array the caller owns.</remarks>
+        [NDScoped]
         public NDArray make_mask(object m, bool shrink = true)
         {
             // NumPy coerces via `!= 0` (so floats/ints become bool by non-zero-ness), not a plain astype(bool).
@@ -1794,6 +1894,10 @@ namespace NumSharp
         /// <param name="m2">Second mask, or null/nomask.</param>
         /// <param name="shrink">Collapse an all-False result to <see cref="nomask"/> (default true).</param>
         /// <returns>The OR of the present masks, or <see cref="nomask"/> when neither contributes (or it shrinks).</returns>
+        /// <remarks>Scoped (<c>[NDScoped]</c>): operands coerced to boolean and an OR that shrinks away are
+        /// reclaimed. When only ONE operand contributes, the result IS that operand's mask (NumPy returns it too),
+        /// so the caller must not dispose a result it did not create.</remarks>
+        [NDScoped]
         public NDArray mask_or(object m1, object m2, bool shrink = true)
         {
             // Treat a null OR the shared nomask sentinel (a 0-D False) as "no contribution".
@@ -1837,7 +1941,9 @@ namespace NumSharp
         /// <param name="mask">A mask array-like (<see cref="NDArray"/>, C# array, scalar, or the
         /// <see cref="nomask"/> sentinel). A 0-D input flattens to a length-1 array (matching NumPy).</param>
         /// <returns>A fresh 1-D boolean <see cref="NDArray"/> in C-order.</returns>
-        /// <remarks>Returns a fresh array (never a view), matching NumPy which builds a new <c>np.array</c>.</remarks>
+        /// <remarks>Returns a fresh array (never a view), matching NumPy which builds a new <c>np.array</c>. Scoped
+        /// (<c>[NDScoped]</c>): the raveled intermediate (and a materialized array-like) are reclaimed.</remarks>
+        [NDScoped]
         public NDArray flatten_mask(object mask) => np.ravel(AsData(mask)).astype(np.@bool);
 
         /// <summary>
@@ -1864,6 +1970,9 @@ namespace NumSharp
         /// <returns>The common fill value (boxed), or null when the two differ.</returns>
         public object common_fill_value(object a, object b)
         {
+            // Scoped by hand (an object return): a scalar/array-like operand is materialized only to read its
+            // dtype for the default fill, and is reclaimed.
+            using var scope = NDScope.Open();
             var fa = FillOf(a);
             var fb = FillOf(b);
             return Equals(fa, fb) ? fa : null;
@@ -1899,8 +2008,11 @@ namespace NumSharp
         /// <param name="fill_value">Value written at the newly-masked (invalid) slots; null uses <paramref name="a"/>'s
         /// own fill (dtype default).</param>
         /// <returns>A masked array with non-finite slots masked and their data replaced by the fill.</returns>
+        /// <remarks>Scoped by hand: the partial masks (non-finite, extra, the intermediate ORs), the fill scalar and
+        /// any operand materializations are reclaimed; only the result's data and mask leave.</remarks>
         public NDMaskedArray fix_invalid(object a, object mask = null, bool copy = true, object fill_value = null)
         {
+            using var scope = NDScope.Open();
             var d = AsData(a);
             // The invalid mask is ~isfinite for a float/complex dtype, else nothing (integers are all finite).
             var invalid = NonFiniteMask(d) ?? np.zeros(DimsOf(d), np.@bool);
@@ -1914,7 +2026,7 @@ namespace NumSharp
             // caught non-finite data, leaving pre-existing masked-but-finite data alone).
             if (np.any(invalid))
                 np.copyto(data, NDArray.Scalar(fv), casting: "unsafe", where: invalid);
-            return new NDMaskedArray(data, (full is not null && np.any(full)) ? full : null);
+            return Yield(scope, new NDMaskedArray(data, (full is not null && np.any(full)) ? full : null));
         }
 
         /// <summary>The <c>~</c> operator's backing (NumPy has no <c>ma.invert</c> module function): bitwise-NOT
@@ -1939,8 +2051,13 @@ namespace NumSharp
         /// <param name="domain">Optional invalid-input predicate: given the data, returns a boolean mask of
         /// elements to mask; null for a domain-free op.</param>
         /// <returns>The masked result, or the <see cref="NDMasked"/> constant for a fully-masked 0-D result.</returns>
+        /// <remarks>Scoped by hand — the one scope every unary masked ufunc rides: the operand materialization,
+        /// the domain/non-finite predicate masks and their ORs, the broadcast mask view and the fill-back scalar
+        /// are all reclaimed here; only the result's data and mask leave (a fully-masked 0-D result's computed
+        /// value is reclaimed too, since the <see cref="NDMasked"/> singleton is returned in its place).</remarks>
         private NDMaskedArray Unary(Func<NDArray, NDArray> f, object a, Func<NDArray, NDArray> domain = null)
         {
+            using var scope = NDScope.Open();
             var d = AsData(a);
             var result = f(d);
             NDArray m;
@@ -1959,7 +2076,7 @@ namespace NumSharp
             // NumPy's unary fill-back is copyto(result, d, where=m) with the DEFAULT 'same_kind' casting,
             // caught if it fails — so a dtype-changing unary (e.g. angle: complex→float) keeps its computed
             // value at masked slots rather than force-casting the input in.
-            return Wrap(result, m, d, casting: "same_kind");
+            return Yield(scope, Wrap(result, m, d, casting: "same_kind"));
         }
 
         /// <summary>
@@ -1972,8 +2089,12 @@ namespace NumSharp
         /// <param name="a">Left operand.</param>
         /// <param name="b">Right operand.</param>
         /// <returns>The masked result, or the <see cref="NDMasked"/> constant for a fully-masked 0-D result.</returns>
+        /// <remarks>Scoped by hand — the one scope every binary masked ufunc rides: operand materializations, the
+        /// numpy.ma scalar-widening casts, the OR'd mask intermediates, the broadcast mask view and the fill-back
+        /// scalar are reclaimed; only the result's data and mask leave.</remarks>
         private NDMaskedArray Binary(Func<NDArray, NDArray, NDArray> f, object a, object b, bool promoteScalar = true)
         {
+            using var scope = NDScope.Open();
             var da = AsData(a);
             var db = AsData(b);
             // numpy.ma treats a bare scalar as a STRONG default-width array (int→int64, float→float64), so a
@@ -1986,7 +2107,7 @@ namespace NumSharp
             var result = f(da, db);
             // OR the two operand masks (nomask fast path: both absent ⇒ no result mask at all).
             var m = Or((a as NDMaskedArray)?._mask, (b as NDMaskedArray)?._mask);
-            return Wrap(result, m, da);
+            return Yield(scope, Wrap(result, m, da));
         }
 
         /// <summary>
@@ -2001,8 +2122,12 @@ namespace NumSharp
         /// <param name="a">Left operand (numerator).</param>
         /// <param name="b">Right operand (denominator).</param>
         /// <returns>The masked result, or the <see cref="NDMasked"/> constant for a fully-masked 0-D result.</returns>
+        /// <remarks>Scoped by hand — the one scope every domained masked ufunc (divide/remainder/…) rides: the
+        /// domain and non-finite predicate masks, their ORs, the widening casts, the broadcast mask view and the
+        /// zero/fill-back scalars are reclaimed; only the result's data and mask leave.</remarks>
         private NDMaskedArray DomainedBinary(Func<NDArray, NDArray, NDArray> f, Func<NDArray, NDArray, NDArray> domain, object a, object b)
         {
+            using var scope = NDScope.Open();
             var da = AsData(a);
             var db = AsData(b);
             // Same scalar-strong promotion as Binary (e.g. ma.floor_divide(int32, 2) → int64).
@@ -2013,7 +2138,7 @@ namespace NumSharp
             m = Or(m, (b as NDMaskedArray)?._mask);
             // Domained fill-back differs from the plain binary: NumPy zeroes masked slots then re-adds da,
             // which we reproduce as "put da back where it can safely cast, else leave zero".
-            return Wrap(result, m, da, domainedZeroFill: true);
+            return Yield(scope, Wrap(result, m, da, domainedZeroFill: true));
         }
 
         /// <summary>
@@ -2086,6 +2211,72 @@ namespace NumSharp
         // ─────────────────────────────────────────────────────────────────────────────
         //  Small internal helpers
         // ─────────────────────────────────────────────────────────────────────────────
+
+        /// <summary>
+        ///     The masked-array egress of a hand-written <see cref="NDScope"/> — the <see cref="NDMaskedArray"/>
+        ///     counterpart of <see cref="NDScope.Returns{T}(T)"/>, and the reason this module scopes by hand: the
+        ///     <c>[NDScoped]</c> weaver only yields NDArray-shaped returns and <see cref="INDArrayCarrier"/>
+        ///     STRUCTS, so a method returning this reference type must open its scope itself and route every
+        ///     return through here. Every array the method built that the result does NOT carry is then reclaimed
+        ///     when the scope closes, instead of waiting for the finalizer.
+        /// </summary>
+        /// <param name="scope">The method's open scope (the one whose temporaries are being reclaimed).</param>
+        /// <param name="result">The masked array being returned; null (no result) passes through.</param>
+        /// <returns><paramref name="result"/>, unchanged.</returns>
+        /// <remarks>
+        ///     A masked array owns nothing itself — it aliases a data array and an optional mask — so its egress
+        ///     is the egress of those two buffers: each is handed back (re-tracked into the parent scope, which
+        ///     still reclaims them if the caller drops the result). An array this scope never tracked — an
+        ///     operand's data or mask passed through untouched, or the process-wide
+        ///     <see cref="NDMasked"/>/<see cref="nomask"/> singletons — is a no-op there, which is what makes
+        ///     "yield every result" a safe blanket rule, including the singleton returns.
+        ///     <para>
+        ///     NEVER use this for an array stored into a FIELD of a longer-lived masked array (a mask created by an
+        ///     in-place write): re-tracking it into the caller's scope would dispose it while the target still
+        ///     holds it. A field store is <see cref="NDScope.Detach(NDArray)"/> (see <see cref="Own"/>).
+        ///     </para>
+        /// </remarks>
+        internal static NDMaskedArray Yield(NDScope scope, NDMaskedArray result)
+        {
+            if (result is not null)
+            {
+                scope.Returns(result._data);
+                scope.Returns(result._mask);
+            }
+            return result;
+        }
+
+        /// <summary>
+        ///     The <see cref="NDMaskedArray"/>[] egress of a hand-written scope (a split/sequence result): every
+        ///     element's data and mask are yielded exactly as <see cref="Yield(NDScope, NDMaskedArray)"/> does for
+        ///     one. A null array and null elements pass through.
+        /// </summary>
+        /// <param name="scope">The method's open scope.</param>
+        /// <param name="results">The masked arrays being returned.</param>
+        /// <returns><paramref name="results"/>, unchanged.</returns>
+        internal static NDMaskedArray[] Yield(NDScope scope, NDMaskedArray[] results)
+        {
+            if (results is not null)
+                for (int i = 0; i < results.Length; i++)
+                    Yield(scope, results[i]);
+            return results;
+        }
+
+        /// <summary>
+        ///     Takes ownership of an array being STORED into a masked array's field (a mask an in-place write
+        ///     creates or rebuilds): removes it from every ambient scope so no scope — the writing method's own or
+        ///     its caller's — can dispose it while the target masked array still references it. The array then
+        ///     lives exactly as long as the masked array holding it (deterministically released when a caller
+        ///     disposes that masked array's parts, otherwise by the finalizer), matching the poly1d coefficient
+        ///     rule: a field egress is a detach, never a <see cref="NDScope.Returns{T}(T)"/>.
+        /// </summary>
+        /// <param name="nd">The array being stored; null passes through.</param>
+        /// <returns><paramref name="nd"/>, unchanged.</returns>
+        internal static NDArray Own(NDArray nd)
+        {
+            NDScope.Detach(nd);
+            return nd;
+        }
 
         /// <summary>
         ///     Normalizes any accepted operand to its data <see cref="NDArray"/>: unwraps a
@@ -2186,16 +2377,19 @@ namespace NumSharp
         /// <param name="a">Operand (masked array or plain array-like).</param>
         /// <param name="axis">The axis whose lines are tainted wholesale by any masked element.</param>
         /// <returns>A masked array whose mask has been propagated along <paramref name="axis"/>.</returns>
+        /// <remarks>Scoped by hand: the per-line <c>any</c> reduction and its broadcast view are reclaimed; the
+        /// returned array carries the operand's data and the freshly propagated mask.</remarks>
         private NDMaskedArray MaskPropagate(object a, int axis)
         {
+            using var scope = NDScope.Open();
             var ma_ = array(a);
             var m = ma_._mask;
             if (m is null || !np.any(m))
-                return ma_;
+                return Yield(scope, ma_);
             // any(m, axis, keepdims) has size 1 on `axis`; broadcasting it back and OR-ing taints the whole line.
             var line = np.any(m, axis, null, true);
             var newmask = np.logical_or(m, np.broadcast_to(line, m.Shape));
-            return new NDMaskedArray(ma_._data, newmask);
+            return Yield(scope, new NDMaskedArray(ma_._data, newmask));
         }
 
         /// <summary>
@@ -2538,7 +2732,13 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">Array-like whose dtype selects the value.</param>
         /// <returns>A boxed scalar castable into the dtype.</returns>
-        public object minimum_fill_value(object a) => MinFill(AsData(a).typecode);
+        public object minimum_fill_value(object a)
+        {
+            // Scoped by hand (an object return): a scalar/array-like operand is materialized only to read its
+            // dtype, and is reclaimed.
+            using var scope = NDScope.Open();
+            return MinFill(AsData(a).typecode);
+        }
 
         /// <summary>
         ///     The value NumPy fills masked elements with for a MAXIMUM/argmax (the dtype's SMALLEST value):
@@ -2547,7 +2747,13 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">Array-like whose dtype selects the value.</param>
         /// <returns>A boxed scalar castable into the dtype.</returns>
-        public object maximum_fill_value(object a) => MaxFill(AsData(a).typecode);
+        public object maximum_fill_value(object a)
+        {
+            // Scoped by hand (an object return): a scalar/array-like operand is materialized only to read its
+            // dtype, and is reclaimed.
+            using var scope = NDScope.Open();
+            return MaxFill(AsData(a).typecode);
+        }
 
         /// <summary>Per-dtype "largest" fill (for min/argmin) — see <see cref="minimum_fill_value"/>.</summary>
         private static object MinFill(NPTypeCode tc) => tc switch
@@ -2620,14 +2826,18 @@ namespace NumSharp
         /// <param name="axis">Reduction axis, or null to reduce the flattened array.</param>
         /// <param name="keepdims">Keep reduced axes as size-1 (NumPy keepdims).</param>
         /// <returns>The masked reduction result (or <see cref="NDMasked"/> for a fully-masked scalar).</returns>
+        /// <remarks>Scoped by hand — the one scope sum/prod/min/max ride: the identity-filled copy of the data (and
+        /// a materialized scalar operand) is reclaimed, as is the computed value when a fully-masked 0-D result
+        /// collapses to the <see cref="NDMasked"/> singleton; only the reduction and its mask leave.</remarks>
         private NDMaskedArray ReduceIdentity(object a, object identity, Func<NDArray, int?, bool, NDArray> fn, int? axis, bool keepdims)
         {
+            using var scope = NDScope.Open();
             var mask = (a as NDMaskedArray)?._mask;
             var d = mask is null ? AsData(a) : ((NDMaskedArray)a).filled(identity);
             var result = fn(d, axis, keepdims);
             if (mask is null)
-                return new NDMaskedArray(result, null);
-            return Finalize(result, AllAlongAxis(mask, axis, keepdims));
+                return Yield(scope, new NDMaskedArray(result, null));
+            return Yield(scope, Finalize(result, AllAlongAxis(mask, axis, keepdims)));
         }
 
         /// <summary>Sum over the axis; masked slots contribute 0. A cell is masked iff its whole slice was.
@@ -2674,12 +2884,19 @@ namespace NumSharp
         /// <param name="fill_value">Masked fill passed to both min and max.</param><param name="keepdims">Keep reduced axes.</param>
         /// <returns>The masked range.</returns>
         public NDMaskedArray ptp(object a, int? axis = null, object fill_value = null, bool keepdims = false)
-            => subtract(max(a, axis, fill_value, keepdims), min(a, axis, fill_value, keepdims));
+        {
+            // Scoped by hand: the separate max and min reductions are only the subtraction's operands and are
+            // reclaimed once the range is computed.
+            using var scope = NDScope.Open();
+            return Yield(scope, subtract(max(a, axis, fill_value, keepdims), min(a, axis, fill_value, keepdims)));
+        }
 
         /// <summary>Number of UNMASKED elements along the axis (NumPy's <c>count</c>) — a plain int64 array,
         /// never masked.</summary>
         /// <param name="a">Operand.</param><param name="axis">Axis or null.</param><param name="keepdims">Keep reduced axes.</param>
         /// <returns>An int64 <see cref="NDArray"/> (0-D for a flat count).</returns>
+        /// <remarks>Scoped (<c>[NDScoped]</c>): the negated-mask (or all-True) indicator the count sums is reclaimed.</remarks>
+        [NDScoped]
         public NDArray count(object a, int? axis = null, bool keepdims = false)
             // DimsOf, not AsData(a).Shape: for a nomask NON-CONTIGUOUS operand the strided Shape made
             // CountUnmasked size/iterate over the base buffer and undercount (a [::2] view of 8 counted 6).
@@ -2691,8 +2908,11 @@ namespace NumSharp
         /// <param name="a">Operand.</param><param name="axis">Axis or null.</param>
         /// <param name="dtype">Sum accumulator dtype.</param><param name="keepdims">Keep reduced axes.</param>
         /// <returns>The masked mean.</returns>
+        /// <remarks>Scoped by hand: the zero-filled copy, the sum and count (and their casts), the raw quotient
+        /// and the masked-slot rewrite are reclaimed; only the mean and its mask leave.</remarks>
         public NDMaskedArray mean(object a, int? axis = null, DType dtype = null, bool keepdims = false)
         {
+            using var scope = NDScope.Open();
             var mask = (a as NDMaskedArray)?._mask;
             var d = AsData(a);
             var tc = d.typecode;
@@ -2712,13 +2932,13 @@ namespace NumSharp
             var cnt = CountUnmasked(mask, d.Shape, axis, keepdims).astype(compute);
             var result = np.divide(dsum, cnt).astype(outdt);     // count==0 slots → nan, masked below
             if (mask is null)
-                return new NDMaskedArray(result, null);
+                return Yield(scope, new NDMaskedArray(result, null));
             var newmask = AllAlongAxis(mask, axis, keepdims);
             // NumPy computes the mean through MASKED arithmetic, so a fully-masked slice's .data is 0 (the
             // sum's identity), NOT the raw 0/0=NaN. Match it at the masked (count==0) positions.
             if (result.ndim != 0)
                 result = np.where(newmask, NDArray.Scalar(0.0), result).astype(outdt);
-            return Finalize(result, newmask);
+            return Yield(scope, Finalize(result, newmask));
         }
 
         /// <summary>Variance over unmasked elements (masked contribute nothing); a cell is masked where its
@@ -2729,8 +2949,12 @@ namespace NumSharp
         /// <param name="ddof">Delta degrees of freedom (divisor is count − ddof).</param><param name="keepdims">Keep reduced axes.</param>
         /// <param name="mean">Precomputed centering mean (broadcast to the keepdims shape), or null to compute it.</param>
         /// <returns>The masked variance (real-valued, even for complex input).</returns>
+        /// <remarks>Scoped by hand: the zero-filled copy, the keepdims count and centering mean, the deviations
+        /// and their squares, the masked-slot rewrite and the predicate masks are reclaimed; only the variance and
+        /// its mask leave.</remarks>
         public NDMaskedArray var(object a, int? axis = null, DType dtype = null, int ddof = 0, bool keepdims = false, object mean = null)
         {
+            using var scope = NDScope.Open();
             var mask = (a as NDMaskedArray)?._mask;
             var d = AsData(a);
             bool cplx = d.typecode == NPTypeCode.Complex;
@@ -2740,7 +2964,7 @@ namespace NumSharp
             if (mask is null && mean is null)
             {
                 var rn = axis is null ? np.var(d, keepdims, ddof, dtype) : np.var(d, axis.Value, keepdims, ddof, dtype);
-                return new NDMaskedArray(rn, null);
+                return Yield(scope, new NDMaskedArray(rn, null));
             }
 
             // `maskEff` is the real mask, or an all-false stand-in when only a supplied mean took us off the fast
@@ -2762,7 +2986,7 @@ namespace NumSharp
             // As with mean, masked (all-masked / cnt<=0) slices carry .data 0, not the raw NaN.
             if (dvar.ndim != 0)
                 dvar = np.where(newmask, NDArray.Scalar(0.0), dvar);
-            return Finalize(dvar, newmask);
+            return Yield(scope, Finalize(dvar, newmask));
         }
 
         /// <summary>Standard deviation = sqrt(<see cref="var"/>), preserving the variance's mask.</summary>
@@ -2774,10 +2998,13 @@ namespace NumSharp
         /// <returns>The masked standard deviation.</returns>
         public NDMaskedArray std(object a, int? axis = null, DType dtype = null, int ddof = 0, bool keepdims = false, object mean = null)
         {
+            // Scoped by hand: the variance is only sqrt's operand; its data is reclaimed once the root is taken
+            // (its mask, which sqrt carries through, is re-parented by the Yield instead).
+            using var scope = NDScope.Open();
             // NumPy's ma.std deliberately does NOT pass `mean` to var (only keepdims), so a supplied mean is a
             // no-op here too — matching ma.std(mean=X) == plain std, byte-for-byte.
             var v = var(a, axis, dtype, ddof, keepdims);
-            return ReferenceEquals(v, NDMasked) ? NDMasked : sqrt(v);
+            return Yield(scope, ReferenceEquals(v, NDMasked) ? NDMasked : sqrt(v));
         }
 
         /// <summary>Anomalies (deviations from the mean along the axis) = <c>a − mean(a, axis, keepdims)</c>,
@@ -2785,7 +3012,11 @@ namespace NumSharp
         /// <param name="a">Operand.</param><param name="axis">Axis or null.</param><param name="dtype">Mean accumulator dtype.</param>
         /// <returns>The masked anomalies, same shape as the input.</returns>
         public NDMaskedArray anom(object a, int? axis = null, DType dtype = null)
-            => subtract(a, mean(a, axis, dtype, keepdims: true));
+        {
+            // Scoped by hand: the keepdims mean is only the subtraction's operand and is reclaimed.
+            using var scope = NDScope.Open();
+            return Yield(scope, subtract(a, mean(a, axis, dtype, keepdims: true)));
+        }
 
         /// <summary>Alias of <see cref="anom"/> (NumPy's <c>anomalies</c>).</summary>
         /// <param name="a">Operand.</param><param name="axis">Axis or null.</param><param name="dtype">Mean accumulator dtype.</param>
@@ -2854,8 +3085,12 @@ namespace NumSharp
         /// <param name="ddof">Explicit delta DOF (divisor is pairwise-count − ddof); null uses bias.</param>
         /// <returns>The masked covariance matrix (squeezed to a scalar for a single variable).</returns>
         /// <exception cref="ValueError"><paramref name="allow_masked"/> is false and data is masked.</exception>
+        /// <remarks>Scoped by hand: the centered/filled data, the not-mask indicator, the pairwise counts, the
+        /// transposed products and the unsqueezed result are reclaimed; only the (squeezed) covariance and its
+        /// mask leave.</remarks>
         public NDMaskedArray cov(object x, object y = null, bool rowvar = true, bool bias = false, bool allow_masked = true, int? ddof = null)
         {
+            using var scope = NDScope.Open();
             int dd = ddof ?? (bias ? 0 : 1);
             var (centered, xnotmask, rv) = CovHelper(x, y, rowvar, allow_masked);
             NDArray fact, data;
@@ -2871,7 +3106,7 @@ namespace NumSharp
                 data = np.divide(np.dot(centered.T, centered), fact);
             }
             var mask = np.less_equal(fact, NDArray.Scalar(0.0));
-            return squeeze(new NDMaskedArray(data, np.any(mask) ? mask : null));
+            return Yield(scope, squeeze(new NDMaskedArray(data, np.any(mask) ? mask : null)));
         }
 
         /// <summary>
@@ -2884,12 +3119,15 @@ namespace NumSharp
         /// <param name="allow_masked">When false, raise if any value is masked.</param>
         /// <returns>The masked correlation matrix.</returns>
         /// <exception cref="ValueError"><paramref name="allow_masked"/> is false and data is masked.</exception>
+        /// <remarks>Scoped by hand: the covariance, its diagonal, the standard deviations and their outer product
+        /// only feed the final division and are reclaimed.</remarks>
         public NDMaskedArray corrcoef(object x, object y = null, bool rowvar = true, bool allow_masked = true)
         {
+            using var scope = NDScope.Open();
             var corr = cov(x, y, rowvar, false, allow_masked);
             // std = sqrt(diagonal(cov)); corr /= outer(std, std).
             var std = sqrt(diagonal(corr));
-            return divide(corr, outer(std, std));
+            return Yield(scope, divide(corr, outer(std, std)));
         }
 
         // ─────────────────────────────────────────────────────────────────────────────
@@ -2903,8 +3141,11 @@ namespace NumSharp
         /// <c>_convolve_or_correlate</c>). With <paramref name="propagate_mask"/> a result element is masked if
         /// ANY masked cell contributed to it (mask = the boolean masks slid against ones); without it, a result
         /// is masked only when NO unmasked cell contributed (and the data is computed from the 0-filled inputs).</summary>
+        /// <remarks>Scoped by hand: the 0/1 mask casts, the ones kernels, the slid mask counts, the filled copies
+        /// and a mask that turns out all-False are reclaimed; only the product and its mask leave.</remarks>
         private NDMaskedArray ConvolveOrCorrelate(Func<NDArray, NDArray, string, NDArray> f, object a, object v, string mode, bool propagate_mask)
         {
+            using var scope = NDScope.Open();
             var da = getdata(a);
             var dv = getdata(v);
             NDArray data, mask;
@@ -2923,7 +3164,7 @@ namespace NumSharp
                 mask = np.logical_not(contributed);
                 data = f(filled(a, 0), filled(v, 0), mode);
             }
-            return new NDMaskedArray(data, np.any(mask) ? mask : null);
+            return Yield(scope, new NDMaskedArray(data, np.any(mask) ? mask : null));
         }
 
         /// <summary>Discrete linear convolution of two 1-D sequences, propagating the mask (NumPy's
@@ -2958,28 +3199,102 @@ namespace NumSharp
         /// <param name="axes">The axes to apply <paramref name="func"/> over, in order.</param>
         /// <returns>The successively-reduced masked array.</returns>
         /// <exception cref="ValueError"><paramref name="func"/> returns an array of the wrong rank.</exception>
+        /// <remarks>
+        ///     <b>Ownership</b> — the same contract as <see cref="np.apply_over_axes(Func{NDArray, int, NDArray}, NDArray, int[])"/>:
+        ///     every masked array <paramref name="func"/> returns stays the CALLER's (this method never disposes
+        ///     one — a callback may return an array it keeps using), so an allocating reduction's per-axis
+        ///     intermediates are released only by a GC unless the caller runs the call inside an
+        ///     <see cref="NDScope"/>. That is also why this method opens NO scope of its own: one would capture —
+        ///     and dispose — whatever the callback allocates. The re-expanded views this method creates (and a
+        ///     scalar operand it had to materialize) are its own and are released as soon as they are superseded.
+        /// </remarks>
         public NDMaskedArray apply_over_axes(Func<NDMaskedArray, int, NDMaskedArray> func, object a, int[] axes)
         {
             NDMaskedArray val = asanyarray(a);
+            // Whether the running value's parts are THIS method's own (a scalar/array-like operand asanyarray had
+            // to materialize, or a re-expanded view) — only those are released when superseded; an array or
+            // masked-array operand wraps the caller's buffers and a callback result is the caller's.
+            bool valIsOurs = !(a is NDMaskedArray || a is NDArray);
             foreach (var ax in axes)
             {
                 int axis = ax < 0 ? ax + val.ndim : ax;
                 var res = func(val, axis);
                 if (res.ndim == val.ndim)
                 {
-                    val = res;
+                    SupersedeMasked(ref val, ref valIsOurs, res, nextIsOurs: false);
                 }
                 else
                 {
                     // NumPy re-expands a keepdims-less result along the reduced axis so the next pass lines up.
-                    res = expand_dims(res, axis);
-                    if (res.ndim == val.ndim)
-                        val = res;
+                    var expanded = expand_dims(res, axis);
+                    if (expanded.ndim == val.ndim)
+                    {
+                        SupersedeMasked(ref val, ref valIsOurs, expanded, nextIsOurs: true);
+                    }
                     else
+                    {
+                        // Our own views, never exposed — release them before refusing.
+                        ReleaseParts(expanded);
                         throw new ValueError("function is not returning an array of the correct shape");
+                    }
                 }
             }
             return val;
+        }
+
+        /// <summary>
+        ///     Advances <see cref="apply_over_axes(Func{NDMaskedArray, int, NDMaskedArray}, object, int[])"/>'s
+        ///     running value to <paramref name="next"/>, releasing the superseded value's parts only when they are
+        ///     the method's OWN (a re-expanded view or a materialized operand) — never a callback result, never the
+        ///     caller's input.
+        /// </summary>
+        /// <param name="val">The running value (replaced by <paramref name="next"/>).</param>
+        /// <param name="valIsOurs">Whether <paramref name="val"/>'s parts are this method's own (updated for <paramref name="next"/>).</param>
+        /// <param name="next">The new running value.</param>
+        /// <param name="nextIsOurs">Whether <paramref name="next"/>'s parts are this method's own.</param>
+        private static void SupersedeMasked(ref NDMaskedArray val, ref bool valIsOurs, NDMaskedArray next, bool nextIsOurs)
+        {
+            // An identity callback hands the running value straight back: nothing is superseded, and ownership
+            // is unchanged (it may still be our view).
+            if (ReferenceEquals(val, next))
+                return;
+            // A callback may also return a NEW wrapper over the very same part objects (np.ma.asarray(x) and
+            // kin alias rather than copy) — those parts now belong to `next` and must survive the release.
+            if (valIsOurs)
+                ReleaseParts(val, keep: next);
+            val = next;
+            valIsOurs = nextIsOurs;
+        }
+
+        /// <summary>
+        ///     Disposes the data and (present) mask a masked array carries — for a masked array whose parts this
+        ///     code created and is abandoning (a superseded view, a slice, a stand-in). Never call it on an array
+        ///     whose parts belong to a caller: a masked array aliases, it does not own.
+        /// </summary>
+        /// <param name="m">The masked array whose parts to release; null and the <see cref="NDMasked"/> singleton
+        /// are ignored (the singleton's scalars are process-wide).</param>
+        /// <param name="keep">An optional masked array that must stay intact: any part <paramref name="m"/> shares
+        /// with it BY REFERENCE (the same <see cref="NDArray"/> object, not merely the same buffer) is skipped. A
+        /// view sharing only the buffer needs no such guard — it holds its own counted reference.</param>
+        private static void ReleaseParts(NDMaskedArray m, NDMaskedArray keep = null)
+        {
+            if (m is null || m is NDMaskedConstant)
+                return;
+            ReleaseUnlessKept(m._data, keep);
+            ReleaseUnlessKept(m._mask, keep);
+        }
+
+        /// <summary>Disposes <paramref name="part"/> unless it is null or one of <paramref name="keep"/>'s own parts
+        /// (reference identity) — the guard behind <see cref="ReleaseParts"/>.</summary>
+        /// <param name="part">A data or mask array being released.</param>
+        /// <param name="keep">The masked array whose parts must survive, or null.</param>
+        private static void ReleaseUnlessKept(NDArray part, NDMaskedArray keep)
+        {
+            if (part is null)
+                return;
+            if (keep is not null && (ReferenceEquals(part, keep._data) || ReferenceEquals(part, keep._mask)))
+                return;
+            part.Dispose();
         }
 
         /// <summary>Single-axis convenience for <see cref="apply_over_axes"/>.</summary>
@@ -3003,65 +3318,97 @@ namespace NumSharp
         /// <exception cref="NotSupportedException"><paramref name="func1d"/> returns a result of rank ≥ 2 (NumSharp
         /// supports the scalar- and 1-D-result cases; a higher-rank per-slice result needs the object-array
         /// assembly NumSharp lacks).</exception>
+        /// <remarks>
+        ///     <b>Ownership</b> — the same contract as <see cref="np.apply_along_axis"/>: every masked array
+        ///     <paramref name="func1d"/> returns stays the CALLER's and is never disposed here (a callback may
+        ///     return an array it keeps using), which is why the callbacks run OUTSIDE any scope this method opens.
+        ///     The per-slice views handed to <paramref name="func1d"/> (and a scalar operand this method had to
+        ///     materialize) are this method's own and are released once the result is assembled — on a throw too;
+        ///     a callback must therefore not retain its ARGUMENT past the call. The assembly (stacking, reshaping,
+        ///     the stand-in all-False masks) runs inside a scope, so only the result's data and mask leave.
+        /// </remarks>
         public NDMaskedArray apply_along_axis(Func<NDMaskedArray, NDMaskedArray> func1d, int axis, object arr)
         {
             var a = asanyarray(arr);
-            int nd = a.ndim;
-            int ax = axis < 0 ? axis + nd : axis;
-            if (ax < 0 || ax >= nd)
-                throw new AxisError($"axis {axis} is out of bounds for array of dimension {nd}");
-            var shape = a.shape;
-            var outerAxes = Enumerable.Range(0, nd).Where(d => d != ax).ToArray();
-            var outerShape = outerAxes.Select(d => shape[d]).ToArray();
-
-            // One masked 1-D slice at the given outer coordinate: ints on the outer axes, ":" on `axis`.
-            NDMaskedArray SliceAt(long[] outer)
+            // A scalar/array-like operand is materialized by asanyarray and is ours; an array or masked-array
+            // operand only wraps the caller's buffers.
+            bool aIsOurs = !(arr is NDMaskedArray || arr is NDArray);
+            // Every slice view built for func1d — ours, released in the finally once nothing reads them.
+            var slices = new List<NDMaskedArray>();
+            try
             {
-                var idx = new object[nd];
-                idx[ax] = Slice.All;
-                for (int j = 0; j < outerAxes.Length; j++)
-                    idx[outerAxes[j]] = (int)outer[j];
-                return (NDMaskedArray)a[idx];
-            }
+                int nd = a.ndim;
+                int ax = axis < 0 ? axis + nd : axis;
+                if (ax < 0 || ax >= nd)
+                    throw new AxisError($"axis {axis} is out of bounds for array of dimension {nd}");
+                var shape = a.shape;
+                var outerAxes = Enumerable.Range(0, nd).Where(d => d != ax).ToArray();
+                var outerShape = outerAxes.Select(d => shape[d]).ToArray();
 
-            // C-order odometer over the outer index space (last outer axis fastest) so the flat result order
-            // matches a reshape to outerShape.
-            var results = new List<NDMaskedArray>();
-            var coord = new long[outerAxes.Length];
-            while (true)
-            {
-                results.Add(func1d(SliceAt(coord)));
-                int p = outerAxes.Length - 1;
-                for (; p >= 0; p--)
+                // One masked 1-D slice at the given outer coordinate: ints on the outer axes, ":" on `axis`.
+                NDMaskedArray SliceAt(long[] outer)
                 {
-                    if (++coord[p] < outerShape[p]) break;
-                    coord[p] = 0;
+                    var idx = new object[nd];
+                    idx[ax] = Slice.All;
+                    for (int j = 0; j < outerAxes.Length; j++)
+                        idx[outerAxes[j]] = (int)outer[j];
+                    var slice = (NDMaskedArray)a[idx];
+                    slices.Add(slice);
+                    return slice;
                 }
-                if (p < 0) break;
-            }
 
-            var datas = results.Select(r => getdata(r)).ToArray();
-            var masks = results.Select(r => getmaskarray(r)).ToArray();
-            int resNd = results[0].ndim;
-            if (resNd == 0)
-            {
-                // Scalar per slice → output shape is exactly the outer shape.
-                var d = np.reshape(np.stack(datas, 0), new Shape(outerShape));
-                var m = np.reshape(np.stack(masks, 0), new Shape(outerShape));
-                return new NDMaskedArray(d, np.any(m) ? m : null);
+                // C-order odometer over the outer index space (last outer axis fastest) so the flat result order
+                // matches a reshape to outerShape.
+                var results = new List<NDMaskedArray>();
+                var coord = new long[outerAxes.Length];
+                while (true)
+                {
+                    results.Add(func1d(SliceAt(coord)));
+                    int p = outerAxes.Length - 1;
+                    for (; p >= 0; p--)
+                    {
+                        if (++coord[p] < outerShape[p]) break;
+                        coord[p] = 0;
+                    }
+                    if (p < 0) break;
+                }
+
+                // Assembly: every array built from here on is this method's own (no callback runs any more), so a
+                // scope reclaims the stacks, reshapes and stand-in masks and the Yield keeps just the result.
+                using var scope = NDScope.Open();
+                var datas = results.Select(r => getdata(r)).ToArray();
+                var masks = results.Select(r => getmaskarray(r)).ToArray();
+                int resNd = results[0].ndim;
+                if (resNd == 0)
+                {
+                    // Scalar per slice → output shape is exactly the outer shape.
+                    var d = np.reshape(np.stack(datas, 0), new Shape(outerShape));
+                    var m = np.reshape(np.stack(masks, 0), new Shape(outerShape));
+                    return Yield(scope, new NDMaskedArray(d, np.any(m) ? m : null));
+                }
+                if (resNd == 1)
+                {
+                    // 1-D result of length L per slice → stack to (outerSize, L), reshape to (outerShape…, L), then
+                    // move that trailing L axis into the original `axis` position (a.shape with axis → L).
+                    var resLen = results[0].shape[0];
+                    var newShape = outerShape.Concat(new[] { resLen }).ToArray();
+                    var d = np.moveaxis(np.reshape(np.stack(datas, 0), new Shape(newShape)), outerAxes.Length, ax);
+                    var m = np.moveaxis(np.reshape(np.stack(masks, 0), new Shape(newShape)), outerAxes.Length, ax);
+                    return Yield(scope, new NDMaskedArray(d, np.any(m) ? m : null));
+                }
+                throw new NotSupportedException(
+                    "np.ma.apply_along_axis supports a scalar or 1-D per-slice result; a rank-{resNd} result needs the object-array assembly NumSharp lacks.".Replace("{resNd}", resNd.ToString()));
             }
-            if (resNd == 1)
+            finally
             {
-                // 1-D result of length L per slice → stack to (outerSize, L), reshape to (outerShape…, L), then
-                // move that trailing L axis into the original `axis` position (a.shape with axis → L).
-                var resLen = results[0].shape[0];
-                var newShape = outerShape.Concat(new[] { resLen }).ToArray();
-                var d = np.moveaxis(np.reshape(np.stack(datas, 0), new Shape(newShape)), outerAxes.Length, ax);
-                var m = np.moveaxis(np.reshape(np.stack(masks, 0), new Shape(newShape)), outerAxes.Length, ax);
-                return new NDMaskedArray(d, np.any(m) ? m : null);
+                // The slice views were only the callbacks' arguments; the assembled result copied what it needed.
+                // `keep: a` guards the degenerate case where indexing handed back the operand's OWN part object
+                // (a full-extent index on a 1-D operand) — that object is the caller's, not a view of ours.
+                foreach (var slice in slices)
+                    ReleaseParts(slice, keep: a);
+                if (aIsOurs)
+                    ReleaseParts(a);
             }
-            throw new NotSupportedException(
-                "np.ma.apply_along_axis supports a scalar or 1-D per-slice result; a rank-{resNd} result needs the object-array assembly NumSharp lacks.".Replace("{resNd}", resNd.ToString()));
         }
 
         /// <summary>Cumulative sum along the axis; masked slots contribute 0 to the running total but their
@@ -3079,16 +3426,19 @@ namespace NumSharp
 
         /// <summary>Shared scan (cumsum/cumprod): fill masked with the identity, scan, and carry the original
         /// per-position mask (raveled to match when axis is null).</summary>
+        /// <remarks>Scoped by hand — the one scope cumsum/cumprod ride: the identity-filled copy (and a
+        /// materialized scalar operand) is reclaimed; the scan and its (possibly raveled) mask leave.</remarks>
         private NDMaskedArray Scan(object a, object identity, Func<NDArray, int?, NDArray> fn, int? axis)
         {
+            using var scope = NDScope.Open();
             var mask = (a as NDMaskedArray)?._mask;
             var d = mask is null ? AsData(a) : ((NDMaskedArray)a).filled(identity);
             var result = fn(d, axis);
             if (mask is null)
-                return new NDMaskedArray(result, null);
+                return Yield(scope, new NDMaskedArray(result, null));
             // axis=null flattens the result in C-order — ravel the mask to match.
             var m = axis is null ? np.ravel(mask) : mask;
-            return new NDMaskedArray(result, m);
+            return Yield(scope, new NDMaskedArray(result, m));
         }
 
         /// <summary>Indices of the minimum along the axis, treating masked slots as the dtype's largest value
@@ -3096,6 +3446,8 @@ namespace NumSharp
         /// <param name="a">Operand.</param><param name="axis">Axis or null (flattened index).</param>
         /// <param name="fill_value">Override the masked fill; null uses <see cref="minimum_fill_value"/>.</param>
         /// <returns>An int64 <see cref="NDArray"/> of indices.</returns>
+        /// <remarks>Scoped (<c>[NDScoped]</c>): the fill-substituted copy the index is computed over is reclaimed.</remarks>
+        [NDScoped]
         public NDArray argmin(object a, int? axis = null, object fill_value = null)
         {
             var d = ArgFilled(a, fill_value ?? minimum_fill_value(a));
@@ -3106,6 +3458,8 @@ namespace NumSharp
         /// <param name="a">Operand.</param><param name="axis">Axis or null (flattened index).</param>
         /// <param name="fill_value">Override the masked fill; null uses <see cref="maximum_fill_value"/>.</param>
         /// <returns>An int64 <see cref="NDArray"/> of indices.</returns>
+        /// <remarks>Scoped (<c>[NDScoped]</c>): the fill-substituted copy the index is computed over is reclaimed.</remarks>
+        [NDScoped]
         public NDArray argmax(object a, int? axis = null, object fill_value = null)
         {
             var d = ArgFilled(a, fill_value ?? maximum_fill_value(a));
@@ -3152,17 +3506,32 @@ namespace NumSharp
         /// <summary>Masked zeros shaped like <paramref name="a"/> (no element masked; the input mask is NOT carried).</summary>
         /// <param name="a">Prototype array-like.</param><param name="dtype">Override dtype (null ⇒ prototype's).</param>
         /// <returns>An unmasked masked array of zeros.</returns>
-        public NDMaskedArray zeros_like(object a, DType dtype = null) => new NDMaskedArray(np.zeros_like(AsData(a), dtype), null);
+        public NDMaskedArray zeros_like(object a, DType dtype = null)
+        {
+            // Scoped by hand: a scalar/array-like prototype is materialized only to read its shape/dtype.
+            using var scope = NDScope.Open();
+            return Yield(scope, new NDMaskedArray(np.zeros_like(AsData(a), dtype), null));
+        }
 
         /// <summary>Masked ones shaped like <paramref name="a"/> (no element masked).</summary>
         /// <param name="a">Prototype array-like.</param><param name="dtype">Override dtype.</param>
         /// <returns>An unmasked masked array of ones.</returns>
-        public NDMaskedArray ones_like(object a, DType dtype = null) => new NDMaskedArray(np.ones_like(AsData(a), dtype), null);
+        public NDMaskedArray ones_like(object a, DType dtype = null)
+        {
+            // Scoped by hand: a scalar/array-like prototype is materialized only to read its shape/dtype.
+            using var scope = NDScope.Open();
+            return Yield(scope, new NDMaskedArray(np.ones_like(AsData(a), dtype), null));
+        }
 
         /// <summary>Masked uninitialized array shaped like <paramref name="a"/> (no element masked).</summary>
         /// <param name="a">Prototype array-like.</param><param name="dtype">Override dtype.</param>
         /// <returns>An unmasked masked array.</returns>
-        public NDMaskedArray empty_like(object a, DType dtype = null) => new NDMaskedArray(np.empty_like(AsData(a), dtype), null);
+        public NDMaskedArray empty_like(object a, DType dtype = null)
+        {
+            // Scoped by hand: a scalar/array-like prototype is materialized only to read its shape/dtype.
+            using var scope = NDScope.Open();
+            return Yield(scope, new NDMaskedArray(np.empty_like(AsData(a), dtype), null));
+        }
 
         /// <summary>Masked evenly-spaced values in [0, stop) (no element masked).</summary>
         /// <param name="stop">Exclusive upper bound.</param><returns>An unmasked masked range.</returns>
@@ -3212,85 +3581,118 @@ namespace NumSharp
         /// <param name="a">Data array-like.</param>
         /// <param name="copy">Copy the data (default true) vs alias it.</param>
         /// <returns>A masked array of <paramref name="a"/>'s data with the new mask.</returns>
+        /// <remarks>Scoped by hand: the boolean-coerced condition copy (when an existing mask is OR'd onto it) and
+        /// any materialized operand are reclaimed; only the result's data and mask leave.</remarks>
         public NDMaskedArray masked_where(object condition, object a, bool copy = true)
         {
+            using var scope = NDScope.Open();
             var cm = AsData(condition).astype(np.@bool);
             var d = AsData(a);
             var existing = (a as NDMaskedArray)?._mask;
             var m = existing is null ? cm : (existing | cm);
-            return new NDMaskedArray(copy ? d.copy() : d, m);
+            return Yield(scope, new NDMaskedArray(copy ? d.copy() : d, m));
         }
 
         /// <summary>Masks where <c>a == value</c> (NumPy's <c>masked_equal</c>).</summary>
         /// <param name="a">Data.</param><param name="value">Value to mask.</param><param name="copy">Copy the data.</param>
         /// <returns>The masked array.</returns>
         public NDMaskedArray masked_equal(object a, object value, bool copy = true)
-            => masked_where(np.equal(AsData(a), NDArray.Scalar(value)), a, copy);
+        {
+            // Scoped by hand: the comparison is only masked_where's condition operand (coerced into its own mask).
+            using var scope = NDScope.Open();
+            return Yield(scope, masked_where(np.equal(AsData(a), NDArray.Scalar(value)), a, copy));
+        }
 
         /// <summary>Masks where <c>a != value</c>.</summary>
         /// <param name="a">Data.</param><param name="value">Value kept unmasked.</param><param name="copy">Copy the data.</param>
         /// <returns>The masked array.</returns>
         public NDMaskedArray masked_not_equal(object a, object value, bool copy = true)
-            => masked_where(np.not_equal(AsData(a), NDArray.Scalar(value)), a, copy);
+        {
+            // Scoped by hand: the comparison is only masked_where's condition operand (coerced into its own mask).
+            using var scope = NDScope.Open();
+            return Yield(scope, masked_where(np.not_equal(AsData(a), NDArray.Scalar(value)), a, copy));
+        }
 
         /// <summary>Masks where <c>a &gt; value</c>.</summary>
         /// <param name="a">Data.</param><param name="value">Threshold.</param><param name="copy">Copy the data.</param>
         /// <returns>The masked array.</returns>
         public NDMaskedArray masked_greater(object a, object value, bool copy = true)
-            => masked_where(np.greater(AsData(a), NDArray.Scalar(value)), a, copy);
+        {
+            // Scoped by hand: the comparison is only masked_where's condition operand (coerced into its own mask).
+            using var scope = NDScope.Open();
+            return Yield(scope, masked_where(np.greater(AsData(a), NDArray.Scalar(value)), a, copy));
+        }
 
         /// <summary>Masks where <c>a &gt;= value</c>.</summary>
         /// <param name="a">Data.</param><param name="value">Threshold.</param><param name="copy">Copy the data.</param>
         /// <returns>The masked array.</returns>
         public NDMaskedArray masked_greater_equal(object a, object value, bool copy = true)
-            => masked_where(np.greater_equal(AsData(a), NDArray.Scalar(value)), a, copy);
+        {
+            // Scoped by hand: the comparison is only masked_where's condition operand (coerced into its own mask).
+            using var scope = NDScope.Open();
+            return Yield(scope, masked_where(np.greater_equal(AsData(a), NDArray.Scalar(value)), a, copy));
+        }
 
         /// <summary>Masks where <c>a &lt; value</c>. Computed as <c>value &gt; a</c> (scalar left) to route around
         /// the <c>np.less</c> 0-D-scalar-RHS quirk while staying NaN-exact (both give False for NaN).</summary>
         /// <param name="a">Data.</param><param name="value">Threshold.</param><param name="copy">Copy the data.</param>
         /// <returns>The masked array.</returns>
         public NDMaskedArray masked_less(object a, object value, bool copy = true)
-            => masked_where(np.greater(NDArray.Scalar(value), AsData(a)), a, copy);
+        {
+            // Scoped by hand: the comparison is only masked_where's condition operand (coerced into its own mask).
+            using var scope = NDScope.Open();
+            return Yield(scope, masked_where(np.greater(NDArray.Scalar(value), AsData(a)), a, copy));
+        }
 
         /// <summary>Masks where <c>a &lt;= value</c>.</summary>
         /// <param name="a">Data.</param><param name="value">Threshold.</param><param name="copy">Copy the data.</param>
         /// <returns>The masked array.</returns>
         public NDMaskedArray masked_less_equal(object a, object value, bool copy = true)
-            => masked_where(np.less_equal(AsData(a), NDArray.Scalar(value)), a, copy);
+        {
+            // Scoped by hand: the comparison is only masked_where's condition operand (coerced into its own mask).
+            using var scope = NDScope.Open();
+            return Yield(scope, masked_where(np.less_equal(AsData(a), NDArray.Scalar(value)), a, copy));
+        }
 
         /// <summary>Masks the CLOSED interval where <c>v1 &lt;= a &lt;= v2</c> (bounds swapped if v1&gt;v2), NumPy's
         /// <c>masked_inside</c>.</summary>
         /// <param name="a">Data.</param><param name="v1">One bound.</param><param name="v2">Other bound.</param><param name="copy">Copy the data.</param>
         /// <returns>The masked array.</returns>
+        /// <remarks>Scoped by hand: the two bound comparisons and their conjunction only feed masked_where.</remarks>
         public NDMaskedArray masked_inside(object a, double v1, double v2, bool copy = true)
         {
+            using var scope = NDScope.Open();
             var lo = Math.Min(v1, v2); var hi = Math.Max(v1, v2);
             var d = AsData(a);
             var cond = np.greater_equal(d, NDArray.Scalar(lo)) & np.less_equal(d, NDArray.Scalar(hi));
-            return masked_where(cond, a, copy);
+            return Yield(scope, masked_where(cond, a, copy));
         }
 
         /// <summary>Masks OUTSIDE the closed interval where <c>a &lt; v1 || a &gt; v2</c> (bounds swapped if v1&gt;v2),
         /// NumPy's <c>masked_outside</c>.</summary>
         /// <param name="a">Data.</param><param name="v1">One bound.</param><param name="v2">Other bound.</param><param name="copy">Copy the data.</param>
         /// <returns>The masked array.</returns>
+        /// <remarks>Scoped by hand: the two bound comparisons and their disjunction only feed masked_where.</remarks>
         public NDMaskedArray masked_outside(object a, double v1, double v2, bool copy = true)
         {
+            using var scope = NDScope.Open();
             var lo = Math.Min(v1, v2); var hi = Math.Max(v1, v2);
             var d = AsData(a);
             var cond = np.greater(NDArray.Scalar(lo), d) | np.greater(d, NDArray.Scalar(hi));
-            return masked_where(cond, a, copy);
+            return Yield(scope, masked_where(cond, a, copy));
         }
 
         /// <summary>Masks non-finite elements (NaN/±inf) — NumPy's <c>masked_invalid</c>. For non-float dtypes
         /// nothing is masked (every value is finite).</summary>
         /// <param name="a">Data.</param><param name="copy">Copy the data.</param>
         /// <returns>The masked array.</returns>
+        /// <remarks>Scoped by hand: the non-finite predicate (or its all-False stand-in) only feeds masked_where.</remarks>
         public NDMaskedArray masked_invalid(object a, bool copy = true)
         {
+            using var scope = NDScope.Open();
             var d = AsData(a);
             var cond = NonFiniteMask(d) ?? np.zeros(DimsOf(d), np.@bool);
-            return masked_where(cond, a, copy);
+            return Yield(scope, masked_where(cond, a, copy));
         }
 
         /// <summary>Masks elements approximately equal to <paramref name="value"/> (NumPy's <c>masked_values</c>,
@@ -3298,8 +3700,11 @@ namespace NumSharp
         /// <param name="a">Data.</param><param name="value">Value to mask around.</param>
         /// <param name="rtol">Relative tolerance.</param><param name="atol">Absolute tolerance.</param><param name="copy">Copy the data.</param>
         /// <returns>The masked array (fill_value = <paramref name="value"/>).</returns>
+        /// <remarks>Scoped by hand: the fill-substituted copy (when a further copy is taken), the comparison
+        /// scalars and a mask that shrinks away are reclaimed; only the result's data and mask leave.</remarks>
         public NDMaskedArray masked_values(object a, double value, double rtol = 1e-5, double atol = 1e-8, bool copy = true)
         {
+            using var scope = NDScope.Open();
             // NumPy fills masked positions with `value` FIRST (xnew = filled(x, value)), THEN masks by
             // approximate equality — so a pre-masked slot's data becomes `value` and is re-masked.
             var xnew = filled(a, value);
@@ -3308,7 +3713,7 @@ namespace NumSharp
                 ? np.isclose(xnew, NDArray.Scalar(value), rtol, atol)
                 : np.equal(xnew, NDArray.Scalar(value));
             // shrink an all-False mask to nomask (NumPy's shrink_mask default).
-            return new NDMaskedArray(copy ? xnew.copy() : xnew, np.any(mask) ? mask : null, value);
+            return Yield(scope, new NDMaskedArray(copy ? xnew.copy() : xnew, np.any(mask) ? mask : null, value));
         }
 
         /// <summary>Masks elements exactly equal to <paramref name="value"/> (NumPy's <c>masked_object</c>).</summary>
@@ -3326,7 +3731,11 @@ namespace NumSharp
         /// <param name="b">Second operand, or null to reduce <paramref name="a"/>.</param>
         /// <returns>The element-wise or reduced masked maximum.</returns>
         public NDMaskedArray maximum(object a, object b = null)
-            => b is null ? max(a) : where(greater(a, b), a, b);
+        {
+            // Scoped by hand: the masked comparison is only where's condition operand and is reclaimed.
+            using var scope = NDScope.Open();
+            return Yield(scope, b is null ? max(a) : where(greater(a, b), a, b));
+        }
 
         /// <summary>Element-wise minimum of two operands (mask = OR); with <paramref name="b"/> omitted it is the
         /// minimum REDUCTION of <paramref name="a"/>.</summary>
@@ -3334,7 +3743,11 @@ namespace NumSharp
         /// <param name="b">Second operand, or null to reduce <paramref name="a"/>.</param>
         /// <returns>The element-wise or reduced masked minimum.</returns>
         public NDMaskedArray minimum(object a, object b = null)
-            => b is null ? min(a) : where(greater(b, a), a, b); // a<b ≡ b>a (routes around the np.less scalar quirk)
+        {
+            // Scoped by hand: the masked comparison is only where's condition operand and is reclaimed.
+            using var scope = NDScope.Open();
+            return Yield(scope, b is null ? min(a) : where(greater(b, a), a, b)); // a<b ≡ b>a (routes around the np.less scalar quirk)
+        }
 
         /// <summary>Masked power (NumPy's <c>ma.power</c>): masked positions take the base's data; a non-finite
         /// result is additionally masked and its data set to the fill value. The <paramref name="third"/> modulus
@@ -3344,11 +3757,15 @@ namespace NumSharp
         /// <returns>The masked power (or the <see cref="NDMasked"/> scalar for a fully-masked 0-D result).</returns>
         /// <exception cref="MaskError"><paramref name="third"/> is non-null (NumPy's
         /// "3-argument power not supported.").</exception>
+        /// <remarks>Scoped by hand: the widening casts, the raw power, the base-restoring select, the non-finite
+        /// predicate, the fill scalar and the broadcast mask view are reclaimed; only the result's data and mask
+        /// leave (the computed value too when a fully-masked 0-D result collapses to <see cref="NDMasked"/>).</remarks>
         public NDMaskedArray power(object a, object b, object third = null)
         {
             // NumPy's ma.power raises on a modulus argument rather than computing pow(a, b, mod).
             if (third is not null)
                 throw new MaskError("3-argument power not supported.");
+            using var scope = NDScope.Open();
             var m = Or((a as NDMaskedArray)?._mask, (b as NDMaskedArray)?._mask);
             var fa = AsData(a);
             var fb = AsData(b);
@@ -3360,7 +3777,7 @@ namespace NumSharp
             var invalid = NonFiniteMask(result); // NaN/±inf ⇒ masked + data set to fill
             var finalMask = Or(m, invalid);
             if (result.ndim == 0)
-                return (finalMask is not null && np.any(finalMask)) ? NDMasked : new NDMaskedArray(result, null);
+                return Yield(scope, (finalMask is not null && np.any(finalMask)) ? NDMasked : new NDMaskedArray(result, null));
             if (invalid is not null && np.any(invalid))
             {
                 result = result.copy();
@@ -3368,7 +3785,7 @@ namespace NumSharp
             }
             if (finalMask is not null && !finalMask.Shape.Equals(result.Shape))
                 finalMask = np.broadcast_to(finalMask, result.Shape).copy();
-            return new NDMaskedArray(result, finalMask);
+            return Yield(scope, new NDMaskedArray(result, finalMask));
         }
 
         /// <summary>Masked <c>where</c> (NumPy's <c>ma.where</c>): picks <paramref name="x"/> where the condition
@@ -3378,8 +3795,11 @@ namespace NumSharp
         /// <param name="x">Values chosen where the condition is True.</param>
         /// <param name="y">Values chosen where the condition is False/masked.</param>
         /// <returns>The masked selection.</returns>
+        /// <remarks>Scoped by hand: the boolean condition copy, the widening casts, the three full masks and the
+        /// intermediate mask selects are reclaimed; only the selected data and the final mask leave.</remarks>
         public NDMaskedArray where(object condition, object x, object y)
         {
+            using var scope = NDScope.Open();
             var cond = condition as NDMaskedArray;
             var cf = (cond?._mask is null ? AsData(condition) : cond.filled(false)).astype(np.@bool);
             var xd = AsData(x);
@@ -3394,7 +3814,7 @@ namespace NumSharp
             var mask = np.where(cf, xm, ym);
             mask = np.where(cm, NDArray.Scalar(true), mask);
             // Shrink an all-False mask back to nomask (NumPy's _shrink_mask).
-            return new NDMaskedArray(data, np.any(mask) ? mask : null);
+            return Yield(scope, new NDMaskedArray(data, np.any(mask) ? mask : null));
         }
 
         /// <summary>Rounds each element to <paramref name="decimals"/> places (half-to-even), preserving the mask
@@ -3402,7 +3822,11 @@ namespace NumSharp
         /// <param name="a">Data.</param><param name="decimals">Decimal places.</param>
         /// <returns>The masked, rounded array.</returns>
         public NDMaskedArray round(object a, int decimals = 0)
-            => new NDMaskedArray(np.around(AsData(a), decimals), (a as NDMaskedArray)?._mask);
+        {
+            // Scoped by hand: a scalar/array-like operand's materialization only feeds the rounding.
+            using var scope = NDScope.Open();
+            return Yield(scope, new NDMaskedArray(np.around(AsData(a), decimals), (a as NDMaskedArray)?._mask));
+        }
 
         /// <summary>Alias of <see cref="round"/> (NumPy's <c>around</c>).</summary>
         /// <param name="a">Data.</param><param name="decimals">Decimal places.</param>
@@ -3417,22 +3841,30 @@ namespace NumSharp
         /// <summary>Applies a shape transform to both the data and (if present) the mask, keeping them aligned.</summary>
         /// <param name="a">Operand.</param><param name="f">The <c>np.*</c> transform to run on data and mask.</param>
         /// <returns>The transformed masked array.</returns>
+        /// <remarks>Scoped by hand — the one scope every shape transform (ravel/reshape/transpose/take/diag/…) rides:
+        /// a materialized scalar/array-like operand and anything the transform builds besides its result are
+        /// reclaimed. When the transform hands back its OWN operand (<c>atleast_1d</c> of a 1-D array, a no-op
+        /// squeeze) the result aliases the caller's arrays, exactly as NumPy's does.</remarks>
         private NDMaskedArray Map1(object a, Func<NDArray, NDArray> f)
         {
+            using var scope = NDScope.Open();
             var m = (a as NDMaskedArray)?._mask;
-            return new NDMaskedArray(f(AsData(a)), m is null ? null : f(m));
+            return Yield(scope, new NDMaskedArray(f(AsData(a)), m is null ? null : f(m)));
         }
 
         /// <summary>Applies a joining transform to a sequence's data arrays and, when ANY input is masked, to
         /// their full mask arrays (an all-unmasked sequence stays nomask).</summary>
         /// <param name="arrays">The operands.</param><param name="f">The <c>np.*</c> join over the arrays.</param>
         /// <returns>The joined masked array.</returns>
+        /// <remarks>Scoped by hand — the one scope every join (concatenate/stack/…) rides: materialized operands and
+        /// the all-False stand-in masks of the unmasked operands only feed the joins and are reclaimed.</remarks>
         private NDMaskedArray MapSeq(object[] arrays, Func<NDArray[], NDArray> f)
         {
+            using var scope = NDScope.Open();
             var rd = f(arrays.Select(AsData).ToArray());
             if (!arrays.Any(x => (x as NDMaskedArray)?._mask is not null))
-                return new NDMaskedArray(rd, null);
-            return new NDMaskedArray(rd, f(arrays.Select(getmaskarray).ToArray()));
+                return Yield(scope, new NDMaskedArray(rd, null));
+            return Yield(scope, new NDMaskedArray(rd, f(arrays.Select(getmaskarray).ToArray())));
         }
 
         /// <summary>Flattened VIEW in the given order (mask flattened alike). NumPy's <c>ravel</c>.</summary>
@@ -3539,6 +3971,9 @@ namespace NumSharp
         /// <summary>The 1-D array of the UNMASKED values in C-order (NumPy's <c>compressed</c>) — a plain
         /// <see cref="NDArray"/>, since a compressed result has, by definition, no mask.</summary>
         /// <param name="a">Operand.</param><returns>A 1-D <see cref="NDArray"/> of the unmasked data.</returns>
+        /// <remarks>Scoped (<c>[NDScoped]</c>): the raveled data/mask and the negated selector are reclaimed; the
+        /// result is always a fresh array the caller owns.</remarks>
+        [NDScoped]
         public NDArray compressed(object a)
         {
             var flat = np.ravel(AsData(a));
@@ -3558,11 +3993,13 @@ namespace NumSharp
         /// <returns>The clamped masked array (mask carried through unchanged).</returns>
         public NDMaskedArray clip(object a, object a_min, object a_max)
         {
+            // Scoped by hand: the bounds (and a scalar operand) are materialized only to feed np.clip.
+            using var scope = NDScope.Open();
             var m = (a as NDMaskedArray)?._mask;
             // The base np.clip does the clamp on the raw data; the mask rides through (masked data is hidden
             // anyway, so clamping it too is harmless and matches NumPy's ma.clip).
             var r = np.clip(AsData(a), a_min is null ? null : AsData(a_min), a_max is null ? null : AsData(a_max));
-            return new NDMaskedArray(r, m);
+            return Yield(scope, new NDMaskedArray(r, m));
         }
 
         /// <summary>
@@ -3574,8 +4011,11 @@ namespace NumSharp
         /// <param name="choices">The <c>n</c> choice arrays (<see cref="NDMaskedArray"/>/<see cref="NDArray"/>/array-like).</param>
         /// <param name="mode">Out-of-bounds policy: "raise" (default), "wrap", or "clip".</param>
         /// <returns>The merged masked array.</returns>
+        /// <remarks>Scoped by hand: the zero-filled index copy, the materialized choices, the stand-in masks of
+        /// unmasked choices and the pre-OR chosen mask are reclaimed; only the merged data and mask leave.</remarks>
         public NDMaskedArray choose(object indices, object[] choices, string mode = "raise")
         {
+            using var scope = NDScope.Open();
             // Index data with masked slots filled by 0 (NumPy's filled(indices, 0)).
             var im = (indices as NDMaskedArray)?._mask;
             var c = im is null ? AsData(indices) : ((NDMaskedArray)indices).filled(0);
@@ -3583,11 +4023,11 @@ namespace NumSharp
             var data = np.choose(c, choices.Select(AsData).ToArray(), mode: mode);
             bool anyMasked = im is not null || choices.Any(ch => (ch as NDMaskedArray)?._mask is not null);
             if (!anyMasked)
-                return new NDMaskedArray(data, null);
+                return Yield(scope, new NDMaskedArray(data, null));
             // Pick each choice's full mask by the SAME index, then OR in the index's own mask.
             var outmask = np.choose(c, choices.Select(getmaskarray).ToArray(), mode: mode);
             outmask = Or(outmask, im);
-            return new NDMaskedArray(data, (outmask is not null && np.any(outmask)) ? outmask : null);
+            return Yield(scope, new NDMaskedArray(data, (outmask is not null && np.any(outmask)) ? outmask : null));
         }
 
         /// <summary>Keeps only the elements where the boolean <paramref name="condition"/> is True (NumPy's
@@ -3597,10 +4037,12 @@ namespace NumSharp
         /// <returns>The compressed masked array.</returns>
         public NDMaskedArray compress(object condition, object a, int? axis = null)
         {
+            // Scoped by hand: the boolean selector copy (and materialized operands) only feed the two compresses.
+            using var scope = NDScope.Open();
             var cond = AsData(condition).astype(np.@bool);
             var m = (a as NDMaskedArray)?._mask;
             var data = np.compress(cond, AsData(a), axis);
-            return new NDMaskedArray(data, m is null ? null : np.compress(cond, m, axis));
+            return Yield(scope, new NDMaskedArray(data, m is null ? null : np.compress(cond, m, axis)));
         }
 
         /// <summary>Extracts the <paramref name="offset"/>-th diagonal of a 2-D (or stacked) array (NumPy's
@@ -3610,9 +4052,12 @@ namespace NumSharp
         /// <returns>The masked diagonal.</returns>
         public NDMaskedArray diagonal(object a, int offset = 0, int axis1 = 0, int axis2 = 1)
         {
+            // Scoped by hand: an array-like operand's materialization is released (the diagonal VIEW keeps its
+            // buffer alive through its own counted reference).
+            using var scope = NDScope.Open();
             var m = (a as NDMaskedArray)?._mask;
-            return new NDMaskedArray(np.diagonal(AsData(a), offset, axis1, axis2),
-                                   m is null ? null : np.diagonal(m, offset, axis1, axis2));
+            return Yield(scope, new NDMaskedArray(np.diagonal(AsData(a), offset, axis1, axis2),
+                                                  m is null ? null : np.diagonal(m, offset, axis1, axis2)));
         }
 
         /// <summary>
@@ -3624,6 +4069,8 @@ namespace NumSharp
         /// <param name="axis1">First plane axis.</param><param name="axis2">Second plane axis.</param>
         /// <param name="dtype">Result dtype; null ⇒ float64 (NumPy's default).</param>
         /// <returns>A plain <see cref="NDArray"/> trace.</returns>
+        /// <remarks>Scoped (<c>[NDScoped]</c>): the zero-filled copy and the pre-cast trace are reclaimed.</remarks>
+        [NDScoped]
         public NDArray trace(object a, int offset = 0, int axis1 = 0, int axis2 = 1, DType dtype = null)
         {
             // Filled0 zeroes masked diagonal contributions; np.trace sums the diagonal; astype(float64) reproduces
@@ -3635,6 +4082,8 @@ namespace NumSharp
         /// with 0 so they never count as non-zero. One plain int64 index array per dimension.</summary>
         /// <param name="a">Data.</param>
         /// <returns>An array of int64 index arrays (the house tuple convention).</returns>
+        /// <remarks>Scoped (<c>[NDScoped]</c>): the zero-filled copy the indices are read from is reclaimed.</remarks>
+        [NDScoped]
         public NDArray<long>[] nonzero(object a) => np.nonzero(Filled0(a));
 
         /// <summary>
@@ -3648,10 +4097,14 @@ namespace NumSharp
         /// <param name="append">Values appended along <paramref name="axis"/> before differencing, or null.</param>
         /// <returns>The masked differences (axis length reduced by <paramref name="n"/>).</returns>
         /// <exception cref="ArgumentException"><paramref name="n"/> is negative or <paramref name="a"/> is 0-D.</exception>
+        /// <remarks>Scoped by hand: the prepend/append concatenation, the per-step dropped-edge takes and their
+        /// index ranges, and every intermediate OR'd mask are reclaimed; only the differences and the final mask
+        /// leave.</remarks>
         public NDMaskedArray diff(object a, int n = 1, int axis = -1, object prepend = null, object append = null)
         {
             if (n == 0) return array(a);
             if (n < 0) throw new ArgumentException("order must be non-negative but got " + n);
+            using var scope = NDScope.Open();
             var d = AsData(a);
             if (d.ndim == 0) throw new ArgumentException("diff requires input that is at least one dimensional");
 
@@ -3677,10 +4130,10 @@ namespace NumSharp
             int ax = axis < 0 ? axis + data.ndim : axis;
             var resultData = np.diff(data, n, axis);
             if (mask is null)
-                return new NDMaskedArray(resultData, null);
+                return Yield(scope, new NDMaskedArray(resultData, null));
             for (int k = 0; k < n; k++)
                 mask = np.logical_or(DropAlong(mask, ax, dropFirst: true), DropAlong(mask, ax, dropFirst: false));
-            return new NDMaskedArray(resultData, np.any(mask) ? mask : null);
+            return Yield(scope, new NDMaskedArray(resultData, np.any(mask) ? mask : null));
         }
 
         /// <summary>Drops one element from the front (<paramref name="dropFirst"/>) or back of <paramref name="a"/>
@@ -3700,9 +4153,11 @@ namespace NumSharp
         /// <returns>The appended masked array (a fresh allocation, never in place).</returns>
         public NDMaskedArray append(object a, object b, int? axis = null)
         {
+            // Scoped by hand: the flattened operands of the axis=null form only feed the concatenation.
+            using var scope = NDScope.Open();
             if (axis is null)
-                return concatenate(new object[] { ravel(a), ravel(b) }, 0);
-            return concatenate(new object[] { a, b }, axis.Value);
+                return Yield(scope, concatenate(new object[] { ravel(a), ravel(b) }, 0));
+            return Yield(scope, concatenate(new object[] { a, b }, axis.Value));
         }
 
         // ─────────────────────────────────────────────────────────────────────────────
@@ -3716,6 +4171,8 @@ namespace NumSharp
         /// <summary>Number of MASKED elements along the axis (NumPy's <c>count_masked</c>) — a plain int64 array.</summary>
         /// <param name="a">Operand.</param><param name="axis">Axis or null.</param>
         /// <returns>An int64 count of masked elements.</returns>
+        /// <remarks>Scoped (<c>[NDScoped]</c>): the all-False stand-in of an unmasked operand is reclaimed.</remarks>
+        [NDScoped]
         public NDArray count_masked(object a, int? axis = null)
         {
             var m = (a as NDMaskedArray)?._mask ?? np.zeros(DimsOf(AsData(a)), np.@bool);
@@ -3734,8 +4191,10 @@ namespace NumSharp
         /// <returns>A fully-masked array.</returns>
         public NDMaskedArray masked_all_like(object a)
         {
+            // Scoped by hand: a scalar/array-like prototype is materialized only to read its shape/dtype.
+            using var scope = NDScope.Open();
             var d = AsData(a);
-            return new NDMaskedArray(np.empty_like(d), np.ones(DimsOf(d), np.@bool));
+            return Yield(scope, new NDMaskedArray(np.empty_like(d), np.ones(DimsOf(d), np.@bool)));
         }
 
         /// <summary>Weighted average over unmasked elements (NumPy's <c>average</c>): with no weights this is the
@@ -3745,7 +4204,12 @@ namespace NumSharp
         /// <param name="keepdims">Keep the reduced axes as size-1 (NumPy 2.0 <c>keepdims</c>).</param>
         /// <returns>The masked (weighted) average.</returns>
         public NDMaskedArray average(object a, int? axis = null, object weights = null, bool keepdims = false)
-            => AverageCore(a, axis, weights, keepdims).avg;
+        {
+            // Scoped by hand: the shared core also computes the sum-of-weights, which this form discards — it is
+            // reclaimed with the core's other intermediates; only the average and its mask leave.
+            using var scope = NDScope.Open();
+            return Yield(scope, AverageCore(a, axis, weights, keepdims).avg);
+        }
 
         /// <summary>
         ///     Weighted average AND its sum-of-weights (NumPy's <c>average(..., returned=True)</c>, which returns
@@ -3757,10 +4221,21 @@ namespace NumSharp
         /// <param name="weights">Weights, or null for uniform.</param><param name="keepdims">Keep reduced axes.</param>
         /// <returns>A tuple of the masked average and the (plain float64) sum of weights.</returns>
         public (NDMaskedArray avg, NDArray sumOfWeights) average_returned(object a, int? axis = null, object weights = null, bool keepdims = false)
-            => AverageCore(a, axis, weights, keepdims);
+        {
+            // Scoped by hand (a tuple carrying a masked array is not a shape the weaver yields): both halves of the
+            // pair are handed back — the average's data/mask and the sum-of-weights — and everything else the core
+            // built is reclaimed.
+            using var scope = NDScope.Open();
+            var result = AverageCore(a, axis, weights, keepdims);
+            Yield(scope, result.avg);
+            scope.Returns(result.sumOfWeights);
+            return result;
+        }
 
         /// <summary>Shared core of <see cref="average"/>/<see cref="average_returned"/>: computes the masked
         /// average and the sum-of-weights so the two public entry points never drift apart.</summary>
+        /// <remarks>Unscoped on purpose: both callers open the scope and decide which halves of the pair leave, so
+        /// the core's intermediates (the casts, broadcast weights, weighted products) ride the caller's scope.</remarks>
         private (NDMaskedArray avg, NDArray sumOfWeights) AverageCore(object a, int? axis, object weights, bool keepdims)
         {
             var mask = (a as NDMaskedArray)?._mask;
@@ -3797,12 +4272,16 @@ namespace NumSharp
         /// <param name="keepdims">Keep the reduced axes as size-1 (NumPy 2.0 <c>keepdims</c>).</param>
         /// <returns>The masked median (a slice with no unmasked element is <see cref="NDMasked"/>; an unmasked NaN in
         /// a slice makes that slice's median NaN, matching NumPy).</returns>
+        /// <remarks>Scoped by hand: the compressed copy, the masked sort, the middle-index arithmetic, the gathered
+        /// middles and the NaN probe (see <see cref="MedianAxisMasked"/>) are all reclaimed here; only the median
+        /// and its mask leave.</remarks>
         public NDMaskedArray median(object a, int? axis = null, bool keepdims = false)
         {
+            using var scope = NDScope.Open();
             var mask = (a as NDMaskedArray)?._mask;
             var d = AsData(a);
             if (mask is null)
-                return new NDMaskedArray(np.median(d, axis, null, false, keepdims), null);
+                return Yield(scope, new NDMaskedArray(np.median(d, axis, null, false, keepdims), null));
             if (axis is null)
             {
                 var comp = compressed(a);
@@ -3812,9 +4291,9 @@ namespace NumSharp
                 // keepdims on a flattened reduction ⇒ an all-ones shape of the input's rank (NumPy's (1,…,1)).
                 if (keepdims && d.ndim > 0)
                     med = np.reshape(med, new Shape(Enumerable.Repeat(1L, d.ndim).ToArray()));
-                return new NDMaskedArray(med, null);
+                return Yield(scope, new NDMaskedArray(med, null));
             }
-            return MedianAxisMasked((NDMaskedArray)a, axis.Value, keepdims);
+            return Yield(scope, MedianAxisMasked((NDMaskedArray)a, axis.Value, keepdims));
         }
 
         /// <summary>
@@ -3953,15 +4432,18 @@ namespace NumSharp
         /// <returns>The masked consecutive differences.</returns>
         public NDMaskedArray ediff1d(object arr, object to_end = null, object to_begin = null)
         {
+            // Scoped by hand: the flattened operand, the two shifted views, and (when bracketing) the raveled
+            // to_begin/to_end and the unbracketed differences are reclaimed; only the final result leaves.
+            using var scope = NDScope.Open();
             var flat = ravel(arr);
             var ed = subtract(Map1(flat, x => x["1:"]), Map1(flat, x => x[":-1"]));
             if (to_begin is null && to_end is null)
-                return ed;
+                return Yield(scope, ed);
             var parts = new List<object>();
             if (to_begin is not null) parts.Add(ravel(to_begin));
             parts.Add(ed);
             if (to_end is not null) parts.Add(ravel(to_end));
-            return concatenate(parts.ToArray());
+            return Yield(scope, concatenate(parts.ToArray()));
         }
 
         /// <summary>True iff every corresponding pair of elements is equal, with masked positions treated as
@@ -3969,6 +4451,8 @@ namespace NumSharp
         /// <param name="a">First operand.</param><param name="b">Second operand.</param>
         /// <param name="fill_value">Treat masked positions as equal (true) or unequal (false).</param>
         /// <returns>A single bool.</returns>
+        /// <remarks>Scoped (<c>[NDScoped]</c>): the element-wise equality and mask combinations are reclaimed.</remarks>
+        [NDScoped]
         public bool allequal(object a, object b, bool fill_value = true)
         {
             NDArray eq = np.equal(AsData(a), AsData(b));
@@ -3984,6 +4468,8 @@ namespace NumSharp
         /// <param name="masked_equal">Treat masked positions as equal.</param>
         /// <param name="rtol">Relative tolerance.</param><param name="atol">Absolute tolerance.</param>
         /// <returns>A single bool.</returns>
+        /// <remarks>Scoped (<c>[NDScoped]</c>): the element-wise closeness and mask combinations are reclaimed.</remarks>
+        [NDScoped]
         public bool allclose(object a, object b, bool masked_equal = true, double rtol = 1e-5, double atol = 1e-8)
         {
             NDArray close = np.isclose(AsData(a), AsData(b), rtol, atol);
@@ -4001,8 +4487,11 @@ namespace NumSharp
         /// <param name="strict">Propagate masks along the contracted axes before the product (default false =
         /// treat masked as 0).</param>
         /// <returns>The masked dot product.</returns>
+        /// <remarks>Scoped by hand: the propagated operands, the zero-filled copies, the validity indicators and
+        /// their product are reclaimed; only the product and its mask leave.</remarks>
         public NDMaskedArray dot(object a, object b, bool strict = false)
         {
+            using var scope = NDScope.Open();
             if (strict)
             {
                 // Propagate the mask along the axes being contracted, mirroring NumPy's ma.dot: for a matrix @
@@ -4019,35 +4508,43 @@ namespace NumSharp
             var ma_ = (a as NDMaskedArray)?._mask;
             var mb_ = (b as NDMaskedArray)?._mask;
             if (ma_ is null && mb_ is null)
-                return new NDMaskedArray(product, null);
+                return Yield(scope, new NDMaskedArray(product, null));
             var va = (ma_ is null ? np.ones(DimsOf(AsData(a)), np.@bool) : np.logical_not(ma_)).astype(np.float64);
             var vb = (mb_ is null ? np.ones(DimsOf(AsData(b)), np.@bool) : np.logical_not(mb_)).astype(np.float64);
             var valid = np.dot(va, vb); // count of valid contributing pairs
             var m = np.equal(valid, NDArray.Scalar(0.0));
-            return new NDMaskedArray(product, np.any(m) ? m : null);
+            return Yield(scope, new NDMaskedArray(product, np.any(m) ? m : null));
         }
 
         /// <summary>Inner product with masked slots treated as 0 (NumPy's <c>ma.inner</c>).</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
         /// <returns>The masked inner product (mask dropped — result treats masked as 0).</returns>
-        public NDMaskedArray inner(object a, object b) => new NDMaskedArray(np.inner(Filled0(a), Filled0(b)), null);
+        public NDMaskedArray inner(object a, object b)
+        {
+            // Scoped by hand: the zero-filled operand copies only feed the product.
+            using var scope = NDScope.Open();
+            return Yield(scope, new NDMaskedArray(np.inner(Filled0(a), Filled0(b)), null));
+        }
 
         /// <summary>Outer product with masked slots treated as 0; result[i,j] is masked iff a[i] or b[j] was
         /// masked (NumPy's <c>ma.outer</c>).</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
         /// <returns>The masked outer product.</returns>
+        /// <remarks>Scoped by hand: the zero-filled operand copies, the stand-in all-False masks and the raveled /
+        /// reshaped mask views are reclaimed; only the product and its mask leave.</remarks>
         public NDMaskedArray outer(object a, object b)
         {
+            using var scope = NDScope.Open();
             var da = AsData(a); var db = AsData(b);
             var product = np.outer(Filled0(a), Filled0(b));
             var ma_ = (a as NDMaskedArray)?._mask;
             var mb_ = (b as NDMaskedArray)?._mask;
             if (ma_ is null && mb_ is null)
-                return new NDMaskedArray(product, null);
+                return Yield(scope, new NDMaskedArray(product, null));
             var maf = ma_ is null ? np.zeros(new Shape(da.size), np.@bool) : np.ravel(ma_);
             var mbf = mb_ is null ? np.zeros(new Shape(db.size), np.@bool) : np.ravel(mb_);
             var mask = np.reshape(maf, new Shape(da.size, 1)) | np.reshape(mbf, new Shape(1, db.size));
-            return new NDMaskedArray(product, mask);
+            return Yield(scope, new NDMaskedArray(product, mask));
         }
 
         /// <summary>Vandermonde matrix of a 1-D input; a masked input element ZEROES its whole row and the
@@ -4055,6 +4552,9 @@ namespace NumSharp
         /// <param name="x">1-D data.</param><param name="n">Number of columns (null ⇒ len(x)). Lowercase to match
         /// NumPy's <c>vander(x, n=…)</c> keyword — a call spelled <c>n:</c> ports verbatim.</param>
         /// <returns>A plain <see cref="NDArray"/> Vandermonde matrix with masked rows zeroed.</returns>
+        /// <remarks>Scoped (<c>[NDScoped]</c>): the reshaped mask column, its broadcast and the zero scalar are
+        /// reclaimed; only the matrix leaves.</remarks>
+        [NDScoped]
         public NDArray vander(object x, int? n = null)
         {
             var d = AsData(x);
@@ -4092,6 +4592,10 @@ namespace NumSharp
         /// implicitly to the coefficient array and deconstructs to the <c>full</c>/<c>cov</c> tuples.</returns>
         /// <exception cref="TypeError"><paramref name="y"/> is not 1-D or 2-D, or <paramref name="w"/> is not 1-D
         /// or has a length differing from <paramref name="y"/> (NumPy's verbatim texts).</exception>
+        /// <remarks>Scoped (<c>[NDScoped]</c>; <see cref="PolyfitResult"/> is an <see cref="INDArrayCarrier"/>, so
+        /// the weaver yields its parts): the unioned observation mask, the row reduction of a 2-D <paramref name="y"/>'s
+        /// mask, the keep-mask and the selected observation rows are reclaimed — on the backend-missing throw too.</remarks>
+        [NDScoped]
         public PolyfitResult polyfit(object x, object y, int deg, double? rcond = null,
             bool full = false, object w = null, object cov = null)
         {
@@ -4144,15 +4648,18 @@ namespace NumSharp
         /// <param name="assume_unique">Speed hint that both inputs already hold unique elements (result unchanged).</param>
         /// <param name="invert">Invert the membership test.</param>
         /// <returns>A masked boolean array shaped like <paramref name="element"/>.</returns>
+        /// <remarks>Scoped by hand: the plain membership array a masked <paramref name="element"/> overwrites, the
+        /// fill scalar and any array-like operand this method had to materialize are reclaimed.</remarks>
         public NDMaskedArray isin(object element, object test_elements, bool assume_unique = false, bool invert = false)
         {
+            using var scope = NDScope.Open();
             NDArray data = np.isin(AsData(element), AsData(test_elements), assume_unique, invert);
             var em = (element as NDMaskedArray)?._mask;
             // A masked element is not a valid value, so its membership answer is definite: `invert`
             // (False normally, True for invert). NumPy's unique-based isin yields the same, unmasked.
             if (em is not null)
                 data = np.where(em, NDArray.Scalar(invert), data);
-            return new NDMaskedArray(data, null);
+            return Yield(scope, new NDMaskedArray(data, null));
         }
 
         /// <summary>1-D membership test (NumPy's <c>ma.in1d</c>): the flattened <see cref="isin"/>.</summary>
@@ -4160,14 +4667,22 @@ namespace NumSharp
         /// <param name="assume_unique">Speed hint (result unchanged).</param>
         /// <param name="invert">Invert the membership test.</param>
         /// <returns>A 1-D masked boolean array.</returns>
+        /// <remarks>Scoped by hand: the raveled operand (a copy for a non-contiguous input) is reclaimed once
+        /// <see cref="isin"/> has read it — the membership result never aliases it.</remarks>
         public NDMaskedArray in1d(object element, object test_elements, bool assume_unique = false, bool invert = false)
-            => isin(ravel(element), test_elements, assume_unique, invert);
+        {
+            using var scope = NDScope.Open();
+            return Yield(scope, isin(ravel(element), test_elements, assume_unique, invert));
+        }
 
         /// <summary>Contiguous UNMASKED runs of a 1-D array as slices (NumPy's <c>clump_unmasked</c>).</summary>
         /// <param name="a">1-D operand.</param>
         /// <returns>One <see cref="Slice"/> per contiguous unmasked run.</returns>
+        /// <remarks>Scoped by hand (the result holds no array): the inverted mask and any operand this method had
+        /// to materialize are reclaimed before the slices are returned.</remarks>
         public Slice[] clump_unmasked(object a)
         {
+            using var scope = NDScope.Open();
             var m = (a as NDMaskedArray)?._mask;
             if (m is null)
                 return new[] { new Slice(0, (int)AsData(a).size) };
@@ -4177,8 +4692,11 @@ namespace NumSharp
         /// <summary>Contiguous MASKED runs of a 1-D array as slices (NumPy's <c>clump_masked</c>).</summary>
         /// <param name="a">1-D operand.</param>
         /// <returns>One <see cref="Slice"/> per contiguous masked run (empty when unmasked).</returns>
+        /// <remarks>Scoped by hand (the result holds no array): the raveled mask — a copy when the mask is not
+        /// contiguous — is reclaimed before the slices are returned.</remarks>
         public Slice[] clump_masked(object a)
         {
+            using var scope = NDScope.Open();
             var m = (a as NDMaskedArray)?._mask;
             return m is null ? Array.Empty<Slice>() : EzClump(np.ravel(m));
         }
@@ -4201,8 +4719,11 @@ namespace NumSharp
         /// element is masked.</summary>
         /// <param name="a">Operand.</param>
         /// <returns>A 2-element <c>[first, last]</c> int64 array, or null.</returns>
+        /// <remarks>Scoped by hand (the weaver does not wrap a <c>long[]</c> return): the inverted, raveled mask
+        /// and any operand this method had to materialize are reclaimed before the indices are returned.</remarks>
         public long[] flatnotmasked_edges(object a)
         {
+            using var scope = NDScope.Open();
             var d = AsData(a);
             var m = (a as NDMaskedArray)?._mask;
             if (m is null)
@@ -4218,12 +4739,20 @@ namespace NumSharp
         /// same as <see cref="clump_unmasked"/> for a 1-D input.</summary>
         /// <param name="a">Operand.</param>
         /// <returns>One <see cref="Slice"/> per contiguous unmasked run.</returns>
-        public Slice[] flatnotmasked_contiguous(object a) => clump_unmasked(ravel(a));
+        /// <remarks>Scoped by hand (the result holds no array): the raveled operand — a copy of a non-contiguous
+        /// input — is reclaimed once its runs are read.</remarks>
+        public Slice[] flatnotmasked_contiguous(object a)
+        {
+            using var scope = NDScope.Open();
+            return clump_unmasked(ravel(a));
+        }
 
         /// <summary>Drops the ROWS of a 2-D array that contain ANY masked element (NumPy's <c>compress_rows</c>) —
         /// a plain <see cref="NDArray"/>.</summary>
         /// <param name="a">2-D operand.</param>
         /// <returns>The surviving rows.</returns>
+        /// <remarks>Scoped (<c>[NDScoped]</c>): the full mask, its row reduction and the keep-mask are reclaimed.</remarks>
+        [NDScoped]
         public NDArray compress_rows(object a)
         {
             var keep = np.logical_not(np.any(getmaskarray(a), 1, null, false));
@@ -4233,6 +4762,8 @@ namespace NumSharp
         /// <summary>Drops the COLUMNS of a 2-D array that contain ANY masked element (NumPy's <c>compress_cols</c>).</summary>
         /// <param name="a">2-D operand.</param>
         /// <returns>The surviving columns.</returns>
+        /// <remarks>Scoped (<c>[NDScoped]</c>): the full mask, its column reduction and the keep-mask are reclaimed.</remarks>
+        [NDScoped]
         public NDArray compress_cols(object a)
         {
             var keep = np.logical_not(np.any(getmaskarray(a), 0, null, false));
@@ -4242,19 +4773,25 @@ namespace NumSharp
         /// <summary>Masks the ENTIRE rows of a 2-D array that contain any masked element (NumPy's <c>mask_rows</c>).</summary>
         /// <param name="a">2-D operand.</param>
         /// <returns>The row-masked array.</returns>
+        /// <remarks>Scoped by hand: the full mask, its row reduction and the broadcast condition view are
+        /// reclaimed — <see cref="masked_where"/> coerces the condition into its own bool COPY, so nothing in the
+        /// result aliases them.</remarks>
         public NDMaskedArray mask_rows(object a)
         {
+            using var scope = NDScope.Open();
             var rows = np.any(getmaskarray(a), 1, null, true);
-            return masked_where(np.broadcast_to(rows, AsData(a).Shape), a);
+            return Yield(scope, masked_where(np.broadcast_to(rows, AsData(a).Shape), a));
         }
 
         /// <summary>Masks the ENTIRE columns of a 2-D array that contain any masked element (NumPy's <c>mask_cols</c>).</summary>
         /// <param name="a">2-D operand.</param>
         /// <returns>The column-masked array.</returns>
+        /// <remarks>Scoped by hand, as <see cref="mask_rows"/>: the full mask and its column reduction are reclaimed.</remarks>
         public NDMaskedArray mask_cols(object a)
         {
+            using var scope = NDScope.Open();
             var cols = np.any(getmaskarray(a), 0, null, true);
-            return masked_where(np.broadcast_to(cols, AsData(a).Shape), a);
+            return Yield(scope, masked_where(np.broadcast_to(cols, AsData(a).Shape), a));
         }
 
         /// <summary>
@@ -4267,14 +4804,17 @@ namespace NumSharp
         /// <param name="axis">null (rows AND cols), 0 (rows), or 1/-1 (cols).</param>
         /// <returns>The row/column-masked array (an all-unmasked input is returned unchanged).</returns>
         /// <exception cref="NotImplementedException"><paramref name="a"/> is not 2-D.</exception>
+        /// <remarks>Scoped by hand: the working mask copy, the per-axis reductions, their broadcasts and the
+        /// superseded OR steps are reclaimed (on the rank throw too); only the result's data and final mask leave.</remarks>
         public NDMaskedArray mask_rowcols(object a, int? axis = null)
         {
+            using var scope = NDScope.Open();
             var ma_ = array(a);
             if (ma_.ndim != 2)
                 throw new NotImplementedException("mask_rowcols works for 2D arrays only.");
             var m = ma_._mask;
             if (m is null || !np.any(m))
-                return ma_;
+                return Yield(scope, ma_);
             var newmask = m.copy();
             // `not axis` in NumPy is truthy for None AND 0, so rows are masked for axis ∈ {null, 0}; columns for
             // axis ∈ {null, 1, -1}. Both sets read the ORIGINAL mask m.
@@ -4284,7 +4824,7 @@ namespace NumSharp
                 newmask = np.logical_or(newmask, np.broadcast_to(np.any(m, 1, null, true), m.Shape));
             if (doCols)
                 newmask = np.logical_or(newmask, np.broadcast_to(np.any(m, 0, null, true), m.Shape));
-            return new NDMaskedArray(ma_._data, newmask);
+            return Yield(scope, new NDMaskedArray(ma_._data, newmask));
         }
 
         /// <summary>
@@ -4298,6 +4838,9 @@ namespace NumSharp
         /// <param name="axis">null (all axes) or a single axis (negative allowed).</param>
         /// <returns>A plain <see cref="NDArray"/> of the surviving data (an unmasked input returns its data;
         /// a fully-masked input returns an empty array).</returns>
+        /// <remarks>Scoped (<c>[NDScoped]</c>): every per-axis reduction, keep-mask and intermediate compression is
+        /// reclaimed; only the final compression (or the operand's own data, which the scope never owned) leaves.</remarks>
+        [NDScoped]
         public NDArray compress_nd(object x, int? axis = null)
         {
             var data = AsData(x);
@@ -4338,6 +4881,9 @@ namespace NumSharp
         /// <param name="axis">null (rows AND cols), 0 (rows), or 1 (cols).</param>
         /// <returns>The surviving data as a plain <see cref="NDArray"/>.</returns>
         /// <exception cref="NotImplementedException"><paramref name="x"/> is not 2-D.</exception>
+        /// <remarks>Scoped (<c>[NDScoped]</c>): an array-like operand the rank check had to materialize is
+        /// reclaimed; <see cref="compress_nd"/> scopes its own intermediates.</remarks>
+        [NDScoped]
         public NDArray compress_rowcols(object x, int? axis = null)
         {
             if (AsData(x).ndim != 2)
@@ -4359,8 +4905,12 @@ namespace NumSharp
         /// a &gt;1-D explicit axis. Returned as <see cref="object"/> because the shape depends on the runtime axis,
         /// as it does in NumPy — cast at the call site.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range for the operand's rank.</exception>
+        /// <remarks>Scoped by hand (the weaver does not wrap an <see cref="object"/> return): the full mask, the
+        /// coordinate grids, their per-axis reductions and the masked wrappers are reclaimed; every compressed
+        /// edge array in the returned jagged pair is handed back to the caller's scope.</remarks>
         public object notmasked_edges(object a, int? axis = null)
         {
+            using var scope = NDScope.Open();
             var d = AsData(a);
             if (axis is null || d.ndim == 1)
                 return flatnotmasked_edges(a);
@@ -4382,6 +4932,13 @@ namespace NumSharp
                 mins[i] = compressed(gi.min(ax));
                 maxs[i] = compressed(gi.max(ax));
             }
+            // The edge arrays are the only survivors: each is re-tracked into the caller's scope (a compressed
+            // view keeps its own reference to the reduction buffer it views, so the reductions' wrappers can go).
+            for (int i = 0; i < nd; i++)
+            {
+                scope.Returns(mins[i]);
+                scope.Returns(maxs[i]);
+            }
             return new NDArray[][] { mins, maxs };
         }
 
@@ -4400,8 +4957,11 @@ namespace NumSharp
         /// <exception cref="NotSupportedException">The input has more than 2 dimensions (NumPy's
         /// <c>NotImplementedError("Currently limited to at most 2D array.")</c>).</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range for the operand's rank.</exception>
+        /// <remarks>Scoped by hand (the result holds no array): the masked operand wrapper, every per-line view and
+        /// the raveled/inverted masks behind each line's runs are reclaimed before the slices are returned.</remarks>
         public object notmasked_contiguous(object a, int? axis = null)
         {
+            using var scope = NDScope.Open();
             var d = AsData(a);
             int nd = d.ndim;
             if (nd > 2)
@@ -4434,8 +4994,13 @@ namespace NumSharp
         /// NumSharp's own buffers, not comparable across processes.</summary>
         /// <param name="a">Operand.</param>
         /// <returns>A tuple of the data-buffer and mask-buffer addresses (mask 0 for nomask).</returns>
+        /// <remarks>Scoped by hand: an array-like operand this method had to materialize is reclaimed once its
+        /// address is read — so, exactly as NumPy's <c>ids</c> of a temporary, the reported address names a buffer
+        /// that no longer exists by the time the caller sees it. Only an array/masked-array operand yields an
+        /// address that stays meaningful.</remarks>
         public unsafe (long data, long mask) ids(object a)
         {
+            using var scope = NDScope.Open();
             long dataPtr = (long)AsData(a).Storage.Address;
             var m = (a as NDMaskedArray)?._mask;
             long maskPtr = m is null ? 0L : (long)m.Storage.Address;
@@ -4456,8 +5021,18 @@ namespace NumSharp
         /// <param name="indices">Flat integer target indices.</param>
         /// <param name="values">Scalar/array/<see cref="NDMaskedArray"/>/the <c>masked</c> singleton.</param>
         /// <param name="mode">Out-of-bounds policy: "raise" (default)/"wrap"/"clip".</param>
+        /// <remarks>
+        ///     Scoped by hand: the hard-mask snapshots, the fill scalars and any array-like value this method had
+        ///     to materialize are reclaimed — on an out-of-bounds throw too. A mask the call CREATES
+        ///     (<see cref="NDMaskedArray.EnsureMask"/>) is a field store and so escapes every scope by design; the
+        ///     hard-mask restore ORs into the existing mask IN PLACE (NumPy writes <c>self._mask</c> in place too),
+        ///     so no second mask array is created and none is orphaned. When the mask shrinks back to
+        ///     <c>nomask</c> the dropped mask array is NOT disposed: another masked array may share it (NumPy's
+        ///     <c>_sharedmask</c>), so it is left to its remaining owners and, finally, the GC.
+        /// </remarks>
         public void put(object a, NDArray indices, object values, string mode = "raise")
         {
+            using var scope = NDScope.Open();
             var ma_ = a as NDMaskedArray;
             var data = AsData(a);
             if (values is NDMaskedConstant)
@@ -4497,8 +5072,10 @@ namespace NumSharp
             if (hard)
             {
                 // Restore data where originally masked and keep those slots masked (retain any freshly-masked ones).
+                // The OR lands IN PLACE in the live mask: replacing the field with a fresh array would orphan the
+                // mask the put just wrote into (and break a sharer that sees this mask object).
                 np.copyto(data, savedData, casting: "unsafe", where: savedMask);
-                ma_._mask = np.logical_or(savedMask, ma_._mask);
+                np.logical_or(savedMask, ma_._mask, @out: ma_._mask);
             }
             // NumPy shrinks the mask after put: an all-False mask collapses to nomask.
             if (ma_?._mask is not null && !np.any(ma_._mask))
@@ -4514,8 +5091,16 @@ namespace NumSharp
         /// <param name="a">The <see cref="NDMaskedArray"/> (or plain array) to mutate.</param>
         /// <param name="mask">Boolean array-like selecting the write positions.</param>
         /// <param name="values">Scalar/array/<see cref="NDMaskedArray"/> supplying the data (and, if masked, the mask).</param>
+        /// <remarks>
+        ///     Scoped by hand: the boolean write mask, the hard-mask working copy, the stand-in all-False value
+        ///     mask and any array-like operand this method had to materialize are reclaimed. A mask the call
+        ///     CREATES on a <c>nomask</c> target is a field store and is detached from every scope (it lives as
+        ///     long as the target); the hard-mask branch ORs into the existing mask IN PLACE — NumPy's
+        ///     <c>a.mask |= m</c> — rather than replacing the field, so no mask array is orphaned.
+        /// </remarks>
         public void putmask(object a, object mask, object values)
         {
+            using var scope = NDScope.Open();
             var ma_ = a as NDMaskedArray;
             var data = AsData(a);
             var maskArr = AsData(mask).astype(np.@bool);
@@ -4525,10 +5110,11 @@ namespace NumSharp
             // slots — putmask does NOT protect data, unlike put; the hard mask only freezes the MASK).
             if (ma_ is null || ma_._mask is null)
             {
-                // No existing mask: only create one if the VALUES bring a mask (else stay nomask).
+                // No existing mask: only create one if the VALUES bring a mask (else stay nomask). The new mask is
+                // a FIELD of the target: Own detaches it so this method's scope cannot dispose it.
                 if (valmask is not null && ma_ is not null)
                 {
-                    ma_._mask = np.zeros(DimsOf(data), np.@bool);
+                    ma_._mask = Own(np.zeros(DimsOf(data), np.@bool));
                     np.copyto(ma_._mask, valmask, casting: "unsafe", where: maskArr);
                 }
             }
@@ -4536,12 +5122,12 @@ namespace NumSharp
             {
                 // HARD: never UNmask — only OR in a masked value's own mask at the written slots; a plain
                 // (unmasked) value leaves the mask untouched. (Data is still written below, keeping masked
-                // slots masked but with new hidden data — exactly NumPy's `a.mask |= m` branch.)
+                // slots masked but with new hidden data — exactly NumPy's `a.mask |= m` branch, in place.)
                 if (valmask is not null)
                 {
                     var m = ma_._mask.copy();
                     np.copyto(m, valmask, casting: "unsafe", where: maskArr);
-                    ma_._mask = np.logical_or(ma_._mask, m);
+                    np.logical_or(ma_._mask, m, @out: ma_._mask);
                 }
             }
             else
@@ -4561,11 +5147,14 @@ namespace NumSharp
         /// </summary>
         /// <param name="x">Operand.</param><param name="new_shape">Target shape.</param>
         /// <returns>A fresh masked array of <paramref name="new_shape"/>.</returns>
+        /// <remarks>Scoped by hand: an array-like operand this method had to materialize is reclaimed once it has
+        /// been tiled; only the tiled data and mask leave.</remarks>
         public NDMaskedArray resize(object x, Shape new_shape)
         {
+            using var scope = NDScope.Open();
             var data = np.resize(AsData(x), new_shape);
             var m = (x as NDMaskedArray)?._mask;
-            return new NDMaskedArray(data, m is null ? null : np.resize(m, new_shape));
+            return Yield(scope, new NDMaskedArray(data, m is null ? null : np.resize(m, new_shape)));
         }
 
         // ─────────────────────────────────────────────────────────────────────────────
@@ -4588,23 +5177,58 @@ namespace NumSharp
         /// </summary>
         /// <param name="function">Vectorized function of the per-axis index grids.</param>
         /// <param name="shape">Output shape (the grids' shape).</param>
-        /// <param name="dtype">Index-grid dtype (null ⇒ int).</param>
+        /// <param name="dtype">Index-grid dtype; null ⇒ <see cref="np.float64"/>, NumPy's <c>dtype=float</c> default
+        /// (probed 2.4.2: <c>ma.fromfunction(lambda i, j: i + j, (3, 4)).dtype</c> is float64). Pass
+        /// <see cref="np.int64"/> for integer grids.</param>
         /// <returns>An unmasked masked array of <paramref name="function"/>'s result.</returns>
+        /// <remarks>
+        ///     The null default USED to fall through to <see cref="np.indices(int[], DType)"/>'s own default
+        ///     (int64), so every default-dtype call computed on integer grids where NumPy computes on float64 —
+        ///     a wrong result dtype (and integer arithmetic, e.g. division) for the most common spelling.
+        ///     <para>
+        ///     <b>Ownership</b> — the np.ma callback contract (<see cref="apply_along_axis"/>): whatever
+        ///     <paramref name="function"/> returns becomes the result's data and stays the CALLER's, so the call
+        ///     runs outside any scope of this method's (one would capture — and dispose — the callback's own
+        ///     allocations). The index grid and the per-axis grid views handed to <paramref name="function"/> are
+        ///     this method's own and are released once it returns (on a throw too) — so a callback must not retain
+        ///     its ARGUMENTS past the call. A grid the callback returns as-is is the result's data and is kept; a
+        ///     view it returns holds its own reference to the grid buffer, so releasing the rest is safe.
+        ///     </para>
+        /// </remarks>
         public NDMaskedArray fromfunction(Func<NDArray[], NDArray> function, Shape shape, DType dtype = null)
         {
             var dims = shape.dimensions.Select(x => (int)x).ToArray();
-            var grid = np.indices(dims, dtype); // shape (ndim, *dims); grid[i] is the i-th coordinate grid
+            // shape (ndim, *dims); grid[i] is the i-th coordinate grid, float64 unless the caller asked otherwise.
+            var grid = np.indices(dims, dtype ?? np.float64);
             var args = new NDArray[dims.Length];
-            for (int i = 0; i < dims.Length; i++)
-                args[i] = grid[i];
-            return new NDMaskedArray(function(args), null);
+            NDArray result = null;
+            try
+            {
+                for (int i = 0; i < dims.Length; i++)
+                    args[i] = grid[i];
+                result = function(args);
+                return new NDMaskedArray(result, null);
+            }
+            finally
+            {
+                // Release the grid views the callback was handed — except one it returned verbatim, which IS the
+                // result's data now — then the grid wrapper itself. A returned view of the grid keeps the buffer
+                // alive through its own counted reference, so this never frees memory the result still reads.
+                foreach (var arg in args)
+                    if (arg is not null && !ReferenceEquals(arg, result))
+                        arg.Dispose();
+                grid.Dispose();
+            }
         }
 
         /// <summary>Two-axis convenience for <see cref="fromfunction(Func{NDArray[],NDArray},Shape,DType)"/> —
         /// matches NumPy's <c>fromfunction(lambda i, j: …, (m, n))</c>.</summary>
         /// <param name="function">Vectorized function of the row and column index grids.</param>
-        /// <param name="shape">Output 2-D shape.</param><param name="dtype">Index-grid dtype (null ⇒ int).</param>
+        /// <param name="shape">Output 2-D shape.</param><param name="dtype">Index-grid dtype (null ⇒ float64, NumPy's
+        /// default).</param>
         /// <returns>An unmasked masked array.</returns>
+        /// <remarks>Same ownership contract as the array-of-grids overload: the two grids handed to
+        /// <paramref name="function"/> are released after the call unless one IS the returned data.</remarks>
         public NDMaskedArray fromfunction(Func<NDArray, NDArray, NDArray> function, Shape shape, DType dtype = null)
             => fromfunction(idx => function(idx[0], idx[1]), shape, dtype);
 
@@ -4613,15 +5237,24 @@ namespace NumSharp
         /// <param name="a">Operand (rank ≥ 1; splits along axis 1, or axis 0 for a 1-D input).</param>
         /// <param name="sections">Number of equal parts.</param>
         /// <returns>The masked-array parts.</returns>
+        /// <remarks>Scoped by hand: an array-like operand this method had to materialize is reclaimed (each part is
+        /// a view holding its own reference to that buffer); every part's data and mask leave.</remarks>
         public NDMaskedArray[] hsplit(object a, int sections)
-            => ZipSplit(np.hsplit(AsData(a), sections), (a as NDMaskedArray)?._mask is null ? null : np.hsplit(((NDMaskedArray)a)._mask, sections));
+        {
+            using var scope = NDScope.Open();
+            return Yield(scope, ZipSplit(np.hsplit(AsData(a), sections), (a as NDMaskedArray)?._mask is null ? null : np.hsplit(((NDMaskedArray)a)._mask, sections)));
+        }
 
         /// <summary>Splits <paramref name="a"/> COLUMN-wise at the given cut points (NumPy's <c>ma.hsplit</c>
         /// with an index list); data AND mask split alike.</summary>
         /// <param name="a">Operand.</param><param name="indices">Column cut points.</param>
         /// <returns>The masked-array parts.</returns>
+        /// <remarks>Scoped by hand, as the <c>sections</c> overload.</remarks>
         public NDMaskedArray[] hsplit(object a, int[] indices)
-            => ZipSplit(np.hsplit(AsData(a), indices), (a as NDMaskedArray)?._mask is null ? null : np.hsplit(((NDMaskedArray)a)._mask, indices));
+        {
+            using var scope = NDScope.Open();
+            return Yield(scope, ZipSplit(np.hsplit(AsData(a), indices), (a as NDMaskedArray)?._mask is null ? null : np.hsplit(((NDMaskedArray)a)._mask, indices)));
+        }
 
         /// <summary>Pairs the split data parts with their (optional) mask parts into masked arrays.</summary>
         private static NDMaskedArray[] ZipSplit(NDArray[] dataParts, NDArray[] maskParts)
@@ -4639,18 +5272,44 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">Operand.</param>
         /// <returns>The unmasked <c>(index, value)</c> pairs.</returns>
+        /// <remarks>
+        ///     An ITERATOR, so it cannot hold an <see cref="NDScope"/> (a scope is per-thread and would straddle
+        ///     every <c>yield</c> — the consumer's own scopes would interleave with it). It releases its two own
+        ///     arrays explicitly instead: the raveled mask (a copy when the mask is not contiguous) as soon as it
+        ///     has been read into the managed flag array, and an array-like operand <see cref="AsData"/> had to
+        ///     materialize when the walk ends — including when the consumer stops early and disposes the
+        ///     enumerator. An array or masked-array operand is the caller's and is never released.
+        /// </remarks>
         public IEnumerable<(long[] index, object value)> ndenumerate(object a)
         {
             var d = AsData(a);
-            var m = (a as NDMaskedArray)?._mask;
-            // np.ndenumerate walks C-order, so the k-th pair aligns with the k-th C-order mask element.
-            var mflat = m is null ? null : np.ravel(m).ToArray<bool>();
-            long k = 0;
-            foreach (var pair in np.ndenumerate(d))
+            // AsData materializes a scalar/array-like operand into a fresh array; an array or masked-array
+            // operand only hands back the caller's own data.
+            bool dIsOurs = !(a is NDMaskedArray || a is NDArray);
+            try
             {
-                if (mflat is null || !mflat[k])
-                    yield return pair;
-                k++;
+                var m = (a as NDMaskedArray)?._mask;
+                // np.ndenumerate walks C-order, so the k-th pair aligns with the k-th C-order mask element.
+                bool[] mflat = null;
+                if (m is not null)
+                {
+                    // np.ravel always returns a DISTINCT array (a view or a copy), never the mask object itself,
+                    // so disposing it releases only the raveled wrapper's own reference.
+                    using var raveled = np.ravel(m);
+                    mflat = raveled.ToArray<bool>();
+                }
+                long k = 0;
+                foreach (var pair in np.ndenumerate(d))
+                {
+                    if (mflat is null || !mflat[k])
+                        yield return pair;
+                    k++;
+                }
+            }
+            finally
+            {
+                if (dIsOurs)
+                    d.Dispose();
             }
         }
 
@@ -4671,15 +5330,18 @@ namespace NumSharp
         /// <param name="fill_value">Override the masked sort key; null uses the endwith default
         /// (<see cref="minimum_fill_value"/> for endwith, <see cref="maximum_fill_value"/> otherwise).</param>
         /// <returns>The sorted masked array.</returns>
+        /// <remarks>Scoped by hand: the filled sort keys and the permutation are reclaimed (as is an array-like
+        /// operand this method had to materialize); only the reordered data and mask leave.</remarks>
         public NDMaskedArray sort(object a, int axis = -1, bool endwith = true, object fill_value = null)
         {
+            using var scope = NDScope.Open();
             var mask = (a as NDMaskedArray)?._mask;
             var d = AsData(a);
             if (mask is null)
-                return new NDMaskedArray(np.sort(d, axis), null);
+                return Yield(scope, new NDMaskedArray(np.sort(d, axis), null));
             // Sort by the argsort of the FILLED keys, then reorder BOTH data and mask by that permutation.
             var order = np.argsort(((NDMaskedArray)a).filled(fill_value ?? SortFill(a, endwith)), axis);
-            return new NDMaskedArray(np.take_along_axis(d, order, axis), np.take_along_axis(mask, order, axis));
+            return Yield(scope, new NDMaskedArray(np.take_along_axis(d, order, axis), np.take_along_axis(mask, order, axis)));
         }
 
         /// <summary>
@@ -4691,6 +5353,9 @@ namespace NumSharp
         /// <param name="endwith">True (default) sends masked entries to the END; false to the FRONT.</param>
         /// <param name="fill_value">Override the masked sort key; null uses the endwith default.</param>
         /// <returns>An int64 <see cref="NDArray"/> of sort indices.</returns>
+        /// <remarks>Scoped (<c>[NDScoped]</c>): the filled sort keys (and an array-like operand this method had to
+        /// materialize) are reclaimed; only the index array leaves.</remarks>
+        [NDScoped]
         public NDArray argsort(object a, int axis = -1, bool endwith = true, object fill_value = null)
         {
             var d = (a as NDMaskedArray)?._mask is null ? AsData(a) : ((NDMaskedArray)a).filled(fill_value ?? SortFill(a, endwith));
@@ -4705,16 +5370,19 @@ namespace NumSharp
         /// element was masked (NumPy's <c>ma.unique</c>, values only).</summary>
         /// <param name="ar">Operand.</param>
         /// <returns>The masked array of unique values.</returns>
+        /// <remarks>Scoped by hand: the compressed values, the plain unique set a masked input extends, and the
+        /// zero/one stand-ins behind the trailing masked slot are reclaimed; only the result's data and mask leave.</remarks>
         public NDMaskedArray unique(object ar)
         {
+            using var scope = NDScope.Open();
             NDArray uvals = np.unique(compressed(ar));
             var mask = (ar as NDMaskedArray)?._mask;
             if (mask is null || !np.any(mask))
-                return new NDMaskedArray(uvals, null);
+                return Yield(scope, new NDMaskedArray(uvals, null));
             // Append a single masked slot (NumPy keeps one masked value in the unique set).
             var data = np.concatenate(new[] { uvals, np.zeros(new Shape(1), uvals.dtype) }, 0);
             var m = np.concatenate(new[] { np.zeros(DimsOf(uvals), np.@bool), np.ones(new Shape(1), np.@bool) }, 0);
-            return new NDMaskedArray(data, m);
+            return Yield(scope, new NDMaskedArray(data, m));
         }
 
         // ─────────────────────────────────────────────────────────────────────────────
@@ -4789,14 +5457,17 @@ namespace NumSharp
         /// <returns>The masked array of shared unique values (sorted; the promoted dtype is preserved even for an
         /// empty/all-masked result).</returns>
         /// <exception cref="ArgumentNullException">Either operand is null.</exception>
+        /// <remarks>Scoped by hand: the compressed operands, the plain set result and its dtype cast are
+        /// reclaimed (as is any operand this method had to materialize); only the result's data and mask leave.</remarks>
         public NDMaskedArray intersect1d(object ar1, object ar2, bool assume_unique = false)
         {
+            using var scope = NDScope.Open();
             var dt = SetOpDtype(ar1, ar2);
             // Compress to the unmasked values, run the plain set op, then FORCE the promoted dtype (astype is a
             // no-op copy on the non-empty path since the set op already promoted; it only bites when both inputs
             // compress to empty, where np.intersect1d would otherwise return float64).
             var values = np.intersect1d(compressed(ar1), compressed(ar2), assume_unique).astype(dt, copy: false);
-            return WithTrailingMasked(values, HasMasked(ar1) && HasMasked(ar2));
+            return Yield(scope, WithTrailingMasked(values, HasMasked(ar1) && HasMasked(ar2)));
         }
 
         /// <summary>
@@ -4806,11 +5477,13 @@ namespace NumSharp
         /// <param name="ar1">First operand.</param><param name="ar2">Second operand.</param>
         /// <returns>The masked array of unique values from either input (sorted; promoted dtype preserved).</returns>
         /// <exception cref="ArgumentNullException">Either operand is null.</exception>
+        /// <remarks>Scoped by hand, as <see cref="intersect1d"/>.</remarks>
         public NDMaskedArray union1d(object ar1, object ar2)
         {
+            using var scope = NDScope.Open();
             var dt = SetOpDtype(ar1, ar2);
             var values = np.union1d(compressed(ar1), compressed(ar2)).astype(dt, copy: false);
-            return WithTrailingMasked(values, HasMasked(ar1) || HasMasked(ar2));
+            return Yield(scope, WithTrailingMasked(values, HasMasked(ar1) || HasMasked(ar2)));
         }
 
         /// <summary>
@@ -4824,12 +5497,14 @@ namespace NumSharp
         /// the inputs are not unique.</param>
         /// <returns>The masked array of the symmetric difference (sorted; promoted dtype preserved).</returns>
         /// <exception cref="ArgumentNullException">Either operand is null.</exception>
+        /// <remarks>Scoped by hand, as <see cref="intersect1d"/>.</remarks>
         public NDMaskedArray setxor1d(object ar1, object ar2, bool assume_unique = false)
         {
+            using var scope = NDScope.Open();
             var dt = SetOpDtype(ar1, ar2);
             var values = np.setxor1d(compressed(ar1), compressed(ar2), assume_unique).astype(dt, copy: false);
             // XOR of masked presence: the collapsed masked value is in exactly one side ⇒ survives the xor.
-            return WithTrailingMasked(values, HasMasked(ar1) ^ HasMasked(ar2));
+            return Yield(scope, WithTrailingMasked(values, HasMasked(ar1) ^ HasMasked(ar2)));
         }
 
         /// <summary>
@@ -4845,12 +5520,14 @@ namespace NumSharp
         /// <returns>The masked array of <paramref name="ar1"/>-only unique values (sorted; <paramref name="ar1"/>'s
         /// promotion preserved).</returns>
         /// <exception cref="ArgumentNullException">Either operand is null.</exception>
+        /// <remarks>Scoped by hand, as <see cref="intersect1d"/>.</remarks>
         public NDMaskedArray setdiff1d(object ar1, object ar2, bool assume_unique = false)
         {
+            using var scope = NDScope.Open();
             var dt = SetOpDtype(ar1, ar2);
             var values = np.setdiff1d(compressed(ar1), compressed(ar2), assume_unique).astype(dt, copy: false);
             // ar1's masked value survives the diff iff ar2 does not also carry one (masked == masked removes it).
-            return WithTrailingMasked(values, HasMasked(ar1) && !HasMasked(ar2));
+            return Yield(scope, WithTrailingMasked(values, HasMasked(ar1) && !HasMasked(ar2)));
         }
 
         // ── Mask hardness (NumPy's harden_mask/soften_mask): a HARD mask forbids UNmasking via a plain-value

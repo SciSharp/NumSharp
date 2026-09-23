@@ -174,12 +174,41 @@ fires in both directions, so a counters-accounting bug cannot read as "everythin
 ~9,900 of 102,785 measured cases** — the axis/nan/cumulative reduction family, the product family
 (matmul/dot/vecdot/matvec/vecmat/vdot), fft, the tri/tril/triu/diag* family, `trim_zeros` (up to
 19 buffers per call), `np.empty` itself, ufunc `out=` paths, and the NEP50 scalar-operand binary
-cells (the engine's `Cast(rhs, resultType, copy: true)` parameter-reassign drop). These are
+cells (the engine's `Cast(rhs, resultType, copy: true)` parameter-reassign drop). They were
 documented in `KnownEscapes` — surfaced green with a per-op **ceiling** (an op leaking more than
-its recorded worst still fails) — and held red by the `KnownEscapeFamilies_AreFixed`
-`[OpenBugs]` pin plus the mechanism pin `BinaryScalarCastTemp_IsDisposed`. Working the list down:
-fix an op, remove its `KnownEscapes` entry (the sweep then gates it at zero forever); when the
-registry empties, delete the pin. Every op NOT in the registry is gated at zero from day one.
+its recorded worst still failed) — and worked down to **zero** across four fix waves. The registry
+is now EMPTY and its `KnownEscapeFamilies_AreFixed` tracking pin is RETIRED: every op is gated at
+zero. The mechanism pin `BinaryScalarCastTemp_IsDisposed` stays. A regression is fixed, not
+registered — `KnownEscapes` exists only as the documented escape hatch for a leak that must land
+before its fix.
+
+### Coverage completion — every public member is leak-measured (2026-09-23)
+
+An inventory cross-reference (the `coverage/NumSharp.Tools.ApiInventory` surface against the op
+keys the sweep actually MEASURED) found 265 of the 961 `[ModuleName]`-module members never
+leak-measured: the sweep replayed only the ordinary op tiers. Five layers now close that, all
+`[ScopeAudit]` + `[FuzzMatrix]`, all reading process-wide pool counters under the same protocol
+(warm invocation, `ScopeAudit.MeasureConfirmedTraffic`, the same escape/bypass verdict):
+
+| Layer | What it measures | Counts (2026-09-23, identical net10.0 / net8.0) |
+|---|---|---|
+| `Corpus_AllOps_…` (`SharedSweep`) | three corpus families — ordinary op tiers, masked-array tiers (`ma_*`, `NDMaskedArray` operands through `OpRegistry.ApplyMasked`), index tiers (`index_*`, the indexer get/set) — and EVERY error path (a NumPy-raising case must throw without stranding a buffer) | 213,264 success (ordinary 138,660 / masked 68,860 / index 5,744) + 9,123 error paths |
+| `Corpus_BackendOps_…` (`SharedBackendSweep`) | the ordinary tiers replayed with OpenBLAS installed (threads=1): the LAPACK family Core cannot compute without a backend, the BLAS product seams, the Interop glue. `Inconclusive` where no library loads | 138,936 + 2,441 error paths |
+| `Catalogue_EveryEntry_…` (`SharedCatalogue`) | `LeakCatalogue*.cs` — one direct invocation per member NO corpus row reaches (np.* conveniences, the `np.linalg` Array-API forms, `ndarray`/`NDArray<T>`/`NDMaskedArray` methods, every operator, object surfaces and indexers). Backend-only entries run under OpenBLAS; `T(...)` entries (members that always raise) are measured as error paths; an entry that cannot run is a HARNESS ERROR and fails | 474 of 482 entries measured (8 always-raise error paths) |
+| `EveryPropertyAndField_Read_…` (`SharedPropertyReads`) | every surface property/field read — settable ones round-trip written — on targets built INSIDE the measured region, so a getter caching an allocation on its owner is caught when the owner is released | 539 reads + 15 error paths |
+| `EveryInventoryMember_IsLeakAudited` | the COMPLETENESS gate (`LeakSurfaceCoverageTests`): every member of `LeakSurface` — the `[ModuleName]` modules, the operators of `ndarray`/`NDArray<T>`/`NDMaskedArray` and of every object owner that declares any (`DType`, `NDArrayFlags`, `poly1d`), the mapped object surfaces — must be credited by a MEASUREMENT from one of the four runs above | 1,348 / 1,348 members |
+
+Credit follows measurement, never declaration: a catalogue entry or property read counts only when
+its run actually exercised the member (`DirectRunResult.Attempted`), a LAPACK-only op only when the
+backend pass measured it, and a corpus key only on a SUCCESS path (an op whose every case raises has
+an unaudited success path). Two environmental outcomes are credited because they are never red
+elsewhere either: a GC-inconclusive measurement (the member ran; only the host withheld the verdict)
+and — only on a host where no CBLAS/LAPACK library loads — a backend-skipped one. The gate also
+fails when an object owner declares an operator outside `LeakSurface.OperatorOwners`, when a
+catalogue/alias-map id names no live member, or when a mapping went stale. Non-vacuity floors sit
+5% under the counts above. **To audit a new public API:** give it corpus rows (`gen_oracle.py` +
+`OpRegistry`) or a catalogue entry (`E(...)`/`T(...)` in `LeakCatalogue*.cs`); a new property is read
+automatically unless its owner needs a new read target (`ReadTargetsFor`).
 
 **Outside-pool allocation detection** rides the same sweep plus a static gate, because the two
 halves of the bypass class need different instruments. The RUNTIME half: a result that is fresh
@@ -197,10 +226,13 @@ vs `KnownBypassDebt` (pin-tracked; empty at landing). The STATIC half —
 internal scratch buffer allocated raw and freed raw inside an op never reaches a result. It scans
 `src/NumSharp.Core` for raw `NativeMemory.Alloc*`/`Marshal.AllocHGlobal`/`VirtualAlloc*` call
 sites (comment lines excluded) and pins an exact file→count allowlist: the two pools + the
-guard-page allocator ARE the chokepoints, NDIter's buffered-mode scratch (7 sites) and
-`np.bincount`'s counting table (1) are carried as routed-through-the-pool audit debt, and ANY new
-raw site — new file or count growth in an allowed file — is red until pooled or consciously
-allowlisted. Inconclusive (never false-green) without a source checkout.
+guard-page allocator ARE the chokepoints; NDIter's state block and buffered-mode scratch (6 sites —
+`NDIter.cs` tightened 2 → 1 on 2026-09-23), the privatized counting tables of `np.bincount` and the
+fused histogram kernel, the managed LU's scratch, and the >int.MaxValue-capable sort/partition line
+buffers (`AxisSort`/`AxisPartition`) are carried as audit debt (each an alloc+free pair inside one
+call); and ANY new raw site — new file or count growth in an allowed file — is red until pooled or
+consciously allowlisted. A file whose count DROPS below its pin prints a "tighten the allowlist"
+note. Inconclusive (never false-green) without a source checkout.
 
 ## Regenerating the corpus
 
