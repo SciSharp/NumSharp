@@ -536,6 +536,8 @@ namespace NumSharp.Tests.Fuzz
         /// key (<c>rnd:&lt;dist&gt;</c>, <c>grnd:&lt;method&gt;</c>, <c>index.get</c>, <c>index.set</c>).</param>
         /// <param name="ErrorMeasuredByOp">Error-path measured count per op key.</param>
         /// <param name="ThrewByOp">Threw-skipped count per op key (diagnostic rollup).</param>
+        /// <param name="DirectMeasured">Success-path DIRECT measurements — catalogue entries and property/field
+        /// reads, keyed by surface id rather than a corpus op key (0 for a corpus sweep).</param>
         internal sealed record SweepResult(
             long OrdinaryMeasured, long MaskedMeasured, long IndexMeasured, long ErrorPathsMeasured,
             long GcInconclusive, long ThrewSkipped, int Files,
@@ -543,10 +545,11 @@ namespace NumSharp.Tests.Fuzz
             Dictionary<(string op, string layout), (long count, string sampleId, string file, long sampleBytes)> Bypasses,
             Dictionary<string, long> MeasuredByOp,
             Dictionary<string, long> ErrorMeasuredByOp,
-            Dictionary<string, long> ThrewByOp)
+            Dictionary<string, long> ThrewByOp,
+            long DirectMeasured = 0)
         {
-            /// <summary>All success-path cases measured, across the three families.</summary>
-            public long Measured => OrdinaryMeasured + MaskedMeasured + IndexMeasured;
+            /// <summary>All success-path cases measured, across every family and the direct runners.</summary>
+            public long Measured => OrdinaryMeasured + MaskedMeasured + IndexMeasured + DirectMeasured;
         }
 
         /// <summary>
@@ -557,6 +560,9 @@ namespace NumSharp.Tests.Fuzz
         {
             /// <summary>Success-path measured counts per family.</summary>
             public long Ordinary, Masked, Index;
+
+            /// <summary>Success-path direct measurements (catalogue entries, property/field reads).</summary>
+            public long Direct;
 
             /// <summary>Error-path cases measured (all families).</summary>
             public long ErrorPaths;
@@ -592,6 +598,13 @@ namespace NumSharp.Tests.Fuzz
                 ThrewSkipped++;
                 ThrewByOp[op] = ThrewByOp.GetValueOrDefault(op) + 1;
             }
+
+            /// <summary>Freezes the tallies into the immutable verdict input every gate consumes.</summary>
+            /// <param name="files">How many corpus files (or 0 for a direct runner) were replayed.</param>
+            /// <returns>The sweep result; it shares this accumulator's dictionaries, so record nothing after.</returns>
+            public SweepResult ToResult(int files)
+                => new(Ordinary, Masked, Index, ErrorPaths, GcInconclusive, ThrewSkipped, files,
+                       Groups, Bypasses, MeasuredByOp, ErrorMeasuredByOp, ThrewByOp, Direct);
 
             /// <summary>
             ///     Records a confirmed measurement and classifies it: a non-zero balance joins an
@@ -677,9 +690,7 @@ namespace NumSharp.Tests.Fuzz
                     SweepOrdinaryFile(file, includeOp, acc);
             }
 
-            return new SweepResult(acc.Ordinary, acc.Masked, acc.Index, acc.ErrorPaths,
-                                   acc.GcInconclusive, acc.ThrewSkipped, files.Length,
-                                   acc.Groups, acc.Bypasses, acc.MeasuredByOp, acc.ErrorMeasuredByOp, acc.ThrewByOp);
+            return acc.ToResult(files.Length);
         }
 
         /// <summary>

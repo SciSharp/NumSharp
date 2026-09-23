@@ -61,16 +61,25 @@ namespace NumSharp
 
             bool directable = Shape.IsContiguous && Shape.offset == 0;
             NDArray src = directable ? this : this.copy('C');
-
-            unsafe
+            try
             {
-                long len = checked((long)src.size * src.dtypesize);
-                using (var ums = new UnmanagedMemoryStream((byte*)src.Storage.Address, len))
-                    ums.CopyTo(stream);
-            }
+                unsafe
+                {
+                    long len = checked((long)src.size * src.dtypesize);
+                    using (var ums = new UnmanagedMemoryStream((byte*)src.Storage.Address, len))
+                        ums.CopyTo(stream);
+                }
 
-            // Keep the (possibly freshly-copied) source alive until the unmanaged read completes.
-            System.GC.KeepAlive(src);
+                // Keep the (possibly freshly-copied) source alive until the unmanaged read completes.
+                System.GC.KeepAlive(src);
+            }
+            finally
+            {
+                // The C-order materialization is this method's own temp: release its pooled buffer now (a
+                // stream write can throw — disk full — and must not strand it either). `this` is the caller's.
+                if (!directable)
+                    src.Dispose();
+            }
         }
 
         // Text: each element in C-order is rendered via `format % item` (default "%s" == the NumPy scalar

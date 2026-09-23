@@ -59,7 +59,15 @@ namespace NumSharp
         ///     iteration dimensions are 0"</c>, verbatim with NumPy — because there is then no first
         ///     slice to determine the result shape.
         /// </exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.apply_along_axis.html</remarks>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.apply_along_axis.html
+        ///     <para><b>Ownership.</b> Every array <paramref name="func1d"/> returns — and every slice handed to
+        ///     it — stays the CALLER's: this method copies each result into its own buffer and never disposes
+        ///     one, because a callback may return an array it keeps using (the slice itself, a held constant).
+        ///     A <paramref name="func1d"/> that ALLOCATES a fresh result per slice therefore leaves those to a
+        ///     GC — run the call inside an <see cref="NDScope"/> (yielding the result) when deterministic
+        ///     release matters. This method's own buffer and views are released before it returns.</para>
+        /// </remarks>
         public static NDArray apply_along_axis(Func<NDArray, NDArray> func1d, int axis, NDArray arr)
         {
             if (func1d is null)
@@ -146,7 +154,16 @@ namespace NumSharp
             for (int i = ax; i < buffNd - resNd; i++)
                 buffPermute[q++] = i;
 
-            return np.transpose(buff, buffPermute);
+            // Ownership: this method may release ONLY what it created and never handed to func1d — the
+            // `buff` wrapper (the returned transpose view holds its own reference, so the buffer lives on)
+            // and the `inarr` view (each slice was re-wrapped with its own reference). It must NOT scope or
+            // dispose func1d's results or the slices passed to it: a callback may return or retain arrays
+            // the caller still owns (a held array, the slice itself), so their lifetime stays the caller's.
+            // Without the release, every call stranded `buff`'s reference — one pooled buffer until a GC.
+            var result = np.transpose(buff, buffPermute);
+            buff.Dispose();
+            inarr.Dispose();
+            return result;
         }
 
         /// <summary>

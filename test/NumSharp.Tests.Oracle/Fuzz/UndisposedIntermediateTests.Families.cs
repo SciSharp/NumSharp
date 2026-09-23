@@ -340,13 +340,39 @@ namespace NumSharp.Tests.Fuzz
         /// <param name="keep">Arrays that must survive (operands, fixtures), compared by reference.</param>
         internal static void DisposeAny(object result, HashSet<object> keep)
         {
+            foreach (var o in CollectDisposables(result))
+                if (!keep.Contains(o))
+                    ((IDisposable)o).Dispose();
+        }
+
+        /// <summary>
+        ///     Every distinct disposable object a result carries — each <see cref="NDArray"/> (bare, in
+        ///     array/tuple/<see cref="object"/>[] containers, or a <see cref="NDMaskedArray"/>'s data and
+        ///     mask) and each other <see cref="IDisposable"/> result object (iterators, archives) — in
+        ///     first-visit order, WITHOUT disposing anything. The single walk every result consumer
+        ///     shares (<see cref="DisposeAny"/>, the catalogue's freshness check, the read gate's
+        ///     stable-part detection), so "what a result holds" means the same thing to all of them.
+        /// </summary>
+        /// <remarks>
+        ///     A lazy <see cref="IEnumerable{NDArray}"/> is enumerated exactly ONCE, here: a caller that
+        ///     walked it again would get a second, different batch of arrays (the first batch then
+        ///     unaccounted for), which is why consumers iterate this materialized list instead of
+        ///     re-walking the result. Only NDArray-typed sequences are enumerated at all — walking an
+        ///     ARBITRARY <see cref="System.Collections.IEnumerable"/> could consume a stateful iterator
+        ///     result (np.ndindex, ndenumerate) or run user code, which inspecting a result must never do.
+        ///     The <see cref="NDMaskedConstant"/> singleton and strings carry nothing.
+        /// </remarks>
+        /// <param name="result">The result object, of any shape (null yields nothing).</param>
+        /// <returns>The distinct disposables, compared by reference.</returns>
+        internal static List<object> CollectDisposables(object result)
+        {
             var seen = new HashSet<object>(ReferenceEqualityComparer.Instance);
+            var found = new List<object>();
 
             void One(NDArray a)
             {
-                if (a is null || !seen.Add(a) || keep.Contains(a))
-                    return;
-                a.Dispose();
+                if (a is not null && seen.Add(a))
+                    found.Add(a);
             }
 
             void Visit(object o, int depth)
@@ -379,10 +405,8 @@ namespace NumSharp.Tests.Fuzz
                     case string:
                         return;
                     case IEnumerable<NDArray> nds when o is not IDisposable:
-                        // A materialized collection of arrays (List<NDArray>, a LINQ-free array view).
-                        // Only NDArray-typed sequences are walked: enumerating an ARBITRARY IEnumerable
-                        // could consume a lazy iterator result (np.ndindex, an ndenumerate) or run
-                        // user code, which a disposer must never do.
+                        // A materialized collection of arrays (List<NDArray>, a LINQ-free array view) —
+                        // enumerated once, here (see remarks).
                         foreach (var a in nds)
                             One(a);
                         return;
@@ -391,13 +415,14 @@ namespace NumSharp.Tests.Fuzz
                             Visit(item, depth + 1);
                         return;
                     case IDisposable d:
-                        if (seen.Add(d) && !keep.Contains(d))
-                            d.Dispose();
+                        if (seen.Add(d))
+                            found.Add(d);
                         return;
                 }
             }
 
             Visit(result, 0);
+            return found;
         }
 
         /// <summary>

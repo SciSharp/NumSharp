@@ -161,9 +161,11 @@ namespace NumSharp.Tests.Fuzz
             E(l, "NDMaskedArray.harden_mask", "owned copy", f => f.MA.copy().harden_mask());
             E(l, "NDMaskedArray.ids", "addresses", f => Box(f.MA.ids()));
             E(l, "NDMaskedArray.iscontiguous", "flag", f => Box(f.MA.iscontiguous()));
-            E(l, "NDMaskedArray.item", "0-d element view", f =>
+            E(l, "NDMaskedArray.item", "size-1 sub-array view", f =>
             {
-                var e = f.MA["1, 3"];
+                // A slice index keeps the result a (1, 1) masked VIEW (an element index would already
+                // reduce to the bare scalar), so item() runs on a real NDMaskedArray.
+                var e = (NDMaskedArray)f.MA["1:2, 3:4"];
                 return new object[] { e, e.item() };
             });
             E(l, "NDMaskedArray.max", "axis", f => f.MA.max(0));
@@ -194,11 +196,18 @@ namespace NumSharp.Tests.Fuzz
             E(l, "NDMaskedArray.ravel", "C", f => f.MA.ravel());
             E(l, "NDMaskedArray.repeat", "axis", f => f.MA.repeat(2, 0));
             E(l, "NDMaskedArray.reshape", "4x3", f => f.MA.reshape(4, 3));
-            E(l, "NDMaskedArray.resize", "owned copy, no refcheck", f =>
+            T(l, "NDMaskedArray.resize", "raises by design (NumPy: a masked array does not own its data)", f =>
             {
                 var m = f.MA.copy();
-                m.resize(new Shape(2, 6), refcheck: false);
-                return m;
+                try
+                {
+                    m.resize(new Shape(2, 6), refcheck: false);
+                    return m;
+                }
+                finally
+                {
+                    UndisposedIntermediateTests.DisposeAny(m, f.Keep);   // the entry's own copy — released on the throw
+                }
             });
             E(l, "NDMaskedArray.round", "decimals", f => f.MA.round(1));
             E(l, "NDMaskedArray.searchsorted", "sorted masked", f =>
@@ -216,7 +225,7 @@ namespace NumSharp.Tests.Fuzz
             E(l, "NDMaskedArray.swapaxes", "0,1", f => f.MA.swapaxes(0, 1));
             E(l, "NDMaskedArray.take", "flat indices", f => f.MA.take(f.Idx));
             E(l, "NDMaskedArray.tobytes", "fill", f => f.MA.tobytes(0.0));
-            E(l, "NDMaskedArray.tofile", "path", f =>
+            T(l, "NDMaskedArray.tofile", "raises by design (NumPy: MaskedArray.tofile() not implemented yet)", f =>
             {
                 f.MA.tofile(Path.Combine(f.Dir, "ma.bin"));
                 return null;
