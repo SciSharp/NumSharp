@@ -288,13 +288,27 @@ namespace NumSharp.Backends
             if (@out is not null)
                 ValidateOutCast(resolvedType, @out.typecode, "evaluate", options.Casting);
 
+            // NumPy's trivial loop (DefaultEngine.Evaluate.Trivial.cs; perf review 2026-09-23, lever 1): a
+            // call whose operands are trivially iterable — identical dims, one shared contiguous order (or
+            // 1-D), no cast, no overlap with a provided out other than an exact alias — runs the fused kernel
+            // ONCE, without NDIter's ~140 ns construction + drive (measured at n = 8). It only ever DECLINES
+            // (null), so every other call, including every call that must raise, continues below unchanged.
+            if (where is null)
+            {
+                var trivial = TryEvaluateTrivialLoop(program, inputs, ops, @out, resolvedType, targetType, options.Order);
+                if (trivial is not null)
+                    return trivial;
+            }
+
             // Iteration shape: the inputs' broadcast (one clone for identical dims, one fresh dims
             // array otherwise — ResolveInputShape), then out and the where mask join per the ufunc rules
             // (both broadcast in, but a provided out is never stretched — its verbatim errors live in
             // ResolveUfuncIterationShape). A where= without out= still joins the mask so the fresh result's
-            // shape includes it (NumPy: where broadcasts with everything).
+            // shape includes it (NumPy: where broadcasts with everything). An out with exactly the inputs'
+            // broadcast dims makes the out join an identity transform that cannot raise, so it is skipped
+            // (the *UfuncInto routes skip it the same way) — ResolveUfuncIterationShape + Clean() allocate.
             Shape inputShape = ResolveInputShape(ops);
-            Shape iterShape = (@out is null && where is null)
+            Shape iterShape = (where is null && (@out is null || SameDims(inputShape, @out.Shape)))
                 ? inputShape
                 : ResolveUfuncIterationShape(inputShape, ops, @out, where).Clean();
 

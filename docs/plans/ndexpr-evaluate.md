@@ -160,6 +160,27 @@ bit-exact (`ILKernelGenerator.Reduction.Pairwise.cs`); only the fused reduce pat
    call `program.Kernel` once with element strides, skipping NDIter (~123 ns; the engine's trivial-loop routes already do
    this); (b) skip `ResolveUfuncIterationShape(...).Clean()` when `out=` has the inputs' dims (the `*UfuncInto` routes skip
    it); (c) `CanonicalResultShape` instead of `Shape.Clean()` for the fresh result (no dims/strides clone).
+   **LANDED (a)+(b)+(c) as NumPy's trivial loop** — `DefaultEngine.Evaluate.Trivial.cs`, a port of
+   `try_trivial_single_output_loop` (`ufunc_object.c`): every non-0-d operand (inputs + out) has the operation's exact
+   dims and is 1-D (any stride, incl. negative / 0) or contiguous in ONE shared order (C or F; both-contiguous operands fix
+   none), 0-d iterator operands ride a zero stride, the fresh result takes exactly the layout the NDIter pass allocates
+   (`ResolveEvalOrder` over the strict-F heuristic) through `CanonicalResultShape` (no dims/strides clone), and a
+   provided out may overlap an input ONLY exactly (same first byte + byte stride + element size) — any other overlap,
+   an out-cast, `dtype=`, `where=`, a read-only out or a genuine broadcast DECLINES (the gate never throws, so every
+   error path is the iterator's, unchanged). The kernel call is the one NDIter makes after coalescing (same pointers,
+   count, byte strides), so the result is byte-identical by construction; the 1-D-strided / 0-d-stride shapes rely on the
+   vector==scalar contract for any chunking difference. (b) rides along on the NDIter path for a same-dims out.
+   Hooks `NDExpr.DisableTrivialLoop` / `TrivialLoopRuns`. **Measured (pinned P-core, ON vs OFF interleaved in one
+   process, best-of):** n = 8 prebuilt 527 → 255 ns (592 → 472 B), rebuilt 655 → 347, `out=` 332 → **75** ns (184 → 0 B),
+   0-d-param tree 540 → 262, f32 561 → 284, 1-D stride-2 364 → 256; n = 1K `out=` 2.98–3.25×, fresh 1.1–1.8× (the
+   allocator floor dominates), stride-2 1.3–1.8×; 100K–1M 1.00–1.04× (as it must be — only fixed cost moved; an
+   earlier 0.92× reading was ON-first allocator warm-up bias and vanished with alternating order). The fused `a*b+c` at
+   n = 8 is now ~2× NumPy's two-ufunc chain (526 ns) and beats NumSharp's own unfused chain (373 ns). Gates:
+   `NDEvaluateTrivialLoopTests` (9: every layout class engages/declines as specified and is byte-, dtype-, shape- and
+   C/F-flag-identical to the NDIter pass; a MUTANT with the overlap guard removed corrupts the output-ahead self-overlap
+   case, so the gate has teeth), 437 NDEvaluate/NDExpr/Evaluate units, FuzzMatrix 100/3/1 (the 1 = the pre-existing
+   38-family leak red, unchanged). What remains at n = 8 is the fresh-result `new NDArray` (≈ 170 ns), shared with every
+   op — the allocator floor, not an evaluate cost.
 2. **Boxed per-element helpers on the axis path:** `ILKernelGenerator.SeedReduceIdentity` / `MeanDivideByCount` and
    `EvaluateAxisReduce`'s complex-mean loop use `SetAtIndex(object)`/`GetAtIndex` per output — `mean(a*b, axis=0)` on
    3×1M spends ≈ 4 ms of its 6.9 ms there (and the engine's `np.mean`/`np.sum(axis)` pay the same). Typed contiguous fast
