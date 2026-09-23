@@ -91,7 +91,7 @@ A divergence is one of: **bit-exact** (passes), a **documented difference** in `
   `[<file>] documented Misaligned divergences excused: <n>x <reason>; …` — so growth in an
   excused class stays visible in the test output. Anything unclassified is red.
 
-### Host-dependent values — the one thing the oracle must never assert
+### Host-dependent values — what the oracle must never assert
 
 A float→integer conversion is **undefined in C** when the value is NaN, ±inf, or outside the
 destination's range, and NumPy performs exactly that C cast. The result is the host toolchain's,
@@ -121,6 +121,32 @@ against cast kernels that reproduce the MSVC answer, so ~950/200000 cases "diver
 `astype` float→uint32/uint64 and on `reciprocal(uint64 0)` — which NumPy computes as
 `(uint64)(1.0/0)`, the same undefined conversion. No implementation can satisfy both hosts; the fix
 was to stop asserting undefined values, not to chase one host's.
+
+**The second class: complex results of the platform's C99 complex library.** NumPy computes the
+complex128 `sqrt`/`log`/`exp`/`sin`/`cos`/`tan` of `fuzz_random.py`'s pool by calling the platform
+library: glibc on Linux, UCRT's `cexp`/`csin`/`ccos`/`ctan` plus NumPy's own msun ports of
+`csqrt`/`clog` on win-amd64 (`npy_config.h` blocklists those under `_MSC_VER`). C99 Annex G leaves
+the sign of many NaN and infinite results of a non-finite argument unspecified, so the two hosts
+disagree, while NumSharp reproduces the win-amd64 bits and the harness holds complex NaN signs
+byte-exact on x64 (`ComplexNanContractOps`). When that contract reached master (PR #628,
+2026-09-06), the soak went red every night with ~650/200000 "NaN-sign/signed-zero contract
+violations", all six ops, all with a NaN or inf input component. One seed generated on both hosts
+had identical operands and differed in NaN signs, infinity signs (`csin` → `(+nan, -inf)` vs
+`(+nan, +inf)`) and last-bit rounding. `_defuse_complex_nonfinite` now replaces only the non-finite
+COMPONENTS of those ops' complex inputs with finite pool values; finite arguments are fully
+specified, so what stays is ULP-level rounding the complex-unary excuse already bounds.
+`assert_portable` audits it like the casts. The committed `unary`/`specials`/`nan` tiers keep the
+non-finite complex edges as win-amd64 bytes, so the NaN-sign contract stays gated there. Measured
+on WSL Ubuntu with a real Linux NumPy 2.4.2: that night's 10 seeds went from ~650 divergences each
+to 0.
+
+**The runner's ISA is a host, too.** On AVX512_SKX hardware the Linux wheel links Intel SVML
+(float64 `exp`/`log` and ~20 more ufuncs) and dispatches its AVX512F float32 `exp`/`log` kernels,
+none of which the win-amd64 reference wheel ever runs. Hosted `ubuntu-latest` runners are a mix of
+AVX2 and AVX-512 machines, so the soak job (like `interop-test`'s ubuntu leg) pins
+`NPY_DISABLE_CPU_FEATURES: X86_V4 AVX512_ICL AVX512_SPR` and logs the runner's raw `AVX512F` flag
+next to NumPy's effective `X86_V4` dispatch. To regenerate a corpus on Linux locally, set the same
+variable, and use a real Linux interpreter: a WSL `python3` can be a shim to the Windows one.
 
 ## Scope gate — undisposed-intermediate detection (oracle-free)
 
