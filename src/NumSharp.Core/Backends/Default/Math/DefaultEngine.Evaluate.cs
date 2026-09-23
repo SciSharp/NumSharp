@@ -894,36 +894,51 @@ namespace NumSharp.Backends
             if (@out is not null)
                 ValidateOutCast(resultType, @out.typecode, "evaluate", options.Casting);
 
-            // Materialize the child once (fresh + contiguous). `using` releases it after the delegated
-            // reduction has read it; every delegated reduction allocates a FRESH result (np.ptp is a
-            // subtract, np.nanmin/nanmax are reductions), so `computed` never aliases `materialized`.
-            using var materialized = EvaluateCore(program.ChildElementwiseProgram, inputs, null);
+            // ArgMax / ArgMin stream the child instead of materializing it (DefaultEngine.Evaluate.ArgStream.cs): a bare
+            // leaf goes straight to the engine argmax, a computed child over all-C operands is produced block by block
+            // into L1 and folded as it arrives. `computed` then has exactly the contract of the engine calls below
+            // (flat: 0-d int64; axis: keepdims applied), so the shared tail is unchanged. Null = declined, nothing
+            // allocated — the materialize route below runs as before.
+            NDArray computed = null;
+            int childNdim = 0;
+            if (reduce.Kind is NDExprReduceKind.ArgMax or NDExprReduceKind.ArgMin)
+                computed = TryStreamArgReduce(program, inputs, out childNdim);
 
-            // A FLAT reduce (axis == null) calls the engine reductions WITHOUT keepdims — they return a
-            // 0-d scalar, which KeepdimsFlat below reshapes to (1,)*childNdim when requested (plan P2 M5);
-            // the AXIS path passes keepdims straight through, since the engine reduction already keeps
-            // the reduced axis as size 1. (np.argmax/argmin's flat form is a scalar `long` regardless,
-            // wrapped into a 0-d int64 array.)
-            bool axisKd = reduce.Axis is int && reduce.Keepdims;
-            NDArray computed = reduce.Kind switch
+            if (computed is null)
             {
-                NDExprReduceKind.Ptp    => np.ptp(materialized, reduce.Axis, keepdims: axisKd),
-                NDExprReduceKind.NanMin => np.nanmin(materialized, reduce.Axis, axisKd),
-                NDExprReduceKind.NanMax => np.nanmax(materialized, reduce.Axis, axisKd),
-                NDExprReduceKind.ArgMax => reduce.Axis is int axMax
-                    ? np.argmax(materialized, axMax, reduce.Keepdims)
-                    : NDArray.Scalar(np.argmax(materialized)),
-                NDExprReduceKind.ArgMin => reduce.Axis is int axMin
-                    ? np.argmin(materialized, axMin, reduce.Keepdims)
-                    : NDArray.Scalar(np.argmin(materialized)),
-                _ => throw new NotSupportedException(
-                    $"EvaluateDelegatingReduce reached with non-delegating kind {reduce.Kind} — dispatch bug."),
-            };
+                // Materialize the child once (fresh + contiguous). `using` releases it at the end of this block,
+                // after the delegated reduction has read it; every delegated reduction allocates a FRESH result
+                // (np.ptp is a subtract, np.nanmin/nanmax are reductions, np.argmax/argmin allocate their index
+                // array), so `computed` never aliases `materialized`.
+                using var materialized = EvaluateCore(program.ChildElementwiseProgram, inputs, null);
+                childNdim = materialized.ndim;
+
+                // A FLAT reduce (axis == null) calls the engine reductions WITHOUT keepdims — they return a
+                // 0-d scalar, which KeepdimsFlat below reshapes to (1,)*childNdim when requested (plan P2 M5);
+                // the AXIS path passes keepdims straight through, since the engine reduction already keeps
+                // the reduced axis as size 1. (np.argmax/argmin's flat form is a scalar `long` regardless,
+                // wrapped into a 0-d int64 array.)
+                bool axisKd = reduce.Axis is int && reduce.Keepdims;
+                computed = reduce.Kind switch
+                {
+                    NDExprReduceKind.Ptp    => np.ptp(materialized, reduce.Axis, keepdims: axisKd),
+                    NDExprReduceKind.NanMin => np.nanmin(materialized, reduce.Axis, axisKd),
+                    NDExprReduceKind.NanMax => np.nanmax(materialized, reduce.Axis, axisKd),
+                    NDExprReduceKind.ArgMax => reduce.Axis is int axMax
+                        ? np.argmax(materialized, axMax, reduce.Keepdims)
+                        : NDArray.Scalar(np.argmax(materialized)),
+                    NDExprReduceKind.ArgMin => reduce.Axis is int axMin
+                        ? np.argmin(materialized, axMin, reduce.Keepdims)
+                        : NDArray.Scalar(np.argmin(materialized)),
+                    _ => throw new NotSupportedException(
+                        $"EvaluateDelegatingReduce reached with non-delegating kind {reduce.Kind} — dispatch bug."),
+                };
+            }
 
             // Flat keepdims (plan P2 M5): keep every axis as size 1 → (1,)*childNdim over the
-            // materialized child's rank. A 0-d child stays 0-d; keepdims=false is a no-op.
+            // child's rank. A 0-d child stays 0-d; keepdims=false is a no-op.
             if (reduce.Axis is null)
-                computed = KeepdimsFlat(computed, materialized.ndim, reduce.Keepdims);
+                computed = KeepdimsFlat(computed, childNdim, reduce.Keepdims);
 
             if (@out is null)
                 return computed;
@@ -932,7 +947,7 @@ namespace NumSharp.Backends
             // wrong-rank out with this message (the fold path raises the identical text — see
             // EvaluateReduce). The axis case's out shape is checked by np.copyto below.
             if (reduce.Axis is null)
-                ValidateFlatReduceOut(@out, materialized.ndim, reduce.Keepdims, ReduceUfuncName(reduce.Kind));
+                ValidateFlatReduceOut(@out, childNdim, reduce.Keepdims, ReduceUfuncName(reduce.Kind));
 
             // copyto applies the (already-validated) same_kind cast and shape-checks the axis case,
             // matching the axis fold path's `np.copyto(@out, reduced)` tail.

@@ -744,6 +744,214 @@ namespace NumSharp.Tests.Backends.Iterators
         }
 
         /// <summary>
+        /// The streamed fused ArgMax / ArgMin (<c>DefaultEngine.Evaluate.ArgStream.cs</c>) over COMPUTED children of every
+        /// served dtype family: flat (one long row), rows (the reduced axis innermost — many short rows per produce block,
+        /// and rows longer than a block folded chunk by chunk) and slabs (an outer axis — narrow slabs many rows per block,
+        /// and slabs wider than a 1024-lane chunk), every axis of 2-D / 3-D blocks, keepdims both ways — byte-identical to
+        /// the materialize route it replaces, and to the engine argmax of the materialized child.
+        /// </summary>
+        [TestMethod]
+        public void ArgReduce_ComputedChildren_StreamAndMatchMaterialize()
+        {
+            var shapes = new[]
+            {
+                new long[] { 700 }, new long[] { 5000 },                          // one short row / a row of five f64 blocks
+                new long[] { 1000, 100 }, new long[] { 5, 5000 },                 // many rows per block / rows longer than one
+                new long[] { 300, 3000 },                                          // slabs wider than a lane chunk
+                new long[] { 4, 5, 67 }, new long[] { 4, 300, 7 },                // every axis of a 3-D block
+            };
+            var half = NDArray.Scalar(0.5);   // 0-d → a hoisted parameter of the computed child
+            foreach (var shape in shapes)
+            {
+                int nd = shape.Length;
+                var a = Pool(shape, NPTypeCode.Double, 40 + (int)shape[0]);                 // NaN / ±inf / -0 laced
+                var b = Pool(shape, NPTypeCode.Double, 50 + (int)shape[0], benign: true);   // specials-free
+                var bf = b.astype(NPTypeCode.Single);
+                var bi = (b * 5).astype(NPTypeCode.Int32);                                  // 2..7: many ties
+                var bl = (b * 5).astype(NPTypeCode.Int64);
+                var bu = (b * 5).astype(NPTypeCode.Byte);
+                var children = new (string, Func<NDExpr>)[]
+                {
+                    ("f64 NaN-laced", () => (NDExpr)a * (NDExpr)b),
+                    ("f64 benign", () => (NDExpr)b - (NDExpr)half),
+                    ("f32", () => (NDExpr)bf * (NDExpr)bf),
+                    ("i32 ties", () => (NDExpr)bi - 3),
+                    ("i64 ties", () => (NDExpr)bl * (NDExpr)bl),
+                    ("u8 wrap", () => (NDExpr)bu + (NDExpr)bu),
+                    ("bool", () => (NDExpr)b > (NDExpr)half),
+                };
+                foreach (var (name, child) in children)
+                {
+                    var c = child;
+                    AssertSameBothWaysExact(() => NDExpr.ArgMax(c()), expectStream: true);
+                    AssertSameBothWaysExact(() => NDExpr.ArgMin(c()), expectStream: true);
+                    AssertSameBothWaysExact(() => NDExpr.ArgMax(c(), keepdims: true), expectStream: true);
+                    for (int axis = -nd; axis < nd; axis++)
+                    {
+                        int ax = axis;
+                        AssertSameBothWaysExact(() => NDExpr.ArgMax(c(), ax), expectStream: true);
+                        AssertSameBothWaysExact(() => NDExpr.ArgMin(c(), ax, keepdims: ax >= 0), expectStream: true);
+                    }
+
+                    // An independent cross-check: the engine argmax over the materialized child.
+                    using var materialized = np.evaluate(c());
+                    for (int axis = 0; axis < nd; axis++)
+                        Assert.IsTrue(np.array_equal(np.argmax(materialized, axis), np.evaluate(NDExpr.ArgMax(c(), axis))),
+                            $"{name} {string.Join("x", shape)} axis {axis}");
+                    Assert.AreEqual(np.argmin(materialized), np.evaluate(NDExpr.ArgMin(c())).GetAtIndex<long>(0), $"{name} flat");
+                }
+            }
+        }
+
+        /// <summary>
+        /// A row longer than the produce block is folded chunk by chunk: the chunk winners must combine to the GLOBAL first
+        /// occurrence (a tie in a later chunk never replaces an earlier one), and the fold must stop at — and only at — a
+        /// deciding value (the first NaN for argmax AND argmin, an integer extreme, the first True / False), wherever
+        /// it falls, including a row with no deciding value at all.
+        /// </summary>
+        [TestMethod]
+        public void ArgReduce_LongRowChunks_KeepTheFirstOccurrence()
+        {
+            // The flat argmax/argmin must stream, equal the materialize route byte for byte, and be the pinned index.
+            void AssertIndex(Func<NDExpr> make, long want, string what)
+            {
+                AssertSameBothWaysExact(make, expectStream: true);
+                Assert.AreEqual(want, np.evaluate(make()).GetAtIndex<long>(0), what);
+            }
+
+            // One row of 5000 doubles = five 1024-element blocks.
+            var x = np.zeros(new Shape(5000), NPTypeCode.Double);
+            x[1000] = 9.0;
+            x[2100] = 9.0;
+            AssertIndex(() => NDExpr.ArgMax((NDExpr)x * 1.0), 1000, "a tie across chunks keeps chunk 0's");
+            AssertIndex(() => NDExpr.ArgMin((NDExpr)x * -1.0), 1000, "…for argmin too");
+            x[3000] = double.NaN;
+            x[4000] = double.NaN;
+            AssertIndex(() => NDExpr.ArgMax((NDExpr)x * 1.0), 3000, "the first NaN wins argmax");
+            AssertIndex(() => NDExpr.ArgMin((NDExpr)x * 1.0), 3000, "…and argmin");
+            x[5] = double.NaN;
+            AssertIndex(() => NDExpr.ArgMax((NDExpr)x * 1.0), 5, "a NaN in chunk 0 decides the row");
+
+            // int64: the extreme in chunk 2 and chunk 3 (2048-element blocks at 8 bytes = 1024) → chunk 2's.
+            var l = np.zeros(new Shape(5000), NPTypeCode.Int64);
+            l[2500] = long.MaxValue;
+            l[3500] = long.MaxValue;
+            AssertIndex(() => NDExpr.ArgMax((NDExpr)l + 0), 2500, "int64 extreme, first chunk holding it");
+            AssertIndex(() => NDExpr.ArgMin(-(NDExpr)l), 2500, "int64 negated extreme");
+
+            // Bool rows of 20000 = three 8192-element blocks: the first True only in the last block, none at all, and
+            // argmin's first False.
+            var m = np.zeros(new Shape(3, 20000), NPTypeCode.Double);
+            m[0, 16384] = 1.0;
+            m[0, 19999] = 1.0;
+            m["2, :"] = 1.0;
+            m[2, 9000] = 0.0;
+            AssertSameBothWaysExact(() => NDExpr.ArgMax((NDExpr)m > 0.5, 1), expectStream: true);
+            AssertSameBothWaysExact(() => NDExpr.ArgMin((NDExpr)m > 0.5, 1), expectStream: true);
+            CollectionAssert.AreEqual(new long[] { 16384, 0, 0 }, np.evaluate(NDExpr.ArgMax((NDExpr)m > 0.5, 1)).ToArray<long>());
+            CollectionAssert.AreEqual(new long[] { 0, 0, 9000 }, np.evaluate(NDExpr.ArgMin((NDExpr)m > 0.5, 1)).ToArray<long>());
+            AssertIndex(() => NDExpr.ArgMax((NDExpr)m["1, :"] > 0.5), 0, "no True at all → 0");
+
+            // A slab whose lanes decide on different rows, one never: the lane-chunk walk may stop only when all have.
+            var s = np.zeros(new Shape(40, 3000), NPTypeCode.Double);
+            for (int c = 0; c < 3000; c += 7) s[(c * 13) % 40, c] = 1.0;
+            s[":, 2999"] = 0.0;
+            s[39, 2999] = 1.0;
+            AssertSameBothWaysExact(() => NDExpr.ArgMax((NDExpr)s > 0.5, 0), expectStream: true);
+            Assert.AreEqual(39L, np.evaluate(NDExpr.ArgMax((NDExpr)s > 0.5, 0)).GetAtIndex<long>(2999));
+        }
+
+        /// <summary>
+        /// The route choice and the result plumbing: a BARE leaf streams in every layout (the engine's fast fold reads it in
+        /// place); a computed child over F / strided / broadcast / mixed-order operands, a Half / Decimal child and an
+        /// empty child keep the materialize route (same answer, same exception); <c>out=</c> — int64 or a same-kind float64
+        /// — receives the streamed result and is what comes back; NumPy's pinned values hold.
+        /// </summary>
+        [TestMethod]
+        public void ArgReduce_LeavesDeclinesOutAndPinnedValues()
+        {
+            var c = Pool(new long[] { 40, 30 }, NPTypeCode.Double, 3);
+            var f = np.asfortranarray(c);
+            var leaves = new[] { c, f, c[":, ::-1"], c["::2, :"], np.broadcast_to(c["0, :"], new Shape(40, 30)) };
+            foreach (var leaf in leaves)
+            {
+                var lv = leaf;
+                AssertSameBothWaysExact(() => NDExpr.ArgMax((NDExpr)lv), expectStream: true);
+                for (int axis = 0; axis < 2; axis++)
+                {
+                    int ax = axis;
+                    AssertSameBothWaysExact(() => NDExpr.ArgMax((NDExpr)lv, ax), expectStream: true);
+                    AssertSameBothWaysExact(() => NDExpr.ArgMin((NDExpr)lv, ax, keepdims: true), expectStream: true);
+                }
+            }
+
+            // Declines: the child's memory order is not its logical C order, or an operand broadcasts.
+            var row = Pool(new long[] { 30 }, NPTypeCode.Double, 4);
+            AssertSameBothWaysExact(() => NDExpr.ArgMax((NDExpr)f * 2.0, 0), expectStream: false);
+            AssertSameBothWaysExact(() => NDExpr.ArgMax((NDExpr)c[":, ::2"] * 2.0, 1), expectStream: false);
+            AssertSameBothWaysExact(() => NDExpr.ArgMin((NDExpr)c + (NDExpr)f, 1), expectStream: false);
+            AssertSameBothWaysExact(() => NDExpr.ArgMax((NDExpr)c + (NDExpr)row, 0), expectStream: false);
+            // Dtypes the fold does not serve.
+            var h = Pool(new long[] { 40, 30 }, NPTypeCode.Double, 5, benign: true).astype(NPTypeCode.Half);
+            AssertSameBothWaysExact(() => NDExpr.ArgMax((NDExpr)h + (NDExpr)h, 1), expectStream: false);
+            var dm = Pool(new long[] { 40, 30 }, NPTypeCode.Double, 6, benign: true).astype(NPTypeCode.Decimal);
+            AssertSameBothWaysExact(() => NDExpr.ArgMin((NDExpr)dm * 2, 0), expectStream: false);
+            // Empty: NumPy's error from the materialize route, whichever route was tried.
+            var e0 = np.zeros(new Shape(0, 5), NPTypeCode.Double);
+            Assert.ThrowsException<ArgumentException>(() => np.evaluate(NDExpr.ArgMax((NDExpr)e0 * 2.0)));
+            Assert.ThrowsException<ArgumentException>(() => np.evaluate(NDExpr.ArgMax((NDExpr)e0 * 2.0, 0)));
+            AssertSameBothWaysExact(() => NDExpr.ArgMax((NDExpr)e0 * 2.0, 1), expectStream: false);
+
+            // out=: the streamed result lands in the caller's array, which is what comes back.
+            var benign = Pool(new long[] { 40, 30 }, NPTypeCode.Double, 7, benign: true);
+            var dst = np.full(new Shape(30), -7L);
+            NDExpr.StreamingReductions = 0;
+            var got = np.evaluate(NDExpr.ArgMax((NDExpr)benign * 2.0, 0), @out: dst);
+            Assert.IsTrue(NDExpr.StreamingReductions > 0, "the argmax streams");
+            Assert.AreSame(dst, got, "out= is returned");
+            CollectionAssert.AreEqual(np.argmax(benign * 2.0, 0).ToArray<long>(), dst.ToArray<long>());
+            var dstf = np.zeros(new Shape(40), NPTypeCode.Double);
+            np.evaluate(NDExpr.ArgMin((NDExpr)benign * 2.0, 1), @out: dstf);
+            CollectionAssert.AreEqual(np.argmin(benign * 2.0, 1).astype(NPTypeCode.Double).ToArray<double>(), dstf.ToArray<double>());
+
+            // NumPy 2.4.2: argmax/argmin(m, 0) = [1 2 0 2] and axis 1 = [2 0 1] — the first NaN wins either way.
+            var m = np.array(new double[,] { { 1, 5, double.NaN, 2 }, { double.NaN, 7, 1, 2 }, { 3, double.NaN, 0, double.NaN } });
+            CollectionAssert.AreEqual(new long[] { 1, 2, 0, 2 }, np.evaluate(NDExpr.ArgMax((NDExpr)m * 1.0, 0)).ToArray<long>());
+            CollectionAssert.AreEqual(new long[] { 1, 2, 0, 2 }, np.evaluate(NDExpr.ArgMin((NDExpr)m * 1.0, 0)).ToArray<long>());
+            CollectionAssert.AreEqual(new long[] { 2, 0, 1 }, np.evaluate(NDExpr.ArgMax((NDExpr)m * 1.0, 1)).ToArray<long>());
+            CollectionAssert.AreEqual(new long[] { 2, 0, 1 }, np.evaluate(NDExpr.ArgMin((NDExpr)m * 1.0, 1)).ToArray<long>());
+        }
+
+        /// <summary>
+        /// A child that throws part-way through the stream (a <c>Call</c> node) raises the same exception on both routes —
+        /// the stream never turns a failure into a fallback, and the half-written result is released rather than returned.
+        /// </summary>
+        [TestMethod]
+        public void ArgReduce_ThrowingChild_PropagatesTheSameException()
+        {
+            var x = np.arange(6000).astype(NPTypeCode.Double).reshape(3, 2000);
+            Func<double, double> boom = v => v > 4500 ? throw new InvalidOperationException("boom " + v) : v;
+            foreach (int? axis in new int?[] { null, 0, 1 })
+            {
+                foreach (bool disable in new[] { false, true })
+                {
+                    NDExpr.DisableStreamingReduce = disable;
+                    try
+                    {
+                        var ex = Assert.ThrowsException<InvalidOperationException>(() => np.evaluate(axis is int ax
+                            ? NDExpr.ArgMax(NDExpr.Call(boom, (NDExpr)x), ax)
+                            : NDExpr.ArgMax(NDExpr.Call(boom, (NDExpr)x))));
+                        Assert.AreEqual("boom 4501", ex.Message, $"axis {axis} streaming {!disable}");
+                    }
+                    finally
+                    {
+                        NDExpr.DisableStreamingReduce = false;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
         /// <see cref="AssertSameBothWays"/> for results of ANY dtype (bool / int64 here): evaluate with streaming off
         /// and on, assert engagement, and compare dtype, shape and raw bytes.
         /// </summary>
