@@ -118,8 +118,12 @@ namespace NumSharp.Tests.Interop
         ///     one CI log carries the whole measurement.</para>
         ///     <para>The input is the same bytes on every host (<see cref="PortableHarmonicSignal"/>),
         ///     which is what lets a mismatch measured on one host be reproduced, hash for hash, on
-        ///     another: an x64 replica of NumPy's arm64 arithmetic can be checked against the hashes a
-        ///     macOS run reports.</para>
+        ///     another. An x64 replica of pocketfft, fed the twiddle factors macOS's libm returns,
+        ///     reproduced both hashes macos-latest reported (NumSharp's literally, NumPy's fused; see
+        ///     <see cref="InteropTestBase.PocketFftFusedArithmetic"/>). The RESULT hashes are not
+        ///     host-independent, NumSharp's included: the twiddles come from the platform's libm
+        ///     (<c>Math.Cos</c>/<c>Math.Sin</c>, as NumPy's <c>std::cos</c>/<c>std::sin</c>), and
+        ///     Apple's, glibc's and ucrtbase's disagree in the last bit on some of them.</para>
         /// </remarks>
         [TestMethod]
         public void Rfft_HarmonicSignal_PowerOfTwoMixedRadixAndBluestein_ByteExactVsLiveNumpy()
