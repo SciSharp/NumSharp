@@ -1,5 +1,21 @@
 # Handover — revalidate and fix the ordered-collection bugs
 
+> **Status: EXECUTED (2026-09-23)** — `git log -- docs/ORDERED_COLLECTIONS_FIX_HANDOVER.md` finds the commits. All ten
+> pinned bugs revalidated (10 failed / 5 passed on net10.0 and net8.0, exactly as §1 predicts) and fixed; B11 fixed by
+> inspection; the ten tests are CI tests now (`OrderedDictionaryOpenBugsTests` was renamed
+> `OrderedDictionaryContractTests`). Gates: the 15 tests green on both TFMs in Release and Debug; the three storm tests
+> 40/40 runs (20 per TFM); the Collections CI filter 172 → 182 on both TFMs; the full suite green on both TFMs.
+> Deviations from the plan below, all measured: (1) the node-handle re-index was NOT neutral (~1.7× the one-pass
+> re-index cache-resident, ~2.5× at 100K), so COD keeps the one-pass re-index when a lookup can run no user code (a
+> framework key type under the default comparer) and resolves nodes first only otherwise; (2) OrderedDictionary growth
+> and the wide-value replace build their new keys and index BEFORE raising the flag, so their fenced window holds only
+> the live-value copy and the publish (no measured cost); `TryRemove` keeps the prescribed order (building first made
+> it 16–21 % slower single-threaded); (3) the removal reads the value it returns inside the fenced window, closing a
+> lost-update variant on `TryRemove`'s result. New
+> findings reported, not fixed: an out-of-memory-only strand on COD's add paths (the vendored map grows its table AFTER
+> inserting), and two named relaxations of OrderedDictionary's lock-free replace (documented in its remarks and in the
+> proposal §7.2). The measured costs are in the OrderedDictionary remarks and `ConcurrentOrderedDictionary.TODO.md`.
+
 **Branch:** `journey4` (draft PR #631). **Never commit on `master`.** Base: `fe756f9e` (the test commit).
 **Scope:** `src/NumSharp.Core/Collections/Concurrent/` — `OrderedDictionary<TKey,TValue>` (lean, lock-free replace, value
 stored once; 0 production users) and `ConcurrentOrderedDictionary<TKey,TValue>` (COD, the shipped node type).

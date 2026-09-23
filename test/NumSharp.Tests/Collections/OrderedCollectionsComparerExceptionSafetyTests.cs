@@ -7,7 +7,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace NumSharp.Tests.Collections
 {
     // Inside the namespace declaration so `OrderedDictionary<,>` binds to NumSharp's type rather than being ambiguous
-    // with System.Collections.Generic.OrderedDictionary<,> (.NET 9+) — see OrderedDictionaryOpenBugsTests.
+    // with System.Collections.Generic.OrderedDictionary<,> (.NET 9+) — see OrderedDictionaryContractTests.
     using NumSharp.Collections;
 
     /// <summary>
@@ -25,22 +25,25 @@ namespace NumSharp.Tests.Collections
     ///         contract").
     ///     </para>
     ///     <para>
-    ///         <b>ConcurrentOrderedDictionary breaks it.</b> Its order-preserving interior removal, both branches of its
-    ///         swap-back removal (in place for word-sized keys/values, copying for wide ones) and its RemoveWhere all mutate
-    ///         the key map FIRST and then re-index the shifted/moved keys through the map — a comparer call per key —
-    ///         BEFORE publishing the new list-path store. A comparer that throws during that re-index (here: the refused
-    ///         write-back) aborts the operation half-applied: a removed key no longer resolves yet still enumerates (or a
-    ///         moved key enumerates twice), and already-re-indexed keys report positions the published store does not have.
-    ///         The refusal meant to prevent corruption causes it. The fix is the discipline the type already applies to
-    ///         allocations: do every comparer-calling lookup (resolve the node refs of the keys to be re-indexed) BEFORE the
-    ///         first mutation, then mutate throw-free.
+    ///         <b>ConcurrentOrderedDictionary broke it until these tests pinned it</b> (committed known-failing as
+    ///         <c>[OpenBugs]</c> in fe756f9e, then fixed). Its order-preserving interior removal, both branches of its
+    ///         swap-back removal (in place for word-sized keys/values, copying for wide ones) and its RemoveWhere all
+    ///         mutated the key map FIRST and then re-indexed the shifted/moved keys through the map — a comparer call per
+    ///         key — BEFORE publishing the new list-path store. A comparer that threw during that re-index (here: the
+    ///         refused write-back) aborted the operation half-applied: a removed key no longer resolved yet still
+    ///         enumerated (or a moved key enumerated twice), and already-re-indexed keys reported positions the published
+    ///         store did not have — the refusal meant to prevent corruption caused it. The fix is the discipline the type
+    ///         already applied to allocations: every comparer-calling lookup (the key-map node of every entry the operation
+    ///         will unlink or re-index, resolved through the vendored map's node handles) happens BEFORE the first
+    ///         mutation, and the mutation then goes through those handles without the comparer — so a refused write-back
+    ///         now aborts the operation with nothing changed.
     ///     </para>
     ///     <para>
-    ///         <b>ConcurrentOrderedCompactDictionary and OrderedDictionary keep the contract</b> and are pinned here as
-    ///         passing controls: the compact type re-indexes from the tags stored in its index words (no comparer after the
+    ///         <b>ConcurrentOrderedCompactDictionary and OrderedDictionary always kept the contract</b> and are pinned here
+    ///         as controls: the compact type re-indexes from the tags stored in its index words (no comparer after the
     ///         probe) and probes every key it will touch before mutating; OrderedDictionary rebuilds a private generation and
     ///         publishes it only at the end, so a throw leaves the published generation untouched (its separate stuck-flag
-    ///         defect is pinned in OrderedDictionaryOpenBugsTests).
+    ///         defect is guarded in OrderedDictionaryContractTests).
     ///     </para>
     ///     <para>
     ///         Every scenario is deterministic and single-threaded: keys 0..9 with a value law (<c>10 × key</c>), and a
@@ -62,17 +65,18 @@ namespace NumSharp.Tests.Collections
         private static readonly Func<int, decimal> WideLaw = k => k * 10m + 0.5m;
 
         // ------------------------------------------------------------------------------------------------------------
-        // ConcurrentOrderedDictionary — known-failing.
+        // ConcurrentOrderedDictionary — regression guards (these four failed before the node-handle fix).
         // ------------------------------------------------------------------------------------------------------------
 
         /// <summary>
-        ///     <c>TryRemove(3)</c> of an interior key: the map drops key 3, then re-indexes keys 4..9 one by one through the
-        ///     comparer; the refused write-back fires while re-indexing key 7, before the shifted store is published.
-        ///     Correct: consistent paths (either the removal fully applied or not at all). Today: key 3 still enumerates at
-        ///     position 3 but no longer resolves, and keys 4..6 report positions 3..5 that the published store does not have.
+        ///     <c>TryRemove(3)</c> of an interior key: key 7 is poisoned, and it is hashed only while resolving the entries
+        ///     the shift moves. Correct: consistent paths (either the removal fully applied or not at all). Before the fix
+        ///     the map dropped key 3 first and re-indexed keys 4..9 one by one through the comparer, so the refused
+        ///     write-back at key 7 left key 3 enumerating at position 3 without resolving, and keys 4..6 reporting
+        ///     positions 3..5 the published store did not have; now every shifted entry's node is resolved before the
+        ///     first mutation, so the refusal aborts the removal with nothing changed.
         /// </summary>
         [TestMethod]
-        [OpenBugs]
         public void ConcurrentOrderedDictionary_InteriorRemoval_RefusedWriteBackMidReindex_LeavesBothPathsConsistent()
         {
             var (d, comparer) = SeedConcurrentOrderedDictionary(IntLaw);
@@ -84,13 +88,13 @@ namespace NumSharp.Tests.Collections
         }
 
         /// <summary>
-        ///     <c>TryRemoveSwapBack(3)</c>, in-place branch (<c>int</c> keys and values): the map drops key 3 and the last
-        ///     entry (key 9) is written into slot 3 of the LIVE store, then key 9's recorded position is rewritten through
-        ///     the comparer — where the refused write-back fires. Correct: consistent paths. Today: the live store still has
-        ///     count 10 with key 9 at positions 3 AND 9 (enumerated twice), key 3 gone.
+        ///     <c>TryRemoveSwapBack(3)</c>, in-place branch (<c>int</c> keys and values), with the moved key 9 poisoned.
+        ///     Correct: consistent paths. Before the fix the map dropped key 3 and the last entry (key 9) was written into
+        ///     slot 3 of the LIVE store before key 9's recorded position was rewritten through the comparer — where the
+        ///     refused write-back fired — leaving the live store at count 10 with key 9 at positions 3 AND 9 (enumerated
+        ///     twice) and key 3 gone; now the moved key's node is resolved before any mutation, so nothing changes.
         /// </summary>
         [TestMethod]
-        [OpenBugs]
         public void ConcurrentOrderedDictionary_SwapBackRemoval_RefusedWriteBackMidReindex_LeavesBothPathsConsistent()
         {
             var (d, comparer) = SeedConcurrentOrderedDictionary(IntLaw);
@@ -102,13 +106,13 @@ namespace NumSharp.Tests.Collections
         }
 
         /// <summary>
-        ///     <c>TryRemoveSwapBack(3)</c>, copying branch (<see cref="decimal" /> values are not atomically writable): the
-        ///     moved entry is placed into fresh arrays, but the map still drops key 3 BEFORE key 9 is re-pointed through the
-        ///     comparer, and the fresh store is published only after that. Correct: consistent paths. Today: the old store
-        ///     is still published, so key 3 enumerates at position 3 while no longer resolving.
+        ///     <c>TryRemoveSwapBack(3)</c>, copying branch (<see cref="decimal" /> values are not atomically writable), with
+        ///     the moved key 9 poisoned. Correct: consistent paths. Before the fix the moved entry was placed into fresh
+        ///     arrays, but the map still dropped key 3 BEFORE key 9 was re-pointed through the comparer, and the fresh
+        ///     store was published only after that — so the refused write-back left the old store published, key 3
+        ///     enumerating at position 3 while no longer resolving; now the moved key's node is resolved first.
         /// </summary>
         [TestMethod]
-        [OpenBugs]
         public void ConcurrentOrderedDictionary_WideSwapBackRemoval_RefusedWriteBackMidReindex_LeavesBothPathsConsistent()
         {
             var (d, comparer) = SeedConcurrentOrderedDictionary(WideLaw);
@@ -120,13 +124,15 @@ namespace NumSharp.Tests.Collections
         }
 
         /// <summary>
-        ///     <c>RemoveWhere(even)</c>: keys 0, 2, 4, 6 are dropped from the map one by one and survivors 1, 3, 5 re-indexed;
-        ///     the refused write-back fires while re-indexing survivor 7, and again inside the <c>finally</c> that is meant
-        ///     to publish the consistent prefix — so the publish never happens. Correct: consistent paths. Today: 0, 2, 4, 6
-        ///     still enumerate but no longer resolve, and 1, 3, 5 report positions 0..2 the published store does not have.
+        ///     <c>RemoveWhere(even)</c> with survivor 7 poisoned. Correct: consistent paths. Before the fix keys 0, 2, 4, 6
+        ///     were dropped from the map one by one and survivors 1, 3, 5 re-indexed through the comparer; the refused
+        ///     write-back fired while re-indexing survivor 7, and again inside the <c>finally</c> meant to publish the
+        ///     consistent prefix — so the publish never happened, leaving 0, 2, 4, 6 enumerating without resolving and 1,
+        ///     3, 5 reporting positions 0..2 the published store did not have. Now the node of every entry the pass may
+        ///     touch is resolved before the first removal (the refusal aborts the pass with nothing removed), and the
+        ///     <c>finally</c> no longer calls the comparer at all.
         /// </summary>
         [TestMethod]
-        [OpenBugs]
         public void ConcurrentOrderedDictionary_RemoveWhere_RefusedWriteBackMidReindex_LeavesBothPathsConsistent()
         {
             var (d, comparer) = SeedConcurrentOrderedDictionary(IntLaw);

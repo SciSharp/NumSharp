@@ -61,7 +61,9 @@ old high-water mark when an O(1) tail removal shares arrays downward, and an app
 copies-on-write; (3) values are rewritten in place only when `TValue` is single-store atomic
 (otherwise node-swap + array-clone, so nothing tears). Single-field in-place node writes (the atomic
 value, the always-atomic index) go through the clone's `GetValueRefOrNullRef` ref seam under the one
-global write lock.
+global write lock — or, inside the removals, through node handles (`FindNode`/`NodeHandle.Value`/
+`TryRemoveNode`, same partial) resolved before the first mutation, so a throwing key comparer can
+never abort a removal half-applied (see "Comparer exception safety" below).
 
 ---
 
@@ -172,6 +174,15 @@ interior remove; tombstoning would forfeit Target A.
       key through the ref seam (no allocation; the hash walk per shifted key remains — carrying a
       node array in the `Store` to avoid it would tax every append and was not worth it once the tail
       and bulk paths above removed the common quadratic drains).
+- [x] **Re-index made exception-safe (2026-09-23)** — the re-index used to run AFTER the key was
+      removed from the map, through the comparer, so a comparer throw stranded the removal half-applied.
+      It now resolves every shifted node before the first mutation when the lookups can run user code
+      (a custom comparer, or a key type with its own `Equals`/`GetHashCode`): an 8-bytes-per-shifted-entry
+      handle array plus a second pass over the nodes, measured ~1.7× the one-pass re-index cache-resident
+      and ~2.5× at 100K entries. For framework key types under the default comparer the lookups cannot
+      throw or write back, so they keep the one-pass re-index (now 5–7 % faster than before — the removed
+      key is unlinked by node identity instead of a second hash walk). Details and numbers:
+      "Comparer exception safety" below.
 
 **Residual (inherent):** a single order-preserving interior removal remains O(n) — array shift plus
 tail re-index — exactly like `List<T>.RemoveAt`.
@@ -223,10 +234,20 @@ back under the lock) is now detected and refused.
   winner; `TryUpdate` is a true CAS (per-key `final value == success count`, exactly);
   `GetOrAdd` returns one winner to every caller and only ever a value a factory actually produced;
   `AddOrUpdate` loses no increments; `AddRange` batches appear on the list path atomically.
-* **Exception-tightness:** every fallible allocation happens before the key map is touched, and the
-  batch operations publish in `finally` — a throw (source enumerator, predicate, OOM) always lands in
-  a consistent "applied everything up to the failure" state, never a key that resolves but does not
-  enumerate.
+* **Exception-tightness:** every fallible allocation happens before the key map is touched, every
+  key-comparer call of a mutation (user code — including this type's own `LockRecursionException`
+  refusal of a comparer that writes back) happens before its first mutation, and the batch operations
+  publish in `finally` — a throw (source enumerator, predicate, comparer, OOM) lands in a consistent
+  "applied everything up to the failure" state, never a key that resolves but does not enumerate.
+  *Corrected 2026-09-23:* the comparer clause was FALSE until then — interior removal, both swap-back
+  branches and `RemoveWhere` re-indexed through the comparer after mutating the map (pinned by
+  `OrderedCollectionsComparerExceptionSafetyTests`, fixed with node handles; see below). *Known
+  out-of-memory-only gap (open):* the vendored map grows its table AFTER inserting a key
+  (`TryAddInternal` → `GrowTable`), and `AddRange` allocates its published `Store` in its `finally`, so
+  an out-of-memory raised by either can leave the key just added resolving without enumerating.
+  Closing it means growing the map BEFORE the insert (a partial member that pre-grows when the next
+  insert would exceed the budget) and allocating `AddRange`'s holder when it goes fresh — both on the
+  hot add path, so they want their own measurement.
 
 **Named relaxations (documented on the members, asserted as-relaxed by the tests):**
 
@@ -251,6 +272,62 @@ call back freely; lock-free reads are legal from anywhere, including inside pred
 cost of the guard (within-process A/B, 20M iterations): **2.84 ns per mutation** — ~2–3% of a real
 add and invisible under host noise on the sweep benchmarks; reads pay nothing (no guard on any read
 path). That is the deliberate price of converting silent corruption into a deterministic exception.
+
+---
+
+## Comparer exception safety (fixed 2026-09-23)
+
+**The defect.** Interior removal, both `TryRemoveSwapBack` branches and `RemoveWhere` removed the key from
+the map FIRST and then re-indexed the shifted/moved keys through the map — one comparer call per key —
+before publishing the new `Store`. A comparer that threw in that window (the documented evil-comparer
+defence included: its refused write-back raises `LockRecursionException` from inside `GetHashCode`)
+aborted the removal half-applied, permanently: the removed key enumerated without resolving, a moved key
+enumerated twice (in-place swap-back), and `RemoveWhere`'s `finally` re-ran the comparer and skipped the
+publish altogether. Pinned by the four `ConcurrentOrderedDictionary_*` tests in
+`OrderedCollectionsComparerExceptionSafetyTests` (committed `[OpenBugs]` in fe756f9e; now CI).
+
+**The fix.** Every removal resolves the key-map node of every entry it will unlink or re-index BEFORE its
+first mutation, then mutates through those node handles (`NodeHandle.Value` for the index write,
+`TryRemoveNode` to unlink by identity) — no comparer call can follow the first mutation, so a comparer
+throw aborts the operation with nothing changed. `RemoveWhere` additionally pre-allocates the `Store` it
+publishes from its `finally`, and `ReplaceExistingUnderLock` (non-atomic `TValue`) now allocates its
+value-array clone and `Store` BEFORE it swaps the node (an out-of-memory in the clone used to leave the
+key path ahead of the list path).
+
+**Two paths, by who can run inside a lookup.** Resolving everything first costs a transient handle array
+(8 B per shifted entry) and a second pass over the nodes — measured per shifted key (10K-entry map,
+one P-core): one-pass lookup+write 1.18–1.25 ns; resolve-first 2.0 ns cache-resident, 3.1 ns at 100K
+(the second pass is memory-bound). That hazard only exists when a lookup can run USER code, so
+`_lookupsRunNoUserCode` (a framework key type — primitive, enum, `string`, `decimal` — under the default
+comparer) keeps the one-pass re-index for the common case; every custom comparer and every key type
+with its own `Equals`/`GetHashCode` takes the resolve-first path. Measured (A/B of the pre-fix and fixed
+sources embedded in one process, pinned P-core, 150 ms warm-up, best-of, median over repeated processes):
+
+| `<int,int>` operation | pre-fix | fixed | fixed / pre-fix |
+|---|---:|---:|---:|
+| interior `TryRemove` at position 0 + re-add, N=1K — default comparer (one-pass) | 1.70 µs | 1.48 µs | **0.87** |
+| — N=10K | 15.8 µs | 14.0 µs | **0.89** |
+| — N=100K | 223 µs | 218 µs | **0.98** |
+| same, custom comparer (resolve-first), N=1K | 3.33 µs | 5.10 µs | **1.53** |
+| — N=10K | 32.0 µs | 51.2 µs | **1.62** |
+| — N=100K | 339 µs | 807 µs | **2.37** |
+| `RemoveWhere(even)`, N=100K — default comparer | 908 µs | 871 µs | **0.95** |
+| — custom comparer | 1,006 µs | 1,345 µs | **1.33** |
+| `TryRemoveSwapBack` drain, N=100K — default comparer | 32.7 ns/op | 31.0 ns/op | **0.95** |
+| — custom comparer | 34.9 ns/op | 33.3 ns/op | **0.97** |
+| `TryRemoveSwapBack` drain `<int,decimal>` (copying branch), N=2K | 757 ns/op | 762 ns/op | **1.00** |
+| tail-pop `TryRemove` drain, N=100K | 31.2 ns/op | 30.5 ns/op | **0.99** |
+| `SetByKey` existing `<int,decimal>` (B11's allocate-first reorder), N=1K | 452 ns | 450 ns | **0.99** |
+| *A/A harness noise (pre-fix vs pre-fix, the interior rows)* | | | *0.99–1.01* |
+
+The swap-back and tail paths got slightly faster on both comparer classes: the removed key is unlinked by
+node identity (`TryRemoveNode`) instead of a second hash walk, and swap-back needs one lookup fewer.
+
+One placement trap found on the way (recorded on `ReindexOnePassUnderLock`): the trusted one-pass loop,
+byte-identical in the JIT's tier-1 output to the pre-fix loop, ran ~0.4 ns/key slower while inlined in
+the now-larger `RemoveCoreUnderLock`; as a method of its own it runs at (or slightly above) the pre-fix
+speed. Check the disassembly (`DOTNET_JitDisasm`) before believing an algorithmic explanation for a
+per-key gap between two identical loops.
 
 ---
 
@@ -288,8 +365,8 @@ a fourth component (~24 B/entry + a second pointer chase) — folding it into th
 | `ToArray` / `Keys` | N×elem | N×elem (+ all stripe locks) | N×elem |
 | remove: tail pop | — | 40 B | **40 B** (one Store holder) |
 | remove: swap-back (in-place) | — | — | **40 B** |
-| remove: interior, order-preserving | **0** (in-place shift) | ~0 | **2 × capacity-sized arrays** (800 KB at 100K int) |
-| `RemoveWhere` (any match count) | — | — | **the same 2 arrays once** (800,152 B measured at 100K — k interior removes cost k×, one bulk pass costs 1×) |
+| remove: interior, order-preserving | **0** (in-place shift) | ~0 | **2 × capacity-sized arrays** (800 KB at 100K int); **+8 B × shifted entries** (a transient node-handle array) when the key comparer can run user code — never for framework key types under the default comparer |
+| `RemoveWhere` (any match count) | — | — | **the same 2 arrays once** (800,152 B measured at 100K — k interior removes cost k×, one bulk pass costs 1×); **+8 B × entries from the first match on** when the comparer can run user code |
 
 The interior-removal column is the concurrency price stated in memory terms: `List<T>` shifts in
 place because it has no lock-free readers to protect; COD must give readers immutable snapshots, so
@@ -330,12 +407,17 @@ The clone in `ConcurrentDictionary.cs` is faithful to dotnet/runtime's source; t
 (striped locks, lock-free reads, `GrowTable`) is verbatim. Deviations:
 
 - **`partial`** (one keyword on the class declaration) so NumSharp-only members live in
-  **`ConcurrentDictionary.RefAccessors.cs`** without touching the vendored body. That file currently holds
-  exactly one member: `public ref TValue GetValueRefOrNullRef(TKey key)` — `TryGetValue`'s bucket
-  walk returning `ref node._value` (null-ref sentinel when absent). Its three caller obligations
-  (lifetime inside one serialized critical section; single-field ≤word-size writes only; caller-side
-  write serialization) are documented on the member. A future re-sync against upstream is a plain file
-  replace + re-adding the `partial` keyword.
+  **`ConcurrentDictionary.RefAccessors.cs`** without touching the vendored body. That file holds
+  `public ref TValue GetValueRefOrNullRef(TKey key)` — `TryGetValue`'s bucket walk returning
+  `ref node._value` (null-ref sentinel when absent) — and, since 2026-09-23, the INTERNAL node-handle trio:
+  `NodeHandle` (a typed wrapper around one live node; `Value` is a ref to its value field),
+  `FindNode(key)` (the same walk, returning the node) and `TryRemoveNode(handle)` (unlink by identity:
+  the bucket comes from the node's stored hash code, the chain is compared by reference — no comparer
+  call, `TryRemoveInternal`'s bookkeeping). The seam's three caller obligations (lifetime inside one
+  serialized critical section; single-field ≤word-size writes only; caller-side write serialization)
+  are documented on the member and apply to handles too. A future re-sync against upstream is a plain
+  file replace + re-adding the `partial` keyword, then re-checking the internals the partial reads
+  (`Node`, `Tables`, `_tables`, `GetBucket`, `GetBucketAndLock`, `GetHashCode(comparer, key)`).
 - `AlternateLookup<TAlternateKey>` / `IAlternateEqualityComparer` dropped (net9+; uses
   `allows ref struct`, which does not compile on net8.0).
 - The string-key `NonRandomizedStringEqualityComparer` hash-flooding hardening (CoreLib-internal) is
@@ -356,6 +438,11 @@ The clone in `ConcurrentDictionary.cs` is faithful to dotnet/runtime's source; t
   each with its `List<T>` or framework-CD baseline **plus the vendored clone rows** so any gap is
   attributable (ordered-dict layer vs clone-vs-BCL drift). Run:
   `dotnet run -c Release -- --filter "*ConcurrentOrderedDictionary*"` (menu option 15).
+- **Comparer exception safety:** `test/NumSharp.Tests/Collections/OrderedCollectionsComparerExceptionSafetyTests.cs`
+  — deterministic, single-threaded: a comparer that attempts a write-back (refused with
+  `LockRecursionException`) while hashing one chosen key, fired inside interior removal, both swap-back
+  branches and `RemoveWhere`; then a full audit that the key and list paths still agree. The same
+  attacks run against `ConcurrentOrderedCompactDictionary` and `OrderedDictionary` as controls.
 - **Functional pins:** `test/NumSharp.Tests/Collections/ConcurrentOrderedDictionaryTests.cs` — ordering,
   dup semantics, the int-key indexer footgun, tail-pop + append-floor snapshot purity, swap-back,
   RemoveWhere (incl. throwing-predicate consistency), AddRange (incl. mid-batch-throw consistency),
