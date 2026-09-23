@@ -1716,9 +1716,22 @@ namespace NumSharp.Backends
                 if (redType == NPTypeCode.Complex)
                 {
                     // np.mean divides the complex sum by the count through the COMPLEX true_divide
-                    // loop, not component-wise — see ComplexDivideByCountLikeNumPy.
-                    for (long i = 0; i < outAcc.size; i++)
-                        outAcc.SetAtIndex(ComplexDivideByCountLikeNumPy((System.Numerics.Complex)outAcc.GetAtIndex(i), axisSize), i);
+                    // loop, not component-wise — see ComplexDivideByCountLikeNumPy. outAcc is a fresh
+                    // reduction result on every path above (C-contiguous, writeable), so the division
+                    // runs through a typed pointer — the boxed GetAtIndex/SetAtIndex round trip it
+                    // replaces cost ~5 ns per output (a 3×1M axis-0 complex mean spent ~5 ms there).
+                    // Any other layout keeps the boxed loop, which honors every stride.
+                    if (outAcc.Shape.IsContiguous && outAcc.Shape.IsWriteable)
+                    {
+                        var p = (System.Numerics.Complex*)((byte*)outAcc.Address + outAcc.Shape.offset * sizeof(System.Numerics.Complex));
+                        for (long i = 0, n = outAcc.size; i < n; i++)
+                            p[i] = ComplexDivideByCountLikeNumPy(p[i], axisSize);
+                    }
+                    else
+                    {
+                        for (long i = 0; i < outAcc.size; i++)
+                            outAcc.SetAtIndex(ComplexDivideByCountLikeNumPy((System.Numerics.Complex)outAcc.GetAtIndex(i), axisSize), i);
+                    }
                 }
                 else
                 {

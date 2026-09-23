@@ -303,19 +303,33 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Pre-fill <paramref name="output"/> with the reduction identity for
         /// <paramref name="op"/> before driving a REDUCE iterator. Required because
-        /// the per-chunk kernels fold into the existing output slot(s). Writes
-        /// through <see cref="NDArray.SetAtIndex(object, long)"/> so any output
+        /// the per-chunk kernels fold into the existing output slot(s). Any output
         /// layout (contiguous fresh alloc or user-supplied view) is honored.
         /// </summary>
-        public static void SeedReduceIdentity(NDArray output, ReductionOp op)
+        /// <remarks>
+        /// A writeable output whose elements occupy one dense memory block (C- or F-contiguous —
+        /// every fresh reduction result, and most user <c>out=</c> arrays) takes the fast path: the
+        /// identity is written to logical element 0 through <see cref="NDArray.SetAtIndex(object, long)"/>
+        /// — so its exact unboxing conversion and read-only check are unchanged — and that element's
+        /// bytes are then replicated across the block with a vectorized fill. The per-element boxed
+        /// <c>SetAtIndex</c> loop it replaces cost ~2 ns per output (a 3×1M axis-0 sum spent ~2 ms
+        /// seeding 1M slots). A strided or read-only output keeps that loop (which raises the same
+        /// read-only error at its first write).
+        /// </remarks>
+        /// <param name="output">The reduction output to seed; its dtype selects the identity.</param>
+        /// <param name="op">The reduction whose identity is written (Sum/Prod/Min/Max, Any/All for bool).</param>
+        /// <exception cref="NotSupportedException"><paramref name="op"/> has no identity for the output dtype (Complex supports Sum/Prod/Min/Max only; see <see cref="ReductionOpExtensions.GetIdentity"/>).</exception>
+        /// <exception cref="InvalidCastException">The boxed identity does not unbox to the output's element type (a caller pairing the op with a foreign dtype).</exception>
+        public static unsafe void SeedReduceIdentity(NDArray output, ReductionOp op)
         {
             long n = output.size;
             if (n == 0) return;
 
             NPTypeCode tc = output.GetTypeCode;
+            object id;
             if (tc == NPTypeCode.Complex)
             {
-                System.Numerics.Complex id = op switch
+                id = op switch
                 {
                     ReductionOp.Sum  => System.Numerics.Complex.Zero,
                     ReductionOp.Prod => System.Numerics.Complex.One,
@@ -326,14 +340,24 @@ namespace NumSharp.Backends.Kernels
                     ReductionOp.Max  => new System.Numerics.Complex(double.NegativeInfinity, double.NegativeInfinity),
                     _ => throw new NotSupportedException($"SeedReduceIdentity: op {op} unsupported for Complex")
                 };
-                for (long i = 0; i < n; i++) output.SetAtIndex(id, i);
+            }
+            else
+            {
+                // Scalar numerics (Half/Double/Decimal/...): the shared identity table is correct
+                // for total-ordering min/max (min seed = +inf/MaxValue, max seed = -inf/MinValue).
+                id = op.GetIdentity(tc);
+            }
+
+            if (TryGetDenseOutputBlock(output, out byte* block, out int itemSize))
+            {
+                // Element 0 goes through the boxed setter (its conversion + writeable check are the
+                // contract); the remaining n-1 slots receive a copy of its bytes.
+                output.SetAtIndex(id, 0);
+                ReplicateFirstElement(block, n, itemSize);
                 return;
             }
 
-            // Scalar numerics (Half/Double/Decimal/...): the shared identity table is correct
-            // for total-ordering min/max (min seed = +inf/MaxValue, max seed = -inf/MinValue).
-            object scalarId = op.GetIdentity(tc);
-            for (long i = 0; i < n; i++) output.SetAtIndex(scalarId, i);
+            for (long i = 0; i < n; i++) output.SetAtIndex(id, i);
         }
 
         /// <summary>
@@ -341,15 +365,29 @@ namespace NumSharp.Backends.Kernels
         /// place — the post-pass that turns an accumulated axis Sum into a Mean. For Complex
         /// this divides both components by the real count (NumPy: <c>mean = sum / n</c>),
         /// which is exactly what the legacy <c>MeanAxisComplex</c> did per element but without
-        /// its per-output-row NDArray allocation. Writes through
-        /// <see cref="NDArray.SetAtIndex(object, long)"/> so any output layout is honored.
+        /// its per-output-row NDArray allocation. Any output layout is honored.
         /// </summary>
+        /// <remarks>
+        /// A writeable dense-block output (C- or F-contiguous) is divided through typed pointers — a
+        /// <see cref="Vector{T}"/> loop for float64/float32, a scalar loop for complex/decimal — with the
+        /// IDENTICAL arithmetic of the boxed loop (<c>x / (double)count</c>, <c>x / (float)count</c>,
+        /// component-wise complex, decimal): IEEE division is correctly rounded per lane, so the vector
+        /// and scalar forms are bit-identical. The boxed <c>GetAtIndex</c>/<c>SetAtIndex</c> loop it
+        /// replaces cost ~4 ns per output (np.mean(axis=0) of 3×1M spent ~4 of its 6.7 ms here). A
+        /// strided or read-only output keeps the boxed loop.
+        /// </remarks>
+        /// <param name="output">The accumulated sums, divided in place.</param>
+        /// <param name="count">The reduced-axis length (0 leaves the output untouched, as before).</param>
+        /// <exception cref="NotSupportedException">The output dtype is not Complex/Double/Single/Decimal (the only mean accumulators).</exception>
         public static void MeanDivideByCount(NDArray output, long count)
         {
             long n = output.size;
             if (n == 0 || count == 0) return;
 
             NPTypeCode tc = output.GetTypeCode;
+            if (TryDivideDenseBlockByCount(output, tc, n, count))
+                return;
+
             switch (tc)
             {
                 case NPTypeCode.Complex:
@@ -385,6 +423,165 @@ namespace NumSharp.Backends.Kernels
                 }
                 default:
                     throw new NotSupportedException($"MeanDivideByCount not implemented for {tc}");
+            }
+        }
+
+        /// <summary>
+        /// Whether a reduction output's elements occupy ONE dense memory block that may be written
+        /// through a raw pointer: writeable, not broadcast, and C- or F-contiguous (every fresh
+        /// reduction result qualifies; a strided or read-only user <c>out=</c> does not). For such an
+        /// output the logical element 0 is the block's first element and the n elements are the
+        /// block's n consecutive slots — in an order that does not matter to the whole-block
+        /// elementwise post-passes that use this (a fill, a divide).
+        /// </summary>
+        /// <param name="output">The reduction output.</param>
+        /// <param name="block">Receives the address of the block's first element (base + view offset), or null.</param>
+        /// <param name="itemSize">Receives the element size in bytes.</param>
+        /// <returns>True when the output is a writeable dense block; false keeps the caller on its per-element path.</returns>
+        private static unsafe bool TryGetDenseOutputBlock(NDArray output, out byte* block, out int itemSize)
+        {
+            var s = output.Shape;
+            itemSize = output.GetTypeCode.SizeOf();
+            // IsWriteable is the same flag the boxed setter's read-only check reads, so a read-only
+            // output stays on the path that raises; a broadcast view is never a dense block.
+            if (s.IsWriteable && !s.IsBroadcasted && (s.IsContiguous || s.IsFContiguous))
+            {
+                block = (byte*)output.Address + s.offset * itemSize;
+                return true;
+            }
+
+            block = null;
+            return false;
+        }
+
+        /// <summary>
+        /// Copy the bytes of the element at <paramref name="block"/> into the following
+        /// <paramref name="n"/> − 1 slots of a dense block — a width-typed, vectorized fill (the
+        /// element is replicated as raw bits, so any dtype of the width round-trips exactly).
+        /// </summary>
+        /// <param name="block">The dense block; its first element holds the value to replicate.</param>
+        /// <param name="n">The number of elements in the block (≥ 1).</param>
+        /// <param name="itemSize">The element size in bytes (1, 2, 4, 8 or 16 — every NumSharp dtype).</param>
+        /// <exception cref="NotSupportedException"><paramref name="itemSize"/> is not a NumSharp element width.</exception>
+        private static unsafe void ReplicateFirstElement(byte* block, long n, int itemSize)
+        {
+            switch (itemSize)
+            {
+                case 1: FillWith(block + 1, n - 1, *block); return;
+                case 2: FillWith((ushort*)block + 1, n - 1, *(ushort*)block); return;
+                case 4: FillWith((uint*)block + 1, n - 1, *(uint*)block); return;
+                case 8: FillWith((ulong*)block + 1, n - 1, *(ulong*)block); return;
+                case 16: FillWith((Block16*)block + 1, n - 1, *(Block16*)block); return;
+                default: throw new NotSupportedException($"ReplicateFirstElement: element size {itemSize}");
+            }
+        }
+
+        /// <summary>
+        /// Fill <paramref name="count"/> elements at <paramref name="p"/> with <paramref name="value"/>
+        /// through <see cref="Span{T}.Fill"/> (vectorized for primitive widths), in <see cref="int"/>-sized
+        /// chunks so a block past 2^31 elements is filled completely.
+        /// </summary>
+        /// <typeparam name="T">The element type (width carrier).</typeparam>
+        /// <param name="p">The first slot to fill.</param>
+        /// <param name="count">The number of slots (≤ 0 fills nothing).</param>
+        /// <param name="value">The value every slot receives.</param>
+        private static unsafe void FillWith<T>(T* p, long count, T value) where T : unmanaged
+        {
+            while (count > 0)
+            {
+                int chunk = (int)Math.Min(count, int.MaxValue);
+                new Span<T>(p, chunk).Fill(value);
+                p += chunk;
+                count -= chunk;
+            }
+        }
+
+        /// <summary>
+        /// A 16-byte raw carrier (Complex, Decimal) for <see cref="ReplicateFirstElement"/>: copying it
+        /// moves bits and nothing else, where a <see cref="decimal"/> or <see cref="System.Numerics.Complex"/>
+        /// carrier would suggest value semantics the fill does not have.
+        /// </summary>
+        private struct Block16
+        {
+            /// <summary>The low eight bytes.</summary>
+            public ulong Lo;
+
+            /// <summary>The high eight bytes.</summary>
+            public ulong Hi;
+        }
+
+        /// <summary>
+        /// <see cref="MeanDivideByCount"/>'s fast path: divide a writeable dense-block output by the count
+        /// through typed pointers with the SAME arithmetic as the boxed loop — float64 <c>x / (double)count</c>
+        /// and float32 <c>x / (float)count</c> over <see cref="Vector{T}"/> lanes (IEEE division is correctly
+        /// rounded per lane, so bit-identical to the scalar form, NaN payloads included), complex
+        /// component-wise by <c>(double)count</c>, decimal <c>x / (decimal)count</c>.
+        /// </summary>
+        /// <param name="output">The accumulated sums.</param>
+        /// <param name="tc">The output dtype.</param>
+        /// <param name="n">The output element count (≥ 1).</param>
+        /// <param name="count">The reduced-axis length (≥ 1).</param>
+        /// <returns>True when divided here; false when the output is not a writeable dense block or the dtype is not a mean accumulator (the caller's boxed loop then runs, raising for an unsupported dtype).</returns>
+        private static unsafe bool TryDivideDenseBlockByCount(NDArray output, NPTypeCode tc, long n, long count)
+        {
+            if (!TryGetDenseOutputBlock(output, out byte* block, out _))
+                return false;
+
+            switch (tc)
+            {
+                case NPTypeCode.Double:
+                {
+                    double* p = (double*)block;
+                    double d = count;
+                    long i = 0;
+                    if (Vector.IsHardwareAccelerated)
+                    {
+                        var vd = new Vector<double>(d);
+                        int w = Vector<double>.Count;
+                        for (; i <= n - w; i += w)
+                            Unsafe.WriteUnaligned(p + i, Unsafe.ReadUnaligned<Vector<double>>(p + i) / vd);
+                    }
+
+                    for (; i < n; i++) p[i] = p[i] / d;
+                    return true;
+                }
+                case NPTypeCode.Single:
+                {
+                    float* p = (float*)block;
+                    float d = count; // the boxed loop's `float d = count` — the same (rounding) conversion
+                    long i = 0;
+                    if (Vector.IsHardwareAccelerated)
+                    {
+                        var vd = new Vector<float>(d);
+                        int w = Vector<float>.Count;
+                        for (; i <= n - w; i += w)
+                            Unsafe.WriteUnaligned(p + i, Unsafe.ReadUnaligned<Vector<float>>(p + i) / vd);
+                    }
+
+                    for (; i < n; i++) p[i] = p[i] / d;
+                    return true;
+                }
+                case NPTypeCode.Complex:
+                {
+                    var p = (System.Numerics.Complex*)block;
+                    double d = count;
+                    for (long i = 0; i < n; i++)
+                    {
+                        var c = p[i];
+                        p[i] = new System.Numerics.Complex(c.Real / d, c.Imaginary / d);
+                    }
+
+                    return true;
+                }
+                case NPTypeCode.Decimal:
+                {
+                    var p = (decimal*)block;
+                    decimal d = count;
+                    for (long i = 0; i < n; i++) p[i] = p[i] / d;
+                    return true;
+                }
+                default:
+                    return false;
             }
         }
 

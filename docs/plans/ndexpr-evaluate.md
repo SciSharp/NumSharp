@@ -185,6 +185,26 @@ bit-exact (`ILKernelGenerator.Reduction.Pairwise.cs`); only the fused reduce pat
    `EvaluateAxisReduce`'s complex-mean loop use `SetAtIndex(object)`/`GetAtIndex` per output — `mean(a*b, axis=0)` on
    3×1M spends ≈ 4 ms of its 6.9 ms there (and the engine's `np.mean`/`np.sum(axis)` pay the same). Typed contiguous fast
    paths with the identical arithmetic (`x / (double)n`, `x / (float)n`, `ComplexDivideByCountLikeNumPy`).
+   **LANDED** (`ILKernelGenerator.Reduction.cs` + `EvaluateAxisReduce`): a writeable, non-broadcast, C- OR F-contiguous
+   output is a DENSE BLOCK at `Address + offset·itemsize` (a contiguous row slice re-seats the address with offset 0; an
+   F column block of an F array keeps a non-zero offset — both covered). `SeedReduceIdentity` writes logical element 0
+   through the boxed setter (its exact unboxing conversion + read-only check are the contract) and replicates those bytes
+   across the block with a width-typed `Span.Fill` (1/2/4/8/16-byte carriers); `MeanDivideByCount` divides the block
+   through typed pointers — `Vector<T>` lanes for f64/f32 (IEEE division is correctly rounded per lane, so bit-identical
+   to the scalar `x / d`, NaN payloads and signed zeros included), scalar complex (component-wise) and decimal; the fused
+   complex mean divides its fresh C accumulator through a typed pointer with `ComplexDivideByCountLikeNumPy`. Strided /
+   read-only outputs keep the boxed loops verbatim. **Measured (pinned P-core, best-of; bits: every result checksum
+   identical before/after):** engine `np.mean(a,0)` 3×1M f64 6.75 → **2.07 ms** (NumPy 3.11 → NPY/NS 0.46 → **1.50**),
+   f32 7.04 → **0.77 ms** (NumPy 2.03 → 0.29 → **2.65**), `np.sum(a,0)` 3×1M 2.61 → 1.72 (NPY/NS 1.07 → 1.62),
+   `np.mean(a,1)` 1M×3 12.5 → 8.1 ms (NumPy 7.18 → 0.58 → 0.89 — the rest is per-3-element-row iterator overhead, the
+   narrow-row gap, not this pass); fused `Mean(a*b,0)` 3×1M 6.14 → 2.48 ms, `Max(a*b,0)` 3×1M 3.9 → 2.9. Gates:
+   `ReductionPostPassTests` (5: every identity × dtype × layout — C, F, C row block, F offset block, strided fallback —
+   writes only the output's elements; the division is bit-exact `x / (T)count` over a NaN-payload/±0/±inf/subnormal pool
+   for counts 1/3/7/1,000,003; a read-only out still raises and stays unchanged; engine + evaluate axis means equal
+   sum/n bit-for-bit — MUTANTS ignoring the view offset (3 tests) or dividing by a reciprocal (2 tests) go red), full
+   NumSharp.Tests 15,552 green (the 25 failures are the OpenBLAS-not-staged Examples demos), FuzzMatrix 100/3/1 unchanged.
+   Found on the way, NOT fixed (engine, flat `np.var`/`np.std`): `ddof ≥ n` on non-constant data returns NaN where NumPy
+   returns +inf — already pinned `[OpenBugs]` (`AuditV2 T1_37a/b`); the fused `NDExpr.Var`/`Std` get it right.
 3. **Flat-reduce fold is SCALAR** (`CompileReduceKernel`: 4 scalar accumulators) — Min/Max, integer Sum/Prod, Any/All,
    CountNonzero ride it: `max(a*b)` f64 is 0.91× NumPy @100K. Vectorize (order-independent for values; keep the ±0 tie and
    first-NaN semantics of the scalar `np.maximum` clamp).
