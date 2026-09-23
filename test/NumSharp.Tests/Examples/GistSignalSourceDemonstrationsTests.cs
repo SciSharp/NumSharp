@@ -1,7 +1,6 @@
 using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Examples.Gist;
-using NumSharp.Interop.OpenBLAS;
 
 namespace NumSharp.Tests.Examples;
 
@@ -25,6 +24,12 @@ public class GistSignalSourceDemonstrationsTests
         Assert.IsTrue(interpolated.Value > values.item<double>(sampled));
     }
 
+    /// <summary>
+    /// parabolic.md's three-point README example: <c>np.polyfit</c> over x=[2,3,4] must recover exactly
+    /// the vertex the closed-form <see cref="FrequencyEstimation.Parabolic"/> computes. polyfit rides
+    /// LAPACK <c>lstsq</c>, which Core ships no managed fallback for, so this is inconclusive on a host
+    /// that cannot load the OpenBLAS LAPACK backend.
+    /// </summary>
     [TestMethod]
     [DoNotParallelize]
     public void ParabolicReadme_ThreePointPolyfitMatchesTheSameQuadratic()
@@ -35,8 +40,7 @@ public class GistSignalSourceDemonstrationsTests
         var originalBackend = values.TensorEngine.Blas;
         try
         {
-            OpenBlasEngine.Enable(threads: 1);
-            Assert.IsTrue(OpenBlasEngine.LapackAvailable);
+            ExampleBlasBackend.EnableOrInconclusive(requireLapack: true);
             var direct = FrequencyEstimation.Parabolic(values, 3);
             var fit = FrequencyEstimation.ParabolicPolyfit(values, 3, 3);
             Assert.AreEqual(45.0 / 14.0, direct.Position);

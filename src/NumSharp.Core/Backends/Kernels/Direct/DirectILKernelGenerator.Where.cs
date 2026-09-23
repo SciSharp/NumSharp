@@ -542,6 +542,46 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Call, VectorMethodCache.GreaterThan(simdBits, unsignedT));
         }
 
+        /// <summary>
+        /// Whether IL from <see cref="EmitInlineMaskCreation"/> can actually RUN on this host for
+        /// <paramref name="elementSize"/>-byte lanes at <paramref name="simdBits"/>. Gate every
+        /// emission on it and take the scalar path when it is false.
+        /// </summary>
+        /// <param name="simdBits">The vector width the mask is created at: 128, 256 or 512.</param>
+        /// <param name="elementSize">The byte width of one output lane: 1, 2, 4 or 8.</param>
+        /// <returns>
+        /// True for 1-byte lanes at any accelerated width (only the portable <c>Vector{N}</c> load +
+        /// <c>GreaterThan</c> is emitted). For 2/4/8-byte lanes, true only when the x86 sign-extend
+        /// the expansion relies on exists: <c>Avx2.ConvertToVector256Int*</c> at 256 bits,
+        /// <c>Sse41.ConvertToVector128Int*</c> at 128 bits. Always false at 512 bits, which has no
+        /// wide-lane expansion (<see cref="VectorMethodCache.ByteLaneSignExtend"/> rejects it).
+        /// </returns>
+        /// <remarks>
+        /// FOOTGUN: the emitter does not check this itself. A <see cref="DynamicMethod"/> that
+        /// calls an unsupported x86 intrinsic still compiles; the call throws
+        /// <see cref="PlatformNotSupportedException"/> only when the kernel RUNS. On ARM64,
+        /// Vector128 is accelerated through AdvSimd (so <see cref="VectorBits"/> is 128) while every
+        /// x86 ISA reports unsupported, so each 2/4/8-byte bool→mask expansion fails there — the
+        /// np.evaluate fused shell hit exactly that on the macOS arm64 CI runner. np.where,
+        /// np.select and np.piecewise gate the same condition with their own <c>needsX86</c>
+        /// checks; new callers should use this predicate. <c>DOTNET_EnableSSE41=0</c> reproduces
+        /// the ARM64 condition on an x64 host (Vector128 stays accelerated, <c>Sse41.IsSupported</c>
+        /// turns false).
+        /// </remarks>
+        internal static bool InlineMaskCreationSupported(int simdBits, int elementSize)
+        {
+            if (elementSize == 1)
+                return simdBits == 128 || simdBits == 256 || simdBits == 512;
+            if (elementSize != 2 && elementSize != 4 && elementSize != 8)
+                return false;
+            return simdBits switch
+            {
+                256 => Avx2.IsSupported,
+                128 => Sse41.IsSupported,
+                _ => false,
+            };
+        }
+
         #endregion
 
         #region Scalar Fallback

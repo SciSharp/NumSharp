@@ -4,7 +4,6 @@ using System.Globalization;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Examples.Gist.Karpathy;
 using NumSharp.Backends;
-using NumSharp.Interop.OpenBLAS;
 
 namespace NumSharp.Tests.Examples;
 
@@ -13,12 +12,23 @@ public class KarpathyLstmTests
 {
     private IBlasBackend? previous;
     private TensorEngine engine = null!;
+    /// <summary>Why OpenBLAS could not be bound for the current test, or null when it is bound.</summary>
+    private string? blasUnavailable;
+
+    /// <summary>
+    /// Bind the OpenBLAS products the LSTM port's exact claims were recorded with, WITHOUT failing the
+    /// test when this host cannot load them: the tests whose assertions are semantic or
+    /// tolerance-based run either way, and only the two exact-value tests call
+    /// <see cref="ExampleBlasBackend.Require"/> (inconclusive without the backend).
+    /// </summary>
     [TestInitialize] public void EnableProducts()
     {
         using var a = np.zeros(0);
         engine = a.TensorEngine; previous = engine.Blas;
-        OpenBlasEngine.Enable(threads: 1);
+        ExampleBlasBackend.TryEnable(out blasUnavailable);
     }
+
+    /// <summary>Restore the exact prior BLAS binding (the seam is process-global).</summary>
     [TestCleanup] public void RestoreProducts() => engine.Blas = previous;
 
     [TestMethod]
@@ -29,9 +39,15 @@ public class KarpathyLstmTests
         for (int j = 0; j < 16; j++) Assert.AreEqual(j is >= 4 and < 8 ? 3.0 : 0.0, w.item<double>(0, j));
     }
 
+    /// <summary>
+    /// The original's five sequential-vs-batch claims, held at tolerance 0: bit-identity between the
+    /// two GEMM shapes is a property of the recorded OpenBLAS build at one thread, so this is
+    /// inconclusive where that backend cannot be bound.
+    /// </summary>
     [TestMethod]
     public void OriginalSequentialVersusBatch_AllFiveClaimsAreAssertions()
     {
+        ExampleBlasBackend.Require(blasUnavailable);
         using var scope = NDScope.Open();
         var rng = np.random.RandomState(7);
         var w = np.array(rng.randn(15, 16) / np.sqrt(np.array(14.0)));
@@ -147,9 +163,14 @@ public class KarpathyLstmTests
         Assert.ThrowsException<ArgumentException>(() => BatchedLstm.Forward(np.zeros((2, 1, 2)), w, np.zeros((2, 3))));
     }
 
+    /// <summary>
+    /// The actual Demo's printed loss and derivative, compared digit-for-digit with the values recorded
+    /// under the OpenBLAS backend; inconclusive where that backend cannot be bound.
+    /// </summary>
     [TestMethod]
     public void ActualDemo_ReportsIndependentlyObservedLossAndDerivative()
     {
+        ExampleBlasBackend.Require(blasUnavailable);
         var previousWriter = Console.Out; var culture = CultureInfo.CurrentCulture;
         using var output = new StringWriter(CultureInfo.InvariantCulture);
         try { Console.SetOut(output); CultureInfo.CurrentCulture = CultureInfo.InvariantCulture; BatchedLstm.Demo(); }

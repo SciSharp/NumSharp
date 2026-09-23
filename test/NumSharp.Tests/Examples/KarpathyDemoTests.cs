@@ -5,13 +5,18 @@ using System.Text.RegularExpressions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Examples.Gist;
 using NumSharp.Examples.Gist.Karpathy;
-using NumSharp.Interop.OpenBLAS;
 
 namespace NumSharp.Tests.Examples;
 
 [TestClass, DoNotParallelize]
 public class KarpathyDemoTests
 {
+    /// <summary>
+    /// Runs the named Karpathy port's actual Demo and compares its printed results and samples with the
+    /// committed transcript (<c>examples/gist/karpathy/demo-output.txt</c>). Inconclusive on a host that
+    /// cannot load the OpenBLAS backend the transcript was recorded with.
+    /// </summary>
+    /// <param name="name">The transcript section (<c>--- name ---</c>) and demo to run.</param>
     [DataTestMethod]
     [DataRow("rnn")] [DataRow("pong")] [DataRow("lstm")]
     [DataRow("microgpt")] [DataRow("nes")] [DataRow("walk")]
@@ -32,7 +37,8 @@ public class KarpathyDemoTests
         using var output = new StringWriter(CultureInfo.InvariantCulture);
         try
         {
-            OpenBlasEngine.Enable(threads: 1);
+            // Recorded with the bundled OpenBLAS at one thread; inconclusive where it cannot load.
+            ExampleBlasBackend.EnableOrInconclusive();
             Console.SetOut(output); CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
             demo();
         }

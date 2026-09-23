@@ -152,9 +152,14 @@ namespace NumSharp
         ///     returns it unchanged when no dtype is requested or the result is already that dtype, otherwise casts
         ///     (float→integer TRUNCATES toward zero; complex→float drops the imaginary part, matching NumPy).
         /// </summary>
-        /// <param name="result">The freshly-computed array in the computation domain (float64 or complex128; owned, may be returned as-is).</param>
+        /// <param name="result">
+        ///     The freshly-computed array in the computation domain (float64 or complex128). OWNERSHIP TRANSFERS in:
+        ///     it is returned as-is when no cast is needed, and DISPOSED here when a cast replaces it, so the caller
+        ///     must not touch it afterwards.
+        /// </param>
         /// <param name="dtype">The requested output dtype, or null to keep the computation domain.</param>
         /// <returns>The result in the requested dtype (the same instance when the dtype already matches or is null).</returns>
+        /// <exception cref="NotSupportedException">The descriptor's class has no storage lane (propagated from <see cref="NDArray.astype(DType, bool)"/>).</exception>
         /// <remarks>
         ///     Domain-agnostic on purpose: <c>logspace</c> feeds a float64 result while <c>geomspace</c>'s complex path
         ///     feeds a complex128 one, and both want "cast only if the dtype actually differs" — so it compares the
@@ -166,7 +171,15 @@ namespace NumSharp
             if (dtype == null || result.GetTypeCode == dtype.GetTypeCode())
                 return result;
             // A genuine dtype change always allocates fresh storage; copy:false mirrors NumPy's copy=False.
-            return result.astype(dtype, false);
+            NDArray cast = result.astype(dtype, false);
+            // The computation-domain array is now a dead intermediate: every caller passes a fresh array
+            // it owns and returns only what this method hands back. Release it now, or its pooled buffer
+            // waits for the finalizer (the FuzzMatrix scope audit caught exactly one escaped buffer per
+            // non-float64 logspace/geomspace call). The guard keeps a same-instance astype from being
+            // disposed out from under the caller.
+            if (!ReferenceEquals(cast, result))
+                result.Dispose();
+            return cast;
         }
     }
 }

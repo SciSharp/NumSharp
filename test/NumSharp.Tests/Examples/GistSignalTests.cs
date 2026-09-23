@@ -2,7 +2,6 @@ using System;
 using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Examples.Gist;
-using NumSharp.Interop.OpenBLAS;
 
 namespace NumSharp.Tests.Examples;
 
@@ -135,18 +134,26 @@ public class GistSignalTests
         });
     }
 
+    /// <summary>
+    /// Run <paramref name="action"/> with the OpenBLAS LAPACK backend bound (one thread), restoring the
+    /// exact prior engine binding afterwards even when <paramref name="action"/> throws.
+    /// </summary>
+    /// <param name="action">The assertions that need LAPACK (the example's polynomial-fit companion).</param>
+    /// <exception cref="AssertInconclusiveException">This host cannot load a CBLAS, or the loaded one has no LAPACK.</exception>
     private static void WithLapack(Action action)
     {
         // This test assembly intentionally suppresses backend autoinstall. The
-        // example's optional polynomial fit needs LAPACK; enable it explicitly,
-        // fail if unavailable, and restore the exact prior engine binding.
+        // example's optional polynomial fit needs LAPACK (np.polyfit -> lstsq has
+        // no managed fallback), so enable it explicitly and go INCONCLUSIVE where it
+        // cannot load — CI's test job stages no native binary, and failing there
+        // would report a missing dependency as a broken example. Assertions made
+        // before this call (the closed-form Parabolic checks) still run everywhere.
         using var probe = np.array(0.0);
         var engine = probe.TensorEngine;
         var previousBackend = engine.Blas;
         try
         {
-            OpenBlasEngine.Enable(threads: 1);
-            Assert.IsTrue(OpenBlasEngine.LapackAvailable, "The polynomial companion requires the bundled LAPACK backend.");
+            ExampleBlasBackend.EnableOrInconclusive(requireLapack: true);
             action();
         }
         finally

@@ -160,14 +160,23 @@ namespace NumSharp.Tests
                 "a 2x-magnitude error is not the cancellation regime");
         }
 
+        /// <summary>
+        /// The cancellation residue that complex multiply USED to leave (expected exactly 0, actual a tiny
+        /// residue at the rounding scale of the dominant component 1e10) is no longer excused.
+        /// </summary>
+        /// <remarks>
+        /// Complex multiply became bit-exact (NDComplexMath ports NumPy's fused <c>simd_cmul</c>,
+        /// dbc0b3b3), and 074d4d08 deliberately removed its excuse so a residue fails the FuzzMatrix
+        /// gate. This test used to assert the excuse still existed; it went red when the excuse was
+        /// removed and was only noticed once CI reached the Oracle step. It now pins the tight contract.
+        /// </remarks>
         [TestMethod]
-        public void B2_ComplexMultiply_CancellationResidue_StillExcused()
+        public void B2_ComplexMultiply_CancellationResidue_NoLongerExcused()
         {
-            // expected exactly 0 (NumPy's rounding), actual a tiny residue at rounding scale of
-            // the dominant component 1e10 (ulp(1e10) ~ 1.9e-6) — the documented regime.
             var c = Case("multiply", ("complex128", new long[] { 1 }), ("complex128", new long[] { 1 }));
             MisalignedRegistry.Classify(c, DivergenceKind.Value,
-                C128(0.0, 1e10), C128(1e-6, 1e10), NPTypeCode.Complex, OneDiff).Should().NotBeNull();
+                C128(0.0, 1e10), C128(1e-6, 1e10), NPTypeCode.Complex, OneDiff).Should().BeNull(
+                "complex multiply is bit-exact (dbc0b3b3); its excuse was retired in 074d4d08, so even a rounding-scale residue is a real regression");
         }
 
         [TestMethod]
@@ -217,12 +226,22 @@ namespace NumSharp.Tests
                 .Should().BeNull("a full-size cumprod NEP50 widening miss is a real bug");
         }
 
+        /// <summary>
+        /// The size-1 cumprod NEP50 widening miss is no longer excused; like the full-size case, a dtype
+        /// divergence there is a real bug.
+        /// </summary>
+        /// <remarks>
+        /// ReduceCumMul's size-≤1 and empty branches cast to the accumulating type (int16/int32 → int64,
+        /// uint8/uint16 → uint64), so cumprod is bit-exact on dtype at n ≤ 1. 7fd70a3b removed the excuse so
+        /// a regression turns the gate red. This test used to assert the excuse still existed; it now
+        /// pins the removal.
+        /// </remarks>
         [TestMethod]
-        public void B3_CumprodDtype_SizeOne_StillExcused()
+        public void B3_CumprodDtype_SizeOne_NoLongerExcused()
         {
             MisalignedRegistry.Classify(Case("cumprod", ("int16", new long[] { 1 })),
                 DivergenceKind.Dtype, null, null, NPTypeCode.Int64, System.Array.Empty<BitDiff.Diff>())
-                .Should().NotBeNull("the documented ReduceCumMul bug is the size-1 fast path");
+                .Should().BeNull("the size-<=1 fast path now widens (7fd70a3b), so a dtype miss there is a real regression");
         }
 
         // ---- B4: modf threw excuse excludes f32/f64 ----

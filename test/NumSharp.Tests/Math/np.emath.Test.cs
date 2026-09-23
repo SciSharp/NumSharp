@@ -24,18 +24,30 @@ namespace NumSharp.Tests.Math
     {
         private const double Pi = System.Math.PI;
 
-        /// <summary>Assert a real 1-D result equals the expected doubles bit-for-bit (NaN tokenized).</summary>
+        /// <summary>
+        /// Assert a real 1-D (or 0-d) result reproduces the NumPy-probed doubles: bit-for-bit on the pinned
+        /// win-amd64 CRT host, within <see cref="HostLibm.OffHostUlpBudget"/> ULP elsewhere. The emath values
+        /// run through libm (acos, atanh, …), and glibc / Apple libm round some inputs one ULP differently
+        /// from <c>ucrtbase</c>, which is why the matching <c>emath</c> corpus tier is host-pinned too.
+        /// </summary>
+        /// <param name="r">The result under test (must be float64).</param>
+        /// <param name="expected">The NumPy 2.4.2 values, in C order.</param>
         private static void AssertReal(NDArray r, params double[] expected)
         {
             Assert.AreEqual(NPTypeCode.Double, r.typecode, "expected a float64 result");
             var got = r.Data<double>();
             Assert.AreEqual(expected.Length, got.Count, "length");
             for (int i = 0; i < expected.Length; i++)
-                Assert.AreEqual(BitConverter.DoubleToInt64Bits(expected[i]), BitConverter.DoubleToInt64Bits(got[i]),
-                    $"element {i}: got {got[i]} expected {expected[i]}");
+                Assert.IsTrue(HostLibm.Matches(expected[i], got[i]), HostLibm.Describe($"element {i}", expected[i], got[i]));
         }
 
-        /// <summary>Assert a complex128 1-D result equals the expected values bit-for-bit (per component).</summary>
+        /// <summary>
+        /// Assert a complex128 1-D result reproduces the NumPy-probed values per component: bit-for-bit on
+        /// the pinned win-amd64 CRT host, within the <see cref="HostLibm"/> budget elsewhere (the sign bit —
+        /// including a signed zero — stays strict on every host).
+        /// </summary>
+        /// <param name="r">The result under test (must be complex128).</param>
+        /// <param name="expected">The NumPy 2.4.2 values, in C order.</param>
         private static void AssertComplexExact(NDArray r, params Complex[] expected)
         {
             Assert.AreEqual(NPTypeCode.Complex, r.typecode, "expected a complex128 result");
@@ -43,10 +55,9 @@ namespace NumSharp.Tests.Math
             Assert.AreEqual(expected.Length, got.Count, "length");
             for (int i = 0; i < expected.Length; i++)
             {
-                Assert.AreEqual(BitConverter.DoubleToInt64Bits(expected[i].Real), BitConverter.DoubleToInt64Bits(got[i].Real),
-                    $"element {i} real: got {got[i].Real:R} expected {expected[i].Real:R}");
-                Assert.AreEqual(BitConverter.DoubleToInt64Bits(expected[i].Imaginary), BitConverter.DoubleToInt64Bits(got[i].Imaginary),
-                    $"element {i} imag: got {got[i].Imaginary:R} expected {expected[i].Imaginary:R}");
+                Assert.IsTrue(HostLibm.Matches(expected[i], got[i]),
+                    HostLibm.Describe($"element {i} real", expected[i].Real, got[i].Real) + "; " +
+                    HostLibm.Describe($"element {i} imag", expected[i].Imaginary, got[i].Imaginary));
             }
         }
 
@@ -273,13 +284,15 @@ namespace NumSharp.Tests.Math
 
         // ─────────────────────────────── arccos / arcsin ───────────────────────────────
 
+        /// <summary>
+        /// arccos(0.5) = pi/3 stays a real scalar. Bit-exact on the pinned CRT host; Apple's libm returns
+        /// the neighbouring double (…976 vs …979), so elsewhere it is held to the <see cref="HostLibm"/> budget.
+        /// </summary>
         [TestMethod]
         public void arccos_InDomain_StaysReal()
         {
-            // arccos(0.5) = pi/3 (real scalar).
             var r = np.emath.arccos((NDArray)0.5);
-            Assert.AreEqual(NPTypeCode.Double, r.typecode);
-            Assert.AreEqual(1.0471975511965979, r.Data<double>()[0], 0.0); // bit-exact
+            AssertReal(r, 1.0471975511965979);
         }
 
         [TestMethod]
@@ -315,12 +328,15 @@ namespace NumSharp.Tests.Math
 
         // ─────────────────────────────── arctanh ───────────────────────────────
 
+        /// <summary>
+        /// arctanh(0.5) stays a real scalar. Bit-exact on the pinned CRT host; glibc returns the neighbouring
+        /// double (…548 vs …549), so elsewhere it is held to the <see cref="HostLibm"/> budget.
+        /// </summary>
         [TestMethod]
         public void arctanh_InDomain_StaysReal()
         {
             var r = np.emath.arctanh((NDArray)0.5);
-            Assert.AreEqual(NPTypeCode.Double, r.typecode);
-            Assert.AreEqual(0.5493061443340549, r.Data<double>()[0], 0.0);
+            AssertReal(r, 0.5493061443340549);
         }
 
         [TestMethod]
