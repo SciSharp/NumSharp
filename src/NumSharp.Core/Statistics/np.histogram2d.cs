@@ -46,7 +46,8 @@ namespace NumSharp
         /// <param name="density">When true, return the probability density.</param>
         /// <param name="weights">Optional <c>(N,)</c> per-point weights.</param>
         /// <returns>A <see cref="Histogram2dResult"/> carrying <c>H</c>, the x edges and the y edges.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.histogram2d.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.histogram2d.html <para>Scoped (<c>[NDScoped]</c>; <see cref="Histogram2dResult"/> is an <see cref="INDArrayCarrier"/>): the shared-edge conversions, the promoted coordinate columns and every per-dimension binning intermediate are reclaimed; only <c>H</c> and the two edge arrays leave.</para></remarks>
+        [NDScoped]
         public static Histogram2dResult histogram2d(NDArray x, NDArray y, int bins = 10, (double, double)?[] range = null, bool density = false, NDArray weights = null)
             => Histogram2dImpl(x, y, bins, range, density, weights);
 
@@ -58,6 +59,8 @@ namespace NumSharp
         /// <param name="density">When true, return the probability density.</param>
         /// <param name="weights">Optional <c>(N,)</c> per-point weights.</param>
         /// <returns>A <see cref="Histogram2dResult"/> carrying <c>H</c>, the x edges and the y edges.</returns>
+        /// <remarks>Scoped (<c>[NDScoped]</c>; <see cref="Histogram2dResult"/> is an <see cref="INDArrayCarrier"/>): the shared-edge conversions, the promoted coordinate columns and every per-dimension binning intermediate are reclaimed; only <c>H</c> and the two edge arrays leave.</remarks>
+        [NDScoped]
         public static Histogram2dResult histogram2d(NDArray x, NDArray y, int[] bins, (double, double)?[] range = null, bool density = false, NDArray weights = null)
             => Histogram2dImpl(x, y, bins, range, density, weights);
 
@@ -69,6 +72,8 @@ namespace NumSharp
         /// <param name="density">When true, return the probability density.</param>
         /// <param name="weights">Optional <c>(N,)</c> per-point weights.</param>
         /// <returns>A <see cref="Histogram2dResult"/> carrying <c>H</c>, the x edges and the y edges.</returns>
+        /// <remarks>Scoped (<c>[NDScoped]</c>; <see cref="Histogram2dResult"/> is an <see cref="INDArrayCarrier"/>): the shared-edge conversions, the promoted coordinate columns and every per-dimension binning intermediate are reclaimed; only <c>H</c> and the two edge arrays leave.</remarks>
+        [NDScoped]
         public static Histogram2dResult histogram2d(NDArray x, NDArray y, NDArray bins, (double, double)?[] range = null, bool density = false, NDArray weights = null)
             => Histogram2dImpl(x, y, bins, range, density, weights);
 
@@ -80,6 +85,8 @@ namespace NumSharp
         /// <param name="density">When true, return the probability density.</param>
         /// <param name="weights">Optional <c>(N,)</c> per-point weights.</param>
         /// <returns>A <see cref="Histogram2dResult"/> carrying <c>H</c>, the x edges and the y edges.</returns>
+        /// <remarks>Scoped (<c>[NDScoped]</c>; <see cref="Histogram2dResult"/> is an <see cref="INDArrayCarrier"/>): the shared-edge conversions, the promoted coordinate columns and every per-dimension binning intermediate are reclaimed; only <c>H</c> and the two edge arrays leave.</remarks>
+        [NDScoped]
         public static Histogram2dResult histogram2d(NDArray x, NDArray y, NDArray[] bins, (double, double)?[] range = null, bool density = false, NDArray weights = null)
             => Histogram2dImpl(x, y, bins, range, density, weights);
 
@@ -91,6 +98,8 @@ namespace NumSharp
         /// <param name="density">When true, return the probability density.</param>
         /// <param name="weights">Optional <c>(N,)</c> per-point weights.</param>
         /// <returns>A <see cref="Histogram2dResult"/> carrying <c>H</c>, the x edges and the y edges.</returns>
+        /// <remarks>Scoped (<c>[NDScoped]</c>; <see cref="Histogram2dResult"/> is an <see cref="INDArrayCarrier"/>): the shared-edge conversions, the promoted coordinate columns and every per-dimension binning intermediate are reclaimed; only <c>H</c> and the two edge arrays leave.</remarks>
+        [NDScoped]
         public static Histogram2dResult histogram2d(NDArray x, NDArray y, object[] bins, (double, double)?[] range = null, bool density = false, NDArray weights = null)
             => Histogram2dImpl(x, y, bins, range, density, weights);
 
@@ -102,6 +111,8 @@ namespace NumSharp
         /// <param name="density">When true, return the probability density.</param>
         /// <param name="weights">Optional <c>(N,)</c> per-point weights.</param>
         /// <returns>A <see cref="Histogram2dResult"/> carrying <c>H</c>, the x edges and the y edges.</returns>
+        /// <remarks>Scoped (<c>[NDScoped]</c>; <see cref="Histogram2dResult"/> is an <see cref="INDArrayCarrier"/>): the shared-edge conversions, the promoted coordinate columns and every per-dimension binning intermediate are reclaimed; only <c>H</c> and the two edge arrays leave.</remarks>
+        [NDScoped]
         public static Histogram2dResult histogram2d(NDArray x, NDArray y, double[] bins, (double, double)?[] range = null, bool density = false, NDArray weights = null)
             => Histogram2dImpl(x, y, bins, range, density, weights);
 

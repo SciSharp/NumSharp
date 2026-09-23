@@ -109,6 +109,15 @@ names the op and the take/return imbalance, not a byte diff. Fix the leak in the
 `[NDScoped]`), never add a `KnownEscapes` entry. `NativeAllocationChokepointTests` is the static twin: a new raw
 `NativeMemory.*`/`Marshal.AllocHGlobal` site fails until pooled or allowlisted.
 
+Two more `ScopeAudit` reds, neither a value divergence:
+- **`EveryInventoryMember_IsLeakAudited`: "N surface members are not leak-audited".** A public member no run
+  measured. Give it corpus rows, or an `E(...)` entry in `LeakCatalogue*.cs` (see the SKILL.md gotcha). The message
+  says when an entry is DECLARED but never ran — that is the next item, not a missing entry.
+- **`Catalogue_EveryEntry_…`: "catalogue entries could not run".** An entry's warm invocation threw (fix its
+  arguments), or a `T(...)` entry started returning (the member now succeeds — make it an ordinary `E(...)`). An
+  entry's own lifetime bugs read as escapes too: return every array the entry owns (the harness disposes results) and
+  never return a fixture array or a member's OWN field (report its size instead).
+
 ## Ledger
 
 The complete, human-readable divergence ledger is `test/NumSharp.Tests.Oracle/Fuzz/README.md`. Keep it and

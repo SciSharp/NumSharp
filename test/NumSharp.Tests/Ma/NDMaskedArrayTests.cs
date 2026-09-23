@@ -927,6 +927,17 @@ namespace NumSharp.Tests.Ma
             Assert.IsTrue(pairs[1].index.SequenceEqual(new long[] { 2 }) && Convert.ToDouble(pairs[1].value) == 3.0);
         }
 
+        /// <summary>fromfunction's DEFAULT grid dtype is float64 — NumPy's <c>fromfunction(..., dtype=float)</c>
+        /// (probed 2.4.2: <c>ma.fromfunction(lambda i, j: i + j, (2, 3))</c> is float64 <c>[[0,1,2],[1,2,3]]</c>).
+        /// The default used to fall through to np.indices' int64, so the plain spelling returned int64.</summary>
+        [TestMethod]
+        public void Fromfunction_DefaultDtype_IsFloat64LikeNumPy()
+        {
+            var ff = np.ma.fromfunction((i, j) => i + j, new Shape(2, 3));
+            Assert.AreEqual(np.float64, ff.dtype);
+            Assert.IsTrue(ff.data.ToArray<double>().SequenceEqual(new double[] { 0, 1, 2, 1, 2, 3 }));
+        }
+
         /// <summary>MAError/MaskError exception types match NumPy's hierarchy (MaskError : MAError : Exception).</summary>
         [TestMethod]
         public void ExceptionTypes_Hierarchy()

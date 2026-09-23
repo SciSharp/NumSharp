@@ -39,7 +39,7 @@ namespace NumSharp.Tests.Fuzz
             ["Backends/Unmanaged/Pooling/SizeBucketedBufferPool.cs"] = 4,  // the bucketed pool itself
             ["Backends/Unmanaged/Pooling/StackedMemoryPool.cs"] = 1,       // the scalar pool itself
             ["Backends/Unmanaged/Pooling/OsVirtualMemory.cs"] = 5,         // guard-page allocator (env-opt-in, pool-routed)
-            ["Backends/Iterators/NDIter.cs"] = 2,                          // audit debt: iterator scratch, alloc+free internal
+            ["Backends/Iterators/NDIter.cs"] = 1,                          // audit debt: the state block (header + inline arena, AllocateStateBlock), recycled through the per-thread cache — tightened 2 -> 1 (2026-09-23): 15154b00 folded the separate allocations into that single block
             ["Backends/Iterators/NDIter.State.cs"] = 2,                    // audit debt: iterator state blocks
             ["Backends/Iterators/NDIterBufferManager.cs"] = 3,             // audit debt: buffered-mode chunk buffers
             ["Sorting_Searching_Counting/np.bincount.cs"] = 1,             // audit debt: privatized counting table

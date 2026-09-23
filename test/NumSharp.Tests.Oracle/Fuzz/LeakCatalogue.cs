@@ -678,6 +678,33 @@ namespace NumSharp.Tests.Fuzz
                 it.reset();
                 return Box(it.iterindex);
             });
+            E(l, "NDIterator.Item", "0-d operand view per step of a strided walk", f =>
+            {
+                // it[i] builds a FRESH view object per call — the caller's to release — so the per-element
+                // `it[0]` loop NumPy code ports verbatim must balance view by view, not only at the end.
+                using var it = np.nditer(f.MT);
+                double s = 0;
+                while (!it.finished)
+                {
+                    using (var v = it[0])
+                        s += (double)v;
+                    it.iternext();
+                }
+                return Box(s);
+            });
+            E(l, "NDIterator.Item", "external-loop chunk view", f =>
+            {
+                // Under external_loop the view spans the inner loop (a 1-D chunk), built by the strided route.
+                using var it = np.nditer(f.M, new[] { "external_loop" });
+                long n = 0;
+                while (!it.finished)
+                {
+                    using (var chunk = it[0])
+                        n += chunk.size;
+                    it.iternext();
+                }
+                return Box(n);
+            });
 
             // ---- flatiter / ndindex / ndenumerate / broadcast ----
             E(l, "FlatIterator.AsTyped", "typed", f =>
@@ -696,6 +723,48 @@ namespace NumSharp.Tests.Fuzz
             });
             E(l, "FlatIterator.copy", "C-order copy of a view", f => f.MT.flatiter.copy());
             E(l, "FlatIterator.next", "advance", f => f.MT.flatiter.next());
+            E(l, "FlatIterator.Item", "scalar get/set through a transposed owned copy", f =>
+            {
+                // Scalar access maps a flat index through the base's strides with no NDArray built, so the
+                // round trip may cost only the owned copy and its transposed view (both released here).
+                using var c = f.M.copy();
+                using var t = c.T;
+                var it = t.flatiter;
+                object v = it[5];
+                it[5] = v;     // same-dtype write-back
+                it[-1] = 7;    // a weak int into float64: NumPy's cross-dtype scalar cast path
+                return Box(v);
+            });
+            E(l, "FlatIterator.Item", "weak scalars into an int32 owned copy (bounds-check + cast route)", f =>
+            {
+                // A mismatched scalar into an INTEGER base takes the NumPy-exact cast route (a 1-element
+                // source cast through astype) after the weak-scalar bounds check — its temps must not outlive
+                // the assignment.
+                using var c = f.I.copy();
+                var it = c.flatiter;
+                it[3] = 7L;     // int64 into int32
+                it[4] = 2.9;    // a float truncates toward zero
+                return Box(it[3]);
+            });
+            E(l, "FlatIterator.Item", "slice + int[] + long[] + NDArray gets", f =>
+            {
+                // Every fancy/slice get gathers into a FRESH 1-D array (returned for disposal); the slice
+                // form resolves its positions through arange(size)[range] internally.
+                var it = f.MT.flatiter;
+                return new object[] { it["1:7:2"], it[new[] { 0, 5, 11 }], it[new long[] { 2, -1 }], it[f.Idx] };
+            });
+            E(l, "FlatIterator.Item", "slice + int[] + long[] + NDArray sets on an owned copy", f =>
+            {
+                // Every fancy/slice set casts the values to the base dtype before scattering; the array is
+                // the entry's own copy so the fixture is never written.
+                using var c = f.M.copy();
+                var it = c.flatiter;
+                it["0:3"] = f.V3;
+                it[new[] { 3, 5, 7 }] = f.V3;
+                it[new long[] { 8, 9, 10 }] = f.V3;
+                it[f.Idx] = f.V3;
+                return null;
+            });
             E(l, "NDIndex.AsSpans", "span walk", f =>
             {
                 long n = 0;
@@ -779,11 +848,44 @@ namespace NumSharp.Tests.Fuzz
             E(l, "DType.GetTypeCode", "code", f => Box(np.float64.GetTypeCode()));
             E(l, "DType.ToString", "str + repr", f => np.float64.ToString() + np.float64.ToString(true));
             E(l, "DType.newbyteorder", "swap", f => np.float64.newbyteorder('>'));
+            // DType's operators are pure descriptor logic (registry lookups, the safe-cast table) and must
+            // read zero pool traffic — an allocation here would be one per dtype comparison, everywhere.
+            E(l, "DType.op_Implicit", "Type / NPTypeCode / NPTypeCode? / string / NPY_TYPES -> DType, DType -> NPTypeCode", f =>
+            {
+                DType fromType = typeof(double);
+                DType fromCode = NPTypeCode.Int32;
+                DType fromNullable = (NPTypeCode?)NPTypeCode.Single;
+                DType fromString = ">i4";
+                DType fromTypeNum = NPY_TYPES.NPY_BOOL;
+                NPTypeCode toCode = np.float64;
+                return new object[] { fromType, fromCode, fromNullable, fromString, fromTypeNum, Box(toCode) };
+            });
+            E(l, "DType.op_Explicit", "DType -> Type", f => (Type)np.float64);
+            E(l, "DType.op_Equality", "structural + coercing (Type converts in)", f => Box(np.float64 == np.dtype("f8") && np.int32 == typeof(int)));
+            E(l, "DType.op_Inequality", "byte order differs", f => Box(np.int32 != DType.From(">i4")));
+            E(l, "DType.op_LessThan", "safe-cast order", f => Box(np.int16 < np.float64));
+            E(l, "DType.op_LessThanOrEqual", "safe-cast order", f => Box(np.int16 <= np.int16));
+            E(l, "DType.op_GreaterThan", "safe-cast order", f => Box(np.float64 > np.int8));
+            E(l, "DType.op_GreaterThanOrEqual", "safe-cast order", f => Box(np.float64 >= np.float64));
             E(l, "finfo.ToString", "repr", f => np.finfo(np.float32).ToString());
             E(l, "iinfo.ToString", "repr", f => np.iinfo(np.int16).ToString());
             E(l, "NDArrayFlags.Equals", "compare", f => Box(f.M.flags.Equals(f.M.flags)));
             E(l, "NDArrayFlags.GetHashCode", "hash", f => Box(f.M.flags.GetHashCode()));
             E(l, "NDArrayFlags.ToString", "repr", f => f.MT.flags.ToString());
+            E(l, "NDArrayFlags.op_Equality", "C array vs its transpose", f => Box(f.M.flags == f.MT.flags));
+            E(l, "NDArrayFlags.op_Inequality", "C array vs its transpose", f => Box(f.M.flags != f.MT.flags));
+            E(l, "NDArrayFlags.Item", "key gets + writeable/aligned sets on an owned copy", f =>
+            {
+                // SET routes through setflags on the LIVE array; an owned buffer can always be made writeable
+                // again, so the entry leaves its copy exactly as it found it.
+                using var c = f.M.copy();
+                var flags = c.flags;
+                bool read = flags["C_CONTIGUOUS"] && flags["W"] && !flags["F"] && flags["OWNDATA"];
+                flags["WRITEABLE"] = false;
+                flags["W"] = true;
+                flags["ALIGNED"] = true;
+                return Box(read && flags["WRITEABLE"]);
+            });
 
             // ---- poly1d ----
             E(l, "poly1d.Call", "NDArray", f => f.P.Call(f.V));
@@ -798,6 +900,35 @@ namespace NumSharp.Tests.Fuzz
             E(l, "poly1d.ToString", "render", f => f.P.ToString());
             E(l, "poly1d.deriv", "first derivative", f => f.P.deriv());
             E(l, "poly1d.integ", "antiderivative", f => f.P.integ());
+            // Every arithmetic operator returns a NEW polynomial (or a (q, r) pair of them) the caller owns —
+            // the result disposer releases them through IDisposable / ITuple.
+            E(l, "poly1d.op_Implicit", "poly1d -> its coefficient array", f =>
+            {
+                // The conversion hands out the polynomial's OWN field (NumPy's __array__), never a result to
+                // release, so the entry reports the size instead of returning the array.
+                NDArray c = f.P;
+                return Box(c.size);
+            });
+            E(l, "poly1d.op_Addition", "poly+poly, poly+array", f => new object[] { f.P + f.P, f.P + f.V3 });
+            E(l, "poly1d.op_Subtraction", "poly-poly (all-zero result), poly-array", f => new object[] { f.P - f.P, f.P - f.V3 });
+            E(l, "poly1d.op_UnaryNegation", "negate", f => -f.P);
+            // Unary plus returns the operand ITSELF — returning it would hand the fixture's polynomial to the
+            // result disposer, so the entry reports the identity instead.
+            E(l, "poly1d.op_UnaryPlus", "identity", f => Box(ReferenceEquals(+f.P, f.P)));
+            E(l, "poly1d.op_Multiply", "poly*poly, poly*array, scalar on both sides", f => new object[] { f.P * f.P, f.P * f.V3, f.P * 2.0, 2.0 * f.P });
+            E(l, "poly1d.op_Division", "by scalar, polynomial division by poly and by array", f => new object[] { f.P / 2.0, f.P / f.P, f.P / f.V3 });
+            E(l, "poly1d.op_Equality", "value compare", f => Box(f.P == f.P));
+            E(l, "poly1d.op_Inequality", "value compare", f => Box(f.P != f.P));
+            E(l, "poly1d.Item", "coefficient views + out-of-range zero", f => new object[] { f.P[0], f.P[2], f.P[7] });
+            E(l, "poly1d.Item", "set in place + grow, on an owned copy", f =>
+            {
+                // The copy constructor copies the coefficients, so the fixture polynomial is never written;
+                // the held 0-d int32 operand (never a call-site temp) is cast into the float64 coefficients.
+                using var p = new poly1d(f.P);
+                p[1] = f.Zero;   // in-place write through a coefficient view
+                p[4] = f.Zero;   // growing REPLACES the owned array (the old one released)
+                return Box(p.order);
+            });
 
             // ---- NpzFile ----
             E(l, "NpzFile.Close", "close", f =>
@@ -835,6 +966,16 @@ namespace NumSharp.Tests.Fuzz
             {
                 using var z = np.load_npz(f.NpzBytes);
                 return Box(z.IsArray("m"));
+            });
+            E(l, "NpzFile.Item", "lazy load + cache, both key spellings", f =>
+            {
+                // The indexer loads on first access and CACHES: the ".npy" spelling must return the SAME
+                // array. The cache is a BORROWED memo — whoever first reads a member owns it and the archive
+                // only forgets it on Close — so the array is returned (once) for the result disposer.
+                using var z = np.load_npz(f.NpzBytes);
+                var m = z["m"];
+                var again = z["m.npy"];
+                return new object[] { m, Box(ReferenceEquals(m, again)) };
             });
             E(l, "NpzFile.ToString", "render", f =>
             {

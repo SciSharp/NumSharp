@@ -77,16 +77,17 @@ namespace NumSharp.Tests.Fuzz
             PrintBypassRollup(r.Bypasses);
 
             // Non-vacuity, per family: a schema/skip regression in ANY family must not silently gate
-            // nothing. Floors sit ~5% under the 2026-09-23 counts (ordinary 138,660 / masked 68,860 /
-            // index success 5,744 / error paths 2,441 ordinary + 6,682 index), so a genuine corpus
-            // growth never trips them but a family that stops being replayed does.
-            Assert.IsTrue(r.OrdinaryMeasured > 130_000,
+            // nothing. Floors sit 5% under the 2026-09-23 counts — measured IDENTICAL on net10.0 and
+            // net8.0 (ordinary 138,660 / masked 68,860 / index success 5,744 / error paths 9,123 =
+            // 2,441 ordinary + 6,682 index) — so a genuine corpus growth never trips them but a family
+            // that stops being replayed (or half a family) does.
+            Assert.IsTrue(r.OrdinaryMeasured > 131_700,
                 $"scope audit measured only {r.OrdinaryMeasured} ordinary cases — corpus schema or skip-logic regression?");
-            Assert.IsTrue(r.MaskedMeasured > 65_000,
+            Assert.IsTrue(r.MaskedMeasured > 65_400,
                 $"scope audit measured only {r.MaskedMeasured} masked-array cases — ma_* replay regression?");
-            Assert.IsTrue(r.IndexMeasured > 5_400,
+            Assert.IsTrue(r.IndexMeasured > 5_450,
                 $"scope audit measured only {r.IndexMeasured} index success cases — index_* replay regression?");
-            Assert.IsTrue(r.ErrorPathsMeasured > 8_600,
+            Assert.IsTrue(r.ErrorPathsMeasured > 8_650,
                 $"scope audit measured only {r.ErrorPathsMeasured} error paths — expects_throw / np.ok=false replay regression?");
 
             AssertNoUnclassifiedEscapes(r, "scope-audit");
@@ -536,6 +537,14 @@ namespace NumSharp.Tests.Fuzz
         /// key (<c>rnd:&lt;dist&gt;</c>, <c>grnd:&lt;method&gt;</c>, <c>index.get</c>, <c>index.set</c>).</param>
         /// <param name="ErrorMeasuredByOp">Error-path measured count per op key.</param>
         /// <param name="ThrewByOp">Threw-skipped count per op key (diagnostic rollup).</param>
+        /// <param name="InconclusiveIds">Op keys / surface ids with at least one SUCCESS-path measurement whose
+        /// every attempt saw a GC. The completeness gate credits them like a measurement: the member ran (its
+        /// warm invocation succeeded) and only the environment prevented a verdict — the same never-red policy
+        /// <see cref="GcInconclusive"/> already applies to the leak verdict, so a busy host cannot turn the
+        /// completeness gate red either.</param>
+        /// <param name="ErrorInconclusiveIds">The error-path twin of <paramref name="InconclusiveIds"/> — kept
+        /// apart because the corpus route credits SUCCESS paths only (an op whose every case raises has an
+        /// unaudited success path), while the direct runners credit either.</param>
         /// <param name="DirectMeasured">Success-path DIRECT measurements — catalogue entries and property/field
         /// reads, keyed by surface id rather than a corpus op key (0 for a corpus sweep).</param>
         internal sealed record SweepResult(
@@ -546,6 +555,8 @@ namespace NumSharp.Tests.Fuzz
             Dictionary<string, long> MeasuredByOp,
             Dictionary<string, long> ErrorMeasuredByOp,
             Dictionary<string, long> ThrewByOp,
+            IReadOnlySet<string> InconclusiveIds,
+            IReadOnlySet<string> ErrorInconclusiveIds,
             long DirectMeasured = 0)
         {
             /// <summary>All success-path cases measured, across every family and the direct runners.</summary>
@@ -588,6 +599,12 @@ namespace NumSharp.Tests.Fuzz
             /// <summary>Threw-skipped count per op key.</summary>
             public readonly Dictionary<string, long> ThrewByOp = new(StringComparer.Ordinal);
 
+            /// <summary>Ids with a GC-inconclusive SUCCESS-path measurement (see <see cref="SweepResult.InconclusiveIds"/>).</summary>
+            public readonly HashSet<string> InconclusiveIds = new(StringComparer.Ordinal);
+
+            /// <summary>Ids with a GC-inconclusive ERROR-path measurement (see <see cref="SweepResult.ErrorInconclusiveIds"/>).</summary>
+            public readonly HashSet<string> ErrorInconclusiveIds = new(StringComparer.Ordinal);
+
             /// <summary>Total measurements (success + error), for the periodic hygiene settle.</summary>
             private long _measurements;
 
@@ -599,12 +616,29 @@ namespace NumSharp.Tests.Fuzz
                 ThrewByOp[op] = ThrewByOp.GetValueOrDefault(op) + 1;
             }
 
+            /// <summary>
+            ///     Records a measurement whose every attempt saw a GC — indistinguishable, so never a leak
+            ///     verdict — AND remembers which id it was, so the completeness gate can tell a member that
+            ///     RAN but could not be judged (credited, like the verdict's never-red rule) from one that
+            ///     never ran at all (uncovered). The single recording point for every family and runner.
+            /// </summary>
+            /// <param name="id">The case's op key or the entry's surface id; null records the count only.</param>
+            /// <param name="errorPath">True for an error-path measurement (kept apart: the corpus route
+            /// credits success paths only).</param>
+            public void Inconclusive(string id, bool errorPath)
+            {
+                GcInconclusive++;
+                if (id != null)
+                    (errorPath ? ErrorInconclusiveIds : InconclusiveIds).Add(id);
+            }
+
             /// <summary>Freezes the tallies into the immutable verdict input every gate consumes.</summary>
             /// <param name="files">How many corpus files (or 0 for a direct runner) were replayed.</param>
-            /// <returns>The sweep result; it shares this accumulator's dictionaries, so record nothing after.</returns>
+            /// <returns>The sweep result; it shares this accumulator's collections, so record nothing after.</returns>
             public SweepResult ToResult(int files)
                 => new(Ordinary, Masked, Index, ErrorPaths, GcInconclusive, ThrewSkipped, files,
-                       Groups, Bypasses, MeasuredByOp, ErrorMeasuredByOp, ThrewByOp, Direct);
+                       Groups, Bypasses, MeasuredByOp, ErrorMeasuredByOp, ThrewByOp,
+                       InconclusiveIds, ErrorInconclusiveIds, Direct);
 
             /// <summary>
             ///     Records a confirmed measurement and classifies it: a non-zero balance joins an
@@ -787,7 +821,7 @@ namespace NumSharp.Tests.Fuzz
                         var errTraffic = ScopeAudit.MeasureConfirmedTraffic(ErrorRegion);
                         if (errTraffic == null)
                         {
-                            acc.GcInconclusive++;
+                            acc.Inconclusive(c.Op, errorPath: true);
                             continue;
                         }
                         acc.Record(c.Op, null, c.Layout ?? "?", errTraffic.Value, 0, errorPath: true, c.Id, file);
@@ -827,7 +861,10 @@ namespace NumSharp.Tests.Fuzz
                     var traffic = ScopeAudit.MeasureConfirmedTraffic(Region);
                     if (traffic == null)
                     {
-                        acc.GcInconclusive++;   // a GC landed inside every attempt — indistinguishable, never red
+                        // A GC landed inside every attempt — indistinguishable, never red. Recorded under the
+                        // op AND its derived coverage key, the keys the completeness gate credits.
+                        acc.Inconclusive(c.Op, errorPath: false);
+                        acc.InconclusiveIds.Add(CoverageKey(c) ?? c.Op);
                         continue;
                     }
 

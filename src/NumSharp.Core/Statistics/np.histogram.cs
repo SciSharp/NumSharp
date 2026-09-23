@@ -88,7 +88,8 @@ namespace NumSharp
         /// <param name="weights">Unused for edge computation (accepted for signature parity, only shape-checked).</param>
         /// <returns>The bin edges (length <paramref name="bins"/> + 1), dtype float (or the input's float width).</returns>
         /// <exception cref="ValueError"><paramref name="bins"/> &lt; 1, or the range is invalid/non-finite.</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.histogram_bin_edges.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.histogram_bin_edges.html <para>Scoped (<c>[NDScoped]</c>): the raveled input, any weights ravel and every estimator/linspace intermediate are reclaimed; only the edge array leaves (an explicit edge array the caller passed through unchanged stays the caller's).</para></remarks>
+        [NDScoped]
         public static NDArray histogram_bin_edges(NDArray a, int bins = 10, (double, double)? range = null, NDArray weights = null)
             => HistogramBinEdgesImpl(a, bins, range, weights);
 
@@ -104,6 +105,8 @@ namespace NumSharp
         /// <returns>The estimator-chosen bin edges.</returns>
         /// <exception cref="ValueError"><paramref name="bins"/> is not a known estimator, or the range is invalid.</exception>
         /// <exception cref="TypeError"><paramref name="weights"/> is supplied (unsupported for estimators).</exception>
+        /// <remarks>Scoped (<c>[NDScoped]</c>): the raveled input, any weights ravel and every estimator/linspace intermediate are reclaimed; only the edge array leaves (an explicit edge array the caller passed through unchanged stays the caller's).</remarks>
+        [NDScoped]
         public static NDArray histogram_bin_edges(NDArray a, string bins, (double, double)? range = null, NDArray weights = null)
             => HistogramBinEdgesImpl(a, bins, range, weights);
 
@@ -118,6 +121,8 @@ namespace NumSharp
         /// <param name="weights">Ignored for edge computation.</param>
         /// <returns>The edges array (dtype preserved).</returns>
         /// <exception cref="ValueError">The edges are not 1-D or not monotonically increasing.</exception>
+        /// <remarks>Scoped (<c>[NDScoped]</c>): the raveled input, any weights ravel and every estimator/linspace intermediate are reclaimed; only the edge array leaves (an explicit edge array the caller passed through unchanged stays the caller's).</remarks>
+        [NDScoped]
         public static NDArray histogram_bin_edges(NDArray a, NDArray bins, (double, double)? range = null, NDArray weights = null)
             => HistogramBinEdgesImpl(a, bins, range, weights);
 
@@ -131,6 +136,8 @@ namespace NumSharp
         /// <param name="range">Ignored when explicit edges are given.</param>
         /// <param name="weights">Ignored for edge computation.</param>
         /// <returns>The edges array (float64).</returns>
+        /// <remarks>Scoped (<c>[NDScoped]</c>): the raveled input, any weights ravel and every estimator/linspace intermediate are reclaimed; only the edge array leaves (an explicit edge array the caller passed through unchanged stays the caller's).</remarks>
+        [NDScoped]
         public static NDArray histogram_bin_edges(NDArray a, double[] bins, (double, double)? range = null, NDArray weights = null)
             => HistogramBinEdgesImpl(a, (NDArray)np.array(bins), range, weights);
 
@@ -162,7 +169,8 @@ namespace NumSharp
         /// </param>
         /// <returns>A <see cref="HistogramResult"/> carrying the histogram values and the bin edges.</returns>
         /// <exception cref="ValueError"><paramref name="bins"/> &lt; 1, or the range is invalid/non-finite.</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.histogram.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.histogram.html <para>Scoped (<c>[NDScoped]</c>; <see cref="HistogramResult"/> is an <see cref="INDArrayCarrier"/>): the raveled input and weights, the per-sample bin indices, the bincount/cumulative scratch and the density quotients are reclaimed; only the histogram and its edges leave.</para></remarks>
+        [NDScoped]
         public static HistogramResult histogram(NDArray a, int bins = 10, (double, double)? range = null, bool density = false, NDArray weights = null)
             => HistogramImpl(a, bins, range, density, weights);
 
@@ -177,6 +185,8 @@ namespace NumSharp
         /// <param name="weights">Weighted data is not supported for automatic estimation.</param>
         /// <returns>A <see cref="HistogramResult"/> carrying the histogram values and the bin edges.</returns>
         /// <exception cref="TypeError"><paramref name="weights"/> is supplied together with an estimator name.</exception>
+        /// <remarks>Scoped (<c>[NDScoped]</c>; <see cref="HistogramResult"/> is an <see cref="INDArrayCarrier"/>): the raveled input and weights, the per-sample bin indices, the bincount/cumulative scratch and the density quotients are reclaimed; only the histogram and its edges leave.</remarks>
+        [NDScoped]
         public static HistogramResult histogram(NDArray a, string bins, (double, double)? range = null, bool density = false, NDArray weights = null)
             => HistogramImpl(a, bins, range, density, weights);
 
@@ -190,6 +200,8 @@ namespace NumSharp
         /// <param name="weights">Optional per-sample weights (same shape as <paramref name="a"/>).</param>
         /// <returns>A <see cref="HistogramResult"/> carrying the histogram values and the bin edges.</returns>
         /// <exception cref="ValueError">The edges are not 1-D or not monotonically increasing.</exception>
+        /// <remarks>Scoped (<c>[NDScoped]</c>; <see cref="HistogramResult"/> is an <see cref="INDArrayCarrier"/>): the raveled input and weights, the per-sample bin indices, the bincount/cumulative scratch and the density quotients are reclaimed; only the histogram and its edges leave.</remarks>
+        [NDScoped]
         public static HistogramResult histogram(NDArray a, NDArray bins, (double, double)? range = null, bool density = false, NDArray weights = null)
             => HistogramImpl(a, bins, range, density, weights);
 
@@ -202,6 +214,8 @@ namespace NumSharp
         /// <param name="density">When true, return the probability density instead of raw counts.</param>
         /// <param name="weights">Optional per-sample weights.</param>
         /// <returns>A <see cref="HistogramResult"/> carrying the histogram values and the bin edges.</returns>
+        /// <remarks>Scoped (<c>[NDScoped]</c>; <see cref="HistogramResult"/> is an <see cref="INDArrayCarrier"/>): the raveled input and weights, the per-sample bin indices, the bincount/cumulative scratch and the density quotients are reclaimed; only the histogram and its edges leave.</remarks>
+        [NDScoped]
         public static HistogramResult histogram(NDArray a, double[] bins, (double, double)? range = null, bool density = false, NDArray weights = null)
             => HistogramImpl(a, (NDArray)np.array(bins), range, density, weights);
 

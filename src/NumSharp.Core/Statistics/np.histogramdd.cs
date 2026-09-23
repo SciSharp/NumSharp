@@ -46,7 +46,8 @@ namespace NumSharp
         /// <param name="density">When true, return the probability density (<c>count / total / bin_volume</c>).</param>
         /// <param name="weights">Optional <c>(N,)</c> per-point weights.</param>
         /// <returns>A <see cref="HistogramddResult"/> carrying <c>H</c> and the per-dimension edges.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.histogramdd.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.histogramdd.html <para>Scoped (<c>[NDScoped]</c>; <see cref="HistogramddResult"/> is an <see cref="INDArrayCarrier"/>): the sample column views, the promoted columns, the per-dimension bin indices, the raveled multi-index and the density quotients are reclaimed; only <c>H</c> and the edge arrays leave.</para></remarks>
+        [NDScoped]
         public static HistogramddResult histogramdd(NDArray sample, int bins = 10, (double, double)?[] range = null, bool density = false, NDArray weights = null)
             => HistogramddImpl(SampleColumns(sample), bins, range, density, weights);
 
@@ -57,6 +58,8 @@ namespace NumSharp
         /// <param name="density">When true, return the probability density.</param>
         /// <param name="weights">Optional <c>(N,)</c> per-point weights.</param>
         /// <returns>A <see cref="HistogramddResult"/> carrying <c>H</c> and the per-dimension edges.</returns>
+        /// <remarks>Scoped (<c>[NDScoped]</c>; <see cref="HistogramddResult"/> is an <see cref="INDArrayCarrier"/>): the sample column views, the promoted columns, the per-dimension bin indices, the raveled multi-index and the density quotients are reclaimed; only <c>H</c> and the edge arrays leave.</remarks>
+        [NDScoped]
         public static HistogramddResult histogramdd(NDArray sample, int[] bins, (double, double)?[] range = null, bool density = false, NDArray weights = null)
             => HistogramddImpl(SampleColumns(sample), bins, range, density, weights);
 
@@ -67,6 +70,8 @@ namespace NumSharp
         /// <param name="density">When true, return the probability density.</param>
         /// <param name="weights">Optional <c>(N,)</c> per-point weights.</param>
         /// <returns>A <see cref="HistogramddResult"/> carrying <c>H</c> and the per-dimension edges.</returns>
+        /// <remarks>Scoped (<c>[NDScoped]</c>; <see cref="HistogramddResult"/> is an <see cref="INDArrayCarrier"/>): the sample column views, the promoted columns, the per-dimension bin indices, the raveled multi-index and the density quotients are reclaimed; only <c>H</c> and the edge arrays leave.</remarks>
+        [NDScoped]
         public static HistogramddResult histogramdd(NDArray sample, NDArray[] bins, (double, double)?[] range = null, bool density = false, NDArray weights = null)
             => HistogramddImpl(SampleColumns(sample), bins, range, density, weights);
 
@@ -77,6 +82,8 @@ namespace NumSharp
         /// <param name="density">When true, return the probability density.</param>
         /// <param name="weights">Optional <c>(N,)</c> per-point weights.</param>
         /// <returns>A <see cref="HistogramddResult"/> carrying <c>H</c> and the per-dimension edges.</returns>
+        /// <remarks>Scoped (<c>[NDScoped]</c>; <see cref="HistogramddResult"/> is an <see cref="INDArrayCarrier"/>): the sample column views, the promoted columns, the per-dimension bin indices, the raveled multi-index and the density quotients are reclaimed; only <c>H</c> and the edge arrays leave.</remarks>
+        [NDScoped]
         public static HistogramddResult histogramdd(NDArray sample, object[] bins, (double, double)?[] range = null, bool density = false, NDArray weights = null)
             => HistogramddImpl(SampleColumns(sample), bins, range, density, weights);
 
@@ -94,6 +101,8 @@ namespace NumSharp
         /// <param name="density">When true, return the probability density.</param>
         /// <param name="weights">Optional <c>(N,)</c> per-point weights.</param>
         /// <returns>A <see cref="HistogramddResult"/> carrying <c>H</c> and the per-dimension edges.</returns>
+        /// <remarks>Scoped (<c>[NDScoped]</c>; <see cref="HistogramddResult"/> is an <see cref="INDArrayCarrier"/>): the sample column views, the promoted columns, the per-dimension bin indices, the raveled multi-index and the density quotients are reclaimed; only <c>H</c> and the edge arrays leave.</remarks>
+        [NDScoped]
         public static HistogramddResult histogramdd(NDArray[] sample, int bins = 10, (double, double)?[] range = null, bool density = false, NDArray weights = null)
             => HistogramddImpl(ColumnsFromSequence(sample), bins, range, density, weights);
 
@@ -104,6 +113,8 @@ namespace NumSharp
         /// <param name="density">When true, return the probability density.</param>
         /// <param name="weights">Optional <c>(N,)</c> per-point weights.</param>
         /// <returns>A <see cref="HistogramddResult"/> carrying <c>H</c> and the per-dimension edges.</returns>
+        /// <remarks>Scoped (<c>[NDScoped]</c>; <see cref="HistogramddResult"/> is an <see cref="INDArrayCarrier"/>): the sample column views, the promoted columns, the per-dimension bin indices, the raveled multi-index and the density quotients are reclaimed; only <c>H</c> and the edge arrays leave.</remarks>
+        [NDScoped]
         public static HistogramddResult histogramdd(NDArray[] sample, int[] bins, (double, double)?[] range = null, bool density = false, NDArray weights = null)
             => HistogramddImpl(ColumnsFromSequence(sample), bins, range, density, weights);
 
@@ -114,6 +125,8 @@ namespace NumSharp
         /// <param name="density">When true, return the probability density.</param>
         /// <param name="weights">Optional <c>(N,)</c> per-point weights.</param>
         /// <returns>A <see cref="HistogramddResult"/> carrying <c>H</c> and the per-dimension edges.</returns>
+        /// <remarks>Scoped (<c>[NDScoped]</c>; <see cref="HistogramddResult"/> is an <see cref="INDArrayCarrier"/>): the sample column views, the promoted columns, the per-dimension bin indices, the raveled multi-index and the density quotients are reclaimed; only <c>H</c> and the edge arrays leave.</remarks>
+        [NDScoped]
         public static HistogramddResult histogramdd(NDArray[] sample, NDArray[] bins, (double, double)?[] range = null, bool density = false, NDArray weights = null)
             => HistogramddImpl(ColumnsFromSequence(sample), bins, range, density, weights);
 
@@ -124,6 +137,8 @@ namespace NumSharp
         /// <param name="density">When true, return the probability density.</param>
         /// <param name="weights">Optional <c>(N,)</c> per-point weights.</param>
         /// <returns>A <see cref="HistogramddResult"/> carrying <c>H</c> and the per-dimension edges.</returns>
+        /// <remarks>Scoped (<c>[NDScoped]</c>; <see cref="HistogramddResult"/> is an <see cref="INDArrayCarrier"/>): the sample column views, the promoted columns, the per-dimension bin indices, the raveled multi-index and the density quotients are reclaimed; only <c>H</c> and the edge arrays leave.</remarks>
+        [NDScoped]
         public static HistogramddResult histogramdd(NDArray[] sample, object[] bins, (double, double)?[] range = null, bool density = false, NDArray weights = null)
             => HistogramddImpl(ColumnsFromSequence(sample), bins, range, density, weights);
 

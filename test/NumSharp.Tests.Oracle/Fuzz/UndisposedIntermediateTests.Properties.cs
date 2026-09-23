@@ -254,7 +254,7 @@ namespace NumSharp.Tests.Fuzz
             var traffic = ScopeAudit.MeasureConfirmedTraffic(errorPath ? ErrorBody : Body);
             if (traffic == null)
             {
-                acc.GcInconclusive++;
+                acc.Inconclusive(member.Id, errorPath);
                 return;
             }
             if (!errorPath)

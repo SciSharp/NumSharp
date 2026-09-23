@@ -47,8 +47,10 @@ namespace NumSharp.Tests.Fuzz
     ///             <c>Public | Static | Instance | DeclaredOnly</c>, special names excluded — the inventory
     ///             tool's <c>InspectType</c>, verbatim.</item>
     ///       <item><b>Operators</b> — the <c>op_*</c> special names of <see cref="NDArray"/>,
-    ///             <see cref="NumSharp.Generic.NDArray{TDType}"/> and <see cref="NDMaskedArray"/>, which the
-    ///             inventory filters out by construction but which allocate on every use.</item>
+    ///             <see cref="NumSharp.Generic.NDArray{TDType}"/>, <see cref="NDMaskedArray"/> and every object
+    ///             owner that declares any (<see cref="DType"/>, <see cref="NDArrayFlags"/>, <see cref="poly1d"/>),
+    ///             which the inventory filters out by construction but which run code — and, for the array
+    ///             and polynomial types, allocate — on every use.</item>
     ///       <item><b>Object surfaces</b> — the NumPy object types <c>coverage/object_surfaces.py</c> maps
     ///             to CLR owners (Generator, SeedSequence, the bit generators, the iterator objects,
     ///             DType, finfo/iinfo, NDArrayFlags, poly1d, NpzFile), plus <see cref="NDMaskedArray"/>
@@ -87,13 +89,31 @@ namespace NumSharp.Tests.Fuzz
             ("NDArray<T>", typeof(NumSharp.Generic.NDArray<>), true),
         };
 
-        /// <summary>The types whose operators are enumerated, with their owner id.</summary>
+        /// <summary>
+        ///     The types whose operators are enumerated, with their owner id: the array types, plus every
+        ///     <see cref="ObjectOwners"/> type that declares <c>op_*</c> members. The completeness gate fails when
+        ///     an object owner declares an operator but is missing here (see
+        ///     <see cref="LeakSurfaceCoverageTests.EveryInventoryMember_IsLeakAudited"/>), so a new operator on,
+        ///     say, <see cref="finfo"/> cannot ship leak-unaudited.
+        /// </summary>
         public static readonly (string Id, Type Type)[] OperatorOwners =
         {
             ("ndarray", typeof(NDArray)),
             ("NDArray<T>", typeof(NumSharp.Generic.NDArray<>)),
             ("NDMaskedArray", typeof(NDMaskedArray)),
+            // Object owners with operators: DType's conversions and safe-cast ordering, the flags object's
+            // equality, and poly1d's arithmetic (which allocates a new polynomial per call).
+            ("DType", typeof(DType)),
+            ("NDArrayFlags", typeof(NDArrayFlags)),
+            ("poly1d", typeof(poly1d)),
         };
+
+        /// <summary>Whether <paramref name="type"/> declares (not inherits) at least one public static <c>op_*</c> member.</summary>
+        /// <param name="type">The owner type.</param>
+        /// <returns>True when the type declares an operator or conversion.</returns>
+        public static bool DeclaresOperators(Type type)
+            => type.GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly)
+                   .Any(m => m.IsSpecialName && m.Name.StartsWith("op_", StringComparison.Ordinal));
 
         /// <summary>Every surface member, in a stable (owner, name) order.</summary>
         /// <returns>The full list.</returns>
@@ -162,6 +182,48 @@ namespace NumSharp.Tests.Fuzz
     }
 
     /// <summary>
+    ///     Everything the completeness gate may credit a surface member with — the observations of the four
+    ///     runs of the process — so <see cref="LeakSurfaceCoverageTests.Resolve"/> can only ever credit what
+    ///     was actually MEASURED, never what was merely declared (a catalogue entry that could not run, a
+    ///     property whose target could not be built, a LAPACK op key listed for a backend pass that did not
+    ///     measure it).
+    /// </summary>
+    /// <param name="Corpus">The shared corpus sweep (<see cref="UndisposedIntermediateTests.SharedSweep"/>).</param>
+    /// <param name="Catalogue">The shared catalogue run (<see cref="UndisposedIntermediateTests.SharedCatalogue"/>).</param>
+    /// <param name="Properties">The shared property/field read run (<see cref="UndisposedIntermediateTests.SharedPropertyReads"/>).</param>
+    /// <param name="Backend">The shared backend pass (<see cref="UndisposedIntermediateTests.SharedBackendSweep"/>).</param>
+    internal sealed record LeakCoverageEvidence(
+        UndisposedIntermediateTests.SweepResult Corpus,
+        UndisposedIntermediateTests.DirectRunResult Catalogue,
+        UndisposedIntermediateTests.DirectRunResult Properties,
+        UndisposedIntermediateTests.BackendSweepResult Backend)
+    {
+        /// <summary>
+        ///     Whether the corpus sweep exercised <paramref name="key"/> on a SUCCESS path — a confirmed
+        ///     measurement, or one a GC made inconclusive (the case ran; never red). An op whose every case
+        ///     raised is NOT credited: its success path went unaudited.
+        /// </summary>
+        /// <param name="key">An op key or derived coverage key (<c>rnd:…</c>, <c>grnd:…</c>, <c>index.get</c>); null is never covered.</param>
+        /// <returns>True when the corpus audited the key's success path.</returns>
+        public bool CorpusAudited(string key)
+            => key != null && (Corpus.MeasuredByOp.GetValueOrDefault(key) > 0 || Corpus.InconclusiveIds.Contains(key));
+
+        /// <summary>
+        ///     The route label crediting backend-only op key <paramref name="op"/>: measured by the backend pass,
+        ///     or — on a host where no CBLAS/LAPACK library loads — credited as skipped, exactly as the host-pinned
+        ///     parity tiers go Inconclusive there instead of red. Null when the pass ran and did NOT measure it.
+        /// </summary>
+        /// <param name="op">A corpus op key in <see cref="UndisposedIntermediateTests.BackendOnlyOpKeys"/>.</param>
+        /// <returns>The route label, or null when uncovered.</returns>
+        public string BackendRoute(string op)
+        {
+            if (Backend.SkipReason != null)
+                return "corpus: backend pass (skipped: no CBLAS/LAPACK library)";
+            return Backend.Attempted(op) ? "corpus: backend pass" : null;
+        }
+    }
+
+    /// <summary>
     ///     COMPLETENESS gate for the leak audit: every member of the NumPy-facing public surface
     ///     (<see cref="LeakSurface"/> — the ApiInventory modules, the operators, the mapped object
     ///     surfaces) must be LEAK-MEASURED somewhere — a measured corpus case (any family of
@@ -171,9 +233,13 @@ namespace NumSharp.Tests.Fuzz
     ///     rows or a catalogue entry.
     /// </summary>
     /// <remarks>
-    ///     The resolution maps below are the ONLY place a member is credited through a differently
+    ///     <para>Credit follows MEASUREMENT, not declaration: a catalogue entry or property read counts only when
+    ///     its run actually exercised the member (<see cref="UndisposedIntermediateTests.DirectRunResult.Attempted"/>),
+    ///     and a LAPACK-only op only when the backend pass measured it — an entry whose warm invocation throws
+    ///     therefore leaves its member uncovered here as well as failing its own gate.</para>
+    ///     <para>The resolution maps below are the ONLY place a member is credited through a differently
     ///     named corpus key; each one is checked against the reflected surface (a renamed member makes
-    ///     its mapping fail instead of rotting), and every catalogue id must name a real member.
+    ///     its mapping fail instead of rotting), and every catalogue id must name a real member.</para>
     /// </remarks>
     [TestClass]
     [DoNotParallelize]   // reads the shared sweep, which measures process-global pool counters
@@ -212,16 +278,26 @@ namespace NumSharp.Tests.Fuzz
 
         /// <summary>
         ///     The completeness verdict: lists every surface member no measurement covers, then every
-        ///     stale mapping/catalogue id. See the class remarks for the resolution order.
+        ///     stale mapping/catalogue id and every object owner whose operators are not enumerated. See the
+        ///     class remarks for the resolution order.
         /// </summary>
-        /// <exception cref="AssertFailedException">A member is unaudited, or a mapping/catalogue id is stale.</exception>
+        /// <remarks>
+        ///     Reads all four shared runs (corpus sweep, catalogue, property reads, backend pass), so run in
+        ///     isolation it pays for each of them once; in a ScopeAudit/FuzzMatrix run they are already built.
+        /// </remarks>
+        /// <exception cref="AssertFailedException">A member is unaudited, a mapping/catalogue id is stale, or an
+        /// object owner declares operators outside <see cref="LeakSurface.OperatorOwners"/>.</exception>
         [TestMethod]
         [TestCategory("FuzzMatrix")]
         [TestCategory("ScopeAudit")]
         public void EveryInventoryMember_IsLeakAudited()
         {
-            var measured = UndisposedIntermediateTests.SharedSweep.Value.MeasuredByOp;
-            var catalogue = LeakCatalogue.ApiIds;
+            var evidence = new LeakCoverageEvidence(
+                UndisposedIntermediateTests.SharedSweep.Value,
+                UndisposedIntermediateTests.SharedCatalogue.Value,
+                UndisposedIntermediateTests.SharedPropertyReads.Value,
+                UndisposedIntermediateTests.SharedBackendSweep.Value);
+            var declaredCatalogue = LeakCatalogue.ApiIds;
             var surface = LeakSurface.Enumerate();
             var ids = new HashSet<string>(surface.Select(m => m.Id), StringComparer.Ordinal);
 
@@ -229,16 +305,25 @@ namespace NumSharp.Tests.Fuzz
             var byRoute = new Dictionary<string, int>(StringComparer.Ordinal);
             foreach (var m in surface)
             {
-                string route = Resolve(m, measured, catalogue);
+                string route = Resolve(m, evidence);
                 if (route == null)
-                    missing.Add($"{m.Id} ({m.Kind}) — no measured corpus case, backend-pass op, catalogue entry or reflective read covers it");
+                {
+                    // Say WHY when a declaration exists without a measurement — that is a broken entry or
+                    // target, not a missing one, and the fix is different.
+                    string why = declaredCatalogue.Contains(m.Id)
+                        ? "a catalogue entry is DECLARED but was never measured (it is a harness error — see the catalogue gate's list)"
+                        : m.Kind is SurfaceKind.Property or SurfaceKind.Field
+                            ? "the reflective read never exercised it (no read target could be built — see the read gate's harness errors)"
+                            : "no measured corpus case, backend-pass op, catalogue entry or reflective read covers it";
+                    missing.Add($"{m.Id} ({m.Kind}) — {why}");
+                }
                 else
                     byRoute[route] = byRoute.GetValueOrDefault(route) + 1;
             }
 
             // Self-retirement: every mapping and catalogue id must name a live member.
             var stale = new List<string>();
-            foreach (var id in catalogue)
+            foreach (var id in declaredCatalogue)
                 if (!ids.Contains(id))
                     stale.Add($"catalogue entry '{id}' names no surface member (renamed/removed API, or a typo)");
             foreach (var name in LinalgOpKeys.Keys)
@@ -251,8 +336,16 @@ namespace NumSharp.Tests.Fuzz
                 if (!LinalgOpKeys.ContainsValue(op) && !ids.Contains("np." + op))
                     stale.Add($"BackendOnlyOpKeys entry '{op}' maps to no np / np.linalg member");
 
+            // Operator enumeration must track the owners: an object owner that gains an operator (or a
+            // conversion) outside OperatorOwners would be invisible to this gate, not merely uncovered.
+            foreach (var (id, type, _) in LeakSurface.ObjectOwners)
+                if (LeakSurface.DeclaresOperators(type) && !LeakSurface.OperatorOwners.Any(o => o.Type == type))
+                    stale.Add($"object owner '{id}' declares op_* members but is missing from LeakSurface.OperatorOwners");
+
             Console.WriteLine($"[leak-surface] members={surface.Count} covered={surface.Count - missing.Count} " +
-                              $"missing={missing.Count} catalogueIds={catalogue.Count} measuredOpKeys={measured.Count}\n  " +
+                              $"missing={missing.Count} catalogueIds={declaredCatalogue.Count} " +
+                              $"measuredOpKeys={evidence.Corpus.MeasuredByOp.Count}" +
+                              (evidence.Backend.SkipReason != null ? $" backendSkipped=({evidence.Backend.SkipReason})" : "") + "\n  " +
                               string.Join("\n  ", byRoute.OrderByDescending(k => k.Value).Select(k => $"{k.Key}: {k.Value}")));
 
             var problems = missing.Concat(stale).ToList();
@@ -262,23 +355,34 @@ namespace NumSharp.Tests.Fuzz
         }
 
         /// <summary>
-        ///     Resolves which measurement covers <paramref name="m"/>, or null when none does. Order:
-        ///     properties/fields → the reflective read gate (it reads EVERY one); indexers and methods →
-        ///     a measured corpus key (per-owner naming + the alias maps), the backend pass, then the catalogue.
+        ///     Resolves which MEASUREMENT covers <paramref name="m"/>, or null when none does. Order:
+        ///     properties/fields → the reflective read gate (it attempts EVERY one); then, for every kind, a
+        ///     catalogue entry that ran; indexers → the index tiers (ndarray only); operators → catalogue only;
+        ///     methods → a measured corpus key (per-owner naming + the alias maps), then the backend pass.
         /// </summary>
         /// <param name="m">The surface member.</param>
-        /// <param name="measured">The shared sweep's success-path measured counts per op/coverage key.</param>
-        /// <param name="catalogue">The catalogue's covered ids.</param>
+        /// <param name="ev">The four shared runs' observations.</param>
         /// <returns>A route label (for the rollup), or null when uncovered.</returns>
-        internal static string Resolve(SurfaceMember m, Dictionary<string, long> measured, IReadOnlySet<string> catalogue)
+        internal static string Resolve(SurfaceMember m, LeakCoverageEvidence ev)
         {
-            bool Has(string key) => key != null && measured.GetValueOrDefault(key) > 0;
+            bool Has(string key) => ev.CorpusAudited(key);
 
             if (m.Kind is SurfaceKind.Property or SurfaceKind.Field)
-                return "reflective read";
+            {
+                if (ev.Properties.Attempted(m.Id))
+                    return "reflective read";
+                if (ev.Properties.Skipped(m.Id))
+                    return "reflective read (backend skipped)";
+                // Not read (its target could not be built): a catalogue entry may still cover it below.
+            }
 
-            if (catalogue.Contains(m.Id))
+            if (ev.Catalogue.Attempted(m.Id))
                 return "catalogue";
+            if (ev.Catalogue.Skipped(m.Id))
+                return "catalogue (backend skipped)";
+
+            if (m.Kind is SurfaceKind.Property or SurfaceKind.Field)
+                return null;
 
             if (m.Kind == SurfaceKind.Indexer)
                 return m.Owner == "ndarray" && Has("index.get") && Has("index.set") ? "corpus: index tiers" : null;
@@ -294,7 +398,7 @@ namespace NumSharp.Tests.Fuzz
                     if (OracleSurfaceCoverageTests.EquivalentAliases.TryGetValue(m.Name, out var npCanonical) && Has(npCanonical))
                         return "corpus: np alias";
                     if (UndisposedIntermediateTests.BackendOnlyOpKeys.Contains(m.Name))
-                        return "corpus: backend pass";
+                        return ev.BackendRoute(m.Name);
                     return null;
                 case "ndarray":
                     if (Has("ndarray." + m.Name))
@@ -318,7 +422,7 @@ namespace NumSharp.Tests.Fuzz
                         if (Has(linKey))
                             return "corpus: linalg";
                         if (UndisposedIntermediateTests.BackendOnlyOpKeys.Contains(linKey))
-                            return "corpus: backend pass";
+                            return ev.BackendRoute(linKey);
                     }
                     return null;
                 case "np.random":
