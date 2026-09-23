@@ -463,11 +463,11 @@ namespace NumSharp.Tests.Fuzz
             ["outerproduct"] = "ma.outer",
             ["asanyarray"] = "ma.asarray",
             // The returned=True twin of ma.average — same weighted-average value path, plus the
-            // sum-of-weights slot pinned by MaskedArrayTests.
+            // sum-of-weights slot pinned by NDMaskedArrayTests.
             ["average_returned"] = "ma.average",
         };
 
-        // Gated by the MaskedArrayTests suite + the ledger in docs/MA_ORACLE_DESIGN.md: creation
+        // Gated by the NDMaskedArrayTests suite + the ledger in docs/MA_ORACLE_DESIGN.md: creation
         // helpers returning plain/unmasked arrays, callable-taking wrappers, fill-value plumbing,
         // mask-structure helpers with no serializable operand form, and predicates.
         private static readonly HashSet<string> MaSiblingOwned = new()

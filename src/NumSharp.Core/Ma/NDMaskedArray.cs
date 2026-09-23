@@ -17,7 +17,7 @@ namespace NumSharp
         ///     <see cref="fft"/>/<see cref="random"/> facade shape (a lowercase property returning a module
         ///     object whose methods are the functions).
         ///     <para>
-        ///     A <see cref="MaskedArray"/> pairs an ordinary <see cref="NDArray"/> of DATA with a boolean
+        ///     A <see cref="NDMaskedArray"/> pairs an ordinary <see cref="NDArray"/> of DATA with a boolean
         ///     <see cref="NDArray"/> MASK (True = "this element is invalid / ignore it"). The masked ufuncs
         ///     here do NOT re-implement arithmetic: exactly like NumPy they call the underlying
         ///     <c>np.*</c> ufunc on the raw data and only propagate the mask around it, so every layout,
@@ -41,7 +41,7 @@ namespace NumSharp
     ///     NumPy's MaskedArray holds views over its base — so the caller keeps the source arrays alive.
     ///     </para>
     /// </summary>
-    public class MaskedArray
+    public class NDMaskedArray
     {
         /// <summary>The underlying data buffer. Never null. Masked positions still hold a data value
         /// (whatever the producing op left there); that value is semantically hidden but observable via
@@ -82,7 +82,7 @@ namespace NumSharp
         /// already match <paramref name="data"/>'s shape; callers building it via broadcasting materialize it first.</param>
         /// <param name="fill_value">Optional default fill value for <see cref="filled(object)"/>; null = dtype default.</param>
         /// <exception cref="ArgumentNullException"><paramref name="data"/> is null.</exception>
-        internal MaskedArray(NDArray data, NDArray mask, object fill_value = null)
+        internal NDMaskedArray(NDArray data, NDArray mask, object fill_value = null)
         {
             // Data is the one invariant that must always hold — every property and the printer dereference it.
             _data = data ?? throw new ArgumentNullException(nameof(data));
@@ -350,164 +350,164 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Adopts a plain <see cref="NDArray"/> as an unmasked <see cref="MaskedArray"/> (no element
+        ///     Adopts a plain <see cref="NDArray"/> as an unmasked <see cref="NDMaskedArray"/> (no element
         ///     masked), so every <c>np.ma.*</c> function accepts a bare array argument exactly as NumPy does.
         /// </summary>
         /// <param name="a">The array to wrap; null yields null.</param>
-        public static implicit operator MaskedArray(NDArray a) => a is null ? null : new MaskedArray(a, null);
+        public static implicit operator NDMaskedArray(NDArray a) => a is null ? null : new NDMaskedArray(a, null);
 
-        // ── Mixed MaskedArray/NDArray operators. These EXPLICIT (MaskedArray, NDArray) / (NDArray, MaskedArray)
+        // ── Mixed NDMaskedArray/NDArray operators. These EXPLICIT (NDMaskedArray, NDArray) / (NDArray, NDMaskedArray)
         //    overloads are REQUIRED: without them `ma + nd` and `nd + ma` are CS0034-ambiguous, because the
-        //    implicit NDArray→MaskedArray conversion makes both the (…, MaskedArray) and (…, object) overloads
+        //    implicit NDArray→NDMaskedArray conversion makes both the (…, NDMaskedArray) and (…, object) overloads
         //    applicable with no better candidate. An exact NDArray parameter beats both, so these win cleanly
-        //    and return a mask-aware MaskedArray — matching NumPy, where `ma + nd`/`nd + ma` are MaskedArrays.
+        //    and return a mask-aware NDMaskedArray — matching NumPy, where `ma + nd`/`nd + ma` are MaskedArrays.
         /// <summary>Masked sum with an NDArray operand (mask = the masked operand's).</summary>
         /// <param name="a">Left.</param><param name="b">Right.</param><returns>a+b, masked.</returns>
-        public static MaskedArray operator +(MaskedArray a, NDArray b) => np.ma.add(a, b);
+        public static NDMaskedArray operator +(NDMaskedArray a, NDArray b) => np.ma.add(a, b);
         /// <summary>Masked sum with an NDArray left operand.</summary>
         /// <param name="a">Left NDArray.</param><param name="b">Right masked array.</param><returns>a+b, masked.</returns>
-        public static MaskedArray operator +(NDArray a, MaskedArray b) => np.ma.add(a, b);
+        public static NDMaskedArray operator +(NDArray a, NDMaskedArray b) => np.ma.add(a, b);
         /// <summary>Masked difference with an NDArray operand.</summary>
         /// <param name="a">Left.</param><param name="b">Right.</param><returns>a-b, masked.</returns>
-        public static MaskedArray operator -(MaskedArray a, NDArray b) => np.ma.subtract(a, b);
+        public static NDMaskedArray operator -(NDMaskedArray a, NDArray b) => np.ma.subtract(a, b);
         /// <summary>Masked difference with an NDArray left operand.</summary>
         /// <param name="a">Left NDArray.</param><param name="b">Right masked array.</param><returns>a-b, masked.</returns>
-        public static MaskedArray operator -(NDArray a, MaskedArray b) => np.ma.subtract(a, b);
+        public static NDMaskedArray operator -(NDArray a, NDMaskedArray b) => np.ma.subtract(a, b);
         /// <summary>Masked product with an NDArray operand.</summary>
         /// <param name="a">Left.</param><param name="b">Right.</param><returns>a*b, masked.</returns>
-        public static MaskedArray operator *(MaskedArray a, NDArray b) => np.ma.multiply(a, b);
+        public static NDMaskedArray operator *(NDMaskedArray a, NDArray b) => np.ma.multiply(a, b);
         /// <summary>Masked product with an NDArray left operand.</summary>
         /// <param name="a">Left NDArray.</param><param name="b">Right masked array.</param><returns>a*b, masked.</returns>
-        public static MaskedArray operator *(NDArray a, MaskedArray b) => np.ma.multiply(a, b);
+        public static NDMaskedArray operator *(NDArray a, NDMaskedArray b) => np.ma.multiply(a, b);
         /// <summary>Masked division with an NDArray denominator.</summary>
         /// <param name="a">Numerator.</param><param name="b">Denominator NDArray.</param><returns>a/b, masked.</returns>
-        public static MaskedArray operator /(MaskedArray a, NDArray b) => np.ma.divide(a, b);
+        public static NDMaskedArray operator /(NDMaskedArray a, NDArray b) => np.ma.divide(a, b);
         /// <summary>Masked division with an NDArray numerator.</summary>
         /// <param name="a">Numerator NDArray.</param><param name="b">Denominator masked array.</param><returns>a/b, masked.</returns>
-        public static MaskedArray operator /(NDArray a, MaskedArray b) => np.ma.divide(a, b);
+        public static NDMaskedArray operator /(NDArray a, NDMaskedArray b) => np.ma.divide(a, b);
         /// <summary>Masked less-than with an NDArray operand.</summary>
         /// <param name="a">Left.</param><param name="b">Right.</param><returns>a&lt;b, masked bool.</returns>
-        public static MaskedArray operator <(MaskedArray a, NDArray b) => np.ma.less(a, b);
+        public static NDMaskedArray operator <(NDMaskedArray a, NDArray b) => np.ma.less(a, b);
         /// <summary>Masked less-than with an NDArray left operand.</summary>
         /// <param name="a">Left NDArray.</param><param name="b">Right masked array.</param><returns>a&lt;b, masked bool.</returns>
-        public static MaskedArray operator <(NDArray a, MaskedArray b) => np.ma.less(a, b);
+        public static NDMaskedArray operator <(NDArray a, NDMaskedArray b) => np.ma.less(a, b);
         /// <summary>Masked greater-than with an NDArray operand.</summary>
         /// <param name="a">Left.</param><param name="b">Right.</param><returns>a&gt;b, masked bool.</returns>
-        public static MaskedArray operator >(MaskedArray a, NDArray b) => np.ma.greater(a, b);
+        public static NDMaskedArray operator >(NDMaskedArray a, NDArray b) => np.ma.greater(a, b);
         /// <summary>Masked greater-than with an NDArray left operand.</summary>
         /// <param name="a">Left NDArray.</param><param name="b">Right masked array.</param><returns>a&gt;b, masked bool.</returns>
-        public static MaskedArray operator >(NDArray a, MaskedArray b) => np.ma.greater(a, b);
+        public static NDMaskedArray operator >(NDArray a, NDMaskedArray b) => np.ma.greater(a, b);
         /// <summary>Masked less-or-equal with an NDArray operand.</summary>
         /// <param name="a">Left.</param><param name="b">Right.</param><returns>a&lt;=b, masked bool.</returns>
-        public static MaskedArray operator <=(MaskedArray a, NDArray b) => np.ma.less_equal(a, b);
+        public static NDMaskedArray operator <=(NDMaskedArray a, NDArray b) => np.ma.less_equal(a, b);
         /// <summary>Masked less-or-equal with an NDArray left operand.</summary>
         /// <param name="a">Left NDArray.</param><param name="b">Right masked array.</param><returns>a&lt;=b, masked bool.</returns>
-        public static MaskedArray operator <=(NDArray a, MaskedArray b) => np.ma.less_equal(a, b);
+        public static NDMaskedArray operator <=(NDArray a, NDMaskedArray b) => np.ma.less_equal(a, b);
         /// <summary>Masked greater-or-equal with an NDArray operand.</summary>
         /// <param name="a">Left.</param><param name="b">Right.</param><returns>a&gt;=b, masked bool.</returns>
-        public static MaskedArray operator >=(MaskedArray a, NDArray b) => np.ma.greater_equal(a, b);
+        public static NDMaskedArray operator >=(NDMaskedArray a, NDArray b) => np.ma.greater_equal(a, b);
         /// <summary>Masked greater-or-equal with an NDArray left operand.</summary>
         /// <param name="a">Left NDArray.</param><param name="b">Right masked array.</param><returns>a&gt;=b, masked bool.</returns>
-        public static MaskedArray operator >=(NDArray a, MaskedArray b) => np.ma.greater_equal(a, b);
+        public static NDMaskedArray operator >=(NDArray a, NDMaskedArray b) => np.ma.greater_equal(a, b);
 
         /// <summary>
         ///     Casts the DATA to <paramref name="dtype"/>, PRESERVING the mask (NumPy's <c>MaskedArray.astype</c>
         ///     — the mask is boolean and dtype-independent, so it rides through unchanged). Returns a
-        ///     <see cref="MaskedArray"/>, unlike the underlying <see cref="NDArray.astype(DType,bool)"/>.
+        ///     <see cref="NDMaskedArray"/>, unlike the underlying <see cref="NDArray.astype(DType,bool)"/>.
         /// </summary>
         /// <param name="dtype">Target element dtype.</param>
         /// <param name="copy">Copy the data even when the dtype already matches (NumPy default true).</param>
         /// <returns>A masked array of the new dtype with the same mask.</returns>
-        public MaskedArray astype(DType dtype, bool copy = true) => new MaskedArray(_data.astype(dtype, copy), _mask, _fill_value);
+        public NDMaskedArray astype(DType dtype, bool copy = true) => new NDMaskedArray(_data.astype(dtype, copy), _mask, _fill_value);
 
         // ── Arithmetic operators — compose the np.ma.* binary ufuncs; masks propagate (OR). ──
         /// <summary>Masked element-wise sum (mask = OR of operands').</summary>
         /// <param name="a">Left.</param><param name="b">Right.</param><returns>a+b, masked.</returns>
-        public static MaskedArray operator +(MaskedArray a, MaskedArray b) => np.ma.add(a, b);
+        public static NDMaskedArray operator +(NDMaskedArray a, NDMaskedArray b) => np.ma.add(a, b);
         /// <summary>Masked sum with a scalar/array-like right operand.</summary>
         /// <param name="a">Left masked array.</param><param name="b">Right scalar/array-like.</param><returns>a+b, masked.</returns>
-        public static MaskedArray operator +(MaskedArray a, object b) => np.ma.add(a, b);
+        public static NDMaskedArray operator +(NDMaskedArray a, object b) => np.ma.add(a, b);
         /// <summary>Masked sum with a scalar/array-like left operand.</summary>
         /// <param name="a">Left scalar/array-like.</param><param name="b">Right masked array.</param><returns>a+b, masked.</returns>
-        public static MaskedArray operator +(object a, MaskedArray b) => np.ma.add(a, b);
+        public static NDMaskedArray operator +(object a, NDMaskedArray b) => np.ma.add(a, b);
         /// <summary>Masked element-wise difference.</summary>
         /// <param name="a">Left.</param><param name="b">Right.</param><returns>a-b, masked.</returns>
-        public static MaskedArray operator -(MaskedArray a, MaskedArray b) => np.ma.subtract(a, b);
+        public static NDMaskedArray operator -(NDMaskedArray a, NDMaskedArray b) => np.ma.subtract(a, b);
         /// <summary>Masked difference with a scalar/array-like right operand.</summary>
         /// <param name="a">Left masked array.</param><param name="b">Right scalar/array-like.</param><returns>a-b, masked.</returns>
-        public static MaskedArray operator -(MaskedArray a, object b) => np.ma.subtract(a, b);
+        public static NDMaskedArray operator -(NDMaskedArray a, object b) => np.ma.subtract(a, b);
         /// <summary>Masked difference with a scalar/array-like left operand.</summary>
         /// <param name="a">Left scalar/array-like.</param><param name="b">Right masked array.</param><returns>a-b, masked.</returns>
-        public static MaskedArray operator -(object a, MaskedArray b) => np.ma.subtract(a, b);
+        public static NDMaskedArray operator -(object a, NDMaskedArray b) => np.ma.subtract(a, b);
         /// <summary>Masked element-wise product.</summary>
         /// <param name="a">Left.</param><param name="b">Right.</param><returns>a*b, masked.</returns>
-        public static MaskedArray operator *(MaskedArray a, MaskedArray b) => np.ma.multiply(a, b);
+        public static NDMaskedArray operator *(NDMaskedArray a, NDMaskedArray b) => np.ma.multiply(a, b);
         /// <summary>Masked product with a scalar/array-like right operand.</summary>
         /// <param name="a">Left masked array.</param><param name="b">Right scalar/array-like.</param><returns>a*b, masked.</returns>
-        public static MaskedArray operator *(MaskedArray a, object b) => np.ma.multiply(a, b);
+        public static NDMaskedArray operator *(NDMaskedArray a, object b) => np.ma.multiply(a, b);
         /// <summary>Masked product with a scalar/array-like left operand.</summary>
         /// <param name="a">Left scalar/array-like.</param><param name="b">Right masked array.</param><returns>a*b, masked.</returns>
-        public static MaskedArray operator *(object a, MaskedArray b) => np.ma.multiply(a, b);
+        public static NDMaskedArray operator *(object a, NDMaskedArray b) => np.ma.multiply(a, b);
         /// <summary>Masked element-wise true division (unsafe divides are additionally masked).</summary>
         /// <param name="a">Numerator.</param><param name="b">Denominator.</param><returns>a/b, masked.</returns>
-        public static MaskedArray operator /(MaskedArray a, MaskedArray b) => np.ma.divide(a, b);
+        public static NDMaskedArray operator /(NDMaskedArray a, NDMaskedArray b) => np.ma.divide(a, b);
         /// <summary>Masked division with a scalar/array-like denominator.</summary>
         /// <param name="a">Numerator masked array.</param><param name="b">Denominator scalar/array-like.</param><returns>a/b, masked.</returns>
-        public static MaskedArray operator /(MaskedArray a, object b) => np.ma.divide(a, b);
+        public static NDMaskedArray operator /(NDMaskedArray a, object b) => np.ma.divide(a, b);
         /// <summary>Masked division with a scalar/array-like numerator.</summary>
         /// <param name="a">Numerator scalar/array-like.</param><param name="b">Denominator masked array.</param><returns>a/b, masked.</returns>
-        public static MaskedArray operator /(object a, MaskedArray b) => np.ma.divide(a, b);
+        public static NDMaskedArray operator /(object a, NDMaskedArray b) => np.ma.divide(a, b);
         /// <summary>Masked element-wise negation.</summary>
         /// <param name="a">Operand.</param><returns>-a, masked.</returns>
-        public static MaskedArray operator -(MaskedArray a) => np.ma.negative(a);
+        public static NDMaskedArray operator -(NDMaskedArray a) => np.ma.negative(a);
 
         // ── Ordering operators — return a masked boolean array (mask = OR of operands'). ==/!= are
         //    deliberately NOT overloaded (they would shadow reference equality and trip the `== null`
         //    elementwise trap); use np.ma.equal / np.ma.not_equal for element-wise (in)equality. ──
         /// <summary>Masked element-wise less-than.</summary>
         /// <param name="a">Left.</param><param name="b">Right.</param><returns>a&lt;b, masked bool.</returns>
-        public static MaskedArray operator <(MaskedArray a, MaskedArray b) => np.ma.less(a, b);
+        public static NDMaskedArray operator <(NDMaskedArray a, NDMaskedArray b) => np.ma.less(a, b);
         /// <summary>Masked less-than against a scalar/array-like.</summary>
         /// <param name="a">Left masked array.</param><param name="b">Right scalar/array-like.</param><returns>a&lt;b, masked bool.</returns>
-        public static MaskedArray operator <(MaskedArray a, object b) => np.ma.less(a, b);
+        public static NDMaskedArray operator <(NDMaskedArray a, object b) => np.ma.less(a, b);
         /// <summary>Masked less-than with a scalar/array-like left operand.</summary>
         /// <param name="a">Left scalar/array-like.</param><param name="b">Right masked array.</param><returns>a&lt;b, masked bool.</returns>
-        public static MaskedArray operator <(object a, MaskedArray b) => np.ma.less(a, b);
+        public static NDMaskedArray operator <(object a, NDMaskedArray b) => np.ma.less(a, b);
         /// <summary>Masked element-wise greater-than.</summary>
         /// <param name="a">Left.</param><param name="b">Right.</param><returns>a&gt;b, masked bool.</returns>
-        public static MaskedArray operator >(MaskedArray a, MaskedArray b) => np.ma.greater(a, b);
+        public static NDMaskedArray operator >(NDMaskedArray a, NDMaskedArray b) => np.ma.greater(a, b);
         /// <summary>Masked greater-than against a scalar/array-like.</summary>
         /// <param name="a">Left masked array.</param><param name="b">Right scalar/array-like.</param><returns>a&gt;b, masked bool.</returns>
-        public static MaskedArray operator >(MaskedArray a, object b) => np.ma.greater(a, b);
+        public static NDMaskedArray operator >(NDMaskedArray a, object b) => np.ma.greater(a, b);
         /// <summary>Masked greater-than with a scalar/array-like left operand.</summary>
         /// <param name="a">Left scalar/array-like.</param><param name="b">Right masked array.</param><returns>a&gt;b, masked bool.</returns>
-        public static MaskedArray operator >(object a, MaskedArray b) => np.ma.greater(a, b);
+        public static NDMaskedArray operator >(object a, NDMaskedArray b) => np.ma.greater(a, b);
         /// <summary>Masked element-wise less-or-equal.</summary>
         /// <param name="a">Left.</param><param name="b">Right.</param><returns>a&lt;=b, masked bool.</returns>
-        public static MaskedArray operator <=(MaskedArray a, MaskedArray b) => np.ma.less_equal(a, b);
+        public static NDMaskedArray operator <=(NDMaskedArray a, NDMaskedArray b) => np.ma.less_equal(a, b);
         /// <summary>Masked less-or-equal against a scalar/array-like.</summary>
         /// <param name="a">Left masked array.</param><param name="b">Right scalar/array-like.</param><returns>a&lt;=b, masked bool.</returns>
-        public static MaskedArray operator <=(MaskedArray a, object b) => np.ma.less_equal(a, b);
+        public static NDMaskedArray operator <=(NDMaskedArray a, object b) => np.ma.less_equal(a, b);
         /// <summary>Masked less-or-equal with a scalar/array-like left operand.</summary>
         /// <param name="a">Left scalar/array-like.</param><param name="b">Right masked array.</param><returns>a&lt;=b, masked bool.</returns>
-        public static MaskedArray operator <=(object a, MaskedArray b) => np.ma.less_equal(a, b);
+        public static NDMaskedArray operator <=(object a, NDMaskedArray b) => np.ma.less_equal(a, b);
         /// <summary>Masked element-wise greater-or-equal.</summary>
         /// <param name="a">Left.</param><param name="b">Right.</param><returns>a&gt;=b, masked bool.</returns>
-        public static MaskedArray operator >=(MaskedArray a, MaskedArray b) => np.ma.greater_equal(a, b);
+        public static NDMaskedArray operator >=(NDMaskedArray a, NDMaskedArray b) => np.ma.greater_equal(a, b);
         /// <summary>Masked greater-or-equal against a scalar/array-like.</summary>
         /// <param name="a">Left masked array.</param><param name="b">Right scalar/array-like.</param><returns>a&gt;=b, masked bool.</returns>
-        public static MaskedArray operator >=(MaskedArray a, object b) => np.ma.greater_equal(a, b);
+        public static NDMaskedArray operator >=(NDMaskedArray a, object b) => np.ma.greater_equal(a, b);
         /// <summary>Masked greater-or-equal with a scalar/array-like left operand.</summary>
         /// <param name="a">Left scalar/array-like.</param><param name="b">Right masked array.</param><returns>a&gt;=b, masked bool.</returns>
-        public static MaskedArray operator >=(object a, MaskedArray b) => np.ma.greater_equal(a, b);
+        public static NDMaskedArray operator >=(object a, NDMaskedArray b) => np.ma.greater_equal(a, b);
 
         // ── Instance reduction methods (NumPy's a.sum()/a.mean()/… — delegate to the np.ma.* funcs). ──
         /// <summary>Sum over unmasked elements. See <see cref="MaskedArrayModule.sum"/>.</summary>
         /// <param name="axis">Axis or null.</param><param name="dtype">Accumulator dtype.</param><param name="keepdims">Keep reduced axes.</param><returns>Masked sum.</returns>
-        public MaskedArray sum(int? axis = null, DType dtype = null, bool keepdims = false) => np.ma.sum(this, axis, dtype, keepdims);
+        public NDMaskedArray sum(int? axis = null, DType dtype = null, bool keepdims = false) => np.ma.sum(this, axis, dtype, keepdims);
         /// <summary>Product over unmasked elements.</summary>
         /// <param name="axis">Axis or null.</param><param name="dtype">Accumulator dtype.</param><param name="keepdims">Keep reduced axes.</param><returns>Masked product.</returns>
-        public MaskedArray prod(int? axis = null, DType dtype = null, bool keepdims = false) => np.ma.prod(this, axis, dtype, keepdims);
+        public NDMaskedArray prod(int? axis = null, DType dtype = null, bool keepdims = false) => np.ma.prod(this, axis, dtype, keepdims);
 
         /// <summary>Alias of <see cref="prod(int?,DType,bool)"/> (NumPy's <c>MaskedArray.product</c>) — the product
         /// of the UNMASKED elements; a fully-masked slice yields <c>masked</c>.</summary>
@@ -515,34 +515,34 @@ namespace NumSharp
         /// <param name="dtype">Accumulator/result dtype; null follows NumPy's product-widening rule.</param>
         /// <param name="keepdims">Keep the reduced axis as size 1.</param>
         /// <returns>The masked product.</returns>
-        public MaskedArray product(int? axis = null, DType dtype = null, bool keepdims = false) => np.ma.product(this, axis, dtype, keepdims);
+        public NDMaskedArray product(int? axis = null, DType dtype = null, bool keepdims = false) => np.ma.product(this, axis, dtype, keepdims);
         /// <summary>Mean over unmasked elements.</summary>
         /// <param name="axis">Axis or null.</param><param name="dtype">Accumulator dtype.</param><param name="keepdims">Keep reduced axes.</param><returns>Masked mean.</returns>
-        public MaskedArray mean(int? axis = null, DType dtype = null, bool keepdims = false) => np.ma.mean(this, axis, dtype, keepdims);
+        public NDMaskedArray mean(int? axis = null, DType dtype = null, bool keepdims = false) => np.ma.mean(this, axis, dtype, keepdims);
         /// <summary>Minimum over unmasked elements.</summary>
         /// <param name="axis">Axis or null.</param><param name="fill_value">Masked fill override.</param><param name="keepdims">Keep reduced axes.</param><returns>Masked minimum.</returns>
-        public MaskedArray min(int? axis = null, object fill_value = null, bool keepdims = false) => np.ma.min(this, axis, fill_value, keepdims);
+        public NDMaskedArray min(int? axis = null, object fill_value = null, bool keepdims = false) => np.ma.min(this, axis, fill_value, keepdims);
         /// <summary>Maximum over unmasked elements.</summary>
         /// <param name="axis">Axis or null.</param><param name="fill_value">Masked fill override.</param><param name="keepdims">Keep reduced axes.</param><returns>Masked maximum.</returns>
-        public MaskedArray max(int? axis = null, object fill_value = null, bool keepdims = false) => np.ma.max(this, axis, fill_value, keepdims);
+        public NDMaskedArray max(int? axis = null, object fill_value = null, bool keepdims = false) => np.ma.max(this, axis, fill_value, keepdims);
         /// <summary>Peak-to-peak (max−min) over unmasked elements.</summary>
         /// <param name="axis">Axis or null.</param><param name="fill_value">Masked fill override.</param><param name="keepdims">Keep reduced axes.</param><returns>Masked range.</returns>
-        public MaskedArray ptp(int? axis = null, object fill_value = null, bool keepdims = false) => np.ma.ptp(this, axis, fill_value, keepdims);
+        public NDMaskedArray ptp(int? axis = null, object fill_value = null, bool keepdims = false) => np.ma.ptp(this, axis, fill_value, keepdims);
         /// <summary>Standard deviation over unmasked elements.</summary>
         /// <param name="axis">Axis or null.</param><param name="dtype">Accumulator dtype.</param><param name="ddof">Delta DOF.</param><param name="keepdims">Keep reduced axes.</param><param name="mean">Precomputed centering mean (NumPy 2.0), or null.</param><returns>Masked std.</returns>
-        public MaskedArray std(int? axis = null, DType dtype = null, int ddof = 0, bool keepdims = false, object mean = null) => np.ma.std(this, axis, dtype, ddof, keepdims, mean);
+        public NDMaskedArray std(int? axis = null, DType dtype = null, int ddof = 0, bool keepdims = false, object mean = null) => np.ma.std(this, axis, dtype, ddof, keepdims, mean);
         /// <summary>Variance over unmasked elements.</summary>
         /// <param name="axis">Axis or null.</param><param name="dtype">Accumulator dtype.</param><param name="ddof">Delta DOF.</param><param name="keepdims">Keep reduced axes.</param><param name="mean">Precomputed centering mean (NumPy 2.0), or null.</param><returns>Masked variance.</returns>
-        public MaskedArray var(int? axis = null, DType dtype = null, int ddof = 0, bool keepdims = false, object mean = null) => np.ma.var(this, axis, dtype, ddof, keepdims, mean);
+        public NDMaskedArray var(int? axis = null, DType dtype = null, int ddof = 0, bool keepdims = false, object mean = null) => np.ma.var(this, axis, dtype, ddof, keepdims, mean);
         /// <summary>Count of unmasked elements.</summary>
         /// <param name="axis">Axis or null.</param><param name="keepdims">Keep reduced axes.</param><returns>int64 count array.</returns>
         public NDArray count(int? axis = null, bool keepdims = false) => np.ma.count(this, axis, keepdims);
         /// <summary>Cumulative sum (masked positions preserved).</summary>
         /// <param name="axis">Axis or null.</param><param name="dtype">Accumulator dtype.</param><returns>Masked cumulative sum.</returns>
-        public MaskedArray cumsum(int? axis = null, DType dtype = null) => np.ma.cumsum(this, axis, dtype);
+        public NDMaskedArray cumsum(int? axis = null, DType dtype = null) => np.ma.cumsum(this, axis, dtype);
         /// <summary>Cumulative product (masked positions preserved).</summary>
         /// <param name="axis">Axis or null.</param><param name="dtype">Accumulator dtype.</param><returns>Masked cumulative product.</returns>
-        public MaskedArray cumprod(int? axis = null, DType dtype = null) => np.ma.cumprod(this, axis, dtype);
+        public NDMaskedArray cumprod(int? axis = null, DType dtype = null) => np.ma.cumprod(this, axis, dtype);
         /// <summary>Indices of the minimum (masked slots ignored).</summary>
         /// <param name="axis">Axis or null.</param><param name="fill_value">Masked fill override.</param><returns>int64 index array.</returns>
         public NDArray argmin(int? axis = null, object fill_value = null) => np.ma.argmin(this, axis, fill_value);
@@ -551,13 +551,13 @@ namespace NumSharp
         public NDArray argmax(int? axis = null, object fill_value = null) => np.ma.argmax(this, axis, fill_value);
         /// <summary>Logical-AND reduction (masked slots treated as True).</summary>
         /// <param name="axis">Axis or null.</param><param name="keepdims">Keep reduced axes.</param><returns>Masked bool.</returns>
-        public MaskedArray all(int? axis = null, bool keepdims = false) => np.ma.all(this, axis, keepdims);
+        public NDMaskedArray all(int? axis = null, bool keepdims = false) => np.ma.all(this, axis, keepdims);
         /// <summary>Logical-OR reduction (masked slots treated as False).</summary>
         /// <param name="axis">Axis or null.</param><param name="keepdims">Keep reduced axes.</param><returns>Masked bool.</returns>
-        public MaskedArray any(int? axis = null, bool keepdims = false) => np.ma.any(this, axis, keepdims);
+        public NDMaskedArray any(int? axis = null, bool keepdims = false) => np.ma.any(this, axis, keepdims);
         /// <summary>Anomalies (deviations from the mean along the axis).</summary>
         /// <param name="axis">Axis or null.</param><param name="dtype">Mean accumulator dtype.</param><returns>Masked anomalies.</returns>
-        public MaskedArray anom(int? axis = null, DType dtype = null) => np.ma.anom(this, axis, dtype);
+        public NDMaskedArray anom(int? axis = null, DType dtype = null) => np.ma.anom(this, axis, dtype);
 
         // ── fill_value — the sentinel filled() substitutes for masked slots. Settable (NumPy parity):
         //    the getter resolves the stored override or the dtype default; the setter mutates THIS instance
@@ -583,11 +583,11 @@ namespace NumSharp
         //    the SAME transform to data and mask), so `a.reshape(...)`/`a.sort()` port from NumPy verbatim. ──
         /// <summary>Transpose (reverse all axes); NumPy's <c>MaskedArray.T</c>. Data and mask are transposed
         /// alike, so the mask stays aligned. A view — no data is moved.</summary>
-        public MaskedArray T => np.ma.transpose(this);
+        public NDMaskedArray T => np.ma.transpose(this);
 
         /// <summary>Matrix transpose — swaps the last two axes (NumPy's <c>MaskedArray.mT</c>); requires rank ≥ 2.</summary>
         /// <exception cref="ArgumentException">The array is rank &lt; 2.</exception>
-        public MaskedArray mT
+        public NDMaskedArray mT
         {
             get
             {
@@ -600,45 +600,45 @@ namespace NumSharp
         }
 
         /// <summary>The real part as a masked array (NumPy's <c>MaskedArray.real</c>); the mask rides through.</summary>
-        public MaskedArray real => new MaskedArray(_data.real, _mask, _fill_value);
+        public NDMaskedArray real => new NDMaskedArray(_data.real, _mask, _fill_value);
 
         /// <summary>The imaginary part as a masked array (NumPy's <c>MaskedArray.imag</c>); the mask rides through.
         /// For a non-complex dtype every element is 0.</summary>
-        public MaskedArray imag => new MaskedArray(_data.imag, _mask, _fill_value);
+        public NDMaskedArray imag => new NDMaskedArray(_data.imag, _mask, _fill_value);
 
         /// <summary>Flattened VIEW in row-major order (NumPy's <c>ravel</c>); mask flattened alike.</summary>
         /// <param name="order">'C' (row-major, default) or 'F' (column-major).</param><returns>The flattened masked array.</returns>
-        public MaskedArray ravel(char order = 'C') => np.ma.ravel(this, order);
+        public NDMaskedArray ravel(char order = 'C') => np.ma.ravel(this, order);
 
         /// <summary>Flattened COPY (NumPy's <c>flatten</c> — always copies, unlike <see cref="ravel"/>).</summary>
         /// <param name="order">'C' (default) or 'F'.</param><returns>The flattened masked copy.</returns>
-        public MaskedArray flatten(char order = 'C') => np.ma.flatten(this, order);
+        public NDMaskedArray flatten(char order = 'C') => np.ma.flatten(this, order);
 
         /// <summary>Reshape to <paramref name="shape"/> (mask reshaped alike).</summary>
         /// <param name="shape">New dimensions (one may be -1).</param><returns>The reshaped masked array.</returns>
-        public MaskedArray reshape(params int[] shape) => np.ma.reshape(this, shape);
+        public NDMaskedArray reshape(params int[] shape) => np.ma.reshape(this, shape);
 
         /// <summary>Permute axes (mask transposed alike); reverses all axes when <paramref name="axes"/> is null.</summary>
         /// <param name="axes">Permutation, or null to reverse.</param><returns>The transposed masked array.</returns>
-        public MaskedArray transpose(int[] axes = null) => np.ma.transpose(this, axes);
+        public NDMaskedArray transpose(int[] axes = null) => np.ma.transpose(this, axes);
 
         /// <summary>Swap two axes (mask swapped alike).</summary>
         /// <param name="axis1">First axis.</param><param name="axis2">Second axis.</param><returns>The masked array with swapped axes.</returns>
-        public MaskedArray swapaxes(int axis1, int axis2) => np.ma.swapaxes(this, axis1, axis2);
+        public NDMaskedArray swapaxes(int axis1, int axis2) => np.ma.swapaxes(this, axis1, axis2);
 
         /// <summary>Remove size-1 axes (mask squeezed alike).</summary>
         /// <returns>The squeezed masked array.</returns>
-        public MaskedArray squeeze(int? axis = null) => np.ma.squeeze(this, axis);
+        public NDMaskedArray squeeze(int? axis = null) => np.ma.squeeze(this, axis);
 
         /// <summary>Repeat elements (mask repeated alike, so repeated masked entries stay masked).</summary>
         /// <param name="repeats">Repeat count.</param><param name="axis">Axis or null (flatten).</param><returns>The masked array.</returns>
-        public MaskedArray repeat(int repeats, int? axis = null) => np.ma.repeat(this, repeats, axis);
+        public NDMaskedArray repeat(int repeats, int? axis = null) => np.ma.repeat(this, repeats, axis);
 
         /// <summary>Gather elements by index (mask gathered alike, so a taken element keeps its masked-ness).</summary>
         /// <param name="indices">Integer index array.</param><param name="axis">Axis or null.</param>
         /// <param name="mode">Out-of-bounds policy: "raise" (default)/"wrap"/"clip".</param>
         /// <returns>The masked array.</returns>
-        public MaskedArray take(NDArray indices, int? axis = null, string mode = "raise") => np.ma.take(this, indices, axis, mode);
+        public NDMaskedArray take(NDArray indices, int? axis = null, string mode = "raise") => np.ma.take(this, indices, axis, mode);
 
         /// <summary>The 1-D array of the UNMASKED values in C-order (NumPy's <c>MaskedArray.compressed</c>) —
         /// a plain <see cref="NDArray"/>, since a compressed result has no mask.</summary>
@@ -650,12 +650,12 @@ namespace NumSharp
         /// <param name="condition">Boolean array-like selector over the (flattened) elements.</param>
         /// <param name="axis">Axis to compress along, or null to flatten first.</param>
         /// <returns>The compressed masked array.</returns>
-        public MaskedArray compress(object condition, int? axis = null) => np.ma.compress(condition, this, axis);
+        public NDMaskedArray compress(object condition, int? axis = null) => np.ma.compress(condition, this, axis);
 
         /// <summary>A DEEP copy of this masked array — data AND mask duplicated, sharing no memory with the source
         /// (NumPy's <c>MaskedArray.copy</c>). Reach for it before mutating a view/slice you must not disturb.</summary>
-        /// <returns>An independent <see cref="MaskedArray"/> with the same values, mask and fill value.</returns>
-        public MaskedArray copy() => np.ma.copy(this);
+        /// <returns>An independent <see cref="NDMaskedArray"/> with the same values, mask and fill value.</returns>
+        public NDMaskedArray copy() => np.ma.copy(this);
 
         /// <summary>Uses THIS array's elements as indices to select from <paramref name="choices"/> (NumPy's
         /// <c>MaskedArray.choose</c>); the result is masked wherever this index was masked (and where a chosen
@@ -667,14 +667,14 @@ namespace NumSharp
         /// <c>new object[]{…}</c>).</param>
         /// <param name="mode">Out-of-bounds index policy: "raise" (default)/"wrap"/"clip".</param>
         /// <returns>The selected, masked array.</returns>
-        public MaskedArray choose(object[] choices, string mode = "raise") => np.ma.choose(this, choices, mode);
+        public NDMaskedArray choose(object[] choices, string mode = "raise") => np.ma.choose(this, choices, mode);
 
         /// <summary>Sorts along an axis with masked entries pushed to the end (or front) and re-masked there.</summary>
         /// <param name="axis">Sort axis (default last).</param>
         /// <param name="endwith">True (default) pushes masked to the END; false pushes them to the FRONT.</param>
         /// <param name="fill_value">Override the masked sort key; null uses the endwith default.</param>
         /// <returns>The sorted masked array.</returns>
-        public MaskedArray sort(int axis = -1, bool endwith = true, object fill_value = null) => np.ma.sort(this, axis, endwith, fill_value);
+        public NDMaskedArray sort(int axis = -1, bool endwith = true, object fill_value = null) => np.ma.sort(this, axis, endwith, fill_value);
 
         /// <summary>Indices that would sort the array with masked entries at the end (or front).</summary>
         /// <param name="axis">Sort axis (default last).</param>
@@ -687,19 +687,19 @@ namespace NumSharp
         /// <param name="a_min">Lower bound (array-like/scalar), or null for no lower clip.</param>
         /// <param name="a_max">Upper bound, or null for no upper clip.</param>
         /// <returns>The clamped masked array.</returns>
-        public MaskedArray clip(object a_min, object a_max) => np.ma.clip(this, a_min, a_max);
+        public NDMaskedArray clip(object a_min, object a_max) => np.ma.clip(this, a_min, a_max);
 
         /// <summary>Rounds each element to <paramref name="decimals"/> places (half-to-even), preserving the mask.</summary>
         /// <param name="decimals">Decimal places.</param><returns>The masked, rounded array.</returns>
-        public MaskedArray round(int decimals = 0) => np.ma.round(this, decimals);
+        public NDMaskedArray round(int decimals = 0) => np.ma.round(this, decimals);
 
         /// <summary>Complex conjugate (real data passes through); mask preserved (NumPy's <c>conj</c>).</summary>
         /// <returns>A masked array of conj(data).</returns>
-        public MaskedArray conj() => np.ma.conjugate(this);
+        public NDMaskedArray conj() => np.ma.conjugate(this);
 
         /// <summary>Alias of <see cref="conj"/> (NumPy's <c>conjugate</c>).</summary>
         /// <returns>A masked array of conj(data).</returns>
-        public MaskedArray conjugate() => np.ma.conjugate(this);
+        public NDMaskedArray conjugate() => np.ma.conjugate(this);
 
         /// <summary>Dot product with masked slots treated as 0 (NumPy's <c>MaskedArray.dot</c>); with
         /// <paramref name="strict"/> the mask is propagated along the contracted axes first (see
@@ -707,12 +707,12 @@ namespace NumSharp
         /// <param name="b">Right operand.</param>
         /// <param name="strict">Propagate masks along the contracted axes before the product (default false).</param>
         /// <returns>The masked dot product.</returns>
-        public MaskedArray dot(object b, bool strict = false) => np.ma.dot(this, b, strict);
+        public NDMaskedArray dot(object b, bool strict = false) => np.ma.dot(this, b, strict);
 
         /// <summary>Extracts the <paramref name="offset"/>-th diagonal (mask alike); NumPy's <c>MaskedArray.diagonal</c>.</summary>
         /// <param name="offset">Diagonal offset (0 = main).</param><param name="axis1">First plane axis.</param><param name="axis2">Second plane axis.</param>
         /// <returns>The masked diagonal.</returns>
-        public MaskedArray diagonal(int offset = 0, int axis1 = 0, int axis2 = 1) => np.ma.diagonal(this, offset, axis1, axis2);
+        public NDMaskedArray diagonal(int offset = 0, int axis1 = 0, int axis2 = 1) => np.ma.diagonal(this, offset, axis1, axis2);
 
         /// <summary>Sum of the diagonal, treating masked slots as 0 (NumPy's <c>MaskedArray.trace</c>) — a PLAIN
         /// array; the result is float64 unless <paramref name="dtype"/> is given (NumPy's <c>astype(None)</c> quirk).</summary>
@@ -727,8 +727,8 @@ namespace NumSharp
         public NDArray<long>[] nonzero() => np.ma.nonzero(this);
 
         /// <summary>The single element as a boxed scalar (NumPy's <c>MaskedArray.item</c>); a size-1 masked array
-        /// whose element is masked returns the <see cref="MaskedArrayModule.masked"/> constant.</summary>
-        /// <returns>The scalar value, or <see cref="MaskedArrayModule.masked"/> when the element is masked.</returns>
+        /// whose element is masked returns the <see cref="MaskedArrayModule.NDMasked"/> constant.</summary>
+        /// <returns>The scalar value, or <see cref="MaskedArrayModule.NDMasked"/> when the element is masked.</returns>
         /// <exception cref="InvalidOperationException">The array does not hold exactly one element.</exception>
         public object item()
         {
@@ -736,7 +736,7 @@ namespace NumSharp
                 throw new InvalidOperationException("can only convert an array of size 1 to a Python scalar");
             // A masked single element reads as the `masked` singleton, matching NumPy's `x.item()`.
             if (_mask is not null && np.any(_mask))
-                return np.ma.masked;
+                return np.ma.NDMasked;
             return _data.GetAtIndex(0);
         }
 
@@ -778,15 +778,15 @@ namespace NumSharp
         /// </summary>
         /// <param name="inplace">Swap the data buffer in place and return this instance (true), or return a new
         /// masked array over a swapped copy (false, the default).</param>
-        /// <returns>This instance when <paramref name="inplace"/>, else a new <see cref="MaskedArray"/> whose data
+        /// <returns>This instance when <paramref name="inplace"/>, else a new <see cref="NDMaskedArray"/> whose data
         /// is byteswapped and whose mask/fill value are carried over (the result starts with a SOFT mask, per this
         /// type's copy-result policy).</returns>
-        public MaskedArray byteswap(bool inplace = false)
+        public NDMaskedArray byteswap(bool inplace = false)
         {
             // In place: mutate the shared data buffer and hand back the same instance (mask + hardmask intact),
             // matching NumPy's `byteswap(inplace=True)` returning self. Otherwise wrap the swapped copy.
             var swapped = _data.byteswap(inplace);
-            return inplace ? this : new MaskedArray(swapped, _mask, _fill_value);
+            return inplace ? this : new NDMaskedArray(swapped, _mask, _fill_value);
         }
 
         /// <summary>
@@ -828,30 +828,30 @@ namespace NumSharp
         /// <param name="kind">Selection algorithm — only "introselect".</param>
         /// <param name="order">Field order (unused).</param>
         /// <returns>A masked array of int64 indices carrying this array's mask in its original positions.</returns>
-        public MaskedArray argpartition(int kth, int? axis = -1, string kind = "introselect", string order = null)
-            => new MaskedArray(np.argpartition(_data, kth, axis, kind, order), _mask, _fill_value);
+        public NDMaskedArray argpartition(int kth, int? axis = -1, string kind = "introselect", string order = null)
+            => new NDMaskedArray(np.argpartition(_data, kth, axis, kind, order), _mask, _fill_value);
 
         // ── The indexer (NumPy's MaskedArray.__getitem__/__setitem__) — the keystone that makes element/slice
         //    access idiomatic and unblocks put/putmask/mask_rowcols. GET applies the SAME index to data and mask
         //    (a basic slice is a VIEW sharing both buffers; a fancy/boolean index is a COPY); a scalar-reducing
         //    index returns the bare value, or the `masked` singleton when that element is masked. SET writes the
         //    data and reconciles the mask — `= masked` masks in place (data untouched), a plain value UNMASKS the
-        //    assigned slots, a MaskedArray value PROPAGATES its mask. ──
+        //    assigned slots, an NDMaskedArray value PROPAGATES its mask. ──
         /// <summary>
         ///     Indexes the masked array (NumPy's <c>x[key]</c> / <c>x[key] = value</c>). GET returns the bare
-        ///     scalar for an index that reduces to a single UNMASKED element, the <see cref="MaskedArrayModule.masked"/>
-        ///     singleton for a single MASKED element, or a sub-<see cref="MaskedArray"/> otherwise (a VIEW sharing
+        ///     scalar for an index that reduces to a single UNMASKED element, the <see cref="MaskedArrayModule.NDMasked"/>
+        ///     singleton for a single MASKED element, or a sub-<see cref="NDMaskedArray"/> otherwise (a VIEW sharing
         ///     memory for a basic slice, a COPY for a fancy/boolean index — matching NumPy). SET accepts a scalar,
-        ///     array-like, <see cref="NDArray"/>, <see cref="MaskedArray"/>, or the <c>masked</c> singleton
+        ///     array-like, <see cref="NDArray"/>, <see cref="NDMaskedArray"/>, or the <c>masked</c> singleton
         ///     (which masks the slots without touching their data).
         /// </summary>
         /// <param name="indices">Mixed index objects — ints (coordinate), slice strings ("1:3"), <see cref="Slice"/>s,
         /// boolean/integer <see cref="NDArray"/> masks/fancy indices — exactly as <see cref="NDArray"/>'s own
         /// <c>this[params object[]]</c> accepts.</param>
-        /// <returns>A boxed scalar, the <c>masked</c> singleton, or a <see cref="MaskedArray"/>.</returns>
+        /// <returns>A boxed scalar, the <c>masked</c> singleton, or a <see cref="NDMaskedArray"/>.</returns>
         /// <remarks>Returns <see cref="object"/> because NumPy's indexer is polymorphic (scalar vs masked vs
         /// sub-array) and a C# indexer cannot switch its type on the runtime index; a slice read is a
-        /// <see cref="MaskedArray"/> to cast. A mask created here for a previously-<c>nomask</c> VIEW is local to
+        /// <see cref="NDMaskedArray"/> to cast. A mask created here for a previously-<c>nomask</c> VIEW is local to
         /// the view (it cannot alias a parent that has no mask buffer) — the one place this differs from NumPy's
         /// shared-base masks.</remarks>
         public object this[params object[] indices]
@@ -865,10 +865,10 @@ namespace NumSharp
                 if (subData.ndim == 0)
                 {
                     if (subMask is not null && np.any(subMask))
-                        return np.ma.masked;
+                        return np.ma.NDMasked;
                     return subData.GetAtIndex(0);
                 }
-                return new MaskedArray(subData, subMask, _fill_value);
+                return new NDMaskedArray(subData, subMask, _fill_value);
             }
             set => SetItem(indices, value);
         }
@@ -877,12 +877,12 @@ namespace NumSharp
         /// <c>__setitem__</c>: <c>masked</c> masks (data untouched), a plain value unmasks, a masked value
         /// propagates its mask.</summary>
         /// <param name="indices">The index expression.</param>
-        /// <param name="value">Scalar/array/NDArray/MaskedArray/the masked singleton.</param>
+        /// <param name="value">Scalar/array/NDArray/NDMaskedArray/the masked singleton.</param>
         private void SetItem(object[] indices, object value)
         {
             // `x[i] = masked`: set the mask True at the slots, leave the DATA as-is (NumPy hides but keeps it).
             // Masking a slot is ALWAYS allowed, even under a hard mask (hardening only forbids UNmasking).
-            if (value is MaskedConstant)
+            if (value is NDMaskedConstant)
             {
                 EnsureMask();
                 _mask[indices] = NDArray.Scalar(true);
@@ -899,7 +899,7 @@ namespace NumSharp
             NDArray savedData = hard ? _data.copy() : null;
 
             // `x[i] = maskedArray`: write its data, then propagate its mask (or unmask if it has none — soft only).
-            if (value is MaskedArray mv)
+            if (value is NDMaskedArray mv)
             {
                 _data[indices] = mv._data;
                 if (mv._mask is not null)
@@ -950,16 +950,16 @@ namespace NumSharp
         /// <summary>Makes the mask HARD (NumPy's <c>harden_mask</c>): from now on a plain-value assignment cannot
         /// unmask a slot — only currently-unmasked positions change. Mutates and returns THIS array.</summary>
         /// <returns>This masked array (now hard-masked).</returns>
-        public MaskedArray harden_mask() { _hardmask = true; return this; }
+        public NDMaskedArray harden_mask() { _hardmask = true; return this; }
 
         /// <summary>Makes the mask SOFT again (NumPy's <c>soften_mask</c>, the default): a plain-value assignment
         /// unmasks the assigned slots. Mutates and returns THIS array.</summary>
         /// <returns>This masked array (now soft-masked).</returns>
-        public MaskedArray soften_mask() { _hardmask = false; return this; }
+        public NDMaskedArray soften_mask() { _hardmask = false; return this; }
 
         /// <summary>Drops an all-False mask back to nomask (NumPy's <c>shrink_mask</c>); otherwise unchanged.</summary>
         /// <returns>A masked array with a redundant all-False mask removed.</returns>
-        public MaskedArray shrink_mask() => np.ma.shrink_mask(this);
+        public NDMaskedArray shrink_mask() => np.ma.shrink_mask(this);
 
         // ── Conversion / export + the hard/shared-mask flag surface (NumPy's tolist/tobytes/tofile/view +
         //    hardmask/sharedmask/recordmask/baseclass/unshare_mask/ids/iscontiguous). tolist and tobytes are
@@ -1064,17 +1064,17 @@ namespace NumSharp
         /// <exception cref="NotSupportedException">The target dtype has a different itemsize AND this array has an
         /// active mask — a boolean (itemsize-1) mask has no sound reinterpretation to the new element count, so
         /// the view is refused rather than silently dropping or misaligning it (fill or drop the mask first).</exception>
-        public MaskedArray view(DType dtype = null)
+        public NDMaskedArray view(DType dtype = null)
         {
             var nd = _data.view(dtype);
             // Same element count ⇒ shape preserved (no-op alias or same-itemsize reinterpret): the bool mask
             // still lines up element-for-element, so carry it (aliased, exactly like .real/.imag do).
             if (nd.size == _data.size)
-                return new MaskedArray(nd, _mask, _fill_value);
+                return new NDMaskedArray(nd, _mask, _fill_value);
             // Itemsize changed ⇒ the trailing axis was rescaled. With no mask the reinterpreted data stands
             // alone; with a live mask there is no meaningful reinterpretation of the boolean mask, so refuse.
             if (_mask is null)
-                return new MaskedArray(nd, null, _fill_value);
+                return new NDMaskedArray(nd, null, _fill_value);
             throw new NotSupportedException(
                 "view() to a dtype of a different itemsize is not supported on a masked array with an active " +
                 "mask: the boolean mask cannot be reinterpreted to the new element count. Fill or drop the mask first.");
@@ -1094,7 +1094,7 @@ namespace NumSharp
         /// writes <paramref name="values"/> where <paramref name="mask"/> is True and reconciles the mask there
         /// (masked values mask the slots, plain values unmask them).</summary>
         /// <param name="mask">Boolean array-like selecting the write positions.</param>
-        /// <param name="values">Scalar/array/<see cref="MaskedArray"/> supplying the data (and, if masked, the mask).</param>
+        /// <param name="values">Scalar/array/<see cref="NDMaskedArray"/> supplying the data (and, if masked, the mask).</param>
         public void putmask(object mask, object values) => np.ma.putmask(this, mask, values);
 
         /// <summary>
@@ -1116,7 +1116,7 @@ namespace NumSharp
         ///     copy otherwise) — NOT NumPy's <c>flat</c> iterator object. It writes through only when
         ///     <see cref="ravel(char)"/> returned a view (a C-contiguous source).
         /// </summary>
-        public MaskedArray flat => np.ma.ravel(this, 'C');
+        public NDMaskedArray flat => np.ma.ravel(this, 'C');
 
         /// <summary>Whether the mask is HARD (NumPy's read-only <c>hardmask</c> property): true once
         /// <see cref="harden_mask()"/> has been called, so a plain-value assignment can no longer unmask a slot;
@@ -1149,7 +1149,7 @@ namespace NumSharp
         /// <remarks>NumSharp cannot track whether a mask is actually shared (there is no <c>sharedmask</c> state),
         /// so — unlike NumPy, which copies only WHEN shared — this copies unconditionally when a mask is present;
         /// the end state (an unshared mask) is identical, only a redundant copy of an already-owned mask differs.</remarks>
-        public MaskedArray unshare_mask()
+        public NDMaskedArray unshare_mask()
         {
             if (_mask is not null)
                 _mask = _mask.copy();
@@ -1160,72 +1160,72 @@ namespace NumSharp
         //    for %). NumPy defines all of these on MaskedArray; without them `ma % b`, `ma & b`, `~ma` throw. ──
         /// <summary>Masked element-wise modulo (division-by-zero additionally masked).</summary>
         /// <param name="a">Numerator.</param><param name="b">Divisor.</param><returns>a%b, masked.</returns>
-        public static MaskedArray operator %(MaskedArray a, MaskedArray b) => np.ma.remainder(a, b);
+        public static NDMaskedArray operator %(NDMaskedArray a, NDMaskedArray b) => np.ma.remainder(a, b);
         /// <summary>Masked modulo with a scalar/array-like divisor.</summary>
         /// <param name="a">Numerator masked array.</param><param name="b">Divisor scalar/array-like.</param><returns>a%b, masked.</returns>
-        public static MaskedArray operator %(MaskedArray a, object b) => np.ma.remainder(a, b);
+        public static NDMaskedArray operator %(NDMaskedArray a, object b) => np.ma.remainder(a, b);
         /// <summary>Masked modulo with a scalar/array-like numerator.</summary>
         /// <param name="a">Numerator scalar/array-like.</param><param name="b">Divisor masked array.</param><returns>a%b, masked.</returns>
-        public static MaskedArray operator %(object a, MaskedArray b) => np.ma.remainder(a, b);
+        public static NDMaskedArray operator %(object a, NDMaskedArray b) => np.ma.remainder(a, b);
         /// <summary>Masked modulo with an NDArray divisor.</summary>
         /// <param name="a">Numerator.</param><param name="b">Divisor NDArray.</param><returns>a%b, masked.</returns>
-        public static MaskedArray operator %(MaskedArray a, NDArray b) => np.ma.remainder(a, b);
+        public static NDMaskedArray operator %(NDMaskedArray a, NDArray b) => np.ma.remainder(a, b);
         /// <summary>Masked modulo with an NDArray numerator.</summary>
         /// <param name="a">Numerator NDArray.</param><param name="b">Divisor masked array.</param><returns>a%b, masked.</returns>
-        public static MaskedArray operator %(NDArray a, MaskedArray b) => np.ma.remainder(a, b);
+        public static NDMaskedArray operator %(NDArray a, NDMaskedArray b) => np.ma.remainder(a, b);
 
         /// <summary>Masked bitwise AND (mask = OR of operands').</summary>
         /// <param name="a">Left.</param><param name="b">Right.</param><returns>a&amp;b, masked.</returns>
-        public static MaskedArray operator &(MaskedArray a, MaskedArray b) => np.ma.bitwise_and(a, b);
+        public static NDMaskedArray operator &(NDMaskedArray a, NDMaskedArray b) => np.ma.bitwise_and(a, b);
         /// <summary>Masked bitwise AND with a scalar/array-like.</summary>
         /// <param name="a">Left masked array.</param><param name="b">Right scalar/array-like.</param><returns>a&amp;b, masked.</returns>
-        public static MaskedArray operator &(MaskedArray a, object b) => np.ma.bitwise_and(a, b);
+        public static NDMaskedArray operator &(NDMaskedArray a, object b) => np.ma.bitwise_and(a, b);
         /// <summary>Masked bitwise AND with a scalar/array-like left operand.</summary>
         /// <param name="a">Left scalar/array-like.</param><param name="b">Right masked array.</param><returns>a&amp;b, masked.</returns>
-        public static MaskedArray operator &(object a, MaskedArray b) => np.ma.bitwise_and(a, b);
+        public static NDMaskedArray operator &(object a, NDMaskedArray b) => np.ma.bitwise_and(a, b);
         /// <summary>Masked bitwise AND with an NDArray operand.</summary>
         /// <param name="a">Left.</param><param name="b">Right NDArray.</param><returns>a&amp;b, masked.</returns>
-        public static MaskedArray operator &(MaskedArray a, NDArray b) => np.ma.bitwise_and(a, b);
+        public static NDMaskedArray operator &(NDMaskedArray a, NDArray b) => np.ma.bitwise_and(a, b);
         /// <summary>Masked bitwise AND with an NDArray left operand.</summary>
         /// <param name="a">Left NDArray.</param><param name="b">Right masked array.</param><returns>a&amp;b, masked.</returns>
-        public static MaskedArray operator &(NDArray a, MaskedArray b) => np.ma.bitwise_and(a, b);
+        public static NDMaskedArray operator &(NDArray a, NDMaskedArray b) => np.ma.bitwise_and(a, b);
 
         /// <summary>Masked bitwise OR (mask = OR of operands').</summary>
         /// <param name="a">Left.</param><param name="b">Right.</param><returns>a|b, masked.</returns>
-        public static MaskedArray operator |(MaskedArray a, MaskedArray b) => np.ma.bitwise_or(a, b);
+        public static NDMaskedArray operator |(NDMaskedArray a, NDMaskedArray b) => np.ma.bitwise_or(a, b);
         /// <summary>Masked bitwise OR with a scalar/array-like.</summary>
         /// <param name="a">Left masked array.</param><param name="b">Right scalar/array-like.</param><returns>a|b, masked.</returns>
-        public static MaskedArray operator |(MaskedArray a, object b) => np.ma.bitwise_or(a, b);
+        public static NDMaskedArray operator |(NDMaskedArray a, object b) => np.ma.bitwise_or(a, b);
         /// <summary>Masked bitwise OR with a scalar/array-like left operand.</summary>
         /// <param name="a">Left scalar/array-like.</param><param name="b">Right masked array.</param><returns>a|b, masked.</returns>
-        public static MaskedArray operator |(object a, MaskedArray b) => np.ma.bitwise_or(a, b);
+        public static NDMaskedArray operator |(object a, NDMaskedArray b) => np.ma.bitwise_or(a, b);
         /// <summary>Masked bitwise OR with an NDArray operand.</summary>
         /// <param name="a">Left.</param><param name="b">Right NDArray.</param><returns>a|b, masked.</returns>
-        public static MaskedArray operator |(MaskedArray a, NDArray b) => np.ma.bitwise_or(a, b);
+        public static NDMaskedArray operator |(NDMaskedArray a, NDArray b) => np.ma.bitwise_or(a, b);
         /// <summary>Masked bitwise OR with an NDArray left operand.</summary>
         /// <param name="a">Left NDArray.</param><param name="b">Right masked array.</param><returns>a|b, masked.</returns>
-        public static MaskedArray operator |(NDArray a, MaskedArray b) => np.ma.bitwise_or(a, b);
+        public static NDMaskedArray operator |(NDArray a, NDMaskedArray b) => np.ma.bitwise_or(a, b);
 
         /// <summary>Masked bitwise XOR (mask = OR of operands').</summary>
         /// <param name="a">Left.</param><param name="b">Right.</param><returns>a^b, masked.</returns>
-        public static MaskedArray operator ^(MaskedArray a, MaskedArray b) => np.ma.bitwise_xor(a, b);
+        public static NDMaskedArray operator ^(NDMaskedArray a, NDMaskedArray b) => np.ma.bitwise_xor(a, b);
         /// <summary>Masked bitwise XOR with a scalar/array-like.</summary>
         /// <param name="a">Left masked array.</param><param name="b">Right scalar/array-like.</param><returns>a^b, masked.</returns>
-        public static MaskedArray operator ^(MaskedArray a, object b) => np.ma.bitwise_xor(a, b);
+        public static NDMaskedArray operator ^(NDMaskedArray a, object b) => np.ma.bitwise_xor(a, b);
         /// <summary>Masked bitwise XOR with a scalar/array-like left operand.</summary>
         /// <param name="a">Left scalar/array-like.</param><param name="b">Right masked array.</param><returns>a^b, masked.</returns>
-        public static MaskedArray operator ^(object a, MaskedArray b) => np.ma.bitwise_xor(a, b);
+        public static NDMaskedArray operator ^(object a, NDMaskedArray b) => np.ma.bitwise_xor(a, b);
         /// <summary>Masked bitwise XOR with an NDArray operand.</summary>
         /// <param name="a">Left.</param><param name="b">Right NDArray.</param><returns>a^b, masked.</returns>
-        public static MaskedArray operator ^(MaskedArray a, NDArray b) => np.ma.bitwise_xor(a, b);
+        public static NDMaskedArray operator ^(NDMaskedArray a, NDArray b) => np.ma.bitwise_xor(a, b);
         /// <summary>Masked bitwise XOR with an NDArray left operand.</summary>
         /// <param name="a">Left NDArray.</param><param name="b">Right masked array.</param><returns>a^b, masked.</returns>
-        public static MaskedArray operator ^(NDArray a, MaskedArray b) => np.ma.bitwise_xor(a, b);
+        public static NDMaskedArray operator ^(NDArray a, NDMaskedArray b) => np.ma.bitwise_xor(a, b);
 
         /// <summary>Masked bitwise NOT / invert (mask unchanged). NumPy has no <c>np.ma.invert</c> module function,
         /// so this operator is the only spelling; it wires to the base <c>np.bitwise_not</c> on the data.</summary>
         /// <param name="a">Operand.</param><returns>~a, masked.</returns>
-        public static MaskedArray operator ~(MaskedArray a) => np.ma.Invert(a);
+        public static NDMaskedArray operator ~(NDMaskedArray a) => np.ma.Invert(a);
     }
 
     /// <summary>
@@ -1233,11 +1233,19 @@ namespace NumSharp
     ///     value". A masked ufunc that reduces to one fully-masked 0-D element returns this instance, matching
     ///     NumPy where <c>np.ma.add(masked, x)</c> and a masked 0-D result are <c>masked</c>.
     /// </summary>
-    public sealed class MaskedConstant : MaskedArray
+    /// <remarks>
+    ///     Exactly ONE instance exists (the constructor is internal), reachable under four names that are all the
+    ///     same object: <see cref="MaskedArrayModule.NDMasked"/> / <see cref="MaskedArrayModule.NDMaskedSingleton"/>
+    ///     (NumSharp's <c>ND*</c> spelling) and <see cref="MaskedArrayModule.masked"/> /
+    ///     <see cref="MaskedArrayModule.masked_singleton"/> (NumPy's names). Because it is a singleton, reference
+    ///     identity (<c>ReferenceEquals(r, np.ma.masked)</c>) is a valid "is this the masked scalar?" test — the
+    ///     C# counterpart of NumPy's <c>r is np.ma.masked</c>.
+    /// </remarks>
+    public sealed class NDMaskedConstant : NDMaskedArray
     {
         /// <summary>Builds the constant as a 0-D <c>0.0</c> datum under a 0-D <c>True</c> mask, i.e. one masked
         /// scalar — the same internal shape NumPy's <c>masked_singleton</c> carries.</summary>
-        internal MaskedConstant() : base(NDArray.Scalar(0.0d), NDArray.Scalar(true)) { }
+        internal NDMaskedConstant() : base(NDArray.Scalar(0.0d), NDArray.Scalar(true)) { }
 
         /// <summary>Renders as the bare token <c>masked</c>, as NumPy prints its singleton.</summary>
         /// <returns>The string <c>"masked"</c>.</returns>
@@ -1252,7 +1260,7 @@ namespace NumSharp
     ///     a masked repr globally.
     ///     <para>
     ///     It is a single shared instance behind <see cref="MaskedArrayModule.masked_print_option"/> — mutating it
-    ///     (like NumPy's module global) changes every subsequent <see cref="MaskedArray.ToString()"/>, so it is a
+    ///     (like NumPy's module global) changes every subsequent <see cref="NDMaskedArray.ToString()"/>, so it is a
     ///     global side effect: set it back if you only meant a local change.
     ///     </para>
     /// </summary>
@@ -1342,11 +1350,11 @@ namespace NumSharp
         /// </summary>
         /// <param name="key">Masked arrays, plain arrays, scalars, slice-expression strings and leading
         /// directive strings — in any mix, following <see cref="np.r_"/>'s grammar.</param>
-        /// <returns>A <see cref="MaskedArray"/> whose data is <c>np.r_[key]</c> and whose mask is the matching
+        /// <returns>A <see cref="NDMaskedArray"/> whose data is <c>np.r_[key]</c> and whose mask is the matching
         /// concatenation of the entries' masks (or <see cref="MaskedArrayModule.nomask"/> when none is masked).</returns>
         /// <exception cref="ArgumentNullException"><paramref name="key"/> (or an entry) is null.</exception>
         /// <exception cref="MAError"><paramref name="key"/> is a lone string (NumPy's rejection).</exception>
-        public MaskedArray this[params object[] key]
+        public NDMaskedArray this[params object[] key]
         {
             get
             {
@@ -1364,7 +1372,7 @@ namespace NumSharp
                 bool anyMask = false;
                 for (int i = 0; i < key.Length; i++)
                 {
-                    if (key[i] is MaskedArray m)
+                    if (key[i] is NDMaskedArray m)
                     {
                         dataKey[i] = m._data;
                         // A real (non-nomask) mask on ANY entry forces the mask stream; else stay on nomask.
@@ -1376,14 +1384,14 @@ namespace NumSharp
                 }
                 NDArray dataResult = np.r_[dataKey];
                 if (!anyMask)
-                    return new MaskedArray(dataResult, null);
+                    return new NDMaskedArray(dataResult, null);
 
                 // MASK stream: same np.r_ grammar over each entry's boolean-mask contribution.
                 var maskKey = new object[key.Length];
                 for (int i = 0; i < key.Length; i++)
                     maskKey[i] = MaskEntry(key[i]);
                 NDArray maskResult = np.r_[maskKey];
-                return new MaskedArray(dataResult, maskResult);
+                return new NDMaskedArray(dataResult, maskResult);
             }
         }
 
@@ -1421,7 +1429,7 @@ namespace NumSharp
     /// <summary>
     ///     The <c>numpy.ma</c> module surface, reachable as <see cref="np.ma"/>. Holds the masked-array
     ///     substrate (<see cref="getdata"/>/<see cref="getmask"/>/<see cref="getmaskarray"/>/<see cref="filled"/>/
-    ///     <see cref="masked"/>/<see cref="nomask"/>) and the masked <b>ufunc family</b> — every unary/binary
+    ///     <see cref="NDMasked"/>/<see cref="nomask"/>) and the masked <b>ufunc family</b> — every unary/binary
     ///     arithmetic, comparison, logical and bitwise op NumPy exposes on <c>numpy.ma</c> via its
     ///     <c>_MaskedUnaryOperation</c>/<c>_MaskedBinaryOperation</c>/<c>_DomainedBinaryOperation</c> wrappers.
     ///     <para>
@@ -1449,18 +1457,48 @@ namespace NumSharp
         //  Substrate: sentinels, extraction, mask construction, filling
         // ─────────────────────────────────────────────────────────────────────────────
 
-        /// <summary>NumPy's <c>nomask</c>: the shared 0-D <c>False</c> that <see cref="MaskedArray.mask"/>
+        /// <summary>NumPy's <c>nomask</c>: the shared 0-D <c>False</c> that <see cref="NDMaskedArray.mask"/>
         /// returns when nothing is masked. Internally "no mask" is stored as a null mask; this is only the
         /// public face of that state.</summary>
         public NDArray nomask { get; } = NDArray.Scalar(false);
 
-        /// <summary>NumPy's <c>masked</c> / <c>masked_singleton</c>: the constant standing for one masked
-        /// value; returned by ufuncs whose result is a single fully-masked 0-D element.</summary>
-        public MaskedConstant masked { get; } = new MaskedConstant();
+        /// <summary>
+        ///     The masked constant in NumSharp's <c>ND*</c> spelling: the ONE <see cref="NDMaskedConstant"/> instance
+        ///     standing for a single masked value (a 0-D float64 <c>0.0</c> datum under a 0-D <c>True</c> mask).
+        ///     Ufuncs and reductions whose result is a single fully-masked 0-D element return THIS object, so test
+        ///     for it by reference (<c>ReferenceEquals(r, np.ma.NDMasked)</c>) or with <see cref="is_masked"/>;
+        ///     assigning it through the indexer (<c>x[i] = np.ma.NDMasked</c>) masks the slot and leaves the data
+        ///     untouched.
+        /// </summary>
+        /// <remarks>
+        ///     NumPy spells this value <c>np.ma.masked</c> (and <c>np.ma.masked_singleton</c>). Both NumPy names are
+        ///     exposed as aliases — <see cref="masked"/> and <see cref="masked_singleton"/> — that return this very
+        ///     instance, so ported NumPy code compiles unchanged while NumSharp code may use the <c>ND*</c> name.
+        ///     Every spelling is the same object; comparing any two of them by reference is always true.
+        /// </remarks>
+        public NDMaskedConstant NDMasked { get; } = new NDMaskedConstant();
 
-        /// <summary>Alias of <see cref="masked"/> (NumPy's <c>masked_singleton</c> — the SAME object as
-        /// <c>masked</c>, exported under both names).</summary>
-        public MaskedConstant masked_singleton => masked;
+        /// <summary>Alias of <see cref="NDMasked"/> mirroring NumPy's <c>masked_singleton</c> in the <c>ND*</c>
+        /// spelling — the SAME object, not a copy.</summary>
+        public NDMaskedConstant NDMaskedSingleton => NDMasked;
+
+        /// <summary>
+        ///     NumPy's <c>np.ma.masked</c>: the SAME <see cref="NDMaskedConstant"/> instance as <see cref="NDMasked"/>
+        ///     (NumSharp's <c>ND*</c> spelling of it), exposed under NumPy's name so NumPy code ports verbatim —
+        ///     <c>x[i] = np.ma.masked</c> masks a slot, and a fully-masked reduction such as
+        ///     <c>np.ma.sum(allMasked)</c> returns an object reference-equal to this one.
+        /// </summary>
+        /// <remarks>An expression-bodied alias rather than a second stored instance on purpose: a separate
+        /// <c>new NDMaskedConstant()</c> would break the reference-identity contract the ufuncs rely on (they
+        /// return <see cref="NDMasked"/>, which must be <c>is</c>-equal to <c>np.ma.masked</c>).</remarks>
+        public NDMaskedConstant masked => NDMasked;
+
+        /// <summary>
+        ///     NumPy's <c>np.ma.masked_singleton</c> — in NumPy just another name for <c>masked</c>
+        ///     (<c>np.ma.masked is np.ma.masked_singleton</c> is <c>True</c>); here likewise the SAME instance as
+        ///     <see cref="NDMasked"/> and <see cref="masked"/>.
+        /// </summary>
+        public NDMaskedConstant masked_singleton => NDMasked;
 
         /// <summary>NumPy's <c>MaskType</c>: the dtype of a mask, i.e. boolean.</summary>
         public DType MaskType => np.@bool;
@@ -1476,16 +1514,16 @@ namespace NumSharp
 
         /// <summary>NumPy's <c>masked_print_option</c>: the shared, mutable object controlling the masked-slot
         /// display token (default <c>--</c>) and whether masked slots are shown as that token or as the fill value.
-        /// Mutating it changes every subsequent <see cref="MaskedArray.ToString()"/> — a process-global side effect.
+        /// Mutating it changes every subsequent <see cref="NDMaskedArray.ToString()"/> — a process-global side effect.
         /// See <see cref="MaskedPrintOption"/>.</summary>
         public MaskedPrintOption masked_print_option { get; } = new MaskedPrintOption("--");
 
         /// <summary>
         ///     Returns the data of <paramref name="a"/> as a plain <see cref="NDArray"/> — the underlying data
-        ///     for a <see cref="MaskedArray"/>, the array itself for an <see cref="NDArray"/>, or a fresh array
+        ///     for a <see cref="NDMaskedArray"/>, the array itself for an <see cref="NDArray"/>, or a fresh array
         ///     for any other array-like/scalar (NumPy's <c>getdata</c>). The mask, if any, is discarded.
         /// </summary>
-        /// <param name="a">A <see cref="MaskedArray"/>, <see cref="NDArray"/>, C# scalar, or array-like.</param>
+        /// <param name="a">A <see cref="NDMaskedArray"/>, <see cref="NDArray"/>, C# scalar, or array-like.</param>
         /// <returns>The data as an <see cref="NDArray"/> (aliased when possible, not copied).</returns>
         /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         public NDArray getdata(object a) => AsData(a);
@@ -1494,9 +1532,9 @@ namespace NumSharp
         ///     Returns the boolean mask of <paramref name="a"/>, or <see cref="nomask"/> when it has none
         ///     (NumPy's <c>getmask</c>). A plain <see cref="NDArray"/> or scalar has no mask.
         /// </summary>
-        /// <param name="a">A <see cref="MaskedArray"/>, <see cref="NDArray"/>, or array-like/scalar.</param>
+        /// <param name="a">A <see cref="NDMaskedArray"/>, <see cref="NDArray"/>, or array-like/scalar.</param>
         /// <returns>The mask array, or the <see cref="nomask"/> sentinel.</returns>
-        public NDArray getmask(object a) => (a as MaskedArray)?._mask ?? nomask;
+        public NDArray getmask(object a) => (a as NDMaskedArray)?._mask ?? nomask;
 
         /// <summary>
         ///     Returns the mask of <paramref name="a"/> as a FULL boolean array of its data's shape, allocating
@@ -1504,11 +1542,11 @@ namespace NumSharp
         ///     <see cref="getmask"/> this never returns the 0-D <c>nomask</c> sentinel, so callers can index it
         ///     positionally.
         /// </summary>
-        /// <param name="a">A <see cref="MaskedArray"/>, <see cref="NDArray"/>, or array-like/scalar.</param>
+        /// <param name="a">A <see cref="NDMaskedArray"/>, <see cref="NDArray"/>, or array-like/scalar.</param>
         /// <returns>A boolean <see cref="NDArray"/> matching the data shape.</returns>
         public NDArray getmaskarray(object a)
         {
-            var m = (a as MaskedArray)?._mask;
+            var m = (a as NDMaskedArray)?._mask;
             if (m is not null)
                 return m;
             return np.zeros(DimsOf(AsData(a)), np.@bool);
@@ -1523,37 +1561,37 @@ namespace NumSharp
         public bool is_mask(object a) => a is NDArray nd && nd.typecode == NPTypeCode.Boolean;
 
         /// <summary>
-        ///     True iff <paramref name="x"/> is a <see cref="MaskedArray"/> (NumPy's <c>isMaskedArray</c>/<c>is_masked</c>
+        ///     True iff <paramref name="x"/> is a <see cref="NDMaskedArray"/> (NumPy's <c>isMaskedArray</c>/<c>is_masked</c>
         ///     type check). Does not inspect whether any element is actually masked.
         /// </summary>
         /// <param name="x">Any object.</param>
-        /// <returns>True for a <see cref="MaskedArray"/> (including the <see cref="masked"/> constant).</returns>
-        public bool isMaskedArray(object x) => x is MaskedArray;
+        /// <returns>True for a <see cref="NDMaskedArray"/> (including the <see cref="NDMasked"/> constant).</returns>
+        public bool isMaskedArray(object x) => x is NDMaskedArray;
 
         /// <summary>
         ///     Substitutes <paramref name="fill_value"/> for masked elements of <paramref name="a"/> and returns
         ///     a plain array (NumPy's module-level <c>ma.filled</c>). A non-masked input is returned as an array
         ///     unchanged.
         /// </summary>
-        /// <param name="a">A <see cref="MaskedArray"/> or array-like.</param>
+        /// <param name="a">A <see cref="NDMaskedArray"/> or array-like.</param>
         /// <param name="fill_value">Fill for masked slots; null uses the dtype default.</param>
         /// <returns>A plain <see cref="NDArray"/> with masked slots filled.</returns>
         public NDArray filled(object a, object fill_value = null)
-            => a is MaskedArray m ? m.filled(fill_value) : AsData(a);
+            => a is NDMaskedArray m ? m.filled(fill_value) : AsData(a);
 
         /// <summary>
         ///     Builds a masked array from data and an optional mask (NumPy's <c>ma.array</c>/<c>masked_array</c>).
         ///     The data is taken via <see cref="getdata"/>; the mask, if given, is coerced to boolean.
         /// </summary>
-        /// <param name="data">Data array-like (a <see cref="MaskedArray"/>'s own mask is honored when no explicit mask is given).</param>
+        /// <param name="data">Data array-like (a <see cref="NDMaskedArray"/>'s own mask is honored when no explicit mask is given).</param>
         /// <param name="mask">Optional boolean mask array-like; null/omitted ⇒ inherit <paramref name="data"/>'s mask or none.</param>
-        /// <param name="fill_value">Optional default fill value for <see cref="MaskedArray.filled(object)"/>.</param>
+        /// <param name="fill_value">Optional default fill value for <see cref="NDMaskedArray.filled(object)"/>.</param>
         /// <param name="copy">When true, copies the data (NumPy's <c>copy=</c>); default false aliases it.</param>
         /// <param name="dtype">Optional dtype to cast the data to.</param>
         /// <param name="hard_mask">When true, the result's mask is HARD (NumPy's <c>hard_mask=</c>): a later
-        /// plain-value assignment cannot unmask a slot (see <see cref="MaskedArray.harden_mask()"/>). Default false (soft).</param>
-        /// <returns>A new <see cref="MaskedArray"/>.</returns>
-        public MaskedArray array(object data, object mask = null, object fill_value = null, bool copy = false, DType dtype = null, bool hard_mask = false)
+        /// plain-value assignment cannot unmask a slot (see <see cref="NDMaskedArray.harden_mask()"/>). Default false (soft).</param>
+        /// <returns>A new <see cref="NDMaskedArray"/>.</returns>
+        public NDMaskedArray array(object data, object mask = null, object fill_value = null, bool copy = false, DType dtype = null, bool hard_mask = false)
         {
             var d = AsData(data);
             // dtype cast happens first (and subsumes the copy — astype makes a new buffer on a real cast, and
@@ -1562,9 +1600,9 @@ namespace NumSharp
                 d = d.astype(dtype, copy);
             else if (copy)
                 d = d.copy();
-            // Explicit mask wins; otherwise inherit an incoming MaskedArray's mask (NumPy semantics).
-            NDArray m = mask != null ? AsData(mask).astype(np.@bool) : (data as MaskedArray)?._mask;
-            var result = new MaskedArray(d, m, fill_value);
+            // Explicit mask wins; otherwise inherit an incoming NDMaskedArray's mask (NumPy semantics).
+            NDArray m = mask != null ? AsData(mask).astype(np.@bool) : (data as NDMaskedArray)?._mask;
+            var result = new NDMaskedArray(d, m, fill_value);
             // hard_mask=true bakes the hardness in at construction (NumPy's ctor flag), so the very first
             // assignment already refuses to unmask — no separate harden_mask() call needed.
             result._hardmask = hard_mask;
@@ -1578,37 +1616,37 @@ namespace NumSharp
         /// <param name="copy">Copy the data when true.</param>
         /// <param name="dtype">Optional dtype to cast the data to.</param>
         /// <param name="hard_mask">When true, the result's mask is HARD (see <see cref="array"/>).</param>
-        /// <returns>A new <see cref="MaskedArray"/>.</returns>
-        public MaskedArray masked_array(object data, object mask = null, object fill_value = null, bool copy = false, DType dtype = null, bool hard_mask = false)
+        /// <returns>A new <see cref="NDMaskedArray"/>.</returns>
+        public NDMaskedArray masked_array(object data, object mask = null, object fill_value = null, bool copy = false, DType dtype = null, bool hard_mask = false)
             => array(data, mask, fill_value, copy, dtype, hard_mask);
 
         /// <summary>
-        ///     Converts an array-like to a <see cref="MaskedArray"/> WITHOUT copying (NumPy's <c>ma.asarray</c>):
+        ///     Converts an array-like to a <see cref="NDMaskedArray"/> WITHOUT copying (NumPy's <c>ma.asarray</c>):
         ///     an incoming masked array keeps its mask, a plain array/scalar becomes unmasked. This is the
-        ///     explicit ndarray→MaskedArray entry point — NumSharp's implicit <c>NDArray→MaskedArray</c> does the
+        ///     explicit ndarray→NDMaskedArray entry point — NumSharp's implicit <c>NDArray→NDMaskedArray</c> does the
         ///     same for the unmasked case, but this also honors an existing mask and an optional dtype cast.
         /// </summary>
-        /// <param name="a">A <see cref="MaskedArray"/>, <see cref="NDArray"/>, or array-like/scalar.</param>
+        /// <param name="a">A <see cref="NDMaskedArray"/>, <see cref="NDArray"/>, or array-like/scalar.</param>
         /// <param name="dtype">Optional dtype to cast the data to (no copy when it already matches).</param>
         /// <returns>A masked array over <paramref name="a"/>'s data (aliased when possible).</returns>
-        public MaskedArray asarray(object a, DType dtype = null)
+        public NDMaskedArray asarray(object a, DType dtype = null)
         {
             var d = AsData(a);
             if (dtype != null)
                 d = d.astype(dtype, copy: false);
-            return new MaskedArray(d, (a as MaskedArray)?._mask);
+            return new NDMaskedArray(d, (a as NDMaskedArray)?._mask);
         }
 
-        /// <summary>Alias of <see cref="asarray"/> (NumPy's <c>ma.asanyarray</c> — NumSharp has no MaskedArray
+        /// <summary>Alias of <see cref="asarray"/> (NumPy's <c>ma.asanyarray</c> — NumSharp has no NDMaskedArray
         /// subclasses to conserve, so it behaves identically).</summary>
         /// <param name="a">Array-like.</param><param name="dtype">Optional dtype cast.</param>
         /// <returns>A masked array over <paramref name="a"/>'s data.</returns>
-        public MaskedArray asanyarray(object a, DType dtype = null) => asarray(a, dtype);
+        public NDMaskedArray asanyarray(object a, DType dtype = null) => asarray(a, dtype);
 
         /// <summary>
         ///     The default fill value NumPy assigns per dtype kind (<c>default_fill_value</c>): <c>1e20</c> for
         ///     float/complex, <c>999999</c> for integers, <c>True</c> for boolean, else <c>0</c>. Used by
-        ///     <see cref="MaskedArray.filled(object)"/> when the caller supplies none.
+        ///     <see cref="NDMaskedArray.filled(object)"/> when the caller supplies none.
         /// </summary>
         /// <param name="dtype">The data dtype to pick a fill for.</param>
         /// <returns>A boxed scalar of a type castable into <paramref name="dtype"/>.</returns>
@@ -1639,14 +1677,14 @@ namespace NumSharp
         ///     True iff <paramref name="x"/> has AT LEAST ONE masked element (NumPy's <c>is_masked</c>) — the
         ///     VALUE predicate, DISTINCT from the <see cref="isMaskedArray"/> TYPE check. A plain array, a
         ///     <c>nomask</c> operand, an all-False mask, and every non-masked scalar all return false; only a
-        ///     masked array with a set mask bit (including the <see cref="masked"/> singleton) returns true.
+        ///     masked array with a set mask bit (including the <see cref="NDMasked"/> singleton) returns true.
         /// </summary>
         /// <param name="x">Any object.</param>
         /// <returns>True when some element of <paramref name="x"/> is actually masked.</returns>
         public bool is_masked(object x)
         {
             // `is not null` (reference) then `np.any` — a `!= null` would run NDArray's ELEMENTWISE `!=`.
-            var m = (x as MaskedArray)?._mask;
+            var m = (x as NDMaskedArray)?._mask;
             return m is not null && np.any(m);
         }
 
@@ -1669,49 +1707,49 @@ namespace NumSharp
         /// the data AND the mask are copied, so mutating either the source or the copy never affects the other.</summary>
         /// <param name="a">Array-like/masked-array to copy.</param>
         /// <returns>A masked array over a fresh copy of the data (mask copied when present).</returns>
-        public MaskedArray copy(object a)
+        public NDMaskedArray copy(object a)
         {
-            var m = (a as MaskedArray)?._mask;
-            return new MaskedArray(AsData(a).copy(), m?.copy(), (a as MaskedArray)?._fill_value);
+            var m = (a as NDMaskedArray)?._mask;
+            return new NDMaskedArray(AsData(a).copy(), m?.copy(), (a as NDMaskedArray)?._fill_value);
         }
 
         /// <summary>Maximum over unmasked elements — alias of <see cref="max"/> (NumPy's deprecated-but-exported
         /// <c>amax</c>).</summary>
         /// <param name="a">Operand.</param><param name="axis">Axis or null.</param><param name="fill_value">Masked fill override.</param><param name="keepdims">Keep reduced axes.</param>
         /// <returns>The masked maximum.</returns>
-        public MaskedArray amax(object a, int? axis = null, object fill_value = null, bool keepdims = false) => max(a, axis, fill_value, keepdims);
+        public NDMaskedArray amax(object a, int? axis = null, object fill_value = null, bool keepdims = false) => max(a, axis, fill_value, keepdims);
 
         /// <summary>Minimum over unmasked elements — alias of <see cref="min"/> (NumPy's <c>amin</c>).</summary>
         /// <param name="a">Operand.</param><param name="axis">Axis or null.</param><param name="fill_value">Masked fill override.</param><param name="keepdims">Keep reduced axes.</param>
         /// <returns>The masked minimum.</returns>
-        public MaskedArray amin(object a, int? axis = null, object fill_value = null, bool keepdims = false) => min(a, axis, fill_value, keepdims);
+        public NDMaskedArray amin(object a, int? axis = null, object fill_value = null, bool keepdims = false) => min(a, axis, fill_value, keepdims);
 
         /// <summary>Logical-AND reduction — alias of <see cref="all"/> (NumPy's DEPRECATED <c>alltrue</c>, still exported).</summary>
         /// <param name="a">Operand.</param><param name="axis">Axis or null.</param><param name="keepdims">Keep reduced axes.</param>
         /// <returns>The masked all-reduction.</returns>
-        public MaskedArray alltrue(object a, int? axis = null, bool keepdims = false) => all(a, axis, keepdims);
+        public NDMaskedArray alltrue(object a, int? axis = null, bool keepdims = false) => all(a, axis, keepdims);
 
         /// <summary>Logical-OR reduction — alias of <see cref="any"/> (NumPy's DEPRECATED <c>sometrue</c>).</summary>
         /// <param name="a">Operand.</param><param name="axis">Axis or null.</param><param name="keepdims">Keep reduced axes.</param>
         /// <returns>The masked any-reduction.</returns>
-        public MaskedArray sometrue(object a, int? axis = null, bool keepdims = false) => any(a, axis, keepdims);
+        public NDMaskedArray sometrue(object a, int? axis = null, bool keepdims = false) => any(a, axis, keepdims);
 
         /// <summary>Round to <paramref name="decimals"/> places — alias of <see cref="round"/> (NumPy's <c>round_</c>).</summary>
         /// <param name="a">Operand.</param><param name="decimals">Decimal places.</param>
         /// <returns>The masked, rounded array.</returns>
-        public MaskedArray round_(object a, int decimals = 0) => round(a, decimals);
+        public NDMaskedArray round_(object a, int decimals = 0) => round(a, decimals);
 
         /// <summary>Stack along the first axis — alias of <see cref="vstack"/> (NumPy's <c>row_stack</c>).</summary>
         /// <param name="tup">Operands.</param><returns>The stacked masked array.</returns>
-        public MaskedArray row_stack(params object[] tup) => vstack(tup);
+        public NDMaskedArray row_stack(params object[] tup) => vstack(tup);
 
         /// <summary>Inner product — alias of <see cref="inner"/> (NumPy's <c>innerproduct</c>).</summary>
         /// <param name="a">Left.</param><param name="b">Right.</param><returns>The masked inner product.</returns>
-        public MaskedArray innerproduct(object a, object b) => inner(a, b);
+        public NDMaskedArray innerproduct(object a, object b) => inner(a, b);
 
         /// <summary>Outer product — alias of <see cref="outer"/> (NumPy's <c>outerproduct</c>).</summary>
         /// <param name="a">Left.</param><param name="b">Right.</param><returns>The masked outer product.</returns>
-        public MaskedArray outerproduct(object a, object b) => outer(a, b);
+        public NDMaskedArray outerproduct(object a, object b) => outer(a, b);
 
         /// <summary>Alias of <see cref="isMaskedArray"/> (NumPy's <c>isMA</c>).</summary>
         /// <param name="x">Any object.</param><returns>True for a masked array.</returns>
@@ -1776,7 +1814,7 @@ namespace NumSharp
             switch (m)
             {
                 case null: return null;
-                case MaskedArray ma_: return ma_._mask;
+                case NDMaskedArray ma_: return ma_._mask;
                 case NDArray nd:
                     // The 0-D nomask sentinel (or any 0-D False) means "no mask".
                     if (ReferenceEquals(nd, nomask)) return null;
@@ -1833,18 +1871,18 @@ namespace NumSharp
 
         /// <summary>The effective fill value of an operand — its stored override, else its dtype default.</summary>
         private object FillOf(object a)
-            => (a as MaskedArray)?._fill_value ?? default_fill_value(AsData(a).dtype);
+            => (a as NDMaskedArray)?._fill_value ?? default_fill_value(AsData(a).dtype);
 
         /// <summary>
         ///     Sets the fill value of <paramref name="a"/> in place (NumPy's module-level <c>set_fill_value</c>).
-        ///     Has effect ONLY on a <see cref="MaskedArray"/> (a plain array has no fill slot); a non-masked
+        ///     Has effect ONLY on a <see cref="NDMaskedArray"/> (a plain array has no fill slot); a non-masked
         ///     operand is silently ignored, matching NumPy.
         /// </summary>
         /// <param name="a">The masked array to mutate.</param>
         /// <param name="fill_value">The new fill value (null restores the dtype default).</param>
         public void set_fill_value(object a, object fill_value)
         {
-            if (a is MaskedArray m)
+            if (a is NDMaskedArray m)
                 m._fill_value = fill_value;
         }
 
@@ -1861,29 +1899,29 @@ namespace NumSharp
         /// <param name="fill_value">Value written at the newly-masked (invalid) slots; null uses <paramref name="a"/>'s
         /// own fill (dtype default).</param>
         /// <returns>A masked array with non-finite slots masked and their data replaced by the fill.</returns>
-        public MaskedArray fix_invalid(object a, object mask = null, bool copy = true, object fill_value = null)
+        public NDMaskedArray fix_invalid(object a, object mask = null, bool copy = true, object fill_value = null)
         {
             var d = AsData(a);
             // The invalid mask is ~isfinite for a float/complex dtype, else nothing (integers are all finite).
             var invalid = NonFiniteMask(d) ?? np.zeros(DimsOf(d), np.@bool);
-            var existing = (a as MaskedArray)?._mask;
+            var existing = (a as NDMaskedArray)?._mask;
             var extra = mask is null ? null : AsData(mask).astype(np.@bool);
             // Full mask = existing | extra | invalid (nomask-aware).
             var full = Or(Or(existing, extra), invalid);
             var data = copy ? d.copy() : d;
-            var fv = fill_value ?? (a as MaskedArray)?._fill_value ?? default_fill_value(d.dtype);
+            var fv = fill_value ?? (a as NDMaskedArray)?._fill_value ?? default_fill_value(d.dtype);
             // Write the fill into every INVALID slot (not the whole mask — NumPy only overwrites the newly
             // caught non-finite data, leaving pre-existing masked-but-finite data alone).
             if (np.any(invalid))
                 np.copyto(data, NDArray.Scalar(fv), casting: "unsafe", where: invalid);
-            return new MaskedArray(data, (full is not null && np.any(full)) ? full : null);
+            return new NDMaskedArray(data, (full is not null && np.any(full)) ? full : null);
         }
 
         /// <summary>The <c>~</c> operator's backing (NumPy has no <c>ma.invert</c> module function): bitwise-NOT
         /// of the data, mask carried through unchanged. Internal — reached via <c>~maskedArray</c>.</summary>
         /// <param name="a">Operand.</param>
         /// <returns>A masked array of ~data.</returns>
-        internal MaskedArray Invert(object a) => Unary(x => np.bitwise_not(x), a);
+        internal NDMaskedArray Invert(object a) => Unary(x => np.bitwise_not(x), a);
 
         // ─────────────────────────────────────────────────────────────────────────────
         //  The three ufunc-wrapper mechanisms (ports of NumPy's operation classes)
@@ -1897,11 +1935,11 @@ namespace NumSharp
         ///     data stays meaningful (NumPy's <c>copyto(result, d, where=m)</c>).
         /// </summary>
         /// <param name="f">The underlying <c>np.*</c> unary op (e.g. <c>np.abs</c>).</param>
-        /// <param name="a">The operand (<see cref="MaskedArray"/>/<see cref="NDArray"/>/scalar).</param>
+        /// <param name="a">The operand (<see cref="NDMaskedArray"/>/<see cref="NDArray"/>/scalar).</param>
         /// <param name="domain">Optional invalid-input predicate: given the data, returns a boolean mask of
         /// elements to mask; null for a domain-free op.</param>
-        /// <returns>The masked result, or the <see cref="masked"/> constant for a fully-masked 0-D result.</returns>
-        private MaskedArray Unary(Func<NDArray, NDArray> f, object a, Func<NDArray, NDArray> domain = null)
+        /// <returns>The masked result, or the <see cref="NDMasked"/> constant for a fully-masked 0-D result.</returns>
+        private NDMaskedArray Unary(Func<NDArray, NDArray> f, object a, Func<NDArray, NDArray> domain = null)
         {
             var d = AsData(a);
             var result = f(d);
@@ -1910,12 +1948,12 @@ namespace NumSharp
             {
                 // Domained: mask non-finite outputs, the domain's rejected inputs, and any incoming mask.
                 m = Or(NonFiniteMask(result), domain(d));
-                m = Or(m, (a as MaskedArray)?._mask);
+                m = Or(m, (a as NDMaskedArray)?._mask);
             }
             else
             {
                 // Domain-free (abs/negative/sin/…): the mask is simply carried through unchanged.
-                m = (a as MaskedArray)?._mask;
+                m = (a as NDMaskedArray)?._mask;
             }
 
             // NumPy's unary fill-back is copyto(result, d, where=m) with the DEFAULT 'same_kind' casting,
@@ -1933,8 +1971,8 @@ namespace NumSharp
         /// <param name="f">The underlying <c>np.*</c> binary op (e.g. <c>np.add</c>).</param>
         /// <param name="a">Left operand.</param>
         /// <param name="b">Right operand.</param>
-        /// <returns>The masked result, or the <see cref="masked"/> constant for a fully-masked 0-D result.</returns>
-        private MaskedArray Binary(Func<NDArray, NDArray, NDArray> f, object a, object b, bool promoteScalar = true)
+        /// <returns>The masked result, or the <see cref="NDMasked"/> constant for a fully-masked 0-D result.</returns>
+        private NDMaskedArray Binary(Func<NDArray, NDArray, NDArray> f, object a, object b, bool promoteScalar = true)
         {
             var da = AsData(a);
             var db = AsData(b);
@@ -1947,7 +1985,7 @@ namespace NumSharp
                 PromoteMaScalar(a, b, ref da, ref db);
             var result = f(da, db);
             // OR the two operand masks (nomask fast path: both absent ⇒ no result mask at all).
-            var m = Or((a as MaskedArray)?._mask, (b as MaskedArray)?._mask);
+            var m = Or((a as NDMaskedArray)?._mask, (b as NDMaskedArray)?._mask);
             return Wrap(result, m, da);
         }
 
@@ -1962,8 +2000,8 @@ namespace NumSharp
         /// <param name="domain">Invalid-input predicate over the two data arrays returning a boolean mask.</param>
         /// <param name="a">Left operand (numerator).</param>
         /// <param name="b">Right operand (denominator).</param>
-        /// <returns>The masked result, or the <see cref="masked"/> constant for a fully-masked 0-D result.</returns>
-        private MaskedArray DomainedBinary(Func<NDArray, NDArray, NDArray> f, Func<NDArray, NDArray, NDArray> domain, object a, object b)
+        /// <returns>The masked result, or the <see cref="NDMasked"/> constant for a fully-masked 0-D result.</returns>
+        private NDMaskedArray DomainedBinary(Func<NDArray, NDArray, NDArray> f, Func<NDArray, NDArray, NDArray> domain, object a, object b)
         {
             var da = AsData(a);
             var db = AsData(b);
@@ -1971,8 +2009,8 @@ namespace NumSharp
             PromoteMaScalar(a, b, ref da, ref db);
             var result = f(da, db);
             var m = Or(NonFiniteMask(result), domain(da, db));
-            m = Or(m, (a as MaskedArray)?._mask);
-            m = Or(m, (b as MaskedArray)?._mask);
+            m = Or(m, (a as NDMaskedArray)?._mask);
+            m = Or(m, (b as NDMaskedArray)?._mask);
             // Domained fill-back differs from the plain binary: NumPy zeroes masked slots then re-adds da,
             // which we reproduce as "put da back where it can safely cast, else leave zero".
             return Wrap(result, m, da, domainedZeroFill: true);
@@ -1981,7 +2019,7 @@ namespace NumSharp
         /// <summary>
         ///     Shared tail of all three wrappers: materializes the mask to the result shape, handles the 0-D
         ///     scalar case, writes the fill-back value into masked slots, and boxes everything into a
-        ///     <see cref="MaskedArray"/>.
+        ///     <see cref="NDMaskedArray"/>.
         /// </summary>
         /// <param name="result">The freshly computed (owned, writeable) data result.</param>
         /// <param name="m">The propagated mask, or null for no mask.</param>
@@ -1989,8 +2027,8 @@ namespace NumSharp
         /// unary, the left operand for binary).</param>
         /// <param name="domainedZeroFill">When true, use the domained fill-back (zero then re-add) instead of
         /// the plain copy-back.</param>
-        /// <returns>The masked result, or the <see cref="masked"/> constant when a 0-D result is fully masked.</returns>
-        private MaskedArray Wrap(NDArray result, NDArray m, NDArray fillbackSource, bool domainedZeroFill = false, string casting = "unsafe")
+        /// <returns>The masked result, or the <see cref="NDMasked"/> constant when a 0-D result is fully masked.</returns>
+        private NDMaskedArray Wrap(NDArray result, NDArray m, NDArray fillbackSource, bool domainedZeroFill = false, string casting = "unsafe")
         {
             // Keep the stored mask shape-consistent with the data (broadcast predicates/operand masks up).
             // `is not null` throughout — `m != null` would invoke NDArray's ELEMENTWISE `!=`.
@@ -2000,7 +2038,7 @@ namespace NumSharp
             // 0-D result: NumPy returns the `masked` singleton if masked, else the bare scalar. We return the
             // singleton when masked and a 0-D masked array otherwise (a deliberate C# type-consistency choice).
             if (result.ndim == 0)
-                return (m is not null && np.any(m)) ? masked : new MaskedArray(result, null);
+                return (m is not null && np.any(m)) ? NDMasked : new NDMaskedArray(result, null);
 
             // Restore data at masked positions so `.data` is meaningful there (masked values are still hidden).
             // No `np.any(m)` gate: copyto with an all-false mask is already a no-op, and the scan would cost a
@@ -2008,7 +2046,7 @@ namespace NumSharp
             if (m is not null)
                 FillBack(result, fillbackSource, m, domainedZeroFill, casting);
 
-            return new MaskedArray(result, m);
+            return new NDMaskedArray(result, m);
         }
 
         /// <summary>
@@ -2051,7 +2089,7 @@ namespace NumSharp
 
         /// <summary>
         ///     Normalizes any accepted operand to its data <see cref="NDArray"/>: unwraps a
-        ///     <see cref="MaskedArray"/>, passes an <see cref="NDArray"/> through, and converts a C# scalar or
+        ///     <see cref="NDMaskedArray"/>, passes an <see cref="NDArray"/> through, and converts a C# scalar or
         ///     array-like via <see cref="np.asarray(object,DType,char)"/>.
         /// </summary>
         /// <param name="a">The operand.</param>
@@ -2062,7 +2100,7 @@ namespace NumSharp
             switch (a)
             {
                 case null: throw new ArgumentNullException(nameof(a));
-                case MaskedArray m: return m._data;
+                case NDMaskedArray m: return m._data;
                 case NDArray nd: return nd;
                 case Array arr: return np.array(arr); // C# array-like (double[], int[,], …)
                 default: return NDArray.Scalar(a);    // boxed C# scalar (int/double/bool/…)
@@ -2074,7 +2112,7 @@ namespace NumSharp
         ///     int→int64, python float→float64, bool→bool, complex→complex128). numpy.ma wraps a scalar as
         ///     <c>np.asarray(scalar)</c> (a STRONG array) rather than a weak NEP50 scalar, which is why
         ///     <c>ma.multiply(int32, 2)</c> is int64 while the plain-np <c>np.multiply(int32, 2)</c> is int32.
-        ///     Returns null for a non-scalar operand (<see cref="NDArray"/>/<see cref="MaskedArray"/>/C# array/null),
+        ///     Returns null for a non-scalar operand (<see cref="NDArray"/>/<see cref="NDMaskedArray"/>/C# array/null),
         ///     whose own dtype already applies.
         /// </summary>
         /// <param name="x">A binary-op operand.</param>
@@ -2082,7 +2120,7 @@ namespace NumSharp
         private static NPTypeCode? BareScalarStrongDtype(object x) => x switch
         {
             NDArray => null,
-            MaskedArray => null,
+            NDMaskedArray => null,
             Array => null,
             null => null,
             bool => NPTypeCode.Boolean,
@@ -2148,7 +2186,7 @@ namespace NumSharp
         /// <param name="a">Operand (masked array or plain array-like).</param>
         /// <param name="axis">The axis whose lines are tainted wholesale by any masked element.</param>
         /// <returns>A masked array whose mask has been propagated along <paramref name="axis"/>.</returns>
-        private MaskedArray MaskPropagate(object a, int axis)
+        private NDMaskedArray MaskPropagate(object a, int axis)
         {
             var ma_ = array(a);
             var m = ma_._mask;
@@ -2157,7 +2195,7 @@ namespace NumSharp
             // any(m, axis, keepdims) has size 1 on `axis`; broadcasting it back and OR-ing taints the whole line.
             var line = np.any(m, axis, null, true);
             var newmask = np.logical_or(m, np.broadcast_to(line, m.Shape));
-            return new MaskedArray(ma_._data, newmask);
+            return new NDMaskedArray(ma_._data, newmask);
         }
 
         /// <summary>
@@ -2237,75 +2275,75 @@ namespace NumSharp
 
         /// <summary>Element-wise absolute value over the data; the mask is unchanged. Alias of <see cref="absolute"/>.</summary>
         /// <param name="a">Operand.</param><returns>A masked array of |data|.</returns>
-        public MaskedArray abs(object a) => Unary(x => np.abs(x), a);
+        public NDMaskedArray abs(object a) => Unary(x => np.abs(x), a);
 
         /// <summary>Element-wise absolute value over the data; the mask is unchanged (same op as <see cref="abs"/>).</summary>
         /// <param name="a">Operand.</param><returns>A masked array of |data|.</returns>
-        public MaskedArray absolute(object a) => Unary(x => np.abs(x), a);
+        public NDMaskedArray absolute(object a) => Unary(x => np.abs(x), a);
 
         /// <summary>Element-wise negation; mask unchanged.</summary>
         /// <param name="a">Operand.</param><returns>A masked array of -data.</returns>
-        public MaskedArray negative(object a) => Unary(x => np.negative(x), a);
+        public NDMaskedArray negative(object a) => Unary(x => np.negative(x), a);
 
         /// <summary>Float-only absolute value (promotes ints to float); mask unchanged.</summary>
         /// <param name="a">Operand.</param><returns>A masked array of the float |data|.</returns>
-        public MaskedArray fabs(object a) => Unary(x => np.fabs(x), a);
+        public NDMaskedArray fabs(object a) => Unary(x => np.fabs(x), a);
 
         /// <summary>Complex conjugate (real data passes through); mask unchanged.</summary>
         /// <param name="a">Operand.</param><returns>A masked array of conj(data).</returns>
-        public MaskedArray conjugate(object a) => Unary(x => np.conjugate(x), a);
+        public NDMaskedArray conjugate(object a) => Unary(x => np.conjugate(x), a);
 
         /// <summary>Angle (argument) of the elements; mask unchanged.</summary>
         /// <param name="a">Operand.</param><returns>A masked array of angle(data).</returns>
-        public MaskedArray angle(object a) => Unary(x => np.angle(x), a);
+        public NDMaskedArray angle(object a) => Unary(x => np.angle(x), a);
 
         /// <summary>Round to nearest integer, half-to-even; mask unchanged.</summary>
         /// <param name="a">Operand.</param><returns>A masked array of round(data).</returns>
-        public MaskedArray around(object a) => Unary(x => np.around(x), a);
+        public NDMaskedArray around(object a) => Unary(x => np.around(x), a);
 
         /// <summary>Floor; mask unchanged.</summary>
         /// <param name="a">Operand.</param><returns>A masked array of floor(data).</returns>
-        public MaskedArray floor(object a) => Unary(x => np.floor(x), a);
+        public NDMaskedArray floor(object a) => Unary(x => np.floor(x), a);
 
         /// <summary>Ceiling; mask unchanged.</summary>
         /// <param name="a">Operand.</param><returns>A masked array of ceil(data).</returns>
-        public MaskedArray ceil(object a) => Unary(x => np.ceil(x), a);
+        public NDMaskedArray ceil(object a) => Unary(x => np.ceil(x), a);
 
         /// <summary>e^x; mask unchanged.</summary>
         /// <param name="a">Operand.</param><returns>A masked array of exp(data).</returns>
-        public MaskedArray exp(object a) => Unary(x => np.exp(x), a);
+        public NDMaskedArray exp(object a) => Unary(x => np.exp(x), a);
 
         /// <summary>Sine; mask unchanged.</summary>
         /// <param name="a">Operand.</param><returns>A masked array of sin(data).</returns>
-        public MaskedArray sin(object a) => Unary(x => np.sin(x), a);
+        public NDMaskedArray sin(object a) => Unary(x => np.sin(x), a);
 
         /// <summary>Cosine; mask unchanged.</summary>
         /// <param name="a">Operand.</param><returns>A masked array of cos(data).</returns>
-        public MaskedArray cos(object a) => Unary(x => np.cos(x), a);
+        public NDMaskedArray cos(object a) => Unary(x => np.cos(x), a);
 
         /// <summary>Hyperbolic sine; mask unchanged.</summary>
         /// <param name="a">Operand.</param><returns>A masked array of sinh(data).</returns>
-        public MaskedArray sinh(object a) => Unary(x => np.sinh(x), a);
+        public NDMaskedArray sinh(object a) => Unary(x => np.sinh(x), a);
 
         /// <summary>Hyperbolic cosine; mask unchanged.</summary>
         /// <param name="a">Operand.</param><returns>A masked array of cosh(data).</returns>
-        public MaskedArray cosh(object a) => Unary(x => np.cosh(x), a);
+        public NDMaskedArray cosh(object a) => Unary(x => np.cosh(x), a);
 
         /// <summary>Hyperbolic tangent; mask unchanged.</summary>
         /// <param name="a">Operand.</param><returns>A masked array of tanh(data).</returns>
-        public MaskedArray tanh(object a) => Unary(x => np.tanh(x), a);
+        public NDMaskedArray tanh(object a) => Unary(x => np.tanh(x), a);
 
         /// <summary>Arctangent; mask unchanged.</summary>
         /// <param name="a">Operand.</param><returns>A masked array of arctan(data).</returns>
-        public MaskedArray arctan(object a) => Unary(x => np.arctan(x), a);
+        public NDMaskedArray arctan(object a) => Unary(x => np.arctan(x), a);
 
         /// <summary>Inverse hyperbolic sine; mask unchanged.</summary>
         /// <param name="a">Operand.</param><returns>A masked array of arcsinh(data).</returns>
-        public MaskedArray arcsinh(object a) => Unary(x => np.arcsinh(x), a);
+        public NDMaskedArray arcsinh(object a) => Unary(x => np.arcsinh(x), a);
 
         /// <summary>Logical NOT of the data; mask unchanged.</summary>
         /// <param name="a">Operand.</param><returns>A masked boolean array of !data.</returns>
-        public MaskedArray logical_not(object a) => Unary(x => np.logical_not(x), a);
+        public NDMaskedArray logical_not(object a) => Unary(x => np.logical_not(x), a);
 
         // ─────────────────────────────────────────────────────────────────────────────
         //  Unary ufuncs — domained (invalid inputs are additionally masked)
@@ -2314,39 +2352,39 @@ namespace NumSharp
         /// <summary>Square root; additionally MASKS inputs <c>&lt; 0</c> (and non-finite results) rather than
         /// letting them produce NaN, which is the whole point of the masked variant.</summary>
         /// <param name="a">Operand.</param><returns>A masked array of sqrt(data) with negatives masked.</returns>
-        public MaskedArray sqrt(object a) => Unary(x => np.sqrt(x), a, d => DomainGreaterEqual(d, 0.0));
+        public NDMaskedArray sqrt(object a) => Unary(x => np.sqrt(x), a, d => DomainGreaterEqual(d, 0.0));
 
         /// <summary>Natural log; additionally masks inputs <c>&lt;= 0</c>.</summary>
         /// <param name="a">Operand.</param><returns>A masked array of log(data) with non-positives masked.</returns>
-        public MaskedArray log(object a) => Unary(x => np.log(x), a, d => DomainGreater(d, 0.0));
+        public NDMaskedArray log(object a) => Unary(x => np.log(x), a, d => DomainGreater(d, 0.0));
 
         /// <summary>Base-2 log; additionally masks inputs <c>&lt;= 0</c>.</summary>
         /// <param name="a">Operand.</param><returns>A masked array of log2(data) with non-positives masked.</returns>
-        public MaskedArray log2(object a) => Unary(x => np.log2(x), a, d => DomainGreater(d, 0.0));
+        public NDMaskedArray log2(object a) => Unary(x => np.log2(x), a, d => DomainGreater(d, 0.0));
 
         /// <summary>Base-10 log; additionally masks inputs <c>&lt;= 0</c>.</summary>
         /// <param name="a">Operand.</param><returns>A masked array of log10(data) with non-positives masked.</returns>
-        public MaskedArray log10(object a) => Unary(x => np.log10(x), a, d => DomainGreater(d, 0.0));
+        public NDMaskedArray log10(object a) => Unary(x => np.log10(x), a, d => DomainGreater(d, 0.0));
 
         /// <summary>Tangent; additionally masks inputs near its poles (<c>|cos(x)| &lt; 1e-35</c>).</summary>
         /// <param name="a">Operand.</param><returns>A masked array of tan(data) with pole-neighbors masked.</returns>
-        public MaskedArray tan(object a) => Unary(x => np.tan(x), a, d => DomainTan(d, 1e-35));
+        public NDMaskedArray tan(object a) => Unary(x => np.tan(x), a, d => DomainTan(d, 1e-35));
 
         /// <summary>Arcsine; additionally masks inputs outside <c>[-1, 1]</c>.</summary>
         /// <param name="a">Operand.</param><returns>A masked array of arcsin(data) with out-of-domain inputs masked.</returns>
-        public MaskedArray arcsin(object a) => Unary(x => np.arcsin(x), a, d => DomainCheckInterval(d, -1.0, 1.0));
+        public NDMaskedArray arcsin(object a) => Unary(x => np.arcsin(x), a, d => DomainCheckInterval(d, -1.0, 1.0));
 
         /// <summary>Arccosine; additionally masks inputs outside <c>[-1, 1]</c>.</summary>
         /// <param name="a">Operand.</param><returns>A masked array of arccos(data) with out-of-domain inputs masked.</returns>
-        public MaskedArray arccos(object a) => Unary(x => np.arccos(x), a, d => DomainCheckInterval(d, -1.0, 1.0));
+        public NDMaskedArray arccos(object a) => Unary(x => np.arccos(x), a, d => DomainCheckInterval(d, -1.0, 1.0));
 
         /// <summary>Inverse hyperbolic cosine; additionally masks inputs <c>&lt; 1</c>.</summary>
         /// <param name="a">Operand.</param><returns>A masked array of arccosh(data) with sub-1 inputs masked.</returns>
-        public MaskedArray arccosh(object a) => Unary(x => np.arccosh(x), a, d => DomainGreaterEqual(d, 1.0));
+        public NDMaskedArray arccosh(object a) => Unary(x => np.arccosh(x), a, d => DomainGreaterEqual(d, 1.0));
 
         /// <summary>Inverse hyperbolic tangent; additionally masks inputs outside <c>(-1, 1)</c>.</summary>
         /// <param name="a">Operand.</param><returns>A masked array of arctanh(data) with out-of-domain inputs masked.</returns>
-        public MaskedArray arctanh(object a) => Unary(x => np.arctanh(x), a, d => DomainCheckInterval(d, -1.0 + 1e-15, 1.0 - 1e-15));
+        public NDMaskedArray arctanh(object a) => Unary(x => np.arctanh(x), a, d => DomainCheckInterval(d, -1.0 + 1e-15, 1.0 - 1e-15));
 
         // ─────────────────────────────────────────────────────────────────────────────
         //  Binary ufuncs — mask = OR of the two input masks
@@ -2355,87 +2393,87 @@ namespace NumSharp
         /// <summary>Element-wise sum; result is masked wherever EITHER operand was masked.</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
         /// <returns>A masked array of a+b.</returns>
-        public MaskedArray add(object a, object b) => Binary((x, y) => np.add(x, y), a, b);
+        public NDMaskedArray add(object a, object b) => Binary((x, y) => np.add(x, y), a, b);
 
         /// <summary>Element-wise difference; masked where either operand was.</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
         /// <returns>A masked array of a-b.</returns>
-        public MaskedArray subtract(object a, object b) => Binary((x, y) => np.subtract(x, y), a, b);
+        public NDMaskedArray subtract(object a, object b) => Binary((x, y) => np.subtract(x, y), a, b);
 
         /// <summary>Element-wise product; masked where either operand was.</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
         /// <returns>A masked array of a*b.</returns>
-        public MaskedArray multiply(object a, object b) => Binary((x, y) => np.multiply(x, y), a, b);
+        public NDMaskedArray multiply(object a, object b) => Binary((x, y) => np.multiply(x, y), a, b);
 
         /// <summary>Two-argument arctangent; masked where either operand was.</summary>
         /// <param name="a">y operand.</param><param name="b">x operand.</param>
         /// <returns>A masked array of arctan2(a, b).</returns>
-        public MaskedArray arctan2(object a, object b) => Binary((x, y) => np.arctan2(x, y), a, b);
+        public NDMaskedArray arctan2(object a, object b) => Binary((x, y) => np.arctan2(x, y), a, b);
 
         /// <summary>Euclidean hypotenuse; masked where either operand was.</summary>
         /// <param name="a">Left leg.</param><param name="b">Right leg.</param>
         /// <returns>A masked array of hypot(a, b).</returns>
-        public MaskedArray hypot(object a, object b) => Binary((x, y) => np.hypot(x, y), a, b);
+        public NDMaskedArray hypot(object a, object b) => Binary((x, y) => np.hypot(x, y), a, b);
 
         /// <summary>Element-wise equality; masked where either operand was.</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
         /// <returns>A masked boolean array of a==b.</returns>
-        public MaskedArray equal(object a, object b) => Binary((x, y) => np.equal(x, y), a, b);
+        public NDMaskedArray equal(object a, object b) => Binary((x, y) => np.equal(x, y), a, b);
 
         /// <summary>Element-wise inequality; masked where either operand was.</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
         /// <returns>A masked boolean array of a!=b.</returns>
-        public MaskedArray not_equal(object a, object b) => Binary((x, y) => np.not_equal(x, y), a, b);
+        public NDMaskedArray not_equal(object a, object b) => Binary((x, y) => np.not_equal(x, y), a, b);
 
         /// <summary>Element-wise less-than; masked where either operand was.</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
         /// <returns>A masked boolean array of a&lt;b.</returns>
-        public MaskedArray less(object a, object b) => Binary((x, y) => np.less(x, y), a, b);
+        public NDMaskedArray less(object a, object b) => Binary((x, y) => np.less(x, y), a, b);
 
         /// <summary>Element-wise less-or-equal; masked where either operand was.</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
         /// <returns>A masked boolean array of a&lt;=b.</returns>
-        public MaskedArray less_equal(object a, object b) => Binary((x, y) => np.less_equal(x, y), a, b);
+        public NDMaskedArray less_equal(object a, object b) => Binary((x, y) => np.less_equal(x, y), a, b);
 
         /// <summary>Element-wise greater-than; masked where either operand was.</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
         /// <returns>A masked boolean array of a&gt;b.</returns>
-        public MaskedArray greater(object a, object b) => Binary((x, y) => np.greater(x, y), a, b);
+        public NDMaskedArray greater(object a, object b) => Binary((x, y) => np.greater(x, y), a, b);
 
         /// <summary>Element-wise greater-or-equal; masked where either operand was.</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
         /// <returns>A masked boolean array of a&gt;=b.</returns>
-        public MaskedArray greater_equal(object a, object b) => Binary((x, y) => np.greater_equal(x, y), a, b);
+        public NDMaskedArray greater_equal(object a, object b) => Binary((x, y) => np.greater_equal(x, y), a, b);
 
         /// <summary>Logical AND; masked where either operand was.</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
         /// <returns>A masked boolean array of a&amp;&amp;b.</returns>
-        public MaskedArray logical_and(object a, object b) => Binary((x, y) => np.logical_and(x, y), a, b);
+        public NDMaskedArray logical_and(object a, object b) => Binary((x, y) => np.logical_and(x, y), a, b);
 
         /// <summary>Logical OR; masked where either operand was.</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
         /// <returns>A masked boolean array of a||b.</returns>
-        public MaskedArray logical_or(object a, object b) => Binary((x, y) => np.logical_or(x, y), a, b);
+        public NDMaskedArray logical_or(object a, object b) => Binary((x, y) => np.logical_or(x, y), a, b);
 
         /// <summary>Logical XOR; masked where either operand was.</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
         /// <returns>A masked boolean array of a^b.</returns>
-        public MaskedArray logical_xor(object a, object b) => Binary((x, y) => np.logical_xor(x, y), a, b);
+        public NDMaskedArray logical_xor(object a, object b) => Binary((x, y) => np.logical_xor(x, y), a, b);
 
         /// <summary>Bitwise AND; masked where either operand was.</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
         /// <returns>A masked array of a&amp;b.</returns>
-        public MaskedArray bitwise_and(object a, object b) => Binary((x, y) => np.bitwise_and(x, y), a, b);
+        public NDMaskedArray bitwise_and(object a, object b) => Binary((x, y) => np.bitwise_and(x, y), a, b);
 
         /// <summary>Bitwise OR; masked where either operand was.</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
         /// <returns>A masked array of a|b.</returns>
-        public MaskedArray bitwise_or(object a, object b) => Binary((x, y) => np.bitwise_or(x, y), a, b);
+        public NDMaskedArray bitwise_or(object a, object b) => Binary((x, y) => np.bitwise_or(x, y), a, b);
 
         /// <summary>Bitwise XOR; masked where either operand was.</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
         /// <returns>A masked array of a^b.</returns>
-        public MaskedArray bitwise_xor(object a, object b) => Binary((x, y) => np.bitwise_xor(x, y), a, b);
+        public NDMaskedArray bitwise_xor(object a, object b) => Binary((x, y) => np.bitwise_xor(x, y), a, b);
 
         /// <summary>Bit shift left (<c>a &lt;&lt; b</c>); masked where either operand was (NumPy's <c>left_shift</c>).
         /// Unlike the arithmetic/bitwise ma ops, NumPy's <c>left_shift</c> is a plain function (not a
@@ -2443,14 +2481,14 @@ namespace NumSharp
         /// the value operand's dtype (<c>ma.left_shift(int16, 1)</c> → int16). Hence <c>promoteScalar:false</c>.</summary>
         /// <param name="a">Value to shift.</param><param name="b">Shift amount.</param>
         /// <returns>A masked array of a&lt;&lt;b in <paramref name="a"/>'s dtype.</returns>
-        public MaskedArray left_shift(object a, object b) => Binary((x, y) => np.left_shift(x, y), a, b, promoteScalar: false);
+        public NDMaskedArray left_shift(object a, object b) => Binary((x, y) => np.left_shift(x, y), a, b, promoteScalar: false);
 
         /// <summary>Bit shift right (<c>a &gt;&gt; b</c>); masked where either operand was (NumPy's <c>right_shift</c>).
         /// Keeps the value operand's dtype for a bare scalar shift-count (see <see cref="left_shift"/>);
         /// <c>promoteScalar:false</c>.</summary>
         /// <param name="a">Value to shift.</param><param name="b">Shift amount.</param>
         /// <returns>A masked array of a&gt;&gt;b in <paramref name="a"/>'s dtype.</returns>
-        public MaskedArray right_shift(object a, object b) => Binary((x, y) => np.right_shift(x, y), a, b, promoteScalar: false);
+        public NDMaskedArray right_shift(object a, object b) => Binary((x, y) => np.right_shift(x, y), a, b, promoteScalar: false);
 
         // ─────────────────────────────────────────────────────────────────────────────
         //  Domained binary ufuncs — division family (unsafe divides are masked)
@@ -2460,32 +2498,32 @@ namespace NumSharp
         /// masked <c>divide</c> never surfaces an inf/NaN from division by zero.</summary>
         /// <param name="a">Numerator.</param><param name="b">Denominator.</param>
         /// <returns>A masked array of a/b with unsafe divides masked.</returns>
-        public MaskedArray divide(object a, object b) => DomainedBinary((x, y) => np.divide(x, y), SafeDivideDomain, a, b);
+        public NDMaskedArray divide(object a, object b) => DomainedBinary((x, y) => np.divide(x, y), SafeDivideDomain, a, b);
 
         /// <summary>Alias of <see cref="divide"/> (NumPy's <c>true_divide</c>).</summary>
         /// <param name="a">Numerator.</param><param name="b">Denominator.</param>
         /// <returns>A masked array of a/b with unsafe divides masked.</returns>
-        public MaskedArray true_divide(object a, object b) => DomainedBinary((x, y) => np.true_divide(x, y), SafeDivideDomain, a, b);
+        public NDMaskedArray true_divide(object a, object b) => DomainedBinary((x, y) => np.true_divide(x, y), SafeDivideDomain, a, b);
 
         /// <summary>Floor division; masks positions where the denominator is (near) zero.</summary>
         /// <param name="a">Numerator.</param><param name="b">Denominator.</param>
         /// <returns>A masked array of a//b with unsafe divides masked.</returns>
-        public MaskedArray floor_divide(object a, object b) => DomainedBinary((x, y) => np.floor_divide(x, y), SafeDivideDomain, a, b);
+        public NDMaskedArray floor_divide(object a, object b) => DomainedBinary((x, y) => np.floor_divide(x, y), SafeDivideDomain, a, b);
 
         /// <summary>Remainder (floored, sign follows divisor); masks positions where the denominator is (near) zero.</summary>
         /// <param name="a">Numerator.</param><param name="b">Denominator.</param>
         /// <returns>A masked array of a%b with unsafe divides masked.</returns>
-        public MaskedArray remainder(object a, object b) => DomainedBinary((x, y) => np.remainder(x, y), SafeDivideDomain, a, b);
+        public NDMaskedArray remainder(object a, object b) => DomainedBinary((x, y) => np.remainder(x, y), SafeDivideDomain, a, b);
 
         /// <summary>Alias of <see cref="remainder"/> (NumPy's <c>mod</c>).</summary>
         /// <param name="a">Numerator.</param><param name="b">Denominator.</param>
         /// <returns>A masked array of a%b with unsafe divides masked.</returns>
-        public MaskedArray mod(object a, object b) => DomainedBinary((x, y) => np.remainder(x, y), SafeDivideDomain, a, b);
+        public NDMaskedArray mod(object a, object b) => DomainedBinary((x, y) => np.remainder(x, y), SafeDivideDomain, a, b);
 
         /// <summary>C-style remainder (sign follows dividend); masks positions where the denominator is (near) zero.</summary>
         /// <param name="a">Numerator.</param><param name="b">Denominator.</param>
         /// <returns>A masked array of fmod(a, b) with unsafe divides masked.</returns>
-        public MaskedArray fmod(object a, object b) => DomainedBinary((x, y) => np.fmod(x, y), SafeDivideDomain, a, b);
+        public NDMaskedArray fmod(object a, object b) => DomainedBinary((x, y) => np.fmod(x, y), SafeDivideDomain, a, b);
 
         // ─────────────────────────────────────────────────────────────────────────────
         //  Reductions — masked entries are excluded by filling with the op's identity, and
@@ -2566,12 +2604,12 @@ namespace NumSharp
         }
 
         /// <summary>Boxes a computed reduction result + its (possibly null) mask, collapsing a fully-masked
-        /// 0-D result to the <see cref="masked"/> singleton (NumPy's scalar-reduction behavior).</summary>
-        private MaskedArray Finalize(NDArray result, NDArray newmask)
+        /// 0-D result to the <see cref="NDMasked"/> singleton (NumPy's scalar-reduction behavior).</summary>
+        private NDMaskedArray Finalize(NDArray result, NDArray newmask)
         {
             if (result.ndim == 0)
-                return (newmask is not null && np.any(newmask)) ? masked : new MaskedArray(result, null);
-            return new MaskedArray(result, newmask);
+                return (newmask is not null && np.any(newmask)) ? NDMasked : new NDMaskedArray(result, null);
+            return new NDMaskedArray(result, newmask);
         }
 
         /// <summary>Shared identity-fill reduction: fill masked with <paramref name="identity"/>, reduce via
@@ -2581,14 +2619,14 @@ namespace NumSharp
         /// <param name="fn">The underlying <c>np.*</c> reduction (data, axis, keepdims) → result.</param>
         /// <param name="axis">Reduction axis, or null to reduce the flattened array.</param>
         /// <param name="keepdims">Keep reduced axes as size-1 (NumPy keepdims).</param>
-        /// <returns>The masked reduction result (or <see cref="masked"/> for a fully-masked scalar).</returns>
-        private MaskedArray ReduceIdentity(object a, object identity, Func<NDArray, int?, bool, NDArray> fn, int? axis, bool keepdims)
+        /// <returns>The masked reduction result (or <see cref="NDMasked"/> for a fully-masked scalar).</returns>
+        private NDMaskedArray ReduceIdentity(object a, object identity, Func<NDArray, int?, bool, NDArray> fn, int? axis, bool keepdims)
         {
-            var mask = (a as MaskedArray)?._mask;
-            var d = mask is null ? AsData(a) : ((MaskedArray)a).filled(identity);
+            var mask = (a as NDMaskedArray)?._mask;
+            var d = mask is null ? AsData(a) : ((NDMaskedArray)a).filled(identity);
             var result = fn(d, axis, keepdims);
             if (mask is null)
-                return new MaskedArray(result, null);
+                return new NDMaskedArray(result, null);
             return Finalize(result, AllAlongAxis(mask, axis, keepdims));
         }
 
@@ -2597,21 +2635,21 @@ namespace NumSharp
         /// <param name="a">Operand.</param><param name="axis">Axis or null (flatten).</param>
         /// <param name="dtype">Accumulator dtype (NumPy sum dtype=).</param><param name="keepdims">Keep reduced axes.</param>
         /// <returns>The masked sum.</returns>
-        public MaskedArray sum(object a, int? axis = null, DType dtype = null, bool keepdims = false)
+        public NDMaskedArray sum(object a, int? axis = null, DType dtype = null, bool keepdims = false)
             => ReduceIdentity(a, 0, (x, ax, kd) => np.sum(x, ax, kd, dtype), axis, keepdims);
 
         /// <summary>Product over the axis; masked slots contribute 1.</summary>
         /// <param name="a">Operand.</param><param name="axis">Axis or null.</param>
         /// <param name="dtype">Accumulator dtype.</param><param name="keepdims">Keep reduced axes.</param>
         /// <returns>The masked product.</returns>
-        public MaskedArray prod(object a, int? axis = null, DType dtype = null, bool keepdims = false)
+        public NDMaskedArray prod(object a, int? axis = null, DType dtype = null, bool keepdims = false)
             => ReduceIdentity(a, 1, (x, ax, kd) => np.prod(x, ax, dtype, kd), axis, keepdims);
 
         /// <summary>Alias of <see cref="prod"/> (NumPy's <c>product</c>).</summary>
         /// <param name="a">Operand.</param><param name="axis">Axis or null.</param>
         /// <param name="dtype">Accumulator dtype.</param><param name="keepdims">Keep reduced axes.</param>
         /// <returns>The masked product.</returns>
-        public MaskedArray product(object a, int? axis = null, DType dtype = null, bool keepdims = false)
+        public NDMaskedArray product(object a, int? axis = null, DType dtype = null, bool keepdims = false)
             => prod(a, axis, dtype, keepdims);
 
         /// <summary>Minimum over the axis; masked slots are filled with the dtype's largest value so they are
@@ -2620,7 +2658,7 @@ namespace NumSharp
         /// <param name="fill_value">Override the masked fill (NumPy fill_value=); null uses <see cref="minimum_fill_value"/>.</param>
         /// <param name="keepdims">Keep reduced axes.</param>
         /// <returns>The masked minimum.</returns>
-        public MaskedArray min(object a, int? axis = null, object fill_value = null, bool keepdims = false)
+        public NDMaskedArray min(object a, int? axis = null, object fill_value = null, bool keepdims = false)
             => ReduceIdentity(a, fill_value ?? minimum_fill_value(a), (x, ax, kd) => np.min(x, ax, kd), axis, keepdims);
 
         /// <summary>Maximum over the axis; masked slots are filled with the dtype's smallest value.</summary>
@@ -2628,14 +2666,14 @@ namespace NumSharp
         /// <param name="fill_value">Override the masked fill; null uses <see cref="maximum_fill_value"/>.</param>
         /// <param name="keepdims">Keep reduced axes.</param>
         /// <returns>The masked maximum.</returns>
-        public MaskedArray max(object a, int? axis = null, object fill_value = null, bool keepdims = false)
+        public NDMaskedArray max(object a, int? axis = null, object fill_value = null, bool keepdims = false)
             => ReduceIdentity(a, fill_value ?? maximum_fill_value(a), (x, ax, kd) => np.max(x, ax, kd), axis, keepdims);
 
         /// <summary>Peak-to-peak (max − min) over the axis, over unmasked elements.</summary>
         /// <param name="a">Operand.</param><param name="axis">Axis or null.</param>
         /// <param name="fill_value">Masked fill passed to both min and max.</param><param name="keepdims">Keep reduced axes.</param>
         /// <returns>The masked range.</returns>
-        public MaskedArray ptp(object a, int? axis = null, object fill_value = null, bool keepdims = false)
+        public NDMaskedArray ptp(object a, int? axis = null, object fill_value = null, bool keepdims = false)
             => subtract(max(a, axis, fill_value, keepdims), min(a, axis, fill_value, keepdims));
 
         /// <summary>Number of UNMASKED elements along the axis (NumPy's <c>count</c>) — a plain int64 array,
@@ -2646,16 +2684,16 @@ namespace NumSharp
             // DimsOf, not AsData(a).Shape: for a nomask NON-CONTIGUOUS operand the strided Shape made
             // CountUnmasked size/iterate over the base buffer and undercount (a [::2] view of 8 counted 6).
             // The count is over the logical DIMENSIONS. See DimsOf.
-            => CountUnmasked((a as MaskedArray)?._mask, DimsOf(AsData(a)), axis, keepdims);
+            => CountUnmasked((a as NDMaskedArray)?._mask, DimsOf(AsData(a)), axis, keepdims);
 
         /// <summary>Mean over unmasked elements = sum/count (masked slots excluded from BOTH). A cell whose
         /// whole slice was masked is masked. Result is float (int/bool promote to float64).</summary>
         /// <param name="a">Operand.</param><param name="axis">Axis or null.</param>
         /// <param name="dtype">Sum accumulator dtype.</param><param name="keepdims">Keep reduced axes.</param>
         /// <returns>The masked mean.</returns>
-        public MaskedArray mean(object a, int? axis = null, DType dtype = null, bool keepdims = false)
+        public NDMaskedArray mean(object a, int? axis = null, DType dtype = null, bool keepdims = false)
         {
-            var mask = (a as MaskedArray)?._mask;
+            var mask = (a as NDMaskedArray)?._mask;
             var d = AsData(a);
             var tc = d.typecode;
             // NumPy mean dtype (default): int/bool → float64; float16 is COMPUTED in float32 then cast BACK to
@@ -2669,12 +2707,12 @@ namespace NumSharp
                 NPTypeCode.Complex => np.complex128,
                 _ => np.float64, // int/bool/float32/float64
             });
-            var filled0 = mask is null ? d : ((MaskedArray)a).filled(0);
+            var filled0 = mask is null ? d : ((NDMaskedArray)a).filled(0);
             var dsum = np.sum(filled0, axis, keepdims, dtype ?? compute).astype(compute);
             var cnt = CountUnmasked(mask, d.Shape, axis, keepdims).astype(compute);
             var result = np.divide(dsum, cnt).astype(outdt);     // count==0 slots → nan, masked below
             if (mask is null)
-                return new MaskedArray(result, null);
+                return new NDMaskedArray(result, null);
             var newmask = AllAlongAxis(mask, axis, keepdims);
             // NumPy computes the mean through MASKED arithmetic, so a fully-masked slice's .data is 0 (the
             // sum's identity), NOT the raw 0/0=NaN. Match it at the masked (count==0) positions.
@@ -2691,9 +2729,9 @@ namespace NumSharp
         /// <param name="ddof">Delta degrees of freedom (divisor is count − ddof).</param><param name="keepdims">Keep reduced axes.</param>
         /// <param name="mean">Precomputed centering mean (broadcast to the keepdims shape), or null to compute it.</param>
         /// <returns>The masked variance (real-valued, even for complex input).</returns>
-        public MaskedArray var(object a, int? axis = null, DType dtype = null, int ddof = 0, bool keepdims = false, object mean = null)
+        public NDMaskedArray var(object a, int? axis = null, DType dtype = null, int ddof = 0, bool keepdims = false, object mean = null)
         {
-            var mask = (a as MaskedArray)?._mask;
+            var mask = (a as NDMaskedArray)?._mask;
             var d = AsData(a);
             bool cplx = d.typecode == NPTypeCode.Complex;
             var computeType = cplx ? np.complex128 : np.float64;
@@ -2702,14 +2740,14 @@ namespace NumSharp
             if (mask is null && mean is null)
             {
                 var rn = axis is null ? np.var(d, keepdims, ddof, dtype) : np.var(d, axis.Value, keepdims, ddof, dtype);
-                return new MaskedArray(rn, null);
+                return new NDMaskedArray(rn, null);
             }
 
             // `maskEff` is the real mask, or an all-false stand-in when only a supplied mean took us off the fast
             // path — so every mask-driven step (where/AllAlongAxis) has a non-null operand and, with no real mask,
             // zeroes nothing and masks nothing.
             var maskEff = mask ?? np.zeros(DimsOf(d), np.@bool);
-            var filled0 = mask is null ? d : ((MaskedArray)a).filled(0);
+            var filled0 = mask is null ? d : ((NDMaskedArray)a).filled(0);
             var cntK = CountUnmasked(mask, d.Shape, axis, true).astype(computeType);
             // keepdims mean for centering — the SUPPLIED mean if given, else the unmasked slice mean.
             var meanK = mean is null
@@ -2734,25 +2772,25 @@ namespace NumSharp
         /// <c>keepdims</c> to <c>var</c>, never <c>mean</c> (a NumPy quirk: <c>ma.std(mean=X)</c> yields the PLAIN
         /// std, unlike <c>ma.var(mean=X)</c>). Reproduced here so a ported call behaves identically.</param>
         /// <returns>The masked standard deviation.</returns>
-        public MaskedArray std(object a, int? axis = null, DType dtype = null, int ddof = 0, bool keepdims = false, object mean = null)
+        public NDMaskedArray std(object a, int? axis = null, DType dtype = null, int ddof = 0, bool keepdims = false, object mean = null)
         {
             // NumPy's ma.std deliberately does NOT pass `mean` to var (only keepdims), so a supplied mean is a
             // no-op here too — matching ma.std(mean=X) == plain std, byte-for-byte.
             var v = var(a, axis, dtype, ddof, keepdims);
-            return ReferenceEquals(v, masked) ? masked : sqrt(v);
+            return ReferenceEquals(v, NDMasked) ? NDMasked : sqrt(v);
         }
 
         /// <summary>Anomalies (deviations from the mean along the axis) = <c>a − mean(a, axis, keepdims)</c>,
         /// mask preserved from the input.</summary>
         /// <param name="a">Operand.</param><param name="axis">Axis or null.</param><param name="dtype">Mean accumulator dtype.</param>
         /// <returns>The masked anomalies, same shape as the input.</returns>
-        public MaskedArray anom(object a, int? axis = null, DType dtype = null)
+        public NDMaskedArray anom(object a, int? axis = null, DType dtype = null)
             => subtract(a, mean(a, axis, dtype, keepdims: true));
 
         /// <summary>Alias of <see cref="anom"/> (NumPy's <c>anomalies</c>).</summary>
         /// <param name="a">Operand.</param><param name="axis">Axis or null.</param><param name="dtype">Mean accumulator dtype.</param>
         /// <returns>The masked anomalies.</returns>
-        public MaskedArray anomalies(object a, int? axis = null, DType dtype = null) => anom(a, axis, dtype);
+        public NDMaskedArray anomalies(object a, int? axis = null, DType dtype = null) => anom(a, axis, dtype);
 
         // ─────────────────────────────────────────────────────────────────────────────
         //  Covariance / correlation — PAIRWISE-COMPLETE over the mask (NumPy's ma.cov/corrcoef,
@@ -2791,7 +2829,7 @@ namespace NumSharp
                 rowvar = true;
             int meanAxis = rowvar ? 1 : 0;
             // Per-variable masked mean, broadcast back for the centering subtraction.
-            var meanMa = mean(new MaskedArray(xd, np.any(xmask) ? xmask : null), meanAxis);
+            var meanMa = mean(new NDMaskedArray(xd, np.any(xmask) ? xmask : null), meanAxis);
             var meanData = getdata(meanMa).astype(np.float64);
             NDArray meanB = rowvar
                 ? np.reshape(meanData, new Shape(meanData.size, 1))
@@ -2816,7 +2854,7 @@ namespace NumSharp
         /// <param name="ddof">Explicit delta DOF (divisor is pairwise-count − ddof); null uses bias.</param>
         /// <returns>The masked covariance matrix (squeezed to a scalar for a single variable).</returns>
         /// <exception cref="ValueError"><paramref name="allow_masked"/> is false and data is masked.</exception>
-        public MaskedArray cov(object x, object y = null, bool rowvar = true, bool bias = false, bool allow_masked = true, int? ddof = null)
+        public NDMaskedArray cov(object x, object y = null, bool rowvar = true, bool bias = false, bool allow_masked = true, int? ddof = null)
         {
             int dd = ddof ?? (bias ? 0 : 1);
             var (centered, xnotmask, rv) = CovHelper(x, y, rowvar, allow_masked);
@@ -2833,7 +2871,7 @@ namespace NumSharp
                 data = np.divide(np.dot(centered.T, centered), fact);
             }
             var mask = np.less_equal(fact, NDArray.Scalar(0.0));
-            return squeeze(new MaskedArray(data, np.any(mask) ? mask : null));
+            return squeeze(new NDMaskedArray(data, np.any(mask) ? mask : null));
         }
 
         /// <summary>
@@ -2846,7 +2884,7 @@ namespace NumSharp
         /// <param name="allow_masked">When false, raise if any value is masked.</param>
         /// <returns>The masked correlation matrix.</returns>
         /// <exception cref="ValueError"><paramref name="allow_masked"/> is false and data is masked.</exception>
-        public MaskedArray corrcoef(object x, object y = null, bool rowvar = true, bool allow_masked = true)
+        public NDMaskedArray corrcoef(object x, object y = null, bool rowvar = true, bool allow_masked = true)
         {
             var corr = cov(x, y, rowvar, false, allow_masked);
             // std = sqrt(diagonal(cov)); corr /= outer(std, std).
@@ -2865,7 +2903,7 @@ namespace NumSharp
         /// <c>_convolve_or_correlate</c>). With <paramref name="propagate_mask"/> a result element is masked if
         /// ANY masked cell contributed to it (mask = the boolean masks slid against ones); without it, a result
         /// is masked only when NO unmasked cell contributed (and the data is computed from the 0-filled inputs).</summary>
-        private MaskedArray ConvolveOrCorrelate(Func<NDArray, NDArray, string, NDArray> f, object a, object v, string mode, bool propagate_mask)
+        private NDMaskedArray ConvolveOrCorrelate(Func<NDArray, NDArray, string, NDArray> f, object a, object v, string mode, bool propagate_mask)
         {
             var da = getdata(a);
             var dv = getdata(v);
@@ -2885,7 +2923,7 @@ namespace NumSharp
                 mask = np.logical_not(contributed);
                 data = f(filled(a, 0), filled(v, 0), mode);
             }
-            return new MaskedArray(data, np.any(mask) ? mask : null);
+            return new NDMaskedArray(data, np.any(mask) ? mask : null);
         }
 
         /// <summary>Discrete linear convolution of two 1-D sequences, propagating the mask (NumPy's
@@ -2895,7 +2933,7 @@ namespace NumSharp
         /// <param name="propagate_mask">Mask a result if ANY masked cell contributed (true) vs only if NO
         /// unmasked cell did (false).</param>
         /// <returns>The masked convolution.</returns>
-        public MaskedArray convolve(object a, object v, string mode = "full", bool propagate_mask = true)
+        public NDMaskedArray convolve(object a, object v, string mode = "full", bool propagate_mask = true)
             => ConvolveOrCorrelate((x, y, m) => np.convolve(x, y, m), a, v, mode, propagate_mask);
 
         /// <summary>Cross-correlation of two 1-D sequences, propagating the mask (NumPy's <c>ma.correlate</c>).
@@ -2905,14 +2943,14 @@ namespace NumSharp
         /// <param name="propagate_mask">Mask a result if ANY masked cell contributed (true) vs only if NO
         /// unmasked cell did (false).</param>
         /// <returns>The masked cross-correlation.</returns>
-        public MaskedArray correlate(object a, object v, string mode = "valid", bool propagate_mask = true)
+        public NDMaskedArray correlate(object a, object v, string mode = "valid", bool propagate_mask = true)
             => ConvolveOrCorrelate((x, y, m) => np.correlate(x, y, m), a, v, mode, propagate_mask);
 
         /// <summary>
         ///     Applies <paramref name="func"/> repeatedly over the given <paramref name="axes"/> (NumPy's
         ///     <c>ma.apply_over_axes</c>): each pass calls <c>func(val, axis)</c> and — when the result dropped
         ///     the reduced axis — re-expands it, so a keepdims-less reduction still composes. <paramref name="func"/>
-        ///     receives (and returns) a whole <see cref="MaskedArray"/>, so the mask is handled by the reduction
+        ///     receives (and returns) a whole <see cref="NDMaskedArray"/>, so the mask is handled by the reduction
         ///     itself (this is why it composes cleanly, unlike per-1-D-slice <c>apply_along_axis</c>).
         /// </summary>
         /// <param name="func">The reduction, e.g. <c>(m, ax) =&gt; np.ma.sum(m, ax)</c>.</param>
@@ -2920,9 +2958,9 @@ namespace NumSharp
         /// <param name="axes">The axes to apply <paramref name="func"/> over, in order.</param>
         /// <returns>The successively-reduced masked array.</returns>
         /// <exception cref="ValueError"><paramref name="func"/> returns an array of the wrong rank.</exception>
-        public MaskedArray apply_over_axes(Func<MaskedArray, int, MaskedArray> func, object a, int[] axes)
+        public NDMaskedArray apply_over_axes(Func<NDMaskedArray, int, NDMaskedArray> func, object a, int[] axes)
         {
-            MaskedArray val = asanyarray(a);
+            NDMaskedArray val = asanyarray(a);
             foreach (var ax in axes)
             {
                 int axis = ax < 0 ? ax + val.ndim : ax;
@@ -2947,13 +2985,13 @@ namespace NumSharp
         /// <summary>Single-axis convenience for <see cref="apply_over_axes"/>.</summary>
         /// <param name="func">The reduction.</param><param name="a">Operand.</param><param name="axis">The axis.</param>
         /// <returns>The reduced masked array.</returns>
-        public MaskedArray apply_over_axes(Func<MaskedArray, int, MaskedArray> func, object a, int axis)
+        public NDMaskedArray apply_over_axes(Func<NDMaskedArray, int, NDMaskedArray> func, object a, int axis)
             => apply_over_axes(func, a, new[] { axis });
 
         /// <summary>
         ///     Applies <paramref name="func1d"/> to each 1-D MASKED slice of <paramref name="arr"/> taken along
         ///     <paramref name="axis"/>, assembling the results (NumPy's <c>ma.apply_along_axis</c>). The slice is
-        ///     handed over as a <see cref="MaskedArray"/> (via the indexer), so the mask rides through the
+        ///     handed over as a <see cref="NDMaskedArray"/> (via the indexer), so the mask rides through the
         ///     function; the output shape is <paramref name="arr"/>'s shape with the <paramref name="axis"/> entry
         ///     replaced by <paramref name="func1d"/>'s result shape (dropped entirely for a scalar result).
         /// </summary>
@@ -2965,7 +3003,7 @@ namespace NumSharp
         /// <exception cref="NotSupportedException"><paramref name="func1d"/> returns a result of rank ≥ 2 (NumSharp
         /// supports the scalar- and 1-D-result cases; a higher-rank per-slice result needs the object-array
         /// assembly NumSharp lacks).</exception>
-        public MaskedArray apply_along_axis(Func<MaskedArray, MaskedArray> func1d, int axis, object arr)
+        public NDMaskedArray apply_along_axis(Func<NDMaskedArray, NDMaskedArray> func1d, int axis, object arr)
         {
             var a = asanyarray(arr);
             int nd = a.ndim;
@@ -2977,18 +3015,18 @@ namespace NumSharp
             var outerShape = outerAxes.Select(d => shape[d]).ToArray();
 
             // One masked 1-D slice at the given outer coordinate: ints on the outer axes, ":" on `axis`.
-            MaskedArray SliceAt(long[] outer)
+            NDMaskedArray SliceAt(long[] outer)
             {
                 var idx = new object[nd];
                 idx[ax] = Slice.All;
                 for (int j = 0; j < outerAxes.Length; j++)
                     idx[outerAxes[j]] = (int)outer[j];
-                return (MaskedArray)a[idx];
+                return (NDMaskedArray)a[idx];
             }
 
             // C-order odometer over the outer index space (last outer axis fastest) so the flat result order
             // matches a reshape to outerShape.
-            var results = new List<MaskedArray>();
+            var results = new List<NDMaskedArray>();
             var coord = new long[outerAxes.Length];
             while (true)
             {
@@ -3010,7 +3048,7 @@ namespace NumSharp
                 // Scalar per slice → output shape is exactly the outer shape.
                 var d = np.reshape(np.stack(datas, 0), new Shape(outerShape));
                 var m = np.reshape(np.stack(masks, 0), new Shape(outerShape));
-                return new MaskedArray(d, np.any(m) ? m : null);
+                return new NDMaskedArray(d, np.any(m) ? m : null);
             }
             if (resNd == 1)
             {
@@ -3020,7 +3058,7 @@ namespace NumSharp
                 var newShape = outerShape.Concat(new[] { resLen }).ToArray();
                 var d = np.moveaxis(np.reshape(np.stack(datas, 0), new Shape(newShape)), outerAxes.Length, ax);
                 var m = np.moveaxis(np.reshape(np.stack(masks, 0), new Shape(newShape)), outerAxes.Length, ax);
-                return new MaskedArray(d, np.any(m) ? m : null);
+                return new NDMaskedArray(d, np.any(m) ? m : null);
             }
             throw new NotSupportedException(
                 "np.ma.apply_along_axis supports a scalar or 1-D per-slice result; a rank-{resNd} result needs the object-array assembly NumSharp lacks.".Replace("{resNd}", resNd.ToString()));
@@ -3030,27 +3068,27 @@ namespace NumSharp
         /// POSITIONS stay masked in the result (NumPy semantics).</summary>
         /// <param name="a">Operand.</param><param name="axis">Axis or null (flatten, C-order).</param><param name="dtype">Accumulator dtype.</param>
         /// <returns>The masked cumulative sum.</returns>
-        public MaskedArray cumsum(object a, int? axis = null, DType dtype = null)
+        public NDMaskedArray cumsum(object a, int? axis = null, DType dtype = null)
             => Scan(a, 0, (x, ax) => np.cumsum(x, ax, dtype), axis);
 
         /// <summary>Cumulative product along the axis; masked slots contribute 1 but stay masked in the result.</summary>
         /// <param name="a">Operand.</param><param name="axis">Axis or null (flatten, C-order).</param><param name="dtype">Accumulator dtype.</param>
         /// <returns>The masked cumulative product.</returns>
-        public MaskedArray cumprod(object a, int? axis = null, DType dtype = null)
+        public NDMaskedArray cumprod(object a, int? axis = null, DType dtype = null)
             => Scan(a, 1, (x, ax) => np.cumprod(x, ax, dtype), axis);
 
         /// <summary>Shared scan (cumsum/cumprod): fill masked with the identity, scan, and carry the original
         /// per-position mask (raveled to match when axis is null).</summary>
-        private MaskedArray Scan(object a, object identity, Func<NDArray, int?, NDArray> fn, int? axis)
+        private NDMaskedArray Scan(object a, object identity, Func<NDArray, int?, NDArray> fn, int? axis)
         {
-            var mask = (a as MaskedArray)?._mask;
-            var d = mask is null ? AsData(a) : ((MaskedArray)a).filled(identity);
+            var mask = (a as NDMaskedArray)?._mask;
+            var d = mask is null ? AsData(a) : ((NDMaskedArray)a).filled(identity);
             var result = fn(d, axis);
             if (mask is null)
-                return new MaskedArray(result, null);
+                return new NDMaskedArray(result, null);
             // axis=null flattens the result in C-order — ravel the mask to match.
             var m = axis is null ? np.ravel(mask) : mask;
-            return new MaskedArray(result, m);
+            return new NDMaskedArray(result, m);
         }
 
         /// <summary>Indices of the minimum along the axis, treating masked slots as the dtype's largest value
@@ -3076,19 +3114,19 @@ namespace NumSharp
 
         /// <summary>Data with masked slots filled for an arg-reduction (null mask ⇒ raw data).</summary>
         private static NDArray ArgFilled(object a, object fill)
-            => (a as MaskedArray)?._mask is null ? AsData(a) : ((MaskedArray)a).filled(fill);
+            => (a as NDMaskedArray)?._mask is null ? AsData(a) : ((NDMaskedArray)a).filled(fill);
 
         /// <summary>Logical-AND reduction: masked slots are treated as True (excluded); a cell whose whole
         /// slice was masked is itself masked.</summary>
         /// <param name="a">Operand.</param><param name="axis">Axis or null.</param><param name="keepdims">Keep reduced axes.</param>
         /// <returns>The masked all-reduction (bool data).</returns>
-        public MaskedArray all(object a, int? axis = null, bool keepdims = false)
+        public NDMaskedArray all(object a, int? axis = null, bool keepdims = false)
             => ReduceIdentity(a, true, (x, ax, kd) => ax is null ? NDArray.Scalar(np.all(x)) : np.all(x, ax, null, kd), axis, keepdims);
 
         /// <summary>Logical-OR reduction: masked slots are treated as False (excluded).</summary>
         /// <param name="a">Operand.</param><param name="axis">Axis or null.</param><param name="keepdims">Keep reduced axes.</param>
         /// <returns>The masked any-reduction (bool data).</returns>
-        public MaskedArray any(object a, int? axis = null, bool keepdims = false)
+        public NDMaskedArray any(object a, int? axis = null, bool keepdims = false)
             => ReduceIdentity(a, false, (x, ax, kd) => ax is null ? NDArray.Scalar(np.any(x)) : np.any(x, ax, null, kd), axis, keepdims);
 
         // ─────────────────────────────────────────────────────────────────────────────
@@ -3099,69 +3137,69 @@ namespace NumSharp
         /// <summary>Masked array of zeros (no element masked). float64 by default.</summary>
         /// <param name="shape">Result shape.</param><param name="dtype">Element dtype (null ⇒ float64).</param>
         /// <returns>An unmasked masked array of zeros.</returns>
-        public MaskedArray zeros(Shape shape, DType dtype = null) => new MaskedArray(np.zeros(shape, dtype ?? np.float64), null);
+        public NDMaskedArray zeros(Shape shape, DType dtype = null) => new NDMaskedArray(np.zeros(shape, dtype ?? np.float64), null);
 
         /// <summary>Masked array of ones (no element masked).</summary>
         /// <param name="shape">Result shape.</param><param name="dtype">Element dtype (null ⇒ float64).</param>
         /// <returns>An unmasked masked array of ones.</returns>
-        public MaskedArray ones(Shape shape, DType dtype = null) => new MaskedArray(np.ones(shape, dtype ?? np.float64), null);
+        public NDMaskedArray ones(Shape shape, DType dtype = null) => new NDMaskedArray(np.ones(shape, dtype ?? np.float64), null);
 
         /// <summary>Masked array of uninitialized values (no element masked).</summary>
         /// <param name="shape">Result shape.</param><param name="dtype">Element dtype (null ⇒ float64).</param>
         /// <returns>An unmasked masked array of arbitrary contents.</returns>
-        public MaskedArray empty(Shape shape, DType dtype = null) => new MaskedArray(np.empty(shape, dtype ?? np.float64), null);
+        public NDMaskedArray empty(Shape shape, DType dtype = null) => new NDMaskedArray(np.empty(shape, dtype ?? np.float64), null);
 
         /// <summary>Masked zeros shaped like <paramref name="a"/> (no element masked; the input mask is NOT carried).</summary>
         /// <param name="a">Prototype array-like.</param><param name="dtype">Override dtype (null ⇒ prototype's).</param>
         /// <returns>An unmasked masked array of zeros.</returns>
-        public MaskedArray zeros_like(object a, DType dtype = null) => new MaskedArray(np.zeros_like(AsData(a), dtype), null);
+        public NDMaskedArray zeros_like(object a, DType dtype = null) => new NDMaskedArray(np.zeros_like(AsData(a), dtype), null);
 
         /// <summary>Masked ones shaped like <paramref name="a"/> (no element masked).</summary>
         /// <param name="a">Prototype array-like.</param><param name="dtype">Override dtype.</param>
         /// <returns>An unmasked masked array of ones.</returns>
-        public MaskedArray ones_like(object a, DType dtype = null) => new MaskedArray(np.ones_like(AsData(a), dtype), null);
+        public NDMaskedArray ones_like(object a, DType dtype = null) => new NDMaskedArray(np.ones_like(AsData(a), dtype), null);
 
         /// <summary>Masked uninitialized array shaped like <paramref name="a"/> (no element masked).</summary>
         /// <param name="a">Prototype array-like.</param><param name="dtype">Override dtype.</param>
         /// <returns>An unmasked masked array.</returns>
-        public MaskedArray empty_like(object a, DType dtype = null) => new MaskedArray(np.empty_like(AsData(a), dtype), null);
+        public NDMaskedArray empty_like(object a, DType dtype = null) => new NDMaskedArray(np.empty_like(AsData(a), dtype), null);
 
         /// <summary>Masked evenly-spaced values in [0, stop) (no element masked).</summary>
         /// <param name="stop">Exclusive upper bound.</param><returns>An unmasked masked range.</returns>
-        public MaskedArray arange(int stop) => new MaskedArray(np.arange(stop), null);
+        public NDMaskedArray arange(int stop) => new NDMaskedArray(np.arange(stop), null);
 
         /// <summary>Masked evenly-spaced values in [start, stop) stepping by <paramref name="step"/>.</summary>
         /// <param name="start">Inclusive start.</param><param name="stop">Exclusive stop.</param><param name="step">Step.</param>
         /// <returns>An unmasked masked range.</returns>
-        public MaskedArray arange(int start, int stop, int step = 1) => new MaskedArray(np.arange(start, stop, step), null);
+        public NDMaskedArray arange(int start, int stop, int step = 1) => new NDMaskedArray(np.arange(start, stop, step), null);
 
         /// <summary>Masked evenly-spaced floating values in [start, stop) stepping by <paramref name="step"/>.</summary>
         /// <param name="start">Inclusive start.</param><param name="stop">Exclusive stop.</param><param name="step">Step.</param>
         /// <returns>An unmasked masked range.</returns>
-        public MaskedArray arange(double start, double stop, double step = 1) => new MaskedArray(np.arange(start, stop, step), null);
+        public NDMaskedArray arange(double start, double stop, double step = 1) => new NDMaskedArray(np.arange(start, stop, step), null);
 
         /// <summary>Masked identity matrix (no element masked).</summary>
         /// <param name="n">Order.</param><param name="dtype">Element dtype (null ⇒ float64).</param>
         /// <returns>An unmasked masked identity.</returns>
-        public MaskedArray identity(int n, DType dtype = null) => new MaskedArray(np.identity(n, dtype), null);
+        public NDMaskedArray identity(int n, DType dtype = null) => new NDMaskedArray(np.identity(n, dtype), null);
 
         /// <summary>Masked grid-index array for <paramref name="dimensions"/> (no element masked).</summary>
         /// <param name="dimensions">Grid shape (32-bit spelling).</param><param name="dtype">Index dtype.</param>
         /// <returns>An unmasked masked index grid.</returns>
-        public MaskedArray indices(int[] dimensions, DType dtype = null) => new MaskedArray(np.indices(dimensions, dtype), null);
+        public NDMaskedArray indices(int[] dimensions, DType dtype = null) => new NDMaskedArray(np.indices(dimensions, dtype), null);
 
         /// <summary>Masked grid-index array for <paramref name="dimensions"/> (no element masked) —
         ///     the house <see cref="long"/> shape spelling, so an <see cref="NDArray"/>'s own <c>shape</c>
         ///     binds without a down-cast.</summary>
         /// <param name="dimensions">Grid shape.</param><param name="dtype">Index dtype.</param>
         /// <returns>An unmasked masked index grid.</returns>
-        public MaskedArray indices(long[] dimensions, DType dtype = null) => new MaskedArray(np.indices(dimensions, dtype), null);
+        public NDMaskedArray indices(long[] dimensions, DType dtype = null) => new NDMaskedArray(np.indices(dimensions, dtype), null);
 
         /// <summary>Masked grid-index array for <paramref name="dimensions"/> (no element masked) —
         ///     <see cref="Shape"/> spelling (accepts an <see cref="NDArray.Shape"/> or a value tuple).</summary>
         /// <param name="dimensions">Grid shape.</param><param name="dtype">Index dtype.</param>
         /// <returns>An unmasked masked index grid.</returns>
-        public MaskedArray indices(Shape dimensions, DType dtype = null) => new MaskedArray(np.indices(dimensions, dtype), null);
+        public NDMaskedArray indices(Shape dimensions, DType dtype = null) => new NDMaskedArray(np.indices(dimensions, dtype), null);
 
         // ─────────────────────────────────────────────────────────────────────────────
         //  masked_* constructors — build a mask from a condition/value and OR it onto any
@@ -3174,57 +3212,57 @@ namespace NumSharp
         /// <param name="a">Data array-like.</param>
         /// <param name="copy">Copy the data (default true) vs alias it.</param>
         /// <returns>A masked array of <paramref name="a"/>'s data with the new mask.</returns>
-        public MaskedArray masked_where(object condition, object a, bool copy = true)
+        public NDMaskedArray masked_where(object condition, object a, bool copy = true)
         {
             var cm = AsData(condition).astype(np.@bool);
             var d = AsData(a);
-            var existing = (a as MaskedArray)?._mask;
+            var existing = (a as NDMaskedArray)?._mask;
             var m = existing is null ? cm : (existing | cm);
-            return new MaskedArray(copy ? d.copy() : d, m);
+            return new NDMaskedArray(copy ? d.copy() : d, m);
         }
 
         /// <summary>Masks where <c>a == value</c> (NumPy's <c>masked_equal</c>).</summary>
         /// <param name="a">Data.</param><param name="value">Value to mask.</param><param name="copy">Copy the data.</param>
         /// <returns>The masked array.</returns>
-        public MaskedArray masked_equal(object a, object value, bool copy = true)
+        public NDMaskedArray masked_equal(object a, object value, bool copy = true)
             => masked_where(np.equal(AsData(a), NDArray.Scalar(value)), a, copy);
 
         /// <summary>Masks where <c>a != value</c>.</summary>
         /// <param name="a">Data.</param><param name="value">Value kept unmasked.</param><param name="copy">Copy the data.</param>
         /// <returns>The masked array.</returns>
-        public MaskedArray masked_not_equal(object a, object value, bool copy = true)
+        public NDMaskedArray masked_not_equal(object a, object value, bool copy = true)
             => masked_where(np.not_equal(AsData(a), NDArray.Scalar(value)), a, copy);
 
         /// <summary>Masks where <c>a &gt; value</c>.</summary>
         /// <param name="a">Data.</param><param name="value">Threshold.</param><param name="copy">Copy the data.</param>
         /// <returns>The masked array.</returns>
-        public MaskedArray masked_greater(object a, object value, bool copy = true)
+        public NDMaskedArray masked_greater(object a, object value, bool copy = true)
             => masked_where(np.greater(AsData(a), NDArray.Scalar(value)), a, copy);
 
         /// <summary>Masks where <c>a &gt;= value</c>.</summary>
         /// <param name="a">Data.</param><param name="value">Threshold.</param><param name="copy">Copy the data.</param>
         /// <returns>The masked array.</returns>
-        public MaskedArray masked_greater_equal(object a, object value, bool copy = true)
+        public NDMaskedArray masked_greater_equal(object a, object value, bool copy = true)
             => masked_where(np.greater_equal(AsData(a), NDArray.Scalar(value)), a, copy);
 
         /// <summary>Masks where <c>a &lt; value</c>. Computed as <c>value &gt; a</c> (scalar left) to route around
         /// the <c>np.less</c> 0-D-scalar-RHS quirk while staying NaN-exact (both give False for NaN).</summary>
         /// <param name="a">Data.</param><param name="value">Threshold.</param><param name="copy">Copy the data.</param>
         /// <returns>The masked array.</returns>
-        public MaskedArray masked_less(object a, object value, bool copy = true)
+        public NDMaskedArray masked_less(object a, object value, bool copy = true)
             => masked_where(np.greater(NDArray.Scalar(value), AsData(a)), a, copy);
 
         /// <summary>Masks where <c>a &lt;= value</c>.</summary>
         /// <param name="a">Data.</param><param name="value">Threshold.</param><param name="copy">Copy the data.</param>
         /// <returns>The masked array.</returns>
-        public MaskedArray masked_less_equal(object a, object value, bool copy = true)
+        public NDMaskedArray masked_less_equal(object a, object value, bool copy = true)
             => masked_where(np.less_equal(AsData(a), NDArray.Scalar(value)), a, copy);
 
         /// <summary>Masks the CLOSED interval where <c>v1 &lt;= a &lt;= v2</c> (bounds swapped if v1&gt;v2), NumPy's
         /// <c>masked_inside</c>.</summary>
         /// <param name="a">Data.</param><param name="v1">One bound.</param><param name="v2">Other bound.</param><param name="copy">Copy the data.</param>
         /// <returns>The masked array.</returns>
-        public MaskedArray masked_inside(object a, double v1, double v2, bool copy = true)
+        public NDMaskedArray masked_inside(object a, double v1, double v2, bool copy = true)
         {
             var lo = Math.Min(v1, v2); var hi = Math.Max(v1, v2);
             var d = AsData(a);
@@ -3236,7 +3274,7 @@ namespace NumSharp
         /// NumPy's <c>masked_outside</c>.</summary>
         /// <param name="a">Data.</param><param name="v1">One bound.</param><param name="v2">Other bound.</param><param name="copy">Copy the data.</param>
         /// <returns>The masked array.</returns>
-        public MaskedArray masked_outside(object a, double v1, double v2, bool copy = true)
+        public NDMaskedArray masked_outside(object a, double v1, double v2, bool copy = true)
         {
             var lo = Math.Min(v1, v2); var hi = Math.Max(v1, v2);
             var d = AsData(a);
@@ -3248,7 +3286,7 @@ namespace NumSharp
         /// nothing is masked (every value is finite).</summary>
         /// <param name="a">Data.</param><param name="copy">Copy the data.</param>
         /// <returns>The masked array.</returns>
-        public MaskedArray masked_invalid(object a, bool copy = true)
+        public NDMaskedArray masked_invalid(object a, bool copy = true)
         {
             var d = AsData(a);
             var cond = NonFiniteMask(d) ?? np.zeros(DimsOf(d), np.@bool);
@@ -3260,7 +3298,7 @@ namespace NumSharp
         /// <param name="a">Data.</param><param name="value">Value to mask around.</param>
         /// <param name="rtol">Relative tolerance.</param><param name="atol">Absolute tolerance.</param><param name="copy">Copy the data.</param>
         /// <returns>The masked array (fill_value = <paramref name="value"/>).</returns>
-        public MaskedArray masked_values(object a, double value, double rtol = 1e-5, double atol = 1e-8, bool copy = true)
+        public NDMaskedArray masked_values(object a, double value, double rtol = 1e-5, double atol = 1e-8, bool copy = true)
         {
             // NumPy fills masked positions with `value` FIRST (xnew = filled(x, value)), THEN masks by
             // approximate equality — so a pre-masked slot's data becomes `value` and is re-masked.
@@ -3270,13 +3308,13 @@ namespace NumSharp
                 ? np.isclose(xnew, NDArray.Scalar(value), rtol, atol)
                 : np.equal(xnew, NDArray.Scalar(value));
             // shrink an all-False mask to nomask (NumPy's shrink_mask default).
-            return new MaskedArray(copy ? xnew.copy() : xnew, np.any(mask) ? mask : null, value);
+            return new NDMaskedArray(copy ? xnew.copy() : xnew, np.any(mask) ? mask : null, value);
         }
 
         /// <summary>Masks elements exactly equal to <paramref name="value"/> (NumPy's <c>masked_object</c>).</summary>
         /// <param name="a">Data.</param><param name="value">Value to mask.</param><param name="copy">Copy the data.</param>
         /// <returns>The masked array.</returns>
-        public MaskedArray masked_object(object a, object value, bool copy = true) => masked_equal(a, value, copy);
+        public NDMaskedArray masked_object(object a, object value, bool copy = true) => masked_equal(a, value, copy);
 
         // ─────────────────────────────────────────────────────────────────────────────
         //  Extrema (element-wise), power, where, round
@@ -3287,7 +3325,7 @@ namespace NumSharp
         /// <param name="a">First operand (or the array to reduce).</param>
         /// <param name="b">Second operand, or null to reduce <paramref name="a"/>.</param>
         /// <returns>The element-wise or reduced masked maximum.</returns>
-        public MaskedArray maximum(object a, object b = null)
+        public NDMaskedArray maximum(object a, object b = null)
             => b is null ? max(a) : where(greater(a, b), a, b);
 
         /// <summary>Element-wise minimum of two operands (mask = OR); with <paramref name="b"/> omitted it is the
@@ -3295,7 +3333,7 @@ namespace NumSharp
         /// <param name="a">First operand (or the array to reduce).</param>
         /// <param name="b">Second operand, or null to reduce <paramref name="a"/>.</param>
         /// <returns>The element-wise or reduced masked minimum.</returns>
-        public MaskedArray minimum(object a, object b = null)
+        public NDMaskedArray minimum(object a, object b = null)
             => b is null ? min(a) : where(greater(b, a), a, b); // a<b ≡ b>a (routes around the np.less scalar quirk)
 
         /// <summary>Masked power (NumPy's <c>ma.power</c>): masked positions take the base's data; a non-finite
@@ -3303,15 +3341,15 @@ namespace NumSharp
         /// slot exists ONLY for signature parity — NumPy rejects a 3-argument masked power, and so does this.</summary>
         /// <param name="a">Base.</param><param name="b">Exponent.</param>
         /// <param name="third">Must be null — a non-null modulus raises <see cref="MaskError"/>, matching NumPy.</param>
-        /// <returns>The masked power (or the <see cref="masked"/> scalar for a fully-masked 0-D result).</returns>
+        /// <returns>The masked power (or the <see cref="NDMasked"/> scalar for a fully-masked 0-D result).</returns>
         /// <exception cref="MaskError"><paramref name="third"/> is non-null (NumPy's
         /// "3-argument power not supported.").</exception>
-        public MaskedArray power(object a, object b, object third = null)
+        public NDMaskedArray power(object a, object b, object third = null)
         {
             // NumPy's ma.power raises on a modulus argument rather than computing pow(a, b, mod).
             if (third is not null)
                 throw new MaskError("3-argument power not supported.");
-            var m = Or((a as MaskedArray)?._mask, (b as MaskedArray)?._mask);
+            var m = Or((a as NDMaskedArray)?._mask, (b as NDMaskedArray)?._mask);
             var fa = AsData(a);
             var fb = AsData(b);
             // ma.power(int32, 2) → int64 (scalar-strong promotion, like the other binary ops).
@@ -3322,7 +3360,7 @@ namespace NumSharp
             var invalid = NonFiniteMask(result); // NaN/±inf ⇒ masked + data set to fill
             var finalMask = Or(m, invalid);
             if (result.ndim == 0)
-                return (finalMask is not null && np.any(finalMask)) ? masked : new MaskedArray(result, null);
+                return (finalMask is not null && np.any(finalMask)) ? NDMasked : new NDMaskedArray(result, null);
             if (invalid is not null && np.any(invalid))
             {
                 result = result.copy();
@@ -3330,7 +3368,7 @@ namespace NumSharp
             }
             if (finalMask is not null && !finalMask.Shape.Equals(result.Shape))
                 finalMask = np.broadcast_to(finalMask, result.Shape).copy();
-            return new MaskedArray(result, finalMask);
+            return new NDMaskedArray(result, finalMask);
         }
 
         /// <summary>Masked <c>where</c> (NumPy's <c>ma.where</c>): picks <paramref name="x"/> where the condition
@@ -3340,9 +3378,9 @@ namespace NumSharp
         /// <param name="x">Values chosen where the condition is True.</param>
         /// <param name="y">Values chosen where the condition is False/masked.</param>
         /// <returns>The masked selection.</returns>
-        public MaskedArray where(object condition, object x, object y)
+        public NDMaskedArray where(object condition, object x, object y)
         {
-            var cond = condition as MaskedArray;
+            var cond = condition as NDMaskedArray;
             var cf = (cond?._mask is null ? AsData(condition) : cond.filled(false)).astype(np.@bool);
             var xd = AsData(x);
             var yd = AsData(y);
@@ -3356,20 +3394,20 @@ namespace NumSharp
             var mask = np.where(cf, xm, ym);
             mask = np.where(cm, NDArray.Scalar(true), mask);
             // Shrink an all-False mask back to nomask (NumPy's _shrink_mask).
-            return new MaskedArray(data, np.any(mask) ? mask : null);
+            return new NDMaskedArray(data, np.any(mask) ? mask : null);
         }
 
         /// <summary>Rounds each element to <paramref name="decimals"/> places (half-to-even), preserving the mask
         /// (NumPy's <c>ma.round</c>). Masked positions carry their rounded data but stay masked.</summary>
         /// <param name="a">Data.</param><param name="decimals">Decimal places.</param>
         /// <returns>The masked, rounded array.</returns>
-        public MaskedArray round(object a, int decimals = 0)
-            => new MaskedArray(np.around(AsData(a), decimals), (a as MaskedArray)?._mask);
+        public NDMaskedArray round(object a, int decimals = 0)
+            => new NDMaskedArray(np.around(AsData(a), decimals), (a as NDMaskedArray)?._mask);
 
         /// <summary>Alias of <see cref="round"/> (NumPy's <c>around</c>).</summary>
         /// <param name="a">Data.</param><param name="decimals">Decimal places.</param>
         /// <returns>The masked, rounded array.</returns>
-        public MaskedArray around(object a, int decimals = 0) => round(a, decimals);
+        public NDMaskedArray around(object a, int decimals = 0) => round(a, decimals);
 
         // ─────────────────────────────────────────────────────────────────────────────
         //  Shape / manipulation — the SAME transform is applied to the data AND the mask,
@@ -3379,52 +3417,52 @@ namespace NumSharp
         /// <summary>Applies a shape transform to both the data and (if present) the mask, keeping them aligned.</summary>
         /// <param name="a">Operand.</param><param name="f">The <c>np.*</c> transform to run on data and mask.</param>
         /// <returns>The transformed masked array.</returns>
-        private MaskedArray Map1(object a, Func<NDArray, NDArray> f)
+        private NDMaskedArray Map1(object a, Func<NDArray, NDArray> f)
         {
-            var m = (a as MaskedArray)?._mask;
-            return new MaskedArray(f(AsData(a)), m is null ? null : f(m));
+            var m = (a as NDMaskedArray)?._mask;
+            return new NDMaskedArray(f(AsData(a)), m is null ? null : f(m));
         }
 
         /// <summary>Applies a joining transform to a sequence's data arrays and, when ANY input is masked, to
         /// their full mask arrays (an all-unmasked sequence stays nomask).</summary>
         /// <param name="arrays">The operands.</param><param name="f">The <c>np.*</c> join over the arrays.</param>
         /// <returns>The joined masked array.</returns>
-        private MaskedArray MapSeq(object[] arrays, Func<NDArray[], NDArray> f)
+        private NDMaskedArray MapSeq(object[] arrays, Func<NDArray[], NDArray> f)
         {
             var rd = f(arrays.Select(AsData).ToArray());
-            if (!arrays.Any(x => (x as MaskedArray)?._mask is not null))
-                return new MaskedArray(rd, null);
-            return new MaskedArray(rd, f(arrays.Select(getmaskarray).ToArray()));
+            if (!arrays.Any(x => (x as NDMaskedArray)?._mask is not null))
+                return new NDMaskedArray(rd, null);
+            return new NDMaskedArray(rd, f(arrays.Select(getmaskarray).ToArray()));
         }
 
         /// <summary>Flattened VIEW in the given order (mask flattened alike). NumPy's <c>ravel</c>.</summary>
         /// <param name="a">Operand.</param><param name="order">'C' or 'F'.</param><returns>The flattened masked array.</returns>
-        public MaskedArray ravel(object a, char order = 'C') => Map1(a, d => np.ravel(d, order));
+        public NDMaskedArray ravel(object a, char order = 'C') => Map1(a, d => np.ravel(d, order));
 
         /// <summary>Flattened COPY (NumPy's <c>flatten</c> — always copies, unlike <see cref="ravel"/>).</summary>
         /// <param name="a">Operand.</param><param name="order">'C' or 'F'.</param><returns>The flattened masked copy.</returns>
-        public MaskedArray flatten(object a, char order = 'C') => Map1(a, d => np.ravel(d, order).copy());
+        public NDMaskedArray flatten(object a, char order = 'C') => Map1(a, d => np.ravel(d, order).copy());
 
         /// <summary>Reshape to <paramref name="new_shape"/> (mask reshaped alike). The parameter is spelled
         /// <c>new_shape</c> so a NumPy call <c>ma.reshape(a, new_shape=…)</c> ports verbatim.</summary>
         /// <param name="a">Operand.</param><param name="new_shape">New dimensions (one may be -1).</param><returns>The reshaped masked array.</returns>
-        public MaskedArray reshape(object a, params int[] new_shape) => Map1(a, d => np.reshape(d, new_shape));
+        public NDMaskedArray reshape(object a, params int[] new_shape) => Map1(a, d => np.reshape(d, new_shape));
 
         /// <summary>Reshape to a <see cref="Shape"/> (mask reshaped alike).</summary>
         /// <param name="a">Operand.</param><param name="new_shape">New shape.</param><returns>The reshaped masked array.</returns>
-        public MaskedArray reshape(object a, Shape new_shape) => Map1(a, d => np.reshape(d, new_shape));
+        public NDMaskedArray reshape(object a, Shape new_shape) => Map1(a, d => np.reshape(d, new_shape));
 
         /// <summary>Permute axes (mask transposed alike); reverses all axes when <paramref name="axes"/> is null.</summary>
         /// <param name="a">Operand.</param><param name="axes">Permutation, or null to reverse.</param><returns>The transposed masked array.</returns>
-        public MaskedArray transpose(object a, int[] axes = null) => Map1(a, d => np.transpose(d, axes));
+        public NDMaskedArray transpose(object a, int[] axes = null) => Map1(a, d => np.transpose(d, axes));
 
         /// <summary>Swap two axes (mask swapped alike).</summary>
         /// <param name="a">Operand.</param><param name="axis1">First axis.</param><param name="axis2">Second axis.</param><returns>The masked array with swapped axes.</returns>
-        public MaskedArray swapaxes(object a, int axis1, int axis2) => Map1(a, d => np.swapaxes(d, axis1, axis2));
+        public NDMaskedArray swapaxes(object a, int axis1, int axis2) => Map1(a, d => np.swapaxes(d, axis1, axis2));
 
         /// <summary>Move an axis (mask moved alike).</summary>
         /// <param name="a">Operand.</param><param name="source">Source axis.</param><param name="destination">Destination axis.</param><returns>The masked array.</returns>
-        public MaskedArray moveaxis(object a, int source, int destination) => Map1(a, d => np.moveaxis(d, source, destination));
+        public NDMaskedArray moveaxis(object a, int source, int destination) => Map1(a, d => np.moveaxis(d, source, destination));
 
         /// <summary>Remove size-1 axes (mask squeezed alike). With <paramref name="axis"/> null EVERY size-1 axis
         /// is dropped; an explicit axis drops ONLY that one (and errors if it is not size 1, via
@@ -3432,16 +3470,16 @@ namespace NumSharp
         /// <param name="a">Operand.</param>
         /// <param name="axis">The single size-1 axis to drop, or null to drop all size-1 axes.</param>
         /// <returns>The squeezed masked array.</returns>
-        public MaskedArray squeeze(object a, int? axis = null)
+        public NDMaskedArray squeeze(object a, int? axis = null)
             => Map1(a, d => axis is null ? np.squeeze(d) : np.squeeze(d, axis.Value));
 
         /// <summary>Insert a size-1 axis at <paramref name="axis"/> (mask expanded alike).</summary>
         /// <param name="a">Operand.</param><param name="axis">Axis position.</param><returns>The masked array.</returns>
-        public MaskedArray expand_dims(object a, int axis) => Map1(a, d => np.expand_dims(d, axis));
+        public NDMaskedArray expand_dims(object a, int axis) => Map1(a, d => np.expand_dims(d, axis));
 
         /// <summary>Repeat elements (mask repeated alike, so repeated masked entries stay masked).</summary>
         /// <param name="a">Operand.</param><param name="repeats">Repeat count.</param><param name="axis">Axis or null (flatten).</param><returns>The masked array.</returns>
-        public MaskedArray repeat(object a, int repeats, int? axis = null) => Map1(a, d => np.repeat(d, repeats, axis));
+        public NDMaskedArray repeat(object a, int repeats, int? axis = null) => Map1(a, d => np.repeat(d, repeats, axis));
 
         /// <summary>Gather elements by index (mask gathered alike, so a taken element keeps its masked-ness).
         /// <paramref name="mode"/> selects the out-of-bounds policy ("raise"/"wrap"/"clip"), applied identically
@@ -3450,53 +3488,53 @@ namespace NumSharp
         /// <param name="axis">Axis or null.</param>
         /// <param name="mode">Out-of-bounds policy: "raise" (default)/"wrap"/"clip".</param>
         /// <returns>The masked array.</returns>
-        public MaskedArray take(object a, NDArray indices, int? axis = null, string mode = "raise")
+        public NDMaskedArray take(object a, NDArray indices, int? axis = null, string mode = "raise")
             => Map1(a, d => np.take(d, indices, axis, null, mode));
 
         /// <summary>Diagonal: 1-D input CONSTRUCTS a matrix with the values (and mask) on the k-th diagonal;
         /// 2-D input EXTRACTS the k-th diagonal (and its mask). NumPy's <c>ma.diag</c>.</summary>
         /// <param name="v">Operand.</param><param name="k">Diagonal offset.</param><returns>The masked array.</returns>
-        public MaskedArray diag(object v, int k = 0) => Map1(v, d => np.diag(d, k));
+        public NDMaskedArray diag(object v, int k = 0) => Map1(v, d => np.diag(d, k));
 
         /// <summary>Flatten the input and build a diagonal matrix from it (mask alike).</summary>
         /// <param name="v">Operand.</param><param name="k">Diagonal offset.</param><returns>The masked diagonal matrix.</returns>
-        public MaskedArray diagflat(object v, int k = 0) => Map1(v, d => np.diagflat(d, k));
+        public NDMaskedArray diagflat(object v, int k = 0) => Map1(v, d => np.diagflat(d, k));
 
         /// <summary>At-least-1-D view (mask alike).</summary>
         /// <param name="a">Operand.</param><returns>The masked array, rank ≥ 1.</returns>
-        public MaskedArray atleast_1d(object a) => Map1(a, d => np.atleast_1d(d));
+        public NDMaskedArray atleast_1d(object a) => Map1(a, d => np.atleast_1d(d));
 
         /// <summary>At-least-2-D view (mask alike).</summary>
         /// <param name="a">Operand.</param><returns>The masked array, rank ≥ 2.</returns>
-        public MaskedArray atleast_2d(object a) => Map1(a, d => np.atleast_2d(d));
+        public NDMaskedArray atleast_2d(object a) => Map1(a, d => np.atleast_2d(d));
 
         /// <summary>At-least-3-D view (mask alike).</summary>
         /// <param name="a">Operand.</param><returns>The masked array, rank ≥ 3.</returns>
-        public MaskedArray atleast_3d(object a) => Map1(a, d => np.atleast_3d(d));
+        public NDMaskedArray atleast_3d(object a) => Map1(a, d => np.atleast_3d(d));
 
         /// <summary>Join arrays along an existing axis (masks joined alike; all-unmasked ⇒ nomask).</summary>
         /// <param name="arrays">Operands.</param><param name="axis">Join axis.</param><returns>The joined masked array.</returns>
-        public MaskedArray concatenate(object[] arrays, int axis = 0) => MapSeq(arrays, ds => np.concatenate(ds, axis));
+        public NDMaskedArray concatenate(object[] arrays, int axis = 0) => MapSeq(arrays, ds => np.concatenate(ds, axis));
 
         /// <summary>Stack arrays along a NEW axis (masks stacked alike).</summary>
         /// <param name="arrays">Operands.</param><param name="axis">New-axis position.</param><returns>The stacked masked array.</returns>
-        public MaskedArray stack(object[] arrays, int axis = 0) => MapSeq(arrays, ds => np.stack(ds, axis));
+        public NDMaskedArray stack(object[] arrays, int axis = 0) => MapSeq(arrays, ds => np.stack(ds, axis));
 
         /// <summary>Stack row-wise / along the first axis (masks alike).</summary>
         /// <param name="tup">Operands.</param><returns>The stacked masked array.</returns>
-        public MaskedArray vstack(params object[] tup) => MapSeq(tup, np.vstack);
+        public NDMaskedArray vstack(params object[] tup) => MapSeq(tup, np.vstack);
 
         /// <summary>Stack column-wise / along the second axis (masks alike).</summary>
         /// <param name="tup">Operands.</param><returns>The stacked masked array.</returns>
-        public MaskedArray hstack(params object[] tup) => MapSeq(tup, np.hstack);
+        public NDMaskedArray hstack(params object[] tup) => MapSeq(tup, np.hstack);
 
         /// <summary>Stack along the third axis (masks alike).</summary>
         /// <param name="tup">Operands.</param><returns>The stacked masked array.</returns>
-        public MaskedArray dstack(params object[] tup) => MapSeq(tup, np.dstack);
+        public NDMaskedArray dstack(params object[] tup) => MapSeq(tup, np.dstack);
 
         /// <summary>Stack 1-D arrays as columns of a 2-D result (masks alike).</summary>
         /// <param name="tup">Operands.</param><returns>The stacked masked array.</returns>
-        public MaskedArray column_stack(params object[] tup) => MapSeq(tup, np.column_stack);
+        public NDMaskedArray column_stack(params object[] tup) => MapSeq(tup, np.column_stack);
 
         /// <summary>The 1-D array of the UNMASKED values in C-order (NumPy's <c>compressed</c>) — a plain
         /// <see cref="NDArray"/>, since a compressed result has, by definition, no mask.</summary>
@@ -3504,7 +3542,7 @@ namespace NumSharp
         public NDArray compressed(object a)
         {
             var flat = np.ravel(AsData(a));
-            var m = (a as MaskedArray)?._mask;
+            var m = (a as NDMaskedArray)?._mask;
             return m is null ? flat.copy() : flat[np.logical_not(np.ravel(m))];
         }
 
@@ -3518,13 +3556,13 @@ namespace NumSharp
         /// <param name="a">Data.</param><param name="a_min">Lower bound (array-like/scalar), or null.</param>
         /// <param name="a_max">Upper bound (array-like/scalar), or null.</param>
         /// <returns>The clamped masked array (mask carried through unchanged).</returns>
-        public MaskedArray clip(object a, object a_min, object a_max)
+        public NDMaskedArray clip(object a, object a_min, object a_max)
         {
-            var m = (a as MaskedArray)?._mask;
+            var m = (a as NDMaskedArray)?._mask;
             // The base np.clip does the clamp on the raw data; the mask rides through (masked data is hidden
             // anyway, so clamping it too is harmless and matches NumPy's ma.clip).
             var r = np.clip(AsData(a), a_min is null ? null : AsData(a_min), a_max is null ? null : AsData(a_max));
-            return new MaskedArray(r, m);
+            return new NDMaskedArray(r, m);
         }
 
         /// <summary>
@@ -3533,23 +3571,23 @@ namespace NumSharp
         ///     the mask is chosen by the SAME index array, mirroring the data.
         /// </summary>
         /// <param name="indices">Integer index array (each in <c>[0, n-1]</c>); a masked index masks its output.</param>
-        /// <param name="choices">The <c>n</c> choice arrays (<see cref="MaskedArray"/>/<see cref="NDArray"/>/array-like).</param>
+        /// <param name="choices">The <c>n</c> choice arrays (<see cref="NDMaskedArray"/>/<see cref="NDArray"/>/array-like).</param>
         /// <param name="mode">Out-of-bounds policy: "raise" (default), "wrap", or "clip".</param>
         /// <returns>The merged masked array.</returns>
-        public MaskedArray choose(object indices, object[] choices, string mode = "raise")
+        public NDMaskedArray choose(object indices, object[] choices, string mode = "raise")
         {
             // Index data with masked slots filled by 0 (NumPy's filled(indices, 0)).
-            var im = (indices as MaskedArray)?._mask;
-            var c = im is null ? AsData(indices) : ((MaskedArray)indices).filled(0);
+            var im = (indices as NDMaskedArray)?._mask;
+            var c = im is null ? AsData(indices) : ((NDMaskedArray)indices).filled(0);
             // Pick the data by index; masked choice slots are hidden by the mask set below.
             var data = np.choose(c, choices.Select(AsData).ToArray(), mode: mode);
-            bool anyMasked = im is not null || choices.Any(ch => (ch as MaskedArray)?._mask is not null);
+            bool anyMasked = im is not null || choices.Any(ch => (ch as NDMaskedArray)?._mask is not null);
             if (!anyMasked)
-                return new MaskedArray(data, null);
+                return new NDMaskedArray(data, null);
             // Pick each choice's full mask by the SAME index, then OR in the index's own mask.
             var outmask = np.choose(c, choices.Select(getmaskarray).ToArray(), mode: mode);
             outmask = Or(outmask, im);
-            return new MaskedArray(data, (outmask is not null && np.any(outmask)) ? outmask : null);
+            return new NDMaskedArray(data, (outmask is not null && np.any(outmask)) ? outmask : null);
         }
 
         /// <summary>Keeps only the elements where the boolean <paramref name="condition"/> is True (NumPy's
@@ -3557,12 +3595,12 @@ namespace NumSharp
         /// <param name="condition">Boolean array-like selector (over the flattened elements, or along <paramref name="axis"/>).</param>
         /// <param name="a">Data.</param><param name="axis">Axis to compress along, or null to flatten first.</param>
         /// <returns>The compressed masked array.</returns>
-        public MaskedArray compress(object condition, object a, int? axis = null)
+        public NDMaskedArray compress(object condition, object a, int? axis = null)
         {
             var cond = AsData(condition).astype(np.@bool);
-            var m = (a as MaskedArray)?._mask;
+            var m = (a as NDMaskedArray)?._mask;
             var data = np.compress(cond, AsData(a), axis);
-            return new MaskedArray(data, m is null ? null : np.compress(cond, m, axis));
+            return new NDMaskedArray(data, m is null ? null : np.compress(cond, m, axis));
         }
 
         /// <summary>Extracts the <paramref name="offset"/>-th diagonal of a 2-D (or stacked) array (NumPy's
@@ -3570,10 +3608,10 @@ namespace NumSharp
         /// <param name="a">Data (rank ≥ 2).</param><param name="offset">Diagonal offset (0 = main).</param>
         /// <param name="axis1">First plane axis.</param><param name="axis2">Second plane axis.</param>
         /// <returns>The masked diagonal.</returns>
-        public MaskedArray diagonal(object a, int offset = 0, int axis1 = 0, int axis2 = 1)
+        public NDMaskedArray diagonal(object a, int offset = 0, int axis1 = 0, int axis2 = 1)
         {
-            var m = (a as MaskedArray)?._mask;
-            return new MaskedArray(np.diagonal(AsData(a), offset, axis1, axis2),
+            var m = (a as NDMaskedArray)?._mask;
+            return new NDMaskedArray(np.diagonal(AsData(a), offset, axis1, axis2),
                                    m is null ? null : np.diagonal(m, offset, axis1, axis2));
         }
 
@@ -3610,7 +3648,7 @@ namespace NumSharp
         /// <param name="append">Values appended along <paramref name="axis"/> before differencing, or null.</param>
         /// <returns>The masked differences (axis length reduced by <paramref name="n"/>).</returns>
         /// <exception cref="ArgumentException"><paramref name="n"/> is negative or <paramref name="a"/> is 0-D.</exception>
-        public MaskedArray diff(object a, int n = 1, int axis = -1, object prepend = null, object append = null)
+        public NDMaskedArray diff(object a, int n = 1, int axis = -1, object prepend = null, object append = null)
         {
             if (n == 0) return array(a);
             if (n < 0) throw new ArgumentException("order must be non-negative but got " + n);
@@ -3634,15 +3672,15 @@ namespace NumSharp
             else
             {
                 data = d;
-                mask = (a as MaskedArray)?._mask;
+                mask = (a as NDMaskedArray)?._mask;
             }
             int ax = axis < 0 ? axis + data.ndim : axis;
             var resultData = np.diff(data, n, axis);
             if (mask is null)
-                return new MaskedArray(resultData, null);
+                return new NDMaskedArray(resultData, null);
             for (int k = 0; k < n; k++)
                 mask = np.logical_or(DropAlong(mask, ax, dropFirst: true), DropAlong(mask, ax, dropFirst: false));
-            return new MaskedArray(resultData, np.any(mask) ? mask : null);
+            return new NDMaskedArray(resultData, np.any(mask) ? mask : null);
         }
 
         /// <summary>Drops one element from the front (<paramref name="dropFirst"/>) or back of <paramref name="a"/>
@@ -3660,7 +3698,7 @@ namespace NumSharp
         /// <param name="a">First operand.</param><param name="b">Value(s) appended.</param>
         /// <param name="axis">Join axis, or null to flatten both operands and append 1-D.</param>
         /// <returns>The appended masked array (a fresh allocation, never in place).</returns>
-        public MaskedArray append(object a, object b, int? axis = null)
+        public NDMaskedArray append(object a, object b, int? axis = null)
         {
             if (axis is null)
                 return concatenate(new object[] { ravel(a), ravel(b) }, 0);
@@ -3673,14 +3711,14 @@ namespace NumSharp
 
         /// <summary>Data of <paramref name="a"/> with masked slots filled by 0 (for a product/reduction that
         /// must treat masked as absent); a null-mask operand is returned unchanged.</summary>
-        private static NDArray Filled0(object a) => (a as MaskedArray)?._mask is null ? AsData(a) : ((MaskedArray)a).filled(0);
+        private static NDArray Filled0(object a) => (a as NDMaskedArray)?._mask is null ? AsData(a) : ((NDMaskedArray)a).filled(0);
 
         /// <summary>Number of MASKED elements along the axis (NumPy's <c>count_masked</c>) — a plain int64 array.</summary>
         /// <param name="a">Operand.</param><param name="axis">Axis or null.</param>
         /// <returns>An int64 count of masked elements.</returns>
         public NDArray count_masked(object a, int? axis = null)
         {
-            var m = (a as MaskedArray)?._mask ?? np.zeros(DimsOf(AsData(a)), np.@bool);
+            var m = (a as NDMaskedArray)?._mask ?? np.zeros(DimsOf(AsData(a)), np.@bool);
             return np.sum(m, axis, false, np.int64);
         }
 
@@ -3688,16 +3726,16 @@ namespace NumSharp
         /// the standard "fill me in" accumulator.</summary>
         /// <param name="shape">Result shape.</param><param name="dtype">Element dtype (null ⇒ float64).</param>
         /// <returns>A fully-masked array.</returns>
-        public MaskedArray masked_all(Shape shape, DType dtype = null)
-            => new MaskedArray(np.empty(shape, dtype ?? np.float64), np.ones(shape, np.@bool));
+        public NDMaskedArray masked_all(Shape shape, DType dtype = null)
+            => new NDMaskedArray(np.empty(shape, dtype ?? np.float64), np.ones(shape, np.@bool));
 
         /// <summary>A fully-masked array shaped and typed like <paramref name="a"/> (NumPy's <c>masked_all_like</c>).</summary>
         /// <param name="a">Prototype array-like.</param>
         /// <returns>A fully-masked array.</returns>
-        public MaskedArray masked_all_like(object a)
+        public NDMaskedArray masked_all_like(object a)
         {
             var d = AsData(a);
-            return new MaskedArray(np.empty_like(d), np.ones(DimsOf(d), np.@bool));
+            return new NDMaskedArray(np.empty_like(d), np.ones(DimsOf(d), np.@bool));
         }
 
         /// <summary>Weighted average over unmasked elements (NumPy's <c>average</c>): with no weights this is the
@@ -3706,7 +3744,7 @@ namespace NumSharp
         /// <param name="weights">Weights (same shape as <paramref name="a"/>, or 1-D along <paramref name="axis"/>); null ⇒ uniform.</param>
         /// <param name="keepdims">Keep the reduced axes as size-1 (NumPy 2.0 <c>keepdims</c>).</param>
         /// <returns>The masked (weighted) average.</returns>
-        public MaskedArray average(object a, int? axis = null, object weights = null, bool keepdims = false)
+        public NDMaskedArray average(object a, int? axis = null, object weights = null, bool keepdims = false)
             => AverageCore(a, axis, weights, keepdims).avg;
 
         /// <summary>
@@ -3718,14 +3756,14 @@ namespace NumSharp
         /// <param name="a">Data.</param><param name="axis">Axis or null.</param>
         /// <param name="weights">Weights, or null for uniform.</param><param name="keepdims">Keep reduced axes.</param>
         /// <returns>A tuple of the masked average and the (plain float64) sum of weights.</returns>
-        public (MaskedArray avg, NDArray sumOfWeights) average_returned(object a, int? axis = null, object weights = null, bool keepdims = false)
+        public (NDMaskedArray avg, NDArray sumOfWeights) average_returned(object a, int? axis = null, object weights = null, bool keepdims = false)
             => AverageCore(a, axis, weights, keepdims);
 
         /// <summary>Shared core of <see cref="average"/>/<see cref="average_returned"/>: computes the masked
         /// average and the sum-of-weights so the two public entry points never drift apart.</summary>
-        private (MaskedArray avg, NDArray sumOfWeights) AverageCore(object a, int? axis, object weights, bool keepdims)
+        private (NDMaskedArray avg, NDArray sumOfWeights) AverageCore(object a, int? axis, object weights, bool keepdims)
         {
-            var mask = (a as MaskedArray)?._mask;
+            var mask = (a as NDMaskedArray)?._mask;
             if (weights is null)
             {
                 // Uniform: the average is the plain masked mean, and the sum-of-weights is the unmasked COUNT.
@@ -3757,26 +3795,26 @@ namespace NumSharp
         /// masked-sorted, then the low/high middle of each slice's unmasked count is averaged).</summary>
         /// <param name="a">Data.</param><param name="axis">Axis or null (flatten).</param>
         /// <param name="keepdims">Keep the reduced axes as size-1 (NumPy 2.0 <c>keepdims</c>).</param>
-        /// <returns>The masked median (a slice with no unmasked element is <see cref="masked"/>; an unmasked NaN in
+        /// <returns>The masked median (a slice with no unmasked element is <see cref="NDMasked"/>; an unmasked NaN in
         /// a slice makes that slice's median NaN, matching NumPy).</returns>
-        public MaskedArray median(object a, int? axis = null, bool keepdims = false)
+        public NDMaskedArray median(object a, int? axis = null, bool keepdims = false)
         {
-            var mask = (a as MaskedArray)?._mask;
+            var mask = (a as NDMaskedArray)?._mask;
             var d = AsData(a);
             if (mask is null)
-                return new MaskedArray(np.median(d, axis, null, false, keepdims), null);
+                return new NDMaskedArray(np.median(d, axis, null, false, keepdims), null);
             if (axis is null)
             {
                 var comp = compressed(a);
                 if (comp.size == 0)
-                    return masked;
+                    return NDMasked;
                 var med = np.median(comp);
                 // keepdims on a flattened reduction ⇒ an all-ones shape of the input's rank (NumPy's (1,…,1)).
                 if (keepdims && d.ndim > 0)
                     med = np.reshape(med, new Shape(Enumerable.Repeat(1L, d.ndim).ToArray()));
-                return new MaskedArray(med, null);
+                return new NDMaskedArray(med, null);
             }
-            return MedianAxisMasked((MaskedArray)a, axis.Value, keepdims);
+            return MedianAxisMasked((NDMaskedArray)a, axis.Value, keepdims);
         }
 
         /// <summary>
@@ -3791,7 +3829,7 @@ namespace NumSharp
         /// <param name="keepdims">Re-insert the reduced axis as size 1.</param>
         /// <returns>The per-slice masked median.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range for the operand's rank.</exception>
-        private MaskedArray MedianAxisMasked(MaskedArray self, int axis, bool keepdims)
+        private NDMaskedArray MedianAxisMasked(NDMaskedArray self, int axis, bool keepdims)
         {
             NDArray data = self._data;
             int nd = data.ndim;
@@ -3811,7 +3849,7 @@ namespace NumSharp
 
             // Masked entries sort to the END (endwith default → minimum_fill_value key = +inf for float, dtype-max
             // for int), reproducing NumPy's fill_value=inf/None so a masked slot can never be picked as a middle.
-            MaskedArray asorted = sort(self, ax);
+            NDMaskedArray asorted = sort(self, ax);
             NDArray sdata = asorted._data;
             NDArray smask = asorted._mask;
 
@@ -3847,15 +3885,15 @@ namespace NumSharp
                 }
             }
 
-            var lowHigh = new MaskedArray(lhData, lhMask);
+            var lowHigh = new NDMaskedArray(lhData, lhMask);
 
             // Average the two middles across `ax`. Inexact: sum then /2 (avoids the masked inf/x pitfall) plus the
             // NaN-propagation check; integer/bool: a straight mean (which widens to float64 like NumPy).
-            MaskedArray s;
+            NDMaskedArray s;
             if (inexact)
             {
                 s = sum(lowHigh, ax);
-                s = new MaskedArray(np.true_divide(s._data, NDArray.Scalar(2.0)), s._mask);
+                s = new NDMaskedArray(np.true_divide(s._data, NDArray.Scalar(2.0)), s._mask);
                 s = MedianNanCheck(sdata, s, ax);
             }
             else
@@ -3870,10 +3908,10 @@ namespace NumSharp
             // back is byte-exact, and it is a no-op whenever the dtype already matches (integers stay float64 via
             // the `mean` branch, guarded by `inexact`).
             if (inexact && s._data.typecode != data.typecode)
-                s = new MaskedArray(s._data.astype(data.dtype), s._mask);
+                s = new NDMaskedArray(s._data.astype(data.dtype), s._mask);
 
             if (keepdims)
-                s = new MaskedArray(np.expand_dims(s._data, ax), s._mask is null ? null : np.expand_dims(s._mask, ax));
+                s = new NDMaskedArray(np.expand_dims(s._data, ax), s._mask is null ? null : np.expand_dims(s._mask, ax));
             return s;
         }
 
@@ -3887,7 +3925,7 @@ namespace NumSharp
         /// <param name="result">The computed per-slice median.</param>
         /// <param name="axis">The reduced axis of <paramref name="sortedData"/>.</param>
         /// <returns><paramref name="result"/> with NaN copied into the slices whose sorted tail is NaN.</returns>
-        private MaskedArray MedianNanCheck(NDArray sortedData, MaskedArray result, int axis)
+        private NDMaskedArray MedianNanCheck(NDArray sortedData, NDMaskedArray result, int axis)
         {
             if (sortedData.size == 0)
                 return result;
@@ -3897,7 +3935,7 @@ namespace NumSharp
                 return result;
             NDArray rd = result._data.copy();
             np.copyto(rd, potentialNans, casting: "unsafe", where: n);
-            return new MaskedArray(rd, result._mask);
+            return new NDMaskedArray(rd, result._mask);
         }
 
         /// <summary>True for the inexact (float/complex) dtypes, where median averages in floating point and the
@@ -3913,7 +3951,7 @@ namespace NumSharp
         /// <param name="to_end">Values appended to the end (array-like), or null.</param>
         /// <param name="to_begin">Values prepended (array-like), or null.</param>
         /// <returns>The masked consecutive differences.</returns>
-        public MaskedArray ediff1d(object arr, object to_end = null, object to_begin = null)
+        public NDMaskedArray ediff1d(object arr, object to_end = null, object to_begin = null)
         {
             var flat = ravel(arr);
             var ed = subtract(Map1(flat, x => x["1:"]), Map1(flat, x => x[":-1"]));
@@ -3934,7 +3972,7 @@ namespace NumSharp
         public bool allequal(object a, object b, bool fill_value = true)
         {
             NDArray eq = np.equal(AsData(a), AsData(b));
-            var mu = Or((a as MaskedArray)?._mask, (b as MaskedArray)?._mask);
+            var mu = Or((a as NDMaskedArray)?._mask, (b as NDMaskedArray)?._mask);
             if (mu is not null)
                 eq = fill_value ? (eq | mu) : (eq & np.logical_not(mu));
             return np.all(eq);
@@ -3949,7 +3987,7 @@ namespace NumSharp
         public bool allclose(object a, object b, bool masked_equal = true, double rtol = 1e-5, double atol = 1e-8)
         {
             NDArray close = np.isclose(AsData(a), AsData(b), rtol, atol);
-            var mu = Or((a as MaskedArray)?._mask, (b as MaskedArray)?._mask);
+            var mu = Or((a as NDMaskedArray)?._mask, (b as NDMaskedArray)?._mask);
             if (mu is not null)
                 close = masked_equal ? (close | mu) : (close & np.logical_not(mu));
             return np.all(close);
@@ -3963,7 +4001,7 @@ namespace NumSharp
         /// <param name="strict">Propagate masks along the contracted axes before the product (default false =
         /// treat masked as 0).</param>
         /// <returns>The masked dot product.</returns>
-        public MaskedArray dot(object a, object b, bool strict = false)
+        public NDMaskedArray dot(object a, object b, bool strict = false)
         {
             if (strict)
             {
@@ -3978,38 +4016,38 @@ namespace NumSharp
                 }
             }
             var product = np.dot(Filled0(a), Filled0(b));
-            var ma_ = (a as MaskedArray)?._mask;
-            var mb_ = (b as MaskedArray)?._mask;
+            var ma_ = (a as NDMaskedArray)?._mask;
+            var mb_ = (b as NDMaskedArray)?._mask;
             if (ma_ is null && mb_ is null)
-                return new MaskedArray(product, null);
+                return new NDMaskedArray(product, null);
             var va = (ma_ is null ? np.ones(DimsOf(AsData(a)), np.@bool) : np.logical_not(ma_)).astype(np.float64);
             var vb = (mb_ is null ? np.ones(DimsOf(AsData(b)), np.@bool) : np.logical_not(mb_)).astype(np.float64);
             var valid = np.dot(va, vb); // count of valid contributing pairs
             var m = np.equal(valid, NDArray.Scalar(0.0));
-            return new MaskedArray(product, np.any(m) ? m : null);
+            return new NDMaskedArray(product, np.any(m) ? m : null);
         }
 
         /// <summary>Inner product with masked slots treated as 0 (NumPy's <c>ma.inner</c>).</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
         /// <returns>The masked inner product (mask dropped — result treats masked as 0).</returns>
-        public MaskedArray inner(object a, object b) => new MaskedArray(np.inner(Filled0(a), Filled0(b)), null);
+        public NDMaskedArray inner(object a, object b) => new NDMaskedArray(np.inner(Filled0(a), Filled0(b)), null);
 
         /// <summary>Outer product with masked slots treated as 0; result[i,j] is masked iff a[i] or b[j] was
         /// masked (NumPy's <c>ma.outer</c>).</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
         /// <returns>The masked outer product.</returns>
-        public MaskedArray outer(object a, object b)
+        public NDMaskedArray outer(object a, object b)
         {
             var da = AsData(a); var db = AsData(b);
             var product = np.outer(Filled0(a), Filled0(b));
-            var ma_ = (a as MaskedArray)?._mask;
-            var mb_ = (b as MaskedArray)?._mask;
+            var ma_ = (a as NDMaskedArray)?._mask;
+            var mb_ = (b as NDMaskedArray)?._mask;
             if (ma_ is null && mb_ is null)
-                return new MaskedArray(product, null);
+                return new NDMaskedArray(product, null);
             var maf = ma_ is null ? np.zeros(new Shape(da.size), np.@bool) : np.ravel(ma_);
             var mbf = mb_ is null ? np.zeros(new Shape(db.size), np.@bool) : np.ravel(mb_);
             var mask = np.reshape(maf, new Shape(da.size, 1)) | np.reshape(mbf, new Shape(1, db.size));
-            return new MaskedArray(product, mask);
+            return new NDMaskedArray(product, mask);
         }
 
         /// <summary>Vandermonde matrix of a 1-D input; a masked input element ZEROES its whole row and the
@@ -4021,7 +4059,7 @@ namespace NumSharp
         {
             var d = AsData(x);
             var v = np.vander(d, n);
-            var m = (x as MaskedArray)?._mask;
+            var m = (x as NDMaskedArray)?._mask;
             if (m is not null)
             {
                 var col = np.reshape(m, new Shape(d.size, 1));
@@ -4062,12 +4100,12 @@ namespace NumSharp
 
             // Union every operand's mask into ONE per-observation mask (null = nothing masked). For 2-D y a masked
             // element masks its whole ROW (NumPy's mask_rows), so reduce y's mask across columns to one bit/row.
-            NDArray m = (x as MaskedArray)?._mask;
+            NDArray m = (x as NDMaskedArray)?._mask;
             if (yd.ndim == 1)
-                m = Or(m, (y as MaskedArray)?._mask);
+                m = Or(m, (y as NDMaskedArray)?._mask);
             else if (yd.ndim == 2)
             {
-                NDArray ymask = (y as MaskedArray)?._mask;
+                NDArray ymask = (y as NDMaskedArray)?._mask;
                 if (ymask is not null)
                     m = Or(m, np.any(ymask, 1, null, false)); // (M,) — True where any column of the row is masked
             }
@@ -4081,7 +4119,7 @@ namespace NumSharp
                     throw new TypeError("expected a 1-d array for weights");
                 if (wcheck.shape[0] != yd.shape[0])
                     throw new TypeError("expected w and y to have the same length");
-                m = Or(m, (w as MaskedArray)?._mask);
+                m = Or(m, (w as NDMaskedArray)?._mask);
             }
 
             NDArray wd = w is null ? null : AsData(w);
@@ -4106,15 +4144,15 @@ namespace NumSharp
         /// <param name="assume_unique">Speed hint that both inputs already hold unique elements (result unchanged).</param>
         /// <param name="invert">Invert the membership test.</param>
         /// <returns>A masked boolean array shaped like <paramref name="element"/>.</returns>
-        public MaskedArray isin(object element, object test_elements, bool assume_unique = false, bool invert = false)
+        public NDMaskedArray isin(object element, object test_elements, bool assume_unique = false, bool invert = false)
         {
             NDArray data = np.isin(AsData(element), AsData(test_elements), assume_unique, invert);
-            var em = (element as MaskedArray)?._mask;
+            var em = (element as NDMaskedArray)?._mask;
             // A masked element is not a valid value, so its membership answer is definite: `invert`
             // (False normally, True for invert). NumPy's unique-based isin yields the same, unmasked.
             if (em is not null)
                 data = np.where(em, NDArray.Scalar(invert), data);
-            return new MaskedArray(data, null);
+            return new NDMaskedArray(data, null);
         }
 
         /// <summary>1-D membership test (NumPy's <c>ma.in1d</c>): the flattened <see cref="isin"/>.</summary>
@@ -4122,7 +4160,7 @@ namespace NumSharp
         /// <param name="assume_unique">Speed hint (result unchanged).</param>
         /// <param name="invert">Invert the membership test.</param>
         /// <returns>A 1-D masked boolean array.</returns>
-        public MaskedArray in1d(object element, object test_elements, bool assume_unique = false, bool invert = false)
+        public NDMaskedArray in1d(object element, object test_elements, bool assume_unique = false, bool invert = false)
             => isin(ravel(element), test_elements, assume_unique, invert);
 
         /// <summary>Contiguous UNMASKED runs of a 1-D array as slices (NumPy's <c>clump_unmasked</c>).</summary>
@@ -4130,7 +4168,7 @@ namespace NumSharp
         /// <returns>One <see cref="Slice"/> per contiguous unmasked run.</returns>
         public Slice[] clump_unmasked(object a)
         {
-            var m = (a as MaskedArray)?._mask;
+            var m = (a as NDMaskedArray)?._mask;
             if (m is null)
                 return new[] { new Slice(0, (int)AsData(a).size) };
             return EzClump(np.logical_not(np.ravel(m)));
@@ -4141,7 +4179,7 @@ namespace NumSharp
         /// <returns>One <see cref="Slice"/> per contiguous masked run (empty when unmasked).</returns>
         public Slice[] clump_masked(object a)
         {
-            var m = (a as MaskedArray)?._mask;
+            var m = (a as NDMaskedArray)?._mask;
             return m is null ? Array.Empty<Slice>() : EzClump(np.ravel(m));
         }
 
@@ -4166,7 +4204,7 @@ namespace NumSharp
         public long[] flatnotmasked_edges(object a)
         {
             var d = AsData(a);
-            var m = (a as MaskedArray)?._mask;
+            var m = (a as NDMaskedArray)?._mask;
             if (m is null)
                 return d.size == 0 ? null : new long[] { 0, d.size - 1 };
             var um = np.logical_not(np.ravel(m)).ToArray<bool>();
@@ -4204,7 +4242,7 @@ namespace NumSharp
         /// <summary>Masks the ENTIRE rows of a 2-D array that contain any masked element (NumPy's <c>mask_rows</c>).</summary>
         /// <param name="a">2-D operand.</param>
         /// <returns>The row-masked array.</returns>
-        public MaskedArray mask_rows(object a)
+        public NDMaskedArray mask_rows(object a)
         {
             var rows = np.any(getmaskarray(a), 1, null, true);
             return masked_where(np.broadcast_to(rows, AsData(a).Shape), a);
@@ -4213,7 +4251,7 @@ namespace NumSharp
         /// <summary>Masks the ENTIRE columns of a 2-D array that contain any masked element (NumPy's <c>mask_cols</c>).</summary>
         /// <param name="a">2-D operand.</param>
         /// <returns>The column-masked array.</returns>
-        public MaskedArray mask_cols(object a)
+        public NDMaskedArray mask_cols(object a)
         {
             var cols = np.any(getmaskarray(a), 0, null, true);
             return masked_where(np.broadcast_to(cols, AsData(a).Shape), a);
@@ -4229,7 +4267,7 @@ namespace NumSharp
         /// <param name="axis">null (rows AND cols), 0 (rows), or 1/-1 (cols).</param>
         /// <returns>The row/column-masked array (an all-unmasked input is returned unchanged).</returns>
         /// <exception cref="NotImplementedException"><paramref name="a"/> is not 2-D.</exception>
-        public MaskedArray mask_rowcols(object a, int? axis = null)
+        public NDMaskedArray mask_rowcols(object a, int? axis = null)
         {
             var ma_ = array(a);
             if (ma_.ndim != 2)
@@ -4246,7 +4284,7 @@ namespace NumSharp
                 newmask = np.logical_or(newmask, np.broadcast_to(np.any(m, 1, null, true), m.Shape));
             if (doCols)
                 newmask = np.logical_or(newmask, np.broadcast_to(np.any(m, 0, null, true), m.Shape));
-            return new MaskedArray(ma_._data, newmask);
+            return new NDMaskedArray(ma_._data, newmask);
         }
 
         /// <summary>
@@ -4263,7 +4301,7 @@ namespace NumSharp
         public NDArray compress_nd(object x, int? axis = null)
         {
             var data = AsData(x);
-            var m = (x as MaskedArray)?._mask;
+            var m = (x as NDMaskedArray)?._mask;
             if (m is null || !np.any(m))
                 return data;
             if (np.all(m))
@@ -4340,7 +4378,7 @@ namespace NumSharp
             var maxs = new NDArray[nd];
             for (int i = 0; i < nd; i++)
             {
-                var gi = new MaskedArray(indices[i], mArr); // the i-th coordinate grid, masked like a
+                var gi = new NDMaskedArray(indices[i], mArr); // the i-th coordinate grid, masked like a
                 mins[i] = compressed(gi.min(ax));
                 maxs[i] = compressed(gi.max(ax));
             }
@@ -4383,9 +4421,9 @@ namespace NumSharp
             var result = new Slice[n][];
             for (int i = 0; i < n; i++)
             {
-                MaskedArray line = other == 0
-                    ? (MaskedArray)ma_[i, Slice.All]  // fix row i, vary the columns (axis 1)
-                    : (MaskedArray)ma_[Slice.All, i]; // fix column i, vary the rows (axis 0)
+                NDMaskedArray line = other == 0
+                    ? (NDMaskedArray)ma_[i, Slice.All]  // fix row i, vary the columns (axis 1)
+                    : (NDMaskedArray)ma_[Slice.All, i]; // fix column i, vary the rows (axis 0)
                 result[i] = flatnotmasked_contiguous(line);
             }
             return result;
@@ -4399,7 +4437,7 @@ namespace NumSharp
         public unsafe (long data, long mask) ids(object a)
         {
             long dataPtr = (long)AsData(a).Storage.Address;
-            var m = (a as MaskedArray)?._mask;
+            var m = (a as NDMaskedArray)?._mask;
             long maskPtr = m is null ? 0L : (long)m.Storage.Address;
             return (dataPtr, maskPtr);
         }
@@ -4414,15 +4452,15 @@ namespace NumSharp
         ///     singleton or a masked-array's mask) masks the written slots; a plain value UNMASKS them. The mask
         ///     is created on demand and shrunk back to <c>nomask</c> if it ends up all-False.
         /// </summary>
-        /// <param name="a">The <see cref="MaskedArray"/> (or plain array) to mutate.</param>
+        /// <param name="a">The <see cref="NDMaskedArray"/> (or plain array) to mutate.</param>
         /// <param name="indices">Flat integer target indices.</param>
-        /// <param name="values">Scalar/array/<see cref="MaskedArray"/>/the <c>masked</c> singleton.</param>
+        /// <param name="values">Scalar/array/<see cref="NDMaskedArray"/>/the <c>masked</c> singleton.</param>
         /// <param name="mode">Out-of-bounds policy: "raise" (default)/"wrap"/"clip".</param>
         public void put(object a, NDArray indices, object values, string mode = "raise")
         {
-            var ma_ = a as MaskedArray;
+            var ma_ = a as NDMaskedArray;
             var data = AsData(a);
-            if (values is MaskedConstant)
+            if (values is NDMaskedConstant)
             {
                 // Mask the slots; leave the data (hidden). A plain array carries no mask, so nothing to do there.
                 if (ma_ is not null)
@@ -4437,7 +4475,7 @@ namespace NumSharp
             bool hard = ma_ is not null && ma_._hardmask && ma_._mask is not null;
             NDArray savedMask = hard ? ma_._mask.copy() : null;
             NDArray savedData = hard ? data.copy() : null;
-            if (values is MaskedArray mv)
+            if (values is NDMaskedArray mv)
             {
                 np.put(data, indices, mv._data, mode);
                 if (mv._mask is not null && ma_ is not null)
@@ -4473,16 +4511,16 @@ namespace NumSharp
         ///     there — masked <paramref name="values"/> mask those slots, plain values UNMASK them. Unlike
         ///     <see cref="put"/>, alignment is by <see cref="np.copyto"/> broadcast (not cycling).
         /// </summary>
-        /// <param name="a">The <see cref="MaskedArray"/> (or plain array) to mutate.</param>
+        /// <param name="a">The <see cref="NDMaskedArray"/> (or plain array) to mutate.</param>
         /// <param name="mask">Boolean array-like selecting the write positions.</param>
-        /// <param name="values">Scalar/array/<see cref="MaskedArray"/> supplying the data (and, if masked, the mask).</param>
+        /// <param name="values">Scalar/array/<see cref="NDMaskedArray"/> supplying the data (and, if masked, the mask).</param>
         public void putmask(object a, object mask, object values)
         {
-            var ma_ = a as MaskedArray;
+            var ma_ = a as NDMaskedArray;
             var data = AsData(a);
             var maskArr = AsData(mask).astype(np.@bool);
             var valdata = AsData(values);
-            var valmask = (values as MaskedArray)?._mask;
+            var valmask = (values as NDMaskedArray)?._mask;
             // NumPy's ma.putmask has three mask branches; the DATA is ALWAYS written at the end (even at masked
             // slots — putmask does NOT protect data, unlike put; the hard mask only freezes the MASK).
             if (ma_ is null || ma_._mask is null)
@@ -4523,11 +4561,11 @@ namespace NumSharp
         /// </summary>
         /// <param name="x">Operand.</param><param name="new_shape">Target shape.</param>
         /// <returns>A fresh masked array of <paramref name="new_shape"/>.</returns>
-        public MaskedArray resize(object x, Shape new_shape)
+        public NDMaskedArray resize(object x, Shape new_shape)
         {
             var data = np.resize(AsData(x), new_shape);
-            var m = (x as MaskedArray)?._mask;
-            return new MaskedArray(data, m is null ? null : np.resize(m, new_shape));
+            var m = (x as NDMaskedArray)?._mask;
+            return new NDMaskedArray(data, m is null ? null : np.resize(m, new_shape));
         }
 
         // ─────────────────────────────────────────────────────────────────────────────
@@ -4539,8 +4577,8 @@ namespace NumSharp
         /// <param name="buffer">The source bytes.</param><param name="dtype">Element dtype (null ⇒ float64).</param>
         /// <param name="count">Elements to read (-1 = all).</param><param name="offset">Start byte offset.</param>
         /// <returns>An unmasked masked array over the buffer's values.</returns>
-        public MaskedArray frombuffer(byte[] buffer, DType dtype = null, long count = -1, long offset = 0)
-            => new MaskedArray(np.frombuffer(buffer, dtype, count, offset), null);
+        public NDMaskedArray frombuffer(byte[] buffer, DType dtype = null, long count = -1, long offset = 0)
+            => new NDMaskedArray(np.frombuffer(buffer, dtype, count, offset), null);
 
         /// <summary>
         ///     Builds an array by applying <paramref name="function"/> to the coordinate grids of
@@ -4552,14 +4590,14 @@ namespace NumSharp
         /// <param name="shape">Output shape (the grids' shape).</param>
         /// <param name="dtype">Index-grid dtype (null ⇒ int).</param>
         /// <returns>An unmasked masked array of <paramref name="function"/>'s result.</returns>
-        public MaskedArray fromfunction(Func<NDArray[], NDArray> function, Shape shape, DType dtype = null)
+        public NDMaskedArray fromfunction(Func<NDArray[], NDArray> function, Shape shape, DType dtype = null)
         {
             var dims = shape.dimensions.Select(x => (int)x).ToArray();
             var grid = np.indices(dims, dtype); // shape (ndim, *dims); grid[i] is the i-th coordinate grid
             var args = new NDArray[dims.Length];
             for (int i = 0; i < dims.Length; i++)
                 args[i] = grid[i];
-            return new MaskedArray(function(args), null);
+            return new NDMaskedArray(function(args), null);
         }
 
         /// <summary>Two-axis convenience for <see cref="fromfunction(Func{NDArray[],NDArray},Shape,DType)"/> —
@@ -4567,7 +4605,7 @@ namespace NumSharp
         /// <param name="function">Vectorized function of the row and column index grids.</param>
         /// <param name="shape">Output 2-D shape.</param><param name="dtype">Index-grid dtype (null ⇒ int).</param>
         /// <returns>An unmasked masked array.</returns>
-        public MaskedArray fromfunction(Func<NDArray, NDArray, NDArray> function, Shape shape, DType dtype = null)
+        public NDMaskedArray fromfunction(Func<NDArray, NDArray, NDArray> function, Shape shape, DType dtype = null)
             => fromfunction(idx => function(idx[0], idx[1]), shape, dtype);
 
         /// <summary>Splits <paramref name="a"/> COLUMN-wise into <paramref name="sections"/> equal parts (NumPy's
@@ -4575,22 +4613,22 @@ namespace NumSharp
         /// <param name="a">Operand (rank ≥ 1; splits along axis 1, or axis 0 for a 1-D input).</param>
         /// <param name="sections">Number of equal parts.</param>
         /// <returns>The masked-array parts.</returns>
-        public MaskedArray[] hsplit(object a, int sections)
-            => ZipSplit(np.hsplit(AsData(a), sections), (a as MaskedArray)?._mask is null ? null : np.hsplit(((MaskedArray)a)._mask, sections));
+        public NDMaskedArray[] hsplit(object a, int sections)
+            => ZipSplit(np.hsplit(AsData(a), sections), (a as NDMaskedArray)?._mask is null ? null : np.hsplit(((NDMaskedArray)a)._mask, sections));
 
         /// <summary>Splits <paramref name="a"/> COLUMN-wise at the given cut points (NumPy's <c>ma.hsplit</c>
         /// with an index list); data AND mask split alike.</summary>
         /// <param name="a">Operand.</param><param name="indices">Column cut points.</param>
         /// <returns>The masked-array parts.</returns>
-        public MaskedArray[] hsplit(object a, int[] indices)
-            => ZipSplit(np.hsplit(AsData(a), indices), (a as MaskedArray)?._mask is null ? null : np.hsplit(((MaskedArray)a)._mask, indices));
+        public NDMaskedArray[] hsplit(object a, int[] indices)
+            => ZipSplit(np.hsplit(AsData(a), indices), (a as NDMaskedArray)?._mask is null ? null : np.hsplit(((NDMaskedArray)a)._mask, indices));
 
         /// <summary>Pairs the split data parts with their (optional) mask parts into masked arrays.</summary>
-        private static MaskedArray[] ZipSplit(NDArray[] dataParts, NDArray[] maskParts)
+        private static NDMaskedArray[] ZipSplit(NDArray[] dataParts, NDArray[] maskParts)
         {
-            var res = new MaskedArray[dataParts.Length];
+            var res = new NDMaskedArray[dataParts.Length];
             for (int i = 0; i < dataParts.Length; i++)
-                res[i] = new MaskedArray(dataParts[i], maskParts?[i]);
+                res[i] = new NDMaskedArray(dataParts[i], maskParts?[i]);
             return res;
         }
 
@@ -4604,7 +4642,7 @@ namespace NumSharp
         public IEnumerable<(long[] index, object value)> ndenumerate(object a)
         {
             var d = AsData(a);
-            var m = (a as MaskedArray)?._mask;
+            var m = (a as NDMaskedArray)?._mask;
             // np.ndenumerate walks C-order, so the k-th pair aligns with the k-th C-order mask element.
             var mflat = m is null ? null : np.ravel(m).ToArray<bool>();
             long k = 0;
@@ -4633,15 +4671,15 @@ namespace NumSharp
         /// <param name="fill_value">Override the masked sort key; null uses the endwith default
         /// (<see cref="minimum_fill_value"/> for endwith, <see cref="maximum_fill_value"/> otherwise).</param>
         /// <returns>The sorted masked array.</returns>
-        public MaskedArray sort(object a, int axis = -1, bool endwith = true, object fill_value = null)
+        public NDMaskedArray sort(object a, int axis = -1, bool endwith = true, object fill_value = null)
         {
-            var mask = (a as MaskedArray)?._mask;
+            var mask = (a as NDMaskedArray)?._mask;
             var d = AsData(a);
             if (mask is null)
-                return new MaskedArray(np.sort(d, axis), null);
+                return new NDMaskedArray(np.sort(d, axis), null);
             // Sort by the argsort of the FILLED keys, then reorder BOTH data and mask by that permutation.
-            var order = np.argsort(((MaskedArray)a).filled(fill_value ?? SortFill(a, endwith)), axis);
-            return new MaskedArray(np.take_along_axis(d, order, axis), np.take_along_axis(mask, order, axis));
+            var order = np.argsort(((NDMaskedArray)a).filled(fill_value ?? SortFill(a, endwith)), axis);
+            return new NDMaskedArray(np.take_along_axis(d, order, axis), np.take_along_axis(mask, order, axis));
         }
 
         /// <summary>
@@ -4655,7 +4693,7 @@ namespace NumSharp
         /// <returns>An int64 <see cref="NDArray"/> of sort indices.</returns>
         public NDArray argsort(object a, int axis = -1, bool endwith = true, object fill_value = null)
         {
-            var d = (a as MaskedArray)?._mask is null ? AsData(a) : ((MaskedArray)a).filled(fill_value ?? SortFill(a, endwith));
+            var d = (a as NDMaskedArray)?._mask is null ? AsData(a) : ((NDMaskedArray)a).filled(fill_value ?? SortFill(a, endwith));
             return np.argsort(d, axis);
         }
 
@@ -4667,16 +4705,16 @@ namespace NumSharp
         /// element was masked (NumPy's <c>ma.unique</c>, values only).</summary>
         /// <param name="ar">Operand.</param>
         /// <returns>The masked array of unique values.</returns>
-        public MaskedArray unique(object ar)
+        public NDMaskedArray unique(object ar)
         {
             NDArray uvals = np.unique(compressed(ar));
-            var mask = (ar as MaskedArray)?._mask;
+            var mask = (ar as NDMaskedArray)?._mask;
             if (mask is null || !np.any(mask))
-                return new MaskedArray(uvals, null);
+                return new NDMaskedArray(uvals, null);
             // Append a single masked slot (NumPy keeps one masked value in the unique set).
             var data = np.concatenate(new[] { uvals, np.zeros(new Shape(1), uvals.dtype) }, 0);
             var m = np.concatenate(new[] { np.zeros(DimsOf(uvals), np.@bool), np.ones(new Shape(1), np.@bool) }, 0);
-            return new MaskedArray(data, m);
+            return new NDMaskedArray(data, m);
         }
 
         // ─────────────────────────────────────────────────────────────────────────────
@@ -4702,7 +4740,7 @@ namespace NumSharp
         private static bool HasMasked(object a)
         {
             // `is not null` — a `!= null` here would run NDArray's ELEMENTWISE `!=` (see the file-wide trap).
-            var m = (a as MaskedArray)?._mask;
+            var m = (a as NDMaskedArray)?._mask;
             return m is not null && np.any(m);
         }
 
@@ -4716,16 +4754,16 @@ namespace NumSharp
         /// <param name="includeMasked">Append the single trailing masked entry when true.</param>
         /// <returns>An unmasked (<c>nomask</c>) masked array when <paramref name="includeMasked"/> is false;
         /// otherwise the values followed by one masked slot.</returns>
-        private static MaskedArray WithTrailingMasked(NDArray values, bool includeMasked)
+        private static NDMaskedArray WithTrailingMasked(NDArray values, bool includeMasked)
         {
             if (!includeMasked)
-                return new MaskedArray(values, null);
+                return new NDMaskedArray(values, null);
             // The datum at the masked slot is arbitrary — the mask hides it and NumPy's own raw value there is
             // whatever its sort/concatenate left (not the fill). A zero of the result dtype keeps `.filled()`
             // (the observable value) consistent with the dtype default, matching NumPy's contract.
             var data = np.concatenate(new[] { values, np.zeros(new Shape(1), values.dtype) }, 0);
             var m = np.concatenate(new[] { np.zeros(DimsOf(values), np.@bool), np.ones(new Shape(1), np.@bool) }, 0);
-            return new MaskedArray(data, m);
+            return new NDMaskedArray(data, m);
         }
 
         /// <summary>
@@ -4744,14 +4782,14 @@ namespace NumSharp
         ///     equal only to one another, so a masked value is "shared" precisely when both sides carry one).
         ///     The result is ALWAYS a masked array, even when neither input is masked.
         /// </summary>
-        /// <param name="ar1">First operand (<see cref="MaskedArray"/>/<see cref="NDArray"/>/scalar/array-like).</param>
+        /// <param name="ar1">First operand (<see cref="NDMaskedArray"/>/<see cref="NDArray"/>/scalar/array-like).</param>
         /// <param name="ar2">Second operand.</param>
         /// <param name="assume_unique">Speed hint passed to the underlying set op that the inputs already hold
         /// unique elements; when it is false but the inputs are not unique, the result is undefined (matching NumPy).</param>
         /// <returns>The masked array of shared unique values (sorted; the promoted dtype is preserved even for an
         /// empty/all-masked result).</returns>
         /// <exception cref="ArgumentNullException">Either operand is null.</exception>
-        public MaskedArray intersect1d(object ar1, object ar2, bool assume_unique = false)
+        public NDMaskedArray intersect1d(object ar1, object ar2, bool assume_unique = false)
         {
             var dt = SetOpDtype(ar1, ar2);
             // Compress to the unmasked values, run the plain set op, then FORCE the promoted dtype (astype is a
@@ -4768,7 +4806,7 @@ namespace NumSharp
         /// <param name="ar1">First operand.</param><param name="ar2">Second operand.</param>
         /// <returns>The masked array of unique values from either input (sorted; promoted dtype preserved).</returns>
         /// <exception cref="ArgumentNullException">Either operand is null.</exception>
-        public MaskedArray union1d(object ar1, object ar2)
+        public NDMaskedArray union1d(object ar1, object ar2)
         {
             var dt = SetOpDtype(ar1, ar2);
             var values = np.union1d(compressed(ar1), compressed(ar2)).astype(dt, copy: false);
@@ -4786,7 +4824,7 @@ namespace NumSharp
         /// the inputs are not unique.</param>
         /// <returns>The masked array of the symmetric difference (sorted; promoted dtype preserved).</returns>
         /// <exception cref="ArgumentNullException">Either operand is null.</exception>
-        public MaskedArray setxor1d(object ar1, object ar2, bool assume_unique = false)
+        public NDMaskedArray setxor1d(object ar1, object ar2, bool assume_unique = false)
         {
             var dt = SetOpDtype(ar1, ar2);
             var values = np.setxor1d(compressed(ar1), compressed(ar2), assume_unique).astype(dt, copy: false);
@@ -4807,7 +4845,7 @@ namespace NumSharp
         /// <returns>The masked array of <paramref name="ar1"/>-only unique values (sorted; <paramref name="ar1"/>'s
         /// promotion preserved).</returns>
         /// <exception cref="ArgumentNullException">Either operand is null.</exception>
-        public MaskedArray setdiff1d(object ar1, object ar2, bool assume_unique = false)
+        public NDMaskedArray setdiff1d(object ar1, object ar2, bool assume_unique = false)
         {
             var dt = SetOpDtype(ar1, ar2);
             var values = np.setdiff1d(compressed(ar1), compressed(ar2), assume_unique).astype(dt, copy: false);
@@ -4823,22 +4861,22 @@ namespace NumSharp
         /// <summary>Makes <paramref name="a"/>'s mask HARD in place (NumPy's <c>ma.harden_mask</c>): a later
         /// plain-value assignment can no longer unmask a slot. A plain (unmasked) array is wrapped and returned
         /// (hardening a nomask array is inert until it gains a mask).</summary>
-        /// <param name="a">Operand (a <see cref="MaskedArray"/> is mutated in place).</param>
+        /// <param name="a">Operand (a <see cref="NDMaskedArray"/> is mutated in place).</param>
         /// <returns>The same masked array, now hard-masked.</returns>
-        public MaskedArray harden_mask(object a) => a is MaskedArray ma_ ? ma_.harden_mask() : array(a);
+        public NDMaskedArray harden_mask(object a) => a is NDMaskedArray ma_ ? ma_.harden_mask() : array(a);
 
         /// <summary>Makes <paramref name="a"/>'s mask SOFT again in place (NumPy's <c>ma.soften_mask</c>, the
         /// default): a plain-value assignment unmasks the assigned slots.</summary>
-        /// <param name="a">Operand (a <see cref="MaskedArray"/> is mutated in place).</param>
+        /// <param name="a">Operand (a <see cref="NDMaskedArray"/> is mutated in place).</param>
         /// <returns>The same masked array, now soft-masked.</returns>
-        public MaskedArray soften_mask(object a) => a is MaskedArray ma_ ? ma_.soften_mask() : array(a);
+        public NDMaskedArray soften_mask(object a) => a is NDMaskedArray ma_ ? ma_.soften_mask() : array(a);
 
         /// <summary>Drops an all-False mask back to nomask (NumPy's <c>shrink_mask</c>); otherwise unchanged.</summary>
         /// <param name="a">Operand.</param><returns>The masked array, with a redundant all-False mask removed.</returns>
-        public MaskedArray shrink_mask(object a)
+        public NDMaskedArray shrink_mask(object a)
         {
-            var m = (a as MaskedArray)?._mask;
-            return (m is not null && !np.any(m)) ? new MaskedArray(AsData(a), null) : array(a);
+            var m = (a as NDMaskedArray)?._mask;
+            return (m is not null && !np.any(m)) ? new NDMaskedArray(AsData(a), null) : array(a);
         }
     }
 }

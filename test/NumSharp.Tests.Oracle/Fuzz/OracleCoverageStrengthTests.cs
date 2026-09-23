@@ -26,7 +26,7 @@ namespace NumSharp.Tests.Fuzz
                     file.StartsWith("index_", StringComparison.Ordinal) ||
                     file.StartsWith("ma_", StringComparison.Ordinal))
                     continue; // host metadata, the advanced-indexing schema, and the masked-array
-                              // schema (MaskedArray operands + ApplyMasked; gated by FuzzCorpusTests.Ma
+                              // schema (NDMaskedArray operands + ApplyMasked; gated by FuzzCorpusTests.Ma
                               // with its own coverage model — many ma helper ops legitimately have <4 cases)
 
                 foreach (var c in FuzzCorpus.Load(file))
