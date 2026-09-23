@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Numerics;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
@@ -25,8 +27,12 @@ namespace NumSharp.Tests.Interop
     ///     (35.5% of random complex values differed, on x64 too — the x64 runs had passed on lucky
     ///     inputs). These tests hold each stage to NumPy on their own, with inputs chosen to expose
     ///     exactly that kind of last-bit difference rather than avoid it.</para>
-    ///     <para>Both run in the numpy-only <c>parity</c> environment (no <c>[PythonEcosystem]</c>): they
+    ///     <para>They run in the numpy-only <c>parity</c> environment (no <c>[PythonEcosystem]</c>): they
     ///     need nothing beyond NumPy, and they belong beside the oracle they protect.</para>
+    ///     <para>The magnitude is byte-exact on every architecture. The real FFT is byte-exact where
+    ///     NumPy rounds each product (x86/x64); NumPy's arm64 wheels fuse pocketfft's multiply-adds, so
+    ///     there a mismatch is reported Inconclusive with its measurements
+    ///     (<see cref="InteropTestBase.AssertExactUnlessNumPyFuses"/>).</para>
     /// </remarks>
     [TestClass]
     public class SpectrumLiveParityTests : InteropTestBase
@@ -99,27 +105,75 @@ namespace NumSharp.Tests.Interop
         }
 
         /// <summary>
-        ///     <c>np.fft.rfft</c> of a seven-harmonic signal (the Gist demo's) at three sizes chosen to
-        ///     drive each pocketfft route NumSharp ports: 1024 (radix-4/2 passes), 1000 = 2³·5³ (mixed
-        ///     radix) and 1021 (a prime whose square exceeds it — the Bluestein chirp-z path).
+        ///     <c>np.fft.rfft</c> of a seven-harmonic signal (the Gist demo's, plus seeded noise) at three
+        ///     sizes chosen to drive each pocketfft route NumSharp ports: 1024 (radix-4 passes),
+        ///     1000 = 2³·5³ (mixed radix: radix-2, -4 and -5 passes) and 1021 (a prime whose square exceeds
+        ///     it — the Bluestein chirp-z path).
         /// </summary>
+        /// <remarks>
+        ///     <para>Strict where NumPy rounds each product (x86/x64). On arm64 NumPy's wheel fuses
+        ///     <see cref="InteropTestBase.PocketFftFusedArithmetic"/>, so there a mismatch is reported
+        ///     Inconclusive. Every size is compared before that decision, and the message lists each
+        ///     size's differing-lane count and the SHA-256 prefixes of the input and of both results, so
+        ///     one CI log carries the whole measurement.</para>
+        ///     <para>The input is the same bytes on every host (<see cref="PortableHarmonicSignal"/>),
+        ///     which is what lets a mismatch measured on one host be reproduced, hash for hash, on
+        ///     another: an x64 replica of NumPy's arm64 arithmetic can be checked against the hashes a
+        ///     macOS run reports.</para>
+        /// </remarks>
         [TestMethod]
         public void Rfft_HarmonicSignal_PowerOfTwoMixedRadixAndBluestein_ByteExactVsLiveNumpy()
         {
+            var mismatches = new List<string>();
             foreach (int n in new[] { 1024, 1000, 1021 })
             {
                 using var scope = NDScope.Open();
-                var time = np.arange(n).astype(NPTypeCode.Double) / 8192.0;
-                var signal = np.zeros(new Shape(n), NPTypeCode.Double);
-                for (int h = 1; h <= 7; h++) signal = signal + np.sin(2 * Math.PI * 384 * h * time) / h;
+                var signal = PortableHarmonicSignal(n);
                 var spectrum = np.fft.rfft(signal);
                 using (Gil())
                 {
                     using PyObject exported = signal.ToNumpy();
                     using PyObject expected = Python.np.with("np.fft.rfft(s)", ("s", exported));
-                    AssertSameDoubles(spectrum, expected, signal, $"np.fft.rfft, n={n}");
+                    string mismatch = DescribeMismatch(spectrum, expected, signal, $"n={n}");
+                    if (mismatch != null) mismatches.Add(mismatch);
                 }
             }
+
+            // The decision comes after every size was measured, so an arm64 log reports all three.
+            AssertExactUnlessNumPyFuses("np.fft.rfft", PocketFftFusedArithmetic, () =>
+            {
+                if (mismatches.Count > 0)
+                    Assert.Fail("np.fft.rfft: " + string.Join(" | ", mismatches));
+            });
+        }
+
+        /// <summary>
+        ///     The Gist demo's seven harmonics of 384 Hz sampled at 8192 Hz (amplitude 1/h each), plus
+        ///     seeded uniform noise of amplitude 5e-4, quantized to multiples of 2⁻²⁰: the same bytes on
+        ///     every host.
+        /// </summary>
+        /// <remarks>
+        ///     <para><c>sin</c> comes from each platform's libm (NumSharp's kernel calls <c>Math.Sin</c>),
+        ///     and those differ in the last bit between platforms, so the raw harmonics are not the same
+        ///     bytes on macOS as on Windows. Rounding to a 2⁻²⁰ grid erases that: a one-ULP change moves a
+        ///     sample across a rounding boundary with probability ~1e-10.</para>
+        ///     <para>The noise is what keeps the transform honest after quantization. The harmonics repeat
+        ///     exactly every 64 samples once quantized, and a periodic input leaves most FFT bins exact
+        ///     zeros, which no arithmetic difference can move. <see cref="Random(int)"/> with a seed is
+        ///     .NET's legacy subtractive generator, integer arithmetic plus one scale, so its draws are
+        ///     identical on every host too.</para>
+        /// </remarks>
+        /// <param name="n">The number of samples.</param>
+        /// <returns>A float64 array of length <paramref name="n"/>, owned by the caller's NDScope.</returns>
+        private static NDArray PortableHarmonicSignal(int n)
+        {
+            var time = np.arange(n).astype(NPTypeCode.Double) / 8192.0;
+            var harmonics = np.zeros(new Shape(n), NPTypeCode.Double);
+            for (int h = 1; h <= 7; h++) harmonics = harmonics + np.sin(2 * Math.PI * 384 * h * time) / h;
+            var rng = new Random(20260923);
+            var noise = new double[n];
+            for (int i = 0; i < n; i++) noise[i] = rng.NextDouble() - 0.5;
+            return np.rint((harmonics + np.array(noise) * 1e-3) * 1048576.0) / 1048576.0;
         }
 
         /// <summary>
@@ -140,9 +194,9 @@ namespace NumSharp.Tests.Interop
         }
 
         /// <summary>
-        ///     Asserts NumSharp's float64 result is byte-identical to NumPy's, reporting HOW MANY 8-byte
-        ///     lanes differ and the first one (both values' bit patterns and the input element) instead
-        ///     of dumping two hundred-kilobyte byte arrays. Call under the GIL.
+        ///     Asserts NumSharp's float64 result is byte-identical to NumPy's, failing with
+        ///     <see cref="DescribeMismatch"/>'s summary instead of dumping two hundred-kilobyte byte
+        ///     arrays. Call under the GIL.
         /// </summary>
         /// <param name="numsharp">NumSharp's result (float64, or complex128 read as float64 pairs).</param>
         /// <param name="numpy">NumPy's result over the same exported input.</param>
@@ -151,9 +205,36 @@ namespace NumSharp.Tests.Interop
         /// <exception cref="AssertFailedException">The byte lengths or any lane differ.</exception>
         private static void AssertSameDoubles(NDArray numsharp, PyObject numpy, NDArray input, string because)
         {
+            string mismatch = DescribeMismatch(numsharp, numpy, input, because);
+            if (mismatch != null)
+                Assert.Fail(mismatch);
+        }
+
+        /// <summary>
+        ///     Compares NumSharp's float64 result with NumPy's lane by lane and, when they differ,
+        ///     describes HOW MANY 8-byte lanes differ, the first one (both bit patterns, and the input
+        ///     element when a lane maps to one) and the SHA-256 prefixes of the input and of both results.
+        ///     Call under the GIL.
+        /// </summary>
+        /// <remarks>
+        ///     The hashes make a mismatch reproducible across hosts: with an input that is the same bytes
+        ///     everywhere, a result computed elsewhere (a replica of another platform's arithmetic, say)
+        ///     can be matched against what a CI host reported without shipping the arrays. A length
+        ///     difference is asserted rather than described — no arithmetic difference explains it, so it
+        ///     must fail on every host, never be excused as one.
+        /// </remarks>
+        /// <param name="numsharp">NumSharp's result (float64, or complex128 read as float64 pairs).</param>
+        /// <param name="numpy">NumPy's result over the same exported input.</param>
+        /// <param name="input">The input; its element is printed at the first difference when the
+        ///     input is complex128 and the result float64 (a magnitude lane maps to one element).</param>
+        /// <param name="what">What was computed, leading the description.</param>
+        /// <returns><see langword="null"/> when every lane is byte-identical; otherwise the description.</returns>
+        /// <exception cref="AssertFailedException">The two results differ in byte length.</exception>
+        private static string DescribeMismatch(NDArray numsharp, PyObject numpy, NDArray input, string what)
+        {
             byte[] ours = ByteContract.NsBytes(numsharp);
             byte[] theirs = numpy.bytes_c();
-            ours.Length.Should().Be(theirs.Length, $"{because}: result byte lengths");
+            ours.Length.Should().Be(theirs.Length, $"{what}: result byte lengths");
 
             ReadOnlySpan<long> a = MemoryMarshal.Cast<byte, long>(ours);
             ReadOnlySpan<long> b = MemoryMarshal.Cast<byte, long>(theirs);
@@ -166,7 +247,7 @@ namespace NumSharp.Tests.Interop
             }
 
             if (differing == 0)
-                return;
+                return null;
 
             string where = "";
             if (input.typecode == NPTypeCode.Complex && numsharp.typecode == NPTypeCode.Double)
@@ -177,9 +258,15 @@ namespace NumSharp.Tests.Interop
                 where = $" (input {z.Real:R} + {z.Imaginary:R}j)";
             }
 
-            Assert.Fail($"{because}: {differing} of {a.Length} float64 lanes differ; first at lane {first}{where}: " +
-                        $"NumSharp=0x{a[first]:X16} ({BitConverter.Int64BitsToDouble(a[first]):R}), " +
-                        $"NumPy=0x{b[first]:X16} ({BitConverter.Int64BitsToDouble(b[first]):R}).");
+            return $"{what}: {differing} of {a.Length} float64 lanes differ; first at lane {first}{where}: " +
+                   $"NumSharp=0x{a[first]:X16} ({BitConverter.Int64BitsToDouble(a[first]):R}), " +
+                   $"NumPy=0x{b[first]:X16} ({BitConverter.Int64BitsToDouble(b[first]):R}); SHA-256 " +
+                   $"input={Sha256Prefix(ByteContract.NsBytes(input))} NumSharp={Sha256Prefix(ours)} NumPy={Sha256Prefix(theirs)}.";
         }
+
+        /// <summary>The first 16 hex digits of <paramref name="bytes"/>' SHA-256: enough to tell results apart in a log.</summary>
+        /// <param name="bytes">The bytes to hash.</param>
+        /// <returns>Sixteen uppercase hex digits.</returns>
+        private static string Sha256Prefix(byte[] bytes) => Convert.ToHexString(SHA256.HashData(bytes))[..16];
     }
 }

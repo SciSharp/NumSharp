@@ -2408,7 +2408,15 @@ port is a faithful **scalar** transcription and NumPy's win-amd64 wheel is itsel
 (`POCKETFFT_NO_VECTORS` under MSVC) with twiddles from the same CRT (`Math.Cos`/`Sin` == MSVC
 `ucrtbase`); **no explicit FMA is needed** (unlike the GEMM port), which is why `fft.jsonl` is a
 PORTABLE fuzz tier rather than a host-pinned one. Full design + parity ledger:
-**`docs/FFT_PARITY.md`**.
+**`docs/stale-docs/FFT_PARITY.md`**. **arm64 NUMPY is the exception, not NumSharp (measured
+2026-09-23):** NumPy's arm64 wheels compile pocketfft with the default FP contraction on an FMA
+baseline, so its `a*b + c*d` twiddle products (`sincos_2pibyn::operator[]`) and butterfly multiply-adds
+(`MULPM`, `radf5`) round once — live arm64 NumPy's `rfft` sits an ULP or so off x86-64 NumPy in ~73 %
+of float64 lanes (macos-latest, n=1024), while NumSharp returns the x86-64 bytes on every host. A C#
+replica fusing exactly those expressions (literal mode == NumSharp in every lane) changes the same
+share. The live interop gate keeps these cells strict on x64 and reports them Inconclusive WITH the
+measurement on arm64 (`InteropTestBase.AssertExactUnlessNumPyFuses`, `SpectrumLiveParityTests`, the
+Gist FFT/HPS cells); the offline `fft.jsonl` tier is unaffected (it replays win-amd64 NumPy's bytes).
 
 The facade is the `np.random` house shape — a lowercase property `np.fft` returning `FourierModule`,
 so `np.fft.fft(x)` ports Python verbatim. Only **three 1-D kernels** do real work (`c2c`/`r2c`/`c2r`

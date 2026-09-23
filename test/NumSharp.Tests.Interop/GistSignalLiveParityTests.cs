@@ -211,6 +211,15 @@ public class GistSignalLiveParityTests : InteropTestBase
     /// The four frequency pipelines (crossings, FFT, autocorrelation, HPS) vs live NumPy/SciPy within their
     /// measured ULP budgets. Inconclusive where SciPy is not installed.
     /// </summary>
+    /// <remarks>
+    /// The autocorrelation estimate is asserted on every architecture: at this size SciPy's
+    /// <c>correlate</c> picks its direct method, <c>np.convolve</c>, which reduces a kernel this long
+    /// through OpenBLAS's <c>ddot</c>, and NumSharp's sliding-dot seam routes the same positions to the
+    /// same bundled OpenBLAS (macos-latest agrees byte for byte). The FFT and
+    /// HPS estimates start from <c>np.fft.rfft</c>'s magnitudes, which NumPy's arm64 wheel computes with
+    /// fused multiply-adds (<see cref="InteropTestBase.PocketFftFusedArithmetic"/>), so they are strict
+    /// on x86/x64 and Inconclusive with their measured distance on arm64 (macos-latest: HPS 20 ULP).
+    /// </remarks>
     [TestMethod]
     public void FrequencyPipelines_MeasuredUlpVersusLiveNumpyAndScipy()
     {
@@ -220,17 +229,20 @@ public class GistSignalLiveParityTests : InteropTestBase
         for (int i = 0; i < samples.Length; i++)
             for (int h = 1; h <= 7; h++) samples[i] += Math.Sin(2 * Math.PI * 384 * h * i / 8192.0) / h;
         var signal = np.array(samples);
-        var result = np.array(new[] {
+        var autocorrelation = np.array(new[] { FrequencyEstimation.FromAutocorrelation(signal, 8192) });
+        var spectral = np.array(new[] {
             FrequencyEstimation.FromFft(signal, 8192),
-            FrequencyEstimation.FromAutocorrelation(signal, 8192),
             FrequencyEstimation.FromHarmonicProductSpectrum(signal, 8192)
         });
         ExportTo("s", signal);
         PyExec(Reference);
         using (Gil())
         {
-            using PyObject expected = Scope.Eval("np.array([fft_frequency(s,8192), autocorrelation_frequency(s,8192), hps_frequency(s,8192)])");
-            AssertMeasured(result, expected, 0, "FFT/autocorrelation/HPS Hz");
+            using PyObject expectedAutocorrelation = Scope.Eval("np.array([autocorrelation_frequency(s,8192)])");
+            AssertMeasured(autocorrelation, expectedAutocorrelation, 0, "autocorrelation Hz");
+            using PyObject expectedSpectral = Scope.Eval("np.array([fft_frequency(s,8192), hps_frequency(s,8192)])");
+            AssertExactUnlessNumPyFuses("FFT/HPS Hz", PocketFftFusedArithmetic,
+                () => AssertMeasured(spectral, expectedSpectral, 0, "FFT/HPS Hz"));
         }
     }
 
@@ -238,6 +250,12 @@ public class GistSignalLiveParityTests : InteropTestBase
     /// Every printed pass of the legacy harmonic-product-spectrum estimator, and its undefined-peak cases,
     /// vs the reference <c>legacy_hps</c>. Inconclusive where SciPy is not installed.
     /// </summary>
+    /// <remarks>
+    /// Every pass starts from <c>np.fft.rfft</c>'s magnitudes, so the comparison is strict where NumPy
+    /// rounds each product and Inconclusive with its measured distance where the wheel fuses
+    /// <see cref="InteropTestBase.PocketFftFusedArithmetic"/> (arm64) — it still passes there whenever
+    /// the passes happen to land on the same doubles.
+    /// </remarks>
     [TestMethod]
     public void LegacyHps_AllPrintedPassesAndUndefinedPeaksAreChecked()
     {
@@ -253,7 +271,8 @@ public class GistSignalLiveParityTests : InteropTestBase
         using (Gil())
         {
             using PyObject expected = Scope.Eval("legacy_hps(s, 16384)");
-            AssertMeasured(result, expected, 0, "original recursive HPS pass diagnostics");
+            AssertExactUnlessNumPyFuses("legacy HPS passes", PocketFftFusedArithmetic,
+                () => AssertMeasured(result, expected, 0, "original recursive HPS pass diagnostics"));
         }
     }
 

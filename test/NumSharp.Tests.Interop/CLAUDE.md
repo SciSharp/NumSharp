@@ -155,6 +155,20 @@ Windows, 64-bit on unix), so `numpy.sum(int32)` is int32 on `windows-latest` but
 Run integer reductions at **int64** so the byte compare is width-identical on all three CI OSes
 (NumSharp is always int64). Products/factorisations don't hit this (they run in float64).
 
+**arm64 contraction trap:** NumPy's arm64 wheels target a baseline ISA that has fused multiply-add
+and are compiled with the default floating-point contraction (clang `-ffp-contract=on` on macOS), so
+every `a*b + c` or `a*b + c*d` written as ONE C expression rounds once there — the left product
+fused, any right product rounded first. The x86-64 wheels (X86_V2 baseline, no FMA) cannot fuse, and
+RyuJIT never does, so NumSharp matches x86-64 NumPy. Two places this reaches a byte-exact test:
+NumPy's legacy Gaussian sampler (`NumPyLegacyGaussianIsLiteral` / `DefineLegacyRandn`) and pocketfft
+(every `np.fft` result: on macos-latest ~73 % of an `rfft`'s float64 lanes are an ULP or so apart).
+Wrap exactly those cells in `AssertExactUnlessNumPyFuses(cell, PocketFftFusedArithmetic, () => …)`:
+strict on x86/x64; on arm64 a mismatch becomes Inconclusive CARRYING the measured difference, and a
+match still passes. Keep every other cell of the test strict — a result NumPy takes from the bundled
+OpenBLAS (products, `np.correlate`'s `ddot`) matches on arm64 too. `SpectrumLiveParityTests` reports
+SHA-256 prefixes of its platform-independent input and both results, so an arm64 mismatch can be
+reproduced hash for hash on x64 by a replica of the fused arithmetic.
+
 ---
 
 ## 5. Error parity
