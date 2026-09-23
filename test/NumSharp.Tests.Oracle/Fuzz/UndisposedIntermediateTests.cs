@@ -28,32 +28,82 @@ namespace NumSharp.Tests.Fuzz
     ///     leak still fails) and worked down to ZERO across four fix waves (see the ledger on
     ///     <see cref="KnownEscapes"/>); the registry is now EMPTY, so every op is gated at zero and
     ///     the former tracking pin has been retired.
+    ///
+    ///     COVERAGE COMPLETION (2026-09-23): an inventory cross-reference (the
+    ///     <c>coverage/NumSharp.Tools.ApiInventory</c> surface vs the op keys this sweep actually
+    ///     MEASURED) found 265 of the 961 [ModuleName]-module members never leak-measured — the
+    ///     sweep only replayed the ordinary op tiers. It now also replays the three families it used
+    ///     to skip: the masked-array tiers (<c>ma_*</c>, NDMaskedArray operands — 84 of 149 np.ma ops
+    ///     were leaking, up to 29 buffers per call), the index tiers (<c>index_*</c>, the indexer
+    ///     get/set surface) and every ERROR path (NumPy-raising cases: a throwing op must strand
+    ///     nothing either). Members no corpus row can reach are driven by <see cref="LeakCatalogue"/>,
+    ///     the LAPACK tier by <see cref="Corpus_BackendOps_LeaveNoUndisposedIntermediates"/>, and
+    ///     <see cref="LeakSurfaceCoverageTests"/> fails on any inventory member that is neither
+    ///     measured nor explicitly classified.
     /// </summary>
     [TestClass]
     [DoNotParallelize]   // ScopeAudit reads process-global pool counters; nothing may run beside it.
-    public class UndisposedIntermediateTests
+    public partial class UndisposedIntermediateTests
     {
         // ---------------------------------------------------------------------------------
         // The corpus sweep (FuzzMatrix gate).
         // ---------------------------------------------------------------------------------
 
+        /// <summary>
+        ///     The corpus-sweep gate: every measured case of every corpus family (ordinary op tiers,
+        ///     masked-array tiers, index tiers — success AND error paths) must balance pool takes and
+        ///     returns, and every fresh result must have come from the pool. Unclassified escapes or
+        ///     bypasses fail with the op, layout, count and a sample case.
+        /// </summary>
+        /// <remarks>
+        ///     The sweep itself runs ONCE per process (<see cref="SharedSweep"/>) — the
+        ///     <see cref="LeakSurfaceCoverageTests"/> completeness gate reads the same result to know
+        ///     which op keys were actually measured, and replaying 200K+ cases twice would double the
+        ///     FuzzMatrix wall time for no extra evidence.
+        /// </remarks>
         [TestMethod]
         [TestCategory("FuzzMatrix")]
         [TestCategory("ScopeAudit")]
         public void Corpus_AllOps_LeaveNoUndisposedIntermediates()
         {
-            var r = RunSweep(includeOp: null);
+            var r = SharedSweep.Value;
 
-            Console.WriteLine($"[scope-audit] measured={r.Measured} gcInconclusive={r.GcInconclusive} " +
-                              $"threwSkipped={r.ThrewSkipped} errorParitySkipped={r.ErrorParitySkipped} " +
-                              $"files={r.Files}");
+            Console.WriteLine($"[scope-audit] measured={r.Measured} (ordinary={r.OrdinaryMeasured} masked={r.MaskedMeasured} " +
+                              $"index={r.IndexMeasured}) errorPathsMeasured={r.ErrorPathsMeasured} " +
+                              $"gcInconclusive={r.GcInconclusive} threwSkipped={r.ThrewSkipped} " +
+                              $"files={r.Files} measuredOpKeys={r.MeasuredByOp.Count}");
+            PrintThrewRollup(r.ThrewByOp);
             PrintPerOpRollup(r.Groups);
             PrintBypassRollup(r.Bypasses);
 
-            // Non-vacuity: a schema/skip regression must not silently gate nothing.
-            Assert.IsTrue(r.Measured > 50_000,
-                $"scope audit measured only {r.Measured} cases — corpus schema or skip-logic regression?");
+            // Non-vacuity, per family: a schema/skip regression in ANY family must not silently gate
+            // nothing. Floors sit 5% under the 2026-09-23 counts — measured IDENTICAL on net10.0 and
+            // net8.0 (ordinary 138,660 / masked 68,860 / index success 5,744 / error paths 9,123 =
+            // 2,441 ordinary + 6,682 index) — so a genuine corpus growth never trips them but a family
+            // that stops being replayed (or half a family) does.
+            Assert.IsTrue(r.OrdinaryMeasured > 131_700,
+                $"scope audit measured only {r.OrdinaryMeasured} ordinary cases — corpus schema or skip-logic regression?");
+            Assert.IsTrue(r.MaskedMeasured > 65_400,
+                $"scope audit measured only {r.MaskedMeasured} masked-array cases — ma_* replay regression?");
+            Assert.IsTrue(r.IndexMeasured > 5_450,
+                $"scope audit measured only {r.IndexMeasured} index success cases — index_* replay regression?");
+            Assert.IsTrue(r.ErrorPathsMeasured > 8_650,
+                $"scope audit measured only {r.ErrorPathsMeasured} error paths — expects_throw / np.ok=false replay regression?");
 
+            AssertNoUnclassifiedEscapes(r, "scope-audit");
+        }
+
+        /// <summary>
+        ///     The shared verdict of every sweep-style gate: each escape family must be documented in
+        ///     <see cref="KnownEscapes"/> within its per-op ceiling, and each pool-bypass family in
+        ///     <see cref="KnownBypassByDesign"/>/<see cref="KnownBypassDebt"/>; anything else fails,
+        ///     listing the op, layout, per-call count and a sample case.
+        /// </summary>
+        /// <param name="r">The sweep's observations.</param>
+        /// <param name="label">Console tag distinguishing the gate (<c>scope-audit</c>, <c>scope-audit/backend</c>).</param>
+        /// <exception cref="AssertFailedException">An escape or bypass family is unclassified.</exception>
+        private static void AssertNoUnclassifiedEscapes(SweepResult r, string label)
+        {
             // Classify each escape family: documented (a KnownEscapes entry within its recorded
             // per-op ceiling) is surfaced but green — the RunCorpus "documented divergences"
             // pattern; anything unclassified — a new leaking op, OR a known op leaking MORE
@@ -95,13 +145,13 @@ namespace NumSharp.Tests.Fuzz
             }
 
             if (documented.Count > 0)
-                Console.WriteLine($"[scope-audit] documented known escapes ({documentedCases} cases across " +
+                Console.WriteLine($"[{label}] documented known escapes ({documentedCases} cases across " +
                                   $"{documented.Count} families still in the KnownEscapes registry — " +
                                   $"remove each op's entry as its leak is fixed):\n  " +
                                   string.Join("\n  ", documented.Take(20)) +
                                   (documented.Count > 20 ? $"\n  … {documented.Count - 20} more families" : ""));
             if (bypassDocumented.Count > 0)
-                Console.WriteLine($"[scope-audit] documented known pool bypasses ({bypassDocumentedCases} cases):\n  " +
+                Console.WriteLine($"[{label}] documented known pool bypasses ({bypassDocumentedCases} cases):\n  " +
                                   string.Join("\n  ", bypassDocumented.Take(20)) +
                                   (bypassDocumented.Count > 20 ? $"\n  … {bypassDocumented.Count - 20} more families" : ""));
 
@@ -449,47 +499,267 @@ namespace NumSharp.Tests.Fuzz
         // KnownEscapes families excused within their ceiling). The includeOp filter is retained for
         // a future focused re-sweep; the KnownEscapes-only tracking pin that used it has been retired
         // now that the registry is empty.
+        //
+        // THREE corpus families are replayed, each with its own case schema but the SAME measurement
+        // protocol (warm invocation, then ScopeAudit.MeasureConfirmedTraffic) and the same verdicts:
+        //   * ordinary op tiers  — FuzzCorpus.Case through OpRegistry.Invoke (this file);
+        //   * masked-array tiers — NDMaskedArray operands through OpRegistry.ApplyMasked
+        //                          (UndisposedIntermediateTests.Families.cs);
+        //   * index tiers        — the indexer get/set over IndexOracleTests' bases (same file).
+        // Every family measures its ERROR paths too (a NumPy-raising case must throw WITHOUT
+        // stranding a buffer): the region swallows the expected exception and must still balance.
         // ---------------------------------------------------------------------------------
 
-        private sealed record SweepResult(
-            long Measured, long GcInconclusive, long ThrewSkipped, long ErrorParitySkipped, int Files,
-            Dictionary<(string op, string layout, long escaped), (long count, string sampleId, string file)> Groups,
-            Dictionary<(string op, string layout), (long count, string sampleId, string file, long sampleBytes)> Bypasses);
+        /// <summary>
+        ///     The one sweep of the process, shared by <see cref="Corpus_AllOps_LeaveNoUndisposedIntermediates"/>
+        ///     and <see cref="LeakSurfaceCoverageTests"/> (which needs the measured op-key set). Lazy +
+        ///     thread-safe so whichever test runs first pays for it and the other reuses it.
+        /// </summary>
+        internal static readonly Lazy<SweepResult> SharedSweep =
+            new(() => RunSweep(includeOp: null), System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
 
+        /// <summary>
+        ///     Everything one sweep observed: verdict inputs (escape groups, bypass groups), the
+        ///     per-family counts behind the non-vacuity floors, and the per-op-key MEASURED counts the
+        ///     completeness gate cross-references against the inventory.
+        /// </summary>
+        /// <param name="OrdinaryMeasured">Success-path cases measured in the ordinary op tiers.</param>
+        /// <param name="MaskedMeasured">Success-path cases measured in the masked-array tiers.</param>
+        /// <param name="IndexMeasured">Success-path cases measured in the index tiers.</param>
+        /// <param name="ErrorPathsMeasured">Error-path cases (NumPy raised) measured across all families.</param>
+        /// <param name="GcInconclusive">Cases whose every attempt saw a GC (indistinguishable — never red).</param>
+        /// <param name="ThrewSkipped">Success-path cases NumSharp threw on (value/throw divergences are
+        /// FuzzCorpusTests' verdict; the op cannot be leak-measured there).</param>
+        /// <param name="Files">Corpus files replayed.</param>
+        /// <param name="Groups">Escape families keyed (op, layout, escaped-per-call).</param>
+        /// <param name="Bypasses">Pool-bypass families keyed (op, layout).</param>
+        /// <param name="MeasuredByOp">Success-path measured count per op key AND per derived coverage
+        /// key (<c>rnd:&lt;dist&gt;</c>, <c>grnd:&lt;method&gt;</c>, <c>index.get</c>, <c>index.set</c>).</param>
+        /// <param name="ErrorMeasuredByOp">Error-path measured count per op key.</param>
+        /// <param name="ThrewByOp">Threw-skipped count per op key (diagnostic rollup).</param>
+        /// <param name="InconclusiveIds">Op keys / surface ids with at least one SUCCESS-path measurement whose
+        /// every attempt saw a GC. The completeness gate credits them like a measurement: the member ran (its
+        /// warm invocation succeeded) and only the environment prevented a verdict — the same never-red policy
+        /// <see cref="GcInconclusive"/> already applies to the leak verdict, so a busy host cannot turn the
+        /// completeness gate red either.</param>
+        /// <param name="ErrorInconclusiveIds">The error-path twin of <paramref name="InconclusiveIds"/> — kept
+        /// apart because the corpus route credits SUCCESS paths only (an op whose every case raises has an
+        /// unaudited success path), while the direct runners credit either.</param>
+        /// <param name="DirectMeasured">Success-path DIRECT measurements — catalogue entries and property/field
+        /// reads, keyed by surface id rather than a corpus op key (0 for a corpus sweep).</param>
+        internal sealed record SweepResult(
+            long OrdinaryMeasured, long MaskedMeasured, long IndexMeasured, long ErrorPathsMeasured,
+            long GcInconclusive, long ThrewSkipped, int Files,
+            Dictionary<(string op, string layout, long escaped), (long count, string sampleId, string file)> Groups,
+            Dictionary<(string op, string layout), (long count, string sampleId, string file, long sampleBytes)> Bypasses,
+            Dictionary<string, long> MeasuredByOp,
+            Dictionary<string, long> ErrorMeasuredByOp,
+            Dictionary<string, long> ThrewByOp,
+            IReadOnlySet<string> InconclusiveIds,
+            IReadOnlySet<string> ErrorInconclusiveIds,
+            long DirectMeasured = 0)
+        {
+            /// <summary>All success-path cases measured, across every family and the direct runners.</summary>
+            public long Measured => OrdinaryMeasured + MaskedMeasured + IndexMeasured + DirectMeasured;
+        }
+
+        /// <summary>
+        ///     Mutable tallies one sweep accumulates while replaying the three families — one object
+        ///     instead of a dozen ref parameters threaded through every family replay.
+        /// </summary>
+        private sealed class SweepAccumulator
+        {
+            /// <summary>Success-path measured counts per family.</summary>
+            public long Ordinary, Masked, Index;
+
+            /// <summary>Success-path direct measurements (catalogue entries, property/field reads).</summary>
+            public long Direct;
+
+            /// <summary>Error-path cases measured (all families).</summary>
+            public long ErrorPaths;
+
+            /// <summary>Cases whose every measurement attempt saw a GC.</summary>
+            public long GcInconclusive;
+
+            /// <summary>Success-path cases NumSharp threw on (not leak-measurable there).</summary>
+            public long ThrewSkipped;
+
+            /// <summary>Escape families: (op, layout, escaped) → (count, sample id, file).</summary>
+            public readonly Dictionary<(string op, string layout, long escaped), (long count, string sampleId, string file)> Groups = new();
+
+            /// <summary>Bypass families: (op, layout) → (count, sample id, file, sample bytes).</summary>
+            public readonly Dictionary<(string op, string layout), (long count, string sampleId, string file, long sampleBytes)> Bypasses = new();
+
+            /// <summary>Success-path measured count per op key / derived coverage key.</summary>
+            public readonly Dictionary<string, long> MeasuredByOp = new(StringComparer.Ordinal);
+
+            /// <summary>Error-path measured count per op key.</summary>
+            public readonly Dictionary<string, long> ErrorMeasuredByOp = new(StringComparer.Ordinal);
+
+            /// <summary>Threw-skipped count per op key.</summary>
+            public readonly Dictionary<string, long> ThrewByOp = new(StringComparer.Ordinal);
+
+            /// <summary>Ids with a GC-inconclusive SUCCESS-path measurement (see <see cref="SweepResult.InconclusiveIds"/>).</summary>
+            public readonly HashSet<string> InconclusiveIds = new(StringComparer.Ordinal);
+
+            /// <summary>Ids with a GC-inconclusive ERROR-path measurement (see <see cref="SweepResult.ErrorInconclusiveIds"/>).</summary>
+            public readonly HashSet<string> ErrorInconclusiveIds = new(StringComparer.Ordinal);
+
+            /// <summary>Total measurements (success + error), for the periodic hygiene settle.</summary>
+            private long _measurements;
+
+            /// <summary>Records one threw-skipped success-path case.</summary>
+            /// <param name="op">The case's op key.</param>
+            public void Threw(string op)
+            {
+                ThrewSkipped++;
+                ThrewByOp[op] = ThrewByOp.GetValueOrDefault(op) + 1;
+            }
+
+            /// <summary>
+            ///     Records a measurement whose every attempt saw a GC — indistinguishable, so never a leak
+            ///     verdict — AND remembers which id it was, so the completeness gate can tell a member that
+            ///     RAN but could not be judged (credited, like the verdict's never-red rule) from one that
+            ///     never ran at all (uncovered). The single recording point for every family and runner.
+            /// </summary>
+            /// <param name="id">The case's op key or the entry's surface id; null records the count only.</param>
+            /// <param name="errorPath">True for an error-path measurement (kept apart: the corpus route
+            /// credits success paths only).</param>
+            public void Inconclusive(string id, bool errorPath)
+            {
+                GcInconclusive++;
+                if (id != null)
+                    (errorPath ? ErrorInconclusiveIds : InconclusiveIds).Add(id);
+            }
+
+            /// <summary>Freezes the tallies into the immutable verdict input every gate consumes.</summary>
+            /// <param name="files">How many corpus files (or 0 for a direct runner) were replayed.</param>
+            /// <returns>The sweep result; it shares this accumulator's collections, so record nothing after.</returns>
+            public SweepResult ToResult(int files)
+                => new(Ordinary, Masked, Index, ErrorPaths, GcInconclusive, ThrewSkipped, files,
+                       Groups, Bypasses, MeasuredByOp, ErrorMeasuredByOp, ThrewByOp,
+                       InconclusiveIds, ErrorInconclusiveIds, Direct);
+
+            /// <summary>
+            ///     Records a confirmed measurement and classifies it: a non-zero balance joins an
+            ///     escape group; a zero balance with zero takes and a fresh result joins a bypass group.
+            /// </summary>
+            /// <param name="op">The op key (the escape/bypass family key and the coverage key).</param>
+            /// <param name="coverageKey">An additional derived coverage key (rnd/grnd/index), or null.</param>
+            /// <param name="layout">The case's layout label (families multiply by layout).</param>
+            /// <param name="traffic">The confirmed traffic.</param>
+            /// <param name="freshBytes">Fresh (non-view, non-scalar-slot) result bytes, for the bypass verdict.</param>
+            /// <param name="errorPath">True when the case is an error path (NumPy raised).</param>
+            /// <param name="sampleId">The case id, kept for the first member of each family.</param>
+            /// <param name="file">The corpus file, kept with the sample id.</param>
+            public void Record(string op, string coverageKey, string layout, ScopeAudit.Traffic traffic,
+                               long freshBytes, bool errorPath, string sampleId, string file)
+            {
+                if (errorPath)
+                {
+                    ErrorPaths++;
+                    ErrorMeasuredByOp[op] = ErrorMeasuredByOp.GetValueOrDefault(op) + 1;
+                    layout += " [error path]";
+                }
+                else
+                {
+                    MeasuredByOp[op] = MeasuredByOp.GetValueOrDefault(op) + 1;
+                    if (coverageKey != null)
+                        MeasuredByOp[coverageKey] = MeasuredByOp.GetValueOrDefault(coverageKey) + 1;
+                }
+
+                // Hygiene: bound the backlog any leak-in-progress builds up across a long sweep.
+                if (++_measurements % 1024 == 0)
+                    ScopeAudit.Settle();
+
+                long escaped = traffic.Escaped;
+                if (escaped != 0)
+                {
+                    var key = (op, layout, escaped);
+                    Groups[key] = Groups.TryGetValue(key, out var g)
+                        ? (g.count + 1, g.sampleId, g.file)
+                        : (1, sampleId, file);
+                }
+                else if (traffic.Takes == 0 && freshBytes > 0)
+                {
+                    // FULL POOL BYPASS: the op handed back a fresh result (not a view of any
+                    // operand, larger than a scalar-pool slot) yet the bucketed pool saw
+                    // ZERO traffic — the buffer was allocated AND freed outside it, paying a
+                    // cold NativeMemory alloc + first-touch faults on every call with no
+                    // warm reuse (the allocator tax the pool exists to remove).
+                    var key = (op, layout);
+                    Bypasses[key] = Bypasses.TryGetValue(key, out var b)
+                        ? (b.count + 1, b.sampleId, b.file, b.sampleBytes)
+                        : (1, sampleId, file, freshBytes);
+                }
+            }
+        }
+
+        /// <summary>
+        ///     Replays every corpus family and returns the combined observations. See the section
+        ///     comment above for the families and the shared protocol.
+        /// </summary>
+        /// <param name="includeOp">Optional op-key filter for a focused re-sweep (null = everything).</param>
+        /// <returns>The sweep's observations.</returns>
         private static SweepResult RunSweep(Func<string, bool> includeOp)
         {
             var corpusDir = Path.Combine(AppContext.BaseDirectory, "Fuzz", "corpus");
             var files = Directory.GetFiles(corpusDir, "*.jsonl")
                 .Select(Path.GetFileName)
-                .Where(f => !f.StartsWith("index_", StringComparison.Ordinal))    // index oracle: different case schema (IndexOracleTests)
-                .Where(f => !f.StartsWith("ma_", StringComparison.Ordinal))       // masked-array oracle: NDMaskedArray operands + ApplyMasked, not OpRegistry.Apply (FuzzCorpusTests.Ma)
                 .Where(f => !f.EndsWith(".host.jsonl", StringComparison.Ordinal)) // host pins: not case files
                 .OrderBy(f => f, StringComparer.Ordinal)
                 .ToArray();
-            Assert.IsTrue(files.Length >= 40, $"only {files.Length} corpus files found — corpus copy regression?");
+            Assert.IsTrue(files.Length >= 80, $"only {files.Length} corpus files found — corpus copy regression?");
 
-            long measured = 0, gcInconclusive = 0, threwSkipped = 0, errorParitySkipped = 0;
-            var groups = new Dictionary<(string op, string layout, long escaped),
-                                        (long count, string sampleId, string file)>();
-            var bypasses = new Dictionary<(string op, string layout),
-                                          (long count, string sampleId, string file, long sampleBytes)>();
-
+            var acc = new SweepAccumulator();
             ScopeAudit.Settle();   // drain finalizer backlog left by earlier (undisposing) test classes
 
             foreach (var file in files)
+            {
+                if (file.StartsWith("index_", StringComparison.Ordinal))
+                    SweepIndexFile(file, includeOp, acc);          // index oracle: its own case schema (IndexOracleTests)
+                else if (file.StartsWith("ma_", StringComparison.Ordinal))
+                    SweepMaskedFile(file, includeOp, acc);         // masked-array oracle: NDMaskedArray operands + ApplyMasked
+                else
+                    SweepOrdinaryFile(file, includeOp, acc);
+            }
+
+            return acc.ToResult(files.Length);
+        }
+
+        /// <summary>
+        ///     The derived coverage key a stream case contributes besides its op key: the random
+        ///     tiers multiplex MANY public samplers through one op key (<c>rnd</c> carries the
+        ///     <c>NumPyRandom</c> method in <c>params.dist</c>, <c>grnd</c> the <c>Generator</c> method in
+        ///     <c>params.method</c>), so the completeness gate needs the sampler, not just the key.
+        /// </summary>
+        /// <param name="c">The corpus case.</param>
+        /// <returns><c>rnd:&lt;dist&gt;</c> / <c>grnd:&lt;method&gt;</c>, or null for every other op.</returns>
+        private static string CoverageKey(FuzzCorpus.Case c)
+        {
+            if (c.Params == null)
+                return null;
+            if (c.Op == "rnd" && c.Params.TryGetValue("dist", out var dist))
+                return "rnd:" + dist.GetString();
+            if (c.Op == "grnd" && c.Params.TryGetValue("method", out var method))
+                return "grnd:" + method.GetString();
+            return null;
+        }
+
+        /// <summary>
+        ///     Replays one ORDINARY op tier (the <see cref="FuzzCorpus.Case"/> schema through
+        ///     <see cref="OpRegistry"/>): success paths with the freshness/bypass inspection, error
+        ///     paths (NumPy raised) with the exception swallowed inside the measured region.
+        /// </summary>
+        /// <param name="file">The corpus file name.</param>
+        /// <param name="includeOp">Optional op-key filter.</param>
+        /// <param name="acc">The sweep's tallies.</param>
+        private static void SweepOrdinaryFile(string file, Func<string, bool> includeOp, SweepAccumulator acc)
+        {
             foreach (var c in FuzzCorpus.Load(file))
             {
                 if (includeOp != null && !includeOp(c.Op))
                     continue;
-
-                // Error-parity cases: NumPy raised here and NumSharp must throw. A throwing op's
-                // scope hygiene is worth gating eventually, but a thrown path has no result to
-                // dispose and its verdict belongs to FuzzCorpusTests.CheckError — skip.
-                if (c.Expects_Throw)
-                {
-                    errorParitySkipped++;
-                    continue;
-                }
 
                 var operands = new NumSharp.NDArray[c.Operands.Length];
                 var ranges = new List<(ulong lo, ulong hi)>(c.Operands.Length);
@@ -500,19 +770,26 @@ namespace NumSharp.Tests.Fuzz
                         operands[i] = FuzzCorpus.Reconstruct(c.Operands[i]);
                         // The operand's whole base-buffer byte range, for result-freshness checks:
                         // a result whose data pointer lands inside any of these is a VIEW, not a
-                        // fresh allocation.
+                        // fresh allocation. The range starts at the BASE BUFFER itself — a corpus
+                        // operand is an Alias of its reconstructed base storage, whose Storage.Address
+                        // is that base (the view's element offset lives in its Shape), so the range
+                        // must not be shifted back by the offset (it once was: `Address - Offset*isz`
+                        // placed a contiguous slice in the operand's last `offset` elements outside
+                        // the range — a latent false bypass — and the bytes just below the base inside
+                        // it — a latent masked one).
                         var o = c.Operands[i];
                         if (operands[i].size > 0 && o.BufferSize > 0)
                         {
                             int isz = FuzzCorpus.DtypeToTC(o.Dtype).SizeOf();
-                            ulong lo = Addr(operands[i]) - (ulong)(o.Offset * isz);
+                            ulong lo = BaseAddr(operands[i]);
                             ranges.Add((lo, lo + (ulong)(o.BufferSize * isz)));
                         }
                     }
                 }
                 catch
                 {
-                    threwSkipped++;
+                    acc.Threw(c.Op);
+                    DisposeOperands(operands);
                     continue;
                 }
 
@@ -521,6 +798,36 @@ namespace NumSharp.Tests.Fuzz
 
                 try
                 {
+                    if (c.Expects_Throw)
+                    {
+                        // ERROR PATH: NumPy raised here and NumSharp must too — THAT verdict belongs to
+                        // FuzzCorpusTests.CheckError. What this gate owns is that the throw strands
+                        // nothing: every buffer the op took before raising must be back in the pool
+                        // when the exception leaves it. The region swallows the exception (and disposes
+                        // a result, should NumSharp diverge and return one) so it is re-executable.
+                        void ErrorRegion()
+                        {
+                            try
+                            {
+                                DisposeResult(Invoke(c, operands), operands);
+                            }
+                            catch
+                            {
+                                // expected: the case is a NumPy error path
+                            }
+                        }
+
+                        ErrorRegion();   // warm: exception machinery + any one-time validation caches
+                        var errTraffic = ScopeAudit.MeasureConfirmedTraffic(ErrorRegion);
+                        if (errTraffic == null)
+                        {
+                            acc.Inconclusive(c.Op, errorPath: true);
+                            continue;
+                        }
+                        acc.Record(c.Op, null, c.Layout ?? "?", errTraffic.Value, 0, errorPath: true, c.Id, file);
+                        continue;
+                    }
+
                     // Warm invocation, un-measured: absorbs one-time retained allocations
                     // (FFT plan/twiddle caches, emitted-kernel warmup) that would otherwise
                     // read as escapes on the first use of an (op, size).
@@ -530,20 +837,19 @@ namespace NumSharp.Tests.Fuzz
                     }
                     catch
                     {
-                        threwSkipped++;   // value/throw divergences are FuzzCorpusTests' verdict, not ours
+                        acc.Threw(c.Op);   // value/throw divergences are FuzzCorpusTests' verdict, not ours
                         continue;
                     }
 
-                    // SCREEN, then CONFIRM. The sweep runs over a library with known leaks, so
-                    // escaped buffers accumulate; pacing/natural GCs collect them and the
-                    // finalizer thread drains RETURNS asynchronously across later regions —
-                    // invisible to GC-count detection (a drain is not a collection) and capable
-                    // of huge spurious negatives / masked positives. A non-zero screen is
-                    // therefore re-measured after a Settle: with the queue drained and no GC
-                    // inside the confirming region, that verdict is trustworthy. (The bypass
-                    // verdict needs no confirm: drain interference adds RETURNS, which makes
-                    // escaped negative and routes through the confirm path; takes==0 && escaped==0
-                    // implies returns==0 — arithmetically drain-free.)
+                    // SCREEN, then CONFIRM (ScopeAudit.MeasureConfirmedTraffic). The sweep may run over a
+                    // library with leaks, so escaped buffers accumulate; pacing/natural GCs collect them
+                    // and the finalizer thread drains RETURNS asynchronously across later regions —
+                    // invisible to GC-count detection (a drain is not a collection) and capable of huge
+                    // spurious negatives / masked positives. A non-zero screen is therefore re-measured
+                    // after a Settle: with the queue drained and no GC inside the confirming region,
+                    // that verdict is trustworthy. (The bypass verdict needs no confirm: drain
+                    // interference adds RETURNS, which makes escaped negative and routes through the
+                    // confirm path; takes==0 && escaped==0 implies returns==0 — arithmetically drain-free.)
                     long freshBytes = 0;
                     void Region()
                     {
@@ -552,52 +858,24 @@ namespace NumSharp.Tests.Fuzz
                         freshBytes = FreshResultBytes(res, operands, ranges);
                         DisposeResult(res, operands);
                     }
-                    var traffic = ScopeAudit.MeasureTraffic(Region);
-                    if (traffic is not null && traffic.Value.Escaped != 0)
-                    {
-                        ScopeAudit.Settle();
-                        traffic = ScopeAudit.MeasureTraffic(Region);
-                    }
+                    var traffic = ScopeAudit.MeasureConfirmedTraffic(Region);
                     if (traffic == null)
                     {
-                        gcInconclusive++;   // a GC landed inside every attempt — indistinguishable, never red
+                        // A GC landed inside every attempt — indistinguishable, never red. Recorded under the
+                        // op AND its derived coverage key, the keys the completeness gate credits.
+                        acc.Inconclusive(c.Op, errorPath: false);
+                        acc.InconclusiveIds.Add(CoverageKey(c) ?? c.Op);
                         continue;
                     }
 
-                    measured++;
-                    // Hygiene: bound the backlog the sweep's own (known-leak) drops build up.
-                    if (measured % 1024 == 0)
-                        ScopeAudit.Settle();
-
-                    long escaped = traffic.Value.Escaped;
-                    if (escaped != 0)
-                    {
-                        var key = (c.Op, c.Layout ?? "?", escaped);
-                        groups[key] = groups.TryGetValue(key, out var g)
-                            ? (g.count + 1, g.sampleId, g.file)
-                            : (1, c.Id, file);
-                    }
-                    else if (traffic.Value.Takes == 0 && freshBytes > 0)
-                    {
-                        // FULL POOL BYPASS: the op handed back a fresh result (not a view of any
-                        // operand, larger than a scalar-pool slot) yet the bucketed pool saw
-                        // ZERO traffic — the buffer was allocated AND freed outside it, paying a
-                        // cold NativeMemory alloc + first-touch faults on every call with no
-                        // warm reuse (the allocator tax the pool exists to remove).
-                        var key = (c.Op, c.Layout ?? "?");
-                        bypasses[key] = bypasses.TryGetValue(key, out var b)
-                            ? (b.count + 1, b.sampleId, b.file, b.sampleBytes)
-                            : (1, c.Id, file, freshBytes);
-                    }
+                    acc.Ordinary++;
+                    acc.Record(c.Op, CoverageKey(c), c.Layout ?? "?", traffic.Value, freshBytes, errorPath: false, c.Id, file);
                 }
                 finally
                 {
                     DisposeOperands(operands);
                 }
             }
-
-            return new SweepResult(measured, gcInconclusive, threwSkipped, errorParitySkipped,
-                                   files.Length, groups, bypasses);
         }
 
         /// <summary>Layout multiplies families, but a leak is a property of an op's code path —
@@ -624,6 +902,23 @@ namespace NumSharp.Tests.Fuzz
                         .OrderByDescending(g => g.Sum(x => x.Value.count))
                         .Select(g => $"{g.Key}: {g.Sum(x => x.Value.count)} cases / {g.Count()} families / " +
                                      $"e.g. {g.First().Value.sampleBytes} B fresh result")));
+        }
+
+        /// <summary>
+        ///     Prints which op keys had success-path cases NumSharp THREW on — cases the sweep could
+        ///     not leak-measure. Diagnostic only (the known ones are backend-only LAPACK ops, measured
+        ///     by <see cref="Corpus_BackendOps_LeaveNoUndisposedIntermediates"/>, and the documented
+        ///     MisalignedRegistry throw cells); <see cref="LeakSurfaceCoverageTests"/> is what fails
+        ///     when an API ends up with NO measured case anywhere.
+        /// </summary>
+        /// <param name="threwByOp">Threw-skipped count per op key.</param>
+        private static void PrintThrewRollup(Dictionary<string, long> threwByOp)
+        {
+            if (threwByOp.Count == 0)
+                return;
+            Console.WriteLine("[scope-audit] success-path cases skipped because NumSharp threw (not leak-measurable there):\n  " +
+                              string.Join("\n  ", threwByOp.OrderByDescending(k => k.Value).ThenBy(k => k.Key, StringComparer.Ordinal)
+                                                           .Select(k => $"{k.Key}: {k.Value}")));
         }
 
         // ---------------------------------------------------------------------------------
@@ -679,7 +974,22 @@ namespace NumSharp.Tests.Fuzz
             return bytes;
         }
 
+        /// <summary>The array's data pointer as the freshness check compares it (<c>Storage.Address</c>:
+        /// the base for an Alias-built view, the first element for a re-seated contiguous slice).</summary>
+        /// <param name="nd">The array.</param>
+        /// <returns>The address as an unsigned integer.</returns>
         private static unsafe ulong Addr(NumSharp.NDArray nd) => (ulong)(byte*)nd.Address;
+
+        /// <summary>
+        ///     The start of the BASE BUFFER an array's storage aliases (its internal slice's address) —
+        ///     the lower bound of the operand byte range a view result must fall inside. Independent of
+        ///     how the view was built (Alias keeps the base in <c>Storage.Address</c> and the offset in
+        ///     the Shape; slicing re-seats <c>Storage.Address</c>), which is why it is read from the
+        ///     slice rather than derived from <see cref="Addr"/>.
+        /// </summary>
+        /// <param name="nd">A non-empty array.</param>
+        /// <returns>The base-buffer address as an unsigned integer.</returns>
+        private static unsafe ulong BaseAddr(NumSharp.NDArray nd) => (ulong)(byte*)nd.Storage.InternalArray.Address;
 
         // ---------------------------------------------------------------------------------
         // Plumbing.

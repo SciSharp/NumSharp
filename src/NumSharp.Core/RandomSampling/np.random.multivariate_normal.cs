@@ -55,38 +55,129 @@ namespace NumSharp
             if (check_valid != "warn" && check_valid != "raise" && check_valid != "ignore")
                 throw new ArgumentException("check_valid must equal 'warn', 'raise', or 'ignore'", nameof(check_valid));
 
-            // Copy mean to unmanaged storage
-            var meanBlock = new UnmanagedMemoryBlock<double>(n);
-            var meanSlice = new ArraySlice<double>(meanBlock);
-            for (long i = 0; i < n; i++)
-                meanSlice[i] = mean[i];
-
-            // Copy cov to unmanaged storage (row-major: cov[i,j] -> covSlice[i*n+j])
-            var covBlock = new UnmanagedMemoryBlock<double>(n * n);
-            var covSlice = new ArraySlice<double>(covBlock);
-            for (long i = 0; i < n; i++)
+            // The mean/cov copies, the transform and the z scratch are RAW pooled buffers (block ctor →
+            // SizeBucketedBufferPool.Take), not NDArrays, so no [NDScoped] scope can reclaim them; all four are
+            // private to this call (the result is written into a fresh NDArray), so each goes back to the pool
+            // in the finally — on the check_valid="raise" throw too. Before, every call stranded all four (plus
+            // ComputeSvdTransform's three) until a GC finalized them: 7 pooled buffers per call, measured.
+            ArraySlice<double> meanSlice = default, covSlice = default, transform = default, z = default;
+            try
             {
-                for (long j = 0; j < n; j++)
-                    covSlice[i * n + j] = cov[i, j];
+                // Copy mean to unmanaged storage
+                meanSlice = new ArraySlice<double>(new UnmanagedMemoryBlock<double>(n));
+                for (long i = 0; i < n; i++)
+                    meanSlice[i] = mean[i];
+
+                // Copy cov to unmanaged storage (row-major: cov[i,j] -> covSlice[i*n+j])
+                covSlice = new ArraySlice<double>(new UnmanagedMemoryBlock<double>(n * n));
+                for (long i = 0; i < n; i++)
+                {
+                    for (long j = 0; j < n; j++)
+                        covSlice[i * n + j] = cov[i, j];
+                }
+
+                // Compute SVD transform matrix: U @ sqrt(S)
+                // For symmetric matrices, this matches NumPy's approach
+                transform = new ArraySlice<double>(new UnmanagedMemoryBlock<double>(n * n));
+
+                bool success = ComputeSvdTransform(covSlice, transform, n, tol);
+                if (!success)
+                {
+                    if (check_valid == "raise")
+                        throw new ArgumentException("covariance is not symmetric positive-semidefinite.", nameof(cov));
+                    // For warn/ignore, we still computed a fallback transform
+                }
+
+                // Allocate scratch space for z vector
+                z = new ArraySlice<double>(new UnmanagedMemoryBlock<double>(n));
+
+                return DrawMultivariateNormal(meanSlice, transform, n, z, size);
             }
-
-            // Compute SVD transform matrix: U @ sqrt(S)
-            // For symmetric matrices, this matches NumPy's approach
-            var transformBlock = new UnmanagedMemoryBlock<double>(n * n);
-            var transform = new ArraySlice<double>(transformBlock);
-
-            bool success = ComputeSvdTransform(covSlice, transform, n, tol);
-            if (!success)
+            finally
             {
-                if (check_valid == "raise")
-                    throw new ArgumentException("covariance is not symmetric positive-semidefinite.", nameof(cov));
-                // For warn/ignore, we still computed a fallback transform
+                FreeScratch(meanSlice, covSlice, transform, z);
             }
+        }
 
-            // Allocate scratch space for z vector
-            var zBlock = new UnmanagedMemoryBlock<double>(n);
-            var z = new ArraySlice<double>(zBlock);
+        /// <summary>
+        ///     Draw random samples from a multivariate normal distribution.
+        /// </summary>
+        public unsafe NDArray multivariate_normal(NDArray mean, NDArray cov, Shape? size = null,
+            string check_valid = "warn", double tol = 1e-8)
+        {
+            // Validate dimensions
+            if (mean.ndim != 1)
+                throw new ArgumentException("mean must be 1 dimensional", nameof(mean));
+            if (cov.ndim != 2)
+                throw new ArgumentException("cov must be 2 dimensional and square", nameof(cov));
 
+            long n = mean.size;
+
+            // Raw pooled scratch, private to this call — freed in the finally on every path, including the
+            // validation throws that come AFTER the mean/cov copies (see the double[] overload).
+            ArraySlice<double> meanSlice = default, covSlice = default, transform = default, z = default;
+            try
+            {
+                // Copy mean (any layout) into a flat double buffer via NDIter.Copy.
+                meanSlice = new ArraySlice<double>(new UnmanagedMemoryBlock<double>(n));
+                var meanStorage = new UnmanagedStorage(meanSlice, new Shape(n));
+                NDIter.Copy(meanStorage, mean.Storage);
+
+                // Copy cov to unmanaged storage (row-major)
+                covSlice = new ArraySlice<double>(new UnmanagedMemoryBlock<double>(n * n));
+                for (long i = 0; i < cov.shape[0]; i++)
+                {
+                    for (long j = 0; j < cov.shape[1]; j++)
+                    {
+                        covSlice[i * n + j] = cov.GetDouble(i, j);
+                    }
+                }
+
+                // Validate check_valid parameter
+                if (check_valid != "warn" && check_valid != "raise" && check_valid != "ignore")
+                    throw new ArgumentException("check_valid must equal 'warn', 'raise', or 'ignore'", nameof(check_valid));
+
+                // Check cov is square
+                if (cov.shape[0] != cov.shape[1])
+                    throw new ArgumentException("cov must be 2 dimensional and square", nameof(cov));
+                if (cov.shape[0] != n)
+                    throw new ArgumentException("mean and cov must have same length", nameof(cov));
+
+                // Compute SVD transform matrix
+                transform = new ArraySlice<double>(new UnmanagedMemoryBlock<double>(n * n));
+
+                bool success = ComputeSvdTransform(covSlice, transform, n, tol);
+                if (!success)
+                {
+                    if (check_valid == "raise")
+                        throw new ArgumentException("covariance is not symmetric positive-semidefinite.", nameof(cov));
+                }
+
+                // Allocate scratch space for z vector
+                z = new ArraySlice<double>(new UnmanagedMemoryBlock<double>(n));
+
+                return DrawMultivariateNormal(meanSlice, transform, n, z, size);
+            }
+            finally
+            {
+                FreeScratch(meanSlice, covSlice, transform, z);
+            }
+        }
+
+        /// <summary>
+        ///     Draws the samples into a fresh result — a single <c>(n,)</c> vector when <paramref name="size"/> is
+        ///     null, else <c>(*size, n)</c> — one <see cref="SampleMultivariateNormalSvd"/> per sample, in C order.
+        ///     Shared by both public overloads (identical draw order, so identical streams).
+        /// </summary>
+        /// <param name="meanSlice">The flat mean vector (length <paramref name="n"/>).</param>
+        /// <param name="transform">The row-major <c>U @ sqrt(S)</c> transform.</param>
+        /// <param name="n">The distribution's dimension.</param>
+        /// <param name="z">Scratch for one standard-normal vector (length <paramref name="n"/>).</param>
+        /// <param name="size">The sample shape, or null for one sample.</param>
+        /// <returns>The drawn samples (the caller owns the array).</returns>
+        private NDArray DrawMultivariateNormal(ArraySlice<double> meanSlice, ArraySlice<double> transform, long n,
+                                               ArraySlice<double> z, Shape? size)
+        {
             if (size == null)
             {
                 // Return single sample with shape (n,)
@@ -118,89 +209,16 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Draw random samples from a multivariate normal distribution.
+        ///     Returns each allocated raw scratch slice to the pool (a <c>default</c> slice — never allocated
+        ///     because an earlier step threw — is skipped).
         /// </summary>
-        public unsafe NDArray multivariate_normal(NDArray mean, NDArray cov, Shape? size = null,
-            string check_valid = "warn", double tol = 1e-8)
+        /// <param name="slices">The scratch slices, allocated or default.</param>
+        private static unsafe void FreeScratch(params ArraySlice<double>[] slices)
         {
-            // Validate dimensions
-            if (mean.ndim != 1)
-                throw new ArgumentException("mean must be 1 dimensional", nameof(mean));
-            if (cov.ndim != 2)
-                throw new ArgumentException("cov must be 2 dimensional and square", nameof(cov));
-
-            long n = mean.size;
-
-            // Copy mean (any layout) into a flat double buffer via NDIter.Copy.
-            var meanBlock = new UnmanagedMemoryBlock<double>(n);
-            var meanSlice = new ArraySlice<double>(meanBlock);
-            var meanStorage = new UnmanagedStorage(meanSlice, new Shape(n));
-            NDIter.Copy(meanStorage, mean.Storage);
-
-            // Copy cov to unmanaged storage (row-major)
-            var covBlock = new UnmanagedMemoryBlock<double>(n * n);
-            var covSlice = new ArraySlice<double>(covBlock);
-            for (long i = 0; i < cov.shape[0]; i++)
-            {
-                for (long j = 0; j < cov.shape[1]; j++)
-                {
-                    covSlice[i * n + j] = cov.GetDouble(i, j);
-                }
-            }
-
-            // Validate check_valid parameter
-            if (check_valid != "warn" && check_valid != "raise" && check_valid != "ignore")
-                throw new ArgumentException("check_valid must equal 'warn', 'raise', or 'ignore'", nameof(check_valid));
-
-            // Check cov is square
-            if (cov.shape[0] != cov.shape[1])
-                throw new ArgumentException("cov must be 2 dimensional and square", nameof(cov));
-            if (cov.shape[0] != n)
-                throw new ArgumentException("mean and cov must have same length", nameof(cov));
-
-            // Compute SVD transform matrix
-            var transformBlock = new UnmanagedMemoryBlock<double>(n * n);
-            var transform = new ArraySlice<double>(transformBlock);
-
-            bool success = ComputeSvdTransform(covSlice, transform, n, tol);
-            if (!success)
-            {
-                if (check_valid == "raise")
-                    throw new ArgumentException("covariance is not symmetric positive-semidefinite.", nameof(cov));
-            }
-
-            // Allocate scratch space for z vector
-            var zBlock = new UnmanagedMemoryBlock<double>(n);
-            var z = new ArraySlice<double>(zBlock);
-
-            if (size == null)
-            {
-                // Return single sample with shape (n,)
-                var result = new NDArray<double>(new Shape(n));
-                ArraySlice<double> data = result.Data<double>();
-                SampleMultivariateNormalSvd(meanSlice, transform, n, z, data, 0);
-                return result;
-            }
-
-            // Output shape is (*size, n)
-            var sizeVal2 = size.Value;
-            long[] outputDims = new long[sizeVal2.NDim + 1];
-            for (long i = 0; i < sizeVal2.NDim; i++)
-                outputDims[i] = sizeVal2.dimensions[i];
-            outputDims[sizeVal2.NDim] = n;
-
-            var ret = new NDArray<double>(outputDims);
-            ArraySlice<double> retData = ret.Data<double>();
-
-            // Number of samples is product of size dimensions
-            long numSamples = sizeVal2.size;
-
-            for (long s = 0; s < numSamples; s++)
-            {
-                SampleMultivariateNormalSvd(meanSlice, transform, n, z, retData, s * n);
-            }
-
-            return ret;
+            // A default slice has a null Address (its block was never constructed); an allocated one never does.
+            foreach (var slice in slices)
+                if (slice.Address != null)
+                    slice.DangerousFree();
         }
 
         /// <summary>
@@ -260,56 +278,66 @@ namespace NumSharp
             // cov = U @ S @ V.T where U = V for symmetric matrices
             // So we use Jacobi eigendecomposition
 
-            // Allocate working arrays
+            // Allocate working arrays. All three are RAW pooled buffers (SizeBucketedBufferPool.Take via the
+            // block ctor), not NDArrays — no [NDScoped] scope can see them — and all are private to this call
+            // (the result is written into the caller's `transform`), so they go back to the pool in the finally.
             var eigenvectorsBlock = new UnmanagedMemoryBlock<double>(n * n);
             var eigenvectors = new ArraySlice<double>(eigenvectorsBlock);
             var eigenvaluesBlock = new UnmanagedMemoryBlock<double>(n);
             var eigenvalues = new ArraySlice<double>(eigenvaluesBlock);
             var workBlock = new UnmanagedMemoryBlock<double>(n * n);
             var work = new ArraySlice<double>(workBlock);
-
-            // Copy cov to work matrix
-            for (long i = 0; i < n * n; i++)
-                work[i] = cov[i];
-
-            // Initialize eigenvectors to identity
-            for (long i = 0; i < n; i++)
+            try
             {
-                for (long j = 0; j < n; j++)
-                    eigenvectors[i * n + j] = (i == j) ? 1.0 : 0.0;
-            }
+                // Copy cov to work matrix
+                for (long i = 0; i < n * n; i++)
+                    work[i] = cov[i];
 
-            // Jacobi eigendecomposition
-            bool hasNegative = false;
-            JacobiEigendecomposition(work, eigenvectors, eigenvalues, n, 100, 1e-12);
-
-            // Check for negative eigenvalues
-            for (long i = 0; i < n; i++)
-            {
-                if (eigenvalues[i] < -tol)
-                    hasNegative = true;
-            }
-
-            // Sort eigenvalues in DESCENDING order (to match NumPy SVD)
-            // and reorder eigenvectors accordingly
-            SortEigenDescending(eigenvalues, eigenvectors, n);
-
-            // Normalize eigenvector signs to match NumPy/LAPACK SVD convention:
-            // The element with largest absolute value in each column should be NEGATIVE
-            NormalizeEigenvectorSigns(eigenvectors, n);
-
-            // Compute transform = eigenvectors @ diag(sqrt(abs(eigenvalues)))
-            // NumPy uses abs for robustness with nearly singular matrices
-            for (long i = 0; i < n; i++)
-            {
-                double sqrtEig = Math.Sqrt(Math.Abs(eigenvalues[i]));
-                for (long j = 0; j < n; j++)
+                // Initialize eigenvectors to identity
+                for (long i = 0; i < n; i++)
                 {
-                    transform[j * n + i] = eigenvectors[j * n + i] * sqrtEig;
+                    for (long j = 0; j < n; j++)
+                        eigenvectors[i * n + j] = (i == j) ? 1.0 : 0.0;
                 }
-            }
 
-            return !hasNegative;
+                // Jacobi eigendecomposition
+                bool hasNegative = false;
+                JacobiEigendecomposition(work, eigenvectors, eigenvalues, n, 100, 1e-12);
+
+                // Check for negative eigenvalues
+                for (long i = 0; i < n; i++)
+                {
+                    if (eigenvalues[i] < -tol)
+                        hasNegative = true;
+                }
+
+                // Sort eigenvalues in DESCENDING order (to match NumPy SVD)
+                // and reorder eigenvectors accordingly
+                SortEigenDescending(eigenvalues, eigenvectors, n);
+
+                // Normalize eigenvector signs to match NumPy/LAPACK SVD convention:
+                // The element with largest absolute value in each column should be NEGATIVE
+                NormalizeEigenvectorSigns(eigenvectors, n);
+
+                // Compute transform = eigenvectors @ diag(sqrt(abs(eigenvalues)))
+                // NumPy uses abs for robustness with nearly singular matrices
+                for (long i = 0; i < n; i++)
+                {
+                    double sqrtEig = Math.Sqrt(Math.Abs(eigenvalues[i]));
+                    for (long j = 0; j < n; j++)
+                    {
+                        transform[j * n + i] = eigenvectors[j * n + i] * sqrtEig;
+                    }
+                }
+
+                return !hasNegative;
+            }
+            finally
+            {
+                work.DangerousFree();
+                eigenvalues.DangerousFree();
+                eigenvectors.DangerousFree();
+            }
         }
 
         /// <summary>

@@ -56,7 +56,15 @@ namespace NumSharp
         ///     less than its input's, so the reduced axis cannot be re-inserted —
         ///     <c>"function is not returning an array of the correct shape"</c>, verbatim with NumPy.
         /// </exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.apply_over_axes.html</remarks>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.apply_over_axes.html
+        ///     <para><b>Ownership.</b> Every array <paramref name="func"/> returns stays the CALLER's: this method
+        ///     never disposes one, because a callback may return an array it keeps using. With a reduction that
+        ///     allocates (<c>np.sum</c>), the intermediate result of each axis but the last is therefore released
+        ///     only by a GC — run the call inside an <see cref="NDScope"/> (yielding the final result) when
+        ///     deterministic release matters. The re-expanded views this method creates are its own and are
+        ///     released as soon as they are superseded.</para>
+        /// </remarks>
         public static NDArray apply_over_axes(Func<NDArray, int, NDArray> func, NDArray a, int[] axes)
         {
             if (func is null)
@@ -70,6 +78,13 @@ namespace NumSharp
             NDArray val = a;
             int N = a.ndim;   // negatives normalize against the ORIGINAL rank, exactly as NumPy does
 
+            // Ownership: arrays `func` RETURNS stay the caller's (a callback may return an array it keeps
+            // using, so this method never disposes one); only the expand_dims views this method creates are
+            // its own. `valIsOurs` tracks whether the running `val` is such a view, so a superseded one is
+            // released (dropping its counted reference on the callback result it aliases) — the final `val`
+            // is returned and never released here (R1).
+            bool valIsOurs = false;
+
             foreach (int rawAxis in axes)
             {
                 int axis = rawAxis < 0 ? N + rawAxis : rawAxis;
@@ -81,7 +96,7 @@ namespace NumSharp
                 if (res.ndim == val.ndim)
                 {
                     // func kept the rank (e.g. a keepdims=True reduction) — take it as-is.
-                    val = res;
+                    Supersede(ref val, ref valIsOurs, res, resIsOurs: false);
                 }
                 else
                 {
@@ -89,15 +104,41 @@ namespace NumSharp
                     // expand_dims validates `axis` against the output rank and raises AxisError if the
                     // drop was by more than one dimension leaves it out of range; a still-wrong rank is
                     // the "correct shape" ValueError below (both match NumPy).
-                    res = np.expand_dims(res, axis);
-                    if (res.ndim == val.ndim)
-                        val = res;
+                    var expanded = np.expand_dims(res, axis);
+                    if (expanded.ndim == val.ndim)
+                    {
+                        Supersede(ref val, ref valIsOurs, expanded, resIsOurs: true);
+                    }
                     else
+                    {
+                        expanded.Dispose();   // our own view, never exposed
                         throw new ValueError("function is not returning an array of the correct shape");
+                    }
                 }
             }
 
             return val;
+        }
+
+        /// <summary>
+        ///     Advances <see cref="apply_over_axes(Func{NDArray, int, NDArray}, NDArray, int[])"/>'s running
+        ///     value to <paramref name="next"/>, releasing the superseded value only when it is one of the
+        ///     method's OWN expand_dims views — never a callback result, never the caller's input.
+        /// </summary>
+        /// <param name="val">The running value (replaced by <paramref name="next"/>).</param>
+        /// <param name="valIsOurs">Whether <paramref name="val"/> is this method's own view (updated for <paramref name="next"/>).</param>
+        /// <param name="next">The new running value.</param>
+        /// <param name="resIsOurs">Whether <paramref name="next"/> is this method's own view.</param>
+        private static void Supersede(ref NDArray val, ref bool valIsOurs, NDArray next, bool resIsOurs)
+        {
+            // An identity callback hands the running value straight back: nothing is superseded, and the
+            // ownership of `val` is unchanged (it may still be our view).
+            if (ReferenceEquals(val, next))
+                return;
+            if (valIsOurs)
+                val.Dispose();
+            val = next;
+            valIsOurs = resIsOurs;
         }
 
         /// <summary>
