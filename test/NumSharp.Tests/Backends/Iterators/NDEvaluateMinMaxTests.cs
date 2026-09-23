@@ -338,11 +338,18 @@ namespace NumSharp.Tests.Backends.Iterators
         }
 
         /// <summary>
-        /// Where the host must NOT impose the contiguous schedule: a bare strided / broadcast leaf (NumPy reduces those
-        /// with its scalar 8-accumulator unroll), an integer child that does not stream (the fold is exact), and every
-        /// dtype outside the served set (Half, Complex, Boolean) — all fold, with the value still right. A strided FLOAT
-        /// computed child is materialized (NumPy materializes it too) and does take the exact schedule.
+        /// Where the host must NOT impose the CONTIGUOUS schedule, and what it does instead. A bare strided leaf is no
+        /// longer a decline: NumPy reduces it through its iterator (one strided run's 8-accumulator unroll here), and
+        /// the flat walker (<c>NumPyMinMaxReduce.ReduceFlat</c>, the same one the engine's <c>np.max</c> runs) reproduces
+        /// that in place. What still declines to the fold, value still right: a bare BROADCAST leaf (NumPy's stride-0
+        /// reduce path is not ported), an integer child that does not stream (the fold is exact — min/max of integers is
+        /// order-free), and every dtype outside the served set (Half, Complex, Boolean). A strided FLOAT computed child is
+        /// materialized (NumPy materializes it too) and does take the exact schedule.
         /// </summary>
+        /// <remarks>
+        /// The counter is reset before every evaluate it checks: the engine's own <c>np.amax</c> / <c>np.amin</c> —
+        /// used here to compute the expected values — ALSO takes the exact flat walker and bumps the same counter.
+        /// </remarks>
         [TestMethod]
         public void Declines_AndTheMaterializeRoute()
         {
@@ -350,9 +357,17 @@ namespace NumSharp.Tests.Backends.Iterators
             var strided = big["::3"];
             NDExpr.ExactMinMaxRuns = 0;
             var s = np.evaluate(NDExpr.Max((NDExpr)strided));
-            Assert.AreEqual(0, NDExpr.ExactMinMaxRuns, "a bare strided leaf keeps the fold");
+            Assert.AreEqual(1, NDExpr.ExactMinMaxRuns, "a bare strided leaf runs NumPy's strided schedule in place");
             Assert.AreEqual((double)np.amax(strided), s.GetAtIndex<double>(0));
 
+            // A bare broadcast leaf: the flat walker refuses stride-0 operands, so the fold answers (value-exact).
+            var bleaf = np.broadcast_to(np.arange(7).astype(NPTypeCode.Double) - 3, new Shape(5, 7));
+            NDExpr.ExactMinMaxRuns = 0;
+            var bl = np.evaluate(NDExpr.Min((NDExpr)bleaf));
+            Assert.AreEqual(0, NDExpr.ExactMinMaxRuns, "a bare broadcast leaf keeps the fold");
+            Assert.AreEqual(-3.0, bl.GetAtIndex<double>(0));
+
+            NDExpr.ExactMinMaxRuns = 0;
             NDExpr.StreamingReductions = 0;
             var sc = np.evaluate(NDExpr.Max((NDExpr)strided * 2.0));
             Assert.AreEqual(1, NDExpr.ExactMinMaxRuns, "a strided float computed child is materialized, then exact");

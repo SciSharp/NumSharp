@@ -282,9 +282,9 @@ bit-exact (`ILKernelGenerator.Reduction.Pairwise.cs`); only the fused reduce pat
    scoped, the forced-fold build fails 52/29,563 cases — C9 has teeth. Gates: `NDEvaluateStreamingTests` 13 (+2:
    permuted-dense flat reductions == the base's bits, with a teeth check that logical order differs; NumPy-probed
    integer means at bufsize 8192 AND 4096 on both routes; MUTANTS no-permuted / whole-array pairwise / dense-check-
-   always-true all red). Still on the scalar fold: integer `Sum`/`Prod` (flat and axis — flat already 3.4× NumPy), the
-   axis `Min`/`Max`, and the non-dense bare leaf's min/max (the float axis `Sum`/`Mean`/`Prod` stream since M3, the axis
-   bool folds since the paragraph below).
+   always-true all red). Still on the scalar fold: integer `Sum`/`Prod` (flat and axis — flat already 3.4× NumPy); the
+   axis `Min`/`Max` and the non-dense bare leaf's min/max went NumPy-exact in "Axis + flat Min/Max everywhere" below
+   (the float axis `Sum`/`Mean`/`Prod` stream since M3, the axis bool folds since the paragraph below).
    **Axis bool folds STREAMED (LANDED):** the axis `Any` / `All` / `Sum`-of-a-bool-child (`CountNonzero`) was the worst
    remaining gap-map cell — `any(a>b, axis=0)` NPY/NS 0.37 @100K, 0.23× NumSharp's own unfused `np.any`, the seeded
    per-output scalar fold paying one iterator pass for nothing an order-free reduction needs. `DefaultEngine.
@@ -323,6 +323,109 @@ bit-exact (`ILKernelGenerator.Reduction.Pairwise.cs`); only the fused reduce pat
    axis=1)` @4M is at parity with the unfused chain, 1.3× NumPy) — producing a short prefix of each row first would
    close it; and the leaf slab combine re-reads/re-writes the accumulator per slab, where OR-ing two slabs before the
    accumulator touch would cut the `any(none, axis=0)` 4M cell's traffic by a quarter.
+   **Axis + flat `Min`/`Max` everywhere — engine AND np.evaluate — NumPy-EXACT (LANDED):** after the contiguous flat
+   schedule above, the rest of the min/max surface still matched NumPy's VALUE only (the ±0 sign and the NaN payload
+   were schedule-dependent): every AXIS reduction (engine `np.max`/`np.min`/`np.ptp` and the fused `Max(x, axis)`), the
+   engine's FLAT `np.max`/`np.min`/`np.ptp`, and the fused form's non-dense bare leaf. All now run NumPy's own
+   schedule (`Backends/Default/Math/Reduction/Default.Reduction.MinMax.Exact.cs`, `NumPyMinMaxReduce`), established
+   first by reading `nditer_constr.c`/`reduction.c`/`loops_minmax.dispatch.c.src` and then pinned by probes:
+   - **Axis:** NumPy copies each output's first reduced element (`PyArray_CopyInitialReduceValues`), then walks a
+     K-order `NpyIter` built with `NPY_ITER_DONT_NEGATE_STRIDES` (logical order along every axis). Its innermost axis is
+     the extent > 1 axis with the smallest |stride| of the input (the output's stride-0 axis never votes), a TIE going
+     to the LATER axis (the stable insertion sort starts from reversed C order). If that is the reduced axis: **ROW
+     mode** — every output is one inner-loop call over its row after the copied element, `simd_reduce_c` for a
+     contiguous row (the lane-exact schedule above, `ReduceRow`), NumPy's scalar 8-accumulator unroll for a strided one
+     (`ReduceStridedRow`). Otherwise **SLAB mode** — the first slab is copied into the output run, and every further
+     reduced index folds in elementwise (`CombineRun`: `o = N(o, x)`, the per-element sequential fold). Outer axes that
+     continue the run contiguously in BOTH operands merge into it (NumPy's coalescing), and the outer walk goes in memory
+     order for locality — each output's operation sequence is fixed by the mode, not by the walk.
+   - **Flat:** the 0-d output makes every axis a reduce axis and the iterator coalesces axes SIGNED (`stride·extent ==
+     next stride`, so a reversed block is one run of stride −1 and a stepped one a run of stride 2 — `FlatIteratorAxes`).
+     One run → one call (`simd_reduce_c` contiguous, the 8-accumulator unroll strided). Two or more runs →
+     `npyiter_find_buffering_setup`'s cost model (`FlatBufferingDim`, ported line for line — including its
+     `size >= maximum_size` stop): best dim 0 (the innermost run is longer than half the buffer) → UNBUFFERED, one call
+     per run, the first skipping the copied element (`ReduceFlatRows`); otherwise BUFFERED — the elements are copied in
+     iteration order into fills of `coresize · ⌊bufsize/coresize⌋` elements (or the whole best block when it fits),
+     never crossing the end of the outer block, and EACH FILL IS ONE CONTIGUOUS `simd_reduce_c` CALL
+     (`ReduceFlatBuffered`) — so a NaN met anywhere in a fill comes back canonical, a running NaN is re-canonicalized by
+     the next fill however short, and a ±0 tie can be decided by where a fill boundary falls. The fill size follows
+     `np.getbufsize()` (thread-local; `np.setbufsize(4096)` changes NumPy's answer too, probed). Scratch: a 2 KB
+     `stackalloc`, else `NativeMemory` freed in `finally`.
+   - **The strided unroll's lane order** (m0..m7 → `(0,1)(2,3)(4,5)(6,7)` → `(01,23)(45,67)` → `(0123,4567)`, then
+     `r = N(r, m)`, then the scalar tail): NumPy's lane op `N(a, b) = isnan(a) ? a : (a > b ? a : b)` is ASSOCIATIVE as a
+     selection (first NaN wins, else the LAST max-equal element), so the whole schedule is "the latest position in the
+     order x[0], lane 0 … lane 7, tail wins a ±0 tie" — probed on 1,056 cases (every lane pair × both zero orders ×
+     strides −1/2/−3 × max/min × f64/f32 + x[0]-vs-lane + lane-vs-tail): 0 disagreements. Consequence: the eight
+     accumulators can be VECTOR LANES (`ChainStrided` — one `Vector256` of 4-byte lanes, a lo/hi pair of 8-byte lanes)
+     fed by `GatherRun` (a stride of −1 is ONE contiguous load + a lane reverse — `Permute4x64` / `PermuteVar8x32`;
+     other strides a scalar-load gather), exact at any width because the lanes never mix before the combine.
+   **Routes.** Engine: `Default.Reduction.AMax/AMin` try `TryExactAxisMinMax` / `TryExactFlatMinMaxScalar` first (flat
+   only when no `dtype=` cast is requested), falling back to the old IL kernels on decline; `np.ptp` composes them and
+   inherits. np.evaluate: `TryExactFlatMinMax` — a dense bare leaf (C/F/any transpose) keeps the in-place contiguous
+   schedule, any other non-broadcast bare leaf goes through `TryExactFlatMinMaxArray` (the flat walker above); axis —
+   `TryExactAxisMinMaxEval` (`DefaultEngine.Evaluate.MinMaxAxis.cs`): a bare leaf reduces IN PLACE through
+   `ReduceAxis`; a computed child over all-C / all-F operands STREAMS (`StreamExactAxisMinMax` — rows reduced per
+   produced block, a row longer than a block streamed as ONE unbroken `simd_reduce_c` via `StreamMinMax(start)`, slabs
+   folded as produced with the output block kept hot); any other computed child is MATERIALIZED in the layout NumPy's
+   own ufunc would allocate (`MaterializeChildNumPyLayout` — `npyiter_new_temp_array`'s K-order permutation, never a
+   negated stride) and then reduced by `ReduceAxis`; the flat materialize route uses the same layout. Declines (the old
+   paths, value-exact): a broadcast operand (NumPy's stride-0 handling is not ported), Half / Decimal / Complex / Bool /
+   Char (not served), rank > 64, empty. `NDExpr.DisableExactMinMax` (thread-static) turns every exact route off;
+   `NDExpr.ExactMinMaxRuns` counts engagements.
+   **Making the exact paths fast** (exactness first cost 0.6–0.7× the old kernels on strided/reversed layouts): the
+   vectorized strided unroll and gather/reverse copy above; a **NaN-free fast fold** in `FoldGroups` — NumPy's blended
+   `N` equals the plain `vmaxp`/`vminp` on every lane whose FIRST operand is not NaN, so a group whose eight vectors are
+   proven NaN-free by four `vcmpunordp` (one per vector pair) folds with one instruction per op instead of three, and the
+   first group holding a NaN breaks out BEFORE touching the accumulator and continues on NumPy's blended rule (only
+   entered with a NaN-free seed); the horizontal step (`ReduceLanes`) runs the no-NaN cascade as an SSE `P128` ladder
+   after its any-NaN check; one-group-ahead `Prefetch0` in the group loop.
+   **Verified:** three NumPy 2.4.2 replay oracles — axis `.npy` (600 cases: f64/f32 lane-structured ±0 / NaN-payload
+   pools × 11 shapes × C/F × every axis × max/min — engine, fused leaf, fused child: 0 misses), axis round 2 (5,764
+   cases: reversed / stepped / sliced / transposed-permutation / rows past the buffer + computed children over mixed
+   layouts; every exact route 0 misses — the only misses are the UNFUSED eager route `np.max(x * 1, axis)` on
+   permuted / `F*negcol` products: 81 + 37 + 3, NumSharp's eager elementwise writes its result in C order where NumPy's
+   ufunc keeps the K-order layout, so the reduction then walks different memory — an elementwise-layout gap, not this
+   lever), flat (3,136 cases across every route incl. the engine: new 0 misses, the old paths 360). `MinMaxExactScheduleTests`
+   (25 — every literal NumPy-probed with the same base+view recipe: row-strided lane ties + payload, contiguous rows with
+   the fast fold then a NaN group, the slab sequential fold, reversed / stepped runs, buffered rows canonicalizing a
+   NaN, rows longer than half the buffer staying unbuffered, a tie decided by a fill boundary, the next fill
+   re-canonicalizing a running NaN, fills following `np.setbufsize`, F-order dense = one memory-order call, a lone
+   element's bits, integers at every layout, keepdims / ptp, the copied-element skip in both modes, fills as whole
+   cores, fills stopping at the outer block end, NaN in each vector of a fast-fold group, a NaN seed, short calls
+   canonicalizing the seed, the disable hook, declines, the axis-order / coalescing and cost-model ports incl. the
+   `size == bufsize` boundary, and the every-lane-pair tie test) + `NDEvaluateMinMaxTests`' decline test updated (a bare
+   strided leaf now ENGAGES the walker; a bare broadcast leaf still declines). **Mutation-tested behind a green-baseline
+   gate:** 22 targeted mutants (axis-order tie `>=`, unsigned coalescing, cost `<` vs `<=`, uncapped bufsize, the stop
+   test `>` vs `>=`, fills not whole cores, the copied-element skip dropped in rows / buffered / one-run modes, no
+   block-end flush, 4-/8-byte lane extraction swaps, the reversed load off by one, both reverse permutes, a permuted
+   buffer copy, broadcast accepted, short calls not canonicalizing, the fast fold's NaN detector inverted / missing a
+   pair, an unguarded NaN seed, swapped `P256` operands) — all 22 killed, each by the test aimed at it. **The gate
+   caught a false green on the way:** the first run reported 22/22 killed, but a stale assertion in the decline test
+   (written when a bare strided leaf still declined) failed on EVERY run, so every mutant "died" of it; with a baseline
+   that must pass unmutated, five survived (the lane-pair swaps and both reverse permutes, invisible to ties that sat in
+   one lane or in lanes 2/3 only, plus the cost-model stop boundary, which fills the same buffers either way) — hence the
+   every-lane-pair test and the unit pin. Full NumSharp.Tests: net10.0 15,607 / net8.0 15,609 green (the 25 failures are
+   the OpenBLAS-not-staged Examples demos, unchanged).
+   **Measured** (pinned P-core, best-of, two rounds; NPY/NS vs a pinned NumPy twin; "old" = `DisableExactMinMax`, the
+   value-exact previous kernels): FLAT @100K — C f64 max/min 1.61 / 1.64 (old 1.41 / 1.45), f32 1.49, i32 1.45, i64
+   1.14, u8 2.30, F 1.85 (0.63), transposed 1.61 (0.61), 3-D permutation 1.82 (0.63), stepped 1.42 (1.16), reversed
+   columns 1.91, reversed 1-D 1.45, ptp C / reversed columns 1.52 / 1.82. AXIS @100K — f64 ax0/ax1 1.61 / 2.16 (old
+   1.01 / 0.88), f32 2.23 / 1.97, i32 2.11 / 2.15, i64 ax0 1.67, u8 ax1 2.23, F 1.87 / 1.39, transposed 2.17, stepped
+   ax1/ax0 2.13 / 1.72 (0.72 / 0.52), reversed rows 1.68, permutation 2.23 (0.64), ptp 2.09, fused `max(a*b, 0/1)`
+   1.97 / 2.50 (0.58 / 0.85), `min(i*i, 0)` 5.20, `max(a, 0)` 1.55 (0.28), `max(aF*b, 0)` 1.28 — no 100K cell below
+   1.14. Where the old kernel was faster (reversed / reversed-column flat cells, reversed axis rows: it read memory
+   forward, which exactness forbids) the new one still beats NumPy 1.45–1.91×. @4M (L3/DRAM-bound, on a host carrying
+   other load — ±25 % run to run) the fused cells stay far ahead (`max(a*b, 0/1)` 3.26 / 3.29, `min(i*i, 0)` 7.70) and
+   the engine cells sit 0.70–1.19: the ones below NumPy are almost all at or above the old kernels' own ratio (flat C
+   i32 0.77 / u8 0.70 / f32 0.87 vs old 0.76 / 0.70 / 0.88; axis i32 ax0 0.70 vs 0.73; the F / step / permutation cells
+   up from 0.45–0.65), i.e. pre-existing bandwidth gaps — follow-ups below.
+   **Follow-ups:** (1) SLAB mode re-reads and re-writes the output run once per reduced index; folding SEVERAL reduced
+   indices per pass (`o = N(N(N(o, x_k), x_k+1), …)`) keeps every element's operation order, so it stays exact, and a
+   raw-loop probe measured 8 per pass at 1.8–2.4× the per-slab loop on DRAM-bound f64 (`max(f64, axis=0)`,
+   `max(F, axis=1)`) — the next lever. (2) The L3-bound 4M flat / row cells (4-byte and 1-byte lanes) trail NumPy's
+   identical schedule by 0.70–0.87 (NumSharp's buffers are 16-byte aligned, so every other 32-byte load splits a line;
+   the one-group-ahead prefetch is unmeasured there). (3) The eager elementwise output-layout gap the oracle exposed.
+   (4) Broadcast operands still decline.
 4. The stat / delegating / average reductions (`NanMean`/`Var`/`Std`, `Ptp`/`NanMin`/`NanMax`/`ArgMax`/`ArgMin`,
    weighted `Average`) still materialize their child(ren) — streaming candidates (Var is two-pass: recompute vs store).
    **A 2026-09-23 gap map** (fused vs NumPy, pinned, best-of; probe `red_gap2.cs` + twin) ranked them: weighted

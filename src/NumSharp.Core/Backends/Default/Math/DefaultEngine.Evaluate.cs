@@ -1729,7 +1729,12 @@ namespace NumSharp.Backends
                 // allocated) for every other kind, layout or an empty reduction: the seeded axis fold below runs as
                 // before. The stream result may be F-contiguous (an all-F walk); every step after this branch treats
                 // outAcc as a dense block, exactly as for the F-aware Sum stream above.
-                outAcc = TryStreamAxisBoolFold(program, inputs, axis, reduce.Kind, accType, reducedShape);
+                // Axis lever (perf review 2026-09-23): Min / Max reduce the buffer NumPy reduces with NumPy's exact
+                // per-element schedule (DefaultEngine.Evaluate.MinMaxAxis.cs) — a bare leaf in place, an all-C / all-F
+                // computed child streamed, any other float child materialized in NumPy's own layout. Null for every
+                // other kind and whatever it declines (broadcast leaf, non-streamable integer child, …).
+                outAcc = TryExactAxisMinMaxEval(program, inputs, axis, reduce.Kind, axisSize, reducedShape)
+                         ?? TryStreamAxisBoolFold(program, inputs, axis, reduce.Kind, accType, reducedShape);
                 if (outAcc is null)
                 {
                     outAcc = new NDArray(accType, reducedShape, false);

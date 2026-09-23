@@ -45,9 +45,11 @@ using NumSharp.Backends.Iteration;
 // Routes (DefaultEngine.TryExactFlatMinMax), each exactly the buffer NumPy reduces:
 //   * the child is a bare DENSE array leaf (C- or F-contiguous, or any transpose of one — a single dense
 //     block): the schedule runs over that block in place, in memory order — NumPy reduces the array itself,
-//     and its K-order iterator coalesces a dense block into one inner loop over memory. A NON-dense leaf
-//     declines: NumPy takes its 8-accumulator SCALAR unroll there, a different schedule, so the existing
-//     fold stays (status quo, value-exact).
+//     and its K-order iterator coalesces a dense block into one inner loop over memory. A NON-dense leaf takes
+//     the engine's flat walker (DefaultEngine.TryExactFlatMinMaxArray, Default.Reduction.MinMax.Exact.cs):
+//     NumPy's iterator reproduced — coalesced runs, a strided run's 8-accumulator unroll, and for layouts that
+//     do not coalesce, NumPy's own buffering decision (row by row in place, or contiguous calls over buffered
+//     chunks). Only a BROADCAST leaf keeps the fold (value-exact).
 //   * the child is computed and its operands stream (CanStreamChild, dense permutations included): the child
 //     kernel evaluates 8 KB blocks into L1 scratch in memory order (a whole number of 8-vector groups per
 //     block, so only the LAST block is partial and the schedule is unbroken), no temp.
@@ -69,7 +71,7 @@ namespace NumSharp.Backends
     /// the scalar tail, or a lone element). Integer lanes have no ties that differ in bits and no NaN, so for
     /// them this is simply a vectorized exact reduction.
     /// </remarks>
-    internal static class NumPyMinMaxReduce
+    internal static partial class NumPyMinMaxReduce
     {
         /// <summary>
         /// True for the dtypes this reduction serves: float64 / float32 (NumPy-exact bits) and the eight integer
@@ -114,6 +116,28 @@ namespace NumSharp.Backends
             /// <param name="b">Second operand.</param>
             /// <returns>True when <paramref name="a"/> strictly beats <paramref name="b"/>.</returns>
             static abstract bool Beats(T a, T b);
+
+            /// <summary>
+            /// The PLAIN 128-bit lane op of the horizontal step — <c>_mm_max_p*</c> / <c>_mm_min_p*</c> (and the integer
+            /// <c>_mm_max_ep*</c> forms): per lane <paramref name="a"/> where it beats <paramref name="b"/>, else
+            /// <paramref name="b"/>, with NO NaN blend. Only ever applied after the caller ruled NaN out, so the second
+            /// operand winning a tie is the whole contract.
+            /// </summary>
+            /// <param name="a">First operand (the lanes being kept).</param>
+            /// <param name="b">Second operand (the lanes moved down by the cascade) — wins a tie.</param>
+            /// <returns>The per-lane result.</returns>
+            static abstract Vector128<T> P128(Vector128<T> a, Vector128<T> b);
+
+            /// <summary>
+            /// The PLAIN 256-bit lane op — <c>_mm256_max_p*</c> / <c>_mm256_min_p*</c>: per lane <paramref name="a"/> where it
+            /// beats <paramref name="b"/>, else <paramref name="b"/>, with NO NaN blend. Equal to <see cref="N"/> on every
+            /// lane whose FIRST operand is not NaN — which is what lets <see cref="FoldGroups{T,TLane}"/> run a group whose
+            /// lanes it has proven NaN-free with one instruction per op instead of NumPy's three.
+            /// </summary>
+            /// <param name="a">First operand.</param>
+            /// <param name="b">Second operand — wins a tie and an unordered compare.</param>
+            /// <returns>The per-lane result.</returns>
+            static abstract Vector256<T> P256(Vector256<T> a, Vector256<T> b);
         }
 
         /// <summary>The maximum lane rule (<c>_mm256_max_pd</c>: <c>a &gt; b ? a : b</c>, NaN-blended).</summary>
@@ -160,6 +184,47 @@ namespace NumSharp.Backends
             /// <inheritdoc />
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public static bool Beats(T a, T b) => a > b;
+
+            /// <inheritdoc />
+            /// <remarks>
+            /// Floats take <c>maxpd</c> / <c>maxps</c> through <see cref="Sse2"/> / <see cref="Sse"/> (the floating-point
+            /// max intrinsics are never operand-swapped by RyuJIT, so the second operand keeps winning a tie); without SSE a
+            /// portable compare + select spells the same rule. Integer lanes have no bit-distinct ties, so
+            /// <see cref="Vector128.Max{T}"/> is exact.
+            /// </remarks>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public static Vector128<T> P128(Vector128<T> a, Vector128<T> b)
+            {
+                if (typeof(T) == typeof(double))
+                    return Sse2.IsSupported
+                        ? Sse2.Max(a.AsDouble(), b.AsDouble()).As<double, T>()
+                        : Vector128.ConditionalSelect(Vector128.GreaterThan(a, b), a, b);
+                if (typeof(T) == typeof(float))
+                    return Sse.IsSupported
+                        ? Sse.Max(a.AsSingle(), b.AsSingle()).As<float, T>()
+                        : Vector128.ConditionalSelect(Vector128.GreaterThan(a, b), a, b);
+                return Vector128.Max(a, b);
+            }
+
+            /// <inheritdoc />
+            /// <remarks>
+            /// Floats take <c>vmaxpd</c> / <c>vmaxps</c> through <see cref="Avx"/> (never operand-swapped by RyuJIT, so the
+            /// second operand keeps winning a tie); without AVX a portable compare + select spells the same rule. Integer
+            /// lanes have no bit-distinct ties, so <see cref="Vector256.Max{T}"/> is exact.
+            /// </remarks>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public static Vector256<T> P256(Vector256<T> a, Vector256<T> b)
+            {
+                if (typeof(T) == typeof(double))
+                    return Avx.IsSupported
+                        ? Avx.Max(a.AsDouble(), b.AsDouble()).As<double, T>()
+                        : Vector256.ConditionalSelect(Vector256.GreaterThan(a, b), a, b);
+                if (typeof(T) == typeof(float))
+                    return Avx.IsSupported
+                        ? Avx.Max(a.AsSingle(), b.AsSingle()).As<float, T>()
+                        : Vector256.ConditionalSelect(Vector256.GreaterThan(a, b), a, b);
+                return Vector256.Max(a, b);
+            }
         }
 
         /// <summary>The minimum lane rule (<c>_mm256_min_pd</c>: <c>a &lt; b ? a : b</c>, NaN-blended).</summary>
@@ -199,6 +264,38 @@ namespace NumSharp.Backends
             /// <inheritdoc />
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public static bool Beats(T a, T b) => a < b;
+
+            /// <inheritdoc />
+            /// <remarks>The mirror of <see cref="MaxLane{T}.P128"/> (<c>minpd</c> / <c>minps</c> / <see cref="Vector128.Min{T}"/>).</remarks>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public static Vector128<T> P128(Vector128<T> a, Vector128<T> b)
+            {
+                if (typeof(T) == typeof(double))
+                    return Sse2.IsSupported
+                        ? Sse2.Min(a.AsDouble(), b.AsDouble()).As<double, T>()
+                        : Vector128.ConditionalSelect(Vector128.LessThan(a, b), a, b);
+                if (typeof(T) == typeof(float))
+                    return Sse.IsSupported
+                        ? Sse.Min(a.AsSingle(), b.AsSingle()).As<float, T>()
+                        : Vector128.ConditionalSelect(Vector128.LessThan(a, b), a, b);
+                return Vector128.Min(a, b);
+            }
+
+            /// <inheritdoc />
+            /// <remarks>The mirror of <see cref="MaxLane{T}.P256"/> (<c>vminpd</c> / <c>vminps</c> / <see cref="Vector256.Min{T}"/>).</remarks>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public static Vector256<T> P256(Vector256<T> a, Vector256<T> b)
+            {
+                if (typeof(T) == typeof(double))
+                    return Avx.IsSupported
+                        ? Avx.Min(a.AsDouble(), b.AsDouble()).As<double, T>()
+                        : Vector256.ConditionalSelect(Vector256.LessThan(a, b), a, b);
+                if (typeof(T) == typeof(float))
+                    return Avx.IsSupported
+                        ? Avx.Min(a.AsSingle(), b.AsSingle()).As<float, T>()
+                        : Vector256.ConditionalSelect(Vector256.LessThan(a, b), a, b);
+                return Vector256.Min(a, b);
+            }
         }
 
         /// <summary>
@@ -253,8 +350,47 @@ namespace NumSharp.Backends
             where T : unmanaged, INumber<T> where TLane : struct, ILane<T>
         {
             int vstep = Vector256<T>.Count;
-            for (long g = 0; g < groups; g++, ip += vstep * 8)
+            long g = 0;
+
+            // NaN-free fast path (float lanes with AVX, NaN-free accumulator): NumPy's lane op N(a, b) is
+            // blend(a, max(a, b), ord(a, a)) — it differs from the plain max P(a, b) ONLY on a lane whose first operand
+            // is NaN. A group whose eight vectors hold no NaN therefore folds bit-identically with P (every
+            // intermediate stays NaN-free too), at one instruction per op instead of three. One unordered compare
+            // covers a PAIR of vectors (a lane is unordered when either side is NaN), so the proof costs four compares
+            // per group. The first group holding a NaN breaks out BEFORE touching acc, and it and every later group take
+            // NumPy's blended rule below from exactly the accumulator NumPy would hold. Integer lanes already fold with
+            // the plain op (N is Vector256.Max/Min for them), so they skip this.
+            if ((typeof(T) == typeof(double) || typeof(T) == typeof(float)) && Avx.IsSupported && Vector256.EqualsAll(acc, acc))
             {
+                for (; g < groups; g++, ip += vstep * 8)
+                {
+                    if (Sse.IsSupported)
+                        Sse.Prefetch0(ip + vstep * 8);
+                    var v0 = Vector256.Load(ip);
+                    var v1 = Vector256.Load(ip + vstep);
+                    var v2 = Vector256.Load(ip + vstep * 2);
+                    var v3 = Vector256.Load(ip + vstep * 3);
+                    var v4 = Vector256.Load(ip + vstep * 4);
+                    var v5 = Vector256.Load(ip + vstep * 5);
+                    var v6 = Vector256.Load(ip + vstep * 6);
+                    var v7 = Vector256.Load(ip + vstep * 7);
+                    var nan = (Unordered(v0, v1) | Unordered(v2, v3)) | (Unordered(v4, v5) | Unordered(v6, v7));
+                    if (nan.ExtractMostSignificantBits() != 0)
+                        break;
+                    var r01 = TLane.P256(v0, v1);
+                    var r23 = TLane.P256(v2, v3);
+                    var r45 = TLane.P256(v4, v5);
+                    var r67 = TLane.P256(v6, v7);
+                    acc = TLane.P256(acc, TLane.P256(TLane.P256(r01, r23), TLane.P256(r45, r67)));
+                }
+            }
+
+            for (; g < groups; g++, ip += vstep * 8)
+            {
+                // NumPy's simd_reduce_c prefetches the NEXT group (NPY_PREFETCH(ip + wstep, 0, 3) → prefetcht0) on SSE2
+                // builds; a hint only — it cannot change a result — so it is mirrored where the ISA has it.
+                if (Sse.IsSupported)
+                    Sse.Prefetch0(ip + vstep * 8);
                 var v0 = Vector256.Load(ip);
                 var v1 = Vector256.Load(ip + vstep);
                 var v2 = Vector256.Load(ip + vstep * 2);
@@ -272,6 +408,21 @@ namespace NumSharp.Backends
 
             return acc;
         }
+
+        /// <summary>
+        /// <c>vcmpunordp*</c>: all-ones in every lane where <paramref name="a"/> or <paramref name="b"/> is NaN, zero
+        /// elsewhere — the NaN proof of <see cref="FoldGroups{T,TLane}"/>'s fast path. Callers gate on
+        /// <see cref="Avx.IsSupported"/> and a float lane type.
+        /// </summary>
+        /// <typeparam name="T">double or float.</typeparam>
+        /// <param name="a">First vector.</param>
+        /// <param name="b">Second vector.</param>
+        /// <returns>The unordered mask.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static Vector256<T> Unordered<T>(Vector256<T> a, Vector256<T> b) where T : unmanaged
+            => typeof(T) == typeof(double)
+                ? Avx.CompareUnordered(a.AsDouble(), b.AsDouble()).As<double, T>()
+                : Avx.CompareUnordered(a.AsSingle(), b.AsSingle()).As<float, T>();
 
         /// <summary>
         /// Phases 1-4 over the LAST <paramref name="len"/> elements of the reduced stream: whole groups, then
@@ -314,12 +465,32 @@ namespace NumSharp.Backends
         /// <typeparam name="TLane">Max or min.</typeparam>
         /// <param name="acc">The accumulator vector.</param>
         /// <returns>The horizontal result.</returns>
-        private static T ReduceLanes<T, TLane>(Vector256<T> acc)
+        private static unsafe T ReduceLanes<T, TLane>(Vector256<T> acc)
             where T : unmanaged, INumber<T> where TLane : struct, ILane<T>
         {
             // x == x fails only for a NaN lane; an integer vector always passes.
             if (!Vector256.EqualsAll(acc, acc))
                 return CanonicalNaN<T>();
+
+            if (Sse2.IsSupported)
+            {
+                // NumPy's own cascade, in registers: extract-and-fold the 128-bit halves, then fold the low half with
+                // itself moved down by 8, 4, 2, 1 bytes — lane i against lane i + half, the moved lane as the SECOND
+                // operand, exactly _mm_*_p?(v, _mm_shuffle_*(v, …)) — until one lane is left. The byte shifts leave zeros
+                // in the vacated upper lanes; those lanes are never read. sizeof(T) is a JIT constant per instantiation,
+                // so only the levels a lane width needs survive compilation (and the shift counts stay immediates). The
+                // stack spill below cost ~a lane-count-long scalar loop per row, which dominated short-row reductions.
+                var v = TLane.P128(acc.GetLower(), acc.GetUpper());
+                if (sizeof(T) <= 4)
+                    v = TLane.P128(v, Sse2.ShiftRightLogical128BitLane(v.AsByte(), 8).As<byte, T>());
+                if (sizeof(T) <= 2)
+                    v = TLane.P128(v, Sse2.ShiftRightLogical128BitLane(v.AsByte(), 4).As<byte, T>());
+                if (sizeof(T) == 1)
+                    v = TLane.P128(v, Sse2.ShiftRightLogical128BitLane(v.AsByte(), 2).As<byte, T>());
+                // The last level pairs lane 0 with lane 1, one element over.
+                v = TLane.P128(v, Sse2.ShiftRightLogical128BitLane(v.AsByte(), (byte)sizeof(T)).As<byte, T>());
+                return v.ToScalar();
+            }
 
             Span<T> lanes = stackalloc T[Vector256<T>.Count];
             acc.CopyTo(lanes);
@@ -408,16 +579,16 @@ namespace NumSharp.Backends
         /// <summary>
         /// Flat <c>Min</c> / <c>Max</c> computed with NumPy's exact contiguous reduction schedule
         /// (<see cref="NumPyMinMaxReduce"/>), over the very buffer NumPy would reduce: the bare contiguous leaf in
-        /// place, a streamable computed child block by block through its kernel (no temp), or — for a float child
-        /// whose operands do not stream — the materialized child.
+        /// place, any other non-broadcast bare leaf through NumPy's iterator schedule
+        /// (<see cref="TryExactFlatMinMaxArray"/>), a streamable computed child block by block through its kernel (no
+        /// temp), or — for a float child whose operands do not stream — the materialized child.
         /// </summary>
         /// <remarks>
         /// <para>
         /// Declines (false, <paramref name="slot"/> untouched — the caller's fold runs as before) when the hook
         /// <see cref="NDExpr.DisableExactMinMax"/> is set, for a dtype outside <see cref="NumPyMinMaxReduce.Supports"/>,
-        /// for a bare leaf that is not one dense block (<see cref="IsSharedDensePermutation"/> — NumPy reduces a strided
-        /// array with its 8-accumulator scalar unroll, a different schedule this does not port), and for a
-        /// non-streamable INTEGER child (an integer
+        /// for a BROADCAST bare leaf (a non-dense one is handed to <see cref="TryExactFlatMinMaxArray"/>, NumPy's iterator
+        /// schedule, which declines only a broadcast layout), and for a non-streamable INTEGER child (an integer
         /// min/max is order-free, so the fold is already exact and materializing would only cost).
         /// </para>
         /// <para>
@@ -443,12 +614,13 @@ namespace NumSharp.Backends
             if (child.Bound is InputNode && ops.Length == 1)
             {
                 // NumPy reduces the array itself. A dense block (C- or F-contiguous or any transpose of one, not
-                // broadcast) coalesces to one inner loop over memory order — the schedule below, in place. Anything
-                // else takes NumPy's scalar unroll, so leave it to the fold (value-exact) rather than impose the wrong
-                // order.
+                // broadcast) coalesces to one inner loop over memory order — the schedule below, in place. Any other
+                // non-broadcast layout goes through NumPy's iterator as the engine's np.max does — coalesced runs, a
+                // strided run's 8-accumulator unroll, or buffered contiguous chunks — which TryExactFlatMinMaxArray
+                // reproduces; a broadcast leaf declines there and keeps the fold (value-exact).
                 var s = ops[0].Shape;
                 if (!IsSharedDensePermutation(ops))
-                    return false;
+                    return TryExactFlatMinMaxArray(ops[0], isMax, slot);
                 // Logical element 0: a contiguous slice re-seats Address (offset 0), an F column block keeps a
                 // non-zero offset — Address + offset·itemsize is right for both.
                 byte* x = (byte*)ops[0].Address + (long)s.offset * t.SizeOf();
@@ -468,12 +640,24 @@ namespace NumSharp.Backends
             if (!NumPyMinMaxReduce.IsFloat(t))
                 return false;
 
-            // A computed float child NumPy would materialize: materialize it the same way (fresh, contiguous, the
-            // K-order layout EvaluateCore picks — the buffer the M1 Sum divert reduces too) and run the schedule over
-            // it. `using` releases the temp as soon as the reduction has read it.
-            using var materialized = EvaluateCore(child, inputs, null);
-            byte* m = (byte*)materialized.Address + (long)materialized.Shape.offset * t.SizeOf();
-            NumPyMinMaxReduce.ReduceContiguous(t, isMax, m, n, slot);
+            // A computed float child NumPy would materialize: materialize it the same way — in the layout NumPy's
+            // ufunc allocates (MaterializeChildNumPyLayout: NpyIter's K-order axis permutation, which for C / F operands
+            // is exactly what EvaluateCore picks on its own) — and run the schedule over its dense buffer in MEMORY
+            // order, the order NumPy's K-order reduce iterator coalesces a dense block into. Both arrays are released as
+            // soon as the reduction has read them.
+            var view = MaterializeChildNumPyLayout(child, inputs, ops, out var buffer);
+            try
+            {
+                byte* m = (byte*)buffer.Address + (long)buffer.Shape.offset * t.SizeOf();
+                NumPyMinMaxReduce.ReduceContiguous(t, isMax, m, n, slot);
+            }
+            finally
+            {
+                if (!ReferenceEquals(view, buffer))
+                    view.Dispose();
+                buffer.Dispose();
+            }
+
             NDExpr.ExactMinMaxRuns++;
             return true;
         }
@@ -518,35 +702,42 @@ namespace NumSharp.Backends
 
             switch (t)
             {
-                case NPTypeCode.Double: *(double*)slot = isMax ? StreamMinMax<double, NumPyMinMaxReduce.MaxLane<double>>(ref stream, n, scratch) : StreamMinMax<double, NumPyMinMaxReduce.MinLane<double>>(ref stream, n, scratch); break;
-                case NPTypeCode.Single: *(float*)slot = isMax ? StreamMinMax<float, NumPyMinMaxReduce.MaxLane<float>>(ref stream, n, scratch) : StreamMinMax<float, NumPyMinMaxReduce.MinLane<float>>(ref stream, n, scratch); break;
-                case NPTypeCode.SByte: *(sbyte*)slot = isMax ? StreamMinMax<sbyte, NumPyMinMaxReduce.MaxLane<sbyte>>(ref stream, n, scratch) : StreamMinMax<sbyte, NumPyMinMaxReduce.MinLane<sbyte>>(ref stream, n, scratch); break;
-                case NPTypeCode.Byte: *slot = isMax ? StreamMinMax<byte, NumPyMinMaxReduce.MaxLane<byte>>(ref stream, n, scratch) : StreamMinMax<byte, NumPyMinMaxReduce.MinLane<byte>>(ref stream, n, scratch); break;
-                case NPTypeCode.Int16: *(short*)slot = isMax ? StreamMinMax<short, NumPyMinMaxReduce.MaxLane<short>>(ref stream, n, scratch) : StreamMinMax<short, NumPyMinMaxReduce.MinLane<short>>(ref stream, n, scratch); break;
-                case NPTypeCode.UInt16: *(ushort*)slot = isMax ? StreamMinMax<ushort, NumPyMinMaxReduce.MaxLane<ushort>>(ref stream, n, scratch) : StreamMinMax<ushort, NumPyMinMaxReduce.MinLane<ushort>>(ref stream, n, scratch); break;
-                case NPTypeCode.Int32: *(int*)slot = isMax ? StreamMinMax<int, NumPyMinMaxReduce.MaxLane<int>>(ref stream, n, scratch) : StreamMinMax<int, NumPyMinMaxReduce.MinLane<int>>(ref stream, n, scratch); break;
-                case NPTypeCode.UInt32: *(uint*)slot = isMax ? StreamMinMax<uint, NumPyMinMaxReduce.MaxLane<uint>>(ref stream, n, scratch) : StreamMinMax<uint, NumPyMinMaxReduce.MinLane<uint>>(ref stream, n, scratch); break;
-                case NPTypeCode.Int64: *(long*)slot = isMax ? StreamMinMax<long, NumPyMinMaxReduce.MaxLane<long>>(ref stream, n, scratch) : StreamMinMax<long, NumPyMinMaxReduce.MinLane<long>>(ref stream, n, scratch); break;
-                case NPTypeCode.UInt64: *(ulong*)slot = isMax ? StreamMinMax<ulong, NumPyMinMaxReduce.MaxLane<ulong>>(ref stream, n, scratch) : StreamMinMax<ulong, NumPyMinMaxReduce.MinLane<ulong>>(ref stream, n, scratch); break;
+                case NPTypeCode.Double: *(double*)slot = isMax ? StreamMinMax<double, NumPyMinMaxReduce.MaxLane<double>>(ref stream, 0, n, scratch) : StreamMinMax<double, NumPyMinMaxReduce.MinLane<double>>(ref stream, 0, n, scratch); break;
+                case NPTypeCode.Single: *(float*)slot = isMax ? StreamMinMax<float, NumPyMinMaxReduce.MaxLane<float>>(ref stream, 0, n, scratch) : StreamMinMax<float, NumPyMinMaxReduce.MinLane<float>>(ref stream, 0, n, scratch); break;
+                case NPTypeCode.SByte: *(sbyte*)slot = isMax ? StreamMinMax<sbyte, NumPyMinMaxReduce.MaxLane<sbyte>>(ref stream, 0, n, scratch) : StreamMinMax<sbyte, NumPyMinMaxReduce.MinLane<sbyte>>(ref stream, 0, n, scratch); break;
+                case NPTypeCode.Byte: *slot = isMax ? StreamMinMax<byte, NumPyMinMaxReduce.MaxLane<byte>>(ref stream, 0, n, scratch) : StreamMinMax<byte, NumPyMinMaxReduce.MinLane<byte>>(ref stream, 0, n, scratch); break;
+                case NPTypeCode.Int16: *(short*)slot = isMax ? StreamMinMax<short, NumPyMinMaxReduce.MaxLane<short>>(ref stream, 0, n, scratch) : StreamMinMax<short, NumPyMinMaxReduce.MinLane<short>>(ref stream, 0, n, scratch); break;
+                case NPTypeCode.UInt16: *(ushort*)slot = isMax ? StreamMinMax<ushort, NumPyMinMaxReduce.MaxLane<ushort>>(ref stream, 0, n, scratch) : StreamMinMax<ushort, NumPyMinMaxReduce.MinLane<ushort>>(ref stream, 0, n, scratch); break;
+                case NPTypeCode.Int32: *(int*)slot = isMax ? StreamMinMax<int, NumPyMinMaxReduce.MaxLane<int>>(ref stream, 0, n, scratch) : StreamMinMax<int, NumPyMinMaxReduce.MinLane<int>>(ref stream, 0, n, scratch); break;
+                case NPTypeCode.UInt32: *(uint*)slot = isMax ? StreamMinMax<uint, NumPyMinMaxReduce.MaxLane<uint>>(ref stream, 0, n, scratch) : StreamMinMax<uint, NumPyMinMaxReduce.MinLane<uint>>(ref stream, 0, n, scratch); break;
+                case NPTypeCode.Int64: *(long*)slot = isMax ? StreamMinMax<long, NumPyMinMaxReduce.MaxLane<long>>(ref stream, 0, n, scratch) : StreamMinMax<long, NumPyMinMaxReduce.MinLane<long>>(ref stream, 0, n, scratch); break;
+                case NPTypeCode.UInt64: *(ulong*)slot = isMax ? StreamMinMax<ulong, NumPyMinMaxReduce.MaxLane<ulong>>(ref stream, 0, n, scratch) : StreamMinMax<ulong, NumPyMinMaxReduce.MinLane<ulong>>(ref stream, 0, n, scratch); break;
                 default: throw new NotSupportedException($"NumPy min/max schedule: dtype {t} is not served.");
             }
         }
 
         /// <summary>
-        /// Drive the schedule over a bound child stream: element 0 seeds <c>splat(x[0])</c>, full blocks fold whole
-        /// groups (<see cref="NumPyMinMaxReduce.FoldGroups{T,TLane}"/>), the final (possibly partial) block finishes
-        /// the schedule (<see cref="NumPyMinMaxReduce.Finish{T,TLane}"/>).
+        /// Drive the schedule over the child elements <c>[start, start + n)</c> of a bound stream — the whole child for a
+        /// flat reduction (<paramref name="start"/> 0), one long ROW for an axis reduction: element <paramref name="start"/>
+        /// seeds <c>splat(x[0])</c>, full blocks fold whole groups (<see cref="NumPyMinMaxReduce.FoldGroups{T,TLane}"/>),
+        /// the final (possibly partial) block finishes the schedule (<see cref="NumPyMinMaxReduce.Finish{T,TLane}"/>).
         /// </summary>
+        /// <remarks>
+        /// The blocks are counted from the element AFTER the seed, so every block but the last holds a whole number of
+        /// 8-vector groups whatever <paramref name="start"/> is — the groups line up with the single-buffer schedule over
+        /// the same range, which is what keeps a streamed row bit-identical to NumPy's one <c>simd_reduce_c</c> call.
+        /// </remarks>
         /// <typeparam name="T">The child element type.</typeparam>
         /// <typeparam name="TLane">Max or min.</typeparam>
         /// <param name="stream">The bound stream (its <c>Block</c> is the scratch capacity in elements).</param>
-        /// <param name="n">The child's element count (&gt; 0).</param>
+        /// <param name="start">Flat child index of the range's first element (the seed).</param>
+        /// <param name="n">The range's element count (&gt; 0).</param>
         /// <param name="scratch">The stream's scratch block.</param>
         /// <returns>The reduction result.</returns>
-        private static unsafe T StreamMinMax<T, TLane>(ref NDExprChildStream stream, long n, byte* scratch)
+        private static unsafe T StreamMinMax<T, TLane>(ref NDExprChildStream stream, long start, long n, byte* scratch)
             where T : unmanaged, INumber<T> where TLane : struct, NumPyMinMaxReduce.ILane<T>
         {
-            stream.Produce(0, 1, scratch);
+            stream.Produce(start, 1, scratch);
             T seed = *(T*)scratch;
             if (n == 1)
                 return seed;   // nothing after the copied first element: NumPy returns it untouched
@@ -554,11 +745,11 @@ namespace NumSharp.Backends
             var acc = Vector256.Create(seed);
             long block = stream.Block;               // a whole number of 8-vector groups (see the summary)
             long groupElems = Vector256<T>.Count * 8L;
-            for (long start = 1; ; start += block)
+            for (long k = 1; ; k += block)
             {
-                long m = Math.Min(block, n - start);
-                stream.Produce(start, m, scratch);
-                if (start + m >= n)
+                long m = Math.Min(block, n - k);
+                stream.Produce(start + k, m, scratch);
+                if (k + m >= n)
                     return NumPyMinMaxReduce.Finish<T, TLane>(acc, (T*)scratch, m);
                 acc = NumPyMinMaxReduce.FoldGroups<T, TLane>(acc, (T*)scratch, m / groupElems);
             }
@@ -571,18 +762,21 @@ namespace NumSharp.Backends.Iteration
     public abstract partial class NDExpr
     {
         /// <summary>
-        /// Test / diagnostics hook: when set on the current thread, np.evaluate SKIPS the NumPy-exact flat min/max
-        /// (<c>DefaultEngine.TryExactFlatMinMax</c>) and folds <c>Min</c> / <c>Max</c> with the 4-accumulator scalar
-        /// kernel as before — value-identical, but not NumPy's ±0-tie / NaN-payload bits. Exists so a probe can time
-        /// the old path and a test can show the two differ exactly where the schedule is observable. Thread-static so
-        /// a parallel test never perturbs another's run.
+        /// Test / diagnostics hook: when set on the current thread, the NumPy-exact min/max schedules are SKIPPED —
+        /// np.evaluate's flat <c>Min</c> / <c>Max</c> (<c>DefaultEngine.TryExactFlatMinMax</c>) folds with the
+        /// 4-accumulator scalar kernel, the engine's flat <c>np.max</c> / <c>np.min</c> / <c>np.ptp</c>
+        /// (<c>DefaultEngine.TryExactFlatMinMaxArray</c>) take the IL kernels, and every AXIS <c>Min</c> / <c>Max</c>
+        /// (np.evaluate's and the engine's, <c>DefaultEngine.TryExactAxisMinMax</c>) takes the kernels it used before —
+        /// value-identical, but not NumPy's ±0-tie / NaN-payload bits. Exists so a probe can time the old paths and a
+        /// test can show the two differ exactly where the schedule is observable. Thread-static so a parallel test
+        /// never perturbs another's run.
         /// </summary>
         [System.ThreadStatic] internal static bool DisableExactMinMax;
 
         /// <summary>
-        /// Test / diagnostics hook: incremented (on the current thread) each time a flat <c>Min</c> / <c>Max</c> is
-        /// computed by the NumPy-exact schedule (any route — in place, streamed or materialized), so a test can assert
-        /// the route ENGAGED instead of silently folding.
+        /// Test / diagnostics hook: incremented (on the current thread) each time a <c>Min</c> / <c>Max</c> — flat or
+        /// axis, np.evaluate or engine — is computed by a NumPy-exact schedule (any route: in place, streamed or
+        /// materialized), so a test can assert the route ENGAGED instead of silently falling back.
         /// </summary>
         [System.ThreadStatic] internal static int ExactMinMaxRuns;
     }
