@@ -563,6 +563,10 @@ var arr = np.array(new[,] {{1, 2}, {3, 4}});
 // a longstanding API typo preserved for backwards compatibility.
 int[,] md = (int[,])arr.ToMuliDimArray<int>();
 
+// Any layout (views, transposes, broadcasts) copies the logical C-order elements, and a T other
+// than the dtype converts with astype semantics. A 0-d array yields a one-element T[].
+double[,] mdT = (double[,])arr.T.ToMuliDimArray<double>();
+
 // To jagged array
 int[][] jag = (int[][])arr.ToJaggedArray<int>();
 
@@ -667,7 +671,7 @@ C# compound assignment reassigns the variable; it doesn't mutate. See [Compound 
 | `AsGeneric<T>()` | Wrap as `NDArray<T>`; returns `null` if dtype differs |
 | `AsOrMakeGeneric<T>()` | Wrap as `NDArray<T>`; `astype` if dtype differs |
 | `Data<T>()` | Get the underlying `ArraySlice<T>` handle |
-| `ToMuliDimArray<T>()` | Copy to a rank-N .NET array |
+| `ToMuliDimArray<T>()` | Copy to a rank-N .NET array (any layout, C order; converts with astype semantics when `T` differs from the dtype; 0-d yields a one-element `T[]`) |
 | `ToJaggedArray<T>()` | Copy to a jagged .NET array |
 | `tofile(path)` | Write raw bytes to file |
 
