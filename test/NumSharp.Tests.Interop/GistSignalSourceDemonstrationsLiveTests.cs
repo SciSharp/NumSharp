@@ -141,6 +141,12 @@ public class GistSignalSourceDemonstrationsLiveTests : InteropTestBase
     /// The synthetic-sine crossing and FFT measurements vs live NumPy, exact. The reference imports
     /// <c>scipy.signal.windows</c>, so this is inconclusive where SciPy is not installed.
     /// </summary>
+    /// <remarks>
+    /// The crossing estimate is plain arithmetic on both sides and exact on every architecture. The FFT
+    /// estimate starts from <c>np.fft.rfft</c>'s magnitudes, which NumPy's arm64 wheel computes with
+    /// fused multiply-adds (<see cref="InteropTestBase.PocketFftFusedArithmetic"/>): exact on x86/x64,
+    /// Inconclusive with the measured difference on arm64 unless it happens to match.
+    /// </remarks>
     [TestMethod]
     [PythonEcosystem]
     public void SyntheticSine_MeasuredCrossingAndFftOutputs_ExactLiveNumpy()
@@ -152,7 +158,8 @@ public class GistSignalSourceDemonstrationsLiveTests : InteropTestBase
         var samples = new double[2048];
         for (int i = 0; i < samples.Length; i++) samples[i] = Math.Sin(2 * Math.PI * 1000 * i / 44100.0 + .4);
         var signal = np.array(samples);
-        var result = np.array(new[] { FrequencyEstimation.FromCrossings(signal, 44100), FrequencyEstimation.FromFft(signal, 44100) });
+        var crossing = np.array(new[] { FrequencyEstimation.FromCrossings(signal, 44100) });
+        var spectral = np.array(new[] { FrequencyEstimation.FromFft(signal, 44100) });
         ExportTo("s", signal);
         PyExec(VertexReference + """
 
@@ -164,8 +171,11 @@ public class GistSignalSourceDemonstrationsLiveTests : InteropTestBase
             """);
         using (Gil())
         {
-            using var expected = Scope.Eval("expected");
-            GistParity.AssertExact(result, expected, "synthetic 1000Hz signal, NOT the unidentified historical recording");
+            using var expectedCrossing = Scope.Eval("expected[:1]");
+            GistParity.AssertExact(crossing, expectedCrossing, "synthetic 1000Hz signal crossings, NOT the unidentified historical recording");
+            using var expectedSpectral = Scope.Eval("expected[1:]");
+            AssertExactUnlessNumPyFuses("synthetic 1000Hz FFT estimate", PocketFftFusedArithmetic,
+                () => GistParity.AssertExact(spectral, expectedSpectral, "synthetic 1000Hz signal FFT estimate, NOT the unidentified historical recording"));
         }
     }
 
@@ -173,6 +183,14 @@ public class GistSignalSourceDemonstrationsLiveTests : InteropTestBase
     /// All four measurements of the synthetic demo harmonics vs live NumPy, exact. The reference imports
     /// <c>scipy.signal</c>, so this is inconclusive where SciPy is not installed.
     /// </summary>
+    /// <remarks>
+    /// Crossings (plain arithmetic) and autocorrelation (OpenBLAS <c>ddot</c> on both sides, see
+    /// <see cref="GistSignalLiveParityTests.FrequencyPipelines_MeasuredUlpVersusLiveNumpyAndScipy"/>) are
+    /// exact on every architecture. The FFT and HPS estimates start from <c>np.fft.rfft</c>'s magnitudes,
+    /// which NumPy's arm64 wheel computes with fused multiply-adds
+    /// (<see cref="InteropTestBase.PocketFftFusedArithmetic"/>): exact on x86/x64, Inconclusive with the
+    /// measured difference on arm64 (macos-latest: the HPS estimate 20 ULP off, the FFT estimate equal).
+    /// </remarks>
     [TestMethod]
     [PythonEcosystem]
     public void SyntheticDemoHarmonics_AllFourMeasurements_ExactLiveNumpy()
@@ -182,9 +200,11 @@ public class GistSignalSourceDemonstrationsLiveTests : InteropTestBase
         var time = np.arange(1024).astype(NPTypeCode.Double) / 8192.0;
         var signal = np.zeros(new Shape(1024), NPTypeCode.Double);
         for (int h = 1; h <= 7; h++) signal = signal + np.sin(2 * Math.PI * 384 * h * time) / h;
-        var result = np.array(new[] {
-            FrequencyEstimation.FromCrossings(signal, 8192), FrequencyEstimation.FromFft(signal, 8192),
-            FrequencyEstimation.FromAutocorrelation(signal, 8192), FrequencyEstimation.FromHarmonicProductSpectrum(signal, 8192)
+        var direct = np.array(new[] {
+            FrequencyEstimation.FromCrossings(signal, 8192), FrequencyEstimation.FromAutocorrelation(signal, 8192)
+        });
+        var spectral = np.array(new[] {
+            FrequencyEstimation.FromFft(signal, 8192), FrequencyEstimation.FromHarmonicProductSpectrum(signal, 8192)
         });
         ExportTo("s", signal);
         PyExec(VertexReference + """
@@ -205,8 +225,12 @@ public class GistSignalSourceDemonstrationsLiveTests : InteropTestBase
             """);
         using (Gil())
         {
-            using var expected = Scope.Eval("expected");
-            GistParity.AssertExact(result, expected, "synthetic demo estimates; matching bytes does not remove autocorrelation's 0.504Hz estimation bias");
+            // expected = [crossings, FFT, autocorrelation, HPS]
+            using var expectedDirect = Scope.Eval("expected[[0, 2]]");
+            GistParity.AssertExact(direct, expectedDirect, "synthetic demo crossing and autocorrelation estimates; matching bytes does not remove autocorrelation's 0.504Hz estimation bias");
+            using var expectedSpectral = Scope.Eval("expected[[1, 3]]");
+            AssertExactUnlessNumPyFuses("synthetic demo FFT/HPS estimates", PocketFftFusedArithmetic,
+                () => GistParity.AssertExact(spectral, expectedSpectral, "synthetic demo FFT and HPS estimates"));
         }
     }
 }

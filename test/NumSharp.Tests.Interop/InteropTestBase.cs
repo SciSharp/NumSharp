@@ -205,6 +205,94 @@ namespace NumSharp.Tests.Interop
         }
 
         /// <summary>
+        ///     True when this process's NumPy rounds each product of a compiled <c>a*b + c*d</c>
+        ///     expression separately, as NumSharp's managed kernels do (RyuJIT never contracts). That holds
+        ///     for every x86/x64 wheel and does NOT hold on arm64, where the wheel's compiler fuses such an
+        ///     expression into one multiply-add.
+        /// </summary>
+        /// <remarks>
+        ///     <para>The arm64 wheels target a baseline ISA that includes fused multiply-add and are built
+        ///     with the compiler's default floating-point contraction (clang's <c>-ffp-contract=on</c> on
+        ///     macOS): each <c>x*y + z</c> or <c>x*y + u*v</c> written as ONE C expression becomes
+        ///     <c>fmuladd(x, y, …)</c>, the left product fused and any right product rounded first. The
+        ///     x86-64 wheels target an X86_V2 baseline with no FMA, so the same source cannot contract
+        ///     there. The effect is the one <see cref="NumPyLegacyGaussianIsLiteral"/> documents for the
+        ///     legacy Gaussian sampler, stated here for any compiled NumPy arithmetic a test compares.</para>
+        ///     <para>Keyed off the PROCESS architecture because the in-process CPython loads the NumPy
+        ///     binary built for it (an x64 process under emulation loads the x64 wheel). Arm (32-bit) and
+        ///     every other non-x86 architecture fall on the fusing side: nothing guarantees their wheels
+        ///     round each product, and a byte-exact claim needs that guarantee.</para>
+        /// </remarks>
+        protected static bool NumPyRoundsEachProduct =>
+            System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture is
+                System.Runtime.InteropServices.Architecture.X64 or System.Runtime.InteropServices.Architecture.X86;
+
+        /// <summary>
+        ///     The multiply-adds in NumPy's pocketfft (<c>numpy/fft/pocketfft/pocketfft_hdronly.h</c>) a
+        ///     fusing wheel contracts — named in the Inconclusive message of every cell that compares a
+        ///     result derived from <c>np.fft</c>.
+        /// </summary>
+        /// <remarks>
+        ///     Modelled with a C# replica of <c>rfftp</c> in two modes. Evaluated literally it equals
+        ///     NumSharp's <c>np.fft.rfft</c> in every lane. Fusing exactly the expressions
+        ///     <c>-ffp-contract=on</c> fuses (the twiddle products in <c>sincos_2pibyn::operator[]</c>,
+        ///     <c>MULPM</c> in every <c>radf</c> codelet, the <c>x + c*y (+ d*z)</c> rotations of
+        ///     <c>radf5</c>) changes 745 of 1026 float64 lanes at n = 1024 and 887 of 1002 at n = 1000 on
+        ///     the seeded input of <c>SpectrumLiveParityTests</c>, each by an ULP or so: the share
+        ///     macos-latest measured between NumSharp and its arm64 NumPy (751 of 1026 at n = 1024, on the
+        ///     earlier sin-only input). The complex codelets behind Bluestein (prime lengths) are written
+        ///     the same way (<c>special_mul</c>, <c>cmplx::operator*</c>).
+        /// </remarks>
+        protected const string PocketFftFusedArithmetic =
+            "pocketfft's twiddle products (sincos_2pibyn::operator[]) and butterfly multiply-adds " +
+            "(rfftp's MULPM and radf5 rotations, the complex codelets behind Bluestein)";
+
+        /// <summary>
+        ///     Runs a byte-exact assertion over a result that NumPy computes in compiled floating-point
+        ///     arithmetic its arm64 wheels fuse: strict where <see cref="NumPyRoundsEachProduct"/> holds,
+        ///     and on any other host a failed assertion becomes Inconclusive CARRYING the failure's own
+        ///     message, so the CI log still records how far the two stacks differed.
+        /// </summary>
+        /// <remarks>
+        ///     <para>Why not <see cref="SkipByteExactOnArm64"/>: that one skips before anything is
+        ///     computed. Here the comparison always runs, so a fusing host whose result happens to match
+        ///     still PASSES (a real byte-exact check), and one that does not match still reports the
+        ///     measured difference — the evidence that the divergence is NumPy's contraction and not a
+        ///     NumSharp regression hiding behind a skip.</para>
+        ///     <para>Only <see cref="AssertFailedException"/> is converted (<c>Assert.Fail</c> and
+        ///     AwesomeAssertions both raise it under MSTest); any other exception — a crash, a Python
+        ///     error — propagates unchanged on every host, and on x86/x64 the failure itself propagates
+        ///     untouched, stack trace included (the conversion is an exception filter).</para>
+        ///     <para>Wrap ONLY the cells whose NumPy side goes through the named arithmetic; assert the
+        ///     rest of a test (values NumPy does not compute with fusable expressions, or computes through
+        ///     the same bundled OpenBLAS NumSharp calls) strictly on every host.</para>
+        /// </remarks>
+        /// <param name="cell">The compared cell, named first in the Inconclusive message.</param>
+        /// <param name="fusedArithmetic">Which of NumPy's compiled expressions fuse on such a host
+        ///     (for example <see cref="PocketFftFusedArithmetic"/>), so the message states the cause.</param>
+        /// <param name="assertExact">The byte-exact assertion. It runs on every host.</param>
+        /// <exception cref="AssertFailedException">The assertion failed on a host whose NumPy rounds each
+        ///     product — a genuine parity failure.</exception>
+        /// <exception cref="AssertInconclusiveException">The assertion failed on a host whose NumPy
+        ///     fuses the named arithmetic.</exception>
+        protected static void AssertExactUnlessNumPyFuses(string cell, string fusedArithmetic, Action assertExact)
+        {
+            try
+            {
+                assertExact();
+            }
+            catch (AssertFailedException failure) when (!NumPyRoundsEachProduct)
+            {
+                Assert.Inconclusive(
+                    $"{cell} is not byte-identical on {System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture} " +
+                    $"({failure.Message.Trim()}). This host's NumPy wheel targets a baseline ISA with fused " +
+                    $"multiply-add and is compiled with the default floating-point contraction, so {fusedArithmetic} " +
+                    "round once where NumSharp's port, and every x86-64 NumPy, round each product. The byte-exact " +
+                    "gate for this cell is pinned to x64.");
+            }
+        }
+
+        /// <summary>
         ///     True when this process's NumPy evaluates its legacy Gaussian sampler LITERALLY, so a seeded
         ///     <c>RandomState.randn</c> draws the same stream NumSharp does. That holds on every x86/x64
         ///     host and does NOT hold on arm64, where NumPy's own wheel fuses one line of the sampler.
