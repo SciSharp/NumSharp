@@ -533,6 +533,217 @@ namespace NumSharp.Tests.Backends.Iterators
         }
 
         /// <summary>
+        /// A deterministic sparse float64 pool: each element is 1.0 with probability 1/<paramref name="oneIn"/>, else 0.0 —
+        /// so an axis Any over it mixes True and False outputs (and All over its complement), which a dense pool would not.
+        /// </summary>
+        /// <param name="shape">The pool's shape.</param>
+        /// <param name="seed">The generator seed.</param>
+        /// <param name="oneIn">The inverse density of the 1.0 elements.</param>
+        /// <returns>A fresh C-contiguous float64 array.</returns>
+        private static NDArray SparsePool(long[] shape, int seed, int oneIn)
+        {
+            var rng = new System.Random(seed);
+            long n = 1;
+            foreach (var d in shape) n *= d;
+            var v = new double[n];
+            for (long i = 0; i < n; i++) v[i] = rng.Next(oneIn) == 0 ? 1.0 : 0.0;
+            return np.array(v).reshape(shape);
+        }
+
+        /// <summary>
+        /// Plan lever 3, AXIS form: the streamed axis <c>Any</c> / <c>All</c> / <c>CountNonzero</c> / <c>Sum(bool)</c> must
+        /// equal the seeded axis fold byte for byte across the row walk (reduced axis contiguous — short rows many per
+        /// block and rows longer than a block), the slab walk (outer axis — short slabs many per block, slabs longer than a
+        /// block, counts across more than 255 slabs and exactly at the byte-counter flush boundary), every axis of a 3-D
+        /// block, C and F walks, computed children (with a 0-d parameter) and bare bool leaves (read in place), keepdims
+        /// and out= — and must decline strided, broadcast, mixed-order and empty reductions.
+        /// </summary>
+        [TestMethod]
+        public void AxisBoolFolds_AnyAllCount_StreamAndMatchTheAxisFold()
+        {
+            var shapes = new[]
+            {
+                new long[] { 700 }, new long[] { 20000 },                        // 1-D reduce-all: one short / one long row
+                new long[] { 1000, 100 }, new long[] { 5, 20000 },               // slabs (inner 100) / long rows (> 8192)
+                new long[] { 300, 9000 },                                        // slabs longer than a block (9000 > 8192)
+                new long[] { 255, 3 }, new long[] { 256, 3 }, new long[] { 511, 2 }, // counts at the 255-slab flush edges
+                new long[] { 4, 5, 67 }, new long[] { 4, 300, 7 },               // every axis of a 3-D block
+            };
+            var half = NDArray.Scalar(0.5);   // 0-d → a hoisted parameter of the computed child
+            foreach (var shape in shapes)
+            {
+                int nd = shape.Length;
+                var a = SparsePool(shape, 1000 + (int)shape[0], oneIn: 97);
+                var b = SparsePool(shape, 2000 + (int)shape[0], oneIn: 5);
+                var mask = a > 0.5;                                            // a bare bool leaf
+                var fa = np.asfortranarray(a);
+                var fb = np.asfortranarray(b);
+                var fmask = np.asfortranarray(mask);
+                for (int axis = 0; axis < nd; axis++)
+                {
+                    int ax = axis;
+                    // Computed children (C and F walks), the 0-d parameter included.
+                    AssertSameBothWaysExact(() => NDExpr.Any((NDExpr)a > (NDExpr)half, ax), expectStream: true);
+                    AssertSameBothWaysExact(() => NDExpr.All((NDExpr)a < (NDExpr)half, ax), expectStream: true);
+                    AssertSameBothWaysExact(() => NDExpr.CountNonzero((NDExpr)a > (NDExpr)b, ax), expectStream: true);
+                    AssertSameBothWaysExact(() => NDExpr.Any((NDExpr)fa > (NDExpr)fb, ax), expectStream: true);
+                    AssertSameBothWaysExact(() => NDExpr.All((NDExpr)fa <= (NDExpr)fb, ax), expectStream: true);
+                    AssertSameBothWaysExact(() => NDExpr.CountNonzero((NDExpr)fb, ax), expectStream: true);
+                    // Bare bool leaves, read in place: Any / All / CountNonzero and a plain Sum of the bools.
+                    AssertSameBothWaysExact(() => NDExpr.Any((NDExpr)mask, ax), expectStream: true);
+                    AssertSameBothWaysExact(() => NDExpr.All((NDExpr)fmask, ax), expectStream: true);
+                    AssertSameBothWaysExact(() => NDExpr.CountNonzero((NDExpr)mask, ax), expectStream: true);
+                    AssertSameBothWaysExact(() => NDExpr.Sum((NDExpr)fmask, ax), expectStream: true);
+                }
+            }
+
+            // DENSE counts: a byte counter holds 255 additions, so an all-true column longer than that is what exposes a
+            // late flush (the sparse pools above never put 256 Trues between two flushes). 255 / 256 / 1000 slabs, and the
+            // longer-than-a-block slab walk (inner 9000), as a computed child and as a bool leaf.
+            foreach (var shape in new[] { new long[] { 255, 5 }, new long[] { 256, 5 }, new long[] { 1000, 3 }, new long[] { 600, 9000 } })
+            {
+                var ones = np.ones(new Shape(shape), NPTypeCode.Double);
+                var onesMask = np.ones(new Shape(shape), NPTypeCode.Boolean);
+                var fOnes = np.asfortranarray(np.ones(new Shape(shape[1], shape[0]), NPTypeCode.Double));
+                AssertSameBothWaysExact(() => NDExpr.CountNonzero((NDExpr)ones, 0), expectStream: true);
+                AssertSameBothWaysExact(() => NDExpr.Sum((NDExpr)onesMask, 0), expectStream: true);
+                AssertSameBothWaysExact(() => NDExpr.CountNonzero((NDExpr)fOnes, 1), expectStream: true);   // F walk: slabs
+                Assert.AreEqual(shape[0], np.evaluate(NDExpr.CountNonzero((NDExpr)ones, 0)).GetAtIndex<long>(shape[1] - 1),
+                    $"{shape[0]}x{shape[1]}: every column counts all {shape[0]} Trues");
+            }
+
+            // NumSharp's own unfused reductions agree (an independent cross-check of the fold both sides above share).
+            var m2 = SparsePool(new long[] { 1000, 100 }, 77, oneIn: 400) > 0.5;
+            for (int axis = 0; axis < 2; axis++)
+            {
+                Assert.IsTrue(np.array_equal(np.any(m2, axis), np.evaluate(NDExpr.Any((NDExpr)m2, axis))), $"any axis {axis}");
+                Assert.IsTrue(np.array_equal(np.all(!m2, axis), np.evaluate(NDExpr.All(!(NDExpr)m2, axis))), $"all axis {axis}");
+                Assert.IsTrue(np.array_equal(np.count_nonzero(m2, axis), np.evaluate(NDExpr.CountNonzero((NDExpr)m2, axis))),
+                    $"count_nonzero axis {axis}");
+            }
+        }
+
+        /// <summary>
+        /// The deciding element of an axis <c>Any</c> / <c>All</c> at every position that matters to the stream — the first
+        /// and last element of a row, both sides of a scratch-block boundary (8192 bools) of a long row, a row with none —
+        /// and the slab walk's early exit, both when every output decides early (the walk stops) and when one output never
+        /// decides (the walk must run to the end), so a premature stop or a missed element shows as a wrong output.
+        /// </summary>
+        [TestMethod]
+        public void AxisBoolFolds_DecidingElementAtEveryPosition_AndTheSlabEarlyExit()
+        {
+            // Long rows (reduced axis contiguous, 20000 > the 8192-bool block): one hot element per row, at a different
+            // position in each row; row 0 has none.
+            long len = 20000;
+            long[] hot = { -1, 0, 1, 8191, 8192, 8193, 16383, 16384, len / 2, len - 1 };
+            var x = np.zeros(new Shape(hot.Length, len), NPTypeCode.Double);
+            for (int r = 0; r < hot.Length; r++)
+                if (hot[r] >= 0) x[r, (int)hot[r]] = 1.0;
+            var xs = x;
+            var xt = np.asfortranarray(x.T.copy()).T;   // the same values, reached through an F walk of the transpose
+            AssertSameBothWaysExact(() => NDExpr.Any((NDExpr)xs, 1), expectStream: true);
+            AssertSameBothWaysExact(() => NDExpr.All((NDExpr)xs < 0.5, 1), expectStream: true);
+            AssertSameBothWaysExact(() => NDExpr.CountNonzero((NDExpr)xs, 1), expectStream: true);
+            AssertSameBothWaysExact(() => NDExpr.Any((NDExpr)xt, 1), expectStream: true);
+            var anyRows = np.evaluate(NDExpr.Any((NDExpr)xs, 1));
+            for (int r = 0; r < hot.Length; r++)
+                Assert.AreEqual(hot[r] >= 0, anyRows.GetAtIndex<bool>(r), $"row {r} (hot at {hot[r]})");
+
+            // Slabs (outer axis 0 reduced, 3000 x 50): every column decided within the first rows → the walk stops early.
+            var early = np.zeros(new Shape(3000, 50), NPTypeCode.Double);
+            for (int c = 0; c < 50; c++) early[(c * 7) % 90, c] = 1.0;
+            var es = early;
+            AssertSameBothWaysExact(() => NDExpr.Any((NDExpr)es, 0), expectStream: true);
+            AssertSameBothWaysExact(() => NDExpr.All((NDExpr)es < 0.5, 0), expectStream: true);
+            Assert.IsTrue(np.evaluate(NDExpr.Any((NDExpr)es, 0)).GetAtIndex<bool>(49), "column 49 decided at row 73");
+
+            // …and the same walk with ONE column that never decides (its hot element is on the very last row): stopping
+            // before the end would report column 13 False.
+            var late = early.copy();
+            late[":, 13"] = 0.0;
+            late[2999, 13] = 1.0;
+            var ls = late;
+            AssertSameBothWaysExact(() => NDExpr.Any((NDExpr)ls, 0), expectStream: true);
+            AssertSameBothWaysExact(() => NDExpr.All((NDExpr)ls < 0.5, 0), expectStream: true);
+            Assert.IsTrue(np.evaluate(NDExpr.Any((NDExpr)ls, 0)).GetAtIndex<bool>(13), "column 13's True is on the last row");
+            Assert.IsFalse(np.evaluate(NDExpr.All((NDExpr)ls < 0.5, 0)).GetAtIndex<bool>(13), "…so column 13 is not all-below");
+
+            // Slabs longer than a block (inner 9000): column 8999 decides only on the last slab.
+            var wide = np.zeros(new Shape(40, 9000), NPTypeCode.Double);
+            wide[":, :8999"] = 1.0;
+            wide[39, 8999] = 1.0;
+            var ws = wide;
+            AssertSameBothWaysExact(() => NDExpr.Any((NDExpr)ws, 0), expectStream: true);
+            AssertSameBothWaysExact(() => NDExpr.All((NDExpr)ws, 0), expectStream: true);
+            Assert.IsTrue(np.evaluate(NDExpr.Any((NDExpr)ws, 0)).GetAtIndex<bool>(8999), "the last slab decides column 8999");
+        }
+
+        /// <summary>
+        /// The streamed axis bool fold's result plumbing: keepdims reshapes it, <c>out=</c> receives it (the same instance
+        /// returned), an F walk's F-contiguous result reads back in logical order, a bool leaf reached through an F column
+        /// block at a NON-zero offset is scanned from its logical element 0 — and strided, broadcast, mixed-order and
+        /// empty reductions decline to the fold.
+        /// </summary>
+        [TestMethod]
+        public void AxisBoolFolds_KeepdimsOutOffsetAndDeclines()
+        {
+            var a = SparsePool(new long[] { 60, 40 }, 5, oneIn: 23);
+            var b = SparsePool(new long[] { 60, 40 }, 6, oneIn: 3);
+            AssertSameBothWaysExact(() => NDExpr.Any((NDExpr)a > (NDExpr)b, 0, keepdims: true), expectStream: true);
+            AssertSameBothWaysExact(() => NDExpr.CountNonzero((NDExpr)a, 1, keepdims: true), expectStream: true);
+            AssertSameBothWaysExact(() => NDExpr.All((NDExpr)a <= (NDExpr)b, -1, keepdims: true), expectStream: true);
+
+            // out=: the streamed result is copied into the caller's array, which is what np.evaluate returns.
+            var dst = np.full(new Shape(40), -7L);
+            var want = np.count_nonzero(a, 0);
+            NDExpr.StreamingReductions = 0;
+            var got = np.evaluate(NDExpr.CountNonzero((NDExpr)a, 0), @out: dst);
+            Assert.IsTrue(NDExpr.StreamingReductions > 0, "the count streams");
+            Assert.AreSame(dst, got, "out= is returned");
+            Assert.IsTrue(np.array_equal(want, dst), "out= holds the counts");
+
+            // An F walk of a 3-D block: the F-contiguous result reads back in logical order.
+            var c3 = SparsePool(new long[] { 6, 7, 8 }, 9, oneIn: 11);
+            var f3 = np.asfortranarray(c3);
+            for (int axis = 0; axis < 3; axis++)
+            {
+                int ax = axis;
+                AssertSameBothWaysExact(() => NDExpr.CountNonzero((NDExpr)f3, ax), expectStream: true);
+                Assert.IsTrue(np.array_equal(np.count_nonzero(c3, ax), np.evaluate(NDExpr.CountNonzero((NDExpr)f3, ax))),
+                    $"F count axis {ax} equals the C count");
+            }
+
+            // A bool leaf in an F column block at a NON-zero offset: columns 0..6 of the base are all True and are NOT
+            // part of the view, so a scan that ignored the offset would report them.
+            var bm = np.zeros(new Shape(6, 400), NPTypeCode.Boolean);
+            bm[":, :7"] = true;
+            bm[":, 7:393"] = ((np.arange(6 * 386) % 5) == 0).reshape(6, 386);
+            var bfo = np.asfortranarray(bm)[":, 7:400"];
+            Assert.IsTrue(bfo.Shape.IsFContiguous && bfo.Shape.offset == 42, "precondition: F-contiguous at offset 42");
+            for (int axis = 0; axis < 2; axis++)
+            {
+                int ax = axis;
+                AssertSameBothWaysExact(() => NDExpr.CountNonzero((NDExpr)bfo, ax), expectStream: true);
+                AssertSameBothWaysExact(() => NDExpr.All((NDExpr)bfo, ax), expectStream: true);
+                Assert.IsTrue(np.array_equal(np.count_nonzero(bfo, ax), np.evaluate(NDExpr.CountNonzero((NDExpr)bfo, ax))),
+                    $"offset-view count axis {ax}");
+            }
+
+            // Declines: a strided operand, a broadcast pair, mixed C / F, an empty reduced axis, an empty output.
+            var st = SparsePool(new long[] { 60, 80 }, 12, oneIn: 9)[":, ::2"];
+            AssertSameBothWaysExact(() => NDExpr.Any((NDExpr)st, 0), expectStream: false);
+            var row = SparsePool(new long[] { 40 }, 13, oneIn: 2);
+            AssertSameBothWaysExact(() => NDExpr.CountNonzero((NDExpr)a > (NDExpr)row, 0), expectStream: false);
+            var fb = np.asfortranarray(b);
+            AssertSameBothWaysExact(() => NDExpr.Any((NDExpr)a > (NDExpr)fb, 1), expectStream: false);
+            var e0 = np.zeros(new Shape(0, 5), NPTypeCode.Double);
+            AssertSameBothWaysExact(() => NDExpr.All((NDExpr)e0, 0), expectStream: false);
+            AssertSameBothWaysExact(() => NDExpr.CountNonzero((NDExpr)e0, 0), expectStream: false);
+            var e1 = np.zeros(new Shape(5, 0), NPTypeCode.Double);
+            AssertSameBothWaysExact(() => NDExpr.Any((NDExpr)e1, 0), expectStream: false);
+        }
+
+        /// <summary>
         /// <see cref="AssertSameBothWays"/> for results of ANY dtype (bool / int64 here): evaluate with streaming off
         /// and on, assert engagement, and compare dtype, shape and raw bytes.
         /// </summary>

@@ -1709,71 +1709,80 @@ namespace NumSharp.Backends
             }
             else
             {
-                outAcc = new NDArray(accType, reducedShape, false);
-                if (outAcc.size != 0)
+                // Plan lever 3, axis form: Any / All / a count of a bool child stream through the child's SIMD kernel
+                // and vectorized byte folds (exact by construction — OR / AND / a count are order-free). Null (nothing
+                // allocated) for every other kind, layout or an empty reduction: the seeded axis fold below runs as
+                // before. The stream result may be F-contiguous (an all-F walk); every step after this branch treats
+                // outAcc as a dense block, exactly as for the F-aware Sum stream above.
+                outAcc = TryStreamAxisBoolFold(program, inputs, axis, reduce.Kind, accType, reducedShape);
+                if (outAcc is null)
                 {
-                    // Seed the accumulator with the reduction identity (Mean accumulates a Sum).
-                    var seedOp = reduce.Kind switch
+                    outAcc = new NDArray(accType, reducedShape, false);
+                    if (outAcc.size != 0)
                     {
-                        NDExprReduceKind.Prod => ReductionOp.Prod,
-                        NDExprReduceKind.Min => ReductionOp.Min,
-                        NDExprReduceKind.Max => ReductionOp.Max,
-                        // logical_or / logical_and: SeedReduceIdentity writes False / True per output slot
-                        // (GetIdentity(Any) == false, GetIdentity(All) == true); the kernel folds OR / AND.
-                        NDExprReduceKind.Any => ReductionOp.Any,
-                        NDExprReduceKind.All => ReductionOp.All,
-                        _ => ReductionOp.Sum, // Sum / Mean
-                    };
-                    ILKernelGenerator.SeedReduceIdentity(outAcc, seedOp);
-
-                    if (axisSize != 0)
-                    {
-                        var kernel = program.AxisReduceKernel;
-
-                        // op_axes: identity for every input; output maps reduce axis → -1 (stride 0).
-                        var opAxes = new int[ops.Length + 1][];
-                        for (int i = 0; i < ops.Length; i++)
+                        // Seed the accumulator with the reduction identity (Mean accumulates a Sum).
+                        var seedOp = reduce.Kind switch
                         {
-                            var a = new int[ndim];
-                            for (int d = 0; d < ndim; d++) a[d] = d;
-                            opAxes[i] = a;
-                        }
-                        var outAxes = new int[ndim];
-                        for (int d = 0, oc = 0; d < ndim; d++) outAxes[d] = (d == axis) ? -1 : oc++;
-                        opAxes[ops.Length] = outAxes;
+                            NDExprReduceKind.Prod => ReductionOp.Prod,
+                            NDExprReduceKind.Min => ReductionOp.Min,
+                            NDExprReduceKind.Max => ReductionOp.Max,
+                            // logical_or / logical_and: SeedReduceIdentity writes False / True per output slot
+                            // (GetIdentity(Any) == false, GetIdentity(All) == true); the kernel folds OR / AND.
+                            NDExprReduceKind.Any => ReductionOp.Any,
+                            NDExprReduceKind.All => ReductionOp.All,
+                            _ => ReductionOp.Sum, // Sum / Mean
+                        };
+                        ILKernelGenerator.SeedReduceIdentity(outAcc, seedOp);
 
-                        var operands = new NDArray[ops.Length + 1];
-                        for (int i = 0; i < ops.Length; i++)
+                        if (axisSize != 0)
                         {
-                            bool same = ops[i].ndim == ndim;
-                            if (same)
-                                for (int d = 0; d < ndim; d++)
-                                    if (ops[i].shape[d] != inputShape[d]) { same = false; break; }
-                            operands[i] = same ? ops[i] : np.broadcast_to(ops[i], inputShape);
+                            var kernel = program.AxisReduceKernel;
+
+                            // op_axes: identity for every input; output maps reduce axis → -1 (stride 0).
+                            var opAxes = new int[ops.Length + 1][];
+                            for (int i = 0; i < ops.Length; i++)
+                            {
+                                var a = new int[ndim];
+                                for (int d = 0; d < ndim; d++) a[d] = d;
+                                opAxes[i] = a;
+                            }
+                            var outAxes = new int[ndim];
+                            for (int d = 0, oc = 0; d < ndim; d++) outAxes[d] = (d == axis) ? -1 : oc++;
+                            opAxes[ops.Length] = outAxes;
+
+                            var operands = new NDArray[ops.Length + 1];
+                            for (int i = 0; i < ops.Length; i++)
+                            {
+                                bool same = ops[i].ndim == ndim;
+                                if (same)
+                                    for (int d = 0; d < ndim; d++)
+                                        if (ops[i].shape[d] != inputShape[d]) { same = false; break; }
+                                operands[i] = same ? ops[i] : np.broadcast_to(ops[i], inputShape);
+                            }
+                            operands[ops.Length] = outAcc;
+
+                            var opFlags = new NDIterPerOpFlags[ops.Length + 1];
+                            for (int i = 0; i < ops.Length; i++) opFlags[i] = NDIterPerOpFlags.READONLY;
+                            opFlags[ops.Length] = NDIterPerOpFlags.READWRITE;
+
+                            using var iter = NDIterRef.AdvancedNew(
+                                operands.Length, operands,
+                                NDIterGlobalFlags.REDUCE_OK | NDIterGlobalFlags.EXTERNAL_LOOP,
+                                NPY_ORDER.NPY_KEEPORDER, NPY_CASTING.NPY_NO_CASTING,
+                                opFlags, null, ndim, opAxes);
+
+                            // Same aux layout as the flat kernel (slot 0 reserved, parameters after it).
+                            byte* aux = null;
+                            if (program.ParamCount > 0)
+                            {
+                                // stackalloc memory lives until the METHOD returns, so the block-scoped declaration is safe.
+                                byte* buf = stackalloc byte[NDExprParamPlan.SlotBytes * (1 + program.ParamCount)];
+                                program.PackParams(inputs, buf + NDExprParamPlan.ReduceParamOffset);
+                                aux = buf;
+                            }
+
+                            iter.ForEach(kernel, aux);
                         }
-                        operands[ops.Length] = outAcc;
-
-                        var opFlags = new NDIterPerOpFlags[ops.Length + 1];
-                        for (int i = 0; i < ops.Length; i++) opFlags[i] = NDIterPerOpFlags.READONLY;
-                        opFlags[ops.Length] = NDIterPerOpFlags.READWRITE;
-
-                        using var iter = NDIterRef.AdvancedNew(
-                            operands.Length, operands,
-                            NDIterGlobalFlags.REDUCE_OK | NDIterGlobalFlags.EXTERNAL_LOOP,
-                            NPY_ORDER.NPY_KEEPORDER, NPY_CASTING.NPY_NO_CASTING,
-                            opFlags, null, ndim, opAxes);
-
-                        // Same aux layout as the flat kernel (slot 0 reserved, parameters after it).
-                        byte* aux = null;
-                        if (program.ParamCount > 0)
-                        {
-                            // stackalloc memory lives until the METHOD returns, so the block-scoped declaration is safe.
-                            byte* buf = stackalloc byte[NDExprParamPlan.SlotBytes * (1 + program.ParamCount)];
-                            program.PackParams(inputs, buf + NDExprParamPlan.ReduceParamOffset);
-                            aux = buf;
-                        }
-
-                        iter.ForEach(kernel, aux);
                     }
                 }
             }

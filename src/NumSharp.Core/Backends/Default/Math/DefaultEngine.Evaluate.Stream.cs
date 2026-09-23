@@ -791,6 +791,412 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
+        /// Plan lever 3, AXIS form — <c>Any</c> / <c>All</c> / <c>Sum</c>-of-a-bool-child (<c>CountNonzero</c>) along one axis,
+        /// streamed: the bool child is produced block by block through its own kernel (the <c>x != 0</c> operand
+        /// substitution included) and folded with vectorized byte operations — each output row scanned with span
+        /// primitives when the reduced axis is the contiguous one, each output slab OR / AND / count-accumulated slab after
+        /// slab otherwise. The per-output scalar axis fold these kinds rode measured 0.37x NumPy for
+        /// <c>any(a &gt; b, axis=0)</c> at 100K (0.23x NumSharp's own unfused <c>np.any</c>).
+        /// </summary>
+        /// <remarks>
+        /// Exact BY CONSTRUCTION: logical OR / AND and an integer count do not depend on the visiting order, so any walk
+        /// that attributes every element to its own output gives NumPy's answer. The walk is the M3 axis stream's
+        /// (<see cref="TryStreamAxisReduce"/>): the child's memory as <c>[outer, axis, inner]</c> for all-C operands, or —
+        /// for all-F ones — the C order of the reversed dims, with an F-contiguous result (NumPy's K-order output). A bare
+        /// bool LEAF (<c>any(mask, axis)</c>) is read in place — its bytes ARE the child — so nothing is copied. Any / All
+        /// may stop early once an output is decided: a long row at its deciding chunk, a slab group once every output of
+        /// the group is decided (a side-effecting <c>Call</c> node could observe the skipped evaluations; element
+        /// evaluation order is not contractual — the flat fold stops early the same way). Declines (null, nothing
+        /// allocated) for any other kind, a non-bool child, a Sum whose accumulator is not int64, an empty reduction, a
+        /// slab longer than <see cref="int.MaxValue"/> bools (the span-based folds address it with an int), or operands
+        /// the streams cannot walk (strided, broadcast, mixed order) — the axis fold then runs as before.
+        /// </remarks>
+        /// <param name="program">The axis reduction program.</param>
+        /// <param name="inputs">Every input of the call, in input order.</param>
+        /// <param name="axis">The already-normalized reduction axis.</param>
+        /// <param name="kind">The reduction kind.</param>
+        /// <param name="accType">The accumulator dtype (Boolean for Any / All, Int64 for the count).</param>
+        /// <param name="reducedShape">The output shape (the input shape without <paramref name="axis"/>).</param>
+        /// <returns>A fresh reduced array of <paramref name="accType"/> (the caller owns it), or null to fall back.</returns>
+        /// <exception cref="OutOfMemoryException">The result (or a count's byte-counter row) cannot be allocated.</exception>
+        /// <exception cref="Exception">Whatever the child kernel raises mid-stream — e.g. <see cref="OverflowException"/>
+        /// from a Decimal child's arithmetic, or a <c>Call</c> node's delegate — propagates unchanged after the partially
+        /// written result is disposed (the declines above are checked first, so no exception means "fall back").</exception>
+        private static unsafe NDArray TryStreamAxisBoolFold(NDExprProgram program, NDArray[] inputs, int axis,
+            NDExprReduceKind kind, NPTypeCode accType, Shape reducedShape)
+        {
+            bool any = kind == NDExprReduceKind.Any;
+            bool all = kind == NDExprReduceKind.All;
+            bool count = kind == NDExprReduceKind.Sum && accType == NPTypeCode.Int64;
+            if (!(any || all || count))
+                return null;
+
+            // Stream the tested bool operand itself when the child is the factories' `x != 0` over a bool x (see
+            // TryStreamBoolFold), else the child as written.
+            var child = program.NonzeroBoolOperandProgram ?? program.ChildElementwiseProgram;
+            if (child is null || child.ResultType != NPTypeCode.Boolean)
+                return null;
+            var ops = child.IteratorOperands(inputs);
+            if (!CanStreamChild(child, ops, allowF: true))
+                return null;
+
+            var dims = ops[0].Shape.dimensions;
+            int nd = dims.Length;
+            long axisSize = dims[axis];
+            if (axisSize == 0 || reducedShape.size == 0)
+                return null;   // an empty reduction keeps the fold's seeded identities
+
+            // Same shared-order resolution and [outer, axis, inner] split as TryStreamAxisReduce: any operand that is not
+            // C-contiguous makes the shared order F (CanStreamChild accepted allC || allF; an operand contiguous in BOTH
+            // orders fits either, so it never decides).
+            bool fOrder = false;
+            for (int j = 0; j < ops.Length; j++)
+            {
+                if (!ops[j].Shape.IsContiguous)
+                {
+                    fOrder = true;
+                    break;
+                }
+            }
+
+            long outer = 1, inner = 1;
+            if (!fOrder)
+            {
+                for (int d = 0; d < axis; d++) outer *= dims[d];
+                for (int d = axis + 1; d < nd; d++) inner *= dims[d];
+            }
+            else
+            {
+                // Memory is the C order of the reversed dims: the axes AFTER `axis` are the slow (outer) ones and the
+                // axes BEFORE it the fast (inner) ones.
+                for (int d = axis + 1; d < nd; d++) outer *= dims[d];
+                for (int d = 0; d < axis; d++) inner *= dims[d];
+            }
+
+            if (inner > int.MaxValue)
+                return null;   // the slab folds index one slab with an int span; the axis fold handles the giant case
+
+            var stream = new NDExprChildStream();
+            byte* leaf = null;
+            if (child.Bound is InputNode && ops.Length == 1)
+            {
+                // A bare bool LEAF: its elements ARE the operand's bytes, one dense C- or F-contiguous block (proved by
+                // CanStreamChild), so every range is read in place — no kernel call, no scratch copy (the flat fold's
+                // in-place scan measured 0.65-0.83x -> 1.4x NumPy for dropping exactly that copy). itemsize 1: the
+                // view offset is in bytes.
+                leaf = (byte*)ops[0].Address + (long)ops[0].Shape.offset;
+            }
+            else
+            {
+                stream.Kernel = child.Kernel;
+                int nop = ops.Length;
+                byte** bases = stackalloc byte*[nop];
+                long* elemBytes = stackalloc long[nop];
+                void** ptrs = stackalloc void*[nop + 1];
+                long* strides = stackalloc long[nop + 1];
+                BindChildStream(ref stream, ops, NPTypeCode.Boolean, bases, elemBytes, ptrs, strides);
+
+                if (child.ParamCount > 0)
+                {
+                    // Elementwise aux layout (slot 0 onward); stackalloc lives until the METHOD returns, so the
+                    // block-scoped declarations stay valid for every Produce below.
+                    byte* paramBlock = stackalloc byte[NDExprParamPlan.SlotBytes * child.ParamCount];
+                    child.PackParams(inputs, paramBlock);
+                    stream.Aux = paramBlock;
+                }
+            }
+
+            byte* scratch = stackalloc byte[EvaluateStreamScratchBytes];
+            stream.Scratch = scratch;
+            stream.Block = EvaluateStreamScratchBytes;   // one byte per bool element
+
+            // Fresh result in the stream's memory order (C, or F for an F walk of a multi-D reduced shape), allocated
+            // UNINITIALIZED: every output is written (Any / All seed their slab, the count clears its own). Disposed on an
+            // exception so a failing kernel does not strand its buffer.
+            var result = fOrder && reducedShape.NDim > 1
+                ? new NDArray(accType, new Shape((long[])reducedShape.dimensions.Clone(), 'F'), false)
+                : new NDArray(accType, reducedShape, false);
+            NDExpr.StreamingReductions++;
+            try
+            {
+                byte* dst = (byte*)result.Address;
+                if (inner == 1)
+                    StreamBoolRows(ref stream, leaf, outer, axisSize, any, all, dst, scratch);
+                else
+                    StreamBoolSlabs(ref stream, leaf, outer, axisSize, inner, any, all, dst, scratch);
+                return result;
+            }
+            catch
+            {
+                result.Dispose();
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// The child bools at flat memory indices <c>[start, start + count)</c>: read IN PLACE from a bare bool leaf's
+        /// own buffer when <paramref name="leaf"/> is set (the child's elements are its bytes), else produced into
+        /// <paramref name="scratch"/> through the child kernel.
+        /// </summary>
+        /// <param name="stream">The bound bool stream (unused for a leaf).</param>
+        /// <param name="leaf">The leaf's logical element 0, or null for a computed child.</param>
+        /// <param name="start">Flat memory index of the first bool.</param>
+        /// <param name="count">Number of bools (≤ <see cref="EvaluateStreamScratchBytes"/> for a computed child).</param>
+        /// <param name="scratch">The stream's scratch block.</param>
+        /// <returns>The address of the first requested bool (valid until the next fetch).</returns>
+        /// <exception cref="Exception">Whatever the child kernel raises while producing a computed child's block (a leaf
+        /// read never throws); the caller disposes its result and rethrows.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe byte* FetchBools(ref NDExprChildStream stream, byte* leaf, long start, long count, byte* scratch)
+        {
+            if (leaf != null)
+                return leaf + start;
+            stream.Produce(start, count, scratch);
+            return scratch;
+        }
+
+        /// <summary>
+        /// The reduced axis is the contiguous one: output <c>o</c> is the fold of the <paramref name="axisSize"/> bools of
+        /// row <c>o</c>. Short rows are fetched many per scratch block and scanned one span at a time; a row longer than
+        /// the scratch block is fetched in chunks, stopping at the chunk that decides an Any / All.
+        /// </summary>
+        /// <param name="stream">The bound bool stream.</param>
+        /// <param name="leaf">A bare bool leaf read in place, or null to produce through <paramref name="stream"/>.</param>
+        /// <param name="outer">Number of rows (= outputs).</param>
+        /// <param name="axisSize">Row length (&gt; 0).</param>
+        /// <param name="any">Fold logical OR (result bool).</param>
+        /// <param name="all">Fold logical AND (result bool); neither = count (result int64).</param>
+        /// <param name="dst">The result buffer (bool bytes, or int64 counts) — every output is written, none read.</param>
+        /// <param name="scratch">The stream's scratch block (<see cref="EvaluateStreamScratchBytes"/> bytes).</param>
+        /// <exception cref="Exception">Whatever the child kernel raises through <see cref="FetchBools"/>; outputs already
+        /// written stay written — the caller disposes the whole result.</exception>
+        private static unsafe void StreamBoolRows(ref NDExprChildStream stream, byte* leaf, long outer, long axisSize,
+            bool any, bool all, byte* dst, byte* scratch)
+        {
+            long rowsPerBlock = EvaluateStreamScratchBytes / axisSize;
+            if (rowsPerBlock >= 1)
+            {
+                for (long o = 0; o < outer; o += rowsPerBlock)
+                {
+                    long r = Math.Min(rowsPerBlock, outer - o);
+                    byte* blk = FetchBools(ref stream, leaf, o * axisSize, r * axisSize, scratch);
+                    for (long j = 0; j < r; j++)
+                    {
+                        // axisSize ≤ the scratch block here, so the int span length cannot overflow.
+                        var row = new ReadOnlySpan<byte>(blk + j * axisSize, (int)axisSize);
+                        if (any)
+                            dst[o + j] = row.IndexOfAnyExcept((byte)0) >= 0 ? (byte)1 : (byte)0;
+                        else if (all)
+                            dst[o + j] = row.IndexOf((byte)0) < 0 ? (byte)1 : (byte)0;
+                        else
+                            ((long*)dst)[o + j] = axisSize - row.Count((byte)0);
+                    }
+                }
+
+                return;
+            }
+
+            // Rows longer than the scratch block: chunk each row; an Any / All row stops at its deciding chunk.
+            for (long o = 0; o < outer; o++)
+            {
+                long nonzero = 0;
+                bool decided = false;
+                for (long c = 0; c < axisSize && !decided; c += EvaluateStreamScratchBytes)
+                {
+                    int m = (int)Math.Min(EvaluateStreamScratchBytes, axisSize - c);
+                    var chunk = new ReadOnlySpan<byte>(FetchBools(ref stream, leaf, o * axisSize + c, m, scratch), m);
+                    if (any)
+                        decided = chunk.IndexOfAnyExcept((byte)0) >= 0;
+                    else if (all)
+                        decided = chunk.IndexOf((byte)0) >= 0;
+                    else
+                        nonzero += m - chunk.Count((byte)0);
+                }
+
+                if (any)
+                    dst[o] = decided ? (byte)1 : (byte)0;
+                else if (all)
+                    dst[o] = decided ? (byte)0 : (byte)1;
+                else
+                    ((long*)dst)[o] = nonzero;
+            }
+        }
+
+        /// <summary>
+        /// An outer axis is reduced: output slab <c>o</c> (<paramref name="inner"/> outputs) folds the
+        /// <paramref name="axisSize"/> input slabs <c>(o·axisSize + k)·inner</c> element by element. Consecutive slabs are
+        /// fetched many per scratch block and combined with <see cref="Vector{T}"/> byte operations: Any / All accumulate
+        /// straight into the bool result (identity-seeded, kept 0 / 1) and stop once every output of the slab is decided;
+        /// the count accumulates into byte counters flushed into the int64 result every 255 slabs (a byte cannot overflow
+        /// in between).
+        /// </summary>
+        /// <param name="stream">The bound bool stream.</param>
+        /// <param name="leaf">A bare bool leaf read in place, or null to produce through <paramref name="stream"/>.</param>
+        /// <param name="outer">Number of output slabs.</param>
+        /// <param name="axisSize">Slabs per output (&gt; 0).</param>
+        /// <param name="inner">Slab length (&gt; 1, ≤ <see cref="int.MaxValue"/> — the caller declines longer slabs).</param>
+        /// <param name="any">Fold logical OR (result bool).</param>
+        /// <param name="all">Fold logical AND (result bool); neither = count (result int64).</param>
+        /// <param name="dst">The result buffer (bool bytes, or int64 counts), uninitialized on entry — every output is seeded here.</param>
+        /// <param name="scratch">The stream's scratch block (<see cref="EvaluateStreamScratchBytes"/> bytes).</param>
+        /// <exception cref="OutOfMemoryException">A count's byte-counter row (<paramref name="inner"/> bytes) cannot be
+        /// allocated.</exception>
+        /// <exception cref="Exception">Whatever the child kernel raises through <see cref="FetchBools"/>; the caller
+        /// disposes the partially written result.</exception>
+        private static unsafe void StreamBoolSlabs(ref NDExprChildStream stream, byte* leaf, long outer, long axisSize,
+            long inner, bool any, bool all, byte* dst, byte* scratch)
+        {
+            bool count = !any && !all;
+            int n = (int)inner;   // the caller declined inner > int.MaxValue
+            // Byte counters for the count (one per inner position), flushed before they can wrap. Allocated per call and
+            // only for the count (inner bytes — an eighth of the int64 output slab); Any / All accumulate in the bool
+            // result itself.
+            byte[] counters = count ? new byte[n] : null;
+            fixed (byte* cnt = counters)
+            {
+                for (long o = 0; o < outer; o++)
+                {
+                    long* counts = (long*)dst + o * inner;
+                    byte* acc = count ? cnt : dst + o * inner;
+                    // Identity: Any false, All true, count 0 (the byte counters are zero after every flush already; the
+                    // fill keeps the invariant explicit). The count's int64 outputs are uninitialized memory the flushes
+                    // ADD into, so they start at 0 here.
+                    new Span<byte>(acc, n).Fill(all ? (byte)1 : (byte)0);
+                    if (count)
+                        new Span<long>(counts, n).Clear();
+                    long pending = 0;   // count: slabs added into the byte counters since the last flush
+
+                    if (inner <= EvaluateStreamScratchBytes)
+                    {
+                        long slabsPerBlock = EvaluateStreamScratchBytes / inner;
+                        for (long k = 0; k < axisSize; k += slabsPerBlock)
+                        {
+                            long kc = Math.Min(slabsPerBlock, axisSize - k);
+                            byte* blk = FetchBools(ref stream, leaf, (o * axisSize + k) * inner, kc * inner, scratch);
+                            for (long j = 0; j < kc; j++)
+                            {
+                                CombineBoolSlab(acc, blk + j * inner, inner, any, all);
+                                if (count && ++pending == 255)
+                                {
+                                    FlushByteCounters(counts, cnt, inner);
+                                    pending = 0;
+                                }
+                            }
+
+                            // Once every output of the slab is decided (Any: all true, All: all false) no later slab can
+                            // change it; checking once per block costs one inner-byte scan per ~8 KB produced.
+                            if (!count && SlabDecided(acc, n, any))
+                                break;
+                        }
+                    }
+                    else
+                    {
+                        // A slab longer than the scratch block: fetch and combine it chunk by chunk.
+                        for (long k = 0; k < axisSize; k++)
+                        {
+                            long slab = (o * axisSize + k) * inner;
+                            for (long c = 0; c < inner; c += EvaluateStreamScratchBytes)
+                            {
+                                long m = Math.Min(EvaluateStreamScratchBytes, inner - c);
+                                CombineBoolSlab(acc + c, FetchBools(ref stream, leaf, slab + c, m, scratch), m, any, all);
+                            }
+
+                            if (count && ++pending == 255)
+                            {
+                                FlushByteCounters(counts, cnt, inner);
+                                pending = 0;
+                            }
+                            else if (!count && SlabDecided(acc, n, any))
+                            {
+                                break;
+                            }
+                        }
+                    }
+
+                    if (count && pending > 0)
+                        FlushByteCounters(counts, cnt, inner);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Is every output of an Any / All accumulator slab already final? Any is final once every byte is 1 (no later
+        /// OR can clear it), All once every byte is 0 (no later AND can set it). The accumulator holds only 0 / 1.
+        /// </summary>
+        /// <param name="acc">The 0 / 1 accumulator slab.</param>
+        /// <param name="n">Its length.</param>
+        /// <param name="any">True for Any (final = all ones), false for All (final = all zeros).</param>
+        /// <returns>Whether no further slab can change any output of the slab.</returns>
+        private static unsafe bool SlabDecided(byte* acc, int n, bool any)
+            => any ? new ReadOnlySpan<byte>(acc, n).IndexOf((byte)0) < 0
+                   : new ReadOnlySpan<byte>(acc, n).IndexOf((byte)1) < 0;
+
+        /// <summary>
+        /// Fold <paramref name="n"/> bools at <paramref name="src"/> into the 0 / 1 byte accumulator <paramref name="acc"/>:
+        /// OR (Any), AND (All), or +1 per nonzero (count — byte counters the caller flushes before 255 additions). Any
+        /// nonzero source byte counts as True (NumPy's truthiness), and the accumulator stays 0 / 1 for Any / All.
+        /// </summary>
+        /// <param name="acc">The accumulator (n bytes).</param>
+        /// <param name="src">The produced bools (n bytes).</param>
+        /// <param name="n">Element count.</param>
+        /// <param name="any">OR.</param>
+        /// <param name="all">AND; neither = count.</param>
+        private static unsafe void CombineBoolSlab(byte* acc, byte* src, long n, bool any, bool all)
+        {
+            long i = 0;
+            if (Vector.IsHardwareAccelerated)
+            {
+                int w = Vector<byte>.Count;
+                var one = Vector<byte>.One;
+                // nz = (src != 0) as 0 / 1 bytes; one loop per fold so the operation is not re-chosen per vector.
+                if (any)
+                {
+                    for (; i + w <= n; i += w)
+                    {
+                        var nz = ~Vector.Equals(Unsafe.ReadUnaligned<Vector<byte>>(src + i), Vector<byte>.Zero) & one;
+                        Unsafe.WriteUnaligned(acc + i, Unsafe.ReadUnaligned<Vector<byte>>(acc + i) | nz);
+                    }
+                }
+                else if (all)
+                {
+                    for (; i + w <= n; i += w)
+                    {
+                        var nz = ~Vector.Equals(Unsafe.ReadUnaligned<Vector<byte>>(src + i), Vector<byte>.Zero) & one;
+                        Unsafe.WriteUnaligned(acc + i, Unsafe.ReadUnaligned<Vector<byte>>(acc + i) & nz);
+                    }
+                }
+                else
+                {
+                    for (; i + w <= n; i += w)
+                    {
+                        var nz = ~Vector.Equals(Unsafe.ReadUnaligned<Vector<byte>>(src + i), Vector<byte>.Zero) & one;
+                        Unsafe.WriteUnaligned(acc + i, Unsafe.ReadUnaligned<Vector<byte>>(acc + i) + nz);
+                    }
+                }
+            }
+
+            for (; i < n; i++)
+            {
+                byte nz = src[i] != 0 ? (byte)1 : (byte)0;
+                acc[i] = any ? (byte)(acc[i] | nz) : all ? (byte)(acc[i] & nz) : (byte)(acc[i] + nz);
+            }
+        }
+
+        /// <summary>
+        /// Add the byte counters into the int64 counts and zero them (the count's overflow guard: a byte holds at most 255
+        /// additions, so the caller flushes at least that often).
+        /// </summary>
+        /// <param name="counts">The int64 result counts for the slab (n values).</param>
+        /// <param name="counters">The byte counters (n bytes), zeroed on return.</param>
+        /// <param name="n">Element count.</param>
+        private static unsafe void FlushByteCounters(long* counts, byte* counters, long n)
+        {
+            for (long i = 0; i < n; i++)
+                counts[i] += counters[i];
+            new Span<byte>(counters, checked((int)n)).Clear();
+        }
+
+        /// <summary>
         /// Largest block the in-place bool-leaf scan hands one span primitive: spans are int-length, so an operand past
         /// 2 GiB is folded in 1 GiB pieces. The pieces cost nothing measurable — the scan is bandwidth-bound — and an
         /// Any / All still stops inside the first piece that decides it.

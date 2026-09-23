@@ -282,8 +282,47 @@ bit-exact (`ILKernelGenerator.Reduction.Pairwise.cs`); only the fused reduce pat
    scoped, the forced-fold build fails 52/29,563 cases — C9 has teeth. Gates: `NDEvaluateStreamingTests` 13 (+2:
    permuted-dense flat reductions == the base's bits, with a teeth check that logical order differs; NumPy-probed
    integer means at bufsize 8192 AND 4096 on both routes; MUTANTS no-permuted / whole-array pairwise / dense-check-
-   always-true all red). Still on the scalar fold: integer `Sum`/`Prod` (already 3.4× NumPy), the axis forms of every
-   kind, and the non-dense bare leaf's min/max.
+   always-true all red). Still on the scalar fold: integer `Sum`/`Prod` (flat and axis — flat already 3.4× NumPy), the
+   axis `Min`/`Max`, and the non-dense bare leaf's min/max (the float axis `Sum`/`Mean`/`Prod` stream since M3, the axis
+   bool folds since the paragraph below).
+   **Axis bool folds STREAMED (LANDED):** the axis `Any` / `All` / `Sum`-of-a-bool-child (`CountNonzero`) was the worst
+   remaining gap-map cell — `any(a>b, axis=0)` NPY/NS 0.37 @100K, 0.23× NumSharp's own unfused `np.any`, the seeded
+   per-output scalar fold paying one iterator pass for nothing an order-free reduction needs. `DefaultEngine.
+   TryStreamAxisBoolFold` (`DefaultEngine.Evaluate.Stream.cs`, hooked into `EvaluateAxisReduce`'s non-divert branch;
+   null = nothing allocated, the fold runs as before) streams the same bool child the flat fold streams
+   (`NonzeroBoolOperandProgram ?? ChildElementwiseProgram`; a bare bool leaf read IN PLACE at `Address + offset`) over
+   all-C or all-F operands (`CanStreamChild(allowF: true)`; an F walk is the C walk of the reversed dims — reducing axis
+   k is `outer = Π dims[k+1:]`, `inner = Π dims[:k]`, and a multi-D result is allocated F-contiguous, NumPy's K-order
+   output), in two shapes picked by `inner`: **rows** (`inner == 1`, the reduced axis contiguous) — `8192 / axisSize`
+   rows per block, each row folded by the BCL span scans (`IndexOfAnyExcept(0)` / `IndexOf(0)` / `axisSize −
+   Count(0)`), rows longer than a block chunked with a per-row early exit; **slabs** (`inner > 1`) — the axis-k slab of
+   every output is one contiguous `inner`-byte run, so an accumulator row takes `acc |= nz` / `acc &= nz` / `cnt += nz`
+   per slab with `nz = ~(v == 0) & 1` (any nonzero byte normalized, a vector at a time), Any / All stop once a block
+   leaves every output of the current outer index decided (`SlabDecided`), and the count runs in BYTE counters flushed
+   into the int64 result every 255 slabs (a byte holds 255 additions; the result's slab row is CLEARED first — the
+   allocation is uninitialized, and the first draft read garbage there). Exact BY CONSTRUCTION (OR / AND / an integer
+   count are order-free), so the early exits and any walk order are legal. Declines: other kinds, an empty reduced axis
+   or empty output (the fold owns the identities), strided / broadcast / mixed-order operands, `inner > int.MaxValue`.
+   **Measured (pinned P-core, both ON/OFF orders, best-of; NPY/NS vs a pinned NumPy 2.4.2 twin, then the speed-up over
+   the old fold):** `any(a>b, axis=0)` **12.4** @100K (33×) and 1693 @4M (every column decides within 2 rows);
+   never-deciding `any(a>1e9, axis=0)` 1.36 / 1.58 (4.2× / 1.9×); `all(a>b, axis=0)` 12.2 / 1.25; `count_nonzero(a>b,
+   axis=0)` 4.8 / 2.14 (3.7× / 1.34×); `any(a>b, axis=1)` 1.50 / 1.30 (4.7× / 1.5×); `count_nonzero(a>b, axis=1)`
+   5.1 / 1.98; bool leaf `any(none, axis=0)` 2.5 / 1.04 (11× / 20×), `count_nonzero(mask, axis=0/1)` 10.6 / 18 @100K
+   and 50 / 53 @4M (≈19× the fold); F operands `any(fa>fb, axis=0)` 1.08 / 3.5 and `count_nonzero(fa>fb, axis=1)`
+   4.2 / 5.2 (the fold took 28 ms at 4M for F — **14×**). No cell below NumPy. Gates: `NDEvaluateStreamingTests` 16
+   (+3: stream == fold byte-for-byte over rows / long rows / slabs / slabs longer than a block, every axis of 3-D
+   blocks, C and F walks, computed children with a 0-d parameter and bare bool leaves, DENSE all-true counts at the
+   255 / 256 / 511-slab flush edges, the deciding element at every row position incl. both sides of a block boundary,
+   the slab early exit both taken and refused, keepdims / `out=` / an F column block at offset 42 / declines; 15/15
+   MUTANTS red — count row not cleared, flush at 256, flush dropped, both slab early exits loosened, view offset
+   dropped, F result allocated C, F walk treated as C, long-row single chunk, inverted row / chunk counts, Any folded
+   with AND, three wrong block/chunk offsets), 434 NDEvaluate/NDExpr/Evaluate/post-pass units on net10.0 AND net8.0,
+   FuzzMatrix 100/3/1 unchanged (the leak audit's 38 pre-existing logspace/geomspace/piecewise families, none new),
+   full NumSharp.Tests 15,572 green (the 25 failures are the OpenBLAS-not-staged Examples demos). Two follow-ups left on
+   the table: rows-mode Any/All exits per BLOCK, so an early-deciding row still pays its whole compare (`any(a>b,
+   axis=1)` @4M is at parity with the unfused chain, 1.3× NumPy) — producing a short prefix of each row first would
+   close it; and the leaf slab combine re-reads/re-writes the accumulator per slab, where OR-ing two slabs before the
+   accumulator touch would cut the `any(none, axis=0)` 4M cell's traffic by a quarter.
 4. The stat / delegating / average reductions (`NanMean`/`Var`/`Std`, `Ptp`/`NanMin`/`NanMax`/`ArgMax`/`ArgMin`,
    weighted `Average`) still materialize their child(ren) — streaming candidates (Var is two-pass: recompute vs store).
    **A 2026-09-23 gap map** (fused vs NumPy, pinned, best-of; probe `red_gap2.cs` + twin) ranked them: weighted
