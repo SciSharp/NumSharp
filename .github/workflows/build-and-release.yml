@@ -234,6 +234,24 @@ jobs:
     # from the runner environment silently re-enabling the green-by-skipping failure mode.
     env:
       NUMSHARP_PYTHONNET_REQUIRE_ENGINE: '1'
+      # Pins the live-NumPy oracle's CPU dispatch below AVX-512 on the Linux leg ONLY. The byte-exact
+      # tests hold NumPy to its reference configuration, the win-amd64 wheel on an AVX2 host, and the
+      # Linux x86-64 wheel leaves that configuration on an AVX-512 runner. Its meson build links Intel
+      # SVML (use_svml = linux AND x86_64 AND X86_V4), so on AVX512_SKX hardware float64 exp/log
+      # (__svml_exp8_ha/__svml_log8_ha) and ~20 other f32/f64 ufuncs (power, arccos, tan, cbrt, ...)
+      # stop calling the libm that NumSharp's .NET Math also calls. The AVX512F float32 exp/log
+      # instantiations take over from the AVX2-FMA3 ones NumSharp ports too.
+      # Evidence: run 35828348090's ubuntu leg drew a runner whose numpy.show_config() found
+      # X86_V3+X86_V4+AVX512_ICL and failed 18 byte-exact tests NO commit touched (GoogLeNet LRN,
+      # Walk slerp, LSTM/RNN/MicroGpt/Pong training); run 35824898562's ubuntu leg found only X86_V3
+      # and passed all of them. The runner hardware is not ours to choose, so the pin makes the answer
+      # independent of it. NumPy's runtime override: disabling a feature the CPU lacks is a silent
+      # no-op, so AVX2 runners are unaffected, and an empty value counts as unset.
+      # Not needed elsewhere: the Windows wheel has no AVX-512 dispatch at all (meson_cpu disables X86_V4
+      # and AVX512_ICL under MSVC), and on the macOS arm64 wheel these names do not exist. Set the same
+      # variable to run this suite on an AVX-512 Linux box. The step "Install numpy" prints
+      # show_config(), whose "found" list reflects the pin.
+      NPY_DISABLE_CPU_FEATURES: ${{ matrix.os == 'ubuntu-latest' && 'X86_V4 AVX512_ICL AVX512_SPR' || '' }}
 
     steps:
     - uses: actions/checkout@v7
