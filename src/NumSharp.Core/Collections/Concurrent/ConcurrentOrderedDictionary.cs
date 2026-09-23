@@ -91,10 +91,18 @@ namespace NumSharp.Collections;
 ///         detected and refused with <see cref="System.Threading.LockRecursionException" /> instead of being
 ///         allowed to corrupt. <see cref="GetOrAdd(TKey, Func{TKey, TValue})" />/<see cref="AddOrUpdate" />
 ///         factories run <b>outside</b> the lock and may freely call back in. Lock-free reads are always legal
-///         from anywhere. Mutations are also exception-tight: every fallible allocation happens before the
-///         key map is touched, and batch operations publish in <c>finally</c>, so a throw (from a source
-///         enumerator, a predicate, or out-of-memory) always lands the collection in a consistent
-///         "applied everything up to the failure" state — never with a key that resolves but does not enumerate.
+///         from anywhere. Mutations are also exception-tight: every call into the key comparer (user code that may
+///         throw — including this type's own <see cref="System.Threading.LockRecursionException" /> refusal of a
+///         comparer that writes back) and every allocation except the two named below happens before the first
+///         mutation of either path, and batch operations publish in <c>finally</c>, so a throw (from a source
+///         enumerator, a predicate, a comparer, or out-of-memory) lands the collection in a consistent "applied
+///         everything up to the failure" state — never with a key that resolves but does not enumerate. Removals
+///         get there by resolving the key-map node of every entry they will unlink or re-index first, then mutating
+///         through those nodes without consulting the comparer again (the same number of lookups the re-index
+///         always needed, done before instead of after). Two out-of-memory-only gaps remain, both on the add paths:
+///         the vendored key map grows its table AFTER inserting a key, and <see cref="AddRange" /> allocates its
+///         published holder in its <c>finally</c> — an out-of-memory raised by either can leave the key just added
+///         resolving without enumerating (ConcurrentOrderedDictionary.TODO.md, thread-safety contract).
 ///     </para>
 /// </remarks>
 /// <typeparam name="TKey">The non-null key type; uniqueness and lookups use the configured comparer.</typeparam>
@@ -239,6 +247,30 @@ public sealed class ConcurrentOrderedDictionary<TKey, TValue> : IReadOnlyList<TV
     /// </summary>
     private readonly object _writeLock = new();
 
+    /// <summary>
+    ///     Whether a key-map lookup on this instance can run <b>no user code</b>: <typeparamref name="TKey" /> is a
+    ///     framework type whose default equality and hashing are framework code (<see cref="s_keyTypeRunsNoUserCode" />)
+    ///     AND the map uses the default comparer. Such a lookup can neither throw nor write back into this collection,
+    ///     so the re-index loops of an interior removal and <see cref="RemoveWhere" /> may resolve-and-write each node in
+    ///     one pass after the first mutation; otherwise they resolve every node before it (see
+    ///     <see cref="RemoveCoreUnderLock" />), which costs ~1.7–2.5× on the re-index.
+    /// </summary>
+    /// <remarks>
+    ///     This is a specialization, not a relaxation: it is only taken where the exception-safety hazard it skips cannot
+    ///     occur. Any custom comparer — even a well-behaved framework one such as a <see cref="StringComparer" /> — takes
+    ///     the general path, because only the default comparer's code is known here.
+    /// </remarks>
+    private readonly bool _lookupsRunNoUserCode;
+
+    /// <summary>
+    ///     Whether <typeparamref name="TKey" />'s DEFAULT equality and hashing are framework code that cannot throw and
+    ///     cannot call back into this collection: a primitive, an enum, <see cref="string" /> or <see cref="decimal" /> —
+    ///     types whose <c>Equals</c>/<c>GetHashCode</c> no user code can override. The type half of
+    ///     <see cref="_lookupsRunNoUserCode" />; a per-closed-type constant the JIT folds.
+    /// </summary>
+    private static readonly bool s_keyTypeRunsNoUserCode =
+        typeof(TKey).IsPrimitive || typeof(TKey).IsEnum || typeof(TKey) == typeof(string) || typeof(TKey) == typeof(decimal);
+
     /// <summary>Creates an empty collection using the default comparer for <typeparamref name="TKey" />.</summary>
     public ConcurrentOrderedDictionary() : this((IEqualityComparer<TKey>?)null)
     {
@@ -251,7 +283,14 @@ public sealed class ConcurrentOrderedDictionary<TKey, TValue> : IReadOnlyList<TV
         // concurrencyLevel 1: all map writes are serialized by _writeLock, so extra stripes are pure overhead.
         _byKey = new ConcurrentDictionary<TKey, ValueIndex>(1, 31, comparer);
         _store = Store.Empty;
+        _lookupsRunNoUserCode = LookupsRunNoUserCode(comparer);
     }
+
+    /// <summary>Decides <see cref="_lookupsRunNoUserCode" /> for a constructor's comparer argument.</summary>
+    /// <param name="comparer">The comparer the key map was built with, or <see langword="null" /> for the default.</param>
+    /// <returns><see langword="true" /> only for a framework key type under the default comparer.</returns>
+    private static bool LookupsRunNoUserCode(IEqualityComparer<TKey>? comparer)
+        => s_keyTypeRunsNoUserCode && (comparer is null || ReferenceEquals(comparer, EqualityComparer<TKey>.Default));
 
     /// <summary>Creates an empty collection with room reserved for <paramref name="capacity" /> entries.</summary>
     /// <param name="capacity">The number of entries to pre-size both paths for; must be non-negative.</param>
@@ -268,6 +307,7 @@ public sealed class ConcurrentOrderedDictionary<TKey, TValue> : IReadOnlyList<TV
         // several inserts don't reallocate. concurrencyLevel 1 for the same reason as the default constructor.
         _byKey = new ConcurrentDictionary<TKey, ValueIndex>(1, capacity, comparer);
         _store = capacity == 0 ? Store.Empty : new Store(new TKey[capacity], new TValue[capacity], 0);
+        _lookupsRunNoUserCode = LookupsRunNoUserCode(comparer);
     }
 
     /// <summary>
@@ -764,8 +804,11 @@ public sealed class ConcurrentOrderedDictionary<TKey, TValue> : IReadOnlyList<TV
 
         lock (_writeLock)
         {
-            ref ValueIndex vi = ref _byKey.GetValueRefOrNullRef(key);
-            if (Unsafe.IsNullRef(ref vi))
+            // Resolve the key's node: the comparer runs in this lookup, before anything changes. The handle then
+            // unlinks the node without a second lookup (see RemoveCoreUnderLock for why no comparer call may follow
+            // the first mutation).
+            var node = _byKey.FindNode(key);
+            if (node.IsNull)
             {
                 value = default!;
                 return false;
@@ -773,8 +816,9 @@ public sealed class ConcurrentOrderedDictionary<TKey, TValue> : IReadOnlyList<TV
 
             // Reading both fields of the struct is safe here (unlike lock-free readers): writes are serialized
             // by the lock we hold, so the pair is consistent.
+            ref ValueIndex vi = ref node.Value;
             value = vi._value;
-            RemoveCoreUnderLock(key, vi._index);
+            RemoveCoreUnderLock(node, vi._index);
             return true;
         }
     }
@@ -838,13 +882,15 @@ public sealed class ConcurrentOrderedDictionary<TKey, TValue> : IReadOnlyList<TV
 
         lock (_writeLock)
         {
-            ref ValueIndex vi = ref _byKey.GetValueRefOrNullRef(key);
-            if (Unsafe.IsNullRef(ref vi))
+            // Resolve the removed key's node (a comparer call, before anything changes); it is unlinked by handle.
+            var node = _byKey.FindNode(key);
+            if (node.IsNull)
             {
                 value = default!;
                 return false;
             }
 
+            ref ValueIndex vi = ref node.Value;
             value = vi._value;
             int idx = vi._index;
             Store s = _store;
@@ -856,7 +902,7 @@ public sealed class ConcurrentOrderedDictionary<TKey, TValue> : IReadOnlyList<TV
                 // Successor allocated BEFORE the map removal (strand-proofing: after the key stops resolving,
                 // only throw-free operations remain).
                 Store next = new(s._keys, s._values, n - 1, Math.Max(s._floor, n));
-                _byKey.TryRemove(key, out _); // key path first (same skew direction as every removal)
+                _byKey.TryRemoveNode(node); // key path first (same skew direction as every removal); no comparer call
                 _store = next;
                 return true;
             }
@@ -864,19 +910,26 @@ public sealed class ConcurrentOrderedDictionary<TKey, TValue> : IReadOnlyList<TV
             TKey movedKey = s._keys[n - 1];
             TValue movedValue = s._values[n - 1];
 
+            // Resolve the MOVED entry's node before any mutation too: this lookup runs the user's comparer, which may
+            // throw (the refused write-back of an evil comparer included). This path used to remove the key first and
+            // re-point the moved key through the comparer afterwards, so such a throw left the removed key enumerating
+            // without resolving (copying branch) or the moved key enumerating twice (in-place branch) — for good.
+            var movedNode = _byKey.FindNode(movedKey);
+            Debug.Assert(!movedNode.IsNull, "the last list slot's key is missing from the key map under the write lock");
+
             if (ConcurrentDictionaryTypeProps<TKey>.IsWriteAtomic && ConcurrentDictionaryTypeProps<TValue>.IsWriteAtomic)
             {
                 // In-place swap: single atomic stores per slot, so concurrent readers can never tear a key or a
                 // value — they can only see the documented duplicate/missing anomaly for this one entry, plus
                 // the transiently mixed key/value pairing at this one slot (two separate stores; see remarks).
                 Store next = new(s._keys, s._values, n - 1, Math.Max(s._floor, n)); // alloc before any mutation
-                _byKey.TryRemove(key, out _); // key path first (same skew direction as every removal)
+                _byKey.TryRemoveNode(node); // key path first (same skew direction as every removal)
                 s._keys[idx] = movedKey;
                 s._values[idx] = movedValue;
 
                 // Publish the shrunken snapshot; the floor freezes the vacated last slot against in-place reuse
                 // so an enumerator that captured count == n keeps reading valid (old) data there.
-                RewriteIndexUnderLock(movedKey, idx);
+                RewriteIndexUnderLock(movedNode, idx);
                 _store = next;
                 return true;
             }
@@ -892,8 +945,8 @@ public sealed class ConcurrentOrderedDictionary<TKey, TValue> : IReadOnlyList<TV
                 keys[idx] = movedKey;
                 values[idx] = movedValue;
                 Store next = new(keys, values, n - 1);
-                _byKey.TryRemove(key, out _); // key path first (same skew direction as every removal)
-                RewriteIndexUnderLock(movedKey, idx);
+                _byKey.TryRemoveNode(node); // key path first (same skew direction as every removal)
+                RewriteIndexUnderLock(movedNode, idx);
                 _store = next;
                 return true;
             }
@@ -911,7 +964,8 @@ public sealed class ConcurrentOrderedDictionary<TKey, TValue> : IReadOnlyList<TV
     ///     must be fast and must not call back into this collection's write operations — such a callback is
     ///     detected and refused with <see cref="LockRecursionException" /> (it would otherwise corrupt the pass in
     ///     progress). A predicate that throws is survivable: the pass lands in the consistent "removed everything
-    ///     matched so far" state and the exception propagates.
+    ///     matched so far" state and the exception propagates. The key comparer runs only in a lookup phase that
+    ///     completes before the first removal, so a comparer that throws aborts the pass with nothing removed.
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="match" /> is <see langword="null" />.</exception>
     /// <exception cref="LockRecursionException">Invoked reentrantly from user code running inside the collection's write lock — an <see cref="AddRange" /> source enumerator, a <see cref="RemoveWhere" /> predicate, or a key comparer (see <see cref="ThrowIfReentrantWrite" />).</exception>
@@ -942,11 +996,32 @@ public sealed class ConcurrentOrderedDictionary<TKey, TValue> : IReadOnlyList<TV
             }
 
             // Compact the survivors into fresh arrays (readers keep the old snapshot), fixing each survivor's
-            // recorded index in place as it lands on a new position.
+            // recorded index in place as it lands on a new position. The holder is allocated here too, with a
+            // placeholder count, so the finally below publishes without allocating: an out-of-memory there, after
+            // keys were already unlinked from the map, would strand them enumerating without resolving.
             var keys = new TKey[s._keys.Length];
             var values = new TValue[s._values.Length];
             Array.Copy(s._keys, keys, first);
             Array.Copy(s._values, values, first);
+            var compacted = new Store(keys, values, 0);
+
+            // Unless the lookups can run no user code (_lookupsRunNoUserCode), resolve the node of every entry the pass
+            // may unlink or re-index — [first, n) — BEFORE the first mutation. Each lookup then runs the user's key
+            // comparer, which may throw (the refused write-back of an evil comparer included); this pass used to call
+            // it per entry AFTER unlinking earlier ones, and — worse — again from the finally below, so a throwing
+            // comparer skipped the publish entirely and left every key removed so far enumerating without resolving.
+            // Resolved up front, a comparer throw lands here with nothing changed and the predicate is the only user
+            // code left in the loop. Same lookup count either way: every entry from the first match on is either
+            // removed or re-indexed, one lookup each. `nodes` stays null on the trusted path, which looks up lazily.
+            ConcurrentDictionary<TKey, ValueIndex>.NodeHandle[]? nodes = null;
+            if (!_lookupsRunNoUserCode)
+            {
+                nodes = new ConcurrentDictionary<TKey, ValueIndex>.NodeHandle[n - first];
+                for (int j = 0; j < nodes.Length; j++)
+                {
+                    nodes[j] = _byKey.FindNode(s._keys[first + j]);
+                }
+            }
 
             int w = first;
             int removed = 0;
@@ -959,7 +1034,7 @@ public sealed class ConcurrentOrderedDictionary<TKey, TValue> : IReadOnlyList<TV
                     TValue v = s._values[i];
                     if (match(k, v))
                     {
-                        _byKey.TryRemove(k, out _);
+                        _byKey.TryRemoveNode(NodeOf(nodes, i - first, k));
                         removed++;
                     }
                     else
@@ -968,7 +1043,7 @@ public sealed class ConcurrentOrderedDictionary<TKey, TValue> : IReadOnlyList<TV
                         values[w] = v;
                         if (w != i)
                         {
-                            RewriteIndexUnderLock(k, w);
+                            RewriteIndexUnderLock(NodeOf(nodes, i - first, k), w);
                         }
 
                         w++;
@@ -981,7 +1056,9 @@ public sealed class ConcurrentOrderedDictionary<TKey, TValue> : IReadOnlyList<TV
                 // would otherwise stay enumerable forever. Carry every not-yet-processed entry — INCLUDING the
                 // one whose predicate threw (it was neither removed nor copied) — over as a survivor and publish,
                 // so the collection lands in the consistent "removed everything matched so far" state whether
-                // the pass completed (i == n: this loop is a no-op) or threw.
+                // the pass completed (i == n: this loop is a no-op) or threw. This block cannot throw itself: it goes
+                // through the pre-resolved handles (or, on the trusted path, lookups that run no user code) and
+                // publishes the pre-allocated holder.
                 for (; i < n; i++)
                 {
                     TKey k = s._keys[i];
@@ -989,13 +1066,14 @@ public sealed class ConcurrentOrderedDictionary<TKey, TValue> : IReadOnlyList<TV
                     values[w] = s._values[i];
                     if (w != i)
                     {
-                        RewriteIndexUnderLock(k, w);
+                        RewriteIndexUnderLock(NodeOf(nodes, i - first, k), w);
                     }
 
                     w++;
                 }
 
-                _store = new Store(keys, values, w);
+                compacted._count = w; // not yet visible to any reader: the volatile publish below releases it
+                _store = compacted;
             }
 
             return removed;
@@ -1138,7 +1216,10 @@ public sealed class ConcurrentOrderedDictionary<TKey, TValue> : IReadOnlyList<TV
                 throw new ArgumentOutOfRangeException(nameof(index));
             }
 
-            RemoveCoreUnderLock(s._keys[index], index);
+            // Resolve the entry's node first — the comparer runs here, before anything changes.
+            var node = _byKey.FindNode(s._keys[index]);
+            Debug.Assert(!node.IsNull, "a live list slot's key is missing from the key map under the write lock");
+            RemoveCoreUnderLock(node, index);
         }
     }
 
@@ -1507,27 +1588,42 @@ public sealed class ConcurrentOrderedDictionary<TKey, TValue> : IReadOnlyList<TV
         }
 
         // Non-atomic value: publish a fresh node (the clone's own tear-free discipline for wide values) and a
-        // fresh value array. `vi` is dead the moment the indexer replaces the node — do not touch it again.
-        _byKey[key] = new ValueIndex(value, idx);
+        // fresh value array. Allocate and fill the value array and its Store FIRST, then swap the node, then
+        // publish: the node swap used to come first, so an out-of-memory from the O(n) Clone() left the key path
+        // holding the new value while the list path kept the old one, permanently. The swap itself is strand-proof
+        // — the vendored indexer hashes (the comparer may throw) and allocates the replacement node before it links
+        // anything — so after it only the throw-free publish remains. The same allocate-first order AddRange's wide
+        // branch uses. `vi` is dead the moment the indexer replaces the node — do not touch it again.
+        Store? next = null;
         if ((uint)idx < (uint)s._count)
         {
             var values = (TValue[])s._values.Clone();
             values[idx] = value;
             // Keys are shared with the old store, so its floor still protects any frozen tail slots.
-            _store = new Store(s._keys, values, s._count, s._floor);
+            next = new Store(s._keys, values, s._count, s._floor);
+        }
+
+        _byKey[key] = new ValueIndex(value, idx);
+        if (next is not null)
+        {
+            _store = next;
         }
     }
 
     /// <summary>
-    ///     Removes the entry for <paramref name="key" /> at position <paramref name="idx" /> from both paths.
-    ///     The last entry is removed in O(1) by publishing a lower-count store over the same arrays (the floor
-    ///     rule keeps the vacated slot safe for concurrent enumerators); an interior entry shifts the tail down
-    ///     into fresh arrays and repairs the shifted entries' recorded positions — O(n) in the tail length.
+    ///     Removes the entry whose key-map node is <paramref name="removed" />, at position <paramref name="idx" />,
+    ///     from both paths. The last entry is removed in O(1) by publishing a lower-count store over the same arrays
+    ///     (the floor rule keeps the vacated slot safe for concurrent enumerators); an interior entry shifts the tail
+    ///     down into fresh arrays and repairs the shifted entries' recorded positions — O(n) in the tail length.
     /// </summary>
-    /// <param name="key">The key to remove (already resolved by the caller).</param>
+    /// <param name="removed">The removed entry's node, already resolved by the caller (so its comparer call happened before this method runs).</param>
     /// <param name="idx">The entry's current position (consistent under the held lock).</param>
-    /// <remarks>The caller must hold <see cref="_writeLock" />.</remarks>
-    private void RemoveCoreUnderLock(TKey key, int idx)
+    /// <remarks>
+    ///     The caller must hold <see cref="_writeLock" />. Every comparer call (the shifted entries' node lookups) and
+    ///     every allocation happens before the first mutation; the mutation phase goes through node handles only and
+    ///     cannot throw, so a throwing comparer leaves both paths exactly as they were.
+    /// </remarks>
+    private void RemoveCoreUnderLock(ConcurrentDictionary<TKey, ValueIndex>.NodeHandle removed, int idx)
     {
         Store s = _store;
         int n = s._count;
@@ -1543,7 +1639,7 @@ public sealed class ConcurrentOrderedDictionary<TKey, TValue> : IReadOnlyList<TV
             // publishes remain, so an allocation failure can never strand a key that stops resolving on the key
             // path yet keeps enumerating forever.
             Store next = new(s._keys, s._values, n - 1, Math.Max(s._floor, n));
-            _byKey.TryRemove(key, out _); // key path leads (the same skew direction as adds)
+            _byKey.TryRemoveNode(removed); // key path leads (the same skew direction as adds); unlinked by identity
             _store = next;
             return;
         }
@@ -1558,31 +1654,86 @@ public sealed class ConcurrentOrderedDictionary<TKey, TValue> : IReadOnlyList<TV
         Array.Copy(s._values, idx + 1, values, idx, n - idx - 1);
         Store shifted = new(keys, values, n - 1);
 
+        if (_lookupsRunNoUserCode)
+        {
+            // Trusted fast path (a BCL key type under the default comparer — see _lookupsRunNoUserCode): the lookups
+            // below can neither throw nor write back, so resolving and writing each shifted node in ONE pass after the
+            // map removal is exception-safe. One node visit per shifted key, as before the node-handle fix.
+            _byKey.TryRemoveNode(removed); // key path first: it stops resolving before it stops enumerating
+            ReindexOnePassUnderLock(keys, idx, n - 1);
+            _store = shifted;
+            return;
+        }
+
+        // General path — the lookups run the user's comparer (a custom comparer, or a key type with its own
+        // Equals/GetHashCode), which may throw, including this type's own LockRecursionException when it tries to
+        // write back. Resolve the node of every shifted entry BEFORE the first mutation. This path used to remove the
+        // key first and look each shifted key up afterwards, so such a throw aborted it half-applied for good: the
+        // removed key enumerated without resolving, and keys already re-indexed reported positions the
+        // never-published store did not have. Same lookup count (one per shifted key); the price is this handle array
+        // and a second pass over the nodes — measured ~1.7x the one-pass re-index when the table is cache-resident,
+        // ~2.5x at 100K entries (see ConcurrentOrderedDictionary.TODO.md, Gap B3).
+        var shiftedNodes = new ConcurrentDictionary<TKey, ValueIndex>.NodeHandle[n - idx - 1];
+        for (int j = 0; j < shiftedNodes.Length; j++)
+        {
+            shiftedNodes[j] = _byKey.FindNode(keys[idx + j]);
+        }
+
         // Key path first: the key stops resolving before it stops enumerating (the same skew direction as adds,
         // where the key path leads).
-        _byKey.TryRemove(key, out _);
+        _byKey.TryRemoveNode(removed);
 
         // Repair the recorded positions of the shifted entries so IndexOf stays correct. In-place atomic int
-        // stores through the ref seam — no node allocation per shifted key.
-        for (int i = idx; i < n - 1; i++)
+        // stores through the pre-resolved handles — no lookup, no comparer call, no node allocation per key.
+        for (int j = 0; j < shiftedNodes.Length; j++)
         {
-            RewriteIndexUnderLock(keys[i], i);
+            RewriteIndexUnderLock(shiftedNodes[j], idx + j);
         }
 
         _store = shifted;
     }
 
-    /// <summary>Rewrites the recorded insertion-order position of <paramref name="key" /> in place (an atomic <c>int</c> store into its hash node — safe for any <typeparamref name="TValue" />, allocation-free).</summary>
-    /// <param name="key">The key whose position changed; expected present.</param>
-    /// <param name="index">The key's new position.</param>
-    /// <remarks>The caller must hold <see cref="_writeLock" />.</remarks>
-    private void RewriteIndexUnderLock(TKey key, int index)
+    /// <summary>
+    ///     The trusted-path re-index (<see cref="_lookupsRunNoUserCode" />): records position <c>i</c> in the node of
+    ///     <c>keys[i]</c> for every <c>i</c> in [<paramref name="from" />, <paramref name="to" />), resolving and writing
+    ///     each node in one pass. Only legal when the lookups cannot throw or write back, since it runs after the
+    ///     enclosing removal has already mutated the key map.
+    /// </summary>
+    /// <param name="keys">The new store's keys, already shifted into their final positions.</param>
+    /// <param name="from">The first position whose key moved.</param>
+    /// <param name="to">One past the last position whose key moved.</param>
+    /// <remarks>The caller must hold <see cref="_writeLock" />. A method of its own so this hot loop keeps its own code placement (measured: inline in its caller it ran ~0.4 ns/key slower than the byte-identical pre-fix loop).</remarks>
+    private void ReindexOnePassUnderLock(TKey[] keys, int from, int to)
     {
-        ref ValueIndex vi = ref _byKey.GetValueRefOrNullRef(key);
-        Debug.Assert(!Unsafe.IsNullRef(ref vi), "a key on the list path is missing from the key map under the write lock");
-        if (!Unsafe.IsNullRef(ref vi))
+        for (int i = from; i < to; i++)
         {
-            vi._index = index;
+            RewriteIndexUnderLock(_byKey.FindNode(keys[i]), i);
+        }
+    }
+
+    /// <summary>
+    ///     The key-map node of an entry during <see cref="RemoveWhere" />: the handle resolved up front on the general
+    ///     path, or a lazy lookup on the trusted path (<paramref name="resolved" /> is <see langword="null" /> exactly when
+    ///     <see cref="_lookupsRunNoUserCode" /> holds, so that lookup cannot throw or write back).
+    /// </summary>
+    /// <param name="resolved">The pre-resolved handles for positions <c>[first, n)</c>, or <see langword="null" /> on the trusted path.</param>
+    /// <param name="offset">The entry's position minus the pass's first match (its slot in <paramref name="resolved" />).</param>
+    /// <param name="key">The entry's key, looked up when nothing was pre-resolved.</param>
+    /// <returns>The entry's node handle.</returns>
+    /// <remarks>The caller must hold <see cref="_writeLock" />.</remarks>
+    private ConcurrentDictionary<TKey, ValueIndex>.NodeHandle NodeOf(ConcurrentDictionary<TKey, ValueIndex>.NodeHandle[]? resolved, int offset, TKey key)
+        => resolved is null ? _byKey.FindNode(key) : resolved[offset];
+
+    /// <summary>Rewrites the recorded insertion-order position held in <paramref name="node" /> in place (an atomic <c>int</c> store into the hash node — safe for any <typeparamref name="TValue" />, allocation-free, and free of comparer calls because the node was resolved beforehand).</summary>
+    /// <param name="node">The node of the key whose position changed, resolved before the enclosing mutation began; expected non-null.</param>
+    /// <param name="index">The key's new position.</param>
+    /// <remarks>The caller must hold <see cref="_writeLock" /> and must not have mutated the key map in a way that replaces this node since resolving it (node handles share the ref seam's lifetime rule).</remarks>
+    private static void RewriteIndexUnderLock(ConcurrentDictionary<TKey, ValueIndex>.NodeHandle node, int index)
+    {
+        Debug.Assert(!node.IsNull, "a key on the list path is missing from the key map under the write lock");
+        if (!node.IsNull)
+        {
+            node.Value._index = index;
         }
     }
 

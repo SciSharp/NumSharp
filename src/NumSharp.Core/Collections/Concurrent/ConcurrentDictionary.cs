@@ -14,9 +14,10 @@
 //     CoreLib-internal types); the provided/default comparer is used directly;
 //   * the net9+ AlternateLookup<TAlternateKey> API and the [DebuggerTypeProxy] view are dropped (not needed,
 //     and the former does not compile on net8.0);
-//   * the class is `partial`: NumSharp-only members live in ConcurrentDictionary.RefAccessors.cs — currently ONE,
-//     the PUBLIC ref accessor GetValueRefOrNullRef, an addition to the upstream public surface that bypasses its
-//     tear-free discipline (the caller obligations are documented on the member).
+//   * the class is `partial`: NumSharp-only members live in ConcurrentDictionary.RefAccessors.cs — the PUBLIC ref
+//     accessor GetValueRefOrNullRef, an addition to the upstream public surface that bypasses its tear-free
+//     discipline (the caller obligations are documented on the member), and the INTERNAL node-handle trio
+//     NodeHandle / FindNode / TryRemoveNode (look up a node once, then write or unlink it without the comparer).
 // Concurrency logic, locking, growth and the upstream members' public key-API behavior are otherwise unchanged.
 // </auto-generated>
 #nullable enable
