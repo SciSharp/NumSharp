@@ -773,15 +773,22 @@ namespace NumSharp.Backends
                         // Sum / Mean / Any: identity 0 already in the slot.
                 }
 
-                var kernel = program.FlatReduceKernel;
-                using var iter = NDIterRef.MultiNew(
-                    ops.Length, ops,
-                    NDIterGlobalFlags.EXTERNAL_LOOP, NPY_ORDER.NPY_KEEPORDER,
-                    NPY_CASTING.NPY_SAFE_CASTING,
-                    EvalReduceFlags(ops.Length),
-                    null);
+                // Plan lever 3 (bool folds): a flat Any / All / count-of-true over a bool child streams through
+                // the child's SIMD kernel + vectorized block scans (DefaultEngine.Evaluate.Stream.cs) — exact by
+                // construction (OR / AND / an integer count do not depend on order). Anything else, or operands
+                // the streams cannot walk, folds through the scalar kernel below exactly as before.
+                if (!TryStreamBoolFold(program, inputs, n, reduce.Kind, accType, slot))
+                {
+                    var kernel = program.FlatReduceKernel;
+                    using var iter = NDIterRef.MultiNew(
+                        ops.Length, ops,
+                        NDIterGlobalFlags.EXTERNAL_LOOP, NPY_ORDER.NPY_KEEPORDER,
+                        NPY_CASTING.NPY_SAFE_CASTING,
+                        EvalReduceFlags(ops.Length),
+                        null);
 
-                iter.ForEach(kernel, slot);
+                    iter.ForEach(kernel, slot);
+                }
 
                 if (reduce.Kind == NDExprReduceKind.Mean)
                 {

@@ -283,6 +283,148 @@ namespace NumSharp.Tests.Backends.Iterators
             }
         }
 
+        /// <summary>
+        /// Plan lever 3: the streamed flat <c>Any</c> / <c>All</c> / <c>CountNonzero</c> must equal the scalar fold
+        /// kernel byte for byte at every deciding-element position (first, last, block boundaries, none), across
+        /// C / F / offset layouts, bool-array leaves and 0-d parameters — and must decline strided / broadcast operands.
+        /// </summary>
+        [TestMethod]
+        public void BoolFolds_AnyAllCountNonzero_StreamAndMatchTheFoldKernel()
+        {
+            // Plan lever 3: flat Any / All / CountNonzero over a bool child stream through the child's SIMD kernel +
+            // vectorized block scans. OR / AND / an integer count are order-independent, so the streamed answer must
+            // equal the scalar fold kernel's for every position of the deciding element — first, last, block
+            // boundaries (8192 bools per scratch block), none, all — and every shared contiguous layout.
+            foreach (long n in new long[] { 1, 7, 8191, 8192, 8193, 20000, 100003 })
+            foreach (long hot in new long[] { -1, 0, n / 2, n - 1, 8191, 8192 })
+            {
+                if (hot >= n) continue;
+                // x has exactly one element > 0 at `hot` (none when hot == -1); y is x's complement pattern.
+                var x = np.zeros(new Shape(n), NPTypeCode.Double) - 1.0;
+                if (hot >= 0) x[hot] = 2.0;
+                var y = np.zeros(new Shape(n), NPTypeCode.Double) + 1.0;
+                if (hot >= 0) y[hot] = -3.0;
+                var xs = x; var ys = y;
+                AssertSameBothWaysExact(() => NDExpr.Any((NDExpr)xs > (NDExpr)NDArray.Scalar(0.0)), expectStream: true);
+                AssertSameBothWaysExact(() => NDExpr.All((NDExpr)ys > (NDExpr)NDArray.Scalar(0.0)), expectStream: true);
+                AssertSameBothWaysExact(() => NDExpr.CountNonzero((NDExpr)xs > (NDExpr)ys), expectStream: true);
+            }
+
+            // All-true / all-false, F and offset layouts, and a many-true count across blocks.
+            var m = (np.arange(3 * 5001).astype(NPTypeCode.Double) % 7 - 3.0).reshape(3, 5001);
+            var mf = np.asfortranarray(m);
+            var big = np.arange(30000).astype(NPTypeCode.Int32) % 5;
+            var off = big["123:29000"];
+            AssertSameBothWaysExact(() => NDExpr.CountNonzero((NDExpr)m), expectStream: true);
+            AssertSameBothWaysExact(() => NDExpr.CountNonzero((NDExpr)mf), expectStream: true);
+            AssertSameBothWaysExact(() => NDExpr.CountNonzero((NDExpr)off), expectStream: true);
+            AssertSameBothWaysExact(() => NDExpr.Any((NDExpr)off), expectStream: true);
+            AssertSameBothWaysExact(() => NDExpr.All((NDExpr)off), expectStream: true);
+            AssertSameBothWaysExact(() => NDExpr.All((NDExpr)off + 1), expectStream: true);
+            AssertSameBothWaysExact(() => NDExpr.Any((NDExpr)off * 0), expectStream: true);
+
+            // Declines: a strided operand, a broadcast pair.
+            var st = big["::3"];
+            AssertSameBothWaysExact(() => NDExpr.Any((NDExpr)st), expectStream: false);
+            var row = np.arange(5001).astype(NPTypeCode.Double);
+            AssertSameBothWaysExact(() => NDExpr.CountNonzero((NDExpr)m > (NDExpr)row), expectStream: false);
+
+            // A bare bool ARRAY leaf: folded in place (no kernel, no scratch copy), across what would be many blocks.
+            var flags = (np.arange(20000) % 3) == 0;
+            var noFlags = np.zeros(new Shape(20000), NPTypeCode.Boolean);
+            var allFlags = np.ones(new Shape(20000), NPTypeCode.Boolean);
+            AssertSameBothWaysExact(() => NDExpr.CountNonzero((NDExpr)flags), expectStream: true);
+            AssertSameBothWaysExact(() => NDExpr.Any((NDExpr)noFlags), expectStream: true);
+            AssertSameBothWaysExact(() => NDExpr.All((NDExpr)flags), expectStream: true);
+            AssertSameBothWaysExact(() => NDExpr.All((NDExpr)allFlags), expectStream: true);
+
+            // The in-place scan must start at the view's logical element 0. A contiguous slice re-seats Address (offset
+            // 0), but an F column block keeps a NON-zero offset: columns 0..6 are all True and columns 3993..3999 all
+            // False, so a scan that ignored the offset would read 42 extra Trues in place of 42 Falses.
+            var bm = np.zeros(new Shape(6, 4000), NPTypeCode.Boolean);
+            bm[":, :7"] = true;
+            bm[":, 7:3993"] = ((np.arange(6 * 3986) % 5) == 0).reshape(6, 3986);
+            var bfo = np.asfortranarray(bm)[":, 7:4000"];
+            Assert.IsTrue(bfo.Shape.IsFContiguous && bfo.Shape.offset == 42, "precondition: F-contiguous at offset 42");
+            AssertSameBothWaysExact(() => NDExpr.CountNonzero((NDExpr)bfo), expectStream: true);
+            AssertSameBothWaysExact(() => NDExpr.All((NDExpr)np.asfortranarray(np.ones(new Shape(3, 50), NPTypeCode.Boolean))[":, 2:50"]),
+                expectStream: true);
+            Assert.AreEqual(np.count_nonzero(bfo), np.evaluate(NDExpr.CountNonzero((NDExpr)bfo)).GetAtIndex<long>(0),
+                "the streamed count agrees with np.count_nonzero");
+        }
+
+        /// <summary>
+        /// <c>NDExprProgram.NonzeroBoolOperandProgram</c> — the substitution that lets the bool fold stream <c>x</c>'s
+        /// SIMD kernel instead of the scalar int64-typed <c>x != 0</c> — must resolve ONLY when the reduction child is
+        /// the factories' nonzero test over a Boolean <c>x</c>; a numeric <c>x</c>, a different child or a
+        /// non-reduction must stay null so no genuine comparison is ever rewritten.
+        /// </summary>
+        [TestMethod]
+        public void BoolFolds_NonzeroOperand_ResolvesOnlyForABoolTestedOperand()
+        {
+            // The factories build `x != 0`; for a bool x the fold streams x itself (its SIMD kernel) — the pattern must
+            // resolve for exactly that shape and stay null everywhere the child is not the identity of x.
+            var a = np.arange(64).astype(NPTypeCode.Double);
+            var b = np.arange(64).astype(NPTypeCode.Double) % 5;
+            var flags = (np.arange(64) % 3) == 0;
+
+            var cmp = NDExpr.CountNonzero((NDExpr)a > (NDExpr)b).GetProgram(null).NonzeroBoolOperandProgram;
+            Assert.IsNotNull(cmp, "count_nonzero(a > b): a > b is bool, so it is the streamed operand");
+            Assert.AreEqual(NPTypeCode.Boolean, cmp.ResultType);
+            Assert.IsNotNull(NDExpr.Any((NDExpr)flags).GetProgram(null).NonzeroBoolOperandProgram, "any(bool array)");
+            Assert.IsNotNull(NDExpr.All((NDExpr)a < 3.0).GetProgram(null).NonzeroBoolOperandProgram, "all(a < 3.0)");
+
+            // A numeric x keeps the child `x != 0` (x's values are not bools); a non-reduction or a non-pattern child
+            // has nothing to substitute.
+            Assert.IsNull(NDExpr.CountNonzero((NDExpr)a).GetProgram(null).NonzeroBoolOperandProgram, "count_nonzero(f64)");
+            Assert.IsNull(NDExpr.Any((NDExpr)a * 2.0).GetProgram(null).NonzeroBoolOperandProgram, "any(a * 2.0)");
+            Assert.IsNull(NDExpr.Sum((NDExpr)a > (NDExpr)b).GetProgram(null).NonzeroBoolOperandProgram, "sum(a > b) has no != 0 test");
+            Assert.IsNull(((NDExpr)a > (NDExpr)b).GetProgram(null).NonzeroBoolOperandProgram, "not a reduction");
+
+            // A hand-spelled test against a DIFFERENT literal is a genuine comparison, not the identity: substituting
+            // `flags` for `flags != 1` would count the complement. Both the resolution and the value must hold.
+            // (NDExpr defines no ==/!= operators — reference equality stays intact — so the tests use the factory.)
+            Assert.IsNull(NDExpr.Sum(NDExpr.NotEqual((NDExpr)flags, NDExpr.Const(1))).GetProgram(null).NonzeroBoolOperandProgram,
+                "sum(flags != 1)");
+            Assert.IsNull(NDExpr.Sum(NDExpr.NotEqual(NDExpr.Const(0), (NDExpr)flags)).GetProgram(null).NonzeroBoolOperandProgram,
+                "sum(0 != flags) — the literal on the left is not the factories' spelling");
+            Assert.IsNull(NDExpr.Sum(NDExpr.NotEqual((NDExpr)flags, NDExpr.Const(0.0))).GetProgram(null).NonzeroBoolOperandProgram,
+                "sum(flags != 0.0) — only the integer literal the factories emit is recognized");
+            Assert.IsNotNull(NDExpr.Sum(NDExpr.NotEqual((NDExpr)flags, NDExpr.Const(0))).GetProgram(null).NonzeroBoolOperandProgram,
+                "sum(flags != 0) IS the pattern");
+            var big = (np.arange(20000) % 3) == 0;
+            AssertSameBothWaysExact(() => NDExpr.Sum(NDExpr.NotEqual((NDExpr)big, NDExpr.Const(1))), expectStream: true);
+            AssertSameBothWaysExact(() => NDExpr.Sum(NDExpr.NotEqual((NDExpr)big, NDExpr.Const(0))), expectStream: true);
+        }
+
+        /// <summary>
+        /// <see cref="AssertSameBothWays"/> for results of ANY dtype (bool / int64 here): evaluate with streaming off
+        /// and on, assert engagement, and compare dtype, shape and raw bytes.
+        /// </summary>
+        /// <param name="make">Builds the tree to evaluate.</param>
+        /// <param name="expectStream">Whether the streaming path must have engaged.</param>
+        private static void AssertSameBothWaysExact(Func<NDExpr> make, bool expectStream)
+        {
+            NDArray want;
+            try
+            {
+                NDExpr.DisableStreamingReduce = true;
+                want = np.evaluate(make());
+            }
+            finally
+            {
+                NDExpr.DisableStreamingReduce = false;
+            }
+
+            NDExpr.StreamingReductions = 0;
+            var got = np.evaluate(make());
+            Assert.AreEqual(want.typecode, got.typecode, "dtype");
+            CollectionAssert.AreEqual(want.shape, got.shape, "shape");
+            CollectionAssert.AreEqual(np.ascontiguousarray(want).Unsafe.ReadOnlyBytes().ToArray(),
+                np.ascontiguousarray(got).Unsafe.ReadOnlyBytes().ToArray(), "raw bytes");
+            Assert.AreEqual(expectStream, NDExpr.StreamingReductions > 0, "streaming engagement");
+        }
+
         [TestMethod]
         public void NegativeZeroSignContract_MatchesMaterialize()
         {

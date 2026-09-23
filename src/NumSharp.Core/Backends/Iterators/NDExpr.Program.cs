@@ -104,6 +104,8 @@ namespace NumSharp.Backends.Iteration
         private NDExprProgram _avgWeights;
         private NDExprProgram _avgNumerator;
         private NDExprProgram _avgDenominator;
+        private NDExprProgram _nonzeroBoolOperand;
+        private bool _nonzeroBoolOperandResolved;
 
         private NDExprProgram(NDExpr bound, NPTypeCode[] inputTypes, bool[] isParam, bool forcedScalar,
             NDInnerLoopFunc kernel, NPTypeCode resultType, ReduceNode reduce, NPTypeCode reduceAcc,
@@ -212,6 +214,55 @@ namespace NumSharp.Backends.Iteration
             => Average is null
                 ? null
                 : _avgDenominator ??= Build(AsResultDtype(Average.Weights, AvgWeightsProgram.ResultType), InputTypes, IsParam);
+
+        /// <summary>
+        /// For a reduction whose child is the factories' nonzero test over an already-BOOLEAN expression —
+        /// <c>Any(x)</c> / <c>All(x)</c> / <c>CountNonzero(x)</c> build <c>x != 0</c>, and for a bool <c>x</c> that is
+        /// <c>x</c> itself — the program for <c>x</c> alone; null for every other reduction (a non-bool <c>x</c>, a
+        /// different child, not a reduction). Its values equal the child's element for element, but its kernel keeps
+        /// <c>x</c>'s vector body: NEP50 types <c>bool != 0</c> as an int64 comparison, a mixed-width tree the vector
+        /// plan declines, so the child kernel itself runs scalar (the streamed <c>count_nonzero(a &gt; b)</c> gained
+        /// nothing until the bool fold evaluated <c>a &gt; b</c> directly).
+        /// </summary>
+        /// <value>
+        /// The elementwise program of the tested bool operand, sharing this program's input signature and parameter
+        /// mask (so the SAME inputs array drives it), or null when the pattern does not apply.
+        /// </value>
+        /// <remarks>
+        /// <para>
+        /// Use it only where a bool STREAM is consumed as a truth value (the bool fold): it is exact there because
+        /// <c>x != 0</c> and <c>x</c> are the same bool for every element. It is NOT a substitute for
+        /// <see cref="ChildElementwiseProgram"/> anywhere the child's dtype or kernel identity matters.
+        /// </para>
+        /// <para>
+        /// Resolved once per program and cached — the null answer included (a separate resolved flag, since
+        /// <c>??=</c> would re-resolve a legitimately-null result on every call). The operand's dtype is found by the
+        /// typing pass alone, so a non-bool <c>x</c> (the common <c>Any(a)</c> over a numeric array) costs one pure
+        /// typing walk and never compiles a kernel.
+        /// </para>
+        /// </remarks>
+        public NDExprProgram NonzeroBoolOperandProgram
+        {
+            get
+            {
+                // A benign race: two threads may both resolve it, to equivalent programs (Build and the typing pass
+                // are pure). The Volatile pair publishes the program before the flag that says it is ready.
+                if (!Volatile.Read(ref _nonzeroBoolOperandResolved))
+                {
+                    NDExprProgram resolved = null;
+                    // Type first, build second: ResolveNumPyTypes only records into its own dictionary, so asking
+                    // "is x Boolean?" compiles nothing — a kernel is JIT-ed only for the operand we will actually run.
+                    if (Reduce?.Child is ComparisonNode test && test.NonzeroTestOperand is NDExpr x
+                        && x.ResolveNumPyTypes(InputTypes, out _) == NPTypeCode.Boolean)
+                        resolved = Build(x, InputTypes, IsParam);
+
+                    _nonzeroBoolOperand = resolved;
+                    Volatile.Write(ref _nonzeroBoolOperandResolved, true);
+                }
+
+                return _nonzeroBoolOperand;
+            }
+        }
 
         /// <summary>
         /// <paramref name="x"/> converted to this program's <see cref="ResultType"/> — itself when

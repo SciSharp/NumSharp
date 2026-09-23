@@ -529,6 +529,152 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
+        /// Plan lever 3 (bool folds) — a FLAT <c>Any</c> / <c>All</c> / <c>Sum</c>-of-a-bool-child (<c>CountNonzero</c>)
+        /// reduction streamed: the child's own SIMD elementwise kernel evaluates each ≤8 KB block into L1 scratch
+        /// (one byte per element) and the block is folded with the BCL's vectorized span primitives —
+        /// <c>IndexOfAnyExcept(0)</c> for Any, <c>IndexOf(0)</c> for All, <c>Count(0)</c> for the count. The scalar
+        /// 4-accumulator fold kernel these kinds rode ran ~0.5 ns/element (any(a&gt;b) 0.25× NumPy at 100K, 4× slower
+        /// than NumSharp's own unfused <c>np.any(a &gt; b)</c>). When the child is the factories' <c>x != 0</c> over a
+        /// bool <c>x</c> (<see cref="NDExprProgram.NonzeroBoolOperandProgram"/>), <c>x</c> itself is streamed: the
+        /// same bools, but through <c>x</c>'s SIMD kernel instead of the scalar int64-typed comparison.
+        /// </summary>
+        /// <remarks>
+        /// Bit-exact BY CONSTRUCTION, not by schedule: logical OR / AND and an integer count are associative and
+        /// commutative, so any blocking and any traversal order give the identical answer — which is also why any
+        /// shared contiguous order (all C or all F) streams, and why Any / All may STOP at the first deciding block
+        /// (a later element cannot change the answer; only a side-effecting <c>Call</c> node could observe the skipped
+        /// evaluations, and element evaluation order is not contractual). The caller has already seeded
+        /// <paramref name="slot"/> with the identity (Any 0, All 1, Sum 0); this folds the whole child into it.
+        /// Declines (false, slot untouched) for any other kind, a non-bool child, a Sum whose accumulator is not
+        /// int64, or operands the streams cannot walk — the fold kernel then runs as before.
+        /// </remarks>
+        /// <param name="program">The flat reduction program.</param>
+        /// <param name="inputs">Every input of the call, in input order.</param>
+        /// <param name="n">The child's element count (&gt; 0).</param>
+        /// <param name="kind">The reduction kind.</param>
+        /// <param name="accType">The accumulator dtype the slot holds.</param>
+        /// <param name="slot">The identity-seeded accumulator slot the result is folded into.</param>
+        /// <returns>True when the reduction was computed here.</returns>
+        private static unsafe bool TryStreamBoolFold(NDExprProgram program, NDArray[] inputs, long n,
+            NDExprReduceKind kind, NPTypeCode accType, byte* slot)
+        {
+            bool any = kind == NDExprReduceKind.Any;
+            bool all = kind == NDExprReduceKind.All;
+            bool count = kind == NDExprReduceKind.Sum && accType == NPTypeCode.Int64;
+            if (!(any || all || count))
+                return false;
+
+            // The factories spell the child `x != 0`; for a bool x that IS x, and x's own kernel keeps its SIMD body
+            // where the int64-typed `bool != 0` comparison runs scalar — so stream x directly when the pattern holds
+            // (the same bools, element for element), else the child exactly as written.
+            var child = program.NonzeroBoolOperandProgram ?? program.ChildElementwiseProgram;
+            if (child is null || child.ResultType != NPTypeCode.Boolean)
+                return false;
+            var ops = child.IteratorOperands(inputs);
+            if (!CanStreamChild(child, ops, allowF: true))
+                return false;
+
+            NDExpr.StreamingReductions++;
+            long nonzero = 0;
+
+            if (child.Bound is InputNode && ops.Length == 1)
+            {
+                // A bare bool LEAF (`any(mask)`, `count_nonzero(mask)`): the child's elements ARE the operand's bytes,
+                // and CanStreamChild proved them one dense C- or F-contiguous block (no broadcast), so fold that block
+                // in place. Running the leaf's identity kernel would only copy it into scratch first — measured
+                // 0.65-0.83x NumPy's count_nonzero(bool) with the copy. Order is free (OR / AND / a count).
+                byte* p = (byte*)ops[0].Address + (long)ops[0].Shape.offset; // itemsize 1: offset is in bytes
+                for (long start = 0; start < n; start += BoolScanChunkBytes)
+                {
+                    int m = (int)Math.Min(BoolScanChunkBytes, n - start);
+                    if (FoldBoolBlock(new ReadOnlySpan<byte>(p + start, m), any, all, ref nonzero, slot))
+                        return true;
+                }
+            }
+            else
+            {
+                var stream = new NDExprChildStream { Kernel = child.Kernel };
+                int nop = ops.Length;
+                byte** bases = stackalloc byte*[nop];
+                long* elemBytes = stackalloc long[nop];
+                void** ptrs = stackalloc void*[nop + 1];
+                long* strides = stackalloc long[nop + 1];
+                BindChildStream(ref stream, ops, NPTypeCode.Boolean, bases, elemBytes, ptrs, strides);
+
+                if (child.ParamCount > 0)
+                {
+                    // The child is an ELEMENTWISE program: its parameters live in the elementwise aux layout
+                    // (slot 0 onward), not after a reduce accumulator. stackalloc lives until the method returns.
+                    byte* paramBlock = stackalloc byte[NDExprParamPlan.SlotBytes * child.ParamCount];
+                    child.PackParams(inputs, paramBlock);
+                    stream.Aux = paramBlock;
+                }
+
+                byte* scratch = stackalloc byte[EvaluateStreamScratchBytes];
+                stream.Scratch = scratch;
+                stream.Block = EvaluateStreamScratchBytes; // one byte per bool element
+
+                for (long start = 0; start < n; start += stream.Block)
+                {
+                    int m = (int)Math.Min(stream.Block, n - start);
+                    stream.Produce(start, m, scratch);
+                    if (FoldBoolBlock(new ReadOnlySpan<byte>(scratch, m), any, all, ref nonzero, slot))
+                        return true;
+                }
+            }
+
+            // Any: no true element — the seeded False stands; All: no false element — the seeded True stands;
+            // the count joins the seeded 0 (int64 addition, the Sum fold's own arithmetic).
+            if (count)
+                *(long*)slot += nonzero;
+            return true;
+        }
+
+        /// <summary>
+        /// Largest block the in-place bool-leaf scan hands one span primitive: spans are int-length, so an operand past
+        /// 2 GiB is folded in 1 GiB pieces. The pieces cost nothing measurable — the scan is bandwidth-bound — and an
+        /// Any / All still stops inside the first piece that decides it.
+        /// </summary>
+        private const int BoolScanChunkBytes = 1 << 30;
+
+        /// <summary>
+        /// Fold one block of bools (one byte each, any nonzero byte is True — NumPy's truthiness, so a bool array
+        /// holding a raw byte 2 counts as True here exactly as in the fold kernel's <c>x != 0</c>) into a streamed
+        /// <c>Any</c> / <c>All</c> / count reduction.
+        /// </summary>
+        /// <param name="block">The bools to fold.</param>
+        /// <param name="any">Folding logical OR: the first True decides the reduction.</param>
+        /// <param name="all">Folding logical AND: the first False decides the reduction.</param>
+        /// <param name="nonzero">The running count of True elements; advanced only when neither
+        /// <paramref name="any"/> nor <paramref name="all"/> is set.</param>
+        /// <param name="slot">The accumulator slot; written ONLY when this block decides the reduction.</param>
+        /// <returns>True when <paramref name="block"/> decided the whole reduction (the caller must stop scanning:
+        /// <paramref name="slot"/> already holds the answer); false to continue with the next block.</returns>
+        private static unsafe bool FoldBoolBlock(ReadOnlySpan<byte> block, bool any, bool all, ref long nonzero, byte* slot)
+        {
+            if (any)
+            {
+                // logical_or: the first true element decides the whole reduction.
+                if (block.IndexOfAnyExcept((byte)0) < 0)
+                    return false;
+                *slot = 1;
+                return true;
+            }
+
+            if (all)
+            {
+                // logical_and: the first false element decides the whole reduction.
+                if (block.IndexOf((byte)0) < 0)
+                    return false;
+                *slot = 0;
+                return true;
+            }
+
+            nonzero += block.Length - block.Count((byte)0);
+            return false;
+        }
+
+        /// <summary>
         /// A fresh 0-d array of <paramref name="t"/> holding the accumulator slot's value — the exact construction
         /// <c>ExactSumArray</c>'s flat branch performs, so a streamed flat sum is indistinguishable from it.
         /// </summary>

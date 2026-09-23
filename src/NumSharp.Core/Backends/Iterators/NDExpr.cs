@@ -2127,6 +2127,20 @@ namespace NumSharp.Backends.Iteration
             _right = right ?? throw new ArgumentNullException(nameof(right));
         }
 
+        /// <summary>
+        /// The tested operand <c>x</c> when this node is the reduction factories' nonzero test <c>x != 0</c> — a
+        /// <see cref="ComparisonOp.NotEqual"/> whose right operand is the integer literal 0, exactly the form
+        /// <see cref="NDExpr.Any(NDExpr)"/>, <see cref="NDExpr.All(NDExpr)"/> and <see cref="NDExpr.CountNonzero(NDExpr)"/>
+        /// build — otherwise null. For a Boolean-typed <c>x</c> the test is the identity (a bool is nonzero iff it is
+        /// true), which lets the host reduce <c>x</c>'s own mask kernel rather than the comparison NEP50 types as
+        /// <c>bool</c> vs a weak int, i.e. an int64 compare the vector plan declines as mixed-width. Any other
+        /// literal, operand order or comparison returns null, so a caller never rewrites a genuine comparison.
+        /// </summary>
+        internal NDExpr NonzeroTestOperand
+            => _op == ComparisonOp.NotEqual && _right is ConstNode c && c.IsIntegerLiteral && c.IntegerValue == 0
+                ? _left
+                : null;
+
         public override bool SupportsSimd => false;
 
         public override void EmitScalar(ILGenerator il, NDExprCompileContext ctx)

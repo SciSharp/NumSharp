@@ -208,6 +208,33 @@ bit-exact (`ILKernelGenerator.Reduction.Pairwise.cs`); only the fused reduce pat
 3. **Flat-reduce fold is SCALAR** (`CompileReduceKernel`: 4 scalar accumulators) — Min/Max, integer Sum/Prod, Any/All,
    CountNonzero ride it: `max(a*b)` f64 is 0.91× NumPy @100K. Vectorize (order-independent for values; keep the ±0 tie and
    first-NaN semantics of the scalar `np.maximum` clamp).
+   **Bool folds STREAMED (LANDED):** a flat `Any` / `All` / `Sum`-of-a-bool-child (`CountNonzero`, int64 accumulator) no
+   longer rides the scalar fold — `DefaultEngine.TryStreamBoolFold` (`DefaultEngine.Evaluate.Stream.cs`, hooked into
+   `EvaluateReduce`'s flat path) evaluates the bool child into the 8 KB L1 scratch block by block with the child's own
+   kernel and folds each block with the BCL's vectorized span scans (`IndexOfAnyExcept(0)` / `IndexOf(0)` /
+   `Count(0)`); Any / All STOP at the first deciding block. Exact BY CONSTRUCTION — OR / AND / an integer count do not
+   depend on order — so any shared contiguous order streams (all C or all F; `CanStreamChild(allowF: true)`) and the
+   early exit is safe. Two refinements carry the speed: (1) the factories spell the child `x != 0`, and for a Boolean
+   `x` NEP50 types that as an **int64** comparison (a mixed-width tree the vector plan declines → a SCALAR child kernel,
+   so `count_nonzero(a > b)` first gained nothing) — `NDExprProgram.NonzeroBoolOperandProgram` recognizes exactly the
+   factories' spelling (`ComparisonNode.NonzeroTestOperand`: `NotEqual`, right operand the INTEGER literal 0) over a
+   Boolean `x` (decided by the typing pass alone, so a numeric `x` never JITs a probe kernel; the null answer is cached
+   behind its own resolved flag) and streams `x` itself — the same bools through `x`'s SIMD kernel; (2) a bare bool
+   LEAF (`any(mask)`, `count_nonzero(mask)`) is folded IN PLACE over its dense block at `Address + offset` — no identity
+   kernel, no scratch copy (the copy had it at 0.65–0.83× NumPy). **Measured (pinned P-core, alternating ON/OFF order,
+   best-of; stream vs the old fold, then NPY/NS against a pinned NumPy 2.4.2 twin):** `any(a>b)` 1.9× / 34× / 2242×
+   at 1K / 100K / 4M (NPY/NS 3.8 / 7.7 / 1870 — the first true is early; NumPy materializes the whole comparison),
+   `any(z)` full scan 2.4 / 6.7 / 3.0× (NPY/NS 5.0 / 4.2 / 2.1–2.3), `all(a>0)` 1.8 / 4.2 / 2.2× (NPY/NS 4.0 / 0.94 /
+   1.7–1.9), `count_nonzero(a>b)` 1.8 / 3.3–3.7 / 1.3× (NPY/NS 1.4 / 0.86–0.95 / 1.2 — 100K sits at the read-bandwidth
+   ceiling of the two f64 operands on both sides), `count_nonzero(mask)` 2.5 / 28 / 29× (NPY/NS ≈1.0 / 1.43 / 1.22),
+   `all(mask)` early exit ≈ 0.3 µs (NPY/NS 4.7). Gates: `NDEvaluateStreamingTests` 11 (+2 — byte equality vs the fold
+   kernel at every deciding-element position (first/last/block boundaries/none) × C/F/offset/bool-leaf layouts × 0-d
+   params, strided/broadcast declines, and the resolution contract; MUTANTS: widening the literal match so
+   `sum(flags != 1)` streams `flags`, and dropping the view offset from the in-place scan (an F column block at offset
+   42), both go red), 424 NDEvaluate/NDExpr/Evaluate/post-pass units. Still on the scalar fold: `Min`/`Max` (0.72–0.80×
+   NumPy @100K — the vector form must keep the scalar `np.maximum` clamp's first-NaN-sticks and second-operand-wins-a-±0-tie
+   results, and NumPy's own `maxn`-over-8-vectors reduction makes its ±0-tie answer host/width-dependent, so the
+   contract needs pinning before a kernel), integer `Sum`/`Prod` (already 3.4× NumPy), the axis forms of every kind.
 4. The stat / delegating / average reductions (`NanMean`/`Var`/`Std`, `Ptp`/`NanMin`/`NanMax`/`ArgMax`/`ArgMin`,
    weighted `Average`) still materialize their child(ren) — streaming candidates (Var is two-pass: recompute vs store).
    **A 2026-09-23 gap map** (fused vs NumPy, pinned, best-of; probe `red_gap2.cs` + twin) ranked them: weighted
