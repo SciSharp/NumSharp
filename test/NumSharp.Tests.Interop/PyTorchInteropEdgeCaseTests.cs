@@ -717,14 +717,24 @@ namespace NumSharp.Tests.Interop
                     return;
                 }
 
-                using PyObject tensor = Scope.Eval($"torch.arange(6, dtype=torch.float64, device='{device}')");
+                // Apple's MPS backend has no float64 at all — torch refuses to even create one there
+                // ("MPS framework doesn't support float64"), which is exactly what the macOS CI runner,
+                // which HAS an MPS device, hit the first time this test ran on it. float32 is the widest
+                // float both accelerators share, so the MPS leg uses it; CUDA keeps float64.
+                bool mps = device == "mps";
+                using PyObject tensor = Scope.Eval(
+                    $"torch.arange(6, dtype=torch.{(mps ? "float32" : "float64")}, device='{device}')");
                 new Action(() => { using var _ = tensor.AsTorchNDArray(requireGIL: false); })
                     .Should().Throw<PythonException>().WithMessage("*CPU*");
 
                 using NDArray copy = tensor.ToTorchNDArray(force: true, requireGIL: false);
-                copy.typecode.Should().Be(NPTypeCode.Double);
+                copy.typecode.Should().Be(mps ? NPTypeCode.Single : NPTypeCode.Double);
                 copy.shape.Should().Equal(6);
-                for (int i = 0; i < 6; i++) ReadAt<double>(copy, i).Should().Be(i);
+                for (int i = 0; i < 6; i++)
+                {
+                    if (mps) ReadAt<float>(copy, i).Should().Be(i);
+                    else ReadAt<double>(copy, i).Should().Be(i);
+                }
             }
         }
 
