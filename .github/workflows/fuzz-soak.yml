@@ -8,6 +8,12 @@ name: Fuzz Soak
 # On a divergence the harness prints a shrunk single-element repro (Shrinker) in the log and the
 # offending corpus is uploaded as an artifact — copy the minimal line into
 # test/NumSharp.Tests.Oracle/Fuzz/corpus/regressions/ so FuzzRegression pins it on every CI thereafter.
+#
+# Unlike those committed corpora (win-amd64 NumPy bytes), this job RECOMPUTES `expected` with the
+# Linux NumPy of whatever runner it draws. So the oracle must not vary with the host: fuzz_random.py
+# keeps host-defined values out of its operands (undefined float->integer casts; non-finite complex
+# inputs to the ops NumPy hands to the platform's C99 complex library — see its comment blocks), and
+# the job env below pins NumPy's CPU dispatch below AVX-512.
 
 on:
   schedule:
@@ -28,6 +34,17 @@ jobs:
   soak:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    # Pins the oracle's CPU dispatch below AVX-512, as build-and-release.yml does for interop-test's
+    # ubuntu leg (full rationale there). Hosted ubuntu runners are a mix of AVX2-only and AVX-512
+    # machines, and on AVX512_SKX hardware the Linux wheel leaves the reference configuration: it links
+    # Intel SVML for float64 exp/log (__svml_exp8_ha/__svml_log8_ha) and ~20 more f32/f64 ufuncs, and
+    # dispatches the AVX512F float32 exp/log kernels where NumSharp ports the AVX2-FMA3 ones. The
+    # float32 exp/log/sin/cos cells are held BIT-EXACT (MisalignedRegistry's ported-kernel carve-out),
+    # so they cannot ride a ULP excuse. Only the AVX2 dispatch is the reference answer: the win-amd64
+    # wheel never compiles an AVX-512 variant. Disabling a feature the CPU lacks is a silent no-op, so
+    # AVX2 runners are unaffected. "Install NumPy" logs the runner's raw ISA next to the effective dispatch.
+    env:
+      NPY_DISABLE_CPU_FEATURES: 'X86_V4 AVX512_ICL AVX512_SPR'
     steps:
     - uses: actions/checkout@v7
 
@@ -43,8 +60,15 @@ jobs:
       with:
         python-version: '3.12'
 
+    # The raw per-instruction flags (AVX512F) survive the pin while the dispatch groups (X86_V4,
+    # AVX512_ICL) do not, so "AVX512F=True ... X86_V4=False" is the pin at work on an AVX-512 runner.
     - name: Install NumPy 2.4.2 (the oracle)
-      run: pip install "numpy==2.4.2"
+      shell: bash
+      run: |
+        pip install "numpy==2.4.2"
+        python -c "from numpy._core._multiarray_umath import __cpu_features__ as f; \
+        print('cpu         ', 'AVX512F=%s AVX2=%s | numpy dispatch X86_V4=%s AVX512_ICL=%s' \
+              % tuple(f.get(k) for k in ('AVX512F', 'AVX2', 'X86_V4', 'AVX512_ICL')))"
 
     - name: Soak — sweep seeds
       shell: bash
