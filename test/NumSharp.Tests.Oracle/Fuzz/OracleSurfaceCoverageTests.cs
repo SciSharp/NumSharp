@@ -18,7 +18,14 @@ namespace NumSharp.Tests.Fuzz
     [TestClass]
     public class OracleSurfaceCoverageTests
     {
-        private static readonly Dictionary<string, string> EquivalentAliases = new()
+        /// <summary>
+        ///     np.* spellings whose value path IS another corpus op (member name → canonical op key) —
+        ///     pure delegations such as <c>absolute → abs</c>. <c>internal</c> because the leak gate
+        ///     (<see cref="LeakSurfaceCoverageTests"/>) resolves coverage through the SAME map: a
+        ///     delegating alias allocates exactly what its canonical op allocates, so a measured
+        ///     canonical op leak-covers the alias too.
+        /// </summary>
+        internal static readonly Dictionary<string, string> EquivalentAliases = new()
         {
             ["absolute"] = "abs",
             ["amax"] = "max",
@@ -293,8 +300,9 @@ namespace NumSharp.Tests.Fuzz
 
         // NumSharp conveniences with NO NumPy 2.4.2 ndarray member of that name, whose VALUE path
         // is nevertheless a corpus op (the np.* twin or an instance key): the alias target must
-        // exist, so a renamed op breaks this map instead of rotting.
-        private static readonly Dictionary<string, string> NdarrayAliases = new()
+        // exist, so a renamed op breaks this map instead of rotting. internal: the leak gate
+        // (LeakSurfaceCoverageTests) resolves ndarray coverage through the same delegations.
+        internal static readonly Dictionary<string, string> NdarrayAliases = new()
         {
             ["amax"] = "ndarray.max",           // alias of ndarray.max (np.amax == np.max)
             ["amin"] = "ndarray.min",
@@ -447,8 +455,9 @@ namespace NumSharp.Tests.Fuzz
 
         // ================= np.ma (coverage plan §A2) ===========================================
 
-        // NumPy-side aliases whose canonical spelling carries the ma corpus cases.
-        private static readonly Dictionary<string, string> MaAliases = new()
+        // NumPy-side aliases whose canonical spelling carries the ma corpus cases. internal: the
+        // leak gate (LeakSurfaceCoverageTests) resolves np.ma coverage through the same aliases.
+        internal static readonly Dictionary<string, string> MaAliases = new()
         {
             ["alltrue"] = "ma.all",
             ["sometrue"] = "ma.any",

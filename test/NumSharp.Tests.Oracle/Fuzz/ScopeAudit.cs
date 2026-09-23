@@ -89,5 +89,47 @@ namespace NumSharp.Tests.Fuzz
         /// <summary>Escaped-buffer count of one region execution (see <see cref="MeasureTraffic"/>).</summary>
         public static long? Measure(Action region, int attempts = 3)
             => MeasureTraffic(region, attempts)?.Escaped;
+
+        /// <summary>
+        ///     The SCREEN-then-CONFIRM measurement every corpus/catalogue replay uses: one
+        ///     <see cref="MeasureTraffic"/> screen, and — only when that screen reads a non-zero
+        ///     balance — a <see cref="Settle"/> followed by a second, confirming measurement whose
+        ///     verdict is returned instead.
+        /// </summary>
+        /// <remarks>
+        ///     Why a non-zero screen is never trusted on its own: a replay runs over a library that
+        ///     may carry leaks, so escaped buffers accumulate; a pacing or natural GC collects them
+        ///     and the finalizer thread then RETURNS their buffers asynchronously across LATER regions.
+        ///     That drain is not a collection, so <see cref="MeasureTraffic"/>'s GC-count detection
+        ///     cannot see it, and it produces phantom negative balances (down to −262 at the gate's
+        ///     landing) or masks a real positive one. With the finalizer queue drained by the settle
+        ///     and no GC inside the confirming region, the confirmed balance is exact. A zero screen
+        ///     needs no confirmation: a drain can only ADD returns, so a region that genuinely
+        ///     escaped a buffer can read zero only if a drain landed in it — which the next (drained)
+        ///     measurement of the same op would expose, and the harness settles periodically anyway.
+        /// </remarks>
+        /// <param name="region">The re-executable region (see <see cref="MeasureTraffic"/>'s contract:
+        /// every execution must produce the same pool traffic).</param>
+        /// <param name="attempts">Per-measurement retry budget for GC interference.</param>
+        /// <returns>The confirmed traffic, or null when a GC landed inside every attempt of the
+        /// measurement that decides the verdict (inconclusive — callers count it, never fail on it).</returns>
+        public static Traffic? MeasureConfirmedTraffic(Action region, int attempts = 3)
+        {
+            var traffic = MeasureTraffic(region, attempts);
+            if (traffic is not null && traffic.Value.Escaped != 0)
+            {
+                // Drain the finalizer backlog so the confirming region sees only its own traffic.
+                Settle();
+                traffic = MeasureTraffic(region, attempts);
+            }
+            return traffic;
+        }
+
+        /// <summary>Confirmed escaped-buffer count (see <see cref="MeasureConfirmedTraffic"/>).</summary>
+        /// <param name="region">The re-executable region to measure.</param>
+        /// <param name="attempts">Per-measurement retry budget for GC interference.</param>
+        /// <returns>The confirmed escape count, or null when every attempt was GC-interfered.</returns>
+        public static long? MeasureConfirmed(Action region, int attempts = 3)
+            => MeasureConfirmedTraffic(region, attempts)?.Escaped;
     }
 }
