@@ -159,8 +159,9 @@ The op corpus + `OpRegistry` are reused for a DIFFERENT claim — no NumPy refer
 - `OpenBugs.FuzzGate.cs` — `MisalignedRegistryTightnessTests` (each excuse branch pinned from both sides — a gross
   regression in the neighbouring cell must NOT be excused) + `FuzzGateRegressionTests` (real bugs the tightening
   exposed, fixed-in-src or pinned `[OpenBugs]`).
-- `fuzz_random.py` — the nightly-soak seeded fuzzer (`.github/workflows/fuzz-soak.yml`), ~1M fresh cases/night;
-  shrunk failures get pinned under `Fuzz/corpus/regressions/`.
+- `fuzz_random.py` — the nightly-soak seeded fuzzer (`.github/workflows/fuzz-soak.yml`): one fixed seed (a
+  deterministic canary) + nine fresh random seeds × 200K cases, ~1.8M fresh cases/night; shrunk failures get
+  pinned under `Fuzz/corpus/regressions/`.
 
 ## Where the corpus lives and how it reaches tests
 
