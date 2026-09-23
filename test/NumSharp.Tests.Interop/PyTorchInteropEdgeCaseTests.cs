@@ -18,6 +18,7 @@ namespace NumSharp.Tests.Interop
     ///     (validated on 2.13.0 and 2.12.1; the gate is the <see cref="PyTorchTestGate"/> floor).
     /// </summary>
     [TestClass]
+    [PythonEcosystem]
     public class PyTorchInteropEdgeCaseTests : InteropTestBase
     {
         [TestMethod]
@@ -803,8 +804,19 @@ namespace NumSharp.Tests.Interop
             return Version.Parse(numeric.Substring(0, cut).TrimEnd('.'));
         }
 
+        /// <summary>
+        ///     Gate for the live PyTorch claims: the running test must be tagged
+        ///     <see cref="PythonEcosystemAttribute"/>, and torch must be installed at
+        ///     <see cref="MinimumTorchVersion"/> or newer — otherwise the test is Inconclusive, or FAILS
+        ///     under <c>NUMSHARP_PYTHONNET_REQUIRE_PACKAGES</c> (the ecosystem environment installs it).
+        /// </summary>
+        /// <param name="scope">The test's Python namespace; <c>torch</c> is imported into it on success.</param>
+        /// <exception cref="AssertFailedException">Untagged test, or torch absent/too old under the require knob.</exception>
+        /// <exception cref="AssertInconclusiveException">torch absent or too old, and that is allowed.</exception>
         internal static void Require(PyModule scope)
         {
+            InteropTestBase.RequireEcosystemTag("torch");
+
             using (Py.GIL())
             {
                 try
@@ -813,13 +825,13 @@ namespace NumSharp.Tests.Interop
                 }
                 catch (PythonException)
                 {
-                    Assert.Inconclusive("python package 'torch' is not installed");
+                    InteropTestBase.ReportMissingPackage("python package 'torch' is not installed");
                 }
 
                 scope.Exec("import torch");
                 string version = Python.torch.version();
                 if (Parse(version) < MinimumTorchVersion)
-                    Assert.Inconclusive(
+                    InteropTestBase.ReportMissingPackage(
                         $"PyTorch {version} is installed; the live compatibility gate needs {MinimumTorchVersion} or newer " +
                         "(the release whose torch.from_numpy accepts unsigned 16/32/64-bit dtypes).");
             }

@@ -10,8 +10,6 @@ namespace NumSharp.Tests.Interop;
 [TestClass]
 public class GistMetricsLiveParityTests : InteropTestBase
 {
-    public TestContext TestContext { get; set; }
-
     // Independent mathematical references, not a copy of either downloaded Python file.
     // Original formulas were reviewed and run on NumPy 2.4.2 before implementing the C# port.
     // a and p are zero-copy views of the exact NumSharp input buffers.

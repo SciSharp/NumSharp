@@ -401,3 +401,7 @@ src/NumSharp.Interop.OpenBLAS/tools/.wheel-cache/
 # output; regenerable scratch, ~95 MB, not repo content).
 /outputs/
 /optimize-runs
+
+# The interop suite's Python virtual environments (parity-py312/, ecosystem-py312/, ...), built by
+# test/NumSharp.Tests.Interop/python-envs/make_env.py from the tracked requirement files there.
+/.venvs/

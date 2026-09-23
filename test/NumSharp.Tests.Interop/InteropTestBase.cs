@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Reflection;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
 using NumSharp.Interop.PythonNet;
@@ -31,9 +32,31 @@ namespace NumSharp.Tests.Interop
         protected PyModule Scope;
         private int _baseExports, _baseImports;
 
+        /// <summary>
+        ///     MSTest's per-test context, injected before every test. Declared once here (derived classes
+        ///     inherit it — redeclaring it would hide this one) because <see cref="InteropInit"/> reads
+        ///     the running test's name from it to enforce the <see cref="PythonEcosystemAttribute"/>
+        ///     drift guard; tests also use it for <c>TestContext.WriteLine</c> diagnostics.
+        /// </summary>
+        public TestContext TestContext { get; set; }
+
+        /// <summary>
+        ///     Whether the test that is running right now carries <see cref="PythonEcosystemAttribute"/>
+        ///     on its method or class. Static because the package gates are static helpers; safe because
+        ///     the assembly runs its tests sequentially (<c>[assembly: DoNotParallelize]</c>).
+        /// </summary>
+        private static bool _currentTestIsEcosystem;
+
+        /// <summary>The running test's display name, for the drift guard's message.</summary>
+        private static string _currentTestName;
+
         [TestInitialize]
         public void InteropInit()
         {
+            // Recorded before anything can throw, so a package gate called from a derived class's own
+            // [TestInitialize] (which MSTest runs after this one) sees the right test.
+            RecordCurrentTest();
+
             PythonSession.EnsureOrInconclusive();
 
             Settle();
@@ -71,10 +94,21 @@ namespace NumSharp.Tests.Interop
         /// <summary>
         ///     Gate for third-party-library claims (docs spec §8.3): attempts the import under the
         ///     GIL and reports Inconclusive when the package is absent — real proof wherever the
-        ///     package exists, silent where it doesn't, so CI stays green on a bare image.
+        ///     package exists, silent where it doesn't — unless
+        ///     <c>NUMSHARP_PYTHONNET_REQUIRE_PACKAGES</c> makes an absent package a failure (CI's run
+        ///     against the <c>ecosystem</c> environment, where every such package is installed on purpose).
         /// </summary>
+        /// <param name="module">The importable module name (<c>scipy</c>, <c>PIL</c>, <c>cv2</c>, …).</param>
+        /// <exception cref="AssertFailedException">
+        ///     The running test lacks <see cref="PythonEcosystemAttribute"/> (see
+        ///     <see cref="RequireEcosystemTag"/>), or the package is absent under
+        ///     <c>NUMSHARP_PYTHONNET_REQUIRE_PACKAGES</c>.
+        /// </exception>
+        /// <exception cref="AssertInconclusiveException">The package is absent and absence is allowed.</exception>
         protected static void SkipUnless(string module)
         {
+            RequireEcosystemTag(module);
+
             bool available;
             using (Py.GIL())
             {
@@ -90,7 +124,64 @@ namespace NumSharp.Tests.Interop
             }
 
             if (!available)
-                Assert.Inconclusive($"python package '{module}' is not installed");
+                ReportMissingPackage($"python package '{module}' is not installed");
+        }
+
+        /// <summary>
+        ///     The drift guard: fails the running test unless it carries <see cref="PythonEcosystemAttribute"/>.
+        ///     Called by every package gate BEFORE it looks for the package, so an untagged test fails on
+        ///     every machine — including a developer's with the package installed — rather than being
+        ///     routed to the numpy-only environment, skipping there, and never running anywhere.
+        /// </summary>
+        /// <param name="package">The package the test asked for; named in the failure message.</param>
+        /// <exception cref="AssertFailedException">The running test is not tagged.</exception>
+        internal static void RequireEcosystemTag(string package)
+        {
+            if (!_currentTestIsEcosystem)
+                Assert.Fail(
+                    $"{_currentTestName ?? "this test"} needs the third-party python package '{package}' but carries no " +
+                    "[PythonEcosystem] attribute (on the method or its class). " +
+                    "CI runs untagged tests in the numpy-only 'parity' environment, where it would skip forever; " +
+                    "tag it so it runs against the 'ecosystem' environment (python-envs/make_env.py).");
+        }
+
+        /// <summary>
+        ///     Reports an absent (or wrong-version) optional package: Inconclusive by default, a failure
+        ///     under <c>NUMSHARP_PYTHONNET_REQUIRE_PACKAGES</c>, where the environment was built to hold it.
+        /// </summary>
+        /// <param name="message">What is missing, e.g. <c>python package 'torch' is not installed</c>.</param>
+        /// <exception cref="AssertFailedException">Absence is not allowed in this run.</exception>
+        /// <exception cref="AssertInconclusiveException">Absence is allowed; the test is skipped.</exception>
+        /// <remarks>Never returns — both outcomes throw — so callers may rely on it ending the test.</remarks>
+        [System.Diagnostics.CodeAnalysis.DoesNotReturn]
+        internal static void ReportMissingPackage(string message)
+        {
+            if (NumSharp.EnvVars.PythonnetRequirePackages)
+                Assert.Fail($"{message} — NUMSHARP_PYTHONNET_REQUIRE_PACKAGES is set, so this environment " +
+                            $"(interpreter: {PythonSession.Interpreter ?? "unknown"}) must provide it.");
+            Assert.Inconclusive(message);
+        }
+
+        /// <summary>
+        ///     Records the test about to run and whether it (or its class) carries
+        ///     <see cref="PythonEcosystemAttribute"/>, for the static package gates.
+        /// </summary>
+        /// <remarks>
+        ///     The method is found by NAME on the runtime type: MSTest's <see cref="TestContext.TestName"/>
+        ///     is the method name (data rows share one method), and test methods are not overloaded. When
+        ///     the context or the method cannot be resolved the class-level attribute still decides.
+        /// </remarks>
+        private void RecordCurrentTest()
+        {
+            Type type = GetType();
+            string name = TestContext?.TestName;
+            MethodInfo method = name is null
+                ? null
+                : Array.Find(type.GetMethods(BindingFlags.Public | BindingFlags.Instance), m => m.Name == name);
+
+            _currentTestName = name is null ? type.Name : $"{type.Name}.{name}";
+            _currentTestIsEcosystem = type.IsDefined(typeof(PythonEcosystemAttribute), inherit: true) ||
+                                      (method?.IsDefined(typeof(PythonEcosystemAttribute), inherit: true) ?? false);
         }
 
         /// <summary>

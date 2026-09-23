@@ -13,6 +13,7 @@ namespace NumSharp.Tests.Interop
     ///     the ordinary <see cref="NDArrayPythonInterop"/> memory bridge.
     /// </summary>
     [TestClass]
+    [PythonEcosystem]
     public class PandasInteropTests : InteropTestBase
     {
         [TestMethod]
@@ -213,8 +214,19 @@ namespace NumSharp.Tests.Interop
     {
         internal const string ValidatedPandasVersion = "3.0.5";
 
+        /// <summary>
+        ///     Gate for the live Pandas claims: the running test must be tagged
+        ///     <see cref="PythonEcosystemAttribute"/>, and pandas must be installed at exactly
+        ///     <see cref="ValidatedPandasVersion"/> — absent or different, the test is Inconclusive,
+        ///     or FAILS under <c>NUMSHARP_PYTHONNET_REQUIRE_PACKAGES</c> (the ecosystem environment pins it).
+        /// </summary>
+        /// <param name="scope">The test's Python namespace; <c>pd</c> is imported into it on success.</param>
+        /// <exception cref="AssertFailedException">Untagged test, or pandas absent/different under the require knob.</exception>
+        /// <exception cref="AssertInconclusiveException">pandas absent or a different release, and that is allowed.</exception>
         internal static void Require(PyModule scope)
         {
+            InteropTestBase.RequireEcosystemTag("pandas");
+
             string version = null;
             using (Py.GIL())
             {
@@ -230,9 +242,9 @@ namespace NumSharp.Tests.Interop
             }
 
             if (version is null)
-                Assert.Inconclusive("python package 'pandas' is not installed");
+                InteropTestBase.ReportMissingPackage("python package 'pandas' is not installed");
             if (version != ValidatedPandasVersion)
-                Assert.Inconclusive(
+                InteropTestBase.ReportMissingPackage(
                     $"Pandas adapter claims are pinned to {ValidatedPandasVersion}; host has {version}");
         }
     }

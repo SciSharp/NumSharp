@@ -15,10 +15,9 @@ namespace NumSharp.Tests.Interop;
 /// The source scripts' audio-loading and plotting top-level code is never executed.
 /// </summary>
 [TestClass]
+[PythonEcosystem]
 public class GistSignalLiveParityTests : InteropTestBase
 {
-    public TestContext TestContext { get; set; }
-
     private const string Reference = """
         from scipy.signal.windows import blackmanharris
         from scipy.signal import correlate
