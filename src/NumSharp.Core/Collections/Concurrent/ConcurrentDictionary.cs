@@ -13,8 +13,11 @@
 //   * the string-key NonRandomizedStringEqualityComparer hash-flooding hardening is dropped (it relies on
 //     CoreLib-internal types); the provided/default comparer is used directly;
 //   * the net9+ AlternateLookup<TAlternateKey> API and the [DebuggerTypeProxy] view are dropped (not needed,
-//     and the former does not compile on net8.0).
-// Concurrency logic, locking, growth and public key-API behavior are otherwise unchanged.
+//     and the former does not compile on net8.0);
+//   * the class is `partial`: NumSharp-only members live in ConcurrentDictionary.RefAccessors.cs — currently ONE,
+//     the PUBLIC ref accessor GetValueRefOrNullRef, an addition to the upstream public surface that bypasses its
+//     tear-free discipline (the caller obligations are documented on the member).
+// Concurrency logic, locking, growth and the upstream members' public key-API behavior are otherwise unchanged.
 // </auto-generated>
 #nullable enable
 

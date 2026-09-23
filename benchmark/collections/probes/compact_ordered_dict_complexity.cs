@@ -4,7 +4,7 @@
 #:property AllowUnsafeBlocks=true
 #:property Optimize=true
 #:property Nullable=disable
-// complexity_probe.cs — O(1) proof + ratios + memory for ConcurrentOrderedDictionary and the recommended
+// compact_ordered_dict_complexity.cs — O(1) proof + ratios + memory for ConcurrentOrderedDictionary and the recommended
 // open-addressed compact table, across N = 1e3 .. 1e7 (four orders of magnitude).
 //
 //   DOTNET_TC_CallCountingDelayMs=0 dotnet run -c Release benchmark/collections/probes/compact_ordered_dict_complexity.cs
