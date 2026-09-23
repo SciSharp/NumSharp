@@ -1,9 +1,18 @@
 name: Fuzz Soak
 
-# Nightly differential-fuzz soak: sweeps five fixed seeds plus five fresh cryptographically-random
+# Nightly differential-fuzz soak: sweeps ONE fixed seed plus NINE fresh cryptographically-random
 # seeds through test/oracle/fuzz_random.py (NumPy 2.4.2 oracle), generating 200K cases per seed by
 # default and replaying them through the C# harness. The FuzzMatrix gate on every push/PR replays the
 # small COMMITTED corpora (no Python); this job is the "millions of cases" tail that needs Python.
+#
+# Why 1 + 9: the generator is deterministic, so a fixed seed regenerates a byte-identical corpus every
+# night. Five of them made half of each night's 2M cases the same inputs as the night before — through
+# 13 nights (2026-09-11..23) in which master did not move at all. One fixed seed keeps both things a
+# fixed seed is for: a deterministic canary (it turning red while the draw stayed put points at the
+# code, not at new cases) and a corpus fingerprint comparable night to night (its source_sha256 in the
+# evidence file should repeat while the generator and the NumPy pin are unchanged; a new value means
+# NumPy answered differently on that runner). The nine others are drawn fresh every night, which is
+# where the soak's new ground comes from. The split lives in the job env (SOAK_*_SEED_COUNT).
 #
 # On a divergence the harness prints a shrunk single-element repro (Shrinker) in the log and the
 # offending corpus is uploaded as an artifact — copy the minimal line into
@@ -20,9 +29,10 @@ on:
     - cron: '0 4 * * *'   # 04:00 UTC nightly
   workflow_dispatch:
     inputs:
+      # Kept plural so existing `-f seeds=N` dispatches still bind; it now takes exactly one seed.
       seeds:
-        description: 'Exactly five space-separated fixed seeds (five fresh random seeds are added)'
-        default: '1 2 3 4 5'
+        description: 'The fixed seed: exactly one non-negative integer (nine fresh random seeds are added)'
+        default: '1'
       count:
         description: 'Random cases per seed'
         default: '200000'
@@ -45,6 +55,13 @@ jobs:
     # AVX2 runners are unaffected. "Install NumPy" logs the runner's raw ISA next to the effective dispatch.
     env:
       NPY_DISABLE_CPU_FEATURES: 'X86_V4 AVX512_ICL AVX512_SPR'
+      # The seed split (header: why 1 + 9). Job env rather than script variables, so the random-seed
+      # generator's Python heredoc reads SOAK_RANDOM_SEED_COUNT from the environment it already has.
+      # Both must be positive integers, and the sweep step refuses anything else: bash arithmetic reads
+      # a malformed value as 0, which would run the wrong shape silently. The `seeds` input description
+      # spells these counts in words, so change the three together.
+      SOAK_FIXED_SEED_COUNT: '1'
+      SOAK_RANDOM_SEED_COUNT: '9'
     steps:
     - uses: actions/checkout@v7
 
@@ -73,7 +90,8 @@ jobs:
     - name: Soak — sweep seeds
       shell: bash
       run: |
-        FIXED_SEEDS="${{ github.event.inputs.seeds || '1 2 3 4 5' }}"
+        # Seed 1 is the one survivor of the former 1..5 set, so its nightly evidence stays comparable.
+        FIXED_SEEDS="${{ github.event.inputs.seeds || '1' }}"
         COUNT="${{ github.event.inputs.count || '200000' }}"
         EVIDENCE="fuzz-soak-evidence.jsonl"
         CORPUS="test/NumSharp.Tests.Oracle/Fuzz/corpus/random_smoke.jsonl"
@@ -81,9 +99,17 @@ jobs:
         STATUS=0
 
         : > "$EVIDENCE"
+        # The split is configuration, not input, but the -ne tests below would read a malformed value
+        # as 0 and accept the wrong shape, so it is validated before anything depends on it.
+        for split in SOAK_FIXED_SEED_COUNT SOAK_RANDOM_SEED_COUNT; do
+          if [[ ! "${!split}" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::$split must be a positive integer, got: '${!split}'"
+            exit 1
+          fi
+        done
         read -r -a fixed_seed_array <<< "$FIXED_SEEDS"
-        if [[ ${#fixed_seed_array[@]} -ne 5 ]]; then
-          echo "::error::Expected exactly five fixed seeds, got ${#fixed_seed_array[@]}: $FIXED_SEEDS"
+        if [[ ${#fixed_seed_array[@]} -ne $SOAK_FIXED_SEED_COUNT ]]; then
+          echo "::error::Expected exactly $SOAK_FIXED_SEED_COUNT fixed seed(s), got ${#fixed_seed_array[@]}: $FIXED_SEEDS"
           exit 1
         fi
         if [[ ! "$COUNT" =~ ^[1-9][0-9]*$ ]]; then
@@ -111,7 +137,8 @@ jobs:
 
         fixed = {int(seed) for seed in os.environ["FIXED_SEEDS"].split()}
         random_seeds = set()
-        while len(random_seeds) < 5:
+        # Distinct, and never the fixed seed: a repeat would replay a corpus this run already covers.
+        while len(random_seeds) < int(os.environ["SOAK_RANDOM_SEED_COUNT"]):
             seed = secrets.randbelow(2**63 - 1) + 1
             if seed not in fixed:
                 random_seeds.add(seed)
@@ -119,14 +146,17 @@ jobs:
             print(seed)
         PY
         )
-        if [[ ${#random_seed_array[@]} -ne 5 ]]; then
-          echo "::error::Expected five random seeds, generated ${#random_seed_array[@]}"
+        # mapfile over a process substitution drops the generator's exit status, so a crashed or
+        # interrupted generator surfaces HERE, as a short count.
+        if [[ ${#random_seed_array[@]} -ne $SOAK_RANDOM_SEED_COUNT ]]; then
+          echo "::error::Expected $SOAK_RANDOM_SEED_COUNT random seeds, generated ${#random_seed_array[@]}"
           exit 1
         fi
 
         fixed_csv=$(IFS=,; echo "${fixed_seed_array[*]}")
         random_csv=$(IFS=,; echo "${random_seed_array[*]}")
-        requested_total=$((COUNT * 10))
+        # From the seed lists rather than a literal, so the evidence stays true if the split changes.
+        requested_total=$((COUNT * (${#fixed_seed_array[@]} + ${#random_seed_array[@]})))
         printf '{"record":"run","requested_cases_per_seed":%s,"requested_total_cases":%s,"fixed_seeds":[%s],"random_seeds":[%s]}\n' \
           "$COUNT" "$requested_total" "$fixed_csv" "$random_csv" >> "$EVIDENCE"
         echo "Fixed seeds:  ${fixed_seed_array[*]}"

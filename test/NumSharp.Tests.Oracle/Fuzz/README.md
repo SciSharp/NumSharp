@@ -295,9 +295,12 @@ dotnet test --filter "TestCategory=FuzzMatrix"          # the differential gate 
 dotnet test --filter "TestCategory=OpenBugs&ClassName~FuzzCorpusTests"   # known-failing repros
 ```
 
-The nightly **soak** (`.github/workflows/fuzz-soak.yml`) sweeps seeds for ~1M cases/night; a
-divergence prints a shrunk minimal repro — copy it into `corpus/regressions/` so `FuzzRegression`
-pins it on every CI thereafter.
+The nightly **soak** (`.github/workflows/fuzz-soak.yml`) sweeps one fixed seed plus nine fresh random
+seeds, 200K cases each (~2M cases/night, ~1.8M of them new draws). The generator is deterministic, so
+the fixed seed replays an identical corpus every night: a deterministic canary, and a `source_sha256`
+in the uploaded evidence that should repeat until the generator or the NumPy pin changes (a new value
+means NumPy answered differently on that runner). A divergence prints a shrunk minimal repro — copy it
+into `corpus/regressions/` so `FuzzRegression` pins it on every CI thereafter.
 
 ## Documented divergence ledger (Misaligned / known bugs)
 
