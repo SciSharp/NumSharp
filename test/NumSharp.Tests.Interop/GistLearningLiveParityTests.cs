@@ -76,9 +76,16 @@ public class GistLearningLiveParityTests : InteropTestBase
         }
     }
 
+    /// <summary>
+    /// The full 300-iteration NES optimisation, byte-exact against live NumPy on the x64 reference
+    /// architecture. On arm64 it is inconclusive: the macos-latest runner measured a 1-ULP drift in the
+    /// final weights (element 1: <c>…4F2F</c> vs <c>…502F</c>), the cross-architecture class
+    /// <see cref="InteropTestBase.SkipByteExactOnArm64"/> documents.
+    /// </summary>
     [TestMethod]
     public void Nes_Complete300IterationOptimization_ByteExactLiveNumpy()
     {
+        SkipByteExactOnArm64("Nes_Complete300IterationOptimization (1-ULP final-weight drift measured on macos-latest arm64)");
         using var solution = np.array(new[] { .5, .1, -.3 });
         using var actual = NaturalEvolutionStrategies.OptimizeQuadratic(solution);
         ExportTo("solution", solution);

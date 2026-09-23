@@ -87,9 +87,17 @@ public class GistSignalLiveParityTests : InteropTestBase
             return np.asarray(maxima, dtype=np.float64), np.asarray(minima, dtype=np.float64)
         """;
 
+    /// <summary>
+    /// PeakDetection vs the reference <c>detect_peaks</c>, byte-exact over views, ties, NaNs, empty input
+    /// and custom coordinates. The shared <see cref="Reference"/> imports SciPy, so this is inconclusive
+    /// where SciPy is not installed (CI's interop job installs only NumPy).
+    /// </summary>
     [TestMethod]
     public void Peaks_ByteExactIncludingViewsTiesNaNsEmptyAndCustomCoordinates()
     {
+        // Checked BEFORE any ExportTo: a later failure would leave the exports pinned, and the leak
+        // then cascades into every interop test that asserts an absolute LiveExports count.
+        SkipUnless("scipy");
         using var scope = NDScope.Open();
         var parent = np.array(new double[] { 0, 99, 2, 99, 2, 99, 0, 99, -2, 99, double.NaN, 99, 0, 99, 3, 99 });
         foreach (var values in new[] { parent["::2"], parent["::2"]["::-1"], np.zeros(new Shape(8), NPTypeCode.Double), np.array(Array.Empty<double>()) })
@@ -113,9 +121,14 @@ public class GistSignalLiveParityTests : InteropTestBase
         }
     }
 
+    /// <summary>
+    /// Zero-crossing frequency estimates vs the reference, byte-exact on non-integer crossings and
+    /// reversed views. Inconclusive without SciPy (the shared <see cref="Reference"/> imports it).
+    /// </summary>
     [TestMethod]
     public void Crossings_ByteExactOnNonIntegerCrossingsAndReversedViews()
     {
+        SkipUnless("scipy");   // before any export — see Peaks_ByteExactIncludingViewsTiesNaNsEmptyAndCustomCoordinates
         using var scope = NDScope.Open();
         var source = np.array(new double[] { -2, 1, 3, -1, -3, 2, 4, -4, -2, 5, 2, -3, -1, 3, 2, -5 });
         foreach (var signal in new[] { source, source["::-1"] })
@@ -131,9 +144,14 @@ public class GistSignalLiveParityTests : InteropTestBase
         }
     }
 
+    /// <summary>
+    /// The three-point parabolic vertex vs the reference <c>vertex</c>, byte-exact. Inconclusive without
+    /// SciPy (the shared <see cref="Reference"/> imports it).
+    /// </summary>
     [TestMethod]
     public void QuadraticVertex_ByteExact()
     {
+        SkipUnless("scipy");   // before any export — see Peaks_ByteExactIncludingViewsTiesNaNsEmptyAndCustomCoordinates
         using var scope = NDScope.Open();
         var values = np.array(new double[] { 2, 3, 1, 6, 4, 2, 3, 1 });
         var (x, y) = FrequencyEstimation.Parabolic(values, 3);
@@ -147,9 +165,14 @@ public class GistSignalLiveParityTests : InteropTestBase
         }
     }
 
+    /// <summary>
+    /// The polyfit-based vertex vs the reference <c>polynomial_vertex</c>, byte-exact on the pinned LAPACK.
+    /// Inconclusive without SciPy (the shared <see cref="Reference"/> imports it) or without LAPACK.
+    /// </summary>
     [TestMethod]
     public void PolynomialVertex_ByteExactWithPinnedLapack()
     {
+        SkipUnless("scipy");   // before any export — see Peaks_ByteExactIncludingViewsTiesNaNsEmptyAndCustomCoordinates
         if (!OpenBlasEngine.LapackAvailable) Assert.Inconclusive("This exact polyfit gate requires the pinned LAPACK backend.");
         using var scope = NDScope.Open();
         var values = np.array(new double[] { 2, 3, 1, 6, 4, 2, 3, 1 });
@@ -164,9 +187,14 @@ public class GistSignalLiveParityTests : InteropTestBase
         }
     }
 
+    /// <summary>
+    /// The Blackman-Harris window vs live <c>scipy.signal.windows.blackmanharris</c>, byte-exact.
+    /// Inconclusive where SciPy is not installed.
+    /// </summary>
     [TestMethod]
     public void Window_ByteExactVersusLiveScipy()
     {
+        SkipUnless("scipy");   // before any export — see Peaks_ByteExactIncludingViewsTiesNaNsEmptyAndCustomCoordinates
         using var scope = NDScope.Open();
         PyExec(Reference);
         foreach (int length in new[] { 0, 1, 9, 32, 255, 1024 })
@@ -180,9 +208,14 @@ public class GistSignalLiveParityTests : InteropTestBase
         }
     }
 
+    /// <summary>
+    /// The four frequency pipelines (crossings, FFT, autocorrelation, HPS) vs live NumPy/SciPy within their
+    /// measured ULP budgets. Inconclusive where SciPy is not installed.
+    /// </summary>
     [TestMethod]
     public void FrequencyPipelines_MeasuredUlpVersusLiveNumpyAndScipy()
     {
+        SkipUnless("scipy");   // before any export — see Peaks_ByteExactIncludingViewsTiesNaNsEmptyAndCustomCoordinates
         using var scope = NDScope.Open();
         var samples = new double[1024];
         for (int i = 0; i < samples.Length; i++)
@@ -202,9 +235,14 @@ public class GistSignalLiveParityTests : InteropTestBase
         }
     }
 
+    /// <summary>
+    /// Every printed pass of the legacy harmonic-product-spectrum estimator, and its undefined-peak cases,
+    /// vs the reference <c>legacy_hps</c>. Inconclusive where SciPy is not installed.
+    /// </summary>
     [TestMethod]
     public void LegacyHps_AllPrintedPassesAndUndefinedPeaksAreChecked()
     {
+        SkipUnless("scipy");   // before any export — see Peaks_ByteExactIncludingViewsTiesNaNsEmptyAndCustomCoordinates
         using var scope = NDScope.Open();
         var samples = new double[16384];
         for (int i = 0; i < samples.Length; i++)

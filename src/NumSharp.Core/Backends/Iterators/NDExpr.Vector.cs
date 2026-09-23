@@ -124,18 +124,39 @@ namespace NumSharp.Backends.Iteration
     /// </summary>
     internal static class NDExprVectorPlan
     {
+        /// <summary>
+        /// Plan the v2 vector kernel for <paramref name="root"/>, or report that it must stay scalar.
+        /// </summary>
+        /// <param name="root">The typed expression tree.</param>
+        /// <param name="inputTypes">Every input's dtype, hoisted parameters included, in input order.</param>
+        /// <param name="nodeTypes">The per-node NumPy result dtypes from the typing pass.</param>
+        /// <param name="lane">Receives the compute lane dtype W (Boolean = byte mode); <see cref="NPTypeCode.Empty"/> when planning fails.</param>
+        /// <param name="isParam">
+        /// Per input, whether it is a hoisted 0-d parameter (null = none). A bool PARAMETER becomes a
+        /// constant lane mask via portable <c>Zero</c>/<c>AllBitsSet</c> in the prologue, so unlike a
+        /// STREAMED bool operand it never needs the x86 byte→lane expansion.
+        /// </param>
+        /// <returns>True when the tree vectorizes on THIS host; false sends it to the scalar shell.</returns>
         internal static bool TryPlan(
             NDExpr root, NPTypeCode[] inputTypes, IReadOnlyDictionary<NDExpr, NPTypeCode> nodeTypes,
-            out NPTypeCode lane)
+            out NPTypeCode lane, bool[]? isParam = null)
         {
             lane = NPTypeCode.Empty;
             if (DirectILKernelGenerator.VectorBits == 0)
                 return false;
 
             bool boolInput = false;
-            foreach (var t in inputTypes)
+            bool boolStreamedInput = false;
+            for (int i = 0; i < inputTypes.Length; i++)
             {
-                if (t == NPTypeCode.Boolean) { boolInput = true; continue; }
+                var t = inputTypes[i];
+                if (t == NPTypeCode.Boolean)
+                {
+                    boolInput = true;
+                    if (isParam is null || i >= isParam.Length || !isParam[i])
+                        boolStreamedInput = true;
+                    continue;
+                }
                 if (lane == NPTypeCode.Empty) lane = t;
                 else if (lane != t) return false;
             }
@@ -152,6 +173,13 @@ namespace NumSharp.Backends.Iteration
             // Bool INPUT masks / a bool OUTPUT pack go through the 128/256-bit shell helpers.
             bool boolIo = boolInput || (nodeTypes.TryGetValue(root, out var rootType) && rootType == NPTypeCode.Boolean);
             if (lane != NPTypeCode.Boolean && boolIo && !DirectILKernelGenerator.FusedBoolLanesAvailable)
+                return false;
+
+            // A STREAMED bool operand is widened to W-lane masks by an x86 sign-extend when W is
+            // 2/4/8 bytes wide. That ISA is absent on ARM64, where the emitted kernel would throw
+            // PlatformNotSupportedException at run time, so plan scalar there. Same condition as
+            // the shell's own re-check (DirectILKernelGenerator.FusedSimdViable).
+            if (lane != NPTypeCode.Boolean && boolStreamedInput && !DirectILKernelGenerator.FusedBoolInputMasksAvailable(lane))
                 return false;
 
             return root.CanEmitVectorV2(lane, nodeTypes);

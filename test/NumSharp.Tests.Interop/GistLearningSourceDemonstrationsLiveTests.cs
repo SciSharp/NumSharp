@@ -7,9 +7,16 @@ namespace NumSharp.Tests.Interop;
 [TestClass]
 public class GistLearningSourceDemonstrationsLiveTests : InteropTestBase
 {
+    /// <summary>
+    /// Every NES state and reward across the original 300 updates, matched against live NumPy on the x64
+    /// reference architecture. On arm64 it is inconclusive: the macos-latest runner measured a 1-ULP drift
+    /// in the 301-state trace (element 542), the cross-architecture class
+    /// <see cref="InteropTestBase.SkipByteExactOnArm64"/> documents.
+    /// </summary>
     [TestMethod]
     public void Nes_EveryStateAndRewardAcrossOriginal300Updates_MatchesLiveNumpy()
     {
+        SkipByteExactOnArm64("Nes_EveryStateAndRewardAcrossOriginal300Updates (1-ULP trace drift measured on macos-latest arm64)");
         using var solution = np.array(new[] { .5, .1, -.3 });
         using var trajectory = np.zeros((301, 4), dtype: np.float64);
         using var final = NaturalEvolutionStrategies.OptimizeQuadratic(solution, progress: (iteration, weights, reward) =>

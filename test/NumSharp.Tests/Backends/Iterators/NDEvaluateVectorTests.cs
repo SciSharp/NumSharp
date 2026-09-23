@@ -267,8 +267,23 @@ namespace NumSharp.Tests.Backends.Iterators
             // homogeneous f64 + masks -> lane Double
             var x = NDExpr.Input(0);
             Assert.IsTrue(Plan(NDExpr.Where(NDExpr.Greater(x, 0.5), x, x * 2), new[] { NPTypeCode.Double }, out var lane) && lane == NPTypeCode.Double);
-            // f64 with a bool operand -> lane Double (mask input)
-            Assert.IsTrue(Plan(NDExpr.Where(NDExpr.Input(1), NDExpr.Input(0), NDExpr.Input(0)), new[] { NPTypeCode.Double, NPTypeCode.Boolean }, out lane) && lane == NPTypeCode.Double);
+            // f64 with a STREAMED bool operand -> lane Double (mask input), but only where the host can
+            // widen bool bytes to 8-byte lane masks (the x86 SSE4.1/AVX2 sign-extend). On ARM64 the plan
+            // must go scalar, or the kernel throws PlatformNotSupportedException when it runs (this
+            // was the macOS-arm64 CI failure of every *_VectorMatchesScalar test above).
+            bool boolInputVectorizes = DirectILKernelGenerator.FusedBoolInputMasksAvailable(NPTypeCode.Double);
+            var whereBool = NDExpr.Where(NDExpr.Input(1), NDExpr.Input(0), NDExpr.Input(0));
+            var doubleAndBool = new[] { NPTypeCode.Double, NPTypeCode.Boolean };
+            Assert.AreEqual(boolInputVectorizes, Plan(whereBool, doubleAndBool, out lane), "streamed bool input: vector iff the host has the byte->lane expansion");
+            if (boolInputVectorizes)
+                Assert.AreEqual(NPTypeCode.Double, lane);
+            // ...the same tree with the bool as a hoisted 0-d PARAMETER is a constant mask built from
+            // portable Zero/AllBitsSet, so it vectorizes on every 128/256-bit host, ARM64 included.
+            Assert.AreEqual(DirectILKernelGenerator.FusedBoolLanesAvailable, Plan(whereBool, doubleAndBool, out lane, isParam: new[] { false, true }), "bool parameter needs no x86 expansion");
+            if (DirectILKernelGenerator.FusedBoolLanesAvailable)
+                Assert.AreEqual(NPTypeCode.Double, lane);
+            // ...and a bool OUTPUT alone is packed portably, so a comparison stays vectorized there too.
+            Assert.AreEqual(DirectILKernelGenerator.FusedBoolLanesAvailable, Plan(NDExpr.Greater(NDExpr.Input(0), 0.5), new[] { NPTypeCode.Double }, out lane), "bool output needs no x86 expansion");
             // all-bool -> byte mode
             Assert.IsTrue(Plan(NDExpr.Input(0) & !NDExpr.Input(1), new[] { NPTypeCode.Boolean, NPTypeCode.Boolean }, out lane) && lane == NPTypeCode.Boolean);
             // mixed lanes (i4 + f8) -> scalar
@@ -282,11 +297,41 @@ namespace NumSharp.Tests.Backends.Iterators
             Assert.IsFalse(Plan(NDExpr.Call<double, double>(System.Math.Sqrt, NDExpr.Input(0)) + NDExpr.Input(0), new[] { NPTypeCode.Double }, out _));
         }
 
-        private static bool Plan(NDExpr tree, NPTypeCode[] inputs, out NPTypeCode lane)
+        /// <summary>
+        /// Resolve <paramref name="tree"/>'s NumPy types and ask the v2 planner whether it vectorizes
+        /// on THIS host.
+        /// </summary>
+        /// <param name="tree">The expression tree to plan.</param>
+        /// <param name="inputs">Every input's dtype, in input order.</param>
+        /// <param name="lane">Receives the planned lane dtype (Empty when the plan fails).</param>
+        /// <param name="isParam">Per input, whether it is a hoisted 0-d parameter; null = all streamed.</param>
+        /// <returns>The planner's verdict: true = vector kernel, false = scalar shell.</returns>
+        private static bool Plan(NDExpr tree, NPTypeCode[] inputs, out NPTypeCode lane, bool[] isParam = null)
         {
             var resolved = tree.ResolveNumPyTypes(inputs, out var types);
             _ = resolved;
-            return NDExprVectorPlan.TryPlan(tree, inputs, types, out lane);
+            return NDExprVectorPlan.TryPlan(tree, inputs, types, out lane, isParam);
+        }
+
+        /// <summary>
+        /// The truth table of <see cref="DirectILKernelGenerator.InlineMaskCreationSupported"/>, stated
+        /// against the ISA it actually depends on: 1-byte lanes are portable at every width, 2/4/8-byte
+        /// lanes need AVX2 (256-bit) or SSE4.1 (128-bit), 512-bit has no wide-lane expansion. On an
+        /// ARM64 host every x86 ISA reports unsupported, so only the 1-byte row is true there.
+        /// </summary>
+        [TestMethod]
+        public void InlineMaskCreationSupported_TracksTheX86SignExtendIsa()
+        {
+            foreach (int bits in new[] { 128, 256, 512 })
+                Assert.IsTrue(DirectILKernelGenerator.InlineMaskCreationSupported(bits, 1), $"1-byte lanes are portable at {bits} bits");
+            foreach (int size in new[] { 2, 4, 8 })
+            {
+                Assert.AreEqual(System.Runtime.Intrinsics.X86.Avx2.IsSupported, DirectILKernelGenerator.InlineMaskCreationSupported(256, size), $"{size}-byte lanes at 256 bits need AVX2");
+                Assert.AreEqual(System.Runtime.Intrinsics.X86.Sse41.IsSupported, DirectILKernelGenerator.InlineMaskCreationSupported(128, size), $"{size}-byte lanes at 128 bits need SSE4.1");
+                Assert.IsFalse(DirectILKernelGenerator.InlineMaskCreationSupported(512, size), $"{size}-byte lanes have no 512-bit expansion");
+            }
+            Assert.IsFalse(DirectILKernelGenerator.InlineMaskCreationSupported(128, 3), "no expansion for a 3-byte lane");
+            Assert.IsFalse(DirectILKernelGenerator.InlineMaskCreationSupported(128, 16), "no expansion for a 16-byte lane");
         }
     }
 }

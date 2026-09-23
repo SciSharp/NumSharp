@@ -137,9 +137,16 @@ public class GistSignalSourceDemonstrationsLiveTests : InteropTestBase
         }
     }
 
+    /// <summary>
+    /// The synthetic-sine crossing and FFT measurements vs live NumPy, exact. The reference imports
+    /// <c>scipy.signal.windows</c>, so this is inconclusive where SciPy is not installed.
+    /// </summary>
     [TestMethod]
     public void SyntheticSine_MeasuredCrossingAndFftOutputs_ExactLiveNumpy()
     {
+        // Checked BEFORE any export, so a missing SciPy cannot leave pinned exports behind (the leak
+        // would cascade into every interop test that asserts an absolute LiveExports count).
+        SkipUnless("scipy");
         using var scope = NDScope.Open();
         var samples = new double[2048];
         for (int i = 0; i < samples.Length; i++) samples[i] = Math.Sin(2 * Math.PI * 1000 * i / 44100.0 + .4);
@@ -161,9 +168,14 @@ public class GistSignalSourceDemonstrationsLiveTests : InteropTestBase
         }
     }
 
+    /// <summary>
+    /// All four measurements of the synthetic demo harmonics vs live NumPy, exact. The reference imports
+    /// <c>scipy.signal</c>, so this is inconclusive where SciPy is not installed.
+    /// </summary>
     [TestMethod]
     public void SyntheticDemoHarmonics_AllFourMeasurements_ExactLiveNumpy()
     {
+        SkipUnless("scipy");   // before any export — see SyntheticSine_MeasuredCrossingAndFftOutputs_ExactLiveNumpy
         using var scope = NDScope.Open();
         var time = np.arange(1024).astype(NPTypeCode.Double) / 8192.0;
         var signal = np.zeros(new Shape(1024), NPTypeCode.Double);

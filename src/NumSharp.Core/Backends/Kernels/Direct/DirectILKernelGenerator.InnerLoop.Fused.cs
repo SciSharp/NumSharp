@@ -17,6 +17,9 @@ using NumSharp.Backends.Iteration;
 //   * an operand of dtype W is loaded as Vector<W>; a BOOL operand (W != Boolean) is loaded
 //     as a Vector<W> LANE MASK (all-ones / zero per lane) through the np.where kernels'
 //     EmitInlineMaskCreation; a bool OUTPUT is a lane mask packed to one byte per lane.
+//     For a 2/4/8-byte W that expansion is an x86 sign-extend (SSE4.1 / AVX2), so on a host
+//     without it (every ARM64 host) a tree with a bool INPUT takes the scalar shell —
+//     FusedBoolInputMasksAvailable. The output pack is portable and stays vectorized.
 //   * the vector body sees N vectors of the SAME CLR type (Vector<lane(W)>) and leaves one.
 //   * runtime dispatch, in order: all operands inner-contiguous -> the 4x unrolled SIMD
 //     loop; every input contiguous OR broadcast (stride 0, hoisted once) with a contiguous
@@ -41,10 +44,36 @@ namespace NumSharp.Backends.Kernels
         internal static bool FusedBoolLanesAvailable => VectorBits == 128 || VectorBits == 256;
 
         /// <summary>
+        /// Whether a BOOL INPUT operand can be expanded into a lane mask of
+        /// <paramref name="laneType"/> on this host. This is stricter than
+        /// <see cref="FusedBoolLanesAvailable"/>, which only checks the vector width.
+        /// </summary>
+        /// <param name="laneType">The kernel's compute lane dtype W (never Boolean — byte mode needs no expansion).</param>
+        /// <returns>
+        /// True when the width is one the shell handles AND <see cref="InlineMaskCreationSupported"/>
+        /// holds for W's element size. It is false for 2/4/8-byte lanes on a host without the x86
+        /// sign-extend (every ARM64 host), where such a tree must take the scalar shell.
+        /// </returns>
+        /// <remarks>
+        /// Only INPUTS need this. A bool OUTPUT is packed with portable <c>Vector{N}</c>
+        /// narrow / most-significant-bit extraction (BMI2 PDEP only when present), so a tree whose
+        /// only bool is its result (<c>a &gt; b</c>) stays vectorized everywhere.
+        /// </remarks>
+        internal static bool FusedBoolInputMasksAvailable(NPTypeCode laneType)
+            => FusedBoolLanesAvailable && InlineMaskCreationSupported(VectorBits, GetTypeSize(laneType));
+
+        /// <summary>
         /// Whether the fused shell can run a vector body for these operands at lane dtype
         /// <paramref name="laneType"/>. Mirrors the NDExpr plan gate; re-checked here so a
         /// mismatched caller gets the scalar shell rather than malformed IL.
         /// </summary>
+        /// <param name="operandTypes">The iterator operands' dtypes, <c>[inputs..., output]</c> — the LAST entry is the output.</param>
+        /// <param name="laneType">The vector body's compute lane dtype W (Boolean = byte mode).</param>
+        /// <returns>
+        /// True when every operand is W or Boolean, W is SIMD-capable, and each bool operand can be
+        /// handled on this host: a bool INPUT needs <see cref="FusedBoolInputMasksAvailable"/>, a bool
+        /// OUTPUT needs only <see cref="FusedBoolLanesAvailable"/>.
+        /// </returns>
         internal static bool FusedSimdViable(NPTypeCode[] operandTypes, NPTypeCode laneType)
         {
             if (VectorBits == 0)
@@ -60,13 +89,27 @@ namespace NumSharp.Backends.Kernels
             if (!CanUseSimd(laneType))
                 return false;
             bool anyBool = false;
-            foreach (var t in operandTypes)
+            bool boolInput = false;
+            int outputIndex = operandTypes.Length - 1;
+            for (int op = 0; op < operandTypes.Length; op++)
             {
-                if (t == NPTypeCode.Boolean) anyBool = true;
+                var t = operandTypes[op];
+                if (t == NPTypeCode.Boolean)
+                {
+                    anyBool = true;
+                    // An input bool is loaded through the byte→lane expansion, which on this host
+                    // may need an x86 ISA the output pack does not (see FusedBoolInputMasksAvailable).
+                    if (op != outputIndex)
+                        boolInput = true;
+                }
                 else if (t != laneType) return false;
             }
 
-            return !anyBool || FusedBoolLanesAvailable;
+            if (!anyBool)
+                return true;
+            if (!FusedBoolLanesAvailable)
+                return false;
+            return !boolInput || FusedBoolInputMasksAvailable(laneType);
         }
 
         /// <summary>

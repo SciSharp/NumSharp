@@ -412,7 +412,9 @@ namespace NumSharp.Backends.Iteration
             // with a vector emit at W. See NDExpr.Vector.cs.
             bool forceScalar = ForceScalar;
             NPTypeCode lane = NPTypeCode.Empty;
-            bool wantSimd = !forceScalar && NDExprVectorPlan.TryPlan(this, inputTypes, nodeTypes, out lane);
+            // isParam lets the plan tell a hoisted bool parameter (portable constant mask) from a
+            // streamed bool operand (host-dependent x86 byte→lane expansion).
+            bool wantSimd = !forceScalar && NDExprVectorPlan.TryPlan(this, inputTypes, nodeTypes, out lane, isParam);
 
             // Parameter locals are declared by the prologue (emitted first, at kernel entry) and read
             // by the bodies through the context — the arrays are shared by closure.

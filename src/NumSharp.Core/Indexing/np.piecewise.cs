@@ -118,7 +118,21 @@ namespace NumSharp
             if (condlist is null) throw new ArgumentNullException(nameof(condlist));
             if (funclist is null) throw new ArgumentNullException(nameof(funclist));
 
-            return PiecewiseCore(x, PromoteBareCondlist(x, condlist), funclist, args);
+            NDArray[] promoted = PromoteBareCondlist(x, condlist);
+            try
+            {
+                return PiecewiseCore(x, promoted, funclist, args);
+            }
+            finally
+            {
+                // PromoteBareCondlist hands back either the caller's own array (one whole condition) or
+                // row views it indexed out of it. The views belong to this call: each holds a reference
+                // on the caller's buffer, which would otherwise stay pinned until the finalizer ran.
+                // The caller's own instance is never disposed here.
+                foreach (var c in promoted)
+                    if (!ReferenceEquals(c, condlist))
+                        c.Dispose();
+            }
         }
 
         /// <summary>
@@ -133,7 +147,10 @@ namespace NumSharp
             if (funclist is null) throw new ArgumentNullException(nameof(funclist));
 
             // isscalar(condlist) => condlist = [condlist] => a single 0-d bool condition (all / nothing).
-            return PiecewiseCore(x, new[] { NDArray.Scalar<bool>(condlist) }, funclist, args);
+            // The 0-d wrapper is this call's own temporary (the result never refers to it), so release it
+            // on the way out instead of leaving its buffer to the finalizer.
+            using var cond = NDArray.Scalar<bool>(condlist);
+            return PiecewiseCore(x, new[] { cond }, funclist, args);
         }
 
         /// <summary>
@@ -174,6 +191,19 @@ namespace NumSharp
         ///     one extra function was given, then <see cref="zeros_like"/> the output and overwrite it
         ///     condition-by-condition in forward order (so the last true condition wins).
         /// </summary>
+        /// <param name="x">The input domain; the result takes its shape and dtype.</param>
+        /// <param name="condlist">The conditions (non-empty). Read only — never disposed here; the caller owns them.</param>
+        /// <param name="funclist">One function per condition, or one more (the default).</param>
+        /// <param name="args">Extra arguments for <c>Func&lt;NDArray, object[], NDArray&gt;</c> entries.</param>
+        /// <returns>A fresh array of <paramref name="x"/>'s shape and dtype, owned by the caller.</returns>
+        /// <exception cref="ValueError">The function count is neither <c>condlist.Length</c> nor one more.</exception>
+        /// <exception cref="OverflowException">A scalar function does not fit <paramref name="x"/>'s integer dtype.</exception>
+        /// <exception cref="TypeError">A complex scalar function targets a non-complex <paramref name="x"/>.</exception>
+        /// <remarks>
+        /// Every temporary this creates (the bool condition aliases, the default's "otherwise" mask, the
+        /// coerced scalar constants, and the result itself when a later step throws) is disposed before
+        /// it returns, so a call leaves no buffer for the finalizer to reclaim.
+        /// </remarks>
         private static NDArray PiecewiseCore(NDArray x, NDArray[] condlist, object[] funclist, object[] args)
         {
             int n = condlist.Length;    // >= 1 — every caller guarantees a non-empty condition list
@@ -186,65 +216,91 @@ namespace NumSharp
                 throw new ValueError(
                     $"with {n} condition(s), either {n} or {n + 1} functions are expected");
 
-            // asarray(condlist, dtype=bool): comparison masks are already bool (a cheap alias); an
-            // int/float condition converts by nonzero.
+            // Ownership: every conds[i] and condElse is created HERE (a fresh MakeGeneric alias or a
+            // converted copy, never the caller's instance), and the finally releases them all. Before,
+            // they were dropped live, keeping a reference on their buffers until the finalizer ran;
+            // the FuzzMatrix scope audit (Corpus_AllOps_LeaveNoUndisposedIntermediates) counted 1-3
+            // escaped buffers per call. `y` is released only if we throw before handing it out. The
+            // result of a user callable is NOT ours and is never disposed (see ApplyCallable).
             var conds = new NDArray<bool>[n];
-            for (int i = 0; i < n; i++)
-                conds[i] = ToBoolCondition(condlist[i]);
-
-            // Fused single-pass fast path for the SCALAR-funclist contiguous case (the common signum
-            // pattern). One IL kernel reads each condition once and writes the result once, avoiding the
-            // zeros_like fill, the per-condition BooleanMaskSet (popcount + materialize + scatter), AND —
-            // for the default case — the ~any(condlist) computation (the kernel seeds each element with
-            // the default scalar and overlays the real conditions forward instead). Declines for
-            // callables, NDArray funcs, non-contiguous x/conditions, or a non-SIMD dtype — those take
-            // the composition below, which already outruns NumPy at scale.
-            if (TryPiecewiseScalarFused(x, conds, funclist, hasDefault, out var fused))
-                return fused;
-
-            // Composition (NumPy's own structure). One extra function => it is the default, evaluated
-            // where NO condition is true: condelse = ~np.any(stack(condlist), axis=0), i.e.
-            // ~(c0 | c1 | … | c_{n-1}).
-            NDArray<bool>[] effConds;
-            if (hasDefault)
+            NDArray<bool> condElse = null;
+            NDArray y = null;
+            bool handedOut = false;
+            try
             {
-                effConds = new NDArray<bool>[n + 1];
-                Array.Copy(conds, effConds, n);
-                effConds[n] = ComputeElseCondition(conds, n);
-            }
-            else
-            {
-                effConds = conds;
-            }
+                // asarray(condlist, dtype=bool): comparison masks are already bool (a cheap alias); an
+                // int/float condition converts by nonzero.
+                for (int i = 0; i < n; i++)
+                    conds[i] = ToBoolCondition(condlist[i]);
 
-            // The output shares x's shape AND dtype (order 'K' matches x's layout), then starts at 0.
-            var y = zeros_like(x);
-
-            for (int i = 0; i < effConds.Length; i++)
-            {
-                NDArray<bool> cond = effConds[i];
-                object func = funclist[i];
-
-                switch (func)
+                // Fused single-pass fast path for the SCALAR-funclist contiguous case (the common signum
+                // pattern). One IL kernel reads each condition once and writes the result once, avoiding the
+                // zeros_like fill, the per-condition BooleanMaskSet (popcount + materialize + scatter), AND —
+                // for the default case — the ~any(condlist) computation (the kernel seeds each element with
+                // the default scalar and overlays the real conditions forward instead). Declines for
+                // callables, NDArray funcs, non-contiguous x/conditions, or a non-SIMD dtype — those take
+                // the composition below, which already outruns NumPy at scale.
+                if (TryPiecewiseScalarFused(x, conds, funclist, hasDefault, out var fused))
                 {
-                    // A callable f(x[cond]) — evaluated only over the selected values, exactly as NumPy
-                    // does, and (matching its `vals.size > 0` guard) NOT called on an empty selection.
-                    case Func<NDArray, NDArray> f1:
-                        ApplyCallable(x, y, cond, f1, null, args);
-                        break;
-                    case Func<NDArray, object[], NDArray> f2:
-                        ApplyCallable(x, y, cond, null, f2, args);
-                        break;
-
-                    // Anything else is a constant "function" (a scalar or an array), assigned into the
-                    // selected slots — the `not callable(func)` branch of NumPy's loop.
-                    default:
-                        AssignConstant(y, cond, func);
-                        break;
+                    handedOut = true;
+                    return fused;
                 }
-            }
 
-            return y;
+                // Composition (NumPy's own structure). One extra function => it is the default, evaluated
+                // where NO condition is true: condelse = ~np.any(stack(condlist), axis=0), i.e.
+                // ~(c0 | c1 | … | c_{n-1}).
+                NDArray<bool>[] effConds;
+                if (hasDefault)
+                {
+                    effConds = new NDArray<bool>[n + 1];
+                    Array.Copy(conds, effConds, n);
+                    effConds[n] = condElse = ComputeElseCondition(conds, n);
+                }
+                else
+                {
+                    effConds = conds;
+                }
+
+                // The output shares x's shape AND dtype (order 'K' matches x's layout), then starts at 0.
+                y = zeros_like(x);
+
+                for (int i = 0; i < effConds.Length; i++)
+                {
+                    NDArray<bool> cond = effConds[i];
+                    object func = funclist[i];
+
+                    switch (func)
+                    {
+                        // A callable f(x[cond]) — evaluated only over the selected values, exactly as NumPy
+                        // does, and (matching its `vals.size > 0` guard) NOT called on an empty selection.
+                        case Func<NDArray, NDArray> f1:
+                            ApplyCallable(x, y, cond, f1, null, args);
+                            break;
+                        case Func<NDArray, object[], NDArray> f2:
+                            ApplyCallable(x, y, cond, null, f2, args);
+                            break;
+
+                        // Anything else is a constant "function" (a scalar or an array), assigned into the
+                        // selected slots — the `not callable(func)` branch of NumPy's loop.
+                        default:
+                            AssignConstant(y, cond, func);
+                            break;
+                    }
+                }
+
+                handedOut = true;
+                return y;
+            }
+            finally
+            {
+                foreach (var c in conds)
+                    c?.Dispose();
+                condElse?.Dispose();
+                // A validation error (e.g. an out-of-range weak scalar) or a throwing callable abandons
+                // the half-written result; the caller never sees it, so it is ours to release.
+                if (!handedOut)
+                    y?.Dispose();
+            }
         }
 
         /// <summary>
@@ -292,8 +348,12 @@ namespace NumSharp
                 default:
                     // A weak python scalar. Validate it the way NumPy's scalar boolean assignment does,
                     // then let the boolean-mask setter cast it into y's dtype (float -> int truncates,
-                    // an in-range int is exact).
-                    y[cond] = CoerceScalarConstant(func, y.typecode);
+                    // an in-range int is exact). The 0-d wrapper is released once its value is scattered.
+                    // Disposing is safe ONLY because `func` is never an NDArray here (that case returned
+                    // above): asanyarray hands back an EXISTING array for NDArray input, but for every
+                    // other input CoerceScalarConstant mints a fresh one.
+                    using (var scalar = CoerceScalarConstant(func, y.typecode))
+                        y[cond] = scalar;
                     return;
             }
         }
@@ -460,9 +520,19 @@ namespace NumSharp
         ///     bytes into <paramref name="dst"/>. Shared by the fused kernel's condition-scalar and seed
         ///     writes.
         /// </summary>
+        /// <param name="dst">Destination for exactly one <paramref name="dtype"/> element.</param>
+        /// <param name="value">A plain C# scalar constant (the fused path admits no NDArray or callable).</param>
+        /// <param name="dtype">The target dtype (x's dtype).</param>
+        /// <param name="elemSize">The byte width of <paramref name="dtype"/>.</param>
+        /// <exception cref="OverflowException">An integer target cannot hold the (truncated) value.</exception>
+        /// <exception cref="TypeError">A complex value targets a non-complex dtype.</exception>
         private static unsafe void WriteCoercedScalar(byte* dst, object value, NPTypeCode dtype, int elemSize)
         {
-            NDArray coerced = CoerceScalarConstant(value, dtype).astype(dtype);   // validated 0-d, x dtype
+            // Both 0-d temporaries are this call's own: CoerceScalarConstant mints a fresh wrapper (value
+            // is never an NDArray here) and astype(copy: true) always allocates. Once the bytes are copied
+            // out, nothing refers to them, so release both instead of leaving them to the finalizer.
+            using var scalar = CoerceScalarConstant(value, dtype);   // validated 0-d
+            using var coerced = scalar.astype(dtype);                 // cast to x's dtype
             Buffer.MemoryCopy((byte*)coerced.Storage.Address + coerced.Shape.offset * elemSize,
                 dst, elemSize, elemSize);
         }
@@ -479,10 +549,24 @@ namespace NumSharp
         }
 
         /// <summary>Convert a condition to <see cref="NDArray{Boolean}"/> (nonzero for a non-bool array).</summary>
+        /// <param name="cond">A caller-owned condition of any dtype; never disposed or mutated here.</param>
+        /// <returns>
+        /// A NEW object the caller owns and must dispose: a <see cref="NDArray.MakeGeneric{T}"/> alias
+        /// (its own reference on <paramref name="cond"/>'s buffer) for a bool condition, or the sole
+        /// owner of a fresh nonzero-converted buffer otherwise. Never <paramref name="cond"/> itself,
+        /// so disposing the result can never free the caller's array.
+        /// </returns>
         private static NDArray<bool> ToBoolCondition(NDArray cond)
-            => cond.typecode == NPTypeCode.Boolean
-                ? cond.MakeGeneric<bool>()
-                : cond.astype(NPTypeCode.Boolean).MakeGeneric<bool>();
+        {
+            if (cond.typecode == NPTypeCode.Boolean)
+                return cond.MakeGeneric<bool>();
+
+            // The conversion's own wrapper is released as soon as the alias exists: the alias holds its
+            // own reference, so it becomes the buffer's only owner (previously the wrapper was dropped
+            // live and pinned the buffer until the finalizer ran).
+            using var converted = cond.astype(NPTypeCode.Boolean);
+            return converted.MakeGeneric<bool>();
+        }
 
         /// <summary>
         ///     The "otherwise" condition — true wherever none of the <paramref name="n"/> conditions is
@@ -490,12 +574,28 @@ namespace NumSharp
         ///     Uses <see cref="logical_not"/> (the ufunc) rather than the <c>!</c> operator: the ufunc is
         ///     layout-correct for every operand, whereas the operator mis-maps a non-C-contiguous input.
         /// </summary>
+        /// <param name="conds">The bool conditions; read only (the caller owns and disposes them).</param>
+        /// <param name="n">How many leading entries of <paramref name="conds"/> to fold (≥ 1).</param>
+        /// <returns>A fresh bool mask the caller owns and must dispose.</returns>
         private static NDArray<bool> ComputeElseCondition(NDArray<bool>[] conds, int n)
         {
+            // OR-fold. Each partial OR is a fresh array this method made, so it is released once the next
+            // one exists. conds[0] seeds the fold but belongs to the caller, so it is never disposed here.
             NDArray anyTrue = conds[0];
             for (int i = 1; i < n; i++)
-                anyTrue = anyTrue | conds[i];
-            return logical_not(anyTrue).MakeGeneric<bool>();
+            {
+                NDArray next = anyTrue | conds[i];
+                if (!ReferenceEquals(anyTrue, conds[0]))
+                    anyTrue.Dispose();
+                anyTrue = next;
+            }
+
+            // The alias outlives the `using`: it holds its own reference, so disposing notTrue (and the
+            // last partial OR) leaves the returned mask the sole owner of its buffer.
+            using var notTrue = logical_not(anyTrue);
+            if (!ReferenceEquals(anyTrue, conds[0]))
+                anyTrue.Dispose();
+            return notTrue.MakeGeneric<bool>();
         }
     }
 }

@@ -34,18 +34,31 @@ namespace NumSharp.Tests.Math
             np.sinc(np.array(new[] { -0.0 })).GetAtIndex<double>(0).Should().Be(1.0);
         }
 
-        /// <summary>Basic float64 values, bit-exact vs NumPy 2.4.2 (probed).</summary>
+        /// <summary>
+        /// Basic float64 values vs NumPy 2.4.2 (probed on win-amd64): bit-exact on the pinned CRT host,
+        /// within the <see cref="HostLibm"/> ULP budget elsewhere. sinc runs through libm <c>sin</c>, and glibc
+        /// / Apple libm round sinc(0.25)'s <c>sin</c> one ULP differently (…061 vs …062), which is also why the
+        /// <c>sinc</c> corpus tier is host-pinned.
+        /// </summary>
         [TestMethod]
         public void Sinc_BasicValues_Float64()
         {
             var r = np.sinc(np.array(new[] { 0.5, 0.25, 0.1, 1.0, 2.0 }));
             r.typecode.Should().Be(NPTypeCode.Double);
-            r.GetAtIndex<double>(0).Should().Be(0.6366197723675814);   // sinc(1/2) = 2/pi
-            r.GetAtIndex<double>(1).Should().Be(0.9003163161571062);
-            r.GetAtIndex<double>(2).Should().Be(0.983631643083466);
-            // sinc(integer != 0) is a tiny residual (sin(pi*k) is not exactly 0 in float), NOT literally 0.
-            r.GetAtIndex<double>(3).Should().Be(3.8981718325193755e-17);
-            r.GetAtIndex<double>(4).Should().Be(-3.8981718325193755e-17);
+            var expected = new[]
+            {
+                0.6366197723675814,        // sinc(1/2) = 2/pi
+                0.9003163161571062,
+                0.983631643083466,
+                // sinc(integer != 0) is a tiny residual (sin(pi*k) is not exactly 0 in float), NOT literally 0.
+                3.8981718325193755e-17,
+                -3.8981718325193755e-17,
+            };
+            for (int i = 0; i < expected.Length; i++)
+            {
+                double got = r.GetAtIndex<double>(i);
+                HostLibm.Matches(expected[i], got).Should().BeTrue(HostLibm.Describe($"sinc element {i}", expected[i], got));
+            }
         }
 
         /// <summary>The docstring example — first values of sinc(linspace(-4, 4, 41)) match NumPy.</summary>

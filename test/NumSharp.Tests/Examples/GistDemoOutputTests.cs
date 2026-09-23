@@ -4,7 +4,6 @@ using System.IO;
 using System.Text.RegularExpressions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Examples.Gist;
-using NumSharp.Interop.OpenBLAS;
 
 namespace NumSharp.Tests.Examples;
 
@@ -12,6 +11,12 @@ namespace NumSharp.Tests.Examples;
 [TestClass, DoNotParallelize]
 public class GistDemoOutputTests
 {
+    /// <summary>
+    /// Runs the actual executable Demo of Gist port #<paramref name="rank"/> and compares everything it
+    /// prints against the committed transcript (<c>examples/gist/demo-output.txt</c>). Inconclusive on a
+    /// host that cannot load the OpenBLAS backend the transcript was recorded with.
+    /// </summary>
+    /// <param name="rank">The 1-based port number (the transcript's <c>NN.</c> section).</param>
     [DataTestMethod]
     [DataRow(1)] [DataRow(2)] [DataRow(3)] [DataRow(4)] [DataRow(5)]
     [DataRow(6)] [DataRow(7)] [DataRow(8)] [DataRow(9)] [DataRow(10)]
@@ -32,7 +37,9 @@ public class GistDemoOutputTests
         using var output = new StringWriter(CultureInfo.InvariantCulture);
         try
         {
-            OpenBlasEngine.Enable(threads: 1);
+            // The transcript was recorded with the bundled OpenBLAS at one thread; without that backend
+            // (CI's test job stages no native binary) the comparison is inconclusive, not a failure.
+            ExampleBlasBackend.EnableOrInconclusive();
             CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
             Console.SetOut(output);
             demos[rank - 1](); // the actual executable Demo, not a rewritten C# algorithm
