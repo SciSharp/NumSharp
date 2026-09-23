@@ -1,7 +1,14 @@
 # API Proposal: `System.Collections.Concurrent.ConcurrentOrderedDictionary<TKey, TValue>`
 
 **Status:** Draft proposal · **Area:** System.Collections.Concurrent · **Type:** New type
-**Reference implementation:** `NumSharp.Collections.OrderedDict<TKey, TValue>` (measured + concurrency-verified; see [§8](#8-reference-implementation--evidence))
+**Reference implementation:** `NumSharp.Collections.OrderedDictionary<TKey, TValue>` (measured + concurrency-verified; see [§8](#8-reference-implementation--evidence))
+
+> **Naming note.** The reference implementation is NumSharp's lock-free, value-once
+> `NumSharp.Collections.OrderedDictionary<TKey, TValue>`. Every *unqualified* `OrderedDictionary<TKey, TValue>` /
+> `OrderedDictionary<,>` in this document means the BCL's `System.Collections.Generic.OrderedDictionary<TKey, TValue>`
+> (.NET 9), and every `ConcurrentOrderedDictionary` means the type proposed here. NumSharp also ships a node-based
+> sibling named `NumSharp.Collections.ConcurrentOrderedDictionary<TKey, TValue>`; despite the shared name it is **not**
+> the reference implementation.
 
 ---
 
@@ -252,10 +259,10 @@ Memory: ~3 machine words per entry (value stored once).
 
 ## 8. Reference implementation & evidence
 
-A complete implementation exists as `NumSharp.Collections.OrderedDict<TKey, TValue>`, with the following measured
+A complete implementation exists as `NumSharp.Collections.OrderedDictionary<TKey, TValue>`, with the following measured
 results (N = 500,000; single process; best-of-9; x64):
 
-**vs the closest existing type, `OrderedDictionary<TKey, TValue>` (.NET 9, single-threaded):** reads at parity
+**vs the closest existing type, `System.Collections.Generic.OrderedDictionary<TKey, TValue>` (.NET 9, single-threaded):** reads at parity
 (key-get 0.93×, `IndexOf` 0.96×, positional 1.06×), enumeration **1.53×** (contiguous span vs the boxed enumerator),
 build 0.25× and replace 0.84× — the modest single-threaded overhead of the synchronization that buys thread-safety.
 The differentiator is not single-thread speed; it is that `OrderedDictionary<,>` **is not thread-safe at all**, whereas

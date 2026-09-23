@@ -7,8 +7,8 @@ using CloneCd = NumSharp.Collections.Concurrent.ConcurrentDictionary<int, int>;
 namespace NumSharp.Benchmark.CSharp.Benchmarks.Collections;
 
 /// <summary>
-///     Fair micro-benchmarks for <see cref="ConcurrentOrderedDict{TKey,TValue}" /> against its two speed targets
-///     (see <c>src/NumSharp.Core/Collections/Concurrent/ConcurrentOrderedDict.TODO.md</c>): <see cref="List{T}" />
+///     Fair micro-benchmarks for <see cref="ConcurrentOrderedDictionary{TKey,TValue}" /> against its two speed targets
+///     (see <c>src/NumSharp.Core/Collections/Concurrent/ConcurrentOrderedDictionary.TODO.md</c>): <see cref="List{T}" />
 ///     for the list-path reads (enumerate, ToArray, index get) and the framework
 ///     <see cref="System.Collections.Concurrent.ConcurrentDictionary{TKey,TValue}" /> for the key-path operations
 ///     (get, add, replace, remove). The vendored clone the ordered dict is built on is measured alongside, so a
@@ -28,12 +28,12 @@ namespace NumSharp.Benchmark.CSharp.Benchmarks.Collections;
 ///     <para>
 ///         This suite has no NumPy twin and is therefore <b>experimental</b> (not part of the official
 ///         run_benchmark.py matrix), like the Allocation suites. Run it directly:
-///         <c>dotnet run -c Release -- --filter "*ConcurrentOrderedDict*"</c>.
+///         <c>dotnet run -c Release -- --filter "*ConcurrentOrderedDictionary*"</c>.
 ///     </para>
 /// </remarks>
-[BenchmarkCategory("Collections", "ConcurrentOrderedDict")]
+[BenchmarkCategory("Collections", "ConcurrentOrderedDictionary")]
 [GroupBenchmarksBy(BenchmarkLogicalGroupRule.ByCategory)]
-public class ConcurrentOrderedDictBenchmarks
+public class ConcurrentOrderedDictionaryBenchmarks
 {
     /// <summary>Element count per case: the house 1K / 100K tiers plus 1M (10M builds would dominate wall time for no extra signal on a hash-map workload).</summary>
     [Params(1_000, 100_000, 1_000_000)]
@@ -49,10 +49,10 @@ public class ConcurrentOrderedDictBenchmarks
     private CloneCd _cloneCd = null!;
 
     /// <summary>Prebuilt ordered dict under test.</summary>
-    private ConcurrentOrderedDict<int, int> _cod = null!;
+    private ConcurrentOrderedDictionary<int, int> _cod = null!;
 
     /// <summary>Prebuilt compact ordered dict (open-addressed index over dense key/value arrays, no per-entry node) — the memory-lean sibling measured on every row.</summary>
-    private ConcurrentOrderedCompactDict<int, int> _cocd = null!;
+    private ConcurrentOrderedCompactDictionary<int, int> _cocd = null!;
 
     /// <summary>The keys 0..N-1 in one fixed shuffled order, so every key-get contender pays the same cache-miss pattern.</summary>
     private int[] _shuffledKeys = null!;
@@ -83,8 +83,8 @@ public class ConcurrentOrderedDictBenchmarks
         _list = new List<int>(N);
         _sysCd = new SysCd(Environment.ProcessorCount, N);
         _cloneCd = new CloneCd(1, N, null);
-        _cod = new ConcurrentOrderedDict<int, int>(N);
-        _cocd = new ConcurrentOrderedCompactDict<int, int>(N);
+        _cod = new ConcurrentOrderedDictionary<int, int>(N);
+        _cocd = new ConcurrentOrderedCompactDictionary<int, int>(N);
         for (int i = 0; i < N; i++)
         {
             _list.Add(i * 2);
@@ -160,7 +160,7 @@ public class ConcurrentOrderedDictBenchmarks
     [BenchmarkCategory("Build")]
     public int Cod_TryAdd()
     {
-        var d = new ConcurrentOrderedDict<int, int>();
+        var d = new ConcurrentOrderedDictionary<int, int>();
         for (int i = 0; i < N; i++)
             d.TryAdd(i, i);
         return d.Count;
@@ -171,7 +171,7 @@ public class ConcurrentOrderedDictBenchmarks
     [BenchmarkCategory("Build")]
     public int Cod_TryAdd_Presized()
     {
-        var d = new ConcurrentOrderedDict<int, int>(N);
+        var d = new ConcurrentOrderedDictionary<int, int>(N);
         for (int i = 0; i < N; i++)
             d.TryAdd(i, i);
         return d.Count;
@@ -182,7 +182,7 @@ public class ConcurrentOrderedDictBenchmarks
     [BenchmarkCategory("Build")]
     public int Cod_AddRange()
     {
-        var d = new ConcurrentOrderedDict<int, int>();
+        var d = new ConcurrentOrderedDictionary<int, int>();
         d.AddRange(_pairs);
         return d.Count;
     }
@@ -190,14 +190,14 @@ public class ConcurrentOrderedDictBenchmarks
     /// <summary>The pairs constructor — the optimal build path: pre-sizes BOTH the hash map and the arrays from the countable source, so the build allocates exactly the live bytes (no growth churn on either representation).</summary>
     [Benchmark(Description = "COD ctor(pairs) (presizes both)")]
     [BenchmarkCategory("Build")]
-    public int Cod_CtorFromPairs() => new ConcurrentOrderedDict<int, int>(_pairs).Count;
+    public int Cod_CtorFromPairs() => new ConcurrentOrderedDictionary<int, int>(_pairs).Count;
 
     /// <summary>Sequential TryAdd into an unsized compact dict — no per-add node; growth copies arrays and rebuilds the index from its own words.</summary>
     [Benchmark(Description = "COCD.TryAdd (unsized)")]
     [BenchmarkCategory("Build")]
     public int Cocd_TryAdd()
     {
-        var d = new ConcurrentOrderedCompactDict<int, int>();
+        var d = new ConcurrentOrderedCompactDictionary<int, int>();
         for (int i = 0; i < N; i++)
             d.TryAdd(i, i);
         return d.Count;
@@ -208,7 +208,7 @@ public class ConcurrentOrderedDictBenchmarks
     [BenchmarkCategory("Build")]
     public int Cocd_TryAdd_Presized()
     {
-        var d = new ConcurrentOrderedCompactDict<int, int>(N);
+        var d = new ConcurrentOrderedCompactDictionary<int, int>(N);
         for (int i = 0; i < N; i++)
             d.TryAdd(i, i);
         return d.Count;
@@ -219,7 +219,7 @@ public class ConcurrentOrderedDictBenchmarks
     [BenchmarkCategory("Build")]
     public int Cocd_AddRange()
     {
-        var d = new ConcurrentOrderedCompactDict<int, int>();
+        var d = new ConcurrentOrderedCompactDictionary<int, int>();
         d.AddRange(_pairs);
         return d.Count;
     }
@@ -227,7 +227,7 @@ public class ConcurrentOrderedDictBenchmarks
     /// <summary>The compact dict's pairs constructor — pre-sizes the arrays and the index from the countable source.</summary>
     [Benchmark(Description = "COCD ctor(pairs) (presizes both)")]
     [BenchmarkCategory("Build")]
-    public int Cocd_CtorFromPairs() => new ConcurrentOrderedCompactDict<int, int>(_pairs).Count;
+    public int Cocd_CtorFromPairs() => new ConcurrentOrderedCompactDictionary<int, int>(_pairs).Count;
 
     // ------------------------------------------------------------------ Key get (baseline: framework dictionary)
 
@@ -434,7 +434,7 @@ public class ConcurrentOrderedDictBenchmarks
     public long Cod_SnapshotIndexLoop()
     {
         long s = 0;
-        ConcurrentOrderedDict<int, int>.ValuesView view = _cod.Snapshot();
+        ConcurrentOrderedDictionary<int, int>.ValuesView view = _cod.Snapshot();
         for (int i = 0; i < view.Count; i++)
             s += view[i];
         return s;
@@ -469,7 +469,7 @@ public class ConcurrentOrderedDictBenchmarks
     public long Cocd_SnapshotIndexLoop()
     {
         long s = 0;
-        ConcurrentOrderedCompactDict<int, int>.ValuesView view = _cocd.Snapshot();
+        ConcurrentOrderedCompactDictionary<int, int>.ValuesView view = _cocd.Snapshot();
         for (int i = 0; i < view.Count; i++)
             s += view[i];
         return s;
@@ -530,7 +530,7 @@ public class ConcurrentOrderedDictBenchmarks
     [BenchmarkCategory("Remove")]
     public int Cod_BuildPopBackAll()
     {
-        var d = new ConcurrentOrderedDict<int, int>(N);
+        var d = new ConcurrentOrderedDictionary<int, int>(N);
         for (int i = 0; i < N; i++)
             d.TryAdd(i, i);
         for (int i = N - 1; i >= 0; i--)
@@ -543,7 +543,7 @@ public class ConcurrentOrderedDictBenchmarks
     [BenchmarkCategory("Remove")]
     public int Cod_BuildSwapBackAll()
     {
-        var d = new ConcurrentOrderedDict<int, int>(N);
+        var d = new ConcurrentOrderedDictionary<int, int>(N);
         for (int i = 0; i < N; i++)
             d.TryAdd(i, i);
         for (int i = 0; i < N; i++)
@@ -556,7 +556,7 @@ public class ConcurrentOrderedDictBenchmarks
     [BenchmarkCategory("Remove")]
     public int Cod_BuildRemoveWhereAll()
     {
-        var d = new ConcurrentOrderedDict<int, int>(N);
+        var d = new ConcurrentOrderedDictionary<int, int>(N);
         for (int i = 0; i < N; i++)
             d.TryAdd(i, i);
         return d.RemoveWhere(static (k, v) => true);
@@ -567,7 +567,7 @@ public class ConcurrentOrderedDictBenchmarks
     [BenchmarkCategory("Remove")]
     public int Cocd_BuildPopBackAll()
     {
-        var d = new ConcurrentOrderedCompactDict<int, int>(N);
+        var d = new ConcurrentOrderedCompactDictionary<int, int>(N);
         for (int i = 0; i < N; i++)
             d.TryAdd(i, i);
         for (int i = N - 1; i >= 0; i--)
@@ -580,7 +580,7 @@ public class ConcurrentOrderedDictBenchmarks
     [BenchmarkCategory("Remove")]
     public int Cocd_BuildSwapBackAll()
     {
-        var d = new ConcurrentOrderedCompactDict<int, int>(N);
+        var d = new ConcurrentOrderedCompactDictionary<int, int>(N);
         for (int i = 0; i < N; i++)
             d.TryAdd(i, i);
         for (int i = 0; i < N; i++)
@@ -593,7 +593,7 @@ public class ConcurrentOrderedDictBenchmarks
     [BenchmarkCategory("Remove")]
     public int Cocd_BuildRemoveWhereAll()
     {
-        var d = new ConcurrentOrderedCompactDict<int, int>(N);
+        var d = new ConcurrentOrderedCompactDictionary<int, int>(N);
         for (int i = 0; i < N; i++)
             d.TryAdd(i, i);
         return d.RemoveWhere(static (k, v) => true);

@@ -1,4 +1,4 @@
-# `ConcurrentOrderedDict<TKey,TValue>` — performance comparison & gaps
+# `ConcurrentOrderedDictionary<TKey,TValue>` — performance comparison & gaps
 
 A thread-safe, insertion-ordered, index-addressable map: a **key path** (dedup + O(1) lookup by
 `TKey`) and a **list path** (O(1) access by `int` index; enumeration/`ToArray`/`Values` yield the
@@ -13,7 +13,7 @@ the residual, structural costs that remain by design.
 * **Target B — `ConcurrentDictionary<TKey,TValue>`** for the *key-path* operations (get, add, update, remove). ✅ met (get/update/remove at parity; unsized sequential add ~1.2× with presized/batched forms at or beyond parity)
 
 > ⚠️ These are different baselines for different operations. `List<T>` is not thread-safe and has no
-> keys; `ConcurrentDictionary` has no order and no index. `ConcurrentOrderedDict` does *all* of it at
+> keys; `ConcurrentDictionary` has no order and no index. `ConcurrentOrderedDictionary` does *all* of it at
 > once, so some overhead over each baseline is structural, not incidental — the sections below mark
 > which gaps were closed and which costs are inherent.
 
@@ -90,7 +90,7 @@ one extra dependent pointer-chase (a second cache miss) per lookup.
 **Fix shipped — the TODO's "Option 2", made to work:** the map value is now the struct
 `ValueIndex { TValue, int }` stored **inline in the node** (measured: a struct node payload costs the
 same as an `int` payload — 0.99× BCL), plus a tiny seam on the clone —
-`internal ref TValue GetValueRefOrNullRef(TKey key)` in `ConcurrentDictionary.NumSharp.cs` — so the
+`public ref TValue GetValueRefOrNullRef(TKey key)` in `ConcurrentDictionary.RefAccessors.cs` — so the
 two problems that made Option 2 "likely not a win" disappeared:
 
 * **Updates don't reallocate nodes:** under the write lock, an atomically-writable value and the
@@ -135,7 +135,7 @@ node alloc, plus contains-check walks before the insert walk.
 - [x] **One bucket walk per add** — `TryAppendUnderLock` lets the map's `TryAdd` itself answer
       "already exists?" (the framework's own approach); the pre-checks that cost a full extra walk on
       the common absent path are gone (kept only where they guard O(n) work, i.e. removals).
-- [x] **Pre-size** via `new ConcurrentOrderedDict(capacity)` — with growth gone, measured **faster
+- [x] **Pre-size** via `new ConcurrentOrderedDictionary(capacity)` — with growth gone, measured **faster
       than an unsized CD build** (0.43–0.71×) and ≈ presized CD + the lock.
 
 **Residual (structural):** unsized sequential add is **~1.17–1.22×** CD. That is the floor for this
@@ -258,7 +258,7 @@ path). That is the deliberate price of converting silent corruption into a deter
 
 ### Steady-state footprint (bytes/entry, presized, full-GC deltas)
 
-| Shape | `List<T>` (values only) | `ConcurrentDictionary` | `ConcurrentOrderedDict` | COD premium vs CD |
+| Shape | `List<T>` (values only) | `ConcurrentDictionary` | `ConcurrentOrderedDictionary` | COD premium vs CD |
 |---|---:|---:|---:|---:|
 | `<int,int>` | 4.0 | 49.3 | **57.3** | +16% |
 | `<int,long>` | 8 | 49.3 | **69.3** | +41% |
@@ -275,7 +275,7 @@ a fourth component (~24 B/entry + a second pointer chase) — folding it into th
 
 ### Allocation churn per operation (thread-local counter, min-of-rounds)
 
-| Operation | `List<T>` | `ConcurrentDictionary` | `ConcurrentOrderedDict` |
+| Operation | `List<T>` | `ConcurrentDictionary` | `ConcurrentOrderedDictionary` |
 |---|---:|---:|---:|
 | read / `IndexOf` / `this[int]` / `Count` | 0 | 0 | **0** |
 | full enumeration | 0 | **56 B** (iterator class) | **0** (struct); `Pairs` = one iterator object |
@@ -299,7 +299,7 @@ large N is gen2/LOH churn — use `RemoveWhere` (one pass for any count), `TryRe
 or tail pops; and batch wide-value (`decimal`-class) replacements through `AddRange`, or prefer
 atomic-width/reference values for update-heavy workloads.
 
-### Retention semantics (verified with WeakReference probes; pinned by `ConcurrentOrderedDictMemoryTests`)
+### Retention semantics (verified with WeakReference probes; pinned by `ConcurrentOrderedDictionaryMemoryTests`)
 
 * A **tail-popped** value stays reachable through the shared arrays until the next append's
   copy-on-write (the floor rule), a compaction, or `Clear` — the slot is deliberately not scrubbed
@@ -330,8 +330,8 @@ The clone in `ConcurrentDictionary.cs` is faithful to dotnet/runtime's source; t
 (striped locks, lock-free reads, `GrowTable`) is verbatim. Deviations:
 
 - **`partial`** (one keyword on the class declaration) so NumSharp-only members live in
-  **`ConcurrentDictionary.NumSharp.cs`** without touching the vendored body. That file currently holds
-  exactly one member: `internal ref TValue GetValueRefOrNullRef(TKey key)` — `TryGetValue`'s bucket
+  **`ConcurrentDictionary.RefAccessors.cs`** without touching the vendored body. That file currently holds
+  exactly one member: `public ref TValue GetValueRefOrNullRef(TKey key)` — `TryGetValue`'s bucket
   walk returning `ref node._value` (null-ref sentinel when absent). Its three caller obligations
   (lifetime inside one serialized critical section; single-field ≤word-size writes only; caller-side
   write serialization) are documented on the member. A future re-sync against upstream is a plain file
@@ -351,16 +351,16 @@ The clone in `ConcurrentDictionary.cs` is faithful to dotnet/runtime's source; t
 
 ## Gates (benchmarks + tests)
 
-- **BDN suite** (fair, grouped, baselined): `benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Collections/ConcurrentOrderedDictBenchmarks.cs`
+- **BDN suite** (fair, grouped, baselined): `benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Collections/ConcurrentOrderedDictionaryBenchmarks.cs`
   — Build / KeyGet / Enumerate / ToArray / IndexGet / Replace / Remove groups at N = 1K / 100K / 1M,
   each with its `List<T>` or framework-CD baseline **plus the vendored clone rows** so any gap is
   attributable (ordered-dict layer vs clone-vs-BCL drift). Run:
-  `dotnet run -c Release -- --filter "*ConcurrentOrderedDict*"` (menu option 15).
-- **Functional pins:** `test/NumSharp.Tests/Collections/ConcurrentOrderedDictTests.cs` — ordering,
+  `dotnet run -c Release -- --filter "*ConcurrentOrderedDictionary*"` (menu option 15).
+- **Functional pins:** `test/NumSharp.Tests/Collections/ConcurrentOrderedDictionaryTests.cs` — ordering,
   dup semantics, the int-key indexer footgun, tail-pop + append-floor snapshot purity, swap-back,
   RemoveWhere (incl. throwing-predicate consistency), AddRange (incl. mid-batch-throw consistency),
   views, non-atomic `decimal` paths, and a 5K-op randomized churn against a `List`-based oracle.
-- **Concurrency gun:** `test/NumSharp.Tests/Collections/ConcurrentOrderedDictConcurrencyTests.cs` —
+- **Concurrency gun:** `test/NumSharp.Tests/Collections/ConcurrentOrderedDictionaryConcurrencyTests.cs` —
   every scenario arms N threads that park on ONE `ManualResetEventSlim` and fire simultaneously:
   exactly-once distinct adds, single-winner same-key adds/removes, `GetOrAdd` single-value,
   `AddOrUpdate` lost-increment counter, torn-read hunts (atomic `long` bit patterns AND non-atomic
@@ -368,7 +368,7 @@ The clone in `ConcurrentDictionary.cs` is faithful to dotnet/runtime's source; t
   `AddRange` batch-atomicity (observed counts are batch multiples), swap-back survivor sets, index
   readers under structural churn, `Clear` vs everything, and a mixed-chaos soak with a value-law
   readers verify on every observation.
-- **Advanced/adversarial tier:** `test/NumSharp.Tests/Collections/ConcurrentOrderedDictAdvancedConcurrencyTests.cs`
+- **Advanced/adversarial tier:** `test/NumSharp.Tests/Collections/ConcurrentOrderedDictionaryAdvancedConcurrencyTests.cs`
   — each scenario targets one clause of the thread-safety contract above: `Barrier`-phased storms
   with rotating roles and a FULL quiescent audit at every post-phase point (oversubscribed threads
   so the scheduler preempts inside locks), the single-writer monotonic register (per-path
@@ -394,7 +394,7 @@ is mandatory, Debug taints NumSharp.Core ~2×); prefer the BDN suite for anythin
 using System.Diagnostics; using NumSharp.Collections;
 const int N = 1_000_000, Reps = 11;
 double Ms(Action a){ a(); a(); long b=long.MaxValue; for(int r=0;r<Reps;r++){ var sw=Stopwatch.StartNew(); a(); sw.Stop(); b=Math.Min(b,sw.ElapsedTicks);} return b*1000.0/Stopwatch.Frequency; }
-var cod=new ConcurrentOrderedDict<int,int>(N); for(int i=0;i<N;i++) cod.Add(i,i);
+var cod=new ConcurrentOrderedDictionary<int,int>(N); for(int i=0;i<N;i++) cod.Add(i,i);
 Console.WriteLine($"view scan: {Ms(()=>{ long s=0; foreach(var v in cod.Snapshot()) s+=v; GC.KeepAlive(s); }):F3} ms");
 ```
 
@@ -411,9 +411,9 @@ Console.WriteLine($"view scan: {Ms(()=>{ long s=0; foreach(var v in cod.Snapshot
 
 ---
 
-## The compact sibling — `ConcurrentOrderedCompactDict` (discovery 2026-09-14, SHIPPED the same day)
+## The compact sibling — `ConcurrentOrderedCompactDictionary` (discovery 2026-09-14, SHIPPED the same day)
 
-`ConcurrentOrderedDict.COMPACT.md` (beside this file) is the discovery ledger; the numbers reproduce with
+`ConcurrentOrderedDictionary.COMPACT.md` (beside this file) is the discovery ledger; the numbers reproduce with
 `benchmark/collections/probes/compact_ordered_dict_probe.cs`. In one paragraph: the Store CAN be absorbed
 into a compact insertion-ordered hash table (slot == index, one copy of each key/value, no per-entry node)
 **without adding copy-on-write to any operation that is not COW today** — append/tail-pop/atomic-replace/
@@ -428,14 +428,14 @@ layout lets a reader of the removed key pair its old key with the moved value; t
 re-validates the single index word after the value load, ABA-free because dummied positions are never
 reused within a generation). Implementation plan and the port traps are in §7–§8 of that document.
 
-**Shipped as `ConcurrentOrderedCompactDict<TKey,TValue>`** (`ConcurrentOrderedCompactDict.cs`, same public
+**Shipped as `ConcurrentOrderedCompactDictionary<TKey,TValue>`** (`ConcurrentOrderedCompactDictionary.cs`, same public
 surface and contract as this type): open-addressed index of 8-byte words `(tag<<32)|(slot+1)` (the tag is the
 key's own bits for ≤4-byte primitive/enum keys under the default comparer, else the comparer's hash), dense
 `keys[]`/`values[]`, generation holders with the same count/floor rules plus a dummy count, the validated read
 (acquire value load + word re-read), a full-fence dummy store before the in-place swap-back overwrite,
 write-atomic guards (wide keys/values take the copy path), and whole-generation copies for wide-value replaces
 (no cross-generation aliasing). Gates: the four suites of this type mirrored verbatim onto it +
-`ConcurrentOrderedCompactDictSpecificTests` (bit-tag types, float/custom-comparer exclusions, tag collisions,
+`ConcurrentOrderedCompactDictionarySpecificTests` (bit-tag types, float/custom-comparer exclusions, tag collisions,
 constant-hash worst case, dummy/rebuild churn, wide types, the swap-back gun) — 85 tests green on net8.0 and
 net10.0, Debug and Release; the probe's `-- gun` with the `cocd` mode: 0 failures over 1.9 G reads. BDN rows
 `COCD.*` sit beside the `COD.*` rows in every group.

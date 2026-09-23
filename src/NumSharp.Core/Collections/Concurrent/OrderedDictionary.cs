@@ -11,7 +11,7 @@ namespace NumSharp.Collections;
 
 /// <summary>
 ///     A lock-free, insertion-ordered, index-addressable dictionary that stores each value <b>once</b>. Like
-///     <see cref="ConcurrentOrderedDict{TKey,TValue}" /> it offers two access paths over one set of entries — a
+///     <see cref="ConcurrentOrderedDictionary{TKey,TValue}" /> it offers two access paths over one set of entries — a
 ///     dictionary path keyed by <typeparamref name="TKey" /> and a list path addressed by insertion-order
 ///     <c>int</c> index — but it is the <b>lean</b> counterpart: the value is held a single time (in one dense
 ///     array), so it uses ~1.5× less memory per entry and builds markedly faster, at the cost of a key lookup
@@ -37,7 +37,7 @@ namespace NumSharp.Collections;
 ///                     <b>Reads are lock-free and need no count-gate.</b> An in-place append writes
 ///                     <c>keys[n]</c>/<c>values[n]</c> <i>before</i> the index word, and publishes that word with
 ///                     <see cref="Volatile.Write(ref int, int)" /> (release); a reader acquire-reads it with
-///                     <see cref="Volatile.Read(ref int)" />, so any word it observes already exposes its slot's
+///                     <c>Volatile.Read</c>, so any word it observes already exposes its slot's
 ///                     key and value, and the <c>keys[slot]</c> equality confirm proves identity.
 ///                 </description>
 ///             </item>
@@ -80,7 +80,7 @@ namespace NumSharp.Collections;
 /// </remarks>
 /// <typeparam name="TKey">The non-null key type; uniqueness and lookups use the configured comparer.</typeparam>
 /// <typeparam name="TValue">The value type stored once per key and yielded, in index order, by enumeration.</typeparam>
-public sealed class OrderedDict<TKey, TValue> : IReadOnlyList<TValue>
+public sealed class OrderedDictionary<TKey, TValue> : IReadOnlyList<TValue>
     where TKey : notnull
 {
     /// <summary>The initial ordered-array capacity and the size the arrays first grow to from empty. Small on purpose — many ordered maps stay tiny.</summary>
@@ -146,26 +146,26 @@ public sealed class OrderedDict<TKey, TValue> : IReadOnlyList<TValue>
     private readonly IEqualityComparer<TKey> _comparer;
 
     /// <summary>Creates an empty dictionary with the default capacity and the default key comparer.</summary>
-    public OrderedDict() : this(DefaultCapacity, null)
+    public OrderedDictionary() : this(DefaultCapacity, null)
     {
     }
 
     /// <summary>Creates an empty dictionary sized to hold <paramref name="capacity" /> entries without a regrow, using the default key comparer.</summary>
     /// <param name="capacity">The number of entries to reserve; values &lt;= 0 use the default capacity.</param>
-    public OrderedDict(int capacity) : this(capacity, null)
+    public OrderedDictionary(int capacity) : this(capacity, null)
     {
     }
 
     /// <summary>Creates an empty dictionary with the default capacity and the given key comparer.</summary>
     /// <param name="comparer">The key comparer, or <see langword="null" /> for <see cref="EqualityComparer{T}.Default" />.</param>
-    public OrderedDict(IEqualityComparer<TKey>? comparer) : this(DefaultCapacity, comparer)
+    public OrderedDictionary(IEqualityComparer<TKey>? comparer) : this(DefaultCapacity, comparer)
     {
     }
 
     /// <summary>Creates an empty dictionary sized for <paramref name="capacity" /> entries with the given key comparer.</summary>
     /// <param name="capacity">The number of entries to reserve; values &lt;= 0 use the default capacity.</param>
     /// <param name="comparer">The key comparer, or <see langword="null" /> for <see cref="EqualityComparer{T}.Default" />.</param>
-    public OrderedDict(int capacity, IEqualityComparer<TKey>? comparer)
+    public OrderedDictionary(int capacity, IEqualityComparer<TKey>? comparer)
     {
         _comparer = comparer ?? EqualityComparer<TKey>.Default;
         int cap = capacity <= 0 ? DefaultCapacity : capacity;
@@ -231,7 +231,7 @@ public sealed class OrderedDict<TKey, TValue> : IReadOnlyList<TValue>
     public TValue GetByKey(TKey key)
     {
         if (TryGetValue(key, out TValue value)) return value;
-        throw new KeyNotFoundException($"The key '{key}' was not present in the {nameof(OrderedDict<TKey, TValue>)}.");
+        throw new KeyNotFoundException($"The key '{key}' was not present in the {nameof(OrderedDictionary<TKey, TValue>)}.");
     }
 
     /// <summary>Gets or sets the value for <paramref name="key" /> (the dictionary path). With <c>int</c> keys the compiler prefers <see cref="this[int]" /> — use <see cref="GetByKey" />/<see cref="SetByKey" /> instead.</summary>
@@ -629,7 +629,7 @@ public sealed class OrderedDict<TKey, TValue> : IReadOnlyList<TValue>
         // check is race-free for the reentrancy it guards against. Monitor is reentrant, so without this a write-back
         // would silently interleave two half-applied mutations instead of failing.
         if (_ownerThreadId == Environment.CurrentManagedThreadId)
-            throw new LockRecursionException($"A callback running inside {nameof(OrderedDict<TKey, TValue>)}'s write lock must not write back into the collection.");
+            throw new LockRecursionException($"A callback running inside {nameof(OrderedDictionary<TKey, TValue>)}'s write lock must not write back into the collection.");
         Monitor.Enter(_lock);
         _ownerThreadId = Environment.CurrentManagedThreadId;
     }

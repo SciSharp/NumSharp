@@ -15,15 +15,15 @@ namespace NumSharp.Collections.Concurrent
         /// <summary>
         ///     Looks up <paramref name="key" /> and returns a <b>direct managed reference to the value field of the
         ///     live hash-table node</b> (the <see cref="System.Runtime.InteropServices.CollectionsMarshal" /> naming
-        ///     convention) — the seam that lets <see cref="NumSharp.Collections.ConcurrentOrderedDict{TKey,TValue}" />
+        ///     convention) — the seam that lets <see cref="ConcurrentOrderedDictionary{TKey,TValue}" />
         ///     read one field of a struct value without copying the whole struct, and mutate a single
         ///     atomically-writable field in place (zero allocation) instead of paying the node-replacing update the
-        ///     public API performs for non-atomic value types.
+        ///     rest of the public API performs for non-atomic value types.
         /// </summary>
         /// <param name="key">The key to locate; hashed and compared exactly like <see cref="TryGetValue" />.</param>
         /// <returns>
         ///     A reference into the node holding the key's value, or <see cref="Unsafe.NullRef{T}" /> when the key
-        ///     is absent. The caller MUST test with <see cref="Unsafe.IsNullRef{T}(ref T)" /> before touching it —
+        ///     is absent. The caller MUST test with <see cref="Unsafe.IsNullRef{T}(ref readonly T)" /> before touching it —
         ///     dereferencing the null ref crashes the process. (A null-ref sentinel instead of an <c>out bool</c>
         ///     on purpose: the sentinel test is a register compare, while an <c>out bool</c> forces a stack
         ///     round-trip per call on this very hot path — measured.)
@@ -31,8 +31,8 @@ namespace NumSharp.Collections.Concurrent
         /// <exception cref="ArgumentNullException"><paramref name="key" /> is <see langword="null" />.</exception>
         /// <remarks>
         ///     <para>
-        ///         <b>This deliberately bypasses the tear-free discipline the public surface guarantees</b>, so the
-        ///         caller inherits three obligations:
+        ///         <b>This deliberately bypasses the tear-free discipline the rest of the public surface
+        ///         guarantees</b>, so every caller — this member is public — inherits three obligations:
         ///     </para>
         ///     <para>
         ///         1. <b>Lifetime.</b> The reference points into a <c>Node</c>. Any mutation of this dictionary —
@@ -56,7 +56,7 @@ namespace NumSharp.Collections.Concurrent
         ///     </para>
         /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)] // hot seam: inlining folds the bucket walk into the ordered dict's readers, matching the BCL's one-call depth
-        internal ref TValue GetValueRefOrNullRef(TKey key)
+        public ref TValue GetValueRefOrNullRef(TKey key)
         {
             // typeof guard: a bare `key is null` on generic TKey is box+compare IL, and unoptimized (Debug)
             // codegen executes the box for value-type keys — 24 B per lookup. The short-circuit keeps the box

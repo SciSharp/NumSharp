@@ -4,7 +4,7 @@
 #:property AllowUnsafeBlocks=true
 #:property Optimize=true
 #:property Nullable=disable
-// complexity_probe.cs — O(1) proof + ratios + memory for ConcurrentOrderedDict and the recommended
+// complexity_probe.cs — O(1) proof + ratios + memory for ConcurrentOrderedDictionary and the recommended
 // open-addressed compact table, across N = 1e3 .. 1e7 (four orders of magnitude).
 //
 //   DOTNET_TC_CallCountingDelayMs=0 dotnet run -c Release benchmark/collections/probes/compact_ordered_dict_complexity.cs
@@ -67,7 +67,7 @@ for (int si = 0; si < sizes.Length; si++)
     var list = new List<int>(n); for (int i = 0; i < n; i++) list.Add(i * 2);
     var dict = new Dictionary<int, int>(n); for (int i = 0; i < n; i++) dict[bk[i]] = i * 2;
     var scd = new SysCd(1, n); for (int i = 0; i < n; i++) scd[bk[i]] = i * 2;
-    var cod = new ConcurrentOrderedDict<int, int>(n); for (int i = 0; i < n; i++) cod.TryAdd(bk[i], i * 2);
+    var cod = new ConcurrentOrderedDictionary<int, int>(n); for (int i = 0; i < n; i++) cod.TryAdd(bk[i], i * 2);
     var oa = new OA(n); for (int i = 0; i < n; i++) oa.Add(bk[i], i * 2);
 
     // get-hit HOT
@@ -93,7 +93,7 @@ for (int si = 0; si < sizes.Length; si++)
     rows["List"]["add (amortized)"][si] = Best(() => { var l = new List<int>(); for (int i = 0; i < n; i++) l.Add(i); GC.KeepAlive(l); }, addReps) / n;
     rows["Dictionary"]["add (amortized)"][si] = Best(() => { var d = new Dictionary<int, int>(); for (int i = 0; i < n; i++) d[bk[i]] = i; GC.KeepAlive(d); }, addReps) / n;
     rows["ConcurrentDictionary"]["add (amortized)"][si] = Best(() => { var d = new SysCd(); for (int i = 0; i < n; i++) d.TryAdd(bk[i], i); GC.KeepAlive(d); }, addReps) / n;
-    rows["COD (shipping)"]["add (amortized)"][si] = Best(() => { var d = new ConcurrentOrderedDict<int, int>(); for (int i = 0; i < n; i++) d.TryAdd(bk[i], i); GC.KeepAlive(d); }, addReps) / n;
+    rows["COD (shipping)"]["add (amortized)"][si] = Best(() => { var d = new ConcurrentOrderedDictionary<int, int>(); for (int i = 0; i < n; i++) d.TryAdd(bk[i], i); GC.KeepAlive(d); }, addReps) / n;
     rows["compact OA"]["add (amortized)"][si] = Best(() => { var d = new OA(0); for (int i = 0; i < n; i++) d.Add(bk[i], i); GC.KeepAlive(d); }, addReps) / n;
 
     // this[int] FULL (positional; index order 0..n-1 sequential is the natural scan)
@@ -108,11 +108,11 @@ for (int si = 0; si < sizes.Length; si++)
     // tail pop (build+drain from the back; per-op)
     int drReps = Math.Max(3, reps / 8);
     rows["ConcurrentDictionary"]["tail pop"][si] = Best(() => { var d = new SysCd(1, n); for (int i = 0; i < n; i++) d.TryAdd(i, i); for (int i = n - 1; i >= 0; i--) d.TryRemove(i, out _); GC.KeepAlive(d); }, drReps) / (2.0 * n);
-    rows["COD (shipping)"]["tail pop"][si] = Best(() => { var d = new ConcurrentOrderedDict<int, int>(n); for (int i = 0; i < n; i++) d.TryAdd(i, i); for (int i = n - 1; i >= 0; i--) d.TryRemove(d.GetKeyAt(d.Count - 1), out _); GC.KeepAlive(d); }, drReps) / (2.0 * n);
+    rows["COD (shipping)"]["tail pop"][si] = Best(() => { var d = new ConcurrentOrderedDictionary<int, int>(n); for (int i = 0; i < n; i++) d.TryAdd(i, i); for (int i = n - 1; i >= 0; i--) d.TryRemove(d.GetKeyAt(d.Count - 1), out _); GC.KeepAlive(d); }, drReps) / (2.0 * n);
     rows["compact OA"]["tail pop"][si] = Best(() => { var d = new OA(n); for (int i = 0; i < n; i++) d.Add(i, i); for (int i = n - 1; i >= 0; i--) d.PopBack(); GC.KeepAlive(d); }, drReps) / (2.0 * n);
 
     // swap-back (front-order drain)
-    rows["COD (shipping)"]["swap-back"][si] = Best(() => { var d = new ConcurrentOrderedDict<int, int>(n); for (int i = 0; i < n; i++) d.TryAdd(i, i); for (int i = 0; i < n; i++) d.TryRemoveSwapBack(i, out _); GC.KeepAlive(d); }, drReps) / (2.0 * n);
+    rows["COD (shipping)"]["swap-back"][si] = Best(() => { var d = new ConcurrentOrderedDictionary<int, int>(n); for (int i = 0; i < n; i++) d.TryAdd(i, i); for (int i = 0; i < n; i++) d.TryRemoveSwapBack(i, out _); GC.KeepAlive(d); }, drReps) / (2.0 * n);
     rows["compact OA"]["swap-back"][si] = Best(() => { var d = new OA(n); for (int i = 0; i < n; i++) d.Add(i, i); for (int i = 0; i < n; i++) d.SwapBack(i); GC.KeepAlive(d); }, drReps) / (2.0 * n);
 
     GC.KeepAlive(list); GC.KeepAlive(dict); GC.KeepAlive(scd); GC.KeepAlive(cod); GC.KeepAlive(oa);
@@ -164,7 +164,7 @@ foreach (int n in new[] { 100_000, 1_000_000, 10_000_000 })
         for (int r = 0; r < 4; r++)
         {
             if (oa) { var d = new OA(n); for (int i = 0; i < n; i++) d.Add(i, i); var sw = Stopwatch.StartNew(); d.RemoveAt(p); sw.Stop(); best = Math.Min(best, sw.ElapsedTicks * 1000.0 / Stopwatch.Frequency); GC.KeepAlive(d); }
-            else { var d = new ConcurrentOrderedDict<int, int>(n); for (int i = 0; i < n; i++) d.TryAdd(i, i); var sw = Stopwatch.StartNew(); d.RemoveAt(p); sw.Stop(); best = Math.Min(best, sw.ElapsedTicks * 1000.0 / Stopwatch.Frequency); GC.KeepAlive(d); }
+            else { var d = new ConcurrentOrderedDictionary<int, int>(n); for (int i = 0; i < n; i++) d.TryAdd(i, i); var sw = Stopwatch.StartNew(); d.RemoveAt(p); sw.Stop(); best = Math.Min(best, sw.ElapsedTicks * 1000.0 / Stopwatch.Frequency); GC.KeepAlive(d); }
         }
         return best;
     }
@@ -187,7 +187,7 @@ foreach (int n in sizes)
     double list = F(() => { var l = new List<int>(n); for (int i = 0; i < n; i++) l.Add(i); return l; });
     double dict = F(() => { var d = new Dictionary<int, int>(n); for (int i = 0; i < n; i++) d[bk[i]] = i; return d; });
     double cd = F(() => { var d = new SysCd(1, n); for (int i = 0; i < n; i++) d.TryAdd(bk[i], i); return d; });
-    double cod = F(() => { var d = new ConcurrentOrderedDict<int, int>(n); for (int i = 0; i < n; i++) d.TryAdd(bk[i], i); return d; });
+    double cod = F(() => { var d = new ConcurrentOrderedDictionary<int, int>(n); for (int i = 0; i < n; i++) d.TryAdd(bk[i], i); return d; });
     double oa = F(() => { var d = new OA(n); for (int i = 0; i < n; i++) d.Add(bk[i], i); return d; });
     double ch = F(() => { var d = new Chained(n); for (int i = 0; i < n; i++) d.Add(bk[i], i); return d; });
     Console.WriteLine($"| {n:N0} | {list:F1} | {dict:F1} | {cd:F1} | {cod:F1} | {oa:F1} | {ch:F1} |");

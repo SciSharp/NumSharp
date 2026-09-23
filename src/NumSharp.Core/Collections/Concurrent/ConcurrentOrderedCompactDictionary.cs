@@ -17,19 +17,19 @@ namespace NumSharp.Collections;
 ///     same dense <c>keys</c>/<c>values</c> arrays serve the dictionary path (O(1) lookup by
 ///     <typeparamref name="TKey" /> through an open-addressed index) and the list path (O(1) access by insertion
 ///     position, contiguous enumeration, spans). It offers the exact public surface and thread-safety contract of
-///     <see cref="ConcurrentOrderedDict{TKey,TValue}" /> at roughly a third of the memory (no hash node per entry)
+///     <see cref="ConcurrentOrderedDictionary{TKey,TValue}" /> at roughly a third of the memory (no hash node per entry)
 ///     and with builds and removals that allocate nothing per entry.
 /// </summary>
 /// <remarks>
 ///     <para>
-///         <b>Why a second type.</b> <see cref="ConcurrentOrderedDict{TKey,TValue}" /> keeps a hash node per entry
+///         <b>Why a second type.</b> <see cref="ConcurrentOrderedDictionary{TKey,TValue}" /> keeps a hash node per entry
 ///         (a vendored concurrent dictionary) beside its parallel key/value arrays; the node is ~40 bytes and the
 ///         arrays 8, so an <c>&lt;int,int&gt;</c> entry costs ~57 bytes. This type folds the hash index into a
 ///         compact table in the style of CPython's <c>dict</c> (a dense entries array plus an open-addressed index
 ///         of slot numbers): the index holds one 8-byte word per probe position, so the same entry costs ~16–25
 ///         bytes, appends allocate 0 bytes in capacity, growth copies arrays instead of re-creating nodes, and
 ///         removals repair the index with a streaming pass instead of a hash walk per shifted key. Measured against
-///         the node design (the discovery ledger <c>ConcurrentOrderedDict.COMPACT.md</c>): key lookups at parity at
+///         the node design (the discovery ledger <c>ConcurrentOrderedDictionary.COMPACT.md</c>): key lookups at parity at
 ///         DRAM scale and 1.1–2.7× faster while the table fits cache, builds 3–4× faster, pop/swap-back drains ~3×
 ///         faster, front interior removals 5× faster; near-tail interior removals ~3× slower (the index is copied
 ///         along with the arrays).
@@ -75,12 +75,12 @@ namespace NumSharp.Collections;
 ///         write lock — an <see cref="AddRange" /> source, a <see cref="RemoveWhere" /> predicate, a comparer — must
 ///         not write back; it is refused with <see cref="LockRecursionException" />) and the <b>consistency</b>
 ///         relaxations (the key path leads the list path by one operation; <see cref="IndexOf" /> may be stale by
-///         concurrent removals) are exactly those of <see cref="ConcurrentOrderedDict{TKey,TValue}" />.
+///         concurrent removals) are exactly those of <see cref="ConcurrentOrderedDictionary{TKey,TValue}" />.
 ///     </para>
 /// </remarks>
 /// <typeparam name="TKey">The non-null key type; uniqueness and lookups use the configured comparer.</typeparam>
 /// <typeparam name="TValue">The value type stored per key and yielded, in index order, by enumeration.</typeparam>
-public sealed class ConcurrentOrderedCompactDict<TKey, TValue> : IReadOnlyList<TValue>
+public sealed class ConcurrentOrderedCompactDictionary<TKey, TValue> : IReadOnlyList<TValue>
     where TKey : notnull
 {
     /// <summary>The initial entry capacity, and the size the arrays first grow to from empty.</summary>
@@ -144,7 +144,7 @@ public sealed class ConcurrentOrderedCompactDict<TKey, TValue> : IReadOnlyList<T
         /// <summary>The number of dummied index positions this generation carries (writer bookkeeping for the rebuild threshold).</summary>
         internal readonly int _dummies;
 
-        /// <summary>The number of live entries. Mutable and monotonically increasing on this instance; readers capture it once with <see cref="Volatile.Read(ref int)" />.</summary>
+        /// <summary>The number of live entries. Mutable and monotonically increasing on this instance; readers capture it once with <c>Volatile.Read</c>.</summary>
         internal int _count;
 
         /// <summary>Wraps the arrays of one generation.</summary>
@@ -186,13 +186,13 @@ public sealed class ConcurrentOrderedCompactDict<TKey, TValue> : IReadOnlyList<T
     private readonly object _writeLock = new();
 
     /// <summary>Creates an empty collection using the default comparer for <typeparamref name="TKey" />.</summary>
-    public ConcurrentOrderedCompactDict() : this((IEqualityComparer<TKey>?)null)
+    public ConcurrentOrderedCompactDictionary() : this((IEqualityComparer<TKey>?)null)
     {
     }
 
     /// <summary>Creates an empty collection using the supplied key comparer.</summary>
     /// <param name="comparer">The comparer used for key uniqueness and lookups, or <see langword="null" /> for the default.</param>
-    public ConcurrentOrderedCompactDict(IEqualityComparer<TKey>? comparer) : this(0, comparer)
+    public ConcurrentOrderedCompactDictionary(IEqualityComparer<TKey>? comparer) : this(0, comparer)
     {
     }
 
@@ -200,7 +200,7 @@ public sealed class ConcurrentOrderedCompactDict<TKey, TValue> : IReadOnlyList<T
     /// <param name="capacity">The number of entries to pre-size the arrays and the index for; must be non-negative.</param>
     /// <param name="comparer">The comparer used for key uniqueness and lookups, or <see langword="null" /> for the default.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="capacity" /> is negative, or larger than the ~715 million entries the index can address.</exception>
-    public ConcurrentOrderedCompactDict(int capacity, IEqualityComparer<TKey>? comparer = null)
+    public ConcurrentOrderedCompactDictionary(int capacity, IEqualityComparer<TKey>? comparer = null)
     {
         if (capacity < 0)
         {
@@ -231,7 +231,7 @@ public sealed class ConcurrentOrderedCompactDict<TKey, TValue> : IReadOnlyList<T
     /// <param name="comparer">The comparer used for key uniqueness and lookups, or <see langword="null" /> for the default.</param>
     /// <remarks>When the source can report its length without enumerating, the arrays and the index are pre-sized to it, so the build allocates exactly the live bytes.</remarks>
     /// <exception cref="ArgumentNullException"><paramref name="source" /> is <see langword="null" />.</exception>
-    public ConcurrentOrderedCompactDict(IEnumerable<KeyValuePair<TKey, TValue>> source, IEqualityComparer<TKey>? comparer = null)
+    public ConcurrentOrderedCompactDictionary(IEnumerable<KeyValuePair<TKey, TValue>> source, IEqualityComparer<TKey>? comparer = null)
         : this(PreSizeOf(source), comparer)
     {
         AddRange(source);
@@ -1617,7 +1617,7 @@ public sealed class ConcurrentOrderedCompactDict<TKey, TValue> : IReadOnlyList<T
 
         /// <summary>Binds the enumerator to a snapshot of the owner's current generation.</summary>
         /// <param name="owner">The collection to snapshot and enumerate.</param>
-        internal Enumerator(ConcurrentOrderedCompactDict<TKey, TValue> owner)
+        internal Enumerator(ConcurrentOrderedCompactDictionary<TKey, TValue> owner)
         {
             Tables t = owner._tables;
             _values = t._values;
@@ -1793,7 +1793,7 @@ public sealed class ConcurrentOrderedCompactDict<TKey, TValue> : IReadOnlyList<T
         if (Monitor.IsEntered(_writeLock))
         {
             throw new LockRecursionException(
-                "ConcurrentOrderedCompactDict does not support reentrant writes: a mutating operation was invoked from user code " +
+                "ConcurrentOrderedCompactDictionary does not support reentrant writes: a mutating operation was invoked from user code " +
                 "running inside the collection's write lock (an AddRange source enumerator, a RemoveWhere predicate, or a " +
                 "key comparer). Perform the mutation after the enclosing operation returns.");
         }

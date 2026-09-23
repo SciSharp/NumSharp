@@ -32,7 +32,7 @@ namespace NumSharp.Collections;
 ///         value and the entry's current insertion-order position — stored <b>inline in the hash-table node</b>,
 ///         so a key lookup costs exactly one node visit, the same memory walk as the plain concurrent dictionary
 ///         (an earlier design interposed a separate heap <c>Entry</c> object and paid a second dependent cache
-///         miss per lookup; see ConcurrentOrderedDict.TODO.md, Gap B1). The list path is a pair of contiguous
+///         miss per lookup; see ConcurrentOrderedDictionary.TODO.md, Gap B1). The list path is a pair of contiguous
 ///         arrays (values and keys, in order); enumeration, <see cref="ToArray" />, <see cref="this[int]" /> and
 ///         <see cref="CopyTo" /> scan them directly, which is what keeps them close to <see cref="List{T}" />.
 ///         A write updates both representations, so both paths observe the same value.
@@ -99,7 +99,7 @@ namespace NumSharp.Collections;
 /// </remarks>
 /// <typeparam name="TKey">The non-null key type; uniqueness and lookups use the configured comparer.</typeparam>
 /// <typeparam name="TValue">The value type stored per key and yielded, in index order, by enumeration.</typeparam>
-public sealed class ConcurrentOrderedDict<TKey, TValue> : IReadOnlyList<TValue>
+public sealed class ConcurrentOrderedDictionary<TKey, TValue> : IReadOnlyList<TValue>
     where TKey : notnull
 {
     /// <summary>The initial ordered-array capacity, and the size the arrays first grow to from empty.</summary>
@@ -196,7 +196,7 @@ public sealed class ConcurrentOrderedDict<TKey, TValue> : IReadOnlyList<TValue>
         /// <summary>
         ///     The number of live entries. <b>Mutable and monotonically increasing on this instance</b>: appends
         ///     bump it with a release store after writing the slots; every shrinking transition publishes a new
-        ///     <see cref="Store" /> instead. Readers must capture it once via <see cref="Volatile.Read(ref int)" />.
+        ///     <see cref="Store" /> instead. Readers must capture it once via <c>Volatile.Read</c>.
         /// </summary>
         internal int _count;
 
@@ -240,13 +240,13 @@ public sealed class ConcurrentOrderedDict<TKey, TValue> : IReadOnlyList<TValue>
     private readonly object _writeLock = new();
 
     /// <summary>Creates an empty collection using the default comparer for <typeparamref name="TKey" />.</summary>
-    public ConcurrentOrderedDict() : this((IEqualityComparer<TKey>?)null)
+    public ConcurrentOrderedDictionary() : this((IEqualityComparer<TKey>?)null)
     {
     }
 
     /// <summary>Creates an empty collection using the supplied key comparer.</summary>
     /// <param name="comparer">The comparer used for key uniqueness and lookups, or <see langword="null" /> for the default.</param>
-    public ConcurrentOrderedDict(IEqualityComparer<TKey>? comparer)
+    public ConcurrentOrderedDictionary(IEqualityComparer<TKey>? comparer)
     {
         // concurrencyLevel 1: all map writes are serialized by _writeLock, so extra stripes are pure overhead.
         _byKey = new ConcurrentDictionary<TKey, ValueIndex>(1, 31, comparer);
@@ -257,7 +257,7 @@ public sealed class ConcurrentOrderedDict<TKey, TValue> : IReadOnlyList<TValue>
     /// <param name="capacity">The number of entries to pre-size both paths for; must be non-negative.</param>
     /// <param name="comparer">The comparer used for key uniqueness and lookups, or <see langword="null" /> for the default.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="capacity" /> is negative.</exception>
-    public ConcurrentOrderedDict(int capacity, IEqualityComparer<TKey>? comparer = null)
+    public ConcurrentOrderedDictionary(int capacity, IEqualityComparer<TKey>? comparer = null)
     {
         if (capacity < 0)
         {
@@ -285,7 +285,7 @@ public sealed class ConcurrentOrderedDict<TKey, TValue> : IReadOnlyList<TValue>
     ///     doubled arrays; a fully pre-sized build allocates exactly the live bytes).
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="source" /> is <see langword="null" />.</exception>
-    public ConcurrentOrderedDict(IEnumerable<KeyValuePair<TKey, TValue>> source, IEqualityComparer<TKey>? comparer = null)
+    public ConcurrentOrderedDictionary(IEnumerable<KeyValuePair<TKey, TValue>> source, IEqualityComparer<TKey>? comparer = null)
         : this(PreSizeOf(source), comparer)
     {
         AddRange(source);
@@ -1362,7 +1362,7 @@ public sealed class ConcurrentOrderedDict<TKey, TValue> : IReadOnlyList<TValue>
 
         /// <summary>Binds the enumerator to a snapshot of the owner's current ordered store.</summary>
         /// <param name="owner">The collection to snapshot and enumerate.</param>
-        internal Enumerator(ConcurrentOrderedDict<TKey, TValue> owner)
+        internal Enumerator(ConcurrentOrderedDictionary<TKey, TValue> owner)
         {
             Store store = owner._store;
             _values = store._values;
@@ -1643,7 +1643,7 @@ public sealed class ConcurrentOrderedDict<TKey, TValue> : IReadOnlyList<TValue>
         if (Monitor.IsEntered(_writeLock))
         {
             throw new LockRecursionException(
-                "ConcurrentOrderedDict does not support reentrant writes: a mutating operation was invoked from user code " +
+                "ConcurrentOrderedDictionary does not support reentrant writes: a mutating operation was invoked from user code " +
                 "running inside the collection's write lock (an AddRange source enumerator, a RemoveWhere predicate, or a " +
                 "key comparer). Perform the mutation after the enclosing operation returns.");
         }

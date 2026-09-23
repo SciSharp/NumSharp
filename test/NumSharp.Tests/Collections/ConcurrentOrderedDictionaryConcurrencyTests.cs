@@ -9,7 +9,7 @@ using NumSharp.Collections;
 namespace NumSharp.Tests.Collections
 {
     /// <summary>
-    ///     Heavy-load concurrency stress for <see cref="ConcurrentOrderedDict{TKey,TValue}" />, built around a
+    ///     Heavy-load concurrency stress for <see cref="ConcurrentOrderedDictionary{TKey,TValue}" />, built around a
     ///     <b>concurrency gun</b>: every participating thread spins up, signals readiness, and then parks on ONE
     ///     shared <see cref="ManualResetEventSlim" />; a single <c>Set()</c> releases them all in the same instant,
     ///     so the contended first microseconds — where publication races, torn reads and lost updates live — are
@@ -19,12 +19,12 @@ namespace NumSharp.Tests.Collections
     ///     Each scenario targets one falsifiable guarantee: exactly-once adds, single-winner dedup races,
     ///     lost-update-free CAS loops, tear-free reads of atomic and non-atomic values, prefix-consistent
     ///     enumeration snapshots (including across the O(1) tail-removal + append-floor path), batch-atomic
-    ///     <see cref="ConcurrentOrderedDict{TKey,TValue}.AddRange" /> visibility, and full cross-path consistency
+    ///     <see cref="ConcurrentOrderedDictionary{TKey,TValue}.AddRange" /> visibility, and full cross-path consistency
     ///     after the storm. Sizes are tuned to run a few seconds total on CI hardware while still forcing millions
     ///     of contended operations.
     /// </remarks>
     [TestClass]
-    public class ConcurrentOrderedDictConcurrencyTests
+    public class ConcurrentOrderedDictionaryConcurrencyTests
     {
         /// <summary>Gun size: enough threads to contend hard even on small CI boxes (oversubscription is fine — it widens the race windows), capped so the box is not drowned.</summary>
         private static int GunThreads => System.Math.Max(4, System.Math.Min(Environment.ProcessorCount, 8));
@@ -88,7 +88,7 @@ namespace NumSharp.Tests.Collections
         /// <typeparam name="TKey">The dictionary's key type.</typeparam>
         /// <typeparam name="TValue">The dictionary's value type.</typeparam>
         /// <param name="d">The instance to audit after the storm.</param>
-        private static void AssertFullyConsistent<TKey, TValue>(ConcurrentOrderedDict<TKey, TValue> d)
+        private static void AssertFullyConsistent<TKey, TValue>(ConcurrentOrderedDictionary<TKey, TValue> d)
             where TKey : notnull
         {
             int n = d.Count;
@@ -107,7 +107,7 @@ namespace NumSharp.Tests.Collections
         {
             const int PerThread = 40_000;
             int threads = GunThreads;
-            var d = new ConcurrentOrderedDict<int, long>();
+            var d = new ConcurrentOrderedDictionary<int, long>();
 
             FireGun(threads, id =>
             {
@@ -141,7 +141,7 @@ namespace NumSharp.Tests.Collections
         {
             const int KeyCount = 10_000;
             int threads = GunThreads;
-            var d = new ConcurrentOrderedDict<int, int>();
+            var d = new ConcurrentOrderedDictionary<int, int>();
             int totalWins = 0;
 
             FireGun(threads, id =>
@@ -177,7 +177,7 @@ namespace NumSharp.Tests.Collections
         {
             const int KeyCount = 2_000;
             int threads = GunThreads;
-            var d = new ConcurrentOrderedDict<int, int>();
+            var d = new ConcurrentOrderedDictionary<int, int>();
             var observed = new int[threads][];
 
             FireGun(threads, id =>
@@ -211,7 +211,7 @@ namespace NumSharp.Tests.Collections
             const int PerThread = 25_000;
             const int HotKeys = 4;
             int threads = GunThreads;
-            var d = new ConcurrentOrderedDict<int, long>();
+            var d = new ConcurrentOrderedDictionary<int, long>();
 
             FireGun(threads, id =>
             {
@@ -242,7 +242,7 @@ namespace NumSharp.Tests.Collections
             const int WriterOps = 150_000;
             const int ReaderOps = 400_000;
             int threads = GunThreads;
-            var d = new ConcurrentOrderedDict<int, long>();
+            var d = new ConcurrentOrderedDictionary<int, long>();
             d.Add(7, A);
 
             FireGun(threads, id =>
@@ -277,7 +277,7 @@ namespace NumSharp.Tests.Collections
             const int WriterOps = 60_000;
             const int ReaderOps = 150_000;
             int threads = GunThreads;
-            var d = new ConcurrentOrderedDict<int, decimal>();
+            var d = new ConcurrentOrderedDictionary<int, decimal>();
             d.Add(7, A);
 
             FireGun(threads, id =>
@@ -316,7 +316,7 @@ namespace NumSharp.Tests.Collections
             // count-publish and enumerator-capture contract under live fire.
             const int Appends = 120_000;
             int threads = GunThreads;
-            var d = new ConcurrentOrderedDict<int, int>();
+            var d = new ConcurrentOrderedDictionary<int, int>();
 
             FireGun(threads, id =>
             {
@@ -360,7 +360,7 @@ namespace NumSharp.Tests.Collections
             const int Base = 1_000;
             const int Cycles = 40_000;
             int threads = GunThreads;
-            var d = new ConcurrentOrderedDict<int, int>();
+            var d = new ConcurrentOrderedDictionary<int, int>();
             for (int k = 0; k < Base; k++)
             {
                 d.Add(k, k);
@@ -407,7 +407,7 @@ namespace NumSharp.Tests.Collections
             const int BatchesPerThread = 60;
             int threads = GunThreads;
             int writers = System.Math.Max(1, threads / 2);
-            var d = new ConcurrentOrderedDict<int, int>();
+            var d = new ConcurrentOrderedDictionary<int, int>();
             long writersDone = 0;
 
             FireGun(threads, id =>
@@ -449,7 +449,7 @@ namespace NumSharp.Tests.Collections
         {
             const int KeyCount = 8_000;
             int threads = GunThreads;
-            var d = new ConcurrentOrderedDict<int, int>();
+            var d = new ConcurrentOrderedDictionary<int, int>();
             for (int k = 0; k < KeyCount; k++)
             {
                 d.Add(k, k);
@@ -484,7 +484,7 @@ namespace NumSharp.Tests.Collections
             const int PerThread = 5_000;
             int threads = GunThreads;
             int total = threads * PerThread * 2;
-            var d = new ConcurrentOrderedDict<int, int>();
+            var d = new ConcurrentOrderedDictionary<int, int>();
             for (int k = 0; k < total; k++)
             {
                 d.Add(k, k * 7);
@@ -525,7 +525,7 @@ namespace NumSharp.Tests.Collections
             const int AddsPerThread = 15_000;
             const int HotKeys = 32;
             int threads = System.Math.Max(4, GunThreads);
-            var d = new ConcurrentOrderedDict<int, long>();
+            var d = new ConcurrentOrderedDictionary<int, long>();
             for (int k = 0; k < Seed; k++)
             {
                 d.Add(k, Legal(k, 0));
@@ -654,7 +654,7 @@ namespace NumSharp.Tests.Collections
             // access and must simply get false, never a crash or an out-of-snapshot read).
             const int Seed = 10_000;
             int threads = GunThreads;
-            var d = new ConcurrentOrderedDict<int, int>();
+            var d = new ConcurrentOrderedDictionary<int, int>();
             for (int k = 0; k < Seed; k++)
             {
                 d.Add(k, k);
@@ -706,7 +706,7 @@ namespace NumSharp.Tests.Collections
             // Clear racing adders/readers: no reader may crash, and the final state (after a last Clear) is empty.
             const int Ops = 30_000;
             int threads = GunThreads;
-            var d = new ConcurrentOrderedDict<int, int>();
+            var d = new ConcurrentOrderedDictionary<int, int>();
 
             FireGun(threads, id =>
             {

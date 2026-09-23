@@ -1,11 +1,11 @@
-# `ConcurrentOrderedDict` — folding the Store into a compact table (discovery, 2026-09-14)
+# `ConcurrentOrderedDictionary` — folding the Store into a compact table (discovery, 2026-09-14)
 
 **Status:** discovery complete, no product code changed. Every number below is reproducible with
 `benchmark/collections/probes/compact_ordered_dict_probe.cs` (five prototype layouts + today's type + the
 baselines; a 20K-op structural sanity check against a `List` oracle gates each run).
 
-**Implemented the same day as `ConcurrentOrderedCompactDict<TKey,TValue>`** (`ConcurrentOrderedCompactDict.cs`
-beside this file; same public surface and thread-safety contract as `ConcurrentOrderedDict`, so it is a
+**Implemented the same day as `ConcurrentOrderedCompactDictionary<TKey,TValue>`** (`ConcurrentOrderedCompactDictionary.cs`
+beside this file; same public surface and thread-safety contract as `ConcurrentOrderedDictionary`, so it is a
 drop-in sibling). The port follows §4 and §8 exactly: 8-byte index words `(tag<<32)|(slot+1)` with the key's
 own bits as the tag for ≤4-byte primitive/enum keys under the default comparer (`float` excluded, a custom
 comparer disables it) and the comparer's hash otherwise; dense `keys[]`/`values[]`; generation holders with
@@ -14,7 +14,7 @@ full-fence (`Interlocked.Exchange`) dummy store before the in-place swap-back ov
 (wide keys or values take the copy path); whole-generation copies for wide-value replaces; growth and rebuilds
 from the old index words (no re-hashing). **Gates:** the sibling's four suites mirrored verbatim onto the new
 type (functional, memory contracts with the append bound tightened to `== 0`, concurrency gun, adversarial
-tier) plus `ConcurrentOrderedCompactDictSpecificTests` (bit-tag types and exclusions, tag collisions, a
+tier) plus `ConcurrentOrderedCompactDictionarySpecificTests` (bit-tag types and exclusions, tag collisions, a
 constant-hash worst case, dummy/rebuild churn, wide types, three swap-back guns) — **85 tests green on net8.0
 and net10.0, Debug and Release**; the probe's gun on the shipped type (`cocd`): **0 failures over 1.9 billion
 reads**; `COCD.*` rows in the BDN suite beside every `COD.*` row. Shipped-type numbers in the fair regime
@@ -397,9 +397,9 @@ Implementation sketch (a follow-up session; the tests are the spec):
    value_last — the §5.4 gun as an MSTest scenario in the adversarial tier), the renumber pass vs a `List`
    oracle, dummy accounting/rebuild, the full-COW rule, and wide-`TKey`/`TValue` swap-back taking the COW
    path.
-4. The BDN suite (`ConcurrentOrderedDictBenchmarks`) needs no new rows; this probe stays the reproduction.
+4. The BDN suite (`ConcurrentOrderedDictionaryBenchmarks`) needs no new rows; this probe stays the reproduction.
 5. The vendored `ConcurrentDictionary` clone + `ConcurrentDictionaryInternals` + the ref seam
-   (`ConcurrentDictionary.NumSharp.cs`) become unused by `src/` and can be retired with the benchmark's
+   (`ConcurrentDictionary.RefAccessors.cs`) become unused by `src/` and can be retired with the benchmark's
    `CloneCD` rows.
 
 ---
@@ -409,7 +409,7 @@ Implementation sketch (a follow-up session; the tests are the spec):
 `benchmark/collections/probes/compact_ordered_dict_complexity.cs` proves the complexity class directly
 and prints the ratios and the per-entry memory. Same host discipline as §5 (one P-core, 2.5 s clock
 spin-up, 150 ms tier-1 warm, fair permuted-key regime), N swept over **1e3 · 1e4 · 1e5 · 1e6 · 1e7**.
-"COD (shipping)" is the real `ConcurrentOrderedDict<int,int>`; "OA"/"chained" are the compact prototypes.
+"COD (shipping)" is the real `ConcurrentOrderedDictionary<int,int>`; "OA"/"chained" are the compact prototypes.
 
 ### 10.1 The O(1) proof — three independent legs
 
@@ -529,7 +529,7 @@ layout 16 B (2 B under `Dictionary`, which is not thread-safe, ordered or indexa
 ## 11. Per-member complexity — every public member measured and classified (2026-09-14)
 
 `benchmark/collections/probes/concurrent_ordered_dict_per_member.cs` times every public member of the
-**shipping** `ConcurrentOrderedDict<int,int>` across N = 1e3 .. 1e7, one P-core, 150 ms tier-1 warm, per-CALL
+**shipping** `ConcurrentOrderedDictionary<int,int>` across N = 1e3 .. 1e7, one P-core, 150 ms tier-1 warm, per-CALL
 cost. Members sharing one implementation path are measured once by a representative (mapped below). Unit is
 one call: an O(1) member's per-call cost is flat (bounded by the cache tier); an O(n) member's grows ~10x
 per decade. Point reads are timed over a 256-key hot set to isolate the call from cache-warming.
@@ -581,7 +581,7 @@ presize (`TryGetNonEnumeratedCount`) + one `TryAdd` per pair.
 `Clear()` calls the vendored `ConcurrentDictionary.Clear`, which allocates a fresh bucket array of
 `GetPrime(_initialCapacity)` slots (`ConcurrentDictionary.cs:697`), and `_initialCapacity` is the CAPACITY the
 map was constructed with (`:244`). So **`Clear` costs O(initial capacity), not O(current count)**: a collection
-`new ConcurrentOrderedDict(1_000_000)` that has been emptied down to a handful of entries still allocates a
+`new ConcurrentOrderedDictionary(1_000_000)` that has been emptied down to a handful of entries still allocates a
 ~1e6-slot bucket array on every `Clear` (measured 0.05 ms at N=10M — the bucket array is large-object
 zero-paged, so wall-time is well under the O(N) allocation's nominal cost, but the work is O(initial
 capacity)). A default-constructed instance keeps the tiny initial capacity, so its `Clear` is O(1) even after
@@ -625,8 +625,8 @@ the bucket table); `ctor(source)` O(m) (delegates to `AddRange`).
 
 ## 12. COD vs COCD — every member, side by side, classified (measured 2026-09-14)
 
-The compact table shipped as `ConcurrentOrderedCompactDict<TKey,TValue>` (commit 6e2869ef) with the
-IDENTICAL public surface of `ConcurrentOrderedDict` — a drop-in sibling. This section measures EVERY public
+The compact table shipped as `ConcurrentOrderedCompactDictionary<TKey,TValue>` (commit 6e2869ef) with the
+IDENTICAL public surface of `ConcurrentOrderedDictionary` — a drop-in sibling. This section measures EVERY public
 member of BOTH shipping types through one adapter and one driver, so the complexity classes and the constant
 factors are directly comparable. Probe: `benchmark/collections/probes/ordered_dict_vs_compact_per_member.cs`
 (same host discipline as §10/§11; <int,int>, per-CALL cost, hot-set point reads, best-of).
@@ -660,8 +660,8 @@ node to allocate, no vendored `ConcurrentDictionary` underneath).
 
 | | `Clear` | why |
 |---|---|---|
-| `ConcurrentOrderedDict` (COD) | **O(initial capacity)** | routes to the vendored `ConcurrentDictionary.Clear`, which allocates a fresh `GetPrime(_initialCapacity)` bucket array (§11.2) — O(1) for a default-constructed instance, O(N) for one presized to N, regardless of current count |
-| `ConcurrentOrderedCompactDict` (COCD) | **O(1)** always | `_tables = Tables.Empty` — the compact type owns its whole state in one generation object, so clearing is a single field publish with no bucket array to rebuild (measured 17.5x faster than COD's presized `Clear` at 10M) |
+| `ConcurrentOrderedDictionary` (COD) | **O(initial capacity)** | routes to the vendored `ConcurrentDictionary.Clear`, which allocates a fresh `GetPrime(_initialCapacity)` bucket array (§11.2) — O(1) for a default-constructed instance, O(N) for one presized to N, regardless of current count |
+| `ConcurrentOrderedCompactDictionary` (COCD) | **O(1)** always | `_tables = Tables.Empty` — the compact type owns its whole state in one generation object, so clearing is a single field publish with no bucket array to rebuild (measured 17.5x faster than COD's presized `Clear` at 10M) |
 
 So the compact sibling not only matches COD's complexity on every other member, it **removes** COD's one
 capacity-dependent wart: `Clear` on a presized-then-emptied COCD is O(1) where the same on COD is O(N).
@@ -714,10 +714,10 @@ DOTNET_TC_CallCountingDelayMs=0 PROBE_KEYS=perm \
 # PROBE_ONLY=OA,no-hash,COD   restricts the rows; omit PROBE_KEYS for the sequential-key regime
 ```
 
-References read for this discovery: `ConcurrentOrderedDict.cs` (the Store rules, `ValueIndex`, every
+References read for this discovery: `ConcurrentOrderedDictionary.cs` (the Store rules, `ValueIndex`, every
 mutator), the vendored `ConcurrentDictionary.cs` (`Tables`/`Node`/`VolatileNode`, `TryAddInternal`,
 `TryRemoveInternal`, `GrowTable`), dotnet/runtime `Dictionary.cs` (`Entry`, `_buckets` 1-based indices,
 `StartOfFreeList = -3` free-list encoding in `Remove`/`TryInsert`, `Resize`), CPython `Objects/dictobject.c`
 (compact dict layout comment, `DKIX_DUMMY`, `delitem_common`, `dictresize`, `USABLE_FRACTION`/`GROWTH_RATE`,
-the free-threaded no-reuse rule), and the measured baseline in `ConcurrentOrderedDict.TODO.md` § Memory
+the free-threaded no-reuse rule), and the measured baseline in `ConcurrentOrderedDictionary.TODO.md` § Memory
 analysis (commit 539e9c05).

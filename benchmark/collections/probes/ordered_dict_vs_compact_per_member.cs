@@ -5,7 +5,7 @@
 #:property Optimize=true
 #:property Nullable=disable
 // ordered_dict_vs_compact_per_member.cs — measure EVERY public member of BOTH shipping types
-// (ConcurrentOrderedDict<int,int> and its compact sibling ConcurrentOrderedCompactDict<int,int>) across
+// (ConcurrentOrderedDictionary<int,int> and its compact sibling ConcurrentOrderedCompactDictionary<int,int>) across
 // N = 1e3 .. 1e7, classify each O(1)/amortized O(1)/O(n), and print them side by side.
 //
 //   DOTNET_TC_CallCountingDelayMs=0 dotnet run -c Release benchmark/collections/probes/ordered_dict_vs_compact_per_member.cs
@@ -159,8 +159,8 @@ static double MsOneShot(Func<object> build, Action<object> op)
 // structural cross-check of both types against a List oracle (correctness gate for every number above)
 static void Sanity()
 {
-    var cod = new ConcurrentOrderedDict<int, int>(4);
-    var cocd = new ConcurrentOrderedCompactDict<int, int>(4);
+    var cod = new ConcurrentOrderedDictionary<int, int>(4);
+    var cocd = new ConcurrentOrderedCompactDictionary<int, int>(4);
     var oracle = new List<int>(); var rng = new Random(7);
     for (int op = 0; op < 20_000; op++)
     {
@@ -238,124 +238,124 @@ interface ICon
     void Clear(object d);
 }
 
-/// <summary>Adapter for the shipping node-plus-arrays <see cref="ConcurrentOrderedDict{TKey,TValue}"/>.</summary>
+/// <summary>Adapter for the shipping node-plus-arrays <see cref="ConcurrentOrderedDictionary{TKey,TValue}"/>.</summary>
 sealed class CodCon : ICon
 {
     /// <inheritdoc/>
     public string Name => "COD";
     /// <inheritdoc/>
-    public object Build(int n, int[] bk) { var d = new ConcurrentOrderedDict<int, int>(n); for (int i = 0; i < n; i++) d.TryAdd(bk[i], i * 2); return d; }
+    public object Build(int n, int[] bk) { var d = new ConcurrentOrderedDictionary<int, int>(n); for (int i = 0; i < n; i++) d.TryAdd(bk[i], i * 2); return d; }
     /// <inheritdoc/>
-    public object NewEmpty() => new ConcurrentOrderedDict<int, int>();
+    public object NewEmpty() => new ConcurrentOrderedDictionary<int, int>();
     /// <inheritdoc/>
-    public void FillKeys(object d, int[] bk) { var t = (ConcurrentOrderedDict<int, int>)d; for (int i = 0; i < bk.Length; i++) t.TryAdd(bk[i], i); }
+    public void FillKeys(object d, int[] bk) { var t = (ConcurrentOrderedDictionary<int, int>)d; for (int i = 0; i < bk.Length; i++) t.TryAdd(bk[i], i); }
     /// <inheritdoc/>
-    public void FillSeq(object d, int n) { var t = (ConcurrentOrderedDict<int, int>)d; for (int i = 0; i < n; i++) t.TryAdd(i, i); }
+    public void FillSeq(object d, int n) { var t = (ConcurrentOrderedDictionary<int, int>)d; for (int i = 0; i < n; i++) t.TryAdd(i, i); }
     /// <inheritdoc/>
-    public long Gets(object d, int[] hot) { var t = (ConcurrentOrderedDict<int, int>)d; long s = 0; foreach (int k in hot) { t.TryGetValue(k, out int v); s += v; } return s; }
+    public long Gets(object d, int[] hot) { var t = (ConcurrentOrderedDictionary<int, int>)d; long s = 0; foreach (int k in hot) { t.TryGetValue(k, out int v); s += v; } return s; }
     /// <inheritdoc/>
-    public long Contains(object d, int[] hot) { var t = (ConcurrentOrderedDict<int, int>)d; long s = 0; foreach (int k in hot) if (t.ContainsKey(k)) s++; return s; }
+    public long Contains(object d, int[] hot) { var t = (ConcurrentOrderedDictionary<int, int>)d; long s = 0; foreach (int k in hot) if (t.ContainsKey(k)) s++; return s; }
     /// <inheritdoc/>
-    public long IndexOfs(object d, int[] hot) { var t = (ConcurrentOrderedDict<int, int>)d; long s = 0; foreach (int k in hot) s += t.IndexOf(k); return s; }
+    public long IndexOfs(object d, int[] hot) { var t = (ConcurrentOrderedDictionary<int, int>)d; long s = 0; foreach (int k in hot) s += t.IndexOf(k); return s; }
     /// <inheritdoc/>
-    public long IdxGet(object d) { var t = (ConcurrentOrderedDict<int, int>)d; long s = 0; for (int i = 0; i < 256; i++) s += t[i]; return s; }
+    public long IdxGet(object d) { var t = (ConcurrentOrderedDictionary<int, int>)d; long s = 0; for (int i = 0; i < 256; i++) s += t[i]; return s; }
     /// <inheritdoc/>
-    public long KeyAt(object d) { var t = (ConcurrentOrderedDict<int, int>)d; long s = 0; for (int i = 0; i < 256; i++) s += t.GetKeyAt(i); return s; }
+    public long KeyAt(object d) { var t = (ConcurrentOrderedDictionary<int, int>)d; long s = 0; for (int i = 0; i < 256; i++) s += t.GetKeyAt(i); return s; }
     /// <inheritdoc/>
-    public long TryAt(object d) { var t = (ConcurrentOrderedDict<int, int>)d; long s = 0; for (int i = 0; i < 256; i++) { t.TryGetAt(i, out int v); s += v; } return s; }
+    public long TryAt(object d) { var t = (ConcurrentOrderedDictionary<int, int>)d; long s = 0; for (int i = 0; i < 256; i++) { t.TryGetAt(i, out int v); s += v; } return s; }
     /// <inheritdoc/>
-    public long Counts(object d) { var t = (ConcurrentOrderedDict<int, int>)d; long s = 0; for (int i = 0; i < 256; i++) s += t.Count; return s; }
+    public long Counts(object d) { var t = (ConcurrentOrderedDictionary<int, int>)d; long s = 0; for (int i = 0; i < 256; i++) s += t.Count; return s; }
     /// <inheritdoc/>
-    public void RepSetByKey(object d, int[] hot) { var t = (ConcurrentOrderedDict<int, int>)d; for (int i = 0; i < 256; i++) t.SetByKey(hot[i], i); }
+    public void RepSetByKey(object d, int[] hot) { var t = (ConcurrentOrderedDictionary<int, int>)d; for (int i = 0; i < 256; i++) t.SetByKey(hot[i], i); }
     /// <inheritdoc/>
-    public void RepSetAt(object d) { var t = (ConcurrentOrderedDict<int, int>)d; for (int i = 0; i < 256; i++) t.SetAt(i, i); }
+    public void RepSetAt(object d) { var t = (ConcurrentOrderedDictionary<int, int>)d; for (int i = 0; i < 256; i++) t.SetAt(i, i); }
     /// <inheritdoc/>
-    public void RepTryUpdate(object d, int[] hot) { var t = (ConcurrentOrderedDict<int, int>)d; for (int i = 0; i < 256; i++) t.TryUpdate(hot[i], i + 1, i); }
+    public void RepTryUpdate(object d, int[] hot) { var t = (ConcurrentOrderedDictionary<int, int>)d; for (int i = 0; i < 256; i++) t.TryUpdate(hot[i], i + 1, i); }
     /// <inheritdoc/>
-    public int Snap(object d) => ((ConcurrentOrderedDict<int, int>)d).Snapshot().Count;
+    public int Snap(object d) => ((ConcurrentOrderedDictionary<int, int>)d).Snapshot().Count;
     /// <inheritdoc/>
-    public int Enum(object d) { var e = ((ConcurrentOrderedDict<int, int>)d).GetEnumerator(); GC.KeepAlive(e); return 1; }
+    public int Enum(object d) { var e = ((ConcurrentOrderedDictionary<int, int>)d).GetEnumerator(); GC.KeepAlive(e); return 1; }
     /// <inheritdoc/>
-    public void PopAll(object d, int n) { var t = (ConcurrentOrderedDict<int, int>)d; for (int i = n - 1; i >= 0; i--) t.TryRemove(t.GetKeyAt(t.Count - 1), out _); }
+    public void PopAll(object d, int n) { var t = (ConcurrentOrderedDictionary<int, int>)d; for (int i = n - 1; i >= 0; i--) t.TryRemove(t.GetKeyAt(t.Count - 1), out _); }
     /// <inheritdoc/>
-    public void SwapAll(object d, int n) { var t = (ConcurrentOrderedDict<int, int>)d; for (int i = 0; i < n; i++) t.TryRemoveSwapBack(i, out _); }
+    public void SwapAll(object d, int n) { var t = (ConcurrentOrderedDictionary<int, int>)d; for (int i = 0; i < n; i++) t.TryRemoveSwapBack(i, out _); }
     /// <inheritdoc/>
-    public void RemoveAt0(object d) => ((ConcurrentOrderedDict<int, int>)d).RemoveAt(0);
+    public void RemoveAt0(object d) => ((ConcurrentOrderedDictionary<int, int>)d).RemoveAt(0);
     /// <inheritdoc/>
-    public long ToArr(object d) => ((ConcurrentOrderedDict<int, int>)d).ToArray().Length;
+    public long ToArr(object d) => ((ConcurrentOrderedDictionary<int, int>)d).ToArray().Length;
     /// <inheritdoc/>
-    public long KeysArr(object d) => ((ConcurrentOrderedDict<int, int>)d).Keys.Length;
+    public long KeysArr(object d) => ((ConcurrentOrderedDictionary<int, int>)d).Keys.Length;
     /// <inheritdoc/>
-    public long Foreach(object d) { long s = 0; foreach (int v in (ConcurrentOrderedDict<int, int>)d) s += v; return s; }
+    public long Foreach(object d) { long s = 0; foreach (int v in (ConcurrentOrderedDictionary<int, int>)d) s += v; return s; }
     /// <inheritdoc/>
-    public long PairsC(object d) { long s = 0; foreach (var kv in ((ConcurrentOrderedDict<int, int>)d).Pairs) s += kv.Value; return s; }
+    public long PairsC(object d) { long s = 0; foreach (var kv in ((ConcurrentOrderedDictionary<int, int>)d).Pairs) s += kv.Value; return s; }
     /// <inheritdoc/>
-    public long CopyToArr(object d, int[] buf) { ((ConcurrentOrderedDict<int, int>)d).CopyTo(buf, 0); return buf.Length; }
+    public long CopyToArr(object d, int[] buf) { ((ConcurrentOrderedDictionary<int, int>)d).CopyTo(buf, 0); return buf.Length; }
     /// <inheritdoc/>
-    public object AddRangeBuild(KeyValuePair<int, int>[] pairs) { var t = new ConcurrentOrderedDict<int, int>(); t.AddRange(pairs); return t; }
+    public object AddRangeBuild(KeyValuePair<int, int>[] pairs) { var t = new ConcurrentOrderedDictionary<int, int>(); t.AddRange(pairs); return t; }
     /// <inheritdoc/>
-    public int RemoveWhereAll(object d) => ((ConcurrentOrderedDict<int, int>)d).RemoveWhere((k, v) => true);
+    public int RemoveWhereAll(object d) => ((ConcurrentOrderedDictionary<int, int>)d).RemoveWhere((k, v) => true);
     /// <inheritdoc/>
-    public void Clear(object d) => ((ConcurrentOrderedDict<int, int>)d).Clear();
+    public void Clear(object d) => ((ConcurrentOrderedDictionary<int, int>)d).Clear();
 }
 
-/// <summary>Adapter for the shipping compact open-addressed <see cref="ConcurrentOrderedCompactDict{TKey,TValue}"/>.</summary>
+/// <summary>Adapter for the shipping compact open-addressed <see cref="ConcurrentOrderedCompactDictionary{TKey,TValue}"/>.</summary>
 sealed class CocdCon : ICon
 {
     /// <inheritdoc/>
     public string Name => "COCD";
     /// <inheritdoc/>
-    public object Build(int n, int[] bk) { var d = new ConcurrentOrderedCompactDict<int, int>(n); for (int i = 0; i < n; i++) d.TryAdd(bk[i], i * 2); return d; }
+    public object Build(int n, int[] bk) { var d = new ConcurrentOrderedCompactDictionary<int, int>(n); for (int i = 0; i < n; i++) d.TryAdd(bk[i], i * 2); return d; }
     /// <inheritdoc/>
-    public object NewEmpty() => new ConcurrentOrderedCompactDict<int, int>();
+    public object NewEmpty() => new ConcurrentOrderedCompactDictionary<int, int>();
     /// <inheritdoc/>
-    public void FillKeys(object d, int[] bk) { var t = (ConcurrentOrderedCompactDict<int, int>)d; for (int i = 0; i < bk.Length; i++) t.TryAdd(bk[i], i); }
+    public void FillKeys(object d, int[] bk) { var t = (ConcurrentOrderedCompactDictionary<int, int>)d; for (int i = 0; i < bk.Length; i++) t.TryAdd(bk[i], i); }
     /// <inheritdoc/>
-    public void FillSeq(object d, int n) { var t = (ConcurrentOrderedCompactDict<int, int>)d; for (int i = 0; i < n; i++) t.TryAdd(i, i); }
+    public void FillSeq(object d, int n) { var t = (ConcurrentOrderedCompactDictionary<int, int>)d; for (int i = 0; i < n; i++) t.TryAdd(i, i); }
     /// <inheritdoc/>
-    public long Gets(object d, int[] hot) { var t = (ConcurrentOrderedCompactDict<int, int>)d; long s = 0; foreach (int k in hot) { t.TryGetValue(k, out int v); s += v; } return s; }
+    public long Gets(object d, int[] hot) { var t = (ConcurrentOrderedCompactDictionary<int, int>)d; long s = 0; foreach (int k in hot) { t.TryGetValue(k, out int v); s += v; } return s; }
     /// <inheritdoc/>
-    public long Contains(object d, int[] hot) { var t = (ConcurrentOrderedCompactDict<int, int>)d; long s = 0; foreach (int k in hot) if (t.ContainsKey(k)) s++; return s; }
+    public long Contains(object d, int[] hot) { var t = (ConcurrentOrderedCompactDictionary<int, int>)d; long s = 0; foreach (int k in hot) if (t.ContainsKey(k)) s++; return s; }
     /// <inheritdoc/>
-    public long IndexOfs(object d, int[] hot) { var t = (ConcurrentOrderedCompactDict<int, int>)d; long s = 0; foreach (int k in hot) s += t.IndexOf(k); return s; }
+    public long IndexOfs(object d, int[] hot) { var t = (ConcurrentOrderedCompactDictionary<int, int>)d; long s = 0; foreach (int k in hot) s += t.IndexOf(k); return s; }
     /// <inheritdoc/>
-    public long IdxGet(object d) { var t = (ConcurrentOrderedCompactDict<int, int>)d; long s = 0; for (int i = 0; i < 256; i++) s += t[i]; return s; }
+    public long IdxGet(object d) { var t = (ConcurrentOrderedCompactDictionary<int, int>)d; long s = 0; for (int i = 0; i < 256; i++) s += t[i]; return s; }
     /// <inheritdoc/>
-    public long KeyAt(object d) { var t = (ConcurrentOrderedCompactDict<int, int>)d; long s = 0; for (int i = 0; i < 256; i++) s += t.GetKeyAt(i); return s; }
+    public long KeyAt(object d) { var t = (ConcurrentOrderedCompactDictionary<int, int>)d; long s = 0; for (int i = 0; i < 256; i++) s += t.GetKeyAt(i); return s; }
     /// <inheritdoc/>
-    public long TryAt(object d) { var t = (ConcurrentOrderedCompactDict<int, int>)d; long s = 0; for (int i = 0; i < 256; i++) { t.TryGetAt(i, out int v); s += v; } return s; }
+    public long TryAt(object d) { var t = (ConcurrentOrderedCompactDictionary<int, int>)d; long s = 0; for (int i = 0; i < 256; i++) { t.TryGetAt(i, out int v); s += v; } return s; }
     /// <inheritdoc/>
-    public long Counts(object d) { var t = (ConcurrentOrderedCompactDict<int, int>)d; long s = 0; for (int i = 0; i < 256; i++) s += t.Count; return s; }
+    public long Counts(object d) { var t = (ConcurrentOrderedCompactDictionary<int, int>)d; long s = 0; for (int i = 0; i < 256; i++) s += t.Count; return s; }
     /// <inheritdoc/>
-    public void RepSetByKey(object d, int[] hot) { var t = (ConcurrentOrderedCompactDict<int, int>)d; for (int i = 0; i < 256; i++) t.SetByKey(hot[i], i); }
+    public void RepSetByKey(object d, int[] hot) { var t = (ConcurrentOrderedCompactDictionary<int, int>)d; for (int i = 0; i < 256; i++) t.SetByKey(hot[i], i); }
     /// <inheritdoc/>
-    public void RepSetAt(object d) { var t = (ConcurrentOrderedCompactDict<int, int>)d; for (int i = 0; i < 256; i++) t.SetAt(i, i); }
+    public void RepSetAt(object d) { var t = (ConcurrentOrderedCompactDictionary<int, int>)d; for (int i = 0; i < 256; i++) t.SetAt(i, i); }
     /// <inheritdoc/>
-    public void RepTryUpdate(object d, int[] hot) { var t = (ConcurrentOrderedCompactDict<int, int>)d; for (int i = 0; i < 256; i++) t.TryUpdate(hot[i], i + 1, i); }
+    public void RepTryUpdate(object d, int[] hot) { var t = (ConcurrentOrderedCompactDictionary<int, int>)d; for (int i = 0; i < 256; i++) t.TryUpdate(hot[i], i + 1, i); }
     /// <inheritdoc/>
-    public int Snap(object d) => ((ConcurrentOrderedCompactDict<int, int>)d).Snapshot().Count;
+    public int Snap(object d) => ((ConcurrentOrderedCompactDictionary<int, int>)d).Snapshot().Count;
     /// <inheritdoc/>
-    public int Enum(object d) { var e = ((ConcurrentOrderedCompactDict<int, int>)d).GetEnumerator(); GC.KeepAlive(e); return 1; }
+    public int Enum(object d) { var e = ((ConcurrentOrderedCompactDictionary<int, int>)d).GetEnumerator(); GC.KeepAlive(e); return 1; }
     /// <inheritdoc/>
-    public void PopAll(object d, int n) { var t = (ConcurrentOrderedCompactDict<int, int>)d; for (int i = n - 1; i >= 0; i--) t.TryRemove(t.GetKeyAt(t.Count - 1), out _); }
+    public void PopAll(object d, int n) { var t = (ConcurrentOrderedCompactDictionary<int, int>)d; for (int i = n - 1; i >= 0; i--) t.TryRemove(t.GetKeyAt(t.Count - 1), out _); }
     /// <inheritdoc/>
-    public void SwapAll(object d, int n) { var t = (ConcurrentOrderedCompactDict<int, int>)d; for (int i = 0; i < n; i++) t.TryRemoveSwapBack(i, out _); }
+    public void SwapAll(object d, int n) { var t = (ConcurrentOrderedCompactDictionary<int, int>)d; for (int i = 0; i < n; i++) t.TryRemoveSwapBack(i, out _); }
     /// <inheritdoc/>
-    public void RemoveAt0(object d) => ((ConcurrentOrderedCompactDict<int, int>)d).RemoveAt(0);
+    public void RemoveAt0(object d) => ((ConcurrentOrderedCompactDictionary<int, int>)d).RemoveAt(0);
     /// <inheritdoc/>
-    public long ToArr(object d) => ((ConcurrentOrderedCompactDict<int, int>)d).ToArray().Length;
+    public long ToArr(object d) => ((ConcurrentOrderedCompactDictionary<int, int>)d).ToArray().Length;
     /// <inheritdoc/>
-    public long KeysArr(object d) => ((ConcurrentOrderedCompactDict<int, int>)d).Keys.Length;
+    public long KeysArr(object d) => ((ConcurrentOrderedCompactDictionary<int, int>)d).Keys.Length;
     /// <inheritdoc/>
-    public long Foreach(object d) { long s = 0; foreach (int v in (ConcurrentOrderedCompactDict<int, int>)d) s += v; return s; }
+    public long Foreach(object d) { long s = 0; foreach (int v in (ConcurrentOrderedCompactDictionary<int, int>)d) s += v; return s; }
     /// <inheritdoc/>
-    public long PairsC(object d) { long s = 0; foreach (var kv in ((ConcurrentOrderedCompactDict<int, int>)d).Pairs) s += kv.Value; return s; }
+    public long PairsC(object d) { long s = 0; foreach (var kv in ((ConcurrentOrderedCompactDictionary<int, int>)d).Pairs) s += kv.Value; return s; }
     /// <inheritdoc/>
-    public long CopyToArr(object d, int[] buf) { ((ConcurrentOrderedCompactDict<int, int>)d).CopyTo(buf, 0); return buf.Length; }
+    public long CopyToArr(object d, int[] buf) { ((ConcurrentOrderedCompactDictionary<int, int>)d).CopyTo(buf, 0); return buf.Length; }
     /// <inheritdoc/>
-    public object AddRangeBuild(KeyValuePair<int, int>[] pairs) { var t = new ConcurrentOrderedCompactDict<int, int>(); t.AddRange(pairs); return t; }
+    public object AddRangeBuild(KeyValuePair<int, int>[] pairs) { var t = new ConcurrentOrderedCompactDictionary<int, int>(); t.AddRange(pairs); return t; }
     /// <inheritdoc/>
-    public int RemoveWhereAll(object d) => ((ConcurrentOrderedCompactDict<int, int>)d).RemoveWhere((k, v) => true);
+    public int RemoveWhereAll(object d) => ((ConcurrentOrderedCompactDictionary<int, int>)d).RemoveWhere((k, v) => true);
     /// <inheritdoc/>
-    public void Clear(object d) => ((ConcurrentOrderedCompactDict<int, int>)d).Clear();
+    public void Clear(object d) => ((ConcurrentOrderedCompactDictionary<int, int>)d).Clear();
 }
