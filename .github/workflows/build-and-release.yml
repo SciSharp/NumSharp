@@ -242,6 +242,19 @@ jobs:
   # Inconclusive — a runner without a usable libpython goes SKIPPED, never red.
   # The "Report Python host" step below prints exactly the values that probe
   # reads, so a silent skip is diagnosable straight from the log.
+  #
+  # This job ALSO carries the nupkg-CONSUMER gate for NumSharp.Interop.OpenBLAS — the two
+  # "Package consumer:" steps at the end, a separate `package-consumer-smoke` job until 2026-09-23.
+  # It rides here rather than on `test` for three reasons:
+  #   - it needs exactly what this job already sets up (Python 3.12 and the staged OpenBLAS
+  #     bundle), and `test` has neither;
+  #   - this job finished in 3.3-3.9 min against `test`'s 11.5-15.7, so the gate's 3.3-4.3 extra
+  #     minutes (the two scripts' measured cost) do not lengthen the run, whereas on `test` they
+  #     would add straight onto the longest job;
+  #   - it saves three jobs per push, one of them macOS. The SciSharp org is on the GitHub Free
+  #     plan (5 concurrent macOS jobs org-wide), and this workflow used to take all five per push;
+  #     measured in run 35858283137: a macOS job waited 68 s for the slot the previous run's
+  #     `test (macos-latest)` was still holding.
   interop-test:
     strategy:
       fail-fast: false
@@ -274,6 +287,12 @@ jobs:
       # variable to run this suite on an AVX-512 Linux box. The step "Install numpy" prints
       # show_config(), whose "found" list reflects the pin.
       NPY_DISABLE_CPU_FEATURES: ${{ matrix.os == 'ubuntu-latest' && 'X86_V4 AVX512_ICL AVX512_SPR' || '' }}
+      # Both variables above are inert for the "Package consumer:" steps: their scratch consumers
+      # reference only NumSharp + NumSharp.Interop.OpenBLAS, so nothing there starts pythonnet or
+      # imports numpy. NEVER add NUMSHARP_OPENBLAS_CACHE_DIR to this block: verify_build_override.sh
+      # asserts the package's DEFAULT per-user cache root on Linux/macOS (~/.cache/NumSharp/openblas)
+      # and, unlike verify_package_consumer.sh, does not unset the variable — a job-level value
+      # would fail its step 1 on two of the three legs.
 
     steps:
     - uses: actions/checkout@v7
@@ -287,6 +306,8 @@ jobs:
 
     # 3.12 sits inside pythonnet 3.0.5's supported range (PythonSession rejects
     # anything outside 3.7-3.13) and has numpy 2.x wheels on all three OSes.
+    # The "Package consumer:" steps run on this interpreter too: fetch_openblas.py is stdlib-only,
+    # and the scripts also use it to list the packed nupkg and to compare realpaths on macOS.
     - name: Setup Python
       uses: actions/setup-python@v7
       with:
@@ -387,6 +408,53 @@ jobs:
         dotnet test test/NumSharp.Tests.Interop/NumSharp.Tests.Interop.csproj \
           --configuration Release --no-build --framework net10.0 --logger "trx"
       shell: bash
+
+    # ── Package consumer: the nupkg-CONSUMER gate for NumSharp.Interop.OpenBLAS ──────────────────
+    #
+    # Every other suite consumes the package by ProjectReference, where a Content item copies files
+    # a PackageReference restore never sees — which is exactly how the macOS package shipped a
+    # dylib whose vendored Fortran runtime sat in a folder NuGet silently drops ("Library not
+    # loaded" on every Mac, green CI). These steps pack the REAL nupkg into a local feed, restore
+    # it into a scratch consumer by PackageReference, and prove the bundled OpenBLAS LOADS in
+    # every layout a consumer can end up with: the portable runtimes/ tree, a read-only install,
+    # and a RID-specific (flattened) publish. macOS is the one that matters; Linux and Windows
+    # run the same script so a layout regression on any RID is caught by the PR that causes it.
+    #
+    # Why these steps come LAST, and why they carry `!cancelled()`:
+    #   - AFTER the interop tests, because both scripts change the machine: they `-t:Rebuild` Core
+    #     and NumSharp.Interop.OpenBLAS in Release inside the repo tree, and delete this version of
+    #     NumSharp / NumSharp.Interop.OpenBLAS from the global NuGet packages folder so the scratch
+    #     consumer restores the fresh pack. Running last keeps the interop suite on the untouched
+    #     build it had while the gate still owned a runner.
+    #   - `!cancelled()` keeps each script's verdict independent of the steps before it, as a
+    #     separate job's was: a red interop test must not hide a package-layout regression, and the
+    #     build-override script still runs when the consumer script failed. A cancelled run still
+    #     stops them (always() would not).
+    #   - Neither uses this job's Build — each packs from its own Release rebuild. They rely only on
+    #     Python (above) and on the bundle staged by "Stage OpenBLAS native assets":
+    #     verify_build_override.sh packs WITHOUT RequireOpenBlasAssets, so an unstaged tree would
+    #     reach its first check as "bundled asset did not reach the output", not as a staging error.
+    #   - timeout-minutes: a normal run takes 1.5-2.5 min per script, PyPI downloads included; the
+    #     cap only keeps a hung download from holding the runner for the 6-hour job default.
+    - name: "Package consumer: pack, restore by PackageReference, load in every layout"
+      if: ${{ !cancelled() }}
+      timeout-minutes: 15
+      shell: bash
+      run: bash src/NumSharp.Interop.OpenBLAS/tools/verify_package_consumer.sh
+
+    # The build-time version-override gate (15 steps; PyPI once, then the per-user cache). Before
+    # 01596628 it ran nowhere in CI; it belongs here because the override task co-extracts the
+    # vendored Fortran runtime into its cache entry and stages it beside the override — a
+    # Linux/macOS-only branch a Windows developer box cannot exercise (the Windows DLL is
+    # self-contained). It writes the REAL per-user build cache — poisoning the scipy-openblas64/
+    # entry on purpose in its step 10, then proving the self-heal. Nothing else in this job reads
+    # that subtree: the interop build sets no override, and the macOS loader's relocation copies
+    # live under the same root's separate dyld/ folder.
+    - name: "Package consumer: build-time version override, end to end"
+      if: ${{ !cancelled() }}
+      timeout-minutes: 15
+      shell: bash
+      run: bash src/NumSharp.Interop.OpenBLAS/tools/verify_build_override.sh
 
     - name: Upload Test Results
       uses: actions/upload-artifact@v7
@@ -521,56 +589,12 @@ jobs:
         path: ${{ github.workspace }}/**/TestResults/**/*.trx
         retention-days: 5
 
-  # The nupkg-CONSUMER gate for NumSharp.Interop.OpenBLAS, on all three OSes.
-  #
-  # Every other job consumes the package by ProjectReference, where a Content item copies files
-  # a PackageReference restore never sees — which is exactly how the macOS package shipped a
-  # dylib whose vendored Fortran runtime sat in a folder NuGet silently drops ("Library not
-  # loaded" on every Mac, green CI). This job packs the REAL nupkg into a local feed, restores
-  # it into a scratch consumer by PackageReference, and proves the bundled OpenBLAS LOADS in
-  # every layout a consumer can end up with: the portable runtimes/ tree, a read-only install,
-  # and a RID-specific (flattened) publish. macOS is the one that matters; Linux and Windows
-  # run the same script so a layout regression on any RID is caught by the PR that causes it.
-  package-consumer-smoke:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ windows-latest, ubuntu-latest, macos-latest ]
-
-    runs-on: ${{ matrix.os }}
-
-    steps:
-    - uses: actions/checkout@v7
-
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v6
-      with:
-        dotnet-version: |
-          8.0.x
-          10.0.x
-
-    # fetch_openblas.py (stdlib-only) stages the pinned per-RID assets the script packs.
-    - name: Setup Python
-      uses: actions/setup-python@v7
-      with:
-        python-version: '3.12'
-
-    - name: Pack, restore by PackageReference, load in every layout
-      shell: bash
-      run: bash src/NumSharp.Interop.OpenBLAS/tools/verify_package_consumer.sh
-
-    # The build-time version-override gate (15 steps; PyPI once, then the per-user cache). It
-    # never ran in CI before; it belongs here because the override task co-extracts the vendored
-    # Fortran runtime into its cache entry and stages it beside the override — a Linux/macOS-only
-    # branch a Windows developer box cannot exercise (the Windows DLL is self-contained).
-    - name: Build-time version override, end to end
-      shell: bash
-      run: bash src/NumSharp.Interop.OpenBLAS/tools/verify_build_override.sh
-
   validate-release:
     # Interop now ships as a package, so a broken interop must block the release — and so must a
-    # package that restores but cannot load its own bundled binary.
-    needs: [test, interop-test, onnxruntime-interop-test, mlnet-interop-test, package-consumer-smoke]
+    # package that restores but cannot load its own bundled binary. The latter is gated by the
+    # "Package consumer:" steps inside interop-test (formerly the package-consumer-smoke job), so
+    # needing interop-test covers both.
+    needs: [test, interop-test, onnxruntime-interop-test, mlnet-interop-test]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     outputs:
