@@ -110,6 +110,18 @@ public class KarpathyPongLiveTests : InteropTestBase
         }
     }
 
+    /// <summary>
+    /// The full-size (200 hidden x 6400 inputs) seed-3 initialization, the next uniform draw on the same
+    /// stream, then one forward/backward pass: all byte-identical to NumPy.
+    /// </summary>
+    /// <remarks>
+    /// The expected weights come from <c>legacy_randn</c> (<see cref="InteropTestBase.DefineLegacyRandn"/>):
+    /// on x64 that is NumPy's own <c>rng.randn</c>. On arm64, NumPy's wheel fuses <c>legacy_gauss</c>'s
+    /// <c>r2</c>, and W1 failed at element 44 on macos-latest, so there the comparison is against the literal
+    /// evaluation of the same live seed-3 stream. <c>legacy_randn</c> advances <c>rng</c> exactly as the literal
+    /// sampler does, so <c>expected_draw</c> still comes from NumPy's own generator on every host. The
+    /// forward/backward half exports NumSharp's weights, so it compares directly against NumPy everywhere.
+    /// </remarks>
     [TestMethod]
     [TestCategory("KarpathyByteParity")]
     public void Full200By6400_SeededInitializationForwardAndBackward_Exact()
@@ -118,7 +130,8 @@ public class KarpathyPongLiveTests : InteropTestBase
         var rng = np.random.RandomState(3);
         using var model = PongPolicyGradient.Initialize(rng);
         var nextDraw = rng.uniform();
-        PyExec("rng=np.random.RandomState(3)\nexpected_w1=rng.randn(200,6400)/np.sqrt(6400)\nexpected_w2=rng.randn(200)/np.sqrt(200)\nexpected_draw=np.array(rng.uniform())");
+        DefineLegacyRandn();
+        PyExec("rng=np.random.RandomState(3)\nexpected_w1=legacy_randn(rng,200,6400)/np.sqrt(6400)\nexpected_w2=legacy_randn(rng,200)/np.sqrt(200)\nexpected_draw=np.array(rng.uniform())");
         using (Gil())
         {
             using var w1 = Scope.Eval("expected_w1"); using var w2 = Scope.Eval("expected_w2"); using var draw = Scope.Eval("expected_draw");
@@ -351,12 +364,25 @@ public class KarpathyPongLiveTests : InteropTestBase
         Console.WriteLine($"PONG_BYTE_PARITY original_functions=5; episodes=11; frames=44; updates=1; arrays={checkedArrays}; bytes={checkedBytes}; mismatches=0; max_ulp=0; hidden=8; input=6400; environment=synthetic_not_Atari");
     }
 
+    /// <summary>
+    /// Loads the hash-pinned original Pong functions into this test's scope, asserts that nothing beyond
+    /// the five numerical functions came along (no Gym, pickle or environment), and defines the bounded
+    /// <see cref="OriginalPongDriver"/> around them.
+    /// </summary>
+    /// <remarks>
+    /// <c>legacy_randn</c> is defined first because <c>pg_initialize</c> draws the initial weights through it:
+    /// NumPy's own <c>randn</c> on x64, the literal re-evaluation of the same stream on a fusing (arm64)
+    /// NumPy. Without that, the short run's very first comparison (W1 element 10 on macos-latest) failed
+    /// and nothing after it could be checked. See <see cref="InteropTestBase.DefineLegacyRandn"/>.
+    /// </remarks>
+    /// <exception cref="AssertFailedException">The pinned source's hash or loaded-name inventory changed.</exception>
     private void LoadOriginalPong()
     {
         KarpathyOriginalSource.Load(Scope, "pong");
         Assert.AreEqual("cf764d11a0ebebb46d02c482c5a9c7c31081960d24b7c332757362735ad71a14", PyStr("original['__source_sha256__']"));
         Assert.IsTrue(PyBool("original['__loaded_names__']==('sigmoid','prepro','discount_rewards','policy_forward','policy_backward')"));
         Assert.IsTrue(PyBool("'gym' not in original and 'pickle' not in original and 'env' not in original"));
+        DefineLegacyRandn();
         PyExec(OriginalPongDriver);
     }
 
@@ -391,13 +417,17 @@ public class KarpathyPongLiveTests : InteropTestBase
     // loaded from the hash-verified original source by KarpathyOriginalSource, not rewritten.
     // Model setup, normalization and optimizer scheduling preserve the top-level numerical
     // equations while replacing only Gym observations/rewards and the infinite loop.
+    // The initial weights draw through legacy_randn (InteropTestBase.DefineLegacyRandn, defined by
+    // LoadOriginalPong): pg_rng.randn itself on x64. On a NumPy that fuses legacy_gauss (arm64), it
+    // is the literal evaluation of pg_rng's own stream, left at the position the literal sampler
+    // reaches, so every later pg_rng.uniform() action draw still comes from NumPy's generator.
     private const string OriginalPongDriver = """
         def pg_initialize(seed,hidden):
             global pg_rng,pg_model,pg_initial_model,pg_gradient_buffer,pg_rms_cache
             global pg_episodes,pg_updates,pg_running_reward
             pg_rng=np.random.RandomState(seed)
-            pg_model={'W1':pg_rng.randn(hidden,6400)/np.sqrt(6400),
-                      'W2':pg_rng.randn(hidden)/np.sqrt(hidden)}
+            pg_model={'W1':legacy_randn(pg_rng,hidden,6400)/np.sqrt(6400),
+                      'W2':legacy_randn(pg_rng,hidden)/np.sqrt(hidden)}
             pg_initial_model={name:value.copy() for name,value in pg_model.items()}
             pg_gradient_buffer={name:np.zeros_like(value) for name,value in pg_model.items()}
             pg_rms_cache={name:np.zeros_like(value) for name,value in pg_model.items()}

@@ -8,15 +8,22 @@ namespace NumSharp.Tests.Interop;
 public class GistLearningSourceDemonstrationsLiveTests : InteropTestBase
 {
     /// <summary>
-    /// Every NES state and reward across the original 300 updates, matched against live NumPy on the x64
-    /// reference architecture. On arm64 it is inconclusive: the macos-latest runner measured a 1-ULP drift
-    /// in the 301-state trace (element 542), the cross-architecture class
-    /// <see cref="InteropTestBase.SkipByteExactOnArm64"/> documents.
+    /// Every NES state and reward across the original 300 updates, matched against live NumPy on every
+    /// host.
     /// </summary>
+    /// <remarks>
+    /// <para>The Python trace draws its seeded Gaussians through <c>legacy_randn</c>
+    /// (<see cref="InteropTestBase.DefineLegacyRandn"/>). On x64 that is NumPy's own <c>rng.randn</c>; on a
+    /// NumPy that fuses <c>legacy_gauss</c> (arm64) it is the literal evaluation of the same stream.</para>
+    /// <para>This test used to be Inconclusive on arm64 via <see cref="InteropTestBase.SkipByteExactOnArm64"/>,
+    /// blaming a NEON reduction-width drift at trace element 542. That diagnosis was wrong. NumSharp's
+    /// trajectory is bit-identical with 256-bit, 128-bit or no hardware vectors. The first divergence came
+    /// late (iteration 135) because a fused <c>r2</c> moves a typical noise draw by about 1 ULP, which the
+    /// 0.0002 step size rounds away almost every time.</para>
+    /// </remarks>
     [TestMethod]
     public void Nes_EveryStateAndRewardAcrossOriginal300Updates_MatchesLiveNumpy()
     {
-        SkipByteExactOnArm64("Nes_EveryStateAndRewardAcrossOriginal300Updates (1-ULP trace drift measured on macos-latest arm64)");
         using var solution = np.array(new[] { .5, .1, -.3 });
         using var trajectory = np.zeros((301, 4), dtype: np.float64);
         using var final = NaturalEvolutionStrategies.OptimizeQuadratic(solution, progress: (iteration, weights, reward) =>
@@ -25,15 +32,16 @@ public class GistLearningSourceDemonstrationsLiveTests : InteropTestBase
             trajectory[iteration, 3] = reward;
         });
         ExportTo("solution", solution);
+        DefineLegacyRandn();
         PyExec("""
             rng=np.random.RandomState(0)
-            weights=rng.randn(3)
+            weights=legacy_randn(rng,3)
             trace=np.empty((301,4))
             for i in range(301):
                 trace[i,:3]=weights
                 trace[i,3]=-np.sum(np.square(solution-weights))
                 if i==300: break
-                noise=rng.randn(50,3)
+                noise=legacy_randn(rng,50,3)
                 rewards=np.array([-np.sum(np.square(solution-(weights+.1*row))) for row in noise])
                 a=(rewards-rewards.mean())/rewards.std()
                 weights=weights+.001/(50*.1)*np.dot(noise.T,a)

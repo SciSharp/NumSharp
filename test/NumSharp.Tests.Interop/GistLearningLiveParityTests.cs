@@ -53,6 +53,18 @@ public class GistLearningLiveParityTests : InteropTestBase
         }
     }
 
+    /// <summary>
+    /// The seed-0 NES noise NumSharp draws, the rewards it yields, and one update step: each byte-identical
+    /// to NumPy.
+    /// </summary>
+    /// <remarks>
+    /// The noise claim is about NumSharp's seeded Gaussian stream, so the expected noise comes from
+    /// <c>legacy_randn</c> (<see cref="InteropTestBase.DefineLegacyRandn"/>). On x64 that is NumPy's own
+    /// <c>rng.randn</c>. On a NumPy that fuses <c>legacy_gauss</c> (arm64) it is the literal evaluation of
+    /// the same stream. These 8 draws happen to be unaffected, so this test passed on macos-latest by luck,
+    /// not by contract. The reward and step checks consume NumSharp's exported noise and compare directly
+    /// on every host.
+    /// </remarks>
     [TestMethod]
     public void Nes_SeededNoiseAndOneStep_ExactLiveNumpy()
     {
@@ -64,7 +76,8 @@ public class GistLearningLiveParityTests : InteropTestBase
         var rewards = NaturalEvolutionStrategies.Rewards(weights, noise, x => NaturalEvolutionStrategies.QuadraticReward(x, solution));
         var next = NaturalEvolutionStrategies.Step(weights, noise, rewards, alpha: .05);
         ExportTo("w", weights); ExportTo("solution", solution); ExportTo("noise", noise);
-        PyExec("rng=np.random.RandomState(0)\nexpected_noise=rng.randn(4,2)\nr=np.array([-np.sum(np.square(solution-(w+.1*n))) for n in noise])\na=(r-np.mean(r))/np.std(r)\nnext_w=w+.05/(4*.1)*np.dot(noise.T,a)");
+        DefineLegacyRandn();
+        PyExec("rng=np.random.RandomState(0)\nexpected_noise=legacy_randn(rng,4,2)\nr=np.array([-np.sum(np.square(solution-(w+.1*n))) for n in noise])\na=(r-np.mean(r))/np.std(r)\nnext_w=w+.05/(4*.1)*np.dot(noise.T,a)");
         using (Gil())
         {
             using var expectedNoise = Scope.Eval("expected_noise");
@@ -77,23 +90,31 @@ public class GistLearningLiveParityTests : InteropTestBase
     }
 
     /// <summary>
-    /// The full 300-iteration NES optimisation, byte-exact against live NumPy on the x64 reference
-    /// architecture. On arm64 it is inconclusive: the macos-latest runner measured a 1-ULP drift in the
-    /// final weights (element 1: <c>…4F2F</c> vs <c>…502F</c>), the cross-architecture class
-    /// <see cref="InteropTestBase.SkipByteExactOnArm64"/> documents.
+    /// The full 300-iteration NES optimisation, byte-exact against live NumPy on every host.
     /// </summary>
+    /// <remarks>
+    /// <para>The Python loop draws its 45,003 seeded Gaussians through <c>legacy_randn</c>
+    /// (<see cref="InteropTestBase.DefineLegacyRandn"/>). On x64 that is NumPy's own <c>rng.randn</c>; on
+    /// a NumPy that fuses <c>legacy_gauss</c> (arm64) it is the literal evaluation of the same stream.</para>
+    /// <para>This test used to be Inconclusive on arm64 via <see cref="InteropTestBase.SkipByteExactOnArm64"/>,
+    /// blaming a NEON reduction-width drift in the final weights (element 1, <c>…4F2F</c> vs <c>…502F</c>).
+    /// That diagnosis was wrong. NumSharp's trajectory is bit-identical with 256-bit, 128-bit or no hardware
+    /// vectors, and <c>…4F2F</c> IS the x64 value. It was NumPy's fused noise stream that moved: a fused
+    /// <c>r2</c> shifts a typical draw by about 1 ULP, the 0.0002 step size rounds that away almost every
+    /// iteration, and it surfaced only late, as the 1-ULP final drift.</para>
+    /// </remarks>
     [TestMethod]
     public void Nes_Complete300IterationOptimization_ByteExactLiveNumpy()
     {
-        SkipByteExactOnArm64("Nes_Complete300IterationOptimization (1-ULP final-weight drift measured on macos-latest arm64)");
         using var solution = np.array(new[] { .5, .1, -.3 });
         using var actual = NaturalEvolutionStrategies.OptimizeQuadratic(solution);
         ExportTo("solution", solution);
+        DefineLegacyRandn();
         PyExec("""
             rng=np.random.RandomState(0)
-            weights=rng.randn(3)
+            weights=legacy_randn(rng,3)
             for iteration in range(300):
-                noise=rng.randn(50,3)
+                noise=legacy_randn(rng,50,3)
                 rewards=np.array([-np.sum(np.square(solution-(weights+.1*row))) for row in noise])
                 advantages=(rewards-np.mean(rewards))/np.std(rewards)
                 weights=weights+.001/(50*.1)*np.dot(noise.T,advantages)

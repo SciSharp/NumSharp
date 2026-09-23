@@ -154,6 +154,84 @@ namespace NumSharp.Tests.Fuzz
             return ops;
         }
 
+        /// <summary>
+        ///     True on the host the corpus's libm-routed values were authored on: win-amd64, where
+        ///     NumPy 2.4.2 and .NET both call ucrtbase. It is the same Windows check
+        ///     <c>RunHostLibmCorpus</c> uses to keep a whole libm tier strict. A registry branch keyed on
+        ///     it excuses nothing on the reference host, so every such cell stays bit-exact there.
+        /// </summary>
+        internal static readonly bool IsLibmReferenceHost =
+            System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows);
+
+        /// <summary>
+        ///     The (H1) predicate: every differing element of a float32 <c>sin</c>/<c>cos</c> slot is a
+        ///     lane past NumPy's Cody-Waite limit that THIS host's libm answered, within 2 ULP of the
+        ///     reference host's answer.
+        /// </summary>
+        /// <remarks>
+        ///     <para>Past the limit, the port (like NumPy's <c>simd_sincos_f32</c>) returns
+        ///     <c>MathF.Sin(x)</c>/<c>MathF.Cos(x)</c>, i.e. the platform libm, so the ucrtbase answer the
+        ///     corpus recorded is only reproducible on the reference host.</para>
+        ///     <para>The check re-derives the host's answer for every past-limit input in the case's input
+        ///     BUFFER (a superset of the view, so no strided/offset layout can hide one). A diff qualifies
+        ///     only if NumSharp's element IS one of those answers. That keeps an in-range lane, the
+        ///     bit-exact port, out of reach without mapping slot indices back through the out layout.</para>
+        ///     <para>The host is a parameter so the tightness tests pin both sides on any machine;
+        ///     <see cref="Classify"/> passes <see cref="IsLibmReferenceHost"/>.</para>
+        /// </remarks>
+        /// <param name="c">The case. Its first operand is the ufunc input for both the plain unary ops
+        /// and the <c>out_unary</c> out=/where= tier, whose ufunc name is in <c>params.ufunc</c>.</param>
+        /// <param name="kind">How the case diverged; only <see cref="DivergenceKind.Value"/> can qualify.</param>
+        /// <param name="expected">The reference (NumPy) bytes of the compared slot.</param>
+        /// <param name="actual">NumSharp's bytes of the same slot.</param>
+        /// <param name="tc">The slot's element type; only <see cref="NPTypeCode.Single"/> can qualify.</param>
+        /// <param name="diffs">Every differing element of the slot; an empty list never qualifies.</param>
+        /// <param name="libmReferenceHost">True on the corpus's reference host, where nothing is excused.</param>
+        /// <returns>
+        ///     True when the divergence is entirely this host's libm rounding past-limit lanes differently
+        ///     from ucrtbase; false for anything else, including any in-range lane.
+        /// </returns>
+        internal static bool IsHostLibmSinCosHandoff(
+            FuzzCorpus.Case c, DivergenceKind kind, byte[] expected, byte[] actual, NPTypeCode tc,
+            IReadOnlyList<BitDiff.Diff> diffs, bool libmReferenceHost)
+        {
+            if (libmReferenceHost || kind != DivergenceKind.Value || tc != NPTypeCode.Single
+                || diffs == null || diffs.Count == 0 || expected == null || actual == null)
+                return false;
+
+            string ufunc = c.Op == "out_unary"
+                ? (c.Params != null && c.Params.TryGetValue("ufunc", out var u) ? u.GetString() : null)
+                : c.Op;
+            bool sine = ufunc == "sin";
+            if (!sine && ufunc != "cos")
+                return false;
+
+            // A narrow-int input (int16/uint16/char rides the same f->f loop) never exceeds 65535,
+            // below both limits, so only a float32 input can reach the libm handoff.
+            if (c.Operands == null || c.Operands.Length == 0 || c.Operands[0].Dtype != "float32"
+                || c.Operands[0].Buffer == null)
+                return false;
+
+            // NumPy's limits, spelled exactly as NDFloatMath's MaxCodySin / MaxCodyCos.
+            float limit = sine ? 117435.9921875f : 71476.0625f;
+            var hostAnswers = new HashSet<uint>();
+            byte[] input = FuzzCorpus.FromHex(c.Operands[0].Buffer);
+            for (int i = 0; i + 4 <= input.Length; i += 4)
+            {
+                float x = BitConverter.ToSingle(input, i);
+                // The kernel sends a lane to libm when it is not NaN and |x| > limit (its inRange test
+                // is |x| <= limit); ±inf qualifies too and libm returns NaN, which BitDiff tokenizes.
+                if (!float.IsNaN(x) && Math.Abs(x) > limit)
+                    hostAnswers.Add(BitConverter.SingleToUInt32Bits(sine ? MathF.Sin(x) : MathF.Cos(x)));
+            }
+            if (hostAnswers.Count == 0)
+                return false;
+
+            return diffs.All(d => d.Index >= 0 && (d.Index + 1) * 4 <= actual.Length
+                                  && hostAnswers.Contains(BitConverter.ToUInt32(actual, d.Index * 4))
+                                  && BitDiff.WithinUlp(expected, actual, d.Index, tc, 2));
+        }
+
         public static string Classify(
             FuzzCorpus.Case c, DivergenceKind kind,
             byte[] expected, byte[] actual, NPTypeCode tc, IReadOnlyList<BitDiff.Diff> diffs,
@@ -741,6 +819,23 @@ namespace NumSharp.Tests.Fuzz
                         return "evaluate: complex arithmetic / magnitude / unary within 3 ULP (npy_c* vs System.Numerics; FMA contraction) [documented]";
                 }
             }
+
+            // (H1) float32 sin/cos PAST NumPy's Cody-Waite limit: the platform libm on BOTH sides.
+            //      The simd_sincos_f32 port (NDFloatMath) is bit-exact on every in-range lane and
+            //      deliberately NOT on the rest. A lane with |x| above NumPy's limit (sin 117435.992,
+            //      cos 71476.0625) goes to MathF.Sin/Cos, exactly as NumPy's own kernel hands it to
+            //      npy_sinf/npy_cosf. So on any host both libraries return THAT host's libm answer, and
+            //      the corpus records win-amd64 ucrtbase's. Another libm may round the lane differently:
+            //      macos-latest's Apple libm put float32 sin(2^32) at 0xbeec8982, 1 ULP from ucrtbase's
+            //      0xbeec8981, in 12 out_where comparisons (six out layouts x both slots).
+            //      This is the RunHostLibmCorpus pin applied per element to an otherwise portable tier.
+            //      Narrow by construction: never on the reference host, only float32 sin/cos, and each
+            //      differing element must equal this host's libm answer for a past-limit input of the
+            //      same case and sit within 2 ULP of the reference. An in-range lane cannot qualify, so
+            //      a regression in the port itself still fails on every host.
+            if (IsHostLibmSinCosHandoff(c, kind, expected, actual, tc, diffs, IsLibmReferenceHost))
+                return "float32 sin/cos past NumPy's Cody-Waite limit is the platform libm on both sides; this "
+                     + "host's libm rounds the lane differently from the win-amd64 ucrtbase reference [host-libm pin]";
 
             // (5) Unary transcendental / complex magnitude ~ULP (libm / algorithm differences).
             //     Tight: every differing element within 2 ULP — a gross error still fails.
