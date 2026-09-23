@@ -292,7 +292,11 @@ The complete 18-callable `np.fft` inventory is implemented in Core: complex, rea
 of NumPy 2.4.2's vendored pocketfft engine; it does not require OpenBLAS.
 
 The double/`complex128` path preserves pocketfft's operation order and is covered by byte-parity
-oracles across contiguous, transposed, strided, negative-stride, and broadcast-read inputs.
+oracles across contiguous, transposed, strided, negative-stride, and broadcast-read inputs. The
+reference is x86-64 NumPy, and NumSharp returns those bytes on every architecture. NumPy's own arm64
+wheels differ from them: they are compiled with the compiler's default floating-point contraction for
+a baseline that has fused multiply-add, so pocketfft's twiddle and butterfly multiply-adds round once
+there, and most bins of an arm64 NumPy transform sit an ULP or so from the x86-64 result.
 NumSharp also has a single-precision pocketfft engine, but it has no `complex64` storage dtype:
 `float16`/`float32` transform results are therefore exposed as `complex128`, where NumPy exposes
 `complex64`. The FFT oracle treats that as a documented dtype divergence while still checking the
