@@ -137,6 +137,7 @@ namespace NumSharp.Tests.Interop.Examples
         }
 
         [TestMethod]
+        [PythonEcosystem]
         public void Pillow_FrombufferReadsInPlace_AnImageCannotBeViewed()
         {
             SkipUnless("PIL");
@@ -160,6 +161,7 @@ namespace NumSharp.Tests.Interop.Examples
         }
 
         [TestMethod]
+        [PythonEcosystem]
         public void PyArrow_PyBufferWrapsZeroCopy_AnArrowBufferImportsAsRawBytes()
         {
             SkipUnless("pyarrow");
@@ -183,6 +185,7 @@ namespace NumSharp.Tests.Interop.Examples
         }
 
         [TestMethod]
+        [PythonEcosystem]
         public void Torch_FrombufferShares_TheSameAddressAsNumpy()
         {
             SkipUnless("torch");

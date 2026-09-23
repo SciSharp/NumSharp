@@ -142,6 +142,7 @@ public class GistSignalSourceDemonstrationsLiveTests : InteropTestBase
     /// <c>scipy.signal.windows</c>, so this is inconclusive where SciPy is not installed.
     /// </summary>
     [TestMethod]
+    [PythonEcosystem]
     public void SyntheticSine_MeasuredCrossingAndFftOutputs_ExactLiveNumpy()
     {
         // Checked BEFORE any export, so a missing SciPy cannot leave pinned exports behind (the leak
@@ -173,6 +174,7 @@ public class GistSignalSourceDemonstrationsLiveTests : InteropTestBase
     /// <c>scipy.signal</c>, so this is inconclusive where SciPy is not installed.
     /// </summary>
     [TestMethod]
+    [PythonEcosystem]
     public void SyntheticDemoHarmonics_AllFourMeasurements_ExactLiveNumpy()
     {
         SkipUnless("scipy");   // before any export — see SyntheticSine_MeasuredCrossingAndFftOutputs_ExactLiveNumpy

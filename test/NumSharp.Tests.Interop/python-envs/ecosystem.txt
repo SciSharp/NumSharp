@@ -1,0 +1,16 @@
+# The third-party libraries NumSharp.Interop.pythonnet bridges into, for the `ecosystem`
+# environment (make_env.py). Only the tests tagged [PythonEcosystem] run against this environment;
+# the byte-exact live-NumPy tests run in `parity`, which holds numpy alone.
+#
+# Every pin is exact so a CI run is reproducible: a library's new release changes this file in a
+# reviewed commit instead of changing the environment underneath an unrelated PR. numpy is NOT
+# listed: make_env.py installs the OpenBLAS-manifest pin first and holds it with a constraint, so
+# a release that needs a different numpy fails this install rather than replacing the oracle's.
+# Resolved together with numpy 2.4.2 on win_amd64, manylinux_2_28 x86_64 and macOS 14 arm64.
+
+pandas==3.0.5                   # PandasTestGate pins the adapter claims to exactly this release
+scipy==1.16.3                   # scipy.signal references in GistSignal*LiveParityTests
+pyarrow==23.0.1                 # buffer-protocol consumer (NpFrombuffer page, example 05)
+pillow==11.3.0                  # PIL buffer reads (NpFrombuffer page, example 05)
+polars==1.38.1                  # Series sharing memory (NpFrombuffer page)
+opencv-python-headless==5.0.0.93  # cv2 drawing into NumSharp memory (NpFrombuffer page); headless = no GUI libs

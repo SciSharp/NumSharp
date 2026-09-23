@@ -16,6 +16,7 @@ namespace NumSharp.Tests.Interop
     ///     dtypes, lifetime ownership, codec policy, explicit GIL ownership and concurrent churn.
     /// </summary>
     [TestClass]
+    [PythonEcosystem]
     public class PandasInteropEdgeCaseTests : InteropTestBase
     {
         [TestMethod]

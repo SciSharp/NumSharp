@@ -242,6 +242,31 @@ namespace NumSharp
         /// </summary>
         public static bool PythonnetRequireEngine => GetBool("NUMSHARP_PYTHONNET_REQUIRE_ENGINE", true);
 
+        /// <summary>
+        ///     Env <c>NUMSHARP_PYTHONNET_PYTHON</c>: the Python INTERPRETER the interop suite embeds — a
+        ///     base install's <c>python</c> or, the intended use, a virtual environment's
+        ///     (<c>.venvs/parity-py312/Scripts/python.exe</c>, built by
+        ///     <c>test/NumSharp.Tests.Interop/python-envs/make_env.py</c>). <b>Binding</b>: when set,
+        ///     the suite probes exactly this interpreter and never falls back to another Python, so a
+        ///     typo cannot silently test against whatever numpy happens to be on <c>PATH</c>. A venv is
+        ///     embedded AS the venv (its site-packages, not its base install's) — which a bare
+        ///     <see cref="PythonNetPyDll"/> cannot express, since a venv has no libpython of its own.
+        ///     Checked BEFORE <see cref="PythonNetPyDll"/>. <b>Default:</b> <c>null</c> → the existing
+        ///     discovery chain.
+        /// </summary>
+        public static string PythonnetPython => Get("NUMSHARP_PYTHONNET_PYTHON");
+
+        /// <summary>
+        ///     Whether a MISSING optional Python package (torch, pandas, scipy, …) FAILS the interop
+        ///     tests that need it instead of reporting Inconclusive. Env
+        ///     <c>NUMSHARP_PYTHONNET_REQUIRE_PACKAGES</c>. <b>Default:</b> <c>false</c> — a developer
+        ///     machine may hold numpy alone. CI sets it for the run against the <c>ecosystem</c>
+        ///     environment, where every such package is installed on purpose, so an absent or
+        ///     wrong-version package goes red instead of green-by-skipping. Also covers the version
+        ///     gates (the PyTorch floor, the exact pandas release the adapter claims were pinned to).
+        /// </summary>
+        public static bool PythonnetRequirePackages => GetBool("NUMSHARP_PYTHONNET_REQUIRE_PACKAGES", false);
+
         #endregion
 
         #region Benchmarks
