@@ -419,13 +419,54 @@ bit-exact (`ILKernelGenerator.Reduction.Pairwise.cs`); only the fused reduce pat
    the engine cells sit 0.70–1.19: the ones below NumPy are almost all at or above the old kernels' own ratio (flat C
    i32 0.77 / u8 0.70 / f32 0.87 vs old 0.76 / 0.70 / 0.88; axis i32 ax0 0.70 vs 0.73; the F / step / permutation cells
    up from 0.45–0.65), i.e. pre-existing bandwidth gaps — follow-ups below.
-   **Follow-ups:** (1) SLAB mode re-reads and re-writes the output run once per reduced index; folding SEVERAL reduced
-   indices per pass (`o = N(N(N(o, x_k), x_k+1), …)`) keeps every element's operation order, so it stays exact, and a
-   raw-loop probe measured 8 per pass at 1.8–2.4× the per-slab loop on DRAM-bound f64 (`max(f64, axis=0)`,
-   `max(F, axis=1)`) — the next lever. (2) The L3-bound 4M flat / row cells (4-byte and 1-byte lanes) trail NumPy's
+   **Follow-ups:** (1) ~~SLAB mode re-reads and re-writes the output run once per reduced index~~ — LANDED, see "Slab
+   fusion" below. (2) The L3-bound 4M flat / row cells (4-byte and 1-byte lanes) trail NumPy's
    identical schedule by 0.70–0.87 (NumSharp's buffers are 16-byte aligned, so every other 32-byte load splits a line;
-   the one-group-ahead prefetch is unmeasured there). (3) The eager elementwise output-layout gap the oracle exposed.
+   the one-group-ahead prefetch is unmeasured there) — after the slab fusion the f32 / i32 SLAB cells at 4M (16 MB,
+   L3-resident) sit in the same class at 0.95 / 0.87. (3) The eager elementwise output-layout gap the oracle exposed.
    (4) Broadcast operands still decline.
+   **Slab fusion (LANDED):** SLAB mode (the engine's `ReduceAxis` and np.evaluate's streamed slabs,
+   `StreamAxisMinMax`) folds EIGHT reduced indices per pass over contiguous slab runs —
+   `NumPyMinMaxReduce.CombineRun8`, the output run loaded and stored once per eight slabs, the eight slab streams in
+   flight together; the axis' remainder and strided runs keep the one-slab `CombineRun`. **The first cut regressed and
+   the fix is a regrouping.** It kept the left chain `N(…N(N(o, x0), x1)…, x7)`, and on L2-resident FLOATS that lost to
+   the per-slab loop (pinned A/B vs `acb8bdc4`: f64 `(100,1000)` axis 0 0.78×, f32 0.87×, F axis 1 0.87×, `ptp` 0.88×,
+   `evaluate max(a,0)` 0.80×) while integers won — the float lane op is three dependent instructions (`vmaxp`,
+   `vcmpordp`, `vblendvp`), so eight in a chain are latency-bound, where an integer `vpmax` is one cycle. The vector body
+   now evaluates the SAME fold as a balanced tree, `N(o, N(N(N(x0,x1), N(x2,x3)), N(N(x4,x5), N(x6,x7))))` — depth four —
+   which is exact because `N` is associative: it returns the FIRST NaN of the sequence, else the LAST of its extreme
+   values, a selection that depends only on operand ORDER, never on the parenthesization (the fact the strided unroll
+   already rests on; integer lanes have no bit-distinct ties at all). The scalar tail keeps the k-ordered left fold. A
+   standalone kernel probe (a scratchpad file, rebuild from this description: raw 64-byte-aligned `(K, W)` buffers, the
+   three fold shapes over the same `N`, every variant bit-checked against the per-slab fold on ±0-tie / NaN-payload
+   data before it is timed) measured per-slab / chain / tree: f64 `(100,1000)` 9.8 / 12.2 /
+   9.4 µs, f32 4.8 / 6.5 / 4.8 µs, f64 `(1000,100)` 11.0 / 12.8 / 9.6 µs, f64 `(4000,1000)` 1.86 / 0.81 / 0.76 ms (a
+   two-vector-per-iteration tree bought nothing further). **Measured** (pinned P-core; the pre-fusion build from a
+   detached `acb8bdc4` worktree vs the tree build, 7 alternated runs each, min; speedup = old/new): @100K slab cells
+   1.03–1.58× (f64 axis 0 1.08, f32 1.20, i32 1.58, i64 1.31, u8 1.33, F axis 1 1.14, 3-D 1.25, `ptp` 1.10,
+   `evaluate max(a*b,0)` 1.15, `max(a,0)` 1.06); @4M f64 1.73, i64 1.65, F 1.58, 3-D 1.45, `ptp` 1.57, `evaluate
+   max(a,0)` 1.57, f32 1.13, u8 1.13, and the i32 slab 0.95 / `evaluate min(i*i,0)` 0.98 — parity within the noise (their
+   medians 1.16 / 0.96; the untouched ROWS control read 0.98 on the min and 0.83 on the median on this loaded host).
+   NPY/NS against a pinned NumPy twin: SLAB cells @100K 1.38–3.08 (were 1.10–2.31), @4M f64-family 1.75–2.10 (were
+   1.06–1.45), f32 / i32 slab @4M 0.95 / 0.87 (were 0.84 / 0.92 — follow-up (2)). **Tests:**
+   `AxisSlab_FusedGroups_KeepTheSequentialFold` (K = 21: ties / NaNs within a group, across groups, in the remainder,
+   against the copied slab, in the f32 scalar tail; the first-NaN column sits at a group's FIRST slab — moved there
+   because a mutant skipping each vector's first slab survived with it at k = 5) and
+   `AxisSlab_FusedTree_EveryNodeKeepsKOrder` (K = 17, W = 20: a ±0 tie or a two-NaN pair on EACH of the tree's eight
+   nodes, vector columns at both widths plus the f32 scalar tail), both NumPy-probed, over C axis 0, its F transpose,
+   both again through a REVERSED view (a negative reduced-axis stride, so the tree walks `sK < 0` — NumPy keeps the
+   logical k order under `DONT_NEGATE_STRIDES`, probed: identical bits), and the streamed evaluate child. A route-probe
+   mutant (throw on `sK < 0`) is killed by exactly those two tests, so the negative-stride route is live, not assumed.
+   **Mutation-tested behind a green-baseline gate:** 24 targeted mutants — group reversed
+   (engine / stream), remainder dropped (engine / stream), tail drops the last slab, tail order reversed, the vector
+   body skipping each group's first slab, fused on strided runs, a skipped group slab, a short stream advance, an operand
+   swap at each of the eight tree nodes, a dropped / duplicated leaf, a NaN-blind (`P256`) leaf and root op, the output
+   not combined, swapped tail operands — all 24 killed; the six inner-node swaps ONLY by the node test (the group test
+   cannot see them). Suites: net10.0 / net8.0 15,611 each (the 25 Examples demos fail as before — OpenBLAS not staged in
+   this worktree); Oracle 154 + the 3 known failures. **Trap seen while measuring:** with the process pinned to ONE
+   logical CPU (`NS_PROBE_AFFINITY=4`), the FIRST timed case of a fresh process can read ~10× slow (f64 per-slab 0.15 ms
+   vs 0.0098 ms steady; a first-run f32 cell 0.10 vs 0.0058 ms) — consistent with tiered JIT's background compile
+   starved of CPU by the pin — so take the min over several runs and never trust a single run's first rows.
 4. The stat / delegating / average reductions (`NanMean`/`Var`/`Std`, `Ptp`/`NanMin`/`NanMax`/`ArgMax`/`ArgMin`,
    weighted `Average`) still materialize their child(ren) — streaming candidates (Var is two-pass: recompute vs store).
    **A 2026-09-23 gap map** (fused vs NumPy, pinned, best-of; probe `red_gap2.cs` + twin) ranked them: weighted

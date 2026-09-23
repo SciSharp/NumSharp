@@ -210,7 +210,9 @@ namespace NumSharp.Backends
         ///   <item>SLABS (<c>inner &gt; 1</c>): slab 0 is produced straight into the output block (NumPy's first-visit
         ///         copy), then every further slab folds in with <see cref="NumPyMinMaxReduce.CombineRun{T,TLane}"/> in
         ///         increasing axis order — the elementwise sequential fold. Narrow slab sets are produced several slabs
-        ///         per kernel call; a wide one block by block with the output block kept hot across the whole axis.</item>
+        ///         per kernel call and folded eight per pass (<see cref="NumPyMinMaxReduce.CombineRun8{T,TLane}"/>, the
+        ///         same per-element result bit for bit); a wide one block by block with the output block kept hot
+        ///         across the whole axis.</item>
         /// </list>
         /// </summary>
         /// <typeparam name="T">The child element type.</typeparam>
@@ -267,7 +269,12 @@ namespace NumSharp.Backends
                         long jc = Math.Min(slabsPer, K - j0);
                         stream.Produce((o * K + j0) * inner, jc * inner, scratch);
                         T* x = (T*)scratch;
-                        for (long j = 0; j < jc; j++, x += inner)
+                        long j = 0;
+                        // The produced slabs sit back to back in scratch (stride `inner`), so eight at a time fold in
+                        // one pass over the output block — bit-identical to one CombineRun each (see CombineRun8).
+                        for (; j + NumPyMinMaxReduce.SlabFuse <= jc; j += NumPyMinMaxReduce.SlabFuse, x += NumPyMinMaxReduce.SlabFuse * inner)
+                            NumPyMinMaxReduce.CombineRun8<T, TLane>(d, x, inner, inner);
+                        for (; j < jc; j++, x += inner)
                             NumPyMinMaxReduce.CombineRun<T, TLane>(d, 1, x, 1, inner);
                     }
                 }

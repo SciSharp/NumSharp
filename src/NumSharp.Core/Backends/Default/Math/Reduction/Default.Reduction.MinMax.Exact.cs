@@ -319,6 +319,81 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
+        /// Reduced indices folded per pass by <see cref="CombineRun8{T,TLane}"/> — the SLAB step fused over this many
+        /// consecutive slabs.
+        /// </summary>
+        /// <remarks>
+        /// Measured on the (1000, 4000) f64 <c>max(axis=0)</c> / F <c>max(axis=1)</c> probes (DRAM-bound): per-slab
+        /// passes 1.4–2.2 ms, 4 per pass 0.95–1.18 ms, 8 per pass 0.75–0.90 ms — each pass re-reads and re-writes the
+        /// output run once instead of once per slab, and the eight concurrent input streams keep more misses in flight.
+        /// </remarks>
+        internal const int SlabFuse = 8;
+
+        /// <summary>
+        /// The SLAB step fused over <see cref="SlabFuse"/> consecutive reduced indices of CONTIGUOUS runs:
+        /// <c>o[i] = N(…N(N(o[i], x_0[i]), x_1[i])…, x_7[i])</c> with <c>x_q = x + q·sK</c> — bit-identical to eight
+        /// separate <see cref="CombineRun{T,TLane}"/> calls for k, k+1, …, k+7, and so to NumPy's sequential fold (the
+        /// last equal zero wins, the first NaN keeps its payload).
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The win is memory traffic: the output run is loaded and stored once per eight slabs instead of once per slab,
+        /// and the eight slabs stream concurrently. Callers must hand eight slabs that all exist (the remainder of a
+        /// reduced axis goes through <see cref="CombineRun{T,TLane}"/>) and unit-stride runs in both operands.
+        /// </para>
+        /// <para>
+        /// The vector body evaluates the fold as a BALANCED TREE, <c>N(o, N(N(N(x0,x1), N(x2,x3)), N(N(x4,x5), N(x6,x7))))</c>,
+        /// not as the left-leaning chain it equals. That is exact because <c>N</c> is associative: it returns <c>a</c> when
+        /// <c>a</c> is NaN, else <c>b</c> when <c>b</c> is NaN, else <c>a</c> when <c>a</c> strictly beats <c>b</c>, else
+        /// <c>b</c> — "the FIRST NaN of the sequence, else the LAST of its extreme values", a selection that depends only
+        /// on the operands' order, never on how they are parenthesized, so every grouping picks the same element with
+        /// the same bits (integer lanes have no bit-distinct ties at all). It is the same fact the flat strided unroll
+        /// rests on (<c>Flat_StridedRun_LaterLaneWinsEveryTie</c>). The chain was measured SLOWER than per-slab passes on
+        /// L2-resident floats — eight dependent <c>vmaxp</c> + <c>vcmpordp</c> + <c>vblendvp</c> steps per vector (f64
+        /// (100, 1000): chain 12.2 µs, per-slab 9.8 µs, tree 9.4 µs; f32: 6.5 / 4.8 / 4.8 µs) — while the tree's depth
+        /// of four keeps the DRAM win (f64 (4000, 1000): per-slab 1.86 ms, chain 0.81 ms, tree 0.76 ms).
+        /// </para>
+        /// </remarks>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <typeparam name="TLane">Max or min.</typeparam>
+        /// <param name="o">First output element of the run (read-modify-write, contiguous).</param>
+        /// <param name="x">First element of the first of the eight slabs' runs (contiguous).</param>
+        /// <param name="sK">Element distance between consecutive slabs' runs (any sign).</param>
+        /// <param name="n">Run length.</param>
+        internal static unsafe void CombineRun8<T, TLane>(T* o, T* x, long sK, long n)
+            where T : unmanaged, INumber<T> where TLane : struct, ILane<T>
+        {
+            long i = 0;
+            if (Vector256.IsHardwareAccelerated)
+            {
+                // Vector256 only where it is hardware (as in CombineRun: an emulated vector would lose to the scalar
+                // loop). The eight slabs fold as a tree in k order (see remarks: exact because N is associative), the
+                // output vector joins LAST as the leftmost operand, then is stored once.
+                int w = Vector256<T>.Count;
+                for (; i + w <= n; i += w)
+                {
+                    T* p = x + i;
+                    var t0 = TLane.N(Vector256.Load(p), Vector256.Load(p + sK));
+                    var t1 = TLane.N(Vector256.Load(p + 2 * sK), Vector256.Load(p + 3 * sK));
+                    var t2 = TLane.N(Vector256.Load(p + 4 * sK), Vector256.Load(p + 5 * sK));
+                    var t3 = TLane.N(Vector256.Load(p + 6 * sK), Vector256.Load(p + 7 * sK));
+                    var v = TLane.N(TLane.N(t0, t1), TLane.N(t2, t3));
+                    Vector256.Store(TLane.N(Vector256.Load(o + i), v), o + i);
+                }
+            }
+
+            // Scalar tail (and the whole run without SIMD): the k-ordered left fold per element.
+            for (; i < n; i++)
+            {
+                T v = o[i];
+                T* p = x + i;
+                for (int q = 0; q < SlabFuse; q++, p += sK)
+                    v = N<T, TLane>(v, *p);
+                o[i] = v;
+            }
+        }
+
+        /// <summary>
         /// One vector of a strided run, lanes in logical order <c>x[0], x[s], x[2s], …</c>: a stride of -1 (a reversed
         /// view) is ONE contiguous load ending at <paramref name="x"/> with its lanes reversed; any other stride goes
         /// through <see cref="GatherStrided{T}"/>. Only 4- and 8-byte lanes are served — the caller gates on it.
@@ -396,7 +471,9 @@ namespace NumSharp.Backends
         /// The whole axis reduction over an arbitrary (non-broadcast) strided input, NumPy's schedule per output element
         /// (see the file header): ROW mode when the reduced axis is the iterator's innermost axis — contiguous rows
         /// through <see cref="ReduceRow{T,TLane}"/>, strided ones through <see cref="ReduceStridedRow{T,TLane}"/> —
-        /// otherwise SLAB mode, the first-visit copy then one <see cref="CombineRun{T,TLane}"/> per further reduced index.
+        /// otherwise SLAB mode, the first-visit copy then one <see cref="CombineRun{T,TLane}"/> per further reduced index
+        /// (contiguous runs fused eight indices per pass by <see cref="CombineRun8{T,TLane}"/> — the same per-element
+        /// result as the one-slab steps, bit for bit).
         /// </summary>
         /// <remarks>
         /// <para>
@@ -515,7 +592,13 @@ namespace NumSharp.Backends
                 else
                 {
                     CopyRun(ob, runOs, xb, runXs, runN);
-                    for (long k = 1; k < K; k++)
+                    long k = 1;
+                    // Contiguous runs fold eight reduced indices per pass (a regrouping of the same k-ordered fold —
+                    // exact, see CombineRun8); a strided run and the axis' remainder take the one-slab step.
+                    if (runOs == 1 && runXs == 1)
+                        for (; k + SlabFuse <= K; k += SlabFuse)
+                            CombineRun8<T, TLane>(ob, xb + k * sK, sK, runN);
+                    for (; k < K; k++)
                         CombineRun<T, TLane>(ob, runOs, xb + k * sK, runXs, runN);
                 }
 

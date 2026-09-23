@@ -187,6 +187,197 @@ public class MinMaxExactScheduleTests
             Bits64(r));
     }
 
+    /// <summary>
+    /// SLAB mode with enough reduced indices that the FUSED step runs (<c>NumPyMinMaxReduce.CombineRun8</c>, eight indices
+    /// per pass): K = 21 is slab 0 copied, fused groups k 1–8 and 9–16, and a one-slab remainder k 17–20. Ties and NaNs
+    /// sit inside one group (the order WITHIN a pass), across a group boundary, in the remainder, against the copied
+    /// slab, and in both the vector columns and the scalar-tail columns of a 12-wide run (f64: three 4-lane vectors;
+    /// f32: one 8-lane vector + a 4-element scalar tail — the "TAIL" columns). The answer must still be NumPy's
+    /// sequential fold — probed against NumPy 2.4.2 on the
+    /// same recipe (identical for max and min: the ±1 fill never wins). Checked on every route that folds slabs: the
+    /// engine and the np.evaluate bare leaf over the C block along axis 0 and over its F transpose along axis 1, both
+    /// again through a reversed view (a NEGATIVE slab stride — NumPy keeps the logical order, probed identical), a
+    /// stepped view (strided runs, not fused), and a computed child <c>b · 1</c> streamed by np.evaluate (its produced
+    /// slabs are fused too).
+    /// </summary>
+    [TestMethod]
+    public void AxisSlab_FusedGroups_KeepTheSequentialFold()
+    {
+        const int K = 21, W = 12;
+        // (column, reduced index, value): +0 / -0 as ±0.0, a NaN as its f64 and f32 bit patterns.
+        var plan = new (int col, int k, double f64, float f32)[]
+        {
+            (0, 3, 0.0, 0f), (0, 8, NegZero, -0f),                                   // same group 1: later wins
+            (1, 8, NegZero, -0f), (1, 9, 0.0, 0f),                                   // across groups 1 | 2
+            (2, 16, 0.0, 0f), (2, 17, NegZero, -0f),                                 // group 2 | remainder
+            (3, 0, NegZero, -0f), (3, 20, 0.0, 0f),                                  // copied slab vs remainder end
+            (4, 1, D(0xFFF8000000000A0A), F(0xFFC00A0A)), (4, 12, D(0x7FF8000000000B0B), F(0x7FC00B0B)),  // first NaN, at a group's FIRST slab
+            (5, 18, D(0xFFF8000000000C0C), F(0xFFC00C0C)),                           // a NaN in the remainder
+            (6, 10, D(0xFFF8000000000D0D), F(0xFFC00D0D)), (6, 15, D(0x7FF8000000000E0E), F(0x7FC00E0E)),  // same group
+            (7, 17, NegZero, -0f), (7, 19, 0.0, 0f),                                 // both in the remainder
+            (8, 10, 0.0, 0f), (8, 13, NegZero, -0f),                                 // TAIL column, same group 2
+            (9, 1, 0.0, 0f), (9, 16, NegZero, -0f),                                  // TAIL, group 1 vs group 2 end
+            (10, 2, NegZero, -0f), (10, 19, 0.0, 0f),                                // TAIL, group 1 vs remainder
+            (11, 4, D(0xFFF8000000000F0F), F(0xFFC00F0F)), (11, 6, D(0x7FF8000000000101), F(0x7FC00101)),  // TAIL NaNs
+        };
+        var want64 = new[]
+        {
+            0x8000000000000000UL, 0x0UL, 0x8000000000000000UL, 0x0UL, 0xFFF8000000000A0AUL, 0xFFF8000000000C0CUL,
+            0xFFF8000000000D0DUL, 0x0UL, 0x8000000000000000UL, 0x8000000000000000UL, 0x0UL, 0xFFF8000000000F0FUL,
+        };
+        var want32 = new[]
+        {
+            0x80000000U, 0x0U, 0x80000000U, 0x0U, 0xFFC00A0AU, 0xFFC00C0CU,
+            0xFFC00D0DU, 0x0U, 0x80000000U, 0x80000000U, 0x0U, 0xFFC00F0FU,
+        };
+
+        foreach (var t in new[] { NPTypeCode.Double, NPTypeCode.Single })
+        foreach (bool isMax in new[] { true, false })
+        {
+            var b = np.full(new Shape(K, W), isMax ? -1.0 : 1.0, t);
+            foreach (var (col, k, f64, f32) in plan)
+            {
+                if (t == NPTypeCode.Double)
+                    b.SetDouble(f64, k, col);
+                else
+                    b.SetSingle(f32, k, col);
+            }
+
+            void Expect(NDArray r, string route)
+            {
+                if (t == NPTypeCode.Double)
+                    CollectionAssert.AreEqual(want64, Bits64(r), $"{t} {(isMax ? "max" : "min")} {route}");
+                else
+                    CollectionAssert.AreEqual(want32, Bits32(r), $"{t} {(isMax ? "max" : "min")} {route}");
+            }
+
+            string op = isMax ? "max" : "min";
+            Expect(Axis(b, 0, isMax, $"{t} {op} C axis 0"), "C axis 0");
+            Expect(Axis(np.asfortranarray(b.T), 1, isMax, $"{t} {op} F axis 1"), "F axis 1");
+
+            // Reversed slab order: the same logical array behind a NEGATIVE reduced-axis stride, so the fused step runs
+            // with sK < 0. NumPy's DONT_NEGATE_STRIDES keeps the logical k order — probed: identical bits.
+            Expect(Axis(np.flip(b, 0).copy()["::-1"], 0, isMax, $"{t} {op} reversed axis 0"), "reversed axis 0");
+            Expect(Axis(np.asfortranarray(np.flip(b, 0).T)[":, ::-1"], 1, isMax, $"{t} {op} reversed F axis 1"), "reversed F axis 1");
+
+            // A STRIDED slab run (every other column of a wider base) keeps the one-slab step — the fused step assumes
+            // unit-stride runs. The gap columns hold a value that would win if they were ever read (probed: NumPy's
+            // answer for the stepped view is the C block's, bit for bit).
+            var wide = np.full(new Shape(K, 2 * W), isMax ? 5.0 : -5.0, t);
+            wide[":, ::2"] = b;
+            Expect(Axis(wide[":, ::2"], 0, isMax, $"{t} {op} stepped axis 0"), "stepped axis 0");
+
+            // A computed child over C operands streams: its slabs are produced back to back and fused eight at a time.
+            var one = np.ones(new Shape(K, W), t);
+            int streamed = NDExpr.StreamingReductions;
+            var child = np.evaluate(isMax ? NDExpr.Max((NDExpr)b * (NDExpr)one, 0) : NDExpr.Min((NDExpr)b * (NDExpr)one, 0));
+            Assert.AreEqual(streamed + 1, NDExpr.StreamingReductions, $"{t} {op}: the computed child must stream");
+            Expect(child, "streamed child");
+        }
+
+        // Integers are order-free: the fused step must still give the plain extreme of every column.
+        var ints = (np.arange(K * W).astype(NPTypeCode.Int32) * 7919 % 1009 - 500).reshape(K, W);
+        var imax = Axis(ints, 0, isMax: true, "int32 max C axis 0");
+        var imin = Axis(ints, 0, isMax: false, "int32 min C axis 0");
+        for (int c = 0; c < W; c++)
+        {
+            int hi = int.MinValue, lo = int.MaxValue;
+            for (int k = 0; k < K; k++)
+            {
+                int v = ints.GetInt32(k, c);
+                hi = System.Math.Max(hi, v);
+                lo = System.Math.Min(lo, v);
+            }
+
+            Assert.AreEqual(hi, imax.GetInt32(c), $"int32 max col {c}");
+            Assert.AreEqual(lo, imin.GetInt32(c), $"int32 min col {c}");
+        }
+    }
+
+    /// <summary>
+    /// The fused SLAB step folds each group of eight slabs as a balanced TREE — <c>t0 = N(x0,x1)</c> … <c>t3 = N(x6,x7)</c>,
+    /// <c>u0 = N(t0,t1)</c>, <c>u1 = N(t2,t3)</c>, <c>v = N(u0,u1)</c>, <c>r = N(o,v)</c> — which is exact only because
+    /// <c>N</c> is associative AND every node keeps its operands in k order. Each column here puts a ±0 tie (+0 first,
+    /// so the later −0 must win) or a two-NaN pair (the first payload must win) on exactly ONE node of the tree, so an
+    /// operand swap at any node — or a NaN-blind lane op at a node whose first operand is NaN — flips that column. K = 17
+    /// is the copied slab plus two whole groups (x_q of group g is k = 8g − 7 + q); W = 20 is five f64 vectors, and two
+    /// f32 vectors plus a 4-element scalar tail (columns 16–19). Expected bits probed against NumPy 2.4.2 on the same
+    /// recipe (C axis 0, its F transpose along axis 1, and both again through a reversed view — a negative slab stride —
+    /// all agree; max and min alike, the ±1 fill never wins).
+    /// </summary>
+    [TestMethod]
+    public void AxisSlab_FusedTree_EveryNodeKeepsKOrder()
+    {
+        const int K = 17, W = 20;
+        double nanA64 = D(0xFFF8000000000A0A), nanB64 = D(0x7FF8000000000B0B);
+        float nanA32 = F(0xFFC00A0A), nanB32 = F(0x7FC00B0B);
+        // (column, reduced index, value): 'p' +0, 'n' −0, 'A' / 'B' the two NaN payloads (A must survive).
+        var plan = new (int col, int k, char v)[]
+        {
+            (0, 1, 'p'), (0, 2, 'n'),     // t0 tie (group 1 x0, x1)
+            (1, 3, 'p'), (1, 4, 'n'),     // t1 tie
+            (2, 5, 'p'), (2, 6, 'n'),     // t2 tie
+            (3, 7, 'p'), (3, 8, 'n'),     // t3 tie
+            (4, 2, 'p'), (4, 3, 'n'),     // u0 tie (x1 vs x2)
+            (5, 6, 'p'), (5, 7, 'n'),     // u1 tie (x5 vs x6)
+            (6, 4, 'p'), (6, 5, 'n'),     // v tie (x3 vs x4)
+            (7, 0, 'p'), (7, 9, 'n'),     // r tie (the copied output vs group 2 x0)
+            (8, 9, 'A'), (8, 10, 'B'),    // t0 NaN pair (group 2)
+            (9, 10, 'A'), (9, 11, 'B'),   // u0 NaN pair (x1 vs x2)
+            (10, 12, 'A'), (10, 13, 'B'), // v NaN pair (x3 vs x4)
+            (11, 1, 'A'), (11, 9, 'B'),   // r NaN pair (NaN carried in from group 1)
+            (12, 8, 'n'), (12, 9, 'p'),   // across groups: the later +0 wins
+            (13, 7, 'A'), (13, 8, 'B'),   // t3 NaN pair
+            (14, 0, 'n'),                 // a zero in the copied slab only
+            (15, 13, 'A'), (15, 14, 'B'), // t2 NaN pair (group 2 x4, x5)
+            (16, 1, 'p'), (16, 2, 'n'),   // f32 scalar tail from here: t0 tie
+            (17, 4, 'p'), (17, 5, 'n'),   // v tie
+            (18, 0, 'A'), (18, 5, 'B'),   // r NaN pair (NaN in the copied output)
+            (19, 6, 'p'), (19, 7, 'n'),   // u1 tie
+        };
+        const ulong N0 = 0x8000000000000000UL, A64 = 0xFFF8000000000A0AUL;
+        var want64 = new[] { N0, N0, N0, N0, N0, N0, N0, N0, A64, A64, A64, A64, 0x0UL, A64, N0, A64, N0, N0, A64, N0 };
+        const uint N032 = 0x80000000U, A32 = 0xFFC00A0AU;
+        var want32 = new[] { N032, N032, N032, N032, N032, N032, N032, N032, A32, A32, A32, A32, 0x0U, A32, N032, A32, N032, N032, A32, N032 };
+
+        foreach (var t in new[] { NPTypeCode.Double, NPTypeCode.Single })
+        foreach (bool isMax in new[] { true, false })
+        {
+            var b = np.full(new Shape(K, W), isMax ? -1.0 : 1.0, t);
+            foreach (var (col, k, v) in plan)
+            {
+                if (t == NPTypeCode.Double)
+                    b.SetDouble(v switch { 'p' => 0.0, 'n' => NegZero, 'A' => nanA64, _ => nanB64 }, k, col);
+                else
+                    b.SetSingle(v switch { 'p' => 0f, 'n' => -0f, 'A' => nanA32, _ => nanB32 }, k, col);
+            }
+
+            string op = isMax ? "max" : "min";
+            void Expect(NDArray r, string route)
+            {
+                if (t == NPTypeCode.Double)
+                    CollectionAssert.AreEqual(want64, Bits64(r), $"{t} {op} {route}");
+                else
+                    CollectionAssert.AreEqual(want32, Bits32(r), $"{t} {op} {route}");
+            }
+
+            Expect(Axis(b, 0, isMax, $"{t} {op} C axis 0"), "C axis 0");
+            Expect(Axis(np.asfortranarray(b.T), 1, isMax, $"{t} {op} F axis 1"), "F axis 1");
+
+            // The same logical slabs behind a NEGATIVE reduced-axis stride (the tree then walks sK < 0) — probed: NumPy
+            // keeps the logical k order, identical bits.
+            Expect(Axis(np.flip(b, 0).copy()["::-1"], 0, isMax, $"{t} {op} reversed axis 0"), "reversed axis 0");
+            Expect(Axis(np.asfortranarray(np.flip(b, 0).T)[":, ::-1"], 1, isMax, $"{t} {op} reversed F axis 1"), "reversed F axis 1");
+
+            // The streamed computed child folds its produced slabs through the same fused step.
+            var one = np.ones(new Shape(K, W), t);
+            int streamed = NDExpr.StreamingReductions;
+            var child = np.evaluate(isMax ? NDExpr.Max((NDExpr)b * (NDExpr)one, 0) : NDExpr.Min((NDExpr)b * (NDExpr)one, 0));
+            Assert.AreEqual(streamed + 1, NDExpr.StreamingReductions, $"{t} {op}: the computed child must stream");
+            Expect(child, "streamed child");
+        }
+    }
+
     // ---------------------------------------------------------------------------------------------------------------
     // FLAT
     // ---------------------------------------------------------------------------------------------------------------

@@ -990,7 +990,11 @@ its payload (met only by scalar ops) — so value-exact is not enough. **Axis:**
 element, then walks a K-order `NpyIter` with `DONT_NEGATE_STRIDES`; the innermost axis is the smallest-|stride| extent>1
 axis (tie → the LATER axis). Reduced axis innermost → ROW mode (a contiguous row = `simd_reduce_c` after the copied
 element, a strided row = the scalar 8-accumulator unroll); otherwise SLAB mode (first slab copied, then `o = N(o, x_k)`
-per reduced index — the sequential fold). **Flat:** the 0-d output never votes, so axes coalesce SIGNED into runs; one
+per reduced index — the sequential fold; contiguous slab runs fold EIGHT indices per pass through `CombineRun8`, evaluated
+as a balanced tree `N(o, N(N(N(x0,x1),N(x2,x3)),N(N(x4,x5),N(x6,x7))))` — bit-identical because `N` is associative, see
+below — so the output run is read and written once per eight slabs; the left chain it equals was measured SLOWER than
+per-slab passes on L2-resident floats, eight dependent `vmaxp`+`vcmpordp`+`vblendvp` steps).
+**Flat:** the 0-d output never votes, so axes coalesce SIGNED into runs; one
 run = one call; several runs → `npyiter_find_buffering_setup`'s cost model (ported, `size >= maximum_size` stop
 included): the innermost run longer than half the buffer → per-run calls, else the input is BUFFERED — copied in
 iteration order into fills of `coresize·⌊bufsize/coresize⌋` (never across the outer block's end), each fill ONE
@@ -1002,13 +1006,14 @@ fast fold (plain `vmaxp` on groups proven NaN-free by `vcmpunordp`, breaking to 
 keeps the exact contiguous path fast. Declines (old kernels, value-exact): broadcast operands, Half/Decimal/Complex/
 Bool/Char, `dtype=` casts, rank > 64. Hooks `NDExpr.DisableExactMinMax`/`ExactMinMaxRuns` (shared with np.evaluate).
 NPY/NS @100K: flat 1.14–2.30 on every layout (F/transposed/permuted 1.61–1.85, were 0.61–0.63), axis 1.28–5.2 (were
-0.28–1.0 on non-C layouts). Gates: `Backends/Kernels/MinMaxExactScheduleTests.cs` (25, NumPy-probed literals incl. the
-every-lane-pair tie test; 22/22 targeted mutants killed behind a green-baseline gate) + three NumPy replay oracles
-(600 + 5,764 + 3,136 cases, 0 misses on every exact route). Known gaps: SLAB mode re-reads the output run per reduced
-index (fusing 8 per pass is exact and measured 1.8–2.4× on DRAM-bound f64 — next lever); L3-bound 4M flat/row cells
-of 1- and 4-byte lanes trail NumPy's identical schedule (0.70–0.87, pre-existing, NumSharp's 16-byte buffer alignment
-suspected); the UNFUSED `np.max(x * 1, axis)` over a permuted input differs because NumSharp's eager elementwise
-writes C order where NumPy's ufunc keeps the K-order layout.
+0.28–1.0 on non-C layouts); the slab fusion put the SLAB cells at 1.38–3.08 @100K (were 1.10–2.31) and the DRAM-bound
+f64-family ones at 1.75–2.10 @4M (were 1.06–1.45). Gates: `Backends/Kernels/MinMaxExactScheduleTests.cs` (27,
+NumPy-probed literals incl. the every-lane-pair tie test and a ±0 tie / NaN pair on every node of the slab tree;
+22/22 schedule + 24/24 slab-fusion targeted mutants killed behind a green-baseline gate) + three NumPy replay oracles
+(600 + 5,764 + 3,136 cases, 0 misses on every exact route). Known gaps: L3-bound 4M cells of 1- and 4-byte lanes trail
+NumPy's identical schedule (flat/row 0.70–0.87, f32/i32 slab 0.87–0.95; pre-existing, NumSharp's 16-byte buffer
+alignment suspected); the UNFUSED `np.max(x * 1, axis)` over a permuted input differs because NumSharp's eager
+elementwise writes C order where NumPy's ufunc keeps the K-order layout.
 
 `cov(m, y=None, rowvar=True, bias=False, ddof=None, fweights=None, aweights=None, dtype=None)` is a **pure
 composition** over `average`/`dot`/`concatenate`/`atleast_2d`/`conjugate`/`squeeze` (no new kernel), a line-for-line
