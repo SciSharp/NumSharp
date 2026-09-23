@@ -236,10 +236,15 @@ delocate's deps carry the placeholder `/DLC/scipy_openblas64/.dylibs/…`) and r
 The build-time version override task co-extracts the vendored deps into its cache entry (`.entry.json`
 sidecar, all files hash-verified on every hit; a pre-sidecar main-only entry is discarded) and stages
 them with the main, so an override loads on Linux/macOS too. Gates: `OpenBlasMacOsVendoredRuntimeTests`
-(21, synthetic Mach-O images + the real staged dylibs, every OS) and the CI job
-`package-consumer-smoke` running `tools/verify_package_consumer.sh` on all three OSes — the real nupkg
+(21, synthetic Mach-O images + the real staged dylibs, every OS) and the "Package consumer:" steps of
+the `interop-test` CI job (a separate `package-consumer-smoke` job until 2026-09-23) running
+`tools/verify_package_consumer.sh` + `tools/verify_build_override.sh` on all three OSes — the real nupkg
 restored into a scratch consumer BY PACKAGEREFERENCE, loaded in the portable, read-only and flattened
-layouts (the path no ProjectReference suite can exercise).
+layouts (the path no ProjectReference suite can exercise). They run LAST in that job, after the
+interop tests, because both scripts `-t:Rebuild` Core/OpenBLAS in Release in the repo tree and evict
+this version from `~/.nuget/packages`; and that job's `env:` must never set
+`NUMSHARP_OPENBLAS_CACHE_DIR` (verify_build_override.sh asserts the default per-user cache root on
+Linux/macOS and does not unset it).
 
 **Four load-bearing details:** the result bits depend on the BLAS **thread count** (1/2/4/24 threads
 give four different answers); they ALSO depend on the **DYNAMIC_ARCH kernel** the CPU dispatches, so
