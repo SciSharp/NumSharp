@@ -9,15 +9,15 @@ using NumSharp.Collections;
 namespace NumSharp.Tests.Collections
 {
     /// <summary>
-    ///     Memory-contract pins for <see cref="ConcurrentOrderedDict{TKey,TValue}" /> — the allocation and
+    ///     Memory-contract pins for <see cref="ConcurrentOrderedDictionary{TKey,TValue}" /> — the allocation and
     ///     retention behavior the type promises, measured with the thread-local allocation counter and
     ///     <see cref="WeakReference" /> probes so a regression (a boxed enumerator, a lost fast path, a slot that
     ///     stops being released) fails deterministically. The comparative numbers against <see cref="List{T}" />
-    ///     and the framework dictionary live in <c>ConcurrentOrderedDict.TODO.md § Memory analysis</c>; these tests
+    ///     and the framework dictionary live in <c>ConcurrentOrderedDictionary.TODO.md § Memory analysis</c>; these tests
     ///     pin only the collection's OWN contracts, which hold on any 64-bit runtime and in both Debug and Release.
     /// </summary>
     [TestClass]
-    public class ConcurrentOrderedDictMemoryTests
+    public class ConcurrentOrderedDictionaryMemoryTests
     {
         /// <summary>
         ///     Measures the managed bytes one invocation of <paramref name="op" /> allocates on this thread —
@@ -69,7 +69,7 @@ namespace NumSharp.Tests.Collections
         [TestMethod]
         public void Reads_AreAllocationFree_OnEveryPath()
         {
-            var d = new ConcurrentOrderedDict<int, int>(4_096);
+            var d = new ConcurrentOrderedDictionary<int, int>(4_096);
             for (int i = 0; i < 4_096; i++)
             {
                 d.Add(i, i);
@@ -105,7 +105,7 @@ namespace NumSharp.Tests.Collections
         [TestMethod]
         public void Enumeration_And_SnapshotView_AreAllocationFree()
         {
-            var d = new ConcurrentOrderedDict<int, int>(4_096);
+            var d = new ConcurrentOrderedDictionary<int, int>(4_096);
             for (int i = 0; i < 4_096; i++)
             {
                 d.Add(i, i);
@@ -141,7 +141,7 @@ namespace NumSharp.Tests.Collections
         {
             // The in-place ref-seam update: for an atomically-writable TValue, replacing an existing key's value
             // must allocate NOTHING (no node swap, no array clone) on any of the three replace entry points.
-            var d = new ConcurrentOrderedDict<int, long>(1_024);
+            var d = new ConcurrentOrderedDictionary<int, long>(1_024);
             for (int i = 0; i < 1_024; i++)
             {
                 d.Add(i, i);
@@ -168,7 +168,7 @@ namespace NumSharp.Tests.Collections
             // Debug builds only — the vendored map's own verbatim `key is null` check, whose box IL executes for
             // value-type keys under unoptimized codegen (24 B; the vendored body stays byte-faithful to upstream,
             // so that one check is not rewritten — every NumSharp-owned path is guarded and allocation-free).
-            var d = new ConcurrentOrderedDict<int, int>(200_000);
+            var d = new ConcurrentOrderedDictionary<int, int>(200_000);
             int next = 0;
             Action adds = () =>
             {
@@ -187,7 +187,7 @@ namespace NumSharp.Tests.Collections
         {
             // The O(1) removals publish one small Store object each — never fresh arrays. 96 B bounds the 40 B
             // holder with slack; the contrast test below proves the interior path is orders of magnitude bigger.
-            var d = new ConcurrentOrderedDict<int, int>(64_000);
+            var d = new ConcurrentOrderedDictionary<int, int>(64_000);
             for (int i = 0; i < 64_000; i++)
             {
                 d.Add(i, i);
@@ -211,7 +211,7 @@ namespace NumSharp.Tests.Collections
             // platform-independent: one interior removal allocates two capacity-sized arrays (~8 B/slot here),
             // hundreds of times a tail pop's single 40 B holder.
             const int Capacity = 32_768;
-            var d = new ConcurrentOrderedDict<int, int>(Capacity);
+            var d = new ConcurrentOrderedDictionary<int, int>(Capacity);
             for (int i = 0; i < Capacity; i++)
             {
                 d.Add(i, i);
@@ -237,7 +237,7 @@ namespace NumSharp.Tests.Collections
             // The documented mitigation: an AddRange batch of replacements performs ONE copy-on-write for the
             // whole batch. Pinned as a ratio: 100 batched replaces must cost far less than 100 singles.
             const int Capacity = 8_192;
-            var d = new ConcurrentOrderedDict<int, decimal>(Capacity);
+            var d = new ConcurrentOrderedDictionary<int, decimal>(Capacity);
             for (int i = 0; i < Capacity; i++)
             {
                 d.Add(i, i);
@@ -271,7 +271,7 @@ namespace NumSharp.Tests.Collections
         /// <param name="d">The collection under probe.</param>
         /// <returns>A weak reference to the popped value (no strong reference survives this frame).</returns>
         [MethodImpl(MethodImplOptions.NoInlining)]
-        private static WeakReference AddThenTailPop(ConcurrentOrderedDict<int, object> d)
+        private static WeakReference AddThenTailPop(ConcurrentOrderedDictionary<int, object> d)
         {
             var value = new object();
             d.Add(2, value);
@@ -283,7 +283,7 @@ namespace NumSharp.Tests.Collections
         [TestMethod]
         public void TailPop_RetainsTheValue_UntilTheNextAppendCopiesTheArrays()
         {
-            var d = new ConcurrentOrderedDict<int, object>();
+            var d = new ConcurrentOrderedDictionary<int, object>();
             d.Add(0, new object());
             d.Add(1, new object());
 
@@ -306,7 +306,7 @@ namespace NumSharp.Tests.Collections
         /// <param name="d">The collection under probe (must already hold at least one entry so the removal is interior).</param>
         /// <returns>A weak reference to the removed value.</returns>
         [MethodImpl(MethodImplOptions.NoInlining)]
-        private static WeakReference AddThenInteriorRemove(ConcurrentOrderedDict<int, object> d)
+        private static WeakReference AddThenInteriorRemove(ConcurrentOrderedDictionary<int, object> d)
         {
             var value = new object();
             d.Add(10, value);
@@ -319,7 +319,7 @@ namespace NumSharp.Tests.Collections
         [TestMethod]
         public void InteriorRemove_ReleasesTheRemovedValueImmediately()
         {
-            var d = new ConcurrentOrderedDict<int, object>();
+            var d = new ConcurrentOrderedDictionary<int, object>();
             d.Add(0, new object());
             WeakReference wr = AddThenInteriorRemove(d);
             Assert.IsTrue(WaitCollected(wr), "an interior-removed value stayed reachable — the compaction copied the removed slot or the old arrays are being retained");
@@ -329,7 +329,7 @@ namespace NumSharp.Tests.Collections
         /// <param name="d">The collection under probe.</param>
         /// <returns>A weak reference to the cleared-out value.</returns>
         [MethodImpl(MethodImplOptions.NoInlining)]
-        private static WeakReference AddThenClear(ConcurrentOrderedDict<int, object> d)
+        private static WeakReference AddThenClear(ConcurrentOrderedDictionary<int, object> d)
         {
             var value = new object();
             d.Add(0, value);
@@ -341,7 +341,7 @@ namespace NumSharp.Tests.Collections
         [TestMethod]
         public void Clear_ReleasesEverything()
         {
-            var d = new ConcurrentOrderedDict<int, object>();
+            var d = new ConcurrentOrderedDictionary<int, object>();
             WeakReference wr = AddThenClear(d);
             Assert.IsTrue(WaitCollected(wr), "Clear left a value reachable");
         }
@@ -359,7 +359,7 @@ namespace NumSharp.Tests.Collections
         ///     and turn the release assert into a false leak (observed doing exactly that in the analysis probes).
         /// </remarks>
         [MethodImpl(MethodImplOptions.NoInlining)]
-        private static WeakReference HoldEnumeratorCheckPinnedThenDrop(ConcurrentOrderedDict<int, object> d)
+        private static WeakReference HoldEnumeratorCheckPinnedThenDrop(ConcurrentOrderedDictionary<int, object> d)
         {
             var value = new object();
             d.Add(0, value);
@@ -381,7 +381,7 @@ namespace NumSharp.Tests.Collections
         [TestMethod]
         public void HeldEnumerator_PinsItsSnapshotArrays_ReleasedWhenDropped()
         {
-            var d = new ConcurrentOrderedDict<int, object>();
+            var d = new ConcurrentOrderedDictionary<int, object>();
             WeakReference wr = HoldEnumeratorCheckPinnedThenDrop(d);
             Assert.IsTrue(WaitCollected(wr), "the snapshot arrays stayed reachable after the enumerator was dropped");
         }
@@ -399,7 +399,7 @@ namespace NumSharp.Tests.Collections
             // reintroduction trips deterministically around round 14 — long before it can OOM the test host —
             // rather than as an internal-capacity assertion that would couple the gate to a private field name.
             const int Seed = 500;
-            var d = new ConcurrentOrderedDict<int, long>();
+            var d = new ConcurrentOrderedDictionary<int, long>();
             for (int k = 0; k < Seed; k++)
             {
                 d.Add(k, k);

@@ -11,7 +11,7 @@ using NumSharp.Collections;
 namespace NumSharp.Tests.Collections
 {
     /// <summary>
-    ///     Pins for what is specific to <see cref="ConcurrentOrderedCompactDict{TKey,TValue}" /> beyond the contract it
+    ///     Pins for what is specific to <see cref="ConcurrentOrderedCompactDictionary{TKey,TValue}" /> beyond the contract it
     ///     shares with its sibling (whose four gates run against it verbatim as the mirrored test classes): the
     ///     bit-tagged small-key path and the types excluded from it, hash-tag collisions, the dummy/rebuild cycle of
     ///     the open-addressed index, the whole-generation copy for wide values, the index capacity ceiling, and the
@@ -19,7 +19,7 @@ namespace NumSharp.Tests.Collections
     ///     the compact design had to earn.
     /// </summary>
     [TestClass]
-    public class ConcurrentOrderedCompactDictSpecificTests
+    public class ConcurrentOrderedCompactDictionarySpecificTests
     {
         /// <summary>The value law the guns check on every hit: a value that belongs to another key is detectable.</summary>
         /// <param name="k">The key.</param>
@@ -30,7 +30,7 @@ namespace NumSharp.Tests.Collections
         /// <typeparam name="TKey">The key type.</typeparam>
         /// <typeparam name="TValue">The value type.</typeparam>
         /// <param name="d">The instance to audit.</param>
-        private static void AssertFullyConsistent<TKey, TValue>(ConcurrentOrderedCompactDict<TKey, TValue> d)
+        private static void AssertFullyConsistent<TKey, TValue>(ConcurrentOrderedCompactDictionary<TKey, TValue> d)
             where TKey : notnull
         {
             int n = d.Count;
@@ -90,7 +90,7 @@ namespace NumSharp.Tests.Collections
         private static void RoundTrip<TKey>(TKey[] keys)
             where TKey : notnull
         {
-            var d = new ConcurrentOrderedCompactDict<TKey, int>();
+            var d = new ConcurrentOrderedCompactDictionary<TKey, int>();
             for (int i = 0; i < keys.Length; i++)
             {
                 Assert.IsTrue(d.TryAdd(keys[i], i * 11), $"{typeof(TKey).Name}: {keys[i]} must add");
@@ -127,7 +127,7 @@ namespace NumSharp.Tests.Collections
         {
             // -0.0f == 0.0f and NaN.Equals(NaN) under the default comparer — bit-equality would get both wrong, so
             // float keys must hash instead of embedding their bits.
-            var d = new ConcurrentOrderedCompactDict<float, string>();
+            var d = new ConcurrentOrderedCompactDictionary<float, string>();
             Assert.IsTrue(d.TryAdd(0.0f, "zero"));
             Assert.IsFalse(d.TryAdd(-0.0f, "negative zero"), "-0.0f must be the same key as 0.0f");
             Assert.IsTrue(d.TryGetValue(-0.0f, out string? z) && z == "zero");
@@ -152,7 +152,7 @@ namespace NumSharp.Tests.Collections
         [TestMethod]
         public void CustomComparer_DisablesTheBitTag_AndDrivesEqualityAndHashing()
         {
-            var d = new ConcurrentOrderedCompactDict<int, string>(new AbsComparer());
+            var d = new ConcurrentOrderedCompactDictionary<int, string>(new AbsComparer());
             Assert.IsTrue(d.TryAdd(5, "five"));
             Assert.IsFalse(d.TryAdd(-5, "minus five"), "the comparer says -5 is 5");
             Assert.IsTrue(d.ContainsKey(-5));
@@ -171,7 +171,7 @@ namespace NumSharp.Tests.Collections
         public void LongKeys_WithEqualHashes_AreDisambiguatedByTheKeyCompare()
         {
             // long.GetHashCode folds the halves: 1 and 1<<32 collide on the tag, so the key compare must decide.
-            var d = new ConcurrentOrderedCompactDict<long, int>();
+            var d = new ConcurrentOrderedCompactDictionary<long, int>();
             long a = 1L, b = 1L << 32, c = (1L << 32) | 1L;
             Assert.AreEqual(a.GetHashCode(), b.GetHashCode(), "the test needs a genuine tag collision");
             Assert.IsTrue(d.TryAdd(a, 1) && d.TryAdd(b, 2) && d.TryAdd(c, 3));
@@ -199,7 +199,7 @@ namespace NumSharp.Tests.Collections
         [TestMethod]
         public void ConstantHash_EveryKeyOnOneProbeRun_StaysCorrectThroughRemovalsAndRebuilds()
         {
-            var d = new ConcurrentOrderedCompactDict<string, int>(new ConstantHashComparer());
+            var d = new ConcurrentOrderedCompactDictionary<string, int>(new ConstantHashComparer());
             const int N = 300;
             for (int i = 0; i < N; i++)
             {
@@ -253,7 +253,7 @@ namespace NumSharp.Tests.Collections
         {
             // Every pop dummies a word and every push after it copies (the floor rule); every swap-back dummies a
             // word in place. Dummies must never make a miss probe spin and must be cleared by the rebuilds.
-            var d = new ConcurrentOrderedCompactDict<int, int>(16);
+            var d = new ConcurrentOrderedCompactDictionary<int, int>(16);
             for (int i = 0; i < 12; i++)
             {
                 d.Add(i, F(i));
@@ -306,7 +306,7 @@ namespace NumSharp.Tests.Collections
         [TestMethod]
         public void InteriorRemovals_ManyInARow_TriggerTheCleanRebuild_AndStayConsistent()
         {
-            var d = new ConcurrentOrderedCompactDict<int, int>();
+            var d = new ConcurrentOrderedCompactDictionary<int, int>();
             for (int i = 0; i < 500; i++)
             {
                 d.Add(i, F(i));
@@ -343,7 +343,7 @@ namespace NumSharp.Tests.Collections
         [TestMethod]
         public void GuidKeys_SwapBackTakesTheCopyPath_WithIdenticalSemantics()
         {
-            var d = new ConcurrentOrderedCompactDict<Guid, int>();
+            var d = new ConcurrentOrderedCompactDictionary<Guid, int>();
             var keys = Enumerable.Range(0, 6).Select(_ => Guid.NewGuid()).ToArray();
             for (int i = 0; i < keys.Length; i++)
             {
@@ -363,7 +363,7 @@ namespace NumSharp.Tests.Collections
         [TestMethod]
         public void DecimalValues_ReplaceCopiesTheWholeGeneration_SoACapturedViewKeepsTheOldValue()
         {
-            var d = new ConcurrentOrderedCompactDict<int, decimal>();
+            var d = new ConcurrentOrderedCompactDictionary<int, decimal>();
             for (int i = 0; i < 8; i++)
             {
                 d.Add(i, i);
@@ -381,7 +381,7 @@ namespace NumSharp.Tests.Collections
             AssertFullyConsistent(d);
 
             // Contrast: an atomic value IS visible through a captured view (the documented live-value semantics).
-            var a = new ConcurrentOrderedCompactDict<int, long>();
+            var a = new ConcurrentOrderedCompactDictionary<int, long>();
             a.Add(1, 10);
             var av = a.Snapshot();
             a.SetByKey(1, 11);
@@ -392,7 +392,7 @@ namespace NumSharp.Tests.Collections
 
         [TestMethod]
         public void Capacity_BeyondTheIndexCeiling_ThrowsBeforeAllocating()
-            => Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => _ = new ConcurrentOrderedCompactDict<int, int>(800_000_000));
+            => Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => _ = new ConcurrentOrderedCompactDictionary<int, int>(800_000_000));
 
         // ------------------------------------------------------------------------------ the concurrency gun
 
@@ -456,7 +456,7 @@ namespace NumSharp.Tests.Collections
         /// <param name="d">The empty instance under fire.</param>
         /// <param name="toKey">Maps the gun's int key space onto <typeparamref name="TKey" />.</param>
         /// <param name="milliseconds">How long to fire.</param>
-        private static void SwapBackGun<TKey>(ConcurrentOrderedCompactDict<TKey, int> d, Func<int, TKey> toKey, int milliseconds)
+        private static void SwapBackGun<TKey>(ConcurrentOrderedCompactDictionary<TKey, int> d, Func<int, TKey> toKey, int milliseconds)
             where TKey : notnull
         {
             for (int k = 0; k < 16; k++)
@@ -554,17 +554,17 @@ namespace NumSharp.Tests.Collections
 
         [TestMethod]
         public void Gun_SwapBackRacing_BitTaggedIntKeys_KeyPathNeverTears()
-            => SwapBackGun(new ConcurrentOrderedCompactDict<int, int>(), k => k, milliseconds: 1_500);
+            => SwapBackGun(new ConcurrentOrderedCompactDictionary<int, int>(), k => k, milliseconds: 1_500);
 
         [TestMethod]
         public void Gun_SwapBackRacing_HashTaggedStringKeys_KeyPathNeverTears()
-            => SwapBackGun(new ConcurrentOrderedCompactDict<string, int>(), k => "key-" + k, milliseconds: 1_500);
+            => SwapBackGun(new ConcurrentOrderedCompactDictionary<string, int>(), k => "key-" + k, milliseconds: 1_500);
 
         [TestMethod]
         public void Gun_SwapBackRacing_LongKeysWithLongValues_KeyPathNeverTears()
         {
             // 8-byte key and value: still in-place on 64-bit (both atomic), so the validated read is what protects it.
-            var d = new ConcurrentOrderedCompactDict<long, int>();
+            var d = new ConcurrentOrderedCompactDictionary<long, int>();
             SwapBackGun(d, k => (long)k << 20, milliseconds: 1_000);
         }
     }

@@ -7,19 +7,19 @@ using NumSharp.Collections;
 namespace NumSharp.Tests.Collections
 {
     /// <summary>
-    ///     Functional pins for <see cref="ConcurrentOrderedDict{TKey,TValue}" />: the dual key/index paths, ordering,
+    ///     Functional pins for <see cref="ConcurrentOrderedDictionary{TKey,TValue}" />: the dual key/index paths, ordering,
     ///     duplicate semantics, the O(1) tail-removal + append-floor snapshot rule, the order-breaking swap-back
     ///     removal, batch upsert, the snapshot view, and the non-atomic-value (node-swap / array-clone) code paths.
-    ///     The multi-threaded guarantees are pinned separately in <see cref="ConcurrentOrderedDictConcurrencyTests" />.
+    ///     The multi-threaded guarantees are pinned separately in <see cref="ConcurrentOrderedDictionaryConcurrencyTests" />.
     /// </summary>
     [TestClass]
-    public class ConcurrentOrderedDictTests
+    public class ConcurrentOrderedDictionaryTests
     {
         /// <summary>Cross-checks every invariant the two paths promise each other on a quiescent instance: positions round-trip (key→index→key), both value routes agree, and the snapshot surfaces (arrays, pairs, view) match.</summary>
         /// <typeparam name="TKey">The dictionary's key type.</typeparam>
         /// <typeparam name="TValue">The dictionary's value type.</typeparam>
         /// <param name="d">The instance to audit.</param>
-        private static void AssertFullyConsistent<TKey, TValue>(ConcurrentOrderedDict<TKey, TValue> d)
+        private static void AssertFullyConsistent<TKey, TValue>(ConcurrentOrderedDictionary<TKey, TValue> d)
             where TKey : notnull
         {
             int n = d.Count;
@@ -55,7 +55,7 @@ namespace NumSharp.Tests.Collections
         [TestMethod]
         public void Empty_HasNoEntries_AndReadsBehave()
         {
-            var d = new ConcurrentOrderedDict<string, int>();
+            var d = new ConcurrentOrderedDictionary<string, int>();
             Assert.AreEqual(0, d.Count);
             Assert.IsTrue(d.IsEmpty);
             Assert.IsFalse(d.ContainsKey("x"));
@@ -70,12 +70,12 @@ namespace NumSharp.Tests.Collections
 
         [TestMethod]
         public void Ctor_NegativeCapacity_Throws()
-            => Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => _ = new ConcurrentOrderedDict<int, int>(-1));
+            => Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => _ = new ConcurrentOrderedDictionary<int, int>(-1));
 
         [TestMethod]
         public void Add_PreservesInsertionOrder_AndBothPathsAgree()
         {
-            var d = new ConcurrentOrderedDict<string, int>();
+            var d = new ConcurrentOrderedDictionary<string, int>();
             d.Add("a", 1);
             d.Add("b", 2);
             d.Add("c", 3);
@@ -90,7 +90,7 @@ namespace NumSharp.Tests.Collections
         [TestMethod]
         public void Add_DuplicateKey_Throws_AndTryAddReturnsFalse()
         {
-            var d = new ConcurrentOrderedDict<string, int> { };
+            var d = new ConcurrentOrderedDictionary<string, int> { };
             Assert.IsTrue(d.TryAdd("k", 1));
             Assert.IsFalse(d.TryAdd("k", 2));
             Assert.ThrowsExactly<ArgumentException>(() => d.Add("k", 3));
@@ -101,7 +101,7 @@ namespace NumSharp.Tests.Collections
         [TestMethod]
         public void NullKey_Throws_OnEveryWriteEntryPoint()
         {
-            var d = new ConcurrentOrderedDict<string, int>();
+            var d = new ConcurrentOrderedDictionary<string, int>();
             Assert.ThrowsExactly<ArgumentNullException>(() => d.TryAdd(null!, 1));
             Assert.ThrowsExactly<ArgumentNullException>(() => d.SetByKey(null!, 1));
             Assert.ThrowsExactly<ArgumentNullException>(() => d.TryRemove(null!, out _));
@@ -116,7 +116,7 @@ namespace NumSharp.Tests.Collections
         public void IntKey_IndexerBindsToIndex_NotKey()
         {
             // The documented int-key footgun: d[x] is POSITION for TKey == int; key access goes through methods.
-            var d = new ConcurrentOrderedDict<int, string>();
+            var d = new ConcurrentOrderedDictionary<int, string>();
             d.Add(10, "ten");
             d.Add(20, "twenty");
 
@@ -129,7 +129,7 @@ namespace NumSharp.Tests.Collections
         [TestMethod]
         public void SetByKey_ExistingKey_UpdatesValueInPlace_KeepingPosition()
         {
-            var d = new ConcurrentOrderedDict<string, int>();
+            var d = new ConcurrentOrderedDictionary<string, int>();
             d.Add("a", 1);
             d.Add("b", 2);
             d.SetByKey("a", 99);
@@ -143,7 +143,7 @@ namespace NumSharp.Tests.Collections
         [TestMethod]
         public void SetByKey_NewKey_Appends()
         {
-            var d = new ConcurrentOrderedDict<string, int>();
+            var d = new ConcurrentOrderedDictionary<string, int>();
             d.SetByKey("a", 1);
             d.SetByKey("b", 2);
             CollectionAssert.AreEqual(new[] { "a", "b" }, d.Keys);
@@ -153,7 +153,7 @@ namespace NumSharp.Tests.Collections
         [TestMethod]
         public void SetAt_ReplacesValue_KeepsKeyAndPosition()
         {
-            var d = new ConcurrentOrderedDict<string, int>();
+            var d = new ConcurrentOrderedDictionary<string, int>();
             d.Add("a", 1);
             d.Add("b", 2);
 
@@ -172,7 +172,7 @@ namespace NumSharp.Tests.Collections
         [TestMethod]
         public void IndexGetters_OutOfRange_Throw_TryFormsReturnFalse()
         {
-            var d = new ConcurrentOrderedDict<string, int>();
+            var d = new ConcurrentOrderedDictionary<string, int>();
             d.Add("a", 1);
             Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => _ = d[1]);
             Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => _ = d[-1]);
@@ -184,14 +184,14 @@ namespace NumSharp.Tests.Collections
         [TestMethod]
         public void GetByKey_Missing_Throws_KeyNotFound()
         {
-            var d = new ConcurrentOrderedDict<string, int>();
+            var d = new ConcurrentOrderedDictionary<string, int>();
             Assert.ThrowsExactly<KeyNotFoundException>(() => d.GetByKey("nope"));
         }
 
         [TestMethod]
         public void GetOrAdd_ReturnsExisting_OrAppends()
         {
-            var d = new ConcurrentOrderedDict<string, int>();
+            var d = new ConcurrentOrderedDictionary<string, int>();
             Assert.AreEqual(1, d.GetOrAdd("a", 1));
             Assert.AreEqual(1, d.GetOrAdd("a", 2));          // existing wins
             Assert.AreEqual(5, d.GetOrAdd("b", k => 5));     // factory form
@@ -203,7 +203,7 @@ namespace NumSharp.Tests.Collections
         [TestMethod]
         public void AddOrUpdate_AddsThenUpdates()
         {
-            var d = new ConcurrentOrderedDict<string, int>();
+            var d = new ConcurrentOrderedDictionary<string, int>();
             Assert.AreEqual(1, d.AddOrUpdate("k", 1, (k, v) => v + 10));
             Assert.AreEqual(11, d.AddOrUpdate("k", 1, (k, v) => v + 10));
             Assert.AreEqual(11, d.GetByKey("k"));
@@ -213,7 +213,7 @@ namespace NumSharp.Tests.Collections
         [TestMethod]
         public void TryUpdate_SwapsOnlyOnComparisonMatch()
         {
-            var d = new ConcurrentOrderedDict<string, int>();
+            var d = new ConcurrentOrderedDictionary<string, int>();
             d.Add("k", 1);
             Assert.IsFalse(d.TryUpdate("k", 9, comparisonValue: 2)); // stale comparand
             Assert.AreEqual(1, d.GetByKey("k"));
@@ -225,7 +225,7 @@ namespace NumSharp.Tests.Collections
         [TestMethod]
         public void TryRemove_Interior_ShiftsTail_AndRepairsIndices()
         {
-            var d = new ConcurrentOrderedDict<string, int>();
+            var d = new ConcurrentOrderedDictionary<string, int>();
             d.Add("a", 1);
             d.Add("b", 2);
             d.Add("c", 3);
@@ -244,7 +244,7 @@ namespace NumSharp.Tests.Collections
         [TestMethod]
         public void TryRemove_Tail_IsO1Path_AndStaysConsistent()
         {
-            var d = new ConcurrentOrderedDict<int, int>();
+            var d = new ConcurrentOrderedDictionary<int, int>();
             for (int i = 0; i < 100; i++)
                 d.Add(i, i * 2);
 
@@ -265,7 +265,7 @@ namespace NumSharp.Tests.Collections
         {
             // THE append-floor pin: a tail removal shares its arrays with older snapshots, so the append that
             // reuses the vacated position must copy instead of overwriting the slot the old enumerator can read.
-            var d = new ConcurrentOrderedDict<string, int>();
+            var d = new ConcurrentOrderedDictionary<string, int>();
             d.Add("a", 1);
             d.Add("b", 2);
             d.Add("c", 3);
@@ -287,7 +287,7 @@ namespace NumSharp.Tests.Collections
         [TestMethod]
         public void RemoveAt_RemovesByPosition()
         {
-            var d = new ConcurrentOrderedDict<string, int>();
+            var d = new ConcurrentOrderedDictionary<string, int>();
             d.Add("a", 1);
             d.Add("b", 2);
             d.Add("c", 3);
@@ -302,7 +302,7 @@ namespace NumSharp.Tests.Collections
         [TestMethod]
         public void TryRemoveSwapBack_MovesLastIntoHole_BreakingOrderOnly()
         {
-            var d = new ConcurrentOrderedDict<string, int>();
+            var d = new ConcurrentOrderedDictionary<string, int>();
             d.Add("a", 1);
             d.Add("b", 2);
             d.Add("c", 3);
@@ -327,7 +327,7 @@ namespace NumSharp.Tests.Collections
         public void TryRemoveSwapBack_NonAtomicTypes_TakesCopyPath_SameSemantics()
         {
             // decimal (16 bytes) is not atomically writable, so the swap must copy the arrays — semantics identical.
-            var d = new ConcurrentOrderedDict<decimal, decimal>();
+            var d = new ConcurrentOrderedDictionary<decimal, decimal>();
             d.Add(1m, 10m);
             d.Add(2m, 20m);
             d.Add(3m, 30m);
@@ -342,7 +342,7 @@ namespace NumSharp.Tests.Collections
         [TestMethod]
         public void RemoveWhere_CompactsInOnePass_AndReindexes()
         {
-            var d = new ConcurrentOrderedDict<int, int>();
+            var d = new ConcurrentOrderedDictionary<int, int>();
             for (int i = 0; i < 10; i++)
                 d.Add(i, i);
 
@@ -361,7 +361,7 @@ namespace NumSharp.Tests.Collections
         [TestMethod]
         public void RemoveWhere_ThrowingPredicate_LeavesBothPathsConsistent()
         {
-            var d = new ConcurrentOrderedDict<int, int>();
+            var d = new ConcurrentOrderedDictionary<int, int>();
             for (int i = 0; i < 6; i++)
                 d.Add(i, i);
 
@@ -381,7 +381,7 @@ namespace NumSharp.Tests.Collections
         [TestMethod]
         public void Clear_EmptiesBothPaths_AndAcceptsNewEntries()
         {
-            var d = new ConcurrentOrderedDict<string, int>();
+            var d = new ConcurrentOrderedDictionary<string, int>();
             d.Add("a", 1);
             d.Clear();
             Assert.AreEqual(0, d.Count);
@@ -395,7 +395,7 @@ namespace NumSharp.Tests.Collections
         [TestMethod]
         public void AddRange_UpsertsWithPythonDictSemantics()
         {
-            var d = new ConcurrentOrderedDict<string, int>();
+            var d = new ConcurrentOrderedDictionary<string, int>();
             d.Add("x", 0);
             d.AddRange(new[]
             {
@@ -413,7 +413,7 @@ namespace NumSharp.Tests.Collections
         [TestMethod]
         public void AddRange_NullKeyMidBatch_Throws_ButAppliedPrefixStaysConsistent()
         {
-            var d = new ConcurrentOrderedDict<string, int>();
+            var d = new ConcurrentOrderedDictionary<string, int>();
             var batch = new[]
             {
                 new KeyValuePair<string, int>("a", 1),
@@ -434,7 +434,7 @@ namespace NumSharp.Tests.Collections
         [TestMethod]
         public void Ctor_FromPairs_MatchesAddRangeSemantics()
         {
-            var d = new ConcurrentOrderedDict<string, int>(new[]
+            var d = new ConcurrentOrderedDictionary<string, int>(new[]
             {
                 new KeyValuePair<string, int>("a", 1),
                 new KeyValuePair<string, int>("b", 2),
@@ -448,7 +448,7 @@ namespace NumSharp.Tests.Collections
         [TestMethod]
         public void Enumerator_IsASnapshot_UnaffectedByLaterAppends()
         {
-            var d = new ConcurrentOrderedDict<int, int>();
+            var d = new ConcurrentOrderedDictionary<int, int>();
             d.Add(0, 0);
             d.Add(1, 1);
 
@@ -465,7 +465,7 @@ namespace NumSharp.Tests.Collections
         [TestMethod]
         public void Snapshot_View_IndexesAndSpans_AndIsFixedInShape()
         {
-            var d = new ConcurrentOrderedDict<string, int>();
+            var d = new ConcurrentOrderedDictionary<string, int>();
             d.Add("a", 1);
             d.Add("b", 2);
 
@@ -488,7 +488,7 @@ namespace NumSharp.Tests.Collections
             Assert.AreEqual(3, sum);
 
             // A default view is a safe empty, never a null-reference trap.
-            ConcurrentOrderedDict<string, int>.ValuesView empty = default;
+            ConcurrentOrderedDictionary<string, int>.ValuesView empty = default;
             Assert.AreEqual(0, empty.Count);
             Assert.AreEqual(0, empty.AsSpan().Length);
             Assert.AreEqual(0, empty.KeysAsSpan().Length);
@@ -499,7 +499,7 @@ namespace NumSharp.Tests.Collections
         public void Snapshot_View_SeesInPlaceAtomicValueUpdates()
         {
             // Documented live-value semantics: the view shares the array, so an atomic in-place replace shows.
-            var d = new ConcurrentOrderedDict<string, int>();
+            var d = new ConcurrentOrderedDictionary<string, int>();
             d.Add("a", 1);
             var view = d.Snapshot();
             d.SetByKey("a", 42);
@@ -509,7 +509,7 @@ namespace NumSharp.Tests.Collections
         [TestMethod]
         public void CopyTo_ValidatesArguments_AndCopies()
         {
-            var d = new ConcurrentOrderedDict<string, int>();
+            var d = new ConcurrentOrderedDictionary<string, int>();
             d.Add("a", 1);
             d.Add("b", 2);
 
@@ -526,7 +526,7 @@ namespace NumSharp.Tests.Collections
         public void NonAtomicValues_Decimal_ReplaceAndRemove_StayCorrect()
         {
             // decimal exercises the tear-free node-swap + value-array-clone branches everywhere.
-            var d = new ConcurrentOrderedDict<string, decimal>();
+            var d = new ConcurrentOrderedDictionary<string, decimal>();
             d.Add("a", 1.5m);
             d.Add("b", 2.5m);
 
@@ -549,7 +549,7 @@ namespace NumSharp.Tests.Collections
         [TestMethod]
         public void CustomComparer_DedupsAccordingly()
         {
-            var d = new ConcurrentOrderedDict<string, int>(StringComparer.OrdinalIgnoreCase);
+            var d = new ConcurrentOrderedDictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             d.Add("Key", 1);
             Assert.IsFalse(d.TryAdd("KEY", 2));
             Assert.AreEqual(1, d.GetByKey("key"));
@@ -559,7 +559,7 @@ namespace NumSharp.Tests.Collections
         [TestMethod]
         public void Growth_FromEmptyAndFromCapacity_KeepsEverything()
         {
-            foreach (var d in new[] { new ConcurrentOrderedDict<int, int>(), new ConcurrentOrderedDict<int, int>(3) })
+            foreach (var d in new[] { new ConcurrentOrderedDictionary<int, int>(), new ConcurrentOrderedDictionary<int, int>(3) })
             {
                 const int n = 1000; // crosses many doubling boundaries
                 for (int i = 0; i < n; i++)
@@ -579,7 +579,7 @@ namespace NumSharp.Tests.Collections
         [TestMethod]
         public void MixedChurn_AddRemoveReAdd_KeepsBothPathsAligned()
         {
-            var d = new ConcurrentOrderedDict<int, int>();
+            var d = new ConcurrentOrderedDictionary<int, int>();
             var reference = new List<KeyValuePair<int, int>>(); // an oracle: ordered upsert list
             var rng = new System.Random(1234);
 

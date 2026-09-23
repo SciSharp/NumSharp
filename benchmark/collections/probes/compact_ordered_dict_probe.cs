@@ -16,7 +16,7 @@
 //
 //   dotnet run -c Release benchmark/collections/probes/compact_ordered_dict_probe.cs -- gun 8 8 cod,cocd,chained,oa-novalidate,oa
 //                              the CONCURRENCY GUN (no core pin): <seconds> <readers> <modes>; `cocd` is the shipped
-//                              ConcurrentOrderedCompactDict (the production port of the `oa` prototype). Readers hammer the
+//                              ConcurrentOrderedCompactDictionary (the production port of the `oa` prototype). Readers hammer the
 //                              key path while writers swap-back/re-add hot keys, append pinned keys that swap-backs
 //                              move, and churn interior removals (COW generations). Oracles: value == F(key) on
 //                              every hit, a published pinned key is never absent (TryGetValue and IndexOf), and
@@ -24,15 +24,15 @@
 //                              cod 0/0, chained 3,172 wrong pairs + 1 transient absence, oa-novalidate 2,862
 //                              wrong pairs, oa 0/0 — the chained key-path tear and the validated read's fix, live.
 //
-// Findings + the design they support: src/NumSharp.Core/Collections/Concurrent/ConcurrentOrderedDict.COMPACT.md
+// Findings + the design they support: src/NumSharp.Core/Collections/Concurrent/ConcurrentOrderedDictionary.COMPACT.md
 //
 // Five compact-layout prototypes (one copy of each key/value; slot == insertion-order index; no per-entry heap
-// node) are measured against today's ConcurrentOrderedDict, the vendored ConcurrentDictionary clone, the BCL
+// node) are measured against today's ConcurrentOrderedDictionary, the vendored ConcurrentDictionary clone, the BCL
 // ConcurrentDictionary/Dictionary and List<T>: bytes/entry (presized + unsized), build, key hit/miss,
 // foreach, this[int], interior order-preserving removal at three positions, pop-back and swap-back drains,
 // allocation churn per op, and a 20K-op structural sanity check of every prototype against a List oracle.
 //
-// Every prototype uses the SAME publication discipline ConcurrentOrderedDict uses today (release-publish of the
+// Every prototype uses the SAME publication discipline ConcurrentOrderedDictionary uses today (release-publish of the
 // key-path link word, then of the count; readers acquire-read both; shrinking transitions publish a new
 // holder; the floor rule freezes vacated tail slots), so the read paths measured here are representative of
 // what a production port would run.
@@ -139,8 +139,8 @@ Console.WriteLine();
 Console.WriteLine("## Footprint B/entry at N = 1,000,000 for wider values (presized)");
 Console.WriteLine("| shape | CloneCD | COD today | compact SoA | compact AoS | compact split | compact OA |");
 Console.WriteLine("|---|---:|---:|---:|---:|---:|---:|");
-Console.WriteLine($"| <int,long> | {Foot(1_000_000, () => { var d = new CloneCd(1, 1_000_000, null); for (int i = 0; i < 1_000_000; i++) d.TryAdd(i, i); return d; }):F1}* | {Foot(1_000_000, () => { var d = new ConcurrentOrderedDict<int, long>(1_000_000); for (int i = 0; i < 1_000_000; i++) d.TryAdd(i, i); return d; }):F1} | {Foot(1_000_000, () => { var d = new CompactSoA<int, long>(1_000_000); for (int i = 0; i < 1_000_000; i++) d.TryAdd(i, i); return d; }):F1} | {Foot(1_000_000, () => { var d = new CompactAoS<int, long>(1_000_000); for (int i = 0; i < 1_000_000; i++) d.TryAdd(i, i); return d; }):F1} | {Foot(1_000_000, () => { var d = new CompactSplit<int, long>(1_000_000); for (int i = 0; i < 1_000_000; i++) d.TryAdd(i, i); return d; }):F1} | {Foot(1_000_000, () => { var d = new CompactOA<long>(1_000_000); for (int i = 0; i < 1_000_000; i++) d.TryAdd(i, i); return d; }):F1} |");
-Console.WriteLine($"| <int,decimal> | {Foot(1_000_000, () => { var d = new CloneCd(1, 1_000_000, null); for (int i = 0; i < 1_000_000; i++) d.TryAdd(i, i); return d; }):F1}* | {Foot(1_000_000, () => { var d = new ConcurrentOrderedDict<int, decimal>(1_000_000); for (int i = 0; i < 1_000_000; i++) d.TryAdd(i, i); return d; }):F1} | {Foot(1_000_000, () => { var d = new CompactSoA<int, decimal>(1_000_000); for (int i = 0; i < 1_000_000; i++) d.TryAdd(i, i); return d; }):F1} | {Foot(1_000_000, () => { var d = new CompactAoS<int, decimal>(1_000_000); for (int i = 0; i < 1_000_000; i++) d.TryAdd(i, i); return d; }):F1} | {Foot(1_000_000, () => { var d = new CompactSplit<int, decimal>(1_000_000); for (int i = 0; i < 1_000_000; i++) d.TryAdd(i, i); return d; }):F1} | {Foot(1_000_000, () => { var d = new CompactOA<decimal>(1_000_000); for (int i = 0; i < 1_000_000; i++) d.TryAdd(i, i); return d; }):F1} |");
+Console.WriteLine($"| <int,long> | {Foot(1_000_000, () => { var d = new CloneCd(1, 1_000_000, null); for (int i = 0; i < 1_000_000; i++) d.TryAdd(i, i); return d; }):F1}* | {Foot(1_000_000, () => { var d = new ConcurrentOrderedDictionary<int, long>(1_000_000); for (int i = 0; i < 1_000_000; i++) d.TryAdd(i, i); return d; }):F1} | {Foot(1_000_000, () => { var d = new CompactSoA<int, long>(1_000_000); for (int i = 0; i < 1_000_000; i++) d.TryAdd(i, i); return d; }):F1} | {Foot(1_000_000, () => { var d = new CompactAoS<int, long>(1_000_000); for (int i = 0; i < 1_000_000; i++) d.TryAdd(i, i); return d; }):F1} | {Foot(1_000_000, () => { var d = new CompactSplit<int, long>(1_000_000); for (int i = 0; i < 1_000_000; i++) d.TryAdd(i, i); return d; }):F1} | {Foot(1_000_000, () => { var d = new CompactOA<long>(1_000_000); for (int i = 0; i < 1_000_000; i++) d.TryAdd(i, i); return d; }):F1} |");
+Console.WriteLine($"| <int,decimal> | {Foot(1_000_000, () => { var d = new CloneCd(1, 1_000_000, null); for (int i = 0; i < 1_000_000; i++) d.TryAdd(i, i); return d; }):F1}* | {Foot(1_000_000, () => { var d = new ConcurrentOrderedDictionary<int, decimal>(1_000_000); for (int i = 0; i < 1_000_000; i++) d.TryAdd(i, i); return d; }):F1} | {Foot(1_000_000, () => { var d = new CompactSoA<int, decimal>(1_000_000); for (int i = 0; i < 1_000_000; i++) d.TryAdd(i, i); return d; }):F1} | {Foot(1_000_000, () => { var d = new CompactAoS<int, decimal>(1_000_000); for (int i = 0; i < 1_000_000; i++) d.TryAdd(i, i); return d; }):F1} | {Foot(1_000_000, () => { var d = new CompactSplit<int, decimal>(1_000_000); for (int i = 0; i < 1_000_000; i++) d.TryAdd(i, i); return d; }):F1} | {Foot(1_000_000, () => { var d = new CompactOA<decimal>(1_000_000); for (int i = 0; i < 1_000_000; i++) d.TryAdd(i, i); return d; }):F1} |");
 Console.WriteLine("(* CloneCD column is the <int,int> clone — the ledger's CD<int,decimal> is 57.3)");
 
 // ---- unsized builds: ALL of a compact table's per-entry bytes sit in doubling arrays (up to 2x slack) where
@@ -152,7 +152,7 @@ Console.WriteLine("| N | CloneCD | COD today | compact SoA | compact AoS | compa
 Console.WriteLine("|---|---:|---:|---:|---:|---:|---:|");
 foreach (int un in new[] { 600_000, 1_000_000 })
 {
-    Console.WriteLine($"| {un:N0} | {Foot(un, () => { var d = new CloneCd(); for (int i = 0; i < un; i++) d.TryAdd(i, i); return d; }):F1} | {Foot(un, () => { var d = new ConcurrentOrderedDict<int, int>(); for (int i = 0; i < un; i++) d.TryAdd(i, i); return d; }):F1} | {Foot(un, () => { var d = new CompactSoA<int, int>(0); for (int i = 0; i < un; i++) d.TryAdd(i, i); return d; }):F1} | {Foot(un, () => { var d = new CompactAoS<int, int>(0); for (int i = 0; i < un; i++) d.TryAdd(i, i); return d; }):F1} | {Foot(un, () => { var d = new CompactSplit<int, int>(0); for (int i = 0; i < un; i++) d.TryAdd(i, i); return d; }):F1} | {Foot(un, () => { var d = new CompactOA<int>(0); for (int i = 0; i < un; i++) d.TryAdd(i, i); return d; }):F1} |");
+    Console.WriteLine($"| {un:N0} | {Foot(un, () => { var d = new CloneCd(); for (int i = 0; i < un; i++) d.TryAdd(i, i); return d; }):F1} | {Foot(un, () => { var d = new ConcurrentOrderedDictionary<int, int>(); for (int i = 0; i < un; i++) d.TryAdd(i, i); return d; }):F1} | {Foot(un, () => { var d = new CompactSoA<int, int>(0); for (int i = 0; i < un; i++) d.TryAdd(i, i); return d; }):F1} | {Foot(un, () => { var d = new CompactAoS<int, int>(0); for (int i = 0; i < un; i++) d.TryAdd(i, i); return d; }):F1} | {Foot(un, () => { var d = new CompactSplit<int, int>(0); for (int i = 0; i < un; i++) d.TryAdd(i, i); return d; }):F1} | {Foot(un, () => { var d = new CompactOA<int>(0); for (int i = 0; i < un; i++) d.TryAdd(i, i); return d; }):F1} |");
 }
 
 // ---- allocation churn per op (thread-local counter, min-of-rounds): a compact append allocates NOTHING (no
@@ -162,7 +162,7 @@ Console.WriteLine("## Churn B/op (<int,int>, presized 70K holding 64K, min-of-ro
 Console.WriteLine("| op | COD today | compact SoA | compact OA |");
 Console.WriteLine("|---|---:|---:|---:|");
 {
-    var cod = new ConcurrentOrderedDict<int, int>(70_000); var soa = new CompactSoA<int, int>(70_000); var oa = new CompactOA<int>(70_000);
+    var cod = new ConcurrentOrderedDictionary<int, int>(70_000); var soa = new CompactSoA<int, int>(70_000); var oa = new CompactOA<int>(70_000);
     for (int i = 0; i < 64_000; i++) { cod.Add(i, i); soa.TryAdd(i, i); oa.TryAdd(i, i); }
     int k1 = 64_000, k2 = 64_000, k3 = 64_000;
     Console.WriteLine($"| append (in capacity) | {MinAlloc(() => cod.TryAdd(k1++, 1), 200)} | {MinAlloc(() => soa.TryAdd(k2++, 1), 200)} | {MinAlloc(() => oa.TryAdd(k3++, 1), 200)} |");
@@ -554,10 +554,10 @@ sealed class CloneCdC : IContender
     public void SwapBack(object d, int key) { }
 }
 
-/// <summary>Today's <see cref="ConcurrentOrderedDict{TKey,TValue}" /> — the design under review (node key path + parallel key/value arrays).</summary>
+/// <summary>Today's <see cref="ConcurrentOrderedDictionary{TKey,TValue}" /> — the design under review (node key path + parallel key/value arrays).</summary>
 sealed class CodC : IContender
 {
-    ConcurrentOrderedDict<int, int> _d;
+    ConcurrentOrderedDictionary<int, int> _d;
     /// <inheritdoc />
     public string Name => "COD today";
     /// <inheritdoc />
@@ -571,9 +571,9 @@ sealed class CodC : IContender
     /// <inheritdoc />
     public bool SupportsSwapBack => true;
     /// <inheritdoc />
-    public void Build(int n) { _d = (ConcurrentOrderedDict<int, int>)NewBuilt(n); }
+    public void Build(int n) { _d = (ConcurrentOrderedDictionary<int, int>)NewBuilt(n); }
     /// <inheritdoc />
-    public object NewBuilt(int n) { var d = new ConcurrentOrderedDict<int, int>(n); for (int i = 0; i < n; i++) d.TryAdd(Probe.BuildKeys[i], i * 2); return d; }
+    public object NewBuilt(int n) { var d = new ConcurrentOrderedDictionary<int, int>(n); for (int i = 0; i < n; i++) d.TryAdd(Probe.BuildKeys[i], i * 2); return d; }
     /// <inheritdoc />
     public void Drop() => _d = null;
     /// <inheritdoc />
@@ -585,17 +585,17 @@ sealed class CodC : IContender
     /// <inheritdoc />
     public long IndexSum() { long s = 0; var d = _d; int n = d.Count; for (int i = 0; i < n; i++) s += d[i]; return s; }
     /// <inheritdoc />
-    public void RemoveAt(object d, int index) => ((ConcurrentOrderedDict<int, int>)d).RemoveAt(index);
+    public void RemoveAt(object d, int index) => ((ConcurrentOrderedDictionary<int, int>)d).RemoveAt(index);
     /// <inheritdoc />
-    public void PopBack(object d) { var c = (ConcurrentOrderedDict<int, int>)d; c.TryRemove(c.GetKeyAt(c.Count - 1), out _); }
+    public void PopBack(object d) { var c = (ConcurrentOrderedDictionary<int, int>)d; c.TryRemove(c.GetKeyAt(c.Count - 1), out _); }
     /// <inheritdoc />
-    public void SwapBack(object d, int key) => ((ConcurrentOrderedDict<int, int>)d).TryRemoveSwapBack(key, out _);
+    public void SwapBack(object d, int key) => ((ConcurrentOrderedDictionary<int, int>)d).TryRemoveSwapBack(key, out _);
 }
 
-/// <summary>The shipped <see cref="ConcurrentOrderedCompactDict{TKey,TValue}" /> — the production port of the open-addressed prototype (validated read, write-atomic guards, generation rules), measured on the same rows.</summary>
+/// <summary>The shipped <see cref="ConcurrentOrderedCompactDictionary{TKey,TValue}" /> — the production port of the open-addressed prototype (validated read, write-atomic guards, generation rules), measured on the same rows.</summary>
 sealed class CocdC : IContender
 {
-    ConcurrentOrderedCompactDict<int, int> _d;
+    ConcurrentOrderedCompactDictionary<int, int> _d;
     /// <inheritdoc />
     public string Name => "COCD (shipped)";
     /// <inheritdoc />
@@ -609,9 +609,9 @@ sealed class CocdC : IContender
     /// <inheritdoc />
     public bool SupportsSwapBack => true;
     /// <inheritdoc />
-    public void Build(int n) { _d = (ConcurrentOrderedCompactDict<int, int>)NewBuilt(n); }
+    public void Build(int n) { _d = (ConcurrentOrderedCompactDictionary<int, int>)NewBuilt(n); }
     /// <inheritdoc />
-    public object NewBuilt(int n) { var d = new ConcurrentOrderedCompactDict<int, int>(n); for (int i = 0; i < n; i++) d.TryAdd(Probe.BuildKeys[i], i * 2); return d; }
+    public object NewBuilt(int n) { var d = new ConcurrentOrderedCompactDictionary<int, int>(n); for (int i = 0; i < n; i++) d.TryAdd(Probe.BuildKeys[i], i * 2); return d; }
     /// <inheritdoc />
     public void Drop() => _d = null;
     /// <inheritdoc />
@@ -623,11 +623,11 @@ sealed class CocdC : IContender
     /// <inheritdoc />
     public long IndexSum() { long s = 0; var d = _d; int n = d.Count; for (int i = 0; i < n; i++) s += d[i]; return s; }
     /// <inheritdoc />
-    public void RemoveAt(object d, int index) => ((ConcurrentOrderedCompactDict<int, int>)d).RemoveAt(index);
+    public void RemoveAt(object d, int index) => ((ConcurrentOrderedCompactDictionary<int, int>)d).RemoveAt(index);
     /// <inheritdoc />
-    public void PopBack(object d) { var c = (ConcurrentOrderedCompactDict<int, int>)d; c.TryRemove(c.GetKeyAt(c.Count - 1), out _); }
+    public void PopBack(object d) { var c = (ConcurrentOrderedCompactDictionary<int, int>)d; c.TryRemove(c.GetKeyAt(c.Count - 1), out _); }
     /// <inheritdoc />
-    public void SwapBack(object d, int key) => ((ConcurrentOrderedCompactDict<int, int>)d).TryRemoveSwapBack(key, out _);
+    public void SwapBack(object d, int key) => ((ConcurrentOrderedCompactDictionary<int, int>)d).TryRemoveSwapBack(key, out _);
 }
 
 /// <summary>Prototype: chained hash index over parallel <c>hashes/next/keys/values</c> arrays (structure-of-arrays; keeps every span surface).</summary>
@@ -973,10 +973,10 @@ interface IGunTable
     long ScanDecodeFailures();
 }
 
-/// <summary>Today's <see cref="ConcurrentOrderedDict{TKey,TValue}" /> under the gun — the node key path is the reference that must stay clean.</summary>
+/// <summary>Today's <see cref="ConcurrentOrderedDictionary{TKey,TValue}" /> under the gun — the node key path is the reference that must stay clean.</summary>
 sealed class CodGun : IGunTable
 {
-    readonly ConcurrentOrderedDict<int, int> _d = new(4096);
+    readonly ConcurrentOrderedDictionary<int, int> _d = new(4096);
     /// <inheritdoc />
     public bool TryGet(int k, out int v) => _d.TryGetValue(k, out v);
     /// <inheritdoc />
@@ -991,10 +991,10 @@ sealed class CodGun : IGunTable
     public long ScanDecodeFailures() { long f = 0; foreach (int v in _d) if ((v - 3) % 7 != 0) f++; return f; }
 }
 
-/// <summary>The shipped <see cref="ConcurrentOrderedCompactDict{TKey,TValue}" /> under the gun — the production port of the open-addressed design, expected clean like <c>cod</c>.</summary>
+/// <summary>The shipped <see cref="ConcurrentOrderedCompactDictionary{TKey,TValue}" /> under the gun — the production port of the open-addressed design, expected clean like <c>cod</c>.</summary>
 sealed class CocdGun : IGunTable
 {
-    readonly ConcurrentOrderedCompactDict<int, int> _d = new(4096);
+    readonly ConcurrentOrderedCompactDictionary<int, int> _d = new(4096);
     /// <inheritdoc />
     public bool TryGet(int k, out int v) => _d.TryGetValue(k, out v);
     /// <inheritdoc />

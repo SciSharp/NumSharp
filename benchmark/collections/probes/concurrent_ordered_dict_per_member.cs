@@ -5,7 +5,7 @@
 #:property Optimize=true
 #:property Nullable=disable
 // concurrent_ordered_dict_per_member.cs — measure EVERY public member of the shipping
-// ConcurrentOrderedDict<int,int> and classify each O(1) / amortized O(1) / O(n).
+// ConcurrentOrderedDictionary<int,int> and classify each O(1) / amortized O(1) / O(n).
 //
 //   DOTNET_TC_CallCountingDelayMs=0 dotnet run -c Release benchmark/collections/probes/concurrent_ordered_dict_per_member.cs
 //
@@ -27,7 +27,7 @@ try { Process.GetCurrentProcess().ProcessorAffinity = (IntPtr)0x4; } catch { }
 
 int[] sizes = { 1_000, 10_000, 100_000, 1_000_000, 10_000_000 };
 Console.WriteLine($"pid {Environment.ProcessId}  tiered={Environment.GetEnvironmentVariable("DOTNET_TC_CallCountingDelayMs")}");
-Console.WriteLine("shipping ConcurrentOrderedDict<int,int>; one P-core; 150ms tier-1 warm; best-of; per-CALL cost.\n");
+Console.WriteLine("shipping ConcurrentOrderedDictionary<int,int>; one P-core; 150ms tier-1 warm; best-of; per-CALL cost.\n");
 
 // each measured path: name -> per-size per-call cost (ns unless noted ms)
 var R = new Dictionary<string, double[]>();
@@ -42,7 +42,7 @@ for (int si = 0; si < sizes.Length; si++)
     int reps = n <= 10_000 ? 200 : n <= 100_000 ? 40 : 8;
     int drReps = Math.Max(2, reps / 12);
 
-    var d = new ConcurrentOrderedDict<int, int>(n);
+    var d = new ConcurrentOrderedDictionary<int, int>(n);
     for (int i = 0; i < n; i++) d.TryAdd(bk[i], i * 2);
 
     // ---- point reads (HOT, ns/call) ----
@@ -64,7 +64,7 @@ for (int si = 0; si < sizes.Length; si++)
     Put("GetEnumerator()", si, NsCall(() => { var e = d.GetEnumerator(); GC.KeepAlive(e); }, 1, reps));
 
     // ---- amortized append: whole unsized build / N, ns/call ----
-    Put("TryAdd (amortized)", si, NsCall(() => { var t = new ConcurrentOrderedDict<int, int>(); for (int i = 0; i < n; i++) t.TryAdd(bk[i], i); GC.KeepAlive(t); }, n, Math.Max(2, reps / 8)));
+    Put("TryAdd (amortized)", si, NsCall(() => { var t = new ConcurrentOrderedDictionary<int, int>(); for (int i = 0; i < n; i++) t.TryAdd(bk[i], i); GC.KeepAlive(t); }, n, Math.Max(2, reps / 8)));
 
     // ---- removes, per-call (build then time the whole drain, / N) ----
     Put("TryRemove tail (pop)", si, NsCall(() => { var t = Build(n); for (int i = n - 1; i >= 0; i--) t.TryRemove(t.GetKeyAt(t.Count - 1), out _); GC.KeepAlive(t); }, n, drReps, buildExcluded: n));
@@ -79,16 +79,16 @@ for (int si = 0; si < sizes.Length; si++)
     Put("foreach consume (ms)", si, MsRead(() => { long s = 0; foreach (int v in d) s += v; return (int)s; }, reps));
     Put("Pairs consume (ms)", si, MsRead(() => { long s = 0; foreach (var kv in d.Pairs) s += kv.Value; return (int)s; }, reps));
     Put("CopyTo (ms)", si, MsRead(() => { var a = new int[n]; d.CopyTo(a, 0); return a.Length; }, reps));
-    Put("AddRange (ms)", si, MsOneShot(() => new ConcurrentOrderedDict<int, int>(), t => { var pairs = new KeyValuePair<int, int>[n]; for (int i = 0; i < n; i++) pairs[i] = new(bk[i], i); t.AddRange(pairs); }));
+    Put("AddRange (ms)", si, MsOneShot(() => new ConcurrentOrderedDictionary<int, int>(), t => { var pairs = new KeyValuePair<int, int>[n]; for (int i = 0; i < n; i++) pairs[i] = new(bk[i], i); t.AddRange(pairs); }));
     Put("RemoveWhere all (ms)", si, MsOneShot(() => Build(n), t => t.RemoveWhere((k, v) => true)));
 
     // ---- Clear: presized (initial capacity ~ N) vs default-grown (initial ~31) ----
     Put("Clear presized (ms)", si, MsOneShot(() => Build(n), t => t.Clear()));
-    Put("Clear default-grown (ms)", si, MsOneShot(() => { var t = new ConcurrentOrderedDict<int, int>(); for (int i = 0; i < n; i++) t.TryAdd(bk[i], i); return t; }, t => t.Clear()));
+    Put("Clear default-grown (ms)", si, MsOneShot(() => { var t = new ConcurrentOrderedDictionary<int, int>(); for (int i = 0; i < n; i++) t.TryAdd(bk[i], i); return t; }, t => t.Clear()));
 
     GC.KeepAlive(d); GC.Collect();
     Console.Error.WriteLine($"  done N={n:N0}");
-    ConcurrentOrderedDict<int, int> Build(int m) { var t = new ConcurrentOrderedDict<int, int>(m); for (int i = 0; i < m; i++) t.TryAdd(i, i); return t; }
+    ConcurrentOrderedDictionary<int, int> Build(int m) { var t = new ConcurrentOrderedDictionary<int, int>(m); for (int i = 0; i < m; i++) t.TryAdd(i, i); return t; }
 }
 
 // ---- print measured table ----

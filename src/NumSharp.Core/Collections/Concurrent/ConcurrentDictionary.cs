@@ -3,7 +3,7 @@
 // (MIT, the same license as NumSharp), taken from
 //   src/libraries/System.Private.CoreLib/src/System/Collections/Concurrent/ConcurrentDictionary.cs @ main.
 //
-// It is the base for NumSharp's two-path ConcurrentOrderedDict (see ConcurrentOrderedDict.cs):
+// It is the base for NumSharp's two-path ConcurrentOrderedDictionary (see ConcurrentOrderedDictionary.cs):
 // the striped-lock hashtable below supplies the key path (dedup + O(1) lock-free key reads), while the
 // ordered type layers an insertion-ordered value snapshot on top for the index/list path.
 //
@@ -38,7 +38,7 @@ namespace NumSharp.Collections.Concurrent
     /// </remarks>
     [DebuggerDisplay("Count = {Count}")]
     // NumSharp deviation from the verbatim dotnet/runtime source: `partial`, so NumSharp-only members can live in
-    // ConcurrentDictionary.NumSharp.cs without touching this vendored body (see ConcurrentOrderedDict.TODO.md).
+    // ConcurrentDictionary.RefAccessors.cs without touching this vendored body (see ConcurrentOrderedDictionary.TODO.md).
     public partial class ConcurrentDictionary<TKey, TValue> : IDictionary<TKey, TValue>, IDictionary, IReadOnlyDictionary<TKey, TValue> where TKey : notnull
     {
         /// <summary>Internal tables of the dictionary.</summary>
