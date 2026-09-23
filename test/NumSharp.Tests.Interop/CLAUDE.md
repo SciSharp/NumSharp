@@ -48,11 +48,23 @@ beside `Python.Runtime`, precisely so the two read for what they are). Never con
 ## 2. The moving parts
 
 ### `PythonSession` (`PythonSession.cs`) — one embedded engine per process
-- `[AssemblyInitialize]` discovers a Python with numpy (`PYTHONNET_PYDLL`, then `python`/`python3`,
-  then `~/.claude/python`, then Windows `Programs\Python3*`), starts the engine, imports numpy to
-  fail fast, and **enables OpenBLAS as the default backend at `threads: 1`**
+- `[AssemblyInitialize]` discovers a Python with numpy (`NUMSHARP_PYTHONNET_PYTHON` — a named
+  interpreter, **binding**: it never falls back to another Python — then `PYTHONNET_PYDLL`, then
+  `python`/`python3`, then `~/.claude/python`, then Windows `Programs\Python3*`), starts the engine,
+  imports numpy to fail fast, and **enables OpenBLAS as the default backend at `threads: 1`**
   (`OpenBlasEngine.TryEnable(threads: 1)`). CPython+numpy cannot re-init after `Py_Finalize`, so the
   engine lifecycle is assembly-scoped, not per-test.
+- **Virtual environments are embedded AS the venv.** A venv has no libpython of its own, so
+  pythonnet loads the base install's; alone, that starts an interpreter whose `sys.prefix` is the
+  base install — the venv's site-packages simply aren't on `sys.path`, and the base's packages
+  (a different numpy, or none) answer instead. When the probed interpreter is a venv's
+  (`sys.prefix != sys.base_prefix`), `Start` sets `PythonEngine.ProgramName` to it before
+  initializing: CPython's `getpath.py` then finds the venv's `pyvenv.cfg` beside that program and
+  `site.py` makes the venv the prefix — exactly what running the venv's `python` does. The embedded
+  `sys.prefix` is then **verified** against the probe's, so a failed adoption stops the session
+  instead of testing against the wrong packages. (Proven: embedding a venv holding torch
+  2.13.0+cpu over a base holding 2.12.1+cu126 yields the venv's torch with the program name set,
+  the base's without it.)
 - **`threads: 1` is load-bearing** — see §4.
 - `EnsureOrInconclusive()` — call at the top of any engine-backed test (InteropTestBase does it for
   you). If the engine is unavailable it either **fails** (default: `NUMSHARP_PYTHONNET_REQUIRE_ENGINE`
@@ -142,6 +154,23 @@ byte-identical too. Likewise integer/bool operands widen to float64 on both side
 Windows, 64-bit on unix), so `numpy.sum(int32)` is int32 on `windows-latest` but int64 elsewhere.
 Run integer reductions at **int64** so the byte compare is width-identical on all three CI OSes
 (NumSharp is always int64). Products/factorisations don't hit this (they run in float64).
+
+**arm64 contraction trap:** NumPy's arm64 wheels target a baseline ISA that has fused multiply-add
+and are compiled with the default floating-point contraction (clang `-ffp-contract=on` on macOS), so
+every `a*b + c` or `a*b + c*d` written as ONE C expression rounds once there — the left product
+fused, any right product rounded first. The x86-64 wheels (X86_V2 baseline, no FMA) cannot fuse, and
+RyuJIT never does, so NumSharp matches x86-64 NumPy. Two places this reaches a byte-exact test:
+NumPy's legacy Gaussian sampler (`NumPyLegacyGaussianIsLiteral` / `DefineLegacyRandn`) and pocketfft
+(every `np.fft` result: on macos-latest 73–98 % of an `rfft`'s float64 lanes are an ULP or so apart).
+Wrap exactly those cells in `AssertExactUnlessNumPyFuses(cell, PocketFftFusedArithmetic, () => …)`:
+strict on x86/x64; on arm64 a mismatch becomes Inconclusive CARRYING the measured difference, and a
+match still passes. Keep every other cell of the test strict — a result NumPy takes from the bundled
+OpenBLAS (products, `np.correlate`'s `ddot`) matches on arm64 too. `SpectrumLiveParityTests` reports
+SHA-256 prefixes of its platform-independent input and both results. That is how the diagnosis was
+proven: an x64 replica of pocketfft reproduced both macOS hashes, NumSharp's literally and NumPy's
+fused. It had to be fed macOS's own libm twiddle values, because the result hashes are NOT
+host-independent. Both stacks take twiddles from the platform libm, and Apple, glibc and ucrtbase
+disagree in the last bit on some angles.
 
 ---
 
@@ -250,7 +279,10 @@ dotnet test -f net10.0
 # Just the cholesky/qr live-parity gate
 dotnet test -f net10.0 --filter "ClassName~CholeskyQrLiveParityTests"
 
-# Point at a specific interpreter's shared library
+# Point at a specific interpreter (a venv's or a base install's) — binding, venv-aware
+NUMSHARP_PYTHONNET_PYTHON=/path/to/python dotnet test -f net10.0
+
+# Point at a specific interpreter's shared library (base installs only — a venv has none)
 PYTHONNET_PYDLL=/path/to/python312.dll dotnet test -f net10.0
 
 # On a box without Python: skip instead of fail
@@ -259,9 +291,51 @@ NUMSHARP_PYTHONNET_REQUIRE_ENGINE=0 dotnet test -f net10.0
 
 Backend discovery honours the usual `NUMSHARP_OPENBLAS_*` knobs (`NUMSHARP_OPENBLAS_LIBRARY` binds one
 specific CBLAS — point it at the numpy wheel's own `libscipy_openblas*` to *guarantee* lever 1 on a
-non-2.4.2 host; `NUMSHARP_OPENBLAS_USE_BUNDLED=0` drops the bundle). CI's interop job installs
-Python+numpy and sets `NUMSHARP_PYTHONNET_REQUIRE_ENGINE`, so a discovery break there goes red rather
-than green-by-skipping.
+non-2.4.2 host; `NUMSHARP_OPENBLAS_USE_BUNDLED=0` drops the bundle). CI's interop job builds the
+Python environments below and sets `NUMSHARP_PYTHONNET_REQUIRE_ENGINE`, so a discovery break there
+goes red rather than green-by-skipping.
+
+### Python environments (`python-envs/`) — what CI runs, reproducible locally
+
+The suite needs two Pythons that must not share site-packages, so it runs twice, each run embedding
+a different virtual environment built by `python-envs/make_env.py` (stdlib `venv` + pip, from the
+tracked, exactly-pinned requirement files beside it):
+
+| Environment | Holds | Runs | Why separate |
+|---|---|---|---|
+| `parity` | numpy ONLY, at the OpenBLAS manifest's `numpy_version` (macOS: the scipy-openblas wheel, never Accelerate) | everything EXCEPT `[PythonEcosystem]` | the byte-exact oracle: numpy pinned, nothing else loaded into its process |
+| `ecosystem` | the same numpy + torch (CPU index), pandas, scipy, pyarrow, pillow, polars, opencv | ONLY `[PythonEcosystem]` | libraries that release on their own schedule and pin numpy ranges of their own |
+
+`make_env.py` installs numpy first from the manifest pin and every later file under a numpy
+**constraint**, so a library that demands another numpy fails the install instead of moving the
+oracle; then it **verifies** what numpy reports (the pinned release linked to scipy-openblas at the
+manifest's `openblas_version`). Environments land at `<repo>/.venvs/<name>-py<maj><min>/`
+(gitignored) — built from whichever interpreter runs the script, so one machine holds the same
+environment for several Pythons side by side (`py -3.11 make_env.py parity`, `py -3.12 …`; on Linux
+`python3.11 …`). The script prints only the interpreter path on stdout:
+
+```bash
+PY=$(python test/NumSharp.Tests.Interop/python-envs/make_env.py parity)
+NUMSHARP_PYTHONNET_PYTHON="$PY" dotnet test -f net10.0 --filter "TestCategory!=PythonEcosystem"
+
+PY=$(python test/NumSharp.Tests.Interop/python-envs/make_env.py ecosystem)
+NUMSHARP_PYTHONNET_PYTHON="$PY" NUMSHARP_PYTHONNET_REQUIRE_PACKAGES=1 \
+  dotnet test -f net10.0 --filter "TestCategory=PythonEcosystem"
+```
+
+- **Tag a test that needs a package beyond numpy with `[PythonEcosystem]`** (the method, or the class
+  when (nearly) all of it does). The package gates — `SkipUnless`, `PyTorchTestGate`,
+  `PandasTestGate` — FAIL an untagged caller on every machine: untagged, it would run only in the
+  numpy-only environment, skip there, and never run anywhere. A new package goes in
+  `python-envs/ecosystem.txt` (exact pin), then check it co-resolves with the numpy pin on all
+  three OSes (e.g. `uv pip compile --python-platform …`).
+- `NUMSHARP_PYTHONNET_REQUIRE_PACKAGES=1` turns an absent or wrong-version package into a failure
+  (CI sets it for the ecosystem run); by default it is Inconclusive, for a dev box with numpy alone.
+- On Debian/Ubuntu a system `python3` builds venvs only with the `python3.X-venv` apt package
+  (`ensurepip` is split out); python.org, `actions/setup-python`, conda and uv interpreters have it.
+- A genuinely different Python (not just different packages) is the same mechanism with another
+  interpreter: e.g. the Python twin of the ONNX Runtime floor, `onnxruntime==1.16.0`, has no cp312
+  wheel and was compiled against NumPy 1.x, so it needs a 3.11 + numpy<2 interpreter of its own.
 
 ---
 

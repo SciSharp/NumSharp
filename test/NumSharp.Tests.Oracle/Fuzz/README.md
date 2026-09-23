@@ -91,7 +91,7 @@ A divergence is one of: **bit-exact** (passes), a **documented difference** in `
   `[<file>] documented Misaligned divergences excused: <n>x <reason>; …` — so growth in an
   excused class stays visible in the test output. Anything unclassified is red.
 
-### Host-dependent values — the one thing the oracle must never assert
+### Host-dependent values — what the oracle must never assert
 
 A float→integer conversion is **undefined in C** when the value is NaN, ±inf, or outside the
 destination's range, and NumPy performs exactly that C cast. The result is the host toolchain's,
@@ -122,6 +122,32 @@ against cast kernels that reproduce the MSVC answer, so ~950/200000 cases "diver
 `(uint64)(1.0/0)`, the same undefined conversion. No implementation can satisfy both hosts; the fix
 was to stop asserting undefined values, not to chase one host's.
 
+**The second class: complex results of the platform's C99 complex library.** NumPy computes the
+complex128 `sqrt`/`log`/`exp`/`sin`/`cos`/`tan` of `fuzz_random.py`'s pool by calling the platform
+library: glibc on Linux, UCRT's `cexp`/`csin`/`ccos`/`ctan` plus NumPy's own msun ports of
+`csqrt`/`clog` on win-amd64 (`npy_config.h` blocklists those under `_MSC_VER`). C99 Annex G leaves
+the sign of many NaN and infinite results of a non-finite argument unspecified, so the two hosts
+disagree, while NumSharp reproduces the win-amd64 bits and the harness holds complex NaN signs
+byte-exact on x64 (`ComplexNanContractOps`). When that contract reached master (PR #628,
+2026-09-06), the soak went red every night with ~650/200000 "NaN-sign/signed-zero contract
+violations", all six ops, all with a NaN or inf input component. One seed generated on both hosts
+had identical operands and differed in NaN signs, infinity signs (`csin` → `(+nan, -inf)` vs
+`(+nan, +inf)`) and last-bit rounding. `_defuse_complex_nonfinite` now replaces only the non-finite
+COMPONENTS of those ops' complex inputs with finite pool values; finite arguments are fully
+specified, so what stays is ULP-level rounding the complex-unary excuse already bounds.
+`assert_portable` audits it like the casts. The committed `unary`/`specials`/`nan` tiers keep the
+non-finite complex edges as win-amd64 bytes, so the NaN-sign contract stays gated there. Measured
+on WSL Ubuntu with a real Linux NumPy 2.4.2: that night's 10 seeds went from ~650 divergences each
+to 0.
+
+**The runner's ISA is a host, too.** On AVX512_SKX hardware the Linux wheel links Intel SVML
+(float64 `exp`/`log` and ~20 more ufuncs) and dispatches its AVX512F float32 `exp`/`log` kernels,
+none of which the win-amd64 reference wheel ever runs. Hosted `ubuntu-latest` runners are a mix of
+AVX2 and AVX-512 machines, so the soak job (like `interop-test`'s ubuntu leg) pins
+`NPY_DISABLE_CPU_FEATURES: X86_V4 AVX512_ICL AVX512_SPR` and logs the runner's raw `AVX512F` flag
+next to NumPy's effective `X86_V4` dispatch. To regenerate a corpus on Linux locally, set the same
+variable, and use a real Linux interpreter: a WSL `python3` can be a shim to the Windows one.
+
 ## Scope gate — undisposed-intermediate detection (oracle-free)
 
 `UndisposedIntermediateTests` (`[FuzzMatrix]` + `[ScopeAudit]`, `[DoNotParallelize]`) replays the
@@ -148,12 +174,41 @@ fires in both directions, so a counters-accounting bug cannot read as "everythin
 ~9,900 of 102,785 measured cases** — the axis/nan/cumulative reduction family, the product family
 (matmul/dot/vecdot/matvec/vecmat/vdot), fft, the tri/tril/triu/diag* family, `trim_zeros` (up to
 19 buffers per call), `np.empty` itself, ufunc `out=` paths, and the NEP50 scalar-operand binary
-cells (the engine's `Cast(rhs, resultType, copy: true)` parameter-reassign drop). These are
+cells (the engine's `Cast(rhs, resultType, copy: true)` parameter-reassign drop). They were
 documented in `KnownEscapes` — surfaced green with a per-op **ceiling** (an op leaking more than
-its recorded worst still fails) — and held red by the `KnownEscapeFamilies_AreFixed`
-`[OpenBugs]` pin plus the mechanism pin `BinaryScalarCastTemp_IsDisposed`. Working the list down:
-fix an op, remove its `KnownEscapes` entry (the sweep then gates it at zero forever); when the
-registry empties, delete the pin. Every op NOT in the registry is gated at zero from day one.
+its recorded worst still failed) — and worked down to **zero** across four fix waves. The registry
+is now EMPTY and its `KnownEscapeFamilies_AreFixed` tracking pin is RETIRED: every op is gated at
+zero. The mechanism pin `BinaryScalarCastTemp_IsDisposed` stays. A regression is fixed, not
+registered — `KnownEscapes` exists only as the documented escape hatch for a leak that must land
+before its fix.
+
+### Coverage completion — every public member is leak-measured (2026-09-23)
+
+An inventory cross-reference (the `coverage/NumSharp.Tools.ApiInventory` surface against the op
+keys the sweep actually MEASURED) found 265 of the 961 `[ModuleName]`-module members never
+leak-measured: the sweep replayed only the ordinary op tiers. Five layers now close that, all
+`[ScopeAudit]` + `[FuzzMatrix]`, all reading process-wide pool counters under the same protocol
+(warm invocation, `ScopeAudit.MeasureConfirmedTraffic`, the same escape/bypass verdict):
+
+| Layer | What it measures | Counts (2026-09-23, identical net10.0 / net8.0) |
+|---|---|---|
+| `Corpus_AllOps_…` (`SharedSweep`) | three corpus families — ordinary op tiers, masked-array tiers (`ma_*`, `NDMaskedArray` operands through `OpRegistry.ApplyMasked`), index tiers (`index_*`, the indexer get/set) — and EVERY error path (a NumPy-raising case must throw without stranding a buffer) | 213,264 success (ordinary 138,660 / masked 68,860 / index 5,744) + 9,123 error paths |
+| `Corpus_BackendOps_…` (`SharedBackendSweep`) | the ordinary tiers replayed with OpenBLAS installed (threads=1): the LAPACK family Core cannot compute without a backend, the BLAS product seams, the Interop glue. `Inconclusive` where no library loads | 138,936 + 2,441 error paths |
+| `Catalogue_EveryEntry_…` (`SharedCatalogue`) | `LeakCatalogue*.cs` — one direct invocation per member NO corpus row reaches (np.* conveniences, the `np.linalg` Array-API forms, `ndarray`/`NDArray<T>`/`NDMaskedArray` methods, every operator, object surfaces and indexers). Backend-only entries run under OpenBLAS; `T(...)` entries (members that always raise) are measured as error paths; an entry that cannot run is a HARNESS ERROR and fails | 474 of 482 entries measured (8 always-raise error paths) |
+| `EveryPropertyAndField_Read_…` (`SharedPropertyReads`) | every surface property/field read — settable ones round-trip written — on targets built INSIDE the measured region, so a getter caching an allocation on its owner is caught when the owner is released | 539 reads + 15 error paths |
+| `EveryInventoryMember_IsLeakAudited` | the COMPLETENESS gate (`LeakSurfaceCoverageTests`): every member of `LeakSurface` — the `[ModuleName]` modules, the operators of `ndarray`/`NDArray<T>`/`NDMaskedArray` and of every object owner that declares any (`DType`, `NDArrayFlags`, `poly1d`), the mapped object surfaces — must be credited by a MEASUREMENT from one of the four runs above | 1,348 / 1,348 members |
+
+Credit follows measurement, never declaration: a catalogue entry or property read counts only when
+its run actually exercised the member (`DirectRunResult.Attempted`), a LAPACK-only op only when the
+backend pass measured it, and a corpus key only on a SUCCESS path (an op whose every case raises has
+an unaudited success path). Two environmental outcomes are credited because they are never red
+elsewhere either: a GC-inconclusive measurement (the member ran; only the host withheld the verdict)
+and — only on a host where no CBLAS/LAPACK library loads — a backend-skipped one. The gate also
+fails when an object owner declares an operator outside `LeakSurface.OperatorOwners`, when a
+catalogue/alias-map id names no live member, or when a mapping went stale. Non-vacuity floors sit
+5% under the counts above. **To audit a new public API:** give it corpus rows (`gen_oracle.py` +
+`OpRegistry`) or a catalogue entry (`E(...)`/`T(...)` in `LeakCatalogue*.cs`); a new property is read
+automatically unless its owner needs a new read target (`ReadTargetsFor`).
 
 **Outside-pool allocation detection** rides the same sweep plus a static gate, because the two
 halves of the bypass class need different instruments. The RUNTIME half: a result that is fresh
@@ -171,17 +226,20 @@ vs `KnownBypassDebt` (pin-tracked; empty at landing). The STATIC half —
 internal scratch buffer allocated raw and freed raw inside an op never reaches a result. It scans
 `src/NumSharp.Core` for raw `NativeMemory.Alloc*`/`Marshal.AllocHGlobal`/`VirtualAlloc*` call
 sites (comment lines excluded) and pins an exact file→count allowlist: the two pools + the
-guard-page allocator ARE the chokepoints, NDIter's buffered-mode scratch (7 sites) and
-`np.bincount`'s counting table (1) are carried as routed-through-the-pool audit debt, and ANY new
-raw site — new file or count growth in an allowed file — is red until pooled or consciously
-allowlisted. Inconclusive (never false-green) without a source checkout.
+guard-page allocator ARE the chokepoints; NDIter's state block and buffered-mode scratch (6 sites —
+`NDIter.cs` tightened 2 → 1 on 2026-09-23), the privatized counting tables of `np.bincount` and the
+fused histogram kernel, the managed LU's scratch, and the >int.MaxValue-capable sort/partition line
+buffers (`AxisSort`/`AxisPartition`) are carried as audit debt (each an alloc+free pair inside one
+call); and ANY new raw site — new file or count growth in an allowed file — is red until pooled or
+consciously allowlisted. A file whose count DROPS below its pin prints a "tighten the allowlist"
+note. Inconclusive (never false-green) without a source checkout.
 
 ## Regenerating the corpus
 
 ```bash
 python test/oracle/gen_oracle.py astype_full      # 13x13 dtypes x 26 layouts (host-sensitive, see above)
 python test/oracle/gen_oracle.py binary           # add/sub/mul/divide x NEP50 pairs x pairwise layouts
-python test/oracle/gen_oracle.py divmod_power     # floor_divide/mod (bit-exact, F1) + complex power (Misaligned)
+python test/oracle/gen_oracle.py divmod_power     # floor_divide/mod (bit-exact, F1) + complex power (integer exp bit-exact; non-integer exp Misaligned)
 python test/oracle/gen_oracle.py comparison       # ==,!=,<,>,<=,>=
 python test/oracle/gen_oracle.py unary            # negate/abs/sqrt/trig/exp/log/...
 python test/oracle/gen_oracle.py reduce           # sum/prod/min/max/mean/std/var/argmax/argmin/all/any
@@ -237,9 +295,12 @@ dotnet test --filter "TestCategory=FuzzMatrix"          # the differential gate 
 dotnet test --filter "TestCategory=OpenBugs&ClassName~FuzzCorpusTests"   # known-failing repros
 ```
 
-The nightly **soak** (`.github/workflows/fuzz-soak.yml`) sweeps seeds for ~1M cases/night; a
-divergence prints a shrunk minimal repro — copy it into `corpus/regressions/` so `FuzzRegression`
-pins it on every CI thereafter.
+The nightly **soak** (`.github/workflows/fuzz-soak.yml`) sweeps one fixed seed plus nine fresh random
+seeds, 200K cases each (~2M cases/night, ~1.8M of them new draws). The generator is deterministic, so
+the fixed seed replays an identical corpus every night: a deterministic canary, and a `source_sha256`
+in the uploaded evidence that should repeat until the generator or the NumPy pin changes (a new value
+means NumPy answered differently on that runner). A divergence prints a shrunk minimal repro — copy it
+into `corpus/regressions/` so `FuzzRegression` pins it on every CI thereafter.
 
 ## Documented divergence ledger (Misaligned / known bugs)
 
@@ -265,13 +326,13 @@ row is scoped in `MisalignedRegistry` branches K1–K9, so each is counted and p
 | `external_loop` coalesces fewer dimensions → more/shorter chunks (values agree, chunk lengths do not) | K1 | known bug |
 | `isscalar(0-d array)` → True, NumPy False | K2 | known bug |
 | `nonzero(0-d)` returns a tuple, NumPy raises | K3 | known bug |
-| complex-input ufunc rejection: same refusal, NumSharp's own wording/type | K4 | known gap |
-| …and the rejection is **skipped entirely** on a zero-size complex operand (NumPy validates the loop, not the data) | K5 | known bug |
+| complex-input ufunc rejection (cbrt/floor/ceil/trunc/deg2rad/rad2deg/floor_divide/mod) | K4 | **FIXED** — each `Default.<Op>` guard now raises NumPy's exact `TypeError("ufunc '<name>' not supported for the input types…")` (mod→'remainder') instead of a kernel `NotSupportedException`; excuse deleted |
+| …and the rejection on a **zero-size** complex operand | K5 | **FIXED** — the K4 guard keys off the input DTYPE, not the data, so a zero-size complex operand is rejected too (NumPy validates the loop, not the data); excuse deleted |
 | `power(bool, negative int)` misses the integer-power guard | K6 | known bug |
 | `power(int, negative int)` trips `Debug.Fail("index < Count, Memory corruption expected")` instead of NumPy's ValueError — in Release that path has no assert | K8 | known bug (memory safety) |
 | `result_type(mixed signed/unsigned, 0-D operand)` throws instead of resolving | K9 | known bug |
 | NEP50 weak-scalar reached via the error path (int64+uint64 succeeds where NumPy refuses) | K7 | intended |
-| ufunc `out=` on a read-only **broadcast** view: NumSharp writes through it (587 cases), contradicting its own `Shape.IsWriteable == false` rule | K10 | known bug |
+| ufunc `out=` on a read-only **broadcast** view (983 cases) | K10 | **FIXED** — `ThrowReadOnly` now raises NumPy's exact `ValueError("output array is read-only")` (was `NumSharpException`, same text) so these pass without an excuse; the write-through was already prevented by `ThrowIfNotWriteable` |
 | `isnan` into a **strided bool `out`**: results land on the wrong elements (contiguous out is correct) | K12 | known bug |
 | `exp(1.0f)` in a (4,5) float32 array returns `0x402df854` from `np.exp(x)`, `np.exp(x, out)` and `np.exp(x, out, where)` alike, while NumPy **and the committed `unary.jsonl` expectation for the same values/shape/dtype** say `0x402df855` — the unary tier is green, so the same op on the same data disagrees depending on how the array was built | K11 | **open question** |
 
@@ -285,9 +346,126 @@ float-tier widening · `full_like` selecting the fill value's CLR dtype · integ
 truncating instead of flooring · Char ones/eye/identity writing `'1'` (0x31) ·
 `ascontiguousarray`/`asfortranarray` failing NumPy's ndim≥1 scalar contract · einsum's internal
 order materialization leaking that public scalar promotion into a `()` contraction result. The one
-algorithmic remainder is complex `corrcoef`: its two normalization divides inherit the existing
-`npy_cdivide` versus `System.Numerics.Complex` 1-ULP difference; it now has its own ≤2-ULP branch
-and paired tightness pins instead of hiding under the broad complex-unary envelope.
+algorithmic remainder is complex `corrcoef`: the complex true-division itself is now BIT-EXACT
+(`ComplexDivideNumPy` ports NumPy's `CDOUBLE_divide` Smith's algorithm), so corrcoef's residual comes
+solely from `cov`'s managed complex GEMM (`np.dot`) — it has its own ≤2-ULP branch scoped to that GEMM
+instead of hiding under the broad complex-unary envelope.
+
+### The 2026-09-18 coverage expansion (docs/plans/oracle-coverage-expansion.md, phases P0–P3)
+
+The assertion-kind and parameter axes were systematically widened; every cell below is now GATED
+(surface + applicability), not just present.
+
+**New tiers.** `instance.jsonl` (5,410 — the whole `ndarray.*` INSTANCE surface, row G0: dual-form
+methods through their instance defaults, instance-only members `item`/`tobytes`/`view`/`getfield`/
+`byteswap`/`__len__`, the D4 property reads `T`/`mT`/`real`/`imag`/`flat`/`nbytes`/`itemsize`/
+`ndim`/`size`/`strides`, `nonzero`'s tuple, and the IN-PLACE mutators `sort`/`fill`/`put`/`resize`
+compared as **[post-call view, post-call whole base buffer]** — the out_where two-slot contract, so
+a mutator writing outside a strided view's window is caught; op keys carry the `ndarray.` prefix and
+`MisalignedRegistry` strips it so the shared excuses apply) and `emath.jsonl` (327 — the scimath
+module promoted into the corpus: the real→complex promotion DECISION over the complex128/float64
+lanes; int8/16/uint16/float32/float16 promote to NumPy's complex64 and stay sibling-owned, #569).
+
+**Widened tiers.** `out_where.jsonl` +240: `out=` beyond the elementwise ufuncs — `out_scan`
+(cumsum/cumprod; complex cumPROD carved exactly as nanscan carves it), `out_round`, `out_clip`
+(scalar 0-D bounds; the read-only broadcast out refusal included), `out_nanarg` (nanargmax/
+nanargmin). `params.jsonl` +288: the §C1 multi-axis cells — `axes` int[] for the reductions with a
+tuple-axis overload (median/average/nanmedian; sum/prod/min/max have NO int[] overload yet — a
+tracked feature gap the applicability matrix warns on, deliberately NOT generated). `errors_full.jsonl`
+714→801 over 22→50 distinct messages: curated §B1 recipes (reshape rejection family, expand_dims OOB
+both signs, flip axis/repeated-axis, matrix_transpose ndim, take/put OOB + float-index dtype
+rejection, partition kth OOB, percentile/quantile q-range, linalg 1-D/non-square/float16 validation,
+fft n-guard). `nan.jsonl` 120→176: the §B3 BINARY special-pair CROSS grid (FLOAT_VALS × FLOAT_VALS,
+both NaN signs) over 19 f64/f32 ops + a 13-op f16 subset (the widen-compute-narrow/bit-level lanes)
++ 5 complex128 binaries against a rolled grid.
+
+**Schema addition — `operand.writeable`.** `layout_catalog.describe()` now serializes
+`"writeable": false` for a read-only view whose read-onlyness the strides CANNOT convey — a
+SAME-SHAPE `np.broadcast_to` keeps ordinary strides — and `FuzzCorpus.Reconstruct` clears the flag
+via the public `setflags(write: false)` route. This closed a REAL gate hole: since the K10 excuse
+deletion (60024b44), the 293 one-D `out=broadcast` refusal cells reconstructed WRITEABLE, NumSharp
+computed a result where NumPy raises, and the OutWhere tier had been silently red. Emitted only when
+False, so every pre-flag corpus row stays byte-identical.
+
+**Real bugs found + fixed by the new coverage** (each with its corpus cells retained as regression
+proof): `np.trace`/`ndarray.trace` promoted **unsigned** narrow lanes (uint8/uint16/Char) to int64
+where NumPy's add.reduce rule gives **uint64** — the pre-existing trace corpus covered only signed/
+float lanes, so the wrong dtype AND wrong wrap point were invisible (`DirectILKernelGenerator.Trace`
+both maps fixed); `ndarray.flat` over a **0-d** array returned 0-d where NumPy yields shape (1,);
+`np.fmod` with a complex operand leaked the kernel `NotSupportedException` instead of NumPy's
+verbatim no-loop `TypeError` (fmod landed after the K4/K5 sweep and missed the guard); `np.take`
+mode='raise' OOB said "for axis with size" — NumPy says "for axis {n} with size" on an axis take
+and drops the clause entirely on a flat one (both spellings now exact); `ndarray.item()` on size>1
+and `__len__()` on 0-d now raise NumPy's verbatim texts ("can only convert an array of size 1 to a
+Python scalar" / "len() of unsized object").
+
+**New/extended excuse branches** (Table 1 additions): *argsort tie order* — NumPy's default
+introsort is UNSTABLE, so ±0.0/duplicate ties resolve arbitrarily while NumSharp's radix argsort is
+stable; excused ONLY when `ArgsortPermutationsEquivalent` re-derives from the operand bytes that
+both index vectors are in-range permutations selecting pairwise IEEE-equal values (the main sort
+tier uses distinct values and never reaches it). *K13 extended to `out_clip`* — clip IS
+maximum(minimum(x, hi), lo), so a ±0-sign result inherits the same non-contractual lane-dependence;
+still guarded by every-diff-is-a-pure-±0-flip. The `ndarray.`/`emath.` prefixes are stripped at
+`Classify` entry (the `ma.` convention), so instance/emath spellings ride the shared branches.
+
+**New gates.** `OracleSurfaceCoverageTests` now reflects ALL 8 `[ModuleName]` facades: `ndarray`
+(lowercase = NumPy-named and must be corpus/`ndarray.*`-covered or classified; PascalCase = C#
+infra by convention; the property row included), `np.emath` (100% corpus-covered — no
+classifications allowed), `np.ma` (`ma.*` keys + aliases + sibling ledger), `np.dtypes` (the 29
+class properties, DTypes-suite-owned), each with the stale-classification self-retirement rule.
+`OracleApplicabilityTests` is the plan's §M1–M3 mechanization: a 22-row declarative manifest of
+(group × assertion-kind) cells — Enforced cells assert op-count floors (MinCases-style ratchets),
+Warn cells PRINT their missing ops (the driven checklist for the next session), NotApplicable
+requires a reason and fails if coverage appears anyway; kinds a row omits are covered by its
+one-line `InapplicableNote`. Applied kinds are computed from the corpus itself (out_* vehicle keys
+credit the ufunc named in their params; masked kinds normalize to array/tuple).
+
+### The dtype-spread validation (2026-09-18, follow-up pass) — "do all oracles cover all 15 dtypes?"
+
+A full per-op × dtype scan of every committed corpus (612 op keys) answered the question and made
+the answer a GATE. The model: the NumPy corpus expresses 13 dtypes directly, **Char** rides the
+uint16 proxy weave, **Decimal** rides the independent C# oracle (`decimal_*.jsonl`) — and a dtype
+counts as covered for an op when it appears as an operand of a value OR error cell (a gated
+rejection IS coverage of the combination).
+
+**Axes widened by the scan** (all bit-exact on regeneration — no new NumSharp bugs, which is
+itself a result: the char instance weave alone re-proved Char ≡ uint16 across ~50 instance
+methods, in-place mutators included):
+`instance.jsonl` 5,414→9,463 (8→13 dtypes + `char_tier("instance")` — the whole tier re-runs on
+the proxy, dedicated dot/searchsorted/choose + resize jobs included; `_relabel_dtype` now recurses
+into tuple `slots`, without which every char in-place mutator kept "uint16" slot dtypes and failed);
+`modf.jsonl` 128→208 (the 59f99320 per-width promotion made every non-complex lane computable —
+the old 4-dtype list predated it; + `char_tier("modf")`); `nanreduce.jsonl` +4,150
+(nanpercentile/nanquantile integer/bool lanes — legal NumPy, degenerates to percentile; the
+generator's NaN-laced float pool would RAISE at construction for unsigned/bool, so integer lanes
+get an int64-built modular-astype pool — a float→uint astype is C-undefined and must never seed an
+oracle); `emath.jsonl` 329→482 (unsigned lanes — no negatives means the `any(x<0)` trigger never
+promotes, and `|x|>1` cells that would land complex64 auto-skip); `out_where.jsonl` +168
+(float16/uint8 lanes through out_scan/out_round/out_clip/out_nanarg); `ndarray.view` gained the
+int16/uint16/uint32/uint64 same-size reinterpret pairs.
+
+**The gate** — `OracleCoverageStrengthTests.EveryOrdinaryOp_MeetsItsDtypeSpreadFloor` (same file
+skips as the case-count gate: host pins, `index_`, `ma_`): every op must reach **≥ 4 distinct
+dtypes** or carry a one-line entry in `FixedDtypeOps` (61 reviewed reasons in five classes:
+fixed-output generators — windows/fftfreq/index-coordinate builders; dtype-axis-in-PARAMS —
+can_cast/promote_types/min_scalar_type sweep dtype pairs the operand metric cannot see; PRNG
+protocol; the host-pinned LAPACK/CBLAS f32/f64/c128 family; variant keys whose primary op carries
+the axis — modf-tuple/std_ddof/average_returned; plus per-op semantics like einsum's small-exact
+lanes and unique_values' [Misaligned] hash-order carve). The ledger is self-retiring BOTH ways: an
+entry whose op vanished or whose spread grew past the floor fails. Rule 2 is 15 per-dtype GLOBAL
+op-count floors (bool 298 … char 216 … decimal 117 … complex128 369 — ~95 % of the post-widening
+spread), so a regeneration that silently drops a dtype axis turns the gate red.
+
+**The sibling oracles' posture** (validated, no changes needed): the **.npy format oracle** covers
+every expressible dtype map entry incl. `<U1`/Char, big-endian variants and the `<c8` widening,
+with Decimal's rejection itself gated; the **advanced-indexing oracle** carries a dedicated
+13-dtype tier (`index_dtype.jsonl`, 8 cases each) + a setter-dtype tier; the **flags** and
+**layout-parity** oracles spot-sweep all 13 NumPy dtypes (×6 / ×1-6) around an int64/f64 bulk —
+correct for their contract, since flags/view semantics depend on itemsize, not lane type (Char and
+Decimal behave as uint16/16-byte lanes; the flags oracle is under active work in a parallel
+session). **Decimal** remains gated exclusively by `decimal_*.jsonl` (124 op keys) — by design,
+per the decimal-coverage expansion; ops absent there raise or ride shared engine paths, and
+widening that set is C#-oracle work tracked in its own memory topic.
 
 ### Table 1 — live `MisalignedRegistry` excuse branches
 
@@ -300,11 +478,9 @@ and paired tightness pins instead of hiding under the broad complex-unary envelo
 | unary ~ULP (transcendental/magnitude algorithm difference) | single-operand × Value, every diff ≤2 ULP — **EXCEPT exp/log/sin/cos/rad2deg/deg2rad at a float32 result, which are gated bit-exact** (see below) | 563 |
 | complex unary within 3 ULP (full NumPy-algorithm port) — FINITE interior only; the NaN SIGN of these ops is now compared **raw-byte** (`ComplexNanContractOps`, `BitDiff.Compare(nanBitExact:true)`) and a pure NaN-sign / signed-zero flip HARD-FAILS via `DiffHasSignFlip` before any ULP excuse runs (NumSharp reproduces NumPy 2.4.2 win-amd64 / MSVC UCRT NaN signs bit-for-bit) | complex unary × Value, ≤3 ULP, no sign flip | 11 |
 | complex arccos/arccosh/sinh/cosh (+ sin/cos routing through sinh/cosh) pathological FINITE edge (sub-DBL_MIN denormal-real flush / \|x\|∈[710,710.13] overflow boundary) — the former "cos/sin NaN zero-sign" regime is GONE (now byte-exact) | those ops × complex × Value, finite | 0 |
-| complex division ~1 ULP (npy_cdivide vs System.Numerics.Complex) | divide × complex × Value, ≤2 ULP | 17 |
-| complex corrcoef normalization inherits complex-division rounding | corrcoef × complex input/result × Value, ≤2 ULP | 1 |
+| complex corrcoef: `cov`'s managed complex GEMM vs zgemm (division itself is now bit-exact) | corrcoef × complex input/result × Value, ≤2 ULP | 1 |
 | complex add/subtract within 2 ULP (FMA contraction) | add/subtract × complex × Value, ≤2 ULP | 0 |
-| complex multiply cancellation / ~ULP at element magnitude (#12) | multiply × complex × Value, ≤16 element-magnitude ULP | 16 |
-| complex power ~ULP / gross inf-NaN edge (Complex.Pow vs npy_cpow) (F5, ledger L6) | power × complex × Value, ≤512 element-magnitude ULP or non-finite | 30 |
+| complex power, NON-integer/complex exponent ~ULP / gross inf-NaN edge (Complex.Pow vs npy_cpow's host cpow) (F5, ledger L6) — INTEGER exponents are now BIT-EXACT (ComplexPowNumPy ports npy_cpow's exact repeated-multiplication branch), so this is scoped OFF integer exponents | power × complex × non-integer exponent × Value, ≤512 element-magnitude ULP or non-finite | 30 |
 | reduction summation/two-pass precision (algorithm order) | sum/mean/std/var/prod × float-family result (Half/Single/Double/Complex) × Value | 401 |
 | complex reduction/scan NaN ordering/propagation differs | reduce+cumsum/cumprod × complex × Value, diffs must contain a NaN token | 35 |
 | decimal std last digit (independent 28-digit sqrts) (ledger L7) | std × Decimal × Value, ≤1 unit in the 28th significant digit | 4 |
@@ -376,11 +552,11 @@ rather than portable IEEE parity — the same status as the "Host-dependent valu
 | power(*,float16): result widened past float16 | power × Half-expected × Dtype | 0 | |
 | dot(int8): Sum(int8)→int8 IL reduction kernel missing | dot × int8·int8 × Threw | 0 | |
 | where(narrow-int) scalar-broadcast: NDExpr zero-push unsupported | where × {i8,u8,i16,u16} operand × Threw | 0 | |
-| cumprod(size-1 int): skips NEP50 accumulator widening | cumprod × Dtype, operand element-count ≤1 | 14 | |
+| cumprod(size-1 int) NEP50 widening — FIXED (ReduceCumMul casts to GetAccumulatingType; excuse removed, now regression-guarded) | cumprod × Dtype, element-count ≤1 | 0 | |
 | modf(float16/int): no Half kernel, no int→float64 promotion | modf × dtype ∉ {f32,f64} × Threw | 32 | |
 | unary hyperbolic/inverse-trig/angle: no Half kernel | sinh…arctan × {bool,i8,u8,f16} (+deg2rad/rad2deg×c128) × Threw | 0 | |
 | unary preserve-dtype pending: square/floor/ceil/trunc widen int→float64 | those 4 ops × Dtype | 78 | F3b |
-| reduction result dtype differs (NEP50 accumulator / complex→real) | reductions × Dtype | 239 | #10 |
+| reduction result dtype differs (NEP50 accumulator / complex→real) — sum/prod/cumprod NOW bit-exact on EVERY size incl. flat 0-d/size-1 (fixed 2026-09-13) & EXCLUDED from the excuse (regression-guarded); residual = std/var complex→real (+decimal) | reductions × Dtype (excl. sum/prod/cumprod) | 85 | #10 |
 | axis-reduction NaN propagation: axis SIMD min/max skips NaN (flat fixed) | min/max × axis≠null × all-NaN diffs | 8 | #10 |
 | bool min/max along axis diverges | min/max × Boolean × Value | 0 | #10 |
 | complex 1-D axis reduction throws (NDCoordinatesAxisIncrementor) | (nan)reductions × complex 1-D × Threw | 8 | #10 |
@@ -539,7 +715,8 @@ across all 13 dtypes × the call-form matrix, and DEEP-TRUTH f32/f64 cases (K=20
 carrying `expected.truth`, adjudicated by the prefer-precise branches since NumPy routes those
 through BLAS. **397/408 bit-exact**; 8 deep cases prefer-precise-excused (NumSharp CLOSER to truth
 than BLAS), 2 f32 deep contractions in P3's bounded known-loss scope, and one complex corrcoef
-normalization cell in the explicit ≤2-ULP npy_cdivide envelope. The tier also caught its own
+normalization cell in the explicit ≤2-ULP managed-complex-GEMM envelope (its complex division is now
+bit-exact — `ComplexDivideNumPy` ports `CDOUBLE_divide`). The tier also caught its own
 harness trap on arrival: a positional `axis` int to `np.vecdot` silently binds `out=` via the
 int→NDArray implicit conversion — the registry passes it BY NAME (documented at the call).
 

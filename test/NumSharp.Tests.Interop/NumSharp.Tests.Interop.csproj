@@ -34,6 +34,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\examples\gist\NumSharp.GistExamples.csproj" />
     <ProjectReference Include="..\..\src\NumSharp.Core\NumSharp.Core.csproj" />
     <ProjectReference Include="..\..\src\NumSharp.Interop.pythonnet\NumSharp.Interop.pythonnet.csproj" />
     <!-- The optional external-CBLAS/LAPACK engine. Unlike NumSharp.Tests — which SUPPRESSES the
@@ -44,6 +45,16 @@
          host-pinned differential tests compare NumSharp's OpenBLAS results against live numpy.linalg
          over the same exported bytes. -->
     <ProjectReference Include="..\..\src\NumSharp.Interop.OpenBLAS\NumSharp.Interop.OpenBLAS.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="../../examples/gist/karpathy/lstm_reference.py" Link="KarpathyLstmReference.py" CopyToOutputDirectory="PreserveNewest" />
+    <EmbeddedResource Include="Fixtures/Karpathy/karpathy.min-char-rnn.py" LogicalName="KarpathyOriginal.rnn.py" />
+    <EmbeddedResource Include="Fixtures/Karpathy/karpathy.pg-pong.py" LogicalName="KarpathyOriginal.pong.py" />
+    <EmbeddedResource Include="Fixtures/Karpathy/karpathy.batched-lstm.py" LogicalName="KarpathyOriginal.lstm.py" />
+    <EmbeddedResource Include="Fixtures/Karpathy/karpathy.microgpt.py" LogicalName="KarpathyOriginal.microgpt.py" />
+    <EmbeddedResource Include="Fixtures/Karpathy/karpathy.nes.py" LogicalName="KarpathyOriginal.nes.py" />
+    <EmbeddedResource Include="Fixtures/Karpathy/karpathy.stablediffusionwalk.py" LogicalName="KarpathyOriginal.walk.py" />
   </ItemGroup>
 
 </Project>

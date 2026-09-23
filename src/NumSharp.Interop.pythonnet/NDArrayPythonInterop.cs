@@ -188,7 +188,7 @@ namespace NumSharp.Interop.PythonNet
         /// <summary>NumSharp dtype -&gt; numpy dtype string ("&lt;i4", "&lt;f8", "|b1", ...).</summary>
         /// <remarks><see cref="NPTypeCode.Char"/> maps to "&lt;u2" (a C# char is a UTF-16 code unit;
         /// numpy has no native char dtype). <see cref="NPTypeCode.Decimal"/> has no numpy equivalent.</remarks>
-        public static string ToNumpyDtypeStr(NPTypeCode tc) => tc switch
+        public static string ToNumpyDtypeStr(DType dtype) => (dtype ?? throw new ArgumentNullException(nameof(dtype))).GetTypeCode() switch
         {
             NPTypeCode.Boolean => "|b1", NPTypeCode.Byte => "|u1",  NPTypeCode.SByte => "|i1",
             NPTypeCode.Int16 => "<i2",   NPTypeCode.UInt16 => "<u2", NPTypeCode.Int32 => "<i4",
@@ -198,7 +198,7 @@ namespace NumSharp.Interop.PythonNet
             NPTypeCode.Char => "<u2",    // C# char is a 2-byte UTF-16 code unit (numpy has no native char)
             NPTypeCode.Decimal => throw new NotSupportedException(
                 "decimal has no numpy dtype (16-byte, non-IEEE). Convert first: nd.astype(NPTypeCode.Double)."),
-            _ => throw new NotSupportedException(tc.ToString())
+            NPTypeCode code => throw new NotSupportedException(code.ToString())
         };
 
         /// <summary>
@@ -232,7 +232,7 @@ namespace NumSharp.Interop.PythonNet
         }
 
         /// <summary>NumSharp dtype -&gt; PEP 3118 struct format code ('?', 'b', 'B', 'h', ..., 'Zd').</summary>
-        public static string ToBufferFormat(NPTypeCode tc) => tc switch
+        public static string ToBufferFormat(DType dtype) => (dtype ?? throw new ArgumentNullException(nameof(dtype))).GetTypeCode() switch
         {
             NPTypeCode.Boolean => "?",  NPTypeCode.Byte => "B",   NPTypeCode.SByte => "b",
             NPTypeCode.Int16 => "h",    NPTypeCode.UInt16 => "H", NPTypeCode.Int32 => "i",
@@ -242,7 +242,7 @@ namespace NumSharp.Interop.PythonNet
             NPTypeCode.Char => "H",     // UTF-16 code unit == unsigned 2-byte
             NPTypeCode.Decimal => throw new NotSupportedException(
                 "decimal has no PEP 3118 format (16-byte, non-IEEE). Convert first: nd.astype(NPTypeCode.Double)."),
-            _ => throw new NotSupportedException(tc.ToString())
+            NPTypeCode code => throw new NotSupportedException(code.ToString())
         };
 
         /// <summary>

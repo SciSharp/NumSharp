@@ -138,8 +138,8 @@ bit-identical to the per-element route (25/25 A/B), 0.80× → **6.47×** on 200
 | Package | Implements | Serves | Why |
 |---------|-----------|--------|-----|
 | `NumSharp.Interop.OpenBLAS` (`src/NumSharp.Interop.OpenBLAS/`) | `OpenBlasBackend : IBlasBackend` | `np.dot`, `np.matmul`, `np.inner`, `np.vdot`, `np.vecdot`, `np.matvec`, `np.vecmat` for float32/float64/**complex128** | matrix + vector products through OpenBLAS — faster on large matrices, and **byte-identical to NumPy**. **Bundles the binaries NumPy itself pins** (scipy-openblas 0.3.31.22.0, byte-identical to numpy 2.4.2's) as per-RID runtime assets, so parity needs no Python installed. See below and `docs/stale-docs/GEMM_PARITY.md`. |
-| `NumSharp.Interop.OnnxRuntime` (`src/NumSharp.Interop.OnnxRuntime/`) | nothing on the engine — a CONVERSION library (`NDArrayOnnxInterop` verbs + `InferenceSessionExtensions` + `Postprocess`), like the pythonnet bridge | `nd.AsOrtValue()` (zero-copy `OrtValue` over the NumSharp buffer, C-contiguous only, ARC-rooted handle `OrtTensor`), `nd.ToOrtValue()` (ORT-allocated copy), `AsDenseTensor<T>`/`ToDenseTensor<T>` (legacy tier), `ortValue.ToNDArray()` (owning copy) / `ortValue.AsNDArray(ownsValue)` (zero-copy lease over ORT's buffer, CPU only), `session.Run(NDArray…)` (metadata-driven names, NumPy-`casting` dtype coercion, declared-shape validation, copy / owning-view / pre-allocated outputs), `Postprocess.{Softmax,LogSoftmax,Sigmoid,Argmax,TopK}` | ONNX Runtime does not compute NumSharp ops; it consumes tensors NumSharp produces and produces tensors NumSharp reads — so no `TensorEngine` seam, no `[ModuleInitializer]`, no native asset. Depends on `Microsoft.ML.OnnxRuntime.Managed [1.16.0, 2.0.0)` ONLY (the native flavours CPU/Gpu/DirectML are mutually exclusive — the consumer picks). 12 dtypes zero-copy incl. Half↔Float16 bit-reinterpret; Char→UInt16; Decimal→Double temp the handle owns; Complex/BFloat16/String refused. Gate: `test/NumSharp.Tests.Interop.OnnxRuntime` (117, over 20 committed `.onnx` models from `test/oracle/gen_onnx_models.py`; CI job `onnxruntime-interop-test` runs floor 1.16.0 AND current 1.29.0, no Python). Docs `docs/website-src/docs/interop/onnxruntime.md`; plan + business review `docs/plans/onnxruntime*.md`. |
-| `NumSharp.Interop.MLNet` (`src/NumSharp.Interop.MLNet/`) | nothing on the engine — a CONVERSION library (`NDArrayMLNetInterop` verbs + `NDArrayDataView` + `Postprocess`), like the ONNX/pythonnet bridges | `nd.AsDataView(colName)` (**vector column** — a lazy `IDataView` reading the NumSharp buffer through its strides, ANY layout, ARC-pinned; the `NDArrayDataView` is `IDisposable`) / `nd.AsDataView(string[])` (**scalar column per feature**) / `nd.ToDataView(…)` (snapshot), `view.ToNDArray("col")` (materialize a column — scalar→(R,), fixed-size vector→(R,C)), **`vbuffer.AsNDArray<T>()` (ZERO-COPY view over a dense VBuffer's private `T[]` via a compiled-expression accessor `VBufferAccessor<T>` — pinned, write-through, leased; sparse/empty→copy)**, `nd.ToVBuffer<T>()` / `vbuffer.ToNDArray()` (COPY), `Postprocess.{Softmax,LogSoftmax,Sigmoid,Argmax,TopK}`. Feed a model: `transformer.Transform(nd.AsDataView("Features")).ToNDArray("Score")` — IDataView is the whole bridge, no per-transformer runner. | ML.NET does not compute NumSharp ops; `IDataView` is its universal currency, so feeding a pipeline and reading its output are both conversions — no `TensorEngine` seam, no `[ModuleInitializer]`, no native asset, and no `ITransformer` dependency. Depends on `Microsoft.ML.DataView [2.0.0, 6.0.0)` ONLY (the standalone contract package; there is NO standalone `Microsoft.ML.Data` package — `ITransformer`/`MLContext` are in the full `Microsoft.ML` the consumer brings, which NuGet unifies upward). 11 dtypes direct + Char→UInt16 one-way; VBuffer zero-copy is ONE-directional: **import** `vbuffer.AsNDArray<T>()` IS zero-copy (reflected compiled-expr access to the private `T[] _values` — VBuffer is managed-`T[]`-backed at every version 2.0.0/3.0.0/4.0.2, NO `ReadOnlyMemory<T>`/non-public ctor, so **export** `NDArray→VBuffer` can NEVER be zero-copy — a managed array can't alias NumSharp's unmanaged buffer → `ToVBuffer` copies; the bulk export path `AsDataView` is already zero-copy anyway); Half→Single (lossless) / Decimal→Double converted by the view verbs (owned temp), Complex refused; ML.NET has NO half/decimal/complex column type. Rank 1–2 only. Gate: `test/NumSharp.Tests.Interop.MLNet` (165 — mirrors the ONNX interop suite's shape modulo what ML.NET's model lacks: dtype map + every-column-type/CLR-type edges, export/import round-trips, the zero-copy `VBuffer.AsNDArray` (write-through/pooled-slice/sparse-fallback/lease-lifetime/derived-slice/compiled-accessor-available), ALL layouts×both modes, output-array flags, empties/0-d/degenerate shapes, special/extreme values bit-exact through EVERY path incl. a real pipeline (NaN uncanonicalized/±inf/-0 sign-bit/subnormal/int-min-max/ulong>2^53/char BMP), sparse/empty/boundary VBuffers, the cursor contract (Position/Batch/IdGetter/IsColumnActive/inactive+wrong-T throws/concurrent cursors), variable-length/text→throw, key→UInt32, lazy null-rowcount, error/null taxonomy, lifetime (source-disposed-safe, resize-refcheck-refuses-while-exported, many-views-one-buffer, disposed-source-cannot-export, finalizer net), THREAD-PARALLEL exports/cursors settling to baseline, doc-snippet examples, and REAL `Microsoft.ML` pipelines — NormalizeMinMax/Concatenate/Sdca/SdcaMaximumEntropy-multiclass-Score-vector/OneHot/MapValueToKey + POCO-loader cross-check; CI job `mlnet-interop-test` runs floor 2.0.1 AND current 4.0.2, no Python). No zero-copy import lease / device-memory / multi-input-Run tests — ML.NET's model has no analog. Docs `docs/website-src/docs/interop/mlnet.md`. |
+| `NumSharp.Interop.OnnxRuntime` (`src/NumSharp.Interop.OnnxRuntime/`) | nothing on the engine — a CONVERSION library (`NDArrayOnnxInterop` verbs + `InferenceSessionExtensions` + `Postprocess`), like the pythonnet bridge | `nd.AsOrtValue()` (zero-copy `OrtValue` over the NumSharp buffer, C-contiguous only, ARC-rooted handle `OrtTensor`), `nd.ToOrtValue()` (ORT-allocated copy), `AsDenseTensor<T>`/`ToDenseTensor<T>` (legacy tier), `ortValue.ToNDArray()` (owning copy) / `ortValue.AsNDArray(ownsValue)` (zero-copy lease over ORT's buffer, CPU only), `session.Run(NDArray…)` (metadata-driven names, NumPy-`casting` dtype coercion, declared-shape validation, copy / owning-view / pre-allocated outputs), `Postprocess.{Softmax,LogSoftmax,Sigmoid,Argmax,TopK}` | ONNX Runtime does not compute NumSharp ops; it consumes tensors NumSharp produces and produces tensors NumSharp reads — so no `TensorEngine` seam, no `[ModuleInitializer]`, no native asset. Depends on `Microsoft.ML.OnnxRuntime.Managed [1.16.0, 2.0.0)` ONLY (the native flavours CPU/Gpu/DirectML are mutually exclusive — the consumer picks). 12 dtypes zero-copy incl. Half↔Float16 bit-reinterpret; Char→UInt16; Decimal→Double temp the handle owns; Complex/BFloat16 refused. Non-tensor outputs read as NumSharp pieces: `ortValue.ToNDArrays()` (sequence of tensors), `ToMap()`/`ToMaps()` (map / ZipMap sequence-of-maps → (keys, values) NDArrays), `ReadStringTensor()` → `string[]` (no NumSharp string dtype; a string/sequence model INPUT is refused). Gate: `test/NumSharp.Tests.Interop.OnnxRuntime` (148, over 23 committed `.onnx` models from `test/oracle/gen_onnx_models.py`; the `interop-test` CI job's ONNX Runtime steps run floor 1.16.0 AND current 1.29.0, no Python (its own `onnxruntime-interop-test` job until 2026-09-23)). Docs `docs/website-src/docs/interop/onnxruntime.md`; plan + business review `docs/plans/onnxruntime*.md`. |
+| `NumSharp.Interop.MLNet` (`src/NumSharp.Interop.MLNet/`) | nothing on the engine — a CONVERSION library (`NDArrayMLNetInterop` verbs + `NDArrayDataView` + `Postprocess`), like the ONNX/pythonnet bridges | `nd.AsDataView(colName)` (**vector column** — a lazy `IDataView` reading the NumSharp buffer through its strides, ANY layout, ARC-pinned; the `NDArrayDataView` is `IDisposable`) / `nd.AsDataView(string[])` (**scalar column per feature**) / `nd.ToDataView(…)` (snapshot), `view.ToNDArray("col")` (materialize a column — scalar→(R,), fixed-size vector→(R,C)), **`vbuffer.AsNDArray<T>()` (ZERO-COPY view over a dense VBuffer's private `T[]` via a compiled-expression accessor `VBufferAccessor<T>` — pinned, write-through, leased; sparse/empty→copy)**, `nd.ToVBuffer<T>()` / `vbuffer.ToNDArray()` (COPY), `Postprocess.{Softmax,LogSoftmax,Sigmoid,Argmax,TopK}`. Feed a model: `transformer.Transform(nd.AsDataView("Features")).ToNDArray("Score")` — IDataView is the whole bridge, no per-transformer runner. | ML.NET does not compute NumSharp ops; `IDataView` is its universal currency, so feeding a pipeline and reading its output are both conversions — no `TensorEngine` seam, no `[ModuleInitializer]`, no native asset, and no `ITransformer` dependency. Depends on `Microsoft.ML.DataView [2.0.0, 6.0.0)` ONLY (the standalone contract package; there is NO standalone `Microsoft.ML.Data` package — `ITransformer`/`MLContext` are in the full `Microsoft.ML` the consumer brings, which NuGet unifies upward). 11 dtypes direct + Char→UInt16 one-way; VBuffer zero-copy is ONE-directional: **import** `vbuffer.AsNDArray<T>()` IS zero-copy (reflected compiled-expr access to the private `T[] _values` — VBuffer is managed-`T[]`-backed at every version 2.0.0/3.0.0/4.0.2, NO `ReadOnlyMemory<T>`/non-public ctor, so **export** `NDArray→VBuffer` can NEVER be zero-copy — a managed array can't alias NumSharp's unmanaged buffer → `ToVBuffer` copies; the bulk export path `AsDataView` is already zero-copy anyway); Half→Single (lossless) / Decimal→Double converted by the view verbs (owned temp), Complex refused; ML.NET has NO half/decimal/complex column type. Rank 1–2 only. Gate: `test/NumSharp.Tests.Interop.MLNet` (165 — mirrors the ONNX interop suite's shape modulo what ML.NET's model lacks: dtype map + every-column-type/CLR-type edges, export/import round-trips, the zero-copy `VBuffer.AsNDArray` (write-through/pooled-slice/sparse-fallback/lease-lifetime/derived-slice/compiled-accessor-available), ALL layouts×both modes, output-array flags, empties/0-d/degenerate shapes, special/extreme values bit-exact through EVERY path incl. a real pipeline (NaN uncanonicalized/±inf/-0 sign-bit/subnormal/int-min-max/ulong>2^53/char BMP), sparse/empty/boundary VBuffers, the cursor contract (Position/Batch/IdGetter/IsColumnActive/inactive+wrong-T throws/concurrent cursors), variable-length/text→throw, key→UInt32, lazy null-rowcount, error/null taxonomy, lifetime (source-disposed-safe, resize-refcheck-refuses-while-exported, many-views-one-buffer, disposed-source-cannot-export, finalizer net), THREAD-PARALLEL exports/cursors settling to baseline, doc-snippet examples, and REAL `Microsoft.ML` pipelines — NormalizeMinMax/Concatenate/Sdca/SdcaMaximumEntropy-multiclass-Score-vector/OneHot/MapValueToKey + POCO-loader cross-check; the `interop-test` CI job's ML.NET steps run floor 2.0.1 AND current 4.0.2, no Python (its own `mlnet-interop-test` job until 2026-09-23)). No zero-copy import lease / device-memory / multi-input-Run tests — ML.NET's model has no analog. Docs `docs/website-src/docs/interop/mlnet.md`. |
 
 **`NumSharp.Interop.OpenBLAS`** exists because no portable algorithm can match NumPy's float matrix
 products: for f32/f64 mat@mat NumPy **always** calls cblas (since gh-23588 it copies non-blasable
@@ -236,10 +236,15 @@ delocate's deps carry the placeholder `/DLC/scipy_openblas64/.dylibs/…`) and r
 The build-time version override task co-extracts the vendored deps into its cache entry (`.entry.json`
 sidecar, all files hash-verified on every hit; a pre-sidecar main-only entry is discarded) and stages
 them with the main, so an override loads on Linux/macOS too. Gates: `OpenBlasMacOsVendoredRuntimeTests`
-(21, synthetic Mach-O images + the real staged dylibs, every OS) and the CI job
-`package-consumer-smoke` running `tools/verify_package_consumer.sh` on all three OSes — the real nupkg
+(21, synthetic Mach-O images + the real staged dylibs, every OS) and the "Package consumer:" steps of
+the `interop-test` CI job (a separate `package-consumer-smoke` job until 2026-09-23) running
+`tools/verify_package_consumer.sh` + `tools/verify_build_override.sh` on all three OSes — the real nupkg
 restored into a scratch consumer BY PACKAGEREFERENCE, loaded in the portable, read-only and flattened
-layouts (the path no ProjectReference suite can exercise).
+layouts (the path no ProjectReference suite can exercise). They run LAST in that job, after every
+test suite in it, because both scripts `-t:Rebuild` Core/OpenBLAS in Release in the repo tree and evict
+this version from `~/.nuget/packages`; and that job's `env:` must never set
+`NUMSHARP_OPENBLAS_CACHE_DIR` (verify_build_override.sh asserts the default per-user cache root on
+Linux/macOS and does not unset it).
 
 **Four load-bearing details:** the result bits depend on the BLAS **thread count** (1/2/4/24 threads
 give four different answers); they ALSO depend on the **DYNAMIC_ARCH kernel** the CPU dispatches, so
@@ -441,9 +446,44 @@ nd["..., -1"]     // Ellipsis fills dimensions
 Tested against NumPy 2.x.
 
 ### Array Creation
-`arange`, `array`, `asanyarray`, `asarray`, `asarray_chkfinite`, `ascontiguousarray`, `asfortranarray`, `asmatrix`, `copy`, `empty`, `empty_like`, `eye`, `frombuffer`, `full`, `full_like`, `identity`, `linspace`, `meshgrid`, `mgrid`, `ogrid`, `ones`, `ones_like`, `require`, `tri`, `zeros`, `zeros_like`
+`arange`, `array`, `asanyarray`, `asarray`, `asarray_chkfinite`, `ascontiguousarray`, `asfortranarray`, `asmatrix`, `copy`, `empty`, `empty_like`, `eye`, `frombuffer`, `full`, `full_like`, `geomspace`, `identity`, `linspace`, `logspace`, `meshgrid`, `mgrid`, `ogrid`, `ones`, `ones_like`, `require`, `tri`, `zeros`, `zeros_like`
 
 The `as*` conversion family mirrors NumPy: `asarray_chkfinite(a, dtype=None, order='K')` = `asarray` then raise `ValueError("array must not contain infs or NaNs")` if a **float-family** dtype (Half/Single/Double/Complex — NumPy's `typecodes['AllFloat']`; Decimal/int/bool skip the check) holds any inf/NaN, via a **fused single-pass NaN-poison SIMD reduction** (`Backends/Kernels/FiniteScan.cs`: `acc += v - v` — +0 for finite, absorbing-NaN for non-finite; AVX2 gather + reversed-contiguous fast path for strided/negative-stride views; ~2–27× NumPy contiguous, ≥1× strided). `require(a, dtype=None, requirements=None)` parses C/F/A/W/O/E flags (+aliases; single-string requirements iterate by char like NumPy, so `"F_CONTIGUOUS"` as one string raises), resolves an order and copies only if a remaining ALIGNED/WRITEABLE/OWNDATA flag is unsatisfied (ALIGNED is always true in NumSharp, so only broadcast-non-writeable and views force a copy). `asmatrix(data, dtype=None)` returns a **2-D view** (NumSharp has no `matrix` subclass — the deprecated NumPy one; no `*`-as-matmul/`.H`/`.I`): 0-D→(1,1), 1-D→(1,N), 2-D unchanged, >2-D drops length-1 axes and must land on 2-D else `ValueError("shape too large to be a matrix.")`; also parses matrix strings (`"1 2; 3 4"`). See `Creation/np.{asarray_chkfinite,require,asmatrix}.cs`.
+
+**`np.logspace` / `np.geomspace` — the log-scale linspace family** (NumPy 2.4.2 `numpy/_core/function_base.py`;
+all probed against 2.4.2; gates `Creation/np.logspace.geomspace.Test.cs` (20) + the `creation` oracle tier —
+28 logspace + 13 geomspace cases, 343/343 bit-exact). **Scalar `start`/`stop`/`base` (double), like NumSharp's
+existing scalar `linspace`** — array-like `start`/`stop`/`base` is OUT of scope (the whole family is scalar-only;
+that's a separate, larger feature). Full parameter parity otherwise: `num=50`, `endpoint=true`, `base=10.0`
+(logspace only), `dtype=null`, `axis=0` (int + long `num` overloads). `axis` is a **no-op for scalar inputs** (the
+output is always 1-D) but is still validated exactly like NumPy's trailing `moveaxis(y, 0, axis)`: only 0 and -1
+are in range, else `AxisError("destination: axis {a} is out of bounds for array of dimension 1")` (verbatim,
+reporting the original axis). `num<0` → `ValueError("Number of samples, {num}, must be non-negative.")`.
+- **`logspace(start, stop, num, endpoint, base, dtype, axis)`** = `power(base, linspace(start, stop, num,
+  endpoint))` then `.astype(dtype)`. The computation is ALWAYS float64 (scalar-double inputs) and only THEN cast —
+  so an integer dtype **TRUNCATES toward zero** (unlike `linspace`, which FLOORS), and even `dtype=complex128` is
+  float64-compute-then-cast (real + 0j), NOT a complex-domain computation. **BIT-EXACT vs NumPy** at every dtype:
+  `Math.Pow`==`npy_pow` and the `start + i*step` interior commutes with NumPy's `arange*step + start` (win-amd64).
+  A negative `base` with fractional exponents yields NaN (real power of a negative base), matching NumPy. Fused
+  single-pass fill loop — no intermediate `linspace` array (`LogspaceCore`).
+- **`geomspace(start, stop, num, endpoint, dtype, axis)`** — a geometric progression, endpoints given directly.
+  Ported op-for-op from NumPy: `out_sign = sign(start)`, rotate `start`/`stop` onto the positive real axis,
+  `logspace(log10(start), log10(stop), num, endpoint, base=10)`, overwrite the endpoints, `result *= out_sign`.
+  The REAL path is **BIT-EXACT** (out_sign is ±1, so the rotate + final multiply are exact and the endpoints land
+  the original `start`/`stop` byte-for-byte); decreasing, all-negative, and **mixed-sign** inputs (`geomspace(-1,1)
+  → [-1, nan, nan, 1]`, log10 of the rotated-negative endpoint poisoning the interior) all fall out automatically.
+  Zero endpoints → `ValueError("Geometric sequence cannot include zero")`, checked FIRST (before num, before axis —
+  NumPy's order). A `Complex` start/stop **overload** and a real-input **`dtype=complex128`** both compute in the
+  complex128 domain (the interior genuinely differs — `geomspace(1,8,4,dtype=complex)[1]==1.9999999999999998`, not
+  the real path's exact 2.0 — so the domain is load-bearing); these compose NumSharp's NumPy-tuned complex power
+  (`npy_cpow` port) + complex log10, so they are **ACCURATE within the documented ≤3-ULP complex-unary envelope but
+  NOT byte-reproducible** (allclose, unit-test-pinned + EXCLUDED from the byte corpus — the `np.sinc` complex
+  policy; verified worst relative error 1.0e-15 over the spiral/circle/dtype cases).
+- **Perf (NPY/NS, Release, best-of-15, warm): ~parity at 1K (NDArray-construction floor), 1.2–1.3× at 100K–10M**
+  (the single-pass fusion avoids NumPy's intermediate `linspace` passes). This is the **physical ceiling**: both
+  are `Math.Pow`-bound (a bare `Math.Pow` loop of 1M measures 8.17 ms vs logspace's 8.29 ms — 98 % pure pow), and
+  no bit-exact SIMD `pow` exists, so the 1.5× target is unreachable without abandoning parity — the same class as
+  `arcsinh`/`float_power`-general/`gcd`. See `Creation/np.{logspace,geomspace}.cs`.
 
 ### Shape Manipulation
 `append`, `array_split`, `atleast_1d`, `atleast_2d`, `atleast_3d`, `block`, `c_`, `column_stack`, `concat`, `concatenate`, `delete`, `dsplit`, `dstack`, `expand_dims`, `flatten`, `flip`, `fliplr`, `flipud`, `hsplit`, `hstack`, `insert`, `intersect1d`, `matrix_transpose`, `moveaxis`, `pad`, `permute_dims`, `r_`, `ravel`, `repeat`, `reshape`, `resize`, `roll`, `rollaxis`, `rot90`, `setdiff1d`, `setxor1d`, `split`, `squeeze`, `stack`, `swapaxes`, `tile`, `transpose`, `trim_zeros`, `union1d`, `unique`, `unique_all`, `unique_counts`, `unique_inverse`, `unique_values`, `unstack`, `vsplit`, `vstack`
@@ -662,7 +702,106 @@ texts differ in wording; `np.broadcast_to(a, (2^62, 6))` builds the view where N
 `are_broadcastable`, `broadcast`, `broadcast_arrays`, `broadcast_to`
 
 ### Math — Arithmetic
-`abs`, `absolute`, `acosh`, `add`, `arccos`, `arccosh`, `arcsin`, `arcsinh`, `arctan`, `arctan2`, `arctanh`, `asinh`, `atanh`, `cbrt`, `ceil`, `clip`, `convolve`, `correlate`, `cos`, `cosh`, `deg2rad`, `degrees`, `divide`, `exp`, `exp2`, `expm1`, `floor`, `floor_divide`, `log`, `log10`, `log1p`, `log2`, `mod`, `modf`, `multiply`, `negative`, `positive`, `power`, `rad2deg`, `radians`, `reciprocal`, `rint`, `sign`, `sin`, `sinh`, `sqrt`, `square`, `subtract`, `tan`, `tanh`, `true_divide`, `trunc`
+`abs`, `absolute`, `acosh`, `add`, `arccos`, `arccosh`, `arcsin`, `arcsinh`, `arctan`, `arctan2`, `arctanh`, `asinh`, `atanh`, `cbrt`, `ceil`, `clip`, `convolve`, `correlate`, `cos`, `cosh`, `deg2rad`, `degrees`, `divide`, `divmod`, `exp`, `exp2`, `expm1`, `fabs`, `fix`, `float_power`, `floor`, `floor_divide`, `fmod`, `gcd`, `lcm`, `log`, `log10`, `log1p`, `log2`, `mod`, `modf`, `multiply`, `negative`, `positive`, `power`, `rad2deg`, `radians`, `reciprocal`, `remainder`, `rint`, `sign`, `sin`, `sinc`, `sinh`, `spacing`, `sqrt`, `square`, `subtract`, `tan`, `tanh`, `true_divide`, `trunc`
+
+**`np.fix`** — round toward zero, dtype-preserving (NumPy `numpy/lib/_ufunclike_impl.py`, gated by the
+`unary`-tier `trunc` corpus via the `fix→trunc` alias + `Math/np.fix.Test.cs`). In NumPy 2.4.2 `fix(x, out=None)`
+is a VERBATIM delegation to `trunc(x, out=out)`, so `np.fix` is `np.trunc` by another name and inherits it
+exactly — dtype preservation (int/bool identity, floats truncated), NaN/±inf pass-through, the sign of `-0.0`,
+and the error surface (a complex input and an incompatible `out` dtype both leak the underlying `trunc` ufunc,
+which is what NumPy's `fix` leaks too since it also delegates). Unlike a true ufunc it has NO `where`/`dtype`
+parameter — the signature is `fix(x, out=null)`, `out` positional as in NumPy. One inherited `trunc` divergence:
+`fix(complex)` raises `NotSupportedException` where NumPy raises `TypeError` (pre-existing in `trunc`, shared).
+See `Math/np.fix.cs`.
+
+**`np.fabs`** — the FLOAT-ONLY absolute value (NumPy `fabs` ufunc, `TD(flts, f='fabs', astype={'e':'f'})` —
+float loops `efdg` only; probed against 2.4.2; gates `Math/np.fabs.Test.cs` (21) + the `unary`/`errors_full`
+corpus tiers). It is the float sibling of `abs`/`absolute` and differs in exactly two ways, both dtype-level:
+it PROMOTES bool/int to float (NEP50 tier: bool/int8/uint8→float16, int16/uint16/char→float32,
+int32/uint32/int64/uint64→float64; float16/float32/float64/decimal preserved) — so `fabs(int)` is always a
+float where `abs(int)` preserves int — and it has NO complex loop (`abs` maps complex→magnitude; `fabs`
+REJECTS it). The **operation** is identical to `abs` on the float loops — clear the IEEE sign bit — so `fabs` rides
+`UnaryOp.Fabs`, a distinct op that **aliases `UnaryOp.Abs` at every kernel emit site** (the 6 non-complex ones:
+scalar `EmitAbsCall`, `Vector.Abs` name-map, the SIMD gate, the f16 selector, decimal, f16-scalar), inheriting
+every layout, `out=`/`where=`/`dtype=`, and the f16/decimal paths for free. It is a separate enum value ONLY so
+`UfuncName(UnaryOp.Fabs) == "fabs"` — the op drives both kernel selection (~10 sites) and the ufunc name in errors,
+and a dedicated enum keeps fabs's specialness in the per-op dispatch layer rather than adding a name-override
+parameter to the shared `ExecuteUnaryOp` executor (`Default.Fabs` → `ExecuteUnaryOp(nd, UnaryOp.Fabs, floatType,
+out, where)`). The
+promoting path casts int→float BEFORE the abs, so `fabs(int.MinValue)` is the exact float magnitude, never the
+wrapped integer abs. **BIT-EXACT with NumPy 2.4.2** across all 12 NumPy-representable non-complex dtypes ×
+26 layouts, including `-0.0→+0.0`, `±inf→+inf`, and a negative/payload-bearing NaN whose sign bit is cleared
+while the payload is preserved (`0xfff8…abcdef → 0x7ff8…abcdef`). **Complex is refused with NumPy's exact three
+error paths** (probed): no `dtype=` → `TypeError` "ufunc 'fabs' not supported for the input types…"; `dtype=`
+float → "Cannot cast ufunc 'fabs' input from complex128 to <float> with casting rule 'same_kind'"; `dtype=`
+complex/int → "No loop matching the specified signature and casting was found for ufunc fabs". The `out=` cast
+error correctly names `"fabs"` (not `"absolute"`) because `UnaryOp.Fabs` is its own op with its own `UfuncName`
+entry — no name-override parameter on the shared executor. **Perf (NPY/NS, Release,
+best-of-15):** faster than NumPy on every measured cell — NumPy's `fabs` is a SCALAR CRT loop (no SIMD dispatch,
+unlike `absolute`), while NumSharp rides `Vector.Abs`: float16 **4.5–24.8×**, float64 **1.75–13.9×**, int32
+**1.6–10.8×**, `out=` paths 2.5–14× (the one sub-1.5× cell, fresh-alloc float32@100K at 1.19×, is the shared
+allocation floor — its `out=` variant is 12.2×). See `Math/np.fabs.cs`, `Backends/Default/Math/Default.Fabs.cs`.
+
+**The divmod family** — `remainder`/`mod`, `fmod`, `divmod` (all probed against 2.4.2; gates the
+`divmod_power`/`multioutput` fuzz tiers + `Math` unit tests). `np.remainder` is an exact ALIAS of the existing
+`np.mod` (in NumPy `remainder` IS the `mod` ufunc — floored remainder, result takes the DIVISOR's sign). **`np.fmod`**
+is a NEW `BinaryOp.Fmod` — C-library remainder (truncated division, result takes the DIVIDEND's sign): `fmod(-7,3) ==
+-1` where `mod(-7,3) == 2`. It rides the exact `Mod`/`FloorDivide` seam (`ExecuteBinaryOp` → scalar-only per-element
+kernel `EmitFmodOperation` → `NDDivision.Fmod*`), so it inherits all layouts, NEP50 promotion (integer stays integer,
+bool→int8), out=/where=/dtype=, and every dtype for free; integer `fmod` is C# `%` with the ÷0→0 and int/long MIN%-1
+guards, float `fmod` is C# `a % b` (bit-identical to C `fmod`), Complex refused (NumPy TypeError). **`np.divmod`** is the
+two-output ufunc returning the tuple `(floor_divide(x1,x2), remainder(x1,x2))` — VERIFIED byte-for-byte across every
+edge (÷0→(±inf,nan)/(0,0)int, signed MIN/-1→(MIN,0), ±inf/nan/-0.0). Its `out=(q,r)`/`where=`/`dtype=` path composes
+the already-validated `FloorDivide`+`Mod`; the common path runs a **fused single-pass IL kernel**
+(`DirectILKernelGenerator.DivMod.cs`, a 4×-unrolled scalar two-in/two-out loop calling `NDDivision.Divmod*(a,b,out
+mod)->floordiv` over contiguous, promoted operands — the `np.modf` materialize pattern). The integer `Divmod*` helpers
+use the **one-idiv form** `q=n/d; r=n-q*d` (not a second `n%d`), halving the integer kernel cost. **Perf (NPY/NS,
+Release, best-of-11):** `divmod` 100K **2.1–2.3×**, 10M f64/i32 **1.7–1.8×** (10M i64 1.26×, memory-bandwidth-bound);
+`fmod` 100K **1.6–1.9×**, 10M **1.34–1.45×** (bandwidth-bound). **W1-A fix (rode along):** `EmitHalfOperation` now
+computes float16 `mod`/`floor_divide`/`fmod` in **float32** (NumPy's HALF loop `astype 'e'->'f'`) via the
+`NDDivision.*Single` helpers, so float16 ÷0 yields ±inf (was the NaN `[known bug]` W1-A) — float16 division is now
+bit-exact with NumPy, and the W1-A `MisalignedRegistry` excuse is removed. See `Math/np.{divmod,math}.cs`,
+`Backends/Default/Math/Default.{Fmod,DivMod}.cs`, `Utilities/NDDivision.{Fmod,Divmod}.cs`.
+
+**`np.float_power`** — power at a MINIMUM precision of float64 (NumPy's `dd->d`/`DD->D` loops ONLY, probed 2.4.2;
+gates the `divmod_power`/`out_where`/`specials` fuzz tiers + `Math/np.float_power.Test.cs`). It is NOT a new kernel:
+`Default.FloatPower` resolves the float loop (complex128 if either operand is complex, else float64) and DELEGATES
+to the bit-exact `Power` engine on that loop, so the arithmetic is byte-for-byte `power` on those loops (same
+`Math.Pow` / `ComplexPowNumPy`). The two behaviours that make it DIFFER from `power` are both loop-SELECTION and
+handled in the wrapper: every real input (bool/int/float16/float32/decimal/char) promotes to float64 and a complex
+operand to complex128 (so the result is always inexact float), and — because there is no integer loop — a negative
+integer exponent is LEGAL (`float_power(2,-1)=0.5`, where `power` raises "Integers to negative integer powers").
+`dtype=` may select ONLY float64/complex128 (else the verbatim "No loop matching…for ufunc float_power"); `out=`/
+`where=` and every layout ride `Power`'s existing machinery. **Error taxonomy + ORDER are NumPy's** (read-only out →
+non-bool where → dtype-no-loop → complex-input-can't-cast-to-float64 → out-cast → shape), raised in the wrapper with
+the `float_power` ufunc name reusing the shared validators. Complex `float_power` inherits the documented complex-power
+divergence (F5: `Complex.Pow`/`npy_cpow` host `cpow` ~ULP for non-integer/large-integer exponents, plus inf/NaN
+edges) — bit-exact on the integer-exponent branch, F5-excused otherwise (same scope as `power`). **Perf (NPY/NS,
+Release):** the scalar-exponent FAST PATH is preserved (operands already float64 → plain `Power`, so `float_power(x,
+2.0)` is `x*x` and `x**0.5` is `sqrt`) — **4.5–51×**; int→float64 **1.05–1.22×**; the general fractional-exponent
+path is **~parity (0.86–0.99×)**, the `Math.Pow` physical ceiling (NumPy is equally scalar-`pow`-bound, no SIMD
+`pow` exists — the same ceiling as `arcsinh`/`arccosh`). See `Math/np.float_power.cs`,
+`Backends/Default/Math/Default.FloatPower.cs`, `Backends/TensorEngine.cs` (`FloatPower`).
+
+**`np.gcd` / `np.lcm` — the number-theoretic pair** (NumPy `npy_gcd@c@`/`npy_lcm@c@` in
+`npymath/npy_math_internal.h.src` + the `@TYPE@_gcd`/`@TYPE@_lcm` integer loops; gates `Math/np.gcd.Test.cs`
+(16) + the differential-fuzz `gcd` tier, 306 cases bit-exact). **INTEGER-ONLY** — bool/half/single/double/
+decimal/complex, and the **uint64+signed → float64** NEP50 pair, name no loop and raise NumPy's verbatim
+`ufunc '{name}' did not contain a loop with signature matching types (…, …) -> None` (as `TypeError`; the
+`dtype=`-path variant closes with `-> {dtype}DType`). Uniform NEP50 promotion (both operands + output share
+ONE integer dtype); a bool paired with an integer promotes to that integer loop (valid). New `BinaryOp.Gcd`/
+`BinaryOp.Lcm` ride the exact `Fmod` seam — `Default.{Gcd,Lcm}` → `ExecuteBinaryOp` → the scalar per-element
+kernel `EmitGcdLcmOperation` → `Utilities/NDGcdLcm.{Gcd,Lcm}*` (one helper per integer dtype incl. Char) — so
+they inherit every layout, `out=`/`where=`/`dtype=`, and weak-scalar binding for free. The helpers port NumPy
+exactly: unsigned Euclidean core (`while(a!=0){c=a;a=b%a;b=c;}`), signed = the core on operand MAGNITUDES then
+reinterpret back, lcm = `gcd==0?0:|a|/gcd*|b|`. Two NumPy-exact wrapping behaviours pinned: a signed result can
+be **negative** when the magnitude wraps (`gcd(int8 -128,-128)==-128`, `lcm(int32.Min,1)==int32.Min`) and the
+lcm product **wraps** the dtype on overflow (`lcm(int16 21000,14000)==-23536`). **NO SIMD** (data-dependent
+Euclidean loop) — like NumPy, which explicitly does not vectorize these. **Perf (NPY/NS, Release, best-of, 100K/
+10M): ~parity (0.99–1.06×)** — the physical ceiling (measured: binary/Stein's GCD is SLOWER than division-based
+Euclid on modern x86, there is no vector integer division or vector TZCNT, and the IL kernel already matches a
+hand-inlined C# loop), the same class of ceiling as `arcsinh`/`float_power`-general. See `Math/np.gcd.cs`,
+`Backends/Default/Math/Default.GcdLcm.cs`, `Utilities/NDGcdLcm.cs`.
 
 **`correlate` / `convolve` — the sliding multiply-accumulate family** (NumPy `_pyarray_correlate` +
 `small_correlate`; `Math/NDArray.SlidingDot.cs`). `np.correlate(a, v, mode='valid')` is cross-correlation
@@ -704,6 +843,34 @@ managed path stays the `groupa` fuzz default.
 `NumSharp.Interop.OpenBLAS/OpenBlasEngine.SlidingDot.cs`.
 
 **Inverse hyperbolic** `arcsinh`/`arccosh`/`arctanh` (+ NumPy 2.0 Array-API aliases `asinh`/`acosh`/`atanh`, same ufunc) follow the `arcsin`/`sinh` engine seam (`ASinh`/`ACosh`/`ATanh` → `ExecuteUnaryOp` → `UnaryOp.{Asinh,Acosh,Atanh}` IL kernels) with the `f(x, out=, where=, dtype=)` ufunc surface + positional-dtype convenience overloads. **Real float32/float64 are BYTE-IDENTICAL to NumPy 2.4.2** — `Math.Asinh/Acosh/Atanh` and the `MathF` twins call the same MSVC `ucrtbase` CRT as `npy_asinh/acosh/atanh` (verified 0-diff over 4521 adversarial inputs at both widths, specials/±inf/NaN/subnormals/±0 included), same class as the platform-libm `expm1`/`log1p` cells. **Perf (NPY/NS, Release, best-of-11 warm, `out=`, 10M on byte-identical inputs):** `arcsinh` **0.99×**, `arccosh` **1.00×**, `arctanh` **0.97×** — parity, and this is the correct ceiling rather than a shortfall. These three are the ONE arc-family NumPy has **no active SIMD kernel** for on win-amd64 (its SVML `asinh`/`acosh`/`atanh` are AVX-512/Linux-gated, never compiled into the 2.4.2 wheel), so — unlike `exp`/`log`/`sin`/`cos`/`tanh`, which NumSharp ports bit-exactly and BEATS — there is nothing to port and byte-parity REQUIRES the same scalar `ucrtbase` CRT on both sides. The kernel is a **non-unrolled scalar loop** (`EmitUnaryScalarLoop`; these three fall through every `CanUseUnarySimd` branch, as they must — there is no `Vector<double>.Asinh`); its only edge over a naive managed loop is a raw-pointer direct `call` with no bounds checks, and that alone is enough to BEAT `System.Numerics.Tensors.TensorPrimitives.Asinh`, .NET's own SIMD transcendental library (one-process warm best-of-15, f64 10M, same array: NumSharp IL kernel **97.3 ms** < TensorPrimitives 101.1 ms < naive `Math.Asinh` loop 105.5 ms). Two speedup levers were POC'd and REJECTED: (1) 4×/8× **unrolling** the CRT-call loop does not help — the `ucrtbase` call latency dominates and the extra body is a wash-to-slightly-slower for asinh/atanh (measured); (2) **SIMD buys nothing byte-exactly** — TensorPrimitives is itself **0-ULP** vs NumPy over 10M f64 AND f32 inputs *precisely because it does NOT vectorize these three* (no correctly-rounded vector asinh/acosh/atanh exists, so it falls to the scalar CRT), which is the direct proof that a vector kernel would necessarily DIVERGE. The only faster route is a divergent SIMD polynomial (SLEEF/Cephes, ~1–4 ULP off), which breaks byte-parity and is therefore rejected. So there is no NumSharp-side overhead left to reclaim. Integer/bool tier to float per `ResolveUnaryFloatReturnType` (bool/i8/u8→f16, i16/u16/char→f32, i32+→f64); **float16 is BYTE-EXACT** via native `Half.Asinh/Acosh/Atanh` (which compute in float32 = NumPy's `astype 'e'->'f'`, `(Half)asinhf((float)h)` — verified 0 finite-diffs over all 65536 f16 values, and faster than the double bridge the rest of the arc-trig f16 tier still uses); Decimal via the decimal→double bridge (valid-domain 15-sig-fig; out-of-domain NaN/inf throws `OverflowException` on `(decimal)NaN` — a pre-existing bridge limitation shared by ALL decimal transcendentals: `arcsin(2m)`/`sqrt(-1m)`/`log(0m)` behave identically, no NumPy decimal analog). **Complex128** is derived from the byte-exact `Asin`/`Acos`/`Atan`(=`Catanh`) ports through NumPy's own msun involution `I·conj(·)` — a pure component-swap (`(z.Im, z.Re)`, zero arithmetic): `asinh(z)=swap(asin(swap z))`, `atanh(z)=catanh(z)` (already ported, drives `atan`), `acosh(z)=cacosh_formula(acos(z))` — so they inherit the whole complex-unary family's documented **≤3 ULP** envelope (the three identities are bit-exact inside NumPy itself, verified 0-diff over 20,036 inputs). `arccosh` inherits `arccos`'s one sub-DBL_MIN-imaginary pathological edge (`[Misaligned]` branch 7). Gates: `Math/InverseHyperbolicTests.cs` (16) + `NpApiOverloadTests_UnaryMath` regions + the `unary_extra`/`specials` fuzz tiers (all 14 dtypes × layouts). See `Math/np.{arcsinh,arccosh,arctanh}.cs`, `Utilities/NDComplexMath.cs`.
+
+**`np.sinc`** — the normalized sinc `sin(pi*x)/(pi*x)`, a port of NumPy 2.4.2 `numpy/lib/_function_base_impl.py::sinc`
+(probed against 2.4.2; gate `Math/np.sinc.Test.cs` (15) + the differential-fuzz `sinc` tier). It is a plain FUNCTION,
+not a ufunc — the signature is `sinc(x)` with NO `out=`/`where=`/`dtype=`. NumPy's five-line composition is
+`y = pi*x; eps = finfo(y.dtype).eps if y.dtype.kind=='f' else 1e-20; y = where(y!=0, y, eps); sin(y)/y` — where the
+zero-replacement fills the removable singularity at every EXACT zero of `pi*x` (x==±0, plus any x so tiny that `pi*x`
+underflows) with its limit value 1. **Two behaviours are load-bearing:** (1) DTYPE follows `pi*x`, a NEP 50 weak-float
+promotion — bool / EVERY integer width / Char all → **float64** (NOT np.sin's i8→f16 / i16→f32 tiers), while
+float16/float32/float64 are **preserved** and complex → complex128; (2) the zero test is on `pi*x`, not `x`
+(the `!= 0` condition is verbatim, so sub-underflow denormals are handled exactly like NumPy). **Implementation is
+ONE fused `np.evaluate` pass** — the pi multiply, the zero→eps select, `sin`, and the divide are folded into a single
+inner-loop kernel over the shared `t=pi*x` subtree, so the operand is read once and the result written once (NumPy
+materializes ~3 intermediates). **BIT-EXACT with NumPy 2.4.2 for every REAL dtype** — validated EXHAUSTIVELY on all 65,536 float16 inputs and over
+1,000,000 adversarial float32 AND float64 inputs (subnormals / any-bit-pattern / near-integer-multiples / specials),
+plus exhaustive int8/uint8/int16/uint16 — 0 diffs, because float64 arithmetic + divide are IEEE-exact and NumSharp's
+`sin` is a bit-exact port of NumPy's float32 kernel / shares the scalar `ucrtbase` `Math.Sin` at float64.
+**COMPLEX128's per-component BITS are NOT reproducible** and it is EXCLUDED from the byte corpus (pinned by an
+`allclose` unit test): sinc composes `sin ∘ divide`, and NumSharp's complex sin differs from NumPy's UCRT `csin`
+within its ≤3-ULP-relative envelope, so the individual re/im bits differ. The complex VALUE is nonetheless
+ACCURATE — validated **≤~2.5 ULP RELATIVE** (max 5.65e-16 relative error) with **np.allclose(rtol=1e-5,atol=1e-8)
+passing on ALL 200,000 random samples**; a raw per-component ULP only looks large (thousands) where one component
+is tiny relative to `|z|`, which is a byte-reproducibility fact, not an accuracy one.
+Decimal (no NumPy analog) rides the same fused expression through the decimal→double bridge. Because sinc is a
+`sin`-composition, its float64 cells are host-libm-sensitive at the near-zero-crossings (`sin(pi*k) ≈ 0`), so the
+`sinc` fuzz tier is **HOST-PINNED** to win-amd64 (`RunHostLibmCorpus` — `Inconclusive` off-Windows), like the sibling
+`unary` tier. **Perf (NPY/NS, Release, best-of, warm):** **≈1.5–2.5× at 100K and 10M** (f64/int 2.2–2.5×, f32
+~1.5–2.0× — the single-pass fusion halves NumPy's memory traffic); at 1K sinc sits at the per-op NDIter-setup floor
+(~parity), sin being the dominant cost on both sides there. See `Math/np.sinc.cs`.
 
 **ufunc `out=` / `where=` parameters** are supported on the elementwise core (NumPy semantics, probed against 2.4.2): binary `add`/`subtract`/`multiply`/`divide`/`true_divide`/`mod`/`power`/`floor_divide`/`arctan2`/`bitwise_and`/`bitwise_or`/`bitwise_xor`, unary `sqrt`/`exp`/`log`/`sin`/`cos`/`tan`/`abs`/`absolute`/`negative`/`square`/`log2`/`log10`/`log1p`/`exp2`/`expm1`/`cbrt`/`sign`/`floor`/`ceil`/`trunc`/`reciprocal`/`sinh`/`cosh`/`tanh`/`arcsin`/`arccos`/`arctan`/`deg2rad`(`radians`)/`rad2deg`(`degrees`)/`invert`(`bitwise_not`)/`rint`. `round_`/`around` take `out=` ONLY (np.round is a function, not a ufunc — no where/dtype; decimals≠0 cast errors name ufunc 'multiply' per NumPy's composition). `rint` is the TRUE ufunc form of round-half-to-even: unlike `round_`/`around` (which preserve integer dtype) it is float-tier (bool/i8/u8→f16, i16/u16→f32, i32+→f64, floats/complex preserved) and reuses `UnaryOp.Round`'s kernel (complex rounds real+imag; `dtype=<int>`→no-loop). floor/ceil/trunc have IDENTITY loops on every bool/int dtype (dtype preserved; np.round's int path is an identity copy); the loop dtype comes from the input tier (`sinh(i1, out=f8)` stores float16-precision values); reciprocal int 1/0 → signed MinValue (NumPy 2.4.2); sign/positive reject bool with the verbatim no-loop UFuncTypeError; bitwise/invert raise the no-loop TypeError for float inputs (probed order: bad where → no-loop → out-cast → shape). `out` joins the broadcast but is never stretched, requires a same_kind cast from the loop dtype (resolved from inputs), returns the same instance, and may alias an input (overlap-safe via COPY_IF_OVERLAP). `where` must be bool, broadcasts and joins the output shape; masked-off `out` slots keep prior contents. Engine plumbing: `Backends/Default/Math/DefaultEngine.UfuncOut.cs`.
 
@@ -846,7 +1013,24 @@ backend present, 1–8 ULP off NumPy on 29/36 elements). Gate: `Statistics/np.co
 `bitwise_and`, `bitwise_or`, `bitwise_xor` (ufunc `out=`/`where=`/`dtype=` supported; float/complex/decimal INPUTS raise NumPy's coercion TypeError while a float/complex/decimal `dtype=` raises the no-loop text — distinct messages, both probed; probed order: bad `where` → no-loop → out-cast → shape), `invert`, `left_shift`, `right_shift`
 
 ### Comparison & Logic
-`all`, `allclose`, `any`, `array_equal`, `equal`, `fmax`, `fmin`, `greater`, `greater_equal`, `isclose`, `iscomplex`, `iscomplexobj`, `isfinite`, `isin`, `isinf`, `isnan`, `isreal`, `isrealobj`, `isscalar`, `iterable`, `less`, `less_equal`, `logical_and`, `logical_not`, `logical_or`, `logical_xor`, `maximum`, `minimum`, `not_equal`
+`all`, `allclose`, `any`, `array_equal`, `equal`, `fmax`, `fmin`, `greater`, `greater_equal`, `isclose`, `iscomplex`, `iscomplexobj`, `isfinite`, `isin`, `isinf`, `isnan`, `isreal`, `isrealobj`, `isscalar`, `iterable`, `less`, `less_equal`, `logical_and`, `logical_not`, `logical_or`, `logical_xor`, `maximum`, `minimum`, `not_equal`, `signbit`
+
+**`np.signbit(x, out=None, where=True, dtype=None)`** — the IEEE sign-bit predicate (a full ufunc, unlike
+`isposinf`/`isneginf`; result always **bool**), the primitive those two are defined on (`isinf(x) & ~signbit(x)` /
+`isinf(x) & signbit(x)`). It is NOT `x < 0`: it reads the raw sign bit, so on floats `-0.0` → True and a
+**negative** NaN → True while `+0.0`/`+inf`/positive NaN → False (probed 2.4.2). Per dtype: **Half/Single/Double**
+test the IEEE sign bit; **signed integers** use `x < 0` (the two's-complement MSB IS the sign bit); **unsigned
+integers / bool / char** are always False; **Decimal** (no NumPy analog) is strictly-negative (`Math.Sign < 0`, so
+`-0.0m` → False, documented); **Complex** has no loop and raises NumPy's verbatim `ufunc 'signbit' not supported
+for the input types…` `TypeError`. Rides the SAME fused predicate kernel as `isnan`/`isinf` — Single/Double **and**
+signed Int32/Int64 vectorize via a per-lane `ExtractMostSignificantBits` + PDEP bool store (the mask IS the loaded
+vector; no compare, no constant), narrow/unsigned/Half/Decimal take the scalar route (which already beats NumPy's
+own scalar signbit loops). `dtype=` is validate-only (bool loops only). **Perf (NPY/NS, plain call):** faster than
+NumPy on every dtype — i8/u8 **7–11×**, i32 **3.3–6.9×**, i64 **1.8–3.3×**, f32 **1.3–2.4×**; f64 **~1.4×**
+(memory-bandwidth-bound reading the full 8-byte lanes, the shared DRAM ceiling). Gate: `Logic/np.signbit.Test.cs`
+(19) + 338 cases in the differential-fuzz `logic` tier (all 13 dtypes × 26 layouts, bit-exact vs NumPy 2.4.2).
+See `Logic/np.is.cs` (`signbit`), `Backends/Default/Logic/Default.SignBit.cs`,
+`Backends/Kernels/Direct/DirectILKernelGenerator.Unary.Predicate.cs` (`EmitSignBitCall` + the extended SIMD gate).
 
 `np.isin(element, test_elements, assume_unique=false, invert=false, kind=null)` is the element-wise membership
 test — a bool array of `element`'s shape, True where `element[i]` is a value in the (flattened) `test_elements`
@@ -998,7 +1182,7 @@ and `Type t = np.float64` need a cast; `a.dtype.Name` → `a.dtype.name` (NumPy)
 30/30 + Oracle 176/176 (dtype_text tier unchanged), Interop 638/638.
 
 ### Selection
-`choose`, `compress`, `extract`, `index_exp`, `indices`, `ix_`, `place`, `put`, `putmask`, `ravel_multi_index`, `s_`, `select`, `take`, `take_along_axis`, `unravel_index`, `where`
+`choose`, `compress`, `extract`, `index_exp`, `indices`, `ix_`, `place`, `put`, `put_along_axis`, `putmask`, `ravel_multi_index`, `s_`, `select`, `take`, `take_along_axis`, `unravel_index`, `where`
 
 `np.take_along_axis(arr, indices, axis=-1)` (NumPy `numpy/lib/_shape_base_impl.py`) is the per-slice
 gather: it matches 1-D index and data slices oriented along `axis` and looks each output element up
@@ -1040,6 +1224,39 @@ carry) and a branch-light unsigned-bounds resolve.
 
 Gates: `Indexing/TakeAlongAxisTests.cs` (37) + 44 `take_along_axis` cases in the `groupa` differential-fuzz
 tier. See `Indexing/np.take_along_axis.cs`.
+
+`np.put_along_axis(arr, indices, values, axis)` (NumPy `numpy/lib/_shape_base_impl.py`) is the SETTER twin
+of `take_along_axis`: for every position in the (broadcast) iteration space it reads one index and writes one
+value into `arr` along `axis`. **In-place** — mutates `arr`, returns `void`. NumPy is `arr[_make_along_axis_idx(
+...)] = values`, an advanced ASSIGNMENT; NumSharp reproduces it as the exact mirror of the take gather — a
+whole-array strided odometer (`DirectILKernelGenerator.PutAlongAxis.cs`), dtype-agnostic via a byte-width-keyed
+element copy. `axis` is **required** (no default, as in NumPy). It shares take's iteration-shape /
+`arrStrides` / non-axis-broadcast machinery (so `J != M`, negative-wrap, index-broadcast, and the identical
+fancy-index `IndexError` all fall out), and adds three setter-only behaviours, all probed against 2.4.2: (1)
+**`values` is BROADCAST — not cycled** — to the indexing result shape (right-aligned, extra LEADING size-1 dims
+stripped, more lenient than `broadcast_to`); a mismatch raises NumPy's verbatim `shape mismatch: value array of
+shape … could not be broadcast to indexing result of shape …`. It is cast to `arr`'s dtype (assignment cast:
+floats truncate toward zero, over/underflow wraps — the put/place/putmask sibling convention). Where several
+positions collapse onto one element (a size-1 `arr` dim, or duplicate indices), the **last write in C-order
+wins**. (2) **ATOMICITY** — every index is validated against the axis bound BEFORE the first store (NumPy's
+`PyArray_MapIterCheckIndices`), so an out-of-bounds index leaves `arr` completely untouched; this is TWO IL
+kernels — a dtype-agnostic `PutAlongAxisValidate` pass then a bounds-check-free `PutAlongAxisScatter` — rather
+than one, which also keeps the scatter's hot loop branch-free on the bound. (3) **`axis=None`** treats `arr` as
+`np.array(arr.flat)`, whose view-vs-copy split is load-bearing: a **C-contiguous** `arr` is written back through
+the flat view (aliased storage), while a **non-contiguous** `arr` raises read-only (NumPy's flat copy is
+read-only there — the dtype check still fires first). A **COPY_IF_OVERLAP** guard snapshots `values` when it may
+alias `arr` (`put_along_axis(a, reversing_idx, a)` reverses via a copy). The validation ORDER mirrors NumPy
+exactly: axis → dtype → ndim → writeable → non-axis broadcast → value broadcast → per-index bounds. **Perf
+(NPY/NS, Release, best-of-15):** the argsort/argmax-along-axis reconstruction (put_along_axis's purpose) is
+**1.68–2.18×** (NumPy builds `_make_along_axis_idx`'s arange grids + a MapIter; NumSharp is a direct odometer);
+the degenerate `axis=None` flat 1-D case is **~1.03–1.11×**, the memory-bandwidth ceiling the whole scatter
+family (`put`/`place`/`putmask`) hits. **One inherited divergence** (`[Misaligned]`, the same benign class as
+`take_along_axis`): for a NON-contiguous `indices` with MULTIPLE out-of-bounds values, the reported offending
+index VALUE follows the validation odometer's C-order while NumPy's follows its MapIter (memory/axis) order — the
+error TYPE, axis and size always match, and argsort/argmax output (contiguous) is exact, so it never arises in
+practice (validated: 10,200 randomized cases + 142 metamorphic layout invariants, 0 unexplained). Gates:
+`Indexing/PutAlongAxisTests.cs` (41) + 48 `put_along_axis` cases in the `groupa` differential-fuzz tier. See
+`Indexing/np.put_along_axis.cs`.
 
 `np.select(condlist, choicelist, default=0)` (NumPy `numpy/lib/_function_base_impl.py`) draws each
 output element from the choice whose condition is true, FIRST matching condition winning; positions
@@ -1113,7 +1330,11 @@ refused. Pinned by `SelectionTests` (`Take_FloatIndices_Throws_SameKind`, `Put_F
 `a.flat[i] = values.flat[i % values.size]` wherever `mask` is True, walking both in C-order. It shares
 `place`'s whole structure — the writeable-first check, the same-`size` (not shape) mask contract, the
 non-bool-mask→`!=0` cast (NaN/inf→True), the `ascontiguousarray`+`copyto` writeback for non-contiguous
-targets — and differs in exactly TWO probed ways (2.4.2): the values cursor advances by **POSITION**
+targets, and the `arrays_overlap`→ENSURECOPY guard (`NDMemOverlap.SolveMayShareMemory(maxWork:0)`, NumPy's
+`NPY_MAY_SHARE_BOUNDS` — a fresh copy of `a` when `values`/`mask` may alias it, so `putmask(a, m, a[2:8])`
+reads the ORIGINAL `a` for every cyclic value instead of an already-overwritten slot; probed against 2.4.2,
+this was a real bug the contiguous fast path had before the guard) — and differs in exactly TWO probed ways
+(2.4.2): the values cursor advances by **POSITION**
 (every element, `j` in lockstep with `i`, wrapping at `nv`) rather than per-True, and an **empty
 `values` is a silent no-op** rather than `place`'s `ValueError`. The IL kernel mirrors Place's typed-MOV
 scatter but with the cursor advance OUTSIDE the mask-True branch, plus a cursor-free `nv==1` scalar-
@@ -1126,8 +1347,10 @@ convert implicitly (`np.putmask(a, cond, 44)`). **Perf (NPY/NS, best-of-9, Relea
 faster than NumPy on every cell; **2.0–3.07×** at 1K/100K and **1.59–1.77×** at 10M for 1/4-byte dtypes;
 the 8/16-byte 10M cells (int64/float64/complex128) compress to **1.08–1.36×** — the memory-bandwidth wall
 the whole scatter family hits (both sides RMW scattered wide-element writes). Gates:
-`Indexing/SelectionTests.cs` (`PutMask_*`, 24 — incl. the position-vs-place contrast, empty-values no-op,
-transposed/negstride writeback, NaN mask, char/decimal/complex) + the `putmask` fuzz tier
+`Indexing/SelectionTests.cs` (`PutMask_*`, 30 — incl. the position-vs-place contrast, empty-values no-op,
+transposed/negstride writeback, operand-overlap (values/mask aliasing `a`, full self-alias `putmask(a,m,a)`),
+complex/float16 mask→bool (both parts / half-truthiness), mask-with-more-dims (size not shape), NaN mask,
+char/decimal/complex) + the `putmask` fuzz tier
 (`putmask.jsonl`, 264 — 11 dtypes × 3 value modes {scalar nv==1 / cycle nv==3 / long nv==size} × 8
 layouts incl. the non-contiguous writeback path, all bit-exact vs NumPy 2.4.2).
 
@@ -1743,6 +1966,7 @@ Semantics (all probed against NumPy 2.4.2, pinned in `NDEvaluateTests.cs`):
 - **Dtypes follow NumPy result_type PER NODE** (`NDExpr.Typing.cs`): NEP50 strong-strong incl. the int/float tier crossing (`i4+f4→f8`); weak python-scalar literals (`i4+2→i4`, `f2+2.5→f2`, `bool+2→i64`, out-of-range → OverflowError); `true_divide` ints→f64; `arctan2` tier floats; `power`/`remainder`/`floor_divide` bool→i8; unary math tiers (`bool/i8→f16`, `i16→f32`, `i32+→f64`); comparisons→bool. `(i4*i4)+f8` wraps the multiply in int32 before promoting — bit-compatible with the unfused NumPy sequence.
 - **Reductions are root-only**: `NDExpr.Sum/Prod/Min/Max/Mean(expr)` run a one-pass accumulating kernel over the inputs (NumPy reduce dtypes; f16/f32 sums accumulate in f64 and cast back (more precise than NumPy's pairwise); min/max NaN-propagate; empty: sum=0, prod=1, mean=NaN, min/max raise).
 - Repeated NDArray references deduplicate to one iterator operand; `out=` follows the ufunc rules above; `ExecuteExpression` (Tier 3C) throws without `EXTERNAL_LOOP` (the ~40× per-element foot-gun) — `np.evaluate` configures the iterator itself.
+- **Compiled once per STRUCTURE, not per call** (`NDExprProgram` + `NDExprProgramCache`, `Backends/Iterators/NDExpr.{Program,Structure,Params}.cs`; plan `docs/plans/ndexpr-evaluate.md` §0.1): binding, the NEP50 typing pass, the vector plan and the kernel lookup run ONCE per (tree structure, input dtype signature, 0-d mask) and are cached twice — on the root instance (a hoisted / `Compile()`d tree: zero walks) and in a process-wide structural cache keyed by a 64-bit order-sensitive structural hash and VERIFIED node by node against the cached bound tree before use (a hash-only hit would run the wrong kernel; one entry per hash, 4096-entry cap, wholesale clear when full — the kernels stay in the kernel cache). So the natural spelling `np.evaluate((NDExpr)a * b + c)` REBUILT inside a loop costs **~0.46–0.51 µs / 0.86 KB per call at n=8** (old NDExpr 1.0 µs / 3.1 KB; the Phase-3-only build 1.58 µs; a prebuilt tree 0.41 µs / 0.59 KB; unfused `a*b+c` 0.35–0.37 µs / 0.94 KB; NumPy 0.52 µs), `out=` 0.36 µs / 0.46 KB, `Sum(a*b)` 0.39, `Where(a>b,a,b)` 0.45 — and fused beats the unfused chain on **13 of 15** probe rows at 1K with the rebuilt spelling (was 5/15; the two losses, `maximum(a,b)` 0.59× and `abs(a)` 0.63×, are single-op trees where the direct engine kernel's fixed cost is lower than an NDIter pass — plan P6.3). The library consumers (`np.sinc`, the windows, `trapezoid`, `gradient`) spell their trees inline and get this for free (the sinc tree at 1K: 4.9 → 3.4 µs, 1.7× the unfused chain). **A 0-d input is a hoisted PARAMETER, not a stride-0 operand** (`NDExpr.Params.cs`): its single element is copied into the kernel's aux block once per call and loaded into a local by the kernel prologue (the scalar, or its broadcast vector / lane mask in the SIMD body), so `a*b+k` with a 0-d `k` costs **0.39 µs prebuilt / 0.48 rebuilt** (was 0.68 / 1.25–1.30), ZERO per element (a stride-0 iterator operand cost 8–10 % per element on BOTH the SIMD and scalar paths — the fused shell's per-load broadcast branch and the strided fallback's stride multiply), and ONE kernel per structure: `np.hanning(M)` over 20 distinct M compiles 0 kernels (a literal `M-1` compiled 20). Typing is unchanged (a 0-d array is the STRONG scalar it always was — `int32 * 0-d int64 → int64`, where a C# literal is weak); the value is read BEFORE the pass (a parameter aliasing `out` keeps its original value, as NumPy's COPY_IF_OVERLAP gives it); every input 0-d → nothing is hoisted (0-d result, iterator path); the mask is part of the program identity and re-validated per call (`ndarray.resize` of a 0-d array re-resolves; a `Compile()`d handle refuses with a clear message); a dtype-pinned positional `Compile(types)` handle knows no shapes and streams everything. **Prefer a 0-d array over a literal for any scalar that varies at runtime** — a literal is baked into the IL and compiles one kernel per value (~0.2–1 ms JIT each, one kernel-cache entry each; the structural cache caps its own growth at 4096 and clears). **`expr.Compile()` / `expr.Compile(params NPTypeCode[] inputTypes)` → `CompiledExpression`** is the explicit handle (numexpr's `NumExpr(expr)`): eager JIT, `Evaluate(out)` for embedded arrays / `Evaluate(operands, out)` for positional trees, `IsPositional`/`IsReduction`/`InputTypes`/`ResultType`; a positional handle PINS its dtype signature (`TypeError` naming both signatures on a mismatch — never a silent recompile). Not the Tier-3C `Compile(inputTypes, outputType, cacheKey)`, which emits a raw kernel computed at ONE dtype. The inputs' broadcast is one N-ary single-allocation pass (`BroadcastInputDims`) whose mismatch lists EVERY operand shape like NumPy (`operands could not be broadcast together with shapes (2,3) (2,3) (4,) `, `IncorrectShapeException`); `out=` joins through `ResolveUfuncIterationShape` unchanged. **`Call` nodes:** the delegate/target SLOT is part of the kernel identity (two closures over one lambda body used to share a kernel, so the second read the first's captured state — fixed), and `DelegateSlots` dedups registration by delegate identity (target reference + method) / target reference, so a delegate held in a field and rebuilt into the tree per call keeps one slot and one kernel; a closure ALLOCATED per call is a new identity (new slot, new kernel JIT) — hold delegates in fields. Gates: `NDEvaluateProgramTests` (21), `NDEvaluateParamTests` (12), the `evaluate.jsonl` tier (its `pp_scalar_*` / `scalar_0d` layouts drive the parameter path bit-exact), `windows.jsonl`.
 
 ### Sorting & Searching
 `argmax`, `argmin`, `argpartition`, `argsort`, `argwhere`, `flatnonzero`, `lexsort`, `nanargmax`, `nanargmin`, `nonzero`, `partition`, `searchsorted`, `sort`, `sort_complex`
@@ -2184,7 +2408,22 @@ port is a faithful **scalar** transcription and NumPy's win-amd64 wheel is itsel
 (`POCKETFFT_NO_VECTORS` under MSVC) with twiddles from the same CRT (`Math.Cos`/`Sin` == MSVC
 `ucrtbase`); **no explicit FMA is needed** (unlike the GEMM port), which is why `fft.jsonl` is a
 PORTABLE fuzz tier rather than a host-pinned one. Full design + parity ledger:
-**`docs/FFT_PARITY.md`**.
+**`docs/stale-docs/FFT_PARITY.md`**. **arm64 NUMPY is the exception, not NumSharp (proven
+2026-09-23):** NumPy's arm64 wheels compile pocketfft with the default FP contraction on an FMA
+baseline, so its `a*b + c*d` twiddle products (`sincos_2pibyn::operator[]`) and butterfly multiply-adds
+(`MULPM`, `radf5`) round once (clang fuses the LEFT product: `fmuladd(a, b, c*d)`). Live arm64 NumPy's
+`rfft` sits an ULP or so off NumSharp's in 73–98 % of float64 lanes (macos-latest, n=1024/1000/1021). A C# replica of
+`rfftp`, fed macOS's libm twiddles, reproduces the SHA-256 of BOTH macOS results: NumSharp's when
+evaluated literally, NumPy's when fused, at n=1024 and n=1000 (hashes in
+`InteropTestBase.PocketFftFusedArithmetic`). The live interop gate keeps these cells strict on x64 and
+reports them Inconclusive WITH the measurement on arm64 (`InteropTestBase.AssertExactUnlessNumPyFuses`,
+`SpectrumLiveParityTests`, the Gist FFT/HPS cells). **Twiddle trap:** twiddles come from the PLATFORM
+libm on both sides (`Math.Cos`/`Math.Sin` ↔ `std::cos`/`std::sin`), and libms disagree in the last
+bit: at n=1024 Apple's `sin(72·π/4096)` and `sin(216·π/4096)` are 1 ULP above correctly rounded, and
+ucrtbase misses correct rounding on 45 cos + 21 sin of the 1,025 candidate angles. So NumSharp's own
+FFT bits are NOT host-independent for large n, and the offline `fft.jsonl` tier (win-amd64 bytes) is
+portable only because ucrtbase, glibc and Apple agree on its sizes' twiddles (green on all three OSes).
+A larger corpus size can turn host-pinned.
 
 The facade is the `np.random` house shape — a lowercase property `np.fft` returning `FourierModule`,
 so `np.fft.fft(x)` ports Python verbatim. Only **three 1-D kernels** do real work (`c2c`/`r2c`/`c2r`
@@ -2459,7 +2698,7 @@ non-structured subset would only re-expose `loadtxt`.
 | np API | `APIs/np.cs` |
 | Diagonal / triangular family | `Creation/np.tri.cs`, `Indexing/np.{diag,tril,diag_indices,tril_indices,fill_diagonal}.cs` |
 | unique family | `Manipulation/NDArray.unique.cs` + `NDArray.unique.Kwargs.cs` (sort+mask core + axis path), `Manipulation/np.unique.cs` (`np.unique`), `Manipulation/np.unique_values.cs` (Array-API `unique_values`/`unique_counts`/`unique_inverse`/`unique_all` + result structs), `Manipulation/NDArray.unique.Hash.cs` (int + complex hash fast path, splitmix64). Design + measured perf decisions: `docs/UNIQUE_DESIGN.md` |
-| Selection family | `Indexing/np.{take,take_along_axis,put,place,putmask,select}.cs`; IL kernels `Backends/Kernels/Direct/DirectILKernelGenerator.{Take,TakeAlongAxis,Put,Place,PutMask,Select}.cs` (`Select` = fused single-pass reverse-`ConditionalSelect` chain; `TakeAlongAxis` = whole-array strided-odometer gather, byte-width-keyed; `PutMask` = Place's typed-MOV scatter with a by-position cursor + `nv==1` scalar fast path) |
+| Selection family | `Indexing/np.{take,take_along_axis,put,put_along_axis,place,putmask,select}.cs`; IL kernels `Backends/Kernels/Direct/DirectILKernelGenerator.{Take,TakeAlongAxis,Put,PutAlongAxis,Place,PutMask,Select}.cs` (`Select` = fused single-pass reverse-`ConditionalSelect` chain; `TakeAlongAxis` = whole-array strided-odometer gather, byte-width-keyed; `PutAlongAxis` = the scatter mirror — a dtype-agnostic validate pass + a bounds-free scatter pass for NumPy's all-or-nothing assignment; `PutMask` = Place's typed-MOV scatter with a by-position cursor + `nv==1` scalar fast path) |
 | BLAS/LAPACK seam | `Backends/IBlasBackend.cs` + `IBlasBackend.LinearAlgebra.cs` (15 default `Try*`), `Backends/TensorEngine.LinearAlgebra.cs` (virtuals + `LinAlgHelper`); managed LU fallback (`det`/`slogdet`/`solve`/`inv`) in `Backends/Default/LinearAlgebra/ManagedLu.cs`; `Backends/ISlidingDotBackend.cs` (optional level-1 `?dot` seam for `correlate`/`convolve`, `OpenBlasEngine.SlidingDot`) |
 | ONNX Runtime interop (package) | `src/NumSharp.Interop.OnnxRuntime/NDArrayOnnxInterop.{cs,Export.cs,Import.cs}` (dtype maps, `AsOrtValue`/`ToOrtValue`/`AsDenseTensor`/`ToDenseTensor`, `ToNDArray`/`AsNDArray`), `OrtTensor.cs` (the `OrtTensor`/`OrtTensor<T>` handles + `ImportLease`), `UnmanagedMemoryManager.cs` (`Memory<T>` over the unmanaged buffer), `InferenceSessionExtensions.cs` (`session.Run(NDArray…)`), `Postprocess.cs`; ORT C# source for reference at `refs/onnxruntime/csharp/` (sparse submodule) + the official samples at `refs/onnxruntime-inference-examples/c_sharp/` |
 | ML.NET interop (package) | `src/NumSharp.Interop.MLNet/NDArrayMLNetInterop.{cs,Export.cs,Import.cs}` (dtype maps, `AsDataView`/`ToDataView`/`ToVBuffer`, `ToNDArray`, zero-copy `VBuffer.AsNDArray<T>` + `WrapExternal`/`Pin`/`Live{Exports,Imports}`), `NDArrayDataView.cs` (the NDArray-backed `IDataView` + strided lazy cursor + ARC-pin lifetime), `VBufferAccessor.cs` (compiled-expression getter for the private `VBuffer<T>._values`), `ImportLease.cs` (the last-view-releases GCHandle pin lease), `Postprocess.cs` (shared with ONNX). Depends on `Microsoft.ML.DataView` only |
@@ -2836,7 +3075,7 @@ claim is stronger: NumSharp's writer must be **byte-identical** to `np.save`, no
 
 `.github/workflows/build-and-release.yml` — test on 3 OSes (Windows/Ubuntu/macOS), build NuGet on tag push, create GitHub Release, publish to nuget.org. The `FuzzMatrix` gate runs here (replays the committed corpora; no Python).
 
-`.github/workflows/fuzz-soak.yml` — nightly soak: sweeps seeds through `test/oracle/fuzz_random.py` (~1M fresh cases/night), replays them, and uploads any failing corpus; copy a shrunk repro into `Fuzz/corpus/regressions/` to pin it on every CI thereafter.
+`.github/workflows/fuzz-soak.yml` — nightly soak: sweeps one fixed seed (a deterministic canary whose corpus `source_sha256` should repeat night to night) plus nine fresh random seeds through `test/oracle/fuzz_random.py` (200K cases each, ~1.8M fresh cases/night), replays them, and uploads any failing corpus; copy a shrunk repro into `Fuzz/corpus/regressions/` to pin it on every CI thereafter.
 
 `.github/workflows/benchmark.yml` — decoupled post-release perf run (triggers on a published Release or manual dispatch — a slow/failed benchmark must never gate a release). Runs the whole `benchmark/run_benchmark.py` harness (op/dtype/N matrix + the five subsystems), then commits the refreshed `benchmark-report.md` + subsystem `*_results.*` + cards + a `benchmark/history/<date>_<sha>/` snapshot (+ the `latest` symlink) to master with `[skip ci]` and redeploys the docs. It does **not** refresh `benchmark/README.md` or the hand-built `docs/website-src/docs/benchmarks-dashboard.md` (the UI hub) — both are maintained by hand. (Its "render docs" step still emits `docs/website-src/docs/benchmark-matrix.md`/`benchmark-iterator.md` + references a `benchmarks.md`, none of which the current site toc links — legacy drift; the live hub is `benchmarks-dashboard.md` + `history/latest/*`.)
 

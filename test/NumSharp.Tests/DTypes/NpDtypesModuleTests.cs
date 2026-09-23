@@ -29,6 +29,20 @@ namespace NumSharp.Tests.DTypes
         [DataRow("TimeDelta64DType", "m8", 22)]
         public void Classes_AreTheClassesOfTheirDescriptors(string className, string spelling, int typeNum)
         {
+            // The four C-integer classes carry a platform-dependent type_num (LLP64 Windows: 7/8/9/10;
+            // LP64: 5/6/7/8). The DataRow carries the LP64 values; remap to the local platform, matching
+            // np.dtype('int32'/'int64').num on the host (see DTypeRegistry's CLongIs32Bit).
+            bool cLongIs32 = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows) || IntPtr.Size != 8;
+            if (cLongIs32)
+                typeNum = className switch
+                {
+                    "Int32DType" => 7,
+                    "UInt32DType" => 8,
+                    "Int64DType" => 9,
+                    "UInt64DType" => 10,
+                    _ => typeNum
+                };
+
             var meta = (DTypeMeta)typeof(np.dtypes).GetProperty(className).GetValue(null);
             meta.Name.Should().Be(className);
             meta.FullName.Should().Be("numpy.dtypes." + className);
@@ -176,14 +190,16 @@ namespace NumSharp.Tests.DTypes
         public void Registry_Register_RejectsDuplicates()
         {
             Action dup = () => DTypeRegistry.Register(new DuplicateMeta());
-            dup.Should().Throw<InvalidOperationException>().WithMessage("*type number 5*");
+            dup.Should().Throw<InvalidOperationException>().WithMessage("*type number 3*");
             Action nullMeta = () => DTypeRegistry.Register(null);
             nullMeta.Should().Throw<ArgumentNullException>();
         }
 
+        // Uses NPY_SHORT (3) — Int16's number, which is registered on EVERY platform (unlike NPY_INT=5, which is
+        // unused on LLP64/Windows where Int32 is NPY_LONG=7), so the duplicate-rejection assertion is platform-stable.
         private sealed class DuplicateMeta : DTypeMeta
         {
-            public DuplicateMeta() : base("DuplicateDType", "test", 5, typeof(int), "dup", NPTypeCode.Empty, 'i', 'x', 4, 4, DTypeFlags.Legacy) { }
+            public DuplicateMeta() : base("DuplicateDType", "test", 3, typeof(int), "dup", NPTypeCode.Empty, 'i', 'x', 4, 4, DTypeFlags.Legacy) { }
             public override DType DefaultDescr() => throw new NotSupportedException();
             public override DTypeMeta CommonDType(DTypeMeta other) => null;
         }

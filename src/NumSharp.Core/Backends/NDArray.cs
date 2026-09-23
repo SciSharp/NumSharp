@@ -417,12 +417,17 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Data length of every dimension
+        ///     Data length of every dimension (NumPy's <c>ndarray.shape</c>). Assigning it reshapes the array
+        ///     IN PLACE — only when the new shape is expressible over the existing memory; see
+        ///     <see cref="SetShapeInPlace"/> for the exact rule and the error it raises otherwise.
         /// </summary>
+        /// <exception cref="AttributeError">(set) The new shape needs a copy (e.g. flattening a transposed
+        /// view); NumPy's message verbatim — use <see cref="reshape(long[])"/> to get a copy.</exception>
+        /// <exception cref="IncorrectShapeException">(set) The new shape's size differs from the array's.</exception>
         public long[] shape
         {
             get => Storage.Shape.Dimensions;
-            set => Storage.Reshape(value);
+            set => SetShapeInPlace(new Shape(value));
         }
 
         /// <summary>
@@ -493,7 +498,13 @@ namespace NumSharp
         {
             get
             {
-                if (ndim == 1 || Shape.IsScalar) //because it is already flat, there is no need to clone even if it is already sliced.
+                // NumPy's a.flat over a 0-d array yields exactly ONE element with 1-D shape (1,)
+                // — np.asarray(a.flat).shape == (1,), matching np.ravel(0-d) — so the raveled
+                // image must be a length-1 vector, never the 0-d view itself (oracle-gated by
+                // the instance tier's ndarray.flat scalar_0d cells).
+                if (Shape.IsScalar)
+                    return this.reshape(new Shape(1));
+                if (ndim == 1) //because it is already flat, there is no need to clone even if it is already sliced.
                     return new NDArray(Storage);
                 // flat's documented contract is the raveled C-order IMAGE — a materialized copy
                 // for ANY non-contiguous layout (its ~15 internal consumers walk the buffer
@@ -581,14 +592,69 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     The shape representing this <see cref="NDArray"/>.
+        ///     The shape representing this <see cref="NDArray"/>. Assigning it reshapes the array IN PLACE to
+        ///     the given shape's dimensions (its strides/offset are ignored) under NumPy's
+        ///     <c>ndarray.shape</c> setter rule — see <see cref="SetShapeInPlace"/>.
         /// </summary>
+        /// <exception cref="AttributeError">(set) The new dimensions need a copy; NumPy's message verbatim.</exception>
+        /// <exception cref="IncorrectShapeException">(set) The new shape's size differs from the array's.</exception>
         public Shape Shape
         {
             [MethodImpl(Inline)]
             get => Storage.Shape;
-            [MethodImpl(Inline)]
-            set => Storage.Reshape(value);
+            set => SetShapeInPlace(value);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>array_shape_set</c> (<c>numpy/_core/src/multiarray/getset.c</c>): reshape this array
+        ///     in C order, and — only when that reshape is a VIEW of this array's own data — adopt its
+        ///     dimensions and strides in place; otherwise raise. The array never copies itself in place.
+        /// </summary>
+        /// <remarks>
+        ///     <para>This replaces an in-place COPY that <see cref="UnmanagedStorage.Reshape(ref Shape, bool)"/>
+        ///     makes for a non-contiguous storage (clone the data, swap the storage's buffer). Done under an
+        ///     <see cref="NDArray"/> that swap corrupted the reference counting: every array holds one counted
+        ///     reference on <c>Storage.InternalArray</c>, so after the swap <see cref="Dispose"/> released the
+        ///     NEW buffer (which never received that reference) while the OLD buffer kept one nobody would ever
+        ///     drop — two buffers stranded per assignment until a GC finalized them (the scope audit's read
+        ///     gate measured exactly 2). NumPy has no such path: <c>t.shape = (12,)</c> on a transposed view
+        ///     is an <see cref="AttributeError"/>, and so it is here.</para>
+        ///     <para>The view/copy decision is <see cref="ReshapeCore"/>'s — the same port of NumPy's reshape
+        ///     (same-dims alias, contiguous relabel, <c>_attempt_nocopy_reshape</c>, else copy) — and a copy is
+        ///     detected the way NumPy detects it, by comparing data pointers. Only the C/F-contiguity flags are
+        ///     recomputed (NumPy's <c>PyArray_UpdateFlags(self, C|F)</c>): WRITEABLE and ALIGNED stay this
+        ///     array's own, and OWNDATA is reconciled by the storage.</para>
+        /// </remarks>
+        /// <param name="requested">The requested dimensions (one may be negative = inferred, NumPy's rule).</param>
+        /// <exception cref="AttributeError">The reshape cannot be expressed over this array's memory.</exception>
+        /// <exception cref="IncorrectShapeException">The requested size differs from this array's size.</exception>
+        /// <exception cref="ValueError">More than one unknown (negative) dimension.</exception>
+        private unsafe void SetShapeInPlace(Shape requested)
+        {
+            // The uninitialized-shape sentinel owns no buffer — there is nothing to view or copy, so it keeps
+            // the plain relabel (the same route ReshapeCore itself takes for it).
+            if (Shape.IsEmpty)
+            {
+                Storage.Reshape(ref requested);
+                return;
+            }
+
+            // The reshape result is only consulted, never returned: disposing it drops its counted reference
+            // (a view) or frees the internal copy (the copy path), so either branch leaves the pool balanced.
+            using var reshaped = ReshapeCore(requested, 'C');
+
+            byte* mine = (byte*)Storage.Address + Shape.offset * dtypesize;
+            byte* theirs = (byte*)reshaped.Storage.Address + reshaped.Shape.offset * reshaped.dtypesize;
+            if (mine != theirs)
+                throw new AttributeError("Incompatible shape for in-place modification. Use " +
+                                         "`.reshape()` to make a copy with the desired shape.");
+
+            // Keep this array's own WRITEABLE/ALIGNED bits (the alias may have defaulted them); the new Shape's
+            // constructor already computed C/F contiguity for the new dims/strides.
+            const ArrayFlags Kept = ArrayFlags.WRITEABLE | ArrayFlags.ALIGNED;
+            var own = (ArrayFlags)Storage.Shape._flags & Kept;
+            var adopted = reshaped.Shape.WithFlags(flagsToSet: own, flagsToClear: Kept & ~own);
+            Storage.SetShapeUnsafe(ref adopted);
         }
 
         /// <summary>
@@ -1291,67 +1357,134 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Sets <see cref="values"/> as the internal data storage and changes the internal storage data type to <see cref="dtype"/> and casts <see cref="values"/> if necessary.
+        ///     Replaces this array's data buffer with <paramref name="values"/>, switching the storage dtype to
+        ///     <paramref name="dtype"/> (casting <paramref name="values"/> first when their element type differs).
+        ///     The shape is unchanged — keeping it consistent with the new buffer's length is the caller's job.
         /// </summary>
-        /// <param name="values">The values to set as internal data soruce</param>
-        /// <param name="dtype">The type to change this storage to and the type to cast <see cref="values"/> if necessary.</param>
-        /// <remarks>Does not copy values unless cast is necessary.</remarks>
+        /// <param name="values">The new data source (wrapped, not copied, unless a cast is needed).</param>
+        /// <param name="dtype">The dtype this storage switches to and the type <paramref name="values"/> is cast to.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="values"/> is null.</exception>
+        /// <exception cref="NotSupportedException"><paramref name="dtype"/> is not a NumSharp storage type.</exception>
+        /// <remarks>This array's counted reference moves from the old buffer to the new one (see
+        /// <see cref="MoveArcReference"/>) — the old buffer is freed if this array was its last owner.</remarks>
         // ReSharper disable once ParameterHidesMember
         public void ReplaceData(Array values, Type dtype)
         {
+            var previous = Storage.InternalArray;
             Storage.ReplaceData(values, dtype);
+            MoveArcReference(previous);
         }
 
         /// <summary>
-        ///     Sets <see cref="values"/> as the internal data storage and changes the internal storage data type to <see cref="values"/> type.
+        ///     Replaces this array's data buffer with <paramref name="values"/>, cast to this array's current
+        ///     dtype when their element type differs. The shape is unchanged (an uninitialized array takes the
+        ///     vector shape of <paramref name="values"/>).
         /// </summary>
-        /// <param name="values"></param>
-        /// <remarks>Does not copy values.</remarks>
+        /// <param name="values">The new data source (wrapped, not copied, unless a cast is needed).</param>
+        /// <exception cref="ArgumentNullException"><paramref name="values"/> is null.</exception>
+        /// <remarks>This array's counted reference moves from the old buffer to the new one (see
+        /// <see cref="MoveArcReference"/>) — the old buffer is freed if this array was its last owner.</remarks>
         public void ReplaceData(Array values)
         {
+            var previous = Storage.InternalArray;
             Storage.ReplaceData(values);
+            MoveArcReference(previous);
         }
 
         /// <summary>
-        ///     Sets <see cref="nd"/> as the internal data storage and changes the internal storage data type to <see cref="nd"/> type.
+        ///     Makes this array share <paramref name="nd"/>'s data — its buffer, shape and dtype. A sliced
+        ///     <paramref name="nd"/> contributes a contiguous COPY of its window instead.
         /// </summary>
-        /// <param name="nd"></param>
-        /// <remarks>Does not copy values and does change shape and dtype.</remarks>
+        /// <param name="nd">The array whose data this array adopts.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="nd"/> is null.</exception>
+        /// <exception cref="NotSupportedException"><paramref name="nd"/>'s dtype is not a NumSharp storage type.</exception>
+        /// <remarks>
+        ///     This array takes its OWN counted reference on the adopted buffer and releases the one it held on
+        ///     its old buffer (<see cref="MoveArcReference"/>). Before that, the storage swap left the reference
+        ///     on the old buffer — stranding it until a GC — while <see cref="Dispose"/> released a reference on
+        ///     the adopted buffer that belonged to <paramref name="nd"/>'s owners: enough of those and the shared
+        ///     buffer was freed under a live <paramref name="nd"/>.
+        /// </remarks>
         public void ReplaceData(NDArray nd)
         {
+            var previous = Storage.InternalArray;
             Storage.ReplaceData(nd);
+            MoveArcReference(previous);
         }
 
         /// <summary>
-        ///     Set an Array to internal storage, cast it to new dtype and if necessary change dtype  
+        ///     Replaces this array's data buffer with <paramref name="values"/>, switching the storage dtype to
+        ///     <paramref name="typeCode"/> (casting <paramref name="values"/> first when their element type differs).
+        ///     The shape is unchanged.
         /// </summary>
-        /// <param name="values"></param>
-        /// <param name="typeCode"></param>
-        /// <remarks>Does not copy values unless cast is necessary and doesn't change shape.</remarks>
+        /// <param name="values">The new data source (wrapped, not copied, unless a cast is needed).</param>
+        /// <param name="typeCode">The dtype this storage switches to.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="values"/> is null.</exception>
+        /// <exception cref="NotSupportedException"><paramref name="typeCode"/> is not a NumSharp storage type.</exception>
+        /// <remarks>This array's counted reference moves from the old buffer to the new one (see
+        /// <see cref="MoveArcReference"/>).</remarks>
         public void ReplaceData(Array values, NPTypeCode typeCode)
         {
+            var previous = Storage.InternalArray;
             Storage.ReplaceData(values, typeCode);
+            MoveArcReference(previous);
         }
 
         /// <summary>
-        ///     Sets <see cref="values"/> as the internal data source and changes the internal storage data type to <see cref="values"/> type.
+        ///     Replaces this array's data buffer with the unmanaged slice <paramref name="values"/> (no copy),
+        ///     switching the storage dtype to <paramref name="dtype"/>. The shape is unchanged.
         /// </summary>
-        /// <param name="values"></param>
-        /// <param name="dtype"></param>
-        /// <remarks>Does not copy values and doesn't change shape.</remarks>
+        /// <param name="values">The new data source; this array takes a counted reference on it.</param>
+        /// <param name="dtype">The dtype this storage switches to (must match the slice's element type).</param>
+        /// <exception cref="InvalidCastException"><paramref name="values"/> is not a slice of <paramref name="dtype"/>.</exception>
+        /// <remarks>This array's counted reference moves from the old buffer to <paramref name="values"/> (see
+        /// <see cref="MoveArcReference"/>) — a bare slice (e.g. from <see cref="CloneData()"/>) is thereby owned
+        /// by this array and freed with it.</remarks>
         public void ReplaceData(IArraySlice values, Type dtype)
         {
+            var previous = Storage.InternalArray;
             Storage.ReplaceData(values, dtype);
+            MoveArcReference(previous);
         }
 
         /// <summary>
-        ///     Sets <see cref="values"/> as the internal data source and changes the internal storage data type to <see cref="values"/> type.
+        ///     Replaces this array's data buffer with the unmanaged slice <paramref name="values"/> (no copy) of
+        ///     this array's current dtype. The shape is unchanged (an uninitialized array takes the slice's
+        ///     vector shape).
         /// </summary>
-        /// <param name="values"></param>
-        /// <remarks>Does not copy values and doesn't change shape.</remarks>
+        /// <param name="values">The new data source; this array takes a counted reference on it.</param>
+        /// <exception cref="InvalidCastException"><paramref name="values"/> is not a slice of this array's dtype.</exception>
+        /// <remarks>This array's counted reference moves from the old buffer to <paramref name="values"/> (see
+        /// <see cref="MoveArcReference"/>).</remarks>
         public void ReplaceData(IArraySlice values)
         {
+            var previous = Storage.InternalArray;
             Storage.ReplaceData(values);
+            MoveArcReference(previous);
+        }
+
+        /// <summary>
+        ///     Re-points this array's counted (ARC) reference after its storage swapped buffers: take one on the
+        ///     NEW <c>Storage.InternalArray</c>, then release the one held on <paramref name="previous"/>.
+        /// </summary>
+        /// <remarks>
+        ///     <para>Every array holds exactly one counted reference on <c>Storage.InternalArray</c> (taken at
+        ///     construction, dropped by <see cref="Dispose"/>), so a storage-level buffer swap must move it, or
+        ///     the old buffer stays referenced forever (a leak until the GC finalizes it) and Dispose releases a
+        ///     reference on the new buffer this array never took (a use-after-free once that count reaches 0).</para>
+        ///     <para>AddRef happens BEFORE the release so a swap onto the same block nets out without the count
+        ///     ever touching zero. A disposed array holds no reference and is left alone. A bare
+        ///     <see cref="IArraySlice"/> starts at zero references, so this array becomes its owner.</para>
+        /// </remarks>
+        /// <param name="previous">The buffer this array referenced before the swap (may be null for an
+        /// uninitialized array).</param>
+        private void MoveArcReference(IArraySlice previous)
+        {
+            if (IsDisposed)
+                return;
+            var current = Storage.InternalArray;
+            current?.TryAddRef();
+            previous?.Release();
         }
 
         /// <summary>

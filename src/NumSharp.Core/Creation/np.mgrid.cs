@@ -140,10 +140,13 @@ namespace NumSharp
                 // NumPy builds the dense grid as indices(sizes, typ) then rescales each layer. The sizes
                 // are ceil((stop-start)/step) (imaginary: the point count) and MAY be negative — indices
                 // then raises "negative dimensions are not allowed", exactly as NumPy's mgrid does (its
-                // ogrid twin instead clamps via arange). A zero real step is a divide-by-zero.
-                int[] sizes = new int[n];
+                // ogrid twin instead clamps via arange). A zero real step is a divide-by-zero. Sizes stay
+                // long: MeshAxisSize is long-native and np.indices takes long[], so no int down-cast is
+                // needed (the former int[]-only indices forced a checked((int)) here that also re-widened
+                // to long[] right after — pure friction that also imposed an artificial 2^31 ceiling).
+                long[] sizes = new long[n];
                 for (int k = 0; k < n; k++)
-                    sizes[k] = checked((int)MeshAxisSize(specs[k]));
+                    sizes[k] = MeshAxisSize(specs[k]);
 
                 NDArray grid = indices(sizes, typ);   // (n, size_0, …, size_{n-1})
 
@@ -152,10 +155,7 @@ namespace NumSharp
                 // coordinates, so it is skipped — the common np.mgrid[0:a, 0:b] case is a single fused
                 // indices fill with no post-pass, and this reuses SliceSpec's exact arange/linspace
                 // values instead of a dtype-branching multiply-add.
-                long[] full = new long[n];
-                for (int k = 0; k < n; k++)
-                    full[k] = sizes[k];
-                var fullShape = new Shape(full);
+                var fullShape = new Shape(sizes);
 
                 for (int k = 0; k < n; k++)
                 {

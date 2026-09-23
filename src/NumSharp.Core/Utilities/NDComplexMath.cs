@@ -35,9 +35,10 @@ namespace NumSharp.Utilities
     /// <see cref="Square"/> = <c>vfmaddsub</c> <c>z·z</c> (matches NumPy's SIMD complex multiply
     /// overflow/cancellation AND NaN sign); <see cref="Reciprocal"/> = the <c>CDOUBLE_reciprocal</c>
     /// ufunc loop (division-form imaginary term, NaN-sign correct);
-    /// <see cref="Exp2"/>/<see cref="Log1p"/> compose the above; <see cref="Abs"/> = <c>npy_cabs</c>
-    /// (C99 <c>hypot</c>: an infinite component yields <c>+inf</c> even alongside a NaN — the .NET 8
-    /// <c>Complex.Abs</c> returns NaN there).</para>
+    /// <see cref="Exp2"/>/<see cref="Log1p"/> compose the above; <see cref="Abs"/> = NumPy's SIMD
+    /// <c>simd_cabsolute</c> (<c>loops_unary_complex.dispatch</c>: <c>sqrt(fma(r, r, 1))·larger</c>, with
+    /// C99 <c>hypot</c>'s rule that an infinite component yields <c>+inf</c> even alongside a NaN — the
+    /// .NET 8 <c>Complex.Abs</c> returns NaN there).</para>
     ///
     /// <para><b>Still delegating to the BCL (at parity):</b> <see cref="Asin"/> and <see cref="Acos"/>
     /// use <see cref="Complex.Asin"/>/<see cref="Complex.Acos"/> on the finite interior with
@@ -88,12 +89,35 @@ namespace NumSharp.Utilities
         private const double SUMSQ_SQRT_MIN = 1.4916681462400413e-154;  // sqrt(DBL_MIN): _sum_squares underflow guard
 
         /// <summary>
-        /// <c>|z| = hypot(re, im)</c> with NumPy/C99 (<c>npy_cabs</c>) infinity/NaN semantics: a
-        /// ±infinite real or imaginary part returns <c>+inf</c> regardless of the other part (including
-        /// NaN); a NaN component with no infinity returns the POSITIVE NaN (NumPy's <c>npy_hypot</c>
-        /// yields <c>0x7ff8…</c>, where <see cref="Complex.Abs"/> emits .NET's negative <c>0xfff8…</c>).
-        /// All finite inputs defer to <see cref="Complex.Abs"/> (bit-exact with NumPy).
+        /// <c>|z|</c> — the complex magnitude exactly as NumPy 2.x's <c>np.abs</c> computes it: the
+        /// <c>simd_cabsolute</c> kernel of <c>loops_unary_complex.dispatch.c.src</c>,
+        /// <c>sqrt(fma(ratio, ratio, 1)) · larger</c> with <c>ratio = smaller / larger</c>. A ±infinite
+        /// real or imaginary part returns <c>+inf</c> regardless of the other part (including NaN); a NaN
+        /// component with no infinity returns the POSITIVE NaN (<c>0x7ff8…</c>, NumPy's <c>NPY_NAN</c>,
+        /// where <see cref="Complex.Abs"/> emits .NET's negative <c>0xfff8…</c>).
         /// </summary>
+        /// <param name="z">The complex value.</param>
+        /// <returns>The magnitude, bit-identical to NumPy's on every FMA-capable host.</returns>
+        /// <remarks>
+        ///     <para><b>The multiply-add is FUSED, and that is the whole point.</b> NumPy's kernel spells
+        ///     the inner term <c>npyv_muladd(ratio, ratio, 1.0)</c>, which is a real fused multiply-add on
+        ///     every target its dispatcher picks on current hardware: <c>vfmaq_f64</c> on arm64 (NEON has
+        ///     FMA in its baseline) and <c>_mm256_fmadd_pd</c> on x86-64 (the <c>X86_V3</c> = AVX2+FMA3
+        ///     target). <see cref="Complex.Abs"/> — which this method deferred to until 2026-09 — computes
+        ///     the same formula UNFUSED (<c>1.0 + ratio * ratio</c>, two roundings), and measured over 1M
+        ///     random complex values on an AVX2+FMA3 host it disagreed with <c>numpy.abs</c> on 35.5% of
+        ///     them, while the fused form matched all 1,000,000. The byte-exact tests had passed only
+        ///     because their inputs happened to avoid the difference (integer-valued pools make
+        ///     <c>ratio²</c> exact, so both forms agree); a windowed FFT spectrum on macOS did not.
+        ///     <see cref="Math.FusedMultiplyAdd(double,double,double)"/> is a hardware FMA where one
+        ///     exists and a correctly-rounded software FMA elsewhere, so NumSharp's answer is the same
+        ///     on every host. NumPy's is not: on an x86-64 CPU WITHOUT FMA3 its dispatcher falls back to
+        ///     the <c>X86_V2</c> target, whose <c>npyv_muladd</c> is an unfused mul+add, and there the two
+        ///     libraries differ again — a CPU class no current runner or desktop belongs to.</para>
+        ///     <para>NumPy also routes non-SIMD-loadable strides and overlapping operands through the
+        ///     scalar <c>npy_hypot</c> (the platform libm's <c>hypot</c>); NumSharp always evaluates
+        ///     this kernel's formula, which is what every ordinary array layout gets from NumPy.</para>
+        /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static double Abs(Complex z)
         {
@@ -101,7 +125,17 @@ namespace NumSharp.Utilities
                 return double.PositiveInfinity;
             if (double.IsNaN(z.Real) || double.IsNaN(z.Imaginary))
                 return NAN;
-            return Complex.Abs(z);
+
+            double re = Math.Abs(z.Real), im = Math.Abs(z.Imaginary);
+            double larger = Math.Max(re, im), smaller = Math.Min(re, im);
+
+            // NumPy masks the division when larger == 0 (npyv_ifdivz), making ratio 0, hypot 1 and the
+            // result 1·0 = +0 — returning larger (+0, both parts were |.|-ed) is that value exactly.
+            if (larger == 0.0)
+                return larger;
+
+            double ratio = smaller / larger;
+            return Math.Sqrt(Math.FusedMultiplyAdd(ratio, ratio, 1.0)) * larger;
         }
 
         #region helpers
@@ -805,6 +839,58 @@ namespace NumSharp.Utilities
             return new Complex(
                 Math.FusedMultiplyAdd(re, re, -(im * im)),
                 Math.FusedMultiplyAdd(im, re, re * im));
+        }
+
+        /// <summary>
+        /// Complex multiply matching NumPy's <c>np.multiply</c> / the <c>*</c> operator bit-for-bit —
+        /// the generalisation of <see cref="Square"/> to two distinct operands. NumPy's complex multiply
+        /// is the SIMD <c>simd_cmul</c> kernel (<c>loops_arithm_fp.dispatch.c.src</c>), a fused
+        /// <c>vfmaddsub</c>: <c>real = fused(a_re*b_re - a_im*b_im)</c>, <c>imag = fused(a_re*b_im +
+        /// a_im*b_re)</c> — and it is taken for EVERY normal layout (contiguous, strided, broadcast,
+        /// in-place, transposed; the naive scalar tail only runs on genuine src/dst overlap or a
+        /// non-loadable stride, which a fresh output never hits). The fused subtract/add is what keeps
+        /// <c>(1e-10+1e-10i)·(…)</c> cancellation and <c>1e300</c> overflow bit-identical to NumPy where
+        /// the BCL's naive <c>a_re*b_re - a_im*b_im</c> diverges by thousands of ULP (measured 14% of
+        /// random operands, up to ~2840 ULP).
+        /// </summary>
+        /// <remarks>
+        /// This must NOT be confused with the NAIVE <c>cmul</c> NumPy's <c>npy_cpow</c> uses for INTEGER
+        /// complex powers (that one is un-fused, and <c>np.power(z,2) != np.multiply(z,z)</c> in NumPy
+        /// itself) — see <c>ComplexPowNumPy</c>. Only the elementwise multiply / <c>*</c> takes this FMA
+        /// form. The lane arrangement is NumPy's <c>vfmaddsub</c> EXACTLY, and the fused/addend split is
+        /// load-bearing for the FINITE result — it must NOT be swapped the way <see cref="Square"/> can:
+        /// there <c>a_re*b_im</c> and <c>a_im*b_re</c> are the SAME product, so putting either in the
+        /// fused slot is finite-identical; for a GENERAL multiply they DIFFER, and the fused product is
+        /// evaluated to full precision while the addend is a pre-rounded product, so swapping them shifts
+        /// the last bit. NumPy fuses <c>a_re*b_re</c> (real) and <c>a_re*b_im</c> (imag), pre-rounding the
+        /// <c>a_im*·</c> products as the addend — reproduced here verbatim. Consequence: on a NaN input
+        /// the propagated NaN can differ from NumPy's (NumPy keeps the fused product's NaN, .NET's fma the
+        /// addend's), but complex-multiply NaN is NON-contractual (a binary op — the oracle tokenizes it),
+        /// so finite parity is chosen over NaN-sign parity here (unlike <see cref="Square"/>, which is
+        /// under the unary NaN-sign contract and so takes the swap). Off x86 the portable
+        /// <see cref="Math.FusedMultiplyAdd(double,double,double)"/> keeps the finite/overflow bits
+        /// identical.
+        /// </remarks>
+        /// <param name="a">Left operand.</param>
+        /// <param name="b">Right operand.</param>
+        /// <returns><c>a * b</c>, fused exactly as NumPy's <c>simd_cmul</c> computes it.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        public static Complex Multiply(Complex a, Complex b)
+        {
+            double ar = a.Real, ai = a.Imaginary, br = b.Real, bi = b.Imaginary;
+            if (Fma.IsSupported)
+            {
+                var arV = Vector128.CreateScalarUnsafe(ar);
+                // real = fused(a_re*b_re) - (a_im*b_im);  imag = fused(a_re*b_im) + (a_im*b_re)
+                // fused product a_re*b_{re,im} matches NumPy's muladdsub; the a_im*· term is the
+                // pre-rounded addend (a NumPy `ab_iiir` product), so the last bit matches simd_cmul.
+                double reOut = Fma.MultiplySubtractScalar(arV, Vector128.CreateScalarUnsafe(br), Vector128.CreateScalarUnsafe(ai * bi)).ToScalar();
+                double imOut = Fma.MultiplyAddScalar(arV, Vector128.CreateScalarUnsafe(bi), Vector128.CreateScalarUnsafe(ai * br)).ToScalar();
+                return new Complex(reOut, imOut);
+            }
+            return new Complex(
+                Math.FusedMultiplyAdd(ar, br, -(ai * bi)),
+                Math.FusedMultiplyAdd(ar, bi, ai * br));
         }
 
         /// <summary>

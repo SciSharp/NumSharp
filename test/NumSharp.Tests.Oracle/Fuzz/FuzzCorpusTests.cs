@@ -69,6 +69,17 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Reduce() => RunCorpus("reduce.jsonl");
 
+        // np.evaluate / NDExpr: fused trees over the pairwise + single layouts, every dtype, weak /
+        // strong literals, comparisons / where / min-max / logical nodes, the unary catalog, root
+        // reductions (flat + axis + keepdims) and out= (returned view + whole out base). NumPy has
+        // no fusion, so the oracle is its UNFUSED node-by-node chain — exactly the contract
+        // np.evaluate claims (per-node result_type incl. NEP50 weak literals, bit-compatible values).
+        // Grammar + node map: OpRegistry.Evaluate.cs <-> gen_oracle.gen_evaluate. Windows-CRT-pinned
+        // like the unary tier: the transcendental nodes call the same ucrtbase libm NumPy does.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Evaluate() => RunHostLibmCorpus("evaluate.jsonl");
+
         [TestMethod]
         [TestCategory("FuzzMatrix")]
         public void Where() => RunCorpus("where.jsonl");
@@ -76,6 +87,13 @@ namespace NumSharp.Tests.Fuzz
         [TestMethod]
         [TestCategory("FuzzMatrix")]
         public void Place() => RunCorpus("place.jsonl");
+
+        // np.putmask — sibling of place, but the values cursor advances by POSITION (every element),
+        // so a.flat[i] = values.flat[i % nv]. 11 dtypes x 3 value modes (scalar nv==1 / cycle nv==3 /
+        // long nv==size) x 8 layouts incl. the non-contiguous writeback path (f/transposed/strided/negstride).
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void PutMask() => RunCorpus("putmask.jsonl");
 
         // T8 linear algebra: matmul / dot / outer across the gufunc shape space (2-D, 1-D promotion,
         // batched/broadcast stacks), 6 dtypes, and C/F operand layouts.
@@ -160,6 +178,13 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Bitwise() => RunCorpus("bitwise.jsonl");
 
+        // np.gcd / np.lcm — number-theoretic binary ufuncs, integer-only. Every valid integer dtype
+        // pair × pairwise layout (bit-exact incl. signed-MIN wrap and lcm overflow wrap); Char woven
+        // via char_tier. Invalid-dtype no-loop errors are gated in errors_full.jsonl.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void GcdLcm() => RunCorpus("gcd.jsonl");
+
         // Char dtype (NumSharp-only, bit-identical to uint16) is WOVEN into the applicable tiers:
         // each Char op is generated through the uint16 NumPy proxy and relabelled uint16->char
         // (gen_oracle.char_tier), appended into its native tier file (binary_arith/divmod_power/
@@ -174,6 +199,28 @@ namespace NumSharp.Tests.Fuzz
         [TestMethod]
         [TestCategory("FuzzMatrix")]
         public void UnaryExtra() => RunCorpus("unary_extra.jsonl");
+
+        // np.sinc — sin(pi*x)/(pi*x) over every REAL dtype (bool/all-ints/Char -> float64,
+        // float16/float32/float64 preserved) × all single-array layouts. HOST-PINNED to win-amd64
+        // (RunHostLibmCorpus, like the sibling Unary tier): sinc's near-zero-crossing results
+        // (sin(pi*integer) ≈ 0) are catastrophically sensitive to the exact libm/CRT sin bits, so
+        // they reproduce bit-for-bit only on the host that generated the corpus (Inconclusive
+        // off-Windows). complex128 is deliberately absent — it amplifies the complex-sin ULP
+        // envelope past the byte-reproducible threshold (pinned by an allclose unit test instead).
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Sinc() => RunHostLibmCorpus("sinc.jsonl");
+
+        // np.i0 — modified Bessel I_0 over every REAL dtype (bool/all-ints/Char -> float64,
+        // float16/float32/float64 preserved) × all single-array layouts. HOST-PINNED to win-amd64
+        // (RunHostLibmCorpus, like the sibling Unary/Sinc tiers): the cephes routine composes exp/sqrt,
+        // so float64 (Math.Exp == win-amd64 ucrtbase) and float16 (BCL Half.Exp) reproduce bit-for-bit
+        // only on the host that generated the corpus (Inconclusive off-Windows) — float32 rides NumPy's
+        // OWN portable exp kernel but shares the tier. complex128 is absent (NumPy rejects it; the
+        // rejection is pinned by a unit test). Bit-exact vs NumPy 2.4.2 across every included dtype.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void I0() => RunHostLibmCorpus("i0.jsonl");
 
         // W4 NaN-aware reductions (T10): nansum/nanprod/nanmax/nanmin/nanmean/nanstd/nanvar/
         // nanmedian over NaN-laced float operands — must IGNORE NaN per NumPy contract.
@@ -328,6 +375,16 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void NanScan() => RunCorpus("nanscan.jsonl");
 
+        // np.unwrap: the phase-unwrapping composition (diff -> fused mod/where -> cumsum), swept over
+        // the scan layouts x every dtype x {default period, float period, discont, integer period
+        // even/odd} x axes. Values are pure arithmetic (subtract/mod/add/cumsum, no libm), so it is a
+        // PORTABLE tier — bit-exact vs NumPy 2.4.2 including the integer-preserving path, with NaN
+        // results (from the catalog's nan/inf pool) tokenized by the comparator. Complex (TypeError)
+        // and unsigned integer-period (OverflowError) are gated by np.unwrap.Test.cs, not here.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Unwrap() => RunCorpus("unwrap.jsonl");
+
         // W6 statistics (T12): median/average/ptp (axis+keepdims), count_nonzero, percentile/
         // quantile (q in {0,25,50,75,100}/{0,.25,.5,.75,1}, axis None/0/last), clip (a,min,max).
         [TestMethod]
@@ -339,6 +396,16 @@ namespace NumSharp.Tests.Fuzz
         [TestMethod]
         [TestCategory("FuzzMatrix")]
         public void Logic() => RunCorpus("logic.jsonl");
+
+        // np.real_if_close — collapse a near-real complex array to its float64 real lane (or leave it
+        // complex). Exercises BOTH outcomes across the tol modes (tol>1 => eps multiples, tol<=1 =>
+        // absolute, tol<=0 => nothing collapses) and every scan path (dense contiguous/F-contiguous,
+        // negative-stride, strided-inner gather, broadcast, 0-d, empty vacuous-all) + NaN/inf/boundary
+        // imaginary parts + non-complex passthrough. Result is pure copies of stored bits (real lane or
+        // the array unchanged), so it is host-INDEPENDENT and byte-exact everywhere (RunCorpus).
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void RealIfClose() => RunCorpus("real_if_close.jsonl");
 
         // W8 multi-output (T15): np.modf -> (fractional, integral), each output bit-compared,
         // with C-standard signed-zero/inf edges from the float pools.
@@ -361,8 +428,10 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Sort() => RunCorpus("sort.jsonl");
 
-        // Group A: np.round_/around with decimals in {0,1,2,-1} over every layout (banker's rounding;
-        // int + negative-decimals genuinely rounds to tens).
+        // Group A: np.round_/around with decimals in {-2,-1,0,1,2} over every layout and dtype (banker's
+        // rounding via the PyArray_Round port). Negative decimals genuinely round to tens/hundreds (int
+        // computes in float64 then wraps back), float16 fractional and complex dec!=0 are bit-exact, bool
+        // is float16 at dec=0 and RAISES at dec!=0 (those cells skipped by the generator, as NumPy raises).
         [TestMethod]
         [TestCategory("FuzzMatrix")]
         public void Rounding() => RunCorpus("rounding.jsonl");
@@ -391,11 +460,46 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Fft() => RunHostLibmCorpus("fft.jsonl");
 
+        // Window functions (np.bartlett/blackman/hamming/hanning/kaiser): pure float64 GENERATORS
+        // from a scalar M (kaiser also takes beta), swept over the empty/single/even/odd/multi-
+        // SIMD-chunk corners; kaiser's beta sweep crosses the Bessel i0 Chebyshev split at x == 8.
+        // The elementwise transform is fused into ONE np.evaluate pass in NumPy's exact operation
+        // order, so the result is bit-identical to NumPy's unfused ufunc chain. Host-libm gated
+        // like Fft: the trig windows call Math.Cos and kaiser's i0 calls Math.Exp (float64 == the
+        // win-amd64 ucrtbase NumPy uses; other platforms round the last bit differently), so this
+        // is HARD-GATED on Windows and INCONCLUSIVE elsewhere.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Windows() => RunHostLibmCorpus("windows.jsonl");
+
         // W12 parameter sweep: middle + negative axes (-1/-2/-3) for all reductions, ddof=1
-        // sample std/var, and order='F' ravel across C/transposed/F-contiguous sources.
+        // sample std/var, order='F' ravel across C/transposed/F-contiguous sources, and the §C1
+        // multi-axis (tuple-axis) cells for the reductions with an int[] overload
+        // (median/average/nanmedian).
         [TestMethod]
         [TestCategory("FuzzMatrix")]
         public void Params() => RunCorpus("params.jsonl");
+
+        // ndarray.* INSTANCE surface (coverage plan §D / row G0): the dual-form methods through
+        // their instance defaults (a.max(axis), a.reshape(-1), a.round(n), a.astype/view/byteswap/
+        // getfield), the instance-only members (item/tobytes/__len__/property reads), nonzero's
+        // tuple, and the IN-PLACE mutators (sort/partition/fill/put/resize) compared as
+        // [post-call view, post-call whole base buffer] — NumPy's post-call operand is the oracle.
+        // Portable: the covered methods are arithmetic/manipulation (no libm), so the tier is
+        // strict on every host exactly like Reduce/Manip.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Instance() => RunCorpus("instance.jsonl");
+
+        // np.emath scimath module (plan §A2/E5): the real->complex promotion DECISION (any(x<0),
+        // |x|>1) and the promoted complex values, over the dtype lanes whose NumPy promotion lands
+        // on complex128/float64 (int8/16/uint16/float32/float16 promote to complex64 — NumSharp
+        // has no complex64 (#569), so those lanes stay on the np.emath.Test.cs sibling suite).
+        // HOST-PINNED like Unary: the complex sqrt/log/arc family and float64 log/arccos are
+        // win-amd64 CRT-libm cells.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Emath() => RunHostLibmCorpus("emath.jsonl");
 
         // W11 operand-relationship flags (section C): input aliasing (a op a, same buffer) and
         // in-place out= (maximum/minimum/clip writing into an input operand).
@@ -506,6 +610,47 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void DecimalManip() => RunCorpus("decimal_manip.jsonl");
 
+        // G14 (2026-09-18) coverage-audit expansion — decimal is the ONLY dtype scope this whole
+        // pipeline exercises for the ops below (no other corpus file carries a decimal operand), so an
+        // unexercised branch here is a live silent-bug risk (the class that hid the G13 flat-argmax bug).
+
+        // Extended unary decimal->decimal (reciprocal/positive/fabs/rint/spacing/deg2rad/rad2deg/modf
+        // split) + signbit (->bool, strictly-negative) + round_ at decimals {-1,0,1,2} (the PyArray_Round
+        // path, DISTINCT from rint's UnaryOp.Round). All exact or portable-arithmetic -> strict tier.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void DecimalExtra() => RunCorpus("decimal_extra.jsonl");
+
+        // sqrt/cbrt/exp/log/trig/... via the kernel's EXACT (decimal)Math.X((double)v) double-bridge —
+        // the oracle replicates that bridge per logical element, so a divergence is a decimal iteration
+        // bug, not a math difference. HOST-PINNED (RunHostLibmCorpus): Math.Exp/Log/Sin/... are the
+        // win-amd64 CRT libm, so the cast-to-decimal bytes reproduce only on the authoring host
+        // (Inconclusive off-Windows — the sibling Unary/Sinc/I0 tier policy).
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void DecimalTranscend() => RunHostLibmCorpus("decimal_transcend.jsonl");
+
+        // The 16-byte gather/scatter/conditional-copy family: take/put/place/putmask/select/choose/
+        // compress/extract/take_along_axis. Only `where` was covered — yet these share the widest,
+        // least-tested byte-width-keyed copy kernels (16-byte = decimal/Complex; Complex has a NumPy
+        // oracle, decimal does not, so this is the only differential coverage of the 16-byte path).
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void DecimalSelect() => RunCorpus("decimal_select.jsonl");
+
+        // dot/inner/outer/vdot/tensordot/trace/kron — matmul was the ONLY covered product, yet each of
+        // these routes through a DIFFERENT decimal accumulate/iterate path (the same 16-byte scalar-
+        // compare/accumulate class as the argmax bug). decimal + is exact -> byte-reproducible.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void DecimalProducts() => RunCorpus("decimal_products.jsonl");
+
+        // argsort/searchsorted/unique/nonzero/flatnonzero/lexsort — the decimal compare-driven sort/
+        // search paths (Bgt/Blt on a 16-byte struct is exactly what silently mis-answered in flat argmax).
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void DecimalSearch() => RunCorpus("decimal_search.jsonl");
+
         // B9 (F26): minimum case-count floor per corpus file, ~80 % of the committed count at
         // 2026-07-07 (post G1-G5/G11/G12 regenerations). `Count > 0` alone would let a silently
         // TRUNCATED regeneration (encoding hiccup, generator early-exit, partial copy) pass the
@@ -518,8 +663,9 @@ namespace NumSharp.Tests.Fuzz
             ["astype_full.jsonl"] = 4056,
             ["astype_smoke.jsonl"] = 249,
             ["binary_arith.jsonl"] = 1296,
-            ["binary_divmod_power.jsonl"] = 793,
+            ["binary_divmod_power.jsonl"] = 1360,
             ["bitwise.jsonl"] = 590,
+            ["gcd.jsonl"] = 244,
             ["comparison.jsonl"] = 1857,
             ["creation.jsonl"] = 241,
             ["conversion.jsonl"] = 862,
@@ -536,9 +682,16 @@ namespace NumSharp.Tests.Fuzz
             ["decimal_unary.jsonl"] = 72,
             ["decimal_varstd.jsonl"] = 17,
             ["decimal_where.jsonl"] = 3,
+            // G14 coverage-audit expansion (2026-09-18): ~80% of the committed counts.
+            ["decimal_extra.jsonl"] = 45,
+            ["decimal_transcend.jsonl"] = 50,
+            ["decimal_select.jsonl"] = 8,
+            ["decimal_products.jsonl"] = 9,
+            ["decimal_search.jsonl"] = 7,
             ["dtype_text.jsonl"] = 2094,
             ["errors.jsonl"] = 8,
-            ["errors_full.jsonl"] = 650,
+            ["errors_full.jsonl"] = 720,   // +87: curated §B1 recipes (reshape/expand_dims/flip/take/put/partition/linalg/fft), 50 distinct messages
+            ["evaluate.jsonl"] = 11800,   // np.evaluate fused-tree tier (14,742 at 2026-09-08)
             ["fft.jsonl"] = 1700,
             ["groupa.jsonl"] = 237,
             ["iter.jsonl"] = 4400,
@@ -549,14 +702,16 @@ namespace NumSharp.Tests.Fuzz
             ["linalg_parity.jsonl"] = 340,   // +90: LU family (solve/inv/det/slogdet/tensorinv/tensorsolve) + matrix_power(n<0)
             ["poly.jsonl"] = 60,
             ["einsum.jsonl"] = 35,
-            ["modf.jsonl"] = 51,
+            ["modf.jsonl"] = 165,   // all non-complex lanes + char (the 59f99320 per-width promotion, dtype-spread gate)
             ["multioutput.jsonl"] = 51,
-            ["nanreduce.jsonl"] = 6692,
+            ["nanreduce.jsonl"] = 8300,   // + nanpercentile/nanquantile integer/bool degenerate lanes (dtype-spread gate)
             ["nanscan.jsonl"] = 525,   // nancumsum all 13 dtypes; nancumprod carves complex128 (host-FMA multiply)
             ["numpy_f32_kernels.jsonl"] = 140,
             ["numpy_f64_kernels.jsonl"] = 24,
-            ["out_where.jsonl"] = 3500,
-            ["params.jsonl"] = 966,
+            ["out_where.jsonl"] = 6300,   // §B2 out_scan/out_round/out_clip/out_nanarg + the f16/uint8 lanes (dtype-spread gate)
+            ["params.jsonl"] = 1190,      // +288 §C1: multi-axis median/average/nanmedian (tuple-axis int[] overloads)
+            ["instance.jsonl"] = 7500,    // §D: ndarray.* instance surface — 13 NumPy dtypes + the char proxy weave (dtype-spread gate)
+            ["emath.jsonl"] = 385,        // §A2/E5: np.emath scimath promotion (+ the unsigned lanes, dtype-spread gate)
             ["place.jsonl"] = 12,
             ["products.jsonl"] = 326,
             ["precision.jsonl"] = 80,
@@ -564,18 +719,20 @@ namespace NumSharp.Tests.Fuzz
             ["random_parity_host.jsonl"] = 86,
             ["generator_parity.jsonl"] = 68,
             ["generator_parity_host.jsonl"] = 32,
-            ["nan.jsonl"] = 100,   // NaN-parity grid (gen_nan_oracle.py): 27 complex + 3×31 float
+            ["nan.jsonl"] = 140,   // NaN-parity grid (gen_nan_oracle.py): 27 complex + 3×31 float unary + 56 §B3 binary cross-grid
             ["random_smoke.jsonl"] = 1600,
             ["reduce.jsonl"] = 9004,
-            ["rounding.jsonl"] = 665,
+            ["rounding.jsonl"] = 1372,
             ["scan.jsonl"] = 907,
+            ["sinc.jsonl"] = 338,   // sin(pi*x)/(pi*x): 12 real dtypes + Char × 26 layouts (complex excluded)
             ["sort.jsonl"] = 940,   // +102: searchsorted expansion (dup/mixed-promotion/sorter/nan/complex-lex/strided/empty)
-            ["specials.jsonl"] = 1866,
+            ["specials.jsonl"] = 1920,
             ["stat.jsonl"] = 3412,
             ["tail.jsonl"] = 1872,
             ["unary.jsonl"] = 5969,
             ["unary_extra.jsonl"] = 6052,
             ["where.jsonl"] = 75,
+            ["windows.jsonl"] = 200,
         };
 
         // Corpus tiers authored against the win-amd64 CRT libm (ucrtbase) and NumSharp's host SIMD

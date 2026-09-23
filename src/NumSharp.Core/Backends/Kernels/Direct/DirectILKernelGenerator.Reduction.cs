@@ -76,6 +76,15 @@ namespace NumSharp.Backends.Kernels
         private static Delegate GenerateTypedElementReductionKernel<TResult>(ElementReductionKernelKey key)
             where TResult : unmanaged
         {
+            // Widening integer Sum (int32→int64 / uint32→uint64): bind a hand-written SIMD helper
+            // instead of the scalar fallback that the same-type SIMD gate (CanUseReductionSimd)
+            // forces whenever the accumulator is wider than the input. Integer addition is
+            // associative + commutative, so the multi-accumulator SIMD sum is BIT-EXACT with the
+            // sequential scalar sum and with NumPy; every element is widened to 64-bit BEFORE
+            // adding, so no lane can overflow for any input. See Reduction.Widening.cs.
+            if (TryGetWideningSumDelegate<TResult>(key, out var wideningDelegate))
+                return wideningDelegate;
+
             // TypedElementReductionKernel<TResult> signature:
             // TResult(void* input, long* strides, long* shape, int ndim, long totalSize)
             var dm = new DynamicMethod(

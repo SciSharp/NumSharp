@@ -63,9 +63,9 @@ namespace NumSharp
             NDArray stddev = np.sqrt(np.real(d));
 
             // c /= stddev[:, None]; c /= stddev[None, :] — NumPy performs BOTH divisions in
-            // place, so preserve that ufunc/out structure. The underlying complex division still
-            // inherits the tightly bounded npy_cdivide-vs-System.Numerics 1-ULP difference recorded
-            // by the oracle; changing allocation alone cannot remove that algorithmic delta.
+            // place, so preserve that ufunc/out structure. The underlying complex division is now
+            // bit-exact vs NumPy (ComplexDivideNumPy ports CDOUBLE_divide), so any residual complex
+            // corrcoef divergence comes from cov's managed complex GEMM (np.dot), not this division.
             np.divide(c, stddev.reshape(stddev.size, 1), @out: c);
             np.divide(c, stddev.reshape(1, stddev.size), @out: c);
 

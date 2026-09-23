@@ -12,6 +12,12 @@ Usage:
 
 Excludes floor_divide/mod/power (tracked separately as [OpenBugs]) so the random gate stays a
 pure "should be bit-exact or documented-Misaligned" check.
+
+Unlike the committed corpora, the soak RECOMPUTES `expected` on whichever host runs it (the nightly
+job is ubuntu-latest). So its operands must never carry a value whose NumPy result is host-defined:
+an undefined float->integer conversion, or a non-finite complex input to an op NumPy hands to the
+platform's C99 complex library. assert_portable() audits both before the corpus is written; the
+two comment blocks below say why each class is host-defined.
 """
 import json
 import os
@@ -103,20 +109,84 @@ def _defuse_integer_reciprocal(base):
         base[...] = np.where(base == 0, 1, base)
 
 
+# ---------------------------------------------------------------------------
+# Host-defined complex results — the second value class this fuzzer must not emit.
+#
+# For these complex128 unary ufuncs NumPy does not compute the answer itself. It calls the
+# PLATFORM's C99 complex library, and C99 Annex G leaves the SIGN of many NaN and infinite results
+# of a non-finite argument unspecified (csinh(+inf + i*inf) = +-inf + i*NaN, "sign unspecified",
+# and every "raise invalid, return NaN" slot). So the bits depend on which library answered:
+#   - Linux wheels: glibc's csqrt/clog/cexp/csin/ccos/ctan.
+#   - The win-amd64 reference wheel: UCRT's cexp/csin/ccos/ctan, and NumPy's own msun ports for
+#     csqrt/clog, which npy_config.h blocklists under _MSC_VER.
+# NumSharp reproduces the win-amd64 answers bit-for-bit, NaN sign included, and the harness holds
+# them to it (ComplexNanContractOps, raw-byte NaN compare on x64). A corpus recomputed on Linux
+# therefore reports glibc's conventions as NumSharp bugs. That is exactly what the nightly soak did
+# on every seed from 2026-09-06, the day that contract reached master (PR #628): ~650 of 200000
+# cases per seed, all complex sqrt/log/exp/sin/cos/tan with a NaN or inf component. Diffing one
+# seed's corpus generated on both hosts showed those same operands, differing only in NaN signs
+# (2642 cases, most of them tokenized reductions), in the sign of infinities like
+# csin -> (+nan, -inf) vs (+nan, +inf), and in last-bit libm rounding.
+#
+# From a FINITE argument these functions are fully specified (overflow signs follow sin/cos of the
+# finite components), so defusing replaces only the non-finite COMPONENTS, with finite values of the
+# pool (overflow edges like 1e20 and 3.5e38 included). The deterministic corpora keep the non-finite
+# complex edges on purpose: the unary/specials/nan tiers commit win-amd64 bytes and replay them, so
+# the NaN-sign contract stays gated there. Ops NumPy computes itself (square, reciprocal, negative,
+# conjugate, sign, ...) agree across hosts and keep their non-finite inputs here.
+# ---------------------------------------------------------------------------
+
+# The complex128 unary ops of this fuzzer's pool whose loop is the platform C99 complex library.
+COMPLEX_LIBM_UNARY = frozenset({"sqrt", "log", "exp", "sin", "cos", "tan"})
+
+
+def _finite_pool(real_dtype):
+    """`_FLOAT_POOL`'s FINITE values at `real_dtype`, the replacements `_defuse_complex_nonfinite` uses."""
+    cand = np.array(_FLOAT_POOL, dtype=np.float64).astype(real_dtype)
+    keep = cand[np.isfinite(cand)]
+    return keep if keep.size else np.zeros(1, dtype=real_dtype)
+
+
+def _defuse_complex_nonfinite(base):
+    """Rewrite, in place, every NaN/inf COMPONENT of a complex `base` with a finite pool value.
+
+    `base` is the C-contiguous buffer the operand view aliases, so repairing it repairs every view
+    of it (strided, reversed, transposed alike). The real and imaginary parts are repaired through
+    their own writable views, and only where they are non-finite, so a finite component (including
+    the pool's -0.0 and its overflow edges) survives untouched. Building a replacement complex
+    number instead could reintroduce a NaN (`1j * nan` is `nan + nan*j`).
+    """
+    if base.dtype.kind != "c":
+        return
+    for part in (base.real, base.imag):
+        ok = np.isfinite(part)
+        if not ok.all():
+            reps = np.resize(_finite_pool(part.dtype), base.size).reshape(base.shape)
+            part[...] = np.where(ok, part, reps)
+
+
 def assert_portable(cases):
-    """Raise if an undefined float->integer conversion reached the corpus.
+    """Raise if a host-defined value reached the corpus: an undefined float->integer conversion,
+    or a non-finite complex input to a C99-complex-library op (`COMPLEX_LIBM_UNARY`).
 
     Runs on the SERIALIZED operand bytes, so it audits what the soak will actually replay rather
     than what the generator meant to emit — and it sits outside the per-case `except Exception`
-    that would otherwise swallow the complaint.
+    that would otherwise swallow the complaint. It audits the whole serialized BUFFER, a superset
+    of the view, so a non-finite value is caught even where a view would skip it.
     """
     for c in cases:
         op = c["op"]
-        if op not in ("astype", "reciprocal"):
+        if op not in ("astype", "reciprocal") and op not in COMPLEX_LIBM_UNARY:
             continue
         o = c["operands"][0]
         src = np.dtype(o["dtype"])
         vals = np.frombuffer(bytes.fromhex(o["buffer"]), dtype=src)
+        if op in COMPLEX_LIBM_UNARY:
+            if src.kind == "c" and not (np.isfinite(vals.real) & np.isfinite(vals.imag)).all():
+                raise AssertionError(
+                    f"{c['id']}: non-finite complex input to {op} reached the corpus; the NaN/inf "
+                    f"signs of its result are this host's C99 complex library, not a NumPy contract")
+            continue
         if op == "astype":
             dst = np.dtype(c["params"]["dtype"])
             if src.kind in "fc" and dst.kind in "iu" and not _cast_defined(vals, dst).all():
@@ -202,6 +272,8 @@ def gen_random(seed, count):
                 opn = rng.choice(list(G.UNARY_OPS))
                 if opn == "reciprocal":
                     _defuse_integer_reciprocal(b)       # (T)(1.0/0) is an undefined conversion
+                elif opn in COMPLEX_LIBM_UNARY:
+                    _defuse_complex_nonfinite(b)        # NaN/inf signs come from the host's C99 library
                 cases.append(_case(opn, [describe(b, v)], G.UNARY_OPS[opn](v), len(cases)))
             elif kind == "reduce":                       # G10: flat reductions over random views
                 dt = rng.choice(DTYPES)

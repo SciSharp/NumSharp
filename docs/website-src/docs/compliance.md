@@ -292,7 +292,15 @@ The complete 18-callable `np.fft` inventory is implemented in Core: complex, rea
 of NumPy 2.4.2's vendored pocketfft engine; it does not require OpenBLAS.
 
 The double/`complex128` path preserves pocketfft's operation order and is covered by byte-parity
-oracles across contiguous, transposed, strided, negative-stride, and broadcast-read inputs.
+oracles across contiguous, transposed, strided, negative-stride, and broadcast-read inputs. NumSharp
+evaluates pocketfft the way NumPy's x86-64 wheels do: each product rounded separately, with twiddle
+factors from the platform's math library. On x86-64 it therefore matches the NumPy running beside it,
+checked live on Windows and Linux. NumPy's own arm64 wheels are the exception. They are compiled with
+the compiler's default floating-point contraction for a baseline that has fused multiply-add, so
+pocketfft's twiddle and butterfly multiply-adds round once there. Most bins of an arm64 NumPy transform
+sit an ULP or so from NumSharp's, which is the literal evaluation. Because the twiddles come from the
+platform's math library, whose last bits differ between operating systems, a large transform's exact
+bits can also differ between hosts. NumSharp's are no exception.
 NumSharp also has a single-precision pocketfft engine, but it has no `complex64` storage dtype:
 `float16`/`float32` transform results are therefore exposed as `complex128`, where NumPy exposes
 `complex64`. The FFT oracle treats that as a documented dtype divergence while still checking the
@@ -350,9 +358,9 @@ scalar, and dtype edge cases.
 
 ## References
 
-- [NumPy API Coverage & Support](coverage-support-dashboard.md) — generated compiled-API inventory
-- [Unit Tests & Oracle](tests-oracle-dashboard.md) — generated correctness-evidence inventory
-- [Dtypes](dtypes.md) — NumSharp dtype and casting details
+- [NumPy API Coverage & Support](coverage-support-dashboard.md) - generated compiled-API inventory
+- [Unit Tests & Oracle](tests-oracle-dashboard.md) - generated correctness-evidence inventory
+- [Dtypes](dtypes.md) - NumSharp dtype and casting details
 - [NumPy 2.0 migration guide](https://numpy.org/doc/stable/numpy_2_0_migration_guide.html)
 - [NEP 50: Promotion rules for Python scalars](https://numpy.org/neps/nep-0050-scalar-promotion.html)
 - [NEP 52: Python API cleanup for NumPy 2.0](https://numpy.org/neps/nep-0052-python-api-cleanup.html)

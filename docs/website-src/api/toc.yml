@@ -7,6 +7,12 @@ items:
   - uid: NumSharp.ArrayFlags
     name: ArrayFlags
     type: Enum
+  - uid: NumSharp.ArrayMethod
+    name: ArrayMethod
+    type: Class
+  - uid: NumSharp.ArrayMethodContext
+    name: ArrayMethodContext
+    type: Class
   - uid: NumSharp.AttributeError
     name: AttributeError
     type: Class
@@ -22,6 +28,12 @@ items:
   - uid: NumSharp.BitGenerator
     name: BitGenerator
     type: Class
+  - uid: NumSharp.BuiltinCastingImpl
+    name: BuiltinCastingImpl
+    type: Class
+  - uid: NumSharp.CastingImpl
+    name: CastingImpl
+    type: Class
   - uid: NumSharp.Char8
     name: Char8
     type: Struct
@@ -31,9 +43,36 @@ items:
   - uid: NumSharp.DType
     name: DType
     type: Class
+  - uid: NumSharp.DTypeCasting
+    name: DTypeCasting
+    type: Class
+  - uid: NumSharp.DTypeFlags
+    name: DTypeFlags
+    type: Enum
+  - uid: NumSharp.DTypeMeta
+    name: DTypeMeta
+    type: Class
+  - uid: NumSharp.DTypePromotion
+    name: DTypePromotion
+    type: Class
+  - uid: NumSharp.DTypePromotionError
+    name: DTypePromotionError
+    type: Class
+  - uid: NumSharp.DTypeRegistry
+    name: DTypeRegistry
+    type: Class
   - uid: NumSharp.DateTime64
     name: DateTime64
     type: Struct
+  - uid: NumSharp.DatetimeDTypeMeta
+    name: DatetimeDTypeMeta
+    type: Class
+  - uid: NumSharp.DatetimeMetaData
+    name: DatetimeMetaData
+    type: Struct
+  - uid: NumSharp.DatetimeTimedeltaCastingImpl
+    name: DatetimeTimedeltaCastingImpl
+    type: Class
   - uid: NumSharp.EinsumPath
     name: EinsumPath
     type: Struct
@@ -70,6 +109,12 @@ items:
   - uid: NumSharp.KeyError
     name: KeyError
     type: Class
+  - uid: NumSharp.LegacyBuiltinDTypeMeta
+    name: LegacyBuiltinDTypeMeta
+    type: Class
+  - uid: NumSharp.LegacyWrappingCastingImpl
+    name: LegacyWrappingCastingImpl
+    type: Class
   - uid: NumSharp.LinAlgError
     name: LinAlgError
     type: Class
@@ -97,6 +142,12 @@ items:
   - uid: NumSharp.NDArrayFlags
     name: NDArrayFlags
     type: Class
+  - uid: NumSharp.NDArrayNetInterop
+    name: NDArrayNetInterop
+    type: Class
+  - uid: NumSharp.NDBorrowedAttribute
+    name: NDBorrowedAttribute
+    type: Class
   - uid: NumSharp.NDScope
     name: NDScope
     type: Class
@@ -120,6 +171,9 @@ items:
     type: Class
   - uid: NumSharp.NPTypeKind
     name: NPTypeKind
+    type: Enum
+  - uid: NumSharp.NPY_DATETIMEUNIT
+    name: NPY_DATETIMEUNIT
     type: Enum
   - uid: NumSharp.NPY_SCALARKIND
     name: NPY_SCALARKIND
@@ -154,6 +208,12 @@ items:
   - uid: NumSharp.PolyfitResult
     name: PolyfitResult
     type: Struct
+  - uid: NumSharp.PyScalarDTypeMeta
+    name: PyScalarDTypeMeta
+    type: Class
+  - uid: NumSharp.PyScalarKind
+    name: PyScalarKind
+    type: Enum
   - uid: NumSharp.RuntimeError
     name: RuntimeError
     type: Class
@@ -171,6 +231,15 @@ items:
     type: Struct
   - uid: NumSharp.TensorEngine
     name: TensorEngine
+    type: Class
+  - uid: NumSharp.TensorEngine.Threading
+    name: TensorEngine.Threading
+    type: Class
+  - uid: NumSharp.TensorEngine.Threading.Variable
+    name: TensorEngine.Threading.Variable
+    type: Class
+  - uid: NumSharp.TimeToTimeCastingImpl
+    name: TimeToTimeCastingImpl
     type: Class
   - uid: NumSharp.TypeError
     name: TypeError
@@ -199,6 +268,9 @@ items:
   - uid: NumSharp.np.FlatIterator
     name: np.FlatIterator
     type: Class
+  - uid: NumSharp.np.FlatRefIter`1
+    name: np.FlatRefIter<T>
+    type: Struct
   - uid: NumSharp.np.IndexExpression
     name: np.IndexExpression
     type: Class
@@ -223,12 +295,27 @@ items:
   - uid: NumSharp.np.NDEnumerate
     name: np.NDEnumerate
     type: Class
+  - uid: NumSharp.np.NDEnumerateRef`1
+    name: np.NDEnumerateRef<T>
+    type: Struct
+  - uid: NumSharp.np.NDEnumerateRef`1.Entry
+    name: np.NDEnumerateRef<T>.Entry
+    type: Struct
+  - uid: NumSharp.np.NDEnumerateRef`1.Enumerator
+    name: np.NDEnumerateRef<T>.Enumerator
+    type: Struct
   - uid: NumSharp.np.NDEnumerate`1
     name: np.NDEnumerate<T>
     type: Class
   - uid: NumSharp.np.NDIndex
     name: np.NDIndex
     type: Class
+  - uid: NumSharp.np.NDIndexSpans
+    name: np.NDIndexSpans
+    type: Struct
+  - uid: NumSharp.np.NDIndexSpans.Enumerator
+    name: np.NDIndexSpans.Enumerator
+    type: Struct
   - uid: NumSharp.np.NDIterator
     name: np.NDIterator
     type: Class
@@ -262,6 +349,9 @@ items:
   - uid: NumSharp.np.UniqueResult
     name: np.UniqueResult
     type: Struct
+  - uid: NumSharp.np.dtypes
+    name: np.dtypes
+    type: Class
   - uid: NumSharp.np.linalg
     name: np.linalg
     type: Class
@@ -772,6 +862,12 @@ items:
   - uid: NumSharp.Backends.Kernels.IndicesKernel
     name: IndicesKernel
     type: Delegate
+  - uid: NumSharp.Backends.Kernels.InnerLoopKernelKey
+    name: InnerLoopKernelKey
+    type: Struct
+  - uid: NumSharp.Backends.Kernels.InnerLoopKernelKey.KernelFamily
+    name: InnerLoopKernelKey.KernelFamily
+    type: Enum
   - uid: NumSharp.Backends.Kernels.MatMul2DKernel`1
     name: MatMul2DKernel<T>
     type: Delegate
@@ -781,14 +877,23 @@ items:
   - uid: NumSharp.Backends.Kernels.MixedTypeKernelKey
     name: MixedTypeKernelKey
     type: Struct
+  - uid: NumSharp.Backends.Kernels.ND2DElementwiseKernel
+    name: ND2DElementwiseKernel
+    type: Delegate
   - uid: NumSharp.Backends.Kernels.NonZeroPerDimKernel
     name: NonZeroPerDimKernel
     type: Delegate
   - uid: NumSharp.Backends.Kernels.PlaceKernel
     name: PlaceKernel
     type: Delegate
+  - uid: NumSharp.Backends.Kernels.PutFlatKernel
+    name: PutFlatKernel
+    type: Delegate
   - uid: NumSharp.Backends.Kernels.PutKernel
     name: PutKernel
+    type: Delegate
+  - uid: NumSharp.Backends.Kernels.PutMaskKernel
+    name: PutMaskKernel
     type: Delegate
   - uid: NumSharp.Backends.Kernels.RavelMultiIndexKernel
     name: RavelMultiIndexKernel
@@ -819,6 +924,9 @@ items:
     type: Delegate
   - uid: NumSharp.Backends.Kernels.TakeAlongAxisKernel
     name: TakeAlongAxisKernel
+    type: Delegate
+  - uid: NumSharp.Backends.Kernels.TakeFlatKernel
+    name: TakeFlatKernel
     type: Delegate
   - uid: NumSharp.Backends.Kernels.TakeKernel
     name: TakeKernel
@@ -894,6 +1002,9 @@ items:
   - uid: NumSharp.Backends.Unmanaged.UnmanagedMemoryBlock`1
     name: UnmanagedMemoryBlock<T>
     type: Struct
+  - uid: NumSharp.Backends.Unmanaged.UnmanagedMemoryManager`1
+    name: UnmanagedMemoryManager<T>
+    type: Class
 - uid: NumSharp.Backends.Unmanaged.Pooling
   name: NumSharp.Backends.Unmanaged.Pooling
   type: Namespace
@@ -1053,6 +1164,9 @@ items:
     type: Class
   - uid: NumSharp.Utilities.NDIntegerPower
     name: NDIntegerPower
+    type: Class
+  - uid: NumSharp.Utilities.NDLogAddExpMath
+    name: NDLogAddExpMath
     type: Class
   - uid: NumSharp.Utilities.NDOffsetIncrementor
     name: NDOffsetIncrementor

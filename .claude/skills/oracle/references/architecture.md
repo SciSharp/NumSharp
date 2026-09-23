@@ -129,7 +129,21 @@ The op corpus + `OpRegistry` are reused for a DIFFERENT claim — no NumPy refer
   every result disposed and asserts the buffer pool's takes==returns. A surplus take is an undisposed intermediate; a
   surplus return is an out-of-pool result buffer. The `KnownEscapes` registry is now **EMPTY** — every op is gated at
   ZERO — so an op that leaks a pooled buffer fails here even when its values are bit-exact. `[DoNotParallelize]`
-  (reads process-global pool counters, shared with `ScopeAudit.cs`).
+  (reads process-global pool counters, shared with `ScopeAudit.cs`). Three corpus FAMILIES are replayed —
+  ordinary op tiers, masked-array tiers (`ma_*`, `.Families.cs`) and index tiers (`index_*`) — each on its success
+  AND error paths (a NumPy-raising case must throw without stranding a buffer). Floors sit 5% under the measured
+  counts (2026-09-23: 213,264 success + 9,123 error paths, identical net10.0/net8.0).
+- `UndisposedIntermediateTests.Backend.cs` — the same ordinary tiers with OpenBLAS installed (threads=1): the LAPACK
+  family (NSE without a backend), the BLAS seams, the Interop glue. `Inconclusive` where no library loads.
+- `UndisposedIntermediateTests.Catalogue.cs` + `LeakCatalogue{,.NDArray,.Masked}.cs` — direct invocations of every
+  public member NO corpus row reaches (np.* conveniences, Array-API linalg forms, ndarray/`NDArray<T>`/`NDMaskedArray`
+  methods, all operators, object surfaces + indexers), measured with the same protocol against a shared
+  `LeakFixture`. `T(...)` = always raises (error path); an entry that cannot run is a harness error (red).
+- `UndisposedIntermediateTests.Properties.cs` — every public property/field read (settable ones round-trip written)
+  on targets built INSIDE the measured region, so a getter caching an allocation on its owner is caught.
+- `LeakSurfaceCoverageTests.cs` — the COMPLETENESS gate: every `LeakSurface` member (ApiInventory modules + operators
+  + object surfaces, 1,348 members) must be credited by a MEASUREMENT of one of the four runs above. Declared but
+  unmeasured never counts; GC-inconclusive counts (never red); backend-skipped counts only where no library loads.
 - `NativeAllocationChokepointTests.cs` — the STATIC complement: every raw `NativeMemory.*` / `Marshal.AllocHGlobal` /
   `VirtualAlloc*` site in `NumSharp.Core` must be a known chokepoint (allowlist pins file → site count). A new raw
   allocation fails until it is routed through the pools or consciously allowlisted. Needs the source tree
@@ -145,8 +159,9 @@ The op corpus + `OpRegistry` are reused for a DIFFERENT claim — no NumPy refer
 - `OpenBugs.FuzzGate.cs` — `MisalignedRegistryTightnessTests` (each excuse branch pinned from both sides — a gross
   regression in the neighbouring cell must NOT be excused) + `FuzzGateRegressionTests` (real bugs the tightening
   exposed, fixed-in-src or pinned `[OpenBugs]`).
-- `fuzz_random.py` — the nightly-soak seeded fuzzer (`.github/workflows/fuzz-soak.yml`), ~1M fresh cases/night;
-  shrunk failures get pinned under `Fuzz/corpus/regressions/`.
+- `fuzz_random.py` — the nightly-soak seeded fuzzer (`.github/workflows/fuzz-soak.yml`): one fixed seed (a
+  deterministic canary) + nine fresh random seeds × 200K cases, ~1.8M fresh cases/night; shrunk failures get
+  pinned under `Fuzz/corpus/regressions/`.
 
 ## Where the corpus lives and how it reaches tests
 

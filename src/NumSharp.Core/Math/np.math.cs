@@ -35,6 +35,45 @@ namespace NumSharp
             => x1.TensorEngine.Mod(x1, x2);
 
         /// <summary>
+        /// Return element-wise remainder of division (the floored remainder — result has the same
+        /// sign as the divisor, Python's <c>%</c>). In NumPy <c>remainder</c> IS <c>mod</c> (the same
+        /// ufunc), so this is a straight alias of <see cref="mod(NDArray, NDArray, NDArray, NDArray, DType)"/>.
+        /// The complement <see cref="fmod(NDArray, NDArray, NDArray, NDArray, DType)"/> uses the
+        /// dividend's sign instead.
+        /// </summary>
+        /// <param name="@out">A location into which the result is stored (NumPy ufunc out=; returned as-is).</param>
+        /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
+        /// <param name="dtype">Explicit loop dtype (NumPy ufunc dtype=).</param>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.remainder.html</remarks>
+        public static NDArray remainder(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
+            => x1.TensorEngine.Mod(x1, x2, dtype, @out, where);
+
+        public static NDArray remainder(NDArray x1, float x2)
+            => x1.TensorEngine.Mod(x1, x2);
+
+        /// <summary>
+        /// Return the element-wise C-library remainder of division. Unlike
+        /// <see cref="mod(NDArray, NDArray, NDArray, NDArray, DType)"/> /
+        /// <see cref="remainder(NDArray, NDArray, NDArray, NDArray, DType)"/> (floored — result has the
+        /// DIVISOR's sign), <c>fmod</c> uses truncated division so the result has the DIVIDEND's sign:
+        /// <c>fmod(-7, 3) == -1</c> where <c>mod(-7, 3) == 2</c>. Integer inputs stay integer (NEP50;
+        /// bool -> int8); floats follow C <c>fmod</c> (<c>fmod(x, 0) == NaN</c>, etc.). Complex is not
+        /// supported (NumPy has no complex fmod loop).
+        /// Mirrors NumPy's ufunc signature: <c>fmod(x1, x2, /, out=None, *, where=True, dtype=None)</c>.
+        /// </summary>
+        /// <param name="@out">A location into which the result is stored (NumPy ufunc out=; returned as-is).</param>
+        /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
+        /// <param name="dtype">Explicit loop dtype (NumPy ufunc dtype=): computation runs in this dtype.</param>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fmod.html</remarks>
+        public static NDArray fmod(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
+            => x1.TensorEngine.Fmod(x1, x2, dtype, @out, where);
+
+        // Scalar / array-like divisor convenience (the a % obj analog; asanyarray mints the operand).
+        [NDScoped]
+        public static NDArray fmod(NDArray x1, object x2)
+            => x1.TensorEngine.Fmod(x1, np.asanyarray(x2));
+
+        /// <summary>
         /// Returns the discrete, linear convolution of two one-dimensional sequences.
         ///
         /// The convolution operator is often seen in signal processing, where it models the effect of a linear time-invariant system on a signal[1]. In probability theory, the sum of two independent random variables is distributed according to the convolution of their individual distributions.

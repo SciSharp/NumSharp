@@ -1,6 +1,6 @@
 # Buffering, Arrays and Unmanaged Memory
 
-NumSharp stores all array data in unmanaged memory for maximum performance. This design choice—borrowed from NumPy's architecture—enables zero-copy interop with native libraries, efficient memory-mapped file access, and predictable memory layout for SIMD operations.
+NumSharp stores all array data in unmanaged memory for maximum performance. This design choice-borrowed from NumPy's architecture-enables zero-copy interop with native libraries, efficient memory-mapped file access, and predictable memory layout for SIMD operations.
 
 This page explains how to create arrays from existing buffers without copying, how to control who owns and frees the memory, and how memory flows through NumSharp.
 
@@ -12,7 +12,7 @@ This page explains how to create arrays from existing buffers without copying, h
 
 **Predictable Layout.** Managed arrays can be moved by the garbage collector at any time. Unmanaged memory stays put, which is essential when passing pointers to native libraries or GPU drivers.
 
-**Reduced GC Overhead.** Large managed arrays cause GC pressure and can trigger expensive collections. Unmanaged memory avoids this—though NumSharp still informs the GC about allocation sizes so it can schedule collections appropriately.
+**Reduced GC Overhead.** Large managed arrays cause GC pressure and can trigger expensive collections. Unmanaged memory avoids this-though NumSharp still informs the GC about allocation sizes so it can schedule collections appropriately.
 
 **Interop Efficiency.** When calling into native code (BLAS, CUDA, image processing libraries), unmanaged memory can be passed directly without marshaling.
 
@@ -48,7 +48,7 @@ User Code
 
 **External APIs** are what you interact with: `np.frombuffer()`, `np.array()`, and the `NDArray` constructors. These APIs hide the complexity of memory management behind sensible defaults.
 
-**Internal Infrastructure** handles the low-level details: pinning managed arrays so the GC won't move them, tracking ownership so memory gets freed at the right time, and managing the raw pointers. You don't need to interact with these directly—the external APIs handle it for you.
+**Internal Infrastructure** handles the low-level details: pinning managed arrays so the GC won't move them, tracking ownership so memory gets freed at the right time, and managing the raw pointers. You don't need to interact with these directly-the external APIs handle it for you.
 
 ### GC Pressure Tracking
 
@@ -165,7 +165,7 @@ ProcessData(arr);
 NativeLib.FreeData(nativeBuffer);
 ```
 
-This is appropriate when you're borrowing memory temporarily. You must ensure the native buffer outlives the NDArray—if the native code frees the memory while NumSharp is using it, you'll get crashes or corruption.
+This is appropriate when you're borrowing memory temporarily. You must ensure the native buffer outlives the NDArray-if the native code frees the memory while NumSharp is using it, you'll get crashes or corruption.
 
 **Transfer ownership (NumSharp frees):**
 
@@ -213,7 +213,7 @@ var arr = np.frombuffer(memory, typeof(float));
 
 If the Memory is backed by an array (the common case), NumSharp creates a view. If it's backed by something else, NumSharp copies.
 
-**ReadOnlySpan<byte>** always requires a copy because spans can't be pinned—they might be stack-allocated:
+**ReadOnlySpan<byte>** always requires a copy because spans can't be pinned-they might be stack-allocated:
 
 ```csharp
 ReadOnlySpan<byte> span = stackalloc byte[16];
@@ -324,7 +324,7 @@ GC.Collect();
 // Eventually: buffer is unpinned, can be GC'd normally
 ```
 
-You don't need to do anything special—the .NET garbage collector handles it. But be aware that pinned memory can cause heap fragmentation if you have many long-lived pinned arrays.
+You don't need to do anything special-the .NET garbage collector handles it. But be aware that pinned memory can cause heap fragmentation if you have many long-lived pinned arrays.
 
 ### Native Memory Without Ownership
 
@@ -336,7 +336,7 @@ var arr = np.frombuffer(ptr, 1024, typeof(float));
 // NumSharp does NOT own this memory
 ```
 
-The NDArray will use this memory, but when the NDArray is garbage collected, nothing happens to the native memory. It's your responsibility to free it at the appropriate time—which must be after all NDArrays viewing it are gone.
+The NDArray will use this memory, but when the NDArray is garbage collected, nothing happens to the native memory. It's your responsibility to free it at the appropriate time-which must be after all NDArrays viewing it are gone.
 
 ### Native Memory With Ownership Transfer
 
@@ -350,7 +350,7 @@ var arr = np.frombuffer(ptr, 1024, typeof(float),
 
 Now when `arr` is garbage collected, NumSharp calls your dispose action. This happens during finalization, which means:
 
-1. It's non-deterministic—you don't know exactly when
+1. It's non-deterministic-you don't know exactly when
 2. It will eventually happen (unless the process exits first)
 3. Don't rely on order between multiple finalizers
 
@@ -406,10 +406,10 @@ var values = np.frombuffer(networkData, "<i4");
 ```
 
 The prefix indicates byte order:
-- `>` or `!` — Big-endian (most significant byte first)
-- `<` — Little-endian (least significant byte first)
-- `=` — Native endian (whatever the CPU uses)
-- `|` — Not applicable (single-byte types)
+- `>` or `!` - Big-endian (most significant byte first)
+- `<` - Little-endian (least significant byte first)
+- `=` - Native endian (whatever the CPU uses)
+- `|` - Not applicable (single-byte types)
 
 **Important:** Big-endian conversion requires a copy because NumSharp must swap the bytes. Little-endian on a little-endian system creates a view.
 

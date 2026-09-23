@@ -76,17 +76,18 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     <see cref="NPTypeCode.Decimal"/> (no ONNX type — convert to Double first; the array-producing
         ///     verbs do so automatically) or <see cref="NPTypeCode.Complex"/> (ORT accepts no complex tensors).
         /// </exception>
-        public static TensorElementType ToTensorElementType(NPTypeCode code)
+        public static TensorElementType ToTensorElementType(DType dtype)
         {
-            if (!TryToTensorElementType(code, out TensorElementType type))
+            NPTypeCode code = (dtype ?? throw new ArgumentNullException(nameof(dtype))).GetTypeCode();
+            if (!TryToTensorElementType(dtype, out TensorElementType type))
                 throw new NotSupportedException(UnsupportedExportMessage(code));
             return type;
         }
 
         /// <summary><see cref="ToTensorElementType"/> without the throw; <c>false</c> for Decimal / Complex.</summary>
-        public static bool TryToTensorElementType(NPTypeCode code, out TensorElementType type)
+        public static bool TryToTensorElementType(DType dtype, out TensorElementType type)
         {
-            switch (code)
+            switch (dtype?.GetTypeCode())
             {
                 case NPTypeCode.Boolean: type = TensorElementType.Bool; return true;
                 case NPTypeCode.Byte: type = TensorElementType.UInt8; return true;
@@ -116,29 +117,29 @@ namespace NumSharp.Interop.OnnxRuntime
         /// </exception>
         public static NPTypeCode FromTensorElementType(TensorElementType type)
         {
-            if (!TryFromTensorElementType(type, out NPTypeCode code))
+            if (!TryFromTensorElementType(type, out DType dtype))
                 throw new NotSupportedException(UnsupportedImportMessage(type));
-            return code;
+            return dtype.GetTypeCode();
         }
 
         /// <summary><see cref="FromTensorElementType"/> without the throw.</summary>
-        public static bool TryFromTensorElementType(TensorElementType type, out NPTypeCode code)
+        public static bool TryFromTensorElementType(TensorElementType type, out DType dtype)
         {
             switch (type)
             {
-                case TensorElementType.Bool: code = NPTypeCode.Boolean; return true;
-                case TensorElementType.UInt8: code = NPTypeCode.Byte; return true;
-                case TensorElementType.Int8: code = NPTypeCode.SByte; return true;
-                case TensorElementType.Int16: code = NPTypeCode.Int16; return true;
-                case TensorElementType.UInt16: code = NPTypeCode.UInt16; return true;
-                case TensorElementType.Int32: code = NPTypeCode.Int32; return true;
-                case TensorElementType.UInt32: code = NPTypeCode.UInt32; return true;
-                case TensorElementType.Int64: code = NPTypeCode.Int64; return true;
-                case TensorElementType.UInt64: code = NPTypeCode.UInt64; return true;
-                case TensorElementType.Float16: code = NPTypeCode.Half; return true;
-                case TensorElementType.Float: code = NPTypeCode.Single; return true;
-                case TensorElementType.Double: code = NPTypeCode.Double; return true;
-                default: code = default; return false;                                   // String, BFloat16, Complex64/128, DataTypeMax
+                case TensorElementType.Bool: dtype = NPTypeCode.Boolean; return true;
+                case TensorElementType.UInt8: dtype = NPTypeCode.Byte; return true;
+                case TensorElementType.Int8: dtype = NPTypeCode.SByte; return true;
+                case TensorElementType.Int16: dtype = NPTypeCode.Int16; return true;
+                case TensorElementType.UInt16: dtype = NPTypeCode.UInt16; return true;
+                case TensorElementType.Int32: dtype = NPTypeCode.Int32; return true;
+                case TensorElementType.UInt32: dtype = NPTypeCode.UInt32; return true;
+                case TensorElementType.Int64: dtype = NPTypeCode.Int64; return true;
+                case TensorElementType.UInt64: dtype = NPTypeCode.UInt64; return true;
+                case TensorElementType.Float16: dtype = NPTypeCode.Half; return true;
+                case TensorElementType.Float: dtype = NPTypeCode.Single; return true;
+                case TensorElementType.Double: dtype = NPTypeCode.Double; return true;
+                default: dtype = null; return false;                                     // String, BFloat16, Complex64/128, DataTypeMax
             }
         }
 
@@ -147,8 +148,9 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     <see cref="System.Half"/> becomes ORT's <see cref="Float16"/>, <see cref="char"/> becomes
         ///     <see cref="ushort"/>; <c>null</c> for Decimal / Complex.
         /// </summary>
-        public static Type ToTensorElementClrType(NPTypeCode code)
+        public static Type ToTensorElementClrType(DType dtype)
         {
+            NPTypeCode code = (dtype ?? throw new ArgumentNullException(nameof(dtype))).GetTypeCode();
             switch (code)
             {
                 case NPTypeCode.Boolean: return typeof(bool);
@@ -237,7 +239,7 @@ namespace NumSharp.Interop.OnnxRuntime
             {
                 case TensorElementType.String:
                     return "ORT string tensors have no NumSharp dtype (NumSharp has no string/object arrays). Read them with " +
-                           "OrtValue.GetStringTensorAsArray() / GetStringElement(i).";
+                           "ortValue.ReadStringTensor() (or OrtValue.GetStringTensorAsArray() / GetStringElement(i)).";
                 case TensorElementType.BFloat16:
                     return "ORT BFloat16 has no NumSharp dtype (NumSharp has no bfloat16). Cast the tensor to float32 or float16 " +
                            "inside the model graph, or read the raw 16-bit patterns with GetTensorDataAsSpan<BFloat16>().";
@@ -265,8 +267,8 @@ namespace NumSharp.Interop.OnnxRuntime
             if (kind == OnnxValueType.ONNX_TYPE_TENSOR)
                 return;
             throw new NotSupportedException(
-                $"{verb} needs a dense tensor OrtValue, but this value is {kind}. Sequences and maps are read element by element " +
-                "with OrtValue.GetValueCount() / GetValue(i, allocator) or the ProcessSequence / ProcessMap visitors; " +
+                $"{verb} needs a dense tensor OrtValue, but this value is {kind}. A sequence of tensors is read with ToNDArrays(); " +
+                "a single map with ToMap(); a sequence of maps (the scikit-learn ZipMap shape) with ToMaps(); " +
                 "sparse tensors and optionals have no NumSharp analog.");
         }
 

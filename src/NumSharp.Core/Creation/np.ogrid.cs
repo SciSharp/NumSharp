@@ -240,6 +240,15 @@ namespace NumSharp
         ///     slices each entry is reshaped to the open-mesh shape <c>(1,…,size,…,1)</c>. <c>ogrid</c>
         ///     returns these directly; <c>mgrid</c> fills them into a dense grid.
         /// </summary>
+        /// <param name="key">The indexer key: slices / slice strings.</param>
+        /// <param name="caller">The public entry's name, for error texts.</param>
+        /// <returns>The lines (a single bare 1-D array, or one open-mesh view per slice); the caller owns them.</returns>
+        /// <exception cref="ValueError">A malformed/missing-stop slice (see <see cref="ParseGridSpecs"/>).</exception>
+        // NDScoped: each materialized line (and its pre-cast original when a cast is needed) is a temp —
+        // only the open-mesh RESHAPE VIEW is returned, and it holds its own reference on the line's buffer.
+        // Without the scope every line's wrapper stranded one pooled buffer per slice (measured: 2 for a
+        // 2-slice ogrid). The weaver yields every element of the returned array.
+        [NDScoped]
         private static NDArray[] NdGridLines(object[] key, string caller)
         {
             var specs = ParseGridSpecs(key, caller);

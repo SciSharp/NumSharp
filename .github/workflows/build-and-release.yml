@@ -40,6 +40,40 @@ jobs:
           8.0.x
           10.0.x
 
+    # ── Strong naming: the per-push gate (ubuntu leg only) ─────────────────────────────────────────
+    #
+    # This step and "Strong naming: pack (throwaway) and verify …" (after the test steps) were the
+    # separate `verify-signing` job until 2026-09-23. The identical check also runs in build-nuget
+    # below, but that job only exists on a tag push — and a release-only gate is how the original
+    # defect survived six years: signing was configured in a `Publish` configuration nothing built,
+    # so nothing ever evaluated it until someone looked at a shipped DLL. Checking on every push and
+    # PR catches a regression in the PR that causes it rather than on release day, when the fix is a
+    # re-tag.
+    #
+    # Why it rides on `test` instead of owning a job: that job took 69 s (run 35858283137) and ~45 s
+    # of it repeated work this job already does — its own checkout (9 s), a cold .NET start (5 s) and
+    # a from-scratch Release compile + NDScope weave of NumSharp.Core (~31 s). Here the Build steps
+    # below have produced those outputs already, so the pack is incremental (see its comment).
+    #
+    # Why ubuntu only: build-nuget packs every release on ubuntu-latest, so this leg checks the
+    # platform whose output ships; Directory.Build.props enables signing with no OS condition; and it
+    # is the shortest leg (11.5 min against Windows' 15.7 in that run), so the ~20-25 s it adds does
+    # not lengthen the run.
+    #
+    # The key is committed and marked `binary` in .gitattributes (without which `* text=auto eol=lf`
+    # would rewrite CRLF bytes inside it and corrupt the key). Assert both facts before building, so
+    # a checkout/attribute problem reports as itself instead of as a confusing signing failure.
+    - name: "Strong naming: key is present and intact"
+      id: snk
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        test -f Open.snk || { echo "::error::Open.snk missing from checkout — signing cannot work."; exit 1; }
+        SIZE=$(stat -c%s Open.snk)
+        SHA=$(sha256sum Open.snk | cut -d' ' -f1)
+        echo "Open.snk: $SIZE bytes, sha256 $SHA"
+        [ "$SIZE" = "596" ] || { echo "::error::Open.snk is $SIZE bytes, expected 596 — likely line-ending corruption; check the '*.snk binary' rule in .gitattributes."; exit 1; }
+        [ "$SHA" = "b897629e0b20090c9219ac80392c037fa4cfcc2bdc21d3c45d9bf74b8df0f671" ] || { echo "::error::Open.snk content changed."; exit 1; }
+
     - name: Build
       run: dotnet build test/NumSharp.Tests/NumSharp.Tests.csproj --configuration Release -p:NoWarn=${{ env.DOTNET_NOWARN }}
 
@@ -140,50 +174,30 @@ jobs:
           --configuration Release --no-build --framework net10.0 \
           --filter "TestCategory!=OpenBugs&TestCategory!=HighMemory&TestCategory!=AnalyzerBuild" --logger "trx"
 
-    - name: Upload Test Results
-      uses: actions/upload-artifact@v7
-      if: always()
-      with:
-        name: test-results-${{ matrix.os }}
-        path: ${{ github.workspace }}/**/TestResults/**/*.trx
-        retention-days: 5
-
-  # Strong-naming gate, on EVERY push and PR.
-  #
-  # The identical check also runs in build-nuget below, but that job only exists on a tag push — and
-  # a release-only gate is how the original defect survived six years: signing was configured in a
-  # `Publish` configuration nothing built, so nothing ever evaluated it until someone looked at a
-  # shipped DLL. Packing here costs ~1 min and means a regression is caught by the PR that causes it
-  # rather than on release day, when the fix is a re-tag.
-  #
-  # This packs a THROWAWAY version into a scratch directory; it publishes nothing.
-  verify-signing:
-    name: Verify strong naming
-    runs-on: ubuntu-latest
-
-    steps:
-    - uses: actions/checkout@v7
-
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v6
-      with:
-        dotnet-version: |
-          8.0.x
-          10.0.x
-
-    # The key is committed and marked `binary` in .gitattributes (without which `* text=auto eol=lf`
-    # would rewrite CRLF bytes inside it and corrupt the key). Assert both facts before building, so
-    # a checkout/attribute problem reports as itself instead of as a confusing signing failure.
-    - name: Key is present and intact
-      run: |
-        test -f Open.snk || { echo "::error::Open.snk missing from checkout — signing cannot work."; exit 1; }
-        SIZE=$(stat -c%s Open.snk)
-        SHA=$(sha256sum Open.snk | cut -d' ' -f1)
-        echo "Open.snk: $SIZE bytes, sha256 $SHA"
-        [ "$SIZE" = "596" ] || { echo "::error::Open.snk is $SIZE bytes, expected 596 — likely line-ending corruption; check the '*.snk binary' rule in .gitattributes."; exit 1; }
-        [ "$SHA" = "b897629e0b20090c9219ac80392c037fa4cfcc2bdc21d3c45d9bf74b8df0f671" ] || { echo "::error::Open.snk content changed."; exit 1; }
-
-    - name: Pack (throwaway) and verify every shipped assembly is signed
+    # ── Strong naming: pack a THROWAWAY version and verify it (ubuntu leg only) ───────────────────
+    #
+    # Packs every shipping project into a scratch directory, then verify_strong_name.cs asserts that
+    # every managed assembly in every .nupkg carries NumSharp's full public key and a real (not
+    # delay-) signature. It inspects the PACKED artifact because that is what users install; a
+    # compile gate cannot see "builds fine, ships with no identity". Publishes nothing.
+    #
+    # Why it is cheap here: the Build steps above already built NumSharp.Core (compiled, woven and
+    # re-signed), NumSharp.Bitmap, NumSharp.Interop.OpenBLAS and NumSharp.Build in Release with the
+    # SAME -p:NoWarn, so each `dotnet pack` is an incremental build — Core's CoreCompile and its
+    # NDScopeWeave marker are up to date, so Core is neither recompiled nor re-woven, and only
+    # pythonnet, OnnxRuntime and MLNet compile. Measured on a fresh clone pinned to 4 CPUs: 17 s for
+    # the 7 packs + 1 s to verify, with no weave line from Core (the old standalone job's CI log put
+    # its six non-Core packs at 14.5 s). If the Build steps' properties ever diverge from these, the
+    # pack still verifies correctly; it just recompiles Core.
+    #
+    # Why it runs LAST with `!cancelled()`: its verdict stays independent of the tests, as the
+    # separate job's was — a red test must not hide a signing regression, and a signing regression
+    # must not skip the tests. It builds whatever it needs itself, so it does not require the Build
+    # steps to have passed; it requires only the key check (`snk`), whose own failure already names
+    # the root cause. A cancelled run still stops it (always() would not).
+    - name: "Strong naming: pack (throwaway) and verify every shipped assembly is signed"
+      if: ${{ !cancelled() && matrix.os == 'ubuntu-latest' && steps.snk.outcome == 'success' }}
+      timeout-minutes: 10
       run: |
         mkdir -p artifacts/signing-check
         for proj in src/NumSharp.Core/NumSharp.Core.csproj \
@@ -206,20 +220,66 @@ jobs:
         done
         dotnet run .github/scripts/verify_strong_name.cs -- artifacts/signing-check
 
-  # Python.NET interop. Kept as its OWN job rather than extra steps on `test`:
-  # the embedded-CPython setup must not slow down or destabilise the main gate,
-  # and a red here is immediately attributable to interop.
+    - name: Upload Test Results
+      uses: actions/upload-artifact@v7
+      if: always()
+      with:
+        name: test-results-${{ matrix.os }}
+        path: ${{ github.workspace }}/**/TestResults/**/*.trx
+        retention-days: 5
+
+  # ── Interop: every NumSharp.Interop.* bridge, one job per OS ─────────────────────────────────────
   #
-  # Building is itself a gate — this is the ONLY place CI compiles
-  # src/NumSharp.Interop.pythonnet, whose sources reach into NumSharp.Core
-  # internals and would otherwise break unnoticed.
+  # This job gates all four interop packages, suite after suite:
+  #   1. NumSharp.Interop.pythonnet  — NumSharp.Tests.Interop, run TWICE, each time embedding a
+  #      different Python environment (see "Python environments" below).
+  #   2. NumSharp.Interop.OnnxRuntime — its suite against the package's FLOOR ORT on both TFMs, then
+  #      against the CURRENT ORT.
+  #   3. NumSharp.Interop.MLNet      — the same, floor ML.NET then current.
+  #   4. NumSharp.Interop.OpenBLAS   — the nupkg-CONSUMER gate ("Package consumer:" steps), LAST.
+  # Until 2026-09-23 these were four separate 3-OS jobs (interop-test, onnxruntime-interop-test,
+  # mlnet-interop-test, package-consumer-smoke). Building is itself part of the gate: this is the
+  # ONLY place CI compiles the pythonnet, OnnxRuntime and MLNet packages, whose sources reach into
+  # NumSharp.Core internals through keyed friend grants and would otherwise break unnoticed.
   #
-  # The suite needs a Python that can host pythonnet AND import numpy. Discovery
-  # is left to PythonSession's own probe (the shipped code path, so CI exercises
-  # what users hit); when it finds nothing, every interop test reports
-  # Inconclusive — a runner without a usable libpython goes SKIPPED, never red.
-  # The "Report Python host" step below prints exactly the values that probe
-  # reads, so a silent skip is diagnosable straight from the log.
+  # Why one job:
+  #   - Slots. The SciSharp org is on the GitHub Free plan: 5 concurrent macOS jobs ORG-WIDE. This
+  #     workflow used to take all five per push (in run 35858283137 a macOS job waited 68 s for the
+  #     slot the previous run's `test (macos-latest)` still held); it now takes two.
+  #   - Nothing collides. The ORT and ML.NET suites are pure .NET — no Python, and no native asset
+  #     beyond what their NuGet packages restore — so this job's Python setup is invisible to them,
+  #     and the job env below is inert for them. The Python version pressure that DOES exist lives
+  #     inside the pythonnet suite and is handled by the two Python environments, not by runners.
+  #   - Wall time. The suites' measured costs (run 35858283137) add to ~10-13 min here, still under
+  #     `test`'s 11.5-15.7 min, so the run gets no longer; NumSharp.Core compiles once, not four times.
+  #
+  # Independence — what separate jobs gave for free. A job stops at its first failing step, which
+  # would let one suite's red hide every later suite's verdict. So each suite's steps carry an
+  # explicit `if:` of `!cancelled()` plus "this suite's own prerequisite steps succeeded" (their step
+  # ids), and every suite reports on its own; the job is red if any suite is. A cancelled run still
+  # stops them (always() would not).
+  #
+  # Python environments (test/NumSharp.Tests.Interop/python-envs/make_env.py — stdlib venv + pip,
+  # built from pinned, tracked requirement files; run the same script locally):
+  #   - parity:    numpy ONLY, at the release whose bundled OpenBLAS NumSharp ships (the OpenBLAS
+  #                manifest's numpy_version). Every test EXCEPT the [PythonEcosystem] ones runs here —
+  #                the byte-exact live-NumPy oracle, in a process no third-party native runtime touches.
+  #   - ecosystem: the same numpy + torch (CPU), pandas, scipy, pyarrow, pillow, polars, opencv. Only
+  #                the [PythonEcosystem] tests run here; before this split CI installed numpy alone and
+  #                those ~94 tests reported Inconclusive on every run.
+  #   Two environments, not one, because the two groups want different things from numpy's
+  #   neighbourhood: the oracle needs numpy pinned and nothing loaded beside it; the bridge tests need
+  #   libraries that release on their own schedule and pin numpy ranges of their own. make_env.py
+  #   installs every environment under a numpy constraint, so a library that demands another numpy
+  #   FAILS the ecosystem install instead of silently moving the oracle. The collision is not
+  #   hypothetical: onnxruntime==1.16.0 — the Python twin of the ORT floor below — publishes no
+  #   cp312 wheel and was compiled against NumPy 1.x ("A module that was compiled using NumPy 1.x
+  #   cannot be run in NumPy 2.4.2"), so a Python that needs it must be a different interpreter.
+  #   make_env.py builds each environment per interpreter (.venvs/<name>-py<maj><min>), so one
+  #   machine holds several side by side; the .NET suites here need none of them.
+  #   PythonSession embeds the environment named by NUMSHARP_PYTHONNET_PYTHON — binding (never falls
+  #   back to another Python) and venv-aware (the venv's site-packages, not its base install's; the
+  #   embedded sys.prefix is verified). The "Report Python host" step prints what it reads.
   interop-test:
     strategy:
       fail-fast: false
@@ -234,6 +294,31 @@ jobs:
     # from the runner environment silently re-enabling the green-by-skipping failure mode.
     env:
       NUMSHARP_PYTHONNET_REQUIRE_ENGINE: '1'
+      # Pins the live-NumPy oracle's CPU dispatch below AVX-512 on the Linux leg ONLY. The byte-exact
+      # tests hold NumPy to its reference configuration, the win-amd64 wheel on an AVX2 host, and the
+      # Linux x86-64 wheel leaves that configuration on an AVX-512 runner. Its meson build links Intel
+      # SVML (use_svml = linux AND x86_64 AND X86_V4), so on AVX512_SKX hardware float64 exp/log
+      # (__svml_exp8_ha/__svml_log8_ha) and ~20 other f32/f64 ufuncs (power, arccos, tan, cbrt, ...)
+      # stop calling the libm that NumSharp's .NET Math also calls. The AVX512F float32 exp/log
+      # instantiations take over from the AVX2-FMA3 ones NumSharp ports too.
+      # Evidence: run 35828348090's ubuntu leg drew a runner whose numpy.show_config() found
+      # X86_V3+X86_V4+AVX512_ICL and failed 18 byte-exact tests NO commit touched (GoogLeNet LRN,
+      # Walk slerp, LSTM/RNN/MicroGpt/Pong training); run 35824898562's ubuntu leg found only X86_V3
+      # and passed all of them. The runner hardware is not ours to choose, so the pin makes the answer
+      # independent of it. NumPy's runtime override: disabling a feature the CPU lacks is a silent
+      # no-op, so AVX2 runners are unaffected, and an empty value counts as unset.
+      # Not needed elsewhere: the Windows wheel has no AVX-512 dispatch at all (meson_cpu disables X86_V4
+      # and AVX512_ICL under MSVC), and on the macOS arm64 wheel these names do not exist. Set the same
+      # variable to run this suite on an AVX-512 Linux box. The step "Install numpy" prints
+      # show_config(), whose "found" list reflects the pin.
+      NPY_DISABLE_CPU_FEATURES: ${{ matrix.os == 'ubuntu-latest' && 'X86_V4 AVX512_ICL AVX512_SPR' || '' }}
+      # Both variables above are inert for the ONNX Runtime, ML.NET and "Package consumer:" steps:
+      # those suites and scratch consumers never start pythonnet or import numpy. NEVER add
+      # NUMSHARP_OPENBLAS_CACHE_DIR to this block: verify_build_override.sh asserts the package's
+      # DEFAULT per-user cache root on Linux/macOS (~/.cache/NumSharp/openblas) and, unlike
+      # verify_package_consumer.sh, does not unset the variable — a job-level value would fail its
+      # step 1 on two of the three legs. Nor NUMSHARP_PYTHONNET_PYTHON: which Python environment a
+      # pythonnet run embeds is a per-STEP choice (parity vs ecosystem), set on each test step.
 
     steps:
     - uses: actions/checkout@v7
@@ -245,53 +330,83 @@ jobs:
           8.0.x
           10.0.x
 
-    # 3.12 sits inside pythonnet 3.0.5's supported range (PythonSession rejects
-    # anything outside 3.7-3.13) and has numpy 2.x wheels on all three OSes.
+    # The BASE interpreter the Python environments are built from (make_env.py builds from the
+    # interpreter that runs it). 3.12 sits inside pythonnet 3.0.5's range (PythonSession rejects
+    # anything outside 3.7-3.13) and numpy 2.4.2's (cp311+). "Stage OpenBLAS" and the "Package
+    # consumer:" steps use it directly — they are stdlib-only (fetch_openblas.py, the nupkg listing,
+    # the macOS realpath compares). The pip cache is keyed on exactly the files that decide what the
+    # environments hold (the requirement files + the numpy pin in the OpenBLAS manifest), so torch's
+    # ~200 MB CPU wheel downloads once per key rather than on every run; every venv's pip reads the
+    # same per-user cache.
     - name: Setup Python
       uses: actions/setup-python@v7
       with:
         python-version: '3.12'
+        cache: pip
+        cache-dependency-path: |
+          test/NumSharp.Tests.Interop/python-envs/*.txt
+          src/NumSharp.Interop.OpenBLAS/tools/openblas-manifest.json
 
-    # The interop suite's byte-exact parity tests compare NumSharp's OpenBLAS-backed LAPACK/BLAS
-    # against THIS live numpy, so both MUST call the identical binary. Two things pin that:
-    #
-    #   (1) VERSION — numpy==2.4.2. NumSharp bundles scipy-openblas 0.3.31.22.0, the exact build
-    #       numpy 2.4.2 pins (numpy.libs is byte-identical). A newer numpy (e.g. 2.5.x) ships a
-    #       DIFFERENT openblas build, so its results diverge ~1 ULP and every *_ByteExact test reds.
-    #       Keep in lockstep with tools/openblas-manifest.json's numpy_version.
-    #
-    #   (2) BLAS FLAVOUR on macOS — numpy 2.4.2 ships TWO Apple-silicon wheels: macosx_14_0_arm64
-    #       links Apple **Accelerate**, macosx_11_0_arm64 bundles **scipy-openblas**. On a macOS 14+
-    #       runner (ours is macos-26) pip prefers the newer tag, so a plain `pip install numpy` links
-    #       Accelerate — a WHOLLY DIFFERENT BLAS than NumSharp's bundle, which no version pin or
-    #       OpenBLAS bump can reconcile (Accelerate is not OpenBLAS). Force the OpenBLAS wheel so both
-    #       sides call scipy-openblas 0.3.31.22.0, exactly as Windows/Linux already do. (Windows and
-    #       Linux numpy wheels are OpenBLAS by default, so they just take the version pin.)
-    - name: Install numpy
+    # The byte-exact live-NumPy oracle's environment. make_env.py installs numpy at the OpenBLAS
+    # manifest's numpy_version (NumSharp bundles the scipy-openblas build that release pins, so both
+    # sides call the identical binary — a newer numpy ships a different build and every *_ByteExact
+    # test reds), forces the scipy-openblas wheel on macOS (numpy's macosx_14_0 wheels link Apple
+    # Accelerate, which pip prefers on a macOS 14+ runner), and then VERIFIES what numpy reports: the
+    # pinned release linked to scipy-openblas at the manifest's openblas_version, or the step fails.
+    # stdout is exactly the environment's interpreter path; the test steps read it from this output.
+    - name: "Python env: parity (numpy only)"
+      id: pyenv_parity
       shell: bash
       run: |
-        python -m pip install --upgrade pip
-        if [ "$RUNNER_OS" = "macOS" ] && [ "$(uname -m)" = "arm64" ]; then
-          python -m pip download --only-binary=:all: --platform macosx_11_0_arm64 \
-            --python-version 312 --implementation cp --abi cp312 --no-deps \
-            -d "$RUNNER_TEMP/np" "numpy==2.4.2"
-          python -m pip install "$RUNNER_TEMP"/np/numpy-*.whl
-        else
-          python -m pip install "numpy==2.4.2"
-        fi
-        python -c "import numpy; print('numpy', numpy.__version__); numpy.show_config()"
+        PY=$(python test/NumSharp.Tests.Interop/python-envs/make_env.py parity)
+        echo "python=$PY" >> "$GITHUB_OUTPUT"
 
-    # Prints precisely what PythonSession.Probe consumes, so if the interop tests
-    # report Inconclusive the reason is visible without reproducing locally.
+    # The third-party libraries the [PythonEcosystem] tests bridge into, on top of the same pinned and
+    # verified numpy (make_env.py holds it with a constraint, so no library can move it). torch comes
+    # from PyTorch's CPU-only index (python-envs/torch-cpu.txt): PyPI's Linux wheel would drag ~3 GB of
+    # CUDA libraries onto a GPU-less runner. `!cancelled()`: a failed parity build must not stop this
+    # one, and vice versa — the test steps key on each environment's own outcome.
+    - name: "Python env: ecosystem (numpy + torch, pandas, scipy, pyarrow, pillow, polars, opencv)"
+      id: pyenv_ecosystem
+      if: ${{ !cancelled() }}
+      shell: bash
+      run: |
+        PY=$(python test/NumSharp.Tests.Interop/python-envs/make_env.py ecosystem)
+        echo "python=$PY" >> "$GITHUB_OUTPUT"
+
+    # Prints, per environment, exactly what PythonSession's probe reads (base_prefix / INSTSONAME /
+    # LIBDIR locate libpython; prefix vs base_prefix decides venv adoption; executable is what it
+    # embeds through), numpy's BLAS, and the runner's vector ISA next to NumPy's EFFECTIVE dispatch —
+    # so a red or skipped interop test is diagnosable from the log without reproducing locally.
+    # Hosted runners are a mix of AVX2-only and AVX-512 machines, and on Linux NumPy's float answers
+    # change with that (see NPY_DISABLE_CPU_FEATURES above): the raw per-instruction flags (AVX512F)
+    # survive the pin, the dispatch groups (X86_V4, AVX512_ICL) do not, so "AVX512F=True ...
+    # X86_V4=False" is the pin at work. Same private module numpy.show_config() itself reads.
     - name: Report Python host
+      if: ${{ !cancelled() }}
       shell: bash
+      env:
+        PARITY_PYTHON: ${{ steps.pyenv_parity.outputs.python }}
+        ECOSYSTEM_PYTHON: ${{ steps.pyenv_ecosystem.outputs.python }}
       run: |
-        python -c "import sys, sysconfig, numpy; \
-        print('python      ', sys.version.replace('\n', ' ')); \
-        print('numpy       ', numpy.__version__); \
-        print('base_prefix ', sys.base_prefix); \
-        print('INSTSONAME  ', sysconfig.get_config_var('INSTSONAME')); \
-        print('LIBDIR      ', sysconfig.get_config_var('LIBDIR'))"
+        for PY in "$PARITY_PYTHON" "$ECOSYSTEM_PYTHON"; do
+          [ -n "$PY" ] || continue   # an environment whose build failed has no interpreter to report
+          echo "=== $PY"
+          "$PY" - <<'PYEOF'
+        import sys, sysconfig, numpy
+        from numpy._core._multiarray_umath import __cpu_features__ as f
+        blas = numpy.show_config(mode='dicts')['Build Dependencies']['blas']
+        print('python      ', sys.version.replace('\n', ' '))
+        print('numpy       ', numpy.__version__, '|', blas.get('name'), blas.get('version'))
+        print('prefix      ', sys.prefix)
+        print('base_prefix ', sys.base_prefix)
+        print('executable  ', sys.executable)
+        print('INSTSONAME  ', sysconfig.get_config_var('INSTSONAME'))
+        print('LIBDIR      ', sysconfig.get_config_var('LIBDIR'))
+        print('cpu         ', 'AVX512F=%s AVX2=%s ASIMD=%s | numpy dispatch X86_V4=%s AVX512_ICL=%s'
+              % tuple(f.get(k) for k in ('AVX512F', 'AVX2', 'ASIMD', 'X86_V4', 'AVX512_ICL')))
+        PYEOF
+        done
 
     # The bundled OpenBLAS binaries are gitignored, so a clean checkout has none. This suite runs
     # with OpenBLAS as its DEFAULT backend (PythonSession.Start calls OpenBlasEngine.TryEnable), and
@@ -299,9 +414,13 @@ jobs:
     # assets before the build so the current RID's native library is copied into the test output.
     # (fetch_openblas.py is stdlib-only; Python is already set up above.)
     - name: Stage OpenBLAS native assets
+      id: stage_openblas
+      if: ${{ !cancelled() }}
       run: python src/NumSharp.Interop.OpenBLAS/tools/fetch_openblas.py
 
-    - name: Build
+    - name: "pythonnet: Build"
+      id: pythonnet_build
+      if: ${{ !cancelled() && steps.stage_openblas.outcome == 'success' }}
       run: dotnet build test/NumSharp.Tests.Interop/NumSharp.Tests.Interop.csproj --configuration Release -p:NoWarn=${{ env.DOTNET_NOWARN }}
 
     # The current-RID OpenBLAS native flows to the test output as CopyToOutputDirectory content
@@ -310,6 +429,7 @@ jobs:
     # output as a self-heal, and log both what landed AND the .so's dynamic deps, so a genuine
     # load failure (a missing libgfortran/libquadmath) is visible rather than a silent Enabled=false.
     - name: Ensure + diagnose OpenBLAS native in test output
+      if: ${{ !cancelled() && steps.pythonnet_build.outcome == 'success' }}
       shell: bash
       run: |
         for tfm in net8.0 net10.0; do
@@ -324,21 +444,191 @@ jobs:
           echo "=== ldd $so ==="; ldd "$so" 2>&1 | grep -i "not found" || echo "  (all deps resolved)"
         fi
 
-    # No category filter: the interop suite carries no OpenBugs/HighMemory tests,
-    # and every test already self-asserts a LiveExports/LiveImports leak baseline.
-    - name: Test (net8.0)
+    # The suite runs once per Python environment, split by the PythonEcosystem category (the suite
+    # carries no OpenBugs/HighMemory tests, and every test already self-asserts a LiveExports/
+    # LiveImports leak baseline). Every test runs exactly once per TFM:
+    #   - parity:    everything EXCEPT [PythonEcosystem] — the byte-exact live-NumPy oracle.
+    #   - ecosystem: ONLY [PythonEcosystem], with NUMSHARP_PYTHONNET_REQUIRE_PACKAGES=1 so an absent
+    #                or wrong-version package FAILS instead of skipping (the environment installs every
+    #                one on purpose). A package-gated test that forgot its tag fails in either run —
+    #                the gates enforce it — so none can slip into the numpy-only run and skip forever.
+    # NUMSHARP_PYTHONNET_PYTHON names the environment's interpreter; PythonSession treats it as binding
+    # and embeds the venv itself (its site-packages, verified through the embedded sys.prefix).
+    - name: "pythonnet: Test parity (net8.0)"
+      if: ${{ !cancelled() && steps.pythonnet_build.outcome == 'success' && steps.pyenv_parity.outcome == 'success' }}
       timeout-minutes: 10
+      shell: bash
+      env:
+        NUMSHARP_PYTHONNET_PYTHON: ${{ steps.pyenv_parity.outputs.python }}
       run: |
         dotnet test test/NumSharp.Tests.Interop/NumSharp.Tests.Interop.csproj \
-          --configuration Release --no-build --framework net8.0 --logger "trx"
-      shell: bash
+          --configuration Release --no-build --framework net8.0 \
+          --filter "TestCategory!=PythonEcosystem" --logger "trx;LogFileName=pythonnet-parity-net8.0.trx"
 
-    - name: Test (net10.0)
+    - name: "pythonnet: Test parity (net10.0)"
+      if: ${{ !cancelled() && steps.pythonnet_build.outcome == 'success' && steps.pyenv_parity.outcome == 'success' }}
       timeout-minutes: 10
+      shell: bash
+      env:
+        NUMSHARP_PYTHONNET_PYTHON: ${{ steps.pyenv_parity.outputs.python }}
       run: |
         dotnet test test/NumSharp.Tests.Interop/NumSharp.Tests.Interop.csproj \
-          --configuration Release --no-build --framework net10.0 --logger "trx"
+          --configuration Release --no-build --framework net10.0 \
+          --filter "TestCategory!=PythonEcosystem" --logger "trx;LogFileName=pythonnet-parity-net10.0.trx"
+
+    - name: "pythonnet: Test ecosystem (net8.0)"
+      if: ${{ !cancelled() && steps.pythonnet_build.outcome == 'success' && steps.pyenv_ecosystem.outcome == 'success' }}
+      timeout-minutes: 10
       shell: bash
+      env:
+        NUMSHARP_PYTHONNET_PYTHON: ${{ steps.pyenv_ecosystem.outputs.python }}
+        NUMSHARP_PYTHONNET_REQUIRE_PACKAGES: '1'
+      run: |
+        dotnet test test/NumSharp.Tests.Interop/NumSharp.Tests.Interop.csproj \
+          --configuration Release --no-build --framework net8.0 \
+          --filter "TestCategory=PythonEcosystem" --logger "trx;LogFileName=pythonnet-ecosystem-net8.0.trx"
+
+    - name: "pythonnet: Test ecosystem (net10.0)"
+      if: ${{ !cancelled() && steps.pythonnet_build.outcome == 'success' && steps.pyenv_ecosystem.outcome == 'success' }}
+      timeout-minutes: 10
+      shell: bash
+      env:
+        NUMSHARP_PYTHONNET_PYTHON: ${{ steps.pyenv_ecosystem.outputs.python }}
+        NUMSHARP_PYTHONNET_REQUIRE_PACKAGES: '1'
+      run: |
+        dotnet test test/NumSharp.Tests.Interop/NumSharp.Tests.Interop.csproj \
+          --configuration Release --no-build --framework net10.0 \
+          --filter "TestCategory=PythonEcosystem" --logger "trx;LogFileName=pythonnet-ecosystem-net10.0.trx"
+
+    # ── ONNX Runtime interop (NumSharp.Interop.OnnxRuntime) ────────────────────────────────────────
+    #
+    # No Python, no GPU: the suite runs committed .onnx models (generated once by
+    # test/oracle/gen_onnx_models.py) through the CPU execution provider the Microsoft.ML.OnnxRuntime
+    # package brings for every runner RID. It runs against the package's FLOOR (1.16.0 — the ORT a bare
+    # consumer resolves, and the version the package compiles against) on both TFMs, then against the
+    # CURRENT release, so both ends of the dependency range are exercised. Its build needs nothing the
+    # pythonnet suite set up, so it only waits for cancellation; NumSharp.Core is already built.
+    - name: "ONNX Runtime: Build (floor)"
+      id: ort_build
+      if: ${{ !cancelled() }}
+      run: dotnet build test/NumSharp.Tests.Interop.OnnxRuntime/NumSharp.Tests.Interop.OnnxRuntime.csproj --configuration Release -p:NoWarn=${{ env.DOTNET_NOWARN }}
+
+    - name: "ONNX Runtime: Test floor (net8.0)"
+      if: ${{ !cancelled() && steps.ort_build.outcome == 'success' }}
+      timeout-minutes: 10
+      shell: bash
+      run: |
+        dotnet test test/NumSharp.Tests.Interop.OnnxRuntime/NumSharp.Tests.Interop.OnnxRuntime.csproj \
+          --configuration Release --no-build --framework net8.0 --logger "trx;LogFileName=onnxruntime-floor-net8.0.trx"
+
+    - name: "ONNX Runtime: Test floor (net10.0)"
+      if: ${{ !cancelled() && steps.ort_build.outcome == 'success' }}
+      timeout-minutes: 10
+      shell: bash
+      run: |
+        dotnet test test/NumSharp.Tests.Interop.OnnxRuntime/NumSharp.Tests.Interop.OnnxRuntime.csproj \
+          --configuration Release --no-build --framework net10.0 --logger "trx;LogFileName=onnxruntime-floor-net10.0.trx"
+
+    # The current ORT release. Keep the version in lockstep with the one the README's "Verified against"
+    # banner names; bumping it here is the whole of "support a newer ORT". The -p: global property
+    # changes the restore, so this run re-restores and rebuilds the suite IN PLACE (same obj/bin — the
+    # test csproj does not redirect them) against that version; it runs after both floor steps, which
+    # have already consumed the floor build.
+    - name: "ONNX Runtime: Test current (net10.0)"
+      if: ${{ !cancelled() && steps.ort_build.outcome == 'success' }}
+      timeout-minutes: 15
+      shell: bash
+      run: |
+        dotnet test test/NumSharp.Tests.Interop.OnnxRuntime/NumSharp.Tests.Interop.OnnxRuntime.csproj \
+          --configuration Release --framework net10.0 --logger "trx;LogFileName=onnxruntime-current-net10.0.trx" \
+          -p:OnnxRuntimeVersion=1.29.0 -p:NoWarn=${{ env.DOTNET_NOWARN }}
+
+    # ── ML.NET interop (NumSharp.Interop.MLNet) ────────────────────────────────────────────────────
+    #
+    # No Python, no GPU: the suite feeds NDArray-backed IDataViews through real Microsoft.ML transforms
+    # and trainers (NormalizeMinMax, Concatenate, Sdca) — all pure managed. It runs against the
+    # package's FLOOR (Microsoft.ML 2.0.1, which carries Microsoft.ML.DataView 2.0.0 — the DataView a
+    # bare consumer resolves, and the version the package compiles against) on both TFMs, then against
+    # the CURRENT release. Independent of every suite above, like the ORT one.
+    - name: "ML.NET: Build (floor)"
+      id: mlnet_build
+      if: ${{ !cancelled() }}
+      run: dotnet build test/NumSharp.Tests.Interop.MLNet/NumSharp.Tests.Interop.MLNet.csproj --configuration Release -p:NoWarn=${{ env.DOTNET_NOWARN }}
+
+    - name: "ML.NET: Test floor (net8.0)"
+      if: ${{ !cancelled() && steps.mlnet_build.outcome == 'success' }}
+      timeout-minutes: 10
+      shell: bash
+      run: |
+        dotnet test test/NumSharp.Tests.Interop.MLNet/NumSharp.Tests.Interop.MLNet.csproj \
+          --configuration Release --no-build --framework net8.0 --logger "trx;LogFileName=mlnet-floor-net8.0.trx"
+
+    - name: "ML.NET: Test floor (net10.0)"
+      if: ${{ !cancelled() && steps.mlnet_build.outcome == 'success' }}
+      timeout-minutes: 10
+      shell: bash
+      run: |
+        dotnet test test/NumSharp.Tests.Interop.MLNet/NumSharp.Tests.Interop.MLNet.csproj \
+          --configuration Release --no-build --framework net10.0 --logger "trx;LogFileName=mlnet-floor-net10.0.trx"
+
+    # The current ML.NET release. Keep the version in lockstep with the one the README's "Verified
+    # against" banner names; bumping it here is the whole of "support a newer ML.NET". Rebuilds the
+    # suite in place against that version, like the ORT "current" step above.
+    - name: "ML.NET: Test current (net10.0)"
+      if: ${{ !cancelled() && steps.mlnet_build.outcome == 'success' }}
+      timeout-minutes: 15
+      shell: bash
+      run: |
+        dotnet test test/NumSharp.Tests.Interop.MLNet/NumSharp.Tests.Interop.MLNet.csproj \
+          --configuration Release --framework net10.0 --logger "trx;LogFileName=mlnet-current-net10.0.trx" \
+          -p:MLNetVersion=4.0.2 -p:NoWarn=${{ env.DOTNET_NOWARN }}
+
+    # ── Package consumer: the nupkg-CONSUMER gate for NumSharp.Interop.OpenBLAS ──────────────────
+    #
+    # Every other suite consumes the package by ProjectReference, where a Content item copies files
+    # a PackageReference restore never sees — which is exactly how the macOS package shipped a
+    # dylib whose vendored Fortran runtime sat in a folder NuGet silently drops ("Library not
+    # loaded" on every Mac, green CI). These steps pack the REAL nupkg into a local feed, restore
+    # it into a scratch consumer by PackageReference, and prove the bundled OpenBLAS LOADS in
+    # every layout a consumer can end up with: the portable runtimes/ tree, a read-only install,
+    # and a RID-specific (flattened) publish. macOS is the one that matters; Linux and Windows
+    # run the same script so a layout regression on any RID is caught by the PR that causes it.
+    #
+    # Why these steps come LAST, and why they carry `!cancelled()`:
+    #   - AFTER every test suite above, because both scripts change the machine: they `-t:Rebuild`
+    #     Core and NumSharp.Interop.OpenBLAS in Release inside the repo tree, and delete this version
+    #     of NumSharp / NumSharp.Interop.OpenBLAS from the global NuGet packages folder so the
+    #     scratch consumer restores the fresh pack. Running last keeps every suite on the untouched
+    #     build it had while each still owned a runner.
+    #   - `!cancelled()` keeps each script's verdict independent of the steps before it, as a
+    #     separate job's was: a red suite must not hide a package-layout regression, and the
+    #     build-override script still runs when the consumer script failed. A cancelled run still
+    #     stops them (always() would not).
+    #   - Neither uses this job's Build — each packs from its own Release rebuild. They rely only on
+    #     Python (above) and on the bundle staged by "Stage OpenBLAS native assets":
+    #     verify_build_override.sh packs WITHOUT RequireOpenBlasAssets, so an unstaged tree would
+    #     reach its first check as "bundled asset did not reach the output", not as a staging error.
+    #   - timeout-minutes: a normal run takes 1.5-2.5 min per script, PyPI downloads included; the
+    #     cap only keeps a hung download from holding the runner for the 6-hour job default.
+    - name: "Package consumer: pack, restore by PackageReference, load in every layout"
+      if: ${{ !cancelled() }}
+      timeout-minutes: 15
+      shell: bash
+      run: bash src/NumSharp.Interop.OpenBLAS/tools/verify_package_consumer.sh
+
+    # The build-time version-override gate (15 steps; PyPI once, then the per-user cache). Before
+    # 01596628 it ran nowhere in CI; it belongs here because the override task co-extracts the
+    # vendored Fortran runtime into its cache entry and stages it beside the override — a
+    # Linux/macOS-only branch a Windows developer box cannot exercise (the Windows DLL is
+    # self-contained). It writes the REAL per-user build cache — poisoning the scipy-openblas64/
+    # entry on purpose in its step 10, then proving the self-heal. Nothing else in this job reads
+    # that subtree: the interop build sets no override, and the macOS loader's relocation copies
+    # live under the same root's separate dyld/ folder.
+    - name: "Package consumer: build-time version override, end to end"
+      if: ${{ !cancelled() }}
+      timeout-minutes: 15
+      shell: bash
+      run: bash src/NumSharp.Interop.OpenBLAS/tools/verify_build_override.sh
 
     - name: Upload Test Results
       uses: actions/upload-artifact@v7
@@ -348,181 +638,13 @@ jobs:
         path: ${{ github.workspace }}/**/TestResults/**/*.trx
         retention-days: 5
 
-  # ONNX Runtime interop. Its OWN job for the same reasons as interop-test: a red here is immediately
-  # attributable to the ORT bridge, and this is the ONLY place CI compiles
-  # src/NumSharp.Interop.OnnxRuntime (which reads NumSharp.Core internals through a keyed friend grant).
-  #
-  # No Python, no GPU: the suite runs 20 committed .onnx models (test/oracle/gen_onnx_models.py) through
-  # the CPU execution provider that the Microsoft.ML.OnnxRuntime package brings for every runner RID.
-  # It runs TWICE: against the package's FLOOR (1.16.0 — the ORT a bare consumer resolves, and the
-  # version the package compiles against) and against the CURRENT release, so both ends of the
-  # dependency range are exercised. The second build uses its own obj/bin (-p: changes the restore).
-  onnxruntime-interop-test:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ windows-latest, ubuntu-latest, macos-latest ]
-
-    runs-on: ${{ matrix.os }}
-
-    steps:
-    - uses: actions/checkout@v7
-
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v6
-      with:
-        dotnet-version: |
-          8.0.x
-          10.0.x
-
-    - name: Build (ORT floor)
-      run: dotnet build test/NumSharp.Tests.Interop.OnnxRuntime/NumSharp.Tests.Interop.OnnxRuntime.csproj --configuration Release -p:NoWarn=${{ env.DOTNET_NOWARN }}
-
-    - name: Test (ORT floor, net8.0)
-      timeout-minutes: 10
-      shell: bash
-      run: |
-        dotnet test test/NumSharp.Tests.Interop.OnnxRuntime/NumSharp.Tests.Interop.OnnxRuntime.csproj \
-          --configuration Release --no-build --framework net8.0 --logger "trx"
-
-    - name: Test (ORT floor, net10.0)
-      timeout-minutes: 10
-      shell: bash
-      run: |
-        dotnet test test/NumSharp.Tests.Interop.OnnxRuntime/NumSharp.Tests.Interop.OnnxRuntime.csproj \
-          --configuration Release --no-build --framework net10.0 --logger "trx"
-
-    # The current ORT release. Keep the version in lockstep with the one the README's "Verified against"
-    # banner names; bumping it here is the whole of "support a newer ORT".
-    - name: Test (ORT current, net10.0)
-      timeout-minutes: 15
-      shell: bash
-      run: |
-        dotnet test test/NumSharp.Tests.Interop.OnnxRuntime/NumSharp.Tests.Interop.OnnxRuntime.csproj \
-          --configuration Release --framework net10.0 --logger "trx" \
-          -p:OnnxRuntimeVersion=1.29.0 -p:NoWarn=${{ env.DOTNET_NOWARN }}
-
-    - name: Upload Test Results
-      uses: actions/upload-artifact@v7
-      if: always()
-      with:
-        name: onnxruntime-interop-test-results-${{ matrix.os }}
-        path: ${{ github.workspace }}/**/TestResults/**/*.trx
-        retention-days: 5
-
-  # ML.NET interop. Its OWN job for the same reasons as the ORT bridge: a red here is immediately
-  # attributable to the ML.NET bridge, and this is the ONLY place CI compiles
-  # src/NumSharp.Interop.MLNet (which reads NumSharp.Core internals through a keyed friend grant).
-  #
-  # No Python, no GPU: the suite feeds NDArray-backed IDataViews through real Microsoft.ML transforms
-  # and trainers (NormalizeMinMax, Concatenate, Sdca) — all pure managed. It runs TWICE: against the
-  # package's FLOOR (Microsoft.ML 2.0.1, which carries Microsoft.ML.DataView 2.0.0 — the DataView a bare
-  # consumer resolves, and the version the package compiles against) and against the CURRENT release, so
-  # both ends of the dependency range are exercised. The second build uses its own obj/bin (-p: changes
-  # the restore).
-  mlnet-interop-test:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ windows-latest, ubuntu-latest, macos-latest ]
-
-    runs-on: ${{ matrix.os }}
-
-    steps:
-    - uses: actions/checkout@v7
-
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v6
-      with:
-        dotnet-version: |
-          8.0.x
-          10.0.x
-
-    - name: Build (ML.NET floor)
-      run: dotnet build test/NumSharp.Tests.Interop.MLNet/NumSharp.Tests.Interop.MLNet.csproj --configuration Release -p:NoWarn=${{ env.DOTNET_NOWARN }}
-
-    - name: Test (ML.NET floor, net8.0)
-      timeout-minutes: 10
-      shell: bash
-      run: |
-        dotnet test test/NumSharp.Tests.Interop.MLNet/NumSharp.Tests.Interop.MLNet.csproj \
-          --configuration Release --no-build --framework net8.0 --logger "trx"
-
-    - name: Test (ML.NET floor, net10.0)
-      timeout-minutes: 10
-      shell: bash
-      run: |
-        dotnet test test/NumSharp.Tests.Interop.MLNet/NumSharp.Tests.Interop.MLNet.csproj \
-          --configuration Release --no-build --framework net10.0 --logger "trx"
-
-    # The current ML.NET release. Keep the version in lockstep with the one the README's "Verified
-    # against" banner names; bumping it here is the whole of "support a newer ML.NET".
-    - name: Test (ML.NET current, net10.0)
-      timeout-minutes: 15
-      shell: bash
-      run: |
-        dotnet test test/NumSharp.Tests.Interop.MLNet/NumSharp.Tests.Interop.MLNet.csproj \
-          --configuration Release --framework net10.0 --logger "trx" \
-          -p:MLNetVersion=4.0.2 -p:NoWarn=${{ env.DOTNET_NOWARN }}
-
-    - name: Upload Test Results
-      uses: actions/upload-artifact@v7
-      if: always()
-      with:
-        name: mlnet-interop-test-results-${{ matrix.os }}
-        path: ${{ github.workspace }}/**/TestResults/**/*.trx
-        retention-days: 5
-
-  # The nupkg-CONSUMER gate for NumSharp.Interop.OpenBLAS, on all three OSes.
-  #
-  # Every other job consumes the package by ProjectReference, where a Content item copies files
-  # a PackageReference restore never sees — which is exactly how the macOS package shipped a
-  # dylib whose vendored Fortran runtime sat in a folder NuGet silently drops ("Library not
-  # loaded" on every Mac, green CI). This job packs the REAL nupkg into a local feed, restores
-  # it into a scratch consumer by PackageReference, and proves the bundled OpenBLAS LOADS in
-  # every layout a consumer can end up with: the portable runtimes/ tree, a read-only install,
-  # and a RID-specific (flattened) publish. macOS is the one that matters; Linux and Windows
-  # run the same script so a layout regression on any RID is caught by the PR that causes it.
-  package-consumer-smoke:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ windows-latest, ubuntu-latest, macos-latest ]
-
-    runs-on: ${{ matrix.os }}
-
-    steps:
-    - uses: actions/checkout@v7
-
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v6
-      with:
-        dotnet-version: |
-          8.0.x
-          10.0.x
-
-    # fetch_openblas.py (stdlib-only) stages the pinned per-RID assets the script packs.
-    - name: Setup Python
-      uses: actions/setup-python@v7
-      with:
-        python-version: '3.12'
-
-    - name: Pack, restore by PackageReference, load in every layout
-      shell: bash
-      run: bash src/NumSharp.Interop.OpenBLAS/tools/verify_package_consumer.sh
-
-    # The build-time version-override gate (15 steps; PyPI once, then the per-user cache). It
-    # never ran in CI before; it belongs here because the override task co-extracts the vendored
-    # Fortran runtime into its cache entry and stages it beside the override — a Linux/macOS-only
-    # branch a Windows developer box cannot exercise (the Windows DLL is self-contained).
-    - name: Build-time version override, end to end
-      shell: bash
-      run: bash src/NumSharp.Interop.OpenBLAS/tools/verify_build_override.sh
-
   validate-release:
-    # Interop now ships as a package, so a broken interop must block the release — and so must a
-    # package that restores but cannot load its own bundled binary.
-    needs: [test, interop-test, onnxruntime-interop-test, mlnet-interop-test, package-consumer-smoke]
+    # Interop now ships as packages, so a broken bridge must block the release — and so must a
+    # package that restores but cannot load its own bundled binary. interop-test gates all of it:
+    # the pythonnet, ONNX Runtime and ML.NET suites and the "Package consumer:" steps (formerly the
+    # onnxruntime-interop-test, mlnet-interop-test and package-consumer-smoke jobs), so needing it
+    # covers every interop package.
+    needs: [test, interop-test]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     outputs:

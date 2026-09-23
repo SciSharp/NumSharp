@@ -48,7 +48,8 @@ in `test/NumSharp.Tests.Oracle/Fuzz/`. (Two *sibling* oracles — flags & layout
 | Harness | `test/NumSharp.Tests.Oracle/Fuzz/{BitDiff,Shrinker}.cs` | Bit-exact compare (NaN tokenized *except* the contractual complex-unary NaN sign; Decimal by value) / shrink to 1 element. |
 | Harness | `test/NumSharp.Tests.Oracle/Fuzz/MisalignedRegistry.cs` | The excused, documented divergences (`Classify(...)` → reason string). |
 | Harness | `test/NumSharp.Tests.Oracle/Fuzz/{OracleSurfaceCoverageTests,OracleCoverageStrengthTests,Journey3TouchedOracleCoverageTests}.cs` | Coverage gates: public-surface inventory / ≥4-cases-per-op / 186 journey3 callables. |
-| Harness | `test/NumSharp.Tests.Oracle/Fuzz/{UndisposedIntermediateTests,NativeAllocationChokepointTests,ScopeAudit}.cs` | **Oracle-FREE leak gates that replay the same corpus through `OpRegistry`** — buffer-pool balance + raw-alloc chokepoint. Adding an op enters these too (see gotchas). |
+| Harness | `test/NumSharp.Tests.Oracle/Fuzz/{UndisposedIntermediateTests{,.Families,.Backend,.Catalogue,.Properties},NativeAllocationChokepointTests,ScopeAudit}.cs` | **Oracle-FREE leak gates that replay the same corpus through `OpRegistry`** — buffer-pool balance over the ordinary/masked/index tiers + every error path, a backend (OpenBLAS) pass, a direct catalogue, a property/field read gate, and the raw-alloc chokepoint. Adding an op enters these too (see gotchas). |
+| Harness | `test/NumSharp.Tests.Oracle/Fuzz/{LeakSurfaceCoverageTests,LeakCatalogue{,.NDArray,.Masked}}.cs` | The leak COMPLETENESS gate (every public member — ApiInventory modules, operators, object surfaces — must be leak-MEASURED somewhere) + the catalogue of direct invocations for members no corpus row reaches. |
 | Harness | `test/NumSharp.Tests.Oracle/Fuzz/{BlasBackendDeltaTests,MatmulParityPin,BlasEngineAutoInstallGuard}.cs` | Managed/OpenBLAS two-pass delta + the host-pin (BLAS-off by default). |
 | Corpus | `test/NumSharp.Tests.Oracle/Fuzz/corpus/**/*.jsonl` | The committed corpus (**~118K rows across 68 files** at 2026-09; grows per regeneration). The csproj glob `Fuzz\corpus\**\*.jsonl` copies it — incl. any `regressions/` — to test output. |
 
@@ -71,7 +72,14 @@ in `test/NumSharp.Tests.Oracle/Fuzz/`. (Two *sibling* oracles — flags & layout
   ≥1 changing axis; all 186 journey3-touched callables have a direct case. A new unclassified API fails here.
 - **`UndisposedIntermediateTests` / `NativeAllocationChokepointTests`** — **oracle-free leak gates** that reuse the
   corpus + `OpRegistry` to assert the buffer pool balances (zero-leak) and that no raw native-alloc site escapes the
-  chokepoint allowlist. (`ScopeAudit`/`[TestCategory("ScopeAudit")]` is the shared pool-counter harness.)
+  chokepoint allowlist. (`ScopeAudit`/`[TestCategory("ScopeAudit")]` is the shared pool-counter harness.) Four
+  shared, run-once measurements: the corpus sweep (ordinary + `ma_*` + `index_*` tiers, success AND error paths), the
+  backend pass (ordinary tiers with OpenBLAS threads=1; `Inconclusive` without a library), the `LeakCatalogue`
+  (direct invocations, harness-error on an entry that cannot run) and the property/field read gate.
+- **`LeakSurfaceCoverageTests`** — the leak COMPLETENESS gate: every member of the public surface (ApiInventory
+  `[ModuleName]` modules, the operators of the array types and of `DType`/`NDArrayFlags`/`poly1d`, the object
+  surfaces) must be credited by a MEASUREMENT of one of the four runs — declared-but-unmeasured never counts. **A new
+  public API fails here until it gains corpus rows or a catalogue entry.**
 - **`BlasBackendDeltaTests`** — replays only the ~1.7K BLAS-affected ordinary cases twice (managed vs OpenBLAS),
   deduplicates identical outcomes, byte-checks the real flips against NumPy on the pinned host.
 - **`MetamorphicTests`** — NumPy-free invariants (round-trips / involutions), no oracle needed.
@@ -164,6 +172,11 @@ is in **`references/add-op.md`** — read it when adding an op. In brief:
   Fix the leak (`[NDScoped]`/dispose the intermediate), don't add a `KnownEscapes` entry. `NativeAllocationChokepointTests`
   separately fails if your op adds a raw `NativeMemory.*`/`Marshal.AllocHGlobal` site outside the chokepoint allowlist —
   route scratch through the pools.
+- **Adding ANY public member enters the leak COMPLETENESS gate.** `LeakSurfaceCoverageTests` fails on a public
+  method/operator/indexer that no run measured. Corpus rows credit it automatically (success path); a member no
+  corpus row reaches needs an `E(...)` entry in `LeakCatalogue*.cs` (`T(...)` for one that always raises; `backend: true`
+  for LAPACK-only). A new property is read automatically unless its owner needs a read target (`ReadTargetsFor`); a new
+  operator on an object type also needs the type in `LeakSurface.OperatorOwners` (the gate names it if missing).
 - **Some tiers go `Inconclusive` off-Windows, not red.** `unary/nan/precision/fft/numpy_f32_kernels` (via
   `RunHostLibmCorpus`) and the host-pinned `matmul_parity`/`random_parity_host`/`generator_parity_host` record bytes
   reproducible only on win-amd64 (CRT libm, SIMD widths, the exact BLAS build). Off-Windows they assert `Inconclusive`,

@@ -43,7 +43,7 @@ foreach (var (type, moduleName) in annotatedTypes)
 }
 
 var inventory = new ApiInventory(
-    SchemaVersion: 4,
+    SchemaVersion: 5,
     AssemblyVersion: assembly.GetName().Version?.ToString() ?? "unknown",
     Modules: modules,
     // The full public surface OUTSIDE the annotated modules (type -> member names). The generator
@@ -58,7 +58,16 @@ var inventory = new ApiInventory(
     ExportedTypes: assembly.GetExportedTypes()
         .Select(type => type.FullName ?? type.Name)
         .OrderBy(name => name, StringComparer.Ordinal)
-        .ToArray());
+        .ToArray(),
+    // Object APIs are a separate inventory from module facades: Generator, dtype, iterator and
+    // bit-generator members are not exports of np.random/np themselves. Include inherited members
+    // (PCG64's BitGenerator contract, for example), but never System.Object's infrastructure.
+    ObjectTypes: assembly.GetExportedTypes()
+        .Where(type => !type.IsEnum)
+        .OrderBy(type => type.FullName, StringComparer.Ordinal)
+        .ToDictionary(type => type.FullName ?? type.Name,
+            type => InspectType(type, BindingFlags.Public | BindingFlags.Static | BindingFlags.Instance
+                | BindingFlags.FlattenHierarchy), StringComparer.Ordinal));
 
 Console.WriteLine(JsonSerializer.Serialize(inventory, new JsonSerializerOptions
 {
@@ -70,41 +79,50 @@ Console.WriteLine(JsonSerializer.Serialize(inventory, new JsonSerializerOptions
 static TypeInventory InspectType(Type type, BindingFlags flags)
 {
     var methods = type.GetMethods(flags)
-        .Where(method => !method.IsSpecialName)
+        .Where(method => !method.IsSpecialName && method.DeclaringType?.Assembly == type.Assembly)
         .GroupBy(method => method.Name, StringComparer.Ordinal)
         .Select(group => new ApiMember(
             group.Key,
             "method",
             group.Select(FormatMethod).OrderBy(value => value, StringComparer.Ordinal).ToArray(),
             group.All(IsObsolete),
-            group.All(method => method.IsStatic)))
+            group.All(method => method.IsStatic),
+            DeclaringTypes(group)))
         .OrderBy(member => member.Name, StringComparer.Ordinal)
         .ToArray();
 
     var properties = type.GetProperties(flags)
+        .Where(property => property.DeclaringType?.Assembly == type.Assembly)
         .GroupBy(property => property.Name, StringComparer.Ordinal)
         .Select(group => new ApiMember(
             group.Key,
             "property",
             group.Select(FormatProperty).OrderBy(value => value, StringComparer.Ordinal).ToArray(),
             group.All(IsObsolete),
-            group.All(IsStaticProperty)))
+            group.All(IsStaticProperty),
+            DeclaringTypes(group)))
         .OrderBy(member => member.Name, StringComparer.Ordinal)
         .ToArray();
 
     var fields = type.GetFields(flags)
+        .Where(field => field.DeclaringType?.Assembly == type.Assembly)
         .GroupBy(field => field.Name, StringComparer.Ordinal)
         .Select(group => new ApiMember(
             group.Key,
             "field",
             group.Select(FormatField).OrderBy(value => value, StringComparer.Ordinal).ToArray(),
             group.All(IsObsolete),
-            group.All(field => field.IsStatic)))
+            group.All(field => field.IsStatic),
+            DeclaringTypes(group)))
         .OrderBy(member => member.Name, StringComparer.Ordinal)
         .ToArray();
 
     return new TypeInventory(type.FullName ?? type.Name, methods, properties, fields);
 }
+
+static string[] DeclaringTypes(IEnumerable<MemberInfo> members) => members
+    .Select(member => member.DeclaringType!.FullName ?? member.DeclaringType.Name)
+    .Distinct(StringComparer.Ordinal).OrderBy(name => name, StringComparer.Ordinal).ToArray();
 
 static bool IsObsolete(MemberInfo member) => member.GetCustomAttribute<ObsoleteAttribute>() is not null;
 
@@ -314,7 +332,9 @@ internal sealed record ApiInventory(
     IReadOnlyDictionary<string, string[]> UnannotatedSurface,
     // Every exported public type's full name — the type-match index behind crediting a NumPy CLASS
     // export against a NumSharp type of the same name (numpy.random.Generator -> NumSharp.Generator).
-    IReadOnlyList<string> ExportedTypes);
+    IReadOnlyList<string> ExportedTypes,
+    // Exact CLR full names, with inherited public members and declaration ownership for source links.
+    IReadOnlyDictionary<string, TypeInventory> ObjectTypes);
 
 internal sealed record TypeInventory(
     string Type,
@@ -329,4 +349,5 @@ internal sealed record ApiMember(
     bool Obsolete,
     // True when EVERY declaration behind this name is static — meaningful on instance facades, where
     // a static helper would otherwise be indistinguishable from the module's functions.
-    bool Static);
+    bool Static,
+    string[] DeclaringTypes);

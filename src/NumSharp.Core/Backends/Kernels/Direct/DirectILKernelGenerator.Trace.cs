@@ -98,19 +98,24 @@ namespace NumSharp.Backends.Kernels
 
         /// <summary>
         /// Maps src dtype → (accum CLR type, result CLR type, result NPTypeCode,
-        /// result-byte-size, supported). Mirrors NumPy's "default platform
-        /// integer" rule for narrow ints / bool / char; preserves float dtypes;
-        /// uses double as the Half accumulator for precision parity.
+        /// result-byte-size, supported). Mirrors NumPy's add.reduce default-integer rule
+        /// EXACTLY: signed narrow ints and bool widen to int64, but every UNSIGNED lane
+        /// (uint8/uint16/uint32 — and Char, NumSharp's uint16 twin) widens to uint64 —
+        /// NumPy's trace(uint8) is uint64, and mapping those lanes to int64 silently
+        /// changed both the result dtype and the wrap point (caught by the instance
+        /// oracle tier's uint8 trace cells, 2026-09-18). Preserves float dtypes; uses
+        /// double as the Half accumulator for precision parity.
         /// </summary>
         private static (Type accum, Type result, NPTypeCode resultCode, int resultBytes, bool supported)
             TraceTypeInfo(Type srcType)
         {
-            if (srcType == typeof(bool) || srcType == typeof(byte) || srcType == typeof(sbyte) ||
-                srcType == typeof(short) || srcType == typeof(ushort) ||
-                srcType == typeof(int) || srcType == typeof(long) || srcType == typeof(char))
+            if (srcType == typeof(bool) || srcType == typeof(sbyte) ||
+                srcType == typeof(short) || srcType == typeof(int) || srcType == typeof(long))
                 return (typeof(long), typeof(long), NPTypeCode.Int64, 8, true);
 
-            if (srcType == typeof(uint) || srcType == typeof(ulong))
+            // Unsigned family (Char ≡ uint16): NumPy's add.reduce widens these to uint64.
+            if (srcType == typeof(byte) || srcType == typeof(ushort) || srcType == typeof(char) ||
+                srcType == typeof(uint) || srcType == typeof(ulong))
                 return (typeof(ulong), typeof(ulong), NPTypeCode.UInt64, 8, true);
 
             if (srcType == typeof(float))
@@ -606,15 +611,19 @@ namespace NumSharp.Backends.Kernels
         public static (NPTypeCode, bool) GetTraceAccumTypeCode(NPTypeCode src) => src switch
         {
             NPTypeCode.Boolean => (NPTypeCode.Int64, true),
-            NPTypeCode.Byte => (NPTypeCode.Int64, true),
+            // Unsigned narrow lanes follow NumPy's add.reduce rule to UNSIGNED int64 —
+            // Byte/UInt16 (and Char, the uint16 twin) previously mapped to Int64, which
+            // changed both trace's result dtype and its wrap point vs NumPy (uint oracle
+            // cells, 2026-09-18); keep in sync with TraceTypeInfo above.
+            NPTypeCode.Byte => (NPTypeCode.UInt64, true),
             NPTypeCode.SByte => (NPTypeCode.Int64, true),
             NPTypeCode.Int16 => (NPTypeCode.Int64, true),
-            NPTypeCode.UInt16 => (NPTypeCode.Int64, true),
+            NPTypeCode.UInt16 => (NPTypeCode.UInt64, true),
             NPTypeCode.Int32 => (NPTypeCode.Int64, true),
             NPTypeCode.Int64 => (NPTypeCode.Int64, true),
             NPTypeCode.UInt32 => (NPTypeCode.UInt64, true),
             NPTypeCode.UInt64 => (NPTypeCode.UInt64, true),
-            NPTypeCode.Char => (NPTypeCode.Int64, true),
+            NPTypeCode.Char => (NPTypeCode.UInt64, true),
             NPTypeCode.Single => (NPTypeCode.Single, true),
             NPTypeCode.Double => (NPTypeCode.Double, true),
             NPTypeCode.Half => (NPTypeCode.Half, true),

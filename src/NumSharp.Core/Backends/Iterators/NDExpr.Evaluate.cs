@@ -78,6 +78,12 @@ namespace NumSharp.Backends.Iteration
         public static implicit operator NDExpr(float value) => Const(value);
         public static implicit operator NDExpr(int value) => Const(value);
         public static implicit operator NDExpr(long value) => Const(value);
+        public static implicit operator NDExpr(uint value) => Const(value);
+        public static implicit operator NDExpr(ulong value) => Const(value);
+        public static implicit operator NDExpr(bool value) => Const(value);
+        public static implicit operator NDExpr(System.Numerics.Complex value) => Const(value);
+        public static implicit operator NDExpr(Half value) => Const(value);
+        public static implicit operator NDExpr(decimal value) => Const(value);
 
         // Mixed NDExpr/NDArray operators. Exact-match overloads are required:
         // through implicit conversions alone, `expr * ndarray` is ambiguous
@@ -149,6 +155,71 @@ namespace NumSharp.Backends.Iteration
         public static NDExpr operator ^(NDExpr a, int b) => BitwiseXor(a, Const(b));
         public static NDExpr operator ^(int a, NDExpr b) => BitwiseXor(Const(a), b);
 
+        // ulong: without an exact match a ulong literal has no implicit path to int/long and
+        // would bind through double — turning `u8 + 18446744073709551615UL` into a float64
+        // expression where NumPy keeps uint64 (and wraps). Complex: keeps the literal WEAK
+        // (a Complex→NDArray conversion would make it a strong 0-d array and cost an operand).
+        public static NDExpr operator +(NDExpr a, ulong b) => Add(a, Const(b));
+        public static NDExpr operator +(ulong a, NDExpr b) => Add(Const(a), b);
+        public static NDExpr operator -(NDExpr a, ulong b) => Subtract(a, Const(b));
+        public static NDExpr operator -(ulong a, NDExpr b) => Subtract(Const(a), b);
+        public static NDExpr operator *(NDExpr a, ulong b) => Multiply(a, Const(b));
+        public static NDExpr operator *(ulong a, NDExpr b) => Multiply(Const(a), b);
+        public static NDExpr operator /(NDExpr a, ulong b) => Divide(a, Const(b));
+        public static NDExpr operator /(ulong a, NDExpr b) => Divide(Const(a), b);
+        public static NDExpr operator %(NDExpr a, ulong b) => Mod(a, Const(b));
+        public static NDExpr operator %(ulong a, NDExpr b) => Mod(Const(a), b);
+        public static NDExpr operator &(NDExpr a, ulong b) => BitwiseAnd(a, Const(b));
+        public static NDExpr operator &(ulong a, NDExpr b) => BitwiseAnd(Const(a), b);
+        public static NDExpr operator |(NDExpr a, ulong b) => BitwiseOr(a, Const(b));
+        public static NDExpr operator |(ulong a, NDExpr b) => BitwiseOr(Const(a), b);
+        public static NDExpr operator ^(NDExpr a, ulong b) => BitwiseXor(a, Const(b));
+        public static NDExpr operator ^(ulong a, NDExpr b) => BitwiseXor(Const(a), b);
+        public static NDExpr operator +(NDExpr a, System.Numerics.Complex b) => Add(a, Const(b));
+        public static NDExpr operator +(System.Numerics.Complex a, NDExpr b) => Add(Const(a), b);
+        public static NDExpr operator -(NDExpr a, System.Numerics.Complex b) => Subtract(a, Const(b));
+        public static NDExpr operator -(System.Numerics.Complex a, NDExpr b) => Subtract(Const(a), b);
+        public static NDExpr operator *(NDExpr a, System.Numerics.Complex b) => Multiply(a, Const(b));
+        public static NDExpr operator *(System.Numerics.Complex a, NDExpr b) => Multiply(Const(a), b);
+        public static NDExpr operator /(NDExpr a, System.Numerics.Complex b) => Divide(a, Const(b));
+        public static NDExpr operator /(System.Numerics.Complex a, NDExpr b) => Divide(Const(a), b);
+
+        // Half / decimal: System.Numerics.Complex declares implicit conversions from BOTH (as from
+        // every primitive), and Complex converts implicitly to NDExpr, so without an exact match the
+        // Complex overloads above would capture `expr + (Half)2` and `expr + 0.1m` and type them
+        // complex. The exact overloads keep them the STRONG float16 / decimal scalars they are.
+        public static NDExpr operator +(NDExpr a, Half b) => Add(a, Const(b));
+        public static NDExpr operator +(Half a, NDExpr b) => Add(Const(a), b);
+        public static NDExpr operator -(NDExpr a, Half b) => Subtract(a, Const(b));
+        public static NDExpr operator -(Half a, NDExpr b) => Subtract(Const(a), b);
+        public static NDExpr operator *(NDExpr a, Half b) => Multiply(a, Const(b));
+        public static NDExpr operator *(Half a, NDExpr b) => Multiply(Const(a), b);
+        public static NDExpr operator /(NDExpr a, Half b) => Divide(a, Const(b));
+        public static NDExpr operator /(Half a, NDExpr b) => Divide(Const(a), b);
+        public static NDExpr operator +(NDExpr a, decimal b) => Add(a, Const(b));
+        public static NDExpr operator +(decimal a, NDExpr b) => Add(Const(a), b);
+        public static NDExpr operator -(NDExpr a, decimal b) => Subtract(a, Const(b));
+        public static NDExpr operator -(decimal a, NDExpr b) => Subtract(Const(a), b);
+        public static NDExpr operator *(NDExpr a, decimal b) => Multiply(a, Const(b));
+        public static NDExpr operator *(decimal a, NDExpr b) => Multiply(Const(a), b);
+        public static NDExpr operator /(NDExpr a, decimal b) => Divide(a, Const(b));
+        public static NDExpr operator /(decimal a, NDExpr b) => Divide(Const(a), b);
+        public static NDExpr operator %(NDExpr a, decimal b) => Mod(a, Const(b));
+        public static NDExpr operator %(decimal a, NDExpr b) => Mod(Const(a), b);
+
+        // bool: a WEAK Python bool (adopts any dtype); without the exact match it would bind through
+        // NDArray's bool conversion as a strong 0-d operand — same dtype, one more iterator stream.
+        public static NDExpr operator +(NDExpr a, bool b) => Add(a, Const(b));
+        public static NDExpr operator +(bool a, NDExpr b) => Add(Const(a), b);
+        public static NDExpr operator *(NDExpr a, bool b) => Multiply(a, Const(b));
+        public static NDExpr operator *(bool a, NDExpr b) => Multiply(Const(a), b);
+        public static NDExpr operator &(NDExpr a, bool b) => BitwiseAnd(a, Const(b));
+        public static NDExpr operator &(bool a, NDExpr b) => BitwiseAnd(Const(a), b);
+        public static NDExpr operator |(NDExpr a, bool b) => BitwiseOr(a, Const(b));
+        public static NDExpr operator |(bool a, NDExpr b) => BitwiseOr(Const(a), b);
+        public static NDExpr operator ^(NDExpr a, bool b) => BitwiseXor(a, Const(b));
+        public static NDExpr operator ^(bool a, NDExpr b) => BitwiseXor(Const(a), b);
+
         // ===================================================================
         // Reduction factories (root-only — see ReduceNode)
         // ===================================================================
@@ -198,6 +269,12 @@ namespace NumSharp.Backends.Iteration
 
         /// <summary>True if any node in the subtree is a <see cref="ReduceNode"/>.</summary>
         internal abstract bool ContainsReduce { get; }
+
+        /// <summary>
+        /// The first embedded <see cref="NDArray"/> leaf in evaluation order, or null for a tree
+        /// built over positional inputs / constants. np.evaluate dispatches on its engine.
+        /// </summary>
+        internal virtual NDArray FirstArray() => null;
     }
 
     public sealed partial class InputNode
@@ -224,6 +301,7 @@ namespace NumSharp.Backends.Iteration
         }
 
         internal override bool ContainsReduce => _left.ContainsReduce || _right.ContainsReduce;
+        internal override NDArray FirstArray() => _left.FirstArray() ?? _right.FirstArray();
     }
 
     public sealed partial class UnaryNode
@@ -235,6 +313,7 @@ namespace NumSharp.Backends.Iteration
         }
 
         internal override bool ContainsReduce => _child.ContainsReduce;
+        internal override NDArray FirstArray() => _child.FirstArray();
     }
 
     public sealed partial class ComparisonNode
@@ -249,6 +328,7 @@ namespace NumSharp.Backends.Iteration
         }
 
         internal override bool ContainsReduce => _left.ContainsReduce || _right.ContainsReduce;
+        internal override NDArray FirstArray() => _left.FirstArray() ?? _right.FirstArray();
     }
 
     public sealed partial class MinMaxNode
@@ -263,6 +343,7 @@ namespace NumSharp.Backends.Iteration
         }
 
         internal override bool ContainsReduce => _left.ContainsReduce || _right.ContainsReduce;
+        internal override NDArray FirstArray() => _left.FirstArray() ?? _right.FirstArray();
     }
 
     public sealed partial class WhereNode
@@ -278,6 +359,7 @@ namespace NumSharp.Backends.Iteration
         }
 
         internal override bool ContainsReduce => _cond.ContainsReduce || _a.ContainsReduce || _b.ContainsReduce;
+        internal override NDArray FirstArray() => _cond.FirstArray() ?? _a.FirstArray() ?? _b.FirstArray();
     }
 
     public sealed partial class CallNode
@@ -324,6 +406,17 @@ namespace NumSharp.Backends.Iteration
                 return false;
             }
         }
+
+        internal override NDArray FirstArray()
+        {
+            foreach (var a in _args)
+            {
+                var arr = a.FirstArray();
+                if (arr is not null)
+                    return arr;
+            }
+            return null;
+        }
     }
 
     // =========================================================================
@@ -364,6 +457,7 @@ namespace NumSharp.Backends.Iteration
             => new InputNode(ctx.IndexOf(_array));
 
         internal override bool ContainsReduce => false;
+        internal override NDArray FirstArray() => _array;
     }
 
     // =========================================================================
@@ -430,6 +524,7 @@ namespace NumSharp.Backends.Iteration
         }
 
         internal override bool ContainsReduce => true;
+        internal override NDArray FirstArray() => _child.FirstArray();
 
         internal override NDExprTypeInfo InferType(
             NPTypeCode[] inputTypes, Dictionary<NDExpr, NPTypeCode> nodeTypes)
@@ -459,9 +554,9 @@ namespace NumSharp.Backends.Iteration
 
                 case NDExprReduceKind.Min:
                 case NDExprReduceKind.Max:
-                    if (child == NPTypeCode.Complex)
-                        throw new NotSupportedException(
-                            "min/max reduction over complex expressions is not supported by np.evaluate.");
+                    // dtype preserved; complex folds lexicographically on (real, imag) with the
+                    // first NaN sticking — np.min([3-4j, 0, nan]) is (nan+0j) — via the engine's
+                    // ComplexMinNaN/ComplexMaxNaN clamp (see EmitFold).
                     return child;
 
                 case NDExprReduceKind.Mean:
@@ -500,17 +595,37 @@ namespace NumSharp.Backends.Iteration
             NPTypeCode[] inputTypes,
             out NPTypeCode accType, out NPTypeCode resultType,
             string? cacheKey = null)
+            => CompileReduceKernel(inputTypes, null, out accType, out resultType, cacheKey);
+
+        /// <summary>
+        /// <see cref="CompileReduceKernel(NPTypeCode[], out NPTypeCode, out NPTypeCode, string)"/> with a
+        /// parameter mask (NDExpr.Params.cs): flagged inputs are loaded once from the aux block —
+        /// AFTER the accumulator slot, at <see cref="NDExprParamPlan.ReduceParamOffset"/> — and only
+        /// the unflagged inputs are iterator operands.
+        /// </summary>
+        /// <param name="inputTypes">Every input's dtype, parameters included, in input order.</param>
+        /// <param name="isParam">Per input, whether it is a hoisted parameter; null for none.</param>
+        /// <param name="accType">Receives the accumulator dtype the host seeds and reads back.</param>
+        /// <param name="resultType">Receives the reduction's NumPy result dtype.</param>
+        /// <param name="cacheKey">An explicit kernel cache key, or null to derive one from the tree.</param>
+        /// <returns>The compiled (cached) accumulating inner loop.</returns>
+        internal NDInnerLoopFunc CompileReduceKernel(
+            NPTypeCode[] inputTypes, bool[]? isParam,
+            out NPTypeCode accType, out NPTypeCode resultType,
+            string? cacheKey = null)
         {
             var resolved = ResolveNumPyTypes(inputTypes, out var nodeTypes);
             resultType = resolved;
             var acc = ResolveAccType(_kind, resolved);
             accType = acc;
             var exprType = nodeTypes[_child];
-            int nIn = inputTypes.Length;
+            var plan = NDExprParamPlan.Create(inputTypes, isParam);
+            var opTypes = plan.OperandTypes;
+            int nIn = plan.OperandCount;                  // iterator operands only
             var kind = _kind;
             var child = _child;
 
-            string key = (cacheKey ?? DeriveCacheKey(inputTypes, resolved)) + "|npreduce";
+            string key = (cacheKey ?? DeriveCacheKey(inputTypes, resolved)) + "|npreduce" + plan.KeySuffix;
 
             return DirectILKernelGenerator.CompileRawInnerLoop(il =>
             {
@@ -522,7 +637,7 @@ namespace NumSharp.Backends.Iteration
                 {
                     ptrLocals[j] = il.DeclareLocal(typeof(byte*));
                     strideLocals[j] = il.DeclareLocal(typeof(long));
-                    inputLocals[j] = il.DeclareLocal(DirectILKernelGenerator.GetClrType(inputTypes[j]));
+                    inputLocals[j] = il.DeclareLocal(DirectILKernelGenerator.GetClrType(opTypes[j]));
                 }
 
                 var accClr = DirectILKernelGenerator.GetClrType(acc);
@@ -533,7 +648,16 @@ namespace NumSharp.Backends.Iteration
                 var locI = il.DeclareLocal(typeof(long));
                 var locN4 = il.DeclareLocal(typeof(long));
 
-                var ctx = new NDExprCompileContext(inputTypes, exprType, inputLocals, vectorMode: false, nodeTypes);
+                // Parameters: loaded once, here, from aux + 16 (slot 0 is the accumulator).
+                LocalBuilder[]? paramLocals = null;
+                if (plan.ParamCount > 0)
+                {
+                    paramLocals = new LocalBuilder[plan.ParamCount];
+                    plan.EmitPrologue(il, paramLocals, null, NPTypeCode.Empty, NDExprParamPlan.ReduceParamOffset);
+                }
+
+                var ctx = new NDExprCompileContext(inputTypes, exprType, inputLocals, vectorMode: false, nodeTypes,
+                    NPTypeCode.Empty, plan.Slots, plan.ParamIndex, paramLocals);
 
                 // ---- prologue: unpack dataptrs / strides --------------------
                 for (int j = 0; j < nIn; j++)
@@ -614,7 +738,7 @@ namespace NumSharp.Backends.Iteration
                             il.Emit(OpCodes.Add);
                         }
 
-                        DirectILKernelGenerator.EmitLoadIndirect(il, inputTypes[j]);
+                        DirectILKernelGenerator.EmitLoadIndirect(il, opTypes[j]);
                         il.Emit(OpCodes.Stloc, inputLocals[j]);
                     }
 
@@ -713,17 +837,37 @@ namespace NumSharp.Backends.Iteration
         internal NDInnerLoopFunc CompileAxisReduceKernel(
             NPTypeCode[] inputTypes, out NPTypeCode accType, out NPTypeCode resultType,
             string? cacheKey = null)
+            => CompileAxisReduceKernel(inputTypes, null, out accType, out resultType, cacheKey);
+
+        /// <summary>
+        /// <see cref="CompileAxisReduceKernel(NPTypeCode[], out NPTypeCode, out NPTypeCode, string)"/> with
+        /// a parameter mask (NDExpr.Params.cs): flagged inputs are loaded once from the aux block at
+        /// <see cref="NDExprParamPlan.ReduceParamOffset"/> (the same layout as the flat kernel, so the
+        /// host packs one buffer for both), and only the unflagged inputs are iterator operands.
+        /// </summary>
+        /// <param name="inputTypes">Every input's dtype, parameters included, in input order.</param>
+        /// <param name="isParam">Per input, whether it is a hoisted parameter; null for none.</param>
+        /// <param name="accType">Receives the accumulator dtype the host seeds the output with.</param>
+        /// <param name="resultType">Receives the reduction's NumPy result dtype.</param>
+        /// <param name="cacheKey">An explicit kernel cache key, or null to derive one from the tree.</param>
+        /// <returns>The compiled (cached) axis-aware accumulating inner loop.</returns>
+        internal NDInnerLoopFunc CompileAxisReduceKernel(
+            NPTypeCode[] inputTypes, bool[]? isParam,
+            out NPTypeCode accType, out NPTypeCode resultType,
+            string? cacheKey = null)
         {
             var resolved = ResolveNumPyTypes(inputTypes, out var nodeTypes);
             resultType = resolved;
             var acc = ResolveAccType(_kind, resolved);
             accType = acc;
             var exprType = nodeTypes[_child];
-            int nIn = inputTypes.Length;
+            var plan = NDExprParamPlan.Create(inputTypes, isParam);
+            var opTypes = plan.OperandTypes;
+            int nIn = plan.OperandCount;                  // iterator operands only
             var kind = _kind;
             var child = _child;
 
-            string key = (cacheKey ?? DeriveCacheKey(inputTypes, resolved)) + "|npaxisreduce";
+            string key = (cacheKey ?? DeriveCacheKey(inputTypes, resolved)) + "|npaxisreduce" + plan.KeySuffix;
 
             return DirectILKernelGenerator.CompileRawInnerLoop(il =>
             {
@@ -735,7 +879,7 @@ namespace NumSharp.Backends.Iteration
                 {
                     ptrLocals[j] = il.DeclareLocal(typeof(byte*));
                     strideLocals[j] = il.DeclareLocal(typeof(long));
-                    inputLocals[j] = il.DeclareLocal(DirectILKernelGenerator.GetClrType(inputTypes[j]));
+                    inputLocals[j] = il.DeclareLocal(DirectILKernelGenerator.GetClrType(opTypes[j]));
                 }
                 var outPtr = il.DeclareLocal(typeof(byte*));
                 var outStride = il.DeclareLocal(typeof(long));
@@ -744,7 +888,17 @@ namespace NumSharp.Backends.Iteration
                 var accLocals = new LocalBuilder[4];
                 for (int l = 0; l < 4; l++) accLocals[l] = il.DeclareLocal(accClr);
 
-                var ctx = new NDExprCompileContext(inputTypes, exprType, inputLocals, vectorMode: false, nodeTypes);
+                // Parameters: loaded once, here, from aux + 16 (the flat kernel's accumulator slot is
+                // reserved in both layouts so the host packs one buffer).
+                LocalBuilder[]? paramLocals = null;
+                if (plan.ParamCount > 0)
+                {
+                    paramLocals = new LocalBuilder[plan.ParamCount];
+                    plan.EmitPrologue(il, paramLocals, null, NPTypeCode.Empty, NDExprParamPlan.ReduceParamOffset);
+                }
+
+                var ctx = new NDExprCompileContext(inputTypes, exprType, inputLocals, vectorMode: false, nodeTypes,
+                    NPTypeCode.Empty, plan.Slots, plan.ParamIndex, paramLocals);
 
                 // prologue: unpack input ptrs/strides (0..nIn-1) and the output ptr/stride (nIn).
                 for (int j = 0; j <= nIn; j++)
@@ -771,7 +925,7 @@ namespace NumSharp.Backends.Iteration
                             il.Emit(OpCodes.Ldc_I4, lane); il.Emit(OpCodes.Conv_I8); il.Emit(OpCodes.Mul);
                             il.Emit(OpCodes.Conv_I); il.Emit(OpCodes.Add);
                         }
-                        DirectILKernelGenerator.EmitLoadIndirect(il, inputTypes[j]);
+                        DirectILKernelGenerator.EmitLoadIndirect(il, opTypes[j]);
                         il.Emit(OpCodes.Stloc, inputLocals[j]);
                     }
                 }
@@ -927,54 +1081,12 @@ namespace NumSharp.Backends.Iteration
                 return;
             }
 
-            if (acc == NPTypeCode.Half)
-            {
-                // [accH, valH] → Math.Min/Max in double, back to Half (exact
-                // roundtrip; keeps NaN propagation).
-                var locVal = il.DeclareLocal(typeof(Half));
-                il.Emit(OpCodes.Stloc, locVal);
-                DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Half, NPTypeCode.Double);
-                il.Emit(OpCodes.Ldloc, locVal);
-                DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Half, NPTypeCode.Double);
-                il.EmitCall(OpCodes.Call,
-                    ScalarMethodCache.Get(typeof(Math), isMin ? "Min" : "Max", typeof(double), typeof(double)), null);
-                DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Double, NPTypeCode.Half);
-                return;
-            }
-
-            var clr = DirectILKernelGenerator.GetClrType(acc);
-            System.Reflection.MethodInfo? method = null;
-            try
-            {
-                method = ScalarMethodCache.Get(typeof(Math), isMin ? "Min" : "Max", clr, clr);
-            }
-            catch (MissingMethodException)
-            {
-            }
-
-            if (method != null)
-            {
-                il.EmitCall(OpCodes.Call, method, null);
-                return;
-            }
-
-            // Branchy fallback (Char): [acc, val] → select.
-            var locV = il.DeclareLocal(clr);
-            var locA = il.DeclareLocal(clr);
-            il.Emit(OpCodes.Stloc, locV);
-            il.Emit(OpCodes.Stloc, locA);
-            var lblElse = il.DefineLabel();
-            var lblEnd = il.DefineLabel();
-            il.Emit(OpCodes.Ldloc, locA);
-            il.Emit(OpCodes.Ldloc, locV);
-            DirectILKernelGenerator.EmitComparisonOperation(
-                il, isMin ? ComparisonOp.LessEqual : ComparisonOp.GreaterEqual, acc);
-            il.Emit(OpCodes.Brfalse, lblElse);
-            il.Emit(OpCodes.Ldloc, locA);
-            il.Emit(OpCodes.Br, lblEnd);
-            il.MarkLabel(lblElse);
-            il.Emit(OpCodes.Ldloc, locV);
-            il.MarkLabel(lblEnd);
+            // [acc, val] → np.minimum/np.maximum(acc, val): the ufunc's own scalar clamp, the body
+            // np.minimum.reduce / np.maximum.reduce fold with — NaN-propagating with the FIRST NaN
+            // sticking (acc is the first operand), the second operand on a ±0 / equal tie, the
+            // lexicographic (real, imag) order for complex, Half / char / decimal covered. One body
+            // for every dtype, shared with the elementwise kernels.
+            DirectILKernelGenerator.EmitScalarOperation(il, isMin ? BinaryOp.Minimum : BinaryOp.Maximum, acc);
         }
     }
 }

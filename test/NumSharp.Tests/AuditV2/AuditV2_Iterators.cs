@@ -365,9 +365,10 @@ public class AuditV2_Iterators
 
     /// <summary>
     /// T1.34 — NDExpr.Call with a Half-typed parameter must be allowed.
-    /// IsSupported() rejects Half/SByte/Complex as method parameter/return types.
+    /// FIXED (NDExpr Phase 0): CallNode.IsSupported covers all 15 dtypes (SByte/Half/Complex
+    /// included); the edge conversions already handled them.
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.34")]
+    [TestMethod]
     public void T1_34_NDExpr_Call_Half_Param_Must_Compile()
     {
         Func<Half, Half> f = h => h;

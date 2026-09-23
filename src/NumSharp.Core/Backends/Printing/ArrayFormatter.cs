@@ -86,24 +86,68 @@ namespace NumSharp.Backends.Printing
                 opts.edgeitems, summaryInsert, opts.legacy);
         }
 
+        /// <summary>
+        ///     Formats a masked array's DATA the way NumPy's <c>MaskedArray._insert_masked_print</c> does when a
+        ///     mask is present and printing is enabled: the data is treated as an OBJECT array (each element its
+        ///     Python-scalar repr, with NO numeric column alignment) and every masked slot is replaced by
+        ///     <paramref name="display"/> (the <c>masked_print_option</c> token, e.g. <c>--</c>). This is why a
+        ///     masked print looks unaligned (<c>[1 -- 3 --]</c>) versus the aligned numeric print of the same data.
+        /// </summary>
+        /// <param name="data">The data array (any layout); read positionally in lockstep with <paramref name="mask"/>.</param>
+        /// <param name="mask">The boolean mask, same shape as <paramref name="data"/>. Must be non-null — the
+        /// caller uses <see cref="Array2String"/> on the raw data (nomask) or the filled data (disabled) instead.</param>
+        /// <param name="display">The token shown at masked positions (NumPy's <c>masked_print_option.display()</c>).</param>
+        /// <param name="opts">Print options (threshold/edgeitems/linewidth drive summarization and wrapping).</param>
+        /// <param name="separator">Element separator — <c>" "</c> for the str form, <c>", "</c> for the repr form.</param>
+        /// <param name="prefix">Alignment prefix (its length only) for line wrapping, exactly as <see cref="Array2String"/>.</param>
+        /// <param name="suffix">Trailing text (its length only) reserved on the last line.</param>
+        /// <returns>The bracketed, wrapped, summarized object-style rendering with <c>--</c> at masked slots.</returns>
+        public static string MaskedObjectArray2String(NDArray data, NDArray mask, string display,
+            PrintOptions opts, string separator, string prefix, string suffix)
+        {
+            int linewidth = opts.linewidth;
+            if (opts.legacy > 113)
+                linewidth -= suffix.Length;
+
+            if (data.size == 0)
+                return "[]";
+
+            bool summarize = data.size > opts.threshold;
+            // Object-array element formatter: Python-scalar repr per element (no shared width), matching what
+            // NumPy prints once the data is cast to dtype=object. No CollectReducedValues pass is needed — unlike
+            // the numeric formatters, ScalarStr computes each element independently of the others.
+            IElementFormatter formatFn = new ObjectReprFormat(data.typecode);
+
+            string nextLinePrefix = " " + new string(' ', prefix.Length);
+            string summaryInsert = summarize ? "..." : "";
+
+            return FormatArray(data, formatFn, linewidth, nextLinePrefix, separator,
+                opts.edgeitems, summaryInsert, opts.legacy, mask, display);
+        }
+
         #endregion
 
         #region recursive layout engine (_formatArray)
 
         private static string FormatArray(NDArray a, IElementFormatter formatFn, int lineWidth,
-            string nextLinePrefix, string separator, int edgeItems, string summaryInsert, long legacy)
+            string nextLinePrefix, string separator, int edgeItems, string summaryInsert, long legacy,
+            NDArray mask = null, string display = null)
         {
             return Recurse(a, formatFn, lineWidth, separator, edgeItems, summaryInsert, legacy,
-                nextLinePrefix, lineWidth);
+                nextLinePrefix, lineWidth, mask, display);
         }
 
+        // The recursive layout engine (NumPy's _formatArray). `mask`/`display` are the masked-array hook: when
+        // `mask` is non-null it is walked in LOCKSTEP with `cur` (same shape) and every leaf whose mask element is
+        // True renders as `display` (NumPy's masked_print_option, e.g. "--") instead of its value — the object-array
+        // substitution _insert_masked_print performs. `mask == null` is the ordinary numeric path, unchanged.
         private static string Recurse(NDArray cur, IElementFormatter formatFn, int lineWidth,
             string separator, int edgeItems, string summaryInsert, long legacy,
-            string hangingIndent, int currWidth)
+            string hangingIndent, int currWidth, NDArray mask = null, string display = null)
         {
             int axesLeft = cur.ndim;
             if (axesLeft == 0)
-                return formatFn.Format(cur.GetAtIndex(0));
+                return FormatLeaf(formatFn, cur, mask, 0, display);
 
             string nextHangingIndent = hangingIndent + " ";
             int nextWidth = legacy <= 113 ? currWidth : currWidth - 1; // - len(']')
@@ -122,7 +166,7 @@ namespace NumSharp.Backends.Printing
 
                 for (long i = 0; i < leadingItems; i++)
                 {
-                    string word = formatFn.Format(cur.GetAtIndex(i));
+                    string word = FormatLeaf(formatFn, cur, mask, i, display);
                     line = ExtendLine(s, line, word, elemWidth, hangingIndent, legacy);
                     line += separator;
                 }
@@ -135,12 +179,12 @@ namespace NumSharp.Backends.Printing
 
                 for (long i = trailingItems; i > 1; i--)
                 {
-                    string word = formatFn.Format(cur.GetAtIndex(aLen - i));
+                    string word = FormatLeaf(formatFn, cur, mask, aLen - i, display);
                     line = ExtendLine(s, line, word, elemWidth, hangingIndent, legacy);
                     line += separator;
                 }
 
-                string lastWord = formatFn.Format(cur.GetAtIndex(aLen - 1));
+                string lastWord = FormatLeaf(formatFn, cur, mask, aLen - 1, display);
                 line = ExtendLine(s, line, lastWord, elemWidth, hangingIndent, legacy);
 
                 s.Append(line);
@@ -152,7 +196,7 @@ namespace NumSharp.Backends.Printing
                 for (long i = 0; i < leadingItems; i++)
                 {
                     string nested = Recurse(cur[i], formatFn, lineWidth, separator, edgeItems,
-                        summaryInsert, legacy, nextHangingIndent, nextWidth);
+                        summaryInsert, legacy, nextHangingIndent, nextWidth, mask?[i], display);
                     s.Append(hangingIndent).Append(nested).Append(lineSep);
                 }
 
@@ -162,12 +206,12 @@ namespace NumSharp.Backends.Printing
                 for (long i = trailingItems; i > 1; i--)
                 {
                     string nested = Recurse(cur[aLen - i], formatFn, lineWidth, separator, edgeItems,
-                        summaryInsert, legacy, nextHangingIndent, nextWidth);
+                        summaryInsert, legacy, nextHangingIndent, nextWidth, mask?[aLen - i], display);
                     s.Append(hangingIndent).Append(nested).Append(lineSep);
                 }
 
                 string lastNested = Recurse(cur[aLen - 1], formatFn, lineWidth, separator, edgeItems,
-                    summaryInsert, legacy, nextHangingIndent, nextWidth);
+                    summaryInsert, legacy, nextHangingIndent, nextWidth, mask?[aLen - 1], display);
                 s.Append(hangingIndent).Append(lastNested);
             }
 
@@ -195,6 +239,13 @@ namespace NumSharp.Backends.Printing
 
         private static string RStrip(string s) => s.TrimEnd(' ');
         private static int RStripLen(string s) => RStrip(s).Length;
+
+        // Formats one leaf element. On the masked path (mask != null) a True mask element renders as the
+        // `display` token (NumPy's masked_print_option, e.g. "--") instead of the value — the substitution
+        // _insert_masked_print performs; otherwise it is the formatter's own output. Convert.ToBoolean reads
+        // the boolean mask element regardless of its storage layout.
+        private static string FormatLeaf(IElementFormatter fn, NDArray cur, NDArray mask, long i, string display)
+            => (mask is not null && Convert.ToBoolean(mask.GetAtIndex(i))) ? display : fn.Format(cur.GetAtIndex(i));
 
         #endregion
 
@@ -276,6 +327,21 @@ namespace NumSharp.Backends.Printing
         #endregion
 
         #region scalar str / dtype-shape helpers
+
+        /// <summary>Element formatter used for the masked (object-array) print path: renders each element with its
+        /// Python-scalar repr via <see cref="ScalarStr"/> — no shared/padded width, since object arrays are not
+        /// column-aligned. This is what makes a masked print unaligned versus the numeric formatters' padded output.</summary>
+        private sealed class ObjectReprFormat : IElementFormatter
+        {
+            private readonly NPTypeCode _tc;
+            /// <summary>Captures the data typecode so each element is stringified with the right scalar rules.</summary>
+            /// <param name="tc">The data array's element typecode.</param>
+            public ObjectReprFormat(NPTypeCode tc) => _tc = tc;
+            /// <summary>The Python-scalar repr of one element (int decimal, shortest-round-trip float, complex "(a+bj)", etc.).</summary>
+            /// <param name="value">The boxed element value.</param>
+            /// <returns>The element's object-array string form.</returns>
+            public string Format(object value) => ScalarStr(value, _tc);
+        }
 
         // str() of a 0d array element (Python scalar str semantics).
         internal static string ScalarStr(object value, NPTypeCode tc)

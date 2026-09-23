@@ -180,8 +180,17 @@ namespace NumSharp.Tests.Fuzz
         /// </summary>
         public static NDArray[] ApplyTuple(string op, IReadOnlyDictionary<string, JsonElement> p, NDArray[] ops)
         {
+            // ndarray.* tuple keys — a.nonzero() plus the IN-PLACE mutators whose two slots are
+            // [post-call view, post-call whole base buffer] (OpRegistry.Instance.cs).
+            if (op.StartsWith("ndarray.", StringComparison.Ordinal))
+                return ApplyInstanceTuple(op.Substring("ndarray.".Length), p, ops);
+
             switch (op)
             {
+                // np.evaluate(expr, out=): [returned view, whole out base buffer] — the out_where shape.
+                case "evaluate":
+                    return EvaluateOutFromCorpus(p, ops);
+
                 // (index, value) for every element, in flatiter C-order whatever the layout.
                 case "ndenumerate":
                 {
@@ -317,6 +326,28 @@ namespace NumSharp.Tests.Fuzz
                     var (fractional, integral) = np.modf(ops[0]);
                     return new[] { fractional, integral };
                 }
+                case "frexp":
+                {
+                    // (mantissa in [0.5,1) in x's float tier, int32 exponent); the tuple comparator
+                    // bit-checks BOTH slots (mantissa dtype and the always-int32 exponent).
+                    var (mantissa, exponent) = np.frexp(ops[0]);
+                    return new[] { mantissa, exponent };
+                }
+                case "divmod":
+                {
+                    var (quotient, remainder) = np.divmod(ops[0], ops[1]);
+                    return new[] { quotient, remainder };
+                }
+                // Numerical gradient — one component per requested axis (a bare array for a single
+                // axis, a tuple otherwise). Recorded as a tuple so arity is asserted; the corpus uses
+                // unit spacing (x=None), so only edge_order/axis vary.
+                case "gradient":
+                {
+                    int eo = p.ContainsKey("edge_order") ? p["edge_order"].GetInt32() : 1;
+                    return p.ContainsKey("axis")
+                        ? (NDArray[])np.gradient(ops[0], null, p["axis"].GetInt32(), eo)
+                        : (NDArray[])np.gradient(ops[0], edge_order: eo);
+                }
                 case "average_returned":
                 {
                     int? axis = p["axis"].ValueKind == JsonValueKind.Null
@@ -361,6 +392,46 @@ namespace NumSharp.Tests.Fuzz
                         ? ApplyBinaryOut(ufunc, ops[0], ops[1], target, mask)
                         : ApplyUnaryOut(ufunc, ops[0], target, mask);
 
+                    return new[] { returned, BaseBuffer(target) };
+                }
+
+                // ---- out= beyond the elementwise ufuncs (coverage plan §B2) ---------------
+                //
+                // Same two-slot contract, over the non-ufunc APIs that DO expose out= in
+                // NumSharp: the scans (cumsum/cumprod), round_, clip, and nanargmax/nanargmin.
+                // The out operand is always the LAST slot; its prior contents were recorded by
+                // the generator, so out-of-window writes into a strided/offset/transposed out
+                // view are caught exactly as for the ufuncs.
+                case "out_scan":
+                {
+                    var target = ops[1];
+                    int? axis = p["axis"].ValueKind == JsonValueKind.Null ? (int?)null : p["axis"].GetInt32();
+                    var returned = p["ufunc"].GetString() == "cumsum"
+                        ? np.cumsum(ops[0], axis, null, target)
+                        : np.cumprod(ops[0], axis, null, target);
+                    return new[] { returned, BaseBuffer(target) };
+                }
+                case "out_round":
+                {
+                    var target = ops[1];
+                    var returned = np.round_(ops[0], p["decimals"].GetInt32(), target);
+                    return new[] { returned, BaseBuffer(target) };
+                }
+                case "out_clip":
+                {
+                    // operands: [a, lo(0-d), hi(0-d), out] — the scalar bounds ride as 0-d
+                    // operands so their dtype travels with the case (the registry clip shape).
+                    var target = ops[3];
+                    var returned = np.clip(ops[0], ops[1], ops[2], target);
+                    return new[] { returned, BaseBuffer(target) };
+                }
+                case "out_nanarg":
+                {
+                    var target = ops[1];
+                    int axis = p["axis"].GetInt32();
+                    var returned = p["ufunc"].GetString() == "nanargmax"
+                        ? np.nanargmax(ops[0], axis, target)
+                        : np.nanargmin(ops[0], axis, target);
                     return new[] { returned, BaseBuffer(target) };
                 }
 
@@ -526,12 +597,25 @@ namespace NumSharp.Tests.Fuzz
                 "multiply" => np.multiply(a, b, o, w),
                 "divide" => np.divide(a, b, o, w),
                 "power" => np.power(a, b, o, w),
+                "float_power" => np.float_power(a, b, o, w),
                 "mod" => np.mod(a, b, o, w),
                 "floor_divide" => np.floor_divide(a, b, o, w),
+                "fmod" => np.fmod(a, b, o, w),
                 "arctan2" => np.arctan2(a, b, o, w),
                 "bitwise_and" => np.bitwise_and(a, b, o, w),
                 "bitwise_or" => np.bitwise_or(a, b, o, w),
                 "bitwise_xor" => np.bitwise_xor(a, b, o, w),
+                // min/max family — the np.* overloads gained out=/where= (2026-09-18); the third
+                // positional slot is `out`, the fourth `where`, exactly as the arithmetic ufuncs above.
+                "maximum" => np.maximum(a, b, o, w),
+                "minimum" => np.minimum(a, b, o, w),
+                "fmax" => np.fmax(a, b, o, w),
+                "fmin" => np.fmin(a, b, o, w),
+                "gcd" => np.gcd(a, b, o, w),
+                "lcm" => np.lcm(a, b, o, w),
+                "copysign" => np.copysign(a, b, o, w),
+                "nextafter" => np.nextafter(a, b, o, w),
+                "heaviside" => np.heaviside(a, b, o, w),
                 "less" => np.less(a, b, o, w),
                 "greater_equal" => np.greater_equal(a, b, o, w),
                 "equal" => np.equal(a, b, o, w),
@@ -544,17 +628,24 @@ namespace NumSharp.Tests.Fuzz
                 "sqrt" => np.sqrt(x, o, w),
                 "negative" => np.negative(x, o, w),
                 "abs" => np.abs(x, o, w),
+                "fabs" => np.fabs(x, o, w),
                 "square" => np.square(x, o, w),
+                "positive" => np.positive(x, o, w),
                 "exp" => np.exp(x, o, w),
                 "log" => np.log(x, o, w),
                 "sin" => np.sin(x, o, w),
                 "floor" => np.floor(x, o, w),
                 "ceil" => np.ceil(x, o, w),
+                "trunc" => np.trunc(x, o, w),
                 "rint" => np.rint(x, o, w),
                 "sign" => np.sign(x, o, w),
                 "reciprocal" => np.reciprocal(x, o, w),
+                "conjugate" => np.conjugate(x, o, w),
                 "invert" => np.invert(x, o, w),
                 "isnan" => np.isnan(x, o, w),
+                "isinf" => np.isinf(x, o, w),
+                "isfinite" => np.isfinite(x, o, w),
+                "signbit" => np.signbit(x, o, w),
                 _ => throw new NotSupportedException($"out_unary ufunc '{ufunc}'")
             };
 

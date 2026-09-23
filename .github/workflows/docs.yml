@@ -57,6 +57,11 @@ jobs:
       - name: Generate coverage artifact
         run: python coverage/generate_coverage.py --output artifacts/numpy-numsharp-coverage
 
+      - name: Verify inventory and dashboard scope contracts
+        run: |
+          python -m unittest discover -s coverage -p 'test_*.py'
+          node --test coverage/test_dashboard.cjs
+
       - name: Audit latest NumPy documentation links
         run: python coverage/audit_documentation.py artifacts/numpy-numsharp-coverage/coverage.json
 

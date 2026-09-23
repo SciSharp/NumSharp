@@ -23,15 +23,33 @@ namespace NumSharp
 {
     public partial class NDArray
     {
+        /// <summary>
+        ///     Copies the array into a .NET JAGGED array of rank <see cref="ndim"/> (<c>T[]</c>, <c>T[][]</c>, …),
+        ///     read in logical C-order through the array's own strides, so every layout — transposed, sliced,
+        ///     strided, broadcast — yields its logical elements.
+        /// </summary>
+        /// <typeparam name="T">The element type; must match the array's dtype.</typeparam>
+        /// <returns>A fresh jagged array the caller owns (no reference to this array's memory).</returns>
+        /// <exception cref="InvalidOperationException">A dimension exceeds <see cref="int.MaxValue"/> (managed arrays
+        /// are int32-indexed).</exception>
+        /// <exception cref="NotSupportedException">The array has more than 6 dimensions.</exception>
+        /// <remarks>
+        ///     Elements are read by COORDINATE (<see cref="GetValue{T}(long[])"/>/<see cref="GetValue(int[])"/>),
+        ///     never by densifying the storage first: <c>Storage.GetData&lt;T&gt;()</c> of a non-contiguous view is a
+        ///     fresh contiguous COPY that nothing released (one pooled buffer stranded per call, measured by the
+        ///     scope audit), and the rank-2 case used to feed a PHYSICAL offset (<c>shape.GetOffset(i, j)</c>) into
+        ///     the LOGICAL <see cref="GetAtIndex{T}"/> — wrong values on a transposed view and an out-of-bounds read
+        ///     on a column slice.
+        /// </remarks>
         public Array ToJaggedArray<T>() where T : unmanaged
         {
-            ArraySlice<T> data = Storage.GetData<T>();
             var shape = Shape;
             switch (ndim)
             {
                 case 1:
                 {
-                    return data.ToArray();
+                    // Storage.ToArray walks the array in logical C-order through its strides (no densified temp).
+                    return ToArray<T>();
                 }
 
                 case 2:
@@ -44,9 +62,10 @@ namespace NumSharp
                     for (int i = 0; i < ret.Length; i++)
                         ret[i] = new T[(int)shape[1]];
 
+                    // By coordinate: GetValue maps (i, j) through the strides + offset itself.
                     for (int i = 0; i < ret.Length; i++)
                     for (int j = 0; j < ret[0].Length; j++)
-                        ret[i][j] = GetAtIndex<T>(shape.GetOffset(i, j));
+                        ret[i][j] = GetValue<T>((long)i, j);
 
                     return ret;
                 }

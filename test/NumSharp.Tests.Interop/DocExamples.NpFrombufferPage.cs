@@ -537,6 +537,7 @@ namespace NumSharp.Tests.Interop
         ///     tensor write lands in the `NDArray`."
         /// </summary>
         [TestMethod]
+        [PythonEcosystem]
         public void Torch_SharesTheDataPointer()
         {
             SkipUnless("torch");
@@ -559,6 +560,7 @@ namespace NumSharp.Tests.Interop
 
         /// <summary>"`Image.frombuffer(...)`: `getpixel` reads NumSharp's bytes."</summary>
         [TestMethod]
+        [PythonEcosystem]
         public void Pillow_ReadsTheExportedBuffer()
         {
             SkipUnless("PIL");
@@ -583,6 +585,7 @@ namespace NumSharp.Tests.Interop
         ///     read-only view."
         /// </summary>
         [TestMethod]
+        [PythonEcosystem]
         public void Pillow_ImageItselfIsNotImportable()
         {
             SkipUnless("PIL");
@@ -604,6 +607,7 @@ namespace NumSharp.Tests.Interop
 
         /// <summary>"`pa.py_buffer(mv)`: `to_numpy(zero_copy_only=True)` returns our address."</summary>
         [TestMethod]
+        [PythonEcosystem]
         public void PyArrow_WrapsTheMemoryViewZeroCopy()
         {
             SkipUnless("pyarrow");
@@ -625,6 +629,7 @@ namespace NumSharp.Tests.Interop
 
         /// <summary>"`pd.DataFrame(nd.ToNumpy(), copy=False)`: `np.shares_memory(...)` is `True`."</summary>
         [TestMethod]
+        [PythonEcosystem]
         public void Pandas_DataFrameSharesMemory()
         {
             SkipUnless("pandas");
@@ -644,6 +649,7 @@ namespace NumSharp.Tests.Interop
 
         /// <summary>"`pl.Series('v', nd.ToNumpy())`: `to_numpy(allow_copy=False)` shares."</summary>
         [TestMethod]
+        [PythonEcosystem]
         public void Polars_SeriesSharesMemory()
         {
             SkipUnless("polars");
@@ -663,6 +669,7 @@ namespace NumSharp.Tests.Interop
 
         /// <summary>"`cv2.circle(...)`: draws **into** the NumSharp buffer" — the page's OpenCV block.</summary>
         [TestMethod]
+        [PythonEcosystem]
         public void OpenCv_DrawsIntoNumSharpMemory()
         {
             SkipUnless("cv2");

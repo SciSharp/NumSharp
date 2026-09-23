@@ -39,10 +39,12 @@ namespace NumSharp
         [NDScoped]
         public static NDArray polymul(NDArray a1, NDArray a2)
         {
-            // poly1d normalisation trims leading zeros (and maps an all-zero input to [0]).
-            NDArray c1 = new poly1d(a1).coeffs;
-            NDArray c2 = new poly1d(a2).coeffs;
-            return np.convolve(c1, c2, "full");
+            // poly1d normalisation trims leading zeros (and maps an all-zero input to [0]). The polynomials
+            // own their coefficient arrays (field egress — no ambient scope reclaims them), so they are
+            // disposed here; the convolution is a fresh array, yielded by the [NDScoped] weaver.
+            using var p1 = new poly1d(a1);
+            using var p2 = new poly1d(a2);
+            return np.convolve(p1.coeffs, p2.coeffs, "full");
         }
 
         /// <summary>
@@ -77,7 +79,14 @@ namespace NumSharp
 
             for (long k = 0; k < m - n + 1; k++)
             {
-                NDArray d = scale * r[k.ToString()];
+                // d = scale * r[k]. NumPy evaluates this SCALAR*SCALAR product through scalarmath —
+                // the NAIVE a_re*b_re - a_im*b_im — NOT the FMA simd_cmul its ARRAY multiply (and hence
+                // NumSharp's complex `*`) uses. For a complex loop we therefore multiply the scalar d
+                // naively to stay bit-identical to NumPy's polydiv; `d * v` below is a scalar*ARRAY
+                // product, which NumPy DOES take through the FMA array loop, so it keeps NumSharp's
+                // (now FMA) complex multiply. (Real dtypes have no scalar/array multiply distinction.)
+                NDArray rk = r[k.ToString()];
+                NDArray d = w == NPTypeCode.Complex ? NaiveComplexScalarMultiply(scale, rk) : scale * rk;
                 q[$"{k}:{k + 1}"] = np.atleast_1d(d);
                 // r[k : k+n+1] -= d * v   (an in-place, length-(n+1) vector update)
                 NDArray seg = r[$"{k}:{k + n + 1}"];
@@ -89,6 +98,25 @@ namespace NumSharp
                 r = r["1:"];
 
             return (q, r);
+        }
+
+        /// <summary>
+        ///     Naive (un-fused) complex scalar product <c>a·b</c> — <c>(a_re·b_re − a_im·b_im,
+        ///     a_re·b_im + a_im·b_re)</c> — matching NumPy's <c>scalarmath</c> path, which a
+        ///     <c>np.complex128</c> scalar multiply takes (its ARRAY multiply is the FMA <c>simd_cmul</c>
+        ///     instead). Used by <see cref="polydiv"/> for the scalar quotient coefficient so it stays
+        ///     bit-identical to NumPy; do NOT route array multiplies here.
+        /// </summary>
+        /// <param name="a">Left 0-D complex scalar.</param>
+        /// <param name="b">Right 0-D complex scalar.</param>
+        /// <returns>A 0-D complex NDArray holding the naive product.</returns>
+        private static NDArray NaiveComplexScalarMultiply(NDArray a, NDArray b)
+        {
+            System.Numerics.Complex x = a.GetData<System.Numerics.Complex>()[0];
+            System.Numerics.Complex y = b.GetData<System.Numerics.Complex>()[0];
+            return NDArray.Scalar(new System.Numerics.Complex(
+                x.Real * y.Real - x.Imaginary * y.Imaginary,
+                x.Real * y.Imaginary + x.Imaginary * y.Real));
         }
     }
 }

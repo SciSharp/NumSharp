@@ -548,6 +548,110 @@ namespace NumSharp
     };
 
     /// <summary>
+    ///     NumPy's <c>NPY_TYPES</c> type-number enum (<c>numpy/_core/include/numpy/ndarraytypes.h</c>) — the C-API
+    ///     identity behind every descriptor's <see cref="DType.num"/> / <see cref="DType.type_num"/>. Byte-identical to
+    ///     NumPy's header: the members and their integer values are exactly NumPy's, so <c>(int)NPY_TYPES.NPY_CDOUBLE</c>
+    ///     is 15 on every platform, and <c>a.dtype.type_num</c> equals <c>np.dtype(...).num</c> on the host it runs on.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    ///     <b>Identity, not the computational switch.</b> <see cref="NPTypeCode"/> remains NumSharp's storage/kernel
+    ///     discriminator (the value every backend <c>switch</c> and IL generator dispatches on); this enum is the
+    ///     NumPy-facing <i>identity</i> that rides ALONGSIDE it, the exact split NumPy draws between its C
+    ///     <c>type_num</c> and the descriptor it keys. It is a pure mirror — see <see cref="DType.type_num"/> for the
+    ///     accessor and <see cref="DType.From(NPY_TYPES)"/> for the <c>PyArray_DescrFromType</c> reverse.
+    /// </para>
+    /// <para>
+    ///     <b>C long is platform-dependent, and so is the descriptor a fixed-width spelling resolves to</b> (verified
+    ///     against numpy 2.4.2): on <b>LP64</b> (Linux/macOS) <c>np.dtype('int32')</c> is <see cref="NPY_INT"/> (5) and
+    ///     <c>np.dtype('int64')</c> is <see cref="NPY_LONG"/> (7); on <b>LLP64</b> (Windows / any 32-bit process, where C
+    ///     <c>long</c> is 32-bit) <c>np.dtype('int32')</c> is <see cref="NPY_LONG"/> (7) and <c>np.dtype('int64')</c> is
+    ///     <see cref="NPY_LONGLONG"/> (9). This enum carries ALL of those members regardless of platform (it is the whole
+    ///     C enum); it is <see cref="DTypeRegistry"/> that maps NumSharp's single Int32/Int64 onto the platform-correct
+    ///     member — the same <c>CLongIs32Bit</c> switch the <c>LongDType</c>/<c>LongLongDType</c> aliases already use.
+    /// </para>
+    /// <para>
+    ///     <b>Members NumSharp has no storage for are still present</b> (for byte-identity and for
+    ///     <see cref="DType.From(NPY_TYPES)"/> to reject them precisely): <see cref="NPY_LONGLONG"/>/<see cref="NPY_ULONGLONG"/>
+    ///     on LP64, <see cref="NPY_LONGDOUBLE"/>/<see cref="NPY_CLONGDOUBLE"/> (NumSharp collapses to float64/complex128),
+    ///     <see cref="NPY_CFLOAT"/> (complex64 — unsupported), <see cref="NPY_OBJECT"/>, <see cref="NPY_STRING"/> (bytes),
+    ///     <see cref="NPY_VOID"/>. <see cref="NPY_CHAR"/> (24) is NumPy's <i>deprecated</i> byte-char and is NOT NumSharp's
+    ///     <c>char</c> dtype (which is a NumSharp extension at <see cref="NUMSHARP_CHAR"/> in the user range).
+    /// </para>
+    /// </remarks>
+    /// <remarks>https://numpy.org/doc/stable/reference/c-api/dtype.html#enumerated-types</remarks>
+    public enum NPY_TYPES
+    {
+        /// <summary>Boolean (<see cref="System.Boolean"/> / NumSharp <see cref="NPTypeCode.Boolean"/>).</summary>
+        NPY_BOOL = 0,
+        /// <summary>Signed 8-bit (C <c>signed char</c>; NumSharp <see cref="NPTypeCode.SByte"/> / int8).</summary>
+        NPY_BYTE = 1,
+        /// <summary>Unsigned 8-bit (C <c>unsigned char</c>; NumSharp <see cref="NPTypeCode.Byte"/> / uint8).</summary>
+        NPY_UBYTE = 2,
+        /// <summary>Signed 16-bit (C <c>short</c>; NumSharp <see cref="NPTypeCode.Int16"/>).</summary>
+        NPY_SHORT = 3,
+        /// <summary>Unsigned 16-bit (C <c>unsigned short</c>; NumSharp <see cref="NPTypeCode.UInt16"/>).</summary>
+        NPY_USHORT = 4,
+        /// <summary>C <c>int</c> — always 32-bit; NumPy's <c>intc</c>. NumSharp's Int32 maps here ONLY on LP64 (on LLP64 it is <see cref="NPY_LONG"/>).</summary>
+        NPY_INT = 5,
+        /// <summary>C <c>unsigned int</c> — NumPy's <c>uintc</c>. NumSharp's UInt32 maps here only on LP64.</summary>
+        NPY_UINT = 6,
+        /// <summary>C <c>long</c> — 64-bit on LP64, 32-bit on LLP64. NumSharp's Int64 maps here on LP64; its Int32 maps here on LLP64.</summary>
+        NPY_LONG = 7,
+        /// <summary>C <c>unsigned long</c>. NumSharp's UInt64 maps here on LP64; its UInt32 on LLP64.</summary>
+        NPY_ULONG = 8,
+        /// <summary>C <c>long long</c> — always 64-bit. NumSharp's Int64 maps here on LLP64 (unused on LP64, where Int64 is <see cref="NPY_LONG"/>).</summary>
+        NPY_LONGLONG = 9,
+        /// <summary>C <c>unsigned long long</c>. NumSharp's UInt64 maps here on LLP64 (unused on LP64).</summary>
+        NPY_ULONGLONG = 10,
+        /// <summary>float32 (NumSharp <see cref="NPTypeCode.Single"/>) — platform-independent.</summary>
+        NPY_FLOAT = 11,
+        /// <summary>float64 (NumSharp <see cref="NPTypeCode.Double"/>) — platform-independent.</summary>
+        NPY_DOUBLE = 12,
+        /// <summary>C <c>long double</c> (extended precision). NumSharp has none — its <c>LongDoubleDType</c> collapses onto float64, so no descriptor reports this num.</summary>
+        NPY_LONGDOUBLE = 13,
+        /// <summary>complex64 — <b>unsupported in NumSharp</b> (single complex width is complex128); no descriptor reports this num.</summary>
+        NPY_CFLOAT = 14,
+        /// <summary>complex128 (NumSharp <see cref="NPTypeCode.Complex"/>) — platform-independent.</summary>
+        NPY_CDOUBLE = 15,
+        /// <summary>C <c>long double</c> complex — collapses onto complex128 in NumSharp; no descriptor reports this num.</summary>
+        NPY_CLONGDOUBLE = 16,
+        /// <summary>Python object array — <b>unsupported in NumSharp</b>.</summary>
+        NPY_OBJECT = 17,
+        /// <summary>Fixed-width byte string (<c>|S</c>) — <b>unsupported in NumSharp</b> (Stage D).</summary>
+        NPY_STRING = 18,
+        /// <summary>Fixed-width Unicode (<c>&lt;U</c>) — the vestigial <see cref="NPTypeCode.String"/> slot; no storage (Stage D).</summary>
+        NPY_UNICODE = 19,
+        /// <summary>Structured / void (<c>V</c>) — <b>unsupported in NumSharp</b>.</summary>
+        NPY_VOID = 20,
+        /// <summary>datetime64 (<c>M8</c>) — descriptor-level only until Stage C (no storage lane yet).</summary>
+        NPY_DATETIME = 21,
+        /// <summary>timedelta64 (<c>m8</c>) — descriptor-level only until Stage C.</summary>
+        NPY_TIMEDELTA = 22,
+        /// <summary>float16 (NumSharp <see cref="NPTypeCode.Half"/>) — appended out of precision order (23), platform-independent.</summary>
+        NPY_HALF = 23,
+        /// <summary>NumPy's <b>deprecated</b> byte-char (raises if used). NOT NumSharp's <c>char</c> dtype — that is <see cref="NUMSHARP_CHAR"/>.</summary>
+        NPY_CHAR = 24,
+        /// <summary>Sentinel: the count of legacy dtypes (shares value 24 with <see cref="NPY_CHAR"/>).</summary>
+        NPY_NTYPES_LEGACY = 24,
+        /// <summary>Sentinel: "no type" (a deliberately high, stable value so appending dtypes does not move it).</summary>
+        NPY_NOTYPE = 25,
+        /// <summary>Sentinel: the count of types excluding the 1.6 additions (shares value 21 with <see cref="NPY_DATETIME"/>).</summary>
+        NPY_NTYPES_ABI_COMPATIBLE = 21,
+        /// <summary>The first user-defined type number — everything at or above is a registered user dtype (NumSharp's Decimal/Char live here).</summary>
+        NPY_USERDEF = 256,
+        /// <summary>NEP 55 variable-width <c>StringDType</c> — the first non-legacy-layout dtype (reserved; Stage D).</summary>
+        NPY_VSTRING = 2056,
+
+        // ---- NumSharp extensions (no NumPy analog) — the user-defined range, exactly as NumPy numbers a user dtype ----
+
+        /// <summary>NumSharp-only <see cref="System.Decimal"/> dtype (NumSharp <see cref="NPTypeCode.Decimal"/>) — the first user slot (aliases <see cref="NPY_USERDEF"/> = 256).</summary>
+        NUMSHARP_DECIMAL = NPY_USERDEF,
+        /// <summary>NumSharp-only <see cref="System.Char"/> dtype (NumSharp <see cref="NPTypeCode.Char"/>; promotes as uint16) — user slot 257.</summary>
+        NUMSHARP_CHAR = NPY_USERDEF + 1,
+    }
+
+    /// <summary>
     ///     https://numpy.org/doc/stable/reference/c-api/dtype.html#enumerated-types
     /// </summary>
     public enum NPY_TYPECHAR

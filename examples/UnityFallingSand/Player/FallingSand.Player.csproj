@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- A standalone, Unity-FREE way to actually PLAY the falling-sand game. It drives the exact same
+       NumSharp simulation the Unity view runs (Assets/Scripts/Simulation/*.cs, pulled in below) and
+       renders it live in the terminal with 24-bit colour, so the game is launchable anywhere a .NET
+       runtime exists (no Unity editor, no CoreCLR-backend setup). Run it interactively to play, or pass
+       the demo flag for a self-driving showcase. -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsPackable>false</IsPackable>
+    <SignAssembly>false</SignAssembly>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="..\UnityProject\Assets\Scripts\Simulation\**\*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\NumSharp.Core\NumSharp.Core.csproj" />
+  </ItemGroup>
+
+</Project>

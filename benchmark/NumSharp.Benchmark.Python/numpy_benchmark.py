@@ -661,12 +661,14 @@ def run_unary_benchmarks(n: int, dtype_name: str, iterations: int) -> List[Bench
             ("np.rint(a)", lambda: np.rint(family_a)),
             ("np.round(a)", lambda: np.round(family_a)),
         ]
-        # NumSharp np.modf supports only Single/Double/Decimal (see UnaryFamilyBenchmarks.Modf);
-        # decimal has no NumPy dtype, so the twin runs float32/float64 only. NumPy's modf DOES
-        # accept int/float16 (int up-casts to float64), but the C# side rejects them via
-        # VerifyUnsupportedDtype — benchmarking those here paired a real NumPy timing against a
-        # C# exception-throw (e.g. modf(int32) 10M: 71ms vs 0.37ms throw = a meaningless 192x).
-        if dtype_name in ("float32", "float64"):
+        # np.modf has a loop for every REAL dtype on both sides: bool/int promote to the narrowest
+        # float per width (int8->float16, int16->float32, int32+->float64), which NumSharp matches
+        # since 59f99320 (see UnaryFamilyBenchmarks.Modf). Only complex has no modf loop (TypeError
+        # on both sides); the C# side records it as rejection evidence, which has no NumPy timing
+        # peer, so the twin skips it. (Before 59f99320 NumSharp rejected everything except
+        # float32/float64/decimal, and pairing a real NumPy timing with a C# exception-throw read as
+        # a meaningless 192x, which is why this used to be float32/float64 only.)
+        if dtype_name != "complex128":
             family_cases.append(("np.modf(a)", lambda: np.modf(family_a)))
         for name, func in family_cases:
             r = benchmark(func, n, iterations=iterations)

@@ -127,7 +127,7 @@ namespace NumSharp.Tests.Backends
             var view = bc.reshape(2, 2, 3);       // stride-0 nocopy view of a read-only broadcast
             view.flags.writeable.Should().BeFalse();
             var act = () => view.SetAtIndex(9L, 0);
-            act.Should().Throw<NumSharpException>().WithMessage("*read-only*");
+            act.Should().Throw<ValueError>().WithMessage("*read-only*");
 
             var diag = np.arange(12).astype(NPTypeCode.Int64).reshape(3, 4).diagonal();
             diag.reshape(3, 1).flags.writeable.Should().BeFalse("reshape of np.diagonal's read-only view inherits");
@@ -421,11 +421,11 @@ namespace NumSharp.Tests.Backends
                 // on the type before the writeable gate in Debug builds)
                 var own = r.GetAtIndex(0);
                 var set = () => r.SetAtIndex(own, 0);
-                set.Should().Throw<NumSharpException>(name).WithMessage("*read-only*");
+                set.Should().Throw<ValueError>(name).WithMessage("*read-only*");
                 var cpt = () => np.copyto(r, NDArray.Scalar(own));
-                cpt.Should().Throw<NumSharpException>(name);
+                cpt.Should().Throw<ValueError>(name);
                 var fil = () => r.fill(own);
-                fil.Should().Throw<NumSharpException>(name);
+                fil.Should().Throw<ValueError>(name);
             }
         }
 
@@ -536,7 +536,7 @@ namespace NumSharp.Tests.Backends
             bc.setflags(write: false);
             bc["1:3"].flags.writeable.Should().BeFalse("views created after the re-clear recompute read-only");
             var act = () => bc["1:3"].SetAtIndex(1L, 0);
-            act.Should().Throw<NumSharpException>();
+            act.Should().Throw<ValueError>();
         }
 
         // ================================================================ KEEPORDER copy/astype

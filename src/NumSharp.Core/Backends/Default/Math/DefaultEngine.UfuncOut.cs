@@ -80,12 +80,20 @@ namespace NumSharp.Backends
             BinaryOp.Multiply => "multiply",
             BinaryOp.Divide => "divide",
             BinaryOp.Mod => "remainder",
+            BinaryOp.Fmod => "fmod",
             BinaryOp.Power => "power",
             BinaryOp.FloorDivide => "floor_divide",
             BinaryOp.BitwiseAnd => "bitwise_and",
             BinaryOp.BitwiseOr => "bitwise_or",
             BinaryOp.BitwiseXor => "bitwise_xor",
+            // NumPy spells the shift ufuncs with an underscore ("left_shift"/"right_shift"); without
+            // these the switch would fall to op.ToString().ToLowerInvariant() = "leftshift", so a
+            // dtype=/out= cast error on a shift routed through ExecuteBinaryOp would leak the wrong name.
+            BinaryOp.LeftShift => "left_shift",
+            BinaryOp.RightShift => "right_shift",
             BinaryOp.ATan2 => "arctan2",
+            BinaryOp.Gcd => "gcd",
+            BinaryOp.Lcm => "lcm",
             _ => op.ToString().ToLowerInvariant(),
         };
 
@@ -104,6 +112,7 @@ namespace NumSharp.Backends
         {
             UnaryOp.Sqrt => "sqrt",
             UnaryOp.Abs => "absolute",
+            UnaryOp.Fabs => "fabs",
             UnaryOp.Negate => "negative",
             UnaryOp.Exp => "exp",
             UnaryOp.Log => "log",
@@ -124,6 +133,7 @@ namespace NumSharp.Backends
             UnaryOp.BitwiseNot => "invert",
             UnaryOp.LogicalNot => "logical_not",
             UnaryOp.Positive => "positive",
+            UnaryOp.Spacing => "spacing",
             _ => op.ToString().ToLowerInvariant(),
         };
 
@@ -395,9 +405,18 @@ namespace NumSharp.Backends
                 scalarBody = il => EmitMixedScalarBody(il, capLhs, capRhs, capRes, capOp);
             }
 
+            // Shifts are excluded from CanUseSimdBinary (CanUseSimdForOp lists no shift), so simdViable is
+            // false for them — but the same-dtype case has a per-lane VARIABLE shift kernel
+            // (EmitShiftVectorBody, the one ExecuteShiftViaNDIter drives). Supply it here too so the hot
+            // out= / where= shift path vectorizes instead of falling to the scalar body (the count operand
+            // is broadcast or an array; a variable shift covers both, and the overflow rule is baked in).
+            bool shiftSimd = sameDtype && (op == BinaryOp.LeftShift || op == BinaryOp.RightShift)
+                             && DirectILKernelGenerator.ShiftVariableSupported(resultType, op == BinaryOp.LeftShift);
             Action<ILGenerator>? vectorBody = simdViable
                 ? il => DirectILKernelGenerator.EmitVectorOperation(il, op, resultType)
-                : null;
+                : shiftSimd
+                    ? il => DirectILKernelGenerator.EmitShiftVectorBody(il, resultType, op == BinaryOp.LeftShift)
+                    : null;
 
             // Packed key (no per-call string): npy_binop_{op}_{lhsType}_{rhsType}_{resultType}.
             var cacheKey = InnerLoopKernelKey.Binary(op, lhsType, rhsType, resultType);
@@ -653,7 +672,7 @@ namespace NumSharp.Backends
             bool simdViable = DirectILKernelGenerator.CanUseUnarySimd(key);
 
             bool bufferedPromoting = inputType != outputType
-                && !IsUnaryPredicateOp(op)
+                && !UnaryOpReadsInputType(op)
                 && !(op == UnaryOp.Abs && inputType == NPTypeCode.Complex)
                 && DirectILKernelGenerator.CanUseUnarySimd(
                        new UnaryKernelKey(outputType, outputType, op, IsContiguous: true))
@@ -674,7 +693,7 @@ namespace NumSharp.Backends
             {
                 scalarBody = il =>
                 {
-                    if (IsUnaryPredicateOp(capOp))
+                    if (UnaryOpReadsInputType(capOp))
                     {
                         DirectILKernelGenerator.EmitUnaryScalarOperation(il, capOp, capIn);
                     }

@@ -1316,4 +1316,305 @@ public class SelectionTests
         np.place(a, np.array(new[] { true, true, true, true, true, false, false }), np.array(new[] { 1, 2 }));
         a.ToArray<int>().Should().Equal(1, 2, 1, 2, 1, 0, 0);   // vals [1,2] cycle over 5 trues
     }
+
+    // =================================================================
+    // np.putmask — the position-cursor sibling of np.place.
+    // Probed against NumPy 2.4.2. The DEFINING difference from place: the
+    // values cursor advances by POSITION (every element), so the value written
+    // at flat index i is values[i % nv] — not values[k % nv] for the k-th True.
+    // =================================================================
+
+    [TestMethod]
+    public void PutMask_CycleByPosition()
+    {
+        // a>2 true at flat positions 3,4,5 -> values[3%2],[4%2],[5%2] = -2,-1,-2.
+        var a = np.arange(6, np.int32);
+        np.putmask(a, a > 2, np.array(new[] { -1, -2 }));
+        a.ToArray<int>().Should().Equal(0, 1, 2, -2, -1, -2);
+    }
+
+    [TestMethod]
+    public void PutMask_Differs_From_Place_SameInputs()
+    {
+        // Same a, mask, vals: putmask cycles by position, place cycles per-True.
+        var pm = np.arange(6, np.int32);
+        np.putmask(pm, pm > 2, np.array(new[] { -1, -2 }));
+        pm.ToArray<int>().Should().Equal(0, 1, 2, -2, -1, -2);   // by position
+
+        var pl = np.arange(6, np.int32);
+        np.place(pl, pl > 2, np.array(new[] { -1, -2 }));
+        pl.ToArray<int>().Should().Equal(0, 1, 2, -1, -2, -1);   // by True count
+    }
+
+    [TestMethod]
+    public void PutMask_ScalarValue_FastPath()
+    {
+        // nv==1 (scalar broadcast) — the cursor-free kernel branch.
+        var a = np.arange(6, np.int32);
+        np.putmask(a, a % 2 == 0, 44);   // implicit int -> 0-d NDArray
+        a.ToArray<int>().Should().Equal(44, 1, 44, 3, 44, 5);
+    }
+
+    [TestMethod]
+    public void PutMask_ValuesLongerThanNeeded_ByPosition()
+    {
+        // true at pos 0 and 3 -> values[0]=10, values[3]=40.
+        var a = np.arange(4, np.int32);
+        np.putmask(a, np.array(new[] { true, false, false, true }),
+                   np.array(new[] { 10, 20, 30, 40, 50 }));
+        a.ToArray<int>().Should().Equal(10, 1, 2, 40);
+    }
+
+    [TestMethod]
+    public void PutMask_EmptyValues_IsNoOp()
+    {
+        // NumPy: nv <= 0 returns None without writing — UNLIKE place, which raises.
+        var a = np.arange(4, np.int32);
+        np.putmask(a, a > 0, np.array(new int[0]));
+        a.ToArray<int>().Should().Equal(0, 1, 2, 3);
+    }
+
+    [TestMethod]
+    public void PutMask_EmptyValues_AllTrueMask_StillNoOp()
+    {
+        var a = np.arange(4, np.int32);
+        np.putmask(a, np.array(new[] { true, true, true, true }), np.array(new int[0]));
+        a.ToArray<int>().Should().Equal(0, 1, 2, 3);   // place would throw "Cannot insert from an empty array!"
+    }
+
+    [TestMethod]
+    public void PutMask_MaskDifferentShape_SameSize()
+    {
+        // NumPy checks SIZE, not shape: a (2,3), mask (6,) align by C-order flat position.
+        var a = np.arange(6, np.int32).reshape(2, 3);
+        np.putmask(a, np.array(new[] { true, false, true, false, true, false }),
+                   np.array(new[] { 7, 8, 9 }));
+        a.GetInt32(0, 0).Should().Be(7);
+        a.GetInt32(0, 1).Should().Be(1);
+        a.GetInt32(0, 2).Should().Be(9);
+        a.GetInt32(1, 0).Should().Be(3);
+        a.GetInt32(1, 1).Should().Be(8);
+        a.GetInt32(1, 2).Should().Be(5);
+    }
+
+    [TestMethod]
+    public void PutMask_MaskWrongSize_Throws()
+    {
+        var a = np.arange(6);
+        var act = () => np.putmask(a, np.array(new[] { true, false }), 1);
+        act.Should().Throw<ArgumentException>()
+           .WithMessage("putmask: mask and data must be the same size*");
+    }
+
+    [TestMethod]
+    public void PutMask_ReadOnly_Throws()
+    {
+        // Broadcast views are read-only; putmask reports it FIRST (before mask-size / nv checks).
+        var ro = np.broadcast_to(np.array(new[] { 1, 2, 3 }), new Shape(2, 3));
+        var act = () => np.putmask(ro, np.ones(6, np.@bool), 0);
+        act.Should().Throw<ValueError>()
+           .WithMessage("putmask: output array is read-only*");
+    }
+
+    [TestMethod]
+    public void PutMask_ReadOnly_AllFalseMask_StillThrows()
+    {
+        var ro = np.broadcast_to(np.array(new[] { 1, 2, 3 }), new Shape(2, 3));
+        var act = () => np.putmask(ro, np.zeros(6, np.@bool), 0);
+        act.Should().Throw<ValueError>()
+           .WithMessage("putmask: output array is read-only*");
+    }
+
+    [TestMethod]
+    public void PutMask_ZeroD_MaskTrue()
+    {
+        var a = np.array(5);
+        np.putmask(a, np.array(true), 9);
+        ((int)a).Should().Be(9);
+    }
+
+    [TestMethod]
+    public void PutMask_ZeroD_MaskFalse_NoOp()
+    {
+        var a = np.array(5);
+        np.putmask(a, np.array(false), 9);
+        ((int)a).Should().Be(5);
+    }
+
+    [TestMethod]
+    public void PutMask_EmptyArray_NoOp()
+    {
+        var a = np.zeros(new Shape(0)).astype(NPTypeCode.Int32);
+        np.putmask(a, np.zeros(new Shape(0)).astype(NPTypeCode.Boolean), np.array(new[] { 1 }));
+        a.size.Should().Be(0);
+    }
+
+    [TestMethod]
+    public void PutMask_NonBoolMask_CastToBool()
+    {
+        // int mask -> bool via !=0 (negatives are True).
+        var a = np.arange(5, np.int32);
+        np.putmask(a, np.array(new[] { 0, 2, 0, -1, 0 }), 77);
+        a.ToArray<int>().Should().Equal(0, 77, 2, 77, 4);
+    }
+
+    [TestMethod]
+    public void PutMask_NanInfMask_AreTrue()
+    {
+        // float mask -> bool: NaN and inf are non-zero -> True; +/-0.0 -> False.
+        var a = np.arange(4, np.int32);
+        np.putmask(a, np.array(new[] { double.NaN, 0.0, double.PositiveInfinity, -0.0 }), 7);
+        a.ToArray<int>().Should().Equal(7, 1, 7, 3);
+    }
+
+    [TestMethod]
+    public void PutMask_FloatValues_IntoIntArray_Truncate()
+    {
+        var a = np.arange(5, np.int32);
+        np.putmask(a, a >= 0, np.array(new[] { 1.9, 2.9 }));   // cast to int32, truncates
+        a.ToArray<int>().Should().Equal(1, 2, 1, 2, 1);
+    }
+
+    [TestMethod]
+    public void PutMask_Transposed_WritesBackInCOrder()
+    {
+        // Non-contiguous target: putmask walks the LOGICAL C-order and writes back through strides.
+        // a.T is (3,2) F-contig; logical flat [0,3,1,4,2,5]; a>2 true at flat 1,3,5.
+        var a = np.arange(6, np.int32).reshape(2, 3).T;
+        np.putmask(a, a > 2, np.array(new[] { 100, 200, 300 }));
+        a.GetInt32(0, 0).Should().Be(0);
+        a.GetInt32(0, 1).Should().Be(200);
+        a.GetInt32(1, 0).Should().Be(1);
+        a.GetInt32(1, 1).Should().Be(100);
+        a.GetInt32(2, 0).Should().Be(2);
+        a.GetInt32(2, 1).Should().Be(300);
+    }
+
+    [TestMethod]
+    public void PutMask_NegativeStrideView_WritesBack()
+    {
+        // Reversed view [::-1] is non-contiguous; writes must flow back to the parent.
+        var parent = np.arange(6, np.int32);
+        var rev = parent["::-1"];   // [5,4,3,2,1,0]
+        np.putmask(rev, np.array(new[] { true, false, true, false, true, false }), 0);
+        // rev positions 0,2,4 -> 0; rev = [0,4,0,2,0,0]; parent = rev reversed = [0,0,2,0,4,0]
+        rev.ToArray<int>().Should().Equal(0, 4, 0, 2, 0, 0);
+        parent.ToArray<int>().Should().Equal(0, 0, 2, 0, 4, 0);
+    }
+
+    [TestMethod]
+    public void PutMask_BoolArray_IntValues()
+    {
+        var a = np.zeros(4, np.@bool);
+        np.putmask(a, np.ones(4, np.@bool), np.array(new[] { 0, 5, 0, 9 }));
+        a.ToArray<bool>().Should().Equal(false, true, false, true);
+    }
+
+    [TestMethod]
+    public void PutMask_Float32_Scalar()
+    {
+        var a = np.arange(4, np.float32);
+        np.putmask(a, a > 1, np.array(new[] { 9.5f }));
+        a.ToArray<float>().Should().Equal(0f, 1f, 9.5f, 9.5f);
+    }
+
+    [TestMethod]
+    public void PutMask_Complex_CycleByPosition()
+    {
+        // 16-byte copyKind. true at pos 1,2,3 -> values[1],[2],[0].
+        var a = np.array(new Complex[] { 0, 0, 0, 0 });
+        np.putmask(a, np.array(new[] { false, true, true, true }),
+                   np.array(new Complex[] { new(1, 1), new(2, 2), new(3, 3) }));
+        a.GetAtIndex<Complex>(0).Should().Be(new Complex(0, 0));
+        a.GetAtIndex<Complex>(1).Should().Be(new Complex(2, 2));
+        a.GetAtIndex<Complex>(2).Should().Be(new Complex(3, 3));
+        a.GetAtIndex<Complex>(3).Should().Be(new Complex(1, 1));
+    }
+
+    [TestMethod]
+    public void PutMask_Decimal_SelfConsistent()
+    {
+        // Decimal has no NumPy analog (16-byte copyKind); self-consistent position cursor.
+        var a = np.array(new decimal[] { 0m, 0m, 0m, 0m, 0m });
+        np.putmask(a, np.array(new[] { true, false, true, false, true }),
+                   np.array(new decimal[] { 1m, 2m }));   // pos 0->v0, 2->v2%2=v0, 4->v4%2=v0
+        a.ToArray<decimal>().Should().Equal(1m, 0m, 1m, 0m, 1m);
+    }
+
+    [TestMethod]
+    public void PutMask_Char_SelfConsistent()
+    {
+        // Char has no NumPy dtype (2-byte copyKind); self-consistent.
+        var a = np.array(new char[] { 'a', 'b', 'c', 'd' });
+        np.putmask(a, np.array(new[] { true, false, true, false }), np.array(new char[] { 'X' }));
+        a.ToArray<char>().Should().Equal('X', 'b', 'X', 'd');
+    }
+
+    [TestMethod]
+    public void PutMask_OverlappingValues_ContiguousView()
+    {
+        // values = a[2:8] is a contiguous view aliasing a. NumPy's arrays_overlap -> ENSURECOPY
+        // reads the ORIGINAL a for every cyclic value; without the copy, a[6]=values[0]=a[2] would
+        // read the ALREADY-OVERWRITTEN a[2]. Result must match NumPy's copy semantics.
+        var a = np.arange(10, np.int32);
+        var vals = a["2:8"];                       // [2,3,4,5,6,7], aliases a
+        np.putmask(a, np.ones(10, np.@bool), vals);
+        a.ToArray<int>().Should().Equal(2, 3, 4, 5, 6, 7, 2, 3, 4, 5);
+    }
+
+    [TestMethod]
+    public void PutMask_OverlappingValues_NegativeStrideView()
+    {
+        var a = np.arange(10, np.int32);
+        var vals = a["::-1"];                       // reversed view, aliases a
+        np.putmask(a, np.ones(10, np.@bool), vals);
+        a.ToArray<int>().Should().Equal(9, 8, 7, 6, 5, 4, 3, 2, 1, 0);
+    }
+
+    [TestMethod]
+    public void PutMask_OverlappingMask_AliasesA()
+    {
+        // bool a, mask is a reversed view of a (aliases a's buffer). Must match NumPy (all True).
+        var a = np.array(new[] { true, false, true, false, true, false, true, false });
+        var m = a["::-1"];
+        np.putmask(a, m, np.array(new[] { true }));
+        a.ToArray<bool>().Should().Equal(true, true, true, true, true, true, true, true);
+    }
+
+    [TestMethod]
+    public void PutMask_ComplexMask_ChecksBothParts()
+    {
+        // NumPy FORCECAST complex->bool is (real != 0 || imag != 0): 0+2j is True.
+        var a = np.arange(4, np.int32);
+        np.putmask(a, np.array(new Complex[] { new(1, 0), new(0, 0), new(0, 2), new(0, 0) }), np.array(new[] { 9 }));
+        a.ToArray<int>().Should().Equal(9, 1, 9, 3);
+    }
+
+    [TestMethod]
+    public void PutMask_FullSelfAlias_IsNoOp()
+    {
+        // putmask(a, a>2, a): values IS a. NumPy's ENSURECOPY reads the ORIGINAL a for every
+        // cyclic value, so a[i]=a[i%n]=a[i] and the array is unchanged.
+        var a = np.arange(6, np.int32);
+        np.putmask(a, a > 2, a);
+        a.ToArray<int>().Should().Equal(0, 1, 2, 3, 4, 5);
+    }
+
+    [TestMethod]
+    public void PutMask_MaskMoreDims_SameSize()
+    {
+        // mask (2,3) into a (6,) — NumPy checks SIZE not shape; C-order flat alignment.
+        var a = np.arange(6, np.int32);
+        np.putmask(a, np.array(new[,] { { true, false, true }, { false, true, false } }), np.array(new[] { 9 }));
+        a.ToArray<int>().Should().Equal(9, 1, 9, 3, 9, 5);
+    }
+
+    [TestMethod]
+    public void PutMask_NullArgs_Throw()
+    {
+        var a = np.arange(3);
+        ((Action)(() => np.putmask(null, np.ones(3, np.@bool), 1))).Should().Throw<ArgumentNullException>();
+        ((Action)(() => np.putmask(a, null, 1))).Should().Throw<ArgumentNullException>();
+        ((Action)(() => np.putmask(a, np.ones(3, np.@bool), null))).Should().Throw<ArgumentNullException>();
+    }
 }

@@ -1,10 +1,10 @@
-# PyTorch — shared CPU tensors with NumSharp
+# PyTorch - shared CPU tensors with NumSharp
 
 `NumSharp.Interop.pythonnet` can hand NumSharp memory to PyTorch and bring PyTorch CPU storage back
 without copying it. The bridge follows PyTorch's own supported interchange path:
 [`torch.from_numpy`](https://docs.pytorch.org/docs/stable/generated/torch.from_numpy.html) in one
 direction and [`Tensor.numpy`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.numpy.html)
-in the other. There is no TorchSharp dependency and no compile-time PyTorch dependency — `torch` is
+in the other. There is no TorchSharp dependency and no compile-time PyTorch dependency - `torch` is
 adapted dynamically from the CPython environment. Torch is a built-in front door to the existing
 `NDArrayPythonInterop` memory bridge, not a separate pointer/lifetime implementation.
 
@@ -19,8 +19,8 @@ adapted dynamically from the CPython environment. Torch is a built-in front door
 > release when this page was validated; 2.14 was still a release candidate. Every compatibility claim
 > below is reproduced against the real installed PyTorch by 28 live tests in `PyTorchInteropTests` and
 > `PyTorchInteropEdgeCaseTests` (the accelerator cell runs conditionally when CUDA or MPS exists). The
-> gate is a version **floor** — PyTorch ≥ 2.3, the release whose `torch.from_numpy` accepts the unsigned
-> 16/32/64-bit dtypes — not an exact-line pin, so the suite runs against whatever stable PyTorch a host has.
+> gate is a version **floor** - PyTorch ≥ 2.3, the release whose `torch.from_numpy` accepts the unsigned
+> 16/32/64-bit dtypes - not an exact-line pin, so the suite runs against whatever stable PyTorch a host has.
 
 ---
 
@@ -105,7 +105,7 @@ buffer and builtin-array-like policies independent.
 
 `nd.ToPython()` by itself still produces the codec's NumPy object: a pythonnet encoder is told the
 managed source type, not which Python library will eventually consume it. This is exactly what makes
-the implicit call above work — `torch.from_numpy` receives that encoded NumPy view. In the reverse
+the implicit call above work - `torch.from_numpy` receives that encoded NumPy view. In the reverse
 direction pythonnet does know the requested CLR type, so both `As<NDArray>()` and
 `AsManagedObject(typeof(NDArray))` select the adapter-aware decoder.
 
@@ -207,7 +207,7 @@ A tensor created from NumSharp is a normal PyTorch leaf tensor. Autograd can ope
 result can return as an owning NumSharp array:
 
 ```csharp
-using NDArray x = np.array(new[] { -2.0, 1.5, 3.0 });
+using NDArray x = np.array([-2.0, 1.5, 3.0]);
 
 using (Py.GIL())
 using (PyObject tensor = x.ToTorch())
@@ -247,7 +247,7 @@ PyTorch 2.13.0 accepts the entire NumSharp dtype surface through this bridge:
 | `Decimal` | converted to `float64` | `torch.float64` |
 
 `Decimal` is necessarily a conversion: NumPy and PyTorch have no CLR-decimal dtype, so values lose
-precision beyond what IEEE float64 can represent. `Char` is data, not text semantics — PyTorch sees
+precision beyond what IEEE float64 can represent. `Char` is data, not text semantics - PyTorch sees
 UTF-16 code units as unsigned 16-bit integers.
 
 The unsigned 16/32/64 rows are live-probed behavior of PyTorch 2.13.0 and are pinned by the test;
@@ -341,7 +341,7 @@ package's data protocol:
 See [Any library via `np.frombuffer`](np-frombuffer.md) for the PEP 3118 consumer route and
 [Python & numpy](pythonnet-numpy.md) for the general four-verb/lifetime contract.
 
-One distinction prevents a common mistake: **`torch.Tensor` is not a PEP 3118 buffer exporter** —
+One distinction prevents a common mistake: **`torch.Tensor` is not a PEP 3118 buffer exporter** -
 `memoryview(tensor)` raises `TypeError`. PyTorch *consumes* Python buffers through `torch.frombuffer`,
 and exposes CPU tensors to NumPy through `Tensor.numpy` / `__array__`. The bridge uses the correct
 direction-specific protocol instead of pretending those are the same capability.

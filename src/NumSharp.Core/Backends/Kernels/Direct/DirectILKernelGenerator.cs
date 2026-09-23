@@ -326,6 +326,40 @@ namespace NumSharp.Backends.Kernels
             public static readonly MethodInfo CopySignH = LA(nameof(Utilities.NDLogAddExpMath.CopySignHalf), typeof(Half));
             public static readonly MethodInfo CopySignDec = LA(nameof(Utilities.NDLogAddExpMath.CopySignDecimal), typeof(decimal));
 
+            // np.spacing scalar kernels — the UNARY IEEE-step sibling of nextafter (one loop-dtype
+            // param, so resolved by a single-type GetMethod rather than the binary LA above). All four
+            // overloads are named Spacing; the correct one is bound by its parameter type. Backs the
+            // SIMD kernel's scalar tail (float32/float64) and the strided / Half / Decimal paths.
+            private static MethodInfo SP(Type t) =>
+                typeof(Utilities.NDSpacingMath).GetMethod(nameof(Utilities.NDSpacingMath.Spacing), new[] { t })
+                ?? throw new MissingMethodException(typeof(Utilities.NDSpacingMath).FullName, nameof(Utilities.NDSpacingMath.Spacing));
+            public static readonly MethodInfo SpacingD = SP(typeof(double));
+            public static readonly MethodInfo SpacingF = SP(typeof(float));
+            public static readonly MethodInfo SpacingH = SP(typeof(Half));
+            public static readonly MethodInfo SpacingDec = SP(typeof(decimal));
+
+            // np.hypot scalar kernels — same shape/family as the LogAddNext helpers above, resolved by
+            // GetLogAddNextMethod. Borges' correctly-rounded FMA hypot lives in NDHypotMath.
+            private static MethodInfo HY(string name, Type t) =>
+                typeof(Utilities.NDHypotMath).GetMethod(name, new[] { t, t })
+                ?? throw new MissingMethodException(typeof(Utilities.NDHypotMath).FullName, name);
+            public static readonly MethodInfo HypotD = HY(nameof(Utilities.NDHypotMath.Hypot), typeof(double));
+            public static readonly MethodInfo HypotF = HY(nameof(Utilities.NDHypotMath.HypotF), typeof(float));
+            public static readonly MethodInfo HypotH = HY(nameof(Utilities.NDHypotMath.HypotHalf), typeof(Half));
+            public static readonly MethodInfo HypotDec = HY(nameof(Utilities.NDHypotMath.HypotDecimal), typeof(decimal));
+
+            // np.heaviside scalar kernels — same (op, loop dtype) -> one 2-arg Call family shape as the
+            // LogAddNext/hypot helpers above, but backed by NDHeavisideMath (the step function). Used by
+            // the strided / mixed-dtype / f16 / decimal IL path; the contiguous & scalar-broadcast f32/f64
+            // cases take NDHeavisideMath's SIMD driver in Default.LogAddExp.cs instead.
+            private static MethodInfo HV(string name, Type t) =>
+                typeof(Utilities.NDHeavisideMath).GetMethod(name, new[] { t, t })
+                ?? throw new MissingMethodException(typeof(Utilities.NDHeavisideMath).FullName, name);
+            public static readonly MethodInfo HeavisideD = HV(nameof(Utilities.NDHeavisideMath.Heaviside), typeof(double));
+            public static readonly MethodInfo HeavisideF = HV(nameof(Utilities.NDHeavisideMath.HeavisideF), typeof(float));
+            public static readonly MethodInfo HeavisideH = HV(nameof(Utilities.NDHeavisideMath.HeavisideHalf), typeof(Half));
+            public static readonly MethodInfo HeavisideDec = HV(nameof(Utilities.NDHeavisideMath.HeavisideDecimal), typeof(decimal));
+
             // Integer power helpers (squared-exponentiation with native wrapping).
             // Used by EmitPowerOperation when result type is integer to preserve
             // NumPy's exact-wrap semantics that Math.Pow's double round-trip loses.
@@ -387,6 +421,68 @@ namespace NumSharp.Backends.Kernels
             public static readonly MethodInfo RemUInt64 = NDDiv(nameof(Utilities.NDDivision.RemUInt64), typeof(ulong));
             public static readonly MethodInfo RemSingle = NDDiv(nameof(Utilities.NDDivision.RemSingle), typeof(float));
             public static readonly MethodInfo RemDouble = NDDiv(nameof(Utilities.NDDivision.RemDouble), typeof(double));
+
+            // C-style fmod helpers (NDDivision, np.fmod) — truncated remainder, sign of dividend.
+            // Same 2-arg signature as the Rem* family, resolved via NDDiv.
+            public static readonly MethodInfo FmodSByte = NDDiv(nameof(Utilities.NDDivision.FmodSByte), typeof(sbyte));
+            public static readonly MethodInfo FmodByte = NDDiv(nameof(Utilities.NDDivision.FmodByte), typeof(byte));
+            public static readonly MethodInfo FmodInt16 = NDDiv(nameof(Utilities.NDDivision.FmodInt16), typeof(short));
+            public static readonly MethodInfo FmodUInt16 = NDDiv(nameof(Utilities.NDDivision.FmodUInt16), typeof(ushort));
+            public static readonly MethodInfo FmodChar = NDDiv(nameof(Utilities.NDDivision.FmodChar), typeof(char));
+            public static readonly MethodInfo FmodInt32 = NDDiv(nameof(Utilities.NDDivision.FmodInt32), typeof(int));
+            public static readonly MethodInfo FmodUInt32 = NDDiv(nameof(Utilities.NDDivision.FmodUInt32), typeof(uint));
+            public static readonly MethodInfo FmodInt64 = NDDiv(nameof(Utilities.NDDivision.FmodInt64), typeof(long));
+            public static readonly MethodInfo FmodUInt64 = NDDiv(nameof(Utilities.NDDivision.FmodUInt64), typeof(ulong));
+            public static readonly MethodInfo FmodSingle = NDDiv(nameof(Utilities.NDDivision.FmodSingle), typeof(float));
+            public static readonly MethodInfo FmodDouble = NDDiv(nameof(Utilities.NDDivision.FmodDouble), typeof(double));
+            public static readonly MethodInfo FmodDecimal = NDDiv(nameof(Utilities.NDDivision.FmodDecimal), typeof(decimal));
+
+            // gcd/lcm helpers (NDGcdLcm, np.gcd / np.lcm) — integer-only, same 2-arg (T,T)->T shape as
+            // the Rem*/Fmod* families but resolved from NDGcdLcm. NO float/decimal/complex entries: those
+            // dtypes have no gcd/lcm loop and are rejected at the np.* boundary before a kernel is built.
+            private static MethodInfo NDGcd(string name, Type t) =>
+                typeof(Utilities.NDGcdLcm).GetMethod(name, new[] { t, t })
+                ?? throw new MissingMethodException(typeof(Utilities.NDGcdLcm).FullName, name);
+
+            public static readonly MethodInfo GcdSByte = NDGcd(nameof(Utilities.NDGcdLcm.GcdSByte), typeof(sbyte));
+            public static readonly MethodInfo GcdByte = NDGcd(nameof(Utilities.NDGcdLcm.GcdByte), typeof(byte));
+            public static readonly MethodInfo GcdInt16 = NDGcd(nameof(Utilities.NDGcdLcm.GcdInt16), typeof(short));
+            public static readonly MethodInfo GcdUInt16 = NDGcd(nameof(Utilities.NDGcdLcm.GcdUInt16), typeof(ushort));
+            public static readonly MethodInfo GcdChar = NDGcd(nameof(Utilities.NDGcdLcm.GcdChar), typeof(char));
+            public static readonly MethodInfo GcdInt32 = NDGcd(nameof(Utilities.NDGcdLcm.GcdInt32), typeof(int));
+            public static readonly MethodInfo GcdUInt32 = NDGcd(nameof(Utilities.NDGcdLcm.GcdUInt32), typeof(uint));
+            public static readonly MethodInfo GcdInt64 = NDGcd(nameof(Utilities.NDGcdLcm.GcdInt64), typeof(long));
+            public static readonly MethodInfo GcdUInt64 = NDGcd(nameof(Utilities.NDGcdLcm.GcdUInt64), typeof(ulong));
+
+            public static readonly MethodInfo LcmSByte = NDGcd(nameof(Utilities.NDGcdLcm.LcmSByte), typeof(sbyte));
+            public static readonly MethodInfo LcmByte = NDGcd(nameof(Utilities.NDGcdLcm.LcmByte), typeof(byte));
+            public static readonly MethodInfo LcmInt16 = NDGcd(nameof(Utilities.NDGcdLcm.LcmInt16), typeof(short));
+            public static readonly MethodInfo LcmUInt16 = NDGcd(nameof(Utilities.NDGcdLcm.LcmUInt16), typeof(ushort));
+            public static readonly MethodInfo LcmChar = NDGcd(nameof(Utilities.NDGcdLcm.LcmChar), typeof(char));
+            public static readonly MethodInfo LcmInt32 = NDGcd(nameof(Utilities.NDGcdLcm.LcmInt32), typeof(int));
+            public static readonly MethodInfo LcmUInt32 = NDGcd(nameof(Utilities.NDGcdLcm.LcmUInt32), typeof(uint));
+            public static readonly MethodInfo LcmInt64 = NDGcd(nameof(Utilities.NDGcdLcm.LcmInt64), typeof(long));
+            public static readonly MethodInfo LcmUInt64 = NDGcd(nameof(Utilities.NDGcdLcm.LcmUInt64), typeof(ulong));
+
+            // Fused divmod helpers (NDDivision, np.divmod) — floored quotient (return) + floored
+            // remainder (out). Signature is (T, T, out T) -> T, so resolve with the by-ref third arg.
+            private static MethodInfo NDDiv3(string name, Type t) =>
+                typeof(Utilities.NDDivision).GetMethod(name, new[] { t, t, t.MakeByRefType() })
+                ?? throw new MissingMethodException(typeof(Utilities.NDDivision).FullName, name);
+
+            public static readonly MethodInfo DivmodSByte = NDDiv3(nameof(Utilities.NDDivision.DivmodSByte), typeof(sbyte));
+            public static readonly MethodInfo DivmodByte = NDDiv3(nameof(Utilities.NDDivision.DivmodByte), typeof(byte));
+            public static readonly MethodInfo DivmodInt16 = NDDiv3(nameof(Utilities.NDDivision.DivmodInt16), typeof(short));
+            public static readonly MethodInfo DivmodUInt16 = NDDiv3(nameof(Utilities.NDDivision.DivmodUInt16), typeof(ushort));
+            public static readonly MethodInfo DivmodChar = NDDiv3(nameof(Utilities.NDDivision.DivmodChar), typeof(char));
+            public static readonly MethodInfo DivmodInt32 = NDDiv3(nameof(Utilities.NDDivision.DivmodInt32), typeof(int));
+            public static readonly MethodInfo DivmodUInt32 = NDDiv3(nameof(Utilities.NDDivision.DivmodUInt32), typeof(uint));
+            public static readonly MethodInfo DivmodInt64 = NDDiv3(nameof(Utilities.NDDivision.DivmodInt64), typeof(long));
+            public static readonly MethodInfo DivmodUInt64 = NDDiv3(nameof(Utilities.NDDivision.DivmodUInt64), typeof(ulong));
+            public static readonly MethodInfo DivmodHalf = NDDiv3(nameof(Utilities.NDDivision.DivmodHalf), typeof(Half));
+            public static readonly MethodInfo DivmodSingle = NDDiv3(nameof(Utilities.NDDivision.DivmodSingle), typeof(float));
+            public static readonly MethodInfo DivmodDouble = NDDiv3(nameof(Utilities.NDDivision.DivmodDouble), typeof(double));
+            public static readonly MethodInfo DivmodDecimal = NDDiv3(nameof(Utilities.NDDivision.DivmodDecimal), typeof(decimal));
 
             // Decimal conversion methods (to decimal)
             public static readonly MethodInfo DecimalImplicitFromInt = typeof(decimal).GetMethod("op_Implicit", new[] { typeof(int) })
@@ -563,10 +659,11 @@ namespace NumSharp.Backends.Kernels
                 ?? throw new MissingMethodException(typeof(Half).FullName, "NegativeInfinity");
 
             // Complex methods and fields (Complex uses static fields, not properties).
-            // ComplexAbs routes through NDComplexMath.Abs (npy_cabs / C99 hypot semantics) rather
-            // than Complex.Abs directly: the BCL's private Hypot returns NaN for abs(NaN+inf*i) on
-            // net8.0, where NumPy returns +inf. The helper defers to Complex.Abs for every
-            // finite/NaN-only input, so magnitudes that already match NumPy stay bit-identical.
+            // ComplexAbs routes through NDComplexMath.Abs rather than Complex.Abs: the helper is a port
+            // of NumPy's SIMD simd_cabsolute, whose sqrt(FMA(r, r, 1))·larger is FUSED on every current
+            // dispatch target — Complex.Abs's unfused form differed from numpy.abs on 35.5% of random
+            // inputs — and it keeps C99 hypot's inf-beats-NaN rule, where the BCL's private Hypot
+            // returns NaN for abs(NaN+inf*i) on net8.0 and NumPy returns +inf.
             public static readonly MethodInfo ComplexAbs = typeof(Utilities.NDComplexMath).GetMethod("Abs", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
                 ?? throw new MissingMethodException(typeof(Utilities.NDComplexMath).FullName, "Abs");
             public static readonly MethodInfo ComplexDivisionByDouble = typeof(System.Numerics.Complex).GetMethod("op_Division", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex), typeof(double) })
@@ -704,6 +801,11 @@ namespace NumSharp.Backends.Kernels
             // into NaN instead of NumPy's -inf.
             public static readonly MethodInfo ComplexSquare = typeof(NumSharp.Utilities.NDComplexMath).GetMethod("Square", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
                 ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "Square");
+            // Multiply routes through NDComplexMath (FMA-contracted a*b == NumPy's simd_cmul): the BCL
+            // Complex.op_Multiply is the NAIVE a_re*b_re - a_im*b_im, which diverges from NumPy's fused
+            // vfmaddsub on ~14% of operands (up to ~2840 ULP in the cancellation regime).
+            public static readonly MethodInfo ComplexMultiply = typeof(NumSharp.Utilities.NDComplexMath).GetMethod("Multiply", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex), typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "Multiply");
             public static readonly MethodInfo ComplexLog1p = typeof(NumSharp.Utilities.NDComplexMath).GetMethod("Log1p", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
                 ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "Log1p");
             public static readonly MethodInfo ComplexExp2 = typeof(NumSharp.Utilities.NDComplexMath).GetMethod("Exp2", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
@@ -1307,14 +1409,26 @@ namespace NumSharp.Backends.Kernels
                 return;
             }
 
-            // np.logaddexp / np.logaddexp2 / np.nextafter — one static helper per (op, loop dtype).
-            // Operands arrive already in resultType (the generic binary loops converted both), and
-            // each helper is signatured (resultType, resultType) -> resultType, so the whole scalar
-            // op is a single Call. Intercept BEFORE the decimal/half routing (like min/max) so those
-            // dtypes flow through the shared helpers rather than EmitDecimal/HalfOperation.
-            if (op == BinaryOp.LogAddExp || op == BinaryOp.LogAddExp2 || op == BinaryOp.NextAfter || op == BinaryOp.CopySign)
+            // np.logaddexp / np.logaddexp2 / np.nextafter / np.copysign / np.hypot — one static helper
+            // per (op, loop dtype). Operands arrive already in resultType (the generic binary loops
+            // converted both), and each helper is signatured (resultType, resultType) -> resultType, so
+            // the whole scalar op is a single Call. Intercept BEFORE the decimal/half routing (like
+            // min/max) so those dtypes flow through the shared helpers rather than EmitDecimal/HalfOperation.
+            if (op == BinaryOp.LogAddExp || op == BinaryOp.LogAddExp2 || op == BinaryOp.NextAfter
+                || op == BinaryOp.CopySign || op == BinaryOp.Hypot || op == BinaryOp.Heaviside)
             {
                 EmitLogAddNextOperation(il, op, resultType);
+                return;
+            }
+
+            // np.gcd / np.lcm — one NDGcdLcm helper per integer dtype, signatured (resultType, resultType)
+            // -> resultType, so the whole scalar op is a single Call. Intercepted BEFORE the decimal/half/
+            // complex routing because gcd/lcm have integer loops ONLY: those dtypes are rejected at the
+            // np.* boundary (Default.Gcd/Lcm) and can never reach here as a resultType, so routing them
+            // through EmitDecimal/Half/ComplexOperation (which have no gcd/lcm branch) would be wrong.
+            if (op == BinaryOp.Gcd || op == BinaryOp.Lcm)
+            {
+                EmitGcdLcmOperation(il, op, resultType);
                 return;
             }
 
@@ -1358,6 +1472,14 @@ namespace NumSharp.Backends.Kernels
             if (op == BinaryOp.Mod)
             {
                 EmitModOperation(il, resultType);
+                return;
+            }
+
+            // Special handling for Fmod - C-style truncated remainder (sign of dividend),
+            // unlike Mod's floored (sign of divisor) convention.
+            if (op == BinaryOp.Fmod)
+            {
+                EmitFmodOperation(il, resultType);
                 return;
             }
 
@@ -1582,20 +1704,126 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// Emit np.logaddexp / np.logaddexp2 / np.nextafter / np.copysign via the
-        /// <see cref="Utilities.NDLogAddExpMath"/> scalar helpers. Stack: [x1, x2] (already in the loop
-        /// dtype) -> [result]. Mirrors <see cref="EmitFloorDivideOperation"/>: resolve the per-dtype
-        /// helper, then a single Call.
+        /// Emit Fmod (np.fmod) via the <see cref="Utilities.NDDivision"/> Fmod* helpers, matching
+        /// NumPy's integer <c>@TYPE@_fmod</c> (÷0 -> 0, truncated sign-of-dividend) and the float
+        /// <c>npy_fmod</c> (C# <c>%</c> == C fmod). Stack: [dividend, divisor] -> [result].
+        /// </summary>
+        private static void EmitFmodOperation(ILGenerator il, NPTypeCode resultType)
+        {
+            var m = GetFmodMethod(resultType);
+            if (m != null)
+            {
+                il.EmitCall(OpCodes.Call, m, null);
+                return;
+            }
+            // Boolean (or any other) result reaching here: fall back to plain remainder.
+            il.Emit(IsUnsigned(resultType) ? OpCodes.Rem_Un : OpCodes.Rem);
+        }
+
+        /// <summary>
+        /// Return the <see cref="Utilities.NDDivision"/> fmod helper for <paramref name="resultType"/>,
+        /// or null if the dtype routes elsewhere (Half via <see cref="EmitHalfOperation"/>, Decimal via
+        /// <see cref="EmitDecimalOperation"/>, Complex unsupported).
+        /// </summary>
+        private static MethodInfo? GetFmodMethod(NPTypeCode resultType)
+        {
+            return resultType switch
+            {
+                NPTypeCode.SByte => CachedMethods.FmodSByte,
+                NPTypeCode.Byte => CachedMethods.FmodByte,
+                NPTypeCode.Int16 => CachedMethods.FmodInt16,
+                NPTypeCode.UInt16 => CachedMethods.FmodUInt16,
+                NPTypeCode.Char => CachedMethods.FmodChar,
+                NPTypeCode.Int32 => CachedMethods.FmodInt32,
+                NPTypeCode.UInt32 => CachedMethods.FmodUInt32,
+                NPTypeCode.Int64 => CachedMethods.FmodInt64,
+                NPTypeCode.UInt64 => CachedMethods.FmodUInt64,
+                NPTypeCode.Single => CachedMethods.FmodSingle,
+                NPTypeCode.Double => CachedMethods.FmodDouble,
+                _ => null
+            };
+        }
+
+        /// <summary>
+        /// Emit np.gcd / np.lcm via the <see cref="Utilities.NDGcdLcm"/> integer helpers. Stack:
+        /// [x1, x2] (both already in the integer <paramref name="resultType"/> — the generic binary loops
+        /// convert both operands) -> [result]. A single <c>call</c> to the per-(op,dtype) helper, mirroring
+        /// <see cref="EmitFmodOperation"/>. The <paramref name="resultType"/> is always an integer dtype
+        /// here (bool/float/complex/decimal are rejected in <c>Default.Gcd</c>/<c>Default.Lcm</c> before any
+        /// kernel is generated), so an unresolved dtype is a real bug and throws rather than silently
+        /// producing wrong bytes.
+        /// </summary>
+        /// <param name="il">The kernel's IL stream.</param>
+        /// <param name="op"><see cref="BinaryOp.Gcd"/> or <see cref="BinaryOp.Lcm"/>.</param>
+        /// <param name="resultType">The integer loop dtype both operands were converted to.</param>
+        /// <exception cref="System.NotSupportedException">The (op, dtype) pair has no helper — only reachable
+        /// if a non-integer dtype bypassed the np.* validation (a defect).</exception>
+        private static void EmitGcdLcmOperation(ILGenerator il, BinaryOp op, NPTypeCode resultType)
+        {
+            var m = GetGcdLcmMethod(op, resultType)
+                ?? throw new NotSupportedException(
+                    $"np.{(op == BinaryOp.Gcd ? "gcd" : "lcm")} has no loop for dtype {resultType} " +
+                    "(only the integer dtypes are supported).");
+            il.EmitCall(OpCodes.Call, m, null);
+        }
+
+        /// <summary>
+        /// Return the <see cref="Utilities.NDGcdLcm"/> helper for (<paramref name="op"/>,
+        /// <paramref name="resultType"/>), or null when the dtype has no gcd/lcm loop (every non-integer
+        /// dtype — the np.* boundary raises the no-loop error for those, so null here is a defect signal).
+        /// Char rides along as the NumSharp unsigned-16-bit integer extension.
+        /// </summary>
+        /// <param name="op"><see cref="BinaryOp.Gcd"/> or <see cref="BinaryOp.Lcm"/>.</param>
+        /// <param name="resultType">The integer loop dtype.</param>
+        /// <returns>The cached 2-arg helper <see cref="MethodInfo"/>, or null if unsupported.</returns>
+        private static MethodInfo? GetGcdLcmMethod(BinaryOp op, NPTypeCode resultType)
+        {
+            if (op == BinaryOp.Gcd)
+                return resultType switch
+                {
+                    NPTypeCode.SByte => CachedMethods.GcdSByte,
+                    NPTypeCode.Byte => CachedMethods.GcdByte,
+                    NPTypeCode.Int16 => CachedMethods.GcdInt16,
+                    NPTypeCode.UInt16 => CachedMethods.GcdUInt16,
+                    NPTypeCode.Char => CachedMethods.GcdChar,
+                    NPTypeCode.Int32 => CachedMethods.GcdInt32,
+                    NPTypeCode.UInt32 => CachedMethods.GcdUInt32,
+                    NPTypeCode.Int64 => CachedMethods.GcdInt64,
+                    NPTypeCode.UInt64 => CachedMethods.GcdUInt64,
+                    _ => null
+                };
+            return resultType switch
+            {
+                NPTypeCode.SByte => CachedMethods.LcmSByte,
+                NPTypeCode.Byte => CachedMethods.LcmByte,
+                NPTypeCode.Int16 => CachedMethods.LcmInt16,
+                NPTypeCode.UInt16 => CachedMethods.LcmUInt16,
+                NPTypeCode.Char => CachedMethods.LcmChar,
+                NPTypeCode.Int32 => CachedMethods.LcmInt32,
+                NPTypeCode.UInt32 => CachedMethods.LcmUInt32,
+                NPTypeCode.Int64 => CachedMethods.LcmInt64,
+                NPTypeCode.UInt64 => CachedMethods.LcmUInt64,
+                _ => null
+            };
+        }
+
+        /// <summary>
+        /// Emit np.logaddexp / np.logaddexp2 / np.nextafter / np.copysign / np.hypot / np.heaviside via the
+        /// <see cref="Utilities.NDLogAddExpMath"/> (hypot -> <see cref="Utilities.NDHypotMath"/>, heaviside
+        /// -> <see cref="Utilities.NDHeavisideMath"/>) scalar helpers. Stack: [x1, x2] (already in the loop
+        /// dtype) -> [result]. Mirrors <see cref="EmitFloorDivideOperation"/>: resolve the per-dtype helper,
+        /// then a single Call.
         /// </summary>
         private static void EmitLogAddNextOperation(ILGenerator il, BinaryOp op, NPTypeCode resultType)
             => il.EmitCall(OpCodes.Call, GetLogAddNextMethod(op, resultType), null);
 
         /// <summary>
-        /// Return the <see cref="Utilities.NDLogAddExpMath"/> scalar helper for
+        /// Return the scalar helper (<see cref="Utilities.NDLogAddExpMath"/>, or
+        /// <see cref="Utilities.NDHypotMath"/> / <see cref="Utilities.NDHeavisideMath"/> for those ops) for
         /// (<paramref name="op"/>, <paramref name="resultType"/>). Every loop dtype resolves to
         /// Half / Single / Double / Decimal (float-tier promotion, same as ATan2), so exactly one of
         /// four signatures applies per op. Parallels <see cref="GetFloorDivideMethod"/> /
-        /// <see cref="GetRemainderMethod"/>, but the four ops are one family (intercepted together like
+        /// <see cref="GetRemainderMethod"/>, but these ops are one family (intercepted together like
         /// maximum/minimum), so they share a single op-keyed resolver.
         /// </summary>
         private static MethodInfo GetLogAddNextMethod(BinaryOp op, NPTypeCode resultType)
@@ -1625,6 +1853,22 @@ namespace NumSharp.Backends.Kernels
                         NPTypeCode.Single => CachedMethods.NextAfterF,
                         NPTypeCode.Decimal => CachedMethods.NextAfterDec,
                         _ => CachedMethods.NextAfterD,
+                    };
+                case BinaryOp.Hypot:
+                    return resultType switch
+                    {
+                        NPTypeCode.Half => CachedMethods.HypotH,
+                        NPTypeCode.Single => CachedMethods.HypotF,
+                        NPTypeCode.Decimal => CachedMethods.HypotDec,
+                        _ => CachedMethods.HypotD,
+                    };
+                case BinaryOp.Heaviside:
+                    return resultType switch
+                    {
+                        NPTypeCode.Half => CachedMethods.HeavisideH,
+                        NPTypeCode.Single => CachedMethods.HeavisideF,
+                        NPTypeCode.Decimal => CachedMethods.HeavisideDec,
+                        _ => CachedMethods.HeavisideD,
                     };
                 default: // BinaryOp.CopySign
                     return resultType switch
@@ -1790,6 +2034,14 @@ namespace NumSharp.Backends.Kernels
                 return;
             }
 
+            // Fmod for decimal: C-style truncated remainder (decimal '%' truncates toward zero).
+            if (op == BinaryOp.Fmod)
+            {
+                // Stack: [dividend, divisor] -> NDDivision.FmodDecimal(a, b) == a % b
+                il.EmitCall(OpCodes.Call, CachedMethods.FmodDecimal, null);
+                return;
+            }
+
             // ATan2 for decimal uses DecimalEx.ATan2
             if (op == BinaryOp.ATan2)
             {
@@ -1817,6 +2069,35 @@ namespace NumSharp.Backends.Kernels
             // Bitwise operations not supported for Half
             if (op == BinaryOp.BitwiseAnd || op == BinaryOp.BitwiseOr || op == BinaryOp.BitwiseXor)
                 throw new NotSupportedException($"Bitwise operation {op} not supported for Half type");
+
+            // FloorDivide / Mod / Fmod: NumPy's HALF loops compute in FLOAT32 (astype 'e'->'f' —
+            // HALF_floor_divide/remainder/divmod call npy_floor_dividef/npy_remainderf/npy_fmodf),
+            // so route through the NDDivision *Single helpers rather than the generic double path.
+            // The old double `a - floor(a/b)*b` / `floor(a/b) with inf->NaN` diverged from NumPy on
+            // ÷0 (NaN vs the floored quotient / IEEE ±inf) — the W1-A known bug. A Half is exact in
+            // both float and double, so HalfToDouble+Conv_R4 is an exact (float) widen and
+            // Conv_R8+DoubleToHalf an exact narrow (== (Half)floatResult), keeping the arithmetic in
+            // float32 as NumPy does. Stack in: [half1, half2].
+            if (op == BinaryOp.FloorDivide || op == BinaryOp.Mod || op == BinaryOp.Fmod)
+            {
+                var locRhsHalf = il.DeclareLocal(typeof(Half));
+                il.Emit(OpCodes.Stloc, locRhsHalf);                 // [half1]
+                il.EmitCall(OpCodes.Call, CachedMethods.HalfToDouble, null);
+                il.Emit(OpCodes.Conv_R4);                            // [floatA]
+                il.Emit(OpCodes.Ldloc, locRhsHalf);
+                il.EmitCall(OpCodes.Call, CachedMethods.HalfToDouble, null);
+                il.Emit(OpCodes.Conv_R4);                            // [floatA, floatB]
+                var single = op switch
+                {
+                    BinaryOp.FloorDivide => CachedMethods.FloorDivSingle,
+                    BinaryOp.Mod => CachedMethods.RemSingle,
+                    _ => CachedMethods.FmodSingle,
+                };
+                il.EmitCall(OpCodes.Call, single, null);             // [floatResult]
+                il.Emit(OpCodes.Conv_R8);
+                il.EmitCall(OpCodes.Call, CachedMethods.DoubleToHalf, null); // [halfResult]
+                return;
+            }
 
             var halfToDouble = CachedMethods.HalfToDouble;
 
@@ -1850,27 +2131,8 @@ namespace NumSharp.Backends.Kernels
                 case BinaryOp.Power:
                     il.EmitCall(OpCodes.Call, CachedMethods.MathPow, null);
                     break;
-                case BinaryOp.Mod:
-                    // NumPy floored modulo: a - floor(a/b) * b
-                    var locB = il.DeclareLocal(typeof(double));
-                    var locA = il.DeclareLocal(typeof(double));
-                    il.Emit(OpCodes.Stloc, locB);
-                    il.Emit(OpCodes.Stloc, locA);
-                    il.Emit(OpCodes.Ldloc, locA);
-                    il.Emit(OpCodes.Ldloc, locA);
-                    il.Emit(OpCodes.Ldloc, locB);
-                    il.Emit(OpCodes.Div);
-                    il.EmitCall(OpCodes.Call, CachedMethods.MathFloor, null);
-                    il.Emit(OpCodes.Ldloc, locB);
-                    il.Emit(OpCodes.Mul);
-                    il.Emit(OpCodes.Sub);
-                    break;
-                case BinaryOp.FloorDivide:
-                    // NumPy rule: floor_divide returns NaN when a/b is non-finite (inf or -inf).
-                    // This matches numpy/core/src/umath/loops_arithmetic's npy_floor_divide_@type@.
-                    il.Emit(OpCodes.Div);
-                    EmitFloorWithInfToNaN(il);
-                    break;
+                // Mod / FloorDivide / Fmod are handled above via the float32 NDDivision path
+                // (NumPy's HALF loops compute in float32), so they never reach this double switch.
                 case BinaryOp.ATan2:
                     il.EmitCall(OpCodes.Call, CachedMethods.MathAtan2, null);
                     break;
@@ -1903,12 +2165,28 @@ namespace NumSharp.Backends.Kernels
                 return;
             }
 
+            // Power goes through a NumPy-compatible helper rather than the BCL's Complex.Pow: NumPy's
+            // npy_cpow special-cases integer exponents with EXACT repeated multiplication, whereas the
+            // BCL always takes the polar exp(b*log a) form — up to ~1e14 ULP off on z**3/z**5/z**-1
+            // (effectively wrong), and even z**2 diverges from np.square. See ComplexPowNumPy.
+            if (op == BinaryOp.Power)
+            {
+                il.EmitCall(OpCodes.Call, GetHelper(nameof(ComplexPowNumPy)), null);
+                return;
+            }
+
+            // Multiply goes through NDComplexMath.Multiply (FMA-contracted, == NumPy's simd_cmul)
+            // rather than the BCL's naive op_Multiply — see the ComplexMultiply cache comment.
+            if (op == BinaryOp.Multiply)
+            {
+                il.EmitCall(OpCodes.Call, CachedMethods.ComplexMultiply, null);
+                return;
+            }
+
             var method = op switch
             {
                 BinaryOp.Add => complexType.GetMethod("op_Addition", new[] { complexType, complexType }),
                 BinaryOp.Subtract => complexType.GetMethod("op_Subtraction", new[] { complexType, complexType }),
-                BinaryOp.Multiply => complexType.GetMethod("op_Multiply", new[] { complexType, complexType }),
-                BinaryOp.Power => complexType.GetMethod("Pow", new[] { complexType, complexType }),
                 _ => throw new NotSupportedException($"Operation {op} not supported for Complex")
             };
 
@@ -1919,22 +2197,156 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// NumPy-compatible complex division. The .NET BCL's Complex.op_Division uses
-        /// Smith's algorithm, which returns (NaN, NaN) when the divisor is (0+0j).
-        /// NumPy instead produces IEEE component-wise division: (a.real/0, a.imag/0),
-        /// giving (±inf, NaN) / (±inf, ±inf) / (NaN, NaN) depending on a's components.
-        /// For all other cases we defer to the BCL operator — it's ULP-identical to
-        /// NumPy for finite inputs.
+        /// NumPy-compatible complex division — a byte-for-byte transcription of the CDOUBLE_divide
+        /// scalar loop in NumPy 2.4.2 (<c>numpy/_core/src/umath/loops.c.src</c>), Smith's algorithm.
         /// </summary>
+        /// <remarks>
+        /// This must NOT defer to the BCL's <see cref="System.Numerics.Complex"/> <c>op_Division</c>:
+        /// both use Smith's algorithm, but they differ in the last bit for finite inputs on ~33% of
+        /// random operands. Two differences, each observable:
+        /// <list type="bullet">
+        /// <item>NumPy computes the reciprocal <c>scl = 1/denom</c> ONCE and MULTIPLIES; the BCL DIVIDES
+        /// each component by <c>denom</c>. So <c>z / 3.0</c> is <c>z*(1.0/3.0)</c> in NumPy but <c>z/3.0</c>
+        /// in the BCL — a 1-ULP gap wherever <c>a*(1/c) != a/c</c> (the reported footgun; trapezoid dodged
+        /// it only because <c>/2.0</c> is a power of two, hence exact both ways).</item>
+        /// <item>The branch pivot is <c>|c| &gt;= |d|</c> (NumPy) vs the BCL's <c>|d| &lt; |c|</c>, which pick
+        /// different formulas exactly at <c>|c| == |d|</c>.</item>
+        /// </list>
+        /// The multiplications must stay un-fused (plain <c>*</c>/<c>+</c>, never <see cref="System.Math.FusedMultiplyAdd"/>):
+        /// NumPy's win-amd64 wheel builds this loop under MSVC <c>/fp:precise</c>, which does not contract,
+        /// and RyuJIT never introduces an FMA on its own — so the separate ops match bit-for-bit.
+        /// The divide-by-zero sub-branch divides by <c>|c|</c>/<c>|d|</c> (both <c>+0.0</c> via <see cref="System.Math.Abs(double)"/>),
+        /// so <c>z/(0+0j)</c> yields NumPy's component-wise IEEE result (±inf / NaN) rather than the BCL's (NaN, NaN).
+        /// </remarks>
         // Per-element op called from the binary IL kernel's inner loop — inline where possible,
         // full tier-1 codegen when invoked standalone via the kernel's Call.
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static System.Numerics.Complex ComplexDivideNumPy(System.Numerics.Complex a, System.Numerics.Complex b)
         {
-            if (b.Real == 0.0 && b.Imaginary == 0.0)
-                return new System.Numerics.Complex(a.Real / 0.0, a.Imaginary / 0.0);
-            return a / b;
+            double in1r = a.Real, in1i = a.Imaginary;
+            double in2r = b.Real, in2i = b.Imaginary;
+            double in2r_abs = System.Math.Abs(in2r);
+            double in2i_abs = System.Math.Abs(in2i);
+            if (in2r_abs >= in2i_abs)
+            {
+                // Divisor real part dominates (covers the real-scalar case, in2i == 0).
+                if (in2r_abs == 0.0 && in2i_abs == 0.0)
+                    // Divide by zero → component-wise IEEE division by +0.0 (NumPy's complex inf/nan).
+                    return new System.Numerics.Complex(in1r / in2r_abs, in1i / in2i_abs);
+
+                double rat = in2i / in2r;
+                double scl = 1.0 / (in2r + in2i * rat);
+                return new System.Numerics.Complex((in1r + in1i * rat) * scl, (in1i - in1r * rat) * scl);
+            }
+            else
+            {
+                // Divisor imaginary part dominates.
+                double rat = in2r / in2i;
+                double scl = 1.0 / (in2i + in2r * rat);
+                return new System.Numerics.Complex((in1r * rat + in1i) * scl, (in1i * rat - in1r) * scl);
+            }
         }
+
+        /// <summary>
+        /// Naive complex multiply — a byte-for-byte match of NumPy's internal <c>cmul</c>
+        /// (<c>npy_math_complex.c.src</c>: <c>(ar*br - ai*bi, ar*bi + ai*br)</c>, un-fused). Used by
+        /// <see cref="ComplexPowNumPy"/> so that integer-power repeated multiplication rounds exactly
+        /// as NumPy's does. Identical to the BCL <c>Complex.op_Multiply</c> for this scalar formula,
+        /// but written out so the power port does not depend on the BCL operator's internal shape.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        private static System.Numerics.Complex ComplexMulNumPy(System.Numerics.Complex a, System.Numerics.Complex b)
+        {
+            double ar = a.Real, ai = a.Imaginary, br = b.Real, bi = b.Imaginary;
+            return new System.Numerics.Complex(ar * br - ai * bi, ar * bi + ai * br);
+        }
+
+        /// <summary>
+        /// NumPy-compatible complex power — a transcription of NumPy 2.4.2's <c>npy_cpow</c>
+        /// (<c>numpy/_core/src/npymath/npy_math_complex.c.src</c>).
+        /// </summary>
+        /// <remarks>
+        /// This must NOT defer to the BCL's <see cref="System.Numerics.Complex"/> <c>Pow</c> for the
+        /// common cases: <c>Complex.Pow</c> ALWAYS evaluates the polar form <c>exp(b·log a)</c>, which
+        /// for an INTEGER exponent is catastrophically imprecise — measured up to ~1e14 raw ULP on
+        /// <c>z**3</c>/<c>z**5</c>/<c>z**-1</c> (effectively the wrong value), and even <c>z**2</c>
+        /// diverges from <see cref="System.Numerics.Complex"/>-free <c>np.square</c>. NumPy instead:
+        /// <list type="bullet">
+        /// <item><c>b == 0</c> → <c>1+0j</c> (incl. <c>0**0</c>).</item>
+        /// <item><c>a == 0</c>, <c>b != 0</c> → <c>0+0j</c> when <c>Re(b) &gt; 0</c>, else complex NaN
+        /// (<c>0</c> to a negative/imaginary power; NumPy raises the invalid flag via <c>inf-inf</c>).</item>
+        /// <item>Integer <c>Re(b)</c> in (-100, 100) with <c>Im(b) == 0</c> → EXACT repeated
+        /// multiplication (<c>z*z</c>, binary exponentiation via <see cref="ComplexMulNumPy"/>), with
+        /// <c>1/result</c> through the byte-exact <see cref="ComplexDivideNumPy"/> for a negative exponent.</item>
+        /// <item>Everything else (non-integer real / complex exponent) → the platform path
+        /// <see cref="System.Numerics.Complex.Pow(System.Numerics.Complex,System.Numerics.Complex)"/>;
+        /// NumPy uses the host <c>cpow</c> there, so a bounded ~ULP / libm divergence remains for that
+        /// branch only (documented in the oracle).</item>
+        /// </list>
+        /// The <c>a == 0</c> branch is checked BEFORE the integer branch, exactly as NumPy orders them —
+        /// otherwise <c>0**-1</c> would take the repeated-multiply path (<c>1/0 → inf/nan</c>) instead of
+        /// yielding NumPy's complex NaN. The complex-NaN result uses the POSITIVE quiet-NaN payload
+        /// NumPy's <c>NPY_NAN</c> carries (<c>0x7ff8…</c>, not .NET's negative <c>double.NaN</c>) so the
+        /// bytes match should complex-power NaN ever become contractual.
+        /// </remarks>
+        // Per-element op called from the binary IL kernel's inner loop.
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        private static System.Numerics.Complex ComplexPowNumPy(System.Numerics.Complex a, System.Numerics.Complex b)
+        {
+            double ar = a.Real, ai = a.Imaginary;
+            double br = b.Real, bi = b.Imaginary;
+
+            // a**0 == 1 for any a (including 0**0), by the definition of the logarithm.
+            if (br == 0.0 && bi == 0.0)
+                return new System.Numerics.Complex(1.0, 0.0);
+
+            // 0**b (b != 0): 0 for Re(b) > 0, otherwise complex NaN (negative / imaginary power of 0).
+            if (ar == 0.0 && ai == 0.0)
+            {
+                if (br > 0.0)
+                    return new System.Numerics.Complex(0.0, 0.0);
+                // Raise the IEEE invalid flag the way NumPy does (inf - inf), then return complex NaN.
+                double invalid = double.PositiveInfinity - double.PositiveInfinity;
+                _ = invalid;
+                return new System.Numerics.Complex(PositiveNaN, PositiveNaN);
+            }
+
+            // Integer real exponent strictly within (-100, 100): exact repeated multiplication.
+            long n;
+            if (bi == 0.0 && br > -100.0 && br < 100.0 && (n = (long)br) == br)
+            {
+                if (n == 1) return new System.Numerics.Complex(ar, ai);           // unroll (inf-friendly)
+                if (n == 2) return ComplexMulNumPy(a, a);                          // == np.square
+                if (n == 3) return ComplexMulNumPy(a, ComplexMulNumPy(a, a));
+
+                // General |n| < 100 via binary exponentiation over ComplexMulNumPy.
+                long nn = n < 0 ? -n : n;
+                var aa = new System.Numerics.Complex(1.0, 0.0);
+                var p = new System.Numerics.Complex(ar, ai);
+                long mask = 1;
+                while (true)
+                {
+                    if ((nn & mask) != 0)
+                        aa = ComplexMulNumPy(aa, p);
+                    mask <<= 1;
+                    if (nn < mask || mask <= 0)   // mask <= 0 guards the (theoretical) shift overflow
+                        break;
+                    p = ComplexMulNumPy(p, p);
+                }
+                // Negative exponent → reciprocal through the byte-exact complex divide (NumPy's cdiv(1, r)).
+                return br < 0.0 ? ComplexDivideNumPy(new System.Numerics.Complex(1.0, 0.0), aa) : aa;
+            }
+
+            // Non-integer real or complex exponent: NumPy uses the host cpow; the BCL's polar
+            // exp(b*log a) is the closest managed equivalent (documented bounded libm/~ULP divergence).
+            return System.Numerics.Complex.Pow(a, b);
+        }
+
+        /// <summary>NumPy's positive quiet NaN (<c>NPY_NAN</c>, <c>0x7ff8000000000000</c>) — .NET's
+        /// <see cref="double.NaN"/> is the NEGATIVE <c>0xfff8…</c>, so this constant is used where a
+        /// complex result must carry NumPy's NaN bytes.</summary>
+        private static readonly double PositiveNaN =
+            System.BitConverter.Int64BitsToDouble(unchecked((long)0x7ff8000000000000UL));
 
         /// <summary>
         /// SIMD lane type for NPTypeCode. Boolean maps to <c>byte</c> — there is no

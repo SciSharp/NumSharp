@@ -1,0 +1,319 @@
+{
+  "schema_version": 1,
+  "gist": "https://gist.github.com/karpathy/8627fe009c40f57531cb18360106ce95",
+  "source_filename": "microgpt.py",
+  "source_raw_url": "https://gist.githubusercontent.com/karpathy/8627fe009c40f57531cb18360106ce95/raw/f42a9440467b4620bd6c178777e7a0209ef064d2/microgpt.py",
+  "raw_file_revision": "f42a9440467b4620bd6c178777e7a0209ef064d2",
+  "gist_head_revision": null,
+  "pin_limitation": "The immutable raw file was obtained and hashed; the gist HEAD API failed. Do not relabel the raw-file revision as a verified gist HEAD.",
+  "source_bytes": 9319,
+  "source_sha256": "d47d88c2fd432c8ebdc1048beab7f7eb64ea7e0e664e11b812d72a6d95ebccee",
+  "source_license": "No explicit license declaration in the inspected pinned file; attribution does not imply a license grant.",
+  "implementation": "examples/gist/karpathy/karpathy.MicroGpt.cs",
+  "status": "Implemented; actual pass/fail counts and measured diagnostics come from central TRX artifacts.",
+  "reference_tiers": [
+    {
+      "tier": "vectorized_numpy_byte_contract",
+      "description": "Independent NumPy implementation of the matrix forward pass, analytic derivatives and Adam. The same NumSharp parameter buffers are exported zero-copy; the reference computes independently. Logits, loss, every gradient, updated weights and both Adam moments use exact dtype/shape/byte assertions. NumPy is not the original source implementation: the original is scalar Python.",
+      "runtime": "NumPy 2.4.2, CPython 3.12.12 for the initial reference execution; final runtime records are in verification artifacts."
+    },
+    {
+      "tier": "original_scalar_equations_value_contract",
+      "description": "Separately expressed scalar-list causal forward equations, with explicit sequential summation and prefix key/value history like the source Value graph. Compared numerically, not claimed byte-identical to matrix BLAS/reductions. Analytic gradients also undergo exhaustive finite-difference checking.",
+      "absolute_logit_gate": 2e-14,
+      "initial_numpy_probe_scalar_difference": 1.3877787807814457e-17,
+      "initial_numpy_probe_gradient_max_normalized_error": 1.389675942153014e-9
+    },
+    {
+      "tier": "pinned_original_scalar_autograd_short_run",
+      "description": "KarpathyOriginalSource.Load embeds and SHA256-verifies the original microgpt.py, AST-selects its unmodified Value/linear/softmax/rmsnorm/gpt definitions, and executes three actual Value-graph backward/Adam steps plus twenty autoregressive samples. Shared starting parameter bytes; small local documents; declared shared NumPy uniform stream for sampling.",
+      "rtol": 1e-9,
+      "atol": 1e-11,
+      "claim": "Numerical scalar-source parity, NOT scalar-source bit identity. Separate NumPy ledger retains exact bytes."
+    }
+  ],
+  "cases": [
+    {
+      "case_id": "MICROGPT-TOKENIZER",
+      "source_lines": [
+        [
+          23,
+          27
+        ],
+        [
+          155,
+          158
+        ]
+      ],
+      "kind": "source_numerical_contract",
+      "tests": [
+        "KarpathyMicroGptTests.Tokenizer_UsesCodePointOrderAndSharedBosEndMarker",
+        "KarpathyMicroGptTests.ContextTruncationAndBadArguments_AreExplicit"
+      ],
+      "assertions": [
+        "Vocabulary sorted by Unicode code point, with a single shared BOS/end token",
+        "Encode/decode round trip including a supplementary Unicode character",
+        "Unknown tokens and invalid context lengths rejected",
+        "Long documents are truncated at the configured block size"
+      ],
+      "limits": [
+        "The caller supplies documents; no file download or hidden corpus normalization is claimed."
+      ]
+    },
+    {
+      "case_id": "MICROGPT-ORIGINAL-DIMENSIONS",
+      "source_lines": [
+        [
+          75,
+          90
+        ]
+      ],
+      "kind": "source_parameter_configuration",
+      "tests": [
+        "KarpathyMicroGptTests.OriginalDefaultDimensions_Have4192ParametersFor27Tokens_AndLiveBeyondCallerScope",
+        "KarpathyMicroGptLiveTests.CompleteTransformer_LogitsLossAndEveryGradient_ExactNumpy"
+      ],
+      "assertions": [
+        "Default one layer, width 16, four heads and context 16",
+        "27-token configuration has 4192 parameters across nine matrices",
+        "Model parameters and optimizer storage remain valid after a surrounding temporary scope closes",
+        "Forward/backward covers original width/head configuration and an additional two-layer configuration"
+      ],
+      "limits": [
+        "Initialization has the source's Gaussian standard deviation .08 but uses NumPy RandomState, not Python random.gauss. No identical source RNG state is asserted."
+      ]
+    },
+    {
+      "case_id": "MICROGPT-COMPLETE-CAUSAL-FORWARD",
+      "source_lines": [
+        [
+          94,
+          143
+        ]
+      ],
+      "kind": "source_architecture_and_forward",
+      "tests": [
+        "KarpathyMicroGptTests.CausalAttention_FutureTokensCannotChangeEarlierOutputs",
+        "KarpathyMicroGptLiveTests.CompleteTransformer_LogitsLossAndEveryGradient_ExactNumpy",
+        "KarpathyMicroGptLiveTests.OriginalDimensionCausalModel_AgreesWithScalarValueEquations"
+      ],
+      "assertions": [
+        "Token plus position embedding followed by the initial RMSNorm and the separate pre-attention RMSNorm",
+        "All Q/K/V projections, four causal attention heads, output projection and residual",
+        "Pre-MLP RMSNorm, 4x expansion, ReLU, contraction and residual, with no biases or final normalization",
+        "All logits are checked against independent NumPy; scalar-list equations are checked at their separate stated tolerance",
+        "Changing future tokens cannot change earlier logits"
+      ],
+      "limits": [
+        "Full-sequence masked matrix attention replaces incremental scalar computation. Prefix recomputation during inference replaces the source key/value cache; this is an efficiency difference, not a missing causal operation."
+      ]
+    },
+    {
+      "case_id": "MICROGPT-COMPLETE-BACKPROP",
+      "source_lines": [
+        [
+          29,
+          72
+        ],
+        [
+          160,
+          171
+        ]
+      ],
+      "kind": "analytic_reverse_mode_replacement",
+      "tests": [
+        "KarpathyMicroGptTests.EveryParameterGradient_AgreesWithCentralDifferences",
+        "KarpathyMicroGptLiveTests.CompleteTransformer_LogitsLossAndEveryGradient_ExactNumpy",
+        "KarpathyMicroGptTests.OwningGradientBatch_SurvivesCallerScopeAndCanUpdateModel"
+      ],
+      "assertions": [
+        "Every parameter gradient, including repeated-token embedding scatter and position embedding gradients, is compared with independent NumPy analytic derivatives",
+        "Every element of the 228-parameter small model is perturbed in both directions with delta=1e-5",
+        "Finite-difference error abs(numeric-analytic)/(1+abs(numeric)+abs(analytic)) must remain below 2e-6",
+        "Loss and all output logits are also checked"
+      ],
+      "limits": [
+        "A general-purpose scalar Value autograd API is not ported. Its complete transformer chain rule is implemented manually at matrix level, including all attention/softmax/RMSNorm/residual/MLP derivatives."
+      ]
+    },
+    {
+      "case_id": "MICROGPT-ADAM",
+      "source_lines": [
+        [
+          146,
+          149
+        ],
+        [
+          173,
+          182
+        ]
+      ],
+      "kind": "source_optimizer",
+      "tests": [
+        "KarpathyMicroGptLiveTests.AdamFourUpdates_AllWeightsAndBothMoments_ExactNumpy",
+        "KarpathyMicroGptTests.ActualTrainingLowersCorpusLoss_AndProducesTwentyBoundedSamples"
+      ],
+      "assertions": [
+        "Source beta1=.85, beta2=.99, epsilon=1e-8, both bias corrections and linear learning-rate decay",
+        "Every weight and both moment buffers compare byte-for-byte after each of four independent NumPy updates",
+        "The actual training path updates every parameter and advances the optimizer step counter"
+      ],
+      "limits": [
+        "Adam is used, not a surrogate optimizer or frozen-weight forward-only demonstration."
+      ]
+    },
+    {
+      "case_id": "MICROGPT-ACTUAL-LOCAL-TRAINING",
+      "source_lines": [
+        [
+          14,
+          21
+        ],
+        [
+          151,
+          184
+        ]
+      ],
+      "kind": "bounded_training_with_explicit_dataset_adaptation",
+      "tests": [
+        "KarpathyMicroGptTests.ActualTrainingLowersCorpusLoss_AndProducesTwentyBoundedSamples",
+        "KarpathyMicroGptTests.OriginalDefaultThousandStepSchedule_TrainsEveryStepAndImprovesLocalCorpus",
+        "KarpathyMicroGptTests.ContextTruncationAndBadArguments_AreExplicit",
+        "KarpathyMicroGptLiveTests.TwentySamplesAfterTraining_MatchIndependentAutoregressiveInference"
+      ],
+      "assertions": [
+        "Both a 200-update diagnostic and the original default 1000-update schedule genuinely train on ten embedded local names at the original architecture dimensions",
+        "All per-step losses finite, every default step callback observed, optimizer step count 1000, full-corpus post-training loss below 75 percent of pre-training loss",
+        "Independent NumPy pre-execution observed full-corpus loss 2.649477742973952 to .5453333686931137 on the 200-update fixture",
+        "Local fixture vocabulary 13, parameter count 3744",
+        "Demo uses the original 1000-update count followed by twenty generated samples"
+      ],
+      "limits": [
+        "The source's remotely downloaded names.txt, shuffled document order and Python RNG stream are not reproduced",
+        "No claim is made about the loss curve or generated names of the original full downloaded corpus"
+      ]
+    },
+    {
+      "case_id": "MICROGPT-TWENTY-SAMPLED-NAMES",
+      "source_lines": [
+        [
+          186,
+          200
+        ]
+      ],
+      "kind": "functional_autoregressive_inference",
+      "tests": [
+        "KarpathyMicroGptTests.ActualTrainingLowersCorpusLoss_AndProducesTwentyBoundedSamples",
+        "KarpathyMicroGptLiveTests.TwentySamplesAfterTraining_MatchIndependentAutoregressiveInference"
+      ],
+      "assertions": [
+        "Twenty actual autoregressive samples at temperature .5 with context cap 16 and BOS termination",
+        "Samples contain only vocabulary characters and are reproducible for the supplied seed",
+        "An independently executed NumPy sampling loop over the same trained parameter buffers must produce the same twenty token sequences",
+        "Inference consumes trained logits rather than a canned list of names"
+      ],
+      "limits": [
+        "Categorical inverse-CDF sampling uses NumPy RandomState instead of Python random.choices. Exact generated strings are compared within that explicitly specified RNG contract, not against nonexistent original sample-output fixtures."
+      ]
+    },
+    {
+      "case_id": "MICROGPT-PINNED-ORIGINAL-SHORT-RUN",
+      "source_lines": [
+        [
+          29,
+          72
+        ],
+        [
+          94,
+          143
+        ],
+        [
+          151,
+          200
+        ]
+      ],
+      "kind": "pinned_original_short_run",
+      "tier": "KarpathyShortRun",
+      "tests": [
+        "KarpathyMicroGptLiveTests.OriginalValueGraph_ThreeTrainingUpdatesAndTwentySamples_NumericalParity"
+      ],
+      "assertions": [
+        "Actual original scalar-autograd loss.backward executes at all three updates",
+        "Every loss/logit/parameter gradient, updated weight and Adam moment compared at each update",
+        "Twenty samples from original incremental-key/value computation match the port",
+        "Full maximum absolute state difference is recorded in TRX"
+      ],
+      "limits": [
+        "Original scalar graph and vectorized reduction order differ; explicit rtol1e-9/atol1e-11 value gate, not a byte fallback",
+        "Explicit small model/documents and shared NumPy sampling stream; no original remote corpus/Python RNG equivalence"
+      ]
+    },
+    {
+      "case_id": "MICROGPT-EVERY-UPDATE-BYTE-LEDGER",
+      "kind": "independent_numpy_byte_ledger",
+      "tier": "KarpathyByteParity",
+      "tests": [
+        "KarpathyMicroGptLiveTests.ShortTrainingLedger_EveryLossLogitGradientAndAdamState_ByteExactNumpy"
+      ],
+      "assertions": [
+        "Six alternating-document updates with228 dtype/shape/byte checkpoints",
+        "Every loss/logit/allninegradientarrays and eachupdatedweight/firstmoment/secondmoment match before moving to next update",
+        "Python evolves independent parameter copies after one initial shared-buffer export"
+      ],
+      "limits": [
+        "Exact NumPy matrix formulation; not a scalar Python byte claim"
+      ]
+    }
+  ],
+  "exclusions": [
+    {
+      "case_id": "MICROGPT-NETWORK-AND-FILE-IO",
+      "source_lines": [
+        [
+          9,
+          21
+        ]
+      ],
+      "status": "not_executed",
+      "reason": "No input.txt, urllib download, external dataset or file side effect. Callers supply local names; the demo uses a committed in-code fixture."
+    },
+    {
+      "case_id": "MICROGPT-SCALAR-ENGINE-BYTE-IDENTITY",
+      "source_lines": [
+        [
+          29,
+          72
+        ],
+        [
+          94,
+          143
+        ]
+      ],
+      "status": "explicitly_not_claimed",
+      "reason": "Matrix BLAS/reduction order and manually accumulated derivatives need not equal the original scalar Value graph bit-for-bit. Independent NumPy byte tests and scalar-equation value/finite-difference tests are separate contracts."
+    },
+    {
+      "case_id": "MICROGPT-ORIGINAL-RNG-AND-CORPUS-OUTPUT",
+      "source_lines": [
+        [
+          12,
+          21
+        ],
+        [
+          80,
+          88
+        ],
+        [
+          152,
+          184
+        ],
+        [
+          187,
+          200
+        ]
+      ],
+      "status": "explicit_adaptation",
+      "reason": "Original random.shuffle/gauss/choices streams and the full remote dataset are not reproduced; there are no fixed original numerical outputs to invent. Model, loss, optimizer and sampling algorithms are fully implemented."
+    }
+  ]
+}

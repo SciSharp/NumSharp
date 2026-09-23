@@ -75,11 +75,22 @@ namespace NumSharp.Statistics
             }
         }
 
+        /// <param name="medianMean">
+        ///     When true, the even-size slice is reduced with NumPy's <c>np.median</c> rule —
+        ///     the <b>mean</b> of the two central order statistics, <c>(a+b)/2</c> — instead of
+        ///     the quantile <c>_lerp</c> at q=0.5. The two disagree by up to 1 ULP on ~10 % of
+        ///     inputs (NumPy computes <c>np.median</c> via <c>mean(part[middle])</c>, a different
+        ///     code path from <c>np.quantile(a, 0.5)</c>), so <c>np.median</c>/<c>np.nanmedian</c>
+        ///     MUST set this to stay bit-exact. Only meaningful with <paramref name="method"/> =
+        ///     <see cref="QuantileMethod.Linear"/> and q = 0.5 (the sole caller shape); ignored by
+        ///     the complex path, whose <c>(1-γ)·a + γ·b</c> form already equals the mean at γ=0.5.
+        /// </param>
         [NDScoped]
         public static NDArray Compute(
             NDArray a, double[] q, int[] axisArr, NDArray @out,
             bool overwrite_input, QuantileMethod method, bool keepdims, bool qIsScalar,
-            bool emptyReturnsNaN = false, bool ignoreNaN = false, bool allowBooleanContinuous = false)
+            bool emptyReturnsNaN = false, bool ignoreNaN = false, bool allowBooleanContinuous = false,
+            bool medianMean = false)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
             if (q is null) throw new ArgumentNullException(nameof(q));
@@ -233,6 +244,12 @@ namespace NumSharp.Statistics
                     fixed (int* rowKPtr = rowKManaged)
                     {
                         long dstOuterStride = qIsScalar ? 0L : outerSize;
+                        // Logical element 0 of the staged operand. Most staging paths copy/flatten
+                        // (offset 0), but the 1-D-contiguous and last-axis-contiguous fast paths
+                        // keep `staged = a` with its original Shape.offset — so the base MUST fold in
+                        // `offset * itemsize`, exactly as np.average/np.cov do. Omitting it read from
+                        // the buffer start and ignored the slice (e.g. a `simple_slice_offset` view).
+                        byte* stagedBase = (byte*)staged.Address + staged.Shape.offset * srcSize;
                         // Complex has no IL quantile kernel — values have no natural
                         // total order and the IL pipeline is float/int-only.  Route
                         // through a managed lexicographic-sort + interpolate path that
@@ -242,7 +259,7 @@ namespace NumSharp.Statistics
                         if (a.typecode == NPTypeCode.Complex)
                         {
                             ComputeComplexQuantile(
-                                srcBase: (System.Numerics.Complex*)staged.Address,
+                                srcBase: (System.Numerics.Complex*)stagedBase,
                                 outer: outerSize, n: n,
                                 method: method,
                                 q: qPtr, nQs: qCopy.Length,
@@ -255,7 +272,7 @@ namespace NumSharp.Statistics
                                 srcType: a.typecode,
                                 outType: outTypeCode,
                                 method: method,
-                                srcBase: staged.Address,
+                                srcBase: stagedBase,
                                 scratchBase: scratchPtr,
                                 outer: outerSize,
                                 n: n,
@@ -266,7 +283,8 @@ namespace NumSharp.Statistics
                                 dstBase: resultRaw.Address,
                                 dstOuterStride: dstOuterStride,
                                 ignoreNaN: nanAware,
-                                rowKScratch: rowKPtr);
+                                rowKScratch: rowKPtr,
+                                medianMean: medianMean);
                         }
                     }
                 }

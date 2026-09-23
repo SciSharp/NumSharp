@@ -28,6 +28,16 @@ namespace NumSharp.Backends
                 throw new IncorrectTypeException(
                     "No loop matching the specified signature and casting was found for ufunc arctan2");
 
+            // Complex has NO arctan2 loop (float-only ufunc). This guard is LOAD-BEARING, not cosmetic:
+            // without it a complex128 input falls through to ExecuteATan2Kernel, whose mixed-type kernel
+            // has no complex path and writes out of bounds on the 16-byte lanes -> heap corruption /
+            // fatal ExecutionEngineException (found by the ma differential fuzz). NumPy raises TypeError
+            // "ufunc 'arctan2' not supported for the input types ..." (probed 2.4.2); mirror hypot's guard.
+            if (y.GetTypeCode == NPTypeCode.Complex || x.GetTypeCode == NPTypeCode.Complex)
+                throw new IncorrectTypeException(
+                    "ufunc 'arctan2' not supported for the input types, and the inputs " +
+                    "could not be safely coerced to any supported types according to the casting rule ''safe''");
+
             // ufunc out=/where= ride the shared binary Into-path:
             // EmitScalarOperation special-cases ATan2 (Math.Atan2 /
             // DecimalMath.ATan2) and the mixed-dtype body converts both
