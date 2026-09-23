@@ -1,7 +1,8 @@
 # API Proposal: `System.Collections.Concurrent.ConcurrentOrderedDictionary<TKey, TValue>`
 
 **Status:** Draft proposal · **Area:** System.Collections.Concurrent · **Type:** New type
-**Reference implementation:** `NumSharp.Collections.OrderedDictionary<TKey, TValue>` (measured + concurrency-verified; see [§8](#8-reference-implementation--evidence))
+**Reference implementation:** `NumSharp.Collections.OrderedDictionary<TKey, TValue>` (a measured prototype of the core
+surface, not the full proposed API; its concurrency contract is pinned by tests — see [§8](#8-reference-implementation--evidence))
 
 > **Naming note.** The reference implementation is NumSharp's lock-free, value-once
 > `NumSharp.Collections.OrderedDictionary<TKey, TValue>`. Every *unqualified* `OrderedDictionary<TKey, TValue>` /
@@ -203,13 +204,24 @@ This is the load-bearing part of the contract.
 - **No torn or garbage reads.** A reader never observes a partially-written entry or a torn value. The per-slot
   reference is published with release / read with acquire; a value update to an atomically-writable `TValue` is a
   single atomic store; a value update to a non-atomically-writable `TValue` (a wide struct, or `long` on a 32-bit
-  runtime) publishes a fresh value array instead of storing in place, so it cannot tear either.
+  runtime) publishes a whole fresh *generation* — index, keys and values — instead of storing in place, so it cannot
+  tear either. No array is ever shared by two generations: that ownership is what lets a lookup skip any count check
+  (a values-only copy would share the index with the older generation, and an older-generation reader could then
+  resolve a key added later to a slot its own generation never wrote — the defect this rule closes).
 - **No lost updates.** A completed write is always durably reflected, *including* the hard race of a lock-free value
-  update running concurrently with a resize that copies the backing arrays: a resize-in-progress flag held across the
-  whole copy+publish, combined with a generation re-check after the store, forces the update to retry under the lock if
-  it could have landed on an abandoned generation.
-- **No corruption.** The structure is never left internally inconsistent under any interleaving.
-- **Snapshot enumeration.** `GetEnumerator`, `ToArray`, `Keys`, `Values` capture a point in time; they never throw
+  update running concurrently with a resize that copies the backing arrays. The update stores its value, executes a
+  **full fence**, and then checks a resize-in-progress flag and the generation; every resize raises the flag with a
+  **full-fence** interlocked exchange before it reads the live values, and lowers it (in a `finally`) after publishing.
+  The two halves are the store-buffering ("Dekker") shape —
+  store mine, then load theirs, on both sides — which release/acquire ordering alone does **not** make safe: x86-TSO and
+  Arm64 both let each side's load miss the other's buffered store (measured on x64 with release/acquire only: ~3.5 %
+  of completed replaces lost under copy churn). With a full fence on both sides at least one side sees the other: the
+  copy captures the new value, or the update sees the flag and retries under the lock; the generation check catches a
+  resize that had already published.
+- **No corruption.** The structure is never left internally inconsistent under any interleaving, and a key comparer
+  that throws during a resize (which re-hashes every surviving key) aborts it before anything is published.
+- **Snapshot enumeration.** `GetEnumerator`, `ToArray`, `Keys`, `Values` capture a point in time — one read of the
+  published generation, from which both the array and the count are taken; they never throw
   `InvalidOperationException` due to concurrent mutation and reflect a consistent prefix/subset — the
   `ConcurrentDictionary` enumeration contract.
 
@@ -218,21 +230,34 @@ This is the load-bearing part of the contract.
 - **Reads are lock-free and wait-free-ish** (`TryGetValue`, `ContainsKey`, `IndexOf`, positional gets, `Count`,
   starting an enumeration): they take no lock and scale with cores.
 - **Value replacement of an existing key** (`this[key] = …`, `TryUpdate`, `AddOrUpdate`-update) is **lock-free** when
-  `TValue` is atomically writable; otherwise it takes the write lock.
+  `TValue` is atomically writable — one store plus one full fence (the handshake of [§7.1](#71-guarantees)); otherwise it
+  takes the write lock.
 - **Structural writes** (`TryAdd`, `TryRemove`, `Clear`, add-path of `GetOrAdd`/`AddOrUpdate`, resize) are
   **serialized by a single lock** — one at a time. This is deliberate: a global insertion order requires a
   serialization point. (`ConcurrentDictionary` likewise locks for writes.)
-- **Consistency model.** Per key, operations are linearizable (a value update on key *k* is immediately visible to a
-  later read of *k*). *Across* keys/paths, views are snapshot-consistent, not instantaneously linked: `Count`,
-  enumeration, and `IndexOf` are each a moment-in-time value, exactly as with `ConcurrentDictionary` — do not assume
-  two *separate* calls (`IndexOf(k)` then `this[i]`) line up while writers run.
-- **Memory model.** All cross-thread publication uses `Volatile`/release-acquire, so the guarantees hold on weak
-  memory models (Arm64), not only x86/x64.
+- **Consistency model.** A completed value update on key *k* is never lost and is visible to every read of *k* that
+  starts after it returns. Two named relaxations remain, both confined to an update that is **still running** and has to
+  retry under the lock because a resize's copy missed its store (the store is visible the moment it lands; the retry
+  decides afterwards whether it counted): (1) another thread reading *k* meanwhile can see the new value, then the old
+  one, then the new one again; (2) a `TryRemove(k)` overlapping that retry can return the new value while the retry —
+  an upsert — re-adds *k*. A strictly linearizable replace would have to take the write lock (or make every resize wait
+  for in-flight lock-free stores), giving up the lock-free replace. *Across* keys/paths, views are
+  snapshot-consistent, not instantaneously linked: `Count`, enumeration, and `IndexOf` are each a moment-in-time value,
+  exactly as with `ConcurrentDictionary` — do not assume two *separate* calls (`IndexOf(k)` then `this[i]`) line up
+  while writers run.
+- **Memory model.** Publication uses `Volatile`/release-acquire, and the one store-then-load handshake (lock-free
+  update vs. copying resize) uses a full fence on both sides, which release/acquire cannot replace; so the guarantees
+  hold on weak memory models (Arm64), not only x86/x64.
+- **Keys and capacity.** A `null` key throws `ArgumentNullException` on every key entry point, as the framework
+  dictionaries do. The reference implementation's open-addressed index is a power-of-two `int[]`, so it holds at most
+  751,619,276 entries (2^30 words at 70 % load); a larger capacity or add throws `ArgumentOutOfRangeException`.
 
 ### 7.3 What is *not* a fault (expected concurrent behavior)
 
 - A read concurrent with a write on the same key returns the value from just-before or just-after it (both valid);
-  last-writer-wins for two concurrent value updates.
+  last-writer-wins for two concurrent value updates. While a lock-free update is retrying under the lock (a resize
+  overlapped it), successive reads of that key may alternate between the two before settling — the first named
+  relaxation of [§7.2](#72-thread-safety-contract).
 - A key mid-insertion may not yet be visible to a concurrent reader (the insert races the read) — but a half-inserted
   entry is never observed.
 - `this[int]`/`GetValueAt` racing a removal that shrinks `Count` may throw `ArgumentOutOfRangeException`; `this[key]`
@@ -259,8 +284,14 @@ Memory: ~3 machine words per entry (value stored once).
 
 ## 8. Reference implementation & evidence
 
-A complete implementation exists as `NumSharp.Collections.OrderedDictionary<TKey, TValue>`, with the following measured
-results (N = 500,000; single process; best-of-9; x64):
+A reference implementation of the core exists as `NumSharp.Collections.OrderedDictionary<TKey, TValue>`. It is **not**
+the complete proposed API: it implements the keyed and positional reads, `TryAdd`/`GetOrAdd(value)`/`TryRemove`/`Clear`,
+the lock-free `this[key] = …` replace, `AddRange` and snapshots, but not the `IDictionary`/`IReadOnlyDictionary`/
+`IReadOnlyList<KeyValuePair<,>>` surface, `TryUpdate`, `AddOrUpdate`, the factory `GetOrAdd` overloads, `GetKeyAt`/
+`GetValueAt`, or the `KeyValuePair` forms of `this[int]` and `ToArray` — the concurrency mechanics those would share
+are the part it proves. The following results were measured before the 2026-09-23 correctness fixes below
+(N = 500,000; single process; best-of-9; x64); those fixes add one full fence (~2.6–3.1 ns) to each lock-free replace and
+make a non-atomic-value replace copy the whole generation, so the replace ratios are optimistic by that amount:
 
 **vs the closest existing type, `System.Collections.Generic.OrderedDictionary<TKey, TValue>` (.NET 9, single-threaded):** reads at parity
 (key-get 0.93×, `IndexOf` 0.96×, positional 1.06×), enumeration **1.53×** (contiguous span vs the boxed enumerator),
@@ -276,13 +307,21 @@ lookups/sec across 4 threads), in addition to providing ordering and positional 
 enum 1.6×); loses build to both and positional to `List` (raw array, no hashing) — expected, and not the comparison
 class (neither is thread-safe or, for `List`, keyed).
 
-**Concurrency verification.** A randomized concurrency gun (the same class of test the reference codebase uses for its
-other concurrent collections) exercised **all** public methods under 20 threads: 8 writers on disjoint key ranges with
-a per-key linearizable model checked on **every** operation, 6 lock-free value-replacers on shared keys racing constant
-resizes, 6 readers over every read method with value-encoding tear detection, and 800+ quiescent full-consistency
-barriers, plus a `Clear`/bulk-add chaos phase. Result across two runs: **~280M operations, 0 tears, 0 lost updates, 0
-corruption, 0 crashes.** A focused concurrent-get-plus-write test on the *same* keys under resize churn: **195.7M
-concurrent reads + 6.0M concurrent writes, 0 faulty reads, 0 lost writes.**
+**Concurrency verification.** An earlier randomized concurrency gun (~280M operations, 20 threads, per-key models,
+tear detection) reported 0 lost updates — but its lock-free replacers shared keys, and last-writer-wins hides a lost
+intermediate write, so it could not detect the failure it reported the absence of. Targeted tests then proved five
+defects in the reference implementation, all since fixed and now guarded in CI by
+`test/NumSharp.Tests/Collections/OrderedDictionaryContractTests.cs` (each test names the clause it guards):
+
+| Clause | Defect (before the fix) | Fix |
+|---|---|---|
+| No lost updates (§7.1) | the replace's store/flag handshake used release/acquire only: **3.4–3.8 %** of completed replaces lost under copy churn (single-writer-per-key read-your-own-write storm, ~20M replaces) | full fence on both sides — **0** lost over ~24M replaces |
+| Snapshot enumeration (§7.1) | `GetEnumerator` read the generation field twice: `IndexOutOfRangeException` and phantom `default` values while a writer regrew the table | one read, both fields from it |
+| No garbage reads (§7.1) | a non-atomic replace shared the index with the previous generation: an older-generation reader read `default` for a present key | whole-generation copy |
+| Lock-free replace (§7.2) | a comparer throw during a resize left the resize flag set forever, silently locking every later replace | rebuild before raising the flag; lower it in `finally` |
+| `notnull` keys, capacity | null keys accepted; a capacity ≥ ~752M hung the constructor (an `int` doubling loop wrapped to 0) | null check on every key entry point; `ArgumentOutOfRangeException` |
+
+Two named relaxations of the lock-free replace remain by design ([§7.2](#72-thread-safety-contract)).
 
 ## 9. Alternative designs
 

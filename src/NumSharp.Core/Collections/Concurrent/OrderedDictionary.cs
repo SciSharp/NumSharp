@@ -3,6 +3,8 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using NumSharp.Collections.Concurrent;
@@ -30,7 +32,10 @@ namespace NumSharp.Collections;
 ///     <para>
 ///         <b>Concurrency (how it is lock-free without tearing).</b> All shape lives in one immutable-in-shape
 ///         <c>Tables</c> generation published through a single <see cref="Volatile" /> field, so a reader captures
-///         a consistent snapshot in one acquiring read. Within a generation:
+///         a consistent snapshot in one acquiring read. <b>Every generation owns every array it references</b>: a
+///         transition that replaces the generation (growth, removal, <see cref="Clear" />, and the replace of a
+///         non-atomically-writable value) builds a fresh index, keys array AND values array, so no array is ever
+///         shared by two generations. Within a generation:
 ///         <list type="bullet">
 ///             <item>
 ///                 <description>
@@ -38,25 +43,53 @@ namespace NumSharp.Collections;
 ///                     <c>keys[n]</c>/<c>values[n]</c> <i>before</i> the index word, and publishes that word with
 ///                     <see cref="Volatile.Write(ref int, int)" /> (release); a reader acquire-reads it with
 ///                     <c>Volatile.Read</c>, so any word it observes already exposes its slot's
-///                     key and value, and the <c>keys[slot]</c> equality confirm proves identity.
+///                     key and value, and the <c>keys[slot]</c> equality confirm proves identity. The generation
+///                     ownership above is what makes this sound: the only writes a generation's index ever receives
+///                     are appends into that same generation, so a word a reader finds always points at a slot its own
+///                     generation wrote.
 ///                 </description>
 ///             </item>
 ///             <item>
 ///                 <description>
-///                     <b>An atomically-writable value replace is lock-free and rigorous.</b> A <see cref="_resizing" />
-///                     flag is held for the <i>entire</i> duration of any generation-replacing resize (set before its
-///                     array copy, cleared after its publish). A lock-free store commits only if, after the store,
-///                     <c>!_resizing &amp;&amp; ReferenceEquals(_t, t)</c>: the flag catches a resize whose copy is in
-///                     progress (which might miss the store), the generation check catches a resize that already
-///                     published (leaving the store on an abandoned generation) — together they cover the whole resize
-///                     lifecycle, so no update is ever lost. If either check fails the write falls back to the lock.
+///                     <b>An atomically-writable value replace is lock-free and never loses a completed write.</b> A
+///                     lock-free <see cref="SetByKey" /> stores the value into the live generation, executes a full
+///                     fence (<see cref="Interlocked.MemoryBarrier" />), and commits only if the resize flag is down and
+///                     the generation is still the live one; otherwise it redoes the write under the lock on the live
+///                     generation. Every generation-replacing resize raises the flag with a full-fence
+///                     <see cref="Interlocked.Exchange(ref int, int)" /> before it reads the live value array, copies it,
+///                     publishes, and lowers the flag in a <c>finally</c> (growth and the wide-value replace build their
+///                     new keys and index before raising it, so their window holds only the copy and the publish; an
+///                     order-preserving removal rebuilds inside it — measured faster single-threaded). The two halves are the
+///                     store-buffering (Dekker) shape — "store mine, then load theirs" on both sides — which
+///                     release/acquire ordering alone does NOT make safe (x86-TSO and ARM64 both let each side's load
+///                     miss the other side's buffered store; measured before the fences: ~3% of replaces lost under copy
+///                     churn). With a full fence on BOTH sides at least one of the two loads sees the other store: either
+///                     the copy reads the new value, or the replacer sees the flag and retries. The generation check
+///                     catches a resize that had already published before the replacer looked. The fence costs
+///                     +2.6–3.2 ns per replace (measured on an i9-13900K P-core, pre-fix vs fixed source in one
+///                     process: <c>&lt;int,int&gt;</c>/<c>&lt;int,long&gt;</c> 1.9 → 4.5–5.1 ns,
+///                     <c>&lt;string,int&gt;</c> 5.2 → 6.7 ns) — still ~3× faster than the locked replace of the
+///                     sibling maps (14.6 ns); lock-free reads pay nothing.
 ///                 </description>
 ///             </item>
 ///         </list>
 ///         <b>Writes are serialized by a single lock</b> because a global insertion order cannot be maintained
 ///         per-stripe — the deliberate cost of ordering — but the common value replace escapes that lock via the
-///         path above. A non-atomically-writable value type (a wide struct) forces a fresh value array on replace
+///         path above. A non-atomically-writable value type (a wide struct) forces a fresh generation on replace
 ///         so a reader never sees a torn value, and its replace therefore takes the lock.
+///     </para>
+///     <para>
+///         <b>Two named relaxations of the lock-free replace</b>, both confined to a <see cref="SetByKey" /> that is
+///         still running, and both consequences of its store-then-verify design (the store is visible the moment it
+///         lands; the verify decides afterwards whether it counted): (1) when a resize overlaps the replace and its
+///         copy misses the store, the replace retries under the lock — meanwhile ANOTHER thread reading that key can
+///         see the new value (in the older generation), then the old one (the resized generation's copy), then the new
+///         one again (the retry); (2) a <see cref="TryRemove" /> of the same key that overlaps that retry can return
+///         the new value as the removed one while the retry — an upsert — then re-adds the key at the end. Once
+///         <see cref="SetByKey" /> returns, every later read of the key returns that value or a newer one. The
+///         lock-based siblings (<see cref="ConcurrentOrderedDictionary{TKey,TValue}" />,
+///         <see cref="ConcurrentOrderedCompactDictionary{TKey,TValue}" />) have neither relaxation — their replace
+///         takes the write lock.
 ///     </para>
 ///     <para>
 ///         <b>The <c>int</c>-key footgun.</b> Both <see cref="this[TKey]" /> and <see cref="this[int]" /> exist;
@@ -65,17 +98,27 @@ namespace NumSharp.Collections;
 ///         <see cref="SetByKey" />) for the key path with <c>int</c> keys.
 ///     </para>
 ///     <para>
-///         <b>Consistency.</b> A lock-free reader always sees valid, untorn keys and values. While a writer runs a
-///         reader may miss a just-added entry (an add races the read) or, for an atomically-written value, observe
-///         the update a hair before/after another path — snapshot semantics, as in the framework concurrent
-///         dictionary. Enumeration captures the value array and count at the start and structural changes never
-///         rewrite the slots it can see.
+///         <b>Consistency.</b> A lock-free reader always sees valid, untorn keys and values, and never a key paired
+///         with a value that was not stored under it. While a writer runs a reader may miss a just-added entry (an
+///         add races the read) — snapshot semantics, as in the framework concurrent dictionary. Enumeration reads the
+///         generation field once and captures that generation's value array and count; structural changes never
+///         rewrite the slots it can see (an atomically-writable value replaced meanwhile may be seen old or new).
+///     </para>
+///     <para>
+///         <b>Keys and capacity.</b> A <see langword="null" /> key is refused with
+///         <see cref="ArgumentNullException" /> on every key entry point, as the sibling ordered maps and the framework
+///         dictionaries do. The index is a power-of-two <c>int[]</c>, and 2^30 words is the largest one .NET can
+///         allocate, so the collection holds at most 751,619,276 entries (2^30 × 70 % load); a capacity or an add
+///         beyond that is refused with <see cref="ArgumentOutOfRangeException" /> before anything is allocated.
 ///     </para>
 ///     <para>
 ///         <b>Enforced callback contract.</b> User code run <i>inside</i> the write lock (an <see cref="AddRange" />
 ///         source enumerator or the key comparer) must not write back into the collection; because
 ///         <see cref="Monitor" /> is reentrant such a write would interleave two half-applied mutations rather than
-///         deadlock, so it is detected and refused with <see cref="LockRecursionException" />.
+///         deadlock, so it is detected and refused with <see cref="LockRecursionException" />. A comparer that throws
+///         during a resize (which re-hashes every surviving key) aborts it before anything is published, and the
+///         resize flag is lowered in a <c>finally</c>, so the collection and its lock-free replace are both left
+///         exactly as they were.
 ///     </para>
 /// </remarks>
 /// <typeparam name="TKey">The non-null key type; uniqueness and lookups use the configured comparer.</typeparam>
@@ -90,9 +133,25 @@ public sealed class OrderedDictionary<TKey, TValue> : IReadOnlyList<TValue>
     private const int LoadPercent = 70;
 
     /// <summary>
+    ///     The largest index length: 2^30 is the largest power of two an <c>int[]</c> can have
+    ///     (<see cref="Array.MaxLength" /> is just under 2^31), and the Fibonacci home requires a power-of-two length.
+    ///     Doubling past it would overflow <c>int</c> — which is how an unguarded size loop once wrapped to
+    ///     <see cref="int.MinValue" />, then to 0, and spun forever.
+    /// </summary>
+    private const int MaxIndexLength = 1 << 30;
+
+    /// <summary>
+    ///     The most entries the collection can hold: the largest count that stays under the load factor in a
+    ///     <see cref="MaxIndexLength" />-word index (751,619,276). Both the constructor's capacity and growth refuse
+    ///     anything above it with <see cref="ArgumentOutOfRangeException" />.
+    /// </summary>
+    private const int MaxCount = (int)((long)MaxIndexLength * LoadPercent / 100);
+
+    /// <summary>
     ///     An immutable-in-shape generation of the whole structure: the open-addressed index, the dense keys and
     ///     values, the hash shift, and the live count. Shape (the arrays and shift) is fixed for the object's life;
-    ///     only <see cref="_count" /> and the in-place slots advance. A grow/shrink publishes a whole new generation.
+    ///     only <see cref="_count" /> and the in-place slots advance. A grow/shrink publishes a whole new generation,
+    ///     and a generation never shares an array with another one (see the type remarks for why that matters).
     /// </summary>
     private sealed class Tables
     {
@@ -130,11 +189,17 @@ public sealed class OrderedDictionary<TKey, TValue> : IReadOnlyList<TValue>
     private volatile Tables _t;
 
     /// <summary>
-    ///     <see langword="true" /> for the entire duration of a generation-replacing resize (set before its array
-    ///     copy, cleared after its publish). The guard that makes the lock-free value replace rigorous: a lock-free
-    ///     store that observes this set redoes under the lock.
+    ///     1 while a generation-replacing resize copies the live value array and publishes (see
+    ///     <see cref="BeginResize" />), 0 otherwise — the guard that makes the lock-free value replace rigorous: a
+    ///     lock-free store that observes it set redoes under the lock.
     /// </summary>
-    private volatile bool _resizing;
+    /// <remarks>
+    ///     An <c>int</c> rather than a <c>volatile bool</c> so the resizer can raise it with
+    ///     <see cref="Interlocked.Exchange(ref int, int)" />, a FULL fence: a release store would let the copy's
+    ///     loads run before the flag is visible, which is exactly the store-buffering race that lost updates. Read
+    ///     with <see cref="Volatile.Read(ref int)" /> (acquire), written only under the write lock.
+    /// </remarks>
+    private int _resizing;
 
     /// <summary>Serializes all structural mutation; lock-free reads and atomic value replaces take no lock.</summary>
     private readonly object _lock = new();
@@ -152,6 +217,7 @@ public sealed class OrderedDictionary<TKey, TValue> : IReadOnlyList<TValue>
 
     /// <summary>Creates an empty dictionary sized to hold <paramref name="capacity" /> entries without a regrow, using the default key comparer.</summary>
     /// <param name="capacity">The number of entries to reserve; values &lt;= 0 use the default capacity.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="capacity" /> exceeds the 751,619,276 entries the index can address.</exception>
     public OrderedDictionary(int capacity) : this(capacity, null)
     {
     }
@@ -165,13 +231,15 @@ public sealed class OrderedDictionary<TKey, TValue> : IReadOnlyList<TValue>
     /// <summary>Creates an empty dictionary sized for <paramref name="capacity" /> entries with the given key comparer.</summary>
     /// <param name="capacity">The number of entries to reserve; values &lt;= 0 use the default capacity.</param>
     /// <param name="comparer">The key comparer, or <see langword="null" /> for <see cref="EqualityComparer{T}.Default" />.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="capacity" /> exceeds the 751,619,276 entries the index can address.</exception>
     public OrderedDictionary(int capacity, IEqualityComparer<TKey>? comparer)
     {
         _comparer = comparer ?? EqualityComparer<TKey>.Default;
         int cap = capacity <= 0 ? DefaultCapacity : capacity;
-        int len = 8;
-        // Size the index so `cap` entries fit under the load factor without a regrow (power-of-two length).
-        while (len < (long)cap * 100 / LoadPercent + 1) len <<= 1;
+        // Size the index BEFORE any allocation so an unaddressable capacity is refused while nothing exists yet. The
+        // old `while (len < cap * 100 / 70 + 1) len <<= 1;` on an int wrapped len to int.MinValue and then 0 for a
+        // capacity of ~752 million or more, and `0 << 1 == 0` never terminated — the constructor spun forever.
+        int len = IndexLengthFor(cap);
         _t = new Tables(new int[len], new TKey[cap], new TValue[cap], 0);
     }
 
@@ -195,9 +263,11 @@ public sealed class OrderedDictionary<TKey, TValue> : IReadOnlyList<TValue>
     /// <param name="key">The key to find.</param>
     /// <param name="value">On success the stored value; otherwise <see langword="default" />.</param>
     /// <returns><see langword="true" /> if the key is present; otherwise <see langword="false" />.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="key" /> is <see langword="null" />.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool TryGetValue(TKey key, out TValue value)
     {
+        NullCheck(key);
         Tables t = _t;
         int[] index = t._index;
         TKey[] keys = t._keys;
@@ -227,6 +297,7 @@ public sealed class OrderedDictionary<TKey, TValue> : IReadOnlyList<TValue>
     /// <summary>Gets the value for <paramref name="key" /> or throws if absent.</summary>
     /// <param name="key">The key to find.</param>
     /// <returns>The stored value.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="key" /> is <see langword="null" />.</exception>
     /// <exception cref="KeyNotFoundException">No entry has the given key.</exception>
     public TValue GetByKey(TKey key)
     {
@@ -237,7 +308,10 @@ public sealed class OrderedDictionary<TKey, TValue> : IReadOnlyList<TValue>
     /// <summary>Gets or sets the value for <paramref name="key" /> (the dictionary path). With <c>int</c> keys the compiler prefers <see cref="this[int]" /> — use <see cref="GetByKey" />/<see cref="SetByKey" /> instead.</summary>
     /// <param name="key">The key to read or write.</param>
     /// <returns>The stored value.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="key" /> is <see langword="null" />.</exception>
     /// <exception cref="KeyNotFoundException">On read, no entry has the given key.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">On write, the key is absent and adding it would exceed the 751,619,276 entries the index can address.</exception>
+    /// <exception cref="LockRecursionException">On write, the locked path is reached from inside a callback this collection is running under its write lock.</exception>
     public TValue this[TKey key]
     {
         get => GetByKey(key);
@@ -263,20 +337,33 @@ public sealed class OrderedDictionary<TKey, TValue> : IReadOnlyList<TValue>
     /// <summary>Tests whether <paramref name="key" /> is present. Lock-free.</summary>
     /// <param name="key">The key to test.</param>
     /// <returns><see langword="true" /> if present; otherwise <see langword="false" />.</returns>
-    public bool ContainsKey(TKey key) => FindSlot(_t, key) >= 0;
+    /// <exception cref="ArgumentNullException"><paramref name="key" /> is <see langword="null" />.</exception>
+    public bool ContainsKey(TKey key)
+    {
+        NullCheck(key);
+        return FindSlot(_t, key) >= 0;
+    }
 
     /// <summary>Returns the insertion-order position of <paramref name="key" />, or -1 if absent. Lock-free.</summary>
     /// <param name="key">The key to locate.</param>
     /// <returns>The zero-based position, or -1.</returns>
-    public int IndexOf(TKey key) => FindSlot(_t, key);
+    /// <exception cref="ArgumentNullException"><paramref name="key" /> is <see langword="null" />.</exception>
+    public int IndexOf(TKey key)
+    {
+        NullCheck(key);
+        return FindSlot(_t, key);
+    }
 
     /// <summary>Adds the pair only if <paramref name="key" /> is absent.</summary>
     /// <param name="key">The key to add.</param>
     /// <param name="value">The value to associate.</param>
     /// <returns><see langword="true" /> if added; <see langword="false" /> if the key was already present.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="key" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The key is absent and adding it would exceed the 751,619,276 entries the index can address.</exception>
     /// <exception cref="LockRecursionException">Called from inside a callback this collection is running under its write lock.</exception>
     public bool TryAdd(TKey key, TValue value)
     {
+        NullCheck(key);
         EnterWrite();
         try
         {
@@ -326,16 +413,21 @@ public sealed class OrderedDictionary<TKey, TValue> : IReadOnlyList<TValue>
     /// <summary>
     ///     Sets the value for <paramref name="key" />, adding it if absent. When the key exists and
     ///     <typeparamref name="TValue" /> is written atomically this is a <b>lock-free</b>, rigorous single store
-    ///     (see the type remarks); otherwise it takes the write lock.
+    ///     plus one full fence (see the type remarks, including its two named relaxations); otherwise it takes the
+    ///     write lock.
     /// </summary>
     /// <param name="key">The key to write.</param>
     /// <param name="value">The value to store.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="key" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The key is absent and adding it would exceed the 751,619,276 entries the index can address.</exception>
     /// <exception cref="LockRecursionException">The locked path is reached from inside a callback this collection is running under its write lock.</exception>
     public void SetByKey(TKey key, TValue value)
     {
-        // Lock-free fast path: present key + atomically-writable value → store, then verify no resize was copying
-        // (flag) and none has published (generation). Either failing means the store may have hit a slot a resize's
-        // copy missed, so redo under the lock on the live generation.
+        NullCheck(key);
+
+        // Lock-free fast path: present key + atomically-writable value → store, FULL fence, then verify no resize was
+        // copying (flag) and none has published (generation). Either failing means the store may have hit a slot a
+        // resize's copy missed, so redo under the lock on the live generation.
         if (ConcurrentDictionaryTypeProps<TValue>.IsWriteAtomic)
         {
             Tables t = _t;
@@ -343,7 +435,17 @@ public sealed class OrderedDictionary<TKey, TValue> : IReadOnlyList<TValue>
             if (slot >= 0)
             {
                 t._values[slot] = value;
-                if (!_resizing && ReferenceEquals(_t, t)) return;
+
+                // The replacer's half of the store/flag handshake (the resizer's half is BeginResize). Without a full
+                // fence the flag load below may be satisfied before this store leaves the store buffer, while the
+                // resizer's copy reads the OLD value — each side misses the other's store and the write is lost
+                // although this method returns normally (measured ~3% of replaces under copy churn). Release/acquire
+                // cannot forbid that outcome on x86-TSO or ARM64; a full fence here AND in BeginResize can.
+                Interlocked.MemoryBarrier();
+
+                // Acquire-read the flag BEFORE the generation: a flag already lowered by a finished resize then
+                // guarantees that resize's publish is visible, so the generation check below cannot miss it.
+                if (Volatile.Read(ref _resizing) == 0 && ReferenceEquals(_t, t)) return;
             }
         }
 
@@ -356,16 +458,12 @@ public sealed class OrderedDictionary<TKey, TValue> : IReadOnlyList<TValue>
             {
                 if (ConcurrentDictionaryTypeProps<TValue>.IsWriteAtomic)
                 {
+                    // Under the lock no resize can run concurrently, so the plain atomic store is final.
                     t._values[slot] = value;
                 }
                 else
                 {
-                    // Wide value: publish a fresh value array so a lock-free reader never sees a torn value.
-                    _resizing = true;
-                    var values = (TValue[])t._values.Clone();
-                    values[slot] = value;
-                    _t = new Tables(t._index, t._keys, values, t._count);
-                    _resizing = false;
+                    ReplaceWideUnderLock(t, slot, value);
                 }
             }
             else
@@ -383,10 +481,12 @@ public sealed class OrderedDictionary<TKey, TValue> : IReadOnlyList<TValue>
     /// <param name="key">The key to read or add.</param>
     /// <param name="value">The value to add when the key is absent.</param>
     /// <returns>The existing value, or the newly added <paramref name="value" />.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="key" /> is <see langword="null" /> (raised by the lock-free lookup that runs first).</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The key is absent and adding it would exceed the 751,619,276 entries the index can address.</exception>
     /// <exception cref="LockRecursionException">Called from inside a callback this collection is running under its write lock.</exception>
     public TValue GetOrAdd(TKey key, TValue value)
     {
-        // Lock-free fast read first: most GetOrAdd calls hit an existing key.
+        // Lock-free fast read first: most GetOrAdd calls hit an existing key. It also performs the null-key check.
         if (TryGetValue(key, out TValue existing)) return existing;
         EnterWrite();
         try
@@ -407,9 +507,11 @@ public sealed class OrderedDictionary<TKey, TValue> : IReadOnlyList<TValue>
     /// <param name="key">The key to remove.</param>
     /// <param name="value">On success the removed value; otherwise <see langword="default" />.</param>
     /// <returns><see langword="true" /> if an entry was removed; otherwise <see langword="false" />.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="key" /> is <see langword="null" />.</exception>
     /// <exception cref="LockRecursionException">Called from inside a callback this collection is running under its write lock.</exception>
     public bool TryRemove(TKey key, out TValue value)
     {
+        NullCheck(key);
         EnterWrite();
         try
         {
@@ -421,22 +523,36 @@ public sealed class OrderedDictionary<TKey, TValue> : IReadOnlyList<TValue>
                 return false;
             }
 
-            value = t._values[slot];
             int n = t._count;
-            // Build a fresh, compacted generation (order-preserving) under the resize guard so a lock-free replace
-            // racing the copy redoes under the lock rather than writing to the abandoned arrays.
-            _resizing = true;
-            var keys = new TKey[t._keys.Length];
-            var values = new TValue[t._values.Length];
-            Array.Copy(t._keys, keys, slot);
-            Array.Copy(t._keys, slot + 1, keys, slot, n - slot - 1);
-            Array.Copy(t._values, values, slot);
-            Array.Copy(t._values, slot + 1, values, slot, n - slot - 1);
-            var index = new int[t._index.Length];
-            var fresh = new Tables(index, keys, values, n - 1);
-            for (int s = 0; s < n - 1; s++) InsertIndex(fresh, keys[s], s);
-            _t = fresh;
-            _resizing = false;
+
+            // Build a fresh, compacted generation (order-preserving) inside the fenced resize window, so a lock-free
+            // replace racing the value copy either lands in it or sees the flag and redoes under the lock. The
+            // removed value is read in there too: read before the flag, it could be the value a lock-free replace had
+            // just overwritten — a replace that then committed (it saw the flag down) and whose write this removal
+            // would silently report as never having happened. The flag is lowered in the finally: the index rebuild
+            // runs the user's comparer, and a throw there used to leave the flag stuck, silently locking every later
+            // replace. (Unlike growth, this path does NOT build the index before raising the flag: measured, doing so
+            // made the single-threaded removal 16-21 % slower — the values must be copied right after the keys — so it
+            // keeps the pre-fix order, where a replace overlapping the rebuild waits for the removal as it always did.)
+            BeginResize();
+            try
+            {
+                value = t._values[slot];
+                var keys = new TKey[t._keys.Length];
+                var values = new TValue[t._values.Length];
+                Array.Copy(t._keys, keys, slot);
+                Array.Copy(t._keys, slot + 1, keys, slot, n - slot - 1);
+                Array.Copy(t._values, values, slot);
+                Array.Copy(t._values, slot + 1, values, slot, n - slot - 1);
+                var fresh = new Tables(new int[t._index.Length], keys, values, n - 1);
+                for (int s = 0; s < n - 1; s++) InsertIndex(fresh, keys[s], s);
+                _t = fresh;
+            }
+            finally
+            {
+                EndResize();
+            }
+
             return true;
         }
         finally
@@ -452,9 +568,20 @@ public sealed class OrderedDictionary<TKey, TValue> : IReadOnlyList<TValue>
         EnterWrite();
         try
         {
-            _resizing = true;
-            _t = new Tables(new int[8], new TKey[DefaultCapacity], new TValue[DefaultCapacity], 0);
-            _resizing = false;
+            var fresh = new Tables(new int[8], new TKey[DefaultCapacity], new TValue[DefaultCapacity], 0);
+
+            // No value copy happens here — the generation check alone would catch a store into the cleared generation —
+            // but every generation replacement follows the same flag protocol, so no transition can be the one that
+            // silently skips it.
+            BeginResize();
+            try
+            {
+                _t = fresh;
+            }
+            finally
+            {
+                EndResize();
+            }
         }
         finally
         {
@@ -464,7 +591,9 @@ public sealed class OrderedDictionary<TKey, TValue> : IReadOnlyList<TValue>
 
     /// <summary>Adds many pairs under a single lock acquisition. A source that writes back into this collection is refused (see the callback contract).</summary>
     /// <param name="pairs">The pairs to add; existing keys are skipped (add-if-absent, like repeated <see cref="TryAdd" />).</param>
-    /// <exception cref="ArgumentNullException"><paramref name="pairs" /> is <see langword="null" />.</exception>
+    /// <remarks>Each added pair is published on its own, so a throw mid-batch (a null key, a refused write-back, the source itself) leaves every earlier pair added and the collection consistent.</remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="pairs" /> is <see langword="null" />, or a key inside it is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Adding the pairs would exceed the 751,619,276 entries the index can address.</exception>
     /// <exception cref="LockRecursionException">The source enumerator writes back into this collection.</exception>
     public void AddRange(IEnumerable<KeyValuePair<TKey, TValue>> pairs)
     {
@@ -474,6 +603,7 @@ public sealed class OrderedDictionary<TKey, TValue> : IReadOnlyList<TValue>
         {
             foreach (var kv in pairs)
             {
+                NullCheck(kv.Key);
                 Tables t = _t;
                 if (FindSlot(t, kv.Key) >= 0) continue;
                 AppendUnderLock(t, kv.Key, kv.Value);
@@ -532,8 +662,16 @@ public sealed class OrderedDictionary<TKey, TValue> : IReadOnlyList<TValue>
     }
 
     /// <summary>Returns a struct enumerator over the values in insertion order (allocation-free, snapshot at the point of the call).</summary>
-    /// <returns>An enumerator over the current values.</returns>
-    public Enumerator GetEnumerator() => new Enumerator(_t._values, Volatile.Read(ref _t._count));
+    /// <returns>An enumerator over one generation's values and count.</returns>
+    public Enumerator GetEnumerator()
+    {
+        // Read the generation ONCE and take both fields from it. `new Enumerator(_t._values, Volatile.Read(ref
+        // _t._count))` read the volatile field twice, so a growth published in between paired the OLD (shorter) value
+        // array with the NEW (larger) count: the enumerator ran past the array (IndexOutOfRangeException) or yielded
+        // slots its generation never wrote (phantom default values).
+        Tables t = _t;
+        return new Enumerator(t._values, Volatile.Read(ref t._count));
+    }
 
     /// <inheritdoc />
     IEnumerator<TValue> IEnumerable<TValue>.GetEnumerator() => GetEnumerator();
@@ -543,7 +681,7 @@ public sealed class OrderedDictionary<TKey, TValue> : IReadOnlyList<TValue>
 
     /// <summary>Probes generation <paramref name="t" /> for <paramref name="key" />, returning its dense slot or -1.</summary>
     /// <param name="t">The generation to probe.</param>
-    /// <param name="key">The key to find.</param>
+    /// <param name="key">The key to find (already null-checked by the public entry point).</param>
     /// <returns>The dense slot, or -1 if absent.</returns>
     private int FindSlot(Tables t, TKey key)
     {
@@ -565,6 +703,7 @@ public sealed class OrderedDictionary<TKey, TValue> : IReadOnlyList<TValue>
     /// <param name="t">The current generation.</param>
     /// <param name="key">The key to append.</param>
     /// <param name="value">The value to append.</param>
+    /// <exception cref="ArgumentOutOfRangeException">The append needs a growth past <see cref="MaxCount" /> entries.</exception>
     private void AppendUnderLock(Tables t, TKey key, TValue value)
     {
         int n = t._count;
@@ -584,28 +723,115 @@ public sealed class OrderedDictionary<TKey, TValue> : IReadOnlyList<TValue>
         Volatile.Write(ref t._count, n + 1);
     }
 
-    /// <summary>Grows the arrays/index and publishes a fresh generation carrying the new pair, guarding the copy+publish with <see cref="_resizing" /> so a lock-free replace cannot lose an update.</summary>
+    /// <summary>
+    ///     Grows the arrays/index and publishes a fresh generation carrying the new pair. Everything but the copy of
+    ///     the live value array is built first; that copy and the publish run inside the fenced resize window
+    ///     (<see cref="BeginResize" />/<see cref="EndResize" />) so a lock-free replace cannot lose an update.
+    /// </summary>
     /// <param name="t">The current generation.</param>
     /// <param name="key">The key to append.</param>
     /// <param name="value">The value to append.</param>
+    /// <exception cref="ArgumentOutOfRangeException">The index is already <see cref="MaxIndexLength" /> words and would have to double: the collection holds <see cref="MaxCount" /> entries.</exception>
     private void AppendGrow(Tables t, TKey key, TValue value)
     {
         int n = t._count;
         int newCap = n == t._keys.Length ? (int)Math.Min((long)Math.Max(DefaultCapacity, t._keys.Length) * 2, Array.MaxLength) : t._keys.Length;
         int newLen = t._index.Length;
-        if (n + 1 >= (long)newLen * LoadPercent / 100) newLen <<= 1;
-        _resizing = true; // set BEFORE the copy: a lock-free replace overlapping the copy sees this and redoes
+        if (n + 1 >= (long)newLen * LoadPercent / 100)
+        {
+            // Doubling a 2^30-word index overflows int (the unguarded `newLen <<= 1` wrapped to int.MinValue) and no
+            // larger power-of-two int[] exists, so the collection is full: refuse before allocating or publishing.
+            if (newLen >= MaxIndexLength) ThrowTooManyEntries((long)n + 1);
+            newLen <<= 1;
+        }
+
+        // The new keys and the rebuilt index come first, outside the resize flag: the rebuild runs the user's comparer
+        // (it may throw — nothing is published and the flag is still down), and a lock-free replace that lands during
+        // it is still in the live value array the fenced copy below reads.
+        Tables fresh = GrownWith(t, key, value, newCap, newLen);
+
+        BeginResize(); // full fence BEFORE the copy: a lock-free replace either lands in the copy or sees the flag
+        try
+        {
+            Array.Copy(t._values, fresh._values, n);
+            _t = fresh; // publish
+        }
+        finally
+        {
+            EndResize(); // lowered AFTER the publish: from here the generation check alone catches stale stores
+        }
+    }
+
+    /// <summary>
+    ///     Builds, privately, the generation <see cref="AppendGrow" /> publishes: the keys of <paramref name="t" /> plus
+    ///     <paramref name="key" />, a rebuilt index of <paramref name="newLen" /> words, and a value array holding only
+    ///     the new <paramref name="value" /> — the live values are copied in later, inside the fenced resize window.
+    /// </summary>
+    /// <param name="t">The live generation (the caller holds the write lock).</param>
+    /// <param name="key">The key being appended.</param>
+    /// <param name="value">The value being appended.</param>
+    /// <param name="newCap">The new keys/values capacity (at least <c>t._count + 1</c>).</param>
+    /// <param name="newLen">The new power-of-two index length.</param>
+    /// <returns>The unpublished generation, count <c>t._count + 1</c>.</returns>
+    /// <remarks>
+    ///     Runs the user's comparer once per entry (the index rebuild) and allocates three arrays; it runs before the
+    ///     resize flag is raised, so a lock-free replace overlapping the rebuild commits without waiting for the growth
+    ///     (the flag window holds only the value copy and the publish). Measured: no cost against the pre-fix growth
+    ///     path (a 100,000-entry build from empty, 1.01×).
+    /// </remarks>
+    private Tables GrownWith(Tables t, TKey key, TValue value, int newCap, int newLen)
+    {
+        int n = t._count;
         var keys = new TKey[newCap];
-        var values = new TValue[newCap];
         Array.Copy(t._keys, keys, n);
-        Array.Copy(t._values, values, n);
         keys[n] = key;
+        var values = new TValue[newCap];
         values[n] = value;
-        var index = new int[newLen];
-        var fresh = new Tables(index, keys, values, n + 1);
+        var fresh = new Tables(new int[newLen], keys, values, n + 1);
         for (int s = 0; s <= n; s++) InsertIndex(fresh, keys[s], s);
-        _t = fresh;        // publish
-        _resizing = false; // cleared AFTER the publish: from here the generation check alone catches stale stores
+        return fresh;
+    }
+
+    /// <summary>
+    ///     Replaces the value in <paramref name="slot" /> for a <typeparamref name="TValue" /> that is not atomically
+    ///     writable, by publishing a <b>whole</b> new generation — fresh index, keys AND values — so a lock-free reader
+    ///     never sees a torn value and no array is shared across generations. O(n), under the write lock.
+    /// </summary>
+    /// <param name="t">The current generation (holding the write lock).</param>
+    /// <param name="slot">The dense slot of the existing key.</param>
+    /// <param name="value">The replacement value.</param>
+    /// <remarks>
+    ///     A values-only clone (what this path used to do) SHARED the index and keys with the previous generation, so
+    ///     the next in-place append wrote its index word and key into arrays an older-generation reader still probes;
+    ///     that reader then resolved the new key to its OWN never-written value slot and returned
+    ///     <see langword="default" /> for a present key (the rule ConcurrentOrderedDictionary.COMPACT.md §4.7 states:
+    ///     a non-atomic replace copies the whole generation). The index is cloned word-for-word — same length, same
+    ///     shift, same slots — so no key is re-hashed and no user code runs. No lock-free replace exists for such a
+    ///     value type, so the resize flag guards nothing here; it is raised anyway so every generation replacement
+    ///     follows one protocol. Cost of the correctness fix, measured against the values-only clone
+    ///     (<c>&lt;int,decimal&gt;</c>): ~1.9× at 1,000 entries (0.44 → 0.86 µs), 2.6–3.2× at 100,000 (three
+    ///     large-object-heap arrays — 1 MB index, 0.4 MB keys, 1.6 MB values — instead of the one value array).
+    /// </remarks>
+    private void ReplaceWideUnderLock(Tables t, int slot, TValue value)
+    {
+        int n = t._count;
+        var index = (int[])t._index.Clone();
+        var keys = new TKey[t._keys.Length];
+        Array.Copy(t._keys, keys, n);
+        var values = new TValue[t._values.Length];
+        var fresh = new Tables(index, keys, values, n);
+
+        BeginResize();
+        try
+        {
+            Array.Copy(t._values, values, n);
+            values[slot] = value;
+            _t = fresh;
+        }
+        finally
+        {
+            EndResize();
+        }
     }
 
     /// <summary>Inserts <c>slot</c> for <paramref name="key" /> into generation <paramref name="t" />'s index with a plain store (used only while building a fresh, not-yet-published generation).</summary>
@@ -619,6 +845,72 @@ public sealed class OrderedDictionary<TKey, TValue> : IReadOnlyList<TValue>
         int h = Home(t, key);
         while (index[h] != 0) h = (h + 1) & mask;
         index[h] = slot + 1;
+    }
+
+    /// <summary>
+    ///     The resizer's half of the store/flag handshake: raises <see cref="_resizing" /> with a FULL fence. Call it
+    ///     under the write lock after everything the new generation needs except the copy of the live value array has
+    ///     been built, immediately before that copy, and pair it with <see cref="EndResize" /> in a <c>finally</c>.
+    /// </summary>
+    /// <remarks>
+    ///     <see cref="Interlocked.Exchange(ref int, int)" /> is a full fence on every supported architecture, so no load
+    ///     of the copy that follows can be satisfied before the flag is globally visible. Combined with the replacer's
+    ///     own fence between its store and its flag load, at least one side sees the other's store: the copy reads the
+    ///     replaced value, or the replacer reads the flag and retries under the lock. The shorter the window, the less
+    ///     often a lock-free replace has to fall back (and wait for the resize); growth and the wide replace keep it to
+    ///     the copy + publish.
+    /// </remarks>
+    private void BeginResize() => Interlocked.Exchange(ref _resizing, 1);
+
+    /// <summary>
+    ///     Lowers <see cref="_resizing" /> (release store) — after the publish on success, or after a failed resize
+    ///     that published nothing, where lowering it is equally correct: the live generation is unchanged, so a
+    ///     replacer that stored into it during the attempt stored into the generation that stays live.
+    /// </summary>
+    private void EndResize() => Volatile.Write(ref _resizing, 0);
+
+    /// <summary>
+    ///     The open-addressed index length that holds <paramref name="entries" /> entries under the load factor: the
+    ///     smallest power of two (at least 8) above <c>entries / 0.7</c>, computed in <see cref="long" /> so neither the
+    ///     scaling nor the doubling can overflow.
+    /// </summary>
+    /// <param name="entries">The entry count the index must accommodate without a regrow.</param>
+    /// <returns>A power-of-two index length in [8, <see cref="MaxIndexLength" />].</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="entries" /> exceeds <see cref="MaxCount" />.</exception>
+    private static int IndexLengthFor(int entries)
+    {
+        long wanted = Math.Max(8, (long)entries * 100 / LoadPercent + 1);
+        if (wanted > MaxIndexLength) ThrowTooManyEntries(entries);
+        return (int)BitOperations.RoundUpToPowerOf2((uint)wanted);
+    }
+
+    /// <summary>Throws the capacity refusal shared by the constructor and the growth path (mirrors the compact sibling, which refuses an unaddressable capacity the same way).</summary>
+    /// <param name="requested">The entry count that could not be accommodated.</param>
+    /// <exception cref="ArgumentOutOfRangeException">Always.</exception>
+    [DoesNotReturn]
+    private static void ThrowTooManyEntries(long requested)
+        => throw new ArgumentOutOfRangeException("capacity", requested,
+            $"{nameof(OrderedDictionary<TKey, TValue>)} cannot hold more than {MaxCount} entries: its open-addressed index would need more than 2^30 words, the largest power-of-two int[].");
+
+    /// <summary>Throws <see cref="ArgumentNullException" /> if <paramref name="key" /> is null (guards the reference-key case), like the sibling ordered maps.</summary>
+    /// <param name="key">The key to validate.</param>
+    /// <remarks>
+    ///     The <c>typeof</c> guard is load-bearing for allocation-freedom: a bare <c>key is null</c> on a generic
+    ///     <typeparamref name="TKey" /> compiles to <c>box</c>+compare IL, and under unoptimized (Debug) codegen that
+    ///     box EXECUTES for value-type keys. Short-circuiting on <c>typeof(TKey).IsValueType</c> keeps it unreached for
+    ///     value types (boxing a reference type is a no-op); Release codegen folds the guard to a constant, so a
+    ///     value-type key pays nothing and a reference key pays one null compare. The check matters because
+    ///     <c>EqualityComparer&lt;string&gt;.Default.GetHashCode(null)</c> returns 0 instead of throwing, so without it
+    ///     a null key was silently stored, found and enumerated.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="key" /> is <see langword="null" />.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void NullCheck(TKey key)
+    {
+        if (!typeof(TKey).IsValueType && key is null)
+        {
+            throw new ArgumentNullException(nameof(key));
+        }
     }
 
     /// <summary>Takes the write lock, refusing a reentrant write-back from inside a lock-held callback.</summary>

@@ -16,29 +16,29 @@ namespace NumSharp.Tests.Collections
     using NumSharp.Collections;
 
     /// <summary>
-    ///     Known-failing reproductions for <see cref="OrderedDictionary{TKey,TValue}" />, the lean lock-free ordered
-    ///     dictionary proposed as <c>System.Collections.Concurrent.ConcurrentOrderedDictionary</c>
+    ///     Contract guards for <see cref="OrderedDictionary{TKey,TValue}" />, the lean lock-free ordered dictionary
+    ///     proposed as <c>System.Collections.Concurrent.ConcurrentOrderedDictionary</c>
     ///     (docs/proposals/ConcurrentOrderedDictionary.md). Every test asserts the <b>correct</b> outcome the type's own
-    ///     documentation and the proposal's concurrency specification promise, and fails today.
+    ///     documentation and the proposal's concurrency specification promise — each one failed on the code as first
+    ///     shipped (these six were committed as known-failing <c>[OpenBugs]</c> reproductions in fe756f9e, then fixed).
     /// </summary>
     /// <remarks>
     ///     <para>
-    ///         Each test names the violated clause and the root cause, and is marked <see cref="OpenBugsAttribute" /> so CI
-    ///         excludes it until the bug is fixed; remove the attribute together with the fix. The races are made as
+    ///         Each test names the clause it guards, the defect it caught and the fix that closed it. The races are made as
     ///         deterministic as the type allows: where the type calls user code (the key comparer) between two steps of a
     ///         racy sequence, a comparer hook injects the competing writer at exactly that point, so the interleaving is
     ///         forced rather than hoped for. Where no user code runs inside the window (the enumerator construction, the
-    ///         store/flag handshake of the lock-free replace), a bounded storm is used instead; on the current code those
-    ///         fail within milliseconds on any multi-core machine, and after the fix they cannot fail at all.
+    ///         store/flag handshake of the lock-free replace), a bounded storm is used instead; on the pre-fix code those
+    ///         failed within milliseconds on any multi-core machine, and with the fixes they cannot fail at all.
     ///     </para>
     ///     <para>
-    ///         Verified against the shipped code on x64 (i9-13900K, Release): the enumerator storm reproduces ~160K
-    ///         IndexOutOfRangeException per second, the lock-free replace loses ~3% of its writes under copy churn, and
-    ///         both drop to zero with the fixes named on each test.
+    ///         Verified against the pre-fix code on x64 (i9-13900K, Release): the enumerator storm reproduced ~160K
+    ///         IndexOutOfRangeException per second and the lock-free replace lost ~3% of its writes under copy churn;
+    ///         both measure zero with the fixes named on each test.
     ///     </para>
     /// </remarks>
     [TestClass]
-    public class OrderedDictionaryOpenBugsTests
+    public class OrderedDictionaryContractTests
     {
         /// <summary>Reader threads per storm: enough to contend on small CI boxes, capped so the host is not drowned (the storms stop at the first anomaly anyway).</summary>
         private static int StormReaders => System.Math.Max(2, System.Math.Min(Environment.ProcessorCount - 1, 4));
@@ -109,16 +109,15 @@ namespace NumSharp.Tests.Collections
 
         /// <summary>
         ///     <b>Contract:</b> "Enumeration captures the value array and count at the start" (type remarks) and "snapshot
-        ///     enumeration never throws ... and reflects a consistent prefix" (proposal §7.1). <b>Bug:</b>
-        ///     <c>GetEnumerator()</c> is <c>new Enumerator(_t._values, Volatile.Read(ref _t._count))</c> — it reads the
-        ///     volatile generation field TWICE, so a growth published between the reads pairs the OLD (shorter) value
-        ///     array with the NEW (larger) count: the enumerator then runs past the array (IndexOutOfRangeException) or
-        ///     yields slots the captured generation never wrote (phantom <c>default</c> values). <b>Fix:</b> read the
-        ///     generation once into a local and take both fields from it, as <c>ToArray</c>/<c>AsValuesSpan</c> already do.
+        ///     enumeration never throws ... and reflects a consistent prefix" (proposal §7.1). <b>Defect caught:</b>
+        ///     <c>GetEnumerator()</c> was <c>new Enumerator(_t._values, Volatile.Read(ref _t._count))</c> — it read the
+        ///     volatile generation field TWICE, so a growth published between the reads paired the OLD (shorter) value
+        ///     array with the NEW (larger) count: the enumerator then ran past the array (IndexOutOfRangeException) or
+        ///     yielded slots the captured generation never wrote (phantom <c>default</c> values). <b>Fix:</b> the
+        ///     generation is read once into a local and both fields come from it, as <c>ToArray</c>/<c>AsValuesSpan</c> do.
         /// </summary>
         /// <remarks>Every value ever stored is <c>i + 1 ≥ 1</c>, so a yielded <c>0</c> can only be an unwritten slot.</remarks>
         [TestMethod]
-        [OpenBugs]
         public void Enumerate_WhileAWriterRegrowsTheTable_NeverThrowsAndNeverYieldsAnUnwrittenSlot()
         {
             var d = new OrderedDictionary<int, int>();
@@ -187,25 +186,24 @@ namespace NumSharp.Tests.Collections
 
         /// <summary>
         ///     <b>Contract:</b> "A lock-free reader always sees valid, untorn keys and values" (type remarks) / "no torn or
-        ///     garbage reads" (proposal §7.1). <b>Bug:</b> replacing the value of an existing key when
+        ///     garbage reads" (proposal §7.1). <b>Defect caught:</b> replacing the value of an existing key when
         ///     <typeparamref name="TValue" /> is NOT atomically writable (<c>decimal</c>, <c>Guid</c>, any struct wider
-        ///     than a machine word, <c>long</c> on 32-bit) publishes a new generation that clones ONLY the value array and
-        ///     SHARES the old generation's index and key arrays. The next in-place append then writes a new index word
-        ///     and key slot into those shared arrays, so a reader still holding the OLD generation resolves the new key
-        ///     through the shared index and returns its own, never-written <c>values[slot]</c> — <c>default</c> for a
-        ///     present key. This is exactly the rule ConcurrentOrderedDictionary.COMPACT.md §4.7 forbids ("a non-atomic
-        ///     replace copies the whole generation"), which the compact sibling follows. <b>Fix:</b> copy the whole
-        ///     generation (index + keys + values) on a wide-value replace.
+        ///     than a machine word, <c>long</c> on 32-bit) published a new generation that cloned ONLY the value array and
+        ///     SHARED the old generation's index and key arrays. The next in-place append then wrote a new index word and
+        ///     key slot into those shared arrays, so a reader still holding the OLD generation resolved the new key
+        ///     through the shared index and returned its own, never-written <c>values[slot]</c> — <c>default</c> for a
+        ///     present key. That is exactly the rule ConcurrentOrderedDictionary.COMPACT.md §4.7 forbids ("a non-atomic
+        ///     replace copies the whole generation"), which the compact sibling follows. <b>Fix:</b> a wide-value replace
+        ///     copies the whole generation (index + keys + values), so no array is shared across generations.
         /// </summary>
         /// <remarks>
         ///     Deterministic: <c>TryGetValue</c> captures its generation and only THEN calls the comparer's
         ///     <c>GetHashCode</c>, so a comparer hook runs the competing writer (wide replace + append, on another thread)
         ///     inside that window. The correct outcome is either "not found" (the reader's snapshot predates the append) or
-        ///     the real value; the shipped code returns <c>(true, default)</c>. The window is not an artefact of the hook:
+        ///     the real value; the pre-fix code returned <c>(true, default)</c>. The window is not an artefact of the hook:
         ///     with a trivial comparer the race reproduced ~47K times per second on the same machine.
         /// </remarks>
         [TestMethod]
-        [OpenBugs]
         public void WideValueReplaceThenAppend_ReaderHoldingTheOlderGeneration_NeverReadsAnUnwrittenValue()
         {
             const int NewKey = 100;
@@ -251,15 +249,15 @@ namespace NumSharp.Tests.Collections
         ///     <b>Contract:</b> "no update is ever lost" (type remarks) / "No lost updates ... including the hard race of a
         ///     lock-free value update running concurrently with a resize that copies the backing arrays" and "per key,
         ///     operations are linearizable (a value update on key k is immediately visible to a later read of k)"
-        ///     (proposal §7.1/§7.2). <b>Bug:</b> the lock-free <c>SetByKey</c> does a plain value store and then
-        ///     volatile-reads <c>_resizing</c>/<c>_t</c>, while a resize does a volatile write of <c>_resizing = true</c> and
-        ///     then copies the value array. That is the store-buffering (Dekker) litmus shape: release/acquire ordering
-        ///     does not forbid "each side's load misses the other side's store" on x86-TSO or ARM64, so the replacer can
-        ///     see <c>_resizing == false</c> while the resize's copy reads the OLD value; the resize then publishes a
-        ///     generation without the completed write. <b>Fix:</b> a full fence (<c>Interlocked.MemoryBarrier()</c>)
-        ///     between the value store and the flag/generation re-check, AND after every <c>_resizing = true</c> before
-        ///     the copy. Measured: fences on both sides → 0 lost writes, +3.3 ns per replace (4.9 → 8.2 ns), still ~5×
-        ///     faster than a locked replace.
+        ///     (proposal §7.1/§7.2). <b>Defect caught:</b> the lock-free <c>SetByKey</c> did a plain value store and then
+        ///     volatile-read <c>_resizing</c>/<c>_t</c>, while a resize did a volatile write of <c>_resizing = true</c> and
+        ///     then copied the value array. That is the store-buffering (Dekker) litmus shape: release/acquire ordering
+        ///     does not forbid "each side's load misses the other side's store" on x86-TSO or ARM64, so the replacer could
+        ///     see <c>_resizing == false</c> while the resize's copy read the OLD value; the resize then published a
+        ///     generation without the completed write. <b>Fix:</b> a full fence on BOTH sides —
+        ///     <c>Interlocked.MemoryBarrier()</c> between the value store and the flag/generation re-check, and the flag
+        ///     raised with a full-fence <c>Interlocked.Exchange</c> right before the copy (the removal also reads the
+        ///     value it returns inside that fenced window). The cost is recorded in the type remarks.
         /// </summary>
         /// <remarks>
         ///     Each replacer is the ONLY writer of its key, so after its own <c>SetByKey(k, i)</c> returns, every read of
@@ -267,10 +265,9 @@ namespace NumSharp.Tests.Collections
         ///     several writers per key cannot detect this — last-writer-wins hides a lost intermediate write.) The
         ///     churn thread forces a copying resize every iteration (an order-preserving removal republishes the whole
         ///     generation). No user code runs inside the window, so this stays a bounded storm; it reproduced at ~3% of
-        ///     all replaces on the shipped code.
+        ///     all replaces on the pre-fix code.
         /// </remarks>
         [TestMethod]
-        [OpenBugs]
         public void LockFreeReplace_RacingCopyingResizes_NeverLosesACompletedWrite()
         {
             const int Replacers = 4, ChurnKey = 1000;
@@ -340,14 +337,13 @@ namespace NumSharp.Tests.Collections
         ///     <b>Contract:</b> <c>where TKey : notnull</c>, the proposed BCL surface, the three sibling ordered maps
         ///     (<see cref="ConcurrentOrderedDictionary{TKey,TValue}" />, <see cref="ConcurrentOrderedCompactDictionary{TKey,TValue}" />)
         ///     and <c>Dictionary</c>/<c>ConcurrentDictionary</c> all reject a null key with
-        ///     <see cref="ArgumentNullException" />. <b>Bug:</b> <see cref="OrderedDictionary{TKey,TValue}" /> never checks,
-        ///     and <c>EqualityComparer&lt;string&gt;.Default.GetHashCode(null)</c> is 0 rather than a throw, so a null
-        ///     reference key is silently stored, found and enumerated like any other key. <b>Fix:</b> the siblings'
-        ///     <c>NullCheck</c> (with its <c>typeof(TKey).IsValueType</c> guard) on every key entry point.
+        ///     <see cref="ArgumentNullException" />. <b>Defect caught:</b> <see cref="OrderedDictionary{TKey,TValue}" />
+        ///     never checked, and <c>EqualityComparer&lt;string&gt;.Default.GetHashCode(null)</c> is 0 rather than a throw,
+        ///     so a null reference key was silently stored, found and enumerated like any other key. <b>Fix:</b> the
+        ///     siblings' <c>NullCheck</c> (with its <c>typeof(TKey).IsValueType</c> guard) on every key entry point.
         /// </summary>
         /// <remarks>Each entry point is checked on a fresh instance, so one accepted null cannot change what a later check observes; the failure lists every entry point that accepted null.</remarks>
         [TestMethod]
-        [OpenBugs]
         public void NullKey_IsRejectedOnEveryKeyEntryPoint_LikeTheSiblingsAndTheBcl()
         {
             var entryPoints = new (string Name, Action<OrderedDictionary<string, int>> Call)[]
@@ -394,21 +390,21 @@ namespace NumSharp.Tests.Collections
 
         /// <summary>
         ///     <b>Contract:</b> a capacity the index cannot address must be refused, as the compact sibling does
-        ///     (<see cref="ArgumentOutOfRangeException" /> above ~715 million entries). <b>Bug:</b> the constructor sizes its
-        ///     index with <c>while (len &lt; cap * 100 / 70 + 1) len &lt;&lt;= 1;</c> on an <c>int</c>; for a capacity of
-        ///     ~752 million or more the target exceeds 2^30, the shift wraps to <c>int.MinValue</c> and then to 0, and
-        ///     <c>0 &lt;&lt; 1 == 0</c> never terminates — the constructor spins forever instead of throwing (and
-        ///     <c>AppendGrow</c>'s <c>newLen &lt;&lt;= 1</c> has the same overflow). <b>Fix:</b> size in <c>long</c> and
-        ///     throw above the addressable maximum (the index needs a power-of-two <c>int[]</c> ≤ <c>Array.MaxLength</c>).
+        ///     (<see cref="ArgumentOutOfRangeException" /> above ~715 million entries). <b>Defect caught:</b> the
+        ///     constructor sized its index with <c>while (len &lt; cap * 100 / 70 + 1) len &lt;&lt;= 1;</c> on an
+        ///     <c>int</c>; for a capacity of ~752 million or more the target exceeds 2^30, the shift wrapped to
+        ///     <c>int.MinValue</c> and then to 0, and <c>0 &lt;&lt; 1 == 0</c> never terminated — the constructor spun
+        ///     forever instead of throwing (and <c>AppendGrow</c>'s <c>newLen &lt;&lt;= 1</c> had the same overflow).
+        ///     <b>Fix:</b> the index length is computed in <c>long</c>, and both the constructor and growth refuse more than
+        ///     751,619,276 entries (2^30 index words × 70 % load; 2^30 is the largest power-of-two <c>int[]</c>).
         /// </summary>
         /// <remarks>
         ///     The constructor runs on a background thread so a hang fails the test instead of hanging the run. There is no
-        ///     way to stop a spinning managed thread, so on the buggy code it keeps one core busy until the test host exits;
-        ///     it runs at the lowest priority to keep that from disturbing the rest of the run. No memory is allocated
-        ///     before the spin (the index-length loop precedes every array allocation).
+        ///     way to stop a spinning managed thread, so on the pre-fix code it kept one core busy until the test host
+        ///     exited; it runs at the lowest priority to keep that from disturbing the rest of the run. No memory is
+        ///     allocated before the refusal (the index length is computed before every array allocation).
         /// </remarks>
         [TestMethod]
-        [OpenBugs]
         public void HugeCapacity_IsRefusedWithArgumentOutOfRange_InsteadOfSpinningForever()
         {
             Exception outcome = null;
@@ -493,16 +489,16 @@ namespace NumSharp.Tests.Collections
 
         /// <summary>
         ///     <b>Contract:</b> "An atomically-writable value replace is lock-free" (type remarks, proposal §7.2).
-        ///     <b>Bug:</b> every generation-replacing resize sets <c>_resizing = true</c>, then allocates and rebuilds the
-        ///     index — which calls the user's comparer (<c>GetHashCode</c> for every surviving key) — and only then clears
-        ///     the flag, with no <c>try/finally</c>. A comparer (or allocation) exception inside that window leaves the
-        ///     collection itself consistent (the new generation is never published) but <c>_resizing</c> stuck at
-        ///     <see langword="true" /> forever, so every later lock-free replace fails its re-check and silently takes the
-        ///     write lock. <b>Fix:</b> clear the flag in a <c>finally</c> (or set it only after the fallible work, right
-        ///     before the copy that must be guarded).
+        ///     <b>Defect caught:</b> every generation-replacing resize set <c>_resizing = true</c>, then allocated and
+        ///     rebuilt the index — which calls the user's comparer (<c>GetHashCode</c> for every surviving key) — and only
+        ///     then cleared the flag, with no <c>try/finally</c>. A comparer (or allocation) exception inside that window
+        ///     left the collection itself consistent (the new generation was never published) but <c>_resizing</c> stuck
+        ///     at <see langword="true" /> forever, so every later lock-free replace failed its re-check and silently took
+        ///     the write lock. <b>Fix:</b> every resize lowers the flag in a <c>finally</c> (growth and the wide-value
+        ///     replace additionally build their new index before raising it, so a comparer throw there never raises it
+        ///     at all; the removal exercised here rebuilds inside the window and relies on the <c>finally</c>).
         /// </summary>
         [TestMethod]
-        [OpenBugs]
         public void ComparerThrowDuringAResize_DoesNotLeaveTheReplacePermanentlyLocked()
         {
             var comparer = new PoisonComparer();
