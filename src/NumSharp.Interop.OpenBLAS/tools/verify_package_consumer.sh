@@ -28,6 +28,12 @@
 #   bash src/NumSharp.Interop.OpenBLAS/tools/verify_package_consumer.sh
 # =============================================================================
 set -euo pipefail
+# Checks read captured output through a here-string, `grep -q PAT <<< "$OUT"`, never
+# `echo "$OUT" | grep -q PAT`. Under pipefail, grep -q exits on its first match while echo is still
+# writing; once the capture outgrows the pipe buffer, echo dies of SIGPIPE and the pipeline FAILS
+# for a pattern it FOUND. Measured: 20/20 false "not found" for a match near the top of a large
+# capture. CI run 35856837911 (package-consumer-smoke, macOS) failed verify_build_override.sh
+# step 10 exactly so, on the verbose rebuild log.
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PKG_DIR="$(dirname "$HERE")"
@@ -98,18 +104,18 @@ EOF
 )"
 echo "$LISTING" | sed 's/^/    /'
 for rid in win-x64 win-arm64 linux-x64 linux-arm64 linux-musl-x64 linux-musl-arm64 osx-x64 osx-arm64; do
-    echo "$LISTING" | grep -q "^runtimes/$rid/native/[^/]*openblas[^/]*$" || fail "no main library for $rid under runtimes/$rid/native/"
+    grep -q "^runtimes/$rid/native/[^/]*openblas[^/]*$" <<< "$LISTING" || fail "no main library for $rid under runtimes/$rid/native/"
 done
 for rid in osx-x64 osx-arm64; do
     for dep in libgfortran.5.dylib libquadmath.0.dylib libgcc_s.1.1.dylib; do
-        echo "$LISTING" | grep -q "^runtimes/$rid/native/.dylibs/$dep$" \
+        grep -q "^runtimes/$rid/native/.dylibs/$dep$" <<< "$LISTING" \
             || fail "$rid: vendored $dep must be packed NESTED as runtimes/$rid/native/.dylibs/$dep (NuGet delivers nested paths)"
     done
 done
-echo "$LISTING" | grep -q "^runtimes/[^/]*/\.dylibs/" \
+grep -q "^runtimes/[^/]*/\.dylibs/" <<< "$LISTING" \
     && fail "a runtimes/<rid>/.dylibs/ SIBLING folder is packed — NuGet drops it from every consumer, so it is dead weight that hides the defect"
 for rid in linux-x64 linux-musl-x64; do
-    echo "$LISTING" | grep -q "^runtimes/$rid/native/libgfortran-" || fail "$rid: vendored libgfortran must sit beside the main (RUNPATH \$ORIGIN)"
+    grep -q "^runtimes/$rid/native/libgfortran-" <<< "$LISTING" || fail "$rid: vendored libgfortran must sit beside the main (RUNPATH \$ORIGIN)"
 done
 echo "ok"
 
@@ -166,9 +172,9 @@ RID="$(cd "$CONS" && dotnet msbuild consumer.csproj -getProperty:NETCoreSdkPorta
 ls "$OUT"/runtimes/"$RID"/native/*openblas* > /dev/null 2>&1 || fail "the bundled asset did not reach the consumer output for $RID"
 [ ! -d "$OUT/runtimes/$RID/.dylibs" ] || fail "a fresh restore must not carry a runtimes/$RID/.dylibs sibling (it is the loader's job to make it)"
 RUN="$(cd "$CONS" && dotnet "$OUT/consumer.dll" 2>&1)"; echo "$RUN" | sed 's/^/    /'
-echo "$RUN" | grep -q "^enabled=True" || fail "the bundled OpenBLAS did not load from a PackageReference restore: $RUN"
-echo "$RUN" | grep -q "^bundled=True" || fail "the loaded library must be the bundle: $RUN"
-echo "$RUN" | grep -q "^dot00=10" || fail "wrong product: $RUN"
+grep -q "^enabled=True" <<< "$RUN" || fail "the bundled OpenBLAS did not load from a PackageReference restore: $RUN"
+grep -q "^bundled=True" <<< "$RUN" || fail "the loaded library must be the bundle: $RUN"
+grep -q "^dot00=10" <<< "$RUN" || fail "wrong product: $RUN"
 if [ "$IS_MAC" = 1 ]; then
     [ -e "$OUT/runtimes/$RID/.dylibs" ] || fail "macOS: the loader must have materialized runtimes/$RID/.dylibs in place"
     [ -L "$OUT/runtimes/$RID/.dylibs" ] && echo "    (materialized as a symlink -> $(readlink "$OUT/runtimes/$RID/.dylibs"))"
@@ -184,9 +190,9 @@ if [ "$IS_WIN" = 0 ]; then
     rm -rf "$RO/runtimes/$RID/.dylibs"          # back to exactly what NuGet delivered
     chmod -R a-w "$RO"
     RORUN="$(cd "$CONS" && dotnet "$RO/consumer.dll" 2>&1)"; echo "$RORUN" | sed 's/^/    /'
-    echo "$RORUN" | grep -q "^enabled=True" || fail "the bundle must load from a read-only install: $RORUN"
-    echo "$RORUN" | grep -q "^bundled=True" || fail "a read-only install of the bundle is still the bundle: $RORUN"
-    echo "$RORUN" | grep -q "^dot00=10" || fail "wrong product from the read-only install: $RORUN"
+    grep -q "^enabled=True" <<< "$RORUN" || fail "the bundle must load from a read-only install: $RORUN"
+    grep -q "^bundled=True" <<< "$RORUN" || fail "a read-only install of the bundle is still the bundle: $RORUN"
+    grep -q "^dot00=10" <<< "$RORUN" || fail "wrong product from the read-only install: $RORUN"
     [ ! -e "$RO/runtimes/$RID/.dylibs" ] || fail "nothing may be written into the read-only tree"
     if [ "$IS_MAC" = 1 ]; then
         IMG="$(echo "$RORUN" | sed -n 's/^image=//p')"
@@ -210,9 +216,9 @@ if [ "$IS_MAC" = 1 ]; then
     ls "$PUB"/libgfortran.5.dylib > /dev/null 2>&1 || fail "macOS: the flatten must have dropped native/.dylibs/ beside the main"
 fi
 PUBRUN="$(cd "$CONS" && dotnet "$PUB/consumer.dll" 2>&1)"; echo "$PUBRUN" | sed 's/^/    /'
-echo "$PUBRUN" | grep -q "^enabled=True" || fail "the bundle must load from a flattened publish: $PUBRUN"
-echo "$PUBRUN" | grep -q "^bundled=True" || fail "the flattened bundle is still the bundle (identity is content, not layout): $PUBRUN"
-echo "$PUBRUN" | grep -q "^dot00=10" || fail "wrong product from the flattened publish: $PUBRUN"
+grep -q "^enabled=True" <<< "$PUBRUN" || fail "the bundle must load from a flattened publish: $PUBRUN"
+grep -q "^bundled=True" <<< "$PUBRUN" || fail "the flattened bundle is still the bundle (identity is content, not layout): $PUBRUN"
+grep -q "^dot00=10" <<< "$PUBRUN" || fail "wrong product from the flattened publish: $PUBRUN"
 [ ! -e "$WORK/.dylibs" ] || fail "the loader must never write ../.dylibs OUTSIDE the application folder"
 if [ "$IS_MAC" = 1 ]; then
     IMG="$(echo "$PUBRUN" | sed -n 's/^image=//p')"
@@ -226,7 +232,7 @@ if [ "$IS_MAC" = 1 ]; then
     chmod -R u+w "$ENTRY"
     printf 'garbage' > "$ENTRY/.dylibs/libgfortran.5.dylib" || fail "could not tamper with $ENTRY/.dylibs/libgfortran.5.dylib"
     AGAIN="$(cd "$CONS" && dotnet "$PUB/consumer.dll" 2>&1)" || { echo "$AGAIN"; fail "the consumer failed after the tamper"; }
-    echo "$AGAIN" | grep -q "^enabled=True" || fail "the loader must rebuild a tampered cache entry: $AGAIN"
+    grep -q "^enabled=True" <<< "$AGAIN" || fail "the loader must rebuild a tampered cache entry: $AGAIN"
     cmp -s "$ENTRY/.dylibs/libgfortran.5.dylib" "$PUB/libgfortran.5.dylib" || fail "the tampered dep must have been restored from its source"
     echo "ok"
 fi
