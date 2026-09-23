@@ -310,6 +310,14 @@ jobs:
         print('base_prefix ', sys.base_prefix); \
         print('INSTSONAME  ', sysconfig.get_config_var('INSTSONAME')); \
         print('LIBDIR      ', sysconfig.get_config_var('LIBDIR'))"
+        # The runner's vector ISA next to NumPy's EFFECTIVE dispatch. Hosted runners are a mix of AVX2-only
+        # and AVX-512 machines, and on Linux NumPy's float answers change with that (see NPY_DISABLE_CPU_FEATURES
+        # above). The raw per-instruction flags (AVX512F) survive the pin, the dispatch groups (X86_V4, AVX512_ICL)
+        # do not, so "AVX512F=True ... X86_V4=False" is the pin at work and a byte-exact red on this leg can be
+        # triaged from the log alone. Same private module numpy.show_config() itself reads.
+        python -c "from numpy._core._multiarray_umath import __cpu_features__ as f; \
+        print('cpu         ', 'AVX512F=%s AVX2=%s ASIMD=%s | numpy dispatch X86_V4=%s AVX512_ICL=%s' \
+              % tuple(f.get(k) for k in ('AVX512F', 'AVX2', 'ASIMD', 'X86_V4', 'AVX512_ICL')))"
 
     # The bundled OpenBLAS binaries are gitignored, so a clean checkout has none. This suite runs
     # with OpenBLAS as its DEFAULT backend (PythonSession.Start calls OpenBlasEngine.TryEnable), and
