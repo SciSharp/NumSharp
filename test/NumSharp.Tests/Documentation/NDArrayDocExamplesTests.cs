@@ -584,6 +584,11 @@ namespace NumSharp.Tests.Documentation
             int[,] md = (int[,])arr.ToMuliDimArray<int>();
             md[1, 1].Should().Be(4);
 
+            // The documented any-layout + conversion line: the transpose's logical elements, as float64.
+            double[,] mdT = (double[,])arr.T.ToMuliDimArray<double>();
+            mdT[0, 1].Should().Be(3.0);
+            mdT[1, 0].Should().Be(2.0);
+
             int[][] jag = (int[][])arr.ToJaggedArray<int>();
             jag[1][0].Should().Be(3);
 
