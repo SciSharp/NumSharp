@@ -8,19 +8,31 @@ namespace NumSharp.Tests.Interop;
 [TestClass]
 public class KarpathyExistingShortRunsTests : InteropTestBase
 {
+    /// <summary>
+    /// Twelve NES updates driven by the hash-pinned original objective <c>f</c>. All 13 states and rewards
+    /// must be byte-identical to NumSharp's <see cref="NaturalEvolutionStrategies.OptimizeQuadratic"/>.
+    /// </summary>
+    /// <remarks>
+    /// The seeded Gaussians come from <c>legacy_randn</c> (<see cref="InteropTestBase.DefineLegacyRandn"/>).
+    /// On x64 that is NumPy's own <c>rng.randn</c>; on a NumPy that fuses <c>legacy_gauss</c> (arm64) it is
+    /// the literal evaluation of the same stream. With raw <c>rng.randn</c> this passed on macos-latest only
+    /// because twelve steps end before the fused stream's first visible effect. The 300-step trace of the
+    /// same loop diverged at iteration 135.
+    /// </remarks>
     [TestMethod, TestCategory("KarpathyShortRun"), TestCategory("KarpathyByteParity")]
     public void NesOriginalObjective_TwelveCompleteUpdates_AllStatesByteExact()
     {
         using var solution = np.array(new[] { .5, .1, -.3 });
         ExportTo("solution", solution);
         KarpathyOriginalSource.Load(Scope, "nes");
+        DefineLegacyRandn();
         PyExec("""
             original['solution']=solution
-            rng=np.random.RandomState(0); w=rng.randn(3); trace=np.empty((13,4))
+            rng=np.random.RandomState(0); w=legacy_randn(rng,3); trace=np.empty((13,4))
             for step in range(13):
                 trace[step,:3]=w; trace[step,3]=original['f'](w)
                 if step==12: break
-                noise=rng.randn(50,3)
+                noise=legacy_randn(rng,50,3)
                 rewards=np.array([original['f'](w+.1*row) for row in noise])
                 advantages=(rewards-np.mean(rewards))/np.std(rewards)
                 w=w+.001/(50*.1)*np.dot(noise.T,advantages)

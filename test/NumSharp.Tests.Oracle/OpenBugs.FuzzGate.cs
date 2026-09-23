@@ -523,5 +523,120 @@ namespace NumSharp.Tests
                 BitConverter.GetBytes(0.3), BitConverter.GetBytes(UlpUp(0.3)), NPTypeCode.Double,
                 OneDiff).Should().NotBeNull("truthless tiers keep the documented summation excuse");
         }
+
+        // ---- H1: float32 sin/cos past NumPy's Cody-Waite limit is the HOST libm ----
+
+        /// <summary>2^32: past both limits; macos-latest's Apple libm rounds its float32 sine 1 ULP from ucrtbase.</summary>
+        private const float PastLimit = 4294967296f;
+
+        /// <summary>
+        /// A float32 sin/cos case in the given tier shape, carrying <paramref name="inputs"/> as its input
+        /// buffer. With <paramref name="outTier"/> it is shaped like an out_where cell: op <c>out_unary</c>,
+        /// the ufunc in <c>params.ufunc</c>, input + out operands.
+        /// </summary>
+        /// <param name="ufunc">The unary ufunc name the case exercises.</param>
+        /// <param name="outTier">True for the out=/where= tier's <c>out_unary</c> shape, false for a plain unary op.</param>
+        /// <param name="inputs">The float32 input values, written as the operand's little-endian hex buffer.</param>
+        /// <returns>The synthetic case.</returns>
+        private static FuzzCorpus.Case SinCosCase(string ufunc, bool outTier, params float[] inputs)
+        {
+            var bytes = inputs.SelectMany(BitConverter.GetBytes).ToArray();
+            var input = new FuzzCorpus.Operand
+            {
+                Dtype = "float32", Shape = new long[] { inputs.Length }, Strides = new long[] { 1 },
+                Offset = 0, BufferSize = inputs.Length, Buffer = Convert.ToHexString(bytes),
+            };
+            if (!outTier)
+                return new FuzzCorpus.Case { Id = "selftest/" + ufunc, Op = ufunc, Layout = "selftest", Operands = new[] { input } };
+            using var doc = System.Text.Json.JsonDocument.Parse($"{{\"ufunc\":\"{ufunc}\"}}");
+            return new FuzzCorpus.Case
+            {
+                Id = "selftest/out_unary/" + ufunc, Op = "out_unary", Layout = "out_c",
+                Params = new System.Collections.Generic.Dictionary<string, System.Text.Json.JsonElement>
+                    { ["ufunc"] = doc.RootElement.GetProperty("ufunc").Clone() },
+                Operands = new[] { input, input },
+            };
+        }
+
+        /// <summary>The float32 bits <paramref name="ulps"/> representable steps away from <paramref name="v"/>.</summary>
+        /// <param name="v">The starting value.</param>
+        /// <param name="ulps">How many ULPs to move (may be negative).</param>
+        /// <returns>The little-endian bytes of the moved value.</returns>
+        private static byte[] F32(float v, int ulps = 0)
+            => BitConverter.GetBytes(BitConverter.Int32BitsToSingle(BitConverter.SingleToInt32Bits(v) + ulps));
+
+        /// <summary>
+        /// The macOS shape of the divergence: NumSharp's element is exactly this host's libm answer for a
+        /// past-limit input, and the reference is 1 ULP away. It is excused off the reference host and
+        /// NEVER on it, for both the plain op and the out_unary tier and for sin and cos alike.
+        /// <see cref="MisalignedRegistry.Classify"/> is pinned to follow whichever host this is.
+        /// </summary>
+        [TestMethod]
+        public void H1_PastLimitHostLibmAnswer_OneUlp_ExcusedOnlyOffTheReferenceHost()
+        {
+            foreach (var ufunc in new[] { "sin", "cos" })
+            foreach (var outTier in new[] { false, true })
+            {
+                var c = SinCosCase(ufunc, outTier, PastLimit, .5f);
+                float host = ufunc == "sin" ? MathF.Sin(PastLimit) : MathF.Cos(PastLimit);
+                var actual = F32(host).Concat(F32(.5f)).ToArray();
+                var expected = F32(host, -1).Concat(F32(.5f)).ToArray();
+                var diffs = new[] { new BitDiff.Diff(0, "ref", "host") };
+
+                MisalignedRegistry.IsHostLibmSinCosHandoff(c, DivergenceKind.Value, expected, actual,
+                    NPTypeCode.Single, diffs, libmReferenceHost: false).Should().BeTrue(
+                    $"{ufunc} (out tier {outTier}): a past-limit lane is the host libm on both sides");
+                MisalignedRegistry.IsHostLibmSinCosHandoff(c, DivergenceKind.Value, expected, actual,
+                    NPTypeCode.Single, diffs, libmReferenceHost: true).Should().BeFalse(
+                    "the reference host reproduces ucrtbase exactly, so it must stay strict");
+                (MisalignedRegistry.Classify(c, DivergenceKind.Value, expected, actual, NPTypeCode.Single, diffs) != null)
+                    .Should().Be(!MisalignedRegistry.IsLibmReferenceHost,
+                    "Classify applies H1 exactly when this is not the libm reference host");
+            }
+        }
+
+        /// <summary>
+        /// The negative space. An in-range lane (the bit-exact port) is not excused off the reference host
+        /// either, even when a past-limit input sits in the same case. Neither is a gross miss on a
+        /// past-limit lane, a value that is not this host's libm answer, another op, or a non-float32 slot.
+        /// </summary>
+        [TestMethod]
+        public void H1_InRangeLane_GrossMiss_OtherOpOrDtype_NotExcused()
+        {
+            var c = SinCosCase("sin", true, PastLimit, .5f);
+            float host = MathF.Sin(PastLimit);
+            float port = NumSharp.Utilities.NDFloatMath.Sin(.5f);
+
+            // An in-range lane 1 ULP off: the port regressed. Its value is no libm answer for 2^32.
+            MisalignedRegistry.IsHostLibmSinCosHandoff(c, DivergenceKind.Value,
+                F32(host).Concat(F32(port)).ToArray(), F32(host).Concat(F32(port, 1)).ToArray(), NPTypeCode.Single,
+                new[] { new BitDiff.Diff(1, "port", "port+1") }, libmReferenceHost: false)
+                .Should().BeFalse("the in-range sin port is bit-exact on every host");
+
+            // The same 1-ULP in-range miss with NO past-limit input in the case at all.
+            MisalignedRegistry.IsHostLibmSinCosHandoff(SinCosCase("sin", true, .5f), DivergenceKind.Value,
+                F32(port), F32(port, 1), NPTypeCode.Single, new[] { new BitDiff.Diff(0, "port", "port+1") },
+                libmReferenceHost: false).Should().BeFalse("no lane of this case reaches the libm handoff");
+
+            // A past-limit lane whose reference is 64 ULP away: beyond any libm rounding difference.
+            MisalignedRegistry.IsHostLibmSinCosHandoff(c, DivergenceKind.Value,
+                F32(host, -64).Concat(F32(port)).ToArray(), F32(host).Concat(F32(port)).ToArray(), NPTypeCode.Single,
+                new[] { new BitDiff.Diff(0, "ref", "host") }, libmReferenceHost: false)
+                .Should().BeFalse("a gross miss is not a libm rounding difference");
+
+            // NumSharp's element is NOT this host's libm answer, even though it is within 1 ULP of the reference.
+            MisalignedRegistry.IsHostLibmSinCosHandoff(c, DivergenceKind.Value,
+                F32(host, 2).Concat(F32(port)).ToArray(), F32(host, 1).Concat(F32(port)).ToArray(), NPTypeCode.Single,
+                new[] { new BitDiff.Diff(0, "ref", "other") }, libmReferenceHost: false)
+                .Should().BeFalse("the kernel returns exactly MathF.Sin past the limit; anything else is a bug");
+
+            // Other ops and dtypes: tan is libm everywhere and has its own excuse, float64 sin is not the port.
+            MisalignedRegistry.IsHostLibmSinCosHandoff(SinCosCase("tan", true, PastLimit), DivergenceKind.Value,
+                F32(MathF.Tan(PastLimit), -1), F32(MathF.Tan(PastLimit)), NPTypeCode.Single,
+                new[] { new BitDiff.Diff(0, "ref", "host") }, libmReferenceHost: false).Should().BeFalse();
+            MisalignedRegistry.IsHostLibmSinCosHandoff(c, DivergenceKind.Value,
+                BitConverter.GetBytes(0.25), BitConverter.GetBytes(UlpUp(0.25)), NPTypeCode.Double,
+                OneDiff, libmReferenceHost: false).Should().BeFalse();
+        }
     }
 }

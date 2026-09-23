@@ -113,6 +113,119 @@ namespace NumSharp.Tests.Interop
                     "pinned to the x64 reference architecture.");
         }
 
+        /// <summary>
+        ///     True when this process's NumPy evaluates its legacy Gaussian sampler LITERALLY, so a seeded
+        ///     <c>RandomState.randn</c> draws the same stream NumSharp does. That holds on every x86/x64
+        ///     host and does NOT hold on arm64, where NumPy's own wheel fuses one line of the sampler.
+        /// </summary>
+        /// <remarks>
+        ///     <para>NumPy's <c>legacy_gauss</c> (<c>numpy/random/src/legacy/legacy-distributions.c</c>)
+        ///     computes <c>r2 = x1 * x1 + x2 * x2</c>. The arm64 wheels are built for an ASIMD baseline
+        ///     (fused multiply-add is in the base ISA) with the compiler's default floating-point
+        ///     contraction, so that line becomes one <c>fma(x1, x1, x2 * x2)</c>. The x86-64 wheels target
+        ///     an X86_V2 baseline with no FMA and cannot contract it, and RyuJIT never contracts, so NumSharp
+        ///     and x64 NumPy round both products separately. <c>log(r2)</c> magnifies that 1-ULP change near
+        ///     the unit circle: about 14 % of draws differ, by 1 to ~50 000 ULP.</para>
+        ///     <para>Evidence: a C# replica that fuses exactly that way reproduces the first mismatching
+        ///     element macos-latest reported for every seeded test (seed 7 -> element 24, seed 23 -> 10,
+        ///     seed 3 -> 44); the other operand order does not. The accept/reject decisions did not change
+        ///     for those seeds, so the MT19937 position (and every later uniform draw) still agreed.</para>
+        ///     <para>NumSharp deliberately keeps the literal stream on every architecture: it is what every
+        ///     x86-64 NumPy returns, it keeps seeded NumSharp output portable, and it is what the
+        ///     win-amd64-authored random corpus and unit tests pin. Keyed off the PROCESS architecture
+        ///     because the in-process CPython loads the NumPy binary built for it (an x64 process under
+        ///     emulation loads the x64 wheel).</para>
+        /// </remarks>
+        protected static bool NumPyLegacyGaussianIsLiteral =>
+            System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture is
+                System.Runtime.InteropServices.Architecture.X64 or System.Runtime.InteropServices.Architecture.X86;
+
+        /// <summary>
+        ///     Defines <c>legacy_randn(rs, *shape)</c> in this test's Python scope: the seeded Gaussian
+        ///     draws NumSharp must reproduce, for tests that compare NumSharp's seeded stream with NumPy's.
+        /// </summary>
+        /// <remarks>
+        ///     <para>Where <see cref="NumPyLegacyGaussianIsLiteral"/> holds, <c>legacy_randn</c> IS
+        ///     <c>rs.randn</c>, so those hosts keep comparing against NumPy's own output.</para>
+        ///     <para>Elsewhere it re-evaluates <c>legacy_gauss</c> exactly as its C source reads, over rs's
+        ///     OWN live MT19937 doubles (<c>random_sample</c> is the same <c>next_double</c> the sampler
+        ///     consumes). It rounds <c>x1*x1</c>, <c>x2*x2</c> and their sum separately as NumPy ufuncs and
+        ///     takes <c>math.log</c> from the platform libm, the one .NET's <c>Math.Log</c> also calls. It
+        ///     also honours and leaves rs's cached second Gaussian and advances rs by exactly the doubles
+        ///     the literal evaluation consumed, so later draws on rs line up with NumSharp's generator.</para>
+        ///     <para>Verified on win-amd64 NumPy 2.4.2, whose own randn IS literal, with the reference path
+        ///     forced. Values, the full state tuple and the continuation were byte-identical to
+        ///     <c>rs.randn</c> for 126 draws in 63 seeded sequences (9 seeds), including odd counts,
+        ///     pre-cached Gaussians, empty draws and 1.28M-element draws. All 32 interop tests that use
+        ///     it also passed with <see cref="NumPyLegacyGaussianIsLiteral"/> forced to false on x64.</para>
+        ///     <para>It never patches NumPy (the pinned-source loader's rule, see
+        ///     <c>KarpathyOriginalSource</c>). A pinned original that calls the global
+        ///     <c>np.random.randn</c> therefore still draws NumPy's own stream, so on a fusing host its
+        ///     output is compared against a <c>legacy_randn</c> evaluation of the same seed instead. Use
+        ///     this only for a CLAIM about NumSharp's seeded stream. A test that feeds NumPy-drawn inputs
+        ///     into NumSharp needs no change.</para>
+        /// </remarks>
+        protected void DefineLegacyRandn()
+            => PyExec(LegacyRandnPython.Replace("__NUMPY_LEGACY_GAUSS_IS_LITERAL__", NumPyLegacyGaussianIsLiteral ? "True" : "False"));
+
+        /// <summary>
+        ///     The Python behind <see cref="DefineLegacyRandn"/>. The placeholder is replaced by
+        ///     <see cref="NumPyLegacyGaussianIsLiteral"/>. Uses only public NumPy API.
+        /// </summary>
+        private const string LegacyRandnPython = """
+            import math as _legacy_math
+
+            _NUMPY_LEGACY_GAUSS_IS_LITERAL = __NUMPY_LEGACY_GAUSS_IS_LITERAL__
+
+            def legacy_randn(rs, *shape):
+                if _NUMPY_LEGACY_GAUSS_IS_LITERAL:
+                    return rs.randn(*shape)
+                n = 1
+                for d in shape:
+                    n *= int(d)
+                if n == 0:
+                    return np.empty(shape)            # randn consumes nothing for an empty draw
+                name, key, pos, has_gauss, cached = rs.get_state()
+                out = np.empty(n)
+                filled = 0
+                if has_gauss:                         # legacy_gauss hands out its cached value first
+                    out[0] = cached
+                    filled = 1
+                pairs = (n - filled + 1) // 2
+                if pairs == 0:
+                    rs.set_state((name, key, pos, 0, 0.0))
+                    return out.reshape(shape)
+                probe = np.random.RandomState()
+                probe.set_state((name, key, pos, 0, 0.0))
+                xs, ys, consumed, accepted = [], [], 0, 0
+                while accepted < pairs:
+                    u = probe.random_sample(2 * (pairs - accepted) + 64)
+                    x = 2.0 * u[0::2] - 1.0
+                    y = 2.0 * u[1::2] - 1.0
+                    r2 = x * x + y * y                # two rounded products, one rounded sum: never fused
+                    ok = np.flatnonzero((r2 < 1.0) & (r2 != 0.0))[: pairs - accepted]
+                    # Doubles consumed: through the last pair still needed, or the whole chunk.
+                    consumed += 2 * (int(ok[-1]) + 1) if accepted + len(ok) == pairs else len(u)
+                    xs.append(x[ok])
+                    ys.append(y[ok])
+                    accepted += len(ok)
+                x = np.concatenate(xs)
+                y = np.concatenate(ys)
+                r2 = x * x + y * y
+                f = np.sqrt(-2.0 * np.array([_legacy_math.log(v) for v in r2.tolist()]) / r2)
+                g = np.empty(2 * pairs)
+                g[0::2] = f * y                       # legacy_gauss returns f*x2 first ...
+                g[1::2] = f * x                       # ... and caches f*x1 for the next call
+                out[filled:] = g[: n - filled]
+                advance = np.random.RandomState()
+                advance.set_state((name, key, pos, 0, 0.0))
+                advance.random_sample(consumed)
+                s = advance.get_state()
+                left = (n - filled) % 2 == 1          # an odd tail leaves the pair's second value cached
+                rs.set_state((s[0], s[1], s[2], 1 if left else 0, float(g[n - filled]) if left else 0.0))
+                return out.reshape(shape)
+            """;
+
         protected void PyExec(string code)
         {
             using (Py.GIL()) Scope.Exec(code);
