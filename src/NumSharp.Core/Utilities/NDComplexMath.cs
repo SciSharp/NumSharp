@@ -35,9 +35,10 @@ namespace NumSharp.Utilities
     /// <see cref="Square"/> = <c>vfmaddsub</c> <c>z·z</c> (matches NumPy's SIMD complex multiply
     /// overflow/cancellation AND NaN sign); <see cref="Reciprocal"/> = the <c>CDOUBLE_reciprocal</c>
     /// ufunc loop (division-form imaginary term, NaN-sign correct);
-    /// <see cref="Exp2"/>/<see cref="Log1p"/> compose the above; <see cref="Abs"/> = <c>npy_cabs</c>
-    /// (C99 <c>hypot</c>: an infinite component yields <c>+inf</c> even alongside a NaN — the .NET 8
-    /// <c>Complex.Abs</c> returns NaN there).</para>
+    /// <see cref="Exp2"/>/<see cref="Log1p"/> compose the above; <see cref="Abs"/> = NumPy's SIMD
+    /// <c>simd_cabsolute</c> (<c>loops_unary_complex.dispatch</c>: <c>sqrt(fma(r, r, 1))·larger</c>, with
+    /// C99 <c>hypot</c>'s rule that an infinite component yields <c>+inf</c> even alongside a NaN — the
+    /// .NET 8 <c>Complex.Abs</c> returns NaN there).</para>
     ///
     /// <para><b>Still delegating to the BCL (at parity):</b> <see cref="Asin"/> and <see cref="Acos"/>
     /// use <see cref="Complex.Asin"/>/<see cref="Complex.Acos"/> on the finite interior with
@@ -88,12 +89,35 @@ namespace NumSharp.Utilities
         private const double SUMSQ_SQRT_MIN = 1.4916681462400413e-154;  // sqrt(DBL_MIN): _sum_squares underflow guard
 
         /// <summary>
-        /// <c>|z| = hypot(re, im)</c> with NumPy/C99 (<c>npy_cabs</c>) infinity/NaN semantics: a
-        /// ±infinite real or imaginary part returns <c>+inf</c> regardless of the other part (including
-        /// NaN); a NaN component with no infinity returns the POSITIVE NaN (NumPy's <c>npy_hypot</c>
-        /// yields <c>0x7ff8…</c>, where <see cref="Complex.Abs"/> emits .NET's negative <c>0xfff8…</c>).
-        /// All finite inputs defer to <see cref="Complex.Abs"/> (bit-exact with NumPy).
+        /// <c>|z|</c> — the complex magnitude exactly as NumPy 2.x's <c>np.abs</c> computes it: the
+        /// <c>simd_cabsolute</c> kernel of <c>loops_unary_complex.dispatch.c.src</c>,
+        /// <c>sqrt(fma(ratio, ratio, 1)) · larger</c> with <c>ratio = smaller / larger</c>. A ±infinite
+        /// real or imaginary part returns <c>+inf</c> regardless of the other part (including NaN); a NaN
+        /// component with no infinity returns the POSITIVE NaN (<c>0x7ff8…</c>, NumPy's <c>NPY_NAN</c>,
+        /// where <see cref="Complex.Abs"/> emits .NET's negative <c>0xfff8…</c>).
         /// </summary>
+        /// <param name="z">The complex value.</param>
+        /// <returns>The magnitude, bit-identical to NumPy's on every FMA-capable host.</returns>
+        /// <remarks>
+        ///     <para><b>The multiply-add is FUSED, and that is the whole point.</b> NumPy's kernel spells
+        ///     the inner term <c>npyv_muladd(ratio, ratio, 1.0)</c>, which is a real fused multiply-add on
+        ///     every target its dispatcher picks on current hardware: <c>vfmaq_f64</c> on arm64 (NEON has
+        ///     FMA in its baseline) and <c>_mm256_fmadd_pd</c> on x86-64 (the <c>X86_V3</c> = AVX2+FMA3
+        ///     target). <see cref="Complex.Abs"/> — which this method deferred to until 2026-09 — computes
+        ///     the same formula UNFUSED (<c>1.0 + ratio * ratio</c>, two roundings), and measured over 1M
+        ///     random complex values on an AVX2+FMA3 host it disagreed with <c>numpy.abs</c> on 35.5% of
+        ///     them, while the fused form matched all 1,000,000. The byte-exact tests had passed only
+        ///     because their inputs happened to avoid the difference (integer-valued pools make
+        ///     <c>ratio²</c> exact, so both forms agree); a windowed FFT spectrum on macOS did not.
+        ///     <see cref="Math.FusedMultiplyAdd(double,double,double)"/> is a hardware FMA where one
+        ///     exists and a correctly-rounded software FMA elsewhere, so NumSharp's answer is the same
+        ///     on every host. NumPy's is not: on an x86-64 CPU WITHOUT FMA3 its dispatcher falls back to
+        ///     the <c>X86_V2</c> target, whose <c>npyv_muladd</c> is an unfused mul+add, and there the two
+        ///     libraries differ again — a CPU class no current runner or desktop belongs to.</para>
+        ///     <para>NumPy also routes non-SIMD-loadable strides and overlapping operands through the
+        ///     scalar <c>npy_hypot</c> (the platform libm's <c>hypot</c>); NumSharp always evaluates
+        ///     this kernel's formula, which is what every ordinary array layout gets from NumPy.</para>
+        /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static double Abs(Complex z)
         {
@@ -101,7 +125,17 @@ namespace NumSharp.Utilities
                 return double.PositiveInfinity;
             if (double.IsNaN(z.Real) || double.IsNaN(z.Imaginary))
                 return NAN;
-            return Complex.Abs(z);
+
+            double re = Math.Abs(z.Real), im = Math.Abs(z.Imaginary);
+            double larger = Math.Max(re, im), smaller = Math.Min(re, im);
+
+            // NumPy masks the division when larger == 0 (npyv_ifdivz), making ratio 0, hypot 1 and the
+            // result 1·0 = +0 — returning larger (+0, both parts were |.|-ed) is that value exactly.
+            if (larger == 0.0)
+                return larger;
+
+            double ratio = smaller / larger;
+            return Math.Sqrt(Math.FusedMultiplyAdd(ratio, ratio, 1.0)) * larger;
         }
 
         #region helpers

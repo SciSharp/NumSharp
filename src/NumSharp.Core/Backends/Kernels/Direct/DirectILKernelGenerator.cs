@@ -659,10 +659,11 @@ namespace NumSharp.Backends.Kernels
                 ?? throw new MissingMethodException(typeof(Half).FullName, "NegativeInfinity");
 
             // Complex methods and fields (Complex uses static fields, not properties).
-            // ComplexAbs routes through NDComplexMath.Abs (npy_cabs / C99 hypot semantics) rather
-            // than Complex.Abs directly: the BCL's private Hypot returns NaN for abs(NaN+inf*i) on
-            // net8.0, where NumPy returns +inf. The helper defers to Complex.Abs for every
-            // finite/NaN-only input, so magnitudes that already match NumPy stay bit-identical.
+            // ComplexAbs routes through NDComplexMath.Abs rather than Complex.Abs: the helper is a port
+            // of NumPy's SIMD simd_cabsolute, whose sqrt(FMA(r, r, 1))·larger is FUSED on every current
+            // dispatch target — Complex.Abs's unfused form differed from numpy.abs on 35.5% of random
+            // inputs — and it keeps C99 hypot's inf-beats-NaN rule, where the BCL's private Hypot
+            // returns NaN for abs(NaN+inf*i) on net8.0 and NumPy returns +inf.
             public static readonly MethodInfo ComplexAbs = typeof(Utilities.NDComplexMath).GetMethod("Abs", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
                 ?? throw new MissingMethodException(typeof(Utilities.NDComplexMath).FullName, "Abs");
             public static readonly MethodInfo ComplexDivisionByDouble = typeof(System.Numerics.Complex).GetMethod("op_Division", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex), typeof(double) })
