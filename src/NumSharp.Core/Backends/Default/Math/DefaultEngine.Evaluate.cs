@@ -675,22 +675,30 @@ namespace NumSharp.Backends
 
                 if (pairwiseSum || sequentialProd)
                 {
-                    // Materialize the child once (fresh + contiguous); `using` releases it after the
-                    // reduce — it never escapes.
-                    using var materialized = EvaluateCore(childProgram, inputs, null);
-
-                    // The reduction runs at the materialized (== result) dtype; a 16-byte slot holds
+                    // The reduction runs at the child (== result) dtype; a 16-byte slot holds
                     // any scalar including Complex.
                     byte* accSlot = stackalloc byte[NDExprParamPlan.SlotBytes];
                     *(ulong*)accSlot = 0;
                     *(ulong*)(accSlot + 8) = 0;
-                    byte* mSrc = (byte*)materialized.Address
-                                 + (long)materialized.Shape.offset * exprType.SizeOf();
 
-                    if (sequentialProd)
-                        SequentialProductInto(mSrc, n, exprType, accSlot);   // np.multiply.reduce order
-                    else
-                        PairwiseSumInto(mSrc, n, exprType, accSlot);         // np.add.reduce (pairwise)
+                    // Plan P2 M3 — stream the SAME pairwise / sequential schedule over the child without
+                    // materializing it (DefaultEngine.Evaluate.Stream.cs): bit-identical to the materialized
+                    // reduce below by construction, ~2x faster (no N-element temp written and read back).
+                    // Serves contiguous inputs in one shared memory order; anything else returns false and
+                    // takes the materialize path unchanged.
+                    if (!TryStreamFlatReduce(childProgram, inputs, n, sequentialProd, accSlot))
+                    {
+                        // Materialize the child once (fresh + contiguous); `using` releases it after the
+                        // reduce — it never escapes.
+                        using var materialized = EvaluateCore(childProgram, inputs, null);
+                        byte* mSrc = (byte*)materialized.Address
+                                     + (long)materialized.Shape.offset * exprType.SizeOf();
+
+                        if (sequentialProd)
+                            SequentialProductInto(mSrc, n, exprType, accSlot);   // np.multiply.reduce order
+                        else
+                            PairwiseSumInto(mSrc, n, exprType, accSlot);         // np.add.reduce (pairwise)
+                    }
 
                     if (reduce.Kind == NDExprReduceKind.Mean)
                         DivideAccByCount(accSlot, exprType, n);              // np._mean: divide at result dtype
@@ -1598,12 +1606,21 @@ namespace NumSharp.Backends
 
             if (diverts)
             {
-                // Materialize the child once (fresh + C-contiguous); `using` releases it after the
-                // reduce — outAcc is a fresh array, never a view into it, so this is safe.
-                using var materialized = EvaluateCore(childProgram, inputs, null);
-                outAcc = reduce.Kind == NDExprReduceKind.Prod
-                    ? SequentialAxisProd(materialized, axis, childType, reducedShape)   // np.multiply.reduce order
-                    : ExactAxisSum(materialized, axis, childType, reducedShape);        // np.add.reduce (pairwise / SLAB)
+                // Plan P2 M3 — stream the same PINNED-pairwise / SLAB-sequential schedule over an
+                // all-C-contiguous child without materializing it (DefaultEngine.Evaluate.Stream.cs);
+                // element-for-element identical to the materialized reduce below. Null = not streamable
+                // (strided / broadcast / mixed-order inputs), so fall through to the materialize path.
+                outAcc = TryStreamAxisReduce(childProgram, inputs, axis,
+                    reduce.Kind == NDExprReduceKind.Prod, reducedShape);
+                if (outAcc is null)
+                {
+                    // Materialize the child once (fresh + C-contiguous); `using` releases it after the
+                    // reduce — outAcc is a fresh array, never a view into it, so this is safe.
+                    using var materialized = EvaluateCore(childProgram, inputs, null);
+                    outAcc = reduce.Kind == NDExprReduceKind.Prod
+                        ? SequentialAxisProd(materialized, axis, childType, reducedShape)   // np.multiply.reduce order
+                        : ExactAxisSum(materialized, axis, childType, reducedShape);        // np.add.reduce (pairwise / SLAB)
+                }
             }
             else
             {
