@@ -39,10 +39,12 @@ namespace NumSharp
         [NDScoped]
         public static NDArray polymul(NDArray a1, NDArray a2)
         {
-            // poly1d normalisation trims leading zeros (and maps an all-zero input to [0]).
-            NDArray c1 = new poly1d(a1).coeffs;
-            NDArray c2 = new poly1d(a2).coeffs;
-            return np.convolve(c1, c2, "full");
+            // poly1d normalisation trims leading zeros (and maps an all-zero input to [0]). The polynomials
+            // own their coefficient arrays (field egress — no ambient scope reclaims them), so they are
+            // disposed here; the convolution is a fresh array, yielded by the [NDScoped] weaver.
+            using var p1 = new poly1d(a1);
+            using var p2 = new poly1d(a2);
+            return np.convolve(p1.coeffs, p2.coeffs, "full");
         }
 
         /// <summary>

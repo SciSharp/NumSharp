@@ -22,7 +22,11 @@ namespace NumSharp.Tests.Fuzz
     /// be re-executable: every execution must produce the same pool traffic.</param>
     /// <param name="RequiresBackend">True when the member computes only through a matrix backend
     /// (LAPACK); such entries run with OpenBLAS installed and are skipped where none loads.</param>
-    internal sealed record LeakCase(string Api, string Label, Func<LeakFixture, object> Run, bool RequiresBackend = false);
+    /// <param name="Throws">True when the member ALWAYS raises (by design — NumPy parity such as an unhashable
+    /// ndarray — or because it is unimplemented/broken): the entry is measured as an ERROR path (the throw
+    /// must strand nothing), and an entry flagged so that stops throwing fails as a harness error, so the
+    /// flag cannot outlive the behaviour it documents.</param>
+    internal sealed record LeakCase(string Api, string Label, Func<LeakFixture, object> Run, bool RequiresBackend = false, bool Throws = false);
 
     /// <summary>
     ///     The shared inputs every catalogue entry and every reflective property read draws on — built
@@ -141,6 +145,13 @@ namespace NumSharp.Tests.Fuzz
         /// <summary>Every array the fixture owns — the result disposer's never-dispose set.</summary>
         public readonly HashSet<object> Keep = new(ReferenceEqualityComparer.Instance);
 
+        /// <summary>
+        ///     The base-buffer byte range of every non-empty array in <see cref="Keep"/>. A catalogue
+        ///     result whose data pointer lands inside one is a VIEW of a fixture — it allocated nothing —
+        ///     so the pool-bypass check must not read it as a fresh result that skipped the pool.
+        /// </summary>
+        public readonly List<(ulong lo, ulong hi)> Ranges = new();
+
         /// <summary>Builds every input and registers each array in <see cref="Keep"/>.</summary>
         /// <exception cref="IOException">The scratch directory or files cannot be created.</exception>
         public LeakFixture()
@@ -181,12 +192,12 @@ namespace NumSharp.Tests.Fuzz
                 MI2 = np.ma.masked_array((np.arange(12).reshape(3, 4) % 5).astype(np.int32), maskM2);
                 GM = (NumSharp.Generic.NDArray<double>)Own(scope, M.MakeGeneric<double>());
                 GB = (NumSharp.Generic.NDArray<bool>)Own(scope, B.MakeGeneric<bool>());
-                MV0_4 = MV["0:4"];
-                MV0_5 = MV["0:5"];
-                MV5_10 = MV["5:10"];
-                MV0_10 = MV["0:10"];
-                MV10_13 = MV["10:13"];
-                MV10_20 = MV["10:20"];
+                MV0_4 = (NDMaskedArray)MV["0:4"];
+                MV0_5 = (NDMaskedArray)MV["0:5"];
+                MV5_10 = (NDMaskedArray)MV["5:10"];
+                MV0_10 = (NDMaskedArray)MV["0:10"];
+                MV10_13 = (NDMaskedArray)MV["10:13"];
+                MV10_20 = (NDMaskedArray)MV["10:20"];
                 MBT = MB.transpose();
                 foreach (var m in new[] { MA, MB, MAn, MV, MI, MI2, MV0_4, MV0_5, MV5_10, MV0_10, MV10_13, MV10_20, MBT })
                 {
@@ -216,6 +227,11 @@ namespace NumSharp.Tests.Fuzz
             File.WriteAllText(TextPath, "1 2 3\n4 5 6\n");
             NpyBytes = File.ReadAllBytes(NpyPath);
             NpzBytes = File.ReadAllBytes(NpzPath);
+
+            // Computed LAST: every fixture array (and every np.ma singleton) is in Keep by now.
+            foreach (var o in Keep)
+                if (o is NDArray nd && nd.size > 0)
+                    Ranges.Add(UndisposedIntermediateTests.BaseRange(nd));
         }
 
         /// <summary>Yields a fixture array out of the construction scope and registers it as kept.</summary>
@@ -299,6 +315,15 @@ namespace NumSharp.Tests.Fuzz
         private static void E(List<LeakCase> list, string api, string label, Func<LeakFixture, object> run, bool backend = false)
             => list.Add(new LeakCase(api, label, run, backend));
 
+        /// <summary>Appends an entry for a member that ALWAYS throws: measured as an error path (see
+        /// <see cref="LeakCase.Throws"/>). The label must say why it throws.</summary>
+        /// <param name="list">The entry list.</param>
+        /// <param name="api">The covered inventory id.</param>
+        /// <param name="label">Why the member throws (by-design NumPy parity, unimplemented, broken).</param>
+        /// <param name="run">The invocation that throws.</param>
+        private static void T(List<LeakCase> list, string api, string label, Func<LeakFixture, object> run)
+            => list.Add(new LeakCase(api, label, run, RequiresBackend: false, Throws: true));
+
         /// <summary>A trivially non-allocating value wrapper so scalar-returning members still yield an object.</summary>
         /// <param name="value">Any value.</param>
         /// <returns>The boxed value (the disposer ignores non-array results).</returns>
@@ -313,7 +338,11 @@ namespace NumSharp.Tests.Fuzz
             E(l, "np.apply_along_axis", "func1d returns a held 0-d", f => np.apply_along_axis(r => f.Zero, 1, f.M));
             E(l, "np.apply_along_axis", "func1d with args", f => np.apply_along_axis((r, a) => f.Zero, 0, f.M, 1));
             E(l, "np.apply_over_axes", "int axis", f => np.apply_over_axes((x, ax) => np.sum(x, ax, keepdims: true), f.M, 0));
-            E(l, "np.apply_over_axes", "int[] axes", f => np.apply_over_axes((x, ax) => np.sum(x, ax, keepdims: true), f.Cube, new[] { 0, 2 }));
+            // The multi-axis form SUPERSEDES the running value; a callback returning a rank-dropping VIEW drives
+            // the re-expand path and the superseded-view release without allocating per call — the arrays a
+            // callback returns stay the caller's by contract (see np.apply_over_axes' remarks), so an allocating
+            // callback would measure the CALLER's intermediates, not the library's.
+            E(l, "np.apply_over_axes", "int[] axes, view callback (re-expand path)", f => np.apply_over_axes((x, ax) => x[ax == 0 ? "0" : ":, :, 0"], f.Cube, new[] { 0, 2 }));
             E(l, "np.are_broadcastable", "arrays", f => Box(np.are_broadcastable(f.M, f.V3)));
             E(l, "np.are_broadcastable", "shapes", f => Box(np.are_broadcastable(new long[] { 3, 4 }, new long[] { 4 })));
             E(l, "np.array2string", "float matrix", f => np.array2string(f.M));
@@ -453,7 +482,10 @@ namespace NumSharp.Tests.Fuzz
             E(l, "np.shares_memory", "view pair", f => Box(np.shares_memory(f.M, f.MT)));
             E(l, "np.typename", "code", f => np.typename("d"));
             E(l, "np.vectorize", "element-wise Func<T,TR>", f => np.vectorize<double, double>(x => x * 2)(f.V));
-            E(l, "np.vectorize", "Vectorized signature mode", f => np.vectorize((Func<NDArray, NDArray>)(x => np.sum(x, -1)), "(n)->()").Call(f.M));
+            // Signature mode with a delegate returning its core VIEW: drives the broadcast, per-slice core views,
+            // output allocation and slot writes without a per-slice delegate allocation (delegate results stay the
+            // caller's by contract — see Vectorized's remarks).
+            E(l, "np.vectorize", "Vectorized signature mode, core-view delegate", f => np.vectorize((Func<NDArray, NDArray>)(x => x), "(n)->(n)").Call(f.M));
         }
 
         // ============================ np.linalg (members no corpus key calls) ================

@@ -79,6 +79,14 @@ namespace NumSharp
     ///         delegate with side effects will observe the extra calls. Prefer <see cref="np.nditer{T}(NDArray, bool, char)"/>
     ///         for single-call multi-output over a hot, impure, or expensive function.
     ///     </para>
+    ///     <para>
+    ///         <b>Ownership (signature mode).</b> The core sub-array views handed to the delegate and every array
+    ///         the delegate returns stay the CALLER's: each result is copied into the output and never disposed,
+    ///         because a delegate may return an array it keeps using (the core view itself, a held constant). A
+    ///         delegate that ALLOCATES a fresh result per core slice therefore leaves those to a GC — run the call
+    ///         inside an <see cref="NDScope"/> (yielding the outputs) when deterministic release matters. The
+    ///         wrapper's own broadcast views are released before the call returns.
+    ///     </para>
     /// </remarks>
     public sealed class Vectorized
     {
@@ -367,77 +375,89 @@ namespace NumSharp
             // 2. Broadcast each input to broadcastShape + its own core shape.
             long[][] inputShapes = CalculateShapes(broadcastShape, dimSizes, _inputCoreDims);
             var bargs = new NDArray[args.Length];
-            for (int i = 0; i < args.Length; i++)
-                bargs[i] = np.broadcast_to(args[i], new Shape(inputShapes[i]));
-
-            NDArray[] outputs = null;
-            // Byte size of one broadcast-index slot per output (product of that output's core dims x
-            // itemsize), computed once the outputs exist. ndindex walks broadcastShape in C-order and
-            // each output is laid out broadcastShape ++ coreShape (also C-order), so the k-th slice is
-            // exactly the k-th contiguous slot — WriteSignatureSlot blits straight into it, skipping
-            // copyto's per-call broadcast/cast setup (measured the dominant per-slice cost). This is
-            // the same contiguous-slot trick NumPy's own apply_along_axis uses.
-            long[] slotBytes = null;
-            long k = 0;   // C-order slice counter == flat index over the broadcast dimensions
-
-            // Reused per-iteration scratch: the index buffer (filled from the allocation-free AsSpans
-            // stream — GetData never retains it) and the core-args array (a container of transient
-            // views). Reusing both keeps the hot loop from allocating a long[] and an NDArray[] per
-            // slice; only the input sub-array views themselves are unavoidably fresh each step.
-            long[] idxBuf = broadcastShape.Length == 0 ? Array.Empty<long>() : new long[broadcastShape.Length];
-            var coreArgs = new NDArray[bargs.Length];
-
-            // 3. Iterate the broadcast index space; each step hands the delegate the core sub-arrays.
-            foreach (ReadOnlySpan<long> index in np.ndindex(broadcastShape).AsSpans())
+            try
             {
-                index.CopyTo(idxBuf);
-                for (int i = 0; i < bargs.Length; i++)
-                    coreArgs[i] = bargs[i].GetData(idxBuf);   // index the leading dims → core sub-array
+                for (int i = 0; i < args.Length; i++)
+                    bargs[i] = np.broadcast_to(args[i], new Shape(inputShapes[i]));
 
-                NDArray[] results = _signatureInvoker(coreArgs);
-                if (results.Length != _nout)
-                    throw new ValueError(
-                        $"wrong number of outputs from pyfunc: expected {_nout}, got {results.Length}");
+                NDArray[] outputs = null;
+                // Byte size of one broadcast-index slot per output (product of that output's core dims x
+                // itemsize), computed once the outputs exist. ndindex walks broadcastShape in C-order and
+                // each output is laid out broadcastShape ++ coreShape (also C-order), so the k-th slice is
+                // exactly the k-th contiguous slot — WriteSignatureSlot blits straight into it, skipping
+                // copyto's per-call broadcast/cast setup (measured the dominant per-slice cost). This is
+                // the same contiguous-slot trick NumPy's own apply_along_axis uses.
+                long[] slotBytes = null;
+                long k = 0;   // C-order slice counter == flat index over the broadcast dimensions
 
-                // The FIRST result fixes any new output core-dim sizes (e.g. k in (n),(m)->(k)) and,
-                // with otypes absent, the output dtypes — so allocate the outputs here, once.
-                if (outputs is null)
+                // Reused per-iteration scratch: the index buffer (filled from the allocation-free AsSpans
+                // stream — GetData never retains it) and the core-args array (a container of transient
+                // views). Reusing both keeps the hot loop from allocating a long[] and an NDArray[] per
+                // slice; only the input sub-array views themselves are unavoidably fresh each step.
+                long[] idxBuf = broadcastShape.Length == 0 ? Array.Empty<long>() : new long[broadcastShape.Length];
+                var coreArgs = new NDArray[bargs.Length];
+
+                // 3. Iterate the broadcast index space; each step hands the delegate the core sub-arrays.
+                foreach (ReadOnlySpan<long> index in np.ndindex(broadcastShape).AsSpans())
                 {
-                    for (int j = 0; j < _nout; j++)
-                        UpdateDimSizes(dimSizes, results[j], _outputCoreDims[j]);
-                    outputs = CreateArrays(broadcastShape, dimSizes, _outputCoreDims, _otypes, results);
+                    index.CopyTo(idxBuf);
+                    for (int i = 0; i < bargs.Length; i++)
+                        coreArgs[i] = bargs[i].GetData(idxBuf);   // index the leading dims → core sub-array
 
-                    slotBytes = new long[_nout];
-                    for (int j = 0; j < _nout; j++)
+                    NDArray[] results = _signatureInvoker(coreArgs);
+                    if (results.Length != _nout)
+                        throw new ValueError(
+                            $"wrong number of outputs from pyfunc: expected {_nout}, got {results.Length}");
+
+                    // The FIRST result fixes any new output core-dim sizes (e.g. k in (n),(m)->(k)) and,
+                    // with otypes absent, the output dtypes — so allocate the outputs here, once.
+                    if (outputs is null)
                     {
-                        long coreSize = 1;
-                        foreach (string d in _outputCoreDims[j]) coreSize *= dimSizes[d];
-                        slotBytes[j] = coreSize * outputs[j].dtypesize;
+                        for (int j = 0; j < _nout; j++)
+                            UpdateDimSizes(dimSizes, results[j], _outputCoreDims[j]);
+                        outputs = CreateArrays(broadcastShape, dimSizes, _outputCoreDims, _otypes, results);
+
+                        slotBytes = new long[_nout];
+                        for (int j = 0; j < _nout; j++)
+                        {
+                            long coreSize = 1;
+                            foreach (string d in _outputCoreDims[j]) coreSize *= dimSizes[d];
+                            slotBytes[j] = coreSize * outputs[j].dtypesize;
+                        }
                     }
+
+                    for (int j = 0; j < _nout; j++)
+                        WriteSignatureSlot(outputs[j], idxBuf, k, results[j], slotBytes[j]);
+
+                    k++;
                 }
 
-                for (int j = 0; j < _nout; j++)
-                    WriteSignatureSlot(outputs[j], idxBuf, k, results[j], slotBytes[j]);
+                // 4. Never called (a broadcast dimension was 0): NumPy needs otypes to know the dtype and
+                //    cannot invent an unknown output core dim without running the function.
+                if (outputs is null)
+                {
+                    if (_otypes is null)
+                        throw new ValueError(
+                            "cannot call `vectorize` on size 0 inputs unless `otypes` is set");
+                    foreach (string[] dims in _outputCoreDims)
+                        foreach (string dim in dims)
+                            if (!dimSizes.ContainsKey(dim))
+                                throw new ValueError(
+                                    "cannot call `vectorize` with a signature including new output dimensions on size 0 inputs");
+                    outputs = CreateArrays(broadcastShape, dimSizes, _outputCoreDims, _otypes, results: null);
+                }
 
-                k++;
+                return outputs;
             }
-
-            // 4. Never called (a broadcast dimension was 0): NumPy needs otypes to know the dtype and
-            //    cannot invent an unknown output core dim without running the function.
-            if (outputs is null)
+            finally
             {
-                if (_otypes is null)
-                    throw new ValueError(
-                        "cannot call `vectorize` on size 0 inputs unless `otypes` is set");
-                foreach (string[] dims in _outputCoreDims)
-                    foreach (string dim in dims)
-                        if (!dimSizes.ContainsKey(dim))
-                            throw new ValueError(
-                                "cannot call `vectorize` with a signature including new output dimensions on size 0 inputs");
-                outputs = CreateArrays(broadcastShape, dimSizes, _outputCoreDims, _otypes, results: null);
+                // The broadcast views are this method's own (broadcast_to always returns a NEW view) and are
+                // never handed to the delegate — the per-slice core views are re-wrapped from them — so they
+                // are released on every path, the delegate throwing included. The core views and whatever the
+                // delegate returns stay the caller's (see the class remarks on ownership).
+                foreach (var b in bargs)
+                    b?.Dispose();
             }
-
-            return outputs;
         }
 
         // Writes one gufunc result into its C-order slot. The blit fast path handles the common case

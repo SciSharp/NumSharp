@@ -25,12 +25,28 @@ namespace NumSharp.Tests.Fuzz
             E(l, "ndarray.AsOrMakeGeneric", "typed wrapper", f => f.M.AsOrMakeGeneric<double>());
             E(l, "ndarray.MakeGeneric", "typed alias", f => f.M.MakeGeneric<double>());
             E(l, "ndarray.Clone", "deep copy of a view", f => f.MT.Clone());
-            E(l, "ndarray.CloneData", "slice copy", f => Box(f.MT.CloneData().Count));
-            E(l, "ndarray.CloneData", "typed slice copy", f => Box(f.MT.CloneData<double>().Count));
+            // CloneData returns a BARE slice holding no counted reference; a caller frees it with one AddRef/Release
+            // pair (the ARC protocol — Release alone on a zero count is a no-op). Consumed that way here.
+            E(l, "ndarray.CloneData", "slice copy", f =>
+            {
+                var s = f.MT.CloneData();
+                long n = s.Count;
+                s.TryAddRef();
+                s.Release();
+                return Box(n);
+            });
+            E(l, "ndarray.CloneData", "typed slice copy", f =>
+            {
+                var s = f.MT.CloneData<double>();
+                long n = s.Count;
+                s.TryAddRef();
+                s.Release();
+                return Box(n);
+            });
             E(l, "ndarray.Data", "typed slice", f => Box(f.M.Data<double>().Count));
             E(l, "ndarray.GetData", "untyped slice of a view", f => Box(f.MT.GetData().Count));
             E(l, "ndarray.GetData", "typed slice", f => Box(f.M.GetData<double>().Count));
-            E(l, "ndarray.GetData", "coordinate sub-array", f => f.M.GetData(1));
+            E(l, "ndarray.GetData", "coordinate sub-array", f => f.M.GetData(new[] { 1 }));
             E(l, "ndarray.CopyTo", "managed array", f =>
             {
                 var dst = new double[12];
@@ -45,28 +61,28 @@ namespace NumSharp.Tests.Fuzz
                 return null;
             });
             E(l, "ndarray.Equals", "reference", f => Box(f.M.Equals(f.M)));
-            E(l, "ndarray.GetHashCode", "hash", f => Box(f.M.GetHashCode()));
-            E(l, "ndarray.__hash__", "hash", f => Box(f.M.__hash__()));
-            E(l, "ndarray.FromMultiDimArray", "copy", f => NDArray.FromMultiDimArray(new double[,] { { 1, 2 }, { 3, 4 } }));
+            T(l, "ndarray.GetHashCode", "unhashable by design (NumPy: mutable ndarray)", f => Box(f.M.GetHashCode()));
+            T(l, "ndarray.__hash__", "unhashable by design (NumPy: mutable ndarray)", f => Box(f.M.__hash__()));
+            E(l, "ndarray.FromMultiDimArray", "copy", f => NDArray.FromMultiDimArray<double>(new double[,] { { 1, 2 }, { 3, 4 } }));
             E(l, "ndarray.FromString", "parse", f => NDArray.FromString("[1, 2, 3]"));
             E(l, "ndarray.Scalar", "object", f => NDArray.Scalar(2.5));
             E(l, "ndarray.Scalar", "object + dtype", f => NDArray.Scalar(3, np.float32));
             E(l, "ndarray.Scalar", "typed", f => NDArray.Scalar<long>(7L));
             E(l, "ndarray.AsString", "char array", f => NDArray.AsString(f.Chars));
-            E(l, "ndarray.AsStringArray", "char array", f => NDArray.AsStringArray(f.Chars));
+            T(l, "ndarray.AsStringArray", "broken: parses a legacy ToString layout the NumPy-parity printer no longer emits", f => NDArray.AsStringArray(f.Chars));
             E(l, "ndarray.GetString", "char row", f => f.Chars.GetString());
-            E(l, "ndarray.GetStringAt", "offset", f => f.Chars.GetStringAt(0));
+            T(l, "ndarray.GetStringAt", "broken: passes ndim coordinates where GetString requires ndim-1", f => f.Chars.GetStringAt(0));
             E(l, "ndarray.SetString", "same text", f =>
             {
                 var x = np.array("world".ToCharArray());
                 x.SetString("world");
                 return x;
             });
-            E(l, "ndarray.SetStringAt", "same text", f =>
+            T(l, "ndarray.SetStringAt", "broken: passes ndim coordinates where SetString requires ndim-1", f =>
             {
-                var x = np.array("world".ToCharArray());
+                using var x = np.array("world".ToCharArray());   // the entry's own scratch — released on the throw
                 x.SetStringAt("world", 0);
-                return x;
+                return null;
             });
 
             // ---- element access (typed getters/setters, one per dtype) ----
@@ -120,7 +136,7 @@ namespace NumSharp.Tests.Fuzz
             E(l, "ndarray.SetData", "NDArray row", f =>
             {
                 var t = f.Typed[NPTypeCode.Double];
-                using var row = t.GetData(0).copy();
+                using var row = t.GetData(new[] { 0 }).copy();
                 t.SetData(row, 0);
                 return null;
             });
@@ -199,11 +215,11 @@ namespace NumSharp.Tests.Fuzz
                 x.ReplaceData(new double[] { 1, 2 });
                 return x;
             });
-            E(l, "ndarray.Normalize", "in place", f =>
+            T(l, "ndarray.Normalize", "unimplemented (NotImplementedException)", f =>
             {
-                var x = np.array(new double[] { 1, 2, 3, 4 });
+                using var x = np.array(new double[] { 1, 2, 3, 4 });   // the entry's own scratch — released on the throw
                 x.Normalize();
-                return x;
+                return null;
             });
             E(l, "ndarray.itemset", "shape + value", f =>
             {

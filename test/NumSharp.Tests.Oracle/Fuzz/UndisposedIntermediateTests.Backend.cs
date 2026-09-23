@@ -77,9 +77,7 @@ namespace NumSharp.Tests.Fuzz
                 foreach (var file in files)
                     SweepOrdinaryFile(file, null, acc);
 
-                var r = new SweepResult(acc.Ordinary, acc.Masked, acc.Index, acc.ErrorPaths,
-                                        acc.GcInconclusive, acc.ThrewSkipped, files.Length,
-                                        acc.Groups, acc.Bypasses, acc.MeasuredByOp, acc.ErrorMeasuredByOp, acc.ThrewByOp);
+                var r = acc.ToResult(files.Length);
                 Console.WriteLine($"[scope-audit/backend] {OpenBlasEngine.Info} :: measured={r.OrdinaryMeasured} " +
                                   $"errorPathsMeasured={r.ErrorPathsMeasured} gcInconclusive={r.GcInconclusive} " +
                                   $"threwSkipped={r.ThrewSkipped} files={r.Files}");
