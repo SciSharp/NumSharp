@@ -28,7 +28,32 @@ namespace NumSharp.Tests.Fuzz
         /// <paramref name="BackendSkipReason"/> — credited by the completeness gate only on such a host,
         /// exactly as the host-pinned parity tiers go Inconclusive there instead of red.</param>
         internal sealed record DirectRunResult(
-            SweepResult Sweep, IReadOnlyList<string> HarnessErrors, string BackendSkipReason, IReadOnlySet<string> BackendSkipped);
+            SweepResult Sweep, IReadOnlyList<string> HarnessErrors, string BackendSkipReason, IReadOnlySet<string> BackendSkipped)
+        {
+            /// <summary>
+            ///     Whether this run actually EXERCISED <paramref name="id"/> under the measurement protocol — a
+            ///     confirmed success- or error-path measurement, or one a GC made inconclusive (the member ran;
+            ///     only the environment withheld the verdict, which is never red). A DECLARED entry that never ran
+            ///     (its warm invocation threw, so it is a harness error) is NOT attempted — that is exactly the
+            ///     declared-but-unmeasured case the completeness gate must not credit.
+            /// </summary>
+            /// <param name="id">The surface id (<c>&lt;owner&gt;.&lt;name&gt;</c>).</param>
+            /// <returns>True when at least one measurement of <paramref name="id"/> was attempted.</returns>
+            public bool Attempted(string id)
+                => Sweep.MeasuredByOp.GetValueOrDefault(id) > 0 ||
+                   Sweep.ErrorMeasuredByOp.GetValueOrDefault(id) > 0 ||
+                   Sweep.InconclusiveIds.Contains(id) ||
+                   Sweep.ErrorInconclusiveIds.Contains(id);
+
+            /// <summary>
+            ///     Whether <paramref name="id"/>'s backend-only measurements were skipped because no CBLAS/LAPACK
+            ///     library loads on this host — credited by the completeness gate only on such a host, as the
+            ///     host-pinned parity tiers go Inconclusive there rather than red.
+            /// </summary>
+            /// <param name="id">The surface id.</param>
+            /// <returns>True when the id was deferred to a backend pass that could not run.</returns>
+            public bool Skipped(string id) => BackendSkipped.Contains(id);
+        }
 
         /// <summary>
         ///     The one catalogue run of the process, shared by <see cref="Catalogue_EveryEntry_LeavesNoUndisposedIntermediates"/>
@@ -175,7 +200,7 @@ namespace NumSharp.Tests.Fuzz
                 var errTraffic = ScopeAudit.MeasureConfirmedTraffic(ErrorRegion);
                 if (errTraffic == null)
                 {
-                    acc.GcInconclusive++;
+                    acc.Inconclusive(entry.Api, errorPath: true);
                     return;
                 }
                 acc.Record(entry.Api, null, entry.Label, errTraffic.Value, 0, errorPath: true, entry.Label, "catalogue");
@@ -195,7 +220,7 @@ namespace NumSharp.Tests.Fuzz
             var traffic = ScopeAudit.MeasureConfirmedTraffic(Region);
             if (traffic == null)
             {
-                acc.GcInconclusive++;   // a GC landed inside every attempt — indistinguishable, never red
+                acc.Inconclusive(entry.Api, errorPath: false);   // a GC landed inside every attempt — indistinguishable, never red
                 return;
             }
 

@@ -193,6 +193,18 @@ namespace NumSharp
                     _base.SetAtIndex(ConvertToBase(value), flat);
             }
 
+            /// <summary>
+            ///     Converts a mismatched WEAK scalar (a C# primitive) to the base's element type with NumPy's
+            ///     scalar-assignment semantics: into an integer/bool/char dtype it is bounds-checked first (an
+            ///     out-of-range weak scalar raises rather than wrapping) and then cast through NumSharp's cast
+            ///     machinery; into a float/complex/decimal dtype the exact <see cref="Convert"/> path is used.
+            /// </summary>
+            /// <param name="value">The scalar to store; never null.</param>
+            /// <returns>The value boxed as the base's element type, ready for <c>SetAtIndex</c>.</returns>
+            /// <exception cref="ArgumentNullException"><paramref name="value"/> is null.</exception>
+            /// <exception cref="OverflowException">An integer-like target cannot hold the (truncated) value, or a
+            /// non-finite float targets an integer dtype.</exception>
+            /// <exception cref="InvalidCastException">The value has no conversion to the base's element type.</exception>
             private object ConvertToBase(object value)
             {
                 if (value is null)
@@ -216,9 +228,13 @@ namespace NumSharp
                     if (tc != NPTypeCode.Boolean)
                         CheckWeakScalarFitsInteger(value, tc);
 
-                    var src = new NDArray(value.GetType(), 1);
+                    // The 1-element source and its cast are this method's temps; GetAtIndex boxes the
+                    // converted element, so nothing returned references either buffer and both are
+                    // released here instead of stranding two allocations per assignment for a GC.
+                    using var src = new NDArray(value.GetType(), 1);
                     src.SetAtIndex(value, 0);
-                    return src.astype(_base.dtype).GetAtIndex(0);
+                    using var cast = src.astype(_base.dtype);
+                    return cast.GetAtIndex(0);
                 }
 
                 if (tc == NPTypeCode.Complex)
@@ -320,10 +336,21 @@ namespace NumSharp
                 set => Scatter(NormalizeMany(indices), value);
             }
 
+            /// <summary>
+            ///     The flat C-order positions a slice string selects, resolved through NumSharp's own slice
+            ///     engine (<c>arange(size)[range]</c>) so every Python slice spelling means exactly what it
+            ///     means on an array.
+            /// </summary>
+            /// <param name="range">A Python slice expression such as <c>"1:4"</c> or <c>"::2"</c>.</param>
+            /// <returns>The selected positions, in slice order (managed — no array outlives the call).</returns>
+            /// <exception cref="ArgumentException">The slice string cannot be parsed.</exception>
             private long[] ResolveSlice(string range)
             {
-                // arange(size)[range] yields the flat positions the slice selects — reuses the slice engine.
-                var positions = arange(_size)[range];
+                // Both the arange and the slice view are this method's temps — the positions are copied out
+                // into a managed long[] — so both are released here. Left undisposed they stranded one pooled
+                // buffer per slice get/set until a GC (measured by the leak-audit catalogue).
+                using var all = arange(_size);
+                using var positions = all[range];
                 long n = positions.size;
                 var pos = new long[n];
                 for (long k = 0; k < n; k++)
@@ -347,9 +374,15 @@ namespace NumSharp
                 return pos;
             }
 
+            /// <summary>Normalizes an index ARRAY (any shape, read in C-order) to validated flat positions.</summary>
+            /// <param name="indices">The integer index array; the caller's, never modified or released here.</param>
+            /// <returns>The normalized positions (negatives wrapped).</returns>
+            /// <exception cref="IndexError">An index is out of bounds for <see cref="size"/>.</exception>
             private long[] NormalizeMany(NDArray indices)
             {
-                var flat = indices.flatten();
+                // flatten ALWAYS copies (never returns `indices` itself), so the copy is this method's temp
+                // and is released here — the caller's index array is untouched.
+                using var flat = indices.flatten();
                 long n = flat.size;
                 var pos = new long[n];
                 for (long k = 0; k < n; k++)
@@ -365,6 +398,17 @@ namespace NumSharp
                 return result;
             }
 
+            /// <summary>
+            ///     Writes <paramref name="values"/> (cast once to the base dtype, STRONG-scalar semantics — it wraps
+            ///     rather than range-checks) into the given flat positions, through the base's strides; a
+            ///     single value is broadcast to every position.
+            /// </summary>
+            /// <param name="positions">Validated flat C-order positions (from <see cref="ResolveSlice"/> /
+            /// <see cref="NormalizeMany(long[])"/>).</param>
+            /// <param name="values">The caller's values — one, or exactly one per position; never released here.</param>
+            /// <exception cref="ValueError">The base is read-only ("underlying array is read-only", raised even
+            /// for zero positions, like NumPy's <c>iter_ass_subscript</c>), or the value count is neither 1 nor
+            /// the position count.</exception>
             private void Scatter(long[] positions, NDArray values)
             {
                 // Raised at ENTRY like NumPy's iter_ass_subscript — even a zero-length fancy set on a
@@ -376,7 +420,9 @@ namespace NumSharp
                     throw new ValueError(
                         $"cannot assign {values.size} input values to the {n} output values where the mask is true");
                 // Cast to the base dtype once (numpy casts on flat assignment); SetValue does not convert.
-                var casted = values.astype(_base.dtype);
+                // astype(dtype) always COPIES, so the cast is this method's temp: every element is boxed
+                // out of it below, and it is released on exit instead of stranding a buffer per set.
+                using var casted = values.astype(_base.dtype);
                 for (long k = 0; k < n; k++)
                     SetScalar(positions[k], broadcast ? casted.GetAtIndex(0) : casted.GetAtIndex(k));
             }

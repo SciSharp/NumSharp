@@ -306,6 +306,30 @@ namespace NumSharp.Tests.Fuzz
             E(l, "NDArray<T>.op_ExclusiveOr", "bool^bool", f => f.GB ^ f.GB);
             E(l, "NDArray<T>.op_Explicit", "T[] -> NDArray<T>", f => (NumSharp.Generic.NDArray<double>)new[] { 1.0, 2.0 });
             E(l, "NDArray<T>.op_Implicit", "NDArray<T> -> ArraySlice<T>", f => { ArraySlice<double> s = f.GM; return Box(s.Count); });
+            E(l, "NDArray<T>.Item", "typed element get/set by int[] and long[] coordinates", f =>
+            {
+                // The coordinate overloads read and write the TYPED element itself — no NDArray is built —
+                // so a read plus a write-back of the same value on the fixture's wrapper (leaving it
+                // unchanged) must read zero pool traffic.
+                double v = f.GM[new[] { 1, 2 }];
+                f.GM[new[] { 1, 2 }] = v;
+                double w = f.GM[2L, 3L];
+                f.GM[2L, 3L] = w;
+                return Box(v + w);
+            });
+            E(l, "NDArray<T>.Item", "typed slice get (string + Slice[]) and set, on an owned copy", f =>
+            {
+                // The slice getters wrap an untyped view as a typed alias — a fresh view object per call, the
+                // caller's to release — and the setters copy a typed view back through the base indexer. The
+                // array is the entry's own copy, so the fixture is never written.
+                using var c = f.M.copy();
+                using var gc = c.MakeGeneric<double>();
+                using var row = gc["1"];
+                using var col = gc[Slice.All, Slice.Index(2)];
+                gc["0"] = row;                          // row 1's values into row 0
+                gc[Slice.All, Slice.Index(3)] = col;    // column 2's values into column 3
+                return Box(row.size + col.size);
+            });
 
             // ---- NDMaskedArray ----
             E(l, "NDMaskedArray.op_Addition", "masked+masked", f => f.MA + f.MB);

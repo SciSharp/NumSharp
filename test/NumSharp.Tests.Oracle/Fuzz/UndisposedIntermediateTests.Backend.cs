@@ -37,6 +37,37 @@ namespace NumSharp.Tests.Fuzz
         };
 
         /// <summary>
+        ///     What the one backend pass of the process observed.
+        /// </summary>
+        /// <param name="Sweep">The replay's observations; null when the pass could not run.</param>
+        /// <param name="SkipReason">Why the pass could not run (no CBLAS/LAPACK library loads on this host), or
+        /// null when it ran.</param>
+        /// <param name="BackendInfo">The loaded backend's description (<see cref="OpenBlasEngine.Info"/>), captured
+        /// while it was installed — it is uninstalled again before anyone reads this record.</param>
+        internal sealed record BackendSweepResult(SweepResult Sweep, string SkipReason, string BackendInfo)
+        {
+            /// <summary>
+            ///     Whether the pass actually EXERCISED op key <paramref name="op"/> on a success path (a confirmed
+            ///     measurement, or one a GC made inconclusive — never red). False when the pass did not run: the
+            ///     caller decides what a skipped pass means (<see cref="SkipReason"/>).
+            /// </summary>
+            /// <param name="op">A corpus op key.</param>
+            /// <returns>True when a success-path measurement of <paramref name="op"/> was attempted.</returns>
+            public bool Attempted(string op)
+                => Sweep != null && (Sweep.MeasuredByOp.GetValueOrDefault(op) > 0 || Sweep.InconclusiveIds.Contains(op));
+        }
+
+        /// <summary>
+        ///     The one backend pass of the process, shared by <see cref="Corpus_BackendOps_LeaveNoUndisposedIntermediates"/>
+        ///     and the <see cref="LeakSurfaceCoverageTests"/> completeness gate, which credits a LAPACK-only member
+        ///     only when THIS pass measured it — not merely because its op key is listed in
+        ///     <see cref="BackendOnlyOpKeys"/>. Lazy + thread-safe like <see cref="SharedSweep"/>: the pass replays
+        ///     the whole ordinary corpus, so running it twice would double the gate's wall time for no evidence.
+        /// </summary>
+        internal static readonly Lazy<BackendSweepResult> SharedBackendSweep =
+            new(RunBackendSweep, System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
+
+        /// <summary>
         ///     Replays every ordinary corpus tier with the OpenBLAS backend installed (threads=1, the
         ///     deterministic configuration) and applies the sweep's verdict. Also asserts non-vacuity
         ///     for the backend: every <see cref="BackendOnlyOpKeys"/> op must now have measured cases.
@@ -49,20 +80,54 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("ScopeAudit")]
         public void Corpus_BackendOps_LeaveNoUndisposedIntermediates()
         {
-            try
+            var run = SharedBackendSweep.Value;
+            if (run.SkipReason != null)
             {
-                OpenBlasEngine.Enable(threads: 1);
-            }
-            catch (Exception e)
-            {
-                Assert.Inconclusive("the backend leak pass needs a loadable CBLAS/LAPACK library and none loaded here " +
-                                    $"({e.GetType().Name}: {e.Message.Split('\n')[0]}). Stage one with " +
-                                    "tools/fetch_openblas.py or point NUMSHARP_OPENBLAS_LIBRARY at a build.");
+                Assert.Inconclusive("the backend leak pass needs a loadable CBLAS/LAPACK library: " + run.SkipReason);
                 return;
             }
 
+            var r = run.Sweep;
+            Console.WriteLine($"[scope-audit/backend] {run.BackendInfo} :: measured={r.OrdinaryMeasured} " +
+                              $"errorPathsMeasured={r.ErrorPathsMeasured} gcInconclusive={r.GcInconclusive} " +
+                              $"threwSkipped={r.ThrewSkipped} files={r.Files}");
+            PrintThrewRollup(r.ThrewByOp);
+            PrintPerOpRollup(r.Groups);
+
+            // Non-vacuity for the backend itself: with a backend installed, the LAPACK family must
+            // run — a backend that loaded yet declined these operands would leave them unaudited.
+            var unmeasured = BackendOnlyOpKeys.Where(op => r.MeasuredByOp.GetValueOrDefault(op) == 0)
+                                              .OrderBy(op => op, StringComparer.Ordinal).ToArray();
+            Assert.AreEqual(0, unmeasured.Length,
+                "backend-only ops still unmeasured WITH the backend installed: " + string.Join(", ", unmeasured));
+
+            // Non-vacuity for the replay as a whole, 5% under the 2026-09-23 counts (identical on net10.0
+            // and net8.0: 138,936 success + 2,441 error paths over 77 files): the per-op check above cannot
+            // see the pass silently dropping whole tiers (a file filter or schema regression).
+            Assert.IsTrue(r.OrdinaryMeasured > 131_900,
+                $"backend pass measured only {r.OrdinaryMeasured} cases — corpus filter or schema regression?");
+            Assert.IsTrue(r.ErrorPathsMeasured > 2_300,
+                $"backend pass measured only {r.ErrorPathsMeasured} error paths — expects_throw replay regression?");
+
+            AssertNoUnclassifiedEscapes(r, "scope-audit/backend");
+        }
+
+        /// <summary>
+        ///     Runs the backend pass: installs OpenBLAS (threads=1), replays the ordinary corpus tiers, and
+        ///     uninstalls the backend again whatever happens — every other test in this assembly asserts the
+        ///     managed kernels.
+        /// </summary>
+        /// <returns>The pass's observations, or a skipped result when no library loads.</returns>
+        private static BackendSweepResult RunBackendSweep()
+        {
+            string skip = TryEnableLeakBackend();
+            if (skip != null)
+                return new BackendSweepResult(null, skip, null);
+
             try
             {
+                // Read while installed: Info describes the LOADED library and reports nothing afterwards.
+                string info = OpenBlasEngine.Info;
                 var corpusDir = Path.Combine(AppContext.BaseDirectory, "Fuzz", "corpus");
                 var files = Directory.GetFiles(corpusDir, "*.jsonl")
                     .Select(Path.GetFileName)
@@ -77,21 +142,7 @@ namespace NumSharp.Tests.Fuzz
                 foreach (var file in files)
                     SweepOrdinaryFile(file, null, acc);
 
-                var r = acc.ToResult(files.Length);
-                Console.WriteLine($"[scope-audit/backend] {OpenBlasEngine.Info} :: measured={r.OrdinaryMeasured} " +
-                                  $"errorPathsMeasured={r.ErrorPathsMeasured} gcInconclusive={r.GcInconclusive} " +
-                                  $"threwSkipped={r.ThrewSkipped} files={r.Files}");
-                PrintThrewRollup(r.ThrewByOp);
-                PrintPerOpRollup(r.Groups);
-
-                // Non-vacuity for the backend itself: with a backend installed, the LAPACK family must
-                // run — a backend that loaded yet declined these operands would leave them unaudited.
-                var unmeasured = BackendOnlyOpKeys.Where(op => r.MeasuredByOp.GetValueOrDefault(op) == 0)
-                                                  .OrderBy(op => op, StringComparer.Ordinal).ToArray();
-                Assert.AreEqual(0, unmeasured.Length,
-                    "backend-only ops still unmeasured WITH the backend installed: " + string.Join(", ", unmeasured));
-
-                AssertNoUnclassifiedEscapes(r, "scope-audit/backend");
+                return new BackendSweepResult(acc.ToResult(files.Length), null, info);
             }
             finally
             {

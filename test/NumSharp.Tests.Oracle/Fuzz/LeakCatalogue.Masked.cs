@@ -41,9 +41,13 @@ namespace NumSharp.Tests.Fuzz
             E(l, "np.ma.diagflat", "masked vector", f => np.ma.diagflat(f.MV0_4));
 
             // ---- callable-taking wrappers (callbacks return library-created views: no user temps) ----
+            // A callback's result is the CALLER's under the apply_* contract (never disposed by the method), so an
+            // ALLOCATING callback (np.ma.sum) would strand every superseded per-axis reduction by design. The
+            // apply_over_axes entries therefore reduce with keepdims-shaped SLICES — views that take no buffer —
+            // which drives the method's own re-expansion/supersede bookkeeping without any user temporaries.
             E(l, "np.ma.apply_along_axis", "identity func1d", f => np.ma.apply_along_axis(r => r, 1, f.MA));
-            E(l, "np.ma.apply_over_axes", "int axis", f => np.ma.apply_over_axes((x, ax) => np.ma.sum(x, ax, null, true), f.MA, 0));
-            E(l, "np.ma.apply_over_axes", "int[] axes", f => np.ma.apply_over_axes((x, ax) => np.ma.sum(x, ax, null, true), f.MA, new[] { 0, 1 }));
+            E(l, "np.ma.apply_over_axes", "int axis", f => np.ma.apply_over_axes((x, ax) => (NDMaskedArray)x[ax == 0 ? "0:1" : ":, 0:1"], f.MA, 0));
+            E(l, "np.ma.apply_over_axes", "int[] axes", f => np.ma.apply_over_axes((x, ax) => (NDMaskedArray)x[ax == 0 ? "0:1" : ":, 0:1"], f.MA, new[] { 0, 1 }));
 
             // ---- stacking / splitting / shape ----
             E(l, "np.ma.column_stack", "two vectors", f => np.ma.column_stack(f.MV0_5, f.MV5_10));
@@ -233,7 +237,17 @@ namespace NumSharp.Tests.Fuzz
             E(l, "NDMaskedArray.tolist", "nested", f => f.MA.tolist());
             E(l, "NDMaskedArray.trace", "main", f => f.MA.trace());
             E(l, "NDMaskedArray.transpose", "default", f => f.MA.transpose());
-            E(l, "NDMaskedArray.unshare_mask", "owned copy", f => f.MA.copy().unshare_mask());
+            E(l, "NDMaskedArray.unshare_mask", "owned copy", f =>
+            {
+                var m = f.MA.copy();
+                // unshare_mask REPLACES the mask with a private copy and deliberately never disposes the superseded
+                // one (another masked array may still read it). This entry built the copy, so it is that mask's
+                // only holder and releases it itself — exactly what the member's documentation tells a caller to do.
+                var superseded = m._mask;
+                m.unshare_mask();
+                superseded?.Dispose();
+                return m;
+            });
             E(l, "NDMaskedArray.var", "flat", f => f.MA.var());
             E(l, "NDMaskedArray.view", "same dtype", f => f.MA.view());
         }

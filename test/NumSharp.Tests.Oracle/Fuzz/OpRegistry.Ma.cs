@@ -232,7 +232,24 @@ namespace NumSharp.Tests.Fuzz
                 case "make_mask": return np.ma.make_mask(ops[0].data);
                 case "make_mask_none": return np.ma.make_mask_none(new Shape(ParseLongArray(p["shape"])));
                 case "mask_or": return np.ma.mask_or(np.ma.getmaskarray(ops[0]), np.ma.getmaskarray(ops[1]));
-                case "flatten_mask": return np.ma.flatten_mask(np.ma.getmaskarray(ops[0]));
+                case "flatten_mask":
+                {
+                    // getmaskarray MATERIALIZES an all-False mask for an unmasked operand — a temporary of this
+                    // replay expression (the generator spells the same call inline), which the leak sweep would
+                    // otherwise count against flatten_mask. A masked operand hands back its OWN mask, which the
+                    // fixture still needs, so only the fresh stand-in is released — after flatten_mask has copied
+                    // it (flatten_mask always returns a new array, never its argument).
+                    var full = np.ma.getmaskarray(ops[0]);
+                    try
+                    {
+                        return np.ma.flatten_mask(full);
+                    }
+                    finally
+                    {
+                        if (ops[0]._mask is null)
+                            full.Dispose();
+                    }
+                }
                 case "make_mask_descr": return np.ma.make_mask_descr(FuzzCorpus.DtypeToTC(p["dtype"].GetString()));
 
                 default:

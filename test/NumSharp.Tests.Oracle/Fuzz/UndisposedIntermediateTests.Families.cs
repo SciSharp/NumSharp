@@ -123,7 +123,7 @@ namespace NumSharp.Tests.Fuzz
                         var errTraffic = ScopeAudit.MeasureConfirmedTraffic(ErrorRegion);
                         if (errTraffic == null)
                         {
-                            acc.GcInconclusive++;
+                            acc.Inconclusive(c.Op, errorPath: true);
                             continue;
                         }
                         acc.Record(c.Op, null, c.Layout ?? "?", errTraffic.Value, 0, errorPath: true, c.Id, file);
@@ -143,7 +143,7 @@ namespace NumSharp.Tests.Fuzz
                     var traffic = ScopeAudit.MeasureConfirmedTraffic(Region);
                     if (traffic == null)
                     {
-                        acc.GcInconclusive++;
+                        acc.Inconclusive(c.Op, errorPath: false);
                         continue;
                     }
 
@@ -282,7 +282,7 @@ namespace NumSharp.Tests.Fuzz
                         var errTraffic = ScopeAudit.MeasureConfirmedTraffic(ErrorRegion);
                         if (errTraffic == null)
                         {
-                            acc.GcInconclusive++;
+                            acc.Inconclusive(key, errorPath: true);
                             continue;
                         }
                         acc.Record(key, null, layout, errTraffic.Value, 0, errorPath: true, id, file);
@@ -302,7 +302,7 @@ namespace NumSharp.Tests.Fuzz
                     var traffic = ScopeAudit.MeasureConfirmedTraffic(Region);
                     if (traffic == null)
                     {
-                        acc.GcInconclusive++;
+                        acc.Inconclusive(key, errorPath: false);
                         continue;
                     }
 

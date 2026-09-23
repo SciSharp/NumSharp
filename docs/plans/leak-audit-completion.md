@@ -1,8 +1,9 @@
 # Leak-audit coverage completion: handover
 
-Branch: `leak-audit-completion` (off `journey4` @ 256224d4). **Work in progress, not merged.** The
-extended gate is intentionally NOT on `journey4` yet: it goes red until the np.ma and histogram leaks
-below are fixed.
+Branch: `leak-audit-completion` (off `journey4` @ 256224d4). **COMPLETE (session 3, 2026-09-23)** — every
+step below is done and the whole `ScopeAudit` category is GREEN on net10.0 and net8.0; see "Session 3" at
+the end. (History: the extended gate was held off `journey4` while it was red on the np.ma and histogram
+leaks; both are fixed.)
 
 ## Goal (from Eli)
 
@@ -127,4 +128,55 @@ coordinates where GetString/SetString need ndim-1 (always throw); `NDArray.Norma
 
 - Replaying ma_* with today's leaks took 12m47s (every leaking case forces a GC settle), which is over
   CI's 10-minute Oracle step. After the ma fixes it should drop to seconds, like the ordinary sweep (11 s).
+  **Measured after the fixes (session 3):** the whole corpus sweep (213,264 cases, all three families) plus the
+  backend pass, catalogue, property reads and completeness gate run in ~25 s; the FULL Oracle suite is 48 s.
 - Evidence (probe tests + logs) is in session 2f2daee7's scratchpad `evidence/`.
+
+## Session 3 (2026-09-23, same worktree) — steps 1-6 DONE
+
+**Gate state, identical on net10.0 and net8.0:** `ScopeAudit` 14/14 green; full Oracle suite 212/212.
+
+| Layer | Measured |
+|---|---|
+| Corpus sweep | 213,264 success (ordinary 138,660 / masked 68,860 / index 5,744) + 9,123 error paths, 0 GC-inconclusive |
+| Backend pass (OpenBLAS threads=1) | 138,936 success + 2,441 error paths over 77 files |
+| Catalogue | 482 entries, 474 measured + 8 always-raise error paths, 0 harness errors |
+| Property/field reads | 288 members: 539 reads + 15 error paths |
+| Completeness | 1,348 / 1,348 surface members credited by a MEASUREMENT |
+
+Floors tightened to 5% under these counts (corpus 131,700 / 65,400 / 5,450 / 8,650; backend pass gained
+floors 131,900 / 2,300). The guessed session-1 floors (index > 5,400, errors > 8,600) were confirmed sound.
+
+Step 1-2 (np.ma + histogram): np.ma methods are hand-scoped (`using var scope = NDScope.Open(); … return
+Yield(scope, result)`; field stores through `Own(...)` = `NDScope.Detach`; a superseded mask is never disposed —
+it may be shared), the carrier-returning histogram family is `[NDScoped]`. Parity bugs found and fixed on the
+way (NumPy-probed): hard-mask `__setitem__` restored data under the OLD mask only (a slot the VALUE masks kept
+the new data), hard-mask `put`/`putmask` now OR into the LIVE mask in place (NumPy writes `self._mask` in place —
+the mask object survives), `ma.fromfunction` defaulted to the grid dtype instead of float64, and the np.ma
+callback APIs (`apply_along_axis`/`fromfunction`) release the arguments they hand a callback unless it returns one
+VERBATIM (reference identity) — the one place np.ma's contract differs from `np.apply_*`'s. Also: `UnmanagedStorage.SetData`'s
+cast-storage temp (the `index.set` escape), `np.polyfit` non-full paths returned unused diagnostics, and a replay-
+harness temp in `flatten_mask`. Pins: `test/NumSharp.Tests/Ma/NDMaskedArrayScopeTests.cs` (8).
+
+Step 3 (completeness gate): `Resolve` now credits only MEASURED evidence (`LeakCoverageEvidence` over the four
+shared runs; `DirectRunResult.Attempted`/`Skipped`, `BackendSweepResult.Attempted`). GC-inconclusive
+measurements are recorded per id (`SweepAccumulator.Inconclusive`) and credited — the member ran, never red —
+and backend-skipped ids only where no library loads. The backend pass is a shared `Lazy` (`SharedBackendSweep`).
+`OperatorOwners` += `DType`, `NDArrayFlags`, `poly1d`, with a guard that fails when any object owner declares
+`op_*` members outside the list. New catalogue entries: every DType/NDArrayFlags/poly1d operator, and the object
+indexers `FlatIterator.Item` (scalar, int→int cast route, slice/int[]/long[]/NDArray get+set), `NpzFile.Item`,
+`NDIterator.Item` (0-d + external-loop views), `NDArrayFlags.Item`, `poly1d.Item`, `NDArray<T>.Item`. They found a
+real Core leak: `FlatIterator`'s slice/fancy get stranded 2 buffers per call and set 6 (`ResolveSlice`'s arange
++ view, `NormalizeMany(NDArray)`'s flatten, `Scatter`'s astype, and — on the int-target scalar route —
+`ConvertToBase`'s 1-element source + cast), all released now. (`NpzFile`'s "leak" was the entry: its cache is a
+BORROWED memo, the first reader owns the array.)
+
+Step 5 pins: `Manipulation/ShapeSetterInPlaceTests.cs` (10), `Lifetime/ReplaceDataArcTests.cs` (4),
+`Casting/NDArray.ToJaggedArray.Views.Test.cs` (4). Found on the way, NOT a setter bug and NOT fixed: size-0
+arrays' byte strides — NumSharp `(0,8)` for `(3,0)` on every path, NumPy `(8,8)` via reshape but `(0,0)` via
+`np.zeros`; the repo's standing policy (`LayoutParityOracleTests.Verify`) already treats size-0 strides as
+non-contractual, and the pin follows it.
+
+Step 6 docs: `Fuzz/README.md` Scope-gate section (retired pin line fixed, coverage-completion subsection with
+the five layers + the crediting rules, chokepoint text), `NativeAllocationChokepointTests` `NDIter.cs` pin 2 → 1,
+`.claude/skills/oracle` (SKILL.md, references/architecture.md, triage.md, add-op.md).
