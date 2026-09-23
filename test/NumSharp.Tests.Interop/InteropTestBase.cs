@@ -233,15 +233,24 @@ namespace NumSharp.Tests.Interop
         ///     result derived from <c>np.fft</c>.
         /// </summary>
         /// <remarks>
-        ///     Modelled with a C# replica of <c>rfftp</c> in two modes. Evaluated literally it equals
-        ///     NumSharp's <c>np.fft.rfft</c> in every lane. Fusing exactly the expressions
-        ///     <c>-ffp-contract=on</c> fuses (the twiddle products in <c>sincos_2pibyn::operator[]</c>,
-        ///     <c>MULPM</c> in every <c>radf</c> codelet, the <c>x + c*y (+ d*z)</c> rotations of
-        ///     <c>radf5</c>) changes 745 of 1026 float64 lanes at n = 1024 and 887 of 1002 at n = 1000 on
-        ///     the seeded input of <c>SpectrumLiveParityTests</c>, each by an ULP or so: the share
-        ///     macos-latest measured between NumSharp and its arm64 NumPy (751 of 1026 at n = 1024, on the
-        ///     earlier sin-only input). The complex codelets behind Bluestein (prime lengths) are written
-        ///     the same way (<c>special_mul</c>, <c>cmplx::operator*</c>).
+        ///     <para>Proven byte for byte against macos-latest (run 35890253503). A C# replica of
+        ///     <c>rfftp</c> (factorization, <c>comp_twiddle</c>, <c>sincos_2pibyn</c>, <c>radf2/4/5</c>,
+        ///     NumPy's r2c packing) was run in two modes over <c>SpectrumLiveParityTests</c>' input, which
+        ///     is the same bytes on every host. The LITERAL mode is NumSharp's port. The FUSED mode fuses
+        ///     exactly the expressions <c>-ffp-contract=on</c> fuses: the twiddle products in
+        ///     <c>sincos_2pibyn::operator[]</c>, <c>MULPM</c> in every <c>radf</c> codelet, and the
+        ///     <c>x + c*y (+ d*z)</c> rotations of <c>radf5</c>. Fed the twiddle values macOS's libm
+        ///     returns, the literal mode reproduces the SHA-256 of NumSharp's arm64 <c>np.fft.rfft</c> and
+        ///     the fused mode reproduces arm64 NumPy's, at n = 1000 (NumSharp <c>F494345710A79842</c>,
+        ///     NumPy <c>483E089585F3D64E</c>, 882 of 1002 float64 lanes apart) and at n = 1024
+        ///     (<c>319422554ED4EAB6</c>, <c>2FA2BA5D8FE0417A</c>, 748 of 1026). A one-ULP perturbation
+        ///     search over the twiddle table recovered macOS's libm values. They are correctly rounded
+        ///     except <c>sin(72·π/4096)</c> and <c>sin(216·π/4096)</c>, which are one ULP high. That
+        ///     perturbation pair was the ONLY one among 140 candidates to reproduce NumSharp's hash, and it
+        ///     then produced NumPy's hash with no further fitting.</para>
+        ///     <para>The complex codelets behind Bluestein (prime lengths) are written the same way
+        ///     (<c>special_mul</c>, <c>cmplx::operator*</c>); n = 1021 differs on 999 of 1022 lanes on
+        ///     macos-latest, but no replica covers that path.</para>
         /// </remarks>
         protected const string PocketFftFusedArithmetic =
             "pocketfft's twiddle products (sincos_2pibyn::operator[]) and butterfly multiply-adds " +

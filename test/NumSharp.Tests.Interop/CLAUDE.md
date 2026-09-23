@@ -161,13 +161,16 @@ every `a*b + c` or `a*b + c*d` written as ONE C expression rounds once there —
 fused, any right product rounded first. The x86-64 wheels (X86_V2 baseline, no FMA) cannot fuse, and
 RyuJIT never does, so NumSharp matches x86-64 NumPy. Two places this reaches a byte-exact test:
 NumPy's legacy Gaussian sampler (`NumPyLegacyGaussianIsLiteral` / `DefineLegacyRandn`) and pocketfft
-(every `np.fft` result: on macos-latest ~73 % of an `rfft`'s float64 lanes are an ULP or so apart).
+(every `np.fft` result: on macos-latest 73–98 % of an `rfft`'s float64 lanes are an ULP or so apart).
 Wrap exactly those cells in `AssertExactUnlessNumPyFuses(cell, PocketFftFusedArithmetic, () => …)`:
 strict on x86/x64; on arm64 a mismatch becomes Inconclusive CARRYING the measured difference, and a
 match still passes. Keep every other cell of the test strict — a result NumPy takes from the bundled
 OpenBLAS (products, `np.correlate`'s `ddot`) matches on arm64 too. `SpectrumLiveParityTests` reports
-SHA-256 prefixes of its platform-independent input and both results, so an arm64 mismatch can be
-reproduced hash for hash on x64 by a replica of the fused arithmetic.
+SHA-256 prefixes of its platform-independent input and both results. That is how the diagnosis was
+proven: an x64 replica of pocketfft reproduced both macOS hashes, NumSharp's literally and NumPy's
+fused. It had to be fed macOS's own libm twiddle values, because the result hashes are NOT
+host-independent. Both stacks take twiddles from the platform libm, and Apple, glibc and ucrtbase
+disagree in the last bit on some angles.
 
 ---
 
