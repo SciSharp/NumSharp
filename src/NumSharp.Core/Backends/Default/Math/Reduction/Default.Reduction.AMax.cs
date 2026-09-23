@@ -27,7 +27,7 @@ namespace NumSharp.Backends
                 // NaN-payload bits equal NumPy's on every non-broadcast layout; a dtype= request, a broadcast input or an
                 // unsupported dtype declines (null) to the IL kernel below, as before.
                 var r = typeCode == null || typeCode == arr.GetTypeCode
-                    ? TryExactFlatMinMaxScalar(arr, isMax: true)
+                    ? TryExactFlatMinMaxScalar(arr, MinMaxOp.Max)
                     : null;
                 r ??= NDArray.Scalar(max_elementwise_il(arr, typeCode));
                 if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks)); }
@@ -47,7 +47,7 @@ namespace NumSharp.Backends
             // kernel); null = declined (broadcast input, unsupported dtype) → the kernels below, as before.
             if (outputType == arr.GetTypeCode)
             {
-                var exact = TryExactAxisMinMax(arr, axis, isMax: true);
+                var exact = TryExactAxisMinMax(arr, axis, MinMaxOp.Max);
                 if (exact is not null)
                 {
                     if (keepdims)

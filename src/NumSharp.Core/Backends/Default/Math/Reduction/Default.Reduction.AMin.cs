@@ -25,7 +25,7 @@ namespace NumSharp.Backends
                 // The mirror of ReduceAMax's flat branch: NumPy's exact flat schedule for a same-dtype reduction, the IL
                 // kernel for everything it declines.
                 var r = typeCode == null || typeCode == arr.GetTypeCode
-                    ? TryExactFlatMinMaxScalar(arr, isMax: false)
+                    ? TryExactFlatMinMaxScalar(arr, MinMaxOp.Min)
                     : null;
                 r ??= NDArray.Scalar(min_elementwise_il(arr, typeCode));
                 if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks)); }
@@ -45,7 +45,7 @@ namespace NumSharp.Backends
             // kernel); null = declined (broadcast input, unsupported dtype) → the kernels below, as before.
             if (outputType == arr.GetTypeCode)
             {
-                var exact = TryExactAxisMinMax(arr, axis, isMax: false);
+                var exact = TryExactAxisMinMax(arr, axis, MinMaxOp.Min);
                 if (exact is not null)
                 {
                     if (keepdims)

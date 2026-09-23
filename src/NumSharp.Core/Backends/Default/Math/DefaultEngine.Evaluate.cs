@@ -712,7 +712,7 @@ namespace NumSharp.Backends
                     && NumPyMinMaxReduce.Supports(exprType))
                 {
                     byte* mmSlot = stackalloc byte[NDExprParamPlan.SlotBytes];
-                    if (TryExactFlatMinMax(childProgram, inputs, n, reduce.Kind == NDExprReduceKind.Max, exprType, mmSlot))
+                    if (TryExactFlatMinMax(childProgram, inputs, n, reduce.Kind == NDExprReduceKind.Max ? MinMaxOp.Max : MinMaxOp.Min, exprType, mmSlot))
                     {
                         // Min / Max preserve the child dtype, so the slot already holds the result dtype; a caller
                         // out= (validated above) takes the same same_kind conversion the fold path uses.
@@ -856,33 +856,48 @@ namespace NumSharp.Backends
 
         /// <summary>
         /// Host-delegated reductions (plan P2 M4-tail + M4c): the value kinds <c>Ptp</c> / <c>NanMin</c> /
-        /// <c>NanMax</c> and the int64 index kinds <c>ArgMax</c> / <c>ArgMin</c>. Materializes the
-        /// reduction's child once (the M1/M2 route — a fresh, contiguous array in NumPy's own K-order
-        /// layout) and reduces THAT buffer through the corresponding public engine reduction
-        /// (<see cref="np.ptp(NDArray,int?,NDArray,bool)"/> / <see cref="np.nanmin(NDArray,int?,bool)"/> /
-        /// <see cref="np.nanmax(NDArray,int?,bool)"/> / <see cref="np.argmax(NDArray,int,bool)"/> /
-        /// <see cref="np.argmin(NDArray,int,bool)"/>), which are themselves NumPy-exact.
-        /// <para>
-        /// Ptp/NanMin/NanMax are ORDER-INDEPENDENT — a minimum, a maximum, or their difference is the same
-        /// value whatever order the elements are visited in — so reducing the materialized buffer is
-        /// bit-identical to <c>np.&lt;kind&gt;(child)</c> for ANY input layout. ArgMax/ArgMin are the
-        /// subtler M4c case: their index DOES depend on the C-order tie/NaN rule (first maximum / first
-        /// NaN wins), but the materialized child is exactly the fresh C-contiguous buffer NumPy's own
-        /// <c>argmax</c> would build and reduce, so their index matches too. Both properties are what the
-        /// summation kinds (Sum/Mean/Prod, and the still-open NanMean/Std/Var) lack — why those need the
-        /// pairwise divert instead.
-        /// </para>
-        /// The value kinds preserve the child dtype and the index kinds always yield int64, so
-        /// (<see cref="ReduceNode.ResolveReduceResultType"/>) already equals the engine reduction's own
-        /// result dtype — no post-cast is needed except into a caller <paramref name="out"/> of a
-        /// different (same_kind-castable) dtype. A flat <c>argmax</c>/<c>argmin</c> returns a scalar
-        /// <c>long</c>, wrapped into a 0-d int64 array here.
+        /// <c>NanMax</c> and the int64 index kinds <c>ArgMax</c> / <c>ArgMin</c> — each answered by the
+        /// corresponding public engine reduction (<see cref="np.ptp(NDArray,int?,NDArray,bool)"/> /
+        /// <see cref="np.nanmin(NDArray,int?,bool)"/> / <see cref="np.nanmax(NDArray,int?,bool)"/> /
+        /// <see cref="np.argmax(NDArray,int,bool)"/> / <see cref="np.argmin(NDArray,int,bool)"/>) over the child's
+        /// values. How the child reaches it decides which BITS come back, so the routes differ per kind:
+        /// <list type="bullet">
+        /// <item><c>NanMax</c> / <c>NanMin</c> try <see cref="TryExactNanMinMaxEval"/> first: float32/float64 run NumPy's
+        /// own <c>fmax</c>/<c>fmin</c> reduction schedules over the buffer NumPy itself reduces (a bare leaf in place, a
+        /// computed child over all-C / all-F operands streamed, anything else materialized in NumPy's K-order layout), and
+        /// float16 / complex128 run NumPy's sequential BINARY_LOOP fold — so the ±0 sign of a tie and WHICH NaN an all-NaN
+        /// slice returns (payload intact) match NumPy. Integer children decline to the materialize route below, where
+        /// every schedule is exact (integers have no bit-distinct ties).</item>
+        /// <item><c>ArgMax</c> / <c>ArgMin</c> try <see cref="TryStreamArgReduce"/> first. Either way the index follows the
+        /// LOGICAL C-order first-occurrence / first-NaN rule (NumPy's argmax ravels in C order), which no buffer layout
+        /// can change — exact on both routes.</item>
+        /// <item><c>Ptp</c> always materializes the child through <see cref="EvaluateCore"/> and reduces that buffer. Its
+        /// VALUE is exact (a max minus a min is order-free), but a float result's ±0 sign and NaN payload follow the
+        /// materialized buffer's visiting order, which for a PERMUTED computed child is not NumPy's K-order layout —
+        /// those bits are not pinned (the same gap the unfused <c>np.max(x * 1, axis)</c> has).</item>
+        /// </list>
         /// </summary>
+        /// <remarks>
+        /// The value kinds preserve the child dtype and the index kinds always yield int64, so
+        /// <see cref="ReduceNode.ResolveReduceResultType"/> already equals the engine reduction's own result dtype — no
+        /// post-cast is needed except into a caller <paramref name="out"/> of a different (same_kind-castable) dtype. A flat
+        /// <c>argmax</c>/<c>argmin</c> returns a scalar <c>long</c>, wrapped into a 0-d int64 array here. The summation
+        /// kinds (Sum/Mean/Prod, NanMean/Var/Std) cannot delegate like this — their result depends on the SUMMATION order
+        /// even in value — which is why they take the pairwise divert (<see cref="EvaluateStatReduce"/>) instead.
+        /// </remarks>
         /// <param name="program">The compiled reduction program; its <c>Reduce</c> carries the kind, axis and keepdims.</param>
-        /// <param name="inputs">The call's operand arrays, driving the child's materialization.</param>
-        /// <param name="out">Optional destination; must be 0-d for a flat reduction and the reduced shape for an axis one. Null allocates a fresh result.</param>
+        /// <param name="inputs">The call's operand arrays, driving the child's materialization / streaming.</param>
+        /// <param name="out">Optional destination; must be 0-d (or <c>(1,)*ndim</c> under keepdims) for a flat reduction and the
+        /// reduced shape for an axis one. Null allocates a fresh result.</param>
+        /// <param name="options">The call's options; only <see cref="NDEvaluateOptions.Casting"/> is read here — the rule a caller
+        /// <paramref name="out"/>'s dtype is checked against before any compute.</param>
         /// <returns>The reduced array (a fresh 0-d scalar / reduced-shape array, or <paramref name="out"/> itself when supplied).</returns>
-        /// <exception cref="ArgumentException">A flat reduction was given a non-0-d <paramref name="out"/>; or the engine reduction rejects a zero-size input (no identity), an out shape mismatch, or an out dtype not reachable by a same_kind cast.</exception>
+        /// <exception cref="ArgumentException">A flat reduction was given a wrong-rank <paramref name="out"/>; or the engine
+        /// reduction rejects a zero-size input with NumPy's text — <c>zero-size array to reduction operation maximum which has
+        /// no identity</c> for Ptp (its max half runs first), <c>… fmax …</c> / <c>… fmin …</c> for NanMax / NanMin,
+        /// <c>attempt to get argmax of an empty sequence</c> (argmin likewise) for the index kinds; or an out shape mismatch,
+        /// or an out dtype not reachable under <see cref="NDEvaluateOptions.Casting"/>.</exception>
+        /// <exception cref="NotSupportedException">The dispatcher routed a non-delegating kind here — an internal bug.</exception>
         private unsafe NDArray EvaluateDelegatingReduce(NDExprProgram program, NDArray[] inputs, NDArray @out, in NDEvaluateOptions options = default)
         {
             var reduce = program.Reduce;
@@ -903,6 +918,12 @@ namespace NumSharp.Backends
             int childNdim = 0;
             if (reduce.Kind is NDExprReduceKind.ArgMax or NDExprReduceKind.ArgMin)
                 computed = TryStreamArgReduce(program, inputs, out childNdim);
+            // NanMax / NanMin over a float child run NumPy's own fmax / fmin schedules over the buffer NumPy reduces
+            // (DefaultEngine.Evaluate.MinMaxAxis.cs) — the materialize-then-np.nanmax route below walks EvaluateCore's layout,
+            // which for a permuted child is not NumPy's, and fmax's ±0-tie / NaN-payload bits depend on it. Same contract as
+            // the engine calls below; null = declined, nothing allocated.
+            else if (reduce.Kind is NDExprReduceKind.NanMax or NDExprReduceKind.NanMin)
+                computed = TryExactNanMinMaxEval(program, inputs, out childNdim);
 
             if (computed is null)
             {
@@ -1152,10 +1173,6 @@ namespace NumSharp.Backends
             return @out;
         }
 
-        /// <summary>Cast a materialized child to <paramref name="rt"/> as a FRESH, C-contiguous array (a copy even when already that dtype, so disposal never aliases the source).</summary>
-        /// <param name="m">The materialized child (any dtype, any contiguous layout).</param>
-        /// <param name="rt">The result dtype (Single / Double / Complex here).</param>
-        /// <returns>A fresh C-contiguous array of dtype <paramref name="rt"/>.</returns>
         /// <summary>
         /// A C-contiguous view of <paramref name="m"/> at dtype <paramref name="rt"/> for the weighted-average
         /// pairwise sums: <paramref name="m"/> ITSELF when it is already result-dtype and C-contiguous (the

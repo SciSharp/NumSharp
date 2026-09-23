@@ -50,9 +50,16 @@ namespace NumSharp.Tests.Fuzz
             "sum", "prod", "min", "max", "mean", "std", "var", "argmax", "argmin", "all", "any"
         };
 
+        /// <summary>
+        ///     The nan-reductions still under the blanket "(T10 / W4) nan* family" excuses below. <c>nanmax</c> /
+        ///     <c>nanmin</c> are deliberately NOT here: they run NumPy's own fmax / fmin schedules (float32 / float64 — the
+        ///     exact SIMD schedules; float16 / complex128 — the sequential loops, which fixed complex NaN propagation and the
+        ///     float16 non-C-layout values) and are held BIT-EXACT on every dtype and layout of the nanreduce and specials
+        ///     tiers (0 divergences on 2,168 cases when removed from this set — a regression now fails the gate).
+        /// </summary>
         private static readonly System.Collections.Generic.HashSet<string> NanReduceOps = new()
         {
-            "nansum", "nanprod", "nanmax", "nanmin", "nanmean", "nanstd", "nanvar", "nanmedian"
+            "nansum", "nanprod", "nanmean", "nanstd", "nanvar", "nanmedian"
         };
 
         private static readonly System.Collections.Generic.HashSet<string> QuantileOps = new()
@@ -553,7 +560,8 @@ namespace NumSharp.Tests.Fuzz
             // making the clip SIMD min/max NaN-aware (the scalar path already propagated). The
             // classifier branch is removed so the matrix verifies clip(NaN) bit-exact.
 
-            // --- NaN-aware reductions (T10 / W4): the nan* family is broadly broken ---
+            // --- NaN-aware reductions (T10 / W4): the nan* family is broadly broken — nanmax / nanmin excepted: they left
+            // NanReduceOps (2026-09-23) and are ENFORCED bit-exact, so none of the excuses below reaches them ---
             if (NanReduceOps.Contains(c.Op))
             {
                 // (W4-E) nanmean/nanstd/nanvar over an EMPTY float16 array (axis=None) throw

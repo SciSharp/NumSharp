@@ -761,11 +761,11 @@ namespace NumSharp.Tests.Backends.Iterators
         }
 
         /// <summary>
-        /// Empty-input behaviour: <c>Ptp</c> RAISES (it composes <c>amax - amin</c>, and a zero-size
-        /// max/min has no identity — NumPy raises here too), while <c>NanMin</c>/<c>NanMax</c> return NaN
-        /// because they delegate to the engine's <c>np.nanmin</c>/<c>np.nanmax</c>, whose empty behaviour
-        /// (a 0-d NaN) is a PRE-EXISTING NumSharp quirk that diverges from NumPy's raise — evaluate
-        /// faithfully mirrors the engine reduction rather than adding parity np.nanmin itself lacks.
+        /// Empty-input behaviour: every one RAISES, as in NumPy — <c>Ptp</c> composes <c>amax - amin</c> and a
+        /// zero-size max/min has no identity; <c>NanMin</c>/<c>NanMax</c> ARE <c>np.fmin.reduce</c> /
+        /// <c>np.fmax.reduce</c> on an ndarray, whose identity-less empty reduction raises NumPy's ValueError
+        /// text with the <c>fmin</c>/<c>fmax</c> name (the engine's <c>np.nanmin</c>/<c>np.nanmax</c> returned a
+        /// 0-d NaN before, and evaluate mirrored it — both now raise, probed against NumPy 2.4.2).
         /// </summary>
         [TestMethod]
         public void M4Tail_EmptyInput()
@@ -775,10 +775,10 @@ namespace NumSharp.Tests.Backends.Iterators
             Assert.ThrowsException<ArgumentException>(   // zero-size max/min has no identity, like np.ptp([])
                 () => np.evaluate(NDExpr.Ptp((NDExpr)e)));
 
-            // np.nanmin([]) / np.nanmax([]) return a 0-d NaN in NumSharp (a documented engine quirk vs
-            // NumPy's ValueError); the delegating evaluate path returns exactly what the engine does.
-            Assert.IsTrue(double.IsNaN(np.evaluate(NDExpr.NanMin((NDExpr)e)).GetDouble(0)));
-            Assert.IsTrue(double.IsNaN(np.evaluate(NDExpr.NanMax((NDExpr)e)).GetDouble(0)));
+            Assert.AreEqual("zero-size array to reduction operation fmin which has no identity",
+                Assert.ThrowsException<ArgumentException>(() => np.evaluate(NDExpr.NanMin((NDExpr)e))).Message);
+            Assert.AreEqual("zero-size array to reduction operation fmax which has no identity",
+                Assert.ThrowsException<ArgumentException>(() => np.evaluate(NDExpr.NanMax((NDExpr)e))).Message);
         }
 
         // ===================================================================

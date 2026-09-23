@@ -32,25 +32,37 @@ namespace NumSharp.Backends
         /// in the same per-element schedule, NumPy's <c>np.max(child, axis)</c> would (see the file header).
         /// </summary>
         /// <remarks>
-        /// Declines (null, nothing allocated — the seeded axis fold runs as before, value-exact) for any other reduce
-        /// kind, when <see cref="NDExpr.DisableExactMinMax"/> is set, for an empty axis or result (the fold's empty
-        /// handling and NumPy's errors stay in charge), for a dtype outside <see cref="NumPyMinMaxReduce.Supports"/>,
-        /// for a child with no iterator operand, for a broadcast bare leaf, and for a non-streamable INTEGER child
-        /// (order-free, so the fold is exact and materializing would only cost). The result is a fresh array holding the
-        /// child dtype (== the reduction's accumulator and result dtype for Min / Max); it may be F-contiguous (an
-        /// F-walked stream, or an F input's engine result) — callers treat it as a dense block.
+        /// Declines (null, nothing allocated — the seeded axis fold, or for NanMin / NanMax the delegated
+        /// <c>np.nanmin</c> / <c>np.nanmax</c>, runs as before) for any other reduce kind, when
+        /// <see cref="NDExpr.DisableExactMinMax"/> is set, for an empty axis or result (the fold's empty handling and
+        /// NumPy's errors stay in charge), for a dtype outside <see cref="NumPyMinMaxReduce.Supports"/>, for a child with no
+        /// iterator operand, for a broadcast bare leaf, and for a non-streamable INTEGER child (order-free, so the fold is
+        /// exact and materializing would only cost). The result is a fresh array holding the child dtype (== the
+        /// reduction's accumulator and result dtype for Min / Max / NanMin / NanMax); it may be F-contiguous (an F-walked
+        /// stream, or an F input's engine result) — callers treat it as a dense block.
         /// </remarks>
         /// <param name="program">The axis reduction program.</param>
         /// <param name="inputs">Every input of the call, in input order.</param>
         /// <param name="axis">The already-normalized reduction axis.</param>
-        /// <param name="kind">The reduce kind (only <see cref="NDExprReduceKind.Min"/> / <see cref="NDExprReduceKind.Max"/> engage).</param>
+        /// <param name="kind">The reduce kind (only <see cref="NDExprReduceKind.Min"/> / <see cref="NDExprReduceKind.Max"/>
+        /// and the NaN-suppressing <see cref="NDExprReduceKind.NanMin"/> / <see cref="NDExprReduceKind.NanMax"/> engage).</param>
         /// <param name="axisSize">The reduced axis' extent.</param>
         /// <param name="reducedShape">The result shape (input shape with <paramref name="axis"/> removed; scalar for 1-D).</param>
         /// <returns>The fresh reduced array (the caller owns it), or null.</returns>
         private unsafe NDArray TryExactAxisMinMaxEval(NDExprProgram program, NDArray[] inputs, int axis, NDExprReduceKind kind,
             long axisSize, Shape reducedShape)
         {
-            if ((kind != NDExprReduceKind.Min && kind != NDExprReduceKind.Max) || NDExpr.DisableExactMinMax)
+            MinMaxOp op;
+            switch (kind)
+            {
+                case NDExprReduceKind.Max: op = MinMaxOp.Max; break;
+                case NDExprReduceKind.Min: op = MinMaxOp.Min; break;
+                case NDExprReduceKind.NanMax: op = MinMaxOp.FMax; break;   // np.nanmax IS np.fmax.reduce on an ndarray
+                case NDExprReduceKind.NanMin: op = MinMaxOp.FMin; break;
+                default: return null;
+            }
+
+            if (NDExpr.DisableExactMinMax)
                 return null;
             if (axisSize == 0 || reducedShape.size == 0)
                 return null;
@@ -60,7 +72,6 @@ namespace NumSharp.Backends
             if (!NumPyMinMaxReduce.Supports(t))
                 return null;
 
-            bool isMax = kind == NDExprReduceKind.Max;
             var ops = child.IteratorOperands(inputs);
             if (ops.Length == 0)
                 return null;
@@ -68,11 +79,11 @@ namespace NumSharp.Backends
             // NumPy reduces the array itself: the engine's exact core honors every non-broadcast layout through its
             // strides (null for a broadcast leaf → the fold).
             if (child.Bound is InputNode && ops.Length == 1)
-                return TryExactAxisMinMax(ops[0], axis, isMax);
+                return TryExactAxisMinMax(ops[0], axis, op);
 
             if (CanStreamChild(child, ops, allowF: true))
             {
-                var streamed = StreamExactAxisMinMax(child, inputs, ops, axis, isMax, t, reducedShape);
+                var streamed = StreamExactAxisMinMax(child, inputs, ops, axis, op, t, reducedShape);
                 NDExpr.StreamingReductions++;
                 NDExpr.ExactMinMaxRuns++;
                 return streamed;
@@ -87,7 +98,135 @@ namespace NumSharp.Backends
             var view = MaterializeChildNumPyLayout(child, inputs, ops, out var buffer);
             try
             {
-                return TryExactAxisMinMax(view, axis, isMax);
+                return TryExactAxisMinMax(view, axis, op);
+            }
+            finally
+            {
+                if (!ReferenceEquals(view, buffer))
+                    view.Dispose();
+                buffer.Dispose();
+            }
+        }
+
+        /// <summary>
+        /// np.evaluate's <c>NanMax</c> / <c>NanMin</c> (flat and axis) through NumPy's own <c>fmax</c> / <c>fmin</c>
+        /// reduction schedules — the same routes as <c>Max</c> / <c>Min</c> (a bare leaf in place, a streamable computed
+        /// child block by block, any other float child materialized in NumPy's layout), with the NaN-suppressing lane
+        /// rules. Returns exactly what <see cref="EvaluateDelegatingReduce"/>'s engine call would: a 0-d child-dtype result
+        /// for a flat reduction (the caller applies flat keepdims), the reduced array with keepdims applied for an axis one.
+        /// </summary>
+        /// <remarks>
+        /// Why not the delegation it precedes: <c>np.nanmax(materialized)</c> reduces the child in the layout
+        /// <see cref="EvaluateCore"/> picks (C, or F for strictly-F operands), where NumPy reduces the buffer its ufunc
+        /// allocated in K order — for a permuted child the two walk different call boundaries, and for <c>fmax</c> the
+        /// boundaries decide a ±0 tie's sign and an all-NaN reduction's payload. It also skips the materialization for
+        /// streamable children. A float16 / complex128 child takes <see cref="NanMinMaxSequentialEval"/> — the engine's
+        /// sequential fold over the leaf itself or the child materialized in K order (its flat visiting order is the
+        /// buffer's memory order, so the layout matters there too). Declines (null, nothing allocated,
+        /// <paramref name="childNdim"/> 0) when <see cref="NDExpr.DisableExactMinMax"/> is set, for an integer / bool child
+        /// (the delegated <c>np.nanmax</c> IS the exact, order-free <c>np.amax</c>), for a child with no iterator operand or
+        /// a 0-d one (NumPy returns its element whatever the axis), for an empty reduction (the delegated call raises
+        /// NumPy's "zero-size array" error), and for anything the float32 / float64 exact core declines (a broadcast leaf).
+        /// </remarks>
+        /// <param name="program">The reduction program (kind NanMax / NanMin).</param>
+        /// <param name="inputs">Every input of the call, in input order.</param>
+        /// <param name="childNdim">Receives the child's rank on success (the flat keepdims rank), else 0.</param>
+        /// <returns>The fresh result (the caller owns it), or null.</returns>
+        /// <exception cref="AxisError">The reduction's axis is out of bounds for the child.</exception>
+        private unsafe NDArray TryExactNanMinMaxEval(NDExprProgram program, NDArray[] inputs, out int childNdim)
+        {
+            childNdim = 0;
+            var reduce = program.Reduce;
+            if (NDExpr.DisableExactMinMax || (reduce.Kind != NDExprReduceKind.NanMax && reduce.Kind != NDExprReduceKind.NanMin))
+                return null;
+
+            var child = program.ChildElementwiseProgram;
+            var t = child.ResultType;
+            // float16 / complex128 have NumPy's sequential fmax / fmin (Default.Reduction.Nan.Sequential.cs), whose answer
+            // depends on the flat visiting order — which a reduction over EvaluateCore's layout would not reproduce.
+            bool sequential = t == NPTypeCode.Half || t == NPTypeCode.Complex;
+            if (!NumPyMinMaxReduce.IsFloat(t) && !sequential)
+                return null;
+
+            var ops = child.IteratorOperands(inputs);
+            if (ops.Length == 0)
+                return null;
+            Shape inputShape = ResolveInputShape(ops);
+            int nd = inputShape.NDim;
+            if (nd == 0 || inputShape.size == 0)
+                return null;
+
+            if (sequential)
+            {
+                childNdim = nd;
+                return NanMinMaxSequentialEval(program, child, inputs, ops);
+            }
+
+            var op = reduce.Kind == NDExprReduceKind.NanMax ? MinMaxOp.FMax : MinMaxOp.FMin;
+            if (reduce.Axis is null)
+            {
+                byte* slot = stackalloc byte[NDExprParamPlan.SlotBytes];
+                if (!TryExactFlatMinMax(child, inputs, inputShape.size, op, t, slot))
+                    return null;
+
+                var flat = new NDArray(t, Shape.Scalar, false);
+                Buffer.MemoryCopy(slot, (byte*)flat.Address + flat.Shape.offset * t.SizeOf(), t.SizeOf(), t.SizeOf());
+                childNdim = nd;
+                // The engine's np.nanmax returns a read-only numpy-scalar 0-d (PyArray_Return); keep that contract.
+                return flat.MarkReductionScalar();
+            }
+
+            int axis = NormalizeAxis(reduce.Axis.Value, nd);
+            long axisSize = inputShape[axis];
+            var reducedDims = new long[nd - 1];
+            for (int d = 0, rd = 0; d < nd; d++)
+                if (d != axis)
+                    reducedDims[rd++] = inputShape[d];
+            Shape reducedShape = reducedDims.Length > 0 ? new Shape(reducedDims) : Shape.NewScalar();
+
+            var reduced = TryExactAxisMinMaxEval(program, inputs, axis, reduce.Kind, axisSize, reducedShape);
+            if (reduced is null)
+                return null;
+
+            childNdim = nd;
+            if (reduce.Keepdims)
+                reduced.Storage.ExpandDimension(axis);   // a fresh result: relabelling its shape in place is safe
+            return reduced.MarkReductionScalar();
+        }
+
+        /// <summary>
+        /// The float16 / complex128 arm of <see cref="TryExactNanMinMaxEval"/>: the engine's <c>np.nanmax</c> /
+        /// <c>np.nanmin</c> (NumPy's sequential fold, exact on every layout) applied to the very buffer NumPy reduces — a
+        /// bare leaf as it is (no copy), any computed child materialized in the layout NumPy's own ufunc would allocate
+        /// (<see cref="MaterializeChildNumPyLayout"/>, K order), since a flat fold's visiting order is that buffer's memory
+        /// order.
+        /// </summary>
+        /// <remarks>
+        /// Same contract as the float arm: a 0-d result for a flat reduction (the caller applies flat keepdims), the reduced
+        /// array with keepdims applied for an axis one. Always fresh — the engine never returns a view of its input (a
+        /// single element is cloned, every reduction allocates) — so returning it never aliases the caller's leaf; the
+        /// materialized temp is released before returning.
+        /// </remarks>
+        /// <param name="program">The reduction program (kind NanMax / NanMin, a non-empty child of rank &gt;= 1).</param>
+        /// <param name="child">The reduction's child elementwise program (float16 or complex128 result).</param>
+        /// <param name="inputs">Every input of the call, in input order.</param>
+        /// <param name="ops">The child's iterator operands.</param>
+        /// <returns>The fresh result (the caller owns it).</returns>
+        /// <exception cref="AxisError">The reduction's axis is out of bounds for the child.</exception>
+        private NDArray NanMinMaxSequentialEval(NDExprProgram program, NDExprProgram child, NDArray[] inputs, NDArray[] ops)
+        {
+            var reduce = program.Reduce;
+            bool isMax = reduce.Kind == NDExprReduceKind.NanMax;
+            // A flat reduce runs without keepdims (the caller reshapes the 0-d result); an axis one passes it through.
+            bool axisKd = reduce.Axis is int && reduce.Keepdims;
+
+            if (child.Bound is InputNode && ops.Length == 1)
+                return isMax ? NanMax(ops[0], reduce.Axis, axisKd) : NanMin(ops[0], reduce.Axis, axisKd);
+
+            var view = MaterializeChildNumPyLayout(child, inputs, ops, out var buffer);
+            try
+            {
+                return isMax ? NanMax(view, reduce.Axis, axisKd) : NanMin(view, reduce.Axis, axisKd);
             }
             finally
             {
@@ -112,13 +251,13 @@ namespace NumSharp.Backends
         /// <param name="inputs">Every input of the call, in input order (for the parameter block).</param>
         /// <param name="ops">The child's iterator operands.</param>
         /// <param name="axis">The already-normalized reduction axis.</param>
-        /// <param name="isMax">Max when true, min when false.</param>
+        /// <param name="op">The reduction op.</param>
         /// <param name="t">The child dtype (satisfies <see cref="NumPyMinMaxReduce.Supports"/>).</param>
         /// <param name="reducedShape">The result shape.</param>
         /// <returns>The fresh reduced array.</returns>
         /// <exception cref="NotSupportedException"><paramref name="t"/> is not a supported dtype.</exception>
         private static unsafe NDArray StreamExactAxisMinMax(NDExprProgram child, NDArray[] inputs, NDArray[] ops, int axis,
-            bool isMax, NPTypeCode t, Shape reducedShape)
+            MinMaxOp op, NPTypeCode t, Shape reducedShape)
         {
             var stream = new NDExprChildStream { Kernel = child.Kernel };
             int nop = ops.Length;
@@ -174,18 +313,40 @@ namespace NumSharp.Backends
             try
             {
                 byte* dst = (byte*)result.Address;
+                // Integer lanes serve FMax / FMin through the max / min lanes (identical results, see MinMaxOp); only the
+                // float P rules read the buffer size (their SLAB calls follow NumPy's call tiling).
+                bool isMax = NumPyMinMaxReduce.IsMaxLike(op);
+                long bufsize = np.getbufsize();
                 switch (t)
                 {
-                    case NPTypeCode.Double: if (isMax) StreamAxisMinMax<double, NumPyMinMaxReduce.MaxLane<double>>(ref stream, outer, K, inner, (double*)dst, scratch); else StreamAxisMinMax<double, NumPyMinMaxReduce.MinLane<double>>(ref stream, outer, K, inner, (double*)dst, scratch); break;
-                    case NPTypeCode.Single: if (isMax) StreamAxisMinMax<float, NumPyMinMaxReduce.MaxLane<float>>(ref stream, outer, K, inner, (float*)dst, scratch); else StreamAxisMinMax<float, NumPyMinMaxReduce.MinLane<float>>(ref stream, outer, K, inner, (float*)dst, scratch); break;
-                    case NPTypeCode.SByte: if (isMax) StreamAxisMinMax<sbyte, NumPyMinMaxReduce.MaxLane<sbyte>>(ref stream, outer, K, inner, (sbyte*)dst, scratch); else StreamAxisMinMax<sbyte, NumPyMinMaxReduce.MinLane<sbyte>>(ref stream, outer, K, inner, (sbyte*)dst, scratch); break;
-                    case NPTypeCode.Byte: if (isMax) StreamAxisMinMax<byte, NumPyMinMaxReduce.MaxLane<byte>>(ref stream, outer, K, inner, dst, scratch); else StreamAxisMinMax<byte, NumPyMinMaxReduce.MinLane<byte>>(ref stream, outer, K, inner, dst, scratch); break;
-                    case NPTypeCode.Int16: if (isMax) StreamAxisMinMax<short, NumPyMinMaxReduce.MaxLane<short>>(ref stream, outer, K, inner, (short*)dst, scratch); else StreamAxisMinMax<short, NumPyMinMaxReduce.MinLane<short>>(ref stream, outer, K, inner, (short*)dst, scratch); break;
-                    case NPTypeCode.UInt16: if (isMax) StreamAxisMinMax<ushort, NumPyMinMaxReduce.MaxLane<ushort>>(ref stream, outer, K, inner, (ushort*)dst, scratch); else StreamAxisMinMax<ushort, NumPyMinMaxReduce.MinLane<ushort>>(ref stream, outer, K, inner, (ushort*)dst, scratch); break;
-                    case NPTypeCode.Int32: if (isMax) StreamAxisMinMax<int, NumPyMinMaxReduce.MaxLane<int>>(ref stream, outer, K, inner, (int*)dst, scratch); else StreamAxisMinMax<int, NumPyMinMaxReduce.MinLane<int>>(ref stream, outer, K, inner, (int*)dst, scratch); break;
-                    case NPTypeCode.UInt32: if (isMax) StreamAxisMinMax<uint, NumPyMinMaxReduce.MaxLane<uint>>(ref stream, outer, K, inner, (uint*)dst, scratch); else StreamAxisMinMax<uint, NumPyMinMaxReduce.MinLane<uint>>(ref stream, outer, K, inner, (uint*)dst, scratch); break;
-                    case NPTypeCode.Int64: if (isMax) StreamAxisMinMax<long, NumPyMinMaxReduce.MaxLane<long>>(ref stream, outer, K, inner, (long*)dst, scratch); else StreamAxisMinMax<long, NumPyMinMaxReduce.MinLane<long>>(ref stream, outer, K, inner, (long*)dst, scratch); break;
-                    case NPTypeCode.UInt64: if (isMax) StreamAxisMinMax<ulong, NumPyMinMaxReduce.MaxLane<ulong>>(ref stream, outer, K, inner, (ulong*)dst, scratch); else StreamAxisMinMax<ulong, NumPyMinMaxReduce.MinLane<ulong>>(ref stream, outer, K, inner, (ulong*)dst, scratch); break;
+                    case NPTypeCode.Double:
+                        switch (op)
+                        {
+                            case MinMaxOp.Max: StreamAxisMinMax<double, NumPyMinMaxReduce.MaxLane<double>>(ref stream, outer, K, inner, (double*)dst, scratch, bufsize); break;
+                            case MinMaxOp.Min: StreamAxisMinMax<double, NumPyMinMaxReduce.MinLane<double>>(ref stream, outer, K, inner, (double*)dst, scratch, bufsize); break;
+                            case MinMaxOp.FMax: StreamAxisMinMax<double, NumPyMinMaxReduce.FMaxLane<double>>(ref stream, outer, K, inner, (double*)dst, scratch, bufsize); break;
+                            default: StreamAxisMinMax<double, NumPyMinMaxReduce.FMinLane<double>>(ref stream, outer, K, inner, (double*)dst, scratch, bufsize); break;
+                        }
+
+                        break;
+                    case NPTypeCode.Single:
+                        switch (op)
+                        {
+                            case MinMaxOp.Max: StreamAxisMinMax<float, NumPyMinMaxReduce.MaxLane<float>>(ref stream, outer, K, inner, (float*)dst, scratch, bufsize); break;
+                            case MinMaxOp.Min: StreamAxisMinMax<float, NumPyMinMaxReduce.MinLane<float>>(ref stream, outer, K, inner, (float*)dst, scratch, bufsize); break;
+                            case MinMaxOp.FMax: StreamAxisMinMax<float, NumPyMinMaxReduce.FMaxLane<float>>(ref stream, outer, K, inner, (float*)dst, scratch, bufsize); break;
+                            default: StreamAxisMinMax<float, NumPyMinMaxReduce.FMinLane<float>>(ref stream, outer, K, inner, (float*)dst, scratch, bufsize); break;
+                        }
+
+                        break;
+                    case NPTypeCode.SByte: if (isMax) StreamAxisMinMax<sbyte, NumPyMinMaxReduce.MaxLane<sbyte>>(ref stream, outer, K, inner, (sbyte*)dst, scratch, bufsize); else StreamAxisMinMax<sbyte, NumPyMinMaxReduce.MinLane<sbyte>>(ref stream, outer, K, inner, (sbyte*)dst, scratch, bufsize); break;
+                    case NPTypeCode.Byte: if (isMax) StreamAxisMinMax<byte, NumPyMinMaxReduce.MaxLane<byte>>(ref stream, outer, K, inner, dst, scratch, bufsize); else StreamAxisMinMax<byte, NumPyMinMaxReduce.MinLane<byte>>(ref stream, outer, K, inner, dst, scratch, bufsize); break;
+                    case NPTypeCode.Int16: if (isMax) StreamAxisMinMax<short, NumPyMinMaxReduce.MaxLane<short>>(ref stream, outer, K, inner, (short*)dst, scratch, bufsize); else StreamAxisMinMax<short, NumPyMinMaxReduce.MinLane<short>>(ref stream, outer, K, inner, (short*)dst, scratch, bufsize); break;
+                    case NPTypeCode.UInt16: if (isMax) StreamAxisMinMax<ushort, NumPyMinMaxReduce.MaxLane<ushort>>(ref stream, outer, K, inner, (ushort*)dst, scratch, bufsize); else StreamAxisMinMax<ushort, NumPyMinMaxReduce.MinLane<ushort>>(ref stream, outer, K, inner, (ushort*)dst, scratch, bufsize); break;
+                    case NPTypeCode.Int32: if (isMax) StreamAxisMinMax<int, NumPyMinMaxReduce.MaxLane<int>>(ref stream, outer, K, inner, (int*)dst, scratch, bufsize); else StreamAxisMinMax<int, NumPyMinMaxReduce.MinLane<int>>(ref stream, outer, K, inner, (int*)dst, scratch, bufsize); break;
+                    case NPTypeCode.UInt32: if (isMax) StreamAxisMinMax<uint, NumPyMinMaxReduce.MaxLane<uint>>(ref stream, outer, K, inner, (uint*)dst, scratch, bufsize); else StreamAxisMinMax<uint, NumPyMinMaxReduce.MinLane<uint>>(ref stream, outer, K, inner, (uint*)dst, scratch, bufsize); break;
+                    case NPTypeCode.Int64: if (isMax) StreamAxisMinMax<long, NumPyMinMaxReduce.MaxLane<long>>(ref stream, outer, K, inner, (long*)dst, scratch, bufsize); else StreamAxisMinMax<long, NumPyMinMaxReduce.MinLane<long>>(ref stream, outer, K, inner, (long*)dst, scratch, bufsize); break;
+                    case NPTypeCode.UInt64: if (isMax) StreamAxisMinMax<ulong, NumPyMinMaxReduce.MaxLane<ulong>>(ref stream, outer, K, inner, (ulong*)dst, scratch, bufsize); else StreamAxisMinMax<ulong, NumPyMinMaxReduce.MinLane<ulong>>(ref stream, outer, K, inner, (ulong*)dst, scratch, bufsize); break;
                     default: throw new NotSupportedException($"NumPy axis min/max schedule: dtype {t} is not served.");
                 }
 
@@ -212,19 +373,24 @@ namespace NumSharp.Backends
         ///         increasing axis order — the elementwise sequential fold. Narrow slab sets are produced several slabs
         ///         per kernel call and folded eight per pass (<see cref="NumPyMinMaxReduce.CombineRun8{T,TLane}"/>, the
         ///         same per-element result bit for bit); a wide one block by block with the output block kept hot
-        ///         across the whole axis.</item>
+        ///         across the whole axis. For the P rules (<c>np.nanmax</c> / <c>np.nanmin</c>) every step is split at
+        ///         NumPy's call boundaries over the materialized child's P region — the <c>inner</c> positions, in memory
+        ///         order (<see cref="NumPyMinMaxReduce.SlabCallTiling"/>, built for the dense <c>(outer, K, inner)</c>
+        ///         buffer NumPy's ufunc would hand the reduction).</item>
         /// </list>
         /// </summary>
         /// <typeparam name="T">The child element type.</typeparam>
-        /// <typeparam name="TLane">Max or min.</typeparam>
+        /// <typeparam name="TLane">The lane rule (max / min, or the NaN-suppressing fmax / fmin).</typeparam>
         /// <param name="stream">The bound stream.</param>
         /// <param name="outer">Product of the walk's axes outside the reduced one.</param>
         /// <param name="K">The reduced axis' extent (&gt;= 1).</param>
         /// <param name="inner">Product of the walk's axes inside the reduced one.</param>
         /// <param name="dst">The dense result (<c>outer · inner</c> elements, same walk).</param>
         /// <param name="scratch">The stream's scratch block.</param>
+        /// <param name="maximumSize">The buffer size in elements (<see cref="np.getbufsize"/>) — shapes NumPy's call tiling,
+        /// read only by the P rules.</param>
         private static unsafe void StreamAxisMinMax<T, TLane>(ref NDExprChildStream stream, long outer, long K, long inner,
-            T* dst, byte* scratch)
+            T* dst, byte* scratch, long maximumSize)
             where T : unmanaged, INumber<T> where TLane : struct, NumPyMinMaxReduce.ILane<T>
         {
             long block = stream.Block;
@@ -257,6 +423,19 @@ namespace NumSharp.Backends
                 return;
             }
 
+            // P rules: NumPy's call tiling over the dense (outer, K, inner) buffer its ufunc would materialize (C strides of
+            // the walk). Its P region is the `inner` positions of one outer index, in memory order, so an element at inner
+            // index i sits at position i. The N rules never read it (their two ops agree, so any split is exact).
+            bool tiled = !TLane.PropagatesNaN;
+            NumPyMinMaxReduce.SlabCallTiling tiling = default;
+            if (tiled)
+            {
+                Span<long> walkDims = stackalloc long[] { outer, K, inner };
+                Span<long> walkStrides = stackalloc long[] { K * inner, inner, 1 };
+                Span<long> place = stackalloc long[3];
+                tiling = NumPyMinMaxReduce.SlabCallTiling.Build<T>(walkDims, walkStrides, 1, maximumSize, place, out _);
+            }
+
             if (inner <= block)
             {
                 long slabsPer = block / inner;
@@ -273,9 +452,20 @@ namespace NumSharp.Backends
                         // The produced slabs sit back to back in scratch (stride `inner`), so eight at a time fold in
                         // one pass over the output block — bit-identical to one CombineRun each (see CombineRun8).
                         for (; j + NumPyMinMaxReduce.SlabFuse <= jc; j += NumPyMinMaxReduce.SlabFuse, x += NumPyMinMaxReduce.SlabFuse * inner)
-                            NumPyMinMaxReduce.CombineRun8<T, TLane>(d, x, inner, inner);
+                        {
+                            if (tiled)
+                                NumPyMinMaxReduce.CombineRun8Tiled<T, TLane>(d, x, inner, 0, inner, tiling);
+                            else
+                                NumPyMinMaxReduce.CombineRun8<T, TLane>(d, x, inner, inner);
+                        }
+
                         for (; j < jc; j++, x += inner)
-                            NumPyMinMaxReduce.CombineRun<T, TLane>(d, 1, x, 1, inner);
+                        {
+                            if (tiled)
+                                NumPyMinMaxReduce.CombineRunTiled<T, TLane>(d, 1, x, 1, 0, inner, tiling);
+                            else
+                                NumPyMinMaxReduce.CombineRun<T, TLane>(d, 1, x, 1, inner);
+                        }
                     }
                 }
 
@@ -292,7 +482,11 @@ namespace NumSharp.Backends
                     for (long k = 1; k < K; k++)
                     {
                         stream.Produce((o * K + k) * inner + ib, m, scratch);
-                        NumPyMinMaxReduce.CombineRun<T, TLane>(d, 1, (T*)scratch, 1, m);
+                        // This block's elements sit at P positions ib, ib + 1, … of the outer index's region.
+                        if (tiled)
+                            NumPyMinMaxReduce.CombineRunTiled<T, TLane>(d, 1, (T*)scratch, 1, ib, m, tiling);
+                        else
+                            NumPyMinMaxReduce.CombineRun<T, TLane>(d, 1, (T*)scratch, 1, m);
                     }
                 }
             }
