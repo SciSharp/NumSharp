@@ -177,11 +177,110 @@ namespace NumSharp.Tests.Backends.Iterators
         }
 
         [TestMethod]
-        public void Axis_TransposedInput_FallsBackToMaterialize()
+        public void Axis_FContiguousInputs_StreamAsTheTransposedCReduction()
         {
-            var a = Pool(new long[] { 30, 40 }, NPTypeCode.Double, 21).T;
-            AssertSameBothWays(() => NDExpr.Sum((NDExpr)a * a, 0), expectStream: false);
-            AssertSameBothWays(() => NDExpr.Sum((NDExpr)a * a, 1), expectStream: false);
+            // A transposed C array is F-contiguous, and NumPy reduces the F-contiguous child it materializes in
+            // MEMORY order — i.e. reducing axis k of the F view is reducing axis nd-1-k of the underlying C data. The
+            // F-aware stream must therefore equal the C stream of the transposed problem, transposed back, bit for
+            // bit (the NumPy .npy oracle pinned both on the session probe: 80/80 strict-F Sum/Mean/Prod cases). The
+            // old route here was the 4-accumulator fold (E1-excused), so there is no materialize twin to diff against.
+            foreach (var tc in new[] { NPTypeCode.Double, NPTypeCode.Single, NPTypeCode.Complex })
+            foreach (var shape in new[] { new long[] { 30, 40 }, new long[] { 4, 5, 67 }, new long[] { 9, 1, 33 } })
+            {
+                var c1 = Pool(shape, tc, shape.Length * 31 + (int)shape[0]);
+                var c2 = Pool(shape, tc, shape.Length * 31 + (int)shape[0] + 1);
+                var f1 = c1.T;   // F-contiguous views of the same memory
+                var f2 = c2.T;
+                int nd = shape.Length;
+                for (int k = 0; k < nd; k++)
+                {
+                    NDExpr.StreamingReductions = 0;
+                    var fSum = np.evaluate(NDExpr.Sum((NDExpr)f1 * f2, k));
+                    Assert.IsTrue(NDExpr.StreamingReductions > 0, $"{tc} {string.Join("x", shape)} axis {k}: the F sum must stream");
+                    var cSum = np.evaluate(NDExpr.Sum((NDExpr)c1 * c2, nd - 1 - k));
+                    AssertBitsEqualNaNTokenized(cSum.T, fSum);
+
+                    var fMean = np.evaluate(NDExpr.Mean((NDExpr)f1 * f2, k));
+                    var cMean = np.evaluate(NDExpr.Mean((NDExpr)c1 * c2, nd - 1 - k));
+                    AssertBitsEqualNaNTokenized(cMean.T, fMean);
+
+                    if (tc != NPTypeCode.Complex)
+                    {
+                        var p = Pool(shape, tc, 77 + k, benign: true);
+                        var fProd = np.evaluate(NDExpr.Prod((NDExpr)p.T * p.T, k));
+                        var cProd = np.evaluate(NDExpr.Prod((NDExpr)p * p, nd - 1 - k));
+                        AssertBitsEqualNaNTokenized(cProd.T, fProd);
+                    }
+                }
+            }
+        }
+
+        [TestMethod]
+        public void Axis_MixedOrderInputs_FallBack()
+        {
+            // One C and one F operand share no memory order, so neither stream applies: the materialize route runs.
+            var c = Pool(new long[] { 30, 40 }, NPTypeCode.Double, 21);
+            var f = np.asfortranarray(Pool(new long[] { 30, 40 }, NPTypeCode.Double, 22));
+            AssertSameBothWays(() => NDExpr.Sum((NDExpr)c * f, 0), expectStream: false);
+            AssertSameBothWays(() => NDExpr.Sum((NDExpr)c * f, 1), expectStream: false);
+        }
+
+        [TestMethod]
+        public void WeightedAverage_CContiguous_StreamsAndMatchesMaterialize()
+        {
+            // Σ(v·w) / Σ(w) with both sums streamed (no product / weights temporaries) must equal the materialize
+            // route byte for byte over C-contiguous operands — flat, every axis, keepdims — incl. an int·int average
+            // (multiplied at float64, never wrapping) and a fused values child.
+            foreach (var tc in new[] { NPTypeCode.Double, NPTypeCode.Single, NPTypeCode.Complex })
+            foreach (var shape in new[] { new long[] { 1 }, new long[] { 129 }, new long[] { 37, 129 }, new long[] { 4, 5, 67 } })
+            {
+                var v = Pool(shape, tc, 3 + shape.Length);
+                var w = Pool(shape, tc, 4 + shape.Length, benign: true);
+                AssertSameBothWays(() => NDExpr.Average((NDExpr)v, (NDExpr)w), expectStream: true);
+                AssertSameBothWays(() => NDExpr.Average((NDExpr)v * v, (NDExpr)w, keepdims: true), expectStream: true);
+                for (int ax = 0; ax < shape.Length; ax++)
+                {
+                    int k = ax;
+                    AssertSameBothWays(() => NDExpr.Average((NDExpr)v, (NDExpr)w, k), expectStream: true);
+                }
+            }
+
+            var iv = np.arange(1000).astype(NPTypeCode.Int32).reshape(10, 100) * 100000;
+            var iw = (np.arange(1000).astype(NPTypeCode.Int32) % 7 + 1).reshape(10, 100) * 30000;
+            AssertSameBothWays(() => NDExpr.Average((NDExpr)iv, (NDExpr)iw), expectStream: true);
+            AssertSameBothWays(() => NDExpr.Average((NDExpr)iv, (NDExpr)iw, 1), expectStream: true);
+        }
+
+        [TestMethod]
+        public void WeightedAverage_FContiguous_EqualsTheTransposedCAverage()
+        {
+            // NumPy's np.average multiplies in K order (an F product for F inputs) and sums in MEMORY order, so a
+            // flat F average is the flat sum over the F memory walk and an axis-k F average is the axis-(nd-1-k)
+            // average of the underlying C data. The streams must reproduce exactly that; the old materialize route
+            // copied F inputs to C and summed in C order (NumPy-divergent — 6 of 9 F cases on the .npy oracle).
+            foreach (var tc in new[] { NPTypeCode.Double, NPTypeCode.Complex })
+            foreach (var shape in new[] { new long[] { 37, 129 }, new long[] { 4, 5, 67 } })
+            {
+                var v = Pool(shape, tc, 50 + shape.Length);
+                var w = Pool(shape, tc, 60 + shape.Length, benign: true);
+                int nd = shape.Length;
+
+                // Flat: the F memory walk of v.T is the C memory walk of v, so the flat F average equals the flat C
+                // average over the SAME data (NumPy: np.average(a.T, weights=w.T) == np.average(a, weights=w)).
+                NDExpr.StreamingReductions = 0;
+                var fFlat = np.evaluate(NDExpr.Average((NDExpr)v.T, (NDExpr)w.T));
+                Assert.IsTrue(NDExpr.StreamingReductions > 0, "the flat F average must stream");
+                AssertBitsEqualNaNTokenized(np.evaluate(NDExpr.Average((NDExpr)v, (NDExpr)w)), fFlat);
+
+                for (int k = 0; k < nd; k++)
+                {
+                    NDExpr.StreamingReductions = 0;
+                    var fAx = np.evaluate(NDExpr.Average((NDExpr)v.T, (NDExpr)w.T, k));
+                    Assert.IsTrue(NDExpr.StreamingReductions > 0, $"the F axis-{k} average must stream");
+                    var cAx = np.evaluate(NDExpr.Average((NDExpr)v, (NDExpr)w, nd - 1 - k));
+                    AssertBitsEqualNaNTokenized(cAx.T, fAx);
+                }
+            }
         }
 
         [TestMethod]

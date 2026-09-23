@@ -210,6 +210,34 @@ bit-exact (`ILKernelGenerator.Reduction.Pairwise.cs`); only the fused reduce pat
    first-NaN semantics of the scalar `np.maximum` clamp).
 4. The stat / delegating / average reductions (`NanMean`/`Var`/`Std`, `Ptp`/`NanMin`/`NanMax`/`ArgMax`/`ArgMin`,
    weighted `Average`) still materialize their child(ren) — streaming candidates (Var is two-pass: recompute vs store).
+   **A 2026-09-23 gap map** (fused vs NumPy, pinned, best-of; probe `red_gap2.cs` + twin) ranked them: weighted
+   `Average` was the worst fused reduction by far — 0.47× NumPy @100K / 0.66× @4M and 0.06–0.19× NumSharp's own
+   unfused `np.average`; `Any`/`CountNonzero` 0.25× @100K (lever 3's scalar bool fold); `Min`/`Max` 0.72–0.80× @100K;
+   `ArgMax`/`Ptp` ≈ 0.95× @100K (1.7–1.9× @4M); `Var` 5.8× / int `Sum` 3.4× already ahead.
+   **Weighted `Average` STREAMED (LANDED):** Σ(v·w) and Σ(w) run as two M3 Sum streams over the children
+   `NDExprProgram.AvgNumeratorProgram` (`Cast(v,rt)·Cast(w,rt)` — a side already at `rt` stays uncast so the kernel keeps
+   its SIMD body; NumPy's `np.multiply(a, wgt, dtype=result_dtype)`) and `AvgDenominatorProgram` (`Cast(w,rt)`) —
+   `DefaultEngine.TryStreamWeightedAverage`; no product, no weights copy, no materialized values. Bit-identical to the
+   materialize route for C operands (flat + every axis + keepdims, incl. int·int multiplied at f64). **It also FIXED a
+   parity bug:** the materialize route copied F inputs to C (`ToResultContig`) and summed in C order, while NumPy's
+   `np.average` keeps the product in K order and sums MEMORY order — a NumPy 2.4.2 `.npy` oracle (C/F × flat/axis 0/1
+   over 37×129 / 300×7 / 5×2000, wide-magnitude pools) had 6 of 9 F cases diverging (up to 98/129 elements); now
+   18/18 bit-exact, all streamed. **Measured (stream vs old, pinned, alternating order):** flat 2.2× @1K / 3.6×
+   @100K / 3.9× @4M (17.8 → 4.5 ms; NumPy 11.7 → NPY/NS 0.66 → 2.6), C axis 3.2–4.2×, F axis 5.0–7.7×. Follow-up:
+   the two streams read `w` twice — one joint recursion (both sums per leaf) would cut the 4M call to ~3 ms.
+   **The F-aware axis stream (LANDED with it):** `TryStreamAxisReduce` accepts ALL-F operands — an F-contiguous array
+   is the C-contiguous array of its reversed dims, so reducing axis k walks memory as the C reduction of axis nd-1-k
+   (`outer = Π dims[k+1:]`, `inner = Π dims[:k]`, F-ordered result = NumPy's K-order output), exactly the schedule
+   NumPy's reduce iterator runs over the F-contiguous child `np.sum(a*b, axis)` materializes. `EvaluateAxisReduce` routes
+   the strict-F corner there first (child-dtype accumulator when it streams; the fold otherwise, as before) — closing
+   the M2 strict-F E1 corner: 80/80 strict-F Sum/Mean/Prod cases (f64/f32/c128, 2-D + 3-D, every axis incl. size-1)
+   bit-exact vs a NumPy 2.4.2 `.npy` oracle, where the old fold diverged on 61; and 4–11× faster (4M F `sum(axis=0)`
+   24.5 → 2.2 ms). `MisalignedRegistry`'s E1 predicate drops its strict-F exception (+ the now-dead
+   `IsStrictFContiguousMultiD`), so the corpus's 84 f32/f64/c128 strict-F axis Sum/Mean/Prod cases are now ENFORCED
+   bit-exact (they pass). Gates: `NDEvaluateStreamingTests` 9 (+3: F axis == transposed-C reduction bit-for-bit over
+   f64/f32/c128 × 2-D/3-D × every axis incl. size-1 × Sum/Mean/Prod; mixed-order fallback; weighted Average C
+   streams == materialize; F Average == transposed-C Average), 445 NDEvaluate/NDExpr/Evaluate/post-pass units,
+   FuzzMatrix 100/3/1 unchanged (evaluate tier green with the tightened excuse).
 5. Known, unchanged: fused Half arithmetic 0.66–0.74× the engine's tuned unfused chain (P5.1 ceiling note).
 6. **Engine divergence found (not fixed, not evaluate-specific):** `np.sum` over a SIZE-1 axis of `-0.0` returns `-0.0`
    (`ReduceAdd` → `HandleTrivialAxisReduction` copies) where NumPy seeds the identity and returns `+0.0`; np.evaluate's
@@ -222,11 +250,14 @@ bit-exact (`ILKernelGenerator.Reduction.Pairwise.cs`); only the fused reduce pat
 | **M5** | Axis forms — `axis=None` + `keepdims`, direct `out=`; tuple `axis` deferred | **reachable scope landed** (this) | **`axis=None` + `keepdims`** landed for EVERY reduction kind (the five base + `Any`/`All`/`CountNonzero`/`NanSum`/`NanProd` + `Ptp`/`NanMin`/`NanMax` + `ArgMax`/`ArgMin` + `NanMean`/`Var`/`Std` + weighted `Average`). NumPy's `np.sum(a, axis=None, keepdims=True)` returns shape `(1,)*a.ndim`; the flat factories gained a `keepdims`-taking overload (a REQUIRED `bool`, so `Sum(x)` stays the 0-d form), and the four host reduce paths (fold / delegating / stat / average) reshape their 0-d scalar result to `(1,)*childNdim` via one shared `KeepdimsFlat`/`FlatReduceShape`/`ValidateFlatReduceOut` triple. The VALUE is identical to the 0-d form (a free reshape of the one element), so it inherits M1/M2/M4*'s bit-exactness with NO new excuse; a 0-d child stays 0-d (matching `np.sum(scalar, keepdims=True)`). Direct `out=` is validated for the keepdims shape (0-d without keepdims, exactly `(1,)*childNdim` with it). **Tuple `axis` is DEFERRED**: every NumSharp reduction is single-axis (`int?`) — multi-axis is a library-wide gap, not an evaluate-specific one, so offering it in `np.evaluate` alone would be inconsistent (a separate, larger feature). Oracle: `(None, True)` added to the flat combos of blocks C / C4 / C5 / C6 / C7 / C8. Gate: `evaluate.jsonl` **21,280** cases green (host-pinned, +2,344) net8+net10 + `NDEvaluateTests.M5_*` (7 — shape/value across every host path, rank-per-input 1-D/3-D, int64 argmax index, weighted average, var/std ddof, `out=` write-through + wrong-rank raise, 0-d child stays 0-d + keepdims=false unchanged). |
 
 **Remaining E1 fold surface (still excused, `MisalignedRegistry`):** Half at any axis (no float16 pairwise
-kernel — M-Half), complex Prod (a complex-multiply chain, npy_cmul FMA-contracted on NumPy's win-amd64 build
-but not on .NET's — the documented multiply gap #12, which an order fix cannot close), and the **strict-F-contiguous
-axis corner** (all-F-input multi-D — M2 leaves it folded, value-exact over the corpus's benign pools). E5
-(complex min/max NaN identity) is a separate min/max milestone. The excuse's `matExactReduce` predicate now
-un-excuses everything M1+M2 fix, so a regression there turns the gate red.
+kernel — M-Half) and complex Prod (a complex-multiply chain, npy_cmul FMA-contracted on NumPy's win-amd64 build
+but not on .NET's — the documented multiply gap #12, which an order fix cannot close). The **strict-F-contiguous
+axis corner** is CLOSED (2026-09-23): the F-aware axis stream reduces it in NumPy's memory order (see "Perf review"
+item 4), and the excuse no longer exempts it — a strict-F case that cannot stream (a broadcast size-1 operand) still
+folds and would now be reported red (the corpus has none: all 84 of its f32/f64/c128 strict-F axis cases stream and
+pass). E5 (complex min/max NaN identity) is a separate min/max milestone. The
+excuse's `matExactReduce` predicate un-excuses everything M1+M2+the F stream fix, so a regression there turns the
+gate red.
 
 ---
 

@@ -102,6 +102,8 @@ namespace NumSharp.Backends.Iteration
         private NDExprProgram _childElementwise;
         private NDExprProgram _avgValues;
         private NDExprProgram _avgWeights;
+        private NDExprProgram _avgNumerator;
+        private NDExprProgram _avgDenominator;
 
         private NDExprProgram(NDExpr bound, NPTypeCode[] inputTypes, bool[] isParam, bool forcedScalar,
             NDInnerLoopFunc kernel, NPTypeCode resultType, ReduceNode reduce, NPTypeCode reduceAcc,
@@ -177,6 +179,50 @@ namespace NumSharp.Backends.Iteration
             => Average is null
                 ? null
                 : _avgWeights ??= Build(Average.Weights, InputTypes, IsParam);
+
+        /// <summary>
+        /// The weighted average's NUMERATOR child for the streaming path (plan lever 4,
+        /// <c>DefaultEngine.TryStreamWeightedAverage</c>): <c>values · weights</c> with each side brought to the
+        /// result dtype FIRST — NumPy's <c>np.multiply(a, wgt, dtype=result_dtype)</c>, whose loop casts both
+        /// inputs to <c>result_dtype</c> and multiplies there (so an int·int average multiplies in float64 and
+        /// never wraps). A side already at the result dtype is left uncast: a <c>Cast</c> node makes the whole
+        /// fused kernel scalar, and the common same-dtype average keeps its SIMD multiply. Null when this is not
+        /// a weighted average. Built once and cached, sharing this program's input signature and parameter
+        /// mask, so the same inputs drive it.
+        /// </summary>
+        /// <remarks>
+        /// Streaming its pairwise sum is bit-identical to the materialize path's <c>ExactSumArray(v·w)</c> over the
+        /// same memory order, because the elementwise product of the result-dtype casts is the same IEEE value
+        /// either way; the dtype casts are the widening ones <c>result_type</c> implies.
+        /// </remarks>
+        public NDExprProgram AvgNumeratorProgram
+            => Average is null
+                ? null
+                : _avgNumerator ??= Build(
+                    AsResultDtype(Average.Values, AvgValuesProgram.ResultType)
+                    * AsResultDtype(Average.Weights, AvgWeightsProgram.ResultType),
+                    InputTypes, IsParam);
+
+        /// <summary>
+        /// The weighted average's DENOMINATOR child for the streaming path: the weights brought to the result
+        /// dtype (NumPy's <c>wgt.sum(dtype=result_dtype)</c> sums the weights AT the result dtype), uncast when
+        /// already there. Null when this is not a weighted average. See <see cref="AvgNumeratorProgram"/>.
+        /// </summary>
+        public NDExprProgram AvgDenominatorProgram
+            => Average is null
+                ? null
+                : _avgDenominator ??= Build(AsResultDtype(Average.Weights, AvgWeightsProgram.ResultType), InputTypes, IsParam);
+
+        /// <summary>
+        /// <paramref name="x"/> converted to this program's <see cref="ResultType"/> — itself when
+        /// <paramref name="xType"/> already is that dtype (no <c>Cast</c> node, so the fused kernel keeps its
+        /// vector body), else an explicit <see cref="NDExpr.Cast(NDExpr, NPTypeCode)"/>.
+        /// </summary>
+        /// <param name="x">A sub-tree of the bound weighted average (positional leaves).</param>
+        /// <param name="xType">The sub-tree's own NumPy result dtype.</param>
+        /// <returns>The sub-tree at the result dtype.</returns>
+        private NDExpr AsResultDtype(NDExpr x, NPTypeCode xType)
+            => xType == ResultType ? x : NDExpr.Cast(x, ResultType);
 
         /// <summary>
         /// Does this program serve these inputs: same count, same typecode per slot, and every input the

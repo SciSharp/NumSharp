@@ -304,6 +304,17 @@ namespace NumSharp.Backends
         /// array of <paramref name="reducedShape"/> holding, element for element, what
         /// <see cref="ExactAxisSum"/> / <see cref="SequentialAxisProd"/> return for the materialized child — or
         /// null (having allocated nothing) when the child is not streamable, so the caller materializes.
+        /// <para>
+        /// An ALL-F-contiguous operand set streams too (plan lever 4 follow-up): an F-contiguous array is the
+        /// C-contiguous array of its reversed dims, so reducing axis <c>k</c> walks memory as the C reduction of
+        /// axis <c>nd-1-k</c> over the reversed dims — <c>outer = Π dims[k+1:]</c>, <c>inner = Π dims[:k]</c> — and
+        /// that memory-order walk is exactly the schedule NumPy's reduce iterator (K order) runs over the
+        /// F-contiguous child its own <c>np.sum(a*b, axis)</c> materializes (whole-run pairwise when the reduced
+        /// axis is the contiguous one, slab accumulation otherwise). The result is then F-contiguous
+        /// (<paramref name="reducedShape"/>'s dims in F order — NumPy's K-order output), which every caller handles
+        /// as a dense block. No C-materializing path computed this: the materialize route copies to C (C order)
+        /// and the fold path folds, so this is the only NumPy-exact route for F inputs.
+        /// </para>
         /// <list type="bullet">
         ///   <item>1-D child (reduce-all): the flat semantics — <c>0 + pairwise(child)</c> / sequential product.</item>
         ///   <item>size-1 reduced axis of a multi-D child (sum): the engine's trivial-axis reduction COPIES the
@@ -327,12 +338,22 @@ namespace NumSharp.Backends
                                : childType != NPTypeCode.Double && childType != NPTypeCode.Single && childType != NPTypeCode.Complex)
                 return null;
 
-            // C order only: the M2 reduction runs over a C-contiguous materialized child, so a C-ordered memory
-            // walk of every operand is the child's own layout. (An all-F operand set is excluded upstream by the
-            // strict-F gate anyway, and a mixed set fails the shared-order test.)
+            // One shared memory order: all C (the M2 divert's C-contiguous child layout) or all F (walked as the C
+            // order of the reversed dims — see the summary). A mixed set fails the shared-order test.
             var ops = child.IteratorOperands(inputs);
-            if (!CanStreamChild(child, ops, allowF: false))
+            if (!CanStreamChild(child, ops, allowF: true))
                 return null;
+            bool fOrder = false;
+            for (int j = 0; j < ops.Length; j++)
+            {
+                // CanStreamChild accepted allC || allF; any operand that is not C-contiguous means the shared
+                // order is F (an operand contiguous in BOTH orders fits either, so it never decides).
+                if (!ops[j].Shape.IsContiguous)
+                {
+                    fOrder = true;
+                    break;
+                }
+            }
 
             var stream = new NDExprChildStream { Kernel = child.Kernel };
             if (!sequentialProd && !BindSumFold(ref stream, childType))
@@ -361,12 +382,26 @@ namespace NumSharp.Backends
             int nd = dims.Length;
             long axisSize = dims[axis];
             long outer = 1, inner = 1;
-            for (int d = 0; d < axis; d++) outer *= dims[d];
-            for (int d = axis + 1; d < nd; d++) inner *= dims[d];
+            if (!fOrder)
+            {
+                for (int d = 0; d < axis; d++) outer *= dims[d];
+                for (int d = axis + 1; d < nd; d++) inner *= dims[d];
+            }
+            else
+            {
+                // Memory is the C order of the reversed dims: the axes AFTER `axis` are the slow (outer) ones and
+                // the axes BEFORE it the fast (inner) ones.
+                for (int d = axis + 1; d < nd; d++) outer *= dims[d];
+                for (int d = 0; d < axis; d++) inner *= dims[d];
+            }
 
-            // A fresh C-contiguous result (offset 0), the layout ExactAxisSum/SequentialAxisProd return for a
-            // C-contiguous child. Disposed on an exception so a failing kernel does not strand its buffer.
-            var result = new NDArray(childType, reducedShape, false);
+            // A fresh result (offset 0): C-contiguous, the layout ExactAxisSum/SequentialAxisProd return for a
+            // C-contiguous child, or — for an F walk — F-contiguous, so its memory order (the C order of the
+            // reversed reduced dims) is exactly the order the streams below write it in. Disposed on an exception
+            // so a failing kernel does not strand its buffer.
+            var result = fOrder && reducedShape.NDim > 1
+                ? new NDArray(childType, new Shape((long[])reducedShape.dimensions.Clone(), 'F'), false)
+                : new NDArray(childType, reducedShape, false);
             NDExpr.StreamingReductions++;
             try
             {
@@ -400,6 +435,111 @@ namespace NumSharp.Backends
                 result.Dispose();
                 throw;
             }
+        }
+
+        /// <summary>
+        /// Plan lever 4 — a weighted average's two sums, streamed: the numerator <c>Σ(v·w)</c> over
+        /// <see cref="NDExprProgram.AvgNumeratorProgram"/> and the denominator <c>Σ(w)</c> over
+        /// <see cref="NDExprProgram.AvgDenominatorProgram"/>, each through the flat / axis Sum streams above — no
+        /// materialized child, no product array, no weights copy (the materialize route allocated and wrote three
+        /// n-element arrays and read them back: 17.6 ms at 4M against NumPy's 11.7).
+        /// </summary>
+        /// <remarks>
+        /// Bit-identical to the materialize route's <c>ExactSumArray(v·w)</c> / <c>ExactSumArray(w)</c> wherever that
+        /// route sums in the operands' memory order — C-contiguous operands, flat and axis: the streams run the
+        /// same pairwise recursion / PINNED / SLAB schedule over the same element values (the product of the
+        /// result-dtype casts is the same IEEE value however it is produced). For ALL-F operands the flat stream
+        /// sums in F memory order, which is NumPy's order for the F-contiguous product (<c>np.multiply</c> keeps K
+        /// order, <c>.sum()</c> walks memory) — the materialize route's C copy summed those in C order and was NOT
+        /// NumPy-exact there. The axis streams are C-only, so an F axis average still materializes. Declines (false,
+        /// outputs null) for anything the Sum streams decline — broadcast, strided, mixed order, more than
+        /// <see cref="EvaluateStreamMaxOperands"/> operands, a 0-d-only operand list — and for an EMPTY input, whose
+        /// zero total weight the materialize route reports with NumPy's error.
+        /// </remarks>
+        /// <param name="program">The weighted-average program.</param>
+        /// <param name="inputs">Every input of the call, in input order.</param>
+        /// <param name="avg">The bound average node (its axis / keepdims).</param>
+        /// <param name="rt">The result dtype (Single / Double / Complex — Half and Decimal were rejected upstream).</param>
+        /// <param name="num">Receives the numerator sums (0-d for a flat average, the reduced shape for an axis one), or null.</param>
+        /// <param name="den">Receives the denominator sums, same shape as <paramref name="num"/>, or null.</param>
+        /// <param name="nax">Receives the normalized reduction axis, or null for a flat average.</param>
+        /// <param name="childNdim">Receives the operands' rank — the flat keepdims result is <c>(1,)*childNdim</c>.</param>
+        /// <returns>True when both sums were streamed; false leaves every output unset for the materialize route.</returns>
+        /// <exception cref="AxisError">The average's axis is out of range for the operands' rank (the same error the materialize route raises).</exception>
+        private unsafe bool TryStreamWeightedAverage(NDExprProgram program, NDArray[] inputs, WeightedAverageNode avg, NPTypeCode rt,
+            out NDArray num, out NDArray den, out int? nax, out int childNdim)
+        {
+            num = null;
+            den = null;
+            nax = null;
+            childNdim = 0;
+
+            var numProgram = program.AvgNumeratorProgram;
+            var denProgram = program.AvgDenominatorProgram;
+
+            // Both children carry this program's input signature, so they stream the same operand list; its shape
+            // is the average's (the streams accept only identical, unbroadcast dims).
+            var ops = numProgram.IteratorOperands(inputs);
+            if (ops.Length == 0)
+                return false;
+            long n = ops[0].size;
+            if (n == 0)
+                return false;
+            int nd = ops[0].ndim;
+
+            if (avg.Axis is null)
+            {
+                byte* numSlot = stackalloc byte[NDExprParamPlan.SlotBytes];
+                byte* denSlot = stackalloc byte[NDExprParamPlan.SlotBytes];
+                *(ulong*)numSlot = 0; *(ulong*)(numSlot + 8) = 0;
+                *(ulong*)denSlot = 0; *(ulong*)(denSlot + 8) = 0;
+                if (!TryStreamFlatReduce(numProgram, inputs, n, sequentialProd: false, numSlot)
+                    || !TryStreamFlatReduce(denProgram, inputs, n, sequentialProd: false, denSlot))
+                    return false;
+
+                // The same 0-d result ExactSumArray builds from its accumulator slot.
+                num = ScalarFromSlot(numSlot, rt);
+                den = ScalarFromSlot(denSlot, rt);
+                childNdim = nd;
+                return true;
+            }
+
+            int ax = NormalizeAxis(avg.Axis.Value, nd);
+            var reducedDims = new long[nd - 1];
+            for (int d = 0, rd = 0; d < nd; d++) if (d != ax) reducedDims[rd++] = ops[0].Shape.dimensions[d];
+            Shape reducedShape = reducedDims.Length > 0 ? new Shape(reducedDims) : Shape.NewScalar();
+
+            var numArr = TryStreamAxisReduce(numProgram, inputs, ax, sequentialProd: false, reducedShape);
+            if (numArr is null)
+                return false;
+            var denArr = TryStreamAxisReduce(denProgram, inputs, ax, sequentialProd: false, reducedShape);
+            if (denArr is null)
+            {
+                // Unreachable in practice (both children share the operand list and dtype, so the gates agree);
+                // release the numerator and let the materialize route recompute both.
+                numArr.Dispose();
+                return false;
+            }
+
+            num = numArr;
+            den = denArr;
+            nax = ax;
+            childNdim = nd;
+            return true;
+        }
+
+        /// <summary>
+        /// A fresh 0-d array of <paramref name="t"/> holding the accumulator slot's value — the exact construction
+        /// <c>ExactSumArray</c>'s flat branch performs, so a streamed flat sum is indistinguishable from it.
+        /// </summary>
+        /// <param name="slot">The 16-byte accumulator slot (value at offset 0, dtype <paramref name="t"/>).</param>
+        /// <param name="t">The accumulator / result dtype.</param>
+        /// <returns>The 0-d result.</returns>
+        private static unsafe NDArray ScalarFromSlot(byte* slot, NPTypeCode t)
+        {
+            var r = new NDArray(t, Shape.NewScalar(), false);
+            NDIterCasting.ConvertValue(slot, (byte*)r.Address + (long)r.Shape.offset * t.SizeOf(), t, t);
+            return r;
         }
 
         /// <summary>

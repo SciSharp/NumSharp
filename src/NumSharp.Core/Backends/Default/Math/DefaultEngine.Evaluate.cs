@@ -999,48 +999,63 @@ namespace NumSharp.Backends
                     "(a bit-exact float16/decimal reduction needs a pairwise sum kernel that dtype lacks; " +
                     "use np.average directly). Plan P2 M-Half/M-Decimal.");
 
-            // Materialize both children once (fresh, contiguous, at their natural dtypes). NOT `using`:
-            // ToResultContig REUSES the materialized array when it is already result-dtype and
-            // C-contiguous (the common case — v/w bare arrays or a same-dtype expression), so vRt/wRt
-            // then ALIAS vMat/wMat and ownership is tracked by the ReferenceEquals guards below rather
-            // than a scope disposer that would double-dispose the shared array. The enclosing
-            // [NDScoped] Evaluate reclaims either on an exception between here and the disposes.
-            NDArray vMat = EvaluateCore(program.AvgValuesProgram, inputs, null);
-            NDArray wMat = EvaluateCore(program.AvgWeightsProgram, inputs, null);
+            NDArray num, den;
+            int? nax;
+            int avgChildNdim;
 
-            // Bring each child to the result dtype as a C-contiguous array — REUSED when the
-            // materialize already produced one (no redundant copy; the whole ~23x-at-100K cost of the
-            // bare-array average was two such copies), else a fresh copy/astype. A fresh array leaves
-            // the now-spent materialize intermediate to dispose here; a reused one aliases it, so the
-            // single dispose of vRt/wRt below (995 / 1012) frees it exactly once.
-            NDArray vRt = ToResultContig(vMat, rt);
-            NDArray wRt = ToResultContig(wMat, rt);
-            if (!ReferenceEquals(vRt, vMat)) vMat.Dispose();
-            if (!ReferenceEquals(wRt, wMat)) wMat.Dispose();
+            // Plan lever 4 — stream both sums with no temporaries (DefaultEngine.Evaluate.Stream.cs, the M3
+            // machinery): Σ(v·w) and Σ(w) are two NumPy-exact Sum reductions over the children
+            // AvgNumeratorProgram / AvgDenominatorProgram, each driven by the SAME pairwise recursion / axis
+            // schedule the materialize route's ExactSumArray runs — so the result is bit-identical to it for
+            // C-contiguous operands, and for all-F operands the flat stream walks MEMORY order exactly as
+            // NumPy's `.sum()` of the F-contiguous product does (the C copy below did not: it summed F inputs
+            // in C order). Anything the streams decline (broadcast, strided, mixed order, F along an axis,
+            // empty) takes the materialize route unchanged.
+            if (!TryStreamWeightedAverage(program, inputs, avg, rt, out num, out den, out nax, out avgChildNdim))
+            {
+                // Materialize both children once (fresh, contiguous, at their natural dtypes). NOT `using`:
+                // ToResultContig REUSES the materialized array when it is already result-dtype and
+                // C-contiguous (the common case — v/w bare arrays or a same-dtype expression), so vRt/wRt
+                // then ALIAS vMat/wMat and ownership is tracked by the ReferenceEquals guards below rather
+                // than a scope disposer that would double-dispose the shared array. The enclosing
+                // [NDScoped] Evaluate reclaims either on an exception between here and the disposes.
+                NDArray vMat = EvaluateCore(program.AvgValuesProgram, inputs, null);
+                NDArray wMat = EvaluateCore(program.AvgWeightsProgram, inputs, null);
 
-            // Product at the result dtype (the two children broadcast together, like any fused binary);
-            // guard C-contiguity for ExactSumArray (a C-input multiply is C, but stay defensive).
-            NDArray prod0 = vRt * wRt;
-            NDArray prod = prod0.Shape.IsContiguous ? prod0 : prod0.copy();
-            if (!ReferenceEquals(prod, prod0)) prod0.Dispose();
-            vRt.Dispose();
+                // Bring each child to the result dtype as a C-contiguous array — REUSED when the
+                // materialize already produced one (no redundant copy; the whole ~23x-at-100K cost of the
+                // bare-array average was two such copies), else a fresh copy/astype. A fresh array leaves
+                // the now-spent materialize intermediate to dispose here; a reused one aliases it, so the
+                // single dispose of vRt/wRt below (995 / 1012) frees it exactly once.
+                NDArray vRt = ToResultContig(vMat, rt);
+                NDArray wRt = ToResultContig(wMat, rt);
+                if (!ReferenceEquals(vRt, vMat)) vMat.Dispose();
+                if (!ReferenceEquals(wRt, wMat)) wMat.Dispose();
 
-            // Denominator weights at the result dtype, broadcast to the PRODUCT's shape so the total
-            // weight counts each element as many times as the numerator does (a same-shape average — the
-            // np.average contract — needs no broadcast; wForDen is then wRt itself).
-            NDArray wForDen = SameDims(wRt.Shape, prod.Shape)
-                ? wRt
-                : np.broadcast_to(wRt, prod.Shape).copy();
+                // Product at the result dtype (the two children broadcast together, like any fused binary);
+                // guard C-contiguity for ExactSumArray (a C-input multiply is C, but stay defensive).
+                NDArray prod0 = vRt * wRt;
+                NDArray prod = prod0.Shape.IsContiguous ? prod0 : prod0.copy();
+                if (!ReferenceEquals(prod, prod0)) prod0.Dispose();
+                vRt.Dispose();
 
-            int? nax = avg.Axis is int rawAxis ? NormalizeAxis(rawAxis, prod.ndim) : (int?)null;
-            int avgChildNdim = prod.ndim;                      // the (broadcast) rank — the flat keepdims result is (1,)*avgChildNdim
+                // Denominator weights at the result dtype, broadcast to the PRODUCT's shape so the total
+                // weight counts each element as many times as the numerator does (a same-shape average — the
+                // np.average contract — needs no broadcast; wForDen is then wRt itself).
+                NDArray wForDen = SameDims(wRt.Shape, prod.Shape)
+                    ? wRt
+                    : np.broadcast_to(wRt, prod.Shape).copy();
 
-            NDArray num = ExactSumArray(prod, nax, rt);        // Σ(v·w) at rt (pairwise / axis add.reduce)
-            NDArray den = ExactSumArray(wForDen, nax, rt);     // Σ(w)   at rt
+                nax = avg.Axis is int rawAxis ? NormalizeAxis(rawAxis, prod.ndim) : (int?)null;
+                avgChildNdim = prod.ndim;                      // the (broadcast) rank — the flat keepdims result is (1,)*avgChildNdim
 
-            prod.Dispose();
-            if (!ReferenceEquals(wForDen, wRt)) wForDen.Dispose();
-            wRt.Dispose();
+                num = ExactSumArray(prod, nax, rt);            // Σ(v·w) at rt (pairwise / axis add.reduce)
+                den = ExactSumArray(wForDen, nax, rt);         // Σ(w)   at rt
+
+                prod.Dispose();
+                if (!ReferenceEquals(wForDen, wRt)) wForDen.Dispose();
+                wRt.Dispose();
+            }
 
             // NumPy raises BEFORE dividing when any (per-slab) total weight is exactly zero.
             if (AverageDenominatorHasZero(den, rt))
@@ -1605,12 +1620,25 @@ namespace NumSharp.Backends
             // folded path — its seeded 0/1 identities are order-independent and already value-exact.
             var childProgram = program.ChildElementwiseProgram;
             var childType = childProgram.ResultType;
-            bool diverts = axisSize > 0 && reducedShape.size > 0
-                           && !AreAllInputsStrictFContig(ops, inputShape)
-                           && (((reduce.Kind == NDExprReduceKind.Sum || reduce.Kind == NDExprReduceKind.Mean)
-                                && (childType == NPTypeCode.Single || childType == NPTypeCode.Double || childType == NPTypeCode.Complex))
-                               || (reduce.Kind == NDExprReduceKind.Prod
-                                   && (childType == NPTypeCode.Single || childType == NPTypeCode.Double)));
+            bool exactKind = axisSize > 0 && reducedShape.size > 0
+                             && (((reduce.Kind == NDExprReduceKind.Sum || reduce.Kind == NDExprReduceKind.Mean)
+                                  && (childType == NPTypeCode.Single || childType == NPTypeCode.Double || childType == NPTypeCode.Complex))
+                                 || (reduce.Kind == NDExprReduceKind.Prod
+                                     && (childType == NPTypeCode.Single || childType == NPTypeCode.Double)));
+            bool strictF = AreAllInputsStrictFContig(ops, inputShape);
+            bool diverts = exactKind && !strictF;
+
+            // The strict-F corner (plan lever 4 follow-up): NumPy reduces the F-contiguous child its own
+            // np.sum(a*b, axis) materializes in MEMORY order, which the F-aware stream reproduces (see
+            // TryStreamAxisReduce) — so when it streams, this case is NumPy-exact and joins the divert path
+            // (child-dtype accumulator). When it cannot stream (a broadcast size-1 operand, …) the fold path
+            // below runs exactly as before; the C materialize route is never used here, since a C copy would
+            // reduce in the wrong order.
+            NDArray fStreamed = exactKind && strictF
+                ? TryStreamAxisReduce(childProgram, inputs, axis, reduce.Kind == NDExprReduceKind.Prod, reducedShape)
+                : null;
+            if (fStreamed is not null)
+                diverts = true;
 
             // The dtype of the reduced accumulator (outAcc): the child dtype on the divert path
             // (NumPy accumulates a float sum at the INPUT precision — f32 stays f32, never the f64
@@ -1624,7 +1652,7 @@ namespace NumSharp.Backends
                 // all-C-contiguous child without materializing it (DefaultEngine.Evaluate.Stream.cs);
                 // element-for-element identical to the materialized reduce below. Null = not streamable
                 // (strided / broadcast / mixed-order inputs), so fall through to the materialize path.
-                outAcc = TryStreamAxisReduce(childProgram, inputs, axis,
+                outAcc = fStreamed ?? TryStreamAxisReduce(childProgram, inputs, axis,
                     reduce.Kind == NDExprReduceKind.Prod, reducedShape);
                 if (outAcc is null)
                 {
@@ -1720,8 +1748,10 @@ namespace NumSharp.Backends
                     // reduction result on every path above (C-contiguous, writeable), so the division
                     // runs through a typed pointer — the boxed GetAtIndex/SetAtIndex round trip it
                     // replaces cost ~5 ns per output (a 3×1M axis-0 complex mean spent ~5 ms there).
-                    // Any other layout keeps the boxed loop, which honors every stride.
-                    if (outAcc.Shape.IsContiguous && outAcc.Shape.IsWriteable)
+                    // Any other layout keeps the boxed loop, which honors every stride. (An F-contiguous
+                    // accumulator — the F-aware stream's — is a dense block too; element order is irrelevant
+                    // to an elementwise divide.)
+                    if ((outAcc.Shape.IsContiguous || outAcc.Shape.IsFContiguous) && !outAcc.Shape.IsBroadcasted && outAcc.Shape.IsWriteable)
                     {
                         var p = (System.Numerics.Complex*)((byte*)outAcc.Address + outAcc.Shape.offset * sizeof(System.Numerics.Complex));
                         for (long i = 0, n = outAcc.size; i < n; i++)
