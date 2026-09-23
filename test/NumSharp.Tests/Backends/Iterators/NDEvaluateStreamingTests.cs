@@ -354,6 +354,141 @@ namespace NumSharp.Tests.Backends.Iterators
         }
 
         /// <summary>
+        /// A flat reduction over a TRANSPOSED dense block (neither C- nor F-contiguous in logical order) must reduce in
+        /// MEMORY order: NumPy's K-order iterator coalesces a dense block into one inner loop over memory (probed on
+        /// 2.4.2: 0 / 400 misses for memory order, 231 / 400 for the logical C order the old materialize route used).
+        /// So the transposed view's flat Sum / Mean / Prod / Min / Max — as a bare leaf and as a fused product of two
+        /// identically-permuted operands — must carry the same bits as the same reduction over the C-contiguous base.
+        /// </summary>
+        [TestMethod]
+        public void Flat_PermutedDenseOperands_ReduceInMemoryOrder()
+        {
+            var rng = new System.Random(4242);
+            NDArray Wide(NPTypeCode tc)
+            {
+                var d = new double[5 * 6 * 7];
+                for (int i = 0; i < d.Length; i++) d[i] = (rng.NextDouble() - 0.5) * System.Math.Pow(10, rng.Next(-6, 7));
+                var a = np.array(d).reshape(5, 6, 7);
+                return tc == NPTypeCode.Double ? a : a.astype(tc);
+            }
+
+            NDArray Benign(NPTypeCode tc)
+            {
+                var d = new double[5 * 6 * 7];
+                for (int i = 0; i < d.Length; i++) d[i] = 0.75 + 0.5 * rng.NextDouble();
+                var a = np.array(d).reshape(5, 6, 7);
+                return tc == NPTypeCode.Double ? a : a.astype(tc);
+            }
+
+            long Bits(NDArray r) => r.typecode == NPTypeCode.Double
+                ? BitConverter.DoubleToInt64Bits(r.GetAtIndex<double>(0))
+                : BitConverter.SingleToInt32Bits(r.GetAtIndex<float>(0));
+
+            int logicalOrderDiffers = 0;
+            foreach (var tc in new[] { NPTypeCode.Double, NPTypeCode.Single })
+            foreach (var perm in new[] { new[] { 2, 0, 1 }, new[] { 1, 0, 2 }, new[] { 0, 2, 1 }, new[] { 1, 2, 0 } })
+            {
+                var b1 = Wide(tc);
+                var b2 = Wide(tc);
+                var bp = Benign(tc);
+                var t1 = b1.transpose(perm);
+                var t2 = b2.transpose(perm);
+                var tp = bp.transpose(perm);
+                Assert.IsFalse(t1.Shape.IsContiguous || t1.Shape.IsFContiguous, "precondition: a permuted, non-C/F view");
+
+                foreach (var (name, make, baseMake) in new (string, Func<NDExpr>, Func<NDExpr>)[]
+                {
+                    ("sum leaf", () => NDExpr.Sum((NDExpr)t1), () => NDExpr.Sum((NDExpr)b1)),
+                    ("mean leaf", () => NDExpr.Mean((NDExpr)t1), () => NDExpr.Mean((NDExpr)b1)),
+                    ("sum product", () => NDExpr.Sum((NDExpr)t1 * (NDExpr)t2), () => NDExpr.Sum((NDExpr)b1 * (NDExpr)b2)),
+                    ("prod leaf", () => NDExpr.Prod((NDExpr)tp), () => NDExpr.Prod((NDExpr)bp)),
+                    ("max product", () => NDExpr.Max((NDExpr)t1 * (NDExpr)t2), () => NDExpr.Max((NDExpr)b1 * (NDExpr)b2)),
+                    ("min leaf", () => NDExpr.Min((NDExpr)t1), () => NDExpr.Min((NDExpr)b1)),
+                })
+                {
+                    NDExpr.StreamingReductions = 0;
+                    NDExpr.ExactMinMaxRuns = 0;
+                    long got = Bits(np.evaluate(make()));
+                    Assert.IsTrue(NDExpr.StreamingReductions > 0 || NDExpr.ExactMinMaxRuns > 0,
+                        $"{tc} {string.Join(",", perm)} {name}: the permuted dense block must take the memory-order route");
+                    Assert.AreEqual(Bits(np.evaluate(baseMake())), got, $"{tc} ({string.Join(",", perm)}) {name}: memory order");
+                }
+
+                // Teeth: the logical-order sum (what the materialize route computed) must differ somewhere.
+                if (Bits(np.evaluate(NDExpr.Sum((NDExpr)np.ascontiguousarray(t1)))) != Bits(np.evaluate(NDExpr.Sum((NDExpr)t1))))
+                    logicalOrderDiffers++;
+            }
+
+            Assert.IsTrue(logicalOrderDiffers > 0, "the pools must make summation order observable, or the test has no teeth");
+        }
+
+        /// <summary>
+        /// A flat <c>Mean</c> of an INTEGER child is NumPy's <c>add.reduce(child, dtype=float64)</c>: a buffered cast,
+        /// so a pairwise sum per <c>np.getbufsize()</c> chunk added from +0.0, then the divide. The chunk length is
+        /// observable — the literal bits below were probed on NumPy 2.4.2 for splitmix64 uint64 data at the default
+        /// 8192 AND after <c>np.setbufsize(4096)</c> (n = 20001 / 50001 differ between the two; n = 20000 does not) —
+        /// and every route (streamed, materialized) must reproduce both.
+        /// </summary>
+        [TestMethod]
+        public void IntegerMean_ChunksLikeNumPysBufferedCast()
+        {
+            NDArray SplitMix(int n)
+            {
+                var v = new ulong[n];
+                for (int i = 0; i < n; i++)
+                {
+                    ulong z = unchecked((ulong)i * 0x9E3779B97F4A7C15UL + 0x9E3779B97F4A7C15UL);
+                    z = unchecked((z ^ (z >> 30)) * 0xBF58476D1CE4E5B9UL);
+                    z = unchecked((z ^ (z >> 27)) * 0x94D049BB133111EBUL);
+                    v[i] = z ^ (z >> 31);
+                }
+
+                return np.array(v);
+            }
+
+            long MeanBits(NDArray a) => BitConverter.DoubleToInt64Bits(np.evaluate(NDExpr.Mean((NDExpr)a)).GetAtIndex<double>(0));
+
+            foreach (var (n, at8192, at4096) in new[]
+                     {
+                         (20001, 0x43dfd95523477bdeL, 0x43dfd95523477bdcL),
+                         (50001, 0x43dff538dac8aaf0L, 0x43dff538dac8aaefL),
+                         (20000, 0x43dfd9901e043787L, 0x43dfd9901e043787L),
+                     })
+            {
+                var a = SplitMix(n);
+                NDExpr.StreamingReductions = 0;
+                Assert.AreEqual(at8192, MeanBits(a), $"n={n} default bufsize (streamed)");
+                Assert.IsTrue(NDExpr.StreamingReductions > 0, "a contiguous integer child streams the float64 cast");
+
+                try
+                {
+                    NDExpr.DisableStreamingReduce = true;
+                    Assert.AreEqual(at8192, MeanBits(a), $"n={n} default bufsize (materialized)");
+                }
+                finally
+                {
+                    NDExpr.DisableStreamingReduce = false;
+                }
+
+                long old = np.setbufsize(4096);
+                try
+                {
+                    Assert.AreEqual(at4096, MeanBits(a), $"n={n} bufsize 4096 — the chunking follows np.getbufsize()");
+                }
+                finally
+                {
+                    np.setbufsize(old);
+                }
+            }
+
+            // Bool / narrow integers take the same route; their sums are exact, so the value is the plain mean.
+            var flags = (np.arange(30001) % 3) == 0;
+            Assert.AreEqual(10001.0 / 30001.0, np.evaluate(NDExpr.Mean((NDExpr)flags)).GetAtIndex<double>(0));
+            var i8 = (np.arange(1000) % 256 - 128).astype(NPTypeCode.SByte);
+            Assert.AreEqual((double)np.mean(i8), np.evaluate(NDExpr.Mean((NDExpr)i8)).GetAtIndex<double>(0));
+        }
+
+        /// <summary>
         /// <c>NDExprProgram.NonzeroBoolOperandProgram</c> — the substitution that lets the bool fold stream <c>x</c>'s
         /// SIMD kernel instead of the scalar int64-typed <c>x != 0</c> — must resolve ONLY when the reduction child is
         /// the factories' nonzero test over a Boolean <c>x</c>; a numeric <c>x</c>, a different child or a

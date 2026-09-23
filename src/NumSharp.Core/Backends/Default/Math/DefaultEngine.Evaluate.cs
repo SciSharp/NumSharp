@@ -687,6 +687,42 @@ namespace NumSharp.Backends
                 bool sequentialProd = reduce.Kind == NDExprReduceKind.Prod
                     && (exprType == NPTypeCode.Single || exprType == NPTypeCode.Double);
 
+                // NumPy's np.mean of an INTEGER / bool child is a float64 sum through a BUFFERED cast — a pairwise sum
+                // per np.getbufsize() chunk, added from +0.0 — then the divide (DefaultEngine.Evaluate.Stream.cs,
+                // ExactIntegerMeanSumInto). The 4-accumulator fold below matched neither the chunking nor the
+                // pairwise order (up to a few ULP off on large integers).
+                if (reduce.Kind == NDExprReduceKind.Mean && IsIntegerMeanChild(exprType))
+                {
+                    byte* imSlot = stackalloc byte[NDExprParamPlan.SlotBytes];
+                    *(ulong*)imSlot = 0;          // +0.0: add.reduce's identity (chunk sums are ADDED into it)
+                    *(ulong*)(imSlot + 8) = 0;
+                    ExactIntegerMeanSumInto(program, inputs, n, imSlot);
+                    DivideAccByCount(imSlot, NPTypeCode.Double, n);   // np._mean: true_divide(sum, count) in float64
+                    var imResult = @out ?? new NDArray(resultType, FlatReduceShape(childNdim, reduce.Keepdims), false);
+                    byte* imDst = (byte*)imResult.Address + (long)imResult.Shape.offset * imResult.typecode.SizeOf();
+                    NDIterCasting.ConvertValue(imSlot, imDst, NPTypeCode.Double, imResult.typecode);
+                    return imResult;
+                }
+
+                // Plan "Perf review" item 3 — flat Min / Max over float / integer children through NumPy's own
+                // contiguous reduction schedule (DefaultEngine.Evaluate.MinMax.cs): the same ±0-tie and
+                // NaN-payload bits as np.max / np.min (the fold below only matched the value), streamed without a
+                // temp where the operands allow. Declines to the fold for the layouts / dtypes it does not serve.
+                if ((reduce.Kind == NDExprReduceKind.Min || reduce.Kind == NDExprReduceKind.Max)
+                    && NumPyMinMaxReduce.Supports(exprType))
+                {
+                    byte* mmSlot = stackalloc byte[NDExprParamPlan.SlotBytes];
+                    if (TryExactFlatMinMax(childProgram, inputs, n, reduce.Kind == NDExprReduceKind.Max, exprType, mmSlot))
+                    {
+                        // Min / Max preserve the child dtype, so the slot already holds the result dtype; a caller
+                        // out= (validated above) takes the same same_kind conversion the fold path uses.
+                        var mmResult = @out ?? new NDArray(resultType, FlatReduceShape(childNdim, reduce.Keepdims), false);
+                        byte* mmDst = (byte*)mmResult.Address + (long)mmResult.Shape.offset * mmResult.typecode.SizeOf();
+                        NDIterCasting.ConvertValue(mmSlot, mmDst, exprType, mmResult.typecode);
+                        return mmResult;
+                    }
+                }
+
                 if (pairwiseSum || sequentialProd)
                 {
                     // The reduction runs at the child (== result) dtype; a 16-byte slot holds

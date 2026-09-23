@@ -9278,7 +9278,9 @@ def gen_evaluate():
             for expr in out_exprs:
                 probe = np.asarray(_ev_eval(expr, [a, b2]))
                 for out_kind in ["c", "f", "strided", "negstride", "offset"]:
-                    for out_dt in {probe.dtype.name, "float64" if probe.dtype.kind == "f" else probe.dtype.name}:
+                    # sorted(): a bare set of dtype names iterates in string-hash order, which Python randomizes per
+                    # process (PYTHONHASHSEED) — the corpus order (and every later case id's running counter) must not.
+                    for out_dt in sorted({probe.dtype.name, "float64" if probe.dtype.kind == "f" else probe.dtype.name}):
                         built = _out_view(shape, np.dtype(out_dt), out_kind)
                         if built is None:
                             continue
@@ -9326,6 +9328,99 @@ def gen_evaluate():
                                 continue
                             emit(expr, [(a, a), (b2, b2)], f"where_{out_kind}", out=built, where=mv,
                                  cid_tag=f"{dt}->{out_dt}/{mk}/{'x'.join(map(str, shape))}/{expr}")
+
+    # ---- C9. flat Min / Max at NumPy-EXACT bits (plan "Perf review 2026-09-23" item 3) -------------
+    # (Appended LAST on purpose: every case id carries the running counter, so a block inserted earlier would
+    # renumber every later case and turn a pure addition into a whole-file corpus diff.)
+    # Block C folds signed zeros into +0 for min/max: the fused 4-accumulator fold matched NumPy's VALUE but not
+    # WHICH ZERO SIGN survives a ±0 tie. The host now reproduces NumPy's own contiguous reduction schedule
+    # (simd_reduce_c_{max,min}: 8-vector groups seeded with splat(x[0]), the canonical-NaN horizontal step, the
+    # scalar tail) over the very buffer NumPy reduces, so the sign of a zero result is contractual HERE. The pools
+    # put the extreme (±0) at a few LANE-STRUCTURED stream positions — different lanes, groups and stream scratch
+    # blocks (1024 float64 / 2048 float32 elements) — with both sign assignments: exactly the cases a sequential
+    # scan, a per-block restart or a wrong horizontal order gets wrong. Routes covered: a contiguous LEAF (in place:
+    # C 1-D, C 2-D, F 2-D), a streamed product (C / F), a materialized product (strided / negstride operands). A
+    # NON-contiguous bare leaf is deliberately absent: NumPy reduces it with its scalar 8-accumulator unroll, a
+    # different schedule the host does not port (it keeps the fold). NaN pools pin propagation only — BitDiff
+    # tokenizes NaN, so the canonical-vs-payload bits are unit-tested (NDEvaluateMinMaxTests).
+    def _c9_pool(N, npdt, kind, flip):
+        fill = -1.0 if kind == "max" else 1.0
+        a = np.full(N, fill, dtype=np.float64)
+        for k, s in enumerate((0, 3, 28, 61, 1025, 2049, 2900, 4990)):   # stream positions (array index s + 1)
+            if s + 1 < N:
+                a[s + 1] = -0.0 if ((k % 2 == 0) != flip) else 0.0
+        return a.astype(npdt)
+
+    def _c9_signs(N, npdt):   # ±1: flips zero signs through the product; both sides compute identical bits
+        return np.where((np.arange(N) * 7) % 3 == 0, -1.0, 1.0).astype(npdt)
+
+    # Sizing: operands are stored as hex, so a large pool is replicated per route; the grid keeps every lane /
+    # group / block feature (N = 33 / 65 one float64 / float32 group, 129 several groups + tail, 1089 / 2177 across the
+    # 1024 / 2048-element stream-block boundary with zeros in DIFFERENT lanes of adjacent blocks) but spends the
+    # keepdims and both-sign variants only on the small sizes (keepdims only reshapes the one result element).
+    def _c9_1d(dt, npdt, kind, N, flip, keepdims_too, routes_too):
+        pool = _c9_pool(N, npdt, kind, flip)
+        sg = _c9_signs(N, npdt)
+        cb, sb = np.ascontiguousarray(pool), np.ascontiguousarray(sg)
+        for kd in ((False, True) if keepdims_too else (False,)):
+            red = {"kind": kind, "axis": None, "keepdims": kd}
+            emit("in0", [(cb, cb)], "c_contiguous_1d", params={"reduce": red},
+                 cid_tag=f"c9/{dt}/{kind}/leaf/N={N}/f{int(flip)}[{int(kd)}]")
+            emit("mul(in0,in1)", [(cb, cb), (sb, sb)], "c_contiguous_1d", params={"reduce": red},
+                 cid_tag=f"c9/{dt}/{kind}/mul/N={N}/f{int(flip)}[{int(kd)}]")
+        if not routes_too:
+            return
+        # Strided operands (every other element of a 2N base) and reversed operands: the product is materialized in
+        # logical order on both sides, then reduced with the schedule.
+        red = {"kind": kind, "axis": None, "keepdims": False}
+        stb = np.full(2 * N, 7.0 if kind == "min" else -7.0, dtype=npdt)
+        stb[::2] = pool
+        ssb = np.ones(2 * N, dtype=npdt)
+        ssb[::2] = sg
+        emit("mul(in0,in1)", [(stb, stb[::2]), (ssb, ssb[::2])], "strided_step2_1d",
+             params={"reduce": red}, cid_tag=f"c9/{dt}/{kind}/mulstrided/N={N}/f{int(flip)}")
+        nb, nsb = np.ascontiguousarray(pool[::-1]), np.ascontiguousarray(sg[::-1])
+        emit("mul(in0,in1)", [(nb, nb[::-1]), (nsb, nsb[::-1])], "negstride_1d",
+             params={"reduce": red}, cid_tag=f"c9/{dt}/{kind}/mulneg/N={N}/f{int(flip)}")
+
+    for dt in ("float64", "float32"):
+        npdt = np.dtype(dt)
+        for kind in ("max", "min"):
+            for N in (2, 3, 33, 65, 129):
+                for flip in (False, True):
+                    _c9_1d(dt, npdt, kind, N, flip, keepdims_too=True, routes_too=True)
+            # The stream-block boundary: one sign assignment per size, the two sizes covering both.
+            _c9_1d(dt, npdt, kind, 1089, False, keepdims_too=False, routes_too=True)
+            _c9_1d(dt, npdt, kind, 2177, True, keepdims_too=False, routes_too=False)
+            # 2-D: the C leaf and product reduce memory order = logical order; the F leaf and all-F product reduce
+            # the F MEMORY order (NumPy coalesces an F-contiguous array into one inner loop over memory).
+            for (r, c), flips, kds in (((9, 7), (False, True), (False, True)), ((33, 31), (False,), (False,))):
+                for flip in flips:
+                    m = _c9_pool(r * c, npdt, kind, flip).reshape(r, c)
+                    s2 = _c9_signs(r * c, npdt).reshape(r, c)
+                    cm, cs = np.ascontiguousarray(m), np.ascontiguousarray(s2)
+                    fm, fs = np.asfortranarray(m), np.asfortranarray(s2)
+                    for kd in kds:
+                        red = {"kind": kind, "axis": None, "keepdims": kd}
+                        emit("in0", [(cm, cm)], "c_contiguous_2d", params={"reduce": red},
+                             cid_tag=f"c9/{dt}/{kind}/leaf2d/{r}x{c}/f{int(flip)}[{int(kd)}]")
+                        emit("in0", [(fm, fm)], "f_contiguous_2d", params={"reduce": red},
+                             cid_tag=f"c9/{dt}/{kind}/leafF/{r}x{c}/f{int(flip)}[{int(kd)}]")
+                        emit("mul(in0,in1)", [(cm, cm), (cs, cs)], "c_contiguous_2d", params={"reduce": red},
+                             cid_tag=f"c9/{dt}/{kind}/mul2d/{r}x{c}/f{int(flip)}[{int(kd)}]")
+                        emit("mul(in0,in1)", [(fm, fm), (fs, fs)], "f_contiguous_2d", params={"reduce": red},
+                             cid_tag=f"c9/{dt}/{kind}/mulF/{r}x{c}/f{int(flip)}[{int(kd)}]")
+            # NaN propagation through every route (a vector-section NaN and a tail-only NaN).
+            for N in (40, 1089):
+                for pos in (5, N - 1):
+                    a = _c9_pool(N, npdt, kind, False)
+                    a[pos] = np.nan
+                    ca, sa = np.ascontiguousarray(a), np.ascontiguousarray(_c9_signs(N, npdt))
+                    red = {"kind": kind, "axis": None, "keepdims": False}
+                    emit("in0", [(ca, ca)], "c_contiguous_1d", params={"reduce": red},
+                         cid_tag=f"c9/{dt}/{kind}/nanleaf/N={N}/p{pos}")
+                    emit("mul(in0,in1)", [(ca, ca), (sa, sa)], "c_contiguous_1d", params={"reduce": red},
+                         cid_tag=f"c9/{dt}/{kind}/nanmul/N={N}/p{pos}")
 
     if skipped:
         print(f"  (skipped {skipped} evaluate cells: NumPy raised a non-verbatim error, or complex64 width)")

@@ -231,10 +231,59 @@ bit-exact (`ILKernelGenerator.Reduction.Pairwise.cs`); only the fused reduce pat
    kernel at every deciding-element position (first/last/block boundaries/none) × C/F/offset/bool-leaf layouts × 0-d
    params, strided/broadcast declines, and the resolution contract; MUTANTS: widening the literal match so
    `sum(flags != 1)` streams `flags`, and dropping the view offset from the in-place scan (an F column block at offset
-   42), both go red), 424 NDEvaluate/NDExpr/Evaluate/post-pass units. Still on the scalar fold: `Min`/`Max` (0.72–0.80×
-   NumPy @100K — the vector form must keep the scalar `np.maximum` clamp's first-NaN-sticks and second-operand-wins-a-±0-tie
-   results, and NumPy's own `maxn`-over-8-vectors reduction makes its ±0-tie answer host/width-dependent, so the
-   contract needs pinning before a kernel), integer `Sum`/`Prod` (already 3.4× NumPy), the axis forms of every kind.
+   42), both go red), 424 NDEvaluate/NDExpr/Evaluate/post-pass units.
+   **Flat `Min`/`Max` NumPy-EXACT (LANDED):** pinned first — a Python simulation of NumPy 2.4.2's
+   `loops_minmax.dispatch.c.src::simd_reduce_c_{max,min}` with the AVX2 `npyv` intrinsics matched `np.max`/`np.min`
+   BIT-FOR-BIT on 2,056 tie-heavy (±0) and NaN-laced cases (NaN payloads included), while a per-8192-chunk restart
+   missed 48 and a sequential scan (either tie rule) 152–304. The schedule: ONE call over the n−1 elements after the
+   copied `x[0]`, `acc = splat(x[0])`, 8-vector groups `acc = N(acc, N(N(N(v0,v1),N(v2,v3)), N(N(v4,v5),N(v6,v7))))`,
+   then single vectors, then `npyv_reduce_{max,min}n` (ANY NaN lane → the canonical +NaN `0x7ff8…`/`0x7fc00000`, else
+   halves folded lo-vs-hi down to lane 0), then the SSE scalar tail; `N(a,b) = isnan(a) ? a : (a > b ? a : b)` — the
+   SECOND operand wins a tie (on x86 NumPy overrides the scalar C macro with this same SSE rule). So the ±0 sign and the
+   NaN payload are schedule-dependent: the fused 4-accumulator fold matched the VALUE only (block C folded signed zeros
+   into +0 for exactly that reason). `DefaultEngine.Evaluate.MinMax.cs`: `NumPyMinMaxReduce` is a lane-exact port shaped
+   as `Vector256<T>` on EVERY host (the lane structure IS the contract; the portable path reproduces it without AVX),
+   the float lane op NumPy's own `vmaxp*`+`vcmpordp*`+`vblendvp*` under `Avx.IsSupported` (RyuJIT never swaps the
+   operands of a floating-point max/min intrinsic; the tie cases would show a swap) — the portable compare+select
+   form cost ~7 µops a vector vs 3 (bare-leaf max @100K 11.1 → 8.7 µs) — and integers `Vector256.Max/Min`
+   (order-free). `TryExactFlatMinMax` runs it over the buffer NumPy reduces: a bare dense leaf IN PLACE (memory order),
+   a streamable computed child block by block (8 KB blocks = a whole number of groups, so only the last is partial),
+   a non-streamable float child MATERIALIZED (as NumPy materializes it); a non-dense bare leaf declines (NumPy's strided
+   reduce is its 8-accumulator SCALAR unroll — not ported, the fold stays) and so does a non-streamable integer child
+   (order-free — the fold is exact). **Verified:** a NumPy 2.4.2 replay oracle (1,568 cases: f64/f32/i32/i64/u8/i16 ×
+   max/min × {all-±0, sparse lane-structured ±0, NaN-laced with payloads, tail-only NaN, random} × {C 1-D, C 2-D, F 2-D,
+   strided, broadcast, mixed C×F} × leaf/product, n 1…65,543) — 0 misses on every exact route (the 19 misses are the
+   declined strided leaves, identical to the old fold's); the old fold missed 360. `NDEvaluateMinMaxTests` (5 — NumPy-
+   probed literals for lane-structured ties, cross-stream-block ties, canonical vs payload NaN, lone element; every
+   route vs an INDEPENDENT test-side lane model; integers at every width with extremes; declines; keepdims/out/F-offset;
+   MUTANTS: AVX operand swap, no canonical NaN, per-block restart, dropped view offset, reversed horizontal pairing — all
+   red). The evaluate corpus gained block **C9** (376 cases, +1.9 MB — lane-structured ±0 pools across the 32/64-group
+   and 1024/2048 stream-block edges, both sign assignments, leaf/product/strided/negstride/F 2-D, NaN pools; signed
+   zeros KEPT), appended LAST so no existing case id moves. **Measured (pinned, alternating order, best-of; NPY/NS vs a
+   pinned NumPy twin; "fold" = the old path):** `max(a*b)` f64 1K/100K/4M 4.4 / **1.55** / 3.5 (fold 100K was 0.87),
+   `min(a*b)` f64 100K 1.53 / 4M 3.4, `max(a*b)` f32 100K 1.15 / 4M 4.5, `max(a*b)` i32 4.0 / 5.3, bare `max(a)` f64
+   1.03 / ~parity at 4M (both sides read-bandwidth bound); a strided float product (materialized) 1.27 / 1.81 — 0.73× the
+   old fold at 4M, the temp NumPy pays too. The two parity fixes below are speed-ups as well: a transposed-3-D flat sum
+   streams in memory order at NPY/NS 1.27 / 2.06 (100K / 4M) — 2.8× / 11.2× the old logical-order materialize route
+   (10.4 → 0.93 ms at 4M, the strided transposed copy gone) — and the chunked integer mean is 4.7 / 1.10 / 1.16.
+   **Three parity bugs it exposed, all fixed:** the C9 teeth check (force the fold → must go red) PASSED at first,
+   because `MisalignedRegistry`'s generic "(5) unary ~ULP" branch — keyed only on one operand — gave EVERY
+   single-operand fused tree a blanket 2-ULP excuse (+0/−0 are "within 2 ULP"); scoping it away from `evaluate` (which
+   has its own E1–E5 policy) surfaced 18 hidden real divergences: (1) a TRANSPOSED 3-D flat Sum/Mean/Prod was
+   materialized and reduced in LOGICAL C order, while NumPy's K-order iterator coalesces a dense block into one loop over
+   MEMORY order (probed 0/400 misses vs 231/400) — `CanStreamChild(allowPermuted: true)` +
+   `IsSharedDensePermutation` now stream any shared dense axis permutation in memory order for every FLAT caller (sum /
+   mean / prod / bool folds / min-max / weighted average's flat sums; the axis streams keep C/F); (2) a flat `Mean` of
+   an INTEGER / bool child rode the 4-accumulator fold, while `np.mean(int)` is `add.reduce(child, dtype=float64)` —
+   a BUFFERED cast, so `+0.0 + Σ pairwise(np.getbufsize()-element chunk)` (probed: whole-array pairwise missed 11/60;
+   and `np.setbufsize` changes 11/20 NumPy results, so the chunk follows `np.getbufsize()` — the `np.bufsize` docs'
+   "never changes a result" claim was corrected) — `ExactIntegerMeanSumInto` streams
+   `NDExprProgram.ChildAsFloat64Program` chunk by chunk (materializes it for non-streamable layouts). With the excuse
+   scoped, the forced-fold build fails 52/29,563 cases — C9 has teeth. Gates: `NDEvaluateStreamingTests` 13 (+2:
+   permuted-dense flat reductions == the base's bits, with a teeth check that logical order differs; NumPy-probed
+   integer means at bufsize 8192 AND 4096 on both routes; MUTANTS no-permuted / whole-array pairwise / dense-check-
+   always-true all red). Still on the scalar fold: integer `Sum`/`Prod` (already 3.4× NumPy), the axis forms of every
+   kind, and the non-dense bare leaf's min/max.
 4. The stat / delegating / average reductions (`NanMean`/`Var`/`Std`, `Ptp`/`NanMin`/`NanMax`/`ArgMax`/`ArgMin`,
    weighted `Average`) still materialize their child(ren) — streaming candidates (Var is two-pass: recompute vs store).
    **A 2026-09-23 gap map** (fused vs NumPy, pinned, best-of; probe `red_gap2.cs` + twin) ranked them: weighted

@@ -132,15 +132,23 @@ namespace NumSharp.Backends
         /// pointer arithmetic)? Requires at least one operand (a tree with no streamed operand is the all-0-d
         /// case, which the fold path handles), a kernel, a bounded operand count, identical dimensions for
         /// every operand, no broadcast view, and ONE shared contiguous memory order — all C-contiguous, or
-        /// (when <paramref name="allowF"/>) all F-contiguous. That shared order is what makes "flat memory
-        /// index k" the same logical element in every operand AND the order the materialized child would be
-        /// reduced in.
+        /// (when <paramref name="allowF"/>) all F-contiguous, or (when <paramref name="allowPermuted"/>) any axis
+        /// permutation of a dense block that every operand shares (<see cref="IsSharedDensePermutation"/>). That
+        /// shared order is what makes "flat memory index k" the same logical element in every operand AND the
+        /// order NumPy reduces in.
         /// </summary>
         /// <param name="child">The reduction's child elementwise program.</param>
         /// <param name="ops">The child's iterator operands (parameters excluded).</param>
         /// <param name="allowF">Whether an all-F-contiguous operand set qualifies (the flat reduce walks memory order; the axis reduce needs C order).</param>
+        /// <param name="allowPermuted">
+        /// Whether a shared dense axis PERMUTATION (a transposed C/F block — contiguous in memory, but neither C nor
+        /// F in logical order) qualifies. Only a FLAT reduction may pass true: NumPy's K-order iterator coalesces such
+        /// an operand set into ONE inner loop over memory order, so a flat reduce of it is the memory-order schedule
+        /// (probed: 0 / 400 misses; the logical C order the materialize route used missed 231). An axis reduction's
+        /// schedule depends on which logical axis is reduced, so the axis stream keeps C / F only.
+        /// </param>
         /// <returns>True when the streaming path applies.</returns>
-        private static bool CanStreamChild(NDExprProgram child, NDArray[] ops, bool allowF)
+        private static bool CanStreamChild(NDExprProgram child, NDArray[] ops, bool allowF, bool allowPermuted = false)
         {
             // Test hook: force the materialize path so a test can compare the two byte for byte.
             if (NDExpr.DisableStreamingReduce)
@@ -161,7 +169,72 @@ namespace NumSharp.Backends
                 allF &= s.IsFContiguous;
             }
 
-            return allC || allF;
+            return allC || allF || (allowPermuted && IsSharedDensePermutation(ops));
+        }
+
+        /// <summary>
+        /// True when every operand has the first operand's dims AND element strides, and those strides tile ONE dense
+        /// block with positive strides under some axis order: a C- or F-contiguous array, or any transpose of one.
+        /// Then flat memory index k (from logical element 0, the block's lowest address) names the same logical element
+        /// in every operand, and NumPy's K-order iteration coalesces the whole set into one inner loop over memory — so
+        /// a FLAT reduction of it is a reduction in memory order.
+        /// </summary>
+        /// <remarks>
+        /// Extent-1 axes are ignored (their stride is never stepped). A negative stride, a broadcast axis, overlapping
+        /// axes or a gap all fail the check: those are not one dense ascending block, and NumPy's iteration over them is
+        /// not a single memory-order loop the stream could reproduce.
+        /// </remarks>
+        /// <param name="ops">The operand set (at least one array).</param>
+        /// <returns>Whether the set is one shared dense block in memory order.</returns>
+        internal static bool IsSharedDensePermutation(NDArray[] ops)
+        {
+            var s0 = ops[0].Shape;
+            if (s0.IsBroadcasted)
+                return false;
+            int nd = s0.NDim;
+            var dims = s0.dimensions;
+            var st = s0.strides;
+            for (int j = 1; j < ops.Length; j++)
+            {
+                var s = ops[j].Shape;
+                if (s.IsBroadcasted || s.NDim != nd)
+                    return false;
+                for (int d = 0; d < nd; d++)
+                    if (s.dimensions[d] != dims[d] || (dims[d] > 1 && s.strides[d] != st[d]))
+                        return false;
+            }
+
+            // The extent > 1 axes sorted by stride must each step by the product of the extents below it (starting
+            // at one element) — that is exactly "one dense block, some axis order". Insertion sort: nd is tiny.
+            Span<long> sStride = nd <= 32 ? stackalloc long[nd] : new long[nd];
+            Span<long> sDim = nd <= 32 ? stackalloc long[nd] : new long[nd];
+            int k = 0;
+            for (int d = 0; d < nd; d++)
+            {
+                if (dims[d] <= 1)
+                    continue;
+                long stv = st[d], dv = dims[d];
+                int i = k++;
+                while (i > 0 && sStride[i - 1] > stv)
+                {
+                    sStride[i] = sStride[i - 1];
+                    sDim[i] = sDim[i - 1];
+                    i--;
+                }
+
+                sStride[i] = stv;
+                sDim[i] = dv;
+            }
+
+            long expect = 1;
+            for (int i = 0; i < k; i++)
+            {
+                if (sStride[i] != expect)
+                    return false;
+                expect *= sDim[i];
+            }
+
+            return true;
         }
 
         /// <summary>
@@ -244,7 +317,7 @@ namespace NumSharp.Backends
                 return false;
 
             var ops = child.IteratorOperands(inputs);
-            if (!CanStreamChild(child, ops, allowF: true))
+            if (!CanStreamChild(child, ops, allowF: true, allowPermuted: true))
                 return false;
 
             var stream = new NDExprChildStream { Kernel = child.Kernel };
@@ -529,6 +602,93 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
+        /// True for the child dtypes whose flat <c>Mean</c> NumPy computes as a float64 sum through a BUFFERED cast —
+        /// Boolean and the eight integer widths (<c>np.mean</c> of them is float64). Char has no NumPy analog and keeps
+        /// the fold; the float / complex children take the M1 pairwise divert instead.
+        /// </summary>
+        /// <param name="t">The reduction child's dtype.</param>
+        /// <returns>Whether <see cref="ExactIntegerMeanSumInto"/> serves <paramref name="t"/>.</returns>
+        private static bool IsIntegerMeanChild(NPTypeCode t)
+            => t is NPTypeCode.Boolean or NPTypeCode.SByte or NPTypeCode.Byte or NPTypeCode.Int16 or NPTypeCode.UInt16
+                or NPTypeCode.Int32 or NPTypeCode.UInt32 or NPTypeCode.Int64 or NPTypeCode.UInt64;
+
+        /// <summary>
+        /// Per-thread float64 chunk buffer for <see cref="ExactIntegerMeanSumInto"/> (np.getbufsize() elements — 64 KB
+        /// at the default, too large for the stack); grown on demand, never shrunk.
+        /// </summary>
+        [ThreadStatic] private static double[] _integerMeanChunk;
+
+        /// <summary>
+        /// The float64 sum a flat <c>Mean</c> of an INTEGER / bool child divides, computed exactly as NumPy computes it:
+        /// <c>np.mean</c> runs <c>add.reduce(child, dtype=float64)</c>, whose BUFFERED iterator casts the child to float64
+        /// one buffer at a time, so the add loop sees consecutive chunks of <c>np.getbufsize()</c> elements (in the
+        /// iterator's memory order) and does <c>*out += pairwise_sum(chunk)</c> for each, from the +0.0 identity. The
+        /// chunking is observable — probed on NumPy 2.4.2, one pairwise sum over the whole child missed 11 of 60 large
+        /// uint64 means that the per-chunk form matched, and <c>np.setbufsize</c> changed 11 of 20 results — so the chunk
+        /// length follows <see cref="np.getbufsize"/>. The 4-accumulator fold the kind rode matched neither.
+        /// </summary>
+        /// <remarks>
+        /// Streams <see cref="NDExprProgram.ChildAsFloat64Program"/> chunk by chunk straight into the per-thread buffer
+        /// when its operands are one shared dense block (memory order, as NumPy's K-order iteration walks it); otherwise
+        /// materializes that program (a float64 temp, the layout <see cref="EvaluateCore"/> picks) and sums its chunks in
+        /// place. <paramref name="slot"/> must be pre-zeroed (+0.0): the chunk sums are ADDED into it.
+        /// </remarks>
+        /// <param name="program">The flat Mean program (its child is integer / bool typed).</param>
+        /// <param name="inputs">Every input of the call, in input order.</param>
+        /// <param name="n">The child's element count (&gt; 0).</param>
+        /// <param name="slot">The pre-zeroed float64 accumulator slot the sum is added into.</param>
+        private unsafe void ExactIntegerMeanSumInto(NDExprProgram program, NDArray[] inputs, long n, byte* slot)
+        {
+            var cast = program.ChildAsFloat64Program;
+            long chunk = np.getbufsize();
+            var ops = cast.IteratorOperands(inputs);
+
+            if (CanStreamChild(cast, ops, allowF: true, allowPermuted: true))
+            {
+                var stream = new NDExprChildStream { Kernel = cast.Kernel };
+                int nop = ops.Length;
+                byte** bases = stackalloc byte*[nop];
+                long* elemBytes = stackalloc long[nop];
+                void** ptrs = stackalloc void*[nop + 1];
+                long* strides = stackalloc long[nop + 1];
+                BindChildStream(ref stream, ops, NPTypeCode.Double, bases, elemBytes, ptrs, strides);
+
+                if (cast.ParamCount > 0)
+                {
+                    // Elementwise aux layout (slot 0 onward); stackalloc lives until the method returns.
+                    byte* paramBlock = stackalloc byte[NDExprParamPlan.SlotBytes * cast.ParamCount];
+                    cast.PackParams(inputs, paramBlock);
+                    stream.Aux = paramBlock;
+                }
+
+                long want = Math.Min(chunk, n);
+                if (_integerMeanChunk is null || _integerMeanChunk.Length < want)
+                    _integerMeanChunk = new double[want];
+                NDExpr.StreamingReductions++;
+
+                fixed (double* buf = _integerMeanChunk)
+                {
+                    for (long start = 0; start < n; start += chunk)
+                    {
+                        long m = Math.Min(chunk, n - start);
+                        // One kernel call per chunk (Produce handles any count): the buffered cast's chunk of float64s.
+                        stream.Produce(start, m, (byte*)buf);
+                        PairwiseSumInto((byte*)buf, m, NPTypeCode.Double, slot);
+                    }
+                }
+
+                return;
+            }
+
+            // Non-streamable operands: materialize the float64 child once and sum its chunks in place; `using` frees the
+            // temp as soon as the sum has read it.
+            using var materialized = EvaluateCore(cast, inputs, null);
+            byte* src = (byte*)materialized.Address + (long)materialized.Shape.offset * sizeof(double);
+            for (long start = 0; start < n; start += chunk)
+                PairwiseSumInto(src + start * sizeof(double), Math.Min(chunk, n - start), NPTypeCode.Double, slot);
+        }
+
+        /// <summary>
         /// Plan lever 3 (bool folds) — a FLAT <c>Any</c> / <c>All</c> / <c>Sum</c>-of-a-bool-child (<c>CountNonzero</c>)
         /// reduction streamed: the child's own SIMD elementwise kernel evaluates each ≤8 KB block into L1 scratch
         /// (one byte per element) and the block is folded with the BCL's vectorized span primitives —
@@ -571,7 +731,7 @@ namespace NumSharp.Backends
             if (child is null || child.ResultType != NPTypeCode.Boolean)
                 return false;
             var ops = child.IteratorOperands(inputs);
-            if (!CanStreamChild(child, ops, allowF: true))
+            if (!CanStreamChild(child, ops, allowF: true, allowPermuted: true))
                 return false;
 
             NDExpr.StreamingReductions++;

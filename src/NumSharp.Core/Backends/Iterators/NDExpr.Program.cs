@@ -106,6 +106,7 @@ namespace NumSharp.Backends.Iteration
         private NDExprProgram _avgDenominator;
         private NDExprProgram _nonzeroBoolOperand;
         private bool _nonzeroBoolOperandResolved;
+        private NDExprProgram _childAsFloat64;
 
         private NDExprProgram(NDExpr bound, NPTypeCode[] inputTypes, bool[] isParam, bool forcedScalar,
             NDInnerLoopFunc kernel, NPTypeCode resultType, ReduceNode reduce, NPTypeCode reduceAcc,
@@ -263,6 +264,22 @@ namespace NumSharp.Backends.Iteration
                 return _nonzeroBoolOperand;
             }
         }
+
+        /// <summary>
+        /// The reduction's child cast to float64 as its own elementwise program — the buffer NumPy's
+        /// <c>np.mean</c> of an integer / bool child actually sums (<c>add.reduce(child, dtype=float64)</c> converts
+        /// every element to float64 in its buffered iterator before the pairwise sum). Null when this is not a
+        /// reduction. Built once and cached, sharing this program's input signature and parameter mask.
+        /// </summary>
+        /// <remarks>
+        /// The <c>Cast</c> node makes its kernel scalar (a conversion per element) — acceptable here: the host only
+        /// asks for it on the integer-mean route, whose alternative was the scalar fold anyway, and it is what lets the
+        /// chunked pairwise sum see exactly NumPy's float64 values in NumPy's order.
+        /// </remarks>
+        public NDExprProgram ChildAsFloat64Program
+            => Reduce is null
+                ? null
+                : _childAsFloat64 ??= Build(NDExpr.Cast(Reduce.Child, NPTypeCode.Double), InputTypes, IsParam);
 
         /// <summary>
         /// <paramref name="x"/> converted to this program's <see cref="ResultType"/> — itself when

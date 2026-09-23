@@ -890,7 +890,16 @@ namespace NumSharp.Tests.Fuzz
             //     tanh is carved out at BOTH widths (see NumPyPortedFloat64Kernels): it is the one
             //     op here for which NumPy ships its own kernel at float64 as well, so f8 tanh is a
             //     port too and a 1-ULP drift there is likewise a regression, not libm noise.
-            if (kind == DivergenceKind.Value && c.Operands.Length == 1
+            //
+            //     NOT for np.evaluate: a fused tree has its OWN policy above ((E1)-(E5), keyed on the
+            //     nodes params.expr names), and this branch — keyed only on "one operand" — used to
+            //     hand every single-operand fused tree a blanket 2-ULP excuse whatever its nodes: it
+            //     swallowed a ±0 flip in a flat min/max (+0 and -0 are "within 2 ULP") and 18 real
+            //     reduction divergences (a transposed-3-D flat sum/prod/mean reduced in logical instead
+            //     of memory order, an integer mean folded instead of NumPy's chunked float64 pairwise).
+            //     Those are fixed, and excluding evaluate here is what keeps them — and block C9's
+            //     signed-zero cells — enforced.
+            if (kind == DivergenceKind.Value && c.Operands.Length == 1 && c.Op != "evaluate"
                 && !(tc == NPTypeCode.Single && NumPyPortedFloat32Kernels.Contains(c.Op))
                 && !(tc == NPTypeCode.Double && NumPyPortedFloat64Kernels.Contains(c.Op))
                 && !ByteExactArithmeticUnaryOps.Contains(c.Op)
