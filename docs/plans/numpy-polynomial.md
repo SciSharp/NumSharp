@@ -4,8 +4,11 @@
 > six convenience classes) to NumSharp, split into **delivery units — each unit a family of functions
 > that share one backend driver**, so every driver is written once and instantiated for all six bases.
 > The legacy half of the same docs page (`np.poly1d`, `np.polyval`, `np.polyfit`, …) already ships.
-> §9 answers which engine should power it, with measurements. The answer is typed C# span code and fused
-> C# kernels behind a 1-to-1 port of NumPy's structure, not NDExpr, emitted IL or an NDIter driver.
+> §9 measured the candidate engines. §10 is the engine the house rules require: loops in IL or NDIter,
+> no struct kernels, no per-dtype C#. It uses Tier-3A IL kernels driven by NDIter, emitted by one typed
+> emitter from per-basis step tables, plus IL primitives over an arena for the small-series algebra. It is
+> measured across bases × dtypes × layouts × tensor modes × Vandermonde × series algebra: byte-exact on
+> every cell and 2.8–168× NumPy.
 >
 > Source of truth: `refs/numpy/` (**2.4.2**) — `numpy/polynomial/{polyutils,_polybase,polynomial,chebyshev,
 > legendre,laguerre,hermite,hermite_e,__init__}.py` and `numpy/polynomial/tests/`. The linked page
@@ -142,13 +145,14 @@ What C# cannot express, all registered in §6:
 - **Printing keeps NumPy's names.** `repr`/`str` print NumPy's class names (`Polynomial(`, `T_1`), never the
   `ND*` names; these are NumPy-verbatim strings.
 
-**D3 — Typed span kernels under one per-dtype ops contract (the load-bearing correctness decision).**
-NumPy's package is pure Python over array ops. Porting each op to an `NDArray` call would be correct but
-construction-bound: `legmul` at degree 50 runs thousands of small array and scalar ops (≈2 ms in NumPy, most
-of it in `legmulx`'s per-coefficient loop). The alternative is to port the
-per-basis steps to typed span loops over one `ISeriesOps<T>` per coefficient dtype (`Half`, `float`, `double`,
-`Complex`, `decimal`) that reproduces **NumPy's array-loop semantics op by op**. Traps it must encode, most
-of which have already bitten NumSharp:
+**D3 — NumPy's per-op semantics, emitted through the house IL emitters (the load-bearing correctness
+decision).** NumPy's package is pure Python over array ops. Porting each op to an `NDArray` call would be
+correct but construction-bound: `legmul` at degree 50 runs thousands of small array and scalar ops (≈2 ms in
+NumPy, most of it in `legmulx`'s per-coefficient loop). The house route instead emits every recurrence as IL.
+One **typed emitter** (§10.1) lowers each node of a basis's step table through `EmitScalarOperation` /
+`EmitConvertTo` (scalars) or the lane-matched vector operators, so each dtype gets **NumPy's array-loop
+semantics op by op** from the same emitters the ufuncs use. There is no per-dtype C# and no struct kernel.
+Traps it must encode, most of which have already bitten NumSharp:
 - **complex:** NumPy's *array* multiply is the fused `simd_cmul`; *numpy-scalar × numpy-scalar* is naive
   scalarmath (the legacy `polydiv` hit exactly this and carries `NaiveComplexScalarMultiply`). Array divide is
   Smith with `scl = 1/denom` (`ComplexDivideNumPy`). Every NumPy expression must be classified as
@@ -159,14 +163,19 @@ of which have already bitten NumSharp:
 - **float32** stays float32; Python int/float factors are weak.
 - **Evaluation order is the source's, token for token:** `(c1 * (nd-1)) / nd` (lagval) is not
   `c1 * ((nd-1) / nd)` (legval). There is no FMA contraction: RyuJIT never contracts, and NumPy's MSVC build
-  doesn't either.
-- **N-D coefficient arrays** (the `axis` of der/int, multi-series `c` in val) run the same kernels per column
-  over strided spans. There is never a second implementation.
+  doesn't either. The step tables are data, written in source order and never re-associated.
+- **The dtype of each op is NumPy's, not the result's** (§10.1 "peeling"). NumPy runs Clenshaw's first one
+  or two steps in the *coefficient* dtype. Casting float32 coefficients to float64 up front changes the result
+  on 100% of points for leg/lag/herm/herme (probed, §10.3 C'). x-only subexpressions (`2*x`, `(2*nd-1) - x`,
+  `1 - x`) run in *x's* dtype: an int8 x wraps, and a Python int that does not fit raises NumPy's
+  `OverflowError`.
+- **N-D coefficient arrays** (the `axis` of der/int, multi-series `c` in val) run the same kernels through
+  NDIter's operand form (§10.1). There is never a second implementation.
 - **Proof before use:** U1 ships a differential "ops probe" (every step expression × all 5 dtypes × random,
   special and adversarial values, vs NumPy) that U2+ build on.
-- **Measured (§9):** the float64 span ports of `polyadd`, `legmul`, `legdiv`, `chebder` and `legint` are
-  byte-exact against NumPy and **14–105× faster** than it. The same code as a 1-to-1 `NDArray` port reaches
-  only **0.61–10.6×**, and **0.26×** when element access keeps NumPy's literal `c[i]` (0-d view) spelling.
+- **Measured (§10.3):** every evaluation, Vandermonde and series cell is byte-exact against NumPy, at 2.8–168×
+  its speed. For contrast, the 1-to-1 `NDArray` port of §9 reaches only **0.61–10.6×**, and **0.26×** when
+  element access keeps NumPy's literal `c[i]` (0-d view) spelling.
 
 **D4 — Dtype policy (probed 2.4.2).**
 - **Coefficients** go through `np.common_type`:
@@ -241,33 +250,51 @@ and have no `__array__`. So `ndarray + Polynomial` is **series** addition via `_
 - An `(object, NDPolyBase<TSelf>)` overload will also catch `"str" + p`, so it must raise TypeError, never
   build a char series.
 
-**D12 — Engine: keep NumPy's structure 1-to-1, but make the hot leaves typed C# (measured, §9).**
-- **Keep NumPy's algorithm structure and operation order exactly.** Every strategy the probe measured is
-  byte-exact against NumPy *because* it keeps that order; the engine choice only decides speed and memory.
-- **Coefficient algebra** (U1/U2/U4, companion builders, class operators): typed span code over
-  `ISeriesOps<T>` (D3). Never `NDArray` ops per coefficient, and never 0-d `c[i]` element views.
-- **Evaluation, Vandermonde and `_valnd`** (U3/U5, class `__call__`): fused **plain C#** `Vector256` kernels.
-  They are generic over a per-basis step struct (a `static abstract` interface, so the JIT specialises each
-  basis/dtype pair) and run ≥4 independent vector chains per iteration, because each point's recurrence is a
-  serial chain. Inputs are contiguous and of one dtype; a strided `x` is copied to contiguous first.
-- **The fused path is gated on a homogeneous dtype.** It applies only when `x` and `c` already share the
-  result dtype (float64/float32; complex128 with NumPy's array-loop complex multiply). NumPy promotes op by
-  op, so casting up front is not equivalent: `chebval(float32 x, float64 c)` computes `2*x` in float32 and
-  overflows to `inf`, where a pre-cast gives `5.4e77`. Integer `x` has two edges of its own: `x*0` is `+0`
-  where float64 gives `-0`, and `2*x` wraps.
-- **Everything else** (mixed dtypes, integer `x`, float16, decimal, broadcast `tensor=False` shapes) takes
-  the **out= composition**: NumSharp's own ufuncs with reused buffers, exact by construction, 1–3× NumPy.
+**D12 — Engine: Tier-3A IL kernels driven by NDIter, one typed emitter over per-basis step tables
+(measured, §10).** This decision replaces the first engine verdict (fused plain-C# kernels generic over a
+per-basis step struct), which the house rules forbid: no struct kernels, no per-dtype C#, every loop in IL or
+NDIter.
+- **Keep NumPy's algorithm structure and operation order exactly.** Every strategy measured is byte-exact
+  against NumPy *because* it keeps that order (§9 finding 1); the engine only decides speed and memory.
+- **Evaluation, `_valnd`/`_gridnd`, Vandermonde and `_vander_nd`** (U3/U5, class `__call__`): Tier-3A raw
+  inner loops (`DirectILKernelGenerator.CompileRawInnerLoop`) driven by `NDIterRef.ForEach` with auxdata.
+  - One typed emitter builds them from the six step tables, using NumPy's per-op dtypes, peeling to a dtype
+    fixpoint and a weak-constant pool.
+  - Each block runs four interleaved chains; a point's recurrence is one serial dependency chain, and the
+    interleave is 1.2–1.9× over a single chain.
+  - Details and measurements: §10.1 and §10.3.
+- **Every dtype takes the same emitter; there is no homogeneous-dtype gate.**
+  - float32 and float64 run vector chains, including MIXED x/c dtypes, via exact lane-matched conversions
+    (float32/int32/int64 x → float64 lanes, float16 x → float32 lanes). Coefficient-only math stays a shared
+    scalar in NumPy's dtype.
+  - float16 runs vector chains through the house AVX2 widen/narrow primitives.
+  - Complex, decimal and the pairs with no lane conversion run scalar chains, still 4-wide interleaved.
+- **Operand forms and buffering.**
+  - A 1-D `c` rides in auxdata as operands `(x, y)`. A non-contiguous `x` then runs BUFFERED+CONTIG, 2.7–3.0×
+    faster than strided scalar chains.
+  - An N-D `c` becomes operands `(x, c[0], y)` and is **never buffered**, because the kernel reads past the
+    `c[0]` operand.
+- **Small-series algebra** (U1/U2/U4, companion builders, class operators) is built from four pieces:
+  - dtype-generic IL **primitive** kernels;
+  - **whole-routine** IL kernels where the routine is one flat recurrence (`chebder`);
+  - dtype-agnostic orchestration mirroring NumPy's Python line for line, whose only loops are NumPy's own
+    loops over series, never over elements;
+  - a bump **arena** for intermediates.
+  Never `NDArray` ops per coefficient, never 0-d `c[i]` element views.
 - **Do not write a loop over full-size arrays as a plain `[NDScoped]` port.** A scope keeps every temporary
   alive until it closes: 1,733 MB at 10M points / degree 10, against 80 MB for the out= port, and it collapses
   to 0.21× NumPy at degree 30 / 100K points.
 - **Not used:**
-  - **NDExpr** cannot express Clenshaw (five of the six bases), and where it can (Horner) it only matches a
-    hand kernel.
-  - **IL emission** compiles to the same machine code as C#, but throws without dynamic code (NativeAOT).
-  - **An NDIter-driven kernel** would only save the strided copy: at most ~1.6×, on strided input only. It is
-    optional, and belongs after v1.
-- **Glue stays a plain composition:** validation, the `_valnd`/`_gridnd`/`_fit`/`_fromroots` drivers, the
-  class layer and the BLAS-bound members. Their cost is the leaf kernels or LAPACK.
+  - **NDExpr** cannot express Clenshaw (five of the six bases); the tree grows exponentially (§9 finding 4).
+  - **The Tier-3B shell** wraps a one-chain body in the house 4×-unrolled loop. That unrolls one dependency
+    chain instead of interleaving independent ones, and it is 1.15–1.46× slower than Tier 3A (§10.3 B).
+  - **Struct kernels / per-dtype C#** are forbidden by the house rules. §9's `Span` variant is kept only as
+    the speed reference: Tier 3A lands within 10–20% of it.
+- **Without dynamic code** (NativeAOT) the IL route is unavailable, as for every house IL kernel. The package
+  then falls back to the out= composition over NumSharp's own ufuncs: exact by construction, 1–3× NumPy
+  (§9 `P1out`).
+- **Glue stays a plain composition:** validation, the `_fit`/`_fromroots` drivers, the class layer and the
+  BLAS-bound members. Their cost is the leaf kernels or LAPACK.
 
 ---
 
@@ -283,8 +310,10 @@ machine-partitioned; the counts sum to 193 with no overlap (Appendix A).
   - `polyutils`: `as_series`, `trimseq`, `trimcoef`, `getdomain`, `mapdomain`, `mapparms`;
   - constants `{p}domain/{p}zero/{p}one/{p}x` (24), `{p}line` (6);
   - `{p}add`/`{p}sub` (12) and `{p}trim` (6, NumPy aliases of `trimcoef`).
-- **Shared backend:** `as_series` (`np.common_type` + `trimseq`), `_add`/`_sub`. The **`ISeriesOps<T>`
-  contract + ops probe** (D3) and the **`SeriesBasis` step-table abstraction** that every later unit fills in.
+- **Shared backend:** `as_series` (`np.common_type` + `trimseq`), `_add`/`_sub`. Also landed here:
+  - the **typed IL emitter** and the **series primitives + arena** (D3, D12, §10.1);
+  - the **ops probe**;
+  - the **step-table** format that every later unit fills in.
 - **Infrastructure landed here:**
   - the oracle generator mode + module-qualified `OpRegistry` keys;
   - the new facade surface gate `PolynomialSurface_IsCoveredOrExplicitlyClassified`;
@@ -317,9 +346,17 @@ machine-partitioned; the counts sum to 193 with no overlap (Appendix A).
     no new code.
 - **Perf headroom (NumPy µs):** `legmul` deg 50 **1,996**, `legdiv` 50/10 **7,831**, `legfromroots` 20
   **517**, `cheb2poly` deg 20 **186** — interpreter-bound loops.
-- **Measured (§9):** the span port of the same step sequence is byte-exact and **65–105×** faster
-  (`legmul` 10×10 / 50×50, `legdiv` 50/10). The 1-to-1 `NDArray` port manages only **1.9–3.5×**, and
-  `chebmul` as a port is *slower* than NumPy (**0.61×**).
+- **Engine (D12, §10.1):** IL primitive kernels plus NumPy-mirroring orchestration over a bump arena.
+- **Measured (§10.3 S), all byte-exact:**
+  - `legmul` 10×10: **114×** (float64), **127×** (float32), **82×** (complex128), **18×** (float16).
+  - `legmul` 50×50: **97×**.
+  - `legdiv` 50/10: **168×** (float64), **82×** (complex128).
+  - For contrast, the 1-to-1 `NDArray` port of §9 manages only **1.9–3.5×**, and `chebmul` as a port is
+    *slower* than NumPy (**0.61×**).
+- **Dtype quirk to encode (probed):** the `len(c) == 1` branch of `legmul`/`hermmul`/`lagmul` sets `c1 = 0`,
+  a Python int. That int flows through `as_series` → `common_type`, so the **result is float64 for float16 or
+  float32 series**. `chebmul` has no such branch and keeps the dtype. The orchestration must therefore carry
+  a dtype per series.
 - **Tests to port:** `TestArithmetic` (mul/div/pow/mulx) and `TestMisc` (fromroots/2poly) × 6.
   `test_polynomial.TestFraction` (Fraction object arrays) → `[Misaligned]` (no object dtype).
 
@@ -330,16 +367,25 @@ machine-partitioned; the counts sum to 193 with no overlap (Appendix A).
 - **Shared backend:** a **Clenshaw/Horner driver** (6 step tables) + `_valnd`/`_gridnd` + the `tensor`
   reshape rule (result = `c.shape[1:] + x.shape`). The driver is **generic over the "x algebra"** from day one
   (§7 R5): `NDArray` x now, and *series-valued* x later, which U10's `convert`/`cast` need.
-- **Specialized path:** a fused per-element Clenshaw, SIMD across `x` lanes with broadcast scalar
-  coefficients. Every lane executes the source's exact op sequence, so the result is bit-exact.
+- **Engine (D12, §10.1):** the Tier-3A evaluation kernel. It is NDIter-driven, reads `x` once and writes
+  `y` once, and runs four interleaved chains per block. Every lane executes the source's exact op sequence at
+  NumPy's per-op dtypes, so the result is bit-exact.
   - NumPy runs about three full-array ops per coefficient, each allocating: `chebval` deg 10 costs
     **4,205 µs @100K** and **467 ms @10M**; `polyval` deg 10 **356 ms @10M**; `chebval2d` (5×5) **14,718 µs
     @100K**.
-  - The fused kernel reads `x` once and writes `y` once.
-  - **Measured (§9), all byte-exact:** a fused kernel runs **10–41×** NumPy across 1K/100K/10M points and
-    degree 3/10/30, and **43×** for `chebval2d`. The best composition (out= buffers) runs 0.78–3.1×. A plain
-    `[NDScoped]` port runs 0.21–1.46× and holds every temporary until it returns (D12).
-  - The kernel is gated on a homogeneous dtype (D12). Everything else takes the out= composition.
+  - `_valnd`/`_gridnd` stay NumPy's two-pass compositions, over the kernel's N-D coefficient operand form.
+  - **Measured (§10.3), all byte-exact:**
+
+    | Scope | NPY/NS |
+    |---|---|
+    | six bases × degree 3/10/30 × 1K/100K/10M, float64 | **3.1–36×** (lowest: `lagval`, two divisions per step) |
+    | float32 / float16 / complex128 | **4.0–15×** |
+    | mixed x/c dtypes and int64 x | **4.3–31×** |
+    | multi-series `tensor=True` | **58–69×** |
+    | `tensor=False` | **7–26×** |
+    | `val2d` / `grid2d` | **13–34×** |
+
+    A plain `[NDScoped]` port runs 0.21–1.46× and holds every temporary until it returns (D12).
 - **Parity:** portable and bit-exact (`+ - * /` only). `polyvalfromroots` = `np.prod(x - r, axis=0)`, an
   axis-0 reduction whose order NumSharp's `prod` must match; the oracle checks it.
 - **Tests to port:** `TestEvaluation` × 6.
@@ -359,6 +405,12 @@ machine-partitioned; the counts sum to 193 with no overlap (Appendix A).
 - **Depends on:** U3.
 - **Parity:** portable, bit-exact.
 - **Perf:** NumPy `chebder` deg 50 **23 µs**, `legint` deg 50 **34 µs**.
+- **Engine (D12):** each body is one flat recurrence, so the whole routine is ONE IL kernel.
+  - **Measured (§10.3 S):** `chebder` 50 runs **50–55×** (float64/float32/complex128) and **16×** (float16),
+    byte-exact.
+  - `*int`'s `tmp[0] += k[i] - {p}val(lbnd, tmp)` evaluates at a Python-scalar `lbnd`. The evaluation
+    kernel's weak-x typing handles it: ops run in the coefficient dtype, and for complex they are
+    scalar∘scalar, so they need the naive multiply (R10).
 - **Tests to port:** `TestIntegral`, `TestDerivative` × 6.
 
 ### U5 — Vandermonde (18 names)
@@ -368,10 +420,19 @@ machine-partitioned; the counts sum to 193 with no overlap (Appendix A).
   followed by `_vander_nd` (broadcast product over `_nth_slice` axes) and `_vander_nd_flat`.
 - **Output layout per D9:** a `moveaxis` view.
 - **Parity:** portable, bit-exact.
-- **Specialized path:** write straight into the final layout.
+- **Engine (D12, §10.1):**
+  - `{p}vander` is a Tier-3A kernel over `(x, v[0])` of a C-contiguous `(deg+1, *x.shape)` buffer. NumPy's
+    `x + 0.0` is fused into it, so `-0.0` becomes `+0.0` as in NumPy, and the result is returned as NumPy's
+    `moveaxis` view.
+  - `vander2d`/`vander3d` build their 1-D Vandermondes, then run ONE row-product kernel. It computes
+    `vx_i * vy_j` (and `(vx_i*vy_j)*vz_k` in 3-D) in NumPy's operand order and writes straight into the final
+    F-contiguous layout, tiled so the input rows stay in L1.
 - **Perf:** NumPy `chebvander` deg 10 **4,203 µs @100K**, `polyvander2d` (3,3) **5,191 µs @100K**.
-- **Measured (§9):** the output write dominates. The fused fill is **5.3×** NumPy and the out= composition
-  **3.9×**, both byte-exact. Fusion is worth 1.4× here, far less than for evaluation.
+- **Measured (§10.3 G), all byte-exact and in NumPy's layout:**
+  - `{p}vander` d10: **4.6–10×** @1K, **9.7–17×** @100K, **2.8–7.7×** @1M. The 1M cells are bound by page
+    faults on the fresh 88 MB output, so they are noisy.
+  - `vander2d` (3,3) @100K: the IL product kernel runs **9.2–9.7×**; the `np.multiply` broadcast composition
+    only **1.4–1.8×** across runs. The inner dimensions are 4 wide, so per-chunk overhead dominates it.
 - **Closes half of #496.**
 - **Tests to port:** `TestVander` × 6.
 
@@ -588,8 +649,29 @@ edits to the same files survive.
   is already a clean C/F-contiguous, offset-0 layout) is a separate Core change with its own tests.
 - **R9 — `[NDScoped]` retains loop temporaries.** A scope frees nothing until it closes. A recurrence over
   full-size arrays written as a plain port therefore keeps `deg × (2–5)` arrays alive: 1,733 MB vs 80 MB at
-  10M points. *Mitigation:* D12. Composition loops reuse out= buffers, and the hot recurrences are fused
-  kernels.
+  10M points. *Mitigation:* D12. The hot recurrences are IL kernels that allocate only their result; the
+  NativeAOT fallback composition reuses out= buffers.
+- **R10 — NumPy dtype edges the emitter must reproduce** (all probed on 2.4.2; the IL probe byte-proves (a),
+  (c) and int64 x; the int8 cases in (b) are NumPy-only probes so far):
+  - **(a) Peeling.** NumPy's first Clenshaw steps run in the coefficient dtype (§10.1). Casting up front
+    diverges on 100% of points (§10.3 C').
+  - **(b) Int x arithmetic.** Integer x ops wrap in x's dtype: `chebval(int8 [100], [0, 0, 1])` is `-5601.0`,
+    because `2*x` wraps to -56. A Python int that does not fit x's dtype raises: `lagval` on an int8 x with
+    70 coefficients gives `OverflowError: Python integer 137 out of bounds for int8`, raised at pool fill.
+  - **(c) Mixed dtypes.** float32 coefficients at a float64 x run steps 1–2 in float32. float16 coefficients
+    at a float32 x run them in float16.
+  - **(d) `hermval`'s `x2 = x*2` runs for every length.** So with `len(c) == 1`, an x above DBL_MAX/2 yields
+    `0*inf = NaN`. `chebval` computes its x2 only when `len(c) >= 3`. The step tables encode both.
+  - **(e) 0-d / Python-scalar x with complex coefficients.** NumPy's ops are then scalar∘scalar (scalarmath).
+    Its complex multiply is the NAIVE product, not the array loop's, while its complex divide calls the
+    CDOUBLE_divide loop. Real dtypes are unaffected.
+  - **(f) The `len(c) == 1` product branch** (`legmul`/`hermmul`/`lagmul`) returns float64 for
+    float16/float32 series (U2).
+  - **(g) Integer and bool coefficients.** `chebval`-family `c` converts them with `astype(double)`, so
+    `chebval(x, [True])` works. `as_series`-based routines raise `ValueError` for bool.
+  - **(h) N-D x Vandermonde layout.** The layout of `vander2d`/`vander3d` for an N-D x is unverified; the
+    probe checked 1-D x only.
+  - *Mitigation:* each is a unit-test + oracle row in the unit that owns it.
 
 ---
 
@@ -625,6 +707,14 @@ supersede these.
 ---
 
 ## 9. Engine choice — measured (2026-09-24)
+
+> **Superseded as the engine DECISION by §10.** This section's measurements stand: they compare the candidate
+> engines and they are why fusion and op order matter. But its verdict, plain C# span code and struct-generic
+> kernels, violates the house rules for np.* functions: every loop in IL or NDIter, no struct kernels, no
+> per-dtype C#. §10 re-derives the engine under those rules. Findings 5 and 6 below are answered there:
+> - Tier 3A lands within 10–20% of the `Span` kernel.
+> - NDIter is the driver, not an optional add-on. Buffering makes non-contiguous x 2–3× faster, and NDIter's
+>   operand form carries N-D coefficients.
 
 **Question.** Should NDExpr (`np.evaluate`) or NDIter + IL kernels power the package, or does a simple
 1-to-1 port of NumPy's Python do the job?
@@ -724,9 +814,342 @@ host noise.
 8. **Fused kernels need a homogeneous dtype** (the float32/float64 `inf` example in D12). Mixed and integer
    inputs go to the composition.
 
-**Verdict:** see D12. Keep NumPy's structure 1-to-1. Use typed span code for coefficient algebra and fused
-plain-C# kernels for evaluation, `_valnd` and Vandermonde, with the out= composition as the any-dtype
-fallback. Do not route the package through NDExpr, emitted IL or an NDIter driver.
+**Verdict at the time:** keep NumPy's structure 1-to-1, use typed span code for coefficient algebra, and use
+fused plain-C# kernels for evaluation, `_valnd` and Vandermonde with an out= fallback. Two parts of that
+survive: the structure/op-order rule and the rejection of NDExpr. The vehicle is replaced by §10's IL + NDIter
+engine (D12). §10 also removes the homogeneous-dtype gate: mixed dtypes vectorize through lane-matched
+conversions instead of falling back to the composition.
+
+---
+
+## 10. Engine — the house route: Tier-3A IL kernels driven by NDIter (measured, 2026-09-24)
+
+**Question.** Under the house rules for np.* functions, what is the fastest engine? The rules: every loop in
+IL (`DirectILKernelGenerator`) or NDIter, no struct kernels, no per-dtype C#, NumPy 2.4.2 parity for every
+dtype, and at least 1.5× NumPy on every variation.
+
+**Answer.** One typed IL emitter turns six per-basis step tables into Tier-3A raw inner loops. NDIter drives
+them, and IL primitives over an arena handle the small-series algebra. Every measured cell is byte-exact
+against NumPy, and the chosen route is ≥ 2.8× NumPy on every timed cell (§10.3). Tier 3A lands within 10–20%
+of hand-written C# `Vector256` code.
+
+### 10.1 Design
+
+**Step tables are data.** Each basis's NumPy 2.4.2 step expressions are small expression trees, written in
+source order and never re-associated. For example:
+- `chebval`: `x2 = 2*x; c0 = c[k] - c1; c1 = tmp + c1*x2; return c0 + c1*x`
+- `lagval`: `c0 = c[k] - (c1*(nd-1))/nd; c1 = tmp + (c1*((2*nd-1) - x))/nd; return c0 + c1*(1 - x)`
+- `hermvander`: `x2 = x*2; v[1] = x2; v[i] = v[i-1]*x2 - v[i-2]*(2*(i-1))`
+
+The emitter is basis-agnostic; a basis differs only by its table.
+
+**NumPy's per-op typing, emitted.** Every node gets NumPy's dtype:
+- strong operands promote through `np.promote_types`;
+- Python literals follow NEP 50 weak rules: a Python int adopts an integer partner's dtype and raises
+  NumPy's `OverflowError` when it does not fit, a Python float turns an integer partner into float64, and
+  `true_divide` of an integer loop is float64.
+
+Each op is lowered through the house `EmitScalarOperation`/`EmitConvertTo`, or through the vector operators
+at a lane-matched width. NumPy's dtype semantics therefore come from the same emitters the ufuncs use: the
+complex array-loop multiply, float16's per-op round trip, and integer wrap-around.
+
+**Peeling to a dtype fixpoint.** NumPy starts Clenshaw's `(c0, c1)` in the coefficient dtype. `c1` absorbs
+x's dtype in the first step, and `c0` absorbs `c1`'s in the second. The emitter simulates these carried dtypes
+and emits the first P steps straight-line, then loops at the fixpoint. P is 0 for a homogeneous call and 2
+for float32 coefficients at a float64 x. The kernel key includes the coefficient-count class `min(nc, P+3)`,
+which also covers NumPy's `len(c) == 1` and `len(c) == 2` branches. Casting the coefficients up front instead
+diverges on 100% of points (§10.3 C').
+
+**Weak constants from a pool.** Python literals and Python-computed values (`2`, `(nd-1)/nd`, `2*(nd-1)`, …)
+live in a constant pool that the kernel reads through auxdata:
+- one region per (constant, dtype), indexed by `nd`;
+- filled once per (kernel, coefficient count) with the house `astype`, so a float16 kernel reads `(nd-1)/nd`
+  rounded to float16 exactly as NumPy rounds the Python float;
+- cached, so the per-call cost is one dictionary lookup.
+
+**Shared scalars, lane-matched vectors.**
+- A value that does not depend on the point is a SHARED scalar in its own dtype, computed once per block for
+  every chain: a broadcast coefficient, a constant, or math on those, such as the peeled coefficient-only
+  steps. This is also NumPy's semantics for coefficient-only math. It is converted and broadcast only where it
+  meets a per-point value.
+- Per-point values are vectors with the loop dtype's lane count W:
+  - a float32 or int32 x at a float64 loop is a `Vector128` widened by `vcvtps2pd`/`vcvtdq2pd`;
+  - an int64 x converts through `Vector256.ConvertToDouble`;
+  - a float16 x already rides float32 lanes.
+- MIXED dtypes therefore vectorize too. The scalar-chain fallback measured 0.69× on `legval(f32 x, f16 c)`;
+  lane-matched it is 5.7×.
+- For a 1-D `c` of another dtype, the steady-state steps read a copy pre-converted to the loop dtype. This is
+  exact: NumPy's promotion in those steps is a widening conversion. It saves a scalar conversion per
+  coefficient per block, and a float16 conversion is a software call.
+- Scalar chains remain only for complex, decimal and the pairs with no lane conversion (narrow ints, float16 x
+  at a float64 loop). They are still 4-wide interleaved.
+
+**Four interleaved chains.** Each point's recurrence is one serial dependency chain, so a block runs U = 4
+independent chains. That is 1.2–1.9× faster than one chain, and it is why the kernel is a Tier-3A raw loop
+rather than the Tier-3B shell: the shell unrolls one body, i.e. one chain (1.15–1.46× slower, §10.3 B).
+
+**NDIter drives the kernel, in two operand forms.**
+- **1-D `c`** (the common case, and class `__call__`): operands `(x, y)`, with the coefficient base in
+  auxdata.
+  - A non-contiguous x runs BUFFERED + CONTIG. The kernel then sees contiguous chunks and stays on vector
+    chains, 2.7–3.0× faster than strided scalar chains.
+  - A contiguous x runs unbuffered, because buffering it costs ~20%.
+- **N-D `c`** (`tensor=True` multi-series, `tensor=False`, `_valnd`, `_gridnd`): NumPy's tensor reshape, then
+  operands `(x, c[0], y)` with NDIter broadcasting. Per chunk, the kernel reads `c[0] + k·stride`:
+  - a stride-0 chunk is one broadcast series;
+  - a contiguous chunk is one series per point, read with lane loads.
+
+  This form is NEVER buffered. The kernel reads past the `c[0]` operand, and NumSharp's NDIter buffers any
+  operand whose walk is not linear (a multi-series `c[0]` beside a non-contiguous x). Its extra iterator setup
+  costs ~1 µs at 1K, which is why a 1-D `c` keeps the auxdata form.
+
+**Vandermonde.** A Tier-3A kernel over `(x, v[0])` of a C-contiguous `(deg+1, *x.shape)` buffer:
+- NumPy's `x + 0.0` is fused, so `-0.0` becomes `+0.0` as in NumPy;
+- each point is read once and its deg+1 rows are written once;
+- the result is `np.moveaxis(v, 0, -1)`, NumPy's layout;
+- a non-contiguous x is copied first (NumPy's `x + 0.0` copies it anyway), which beats strided chains by
+  1.1–1.3×.
+
+`vander2d`/`vander3d` build their 1-D Vandermondes, then run ONE row-product kernel. It computes NumPy's
+single multiply `vx_i * vy_j` in its operand order (3-D: `(vx_i*vy_j)*vz_k`) and writes straight into the
+final F-contiguous layout. It works in tiles of 512 points, so the input rows stay in L1 across all output
+rows.
+
+**Small-series algebra.** Routines over 6–51 coefficients are dominated by NumPy's per-array-op overhead, and
+an NDIter per op would cost about as much. The engine instead has four parts:
+- dtype-generic IL **primitives**: trim length, `k*v`, `(v*k)/d`, in-place add/sub/negate, `legmulx`, and
+  scalar÷scalar;
+- **whole-routine** IL kernels where the routine is one flat recurrence (`chebder`);
+- dtype-agnostic **orchestration** mirroring NumPy's Python line for line over byte pointers. Its only loops
+  are NumPy's own Python-level loops over SERIES (legmul's i-loop), never over elements;
+- a bump **arena** (one reused block per thread) for every intermediate series, so an intermediate costs a
+  pointer bump instead of an NDArray.
+
+**Not used:**
+- NDExpr: a Clenshaw tree grows exponentially (§9 finding 4).
+- Struct kernels / per-dtype C#: house rule. §9's `Span` variant serves only as the speed reference.
+- The Tier-3B shell: one chain per body.
+- A plain `[NDScoped]` port: it holds every temporary (§9).
+- Without dynamic code (NativeAOT) the package falls back to the out= composition over NumSharp's ufuncs.
+
+### 10.2 Method
+
+The probe pair lives in `benchmark/polynomial/probes/`:
+- `polynomial_il_eval_probe.cs`: the emitter, the evaluation, Vandermonde and product kernels, and the NDIter
+  drivers.
+- `polynomial_il_series_probe.cs`: primitives, orchestration and arena.
+- `polynomial_il_numpy.py`: the NumPy twin. It writes seeded inputs and NumPy's outputs to `data/il/` and
+  prints NumPy's timings under the same cell labels.
+
+Protocol:
+- Every row is byte-compared (NaN payloads and signed zeros included) before it is timed.
+- Timing is best-of-7 after a 300 ms warm-up, in Release, with `PublishAot=false` and
+  `DOTNET_TC_CallCountingDelayMs=0`. Both sides are pinned to logical CPUs 0–7 (`NS_PROBE_AFFINITY=0xFF`).
+- The host was shared with other sessions: a `python` job held one core, and Zoom and agents took ~30% of the
+  CPU. Every figure is therefore the per-cell **minimum over two full runs on each side**.
+- Absolute NumPy times vary 1.5–2× between states of this host (§8's note), so read ratios, not microseconds.
+- Ratios are NPY/NS: higher = NumSharp faster.
+
+### 10.3 Measurements
+
+#### A. Evaluation, float64, 1-D coefficients: NPY/NS for Tier 3A with 4 interleaved chains
+
+| Basis | d3 @1K | d10 @1K | d30 @1K | d3 @100K | d10 @100K | d30 @100K | d10 @10M |
+|---|---|---|---|---|---|---|---|
+| `polyval` | 11.1 | 16.8 | 17.3 | 16.2 | 15.7 | 12.6 | 24.5 |
+| `chebval` | 11.6 | 19.4 | 20.1 | 30.3 | 23.0 | 18.3 | 31.5 |
+| `legval` | 13.5 | 19.6 | 20.5 | 12.0 | 16.0 | 12.1 | 36.3 |
+| `lagval` | 6.5 | 6.9 | 7.4 | 3.1 | 3.9 | 3.4 | 13.8 |
+| `hermval` | 13.5 | 21.2 | 24.1 | 14.0 | 27.8 | 27.7 | 32.0 |
+| `hermeval` | 12.5 | 21.6 | 23.8 | 10.3 | 16.7 | 14.8 | 34.9 |
+
+Absolute time for the d10 @100K column (µs, NumPy → NumSharp):
+`polyval` 860.6 → 54.7, `chebval` 1,580 → 68.8, `legval` 1,902 → 119.2, `lagval` 2,751 → 706.3, `hermval` 2,708 → 97.3, `hermeval` 1,447 → 86.4.
+
+#### A'. Interleaving and the operand form (µs; ratio NPY/NS)
+
+| Cell | NumPy | 4 chains | 1 chain | 3-operand form (c via NDIter) |
+|---|---|---|---|---|
+| `polyval` d10 @1K | 16.5 | 1.0 (16.8×) | 1.2 (13.7×) | 2.0 (8.3×) |
+| `polyval` d10 @100K | 860.6 | 54.7 (15.7×) | 77.1 (11.2×) | 57.8 (14.9×) |
+| `polyval` d30 @100K | 2,569 | 204.2 (12.6×) | 333.2 (7.7×) | - |
+| `chebval` d10 @1K | 21.0 | 1.1 (19.4×) | 1.4 (15.5×) | 2.2 (9.7×) |
+| `chebval` d10 @100K | 1,580 | 68.8 (23.0×) | 90.5 (17.5×) | 78.4 (20.1×) |
+| `chebval` d30 @100K | 4,346 | 237.6 (18.3×) | 377.7 (11.5×) | - |
+| `legval` d10 @1K | 31.6 | 1.6 (19.6×) | 2.1 (15.2×) | 2.8 (11.1×) |
+| `legval` d10 @100K | 1,902 | 119.2 (16.0×) | 169.1 (11.2×) | 122.1 (15.6×) |
+| `legval` d30 @100K | 5,288 | 438.8 (12.1×) | 828.2 (6.4×) | - |
+| `lagval` d10 @1K | 52.9 | 7.6 (6.9×) | 7.4 (7.2×) | 8.2 (6.5×) |
+| `lagval` d10 @100K | 2,751 | 706.3 (3.9×) | 694.6 (4.0×) | 742.4 (3.7×) |
+| `lagval` d30 @100K | 7,513 | 2,188 (3.4×) | 2,326 (3.2×) | - |
+
+#### B. Tier 3A vs the Tier-3B shell vs hand-written C# (`chebval` d10, µs; ratio NPY/NS)
+
+| Size | NumPy | Tier 3A (4 chains) | Tier 3B shell | plain C# `Vector256`, no NDIter |
+|---|---|---|---|---|
+| 1K | 21.0 | 1.1 (19.4×) | 1.3 (15.6×) | 0.8 (25.8×) |
+| 100K | 1,580 | 68.8 (23.0×) | 100.6 (15.7×) | 56.9 (27.8×) |
+| 10M | 522,375 | 16,561 (31.5×) | 19,015 (27.5×) | 15,151 (34.5×) |
+
+#### C. Dtypes and mixed dtypes (d10 / 11 coefficients @100K, µs; ratio NPY/NS; every row byte-exact)
+
+| Cell | NumPy | NumSharp | NPY/NS | Path |
+|---|---|---|---|---|
+| `polyval f32 d10 n100000` | 238.1 | 29.1 | 8.2 | vector chains |
+| `polyval c128 d10 n100000` | 7,057 | 736.4 | 9.6 | scalar chains (complex) |
+| `chebval f32 d10 n100000` | 505.8 | 35.0 | 14.4 | vector chains |
+| `chebval c128 d10 n100000` | 9,812 | 835.5 | 11.7 | scalar chains (complex) |
+| `legval f32 d10 n100000` | 666.3 | 58.6 | 11.4 | vector chains |
+| `legval c128 d10 n100000` | 15,332 | 1,446 | 10.6 | scalar chains (complex) |
+| `lagval f32 d10 n100000` | 1,089 | 217.1 | 5.0 | vector chains |
+| `lagval c128 d10 n100000` | 22,214 | 3,651 | 6.1 | scalar chains (complex) |
+| `hermval f32 d10 n100000` | 648.1 | 44.5 | 14.6 | vector chains |
+| `hermval c128 d10 n100000` | 12,693 | 1,118 | 11.4 | scalar chains (complex) |
+| `hermeval f32 d10 n100000` | 586.1 | 44.6 | 13.2 | vector chains |
+| `hermeval c128 d10 n100000` | 11,950 | 1,109 | 10.8 | scalar chains (complex) |
+| `polyval f16 d10 n100000` | 6,636 | 1,356 | 4.9 | float16 vector chains (widen-op-narrow) |
+| `chebval f16 d10 n100000` | 8,724 | 1,835 | 4.8 | float16 vector chains (widen-op-narrow) |
+| `legval f16 d10 n100000` | 13,507 | 2,976 | 4.5 | float16 vector chains (widen-op-narrow) |
+| `hermval f16 d10 n100000` | 10,998 | 2,782 | 4.0 | float16 vector chains (widen-op-narrow) |
+| `chebval x32/c64 d10 n100000` | 1,981 | 96.5 | 20.5 | vector, float32 lanes → float64 |
+| `legval x32/c64 d10 n100000` | 2,258 | 128.4 | 17.6 | vector, float32 lanes → float64 |
+| `polyval int64x d10 n100000` | 915.4 | 127.4 | 7.2 | vector, int64 lanes → float64 |
+| `chebval int64x d10 n100000` | 1,970 | 154.7 | 12.7 | vector, int64 lanes → float64 |
+| `lagval int64x d10 n100000` | 3,364 | 687.3 | 4.9 | vector, int64 lanes → float64 |
+| `chebval c32/x64 nc11 n100000` | 1,716 | 77.1 | 22.3 | vector + 2 peeled steps in float32 |
+| `legval c32/x64 nc11 n100000` | 2,036 | 125.3 | 16.3 | vector + 2 peeled steps in float32 |
+| `lagval c32/x64 nc11 n100000` | 2,829 | 658.6 | 4.3 | vector + 2 peeled steps in float32 |
+| `hermval c32/x64 nc11 n100000` | 3,034 | 98.1 | 30.9 | vector + 2 peeled steps in float32 |
+| `hermeval c32/x64 nc11 n100000` | 1,589 | 90.0 | 17.7 | vector + 2 peeled steps in float32 |
+| `legval c16/x32 nc11 n100000` | 676.2 | 119.2 | 5.7 | vector + 2 peeled steps in float16 |
+
+#### C'. Why the peeling is load-bearing (float32 coefficients at a float64 x, 100K points)
+
+| Basis | nc=3 | nc=4 | nc=5 | nc=11 |
+|---|---|---|---|---|
+| `chebval` | exact / 100% differ | exact / exact | exact / 100% differ | exact / 100% differ |
+| `legval` | exact / 100% differ | exact / 100% differ | exact / 100% differ | exact / 100% differ |
+| `lagval` | exact / 100% differ | exact / 100% differ | exact / 100% differ | exact / 100% differ |
+| `hermval` | exact / 100% differ | exact / 100% differ | exact / 100% differ | exact / 100% differ |
+| `hermeval` | exact / 100% differ | exact / exact | exact / 100% differ | exact / 100% differ |
+
+Each cell: peeled kernel / the same kernel on coefficients pre-cast to float64.
+
+#### D. Non-contiguous x (d10, µs; ratio NPY/NS)
+
+| Cell | NumPy | strided scalar chains | BUFFERED+CONTIG → vector chains |
+|---|---|---|---|
+| `chebval` strided (50K) | 538.3 | 158.8 (3.4×) | 56.3 (9.6×) |
+| `chebval` reversed (100K) | 1,644 | 305.5 (5.4×) | 107.6 (15.3×) |
+| `chebval` 2dT (100K) | 1,634 | 321.2 (5.1×) | 119.1 (13.7×) |
+| `legval` strided (50K) | 748.5 | 243.0 (3.1×) | 83.2 (9.0×) |
+| `legval` reversed (100K) | 1,949 | 470.6 (4.1×) | 156.3 (12.5×) |
+| `legval` 2dT (100K) | 1,898 | 502.6 (3.8×) | 168.2 (11.3×) |
+
+- BUFFERED on an already-contiguous x, `chebval` d10 @1K: 1.1 → 1.3 µs.
+- BUFFERED on an already-contiguous x, `chebval` d10 @100K: 68.8 → 84.2 µs.
+
+#### F. N-D coefficients (µs; ratio NPY/NS)
+
+| Cell | NumPy | NumSharp | NPY/NS | Route |
+|---|---|---|---|---|
+| `polyval multi8 d10 n100000` | 27,000 | 468.3 | 57.7 | (x, c[0], y) operands, broadcast coefficients |
+| `polyval tensorF d10 n100000` | 931.9 | 129.6 | 7.2 | (x, c[0], y), one series per point |
+| `polyval2d d5x5 n100000` | 10,905 | 555.0 | 19.6 | two kernel passes, NumPy's intermediate |
+| `polygrid2d d5x5 300x300` | 461.4 | 34.3 | 13.5 | two kernel passes |
+| `chebval multi8 d10 n100000` | 37,932 | 551.7 | 68.8 | (x, c[0], y) operands, broadcast coefficients |
+| `chebval tensorF d10 n100000` | 3,510 | 132.7 | 26.4 | (x, c[0], y), one series per point |
+| `chebval2d d5x5 n100000` | 14,836 | 588.6 | 25.2 | two kernel passes, NumPy's intermediate |
+| `chebgrid2d d5x5 300x300` | 1,010 | 39.6 | 25.5 | two kernel passes |
+| `legval multi8 d10 n100000` | 60,882 | 937.8 | 64.9 | (x, c[0], y) operands, broadcast coefficients |
+| `legval tensorF d10 n100000` | 2,253 | 133.1 | 16.9 | (x, c[0], y), one series per point |
+| `legval2d d5x5 n100000` | 20,564 | 610.8 | 33.7 | two kernel passes, NumPy's intermediate |
+| `leggrid2d d5x5 300x300` | 943.9 | 53.2 | 17.7 | two kernel passes |
+| `chebval tensorF strided d10 n50000` | 1,884 | 203.1 | 9.3 | strided lanes → scalar chains |
+
+#### G. Vandermonde (d10; NPY/NS; every result byte-exact and in NumPy's `moveaxis` layout)
+
+| Basis | @1K | @100K | @1M | @100K, 1 chain |
+|---|---|---|---|---|
+| `polyvander` | 4.6 | 11.5 | 2.8 | 11.2 |
+| `chebvander` | 6.5 | 14.5 | 4.2 | 13.7 |
+| `legvander` | 9.7 | 9.7 | 7.7 | 9.0 |
+| `lagvander` | 10.1 | 11.3 | 7.4 | 11.0 |
+| `hermvander` | 8.9 | 17.1 | 5.9 | 16.5 |
+| `hermevander` | 9.0 | 16.1 | 6.6 | 15.8 |
+
+| Cell | NumPy | NumSharp | NPY/NS |
+|---|---|---|---|
+| `chebvander f32 d10 n100000` (IL3A-x4) | 1,316 | 92.2 | 14.3 |
+| `chebvander f16 d10 n100000` (IL3A-x4) | 7,169 | 1,789 | 4.0 |
+| `chebvander c128 d10 n100000` (IL3A-x4) | 10,830 | 1,235 | 8.8 |
+| `chebvander int64x d10 n100000` (IL3A-x4) | 2,938 | 188.5 | 15.6 |
+| `chebvander strided d10 n50000` (IL3A-x4 strided) | 1,310 | 124.5 | 10.5 |
+| `chebvander strided d10 n50000` (IL3A-x4 copy-first) | 1,310 | 111.2 | 11.8 |
+| `chebvander 2dT d10 n100000` (IL3A-x4 strided) | 3,218 | 303.7 | 10.6 |
+| `chebvander 2dT d10 n100000` (IL3A-x4 copy-first) | 3,218 | 239.4 | 13.4 |
+| `polyvander2d d3x3 n100000` (_vander_nd np.multiply) | 5,405 | 2,990 | 1.8 |
+| `polyvander2d d3x3 n100000` (_vander_nd IL product) | 5,405 | 587.0 | 9.2 |
+| `chebvander2d d3x3 n100000` (_vander_nd np.multiply) | 5,775 | 3,357 | 1.7 |
+| `chebvander2d d3x3 n100000` (_vander_nd IL product) | 5,775 | 597.8 | 9.7 |
+
+#### S. Small-series algebra: IL primitives + orchestration + arena (µs; every result byte-exact)
+
+| Cell | NumPy | NumSharp | NPY/NS |
+|---|---|---|---|
+| `polyadd 5+10 f64` | 3.2 | 0.8 | 4.2 |
+| `legmul 10x10 f64` | 175.6 | 1.5 | 113.5 |
+| `legmul 10x10 f32` | 189.0 | 1.5 | 127.4 |
+| `legmul 10x10 f16` | 202.7 | 11.1 | 18.3 |
+| `legmul 10x10 c128` | 189.6 | 2.3 | 81.6 |
+| `legmul 50x50 f64` | 2,144 | 22.2 | 96.7 |
+| `legdiv 50/10 f64` | 8,476 | 50.6 | 167.5 |
+| `legdiv 50/10 c128` | 8,962 | 109.6 | 81.8 |
+| `chebder 50 f64` | 24.2 | 0.5 | 51.9 |
+| `chebder 50 f32` | 26.1 | 0.5 | 55.2 |
+| `chebder 50 f16` | 28.8 | 1.8 | 15.8 |
+| `chebder 50 c128` | 26.1 | 0.5 | 50.0 |
+
+Lowest NPY/NS over the chosen route of every timed cell: `polyvander d10 n1000000` 2.82×; `lagval d3 n100000` 3.13×; `lagval d30 n100000` 3.43×; `lagval d10 n100000` 3.89×; `hermval f16 d10 n100000` 3.95×; `chebvander f16 d10 n100000` 4.01×.
+
+Non-exact rows (excluding the deliberate pre-cast control): 0
+
+### 10.4 Findings
+
+1. **The IL route costs little against hand C#.** A hand-written C# `Vector256` Clenshaw (no NDIter) is
+   1.2× faster at 100K (56.9 vs 68.8 µs) and 1.09× at 10M. In a side-by-side rerun the gap at 100K was 1.10×
+   (59.8 vs 65.6 µs). At 1K the difference is the ~0.2–0.3 µs NDIter setup that the direct call skips; that
+   setup is what buys every layout and dtype.
+2. **Interleaving is the one kernel-shape decision that matters.**
+   - Four independent chains are 1.2–1.9× over one, because the recurrence is latency-bound.
+   - The Tier-3B shell cannot interleave, and it is the slower Tier.
+   - Division-bound `lagval` is flat across chain counts (the divider is the bottleneck), which makes it the
+     lowest basis at 3.1–3.9× @100K.
+3. **Peeling is correctness, not tuning.** Pre-casting float32 coefficients diverged on 100% of points for
+   every basis and count, except where the peeled subtraction happened to be exact. The peeled kernel matched
+   everywhere.
+4. **Lane-matched vectors turn every real dtype pair into vector chains.** The one sub-1.5× variation of the
+   scalar fallback, `legval(f32 x, f16 c)` at 0.69×, is 5.7× lane-matched. Mixed float32/float64 moved from
+   2.3–8.5× to 4.3–31×, and int64 x from 2.4–4.4× to 4.9–12.7×.
+5. **Composition over NumSharp ufuncs is not good enough for `_vander_nd`.** The broadcast `np.multiply`
+   over 4-wide inner dims ran 1.4–1.8×; the row-product kernel runs 9.2–9.7×. `_valnd`/`_gridnd`, by
+   contrast, compose fine as two kernel passes: each pass is itself a kernel (13–34×).
+6. **Small series: the arena is the win.** IL primitives with arena intermediates run 82–168× NumPy for
+   `legmul`/`legdiv` in float64 and complex128. float16 is 16–18× because each scalar Half op is software.
+   `polyadd` sits at 4.2×: one output NDArray is the whole cost there.
+
+**Open levers for the implementation** (none is needed to clear 1.5×):
+- **Hoist the shared peeled math out of the block loop.** Coefficient-only work is loop-invariant across
+  blocks. It dominates `legval(f32 x, f16 c)` (5.7×, vs 11× for homogeneous float32).
+- **AVX-512 lane conversions.** A 512-bit host needs the Avx512F twins of the three conversions; until then it
+  runs scalar chains for mixed pairs.
+- **Narrow-int x lane kinds** (int8/int16/uint*). They run scalar chains today; each needs a widen-then-wrap
+  lane form.
+- **R10 (e):** 0-d complex x must use the naive scalar multiply.
+- **R10 (h):** verify the N-D x layout of `vander2d`/`vander3d`, and write the 3-D product kernel.
+- **Zero-size x:** needs NDIter's zero-size flag or an early return; the probe does not cover it.
+- **Decimal** rides scalar chains through the house decimal ops and is gated by the independent decimal
+  oracle.
 
 ---
 
