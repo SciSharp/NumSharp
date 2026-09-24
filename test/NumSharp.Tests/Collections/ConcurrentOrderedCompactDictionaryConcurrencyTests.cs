@@ -539,10 +539,17 @@ namespace NumSharp.Tests.Collections
             // read surface. Readers assert only invariants that hold under ANY legal interleaving; afterwards the
             // final membership is checked exactly.
             // Budget (StressBudget): golden 20,000 seeded keys, 15,000 appends per appender, 30 remover rounds;
-            // per-push CI 5,000 / 4,000 / 15. The remover band [Seed - 3,000, Seed - 2,500) must stay inside the
-            // seeded range above the hot keys, which holds for any Seed >= 3,032.
-            int Seed = StressBudget.Pick(full: 20_000, ci: 5_000);   // keys [0, Seed) pre-seeded; kept forever (values churn on a hot subset)
-            int AddsPerThread = StressBudget.Pick(full: 15_000, ci: 4_000);
+            // per-push CI 3,100 / 400 / 15. The remover band [Seed - 3,000, Seed - 2,500) must stay inside the
+            // seeded range above the hot keys, which holds for any Seed >= 3,032. The per-push live set is sized to
+            // stay at or under 4,096 entries (3,100 + at most two appenders x 400 on the 8-thread gun): every interior
+            // removal copies the whole generation, and at the former 5,000 + 2 x 4,000 = 13,000 entries the compact
+            // mirror's index (32,768 words = 256 KB) and values (128 KB) were large-object-heap allocations - 1,347 of the
+            // storm's 1,347 collections gen 2 on a small heap - where capacity 4,096 keeps every array under 85 KB.
+            // The remover rounds (the removal-copy workload) are unchanged. Teeth (mutation-checked on both types,
+            // reverted): an interior removal that shifts the PUBLISHED arrays in place instead of copying fails every
+            // run at both budgets, pinned to 4 CPUs and unpinned ("Pairs exposed a (key, value) mix").
+            int Seed = StressBudget.Pick(full: 20_000, ci: 3_100);   // keys [0, Seed) pre-seeded; kept forever (values churn on a hot subset)
+            int AddsPerThread = StressBudget.Pick(full: 15_000, ci: 400);
             int RemoverRounds = StressBudget.Pick(full: 30, ci: 15);
             const int HotKeys = 32;
             int threads = System.Math.Max(4, GunThreads);
