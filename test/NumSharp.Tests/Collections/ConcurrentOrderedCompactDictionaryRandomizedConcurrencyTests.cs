@@ -716,10 +716,22 @@ namespace NumSharp.Tests.Collections
             // arrays it mutates in place), the EXACT pair law and duplicate-freedom are asserted only at the FINAL
             // quiescent point, never on a live surface here — that is precisely the contract boundary scenario 3
             // above lives inside.
-            // Budget (StressBudget): golden 16,000-key universe x 25,000 ops per writer; per-push CI 4,000 x 10,000
-            // (still two Clear()s and five RemoveWhere sweeps per writer at the cadences below).
+            // Budget (StressBudget): golden 16,000-key universe x 25,000 ops per writer; per-push CI 4,000 x 5,000.
+            // The 4,000-key universe keeps every generation at capacity 4,096; the op count sets the run length (the
+            // readers sweep until the writers finish), so 5,000 ops (was 10,000) roughly halve it. The Clear and
+            // RemoveWhere cadences are budgeted WITH the op count so every writer is still offered the same two Clears
+            // (ops 0 and 4,096) and five sweeps (ops 0, 1,024, ..., 4,096) per push - each taken when its case is drawn
+            // there, 1 in 12: halving the ops under the old 0x1FFF mask would have left only the op-0 Clear and
+            // dropped the mid-storm wipe. The golden masks are the old ones.
+            // Teeth (mutation-checked at both budgets, reverted): an interior removal that also shifts the PUBLISHED
+            // generation in place fails 12/12, pinned to 4 CPUs and unpinned; a TryRemove on a generation read
+            // OUTSIDE the write lock fails 12/12 unpinned and 9/12 (old) vs 11/12 (new) pinned. A key-path read that
+            // skips its post-read index re-validation is not caught at either budget (0/12) - the swap-back racing
+            // guns in the specific tests own that one.
             int Universe = StressBudget.Pick(full: 16_000, ci: 4_000);
-            int WriterOps = StressBudget.Pick(full: 25_000, ci: 10_000);
+            int WriterOps = StressBudget.Pick(full: 25_000, ci: 5_000);
+            int SweepMask = StressBudget.Pick(full: 0x7FF, ci: 0x3FF);  // RemoveWhere offered when (op & SweepMask) == 0
+            int ClearMask = StressBudget.Pick(full: 0x1FFF, ci: 0xFFF); // Clear offered when (op & ClearMask) == 0
             int threads = HeavyThreads;
             int writers = System.Math.Max(1, threads * 3 / 4);
 
@@ -797,14 +809,14 @@ namespace NumSharp.Tests.Collections
 
                                     break;
                                 case 9:
-                                    if ((op & 0x7FF) == 0)
+                                    if ((op & SweepMask) == 0)
                                     {
                                         d.RemoveWhere((key, _) => (key % 991) == (op % 991)); // pure predicate
                                     }
 
                                     break;
                                 case 10:
-                                    if ((op & 0x1FFF) == 0)
+                                    if ((op & ClearMask) == 0)
                                     {
                                         d.Clear(); // rare full wipe; whatever repopulates still obeys the law
                                     }
