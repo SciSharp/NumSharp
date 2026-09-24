@@ -51,6 +51,10 @@
        check); see the file's remarks for why a full GC per measurement was the dominant cost. -->
   <ItemGroup>
     <Compile Include="..\NumSharp.Tests\Utilities\GcQuiescence.cs" Link="Fuzz\GcQuiescence.cs" />
+    <!-- Opts the test host out of Windows' efficiency-mode scheduling (a windowless child of `dotnet test` is
+         treated as background work and parked on a hybrid CPU's E-cores: this suite ran 12 s on P-cores vs
+         22 s placed by the scheduler). A module initializer; a no-op off Windows. See the file's remarks. -->
+    <Compile Include="..\NumSharp.Tests\Utilities\TestHostQualityOfService.cs" Link="Fuzz\TestHostQualityOfService.cs" />
   </ItemGroup>
 
   <!-- Differential-fuzzer oracle corpus: committed JSONL replayed by MSTest (no Python in CI). -->

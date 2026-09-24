@@ -54,6 +54,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Opts the test host out of Windows' efficiency-mode scheduling (a windowless child of `dotnet test` is
+         treated as background work and parked on a hybrid CPU's E-cores). Shared with NumSharp.Tests, which
+         owns the file; a module initializer, a no-op off Windows. See the file's remarks. -->
+    <Compile Include="..\NumSharp.Tests\Utilities\TestHostQualityOfService.cs" Link="TestHostQualityOfService.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- The fixture source files travel into bin/**/Fixtures/ as DATA the tests read at runtime. They
          are NOT compiled into this assembly (they live outside the project cone and are <None>). A glob
          so every scenario file is copied automatically — adding a fixture needs no csproj edit. -->
