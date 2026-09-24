@@ -45,24 +45,15 @@ namespace NumSharp.Tests.Collections
             return best;
         }
 
-        /// <summary>Full-fence collection retried a few times before declaring an object collected, so background/concurrent GC modes cannot flake the negative asserts.</summary>
+        /// <summary>
+        ///     Collects until the probe's target is gone — one young collection first, then up to five full ones
+        ///     (<see cref="GcQuiescence.WaitCollected(WeakReference,int)"/>), so a background/concurrent collection
+        ///     in flight cannot flake the release asserts while the common case costs a young collection instead
+        ///     of full ones that mark the whole test run's heap.
+        /// </summary>
         /// <param name="wr">The probe to wait on.</param>
         /// <returns><see langword="true" /> once the target has been collected; <see langword="false" /> after the retries expire.</returns>
-        private static bool WaitCollected(WeakReference wr)
-        {
-            for (int i = 0; i < 5; i++)
-            {
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
-                GC.Collect();
-                if (!wr.IsAlive)
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
+        private static bool WaitCollected(WeakReference wr) => GcQuiescence.WaitCollected(wr);
 
         // ---------------------------------------------------------------- allocation contracts (thread-local counter)
 
@@ -283,6 +274,9 @@ namespace NumSharp.Tests.Collections
         [TestMethod]
         public void TailPop_RetainsTheValue_UntilTheNextAppendCopiesTheArrays()
         {
+            // Everything the retention check below reasons about is built after this epoch, so CollectSince can
+            // decide it with a young collection whenever none has run in between.
+            var since = GcQuiescence.Epoch.Capture();
             var d = new ConcurrentOrderedDictionary<int, object>();
             d.Add(0, new object());
             d.Add(1, new object());
@@ -291,9 +285,7 @@ namespace NumSharp.Tests.Collections
 
             // Documented retention: the vacated slot is not scrubbed (an enumerator captured at the old count must
             // still read valid data), so the popped value stays reachable through the shared arrays.
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
+            GcQuiescence.CollectSince(since);
             Assert.IsTrue(wr.IsAlive, "the popped value was scrubbed — a captured enumerator would now read garbage");
 
             // The floor rule makes the next append copy-on-write WITHOUT carrying the vacated slot — that copy is
@@ -352,6 +344,8 @@ namespace NumSharp.Tests.Collections
         ///     with this frame.
         /// </summary>
         /// <param name="d">The collection under probe.</param>
+        /// <param name="since">An epoch the caller captured before building <paramref name="d"/>, so the "still pinned"
+        /// check can be decided exactly by a young collection when none has run since (<see cref="GcQuiescence.CollectSince"/>).</param>
         /// <returns>A weak reference to the removed value, for the caller to verify release after this frame dies.</returns>
         /// <remarks>
         ///     Both the "pinned" check and the drop happen INSIDE this method on purpose: the enumerator reference
@@ -359,7 +353,7 @@ namespace NumSharp.Tests.Collections
         ///     and turn the release assert into a false leak (observed doing exactly that in the analysis probes).
         /// </remarks>
         [MethodImpl(MethodImplOptions.NoInlining)]
-        private static WeakReference HoldEnumeratorCheckPinnedThenDrop(ConcurrentOrderedDictionary<int, object> d)
+        private static WeakReference HoldEnumeratorCheckPinnedThenDrop(ConcurrentOrderedDictionary<int, object> d, GcQuiescence.Epoch since)
         {
             var value = new object();
             d.Add(0, value);
@@ -369,9 +363,7 @@ namespace NumSharp.Tests.Collections
             Assert.IsTrue(d.TryRemove(0, out _));
             d.Add(1, new object()); // floor copy: from here only the enumerator references the old arrays
 
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
+            GcQuiescence.CollectSince(since);
             Assert.IsTrue(wr.IsAlive, "a held enumerator failed to pin its snapshot — its captured array was collected under it");
 
             GC.KeepAlive(pin); // the pin's last use; the reference dies with this frame
@@ -381,8 +373,9 @@ namespace NumSharp.Tests.Collections
         [TestMethod]
         public void HeldEnumerator_PinsItsSnapshotArrays_ReleasedWhenDropped()
         {
+            var since = GcQuiescence.Epoch.Capture();
             var d = new ConcurrentOrderedDictionary<int, object>();
-            WeakReference wr = HoldEnumeratorCheckPinnedThenDrop(d);
+            WeakReference wr = HoldEnumeratorCheckPinnedThenDrop(d, since);
             Assert.IsTrue(WaitCollected(wr), "the snapshot arrays stayed reachable after the enumerator was dropped");
         }
 

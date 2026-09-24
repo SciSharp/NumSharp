@@ -376,10 +376,9 @@ namespace NumSharp.Tests.Backends
             }
             finally
             {
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
-                GC.Collect();
-                try { Directory.Delete(dir, recursive: true); } catch { /* best-effort */ }
+                // The three memmaps were never disposed: a young collection releases them (they are young), a
+                // full one only if the directory is still held afterwards (MappedFileCleanup).
+                MappedFileCleanup.DeleteDirectory(dir);
             }
         }
 

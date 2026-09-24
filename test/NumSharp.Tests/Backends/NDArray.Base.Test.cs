@@ -260,6 +260,9 @@ namespace NumSharp.Tests.Backends
         [TestMethod]
         public void Base_ViewKeepsDataAlive()
         {
+            // Everything this test reasons about is built after this epoch, so CollectSince decides it with a
+            // young collection whenever none has run in between (a full one otherwise).
+            var since = GcQuiescence.Epoch.Capture();
             NDArray view;
             long expectedValue;
 
@@ -271,9 +274,7 @@ namespace NumSharp.Tests.Backends
             }
 
             // Force GC
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
+            GcQuiescence.CollectSince(since);
 
             // View should still have valid data
             view.GetInt64(0).Should().Be(expectedValue);
@@ -285,6 +286,9 @@ namespace NumSharp.Tests.Backends
         [TestMethod]
         public void Base_NestedViews_KeepDataAlive()
         {
+            // Everything this test reasons about is built after this epoch, so CollectSince decides it with a
+            // young collection whenever none has run in between (a full one otherwise).
+            var since = GcQuiescence.Epoch.Capture();
             NDArray deepView;
 
             {
@@ -294,9 +298,7 @@ namespace NumSharp.Tests.Backends
                 deepView = c["10:50"];
             }
 
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
+            GcQuiescence.CollectSince(since);
 
             // deepView should still be valid
             deepView.size.Should().Be(40);
@@ -309,6 +311,9 @@ namespace NumSharp.Tests.Backends
         [TestMethod]
         public void Base_BroadcastView_KeepsDataAlive()
         {
+            // Everything this test reasons about is built after this epoch, so CollectSince decides it with a
+            // young collection whenever none has run in between (a full one otherwise).
+            var since = GcQuiescence.Epoch.Capture();
             NDArray broadcasted;
             int[] expectedValues;
 
@@ -318,9 +323,7 @@ namespace NumSharp.Tests.Backends
                 expectedValues = new[] { 1, 2, 3 };
             }
 
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
+            GcQuiescence.CollectSince(since);
 
             // Verify broadcasted data is still valid
             for (int row = 0; row < 3; row++)
@@ -338,6 +341,9 @@ namespace NumSharp.Tests.Backends
         [TestMethod]
         public void Base_ReshapeView_KeepsDataAlive()
         {
+            // Everything this test reasons about is built after this epoch, so CollectSince decides it with a
+            // young collection whenever none has run in between (a full one otherwise).
+            var since = GcQuiescence.Epoch.Capture();
             NDArray reshaped;
 
             {
@@ -345,9 +351,7 @@ namespace NumSharp.Tests.Backends
                 reshaped = original.reshape(3, 4);
             }
 
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
+            GcQuiescence.CollectSince(since);
 
             // Verify data integrity
             int expected = 0;
@@ -366,6 +370,9 @@ namespace NumSharp.Tests.Backends
         [TestMethod]
         public void Base_TransposeView_KeepsDataAlive()
         {
+            // Everything this test reasons about is built after this epoch, so CollectSince decides it with a
+            // young collection whenever none has run in between (a full one otherwise).
+            var since = GcQuiescence.Epoch.Capture();
             NDArray transposed;
 
             {
@@ -373,9 +380,7 @@ namespace NumSharp.Tests.Backends
                 transposed = original.T;
             }
 
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
+            GcQuiescence.CollectSince(since);
 
             // Verify transposed data
             transposed.Shape.dimensions.Should().BeEquivalentTo(new long[] { 3, 2 });

@@ -85,13 +85,14 @@ namespace NumSharp.Tests.Creation
         [TestMethod]
         public void MakeGeneric_AliasOutlivesDisposedSource()
         {
+            // Built after this epoch, so CollectSince decides these objects' fate as a full collection would, with
+            // a young one whenever no collection ran in between (GcQuiescence.CollectSince).
+            var since = GcQuiescence.Epoch.Capture();
             var a = np.arange(100);
             var g = a.MakeGeneric<long>();
 
             a.Dispose();
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
+            GcQuiescence.CollectSince(since);
 
             Assert.AreEqual(77L, (long)g.GetValue(77), "alias must remain readable after source disposal");
             g.SetValue(123L, 0);
@@ -104,12 +105,14 @@ namespace NumSharp.Tests.Creation
         [TestMethod]
         public void MakeGeneric_DisposingAlias_LeavesSourceValid()
         {
+            // Built after this epoch, so CollectSince decides these objects' fate as a full collection would, with
+            // a young one whenever no collection ran in between (GcQuiescence.CollectSince).
+            var since = GcQuiescence.Epoch.Capture();
             var a = np.arange(100);
             var g = a.MakeGeneric<long>();
 
             g.Dispose();
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
+            GcQuiescence.CollectSince(since);
 
             Assert.AreEqual(33L, (long)a.GetValue(33), "source must remain valid after alias disposal");
         }

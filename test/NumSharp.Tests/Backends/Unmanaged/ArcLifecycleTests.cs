@@ -144,10 +144,10 @@ namespace NumSharp.Tests.Backends.Unmanaged
             firstValue.Should().Be(0d, "the abandoned-but-aliased buffer stays readable");
 
             // The alias was dropped inside the helper: the block's own finalizer
-            // must now reclaim the buffer (abandoned refs never leak).
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
+            // must now reclaim the buffer (abandoned refs never leak). Young collection
+            // first (the Disposer is at most gen 1 here), full ones only if it survived —
+            // as strong as the full collection this replaced (GcQuiescence.WaitCollected).
+            GcQuiescence.WaitCollected(weakDisposer);
 
             weakDisposer.IsAlive.Should().BeFalse(
                 "once the last alias dies the Disposer finalizes — freeing (and pooling) the buffer");
@@ -164,9 +164,9 @@ namespace NumSharp.Tests.Backends.Unmanaged
             static (bool ndAlive, bool released, long refCount, double firstValue, WeakReference weakDisposer)
                 ObserveWhileAliasHeld_ThenDropAlias(WeakReference weak, IArraySlice[] holder)
             {
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
-                GC.Collect();
+                // The wrapper was allocated a moment ago: a young collection finalizes it, a full
+                // one is the fallback if it somehow survived (GcQuiescence.WaitCollected).
+                GcQuiescence.WaitCollected(weak);
 
                 var slice = holder[0];
                 var result = (weak.IsAlive, slice.IsReleased, GetRefCount(slice),
@@ -783,9 +783,8 @@ namespace NumSharp.Tests.Backends.Unmanaged
             }
 
             var w = MakeAndDispose();
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
+            // Young collection first, full ones only if it survived (GcQuiescence.WaitCollected).
+            GcQuiescence.WaitCollected(w);
 
             w.IsAlive.Should().BeFalse();
         }
@@ -803,11 +802,10 @@ namespace NumSharp.Tests.Backends.Unmanaged
 
             var (w, slice) = MakeAndDrop();
 
-            // Two passes: first GC.Collect surfaces it to finalizer; second
-            // GC reclaims after finalizer ran.
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
+            // The wrapper is young: a young collection surfaces it to the finalizer and the
+            // drain runs it (a short weak reference is cleared at that first collection);
+            // full collections only if it survived (GcQuiescence.WaitCollected).
+            GcQuiescence.WaitCollected(w);
 
             w.IsAlive.Should().BeFalse("NDArray should be reclaimed");
             slice.IsReleased.Should().BeFalse(

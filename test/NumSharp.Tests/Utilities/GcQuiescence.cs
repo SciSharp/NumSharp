@@ -8,6 +8,9 @@ namespace NumSharp.Tests
     ///     count after forcing a finalizer. Use <see cref="CollectYoung"/> between measurements,
     ///     <see cref="OpenWindow"/> / <see cref="Undisturbed"/> to prove a measured region saw no asynchronous
     ///     finalizer, and <see cref="CollectFull"/> only once per test to clear what EARLIER tests left behind.
+    ///     Lifetime tests that assert what a collection does to objects they just built use
+    ///     <see cref="CollectSince"/> ("still reachable") and <see cref="WaitCollected(WeakReference,int)"/>
+    ///     ("now collectable"), which pay for a full collection only when a young one could get it wrong.
     /// </summary>
     /// <remarks>
     ///     <para><b>The cost this removes.</b> These tests used to "drain" with
@@ -131,5 +134,83 @@ namespace NumSharp.Tests
         /// <param name="opened">The epoch returned by <see cref="OpenWindow"/>.</param>
         /// <returns>True when the window is exact; false when it must be discarded and re-run.</returns>
         public static bool Undisturbed(Epoch opened) => Epoch.Capture() == opened;
+
+        /// <summary>
+        ///     A collection (plus finalizer drain) that decides the fate of every small object allocated since
+        ///     <paramref name="since"/> exactly as a full collection would — at the price of a young one whenever it can.
+        ///     Use it where a test asserts something about objects it just built: that they are still REACHABLE
+        ///     (a view keeps its base's data alive, a collection retains a popped value), or that nothing was
+        ///     prematurely finalized under a live reference.
+        /// </summary>
+        /// <param name="since">An epoch captured (<see cref="Epoch.Capture"/>) BEFORE the objects under test were
+        /// built — typically the first line of the test.</param>
+        /// <remarks>
+        ///     <para><b>Why young is exact here.</b> While no collection runs, every small allocation stays in gen 0,
+        ///     so a gen-1 collection examines each object allocated after <paramref name="since"/> — and every object
+        ///     that could have come to reference one of them after that point, since those were allocated after it
+        ///     too. For such objects it reaches the same reachability verdict as a full collection, and runs the same
+        ///     finalizers. Once ANY collection has run since <paramref name="since"/> (the epoch moved), some of them
+        ///     may already sit in gen 2, which only a full collection examines — a young collection would then pass a
+        ///     "still reachable" assertion vacuously — so this falls back to <see cref="CollectFull"/>.</para>
+        ///     <para><b>Limits.</b> Large objects (85,000 bytes and up, allocated straight into the large-object heap,
+        ///     logically gen 2) are only collected by gen-2 collections; do not use this for a large TARGET. An
+        ///     object OLDER than <paramref name="since"/> that references a fresh one and then dies can keep it alive
+        ///     through a young collection — hence capture the epoch before building the objects under test.</para>
+        /// </remarks>
+        public static void CollectSince(Epoch since)
+        {
+            if (Undisturbed(since))
+                CollectYoung();
+            else
+                CollectFull();
+        }
+
+        /// <summary>
+        ///     Collects until <paramref name="probe"/>'s target is gone — one young collection first, then up to
+        ///     <paramref name="fullAttempts"/> full ones. Use it for "this object must now be COLLECTABLE" assertions.
+        /// </summary>
+        /// <param name="probe">A short weak reference to the object that must become unreachable.</param>
+        /// <param name="fullAttempts">How many full collections to try after the young one before giving up.</param>
+        /// <returns>True once the target was collected; false if it survived every attempt (a genuine retention).</returns>
+        /// <remarks>
+        ///     The young collection settles the usual case — a test just dropped the last reference to a fresh object —
+        ///     for well under a millisecond. The full ones keep the assertion as strong as it always was: a target a
+        ///     collection promoted to gen 2, or one referenced only by an already-dead older object, needs a full
+        ///     collection to be found, and several are tried so a background collection in flight cannot flake it.
+        /// </remarks>
+        public static bool WaitCollected(WeakReference probe, int fullAttempts = 5)
+        {
+            CollectYoung();
+            for (int attempt = 0; probe.IsAlive && attempt < fullAttempts; attempt++)
+                CollectFull();
+            return !probe.IsAlive;
+        }
+
+        /// <summary>
+        ///     <see cref="WaitCollected(WeakReference,int)"/> for a typed weak reference.
+        /// </summary>
+        /// <typeparam name="T">The target's type.</typeparam>
+        /// <param name="probe">A weak reference to the object that must become unreachable.</param>
+        /// <param name="fullAttempts">How many full collections to try after the young one before giving up.</param>
+        /// <returns>True once the target was collected; false if it survived every attempt.</returns>
+        public static bool WaitCollected<T>(WeakReference<T> probe, int fullAttempts = 5) where T : class
+        {
+            CollectYoung();
+            for (int attempt = 0; IsAlive(probe) && attempt < fullAttempts; attempt++)
+                CollectFull();
+            return !IsAlive(probe);
+        }
+
+        /// <summary>
+        ///     Whether a typed weak reference's target is alive, WITHOUT leaving a strong reference in the caller's
+        ///     frame: <c>TryGetTarget</c>'s out argument is a hidden local, which an unoptimized (Debug / tier-0) frame
+        ///     keeps reporting to the GC until the method returns — enough to keep the target alive across the very
+        ///     collections meant to reclaim it. Isolated here, it dies with this frame.
+        /// </summary>
+        /// <typeparam name="T">The target's type.</typeparam>
+        /// <param name="probe">The weak reference.</param>
+        /// <returns>True while the target has not been collected.</returns>
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        private static bool IsAlive<T>(WeakReference<T> probe) where T : class => probe.TryGetTarget(out _);
     }
 }

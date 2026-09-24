@@ -205,7 +205,11 @@ namespace NumSharp.Tests.Lifetime
             {
                 while (!stop.IsSet)
                 {
-                    GC.Collect();
+                    // Churn the generations the scoped temporaries live in: a blocking, COMPACTING collection of
+                    // gens 0-1 still moves and finalizes them mid-operation, which is what this test perturbs
+                    // with — without also marking the whole test run's gen 2 every 10 ms (a full collection
+                    // costs tens of milliseconds in-suite and stalled the workers for most of the test).
+                    GC.Collect(1, GCCollectionMode.Forced, blocking: true, compacting: true);
                     GC.WaitForPendingFinalizers();
                     Thread.Sleep(10);
                 }

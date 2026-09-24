@@ -149,6 +149,9 @@ namespace NumSharp.Tests.Backends
         [TestMethod]
         public void ReshapeView_SurvivesSourceWrapperCollection()
         {
+            // Built after this epoch, so CollectSince decides these objects' fate as a full collection would, with
+            // a young one whenever no collection ran in between (GcQuiescence.CollectSince).
+            var since = GcQuiescence.Epoch.Capture();
             NDArray MakeView()
             {
                 var big = np.arange(1000).astype(NPTypeCode.Int64);
@@ -156,9 +159,7 @@ namespace NumSharp.Tests.Backends
             }
 
             var view = MakeView();
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
+            GcQuiescence.CollectSince(since);
             np.sum(view).GetInt64().Should().Be(Enumerable.Range(0, 1000).Where(i => i % 100 % 2 == 0).Sum(i => (long)i),
                 "ARC must keep the base buffer alive through the view alone");
         }

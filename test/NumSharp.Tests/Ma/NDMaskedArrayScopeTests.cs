@@ -163,11 +163,13 @@ namespace NumSharp.Tests.Ma
         [TestMethod]
         public void FromFunction_CallbackReturningItsArgument_KeepsTheResult()
         {
+            // Built after this epoch, so CollectSince decides these objects' fate as a full collection would, with
+            // a young one whenever no collection ran in between (GcQuiescence.CollectSince).
+            var since = GcQuiescence.Epoch.Capture();
             var r = np.ma.fromfunction((i, j) => i, new Shape(2, 3));
 
             // A collection proves the result does not merely survive by luck of timing.
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
+            GcQuiescence.CollectSince(since);
 
             Assert.IsFalse(r.data.IsDisposed);
             Assert.IsTrue(D(r).SequenceEqual(new double[] { 0, 0, 0, 1, 1, 1 }));

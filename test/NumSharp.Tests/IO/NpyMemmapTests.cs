@@ -36,12 +36,8 @@ namespace NumSharp.Tests.IO
             // A mapped file stays open until its array + views are released. The views a test left undisposed
             // are young, so the young pass frees them; a full collection is paid only when the directory is
             // still held afterwards (a view a mid-test GC promoted to gen 2). Deletion stays best-effort: a
-            // leftover temp directory must never fail a test.
-            ReleaseUndisposedViews();
-            if (TryDeleteDirectory(_dir))
-                return;
-            GcQuiescence.CollectFull();
-            TryDeleteDirectory(_dir);
+            // leftover temp directory must never fail a test. (The shared helper every mmap-using class uses.)
+            MappedFileCleanup.DeleteDirectory(_dir);
         }
 
         /// <summary>
@@ -56,29 +52,6 @@ namespace NumSharp.Tests.IO
         ///     never fail a test while a genuinely leaked mapping still does.
         /// </remarks>
         private static void ReleaseUndisposedViews() => GcQuiescence.CollectYoung();
-
-        /// <summary>
-        ///     Deletes <paramref name="dir"/> recursively, reporting instead of throwing when a file in it is
-        ///     still open or mapped.
-        /// </summary>
-        /// <param name="dir">The directory to delete.</param>
-        /// <returns>True when the directory is gone (deleted now, or already absent); false when deletion failed.</returns>
-        private static bool TryDeleteDirectory(string dir)
-        {
-            if (!Directory.Exists(dir))
-                return true;
-            try
-            {
-                Directory.Delete(dir, recursive: true);
-                return true;
-            }
-            catch
-            {
-                // Sharing violation (IOException) or a still-mapped file (UnauthorizedAccessException): the
-                // caller decides whether a full collection is worth one more attempt.
-                return false;
-            }
-        }
 
         /// <summary>
         ///     Whether <paramref name="path"/> can be opened read-write with no sharing — i.e. nothing in the

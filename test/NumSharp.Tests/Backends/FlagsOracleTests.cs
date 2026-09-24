@@ -686,10 +686,8 @@ namespace NumSharp.Tests.Backends
         [ClassCleanup]
         public static void Cleanup()
         {
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
-            try { Directory.Delete(_mmapDir, recursive: true); } catch { /* best-effort */ }
+            // Young collection first, full only if a mapping still holds the directory (MappedFileCleanup).
+            MappedFileCleanup.DeleteDirectory(_mmapDir);
         }
 
         // ---- the comparator ---------------------------------------------------------------
