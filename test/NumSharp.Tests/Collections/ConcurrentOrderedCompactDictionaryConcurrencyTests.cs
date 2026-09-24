@@ -361,7 +361,12 @@ namespace NumSharp.Tests.Collections
             // hand-backs), enumerators must still only ever see exact prefixes of the CURRENT sequence — a
             // reused slot bleeding a new value into an old snapshot would break the prefix's value pattern.
             const int Base = 1_000;
-            const int Cycles = 40_000;
+            // Budget (StressBudget): golden 40,000 pop/re-append cycles; per-push 10,000. Every append after a pop
+            // copies the generation (the floor rule), so the writer's cost is linear in the cycle count. Teeth
+            // (mutation-checked, reverted): scrubbing the vacated slot on a tail pop — the value an enumerator captured
+            // before the pop then reads as 0 — fails 4/4 runs at 40,000 cycles and 6/6 at a quarter of the per-push
+            // budget (2,500), pinned to 4 CPUs and unpinned.
+            int Cycles = StressBudget.Pick(full: 40_000, ci: 10_000);
             int threads = GunThreads;
             var d = new ConcurrentOrderedCompactDictionary<int, int>();
             for (int k = 0; k < Base; k++)
@@ -450,7 +455,16 @@ namespace NumSharp.Tests.Collections
         [TestMethod]
         public void Gun_RemoveSameKeys_ExactlyOneWinnerEach()
         {
-            const int KeyCount = 8_000;
+            // Budget (StressBudget): golden 8,000 keys; per-push 4,000. Every thread walks the keys in the SAME order,
+            // so each removal takes the current head — an interior removal that copies the whole generation. At
+            // 8,000 keys the capacity is 8,192 and the compact index (the power of two above 1.5x capacity, 16,384
+            // words = 128 KB) crosses the 85 KB large-object threshold: every one of the 8,000 copies was a LOH
+            // allocation, and every LOH budget overrun a gen-2 collection (334 of the storm's 334 collections).
+            // At 4,000 keys (capacity 4,096, index 64 KB) every array stays in the small-object heap and the storm
+            // does a quarter of the copying. Teeth (mutation-checked, reverted): reading the generation OUTSIDE the
+            // write lock in TryRemove — a stale-generation removal — fails 4/4 runs at both budgets, pinned to
+            // 4 CPUs and unpinned (8,000 keys: 59,316-64,000 "winners"; 4,000 keys: 13,406-32,000).
+            int KeyCount = StressBudget.Pick(full: 8_000, ci: 4_000);
             int threads = GunThreads;
             var d = new ConcurrentOrderedCompactDictionary<int, int>();
             for (int k = 0; k < KeyCount; k++)

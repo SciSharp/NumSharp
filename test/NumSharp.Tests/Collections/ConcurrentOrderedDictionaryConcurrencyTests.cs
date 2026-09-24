@@ -358,7 +358,12 @@ namespace NumSharp.Tests.Collections
             // hand-backs), enumerators must still only ever see exact prefixes of the CURRENT sequence — a
             // reused slot bleeding a new value into an old snapshot would break the prefix's value pattern.
             const int Base = 1_000;
-            const int Cycles = 40_000;
+            // Budget (StressBudget): golden 40,000 pop/re-append cycles; per-push 10,000. Every append after a pop
+            // copies the generation (the floor rule), so the writer's cost is linear in the cycle count. Teeth
+            // (mutation-checked on both types, reverted): scrubbing the vacated slot on a tail pop — the value an
+            // enumerator captured before the pop then reads as 0 — fails every run at 40,000 cycles and at a quarter
+            // of the per-push budget (2,500), pinned to 4 CPUs and unpinned.
+            int Cycles = StressBudget.Pick(full: 40_000, ci: 10_000);
             int threads = GunThreads;
             var d = new ConcurrentOrderedDictionary<int, int>();
             for (int k = 0; k < Base; k++)
@@ -447,7 +452,14 @@ namespace NumSharp.Tests.Collections
         [TestMethod]
         public void Gun_RemoveSameKeys_ExactlyOneWinnerEach()
         {
-            const int KeyCount = 8_000;
+            // Budget (StressBudget): golden 8,000 keys; per-push 4,000. Every thread walks the keys in the SAME order,
+            // so each removal takes the current head — an interior removal that copies the whole generation. On the
+            // compact mirror 8,000 keys put the index over the 85 KB large-object threshold (every copy a LOH
+            // allocation, every collection gen 2); at 4,000 every array stays in the small-object heap and the storm
+            // does a quarter of the copying. Teeth (mutation-checked on both types, reverted): a stale-generation
+            // removal (compact: the generation read outside the write lock; this type: the key's node found outside
+            // it) fails every run at both budgets, pinned to 4 CPUs and unpinned.
+            int KeyCount = StressBudget.Pick(full: 8_000, ci: 4_000);
             int threads = GunThreads;
             var d = new ConcurrentOrderedDictionary<int, int>();
             for (int k = 0; k < KeyCount; k++)
