@@ -2889,7 +2889,7 @@ dotnet test --no-build 2>&1 | grep -v "^    at " | grep -v "^     at " | grep -v
 dotnet test --no-build -v normal
 ```
 
-### Keeping the suite fast (2026-09-24: NumSharp.Tests 262 s → ~32 s, Oracle 37 s → 12 s per framework, local)
+### Keeping the suite fast (2026-09-24: NumSharp.Tests 262 s → ~24 s, Oracle 37 s → 12 s per framework, local)
 
 MSTest runs the ~16K tests **serially**, so a handful of slow tests set the wall time. The rules came out
 of finding them (the diagnosis, per-test numbers and mutation checks are in commit messages / the files):
@@ -2912,7 +2912,24 @@ of finding them (the diagnosis, per-test numbers and mutation checks are in comm
   in `fuzz-soak.yml` runs it. Size a new storm the same way rather than letting it dominate every push. A
   WALL-CLOCK storm (a time-boxed race hunt) gets a short per-push window only after calibration: re-introduce
   the defect it pins and confirm every per-push run still fails, pinned to 4 CPUs and unpinned (the numbers
-  live on `OrderedDictionaryContractTests` and the swap-back gun).
+  live on `OrderedDictionaryContractTests` and the swap-back gun). Size a per-push LIVE SET under the
+  large-object threshold: every interior removal copies the whole generation, and past 4,096 entries the
+  compact dictionary's index (the power of two above 1.5× capacity, in `long`s) is ≥ 128 KB, so each copy is a
+  gen-2 collection (PhasedStorms/PartitionedAllOps/KeyOwnedOps/IndexPathReaders ran 190–294 gen-2 per run). A
+  budget shrink is calibrated like a window: a mutation the storm catches, at the old AND new budget, pinned
+  and unpinned (the per-storm evidence is in each budget comment). Two traps from doing it: a MUTATED run is
+  faster than a clean one (a reader that sees the violation throws and leaves, so its writers finish sooner —
+  time only clean same-build A/Bs), and shrinking the op count can silently drop a cadence-gated operation
+  (FullSurfaceChaos' mid-storm `Clear` — budget the cadence masks with the ops).
+- **Hot product paths use `[GeneratedRegex]`, never the static `Regex.Match/Split/Replace`.** On .NET 8 the
+  static helpers share a 15-entry cache whose eviction thrashes once it is full of stale entries — every
+  string slice (`nd["1:3"]`) re-parsed its pattern (9–18 µs instead of 0.6–2.8 µs per `ParseSlices`;
+  microgpt 2.5 → 0.57 s on net8.0). Idle polls in stress tests call `Thread.Yield()`, not `Thread.SpinWait` —
+  on .NET 8 a `SpinWait` loop is an FCALL the GC cannot suspend, and blocking collections stalled 24–43 s.
+- **A strided view is not a scalar-path probe.** The unary kernels gather strided inputs into the vector
+  kernel, so "contiguous vs `::2`" compares the vector kernel with itself (`Exp2_Scalar_Equals_Simd` was
+  vacuous until 63a94fa2); compare against the scalar entry point (`NDFloatMath.X(float)`) directly, and
+  confirm with a planted scalar-only and vector-only slip that each assertion can fail.
 - **Oracle coverage gates read `CorpusSurvey`, replays stream `FuzzCorpus.Open`.** Never re-parse the whole
   ~170 MB corpus into `FuzzCorpus.Case` objects for a coverage question (op keys, layouts, dtypes, params,
   outcome kinds): `CorpusSurvey.Files` is a header-only scan built once per process (extend `SurveyCase` + its
