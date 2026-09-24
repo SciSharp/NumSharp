@@ -2889,9 +2889,9 @@ dotnet test --no-build 2>&1 | grep -v "^    at " | grep -v "^     at " | grep -v
 dotnet test --no-build -v normal
 ```
 
-### Keeping the suite fast (2026-09-24: 262 s → ~57 s per framework)
+### Keeping the suite fast (2026-09-24: NumSharp.Tests 262 s → ~32 s, Oracle 37 s → 12 s per framework, local)
 
-MSTest runs the ~16K tests **serially**, so a handful of slow tests set the wall time. Two rules came out
+MSTest runs the ~16K tests **serially**, so a handful of slow tests set the wall time. The rules came out
 of finding them (the diagnosis, per-test numbers and mutation checks are in commit messages / the files):
 
 - **Never force a FULL GC per measurement.** A forced full collection marks the whole live heap, and in a
@@ -2901,11 +2901,31 @@ of finding them (the diagnosis, per-test numbers and mutation checks are in comm
   counters (pool take/return, ARC refcounts after a finalizer) use `test/NumSharp.Tests/Utilities/GcQuiescence.cs`
   (linked into the Oracle): `CollectYoung()` for per-window hygiene, `OpenWindow()`/`Undisturbed()` to prove no
   collection — including a background GC, whose `CollectionCount` moves at its START but whose finalizers run
-  at its END — touched the window, `CollectFull()` once per test at most.
+  at its END — touched the window, `CollectFull()` once per test at most. Lifetime tests asserting what a
+  collection does to objects they just built use `CollectSince(epoch)` ("still reachable": young is exact while
+  no collection ran since the epoch, full otherwise) and `WaitCollected(weakRef)` ("now collectable": young
+  first, full as the fallback); a class whose counter windows need a clean backlog drains FULL once in
+  `[ClassInitialize]` and young per test; temp dirs holding memmaps go through `MappedFileCleanup.DeleteDirectory`.
 - **Concurrent-collection storms have two budgets** (`test/NumSharp.Tests/Collections/StressBudget.cs`): each
   call site spells `StressBudget.Pick(full: <authored>, ci: <per-push>)`. Per-push runs the CI budget;
   `NUMSHARP_TEST_STRESS=full` restores the authored workload exactly, and the nightly `collections-stress` job
-  in `fuzz-soak.yml` runs it. Size a new storm the same way rather than letting it dominate every push.
+  in `fuzz-soak.yml` runs it. Size a new storm the same way rather than letting it dominate every push. A
+  WALL-CLOCK storm (a time-boxed race hunt) gets a short per-push window only after calibration: re-introduce
+  the defect it pins and confirm every per-push run still fails, pinned to 4 CPUs and unpinned (the numbers
+  live on `OrderedDictionaryContractTests` and the swap-back gun).
+- **Oracle coverage gates read `CorpusSurvey`, replays stream `FuzzCorpus.Open`.** Never re-parse the whole
+  ~170 MB corpus into `FuzzCorpus.Case` objects for a coverage question (op keys, layouts, dtypes, params,
+  outcome kinds): `CorpusSurvey.Files` is a header-only scan built once per process (extend `SurveyCase` + its
+  fidelity test if a gate needs a new field). A replay that visits each case once enumerates `FuzzCorpus.Open(file)`
+  (count up front, one parsed case alive at a time) — a materialized whole-tier `List<Case>` gets promoted
+  through the GC generations, which cost more than the parse itself.
+- **Test hosts run with `TieredPGO=false` and opt out of EcoQoS.** A test run is short and JIT-bound, so
+  PGO's instrumented tier never pays back (Oracle 15.1 → 12.2 s, Analyzer 19.0 → 17.5 s pinned; NumSharp.Tests
+  neutral) — set in the three test csprojs, overriding the repo-wide default. `TestHostQualityOfService` (a
+  `[ModuleInitializer]`, Windows-only) disables execution-speed power throttling, because Windows parks a
+  windowless `testhost` on a hybrid CPU's E-cores (i9-13900K: NumSharp.Tests 47 s unpinned vs 27 s on P-cores).
+  **Measurement trap:** A/B single-threaded suites pinned to the P-cores (affinity `0xFFFF` on the dev box) —
+  unpinned runs mix two ~1.8×-apart populations and swamp any knob.
 
 ## Test Categories
 
