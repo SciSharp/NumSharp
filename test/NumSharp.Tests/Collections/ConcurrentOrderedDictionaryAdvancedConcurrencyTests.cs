@@ -896,10 +896,25 @@ namespace NumSharp.Tests.Collections
             // is documented; the pair law has its own swapback-free scenario above.
             int threads = OversubscribedThreads;
             const int P1Lo = 10_000, P2Lo = 20_000, P4Lo = 40_000, Band = 1_000;
-            // Budget (StressBudget): golden 25 AddRange batches per P0 thread and 15 P2 churn rounds; per-push CI
-            // 8 and 6. The P0 batches set the collection's size — every P2 interior removal is O(size) — and the
-            // final oracle counts whatever P0 actually appended, so both are free to shrink.
-            int P0Batches = StressBudget.Pick(full: 25, ci: 8);
+            // Budget (StressBudget): golden 25 AddRange batches of 400 keys per P0 thread and 15 P2 churn rounds;
+            // per-push CI 16 batches of 25 keys and 6 rounds. The P0 batches set the collection's size — every P2
+            // interior removal is O(size) — and the final oracle counts whatever P0 actually appended, so both are
+            // free to shrink. The per-push live set is sized to stay under 4,096 entries (3,000 seeded + the two P0
+            // threads' 2 x 16 x 25 = 800 appends + at most 2 x 25 transient P3 pushes = 3,850): every interior
+            // removal copies the whole generation, and at the former 8 batches of 400 keys (up to 3,000 + 6,400 =
+            // 9,400 entries, capacity 16,384) the values array (128 KB) was a large-object-heap allocation - 188-239
+            // gen-2 collections per run on a small heap. This type would already fit up to capacity 8,192; the bound
+            // is the compact mirror's index, and the two files keep one budget. The appends shrink as MORE, smaller
+            // batches, not fewer: the AddRange calls are writes racing everything else, and on the compact mirror the
+            // same 800 keys as 8 batches of 50 let a RemoveWhere that compacts a generation read OUTSIDE the write
+            // lock pass 4 of 12 runs pinned to 4 CPUs, where 16 x 25 misses 4 of 48 - the former budget's own rate (3
+            // of 48). Teeth (mutation-checked on both types at 16 x 25, reverted): that RemoveWhere (on a store read
+            // outside the lock) fails 12/12 runs pinned and 12/12 unpinned here and 12/12 unpinned / 44/48 pinned on
+            // the mirror; a TryRemove on a store read outside the lock fails 12/12 unpinned / 46/48 pinned here (former
+            // budget 39/39) and 12/12 in both modes on the mirror - the final partition oracle, the swap-back winner
+            // count or a P3 pop that lost its key.
+            int P0Batches = StressBudget.Pick(full: 25, ci: 16);
+            int P0BatchSize = StressBudget.Pick(full: 400, ci: 25);
             int P2Rounds = StressBudget.Pick(full: 15, ci: 6);
 
             var d = new ConcurrentOrderedDictionary<int, long>();
@@ -921,7 +936,7 @@ namespace NumSharp.Tests.Collections
                         Interlocked.Increment(ref writers);
                         try
                         {
-                            const int BatchSize = 400;
+                            int BatchSize = P0BatchSize;
                             for (int b = 0; b < P0Batches; b++)
                             {
                                 int lo = 1_000_000 + (id * P0Batches + b) * BatchSize;   // disjoint per (thread, batch)
