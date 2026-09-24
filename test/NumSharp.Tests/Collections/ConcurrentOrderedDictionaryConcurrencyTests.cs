@@ -521,8 +521,12 @@ namespace NumSharp.Tests.Collections
             // Everything at once: appenders, hot-key updaters, disjoint removers, and readers hammering every
             // read surface. Readers assert only invariants that hold under ANY legal interleaving; afterwards the
             // final membership is checked exactly.
-            const int Seed = 20_000;   // keys [0, Seed) pre-seeded; kept forever (values churn on a hot subset)
-            const int AddsPerThread = 15_000;
+            // Budget (StressBudget): golden 20,000 seeded keys, 15,000 appends per appender, 30 remover rounds;
+            // per-push CI 5,000 / 4,000 / 15. The remover band [Seed - 3,000, Seed - 2,500) must stay inside the
+            // seeded range above the hot keys, which holds for any Seed >= 3,032.
+            int Seed = StressBudget.Pick(full: 20_000, ci: 5_000);   // keys [0, Seed) pre-seeded; kept forever (values churn on a hot subset)
+            int AddsPerThread = StressBudget.Pick(full: 15_000, ci: 4_000);
+            int RemoverRounds = StressBudget.Pick(full: 30, ci: 15);
             const int HotKeys = 32;
             int threads = System.Math.Max(4, GunThreads);
             var d = new ConcurrentOrderedDictionary<int, long>();
@@ -578,7 +582,7 @@ namespace NumSharp.Tests.Collections
                     {
                         Interlocked.Increment(ref writerCount);
                         int lo = Seed - (id % 4 + 1) * 1_000; // bands inside the seeded range, above the hot keys
-                        for (int round = 0; round < 30; round++)
+                        for (int round = 0; round < RemoverRounds; round++)
                         {
                             for (int k = lo; k < lo + 500; k++)
                             {

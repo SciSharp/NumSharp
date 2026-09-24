@@ -572,6 +572,9 @@ namespace NumSharp.Tests.Collections
             // slot was structurally reused under a live snapshot (the floor rule failing), a phantom would prove a
             // half-published slot leaked. Keys double as values so the observations are self-identifying.
             const int Universe = 3_000;
+            // Budget (StressBudget): golden 25,000 remove+re-add cycles by the writer; per-push CI 10,000. Each
+            // cycle is an O(Universe) fresh-array compaction; the final oracle (count == Universe) is cycle-free.
+            int WriterCycles = StressBudget.Pick(full: 25_000, ci: 10_000);
             int threads = GunThreads;
             var d = new ConcurrentOrderedCompactDictionary<int, int>();
             for (int k = 0; k < Universe; k++)
@@ -587,7 +590,7 @@ namespace NumSharp.Tests.Collections
                     try
                     {
                         var rng = new System.Random(11);
-                        for (int i = 0; i < 25_000; i++)
+                        for (int i = 0; i < WriterCycles; i++)
                         {
                             int k = rng.Next(Universe);
                             if (d.TryRemove(k, out _))
@@ -884,6 +887,11 @@ namespace NumSharp.Tests.Collections
             // is documented; the pair law has its own swapback-free scenario above.
             int threads = OversubscribedThreads;
             const int P1Lo = 10_000, P2Lo = 20_000, P4Lo = 40_000, Band = 1_000;
+            // Budget (StressBudget): golden 25 AddRange batches per P0 thread and 15 P2 churn rounds; per-push CI
+            // 8 and 6. The P0 batches set the collection's size — every P2 interior removal is O(size) — and the
+            // final oracle counts whatever P0 actually appended, so both are free to shrink.
+            int P0Batches = StressBudget.Pick(full: 25, ci: 8);
+            int P2Rounds = StressBudget.Pick(full: 15, ci: 6);
 
             var d = new ConcurrentOrderedCompactDictionary<int, long>();
             for (int k = P1Lo; k < P1Lo + Band; k++) d.Add(k, Law(k, 0));
@@ -905,9 +913,9 @@ namespace NumSharp.Tests.Collections
                         try
                         {
                             const int BatchSize = 400;
-                            for (int b = 0; b < 25; b++)
+                            for (int b = 0; b < P0Batches; b++)
                             {
-                                int lo = 1_000_000 + (id * 25 + b) * BatchSize;
+                                int lo = 1_000_000 + (id * P0Batches + b) * BatchSize;   // disjoint per (thread, batch)
                                 var batch = new KeyValuePair<int, long>[BatchSize];
                                 for (int i = 0; i < BatchSize; i++)
                                 {
@@ -952,7 +960,7 @@ namespace NumSharp.Tests.Collections
                         Interlocked.Increment(ref writers);
                         try
                         {
-                            for (int round = 0; round < 15; round++)
+                            for (int round = 0; round < P2Rounds; round++)
                             {
                                 int lo = P2Lo + (id % 4) * 250;
                                 for (int k = lo; k < lo + 250; k++)

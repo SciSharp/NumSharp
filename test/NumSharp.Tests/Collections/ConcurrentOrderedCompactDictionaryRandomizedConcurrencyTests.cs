@@ -163,8 +163,9 @@ namespace NumSharp.Tests.Collections
             // moved entry's value would be caught by ITS owner's next per-op probe. Index-addressed writes
             // (SetAt / RemoveAt / RemoveWhere / Clear) are excluded: they touch keys this thread does not own, so
             // no per-partition reference can predict them (they get their own shared-space scenarios below).
-            const int KeysPerThread = 1_000;
-            const int OpsPerThread = 6_000;
+            // Budget (StressBudget): golden 1,000 keys x 6,000 ops per thread; per-push CI 250 x 3,000.
+            int KeysPerThread = StressBudget.Pick(full: 1_000, ci: 250);
+            int OpsPerThread = StressBudget.Pick(full: 6_000, ci: 3_000);
             int threads = HeavyThreads;
 
             var d = new ConcurrentOrderedCompactDictionary<int, long>();
@@ -384,9 +385,11 @@ namespace NumSharp.Tests.Collections
             // holds. Corruption that only ACCUMULATES across volleys (which a single final check could miss if a
             // later op happened to paper over it) is caught at the first quiescent point after it happens. Threads
             // carry their reference across rounds and keep drawing random key-addressed operations.
-            const int KeysPerThread = 1_200;
+            // Budget (StressBudget): golden 1,200 keys per thread x 10 volleys x 2,500 ops; per-push CI keeps all
+            // 10 quiescent audits and shrinks each partition to 300 keys and each volley to 1,000 ops.
+            int KeysPerThread = StressBudget.Pick(full: 1_200, ci: 300);
             const int Rounds = 10;
-            const int OpsPerRound = 2_500;
+            int OpsPerRound = StressBudget.Pick(full: 2_500, ci: 1_000);
             int threads = HeavyThreads;
 
             var d = new ConcurrentOrderedCompactDictionary<int, long>();
@@ -551,8 +554,10 @@ namespace NumSharp.Tests.Collections
             // slot's key and value — and so is the index-addressed value setter (SetAt), whose target key is a
             // moving target under concurrent reindexing. Both appear in the maximal-chaos scenario below under the
             // weaker checks their contracts permit.
-            const int Universe = 20_000;
-            const int WriterOps = 25_000;
+            // Budget (StressBudget): golden 20,000-key universe x 25,000 ops per writer; per-push CI 4,000 x 10,000
+            // (still ~10 RemoveWhere sweeps per writer at the 0x3FF cadence below).
+            int Universe = StressBudget.Pick(full: 20_000, ci: 4_000);
+            int WriterOps = StressBudget.Pick(full: 25_000, ci: 10_000);
             int threads = HeavyThreads;
             int writers = System.Math.Max(1, threads * 3 / 4); // a quarter of the gun are dedicated pair auditors
 
@@ -688,8 +693,10 @@ namespace NumSharp.Tests.Collections
             // arrays it mutates in place), the EXACT pair law and duplicate-freedom are asserted only at the FINAL
             // quiescent point, never on a live surface here — that is precisely the contract boundary scenario 3
             // above lives inside.
-            const int Universe = 16_000;
-            const int WriterOps = 25_000;
+            // Budget (StressBudget): golden 16,000-key universe x 25,000 ops per writer; per-push CI 4,000 x 10,000
+            // (still two Clear()s and five RemoveWhere sweeps per writer at the cadences below).
+            int Universe = StressBudget.Pick(full: 16_000, ci: 4_000);
+            int WriterOps = StressBudget.Pick(full: 25_000, ci: 10_000);
             int threads = HeavyThreads;
             int writers = System.Math.Max(1, threads * 3 / 4);
 
@@ -700,8 +707,8 @@ namespace NumSharp.Tests.Collections
             }
 
             // Weak, interleaving-independent value check: a clean value decodes to an in-range key; a torn or
-            // cross-key value almost certainly would not.
-            static void AssertLawShaped(long v)
+            // cross-key value almost certainly would not. (Not `static`: it reads the budgeted Universe.)
+            void AssertLawShaped(long v)
                 => Assert.IsTrue((uint)LawKey(v) < Universe, $"a read returned a non-law-shaped value 0x{v:X16} (decodes to key {LawKey(v)})");
 
             long writersDone = 0;

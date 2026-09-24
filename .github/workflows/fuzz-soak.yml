@@ -23,6 +23,9 @@ name: Fuzz Soak
 # keeps host-defined values out of its operands (undefined float->integer casts; non-finite complex
 # inputs to the ops NumPy hands to the platform's C99 complex library — see its comment blocks), and
 # the job env below pins NumPy's CPU dispatch below AVX-512.
+#
+# A second, independent job (`collections-stress`, at the end) runs the concurrent-collection storms at
+# their golden budgets — the per-push CI runs them at the smaller CI budget (see that job's comment).
 
 on:
   schedule:
@@ -238,4 +241,51 @@ jobs:
       with:
         name: fuzz-soak-failures
         path: failing-seed-*.jsonl
+        retention-days: 14
+
+  # ── The concurrent-collection storms at their GOLDEN budgets ─────────────────────────────────────
+  #
+  # test/NumSharp.Tests/Collections/StressBudget.cs gives every op-count storm two budgets: the one it was
+  # authored with (the "golden" budget, sized to drain inside its 2-minute join ceiling) and a per-push CI
+  # budget that shrinks the collection and trims the operation count but keeps every thread, operation mix
+  # and assertion. At the golden budget those suites cost 99-124 s per target framework on the build-and-release
+  # `test` legs (run 35892546210) — close to half of NumSharp.Tests — so per-push CI runs the CI budget and
+  # THIS job runs the golden one, every night, so the deep storms keep their bite without taxing every push.
+  #
+  # One OS and one framework: the storms hammer the collections' own lock/fence protocol, which the JIT
+  # emits the same way on both frameworks; the per-push legs already cover all three OSes and both
+  # frameworks at the CI budget. No Python, no OpenBLAS — just the managed suite.
+  collections-stress:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      NUMSHARP_TEST_STRESS: full
+    steps:
+    - uses: actions/checkout@v7
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v6
+      with:
+        dotnet-version: |
+          8.0.x
+          10.0.x
+
+    - name: Build
+      run: dotnet build test/NumSharp.Tests/NumSharp.Tests.csproj --configuration Release -p:NoWarn=CS1591
+
+    - name: Collections storms at the golden budget (net10.0)
+      shell: bash
+      run: |
+        dotnet test test/NumSharp.Tests/NumSharp.Tests.csproj \
+          --configuration Release --no-build --framework net10.0 \
+          --filter "FullyQualifiedName~NumSharp.Tests.Collections&TestCategory!=OpenBugs&TestCategory!=HighMemory" \
+          --logger "trx;LogFileName=collections-stress.trx"
+
+    - name: Upload stress results
+      if: always()
+      uses: actions/upload-artifact@v7
+      with:
+        name: collections-stress-results
+        path: test/NumSharp.Tests/TestResults/collections-stress.trx
+        if-no-files-found: warn
         retention-days: 14
