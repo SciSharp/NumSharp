@@ -18,18 +18,17 @@ namespace NumSharp.Tests.Fuzz
         public void EveryOrdinaryOracleOp_HasFourCasesAndAChangingAxis()
         {
             var byOp = new Dictionary<string, Strength>(StringComparer.Ordinal);
-            string directory = Path.GetDirectoryName(FuzzCorpus.CorpusPath("unused"));
-            foreach (string path in Directory.EnumerateFiles(directory, "*.jsonl"))
+            // The shared header survey already excludes the host pins; its signatures are built exactly as this
+            // loop built them from a full parse (operand dtypes joined by ',', params as ordinal key=rawJson|...).
+            foreach (var file in CorpusSurvey.Files)
             {
-                string file = Path.GetFileName(path);
-                if (file.EndsWith(".host.jsonl", StringComparison.Ordinal) ||
-                    file.StartsWith("index_", StringComparison.Ordinal) ||
-                    file.StartsWith("ma_", StringComparison.Ordinal))
-                    continue; // host metadata, the advanced-indexing schema, and the masked-array
-                              // schema (NDMaskedArray operands + ApplyMasked; gated by FuzzCorpusTests.Ma
-                              // with its own coverage model — many ma helper ops legitimately have <4 cases)
+                if (file.Name.StartsWith("index_", StringComparison.Ordinal) ||
+                    file.Name.StartsWith("ma_", StringComparison.Ordinal))
+                    continue; // the advanced-indexing schema, and the masked-array schema (NDMaskedArray
+                              // operands + ApplyMasked; gated by FuzzCorpusTests.Ma with its own coverage
+                              // model — many ma helper ops legitimately have <4 cases)
 
-                foreach (var c in FuzzCorpus.Load(file))
+                foreach (var c in file.Cases)
                 {
                     if (string.IsNullOrEmpty(c.Op))
                         continue;
@@ -38,14 +37,9 @@ namespace NumSharp.Tests.Fuzz
                     s.Count++;
                     s.Layouts.Add(c.Layout ?? "");
                     s.ValueClasses.Add(c.Valueclass ?? "");
-                    s.DtypeSignatures.Add(string.Join(",", (c.Operands ?? Array.Empty<FuzzCorpus.Operand>())
-                        .Select(o => o.Dtype ?? "")));
-                    s.ParameterSignatures.Add(c.Params == null ? "{}" : string.Join("|",
-                        c.Params.OrderBy(kv => kv.Key, StringComparer.Ordinal)
-                            .Select(kv => kv.Key + "=" + kv.Value.GetRawText())));
-                    s.Outcomes.Add(c.Error != null || c.Expects_Throw
-                        ? "error"
-                        : c.Expected?.KindOrArray ?? "array");
+                    s.DtypeSignatures.Add(c.DtypeSignature);
+                    s.ParameterSignatures.Add(c.ParamSignature);
+                    s.Outcomes.Add(c.IsError ? "error" : c.ExpectedKind);
                 }
             }
 
@@ -189,37 +183,33 @@ namespace NumSharp.Tests.Fuzz
         public void EveryOrdinaryOp_MeetsItsDtypeSpreadFloor()
         {
             var opDtypes = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
-            string directory = Path.GetDirectoryName(FuzzCorpus.CorpusPath("unused"));
-            foreach (string path in Directory.EnumerateFiles(directory, "*.jsonl"))
+            foreach (var file in CorpusSurvey.Files)   // the shared header survey: host pins already excluded
             {
-                string file = Path.GetFileName(path);
-                if (file.EndsWith(".host.jsonl", StringComparison.Ordinal) ||
-                    file.StartsWith("index_", StringComparison.Ordinal) ||
-                    file.StartsWith("ma_", StringComparison.Ordinal))
+                if (file.Name.StartsWith("index_", StringComparison.Ordinal) ||
+                    file.Name.StartsWith("ma_", StringComparison.Ordinal))
                     continue;
 
-                foreach (var c in FuzzCorpus.Load(file))
+                foreach (var c in file.Cases)
                 {
                     if (string.IsNullOrEmpty(c.Op))
                         continue;
                     if (!opDtypes.TryGetValue(c.Op, out var set))
                         opDtypes[c.Op] = set = new HashSet<string>(StringComparer.Ordinal);
                     bool any = false;
-                    foreach (var o in c.Operands ?? Array.Empty<FuzzCorpus.Operand>())
-                        if (DtypeOpFloors.ContainsKey(o.Dtype ?? ""))
+                    foreach (string dtype in c.OperandDtypes)
+                        if (DtypeOpFloors.ContainsKey(dtype ?? ""))
                         {
-                            set.Add(o.Dtype);
+                            set.Add(dtype);
                             any = true;
                         }
                     if (!any)
                     {
-                        // Zero-operand creation ops: the dtype request/result is the axis.
-                        if (c.Params != null && c.Params.TryGetValue("dtype", out var pd)
-                            && pd.ValueKind == System.Text.Json.JsonValueKind.String
-                            && DtypeOpFloors.ContainsKey(pd.GetString()))
-                            set.Add(pd.GetString());
-                        else if (c.Expected?.Dtype != null && DtypeOpFloors.ContainsKey(c.Expected.Dtype))
-                            set.Add(c.Expected.Dtype);
+                        // Zero-operand creation ops: the dtype request/result is the axis. ParamDtype is the
+                        // dtype param only when it is a JSON string, the kind this gate ever accepted.
+                        if (c.ParamDtype != null && DtypeOpFloors.ContainsKey(c.ParamDtype))
+                            set.Add(c.ParamDtype);
+                        else if (c.ExpectedDtype != null && DtypeOpFloors.ContainsKey(c.ExpectedDtype))
+                            set.Add(c.ExpectedDtype);
                     }
                 }
             }

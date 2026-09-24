@@ -123,7 +123,8 @@ namespace NumSharp.Tests.Fuzz
         /// <param name="file">The corpus file name under Fuzz/corpus/.</param>
         private static void RunMaCorpus(string file)
         {
-            var cases = FuzzCorpus.Load(file);
+            // Streamed like RunCorpus: counted up front, parsed one case at a time (see CorpusFile).
+            using var cases = FuzzCorpus.Open(file);
             int floor = MaMinCases.TryGetValue(file, out var f) ? f : 1;
             Assert.IsTrue(cases.Count >= floor,
                 $"corpus '{file}' has {cases.Count} cases, below the committed floor of {floor} " +

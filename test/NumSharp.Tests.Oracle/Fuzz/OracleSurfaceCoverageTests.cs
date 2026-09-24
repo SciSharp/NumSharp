@@ -177,21 +177,13 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void EveryPublicNumpySurface_IsCoveredOrExplicitlyClassified()
         {
-            var corpusOps = new HashSet<string>(StringComparer.Ordinal);
+            // The shared header survey (host pins excluded, as this scan always did) instead of a full parse.
+            var corpusOps = CorpusOps();
             var randomDists = new HashSet<string>(StringComparer.Ordinal);
-            string directory = Path.GetDirectoryName(FuzzCorpus.CorpusPath("unused"));
-            foreach (string path in Directory.EnumerateFiles(directory, "*.jsonl"))
-            {
-                if (path.EndsWith(".host.jsonl", StringComparison.Ordinal))
-                    continue;
-                foreach (var c in FuzzCorpus.Load(Path.GetFileName(path)))
-                {
-                    if (!string.IsNullOrEmpty(c.Op))
-                        corpusOps.Add(c.Op);
-                    if (c.Op == "rnd" && c.Params != null && c.Params.TryGetValue("dist", out var dist))
-                        randomDists.Add(dist.GetString());
-                }
-            }
+            foreach (var file in CorpusSurvey.Files)
+                foreach (var c in file.Cases)
+                    if (c.Op == "rnd" && c.Dist != null)
+                        randomDists.Add(c.Dist);
 
             var failures = new List<string>();
             var npNames = Surface(typeof(np), BindingFlags.Static);
@@ -278,21 +270,17 @@ namespace NumSharp.Tests.Fuzz
                 .OrderBy(name => name, StringComparer.Ordinal)
                 .ToArray();
 
-        /// <summary>All distinct op keys in the committed corpus (host pins excluded) — the same
-        ///     discovery the np-surface gate uses, shared by the four facade gates below.</summary>
-        /// <returns>The op-key set, ordinal-compared.</returns>
+        /// <summary>All distinct op keys in the committed corpus (host pins excluded) — the discovery the
+        ///     np-surface gate and the four facade gates below share, read off the process-wide
+        ///     <see cref="CorpusSurvey"/> rather than a fresh full parse per gate.</summary>
+        /// <returns>A new op-key set, ordinal-compared (callers may mutate it).</returns>
         private static HashSet<string> CorpusOps()
         {
             var ops = new HashSet<string>(StringComparer.Ordinal);
-            string directory = Path.GetDirectoryName(FuzzCorpus.CorpusPath("unused"));
-            foreach (string path in Directory.EnumerateFiles(directory, "*.jsonl"))
-            {
-                if (path.EndsWith(".host.jsonl", StringComparison.Ordinal))
-                    continue;
-                foreach (var c in FuzzCorpus.Load(Path.GetFileName(path)))
+            foreach (var file in CorpusSurvey.Files)
+                foreach (var c in file.Cases)
                     if (!string.IsNullOrEmpty(c.Op))
                         ops.Add(c.Op);
-            }
             return ops;
         }
 

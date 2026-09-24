@@ -42,7 +42,9 @@ namespace NumSharp.Tests.Fuzz
         /// <param name="acc">The sweep's tallies.</param>
         private static void SweepMaskedFile(string file, Func<string, bool> includeOp, SweepAccumulator acc)
         {
-            foreach (var c in FuzzCorpus.Load(file))
+            // Streamed (see CorpusFile): one parsed case alive at a time instead of the whole tier's list.
+            using var corpus = FuzzCorpus.Open(file);
+            foreach (var c in corpus)
             {
                 if (includeOp != null && !includeOp(c.Op))
                     continue;

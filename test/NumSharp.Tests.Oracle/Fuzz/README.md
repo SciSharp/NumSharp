@@ -44,6 +44,13 @@ test/oracle/                         corpus generators (NumPy 2.4.2)
                                      flat-reduce/astype kinds; NumSharp-producible layouts)
 test/NumSharp.Tests.Oracle/Fuzz/
   FuzzCorpus.cs                      reconstructs EXACT NDArray views from (dtype,shape,strides,offset,bytes)
+  CorpusFile.cs                      one tier as pooled UTF-8: case count up front, cases parsed ONE AT A TIME
+                                     (replays stream it — holding a tier's parsed list cost more in GC promotion
+                                     than the parse itself)
+  CorpusSurvey.cs                    header-only Utf8JsonReader scan of the whole corpus, built once per process
+                                     and shared by the coverage gates (surface/strength/journey3/applicability),
+                                     which used to parse all ~170 MB eight times; CorpusSurveyTests pins it to
+                                     the full parser
   BitDiff.cs                         bit-exact compare; NaN tokenized (payload/sign non-contractual) EXCEPT
                                      the complex-unary ops, whose NaN sign IS contractual and is raw-byte
                                      compared (Compare nanBitExact + DiffHasSignFlip); Decimal by canonical

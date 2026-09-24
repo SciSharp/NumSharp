@@ -399,15 +399,15 @@ namespace NumSharp.Tests.Fuzz
         private static Dictionary<string, HashSet<string>> AppliedKinds()
         {
             var applied = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
-            string directory = Path.GetDirectoryName(FuzzCorpus.CorpusPath("unused"));
-            foreach (string path in Directory.EnumerateFiles(directory, "*.jsonl"))
+            // The shared header survey (host pins — which carry no cases — already excluded) instead of a
+            // full parse; every field read below is the one this loop used to derive from the parsed case.
+            foreach (var surveyed in CorpusSurvey.Files)
             {
-                string file = Path.GetFileName(path);
-                if (file.EndsWith(".host.jsonl", StringComparison.Ordinal) ||
-                    file.StartsWith("index_", StringComparison.Ordinal))
-                    continue;   // host pins carry no cases; the index oracle has its own schema
+                string file = surveyed.Name;
+                if (file.StartsWith("index_", StringComparison.Ordinal))
+                    continue;   // the index oracle has its own schema
 
-                foreach (var c in FuzzCorpus.Load(file))
+                foreach (var c in surveyed.Cases)
                 {
                     if (string.IsNullOrEmpty(c.Op))
                         continue;
@@ -416,8 +416,7 @@ namespace NumSharp.Tests.Fuzz
 
                     // The masked-array comparator kinds are the (filled, mask) spelling of the
                     // ordinary array/tuple contract — normalize so group floors see them.
-                    string kind = c.Error != null || c.Expects_Throw ? "error"
-                        : c.Expected?.KindOrArray ?? "array";
+                    string kind = c.IsError ? "error" : c.ExpectedKind;
                     kinds.Add(kind switch { "masked" => "array", "masked_tuple" => "tuple", _ => kind });
 
                     if (file == "out_where.jsonl" || c.Valueclass == "outwhere")
@@ -426,10 +425,9 @@ namespace NumSharp.Tests.Fuzz
                         // The out_* vehicle keys (out_binary/out_unary/out_scan/out_nanarg) carry
                         // the REAL ufunc in params — credit that op so the group rows (whose keys
                         // are the ufunc names) see their out=/where= coverage.
-                        if (c.Params != null && c.Params.TryGetValue("ufunc", out var uf)
-                            && uf.ValueKind == System.Text.Json.JsonValueKind.String)
+                        if (c.Ufunc != null)
                         {
-                            string target = uf.GetString();
+                            string target = c.Ufunc;
                             if (!applied.TryGetValue(target, out var tk))
                                 applied[target] = tk = new HashSet<string>(StringComparer.Ordinal);
                             tk.Add("outwhere");
@@ -446,14 +444,13 @@ namespace NumSharp.Tests.Fuzz
                         kinds.Add("nan");
                     if (file == "specials.jsonl")
                         kinds.Add("specials");
-                    if (c.Expected?.Truth != null)
+                    if (c.HasTruth)
                         kinds.Add("precision");
-                    if (c.Params != null && c.Params.ContainsKey("axes")
-                        && (c.Op is "median" or "average" or "nanmedian"))
+                    if (c.HasAxesParam && (c.Op is "median" or "average" or "nanmedian"))
                         kinds.Add("multiaxis");
                     if (InplaceOps.Contains(c.Op))
                         kinds.Add("inplace");
-                    if (c.Operands != null && c.Operands.Any(o => o.Shape != null && o.Shape.Length == 0))
+                    if (c.HasZeroDOperand)
                         kinds.Add("zerod");
                     if (c.Layout != null && c.Layout.Contains("scalar_0d"))
                         kinds.Add("zerod");

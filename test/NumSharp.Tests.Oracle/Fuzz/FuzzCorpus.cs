@@ -144,18 +144,42 @@ namespace NumSharp.Tests.Fuzz
         public static string CorpusPath(string fileName)
             => Path.Combine(AppContext.BaseDirectory, "Fuzz", "corpus", fileName);
 
+        /// <summary>
+        ///     Opens a corpus file for ONE streaming pass: its case count is known up front and its cases are parsed
+        ///     one at a time as they are enumerated. Prefer this over <see cref="Load"/> for any replay that visits
+        ///     each case once — see <see cref="CorpusFile"/> for why holding a whole tier's parsed cases was the cost.
+        /// </summary>
+        /// <param name="fileName">The corpus file name under <c>Fuzz/corpus/</c>.</param>
+        /// <returns>The opened file; dispose it (it holds a pooled buffer).</returns>
+        /// <exception cref="IOException">The file does not exist or cannot be read.</exception>
+        public static CorpusFile Open(string fileName) => new(fileName, CorpusPath(fileName));
+
+        /// <summary>
+        ///     Parses a whole corpus file into a list, for the callers that need random access or several passes
+        ///     (a filtered subset, a two-variation replay). A single-pass replay should enumerate <see cref="Open"/>
+        ///     instead, so the parsed cases die young rather than surviving — and being promoted — as a list.
+        /// </summary>
+        /// <param name="fileName">The corpus file name under <c>Fuzz/corpus/</c>.</param>
+        /// <returns>Every case, in file order (one per non-blank line).</returns>
+        /// <exception cref="IOException">The file does not exist or cannot be read.</exception>
+        /// <exception cref="JsonException">A line is not valid corpus JSON.</exception>
         public static List<Case> Load(string fileName)
         {
-            var path = CorpusPath(fileName);
-            var list = new List<Case>();
-            foreach (var line in File.ReadLines(path))
-            {
-                if (string.IsNullOrWhiteSpace(line))
-                    continue;
-                list.Add(JsonSerializer.Deserialize<Case>(line, J));
-            }
+            using var file = Open(fileName);
+            var list = new List<Case>(file.Count);
+            foreach (var c in file)
+                list.Add(c);
             return list;
         }
+
+        /// <summary>
+        ///     Deserializes one corpus line (UTF-8, terminator excluded) with the corpus serializer options —
+        ///     case-insensitive property names, unknown properties ignored.
+        /// </summary>
+        /// <param name="utf8Line">One JSONL line.</param>
+        /// <returns>The parsed case (null only for a literal <c>null</c> line, which no generator writes).</returns>
+        /// <exception cref="JsonException">The line is not a valid corpus case.</exception>
+        internal static Case ParseLine(ReadOnlySpan<byte> utf8Line) => JsonSerializer.Deserialize<Case>(utf8Line, J);
 
         // -- dtype token <-> NPTypeCode. 13 NumPy-representable types + "char": NumSharp's Char
         // is bit-identical to uint16, so the oracle emits Char cases as uint16-proxy bytes

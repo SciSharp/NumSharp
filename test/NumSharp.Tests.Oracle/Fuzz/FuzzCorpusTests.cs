@@ -762,7 +762,10 @@ namespace NumSharp.Tests.Fuzz
 
         private static void RunCorpus(string file)
         {
-            var cases = FuzzCorpus.Load(file);
+            // Streamed, not loaded: the count (for the floor below) comes from a line scan and each case is parsed
+            // as the loop reaches it, so a 17 MB tier never holds its whole parsed list — whose promotion through the
+            // GC generations cost more than the parsing did (see CorpusFile).
+            using var cases = FuzzCorpus.Open(file);
             int floor = MinCases.TryGetValue(file, out var f) ? f : 1;
             Assert.IsTrue(cases.Count >= floor,
                 $"corpus '{file}' has {cases.Count} cases, below the committed floor of {floor} " +
