@@ -58,6 +58,12 @@
          treated as background work and parked on a hybrid CPU's E-cores). Shared with NumSharp.Tests, which
          owns the file; a module initializer, a no-op off Windows. See the file's remarks. -->
     <Compile Include="..\NumSharp.Tests\Utilities\TestHostQualityOfService.cs" Link="TestHostQualityOfService.cs" />
+    <!-- The exact-and-cheap GC protocol (young collection when it decides the same fates a full one would, full
+         only as the fallback). Linked (not copied) from NumSharp.Tests, like the Oracle does, so the weaver's
+         "values survive forced collections" gate collects the way every other lifetime test does: this host's
+         heap holds whole Roslyn compilations, so the full pair it used to force per iteration was the test's
+         dominant cost. See the file's remarks. -->
+    <Compile Include="..\NumSharp.Tests\Utilities\GcQuiescence.cs" Link="GcQuiescence.cs" />
   </ItemGroup>
 
   <ItemGroup>
