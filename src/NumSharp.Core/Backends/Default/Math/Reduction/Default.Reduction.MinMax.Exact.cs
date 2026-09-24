@@ -78,7 +78,10 @@ using NumSharp.Utilities;
 // all-NaN slice — and a NaN is never canonicalized anywhere. Per schedule:
 //
 //   * FLAT and ROW-contiguous: simd_reduce_c with the P lane reduce — the same NumPyMinMaxReduce code the N rules run,
-//     TLane.PropagatesNaN == false switching off every canonicalization (ChainContiguous, ReduceLanes);
+//     TLane.PropagatesNaN == false switching off every canonicalization (ChainContiguous, ReduceLanes). Only the vector
+//     section differs in HOW it is computed: maxp is an associative selection, so NumPy's group tree + single-vector loop
+//     equal one order-free per-lane fold, which NumPyMinMaxReduce.FoldVectorsP runs as an aligned backward scan (one
+//     plain vmaxp per vector) — the same bits, without the per-group NaN proof and the split loads of NumPy's x[1:] start;
 //   * ROW-strided: the 8-accumulator unroll with the SCALAR op (ChainStrided folds through TLane.SV / TLane.S, the CRT
 //     rule lane by lane);
 //   * SLAB: the elementwise calls apply the VECTOR op to the first L - L % lanes elements of every call and the SCALAR

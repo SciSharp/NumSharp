@@ -1056,13 +1056,28 @@ visiting order: NaN skipped (complex: a NaN in either part), the EARLIER of a ti
 all-NaN slice → its first NaN verbatim. Integers/bool/char/decimal are `np.amax`/`np.amin`. **BREAKING
 (NumPy-aligned):** an empty reduction RAISES `zero-size array to reduction operation fmax/fmin which has no identity`
 (was a 0-d NaN); complex used to go to `np.amax` and PROPAGATE a NaN; float16 non-C layouts misread strides. Gates:
-`Backends/Kernels/NanMinMaxExactScheduleTests.cs` (26, NumPy-probed literals; 36/36 targeted mutants killed) + three
-NumPy replay oracles (6,000+ f32/f64 cases × engine/leaf/computed, 2,080 f16/c128 incl. broadcasts — 0 misses) + the
-`nanreduce`/`specials` fuzz tiers, where `nanmax`/`nanmin` are no longer in `MisalignedRegistry.NanReduceOps` (now
-ENFORCED). NPY/NS @100K: flat C f64/f32 1.93/2.40, F 1.90, axis 2.07–3.19, evaluate `nanmax(a*b)` 9.3 (1.5–13.6× the
-previous kernels on non-C/axis cells). Known gaps: float16/complex128 axis & non-C cells are a scalar fold at
-0.41–0.69× NumPy (the next lever); flat contiguous @4M 0.84–1.01× (DRAM-bound, np.max's follow-up class); a broadcast
-float32/float64 input keeps the old kernels (value-exact only).
+`Backends/Kernels/NanMinMaxExactScheduleTests.cs` (31, NumPy-probed literals; 36/36 schedule mutants + 21/24 fold
+mutants killed, the 3 fold survivors equivalent by design) + three NumPy replay oracles (6,000+ f32/f64 cases ×
+engine/leaf/computed, 2,080 f16/c128 incl. broadcasts — 0 misses) + the `nanreduce`/`specials` fuzz tiers, where
+`nanmax`/`nanmin` are no longer in `MisalignedRegistry.NanReduceOps` (now ENFORCED). **The P rules' vector section is
+ONE order-free fold** (`NumPyMinMaxReduce.FoldVectorsP`, `DefaultEngine.Evaluate.MinMax.cs`): `maxp` is an associative
+selection ("the LAST largest non-NaN, else the FIRST NaN"), so NumPy's group tree + single-vector loop equal, per lane,
+a BACKWARD scan with the plain `vmaxp(data, suffix)` from `∓inf` — one instruction per vector, the suffix never NaN, a
+NaN data lane skipped, a tie keeping the later element — read through the 32-byte-ALIGNED vectors covering NumPy's
+`x[1:]` section (NumPy's own loads split a cache line every other vector; the tree paid 1.4× the old value-only
+kernel's time for it) with one `vpermd` rotating positions back to NumPy's lanes and a vectorized rescan of the rare
+NaN-accumulator lane the fill cannot decide. Only for stretches of ≥ `FoldVectorsPMinElements` = 768 elements: the
+fold's 1.5–5 ns fixed cost is paid per ROW (rows ≤ 512 elements ran 0.49–0.97× the tree), so shorter stretches keep the
+literal tree untouched; and `Finish` dispatches to two SEPARATE methods (`FinishTree`, the old body verbatim /
+`FinishFoldP`) because tier-1 PGO compiles one body from its early profile — a shared body laid the tree's loops out
+cold whenever long reductions ran first (short rows 0.69–0.84×). NPY/NS @100K: flat C f64/f32 2.89/3.33 (were
+1.93/2.40, the exact route now 0.96–1.01× the old kernel in-process — it was 0.74/0.67×, the "1.10×" once claimed did
+not reproduce), F 2.98, rows of 1000 3.54 / f32 4.31, axis slab 2.07–2.55, evaluate `nanmax(a*b)` 2.16 (the 9.3 once
+quoted was measured while NumPy's temporary page-faulted — the allocator-regime trap); rows below the threshold
+0.96–1.05× unchanged. Known gaps: float16/complex128 axis & non-C cells are a scalar fold at 0.41–0.69× NumPy (the next
+lever); flat contiguous @4M is DRAM-bound (0.89–1.06× the old kernel in-process, NPY/NS f64 ~1.5–1.6 / f32 ~1.0); a
+broadcast float32/float64 input keeps the old kernels (value-exact only). Design + measurements + gates:
+`docs/plans/ndexpr-evaluate.md` → "The P rules' order-free aligned fold".
 
 ### Bitwise
 `bitwise_and`, `bitwise_or`, `bitwise_xor` (ufunc `out=`/`where=`/`dtype=` supported; float/complex/decimal INPUTS raise NumPy's coercion TypeError while a float/complex/decimal `dtype=` raises the no-loop text — distinct messages, both probed; probed order: bad `where` → no-loop → out-cast → shape), `invert`, `left_shift`, `right_shift`

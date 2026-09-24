@@ -609,8 +609,10 @@ bit-exact (`ILKernelGenerator.Reduction.Pairwise.cs`); only the fused reduce pat
    even under a NaN accumulator, and a group HOLDING a NaN folds with the full blended rule and then the fast path
    CONTINUES (the N rules must still leave for good: a NaN accumulator is exactly where the plain op differs). The first
    cut broke out permanently like the N rules, which put every NaN-laced run — a NaN in the first group included — on the
-   three-instruction rule: flat C f64 @100K was 0.44× the old value-exact kernel; with the continue it is 0.72× / f32
-   1.10× (NPY/NS 1.31 → 1.93, f32 1.60 → 2.40). **BREAKING (NumPy-aligned):** an empty `nanmax`/`nanmin` raises
+   three-instruction rule: flat C f64 @100K was 0.44× the old value-exact kernel; with the continue it measured 0.72× /
+   f32 "1.10×" (NPY/NS 1.31 → 1.93, f32 1.60 → 2.40) — **the f32 figure did not hold up**: re-measured pinned, in one
+   process, the exact route ran 0.74× (f64) / 0.67× (f32) the old kernel, and the gap was never the NaN proof — see
+   "**The P rules' order-free aligned fold**" below, which closes it. **BREAKING (NumPy-aligned):** an empty `nanmax`/`nanmin` raises
    `zero-size array to reduction operation fmax/fmin which has no identity`; complex skips NaN; an all-NaN float16
    slice returns its first NaN verbatim. **Verified:** three NumPy 2.4.2 replay oracles — f32/f64 #1 (3,584 cases,
    engine + evaluate) and #2 (3,452 cases × engine / bare leaf / computed child: lane-structured ±0, NaN-payload pools,
@@ -637,16 +639,88 @@ bit-exact (`ILKernelGenerator.Reduction.Pairwise.cs`); only the fused reduce pat
    2.43 / f32 2.88, F slab 2.69, F rows 3.19, transposed 2.07, 3-D 1.63 (old 0.15), stepped rows 4.72, reversed rows
    1.86; evaluate `nanmax(a*b)` **9.29**, `(a*b, 0)` 7.94, `(a*b, 1)` 4.83, `(a, 0)` 2.12, `nanmin(af*af, 1)` 2.29 —
    1.5–13.6× the old kernels on every non-C / axis cell (stepped 1.5–1.7×, the flat computed child 1.8×, the rest
-   2.8–13.6×). @4M (DRAM-bound, host ~50 % loaded by another job — ±30 % run
+   2.8–13.6×). (Correction 2026-09-24: the three `a*b` evaluate ratios were measured while NumPy's 800 KB `a*b`
+   temporary page-faulted on every call — NumPy 0.18–0.23 ms; with a warm allocator NumPy takes 0.034 ms and the same
+   cells read NPY/NS 2.2 (`nanmax(a*b)`, after the aligned fold) and 2.5 (`(a*b, 1)`) — the allocator-regime
+   volatility of `benchmark/CLAUDE.md`, not a kernel property.) @4M (DRAM-bound, host ~50 % loaded by another job — ±30 % run
    to run, min over five rounds each side): slab C 1.84 / f32 1.24, rows 1.32 / 1.30, F slab 1.96, F rows 1.55,
-   transposed 1.84, 3-D 2.35, evaluate 3.31–9.77; flat F 1.18, reversed columns 1.26. **Known gaps / follow-ups:**
+   transposed 1.84, 3-D 2.35, evaluate 3.31–9.77; flat F 1.18, reversed columns 1.26. **The P rules' order-free
+   aligned fold (2026-09-24; `FoldVectorsP` / `FinishFoldP` in `DefaultEngine.Evaluate.MinMax.cs`).** The fast fold's
+   "1.10×" failed a pinned SAME-PROCESS A/B: on a flat C-contiguous reduction @100K the exact route ran 0.74× (f64) /
+   0.67× (f32) the old value-only kernel, NaN-free input just as slow — the NaN proof was never the gap. The ADDRESS
+   was: NumPy copies `x[0]` into the output and reduces `x[1:]`, so on a 32-byte-aligned buffer its lanes sit one
+   element off every 32-byte boundary and every other 32-byte load straddles a 64-byte cache line — 1.4× the old
+   kernel's time in L1/L2 (the old kernel folded from `x[0]`). The fix computes the SAME bits from aligned memory:
+   (1) `maxp(a, b) = isnan(b) ? a : (a > b ? a : b)` is an associative SELECTION — over an ordered sequence in any
+   bracketing it returns the LAST element holding the largest non-NaN value (±0 compare equal), else the FIRST element
+   when all are NaN — and NumPy's 8-vector group tree + single-vector loop only ever combine one lane's elements in
+   increasing position, so accumulator lane `j` after the section is that selection over `[acc_j, ip[j], ip[j+Count],
+   …]` whatever the tree's shape; (2) scanned BACKWARD from the fill (`-inf` for fmax, `+inf` for fmin — the identity
+   among non-NaN values), the PLAIN op `vmaxp(data, suffix)` computes exactly that selection: a NaN data lane returns
+   the suffix (skipped), a tie returns the suffix (the later element), and the suffix is never NaN — one instruction per
+   vector, no NaN proof, no data-dependent branch, eight contiguous chunks scanned side by side as eight independent
+   chains and combined in order (a FORWARD scan cannot do it in one instruction: accumulator-first lets a NaN win,
+   data-first keeps the EARLIER of a tie — the old kernel's ±0 discrepancy); (3) the section is read as the
+   32-byte-ALIGNED vectors covering it — memory position `p` of each holds NumPy lane `(p − d) mod Count`, the first
+   and last are blended to the fill before any arithmetic (nothing outside the section — another array's bytes,
+   uninitialized memory — can reach the result, and an aligned 32-byte read never crosses a page, so an edge read cannot
+   fault), and one `vpermd` rotates positions back to NumPy's lanes at both widths (8-byte lanes by `d` = 4-byte lanes
+   by `2d`: a variable index vector, no switch on `d`); (4) a suffix equal to the fill cannot tell "no non-NaN in the
+   lane" from "its largest non-NaN is the infinity" — combining it with an ordered accumulator lane is right either
+   way, but a NaN accumulator lane must survive only in the first case (NumPy keeps the FIRST of two NaNs), so only
+   those lanes are rescanned (`KeepAllNaNLanes`, vectorized, early exit). Routes: `FinishFoldP` (every flat call, row
+   and buffered fill of ≥ 768 elements) and `FoldGroups` (evaluate's streamed 8 KB blocks); the N rules and every
+   shorter P stretch keep the literal tree (`FoldGroupsTree` / `FinishTree`). **"Not hurting the others" took three
+   rounds, each found by measurement:** (a) the fold costs 1.5–5 ns per CALL (out-of-line frames that spill the
+   callee-saved XMM6–15 under the Windows x64 ABI, chunk setup, two edge vectors, the rotation), which a ROW reduction
+   pays per row — a row-length sweep (`np.nanmax(a, axis=1)` over (R, L) blocks of 256K elements) put rows up to 512
+   elements at 0.49–0.97× the tree and from 768 on at 1.03–1.22×, at the same ELEMENT count for both widths, so
+   `FoldVectorsPMinElements = 768` elements and below it the old route runs untouched; (b) inlining `SuffixFold` into
+   `FoldVectorsP` to save the call made long rows 7–17 % slower (the JIT loop-placement effect: the identical chain loop
+   inside a bigger frame) — kept `[NoInlining]`; (c) tier-1 PGO had inlined the whole tree into `Finish`, a call-free
+   leaf (`sub rsp, 104` + six XMM saves); a call to the fold in the same body made it push four GPRs and grow a 184-byte
+   frame on EVERY call (rows of 10–100 elements, which never fold, 0.78–0.86×), and even behind an early exit ONE body
+   kept ONE profile, compiled from whichever route ran first — long flat reductions first left the tree's loops laid
+   out cold, short rows 0.69–0.84×. `Finish` is now an
+   `[AggressiveInlining]` dispatcher between `FinishTree` (the old body verbatim) and `[NoInlining] FinishFoldP`, each
+   method profiled on its own. **Measured** (pinned P-core, `DOTNET_TC_CallCountingDelayMs=0`, frozen before / after
+   worktrees alternated process by process, min of 3 per side; before = `014f5b95`, "old" = the same process's
+   `DisableExactMinMax` route, a NaN at every 997th element): @100K flat C f64 nanmax / nanmin **1.49× / 1.53×** faster
+   (5.78 → 3.88 µs, 5.82 → 3.81), f32 **1.40×**, NaN-free 1.33–1.38×, F 1.45×, reversed columns 1.11×, rows of 1000
+   f64 / f32 1.31× / 1.24×, evaluate `nanmax(a*b)` 1.20× — and the exact route now runs **0.96–1.01× the old value-only
+   kernel** in the same process (was 0.74 / 0.67), which is the claim corrected above. NPY/NS @100K: flat C f64 1.94 →
+   **2.89**, nanmin 1.94 → **2.97**, f32 2.38 → **3.33**, F 2.05 → 2.98, rows 2.71 → 3.54 / f32 3.48 → 4.31, evaluate
+   `nanmax(a*b)` 1.80 → 2.16. Nothing else moved: the row-length sweep reads 0.96–1.05 below the threshold and 1.05
+   (769) → 1.22 (2049) above it; the short-row cells (rows of 10 / 100, F axis 0) rerun in isolation read 0.98–1.09
+   (the full list's 0.88–0.92 on rows of 10 was process-order noise); the `np.max` controls 0.96–1.03; every @1K cell is
+   below the threshold. @4M the cells are DRAM-bound and the host drifted (the identical-code control column read
+   0.70–1.30), so only the in-process ratio carries: 0.89–1.06× the old kernel. **Gates:** `NanMinMaxExactScheduleTests`
+   (31) — the three FLAT public-route fold tests run one length on each side of the threshold at every start alignment
+   with winning-infinity garbage around the view; the new
+   `Flat_FoldedSection_TheLaterOfTwoTiedZerosWins_AtEveryAdjacentVectorPair` (56,368 cases: two tied zeros at every
+   adjacent vector pair in a lane, eight lengths per base length so
+   every remainder of the eight-chunk split meets the sweep; its NumPy probe ran 112,736 cases incl. the mirrored signs,
+   every one the later zero); and `FoldVectorsP_IsNumPysLiteralVectorSection_AnyAlignmentAnyData` (the fold against the
+   literal tree transcription on the RAW accumulator, 1,500 random sections × both widths × both rules). Mutation behind
+   a green baseline: **24 mutants, 21 killed**; the 3 survivors are equivalent by design (`d` from 16-byte blocks — an
+   exact, merely unaligned read; folding every P stretch / none — the threshold picks speed, not bits). With the
+   raw-accumulator differential excluded, the NumPy-probed tests alone kill 19 of the 21; the other two (the short chain,
+   which no production call reaches — a public route always folds ≥ 96 vectors; a fix-up that stops at the first
+   resolved lane, since every lane it could misplace holds the fill's infinity, which the lane reduce answers
+   identically) change no public result. The three replay oracles on the final code: **0 misses** (3,584 × engine /
+   evaluate; 3,452 × engine / bare leaf / computed child, every case on the exact route; 2,080 float16 / complex128) —
+   and teeth-checked by planting mutants: a dropped rotation reads 11–24 misses per route, but the chunk-order mutant 0,
+   because the oracles' long arrays never tie at a lane's maximum — the gap the adjacent-pair test closes (it alone
+   kills the chunk-order, chunk-combine, first-edge, extra-vector-order and extra-vector-dropped mutants). **Known
+   gaps / follow-ups:**
    (1) the float16 / complex128 sequential fold is scalar — per-element `(float)` conversions, a per-element odometer in
    slab mode — at 0.41–0.62× NumPy on float16 axis / non-C cells and 0.61–0.69× on complex axis 0 (complex flat /
    axis 1 1.01–1.20; the flat C float16 bit kernel 45–58×); nothing correct got slower (the faster pre-lever routes
    returned wrong values), but it is the next lever: integer-key float16 compares, tight inner slab loops, and SIMD
-   through the existing bit-level float16 `fmax` kernel, which computes exactly `HALF_fmax`. (2) Flat CONTIGUOUS f64 /
-   f32 @4M sits at 0.84–1.01× NumPy, ~0.8× the old kernel within the same process — the single `simd_reduce_c` chain
-   NumPy itself runs, DRAM-bound; the same class as `np.max`'s follow-up (2). (3) A broadcast float32 / float64 input
+   through the existing bit-level float16 `fmax` kernel, which computes exactly `HALF_fmax`. (2) ~~Flat CONTIGUOUS f64 /
+   f32 @4M sits at 0.84–1.01× NumPy, ~0.8× the old kernel within the same process~~ — CLOSED 2026-09-24 by the aligned
+   fold below: @4M the flat contiguous cells are DRAM-bound at 0.89–1.06× the old kernel in the same process, NPY/NS
+   f64 ~1.5–1.6 / f32 ~1.0 (host-noisy there, ±15 %). (3) A broadcast float32 / float64 input
    keeps the old kernels (value-exact; ±0 sign / payload not pinned) — needs NpyIter's ambiguous zero-stride axis sort,
    coalescing and buffering branch ported, as for `np.max`. (4) evaluate `Ptp` over a PERMUTED computed child: bits not
    pinned (it materializes through `EvaluateCore`'s C layout). (5) float16 `NanSum`/`NanProd` on non-C layouts likely

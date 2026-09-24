@@ -42,6 +42,17 @@ using NumSharp.Backends.Iteration;
 // The portable compare + select form cost ~7 uops a vector against the AVX form's 3 — 11.1 vs ~6 us on a
 // 100K bare-leaf max, so the gate is a measured speed matter, not a semantic one.
 //
+// The NaN-SUPPRESSING rules (np.nanmax / np.nanmin = fmax / fmin.reduce, the "P rules") compute the vector section
+// differently but land on the same bits: their vector op maxp is an associative selection ("the LAST largest non-NaN,
+// else the FIRST NaN"), so the group tree and the single-vector loop are one order-free fold per lane. FoldVectorsP runs
+// it as a BACKWARD scan with the plain op, data first — vmaxp(data, suffix) skips a NaN and lets the later element win a
+// tie, one instruction per vector where the tree needed a NaN proof per group — over the 32-byte-ALIGNED vectors covering
+// the section, rotating positions back to NumPy's lanes at the end. The alignment matters because the section starts at
+// x[1] (x[0] is the seed): NumPy's own loads split a cache line every other vector, which on an aligned buffer cost the
+// tree 1.4x the old value-only kernel's time in L1/L2. The N rules keep the literal tree (FoldGroupsTree), and so does a
+// P-rule stretch shorter than FoldVectorsPMinElements (768 elements): the fold costs a few ns per call, which a row
+// reduction pays per ROW, so rows below that length ran 0.5-0.97x the tree's speed and keep the tree's exact route.
+//
 // Routes (DefaultEngine.TryExactFlatMinMax), each exactly the buffer NumPy reduces:
 //   * the child is a bare DENSE array leaf (C- or F-contiguous, or any transpose of one — a single dense
 //     block): the schedule runs over that block in place, in memory order — NumPy reduces the array itself,
@@ -842,15 +853,53 @@ namespace NumSharp.Backends
 
         /// <summary>
         /// Phase 1 of the schedule: fold <paramref name="groups"/> whole 8-vector groups into
-        /// <paramref name="acc"/>, each as <c>acc = N(acc, N(N(N(v0,v1), N(v2,v3)), N(N(v4,v5), N(v6,v7))))</c>.
+        /// <paramref name="acc"/>, bit-identical to NumPy's <c>acc = N(acc, N(N(N(v0,v1), N(v2,v3)), N(N(v4,v5), N(v6,v7))))</c>
+        /// per group. The N rules (<c>np.max</c> / <c>np.min</c>, and every integer lane) run that tree literally
+        /// (<see cref="FoldGroupsTree{T,TLane}"/>); the P rules (<c>np.nanmax</c> / <c>np.nanmin</c>) take the order-free
+        /// aligned backward fold (<see cref="FoldVectorsP{T,TLane}"/>), which lands on the same bits without a per-group
+        /// NaN proof — once the run is long enough (<see cref="FoldVectorsPMinElements"/>) for that fold's fixed cost to pay.
         /// </summary>
+        /// <remarks>
+        /// The dispatch is on <see cref="ILane{T}.PropagatesNaN"/>, a JIT-time constant per lane type, so an N-rule or integer
+        /// instantiation compiles to exactly the tree fold it ran before the P-rule fold existed — nothing but the
+        /// <c>np.nanmax</c> / <c>np.nanmin</c> family changes route, and it changes route only for runs of at least
+        /// <see cref="FoldVectorsPMinElements"/> elements; a shorter P-rule run keeps the tree, the route it took before. Both
+        /// routes are bit-identical, so the threshold is a pure speed choice.
+        /// </remarks>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <typeparam name="TLane">The lane rule (max / min, or the NaN-suppressing fmax / fmin).</typeparam>
+        /// <param name="acc">The running accumulator vector.</param>
+        /// <param name="ip">First element of the first group (unaligned is fine).</param>
+        /// <param name="groups">Number of whole groups (8 × <see cref="Vector256{T}.Count"/> elements each) to fold.</param>
+        /// <returns>The updated accumulator — NumPy's, lane for lane and bit for bit.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static unsafe Vector256<T> FoldGroups<T, TLane>(Vector256<T> acc, T* ip, long groups)
+            where T : unmanaged, INumber<T> where TLane : struct, ILane<T>
+            => TLane.PropagatesNaN || groups * 8 * Vector256<T>.Count < FoldVectorsPMinElements
+                ? FoldGroupsTree<T, TLane>(acc, ip, groups)
+                : FoldVectorsP<T, TLane>(acc, ip, groups * 8);
+
+        /// <summary>
+        /// NumPy's group tree, literally: fold <paramref name="groups"/> whole 8-vector groups into <paramref name="acc"/>,
+        /// each as <c>acc = N(acc, N(N(N(v0,v1), N(v2,v3)), N(N(v4,v5), N(v6,v7))))</c>, with a NaN-free fast path that
+        /// runs a group proven NaN-free with the plain lane op. What <see cref="FoldGroups{T,TLane}"/> runs for the N rules;
+        /// for the P rules it is the tree <see cref="FoldVectorsP{T,TLane}"/> must equal bit for bit, and the tests compare
+        /// the two directly.
+        /// </summary>
+        /// <remarks>
+        /// The P rules' production path only for runs shorter than <see cref="FoldVectorsPMinElements"/> elements. On a long run
+        /// it loses to <see cref="FoldVectorsP{T,TLane}"/>: it reads NumPy's vector section starting one element past an
+        /// array's base (element 0 is the seed), so on a 32-byte-aligned buffer every other 32-byte load splits a cache line
+        /// — the cause of the in-cache gap to the old value-only kernel that the aligned, order-free fold closes. On a short
+        /// run that per-vector penalty is smaller than the aligned fold's fixed cost, so the tree stays.
+        /// </remarks>
         /// <typeparam name="T">The element type.</typeparam>
         /// <typeparam name="TLane">The lane rule (max / min, or the NaN-suppressing fmax / fmin).</typeparam>
         /// <param name="acc">The running accumulator vector.</param>
         /// <param name="ip">First element of the first group (unaligned is fine).</param>
         /// <param name="groups">Number of whole groups (8 × <see cref="Vector256{T}.Count"/> elements each) to fold.</param>
         /// <returns>The updated accumulator.</returns>
-        internal static unsafe Vector256<T> FoldGroups<T, TLane>(Vector256<T> acc, T* ip, long groups)
+        internal static unsafe Vector256<T> FoldGroupsTree<T, TLane>(Vector256<T> acc, T* ip, long groups)
             where T : unmanaged, INumber<T> where TLane : struct, ILane<T>
         {
             int vstep = Vector256<T>.Count;
@@ -954,8 +1003,357 @@ namespace NumSharp.Backends
                 : Avx.CompareUnordered(a.AsSingle(), b.AsSingle()).As<float, T>();
 
         /// <summary>
+        /// Below this many whole vectors <see cref="FoldVectorsP{T,TLane}"/> reads NumPy's lanes directly (unaligned) instead
+        /// of through the aligned-position remap: with fewer than one group the fold is one short backward chain whose
+        /// latency, not its few split loads, sets the cost, and the remap's two masked edge vectors plus the lane rotation
+        /// would only add work.
+        /// </summary>
+        private const long AlignedFoldMinVectors = 8;
+
+        /// <summary>
+        /// The shortest P-rule stretch (in ELEMENTS) that <see cref="Finish{T,TLane}"/> and <see cref="FoldGroups{T,TLane}"/>
+        /// hand to <see cref="FoldVectorsP{T,TLane}"/>; a shorter one keeps NumPy's tree (<see cref="FoldGroupsTree{T,TLane}"/>
+        /// + the single-vector loop), the exact route every P-rule section took before the order-free fold existed. Both
+        /// routes produce the same bits, so this only picks the faster one — and below it nothing changed at all.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The aligned fold saves a split cache-line load on every other vector, but costs a fixed amount per call: its
+        /// out-of-line frames (the eight chains need callee-saved vector registers, which the Windows x64 ABI makes them
+        /// spill and restore), the chunk setup, the two edge vectors and the lane rotation — about 1.5–5 ns. A flat
+        /// reduction pays that once; a ROW reduction pays it once per row, and there the tree wins short rows.
+        /// </para>
+        /// <para>
+        /// Measured (np.nanmax(a, axis=1) over C-contiguous (R, L) blocks of 256K elements, pinned, min of 4 runs per side,
+        /// tree vs fold time per row): up to 64 float32 / 128 float64 vectors — 512 elements — the fold ran 0.49–0.97x the
+        /// tree's speed; from 96 float32 / 192 float64 vectors — 768 elements — on it ran 1.03–1.22x. The crossover sat at
+        /// about the same ELEMENT count for both widths (not the same vector count), so the threshold counts elements. It
+        /// sits at the first measured WINNING size rather than the interpolated crossover: every shorter stretch keeps the
+        /// old route exactly (a length between the two samples might gain a percent or two from the fold, or lose as much),
+        /// and every longer one is past the point where the fold measured faster.
+        /// </para>
+        /// </remarks>
+        internal const long FoldVectorsPMinElements = 768;
+
+        /// <summary>
+        /// The P rules' vector section — NumPy's 8-vector group tree followed by its single-vector loop — over
+        /// <paramref name="vectors"/> whole vectors from <paramref name="ip"/>, computed as ONE order-free fold: bit-identical
+        /// to <see cref="FoldGroupsTree{T,TLane}"/> + the loop, at the old value-only kernel's cost (one load and one plain
+        /// <c>vmaxp</c> / <c>vminp</c> per vector, no NaN proof, no data-dependent branch).
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// WHY IT IS EXACT. NumPy's vector op <c>maxp(a, b) = isnan(b) ? a : (a &gt; b ? a : b)</c> is an associative
+        /// SELECTION: folded over an ordered sequence in ANY bracketing it returns "the LAST element holding the largest
+        /// non-NaN value (±0 compare equal), or the FIRST element when every one is NaN". NumPy's tree and single-vector loop
+        /// only ever combine one lane's elements in increasing position, so accumulator lane <c>j</c> after the vector section
+        /// is that selection over <c>[acc_j, ip[j], ip[j + Count], ip[j + 2·Count], …]</c> — whatever the tree's shape.
+        /// </para>
+        /// <para>
+        /// WHY IT IS ONE INSTRUCTION PER VECTOR. Scanned BACKWARD, the plain op <c>vmaxp(data, suffix)</c> computes exactly
+        /// that selection over the suffix, starting from the fill <see cref="ILane{T}.NaNLaneFill"/> (<c>-inf</c> for fmax,
+        /// <c>+inf</c> for fmin — the identity among non-NaN values): a NaN data lane returns the suffix (skipped), a tie
+        /// returns the suffix (the LATER element wins), and the suffix itself is never NaN. Eight contiguous chunks scanned
+        /// backward side by side give eight independent chains, combined in order with the same op. A forward scan cannot
+        /// do this with one instruction: with the accumulator first a NaN data lane would win, with the data first a tie
+        /// would keep the EARLIER element (the old value-only kernel's ±0 discrepancy).
+        /// </para>
+        /// <para>
+        /// WHY IT READS ALIGNED MEMORY. The section starts one element past an array's base (element 0 is NumPy's seed), so
+        /// NumPy's lanes sit at a fixed offset <c>d</c> from 32-byte boundaries and every other 32-byte load of theirs splits
+        /// a cache line — measured 1.4x the old kernel's time in L1/L2. Because the fold is order-free per lane and each lane
+        /// keeps its elements in order, the section is read instead as the 32-byte-ALIGNED vectors covering it: memory
+        /// position <c>p</c> of every aligned vector holds NumPy lane <c>(p - d) mod Count</c>. The first aligned vector
+        /// contributes only positions <c>p &gt;= d</c> and the last only <c>p &lt; d</c> (the rest is blended to the fill
+        /// before any arithmetic, so nothing outside the section — possibly another array's bytes or uninitialized memory —
+        /// can reach the result), and one lane rotation maps positions back to NumPy's lanes. An aligned 32-byte read never
+        /// crosses a page boundary, so reading those edge vectors cannot fault even at the ends of an allocation.
+        /// </para>
+        /// <para>
+        /// THE ONE LANE THE FILL CANNOT DECIDE. A suffix result equal to the fill means either "the lane's data holds no
+        /// non-NaN" or "its largest non-NaN is -inf" (+inf for fmin). Combining it with an ordered <paramref name="acc"/>
+        /// lane is right in both cases, but a NaN accumulator lane must survive only in the first — NumPy keeps the FIRST of
+        /// two NaNs, i.e. the accumulator's own payload. Only such lanes are rescanned (<see cref="KeepAllNaNLanes{T}"/>,
+        /// vectorized, stopping once every one has met a non-NaN), so the rescan costs at most one extra pass and only on
+        /// data whose lanes are all-NaN or bottom out at an infinity.
+        /// </para>
+        /// </remarks>
+        /// <typeparam name="T">float or double (the P rules exist only for float lanes).</typeparam>
+        /// <typeparam name="TLane">A NaN-suppressing rule (<see cref="FMaxLane{T}"/> / <see cref="FMinLane{T}"/>).</typeparam>
+        /// <param name="acc">The accumulator entering the section (<c>splat</c> of the seed, or the fold carried from an earlier
+        /// block of the same call).</param>
+        /// <param name="ip">First element of the section (NumPy's lane 0), any alignment.</param>
+        /// <param name="vectors">Whole vectors to fold (&gt;= 0).</param>
+        /// <returns>The accumulator NumPy holds after the section, bit for bit.</returns>
+        /// <remarks>
+        /// Kept out of line on purpose: the production callers (<see cref="Finish{T,TLane}"/>, <see cref="FoldGroups{T,TLane}"/>)
+        /// reach it only for sections of at least <see cref="FoldVectorsPMinElements"/> elements, and inlining it into them
+        /// would make every SHORT row pay the vector-register spills this frame needs.
+        /// </remarks>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        internal static unsafe Vector256<T> FoldVectorsP<T, TLane>(Vector256<T> acc, T* ip, long vectors)
+            where T : unmanaged, INumber<T> where TLane : struct, ILane<T>
+        {
+            if (vectors <= 0)
+                return acc;
+
+            int vs = Vector256<T>.Count;
+            var fill = Vector256.Create(TLane.NaNLaneFill);
+            // d: NumPy's lane 0 position inside its 32-byte block. A pointer that is not even element-aligned (a byte-offset
+            // view) cannot be remapped lane for lane, so it — like an already aligned one and a short section — folds in place.
+            int d = (int)(((nuint)ip & 31) / (nuint)sizeof(T));
+            bool aligned = d != 0 && vectors >= AlignedFoldMinVectors && ((nuint)ip & (nuint)(sizeof(T) - 1)) == 0;
+            Vector256<T> s;
+            if (!aligned)
+            {
+                s = SuffixFold<T, TLane>(ip, vectors, fill);
+            }
+            else
+            {
+                // The vectors+1 aligned vectors covering the section: #0 contributes positions >= d, #vectors positions < d,
+                // everything between is whole. Each edge is blended to the fill BEFORE the op touches it, and taken through
+                // P256(v, fill) so a NaN edge lane becomes the fill (skipped) like any NaN the scan meets.
+                T* a0 = ip - d;
+                var tail = LanesFrom<T>(d);
+                var first = TLane.P256(Vector256.ConditionalSelect(tail, Vector256.Load(a0), fill), fill);
+                var last = TLane.P256(Vector256.ConditionalSelect(tail, fill, Vector256.Load(a0 + vectors * vs)), fill);
+                // In sequence order: first, the whole middle, last — combined with the later operand second.
+                s = TLane.P256(TLane.P256(first, SuffixFold<T, TLane>(a0 + vs, vectors - 1, fill)), last);
+                s = RotateLanes(s, d);
+            }
+
+            // Prefix the section with the incoming accumulator: s is never NaN, so the plain op IS maxp here (a NaN acc lane
+            // yields s, a tie keeps s — the later element).
+            var r = TLane.P256(acc, s);
+            var suspect = ~Vector256.Equals(acc, acc) & Vector256.Equals(s, fill);
+            return suspect.ExtractMostSignificantBits() == 0 ? r : KeepAllNaNLanes(r, acc, ip, vectors, suspect);
+        }
+
+        /// <summary>
+        /// The order-free fold of <paramref name="count"/> whole vectors from <paramref name="p"/>: per lane, the LAST element
+        /// holding the largest non-NaN value, or <paramref name="fill"/> when the lane has none — eight contiguous chunks
+        /// scanned BACKWARD with the plain op, data first (<c>P256(data, suffix)</c>), then combined in order.
+        /// </summary>
+        /// <remarks>
+        /// The chunks are contiguous and the first <c>count % 8</c> of them hold one vector more, so no chain is longer than
+        /// <c>count / 8 + 1</c> (a remainder parked on one chunk would be a serial tail of up to seven dependent ops). Each
+        /// longer chunk folds its extra — its LAST — vector first, as a backward scan must. Only the ORDER inside a lane is
+        /// load-bearing: chunk results combine as <c>P256(earlier, later)</c>, so a tie keeps the later chunk's element. Fewer
+        /// than eight vectors fold as one chain (no chunk would reach one vector per chain anyway). Deliberately NOT inlined
+        /// into <see cref="FoldVectorsP{T,TLane}"/>: measured, the identical chain loop ran 7–17% slower on long rows once
+        /// inlined into the bigger frame (the JIT loop-placement effect), for a saving of one call per fold that the
+        /// <see cref="FoldVectorsPMinElements"/> threshold already makes negligible.
+        /// </remarks>
+        /// <typeparam name="T">float or double.</typeparam>
+        /// <typeparam name="TLane">A NaN-suppressing rule.</typeparam>
+        /// <param name="p">First vector (any alignment; aligned reads are faster).</param>
+        /// <param name="count">Whole vectors (&gt;= 0).</param>
+        /// <param name="fill">The rule's fill (<c>-inf</c> / <c>+inf</c>), the identity of the plain op among non-NaN values.</param>
+        /// <returns>The per-lane fold, never NaN.</returns>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static unsafe Vector256<T> SuffixFold<T, TLane>(T* p, long count, Vector256<T> fill)
+            where T : unmanaged, INumber<T> where TLane : struct, ILane<T>
+        {
+            int vs = Vector256<T>.Count;
+            if (count < 8)
+            {
+                var t = fill;
+                for (long k = count - 1; k >= 0; k--)
+                    t = TLane.P256(Vector256.Load(p + k * vs), t);
+                return t;
+            }
+
+            long L = count / 8;
+            long extra = count - 8 * L;
+            // Chunk c spans L vectors, plus one when c < extra; b1..b7 start where the previous chunk ends.
+            T* b0 = p;
+            T* b1 = b0 + (extra > 0 ? L + 1 : L) * vs;
+            T* b2 = b1 + (extra > 1 ? L + 1 : L) * vs;
+            T* b3 = b2 + (extra > 2 ? L + 1 : L) * vs;
+            T* b4 = b3 + (extra > 3 ? L + 1 : L) * vs;
+            T* b5 = b4 + (extra > 4 ? L + 1 : L) * vs;
+            T* b6 = b5 + (extra > 5 ? L + 1 : L) * vs;
+            T* b7 = b6 + (extra > 6 ? L + 1 : L) * vs;
+            var s0 = fill; var s1 = fill; var s2 = fill; var s3 = fill;
+            var s4 = fill; var s5 = fill; var s6 = fill; var s7 = fill;
+
+            // The longer chunks' last vector (index L of the chunk) comes first in a backward scan. Chunk 7 never has one.
+            long lastOff = L * vs;
+            if (extra > 0) s0 = TLane.P256(Vector256.Load(b0 + lastOff), s0);
+            if (extra > 1) s1 = TLane.P256(Vector256.Load(b1 + lastOff), s1);
+            if (extra > 2) s2 = TLane.P256(Vector256.Load(b2 + lastOff), s2);
+            if (extra > 3) s3 = TLane.P256(Vector256.Load(b3 + lastOff), s3);
+            if (extra > 4) s4 = TLane.P256(Vector256.Load(b4 + lastOff), s4);
+            if (extra > 5) s5 = TLane.P256(Vector256.Load(b5 + lastOff), s5);
+            if (extra > 6) s6 = TLane.P256(Vector256.Load(b6 + lastOff), s6);
+
+            for (long o = lastOff - vs; o >= 0; o -= vs)
+            {
+                s0 = TLane.P256(Vector256.Load(b0 + o), s0);
+                s1 = TLane.P256(Vector256.Load(b1 + o), s1);
+                s2 = TLane.P256(Vector256.Load(b2 + o), s2);
+                s3 = TLane.P256(Vector256.Load(b3 + o), s3);
+                s4 = TLane.P256(Vector256.Load(b4 + o), s4);
+                s5 = TLane.P256(Vector256.Load(b5 + o), s5);
+                s6 = TLane.P256(Vector256.Load(b6 + o), s6);
+                s7 = TLane.P256(Vector256.Load(b7 + o), s7);
+            }
+
+            return TLane.P256(TLane.P256(TLane.P256(s0, s1), TLane.P256(s2, s3)), TLane.P256(TLane.P256(s4, s5), TLane.P256(s6, s7)));
+        }
+
+        /// <summary>
+        /// All-ones in every lane whose position is at least <paramref name="d"/>, zero below — the part of the FIRST aligned
+        /// vector that belongs to a section starting <paramref name="d"/> lanes into its 32-byte block (its complement is
+        /// the part of the LAST aligned vector that does).
+        /// </summary>
+        /// <typeparam name="T">A 4- or 8-byte lane type.</typeparam>
+        /// <param name="d">The section's start position inside its block (1 .. Count - 1).</param>
+        /// <returns>The lane mask.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe Vector256<T> LanesFrom<T>(int d) where T : unmanaged
+            => sizeof(T) == 8
+                ? Vector256.GreaterThanOrEqual(Vector256.Create(0L, 1L, 2L, 3L), Vector256.Create((long)d)).As<long, T>()
+                : Vector256.GreaterThanOrEqual(Vector256.Create(0, 1, 2, 3, 4, 5, 6, 7), Vector256.Create(d)).As<int, T>();
+
+        /// <summary>
+        /// Lane <c>j</c> of the result is lane <c>(j + d) mod Count</c> of <paramref name="g"/> — maps the positions of an
+        /// aligned fold back to NumPy's lanes when NumPy's lane 0 sits at position <paramref name="d"/>. A pure permutation
+        /// (no arithmetic), so the bits of every lane survive it, NaN payloads included.
+        /// </summary>
+        /// <remarks>
+        /// One <c>vpermd</c> with AVX2, inlined into <see cref="FoldVectorsP{T,TLane}"/>, for BOTH lane widths: rotating
+        /// 8-byte lanes by <paramref name="d"/> is rotating 4-byte lanes by <c>2d</c> (each 8-byte lane's two halves move
+        /// together, in order), so the rotation is a variable index vector rather than <c>vpermq</c>'s immediate — no
+        /// switch on <paramref name="d"/>, whose target changes from row to row when rows start at varying alignments.
+        /// Without AVX2 the rotation goes through <see cref="RotateLanesPortable{T}"/>, kept out of line because its
+        /// <c>stackalloc</c> would otherwise stop this method from inlining on the AVX2 hosts that never reach it.
+        /// </remarks>
+        /// <typeparam name="T">A 4- or 8-byte lane type.</typeparam>
+        /// <param name="g">The fold by position.</param>
+        /// <param name="d">The rotation (1 .. Count - 1).</param>
+        /// <returns>The fold by NumPy lane.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe Vector256<T> RotateLanes<T>(Vector256<T> g, int d) where T : unmanaged
+        {
+            if (Avx2.IsSupported && (sizeof(T) == 4 || sizeof(T) == 8))
+            {
+                // 32-bit result lane i <- source lane (i + d·(sizeof(T)/4)) & 7: for 8-byte lanes, 64-bit lane j takes the
+                // halves 2j+2d and 2j+2d+1 (mod 8), i.e. source lane (j + d) & 3, low half first.
+                int k = d * (sizeof(T) / 4);
+                var idx = (Vector256.Create(0, 1, 2, 3, 4, 5, 6, 7) + Vector256.Create(k)) & Vector256.Create(7);
+                return Avx2.PermuteVar8x32(g.AsInt32(), idx).As<int, T>();
+            }
+
+            return RotateLanesPortable(g, d);
+        }
+
+        /// <summary>
+        /// <see cref="RotateLanes{T}"/> without AVX2: the vector is stored twice back to back and one vector is read back
+        /// starting <paramref name="d"/> lanes in — lane <c>j</c> of the result is lane <c>(j + d) mod Count</c> of
+        /// <paramref name="g"/>, bits untouched.
+        /// </summary>
+        /// <remarks>
+        /// Runs once per fold, so the store-forwarding stall of reading back across the two stores is noise. Out of line so
+        /// the <c>stackalloc</c> never lands in the caller's frame.
+        /// </remarks>
+        /// <typeparam name="T">A 4- or 8-byte lane type.</typeparam>
+        /// <param name="g">The fold by position.</param>
+        /// <param name="d">The rotation (1 .. Count - 1).</param>
+        /// <returns>The fold by NumPy lane.</returns>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static unsafe Vector256<T> RotateLanesPortable<T>(Vector256<T> g, int d) where T : unmanaged
+        {
+            int vs = Vector256<T>.Count;
+            T* twice = stackalloc T[2 * vs];
+            g.Store(twice);
+            g.Store(twice + vs);
+            return Vector256.Load(twice + d);
+        }
+
+        /// <summary>
+        /// The rare fix-up of <see cref="FoldVectorsP{T,TLane}"/>: in each <paramref name="suspect"/> lane (the accumulator is
+        /// NaN and the section's fold only reached the fill) keep the accumulator's own NaN when the section holds no non-NaN
+        /// element in that lane — NumPy's <c>maxp</c> keeps the FIRST of two NaNs — and leave <paramref name="r"/> (the
+        /// fill, which is then the lane's genuine -inf / +inf) otherwise.
+        /// </summary>
+        /// <remarks>
+        /// Reads the section in NumPy's own lane layout (unaligned) and stops once every suspect lane has met a non-NaN, so a
+        /// lane that merely bottoms out at an infinity usually settles within a few vectors; only a truly all-NaN lane scans
+        /// the whole section — one ordered compare per vector, about the cost of the fold itself. Kept out of line: it runs
+        /// only on degenerate data, and the fold's hot path should not carry its loop.
+        /// </remarks>
+        /// <typeparam name="T">float or double.</typeparam>
+        /// <param name="r">The fold's answer where the lane is not NaN-only.</param>
+        /// <param name="acc">The accumulator that entered the section.</param>
+        /// <param name="ip">First element of the section.</param>
+        /// <param name="vectors">Whole vectors in the section.</param>
+        /// <param name="suspect">All-ones in the lanes to decide.</param>
+        /// <returns>The corrected accumulator.</returns>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static unsafe Vector256<T> KeepAllNaNLanes<T>(Vector256<T> r, Vector256<T> acc, T* ip, long vectors, Vector256<T> suspect)
+            where T : unmanaged
+        {
+            int vs = Vector256<T>.Count;
+            var seen = Vector256<T>.Zero;   // all-ones once the lane met a non-NaN (x == x fails only for NaN)
+            for (long k = 0; k < vectors; k++)
+            {
+                var v = Vector256.Load(ip + k * vs);
+                seen |= Vector256.Equals(v, v);
+                if ((k & 7) == 7 && Vector256.AndNot(suspect, seen).ExtractMostSignificantBits() == 0)
+                    break;
+            }
+
+            return Vector256.ConditionalSelect(Vector256.AndNot(suspect, seen), acc, r);
+        }
+
+        /// <summary>
         /// Phases 1-4 over the LAST <paramref name="len"/> elements of the reduced stream: whole groups, then
         /// single vectors, then the horizontal <c>npyv_reduce_{max,min}n</c>, then the scalar tail.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// A DISPATCHER, inlined into every caller: the N rules — and a P-rule stretch shorter than
+        /// <see cref="FoldVectorsPMinElements"/> — run phases 1 and 2 as NumPy spells them (<see cref="FinishTree{T,TLane}"/>:
+        /// <see cref="FoldGroupsTree{T,TLane}"/> + the single-vector loop); a longer P-rule stretch goes to
+        /// <see cref="FinishFoldP{T,TLane}"/>, which runs them as ONE order-free fold over every whole vector
+        /// (<see cref="FoldVectorsP{T,TLane}"/>): NumPy's tree and loop only ever combine elements of the same lane in
+        /// increasing position with an associative selection, so the accumulator — and every phase after it — is
+        /// bit-identical, but the fold reads aligned memory and needs no per-group NaN proof. The split between the vector
+        /// section and the scalar tail is untouched either way: the last <c>len % Count</c> elements still meet the scalar
+        /// op, where the P rules' CRT tie / two-NaN rule differs.
+        /// </para>
+        /// <para>
+        /// WHY THE TWO ROUTES ARE TWO METHODS, picked at the call site. Both were tried inside one body and both cost the
+        /// short rows. A branch around phases 1 and 2 kept the pointer, the count and the vector count live across the
+        /// fold's call, so the JIT pushed and popped four callee-saved registers and grew the frame from 104 to 184 bytes
+        /// on EVERY call — 0.78–0.86x on rows of 10 to 100 elements that never take the fold. An early exit fixed the
+        /// frame, but one tier-1 body still served both routes, and PGO compiles it ONCE from whatever the process ran
+        /// first: after long flat reductions the tree's loops came out laid out as cold code — 0.69–0.84x on the same
+        /// short rows. As separate methods each route gets its own profile, and <see cref="FinishTree{T,TLane}"/> is
+        /// the tree body exactly as it was before the fold existed. For the N rules the test is a JIT-time constant, so
+        /// their callers compile to the one plain call they made before.
+        /// </para>
+        /// </remarks>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <typeparam name="TLane">The lane rule (max / min, or the NaN-suppressing fmax / fmin).</typeparam>
+        /// <param name="acc">The accumulator carried from any earlier <see cref="FoldGroups{T,TLane}"/> calls
+        /// (<c>splat(x[0])</c> when this is the whole stream).</param>
+        /// <param name="ip">First remaining element.</param>
+        /// <param name="len">Remaining element count (&gt;= 1).</param>
+        /// <returns>The reduction result.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static unsafe T Finish<T, TLane>(Vector256<T> acc, T* ip, long len)
+            where T : unmanaged, INumber<T> where TLane : struct, ILane<T>
+            => !TLane.PropagatesNaN && len >= FoldVectorsPMinElements
+                ? FinishFoldP<T, TLane>(acc, ip, len)
+                : FinishTree<T, TLane>(acc, ip, len);
+
+        /// <summary>
+        /// Phases 1-4 through NumPy's own spelling: whole groups (<see cref="FoldGroupsTree{T,TLane}"/>), single vectors,
+        /// the horizontal <c>npyv_reduce_{max,min}{n,p}</c>, the scalar tail. The route of every N-rule call and of every
+        /// P-rule stretch shorter than <see cref="FoldVectorsPMinElements"/> — the body <see cref="Finish{T,TLane}"/> had
+        /// before the order-free fold existed, kept verbatim so it compiles (and is profiled) exactly as it did then.
         /// </summary>
         /// <typeparam name="T">The element type.</typeparam>
         /// <typeparam name="TLane">The lane rule (max / min, or the NaN-suppressing fmax / fmin).</typeparam>
@@ -964,13 +1362,14 @@ namespace NumSharp.Backends
         /// <param name="ip">First remaining element.</param>
         /// <param name="len">Remaining element count (&gt;= 1).</param>
         /// <returns>The reduction result.</returns>
-        internal static unsafe T Finish<T, TLane>(Vector256<T> acc, T* ip, long len)
+        private static unsafe T FinishTree<T, TLane>(Vector256<T> acc, T* ip, long len)
             where T : unmanaged, INumber<T> where TLane : struct, ILane<T>
         {
+            // NumPy's group tree, then its single-vector loop, literally.
             int vstep = Vector256<T>.Count;
             long wstep = vstep * 8L;
             long groups = len / wstep;
-            acc = FoldGroups<T, TLane>(acc, ip, groups);
+            acc = FoldGroupsTree<T, TLane>(acc, ip, groups);
             ip += groups * wstep;
             len -= groups * wstep;
 
@@ -980,6 +1379,40 @@ namespace NumSharp.Backends
             T r = ReduceLanes<T, TLane>(acc);
 
             // The scalar tail: a NaN met here keeps its own payload (NumPy's SSE op returns the operand).
+            for (; len > 0; --len, ++ip)
+                r = N<T, TLane>(r, *ip);
+            return r;
+        }
+
+        /// <summary>
+        /// <see cref="Finish{T,TLane}"/> for a P-rule stretch of at least <see cref="FoldVectorsPMinElements"/> elements:
+        /// every whole vector through the order-free aligned fold (<see cref="FoldVectorsP{T,TLane}"/>) in place of NumPy's
+        /// group tree + single-vector loop, then the same horizontal reduce and scalar tail — NumPy's bits, lane for lane.
+        /// </summary>
+        /// <remarks>
+        /// Out of line, and never inlined into <see cref="Finish{T,TLane}"/>'s callers: the fold's frame, its register
+        /// spills and its PGO profile belong to this method, which only long stretches reach (see
+        /// <see cref="Finish{T,TLane}"/>'s remarks for what sharing a body with the tree cost the short rows).
+        /// </remarks>
+        /// <typeparam name="T">float or double (only the P rules come here).</typeparam>
+        /// <typeparam name="TLane">A NaN-suppressing rule (<see cref="FMaxLane{T}"/> / <see cref="FMinLane{T}"/>).</typeparam>
+        /// <param name="acc">The accumulator entering the stretch.</param>
+        /// <param name="ip">First remaining element.</param>
+        /// <param name="len">Remaining element count (&gt;= <see cref="FoldVectorsPMinElements"/>).</param>
+        /// <returns>The reduction result.</returns>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static unsafe T FinishFoldP<T, TLane>(Vector256<T> acc, T* ip, long len)
+            where T : unmanaged, INumber<T> where TLane : struct, ILane<T>
+        {
+            int vstep = Vector256<T>.Count;
+            long vectors = len / vstep;
+            acc = FoldVectorsP<T, TLane>(acc, ip, vectors);
+            ip += vectors * vstep;
+            len -= vectors * vstep;
+
+            T r = ReduceLanes<T, TLane>(acc);
+
+            // The scalar tail, exactly as in Finish: the CRT fmax / fmin, a NaN met here keeping its own payload.
             for (; len > 0; --len, ++ip)
                 r = N<T, TLane>(r, *ip);
             return r;

@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Runtime.Intrinsics;
 using NumSharp.Backends;
 using NumSharp.Backends.Iteration;
 
@@ -432,16 +433,18 @@ public class NanMinMaxExactScheduleTests
     }
 
     /// <summary>
-    /// A group holding a NaN does not end the NaN-free fast path for the P rules. <c>FoldGroups</c> folds a group proven
-    /// NaN-free with the plain <c>vmaxp</c>, which equals NumPy's <c>maxp</c> whenever the SECOND operand is NaN-free,
-    /// whatever the accumulator holds — so after a NaN group (folded with the full blended rule) the next clean group goes
-    /// fast again. Three wrong versions of that branch are pinned: skipping the NaN group (A: the maximum sits inside it);
-    /// folding it with the plain op (B: its NaN in vector 7 climbs the tree's second-operand path into the accumulator lane
-    /// holding the earlier maximum, and the next plain group overwrites that lane with a smaller value); and letting the N
-    /// rules continue too (<c>np.max</c> must still return the canonical NaN, which a plain group after the NaN group would
-    /// drop). float64 has 4 lanes / 32-element groups, float32 8 lanes / 64-element groups; positions name the group /
-    /// vector / lane of the elements after the copied <c>x[0]</c>. Every result was probed against NumPy 2.4.2 with the
-    /// same construction.
+    /// A group holding a NaN does not end the NaN-free fast path for the P rules. <c>FoldGroupsTree</c> folds a group
+    /// proven NaN-free with the plain <c>vmaxp</c>, which equals NumPy's <c>maxp</c> whenever the SECOND operand is
+    /// NaN-free, whatever the accumulator holds — so after a NaN group (folded with the full blended rule) the next clean
+    /// group goes fast again. These sections (131 / 197 elements after the seed) are shorter than
+    /// <c>NumPyMinMaxReduce.FoldVectorsPMinElements</c>, so the P rules run exactly that tree here; the order-free fold that
+    /// longer sections take is pinned by the FLAT fold tests below. Three wrong versions of the fast-path branch are pinned:
+    /// skipping the NaN group (A: the maximum sits inside it); folding it with the plain op (B: its NaN in vector 7 climbs
+    /// the tree's second-operand path into the accumulator lane holding the earlier maximum, and the next plain group
+    /// overwrites that lane with a smaller value); and letting the N rules continue too (<c>np.max</c> must still return
+    /// the canonical NaN, which a plain group after the NaN group would drop). float64 has 4 lanes / 32-element groups,
+    /// float32 8 lanes / 64-element groups; positions name the group / vector / lane of the elements after the copied
+    /// <c>x[0]</c>. Every result was probed against NumPy 2.4.2 with the same construction.
     /// </summary>
     [TestMethod]
     public void Flat_NaNGroupThenCleanGroups_PRulesStayOnTheFastPath()
@@ -549,6 +552,415 @@ public class NanMinMaxExactScheduleTests
         finally
         {
             np.setbufsize(old);
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------------------------------
+    // FLAT — the P rules' vector section is ONE order-free fold (NumPyMinMaxReduce.FoldVectorsP): read through the
+    // 32-byte-aligned vectors covering NumPy's x[1:] section, lanes rotated back, the rare all-NaN lane fixed up —
+    // for sections of FoldVectorsPMinElements elements or more; shorter ones keep NumPy's tree. The public-route tests
+    // below run on both sides of that threshold (SectionVectors).
+    // ---------------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The two section lengths (whole vectors after the seed) the public-route fold tests run: the given short one, which
+    /// must stay below <see cref="NumPyMinMaxReduce.FoldVectorsPMinElements"/> and so keeps NumPy's tree, and a long one past
+    /// it, which takes <c>FoldVectorsP</c>. Derived from the constant, so both routes stay covered if the threshold moves.
+    /// </summary>
+    /// <param name="vs">The lane count (4 for float64, 8 for float32).</param>
+    /// <param name="shortVectors">The short section's vector count.</param>
+    /// <returns>The short and the long vector count, in that order.</returns>
+    /// <exception cref="AssertFailedException">The short section would reach the fold's threshold.</exception>
+    private static int[] SectionVectors(int vs, int shortVectors)
+    {
+        Assert.IsTrue(shortVectors * vs < NumPyMinMaxReduce.FoldVectorsPMinElements, "the short section must stay on the tree route");
+        return new[] { shortVectors, (int)(NumPyMinMaxReduce.FoldVectorsPMinElements / vs) + 8 };
+    }
+
+    /// <summary>
+    /// A contiguous view of <paramref name="n"/> elements starting <paramref name="start"/> elements into a fresh buffer
+    /// whose every element outside the view is <paramref name="garbage"/> — the value that WINS the reduction (<c>+inf</c>
+    /// for nanmax, <c>-inf</c> for nanmin), so an aligned read that lets an out-of-view lane into the fold turns the
+    /// answer into an infinity.
+    /// </summary>
+    /// <param name="t">Float64 or float32.</param>
+    /// <param name="n">The view's element count.</param>
+    /// <param name="start">The view's first element inside the buffer (sweeping it sweeps the section's alignment).</param>
+    /// <param name="garbage">The out-of-view fill.</param>
+    /// <returns>The view (writes to it land in the buffer).</returns>
+    private static NDArray GuardedView(NPTypeCode t, int n, int start, double garbage)
+        => np.full(new Shape(n + 24), garbage, t)[$"{start}:{start + n}"];
+
+    /// <summary>
+    /// The aligned fold maps every memory position back to NumPy's lane. A section of <c>M</c> whole vectors with no
+    /// scalar tail holds the NEUTRAL zero (<c>-0</c> for nanmax, <c>+0</c> for nanmin) everywhere except the last element
+    /// of NumPy lane <c>j</c>, which holds the other zero: every lane ties, so <c>npyv_reduce_maxp</c>'s cascade (the
+    /// upper lane wins a tie at every level) returns the TOP lane's accumulator — NumPy 2.4.2 answers the marked zero only
+    /// for <c>j = Count - 1</c>, at both lengths run (<c>M</c> = 50, the tree route, and past the fold's threshold). A
+    /// rotation off by any amount moves the marked zero into another lane and flips a sign; the start sweep runs the
+    /// section at every alignment inside its 32-byte block, and the winning-infinity garbage around the view catches an
+    /// edge vector that is not masked.
+    /// </summary>
+    [TestMethod]
+    public void Flat_AlignedVectorFold_MapsEveryPositionBackToItsNumPyLane()
+    {
+        foreach (var (t, vs) in new[] { (NPTypeCode.Double, 4), (NPTypeCode.Single, 8) })
+        foreach (int m in SectionVectors(vs, 50))
+        {
+            int n = 1 + vs * m;
+            foreach (bool isMax in new[] { true, false })
+            {
+                double neutral = isMax ? NegZero : 0.0;
+                double marked = isMax ? 0.0 : NegZero;
+                for (int j = 0; j < vs; j++)
+                for (int start = 0; start < vs; start++)
+                {
+                    var x = GuardedView(t, n, start, isMax ? double.PositiveInfinity : double.NegativeInfinity);
+                    x[":"] = NDArray.Scalar(neutral).astype(t);
+                    if (t == NPTypeCode.Double)
+                        x.SetDouble(marked, 1 + vs * (m - 1) + j);
+                    else
+                        x.SetSingle((float)marked, 1 + vs * (m - 1) + j);
+
+                    string what = $"{t} M {m} {(isMax ? "nanmax" : "nanmin")} marked lane {j} start {start}";
+                    bool wantMarked = j == vs - 1;
+                    bool wantNegative = isMax ? !wantMarked : wantMarked;
+                    var r = FlatNan(x, isMax, what);
+                    if (t == NPTypeCode.Double)
+                        CollectionAssert.AreEqual(new[] { wantNegative ? N0 : P0 }, Bits64(r), what);
+                    else
+                        CollectionAssert.AreEqual(new[] { wantNegative ? N0F : P0F }, Bits32(r), what);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// An all-NaN input of many vectors after the seed (40, the tree route, and past the fold's threshold): every lane of
+    /// the section is NaN, so <c>maxp</c> keeps the FIRST NaN — the seed <c>splat(x[0])</c> — and <c>npyv_reduce_maxp</c>
+    /// hands back lane 0 as is; a scalar tail then walks the CRT op to its LAST NaN. The fold alone only ever reaches the
+    /// fill here, so on the long section the seed's payload comes back only through the NaN-lane fix-up. NumPy 2.4.2 at
+    /// both lengths: tail 0 → <c>x[0]</c>'s payload, else the last element's; nanmin identical. Every start offset, with
+    /// winning-infinity garbage around the view.
+    /// </summary>
+    [TestMethod]
+    public void Flat_AllNaNSectionOfManyVectors_KeepsTheSeedsPayload()
+    {
+        foreach (var (t, vs) in new[] { (NPTypeCode.Double, 4), (NPTypeCode.Single, 8) })
+        foreach (int m in SectionVectors(vs, 40))
+        foreach (int tail in new[] { 0, 1, vs - 1 })
+        foreach (bool isMax in new[] { true, false })
+        for (int start = 0; start < vs; start++)
+        {
+            int n = 1 + vs * m + tail;
+            var x = GuardedView(t, n, start, isMax ? double.PositiveInfinity : double.NegativeInfinity);
+            for (int i = 0; i < n; i++)
+            {
+                if (t == NPTypeCode.Double)
+                    x.SetDouble(Q64(0x100 + (ulong)i), i);
+                else
+                    x.SetSingle(Q32(0x100 + (uint)i), i);
+            }
+
+            int want = tail == 0 ? 0 : n - 1;
+            string what = $"{t} M {m} {(isMax ? "nanmax" : "nanmin")} tail {tail} start {start}";
+            var r = FlatNan(x, isMax, what);
+            if (t == NPTypeCode.Double)
+                CollectionAssert.AreEqual(new[] { 0x7FF8000000000100UL + (ulong)want }, Bits64(r), what);
+            else
+                CollectionAssert.AreEqual(new[] { 0x7FC00100u + (uint)want }, Bits32(r), what);
+        }
+    }
+
+    /// <summary>
+    /// The other half of the NaN-lane fix-up: a NaN seed, and NumPy lane 0 of an <c>M</c>-vector section (40, the tree
+    /// route, and past the fold's threshold) holding ONE losing infinity (<c>-inf</c> for nanmax, <c>+inf</c> for nanmin —
+    /// the fold's own fill value) at vector <c>M - 3</c> among NaNs, while every other lane is NaN only. NumPy's lane 0 is
+    /// that infinity, so <c>npyv_reduce_maxp</c> sees a non-NaN lane and returns it (NumPy 2.4.2 at both lengths:
+    /// <c>-inf</c> / <c>+inf</c>). A fix-up that restored the seed's NaN in every lane whose fold only reached the fill
+    /// would answer a NaN payload instead.
+    /// </summary>
+    [TestMethod]
+    public void Flat_NaNSeedAndALoneInfinity_TheInfinityIsTheAnswer()
+    {
+        foreach (var (t, vs) in new[] { (NPTypeCode.Double, 4), (NPTypeCode.Single, 8) })
+        foreach (int m in SectionVectors(vs, 40))
+        foreach (bool isMax in new[] { true, false })
+        for (int start = 0; start < vs; start++)
+        {
+            int n = 1 + vs * m;
+            var x = GuardedView(t, n, start, isMax ? double.PositiveInfinity : double.NegativeInfinity);
+            for (int i = 0; i < n; i++)
+            {
+                if (t == NPTypeCode.Double)
+                    x.SetDouble(Q64(0x100 + (ulong)i), i);
+                else
+                    x.SetSingle(Q32(0x100 + (uint)i), i);
+            }
+
+            double inf = isMax ? double.NegativeInfinity : double.PositiveInfinity;
+            if (t == NPTypeCode.Double)
+                x.SetDouble(inf, 1 + vs * (m - 3));
+            else
+                x.SetSingle((float)inf, 1 + vs * (m - 3));
+
+            string what = $"{t} M {m} {(isMax ? "nanmax" : "nanmin")} start {start}";
+            var r = FlatNan(x, isMax, what);
+            if (t == NPTypeCode.Double)
+                CollectionAssert.AreEqual(new[] { isMax ? 0xFFF0000000000000UL : 0x7FF0000000000000UL }, Bits64(r), what);
+            else
+                CollectionAssert.AreEqual(new[] { isMax ? 0xFF800000u : 0x7F800000u }, Bits32(r), what);
+        }
+    }
+
+    /// <summary>
+    /// The order INSIDE a lane, pinned on the public routes. The seed and every element of an <c>M</c>-vector section
+    /// (no scalar tail) hold a LOSING value — <c>-1</c> for nanmax, <c>+1</c> for nanmin — except two zeros in NumPy lane
+    /// <c>j</c>, at vectors <c>k - 1</c> and <c>k</c>: <c>+0</c> then <c>-0</c> for nanmax, <c>-0</c> then <c>+0</c> for
+    /// nanmin. <c>maxp</c> / <c>minp</c> keep the LATER operand of a tie and no other lane reaches zero, so NumPy answers
+    /// the LATER zero — probed on every case of this grid and of its mirror with the two signs swapped (NumPy 2.4.2:
+    /// 112,736 cases, every one the later zero).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Sweeping <c>k</c> over every adjacent vector pair at every start alignment walks each boundary the order-free fold
+    /// creates: inside one of its eight chunks, between two chunks, a chunk's extra (last) vector, and the two masked edge
+    /// vectors of the aligned read. A fold that combined any two neighbours in the wrong order returns the EARLIER zero,
+    /// and one that dropped a vector returns the losing value — a sign flip or a different value here, where the NumPy
+    /// replay oracles (whose long arrays never tie at a lane's maximum) could not see either. The later zero is also the
+    /// sign the CRT's tie rule would NOT produce (<c>fmax</c> ANDs a ±0 tie to <c>+0</c>, <c>fmin</c> ORs it to
+    /// <c>-0</c>), so a vector-section element that met the scalar op instead would flip it too.
+    /// </para>
+    /// <para>
+    /// The chunk layout depends on the section's vector count modulo 8 (the fold splits it into eight chunks and hands
+    /// the remainder to the first ones as one extra vector each), so each base length — 40, the tree route, and one past
+    /// the fold's threshold — runs as the eight lengths <c>M .. M + 7</c>: every remainder, on the aligned read (which
+    /// folds <c>M - 1</c> middle vectors) and the in-place one (<c>M</c>) alike. The base length runs every lane; each
+    /// longer one a single lane (<c>extra % Count</c>), which keeps the test's 56,368 cases near half a second while every
+    /// lane and every remainder still meets the sweep. Each alignment reuses one guarded view: a case writes its two zeros
+    /// and restores the losing value before the next. Mutation-checked with the fold-vs-tree differential below excluded:
+    /// this test alone kills the chunk-order, chunk-combine, first-edge-order, extra-vector-order and extra-vector-dropped
+    /// mutants of the fold, which no other NumPy-probed literal and no replay oracle did.
+    /// </para>
+    /// </remarks>
+    [TestMethod]
+    public void Flat_FoldedSection_TheLaterOfTwoTiedZerosWins_AtEveryAdjacentVectorPair()
+    {
+        // Writes one element as float64 or float32; (float)-0.0 keeps the sign bit, so the zeros survive the narrowing.
+        static void Put(NDArray x, NPTypeCode t, int index, double value)
+        {
+            if (t == NPTypeCode.Double)
+                x.SetDouble(value, index);
+            else
+                x.SetSingle((float)value, index);
+        }
+
+        foreach (var (t, vs) in new[] { (NPTypeCode.Double, 4), (NPTypeCode.Single, 8) })
+        foreach (int baseVectors in SectionVectors(vs, 40))
+        for (int extra = 0; extra < 8; extra++)
+        foreach (bool isMax in new[] { true, false })
+        {
+            int m = baseVectors + extra;
+            int n = 1 + vs * m;
+            int firstLane = extra == 0 ? 0 : extra % vs, lastLane = extra == 0 ? vs - 1 : extra % vs;
+            double losing = isMax ? -1.0 : 1.0;
+            double earlier = isMax ? 0.0 : NegZero;
+            double later = isMax ? NegZero : 0.0;
+            for (int start = 0; start < vs; start++)
+            {
+                var x = GuardedView(t, n, start, isMax ? double.PositiveInfinity : double.NegativeInfinity);
+                x[":"] = NDArray.Scalar(losing).astype(t);
+                for (int j = firstLane; j <= lastLane; j++)
+                for (int k = 1; k < m; k++)
+                {
+                    int p1 = 1 + (k - 1) * vs + j, p2 = 1 + k * vs + j;
+                    Put(x, t, p1, earlier);
+                    Put(x, t, p2, later);
+
+                    string what = $"{t} M {m} {(isMax ? "nanmax" : "nanmin")} start {start} lane {j} vectors {k - 1},{k}";
+                    var r = FlatNan(x, isMax, what);
+                    if (t == NPTypeCode.Double)
+                        CollectionAssert.AreEqual(new[] { isMax ? N0 : P0 }, Bits64(r), what);
+                    else
+                        CollectionAssert.AreEqual(new[] { isMax ? N0F : P0F }, Bits32(r), what);
+
+                    Put(x, t, p1, losing);
+                    Put(x, t, p2, losing);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// <c>FoldVectorsP</c> against NumPy's own vector section, transcribed literally from <c>simd_reduce_c</c> (8-vector
+    /// groups folded as <c>N(acc, N(N(N(v0,v1),N(v2,v3)),N(N(v4,v5),N(v6,v7))))</c> with the three-instruction
+    /// <c>npyv_maxp</c> / <c>npyv_minp</c>, then single vectors), bit for bit on the whole accumulator — over random
+    /// accumulators (NaN payloads of both signs, ±0, finite values: the fold continues a chained call too), random sections
+    /// rich in ±0 ties, NaN payloads, both infinities, all-NaN lanes and lanes that bottom out at the fill infinity, and
+    /// sections whose only zeros sit in a short window (so the answer's sign is decided by whichever chunk / edge combine
+    /// the window straddles — random data would hide a swapped combine behind a later chunk's tie); section lengths across
+    /// the one-chain / eight-chunk / aligned-remap thresholds; every element misalignment inside the 32-byte block and a
+    /// byte-misaligned pointer (folded in place); and winning-infinity garbage around the section. The committed tree
+    /// (<c>FoldGroupsTree</c> + the single-vector loop), the reference this fold replaced, must agree too. The
+    /// misalignment <c>d</c> the fold picks is a SPEED choice only — the remap is exact for any <c>d</c> in
+    /// <c>0 .. Count-1</c> as long as the base, masks and rotation agree — so no test can (or should) pin it.
+    /// </summary>
+    [TestMethod]
+    public unsafe void FoldVectorsP_IsNumPysLiteralVectorSection_AnyAlignmentAnyData()
+    {
+        var rng = new System.Random(20260924);
+        for (int it = 0; it < 1500; it++)
+        {
+            FoldCase<double, NumPyMinMaxReduce.FMaxLane<double>>(rng, isMax: true);
+            FoldCase<double, NumPyMinMaxReduce.FMinLane<double>>(rng, isMax: false);
+            FoldCase<float, NumPyMinMaxReduce.FMaxLane<float>>(rng, isMax: true);
+            FoldCase<float, NumPyMinMaxReduce.FMinLane<float>>(rng, isMax: false);
+        }
+    }
+
+    /// <summary>
+    /// One randomized case of <see cref="FoldVectorsP_IsNumPysLiteralVectorSection_AnyAlignmentAnyData"/>: builds the
+    /// section in a pinned buffer at the drawn misalignment, then compares <c>FoldVectorsP</c> and the committed tree with
+    /// the literal NumPy transcription (<see cref="LiteralVectorSection{T,TLane}"/>).
+    /// </summary>
+    /// <typeparam name="T">float or double.</typeparam>
+    /// <typeparam name="TLane">The fmax or fmin lane rule.</typeparam>
+    /// <param name="rng">The case generator (seeded by the caller, so a failure reproduces).</param>
+    /// <param name="isMax">True for fmax — picks the winning garbage (<c>+inf</c>) and the fill infinity (<c>-inf</c>).</param>
+    private static unsafe void FoldCase<T, TLane>(System.Random rng, bool isMax)
+        where T : unmanaged, System.Numerics.INumber<T> where TLane : struct, NumPyMinMaxReduce.ILane<T>
+    {
+        int vs = System.Runtime.Intrinsics.Vector256<T>.Count;
+        int size = sizeof(T);
+        long vectors = rng.Next(5) switch { 0 => rng.Next(0, 8), 1 => rng.Next(8, 20), _ => rng.Next(20, 420) };
+        int d = rng.Next(vs);
+        int byteSkew = rng.Next(10) == 0 ? rng.Next(1, size) : 0;
+        int style = rng.Next(9);
+        // Style 3's window: the only vectors holding ±0 (everything else loses to a zero), so the answer is the LAST
+        // zero inside it — and whichever chunk / edge combine the window straddles decides that zero's sign, which
+        // random data (zeros everywhere) would mask behind a later chunk's tie.
+        long w0 = vectors == 0 ? 0 : rng.NextInt64(vectors);
+        long w1 = w0 + 1 + (vectors == 0 ? 0 : rng.NextInt64(System.Math.Max(1, System.Math.Min(vectors - w0, vectors / 4 + 1))));
+
+        // Buffer: 64 bytes of head room, the section, 64 bytes of tail room — all winning garbage first.
+        long bytes = 64 + vectors * 32 + 128;
+        var buffer = GC.AllocateArray<byte>((int)bytes + 64, pinned: true);
+        fixed (byte* raw = buffer)
+        {
+            byte* aligned = (byte*)(((nuint)raw + 63) & ~(nuint)31);
+            double winning = isMax ? double.PositiveInfinity : double.NegativeInfinity;
+            for (byte* g = aligned; g + size <= aligned + bytes; g += size)
+                WriteElement<T>(g, rng.Next(6) == 0 ? double.NaN : winning, rng);
+
+            T* ip = (T*)(aligned + 64 + d * size + byteSkew);
+            double losing = isMax ? double.NegativeInfinity : double.PositiveInfinity;
+            for (long k = 0; k < vectors; k++)
+            for (int j = 0; j < vs; j++)
+            {
+                // Per-lane styles make whole lanes NaN-only or "losing infinity + NaN" (the fix-up's two cases).
+                int laneStyle = style == 0 ? (j % 3) : style == 1 ? 1 : style == 2 ? 2 : style == 3 ? 4 : 3;
+                double v = laneStyle switch
+                {
+                    0 => double.NaN,
+                    1 => rng.Next(6) == 0 ? losing : double.NaN,
+                    2 => rng.Next(2) == 0 ? 0.0 : NegZero,
+                    4 => k >= w0 && k < w1
+                        ? (rng.Next(2) == 0 ? 0.0 : NegZero)
+                        : rng.Next(8) == 0 ? double.NaN : (isMax ? -rng.Next(1, 4) : rng.Next(1, 4)),
+                    _ => rng.Next(100) switch
+                    {
+                        < 30 => rng.Next(2) == 0 ? 0.0 : NegZero,
+                        < 45 => double.NaN,
+                        < 50 => rng.Next(2) == 0 ? double.PositiveInfinity : double.NegativeInfinity,
+                        _ => rng.Next(-3, 4),
+                    },
+                };
+                WriteElement<T>((byte*)(ip + k * vs + j), v, rng);
+            }
+
+            var laneAcc = new T[vs];
+            T* slot = stackalloc T[1];
+            for (int j = 0; j < vs; j++)
+            {
+                double a = rng.Next(4) switch { 0 => double.NaN, 1 => rng.Next(2) == 0 ? 0.0 : NegZero, 2 => losing, _ => rng.Next(-3, 4) };
+                WriteElement<T>((byte*)slot, a, rng);
+                laneAcc[j] = *slot;
+            }
+
+            var acc = System.Runtime.Intrinsics.Vector256.Create(laneAcc);
+            var want = LiteralVectorSection<T, TLane>(acc, ip, vectors);
+            var got = NumPyMinMaxReduce.FoldVectorsP<T, TLane>(acc, ip, vectors);
+            var tree = NumPyMinMaxReduce.FoldGroupsTree<T, TLane>(acc, ip, vectors / 8);
+            for (long k = vectors / 8 * 8; k < vectors; k++)
+                tree = NumPyMinMaxReduce.N<T, TLane>(tree, System.Runtime.Intrinsics.Vector256.Load(ip + k * vs));
+
+            string what = $"{typeof(T).Name} {(isMax ? "fmax" : "fmin")} vectors={vectors} d={d} skew={byteSkew} style={style}";
+            Assert.IsTrue(System.Runtime.Intrinsics.Vector256.EqualsAll(want.AsUInt64(), got.AsUInt64()),
+                $"FoldVectorsP {what}: want {want} got {got}");
+            Assert.IsTrue(System.Runtime.Intrinsics.Vector256.EqualsAll(want.AsUInt64(), tree.AsUInt64()),
+                $"FoldGroupsTree {what}: want {want} got {tree}");
+        }
+    }
+
+    /// <summary>
+    /// NumPy's vector section of <c>simd_reduce_c</c>, transcribed: whole 8-vector groups folded as
+    /// <c>acc = N(acc, N(N(N(v0,v1),N(v2,v3)),N(N(v4,v5),N(v6,v7))))</c>, then the remaining whole vectors one by one —
+    /// with the lane rule's three-instruction vector op and no fast path, i.e. the ground truth the optimized folds must
+    /// reproduce bit for bit.
+    /// </summary>
+    /// <typeparam name="T">float or double.</typeparam>
+    /// <typeparam name="TLane">The fmax or fmin lane rule.</typeparam>
+    /// <param name="acc">The accumulator entering the section.</param>
+    /// <param name="ip">NumPy's lane 0 of the first vector (any alignment).</param>
+    /// <param name="vectors">Whole vectors to fold.</param>
+    /// <returns>NumPy's accumulator after the section.</returns>
+    private static unsafe System.Runtime.Intrinsics.Vector256<T> LiteralVectorSection<T, TLane>(
+        System.Runtime.Intrinsics.Vector256<T> acc, T* ip, long vectors)
+        where T : unmanaged, System.Numerics.INumber<T> where TLane : struct, NumPyMinMaxReduce.ILane<T>
+    {
+        int vs = System.Runtime.Intrinsics.Vector256<T>.Count;
+        long groups = vectors / 8;
+        for (long g = 0; g < groups; g++, ip += vs * 8)
+        {
+            var v0 = System.Runtime.Intrinsics.Vector256.Load(ip);
+            var v1 = System.Runtime.Intrinsics.Vector256.Load(ip + vs);
+            var v2 = System.Runtime.Intrinsics.Vector256.Load(ip + vs * 2);
+            var v3 = System.Runtime.Intrinsics.Vector256.Load(ip + vs * 3);
+            var v4 = System.Runtime.Intrinsics.Vector256.Load(ip + vs * 4);
+            var v5 = System.Runtime.Intrinsics.Vector256.Load(ip + vs * 5);
+            var v6 = System.Runtime.Intrinsics.Vector256.Load(ip + vs * 6);
+            var v7 = System.Runtime.Intrinsics.Vector256.Load(ip + vs * 7);
+            acc = TLane.N(acc, TLane.N(TLane.N(TLane.N(v0, v1), TLane.N(v2, v3)), TLane.N(TLane.N(v4, v5), TLane.N(v6, v7))));
+        }
+
+        for (long k = groups * 8; k < vectors; k++, ip += vs)
+            acc = TLane.N(acc, System.Runtime.Intrinsics.Vector256.Load(ip));
+        return acc;
+    }
+
+    /// <summary>
+    /// Writes <paramref name="value"/> at <paramref name="p"/> as a <typeparamref name="T"/> (float or double), unaligned;
+    /// a NaN gets a random payload and sign so the fold's choice of NaN is observable.
+    /// </summary>
+    /// <typeparam name="T">float or double.</typeparam>
+    /// <param name="p">The destination (any byte alignment).</param>
+    /// <param name="value">The value (NaN = a random NaN).</param>
+    /// <param name="rng">The payload generator.</param>
+    private static unsafe void WriteElement<T>(byte* p, double value, System.Random rng) where T : unmanaged
+    {
+        if (typeof(T) == typeof(double))
+        {
+            double v = double.IsNaN(value)
+                ? D(0x7FF0000000000001UL | (ulong)rng.NextInt64(1, 1L << 51) | (rng.Next(2) == 0 ? N0 : 0UL))
+                : value;
+            System.Runtime.CompilerServices.Unsafe.WriteUnaligned(p, v);
+        }
+        else
+        {
+            float v = double.IsNaN(value)
+                ? F(0x7F800001u | (uint)rng.Next(1, 1 << 22) | (rng.Next(2) == 0 ? N0F : 0u))
+                : (float)value;
+            System.Runtime.CompilerServices.Unsafe.WriteUnaligned(p, v);
         }
     }
 
