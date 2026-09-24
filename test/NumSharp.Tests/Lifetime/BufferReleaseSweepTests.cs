@@ -43,8 +43,8 @@ namespace NumSharp.Tests.Lifetime
     ///     collection finished — while it was open. No finalizer can therefore land inside an
     ///     accepted window, which makes every accepted reading exact. (A finalizer landing
     ///     mid-window could only ADD releases, masking a defect rather than inventing one, so even
-    ///     the fallback reading below fails safe.) Each test first runs one full drain for the
-    ///     backlog earlier tests left. <c>[DoNotParallelize]</c> is mandatory for the same reason.
+    ///     the fallback reading below fails safe.) The class first runs one full drain for the
+    ///     backlog earlier test classes left. <c>[DoNotParallelize]</c> is mandatory for the same reason.
     ///     </para>
     ///     <para><b>Why not a full collection per window.</b> Until 2026-09-24 every window was
     ///     drained with <c>GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect()</c>. In a full
@@ -65,13 +65,22 @@ namespace NumSharp.Tests.Lifetime
         private const int MaxWindowAttempts = 5;
 
         /// <summary>
-        ///     Runs ONE full drain before each sweep so the backlog earlier test classes left on the
-        ///     finalizer queue (or as unvisited finalizable garbage) is cleared up front, instead of
-        ///     surfacing as a disturbed window later. Once per test — the per-window hygiene is the
-        ///     young collection in <see cref="Deficit"/>.
+        ///     Runs ONE full drain before the class's sweeps so the backlog earlier test classes left on
+        ///     the finalizer queue (or as unvisited finalizable garbage) is cleared up front, instead of
+        ///     surfacing as a disturbed window later. Once per CLASS: the per-window hygiene is the young
+        ///     collection in <see cref="Deficit"/>, and the sweeps that follow one another here leave only
+        ///     garbage that hygiene handles.
         /// </summary>
-        [TestInitialize]
-        public void DrainEarlierTests() => GcQuiescence.CollectFull();
+        /// <param name="context">The MSTest class context (unused).</param>
+        /// <remarks>
+        ///     Formerly a <c>[TestInitialize]</c>: a full drain costs ~80 ms in a full run (it marks the whole
+        ///     test host's heap) and bought nothing after the first sweep — exactness never depended on it,
+        ///     since every window is re-run when <see cref="GcQuiescence.Undisturbed"/> reports a collection
+        ///     inside it; the drain only makes such re-runs rarer, and the backlog it clears is the one
+        ///     OTHER classes left, which exists only before this class's first test.
+        /// </remarks>
+        [ClassInitialize]
+        public static void DrainEarlierClasses(TestContext context) => GcQuiescence.CollectFull();
 
         /// <summary>
         ///     The two sample sizes. Both sit far below the knee where the GC starts finalizing
