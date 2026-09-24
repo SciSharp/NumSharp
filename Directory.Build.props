@@ -80,7 +80,10 @@
 
        A project overrides in its own body (imported AFTER this file, so it wins), and the
        `== ''` guards also let a command-line `-p:` / global property win — e.g.
-       benchmark/NumSharp.Benchmark.Sandbox deliberately sets both false to measure cold tier-1.
+       benchmark/NumSharp.Benchmark.Sandbox deliberately sets both false to measure cold tier-1, and
+       the three CI test hosts (NumSharp.Tests, NumSharp.Tests.Oracle, NumSharp.Tests.Build.Analyzer)
+       set TieredPGO=false: a short, JIT-bound test run never pays back PGO's instrumented tier
+       (measured 7-15 % faster; rationale and numbers in test/NumSharp.Tests/NumSharp.Tests.csproj).
        ==================================================================================== -->
   <PropertyGroup>
     <TieredCompilation Condition="'$(TieredCompilation)' == ''">true</TieredCompilation>

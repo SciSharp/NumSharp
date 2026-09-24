@@ -23,6 +23,10 @@
     <Configurations>Debug;Release;Publish</Configurations>
     <!-- This project does NOT apply the analyzer to its own compile (it only references it for the
          DiagnosticAnalyzer TYPES and drives it manually), so its own code is never analyzed. -->
+    <!-- TieredPGO OFF for this short-lived, JIT-bound test host (tiering stays on) — overrides the repo-wide
+         default in ../../Directory.Build.props; the measured rationale is in ../NumSharp.Tests/NumSharp.Tests.csproj
+         (this suite: 23.9 s -> 20.7 s summed on net10.0, 2026-09-24 — Roslyn compiles in-process are JIT-heavy). -->
+    <TieredPGO>false</TieredPGO>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Publish|AnyCPU'">

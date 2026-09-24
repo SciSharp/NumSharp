@@ -19,6 +19,10 @@
     <!-- Strong-naming is set repo-wide in ../../Directory.Build.props. Signed because
          NumSharp.Core grants it InternalsVisibleTo, which now names a PublicKey. -->
     <Configurations>Debug;Release;Publish</Configurations>
+    <!-- TieredPGO OFF for this short-lived, JIT-bound test host (tiering stays on) — overrides the repo-wide
+         default in ../../Directory.Build.props; the measured rationale is in ../NumSharp.Tests/NumSharp.Tests.csproj
+         (this suite: 16.6 s -> 14.2 s summed on net10.0, 2026-09-24). -->
+    <TieredPGO>false</TieredPGO>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Publish|AnyCPU'">
