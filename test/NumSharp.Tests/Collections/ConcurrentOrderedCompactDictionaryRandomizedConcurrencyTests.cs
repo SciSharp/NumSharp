@@ -568,10 +568,19 @@ namespace NumSharp.Tests.Collections
             // slot's key and value — and so is the index-addressed value setter (SetAt), whose target key is a
             // moving target under concurrent reindexing. Both appear in the maximal-chaos scenario below under the
             // weaker checks their contracts permit.
-            // Budget (StressBudget): golden 20,000-key universe x 25,000 ops per writer; per-push CI 4,000 x 10,000
-            // (still ~10 RemoveWhere sweeps per writer at the 0x3FF cadence below).
+            // Budget (StressBudget): golden 20,000-key universe x 25,000 ops per writer; per-push CI 4,000 x 5,000.
+            // The 4,000-key universe keeps every generation at capacity 4,096 (no large-object-heap copies). The op
+            // count sets the run length - the auditors sweep until the writers finish - and every interior removal
+            // copies the whole generation, so 5,000 ops (was 10,000) roughly halve the run on a wide box (1.3x on 4
+            // CPUs, where a fixed start-up share dominates). The 0x3FF cadence below offers RemoveWhere at ops 0,
+            // 1,024, ..., 4,096 of every writer (a sweep when case 7 is drawn there: ~10 per run on the 24-thread gun,
+            // ~7 on the 16-thread one).
+            // Teeth (mutation-checked, reverted): an interior removal that also shifts the PUBLISHED generation in
+            // place ("forgot copy-on-write") fails 24/24 runs pinned to 4 CPUs at both 10,000 and 5,000 ops and 6/6
+            // unpinned; the same slip inside RemoveWhere fails 12/12 in both modes at both op counts; the non-compact
+            // mirror's twin fails 12/12 in both modes at both op counts.
             int Universe = StressBudget.Pick(full: 20_000, ci: 4_000);
-            int WriterOps = StressBudget.Pick(full: 25_000, ci: 10_000);
+            int WriterOps = StressBudget.Pick(full: 25_000, ci: 5_000);
             int threads = HeavyThreads;
             int writers = System.Math.Max(1, threads * 3 / 4); // a quarter of the gun are dedicated pair auditors
 
