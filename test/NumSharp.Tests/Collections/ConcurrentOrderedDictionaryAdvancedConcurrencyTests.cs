@@ -133,7 +133,19 @@ namespace NumSharp.Tests.Collections
             // and the thread count is oversubscribed so the scheduler preempts inside locks and read sequences.
             const int Rounds = 10;
             const int HotKeys = 64;
-            const int AppendsPerRole = 500;
+            // Budget (StressBudget): golden 500 appends per appender activation, per-push CI 50. The appender role
+            // lands on at most 3 of the (at most 12) threads per round, so the golden budget grows the live set to
+            // 2,464 seeded + 30 x 500 = 17,464 entries, and every interior removal of the churner role (200 per
+            // activation, ~6,000 per run) then copies a capacity-32,768 generation - values 256 KB, keys 128 KB, both
+            // large-object-heap allocations. At 50 the live set peaks at 2,464 + 30 x 50 = 3,964 entries, capacity
+            // 4,096: every generation copy stays in the small-object heap. The churner, updater and reader roles - the
+            // volley workloads raced against each other - are unchanged. Teeth (mutation-checked, reverted): a
+            // TryRemove that removes from a store read OUTSIDE the write lock fails every run at both budgets, pinned
+            // to 4 CPUs and unpinned, at the first quiescent audit ("entries were lost or duplicated across a
+            // volley"): a failed audit reaches every participant as a BarrierPostPhaseException and ends the run at
+            // once, whereas a participant that throws (or spins on a corrupted structure) never reaches SignalAndWait
+            // and parks the rest until the gun's 2-minute hang ceiling (how the compact mirror's mutation surfaces).
+            int AppendsPerRole = StressBudget.Pick(full: 500, ci: 50);
             const int ChurnBandSize = 200;
             int threads = OversubscribedThreads;
 
