@@ -391,16 +391,21 @@ namespace NumSharp.Tests.Collections
             // later op happened to paper over it) is caught at the first quiescent point after it happens. Threads
             // carry their reference across rounds and keep drawing random key-addressed operations.
             // Budget (StressBudget): golden 1,200 keys per thread x 10 volleys x 2,500 ops; per-push CI keeps all
-            // 10 quiescent audits and shrinks each partition to 150 keys and each volley to 1,000 ops. 150, not the
+            // 10 quiescent audits and shrinks each partition to 150 keys and each volley to 500 ops. 150, not the
             // earlier 300: at up to 24 heavy threads that keeps the live set under 4,096 entries, so every copy-on-write
             // array (the compact type's long[] index is the power of two above 1.5x capacity) stays below the 85 KB
             // large-object threshold. At 300 each ordered removal copied a 128 KB index onto the LOH: ~7 GB of LOH
-            // churn per run, nearly every collection a gen-2 one (1,320 of 1,329), 2.4-3.7 s in-suite. The ops, their
-            // mix and every audit are unchanged; the capacity-doubling defect of bcf924f6 re-introduced into the
-            // compact append path still fails this storm at 150 (3/3, the index-capacity guard trips).
+            // churn per run, nearly every collection a gen-2 one (1,320 of 1,329), 2.4-3.7 s in-suite. The op mix and
+            // every audit are unchanged; the capacity-doubling defect of bcf924f6 re-introduced into the compact append
+            // path still fails this storm at 150 (3/3, the index-capacity guard trips). Each volley then runs 500 ops,
+            // not the earlier 1,000: every ordered removal still copies the whole (small-object) generation, so the op
+            // count is the run length, and 500 keeps all 10 quiescent audits while roughly halving it. Mutation-checked
+            // at both 1,000 and 500 (reverted): a TryRemove on a generation read OUTSIDE the write lock fails 12/12 on
+            // both types, pinned to 4 CPUs and unpinned; a compact TryRemoveSwapBack doing the same fails 12/12; the
+            // capacity-doubling append defect fails 3/3.
             int KeysPerThread = StressBudget.Pick(full: 1_200, ci: 150);
             const int Rounds = 10;
-            int OpsPerRound = StressBudget.Pick(full: 2_500, ci: 1_000);
+            int OpsPerRound = StressBudget.Pick(full: 2_500, ci: 500);
             int threads = HeavyThreads;
 
             var d = new ConcurrentOrderedDictionary<int, long>();
