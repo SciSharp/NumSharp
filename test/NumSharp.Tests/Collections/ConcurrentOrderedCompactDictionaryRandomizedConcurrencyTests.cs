@@ -163,10 +163,18 @@ namespace NumSharp.Tests.Collections
             // moved entry's value would be caught by ITS owner's next per-op probe. Index-addressed writes
             // (SetAt / RemoveAt / RemoveWhere / Clear) are excluded: they touch keys this thread does not own, so
             // no per-partition reference can predict them (they get their own shared-space scenarios below).
-            // Budget (StressBudget): golden 1,000 keys x 6,000 ops per thread; per-push CI 250 x 3,000.
-            int KeysPerThread = StressBudget.Pick(full: 1_000, ci: 250);
-            int OpsPerThread = StressBudget.Pick(full: 6_000, ci: 3_000);
+            // Budget (StressBudget): golden 1,000 keys x 6,000 ops per thread; per-push CI up to 250 x 3,000, the keys
+            // capped at 4,096 / threads. HeavyThreads is 16 on a box with at most 16 CPUs (250 keys each, 4,000 in all -
+            // unchanged there) but up to 24 on a bigger one, where 250 keys each made up to 6,000 live entries:
+            // capacity 8,192, index 16,384 words = 128 KB - a large-object-heap allocation on every interior removal
+            // (up to 6,000 per run), ~290 gen-2 collections per run (0.56-0.66 s in the suite on a 32-CPU box, 0.8 s in
+            // a fresh test host). The cap keeps the table at capacity 4,096 (index 64 KB) however wide the gun is; the
+            // op count - the workload every per-op probe checks - is unchanged.
+            // Teeth (mutation-checked on the compact type at 24 threads, reverted): a TryRemove or a TryRemoveSwapBack
+            // on a generation read OUTSIDE the write lock fails 12/12 runs at both 250 and 170 keys per thread.
             int threads = HeavyThreads;
+            int KeysPerThread = StressBudget.Pick(full: 1_000, ci: System.Math.Min(250, 4_096 / threads));
+            int OpsPerThread = StressBudget.Pick(full: 6_000, ci: 3_000);
 
             var d = new ConcurrentOrderedCompactDictionary<int, long>();
 
