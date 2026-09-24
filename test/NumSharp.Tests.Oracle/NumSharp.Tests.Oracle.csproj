@@ -41,6 +41,14 @@
     <ProjectReference Include="..\..\src\NumSharp.Interop.OpenBLAS\NumSharp.Interop.OpenBLAS.csproj" />
   </ItemGroup>
 
+  <!-- The exact-and-cheap GC window protocol the leak sweep's ScopeAudit measures with. Linked (not
+       copied) from NumSharp.Tests so both projects' process-global counter tests share ONE implementation
+       of a subtle protocol (young collection + finalizer drain + collection-count AND background-GC-index
+       check); see the file's remarks for why a full GC per measurement was the dominant cost. -->
+  <ItemGroup>
+    <Compile Include="..\NumSharp.Tests\Utilities\GcQuiescence.cs" Link="Fuzz\GcQuiescence.cs" />
+  </ItemGroup>
+
   <!-- Differential-fuzzer oracle corpus: committed JSONL replayed by MSTest (no Python in CI). -->
   <ItemGroup>
     <None Update="Fuzz\corpus\**\*.jsonl">

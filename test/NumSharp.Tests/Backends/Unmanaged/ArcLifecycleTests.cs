@@ -850,6 +850,16 @@ namespace NumSharp.Tests.Backends.Unmanaged
         ///     — a free here returned the buffer to the pool under the live alias, so the
         ///     next same-size allocation overwrote it (CI read 0 where 8 was stored).
         /// </summary>
+        /// <remarks>
+        ///     Each iteration forces the temp's finalizer with a YOUNG collection
+        ///     (<see cref="GcQuiescence.CollectYoung"/>) and then proves it ran: the temp held the
+        ///     buffer's only counted reference, so a refcount of 0 means its finalizer abandoned it in
+        ///     THIS iteration — an iteration that silently skipped the finalizer cannot pass. The temp
+        ///     is allocated immediately before the collection, so it is gen-0 garbage; should it ever
+        ///     have been promoted past gen 1, the iteration falls back to a full drain rather than
+        ///     assert vacuously. A full drain per iteration (the original form) marked the whole
+        ///     test-run heap — ~95 ms each in a full suite run, 19 s for this loop.
+        /// </remarks>
         [TestMethod]
         public void AliasedBaseBuffer_SurvivesFinalizerOfItsLastNDArray()
         {
@@ -859,10 +869,12 @@ namespace NumSharp.Tests.Backends.Unmanaged
             for (int i = 0; i < 200; i++)
             {
                 var a = Make();
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
-                GC.Collect();
+                GcQuiescence.CollectYoung();
+                if (GetRefCount(a.InternalArray) != 0)
+                    GcQuiescence.CollectFull();   // the temp outlived gen 1 somehow: find it the slow way
 
+                GetRefCount(a.InternalArray).Should().Be(0,
+                    "iteration {0}: the arange temp's finalizer must have run and ABANDONED its reference", i);
                 a.InternalArray.IsReleased.Should().BeFalse(
                     "iteration {0}: the aliased base buffer must survive the arange temp's finalizer", i);
                 // A same-size allocation would steal a wrongly-pooled buffer and

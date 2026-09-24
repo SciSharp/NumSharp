@@ -605,7 +605,7 @@ namespace NumSharp.Tests.Fuzz
             /// <summary>Ids with a GC-inconclusive ERROR-path measurement (see <see cref="SweepResult.ErrorInconclusiveIds"/>).</summary>
             public readonly HashSet<string> ErrorInconclusiveIds = new(StringComparer.Ordinal);
 
-            /// <summary>Total measurements (success + error), for the periodic hygiene settle.</summary>
+            /// <summary>Total measurements (success + error), for the periodic hygiene quiesce.</summary>
             private long _measurements;
 
             /// <summary>Records one threw-skipped success-path case.</summary>
@@ -668,9 +668,11 @@ namespace NumSharp.Tests.Fuzz
                         MeasuredByOp[coverageKey] = MeasuredByOp.GetValueOrDefault(coverageKey) + 1;
                 }
 
-                // Hygiene: bound the backlog any leak-in-progress builds up across a long sweep.
+                // Hygiene: bound the backlog any leak-in-progress builds up across a long sweep. Young
+                // collection only (ScopeAudit.Quiesce): the backlog is escaped wrappers allocated
+                // moments ago, and a FULL settle here marked the whole corpus-laden heap every time.
                 if (++_measurements % 1024 == 0)
-                    ScopeAudit.Settle();
+                    ScopeAudit.Quiesce();
 
                 long escaped = traffic.Escaped;
                 if (escaped != 0)
@@ -846,8 +848,8 @@ namespace NumSharp.Tests.Fuzz
                     // and the finalizer thread drains RETURNS asynchronously across later regions —
                     // invisible to GC-count detection (a drain is not a collection) and capable of huge
                     // spurious negatives / masked positives. A non-zero screen is therefore re-measured
-                    // after a Settle: with the queue drained and no GC inside the confirming region,
-                    // that verdict is trustworthy. (The bypass verdict needs no confirm: drain
+                    // in an exact window (ScopeAudit.MeasureExactTraffic): with the queue drained when it
+                    // opens and no collection inside it, that verdict is trustworthy. (The bypass verdict needs no confirm: drain
                     // interference adds RETURNS, which makes escaped negative and routes through the
                     // confirm path; takes==0 && escaped==0 implies returns==0 — arithmetically drain-free.)
                     long freshBytes = 0;
