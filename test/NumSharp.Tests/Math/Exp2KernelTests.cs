@@ -80,9 +80,19 @@ namespace NumSharp.Tests.Math
 
         /// <summary>
         /// The load-bearing contract shared by all the NDFloatMath ports: the scalar entry point and
-        /// the vector kernel must agree bit-for-bit. A contiguous array takes the SIMD path; a strided
-        /// view of the SAME values takes the scalar path. Every element must match exactly.
+        /// the vector kernel must agree bit-for-bit. A contiguous 4,096-element array runs the vector
+        /// kernel for every element (a whole number of vectors at any width, so no scalar tail), and each
+        /// element must equal <see cref="NDFloatMath.Exp2(float)"/> called directly — the scalar entry
+        /// point. A strided view of the same values must reproduce the contiguous bits as well.
         /// </summary>
+        /// <remarks>
+        /// The strided view used to be this test's only probe, on the premise that it "takes the scalar
+        /// path". It does not: the view is gathered into the same vector kernel, so the test compared the
+        /// vector kernel with itself and stayed green under an accuracy slip planted in the scalar entry
+        /// point alone AND under one planted in the Vector256 overload alone (mutation-checked). Comparing
+        /// against the scalar entry point directly fails on either; the strided comparison is kept for what
+        /// it does prove — the result does not depend on the input's layout.
+        /// </remarks>
         [TestMethod]
         public void Exp2_Scalar_Equals_Simd()
         {
@@ -92,14 +102,21 @@ namespace NumSharp.Tests.Math
             for (int i = 0; i < n; i++)
                 data[i] = (float)(rnd.NextDouble() * 80.0 - 40.0);   // covers overflow/underflow/normal
 
-            var contig = np.exp2(np.array(data));                    // SIMD (contiguous)
-            var strided = np.exp2(np.array((float[])data.Clone())["::2"]);  // scalar (strided)
+            var contig = np.exp2(np.array(data));                    // vector kernel, every element
+            var strided = np.exp2(np.array((float[])data.Clone())["::2"]);  // strided view: gathered into the vector kernel too
+
+            for (int i = 0; i < n; i++)
+            {
+                uint v = BitConverter.SingleToUInt32Bits(contig.GetAtIndex<float>(i));
+                uint s = BitConverter.SingleToUInt32Bits(NDFloatMath.Exp2(data[i]));
+                v.Should().Be(s, $"the scalar entry point and the vector kernel must be bit-identical at value {data[i]}");
+            }
 
             for (int i = 0; i < n / 2; i++)
             {
                 uint c = BitConverter.SingleToUInt32Bits(contig.GetAtIndex<float>(i * 2));
                 uint s = BitConverter.SingleToUInt32Bits(strided.GetAtIndex<float>(i));
-                c.Should().Be(s, $"scalar and SIMD exp2 must be bit-identical at value {data[i * 2]}");
+                c.Should().Be(s, $"a strided view must reproduce the contiguous result's bits at value {data[i * 2]}");
             }
         }
 
