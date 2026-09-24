@@ -452,10 +452,18 @@ namespace NumSharp.Tests.Collections
         ///     must never be absent (a moved key is always resolvable), and a list-path scan must never see a value
         ///     outside the law (no torn slots).
         /// </summary>
+        /// <remarks>
+        ///     <b>Budget calibration (2026-09-24).</b> With the validated read disabled (the value returned without
+        ///     re-reading the index word — the defect the gun exists to catch), the three guns counted 171–676 wrong
+        ///     pairs per run at their authored 1.0/1.5 s windows with the test host pinned to 4 CPUs (a 4-vCPU CI
+        ///     runner), i.e. one every ~2–6 ms, and 185–5,544 unpinned. The per-push window of 250 ms
+        ///     (<see cref="StressBudget" />) therefore still expects dozens of detections per run on that defect, and
+        ///     the authored windows run nightly (<c>NUMSHARP_TEST_STRESS=full</c>) for the rarer interleavings.
+        /// </remarks>
         /// <typeparam name="TKey">The key type (drives the bit-tag vs. hash-tag read path).</typeparam>
         /// <param name="d">The empty instance under fire.</param>
         /// <param name="toKey">Maps the gun's int key space onto <typeparamref name="TKey" />.</param>
-        /// <param name="milliseconds">How long to fire.</param>
+        /// <param name="milliseconds">How long to fire (the call sites pick it through <see cref="StressBudget" />).</param>
         private static void SwapBackGun<TKey>(ConcurrentOrderedCompactDictionary<TKey, int> d, Func<int, TKey> toKey, int milliseconds)
             where TKey : notnull
         {
@@ -554,18 +562,20 @@ namespace NumSharp.Tests.Collections
 
         [TestMethod]
         public void Gun_SwapBackRacing_BitTaggedIntKeys_KeyPathNeverTears()
-            => SwapBackGun(new ConcurrentOrderedCompactDictionary<int, int>(), k => k, milliseconds: 1_500);
+            => SwapBackGun(new ConcurrentOrderedCompactDictionary<int, int>(), k => k,
+                           milliseconds: StressBudget.Pick(full: 1_500, ci: 250));
 
         [TestMethod]
         public void Gun_SwapBackRacing_HashTaggedStringKeys_KeyPathNeverTears()
-            => SwapBackGun(new ConcurrentOrderedCompactDictionary<string, int>(), k => "key-" + k, milliseconds: 1_500);
+            => SwapBackGun(new ConcurrentOrderedCompactDictionary<string, int>(), k => "key-" + k,
+                           milliseconds: StressBudget.Pick(full: 1_500, ci: 250));
 
         [TestMethod]
         public void Gun_SwapBackRacing_LongKeysWithLongValues_KeyPathNeverTears()
         {
             // 8-byte key and value: still in-place on 64-bit (both atomic), so the validated read is what protects it.
             var d = new ConcurrentOrderedCompactDictionary<long, int>();
-            SwapBackGun(d, k => (long)k << 20, milliseconds: 1_000);
+            SwapBackGun(d, k => (long)k << 20, milliseconds: StressBudget.Pick(full: 1_000, ci: 250));
         }
     }
 }

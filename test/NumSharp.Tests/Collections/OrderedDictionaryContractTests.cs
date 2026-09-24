@@ -36,6 +36,15 @@ namespace NumSharp.Tests.Collections
     ///         IndexOutOfRangeException per second and the lock-free replace lost ~3% of its writes under copy churn;
     ///         both measure zero with the fixes named on each test.
     ///     </para>
+    ///     <para>
+    ///         <b>Storm budgets.</b> The two bounded storms run their authored 2 s / 3 s windows nightly
+    ///         (<c>NUMSHARP_TEST_STRESS=full</c>, see <see cref="StressBudget" />) and 250 ms / 500 ms per push. Calibrated
+    ///         2026-09-24 by re-introducing each defect (the double generation read in <c>GetEnumerator</c>; the
+    ///         replace's full fence and the resize flag's <c>Interlocked.Exchange</c> both weakened back to release
+    ///         stores): over 6 runs per storm at the authored budget and 20 at the per-push one, half with the test host
+    ///         pinned to 4 CPUs (a 4-vCPU CI runner), every run failed — the enumerator storm at its first violation within
+    ///         1–10 ms, the replace storm within 1–10 ms but once at 68 ms (pinned), hence its wider 500 ms window.
+    ///     </para>
     /// </remarks>
     [TestClass]
     public class OrderedDictionaryContractTests
@@ -167,7 +176,8 @@ namespace NumSharp.Tests.Collections
                 });
             }
 
-            RunStorm(TimeSpan.FromSeconds(2), () => Interlocked.Read(ref outOfRange) + Interlocked.Read(ref phantoms) > 0, bodies.ToArray());
+            RunStorm(TimeSpan.FromMilliseconds(StressBudget.Pick(full: 2_000, ci: 250)),
+                     () => Interlocked.Read(ref outOfRange) + Interlocked.Read(ref phantoms) > 0, bodies.ToArray());
 
             Assert.AreEqual(0L, outOfRange + phantoms,
                 $"a foreach over OrderedDictionary must enumerate ONE generation's (values, count) snapshot; observed " +
@@ -321,7 +331,8 @@ namespace NumSharp.Tests.Collections
                 }
             });
 
-            RunStorm(TimeSpan.FromSeconds(3), () => Interlocked.Read(ref lost) > 0, bodies.ToArray());
+            RunStorm(TimeSpan.FromMilliseconds(StressBudget.Pick(full: 3_000, ci: 500)), () => Interlocked.Read(ref lost) > 0,
+                     bodies.ToArray());
 
             Assert.AreEqual(0L, lost,
                 $"a completed lock-free SetByKey must never be lost; {lost} loss(es) over {sets} replace(s) racing {resizes} " +

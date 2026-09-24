@@ -25,11 +25,12 @@ namespace NumSharp.Tests.Collections
     ///     per compaction, not fewer).</para>
     ///     <para><b>Where the golden budget still runs.</b> The nightly <c>collections-stress</c> job in
     ///     <c>.github/workflows/fuzz-soak.yml</c> sets <see cref="EnvironmentVariable"/> to <c>full</c>; so can a
-    ///     developer: <c>NUMSHARP_TEST_STRESS=full dotnet test --filter "FullyQualifiedName~Collections"</c>.
-    ///     Storms whose budget is a wall-clock DURATION (the time-boxed race hunts in
-    ///     <c>OrderedDictionaryContractTests</c> and the compact type's swap-back gun) are deliberately NOT
-    ///     routed through here: their windows were calibrated against the measured frequency of the races they
-    ///     pin, so shortening them would need that calibration redone.</para>
+    ///     developer: <c>NUMSHARP_TEST_STRESS=full dotnet test --filter "FullyQualifiedName~Collections"</c>.</para>
+    ///     <para><b>Wall-clock storms.</b> The time-boxed race hunts (the two bounded storms in
+    ///     <c>OrderedDictionaryContractTests</c>, the compact type's three swap-back guns) pick their DURATION here
+    ///     too, but only after their per-push windows were re-calibrated against the races they pin: each known
+    ///     defect was re-introduced and every per-push run still failed, pinned to 4 CPUs and unpinned (the numbers
+    ///     are on each storm). A new time-boxed storm needs the same calibration before it gets a short window.</para>
     /// </remarks>
     internal static class StressBudget
     {
