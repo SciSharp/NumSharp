@@ -494,6 +494,14 @@ namespace NumSharp.Tests.Collections
             // is deliberately ABSENT here, making any mixed observation a hard failure.
             const int Seed = 4_000;
             const int HotKeys = 48;
+            // Budget (StressBudget): golden 40 structural churn rounds, per-push CI 20. The structural churners are the
+            // run length (the auditors sweep until every writer is done): each round removes and re-adds 150 interior
+            // keys, and every such removal copies the whole 4,000-entry generation under the write lock - 24,000
+            // serialized copies per run at 40 rounds on the 12-thread gun. The value churners (50,000 SetByKey each)
+            // finish well inside that and are unchanged. Teeth (mutation-checked on both types, reverted): an interior
+            // removal that also shifts the PUBLISHED generation / store in place ("forgot copy-on-write") fails 12/12
+            // runs at both 40 and 20 rounds, pinned to 4 CPUs and unpinned.
+            int ChurnRounds = StressBudget.Pick(full: 40, ci: 20);
             int threads = OversubscribedThreads;
             var d = new ConcurrentOrderedCompactDictionary<int, long>();
             for (int k = 0; k < Seed; k++)
@@ -529,7 +537,7 @@ namespace NumSharp.Tests.Collections
                         try
                         {
                             int lo = HotKeys + (id % 7) * 300;
-                            for (int round = 0; round < 40; round++)
+                            for (int round = 0; round < ChurnRounds; round++)
                             {
                                 for (int k = lo; k < lo + 150; k++)
                                 {
