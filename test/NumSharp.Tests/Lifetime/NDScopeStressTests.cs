@@ -170,7 +170,14 @@ namespace NumSharp.Tests.Lifetime
                 {
                     while (!done.IsSet || !queue.IsEmpty)
                     {
-                        if (!queue.TryDequeue(out var r)) { Thread.SpinWait(200); continue; }
+                        // Idle poll with Thread.Yield, NOT Thread.SpinWait. On .NET 8 SpinWait is a runtime FCALL that
+                        // the thread is almost always inside while it polls, and a thread in an FCALL cannot be
+                        // suspended — so every blocking GC a PRODUCER triggered (np.roll allocates) waited for these
+                        // two pollers to reach a safe point: traced 1.2 s, 23.8 s and 42.9 s gen-0 pauses, the test
+                        // 0.2 s typically and 24 s once in a full run (.NET 10 is unaffected, 6 ms). Yield is a
+                        // GC-safe transition, so a collection suspends the pollers at once; the handoff under test —
+                        // consumers draining results produced under another thread's scope — is unchanged.
+                        if (!queue.TryDequeue(out var r)) { Thread.Yield(); continue; }
                         // Produced under a scope on ANOTHER thread, yielded with no parent ->
                         // fully detached: this thread owns it outright.
                         if (r.IsDisposed || r.GetInt64(0) != 62 || r.GetInt64(2) != 0)
