@@ -680,7 +680,17 @@ namespace NumSharp.Tests.Collections
             // TryGetAt/GetKeyAt/Snapshot must be exception-free for in-range-of-snapshot requests no matter what
             // structure churns underneath (interior removes shrink counts; readers use Try-forms for race-tolerant
             // access and must simply get false, never a crash or an out-of-snapshot read).
-            const int Seed = 10_000;
+            // Budget (StressBudget): golden 10,000 seeded keys, per-push CI 4,000; the writer's 4,000 remove/re-add
+            // ops and the readers' loop are unchanged. The readers copy the whole table on every pass (ToArray, Keys),
+            // so they allocate in proportion to its size - 18 GiB per run at 10,000 keys, most of it gen-0 garbage.
+            // At 10,000 keys the table sits at capacity 16,384 and every interior removal copies a
+            // 32,768-word (256 KB) index into the large-object heap - ~280 gen-2 collections per run on a small heap,
+            // 0.57-0.79 s in the suite; at 4,000 every array stays under 85 KB.
+            // What the storm guards does not depend on the size: every generation here keeps one capacity, so a
+            // torn read cannot index past an array at any size, and a Try-form that takes the throwing path
+            // (mutation-checked, reverted: TryGetAt throwing instead of returning false once churn has shrunk the
+            // count) fails 6/6 runs at both sizes, pinned to 4 CPUs and unpinned.
+            int Seed = StressBudget.Pick(full: 10_000, ci: 4_000);
             int threads = GunThreads;
             var d = new ConcurrentOrderedCompactDictionary<int, int>();
             for (int k = 0; k < Seed; k++)
