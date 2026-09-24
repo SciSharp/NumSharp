@@ -2889,6 +2889,24 @@ dotnet test --no-build 2>&1 | grep -v "^    at " | grep -v "^     at " | grep -v
 dotnet test --no-build -v normal
 ```
 
+### Keeping the suite fast (2026-09-24: 262 s → ~57 s per framework)
+
+MSTest runs the ~16K tests **serially**, so a handful of slow tests set the wall time. Two rules came out
+of finding them (the diagnosis, per-test numbers and mutation checks are in commit messages / the files):
+
+- **Never force a FULL GC per measurement.** A forced full collection marks the whole live heap, and in a
+  full run that heap is mostly MSTest's per-test bookkeeping (~120 MiB → ~78 ms per
+  `Collect/WaitForPendingFinalizers/Collect`, vs <10 ms in isolation) — so a GC-drain loop that is instant
+  alone costs a minute in the suite, and grows with every test added. Tests that read process-global
+  counters (pool take/return, ARC refcounts after a finalizer) use `test/NumSharp.Tests/Utilities/GcQuiescence.cs`
+  (linked into the Oracle): `CollectYoung()` for per-window hygiene, `OpenWindow()`/`Undisturbed()` to prove no
+  collection — including a background GC, whose `CollectionCount` moves at its START but whose finalizers run
+  at its END — touched the window, `CollectFull()` once per test at most.
+- **Concurrent-collection storms have two budgets** (`test/NumSharp.Tests/Collections/StressBudget.cs`): each
+  call site spells `StressBudget.Pick(full: <authored>, ci: <per-push>)`. Per-push runs the CI budget;
+  `NUMSHARP_TEST_STRESS=full` restores the authored workload exactly, and the nightly `collections-stress` job
+  in `fuzz-soak.yml` runs it. Size a new storm the same way rather than letting it dominate every push.
+
 ## Test Categories
 
 Tests use typed category attributes defined in `TestCategory.cs`. Adding new bug reproductions or platform-specific tests only requires the right attribute — no CI workflow changes.
