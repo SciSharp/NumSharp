@@ -1,5 +1,6 @@
 using System;
 using NumSharp.Backends.Iteration;
+using NumSharp.Utilities;
 
 namespace NumSharp.Tests.Math
 {
@@ -105,22 +106,54 @@ namespace NumSharp.Tests.Math
         /// <summary>
         /// Bounded-accuracy regression guard: exp2 must stay within 2 ULP of the correctly-rounded
         /// 2^x (approximated by the double Math.Pow reference the kernel replaced) across the normal
-        /// output range. A gross error — wrong magnitude, a broken polynomial — exceeds this.
+        /// output range, on BOTH kernel paths. A gross error — wrong magnitude, a broken polynomial —
+        /// exceeds this.
         /// </summary>
+        /// <remarks>
+        /// The 2^-10 grid over [-120, 120] (245,761 points, each exact in float) is checked on both
+        /// paths without one NDArray per point. The SCALAR entry point <see cref="NDFloatMath.Exp2(float)"/>
+        /// is called directly for every point — it is the function each former single-element
+        /// <c>np.exp2</c> call reached (a one-element array never fills a vector), so that coverage is
+        /// unchanged; the dispatch around it stays covered by the per-element tests above. The whole grid
+        /// then goes through <c>np.exp2</c> as ONE contiguous array — the vector kernel, which the
+        /// per-point form never reached. A strided view is not a scalar-path probe: it runs the vector
+        /// kernel too (mutation-checked — an error planted in the Vector256 overload alone shows up on
+        /// a <c>::2</c> view). The per-point form cost ~0.36 s in the suite: two NDArrays per point, all
+        /// ~491k of them left undisposed for the finalizer.
+        /// </remarks>
         [TestMethod]
         public void Exp2_WithinTwoUlp_OfReference()
         {
-            long worst = 0;
-            for (double x = -120.0; x <= 120.0; x += 0.0009765625)  // 2^-10 step, ~245k points
+            const int Steps = 240 * 1024;           // 2^-10 step across [-120, 120]
+            var grid = new float[Steps + 1];
+            for (int k = 0; k <= Steps; k++)
             {
-                float xf = (float)x;
-                float got = Exp2(xf);
-                float reference = (float)System.Math.Pow(2.0, (double)xf);
-                if (!float.IsFinite(got) || !float.IsFinite(reference))
-                    continue;
-                worst = System.Math.Max(worst, Ulp(got, reference));
+                // -120 + k * 2^-10 is exact in double and in float (17 significant bits at most), so this is
+                // exactly the point sequence the former accumulating `x += 2^-10` loop produced.
+                grid[k] = (float)(-120.0 + k * 0.0009765625);
             }
-            worst.Should().BeLessThanOrEqualTo(2, "exp2 must be within 2 ULP of the double reference");
+
+            using var input = np.array(grid);
+            using var kernelResult = np.exp2(input);  // contiguous: the vector kernel, plus its scalar tail
+            float[] vector = kernelResult.ToArray<float>();
+
+            long worstScalar = 0, worstVector = 0;
+            for (int k = 0; k <= Steps; k++)
+            {
+                float reference = (float)System.Math.Pow(2.0, (double)grid[k]);
+                if (!float.IsFinite(reference))
+                    continue;
+                // A non-finite result against a finite reference is skipped exactly as the per-point form did:
+                // Exp2_Specials pins where overflow and underflow must land.
+                float scalar = NDFloatMath.Exp2(grid[k]);
+                if (float.IsFinite(scalar))
+                    worstScalar = System.Math.Max(worstScalar, Ulp(scalar, reference));
+                if (float.IsFinite(vector[k]))
+                    worstVector = System.Math.Max(worstVector, Ulp(vector[k], reference));
+            }
+
+            worstScalar.Should().BeLessThanOrEqualTo(2, "exp2's scalar entry point must be within 2 ULP of the double reference");
+            worstVector.Should().BeLessThanOrEqualTo(2, "exp2's vector kernel must be within 2 ULP of the double reference");
         }
 
         /// <summary>exp2 fused into an NDExpr chain must equal the direct kernel bit-for-bit.</summary>
