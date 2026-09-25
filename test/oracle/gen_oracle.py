@@ -7843,12 +7843,16 @@ def gen_fft():
 #
 # TWO FILES, same split as random_parity:
 #   * generator_parity.jsonl      — PORTABLE: pure PCG64 bits + exactly-rounded IEEE
-#     (random, integers, uniform, permutation, shuffle, choice, bytes) + the RandomState
+#     (random, integers, uniform, permutation, shuffle, choice, bytes; triangular, the urn-walk
+#     hypergeometric, the geometric search, multivariate_hypergeometric count) + the RandomState
 #     helpers random_integers/bytes (pure MT19937 bits). Hard-gated on every host.
 #   * generator_parity_host.jsonl — HOST-libm: the ziggurat / rejection samplers whose
 #     transform consumes log1p/exp/pow (standard_normal, standard_exponential, normal,
-#     exponential, standard_gamma, gamma). Byte-exact on win-amd64 (Kahan log1p + Math.*
-#     == ucrtbase); reported Inconclusive off-Windows (the random_parity_host pattern).
+#     exponential, standard_gamma, gamma) and every distribution built on them (one parameter
+#     set per internal branch). Byte-exact on win-amd64 (Kahan log1p + Math.* == ucrtbase)
+#     except pareto/power, which call the CRT's closed in-band expm1 (MisalignedRegistry
+#     bounds them per element); reported Inconclusive off-Windows (the random_parity_host
+#     pattern). multivariate_normal is excluded: it is byte-exact only with a LAPACK backend.
 #
 # Every case seeds a FRESH default_rng / RandomState, so replaying never mutates global
 # np.random state (matches the fresh-instance isolation the rnd tier uses). Op key "grnd";
@@ -7863,6 +7867,13 @@ _GEN_DTYPE = {
 }
 _GRND_SEEDS = [42, 987654321]
 _GRND_SIZES = [[7], [2, 3]]
+# The Generator distributions whose parameters are all scalars: `rng.<method>(*args, size)` on both sides (ints stay
+# JSON ints, so binomial/hypergeometric receive Python ints exactly as a user call would).
+_GRND_POSITIONAL = {
+    "beta", "chisquare", "f", "noncentral_chisquare", "noncentral_f", "standard_cauchy", "standard_t", "vonmises",
+    "pareto", "weibull", "power", "laplace", "gumbel", "logistic", "lognormal", "rayleigh", "wald", "triangular",
+    "binomial", "negative_binomial", "poisson", "zipf", "geometric", "hypergeometric", "logseries",
+}
 
 
 def gen_generator_parity():
@@ -7942,6 +7953,18 @@ def gen_generator_parity():
                 r = rng.standard_gamma(args[0], size, dtype=npdt or np.float64)
             elif method == "gamma":
                 r = rng.gamma(args[0], args[1], size)
+            elif method in _GRND_POSITIONAL:
+                # The scalar-parameter distributions: NumPy's positional parameters, then size.
+                r = getattr(rng, method)(*args, size)
+            elif method == "multinomial":
+                n_arg = np.array(params["narr"]) if "narr" in params else int(args[0])
+                r = rng.multinomial(n_arg, params["pvals"], size if "size" in params else None)
+            elif method == "dirichlet":
+                r = rng.dirichlet(params["alpha"], size if "size" in params else None)
+            elif method == "multivariate_hypergeometric":
+                r = rng.multivariate_hypergeometric(params["colors"], int(args[0]),
+                                                    size if "size" in params else None,
+                                                    method=params.get("mvmethod", "marginals"))
             else:
                 raise ValueError(f"unknown generator method '{method}'")
         return np.asarray(r)
@@ -7994,6 +8017,64 @@ def gen_generator_parity():
     cases(host, "standard_gamma", {"args": [0.5], "dtype": "float64"})  # shape<1 branch
     cases(host, "standard_gamma", {"args": [2.0], "dtype": "float32"})
     cases(host, "gamma", {"args": [2.0, 3.0]})
+
+    # ---- the distribution surface (Phase 6), one parameter set per internal branch ----
+    # PORTABLE: pure PCG64 bits + exactly-rounded IEEE (next_double, sqrt, +-*/, random_interval).
+    for args in ([0.0, 3.0, 10.0], [0.0, 0.0, 1.0], [0.0, 1.0, 1.0]):
+        cases(portable, "triangular", {"args": args})
+    for args in ([10, 7, 8], [15, 15, 20]):                       # the urn walk (sample < 10 or > total - 10)
+        cases(portable, "hypergeometric", {"args": args})
+    cases(portable, "geometric", {"args": [0.35]})                # the search (p >= 1/3): sums of products
+    cases(portable, "multivariate_hypergeometric", {"args": [40], "colors": [30, 20, 50], "mvmethod": "count"})
+    # HOST-libm: every sampler whose transform or setup consumes log/exp/pow/log1p/expm1.
+    for args in ([2.0, 3.0], [0.5, 0.5], [1e-3, 1e-3], [1e-105, 1e-105], [0.5, 2.0]):
+        cases(host, "beta", {"args": args})
+    for args in ([3.0], [0.5]):
+        cases(host, "chisquare", {"args": args})
+    for args in ([5.0, 7.0], [0.5, 0.5]):
+        cases(host, "f", {"args": args})
+    for args in ([3.0, 1.5], [0.5, 1.5], [3.0, 0.0], [0.5, 30.0]):
+        cases(host, "noncentral_chisquare", {"args": args})
+    for args in ([5.0, 7.0, 1.5], [0.5, 7.0, 1.5]):
+        cases(host, "noncentral_f", {"args": args})
+    cases(host, "standard_cauchy", {"args": []})
+    for args in ([3.5], [0.5]):
+        cases(host, "standard_t", {"args": args})
+    for args in ([0.5, 2.0], [0.0, 1e-9], [1.0, 1e-6], [-2.0, 1e7], [3.0, 50.0]):
+        cases(host, "vonmises", {"args": args})
+    # pareto/power: the CRT's in-band expm1 is closed; MisalignedRegistry bounds the difference per element.
+    for args in ([3.0], [0.5]):
+        cases(host, "pareto", {"args": args})
+    for args in ([2.5], [0.3]):
+        cases(host, "power", {"args": args})
+    for args in ([1.79], [0.3], [0.0]):
+        cases(host, "weibull", {"args": args})
+    cases(host, "laplace", {"args": [0.0, 1.0]})
+    cases(host, "gumbel", {"args": [0.5, 2.0]})
+    cases(host, "logistic", {"args": [0.0, 1.0]})
+    cases(host, "lognormal", {"args": [1.0, 0.5]})
+    cases(host, "rayleigh", {"args": [1.5]})
+    for args in ([3.0, 2.0], [0.5, 10.0]):
+        cases(host, "wald", {"args": args})
+    for args in ([10, 0.35], [100, 0.4], [1000, 0.7], [20, 0.9]):
+        cases(host, "binomial", {"args": args})
+    for args in ([5.0, 0.4], [0.5, 0.5]):
+        cases(host, "negative_binomial", {"args": args})
+    for args in ([3.5], [100.0], [1e6]):
+        cases(host, "poisson", {"args": args})
+    for args in ([3.0], [1.5], [1.05]):
+        cases(host, "zipf", {"args": args})
+    for args in ([0.1], [1e-5]):                                  # the inversion (p < 1/3): ceil(-E / log1p(-p))
+        cases(host, "geometric", {"args": args})
+    for args in ([100, 200, 50], [300, 100, 250], [1000, 1000, 1995]):   # HRUA
+        cases(host, "hypergeometric", {"args": args})
+    for args in ([0.6], [0.99], [0.1]):
+        cases(host, "logseries", {"args": args})
+    cases(host, "multinomial", {"args": [20], "pvals": [0.2, 0.3, 0.5]})
+    cases(host, "multinomial", {"args": [], "narr": [[5], [10]], "pvals": [[0.5, 0.5], [0.1, 0.9]]}, sized=False)
+    cases(host, "dirichlet", {"args": [], "alpha": [2.0, 3.0, 5.0]})
+    cases(host, "dirichlet", {"args": [], "alpha": [0.05, 0.05, 0.05]})   # stick-breaking over random_beta
+    cases(host, "multivariate_hypergeometric", {"args": [40], "colors": [30, 20, 50]})
 
     return portable, host
 

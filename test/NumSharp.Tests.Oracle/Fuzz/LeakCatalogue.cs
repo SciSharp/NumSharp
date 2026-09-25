@@ -559,9 +559,18 @@ namespace NumSharp.Tests.Fuzz
         /// <param name="l">The entry list.</param>
         private static void AddObjects(List<LeakCase> l)
         {
-            // ---- Generator (the stream methods ride grnd; these two do not) ----
+            // ---- Generator (the stream methods ride grnd; these three do not) ----
             E(l, "Generator.ToString", "repr", f => f.Rng.ToString());
             E(l, "Generator.permuted", "axis copy", f => f.Rng.permuted(f.M, 1));
+            // Byte-exact only with a LAPACK backend, so it has no grnd stream case; the managed fallback (Jacobi SVD, its
+            // factors and the transform's temporaries) is the path this measures.
+            E(l, "Generator.multivariate_normal", "svd + eigh + cholesky", f =>
+            {
+                var cov = new double[,] { { 2.0, 0.3 }, { 0.3, 1.0 } };
+                using var a = f.Rng.multivariate_normal(new[] { 0.0, 1.0 }, cov, new Shape(4));
+                using var b = f.Rng.multivariate_normal(new[] { 0.0, 1.0 }, cov, new Shape(4), method: "eigh");
+                return f.Rng.multivariate_normal(new[] { 0.0, 1.0 }, cov, new Shape(4), method: "cholesky");
+            });
 
             // ---- SeedSequence / bit generators (managed state; random_raw allocates only its result) ----
             E(l, "SeedSequence.generate_state", "uint32 words", f => new SeedSequence(5).generate_state(4));

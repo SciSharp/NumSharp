@@ -48,8 +48,9 @@ namespace NumSharp
         /// <param name="alpha">Concentration parameters as a 1-D NDArray of any numeric dtype and layout (cast to float64).</param>
         /// <param name="size">Output shape; the output has shape (*size, k). Null (NumPy's <c>None</c>) draws one vector.</param>
         /// <returns>Drawn samples from the Dirichlet distribution (float64).</returns>
-        /// <exception cref="TypeError"><paramref name="alpha"/> is null (<c>object of type 'NoneType' has no len()</c>) or 0-d
-        ///     (<c>len() of unsized object</c>).</exception>
+        /// <exception cref="TypeError"><paramref name="alpha"/> is null (<c>object of type 'NoneType' has no len()</c>), 0-d
+        ///     (<c>len() of unsized object</c>) or complex (<c>Cannot cast array data from dtype('complex128') to
+        ///     dtype('float64') according to the rule 'safe'</c>).</exception>
         /// <exception cref="ValueError"><paramref name="alpha"/> has more than one dimension (<c>object too deep for desired
         ///     array</c>), an element is <c>&lt;= 0</c> (<c>alpha &lt;= 0</c>), or <paramref name="size"/> has a negative dimension.</exception>
         /// <remarks>
@@ -65,6 +66,8 @@ namespace NumSharp
                 throw new TypeError("len() of unsized object");
             if (alpha.ndim > 1)
                 throw new ValueError("object too deep for desired array");
+            // PyArray_FROMANY's safe cast follows its depth test: a complex alpha fails here, before any value is read.
+            RandomConstraints.CheckSafeCast(alpha, NPTypeCode.Double);
 
             long k = alpha.size;
 
@@ -155,9 +158,9 @@ namespace NumSharp
 
             // Each alpha's gamma setup (Marsaglia-Tsang's b and c, or Johnk's 1/alpha), which NumPy recomputes for every row,
             // evaluated once — the same expressions, so bit-neutral.
-            var setups = new LegacyGammaSetup[k];
+            var setups = new GammaSetup[k];
             for (long j = 0; j < k; j++)
-                setups[j] = new LegacyGammaSetup(alpha[j]);
+                setups[j] = new GammaSetup(alpha[j]);
 
             // Read-ahead draws (bulk-filled by the bit generator): every gamma draws at least once — each alpha is positive
             // or NaN, never 0 — so the gammas still owed bound the draws still to come.

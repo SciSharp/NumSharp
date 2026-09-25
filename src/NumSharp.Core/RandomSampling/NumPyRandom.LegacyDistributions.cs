@@ -195,54 +195,6 @@ namespace NumSharp
         // ------------------------------------------------------------------------------------------------ gamma family
 
         /// <summary>
-        ///     The per-shape constants of <c>legacy_standard_gamma</c> — Marsaglia-Tsang's <c>b = shape - 1/3</c> and
-        ///     <c>c = 1 / sqrt(9 * b)</c>, or Johnk's <c>1 / shape</c> — computed once for a fill instead of on every value.
-        /// </summary>
-        /// <remarks>
-        ///     NumPy's C computes <c>b</c>/<c>c</c> on every call and <c>1 / shape</c> on every rejection attempt; each is a
-        ///     deterministic function of the shape under the same IEEE operations, so reading the stored value back is
-        ///     bit-identical and saves a <c>sqrt</c> and a division per value. Only the branch the shape selects is computed
-        ///     (the others stay 0 and are never read). Shared by every sampler built on the legacy gamma (chi-square, F,
-        ///     Student's t, beta, negative binomial, dirichlet, the noncentral pair).
-        /// </remarks>
-        private readonly struct LegacyGammaSetup
-        {
-            /// <summary>The shape; still selects the branch per value (1, 0, below 1, or Marsaglia-Tsang — NaN included).</summary>
-            internal readonly double Shape;
-
-            /// <summary>Marsaglia-Tsang's <c>shape - 1/3</c> (shape &gt; 1 or NaN).</summary>
-            internal readonly double B;
-
-            /// <summary>Marsaglia-Tsang's <c>1 / sqrt(9 * B)</c> — NOT the algebraically equal <c>(1/3) / sqrt(B)</c>, which rounds differently.</summary>
-            internal readonly double C;
-
-            /// <summary>Johnk's <c>1 / shape</c> (0 &lt; shape &lt; 1).</summary>
-            internal readonly double InvShape;
-
-            /// <summary>Evaluates NumPy's per-shape statements for the branch <paramref name="shape"/> selects.</summary>
-            /// <param name="shape">The validated shape (non-negative or NaN).</param>
-            internal LegacyGammaSetup(double shape)
-            {
-                Shape = shape;
-                B = C = InvShape = 0.0;
-                if (shape == 1.0 || shape == 0.0)
-                    return;
-                if (shape < 1.0)
-                {
-                    InvShape = 1.0 / shape;
-                }
-                else
-                {
-                    B = shape - 1.0 / 3.0;
-                    C = 1.0 / Math.Sqrt(9 * B);
-                }
-            }
-
-            /// <summary>Whether every value draws at least once — false only for shape 0 (0 without a draw).</summary>
-            internal bool Draws => Shape != 0.0;
-        }
-
-        /// <summary>
         ///     NumPy's <c>legacy_standard_gamma</c>: exponential for <c>shape == 1</c>, 0 (no draw) for <c>shape == 0</c>,
         ///     Johnk/Ahrens-Dieter rejection for <c>shape &lt; 1</c>, and Marsaglia-Tsang (on the cached-Gaussian polar
         ///     normals) above.
@@ -250,7 +202,7 @@ namespace NumSharp
         /// <param name="src">The draw source — per-draw, or a read-ahead whose no-overdraw accounting the caller keeps.</param>
         /// <param name="g">The shape's setup (validated non-negative by the caller; NaN takes the Marsaglia branch and yields NaN).</param>
         /// <returns>The draw.</returns>
-        private double LegacyStandardGamma(ref DrawBufferDouble src, in LegacyGammaSetup g)
+        private double LegacyStandardGamma(ref DrawBufferDouble src, in GammaSetup g)
         {
             double b, c;
             double U, V, X, Y;
@@ -312,26 +264,26 @@ namespace NumSharp
         /// <param name="src">The draw source — per-draw, or a read-ahead whose no-overdraw accounting the caller keeps.</param>
         /// <param name="shape">The shape.</param>
         /// <returns>The draw.</returns>
-        private double LegacyStandardGamma(ref DrawBufferDouble src, double shape) => LegacyStandardGamma(ref src, new LegacyGammaSetup(shape));
+        private double LegacyStandardGamma(ref DrawBufferDouble src, double shape) => LegacyStandardGamma(ref src, new GammaSetup(shape));
 
         /// <summary>NumPy's <c>legacy_gamma</c>: <c>scale * legacy_standard_gamma(shape)</c>.</summary>
         /// <param name="src">The draw source — per-draw, or a read-ahead whose no-overdraw accounting the caller keeps.</param>
         /// <param name="g">The shape's setup.</param>
         /// <param name="scale">The scale.</param>
         /// <returns>The draw.</returns>
-        private double LegacyGamma(ref DrawBufferDouble src, in LegacyGammaSetup g, double scale) => scale * LegacyStandardGamma(ref src, in g);
+        private double LegacyGamma(ref DrawBufferDouble src, in GammaSetup g, double scale) => scale * LegacyStandardGamma(ref src, in g);
 
         /// <summary>NumPy's <c>legacy_chisquare</c>: <c>2 * legacy_standard_gamma(df / 2)</c>.</summary>
         /// <param name="src">The draw source — per-draw, or a read-ahead whose no-overdraw accounting the caller keeps.</param>
         /// <param name="halfDf">The setup of <c>df / 2.0</c>.</param>
         /// <returns>The draw.</returns>
-        private double LegacyChisquare(ref DrawBufferDouble src, in LegacyGammaSetup halfDf) => 2.0 * LegacyStandardGamma(ref src, in halfDf);
+        private double LegacyChisquare(ref DrawBufferDouble src, in GammaSetup halfDf) => 2.0 * LegacyStandardGamma(ref src, in halfDf);
 
         /// <summary><c>legacy_chisquare</c> for a <paramref name="df"/> that changes per call (the Poisson-mixed noncentral branch).</summary>
         /// <param name="src">The draw source — per-draw, or a read-ahead whose no-overdraw accounting the caller keeps.</param>
         /// <param name="df">The degrees of freedom.</param>
         /// <returns>The draw.</returns>
-        private double LegacyChisquare(ref DrawBufferDouble src, double df) => 2.0 * LegacyStandardGamma(ref src, new LegacyGammaSetup(df / 2.0));
+        private double LegacyChisquare(ref DrawBufferDouble src, double df) => 2.0 * LegacyStandardGamma(ref src, new GammaSetup(df / 2.0));
 
         /// <summary>The setups of <c>legacy_f</c>: the two chi-squares' <c>df / 2</c> gammas.</summary>
         private readonly struct LegacyFSetup
@@ -343,10 +295,10 @@ namespace NumSharp
             internal readonly double Dfden;
 
             /// <summary>The setup of <c>dfnum / 2</c>.</summary>
-            internal readonly LegacyGammaSetup HalfNum;
+            internal readonly GammaSetup HalfNum;
 
             /// <summary>The setup of <c>dfden / 2</c>.</summary>
-            internal readonly LegacyGammaSetup HalfDen;
+            internal readonly GammaSetup HalfDen;
 
             /// <summary>Builds both chi-square setups.</summary>
             /// <param name="dfnum">The numerator degrees of freedom.</param>
@@ -355,8 +307,8 @@ namespace NumSharp
             {
                 Dfnum = dfnum;
                 Dfden = dfden;
-                HalfNum = new LegacyGammaSetup(dfnum / 2.0);
-                HalfDen = new LegacyGammaSetup(dfden / 2.0);
+                HalfNum = new GammaSetup(dfnum / 2.0);
+                HalfDen = new GammaSetup(dfden / 2.0);
             }
 
             /// <summary>Whether every value draws — false only when BOTH halves are 0 (e.g. both df underflow when halved).</summary>
@@ -389,7 +341,7 @@ namespace NumSharp
             internal readonly double Nonc;
 
             /// <summary>The chi-square's <c>df/2</c> setup: of <c>df</c> when <c>nonc == 0</c>, of <c>df - 1</c> when <c>df &gt; 1</c>.</summary>
-            internal readonly LegacyGammaSetup Chi;
+            internal readonly GammaSetup Chi;
 
             /// <summary><c>sqrt(nonc)</c> for the <c>df &gt; 1</c> branch.</summary>
             internal readonly double SqrtNonc;
@@ -409,12 +361,12 @@ namespace NumSharp
                 HalfNonc = default;
                 if (nonc == 0)
                 {
-                    Chi = new LegacyGammaSetup(df / 2.0);
+                    Chi = new GammaSetup(df / 2.0);
                 }
                 else if (1 < df)
                 {
                     // legacy_chisquare(df - 1) halves its argument: the gamma shape is (df - 1) / 2.0.
-                    Chi = new LegacyGammaSetup((df - 1) / 2.0);
+                    Chi = new GammaSetup((df - 1) / 2.0);
                     SqrtNonc = Math.Sqrt(nonc);
                 }
                 else
@@ -488,7 +440,7 @@ namespace NumSharp
             internal readonly LegacyNoncentralChisquareSetup Num;
 
             /// <summary>The denominator chi-square's <c>dfden / 2</c> setup.</summary>
-            internal readonly LegacyGammaSetup HalfDen;
+            internal readonly GammaSetup HalfDen;
 
             /// <summary>Builds both setups.</summary>
             /// <param name="dfnum">The numerator degrees of freedom.</param>
@@ -499,7 +451,7 @@ namespace NumSharp
                 Dfnum = dfnum;
                 Dfden = dfden;
                 Num = new LegacyNoncentralChisquareSetup(dfnum, nonc);
-                HalfDen = new LegacyGammaSetup(dfden / 2.0);
+                HalfDen = new GammaSetup(dfden / 2.0);
             }
 
             /// <summary>Whether every value draws — when either the numerator or the denominator does.</summary>
@@ -520,7 +472,7 @@ namespace NumSharp
         private readonly struct LegacyStandardTSetup
         {
             /// <summary>The setup of <c>df / 2</c>.</summary>
-            internal readonly LegacyGammaSetup Half;
+            internal readonly GammaSetup Half;
 
             /// <summary><c>sqrt(df / 2)</c>.</summary>
             internal readonly double SqrtHalf;
@@ -529,7 +481,7 @@ namespace NumSharp
             /// <param name="df">The degrees of freedom.</param>
             internal LegacyStandardTSetup(double df)
             {
-                Half = new LegacyGammaSetup(df / 2);
+                Half = new GammaSetup(df / 2);
                 SqrtHalf = Math.Sqrt(df / 2);
             }
         }
@@ -551,7 +503,7 @@ namespace NumSharp
         private readonly struct LegacyNegativeBinomialSetup
         {
             /// <summary>The setup of the gamma shape <c>n</c>.</summary>
-            internal readonly LegacyGammaSetup Gamma;
+            internal readonly GammaSetup Gamma;
 
             /// <summary>The gamma scale <c>(1 - p) / p</c>.</summary>
             internal readonly double Scale;
@@ -561,7 +513,7 @@ namespace NumSharp
             /// <param name="p">The success probability.</param>
             internal LegacyNegativeBinomialSetup(double n, double p)
             {
-                Gamma = new LegacyGammaSetup(n);
+                Gamma = new GammaSetup(n);
                 Scale = (1 - p) / p;
             }
         }
@@ -607,10 +559,10 @@ namespace NumSharp
             internal readonly double InvB;
 
             /// <summary>The gamma-ratio branch's setup of <c>a</c>.</summary>
-            internal readonly LegacyGammaSetup GammaA;
+            internal readonly GammaSetup GammaA;
 
             /// <summary>The gamma-ratio branch's setup of <c>b</c>.</summary>
-            internal readonly LegacyGammaSetup GammaB;
+            internal readonly GammaSetup GammaB;
 
             /// <summary>Evaluates the selected branch's per-shape terms.</summary>
             /// <param name="a">Alpha (validated positive or NaN).</param>
@@ -629,8 +581,8 @@ namespace NumSharp
                 }
                 else
                 {
-                    GammaA = new LegacyGammaSetup(a);
-                    GammaB = new LegacyGammaSetup(b);
+                    GammaA = new GammaSetup(a);
+                    GammaB = new GammaSetup(b);
                 }
             }
         }

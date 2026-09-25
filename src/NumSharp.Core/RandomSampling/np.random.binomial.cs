@@ -65,11 +65,25 @@ namespace NumSharp
                 double* storage = stackalloc double[DrawBufferDouble.Capacity];
                 var src = new DrawBufferDouble(randomizer, storage, DrawBufferDouble.Capacity);
                 lock (randomizer.@lock)
-                    for (long i = 0; i < count; i++)
+                {
+                    // legacy_random_binomial's dispatch, decided once for the fill: a BTPE key (n * min(p, 1-p) > 30) fills
+                    // with Step10's triangle inlined per value (the BTPE code is shared with Generator); inversion per call.
+                    if (p <= 0.5 ? p * n > 30.0 : (1.0 - p) * n > 30.0)
                     {
-                        src.Owed = count - i;
-                        dst[i] = LegacyBinomial(ref src, p, n);
+                        if (p <= 0.5)
+                            Distributions.RandomBinomialBtpeFill(ref src, dst, count, n, p, complement: false, _binomial);
+                        else
+                            Distributions.RandomBinomialBtpeFill(ref src, dst, count, n, 1.0 - p, complement: true, _binomial);
                     }
+                    else
+                    {
+                        for (long i = 0; i < count; i++)
+                        {
+                            src.Owed = count - i;
+                            dst[i] = LegacyBinomial(ref src, p, n);
+                        }
+                    }
+                }
             }
 
             return ret;

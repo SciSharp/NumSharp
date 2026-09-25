@@ -18,7 +18,8 @@ namespace NumSharp
     ///     The memos hold terms the C code recomputes on EVERY draw although they depend only on the key: the inversion's
     ///     CDF-walk probabilities (<see cref="px"/>), BTPE's per-attempt <c>nrq</c> and Step50 constants
     ///     (<see cref="nrq"/>, <see cref="s"/>, <see cref="a"/>), Step50's acceptance bound <c>F(y)</c>
-    ///     (<see cref="StepF"/>) and Step52's squeeze and Stirling bounds (<see cref="Step52Bounds"/>). Each is the same IEEE
+    ///     (<see cref="StepF"/>) and Step52's squeeze and Stirling bounds (<see cref="Step52Squeeze"/>,
+    ///     <see cref="Step52Stirling"/>). Each is the same IEEE
     ///     expression, in the same order, over the same inputs, evaluated the first time it is needed — so reading it back
     ///     changes no bit: the draws, the comparisons and the returned counts stay NumPy's. They turn the inversion walk
     ///     from a chain of divisions into a chain of subtractions, Step50's product loop into a load, and Step52's four
@@ -115,7 +116,10 @@ namespace NumSharp
         /// <summary>BTPE Step52 memo: the candidate each slot holds, -1 when empty (Step52 only sees <c>0 &lt;= y &lt;= n</c>).</summary>
         private long[] _s52Key;
 
-        /// <summary>BTPE Step52 memo: the squeeze bounds <c>t - rho</c>, <c>t + rho</c> and the Stirling bound, per slot.</summary>
+        /// <summary>
+        ///     BTPE Step52 memo: the squeeze bounds <c>t - rho</c>, <c>t + rho</c> and the Stirling bound, per slot. The Stirling
+        ///     bound is NaN until a draw of that candidate first needs it (the squeeze usually decides without it).
+        /// </summary>
         private double[] _s52Lo, _s52Hi, _s52Bound;
 
         /// <summary>Whether the Step52 memo belongs to the current key (cleared by <see cref="ResetMemos"/>).</summary>
@@ -154,30 +158,25 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     BTPE Step52's three thresholds for candidate <paramref name="y"/> (at distance <paramref name="k"/> from the
-        ///     mode): the squeeze bounds <c>t - rho</c> and <c>t + rho</c> and the Stirling bound <c>log(f(y)/f(m))</c> that
-        ///     <c>A = log(v)</c> is compared against — memoized per candidate, direct-mapped.
+        ///     BTPE Step52's squeeze bounds for candidate <paramref name="y"/> (at distance <paramref name="k"/> from the mode):
+        ///     <c>t - rho</c> and <c>t + rho</c>, which <c>A = log(v)</c> is compared against first — memoized per candidate,
+        ///     direct-mapped, once the setup has earned its memos.
         /// </summary>
-        /// <param name="n">The trial count (the key's <see cref="nsave"/>).</param>
         /// <param name="y">The candidate (<c>0 &lt;= y &lt;= n</c>).</param>
         /// <param name="k"><c>|y - m|</c>.</param>
         /// <param name="lo">The lower squeeze bound <c>t - rho</c> (accept below it).</param>
         /// <param name="hi">The upper squeeze bound <c>t + rho</c> (reject above it).</param>
-        /// <param name="bound">The exact bound (reject above it).</param>
         /// <remarks>
-        ///     All three depend only on the setup and the candidate — <c>rho</c> and <c>t</c> on <c>k</c> and <c>nrq</c>, the
-        ///     Stirling bound on <c>y</c>, <c>m</c>, <c>n</c>, <c>xm</c>, <c>r</c>, <c>q</c> — and a miss evaluates NumPy's
-        ///     expressions in NumPy's order, so the comparisons see NumPy's bits. The only difference is WHEN the exact bound
-        ///     is evaluated: NumPy skips it when the squeeze decides; a miss here evaluates all three at once (pure work, no
-        ///     draws), after which every later visit of the candidate costs one load per threshold instead of four
-        ///     <c>log</c>s and sixteen divisions.
+        ///     Both depend only on the setup and <c>k</c> (<c>rho</c> and <c>t</c> on <c>k</c> and <c>nrq</c>), and a miss
+        ///     evaluates NumPy's expressions in NumPy's order, so the comparisons see NumPy's bits. A miss also claims the
+        ///     candidate's slot for <see cref="Step52Stirling"/>, marking its Stirling bound "not yet evaluated".
         /// </remarks>
-        internal void Step52Bounds(long n, long y, long k, out double lo, out double hi, out double bound)
+        internal void Step52Squeeze(long y, long k, out double lo, out double hi)
         {
             // Before the setup has earned its memo: NumPy's expressions directly (same bits).
             if (btpeUses < BtpeMemoWarmup)
             {
-                ComputeStep52(n, y, k, out lo, out hi, out bound);
+                ComputeSqueeze(k, out lo, out hi);
                 return;
             }
             if (!s52Valid)
@@ -198,32 +197,65 @@ namespace NumSharp
             {
                 lo = _s52Lo[slot];
                 hi = _s52Hi[slot];
-                bound = _s52Bound[slot];
                 return;
             }
 
-            ComputeStep52(n, y, k, out lo, out hi, out bound);
+            ComputeSqueeze(k, out lo, out hi);
             _s52Key[slot] = y;
             _s52Lo[slot] = lo;
             _s52Hi[slot] = hi;
-            _s52Bound[slot] = bound;
+            _s52Bound[slot] = double.NaN;
         }
 
-        /// <summary>NumPy's Step52 expressions verbatim: <c>rho</c>, <c>t</c>, and the Stirling-series bound.</summary>
-        /// <param name="n">The trial count.</param>
-        /// <param name="y">The candidate.</param>
+        /// <summary>
+        ///     BTPE Step52's exact bound for candidate <paramref name="y"/>: the Stirling-series <c>log(f(y)/f(m))</c> that
+        ///     <c>A = log(v)</c> is compared against when the squeeze does not decide — evaluated only then, as NumPy does, and
+        ///     memoized in the slot <see cref="Step52Squeeze"/> just claimed for the candidate.
+        /// </summary>
+        /// <param name="n">The trial count (the key's <see cref="nsave"/>).</param>
+        /// <param name="y">The candidate (the one <see cref="Step52Squeeze"/> was just called with).</param>
+        /// <returns>The exact bound (reject above it).</returns>
+        /// <remarks>
+        ///     Three <c>log</c>s and sixteen divisions of pure work (no draws): NumPy spends them only on draws the squeeze
+        ///     leaves open, and so does this — computing the bound eagerly at every Step52 visit cost fresh-key BTPE fills
+        ///     (a new <c>(n, p)</c> per call, where no memo is ever warm) roughly a <c>log</c> and a half per draw. A NaN
+        ///     memo slot means "not yet": were the bound itself ever NaN it would only be recomputed, still exact.
+        /// </remarks>
+        internal double Step52Stirling(long n, long y)
+        {
+            if (btpeUses >= BtpeMemoWarmup && s52Valid)
+            {
+                int slot = (int)(y & (Step52Slots - 1));
+                if (_s52Key[slot] == y)
+                {
+                    double bound = _s52Bound[slot];
+                    if (double.IsNaN(bound))
+                        _s52Bound[slot] = bound = ComputeStirling(n, y);
+                    return bound;
+                }
+            }
+            return ComputeStirling(n, y);
+        }
+
+        /// <summary>NumPy's Step52 squeeze expressions verbatim: <c>rho</c> and <c>t</c>.</summary>
         /// <param name="k"><c>|y - m|</c>.</param>
         /// <param name="lo"><c>t - rho</c>.</param>
         /// <param name="hi"><c>t + rho</c>.</param>
-        /// <param name="bound">The exact acceptance bound.</param>
-        private void ComputeStep52(long n, long y, long k, out double lo, out double hi, out double bound)
+        private void ComputeSqueeze(long k, out double lo, out double hi)
         {
             double rho = (k / (nrq)) * ((k * (k / 3.0 + 0.625) + 0.16666666666666666) / nrq + 0.5);
             // C's `-k * k` is an INTEGER product, converted to double only for the division.
             double t = -k * k / (2 * nrq);
             lo = t - rho;
             hi = t + rho;
+        }
 
+        /// <summary>NumPy's Step52 Stirling-series bound verbatim.</summary>
+        /// <param name="n">The trial count.</param>
+        /// <param name="y">The candidate.</param>
+        /// <returns>The exact acceptance bound.</returns>
+        private double ComputeStirling(long n, long y)
+        {
             double x1 = (double)y + 1;
             double f1 = (double)m + 1;
             double z = (double)n + 1 - (double)m;
@@ -232,7 +264,7 @@ namespace NumSharp
             double f2 = f1 * f1;
             double z2 = z * z;
             double w2 = w * w;
-            bound = xm * Math.Log(f1 / x1) + (n - m + 0.5) * Math.Log(z / w) +
+            return xm * Math.Log(f1 / x1) + (n - m + 0.5) * Math.Log(z / w) +
                     (y - m) * Math.Log(w * r / (x1 * q)) +
                     (13680.0 - (462.0 - (132.0 - (99.0 - 140.0 / f2) / f2) / f2) / f2) / f1 / 166320.0 +
                     (13680.0 - (462.0 - (132.0 - (99.0 - 140.0 / z2) / z2) / z2) / z2) / z / 166320.0 +
@@ -391,9 +423,33 @@ namespace NumSharp
 
         /// <summary>
         ///     The per-key memo of modern setups, direct-mapped by <c>(n, p)</c> — non-null only while a <c>multinomial</c>
-        ///     fill runs (see the class remarks for why it must not outlive one).
+        ///     fill runs (see the class remarks for why it must not outlive one). Installing one also installs its miss
+        ///     tags; removing it (null) drops both.
         /// </summary>
-        internal BinomialSetup[] Memo;
+        internal BinomialSetup[] Memo
+        {
+            get => _memo;
+            set
+            {
+                _memo = value;
+                _tags = value is null ? null : new ulong[value.Length];
+            }
+        }
+
+        /// <summary>The installed memo (see <see cref="Memo"/>).</summary>
+        private BinomialSetup[] _memo;
+
+        /// <summary>
+        ///     Per slot, the hash of the last key that missed there without earning the slot: a key is memoized from its
+        ///     SECOND miss on (see <see cref="Acquire"/>).
+        /// </summary>
+        private ulong[] _tags;
+
+        /// <summary>
+        ///     The setup a key missing for the first time is populated into while a memo is installed — never a memo slot,
+        ///     so first-seen keys cannot overwrite a memoized one.
+        /// </summary>
+        private BinomialSetup _scratch;
 
         /// <summary>
         ///     Resolves a miss on <see cref="Current"/> for key <c>(<paramref name="n"/>, <paramref name="p"/>)</c>: returns
@@ -406,9 +462,14 @@ namespace NumSharp
         /// <param name="fresh">True when the returned setup must be (re)populated.</param>
         /// <returns>The setup, already installed as <see cref="Current"/>.</returns>
         /// <remarks>
-        ///     Without a memo this is NumPy's single entry: the current setup is repopulated in place. With one, the key's slot
-        ///     is reused in place (evicting a colliding key) — safe because every memo slot holds a modern setup and a
-        ///     repopulation is itself modern. NaN keys never compare equal, so they always repopulate, as in NumPy.
+        ///     Without a memo this is NumPy's single entry: the current setup is repopulated in place. With one, a key earns
+        ///     its slot on its SECOND miss: the first miss only tags the slot with the key's hash and populates a scratch
+        ///     setup (so a fill whose keys never recur — a new count at every broadcast position — allocates nothing and
+        ///     behaves like NumPy's single entry), and a later miss of the tagged key takes the slot over, reusing it in place
+        ///     (evicting a colliding key) — safe because every memo slot holds a modern setup and a repopulation is itself
+        ///     modern. Whatever serves the last key stays <see cref="Current"/> after the fill, holding that key's modern
+        ///     setup exactly as NumPy's single entry would. NaN keys never compare equal, so they always repopulate, as in
+        ///     NumPy.
         /// </remarks>
         internal BinomialSetup Acquire(long n, double p, out bool fresh)
         {
@@ -428,12 +489,71 @@ namespace NumSharp
                 fresh = false;
                 return e;
             }
+            if (_tags[slot] != h)
+            {
+                // First miss of this key here: remember it, serve it from the scratch setup.
+                _tags[slot] = h;
+                _scratch ??= new BinomialSetup();
+                Current = _scratch;
+                fresh = true;
+                return _scratch;
+            }
             if (e == null)
                 memo[slot] = e = new BinomialSetup();
             Current = e;
             fresh = true;
             return e;
         }
+    }
+
+    /// <summary>
+    ///     The per-shape constants of NumPy's standard gamma samplers — Marsaglia-Tsang's <c>b = shape - 1/3</c> and
+    ///     <c>c = 1 / sqrt(9 * b)</c>, or Johnk's <c>1 / shape</c> — computed once for a fill instead of on every value.
+    ///     Shared by <c>legacy_standard_gamma</c> (RandomState) and <c>random_standard_gamma</c> (Generator): the two
+    ///     differ only in where their normals and exponentials come from, never in these constants.
+    /// </summary>
+    /// <remarks>
+    ///     NumPy's C computes <c>b</c>/<c>c</c> on every call and <c>1 / shape</c> on every rejection attempt; each is a
+    ///     deterministic function of the shape under the same IEEE operations, so reading the stored value back is
+    ///     bit-identical and saves a <c>sqrt</c> and a division per value. Only the branch the shape selects is computed
+    ///     (the others stay 0 and are never read). Shared by every sampler built on either gamma (chi-square, F,
+    ///     Student's t, beta, negative binomial, dirichlet, the noncentral pair — legacy and Generator alike).
+    /// </remarks>
+    internal readonly struct GammaSetup
+    {
+        /// <summary>The shape; still selects the branch per value (1, 0, below 1, or Marsaglia-Tsang — NaN included).</summary>
+        internal readonly double Shape;
+
+        /// <summary>Marsaglia-Tsang's <c>shape - 1/3</c> (shape &gt; 1 or NaN).</summary>
+        internal readonly double B;
+
+        /// <summary>Marsaglia-Tsang's <c>1 / sqrt(9 * B)</c> — NOT the algebraically equal <c>(1/3) / sqrt(B)</c>, which rounds differently.</summary>
+        internal readonly double C;
+
+        /// <summary>Johnk's <c>1 / shape</c> (0 &lt; shape &lt; 1).</summary>
+        internal readonly double InvShape;
+
+        /// <summary>Evaluates NumPy's per-shape statements for the branch <paramref name="shape"/> selects.</summary>
+        /// <param name="shape">The validated shape (non-negative or NaN).</param>
+        internal GammaSetup(double shape)
+        {
+            Shape = shape;
+            B = C = InvShape = 0.0;
+            if (shape == 1.0 || shape == 0.0)
+                return;
+            if (shape < 1.0)
+            {
+                InvShape = 1.0 / shape;
+            }
+            else
+            {
+                B = shape - 1.0 / 3.0;
+                C = 1.0 / Math.Sqrt(9 * B);
+            }
+        }
+
+        /// <summary>Whether every value draws at least once — false only for shape 0 (0 without a draw).</summary>
+        internal bool Draws => Shape != 0.0;
     }
 
     /// <summary>
@@ -777,25 +897,17 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     NumPy's <c>random_binomial_btpe</c>: Kachitvichyanukul &amp; Schmeiser's BTPE rejection sampler for
-        ///     <c>n*min(p,1-p) &gt; 30</c>, with its setup cached in <paramref name="binomial"/>.
+        ///     The BTPE setup of NumPy's <c>random_binomial_btpe</c> for the key <c>(n, p)</c>: the cached one when the key
+        ///     matches, otherwise NumPy's <c>/* initialize */</c> block evaluated into the setup the cache hands out.
         /// </summary>
-        /// <param name="src">The draw source — per-draw, or a read-ahead whose no-overdraw accounting the caller keeps.</param>
         /// <param name="n">The trial count.</param>
         /// <param name="p">The success probability (every NumPy caller passes <c>p &lt;= 0.5</c>).</param>
         /// <param name="binomial">The cache (see <see cref="BinomialState"/>).</param>
-        /// <returns>The count of successes.</returns>
-        /// <remarks>
-        ///     The <c>goto</c> structure is NumPy's, kept so each step can be compared with the C label it ports. Step10's
-        ///     <c>nrq</c>, Step50's <c>s</c>, <c>a</c> and <c>F</c> product, and Step52's <c>rho</c>, <c>t</c> and Stirling
-        ///     bound are read from the setup's memos (<see cref="BinomialSetup"/>) — the same values the C statements
-        ///     recompute on each attempt; only Step52's <c>log(v)</c> is still evaluated per trial.
-        /// </remarks>
-        internal static long RandomBinomialBtpe(ref DrawBufferDouble src, long n, double p, BinomialState binomial)
+        /// <returns>The key's setup, installed as the cache's current one.</returns>
+        internal static BinomialSetup BtpeSetup(long n, double p, BinomialState binomial)
         {
-            double r, q, fm, p1, xm, xl, xr, c, laml, lamr, p2, p3, p4;
-            double a, u, v, F, A, nrq, x;
-            long m, y, k;
+            double r, q, fm, p1, xm, xl, xr, c, laml, lamr, p2, p3, a;
+            long m;
 
             BinomialSetup e = binomial.Current;
             if (!e.has_binomial || (e.nsave != n) || (e.psave != p))
@@ -823,7 +935,7 @@ namespace NumSharp
                     e.lamr = lamr = a * (1.0 + a / 2.0);
                     e.p2 = p2 = p1 * (1.0 + 2.0 * c);
                     e.p3 = p3 = p2 + c / laml;
-                    e.p4 = p4 = p3 + c / lamr;
+                    e.p4 = p3 + c / lamr;
                     // The memos: Step10's per-attempt nrq and Step50's s/a, as the C statements compute them.
                     e.nrq = n * r * q;
                     e.s = r / q;
@@ -831,23 +943,101 @@ namespace NumSharp
                     e.ResetMemos();
                 }
             }
+            return e;
+        }
 
-            r = e.r;
-            q = e.q;
-            fm = e.fm;
-            m = e.m;
+        /// <summary>
+        ///     NumPy's <c>random_binomial_btpe</c>: Kachitvichyanukul &amp; Schmeiser's BTPE rejection sampler for
+        ///     <c>n*min(p,1-p) &gt; 30</c>, with its setup cached in <paramref name="binomial"/>.
+        /// </summary>
+        /// <param name="src">The draw source — per-draw, or a read-ahead whose no-overdraw accounting the caller keeps.</param>
+        /// <param name="n">The trial count.</param>
+        /// <param name="p">The success probability (every NumPy caller passes <c>p &lt;= 0.5</c>).</param>
+        /// <param name="binomial">The cache (see <see cref="BinomialState"/>).</param>
+        /// <returns>The count of successes.</returns>
+        /// <remarks>
+        ///     The first attempt's Step10 — the triangle, which accepts most attempts — runs here and touches three fields
+        ///     of the setup; everything past it continues in <see cref="BtpeFromStep20"/>, which keeps NumPy's <c>goto</c>
+        ///     structure. Step10's <c>nrq</c>, Step50's <c>s</c>, <c>a</c> and <c>F</c> product, and Step52's <c>rho</c>,
+        ///     <c>t</c> and Stirling bound are read from the setup's memos (<see cref="BinomialSetup"/>) — the same values the
+        ///     C statements recompute on each attempt; only Step52's <c>log(v)</c> is still evaluated per trial.
+        /// </remarks>
+        internal static long RandomBinomialBtpe(ref DrawBufferDouble src, long n, double p, BinomialState binomial)
+        {
+            BinomialSetup e = BtpeSetup(n, p, binomial);
+            e.CountBtpeUse();
+
+            // Step10
+            double p1 = e.p1;
+            double u = src.NextDouble() * e.p4;
+            double v = src.NextDouble();
+            if (u > p1)
+                return BtpeFromStep20(ref src, e, n, p, u, v);
+            long y = ToInt64(Math.Floor(e.xm - p1 * v + u));
+            // Step60
+            if (p > 0.5)
+                y = n - y;
+            return y;
+        }
+
+        /// <summary>
+        ///     Fills <paramref name="count"/> BTPE draws for one key: <paramref name="count"/> calls of
+        ///     <see cref="RandomBinomialBtpe"/> with the setup resolved once and Step10's triangle test inlined per value.
+        /// </summary>
+        /// <param name="src">The draw source — a read-ahead the caller sizes (every value draws at least one U/V pair).</param>
+        /// <param name="dst">The output (<paramref name="count"/> slots).</param>
+        /// <param name="count">The values to draw.</param>
+        /// <param name="n">The trial count.</param>
+        /// <param name="p">The success probability, <c>&lt;= 0.5</c> (the caller reduced a larger one to <c>1 - p</c>).</param>
+        /// <param name="complement">Store <c>n - y</c> (the caller's <c>p &gt; 0.5</c> reduction) instead of <c>y</c>.</param>
+        /// <param name="binomial">The cache (see <see cref="BinomialState"/>).</param>
+        /// <remarks>
+        ///     Every value makes the same draws, comparisons and memo updates as a separate call (the setup lookup, the
+        ///     warm-up count and Step10's two draws, in that order), so the counts are NumPy's bits; what disappears is a call
+        ///     frame and three field loads per value on the path most values take.
+        /// </remarks>
+        internal static unsafe void RandomBinomialBtpeFill(ref DrawBufferDouble src, long* dst, long count, long n, double p,
+                                                          bool complement, BinomialState binomial)
+        {
+            BinomialSetup e = BtpeSetup(n, p, binomial);
+            double p1 = e.p1, p4 = e.p4, xm = e.xm;
+            for (long i = 0; i < count; i++)
+            {
+                src.Owed = count - i;
+                e.CountBtpeUse();
+                // Step10
+                double u = src.NextDouble() * p4;
+                double v = src.NextDouble();
+                long y = u > p1 ? BtpeFromStep20(ref src, e, n, p, u, v) : ToInt64(Math.Floor(xm - p1 * v + u));
+                // Step60 (p <= 0.5 here, so it never flips) and the caller's p > 0.5 reduction.
+                dst[i] = complement ? n - y : y;
+            }
+        }
+
+        /// <summary>
+        ///     BTPE from Step20 on, for an attempt whose Step10 draws <paramref name="u0"/>, <paramref name="v0"/> fell outside
+        ///     the triangle — NumPy's <c>goto</c> structure, so each step compares with the C label it ports.
+        /// </summary>
+        /// <param name="src">The draw source (later attempts draw from it).</param>
+        /// <param name="e">The key's setup.</param>
+        /// <param name="n">The trial count.</param>
+        /// <param name="p">The success probability passed to BTPE.</param>
+        /// <param name="u0">The attempt's <c>u</c> (already scaled by <c>p4</c>, above <c>p1</c>).</param>
+        /// <param name="v0">The attempt's <c>v</c>.</param>
+        /// <returns>The count of successes.</returns>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static long BtpeFromStep20(ref DrawBufferDouble src, BinomialSetup e, long n, double p, double u0, double v0)
+        {
+            double r, q, fm, p1, xm, xl, xr, c, laml, lamr, p2, p3, p4;
+            double u, v, F, A, nrq, x;
+            long m, y, k;
+
             p1 = e.p1;
             xm = e.xm;
-            xl = e.xl;
-            xr = e.xr;
-            c = e.c;
-            laml = e.laml;
-            lamr = e.lamr;
-            p2 = e.p2;
-            p3 = e.p3;
             p4 = e.p4;
-            nrq = e.nrq; // Step10's `nrq = n * r * q`, identical on every attempt
-            e.CountBtpeUse();
+            u = u0;
+            v = v0;
+            goto Step20;
 
         Step10:
             u = src.NextDouble() * p4;
@@ -858,6 +1048,18 @@ namespace NumSharp
             goto Step60;
 
         Step20:
+            r = e.r;
+            q = e.q;
+            fm = e.fm;
+            m = e.m;
+            xl = e.xl;
+            xr = e.xr;
+            c = e.c;
+            laml = e.laml;
+            lamr = e.lamr;
+            p2 = e.p2;
+            p3 = e.p3;
+            nrq = e.nrq; // Step10's `nrq = n * r * q`, identical on every attempt
             if (u > p2)
                 goto Step30;
             x = xl + (u - p1) / c;
@@ -900,15 +1102,16 @@ namespace NumSharp
 
         Step52:
             // rho, t and the Stirling bound depend only on the candidate — NumPy's expressions, memoized per y
-            // (BinomialSetup.Step52Bounds); only log(v) is per trial.
-            e.Step52Bounds(n, y, k, out double squeezeLo, out double squeezeHi, out double stirling);
+            // (BinomialSetup.Step52Squeeze / Step52Stirling); only log(v) is per trial. The Stirling bound is evaluated
+            // only when the squeeze leaves the draw open, exactly as in NumPy.
+            e.Step52Squeeze(y, k, out double squeezeLo, out double squeezeHi);
             /* log(0.0) ok here */
             A = Math.Log(v);
             if (A < squeezeLo)
                 goto Step60;
             if (A > squeezeHi)
                 goto Step10;
-            if (A > stirling)
+            if (A > e.Step52Stirling(n, y))
                 goto Step10;
 
         Step60:

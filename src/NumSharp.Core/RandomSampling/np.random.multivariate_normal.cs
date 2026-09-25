@@ -158,7 +158,12 @@ namespace NumSharp
                     finalShape[d] = sizeVal.dimensions[d];
                 finalShape[sizeVal.NDim] = n;
             }
-            NDArray x = standard_normal(new Shape(finalShape)).reshape(-1, n);
+            NDArray normals = standard_normal(new Shape(finalShape));
+            // x.reshape(-1, 0) cannot infer -1 from a zero-size array: NumPy leaks that reshape's ValueError (after the
+            // empty draw), and NumSharp's own reshape would raise its house IncorrectShapeException with the same text.
+            if (n == 0)
+                throw new ValueError("cannot reshape array of size 0 into shape (0)");
+            NDArray x = normals.reshape(-1, n);
 
             // GH10839, ensure double to make tol meaningful
             NDArray covD = cov.astype(np.float64, copy: true);
@@ -270,7 +275,7 @@ namespace NumSharp
         ///     Jacobi eigendecomposition for symmetric matrices.
         ///     Uses the classical Jacobi algorithm with Schur2 rotations.
         /// </summary>
-        private static void JacobiEigendecomposition(ArraySlice<double> A, ArraySlice<double> V,
+        internal static void JacobiEigendecomposition(ArraySlice<double> A, ArraySlice<double> V,
             ArraySlice<double> eigenvalues, long n, int maxIterations, double tolerance)
         {
             // Classical Jacobi algorithm
@@ -363,7 +368,7 @@ namespace NumSharp
         /// <summary>
         ///     Sort eigenvalues in descending order and reorder eigenvectors accordingly.
         /// </summary>
-        private static void SortEigenDescending(ArraySlice<double> eigenvalues, ArraySlice<double> eigenvectors, long n)
+        internal static void SortEigenDescending(ArraySlice<double> eigenvalues, ArraySlice<double> eigenvectors, long n)
         {
             // Simple insertion sort (n is typically small for covariance matrices)
             for (long i = 1; i < n; i++)
@@ -405,7 +410,7 @@ namespace NumSharp
         ///     2. Ensure determinant matches NumPy convention: +1 for odd n, -1 for even n
         ///        (skip for identity-like matrices where all columns are standard basis vectors)
         /// </summary>
-        private static void NormalizeEigenvectorSigns(ArraySlice<double> eigenvectors, long n)
+        internal static void NormalizeEigenvectorSigns(ArraySlice<double> eigenvectors, long n)
         {
             // Step 1: Make largest element in each column negative
             // Exception: don't flip standard basis vectors (only one non-zero element)

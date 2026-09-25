@@ -337,8 +337,10 @@ namespace NumSharp.Tests.Fuzz
         }
 
         // PCG64 Generator (np.random.default_rng) byte-parity, PORTABLE half: pure PCG64 bits +
-        // exactly-rounded IEEE (random, integers, uniform, permutation, shuffle, choice, bytes) plus
-        // the new RandomState helpers random_integers/bytes (pure MT19937 bits). Hard-gated on every
+        // exactly-rounded IEEE (random, integers, uniform, permutation, shuffle, choice, bytes, and the
+        // distributions built from next_double/sqrt/random_interval alone: triangular, the urn-walk
+        // hypergeometric, the geometric search, multivariate_hypergeometric(method='count')) plus the
+        // new RandomState helpers random_integers/bytes (pure MT19937 bits). Hard-gated on every
         // host — NumSharp's Generator stream is bit-identical to default_rng(seed) by construction.
         [TestMethod]
         [TestCategory("FuzzMatrix")]
@@ -346,9 +348,13 @@ namespace NumSharp.Tests.Fuzz
 
         // PCG64 Generator byte-parity, HOST-LIBM half: the ziggurat / rejection samplers whose
         // transform consumes log1p/exp/pow (standard_normal, standard_exponential, normal,
-        // exponential, standard_gamma, gamma). Byte-exact on win-amd64 (Kahan log1p + Math.* ==
-        // ucrtbase); off-Windows both sides shift with their local libm, so it is Inconclusive there
-        // (the random_parity_host / matmul_parity pattern).
+        // exponential, standard_gamma, gamma) and the distribution surface over them (beta ...
+        // logseries, multinomial, dirichlet, multivariate_hypergeometric marginals — every internal
+        // branch). Byte-exact on win-amd64 (Kahan log1p + Math.* == ucrtbase) except pareto/power,
+        // whose closed in-band ucrtbase expm1 MisalignedRegistry bounds per element; off-Windows both
+        // sides shift with their local libm, so it is Inconclusive there (the random_parity_host /
+        // matmul_parity pattern). multivariate_normal is not here: it is byte-exact only with a
+        // LAPACK backend (Generator.Distributions.Test.cs pins it with OpenBLAS).
         [TestMethod]
         [TestCategory("FuzzMatrix")]
         public void GeneratorParityHostLibm()
@@ -729,8 +735,8 @@ namespace NumSharp.Tests.Fuzz
             ["precision.jsonl"] = 80,
             ["random_parity.jsonl"] = 40,
             ["random_parity_host.jsonl"] = 86,
-            ["generator_parity.jsonl"] = 68,
-            ["generator_parity_host.jsonl"] = 32,
+            ["generator_parity.jsonl"] = 90,        // + the portable distribution surface (triangular, urn hypergeometric, geometric search, mvhg count)
+            ["generator_parity_host.jsonl"] = 215,  // + the libm distribution surface (29 Generator samplers, every internal branch)
             ["nan.jsonl"] = 140,   // NaN-parity grid (gen_nan_oracle.py): 27 complex + 3×31 float unary + 56 §B3 binary cross-grid
             ["random_smoke.jsonl"] = 1600,
             ["reduce.jsonl"] = 9004,

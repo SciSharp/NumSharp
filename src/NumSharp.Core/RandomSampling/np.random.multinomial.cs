@@ -49,19 +49,28 @@ namespace NumSharp
         /// <param name="pvals">Probabilities of each of the k different outcomes (1-D).</param>
         /// <param name="size">Output shape. Result will have shape (*size, k); null gives shape (k,).</param>
         /// <returns>Drawn samples with shape (*size, k), where each row sums to n (int32).</returns>
-        /// <exception cref="TypeError"><paramref name="pvals"/> is null or 0-d (<c>pvals must be a 1-d sequence</c>).</exception>
-        /// <exception cref="ValueError"><paramref name="pvals"/> has more than one dimension, or a validation of
-        ///     <see cref="multinomial(int, double[], Shape?)"/> fails.</exception>
+        /// <exception cref="TypeError"><paramref name="pvals"/> is null or 0-d (<c>pvals must be a 1-d sequence</c>), or
+        ///     complex (<c>Cannot cast array data from dtype('complex128') to dtype('float64') according to the rule
+        ///     'safe'</c>; <c>scalar</c> for a 0-d array, which fails the cast before the 1-d test).</exception>
+        /// <exception cref="ValueError"><paramref name="pvals"/> has more than one dimension (<c>object too deep for desired
+        ///     array</c>, reported before the cast), or a validation of <see cref="multinomial(int, double[], Shape?)"/> fails.</exception>
         /// <remarks>
         ///     When <paramref name="pvals"/> is a float16/float32 array whose own-precision sum is below <c>1.0001</c> but whose
         ///     float64 cast fails the sum check, the error carries NumPy's longer message explaining the cast.
         /// </remarks>
         public unsafe NDArray multinomial(int n, NDArray pvals, Shape? size = null)
         {
-            if (pvals is null || pvals.ndim == 0)
+            // np.array(None, float64) is a 0-d NaN: the 1-d test below would reject it.
+            if (pvals is null)
                 throw new TypeError("pvals must be a 1-d sequence");
+            // PyArray_FROMANY(pvals, NPY_DOUBLE, 0, 1) tests an ARRAY's depth first ("object too deep" — the "setting an
+            // array element with a sequence" text belongs to nested Python lists, which C# spells as NDArray too late to
+            // tell apart), then the safe cast (complex fails), and only then does multinomial test for 0-d.
             if (pvals.ndim > 1)
-                throw new ValueError("setting an array element with a sequence. The requested array would exceed the maximum number of dimension of 1.");
+                throw new ValueError("object too deep for desired array");
+            RandomConstraints.CheckSafeCast(pvals, NPTypeCode.Double);
+            if (pvals.ndim == 0)
+                throw new TypeError("pvals must be a 1-d sequence");
 
             long d = pvals.size;
             // NumPy's alternate message applies when `pvals.sum() < 1.0001` for a non-float64 FLOAT array. Under NEP 50 the

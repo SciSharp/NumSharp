@@ -314,6 +314,23 @@ namespace NumSharp.Tests.Fuzz
                 && diffs.Count > 0 && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 2)))
                 return "logaddexp/logaddexp2: managed fdlibm log1p <=2 ULP vs NumPy's closed ucrtbase log1p [documented]";
 
+            // Generator.pareto / Generator.power: NumPy's modern samplers are expm1(E/a) and pow(-expm1(-E), 1/a), and
+            // the win-amd64 CRT's expm1 is a closed approximation inside [-ln 2, ln 1.5] (outside it is exp(x)-1, which
+            // Generator.Expm1 reproduces bit for bit). Inside, Sun's s_expm1 agrees on ~58% of inputs and is <=2 ULP
+            // off; the draws themselves (the ziggurat exponentials) are identical. pareto carries that <=2 ULP straight
+            // through; power's pow(q, 1/a) scales the relative difference by 1/a, so its bound is ceil(2/a)+3 ULP
+            // (power(0.3) measured 9). Keyed on the method AND the bound, so any other grnd drift still fails.
+            if (kind == DivergenceKind.Value && c.Op == "grnd" && tc == NPTypeCode.Double
+                && c.Params.TryGetValue("method", out var grndMethod) && diffs.Count > 0)
+            {
+                string m = grndMethod.GetString();
+                int bound = m == "pareto" ? 2
+                    : m == "power" ? (int)Math.Ceiling(2.0 / c.Params["args"][0].GetDouble()) + 3
+                    : -1;
+                if (bound > 0 && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, bound)))
+                    return $"Generator.{m}: in-band expm1 (Sun's s_expm1) vs the closed ucrtbase expm1, <= {bound} ULP [documented]";
+            }
+
             // hypot: sqrt(x1**2 + x2**2). NumPy calls the platform (win-amd64 UCRT) hypot, which is only
             // FAITHFULLY rounded — it disagrees with the exact correctly-rounded result on 8.7% of float64
             // inputs (measured: np.hypot vs an 80-digit Decimal reference). NumSharp's kernel is the

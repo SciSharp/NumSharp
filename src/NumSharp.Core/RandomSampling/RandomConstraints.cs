@@ -103,6 +103,31 @@ namespace NumSharp
         internal const double LegacyLongMax = long.MaxValue;
 
         /// <summary>
+        ///     The dtype gate of NumPy's array-parameter conversions (<c>PyArray_FROM_OTF</c> / <c>PyArray_FROMANY</c> without
+        ///     <c>NPY_ARRAY_FORCECAST</c>): the array must reach <paramref name="to"/> under the <c>'safe'</c> casting rule,
+        ///     or the conversion raises before any value is read.
+        /// </summary>
+        /// <param name="a">The array parameter as the caller passed it.</param>
+        /// <param name="to">The dtype NumPy converts the parameter to (<c>int64</c> for counts, <c>float64</c> for
+        ///     probabilities and concentrations).</param>
+        /// <exception cref="TypeError">The cast is not safe — a float or uint64 count, a complex probability. The text is
+        ///     NumPy's, including its <c>scalar</c> wording for a 0-d array:
+        ///     <c>Cannot cast array data from dtype('float64') to dtype('int64') according to the rule 'safe'</c>.</exception>
+        /// <remarks>
+        ///     Decimal (no NumPy dtype) is let through to <c>float64</c> as a NumSharp extension: its <c>can_cast</c> row says
+        ///     "unsafe", but its NumPy-facing name is <c>float64</c>, so NumPy's message would read "cannot cast float64 to
+        ///     float64". Toward <c>int64</c> it is refused like the float it stands in for.
+        /// </remarks>
+        internal static void CheckSafeCast(NDArray a, NPTypeCode to)
+        {
+            var from = a.typecode;
+            if (from == to || np.can_cast(from, to, "safe") || (from == NPTypeCode.Decimal && to == NPTypeCode.Double))
+                return;
+            throw new TypeError($"Cannot cast {(a.ndim == 0 ? "scalar" : "array data")} from dtype('{from.AsNumpyDtypeName()}') "
+                                + $"to dtype('{to.AsNumpyDtypeName()}') according to the rule 'safe'");
+        }
+
+        /// <summary>
         ///     Validates one scalar parameter the way NumPy's <c>check_constraint(double val, name, cons)</c> does.
         /// </summary>
         /// <param name="val">The parameter value (integer parameters are passed as the double NumPy casts them to).</param>

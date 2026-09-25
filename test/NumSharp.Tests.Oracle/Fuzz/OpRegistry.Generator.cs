@@ -111,11 +111,100 @@ namespace NumSharp.Tests.Fuzz
                     case "gamma":
                         result = rng.gamma(A(0), A(1), S());
                         break;
+                    // ---- the distribution surface: NumPy's positional parameters, then size ----
+                    case "beta": result = rng.beta(A(0), A(1), S()); break;
+                    case "chisquare": result = rng.chisquare(A(0), S()); break;
+                    case "f": result = rng.f(A(0), A(1), S()); break;
+                    case "noncentral_chisquare": result = rng.noncentral_chisquare(A(0), A(1), S()); break;
+                    case "noncentral_f": result = rng.noncentral_f(A(0), A(1), A(2), S()); break;
+                    case "standard_cauchy": result = rng.standard_cauchy(S()); break;
+                    case "standard_t": result = rng.standard_t(A(0), S()); break;
+                    case "vonmises": result = rng.vonmises(A(0), A(1), S()); break;
+                    case "pareto": result = rng.pareto(A(0), S()); break;
+                    case "weibull": result = rng.weibull(A(0), S()); break;
+                    case "power": result = rng.power(A(0), S()); break;
+                    case "laplace": result = rng.laplace(A(0), A(1), S()); break;
+                    case "gumbel": result = rng.gumbel(A(0), A(1), S()); break;
+                    case "logistic": result = rng.logistic(A(0), A(1), S()); break;
+                    case "lognormal": result = rng.lognormal(A(0), A(1), S()); break;
+                    case "rayleigh": result = rng.rayleigh(A(0), S()); break;
+                    case "wald": result = rng.wald(A(0), A(1), S()); break;
+                    case "triangular": result = rng.triangular(A(0), A(1), A(2), S()); break;
+                    case "binomial": result = rng.binomial(AL(0), A(1), S()); break;
+                    case "negative_binomial": result = rng.negative_binomial(A(0), A(1), S()); break;
+                    case "poisson": result = rng.poisson(A(0), S()); break;
+                    case "zipf": result = rng.zipf(A(0), S()); break;
+                    case "geometric": result = rng.geometric(A(0), S()); break;
+                    case "hypergeometric": result = rng.hypergeometric(AL(0), AL(1), AL(2), S()); break;
+                    case "logseries": result = rng.logseries(A(0), S()); break;
+                    case "multinomial":
+                    {
+                        // Harness-built operands: the sampler reads them and retains nothing, so they die here.
+                        using var pvals = NestedArray(p["pvals"], integer: false);
+                        if (p.TryGetValue("narr", out var narr))
+                        {
+                            using var counts = NestedArray(narr, integer: true);
+                            result = rng.multinomial(counts, pvals, S());
+                        }
+                        else
+                        {
+                            result = rng.multinomial(AL(0), pvals, S());
+                        }
+                        break;
+                    }
+                    case "dirichlet":
+                        result = rng.dirichlet(ParseDoubleArray(p["alpha"]), S());
+                        break;
+                    case "multivariate_hypergeometric":
+                        result = rng.multivariate_hypergeometric(ParseLongArray(p["colors"]), AL(0), S(),
+                            p.TryGetValue("mvmethod", out var mv) ? mv.GetString() : "marginals");
+                        break;
                     default:
                         throw new NotSupportedException($"grnd method '{method}' not wired in OpRegistry");
                 }
             }
             return result;
+        }
+
+        /// <summary>
+        ///     A rectangular nested JSON array (<c>[[5], [10]]</c>, <c>[0.2, 0.3]</c>) as an int64 or float64 NDArray of the
+        ///     same shape — the array-valued parameters of the grnd multinomial vector path.
+        /// </summary>
+        /// <param name="e">The JSON array (nested to any depth, rectangular).</param>
+        /// <param name="integer">True for an int64 result (counts), false for float64 (probabilities).</param>
+        /// <returns>A fresh C-contiguous array the caller owns.</returns>
+        private static NDArray NestedArray(JsonElement e, bool integer)
+        {
+            var dims = new List<long>();
+            for (var cur = e; cur.ValueKind == JsonValueKind.Array; cur = cur[0])
+            {
+                dims.Add(cur.GetArrayLength());
+                if (cur.GetArrayLength() == 0)
+                    break;
+            }
+            var flat = new List<double>();
+            void Walk(JsonElement x)
+            {
+                if (x.ValueKind == JsonValueKind.Array)
+                    foreach (var y in x.EnumerateArray())
+                        Walk(y);
+                else
+                    flat.Add(x.GetDouble());
+            }
+            Walk(e);
+            var shape = new Shape(dims.ToArray());
+            if (integer)
+            {
+                var longs = new long[flat.Count];
+                for (int i = 0; i < longs.Length; i++)
+                    longs[i] = (long)flat[i];
+                using var flatL = np.array(longs);
+                using var viewL = flatL.reshape(shape); // the reshape view is harness-private too
+                return viewL.copy();
+            }
+            using var flatD = np.array(flat.ToArray());
+            using var viewD = flatD.reshape(shape);
+            return viewD.copy();
         }
 
         private static DType DtypeFromName(string n) => n switch

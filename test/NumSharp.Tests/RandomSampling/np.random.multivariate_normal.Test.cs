@@ -251,9 +251,9 @@ namespace NumSharp.Tests.RandomSampling
             var mean = new double[0];
             var cov = new double[0, 0];
 
-            // NumPy: standard_normal((0,)).reshape(-1, 0) -> "cannot reshape array of size 0 into shape (0)"; NumSharp's
-            // reshape rejections are IncorrectShapeException with NumPy's text (house convention).
-            var e = Assert.ThrowsException<IncorrectShapeException>(() =>
+            // NumPy: standard_normal((0,)).reshape(-1, 0) -> ValueError "cannot reshape array of size 0 into shape (0)".
+            // The sampler raises NumPy's type itself (a bare reshape would raise NumSharp's house IncorrectShapeException).
+            var e = Assert.ThrowsException<ValueError>(() =>
                 np.random.multivariate_normal(mean, cov));
             e.Message.Should().Be("cannot reshape array of size 0 into shape (0)");
         }

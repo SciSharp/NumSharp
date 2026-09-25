@@ -33,7 +33,7 @@ namespace NumSharp
             RandomConstraints.Check(df, "df", ConstraintType.CONS_POSITIVE);
 
             // The per-call setup NumPy recomputes for every value, evaluated once (the same expressions — bit-neutral).
-            var setup = new LegacyGammaSetup(df / 2.0);
+            var setup = new GammaSetup(df / 2.0);
 
             if (IsScalarDraw(size))
             {

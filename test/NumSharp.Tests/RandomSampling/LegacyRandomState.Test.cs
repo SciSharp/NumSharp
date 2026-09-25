@@ -813,8 +813,22 @@ namespace NumSharp.Tests.RandomSampling
             scalar.Should().Throw<TypeError>().WithMessage("pvals must be a 1-d sequence");
             Action nullP = () => np.random.RandomState(42).multinomial(10, (double[])null);
             nullP.Should().Throw<TypeError>().WithMessage("pvals must be a 1-d sequence");
+            // An ndarray (not a nested list) fails PyArray_FROMANY's depth test: RandomState(42).multinomial(10,
+            // np.array([[.5, .5]])) -> ValueError: object too deep for desired array.
             Action twoD = () => np.random.RandomState(42).multinomial(10, np.array(new double[,] { { 0.5, 0.5 } }));
-            twoD.Should().Throw<ValueError>().WithMessage("setting an array element with a sequence.*");
+            twoD.Should().Throw<ValueError>().WithMessage("object too deep for desired array");
+            // The safe cast to float64 follows the depth test and precedes the 1-d test (NumPy 2.4.2):
+            //   multinomial(10, np.array([.5+0j, .5]))  -> TypeError: Cannot cast array data from dtype('complex128') ...
+            //   multinomial(10, np.array(.5+0j))        -> TypeError: Cannot cast scalar from dtype('complex128') ...
+            //   multinomial(10, np.array([[.5+0j, .5]])) -> ValueError: object too deep for desired array
+            Action complex1 = () => np.random.RandomState(42).multinomial(10, np.array(new[] { new System.Numerics.Complex(0.5, 0), new System.Numerics.Complex(0.5, 0) }));
+            complex1.Should().Throw<TypeError>()
+                .WithMessage("Cannot cast array data from dtype('complex128') to dtype('float64') according to the rule 'safe'");
+            Action complex0 = () => np.random.RandomState(42).multinomial(10, NDArray.Scalar(new System.Numerics.Complex(0.5, 0)));
+            complex0.Should().Throw<TypeError>()
+                .WithMessage("Cannot cast scalar from dtype('complex128') to dtype('float64') according to the rule 'safe'");
+            Action complex2 = () => np.random.RandomState(42).multinomial(10, np.array(new[,] { { new System.Numerics.Complex(0.5, 0), new System.Numerics.Complex(0.5, 0) } }));
+            complex2.Should().Throw<ValueError>().WithMessage("object too deep for desired array");
             // A float32 pvals that sums below 1.0001 in its own dtype but fails after the float64 cast gets NumPy's longer text.
             Action f32 = () => np.random.RandomState(42).multinomial(10, np.array(new[] { 0.9999999f, 0.0000002f, 0.0f }));
             f32.Should().Throw<ValueError>().WithMessage("sum(pvals[:-1].astype(np.float64)) > 1.0. The pvals array is cast to 64-bit "
@@ -824,6 +838,27 @@ namespace NumSharp.Tests.RandomSampling
             // the plain message — as in NumPy.
             Action f16 = () => np.random.RandomState(42).multinomial(10, np.array(new[] { (Half)0.9999, (Half)0.0002, (Half)0.0 }));
             f16.Should().Throw<ValueError>().WithMessage("sum(pvals[:-1]) > 1.0");
+        }
+
+        /// <summary>
+        ///     The legacy <c>dirichlet</c>'s NDArray conversion follows NumPy's order: <c>len(alpha)</c> (a 0-d array fails
+        ///     here), then <c>PyArray_FROMANY(alpha, NPY_DOUBLE, 1, 1)</c> — its depth test, then its safe cast, which refuses a
+        ///     complex alpha instead of silently dropping the imaginary part. Texts from NumPy 2.4.2.
+        /// </summary>
+        [TestMethod]
+        public void Dirichlet_NDArrayAlpha_ConversionErrors_MatchNumPyOrder()
+        {
+            Action complex1 = () => np.random.RandomState(42).dirichlet(np.array(new[] { new System.Numerics.Complex(1, 0), new System.Numerics.Complex(2, 0) }));
+            complex1.Should().Throw<TypeError>()
+                .WithMessage("Cannot cast array data from dtype('complex128') to dtype('float64') according to the rule 'safe'");
+            Action complex0 = () => np.random.RandomState(42).dirichlet(NDArray.Scalar(new System.Numerics.Complex(1, 0)));
+            complex0.Should().Throw<TypeError>().WithMessage("len() of unsized object");
+            Action complex2 = () => np.random.RandomState(42).dirichlet(np.array(new[,] { { new System.Numerics.Complex(1, 0), new System.Numerics.Complex(2, 0) } }));
+            complex2.Should().Throw<ValueError>().WithMessage("object too deep for desired array");
+            // Every real dtype is safely castable: an int64 alpha draws exactly what the float64 one does.
+            var fromInt = np.random.RandomState(42).dirichlet(np.array(new long[] { 2, 3, 5 }), new Shape(2));
+            var fromDouble = np.random.RandomState(42).dirichlet(new[] { 2.0, 3.0, 5.0 }, new Shape(2));
+            fromInt.ToArray<double>().Should().Equal(fromDouble.ToArray<double>());
         }
 
         [TestMethod]
