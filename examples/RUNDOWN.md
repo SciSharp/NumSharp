@@ -210,9 +210,10 @@ Unity **is** installed here (`2022.3.62f3` and `6000.4.3f1`). To run either game
 | `25e85362` | Falling-sand high-resolution 1000×500 — Unity default + native PNG renderer |
 | `02da9ddc` | This RUNDOWN — a summary of both games |
 | `d837dedd` | Falling-sand fun pass: templates via icons, brushes + size/shape, paintable-wall scenes, fire/lava reactions |
+| `5bbb7e35` | MaterialLab: the falling-sand game reworked into a real-time MLS-MPM liquids/grains/solids simulator on NumSharp (FPS counter, 2/3-screen window, F11 fullscreen, 27-check physics gate) |
 
 Each example's `Verification` project is in `SciSharp.NumSharp.sln` (under the `examples` folder), plus
-the falling-sand `Player`.
+the falling-sand `Player` and the MaterialLab `App`.
 
 ---
 
