@@ -173,33 +173,41 @@ namespace NumSharp.Tests.RandomSampling
         // ========== Validation Tests ==========
 
         [TestMethod]
-        public void Dirichlet_EmptyAlpha_ThrowsArgumentException()
+        public void Dirichlet_EmptyAlpha_ReturnsEmptyRows_AsNumPy()
         {
-            Assert.ThrowsException<ArgumentException>(() => np.random.dirichlet(new double[0], 5));
+            // NumPy: RandomState(42).dirichlet([], 5) -> array of shape (5, 0), nothing drawn.
+            var r = np.random.RandomState(42);
+            r.dirichlet(new double[0], 5).shape.Should().Equal(5L, 0L);
+            r.random_sample(1).GetAtIndex(0).Should().Be(0.3745401188473625);
         }
 
         [TestMethod]
-        public void Dirichlet_NullAlpha_ThrowsArgumentException()
+        public void Dirichlet_NullAlpha_ThrowsTypeError()
         {
-            Assert.ThrowsException<ArgumentException>(() => np.random.dirichlet((double[])null, 5));
+            // NumPy: dirichlet(None) -> TypeError: object of type 'NoneType' has no len()
+            Assert.ThrowsException<TypeError>(() => np.random.dirichlet((double[])null, 5));
         }
 
         [TestMethod]
         public void Dirichlet_NegativeAlpha_ThrowsArgumentException()
         {
-            Assert.ThrowsException<ArgumentException>(() => np.random.dirichlet(new double[] { 1, -1, 2 }, 5));
+            Assert.ThrowsException<ValueError>(() => np.random.dirichlet(new double[] { 1, -1, 2 }, 5));
         }
 
         [TestMethod]
         public void Dirichlet_ZeroAlpha_ThrowsArgumentException()
         {
-            Assert.ThrowsException<ArgumentException>(() => np.random.dirichlet(new double[] { 0, 1, 2 }, 5));
+            Assert.ThrowsException<ValueError>(() => np.random.dirichlet(new double[] { 0, 1, 2 }, 5));
         }
 
         [TestMethod]
-        public void Dirichlet_NaNAlpha_ThrowsArgumentException()
+        public void Dirichlet_NaNAlpha_SamplesNaN_AsNumPy()
         {
-            Assert.ThrowsException<ArgumentException>(() => np.random.dirichlet(new double[] { 1, double.NaN, 2 }, 5));
+            // NumPy's check is np.any(alpha <= 0): NaN compares false, is accepted, and poisons every row.
+            var r = np.random.dirichlet(new double[] { 1, double.NaN, 2 }, 5);
+            r.shape.Should().Equal(5L, 3L);
+            for (long i = 0; i < r.size; i++)
+                double.IsNaN((double)r.GetAtIndex(i)).Should().BeTrue();
         }
 
         // ========== Tests migrated from NumPy ==========

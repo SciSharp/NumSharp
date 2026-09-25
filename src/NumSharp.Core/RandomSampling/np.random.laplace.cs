@@ -1,7 +1,3 @@
-using System;
-using NumSharp.Backends.Unmanaged;
-using NumSharp.Generic;
-
 namespace NumSharp
 {
     public partial class NumPyRandom
@@ -9,6 +5,10 @@ namespace NumSharp
         /// <summary>
         ///     Draw a single sample from the Laplace distribution.
         /// </summary>
+        /// <param name="loc">The position of the distribution peak. Default is 0.</param>
+        /// <param name="scale">The exponential decay. Must be non-negative. Default is 1.</param>
+        /// <returns>A 0-d float64 array holding the draw.</returns>
+        /// <exception cref="ValueError"><paramref name="scale"/> is negative, including <c>-0.0</c> (<c>scale &lt; 0</c>).</exception>
         public NDArray laplace(double loc = 0.0, double scale = 1.0) => laplace(loc, scale, Shape.Scalar);
 
         /// <summary>
@@ -17,8 +17,10 @@ namespace NumSharp
         /// </summary>
         /// <param name="loc">The position of the distribution peak. Default is 0.</param>
         /// <param name="scale">The exponential decay. Must be non-negative. Default is 1.</param>
-        /// <param name="size">Output shape.</param>
-        /// <returns>Drawn samples from the parameterized Laplace distribution.</returns>
+        /// <param name="size">Output shape; <c>default</c> (NumPy's <c>None</c>) draws a single value.</param>
+        /// <returns>Drawn samples from the parameterized Laplace distribution (float64).</returns>
+        /// <exception cref="ValueError"><paramref name="scale"/> is negative, including <c>-0.0</c> (<c>scale &lt; 0</c>), or
+        ///     <paramref name="size"/> has a negative dimension.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.laplace.html
         ///     <br/>
@@ -31,53 +33,30 @@ namespace NumSharp
         ///     f(x; μ, λ) = (1/2λ) * exp(-|x - μ| / λ)
         ///     <br/>
         ///     where μ is the location parameter and λ is the scale parameter.
+        ///     <br/>
+        ///     NumPy's <c>random_laplace</c> (shared by RandomState and Generator): <c>loc - scale*log(2 - 2U)</c> for
+        ///     <c>U &gt;= 0.5</c>, <c>loc + scale*log(2U)</c> for <c>0 &lt; U &lt; 0.5</c>, redrawing <c>U == 0</c>.
+        ///     Holds the bit generator's lock for the draws.
         /// </remarks>
         public NDArray laplace(double loc, double scale, Shape size)
         {
-            if (scale < 0)
-                throw new ArgumentException("scale < 0", nameof(scale));
+            RandomConstraints.Check(scale, "scale", ConstraintType.CONS_NON_NEGATIVE);
 
-            if (size.IsScalar || size.IsEmpty)
-                return NDArray.Scalar(SampleLaplace(loc, scale));
+            if (IsScalarDraw(size))
+                lock (randomizer.@lock)
+                    return NDArray.Scalar(Distributions.RandomLaplace(randomizer, loc, scale));
 
-            var ret = new NDArray<double>(size);
-            ArraySlice<double> data = ret.Data<double>();
-
-            for (int i = 0; i < ret.size; i++)
+            var ret = LegacyOutput(NPTypeCode.Double, size);
+            unsafe
             {
-                data[i] = SampleLaplace(loc, scale);
+                var dst = (double*)ret.Address;
+                long n = ret.size;
+                lock (randomizer.@lock)
+                    for (long i = 0; i < n; i++)
+                        dst[i] = Distributions.RandomLaplace(randomizer, loc, scale);
             }
 
             return ret;
-        }
-
-        /// <summary>
-        ///     Sample from the Laplace distribution using the same algorithm as NumPy.
-        /// </summary>
-        /// <remarks>
-        ///     Based on NumPy's random_laplace in distributions.c:
-        ///     U = random_double [0, 1)
-        ///     if U >= 0.5: return loc - scale * log(2.0 - U - U)
-        ///     else if U > 0: return loc + scale * log(U + U)
-        ///     else: reject U == 0.0 and retry
-        /// </remarks>
-        private double SampleLaplace(double loc, double scale)
-        {
-            double U;
-
-            do
-            {
-                U = randomizer.NextDouble();
-            } while (U == 0.0);
-
-            if (U >= 0.5)
-            {
-                return loc - scale * Math.Log(2.0 - U - U);
-            }
-            else
-            {
-                return loc + scale * Math.Log(U + U);
-            }
         }
     }
 }

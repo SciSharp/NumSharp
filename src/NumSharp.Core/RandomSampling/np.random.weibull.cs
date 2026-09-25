@@ -1,5 +1,4 @@
 using System;
-using NumSharp.Generic;
 
 namespace NumSharp
 {
@@ -8,15 +7,19 @@ namespace NumSharp
         /// <summary>
         ///     Draw a single sample from a Weibull distribution.
         /// </summary>
+        /// <param name="a">Shape parameter of the distribution. Must be non-negative.</param>
+        /// <returns>A 0-d float64 array holding the draw.</returns>
+        /// <exception cref="ValueError"><paramref name="a"/> is negative, including <c>-0.0</c> (<c>a &lt; 0</c>).</exception>
         public NDArray weibull(double a) => weibull(a, Shape.Scalar);
 
         /// <summary>
         ///     Draw samples from a Weibull distribution.
         /// </summary>
-        /// <param name="a">Shape parameter of the distribution. Must be non-negative.</param>
-        /// <param name="size">Output shape.</param>
-        /// <returns>Drawn samples from the Weibull distribution.</returns>
-        /// <exception cref="ArgumentException">If a is negative.</exception>
+        /// <param name="a">Shape parameter of the distribution. Must be non-negative (NaN is accepted and samples NaN, as in NumPy).</param>
+        /// <param name="size">Output shape; <c>default</c> (NumPy's <c>None</c>) draws a single value.</param>
+        /// <returns>Drawn samples from the Weibull distribution (float64).</returns>
+        /// <exception cref="ValueError">If a is negative, including <c>-0.0</c> (<c>a &lt; 0</c>), or <paramref name="size"/> has a
+        ///     negative dimension.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.weibull.html
         ///     <br/>
@@ -27,57 +30,36 @@ namespace NumSharp
         ///     use: scale * np.random.weibull(a, size).
         ///     <br/>
         ///     When a=1, the Weibull distribution reduces to the exponential distribution.
+        ///     <br/>
+        ///     NumPy's <c>legacy_weibull</c>: <c>(-log(1 - U))^(1/a)</c>, one uniform per value (bulk-filled, transformed in
+        ///     place); <c>a == 0</c> returns zeros WITHOUT drawing, exactly as NumPy's early return does. Byte-identical to
+        ///     <c>np.random.RandomState(seed).weibull</c>; holds the bit generator's lock for the draws.
         /// </remarks>
         public NDArray weibull(double a, Shape size)
         {
-            if (a < 0)
-                throw new ArgumentException("a < 0", nameof(a));
+            RandomConstraints.Check(a, "a", ConstraintType.CONS_NON_NEGATIVE);
 
-            if (size.IsScalar || size.IsEmpty)
-            {
-                // Return scalar
-                if (a == 0)
-                    return NDArray.Scalar(0.0);
-                return NDArray.Scalar(WeibullSample(a));
-            }
+            if (IsScalarDraw(size))
+                lock (randomizer.@lock)
+                    return NDArray.Scalar(LegacyWeibull(a));
 
+            if (a == 0.0)
+                return np.zeros(new Shape(size.dimensions), NPTypeCode.Double); // legacy_weibull(0) draws nothing
+
+            var ret = LegacyOutput(NPTypeCode.Double, size);
             unsafe
             {
-                var array = new NDArray<double>(size);
-                var dst = array.Address;
-                var count = array.size;
-
-                if (a == 0)
-                {
-                    // When a=0, all values are 0 (NumPy behavior)
-                    for (long i = 0; i < count; i++)
-                        dst[i] = 0.0;
-                }
-                else
-                {
-                    // Inverse transform: X = (-ln(1-U))^(1/a) = (-ln(U))^(1/a)
-                    // Using 1-U or U gives same distribution since U is uniform
-                    double invA = 1.0 / a;
-                    Func<double> nextDouble = randomizer.NextDouble;
-                    for (long i = 0; i < count; i++)
-                    {
-                        double u = nextDouble();
-                        // Use 1-u to avoid log(0) when u=0
-                        dst[i] = Math.Pow(-Math.Log(1.0 - u), invA);
-                    }
-                }
-
-                return array;
+                var dst = (double*)ret.Address;
+                long n = ret.size;
+                lock (randomizer.@lock)
+                    randomizer.FillDouble(dst, n);
+                // The draws are all taken; legacy_weibull's transform of each, in place.
+                double invA = 1.0 / a;
+                for (long i = 0; i < n; i++)
+                    dst[i] = Math.Pow(-Math.Log(1.0 - dst[i]), invA);
             }
-        }
 
-        /// <summary>
-        ///     Generate a single sample from the Weibull distribution.
-        /// </summary>
-        private double WeibullSample(double a)
-        {
-            double u = randomizer.NextDouble();
-            return Math.Pow(-Math.Log(1.0 - u), 1.0 / a);
+            return ret;
         }
     }
 }

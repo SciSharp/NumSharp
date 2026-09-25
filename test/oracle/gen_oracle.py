@@ -6999,8 +6999,8 @@ _RND_HOST_GENERIC = [
     ("exponential", [1.0]), ("exponential", [2.5]),
     ("standard_t", [3.5]),
     ("standard_gamma", [2.0]), ("standard_gamma", [0.5]),   # shape<1: different sampler branch
-    ("gamma", [2.0, 3.0]), ("gamma", [2.0, 1.0]),   # shape>=1 matches (scale path included);
-                                                    # shape<1 via gamma() is CARVED, see below
+    ("gamma", [2.0, 3.0]), ("gamma", [2.0, 1.0]),   # shape>=1, scale path included
+    ("gamma", [0.5, 2.0]),                          # shape<1: the Johnk/Ahrens-Dieter branch (uncarved 2026-09-25)
     ("beta", [2.0, 3.0]), ("beta", [0.5, 0.5]),
     ("chisquare", [3.0]),
     ("gumbel", [0.5, 2.0]),
@@ -7013,20 +7013,32 @@ _RND_HOST_GENERIC = [
     ("wald", [3.0, 2.0]),
     ("weibull", [1.79]),
     ("poisson", [5.0]), ("poisson", [0.3]),
+    ("poisson", [15.0]),                            # lam>=10: PTRS transformed rejection
     ("geometric", [0.35]),
+    ("geometric", [0.1]),                           # p<1/3: the legacy inversion branch
     ("zipf", [3.0]),
     ("logseries", [0.6]),
     ("noncentral_chisquare", [3.0, 1.5]),
     ("noncentral_f", [5.0, 7.0, 1.5]),
+    # Uncarved 2026-09-25 — the legacy samplers are now line-by-line ports of legacy-distributions.c:
+    ("f", [5.0, 7.0]),
+    ("pareto", [3.0]),
+    ("binomial", [10, 0.35]),                       # n*p <= 30: legacy inversion
+    ("binomial", [100, 0.4]),                       # n*p > 30: BTPE
+    ("negative_binomial", [5.0, 0.4]),
+    ("vonmises", [0.5, 1e7]),                       # large kappa: the legacy code has no wrapped-normal fallback
 ]
 # Stream-advancement pins: draw the same spec twice, record the SECOND block.
-_RND_DRAWS2 = {"uniform", "randint", "normal", "standard_gamma", "poisson"}
+_RND_DRAWS2 = {"uniform", "randint", "normal", "standard_gamma", "poisson",
+               "binomial", "standard_cauchy"}   # binomial: the setup cache carried across calls; cauchy: the gauss cache
 
-# CARVED — the tier's findings on arrival (2026-08-14): eight samplers where NumSharp's
-# STREAM diverges from NumPy's (a different algorithm / draw order / accept-reject
-# boundary, not mere rounding), so the documented 1-to-1 claim does not hold for them
-# today. Each is carved from the green corpus and pinned under [OpenBugs]
-# (OpenBugs.Random.cs, RandomParity_* — remove the pin and re-add the spec when fixed):
+# CARVED on arrival (2026-08-14), UNCARVED 2026-09-25: eight samplers whose STREAM diverged
+# from NumPy's (a different algorithm / draw order / accept-reject boundary, not mere
+# rounding). Every legacy sampler is now a line-by-line port of NumPy's
+# legacy-distributions.c (NumPyRandom.LegacyDistributions.cs / Distributions.cs), so seven
+# are back in the tier; only multivariate_normal stays carved — it is byte-identical only
+# with a LAPACK backend supplying NumPy's gesdd (the managed Jacobi fallback cannot
+# reproduce LAPACK's singular-vector signs), pinned in OpenBugs.Random.cs. The findings:
 #   * gamma(shape<1, scale)    — gross divergence while standard_gamma(shape<1) AND
 #     gamma(shape>=1, any scale) match byte-for-byte: the two-arg gamma routes shape<1
 #     differently than NumSharp's own (correct) standard_gamma.
@@ -7041,8 +7053,9 @@ _RND_DRAWS2 = {"uniform", "randint", "normal", "standard_gamma", "poisson"}
 #                                stream differently (values gross-diverge; dtype int32 matches).
 #   * multivariate_normal      — different factorization/transform (sign flips + values).
 # The small-ULP samplers (chisquare/wald/noncentral_f/dirichlet — arithmetic-ordering
-# noise on an IDENTICAL stream, measured ≤5/≤24/≤3/≤3 ULP) stay IN the tier under the
-# scoped R1 registry envelope (8 ULP; 32 for wald).
+# noise on an IDENTICAL stream, measured ≤5/≤24/≤3/≤3 ULP) are EXACT since the port (the
+# Marsaglia constant, the legacy wald spelling and dirichlet's reciprocal multiply), so the
+# R1 registry envelope that excused them is gone: a single-ULP regression fails the tier.
 #
 # int-output samplers: legacy RandomState returns C long — int32 on win-amd64, int64 on
 # Linux — while NumSharp's remaining legacy int samplers fix int64 (the Linux-NumPy shape).
@@ -7052,7 +7065,7 @@ _RND_DRAWS2 = {"uniform", "randint", "normal", "standard_gamma", "poisson"}
 # NumPy's win-amd64 C-long (int32) for all of them since the 2026-09-25 legacy-RandomState
 # alignment (permutation used to be int64 and weighted choice int64 while plain choice was
 # int32 — the inconsistency this tier used to paper over by widening).
-_RND_INT64_CAST = {"poisson", "zipf", "logseries", "hypergeometric", "geometric"}
+_RND_INT64_CAST = {"poisson", "zipf", "logseries", "hypergeometric", "geometric", "binomial", "negative_binomial"}
 
 
 def gen_random_parity():
@@ -7187,8 +7200,8 @@ def gen_random_parity():
         n += 1
 
     # --- host-libm: transform / rejection samplers ------------------------------------
-    # standard_cauchy / multinomial / multivariate_normal are CARVED (see _RND_INT64_CAST
-    # comment block) — gross stream divergence, pinned in OpenBugs.Random.cs.
+    # multivariate_normal stays CARVED (see the _RND_INT64_CAST comment block) — exact only
+    # with a LAPACK backend, pinned in OpenBugs.Random.cs.
     for dist, args in _RND_HOST_GENERIC:
         cases_for(host, dist, args)
     cases_for(host, "randn", [])
@@ -7196,6 +7209,10 @@ def gen_random_parity():
     cases_for(host, "standard_exponential", [])
     cases_for(host, "hypergeometric", [10, 7, 8])
     cases_for(host, "dirichlet", [], extra={"alpha": [2.0, 3.0, 5.0]})
+    # Uncarved 2026-09-25:
+    cases_for(host, "hypergeometric", [100, 200, 50])   # nsample > 10: the HRUA branch
+    cases_for(host, "standard_cauchy", [])
+    cases_for(host, "multinomial", [20], extra={"pvals": [0.2, 0.3, 0.5]})
     return portable, host
 
 

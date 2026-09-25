@@ -136,7 +136,7 @@ namespace NumSharp
             {
                 // NumPy's isinstance(entropy, (int, np.integer, list, tuple, range, np.ndarray)) gate: a C# array or
                 // list stands for list/tuple; a bare string is rejected here even though a string ELEMENT would parse.
-                throw new TypeError($"SeedSequence expects int or sequence of ints for entropy not {PyInt.Str(entropy)}");
+                throw new TypeError($"SeedSequence expects int or sequence of ints for entropy not {PythonInt.Str(entropy)}");
             }
 
             _entropy = entropy;
@@ -229,7 +229,7 @@ namespace NumSharp
                 case string s:
                     // NumPy picks the base from the RAW text (no strip first): ' 0x10' parses in base 10 and fails.
                     int radix = s.StartsWith("0x", StringComparison.Ordinal) ? 16 : s.StartsWith("0", StringComparison.Ordinal) ? 8 : 10;
-                    return new EntropyPiece(IntToUint32Array(PyInt.Parse(s, radix)));
+                    return new EntropyPiece(IntToUint32Array(PythonInt.Parse(s, radix)));
                 case System.Collections.IList list:
                     return CoerceSequence(list);
                 case null:
@@ -595,7 +595,7 @@ namespace NumSharp
                 case bool b:
                     return b ? "True" : "False";
                 case string str:
-                    return PyInt.Repr(str);
+                    return PythonInt.Repr(str);
                 case uint[] u when u.GetType() == typeof(uint[]):
                     // The uint32 pass-through stands for NumPy's uint32 ndarray (exact type: an int[] also
                     // passes `is uint[]`, and is a Python list).
@@ -610,7 +610,7 @@ namespace NumSharp
                     return "[" + string.Join(", ", parts) + "]";
                 }
                 default:
-                    return PyInt.Str(e);
+                    return PythonInt.Str(e);
             }
         }
 

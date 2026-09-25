@@ -1,7 +1,3 @@
-using System;
-using NumSharp.Backends.Unmanaged;
-using NumSharp.Generic;
-
 namespace NumSharp
 {
     public partial class NumPyRandom
@@ -11,9 +7,14 @@ namespace NumSharp
         /// </summary>
         /// <param name="ngood">Number of ways to make a good selection. Must be non-negative.</param>
         /// <param name="nbad">Number of ways to make a bad selection. Must be non-negative.</param>
-        /// <param name="nsample">Number of items sampled. Must be >= 1 and &lt;= ngood + nbad.</param>
-        /// <param name="size">Output shape.</param>
-        /// <returns>Drawn samples from the hypergeometric distribution (number of good items in sample).</returns>
+        /// <param name="nsample">Number of items sampled. Must be &gt;= 1 and &lt;= ngood + nbad.</param>
+        /// <param name="size">Output shape; null (NumPy's <c>None</c>) draws a single value.</param>
+        /// <returns>Drawn samples from the hypergeometric distribution (number of good items in sample, int64).</returns>
+        /// <exception cref="ValueError">
+        ///     In NumPy's order: <c>ngood + nbad &lt; nsample</c> (checked BEFORE the individual constraints), then
+        ///     <c>ngood &lt; 0</c>, <c>nbad &lt; 0</c>, <c>nsample &lt; 1 or nsample is NaN</c>; or <paramref name="size"/> has a
+        ///     negative dimension.
+        /// </exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.hypergeometric.html
         ///     <br/>
@@ -22,20 +23,34 @@ namespace NumSharp
         ///     describes the distribution of white balls in the drawn sample.
         ///     <br/>
         ///     Mean = nsample * ngood / (ngood + nbad)
+        ///     <br/>
+        ///     NumPy's <c>legacy_random_hypergeometric</c>: the urn simulation (<c>hyp</c>) for <c>nsample &lt;= 10</c> and
+        ///     Stadlober's ratio-of-uniforms (<c>hrua</c>) above — byte-identical to
+        ///     <c>np.random.RandomState(seed).hypergeometric</c>. When <c>ngood</c> or <c>nbad</c> is 0 and
+        ///     <c>nsample &lt;= 10</c> the answer is known and nothing is drawn, as in NumPy. int64 output (NumPy returns C
+        ///     <c>long</c>). Holds the bit generator's lock for the draws.
         /// </remarks>
         public NDArray hypergeometric(long ngood, long nbad, long nsample, Shape? size = null)
         {
-            ValidateHypergeometricParams(ngood, nbad, nsample);
+            // NumPy tests the (wrapping) int64 sum before the per-parameter constraints.
+            if (ngood + nbad < nsample)
+                throw new ValueError("ngood + nbad < nsample");
+            RandomConstraints.Check(ngood, "ngood", ConstraintType.LEGACY_CONS_NON_NEGATIVE_INBOUNDS_LONG);
+            RandomConstraints.Check(nbad, "nbad", ConstraintType.CONS_NON_NEGATIVE);
+            RandomConstraints.Check(nsample, "nsample", ConstraintType.CONS_GTE_1);
 
-            if (size == null)
-                return NDArray.Scalar(SampleHypergeometric(ngood, nbad, nsample));
+            if (size is null || IsScalarDraw(size.Value))
+                lock (randomizer.@lock)
+                    return NDArray.Scalar(LegacyHypergeometric(ngood, nbad, nsample));
 
-            var ret = new NDArray<long>(size.Value);
-            ArraySlice<long> data = ret.Data<long>();
-
-            for (int i = 0; i < ret.size; i++)
+            var ret = LegacyOutput(NPTypeCode.Int64, size.Value);
+            unsafe
             {
-                data[i] = SampleHypergeometric(ngood, nbad, nsample);
+                var dst = (long*)ret.Address;
+                long n = ret.size;
+                lock (randomizer.@lock)
+                    for (long i = 0; i < n; i++)
+                        dst[i] = LegacyHypergeometric(ngood, nbad, nsample);
             }
 
             return ret;
@@ -46,9 +61,11 @@ namespace NumSharp
         /// </summary>
         /// <param name="ngood">Number of ways to make a good selection. Must be non-negative.</param>
         /// <param name="nbad">Number of ways to make a bad selection. Must be non-negative.</param>
-        /// <param name="nsample">Number of items sampled. Must be >= 1 and &lt;= ngood + nbad.</param>
+        /// <param name="nsample">Number of items sampled. Must be &gt;= 1 and &lt;= ngood + nbad.</param>
         /// <param name="size">Output shape as int array.</param>
         /// <returns>Drawn samples from the hypergeometric distribution.</returns>
+        /// <exception cref="ValueError">A parameter violates its constraint (see <see cref="hypergeometric(long, long, long, Shape?)"/>)
+        ///     or a size dimension is negative.</exception>
         public NDArray hypergeometric(long ngood, long nbad, long nsample, int[] size)
             => hypergeometric(ngood, nbad, nsample, new Shape(size));
 
@@ -57,9 +74,11 @@ namespace NumSharp
         /// </summary>
         /// <param name="ngood">Number of ways to make a good selection. Must be non-negative.</param>
         /// <param name="nbad">Number of ways to make a bad selection. Must be non-negative.</param>
-        /// <param name="nsample">Number of items sampled. Must be >= 1 and &lt;= ngood + nbad.</param>
+        /// <param name="nsample">Number of items sampled. Must be &gt;= 1 and &lt;= ngood + nbad.</param>
         /// <param name="size">Output shape.</param>
         /// <returns>Drawn samples from the hypergeometric distribution.</returns>
+        /// <exception cref="ValueError">A parameter violates its constraint (see <see cref="hypergeometric(long, long, long, Shape?)"/>)
+        ///     or a size dimension is negative.</exception>
         public NDArray hypergeometric(long ngood, long nbad, long nsample, long[] size)
             => hypergeometric(ngood, nbad, nsample, new Shape(size));
 
@@ -68,9 +87,11 @@ namespace NumSharp
         /// </summary>
         /// <param name="ngood">Number of ways to make a good selection. Must be non-negative.</param>
         /// <param name="nbad">Number of ways to make a bad selection. Must be non-negative.</param>
-        /// <param name="nsample">Number of items sampled. Must be >= 1 and &lt;= ngood + nbad.</param>
+        /// <param name="nsample">Number of items sampled. Must be &gt;= 1 and &lt;= ngood + nbad.</param>
         /// <param name="size">Output shape as single int.</param>
         /// <returns>Drawn samples from the hypergeometric distribution.</returns>
+        /// <exception cref="ValueError">A parameter violates its constraint (see <see cref="hypergeometric(long, long, long, Shape?)"/>)
+        ///     or <paramref name="size"/> is negative.</exception>
         public NDArray hypergeometric(long ngood, long nbad, long nsample, int size)
             => hypergeometric(ngood, nbad, nsample, new int[] { size });
 
@@ -79,79 +100,10 @@ namespace NumSharp
         /// </summary>
         /// <param name="ngood">Number of ways to make a good selection. Must be non-negative.</param>
         /// <param name="nbad">Number of ways to make a bad selection. Must be non-negative.</param>
-        /// <param name="nsample">Number of items sampled. Must be >= 1 and &lt;= ngood + nbad.</param>
+        /// <param name="nsample">Number of items sampled. Must be &gt;= 1 and &lt;= ngood + nbad.</param>
         /// <returns>A single sample from the hypergeometric distribution as 0-d array.</returns>
+        /// <exception cref="ValueError">A parameter violates its constraint (see <see cref="hypergeometric(long, long, long, Shape?)"/>).</exception>
         public NDArray hypergeometric(long ngood, long nbad, long nsample)
             => hypergeometric(ngood, nbad, nsample, (Shape?)null);
-
-        private void ValidateHypergeometricParams(long ngood, long nbad, long nsample)
-        {
-            if (ngood < 0)
-                throw new ArgumentException("ngood < 0", nameof(ngood));
-            if (nbad < 0)
-                throw new ArgumentException("nbad < 0", nameof(nbad));
-            if (nsample < 1)
-                throw new ArgumentException("nsample < 1", nameof(nsample));
-            if (nsample > ngood + nbad)
-                throw new ArgumentException("ngood + nbad < nsample");
-        }
-
-        /// <summary>
-        ///     Sample from the hypergeometric distribution using the basic algorithm.
-        /// </summary>
-        /// <remarks>
-        ///     This is the basic sampling algorithm from NumPy's hypergeometric_sample():
-        ///     - If sample > total/2, we select the complement
-        ///     - Loop: for each item in computed_sample, randomly decide if it's "good"
-        ///     - Probability of good = remaining_good / remaining_total
-        ///     - Early exit if only good items remain
-        /// </remarks>
-        private long SampleHypergeometric(long good, long bad, long sample)
-        {
-            long total = good + bad;
-            long computedSample;
-            long remainingTotal = total;
-            long remainingGood = good;
-
-            // Optimization: if sample > half, select complement
-            if (sample > total / 2)
-            {
-                computedSample = total - sample;
-            }
-            else
-            {
-                computedSample = sample;
-            }
-
-            // Main sampling loop
-            while (computedSample > 0 && remainingGood > 0 && remainingTotal > remainingGood)
-            {
-                --remainingTotal;
-                // Random integer in [0, remainingTotal]
-                long randomValue = (long)(randomizer.NextDouble() * (remainingTotal + 1));
-                if (randomValue < remainingGood)
-                {
-                    // Selected a "good" one
-                    --remainingGood;
-                }
-                --computedSample;
-            }
-
-            // If only "good" choices left, take what's needed
-            if (remainingTotal == remainingGood)
-            {
-                remainingGood -= computedSample;
-            }
-
-            // Return result based on whether we used complement
-            if (sample > total / 2)
-            {
-                return remainingGood;
-            }
-            else
-            {
-                return good - remainingGood;
-            }
-        }
     }
 }

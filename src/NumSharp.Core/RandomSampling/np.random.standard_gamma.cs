@@ -1,7 +1,3 @@
-using System;
-using NumSharp.Backends.Unmanaged;
-using NumSharp.Generic;
-
 namespace NumSharp
 {
     public partial class NumPyRandom
@@ -9,51 +5,50 @@ namespace NumSharp
         /// <summary>
         ///     Draw a single sample from a standard Gamma distribution.
         /// </summary>
+        /// <param name="shape">The shape of the gamma distribution. Must be &gt;= 0.</param>
+        /// <returns>A 0-d float64 array holding the draw.</returns>
+        /// <exception cref="ValueError"><paramref name="shape"/> is negative, including <c>-0.0</c> (<c>shape &lt; 0</c>).</exception>
         public NDArray standard_gamma(double shape) => standard_gamma(shape, Shape.Scalar);
 
         /// <summary>
         ///     Draw samples from a standard Gamma distribution (scale=1).
         /// </summary>
-        /// <param name="shape">The shape of the gamma distribution. Must be >= 0.</param>
-        /// <param name="size">Output shape.</param>
-        /// <returns>Drawn samples from the standard gamma distribution.</returns>
+        /// <param name="shape">The shape of the gamma distribution. Must be &gt;= 0 (0 gives zeros without drawing; NaN is
+        ///     accepted and samples NaN, as in NumPy).</param>
+        /// <param name="size">Output shape; <c>default</c> (NumPy's <c>None</c>) draws a single value.</param>
+        /// <returns>Drawn samples from the standard gamma distribution (float64).</returns>
+        /// <exception cref="ValueError"><paramref name="shape"/> is negative, including <c>-0.0</c> (<c>shape &lt; 0</c>), or
+        ///     <paramref name="size"/> has a negative dimension.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.standard_gamma.html
         ///     <br/>
-        ///     Samples are drawn from a Gamma distribution with shape parameter and scale=1.
         ///     For a different scale, multiply the result: scale * standard_gamma(shape).
         ///     <br/>
         ///     The probability density function is:
         ///     p(x) = x^(shape-1) * e^(-x) / Gamma(shape)
+        ///     <br/>
+        ///     NumPy's <c>legacy_standard_gamma</c> (see <c>NumPyRandom.LegacyDistributions.cs</c>) — byte-identical to
+        ///     <c>np.random.RandomState(seed).standard_gamma</c>. Holds the bit generator's lock for the draws.
         /// </remarks>
         public NDArray standard_gamma(double shape, Shape size)
         {
-            // Parameter validation (matches NumPy error message)
-            if (shape < 0)
-                throw new ArgumentException("shape < 0", nameof(shape));
+            RandomConstraints.Check(shape, "shape", ConstraintType.CONS_NON_NEGATIVE);
 
-            if (size.IsScalar || size.IsEmpty)
-                return NDArray.Scalar(shape == 0 ? 0.0 : SampleStandardGamma(shape));
+            if (IsScalarDraw(size))
+                lock (randomizer.@lock)
+                    return NDArray.Scalar(LegacyStandardGamma(shape));
 
-            var result = new NDArray<double>(size);
-            ArraySlice<double> resultArray = result.Data<double>();
-
-            if (shape == 0)
+            var ret = LegacyOutput(NPTypeCode.Double, size);
+            unsafe
             {
-                // Special case: shape=0 returns all zeros
-                for (long i = 0; i < result.size; ++i)
-                    resultArray[i] = 0.0;
-            }
-            else
-            {
-                for (long i = 0; i < result.size; ++i)
-                    resultArray[i] = SampleStandardGamma(shape);
+                var dst = (double*)ret.Address;
+                long n = ret.size;
+                lock (randomizer.@lock)
+                    for (long i = 0; i < n; i++)
+                        dst[i] = LegacyStandardGamma(shape);
             }
 
-            result.ReplaceData(resultArray);
-            return result;
+            return ret;
         }
-
-        // Note: SampleStandardGamma() and SampleMarsaglia() are already defined in np.random.standard_t.cs
     }
 }

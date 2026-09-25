@@ -130,31 +130,31 @@ namespace NumSharp.Tests.RandomSampling;
     [TestMethod]
     public void NoncentralChisquare_ZeroDf_ThrowsArgumentException()
     {
-        Assert.ThrowsException<ArgumentException>(() => np.random.noncentral_chisquare(0, 2, 5L));
+        Assert.ThrowsException<ValueError>(() => np.random.noncentral_chisquare(0, 2, 5L));
     }
 
     [TestMethod]
     public void NoncentralChisquare_NegativeDf_ThrowsArgumentException()
     {
-        Assert.ThrowsException<ArgumentException>(() => np.random.noncentral_chisquare(-1, 2, 5L));
+        Assert.ThrowsException<ValueError>(() => np.random.noncentral_chisquare(-1, 2, 5L));
     }
 
     [TestMethod]
     public void NoncentralChisquare_NegativeNonc_ThrowsArgumentException()
     {
-        Assert.ThrowsException<ArgumentException>(() => np.random.noncentral_chisquare(3, -1, 5L));
+        Assert.ThrowsException<ValueError>(() => np.random.noncentral_chisquare(3, -1, 5L));
     }
 
     [TestMethod]
     public void NoncentralChisquare_ScalarZeroDf_ThrowsArgumentException()
     {
-        Assert.ThrowsException<ArgumentException>(() => np.random.noncentral_chisquare(0, 2));
+        Assert.ThrowsException<ValueError>(() => np.random.noncentral_chisquare(0, 2));
     }
 
     [TestMethod]
     public void NoncentralChisquare_ScalarNegativeNonc_ThrowsArgumentException()
     {
-        Assert.ThrowsException<ArgumentException>(() => np.random.noncentral_chisquare(3, -1));
+        Assert.ThrowsException<ValueError>(() => np.random.noncentral_chisquare(3, -1));
     }
 
     [TestMethod]

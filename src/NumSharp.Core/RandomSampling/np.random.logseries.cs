@@ -1,6 +1,3 @@
-using System;
-using NumSharp.Generic;
-
 namespace NumSharp
 {
     public partial class NumPyRandom
@@ -10,8 +7,9 @@ namespace NumSharp
         /// </summary>
         /// <param name="p">Shape parameter for the distribution. Must be in the range [0, 1).</param>
         /// <param name="size">Output shape. If null, a single value is returned.</param>
-        /// <returns>Drawn samples from the parameterized logarithmic series distribution.</returns>
-        /// <exception cref="ArgumentException">If p is not in range [0, 1) or is NaN.</exception>
+        /// <returns>Drawn samples from the parameterized logarithmic series distribution (int64).</returns>
+        /// <exception cref="ValueError">If p is not in range [0, 1) or is NaN (<c>p &lt; 0, p &gt;= 1 or p is NaN</c>), or a size
+        ///     dimension is negative.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.logseries.html
         ///     <br/>
@@ -25,15 +23,9 @@ namespace NumSharp
         /// </remarks>
         public NDArray logseries(double p, Shape? size = null)
         {
-            ValidateLogseriesP(p);
-
-            if (size == null)
-            {
-                // Return scalar
-                return NDArray.Scalar(SampleLogseries(p));
-            }
-
-            return logseries(p, size.Value.dimensions);
+            if (size is null)
+                return logseries(p, default(Shape));
+            return logseries(p, size.Value);
         }
 
         /// <summary>
@@ -42,6 +34,7 @@ namespace NumSharp
         /// <param name="p">Shape parameter for the distribution. Must be in the range [0, 1).</param>
         /// <param name="size">Output shape as int array.</param>
         /// <returns>Drawn samples from the parameterized logarithmic series distribution.</returns>
+        /// <exception cref="ValueError"><paramref name="p"/> is outside <c>[0, 1)</c> or NaN, or a size dimension is negative.</exception>
         public NDArray logseries(double p, int[] size)
             => logseries(p, new Shape(size));
 
@@ -51,6 +44,7 @@ namespace NumSharp
         /// <param name="p">Shape parameter for the distribution. Must be in the range [0, 1).</param>
         /// <param name="size">Output shape.</param>
         /// <returns>Drawn samples from the parameterized logarithmic series distribution.</returns>
+        /// <exception cref="ValueError"><paramref name="p"/> is outside <c>[0, 1)</c> or NaN, or a size dimension is negative.</exception>
         public NDArray logseries(double p, long[] size)
             => logseries(p, new Shape(size));
 
@@ -58,30 +52,35 @@ namespace NumSharp
         ///     Draw samples from a logarithmic series distribution.
         /// </summary>
         /// <param name="p">Shape parameter for the distribution. Must be in the range [0, 1).</param>
-        /// <param name="size">Output shape.</param>
-        /// <returns>Drawn samples from the parameterized logarithmic series distribution.</returns>
+        /// <param name="size">Output shape; <c>default</c> (NumPy's <c>None</c>) draws a single value.</param>
+        /// <returns>Drawn samples from the parameterized logarithmic series distribution (int64).</returns>
+        /// <exception cref="ValueError"><paramref name="p"/> is outside <c>[0, 1)</c> or NaN
+        ///     (<c>p &lt; 0, p &gt;= 1 or p is NaN</c>), or <paramref name="size"/> has a negative dimension.</exception>
+        /// <remarks>
+        ///     NumPy's <c>legacy_logseries</c> (Kemp's LK generator with the legacy <c>log(1 - p)</c> / <c>1 - exp(r*U)</c>
+        ///     spellings) — byte-identical to <c>np.random.RandomState(seed).logseries</c>, including the rejection of a
+        ///     count whose <c>floor</c> overflows. <c>p = 0</c> (and <c>-0.0</c>) returns 1 after one draw. int64 output
+        ///     (NumPy returns C <c>long</c>). Holds the bit generator's lock for the draws.
+        /// </remarks>
         public NDArray logseries(double p, Shape size)
         {
-            ValidateLogseriesP(p);
+            RandomConstraints.Check(p, "p", ConstraintType.CONS_BOUNDED_LT_0_1);
 
-            if (size.IsEmpty)
-            {
-                // Return scalar
-                return NDArray.Scalar(SampleLogseries(p));
-            }
+            if (IsScalarDraw(size))
+                lock (randomizer.@lock)
+                    return NDArray.Scalar(LegacyLogseries(p));
 
+            var ret = LegacyOutput(NPTypeCode.Int64, size);
             unsafe
             {
-                var ret = new NDArray<long>(size);
-                var dst = ret.Address;
-
-                for (long i = 0; i < ret.size; i++)
-                {
-                    dst[i] = SampleLogseries(p);
-                }
-
-                return ret;
+                var dst = (long*)ret.Address;
+                long n = ret.size;
+                lock (randomizer.@lock)
+                    for (long i = 0; i < n; i++)
+                        dst[i] = LegacyLogseries(p);
             }
+
+            return ret;
         }
 
         /// <summary>
@@ -90,60 +89,8 @@ namespace NumSharp
         /// <param name="p">Shape parameter for the distribution. Must be in the range [0, 1).</param>
         /// <param name="size">Output shape as single int.</param>
         /// <returns>Drawn samples from the parameterized logarithmic series distribution.</returns>
+        /// <exception cref="ValueError"><paramref name="p"/> is outside <c>[0, 1)</c> or NaN, or <paramref name="size"/> is negative.</exception>
         public NDArray logseries(double p, int size)
             => logseries(p, new int[] { size });
-
-        private static void ValidateLogseriesP(double p)
-        {
-            if (p < 0 || p >= 1 || double.IsNaN(p))
-                throw new ArgumentException("p < 0, p >= 1 or p is NaN", nameof(p));
-        }
-
-        /// <summary>
-        ///     Sample from the logarithmic series distribution using the same algorithm as NumPy.
-        /// </summary>
-        /// <remarks>
-        ///     Based on NumPy's random_logseries in distributions.c.
-        ///     Uses the algorithm from Kemp (1981).
-        /// </remarks>
-        private long SampleLogseries(double p)
-        {
-            double q, r, U, V;
-            long result;
-
-            r = Math.Log(1 - p); // log1p(-p)
-
-            while (true)
-            {
-                V = randomizer.NextDouble();
-                if (V >= p)
-                {
-                    return 1;
-                }
-
-                U = randomizer.NextDouble();
-                q = 1 - Math.Exp(r * U); // -expm1(r * U) = -(exp(r*U) - 1) = 1 - exp(r*U)
-
-                if (V <= q * q)
-                {
-                    result = (long)Math.Floor(1 + Math.Log(V) / Math.Log(q));
-                    if (result < 1 || V == 0.0)
-                    {
-                        continue;
-                    }
-                    else
-                    {
-                        return result;
-                    }
-                }
-
-                if (V >= q)
-                {
-                    return 1;
-                }
-
-                return 2;
-            }
-        }
     }
 }

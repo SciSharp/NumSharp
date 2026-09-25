@@ -7,37 +7,52 @@ namespace NumSharp
         /// <summary>
         ///     Draw a single sample from an exponential distribution.
         /// </summary>
+        /// <param name="scale">The scale parameter, β = 1/λ. Must be non-negative. Default is 1.0.</param>
+        /// <returns>A 0-d float64 array holding the draw.</returns>
+        /// <exception cref="ValueError"><paramref name="scale"/> is negative, including <c>-0.0</c> (<c>scale &lt; 0</c>).</exception>
         public NDArray exponential(double scale = 1.0) => exponential(scale, Shape.Scalar);
 
         /// <summary>
         ///     Draw samples from an exponential distribution.
         /// </summary>
-        /// <param name="scale">The scale parameter, β = 1/λ. Must be non-negative. Default is 1.0.</param>
-        /// <param name="size">Output shape.</param>
-        /// <returns>Drawn samples from the parameterized exponential distribution.</returns>
+        /// <param name="scale">The scale parameter, β = 1/λ. Must be non-negative (NaN is accepted and samples NaN, as in NumPy).</param>
+        /// <param name="size">Output shape; <c>default</c> (NumPy's <c>None</c>) draws a single value.</param>
+        /// <returns>Drawn samples from the parameterized exponential distribution (float64).</returns>
+        /// <exception cref="ValueError"><paramref name="scale"/> is negative, including <c>-0.0</c> (<c>scale &lt; 0</c>), or
+        ///     <paramref name="size"/> has a negative dimension.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.exponential.html
         ///     <br/>
         ///     The exponential distribution is a continuous analogue of the geometric distribution.
         ///     It describes many common situations, such as the size of raindrops measured over
         ///     many rainstorms, or the time between page requests to Wikipedia.
+        ///     <br/>
+        ///     NumPy's <c>legacy_exponential</c>: <c>scale * -log(1 - U)</c>, one uniform per value. Because every value
+        ///     consumes exactly one draw, the uniforms are produced by the bit generator's bulk fill straight into the
+        ///     output and transformed in place — the same stream as NumPy's per-value calls, with no intermediate arrays.
+        ///     Holds the bit generator's lock for the draws.
         /// </remarks>
         public NDArray exponential(double scale, Shape size)
         {
-            if (size.IsScalar || size.IsEmpty)
-                return NDArray.Scalar(-Math.Log(1 - randomizer.NextDouble()) * scale);
+            RandomConstraints.Check(scale, "scale", ConstraintType.CONS_NON_NEGATIVE);
 
-            // Every step but the final `* scale` is an owning intermediate consumed exactly once.
-            // Release each synchronously (`using`) instead of letting it ride the finalizer queue —
-            // in a tight exponential() loop the un-disposed uniform / (1-u) / negate buffers
-            // (≈400 KB each at 50K float64) accumulated as live allocations until GC, growing the
-            // process working set (np.random.exponential leak guard). The trailing `* scale`
-            // produces the fresh NDArray returned to (and owned by) the caller.
-            using var u = uniform(0, 1, size);   // U(0,1)
-            using var oneMinusU = 1 - u;         // 1 - U
-            using var x = np.log(oneMinusU);     // log(1 - U)
-            using var negX = np.negative(x);     // -log(1 - U)
-            return negX * scale;                 // β · (-log(1 - U))
+            if (IsScalarDraw(size))
+                lock (randomizer.@lock)
+                    return NDArray.Scalar(LegacyExponential(scale));
+
+            var ret = LegacyOutput(NPTypeCode.Double, size);
+            unsafe
+            {
+                var dst = (double*)ret.Address;
+                long n = ret.size;
+                lock (randomizer.@lock)
+                    randomizer.FillDouble(dst, n);
+                // The draws are all taken; the transform no longer needs the lock.
+                for (long i = 0; i < n; i++)
+                    dst[i] = scale * -Math.Log(1.0 - dst[i]);
+            }
+
+            return ret;
         }
     }
 }

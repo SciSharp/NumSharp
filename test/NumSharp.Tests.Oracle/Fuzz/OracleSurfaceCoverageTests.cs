@@ -150,9 +150,19 @@ namespace NumSharp.Tests.Fuzz
             "maximum_sctype", "multithreading", "ndarray", "save_version", "sctype2char",
         };
 
+        // RandomState construction and its str() (ToString, "RandomState(MT19937)") — dedicated state tests
+        // (LegacyRandomState.Test.cs, byte-exact against NumPy 2.4.2).
         private static readonly HashSet<string> RandomStateSurface = new()
         {
-            "RandomState",
+            "RandomState", "ToString",
+        };
+
+        // Platform-dependent legacy samplers: tomaxint draws next_uint64 >> 1 under NumSharp's 64-bit C long (NumPy's
+        // LP64 build) but next_uint32 >> 1 on the win-amd64 build that authors this corpus, so it cannot ride the
+        // Windows-authored stream tier; LegacyRandomState.Test.cs pins it against Linux NumPy 2.4.2.
+        private static readonly HashSet<string> RandomPlatformDependent = new()
+        {
+            "tomaxint",
         };
 
         // Non-stream Generator/RandomState API surface: these return a Generator, a byte[], or are a
@@ -164,13 +174,14 @@ namespace NumSharp.Tests.Fuzz
             "default_rng", "bytes", "random_integers",
         };
 
-        // Stream algorithms already carved and pinned under OpenBugs.Random.cs. Re-adding any one
-        // to random_parity(_host).jsonl automatically moves it to direct coverage and this set entry
-        // becomes stale/fails below.
+        // Stream algorithms carved and pinned under OpenBugs.Random.cs. Re-adding any one to
+        // random_parity(_host).jsonl automatically moves it to direct coverage and this set entry
+        // becomes stale/fails below. (binomial/f/multinomial/negative_binomial/pareto/standard_cauchy
+        // retired 2026-09-25 — ports of legacy-distributions.c, back in the stream tier; mvn stays: it
+        // is byte-exact only with a LAPACK backend.)
         private static readonly HashSet<string> RandomKnownGaps = new()
         {
-            "binomial", "f", "multinomial", "multivariate_normal", "negative_binomial",
-            "pareto", "standard_cauchy",
+            "multivariate_normal",
         };
 
         [TestMethod]
@@ -214,8 +225,10 @@ namespace NumSharp.Tests.Fuzz
                     continue;
                 if (randomDists.Contains(name))
                     continue;
-                if (name == "random" && randomDists.Contains("random_sample"))
-                    continue; // documented alias
+                if ((name == "random" || name == "ranf" || name == "sample") && randomDists.Contains("random_sample"))
+                    continue; // documented aliases (ranf/sample are NumPy's module-level spellings)
+                if (RandomPlatformDependent.Contains(name))
+                    continue; // C-long-width dependent; pinned against Linux NumPy in unit tests
                 if (RandomStateSurface.Contains(name))
                     continue; // dedicated state/seed tests
                 if (GeneratorApiSurface.Contains(name))

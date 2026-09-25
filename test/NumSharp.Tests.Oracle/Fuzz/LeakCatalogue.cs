@@ -521,9 +521,11 @@ namespace NumSharp.Tests.Fuzz
 
         // ============================ np.random (samplers outside the stream corpus) =========
 
-        /// <summary>The samplers carved out of the byte-parity stream corpus (their VALUES are pinned
-        /// under OpenBugs; their allocation paths are still leak-gated here) and the non-stream
-        /// factories.</summary>
+        /// <summary>The samplers that were carved out of the byte-parity stream corpus (all but
+        /// multivariate_normal are back in it since 2026-09-25; their allocation paths stay leak-gated here
+        /// too), the platform-dependent <c>tomaxint</c> and the module-level <c>ranf</c>/<c>sample</c>
+        /// aliases (no stream corpus entry — see OracleSurfaceCoverageTests), <c>str(RandomState)</c>, and
+        /// the non-stream factories.</summary>
         /// <param name="l">The entry list.</param>
         private static void AddRandom(List<LeakCase> l)
         {
@@ -540,6 +542,10 @@ namespace NumSharp.Tests.Fuzz
             E(l, "np.random.standard_cauchy", "sized", f => np.random.standard_cauchy(new Shape(20)));
             E(l, "np.random.bytes", "legacy", f => f.Rs.bytes(16));
             E(l, "np.random.random_integers", "legacy", f => f.Rs.random_integers(1, 6, new Shape(10)));
+            E(l, "np.random.tomaxint", "sized", f => f.Rs.tomaxint(new Shape(20)));
+            E(l, "np.random.ranf", "sized", f => f.Rs.ranf(20));
+            E(l, "np.random.sample", "sized", f => f.Rs.sample(20));
+            E(l, "np.random.ToString", "str", f => f.Rs.ToString());
         }
 
         // ============================ object surfaces (object_surfaces.py owners) ===========

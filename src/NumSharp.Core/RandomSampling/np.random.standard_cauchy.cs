@@ -1,6 +1,3 @@
-using System;
-using NumSharp.Generic;
-
 namespace NumSharp
 {
     public partial class NumPyRandom
@@ -8,13 +5,15 @@ namespace NumSharp
         /// <summary>
         ///     Draw a single sample from a standard Cauchy distribution.
         /// </summary>
+        /// <returns>A 0-d float64 array holding the draw.</returns>
         public NDArray standard_cauchy() => standard_cauchy(Shape.Scalar);
 
         /// <summary>
         ///     Draw samples from a standard Cauchy distribution with mode = 0.
         /// </summary>
-        /// <param name="size">Output shape.</param>
-        /// <returns>Drawn samples from the standard Cauchy distribution.</returns>
+        /// <param name="size">Output shape; <c>default</c> (NumPy's <c>None</c>) draws a single value.</param>
+        /// <returns>Drawn samples from the standard Cauchy distribution (float64).</returns>
+        /// <exception cref="ValueError"><paramref name="size"/> has a negative dimension.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.standard_cauchy.html
         ///     <br/>
@@ -24,40 +23,28 @@ namespace NumSharp
         ///     The Cauchy distribution has no defined mean or variance (infinite tails).
         ///     The median is 0, and the interquartile range is 2 (from -1 to 1).
         ///     <br/>
-        ///     Generated using inverse transform: X = tan(pi * (U - 0.5)) where U ~ Uniform(0, 1).
+        ///     Generated as NumPy's <c>legacy_standard_cauchy</c>: the ratio of two cached-polar normals
+        ///     (<c>N1 / N2</c>, numerator first) — not the inverse transform <c>tan(pi * (U - 0.5))</c> the former code used,
+        ///     which drew a different stream. Byte-identical to <c>np.random.RandomState(seed).standard_cauchy</c>; holds the
+        ///     bit generator's lock for the draws.
         /// </remarks>
         public NDArray standard_cauchy(Shape size)
         {
-            if (size.IsScalar || size.IsEmpty)
-                return NDArray.Scalar(StandardCauchySample());
+            if (IsScalarDraw(size))
+                lock (randomizer.@lock)
+                    return NDArray.Scalar(LegacyStandardCauchy());
 
+            var ret = LegacyOutput(NPTypeCode.Double, size);
             unsafe
             {
-                var shape = size;
-                var array = new NDArray<double>(shape);
-                var dst = array.Address;
-                var count = array.size;
-
-                // Inverse transform: X = tan(pi * (U - 0.5))
-                Func<double> nextDouble = randomizer.NextDouble;
-                for (long i = 0; i < count; i++)
-                {
-                    double u = nextDouble();
-                    dst[i] = Math.Tan(Math.PI * (u - 0.5));
-                }
-
-                return array;
+                var dst = (double*)ret.Address;
+                long n = ret.size;
+                lock (randomizer.@lock)
+                    for (long i = 0; i < n; i++)
+                        dst[i] = LegacyStandardCauchy();
             }
-        }
 
-        /// <summary>
-        ///     Generate a single sample from the standard Cauchy distribution.
-        /// </summary>
-        /// <returns>A random value from the standard Cauchy distribution.</returns>
-        private double StandardCauchySample()
-        {
-            double u = randomizer.NextDouble();
-            return Math.Tan(Math.PI * (u - 0.5));
+            return ret;
         }
     }
 }

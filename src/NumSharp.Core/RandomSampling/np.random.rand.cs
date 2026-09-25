@@ -18,7 +18,8 @@ namespace NumSharp
         public NDArray rand(params long[] shape)
         {
             if (shape.Length == 0)
-                return NDArray.Scalar(randomizer.NextDouble());
+                lock (randomizer.@lock)
+                    return NDArray.Scalar(randomizer.NextDouble());
             return rand(new Shape(shape));
         }
 
@@ -77,5 +78,29 @@ namespace NumSharp
         ///     Alias for random_sample.
         /// </remarks>
         public NDArray random(params long[] size) => random_sample(size);
+
+        /// <summary>
+        ///     Return random floats in the half-open interval [0.0, 1.0) — NumPy's legacy module-level alias
+        ///     <c>np.random.ranf</c> of <see cref="random_sample"/>.
+        /// </summary>
+        /// <param name="size">Output shape (none for a single value).</param>
+        /// <returns>Array of random floats of shape size (0-d when no size is given).</returns>
+        /// <exception cref="ValueError">A dimension is negative.</exception>
+        /// <remarks>
+        ///     NumPy defines <c>ranf</c> (and <see cref="sample"/>) on the <c>np.random</c> module only, not on
+        ///     <c>RandomState</c>; NumSharp's <c>np.random</c> IS a <see cref="NumPyRandom"/>, so the alias lives here and is
+        ///     also reachable from other instances. Same stream as <see cref="random_sample"/>.
+        /// </remarks>
+        public NDArray ranf(params long[] size) => random_sample(size);
+
+        /// <summary>
+        ///     Return random floats in the half-open interval [0.0, 1.0) — NumPy's legacy module-level alias
+        ///     <c>np.random.sample</c> of <see cref="random_sample"/>.
+        /// </summary>
+        /// <param name="size">Output shape (none for a single value).</param>
+        /// <returns>Array of random floats of shape size (0-d when no size is given).</returns>
+        /// <exception cref="ValueError">A dimension is negative.</exception>
+        /// <remarks>Module-level in NumPy (see <see cref="ranf"/>); same stream as <see cref="random_sample"/>.</remarks>
+        public NDArray sample(params long[] size) => random_sample(size);
     }
 }

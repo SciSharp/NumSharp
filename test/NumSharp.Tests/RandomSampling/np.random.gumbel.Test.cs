@@ -71,7 +71,7 @@ namespace NumSharp.Tests.RandomSampling
         [TestMethod]
         public void Gumbel_NegativeScale_ThrowsArgumentException()
         {
-            Assert.ThrowsException<ArgumentException>(() => np.random.gumbel(0, -1, 5));
+            Assert.ThrowsException<ValueError>(() => np.random.gumbel(0, -1, 5));
         }
 
         [TestMethod]
@@ -180,8 +180,8 @@ namespace NumSharp.Tests.RandomSampling
         public void Gumbel_NumPy_NegativeScaleRaises()
         {
             // From NumPy: assert_raises(ValueError, np.random.gumbel, scale=-0.)
-            Assert.ThrowsException<ArgumentException>(() => np.random.gumbel(0, -1));
-            Assert.ThrowsException<ArgumentException>(() => np.random.gumbel(0, -0.001));
+            Assert.ThrowsException<ValueError>(() => np.random.gumbel(0, -1));
+            Assert.ThrowsException<ValueError>(() => np.random.gumbel(0, -0.001));
         }
 
         /// <summary>

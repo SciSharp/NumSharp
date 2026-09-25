@@ -68,7 +68,7 @@ namespace NumSharp.Tests.RandomSampling
         [TestMethod]
         public void Rayleigh_NegativeScale_ThrowsArgumentException()
         {
-            Assert.ThrowsException<ArgumentException>(() => np.random.rayleigh(-1, 5L));
+            Assert.ThrowsException<ValueError>(() => np.random.rayleigh(-1, 5L));
         }
 
         [TestMethod]
@@ -170,8 +170,8 @@ namespace NumSharp.Tests.RandomSampling
         public void Rayleigh_NumPy_NegativeScaleRaises()
         {
             // From NumPy: assert_raises(ValueError, np.random.rayleigh, scale=-0.)
-            Assert.ThrowsException<ArgumentException>(() => np.random.rayleigh(-1));
-            Assert.ThrowsException<ArgumentException>(() => np.random.rayleigh(-0.001));
+            Assert.ThrowsException<ValueError>(() => np.random.rayleigh(-1));
+            Assert.ThrowsException<ValueError>(() => np.random.rayleigh(-0.001));
         }
 
         /// <summary>

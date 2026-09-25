@@ -655,21 +655,6 @@ namespace NumSharp.Tests.Fuzz
                      + "accumulation + f32 deep product contraction lose ULP vs truth where NumPy "
                      + "stays near-exact (bounded ≤256) [known bug]";
 
-            // (R1) np.random transform samplers within a few ULP of NumPy on the SAME CRT:
-            //      chisquare / wald / noncentral_f / dirichlet compose their draws with a
-            //      slightly different arithmetic ordering than NumPy's C (measured ≤5/≤24/≤3/≤3
-            //      ULP on the corpus; the underlying uniform/gauss STREAM is bit-identical — a
-            //      stream slip produces gross divergence and still fails, as the eight carved
-            //      samplers in gen_random_parity did). Per-dist caps: 32 for wald (its
-            //      inverse-Gaussian composition drifts the most), 8 for the rest.
-            if (c.Op == "rnd" && kind == DivergenceKind.Value && diffs.Count > 0
-                && c.Params != null && c.Params.TryGetValue("dist", out var rndDist)
-                && rndDist.GetString() is "chisquare" or "wald" or "noncentral_f" or "dirichlet"
-                && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc,
-                                                    rndDist.GetString() == "wald" ? 32 : 8)))
-                return "rnd transform ~ULP: chisquare/wald/noncentral_f/dirichlet arithmetic "
-                     + "ordering differs from NumPy's C composition (stream identical) [documented]";
-
             // --- Reductions (single-operand, but classified before the unary rules) ---
             if (ReduceOps.Contains(c.Op))
             {

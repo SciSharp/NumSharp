@@ -1,7 +1,3 @@
-using System;
-using NumSharp.Backends.Unmanaged;
-using NumSharp.Generic;
-
 namespace NumSharp
 {
     public partial class NumPyRandom
@@ -9,14 +5,19 @@ namespace NumSharp
         /// <summary>
         ///     Draw a single sample from a Zipf distribution.
         /// </summary>
+        /// <param name="a">Distribution parameter. Must be greater than 1.</param>
+        /// <returns>A 0-d int64 array holding the draw.</returns>
+        /// <exception cref="ValueError"><paramref name="a"/> is <c>&lt;= 1</c> or NaN (<c>a &lt;= 1 or a is NaN</c>).</exception>
         public NDArray zipf(double a) => zipf(a, Shape.Scalar);
 
         /// <summary>
         ///     Draw samples from a Zipf distribution.
         /// </summary>
         /// <param name="a">Distribution parameter. Must be greater than 1.</param>
-        /// <param name="size">Output shape.</param>
+        /// <param name="size">Output shape; <c>default</c> (NumPy's <c>None</c>) draws a single value.</param>
         /// <returns>Drawn samples from the parameterized Zipf distribution as int64.</returns>
+        /// <exception cref="ValueError"><paramref name="a"/> is <c>&lt;= 1</c> or NaN (<c>a &lt;= 1 or a is NaN</c>), or
+        ///     <paramref name="size"/> has a negative dimension.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.zipf.html
         ///     <br/>
@@ -29,70 +30,34 @@ namespace NumSharp
         ///     <br/>
         ///     where k >= 1 and zeta(a) is the Riemann zeta function.
         ///     <br/>
-        ///     Samples are positive integers.
+        ///     NumPy's <c>legacy_random_zipf</c>: rejection over <c>U = 1 - next_double</c> WITHOUT the modern sampler's
+        ///     <c>Umin</c> window (the former code used the modern one — the same values for most <c>a</c> but a different
+        ///     stream near <c>a = 1</c>). Byte-identical to <c>np.random.RandomState(seed).zipf</c>; int64 output (NumPy returns
+        ///     C <c>long</c>).
+        ///     <br/>
+        ///     One deliberate difference: for <c>a &gt;= 1025</c> (and <c>a = inf</c>) NumPy's legacy loop compares NaN forever
+        ///     and never returns; NumSharp returns 1 — the value the distribution degenerates to, and the modern sampler's
+        ///     answer — without drawing. Holds the bit generator's lock for the draws.
         /// </remarks>
         public NDArray zipf(double a, Shape size)
         {
-            if (a <= 1.0 || double.IsNaN(a))
-                throw new ArgumentException("a <= 1 or a is NaN", nameof(a));
+            RandomConstraints.Check(a, "a", ConstraintType.CONS_GT_1);
 
-            if (size.IsScalar || size.IsEmpty)
-                return NDArray.Scalar(SampleZipf(a));
+            if (IsScalarDraw(size))
+                lock (randomizer.@lock)
+                    return NDArray.Scalar(LegacyZipf(a));
 
-            var ret = new NDArray<long>(size);
-            ArraySlice<long> data = ret.Data<long>();
-
-            for (int i = 0; i < ret.size; i++)
+            var ret = LegacyOutput(NPTypeCode.Int64, size);
+            unsafe
             {
-                data[i] = SampleZipf(a);
+                var dst = (long*)ret.Address;
+                long n = ret.size;
+                lock (randomizer.@lock)
+                    for (long i = 0; i < n; i++)
+                        dst[i] = LegacyZipf(a);
             }
 
             return ret;
-        }
-
-        /// <summary>
-        ///     Sample from the Zipf distribution using the same rejection algorithm as NumPy.
-        /// </summary>
-        /// <remarks>
-        ///     Based on NumPy's random_zipf in distributions.c.
-        ///     Uses rejection sampling.
-        /// </remarks>
-        private long SampleZipf(double a)
-        {
-            // For very large a, probability of getting > 1 is essentially 0
-            // NumPy uses a >= 1025 threshold
-            if (a >= 1025.0)
-            {
-                return 1L;
-            }
-
-            double am1 = a - 1.0;
-            double b = Math.Pow(2.0, am1);
-
-            // Umin is the minimum U value that could produce a valid X
-            // Using long.MaxValue as RAND_INT_MAX equivalent
-            double Umin = Math.Pow((double)long.MaxValue, -am1);
-
-            while (true)
-            {
-                // U is sampled from (Umin, 1]. Note that Umin might be 0.
-                double U01 = randomizer.NextDouble();
-                double U = U01 * Umin + (1.0 - U01);
-                double V = randomizer.NextDouble();
-                double X = Math.Floor(Math.Pow(U, -1.0 / am1));
-
-                // Reject if X is too large or less than 1
-                if (X > (double)long.MaxValue || X < 1.0)
-                {
-                    continue;
-                }
-
-                double T = Math.Pow(1.0 + 1.0 / X, am1);
-                if (V * X * (T - 1.0) / (b - 1.0) <= T / b)
-                {
-                    return (long)X;
-                }
-            }
         }
     }
 }

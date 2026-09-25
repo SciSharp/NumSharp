@@ -1,6 +1,4 @@
 using System;
-using NumSharp.Backends.Unmanaged;
-using NumSharp.Generic;
 
 namespace NumSharp
 {
@@ -9,9 +7,11 @@ namespace NumSharp
         /// <summary>
         ///     Draws samples in [0, 1] from a power distribution with positive exponent a - 1.
         /// </summary>
-        /// <param name="a">Shape parameter of the distribution. Must be positive (&gt; 0).</param>
-        /// <param name="size">Output shape.</param>
-        /// <returns>Drawn samples from the parameterized power distribution, in range [0, 1].</returns>
+        /// <param name="a">Shape parameter of the distribution. Must be positive (&gt; 0; NaN is accepted and samples NaN, as in NumPy).</param>
+        /// <param name="size">Output shape; <c>default</c> (NumPy's <c>None</c>) draws a single value.</param>
+        /// <returns>Drawn samples from the parameterized power distribution, in range [0, 1] (float64).</returns>
+        /// <exception cref="ValueError"><paramref name="a"/> is <c>&lt;= 0</c> (<c>a &lt;= 0</c>), or <paramref name="size"/> has a
+        ///     negative dimension.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.power.html
         ///     <br/>
@@ -20,21 +20,33 @@ namespace NumSharp
         ///     <br/>
         ///     The power function distribution is the inverse of the Pareto distribution.
         ///     It may also be seen as a special case of the Beta distribution.
+        ///     <br/>
+        ///     NumPy's <c>legacy_power</c>: <c>(1 - exp(-E))^(1/a)</c> with <c>E = -log(1 - U)</c> — algebraically
+        ///     <c>U^(1/a)</c>, but rounded through the exponential round trip, which the former <c>U^(1/a)</c> did not
+        ///     reproduce. One draw per value (bulk-filled, transformed in place); byte-identical to
+        ///     <c>np.random.RandomState(seed).power</c>. Holds the bit generator's lock for the draws.
         /// </remarks>
         public NDArray power(double a, Shape size)
         {
-            if (a <= 0)
-                throw new ArgumentException("a <= 0", nameof(a));
+            RandomConstraints.Check(a, "a", ConstraintType.CONS_POSITIVE);
 
-            if (size.IsScalar || size.IsEmpty)
-                return NDArray.Scalar(SamplePower(a));
+            if (IsScalarDraw(size))
+                lock (randomizer.@lock)
+                    return NDArray.Scalar(LegacyPower(a));
 
-            var ret = new NDArray<double>(size);
-            ArraySlice<double> data = ret.Data<double>();
-
-            for (int i = 0; i < ret.size; i++)
+            var ret = LegacyOutput(NPTypeCode.Double, size);
+            unsafe
             {
-                data[i] = SamplePower(a);
+                var dst = (double*)ret.Address;
+                long n = ret.size;
+                lock (randomizer.@lock)
+                    randomizer.FillDouble(dst, n);
+                // The draws are all taken; legacy_power's transform of each, in place.
+                for (long i = 0; i < n; i++)
+                {
+                    double e = -Math.Log(1.0 - dst[i]);
+                    dst[i] = Math.Pow(1 - Math.Exp(-e), 1.0 / a);
+                }
             }
 
             return ret;
@@ -46,6 +58,7 @@ namespace NumSharp
         /// <param name="a">Shape parameter of the distribution. Must be positive (&gt; 0).</param>
         /// <param name="size">Output shape as int array.</param>
         /// <returns>Drawn samples from the parameterized power distribution, in range [0, 1].</returns>
+        /// <exception cref="ValueError"><paramref name="a"/> is <c>&lt;= 0</c>, or a size dimension is negative.</exception>
         public NDArray power(double a, int[] size)
             => power(a, new Shape(size));
 
@@ -55,6 +68,7 @@ namespace NumSharp
         /// <param name="a">Shape parameter of the distribution. Must be positive (&gt; 0).</param>
         /// <param name="size">Output shape.</param>
         /// <returns>Drawn samples from the parameterized power distribution, in range [0, 1].</returns>
+        /// <exception cref="ValueError"><paramref name="a"/> is <c>&lt;= 0</c>, or a size dimension is negative.</exception>
         public NDArray power(double a, long[] size)
             => power(a, new Shape(size));
 
@@ -64,32 +78,16 @@ namespace NumSharp
         /// <param name="a">Shape parameter of the distribution. Must be positive (&gt; 0).</param>
         /// <param name="size">Output shape as single int.</param>
         /// <returns>Drawn samples from the parameterized power distribution, in range [0, 1].</returns>
+        /// <exception cref="ValueError"><paramref name="a"/> is <c>&lt;= 0</c>, or <paramref name="size"/> is negative.</exception>
         public NDArray power(double a, int size)
             => power(a, new int[] { size });
 
         /// <summary>
-        ///     Draw a single sample from a power distribution.
+        ///     Draws a single sample in [0, 1] from a power distribution with positive exponent a - 1.
         /// </summary>
         /// <param name="a">Shape parameter of the distribution. Must be positive (&gt; 0).</param>
-        /// <returns>A single sample from the power distribution as 0-d array.</returns>
+        /// <returns>A 0-d float64 array holding the draw.</returns>
+        /// <exception cref="ValueError"><paramref name="a"/> is <c>&lt;= 0</c>.</exception>
         public NDArray power(double a) => power(a, Shape.Scalar);
-
-        /// <summary>
-        ///     Sample from the power distribution using inverse transform method.
-        /// </summary>
-        /// <remarks>
-        ///     NumPy uses: pow(-expm1(-standard_exponential()), 1/a)
-        ///     which simplifies to: pow(1 - exp(-E), 1/a) where E ~ Exponential(1)
-        ///     Since E = -ln(U), this becomes: pow(1 - U, 1/a) = pow(U, 1/a)
-        ///     (because 1-U is also uniform when U is uniform)
-        ///
-        ///     We use the simpler equivalent: U^(1/a)
-        /// </remarks>
-        private double SamplePower(double a)
-        {
-            double U = randomizer.NextDouble();
-            // U^(1/a) - inverse CDF of power distribution
-            return Math.Pow(U, 1.0 / a);
-        }
     }
 }

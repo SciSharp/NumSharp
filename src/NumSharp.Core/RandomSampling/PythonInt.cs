@@ -17,7 +17,7 @@ namespace NumSharp
     ///     Python's grammar (surrounding whitespace, a sign, single underscores between digits, a base prefix that must
     ///     agree with the base) — never with .NET's culture-sensitive number parsing.
     /// </remarks>
-    internal static class PyInt
+    internal static class PythonInt
     {
         /// <summary>
         ///     Python's <c>int(v)</c> of a scalar: integers (any C# width, <see cref="BigInteger"/>, bool, char) as-is,

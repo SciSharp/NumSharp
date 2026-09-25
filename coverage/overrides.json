@@ -53,14 +53,6 @@
       "target": "NumSharp.np.vstack",
       "notes": "NumPy documents row_stack as an alias of vstack."
     },
-    "numpy.random.ranf": {
-      "target": "NumSharp.NumPyRandom.random_sample",
-      "notes": "NumPy documents ranf as an alias of random_sample."
-    },
-    "numpy.random.sample": {
-      "target": "NumSharp.NumPyRandom.random_sample",
-      "notes": "NumPy documents sample as an alias of random_sample."
-    },
     "numpy.shape": {
       "target": "NumSharp.NDArray.Shape",
       "notes": "NumSharp exposes shape as an NDArray Shape property rather than the top-level NumPy tuple-returning helper."

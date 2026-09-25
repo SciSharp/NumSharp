@@ -1,7 +1,3 @@
-using System;
-using NumSharp.Backends.Unmanaged;
-using NumSharp.Generic;
-
 namespace NumSharp
 {
     public partial class NumPyRandom
@@ -9,16 +5,23 @@ namespace NumSharp
         /// <summary>
         ///     Draw a single sample from the noncentral F distribution.
         /// </summary>
+        /// <param name="dfnum">Numerator degrees of freedom, must be &gt; 0.</param>
+        /// <param name="dfden">Denominator degrees of freedom, must be &gt; 0.</param>
+        /// <param name="nonc">Non-centrality parameter, must be &gt;= 0.</param>
+        /// <returns>A 0-d float64 array holding the draw.</returns>
+        /// <exception cref="ValueError">A degrees-of-freedom parameter is <c>&lt;= 0</c>, or <paramref name="nonc"/> is negative.</exception>
         public NDArray noncentral_f(double dfnum, double dfden, double nonc) => noncentral_f(dfnum, dfden, nonc, Shape.Scalar);
 
         /// <summary>
         ///     Draw samples from the noncentral F distribution.
         /// </summary>
-        /// <param name="dfnum">Numerator degrees of freedom, must be > 0.</param>
-        /// <param name="dfden">Denominator degrees of freedom, must be > 0.</param>
-        /// <param name="nonc">Non-centrality parameter, must be >= 0.</param>
-        /// <param name="size">Output shape.</param>
-        /// <returns>Drawn samples from the parameterized noncentral F distribution.</returns>
+        /// <param name="dfnum">Numerator degrees of freedom, must be &gt; 0 (NaN is accepted and samples NaN, as in NumPy).</param>
+        /// <param name="dfden">Denominator degrees of freedom, must be &gt; 0 (NaN is accepted and samples NaN).</param>
+        /// <param name="nonc">Non-centrality parameter, must be &gt;= 0 (NaN is accepted and samples NaN).</param>
+        /// <param name="size">Output shape; <c>default</c> (NumPy's <c>None</c>) draws a single value.</param>
+        /// <returns>Drawn samples from the parameterized noncentral F distribution (float64).</returns>
+        /// <exception cref="ValueError">In NumPy's order: <c>dfnum &lt;= 0</c>, <c>dfden &lt;= 0</c>, <c>nonc &lt; 0</c>
+        ///     (<c>-0.0</c> included); or <paramref name="size"/> has a negative dimension.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.noncentral_f.html
         ///     <br/>
@@ -26,48 +29,31 @@ namespace NumSharp
         ///     becomes important. When the null hypothesis is true, the F statistic follows
         ///     a central F distribution. When the null hypothesis is not true, it follows
         ///     a non-central F distribution.
+        ///     <br/>
+        ///     NumPy's <c>legacy_noncentral_f</c>: <c>(ncchi2(dfnum, nonc) * dfden) / (chi2(dfden) * dfnum)</c> — byte-identical
+        ///     to <c>np.random.RandomState(seed).noncentral_f</c>. Holds the bit generator's lock for the draws.
         /// </remarks>
         public NDArray noncentral_f(double dfnum, double dfden, double nonc, Shape size)
         {
-            // Parameter validation (matches NumPy error messages)
-            if (dfnum <= 0)
-                throw new ArgumentException("dfnum <= 0", nameof(dfnum));
-            if (dfden <= 0)
-                throw new ArgumentException("dfden <= 0", nameof(dfden));
-            if (nonc < 0)
-                throw new ArgumentException("nonc < 0", nameof(nonc));
+            RandomConstraints.Check(dfnum, "dfnum", ConstraintType.CONS_POSITIVE);
+            RandomConstraints.Check(dfden, "dfden", ConstraintType.CONS_POSITIVE);
+            RandomConstraints.Check(nonc, "nonc", ConstraintType.CONS_NON_NEGATIVE);
 
-            if (size.IsScalar || size.IsEmpty)
-                return NDArray.Scalar(SampleNoncentralF(dfnum, dfden, nonc));
+            if (IsScalarDraw(size))
+                lock (randomizer.@lock)
+                    return NDArray.Scalar(LegacyNoncentralF(dfnum, dfden, nonc));
 
-            var shape = size;
-            var result = new NDArray(NPTypeCode.Double, shape, false);
-
+            var ret = LegacyOutput(NPTypeCode.Double, size);
             unsafe
             {
-                var addr = (double*)result.Address;
-                for (long i = 0; i < result.size; ++i)
-                    addr[i] = SampleNoncentralF(dfnum, dfden, nonc);
+                var dst = (double*)ret.Address;
+                long n = ret.size;
+                lock (randomizer.@lock)
+                    for (long i = 0; i < n; i++)
+                        dst[i] = LegacyNoncentralF(dfnum, dfden, nonc);
             }
 
-            return result;
+            return ret;
         }
-
-        /// <summary>
-        ///     Sample a single value from the noncentral F distribution.
-        /// </summary>
-        /// <remarks>
-        ///     Algorithm from NumPy's random_noncentral_f in distributions.c:
-        ///     t = noncentral_chisquare(dfnum, nonc) * dfden
-        ///     return t / (chisquare(dfden) * dfnum)
-        /// </remarks>
-        private double SampleNoncentralF(double dfnum, double dfden, double nonc)
-        {
-            // Use helper methods from np.random.noncentral_chisquare.cs
-            double t = SampleNoncentralChisquare(dfnum, nonc) * dfden;
-            return t / (SampleChisquare(dfden) * dfnum);
-        }
-
-        // Note: SampleChisquare() and SampleNoncentralChisquare() are defined in np.random.noncentral_chisquare.cs
     }
 }

@@ -1,7 +1,3 @@
-using System;
-using NumSharp.Backends.Unmanaged;
-using NumSharp.Generic;
-
 namespace NumSharp
 {
     public partial class NumPyRandom
@@ -9,15 +5,21 @@ namespace NumSharp
         /// <summary>
         ///     Draw a single sample from a Wald distribution.
         /// </summary>
+        /// <param name="mean">Distribution mean, must be &gt; 0.</param>
+        /// <param name="scale">Scale parameter, must be &gt; 0.</param>
+        /// <returns>A 0-d float64 array holding the draw.</returns>
+        /// <exception cref="ValueError"><paramref name="mean"/> or <paramref name="scale"/> is <c>&lt;= 0</c>.</exception>
         public NDArray wald(double mean, double scale) => wald(mean, scale, Shape.Scalar);
 
         /// <summary>
         ///     Draw samples from a Wald, or inverse Gaussian, distribution.
         /// </summary>
-        /// <param name="mean">Distribution mean, must be > 0.</param>
-        /// <param name="scale">Scale parameter, must be > 0.</param>
-        /// <param name="size">Output shape.</param>
-        /// <returns>Drawn samples from the parameterized Wald distribution.</returns>
+        /// <param name="mean">Distribution mean, must be &gt; 0 (NaN is accepted and samples NaN, as in NumPy).</param>
+        /// <param name="scale">Scale parameter, must be &gt; 0 (NaN is accepted and samples NaN).</param>
+        /// <param name="size">Output shape; <c>default</c> (NumPy's <c>None</c>) draws a single value.</param>
+        /// <returns>Drawn samples from the parameterized Wald distribution (float64).</returns>
+        /// <exception cref="ValueError"><paramref name="mean"/> (<c>mean &lt;= 0</c>, checked first) or <paramref name="scale"/>
+        ///     (<c>scale &lt;= 0</c>) is not positive, or <paramref name="size"/> has a negative dimension.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.wald.html
         ///     <br/>
@@ -27,58 +29,32 @@ namespace NumSharp
         ///     <br/>
         ///     The probability density function is:
         ///     P(x;mean,scale) = sqrt(scale/(2*pi*x^3)) * exp(-scale*(x-mean)^2 / (2*mean^2*x))
+        ///     <br/>
+        ///     NumPy's <c>legacy_wald</c>: <c>X = mean + mu_2l * (Y - sqrt(4*scale*Y + Y*Y))</c> with <c>Y = mean * N^2</c> —
+        ///     the LEGACY spelling (the former code used the Generator's cancellation-free rewrite, a few ULP off NumPy's
+        ///     RandomState stream). Byte-identical to <c>np.random.RandomState(seed).wald</c>; holds the bit generator's lock
+        ///     for the draws.
         /// </remarks>
         public NDArray wald(double mean, double scale, Shape size)
         {
-            // Parameter validation (matches NumPy error messages)
-            if (mean <= 0)
-                throw new ArgumentException("mean <= 0", nameof(mean));
-            if (scale <= 0)
-                throw new ArgumentException("scale <= 0", nameof(scale));
+            RandomConstraints.Check(mean, "mean", ConstraintType.CONS_POSITIVE);
+            RandomConstraints.Check(scale, "scale", ConstraintType.CONS_POSITIVE);
 
-            if (size.IsScalar || size.IsEmpty)
-                return NDArray.Scalar(SampleWald(mean, scale));
+            if (IsScalarDraw(size))
+                lock (randomizer.@lock)
+                    return NDArray.Scalar(LegacyWald(mean, scale));
 
-            var result = new NDArray<double>(size);
-            ArraySlice<double> resultArray = result.Data<double>();
-
-            for (int i = 0; i < result.size; ++i)
-                resultArray[i] = SampleWald(mean, scale);
-
-            result.ReplaceData(resultArray);
-            return result;
-        }
-
-        /// <summary>
-        ///     Sample a single value from the Wald (inverse Gaussian) distribution.
-        /// </summary>
-        /// <remarks>
-        ///     Algorithm from NumPy's random_wald in distributions.c:
-        ///     Y = standard_normal()^2 * mean
-        ///     d = 1 + sqrt(1 + 4 * scale / Y)
-        ///     X = mean * (1 - 2 / d)
-        ///     if uniform() <= mean / (mean + X):
-        ///         return X
-        ///     else:
-        ///         return mean^2 / X
-        /// </remarks>
-        private double SampleWald(double mean, double scale)
-        {
-            // NumPy's exact implementation from distributions.c
-            double Y = NextGaussian();
-            Y = mean * Y * Y;
-            double d = 1.0 + Math.Sqrt(1.0 + 4.0 * scale / Y);
-            double X = mean * (1.0 - 2.0 / d);
-            double U = randomizer.NextDouble();
-
-            if (U <= mean / (mean + X))
+            var ret = LegacyOutput(NPTypeCode.Double, size);
+            unsafe
             {
-                return X;
+                var dst = (double*)ret.Address;
+                long n = ret.size;
+                lock (randomizer.@lock)
+                    for (long i = 0; i < n; i++)
+                        dst[i] = LegacyWald(mean, scale);
             }
-            else
-            {
-                return mean * mean / X;
-            }
+
+            return ret;
         }
     }
 }

@@ -50,7 +50,7 @@ namespace NumSharp.Tests.RandomSampling
         [TestMethod]
         public void Weibull_NegativeA_ThrowsArgumentException()
         {
-            Assert.ThrowsException<ArgumentException>(() => np.random.weibull(-1));
+            Assert.ThrowsException<ValueError>(() => np.random.weibull(-1));
         }
 
         [TestMethod]

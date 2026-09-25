@@ -425,7 +425,7 @@ namespace NumSharp
                     return CheckArrayForm(words, name, len, shape);
                 }
 
-                BigInteger v = PyInt.From(nd is not null ? nd.GetAtIndex(0) : value);
+                BigInteger v = PythonInt.From(nd is not null ? nd.GetAtIndex(0) : value);
                 if (v.Sign < 0 || v >= BigInteger.One << bits)
                     throw new ValueError($"{name} must be positive and less than 2**{bits}.");
                 var result = new ulong[len];
@@ -476,21 +476,21 @@ namespace NumSharp
                 var doubles = new double[list.Count];
                 for (int i = 0; i < doubles.Length; i++)
                 {
-                    // Integers round through PyInt.ToDouble (Python's correctly rounded float(int) — .NET's
+                    // Integers round through PythonInt.ToDouble (Python's correctly rounded float(int) — .NET's
                     // BigInteger/ulong conversions truncate or double-round); Half is not IConvertible.
                     doubles[i] = list[i] switch
                     {
                         bool b => b ? 1.0 : 0.0,
                         Half h => (double)h,
                         double or float or decimal => Convert.ToDouble(list[i], System.Globalization.CultureInfo.InvariantCulture),
-                        _ => PyInt.ToDouble(PyInt.From(list[i])),
+                        _ => PythonInt.ToDouble(PythonInt.From(list[i])),
                     };
                 }
                 return doubles;
             }
             var ints = new BigInteger[list.Count];
             for (int i = 0; i < ints.Length; i++)
-                ints[i] = PyInt.From(list[i]);
+                ints[i] = PythonInt.From(list[i]);
             return ints;
         }
 
@@ -560,7 +560,7 @@ namespace NumSharp
             // conversion, the same astype the NDArray forms take.
             var doubles = new double[big.Length];
             for (int i = 0; i < big.Length; i++)
-                doubles[i] = PyInt.ToDouble(big[i]);
+                doubles[i] = PythonInt.ToDouble(big[i]);
             using NDArray d = np.array(doubles);
             using NDArray u = d.astype(DType.UInt64);
             for (int i = 0; i < big.Length; i++)
