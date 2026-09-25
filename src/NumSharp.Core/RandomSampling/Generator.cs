@@ -86,10 +86,7 @@ namespace NumSharp
             var ret = new NDArray(typeof(double), shape, false);
             if (shape.size == 0)
                 return ret;
-            var p = (double*)ret.Address;
-            long n = shape.size;
-            for (long i = 0; i < n; i++)
-                p[i] = bg.NextDouble();
+            bg.FillDouble((double*)ret.Address, shape.size);
             return ret;
         }
 
@@ -102,10 +99,7 @@ namespace NumSharp
             var ret = new NDArray(typeof(float), shape, false);
             if (shape.size == 0)
                 return ret;
-            var p = (float*)ret.Address;
-            long n = shape.size;
-            for (long i = 0; i < n; i++)
-                p[i] = bg.NextFloat();
+            bg.FillFloat((float*)ret.Address, shape.size);
             return ret;
         }
 
@@ -177,15 +171,9 @@ namespace NumSharp
             // NumPy fills PyArray_DATA(out) sequentially, i.e. in MEMORY order — for an F-contiguous out
             // that is column-major, which is why the base-plus-offset pointer (not a logical walk) is used.
             if (tc == NPTypeCode.Single)
-            {
-                var p = (float*)(@out.Storage.Address + @out.Shape.offset * sizeof(float));
-                for (long i = 0; i < n; i++) p[i] = _bitGenerator.NextFloat();
-            }
+                _bitGenerator.FillFloat((float*)(@out.Storage.Address + @out.Shape.offset * sizeof(float)), n);
             else
-            {
-                var p = (double*)(@out.Storage.Address + @out.Shape.offset * sizeof(double));
-                for (long i = 0; i < n; i++) p[i] = _bitGenerator.NextDouble();
-            }
+                _bitGenerator.FillDouble((double*)(@out.Storage.Address + @out.Shape.offset * sizeof(double)), n);
         }
 
         /// <summary>

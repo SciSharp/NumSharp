@@ -15,8 +15,12 @@ namespace NumSharp
     /// </remarks>
     public sealed class PCG64DXSM : BitGenerator
     {
-        private UInt128 _state;
-        private UInt128 _inc;
+        // The 128-bit state and increment as 64-bit limbs: the hot loops do their mod-2**128 arithmetic on ulongs
+        // (Pcg128.MulAdd = Math.BigMul + two 64-bit products) because the JIT does not reliably inline UInt128's
+        // operators into a loop body — measured: a four-way fill written over UInt128 ran 2.3x SLOWER than the plain
+        // loop, every operator left as a call. UInt128 is still the currency of the state API and of advance().
+        private ulong _stateHi, _stateLo;
+        private ulong _incHi, _incLo;
         private int _hasUint32;
         private uint _uinteger;
 
@@ -58,7 +62,25 @@ namespace NumSharp
         public PCG64DXSM(ISeedSequence seedSeq) : base(seedSeq ?? throw new ArgumentNullException(nameof(seedSeq)))
         {
             ulong[] val = SeedWords64(seedSeq, 4);
-            Pcg128.Srandom(((UInt128)val[0] << 64) | val[1], ((UInt128)val[2] << 64) | val[3], out _state, out _inc);
+            Pcg128.Srandom(((UInt128)val[0] << 64) | val[1], ((UInt128)val[2] << 64) | val[3], out UInt128 state, out UInt128 inc);
+            SetState128(state, inc);
+        }
+
+        /// <summary>The current state as a <see cref="UInt128"/>.</summary>
+        private UInt128 State128 => new UInt128(_stateHi, _stateLo);
+
+        /// <summary>The increment as a <see cref="UInt128"/>.</summary>
+        private UInt128 Inc128 => new UInt128(_incHi, _incLo);
+
+        /// <summary>Stores a 128-bit state and increment into the limb fields.</summary>
+        /// <param name="state">The state.</param>
+        /// <param name="inc">The increment.</param>
+        private void SetState128(UInt128 state, UInt128 inc)
+        {
+            _stateHi = (ulong)(state >> 64);
+            _stateLo = (ulong)state;
+            _incHi = (ulong)(inc >> 64);
+            _incLo = (ulong)inc;
         }
 
         /// <inheritdoc/>
@@ -71,10 +93,57 @@ namespace NumSharp
         /// <remarks>NumPy's <c>pcg_cm_random_r</c>: DXSM output of the current state, then the cheap-multiplier step.</remarks>
         internal override ulong NextUInt64()
         {
-            ulong ret = Pcg128.OutputDxsm(_state);
-            _state = _state * (UInt128)Pcg128.CheapMultiplier + _inc;
+            ulong ret = Pcg128.Dxsm(_stateHi, _stateLo);
+            Pcg128.StepCheap(_stateHi, _stateLo, _incHi, _incLo, out _stateHi, out _stateLo);
             return ret;
         }
+
+        /// <inheritdoc/>
+        /// <remarks>
+        ///     The state and increment live in locals for the whole run (see <see cref="BitGenerator.FillUInt64"/>), two
+        ///     words per step: the next state comes from the cheap step and the one after it straight from the current
+        ///     state through the precomputed two-step multiplier (<see cref="Pcg128.CheapMul2Hi"/>), so the multiply chain
+        ///     is half as long. Two-way is the sweet spot here — the output function costs two multiplies of its own, and
+        ///     each further jump needs a FULL 128-bit multiplier, so wider unrolls are multiplier-throughput bound.
+        ///     Arithmetic mod 2**128 is exact: the words are the sequential ones.
+        /// </remarks>
+        internal override unsafe void FillUInt64(ulong* dst, long n)
+        {
+            ulong sh = _stateHi, sl = _stateLo, ih = _incHi, il = _incLo;
+            long i = 0;
+            if (n >= 4)
+            {
+                // The two-step additive term inc * (1 + M) depends on this generator's increment.
+                Pcg128.Mul(ih, il, Pcg128.CheapIncFactor2Hi, Pcg128.CheapIncFactor2Lo, out ulong c2h, out ulong c2l);
+                ulong m2h = Pcg128.CheapMul2Hi, m2l = Pcg128.CheapMul2Lo;
+                for (; i + 2 <= n; i += 2)
+                {
+                    Pcg128.StepCheap(sh, sl, ih, il, out ulong s1h, out ulong s1l);
+                    dst[i] = Pcg128.Dxsm(sh, sl);
+                    dst[i + 1] = Pcg128.Dxsm(s1h, s1l);
+                    Pcg128.MulAdd(sh, sl, m2h, m2l, c2h, c2l, out sh, out sl);
+                }
+            }
+            for (; i < n; i++)
+            {
+                dst[i] = Pcg128.Dxsm(sh, sl);
+                Pcg128.StepCheap(sh, sl, ih, il, out sh, out sl);
+            }
+            _stateHi = sh;
+            _stateLo = sl;
+        }
+
+        /// <inheritdoc/>
+        internal override unsafe void FillUInt32(uint* dst, long n) => FillUInt32From64(dst, n, ref _hasUint32, ref _uinteger);
+
+        /// <inheritdoc/>
+        internal override unsafe void FillDouble(double* dst, long n) => FillDoubleFrom64(dst, n);
+
+        /// <inheritdoc/>
+        internal override unsafe void FillFloat(float* dst, long n) => FillFloatFrom64(dst, n, ref _hasUint32, ref _uinteger);
+
+        /// <inheritdoc/>
+        internal override unsafe void FillRaw(ulong* dst, long n) => FillUInt64(dst, n);
 
         /// <inheritdoc/>
         internal override uint NextUInt32()
@@ -103,7 +172,7 @@ namespace NumSharp
             UInt128 d = Pcg128.WrapDelta(delta);
             lock (@lock)
             {
-                _state = Pcg128.AdvanceLcg(_state, d, (UInt128)Pcg128.CheapMultiplier, _inc);
+                SetState128(Pcg128.AdvanceLcg(State128, d, (UInt128)Pcg128.CheapMultiplier, Inc128), Inc128);
                 _hasUint32 = 0;
                 _uinteger = 0;
             }
@@ -176,15 +245,14 @@ namespace NumSharp
         }
 
         /// <inheritdoc/>
-        private protected override BitGeneratorState GetStateCore() => new State(_state, _inc, _hasUint32, _uinteger);
+        private protected override BitGeneratorState GetStateCore() => new State(State128, Inc128, _hasUint32, _uinteger);
 
         /// <inheritdoc/>
         private protected override void SetStateCore(BitGeneratorState value)
         {
             if (value is not State s)
                 throw new ValueError("state must be for a PCG64DXSM RNG");
-            _state = s.state;
-            _inc = s.inc;
+            SetState128(s.state, s.inc);
             _hasUint32 = s.has_uint32;
             _uinteger = s.uinteger;
         }

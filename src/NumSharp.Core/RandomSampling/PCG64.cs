@@ -17,8 +17,12 @@ namespace NumSharp
     /// </remarks>
     public sealed class PCG64 : BitGenerator
     {
-        private UInt128 _state;
-        private UInt128 _inc;
+        // The 128-bit state and increment as 64-bit limbs: the hot loops do their mod-2**128 arithmetic on ulongs
+        // (Pcg128.MulAdd = Math.BigMul + two 64-bit products) because the JIT does not reliably inline UInt128's
+        // operators into a loop body — measured: a four-way fill written over UInt128 ran 2.3x SLOWER than the plain
+        // loop, every operator left as a call. UInt128 is still the currency of the state API and of advance().
+        private ulong _stateHi, _stateLo;
+        private ulong _incHi, _incLo;
 
         // 32-bit output buffering (NumPy pcg64_next32: caches the high half of a 64-bit draw). Kept as the
         // int NumPy stores so a state round-trips whatever value was assigned.
@@ -63,7 +67,25 @@ namespace NumSharp
         public PCG64(ISeedSequence seedSeq) : base(seedSeq ?? throw new ArgumentNullException(nameof(seedSeq)))
         {
             ulong[] val = SeedWords64(seedSeq, 4);
-            Pcg128.Srandom(((UInt128)val[0] << 64) | val[1], ((UInt128)val[2] << 64) | val[3], out _state, out _inc);
+            Pcg128.Srandom(((UInt128)val[0] << 64) | val[1], ((UInt128)val[2] << 64) | val[3], out UInt128 state, out UInt128 inc);
+            SetState128(state, inc);
+        }
+
+        /// <summary>The current state as a <see cref="UInt128"/>.</summary>
+        private UInt128 State128 => new UInt128(_stateHi, _stateLo);
+
+        /// <summary>The increment as a <see cref="UInt128"/>.</summary>
+        private UInt128 Inc128 => new UInt128(_incHi, _incLo);
+
+        /// <summary>Stores a 128-bit state and increment into the limb fields.</summary>
+        /// <param name="state">The state.</param>
+        /// <param name="inc">The increment.</param>
+        private void SetState128(UInt128 state, UInt128 inc)
+        {
+            _stateHi = (ulong)(state >> 64);
+            _stateLo = (ulong)state;
+            _incHi = (ulong)(inc >> 64);
+            _incLo = (ulong)inc;
         }
 
         /// <inheritdoc/>
@@ -76,8 +98,8 @@ namespace NumSharp
         internal override ulong NextUInt64()
         {
             // pcg_setseq_128_xsl_rr_64_random_r: step, then output the new state.
-            _state = _state * Pcg128.DefaultMultiplier + _inc;
-            return Pcg128.OutputXslRr(_state);
+            Pcg128.MulAdd(_stateHi, _stateLo, Pcg128.DefaultMulHi, Pcg128.DefaultMulLo, _incHi, _incLo, out _stateHi, out _stateLo);
+            return Pcg128.XslRr(_stateHi, _stateLo);
         }
 
         /// <inheritdoc/>
@@ -94,6 +116,58 @@ namespace NumSharp
             _uinteger = (uint)(next >> 32);
             return (uint)next;
         }
+
+        /// <inheritdoc/>
+        /// <remarks>
+        ///     The state and increment live in locals for the whole run (see <see cref="BitGenerator.FillUInt64"/>), and
+        ///     four states are computed per step straight from the current one with the precomputed 1..4-step multipliers
+        ///     (<see cref="Pcg128.DefaultMultiplier2"/> …): one step of the LCG is a 128-bit multiply-add whose latency
+        ///     chains every draw to the previous one, while the four jumps are independent, so the multiplier throughput —
+        ///     not the chain — bounds the loop (~2x). Arithmetic mod 2**128 is exact, so the words are the sequential ones.
+        /// </remarks>
+        internal override unsafe void FillUInt64(ulong* dst, long n)
+        {
+            ulong sh = _stateHi, sl = _stateLo, ih = _incHi, il = _incLo;
+            long i = 0;
+            if (n >= 8)
+            {
+                // The additive terms of the 2/3/4-step jumps depend on this generator's increment: c_k = inc * factor_k.
+                Pcg128.Mul(ih, il, Pcg128.IncFactor2Hi, Pcg128.IncFactor2Lo, out ulong c2h, out ulong c2l);
+                Pcg128.Mul(ih, il, Pcg128.IncFactor3Hi, Pcg128.IncFactor3Lo, out ulong c3h, out ulong c3l);
+                Pcg128.Mul(ih, il, Pcg128.IncFactor4Hi, Pcg128.IncFactor4Lo, out ulong c4h, out ulong c4l);
+                ulong m2h = Pcg128.Mul2Hi, m2l = Pcg128.Mul2Lo, m3h = Pcg128.Mul3Hi, m3l = Pcg128.Mul3Lo, m4h = Pcg128.Mul4Hi, m4l = Pcg128.Mul4Lo;
+                for (; i + 4 <= n; i += 4)
+                {
+                    Pcg128.MulAdd(sh, sl, Pcg128.DefaultMulHi, Pcg128.DefaultMulLo, ih, il, out ulong h1, out ulong l1);
+                    Pcg128.MulAdd(sh, sl, m2h, m2l, c2h, c2l, out ulong h2, out ulong l2);
+                    Pcg128.MulAdd(sh, sl, m3h, m3l, c3h, c3l, out ulong h3, out ulong l3);
+                    Pcg128.MulAdd(sh, sl, m4h, m4l, c4h, c4l, out sh, out sl);
+                    dst[i] = Pcg128.XslRr(h1, l1);
+                    dst[i + 1] = Pcg128.XslRr(h2, l2);
+                    dst[i + 2] = Pcg128.XslRr(h3, l3);
+                    dst[i + 3] = Pcg128.XslRr(sh, sl);
+                }
+            }
+            for (; i < n; i++)
+            {
+                Pcg128.MulAdd(sh, sl, Pcg128.DefaultMulHi, Pcg128.DefaultMulLo, ih, il, out sh, out sl);
+                dst[i] = Pcg128.XslRr(sh, sl);
+            }
+            _stateHi = sh;
+            _stateLo = sl;
+        }
+
+        /// <inheritdoc/>
+        internal override unsafe void FillUInt32(uint* dst, long n) => FillUInt32From64(dst, n, ref _hasUint32, ref _uinteger);
+
+        /// <inheritdoc/>
+        internal override unsafe void FillDouble(double* dst, long n) => FillDoubleFrom64(dst, n);
+
+        /// <inheritdoc/>
+        internal override unsafe void FillFloat(float* dst, long n) => FillFloatFrom64(dst, n, ref _hasUint32, ref _uinteger);
+
+        /// <inheritdoc/>
+        internal override unsafe void FillRaw(ulong* dst, long n) => FillUInt64(dst, n);
 
         // ---- advance / jumped (numpy pcg64_advance, PCG64.jumped) ----
 
@@ -114,7 +188,7 @@ namespace NumSharp
             UInt128 d = Pcg128.WrapDelta(delta);
             lock (@lock)
             {
-                _state = Pcg128.AdvanceLcg(_state, d, Pcg128.DefaultMultiplier, _inc);
+                SetState128(Pcg128.AdvanceLcg(State128, d, Pcg128.DefaultMultiplier, Inc128), Inc128);
                 _hasUint32 = 0;
                 _uinteger = 0;
             }
@@ -196,15 +270,14 @@ namespace NumSharp
         }
 
         /// <inheritdoc/>
-        private protected override BitGeneratorState GetStateCore() => new State(_state, _inc, _hasUint32, _uinteger);
+        private protected override BitGeneratorState GetStateCore() => new State(State128, Inc128, _hasUint32, _uinteger);
 
         /// <inheritdoc/>
         private protected override void SetStateCore(BitGeneratorState value)
         {
             if (value is not State s)
                 throw new ValueError("state must be for a PCG64 RNG");
-            _state = s.state;
-            _inc = s.inc;
+            SetState128(s.state, s.inc);
             _hasUint32 = s.has_uint32;
             _uinteger = s.uinteger;
         }

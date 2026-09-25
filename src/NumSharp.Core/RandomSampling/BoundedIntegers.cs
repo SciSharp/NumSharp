@@ -91,7 +91,8 @@ namespace NumSharp
                     return NDArray.Scalar(one.GetAtIndex(0), tc);
                 }
 
-                var nd = new NDArray(resultType, size);
+                // Every element is written by the fill, so the allocation skips its zero pass.
+                var nd = new NDArray(resultType, size, false);
                 Fill(bg, nd, nd.size, width, off, rng, useMasked);
                 return nd;
             }
@@ -249,6 +250,7 @@ namespace NumSharp
         /// <param name="off">Low bound.</param>
         /// <param name="rng">Closed-interval range.</param>
         /// <param name="useMasked">Masked rejection (legacy) instead of Lemire.</param>
+        [System.Runtime.CompilerServices.SkipLocalsInit] // the chunk scratch is always written before it is read
         private static unsafe void FillUInt64(BitGenerator bg, ulong* outp, long cnt, ulong off, ulong rng, bool useMasked)
         {
             if (rng == 0)
@@ -257,34 +259,148 @@ namespace NumSharp
             }
             else if (rng <= 0xFFFFFFFFUL)
             {
-                // Call the 32-bit generator when the RANGE fits 32 bits — even if the bounds need 64.
-                if (rng == 0xFFFFFFFFUL)
+                // Call the 32-bit generator when the RANGE fits 32 bits — even if the bounds need 64. The values come
+                // a chunk at a time through a uint32 staging buffer and are widened with the offset added.
+                uint* vals = stackalloc uint[DrawChunk];
+                uint* words = stackalloc uint[DrawChunk];
+                for (long i = 0; i < cnt;)
                 {
-                    for (long i = 0; i < cnt; i++) outp[i] = off + bg.NextUInt32();
+                    int c = (int)Math.Min(DrawChunk, cnt - i);
+                    Bounded32Chunk(bg, vals, c, (uint)rng, useMasked, words);
+                    for (int j = 0; j < c; j++)
+                        outp[i + j] = off + vals[j];
+                    i += c;
                 }
-                else if (useMasked)
-                {
-                    uint r = (uint)rng, mask = (uint)GenMask(rng);
-                    for (long i = 0; i < cnt; i++) outp[i] = off + MaskedUInt32(bg, r, mask);
-                }
-                else
-                {
-                    uint r = (uint)rng;
-                    for (long i = 0; i < cnt; i++) outp[i] = off + LemireUInt32(bg, r);
-                }
-            }
-            else if (rng == 0xFFFFFFFFFFFFFFFFUL)
-            {
-                for (long i = 0; i < cnt; i++) outp[i] = off + bg.NextUInt64();
-            }
-            else if (useMasked)
-            {
-                ulong mask = GenMask(rng);
-                for (long i = 0; i < cnt; i++) outp[i] = off + MaskedUInt64(bg, rng, mask);
             }
             else
             {
-                for (long i = 0; i < cnt; i++) outp[i] = off + LemireUInt64(bg, rng);
+                ulong* words = stackalloc ulong[DrawChunk];
+                for (long i = 0; i < cnt;)
+                {
+                    int c = (int)Math.Min(DrawChunk, cnt - i);
+                    Bounded64Chunk(bg, outp + i, c, rng, useMasked, words);
+                    if (off != 0)
+                    {
+                        for (int j = 0; j < c; j++)
+                            outp[i + j] += off;
+                    }
+                    i += c;
+                }
+            }
+        }
+
+        /// <summary>
+        ///     Words pulled per chunk by the chunked integer fills: 2 KB of uint32 / 4 KB of uint64, L1-resident while the
+        ///     rejection loop consumes them.
+        /// </summary>
+        private const int DrawChunk = 512;
+
+        /// <summary>
+        ///     <paramref name="count"/> values in <c>[0, rng]</c> from 32-bit draws — NumPy's <c>buffered_bounded_lemire_uint32</c>
+        ///     (or <c>buffered_bounded_masked_uint32</c>, or the raw word for the full range) — drawn a chunk at a time.
+        /// </summary>
+        /// <param name="bg">The bit generator (its lock held by the caller).</param>
+        /// <param name="vals">Receives the values, without offset (may be the final uint32 destination).</param>
+        /// <param name="count">The number of values (at most <see cref="DrawChunk"/>).</param>
+        /// <param name="rng">The closed-interval range (non-zero).</param>
+        /// <param name="useMasked">Masked rejection (legacy) instead of Lemire.</param>
+        /// <param name="words">A <see cref="DrawChunk"/>-word scratch buffer.</param>
+        /// <remarks>
+        ///     Why a chunk may be drawn ahead without changing the stream: every value consumes AT LEAST one word, so
+        ///     with <c>k</c> values still owed the per-draw loop is certain to consume the next <c>k</c> words — drawing
+        ///     exactly <c>k</c> never reads past the words NumPy would have drawn, and a rejected word simply leaves one
+        ///     value owed for the next pass. Each word is accepted by the same test NumPy applies to every draw
+        ///     (Lemire: the low half of <c>w * (rng + 1)</c> is at least <c>(2**32 - 1 - rng) % (rng + 1)</c> — the
+        ///     <c>leftover &lt; rng_excl</c> pre-check only skips computing that threshold; masked: <c>w &amp; mask &lt;= rng</c>).
+        ///     The engine is left exactly where the per-draw loop leaves it, buffered 32-bit half included.
+        /// </remarks>
+        private static unsafe void Bounded32Chunk(BitGenerator bg, uint* vals, int count, uint rng, bool useMasked, uint* words)
+        {
+            if (rng == uint.MaxValue)
+            {
+                // Lemire32 does not support the full range; NumPy returns the raw word.
+                bg.FillUInt32(vals, count);
+                return;
+            }
+            int produced = 0;
+            if (useMasked)
+            {
+                uint mask = (uint)GenMask(rng);
+                while (produced < count)
+                {
+                    int k = count - produced;
+                    bg.FillUInt32(words, k);
+                    for (int j = 0; j < k; j++)
+                    {
+                        uint v = words[j] & mask;
+                        if (v <= rng)
+                            vals[produced++] = v;
+                    }
+                }
+                return;
+            }
+            uint rngExcl = rng + 1;
+            uint threshold = (uint.MaxValue - rng) % rngExcl;
+            while (produced < count)
+            {
+                int k = count - produced;
+                bg.FillUInt32(words, k);
+                for (int j = 0; j < k; j++)
+                {
+                    ulong m = (ulong)words[j] * rngExcl;
+                    if ((uint)m >= threshold)
+                        vals[produced++] = (uint)(m >> 32);
+                }
+            }
+        }
+
+        /// <summary>
+        ///     <paramref name="count"/> values in <c>[0, rng]</c> from 64-bit draws — NumPy's <c>bounded_lemire_uint64</c>
+        ///     (or <c>bounded_masked_uint64</c>, or the raw word for the full range) — drawn a chunk at a time, under the
+        ///     same no-overdraw argument as <see cref="Bounded32Chunk"/>.
+        /// </summary>
+        /// <param name="bg">The bit generator (its lock held by the caller).</param>
+        /// <param name="vals">Receives the values, without offset.</param>
+        /// <param name="count">The number of values (at most <see cref="DrawChunk"/>).</param>
+        /// <param name="rng">The closed-interval range (above 2**32 - 1).</param>
+        /// <param name="useMasked">Masked rejection (legacy) instead of Lemire.</param>
+        /// <param name="words">A <see cref="DrawChunk"/>-word scratch buffer.</param>
+        private static unsafe void Bounded64Chunk(BitGenerator bg, ulong* vals, int count, ulong rng, bool useMasked, ulong* words)
+        {
+            if (rng == ulong.MaxValue)
+            {
+                bg.FillUInt64(vals, count);
+                return;
+            }
+            int produced = 0;
+            if (useMasked)
+            {
+                ulong mask = GenMask(rng);
+                while (produced < count)
+                {
+                    int k = count - produced;
+                    bg.FillUInt64(words, k);
+                    for (int j = 0; j < k; j++)
+                    {
+                        ulong v = words[j] & mask;
+                        if (v <= rng)
+                            vals[produced++] = v;
+                    }
+                }
+                return;
+            }
+            ulong rngExcl = rng + 1;
+            ulong threshold = (ulong.MaxValue - rng) % rngExcl;
+            while (produced < count)
+            {
+                int k = count - produced;
+                bg.FillUInt64(words, k);
+                for (int j = 0; j < k; j++)
+                {
+                    ulong hi = Math.BigMul(words[j], rngExcl, out ulong lo);
+                    if (lo >= threshold)
+                        vals[produced++] = hi;
+                }
             }
         }
 
@@ -295,25 +411,27 @@ namespace NumSharp
         /// <param name="off">Low bound.</param>
         /// <param name="rng">Closed-interval range.</param>
         /// <param name="useMasked">Masked rejection (legacy) instead of Lemire.</param>
+        [System.Runtime.CompilerServices.SkipLocalsInit] // the chunk scratch is always written before it is read
         private static unsafe void FillUInt32(BitGenerator bg, uint* outp, long cnt, uint off, uint rng, bool useMasked)
         {
             if (rng == 0)
             {
                 for (long i = 0; i < cnt; i++) outp[i] = off;
+                return;
             }
-            else if (rng == 0xFFFFFFFFu)
+            // The values land straight in the destination a chunk at a time; the offset is added in place (a zero
+            // offset — the common [0, n) request — skips that pass).
+            uint* words = stackalloc uint[DrawChunk];
+            for (long i = 0; i < cnt;)
             {
-                // Lemire32 doesn't support rng = 0xFFFFFFFF.
-                for (long i = 0; i < cnt; i++) outp[i] = off + bg.NextUInt32();
-            }
-            else if (useMasked)
-            {
-                uint mask = (uint)GenMask(rng);
-                for (long i = 0; i < cnt; i++) outp[i] = off + MaskedUInt32(bg, rng, mask);
-            }
-            else
-            {
-                for (long i = 0; i < cnt; i++) outp[i] = off + LemireUInt32(bg, rng);
+                int c = (int)Math.Min(DrawChunk, cnt - i);
+                Bounded32Chunk(bg, outp + i, c, rng, useMasked, words);
+                if (off != 0)
+                {
+                    for (int j = 0; j < c; j++)
+                        outp[i + j] += off;
+                }
+                i += c;
             }
         }
 

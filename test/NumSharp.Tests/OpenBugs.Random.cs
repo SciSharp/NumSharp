@@ -3,11 +3,13 @@ using System;
 namespace NumSharp.Tests
 {
     /// <summary>
-    ///     Random number generator alignment bugs with NumPy.
+    ///     Legacy <c>np.random</c> (RandomState) stream pins against NumPy.
     ///
-    ///     CRITICAL FINDING: NumSharp's Randomizer uses .NET's Subtractive Generator
-    ///     (Knuth's algorithm), NOT NumPy's Mersenne Twister (MT19937).
-    ///     This means same seed produces completely different sequences.
+    ///     History: NumSharp's RandomState once ran .NET's subtractive generator, so every seeded stream differed from
+    ///     NumPy's MT19937. It runs NumPy's MT19937 with the legacy seeding now, and the tests without <c>[OpenBugs]</c>
+    ///     pin that. The <c>[OpenBugs]</c> tests left are the legacy samplers whose ALGORITHM still differs from
+    ///     NumPy's <c>legacy-distributions.c</c> (gamma with shape &lt; 1, binomial, negative binomial, F, Pareto, standard
+    ///     Cauchy, multinomial, multivariate normal).
     ///
     ///     NumPy 2.4.2 expected values generated with:
     ///     <code>
@@ -19,30 +21,31 @@ namespace NumSharp.Tests
     [TestClass]
     public class OpenBugsRandom : TestClass
     {
-        // ===== CRITICAL: RNG Algorithm Mismatch =====
-        // NumPy uses Mersenne Twister (MT19937)
-        // NumSharp uses .NET Subtractive Generator (Knuth)
-        // These tests document the expected NumPy values that NumSharp should produce
-
         /// <summary>
-        ///     BUG: rand() produces different values than NumPy with same seed.
-        ///
-        ///     NumPy seed=42:    0.3745401188473625
-        ///     NumSharp seed=42: 0.668106465911542 (WRONG - different algorithm)
+        ///     <c>rand()</c> — NO arguments — is the scalar draw, NumPy seed=42: 0.3745401188473625. (This test used to
+        ///     call <c>rand(0)</c>, which in NumPy is the EMPTY array <c>array([], dtype=float64)</c>, and then read element
+        ///     0 of it; <see cref="Rand0_IsEmpty"/> pins that shape.)
         /// </summary>
         [TestMethod]
-        [OpenBugs]
         public void Rand_Seed42_ShouldMatchNumPy()
         {
             var rng = np.random.RandomState(42);
-            var result = rng.rand(0L);
+            var result = rng.rand();
 
-            // NumPy expected value
             const double expected = 0.3745401188473625;
-            var actual = result.GetDouble(0);
+            result.ndim.Should().Be(0);
+            result.GetDouble(0).Should().Be(expected, "rand() with seed=42 should match NumPy");
+        }
 
-            actual.Should().BeApproximately(expected, 1e-10,
-                $"rand() with seed=42 should match NumPy. NumSharp uses different RNG algorithm.");
+        /// <summary><c>rand(0)</c> is NumPy's empty float64 array (shape <c>(0,)</c>), and it draws nothing.</summary>
+        [TestMethod]
+        public void Rand0_IsEmpty()
+        {
+            var rng = np.random.RandomState(42);
+            var empty = rng.rand(0L);
+            empty.shape.Should().Equal(0L);
+            empty.dtype.Should().Be(np.float64);
+            rng.rand().GetDouble(0).Should().Be(0.3745401188473625, "an empty draw must not consume the stream");
         }
 
         /// <summary>
@@ -74,24 +77,18 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     BUG: randn() produces different values than NumPy with same seed.
-        ///
-        ///     NumPy seed=42:    0.4967141530112327
-        ///     NumSharp seed=42: Different value (wrong RNG + Box-Muller may differ)
+        ///     <c>randn()</c> — NO arguments — is the scalar draw, NumPy seed=42: 0.4967141530112327. (This test used to
+        ///     call <c>randn(0)</c>, NumPy's EMPTY array, and read element 0 of it.)
         /// </summary>
         [TestMethod]
-        [OpenBugs]
         public void Randn_Seed42_ShouldMatchNumPy()
         {
             var rng = np.random.RandomState(42);
-            var result = rng.randn(0L);
+            var result = rng.randn();
 
-            // NumPy expected value
             const double expected = 0.4967141530112327;
-            var actual = result.GetDouble(0);
-
-            actual.Should().BeApproximately(expected, 1e-10,
-                "randn() with seed=42 should match NumPy");
+            result.ndim.Should().Be(0);
+            result.GetDouble(0).Should().Be(expected, "randn() with seed=42 should match NumPy");
         }
 
         /// <summary>
@@ -216,12 +213,9 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     BUG: permutation(5) produces different sequence than NumPy.
-        ///
-        ///     NumPy seed=42: [1, 4, 2, 0, 3]
+        ///     <c>permutation(5)</c>, NumPy seed=42: [1, 4, 2, 0, 3] (fixed with the legacy shuffle port).
         /// </summary>
         [TestMethod]
-        [OpenBugs]
         public void Permutation_Seed42_ShouldMatchNumPy()
         {
             var rng = np.random.RandomState(42);

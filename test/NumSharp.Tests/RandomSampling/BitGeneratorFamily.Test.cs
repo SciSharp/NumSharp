@@ -760,6 +760,176 @@ namespace NumSharp.Tests.RandomSampling
         }
 
         // =====================================================================================
+        //  Bulk fills: identical streams and states to the per-draw primitives
+        // =====================================================================================
+
+        /// <summary>The five engines, freshly seeded, for the bulk-fill equivalence checks.</summary>
+        /// <returns>Factories producing an identically seeded engine on every call.</returns>
+        private static IEnumerable<Func<BitGenerator>> AllEngines() => new Func<BitGenerator>[]
+        {
+            () => new PCG64(123), () => new PCG64DXSM(123), () => new Philox(123), () => new SFC64(123), () => new MT19937(123),
+        };
+
+        /// <summary>Snapshots a bit generator's state as a comparable string (every member, arrays expanded).</summary>
+        /// <param name="bg">The bit generator.</param>
+        /// <returns>The state's members, in declaration order.</returns>
+        private static string StateText(BitGenerator bg)
+        {
+            var st = bg.state;
+            return string.Join("|", st.GetType().GetProperties().Select(p =>
+            {
+                object v = p.GetValue(st);
+                return p.Name + "=" + (v is Array a ? string.Join(",", a.Cast<object>()) : Convert.ToString(v));
+            }));
+        }
+
+        /// <summary>
+        ///     Every bulk fill (the double / float / raw paths behind <c>random</c>, <c>random(float32)</c> and
+        ///     <c>random_raw</c>) must produce EXACTLY the per-draw stream and leave EXACTLY the per-draw state, for every
+        ///     engine, across chunk/block/twist boundaries and with a pending 32-bit half or a part-consumed Philox block
+        ///     going in — the fills are interleaved freely with single draws in NumPy's streams.
+        /// </summary>
+        [TestMethod]
+        public void BulkFills_MatchThePerDrawStreamAndState()
+        {
+            long[] sizes = { 1, 2, 3, 4, 5, 7, 8, 9, 255, 256, 257, 511, 512, 513, 623, 624, 625, 1249, 5000 };
+            foreach (var make in AllEngines())
+            {
+                foreach (long n in sizes)
+                {
+                    foreach (int lead in new[] { 0, 1, 2, 3 })
+                    {
+                        // lead float draws leave a pending half (odd) and part-consume Philox's block.
+                        var bulk = make();
+                        var single = make();
+                        var gb = new Generator(bulk);
+                        var gs = new Generator(single);
+                        for (int k = 0; k < lead; k++)
+                        {
+                            gb.random(dtype: np.float32);
+                            gs.random(dtype: np.float32);
+                        }
+
+                        double[] d = D(gb.random(new Shape(n)));
+                        var ds = new double[n];
+                        for (long k = 0; k < n; k++) ds[k] = Convert.ToDouble(gs.random().GetAtIndex(0));
+                        d.Should().Equal(ds, $"{bulk.GetType().Name} doubles n={n} lead={lead}");
+                        StateText(bulk).Should().Be(StateText(single), $"{bulk.GetType().Name} state after doubles n={n} lead={lead}");
+
+                        double[] f = D(gb.random(new Shape(n), np.float32));
+                        var fs = new double[n];
+                        for (long k = 0; k < n; k++) fs[k] = Convert.ToDouble(gs.random(dtype: np.float32).GetAtIndex(0));
+                        f.Should().Equal(fs, $"{bulk.GetType().Name} floats n={n} lead={lead}");
+                        StateText(bulk).Should().Be(StateText(single), $"{bulk.GetType().Name} state after floats n={n} lead={lead}");
+
+                        ulong[] r = U(bulk.random_raw(new Shape(n)));
+                        var rs = new ulong[n];
+                        for (long k = 0; k < n; k++) rs[k] = Convert.ToUInt64(single.random_raw().GetAtIndex(0));
+                        r.Should().Equal(rs, $"{bulk.GetType().Name} raw n={n} lead={lead}");
+                        StateText(bulk).Should().Be(StateText(single), $"{bulk.GetType().Name} state after raw n={n} lead={lead}");
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        ///     The chunked bounded-integer fills (words pulled a chunk at a time, never past what the per-draw loop would
+        ///     consume) produce exactly NumPy's per-draw Lemire sequence — <c>buffered_bounded_lemire_uint32</c> for ranges
+        ///     that fit 32 bits, <c>bounded_lemire_uint64</c> above, the raw word at the full ranges — and leave the engine in
+        ///     the per-draw state, for every engine, across chunk boundaries and with a pending 32-bit half going in.
+        /// </summary>
+        [TestMethod]
+        public void ChunkedIntegers_MatchThePerDrawLemireStreamAndState()
+        {
+            ulong[] ranges = { 1, 5, 1000, 1UL << 31, 0xFFFFFFFEUL, 0xFFFFFFFFUL, 1UL << 32, (1UL << 40) + 3, 1UL << 63, ulong.MaxValue - 1, ulong.MaxValue };
+            long[] sizes = { 1, 7, 511, 512, 513, 1500 };
+            foreach (var make in AllEngines())
+            {
+                foreach (ulong rng in ranges)
+                {
+                    foreach (long n in sizes)
+                    {
+                        foreach (int lead in new[] { 0, 1 })
+                        {
+                            var bulk = make();
+                            var single = make();
+                            for (int k = 0; k < lead; k++)
+                            {
+                                new Generator(bulk).random(dtype: np.float32);
+                                new Generator(single).random(dtype: np.float32);
+                            }
+                            ulong[] got = U(new Generator(bulk).integers(0UL, rng, new Shape(n), np.uint64, endpoint: true));
+                            var expected = new ulong[n];
+                            for (long k = 0; k < n; k++)
+                            {
+                                expected[k] = rng <= 0xFFFFFFFFUL
+                                    ? (rng == 0xFFFFFFFFUL ? single.NextUInt32() : BoundedIntegers.LemireUInt32(single, (uint)rng))
+                                    : (rng == ulong.MaxValue ? single.NextUInt64() : BoundedIntegers.LemireUInt64(single, rng));
+                            }
+                            got.Should().Equal(expected, $"{bulk.GetType().Name} rng={rng} n={n} lead={lead}");
+                            StateText(bulk).Should().Be(StateText(single), $"{bulk.GetType().Name} state rng={rng} n={n} lead={lead}");
+                        }
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        ///     The ziggurat fills (normal / exponential, float64 and float32, plus <c>method='inv'</c>, <c>normal(loc, scale)</c>,
+        ///     <c>exponential(scale)</c>, <c>uniform</c>) read their draws ahead through a buffer; over 20,000 outputs — hundreds
+        ///     of wedge/tail rejections included — every engine must give exactly the per-draw values and end in the per-draw
+        ///     state (a read-ahead that drew one word too many would shift every later value).
+        /// </summary>
+        [TestMethod]
+        public void ZigguratFills_MatchThePerDrawStreamAndState()
+        {
+            const int n = 20_000;
+            var cases = new (string Name, Func<Generator, NDArray> Bulk, Func<Generator, double> Single)[]
+            {
+                ("standard_normal", g => g.standard_normal(new Shape(n)), g => Convert.ToDouble(g.standard_normal().GetAtIndex(0))),
+                ("standard_normal f32", g => g.standard_normal(new Shape(n), np.float32), g => Convert.ToDouble(g.standard_normal(dtype: np.float32).GetAtIndex(0))),
+                ("standard_exponential", g => g.standard_exponential(new Shape(n)), g => Convert.ToDouble(g.standard_exponential().GetAtIndex(0))),
+                ("standard_exponential f32", g => g.standard_exponential(new Shape(n), np.float32), g => Convert.ToDouble(g.standard_exponential(dtype: np.float32).GetAtIndex(0))),
+                ("standard_exponential inv", g => g.standard_exponential(new Shape(n), method: "inv"), g => Convert.ToDouble(g.standard_exponential(method: "inv").GetAtIndex(0))),
+                ("standard_exponential inv f32", g => g.standard_exponential(new Shape(n), np.float32, "inv"), g => Convert.ToDouble(g.standard_exponential(dtype: np.float32, method: "inv").GetAtIndex(0))),
+                ("normal(3, 2)", g => g.normal(3.0, 2.0, new Shape(n)), g => Convert.ToDouble(g.normal(3.0, 2.0).GetAtIndex(0))),
+                ("exponential(2.5)", g => g.exponential(2.5, new Shape(n)), g => Convert.ToDouble(g.exponential(2.5).GetAtIndex(0))),
+                ("uniform(-1, 4)", g => g.uniform(-1.0, 4.0, new Shape(n)), g => Convert.ToDouble(g.uniform(-1.0, 4.0).GetAtIndex(0))),
+            };
+            foreach (var make in AllEngines())
+            {
+                foreach (var (name, bulkCall, singleCall) in cases)
+                {
+                    var bulk = make();
+                    var single = make();
+                    // A pending 32-bit half going in exercises the float32 paths' buffered-half hand-off.
+                    new Generator(bulk).random(dtype: np.float32);
+                    new Generator(single).random(dtype: np.float32);
+                    double[] got = D(bulkCall(new Generator(bulk)));
+                    var gs = new Generator(single);
+                    var expected = new double[n];
+                    for (int k = 0; k < n; k++) expected[k] = singleCall(gs);
+                    got.Should().Equal(expected, $"{bulk.GetType().Name} {name}");
+                    StateText(bulk).Should().Be(StateText(single), $"{bulk.GetType().Name} {name} state");
+                }
+            }
+        }
+
+        /// <summary>The legacy <c>rand</c> bulk fill keeps RandomState's stream (it now fills in one locked pass).</summary>
+        [TestMethod]
+        public void LegacyRand_BulkFill_MatchesNumPy()
+        {
+            var rs = np.random.RandomState(42);
+            D(rs.rand(5)).Should().Equal(0.3745401188473625, 0.9507143064099162, 0.7319939418114051, 0.5986584841970366, 0.15601864044243652);
+            var single = np.random.RandomState(42);
+            var bulk = np.random.RandomState(42);
+            double[] b = D(bulk.rand(new Shape(700)));
+            var s = new double[700];
+            for (int k = 0; k < 700; k++) s[k] = Convert.ToDouble(single.rand().GetAtIndex(0));
+            b.Should().Equal(s);
+        }
+
+        // =====================================================================================
         //  Thread safety: the new generators serialize on BitGenerator.lock like the others
         // =====================================================================================
 

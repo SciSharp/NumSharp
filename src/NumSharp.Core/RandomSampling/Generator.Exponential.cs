@@ -31,8 +31,10 @@ namespace NumSharp
                 if (@out is not null)
                 {
                     ValidateOut(@out, size, tc, requireCContiguous: false);
-                    if (tc == NPTypeCode.Single) FillFloatDistInto(@out, f);
-                    else FillDoubleDistInto(@out, d);
+                    unsafe
+                    {
+                        FillStandardExponentialInto(OutStart(@out), @out.size, tc, zig);
+                    }
                     return @out;
                 }
 
@@ -41,8 +43,50 @@ namespace NumSharp
                     // the float32 draw to a Python float); only sized/()/out= stay float32.
                     return tc == NPTypeCode.Single ? NDArray.Scalar((double)f()) : NDArray.Scalar(d());
 
-                return tc == NPTypeCode.Single ? FillFloatDist(size, f) : FillDoubleDist(size, d);
+                var ret = new NDArray(tc == NPTypeCode.Single ? typeof(float) : typeof(double), size, false);
+                unsafe
+                {
+                    FillStandardExponentialInto((byte*)ret.Address, ret.size, tc, zig);
+                }
+                return ret;
             }
+        }
+
+        /// <summary>
+        ///     Fills <paramref name="n"/> standard exponentials in the loop dtype: the ziggurat through its read-ahead fill, or
+        ///     NumPy's <c>method='inv'</c> sampler — one uniform per output, so a bulk uniform fill transformed in place
+        ///     (<c>-log1p(-u)</c>; the float32 form takes the double log1p of the float draw, as NumPy's
+        ///     <c>random_standard_exponential_inv_fill_f</c> does).
+        /// </summary>
+        /// <param name="p">The destination (float32 or float64 per <paramref name="tc"/>).</param>
+        /// <param name="n">The number of draws.</param>
+        /// <param name="tc">The loop dtype.</param>
+        /// <param name="zig">True for the ziggurat, false for the inverse-CDF sampler.</param>
+        /// <remarks>The caller holds the bit generator's lock.</remarks>
+        private unsafe void FillStandardExponentialInto(byte* p, long n, NPTypeCode tc, bool zig)
+        {
+            if (tc == NPTypeCode.Single)
+            {
+                var fp = (float*)p;
+                if (zig)
+                {
+                    FillStandardExponentialF(fp, n);
+                    return;
+                }
+                _bitGenerator.FillFloat(fp, n);
+                for (long i = 0; i < n; i++)
+                    fp[i] = (float)(-Log1p(-(double)fp[i]));
+                return;
+            }
+            var dp = (double*)p;
+            if (zig)
+            {
+                FillStandardExponential(dp, n);
+                return;
+            }
+            _bitGenerator.FillDouble(dp, n);
+            for (long i = 0; i < n; i++)
+                dp[i] = -Log1p(-dp[i]);
         }
 
         /// <summary>
@@ -65,7 +109,16 @@ namespace NumSharp
                 if (IsNoSize(size))
                     return NDArray.Scalar(scale * NextStandardExponential());
 
-                return FillDoubleDist(size, () => scale * NextStandardExponential());
+                var ret = new NDArray(typeof(double), size, false);
+                unsafe
+                {
+                    var p = (double*)ret.Address;
+                    long n = ret.size;
+                    FillStandardExponential(p, n);
+                    for (long i = 0; i < n; i++)
+                        p[i] = scale * p[i];
+                }
+                return ret;
             }
         }
     }

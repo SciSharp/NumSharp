@@ -1,5 +1,6 @@
 using System;
 using System.Numerics;
+using System.Runtime.Intrinsics;
 
 namespace NumSharp
 {
@@ -174,23 +175,200 @@ namespace NumSharp
         }
 
         /// <summary>NumPy's <c>mt19937_gen</c>: the twist that regenerates all 624 words.</summary>
-        private void Generate()
+        private unsafe void Generate()
         {
-            uint y;
-            int kk;
-            for (kk = 0; kk < N - M; kk++)
+            fixed (uint* key = _key)
+                Twist(key);
+            _pos = 0;
+        }
+
+        /// <summary>
+        ///     The twist over a pinned key, eight words per step where 256-bit vectors are accelerated.
+        /// </summary>
+        /// <param name="key">The 624-word key (rewritten in place).</param>
+        /// <remarks>
+        ///     Vectorizing preserves the sequential recurrence exactly: word <c>kk</c> reads <c>key[kk]</c>,
+        ///     <c>key[kk + 1]</c> and <c>key[kk ± 397/227]</c>. In the first run (<c>kk &lt; 227</c>) the far word is
+        ///     <c>kk + 397</c>, not yet rewritten in this pass; in the second it is <c>kk - 227</c>, rewritten at least
+        ///     227 &gt; 8 words earlier — so an 8-lane block never reads a lane it writes, and <c>key[kk + 8]</c> (the
+        ///     block's last "+1" read) is still the old word, exactly as in the scalar order. Each run's tail and the
+        ///     wrap-around word 623 (which reads the NEW <c>key[0]</c>) stay scalar.
+        /// </remarks>
+        private static unsafe void Twist(uint* key)
+        {
+            int kk = 0;
+            if (Vector256.IsHardwareAccelerated)
             {
-                y = (_key[kk] & UPPER_MASK) | (_key[kk + 1] & LOWER_MASK);
-                _key[kk] = _key[kk + M] ^ (y >> 1) ^ (unchecked(0u - (y & 1)) & MATRIX_A);
+                var upper = Vector256.Create(UPPER_MASK);
+                var lower = Vector256.Create(LOWER_MASK);
+                var one = Vector256.Create(1u);
+                var matrixA = Vector256.Create(MATRIX_A);
+                for (; kk <= N - M - 8; kk += 8)
+                {
+                    var y = (Vector256.Load(key + kk) & upper) | (Vector256.Load(key + kk + 1) & lower);
+                    var mag = (Vector256<uint>.Zero - (y & one)) & matrixA;
+                    (Vector256.Load(key + kk + M) ^ Vector256.ShiftRightLogical(y, 1) ^ mag).Store(key + kk);
+                }
+            }
+            for (; kk < N - M; kk++)
+            {
+                uint y = (key[kk] & UPPER_MASK) | (key[kk + 1] & LOWER_MASK);
+                key[kk] = key[kk + M] ^ (y >> 1) ^ (unchecked(0u - (y & 1)) & MATRIX_A);
+            }
+            if (Vector256.IsHardwareAccelerated)
+            {
+                var upper = Vector256.Create(UPPER_MASK);
+                var lower = Vector256.Create(LOWER_MASK);
+                var one = Vector256.Create(1u);
+                var matrixA = Vector256.Create(MATRIX_A);
+                for (; kk <= N - 1 - 8; kk += 8)
+                {
+                    var y = (Vector256.Load(key + kk) & upper) | (Vector256.Load(key + kk + 1) & lower);
+                    var mag = (Vector256<uint>.Zero - (y & one)) & matrixA;
+                    (Vector256.Load(key + kk + (M - N)) ^ Vector256.ShiftRightLogical(y, 1) ^ mag).Store(key + kk);
+                }
             }
             for (; kk < N - 1; kk++)
             {
-                y = (_key[kk] & UPPER_MASK) | (_key[kk + 1] & LOWER_MASK);
-                _key[kk] = _key[kk + (M - N)] ^ (y >> 1) ^ (unchecked(0u - (y & 1)) & MATRIX_A);
+                uint y = (key[kk] & UPPER_MASK) | (key[kk + 1] & LOWER_MASK);
+                key[kk] = key[kk + (M - N)] ^ (y >> 1) ^ (unchecked(0u - (y & 1)) & MATRIX_A);
             }
-            y = (_key[N - 1] & UPPER_MASK) | (_key[0] & LOWER_MASK);
-            _key[N - 1] = _key[M - 1] ^ (y >> 1) ^ (unchecked(0u - (y & 1)) & MATRIX_A);
-            _pos = 0;
+            uint last = (key[N - 1] & UPPER_MASK) | (key[0] & LOWER_MASK);
+            key[N - 1] = key[M - 1] ^ (last >> 1) ^ (unchecked(0u - (last & 1)) & MATRIX_A);
+        }
+
+        /// <summary>NumPy's tempering of <paramref name="count"/> key words into <paramref name="dst"/>, eight per step where accelerated.</summary>
+        /// <param name="src">The key words to temper.</param>
+        /// <param name="dst">The destination (may be unaligned).</param>
+        /// <param name="count">The word count.</param>
+        private static unsafe void Temper(uint* src, uint* dst, int count)
+        {
+            int k = 0;
+            if (Vector256.IsHardwareAccelerated)
+            {
+                var maskB = Vector256.Create(TEMPERING_MASK_B);
+                var maskC = Vector256.Create(TEMPERING_MASK_C);
+                for (; k <= count - 8; k += 8)
+                {
+                    var y = Vector256.Load(src + k);
+                    y ^= Vector256.ShiftRightLogical(y, 11);
+                    y ^= Vector256.ShiftLeft(y, 7) & maskB;
+                    y ^= Vector256.ShiftLeft(y, 15) & maskC;
+                    y ^= Vector256.ShiftRightLogical(y, 18);
+                    y.Store(dst + k);
+                }
+            }
+            for (; k < count; k++)
+            {
+                uint y = src[k];
+                y ^= y >> 11;
+                y ^= (y << 7) & TEMPERING_MASK_B;
+                y ^= (y << 15) & TEMPERING_MASK_C;
+                y ^= y >> 18;
+                dst[k] = y;
+            }
+        }
+
+        /// <inheritdoc/>
+        /// <remarks>Tempers the key a run at a time (vectorized), twisting whenever it is exhausted — the per-draw stream exactly.</remarks>
+        internal override unsafe void FillUInt32(uint* dst, long n)
+        {
+            long i = 0;
+            fixed (uint* key = _key)
+            {
+                while (i < n)
+                {
+                    if (_pos == N)
+                    {
+                        Twist(key);
+                        _pos = 0;
+                    }
+                    int take = (int)Math.Min(N - _pos, n - i);
+                    Temper(key + _pos, dst + i, take);
+                    _pos += take;
+                    i += take;
+                }
+            }
+        }
+
+        /// <inheritdoc/>
+        /// <remarks>
+        ///     <c>mt19937_next64</c> is <c>(first &lt;&lt; 32) | second</c>: the two words land in the slot little-endian
+        ///     (first in the LOW half), so each slot is rotated by 32 to put the first word high.
+        /// </remarks>
+        internal override unsafe void FillUInt64(ulong* dst, long n)
+        {
+            if (!BitConverter.IsLittleEndian)
+            {
+                base.FillUInt64(dst, n);
+                return;
+            }
+            var words = dst;
+            while (n > 0)
+            {
+                long m = n < FillChunk ? n : FillChunk;
+                FillUInt32((uint*)words, 2 * m);
+                for (long k = 0; k < m; k++)
+                    words[k] = BitOperations.RotateLeft(words[k], 32);
+                words += m;
+                n -= m;
+            }
+        }
+
+        /// <inheritdoc/>
+        /// <remarks><c>mt19937_next_double</c> from word pairs drawn into each slot: <c>((a &gt;&gt; 5) * 2**26 + (b &gt;&gt; 6)) / 2**53</c>, a the first word.</remarks>
+        internal override unsafe void FillDouble(double* dst, long n)
+        {
+            if (!BitConverter.IsLittleEndian)
+            {
+                base.FillDouble(dst, n);
+                return;
+            }
+            var words = (ulong*)dst;
+            while (n > 0)
+            {
+                long m = n < FillChunk ? n : FillChunk;
+                FillUInt32((uint*)words, 2 * m);
+                var d = (double*)words;
+                for (long k = 0; k < m; k++)
+                {
+                    ulong w = words[k];
+                    int a = (int)((uint)w >> 5);
+                    int b = (int)((uint)(w >> 32) >> 6);
+                    d[k] = (a * 67108864.0 + b) / 9007199254740992.0;
+                }
+                words += m;
+                n -= m;
+            }
+        }
+
+        /// <inheritdoc/>
+        /// <remarks><c>next_float</c> = <c>(next_uint32 &gt;&gt; 8) * 2**-24</c>, converted in place after a vectorized word fill.</remarks>
+        internal override unsafe void FillFloat(float* dst, long n)
+        {
+            var words = (uint*)dst;
+            while (n > 0)
+            {
+                long m = n < 2 * FillChunk ? n : 2 * FillChunk;
+                FillUInt32(words, m);
+                var f = (float*)words;
+                for (long k = 0; k < m; k++)
+                    f[k] = (int)(words[k] >> 8) * (1.0f / 16777216.0f);
+                words += m;
+                n -= m;
+            }
+        }
+
+        /// <inheritdoc/>
+        /// <remarks>The 32-bit words drawn into the front half of the buffer, then widened back to front (a slot is only rewritten after the words it covers were read).</remarks>
+        internal override unsafe void FillRaw(ulong* dst, long n)
+        {
+            if (n <= 0)
+                return;
+            FillUInt32((uint*)dst, n);
+            var src = (uint*)dst;
+            for (long k = n - 1; k >= 0; k--)
+                dst[k] = src[k];
         }
 
         /// <inheritdoc/>
@@ -231,6 +409,18 @@ namespace NumSharp
         /// <inheritdoc/>
         /// <remarks>NumPy's <c>mt19937_raw</c>: the 32-bit word, widened.</remarks>
         internal override ulong NextRaw() => NextUInt32();
+
+        /// <inheritdoc/>
+        /// <remarks>
+        ///     A unit is <c>(first &lt;&lt; 32) | second</c> (<see cref="NextUInt64"/>), and <c>mt19937_next_double</c> consumes the
+        ///     same two words as <c>(first &gt;&gt; 5, second &gt;&gt; 6)</c> — so the double is rebuilt from the unit's halves.
+        /// </remarks>
+        internal override double UnitToDouble(ulong unit)
+        {
+            int a = (int)((uint)(unit >> 32) >> 5);
+            int b = (int)((uint)unit >> 6);
+            return (a * 67108864.0 + b) / 9007199254740992.0;
+        }
 
         // ---- legacy seeding (NumPy MT19937._legacy_seeding, used by RandomState.seed) ----
 

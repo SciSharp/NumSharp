@@ -27,8 +27,11 @@ namespace NumSharp
                 if (@out is not null)
                 {
                     ValidateOut(@out, size, tc, requireCContiguous: false);
-                    if (tc == NPTypeCode.Single) FillFloatDistInto(@out, NextStandardNormalF);
-                    else FillDoubleDistInto(@out, NextStandardNormal);
+                    unsafe
+                    {
+                        if (tc == NPTypeCode.Single) FillStandardNormalF((float*)OutStart(@out), @out.size);
+                        else FillStandardNormal((double*)OutStart(@out), @out.size);
+                    }
                     return @out;
                 }
 
@@ -39,9 +42,13 @@ namespace NumSharp
                         ? NDArray.Scalar((double)NextStandardNormalF())
                         : NDArray.Scalar(NextStandardNormal());
 
-                return tc == NPTypeCode.Single
-                    ? FillFloatDist(size, NextStandardNormalF)
-                    : FillDoubleDist(size, NextStandardNormal);
+                var ret = new NDArray(tc == NPTypeCode.Single ? typeof(float) : typeof(double), size, false);
+                unsafe
+                {
+                    if (tc == NPTypeCode.Single) FillStandardNormalF((float*)ret.Address, ret.size);
+                    else FillStandardNormal((double*)ret.Address, ret.size);
+                }
+                return ret;
             }
         }
 
@@ -66,7 +73,17 @@ namespace NumSharp
                 if (IsNoSize(size))
                     return NDArray.Scalar(loc + scale * NextStandardNormal());
 
-                return FillDoubleDist(size, () => loc + scale * NextStandardNormal());
+                // loc + scale * z for each standard normal z — the same expression per element as NumPy's cont().
+                var ret = new NDArray(typeof(double), size, false);
+                unsafe
+                {
+                    var p = (double*)ret.Address;
+                    long n = ret.size;
+                    FillStandardNormal(p, n);
+                    for (long i = 0; i < n; i++)
+                        p[i] = loc + scale * p[i];
+                }
+                return ret;
             }
         }
     }

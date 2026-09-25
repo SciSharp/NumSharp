@@ -195,13 +195,29 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     NumPy's <c>philox4x64_R(10, ctr, key)</c>: ten rounds over the counter, the key bumped by the Weyl
-        ///     constants between rounds; the result becomes the buffered block.
+        ///     NumPy's <c>philox4x64_R(10, ctr, key)</c> over the current counter and key; the result becomes the
+        ///     buffered block.
         /// </summary>
-        private void EncryptCounter()
+        private unsafe void EncryptCounter()
         {
-            ulong x0 = _c0, x1 = _c1, x2 = _c2, x3 = _c3;
-            ulong k0 = _k0, k1 = _k1;
+            fixed (ulong* block = _buffer)
+                Encrypt(_c0, _c1, _c2, _c3, _k0, _k1, block);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>philox4x64_R(10, ctr, key)</c>: ten rounds over a counter, the key bumped by the Weyl constants
+        ///     between rounds.
+        /// </summary>
+        /// <param name="x0">Counter word 0 (lowest).</param>
+        /// <param name="x1">Counter word 1.</param>
+        /// <param name="x2">Counter word 2.</param>
+        /// <param name="x3">Counter word 3 (highest).</param>
+        /// <param name="k0">Key word 0.</param>
+        /// <param name="k1">Key word 1.</param>
+        /// <param name="block">Receives the four output words.</param>
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        private static unsafe void Encrypt(ulong x0, ulong x1, ulong x2, ulong x3, ulong k0, ulong k1, ulong* block)
+        {
             for (int r = 0; r < Rounds; r++)
             {
                 if (r > 0)
@@ -219,11 +235,70 @@ namespace NumSharp
                 x2 = n2;
                 x3 = lo0;
             }
-            _buffer[0] = x0;
-            _buffer[1] = x1;
-            _buffer[2] = x2;
-            _buffer[3] = x3;
+            block[0] = x0;
+            block[1] = x1;
+            block[2] = x2;
+            block[3] = x3;
         }
+
+        /// <inheritdoc/>
+        /// <remarks>
+        ///     Serves what is left of the buffered block, encrypts whole blocks STRAIGHT into the destination (counter and
+        ///     key in locals), and runs a partial final block through the buffer. The state afterwards is exactly the
+        ///     per-draw one: the buffer holds the last block encrypted and <c>buffer_pos</c> indexes its next unread
+        ///     word (4 when a whole block was just consumed).
+        /// </remarks>
+        internal override unsafe void FillUInt64(ulong* dst, long n)
+        {
+            long i = 0;
+            while (i < n && _bufferPos < BufferSize)
+                dst[i++] = _buffer[_bufferPos++];
+            if (i >= n)
+                return;
+
+            ulong c0 = _c0, c1 = _c1, c2 = _c2, c3 = _c3, k0 = _k0, k1 = _k1;
+            long wholeStart = i;
+            while (n - i >= BufferSize)
+            {
+                if (++c0 == 0 && ++c1 == 0 && ++c2 == 0)
+                    ++c3;
+                Encrypt(c0, c1, c2, c3, k0, k1, dst + i);
+                i += BufferSize;
+            }
+            _c0 = c0;
+            _c1 = c1;
+            _c2 = c2;
+            _c3 = c3;
+            if (i > wholeStart)
+            {
+                // The last whole block stays observable as the buffer, fully consumed.
+                for (int k = 0; k < BufferSize; k++)
+                    _buffer[k] = dst[i - BufferSize + k];
+                _bufferPos = BufferSize;
+            }
+
+            if (i < n)
+            {
+                if (++_c0 == 0 && ++_c1 == 0 && ++_c2 == 0)
+                    ++_c3;
+                EncryptCounter();
+                _bufferPos = 0;
+                while (i < n)
+                    dst[i++] = _buffer[_bufferPos++];
+            }
+        }
+
+        /// <inheritdoc/>
+        internal override unsafe void FillUInt32(uint* dst, long n) => FillUInt32From64(dst, n, ref _hasUint32, ref _uinteger);
+
+        /// <inheritdoc/>
+        internal override unsafe void FillDouble(double* dst, long n) => FillDoubleFrom64(dst, n);
+
+        /// <inheritdoc/>
+        internal override unsafe void FillFloat(float* dst, long n) => FillFloatFrom64(dst, n, ref _hasUint32, ref _uinteger);
+
+        /// <inheritdoc/>
+        internal override unsafe void FillRaw(ulong* dst, long n) => FillUInt64(dst, n);
 
         /// <summary>
         ///     Advance the underlying RNG as if <paramref name="delta"/> draws had occurred (NumPy's <c>Philox.advance</c>)

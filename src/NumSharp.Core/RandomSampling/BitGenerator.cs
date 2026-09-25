@@ -205,10 +205,7 @@ namespace NumSharp
                     return NDArray.Scalar(NextRaw());
 
                 var ret = new NDArray(typeof(ulong), size, false);
-                long count = ret.size;
-                var p = (ulong*)ret.Address;
-                for (long i = 0; i < count; i++)
-                    p[i] = NextRaw();
+                FillRaw((ulong*)ret.Address, ret.size);
                 return ret;
             }
         }
@@ -225,6 +222,15 @@ namespace NumSharp
         /// <returns>The top 53 bits of one 64-bit word scaled by <c>2**-53</c> (engines with their own formula override).</returns>
         internal virtual double NextDouble() => (NextUInt64() >> 11) * (1.0 / 9007199254740992.0);
 
+        /// <summary>
+        ///     Converts one <c>next_uint64</c> draw to the <c>next_double</c> the same stream position would have produced —
+        ///     the contract that lets <see cref="DrawBuffer64"/> serve both kinds of draw from one read-ahead buffer.
+        /// </summary>
+        /// <param name="unit">A word from <see cref="NextUInt64"/> / <see cref="FillUInt64"/>.</param>
+        /// <returns><c>(unit &gt;&gt; 11) * 2**-53</c> — <c>uint64_to_double</c>, the <c>next_double</c> of every 64-bit engine
+        /// (MT19937 overrides it: its double is built from the two 32-bit words its 64-bit draw concatenates).</returns>
+        internal virtual double UnitToDouble(ulong unit) => (unit >> 11) * (1.0 / 9007199254740992.0);
+
         /// <summary>A random float in <c>[0, 1)</c> with 24-bit precision (NumPy's <c>next_float</c>).</summary>
         /// <returns>The top 24 bits of one 32-bit word scaled by <c>2**-24</c>.</returns>
         internal virtual float NextFloat() => (NextUInt32() >> 8) * (1.0f / 16777216.0f);
@@ -232,6 +238,167 @@ namespace NumSharp
         /// <summary>The engine's raw output word (NumPy's <c>next_raw</c>), widened to 64 bits.</summary>
         /// <returns>A full 64-bit word for 64-bit engines; the 32-bit word for MT19937.</returns>
         internal virtual ulong NextRaw() => NextUInt64();
+
+        // ---- bulk fills: the same streams as the per-draw primitives, without a virtual call per draw ----
+        //
+        // A fill of n draws through the per-draw primitives pays two virtual calls per element (NextDouble ->
+        // NextUInt64) and re-reads/re-writes the engine's fields around every destination store (a raw pointer
+        // store may alias them, so the JIT cannot keep the state in registers). The engines override these with
+        // loops that hold their state in locals for the whole run. Every override MUST leave the engine in
+        // exactly the state the equivalent sequence of per-draw calls would — the fills are observable through
+        // `state`, and NumPy's streams interleave them freely with single draws.
+
+        /// <summary>Fills <paramref name="n"/> words of <c>next_uint64</c> (the stream <see cref="NextUInt64"/> yields).</summary>
+        /// <param name="dst">The destination (at least <paramref name="n"/> words; may be unaligned).</param>
+        /// <param name="n">The number of words (non-positive: nothing).</param>
+        /// <remarks>The caller holds <see cref="@lock"/>.</remarks>
+        internal virtual unsafe void FillUInt64(ulong* dst, long n)
+        {
+            for (long i = 0; i < n; i++)
+                dst[i] = NextUInt64();
+        }
+
+        /// <summary>Fills <paramref name="n"/> words of <c>next_uint32</c>, buffered halves included (the stream <see cref="NextUInt32"/> yields).</summary>
+        /// <param name="dst">The destination (at least <paramref name="n"/> words).</param>
+        /// <param name="n">The number of words (non-positive: nothing).</param>
+        /// <remarks>The caller holds <see cref="@lock"/>.</remarks>
+        internal virtual unsafe void FillUInt32(uint* dst, long n)
+        {
+            for (long i = 0; i < n; i++)
+                dst[i] = NextUInt32();
+        }
+
+        /// <summary>Fills <paramref name="n"/> <c>next_double</c> draws in <c>[0, 1)</c> (the stream <see cref="NextDouble"/> yields).</summary>
+        /// <param name="dst">The destination (at least <paramref name="n"/> doubles).</param>
+        /// <param name="n">The number of draws (non-positive: nothing).</param>
+        /// <remarks>The caller holds <see cref="@lock"/>.</remarks>
+        internal virtual unsafe void FillDouble(double* dst, long n)
+        {
+            for (long i = 0; i < n; i++)
+                dst[i] = NextDouble();
+        }
+
+        /// <summary>Fills <paramref name="n"/> <c>next_float</c> draws in <c>[0, 1)</c> (the stream <see cref="NextFloat"/> yields).</summary>
+        /// <param name="dst">The destination (at least <paramref name="n"/> floats).</param>
+        /// <param name="n">The number of draws (non-positive: nothing).</param>
+        /// <remarks>The caller holds <see cref="@lock"/>.</remarks>
+        internal virtual unsafe void FillFloat(float* dst, long n)
+        {
+            for (long i = 0; i < n; i++)
+                dst[i] = NextFloat();
+        }
+
+        /// <summary>Fills <paramref name="n"/> raw words (<c>next_raw</c>, widened to 64 bits) — the stream <see cref="NextRaw"/> yields.</summary>
+        /// <param name="dst">The destination (at least <paramref name="n"/> words).</param>
+        /// <param name="n">The number of words (non-positive: nothing).</param>
+        /// <remarks>The caller holds <see cref="@lock"/>.</remarks>
+        internal virtual unsafe void FillRaw(ulong* dst, long n)
+        {
+            for (long i = 0; i < n; i++)
+                dst[i] = NextRaw();
+        }
+
+        /// <summary>
+        ///     The chunk, in 64-bit words, that the in-place conversions below walk: 2 KB, so the words a chunk's
+        ///     <see cref="FillUInt64"/> just wrote are still in L1 when they are converted.
+        /// </summary>
+        private protected const int FillChunk = 256;
+
+        /// <summary>
+        ///     <see cref="FillDouble"/> for engines whose <c>next_double</c> is <c>uint64_to_double(next_uint64)</c>
+        ///     (PCG64, PCG64DXSM, Philox, SFC64): the destination is filled with raw words a chunk at a time and each
+        ///     word is converted IN PLACE to <c>(w &gt;&gt; 11) * 2**-53</c>.
+        /// </summary>
+        /// <param name="dst">The destination.</param>
+        /// <param name="n">The number of draws.</param>
+        /// <remarks>
+        ///     Reinterpreting the double slots as words is safe (same size, each word read before its slot is
+        ///     rewritten), and <c>w &gt;&gt; 11 &lt; 2**53</c> converts exactly through the signed conversion.
+        /// </remarks>
+        private protected unsafe void FillDoubleFrom64(double* dst, long n)
+        {
+            var words = (ulong*)dst;
+            while (n > 0)
+            {
+                long m = n < FillChunk ? n : FillChunk;
+                FillUInt64(words, m);
+                var d = (double*)words;
+                for (long k = 0; k < m; k++)
+                    d[k] = (long)(words[k] >> 11) * (1.0 / 9007199254740992.0);
+                words += m;
+                n -= m;
+            }
+        }
+
+        /// <summary>
+        ///     <see cref="FillUInt32"/> for engines whose <c>next_uint32</c> splits a <c>next_uint64</c> word — low half
+        ///     returned, high half buffered (PCG64, PCG64DXSM, Philox, SFC64): a pending half is served first, whole
+        ///     words then land straight in the destination (little-endian, so word k's low/high halves ARE the next two
+        ///     uint32 slots), and an odd final draw splits one more word and buffers its high half.
+        /// </summary>
+        /// <param name="dst">The destination (any 4-byte alignment; the word stores may be unaligned).</param>
+        /// <param name="n">The number of draws.</param>
+        /// <param name="hasUint32">The engine's pending-half flag (read and updated).</param>
+        /// <param name="uinteger">The engine's pending half (read and updated).</param>
+        private protected unsafe void FillUInt32From64(uint* dst, long n, ref int hasUint32, ref uint uinteger)
+        {
+            if (n <= 0)
+                return;
+            if (!BitConverter.IsLittleEndian)
+            {
+                // The in-place split relies on the little-endian word layout; stay per-draw elsewhere.
+                for (long k = 0; k < n; k++)
+                    dst[k] = NextUInt32();
+                return;
+            }
+            long i = 0;
+            if (hasUint32 != 0)
+            {
+                hasUint32 = 0;
+                dst[i++] = uinteger;
+            }
+            long pairs = (n - i) >> 1;
+            if (pairs > 0)
+            {
+                FillUInt64((ulong*)(dst + i), pairs);
+                i += pairs << 1;
+                // Per draw, each word's high half is first buffered into `uinteger` and then consumed — which clears
+                // the flag but LEAVES the value (NumPy's next32 never zeroes it), and the state exposes it. So the
+                // last pair's high half is the uinteger the per-draw sequence would leave behind.
+                uinteger = dst[i - 1];
+            }
+            if (i < n)
+            {
+                ulong w;
+                FillUInt64(&w, 1);
+                dst[i] = (uint)w;
+                hasUint32 = 1;
+                uinteger = (uint)(w >> 32);
+            }
+        }
+
+        /// <summary>
+        ///     <see cref="FillFloat"/> for the split-word engines: <see cref="FillUInt32From64"/> into the float slots a chunk at
+        ///     a time, then each word converted in place to <c>(u &gt;&gt; 8) * 2**-24</c> (NumPy's <c>next_float</c>).
+        /// </summary>
+        /// <param name="dst">The destination.</param>
+        /// <param name="n">The number of draws.</param>
+        /// <param name="hasUint32">The engine's pending-half flag (read and updated).</param>
+        /// <param name="uinteger">The engine's pending half (read and updated).</param>
+        private protected unsafe void FillFloatFrom64(float* dst, long n, ref int hasUint32, ref uint uinteger)
+        {
+            var words = (uint*)dst;
+            while (n > 0)
+            {
+                long m = n < 2 * FillChunk ? n : 2 * FillChunk;
+                FillUInt32From64(words, m, ref hasUint32, ref uinteger);
+                var f = (float*)words;
+                for (long k = 0; k < m; k++)
+                    f[k] = (int)(words[k] >> 8) * (1.0f / 16777216.0f);
+                words += m;
+                n -= m;
+            }
+        }
 
         /// <summary>The bit generator's class name, e.g. <c>"PCG64"</c>. Drives <c>Generator</c>'s repr and the state checks.</summary>
         internal abstract string Name { get; }

@@ -88,6 +88,37 @@ namespace NumSharp
         internal override ulong NextUInt64() => Next();
 
         /// <inheritdoc/>
+        /// <remarks>The four state words live in locals for the whole run (see <see cref="BitGenerator.FillUInt64"/>).</remarks>
+        internal override unsafe void FillUInt64(ulong* dst, long n)
+        {
+            ulong a = _s0, b = _s1, c = _s2, counter = _s3;
+            for (long i = 0; i < n; i++)
+            {
+                ulong tmp = a + b + counter++;
+                a = b ^ (b >> 11);
+                b = c + (c << 3);
+                c = BitOperations.RotateLeft(c, 24) + tmp;
+                dst[i] = tmp;
+            }
+            _s0 = a;
+            _s1 = b;
+            _s2 = c;
+            _s3 = counter;
+        }
+
+        /// <inheritdoc/>
+        internal override unsafe void FillUInt32(uint* dst, long n) => FillUInt32From64(dst, n, ref _hasUint32, ref _uinteger);
+
+        /// <inheritdoc/>
+        internal override unsafe void FillDouble(double* dst, long n) => FillDoubleFrom64(dst, n);
+
+        /// <inheritdoc/>
+        internal override unsafe void FillFloat(float* dst, long n) => FillFloatFrom64(dst, n, ref _hasUint32, ref _uinteger);
+
+        /// <inheritdoc/>
+        internal override unsafe void FillRaw(ulong* dst, long n) => FillUInt64(dst, n);
+
+        /// <inheritdoc/>
         internal override uint NextUInt32()
         {
             // sfc64_next32: serve the cached high half, else draw a 64-bit word and cache its high half.

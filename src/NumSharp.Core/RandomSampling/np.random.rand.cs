@@ -1,5 +1,3 @@
-using NumSharp.Utilities;
-
 namespace NumSharp
 {
     public partial class NumPyRandom
@@ -37,20 +35,19 @@ namespace NumSharp
         /// </remarks>
         public NDArray rand(Shape shape)
         {
-            NDArray ret = new NDArray(typeof(double), shape, false);
+            // A fresh C-contiguous array of the requested dimensions: a view's Shape (strides/offset) must not leak
+            // into the allocation, and NumPy's random_sample always fills a new C-order array.
+            NDArray ret = new NDArray(typeof(double), shape.IsEmpty ? shape : new Shape(shape.dimensions), false);
 
             // Handle empty arrays (any dimension is 0)
-            if (shape.size == 0)
+            if (ret.size == 0)
                 return ret;
 
             unsafe
             {
-                var addr = (double*)ret.Address;
-                var incr = new ValueCoordinatesIncrementor(ref shape);
-                do
-                {
-                    *(addr + shape.GetOffset(incr.Index)) = randomizer.NextDouble();
-                } while (incr.Next() != null);
+                // One bulk fill in memory (= C) order, holding the engine lock as NumPy's double_fill does.
+                lock (randomizer.@lock)
+                    randomizer.FillDouble((double*)ret.Address, ret.size);
             }
 
             return ret;

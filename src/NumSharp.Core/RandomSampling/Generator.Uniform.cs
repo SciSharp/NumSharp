@@ -29,7 +29,17 @@ namespace NumSharp
                 if (IsNoSize(size))
                     return NDArray.Scalar(low + range * _bitGenerator.NextDouble());
 
-                return FillDoubleDist(size, () => low + range * _bitGenerator.NextDouble());
+                // One bulk uniform fill, then low + range * u in place — NumPy's per-element expression.
+                var ret = new NDArray(typeof(double), size, false);
+                unsafe
+                {
+                    var p = (double*)ret.Address;
+                    long n = ret.size;
+                    _bitGenerator.FillDouble(p, n);
+                    for (long i = 0; i < n; i++)
+                        p[i] = low + range * p[i];
+                }
+                return ret;
             }
         }
     }
