@@ -9,83 +9,168 @@ namespace NumSharp
         ///     Return random integers from <paramref name="low"/> (inclusive) to <paramref name="high"/>
         ///     (exclusive, or inclusive when <paramref name="endpoint"/> is true).
         /// </summary>
-        /// <param name="low">Lowest integer drawn (or the highest, one above, when <paramref name="high"/> is null).</param>
+        /// <param name="low">Lowest integer drawn (or, when <paramref name="high"/> is null, one above the highest with low = 0).</param>
         /// <param name="high">If provided, one above the largest integer drawn (or the largest when <paramref name="endpoint"/>).</param>
-        /// <param name="size">Output shape. If default/scalar a single value is returned.</param>
-        /// <param name="dtype">Desired integer dtype. Default is int64.</param>
+        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) returns a single value; <c>()</c> returns a 0-d array.</param>
+        /// <param name="dtype">Desired native integer or bool dtype. Default is int64.</param>
         /// <param name="endpoint">If true, sample from the closed interval <c>[low, high]</c>.</param>
+        /// <returns>The draws, of <paramref name="dtype"/>.</returns>
+        /// <exception cref="TypeError"><paramref name="dtype"/> is a native non-integer dtype (<c>Unsupported dtype dtype('float64') for integers</c>).</exception>
+        /// <exception cref="ValueError">
+        ///     <paramref name="dtype"/> has a non-native byte order; or the bounds fall outside the dtype
+        ///     (<c>low/high is out of bounds for &lt;dtype&gt;</c>); or the interval is empty (<c>low &gt;= high</c>,
+        ///     <c>high &lt;= 0</c> and their closed-interval forms).
+        /// </exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.integers.html
         ///     <br/>
         ///     Uses Lemire's method (NumPy's Generator default, <c>use_masked=False</c>) — NOT the
         ///     legacy masked rejection of <c>RandomState.randint</c> — so the stream is byte-identical
-        ///     to <c>default_rng(seed).integers(...)</c>.
+        ///     to <c>default_rng(seed).integers(...)</c>. A zero-size request returns an empty array before
+        ///     the bounds are checked and draws nothing, exactly as NumPy's <c>_rand_*</c> does.
         /// </remarks>
         public NDArray integers(long low, long? high = null, Shape size = default, DType dtype = null, bool endpoint = false)
-        {
-            dtype ??= DType.Int64;
-            NPTypeCode tc = dtype.GetTypeCode();
+            => IntegersCore(low, high.HasValue ? (Int128)high.Value : (Int128?)null, size, dtype, endpoint);
 
-            long lo, hiArg;
-            if (high == null)
+        /// <summary>
+        ///     Unsigned overload of <see cref="integers(long, long?, Shape, DType, bool)"/> — the C# spelling of a
+        ///     bound above <see cref="long.MaxValue"/>, which NumPy expresses with arbitrary-precision Python ints:
+        ///     the upper half of the <c>uint64</c> range (full range: <c>integers(0UL, ulong.MaxValue,
+        ///     dtype: np.uint64, endpoint: true)</c>) and the exclusive int64 high <c>2**63</c>
+        ///     (<c>integers(0UL, 9223372036854775808UL, dtype: np.int64)</c>).
+        /// </summary>
+        /// <param name="low">Lowest integer drawn (or, when <paramref name="high"/> is null, one above the highest with low = 0).</param>
+        /// <param name="high">If provided, one above the largest integer drawn (or the largest when <paramref name="endpoint"/>).</param>
+        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) returns a single value; <c>()</c> returns a 0-d array.</param>
+        /// <param name="dtype">Desired native integer or bool dtype. Default is int64.</param>
+        /// <param name="endpoint">If true, sample from the closed interval <c>[low, high]</c>.</param>
+        /// <returns>The draws, of <paramref name="dtype"/>.</returns>
+        /// <exception cref="TypeError"><paramref name="dtype"/> is a native non-integer dtype.</exception>
+        /// <exception cref="ValueError">Non-native byte order, bounds outside the dtype, or an empty interval — as for the signed overload.</exception>
+        /// <remarks>
+        ///     Both overloads share one arbitrary-precision (<see cref="Int128"/>) range check, so every value
+        ///     expressible in either spelling is validated exactly as NumPy validates the Python int.
+        /// </remarks>
+        public NDArray integers(ulong low, ulong? high = null, Shape size = default, DType dtype = null, bool endpoint = false)
+            => IntegersCore(low, high.HasValue ? (Int128)high.Value : (Int128?)null, size, dtype, endpoint);
+
+        /// <summary>
+        ///     The shared body of both <c>integers</c> overloads: NumPy's <c>Generator.integers</c> +
+        ///     <c>_bounded_integers._rand_&lt;dtype&gt;</c> scalar path, in NumPy's validation order.
+        /// </summary>
+        /// <param name="low">The first bound as received.</param>
+        /// <param name="high">The second bound as received (null = NumPy's <c>high=None</c>).</param>
+        /// <param name="size">The output shape (default = scalar request).</param>
+        /// <param name="dtype">The requested dtype (null = int64).</param>
+        /// <param name="endpoint">Whether <paramref name="high"/> is inclusive.</param>
+        /// <returns>The draws.</returns>
+        /// <exception cref="TypeError">Unsupported native dtype.</exception>
+        /// <exception cref="ValueError">Non-native dtype, out-of-bounds low/high, or an empty interval.</exception>
+        /// <remarks>
+        ///     The range arithmetic is done in <see cref="Int128"/> — NumPy works on unbounded Python ints, so
+        ///     <c>high - 1</c> can never wrap and a bound one past a dtype's range is REPORTED rather than
+        ///     silently masked. Each dtype's upper bound is its INCLUSIVE maximum (NumPy's template <c>ub</c>:
+        ///     <c>0x1</c> for bool, <c>0xFF</c> for uint8, <c>0x7FFFFFFF</c> for int32, …), compared against the
+        ///     already-inclusive high; comparing against an exclusive limit accepted <c>high = max + 2</c>, masked
+        ///     the range to zero and returned a constant array.
+        /// </remarks>
+        private NDArray IntegersCore(Int128 low, Int128? high, Shape size, DType dtype, bool endpoint)
+        {
+            Int128 lo, hi;
+            if (high is null)
             {
-                hiArg = low;
+                hi = low;
                 lo = 0;
             }
             else
             {
                 lo = low;
-                hiArg = high.Value;
+                hi = high.Value;
             }
 
-            // Internal generator produces on the closed interval; subtract 1 for the half-open case.
-            long highInclusive = endpoint ? hiArg : hiArg - 1;
+            dtype ??= DType.Int64;
+            ResolveIntegerDtype(dtype, out NPTypeCode tc, out int width, out Int128 lb, out Int128 ub);
 
-            ComputeOffRng(tc, dtype, lo, highInclusive, endpoint, out int width, out ulong off, out ulong rng);
-            return FillIntegers(dtype, tc, size, width, off, rng);
+            // NumPy _rand_*: `if size is not None and np.prod(size) == 0: return np.empty(size, dtype)` runs
+            // BEFORE the bounds are looked at, and consumes nothing from the stream.
+            if (!IsNoSize(size) && size.size == 0)
+                return new NDArray(dtype, size);
+
+            // The internal generator produces on the closed interval [low, high]; subtract 1 for the
+            // half-open case. Int128 keeps this exact for both overloads (no wrap at 0 or at 2**63).
+            if (!endpoint)
+                hi -= 1;
+
+            string name = tc.AsNumpyDtypeName();
+            if (lo < lb)
+                throw new ValueError($"low is out of bounds for {name}");
+            if (hi > ub)
+                throw new ValueError($"high is out of bounds for {name}");
+            if (lo > hi)
+                throw new ValueError(FormatBoundsError(endpoint, lo));
+
+            // rng = high - low fits the dtype's unsigned width once the bounds hold; off is the low bound's
+            // two's-complement bit pattern at that width (NumPy's `<utype>(<nptype>low)` cast).
+            ulong widthMask = width >= 64 ? ulong.MaxValue : ((1UL << width) - 1UL);
+            ulong rng = unchecked((ulong)(hi - lo)) & widthMask;
+            ulong off = unchecked((ulong)(lo & ulong.MaxValue)) & widthMask;
+
+            lock (_bitGenerator.@lock)
+                return FillIntegers(dtype, tc, size, width, off, rng);
         }
 
         /// <summary>
-        ///     Unsigned overload of <see cref="integers(long, long?, Shape, DType, bool)"/> — the only way
-        ///     to reach the upper half of the <c>uint64</c> range (values above <see cref="long.MaxValue"/>),
-        ///     which NumPy addresses with arbitrary-precision Python ints. The full <c>[0, 2**64)</c> range
-        ///     is drawn as <c>integers(0UL, ulong.MaxValue, dtype: np.uint64, endpoint: true)</c>.
+        ///     Maps a requested dtype onto NumPy's nine <c>integers</c> loops (the <c>_dtype == np.int32 …</c>
+        ///     dispatch), with each loop's draw width and INCLUSIVE value range.
         /// </summary>
-        /// <remarks>
-        ///     Anything expressible in the signed domain is forwarded verbatim to the signed overload, so
-        ///     only genuinely-large uint64 requests take the dedicated path — which, like NumPy, rejects a
-        ///     non-uint64 dtype whose range cannot hold the requested high (<c>high is out of bounds…</c>).
-        /// </remarks>
-        public NDArray integers(ulong low, ulong? high = null, Shape size = default, DType dtype = null, bool endpoint = false)
+        /// <param name="dtype">The requested dtype.</param>
+        /// <param name="tc">The resolved type code.</param>
+        /// <param name="width">The bounded-draw width: 1 (bool), 8, 16, 32 or 64 — it decides how the stream is consumed.</param>
+        /// <param name="lb">The inclusive minimum of the dtype.</param>
+        /// <param name="ub">The inclusive maximum of the dtype.</param>
+        /// <exception cref="ValueError">The dtype's byte order is not native (NumPy checks this after the nine equality tests fail, so it wins over "unsupported").</exception>
+        /// <exception cref="TypeError">The dtype is a native non-integer type.</exception>
+        private static void ResolveIntegerDtype(DType dtype, out NPTypeCode tc, out int width, out Int128 lb, out Int128 ub)
         {
-            // Everything that fits the signed domain goes through the (byte-exact, well-tested) signed path.
-            if (low <= long.MaxValue && (high is null || high.Value <= (ulong)long.MaxValue))
-                return integers((long)low, high is null ? (long?)null : (long)high.Value, size, dtype, endpoint);
+            tc = dtype.GetTypeCode();
+            if (dtype.isnative)
+            {
+                switch (tc)
+                {
+                    case NPTypeCode.Boolean: width = 1; lb = 0; ub = 1; return;
+                    case NPTypeCode.Byte: width = 8; lb = 0; ub = byte.MaxValue; return;
+                    case NPTypeCode.SByte: width = 8; lb = sbyte.MinValue; ub = sbyte.MaxValue; return;
+                    case NPTypeCode.UInt16: width = 16; lb = 0; ub = ushort.MaxValue; return;
+                    case NPTypeCode.Int16: width = 16; lb = short.MinValue; ub = short.MaxValue; return;
+                    case NPTypeCode.UInt32: width = 32; lb = 0; ub = uint.MaxValue; return;
+                    case NPTypeCode.Int32: width = 32; lb = int.MinValue; ub = int.MaxValue; return;
+                    case NPTypeCode.UInt64: width = 64; lb = 0; ub = ulong.MaxValue; return;
+                    case NPTypeCode.Int64: width = 64; lb = long.MinValue; ub = long.MaxValue; return;
+                }
+            }
+            else
+            {
+                throw new ValueError("Providing a dtype with a non-native byteorder is not supported. If you require platform-independent byteorder, call byteswap when required.");
+            }
 
-            // Values exceed the signed range: only uint64 can represent them (NumPy's per-dtype bound check).
-            dtype ??= DType.Int64;
-            NPTypeCode tc = dtype.GetTypeCode();
-            if (tc != NPTypeCode.UInt64)
-                throw new ValueError($"high is out of bounds for {tc.AsNumpyDtypeName()}");
-
-            ulong lo, hiArg;
-            if (high is null) { hiArg = low; lo = 0UL; }
-            else { lo = low; hiArg = high.Value; }
-
-            // hiArg > long.MaxValue on this path (else we forwarded above), so hiArg - 1 cannot underflow.
-            ulong hiInclusive = endpoint ? hiArg : hiArg - 1UL;
-            if (lo > hiInclusive)
-                throw new ValueError(FormatBoundsErrorU(endpoint, lo));
-
-            ulong off = lo;
-            ulong rng = hiInclusive - lo;
-            return FillIntegers(dtype, tc, size, 64, off, rng);
+            throw new TypeError($"Unsupported dtype {dtype.ToString(true)} for integers");
         }
 
-        // Shared result builder: size==0 -> empty, size==None -> scalar, else a filled dtype array.
+        /// <summary>
+        ///     Builds the result: a scalar request returns a 0-d array of the dtype, anything else a filled array.
+        /// </summary>
+        /// <param name="dtype">The result dtype.</param>
+        /// <param name="tc">The result type code.</param>
+        /// <param name="size">The output shape (default = scalar request).</param>
+        /// <param name="width">The bounded-draw width (1/8/16/32/64).</param>
+        /// <param name="off">The low bound, as the unsigned bit pattern of the dtype.</param>
+        /// <param name="rng">The closed-interval range <c>high - low</c>.</param>
+        /// <returns>The draws.</returns>
+        /// <remarks>The caller holds the bit generator's lock.</remarks>
         private NDArray FillIntegers(DType dtype, NPTypeCode tc, Shape size, int width, ulong off, ulong rng)
         {
-            // size == 0 -> empty array of the requested dtype (drawn no state).
+            // size == 0 -> empty array of the requested dtype (draws no state). IntegersCore already
+            // returned for this case; kept so the helper is self-contained.
             if (!IsNoSize(size) && size.size == 0)
                 return new NDArray(dtype, size);
 
@@ -110,6 +195,7 @@ namespace NumSharp
         ///     A 1-D <see cref="NDArray{T}"/> of <see cref="byte"/> (dtype <c>uint8</c>), length
         ///     <paramref name="length"/> — the NumSharp analogue of NumPy's <c>bytes</c> object.
         /// </returns>
+        /// <exception cref="ValueError"><paramref name="length"/> is below the smallest length NumPy accepts (<c>negative dimensions are not allowed</c>).</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.bytes.html
         ///     <br/>
@@ -120,54 +206,19 @@ namespace NumSharp
         ///     NOT capped at <see cref="Array.MaxLength"/> and a request over 2 GiB still succeeds.
         /// </remarks>
         public NDArray<byte> bytes(long length)
-            => NumPyRandom.BytesCore(length, static bg => bg.NextUInt32(), _bitGenerator);
-
-        // ---- off/rng computation + validation (numpy _bounded_integers.pyx.in scalar path) ----
-
-        private static void ComputeOffRng(NPTypeCode tc, DType dtype, long lo, long highInclusive, bool endpoint,
-                                          out int width, out ulong off, out ulong rng)
         {
-            // (lb, ub, width). ub is the EXCLUSIVE upper bound; only meaningful (and checkable
-            // against a long input) for the <= 32-bit widths.
-            long lb;
-            long ub;
-            switch (tc)
-            {
-                case NPTypeCode.Boolean: lb = 0; ub = 2; width = 1; break;
-                case NPTypeCode.Byte: lb = 0; ub = 0x100L; width = 8; break;
-                case NPTypeCode.SByte: lb = -0x80L; ub = 0x80L; width = 8; break;
-                case NPTypeCode.UInt16: lb = 0; ub = 0x10000L; width = 16; break;
-                case NPTypeCode.Int16: lb = -0x8000L; ub = 0x8000L; width = 16; break;
-                case NPTypeCode.UInt32: lb = 0; ub = 0x100000000L; width = 32; break;
-                case NPTypeCode.Int32: lb = -0x80000000L; ub = 0x80000000L; width = 32; break;
-                case NPTypeCode.UInt64: lb = 0; ub = long.MaxValue; width = 64; break; // ub 2^64 unreachable by long
-                case NPTypeCode.Int64: lb = long.MinValue; ub = long.MaxValue; width = 64; break; // ub 2^63 unreachable
-                default:
-                    throw new TypeError($"Unsupported dtype dtype('{tc.AsNumpyDtypeName()}') for integers");
-            }
-
-            if (lo < lb)
-                throw new ValueError($"low is out of bounds for {tc.AsNumpyDtypeName()}");
-            // For 64-bit widths a long can never exceed the exclusive bound, so skip that check.
-            if (width <= 32 && highInclusive > ub)
-                throw new ValueError($"high is out of bounds for {tc.AsNumpyDtypeName()}");
-            if (lo > highInclusive)
-                throw new ValueError(FormatBoundsError(endpoint, lo));
-
-            ulong widthMask = width >= 64 ? ulong.MaxValue : ((1UL << width) - 1UL);
-            off = unchecked((ulong)lo) & widthMask;
-            rng = unchecked((ulong)(highInclusive - lo)) & widthMask;
+            lock (_bitGenerator.@lock)
+                return NumPyRandom.BytesCore(length, static bg => bg.NextUInt32(), _bitGenerator);
         }
 
-        private static string FormatBoundsError(bool closed, long low)
-        {
-            if (low == 0)
-                return closed ? "high < 0" : "high <= 0";
-            return closed ? "low > high" : "low >= high";
-        }
-
-        // Unsigned twin of FormatBoundsError for the uint64-large path.
-        private static string FormatBoundsErrorU(bool closed, ulong low)
+        /// <summary>
+        ///     NumPy's <c>format_bounds_error</c>: the special wording for the default single-argument
+        ///     (<c>low == 0</c>) case, else the low-versus-high wording.
+        /// </summary>
+        /// <param name="closed">Whether the interval is closed (<c>endpoint=True</c>).</param>
+        /// <param name="low">The low bound.</param>
+        /// <returns>The message text.</returns>
+        private static string FormatBoundsError(bool closed, Int128 low)
         {
             if (low == 0)
                 return closed ? "high < 0" : "high <= 0";
@@ -176,6 +227,17 @@ namespace NumSharp
 
         // ---- the per-width bounded fills (numpy random_bounded_uintX_fill, use_masked=False) ----
 
+        /// <summary>Dispatches a bounded fill to the per-width loop that consumes the stream the way NumPy's does.</summary>
+        /// <param name="nd">The freshly allocated C-contiguous destination.</param>
+        /// <param name="cnt">The number of values to draw.</param>
+        /// <param name="width">1 (bool), 8, 16, 32 or 64.</param>
+        /// <param name="off">The low bound's unsigned bit pattern.</param>
+        /// <param name="rng">The closed-interval range.</param>
+        /// <remarks>
+        ///     The width dispatch is REQUIRED for parity, not a performance switch: the 8/16-bit and bool loops
+        ///     split one 32-bit word into several values, so the same range drawn at another width consumes the
+        ///     stream differently.
+        /// </remarks>
         private unsafe void FillBounded(NDArray nd, long cnt, int width, ulong off, ulong rng)
         {
             void* addr = (void*)nd.Address;
@@ -189,6 +251,11 @@ namespace NumSharp
             }
         }
 
+        /// <summary>NumPy's <c>random_bounded_uint64_fill</c> (Lemire): 32-bit draws for ranges that fit, 64-bit otherwise.</summary>
+        /// <param name="outp">Destination.</param>
+        /// <param name="cnt">Value count.</param>
+        /// <param name="off">Low bound.</param>
+        /// <param name="rng">Closed-interval range.</param>
         private unsafe void FillBoundedUInt64(ulong* outp, long cnt, ulong off, ulong rng)
         {
             if (rng == 0)
@@ -215,6 +282,11 @@ namespace NumSharp
             }
         }
 
+        /// <summary>NumPy's <c>random_bounded_uint32_fill</c> (Lemire).</summary>
+        /// <param name="outp">Destination.</param>
+        /// <param name="cnt">Value count.</param>
+        /// <param name="off">Low bound.</param>
+        /// <param name="rng">Closed-interval range.</param>
         private unsafe void FillBoundedUInt32(uint* outp, long cnt, uint off, uint rng)
         {
             if (rng == 0)
@@ -225,6 +297,11 @@ namespace NumSharp
                 for (long i = 0; i < cnt; i++) outp[i] = off + LemireUint32(rng);
         }
 
+        /// <summary>NumPy's <c>random_bounded_uint16_fill</c> (Lemire over a 32-bit word split in two halves).</summary>
+        /// <param name="outp">Destination.</param>
+        /// <param name="cnt">Value count.</param>
+        /// <param name="off">Low bound.</param>
+        /// <param name="rng">Closed-interval range.</param>
         private unsafe void FillBoundedUInt16(ushort* outp, long cnt, ushort off, ushort rng)
         {
             uint buf = 0;
@@ -237,6 +314,11 @@ namespace NumSharp
                 for (long i = 0; i < cnt; i++) outp[i] = (ushort)(off + LemireUint16(rng, ref buf, ref bcnt));
         }
 
+        /// <summary>NumPy's <c>random_bounded_uint8_fill</c> (Lemire over a 32-bit word split in four bytes).</summary>
+        /// <param name="outp">Destination.</param>
+        /// <param name="cnt">Value count.</param>
+        /// <param name="off">Low bound.</param>
+        /// <param name="rng">Closed-interval range.</param>
         private unsafe void FillBoundedUInt8(byte* outp, long cnt, byte off, byte rng)
         {
             uint buf = 0;
@@ -249,6 +331,11 @@ namespace NumSharp
                 for (long i = 0; i < cnt; i++) outp[i] = (byte)(off + LemireUint8(rng, ref buf, ref bcnt));
         }
 
+        /// <summary>NumPy's <c>random_bounded_bool_fill</c>: one bit per value from a buffered 32-bit word (the low bound is ignored once the range is 1).</summary>
+        /// <param name="outp">Destination.</param>
+        /// <param name="cnt">Value count.</param>
+        /// <param name="off">Low bound (the value when the range is 0).</param>
+        /// <param name="rng">Closed-interval range (0 or 1).</param>
         private unsafe void FillBoundedBool(byte* outp, long cnt, byte off, byte rng)
         {
             uint buf = 0;
@@ -264,6 +351,10 @@ namespace NumSharp
 
         // ---- 32-bit buffer splitters (numpy buffered_uint16 / buffered_uint8) ----
 
+        /// <summary>NumPy's <c>buffered_uint16</c>: serves the two 16-bit halves of one 32-bit word, low half first.</summary>
+        /// <param name="buf">The buffered word (state across calls within one fill).</param>
+        /// <param name="bcnt">The number of halves still buffered.</param>
+        /// <returns>The next 16-bit value.</returns>
         private ushort BufferedUint16(ref uint buf, ref int bcnt)
         {
             if (bcnt == 0) { buf = _bitGenerator.NextUInt32(); bcnt = 1; }
@@ -271,6 +362,10 @@ namespace NumSharp
             return (ushort)buf;
         }
 
+        /// <summary>NumPy's <c>buffered_uint8</c>: serves the four bytes of one 32-bit word, low byte first.</summary>
+        /// <param name="buf">The buffered word (state across calls within one fill).</param>
+        /// <param name="bcnt">The number of bytes still buffered.</param>
+        /// <returns>The next 8-bit value.</returns>
         private byte BufferedUint8(ref uint buf, ref int bcnt)
         {
             if (bcnt == 0) { buf = _bitGenerator.NextUInt32(); bcnt = 3; }
@@ -280,6 +375,9 @@ namespace NumSharp
 
         // ---- Lemire bounded generators (numpy bounded_lemire_uintX) ----
 
+        /// <summary>NumPy's <c>bounded_lemire_uint64</c>: unbiased draw in <c>[0, rng]</c> by 128-bit multiply-and-reject.</summary>
+        /// <param name="rng">Closed-interval range (below 2**64-1).</param>
+        /// <returns>The draw.</returns>
         private ulong LemireUint64(ulong rng)
         {
             ulong rngExcl = rng + 1;
@@ -297,6 +395,9 @@ namespace NumSharp
             return (ulong)(m >> 64);
         }
 
+        /// <summary>NumPy's <c>bounded_lemire_uint32</c>: unbiased draw in <c>[0, rng]</c> by 64-bit multiply-and-reject.</summary>
+        /// <param name="rng">Closed-interval range (below 2**32-1).</param>
+        /// <returns>The draw.</returns>
         private uint LemireUint32(uint rng)
         {
             uint rngExcl = rng + 1;
@@ -314,6 +415,11 @@ namespace NumSharp
             return (uint)(m >> 32);
         }
 
+        /// <summary>NumPy's <c>buffered_bounded_lemire_uint16</c>: Lemire over buffered 16-bit halves.</summary>
+        /// <param name="rng">Closed-interval range (below 0xFFFF).</param>
+        /// <param name="buf">The buffered word.</param>
+        /// <param name="bcnt">The number of halves still buffered.</param>
+        /// <returns>The draw.</returns>
         private ushort LemireUint16(ushort rng, ref uint buf, ref int bcnt)
         {
             ushort rngExcl = (ushort)(rng + 1);
@@ -331,6 +437,11 @@ namespace NumSharp
             return (ushort)(m >> 16);
         }
 
+        /// <summary>NumPy's <c>buffered_bounded_lemire_uint8</c>: Lemire over buffered bytes.</summary>
+        /// <param name="rng">Closed-interval range (below 0xFF).</param>
+        /// <param name="buf">The buffered word.</param>
+        /// <param name="bcnt">The number of bytes still buffered.</param>
+        /// <returns>The draw.</returns>
         private byte LemireUint8(byte rng, ref uint buf, ref int bcnt)
         {
             byte rngExcl = (byte)(rng + 1);

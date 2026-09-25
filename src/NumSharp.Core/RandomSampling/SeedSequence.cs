@@ -188,16 +188,20 @@ namespace NumSharp
         ///     <c>generate_state(n_words, dtype=np.uint32)</c>). Returns a <c>uint[]</c> for
         ///     <c>uint32</c> (the default) or a <c>ulong[]</c> for <c>uint64</c>.
         /// </summary>
+        /// <param name="n_words">The number of words to produce (0 gives an empty result).</param>
+        /// <param name="dtype"><c>uint32</c> (default) or <c>uint64</c>; a uint64 word consumes two uint32 words of the stream.</param>
+        /// <returns>The seeding words — the same words for the same pool every call (the sequence is not consumed).</returns>
+        /// <exception cref="ValueError"><paramref name="n_words"/> is negative (NumPy's <c>np.zeros(n_words)</c> error), or <paramref name="dtype"/> is neither uint32 nor uint64.</exception>
         public Array generate_state(int n_words, DType dtype = null)
         {
-            if (dtype is null)
-                return GenerateState(n_words);
-            var tc = dtype.GetTypeCode();
-            if (tc == NPTypeCode.UInt32)
-                return GenerateState(n_words);
-            if (tc == NPTypeCode.UInt64)
-                return GenerateState64(n_words);
-            throw new ValueError("only support uint32 or uint64");
+            NPTypeCode tc = dtype is null ? NPTypeCode.UInt32 : dtype.GetTypeCode();
+            if (tc != NPTypeCode.UInt32 && tc != NPTypeCode.UInt64)
+                throw new ValueError("only support uint32 or uint64");
+            // NumPy allocates `np.zeros(n_words, dtype=np.uint32)` (twice the words for uint64), so a
+            // negative count is the allocator's error, raised after the dtype is accepted.
+            if (n_words < 0)
+                throw new ValueError("negative dimensions are not allowed");
+            return tc == NPTypeCode.UInt64 ? GenerateState64(n_words) : GenerateState(n_words);
         }
 
         /// <summary>
