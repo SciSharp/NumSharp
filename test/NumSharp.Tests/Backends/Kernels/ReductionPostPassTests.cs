@@ -177,6 +177,13 @@ public class ReductionPostPassTests
         }
     }
 
+    /// <summary>
+    /// A read-only output handed to either post-pass must be REFUSED before any store, with NumPy's own error —
+    /// <see cref="ValueError"/> "… is read-only" (<see cref="NumSharpException.ThrowReadOnly"/>, the one read-only
+    /// guard the whole write surface shares) — and must come back byte-for-byte unchanged. The typed dense-block
+    /// fast path is the risk this pins: it writes through raw pointers, so a missing writeable check there would
+    /// silently mutate a read-only (e.g. broadcast or <c>setflags(write: false)</c>) array instead of raising.
+    /// </summary>
     [TestMethod]
     public void ReadOnlyOutput_StillRaisesAndStaysUnchanged()
     {
@@ -184,8 +191,13 @@ public class ReductionPostPassTests
         a.setflags(write: false);
         var before = Bytes(a);
 
-        Assert.ThrowsException<NumSharpException>(() => ILKernelGenerator.SeedReduceIdentity(a, ReductionOp.Sum));
-        Assert.ThrowsException<NumSharpException>(() => ILKernelGenerator.MeanDivideByCount(a, 3));
+        // ValueError, not NumSharpException: the read-only guard raises NumPy's exact type since
+        // journey4 60024b44 (ValueError derives from ArgumentException, so asserting the old type
+        // would fail even though the refusal itself still happens).
+        var seed = Assert.ThrowsException<ValueError>(() => ILKernelGenerator.SeedReduceIdentity(a, ReductionOp.Sum));
+        StringAssert.EndsWith(seed.Message, "is read-only");
+        var mean = Assert.ThrowsException<ValueError>(() => ILKernelGenerator.MeanDivideByCount(a, 3));
+        StringAssert.EndsWith(mean.Message, "is read-only");
         CollectionAssert.AreEqual(before, Bytes(a), "a read-only output must not be written");
     }
 
