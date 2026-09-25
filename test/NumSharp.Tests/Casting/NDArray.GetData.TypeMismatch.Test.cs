@@ -12,7 +12,8 @@ namespace NumSharp.Tests.Casting
     ///
     /// NumSharp must never behave that way. The contract these tests pin:
     ///   * <see cref="NDArray.GetData{T}"/> performs a VALUE CAST that matches numpy's <c>a.astype(...)</c> exactly.
-    ///   * <see cref="NDArray.ToArray{T}"/> is STRICT and throws <see cref="ArrayTypeMismatchException"/> on mismatch.
+    ///   * <see cref="NDArray.ToArray{T}"/> performs the same value cast (astype semantics) into a new T[] — it used to
+    ///     throw <see cref="ArrayTypeMismatchException"/> on a mismatch, and must never reinterpret the raw bytes instead.
     /// Oracle values were produced with NumPy 2.4.2.
     /// </summary>
     [TestClass]
@@ -75,13 +76,23 @@ namespace NumSharp.Tests.Casting
             GetLongs(i64).Should().Equal(1L, 5_000_000_000L, -1L);
         }
 
+        /// <summary>
+        ///     <see cref="NDArray.ToArray{T}"/> with T ≠ dtype converts every value exactly as numpy's <c>astype</c> does —
+        ///     int64 → int32 wraps modulo 2^32 — instead of the old <see cref="ArrayTypeMismatchException"/>; the result
+        ///     must not be the "C3" byte reinterpretation that corrupts data.
+        /// </summary>
         [TestMethod]
-        public void ToArray_TypeMismatch_Throws()
+        public void ToArray_TypeMismatch_ConvertsLikeAstype()
         {
             var i64 = np.array(new long[] { 1, 5_000_000_000L, -1 });
 
-            Action act = () => i64.ToArray<int>();
-            act.Should().Throw<ArrayTypeMismatchException>();
+            var got = i64.ToArray<int>();
+
+            // numpy: np.array([1, 5_000_000_000, -1], np.int64).astype(np.int32).tolist() == [1, 705032704, -1]
+            got.Should().Equal(1, 705032704, -1);
+
+            // Must NOT equal numpy's a.view(np.int32)[:3] == [1, 0, 705032704] — the Numpy.NET "C3" reinterpret bug.
+            got.Should().NotEqual(new[] { 1, 0, 705032704 });
         }
     }
 }
