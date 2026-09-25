@@ -265,6 +265,7 @@ python test/oracle/gen_oracle.py precision        # truthful-vs-precise (adversa
 python test/oracle/gen_oracle.py products         # CBLAS product family values (inner/vdot/vecdot/matvec/...)
 python test/oracle/gen_oracle.py fft              # np.fft.* — 1-D/N-D/hermitian transforms + freq/shift helpers
 python test/oracle/gen_oracle.py random_parity    # seeded np.random stream bytes (portable + host-libm files)
+python test/oracle/gen_oracle.py polyeval         # np.polynomial.* evaluation family (module-qualified keys)
 python test/oracle/gen_index_oracle.py            # the four index_* corpora (seed pinned 20240626)
 python test/oracle/gen_nan_oracle.py              # nan.jsonl — NaN parity grid (standalone; complex bit-exact)
 python test/oracle/fuzz_random.py 1234 2000 random_smoke.jsonl
@@ -308,6 +309,30 @@ the fixed seed replays an identical corpus every night: a deterministic canary, 
 in the uploaded evidence that should repeat until the generator or the NumPy pin changes (a new value
 means NumPy answered differently on that runner). A divergence prints a shrunk minimal repro — copy it
 into `corpus/regressions/` so `FuzzRegression` pins it on every CI thereafter.
+
+### Coverage join — per-API parity evidence
+
+The API coverage tool (`coverage/generate_coverage.py`, the "NumPy API Coverage & Support" dashboard)
+joins every committed contract of this corpus — plus the `.npy`, flags and layout oracles in
+`test/NumSharp.Tests/` — onto the catalog row of the API it exercises, so each NumPy API reads
+**available** (the compiled surface has it) and, separately, **oracle-verified** (committed NumPy output
+replays against it here). The join lives in `coverage/oracle_evidence.py`; the reviewed table is
+`coverage/oracle_map.json`. It is STRICT, and that has two consequences for anyone adding corpus cases:
+
+* **A new op key must resolve.** Bare keys resolve to `np.<key>` first (then `np.linalg`/`np.fft`/
+  `np.random`, then a NumSharp-only `np` row); dotted keys by namespace (`ndarray.`, `emath.`, `ma.`, the six
+  polynomial bases). Anything else — a variant suffix (`std_ddof`), a parameter-driven key
+  (`out_binary` + `params.ufunc`), a protocol (`get`/`set`) — needs a `fuzz.keys` entry, or the coverage
+  generator fails naming the key. Entries that go unused, or merely repeat the automatic rules, fail too.
+* **A new corpus file must be replayed.** A `*.jsonl` no replay suite (`FuzzCorpusTests*.cs`,
+  `IndexOracleTests.cs`) names as a string literal fails the join: its contracts would prove nothing.
+  Files run through `RunHostLibmCorpus(...)` are discovered as host-pinned automatically; other pinned
+  tiers are declared under `host_pins`.
+
+Aliases mirror `OracleSurfaceCoverageTests`' `EquivalentAliases`/`NdarrayAliases`/`MaAliases` (a Python
+test fails if a C# alias has no counterpart), plus an automatic identity rule: a row credited to the SAME
+NumSharp member as a gated row, whose NumPy object is the SAME object (`np.acos is np.arccos`), shares its
+contracts. Gate: `python -m unittest discover -s coverage -p 'test_oracle_evidence.py'`.
 
 ## Documented divergence ledger (Misaligned / known bugs)
 
@@ -791,6 +816,24 @@ the corpus records; `polyder`/`vander` preserve int64. The pure single-operand o
 vander/poly1d/cov/corrcoef) are **carved out of the blanket "unary ~ULP" excuse** in `MisalignedRegistry`
 (they are arithmetic, not transcendental-libm, so a ≤2-ULP drift is a regression — the same narrowing the
 ported float32 kernels get).
+
+### numpy.polynomial evaluation family (`polyeval` tier)
+
+`polyeval.jsonl` (`gen_oracle.py polyeval`, 12,214 cases, floor 11,800) gates the PACKAGE evaluation
+family — `{p}val`/`{p}val2d`/`{p}val3d`/`{p}grid2d`/`{p}grid3d` for the six bases (`polynomial`,
+`chebyshev`, `legendre`, `laguerre`, `hermite`, `hermite_e`) plus NumSharp's `{p}valnd` twins — **bit-exact,
+0 excused**. Op keys are MODULE-QUALIFIED (`chebyshev.chebval`) because the package reuses the legacy
+`np.polyval`/`polyder` names with the OPPOSITE coefficient order: a bare key would credit one family with
+the other's corpus (the coverage join and `OracleSurfaceCoverageTests.PolynomialSurface_*` both key on the
+qualified name). `params.xs` records each x position's form — an ndarray operand (0-d arrays included,
+STRONG) or a weak Python int/float/complex/bool (NEP 50: `chebval(2.0, float32_c)` is float32, and CPython
+computes `2*x`/`x*0`/`(2*nd-1) - x` before NumPy sees them; ints may exceed 64 bits). The matrix: every x
+dtype × 8 series dtypes × coefficient counts 1/2/3/4/7/12, 26 x layouts, N-D series (tensor True/False,
+transposed/reversed/broadcast), Python-scalar and 0-d x, NaN/±inf/-0 coefficients, every vector-lane width
+at 45 points (1-D and per-point series, at the dtype extremes, and column-strided), and the error cells
+(incl. `lagval`'s OverflowError); Char rides the uint16 proxy. Cells
+whose NumPy result is complex64 are skipped (one complex width, #569). `OpRegistry.Polynomial.cs` replays it;
+`MisalignedRegistry`'s generic unary/complex ULP branches are carved out for these ops, so any drift fails.
 
 ### einsum (`einsum` tier)
 

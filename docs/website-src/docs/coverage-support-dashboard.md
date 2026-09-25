@@ -14,6 +14,8 @@
   --cov-bad-soft: #ffe1e4;
   --cov-ext: #7256b5;
   --cov-ext-soft: #eee8ff;
+  --cov-oracle: #0f7c86;
+  --cov-oracle-soft: #dcf4f5;
   --cov-quiet: var(--bs-secondary-color, #66737e);
   --cov-line: var(--bs-border-color);
   --cov-panel: var(--bs-body-bg);
@@ -83,13 +85,14 @@
 .ns-coverage-dashboard .is-extension { --status-color: var(--cov-ext); --status-soft: var(--cov-ext-soft); }
 .ns-coverage-dashboard .is-exact { --status-color: var(--cov-good); --status-soft: var(--cov-good-soft); }
 .ns-coverage-dashboard .is-alias { --status-color: var(--cov-alias); --status-soft: var(--cov-alias-soft); }
+.ns-coverage-dashboard .is-oracle { --status-color: var(--cov-oracle); --status-soft: var(--cov-oracle-soft); }
 .ns-coverage-dashboard .cov-badge { background: var(--status-soft); border-color: color-mix(in srgb, var(--status-color), transparent 62%); color: var(--status-color); }
 .ns-coverage-dashboard .cov-badge .cov-dot { background: var(--status-color); }
 
 .ns-coverage-dashboard .cov-metrics {
   display: grid;
   gap: .75rem;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   margin: 1.25rem 0;
 }
 
@@ -291,6 +294,13 @@
 .ns-coverage-dashboard .cov-detail-api-link:focus-visible { text-decoration: underline; }
 .ns-coverage-dashboard .cov-result-sub { color: var(--cov-quiet); display: flex; font-size: .71rem; gap: .45rem; margin-top: .25rem; }
 .ns-coverage-dashboard .cov-result-status { background: var(--status-soft); border-radius: 999px; color: var(--status-color); flex: 0 0 auto; font-size: .67rem; font-weight: 750; padding: .22rem .42rem; text-transform: capitalize; }
+.ns-coverage-dashboard .cov-result-badges { align-items: center; display: inline-flex; flex: 0 0 auto; gap: .3rem; }
+.ns-coverage-dashboard .cov-result-oracle { background: var(--cov-oracle-soft); border-radius: 999px; color: var(--cov-oracle); font-size: .64rem; font-weight: 750; padding: .2rem .4rem; }
+.ns-coverage-dashboard .cov-oracle-block { background: color-mix(in srgb, var(--cov-oracle), transparent 93%); border-left: 3px solid var(--cov-oracle); border-radius: .2rem .5rem .5rem .2rem; font-size: .82rem; margin: .4rem 0 .9rem; padding: .6rem .75rem; }
+.ns-coverage-dashboard .cov-oracle-block p { margin: 0 0 .35rem; }
+.ns-coverage-dashboard .cov-oracle-block p:last-child { margin-bottom: 0; }
+.ns-coverage-dashboard .cov-oracle-block code { font-size: .74rem; }
+.ns-coverage-dashboard .cov-oracle-block.is-gap { background: var(--cov-muted); border-left-color: var(--cov-quiet); color: var(--cov-quiet); }
 .ns-coverage-dashboard .cov-more { background: var(--cov-muted); border: 0; color: var(--cov-alias); cursor: pointer; font-weight: 700; padding: .7rem; width: 100%; }
 .ns-coverage-dashboard .cov-empty { color: var(--cov-quiet); padding: 2rem 1rem; text-align: center; }
 
@@ -368,7 +378,7 @@
   <section class="cov-intro" aria-labelledby="cov-dashboard-title">
     <div class="cov-kicker">NumPy 2.x parity · compiled API inventory</div>
     <h2 class="cov-title" id="cov-dashboard-title">See the supported surface. Find the next gap.</h2>
-    <p class="cov-lede">Explore the NumPy catalog across functions, modules, and object members, with NumSharp equivalents, known limitations, and C# overloads. The page is generated from the same artifact published by CI.</p>
+    <p class="cov-lede">Explore the NumPy catalog across functions, modules, and object members, with NumSharp equivalents, known limitations, C# overloads, and the committed NumPy-oracle contracts that prove each API's parity. The page is generated from the same artifact published by CI.</p>
     <div class="cov-meta" id="cov-meta" aria-label="Artifact metadata"></div>
   </section>
 
@@ -383,7 +393,7 @@
     <section class="cov-metrics" id="cov-metrics" aria-label="Coverage summary"></section>
     <div class="cov-definition">
       <strong>Coverage math</strong>
-      <p><span id="cov-headline-reference"></span> Summaries, cards, and the explorer follow the selected scope. Availability is <code>available ÷ NumPy APIs in that scope</code>; supporting types, constants, modules, and NumSharp-only APIs do not enter this percentage. “Available” means an exact public member or a reviewed alias exists and is not marked partial/unsupported. The headline comparison also excludes extended APIs. API presence is not a blanket edge-case, dtype, layout, or signature parity claim. <span id="cov-applicability-note"></span></p>
+      <p><span id="cov-headline-reference"></span> Summaries, cards, and the explorer follow the selected scope. Availability is <code>available ÷ NumPy APIs in that scope</code>; supporting types, constants, modules, and NumSharp-only APIs do not enter this percentage. “Available” means an exact public member or a reviewed alias exists and is not marked partial/unsupported. The headline comparison also excludes extended APIs. API presence is not a blanket edge-case, dtype, layout, or signature parity claim. <strong>Oracle-verified</strong> is that claim's evidence: committed NumPy 2.4.2 output (the differential-fuzz corpus plus the .npy, flags and layout oracles) that CI replays against NumSharp, bit-exact or a documented divergence, resolved to the API directly or through an identity or reviewed delegation alias. <span id="cov-oracle-reference"></span> <span id="cov-applicability-note"></span></p>
     </div>
     <section class="cov-section" aria-labelledby="cov-status-heading">
       <div class="cov-section-head">
@@ -418,6 +428,7 @@
           <div class="cov-control"><label for="cov-status">Status</label><select id="cov-status"><option value="all">All statuses</option></select></div>
           <div class="cov-control"><label for="cov-kind">Kind</label><select id="cov-kind"><option value="all">All kinds</option></select></div>
           <div class="cov-control"><label for="cov-mapping">Mapping</label><select id="cov-mapping"><option value="all">All mappings</option></select></div>
+          <div class="cov-control"><label for="cov-oracle">NumPy oracle</label><select id="cov-oracle"><option value="all">All evidence</option></select></div>
           <div class="cov-control"><label for="cov-sort">Sort</label><select id="cov-sort"><option value="gap">Gaps first</option><option value="name">API name</option><option value="surface">Surface</option><option value="coverage">Available first</option></select></div>
           <button class="cov-reset" id="cov-reset" type="button">Clear filters</button>
         </div>
@@ -448,6 +459,10 @@
   const statusOrder = { unsupported: 0, partial: 1, missing: 2, available: 3, extension: 4 };
   const mappingLabels = { exact: "Exact public name", alias: "Reviewed alias", missing: "No public mapping", extension: "NumSharp-only" };
   const dispositionLabels = { object: "Object members", type: "Type", constant: "Constant", module: "Module", extension: "NumSharp-only API", extended: "Extended catalog" };
+  const oracleLabels = { verified: "Oracle-verified (any)", "verified-direct": "Direct oracle contracts", "verified-alias": "Verified via alias", uncredited: "Oracle-gated, not credited", unverified: "Available, no oracle contracts", none: "No oracle evidence" };
+  const parityOrder = ["verified-direct", "verified-alias", "uncredited", "unverified", "none"];
+  const creditedStatuses = new Set(["available", "partial", "extension"]);
+  const pinLabels = { "host-libm": "the win-amd64 CRT libm", "pinned-blas": "the content-hash-pinned OpenBLAS" };
   const number = (value) => Number.isFinite(Number(value)) ? Number(value) : 0;
   const percent = (part, whole) => whole ? (part * 100 / whole) : 0;
   const apiLabel = (row) => row.id.startsWith("numpy.ndarray.")
@@ -472,15 +487,94 @@
     return row.origin === "numpy" && (row.in_default_scope || (row.extended && !["class", "constant", "module"].includes(row.kind)));
   }
 
+  // Mirrors coverage/oracle_evidence.py classify(), the generator's single definition. The two must
+  // agree: initializeMetadata recounts the headline with this and refuses a mismatched artifact.
+  function parityClass(row) {
+    const record = row.oracle;
+    const credited = creditedStatuses.has(row.status);
+    if (record) {
+      if (!credited) return "uncredited";
+      return record.status === "direct" ? "verified-direct" : "verified-alias";
+    }
+    if (row.origin === "numpy" && (row.status === "available" || row.status === "partial")) return "unverified";
+    return "none";
+  }
+
+  function isOracleVerified(row) {
+    return parityClass(row).startsWith("verified");
+  }
+
   function summarize(rows) {
-    const counts = { total: rows.length, numpy: rows.filter(isComparableApi).length, availableApis: 0, available: 0, partial: 0, unsupported: 0, missing: 0, extension: 0, exact: 0, alias: 0 };
+    const counts = { total: rows.length, numpy: rows.filter(isComparableApi).length, availableApis: 0, available: 0, partial: 0, unsupported: 0, missing: 0, extension: 0, exact: 0, alias: 0, oracle: 0, oracleApis: 0, oracleDirect: 0, oracleAlias: 0, oracleUnverified: 0, oracleUncredited: 0 };
     rows.forEach((row) => {
       if (counts[row.status] !== undefined) counts[row.status] += 1;
       if (isComparableApi(row) && row.status === "available") counts.availableApis += 1;
       if (row.availability === "exact" || row.availability === "alias") counts[row.availability] += 1;
+      const parity = parityClass(row);
+      if (parity.startsWith("verified")) {
+        counts.oracle += 1;
+        if (isComparableApi(row)) counts.oracleApis += 1;
+        counts[parity === "verified-direct" ? "oracleDirect" : "oracleAlias"] += 1;
+      }
+      if (parity === "unverified") counts.oracleUnverified += 1;
+      if (parity === "uncredited") counts.oracleUncredited += 1;
     });
     counts.coverage = percent(counts.availableApis, counts.numpy);
+    counts.oracleCoverage = percent(counts.oracleApis, counts.numpy);
     return counts;
+  }
+
+  // "np.max" style label for a row id that may not be in the current scope (an alias's via target).
+  function idLabel(id) {
+    return apiLabel({ id });
+  }
+
+  function oracleTitle(row) {
+    const record = row.oracle;
+    if (!record) return "";
+    if (record.status === "direct") return `${number(record.contracts).toLocaleString()} committed NumPy oracle contracts`;
+    return `Verified via ${idLabel(record.via?.id || "")} (${number(record.via?.contracts).toLocaleString()} contracts)`;
+  }
+
+  function oracleSummary(row) {
+    const parity = parityClass(row);
+    const record = row.oracle;
+    if (parity === "verified-direct") return `${number(record.contracts).toLocaleString()} contracts${record.pinned ? " · pinned host only" : ""}`;
+    if (parity === "verified-alias") return `Via ${idLabel(record.via?.id || "")}`;
+    if (parity === "uncredited") return `${number(record.contracts).toLocaleString()} contracts, not credited`;
+    if (parity === "unverified") return "No oracle contracts";
+    return "No oracle evidence";
+  }
+
+  function oracleSection(row) {
+    const parity = parityClass(row);
+    const record = row.oracle;
+    if (!record) {
+      return parity === "unverified"
+        ? `<h4>NumPy oracle evidence</h4><div class="cov-oracle-block is-gap"><p>No committed NumPy-oracle contract exercises this API: its parity is declared by the compiled surface only (it may carry a dedicated unit suite instead).</p></div>`
+        : "";
+    }
+    const parts = [];
+    if (number(record.contracts)) {
+      const sources = Object.entries(record.sources || {}).map(([source, count]) => `${source} ${number(count).toLocaleString()}`).join(" · ");
+      parts.push(`<p><strong>${number(record.contracts).toLocaleString()}</strong> committed NumPy 2.4.2 contracts replayed against NumSharp in CI (${number(record.error_contracts).toLocaleString()} error-message contracts) · ${escapeHtml(sources)}</p>`);
+      const dtypes = record.dtypes || [];
+      parts.push(`<p>${dtypes.length} dtype${dtypes.length === 1 ? "" : "s"}${dtypes.length ? `: ${dtypes.map((dtype) => `<code>${escapeHtml(dtype)}</code>`).join(" ")}` : ""} · ${number(record.layouts)} memory layout${number(record.layouts) === 1 ? "" : "s"}</p>`);
+      const keys = record.keys || [];
+      parts.push(`<p>Oracle keys: ${keys.slice(0, 12).map((key) => `<code>${escapeHtml(key)}</code>`).join(" ")}${keys.length > 12 ? ` +${keys.length - 12} more` : ""} · files: ${(record.files || []).map((file) => `<code>${escapeHtml(file)}</code>`).join(" ")}</p>`);
+      if (number(record.pinned_contracts)) {
+        const pins = (record.pins || []).map((pin) => pinLabels[pin] || pin).join(" / ");
+        parts.push(`<p>${number(record.pinned_contracts).toLocaleString()} of ${number(record.contracts).toLocaleString()} contracts are hard-gated only on the pinned host (${escapeHtml(pins)}) and Inconclusive elsewhere.</p>`);
+      }
+    }
+    if (record.via) {
+      const rule = record.via.rule === "identity" ? "identity alias" : "reviewed delegation alias";
+      parts.push(`<p>${number(record.contracts) ? "Value parity also rides" : "Verified through"} <code>${escapeHtml(idLabel(record.via.id))}</code>'s ${number(record.via.contracts).toLocaleString()} contracts (${rule}): ${escapeHtml(record.via.reason || "")}</p>`);
+    }
+    if (parity === "uncredited") {
+      parts.push(`<p>These contracts prove NumSharp reproduces this NumPy behaviour, but the catalog credits no NumSharp member under this NumPy name: add the member or record a reviewed alias.</p>`);
+    }
+    return `<h4>NumPy oracle evidence</h4><div class="cov-oracle-block">${parts.join("")}</div>`;
   }
 
   function defaultRows() {
@@ -519,7 +613,7 @@
       <div class="cov-card-stat is-available"><strong>${counts.available}</strong><span>available</span></div>
       <div class="cov-card-stat is-partial"><strong>${counts.partial}</strong><span>partial</span></div>
       <div class="cov-card-stat is-missing"><strong>${gaps}</strong><span>gaps</span></div>
-    </div><div class="cov-small cov-card-foot">${counts.exact} direct names · ${counts.alias} aliases · ${counts.total} total${counts.extension ? ` · ${counts.extension} NumSharp-only` : ""}</div>`;
+    </div><div class="cov-small cov-card-foot">${counts.oracle} oracle-verified · ${counts.exact} direct names · ${counts.alias} aliases · ${counts.total} total${counts.extension ? ` · ${counts.extension} NumSharp-only` : ""}</div>`;
   }
 
   function compactCardBreakdown(counts) {
@@ -528,6 +622,7 @@
       <span class="is-available">${counts.available} available</span>
       <span class="is-partial">${counts.partial} partial</span>
       <span class="is-missing">${gaps} gaps</span>
+      ${counts.oracle ? `<span class="is-oracle">${counts.oracle} oracle-verified</span>` : ""}
       ${counts.extension ? `<span class="is-extension">${counts.extension} NumSharp-only</span>` : ""}
     </div>`;
   }
@@ -538,15 +633,25 @@
     if (stats.total !== number(published.total) || stats.available !== number(published.available)) {
       throw new Error("Coverage summary does not match its row inventory.");
     }
+    // Artifacts from generator 1.10+ publish oracle counts; recounting them here catches a drift
+    // between parityClass and the generator's classify before a wrong percentage is displayed.
+    const hasOracle = published.oracle_verified !== undefined;
+    if (hasOracle && stats.oracle !== number(published.oracle_verified)) {
+      throw new Error("Coverage oracle summary does not match its row evidence.");
+    }
 
     byId("cov-meta").innerHTML = [
       `NumPy ${data.numpy_version}`,
       `NumSharp assembly ${data.numsharp_assembly_version}`,
       `${data.summary.catalog_rows.toLocaleString()} searchable rows`,
+      ...(data.oracle ? [`${number(data.oracle.contracts).toLocaleString()} NumPy oracle contracts`] : []),
       `schema v${data.schema_version}`
     ].map((item) => `<span class="cov-pill">${escapeHtml(item)}</span>`).join("");
 
     byId("cov-headline-reference").textContent = `Headline comparison: ${coverageLabel(stats)} (${stats.available}/${stats.total} APIs).`;
+    byId("cov-oracle-reference").textContent = hasOracle
+      ? `Headline oracle-verified: ${percent(stats.oracle, stats.total).toFixed(1)}% (${stats.oracle}/${stats.total} APIs; ${stats.oracleUnverified} available APIs without contracts).`
+      : "";
   }
 
   function renderSummary() {
@@ -561,6 +666,7 @@
 
     byId("cov-metrics").innerHTML = [
       metricCard("Scoped API availability", coverageLabel(stats), stats.numpy ? `${stats.availableApis} of ${stats.numpy} comparable NumPy APIs` : "No comparable NumPy APIs in this scope"),
+      metricCard("Oracle-verified parity", stats.numpy ? `${stats.oracleCoverage.toFixed(1)}%` : "-", stats.numpy ? `${stats.oracleApis} of ${stats.numpy} replay committed NumPy oracle contracts · ${stats.oracleUnverified} available without` : `${stats.oracle} oracle-verified entries in this scope`, stats.oracle ? "oracle" : ""),
       metricCard("Exact names", stats.exact.toLocaleString(), `${stats.alias} reviewed aliases bridge C#/NumPy naming`, stats.exact ? "exact" : ""),
       metricCard("Open gaps", (stats.missing + stats.unsupported).toLocaleString(), `${stats.partial} additional API${stats.partial === 1 ? " is" : "s are"} partial`, "gaps"),
       metricCard("Entries in scope", stats.total.toLocaleString(), `${surfaces.length} public surfaces · ${categories.length} capability areas`)
@@ -628,6 +734,9 @@
     populateSelect("cov-status", statuses, statusLabels);
     populateSelect("cov-kind", [...new Set(rows.map((row) => row.kind))].sort());
     populateSelect("cov-mapping", [...new Set(rows.map((row) => row.availability))].sort(), mappingLabels);
+    const parities = [...new Set(rows.map(parityClass))].sort((a, b) => parityOrder.indexOf(a) - parityOrder.indexOf(b));
+    if (parities.some((value) => value.startsWith("verified"))) parities.unshift("verified");
+    populateSelect("cov-oracle", parities, oracleLabels);
   }
 
   function currentFilters() {
@@ -639,6 +748,7 @@
       status: byId("cov-status").value,
       kind: byId("cov-kind").value,
       mapping: byId("cov-mapping").value,
+      oracle: byId("cov-oracle").value,
       sort: byId("cov-sort").value,
     };
   }
@@ -663,8 +773,11 @@
       if (filters.status !== "all" && filters.status !== "gaps" && row.status !== filters.status) return false;
       if (filters.kind !== "all" && row.kind !== filters.kind) return false;
       if (filters.mapping !== "all" && row.availability !== filters.mapping) return false;
+      if (filters.oracle === "verified" && !isOracleVerified(row)) return false;
+      if (filters.oracle !== "all" && filters.oracle !== "verified" && parityClass(row) !== filters.oracle) return false;
       if (!terms.length) return true;
-      const haystack = [row.id, apiLabel(row), row.name, row.surface, surfaceLabel(row.surface), row.category, row.kind, row.disposition, row.status, row.availability, row.numsharp_target, row.numpy_signature, row.notes, ...(row.numsharp_signatures || [])].join(" ").toLowerCase();
+      // Oracle keys/files are searchable so "polyeval.jsonl" or "rnd:normal" finds the APIs they prove.
+      const haystack = [row.id, apiLabel(row), row.name, row.surface, surfaceLabel(row.surface), row.category, row.kind, row.disposition, row.status, row.availability, row.numsharp_target, row.numpy_signature, row.notes, ...(row.numsharp_signatures || []), ...(row.oracle?.keys || []), ...(row.oracle?.files || []), row.oracle?.via?.id].join(" ").toLowerCase();
       return terms.every((term) => haystack.includes(term));
     });
     results.sort((a, b) => {
@@ -695,8 +808,9 @@
       const nameMarkup = primaryUrl
         ? `<a class="cov-result-name" data-api-link href="${escapeHtml(primaryUrl)}" target="_blank" rel="noopener" title="${linkTitle}">${name}</a>`
         : `<span class="cov-result-name">${name}</span>`;
+      const oracleBadge = isOracleVerified(row) ? `<span class="cov-result-oracle" title="${escapeHtml(oracleTitle(row))}">oracle</span>` : "";
       return `<div class="cov-result" role="listitem" tabindex="0" data-row-id="${escapeHtml(row.id)}" aria-current="${row.id === state.selectedId}">
-      <div class="cov-result-main">${nameMarkup}<span class="cov-result-status is-${escapeHtml(row.status)}">${escapeHtml(statusLabels[row.status] || row.status)}</span></div>
+      <div class="cov-result-main">${nameMarkup}<span class="cov-result-badges">${oracleBadge}<span class="cov-result-status is-${escapeHtml(row.status)}">${escapeHtml(statusLabels[row.status] || row.status)}</span></span></div>
       <div class="cov-result-sub"><span>${escapeHtml(surfaceLabel(row.surface))}</span><span>·</span><span>${escapeHtml(row.category)}</span><span>·</span><span>${escapeHtml(row.kind)}</span></div>
     </div>`;
     }).join("") + (state.filtered.length > visible.length ? `<button class="cov-more" id="cov-more" type="button">Show ${Math.min(120, state.filtered.length - visible.length)} more</button>` : "");
@@ -732,7 +846,9 @@
         <div class="cov-detail-fact"><div class="cov-detail-label">Availability</div><div class="cov-detail-value">${escapeHtml(mapping)}</div></div>
         <div class="cov-detail-fact"><div class="cov-detail-label">Inventory group</div><div class="cov-detail-value">${row.in_default_scope ? "Headline comparison" : isComparableApi(row) ? "Extended NumPy API" : row.origin === "numsharp" ? "NumSharp-only API" : "Supporting NumPy export"}${row.disposition ? ` · ${escapeHtml(dispositionLabels[row.disposition] || row.disposition)}` : ""}</div></div>
         ${row.applicability ? `<div class="cov-detail-fact"><div class="cov-detail-label">NumPy applicability</div><div class="cov-detail-value">${escapeHtml(row.applicability === "not_applicable" ? "NumPy rejects this ufunc method" : row.applicability === "conditional" ? "Depends on operands and dtype" : row.applicability)}</div></div>` : ""}
+        <div class="cov-detail-fact"><div class="cov-detail-label">NumPy oracle</div><div class="cov-detail-value">${escapeHtml(oracleSummary(row))}</div></div>
       </div>
+      ${oracleSection(row)}
       ${row.origin === "numpy" ? `<h4>NumPy signature</h4><div class="cov-code-block">${escapeHtml(row.numpy_signature)}</div>` : ""}
       <h4>NumSharp target</h4><div class="cov-code-block">${escapeHtml(row.numsharp_target || "Not available")}</div>
       <h4>Compiled C# overload${row.numsharp_signatures?.length === 1 ? "" : "s"}</h4>${signatures}
@@ -749,13 +865,14 @@
     if (preset === "category") byId("cov-category").value = value;
     if (preset === "gaps") byId("cov-status").value = "gaps";
     if (preset === "exact") byId("cov-mapping").value = "exact";
+    if (preset === "oracle") byId("cov-oracle").value = "verified";
     filterRows();
     byId("cov-explorer-heading").scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   function clearExplorerFilters() {
     byId("cov-search").value = "";
-    ["cov-surface", "cov-category", "cov-status", "cov-kind", "cov-mapping"].forEach((id) => byId(id).value = "all");
+    ["cov-surface", "cov-category", "cov-status", "cov-kind", "cov-mapping", "cov-oracle"].forEach((id) => byId(id).value = "all");
     byId("cov-sort").value = "gap";
   }
 
@@ -799,7 +916,7 @@
     const tabs = [["available", "Available", available], ["gaps", "Gaps", gaps]];
     if (other.length) tabs.push(["other", "Partial / NumSharp-only", other]);
     const initialTab = tabs.find(([, , items]) => items.length)?.[0] || "available";
-    return `<div class="ns-cov-tip"><div class="ns-cov-tip-head"><strong>${escapeHtml(title)}</strong><span>${counts.total} entries · ${counts.numpy ? `${counts.availableApis}/${counts.numpy} NumPy APIs available · ${coverageLabel(counts)}` : "No comparable NumPy APIs"}</span></div>
+    return `<div class="ns-cov-tip"><div class="ns-cov-tip-head"><strong>${escapeHtml(title)}</strong><span>${counts.total} entries · ${counts.numpy ? `${counts.availableApis}/${counts.numpy} NumPy APIs available · ${coverageLabel(counts)} · ${counts.oracleApis} oracle-verified` : "No comparable NumPy APIs"}</span></div>
       <div class="ns-cov-tip-tabs" role="tablist">${tabs.map(([key, label, items]) => `<button class="ns-cov-tip-tab" role="tab" aria-selected="${key === initialTab}" data-tip-tab="${key}">${label} (${items.length})</button>`).join("")}</div>
       ${tabs.map(([key, , items]) => `<div class="ns-cov-tip-panel" data-tip-panel="${key}"${key === initialTab ? "" : " hidden"}>${tooltipRowsHtml(items)}</div>`).join("")}</div>`;
   }
@@ -852,7 +969,7 @@
   }
 
   function bindEvents() {
-    ["cov-search", "cov-surface", "cov-category", "cov-status", "cov-kind", "cov-mapping", "cov-sort"].forEach((id) => {
+    ["cov-search", "cov-surface", "cov-category", "cov-status", "cov-kind", "cov-mapping", "cov-oracle", "cov-sort"].forEach((id) => {
       byId(id).addEventListener(id === "cov-search" ? "input" : "change", filterRows);
     });
     byId("cov-scope").addEventListener("change", changeScope);

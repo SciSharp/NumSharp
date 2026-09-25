@@ -17,13 +17,14 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
+import oracle_evidence
 from numpy_documentation import documentation_url
 from object_surfaces import OBJECT_SURFACE_PATHS, enrich_object_classes, object_surface_rows
 
 
 ROOT = Path(__file__).resolve().parents[1]
 PINNED_NUMPY_VERSION = "2.4.2"
-GENERATOR_VERSION = "1.9.0"
+GENERATOR_VERSION = "1.10.0"
 OUTPUT_FILES = ("coverage.json", "coverage.csv", "summary.md", "manifest.json")
 NUMSHARP_SOURCE_BASE_URL = "https://github.com/SciSharp/NumSharp/blob/master/"
 
@@ -862,6 +863,22 @@ def resolve_rows(np: Any, inventory: dict[str, Any], overrides: dict[str, Any]) 
                             if row["origin"] == "numpy" and row["numsharp_target"])
     rows = [row for row in rows if row["origin"] == "numpy" or row["numsharp_target"] not in consumed_targets]
 
+    # Oracle evidence: join the committed NumPy-oracle contracts onto the FINAL row set (resolution
+    # needs every id, including surfaces the dashboard projection later hides). Strict like the gates
+    # above: an unresolvable corpus key, a stale map entry or an unreplayed corpus file fails the run,
+    # because an artifact that silently dropped evidence would understate parity without anyone
+    # noticing, and one that kept a stale mapping would overstate it.
+    oracle_map = oracle_evidence.load_map()
+    oracle = oracle_evidence.join(rows, oracle_evidence.load_sources(oracle_map), oracle_map,
+                                  identical=oracle_evidence.identity_predicate(np))
+    if oracle.problems:
+        raise SystemExit(
+            "NumPy-oracle evidence join failed:\n"
+            + "".join(f"  - {problem}\n" for problem in oracle.problems)
+            + "Fix coverage/oracle_map.json (or the replay wiring) so every committed contract maps to a catalog row."
+        )
+    oracle_evidence.attach(rows, oracle)
+
     rows.sort(key=lambda row: (row["origin"] != "numpy", row["surface"], row["name"].lower(), row["id"]))
     missing_extension_sources = [
         row["id"] for row in rows
@@ -873,11 +890,25 @@ def resolve_rows(np: Any, inventory: dict[str, Any], overrides: dict[str, Any]) 
 
 
 def status_counts(rows: list[dict[str, Any]]) -> dict[str, int | float]:
+    """Count availability AND oracle parity evidence over one scope's rows.
+
+    The oracle counts use oracle_evidence.classify, the single definition the dashboard mirrors:
+    ``oracle_verified`` = credited rows with committed NumPy-oracle contracts (direct or through an
+    identity/reviewed alias); ``oracle_unverified`` = available/partial rows without any;
+    ``oracle_uncredited`` = rows the corpus exercises although the catalog does not credit NumSharp with
+    them (a finding, never counted as verified). ``oracle_percent`` shares ``coverage_percent``'s
+    denominator (every row in scope), so the two read as "exposed" vs "exposed AND proven".
+
+    :param rows: the rows of one scope (headline, expanded, a surface, a category, ...).
+    :returns: availability counts/percentages plus the oracle counts/percentage.
+    """
     statuses = Counter(row["status"] for row in rows)
     availability = Counter(row["availability"] for row in rows)
+    parity = Counter(oracle_evidence.classify(row) for row in rows)
     total = len(rows)
     available = statuses["available"]
     addressed = available + statuses["partial"]
+    verified = parity["verified-direct"] + parity["verified-alias"]
     return {
         "total": total,
         "available": available,
@@ -888,6 +919,12 @@ def status_counts(rows: list[dict[str, Any]]) -> dict[str, int | float]:
         "alias": availability["alias"],
         "coverage_percent": round(available * 100 / total, 1) if total else 0.0,
         "addressed_percent": round(addressed * 100 / total, 1) if total else 0.0,
+        "oracle_verified": verified,
+        "oracle_direct": parity["verified-direct"],
+        "oracle_alias": parity["verified-alias"],
+        "oracle_unverified": parity["unverified"],
+        "oracle_uncredited": parity["uncredited"],
+        "oracle_percent": round(verified * 100 / total, 1) if total else 0.0,
     }
 
 
@@ -949,11 +986,16 @@ def json_text(value: Any) -> str:
 
 
 def csv_text(rows: list[dict[str, Any]]) -> str:
+    # The oracle columns are appended AFTER the historical ones so a consumer indexing by position
+    # keeps working; "oracle_parity" is the classify() label (it also covers rows without a record).
     columns = [
         "id", "origin", "surface", "category", "name", "kind", "in_default_scope", "extended", "disposition",
         "object_surface", "object_type", "applicability", "status", "availability",
         "support", "numpy_signature", "numsharp_target", "numsharp_signatures", "numsharp_source_paths",
-        "numsharp_source_urls", "numsharp_obsolete", "case_insensitive_matches", "notes", "documentation_url"
+        "numsharp_source_urls", "numsharp_obsolete", "case_insensitive_matches", "notes", "documentation_url",
+        "oracle_parity", "oracle_contracts", "oracle_error_contracts", "oracle_sources", "oracle_keys",
+        "oracle_files", "oracle_dtypes", "oracle_layouts", "oracle_pinned_contracts", "oracle_via",
+        "oracle_via_rule",
     ]
     stream = io.StringIO(newline="")
     writer = csv.DictWriter(stream, fieldnames=columns, lineterminator="\n")
@@ -964,11 +1006,131 @@ def csv_text(rows: list[dict[str, Any]]) -> str:
         flat["numsharp_source_paths"] = " | ".join(row["numsharp_source_paths"])
         flat["numsharp_source_urls"] = " | ".join(row["numsharp_source_urls"])
         flat["case_insensitive_matches"] = " | ".join(row.get("case_insensitive_matches", []))
+        flat["oracle_parity"] = oracle_evidence.classify(row)
+        record = row.get("oracle")
+        if record:
+            via = record.get("via") or {}
+            flat.update({
+                "oracle_contracts": record["contracts"],
+                "oracle_error_contracts": record["error_contracts"],
+                "oracle_sources": " | ".join(f"{source}:{count}" for source, count in record["sources"].items()),
+                "oracle_keys": " | ".join(record["keys"]),
+                "oracle_files": " | ".join(record["files"]),
+                "oracle_dtypes": " | ".join(record["dtypes"]),
+                "oracle_layouts": record["layouts"],
+                "oracle_pinned_contracts": record["pinned_contracts"],
+                "oracle_via": via.get("id", ""),
+                "oracle_via_rule": via.get("rule", ""),
+            })
         writer.writerow(flat)
     return stream.getvalue()
 
 
-def markdown_text(summary: dict[str, Any], rows: list[dict[str, Any]], numpy_version: str, assembly_version: str) -> str:
+def oracle_markdown(summary: dict[str, Any], rows: list[dict[str, Any]], oracle: dict[str, Any]) -> list[str]:
+    """Render summary.md's NumPy-oracle parity section.
+
+    Two lists make the section actionable rather than decorative: headline APIs that are available but
+    have no oracle contracts (parity is only declared, the next oracle work), and APIs the corpus gates
+    although the catalog does not credit them (a crediting gap: an alias or instance method to add).
+
+    :param summary: the artifact summary (``default_scope``/``api_scope`` carry the oracle counts).
+    :param rows: the emitted rows.
+    :param oracle: the artifact's top-level ``oracle`` block (oracle_evidence.describe).
+    :returns: markdown lines, starting with a blank separator line.
+    """
+    headline = summary["default_scope"]
+    expanded = summary["api_scope"]
+    lines = [
+        "",
+        "## NumPy-oracle parity evidence",
+        "",
+        f"**{oracle['contracts']:,}** committed NumPy {oracle['numpy_version']} oracle contracts "
+        f"(**{oracle['error_contracts']:,}** error-message contracts) are replayed against NumSharp in CI; each "
+        "must be bit-exact or a documented, registry-excused divergence. An API counts as **oracle-verified** "
+        "when contracts resolve to it directly, or through an identity alias (the same NumPy object mapped to "
+        "the same NumSharp member) or a reviewed pure-delegation alias.",
+        "",
+        f"Headline scope: **{headline['oracle_verified']}** of {headline['total']} APIs oracle-verified "
+        f"(**{headline['oracle_percent']:.1f}%**; {headline['oracle_direct']} direct, {headline['oracle_alias']} alias); "
+        f"**{headline['oracle_unverified']}** available APIs have no oracle contracts.",
+        "",
+        f"Expanded scope: **{expanded['oracle_verified']}** of {expanded['total']} APIs oracle-verified "
+        f"(**{expanded['oracle_percent']:.1f}%**; {expanded['oracle_direct']} direct, {expanded['oracle_alias']} alias); "
+        f"**{expanded['oracle_unverified']}** available APIs have no oracle contracts.",
+        "",
+        "| Source | Contracts | Error contracts | Host-pinned | Files | Keys | Replayed by |",
+        "|---|---:|---:|---:|---:|---:|---|",
+    ]
+    for source in oracle["sources"].values():
+        lines.append(
+            f"| {source['label']} (`{source['path']}`) | {source['contracts']:,} | {source['error_contracts']:,} | "
+            f"{source['pinned_contracts']:,} | {source['files']} | {source['keys']} | {source['replayed_by']} |"
+        )
+    labels = {"np": "np.*", "ndarray": "ndarray.*", "random": "np.random.*", "linalg": "np.linalg.*",
+              "fft": "np.fft.*", "ma": "np.ma.*", "polynomial": "np.polynomial.*"}
+    lines.extend([
+        "",
+        "Host-pinned contracts are hard-gated only on the pinned host (win-amd64 CRT libm, or the "
+        "content-hash-pinned OpenBLAS) and Inconclusive elsewhere.",
+        "",
+        "Per surface (expanded scope; surfaces with nothing available or gated are omitted). *Verified* "
+        "shares the coverage percentage's denominator: every API row of the surface.",
+        "",
+        "| Surface | Total | Available | Oracle-verified | Direct | Alias | Unverified available | Verified |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|",
+    ])
+    for surface, counts in expanded["by_surface"].items():
+        if not (counts["available"] or counts["partial"] or counts["oracle_uncredited"]):
+            continue
+        lines.append(
+            f"| {labels.get(surface, surface)} | {counts['total']} | {counts['available']} | {counts['oracle_verified']} | "
+            f"{counts['oracle_direct']} | {counts['oracle_alias']} | {counts['oracle_unverified']} | "
+            f"{counts['oracle_percent']:.1f}% |"
+        )
+
+    unverified = sorted(
+        (row for row in rows if row["origin"] == "numpy" and row["in_default_scope"]
+         and oracle_evidence.classify(row) == "unverified"),
+        key=lambda row: (row["surface"], row["name"].lower()),
+    )
+    lines.extend([
+        "",
+        "### Available headline APIs without oracle contracts",
+        "",
+        "Parity for these is declared, not oracle-proven (some carry dedicated unit suites instead; see "
+        "OracleSurfaceCoverageTests' sibling-owned and known-gap classifications).",
+        "",
+    ])
+    if unverified:
+        lines.extend(["| API | Surface | Status | Category |", "|---|---|---|---|"])
+        for row in unverified:
+            api = row["id"].replace("numpy.", "np.", 1).replace("np.ndarray.", "ndarray.", 1)
+            lines.append(f"| [`{api}`]({row['documentation_url']}) | {row['surface']} | {row['status']} | {row['category']} |")
+    else:
+        lines.append("_None: every available headline API has oracle contracts._")
+
+    uncredited = sorted((row for row in rows if oracle_evidence.classify(row) == "uncredited"), key=lambda row: row["id"])
+    lines.extend([
+        "",
+        "### Oracle-gated APIs the catalog does not credit",
+        "",
+        "The corpus proves NumSharp reproduces these NumPy behaviours, yet no NumSharp member is credited "
+        "under the NumPy name (add the member, or record a reviewed alias in overrides.json).",
+        "",
+    ])
+    if uncredited:
+        lines.extend(["| API | Status | Contracts | Oracle keys |", "|---|---|---:|---|"])
+        for row in uncredited:
+            record = row["oracle"]
+            keys = ", ".join(f"`{key}`" for key in record["keys"])
+            lines.append(f"| `{row['id']}` | {row['status']} | {record['contracts']:,} | {keys} |")
+    else:
+        lines.append("_None._")
+    return lines
+
+
+def markdown_text(summary: dict[str, Any], rows: list[dict[str, Any]], numpy_version: str, assembly_version: str,
+                  oracle: dict[str, Any] | None = None) -> str:
     headline = summary["default_scope"]
     all_apis = summary["api_scope"]
     lines = [
@@ -1001,6 +1163,12 @@ def markdown_text(summary: dict[str, Any], rows: list[dict[str, Any]], numpy_ver
     lines.extend([
         "",
         "> Availability is based on the compiled public API. It is not a blanket behavioral-parity claim; dtype, layout, signature, and edge-case parity require differential tests.",
+    ])
+    # The oracle section sits right under the disclaimer it answers: which APIs those differential
+    # tests actually cover. Absent only for callers that render without the oracle block.
+    if oracle is not None:
+        lines.extend(oracle_markdown(summary, rows, oracle))
+    lines.extend([
         "",
         "## Highest-priority gaps",
         "",
@@ -1097,6 +1265,10 @@ def render_outputs(np: Any, inventory: dict[str, Any], overrides: dict[str, Any]
     rows, _ = resolve_rows(np, inventory, overrides)
     rows = dashboard_rows(rows)
     summary = build_summary(rows)
+    # The source totals come from the memoized scan resolve_rows already ran (no second corpus pass);
+    # the row counts are read from the PROJECTED rows, the same set every other count uses.
+    oracle_map = oracle_evidence.load_map()
+    oracle = oracle_evidence.describe(oracle_evidence.load_sources(oracle_map), rows, np.__version__)
     payload = {
         "schema_version": 1,
         "generator_version": GENERATOR_VERSION,
@@ -1109,7 +1281,9 @@ def render_outputs(np: Any, inventory: dict[str, Any], overrides: dict[str, Any]
             "object_members": "Object members match only their explicit NumSharp owner type. Inherited members and ufunc protocols are catalogued per owner; namespace namesakes never confer support. Protocol existence does not imply applicability to every ufunc.",
             "availability_note": "Compiled API availability is distinct from fully verified behavioral parity.",
             "case_sensitivity": "NumPy API names are matched case-sensitively for parity. Case-insensitive near-misses are detected and reported (row field 'case_insensitive_matches'; the 'Case-insensitive near-misses' section of summary.md) but never counted as available.",
+            "oracle": "Behavioral parity evidence: committed NumPy 2.4.2 oracle contracts (the differential-fuzz corpus plus the .npy, flags and layout oracles), each replayed against NumSharp in CI and required to be bit-exact or a documented, registry-excused divergence. Contracts resolve to rows through coverage/oracle_map.json; a row is oracle-verified when it is credited and has direct contracts, an identity alias (same NumPy object, same NumSharp member) or a reviewed pure-delegation alias. Host-pinned contracts are hard-gated only on the pinned host.",
         },
+        "oracle": oracle,
         "summary": summary,
         "rows": rows,
     }
@@ -1126,12 +1300,14 @@ def render_outputs(np: Any, inventory: dict[str, Any], overrides: dict[str, Any]
         "extended_surfaces": ["numpy." + surface for surface in sorted({row["surface"] for row in rows if row.get("extended")})],
         "object_surfaces": [path for path in OBJECT_SURFACE_PATHS if not ignored_dashboard_id(path)],
         "numsharp_source_base_url": NUMSHARP_SOURCE_BASE_URL,
+        "oracle_map": "coverage/oracle_map.json",
+        "oracle": oracle,
         "summary": summary,
     }
     return {
         "coverage.json": json_text(payload),
         "coverage.csv": csv_text(rows),
-        "summary.md": markdown_text(summary, rows, np.__version__, inventory["assemblyVersion"]),
+        "summary.md": markdown_text(summary, rows, np.__version__, inventory["assemblyVersion"], oracle),
         "manifest.json": json_text(manifest),
     }
 
@@ -1174,13 +1350,20 @@ def main() -> None:
         print(f"Coverage artifact is current ({args.output}).")
     else:
         write_outputs(args.output, rendered)
-        summary = json.loads(rendered["coverage.json"])["summary"]
+        payload = json.loads(rendered["coverage.json"])
+        summary = payload["summary"]
         expanded = summary["api_scope"]
         headline = summary["default_scope"]
         print(
             f"Wrote {args.output}: {summary['catalog_rows']} catalog rows; "
             f"expanded {expanded['available']}/{expanded['total']} available ({expanded['coverage_percent']:.1f}%); "
             f"headline {headline['available']}/{headline['total']} ({headline['coverage_percent']:.1f}%)."
+        )
+        print(
+            f"NumPy oracle: {payload['oracle']['contracts']:,} contracts; oracle-verified "
+            f"headline {headline['oracle_verified']}/{headline['total']} ({headline['oracle_percent']:.1f}%), "
+            f"expanded {expanded['oracle_verified']}/{expanded['total']} ({expanded['oracle_percent']:.1f}%); "
+            f"{headline['oracle_unverified']} available headline APIs lack contracts."
         )
 
 

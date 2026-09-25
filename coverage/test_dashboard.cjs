@@ -55,7 +55,7 @@ function dashboard() {
     addEventListener() {},
   };
   const context = vm.createContext({ document, window: {}, console });
-  const exposed = inline.replace(/\n  initialize\(\);\s*\n\}\)\(\);\s*$/, '\n  globalThis.dashboard = { state, rowInScope, summarize, surfaceLabel, apiLabel, scopedRows, initializeMetadata, initializeFilters, renderSummary, filterRows, changeScope, resetFilters, applyPreset, tooltipContent };\n})();');
+  const exposed = inline.replace(/\n  initialize\(\);\s*\n\}\)\(\);\s*$/, '\n  globalThis.dashboard = { state, rowInScope, summarize, surfaceLabel, apiLabel, scopedRows, initializeMetadata, initializeFilters, renderSummary, filterRows, changeScope, resetFilters, applyPreset, tooltipContent, parityClass };\n})();');
   assert.notEqual(exposed, inline, 'test harness must replace only the initialization call');
   new vm.Script(exposed).runInContext(context);
   const api = context.dashboard;
@@ -254,4 +254,134 @@ test('projected polynomial and masked-array groups stay merged across cards, fil
   assert.equal(api.state.filtered.length, 2);
   assert.match(element('cov-results').innerHTML, /np\.polyfit/);
   assert.doesNotMatch(element('cov-results').innerHTML, /np\.polynomial\.polyfit/);
+});
+
+// ---- NumPy-oracle parity evidence (generator 1.10+: rows carry an `oracle` record) ----
+
+function direct(contracts, extra = {}) {
+  return {
+    status: 'direct', contracts, error_contracts: 2, sources: { fuzz: contracts }, keys: ['sqrt'],
+    files: ['unary.jsonl'], dtypes: ['float32', 'float64'], layouts: 26, pinned: false,
+    pinned_contracts: 0, pins: [], ...extra,
+  };
+}
+
+function aliasVia(id, contracts) {
+  return {
+    status: 'alias', contracts: 0, error_contracts: 0, sources: {}, keys: [], files: [], dtypes: [],
+    layouts: 0, pinned: false, pinned_contracts: 0, pins: [],
+    via: { id, contracts, rule: 'reviewed', reason: 'np.amax is an alias of np.max.', pinned: false },
+  };
+}
+
+const oracleRows = () => [
+  row('numpy.sqrt', 'Math', { status: 'available', availability: 'exact', in_default_scope: true, extended: false, oracle: direct(1200) }),
+  row('numpy.exp', 'Math', { status: 'available', availability: 'exact', in_default_scope: true, extended: false,
+    oracle: direct(40, { keys: ['exp'], files: ['unary.jsonl'], pinned: true, pinned_contracts: 40, pins: ['host-libm'] }) }),
+  row('numpy.amax', 'Reductions', { status: 'available', availability: 'exact', in_default_scope: true, extended: false, oracle: aliasVia('numpy.max', 1648) }),
+  row('numpy.histogram', 'Statistics', { status: 'available', availability: 'exact', in_default_scope: true, extended: false }),
+  row('numpy.nextafter', 'Math', { status: 'missing', availability: 'missing', in_default_scope: true, extended: false }),
+  row('numpy.ma.MaskedArray.flatten', 'Masked arrays', { surface: 'ma', kind: 'method', oracle: direct(408, { keys: ['ma.flatten'], files: ['ma_manip.jsonl'] }) }),
+  row('numsharp.np.evaluate', 'NumSharp-only APIs', { origin: 'numsharp', kind: 'method', extended: false, status: 'extension', availability: 'extension', oracle: direct(29563, { keys: ['evaluate'], files: ['evaluate.jsonl'] }) }),
+];
+
+test('oracle parity classes mirror the generator classify() for every status', () => {
+  const { api } = dashboard();
+  const rows = oracleRows();
+  const classes = Object.fromEntries(rows.map((item) => [item.id, api.parityClass(item)]));
+  assert.deepEqual(classes, {
+    'numpy.sqrt': 'verified-direct',
+    'numpy.exp': 'verified-direct',
+    'numpy.amax': 'verified-alias',
+    'numpy.histogram': 'unverified',
+    'numpy.nextafter': 'none',
+    'numpy.ma.MaskedArray.flatten': 'uncredited',
+    'numsharp.np.evaluate': 'verified-direct',
+  });
+  // Partial rows are credited too; a row the catalog calls missing is never "verified".
+  assert.equal(api.parityClass(row('numpy.shape', 'X', { status: 'partial' })), 'unverified');
+  assert.equal(api.parityClass(row('numpy.shape', 'X', { status: 'partial', oracle: direct(3) })), 'verified-direct');
+  assert.equal(api.parityClass(row('numpy.x', 'X', { status: 'unsupported', oracle: direct(3) })), 'uncredited');
+  const counts = api.summarize(rows);
+  assert.equal(counts.oracle, 4, 'the NumSharp-only row counts as verified, the uncredited row does not');
+  assert.equal(counts.oracleApis, 3, 'only comparable NumPy APIs enter the oracle percentage');
+  assert.equal(counts.oracleDirect, 3);
+  assert.equal(counts.oracleAlias, 1);
+  assert.equal(counts.oracleUnverified, 1);
+  assert.equal(counts.oracleUncredited, 1);
+  assert.equal(counts.oracleCoverage, 50, '3 verified of 6 comparable APIs');
+});
+
+test('oracle metric, filter, badges and search follow the selected scope', () => {
+  const { api, element } = dashboard();
+  api.state.rows = oracleRows();
+  api.changeScope();
+  assert.match(element('cov-metrics').innerHTML, /Oracle-verified parity/);
+  assert.match(element('cov-metrics').innerHTML, /50\.0%/);
+  assert.match(element('cov-metrics').innerHTML, /3 of 6 replay committed NumPy oracle contracts · 1 available without/);
+  assert.match(element('cov-metrics').innerHTML, /data-metric-action="oracle"/);
+  assert.deepEqual(Array.from(element('cov-oracle').options, (item) => item.value),
+    ['all', 'verified', 'verified-direct', 'verified-alias', 'uncredited', 'unverified', 'none']);
+  assert.match(element('cov-surface-grid').innerHTML, /3 oracle-verified/);
+  api.applyPreset('oracle');
+  assert.equal(element('cov-oracle').value, 'verified');
+  assert.deepEqual(api.state.filtered.map((item) => item.id).sort(), ['numpy.amax', 'numpy.exp', 'numpy.sqrt']);
+  assert.equal((element('cov-results').innerHTML.match(/class="cov-result-oracle"/g) || []).length, 3);
+  element('cov-oracle').value = 'unverified';
+  api.filterRows();
+  assert.deepEqual(api.state.filtered.map((item) => item.id), ['numpy.histogram']);
+  assert.doesNotMatch(element('cov-results').innerHTML, /cov-result-oracle/);
+  api.resetFilters();
+  assert.equal(element('cov-oracle').value, 'all');
+  element('cov-search').value = 'ma_manip.jsonl';
+  api.filterRows();
+  assert.deepEqual(api.state.filtered.map((item) => item.id), ['numpy.ma.MaskedArray.flatten'], 'oracle files are searchable');
+  element('cov-scope').value = 'extensions';
+  api.changeScope();
+  assert.match(element('cov-metrics').innerHTML, /1 oracle-verified entries in this scope/);
+});
+
+test('detail pane renders contracts, host pins, alias via and the two gap readings', () => {
+  const { api, element } = dashboard();
+  api.state.rows = oracleRows();
+  api.changeScope();
+  const show = (id) => { element('cov-search').value = id; api.filterRows(); return element('cov-detail').innerHTML; };
+  const sqrt = show('numpy.sqrt');
+  assert.match(sqrt, /<strong>1,200<\/strong> committed NumPy 2\.4\.2 contracts/);
+  assert.match(sqrt, /2 error-message contracts/);
+  assert.match(sqrt, /<code>float32<\/code> <code>float64<\/code> · 26 memory layouts/);
+  assert.doesNotMatch(sqrt, /pinned host/);
+  const exp = show('numpy.exp');
+  assert.match(exp, /40 of 40 contracts are hard-gated only on the pinned host \(the win-amd64 CRT libm\)/);
+  assert.match(exp, /40 contracts · pinned host only/);
+  const amax = show('numpy.amax');
+  assert.match(amax, /Verified through <code>np\.max<\/code>'s 1,648 contracts \(reviewed delegation alias\)/);
+  assert.match(amax, /Via np\.max/);
+  const flatten = show('numpy.ma.MaskedArray.flatten');
+  assert.match(flatten, /credits no NumSharp member under this NumPy name/);
+  assert.match(flatten, /408 contracts, not credited/);
+  const histogram = show('numpy.histogram');
+  assert.match(histogram, /No committed NumPy-oracle contract exercises this API/);
+  const nextafter = show('numpy.nextafter');
+  assert.doesNotMatch(nextafter, /NumPy oracle evidence/, 'a missing API without contracts gets no evidence block');
+  assert.match(nextafter, /No oracle evidence/);
+});
+
+test('metadata publishes oracle totals and rejects a classification drift', () => {
+  const { api, element } = dashboard();
+  api.state.rows = oracleRows();
+  const data = {
+    numpy_version: '2.4.2', numsharp_assembly_version: 'test', schema_version: 1,
+    oracle: { contracts: 251498 },
+    summary: { default_scope: { total: 5, available: 4, oracle_verified: 3 }, catalog_rows: 7 },
+  };
+  api.initializeMetadata(data);
+  assert.match(element('cov-meta').innerHTML, /251,498 NumPy oracle contracts/);
+  assert.equal(element('cov-oracle-reference').textContent,
+    'Headline oracle-verified: 60.0% (3/5 APIs; 1 available APIs without contracts).');
+  data.summary.default_scope.oracle_verified = 4;
+  assert.throws(() => api.initializeMetadata(data), /oracle summary does not match/);
+  delete data.summary.default_scope.oracle_verified;
+  api.initializeMetadata(data);
+  assert.equal(element('cov-oracle-reference').textContent, '', 'pre-1.10 artifacts render without the oracle line');
 });

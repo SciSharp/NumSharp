@@ -27,6 +27,45 @@ The final `dashboard_rows` projection in `generate_coverage.py` applies the dash
 
 The reflection inventory's schema v5 `objectTypes` map contains public members **including inherited members**, with declaring-type evidence. Object members match only their explicitly mapped CLR owner, using exact spelling or a reviewed adapter in `object_surfaces.py`. A top-level `np.sqrt`, `np.sum`, or an ordinary NDArray member cannot confer support on `emath.sqrt`, `add.reduce`, or `MaskedArray.sum`. A class being available does not mark its methods available. Missing methods, signatures, source links, and reviewed spelling differences are visible individually.
 
+## NumPy-oracle parity evidence
+
+Availability says NumSharp *exposes* an API; the committed NumPy oracles say it *behaves* like NumPy. `oracle_evidence.py` joins the two, row by row, so the artifact reports both. Four sources are joined, each replayed against NumSharp in CI and required to be bit-exact or a documented, registry-excused divergence:
+
+| Source | Path | Replayed by |
+|---|---|---|
+| Differential-fuzz corpus | `test/NumSharp.Tests.Oracle/Fuzz/corpus/*.jsonl` | `FuzzMatrix` (FuzzCorpusTests*, IndexOracleTests) |
+| `.npy`/`.npz` format oracle | `test/NumSharp.Tests/IO/corpus/npy_oracle.zip` | `NpyOracle` (NpyOracleTests) |
+| Array flags oracle | `test/NumSharp.Tests/Backends/corpus/flags_oracle.jsonl` | FlagsOracleTests |
+| Result-layout parity oracle | `test/NumSharp.Tests/Backends/corpus/layout_parity_oracle.jsonl` | LayoutParityOracleTests |
+
+**Resolution.** Contracts are grouped by (source, file, key, variant) and each group resolves to catalog rows. A bare fuzz op key walks `np.<key>` → `np.linalg` → `np.fft` → `np.random` → a NumSharp-only `np` row, and the first existing callable/property wins, so `np.trace` shadows `np.linalg.trace`. The generator calls `np.trace`, and the Array-API form has a stricter contract. Module/class/constant rows are never automatic targets (`fft` resolves to `np.fft.fft`, not the module). Dotted keys resolve by namespace (`ndarray.`, `emath.`, `ma.`, the six polynomial bases, falling back to NumSharp-only rows such as `chebvalnd`). Everything else — variant suffixes (`std_ddof`), parameter-driven keys (`out_binary` + `params.ufunc`, `rnd` + `params.dist`, `grnd` + `params.method`), protocols (`get`/`set` attach to `numpy.ndarray`, which has no dunder rows) and the specialized sources' families — is reviewed in `oracle_map.json`.
+
+**Aliases.** A row the corpus does not gate by name can still be verified two ways. *Identity* is mechanical: the row is credited to the same NumSharp member as a gated row AND NumPy's two names are the same object (`np.acos is np.arccos`, `np.pow is np.power`). Both sides are then one implementation. *Reviewed* aliases in `oracle_map.json` cover pure delegations that are not the same object (`np.amax` → `np.max`, `np.row_stack` → `np.vstack`, `np.linalg.matmul` → `np.matmul`). They mirror the C# gate's `EquivalentAliases`/`NdarrayAliases`/`MaAliases`, and a test fails if one is missing. `np.linalg.trace`/`diagonal`/`outer`/`cross` are deliberately *not* aliased: their contracts differ from the `np.*` forms.
+
+**Strictness.** The generator refuses to write an artifact while any of these holds (all reported at once):
+- a corpus key resolves to nothing, or maps to an id the catalog lacks;
+- an explicit entry is unused, or repeats the automatic rules;
+- a value override or specialized-section entry is unused;
+- an alias names an unknown row, points at a row without direct contracts, has gone stale (its row gained direct fuzz contracts), or duplicates the identity rule;
+- a pin declaration is bad;
+- a corpus file no replay suite names.
+
+**Classification** (`oracle_evidence.classify`, mirrored by the dashboard's `parityClass`; the page recounts the headline and refuses a mismatched artifact):
+
+- `verified-direct` / `verified-alias` — credited (available/partial) row with contracts. Both count as **oracle-verified**.
+- `unverified` — available/partial NumPy API with no contracts: parity is declared, not proven. Some such APIs carry dedicated unit suites instead (see OracleSurfaceCoverageTests' sibling-owned and known-gap lists).
+- `uncredited` — contracts exercise the API but the catalog calls it missing/unsupported: a crediting gap (for example `numpy.ma.MaskedArray.*`, whose object surface has no CLR owner type yet).
+- `none` — everything else.
+
+**Outputs.**
+- Each row with evidence carries an `oracle` record: `status`, `contracts`, `error_contracts`, per-`sources` counts, `keys`, `files`, `dtypes`, `layouts`, `pinned` (verified only on the pinned host), `pinned_contracts`, `pins`, and `via` for aliases.
+- Every summary scope adds `oracle_verified`/`oracle_direct`/`oracle_alias`/`oracle_unverified`/`oracle_uncredited` and `oracle_percent`, which shares `coverage_percent`'s denominator.
+- `coverage.csv` appends `oracle_*` columns after the historical ones.
+- `coverage.json`/`manifest.json` carry a top-level `oracle` block (per-source totals, pinned files, classification counts).
+- `summary.md` gains a "NumPy-oracle parity evidence" section, including the lists of available headline APIs without contracts and of oracle-gated APIs the catalog does not credit.
+
+Host-pinned contracts (the `RunHostLibmCorpus` tiers, discovered from the replay source; the OpenBLAS and Windows-libm tiers declared under `host_pins`) are hard-gated only on the pinned host. A row whose contracts are *all* pinned is marked `pinned`.
+
 ## Generate or verify
 
 ```bash
@@ -42,7 +81,7 @@ Generated, reviewable outputs live in gitignored `coverage/generated/`:
 
 - `coverage.json` — complete machine-readable inventory used by the documentation dashboard.
 - `coverage.csv` — flat data for spreadsheets and downstream tooling.
-- `summary.md` — human-readable totals and the highest-priority gaps.
+- `summary.md` — human-readable totals, the NumPy-oracle parity evidence, and the highest-priority gaps.
 - `manifest.json` — schema, tool versions, scope, and counting rules.
 
 CI generates a fresh copy under `artifacts/numpy-numsharp-coverage/`, validates documentation links across **all catalog scopes**, and uploads it as `numpy-numsharp-api-coverage`. Master builds publish snapshots to the repository's `data` branch. Generated data is not committed on master.
@@ -73,4 +112,4 @@ Platform-conditional extended-precision aliases (`float96`, `float128`, `complex
 - **Missing** — no NumSharp public API mapping was found.
 - **NumSharp-only** — an unmatched public member declared by `np`, `NDArray`, or `NumPyRandom`; these rows link directly to their declaration on GitHub.
 
-API availability is not a blanket behavioral-parity claim. Exact edge-case, dtype, layout, and signature parity still requires differential tests. Record reviewed exceptions and cross-surface aliases in `coverage/overrides.json`; the generator validates every referenced NumSharp target.
+API availability is not a blanket behavioral-parity claim. Exact edge-case, dtype, layout, and signature parity requires differential tests, and the **oracle-verified** counts report which APIs those tests actually cover (see "NumPy-oracle parity evidence" above). Record reviewed exceptions and cross-surface aliases in `coverage/overrides.json`; the generator validates every referenced NumSharp target. Record corpus-key mappings and oracle aliases in `coverage/oracle_map.json`; the generator validates those too.
