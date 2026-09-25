@@ -2582,6 +2582,56 @@ class above; `OpRegistry` all 16 transforms + 4 helpers, `gen_oracle.gen_fft`, `
 **330** `Fourier`-namespace unit tests. See `Fourier/np.fft.{cs,Standard,Real,Hermitian,Helper,RawFft}.cs`
 + `Fourier/PocketFFT*.cs` (+ `*.Single.cs`); issues **#114** / **#569**.
 
+### Polynomial package (`np.polynomial.*`) — evaluation family (U3)
+`polyval`/`chebval`/`legval`/`lagval`/`hermval`/`hermeval` and their `*val2d`, `*val3d`, `*grid2d`, `*grid3d`, `*valnd` twins (36 names; `polyvalfromroots` open)
+
+The `numpy.polynomial` PACKAGE (not the legacy `np.polyval` family) — facade `np.polynomial.{polynomial,
+chebyshev,legendre,laguerre,hermite,hermite_e}` (instance-property modules, since a nested static class
+cannot share `np.polynomial`'s name, CS0542), plan `docs/plans/numpy-polynomial.md` (U3 delivered, §10 engine).
+Driver `Polynomial/Package/NDPolyEval.cs` (NumPy's Python layer: `np.array(c, ndmin=1)`, int/bool series →
+float64, Python-scalar x stays WEAK, `tensor` reshape, `_valnd`/`_gridnd` two-pass compositions, verbatim
+errors). Kernels `Backends/Kernels/ILKernelGenerator.Polynomial{,.Typing,.Emitter,.Lanes,.ConstPool,.Eval}.cs`:
+Tier-3A per-chunk IL over `NDIterRef.ForEach`, emitted by ONE typed emitter from per-basis STEP TABLES
+(NumPy's source-order expression trees, never re-associated, each node typed by NEP 50) — so no per-basis and
+no per-dtype C#. **Bit-exact with NumPy 2.4.2** on every dtype pair and layout (oracle tier `polyeval.jsonl`,
+12,214 cases, 0 excused; `MisalignedRegistry`'s generic unary/complex ULP branches are carved out for these
+ops so a drift fails). **Perf (NPY/NS, `benchmark/polynomial/`, 1,320 cells, every one SHA-256-checked):
+geomean 7.5×, min 1.62×** — float64 `chebval` d10 16.9×/11.2×/36.5× at 1K/100K/10M, `chebval2d` 41.5×,
+complex 23.7×@100K, float16 3.3×@10M, `lagval` (divider-bound) 2.7–14×, Python-scalar x 4.8–5.7×.
+
+**Traps this family hit — do not re-break:**
+- **NumPy runs the first 1–2 Clenshaw steps in the COEFFICIENT dtype** (`c0 = c[-2]` is a float32 scalar
+  until it meets x): pre-casting a float32 series to the float64 loop changes 100 % of the points. The
+  emitter PEELS those steps to a dtype fixpoint (kernel class `min(nc, P+3)`), then loops.
+- **Python-scalar x is WEAK** (`chebval(2.0, float32_c)` is float32) and its x-only subtrees (`2*x`,
+  `x*0`, `(2*nd-1) - x`) are CPython arithmetic — BigInteger ints, and a Python int → double is CORRECTLY
+  ROUNDED (.NET's `(double)BigInteger` TRUNCATES: 42 oracle cells of `2**64-1` caught it). A 0-d NDArray x
+  is STRONG. C# `char`/`Half`/`decimal` have no Python literal → strong 0-d arrays (the `np.r_` rule).
+- **Two complex multiplies:** an ARRAY op is NumPy's fused `simd_cmul`, a 0-d result is scalar math (the
+  naive product) — except an op touching the raw 0-d x array, which NumPy runs as a ufunc. chebval with a
+  0-d complex x differs from BOTH the array-x and the Python-scalar results; the emitter reproduces all three.
+- **Vector lanes for EVERY dtype pair** (`...Lanes.cs`): 256-bit on AVX2 (float64 4 lanes, float32/float16
+  8, complex128 2) and every other per-point dtype at the same lane count — int32 containers re-wrapped to
+  int8/uint8/int16/uint16/char width after each op (NumPy's `2*x` WRAPS in int8), packed 2-lane containers,
+  float16 as 8 float32 lanes with 2/4/8 live, complex `[re,im]×2` with vfmaddsub `simd_cmul` and Smith
+  division (a shared divisor `/nd` prepared once per block). A lane-table miss compiles scalar chains (same
+  bits) and bumps `ILKernelGenerator.PolyVectorFallbacks` — zero over the dtype matrix, unit-tested. Before
+  the table, 227 of 936 small-size dtype cells were below 1.5× (min 0.25×).
+- **One DynamicMethod per STAGE, or the JIT stops inlining:** once a method's inline budget is spent (its
+  local-variable limit / time budget — AggressiveInlining does not override it) it inlines nothing more, so
+  a monolithic kernel left its lane helpers — even `Vector256.Load` — as CALLS (a 23 KB
+  complex kernel with 340 calls, 3.3× slower). The kernel is a stride dispatcher → part (vector/scalar ×
+  broadcast/per-point series) → U-chain stage → remainder stage, each its own DynamicMethod (0–2 calls
+  each). **Diagnose with `DOTNET_JitDisasm="NDPolyEval_*"` + `DOTNET_JitStdOutFile` and count `call`.**
+- **float16 series in a float64/complex loop gang-load:** one 16-byte load + exact widen serves 8/W
+  adjacent chains (each takes its lanes by one `vpermpd`); per-chain widening held those cells at 0.93–1.47×.
+- **N-D series are NEVER buffered** (the kernel reads `c[k]` at `c0 + k*kstride`, outside the operand the
+  iterator knows); the 1-D form buffers a strided x (coefficients live in auxdata).
+- **Benchmark traps:** a file-based `dotnet run` REUSES its cached build — NumSharp.Core included — when the
+  script did not change (`--no-cache` after every Core edit; a 936-cell run reproduced the old kernels to the
+  microsecond); one warm-up pass only QUEUES tier-1 (warm, sleep for the background JIT, warm again); and
+  NumPy's loops are cheapest L1/L2-resident, so a 100K-only dtype sweep hides the worst cells.
+
 ### Random (`np.random.*`)
 `bernoulli`, `beta`, `binomial`, `chisquare`, `choice`, `dirichlet`, `exponential`, `f`, `gamma`, `geometric`, `gumbel`, `hypergeometric`, `laplace`, `logistic`, `lognormal`, `logseries`, `multinomial`, `multivariate_normal`, `negative_binomial`, `noncentral_chisquare`, `noncentral_f`, `normal`, `pareto`, `permutation`, `poisson`, `power`, `rand`, `randint`, `randn`, `random_sample`, `rayleigh`, `seed`, `shuffle`, `standard_cauchy`, `standard_exponential`, `standard_gamma`, `standard_normal`, `standard_t`, `triangular`, `uniform`, `vonmises`, `wald`, `weibull`, `zipf`
 
@@ -2802,6 +2852,7 @@ non-structured subset would only re-expose `loadtxt`.
 | `np.linalg` module | `LinearAlgebra/linalg/np.linalg.cs` (class + `_assert_*`/`_commonType` ports) and `np.linalg.{solve,inv,det,eig,svd,qr,cholesky,lstsq,norm,multi_dot,matrix_power,arrayapi}.cs`; `Exceptions/LinAlgError.cs` |
 | Window functions | `Math/np.windows.cs` (bartlett/blackman/hamming/hanning/kaiser + the internal cephes `BesselI0`; fused via `np.evaluate`) |
 | Fourier / FFT (`np.fft.*`) | `Fourier/np.fft.cs` (`FourierModule` facade), `Fourier/np.fft.{Standard,Real,Hermitian,Helper}.cs` (the 18 funcs), `Fourier/np.fft.RawFft.cs` (layer-3 port: `_raw_fft`/`_raw_fftnd`/`_cook_nd_args`/`_swap_direction`), `Fourier/PocketFFTDriver.cs` (strided 1-D driver + FFTPACK packing), `Fourier/PocketFFT.{Twiddle,Complex,Real,Bluestein,Plan}.cs` (managed pocketfft engine); companion accessors `Math/np.{conjugate,real,imag,angle}.cs`. Design + parity ledger: `docs/FFT_PARITY.md` |
+| numpy.polynomial evaluation (`np.polynomial.*`) | `Polynomial/Package/np.polynomial{,.polynomial,.chebyshev,.legendre,.laguerre,.hermite,.hermite_e}.cs` (facades), `Polynomial/Package/NDPolyEval.cs` (NumPy's Python layer), `Backends/Kernels/ILKernelGenerator.Polynomial.cs` (step tables + `PyScalar`), `.Typing.cs` (NEP 50 per node, peeling), `.Emitter.cs` (typed emitter), `.Lanes.cs` (vector lane kinds for every dtype pair), `.ConstPool.cs` (weak-value regions), `.Eval.cs` (dispatcher/part/stage kernels). Plan + measurements: `docs/plans/numpy-polynomial.md` (U3); benchmark `benchmark/polynomial/` |
 | Grid / slice-expression DSL | `Creation/np.r_.cs` (`AxisConcatenator` + `RClass`), `Creation/np.c_.cs`, `Creation/np.ogrid.cs` (`OGridClass` + `OGridResult` + shared `nd_grid` helpers), `Creation/np.mgrid.cs` (`MGridClass` + `MGridResult`), `Creation/np.meshgrid.cs` (`MeshgridResult`), `Indexing/np.{ix_,s_}.cs` |
 | Array printing (NumPy parity) | `Backends/Printing/{PrintOptions,Dragon4,ElementFormatters,ArrayFormatter}.cs`, `APIs/np.array2string.cs`, `Casting/NDArray.ToString.cs` |
 | Iterators | `Backends/Iterators/NDIter.cs`, `NDIter.Detach.cs` (ref-struct → managed-owner bridge) |

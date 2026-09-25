@@ -911,6 +911,9 @@ namespace NumSharp.Tests.Fuzz
                 && !(tc == NPTypeCode.Single && NumPyPortedFloat32Kernels.Contains(c.Op))
                 && !(tc == NPTypeCode.Double && NumPyPortedFloat64Kernels.Contains(c.Op))
                 && !ByteExactArithmeticUnaryOps.Contains(c.Op)
+                // numpy.polynomial evaluation is + - * / only (a Python-scalar x leaves ONE operand, the
+                // coefficients): bit-exact by construction, so it must never inherit this excuse.
+                && !OpRegistry.IsPolynomialOp(c.Op)
                 && diffs.Count > 0 && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 2)))
                 return "unary ~ULP (transcendental/magnitude algorithm difference)";
 
@@ -946,6 +949,7 @@ namespace NumSharp.Tests.Fuzz
             //     regression fails.
             if (kind == DivergenceKind.Value && c.Operands.Length == 1 && tc == NPTypeCode.Complex
                 && !ByteExactArithmeticUnaryOps.Contains(c.Op)
+                && !OpRegistry.IsPolynomialOp(c.Op)   // + - * / only: held bit-exact (see branch 5)
                 && diffs.Count > 0 && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 3)))
                 return "complex unary within 3 ULP (full NumPy-algorithm port)";
 

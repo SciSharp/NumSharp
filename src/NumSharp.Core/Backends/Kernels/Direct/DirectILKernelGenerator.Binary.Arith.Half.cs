@@ -79,8 +79,11 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>8 f16 lanes (as a 128-bit ushort vector) → 8 exact f32 lanes.</summary>
+        /// <remarks>Internal so the numpy.polynomial evaluation kernels (ILKernelGenerator.Polynomial.Emitter.cs)
+        ///     can keep float16 values as float32 lanes on the f16 grid with the SAME widen primitive, which is
+        ///     what makes their vector and scalar float16 paths bit-identical. Requires AVX2.</remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static Vector256<float> HalfWiden8V(Vector128<ushort> h)
+        internal static Vector256<float> HalfWiden8V(Vector128<ushort> h)
             => HalfBitsToFloatExact(Avx2.ConvertToVector256Int32(h));
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -96,8 +99,10 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>Narrow 8 f32 result lanes back to 8 f16 patterns (128-bit ushort vector).</summary>
+        /// <remarks>Internal for the same reason as <see cref="HalfWiden8V"/>: the polynomial kernels round each
+        ///     float32-lane result back onto the f16 grid through this exact narrow. Requires AVX2.</remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static Vector128<ushort> HalfNarrow8V(Vector256<float> fr)
+        internal static Vector128<ushort> HalfNarrow8V(Vector256<float> fr)
         {
             var hb = FloatToHalfBits(fr);
             return Sse41.PackUnsignedSaturate(hb.GetLower(), hb.GetUpper());

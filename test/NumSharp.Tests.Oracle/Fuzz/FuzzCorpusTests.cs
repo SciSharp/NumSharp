@@ -501,6 +501,17 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Emath() => RunHostLibmCorpus("emath.jsonl");
 
+        // numpy.polynomial evaluation family (plan docs/plans/numpy-polynomial.md U3): {p}val /
+        // val2d / val3d / grid2d / grid3d / valnd for the six bases — every x dtype x coefficient dtype
+        // x count class, x layouts, N-D coefficients (tensor / broadcast / coefficient layouts), Python-
+        // scalar (weak) and 0-d (strong) x, special coefficients, the vector-lane matrix at 45 points
+        // (every x dtype x series dtype, 1-D and per point, integer bounds and float specials, column-
+        // strided per-point series for the scalar part), and the IndexError / ValueError / OverflowError
+        // cells. Portable: + - * / only, so strict on every host.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Polyeval() => RunCorpus("polyeval.jsonl");
+
         // W11 operand-relationship flags (section C): input aliasing (a op a, same buffer) and
         // in-place out= (maximum/minimum/clip writing into an input operand).
         [TestMethod]
@@ -712,6 +723,7 @@ namespace NumSharp.Tests.Fuzz
             ["params.jsonl"] = 1190,      // +288 §C1: multi-axis median/average/nanmedian (tuple-axis int[] overloads)
             ["instance.jsonl"] = 7500,    // §D: ndarray.* instance surface — 13 NumPy dtypes + the char proxy weave (dtype-spread gate)
             ["emath.jsonl"] = 385,        // §A2/E5: np.emath scimath promotion (+ the unsigned lanes, dtype-spread gate)
+            ["polyeval.jsonl"] = 11800,   // numpy.polynomial {p}val family (U3), 6 bases x the matrix above
             ["place.jsonl"] = 12,
             ["products.jsonl"] = 326,
             ["precision.jsonl"] = 80,

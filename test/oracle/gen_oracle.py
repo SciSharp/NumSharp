@@ -9899,6 +9899,336 @@ def gen_emath():
     return cases
 
 
+# ---- numpy.polynomial evaluation family (plan docs/plans/numpy-polynomial.md U3) -------------
+#
+# {p}val / {p}val2d / {p}val3d / {p}grid2d / {p}grid3d for the six bases, plus {p}valnd (NumPy's
+# development-branch addition, oracle'd through the identical private polyutils._valnd).
+# Op keys are MODULE-QUALIFIED ("chebyshev.chebval") because the package reuses the legacy
+# np.polyval/polyder/... names with the OPPOSITE coefficient order (plan D5): a bare "polyval" key
+# would credit the new facade with the legacy corpus, or the legacy function with this one.
+#
+# Every case records the x forms NumPy distinguishes, in params["xs"] (one entry per x/y/z/pts
+# position, in order; the coefficients are always the LAST operand):
+#   "a"                          -> the next operand (an ndarray; 0-d arrays included — STRONG)
+#   {"kind": "int",  "int": "…"} -> a Python int (decimal text; may exceed 64 bits)
+#   {"kind": "float","bits": …}  -> a Python float (its IEEE-754 bit pattern as 0x… text)
+#   {"kind": "complex","re": …,"im": …}  -> a Python complex (component bit patterns)
+#   {"kind": "bool", "bool": b}  -> a Python bool
+# A Python scalar is WEAK (NEP 50): chebval(2.0, float32_c) is float32, and CPython computes the
+# x-only subexpressions (2*x, x*0, 1 - x, (2*nd - 1) - x) before NumPy sees them.
+# Cells whose NumPy result is complex64 (a Python complex against float16/float32 coefficients)
+# are skipped: NumSharp has one complex width (#569).
+
+POLY_MODULES = [
+    ("polynomial", "poly"), ("chebyshev", "cheb"), ("legendre", "leg"),
+    ("laguerre", "lag"), ("hermite", "herm"), ("hermite_e", "herme"),
+]
+
+_POLY_MODERATE = [0.5, -1.25, 2.0, -0.75, 1.5, -2.0, 0.25, 1.0, -0.5, 0.0, -0.0, 3.0,
+                  1e-3, -1e-3, 0.9, -1.9, 1.25, -3.0, 0.125, 2.5, -0.375, 1.75, -1.0, 0.625]
+_POLY_INTS = [0, 1, 2, 3, -1, -2, 5, 7, -4, 9, 11, -6, 4, 6, -3, 8, 10, -7, 12, 13, -9, 14, 15, -11]
+
+
+def _poly_module(name):
+    import numpy.polynomial as npp
+    return getattr(npp, name)
+
+
+def _f64_bits(v):
+    import struct
+    return "0x%016x" % struct.unpack("<Q", struct.pack("<d", v))[0]
+
+
+def _poly_fill(n, dt, seed=0):
+    """Deterministic MODERATE values (so high-degree series stay finite and every bit is informative)."""
+    dt = np.dtype(dt)
+    idx = [(i * 7 + seed) % len(_POLY_MODERATE) for i in range(n)]
+    if dt.kind == "f":
+        return np.array([_POLY_MODERATE[i] for i in idx], dtype=np.float64).astype(dt)
+    if dt.kind == "c":
+        re = np.array([_POLY_MODERATE[i] for i in idx], dtype=np.float64)
+        im = np.array([_POLY_MODERATE[(i + 5) % len(_POLY_MODERATE)] for i in idx], dtype=np.float64)
+        return (re + 1j * im).astype(dt)
+    if dt.kind == "b":
+        return np.array([(i + seed) % 3 != 1 for i in range(n)], dtype=bool)
+    return np.array([_POLY_INTS[i] for i in idx], dtype=np.int64).astype(dt)
+
+
+def _poly_coef(shape, dt, seed=1):
+    n = int(np.prod(shape)) if len(shape) else 1
+    return np.ascontiguousarray(_poly_fill(n, dt, seed).reshape(shape))
+
+
+def _weak_spec(v):
+    if isinstance(v, bool):
+        return {"kind": "bool", "bool": v}
+    if isinstance(v, int):
+        return {"kind": "int", "int": str(v)}
+    if isinstance(v, float):
+        return {"kind": "float", "bits": _f64_bits(v)}
+    if isinstance(v, complex):
+        return {"kind": "complex", "re": _f64_bits(v.real), "im": _f64_bits(v.imag)}
+    raise TypeError(type(v))
+
+
+def _poly_exc(e):
+    # The C# harness trims its own message, so trailing blanks (NumPy's broadcast error ends in a
+    # space) are trimmed here too; everything else is NumPy's text verbatim.
+    return {"type": type(e).__name__, "text": str(e).strip()}
+
+
+def gen_polyeval():
+    import numpy.polynomial.polyutils as pu
+    cases = []
+    n = 0
+    skipped = 0
+    ok_dtypes = set(ALL_DTYPES)
+
+    def emit(op, xs, operands, call, layout, cid, extra=None):
+        nonlocal n, skipped
+        params = {"xs": xs}
+        if extra:
+            params.update(extra)
+        try:
+            with np.errstate(all="ignore"):
+                r = np.asarray(call())
+        except Exception as e:
+            cases.append({"id": f"{cid}/{n}", "op": op, "params": params, "operands": operands,
+                          "expected": {}, "expects_throw": True, "error": _poly_exc(e),
+                          "layout": layout, "valueclass": "error"})
+            n += 1
+            return
+        if r.dtype.name not in ok_dtypes:
+            skipped += 1          # complex64 lane (#569)
+            return
+        cases.append(_case(op, params, operands, _arr_expected(r), layout, "polyeval", cid=f"{cid}/{n}"))
+        n += 1
+
+    c_dtypes = ["float64", "float32", "float16", "complex128", "int64", "bool", "int8", "uint16"]
+    counts = [1, 2, 3, 4, 7, 12]
+
+    for modname, p in POLY_MODULES:
+        mod = _poly_module(modname)
+        val = getattr(mod, p + "val")
+        op = f"{modname}.{p}val"
+
+        # (A) dtype matrix: every x dtype x the coefficient dtypes x every coefficient-count class.
+        for xs in ALL_DTYPES:
+            xv = _poly_fill(9, xs)
+            xd = describe(xv, xv)
+            for cs in c_dtypes:
+                for nc in counts:
+                    cv = _poly_coef((nc,), cs)
+                    emit(op, ["a"], [xd, describe(cv, cv)], lambda: val(xv, cv), "c_contiguous_1d",
+                         f"{op}/dt/{xs}/{cs}/{nc}")
+
+        # (B) x memory layouts (values overwritten with moderate ones; the layout is the point).
+        for ln in sorted(LAYOUTS):
+            for xs, cs, nc in (("float64", "float64", 5), ("float32", "float32", 6),
+                               ("float16", "float16", 4), ("complex128", "float64", 7),
+                               ("int32", "float64", 12)):
+                base, view = LAYOUTS[ln](np.dtype(xs))
+                base[...] = _poly_fill(base.size, xs).reshape(base.shape)
+                cv = _poly_coef((nc,), cs)
+                emit(op, ["a"], [describe(base, view), describe(cv, cv)], lambda: val(view, cv), ln,
+                     f"{op}/lay/{ln}/{xs}/{cs}")
+
+        # (C) N-D coefficients: tensor=True (every series at every point) and tensor=False (x
+        # broadcast over the series), coefficient layouts (transposed / reversed / broadcast).
+        for cs in ("float64", "float32", "complex128", "float16"):
+            for nc in (1, 2, 3, 6):
+                for cshape_tail, xshape, tensor in (((2,), (4,), True), ((3, 2), (4,), True),
+                                                    ((2,), (2, 3), True), ((3,), (3,), False),
+                                                    ((2, 3), (3,), False), ((2, 3), (2, 3), False),
+                                                    ((4,), (1,), False), ((1,), (5,), False)):
+                    cv = _poly_coef((nc,) + cshape_tail, cs)
+                    xv = _poly_fill(int(np.prod(xshape)), "float64", seed=3).reshape(xshape)
+                    emit(op, ["a"], [describe(xv, xv), describe(cv, cv)],
+                         lambda: val(xv, cv, tensor=tensor), f"nd_c_{'tensor' if tensor else 'bcast'}",
+                         f"{op}/nd/{cs}/{nc}/{cshape_tail}/{xshape}/{tensor}", {"tensor": tensor})
+            # coefficient layouts: axis 0 strided (transposed), reversed, broadcast along the columns
+            cb = _poly_coef((3, 5), cs)
+            ct = cb.T                                   # (5, 3): series stride = 1 element
+            cr = _poly_coef((5, 3), cs)[::-1]           # negative series stride
+            csrc = _poly_coef((5, 1), cs)
+            cbc = np.broadcast_to(csrc, (5, 3))
+            xv = _poly_fill(3, "float64", seed=5)
+            for cn, (cbase, cview) in (("c_transposed", (cb, ct)), ("c_reversed", (cr.base, cr)),
+                                       ("c_broadcast", (csrc, cbc))):
+                for tensor in (True, False):
+                    emit(op, ["a"], [describe(xv, xv), describe(cbase, cview)],
+                         lambda: val(xv, cview, tensor=tensor), cn, f"{op}/clay/{cs}/{cn}/{tensor}", {"tensor": tensor})
+        # tensor=False broadcast mismatch: NumPy's ValueError (column shape first)
+        cv = _poly_coef((3, 2), "float64")
+        xv = _poly_fill(3, "float64")
+        emit(op, ["a"], [describe(xv, xv), describe(cv, cv)], lambda: val(xv, cv, tensor=False),
+             "nd_c_bcast", f"{op}/err/bcast", {"tensor": False})
+
+        # (D) Python-scalar x (weak) against 1-D and 2-D series.
+        weak_values = [0, 1, -3, 7, 2 ** 40, 2 ** 64 - 1, True, False,
+                       0.5, -0.0, 2.25, -1.75, float("inf"), float("-inf"), float("nan"), 1e300, 5e-324,
+                       complex(1, 2), complex(-0.5, 0.25), complex(float("inf"), 1.0), complex(0.0, -0.0)]
+        for wv in weak_values:
+            for cs in ("float64", "float32", "float16", "complex128", "int64", "bool"):
+                for cshape in ((1,), (2,), (3,), (6,), (4, 3)):
+                    cv = _poly_coef(cshape, cs)
+                    emit(op, [_weak_spec(wv)], [describe(cv, cv)], lambda: val(wv, cv), "weak_scalar",
+                         f"{op}/weak/{type(wv).__name__}/{cs}/{cshape}")
+
+        # (E) 0-d array x (STRONG), including complex 0-d x, whose ops mix ufunc and scalar math.
+        for xs in ("float64", "float32", "float16", "complex128", "int32", "bool"):
+            x0 = np.array(_poly_fill(1, xs, seed=2)[0])
+            for cs in ("float64", "float32", "complex128"):
+                for cshape in ((1,), (2,), (3,), (5,), (9,), (3, 2)):
+                    cv = _poly_coef(cshape, cs, seed=4)
+                    emit(op, ["a"], [describe(x0, x0), describe(cv, cv)], lambda: val(x0, cv), "scalar_0d",
+                         f"{op}/x0d/{xs}/{cs}/{cshape}")
+
+        # (F) special values in the coefficients (NaN/inf/-0) at a few x dtypes.
+        cspecial = np.array([1.0, float("nan"), -0.0, float("inf"), 2.0, -float("inf"), 0.5], dtype=np.float64)
+        for xs in ("float64", "float32", "float16", "complex128"):
+            xv = _poly_fill(6, xs, seed=6)
+            for nc in (1, 2, 3, 7):
+                cv = np.ascontiguousarray(cspecial[:nc])
+                emit(op, ["a"], [describe(xv, xv), describe(cv, cv)], lambda: val(xv, cv), "c_contiguous_1d",
+                     f"{op}/cspec/{xs}/{nc}")
+
+        # (H) vector lanes: every x dtype x every inexact series dtype at 45 points — enough for the U-chain
+        # stage, the 1-chain vector stage and the scalar tail at every lane width (45 = 32+8+5 for 8 lanes,
+        # 32+12+1 for 4, 40+4+1 for 2) — as a 1-D series and one series per point (tensor=False). The (A)
+        # matrix's 9 points never reach the U-chain stage of a float64/float32 loop, and its per-point
+        # shapes (C) are narrower than one vector: these cells are the byte gate of the mixed-dtype lane kinds.
+        for xs in ALL_DTYPES:
+            xv = _poly_fill(45, xs, seed=41)
+            xd = describe(xv, xv)
+            for cs in ("float16", "float32", "float64", "complex128"):
+                cv = _poly_coef((6,), cs, seed=42)
+                emit(op, ["a"], [xd, describe(cv, cv)], lambda: val(xv, cv), "c_contiguous_1d",
+                     f"{op}/vl/{xs}/{cs}/1d")
+                cp = _poly_coef((6, 45), cs, seed=43)
+                emit(op, ["a"], [xd, describe(cp, cp)], lambda: val(xv, cp, tensor=False), "nd_c_bcast",
+                     f"{op}/vl/{xs}/{cs}/pp", {"tensor": False})
+        # ... at the dtype extremes: integer x at its bounds, so 2*x / (2*nd - 1) - x / 1 - x WRAP in x's
+        # dtype lane for lane (the moderate values above never overflow a signed lane), and float x with
+        # the specials (NaN, +-inf, +-0, subnormals, values that overflow float16/float32 mid-recurrence).
+        for xs in ALL_DTYPES:
+            dt = np.dtype(xs)
+            if dt.kind in "iu":
+                info = np.iinfo(dt)
+                ext = [int(info.min), int(info.max), int(info.min) + 1, int(info.max) - 1, int(info.max) // 2 + 1,
+                       int(info.min) // 2, 0, 1, 3]
+                xv = np.array([ext[i % len(ext)] for i in range(45)], dtype=dt)
+                series = ("float64", "float16")
+            elif dt.kind in "fc":
+                ext = [float("nan"), float("inf"), float("-inf"), 0.0, -0.0, 5e-324, -1e-310, 1e300, -3e38,
+                       65504.0, 1e5, 0.5, -1.25]
+                re = np.array([ext[i % len(ext)] for i in range(45)])
+                if dt.kind == "c":
+                    xv = (re + 1j * np.array([ext[(i + 4) % len(ext)] for i in range(45)])).astype(dt)
+                else:
+                    with np.errstate(all="ignore"):
+                        xv = re.astype(dt)
+                series = ("float64", "complex128")
+            else:
+                continue
+            xd = describe(xv, xv)
+            for cs in series:
+                cv = _poly_coef((6,), cs, seed=45)
+                emit(op, ["a"], [xd, describe(cv, cv)], lambda: val(xv, cv), "c_contiguous_1d",
+                     f"{op}/vlx/{xs}/{cs}/1d")
+                cp = _poly_coef((6, 45), cs, seed=46)
+                emit(op, ["a"], [xd, describe(cp, cp)], lambda: val(xv, cp, tensor=False), "nd_c_bcast",
+                     f"{op}/vlx/{xs}/{cs}/pp", {"tensor": False})
+        # ... and the same per-point series through a column-strided view: the kernel's scalar per-point
+        # part, which must agree with the vector part above byte for byte.
+        for xs, cs in (("float64", "float64"), ("complex128", "float16"), ("int8", "float32"),
+                       ("float16", "complex128"), ("uint64", "float64"), ("bool", "float16")):
+            xv = _poly_fill(45, xs, seed=41)
+            cbase = _poly_coef((6, 90), cs, seed=44)
+            cview = cbase[:, ::2]
+            emit(op, ["a"], [describe(xv, xv), describe(cbase, cview)], lambda: val(xv, cview, tensor=False),
+                 "nd_c_strided", f"{op}/vl/{xs}/{cs}/ppstrided", {"tensor": False})
+
+        # (G) errors: empty series (IndexError at NumPy's first coefficient read)
+        ce = np.zeros((0,), np.float64)
+        xv = _poly_fill(3, "float64")
+        emit(op, ["a"], [describe(xv, xv), describe(ce, ce)], lambda: val(xv, ce), "c_contiguous_1d", f"{op}/err/empty")
+        ce2 = np.zeros((0, 3), np.float64)
+        emit(op, ["a"], [describe(xv, xv), describe(ce2, ce2)], lambda: val(xv, ce2), "nd_c_tensor", f"{op}/err/empty2d")
+        emit(op, [_weak_spec(2.0)], [describe(ce, ce)], lambda: val(2.0, ce), "weak_scalar", f"{op}/err/emptyweak")
+
+        # ---- 2-D / 3-D / N-D ----
+        for kind in ("val2d", "val3d", "grid2d", "grid3d"):
+            f = getattr(mod, p + kind)
+            op2 = f"{modname}.{p}{kind}"
+            dims = 2 if kind.endswith("2d") else 3
+            for cs in ("float64", "float32", "complex128", "float16", "int64"):
+                cshape = (3, 4) if dims == 2 else (2, 3, 4)
+                cv = _poly_coef(cshape, cs, seed=7)
+                for xs in ("float64", "float32", "int32", "complex128"):
+                    for pshape in ((5,), (2, 3)):
+                        pts = [_poly_fill(int(np.prod(pshape)), xs, seed=10 + i).reshape(pshape) for i in range(dims)]
+                        emit(op2, ["a"] * dims, [describe(q, q) for q in pts] + [describe(cv, cv)],
+                             lambda: f(*pts, cv), "c_contiguous", f"{op2}/{cs}/{xs}/{pshape}")
+            # trailing series axes on c
+            cv = _poly_coef((3, 4, 2) if dims == 2 else (2, 3, 4, 2), "float64", seed=8)
+            pts = [_poly_fill(4, "float64", seed=20 + i) for i in range(dims)]
+            emit(op2, ["a"] * dims, [describe(q, q) for q in pts] + [describe(cv, cv)],
+                 lambda: f(*pts, cv), "c_contiguous", f"{op2}/extraaxis")
+            # scalar ordinates: STRONG 0-d arrays for val*d (np.asanyarray), WEAK for grid*d
+            cv = _poly_coef((3, 4) if dims == 2 else (2, 3, 4), "float32", seed=9)
+            svals = [0.5, 2, -1.25][:dims]
+            if kind.startswith("val"):
+                arrs = [np.asarray(v) for v in svals]
+                emit(op2, ["a"] * dims, [describe(a, a) for a in arrs] + [describe(cv, cv)],
+                     lambda: f(*svals, cv), "scalar_0d", f"{op2}/scalars")
+            else:
+                emit(op2, [_weak_spec(v) for v in svals], [describe(cv, cv)],
+                     lambda: f(*svals, cv), "weak_scalar", f"{op2}/scalars")
+                # mixed: weak first ordinate, array second
+                yv = _poly_fill(3, "float64", seed=12)
+                mixed = [svals[0], yv] + ([svals[2]] if dims == 3 else [])
+                xs_spec = [_weak_spec(svals[0]), "a"] + ([_weak_spec(svals[2])] if dims == 3 else [])
+                emit(op2, xs_spec, [describe(yv, yv), describe(cv, cv)],
+                     lambda: f(*mixed, cv), "weak_scalar", f"{op2}/mixed")
+            if kind.startswith("val"):
+                # incompatible ordinate shapes
+                pts = [_poly_fill(3, "float64"), _poly_fill(4, "float64")] + ([_poly_fill(3, "float64")] if dims == 3 else [])
+                emit(op2, ["a"] * dims, [describe(q, q) for q in pts] + [describe(cv, cv)],
+                     lambda: f(*pts, cv), "c_contiguous", f"{op2}/err/shapes")
+
+        # {p}valnd (numpy main) == polyutils._valnd(val, c, *pts) on 2.4.2
+        opn = f"{modname}.{p}valnd"
+        for npts in (1, 2, 3, 4):
+            cshape = tuple([3, 2, 2, 2][:npts])
+            for cs, xs in (("float64", "float64"), ("float32", "int32"), ("complex128", "float32"),
+                           ("float16", "float16"), ("int64", "complex128")):
+                cv = _poly_coef(cshape, cs, seed=13)
+                pts = [_poly_fill(4, xs, seed=30 + i) for i in range(npts)]
+                emit(opn, ["a"] * npts, [describe(q, q) for q in pts] + [describe(cv, cv)],
+                     lambda: pu._valnd(val, cv, *pts), "c_contiguous", f"{opn}/{npts}/{cs}/{xs}")
+        cv = _poly_coef((3, 2, 2, 2), "float64")
+        pts = [_poly_fill(4, "float64"), _poly_fill(4, "float64"), _poly_fill(3, "float64"), _poly_fill(4, "float64")]
+        emit(opn, ["a"] * 4, [describe(q, q) for q in pts] + [describe(cv, cv)],
+             lambda: pu._valnd(val, cv, *pts), "c_contiguous", f"{opn}/err/shapes")
+
+    # The recurrence's Python ints meeting an integer x: lagval's (2*nd - 1) - x overflows int8 at
+    # 70 coefficients and uint8 at 130 (NumPy's OverflowError, raised before any shape check).
+    for xs, nc in (("int8", 70), ("uint8", 130), ("int8", 65), ("int16", 70)):
+        xv = _poly_fill(4, xs)
+        cv = _poly_coef((nc,), "float64")
+        emit("laguerre.lagval", ["a"], [describe(xv, xv), describe(cv, cv)],
+             lambda: _poly_module("laguerre").lagval(xv, cv), "c_contiguous_1d", f"laguerre.lagval/overflow/{xs}/{nc}")
+
+    # Char: NumSharp's uint16-like dtype has no NumPy analog; the uint16 x cells of the dtype matrix
+    # are the bytes-exact oracle for it (the house char weave).
+    cases += _relabel_dtype([c for c in cases if any(t in (c.get("id") or "") for t in ("/dt/uint16/", "/vl/uint16/", "/vlx/uint16/"))],
+                            "uint16", "char")
+    if skipped:
+        print(f"  (skipped {skipped} complex64 cells — #569)")
+    return cases
+
+
 def main():
     here = os.path.dirname(os.path.abspath(__file__))
     corpus_dir = os.path.normpath(os.path.join(here, "..", "NumSharp.Tests.Oracle", "Fuzz", "corpus"))
@@ -10165,8 +10495,11 @@ def main():
     elif mode == "emath":
         cases = gen_emath()                                             # np.emath scimath module (plan §A2/E5)
         write_jsonl(os.path.join(corpus_dir, "emath.jsonl"), cases)
+    elif mode == "polyeval":
+        cases = gen_polyeval()                                          # numpy.polynomial {p}val family (U3)
+        write_jsonl(os.path.join(corpus_dir, "polyeval.jsonl"), cases)
     else:
-        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | sinc | i0 | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows | evaluate | real_if_close | instance | emath)")
+        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | sinc | i0 | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows | evaluate | real_if_close | instance | emath | polyeval)")
         sys.exit(2)
 
 

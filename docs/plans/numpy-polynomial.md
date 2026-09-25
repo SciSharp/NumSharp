@@ -360,35 +360,83 @@ machine-partitioned; the counts sum to 193 with no overlap (Appendix A).
 - **Tests to port:** `TestArithmetic` (mul/div/pow/mulx) and `TestMisc` (fromroots/2poly) × 6.
   `test_polynomial.TestFraction` (Fraction object arrays) → `[Misaligned]` (no object dtype).
 
-### U3 — Evaluation (37 names)
+### U3 — Evaluation (37 names) — DELIVERED 2026-09-25 (36 of 37; `polyvalfromroots` open)
 
-- **Scope:** `{p}val`, `{p}val2d`, `{p}val3d`, `{p}grid2d`, `{p}grid3d`, `{p}valnd` (devdocs), and
-  `polyvalfromroots`.
-- **Shared backend:** a **Clenshaw/Horner driver** (6 step tables) + `_valnd`/`_gridnd` + the `tensor`
-  reshape rule (result = `c.shape[1:] + x.shape`). The driver is **generic over the "x algebra"** from day one
-  (§7 R5): `NDArray` x now, and *series-valued* x later, which U10's `convert`/`cast` need.
-- **Engine (D12, §10.1):** the Tier-3A evaluation kernel. It is NDIter-driven, reads `x` once and writes
-  `y` once, and runs four interleaved chains per block. Every lane executes the source's exact op sequence at
-  NumPy's per-op dtypes, so the result is bit-exact.
-  - NumPy runs about three full-array ops per coefficient, each allocating: `chebval` deg 10 costs
-    **4,205 µs @100K** and **467 ms @10M**; `polyval` deg 10 **356 ms @10M**; `chebval2d` (5×5) **14,718 µs
-    @100K**.
-  - `_valnd`/`_gridnd` stay NumPy's two-pass compositions, over the kernel's N-D coefficient operand form.
-  - **Measured (§10.3), all byte-exact:**
+- **Scope delivered:** `{p}val`, `{p}val2d`, `{p}val3d`, `{p}grid2d`, `{p}grid3d` and `{p}valnd` (devdocs)
+  for all six bases, under the new facade `np.polynomial.{polynomial,chebyshev,legendre,laguerre,hermite,
+  hermite_e}` (instance-property modules, §2). **Still open:** `polyvalfromroots` (`np.prod(x - r, axis=0)`,
+  an axis-0 reduction whose order NumSharp's `prod` must match).
+- **Engine as built (D12, §10.1):** Tier-3A per-chunk IL kernels driven by `NDIterRef.ForEach`
+  (`src/NumSharp.Core/Backends/Kernels/ILKernelGenerator.Polynomial*.cs`, driver
+  `src/NumSharp.Core/Polynomial/Package/NDPolyEval.cs`):
+  - **Step tables as data** (`ILKernelGenerator.Polynomial.cs`): NumPy's source-order expression trees per
+    basis, never re-associated, typed node by node with NumPy's NEP 50 rules (`...Typing.cs`) — strong
+    `promote_types`, weak Python int/float/complex, int true-divide → float64. NumPy runs the first 1–2
+    Clenshaw steps in the COEFFICIENT dtype, so the emitter **peels** to a dtype fixpoint; kernel class =
+    `min(nc, P+3)` for Clenshaw, 1 for Horner.
+  - **Weak (Python-scalar) x** folds into weak constants evaluated with CPython 3.12 arithmetic
+    (`PyScalar`, BigInteger ints); a 0-d NDArray x is STRONG. Weak values reach the kernel through a
+    per-(constant, dtype) region pool (`...ConstPool.cs`), converted by astype's own cast path, with NumPy's
+    `OverflowError` for a Python int that does not fit an integer x.
+  - **Complex has two NumPy multiplies:** an ARRAY op is the fused `simd_cmul`, a 0-d result is scalar
+    math (naive product) except where an operand is the raw 0-d x array. Reproduced per op.
+  - **Vector lanes for every dtype pair** (`...Lanes.cs`): 256-bit chains on AVX2 hosts (float64 4 lanes,
+    float32/float16 8, complex128 2), and every other per-point dtype held at the SAME lane count —
+    int32 containers re-wrapped to int8/uint8/int16/uint16/char width after every op, packed 2-lane
+    float32/int32/uint32, float16 as 8 float32 lanes with 2/4/8 live, complex128 `[re, im]×2` with NumPy's
+    `simd_cmul` (vfmaddsub) and Smith division (a shared divisor prepared once per block) — each conversion
+    exact (uint64/int64 via .NET's correctly rounded ConvertToDouble, verified on 16M values). A lane table
+    miss falls back to scalar chains (same bits), counted by `ILKernelGenerator.PolyVectorFallbacks` — zero
+    across the whole dtype matrix (unit-tested).
+  - **One DynamicMethod per STAGE** (dispatcher → part → U-chain stage → remainder stage): the JIT stops
+    inlining in a method once its inline budget (local-variable limit, time budget) is spent, so one method
+    holding every block left the lane helpers as calls — measured 340 un-inlined calls in a 23 KB complex kernel (3.3× slower); one method per part
+    still left 95 in its float16-series twin (0.93× NumPy). Per stage: 0–2 calls.
+  - `_valnd`/`_gridnd` stay NumPy's two-pass compositions over the N-D coefficient operand form (never
+    buffered: the kernel reads past `c[0]`).
+- **Parity:** `test/NumSharp.Tests.Oracle/Fuzz/corpus/polyeval.jsonl` (`gen_oracle.py polyeval`, **12,214
+  cases, 0 excused**): the x-dtype × series-dtype × count-class matrix, x layouts, N-D series (tensor
+  True/False, series layouts), weak and 0-d scalars incl. 2**64-1 / NaN / ±inf / complex, special
+  coefficients, errors, 2-D/3-D/N-D, the lagval int8/uint8 OverflowError, and — section (H) — every x dtype
+  × every inexact series dtype at 45 points (U-chain stage + 1-chain stage + scalar tail at every lane width)
+  as a 1-D and a per-point series, at the dtype extremes (integer wrap-around, NaN/±inf/subnormal/overflow),
+  plus column-strided per-point series (the scalar part). `MisalignedRegistry`'s generic unary/complex
+  ULP excuses are carved out for these ops. Unit tests `test/NumSharp.Tests/Polynomial/
+  PolynomialEvaluationTests.cs` (16): NumPy bytes per basis, peeled float32, weak vs strong, complex
+  scalar-math/ufunc mix, float16 NaN priority (vector AND scalar path), int8 wrap, shapes/errors/layouts,
+  Decimal/Char, thread safety, zero vector fallbacks over the dtype matrix, vector part ≡ scalar part byte
+  for byte. Mutation-checked (below).
+- **Measured (NPY/NS, pinned to 4 logical CPUs on both sides, Release, drained JIT warm-up, every cell
+  SHA-256-checked against NumPy's result BEFORE it is timed — `benchmark/polynomial/polyeval_{numpy.py,
+  bench.cs}`):**
 
-    | Scope | NPY/NS |
-    |---|---|
-    | six bases × degree 3/10/30 × 1K/100K/10M, float64 | **3.1–36×** (lowest: `lagval`, two divisions per step) |
-    | float32 / float16 / complex128 | **4.0–15×** |
-    | mixed x/c dtypes and int64 x | **4.3–31×** |
-    | multi-series `tensor=True` | **58–69×** |
-    | `tensor=False` | **7–26×** |
-    | `val2d` / `grid2d` | **13–34×** |
+  | Section | Cells | min | geomean | What it covers |
+  |---|---|---|---|---|
+  | E | 48 | 2.53 | 11.7 | six bases × degree 3/10/30 × 1K/100K/10M, float64 |
+  | T | 162 | 2.52 | 9.7 | 21 dtype pairs @100K + float32/float16/complex128 @1K/10M |
+  | L | 54 | 2.43 | 7.8 | strided/reversed/transposed/F/broadcast/2-D/3-D x |
+  | N | 36 | 2.24 | 10.1 | multi-series tensor=True, per-point series, series layouts, complex per point |
+  | S | 42 | 2.73 | 6.5 | Python-scalar and 0-d x against 1-D and N-D series |
+  | D | 42 | 3.01 | 14.9 | val2d/val3d/grid2d/grid3d/valnd |
+  | M | 936 | 1.62 | 6.7 | every x dtype × every inexact series dtype @1K/10K, 1-D and per point |
+  | **all** | **1,320** | **1.62** | **7.5** | 0 byte mismatches |
 
-    A plain `[NDScoped]` port runs 0.21–1.46× and holds every temporary until it returns (D12).
-- **Parity:** portable and bit-exact (`+ - * /` only). `polyvalfromroots` = `np.prod(x - r, axis=0)`, an
-  axis-0 reduction whose order NumSharp's `prod` must match; the oracle checks it.
-- **Tests to port:** `TestEvaluation` × 6.
+  Representative: `chebval` d10 float64 **16.9× / 11.2× / 36.5×** (1K/100K/10M); `lagval` (two divisions
+  per step, divider-bound) **7.2× / 2.7× / 14.1×**; complex128 `chebval` @100K **23.7×**; float16 @10M
+  **3.3×**; `chebval2d` @100K **41.5×**; `polyval(0.37, c)` **4.8×** (0.44 µs vs 2.10 µs).
+- **What the first measurement got wrong (keep for the next family):** (1) the 100K-only dtype section
+  hid 227 sub-1.5× cells — NumPy's own loops are cheapest when L1/L2-resident (1K–10K), which is why the M
+  section exists; (2) a single warm-up pass only QUEUES methods for tier-1, so the first-timed cells read
+  4–5× slow — the harness now warms, sleeps 250 ms for the background JIT, and repeats; (3) `dotnet run
+  file.cs` reuses its cached build — referenced NumSharp.Core included — when the script itself did not
+  change, so a whole 936-cell run silently timed the previous kernels: `--no-cache` is mandatory.
+- **Mutation check (every one killed):** 7 engine mutations — no peeling, no naive scalar-math complex
+  product, Horner operand order, weak x treated as strong, Legendre re-association, truncating Python
+  int → double (oracle), and the float16 NaN-priority blend removed (unit test only: the oracle tokenizes NaN
+  payloads) — plus 8 lane mutations — int8 wrap width, uint16 wrap mask, complex multiply fused/addend swap,
+  shared complex divide scale, uint32→float64 bias, float16 gang-load lane, float64→complex imaginary lane,
+  float16 4-lane load width — all killed by the oracle tier, 7 of 8 also by the unit tests.
+- **Tests to port:** `TestEvaluation` × 6 (covered by the oracle tier + unit tests above).
 
 ### U4 — Calculus (12 names)
 

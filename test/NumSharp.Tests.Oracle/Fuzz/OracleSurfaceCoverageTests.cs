@@ -441,6 +441,61 @@ namespace NumSharp.Tests.Fuzz
                 "np.emath members without an emath.* corpus op: " + string.Join(", ", missing));
         }
 
+        // ================= np.polynomial (docs/plans/numpy-polynomial.md, DoD item 5) ==============
+
+        /// <summary>
+        ///     Every public member of the six <c>np.polynomial.*</c> basis submodules has corpus cases under
+        ///     its MODULE-QUALIFIED key (<c>chebyshev.chebval</c>) — or is listed in
+        ///     <see cref="PolynomialNotYetInCorpus"/> with a reason. The package reuses the legacy
+        ///     <c>np.polyval</c>/<c>polyder</c>/… names with the opposite coefficient order (plan D5), so a
+        ///     name-keyed check would credit the new functions with the legacy corpus; this gate keys on the
+        ///     qualified name only. The ledger self-retires: an entry whose member gained corpus cases, or no
+        ///     longer exists, fails.
+        /// </summary>
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void PolynomialSurface_IsCoveredOrExplicitlyClassified()
+        {
+            var corpusOps = CorpusOps();
+            var modules = new (string Key, Type Type)[]
+            {
+                ("polynomial", typeof(PowerSeriesModule)), ("chebyshev", typeof(ChebyshevModule)),
+                ("legendre", typeof(LegendreModule)), ("laguerre", typeof(LaguerreModule)),
+                ("hermite", typeof(HermiteModule)), ("hermite_e", typeof(HermiteEModule)),
+            };
+            var failures = new List<string>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var (key, type) in modules)
+            {
+                foreach (string name in Surface(type, BindingFlags.Instance))
+                {
+                    string op = key + "." + name;
+                    seen.Add(op);
+                    bool covered = corpusOps.Contains(op);
+                    bool listed = PolynomialNotYetInCorpus.ContainsKey(op);
+                    if (!covered && !listed)
+                        failures.Add($"{op}: no corpus op and no PolynomialNotYetInCorpus reason");
+                    else if (covered && listed)
+                        failures.Add($"{op}: stale PolynomialNotYetInCorpus entry — the op has corpus cases now");
+                }
+            }
+            foreach (var op in PolynomialNotYetInCorpus.Keys)
+                if (!seen.Contains(op))
+                    failures.Add($"{op}: stale PolynomialNotYetInCorpus entry — no such facade member");
+
+            Console.WriteLine($"[PolynomialSurface] members={seen.Count}, corpus-covered={seen.Count(corpusOps.Contains)}, " +
+                              $"ledger={PolynomialNotYetInCorpus.Count}");
+            if (failures.Count > 0)
+                Assert.Fail($"{failures.Count} np.polynomial surface classification failures:\n  " + string.Join("\n  ", failures));
+        }
+
+        /// <summary>
+        ///     np.polynomial facade members that are public but not yet in the differential corpus, each with
+        ///     the reason. Empty while every implemented member (the U3 evaluation family) is corpus-covered;
+        ///     later units add their members together with their corpus modes.
+        /// </summary>
+        private static readonly Dictionary<string, string> PolynomialNotYetInCorpus = new(StringComparer.Ordinal);
+
         // ================= np.ma (coverage plan §A2) ===========================================
 
         // NumPy-side aliases whose canonical spelling carries the ma corpus cases. internal: the

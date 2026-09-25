@@ -414,6 +414,15 @@ namespace NumSharp.Tests.Fuzz
                     return null;
                 case "np.emath":
                     return Has("emath." + m.Name) ? "corpus: emath" : null;
+                // numpy.polynomial submodules: module-qualified corpus keys ("chebyshev.chebval", plan D5) —
+                // the key's prefix is the submodule's own name, so np.polynomial.X.f maps to "X.f".
+                case "np.polynomial.polynomial":
+                case "np.polynomial.chebyshev":
+                case "np.polynomial.legendre":
+                case "np.polynomial.laguerre":
+                case "np.polynomial.hermite":
+                case "np.polynomial.hermite_e":
+                    return Has(m.Owner.Substring("np.polynomial.".Length) + "." + m.Name) ? "corpus: polynomial" : null;
                 case "np.fft":
                     return Has(m.Name) ? "corpus: fft" : null;
                 case "np.linalg":

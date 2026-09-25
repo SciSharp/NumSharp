@@ -383,6 +383,8 @@ namespace NumSharp.Tests.Fuzz
                 "np.random" => new[] { new ReadTarget("RandomState(1234)", _ => (np.random.RandomState(1234), Noop)) },
                 "np.ma" => new[] { new ReadTarget("np.ma", _ => (np.ma, Noop)) },
                 "np.fft" => new[] { new ReadTarget("np.fft", _ => (np.fft, Noop)) },
+                // The numpy.polynomial package facade: its members are the six submodule properties.
+                "np.polynomial" => new[] { new ReadTarget("np.polynomial", _ => (np.polynomial, Noop)) },
                 "Generator" => new[] { new ReadTarget("default_rng(7)", _ => (np.random.default_rng(7), Noop)) },
                 "SeedSequence" => new[] { new ReadTarget("SeedSequence(5)", _ => (new SeedSequence(5), Noop)) },
                 "BitGenerator" or "PCG64" => new[] { new ReadTarget("PCG64(5)", _ => (new PCG64(5), Noop)) },
