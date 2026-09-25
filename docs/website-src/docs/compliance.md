@@ -202,6 +202,28 @@ NumSharp implements both NumPy random APIs:
   array seeding, cached Gaussian state, and legacy distribution algorithms (`randint`'s masked
   per-dtype sampler, `shuffle`/`permutation`/`choice` with the legacy messages and `np.long` dtype).
   An unseeded `RandomState()` draws OS entropy through `SeedSequence`, as NumPy's does.
+- Every legacy distribution is a line-by-line port of NumPy's frozen `legacy-distributions.c` (and
+  the shared `distributions.c` samplers it calls: Poisson PTRS, BTPE binomial, HRUA hypergeometric,
+  `random_loggam`, …), so `RandomState(seed).<method>(...)` is byte-identical to NumPy for every
+  sampler, including `gamma` with `shape < 1`, `binomial`, `negative_binomial`, `f`, `pareto`,
+  `standard_cauchy`, `multinomial` (which shares `binomial`'s setup cache, as NumPy's does) and
+  `dirichlet`. Parameters are validated with NumPy's constraints and messages (`ValueError: scale < 0`,
+  `-0.0` rejected where NumPy tests the sign bit, NaN accepted where NumPy accepts it) before anything
+  is drawn. `multivariate_normal` follows NumPy's SVD algorithm and is byte-identical when
+  `NumSharp.Interop.OpenBLAS` supplies LAPACK's `gesdd`; without it a managed Jacobi SVD stands in and
+  a singular vector's sign can differ.
+- The legacy integer samplers compute in C `long`. NumSharp returns int64 and models a 64-bit `long`
+  — NumPy's Linux/macOS (LP64) build, which it matches exactly; NumPy's Windows build (32-bit `long`)
+  differs only where that width overflows (`zipf` near `a = 1`, `poisson` above `2**31`, `tomaxint`'s
+  range, `negative_binomial` with an infinite mean).
+- `RandomState(bit_generator)` runs the legacy samplers on any bit generator
+  (`np.random.RandomState(new PCG64(42))`), with NumPy's `str()` (`RandomState(PCG64)`), `seed()`
+  refused on a non-MT19937 engine (`TypeError`), and both state forms: `get_state()` returns the legacy
+  MT19937 tuple, `get_state(legacy: false)` the dict (`NumPyRandom.State`: the bit generator's state
+  plus the cached Gaussian), and `set_state` accepts either. Consuming the cached Gaussian zeroes it,
+  as NumPy's `legacy_gauss` does. `tomaxint`, `ranf` and `sample` complete the legacy surface. Two
+  NumPy inputs never return (`zipf(a)` for `a >= 1025`, `vonmises` once `4*kappa^2` overflows); NumSharp
+  returns the distribution's limit there instead of hanging.
 - `np.random.default_rng(seed)` returns a `Generator` backed by `PCG64` and `SeedSequence`, with the
   modern ziggurat and bounded-integer algorithms used by NumPy 2.4.2.
 - All five NumPy bit generators exist — `PCG64`, `PCG64DXSM`, `Philox`, `SFC64` and `MT19937` — each a
@@ -221,10 +243,9 @@ NumSharp implements both NumPy random APIs:
 - `default_rng` accepts every NumPy seed form: an integer (up to any `BigInteger`), a sequence or
   integer array, a `SeedSequence`, a `BitGenerator` (wrapped), a `Generator` (passed through) or a
   legacy `RandomState` (its MT19937 engine is wrapped, as `default_rng(RandomState)` does).
-- Every `Generator` draw holds the bit generator's `lock`, so one generator (or several over the same
-  bit generator) can be shared between threads: each call consumes a contiguous piece of the one
-  stream. (The legacy `RandomState` takes the lock in `randint`, `shuffle`, `choice` and the state
-  accessors; its other distribution methods do not yet.)
+- Every `Generator` and `RandomState` draw holds the bit generator's `lock`, so one generator (or
+  several over the same bit generator) can be shared between threads: each call consumes a contiguous
+  piece of the one stream.
 
 The familiar legacy example matches NumPy:
 
