@@ -381,7 +381,7 @@ namespace NumSharp.Backends.Printing
         // the shortest-repr exponent: e.g. float32(1e-4) rounds to 9.999999e-5 < 1e-4 so it prints "1e-04".
         // For float64 this is exactly equivalent to the old decExp in [-4, 16) test (no behavior change);
         // it only tightens float32/float16 to their true (narrower) positional windows.
-        private static string PythonFloatRepr(object v, FloatKind kind)
+        internal static string PythonFloatRepr(object v, FloatKind kind)
         {
             double d = kind switch
             {

@@ -12,14 +12,11 @@ namespace NumSharp
     ///     with the XSL-RR 128→64 output permutation. The 128-bit state arithmetic is expressed with .NET's native
     ///     <see cref="UInt128"/>, so the raw stream is byte-for-byte identical to NumPy's (verified against
     ///     <c>random_raw</c>). Seeding goes through <see cref="SeedSequence"/> exactly as NumPy does
-    ///     (<c>generate_state(4, uint64)</c> → initial state and increment).
+    ///     (<c>generate_state(4, uint64)</c> → initial state and increment). <see cref="advance"/> and
+    ///     <see cref="jumped(long)"/> move the stream in O(log n).
     /// </remarks>
     public sealed class PCG64 : BitGenerator
     {
-        // PCG_DEFAULT_MULTIPLIER_128 = (2549297995355413924 << 64) + 4865540595714422341
-        private static readonly UInt128 Multiplier =
-            new UInt128(2549297995355413924UL, 4865540595714422341UL);
-
         private UInt128 _state;
         private UInt128 _inc;
 
@@ -62,55 +59,25 @@ namespace NumSharp
         /// <summary>Constructs and seeds a PCG64 from the given seed sequence.</summary>
         /// <param name="seedSeq">The seed sequence; <c>generate_state(4, uint64)</c> supplies the state and the stream.</param>
         /// <exception cref="ArgumentNullException"><paramref name="seedSeq"/> is null.</exception>
-        public PCG64(SeedSequence seedSeq) : base(seedSeq ?? throw new ArgumentNullException(nameof(seedSeq)))
+        /// <exception cref="NotImplementedException"><paramref name="seedSeq"/> is a <see cref="SeedlessSeedSequence"/>.</exception>
+        public PCG64(ISeedSequence seedSeq) : base(seedSeq ?? throw new ArgumentNullException(nameof(seedSeq)))
         {
-            ulong[] val = seedSeq.GenerateState64(4);
-            UInt128 initState = ((UInt128)val[0] << 64) | val[1];
-            UInt128 initSeq = ((UInt128)val[2] << 64) | val[3];
-            Srandom(initState, initSeq);
+            ulong[] val = SeedWords64(seedSeq, 4);
+            Pcg128.Srandom(((UInt128)val[0] << 64) | val[1], ((UInt128)val[2] << 64) | val[3], out _state, out _inc);
         }
 
         /// <inheritdoc/>
         internal override string Name => "PCG64";
 
-        /// <summary>NumPy's <c>pcg_setseq_128_srandom_r</c>: odd increment from the sequence, two steps around the state add.</summary>
-        /// <param name="initState">The initial state word.</param>
-        /// <param name="initSeq">The stream selector (the increment is <c>2·initSeq + 1</c>).</param>
-        private void Srandom(UInt128 initState, UInt128 initSeq)
-        {
-            _state = UInt128.Zero;
-            _inc = (initSeq << 1) | UInt128.One;
-            Step();
-            _state += initState;
-            Step();
-        }
-
-        /// <summary>NumPy's <c>pcg_setseq_128_step_r</c>: one LCG step.</summary>
-        private void Step() => _state = _state * Multiplier + _inc;
-
-        /// <summary>Rotate right.</summary>
-        /// <param name="value">The value.</param>
-        /// <param name="rot">The rotation (0-63).</param>
-        /// <returns>The rotated value.</returns>
-        private static ulong Rotr(ulong value, int rot)
-            => (value >> rot) | (value << ((-rot) & 63));
-
-        /// <summary>NumPy's <c>pcg_output_xsl_rr_128_64</c>: xor-fold the halves, rotate by the top 6 bits.</summary>
-        /// <param name="state">The 128-bit state.</param>
-        /// <returns>The 64-bit output.</returns>
-        private static ulong Output(UInt128 state)
-        {
-            ulong hi = (ulong)(state >> 64);
-            ulong lo = (ulong)state;
-            return Rotr(hi ^ lo, (int)(hi >> 58));
-        }
+        /// <inheritdoc/>
+        private protected override BitGenerator CreateFromSeed(ISeedSequence seed) => new PCG64(seed);
 
         /// <inheritdoc/>
         internal override ulong NextUInt64()
         {
             // pcg_setseq_128_xsl_rr_64_random_r: step, then output the new state.
-            Step();
-            return Output(_state);
+            _state = _state * Pcg128.DefaultMultiplier + _inc;
+            return Pcg128.OutputXslRr(_state);
         }
 
         /// <inheritdoc/>
@@ -126,6 +93,55 @@ namespace NumSharp
             _hasUint32 = 1;
             _uinteger = (uint)(next >> 32);
             return (uint)next;
+        }
+
+        // ---- advance / jumped (numpy pcg64_advance, PCG64.jumped) ----
+
+        /// <summary>
+        ///     Advance the underlying RNG as if <paramref name="delta"/> draws had occurred (NumPy's <c>PCG64.advance</c>),
+        ///     in O(log delta).
+        /// </summary>
+        /// <param name="delta">The number of 64-bit draws to skip — any integer, reduced mod 2**128 as NumPy's
+        /// <c>wrap_int</c> does, so a negative delta steps backwards (<c>advance(-1)</c> undoes one draw).</param>
+        /// <returns>This bit generator (advanced in place).</returns>
+        /// <remarks>
+        ///     Resets the buffered 32-bit half, as NumPy does "to ensure exact reproducibility" — a distribution's draw
+        ///     count is not a count of raw words (rejection sampling, 32-bit halves), so only raw words are skipped.
+        ///     Holds the lock.
+        /// </remarks>
+        public PCG64 advance(BigInteger delta)
+        {
+            UInt128 d = Pcg128.WrapDelta(delta);
+            lock (@lock)
+            {
+                _state = Pcg128.AdvanceLcg(_state, d, Pcg128.DefaultMultiplier, _inc);
+                _hasUint32 = 0;
+                _uinteger = 0;
+            }
+            return this;
+        }
+
+        /// <summary>
+        ///     Returns a new bit generator with this one's state jumped as if <c>jumps * 210306068529402873165736369884012333109</c>
+        ///     draws had been made (NumPy's <c>PCG64.jumped</c>; the step is (phi - 1) * 2**128).
+        /// </summary>
+        /// <param name="jumps">The number of jumps (any integer; 0 is a plain copy of the state).</param>
+        /// <returns>A new <see cref="PCG64"/>; this instance is not modified.</returns>
+        /// <remarks>
+        ///     Built like NumPy's <c>self.__class__()</c> — the copy carries a FRESH OS-entropy seed sequence, not this
+        ///     one's — then <c>state = self.state</c> and <c>advance(step * jumps)</c> (which also clears the buffered half).
+        /// </remarks>
+        public PCG64 jumped(long jumps = 1) => jumped((BigInteger)jumps);
+
+        /// <summary>Arbitrary-size <see cref="jumped(long)"/>.</summary>
+        /// <param name="jumps">The number of jumps (any integer).</param>
+        /// <returns>A new, jumped <see cref="PCG64"/>.</returns>
+        public PCG64 jumped(BigInteger jumps)
+        {
+            var bg = new PCG64();
+            bg.state = state;
+            bg.advance(Pcg128.JumpStep * jumps);
+            return bg;
         }
 
         // ---- state get/set (numpy pcg64_get_state / pcg64_set_state) ----

@@ -62,7 +62,7 @@ namespace NumSharp.Tests.Fuzz
     {
         /// <summary>
         ///     The object-surface owners: <c>coverage/object_surfaces.py</c>'s CLR-mapped NumPy objects
-        ///     (the ones NumSharp exports — PCG64DXSM/Philox/SFC64 have no NumSharp type) plus the two
+        ///     (every bit generator NumPy ships, the seed sequences, the iterator objects, …) plus the two
         ///     array types whose instance surface is the masked/typed half of ndarray. Keyed by the
         ///     short owner id used in coverage ids.
         /// </summary>
@@ -72,6 +72,9 @@ namespace NumSharp.Tests.Fuzz
             ("SeedSequence", typeof(SeedSequence), false),
             ("BitGenerator", typeof(BitGenerator), false),
             ("PCG64", typeof(PCG64), false),
+            ("PCG64DXSM", typeof(PCG64DXSM), false),
+            ("Philox", typeof(Philox), false),
+            ("SFC64", typeof(SFC64), false),
             ("MT19937", typeof(MT19937), false),
             ("NDIterator", typeof(np.NDIterator), false),
             ("FlatIterator", typeof(np.FlatIterator), false),

@@ -178,7 +178,7 @@ namespace NumSharp.Tests.RandomSampling
             var j = src.jumped();
             j.seed_seq.Should().NotBeNull();
             ReferenceEquals(j.seed_seq, src.seed_seq).Should().BeFalse();
-            j.seed_seq.entropy.Should().NotBe(42L);
+            ((SeedSequence)j.seed_seq).entropy.Should().NotBe(42L);
         }
 
         // ---- _legacy_seeding ----

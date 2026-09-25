@@ -578,6 +578,33 @@ namespace NumSharp.Tests.Fuzz
                 g._legacy_seeding();
                 return Box(g.state.pos);
             });
+            E(l, "SeedSequence.spawn", "children + a grandchild", f => Box(new SeedSequence(5).spawn(2)[1].spawn(1)[0].spawn_key.Length));
+            E(l, "SeedSequence.ToString", "repr with spawn key + pool size", f => new SeedSequence(5, new long[] { 1 }, 8).ToString());
+            E(l, "BitGenerator.spawn", "base-typed", f =>
+            {
+                BitGenerator g = new PCG64(3);
+                return Box(g.spawn(2).Length);
+            });
+            E(l, "Generator.spawn", "two children", f => Box(np.random.default_rng(3).spawn(2).Length));
+            E(l, "PCG64.spawn", "two children", f => Box(new PCG64(3).spawn(2).Length));
+            E(l, "PCG64.advance", "forward + backward", f => Box(new PCG64(3).advance(5).advance(-2).state.has_uint32));
+            E(l, "PCG64.jumped", "long + BigInteger", f => Box(new PCG64(3).jumped().jumped(new System.Numerics.BigInteger(2)).state.inc));
+            E(l, "MT19937.spawn", "two children", f => Box(new MT19937(3).spawn(2).Length));
+            E(l, "PCG64DXSM.random_raw", "sized", f => new PCG64DXSM(3).random_raw(new Shape(8)));
+            E(l, "PCG64DXSM.advance", "forward + backward", f => Box(new PCG64DXSM(3).advance(5).advance(-2).state.has_uint32));
+            E(l, "PCG64DXSM.jumped", "long + BigInteger", f => Box(new PCG64DXSM(3).jumped().jumped(new System.Numerics.BigInteger(2)).state.inc));
+            E(l, "PCG64DXSM.spawn", "two children", f => Box(new PCG64DXSM(3).spawn(2).Length));
+            E(l, "Philox.random_raw", "sized, crossing a block", f => new Philox(3).random_raw(new Shape(9)));
+            E(l, "Philox.advance", "mid-block, forward + backward", f =>
+            {
+                var g = new Philox(3);
+                g.random_raw(output: false);
+                return Box(g.advance(5).advance(-2).state.buffer_pos);
+            });
+            E(l, "Philox.jumped", "long + BigInteger", f => Box(new Philox(3).jumped().jumped(new System.Numerics.BigInteger(2)).state.counter[2]));
+            E(l, "Philox.spawn", "two children", f => Box(new Philox(3).spawn(2).Length));
+            E(l, "SFC64.random_raw", "sized", f => new SFC64(3).random_raw(new Shape(8)));
+            E(l, "SFC64.spawn", "two children", f => Box(new SFC64(3).spawn(2).Length));
 
             // ---- np.nditer's NDIterator ----
             E(l, "NDIterator.iternext", "walk", f =>

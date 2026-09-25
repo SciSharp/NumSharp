@@ -73,19 +73,27 @@ class ObjectSurfaceTests(unittest.TestCase):
             "numpy.random.RandomState.normal": "NumSharp.NumPyRandom.normal",
             "numpy.random.SeedSequence.generate_state": "NumSharp.SeedSequence.generate_state",
             "numpy.random.PCG64.state": "NumSharp.PCG64.state",
+            "numpy.random.PCG64.advance": "NumSharp.PCG64.advance",
+            "numpy.random.PCG64.random_raw": "NumSharp.PCG64.random_raw",
+            "numpy.random.MT19937.random_raw": "NumSharp.MT19937.random_raw",
+            "numpy.random.Philox.advance": "NumSharp.Philox.advance",
+            "numpy.random.PCG64DXSM.jumped": "NumSharp.PCG64DXSM.jumped",
+            "numpy.random.SFC64.state": "NumSharp.SFC64.state",
+            "numpy.random.Generator.spawn": "NumSharp.Generator.spawn",
             "numpy.nditer.iternext": "NumSharp.np.NDIterator.iternext",
         }
         for row_id, target in expected.items():
             self.assertEqual(target, self.by_id[row_id]["numsharp_target"])
-        for row_id in ("numpy.random.Generator.spawn", "numpy.random.PCG64.random_raw",
-                       "numpy.random.PCG64.advance", "numpy.random.MT19937.random_raw",
-                       "numpy.random.Philox.advance", "numpy.random.PCG64DXSM.jumped"):
+            self.assertEqual("available", self.by_id[row_id]["status"], row_id)
+        # The C-level interop handles have no managed counterpart: genuine, deliberate gaps.
+        for row_id in ("numpy.random.PCG64.ctypes", "numpy.random.Philox.cffi",
+                       "numpy.random.SFC64.capsule", "numpy.random.BitGenerator.ctypes"):
             self.assertEqual("missing", self.by_id[row_id]["status"], row_id)
 
     def test_unrelated_top_level_or_ndarray_member_is_not_credited(self):
         for row_id in ("numpy.ufunc.outer", "numpy.add.reduce", "numpy.add.outer",
                        "numpy.ma.MaskedArray.reshape", "numpy.matrix.reshape",
-                       "numpy.recarray.reshape", "numpy.random.PCG64.random_raw"):
+                       "numpy.recarray.reshape", "numpy.random.PCG64.ctypes"):
             self.assertIsNone(self.by_id[row_id]["numsharp_target"], row_id)
         self.assertEqual("missing", self.by_id["numpy.lib.npyio.NpzFile.keys"]["status"])
         self.assertEqual("alias", self.by_id["numpy.lib.npyio.NpzFile.files"]["availability"])

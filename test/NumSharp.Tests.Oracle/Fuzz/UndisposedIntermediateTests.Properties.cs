@@ -389,6 +389,14 @@ namespace NumSharp.Tests.Fuzz
                 "SeedSequence" => new[] { new ReadTarget("SeedSequence(5)", _ => (new SeedSequence(5), Noop)) },
                 "BitGenerator" or "PCG64" => new[] { new ReadTarget("PCG64(5)", _ => (new PCG64(5), Noop)) },
                 "MT19937" => new[] { new ReadTarget("MT19937(3)", _ => (new MT19937(3), Noop)) },
+                "PCG64DXSM" => new[] { new ReadTarget("PCG64DXSM(5)", _ => (new PCG64DXSM(5), Noop)) },
+                // Both Philox shapes: a seeded one (has a seed sequence) and a keyed one (seed_seq is null).
+                "Philox" => new[]
+                {
+                    new ReadTarget("Philox(5)", _ => (new Philox(5), Noop)),
+                    new ReadTarget("Philox(key=5, counter=7)", _ => (new Philox(counter: 7, key: 5), Noop)),
+                },
+                "SFC64" => new[] { new ReadTarget("SFC64(5)", _ => (new SFC64(5), Noop)) },
                 "NDIterator" => NDIteratorTargets,
                 "FlatIterator" => new[]
                 {

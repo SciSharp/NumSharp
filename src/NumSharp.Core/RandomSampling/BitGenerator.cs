@@ -1,3 +1,5 @@
+using System;
+
 namespace NumSharp
 {
     /// <summary>
@@ -10,20 +12,24 @@ namespace NumSharp
     ///     NumPy's public surface — <see cref="random_raw"/>, <see cref="state"/>, <see cref="seed_seq"/> and
     ///     <see cref="@lock"/>. The per-draw primitives (<c>NextUInt64</c> …) are the internal engine contract
     ///     (NumPy's <c>bitgen_t</c> function pointers), so they are <c>internal</c> and the public surface stays
-    ///     NumPy-cased. Concrete generators: <see cref="PCG64"/> (the <c>default_rng</c> default) and
-    ///     <see cref="MT19937"/> (the legacy RandomState's engine).
+    ///     NumPy-cased. Concrete generators: <see cref="PCG64"/> (the <c>default_rng</c> default),
+    ///     <see cref="PCG64DXSM"/> (NumPy's recommendation for massively parallel work), <see cref="Philox"/> (a
+    ///     counter-based generator addressable by key/counter), <see cref="SFC64"/> (Chris Doty-Humphrey's small fast
+    ///     chaotic generator) and <see cref="MT19937"/> (the legacy RandomState's engine). Each is seeded through an
+    ///     <see cref="ISeedSequence"/> (normally a <see cref="SeedSequence"/>) and <see cref="spawn"/>s independent
+    ///     children from it.
     /// </remarks>
     public abstract class BitGenerator
     {
         /// <summary>
         ///     The seed sequence this bit generator was seeded from, or null once it was re-seeded in a way that
-        ///     discards it (NumPy's <c>MT19937._legacy_seeding</c> sets <c>_seed_seq = None</c>).
+        ///     discards it (NumPy's <c>MT19937._legacy_seeding</c> and <c>Philox(key=...)</c> set <c>_seed_seq = None</c>).
         /// </summary>
-        private protected SeedSequence _seedSeq;
+        private protected ISeedSequence _seedSeq;
 
         /// <summary>Initializes the shared state of a bit generator.</summary>
         /// <param name="seedSeq">The seed sequence the subclass seeds itself from (null for a generator seeded without one).</param>
-        private protected BitGenerator(SeedSequence seedSeq)
+        private protected BitGenerator(ISeedSequence seedSeq)
         {
             _seedSeq = seedSeq;
         }
@@ -45,14 +51,80 @@ namespace NumSharp
         public object @lock { get; } = new object();
 
         /// <summary>
-        ///     The seed sequence used to initialize the bit generator (NumPy's <c>BitGenerator.seed_seq</c>).
+        ///     The seed sequence used to initialize the bit generator (NumPy's <c>BitGenerator.seed_seq</c>) — normally a
+        ///     <see cref="SeedSequence"/> (cast to read its <c>entropy</c> / <c>spawn_key</c>).
         /// </summary>
         /// <remarks>
-        ///     Null for a bit generator re-seeded with <see cref="MT19937._legacy_seeding()"/> (NumPy then reports
-        ///     <c>None</c> too). A <c>jumped()</c> copy carries a FRESH OS-entropy sequence, as NumPy's
-        ///     <c>self.__class__()</c> construction gives it — not the parent's.
+        ///     Null for a bit generator re-seeded with <see cref="MT19937._legacy_seeding()"/> or built from an explicit
+        ///     <see cref="Philox"/> key (NumPy then reports <c>None</c> too). A <c>jumped()</c> copy carries a FRESH
+        ///     OS-entropy sequence, as NumPy's <c>self.__class__()</c> construction gives it — not the parent's.
         /// </remarks>
-        public SeedSequence seed_seq => _seedSeq;
+        public ISeedSequence seed_seq => _seedSeq;
+
+        /// <summary>
+        ///     Create new independent child bit generators of this generator's type (NumPy's <c>BitGenerator.spawn</c>),
+        ///     each seeded from a child of <see cref="seed_seq"/> — the recommended way to get non-overlapping streams
+        ///     for parallel work.
+        /// </summary>
+        /// <param name="n_children">The number of children.</param>
+        /// <returns>The children, of this bit generator's concrete type (NumPy's <c>type(self)(seed=s)</c>).</returns>
+        /// <exception cref="TypeError">The seed sequence cannot spawn — e.g. none (legacy-seeded MT19937, keyed Philox): NumPy's
+        /// <c>The underlying SeedSequence does not implement spawning.</c></exception>
+        /// <exception cref="OverflowException">The seed sequence's child count would leave its uint32 range.</exception>
+        /// <remarks>Spawning advances the parent seed sequence's <c>n_children_spawned</c>, so repeated calls never repeat a child.</remarks>
+        public BitGenerator[] spawn(int n_children)
+        {
+            if (_seedSeq is not ISpawnableSeedSequence spawnable)
+                throw new TypeError("The underlying SeedSequence does not implement spawning.");
+            ISpawnableSeedSequence[] children = spawnable.spawn(n_children);
+            var result = new BitGenerator[children.Length];
+            for (int i = 0; i < children.Length; i++)
+                result[i] = CreateFromSeed(children[i]);
+            return result;
+        }
+
+        /// <summary>Constructs a new instance of this bit generator's concrete type seeded from <paramref name="seed"/> (NumPy's <c>type(self)(seed=seed)</c>).</summary>
+        /// <param name="seed">The seed sequence.</param>
+        /// <returns>The new, independently seeded generator.</returns>
+        private protected abstract BitGenerator CreateFromSeed(ISeedSequence seed);
+
+        /// <summary>
+        ///     Reads <paramref name="n_words"/> uint32 seeding words from any <see cref="ISeedSequence"/> (the fast path for
+        ///     <see cref="SeedSequence"/>, the interface contract — a <c>uint[]</c> — otherwise).
+        /// </summary>
+        /// <param name="seed">The seed sequence.</param>
+        /// <param name="n_words">The word count.</param>
+        /// <returns>The words.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="seed"/> is null.</exception>
+        /// <exception cref="TypeError">A custom sequence returned something other than a <c>uint[]</c>.</exception>
+        private protected static uint[] SeedWords32(ISeedSequence seed, int n_words)
+        {
+            if (seed is null)
+                throw new ArgumentNullException(nameof(seed));
+            if (seed is SeedSequence ss)
+                return ss.GenerateState(n_words);
+            return seed.generate_state(n_words, DType.UInt32) as uint[]
+                   ?? throw new TypeError("generate_state(n_words, np.uint32) must return a uint32 array");
+        }
+
+        /// <summary>
+        ///     Reads <paramref name="n_words"/> uint64 seeding words from any <see cref="ISeedSequence"/> (the fast path for
+        ///     <see cref="SeedSequence"/>, the interface contract — a <c>ulong[]</c> — otherwise).
+        /// </summary>
+        /// <param name="seed">The seed sequence.</param>
+        /// <param name="n_words">The word count.</param>
+        /// <returns>The words.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="seed"/> is null.</exception>
+        /// <exception cref="TypeError">A custom sequence returned something other than a <c>ulong[]</c>.</exception>
+        private protected static ulong[] SeedWords64(ISeedSequence seed, int n_words)
+        {
+            if (seed is null)
+                throw new ArgumentNullException(nameof(seed));
+            if (seed is SeedSequence ss)
+                return ss.GenerateState64(n_words);
+            return seed.generate_state(n_words, DType.UInt64) as ulong[]
+                   ?? throw new TypeError("generate_state(n_words, np.uint64) must return a uint64 array");
+        }
 
         /// <summary>
         ///     Gets or sets the bit generator's state (NumPy's <c>bit_generator.state</c> dict, as a typed
@@ -169,8 +241,9 @@ namespace NumSharp
     ///     A snapshot of a bit generator's state — the typed stand-in for NumPy's <c>bit_generator.state</c> dict.
     /// </summary>
     /// <remarks>
-    ///     Each concrete generator has its own state class (<see cref="PCG64.State"/>, <see cref="MT19937.State"/>)
-    ///     whose members are named after NumPy's dict keys; the nested <c>'state'</c> sub-dict is flattened into the
+    ///     Each concrete generator has its own state class (<see cref="PCG64.State"/>, <see cref="PCG64DXSM.State"/>,
+    ///     <see cref="Philox.State"/>, <see cref="SFC64.State"/>, <see cref="MT19937.State"/>) whose members are named
+    ///     after NumPy's dict keys; the nested <c>'state'</c> sub-dict is flattened into the
     ///     same object. Snapshots are plain mutable data: build one, edit one, or assign one back through
     ///     <see cref="BitGenerator.state"/>.
     /// </remarks>

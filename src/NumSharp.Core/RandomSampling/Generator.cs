@@ -9,9 +9,10 @@ namespace NumSharp
     ///     Port of NumPy 2.4.2's <c>numpy.random.Generator</c> (<c>numpy/random/_generator.pyx</c>).
     ///     Unlike the legacy <see cref="NumPyRandom"/> (<c>RandomState</c>, MT19937 + polar-method
     ///     normal / inverse-CDF exponential / masked bounded integers), <see cref="Generator"/> draws
-    ///     from a <see cref="PCG64"/> bit generator and uses NumPy's newer algorithms — ziggurat
-    ///     normal/exponential and Lemire bounded integers — so its stream matches
-    ///     <c>default_rng(seed)</c> bit-for-bit, not <c>RandomState</c>.
+    ///     from any <see cref="BitGenerator"/> — <see cref="PCG64"/> by default, or <see cref="PCG64DXSM"/>,
+    ///     <see cref="Philox"/>, <see cref="SFC64"/>, <see cref="MT19937"/> — and uses NumPy's newer algorithms —
+    ///     ziggurat normal/exponential and Lemire bounded integers — so its stream matches
+    ///     <c>np.random.Generator(bit_generator)</c> (and <c>default_rng(seed)</c>) bit-for-bit, not <c>RandomState</c>.
     ///     <para>
     ///     Every public drawing method holds the bit generator's <see cref="BitGenerator.@lock"/> while it
     ///     consumes the stream, so one generator (or several over the same bit generator) can be shared
@@ -32,6 +33,29 @@ namespace NumSharp
 
         /// <summary>The bit generator supplying this Generator's stream.</summary>
         public BitGenerator bit_generator => _bitGenerator;
+
+        /// <summary>
+        ///     Create new independent child generators (NumPy's <c>Generator.spawn</c>): each wraps a child of
+        ///     <see cref="bit_generator"/>'s seed sequence, via <see cref="BitGenerator.spawn"/> — the recommended way to
+        ///     hand non-overlapping streams to parallel workers.
+        /// </summary>
+        /// <param name="n_children">The number of children.</param>
+        /// <returns>The children, each a <see cref="Generator"/> over a fresh bit generator of the same type.</returns>
+        /// <exception cref="TypeError">The bit generator's seed sequence cannot spawn (a legacy-seeded <see cref="MT19937"/>, a
+        /// keyed <see cref="Philox"/>): <c>The underlying SeedSequence does not implement spawning.</c></exception>
+        /// <exception cref="OverflowException">The seed sequence's child count would leave its uint32 range (e.g. a negative count).</exception>
+        /// <remarks>
+        ///     Spawning advances the seed sequence's <see cref="SeedSequence.n_children_spawned"/>, so it never repeats a
+        ///     child; it does NOT consume this generator's stream (the children are seeded, not drawn).
+        /// </remarks>
+        public Generator[] spawn(int n_children)
+        {
+            BitGenerator[] children = _bitGenerator.spawn(n_children);
+            var result = new Generator[children.Length];
+            for (int i = 0; i < children.Length; i++)
+                result[i] = new Generator(children[i]);
+            return result;
+        }
 
         /// <summary>NumPy's <c>str(Generator)</c>: the class name and the bit generator's name.</summary>
         /// <returns><c>Generator(&lt;bit generator name&gt;)</c>, e.g. <c>Generator(PCG64)</c>.</returns>
