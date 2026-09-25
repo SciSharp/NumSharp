@@ -42,6 +42,21 @@ namespace NumSharp
         private const int UninitializedLeafBytes = 2048;
 
         /// <summary>
+        ///     Test hook: when set on the calling thread, <see cref="ToJaggedArray{T}"/> builds rank ≥ 3 results with its
+        ///     no-dynamic-code fallback (a recursive descent over reflection-created levels) and
+        ///     <see cref="ToMuliDimArray{T}"/> allocates rank ≥ 4 results with
+        ///     <see cref="System.Array.CreateInstance(Type, int[])"/> — exactly what a runtime without dynamic code
+        ///     (NativeAOT, the interpreter) runs. A JIT-compiled test process never takes those paths on its own, so
+        ///     this is the only way a test can prove them equal to the emitted ones.
+        /// </summary>
+        /// <remarks>
+        ///     Thread-static, so a test that sets it re-routes only its own calls, never another thread's; production
+        ///     code never sets it. A test resets it in a <c>finally</c>.
+        /// </remarks>
+        [ThreadStatic]
+        internal static bool ForceNoDynamicCodeFallbacks;
+
+        /// <summary>
         ///     Copies this array into a fresh .NET jagged array (<c>T[]</c> for 1-D, <c>T[][]</c> for 2-D, …,
         ///     one nesting level per dimension, any rank), reading the logical elements in C order whatever
         ///     the memory layout (C/F-contiguous, transposed, strided, reversed, offset or broadcast views).
@@ -150,8 +165,9 @@ namespace NumSharp
                 if (nd == 2)
                     return FillBlock(first, (int)dims[0], strides[0], (int)dims[1], strides[1]);
 
-                // NativeAOT / interpreter: emitting IL there is either impossible or slower than reflection.
-                if (!RuntimeFeature.IsDynamicCodeCompiled)
+                // NativeAOT / interpreter: emitting IL there is either impossible or slower than reflection. (The test
+                // hook takes the same fallback on a JIT runtime, so the fallback is covered by tests.)
+                if (!RuntimeFeature.IsDynamicCodeCompiled || ForceNoDynamicCodeFallbacks)
                     return JaggedLevel(first, dims, strides, LevelElementTypes<T>(nd), 0);
 
                 BlockLevelsBuilder<T> build = BlockLevelsBuilders<T>.ByRank.GetOrAdd(nd, static rank => (BlockLevelsBuilder<T>)EmitBlockLevelsBuilder<T>(rank, converted: false));
@@ -224,7 +240,8 @@ namespace NumSharp
                 if (nd == 2)
                     return FillBlockConverted(first, (int)dims[0], strides[0] * itemSize, (int)dims[1], strides[1], converter);
 
-                if (!RuntimeFeature.IsDynamicCodeCompiled)
+                // No dynamic code (or the test hook): the reflection-built fallback, as in the exact path.
+                if (!RuntimeFeature.IsDynamicCodeCompiled || ForceNoDynamicCodeFallbacks)
                     return JaggedLevelConverted(first, dims, strides, itemSize, LevelElementTypes<T>(nd), 0, converter);
 
                 ConvertedBuilder<T> build = ConvertedBuilders<T>.ByRank.GetOrAdd(nd, static rank => (ConvertedBuilder<T>)EmitBlockLevelsBuilder<T>(rank, converted: true));
@@ -1082,7 +1099,12 @@ namespace NumSharp
         ///     other stride an element-by-element gather.
         /// </summary>
         /// <typeparam name="T">Element type.</typeparam>
-        /// <param name="p">Address of the row's first element (position 0 of the leaf).</param>
+        /// <param name="p">
+        ///     Address of the row's first element (position 0 of the leaf). For an EMPTY row it need not address a valid
+        ///     element — an empty view's offset may point one past its buffer (an <c>np.split</c> child at the end) or
+        ///     anywhere at all (an empty slice keeps its parent's offset over a fresh zero-length buffer) — so nothing is
+        ///     read when <paramref name="n"/> is 0.
+        /// </param>
         /// <param name="stride">Element stride along the row (never 1; callers block-copy those rows).</param>
         /// <param name="d">Position 0 of the leaf (a GC-tracked reference, so the leaf needs no pinning).</param>
         /// <param name="n">Row length.</param>
@@ -1095,8 +1117,11 @@ namespace NumSharp
         {
             if (stride == 0)
             {
-                // A broadcast row holds one value n times.
-                MemoryMarshal.CreateSpan(ref d, n).Fill(*p);
+                // A broadcast row holds one value n times. The value is read only when there is a position to fill:
+                // an empty row's pointer is not an element (an empty slice reports stride 0, and its offset may lie far
+                // outside the zero-length buffer it owns — reading it access-violated).
+                if (n != 0)
+                    MemoryMarshal.CreateSpan(ref d, n).Fill(*p);
                 return;
             }
 

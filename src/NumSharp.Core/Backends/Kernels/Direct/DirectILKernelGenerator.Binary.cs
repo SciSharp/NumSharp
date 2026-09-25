@@ -648,10 +648,19 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Emit conversion from T to double.
         /// </summary>
+        /// <typeparam name="T">The integer or float type of the value on the evaluation stack.</typeparam>
+        /// <param name="il">The IL stream.</param>
+        /// <remarks>A uint64 rounds ONCE, like NumPy's C cast (conv.r.un + conv.r8 round twice from 2^63 on under .NET 8).</remarks>
         private static void EmitConvertToDouble<T>(ILGenerator il) where T : unmanaged
         {
             if (typeof(T) == typeof(double))
                 return; // Already double
+
+            if (typeof(T) == typeof(ulong))
+            {
+                il.EmitCall(OpCodes.Call, CachedMethods.ConvertsUInt64ToDouble, null);
+                return;
+            }
 
             // For unsigned types, use Conv_R_Un first
             if (typeof(T) == typeof(byte) || typeof(T) == typeof(ushort) ||

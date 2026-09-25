@@ -3084,7 +3084,9 @@ namespace NumSharp
             internal static Array Allocate(long[] dims)
             {
                 int rank = dims.Length;
-                if (rank > 32 || !System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported)
+                // Rank > 32, no dynamic code, or the test hook (NDArray.ForceNoDynamicCodeFallbacks, which makes a JIT
+                // process take the no-dynamic-code route so a test can compare it with the emitted one).
+                if (rank > 32 || !System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported || ForceNoDynamicCodeFallbacks)
                     return System.Array.CreateInstance(typeof(T), System.Array.ConvertAll(dims, ManagedLength));
                 var allocate = s_byRank[rank] ??= Build(rank);
                 return allocate(dims);

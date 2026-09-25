@@ -50,11 +50,12 @@ namespace NumSharp.Tests.Casting
     ///         NumPy 2.4.2's own output on every route.
     ///     </para>
     ///     <para>
-    ///         Three known divergences are pinned as <c>[OpenBugs]</c> rather than hidden, each with NumPy's exact bits on
-    ///         every route: a signalling NaN converted into or out of float16 is quieted by ToArray's scalar routes (while
-    ///         astype keeps it signalling, as NumPy does) — the one input the conversion matrix quiets beforehand, and
-    ///         only for float16 conversions; astype's own float16 → float64 / complex128 conversion quiets it on every
-    ///         route; and on .NET 8 uint64 ≥ 2⁶³ → float64 rounds twice (the runtime's own cast).
+    ///         Three conversion bugs this suite found are guarded by NumPy-anchored regression tests, each over every
+    ///         route: a signalling NaN converted into or out of float16 stays signalling with its payload (NumPy converts
+    ///         float16 bit by bit; the scalar converter and the float16 → float64 / complex128 cast used to quiet it), a
+    ///         signalling NaN between float32 and float64 IS quieted (the hardware conversion NumPy uses too), and
+    ///         uint64 → float32 / float64 / complex128 rounds once on every runtime (.NET 8's own conversion rounds twice).
+    ///         Since the fix the conversion matrix feeds signalling NaNs to every float conversion unaltered.
     ///     </para>
     ///     <para>
     ///         Every case also checks that the source's buffer is byte-for-byte unchanged afterwards (a mis-aimed store in
@@ -62,12 +63,17 @@ namespace NumSharp.Tests.Casting
     ///         array, and that an empty result is the shared <see cref="Array.Empty{T}"/> instance. Failures are collected
     ///         rather than thrown at the first one, so a broken route reports every (dtype, layout) cell it breaks.
     ///     </para>
+    ///     <para>
+    ///         The patterns, the oracle and the case bookkeeping are <c>internal</c>: the ToJaggedArray contract
+    ///         (<see cref="ToJaggedArrayContractTests"/>) and the cross-API edge cases (<see cref="ArrayExportEdgeCaseTests"/>)
+    ///         reuse them, so all three export APIs are held to one oracle and one notion of a defined conversion.
+    ///     </para>
     /// </remarks>
     [TestClass]
     public class ToArrayContractTests
     {
         /// <summary>The 15 NumSharp dtypes.</summary>
-        private static readonly NPTypeCode[] AllDtypes =
+        internal static readonly NPTypeCode[] AllDtypes =
         {
             NPTypeCode.Boolean, NPTypeCode.Byte, NPTypeCode.SByte, NPTypeCode.Int16, NPTypeCode.UInt16,
             NPTypeCode.Int32, NPTypeCode.UInt32, NPTypeCode.Int64, NPTypeCode.UInt64, NPTypeCode.Char,
@@ -75,7 +81,7 @@ namespace NumSharp.Tests.Casting
         };
 
         /// <summary>One mebibyte: the size from which ToArray streams reversed runs, transposes and conversions.</summary>
-        private const long Mebibyte = 1L << 20;
+        internal const long Mebibyte = 1L << 20;
 
         // ============================================================================================== tests
 
@@ -271,93 +277,158 @@ namespace NumSharp.Tests.Casting
         }
 
         /// <summary>
-        ///     uint64 values at or above 2⁶³ convert to float64 with ONE rounding, as NumPy's correctly rounded cast does.
-        ///     Fails on .NET 8 only, and not in ToArray: there the runtime's own <c>(double)ulong</c> converts as signed and
-        ///     adds 2⁶⁴, rounding twice, and astype — which ToArray matches by contract — inherits it, so 2⁶³ + 1025 lands
-        ///     on 2⁶³ instead of 2⁶³ + 2048.
+        ///     uint64 → float32 / float64 / complex128 rounds ONCE to nearest-even, as NumPy's C cast does, on every route
+        ///     and every runtime — for values past 2⁵³ (where float64 stops being exact) and past 2⁶³ (where a signed
+        ///     conversion no longer applies).
         /// </summary>
-        /// <exception cref="AssertFailedException">A route's float64 differs from NumPy's bits (on .NET 8: every route, for 2⁶³ + 1025).</exception>
+        /// <exception cref="AssertFailedException">A route's result differs from NumPy's bits.</exception>
         /// <remarks>
-        ///     Probed: <c>np.array([2**63 + 1025, 2**63 + 2049, 2**63 + 1], np.uint64).astype(np.float64).view(np.uint64)</c>
-        ///     → <c>[0x43e0000000000001, 0x43e0000000000001, 0x43e0000000000000]</c>; .NET 8.0.29 gives
-        ///     <c>0x43e0000000000000</c> for the first through astype and ToArray alike (contiguous and strided), .NET 10
-        ///     matches NumPy. The decimal → float64 kernel already guards the same runtime difference with a start-up
-        ///     probe; the uint64 cast has no such guard. Remove <c>[OpenBugs]</c> when astype rounds once on every runtime.
+        ///     <para>
+        ///         Regression test. .NET 8's own conversions round TWICE: <c>(float)ulong</c> goes through float64 (2⁶⁰ +
+        ///         2³⁶ + 1 → 0x5D800000, NumPy 0x5D800001; 2⁶⁴ − 2³⁹ − 1 → 2⁶⁴ itself, NumPy 0x5F7FFFFF), and
+        ///         <c>(double)ulong</c> of a value ≥ 2⁶³ converts as signed and adds 2⁶⁴ (2⁶³ + 1025 → 2⁶³, NumPy 2⁶³ + 2048).
+        ///         Every NumSharp conversion of a uint64 — the Converts table, the scalar converter, the IL cast emitter and
+        ///         the operand widenings — now goes through <c>Converts.UInt64ToSingleRoundOnce</c> /
+        ///         <c>UInt64ToDoubleRoundOnce</c>, which round once on every runtime. .NET 10's own conversions are correct,
+        ///         so there this test passes either way; on .NET 8 it failed on every route.
+        ///     </para>
+        ///     <para>
+        ///         Probed (numpy 2.4.2): <c>np.array([2**60+2**36+1, 2**63+2**39+1, 2**53+2**29+1, 2**63+1025,
+        ///         2**64-2**39-1, 2**53+1, 2**64-1, 2**63, 2**63-1, 2**24+1, 2**54+3], np.uint64)</c> →
+        ///         <c>.astype(np.float32).view(np.uint32)</c> = [0x5d800001, 0x5f000001, 0x5a000001, 0x5f000000, 0x5f7fffff,
+        ///         0x5a000000, 0x5f800000, 0x5f000000, 0x5f000000, 0x4b800000, 0x5a800000];
+        ///         <c>.astype(np.float64).view(np.uint64)</c> = [0x43b0000010000000, 0x43e0000010000000, 0x4340000010000000,
+        ///         0x43e0000000000001, 0x43effffff0000000, 0x4340000000000000, 0x43f0000000000000, 0x43e0000000000000,
+        ///         0x43e0000000000000, 0x4170000010000000, 0x4350000000000001] (complex128: the same
+        ///         real parts, +0 imaginary).
+        ///     </para>
         /// </remarks>
         [TestMethod]
-        [OpenBugs]
-        public void Conversion_UInt64AtOrAboveTwoTo63ToFloat64_RoundsOnceLikeNumPy()
+        public void Conversion_UInt64ToFloat_RoundsOnceLikeNumPy()
         {
             var log = new CaseLog();
-            LikeNumPy(new ulong[] { 9223372036854776833, 9223372036854777857, 9223372036854775809 },
-                Doubles(0x43E0000000000001, 0x43E0000000000001, 0x43E0000000000000), "uint64 ≥ 2^63 → float64", log);
-            AssertNoFailures(log, "uint64 ≥ 2^63 → float64", minimumCases: 9);
+            ulong[] values =
+            {
+                (1UL << 60) + (1UL << 36) + 1, (1UL << 63) + (1UL << 39) + 1, (1UL << 53) + (1UL << 29) + 1, (1UL << 63) + 1025,
+                ulong.MaxValue - (1UL << 39), (1UL << 53) + 1, ulong.MaxValue, 1UL << 63, (1UL << 63) - 1, (1UL << 24) + 1,
+                (1UL << 54) + 3,
+            };
+            LikeNumPy(values, Singles(0x5D800001, 0x5F000001, 0x5A000001, 0x5F000000, 0x5F7FFFFF, 0x5A000000,
+                0x5F800000, 0x5F000000, 0x5F000000, 0x4B800000, 0x5A800000), "uint64 → float32", log);
+            double[] doubles = Doubles(0x43B0000010000000, 0x43E0000010000000, 0x4340000010000000, 0x43E0000000000001,
+                0x43EFFFFFF0000000, 0x4340000000000000, 0x43F0000000000000, 0x43E0000000000000, 0x43E0000000000000,
+                0x4170000010000000, 0x4350000000000001);
+            LikeNumPy(values, doubles, "uint64 → float64", log);
+            LikeNumPy(values, doubles.Select(d => new Complex(d, 0)).ToArray(), "uint64 → complex128", log);
+            AssertNoFailures(log, "uint64 → float32 / float64 / complex128", minimumCases: 3 * (8 + 11));
         }
 
         /// <summary>
         ///     A signalling NaN converted into or out of float16 stays SIGNALLING with its payload, as NumPy's bit-level
         ///     <c>npy_halfbits_to_floatbits</c> / <c>npy_floatbits_to_halfbits</c> / <c>npy_doublebits_to_halfbits</c>
-        ///     keep it — on every route. Fails today on ToArray's scalar routes only: the small non-contiguous views and
-        ///     the 0-d elements (contiguous and large views match NumPy).
+        ///     keep it — on every route, and a NaN whose payload bits do not survive the narrowing becomes 0x7C01 (still
+        ///     signalling), never the canonical 0x7E00.
         /// </summary>
-        /// <exception cref="AssertFailedException">A route set the quiet bit, or lost the payload (on the scalar routes: every signalling input).</exception>
+        /// <exception cref="AssertFailedException">A route set the quiet bit, or kept the wrong payload bits.</exception>
         /// <remarks>
         ///     <para>
-        ///         Root cause: those routes convert one element at a time through <c>NDIterCasting.ConvertValue</c>, which
-        ///         reads a float16 through .NET's <c>(double)Half</c> and writes one through <c>(Half)double</c> — both set
-        ///         the NaN quiet bit (and a signalling NaN whose payload does not survive the narrowing becomes the canonical
-        ///         0x7E00, where NumPy keeps it signalling as 0x7C01). astype's cast kernels do the bit conversion NumPy does,
-        ///         so ToArray breaks its own contract ("converts exactly as astype") on these values. The conversion matrix
-        ///         quiets the signalling NaNs of every float16 conversion source until this is fixed.
+        ///         Regression test. ToArray's scalar routes (small non-contiguous views, 0-d elements) converted through
+        ///         <c>NDIterCasting.ConvertValue</c>, which read a float16 through .NET's <c>(double)Half</c> and wrote one
+        ///         through <c>(Half)double</c> — both set the quiet bit — while astype's cast kernels kept NumPy's bits, so
+        ///         ToArray broke its own "converts exactly as astype" contract. The Converts table, the scalar converter and
+        ///         the IL cast emitter now apply NumPy's rules (<c>Converts.NumPyFloatRules.cs</c>), float16 ↔ float32
+        ///         directly (never through a double, whose float32 ↔ float64 hop would quiet the NaN).
         ///     </para>
         ///     <para>
-        ///         Probed (numpy 2.4.2): float16 [0x7d01, 0xfd01, 0x7e01, 0x7c01] → float32 [0x7fa02000, 0xffa02000,
-        ///         0x7fc02000, 0x7f802000]; float32 [0x7fa00001, 0xffa00001, 0x7fc0beef, 0x7f800001] → float16 [0x7d00,
-        ///         0xfd00, 0x7e05, 0x7c01]; float64 [0x7ff4000000000001, 0xfff4000000000001, 0x7ff8deadbeef0001,
-        ///         0x7ff0000000000001] (and complex128 with those real parts) → float16 [0x7d00, 0xfd00, 0x7e37, 0x7c01].
-        ///         Remove <c>[OpenBugs]</c> when the scalar converter keeps signalling NaNs as NumPy does.
+        ///         Probed (numpy 2.4.2): float16 [0x7d01, 0xfd01, 0x7e01, 0x7c01, 0x7dff, 0x7fff, 0xfc01] → float32
+        ///         [0x7fa02000, 0xffa02000, 0x7fc02000, 0x7f802000, 0x7fbfe000, 0x7fffe000, 0xff802000]; float32
+        ///         [0x7fa00001, 0xffa00001, 0x7fc0beef, 0x7f800001, 0x7f801fff, 0x7f802000, 0xff800001, 0x7fbfffff] →
+        ///         float16 [0x7d00, 0xfd00, 0x7e05, 0x7c01, 0x7c01, 0x7c01, 0xfc01, 0x7dff]; float64 [0x7ff4000000000001,
+        ///         0xfff4000000000001, 0x7ff8deadbeef0001, 0x7ff0000000000001, 0x7ff003ffffffffff, 0x7ff0040000000000,
+        ///         0xfff0000000000001, 0x7ff7ffffffffffff] (and complex128 with those real parts) → float16 [0x7d00, 0xfd00,
+        ///         0x7e37, 0x7c01, 0x7c01, 0x7c01, 0xfc01, 0x7dff].
         ///     </para>
         /// </remarks>
         [TestMethod]
-        [OpenBugs]
         public void Conversion_SignallingNaNIntoOrOutOfFloat16_StaysSignallingOnEveryRoute()
         {
             var log = new CaseLog();
-            LikeNumPy(Halves(0x7D01, 0xFD01, 0x7E01, 0x7C01), Singles(0x7FA02000, 0xFFA02000, 0x7FC02000, 0x7F802000),
+            LikeNumPy(Halves(0x7D01, 0xFD01, 0x7E01, 0x7C01, 0x7DFF, 0x7FFF, 0xFC01),
+                Singles(0x7FA02000, 0xFFA02000, 0x7FC02000, 0x7F802000, 0x7FBFE000, 0x7FFFE000, 0xFF802000),
                 "float16 signalling NaN → float32", log);
-            LikeNumPy(Singles(0x7FA00001, 0xFFA00001, 0x7FC0BEEF, 0x7F800001), Halves(0x7D00, 0xFD00, 0x7E05, 0x7C01),
-                "float32 signalling NaN → float16", log);
-            double[] doubles = Doubles(0x7FF4000000000001, 0xFFF4000000000001, 0x7FF8DEADBEEF0001, 0x7FF0000000000001);
-            LikeNumPy(doubles, Halves(0x7D00, 0xFD00, 0x7E37, 0x7C01), "float64 signalling NaN → float16", log);
-            LikeNumPy(doubles.Select(d => new Complex(d, 0)).ToArray(), Halves(0x7D00, 0xFD00, 0x7E37, 0x7C01),
-                "complex128 signalling NaN → float16", log);
-            AssertNoFailures(log, "signalling NaNs into or out of float16", minimumCases: 4 * 12);
+            LikeNumPy(Singles(0x7FA00001, 0xFFA00001, 0x7FC0BEEF, 0x7F800001, 0x7F801FFF, 0x7F802000, 0xFF800001, 0x7FBFFFFF),
+                Halves(0x7D00, 0xFD00, 0x7E05, 0x7C01, 0x7C01, 0x7C01, 0xFC01, 0x7DFF), "float32 signalling NaN → float16", log);
+            double[] doubles = Doubles(0x7FF4000000000001, 0xFFF4000000000001, 0x7FF8DEADBEEF0001, 0x7FF0000000000001,
+                0x7FF003FFFFFFFFFF, 0x7FF0040000000000, 0xFFF0000000000001, 0x7FF7FFFFFFFFFFFF);
+            Half[] halves = Halves(0x7D00, 0xFD00, 0x7E37, 0x7C01, 0x7C01, 0x7C01, 0xFC01, 0x7DFF);
+            LikeNumPy(doubles, halves, "float64 signalling NaN → float16", log);
+            LikeNumPy(doubles.Select(d => new Complex(d, 0)).ToArray(), halves, "complex128 signalling NaN → float16", log);
+            AssertNoFailures(log, "signalling NaNs into or out of float16", minimumCases: (8 + 7) + 3 * (8 + 8));
         }
 
         /// <summary>
         ///     A float16 signalling NaN converted to float64 or complex128 stays SIGNALLING with its payload, as NumPy's
-        ///     <c>npy_halfbits_to_doublebits</c> keeps it. Fails today on EVERY route — not a ToArray inconsistency but an
-        ///     astype parity bug ToArray inherits by contract: astype's own float16 → float64 / complex128 conversion sets
-        ///     the quiet bit.
+        ///     <c>npy_halfbits_to_doublebits</c> keeps it — NumPy converts float16 → float64 directly, not through float32.
         /// </summary>
-        /// <exception cref="AssertFailedException">A route set the quiet bit (today: every route, for every signalling input).</exception>
+        /// <exception cref="AssertFailedException">A route set the quiet bit.</exception>
         /// <remarks>
-        ///     Probed (numpy 2.4.2): float16 [0x7d01, 0xfd01, 0x7e01, 0x7c01] → float64 [0x7ff4040000000000,
-        ///     0xfff4040000000000, 0x7ff8040000000000, 0x7ff0040000000000] (complex128: the same real parts, +0 imaginary);
-        ///     NumSharp gives 0x7ffc040000000000 / 0xfffc040000000000 / … / 0x7ff8040000000000 through astype and ToArray
-        ///     alike (float16 → float32 keeps the payload; the float32 → float64 widening then quiets it, where NumPy converts
-        ///     float16 → float64 directly). Remove <c>[OpenBugs]</c> when astype keeps the NaN signalling.
+        ///     <para>
+        ///         Regression test: astype's own float16 → float64 / complex128 conversion used to quiet it on every route
+        ///         (the BCL <c>(double)Half</c> cast in the Converts table and the IL cast emitter), so ToArray — which
+        ///         matches astype by contract — did too.
+        ///     </para>
+        ///     <para>
+        ///         Probed (numpy 2.4.2): float16 [0x7d01, 0xfd01, 0x7e01, 0x7c01, 0x7dff, 0x7fff, 0xfc01] → float64
+        ///         [0x7ff4040000000000, 0xfff4040000000000, 0x7ff8040000000000, 0x7ff0040000000000, 0x7ff7fc0000000000,
+        ///         0x7ffffc0000000000, 0xfff0040000000000] (complex128: the same real parts, +0 imaginary).
+        ///     </para>
         /// </remarks>
         [TestMethod]
-        [OpenBugs]
         public void Conversion_SignallingFloat16NaNToFloat64_StaysSignallingLikeNumPy()
         {
             var log = new CaseLog();
-            Half[] halves = Halves(0x7D01, 0xFD01, 0x7E01, 0x7C01);
-            double[] numpy = Doubles(0x7FF4040000000000, 0xFFF4040000000000, 0x7FF8040000000000, 0x7FF0040000000000);
+            Half[] halves = Halves(0x7D01, 0xFD01, 0x7E01, 0x7C01, 0x7DFF, 0x7FFF, 0xFC01);
+            double[] numpy = Doubles(0x7FF4040000000000, 0xFFF4040000000000, 0x7FF8040000000000, 0x7FF0040000000000,
+                0x7FF7FC0000000000, 0x7FFFFC0000000000, 0xFFF0040000000000);
             LikeNumPy(halves, numpy, "float16 signalling NaN → float64", log);
             LikeNumPy(halves, numpy.Select(d => new Complex(d, 0)).ToArray(), "float16 signalling NaN → complex128", log);
-            AssertNoFailures(log, "float16 signalling NaN → float64 / complex128", minimumCases: 2 * 12);
+            AssertNoFailures(log, "float16 signalling NaN → float64 / complex128", minimumCases: 2 * (8 + 7));
+        }
+
+        /// <summary>
+        ///     A signalling NaN converted between float32 and float64 (either way, complex128 included) IS quieted, with
+        ///     its payload kept — the hardware conversion NumPy uses too. Pins the other side of the float16 rule, so a
+        ///     "keep it signalling everywhere" change cannot slip in.
+        /// </summary>
+        /// <exception cref="AssertFailedException">A route kept a NaN signalling, or changed its payload.</exception>
+        /// <remarks>
+        ///     Probed (numpy 2.4.2): float32 [0x7fa00001, 0xffa00001, 0x7fc0beef, 0x7f800001, 0x7f801fff, 0x7f802000,
+        ///     0xff800001, 0x7fbfffff] → float64 (and complex128's real part) [0x7ffc000020000000, 0xfffc000020000000,
+        ///     0x7ff817dde0000000, 0x7ff8000020000000, 0x7ff803ffe0000000, 0x7ff8040000000000, 0xfff8000020000000,
+        ///     0x7fffffffe0000000]; float64 [0x7ff4000000000001, 0xfff4000000000001, 0x7ff8deadbeef0001,
+        ///     0x7ff0000000000001, 0x7ff003ffffffffff, 0x7ff0040000000000, 0xfff0000000000001, 0x7ff7ffffffffffff] (and
+        ///     complex128 with those real parts) → float32 [0x7fe00000, 0xffe00000, 0x7fc6f56d, 0x7fc00000, 0x7fc01fff,
+        ///     0x7fc02000, 0xffc00000, 0x7fffffff]; complex128 → float64 and float64 → complex128 keep the bits as they are.
+        /// </remarks>
+        [TestMethod]
+        public void Conversion_SignallingNaNBetweenFloat32AndFloat64_IsQuietedLikeNumPy()
+        {
+            var log = new CaseLog();
+            float[] singles = Singles(0x7FA00001, 0xFFA00001, 0x7FC0BEEF, 0x7F800001, 0x7F801FFF, 0x7F802000, 0xFF800001, 0x7FBFFFFF);
+            double[] widened = Doubles(0x7FFC000020000000, 0xFFFC000020000000, 0x7FF817DDE0000000, 0x7FF8000020000000,
+                0x7FF803FFE0000000, 0x7FF8040000000000, 0xFFF8000020000000, 0x7FFFFFFFE0000000);
+            LikeNumPy(singles, widened, "float32 signalling NaN → float64", log);
+            LikeNumPy(singles, widened.Select(d => new Complex(d, 0)).ToArray(), "float32 signalling NaN → complex128", log);
+
+            double[] doubles = Doubles(0x7FF4000000000001, 0xFFF4000000000001, 0x7FF8DEADBEEF0001, 0x7FF0000000000001,
+                0x7FF003FFFFFFFFFF, 0x7FF0040000000000, 0xFFF0000000000001, 0x7FF7FFFFFFFFFFFF);
+            Complex[] complexes = doubles.Select(d => new Complex(d, 0)).ToArray();
+            float[] narrowed = Singles(0x7FE00000, 0xFFE00000, 0x7FC6F56D, 0x7FC00000, 0x7FC01FFF, 0x7FC02000, 0xFFC00000, 0x7FFFFFFF);
+            LikeNumPy(doubles, narrowed, "float64 signalling NaN → float32", log);
+            LikeNumPy(complexes, narrowed, "complex128 signalling NaN → float32", log);
+            LikeNumPy(complexes, doubles, "complex128 signalling NaN → float64 (the real part, untouched)", log);
+            LikeNumPy(doubles, complexes, "float64 signalling NaN → complex128 (untouched, +0 imaginary)", log);
+            AssertNoFailures(log, "signalling NaNs between float32 and float64", minimumCases: 6 * (8 + 8));
         }
 
         /// <summary>
@@ -971,7 +1042,7 @@ namespace NumSharp.Tests.Casting
         /// </summary>
         /// <param name="view">Any array or view: any rank, any strides (negative and broadcast zero included), 0-d or empty.</param>
         /// <returns><c>size × itemsize</c> bytes; logical element k at <c>[k · itemsize, (k + 1) · itemsize)</c>.</returns>
-        private static unsafe byte[] LogicalBytes(NDArray view)
+        internal static unsafe byte[] LogicalBytes(NDArray view)
         {
             int itemSize = view.dtypesize;
             long count = view.size;
@@ -1065,7 +1136,7 @@ namespace NumSharp.Tests.Casting
         /// <param name="n">The element count.</param>
         /// <param name="lead">The first element's index for an ascending view; the lowest index read for a descending one.</param>
         /// <returns>A view of <paramref name="line"/>.</returns>
-        private static NDArray Stepped(NDArray line, long step, long n, long lead)
+        internal static NDArray Stepped(NDArray line, long step, long n, long lead)
         {
             long start = step > 0 ? lead : lead + (n - 1) * -step;
             return line[$"{start}::{step}"][$"0:{n}"];
@@ -1080,14 +1151,14 @@ namespace NumSharp.Tests.Casting
         /// <param name="start">The first element's index (the child's offset).</param>
         /// <param name="n">The element count.</param>
         /// <returns>A view of <paramref name="line"/>.</returns>
-        private static NDArray SplitChild(NDArray line, long start, long n) => np.split(line, new[] { start, start + n })[1];
+        internal static NDArray SplitChild(NDArray line, long start, long n) => np.split(line, new[] { start, start + n })[1];
 
         /// <summary>The (rows, cols) C-contiguous view over the first rows · cols elements of a 1-D pattern.</summary>
         /// <param name="line">The 1-D source.</param>
         /// <param name="rows">Row count.</param>
         /// <param name="cols">Column count.</param>
         /// <returns>A view of <paramref name="line"/>.</returns>
-        private static NDArray Grid(NDArray line, long rows, long cols) => line[$"0:{rows * cols}"].reshape(rows, cols);
+        internal static NDArray Grid(NDArray line, long rows, long cols) => line[$"0:{rows * cols}"].reshape(rows, cols);
 
         /// <summary>The (a, b, c) C-contiguous view over the first a · b · c elements of a 1-D pattern.</summary>
         /// <param name="line">The 1-D source.</param>
@@ -1095,7 +1166,7 @@ namespace NumSharp.Tests.Casting
         /// <param name="b">Extent of axis 1.</param>
         /// <param name="c">Extent of axis 2.</param>
         /// <returns>A view of <paramref name="line"/>.</returns>
-        private static NDArray Cube(NDArray line, long a, long b, long c) => line[$"0:{a * b * c}"].reshape(a, b, c);
+        internal static NDArray Cube(NDArray line, long a, long b, long c) => line[$"0:{a * b * c}"].reshape(a, b, c);
 
         /// <summary>
         ///     Runs large same-dtype cases over a pattern of their own (created and disposed here): one runner, so every
@@ -1126,7 +1197,7 @@ namespace NumSharp.Tests.Casting
         /// <param name="what">The catalog's description.</param>
         /// <param name="minimumCases">The fewest cases the catalog lists.</param>
         /// <exception cref="AssertFailedException">A case failed, or too few cases ran.</exception>
-        private static void AssertNoFailures(CaseLog log, string what, int minimumCases)
+        internal static void AssertNoFailures(CaseLog log, string what, int minimumCases)
         {
             if (log.Failures.Count > 0)
                 Assert.Fail($"{what}: {log.Failures.Count} of {log.Cases} cases failed; first {System.Math.Min(30, log.Failures.Count)}:\n  "
@@ -1153,7 +1224,7 @@ namespace NumSharp.Tests.Casting
         ///     integers; zeros of both signs and other scales, the extremes and the smallest step for decimal. Every 29th
         ///     complex is a signed zero in both parts (complex → bool reads both).
         /// </remarks>
-        private static NDArray RawPattern(NPTypeCode dtype, long n, ulong seed)
+        internal static NDArray RawPattern(NPTypeCode dtype, long n, ulong seed)
         {
             var a = np.empty(new Shape(n), dtype);
             Span<byte> bytes = a.Unsafe.Bytes();
@@ -1250,21 +1321,12 @@ namespace NumSharp.Tests.Casting
         ///         random bits, which such a conversion discards.
         ///     </para>
         /// </remarks>
-        private static NDArray ConversionPattern(NPTypeCode from, NPTypeCode to, long n, ulong seed)
+        internal static NDArray ConversionPattern(NPTypeCode from, NPTypeCode to, long n, ulong seed)
         {
             bool bounded = IsIntegerTarget(to, out double lo, out double hi);
             bool floating = from is NPTypeCode.Half or NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Complex or NPTypeCode.Decimal;
             if (!floating || (!bounded && to != NPTypeCode.Decimal))
-            {
-                var raw = RawPattern(from, n, seed);
-                // A known divergence, pinned (not hidden) by the two [OpenBugs] signalling-NaN tests: a signalling NaN
-                // converted into or out of float16 keeps its quiet bit clear in NumPy, but ToArray's scalar routes set
-                // it (and astype's float16 → float64 / complex128 kernels do too). Every such conversion here gets
-                // QUIET NaNs — payloads and signs intact — so the matrix stays strict on everything else.
-                if (from == NPTypeCode.Half || to == NPTypeCode.Half)
-                    QuietSignallingNaNs(raw, from);
-                return raw;
-            }
+                return RawPattern(from, n, seed);
             if (from == NPTypeCode.Half)
             {
                 // A float16 holds at most ±65 504: draw inside that too, or nearly every value would be replaced.
@@ -1313,44 +1375,6 @@ namespace NumSharp.Tests.Casting
                 }
             }
             return a;
-        }
-
-        /// <summary>
-        ///     Sets the quiet bit of every signalling NaN in a float16, float32, float64 or complex128 array (both parts of
-        ///     a complex), leaving every other value — quiet NaNs, their payloads and signs included — untouched; any
-        ///     other dtype is left as it is.
-        /// </summary>
-        /// <param name="a">A C-contiguous array, modified in place.</param>
-        /// <param name="dtype">Its dtype.</param>
-        /// <remarks>
-        ///     Used only for conversions into or out of float16, where ToArray's scalar routes disagree with astype on
-        ///     signalling NaNs (see <see cref="Conversion_SignallingNaNIntoOrOutOfFloat16_StaysSignallingOnEveryRoute"/>).
-        /// </remarks>
-        private static void QuietSignallingNaNs(NDArray a, NPTypeCode dtype)
-        {
-            Span<byte> bytes = a.Unsafe.Bytes();
-            switch (dtype)
-            {
-                case NPTypeCode.Half:
-                    foreach (ref ushort h in MemoryMarshal.Cast<byte, ushort>(bytes))
-                        // Exponent all ones, a non-zero significand, the quiet bit (the significand's top bit) clear.
-                        if ((h & 0x7C00) == 0x7C00 && (h & 0x03FF) != 0 && (h & 0x0200) == 0)
-                            h |= 0x0200;
-                    break;
-                case NPTypeCode.Single:
-                    foreach (ref uint u in MemoryMarshal.Cast<byte, uint>(bytes))
-                        if ((u & 0x7F80_0000) == 0x7F80_0000 && (u & 0x007F_FFFF) != 0 && (u & 0x0040_0000) == 0)
-                            u |= 0x0040_0000;
-                    break;
-                case NPTypeCode.Double:
-                case NPTypeCode.Complex:
-                    // A complex is two doubles: both parts are quieted alike.
-                    foreach (ref ulong x in MemoryMarshal.Cast<byte, ulong>(bytes))
-                        if ((x & 0x7FF0_0000_0000_0000) == 0x7FF0_0000_0000_0000 && (x & 0x000F_FFFF_FFFF_FFFF) != 0
-                            && (x & 0x0008_0000_0000_0000) == 0)
-                            x |= 0x0008_0000_0000_0000;
-                    break;
-            }
         }
 
         /// <summary>
@@ -1464,7 +1488,7 @@ namespace NumSharp.Tests.Casting
         /// </summary>
         /// <param name="state">The stream's state, advanced by one step.</param>
         /// <returns>The next 64 random bits.</returns>
-        private static ulong NextBits(ref ulong state)
+        internal static ulong NextBits(ref ulong state)
         {
             ulong z = state += 0x9E3779B97F4A7C15UL;
             z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9UL;
@@ -1507,17 +1531,17 @@ namespace NumSharp.Tests.Casting
         /// <summary>float16 values from their bits.</summary>
         /// <param name="bits">The IEEE binary16 encodings.</param>
         /// <returns>The values.</returns>
-        private static Half[] Halves(params ushort[] bits) => bits.Select(BitConverter.UInt16BitsToHalf).ToArray();
+        internal static Half[] Halves(params ushort[] bits) => bits.Select(BitConverter.UInt16BitsToHalf).ToArray();
 
         /// <summary>float32 values from their bits.</summary>
         /// <param name="bits">The IEEE binary32 encodings.</param>
         /// <returns>The values.</returns>
-        private static float[] Singles(params uint[] bits) => bits.Select(BitConverter.UInt32BitsToSingle).ToArray();
+        internal static float[] Singles(params uint[] bits) => bits.Select(BitConverter.UInt32BitsToSingle).ToArray();
 
         /// <summary>float64 values from their bits.</summary>
         /// <param name="bits">The IEEE binary64 encodings.</param>
         /// <returns>The values.</returns>
-        private static double[] Doubles(params ulong[] bits) => bits.Select(BitConverter.UInt64BitsToDouble).ToArray();
+        internal static double[] Doubles(params ulong[] bits) => bits.Select(BitConverter.UInt64BitsToDouble).ToArray();
 
         /// <summary>The values repeated back to back <paramref name="times"/> times.</summary>
         /// <typeparam name="T">Element type.</typeparam>
@@ -1547,7 +1571,7 @@ namespace NumSharp.Tests.Casting
         // ============================================================================================== machinery
 
         /// <summary>The cases a catalog ran and the failures it recorded.</summary>
-        private sealed class CaseLog
+        internal sealed class CaseLog
         {
             /// <summary>Cases run so far (a failing case counts too).</summary>
             public int Cases;
@@ -1652,7 +1676,7 @@ namespace NumSharp.Tests.Casting
         }
 
         /// <summary>A body run once per element type: C# cannot pass an open generic method as a delegate.</summary>
-        private interface IElementTypeVisitor
+        internal interface IElementTypeVisitor
         {
             /// <summary>Runs the body for element type <typeparamref name="T"/>.</summary>
             /// <typeparam name="T">The CLR type of a NumSharp dtype.</typeparam>
@@ -1663,7 +1687,7 @@ namespace NumSharp.Tests.Casting
         /// <param name="dtype">One of the 15 dtypes.</param>
         /// <param name="visitor">The body to run.</param>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="dtype"/> is not one of the 15 dtypes.</exception>
-        private static void Visit(NPTypeCode dtype, IElementTypeVisitor visitor)
+        internal static void Visit(NPTypeCode dtype, IElementTypeVisitor visitor)
         {
             switch (dtype)
             {

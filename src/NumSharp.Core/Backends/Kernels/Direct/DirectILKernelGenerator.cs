@@ -638,6 +638,30 @@ namespace NumSharp.Backends.Kernels
                 .First(m => m.Name == "op_Explicit" && m.ReturnType == typeof(float) && m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType == typeof(Half));
             public static readonly MethodInfo FloatToHalf = typeof(Half).GetMethods(BindingFlags.Public | BindingFlags.Static)
                 .First(m => m.Name == "op_Explicit" && m.ReturnType == typeof(Half) && m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType == typeof(float));
+
+            // NumPy-exact float16 / uint64 conversions (Converts.NumPyFloatRules.cs) for the conversion emitter
+            // (EmitConvertTo / EmitHalfOrComplexConversion) — which every IL kernel uses to convert an operand to its
+            // loop dtype (the scalar cast kernels, mixed-dtype binary ops, np.evaluate, polynomial evaluation,
+            // reductions) — and for the uint64 -> float64 operand widenings. NumPy converts float16 bit by bit — a
+            // signalling NaN stays signalling, where the BCL casts above set the quiet bit, so maximum(f16, f32) returned
+            // a quieted NaN — and rounds uint64 -> float32 / float64 once, where conv.r.un + conv.r4 / conv.r8 round
+            // twice (.NET 8). The float16 ARITHMETIC paths (widen, compute, narrow) keep the BCL casts above: the
+            // arithmetic quiets a NaN anyway.
+            public static readonly MethodInfo ConvertsHalfToSingle = ConvertsOverload(nameof(Converts.ToSingle), typeof(Half));
+            public static readonly MethodInfo ConvertsHalfToDouble = ConvertsOverload(nameof(Converts.ToDouble), typeof(Half));
+            public static readonly MethodInfo ConvertsSingleToHalf = ConvertsOverload(nameof(Converts.ToHalf), typeof(float));
+            public static readonly MethodInfo ConvertsDoubleToHalf = ConvertsOverload(nameof(Converts.ToHalf), typeof(double));
+            public static readonly MethodInfo ConvertsUInt64ToSingle = ConvertsOverload(nameof(Converts.ToSingle), typeof(ulong));
+            public static readonly MethodInfo ConvertsUInt64ToDouble = ConvertsOverload(nameof(Converts.ToDouble), typeof(ulong));
+
+            /// <summary>Resolves the public one-parameter <c>Converts.{name}({parameter})</c> overload.</summary>
+            /// <param name="name">The method name (ToSingle, ToDouble, ToHalf, ...).</param>
+            /// <param name="parameter">The single parameter's type.</param>
+            /// <returns>The overload.</returns>
+            /// <exception cref="MissingMethodException">No such overload exists (fails the type's initialization, i.e. fast).</exception>
+            private static MethodInfo ConvertsOverload(string name, Type parameter) =>
+                typeof(Converts).GetMethod(name, BindingFlags.Public | BindingFlags.Static, null, new[] { parameter }, null)
+                ?? throw new MissingMethodException(typeof(Converts).FullName, $"{name}({parameter.Name})");
             // float.Exp2 == the CRT exp2f NumPy's HALF_exp2 loop calls (npy_exp2f). Used ONLY on the
             // Half path: it is the correctly-rounded software 2^x, byte-identical to NumPy's half loop
             // (finite AND NaN payload). The float32-array path uses NDFloatMath.Exp2 (the fast SIMD
@@ -1170,11 +1194,25 @@ namespace NumSharp.Backends.Kernels
                     il.Emit(IsUnsigned(from) ? OpCodes.Conv_U8 : OpCodes.Conv_I8);
                     break;
                 case NPTypeCode.Single:
+                    // uint64 -> float32 rounds ONCE, like NumPy's C cast: conv.r.un + conv.r4 go through float64 and
+                    // round twice for many values past 2^53 (.NET 8's own ulong -> float does the same).
+                    if (from == NPTypeCode.UInt64)
+                    {
+                        il.EmitCall(OpCodes.Call, CachedMethods.ConvertsUInt64ToSingle, null);
+                        break;
+                    }
                     if (IsUnsigned(from))
                         il.Emit(OpCodes.Conv_R_Un);
                     il.Emit(OpCodes.Conv_R4);
                     break;
                 case NPTypeCode.Double:
+                    // uint64 -> float64 rounds ONCE, like NumPy's C cast: .NET 8 converts a value >= 2^63 as signed
+                    // and adds 2^64, which rounds twice.
+                    if (from == NPTypeCode.UInt64)
+                    {
+                        il.EmitCall(OpCodes.Call, CachedMethods.ConvertsUInt64ToDouble, null);
+                        break;
+                    }
                     if (IsUnsigned(from))
                         il.Emit(OpCodes.Conv_R_Un);
                     il.Emit(OpCodes.Conv_R8);
@@ -1312,13 +1350,32 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Emit Half or Complex type conversions (require method calls).
         /// </summary>
+        /// <param name="il">The IL stream; the source value is on the evaluation stack.</param>
+        /// <param name="from">The source type (Half or Complex, or any type when <paramref name="to"/> is one).</param>
+        /// <param name="to">The target type.</param>
+        /// <exception cref="NotSupportedException">Neither side is Half nor Complex.</exception>
+        /// <remarks>
+        /// A float16 crosses with NumPy's bit rules (npy_halfbits_to_floatbits / _to_doublebits,
+        /// npy_floatbits_to_halfbits / npy_doublebits_to_halfbits), through the NumPy-exact <see cref="Converts"/>
+        /// overloads: a signalling NaN stays signalling. float16 &lt;-&gt; float32 converts DIRECTLY — going through a
+        /// double would quiet the NaN in the float32 &lt;-&gt; float64 hop.
+        /// </remarks>
         private static void EmitHalfOrComplexConversion(ILGenerator il, NPTypeCode from, NPTypeCode to)
         {
             // Half -> other: convert Half to double first, then to target
             if (from == NPTypeCode.Half)
             {
-                // Half.op_Explicit(Half) -> double (use cached method to avoid ambiguous match)
-                il.EmitCall(OpCodes.Call, CachedMethods.HalfToDouble, null);
+                // float16 -> float32 DIRECTLY (npy_halfbits_to_floatbits): the double route's narrowing would quiet a
+                // signalling NaN.
+                if (to == NPTypeCode.Single)
+                {
+                    il.EmitCall(OpCodes.Call, CachedMethods.ConvertsHalfToSingle, null);
+                    return;
+                }
+
+                // float16 -> float64 with NumPy's NaN rule (npy_halfbits_to_doublebits; the BCL cast quiets). Every
+                // float16 is exact in a double, so it is a lossless intermediate for every other target.
+                il.EmitCall(OpCodes.Call, CachedMethods.ConvertsHalfToDouble, null);
 
                 if (to == NPTypeCode.Double)
                     return;  // Already double
@@ -1347,14 +1404,21 @@ namespace NumSharp.Backends.Kernels
             // other -> Half: convert to double first, then to Half
             if (to == NPTypeCode.Half)
             {
-                // First convert source to double
-                if (from != NPTypeCode.Double && from != NPTypeCode.Single)
-                    EmitConvertTo(il, from, NPTypeCode.Double);
-                else if (from == NPTypeCode.Single)
-                    il.Emit(OpCodes.Conv_R8);  // float to double
+                // float32 -> float16 DIRECTLY (npy_floatbits_to_halfbits): widening to float64 first would quiet a
+                // signalling NaN (and keep a different slice of its payload).
+                if (from == NPTypeCode.Single)
+                {
+                    il.EmitCall(OpCodes.Call, CachedMethods.ConvertsSingleToHalf, null);
+                    return;
+                }
 
-                // double -> Half via explicit cast (use cached method to avoid ambiguous match)
-                il.EmitCall(OpCodes.Call, CachedMethods.DoubleToHalf, null);
+                // First convert source to double
+                if (from != NPTypeCode.Double)
+                    EmitConvertTo(il, from, NPTypeCode.Double);
+
+                // double -> Half, rounded once to nearest-even, with NumPy's NaN rule (npy_doublebits_to_halfbits;
+                // the BCL cast quiets a signalling NaN and turns a payload lost in the narrowing into 0x7E00, not 0x7C01)
+                il.EmitCall(OpCodes.Call, CachedMethods.ConvertsDoubleToHalf, null);
                 return;
             }
 

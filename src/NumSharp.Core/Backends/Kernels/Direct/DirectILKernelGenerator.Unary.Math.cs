@@ -441,10 +441,19 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Convert stack value to double.
         /// </summary>
+        /// <param name="il">The IL stream.</param>
+        /// <param name="from">The integer or float type of the value on the evaluation stack.</param>
+        /// <remarks>A uint64 rounds ONCE, like NumPy's C cast (conv.r.un + conv.r8 round twice from 2^63 on under .NET 8).</remarks>
         private static void EmitConvertToDouble(ILGenerator il, NPTypeCode from)
         {
             if (from == NPTypeCode.Double)
                 return;
+
+            if (from == NPTypeCode.UInt64)
+            {
+                il.EmitCall(OpCodes.Call, CachedMethods.ConvertsUInt64ToDouble, null);
+                return;
+            }
 
             if (IsUnsigned(from))
                 il.Emit(OpCodes.Conv_R_Un);
