@@ -4,7 +4,6 @@
     public class NpRandomChoiceTests : TestClass
     {
         [TestMethod]
-        [OpenBugs] // BUG: default(Shape) handling causes "index < Count" error
         public void UniformOneSample()
         {
             // Generate a uniform random sample from np.arange(5) of size 1:
@@ -20,13 +19,12 @@
             // Verify that all elements in output are within the range
             for (int i = 0; i < actual.size; i++)
             {
-                Assert.IsTrue(actual.GetInt64(i) >= low, "Element was less than expected");
-                Assert.IsTrue(actual.GetInt64(i) < high, "Element was greater than expected");
+                Assert.IsTrue(System.Convert.ToInt64(actual.GetAtIndex(i)) >= low, "Element was less than expected");
+                Assert.IsTrue(System.Convert.ToInt64(actual.GetAtIndex(i)) < high, "Element was greater than expected");
             }
         }
 
         [TestMethod]
-        [OpenBugs] // BUG: default(Shape) handling causes "index < Count" error
         public void UniformMultipleSample()
         {
             // Generate a uniform random sample from np.arange(5) of size 3:
@@ -42,8 +40,8 @@
             // Verify that all elements in output are within the range
             for (int i = 0; i < actual.size; i++)
             {
-                Assert.IsTrue(actual.GetInt64(i) >= low, "Element was less than expected");
-                Assert.IsTrue(actual.GetInt64(i) < high, "Element was greater than expected");
+                Assert.IsTrue(System.Convert.ToInt64(actual.GetAtIndex(i)) >= low, "Element was less than expected");
+                Assert.IsTrue(System.Convert.ToInt64(actual.GetAtIndex(i)) < high, "Element was greater than expected");
             }
         }
 
@@ -63,28 +61,40 @@
             // Verify that all elements in output are within the range
             for (int i = 0; i < actual.size; i++)
             {
-                Assert.IsTrue(actual.GetInt64(i) >= low, "Element was less than expected");
-                Assert.IsTrue(actual.GetInt64(i) < high, "Element was greater than expected");
-                Assert.IsTrue(actual.GetInt64(i) != 1, "Sampled zero-probability element");
-                Assert.IsTrue(actual.GetInt64(i) != 4, "Sampled zero-probability element");
+                Assert.IsTrue(System.Convert.ToInt64(actual.GetAtIndex(i)) >= low, "Element was less than expected");
+                Assert.IsTrue(System.Convert.ToInt64(actual.GetAtIndex(i)) < high, "Element was greater than expected");
+                Assert.IsTrue(System.Convert.ToInt64(actual.GetAtIndex(i)) != 1, "Sampled zero-probability element");
+                Assert.IsTrue(System.Convert.ToInt64(actual.GetAtIndex(i)) != 4, "Sampled zero-probability element");
             }
         }
 
         [TestMethod]
-        [OpenBugs] // Choice without replacement not implemented yet
         public void UniformSampleWithoutReplace()
         {
+            // replace=False draws distinct members of arange(5) (NumPy: permutation(5)[:3]).
             NDArray actual = np.random.choice(5, (Shape)3, replace: false);
-            Assert.Fail("Not implemented");
+            Assert.AreEqual(3, actual.size, "Unexpected number of elements");
+            var seen = new System.Collections.Generic.HashSet<long>();
+            for (int i = 0; i < actual.size; i++)
+            {
+                long v = System.Convert.ToInt64(actual.GetAtIndex(i));
+                Assert.IsTrue(v >= 0 && v < 5, "Element out of range");
+                Assert.IsTrue(seen.Add(v), "Duplicate element without replacement");
+            }
         }
 
         [TestMethod]
-        [OpenBugs] // Choice without replacement not implemented yet
         public void NonUniformSampleWithoutReplace()
         {
+            // Exactly three non-zero probabilities and three samples without replacement: the draw must be
+            // {0, 2, 3} in some order, never a zero-probability member.
             double[] probabilities = new double[] {0.1, 0, 0.3, 0.6, 0};
             NDArray actual = np.random.choice(5, (Shape)3, replace: false, p: probabilities);
-            Assert.Fail("Not implemented");
+            Assert.AreEqual(3, actual.size, "Unexpected number of elements");
+            var got = new System.Collections.Generic.HashSet<long>();
+            for (int i = 0; i < actual.size; i++)
+                got.Add(System.Convert.ToInt64(actual.GetAtIndex(i)));
+            Assert.IsTrue(got.SetEquals(new long[] { 0, 2, 3 }), "Expected exactly the three non-zero-probability members");
         }
 
         [TestMethod]
@@ -113,7 +123,7 @@
             int nrSamples = 5;
 
             NDArray int_arr = new int[] {42, 96, 3, 101};
-            double[] probabilities = new double[] {0.5, 0.1, 0.0, 0.3};
+            double[] probabilities = new double[] {0.5, 0.2, 0.0, 0.3};
 
             NDArray actual = np.random.choice(int_arr, (Shape)nrSamples, p: probabilities);
 

@@ -47,7 +47,7 @@ namespace NumSharp
             bool popExceedsInt64 = false;
             if (aIsScalarPop)
             {
-                popSize = ScalarPopulation(a, out popExceedsInt64);
+                popSize = ScalarPopulation(a, "a must be a sequence or an integer, not <class 'numpy.ndarray'>", out popExceedsInt64);
                 if (!popExceedsInt64 && popSize <= 0 && count != 0)
                     throw new ValueError("a must be a positive integer unless no samples are taken");
             }
@@ -68,7 +68,7 @@ namespace NumSharp
             // ---- p validation (NumPy's order: len(p), atol, cast, ndim, size, NaN, sign, sum) ----
             double[] pw = null;
             if (p is not null)
-                pw = ValidateChoiceProbabilities(p, popSize);
+                pw = ValidateChoiceProbabilities(p, popSize, legacyMessages: false);
 
             NDArray idx;
             lock (_bitGenerator.@lock)
@@ -137,12 +137,15 @@ namespace NumSharp
         ///     NumPy's <c>pop_size = operator.index(a.item())</c> for a 0-d population.
         /// </summary>
         /// <param name="a">The 0-d population array.</param>
+        /// <param name="nonIntegerMessage">The ValueError text for a non-integer scalar — the Generator's
+        /// (<c>a must be a sequence or an integer, not &lt;class 'numpy.ndarray'&gt;</c>) and the legacy RandomState's
+        /// (<c>a must be 1-dimensional or an integer</c>) differ.</param>
         /// <param name="exceedsInt64">Set when a uint64 population lies above <see cref="long.MaxValue"/> (NumPy keeps the
         /// Python int; the caller reproduces the error NumPy then raises on each sampling path).</param>
         /// <returns>The population size (bool counts as the integer 0/1, as in Python).</returns>
         /// <exception cref="ValueError">The scalar is not an integer (float, complex, decimal): <c>operator.index</c>
         /// raises <c>TypeError</c>, which NumPy re-raises as this ValueError naming the argument's type.</exception>
-        private static long ScalarPopulation(NDArray a, out bool exceedsInt64)
+        internal static long ScalarPopulation(NDArray a, string nonIntegerMessage, out bool exceedsInt64)
         {
             exceedsInt64 = false;
             switch (a.typecode)
@@ -163,8 +166,8 @@ namespace NumSharp
                     exceedsInt64 = u > long.MaxValue;
                     return exceedsInt64 ? long.MaxValue : (long)u;
                 default:
-                    // NumSharp only ever passes an ndarray here, so NumPy's message names numpy.ndarray.
-                    throw new ValueError("a must be a sequence or an integer, not <class 'numpy.ndarray'>");
+                    // NumSharp only ever passes an ndarray here, so the Generator's message names numpy.ndarray.
+                    throw new ValueError(nonIntegerMessage);
             }
         }
 
@@ -173,6 +176,8 @@ namespace NumSharp
         /// </summary>
         /// <param name="p">The user's probabilities.</param>
         /// <param name="popSize">The population size they must match.</param>
+        /// <param name="legacyMessages">True for the legacy RandomState wording (<c>'p' must be 1-dimensional</c>,
+        /// <c>'a' and 'p' must have same size</c>, lower-case <c>probabilities …</c>, no docstring pointer).</param>
         /// <returns>The probabilities converted to float64 (a private copy the weighted paths may modify).</returns>
         /// <exception cref="TypeError"><paramref name="p"/> is 0-d (<c>len() of unsized object</c>).</exception>
         /// <exception cref="ValueError">Not 1-D, wrong size, NaN sum, a negative entry, or a sum farther than the tolerance from 1.</exception>
@@ -181,7 +186,7 @@ namespace NumSharp
         ///     floating <paramref name="p"/> (float32: ~3.45e-4, float16: 0.03125) — so probabilities normalized in
         ///     single or half precision are accepted. The sum is NumPy's Kahan (compensated) sum, not a plain one.
         /// </remarks>
-        private static unsafe double[] ValidateChoiceProbabilities(NDArray p, long popSize)
+        internal static unsafe double[] ValidateChoiceProbabilities(NDArray p, long popSize, bool legacyMessages)
         {
             // d = len(p): a 0-d array has no length.
             if (p.ndim == 0)
@@ -197,9 +202,9 @@ namespace NumSharp
             }
 
             if (p.ndim != 1)
-                throw new ValueError("p must be 1-dimensional");
+                throw new ValueError(legacyMessages ? "'p' must be 1-dimensional" : "p must be 1-dimensional");
             if (p.size != popSize)
-                throw new ValueError("a and p must have same size");
+                throw new ValueError(legacyMessages ? "'a' and 'p' must have same size" : "a and p must have same size");
 
             using var pd = p.astype(np.float64);
             var pw = new double[pd.size];
@@ -209,12 +214,14 @@ namespace NumSharp
 
             double pSum = KahanSum(pw);
             if (double.IsNaN(pSum))
-                throw new ValueError("Probabilities contain NaN");
+                throw new ValueError(legacyMessages ? "probabilities contain NaN" : "Probabilities contain NaN");
             foreach (double v in pw)
                 if (v < 0)
-                    throw new ValueError("Probabilities are not non-negative");
+                    throw new ValueError(legacyMessages ? "probabilities are not non-negative" : "Probabilities are not non-negative");
             if (Math.Abs(pSum - 1.0) > atol)
-                throw new ValueError("Probabilities do not sum to 1. See Notes section of docstring for more information.");
+                throw new ValueError(legacyMessages
+                    ? "probabilities do not sum to 1"
+                    : "Probabilities do not sum to 1. See Notes section of docstring for more information.");
             return pw;
         }
 
@@ -396,34 +403,13 @@ namespace NumSharp
         /// <summary>numpy random_bounded_uint64(bitgen, off=0, rng, mask=0, use_masked=0) — the scalar Lemire draw.</summary>
         /// <param name="rng">The closed-interval range.</param>
         /// <returns>A value in <c>[0, rng]</c>.</returns>
+        /// <remarks>The caller holds the bit generator's lock.</remarks>
         private ulong BoundedUInt64Scalar(ulong rng)
-        {
-            if (rng == 0)
-                return 0;
-            if (rng <= 0xFFFFFFFFUL)
-            {
-                if (rng == 0xFFFFFFFFUL)
-                    return _bitGenerator.NextUInt32();
-                return LemireUint32((uint)rng);
-            }
-            if (rng == 0xFFFFFFFFFFFFFFFFUL)
-                return _bitGenerator.NextUInt64();
-            return LemireUint64(rng);
-        }
+            => BoundedIntegers.RandomBoundedUInt64(_bitGenerator, 0, rng, 0, useMasked: false);
 
         /// <summary>NumPy's <c>_gen_mask</c>: the smallest all-ones bit mask covering <paramref name="max"/>.</summary>
         /// <param name="max">The value to cover.</param>
         /// <returns>The mask.</returns>
-        private static ulong GenMask(ulong max)
-        {
-            ulong mask = max;
-            mask |= mask >> 1;
-            mask |= mask >> 2;
-            mask |= mask >> 4;
-            mask |= mask >> 8;
-            mask |= mask >> 16;
-            mask |= mask >> 32;
-            return mask;
-        }
+        private static ulong GenMask(ulong max) => BoundedIntegers.GenMask(max);
     }
 }

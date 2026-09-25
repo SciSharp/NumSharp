@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 
 namespace NumSharp
 {
@@ -6,7 +6,15 @@ namespace NumSharp
     ///     A class that serves as numpy.random.RandomState in python.
     ///     Uses MT19937 (Mersenne Twister) for NumPy-compatible random number generation.
     /// </summary>
-    /// <remarks>https://numpy.org/doc/stable/reference/random/index.html</remarks>
+    /// <remarks>
+    ///     https://numpy.org/doc/stable/reference/random/index.html
+    ///     <para>
+    ///     Seeding follows NumPy's RandomState: an unseeded instance draws 128 bits of OS entropy through
+    ///     <see cref="SeedSequence"/> (NumPy's <c>MT19937()</c>), while <c>RandomState(seed)</c> /
+    ///     <c>seed(seed)</c> use MT19937's legacy integer/array initializers (<see cref="MT19937._legacy_seeding(long)"/>),
+    ///     so seeded streams are byte-identical to NumPy's legacy streams.
+    ///     </para>
+    /// </remarks>
     [ModuleName("np.random")]
     public partial class NumPyRandom
     {
@@ -22,26 +30,46 @@ namespace NumSharp
         private bool _hasGauss;
         private double _gaussCache;
 
+        /// <summary>The last explicit integer seed (NumSharp bookkeeping; not part of NumPy's API).</summary>
         public int Seed { get; set; }
 
         #region Constructors
 
+        /// <summary>Wraps an existing MT19937 bit generator (NumPy's <c>RandomState(bit_generator)</c>).</summary>
+        /// <param name="bitGenerator">The engine; draws advance ITS state.</param>
         protected internal NumPyRandom(MT19937 bitGenerator)
         {
             this.randomizer = bitGenerator;
         }
 
+        /// <summary>Creates a RandomState restored from a legacy state tuple.</summary>
+        /// <param name="nativeRandomState">The state to restore (key, position and Gaussian cache).</param>
+        /// <exception cref="ArgumentException">The key is not 624 words long.</exception>
         protected internal NumPyRandom(NativeRandomState nativeRandomState)
         {
             set_state(nativeRandomState);
         }
 
+        /// <summary>Creates a RandomState with the legacy integer seeding (NumPy's <c>RandomState(seed)</c>).</summary>
+        /// <param name="seed">The seed, in <c>[0, 2**32 - 1]</c>.</param>
+        /// <exception cref="ValueError"><paramref name="seed"/> is negative (<c>Seed must be between 0 and 2**32 - 1</c>).</exception>
         protected internal NumPyRandom(int seed)
         {
+            if (seed < 0)
+                throw new ValueError("Seed must be between 0 and 2**32 - 1");
             Seed = seed;
-            randomizer = new MT19937(seed);
+            randomizer = MT19937.LegacySeeded((uint)seed);
         }
 
+        /// <summary>
+        ///     Creates a RandomState seeded from fresh OS entropy (NumPy's <c>RandomState()</c>: an
+        ///     <c>MT19937()</c> seeded through <see cref="SeedSequence"/>, so its state has <c>key[0] = 0x80000000</c>
+        ///     and <c>pos = 623</c>).
+        /// </summary>
+        /// <remarks>
+        ///     Two instances created back to back are independent — the previous clock-tick seeding gave
+        ///     identical streams to instances created within the same millisecond.
+        /// </remarks>
         protected internal NumPyRandom()
         {
             randomizer = new MT19937();
@@ -55,6 +83,7 @@ namespace NumSharp
         ///     Returns a random sample from the standard normal distribution (mean=0, std=1).
         ///     Uses the polar method (Marsaglia) matching NumPy's legacy RandomState exactly.
         /// </summary>
+        /// <returns>A standard normal draw (the second of each generated pair is cached and returned next).</returns>
         /// <remarks>
         ///     NumPy's legacy RandomState uses the polar method (not Box-Muller) with caching.
         ///     The polar method generates two uniform values in [-1,1], rejects if outside unit circle,
@@ -97,30 +126,50 @@ namespace NumSharp
         #region RandomState
 
         /// <summary>
-        ///     Returns a new instance of <see cref="NumPyRandom"/>.
+        ///     Returns a new <see cref="NumPyRandom"/> seeded from fresh OS entropy (NumPy's <c>RandomState()</c>).
         /// </summary>
+        /// <returns>An independently seeded legacy generator.</returns>
         public NumPyRandom RandomState()
         {
             return new NumPyRandom();
         }
 
         /// <summary>
-        ///     Returns a new instance of <see cref="NumPyRandom"/>.
+        ///     Returns a new <see cref="NumPyRandom"/> with the legacy integer seeding (NumPy's <c>RandomState(seed)</c>).
         /// </summary>
+        /// <param name="seed">The seed, in <c>[0, 2**31 - 1]</c> for this overload.</param>
+        /// <returns>A legacy generator whose stream matches <c>np.random.RandomState(seed)</c>.</returns>
+        /// <exception cref="ValueError"><paramref name="seed"/> is negative.</exception>
         public NumPyRandom RandomState(int seed)
         {
             return new NumPyRandom(seed);
         }
 
         /// <summary>
-        ///     Returns a new instance of <see cref="NumPyRandom"/>.
+        ///     Returns a new <see cref="NumPyRandom"/> restored from a legacy state tuple.
         /// </summary>
+        /// <param name="state">The state (key, position and Gaussian cache).</param>
+        /// <returns>A legacy generator continuing from <paramref name="state"/>.</returns>
+        /// <exception cref="ArgumentException">The key is not 624 words long.</exception>
         public NumPyRandom RandomState(NativeRandomState state)
         {
             return new NumPyRandom(state);
         }
 
         #endregion
+
+        /// <summary>
+        ///     Re-seeds from fresh OS entropy (NumPy's <c>seed()</c> / <c>seed(None)</c>).
+        /// </summary>
+        /// <remarks>
+        ///     NumPy's <c>_legacy_seeding(None)</c> fills the key from a new <see cref="SeedSequence"/> and LEAVES the
+        ///     position where it was (observable through <see cref="get_state"/>); the Gaussian cache is cleared.
+        /// </remarks>
+        public void seed()
+        {
+            randomizer._legacy_seeding();
+            ResetGauss();
+        }
 
         /// <summary>
         ///     Seeds the generator with a uint value (full NumPy range).
@@ -134,10 +183,8 @@ namespace NumSharp
         public void seed(uint seed)
         {
             Seed = (int)seed;
-            randomizer = new MT19937(seed);
-            // Clear Gaussian cache on reseed (NumPy behavior)
-            _hasGauss = false;
-            _gaussCache = 0.0;
+            randomizer._legacy_seeding(seed);
+            ResetGauss();
         }
 
         /// <summary>
@@ -184,20 +231,43 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Seeds the generator with an array of uint values.
-        ///     Matches NumPy's init_by_array seeding.
+        ///     Seeds the generator with an array of uint values (NumPy's <c>init_by_array</c> seeding).
         /// </summary>
-        /// <param name="seed">Array of seed values.</param>
+        /// <param name="seed">The key words (non-empty).</param>
+        /// <exception cref="ValueError"><paramref name="seed"/> is null or empty (<c>Seed must be non-empty</c> — it used to seed 0 silently).</exception>
         public void seed(uint[] seed)
         {
-            if (seed == null || seed.Length == 0)
-            {
-                this.seed(0u);
-                return;
-            }
+            randomizer._legacy_seeding(seed);
             Seed = (int)seed[0];
-            randomizer = new MT19937();
-            randomizer.SeedByArray(seed);
+            ResetGauss();
+        }
+
+        /// <summary>
+        ///     Seeds the generator with an array of integers (NumPy's <c>seed([...])</c>): each element must lie in
+        ///     <c>[0, 2**32 - 1]</c>.
+        /// </summary>
+        /// <param name="seed">The key words (non-empty).</param>
+        /// <exception cref="ValueError">Empty (<c>Seed must be non-empty</c>) or an element out of range (<c>Seed must be between 0 and 2**32 - 1</c>).</exception>
+        public void seed(long[] seed) => this.seed(MT19937.ValidateLegacyArray(seed));
+
+        /// <summary>
+        ///     Seeds the generator with an array of integers (NumPy's <c>seed([...])</c>): each element must be non-negative.
+        /// </summary>
+        /// <param name="seed">The key words (non-empty).</param>
+        /// <exception cref="ValueError">Empty (<c>Seed must be non-empty</c>) or a negative element (<c>Seed must be between 0 and 2**32 - 1</c>).</exception>
+        public void seed(int[] seed)
+        {
+            if (seed is null || seed.Length == 0)
+                throw new ValueError("Seed must be non-empty");
+            var words = new long[seed.Length];
+            for (int i = 0; i < seed.Length; i++)
+                words[i] = seed[i];
+            this.seed(words);
+        }
+
+        /// <summary>Clears the cached Gaussian (NumPy's <c>_reset_gauss</c>) — every re-seed does this.</summary>
+        private void ResetGauss()
+        {
             _hasGauss = false;
             _gaussCache = 0.0;
         }
@@ -207,17 +277,21 @@ namespace NumSharp
         ///     For use if one has reason to manually (re-)set the internal state of the pseudo-random number generating algorithm.
         /// </summary>
         /// <param name="state">The state to restore onto this <see cref="NumPyRandom"/></param>
+        /// <exception cref="ArgumentException">The key is not 624 words long.</exception>
         public void set_state(NativeRandomState state)
         {
             if (state.Key == null || state.Key.Length != 624)
                 throw new ArgumentException("Invalid state: key array must be length 624");
 
             if (randomizer == null)
-                randomizer = new MT19937();
+                randomizer = MT19937.LegacySeeded(0);
 
-            randomizer.SetState(state.Key, state.Pos);
-            _hasGauss = state.HasGauss != 0;
-            _gaussCache = state.CachedGaussian;
+            lock (randomizer.@lock)
+            {
+                randomizer.SetState(state.Key, state.Pos);
+                _hasGauss = state.HasGauss != 0;
+                _gaussCache = state.CachedGaussian;
+            }
         }
 
         /// <summary>
@@ -226,12 +300,15 @@ namespace NumSharp
         /// <returns>The current state, including Gaussian cache.</returns>
         public NativeRandomState get_state()
         {
-            return new NativeRandomState(
-                key: (uint[])randomizer.Key.Clone(),
-                pos: randomizer.Pos,
-                hasGauss: _hasGauss ? 1 : 0,
-                cachedGaussian: _gaussCache
-            );
+            lock (randomizer.@lock)
+            {
+                return new NativeRandomState(
+                    key: randomizer.Key,
+                    pos: randomizer.Pos,
+                    hasGauss: _hasGauss ? 1 : 0,
+                    cachedGaussian: _gaussCache
+                );
+            }
         }
     }
 }

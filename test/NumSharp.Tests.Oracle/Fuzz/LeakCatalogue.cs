@@ -557,38 +557,26 @@ namespace NumSharp.Tests.Fuzz
             E(l, "Generator.ToString", "repr", f => f.Rng.ToString());
             E(l, "Generator.permuted", "axis copy", f => f.Rng.permuted(f.M, 1));
 
-            // ---- SeedSequence / MT19937 (managed state only — must read zero pool traffic) ----
+            // ---- SeedSequence / bit generators (managed state; random_raw allocates only its result) ----
             E(l, "SeedSequence.generate_state", "uint32 words", f => new SeedSequence(5).generate_state(4));
-            E(l, "MT19937.Clone", "copy", f => new MT19937(3).Clone());
-            E(l, "MT19937.Next", "bounded", f => Box(new MT19937(3).Next(10) + new MT19937(3).Next(2, 9)));
-            E(l, "MT19937.NextBytes", "buffer", f =>
+            E(l, "BitGenerator.random_raw", "scalar + output=False", f =>
             {
-                var b = new byte[8];
-                new MT19937(3).NextBytes(b);
-                return b;
+                BitGenerator g = new PCG64(3);
+                g.random_raw(output: false);
+                return g.random_raw();
             });
-            E(l, "MT19937.NextDouble", "draw", f => Box(new MT19937(3).NextDouble()));
-            E(l, "MT19937.NextInt", "draw", f => Box(new MT19937(3).NextInt()));
-            E(l, "MT19937.NextLong", "bounded", f => Box(new MT19937(3).NextLong(1L, 100L)));
-            E(l, "MT19937.NextLongNumPy", "range", f => Box(new MT19937(3).NextLongNumPy(0L, 50L)));
-            E(l, "MT19937.NextUInt32", "draw", f => Box(new MT19937(3).NextUInt32()));
-            E(l, "MT19937.Seed", "reseed", f =>
+            E(l, "PCG64.random_raw", "sized", f => new PCG64(3).random_raw(new Shape(8)));
+            E(l, "MT19937.random_raw", "sized", f => new MT19937(3).random_raw(new Shape(8)));
+            E(l, "MT19937.jumped", "one 2**128 jump", f => Box(new MT19937(3).jumped().state.pos));
+            E(l, "MT19937._legacy_seeding", "int + array + None", f =>
             {
                 var g = new MT19937(3);
-                g.Seed(11u);
-                return Box(g.NextUInt32());
-            });
-            E(l, "MT19937.SeedByArray", "key", f =>
-            {
-                var g = new MT19937(3);
-                g.SeedByArray(new uint[] { 1, 2, 3 });
-                return Box(g.NextUInt32());
-            });
-            E(l, "MT19937.SetState", "key+pos", f =>
-            {
-                var g = new MT19937(3);
-                g.SetState(new uint[624], 624);
-                return Box(g.NextUInt32());
+                g._legacy_seeding(11);
+                g._legacy_seeding(new uint[] { 1, 2, 3 });
+                g._legacy_seeding(new long[] { 4, 5 });
+                g._legacy_seeding(new[] { 6, 7 });
+                g._legacy_seeding();
+                return Box(g.state.pos);
             });
 
             // ---- np.nditer's NDIterator ----

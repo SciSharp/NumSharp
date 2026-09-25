@@ -199,9 +199,20 @@ particular specification revision with NumPy API aliases and became stale.
 NumSharp implements both NumPy random APIs:
 
 - The legacy `np.random`/`RandomState` surface uses MT19937, including NumPy-compatible state,
-  array seeding, cached Gaussian state, and legacy distribution algorithms.
+  array seeding, cached Gaussian state, and legacy distribution algorithms (`randint`'s masked
+  per-dtype sampler, `shuffle`/`permutation`/`choice` with the legacy messages and `np.long` dtype).
+  An unseeded `RandomState()` draws OS entropy through `SeedSequence`, as NumPy's does.
 - `np.random.default_rng(seed)` returns a `Generator` backed by `PCG64` and `SeedSequence`, with the
   modern ziggurat and bounded-integer algorithms used by NumPy 2.4.2.
+- `MT19937` and `PCG64` are `BitGenerator`s with NumPy's surface — `random_raw`, `state` (typed
+  `MT19937.State` / `PCG64.State`), `seed_seq`, `lock` — so `new Generator(new MT19937(seed))` works
+  like `np.random.Generator(np.random.MT19937(seed))`. As in NumPy, `new MT19937(42)` seeds through
+  `SeedSequence`; the legacy stream of `RandomState(42)` is `mt._legacy_seeding(42)`.
+  `MT19937.jumped(n)` advances a copy by `n * 2**128` draws with NumPy's jump polynomial.
+- Every `Generator` draw holds the bit generator's `lock`, so one generator (or several over the same
+  bit generator) can be shared between threads: each call consumes a contiguous piece of the one
+  stream. (The legacy `RandomState` takes the lock in `randint`, `shuffle`, `choice` and the state
+  accessors; its other distribution methods do not yet.)
 
 The familiar legacy example matches NumPy:
 

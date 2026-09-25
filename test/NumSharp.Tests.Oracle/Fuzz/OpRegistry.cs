@@ -954,8 +954,15 @@ namespace NumSharp.Tests.Fuzz
                     return arr;
                 }
                 case "choice":
-                    return random.choice((int)A(0), S(), true,
-                        p.TryGetValue("p", out var pw) ? ParseDoubleArray(pw) : null);
+                {
+                    // choice takes p as an NDArray: build it here and dispose it after the draw (choice reads it,
+                    // never retains it) — passing the double[] directly would let the implicit conversion's array
+                    // escape to the finalizer, which the leak gates attribute to this op.
+                    NDArray pv = p.TryGetValue("p", out var pw) ? np.array(ParseDoubleArray(pw)) : null;
+                    var result = random.choice((int)A(0), S(), true, pv);
+                    pv?.Dispose();
+                    return result;
+                }
 
                 // ---- host-libm: transform / rejection samplers ----
                 case "normal": return random.normal(A(0), A(1), S());

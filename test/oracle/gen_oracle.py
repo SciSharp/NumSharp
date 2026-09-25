@@ -7045,13 +7045,14 @@ _RND_DRAWS2 = {"uniform", "randint", "normal", "standard_gamma", "poisson"}
 # scoped R1 registry envelope (8 ULP; 32 for wald).
 #
 # int-output samplers: legacy RandomState returns C long — int32 on win-amd64, int64 on
-# Linux — while NumSharp fixes int64 (the Linux-NumPy shape). The corpus records these
-# WIDENED to int64 so the VALUE stream stays hard-gated and the dtype policy is
-# documented here rather than silently failing per-host. Two exceptions, both matching
-# win-amd64 NumPy unwidened: randint (NumSharp defaults int32) and PLAIN choice —
-# NumSharp's choice returns int32 without `p` but int64 WITH `p` (an internal
-# inconsistency worth its own fix; the with-p cases are widened so their values gate).
-_RND_INT64_CAST = {"permutation", "poisson", "zipf", "logseries", "hypergeometric", "geometric"}
+# Linux — while NumSharp's remaining legacy int samplers fix int64 (the Linux-NumPy shape).
+# The corpus records THOSE widened to int64 so the VALUE stream stays hard-gated and the
+# dtype policy is documented here rather than silently failing per-host. randint,
+# permutation and choice (with or without `p`) are recorded UNWIDENED — NumSharp returns
+# NumPy's win-amd64 C-long (int32) for all of them since the 2026-09-25 legacy-RandomState
+# alignment (permutation used to be int64 and weighted choice int64 while plain choice was
+# int32 — the inconsistency this tier used to paper over by widening).
+_RND_INT64_CAST = {"poisson", "zipf", "logseries", "hypergeometric", "geometric"}
 
 
 def gen_random_parity():
@@ -7062,7 +7063,7 @@ def gen_random_parity():
     def emit(into, dist, params, r):
         nonlocal n
         r = np.asarray(r)
-        if dist in _RND_INT64_CAST or (dist == "choice" and "p" in params):
+        if dist in _RND_INT64_CAST:
             r = r.astype(np.int64)   # widen C-long (int32 here) to NumSharp's fixed int64 — see above
         into.append({
             "id": f"rnd/{dist}/seed{params['seed']}/{n}",

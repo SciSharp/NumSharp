@@ -1,51 +1,182 @@
 namespace NumSharp
 {
     /// <summary>
-    ///     Base class for the pseudo-random bit generators that drive <see cref="Generator"/>.
+    ///     Base class for the pseudo-random bit generators that drive <see cref="Generator"/> and the legacy
+    ///     <see cref="NumPyRandom"/> (<c>RandomState</c>).
     /// </summary>
     /// <remarks>
-    ///     Mirrors NumPy 2.4.2's <c>numpy.random.BitGenerator</c>: a source of uniform 64-/32-bit
-    ///     words plus the <c>[0,1)</c> float conversions the distribution kernels are built on.
-    ///     <see cref="PCG64"/> is the concrete implementation used by <c>np.random.default_rng</c>.
-    ///     The per-draw primitives (<c>NextUInt64</c> …) are the internal engine contract — NumPy
-    ///     exposes only <c>random_raw</c> / <c>state</c> publicly — so they are <c>internal</c> and
-    ///     the public surface stays NumPy-cased.
+    ///     Mirrors NumPy 2.4.2's <c>numpy.random.BitGenerator</c> (<c>bit_generator.pyx</c>): a source of uniform
+    ///     64-/32-bit words plus the <c>[0,1)</c> float conversions the distribution kernels are built on, with
+    ///     NumPy's public surface — <see cref="random_raw"/>, <see cref="state"/>, <see cref="seed_seq"/> and
+    ///     <see cref="@lock"/>. The per-draw primitives (<c>NextUInt64</c> …) are the internal engine contract
+    ///     (NumPy's <c>bitgen_t</c> function pointers), so they are <c>internal</c> and the public surface stays
+    ///     NumPy-cased. Concrete generators: <see cref="PCG64"/> (the <c>default_rng</c> default) and
+    ///     <see cref="MT19937"/> (the legacy RandomState's engine).
     /// </remarks>
     public abstract class BitGenerator
     {
+        /// <summary>
+        ///     The seed sequence this bit generator was seeded from, or null once it was re-seeded in a way that
+        ///     discards it (NumPy's <c>MT19937._legacy_seeding</c> sets <c>_seed_seq = None</c>).
+        /// </summary>
+        private protected SeedSequence _seedSeq;
+
+        /// <summary>Initializes the shared state of a bit generator.</summary>
+        /// <param name="seedSeq">The seed sequence the subclass seeds itself from (null for a generator seeded without one).</param>
+        private protected BitGenerator(SeedSequence seedSeq)
+        {
+            _seedSeq = seedSeq;
+        }
+
         /// <summary>
         ///     The lock every draw from this bit generator holds (NumPy's <c>BitGenerator.lock</c>).
         /// </summary>
         /// <remarks>
         ///     A <see cref="Generator"/> holds this monitor for the whole of a fill, exactly as NumPy's
         ///     <c>with self.lock:</c> does. The engine state (PCG64's two 128-bit words plus its buffered
-        ///     32-bit half) is updated non-atomically, so two threads drawing at once tear it and emit values
-        ///     that belong to no seed's stream — measured at 72–99% foreign values for four threads before
-        ///     the lock existed. Generators built over the SAME bit generator share this object, so their
-        ///     draws serialize together, as NumPy's <c>Generator.lock = bit_generator.lock</c> makes them.
-        ///     The monitor is re-entrant (like NumPy's <c>RLock</c>), so a draw that goes through another
-        ///     public method (e.g. <c>choice</c> calling <c>integers</c>) re-acquires it without deadlock.
-        ///     Code that calls the internal primitives directly must hold it too.
+        ///     32-bit half, MT19937's 624-word key and position) is updated non-atomically, so two threads drawing
+        ///     at once tear it and emit values that belong to no seed's stream — measured at 72–99% foreign values
+        ///     for four threads before the lock existed. Generators built over the SAME bit generator share this
+        ///     object, so their draws serialize together, as NumPy's <c>Generator.lock = bit_generator.lock</c> makes
+        ///     them. The monitor is re-entrant (like NumPy's <c>RLock</c>), so a draw that goes through another
+        ///     public method (e.g. <c>choice</c> calling <c>integers</c>) re-acquires it without deadlock. Code that
+        ///     calls the internal primitives directly must hold it too.
         /// </remarks>
         public object @lock { get; } = new object();
 
-        /// <summary>The next uniform 64-bit word.</summary>
+        /// <summary>
+        ///     The seed sequence used to initialize the bit generator (NumPy's <c>BitGenerator.seed_seq</c>).
+        /// </summary>
+        /// <remarks>
+        ///     Null for a bit generator re-seeded with <see cref="MT19937._legacy_seeding()"/> (NumPy then reports
+        ///     <c>None</c> too). A <c>jumped()</c> copy carries a FRESH OS-entropy sequence, as NumPy's
+        ///     <c>self.__class__()</c> construction gives it — not the parent's.
+        /// </remarks>
+        public SeedSequence seed_seq => _seedSeq;
+
+        /// <summary>
+        ///     Gets or sets the bit generator's state (NumPy's <c>bit_generator.state</c> dict, as a typed
+        ///     <see cref="BitGeneratorState"/> whose members are named after the dict's keys).
+        /// </summary>
+        /// <remarks>
+        ///     The getter returns a fresh snapshot; setting it copies the snapshot's values in, so a snapshot can be
+        ///     restored any number of times. Each concrete generator also exposes a typed <c>state</c> property of
+        ///     its own state class. Reading or writing holds <see cref="@lock"/>.
+        /// </remarks>
+        /// <exception cref="TypeError">Setting null (NumPy: <c>state must be a dict</c>).</exception>
+        /// <exception cref="ValueError">Setting another generator's state (NumPy: <c>state must be for a &lt;name&gt; RNG/PRNG</c>).</exception>
+        public BitGeneratorState state
+        {
+            get
+            {
+                lock (@lock)
+                    return GetStateCore();
+            }
+            set
+            {
+                if (value is null)
+                    throw new TypeError("state must be a dict");
+                lock (@lock)
+                    SetStateCore(value);
+            }
+        }
+
+        /// <summary>Snapshots the engine state.</summary>
+        /// <returns>A fresh state object of the concrete generator's state type.</returns>
+        private protected abstract BitGeneratorState GetStateCore();
+
+        /// <summary>Restores the engine state from a snapshot (validated against this generator's type).</summary>
+        /// <param name="value">The non-null snapshot.</param>
+        /// <exception cref="ValueError">The snapshot belongs to another bit generator type.</exception>
+        private protected abstract void SetStateCore(BitGeneratorState value);
+
+        /// <summary>
+        ///     Return randoms as generated by the underlying bit generator (NumPy's <c>BitGenerator.random_raw</c>).
+        /// </summary>
+        /// <param name="size">Output shape; default (NumPy's <c>None</c>) returns a single value as a 0-d array.</param>
+        /// <param name="output">When false the draws are made but discarded and null is returned (NumPy's benchmark switch).</param>
+        /// <returns>
+        ///     The raw words as <c>uint64</c> — a 0-d array for <c>size=None</c>, else an array of <paramref name="size"/>;
+        ///     null when <paramref name="output"/> is false. Every raw value is widened to 64 bits irrespective of the
+        ///     number of bits the engine produces (MT19937's raw words are 32-bit).
+        /// </returns>
+        /// <exception cref="ValueError"><paramref name="size"/> has a negative dimension (with <paramref name="output"/> true).</exception>
+        /// <exception cref="TypeError"><paramref name="size"/> is <c>()</c> with <paramref name="output"/> false — NumPy sums an empty
+        /// float array and cannot use the float as a count.</exception>
+        /// <remarks>
+        ///     With <paramref name="output"/> false NumPy draws <c>np.asarray(size).sum()</c> values — the SUM of the
+        ///     dimensions, not their product (<c>(3, 4)</c> draws 7, <c>(0, 3)</c> draws 3, <c>-1</c> draws none). That
+        ///     quirk decides how far the stream advances, so it is reproduced. The whole call holds <see cref="@lock"/>.
+        /// </remarks>
+        public unsafe NDArray random_raw(Shape size = default, bool output = true)
+        {
+            lock (@lock)
+            {
+                if (!output)
+                {
+                    if (size.IsEmpty)
+                    {
+                        NextRaw();
+                        return null;
+                    }
+                    if (size.NDim == 0)
+                        throw new TypeError("'numpy.float64' object cannot be interpreted as an integer");
+                    long n = 0;
+                    foreach (long d in size.dimensions)
+                        n += d;
+                    for (long i = 0; i < n; i++)
+                        NextRaw();
+                    return null;
+                }
+
+                if (size.IsEmpty)
+                    return NDArray.Scalar(NextRaw());
+
+                var ret = new NDArray(typeof(ulong), size, false);
+                long count = ret.size;
+                var p = (ulong*)ret.Address;
+                for (long i = 0; i < count; i++)
+                    p[i] = NextRaw();
+                return ret;
+            }
+        }
+
+        /// <summary>The next uniform 64-bit word (NumPy's <c>next_uint64</c>).</summary>
         /// <returns>A uniformly distributed 64-bit value; advances the engine state.</returns>
         internal abstract ulong NextUInt64();
 
-        /// <summary>The next uniform 32-bit word.</summary>
+        /// <summary>The next uniform 32-bit word (NumPy's <c>next_uint32</c>).</summary>
         /// <returns>A uniformly distributed 32-bit value; advances (or consumes a buffered half of) the engine state.</returns>
         internal abstract uint NextUInt32();
 
         /// <summary>A random double in <c>[0, 1)</c> with 53-bit precision (NumPy's <c>next_double</c>).</summary>
-        /// <returns>The top 53 bits of one 64-bit word scaled by <c>2**-53</c>.</returns>
+        /// <returns>The top 53 bits of one 64-bit word scaled by <c>2**-53</c> (engines with their own formula override).</returns>
         internal virtual double NextDouble() => (NextUInt64() >> 11) * (1.0 / 9007199254740992.0);
 
         /// <summary>A random float in <c>[0, 1)</c> with 24-bit precision (NumPy's <c>next_float</c>).</summary>
         /// <returns>The top 24 bits of one 32-bit word scaled by <c>2**-24</c>.</returns>
         internal virtual float NextFloat() => (NextUInt32() >> 8) * (1.0f / 16777216.0f);
 
-        /// <summary>The bit generator's name, e.g. <c>"PCG64"</c>. Drives <c>Generator</c>'s repr.</summary>
+        /// <summary>The engine's raw output word (NumPy's <c>next_raw</c>), widened to 64 bits.</summary>
+        /// <returns>A full 64-bit word for 64-bit engines; the 32-bit word for MT19937.</returns>
+        internal virtual ulong NextRaw() => NextUInt64();
+
+        /// <summary>The bit generator's class name, e.g. <c>"PCG64"</c>. Drives <c>Generator</c>'s repr and the state checks.</summary>
         internal abstract string Name { get; }
+    }
+
+    /// <summary>
+    ///     A snapshot of a bit generator's state — the typed stand-in for NumPy's <c>bit_generator.state</c> dict.
+    /// </summary>
+    /// <remarks>
+    ///     Each concrete generator has its own state class (<see cref="PCG64.State"/>, <see cref="MT19937.State"/>)
+    ///     whose members are named after NumPy's dict keys; the nested <c>'state'</c> sub-dict is flattened into the
+    ///     same object. Snapshots are plain mutable data: build one, edit one, or assign one back through
+    ///     <see cref="BitGenerator.state"/>.
+    /// </remarks>
+    public abstract class BitGeneratorState
+    {
+        /// <summary>NumPy's <c>'bit_generator'</c> key: the name of the bit generator class this state belongs to.</summary>
+        public abstract string bit_generator { get; }
     }
 }

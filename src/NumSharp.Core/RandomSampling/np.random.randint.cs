@@ -1,8 +1,4 @@
 using System;
-using System.Numerics;
-using NumSharp.Backends;
-using NumSharp.Backends.Unmanaged;
-using NumSharp.Utilities;
 
 namespace NumSharp
 {
@@ -12,113 +8,41 @@ namespace NumSharp
         ///     Return random integers from the "discrete uniform" distribution in the half-open interval [low, high).
         /// </summary>
         /// <param name="low">Lowest (signed) integer to be drawn from the distribution (unless high is not provided, in which case this parameter is one above the highest such integer).</param>
-        /// <param name="high">If provided, one above the largest (signed) integer to be drawn from the distribution. If not provided (-1), results are from [0, low).</param>
+        /// <param name="high">If provided, one above the largest (signed) integer to be drawn from the distribution. If null (NumPy's <c>None</c>), results are from [0, low).</param>
         /// <param name="size">Output shape. If None, a single value is returned.</param>
-        /// <param name="dtype">Desired dtype of the result. Default is np.int32.</param>
+        /// <param name="dtype">Desired dtype of the result. Default is NumPy's <c>'l'</c> (C long), which is int32 on the win-amd64 reference build.</param>
         /// <returns>Random integers from the appropriate distribution, or a single such random int if size not provided.</returns>
+        /// <exception cref="TypeError"><paramref name="dtype"/> is not an integer/bool dtype (<c>Unsupported dtype dtype('float64') for randint</c>).</exception>
+        /// <exception cref="ValueError">The bounds fall outside the dtype (<c>low/high is out of bounds for &lt;dtype&gt;</c>) or the interval is empty (<c>low &gt;= high</c>; <c>high &lt;= 0</c> for the one-argument form).</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.randint.html
+        ///     <br/>
+        ///     NumPy's legacy sampler — masked rejection (<c>use_masked=True</c>), NOT the Generator's Lemire — with
+        ///     the per-dtype stream consumption (8/16-bit dtypes and bool split one 32-bit word; a range that fits
+        ///     32 bits uses 32-bit draws even when the bounds need 64), so every dtype is byte-identical to
+        ///     <c>np.random.RandomState(seed).randint(...)</c>. <c>high=-1</c> is a real bound (NumPy's
+        ///     <c>randint(-10, -1)</c>); only null means "high omitted". A non-native byte order is drawn as the
+        ///     native dtype (NumPy only warns). A zero-size request returns an empty array before the bounds are
+        ///     checked. Holds the bit generator's lock for the fill.
         /// </remarks>
-        public NDArray randint(long low, long high = -1, Shape size = default, DType dtype = null)
-        {
-            dtype ??= DType.Int32;
-            var typecode = dtype.GetTypeCode();
-            if (high == -1)
-            {
-                high = low;
-                low = 0;
-            }
-
-            // Validate bounds against dtype (NumPy behavior)
-            ValidateRandintBounds(low, high, typecode);
-
-            // Determine if we need int64 range
-            bool needsLongRange = high > int.MaxValue || low < int.MinValue || (high - low) > int.MaxValue;
-
-            if (size.IsEmpty || size.IsScalar)
-            {
-                var value = needsLongRange
-                    ? randomizer.NextLong(low, high)
-                    : randomizer.Next((int)low, (int)high);
-                return NDArray.Scalar(value, typecode);
-            }
-
-            var nd = new NDArray(dtype, size);
-
-            if (needsLongRange)
-            {
-                // Use NextLong for large ranges
-                FillRandintLong(nd, low, high, typecode);
-            }
-            else
-            {
-                // Use Next for int32 ranges (faster)
-                FillRandintInt(nd, (int)low, (int)high, typecode);
-            }
-
-            return nd;
-        }
+        public NDArray randint(long low, long? high = null, Shape size = default, DType dtype = null)
+            => BoundedIntegers.Draw(randomizer, low, high.HasValue ? (Int128)high.Value : (Int128?)null, size,
+                                    dtype ?? DType.Int32, endpoint: false, useMasked: true, "randint", legacyByteOrder: true);
 
         /// <summary>
-        ///     Validates that low/high are within bounds for the specified dtype.
+        ///     Unsigned overload of <see cref="randint(long, long?, Shape, DType)"/> — the C# spelling of a bound above
+        ///     <see cref="long.MaxValue"/> (the upper half of the uint64 range, e.g. <c>randint(2**63, 2**64 - 1,
+        ///     dtype=np.uint64)</c>) and of the exclusive int64 high <c>2**63</c>.
         /// </summary>
-        private static void ValidateRandintBounds(long low, long high, NPTypeCode typecode)
-        {
-            // Get min/max for the dtype, and the max allowed high value
-            // high is exclusive, so high can be at most max+1 (but watch for overflow)
-            (long min, long max, long maxHigh) = typecode switch
-            {
-                NPTypeCode.Byte => (byte.MinValue, byte.MaxValue, byte.MaxValue + 1L),
-                NPTypeCode.Int16 => (short.MinValue, short.MaxValue, short.MaxValue + 1L),
-                NPTypeCode.UInt16 => (ushort.MinValue, ushort.MaxValue, ushort.MaxValue + 1L),
-                NPTypeCode.Int32 => (int.MinValue, int.MaxValue, (long)int.MaxValue + 1L),
-                NPTypeCode.UInt32 => (uint.MinValue, uint.MaxValue, (long)uint.MaxValue + 1L),
-                // For int64/uint64, we can't represent max+1 in long, so use long.MaxValue
-                // NumPy actually allows high up to 2^63 for int64 (which we represent as high=long.MinValue due to overflow)
-                NPTypeCode.Int64 => (long.MinValue, long.MaxValue, long.MaxValue),
-                NPTypeCode.UInt64 => (0, long.MaxValue, long.MaxValue),
-                _ => (long.MinValue, long.MaxValue, long.MaxValue)
-            };
-
-            // NumPy error: "high is out of bounds for {dtype}"
-            // For int64/uint64, we allow any valid high since we can't overflow check properly
-            if (typecode != NPTypeCode.Int64 && typecode != NPTypeCode.UInt64)
-            {
-                if (high > maxHigh)
-                    throw new ValueError("high is out of bounds for " + typecode.AsNumpyDtypeName());
-            }
-
-            // NumPy error: "low is out of bounds for {dtype}"
-            if (low < min)
-                throw new ValueError("low is out of bounds for " + typecode.AsNumpyDtypeName());
-
-            // NumPy error: "low >= high"
-            if (low >= high)
-                throw new ValueError("low >= high");
-        }
-
-        private void FillRandintInt(NDArray nd, int low, int high, NPTypeCode typecode)
-        {
-            NpFunc.Invoke(typecode, FillRandintIntDispatch<int>, nd.Array, randomizer, low, high);
-        }
-
-        private void FillRandintLong(NDArray nd, long low, long high, NPTypeCode typecode)
-        {
-            NpFunc.Invoke(typecode, FillRandintLongDispatch<int>, nd.Array, randomizer, low, high);
-        }
-
-        private static void FillRandintIntDispatch<T>(IArraySlice array, MT19937 rng, int low, int high) where T : unmanaged, INumberBase<T>
-        {
-            var data = (ArraySlice<T>)array;
-            for (long i = 0; i < data.Count; i++)
-                data[i] = T.CreateTruncating(rng.Next(low, high));
-        }
-
-        private static void FillRandintLongDispatch<T>(IArraySlice array, MT19937 rng, long low, long high) where T : unmanaged, INumberBase<T>
-        {
-            var data = (ArraySlice<T>)array;
-            for (long i = 0; i < data.Count; i++)
-                data[i] = T.CreateTruncating(rng.NextLong(low, high));
-        }
+        /// <param name="low">Lowest integer drawn (or, when <paramref name="high"/> is null, one above the highest with low = 0).</param>
+        /// <param name="high">If provided, one above the largest integer drawn.</param>
+        /// <param name="size">Output shape. If None, a single value is returned.</param>
+        /// <param name="dtype">Desired integer dtype. Default is NumPy's <c>'l'</c> (int32 on win-amd64).</param>
+        /// <returns>Random integers from the appropriate distribution, or a single such random int if size not provided.</returns>
+        /// <exception cref="TypeError"><paramref name="dtype"/> is not an integer/bool dtype.</exception>
+        /// <exception cref="ValueError">The bounds fall outside the dtype or the interval is empty.</exception>
+        public NDArray randint(ulong low, ulong? high = null, Shape size = default, DType dtype = null)
+            => BoundedIntegers.Draw(randomizer, low, high.HasValue ? (Int128)high.Value : (Int128?)null, size,
+                                    dtype ?? DType.Int32, endpoint: false, useMasked: true, "randint", legacyByteOrder: true);
     }
 }

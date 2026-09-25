@@ -95,7 +95,7 @@ public class AuditV2_CastingRandomUtilities
     //   to (low=0, high=low). This collides with the perfectly legal call
     //   np.random.randint(-10, -1, 3) which NumPy returns e.g. [-4, -7, -3].
     // -----------------------------------------------------------------------
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.31")]
+    [TestMethod]
     public void T1_31_Randint_NegativeOneHigh_TreatedAsSentinel()
     {
         np.random.seed(42);
@@ -108,7 +108,9 @@ public class AuditV2_CastingRandomUtilities
         arr.size.Should().Be(3);
         for (int i = 0; i < (int)arr.size; i++)
         {
-            long v = arr.GetInt64(i);
+            // randint's default dtype is int32 (NumPy's C long on win-amd64): read by value, not GetInt64
+            // (which would reinterpret 8 bytes of the int32 buffer).
+            long v = System.Convert.ToInt64(arr.GetAtIndex(i));
             v.Should().BeGreaterThanOrEqualTo(-10);
             v.Should().BeLessThan(-1);
         }

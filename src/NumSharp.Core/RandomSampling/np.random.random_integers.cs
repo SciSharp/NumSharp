@@ -21,18 +21,20 @@ namespace NumSharp
         ///     <paramref name="size"/>-shaped array of random integers from the closed interval
         ///     <c>[low, high]</c>, or a single such int if <paramref name="size"/> is not provided.
         /// </returns>
+        /// <exception cref="ValueError">The bounds fall outside int32 (<c>high is out of bounds for int32</c>) or the interval is empty.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.random_integers.html
         ///     <br/>
-        ///     This function is deprecated in NumPy in favour of <see cref="randint"/>. It is exactly
-        ///     <c>randint(low, high + 1, size, dtype='l')</c> — i.e. the closed interval
-        ///     <c>[low, high]</c> rather than <c>randint</c>'s half-open <c>[low, high)</c>. The result
-        ///     dtype is the C <c>long</c> (<c>np.dtype('l')</c>), which is 32-bit on the win-amd64
-        ///     reference platform, so the output is <c>int32</c> — matching NumPy 2.4.2 on Windows.
+        ///     This function is deprecated in NumPy in favour of <see cref="randint(long, long?, Shape, DType)"/>. It is
+        ///     exactly <c>randint(low, high + 1, size, dtype='l')</c> — i.e. the closed interval <c>[low, high]</c>
+        ///     rather than <c>randint</c>'s half-open <c>[low, high)</c>. The result dtype is the C <c>long</c>
+        ///     (<c>np.dtype('l')</c>), which is 32-bit on the win-amd64 reference platform, so the output is
+        ///     <c>int32</c> — matching NumPy 2.4.2 on Windows. The <c>high + 1</c> is exact (arbitrary precision, as
+        ///     NumPy's Python int), so <c>random_integers(0, 2**31)</c> is reported as out of bounds rather than wrapping.
         /// </remarks>
         public NDArray random_integers(long low, long? high = null, Shape size = default)
         {
-            long lo, hiInclusive;
+            Int128 lo, hiInclusive;
             if (high == null)
             {
                 // random_integers(low) -> [1, low]
@@ -45,34 +47,10 @@ namespace NumSharp
                 hiInclusive = high.Value;
             }
 
-            // random_integers is randint over the CLOSED interval, so the exclusive high is +1.
-            long hiExclusive = hiInclusive + 1;
-
-            // dtype='l' == C long == int32 on the win-amd64 reference build.
-            const NPTypeCode typecode = NPTypeCode.Int32;
-
-            // Reuse randint's validation (verbatim NumPy bounds errors) and fill helpers directly,
-            // bypassing randint's high == -1 "not provided" sentinel (which random_integers, having
-            // resolved both bounds, must not trigger).
-            ValidateRandintBounds(lo, hiExclusive, typecode);
-
-            bool needsLongRange = hiExclusive > int.MaxValue || lo < int.MinValue || (hiExclusive - lo) > int.MaxValue;
-
-            if (size.IsEmpty || size.IsScalar)
-            {
-                long value = needsLongRange
-                    ? randomizer.NextLong(lo, hiExclusive)
-                    : randomizer.Next((int)lo, (int)hiExclusive);
-                return NDArray.Scalar(value, typecode);
-            }
-
-            var nd = new NDArray(np.int32, size);
-            if (needsLongRange)
-                FillRandintLong(nd, lo, hiExclusive, typecode);
-            else
-                FillRandintInt(nd, (int)lo, (int)hiExclusive, typecode);
-
-            return nd;
+            // randint(low, int(high) + 1, size=size, dtype='l'): the shared masked core, with the randint name in
+            // any dtype error (dtype='l' is always supported, so that message never fires here).
+            return BoundedIntegers.Draw(randomizer, lo, hiInclusive + 1, size, DType.Int32, endpoint: false,
+                                        useMasked: true, "randint", legacyByteOrder: true);
         }
     }
 }

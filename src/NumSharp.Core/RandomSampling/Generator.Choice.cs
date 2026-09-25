@@ -5,35 +5,6 @@ namespace NumSharp
     public sealed partial class Generator
     {
         /// <summary>
-        ///     NumPy's <c>random_interval</c>: a uniform integer in <c>[0, max]</c> by mask-rejection (NOT Lemire).
-        /// </summary>
-        /// <param name="max">The inclusive upper bound.</param>
-        /// <returns>The draw (0 without consuming the stream when <paramref name="max"/> is 0).</returns>
-        /// <remarks>
-        ///     This is the sampler <c>shuffle</c>/<c>permutation</c>/<c>permuted</c> use (<c>choice</c> uses Lemire via
-        ///     <c>_shuffle_int</c>); a 32-bit word is drawn whenever <paramref name="max"/> fits 32 bits. The caller
-        ///     holds the bit generator's lock.
-        /// </remarks>
-        private ulong RandomInterval(ulong max)
-        {
-            if (max == 0)
-                return 0;
-            ulong mask = max;
-            mask |= mask >> 1;
-            mask |= mask >> 2;
-            mask |= mask >> 4;
-            mask |= mask >> 8;
-            mask |= mask >> 16;
-            mask |= mask >> 32;
-            ulong value;
-            if (max <= 0xffffffffUL)
-                while ((value = _bitGenerator.NextUInt32() & mask) > max) { }
-            else
-                while ((value = _bitGenerator.NextUInt64() & mask) > max) { }
-            return value;
-        }
-
-        /// <summary>
         ///     Modify an array in-place by shuffling its contents along the given axis.
         /// </summary>
         /// <param name="x">The writeable array to shuffle (at least 1-D).</param>
@@ -82,7 +53,7 @@ namespace NumSharp
             // byte-exact and view-agnostic.
             long[] idx;
             lock (_bitGenerator.@lock)
-                idx = FisherYatesIndices(m);
+                idx = BoundedIntegers.FisherYatesIndices(_bitGenerator, m);
             var reordered = np.take(x, np.array(idx), axis: ax);
             np.copyto(x, reordered);
         }
@@ -134,7 +105,7 @@ namespace NumSharp
 
             long[] idx;
             lock (_bitGenerator.@lock)
-                idx = FisherYatesIndices(x.shape[ax]);
+                idx = BoundedIntegers.FisherYatesIndices(_bitGenerator, x.shape[ax]);
             return np.take(x, np.array(idx), axis: ax);
         }
 
@@ -235,7 +206,6 @@ namespace NumSharp
             int itemsize = target.dtypesize;
             long axStrideBytes = target.Shape.strides[ax] * itemsize;
             byte* basePtr = target.Storage.Address + target.Shape.offset * itemsize;
-            byte* buf = stackalloc byte[16]; // widest dtype (Complex/Decimal)
 
             int nd = target.ndim;
             // The non-axis dimensions and their byte strides, in original (C) order.
@@ -252,29 +222,11 @@ namespace NumSharp
                 long baseOff = 0;
                 for (int d = 0; d < nd - 1; d++) baseOff += coord[d] * strides[d];
 
-                ShuffleRaw(basePtr + baseOff, axlen, axStrideBytes, itemsize, buf);
+                BoundedIntegers.ShuffleRaw(_bitGenerator, basePtr + baseOff, axlen, axStrideBytes, itemsize);
 
                 // C-order odometer over the non-axis dimensions (last dim fastest).
                 for (int d = nd - 2; d >= 0; d--) { if (++coord[d] < dims[d]) break; coord[d] = 0; }
             }
-        }
-
-        /// <summary>The permutation produced by an in-place Fisher–Yates (random_interval) over <c>[0, m)</c>.</summary>
-        /// <param name="m">The length of the permuted axis.</param>
-        /// <returns>The index order a sub-array swap loop would leave behind.</returns>
-        /// <remarks>Draws for every <c>i</c> (even when the draw equals <c>i</c>), as NumPy does. The caller holds the lock.</remarks>
-        private long[] FisherYatesIndices(long m)
-        {
-            var idx = new long[m];
-            for (long k = 0; k < m; k++)
-                idx[k] = k;
-            for (long i = m - 1; i >= 1; i--)
-            {
-                ulong j = RandomInterval((ulong)i);
-                if ((long)j != i)
-                    (idx[i], idx[j]) = (idx[j], idx[i]);
-            }
-            return idx;
         }
 
         /// <summary>
@@ -289,8 +241,7 @@ namespace NumSharp
             if (n <= 1)
                 return;
             int itemsize = x.dtypesize;
-            byte* buf = stackalloc byte[16]; // widest dtype (Complex/Decimal) = 16 bytes
-            ShuffleRaw(x.Storage.Address + x.Shape.offset * itemsize, n, x.Shape.strides[0] * itemsize, itemsize, buf);
+            BoundedIntegers.ShuffleRaw(_bitGenerator, x.Storage.Address + x.Shape.offset * itemsize, n, x.Shape.strides[0] * itemsize, itemsize);
         }
 
         /// <summary>
@@ -305,36 +256,7 @@ namespace NumSharp
             if (n <= 1)
                 return;
             int itemsize = contiguous.dtypesize;
-            byte* buf = stackalloc byte[16];
-            ShuffleRaw(contiguous.Storage.Address + contiguous.Shape.offset * itemsize, n, itemsize, itemsize, buf);
-        }
-
-        /// <summary>
-        ///     NumPy's <c>_shuffle_raw</c>: swap element <c>i</c> with <c>random_interval(i)</c> for
-        ///     <c>i = n-1 … 1</c>, over <paramref name="n"/> elements <paramref name="strideBytes"/> apart.
-        /// </summary>
-        /// <param name="basePtr">Address of element 0.</param>
-        /// <param name="n">Element count.</param>
-        /// <param name="strideBytes">Byte distance between consecutive elements (may be negative).</param>
-        /// <param name="itemsize">Element size in bytes (at most 16).</param>
-        /// <param name="buf">A 16-byte scratch buffer for the swap.</param>
-        /// <remarks>
-        ///     Every <c>i</c> draws, and <c>i == j</c> skips only the copy — the stream consumption is NumPy's.
-        ///     The caller holds the bit generator's lock.
-        /// </remarks>
-        private unsafe void ShuffleRaw(byte* basePtr, long n, long strideBytes, int itemsize, byte* buf)
-        {
-            for (long i = n - 1; i >= 1; i--)
-            {
-                ulong j = RandomInterval((ulong)i);
-                if ((long)j == i)
-                    continue;
-                byte* pi = basePtr + i * strideBytes;
-                byte* pj = basePtr + (long)j * strideBytes;
-                Buffer.MemoryCopy(pj, buf, 16, itemsize);
-                Buffer.MemoryCopy(pi, pj, itemsize, itemsize);
-                Buffer.MemoryCopy(buf, pi, itemsize, itemsize);
-            }
+            BoundedIntegers.ShuffleRaw(_bitGenerator, contiguous.Storage.Address + contiguous.Shape.offset * itemsize, n, itemsize, itemsize);
         }
     }
 }
