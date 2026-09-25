@@ -204,11 +204,23 @@ NumSharp implements both NumPy random APIs:
   An unseeded `RandomState()` draws OS entropy through `SeedSequence`, as NumPy's does.
 - `np.random.default_rng(seed)` returns a `Generator` backed by `PCG64` and `SeedSequence`, with the
   modern ziggurat and bounded-integer algorithms used by NumPy 2.4.2.
-- `MT19937` and `PCG64` are `BitGenerator`s with NumPy's surface — `random_raw`, `state` (typed
-  `MT19937.State` / `PCG64.State`), `seed_seq`, `lock` — so `new Generator(new MT19937(seed))` works
-  like `np.random.Generator(np.random.MT19937(seed))`. As in NumPy, `new MT19937(42)` seeds through
-  `SeedSequence`; the legacy stream of `RandomState(42)` is `mt._legacy_seeding(42)`.
+- All five NumPy bit generators exist — `PCG64`, `PCG64DXSM`, `Philox`, `SFC64` and `MT19937` — each a
+  `BitGenerator` with NumPy's surface: `random_raw`, `state` (typed `PCG64.State`, `Philox.State`, …),
+  `seed_seq`, `lock` and `spawn`, so `new Generator(new Philox(seed))` works like
+  `np.random.Generator(np.random.Philox(seed))` and reproduces its stream byte for byte. `PCG64`,
+  `PCG64DXSM` and `Philox` have `advance(delta)` (any `BigInteger`, wrapped like NumPy's `wrap_int`)
+  and `jumped(n)`; `Philox` also takes an explicit `key`/`counter` (`new Philox(key: 5)`, NumPy's
+  integer and array forms and error texts included). As in NumPy, `new MT19937(42)` seeds through
+  `SeedSequence`; the legacy stream of `RandomState(42)` is `mt._legacy_seeding(42)`, and
   `MT19937.jumped(n)` advances a copy by `n * 2**128` draws with NumPy's jump polynomial.
+- `SeedSequence` has NumPy's whole surface: `spawn(n)` (child `spawn_key`s, `n_children_spawned`),
+  `pool_size`, `pool`, `state`, `entropy` (the 128-bit OS entropy of an unseeded sequence, to log for
+  reproducibility) and NumPy's repr. `BitGenerator.spawn(n)` and `Generator.spawn(n)` derive
+  independent children from it — the recommended way to hand streams to parallel workers. Any
+  `ISeedSequence` can seed a bit generator (`SeedlessSeedSequence` included).
+- `default_rng` accepts every NumPy seed form: an integer (up to any `BigInteger`), a sequence or
+  integer array, a `SeedSequence`, a `BitGenerator` (wrapped), a `Generator` (passed through) or a
+  legacy `RandomState` (its MT19937 engine is wrapped, as `default_rng(RandomState)` does).
 - Every `Generator` draw holds the bit generator's `lock`, so one generator (or several over the same
   bit generator) can be shared between threads: each call consumes a contiguous piece of the one
   stream. (The legacy `RandomState` takes the lock in `randint`, `shuffle`, `choice` and the state
