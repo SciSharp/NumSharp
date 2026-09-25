@@ -9,6 +9,7 @@ run them outside Unity.
 |---|---|---|
 | [`UnityGravitySandbox/`](UnityGravitySandbox/) | Interactive N-body orbital-mechanics sandbox | Newtonian gravity + symplectic integration + a relativistic (1PN) correction |
 | [`UnityFallingSand/`](UnityFallingSand/) | Falling-sand / powder game (sand, water, oil, smoke, walls) | Mass-conserving cellular automaton with density stratification |
+| [`MaterialLab/`](MaterialLab/) | Real-time liquids / grains / solids simulator (standalone Windows app, FPS counter) — the falling-sand game reworked into continuum physics | MLS-MPM with a constitutive model per material (see §3d) |
 
 ---
 
@@ -150,6 +151,38 @@ dotnet run -c Release -- --bench --width 1000 --height 500   # time the step cos
 ```
 
 `--width`/`--height` set the sim size; terminal modes downscale a big grid to a readable preview.
+
+### 3d. MaterialLab — the rework into a real-time materials simulator
+
+The falling-sand game was copied and rebuilt as [`MaterialLab/`](MaterialLab/): a **hyperrealistic, real-time
+simulator of fluids, grains and solids** with an FPS counter, in a window covering **2/3 of the screen** (F11
+fullscreen). It is a standalone Windows app (raw Win32 + OpenGL 3.3 via P/Invoke, no packages) — no Unity:
+
+```bash
+dotnet run -c Release --project examples/MaterialLab/App            # the lab
+dotnet run -c Release --project examples/MaterialLab/Verification   # the 27-check physics gate
+```
+
+- **Physics.** MLS-MPM with APIC transfers and a constitutive model per material: water/oil/honey/lava
+  (equation-of-state pressure + viscosity; lava cools, thickens, and freezes into rock in water), sand
+  (Drucker–Prager), snow (Stomakhin plasticity with hardening), jelly/rubber/rock (fixed corotated), clay (von
+  Mises). Liquids take their volume from the local occupancy (J = 1/φ, walls contribute a B-spline "wall volume")
+  so a resting pool keeps its volume to the equation of state's prediction; sub-grid mixtures separate by a
+  drift flux; walls are analytic SDF shapes with CSG paint/carve.
+- **NumSharp.** Every material's physics is a list of fused `NDExpr` stages compiled once and evaluated in place
+  each substep (Δt and viscosity caps are 0-d hoisted parameters); the grid update is fused expressions over
+  strided node-lane views; a pure-NumSharp reference transfer path (`np.bincount` scatter / `np.take` gather,
+  toggled live with **T**) specifies the fused `Vector256` transfer kernels, which the gate verifies agree to
+  float rounding.
+- **Performance.** 72–208 FPS uncapped, single thread, i9-13900K, 192×108 grid (35K particles in the heaviest
+  scene); auto quality steps the grid down if a scene cannot hold 60 FPS.
+- **Validation.** Conservation, hydrostatic compression (1.6 % vs 1.3 % predicted), buoyancy ordering, a sand
+  column's collapse vs the Lube et al. (2005) laboratory scaling laws (×1.20 run-out, ×0.79 height), elastic
+  recovery vs plastic denting, walls, determinism — see [`MaterialLab/README.md`](MaterialLab/README.md) and
+  [`MaterialLab/docs/PHYSICS.md`](MaterialLab/docs/PHYSICS.md).
+- **Lessons recorded in the code:** fused trees do not share subexpressions (hoist each `Log`/`Exp` into a scratch
+  lane — sand 3.5× faster); `Hypot` is ~19× slower than `Sqrt(a²+b²)`; a `Where` branch only runs where taken;
+  occupancy-based liquids need capped fills (an over-packed cell is a compressed spring).
 
 ---
 

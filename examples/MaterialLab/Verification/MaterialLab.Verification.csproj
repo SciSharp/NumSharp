@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Standalone console gate that compiles the EXACT simulation source the Material Lab app runs
+       (../Simulation/*.cs) against NumSharp.Core and checks every physical claim the lab makes with a
+       measured invariant: transfer parity and conservation, a resting liquid keeping its volume, buoyancy
+       ordering, lava freezing, the sand repose angle, snow compaction, elastic recovery vs. plastic denting,
+       walls that hold, fills that never over-pack, determinism, and every scene running clean.
+       Exit code = number of failed checks. -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsPackable>false</IsPackable>
+    <!-- NumSharp.Core is strong-named; an unsigned console harness may reference it. -->
+    <SignAssembly>false</SignAssembly>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AssemblyName>MaterialLab.Verification</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="..\Simulation\**\*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\NumSharp.Core\NumSharp.Core.csproj" />
+  </ItemGroup>
+
+</Project>

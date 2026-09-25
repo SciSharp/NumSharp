@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The real-time front-end of the Material Lab: a Win32 window with an OpenGL 3.3 core renderer,
+       driving the NumSharp MLS-MPM engine in ../Simulation (compiled in below, exactly as the
+       Verification project compiles it). No NuGet packages — the Win32/WGL/GL bindings are
+       hand-declared P/Invokes and function pointers — so the project builds on every OS (CI) and
+       runs on Windows. -->
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsPackable>false</IsPackable>
+    <SignAssembly>false</SignAssembly>
+    <AssemblyName>MaterialLab</AssemblyName>
+    <RootNamespace>NumSharp.Examples.MaterialLab.App</RootNamespace>
+    <!-- A frame loop allocates little per frame; the concurrent workstation GC keeps pauses short. -->
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Simulation\**\*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\NumSharp.Core\NumSharp.Core.csproj" />
+  </ItemGroup>
+
+</Project>
