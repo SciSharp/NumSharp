@@ -31,8 +31,16 @@ namespace NumSharp
             RandomConstraints.Check(a, "a", ConstraintType.CONS_POSITIVE);
 
             if (IsScalarDraw(size))
-                lock (randomizer.@lock)
-                    return NDArray.Scalar(LegacyPower(a));
+            {
+                unsafe
+                {
+                    // A one-double buffer IS NumPy's per-draw call sequence.
+                    double word;
+                    var one = new DrawBufferDouble(randomizer, &word, 1);
+                    lock (randomizer.@lock)
+                        return NDArray.Scalar(LegacyPower(ref one, a));
+                }
+            }
 
             var ret = LegacyOutput(NPTypeCode.Double, size);
             unsafe
@@ -41,11 +49,12 @@ namespace NumSharp
                 long n = ret.size;
                 lock (randomizer.@lock)
                     randomizer.FillDouble(dst, n);
-                // The draws are all taken; legacy_power's transform of each, in place.
+                // The draws are all taken; legacy_power's transform of each, in place (its per-value 1.0 / a evaluated once).
+                double invA = 1.0 / a;
                 for (long i = 0; i < n; i++)
                 {
                     double e = -Math.Log(1.0 - dst[i]);
-                    dst[i] = Math.Pow(1 - Math.Exp(-e), 1.0 / a);
+                    dst[i] = Math.Pow(1 - Math.Exp(-e), invA);
                 }
             }
 

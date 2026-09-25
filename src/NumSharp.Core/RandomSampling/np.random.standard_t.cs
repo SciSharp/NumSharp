@@ -35,18 +35,35 @@ namespace NumSharp
         {
             RandomConstraints.Check(df, "df", ConstraintType.CONS_POSITIVE);
 
+            // The per-call setup NumPy recomputes for every value, evaluated once (the same expressions — bit-neutral).
+            var setup = new LegacyStandardTSetup(df);
+
             if (IsScalarDraw(size))
-                lock (randomizer.@lock)
-                    return NDArray.Scalar(LegacyStandardT(df));
+            {
+                unsafe
+                {
+                    // A one-double buffer IS NumPy's per-draw call sequence.
+                    double word;
+                    var one = new DrawBufferDouble(randomizer, &word, 1);
+                    lock (randomizer.@lock)
+                        return NDArray.Scalar(LegacyStandardT(ref one, in setup));
+                }
+            }
 
             var ret = LegacyOutput(NPTypeCode.Double, size);
             unsafe
             {
                 var dst = (double*)ret.Address;
                 long n = ret.size;
+                // Read-ahead draws (bulk-filled by the bit generator): every value draws unless df / 2 underflows to 0 (then per-draw).
+                double* storage = stackalloc double[DrawBufferDouble.Capacity];
+                var src = new DrawBufferDouble(randomizer, storage, setup.Half.Draws ? DrawBufferDouble.Capacity : 1);
                 lock (randomizer.@lock)
                     for (long i = 0; i < n; i++)
-                        dst[i] = LegacyStandardT(df);
+                    {
+                        src.Owed = n - i;
+                        dst[i] = LegacyStandardT(ref src, in setup);
+                    }
             }
 
             return ret;

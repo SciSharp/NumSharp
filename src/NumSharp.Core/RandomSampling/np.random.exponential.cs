@@ -37,8 +37,16 @@ namespace NumSharp
             RandomConstraints.Check(scale, "scale", ConstraintType.CONS_NON_NEGATIVE);
 
             if (IsScalarDraw(size))
-                lock (randomizer.@lock)
-                    return NDArray.Scalar(LegacyExponential(scale));
+            {
+                unsafe
+                {
+                    // A one-double buffer IS NumPy's per-draw call sequence.
+                    double word;
+                    var one = new DrawBufferDouble(randomizer, &word, 1);
+                    lock (randomizer.@lock)
+                        return NDArray.Scalar(LegacyExponential(ref one, scale));
+                }
+            }
 
             var ret = LegacyOutput(NPTypeCode.Double, size);
             unsafe

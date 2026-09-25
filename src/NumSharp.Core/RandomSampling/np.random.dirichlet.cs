@@ -153,6 +153,16 @@ namespace NumSharp
             var val = (double*)ret.Address;
             long totsize = ret.size;
 
+            // Each alpha's gamma setup (Marsaglia-Tsang's b and c, or Johnk's 1/alpha), which NumPy recomputes for every row,
+            // evaluated once — the same expressions, so bit-neutral.
+            var setups = new LegacyGammaSetup[k];
+            for (long j = 0; j < k; j++)
+                setups[j] = new LegacyGammaSetup(alpha[j]);
+
+            // Read-ahead draws (bulk-filled by the bit generator): every gamma draws at least once — each alpha is positive
+            // or NaN, never 0 — so the gammas still owed bound the draws still to come.
+            double* storage = stackalloc double[DrawBufferDouble.Capacity];
+            var src = new DrawBufferDouble(randomizer, storage, DrawBufferDouble.Capacity);
             lock (randomizer.@lock)
             {
                 // totsize is a multiple of k (k == 0 means totsize == 0), so the row stride never overruns.
@@ -161,7 +171,8 @@ namespace NumSharp
                     double acc = 0.0;
                     for (long j = 0; j < k; j++)
                     {
-                        val[i + j] = LegacyStandardGamma(alpha[j]);
+                        src.Owed = totsize - (i + j);
+                        val[i + j] = LegacyStandardGamma(ref src, in setups[j]);
                         acc = acc + val[i + j];
                     }
                     double invacc = 1 / acc;

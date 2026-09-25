@@ -27,25 +27,44 @@ namespace NumSharp
         ///     and array shape. Note that the mean and standard deviation are not the values for
         ///     the distribution itself, but of the underlying normal distribution it is derived from.
         ///     <br/>
-        ///     NumPy's <c>legacy_lognormal</c> — <c>exp(mean + sigma * legacy_gauss)</c>, one fused loop (no intermediate
-        ///     normal array). Holds the bit generator's lock for the draws.
+        ///     NumPy's <c>legacy_lognormal</c> — <c>exp(mean + sigma * legacy_gauss)</c>, byte-identical to
+        ///     <c>np.random.RandomState(seed).lognormal</c>: the normals are drawn into the output, then exponentiated in place
+        ///     (no intermediate array; the split lets the CPU overlap the <c>exp</c> calls). Holds the bit generator's lock for
+        ///     the draws.
         /// </remarks>
         public NDArray lognormal(double mean, double sigma, Shape size)
         {
             RandomConstraints.Check(sigma, "sigma", ConstraintType.CONS_NON_NEGATIVE);
 
             if (IsScalarDraw(size))
-                lock (randomizer.@lock)
-                    return NDArray.Scalar(LegacyLognormal(mean, sigma));
+            {
+                unsafe
+                {
+                    // A one-double buffer IS NumPy's per-draw call sequence.
+                    double word;
+                    var one = new DrawBufferDouble(randomizer, &word, 1);
+                    lock (randomizer.@lock)
+                        return NDArray.Scalar(LegacyLognormal(ref one, mean, sigma));
+                }
+            }
 
             var ret = LegacyOutput(NPTypeCode.Double, size);
             unsafe
             {
                 var dst = (double*)ret.Address;
                 long n = ret.size;
+                // Read-ahead draws (bulk-filled by the bit generator), accounted in polar PAIRS inside LegacyGaussFill.
+                double* storage = stackalloc double[DrawBufferDouble.Capacity];
+                var src = new DrawBufferDouble(randomizer, storage, DrawBufferDouble.Capacity);
+                // Two passes over legacy_lognormal = exp(mean + sigma * legacy_gauss): the Gaussians first (every draw, by the
+                // two-phase polar fill), then exp(mean + sigma * g) of each in place — the same operations per value, so the
+                // same bits, but the exp pass is a branch-free run of independent calls the CPU overlaps, where the fused
+                // loop stalled each exp behind a polar rejection loop. The exp pass touches no stream state, so it runs
+                // after the lock is released.
                 lock (randomizer.@lock)
-                    for (long i = 0; i < n; i++)
-                        dst[i] = LegacyLognormal(mean, sigma);
+                    LegacyGaussFill(ref src, dst, n);
+                for (long i = 0; i < n; i++)
+                    dst[i] = System.Math.Exp(mean + sigma * dst[i]);
             }
 
             return ret;

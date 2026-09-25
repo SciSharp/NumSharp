@@ -40,18 +40,32 @@ namespace NumSharp
             RandomConstraints.Check(mean, "mean", ConstraintType.CONS_POSITIVE);
             RandomConstraints.Check(scale, "scale", ConstraintType.CONS_POSITIVE);
 
+            // The per-call setup NumPy recomputes for every value, evaluated once (the same expressions — bit-neutral).
+            var setup = new LegacyWaldSetup(mean, scale);
+
             if (IsScalarDraw(size))
-                lock (randomizer.@lock)
-                    return NDArray.Scalar(LegacyWald(mean, scale));
+            {
+                unsafe
+                {
+                    // A one-double buffer IS NumPy's per-draw call sequence.
+                    double word;
+                    var one = new DrawBufferDouble(randomizer, &word, 1);
+                    lock (randomizer.@lock)
+                        return NDArray.Scalar(LegacyWald(ref one, in setup));
+                }
+            }
 
             var ret = LegacyOutput(NPTypeCode.Double, size);
             unsafe
             {
                 var dst = (double*)ret.Address;
                 long n = ret.size;
+                // Read-ahead draws (bulk-filled by the bit generator), consumed by the two-phase fill (LegacyWaldFill): every
+                // value draws at least its acceptance uniform.
+                double* storage = stackalloc double[DrawBufferDouble.Capacity];
+                var src = new DrawBufferDouble(randomizer, storage, DrawBufferDouble.Capacity);
                 lock (randomizer.@lock)
-                    for (long i = 0; i < n; i++)
-                        dst[i] = LegacyWald(mean, scale);
+                    LegacyWaldFill(ref src, dst, n, in setup);
             }
 
             return ret;

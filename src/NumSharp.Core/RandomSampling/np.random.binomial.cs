@@ -45,17 +45,31 @@ namespace NumSharp
             RandomConstraints.Check(n, "n", ConstraintType.LEGACY_CONS_NON_NEGATIVE_INBOUNDS_LONG);
 
             if (IsScalarDraw(size))
-                lock (randomizer.@lock)
-                    return NDArray.Scalar(LegacyBinomial(p, n));
+            {
+                unsafe
+                {
+                    // A one-double buffer IS NumPy's per-draw call sequence.
+                    double word;
+                    var one = new DrawBufferDouble(randomizer, &word, 1);
+                    lock (randomizer.@lock)
+                        return NDArray.Scalar(LegacyBinomial(ref one, p, n));
+                }
+            }
 
             var ret = LegacyOutput(NPTypeCode.Int64, size);
             unsafe
             {
                 var dst = (long*)ret.Address;
                 long count = ret.size;
+                // Read-ahead draws (bulk-filled by the bit generator): every value draws at least one uniform (the legacy sampler has no n == 0 / p == 0 shortcut).
+                double* storage = stackalloc double[DrawBufferDouble.Capacity];
+                var src = new DrawBufferDouble(randomizer, storage, DrawBufferDouble.Capacity);
                 lock (randomizer.@lock)
                     for (long i = 0; i < count; i++)
-                        dst[i] = LegacyBinomial(p, n);
+                    {
+                        src.Owed = count - i;
+                        dst[i] = LegacyBinomial(ref src, p, n);
+                    }
             }
 
             return ret;

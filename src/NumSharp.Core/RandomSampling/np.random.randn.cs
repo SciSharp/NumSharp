@@ -73,17 +73,30 @@ namespace NumSharp
             RandomConstraints.Check(scale, "scale", ConstraintType.CONS_NON_NEGATIVE);
 
             if (IsScalarDraw(size))
-                lock (randomizer.@lock)
-                    return NDArray.Scalar(LegacyNormal(loc, scale));
+            {
+                unsafe
+                {
+                    // A one-double buffer IS NumPy's per-draw call sequence.
+                    double word;
+                    var one = new DrawBufferDouble(randomizer, &word, 1);
+                    lock (randomizer.@lock)
+                        return NDArray.Scalar(LegacyNormal(ref one, loc, scale));
+                }
+            }
 
             var ret = LegacyOutput(NPTypeCode.Double, size);
             unsafe
             {
                 var dst = (double*)ret.Address;
                 long n = ret.size;
+                // Read-ahead draws (bulk-filled by the bit generator), consumed by the two-phase polar fill (LegacyGaussFill);
+                // then legacy_normal's loc + scale * g of each, in place — the same expression, so the same bits.
+                double* storage = stackalloc double[DrawBufferDouble.Capacity];
+                var src = new DrawBufferDouble(randomizer, storage, DrawBufferDouble.Capacity);
                 lock (randomizer.@lock)
-                    for (long i = 0; i < n; i++)
-                        dst[i] = loc + scale * NextGaussian();
+                    LegacyGaussFill(ref src, dst, n);
+                for (long i = 0; i < n; i++)
+                    dst[i] = loc + scale * dst[i];
             }
 
             return ret;
@@ -110,17 +123,27 @@ namespace NumSharp
         public NDArray standard_normal(Shape size)
         {
             if (IsScalarDraw(size))
-                lock (randomizer.@lock)
-                    return NDArray.Scalar(NextGaussian());
+            {
+                unsafe
+                {
+                    // A one-double buffer IS NumPy's per-draw call sequence.
+                    double word;
+                    var one = new DrawBufferDouble(randomizer, &word, 1);
+                    lock (randomizer.@lock)
+                        return NDArray.Scalar(LegacyGauss(ref one));
+                }
+            }
 
             var ret = LegacyOutput(NPTypeCode.Double, size);
             unsafe
             {
                 var dst = (double*)ret.Address;
                 long n = ret.size;
+                // Read-ahead draws (bulk-filled by the bit generator), consumed by the two-phase polar fill (LegacyGaussFill).
+                double* storage = stackalloc double[DrawBufferDouble.Capacity];
+                var src = new DrawBufferDouble(randomizer, storage, DrawBufferDouble.Capacity);
                 lock (randomizer.@lock)
-                    for (long i = 0; i < n; i++)
-                        dst[i] = NextGaussian();
+                    LegacyGaussFill(ref src, dst, n);
             }
 
             return ret;

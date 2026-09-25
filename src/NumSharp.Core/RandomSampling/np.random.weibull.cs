@@ -40,8 +40,16 @@ namespace NumSharp
             RandomConstraints.Check(a, "a", ConstraintType.CONS_NON_NEGATIVE);
 
             if (IsScalarDraw(size))
-                lock (randomizer.@lock)
-                    return NDArray.Scalar(LegacyWeibull(a));
+            {
+                unsafe
+                {
+                    // A one-double buffer IS NumPy's per-draw call sequence.
+                    double word;
+                    var one = new DrawBufferDouble(randomizer, &word, 1);
+                    lock (randomizer.@lock)
+                        return NDArray.Scalar(LegacyWeibull(ref one, a));
+                }
+            }
 
             if (a == 0.0)
                 return np.zeros(new Shape(size.dimensions), NPTypeCode.Double); // legacy_weibull(0) draws nothing

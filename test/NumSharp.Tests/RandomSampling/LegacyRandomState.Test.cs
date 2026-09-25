@@ -894,6 +894,398 @@ namespace NumSharp.Tests.RandomSampling
             }
         }
 
+        // ---------------------------------------------------------------- read-ahead fills == per-draw calls
+
+        /// <summary>
+        ///     The sized fills read their uniforms through a bulk-filled read-ahead buffer; the scalar path draws one at a
+        ///     time, exactly NumPy's call sequence. For every sampler — at ordinary parameters AND at every parameter where a
+        ///     value can finish without drawing (shape 0, a df/2 that underflows to 0, lam 0, an absent urn colour, NaN or
+        ///     overflowing kappa, zipf's a &gt;= 1025) — a fill of n values must equal n scalar calls value for value AND leave
+        ///     the engine (key, position) and the Gaussian cache in the same state: a read-ahead that drew one word too many
+        ///     shows up as a state mismatch even when the values agree. Sizes straddle the 256-word refill, the Gaussian cache
+        ///     starts both empty and full, and the samplers run on MT19937 and PCG64.
+        /// </summary>
+        [TestMethod]
+        public void ReadAheadFills_EqualPerDrawCalls_ValuesAndEngineState()
+        {
+            var cases = new (string name, Func<NumPyRandom, Shape, NDArray> sized, Func<NumPyRandom, NDArray> one)[]
+            {
+                ("standard_normal", (r, s) => r.standard_normal(s), r => r.standard_normal()),
+                ("normal(1,2)", (r, s) => r.normal(1.0, 2.0, s), r => r.normal(1.0, 2.0)),
+                ("lognormal(0,1)", (r, s) => r.lognormal(0.0, 1.0, s), r => r.lognormal(0.0, 1.0)),
+                ("standard_gamma(0.5)", (r, s) => r.standard_gamma(0.5, s), r => r.standard_gamma(0.5)),
+                ("standard_gamma(3)", (r, s) => r.standard_gamma(3.0, s), r => r.standard_gamma(3.0)),
+                ("standard_gamma(0)", (r, s) => r.standard_gamma(0.0, s), r => r.standard_gamma(0.0)),
+                ("gamma(0,2)", (r, s) => r.gamma(0.0, 2.0, s), r => r.gamma(0.0, 2.0)),
+                ("gamma(2.5,2)", (r, s) => r.gamma(2.5, 2.0, s), r => r.gamma(2.5, 2.0)),
+                ("beta(2,3)", (r, s) => r.beta(2.0, 3.0, s), r => r.beta(2.0, 3.0)),
+                ("beta(0.5,0.5)", (r, s) => r.beta(0.5, 0.5, s), r => r.beta(0.5, 0.5)),
+                ("chisquare(3)", (r, s) => r.chisquare(3.0, s), r => r.chisquare(3.0)),
+                ("chisquare(tiny)", (r, s) => r.chisquare(double.Epsilon, s), r => r.chisquare(double.Epsilon)),
+                ("f(5,7)", (r, s) => r.f(5.0, 7.0, s), r => r.f(5.0, 7.0)),
+                ("f(tiny,tiny)", (r, s) => r.f(double.Epsilon, double.Epsilon, s), r => r.f(double.Epsilon, double.Epsilon)),
+                ("noncentral_chisquare(3,1.5)", (r, s) => r.noncentral_chisquare(3.0, 1.5, s), r => r.noncentral_chisquare(3.0, 1.5)),
+                ("noncentral_chisquare(0.5,1.5)", (r, s) => r.noncentral_chisquare(0.5, 1.5, s), r => r.noncentral_chisquare(0.5, 1.5)),
+                ("noncentral_chisquare(tiny,tiny)", (r, s) => r.noncentral_chisquare(double.Epsilon, double.Epsilon, s),
+                    r => r.noncentral_chisquare(double.Epsilon, double.Epsilon)),
+                ("noncentral_f(5,7,1.5)", (r, s) => r.noncentral_f(5.0, 7.0, 1.5, s), r => r.noncentral_f(5.0, 7.0, 1.5)),
+                ("standard_t(3.5)", (r, s) => r.standard_t(3.5, s), r => r.standard_t(3.5)),
+                ("standard_t(tiny)", (r, s) => r.standard_t(double.Epsilon, s), r => r.standard_t(double.Epsilon)),
+                ("standard_cauchy", (r, s) => r.standard_cauchy(s), r => r.standard_cauchy()),
+                ("wald(3,2)", (r, s) => r.wald(3.0, 2.0, s), r => r.wald(3.0, 2.0)),
+                ("vonmises(0.5,2)", (r, s) => r.vonmises(0.5, 2.0, s), r => r.vonmises(0.5, 2.0)),
+                ("vonmises(0,1e-9)", (r, s) => r.vonmises(0.0, 1e-9, s), r => r.vonmises(0.0, 1e-9)),
+                ("vonmises(0,nan)", (r, s) => r.vonmises(0.0, double.NaN, s), r => r.vonmises(0.0, double.NaN)),
+                ("vonmises(0,inf)", (r, s) => r.vonmises(0.0, double.PositiveInfinity, s), r => r.vonmises(0.0, double.PositiveInfinity)),
+                ("laplace", (r, s) => r.laplace(0.0, 1.0, s), r => r.laplace(0.0, 1.0)),
+                ("gumbel", (r, s) => r.gumbel(0.5, 2.0, s), r => r.gumbel(0.5, 2.0)),
+                ("logistic", (r, s) => r.logistic(0.0, 1.0, s), r => r.logistic(0.0, 1.0)),
+                ("binomial(10,0.35)", (r, s) => r.binomial(10, 0.35, s), r => r.binomial(10, 0.35)),
+                ("binomial(100,0.4)", (r, s) => r.binomial(100, 0.4, s), r => r.binomial(100, 0.4)),
+                ("binomial(0,0.5)", (r, s) => r.binomial(0, 0.5, s), r => r.binomial(0, 0.5)),
+                ("negative_binomial(5,0.4)", (r, s) => r.negative_binomial(5.0, 0.4, s), r => r.negative_binomial(5.0, 0.4)),
+                ("poisson(3.5)", (r, s) => r.poisson(3.5, s), r => r.poisson(3.5)),
+                ("poisson(100)", (r, s) => r.poisson(100.0, s), r => r.poisson(100.0)),
+                ("poisson(0)", (r, s) => r.poisson(0.0, s), r => r.poisson(0.0)),
+                ("zipf(1.5)", (r, s) => r.zipf(1.5, s), r => r.zipf(1.5)),
+                ("zipf(2000)", (r, s) => r.zipf(2000.0, s), r => r.zipf(2000.0)),
+                ("geometric(0.35)", (r, s) => r.geometric(0.35, s), r => r.geometric(0.35)),
+                ("geometric(0.1)", (r, s) => r.geometric(0.1, s), r => r.geometric(0.1)),
+                ("hypergeometric(10,7,8)", (r, s) => r.hypergeometric(10, 7, 8, s), r => r.hypergeometric(10, 7, 8)),
+                ("hypergeometric(100,200,50)", (r, s) => r.hypergeometric(100, 200, 50, s), r => r.hypergeometric(100, 200, 50)),
+                ("hypergeometric(0,5,3)", (r, s) => r.hypergeometric(0, 5, 3, s), r => r.hypergeometric(0, 5, 3)),
+                ("logseries(0.6)", (r, s) => r.logseries(0.6, s), r => r.logseries(0.6)),
+                ("logseries(0.99)", (r, s) => r.logseries(0.99, s), r => r.logseries(0.99)),
+            };
+
+            foreach (var make in new Func<NumPyRandom>[] { () => np.random.RandomState(42), () => np.random.RandomState(new PCG64(42)) })
+            foreach (bool cachedGauss in new[] { false, true })
+            foreach (long n in new long[] { 1, 2, 3, 255, 256, 257, 1001 })
+            foreach (var (name, sized, one) in cases)
+            {
+                var bulk = make();
+                var single = make();
+                if (cachedGauss)
+                {
+                    bulk.randn();
+                    single.randn();
+                }
+
+                string where = $"{name} n={n} gaussCached={cachedGauss} {bulk._bit_generator}";
+                var fill = sized(bulk, new Shape(n));
+                for (long i = 0; i < n; i++)
+                {
+                    var v = one(single);
+                    object a = fill.GetAtIndex(i), b = v.GetAtIndex(0);
+                    if (a is double da)
+                        Assert.AreEqual(BitConverter.DoubleToInt64Bits((double)b), BitConverter.DoubleToInt64Bits(da), $"{where}: value {i}");
+                    else
+                        Assert.AreEqual(Convert.ToInt64(b), Convert.ToInt64(a), $"{where}: value {i}");
+                }
+
+                // The engine and the Gaussian cache must sit exactly where the per-draw calls left them.
+                var sb = (NumPyRandom.State)bulk.get_state(legacy: false);
+                var ss = (NumPyRandom.State)single.get_state(legacy: false);
+                Assert.AreEqual(ss.has_gauss, sb.has_gauss, $"{where}: has_gauss");
+                Assert.AreEqual(BitConverter.DoubleToInt64Bits(ss.gauss), BitConverter.DoubleToInt64Bits(sb.gauss), $"{where}: gauss");
+                if (ss.state is MT19937.State ms)
+                {
+                    var mb = (MT19937.State)sb.state;
+                    Assert.AreEqual(ms.pos, mb.pos, $"{where}: pos");
+                    CollectionAssert.AreEqual(ms.key, mb.key, $"{where}: key");
+                }
+                else
+                {
+                    var ps = (PCG64.State)ss.state;
+                    var pb = (PCG64.State)sb.state;
+                    Assert.AreEqual(ps.state, pb.state, $"{where}: pcg state");
+                    Assert.AreEqual(ps.has_uint32, pb.has_uint32, $"{where}: has_uint32");
+                }
+            }
+        }
+
+        /// <summary>
+        ///     Dirichlet rows read every gamma through one read-ahead; a fill must equal the row-by-row scalar calls and leave
+        ///     the engine in the same state.
+        /// </summary>
+        [TestMethod]
+        public void Dirichlet_ReadAhead_EqualsRowByRowCalls()
+        {
+            foreach (long rows in new long[] { 1, 2, 85, 86, 400 })
+            {
+                var bulk = np.random.RandomState(42);
+                var single = np.random.RandomState(42);
+                var fill = bulk.dirichlet(new[] { 2.0, 0.3, 5.0 }, new Shape(rows));
+                for (long r = 0; r < rows; r++)
+                {
+                    var row = single.dirichlet(new[] { 2.0, 0.3, 5.0 });
+                    for (long j = 0; j < 3; j++)
+                        Assert.AreEqual(BitConverter.DoubleToInt64Bits((double)row.GetAtIndex(j)),
+                            BitConverter.DoubleToInt64Bits((double)fill.GetAtIndex(r * 3 + j)), $"rows={rows} [{r},{j}]");
+                }
+                var sb = bulk.get_state();
+                var ss = single.get_state();
+                Assert.AreEqual(ss.Pos, sb.Pos, $"rows={rows}: pos");
+                CollectionAssert.AreEqual(ss.Key, sb.Key, $"rows={rows}: key");
+                Assert.AreEqual(ss.HasGauss, sb.HasGauss, $"rows={rows}: has_gauss");
+            }
+        }
+
+        // ---------------------------------------------------------------- per-fill setups and memos
+
+        /// <summary>
+        ///     Multi-row multinomial fills run with the binomial-setup memo installed (each row cycles through one key per
+        ///     category, on which NumPy's single-entry cache never hits); the rows must still be NumPy's — at inversion keys,
+        ///     at BTPE keys, with zero categories, and after a legacy <c>binomial</c> call has left its own <c>q^n</c> (the
+        ///     legacy <c>exp(n*log(q))</c> spelling, which differs from the modern one at this key) in the shared cache.
+        /// </summary>
+        [TestMethod]
+        public void Multinomial_MemoFills_MatchNumPy()
+        {
+            AssertValues(np.random.RandomState(42).multinomial(20, new[] { 0.2, 0.3, 0.5 }, 12),
+                "3, 10, 7, 5, 6, 9, 2, 5, 13, 1, 9, 10, 4, 7, 9, 1, 11, 8, 6, 4, 10, 2, 5, 13, 3, 6, 11, 4, 5, 11, 4, 4, 12, 3, 6, 11",
+                "multinomial(20, [.2,.3,.5], 12)");
+            AssertValues(np.random.RandomState(42).multinomial(1000, new[] { 0.25, 0.25, 0.5 }, 10),
+                "240, 255, 505, 229, 262, 509, 225, 266, 509, 253, 248, 499, 260, 267, 473, 252, 247, 501, 245, 274, 481, "
+                + "270, 222, 508, 278, 250, 472, 230, 248, 522",
+                "multinomial(1000, [.25,.25,.5], 10) (BTPE keys)");
+            AssertValues(np.random.RandomState(3).multinomial(50, new[] { 0.0, 0.1, 0.0, 0.4, 0.5 }, 9),
+                "0, 5, 0, 22, 23, 0, 4, 0, 21, 25, 0, 8, 0, 23, 19, 0, 3, 0, 18, 29, 0, 2, 0, 21, 27, 0, 1, 0, 21, 28, 0, 6, 0, "
+                + "18, 26, 0, 6, 0, 20, 24, 0, 1, 0, 22, 27",
+                "multinomial(50, [0,.1,0,.4,.5], 9) (zero categories)");
+
+            var rs = np.random.RandomState(7);
+            rs.binomial(20, 0.2); // leaves the LEGACY q^n under key (20, 0.2) — the first category's key below
+            AssertValues(rs.multinomial(20, new[] { 0.2, 0.3, 0.5 }, 10),
+                "5, 5, 10, 5, 9, 6, 4, 6, 10, 2, 5, 13, 4, 7, 9, 5, 5, 10, 1, 6, 13, 6, 4, 10, 4, 9, 7, 1, 8, 11",
+                "multinomial after a legacy binomial");
+            AssertValues(rs.binomial(20, 0.2, new Shape(4)), "7, 3, 4, 6", "binomial after the multinomial fill");
+        }
+
+        /// <summary>
+        ///     A multinomial fill (memo installed, read-ahead draws) must equal the same rows drawn one call at a time (no
+        ///     memo, per-draw — NumPy's call sequence): every count, the engine state afterwards, and the binomial cache it
+        ///     leaves behind (a legacy <c>binomial</c> drawn after the fill reuses whatever setup is current, as in NumPy). Row
+        ///     counts straddle the memo threshold; the cases cover inversion and BTPE keys, zero-probability categories, a
+        ///     single category, <c>n == 0</c>, and many-key fills that collide in the memo; each runs with and without a
+        ///     legacy-populated setup under the first category's key.
+        /// </summary>
+        [TestMethod]
+        public void Multinomial_MemoFill_EqualsRowByRowCalls()
+        {
+            var cases = new (int n, double[] p)[]
+            {
+                (20, new[] { 0.2, 0.3, 0.5 }),
+                (1000, new[] { 0.25, 0.25, 0.5 }),
+                (50, new[] { 0.0, 0.1, 0.0, 0.4, 0.5 }),
+                (7, new[] { 1.0 / 6, 1.0 / 6, 1.0 / 6, 1.0 / 6, 1.0 / 6, 1.0 / 6 }),
+                (0, new[] { 0.5, 0.5 }),
+                (30, new[] { 0.0, 0.0, 1.0 }),
+                (40, new[] { 1.0 }),
+                (100000, new[] { 0.3, 0.2, 0.1, 0.4 }),
+                (60, new[] { 0.5, 0.5 }),
+            };
+            foreach (bool legacyFirst in new[] { false, true })
+            foreach (int rows in new[] { 1, 7, 8, 9, 300 })
+            foreach (var (n, p) in cases)
+            {
+                string where = $"multinomial({n}, [{string.Join(",", p)}], {rows}) legacyFirst={legacyFirst}";
+                var bulk = np.random.RandomState(11);
+                var single = np.random.RandomState(11);
+                if (legacyFirst)
+                {
+                    bulk.binomial(n, p[0]);
+                    single.binomial(n, p[0]);
+                }
+
+                var fill = bulk.multinomial(n, p, rows);
+                for (int r = 0; r < rows; r++)
+                {
+                    var row = single.multinomial(n, p);
+                    for (int j = 0; j < p.Length; j++)
+                        Assert.AreEqual(Convert.ToInt64(row.GetAtIndex(j)), Convert.ToInt64(fill.GetAtIndex(r * p.Length + j)),
+                            $"{where}: [{r},{j}]");
+                }
+
+                var sb = bulk.get_state();
+                var ss = single.get_state();
+                Assert.AreEqual(ss.Pos, sb.Pos, $"{where}: pos");
+                CollectionAssert.AreEqual(ss.Key, sb.Key, $"{where}: key");
+
+                // The cache the fill leaves current is the one NumPy's rows leave — same key, same q^n (a legacy or a modern
+                // spelling) — and the fill's memo is gone. Values alone cannot show this: a wrong q^n differs in its last bits.
+                AssertSameBinomialCache(CurrentBinomialSetup(single), CurrentBinomialSetup(bulk), where);
+                for (int k = 0; k < 3; k++)
+                    Assert.AreEqual(Convert.ToInt64(single.binomial(n, p[0]).GetAtIndex(0)), Convert.ToInt64(bulk.binomial(n, p[0]).GetAtIndex(0)),
+                        $"{where}: binomial after the fill #{k}");
+            }
+        }
+
+        /// <summary>
+        ///     The binomial setup NumPy's single <c>binomial_t</c> would hold for <paramref name="r"/> right now (the private
+        ///     <c>_binomial</c> cache's current entry), asserting on the way that no multinomial memo outlived its fill.
+        /// </summary>
+        /// <param name="r">The generator.</param>
+        /// <returns>Its current setup.</returns>
+        private static BinomialSetup CurrentBinomialSetup(NumPyRandom r)
+        {
+            var state = (BinomialState)typeof(NumPyRandom)
+                .GetField("_binomial", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                .GetValue(r);
+            Assert.IsNull(state.Memo, "a multinomial fill's memo must be removed when the fill ends");
+            return state.Current;
+        }
+
+        /// <summary>Asserts two cached binomial setups are NumPy-identical: key, algorithm fields and <c>q^n</c>, bit for bit.</summary>
+        /// <param name="expected">The setup the per-call path leaves.</param>
+        /// <param name="actual">The setup the fill leaves.</param>
+        /// <param name="where">The case, for messages.</param>
+        private static void AssertSameBinomialCache(BinomialSetup expected, BinomialSetup actual, string where)
+        {
+            static long B(double v) => BitConverter.DoubleToInt64Bits(v);
+            Assert.AreEqual(expected.has_binomial, actual.has_binomial, $"{where}: has_binomial");
+            if (!expected.has_binomial)
+                return;
+            Assert.AreEqual(expected.nsave, actual.nsave, $"{where}: nsave");
+            Assert.AreEqual(B(expected.psave), B(actual.psave), $"{where}: psave");
+            Assert.AreEqual(B(expected.r), B(actual.r), $"{where}: r");
+            Assert.AreEqual(B(expected.q), B(actual.q), $"{where}: q");
+            Assert.AreEqual(B(expected.c), B(actual.c), $"{where}: c");
+            Assert.AreEqual(expected.m, actual.m, $"{where}: m");
+            Assert.AreEqual(B(expected.p4), B(actual.p4), $"{where}: p4");
+        }
+
+        /// <summary>
+        ///     Scalar binomial calls alternating between two inversion keys and two BTPE keys: every call repopulates the
+        ///     single cached setup, so the inversion's <c>px</c> memo and BTPE's Step50 memo must be reset with it.
+        /// </summary>
+        [TestMethod]
+        public void Binomial_AlternatingKeys_MatchNumPy()
+        {
+            var rs = np.random.RandomState(5);
+            var got = new long[24];
+            for (int k = 0; k < 12; k++)
+            {
+                got[2 * k] = Convert.ToInt64(rs.binomial(10 + (k % 3), 0.3).GetAtIndex(0));
+                got[2 * k + 1] = Convert.ToInt64(rs.binomial(200 + 7 * (k % 2), 0.45).GetAtIndex(0));
+            }
+            CollectionAssert.AreEqual(new long[] { 2, 101, 5, 97, 5, 98, 2, 85, 3, 83, 3, 99, 3, 93, 2, 99, 2, 103, 2, 91, 4, 95, 4, 86 }, got);
+        }
+
+        /// <summary>
+        ///     Long streams where the per-setup memos are exercised constantly, pinned by the SHA-256 of NumPy 2.4.2's int64
+        ///     values (<c>RandomState(2024)</c>): BTPE at <c>n = 1000</c> and <c>n = 10^6</c> (Step50's <c>F</c> memo and Step52's
+        ///     bounds memo, the latter colliding heavily at <c>10^6</c>), BTPE near its <c>n*p = 30</c> threshold, and zipf's
+        ///     <c>pow(1 + 1/X, a-1)</c> memo for a light tail (<c>a = 3</c>), a heavy one (<c>1.5</c>) and a near-1 exponent whose
+        ///     candidates mostly overflow the memo. A fill-versus-scalar differential cannot catch a wrong memo (both paths
+        ///     share it), so the truth has to be NumPy's own stream. <c>zipf(1.05)</c> is Linux NumPy's (a 64-bit C
+        ///     <c>long</c> accepts the candidates past <c>2^31</c> that win-amd64 rejects); the rest agree on both builds.
+        /// </summary>
+        /// <param name="method">The sampler.</param>
+        /// <param name="args">Its parameters.</param>
+        /// <param name="count">The fill size.</param>
+        /// <param name="sha256">The digest of NumPy's values as little-endian int64.</param>
+        [TestMethod]
+        [DataRow("binomial", "1000,0.7", 5000, "4d6b90cb7c51da03e83f89f0f6a4d3926967feab5c5a2478dc5d3c32fc173363")]
+        [DataRow("binomial", "1000000,0.3", 5000, "d9a9e3013900fc1ff6a88a5e37148ffbc085ea92e81cb94204b5593ec88f650b")]
+        [DataRow("binomial", "60,0.5", 5000, "737e1af098a18afb8bea3827cad10ca25801426140fb2a5597e0943fe0eb3b79")]
+        [DataRow("zipf", "3", 5000, "cc7cd197e2c3831fdd67693e45f3278fc055d9eafbcee54830e3c09505259fa1")]
+        [DataRow("zipf", "1.5", 5000, "81ea9fe9f2c7a1b007270b6b6841eddb7380723aaa70f45a03bc3577f7480770")]
+        [DataRow("zipf", "1.05", 3000, "7b12b8b752dd56da9983a0157e03a14d4d0502e8529cd499e631df2e8ad2801a")]
+        public void MemoizedSetups_LongStreams_MatchNumPyDigest(string method, string args, int count, string sha256)
+        {
+            var a = args.Split(',');
+            var rs = np.random.RandomState(2024);
+            NDArray drawn = method == "binomial"
+                ? rs.binomial(long.Parse(a[0], CultureInfo.InvariantCulture), ParseDouble(a[1]), new Shape(count))
+                : rs.zipf(ParseDouble(a[0]), new Shape(count));
+            var bytes = new byte[count * sizeof(long)];
+            for (int i = 0; i < count; i++)
+                BitConverter.TryWriteBytes(new Span<byte>(bytes, i * sizeof(long), sizeof(long)), Convert.ToInt64(drawn.GetAtIndex(i)));
+            string digest = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant();
+            Assert.AreEqual(sha256, digest, $"{method}({args}) x{count}");
+        }
+
+        /// <summary>
+        ///     Hypergeometric fills long enough to build a memo — HRUA's loggam-sum memo (<c>nsample &gt; 10</c>) or the urn
+        ///     walk's ratio table (<c>nsample &lt;= 10</c>) — against NumPy 2.4.2 (<c>RandomState(42)</c>, win-amd64): absent
+        ///     and scarce colours, <c>good &gt; bad</c>, <c>nsample == popsize</c> (<c>d1 == 0</c>, ratios reaching 1), and
+        ///     <c>nsample &gt; popsize / 2</c>.
+        /// </summary>
+        /// <param name="good">Good items.</param>
+        /// <param name="bad">Bad items.</param>
+        /// <param name="sample">Items drawn.</param>
+        /// <param name="expected">NumPy's values.</param>
+        [TestMethod]
+        [DataRow(10L, 7L, 8L, "5, 4, 7, 5, 4, 5, 3, 7, 5, 4, 5, 4, 6, 6, 3, 4, 7, 5, 6, 4, 5, 5, 4, 5, 3, 5, 4, 5, 4, 6, 3, 5, 5, 3, 3, 5, 5, 5, 5, 5")]
+        [DataRow(3L, 1000L, 10L, "0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0")]
+        [DataRow(1000L, 3L, 10L, "10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10")]
+        [DataRow(5L, 5L, 10L, "5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5")]
+        [DataRow(1L, 1L, 2L, "1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1")]
+        [DataRow(2L, 9L, 10L, "2, 2, 2, 2, 1, 2, 2, 2, 2, 1, 2, 1, 2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 2, 1, 1, 2, 2")]
+        [DataRow(100L, 200L, 50L, "18, 19, 15, 17, 14, 13, 14, 21, 17, 13, 16, 16, 21, 17, 13, 21, 13, 16, 18, 14, 19, 18, 13, 18, 16, 17, 17, 16, 17, 15, 21, 20, 14, 17, 15, 19, 26, 12, 19, 14")]
+        [DataRow(200L, 100L, 250L, "168, 171, 168, 161, 168, 166, 166, 167, 164, 169, 168, 169, 166, 168, 167, 165, 167, 167, 163, 162, 167, 166, 171, 167, 165, 168, 161, 171, 168, 167, 167, 165, 162, 171, 168, 170, 167, 169, 168, 171")]
+        [DataRow(1000000L, 1000000L, 5000L, "2508, 2521, 2479, 2505, 2470, 2464, 2472, 2538, 2504, 2453, 2467, 2495, 2498, 2539, 2504, 2465, 2543, 2464, 2489, 2509, 2476, 2520, 2466, 2434, 2509, 2465, 2512, 2498, 2505, 2500")]
+        [DataRow(7L, 13L, 11L, "3, 3, 4, 5, 5, 2, 4, 4, 4, 2, 4, 4, 3, 5, 3, 3, 6, 3, 4, 4, 4, 4, 4, 2, 4, 5, 4, 3, 5, 4")]
+        public void Hypergeometric_MemoFills_MatchNumPy(long good, long bad, long sample, string expected)
+        {
+            int count = expected.Split(',').Length;
+            AssertValues(np.random.RandomState(42).hypergeometric(good, bad, sample, new Shape(count)), expected,
+                $"hypergeometric({good}, {bad}, {sample}, {count})");
+        }
+
+        /// <summary>
+        ///     Populations only a 64-bit C <c>long</c> holds (NumPy's win-amd64 build rejects them), pinned against Linux NumPy
+        ///     2.4.2. The first two are the reason the urn walk's integer table is gated to <c>min(good, bad) &lt;= 2^53</c>:
+        ///     NumPy walks <c>y</c> as a DOUBLE, so above <c>2^53</c> <c>y - 1</c> rounds back to <c>y</c> and every draw is 0 —
+        ///     an exact integer walk would return about <c>sample / 2</c> instead. The third is HRUA with a candidate spread far
+        ///     wider than the loggam-sum memo, which then collides and recomputes.
+        /// </summary>
+        [TestMethod]
+        public void Hypergeometric_BeyondDoublePrecision_MatchesLinuxNumPy()
+        {
+            AssertValues(np.random.RandomState(42).hypergeometric(1L << 60, 1L << 60, 5, new Shape(20)),
+                "0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0", "hypergeometric(2**60, 2**60, 5)");
+            AssertValues(np.random.RandomState(42).hypergeometric((1L << 54) + 3, 1L << 55, 9, new Shape(20)),
+                "0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0", "hypergeometric(2**54+3, 2**55, 9)");
+            AssertValues(np.random.RandomState(42).hypergeometric(1L << 40, 3L << 40, 1L << 30, new Shape(20)),
+                "268438736, 268443881, 268427045, 268437437, 268423692, 268421115, 268424322, 268450675, 268437191, 268416822, "
+                + "268422257, 268433327, 268434494, 268450742, 268437023, 268421426, 268452630, 268421138, 268431249, 268439155",
+                "hypergeometric(2**40, 3*2**40, 2**30)");
+        }
+
+        /// <summary>
+        ///     A hypergeometric fill (setup hoisted, memo or ratio table built, read-ahead draws) must equal the same values
+        ///     drawn one scalar call at a time (NumPy's statements as written, per-draw): every value and the engine state.
+        ///     Sizes straddle the memo threshold; the cases include the <c>2^53</c> boundary of the table's integer walk from
+        ///     both sides, absent colours (no draws), <c>d1 == 0</c>, and HRUA spreads the memo does and does not cover.
+        /// </summary>
+        [TestMethod]
+        public void Hypergeometric_MemoFill_EqualsScalarCalls()
+        {
+            var cases = new (long good, long bad, long sample)[]
+            {
+                (10, 7, 8), (3, 1000, 10), (1000, 3, 10), (5, 5, 10), (1, 1, 2), (2, 9, 10), (6, 6, 1), (7, 13, 11),
+                (100, 200, 50), (200, 100, 250), (1000000, 1000000, 5000), (1L << 40, 3L << 40, 1L << 30),
+                (1L << 53, 1L << 53, 10), ((1L << 53) + 2, (1L << 53) + 2, 10), (0, 5, 3), (5, 0, 3), (0, 20, 15),
+            };
+            foreach (long size in new long[] { 1, 15, 16, 17, 400 })
+            foreach (var (good, bad, sample) in cases)
+            {
+                string where = $"hypergeometric({good}, {bad}, {sample}) size={size}";
+                var bulk = np.random.RandomState(9);
+                var single = np.random.RandomState(9);
+                var fill = bulk.hypergeometric(good, bad, sample, new Shape(size));
+                for (long i = 0; i < size; i++)
+                    Assert.AreEqual(Convert.ToInt64(single.hypergeometric(good, bad, sample).GetAtIndex(0)),
+                        Convert.ToInt64(fill.GetAtIndex(i)), $"{where}: value {i}");
+                var sb = bulk.get_state();
+                var ss = single.get_state();
+                Assert.AreEqual(ss.Pos, sb.Pos, $"{where}: pos");
+                CollectionAssert.AreEqual(ss.Key, sb.Key, $"{where}: key");
+            }
+        }
+
         // ---------------------------------------------------------------- locking
 
         /// <summary>

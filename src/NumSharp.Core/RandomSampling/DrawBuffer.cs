@@ -179,4 +179,69 @@ namespace NumSharp
             _pos = 0;
         }
     }
+    /// <summary>
+    ///     A read-ahead buffer of ready-made <c>next_double</c> draws for the samplers that consume ONLY doubles (NumPy's
+    ///     <c>distributions.c</c> / <c>legacy-distributions.c</c> rejection samplers), refilled through the engine's
+    ///     vectorized <see cref="BitGenerator.FillDouble"/> — so a read costs a load, with no per-draw conversion or virtual
+    ///     call (the <see cref="DrawBuffer64"/> route converts every unit through <see cref="BitGenerator.UnitToDouble"/>).
+    /// </summary>
+    /// <remarks>
+    ///     The no-overdraw contract is <see cref="DrawBuffer64"/>'s, counted in doubles (each <c>next_double</c> consumes
+    ///     exactly one engine unit, so doubles and units are one-to-one): before producing an output the caller sets
+    ///     <see cref="Owed"/> to a LOWER BOUND of the doubles the rest of the fill will draw, and a refill draws at most that
+    ///     many. When the fill ends the buffer is empty and the engine sits exactly where the per-draw loop leaves it. With a
+    ///     capacity of 1 the buffer IS the per-draw call sequence, which is how the scalar paths and the parameter values that
+    ///     can finish an output without drawing use it. The caller holds the bit generator's lock and provides the storage.
+    /// </remarks>
+    internal unsafe ref struct DrawBufferDouble
+    {
+        /// <summary>The draws a refill may pull at most (2 KB, L1-resident).</summary>
+        internal const int Capacity = 256;
+
+        private readonly BitGenerator _bg;
+        private readonly double* _buf;
+        private readonly int _capacity;
+        private int _pos;
+        private int _avail;
+
+        /// <summary>
+        ///     A lower bound of the doubles the fill will still draw, the current output's included — the most a refill may
+        ///     draw. Set it before each output (see the sampler's accounting); 1 behaves exactly like per-draw calls.
+        /// </summary>
+        internal long Owed;
+
+        /// <summary>Creates an empty buffer over <paramref name="bg"/>.</summary>
+        /// <param name="bg">The bit generator (lock held by the caller).</param>
+        /// <param name="storage">At least <paramref name="capacity"/> doubles of scratch.</param>
+        /// <param name="capacity">The storage size in doubles (at least 1; 1 = per-draw).</param>
+        internal DrawBufferDouble(BitGenerator bg, double* storage, int capacity)
+        {
+            _bg = bg;
+            _buf = storage;
+            _capacity = capacity;
+            _pos = 0;
+            _avail = 0;
+            Owed = 1;
+        }
+
+        /// <summary>The next <c>next_double</c> draw.</summary>
+        /// <returns>A double in <c>[0, 1)</c>, bit-identical to the engine's own <c>next_double</c>.</returns>
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        internal double NextDouble()
+        {
+            if (_pos == _avail)
+                Refill();
+            return _buf[_pos++];
+        }
+
+        /// <summary>Draws the next batch: <c>min(capacity, Owed)</c> doubles (at least one).</summary>
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        private void Refill()
+        {
+            long want = Owed < _capacity ? Owed : _capacity;
+            _avail = want < 1 ? 1 : (int)want;
+            _bg.FillDouble(_buf, _avail);
+            _pos = 0;
+        }
+    }
 }

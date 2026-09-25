@@ -43,17 +43,31 @@ namespace NumSharp
             RandomConstraints.Check(scale, "scale", ConstraintType.CONS_NON_NEGATIVE);
 
             if (IsScalarDraw(size))
-                lock (randomizer.@lock)
-                    return NDArray.Scalar(Distributions.RandomGumbel(randomizer, loc, scale));
+            {
+                unsafe
+                {
+                    // A one-double buffer IS NumPy's per-draw call sequence.
+                    double word;
+                    var one = new DrawBufferDouble(randomizer, &word, 1);
+                    lock (randomizer.@lock)
+                        return NDArray.Scalar(Distributions.RandomGumbel(ref one, loc, scale));
+                }
+            }
 
             var ret = LegacyOutput(NPTypeCode.Double, size);
             unsafe
             {
                 var dst = (double*)ret.Address;
                 long n = ret.size;
+                // Read-ahead draws (bulk-filled by the bit generator): every value draws at least one uniform.
+                double* storage = stackalloc double[DrawBufferDouble.Capacity];
+                var src = new DrawBufferDouble(randomizer, storage, DrawBufferDouble.Capacity);
                 lock (randomizer.@lock)
                     for (long i = 0; i < n; i++)
-                        dst[i] = Distributions.RandomGumbel(randomizer, loc, scale);
+                    {
+                        src.Owed = n - i;
+                        dst[i] = Distributions.RandomGumbel(ref src, loc, scale);
+                    }
             }
 
             return ret;

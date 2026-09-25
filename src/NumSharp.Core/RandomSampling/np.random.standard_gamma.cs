@@ -34,18 +34,35 @@ namespace NumSharp
         {
             RandomConstraints.Check(shape, "shape", ConstraintType.CONS_NON_NEGATIVE);
 
+            // The per-call setup NumPy recomputes for every value, evaluated once (the same expressions — bit-neutral).
+            var setup = new LegacyGammaSetup(shape);
+
             if (IsScalarDraw(size))
-                lock (randomizer.@lock)
-                    return NDArray.Scalar(LegacyStandardGamma(shape));
+            {
+                unsafe
+                {
+                    // A one-double buffer IS NumPy's per-draw call sequence.
+                    double word;
+                    var one = new DrawBufferDouble(randomizer, &word, 1);
+                    lock (randomizer.@lock)
+                        return NDArray.Scalar(LegacyStandardGamma(ref one, in setup));
+                }
+            }
 
             var ret = LegacyOutput(NPTypeCode.Double, size);
             unsafe
             {
                 var dst = (double*)ret.Address;
                 long n = ret.size;
+                // Read-ahead draws (bulk-filled by the bit generator): every value draws unless shape == 0 (then per-draw).
+                double* storage = stackalloc double[DrawBufferDouble.Capacity];
+                var src = new DrawBufferDouble(randomizer, storage, setup.Draws ? DrawBufferDouble.Capacity : 1);
                 lock (randomizer.@lock)
                     for (long i = 0; i < n; i++)
-                        dst[i] = LegacyStandardGamma(shape);
+                    {
+                        src.Owed = n - i;
+                        dst[i] = LegacyStandardGamma(ref src, in setup);
+                    }
             }
 
             return ret;

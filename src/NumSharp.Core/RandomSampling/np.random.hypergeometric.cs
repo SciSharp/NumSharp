@@ -40,21 +40,64 @@ namespace NumSharp
             RandomConstraints.Check(nsample, "nsample", ConstraintType.CONS_GTE_1);
 
             if (size is null || IsScalarDraw(size.Value))
-                lock (randomizer.@lock)
-                    return NDArray.Scalar(LegacyHypergeometric(ngood, nbad, nsample));
+            {
+                unsafe
+                {
+                    // A one-double buffer IS NumPy's per-draw call sequence.
+                    double word;
+                    var one = new DrawBufferDouble(randomizer, &word, 1);
+                    lock (randomizer.@lock)
+                        return NDArray.Scalar(LegacyHypergeometric(ref one, ngood, nbad, nsample));
+                }
+            }
 
             var ret = LegacyOutput(NPTypeCode.Int64, size.Value);
             unsafe
             {
                 var dst = (long*)ret.Address;
                 long n = ret.size;
-                lock (randomizer.@lock)
-                    for (long i = 0; i < n; i++)
-                        dst[i] = LegacyHypergeometric(ngood, nbad, nsample);
+                // Read-ahead draws (bulk-filled by the bit generator): every value draws unless nsample <= 10 and a colour is absent (the urn answer is then known — per-draw).
+                double* storage = stackalloc double[DrawBufferDouble.Capacity];
+                var src = new DrawBufferDouble(randomizer, storage, nsample > 10 || (ngood > 0 && nbad > 0) ? DrawBufferDouble.Capacity : 1);
+                if (nsample > 10)
+                {
+                    // HRUA's setup (a sqrt, four loggams) once for the fill, and — for fills long enough to repay its 16 KB —
+                    // a memo of the per-candidate loggam sums; both are bit-neutral (LegacyHruaSetup, LoggamSumMemo).
+                    var setup = new LegacyHruaSetup(ngood, nbad, nsample);
+                    var memo = n >= HypergeometricMemoMinFill ? new LoggamSumMemo() : null;
+                    lock (randomizer.@lock)
+                        for (long i = 0; i < n; i++)
+                        {
+                            src.Owed = n - i;
+                            dst[i] = LegacyHypergeometricHrua(ref src, ngood, nbad, nsample, in setup, memo);
+                        }
+                }
+                else
+                {
+                    // The urn walk over a precomputed ratio table (no division per step) when its integer walk is exact
+                    // and the fill repays the table's <= 110 divisions; otherwise NumPy's walk as written.
+                    var table = n >= HypergeometricMemoMinFill && LegacyHypTable.Applicable(ngood, nbad)
+                        ? new LegacyHypTable(ngood, nbad, nsample)
+                        : null;
+                    lock (randomizer.@lock)
+                        for (long i = 0; i < n; i++)
+                        {
+                            src.Owed = n - i;
+                            dst[i] = table != null
+                                ? LegacyHypergeometricHyp(ref src, ngood, nbad, nsample, table)
+                                : LegacyHypergeometricHyp(ref src, ngood, nbad, nsample);
+                        }
+                }
             }
 
             return ret;
         }
+
+        /// <summary>
+        ///     The smallest fill that builds a hypergeometric memo (HRUA's loggam-sum memo or the urn walk's ratio table):
+        ///     below it, building the memo costs more than the values it would speed up.
+        /// </summary>
+        private const long HypergeometricMemoMinFill = 16;
 
         /// <summary>
         ///     Draw samples from a Hypergeometric distribution.

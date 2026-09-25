@@ -43,21 +43,49 @@ namespace NumSharp
         {
             RandomConstraints.Check(a, "a", ConstraintType.CONS_GT_1);
 
+            // The per-call setup NumPy recomputes for every value, evaluated once (the same expressions — bit-neutral).
+            var setup = new LegacyZipfSetup(a);
+
             if (IsScalarDraw(size))
-                lock (randomizer.@lock)
-                    return NDArray.Scalar(LegacyZipf(a));
+            {
+                unsafe
+                {
+                    // A one-double buffer IS NumPy's per-draw call sequence.
+                    double word;
+                    var one = new DrawBufferDouble(randomizer, &word, 1);
+                    lock (randomizer.@lock)
+                        return NDArray.Scalar(LegacyZipf(ref one, in setup, null));
+                }
+            }
 
             var ret = LegacyOutput(NPTypeCode.Int64, size);
             unsafe
             {
                 var dst = (long*)ret.Address;
                 long n = ret.size;
+                // Read-ahead draws (bulk-filled by the bit generator): every value draws unless a >= 1025 (1 without drawing — per-draw).
+                double* storage = stackalloc double[DrawBufferDouble.Capacity];
+                var src = new DrawBufferDouble(randomizer, storage, setup.Draws ? DrawBufferDouble.Capacity : 1);
+                // A memo of the acceptance test's pow(1 + 1/X, a - 1) for the small candidates X (bit-neutral — see LegacyZipf),
+                // for fills long enough to repay it.
+                double[] tMemo = null;
+                if (n >= ZipfMemoMinFill && setup.Draws)
+                {
+                    tMemo = new double[256];
+                    System.Array.Fill(tMemo, double.NaN);
+                }
                 lock (randomizer.@lock)
                     for (long i = 0; i < n; i++)
-                        dst[i] = LegacyZipf(a);
+                    {
+                        src.Owed = n - i;
+                        dst[i] = LegacyZipf(ref src, in setup, tMemo);
+                    }
             }
 
             return ret;
         }
+
+        /// <summary>The smallest zipf fill that builds the acceptance-test memo (below it the memo costs more than it saves).</summary>
+        private const long ZipfMemoMinFill = 16;
     }
 }

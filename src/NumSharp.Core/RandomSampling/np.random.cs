@@ -134,33 +134,12 @@ namespace NumSharp
         ///
         ///     This is critical for matching NumPy's randn() output exactly.
         /// </remarks>
-        protected internal double NextGaussian()
+        protected internal unsafe double NextGaussian()
         {
-            // Return cached value if available (NumPy behavior)
-            if (_hasGauss)
-            {
-                double temp = _gaussCache;
-                _hasGauss = false;
-                _gaussCache = 0.0;
-                return temp;
-            }
-
-            // Polar method (Marsaglia) - matches NumPy's legacy_gauss
-            double f, x1, x2, r2;
-            do
-            {
-                x1 = 2.0 * randomizer.NextDouble() - 1.0;
-                x2 = 2.0 * randomizer.NextDouble() - 1.0;
-                r2 = x1 * x1 + x2 * x2;
-            } while (r2 >= 1.0 || r2 == 0.0);
-
-            // Polar method, a more efficient version of the Box-Muller approach.
-            f = Math.Sqrt(-2.0 * Math.Log(r2) / r2);
-
-            // NumPy keeps f*x1 for the next call and returns f*x2 now.
-            _gaussCache = f * x1;
-            _hasGauss = true;
-            return f * x2;
+            // A one-double buffer is exactly the per-draw call sequence (see DrawBufferDouble).
+            double word;
+            var src = new DrawBufferDouble(randomizer, &word, 1);
+            return LegacyGauss(ref src);
         }
 
         #endregion

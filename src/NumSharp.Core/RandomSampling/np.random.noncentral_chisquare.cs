@@ -38,18 +38,35 @@ namespace NumSharp
             RandomConstraints.Check(df, "df", ConstraintType.CONS_POSITIVE);
             RandomConstraints.Check(nonc, "nonc", ConstraintType.CONS_NON_NEGATIVE);
 
+            // The per-call setup NumPy recomputes for every value, evaluated once (the same expressions — bit-neutral).
+            var setup = new LegacyNoncentralChisquareSetup(df, nonc);
+
             if (IsScalarDraw(size))
-                lock (randomizer.@lock)
-                    return NDArray.Scalar(LegacyNoncentralChisquare(df, nonc));
+            {
+                unsafe
+                {
+                    // A one-double buffer IS NumPy's per-draw call sequence.
+                    double word;
+                    var one = new DrawBufferDouble(randomizer, &word, 1);
+                    lock (randomizer.@lock)
+                        return NDArray.Scalar(LegacyNoncentralChisquare(ref one, in setup));
+                }
+            }
 
             var ret = LegacyOutput(NPTypeCode.Double, size);
             unsafe
             {
                 var dst = (double*)ret.Address;
                 long n = ret.size;
+                // Read-ahead draws (bulk-filled by the bit generator): every value draws unless a zero-draw branch is selected (see LegacyNoncentralChisquareSetup.Draws — then per-draw).
+                double* storage = stackalloc double[DrawBufferDouble.Capacity];
+                var src = new DrawBufferDouble(randomizer, storage, setup.Draws ? DrawBufferDouble.Capacity : 1);
                 lock (randomizer.@lock)
                     for (long i = 0; i < n; i++)
-                        dst[i] = LegacyNoncentralChisquare(df, nonc);
+                    {
+                        src.Owed = n - i;
+                        dst[i] = LegacyNoncentralChisquare(ref src, in setup);
+                    }
             }
 
             return ret;

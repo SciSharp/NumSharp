@@ -47,8 +47,16 @@ namespace NumSharp
                 throw new ValueError("left == right");
 
             if (IsScalarDraw(size))
-                lock (randomizer.@lock)
-                    return NDArray.Scalar(Distributions.RandomTriangular(randomizer, left, mode, right));
+            {
+                unsafe
+                {
+                    // A one-double buffer IS NumPy's per-draw call sequence.
+                    double word;
+                    var one = new DrawBufferDouble(randomizer, &word, 1);
+                    lock (randomizer.@lock)
+                        return NDArray.Scalar(Distributions.RandomTriangular(ref one, left, mode, right));
+                }
+            }
 
             var ret = LegacyOutput(NPTypeCode.Double, size);
             unsafe

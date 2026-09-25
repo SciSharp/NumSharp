@@ -36,18 +36,35 @@ namespace NumSharp
         {
             RandomConstraints.Check(p, "p", ConstraintType.CONS_BOUNDED_GT_0_1);
 
+            // The per-call setup NumPy recomputes for every value, evaluated once (the same expressions — bit-neutral).
+            var setup = new LegacyGeometricSetup(p);
+
             if (IsScalarDraw(size))
-                lock (randomizer.@lock)
-                    return NDArray.Scalar(LegacyGeometric(p));
+            {
+                unsafe
+                {
+                    // A one-double buffer IS NumPy's per-draw call sequence.
+                    double word;
+                    var one = new DrawBufferDouble(randomizer, &word, 1);
+                    lock (randomizer.@lock)
+                        return NDArray.Scalar(LegacyGeometric(ref one, in setup));
+                }
+            }
 
             var ret = LegacyOutput(NPTypeCode.Int64, size);
             unsafe
             {
                 var dst = (long*)ret.Address;
                 long n = ret.size;
+                // Read-ahead draws (bulk-filled by the bit generator): every value draws one uniform.
+                double* storage = stackalloc double[DrawBufferDouble.Capacity];
+                var src = new DrawBufferDouble(randomizer, storage, DrawBufferDouble.Capacity);
                 lock (randomizer.@lock)
                     for (long i = 0; i < n; i++)
-                        dst[i] = LegacyGeometric(p);
+                    {
+                        src.Owed = n - i;
+                        dst[i] = LegacyGeometric(ref src, in setup);
+                    }
             }
 
             return ret;

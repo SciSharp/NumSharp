@@ -43,18 +43,35 @@ namespace NumSharp
             RandomConstraints.Check(n, "n", ConstraintType.CONS_POSITIVE);
             RandomConstraints.Check(p, "p", ConstraintType.CONS_BOUNDED_0_1);
 
+            // The per-call setup NumPy recomputes for every value, evaluated once (the same expressions — bit-neutral).
+            var setup = new LegacyNegativeBinomialSetup(n, p);
+
             if (IsScalarDraw(size))
-                lock (randomizer.@lock)
-                    return NDArray.Scalar(LegacyNegativeBinomial(n, p));
+            {
+                unsafe
+                {
+                    // A one-double buffer IS NumPy's per-draw call sequence.
+                    double word;
+                    var one = new DrawBufferDouble(randomizer, &word, 1);
+                    lock (randomizer.@lock)
+                        return NDArray.Scalar(LegacyNegativeBinomial(ref one, in setup));
+                }
+            }
 
             var ret = LegacyOutput(NPTypeCode.Int64, size);
             unsafe
             {
                 var dst = (long*)ret.Address;
                 long count = ret.size;
+                // Read-ahead draws (bulk-filled by the bit generator): every value draws (the gamma's shape n is positive).
+                double* storage = stackalloc double[DrawBufferDouble.Capacity];
+                var src = new DrawBufferDouble(randomizer, storage, DrawBufferDouble.Capacity);
                 lock (randomizer.@lock)
                     for (long i = 0; i < count; i++)
-                        dst[i] = LegacyNegativeBinomial(n, p);
+                    {
+                        src.Owed = count - i;
+                        dst[i] = LegacyNegativeBinomial(ref src, in setup);
+                    }
             }
 
             return ret;

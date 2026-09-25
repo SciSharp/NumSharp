@@ -224,6 +224,16 @@ NumSharp implements both NumPy random APIs:
   as NumPy's `legacy_gauss` does. `tomaxint`, `ranf` and `sample` complete the legacy surface. Two
   NumPy inputs never return (`zipf(a)` for `a >= 1025`, `vonmises` once `4*kappa^2` overflows); NumSharp
   returns the distribution's limit there instead of hanging.
+- Sized legacy draws are fast without changing a bit.
+  - **Read-ahead uniforms.** They come through a buffer bulk-filled by the bit generator's vectorized `FillDouble`, which never draws past what NumPy's per-value calls would.
+  - **Setup hoisted.** Per-parameter setup that NumPy recomputes for every value runs once per call: Marsaglia-Tsang's `1/sqrt(9b)`, `exp(-lam)` and the PTRS constants, `log(1-p)`, `2^(a-1)`, the von Mises envelope, and HRUA's `sqrt` and four `loggam`s.
+  - **Memoized sub-terms.** Deterministic sub-terms are memoized: the binomial inversion's CDF walk, BTPE's Step50 and Step52 bounds, HRUA's per-candidate `loggam` sums, zipf's acceptance power and the small-sample urn walk's ratios. `multinomial` also memoizes the per-category binomial setups that NumPy's single-entry cache thrashes on.
+  - **Two-phase Gaussian fills.** The polar Gaussian fills (`standard_normal`, `normal`, `lognormal`, `standard_cauchy`, `wald`) run in two phases, so their `log`/`sqrt` chains overlap.
+
+  Every memoized value is the same expression over the same inputs, so the streams stay byte-identical. Measured against NumPy 2.4.2 (NPY/NS, one pinned P-core, turbo off, min over repeated sweeps):
+  - **Most samplers: 1.5–5.6×.** HRUA hypergeometric 4–5.6×, zipf 2–2.7×, poisson 1.6–2.3×, `lognormal` ~2×, the gamma family, chi-square, F and t with shapes ≥ 1 at 1.5–1.7×.
+  - **BTPE-sized `binomial`, and `multinomial` with such categories: ~1.4–1.5×.**
+  - **CRT-bound samplers: 1.2–1.5×.** This covers `weibull`, `power`, `vonmises` and gamma with shape < 1 (Johnk's algorithm), plus what builds on that gamma: `beta` with a shape ≤ 1, `standard_t` with `df < 2`, `negative_binomial` with `n < 1` and `dirichlet` with `alpha < 1`. Their remaining work is the same MSVC `pow`/`log`/`exp`/`cos` call NumPy makes per value, and a bit-identical faster one does not exist.
 - `np.random.default_rng(seed)` returns a `Generator` backed by `PCG64` and `SeedSequence`, with the
   modern ziggurat and bounded-integer algorithms used by NumPy 2.4.2.
 - All five NumPy bit generators exist — `PCG64`, `PCG64DXSM`, `Philox`, `SFC64` and `MT19937` — each a

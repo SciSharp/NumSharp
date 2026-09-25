@@ -34,18 +34,35 @@ namespace NumSharp
         {
             RandomConstraints.Check(lam, "lam", ConstraintType.LEGACY_CONS_POISSON);
 
+            // The per-call setup NumPy recomputes for every value, evaluated once (the same expressions — bit-neutral).
+            var setup = new PoissonSetup(lam, hoistRejectionLog: !IsScalarDraw(size));
+
             if (IsScalarDraw(size))
-                lock (randomizer.@lock)
-                    return NDArray.Scalar(Distributions.RandomPoisson(randomizer, lam));
+            {
+                unsafe
+                {
+                    // A one-double buffer IS NumPy's per-draw call sequence.
+                    double word;
+                    var one = new DrawBufferDouble(randomizer, &word, 1);
+                    lock (randomizer.@lock)
+                        return NDArray.Scalar(Distributions.RandomPoisson(ref one, in setup));
+                }
+            }
 
             var ret = LegacyOutput(NPTypeCode.Int64, size);
             unsafe
             {
                 var dst = (long*)ret.Address;
                 long n = ret.size;
+                // Read-ahead draws (bulk-filled by the bit generator): every value draws unless lam == 0 (0 without a draw — per-draw).
+                double* storage = stackalloc double[DrawBufferDouble.Capacity];
+                var src = new DrawBufferDouble(randomizer, storage, setup.Draws ? DrawBufferDouble.Capacity : 1);
                 lock (randomizer.@lock)
                     for (long i = 0; i < n; i++)
-                        dst[i] = Distributions.RandomPoisson(randomizer, lam);
+                    {
+                        src.Owed = n - i;
+                        dst[i] = Distributions.RandomPoisson(ref src, in setup);
+                    }
             }
 
             return ret;

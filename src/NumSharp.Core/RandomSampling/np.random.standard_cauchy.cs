@@ -31,17 +31,38 @@ namespace NumSharp
         public NDArray standard_cauchy(Shape size)
         {
             if (IsScalarDraw(size))
-                lock (randomizer.@lock)
-                    return NDArray.Scalar(LegacyStandardCauchy());
+            {
+                unsafe
+                {
+                    // A one-double buffer IS NumPy's per-draw call sequence.
+                    double word;
+                    var one = new DrawBufferDouble(randomizer, &word, 1);
+                    lock (randomizer.@lock)
+                        return NDArray.Scalar(LegacyStandardCauchy(ref one));
+                }
+            }
 
             var ret = LegacyOutput(NPTypeCode.Double, size);
             unsafe
             {
                 var dst = (double*)ret.Address;
                 long n = ret.size;
+                // Read-ahead draws (bulk-filled by the bit generator), consumed by the two-phase polar fill (LegacyGaussFill).
+                // legacy_standard_cauchy is num / denom over two consecutive legacy_gauss calls (numerator first), so the
+                // values are consecutive Gaussians g[2j] / g[2j+1]: drawn a chunk at a time — the Gaussian stream, its cache
+                // included, continues seamlessly across chunks — then divided (the same division, so the same bits).
+                const int Chunk = 256;
+                double* storage = stackalloc double[DrawBufferDouble.Capacity];
+                double* gauss = stackalloc double[2 * Chunk];
+                var src = new DrawBufferDouble(randomizer, storage, DrawBufferDouble.Capacity);
                 lock (randomizer.@lock)
-                    for (long i = 0; i < n; i++)
-                        dst[i] = LegacyStandardCauchy();
+                    for (long i = 0; i < n; i += Chunk)
+                    {
+                        long m = n - i < Chunk ? n - i : Chunk;
+                        LegacyGaussFill(ref src, gauss, 2 * m);
+                        for (long j = 0; j < m; j++)
+                            dst[i + j] = gauss[2 * j] / gauss[2 * j + 1];
+                    }
             }
 
             return ret;
