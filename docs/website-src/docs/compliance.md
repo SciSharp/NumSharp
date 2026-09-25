@@ -236,6 +236,53 @@ NumSharp implements both NumPy random APIs:
   - **CRT-bound samplers: 1.2–1.5×.** This covers `weibull`, `power`, `vonmises` and gamma with shape < 1 (Johnk's algorithm), plus what builds on that gamma: `beta` with a shape ≤ 1, `standard_t` with `df < 2`, `negative_binomial` with `n < 1` and `dirichlet` with `alpha < 1`. Their remaining work is the same MSVC `pow`/`log`/`exp`/`cos` call NumPy makes per value, and a bit-identical faster one does not exist.
 - `np.random.default_rng(seed)` returns a `Generator` backed by `PCG64` and `SeedSequence`, with the
   modern ziggurat and bounded-integer algorithms used by NumPy 2.4.2.
+- The `Generator` has NumPy's whole distribution surface, on NumPy's modern algorithms rather than the
+  legacy ones. That covers `beta`, `binomial`, `chisquare`, `dirichlet`, `f`, `geometric`, `gumbel`,
+  `hypergeometric`, `laplace`, `logistic`, `lognormal`, `logseries`, `multinomial`,
+  `multivariate_hypergeometric`, `multivariate_normal`, `negative_binomial`, `noncentral_chisquare`,
+  `noncentral_f`, `pareto`, `poisson`, `power`, `rayleigh`, `standard_cauchy`, `standard_t`,
+  `triangular`, `vonmises`, `wald`, `weibull` and `zipf`. The modern details are reproduced:
+  - Ziggurat normals and exponentials under the gamma family.
+  - beta's tiny-shape and log-space paths.
+  - The HRUA hypergeometric with its `logfactorial` table, and an int64 zipf with its acceptance window.
+  - vonmises' wrapped-normal fallback above `kappa = 1e6`.
+  - noncentral chi-square's NaN short-circuit.
+  - Int64 integer outputs.
+
+  Every sampler matches `default_rng(seed)` bit for bit. The oracle checks 100 branch-reaching
+  parameter sets, 222 constraint corners (NumPy's messages and check order), 66 streams of 20000 draws
+  and 185 byte-parity corpus cases. `multinomial` has NumPy's vector path: counts broadcast against the
+  probabilities' leading axes, with `size` required to equal the broadcast shape. Array parameters pass
+  NumPy's `'safe'` casting gate, so a float or uint64 count, or complex probabilities, raise NumPy's
+  `TypeError`. Two documented exceptions:
+  - **`pareto` and `power`.** They call the C runtime's `expm1`. NumSharp reproduces it exactly outside
+    `[-ln 2, ln 1.5]`, but inside that band Windows' ucrtbase uses a closed approximation. Values there
+    can differ by up to 2 ulp for `pareto`. `power` raises the result to `1/a`, which scales the
+    difference: measured ≤1 ulp at `a = 2.5` and 9 ulp at `a = 0.3`.
+  - **`multivariate_normal`.** It is byte-identical with `NumSharp.Interop.OpenBLAS`, which supplies
+    NumPy's own `gesdd`/`syevd`/`potrf`. Without it, managed factorizations are exact for diagonal
+    covariances and agree to rounding for `cholesky`. For `svd`/`eigh` they may pick the other sign of
+    an eigenvector: still a valid sample, but not NumPy's.
+
+  The sized draws use the legacy sampler's techniques (read-ahead draws, per-fill setups, memoized
+  deterministic sub-terms) without changing a bit. Two are specific to the modern algorithms: HRUA's
+  setup is hoisted and each candidate's `logfactorial` sum memoized, and the urn walk keeps its
+  32-bit read-ahead in registers. Measured against NumPy 2.4.2 (NPY/NS, one pinned P-core, turbo off,
+  min over repeated sweeps):
+  - **1.5–3.1×.** `zipf` 2.3–3.1×, `standard_cauchy` 2.3–2.5×, `multinomial` 2.1–2.3×, HRUA
+    `hypergeometric` 2.1–2.2×, `geometric` inversion 2–2.3×, `multivariate_normal` 2–2.3×, `standard_t`
+    2×, `lognormal` 1.9×, `noncentral_f` and `noncentral_chisquare` (`df > 1`) 1.8–1.9×, `dirichlet`
+    (`alpha >= 0.1`) up to 1.8×, and `chisquare`, `f`, `beta` with shapes above 1 and small-mean
+    `binomial` at 1.5–1.7×.
+  - **1.1–1.5×.** BTPE `binomial` 1.4–1.5×, the urn-walk `hypergeometric` 1.35–1.4×, `logseries`,
+    `poisson`, the `geometric` search, `triangular`, `wald`, `laplace`, `gumbel`, `logistic` and
+    `rayleigh`, `multivariate_hypergeometric` 1–1.3×.
+  - **About 1× (the CRT ceiling).** `pareto`, `power`, `weibull`, `vonmises`, and Johnk's gamma/beta
+    (a shape below 1), with what builds on them: `dirichlet` with tiny alphas, `noncentral_chisquare`
+    with `df <= 1`, `negative_binomial`. They measure 0.96–1.2×. Each value's cost is the
+    `pow`/`log`/`exp`/`cos`/`expm1` call NumPy makes too.
+  - **`multinomial`'s broadcast path when every position brings a new `(count, probability)` pair: about
+    0.9×.** This is the same per-position BTPE setup NumPy runs. When pairs recur, it measures 2.2×.
 - All five NumPy bit generators exist — `PCG64`, `PCG64DXSM`, `Philox`, `SFC64` and `MT19937` — each a
   `BitGenerator` with NumPy's surface: `random_raw`, `state` (typed `PCG64.State`, `Philox.State`, …),
   `seed_seq`, `lock` and `spawn`, so `new Generator(new Philox(seed))` works like
