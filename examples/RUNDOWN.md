@@ -173,7 +173,9 @@ dotnet run -c Release --project examples/MaterialLab/Verification   # the 27-che
   each substep (Δt and viscosity caps are 0-d hoisted parameters); the grid update is fused expressions over
   strided node-lane views; a pure-NumSharp reference transfer path (`np.bincount` scatter / `np.take` gather,
   toggled live with **T**) specifies the fused `Vector256` transfer kernels, which the gate verifies agree to
-  float rounding.
+  float rounding. **Not everything is NumSharp:** by default the particle↔grid transfers (the hot loop) are
+  hand-written C# SIMD over NumSharp's buffers, so NumSharp operations are 12–46 % of a step; in **T** mode they
+  are ~98 %, at 7–19× lower frame rate (e.g. Dam Break 138 → 18 FPS). Rendering is GPU/GLSL.
 - **Performance.** 72–208 FPS uncapped, single thread, i9-13900K, 192×108 grid (35K particles in the heaviest
   scene); auto quality steps the grid down if a scene cannot hold 60 FPS.
 - **Validation.** Conservation, hydrostatic compression (1.6 % vs 1.3 % predicted), buoyancy ordering, a sand

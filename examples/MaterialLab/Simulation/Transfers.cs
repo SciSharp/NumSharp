@@ -41,10 +41,12 @@ namespace NumSharp.Examples.MaterialLab.Simulation
     /// <para>
     /// <b>Why the fused kernels exist.</b> As whole-array math, P2G must materialize nine contributions per
     /// particle (9N-element index, weight and momentum arrays) before <c>np.bincount</c> can add them, and G2P
-    /// materializes nine gathered velocities per particle before reducing them; at 28K particles that is ~5×
-    /// the cost of doing the same arithmetic in one pass with the node in registers. Both forms are kept: the
-    /// reference is the specification (plain NumPy-style MLS-MPM, readable line by line), the fused kernels are
-    /// the speed, and the verification harness asserts they agree to float rounding.
+    /// materializes nine gathered velocities per particle before reducing them. Measured at 192×108, the
+    /// transfers cost 9.5–28× what the same arithmetic costs in one pass with the node in registers (whole
+    /// steps: Dam Break 7.2 vs 56 ms, 35K-particle Oil/Water/Honey 13.6 vs 128 ms; the reference P2G is worst
+    /// with many materials, as it builds grid-sized bincounts per group). Both forms are kept: the reference is the
+    /// specification (plain NumPy-style MLS-MPM, readable line by line), the fused kernels are the speed, and the
+    /// verification harness asserts they agree to float rounding.
     /// </para>
     /// <para>
     /// <b>Weights.</b> Quadratic B-splines: for a particle at x/Δx, base = ⌊x/Δx − ½⌋, f = x/Δx − base ∈ [½, 3/2),

@@ -5,8 +5,11 @@
 A real-time 2-D simulator of liquids, grains and solids — **water, oil, honey, lava, sand, snow, jelly,
 rubber, clay and rock** — all in one tank, all interacting, with a live FPS counter. It runs the **Material
 Point Method** (MLS-MPM, the method behind film snow and sand) with a physical constitutive model per material,
-at **70–200 FPS on a single CPU core**. NumSharp holds every particle and grid buffer and computes the material
-physics as fused array expressions.
+at **70–200 FPS on a single CPU core**. NumSharp holds the simulation state (every particle field and the grid)
+and computes the material physics and the grid update as fused array expressions. The hottest loop — moving
+data between particles and grid — is hand-written SIMD C# over NumSharp's buffers by default; press **T** to
+run it as pure NumSharp array math instead, at about a tenth of the speed. [What runs where](#what-runs-on-numsharp--and-what-doesnt)
+has the measured split.
 
 It opens a window covering **2/3 of the screen**; **F11** goes borderless fullscreen.
 
@@ -117,7 +120,44 @@ What makes it behave physically, in short (the full story, with equations and me
 
 ---
 
-## Where NumSharp does the work
+## What runs on NumSharp — and what doesn't
+
+Not everything is a NumSharp operation, by design. NumSharp does what array math is good at — the same law
+applied to every particle, the same update applied to every node, sorting — and owns the data. The
+particle↔grid transfers are a scatter-add of nine weighted contributions per particle into shared nodes;
+expressed as array operations (the **T** mode) they must materialize 9N-element index/weight arrays and call
+`np.bincount` per lane, which is far slower than one fused loop. NumPy has the same limitation — MPM in Python is
+usually written in Taichi, Numba or CUDA for exactly this step.
+
+| Part of each frame | Implemented as |
+|---|---|
+| Constitutive physics of all 10 materials | **NumSharp** — fused `NDExpr` kernels, compiled by NumSharp |
+| Grid update (velocity, gravity, stir, walls, friction) | **NumSharp** — fused `NDExpr` kernels over the node lanes |
+| Spatial sort (every 24 frames) | **NumSharp** — `np.argsort` + `np.take` |
+| Particle → grid, grid → particle (default) | **C#** — `Vector256` + FMA loops reading and writing NumSharp's buffers through raw pointers |
+| Particle → grid, grid → particle (key **T**) | **NumSharp** — `np.bincount`, `np.take`, fused axis reductions |
+| Per-particle finish: advection, drift, wall push-out, lava cooling | **C#** loop (both modes) |
+| Walls (distance field, CSG), painting, filling, faucets, lava → rock, Δt choice | **C#** (event-driven or per frame, negligible time) |
+| Rendering, HUD, window, input | **GPU** (OpenGL/GLSL) and Win32 — no NumSharp |
+
+All particle state and the simulation grid (nodes, φ, normals) are NumSharp `NDArray`s; only the render-only
+fine φ and the node-clear template are plain C# arrays.
+
+Measured (High quality, single thread, i9-13900K P-core, simulation time only):
+
+| Scene | Default: NumSharp operations' share of the step | Default | **T** (transfers in NumSharp) |
+|---|---:|---:|---:|
+| Dam Break | 19 % | 7.2 ms (138 FPS) | 56 ms (18 FPS) |
+| Oil, Water & Honey | 12 % | 13.6 ms (74 FPS) | 128 ms (8 FPS) |
+| Hourglass | 46 % | 6.1 ms (165 FPS) | 43 ms (23 FPS) |
+| Material Zoo | 31 % | 9.2 ms (109 FPS) | 173 ms (6 FPS) |
+
+In **T** mode about 98 % of the step is NumSharp operations — everything except the per-particle finish loop —
+and the two modes agree to float rounding (verified). The fused transfers themselves are 9.5–28× faster than their
+NumSharp formulation; the reference P2G is slowest with many materials, because it builds grid-sized bincounts
+per material group.
+
+### The NumSharp parts, in detail
 
 The material physics is written as NumSharp array expressions, compiled once and evaluated in place:
 
@@ -140,8 +180,8 @@ Stage(s * (pressure + 2.0 * mu * j * c00) + m * c00, _g[SField.A00]);   // one f
   reduced by fused axis sums. It is the readable specification; the default fused SIMD kernels (`Vector256` +
   FMA directly on the NumSharp buffers) are the same algorithm, verified to agree to float rounding.
 - **Spatial sort** — `np.argsort` of the cell key + `np.take` every 24 frames keeps the transfers cache-friendly.
-- **Memory** — every buffer is a NumSharp `NDArray` (unmanaged); live particle ranges are cached views; the
-  reference path's temporaries live in an `NDScope`.
+- **Memory** — every particle field and the simulation grid are NumSharp `NDArray`s (unmanaged); live particle
+  ranges are cached views; the reference path's temporaries live in an `NDScope`.
 
 Three performance lessons from profiling, all visible in the code comments:
 

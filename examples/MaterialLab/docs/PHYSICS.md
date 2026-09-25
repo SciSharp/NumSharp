@@ -288,7 +288,12 @@ crust that darkens as it cools.
   run through tiered-JIT stepping stones during its first second.
 
 Verified to agree to float rounding: after 60 substeps of every material interacting, positions differ by at
-most 1.7·10⁻⁵ cells and J by 8·10⁻⁶. The fused path is ~5× faster (it never materializes the 9N-element stencil).
+most 1.7·10⁻⁵ cells and J by 8·10⁻⁶. The fused transfers are **9.5–28× faster** than the reference ones at High
+quality (it never materializes the 9N-element stencil, and the reference P2G builds grid-sized bincounts per
+material group): whole simulation steps measure Dam Break 7.2 vs 56 ms, Oil/Water/Honey 13.6 vs 128 ms,
+Hourglass 6.1 vs 43 ms, Material Zoo 9.2 vs 173 ms. In the default mode NumSharp operations (constitutive update,
+grid update, sort) are 12–46 % of the step; in the reference mode about 98 % — see the README's
+"What runs on NumSharp" section for the full split.
 
 ---
 
