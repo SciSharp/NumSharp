@@ -283,6 +283,55 @@ NumSharp implements both NumPy random APIs:
     `pow`/`log`/`exp`/`cos`/`expm1` call NumPy makes too.
   - **`multinomial`'s broadcast path when every position brings a new `(count, probability)` pair: about
     0.9×.** This is the same per-position BTPE setup NumPy runs. When pairs recur, it measures 2.2×.
+- Every sampler that takes parameters accepts them as arrays, on both `RandomState` and `Generator`, broadcast
+  the way NumPy broadcasts them. That covers `beta`, `binomial`, `chisquare`, `exponential`, `f`, `gamma`,
+  `geometric`, `gumbel`, `hypergeometric`, `laplace`, `logistic`, `lognormal`, `logseries`,
+  `negative_binomial`, `noncentral_chisquare`, `noncentral_f`, `normal`, `pareto`, `poisson`, `power`,
+  `rayleigh`, `standard_gamma`, `standard_t`, `triangular`, `uniform`, `vonmises`, `wald`, `weibull` and
+  `zipf`: `rs.normal(locs, 2.0)`, `g.poisson(column, new Shape(k, k))`. The flow is NumPy's `cont`/`disc`:
+  - Each parameter converts under NumPy's `'safe'` rule, so a complex parameter or a float count raises NumPy's
+    `TypeError`. When every parameter is 0-d the call takes the scalar path, so a 0-d array behaves exactly
+    like a number. A `null` stands for Python's `None`: the default where NumPy has one (`loc`, `scale`,
+    `lam`, …), otherwise NumPy's `None` handling.
+  - Constraints are checked over the whole array before anything is drawn, in NumPy's order and with its
+    array messages: `lam value too large` for a NaN mean, `-0.0` rejected wherever NumPy tests the sign bit.
+  - The output shape is `size` when given, else the parameters' broadcast shape. NumPy's `shape mismatch` and
+    `Output size (1,) is not compatible with broadcast dimensions of inputs (3,).` errors are reproduced;
+    `default` stands for `size=None` and `Shape.Scalar` for `size=()`.
+  - One value is drawn per output position, in C order, with that position's parameters, so the values and
+    the stream position after the call are byte-identical to NumPy. The oracle replays 834 legacy and 851
+    Generator array-parameter cases, 507 of them NumPy's constraint and broadcast errors. A mutation sweep
+    over the read-ahead decisions, the constraint scans and the per-run setup sharing is caught in full.
+  - The legacy samplers keep mtrand's own rules where they differ from the Generator's. `uniform` accepts
+    reversed bounds (only the range must be finite), `hypergeometric` checks `ngood + nbad < nsample` first
+    and has no `10^9` caps, `negative_binomial` has no Poisson-mean bound, and `binomial`'s `n` is a C `long`.
+    `laplace`, `gumbel` and `logistic` run the modern samplers on the MT19937 stream, as mtrand does.
+  - Legacy integer results model NumPy's LP64 `long`, as the scalar samplers do. NumPy's Windows build
+    (32-bit `long`) truncates or rejects some of those inputs, and its legacy HRUA `hypergeometric` never
+    returns for a population past `2**31` (`hypergeometric(2e9, 1.5e9, 12)`).
+  - NumPy's legacy samplers never return for two inputs: `zipf` with `a >= 1025` and `vonmises` with
+    `kappa >= 2**511`, where `4*kappa*kappa` overflows. NumSharp returns the distribution's limit there
+    without drawing, as its scalar samplers do.
+
+  Measured against NumPy 2.4.2 (NPY/NS, one pinned P-core, turbo off, best of 7, 1K / 100K / 1M values):
+  - **Parameters that repeat along the walk: the scalar samplers' speed.** This is a column against a row, or
+    a parameter stretched over a larger `size`. It is drawn run by run, each run of equal parameters like a
+    scalar fill: NumPy's per-call statements are computed once per run, and a long run also gets HRUA's,
+    zipf's and the urn walk's memos. Most samplers measure 1.5–5.3× (legacy HRUA `hypergeometric` 5.3×,
+    `uniform` 3.6–4.4×, `zipf` 2.9×, `binomial` 2.6–2.8×, `normal` 2.4–3.6×). The Generator's `poisson`, `f`,
+    `wald` and `negative_binomial` measure 1.2–1.4×, and the CRT-bound `vonmises`, `power` and `pareto`
+    1.06–1.35×, as their scalar fills do.
+  - **One transform per value: 1.3–4.4×.** This covers `normal`, `lognormal`, `exponential`, `uniform`,
+    `laplace`, `logistic`, `gumbel`, `rayleigh`, `triangular`, `wald` and `standard_t`, with any parameter
+    layout.
+  - **A new parameter at every position: 0.88–1.8×, per-call parity.** NumPy recomputes each sampler's
+    per-call setup for every value (`sqrt`/`log`/`exp`, and PTRS's, BTPE's or HRUA's constants), and so does
+    NumSharp. The fill's advantages (shared setups, memos) do not apply. The Generator's cells sit at the low
+    end because NumPy's PCG64 call path is cheap: `hypergeometric` 0.88–1.1×, `poisson` 0.91–1×, and `beta`,
+    `zipf`, `logseries`, `vonmises` and `power` 0.95–1.2×. Legacy `binomial` measures 0.91–1×. Its setups go
+    through RandomState's single-entry binomial cache, kept exactly as NumPy's because what one call leaves
+    in it is visible to the next. The Generator's `binomial` keeps a per-fill memo of recurring keys and
+    measures 1.2–2.4×.
 - All five NumPy bit generators exist — `PCG64`, `PCG64DXSM`, `Philox`, `SFC64` and `MT19937` — each a
   `BitGenerator` with NumPy's surface: `random_raw`, `state` (typed `PCG64.State`, `Philox.State`, …),
   `seed_seq`, `lock` and `spawn`, so `new Generator(new Philox(seed))` works like
