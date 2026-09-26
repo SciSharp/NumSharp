@@ -216,7 +216,7 @@ namespace NumSharp
         ///     array texts (<c>"… contains NaNs"</c> where the scalar check says <c>"… is NaN"</c>) and the array order of the
         ///     tests.
         /// </summary>
-        /// <param name="arr">The converted parameter: a C-contiguous float64, int64 or float32 array (float32 is the
+        /// <param name="arr">The converted parameter (<see cref="RandomParam.Array"/>): a dense float64, int64 or float32 array (float32 is the
         ///     forced-cast parameter of the float32 <c>standard_gamma</c>).</param>
         /// <param name="name">The parameter name as it appears in NumPy's message.</param>
         /// <param name="cons">The rule to apply; <see cref="ConstraintType.CONS_NONE"/> accepts everything.</param>

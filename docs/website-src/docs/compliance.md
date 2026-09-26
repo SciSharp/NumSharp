@@ -297,7 +297,9 @@ NumSharp implements both NumPy random APIs:
     array messages: `lam value too large` for a NaN mean, `-0.0` rejected wherever NumPy tests the sign bit.
   - The output shape is `size` when given, else the parameters' broadcast shape. NumPy's `shape mismatch` and
     `Output size (1,) is not compatible with broadcast dimensions of inputs (3,).` errors are reproduced;
-    `default` stands for `size=None` and `Shape.Scalar` for `size=()`.
+    `default` stands for `size=None` and `Shape.Scalar` for `size=()`. A given `size` is allocated before the
+    parameters are broadcast against it, as NumPy's `np.empty(size)` is. So a size that is too big to allocate
+    and also incompatible reports `array is too big`, not the shape mismatch.
   - One value is drawn per output position, in C order, with that position's parameters, so the values and
     the stream position after the call are byte-identical to NumPy. The oracle replays 834 legacy and 851
     Generator array-parameter cases, 507 of them NumPy's constraint and broadcast errors. A mutation sweep
@@ -319,7 +321,7 @@ NumSharp implements both NumPy random APIs:
     scalar fill: NumPy's per-call statements are computed once per run, and a long run also gets HRUA's,
     zipf's and the urn walk's memos. Most samplers measure 1.5–5.3× (legacy HRUA `hypergeometric` 5.3×,
     `uniform` 3.6–4.4×, `zipf` 2.9×, `binomial` 2.6–2.8×, `normal` 2.4–3.6×). The Generator's `poisson`, `f`,
-    `wald` and `negative_binomial` measure 1.2–1.4×, and the CRT-bound `vonmises`, `power` and `pareto`
+    `wald` and `negative_binomial` measure 1.1–1.4×, and the CRT-bound `vonmises`, `power` and `pareto`
     1.06–1.35×, as their scalar fills do.
   - **One transform per value: 1.3–4.4×.** This covers `normal`, `lognormal`, `exponential`, `uniform`,
     `laplace`, `logistic`, `gumbel`, `rayleigh`, `triangular`, `wald` and `standard_t`, with any parameter

@@ -18,9 +18,9 @@ namespace NumSharp
     ///     The flow every array-parameter sampler follows, in NumPy's order: convert each parameter
     ///     (<see cref="RandomParam"/>, NumPy's <c>PyArray_FROM_OTF</c> with its <c>'safe'</c> casting gate); when every
     ///     converted parameter is 0-d take the scalar path; otherwise check each parameter's constraint over the whole
-    ///     array (<see cref="RandomConstraints.CheckArray"/>), resolve the output shape (<see cref="OutputDims"/>),
-    ///     allocate, and draw one value per output position in C order (<see cref="BroadcastWalk"/>) with that position's
-    ///     parameters.
+    ///     array (<see cref="RandomConstraints.CheckArray"/>), allocate the output and check its shape in NumPy's order
+    ///     (<see cref="NewOutput"/>: <c>np.empty(size)</c> first when a size is given, then <see cref="OutputDims"/>), and
+    ///     draw one value per output position in C order (<see cref="BroadcastWalk"/>) with that position's parameters.
     ///     </para>
     ///     <para>
     ///     Shape errors carry NumPy's texts and <see cref="ValueError"/> type: NumPy's <c>MultiIterNew</c> mismatch
@@ -55,12 +55,14 @@ namespace NumSharp
         internal const long PoissonRejectionLogMinRun = 16;
 
         /// <summary>
-        ///     The output dimensions of a broadcast draw: <paramref name="size"/> when given (NumPy's <c>np.empty(size)</c>),
-        ///     else the parameters' broadcast shape — then NumPy's <c>validate_output_shape</c>: the output and the parameters
-        ///     must broadcast to exactly the output's shape.
+        ///     The shape check of a broadcast draw — NumPy's <c>MultiIterNew(randoms, a, b, c)</c> then
+        ///     <c>validate_output_shape</c>: the output and the parameters must broadcast to exactly the output's shape. The
+        ///     output's dimensions are <paramref name="size"/> when given, else the parameters' broadcast shape.
         /// </summary>
-        /// <param name="size">The requested size; ignored unless <paramref name="sizeGiven"/>.</param>
-        /// <param name="sizeGiven">Whether the caller passed a size (NumPy's <c>size is not None</c>).</param>
+        /// <param name="size">The output's shape — an already-allocated output's (<see cref="NewOutput"/>) or a caller's
+        ///     <c>out=</c> array's; ignored unless <paramref name="sizeGiven"/>.</param>
+        /// <param name="sizeGiven">Whether <paramref name="size"/> names the output (NumPy's <c>size is not None</c>, or an
+        ///     <c>out</c> array).</param>
         /// <param name="a">The first parameter (converted), in NumPy's <c>MultiIterNew</c> order.</param>
         /// <param name="b">The second parameter, or null.</param>
         /// <param name="c">The third parameter, or null.</param>
@@ -69,9 +71,17 @@ namespace NumSharp
         ///     text, where arg 0 is the output when a size was given — or a size that is not the broadcast shape itself
         ///     (<c>Output size (1,) is not compatible with broadcast dimensions of inputs (3,).</c>).</exception>
         /// <remarks>
+        ///     <para>
         ///     The parameter ORDER is part of the contract: NumPy numbers the operands in its error text by their position
         ///     in <c>MultiIterNew</c>, which is not always the signature order (the binomial passes <c>p</c> before
         ///     <c>n</c>), so callers pass them exactly as NumPy's sampler does.
+        ///     </para>
+        ///     <para>
+        ///     This is the check only — it allocates nothing. A draw that allocates its output goes through
+        ///     <see cref="NewOutput"/>, which runs <c>np.empty(size)</c> BEFORE this check as NumPy does (an unallocatable
+        ///     size must report the allocation, not a shape mismatch); a caller-supplied <c>out=</c> array is checked here
+        ///     directly. Either way the size reaching this method has no negative or overflowing dimension.
+        ///     </para>
         /// </remarks>
         internal static long[] OutputDims(Shape size, bool sizeGiven, NDArray a, NDArray b = null, NDArray c = null)
         {
@@ -119,13 +129,59 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Allocates a broadcast draw's output — NumPy's <c>np.empty(shape, dtype)</c>: a fresh, uninitialized,
-        ///     C-contiguous array every element of which the draw loop writes.
+        ///     Allocates a broadcast draw's output in NumPy's ORDER and validates its shape — <c>np.empty(size)</c> BEFORE the
+        ///     parameters are broadcast against it when a size is given, the parameters' broadcast first otherwise: a fresh,
+        ///     uninitialized, C-contiguous array every element of which the draw loop writes.
         /// </summary>
         /// <param name="typeCode">The output dtype.</param>
-        /// <param name="dims">The output dimensions (from <see cref="OutputDims"/>).</param>
-        /// <returns>The output.</returns>
-        internal static NDArray NewOutput(NPTypeCode typeCode, long[] dims) => new NDArray(typeCode, new Shape(dims), false);
+        /// <param name="size">The requested size; ignored unless <paramref name="sizeGiven"/>.</param>
+        /// <param name="sizeGiven">Whether the caller passed a size (NumPy's <c>size is not None</c>).</param>
+        /// <param name="a">The first parameter (converted), in NumPy's <c>MultiIterNew</c> order (see <see cref="OutputDims"/>).</param>
+        /// <param name="b">The second parameter, or null.</param>
+        /// <param name="c">The third parameter, or null (only with <paramref name="b"/>).</param>
+        /// <returns>The output; the caller owns it.</returns>
+        /// <exception cref="ValueError">A size dimension is negative (<c>negative dimensions are not allowed</c>) or the size's
+        ///     byte count passes the addressable maximum (<c>array is too big; `arr.size * arr.dtype.itemsize` is larger than the
+        ///     maximum possible size.</c>) — scanned left to right like NumPy's, so <c>(2^62, -1)</c> reports the size — or,
+        ///     after a successful allocation, the shape errors of <see cref="OutputDims"/> (the parameters do not broadcast, or
+        ///     the size is not their broadcast shape).</exception>
+        /// <exception cref="OutOfMemoryException">A valid size that cannot be allocated (NumPy's <c>MemoryError</c>).</exception>
+        /// <remarks>
+        ///     <para>
+        ///     NumPy's <c>cont_broadcast_N</c> / <c>discrete_broadcast_*</c> (and the Generator's hand-written binomial) run
+        ///     <c>np.empty(size)</c> before <c>MultiIterNew(randoms, a, ...)</c> and <c>validate_output_shape</c>, so a size that
+        ///     is BOTH unallocatable and incompatible with the parameters reports the allocation: <c>size=(2^62, 3)</c> against a
+        ///     <c>(2,)</c> parameter is <c>array is too big</c>, not the <c>shape mismatch</c> a check-then-allocate order gives.
+        ///     Without a size, NumPy broadcasts the parameters first (<c>MultiIterNew(a, b, ...)</c>, their mismatch text) and
+        ///     allocates <c>np.empty(it.shape)</c>, whose shape check then passes by construction.
+        ///     </para>
+        ///     <para>
+        ///     A size that allocates but fails the shape check frees the output before the exception leaves (NumPy leaves its
+        ///     orphaned <c>np.empty</c> to the collector): uninitialized memory costs the allocation call only, never a write.
+        ///     The output is always built from a FRESH shape over the size's dimensions, never from the caller's
+        ///     <see cref="Shape"/> itself — a view's shape carries strides and an offset an allocation must not inherit.
+        ///     </para>
+        /// </remarks>
+        internal static NDArray NewOutput(NPTypeCode typeCode, Shape size, bool sizeGiven, NDArray a, NDArray b = null, NDArray c = null)
+        {
+            if (!sizeGiven)
+                return new NDArray(typeCode, new Shape(Broadcast(a, b, c)), false);
+
+            // np.empty(size) first: the allocation guard rejects a negative or overflowing size in NumPy's left-to-right order.
+            var ret = new NDArray(typeCode, new Shape((long[])(size.dimensions ?? Array.Empty<long>()).Clone()), false);
+            try
+            {
+                // Then MultiIterNew(randoms, a, b, c) + validate_output_shape over the output's own (fresh) shape.
+                OutputDims(ret.Shape, true, a, b, c);
+            }
+            catch
+            {
+                // The output never leaves this method on failure: free it rather than leave unmanaged memory to the finalizer.
+                ret.Dispose();
+                throw;
+            }
+            return ret;
+        }
 
         /// <summary>
         ///     Runs a NumPy ufunc-style step on the parameters (NumPy's <c>np.subtract(high, low)</c>, <c>np.greater</c>, …),
@@ -182,7 +238,7 @@ namespace NumSharp
         ///     Whether some element <c>v</c> of a converted parameter lies in <c>[lo, hi]</c> (a NaN never does) — the scan
         ///     behind the array constraint checks and the read-ahead decisions (see the remarks).
         /// </summary>
-        /// <param name="p">A converted parameter (<see cref="RandomParam.Array"/>): C-contiguous float64, int64 or float32.</param>
+        /// <param name="p">A converted parameter (<see cref="RandomParam.Array"/>): a dense float64, int64 or float32 array.</param>
         /// <param name="lo">The inclusive lower bound (<see cref="double.NegativeInfinity"/> for none).</param>
         /// <param name="hi">The inclusive upper bound (<see cref="double.PositiveInfinity"/> for none).</param>
         /// <returns>True when some element satisfies <c>lo &lt;= v &lt;= hi</c>.</returns>
@@ -206,6 +262,15 @@ namespace NumSharp
         ///     A plain loop with the bounds in registers, vectorized over float64 — NOT a per-element delegate, which
         ///     measured 2.8 ns an element (280 us per rule for a 100K-element parameter): more than a cheap sampler's whole
         ///     draw, where NumPy's ufunc checks cost about a tenth of that.
+        ///     </para>
+        ///     <para>
+        ///     And NOT the library's fused-expression route (<c>np.evaluate(NDExpr.Any(...))</c>, the NDIter/IL path other
+        ///     whole-array predicates take), measured against these scans on the same inputs: it agrees on every edge value
+        ///     (NaN of either sign, <c>±0</c>, subnormals, <c>±inf</c>, the neighbouring doubles), but it has a floor of about
+        ///     1 us per call (0.9-1.1 us over 3 elements, where a scan takes nanoseconds) that a sampler pays up to four
+        ///     times per call, and over 100K elements it ran 1.3-15x slower (float64 range 27.2 vs 16.4 us, int64 sign 258
+        ///     vs 17 us, float32 sign 28.5 vs 10.2 us). The per-dtype switch is closed rather than open-ended: a converted
+        ///     parameter is float64, int64 or float32 (<see cref="RandomParam"/>), so no other dtype reaches a scan.
         ///     </para>
         /// </remarks>
         internal static bool AnyInRange(NDArray p, double lo, double hi)
@@ -266,7 +331,7 @@ namespace NumSharp
         ///     Whether EVERY element <c>v</c> of a converted parameter lies in <c>[lo, hi]</c> — NumPy's <c>np.all</c> over a
         ///     range condition, so a NaN element fails it (an empty parameter satisfies it).
         /// </summary>
-        /// <param name="p">A converted parameter: C-contiguous float64, int64 or float32.</param>
+        /// <param name="p">A converted parameter (<see cref="RandomParam.Array"/>): a dense float64, int64 or float32 array.</param>
         /// <param name="lo">The inclusive lower bound (see <see cref="AnyInRange"/> for exclusive bounds).</param>
         /// <param name="hi">The inclusive upper bound.</param>
         /// <returns>True when no element falls outside the range or is NaN.</returns>
@@ -285,11 +350,14 @@ namespace NumSharp
                     {
                         var vlo = new Vector<double>(lo);
                         var vhi = new Vector<double>(hi);
+                        var allLanes = new Vector<long>(-1L);
                         for (; i <= n - Vector<double>.Count; i += Vector<double>.Count)
                         {
                             var v = Unsafe.ReadUnaligned<Vector<double>>(d + i);
-                            // Every lane must pass both compares; a NaN lane passes neither.
-                            if (!(Vector.GreaterThanOrEqualAll(v, vlo) && Vector.LessThanOrEqualAll(v, vhi)))
+                            // Every lane must pass both compares (a NaN lane passes neither): ONE mask and one horizontal
+                            // test, where GreaterThanOrEqualAll && LessThanOrEqualAll paid two (measured 1.3x slower: 26.4
+                            // vs 19.9 us over 100K elements).
+                            if (!Vector.EqualsAll(Vector.GreaterThanOrEqual(v, vlo) & Vector.LessThanOrEqual(v, vhi), allLanes))
                                 return false;
                         }
                     }
@@ -326,13 +394,13 @@ namespace NumSharp
         }
 
         /// <summary>Whether some element of a converted parameter is exactly zero, of either sign — a draw-free input's usual mark.</summary>
-        /// <param name="p">A converted parameter: C-contiguous float64, int64 or float32.</param>
+        /// <param name="p">A converted parameter (<see cref="RandomParam.Array"/>): a dense float64, int64 or float32 array.</param>
         /// <returns>True when some element equals 0 (<c>-0.0</c> included, as <c>v == 0</c> reads it).</returns>
         /// <exception cref="ArgumentException"><paramref name="p"/> is not float64, int64 or float32 (a caller bug).</exception>
         internal static bool AnyZero(NDArray p) => AnyInRange(p, 0.0, 0.0);
 
         /// <summary>Whether some element of a converted parameter is NaN (never, for int64).</summary>
-        /// <param name="p">A converted parameter: C-contiguous float64, int64 or float32.</param>
+        /// <param name="p">A converted parameter (<see cref="RandomParam.Array"/>): a dense float64, int64 or float32 array.</param>
         /// <returns>True when some element is NaN.</returns>
         /// <exception cref="ArgumentException"><paramref name="p"/> is not float64, int64 or float32 (a caller bug).</exception>
         internal static bool AnyNaN(NDArray p)
@@ -378,13 +446,17 @@ namespace NumSharp
         ///     <c>np.any(np.logical_and(np.logical_not(np.isnan(val)), np.signbit(val)))</c>, the <c>CONS_NON_NEGATIVE</c>
         ///     array test, which rejects <c>-0.0</c> along with every negative value.
         /// </summary>
-        /// <param name="p">A converted parameter: C-contiguous float64, int64 or float32.</param>
+        /// <param name="p">A converted parameter (<see cref="RandomParam.Array"/>): a dense float64, int64 or float32 array.</param>
         /// <returns>True when some element is negative or <c>-0.0</c>; a NaN of either sign never counts.</returns>
         /// <exception cref="ArgumentException"><paramref name="p"/> is not float64, int64 or float32 (a caller bug).</exception>
         /// <remarks>
         ///     <c>v &lt; 0</c> alone would miss <c>-0.0</c>, which NumPy's <c>signbit</c> catches; an int64 element's sign bit
-        ///     IS <c>v &lt; 0</c>. Over float64 the bits are tested directly: the sign bit set and the magnitude no larger than
-        ///     <c>+inf</c>'s (a larger magnitude is a NaN).
+        ///     IS <c>v &lt; 0</c>. Over float64 and float32 the bits are tested directly, as integers: the sign bit set (the
+        ///     pattern is negative) and the magnitude no larger than <c>+inf</c>'s (a larger magnitude is a NaN) — which is
+        ///     also what lets the test vectorize as two integer compares per lane. CONS_NON_NEGATIVE is the most common
+        ///     array constraint (every <c>scale</c>), so this scan runs on most array calls: the per-element form took
+        ///     0.35 ns an element over float64 and 0.69 ns over float32 (the latter 2.4x slower than a fused
+        ///     <c>np.evaluate</c> of the same predicate); the vector bodies take 0.26 and 0.10 ns.
         /// </remarks>
         internal static bool AnyNegativeSign(NDArray p)
         {
@@ -396,7 +468,20 @@ namespace NumSharp
                 {
                     var d = (long*)first; // the float64 bit patterns
                     const long magnitude = 0x7FFFFFFFFFFFFFFF, infBits = 0x7FF0000000000000;
-                    for (long i = 0; i < n; i++)
+                    long i = 0;
+                    if (Vector.IsHardwareAccelerated && n >= Vector<long>.Count)
+                    {
+                        var vmag = new Vector<long>(magnitude);
+                        var vinf = new Vector<long>(infBits);
+                        for (; i <= n - Vector<long>.Count; i += Vector<long>.Count)
+                        {
+                            var b = Unsafe.ReadUnaligned<Vector<long>>(d + i);
+                            // Sign bit set AND magnitude within +inf's: a negative (or -0.0) non-NaN lane.
+                            if (!Vector.EqualsAll(Vector.LessThan(b, Vector<long>.Zero) & Vector.LessThanOrEqual(b & vmag, vinf), Vector<long>.Zero))
+                                return true;
+                        }
+                    }
+                    for (; i < n; i++)
                     {
                         long b = d[i];
                         if (b < 0 && (b & magnitude) <= infBits)
@@ -407,17 +492,39 @@ namespace NumSharp
                 case NPTypeCode.Int64:
                 {
                     var d = (long*)first;
-                    for (long i = 0; i < n; i++)
+                    long i = 0;
+                    if (Vector.IsHardwareAccelerated && n >= Vector<long>.Count)
+                        for (; i <= n - Vector<long>.Count; i += Vector<long>.Count)
+                            if (!Vector.EqualsAll(Vector.LessThan(Unsafe.ReadUnaligned<Vector<long>>(d + i), Vector<long>.Zero), Vector<long>.Zero))
+                                return true;
+                    for (; i < n; i++)
                         if (d[i] < 0)
                             return true;
                     return false;
                 }
                 case NPTypeCode.Single:
                 {
-                    var d = (float*)first;
-                    for (long i = 0; i < n; i++)
-                        if (!float.IsNaN(d[i]) && float.IsNegative(d[i]))
+                    var d = (int*)first; // the float32 bit patterns
+                    const int magnitude = 0x7FFFFFFF, infBits = 0x7F800000;
+                    long i = 0;
+                    if (Vector.IsHardwareAccelerated && n >= Vector<int>.Count)
+                    {
+                        var vmag = new Vector<int>(magnitude);
+                        var vinf = new Vector<int>(infBits);
+                        for (; i <= n - Vector<int>.Count; i += Vector<int>.Count)
+                        {
+                            var b = Unsafe.ReadUnaligned<Vector<int>>(d + i);
+                            // The float64 test at 32 bits: sign bit set AND not a NaN.
+                            if (!Vector.EqualsAll(Vector.LessThan(b, Vector<int>.Zero) & Vector.LessThanOrEqual(b & vmag, vinf), Vector<int>.Zero))
+                                return true;
+                        }
+                    }
+                    for (; i < n; i++)
+                    {
+                        int b = d[i];
+                        if (b < 0 && (b & magnitude) <= infBits)
                             return true;
+                    }
                     return false;
                 }
                 default:
@@ -429,7 +536,7 @@ namespace NumSharp
         ///     Whether some element of a converted float64 parameter HALVES to zero (<c>v / 2.0 == 0</c>) — the degrees of
         ///     freedom whose chi-square gamma (shape <c>df / 2</c>) returns 0 without drawing.
         /// </summary>
-        /// <param name="p">A converted parameter: C-contiguous float64.</param>
+        /// <param name="p">A converted parameter (<see cref="RandomParam.Array"/>): a dense float64 array.</param>
         /// <returns>True when some element halves to zero.</returns>
         /// <exception cref="ArgumentException"><paramref name="p"/> is not float64, int64 or float32 (a caller bug).</exception>
         /// <remarks>
@@ -593,8 +700,8 @@ namespace NumSharp
 
     /// <summary>
     ///     One distribution parameter after NumPy's conversion (<c>PyArray_FROM_OTF(x, NPY_DOUBLE / NPY_INT64,
-    ///     NPY_ARRAY_ALIGNED)</c>): the caller's array itself when it already is a C-contiguous array of the target dtype,
-    ///     else a private converted copy this value owns and disposes.
+    ///     NPY_ARRAY_ALIGNED)</c>): the caller's array itself when it already is a C- or F-contiguous array of the target
+    ///     dtype, else a private converted copy this value owns and disposes.
     /// </summary>
     /// <remarks>
     ///     <para>
@@ -613,7 +720,12 @@ namespace NumSharp
     /// </remarks>
     internal readonly struct RandomParam : IDisposable
     {
-        /// <summary>The converted parameter: C-contiguous, float64 or int64 (float32 for <see cref="Float32Forced"/>).</summary>
+        /// <summary>
+        ///     The converted parameter: float64 or int64 (float32 for <see cref="Float32Forced"/>), and DENSE — its
+        ///     <c>size</c> elements fill one block starting at its first element (C- or F-contiguous, or the dense copy
+        ///     <c>astype</c>'s K order makes of any other layout), which the whole-array scans rely on; NOT necessarily
+        ///     C-contiguous, so anything reading it in logical order goes through its strides.
+        /// </summary>
         internal readonly NDArray Array;
 
         /// <summary>True when <see cref="Array"/> is a private copy this value disposes.</summary>
@@ -719,15 +831,26 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     The conversion itself: the argument when it already is a C-contiguous array of <paramref name="to"/>, else an
-        ///     owned copy in that dtype (C order, the logical element order NumPy's multi-iterator reads).
+        ///     The conversion itself: the argument when it already is a C- or F-contiguous array of <paramref name="to"/>,
+        ///     else an owned copy in that dtype — <c>astype</c>'s K order, which is dense whatever the input's layout (an
+        ///     F-ordered or axis-permuted input keeps its memory order, a strided / reversed / broadcast one is compacted).
         /// </summary>
         /// <param name="x">The argument (not null; the safe-cast gate already ran where one applies).</param>
         /// <param name="to">The target dtype.</param>
-        /// <returns>The converted parameter.</returns>
+        /// <returns>The converted parameter (see <see cref="Array"/> for the layout it guarantees).</returns>
+        /// <remarks>
+        ///     NumPy's <c>PyArray_FROM_OTF(x, type, NPY_ARRAY_ALIGNED)</c> copies nothing that already has the dtype,
+        ///     whatever its layout. This conversion keeps every C- or F-contiguous input as it is and copies only the other
+        ///     layouts, because the whole-array scans (<see cref="RandomBroadcast.AnyInRange"/> and its siblings) read the
+        ///     elements as ONE block from the first element's address, which a contiguous array of either order is (and so
+        ///     is every copy). The draw loops read each parameter through its strides in the output's C order
+        ///     (<see cref="BroadcastWalk"/>), so the layout decides only whether a copy is made, never a value — an
+        ///     F-ordered parameter (<c>a.T</c> of a C array, the usual way a transposed parameter arrives) is no longer
+        ///     copied just to produce another F-ordered array.
+        /// </remarks>
         private static RandomParam Convert(NDArray x, NPTypeCode to)
         {
-            if (x.typecode == to && x.Shape.IsContiguous)
+            if (x.typecode == to && (x.Shape.IsContiguous || x.Shape.IsFContiguous))
                 return new RandomParam(x, owned: false, isNone: false, complexScalar: false);
             return new RandomParam(x.astype(to), owned: true, isNone: false, complexScalar: false);
         }

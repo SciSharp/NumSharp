@@ -7,9 +7,11 @@ namespace NumSharp.Tests.RandomSampling
     ///     The array-valued (broadcast) distribution parameters of both random APIs — the parts the oracle corpus
     ///     (random_parity / generator_parity, <c>params["bargs"]</c>) cannot pin: legacy outcomes that depend on the width of
     ///     C <c>long</c>, RandomState's cached Gaussian carried into the next call, the read-ahead edge where a position draws
-    ///     nothing, the <c>size=()</c> contract, the overloads C# must resolve — plus the exact closed-range scans behind the
-    ///     constraint checks, the draw-free thresholds NumPy never returns from (legacy <c>vonmises</c> from <c>2^511</c>,
-    ///     legacy <c>zipf</c> from 1025), and the bit-neutrality of the setups a run of equal parameters shares.
+    ///     nothing, the <c>size=()</c> contract, the overloads C# must resolve — plus the exact closed-range and sign scans
+    ///     behind the constraint checks (vector body and tail), the draw-free thresholds NumPy never returns from (legacy
+    ///     <c>vonmises</c> from <c>2^511</c>, legacy <c>zipf</c> from 1025), the bit-neutrality of the setups a run of equal
+    ///     parameters shares, NumPy's allocate-before-broadcast error order for sizes too big to allocate, and which
+    ///     parameter layouts are used in place.
     /// </summary>
     /// <remarks>
     ///     <para>
@@ -77,6 +79,11 @@ namespace NumSharp.Tests.RandomSampling
 
         // ---------------------------------------------------------------- legacy C long = 64-bit (LP64 NumPy)
 
+        /// <summary>
+        ///     Legacy HRUA with <c>ngood + nbad</c> past <c>2^31</c> draws LP64 NumPy's values and leaves the stream
+        ///     where LP64 NumPy does — a 32-bit popsize (Windows NumPy) overflows and never returns, so a regression to
+        ///     32-bit arithmetic shows as different draws or a hang.
+        /// </summary>
         [TestMethod]
         public void Legacy_Hypergeometric_PopulationPast2Pow31_IsLP64NumPy()
         {
@@ -91,6 +98,11 @@ namespace NumSharp.Tests.RandomSampling
             Assert.AreEqual(0x3F95141A07387E80UL, NextSample(rs));
         }
 
+        /// <summary>
+        ///     A legacy binomial count past <c>2^31</c> is legal and draws what LP64 NumPy draws:
+        ///     <c>LEGACY_CONS_NON_NEGATIVE_INBOUNDS_LONG</c> bounds at a 64-bit C long here, not Windows' <c>2^31 -
+        ///     1</c>.
+        /// </summary>
         [TestMethod]
         public void Legacy_Binomial_NPast2Pow31_IsLP64NumPy()
         {
@@ -103,6 +115,10 @@ namespace NumSharp.Tests.RandomSampling
             Assert.AreEqual(0x3FE32835D6632CB0UL, NextSample(rs));
         }
 
+        /// <summary>
+        ///     A legacy Poisson mean past <c>2^31</c> is legal and draws what LP64 NumPy draws:
+        ///     <c>LEGACY_POISSON_LAM_MAX</c> derives from a 64-bit long, and the count itself exceeds int32.
+        /// </summary>
         [TestMethod]
         public void Legacy_Poisson_LamPast2Pow31_IsLP64NumPy()
         {
@@ -114,6 +130,11 @@ namespace NumSharp.Tests.RandomSampling
             Assert.AreEqual(0x3FEBB7B70955B7B5UL, NextSample(rs));
         }
 
+        /// <summary>
+        ///     The legacy negative binomial's Poisson of an extreme mean returns C's <c>(long)</c> cast of the double
+        ///     as LP64 NumPy does: <c>p == 0</c> yields long's minimum (the indefinite integer), a tiny <c>p</c> or a
+        ///     huge <c>n</c> a count past <c>2^31</c> — values only a 64-bit long carries.
+        /// </summary>
         [TestMethod]
         public void Legacy_NegativeBinomial_ExtremeMeans_AreLP64IntegerCasts()
         {
@@ -145,6 +166,11 @@ namespace NumSharp.Tests.RandomSampling
             }
         }
 
+        /// <summary>
+        ///     Legacy zipf rejects candidates above a 64-bit <c>LONG_MAX</c>: a candidate past <c>2^31</c> is accepted
+        ///     and the stream continues where LP64 NumPy's does (Windows NumPy rejects it and continues on a different
+        ///     stream).
+        /// </summary>
         [TestMethod]
         public void Legacy_Zipf_SmallExponent_KeepsCandidatesBelowLongMax_LP64()
         {
@@ -159,6 +185,11 @@ namespace NumSharp.Tests.RandomSampling
 
         // ---------------------------------------------------------------- RandomState's cached Gaussian
 
+        /// <summary>
+        ///     An odd number of legacy normals leaves the last polar pair's second half in RandomState's Gaussian
+        ///     cache, and the NEXT call returns it without drawing — a broadcast fill that dropped or reused the cache
+        ///     would shift every later normal.
+        /// </summary>
         [TestMethod]
         public void Legacy_Normal_OddCount_LeavesTheCachedHalfForTheNextCall()
         {
@@ -172,6 +203,10 @@ namespace NumSharp.Tests.RandomSampling
             Assert.AreEqual(0x3FF85E548E01AA2BUL, (ulong)BitConverter.DoubleToInt64Bits(rs.standard_normal().GetAtIndex<double>(0)));
         }
 
+        /// <summary>
+        ///     A legacy <c>standard_t</c> position whose df halves to 0 takes its normal from the cache and draws no
+        ///     gamma: the read-ahead must stop at such a position, or the following draws land on the wrong words.
+        /// </summary>
         [TestMethod]
         public void Legacy_StandardT_DfHalvingToZero_UsesTheCacheAndDrawsNothing()
         {
@@ -186,6 +221,11 @@ namespace NumSharp.Tests.RandomSampling
 
         // ---------------------------------------------------------------- read-ahead: positions that draw nothing
 
+        /// <summary>
+        ///     Draw-free positions at the END of a legacy <c>chisquare</c> / <c>standard_t</c> array leave the stream
+        ///     exactly where NumPy leaves it — a read-ahead sized by "one draw per position still owed" would consume
+        ///     words NumPy never reads.
+        /// </summary>
         [TestMethod]
         public void Legacy_ChisquareAndStandardT_TrailingDrawFreePositions_KeepTheStream()
         {
@@ -205,6 +245,10 @@ namespace NumSharp.Tests.RandomSampling
             }
         }
 
+        /// <summary>
+        ///     Draw-free positions at the END of a Generator <c>chisquare</c> / <c>f</c> array leave the PCG64 stream
+        ///     exactly where NumPy leaves it (the next <c>random()</c> is NumPy's).
+        /// </summary>
         [TestMethod]
         public void Generator_ChisquareAndF_TrailingDrawFreePositions_KeepTheStream()
         {
@@ -229,6 +273,10 @@ namespace NumSharp.Tests.RandomSampling
 
         // ---------------------------------------------------------------- size=() and the scalar path
 
+        /// <summary>
+        ///     <c>Shape.Scalar</c> is NumPy's GIVEN size <c>()</c>, not <c>None</c>: with non-0-d parameters both APIs
+        ///     raise <c>validate_output_shape</c>'s text instead of broadcasting the parameters.
+        /// </summary>
         [TestMethod]
         public void SizeEmptyTuple_WithArrayParameters_RaisesNumPysOutputSizeError()
         {
@@ -240,6 +288,10 @@ namespace NumSharp.Tests.RandomSampling
             Assert.AreEqual("Output size () is not compatible with broadcast dimensions of inputs (3,).", gen.Message);
         }
 
+        /// <summary>
+        ///     With every parameter 0-d, <c>size=()</c> takes the scalar path and returns ONE 0-d draw, consuming
+        ///     exactly the words NumPy's scalar call consumes (pinned by the next draw).
+        /// </summary>
         [TestMethod]
         public void SizeEmptyTuple_WithZeroDParameters_ReturnsOneZeroDDraw()
         {
@@ -255,8 +307,52 @@ namespace NumSharp.Tests.RandomSampling
             Assert.AreEqual(0x3FDC16959869E47EUL, NextRandom(g));
         }
 
+        // ---------------------------------------------------------------- output allocation: np.empty(size) comes first
+
+        /// <summary>
+        ///     A given size is allocated BEFORE the parameters are broadcast against it, as NumPy's
+        ///     <c>cont_broadcast_N</c> / <c>discrete_broadcast_*</c> do: a size that is both unallocatable and
+        ///     incompatible reports <c>array is too big</c> (checking the shape first reported the mismatch), the
+        ///     dimensions are scanned left to right, and an allocatable size that does not fit keeps NumPy's mismatch
+        ///     text.
+        /// </summary>
+        [TestMethod]
+        public void Broadcast_UnallocatableSize_ReportsTheAllocationBeforeTheShapeMismatch()
+        {
+            const string tooBig = "array is too big; `arr.size * arr.dtype.itemsize` is larger than the maximum possible size.";
+            const string mismatch = "shape mismatch: objects cannot be broadcast to a single shape.  Mismatch is between arg 0 with shape (4, 3) and arg 1 with shape (2,).";
+            using var two = np.array(new[] { 0.0, 1.0 });
+            using var one = NDArray.Scalar(1.0);
+            using var counts = np.array(new long[] { 5, 6 });
+            using var half = NDArray.Scalar(0.5);
+            // (2^62, 3) is both unallocatable and incompatible with a (2,) parameter: NumPy's np.empty(size) fails first.
+            var huge = new Shape(1L << 62, 3);
+            (string expected, Func<NDArray> call)[] cases =
+            {
+                (tooBig, () => np.random.default_rng(42).normal(two, one, huge)),
+                (tooBig, () => np.random.RandomState(42).normal(two, one, huge)),
+                (tooBig, () => np.random.default_rng(42).binomial(counts, half, huge)),
+                (tooBig, () => np.random.RandomState(42).binomial(counts, half, huge)),
+                // The dimensions are scanned left to right, as np.empty does: the overflow is met before the -1 here...
+                (tooBig, () => np.random.default_rng(42).normal(two, one, new Shape(1L << 62, -1))),
+                (tooBig, () => np.random.RandomState(42).normal(two, one, new Shape(1L << 62, -1))),
+                // ...and the -1 first here.
+                ("negative dimensions are not allowed", () => np.random.default_rng(42).normal(two, one, new Shape(-1, 1L << 62))),
+                ("negative dimensions are not allowed", () => np.random.RandomState(42).normal(two, one, new Shape(-1, 1L << 62))),
+                // An allocatable size that does not fit still reports MultiIterNew's text, the output as arg 0.
+                (mismatch, () => np.random.default_rng(42).normal(two, one, new Shape(4, 3))),
+                (mismatch, () => np.random.RandomState(42).normal(two, one, new Shape(4, 3))),
+            };
+            foreach (var (expected, call) in cases)
+                Assert.AreEqual(expected, Assert.ThrowsException<ValueError>(() => call()).Message);
+        }
+
         // ---------------------------------------------------------------- uniform: the NumPy-shaped array overload
 
+        /// <summary>
+        ///     Array <c>uniform</c> bounds run NumPy's <c>np.subtract(high, low)</c> once, then <c>low + range *
+        ///     next_double()</c> per broadcast position, on both APIs — NumPy's values and stream position.
+        /// </summary>
         [TestMethod]
         public void Uniform_ArrayBounds_BroadcastLowAndRange_BothApis()
         {
@@ -274,6 +370,10 @@ namespace NumSharp.Tests.RandomSampling
             Assert.AreEqual(0x3FE650D6C1C2C011UL, NextRandom(g));
         }
 
+        /// <summary>
+        ///     The APIs' <c>uniform</c> checks differ: mtrand refuses only a non-finite range, so reversed bounds draw;
+        ///     the Generator also requires <c>high - low &gt;= 0</c> and raises NumPy's text.
+        /// </summary>
         [TestMethod]
         public void Uniform_Legacy_ReversedBoundsAreLegal_GeneratorRefusesThem()
         {
@@ -288,6 +388,11 @@ namespace NumSharp.Tests.RandomSampling
 
         // ---------------------------------------------------------------- overload resolution
 
+        /// <summary>
+        ///     The NDArray <c>hypergeometric</c> overload must not capture integer calls: <c>(long, long, long,
+        ///     Shape)</c> binds the scalar sampler, and the all-0-d NDArray form takes NumPy's scalar path with the
+        ///     same draws.
+        /// </summary>
         [TestMethod]
         public void Hypergeometric_IntegersAndShape_BindTheScalarSampler()
         {
@@ -304,6 +409,10 @@ namespace NumSharp.Tests.RandomSampling
             AssertInt64(viaArrays, new long[] { 4 }, viaNullable.ToArray<long>());
         }
 
+        /// <summary>
+        ///     The Generator's <c>10^9</c> caps on <c>ngood</c>/<c>nbad</c> do not exist in mtrand: the legacy array
+        ///     path draws where the Generator raises NumPy's text.
+        /// </summary>
         [TestMethod]
         public void Legacy_HypergeometricArrays_HaveNoGeneratorCaps()
         {
@@ -331,6 +440,11 @@ namespace NumSharp.Tests.RandomSampling
             return np.array(values);
         }
 
+        /// <summary>
+        ///     The float64 scans behind the constraint checks and the read-ahead decisions answer exactly at every edge
+        ///     — NaN of either sign, <c>±0</c>, the smallest subnormal and its halving, <c>±inf</c>, the neighbouring
+        ///     doubles of strict bounds — both in the vectorized body and in the scalar tail.
+        /// </summary>
         [TestMethod]
         public void Scans_ClosedRanges_AreExact_InTheVectorBodyAndTheTail()
         {
@@ -377,6 +491,10 @@ namespace NumSharp.Tests.RandomSampling
             Assert.IsTrue(RandomBroadcast.AllInRange(clean, 0.5, 0.5));
         }
 
+        /// <summary>
+        ///     int64 and float32 parameters compare exactly against the double bounds: <c>long.MaxValue</c> against
+        ///     <c>10^9</c> and the legacy long bound, float32 <c>-0</c> and NaN with their sign and NaN answers.
+        /// </summary>
         [TestMethod]
         public void Scans_Int64AndFloat32Parameters_WidenExactly()
         {
@@ -396,8 +514,60 @@ namespace NumSharp.Tests.RandomSampling
             Assert.IsFalse(RandomBroadcast.AllInRange(floats, -1.0, 2.0), "the NaN fails the range");
         }
 
+        /// <summary>
+        ///     A parameter of <c>2 * lanes + 3</c> elements (so both the vector body and the scalar tail run whatever the
+        ///     host's vector width) filled with <paramref name="fill"/>, with <paramref name="v"/> planted at
+        ///     <paramref name="at"/>.
+        /// </summary>
+        /// <typeparam name="T">The element type (int64 or float32 here).</typeparam>
+        /// <param name="fill">The background value, which no probe answers true for.</param>
+        /// <param name="v">The probe value.</param>
+        /// <param name="at">Where to plant it: a non-negative index counts from the start (1 lands in the vector body), a
+        ///     negative one from the end (-1 is the last element, always in the scalar tail).</param>
+        /// <returns>The array (the caller disposes it).</returns>
+        private static NDArray PlantedLanes<T>(T fill, T v, int at) where T : unmanaged
+        {
+            var values = new T[2 * System.Numerics.Vector<T>.Count + 3];
+            Array.Fill(values, fill);
+            values[at >= 0 ? at : values.Length + at] = v;
+            return np.array(values);
+        }
+
+        /// <summary>
+        ///     The vectorized sign scans over int64 and float32 parameters (the float32 one serves
+        ///     <c>standard_gamma</c>'s float32 path) answer like NumPy's <c>signbit</c> on every edge — <c>-0</c>, a
+        ///     NaN of either sign, the smallest negative subnormal, the extremes — whether the element sits in the
+        ///     vector body or the scalar tail.
+        /// </summary>
+        [TestMethod]
+        public void Scans_SignScans_VectorBodies_OverInt64AndFloat32()
+        {
+            // .NET's float.NaN is the NEGATIVE quiet NaN (0xffc00000); both NaN signs must answer false.
+            float positiveNaN = BitConverter.Int32BitsToSingle(0x7FC00000), negativeNaN = BitConverter.Int32BitsToSingle(unchecked((int)0xFFC00001));
+            (float v, bool expected)[] floats =
+            {
+                (-0f, true), (-1f, true), (-float.Epsilon, true), (float.MinValue, true), (float.NegativeInfinity, true),
+                (positiveNaN, false), (negativeNaN, false), (0f, false), (float.Epsilon, false), (float.PositiveInfinity, false),
+            };
+            (long v, bool expected)[] longs = { (-1, true), (long.MinValue, true), (0, false), (long.MaxValue, false) };
+            foreach (int at in new[] { 1, -1 })
+            {
+                foreach (var (v, expected) in floats)
+                    using (var a = PlantedLanes(0.5f, v, at))
+                        Assert.AreEqual(expected, RandomBroadcast.AnyNegativeSign(a), $"float32 0x{BitConverter.SingleToInt32Bits(v):X8} at {at}");
+                foreach (var (v, expected) in longs)
+                    using (var a = PlantedLanes(5L, v, at))
+                        Assert.AreEqual(expected, RandomBroadcast.AnyNegativeSign(a), $"int64 {v} at {at}");
+            }
+        }
+
         // ---------------------------------------------------------------- constraint bounds (NumPy 2.4.2 values)
 
+        /// <summary>
+        ///     Each strict Generator bound accepts its neighbouring double and draws NumPy's values from it (geometric
+        ///     <c>p = 5e-324</c>, logseries <c>p = 1 - ulp</c>, zipf <c>a = 1 + ulp</c>, a NaN exponential scale, a
+        ///     zero gamma shape) — and rejects the bound itself with NumPy's array text.
+        /// </summary>
         [TestMethod]
         public void Constraints_StrictBounds_AcceptTheNeighbouringDouble_Generator()
         {
@@ -442,6 +612,11 @@ namespace NumSharp.Tests.RandomSampling
                 Assert.AreEqual(expected, Assert.ThrowsException<ValueError>(() => call()).Message);
         }
 
+        /// <summary>
+        ///     The legacy strict bounds at their neighbouring doubles, against LP64 NumPy: the geometric inversion
+        ///     overflows to C's indefinite long, logseries near <c>p = 1</c> keeps its 64-bit count, and the bounds
+        ///     themselves are rejected with NumPy's array texts.
+        /// </summary>
         [TestMethod]
         public void Constraints_StrictBounds_AcceptTheNeighbouringDouble_LegacyLP64()
         {
@@ -470,6 +645,11 @@ namespace NumSharp.Tests.RandomSampling
 
         // ---------------------------------------------------------------- draw-free thresholds NumPy never returns from
 
+        /// <summary>
+        ///     The legacy <c>vonmises</c> draw-free threshold is exactly <c>2^511</c>, where <c>4 * kappa^2</c>
+        ///     overflows and NumPy never returns: the fill must equal the scalar calls there and must not read ahead
+        ///     past those positions.
+        /// </summary>
         [TestMethod]
         public void Legacy_VonmisesOverflowKappa_IsTwoPow511_AndDrawsNothingFromThere()
         {
@@ -494,6 +674,11 @@ namespace NumSharp.Tests.RandomSampling
             Assert.AreEqual(NextSample(viaScalars), NextSample(viaArrays));
         }
 
+        /// <summary>
+        ///     The legacy <c>zipf</c> draw-free threshold is exactly <c>a = 1025</c>, where <c>pow(2, a - 1)</c>
+        ///     overflows and NumPy never returns: the fill must equal the scalar calls there and must not read ahead
+        ///     past those positions.
+        /// </summary>
         [TestMethod]
         public void Legacy_ZipfDrawFreeThreshold_Is1025_AndDrawsNothingFromThere()
         {
@@ -531,6 +716,11 @@ namespace NumSharp.Tests.RandomSampling
         /// <returns>One array.</returns>
         private static double[] Cat(params double[][] parts) => parts.SelectMany(p => p).ToArray();
 
+        /// <summary>
+        ///     Setups shared across a run of equal parameters — and the memos built for runs of 16 or more — are
+        ///     bit-neutral: every position of long runs, short runs and single values equals the scalar call with its
+        ///     parameters, and the stream ends where the scalar calls leave it.
+        /// </summary>
         [TestMethod]
         public void Broadcast_RunsShareSetups_YetEqualTheScalarCallsInSequence()
         {
@@ -599,6 +789,11 @@ namespace NumSharp.Tests.RandomSampling
             }
         }
 
+        /// <summary>
+        ///     Runs compare parameters BITWISE (<c>-0.0</c> and <c>+0.0</c> split a run, only the same NaN pattern
+        ///     continues one), a stride-0 parameter is constant over its chunk, and a multi-parameter run ends where
+        ///     ANY parameter changes.
+        /// </summary>
         [TestMethod]
         public unsafe void RunEnd_ComparesBitwise_AndAStrideZeroParameterIsOneRun()
         {
@@ -631,6 +826,70 @@ namespace NumSharp.Tests.RandomSampling
                 Assert.AreEqual(4, RandomBroadcast.RunEnd(2, 4, pg, 1, pb, 1, ps, 1));
                 Assert.AreEqual(4, RandomBroadcast.RunEnd(0, 4, pg, 0, pb, 0, ps, 0));
             }
+        }
+
+        // ---------------------------------------------------------------- conversion: which layouts are used in place
+
+        /// <summary>
+        ///     A parameter that already has the dtype and is C- or F-contiguous is used IN PLACE (NumPy's
+        ///     <c>PyArray_FROM_OTF</c> copies nothing there); any other layout is copied densely. Either way the draws
+        ///     read the parameter in the output's C order: an F-ordered or offset parameter draws exactly what its
+        ///     C-ordered copy draws, and the whole-array scans see exactly the view's elements.
+        /// </summary>
+        [TestMethod]
+        public void Convert_ContiguousParameters_AreUsedInPlace_AndDrawLikeTheirCopies()
+        {
+            using var c = np.arange(24.0).reshape(4, 6) + 1.0;          // C-contiguous, values 1..24 (valid means/shapes)
+            using var f = c.T;                                            // (6, 4) F-contiguous view of it
+            Assert.IsTrue(f.Shape.IsFContiguous && !f.Shape.IsContiguous, "precondition: an F-only layout");
+            using (var p = RandomParam.Float64(c))
+                Assert.IsTrue(ReferenceEquals(p.Array, c), "a C-contiguous float64 parameter is used in place");
+            using (var p = RandomParam.Float64(f))
+                Assert.IsTrue(ReferenceEquals(p.Array, f), "an F-contiguous float64 parameter is used in place");
+            using (var strided = c[":, ::2"])
+            using (var p = RandomParam.Float64(strided))
+            {
+                Assert.IsFalse(ReferenceEquals(p.Array, strided), "a strided view is copied");
+                Assert.IsTrue(p.Array.Shape.IsContiguous || p.Array.Shape.IsFContiguous, "the copy is dense");
+            }
+            using (var ints = np.arange(24).reshape(4, 6).T)
+            using (var p = RandomParam.Float64(ints))
+                Assert.IsTrue(p.Array.Shape.IsFContiguous && !p.Array.Shape.IsContiguous,
+                    "a converting copy keeps the input's F order (astype's K order): converted parameters are dense, not C-ordered");
+
+            // The draws read the parameter in the OUTPUT's C order through its strides: an F-ordered parameter used in
+            // place draws exactly what its C-ordered copy draws, run-structured samplers included, on both APIs.
+            using var fAsC = np.ascontiguousarray(f);
+            using var two = NDArray.Scalar(2.0);
+            {
+                var ga = np.random.default_rng(3); var gb = np.random.default_rng(3);
+                using var viaF = ga.poisson(f);
+                using var viaC = gb.poisson(fAsC);
+                CollectionAssert.AreEqual(viaC.ToArray<long>(), viaF.ToArray<long>(), "gen poisson");
+                Assert.AreEqual(NextRandom(gb), NextRandom(ga), "gen poisson: stream position");
+            }
+            {
+                var ra = np.random.RandomState(3); var rb = np.random.RandomState(3);
+                using var viaF = ra.gamma(f, two);
+                using var viaC = rb.gamma(fAsC, two);
+                CollectionAssert.AreEqual(Bits(viaC), Bits(viaF), "legacy gamma");
+                Assert.AreEqual(NextSample(rb), NextSample(ra), "legacy gamma: stream position");
+            }
+
+            // An F-contiguous view at an OFFSET is used in place too; the whole-array checks must see exactly its
+            // elements — a negative value just outside the view passes, one inside is rejected.
+            using var outside = np.arange(24.0).reshape(4, 6) + 1.0;
+            outside[0, 5] = -1.0;                                          // row 0: outside the view below
+            using var fOutside = outside.T[":, 1:3"];                      // rows 1..2 of the base, F-contiguous, offset 6
+            Assert.IsTrue(fOutside.Shape.IsFContiguous && fOutside.Shape.offset != 0, "precondition: an offset F-contiguous view");
+            using (var p = RandomParam.Float64(fOutside))
+                Assert.IsTrue(ReferenceEquals(p.Array, fOutside), "an offset F-contiguous parameter is used in place");
+            using (var r = np.random.default_rng(3).exponential(fOutside))
+                Assert.AreEqual(12, r.size);
+            using var inside = np.arange(24.0).reshape(4, 6) + 1.0;
+            inside[2, 0] = -1.0;                                           // row 2: inside the view below
+            using var fInside = inside.T[":, 1:3"];
+            Assert.AreEqual("scale < 0", Assert.ThrowsException<ValueError>(() => np.random.default_rng(3).exponential(fInside)).Message);
         }
     }
 }

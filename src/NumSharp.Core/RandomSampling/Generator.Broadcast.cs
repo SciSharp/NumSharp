@@ -15,17 +15,21 @@ namespace NumSharp
         //   2. every converted parameter 0-d -> the scalar path: read each value the way the C code does
         //      (PyFloat_AsDouble / <int64_t>) and delegate to the scalar overload, which checks and draws exactly as
         //      NumPy's scalar branch;
-        //   3. otherwise check each constraint over the whole array (check_array_constraint), resolve the output shape
-        //      (size, else the broadcast of the parameters; then validate_output_shape), allocate, and draw one value per
-        //      output position in C order with that position's parameters (BroadcastWalk, NumPy's MultiIter walk).
+        //   3. otherwise check each constraint over the whole array (check_array_constraint), allocate the output in
+        //      NumPy's order (RandomBroadcast.NewOutput: np.empty(size) BEFORE the parameters are broadcast against it
+        //      when a size is given, so an unallocatable size reports "array is too big" ahead of any shape mismatch; the
+        //      parameters' broadcast first otherwise; then validate_output_shape), and draw one value per output position
+        //      in C order with that position's parameters (BroadcastWalk, NumPy's MultiIter walk).
         //
         // Draws keep NumPy's stream. Samplers whose draw count does not depend on the parameters (one standard normal /
         // exponential / uniform per value) bulk-fill those variates first and transform them in place — the same
         // expression per element as the C function, over the same variate. The rest call the per-value kernel of the
-        // scalar path with a per-value setup (the same statements NumPy runs per call) over a read-ahead buffer whose Owed
-        // stays at the values still owed — valid only when EVERY position draws at least once, which a scan over the
-        // parameter elements decides (RandomBroadcast.Any); when some position draws nothing (weibull a == 0, poisson
-        // lam == 0, ...) the buffer holds one draw (capacity 1 is NumPy's per-call sequence).
+        // scalar path with the setup NumPy's call computes (the same statements), built once per RUN of equal parameters
+        // (RandomBroadcast.RunEnd — bit-neutral, a setup is a pure function of its parameters), over a read-ahead buffer
+        // whose Owed stays at the values still owed — valid only when EVERY position draws at least once, which a scan
+        // over the parameter elements decides (RandomBroadcast.AnyZero / AnyNaN / AnyInRange / AnyHalvesToZero); when
+        // some position draws nothing (weibull a == 0, poisson lam == 0, ...) the buffer holds one draw (capacity 1 is
+        // NumPy's per-call sequence).
 
         /// <summary>
         ///     Draw samples from a Beta distribution with array-valued, broadcast parameters.
@@ -54,7 +58,7 @@ namespace NumSharp
 
             RandomConstraints.CheckArray(pa.Array, "a", ConstraintType.CONS_POSITIVE);
             RandomConstraints.CheckArray(pb.Array, "b", ConstraintType.CONS_POSITIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, RandomBroadcast.OutputDims(size, !IsNoSize(size), pa.Array, pb.Array));
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !IsNoSize(size), pa.Array, pb.Array);
             unsafe
             {
                 long n = ret.size, i = 0;
@@ -104,7 +108,7 @@ namespace NumSharp
                 return exponential(ps.Scalar(), size);
 
             RandomConstraints.CheckArray(ps.Array, "scale", ConstraintType.CONS_NON_NEGATIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, RandomBroadcast.OutputDims(size, !IsNoSize(size), ps.Array));
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !IsNoSize(size), ps.Array);
             unsafe
             {
                 lock (_bitGenerator.@lock)
@@ -151,7 +155,7 @@ namespace NumSharp
             if (!RandomBroadcast.AllInRange(pRange.Array, -double.MaxValue, double.MaxValue))
                 throw new OverflowException("Range exceeds valid bounds");
             RandomConstraints.CheckArray(pRange.Array, "high - low", ConstraintType.CONS_NON_NEGATIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, RandomBroadcast.OutputDims(size, !IsNoSize(size), pLow.Array, pRange.Array));
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !IsNoSize(size), pLow.Array, pRange.Array);
             unsafe
             {
                 lock (_bitGenerator.@lock)
@@ -192,7 +196,7 @@ namespace NumSharp
                 return normal(pLoc.Scalar(), pScale.Scalar(), size);
 
             RandomConstraints.CheckArray(pScale.Array, "scale", ConstraintType.CONS_NON_NEGATIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, RandomBroadcast.OutputDims(size, !IsNoSize(size), pLoc.Array, pScale.Array));
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !IsNoSize(size), pLoc.Array, pScale.Array);
             unsafe
             {
                 lock (_bitGenerator.@lock)
@@ -245,7 +249,7 @@ namespace NumSharp
                     return standard_gamma(pf.ScalarChecked("shape", ConstraintType.CONS_NON_NEGATIVE), size, dtype, @out);
 
                 RandomConstraints.CheckArray(pf.Array, "shape", ConstraintType.CONS_NON_NEGATIVE);
-                var retF = @out ?? RandomBroadcast.NewOutput(NPTypeCode.Single, RandomBroadcast.OutputDims(size, !IsNoSize(size), pf.Array));
+                var retF = @out ?? RandomBroadcast.NewOutput(NPTypeCode.Single, size, !IsNoSize(size), pf.Array);
                 if (@out is not null)
                     RandomBroadcast.OutputDims(@out.Shape, true, pf.Array);
                 unsafe
@@ -267,7 +271,7 @@ namespace NumSharp
                 return standard_gamma(p.ScalarChecked("shape", ConstraintType.CONS_NON_NEGATIVE), size, dtype, @out);
 
             RandomConstraints.CheckArray(p.Array, "shape", ConstraintType.CONS_NON_NEGATIVE);
-            var ret = @out ?? RandomBroadcast.NewOutput(NPTypeCode.Double, RandomBroadcast.OutputDims(size, !IsNoSize(size), p.Array));
+            var ret = @out ?? RandomBroadcast.NewOutput(NPTypeCode.Double, size, !IsNoSize(size), p.Array);
             if (@out is not null)
                 RandomBroadcast.OutputDims(@out.Shape, true, p.Array);
             unsafe
@@ -324,7 +328,7 @@ namespace NumSharp
 
             RandomConstraints.CheckArray(pShape.Array, "shape", ConstraintType.CONS_NON_NEGATIVE);
             RandomConstraints.CheckArray(pScale.Array, "scale", ConstraintType.CONS_NON_NEGATIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, RandomBroadcast.OutputDims(size, !IsNoSize(size), pShape.Array, pScale.Array));
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !IsNoSize(size), pShape.Array, pScale.Array);
             unsafe
             {
                 long n = ret.size, i = 0;
@@ -377,7 +381,7 @@ namespace NumSharp
 
             RandomConstraints.CheckArray(pNum.Array, "dfnum", ConstraintType.CONS_POSITIVE);
             RandomConstraints.CheckArray(pDen.Array, "dfden", ConstraintType.CONS_POSITIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, RandomBroadcast.OutputDims(size, !IsNoSize(size), pNum.Array, pDen.Array));
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !IsNoSize(size), pNum.Array, pDen.Array);
             unsafe
             {
                 long n = ret.size, i = 0;
@@ -439,8 +443,7 @@ namespace NumSharp
             RandomConstraints.CheckArray(pNum.Array, "dfnum", ConstraintType.CONS_POSITIVE);
             RandomConstraints.CheckArray(pDen.Array, "dfden", ConstraintType.CONS_POSITIVE);
             RandomConstraints.CheckArray(pNonc.Array, "nonc", ConstraintType.CONS_NON_NEGATIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double,
-                RandomBroadcast.OutputDims(size, !IsNoSize(size), pNum.Array, pDen.Array, pNonc.Array));
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !IsNoSize(size), pNum.Array, pDen.Array, pNonc.Array);
             unsafe
             {
                 long n = ret.size, i = 0;
@@ -492,7 +495,7 @@ namespace NumSharp
                 return chisquare(p.ScalarChecked("df", ConstraintType.CONS_POSITIVE), size);
 
             RandomConstraints.CheckArray(p.Array, "df", ConstraintType.CONS_POSITIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, RandomBroadcast.OutputDims(size, !IsNoSize(size), p.Array));
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !IsNoSize(size), p.Array);
             unsafe
             {
                 long n = ret.size, i = 0;
@@ -549,7 +552,7 @@ namespace NumSharp
 
             RandomConstraints.CheckArray(pDf.Array, "df", ConstraintType.CONS_POSITIVE);
             RandomConstraints.CheckArray(pNonc.Array, "nonc", ConstraintType.CONS_NON_NEGATIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, RandomBroadcast.OutputDims(size, !IsNoSize(size), pDf.Array, pNonc.Array));
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !IsNoSize(size), pDf.Array, pNonc.Array);
             unsafe
             {
                 long n = ret.size, i = 0;
@@ -582,8 +585,8 @@ namespace NumSharp
         ///     Whether EVERY broadcast position of the modern <c>random_noncentral_chisquare</c> is guaranteed to draw at
         ///     least once, decided from the parameter elements alone — the condition a read-ahead needs.
         /// </summary>
-        /// <param name="df">The converted degrees of freedom (C-contiguous float64).</param>
-        /// <param name="nonc">The converted non-centralities (C-contiguous float64).</param>
+        /// <param name="df">The converted degrees of freedom (dense float64, <see cref="RandomParam.Array"/>).</param>
+        /// <param name="nonc">The converted non-centralities (dense float64, <see cref="RandomParam.Array"/>).</param>
         /// <returns>True when no position can draw nothing; false when some position might (the caller then reads per draw).</returns>
         /// <remarks>
         ///     <para>
@@ -621,7 +624,7 @@ namespace NumSharp
                 return standard_t(p.ScalarChecked("df", ConstraintType.CONS_POSITIVE), size);
 
             RandomConstraints.CheckArray(p.Array, "df", ConstraintType.CONS_POSITIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, RandomBroadcast.OutputDims(size, !IsNoSize(size), p.Array));
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !IsNoSize(size), p.Array);
             unsafe
             {
                 long n = ret.size, i = 0;
@@ -674,7 +677,7 @@ namespace NumSharp
                 return vonmises(pMu.Scalar(), pKappa.ScalarChecked("kappa", ConstraintType.CONS_NON_NEGATIVE), size);
 
             RandomConstraints.CheckArray(pKappa.Array, "kappa", ConstraintType.CONS_NON_NEGATIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, RandomBroadcast.OutputDims(size, !IsNoSize(size), pMu.Array, pKappa.Array));
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !IsNoSize(size), pMu.Array, pKappa.Array);
             unsafe
             {
                 long n = ret.size, i = 0;
@@ -724,7 +727,7 @@ namespace NumSharp
                 return pareto(p.ScalarChecked("a", ConstraintType.CONS_POSITIVE), size);
 
             RandomConstraints.CheckArray(p.Array, "a", ConstraintType.CONS_POSITIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, RandomBroadcast.OutputDims(size, !IsNoSize(size), p.Array));
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !IsNoSize(size), p.Array);
             unsafe
             {
                 lock (_bitGenerator.@lock)
@@ -764,7 +767,7 @@ namespace NumSharp
                 return weibull(p.ScalarChecked("a", ConstraintType.CONS_NON_NEGATIVE), size);
 
             RandomConstraints.CheckArray(p.Array, "a", ConstraintType.CONS_NON_NEGATIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, RandomBroadcast.OutputDims(size, !IsNoSize(size), p.Array));
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !IsNoSize(size), p.Array);
             unsafe
             {
                 long n = ret.size;
@@ -822,7 +825,7 @@ namespace NumSharp
                 return power(p.ScalarChecked("a", ConstraintType.CONS_POSITIVE), size);
 
             RandomConstraints.CheckArray(p.Array, "a", ConstraintType.CONS_POSITIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, RandomBroadcast.OutputDims(size, !IsNoSize(size), p.Array));
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !IsNoSize(size), p.Array);
             unsafe
             {
                 lock (_bitGenerator.@lock)
@@ -861,7 +864,7 @@ namespace NumSharp
                 return laplace(pLoc.Scalar(), pScale.Scalar(), size);
 
             RandomConstraints.CheckArray(pScale.Array, "scale", ConstraintType.CONS_NON_NEGATIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, RandomBroadcast.OutputDims(size, !IsNoSize(size), pLoc.Array, pScale.Array));
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !IsNoSize(size), pLoc.Array, pScale.Array);
             unsafe
             {
                 long n = ret.size, i = 0;
@@ -904,7 +907,7 @@ namespace NumSharp
                 return gumbel(pLoc.Scalar(), pScale.Scalar(), size);
 
             RandomConstraints.CheckArray(pScale.Array, "scale", ConstraintType.CONS_NON_NEGATIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, RandomBroadcast.OutputDims(size, !IsNoSize(size), pLoc.Array, pScale.Array));
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !IsNoSize(size), pLoc.Array, pScale.Array);
             unsafe
             {
                 long n = ret.size, i = 0;
@@ -947,7 +950,7 @@ namespace NumSharp
                 return logistic(pLoc.Scalar(), pScale.Scalar(), size);
 
             RandomConstraints.CheckArray(pScale.Array, "scale", ConstraintType.CONS_NON_NEGATIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, RandomBroadcast.OutputDims(size, !IsNoSize(size), pLoc.Array, pScale.Array));
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !IsNoSize(size), pLoc.Array, pScale.Array);
             unsafe
             {
                 long n = ret.size, i = 0;
@@ -991,7 +994,7 @@ namespace NumSharp
                 return lognormal(pMean.Scalar(), pSigma.Scalar(), size);
 
             RandomConstraints.CheckArray(pSigma.Array, "sigma", ConstraintType.CONS_NON_NEGATIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, RandomBroadcast.OutputDims(size, !IsNoSize(size), pMean.Array, pSigma.Array));
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !IsNoSize(size), pMean.Array, pSigma.Array);
             unsafe
             {
                 lock (_bitGenerator.@lock)
@@ -1027,7 +1030,7 @@ namespace NumSharp
                 return rayleigh(p.Scalar(), size);
 
             RandomConstraints.CheckArray(p.Array, "scale", ConstraintType.CONS_NON_NEGATIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, RandomBroadcast.OutputDims(size, !IsNoSize(size), p.Array));
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !IsNoSize(size), p.Array);
             unsafe
             {
                 lock (_bitGenerator.@lock)
@@ -1067,7 +1070,7 @@ namespace NumSharp
 
             RandomConstraints.CheckArray(pMean.Array, "mean", ConstraintType.CONS_POSITIVE);
             RandomConstraints.CheckArray(pScale.Array, "scale", ConstraintType.CONS_POSITIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, RandomBroadcast.OutputDims(size, !IsNoSize(size), pMean.Array, pScale.Array));
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !IsNoSize(size), pMean.Array, pScale.Array);
             unsafe
             {
                 long n = ret.size, i = 0;
@@ -1125,8 +1128,7 @@ namespace NumSharp
                 throw new ValueError("mode > right");
             if (RandomBroadcast.AnyCompare(NDExpr.Equal, pLeft.Array, pRight.Array))
                 throw new ValueError("left == right");
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double,
-                RandomBroadcast.OutputDims(size, !IsNoSize(size), pLeft.Array, pMode.Array, pRight.Array));
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !IsNoSize(size), pLeft.Array, pMode.Array, pRight.Array);
             unsafe
             {
                 long n = ret.size, i = 0;
@@ -1174,7 +1176,7 @@ namespace NumSharp
 
             RandomConstraints.CheckArray(pp.Array, "p", ConstraintType.CONS_BOUNDED_0_1);
             RandomConstraints.CheckArray(pn.Array, "n", ConstraintType.CONS_NON_NEGATIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Int64, RandomBroadcast.OutputDims(size, !IsNoSize(size), pp.Array, pn.Array));
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Int64, size, !IsNoSize(size), pp.Array, pn.Array);
             unsafe
             {
                 long count = ret.size, i = 0;
@@ -1243,7 +1245,7 @@ namespace NumSharp
             RandomConstraints.CheckArray(pp.Array, "p", ConstraintType.CONS_BOUNDED_GT_0_1);
             if (NegativeBinomialLamTooLarge(pn.Array, pp.Array))
                 throw new ValueError("n too large or p too small, see Generator.negative_binomial Notes");
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Int64, RandomBroadcast.OutputDims(size, !IsNoSize(size), pn.Array, pp.Array));
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Int64, size, !IsNoSize(size), pn.Array, pp.Array);
             unsafe
             {
                 long count = ret.size, i = 0;
@@ -1316,7 +1318,7 @@ namespace NumSharp
                 return poisson(p.Scalar(), size);
 
             RandomConstraints.CheckArray(p.Array, "lam", ConstraintType.CONS_POISSON);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Int64, RandomBroadcast.OutputDims(size, !IsNoSize(size), p.Array));
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Int64, size, !IsNoSize(size), p.Array);
             unsafe
             {
                 long count = ret.size, i = 0;
@@ -1380,7 +1382,7 @@ namespace NumSharp
                 return zipf(p.ScalarChecked("a", ConstraintType.CONS_GT_1), size);
 
             RandomConstraints.CheckArray(p.Array, "a", ConstraintType.CONS_GT_1);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Int64, RandomBroadcast.OutputDims(size, !IsNoSize(size), p.Array));
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Int64, size, !IsNoSize(size), p.Array);
             unsafe
             {
                 long count = ret.size, i = 0;
@@ -1440,7 +1442,7 @@ namespace NumSharp
                 return geometric(pp.ScalarChecked("p", ConstraintType.CONS_BOUNDED_GT_0_1), size);
 
             RandomConstraints.CheckArray(pp.Array, "p", ConstraintType.CONS_BOUNDED_GT_0_1);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Int64, RandomBroadcast.OutputDims(size, !IsNoSize(size), pp.Array));
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Int64, size, !IsNoSize(size), pp.Array);
             unsafe
             {
                 long count = ret.size, i = 0;
@@ -1541,8 +1543,7 @@ namespace NumSharp
             RandomConstraints.CheckArray(pg.Array, "ngood", ConstraintType.CONS_NON_NEGATIVE);
             RandomConstraints.CheckArray(pb.Array, "nbad", ConstraintType.CONS_NON_NEGATIVE);
             RandomConstraints.CheckArray(ps.Array, "nsample", ConstraintType.CONS_NON_NEGATIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Int64,
-                RandomBroadcast.OutputDims(size, !IsNoSize(size), pg.Array, pb.Array, ps.Array));
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Int64, size, !IsNoSize(size), pg.Array, pb.Array, ps.Array);
             unsafe
             {
                 long count = ret.size;
@@ -1656,7 +1657,7 @@ namespace NumSharp
                 return logseries(pp.ScalarChecked("p", ConstraintType.CONS_BOUNDED_LT_0_1), size);
 
             RandomConstraints.CheckArray(pp.Array, "p", ConstraintType.CONS_BOUNDED_LT_0_1);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Int64, RandomBroadcast.OutputDims(size, !IsNoSize(size), pp.Array));
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Int64, size, !IsNoSize(size), pp.Array);
             unsafe
             {
                 long count = ret.size, i = 0;
