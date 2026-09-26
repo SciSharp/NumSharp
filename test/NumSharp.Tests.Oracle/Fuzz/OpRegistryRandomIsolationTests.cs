@@ -62,7 +62,15 @@ namespace NumSharp.Tests.Fuzz
                     foreach (var c in FuzzCorpus.Load(corpus).Where(c => c.Op == "rnd"))
                     {
                         var operands = c.Operands.Select(FuzzCorpus.Reconstruct).ToArray();
-                        _ = OpRegistry.Apply(c.Op, c.Params, operands);
+                        try
+                        {
+                            _ = OpRegistry.Apply(c.Op, c.Params, operands);
+                        }
+                        catch (System.Exception) when (c.Expects_Throw)
+                        {
+                            // A validation case (NumPy raises too — the array-parameter broadcast cases): the fresh
+                            // per-case RandomState must still leave the global stream untouched after the throw.
+                        }
                         AssertGlobalStateUnchanged(c.Id);
                     }
                 }

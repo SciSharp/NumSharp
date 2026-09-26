@@ -100,6 +100,27 @@ namespace NumSharp
         private const long HypergeometricMemoMinFill = 16;
 
         /// <summary>
+        ///     Draw samples from a Hypergeometric distribution into a given (non-nullable) output shape.
+        /// </summary>
+        /// <param name="ngood">Number of ways to make a good selection. Must be non-negative.</param>
+        /// <param name="nbad">Number of ways to make a bad selection. Must be non-negative.</param>
+        /// <param name="nsample">Number of items sampled. Must be &gt;= 1 and &lt;= ngood + nbad.</param>
+        /// <param name="size">Output shape; <c>default</c> / <see cref="Shape.Scalar"/> draw a single value (NumPy's
+        ///     <c>None</c>, this class's convention).</param>
+        /// <returns>Drawn samples from the hypergeometric distribution (int64).</returns>
+        /// <exception cref="ValueError">A parameter violates its constraint (see <see cref="hypergeometric(long, long, long, Shape?)"/>)
+        ///     or a size dimension is negative.</exception>
+        /// <remarks>
+        ///     Exists for overload resolution, not behaviour: with the array-parameter
+        ///     <see cref="hypergeometric(NDArray, NDArray, NDArray, Shape)"/> beside the <see cref="Nullable{T}"/> form, a call
+        ///     passing integers and a <see cref="Shape"/> was better than each candidate in one argument (the integers bind
+        ///     the scalar form, the <see cref="Shape"/> binds the array form without the nullable wrap) — an ambiguity error.
+        ///     This exact match wins every such call and forwards to the scalar sampler unchanged.
+        /// </remarks>
+        public NDArray hypergeometric(long ngood, long nbad, long nsample, Shape size)
+            => hypergeometric(ngood, nbad, nsample, (Shape?)size);
+
+        /// <summary>
         ///     Draw samples from a Hypergeometric distribution.
         /// </summary>
         /// <param name="ngood">Number of ways to make a good selection. Must be non-negative.</param>

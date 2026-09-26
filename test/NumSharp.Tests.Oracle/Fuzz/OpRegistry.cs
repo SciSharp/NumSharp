@@ -838,7 +838,8 @@ namespace NumSharp.Tests.Fuzz
                         // Dispose each superseded draw so the harness's own multi-draw scaffolding is
                         // not counted as a library escape (the modf/partition dispose-intermediate pattern).
                         r?.Dispose();
-                        r = RndDraw(random, p);
+                        // Array-valued parameters (params["bargs"]) call the NDArray overloads with the operands.
+                        r = p.ContainsKey("bargs") ? LegacyBroadcastDraw(random, p, ops) : RndDraw(random, p);
                     }
                     return r;
                 }

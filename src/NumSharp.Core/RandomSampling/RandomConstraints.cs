@@ -210,5 +210,112 @@ namespace NumSharp
                     throw new ArgumentOutOfRangeException(nameof(cons), cons, "Unknown random-parameter constraint.");
             }
         }
+
+        /// <summary>
+        ///     Validates an ARRAY parameter the way NumPy's <c>check_array_constraint</c> does — over every element, with the
+        ///     array texts (<c>"… contains NaNs"</c> where the scalar check says <c>"… is NaN"</c>) and the array order of the
+        ///     tests.
+        /// </summary>
+        /// <param name="arr">The converted parameter: a C-contiguous float64, int64 or float32 array (float32 is the
+        ///     forced-cast parameter of the float32 <c>standard_gamma</c>).</param>
+        /// <param name="name">The parameter name as it appears in NumPy's message.</param>
+        /// <param name="cons">The rule to apply; <see cref="ConstraintType.CONS_NONE"/> accepts everything.</param>
+        /// <exception cref="ValueError">An element violates <paramref name="cons"/>; the message is NumPy's array text.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="cons"/> is not a defined <see cref="ConstraintType"/>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="arr"/> is not float64, int64 or float32 (a caller bug).</exception>
+        /// <remarks>
+        ///     <para>
+        ///     NumPy evaluates each condition over the whole array (<c>np.any</c> / <c>np.all</c>), so where a rule has two
+        ///     conditions the FIRST one decides the message whenever any element fails it — which is why an array Poisson
+        ///     mean of NaN reports <c>"lam value too large"</c> (the <c>all(val &lt;= LAM_MAX)</c> test runs first and NaN
+        ///     fails it) while the scalar check reports <c>"lam &lt; 0 or lam is NaN"</c>.
+        ///     </para>
+        ///     <para>
+        ///     An int64 array reads as NumPy's integer loops do: <c>signbit</c> is <c>val &lt; 0</c>, <c>isnan</c> is always
+        ///     false, and the widening to double the range scans perform keeps every answer against these rules' constants.
+        ///     A float32 element widens exactly — sign, NaN-ness and every comparison keep their float32 answers.
+        ///     </para>
+        ///     <para>
+        ///     Each condition is one vectorized scan (<see cref="RandomBroadcast.AnyInRange"/>, …): a per-element delegate
+        ///     here measured 280 us per condition on a 100K-element parameter, 10-15% of a cheap sampler's whole call.
+        ///     </para>
+        /// </remarks>
+        internal static void CheckArray(NDArray arr, string name, ConstraintType cons)
+        {
+            // Each NumPy condition is one whole-array scan (RandomBroadcast's range/sign/NaN scans), in NumPy's order. A
+            // strict bound is spelled as the closed bound at its neighbouring double — exact for every double (see
+            // RandomBroadcast.AnyInRange) — and a NaN fails every range, as it fails NumPy's comparisons.
+            switch (cons)
+            {
+                case ConstraintType.CONS_NONE:
+                    return;
+
+                case ConstraintType.CONS_NON_NEGATIVE:
+                    // np.any(np.logical_and(np.logical_not(np.isnan(val)), np.signbit(val))): -0.0 is rejected, NaN passes.
+                    if (RandomBroadcast.AnyNegativeSign(arr))
+                        throw new ValueError($"{name} < 0");
+                    return;
+
+                case ConstraintType.CONS_POSITIVE:
+                case ConstraintType.CONS_POSITIVE_NOT_NAN:
+                    if (cons == ConstraintType.CONS_POSITIVE_NOT_NAN && RandomBroadcast.AnyNaN(arr))
+                        throw new ValueError($"{name} must not be NaN");
+                    // np.any(np.less_equal(val, 0)): NaN compares false and passes CONS_POSITIVE.
+                    if (RandomBroadcast.AnyInRange(arr, double.NegativeInfinity, 0.0))
+                        throw new ValueError($"{name} <= 0");
+                    return;
+
+                case ConstraintType.CONS_BOUNDED_0_1:
+                    if (!RandomBroadcast.AllInRange(arr, 0.0, 1.0))
+                        throw new ValueError($"{name} < 0, {name} > 1 or {name} contains NaNs");
+                    return;
+
+                case ConstraintType.CONS_BOUNDED_GT_0_1:
+                    // v > 0 is v >= the smallest subnormal.
+                    if (!RandomBroadcast.AllInRange(arr, double.Epsilon, 1.0))
+                        throw new ValueError($"{name} <= 0, {name} > 1 or {name} contains NaNs");
+                    return;
+
+                case ConstraintType.CONS_BOUNDED_LT_0_1:
+                    if (!RandomBroadcast.AllInRange(arr, 0.0, Math.BitDecrement(1.0)))
+                        throw new ValueError($"{name} < 0, {name} >= 1 or {name} contains NaNs");
+                    return;
+
+                case ConstraintType.CONS_GT_1:
+                    if (!RandomBroadcast.AllInRange(arr, Math.BitIncrement(1.0), double.PositiveInfinity))
+                        throw new ValueError($"{name} <= 1 or {name} contains NaNs");
+                    return;
+
+                case ConstraintType.CONS_GTE_1:
+                    if (!RandomBroadcast.AllInRange(arr, 1.0, double.PositiveInfinity))
+                        throw new ValueError($"{name} < 1 or {name} contains NaNs");
+                    return;
+
+                case ConstraintType.CONS_POISSON:
+                case ConstraintType.LEGACY_CONS_POISSON:
+                {
+                    double max = cons == ConstraintType.CONS_POISSON ? PoissonLamMax : LegacyPoissonLamMax;
+                    // The bound runs FIRST over the array (NaN fails it), unlike the scalar check.
+                    if (!RandomBroadcast.AllInRange(arr, double.NegativeInfinity, max))
+                        throw new ValueError($"{name} value too large");
+                    if (!RandomBroadcast.AllInRange(arr, 0.0, double.PositiveInfinity))
+                        throw new ValueError($"{name} < 0 or {name} contains NaNs");
+                    return;
+                }
+
+                case ConstraintType.LEGACY_CONS_NON_NEGATIVE_INBOUNDS_LONG:
+                    // NumPy assumes an integral array here. v < 0 is v <= the negative number closest to 0 (-0.0 passes,
+                    // as it passes np.greater_equal); for an int64 element the upper bound always holds (every int64 widens to
+                    // at most 2^63, the bound's double value).
+                    if (RandomBroadcast.AnyInRange(arr, double.NegativeInfinity, -double.Epsilon))
+                        throw new ValueError($"{name} < 0");
+                    if (!RandomBroadcast.AllInRange(arr, double.NegativeInfinity, LegacyLongMax))
+                        throw new ValueError($"{name} is out of bounds for long, consider using the new generator API for 64bit integers.");
+                    return;
+
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(cons), cons, "Unknown random-parameter constraint.");
+            }
+        }
     }
 }

@@ -1002,7 +1002,7 @@ namespace NumSharp.Tests.Fuzz
 
         private static object Invoke(FuzzCorpus.Case c, NumSharp.NDArray[] operands)
             => c.Op == "grnd"
-                ? OpRegistry.GeneratorDraw(c.Params)
+                ? OpRegistry.GeneratorDraw(c.Params, operands)
                 : OpRegistry.Invoke(c.Expected.KindOrArray, c.Op, c.Params, operands);
 
         /// <summary>

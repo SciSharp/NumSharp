@@ -1,5 +1,4 @@
 using System;
-using System.Linq;
 
 namespace NumSharp
 {
@@ -65,26 +64,6 @@ namespace NumSharp
             }
 
             return ret;
-        }
-
-        /// <summary>
-        ///     Draw samples from a uniform distribution with array boundaries.
-        /// </summary>
-        /// <param name="low">Lower boundary array.</param>
-        /// <param name="high">Upper boundary array.</param>
-        /// <param name="dtype">The dtype of the output NDArray.</param>
-        /// <returns>Drawn samples.</returns>
-        /// <exception cref="IncorrectShapeException"><paramref name="low"/> and <paramref name="high"/> differ in shape.</exception>
-        /// <exception cref="IncorrectTypeException"><paramref name="dtype"/> is null and the bounds differ in dtype.</exception>
-        [NDScoped] // reclaims the rand draw, its astype, the (high-low) diff and the pre-cast ret
-        public NDArray uniform(NDArray low, NDArray high, DType dtype = null)
-        {
-            if (!low.shape.SequenceEqual(high.shape))
-                throw new IncorrectShapeException();
-            dtype ??= low.typecode == high.typecode ? low.dtype : throw new IncorrectTypeException();
-
-            var ret = low + rand(low.shape).astype(dtype) * (high - low);
-            return dtype != null ? ret.astype(dtype) : ret;
         }
     }
 }

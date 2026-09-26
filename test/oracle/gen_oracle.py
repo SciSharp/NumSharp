@@ -7213,6 +7213,10 @@ def gen_random_parity():
     cases_for(host, "hypergeometric", [100, 200, 50])   # nsample > 10: the HRUA branch
     cases_for(host, "standard_cauchy", [])
     cases_for(host, "multinomial", [20], extra={"pvals": [0.2, 0.3, 0.5]})
+    # Array-valued (broadcast) parameters of every legacy sampler — see _gen_random_broadcast.
+    bp, bh, n = _gen_random_broadcast("legacy", n)
+    portable += bp
+    host += bh
     return portable, host
 
 
@@ -8075,8 +8079,426 @@ def gen_generator_parity():
     cases(host, "dirichlet", {"args": [], "alpha": [2.0, 3.0, 5.0]})
     cases(host, "dirichlet", {"args": [], "alpha": [0.05, 0.05, 0.05]})   # stick-breaking over random_beta
     cases(host, "multivariate_hypergeometric", {"args": [40], "colors": [30, 20, 50]})
+    # Array-valued (broadcast) parameters of every Generator sampler — see _gen_random_broadcast.
+    bp, bh, n = _gen_random_broadcast("gen", n)
+    portable += bp
+    host += bh
 
     return portable, host
+
+
+# =====================================================================================
+# Array-valued (broadcast) distribution parameters — BOTH random APIs. Appended to the
+# random_parity tiers (legacy RandomState, op "rnd") and the generator_parity tiers (PCG64
+# Generator, op "grnd"): every sampler whose parameters NumPy accepts as arrays
+# (_common.pyx's cont / disc broadcast paths, mtrand.pyx / _generator.pyx), gated on the
+# full observable contract —
+#   * values: one draw per output position in C order with that position's parameters;
+#   * the output shape: `size`, else the parameters' broadcast shape, then NumPy's
+#     validate_output_shape ("Output size ... is not compatible with broadcast dimensions
+#     of inputs ...") and MultiIterNew's "shape mismatch" text (arg 0 = the output);
+#   * the conversion: PyArray_FROM_OTF's 'safe' gate (complex -> TypeError; ints/bool/
+#     float32/float16 accepted; floats refused for integer parameters), 0-d arrays taking
+#     the scalar path (PyFloat_AsDouble — None fails there, becomes NaN on the array path);
+#   * the constraints over whole arrays (check_array_constraint's texts and ORDER — e.g. a
+#     NaN Poisson mean reports "lam value too large" because the bound runs first), the
+#     sampler-specific whole-array ufunc steps (uniform's np.subtract, triangular's
+#     np.greater/np.equal, hypergeometric's np.add/np.less, the Generator negative_binomial's
+#     Poisson-mean bound) with their ufunc broadcast errors;
+#   * the stream: "draws": 2 records the SECOND call, so a call that over- or under-draws
+#     (a read-ahead running past a position that draws nothing — weibull a == 0, poisson
+#     lam == 0, a degrees of freedom whose df / 2 underflows to 0 — or RandomState's cached
+#     Gaussian left in the wrong state) shows up in the next block.
+# Parameters ride as real OPERANDS (layout_catalog.describe), so strided / reversed /
+# F-order / transposed / 0-d views are rebuilt exactly on the C# side; Python scalars and
+# None ride in params["bargs"] ({"op": k} | {"f": x} | {"i": n} | {"none": true}).
+#
+# Legacy int results are C long — int32 on this win-amd64 authoring host — and are widened
+# to NumSharp's LP64 int64 like the scalar rnd cases (_RND_INT64_CAST). Inputs whose outcome
+# DEPENDS on the long width (n / lam / ngood past 2^31, p == 0's integer cast of infinity,
+# and the popsize overflow that makes Windows NumPy's legacy HRUA loop forever) cannot be
+# authored here; NumSharp's unit tests pin them against Linux (LP64) NumPy.
+_RB_DISTS = {
+    "beta": ([[0.5, 2.0, 5.0], 2.0], "dd"),
+    "exponential": ([[1.0, 2.0, 0.5]], "d"),
+    "uniform": ([[0.0, 1.0, -1.0], 5.0], "dd"),
+    "normal": ([[0.0, 1.0, -2.0], 2.0], "dd"),
+    "standard_gamma": ([[0.5, 1.0, 3.0]], "d"),
+    "gamma": ([[0.5, 1.0, 3.0], 2.0], "dd"),
+    "f": ([[1.0, 5.0, 10.0], 7.0], "dd"),
+    "noncentral_f": ([[1.0, 5.0, 10.0], 7.0, 1.5], "ddd"),
+    "chisquare": ([[0.5, 3.0, 10.0]], "d"),
+    "noncentral_chisquare": ([[0.5, 3.0, 10.0], 1.5], "dd"),
+    "standard_t": ([[0.5, 3.5, 10.0]], "d"),
+    "vonmises": ([[0.0, 1.0, -2.0], 2.0], "dd"),
+    "pareto": ([[0.5, 3.0, 10.0]], "d"),
+    "weibull": ([[0.0, 1.79, 5.0]], "d"),
+    "power": ([[0.3, 2.5, 5.0]], "d"),
+    "laplace": ([[0.0, 1.0, 2.0], 1.5], "dd"),
+    "gumbel": ([[0.0, 1.0, 2.0], 1.5], "dd"),
+    "logistic": ([[0.0, 1.0, 2.0], 1.5], "dd"),
+    "lognormal": ([[0.0, 1.0, 2.0], 0.5], "dd"),
+    "rayleigh": ([[1.0, 0.0, 2.0]], "d"),
+    "wald": ([[3.0, 0.5, 1.0], 2.0], "dd"),
+    "triangular": ([[0.0, 1.0, 2.0], 3.0, 10.0], "ddd"),
+    "binomial": ([[10, 100, 1000], 0.4], "id"),
+    "negative_binomial": ([[5.0, 0.5, 10.0], 0.4], "dd"),
+    "poisson": ([[3.5, 100.0, 0.0]], "d"),
+    "zipf": ([[3.0, 1.5, 1.05]], "d"),
+    "geometric": ([[0.35, 0.1, 1.0]], "d"),
+    "hypergeometric": ([[10, 100, 300], 200, 8], "iii"),
+    "logseries": ([[0.6, 0.99, 0.0]], "d"),
+}
+_RB_NAN = float("nan")
+_RB_INF = float("inf")
+_RB_VIOLATIONS = [
+    ("beta", 0, [1.0, 0.0], "a<=0"), ("beta", 1, [1.0, _RB_NAN], "b-nan"),
+    ("exponential", 0, [1.0, -1.0], "scale<0"), ("exponential", 0, [1.0, -0.0], "scale-negzero"),
+    ("normal", 1, [1.0, -1.0], "scale<0"), ("standard_gamma", 0, [1.0, -1.0], "shape<0"),
+    ("gamma", 0, [1.0, -1.0], "shape<0"), ("gamma", 1, [1.0, -1.0], "scale<0"),
+    ("f", 0, [1.0, 0.0], "dfnum<=0"), ("f", 1, [1.0, 0.0], "dfden<=0"),
+    ("noncentral_f", 2, [1.0, -1.0], "nonc<0"), ("chisquare", 0, [1.0, 0.0], "df<=0"),
+    ("noncentral_chisquare", 1, [1.0, -1.0], "nonc<0"), ("standard_t", 0, [1.0, 0.0], "df<=0"),
+    ("vonmises", 1, [1.0, -1.0], "kappa<0"), ("pareto", 0, [1.0, 0.0], "a<=0"),
+    ("weibull", 0, [1.0, -1.0], "a<0"), ("power", 0, [1.0, 0.0], "a<=0"),
+    ("laplace", 1, [1.0, -1.0], "scale<0"), ("gumbel", 1, [1.0, -1.0], "scale<0"),
+    ("logistic", 1, [1.0, -1.0], "scale<0"), ("lognormal", 1, [1.0, -1.0], "sigma<0"),
+    ("rayleigh", 0, [1.0, -1.0], "scale<0"), ("wald", 0, [1.0, 0.0], "mean<=0"),
+    ("wald", 1, [1.0, 0.0], "scale<=0"),
+    ("binomial", 0, [10, -1], "n<0"), ("binomial", 1, [0.5, 1.5], "p>1"), ("binomial", 1, [0.5, _RB_NAN], "p-nan"),
+    ("negative_binomial", 0, [5.0, _RB_NAN], "n-nan"), ("negative_binomial", 0, [5.0, 0.0], "n<=0"),
+    ("negative_binomial", 1, [0.5, 0.0], "p<=0"), ("negative_binomial", 1, [0.5, 1e-18], "maxlam"),
+    ("negative_binomial", 0, [5.0, 1e19], "maxlam2"),
+    ("poisson", 0, [1.0, -1.0], "lam<0"), ("poisson", 0, [1.0, 1e20], "lam-big"), ("poisson", 0, [1.0, _RB_NAN], "lam-nan"),
+    ("zipf", 0, [2.0, 1.0], "a<=1"), ("zipf", 0, [2.0, _RB_NAN], "a-nan"),
+    ("geometric", 0, [0.5, 0.0], "p<=0"), ("geometric", 0, [0.5, 1.5], "p>1"),
+    ("logseries", 0, [0.5, 1.0], "p>=1"), ("logseries", 0, [0.5, -0.1], "p<0"),
+    ("hypergeometric", 0, [10, -1], "ngood<0"), ("hypergeometric", 0, [10, 10 ** 9], "ngood>=1e9"),
+    ("hypergeometric", 2, [8, 300], "sum<nsample"), ("hypergeometric", 1, [10, -1], "nbad<0"),
+    ("triangular", 0, [0.0, 5.0], "left>mode"), ("triangular", 2, [10.0, 2.0], "mode>right"),
+    ("triangular", 0, [0.0, 10.0], "left==right"),
+    ("uniform", 1, [5.0, _RB_INF], "range-inf"), ("uniform", 1, [5.0, -1.0], "range<0"),
+]
+# Long mixed streams: each parameter on its own axis, so the draws cycle through every combination (every internal
+# branch of every sampler, the rejection retries, and the read-ahead refill boundaries of a (40, ...) output).
+_RB_STREAMS = {
+    "beta": [[0.05, 0.5, 1.0, 2.0, 5.0, 1e-200, 0.9, 30.0], [0.7, 3.0]],
+    "exponential": [[0.5, 1.0, 2.0, 10.0]],
+    "uniform": [[0.0, -5.0, 0.5, -3e5], [1.0, 2.5]],
+    "normal": [[0.0, -2.0, 5.0, 1e3], [1.0, 0.5, 3.0]],
+    "standard_gamma": [[0.05, 0.5, 1.0, 1.5, 3.0, 50.0, 0.999]],
+    "gamma": [[0.3, 1.0, 2.5, 20.0], [1.0, 0.5]],
+    "f": [[0.5, 1.0, 5.0, 40.0], [0.8, 7.0]],
+    "noncentral_f": [[0.5, 1.0, 5.0, 40.0], [0.8, 7.0], [0.0, 1.5, 20.0]],
+    "chisquare": [[0.3, 1.0, 2.0, 9.0, 100.0]],
+    "noncentral_chisquare": [[0.5, 1.0, 1.5, 3.0, 10.0], [0.0, 0.5, 2.0, 30.0]],
+    "standard_t": [[0.5, 1.0, 3.5, 30.0, 1e4]],
+    "vonmises": [[0.0, 1.0, -2.0], [1e-9, 1e-6, 0.5, 4.0, 1e3, 2e6]],
+    "pareto": [[0.5, 1.0, 3.0, 20.0]],
+    "weibull": [[0.5, 1.0, 1.79, 5.0]],
+    "power": [[0.3, 1.0, 2.5, 5.0]],
+    "laplace": [[0.0, 1.0, -3.0], [1.5, 0.2]],
+    "gumbel": [[0.0, 1.0, -3.0], [1.5, 0.2]],
+    "logistic": [[0.0, 1.0, -3.0], [1.5, 0.2]],
+    "lognormal": [[0.0, 1.0, -1.0], [0.5, 1.5]],
+    "rayleigh": [[0.5, 1.0, 2.0, 9.0]],
+    "wald": [[0.5, 1.0, 3.0, 20.0], [0.3, 2.0]],
+    "triangular": [[0.0, 1.0, -2.0], [3.0, 4.0], [10.0, 12.0]],
+    "binomial": [[1, 10, 50, 100, 1000, 100000], [0.05, 0.3, 0.5, 0.8, 0.97]],
+    "negative_binomial": [[0.5, 1.0, 5.0, 40.0, 500.0], [0.1, 0.4, 0.9, 1.0]],
+    "poisson": [[0.5, 3.5, 9.99, 10.0, 25.0, 1000.0, 1e6]],
+    "zipf": [[1.05, 1.5, 2.0, 3.0, 10.0]],
+    "geometric": [[0.01, 0.1, 0.3, 0.34, 0.5, 0.9, 1.0]],
+    "hypergeometric": [[15, 100, 300, 1000], [200, 30], [12, 40, 8]],
+    "logseries": [[0.0, 0.3, 0.6, 0.9, 0.99, 0.9999]],
+}
+# Legacy inputs whose OUTCOME depends on the width of C long, replaced/skipped in the legacy half (this win-amd64
+# host's long is 32-bit; NumSharp models LP64). legacy_random_zipf rejects every candidate above LONG_MAX, so a small
+# exponent (a < 2: 1.5, 1.05 draw candidates past 2^31 routinely) takes a different stream on the two widths — the
+# legacy half uses exponents >= 2 (P(X > 2^31) <= 5e-10 per attempt). legacy negative_binomial's p == 0 / tiny p /
+# huge n reach the Poisson's integer cast of an infinite or > 2^31 mean, which truncates differently.
+_RB_LEGACY_DISTS = {"zipf": ([[3.0, 2.5, 2.0]], "d")}
+_RB_LEGACY_STREAMS = {"zipf": [[2.0, 2.5, 3.0, 5.0, 10.0]]}
+_RB_LEGACY_SKIP = {("negative_binomial", "viol:p<=0"), ("negative_binomial", "viol:maxlam"),
+                   ("negative_binomial", "viol:maxlam2"), ("negative_binomial", "huge_n")}
+# Portable (pure MT19937/PCG64 bits + exactly-rounded IEEE): the uniform transform everywhere, and the Generator's
+# triangular (the scalar tiers classify them the same way). Every other sampler's VALUES consume the host libm.
+_RB_PORTABLE = {"legacy": {"uniform"}, "gen": {"uniform", "triangular"}}
+
+
+class _RBView:
+    """An array parameter passed as a VIEW of a C-contiguous base (a slice, a reversal, an F-order reshape)."""
+
+    def __init__(self, base, view):
+        self.base, self.view = base, view
+
+
+def _gen_random_broadcast(api, n):
+    """The array-parameter cases of one API ('legacy' -> op rnd, 'gen' -> op grnd); returns (portable, host, n)."""
+    op = "rnd" if api == "legacy" else "grnd"
+    key = "dist" if api == "legacy" else "method"
+    portable, host = [], []
+    A = np.array
+    nan, inf = _RB_NAN, _RB_INF
+
+    def run(dist, case, args, size="__none__", draws=1, dtype=None, out=None):
+        nonlocal n
+        operands, bargs, real = [], [], []
+        for a in args:
+            if a is None:
+                bargs.append({"none": True})
+                real.append(None)
+            elif isinstance(a, _RBView):
+                bargs.append({"op": len(operands)})
+                operands.append(describe(a.base, a.view))
+                real.append(a.view)
+            elif isinstance(a, np.ndarray):
+                base = np.array(a, copy=True, order="C")   # np.array keeps a 0-d array 0-d
+                bargs.append({"op": len(operands)})
+                operands.append(describe(base, base))
+                real.append(base)
+            elif isinstance(a, bool):
+                raise TypeError("bool scalars are not used as Python-literal parameters")
+            elif isinstance(a, int):
+                bargs.append({"i": a})
+                real.append(a)
+            else:
+                bargs.append({"f": float(a)})
+                real.append(float(a))
+        params = {key: dist, "seed": 42, "args": [], "bargs": bargs}
+        call_kw = {}
+        if size != "__none__":
+            params["size"] = [size] if isinstance(size, int) else list(size)
+            call_kw["size"] = size
+        if dtype is not None:
+            params["dtype"] = dtype
+            call_kw["dtype"] = np.dtype(dtype)
+        if out is not None:
+            params["out"] = out
+        if draws != 1:
+            params["draws"] = draws
+        if api == "legacy" and (dist, case) in _RB_LEGACY_SKIP:
+            return
+        layout = f"{op}_bcast"
+        cid = f"{op}/{dist}/bcast:{case}/{n}"
+        obj = np.random.RandomState(42) if api == "legacy" else np.random.default_rng(42)
+        try:
+            r = None
+            for _ in range(draws):
+                if out is not None:
+                    call_kw["out"] = np.empty(tuple(out["shape"]), dtype=out["dtype"], order=out["order"])
+                r = getattr(obj, dist)(*real, **call_kw)
+            r = np.asarray(r)
+            if api == "legacy" and r.dtype == np.int32:
+                r = r.astype(np.int64)   # C long -> NumSharp's LP64 int64 (values fit: see the block comment)
+            into = portable if dist in _RB_PORTABLE[api] else host
+            into.append(_case(op, params, operands, _arr_expected(r), layout, "stream", cid=cid))
+        except Exception as e:  # noqa: BLE001 - NumPy's exception IS the recorded contract
+            err = _error_case(op, params, operands, e, layout, cid=cid)   # validation: host-independent
+            # The C# harness trims its own message, so NumPy's trailing blank (the ufunc broadcast error ends in a space)
+            # is trimmed too — the _poly_exc rule; the text is otherwise verbatim.
+            err["error"]["text"] = err["error"]["text"].strip()
+            portable.append(err)
+        n += 1
+
+    dists = dict(_RB_DISTS, **(_RB_LEGACY_DISTS if api == "legacy" else {}))
+    streams = dict(_RB_STREAMS, **(_RB_LEGACY_STREAMS if api == "legacy" else {}))
+    for dist, (valid, kinds) in dists.items():
+        base = [A(v) if isinstance(v, list) else v for v in valid]
+        run(dist, "b1", base)
+        run(dist, "b1", base, draws=2)
+        run(dist, "b1_size43", base, (4, 3))
+        run(dist, "b1_size1", base, (1,))
+        run(dist, "b1_size42", base, (4, 2))
+        run(dist, "b1_size_empty", base, ())
+        run(dist, "b1_size_int3", base, 3)
+        run(dist, "b1_size0", base, (0, 3))
+        if len(valid) > 1:
+            col = A(valid[0][:2]).reshape(2, 1)
+            second = valid[1]
+            row = A([second, second * 1.5 if kinds[1] == "d" else second + 1, second * 2 if kinds[1] == "d" else second + 2])
+            if dist == "hypergeometric":
+                row = A([200, 150, 400])
+            if dist == "triangular":
+                row = A([3.0, 4.0, 5.0])
+            rest = [A(v) if isinstance(v, list) else v for v in valid[2:]]
+            run(dist, "b2", [col, row] + rest)
+            run(dist, "b2", [col, row] + rest, draws=2)
+            run(dist, "b2_size", [col, row] + rest, (3, 2, 3))
+            run(dist, "mismatch", [A(valid[0][:2]), row] + rest)
+            run(dist, "mismatch_size", [A(valid[0][:2]), row[:2]] + rest, (3,))
+            run(dist, "second_arr", [A(valid[0][0]), row] + rest)
+        zd = [A(v[0] if isinstance(v, list) else v) for v in valid]
+        run(dist, "zero_d", zd)
+        run(dist, "zero_d_size3", zd, 3)
+        run(dist, "zero_d_size_empty", zd, ())
+        run(dist, "empty", [A(valid[0][:0], dtype=np.int64 if kinds[0] == "i" else np.float64)] + base[1:])
+        if kinds[0] == "d":
+            ints = A([1, 2, 3], dtype=np.int64)
+            if dist == "zipf":
+                ints = A([2, 3, 4], dtype=np.int64)
+            if dist == "geometric":
+                ints = A([1, 1, 1], dtype=np.int64)
+            if dist == "logseries":
+                ints = A([0, 0, 0], dtype=np.int64)
+            run(dist, "int_param", [ints] + base[1:])
+            run(dist, "f32_param", [A(valid[0], dtype=np.float32)] + base[1:])
+            doubled = A(valid[0] + valid[0])
+            run(dist, "strided_param", [_RBView(doubled, doubled[::2])] + base[1:])
+            single = A(valid[0])
+            run(dist, "reversed_param", [_RBView(single, single[::-1])] + base[1:])
+        else:
+            run(dist, "float_int_param", [A([10.5, 20.0])] + base[1:])
+            run(dist, "uint64_param", [A([10, 20], dtype=np.uint64)] + base[1:])
+            run(dist, "int32_param", [A([10, 20], dtype=np.int32)] + base[1:])
+        run(dist, "complex_param", [A([1 + 0j, 2 + 0j])] + base[1:])
+        run(dist, "complex_0d_param", [A(1 + 0j)] + base[1:])
+    for dist, idx, bad, label in _RB_VIOLATIONS:
+        valid, _ = dists[dist]
+        args = [A(v) if isinstance(v, list) else v for v in valid]
+        args[idx] = A(bad)
+        args = [a if (not isinstance(a, np.ndarray) or a.ndim == 0 or a.shape == (2,)) else a[:2] for a in args]
+        run(dist, f"viol:{label}", args)
+
+    # ---- layouts, dtypes, draw-free positions, None ----
+    f_base = A([0.0, 2.0, 1.0, 3.0])
+    run("normal", "F_param", [_RBView(f_base, f_base.reshape((2, 2), order="F")), 1.0])
+    t_base = A([[0.0, 1.0, 5.0], [2.0, 3.0, 7.0]])
+    run("normal", "negstride_2d_param", [_RBView(t_base, t_base[:, ::-1]), 1.0])
+    run("normal", "transposed_param", [_RBView(t_base, t_base.T), A([1.0, 2.0])])
+    run("normal", "bool_param", [A([True, False]), 1.0])
+    run("normal", "uint64_param", [A([1, 2], dtype=np.uint64), 1.0])
+    run("normal", "f16_param", [A([0.1, 0.2], dtype=np.float16), 1.0])
+    run("normal", "int8_param", [A([-3, 4], dtype=np.int8), 1.0])
+    run("normal", "nan_scale", [A([0.0, 1.0]), A([nan, 1.0])])
+    run("exponential", "nan", [A([nan, 1.0])])
+    run("weibull", "zero_mid", [A([1.0, 0.0, 2.0, 0.0, 3.0])])
+    run("weibull", "zero_mid", [A([1.0, 0.0, 2.0, 0.0, 3.0])], draws=2)
+    run("weibull", "all_zero", [A([0.0, 0.0])], (3, 2))
+    run("gamma", "zero_shape", [A([0.0, 1.0, 0.0]), 2.0], draws=2)
+    run("gamma", "zero_shape_end", [A([2.0, 0.0, 0.0]), 1.0], draws=2)
+    run("standard_gamma", "zero_shape", [A([0.0, 2.0, 0.0])], draws=2)
+    run("poisson", "zero_mid", [A([0.0, 3.0, 0.0, 30.0])], draws=2)
+    run("binomial", "zero_mid", [A([0, 5, 100, 0]), A([0.5, 0.0, 0.5, 0.3])], draws=2)
+    run("noncentral_chisquare", "nan_nonc", [A([3.0, 3.0, 0.5]), A([nan, 1.0, nan])], draws=2)
+    # A degrees of freedom that HALVES to 0 (5e-324 / 2 rounds to even = 0): its chi-square draws nothing, so a
+    # position may draw nothing at all — the read-ahead must not run past it (checked by the second block).
+    run("chisquare", "half_zero", [A([2.0, 5e-324, 5e-324])], draws=2)
+    run("f", "half_zero", [A([5e-324, 5e-324]), A([2.0, 5e-324])], draws=2)
+    run("noncentral_f", "half_zero", [A([5e-324, 5e-324]), A([2.0, 5e-324]), A([0.0, 0.0])], draws=2)
+    # The same edge with a STREAM-SENSITIVE first value: the two cases above return 0 / NaN whatever the draws were,
+    # so a surplus word taken by a wrong read-ahead would only show in the stream position, which a value corpus sees
+    # through the second call's values alone.
+    run("f", "half_zero_seq", [A([2.0, 5e-324, 5e-324]), A([2.0, 5e-324, 5e-324])], draws=2)
+    run("noncentral_f", "half_zero_seq", [A([2.0, 5e-324, 5e-324]), A([2.0, 5e-324, 5e-324]), A([0.0, 0.0, 0.0])], draws=2)
+    run("noncentral_f", "nan_nonc_tiny_den", [A([3.0, 3.0]), A([2.0, 5e-324]), A([1.0, nan])], draws=2)
+    run("noncentral_chisquare", "half_zero", [A([3.0, 5e-324, 5e-324]), A([1.0, 0.0, 5e-324])], draws=2)
+    run("standard_t", "half_zero", [A([3.0, 5e-324, 5e-324, 2.0])], draws=2)
+    # A drawing position with a SMALL, known draw count followed by positions that draw nothing: the only shape in
+    # which a read-ahead that assumed "every position draws" takes words NumPy never takes (a later drawing position
+    # would absorb the surplus). One per draw-free condition the samplers have.
+    # Where one drawing position's value is too coarse to reveal a shifted stream (a count that is usually 0 or 1),
+    # a RUN of drawing positions precedes the draw-free run, so the second call's run of values shows any shift.
+    run("vonmises", "nan_tail", [0.0, A([1e-9, nan, nan])], draws=2)            # kappa < 1e-8: one uniform; NaN: none
+    run("poisson", "zero_tail", [A([0.1] * 50 + [0.0] * 50)], draws=2)          # ~1.1 uniforms each; lam == 0: none
+    run("standard_gamma", "zero_tail", [A([1.0, 0.0, 0.0])], draws=2)           # one exponential; shape 0: none
+    run("binomial", "zero_tail", [A([5] * 40 + [0] * 40), 0.5], draws=2)        # Generator n == 0: none (legacy draws)
+    run("noncentral_chisquare", "nan_tail", [A([3.0, 3.0, 3.0]), A([1.0, nan, nan])], draws=2)  # Generator NaN: none
+    run("standard_t", "half_zero_tail", [A([2.0, 5e-324])], draws=2)           # legacy: cached normal + gamma(0)
+    run("hypergeometric", "zero_colour_tail",                                  # sample 1: one word each; absent colour: none
+        [A([10] * 30 + [0] * 15 + [5] * 15), A([10] * 30 + [5] * 15 + [0] * 15), A([1] * 30 + [3] * 15 + [4] * 15)],
+        draws=2)
+    if api == "gen":
+        run("zipf", "big_a_tail", [A([2.0] * 20 + [2000.0] * 40)], draws=2)     # a >= 1025: 1 without a draw
+        run("vonmises", "kappa_regimes", [0.0, A([nan, 1.0, 1e-9, 2e6, inf, 1e-6])], draws=2)
+        run("zipf", "big_a", [A([2000.0, 2.0, inf])], draws=2)
+    else:
+        # NumPy's legacy samplers never return for kappa = inf (a NaN envelope) or zipf a >= 1025.
+        run("vonmises", "kappa_regimes", [0.0, A([nan, 1.0, 1e-9, 2e6, 1e-6])], draws=2)
+        # RandomState's cached Gaussian carried into the next call (odd counts leave a cached half).
+        run("normal", "gauss_cache_odd", [A([0.0, 1.0, 2.0]), 1.0], draws=2)
+        run("lognormal", "gauss_cache_odd", [A([0.0, 1.0, 2.0]), 0.5], draws=2)
+        run("gamma", "gauss_cache", [A([3.0, 0.5, 7.0]), 1.0], draws=2)
+        run("standard_t", "gauss_cache", [A([3.0, 5.0, 7.0])], draws=2)
+        run("wald", "gauss_cache", [A([1.0, 2.0, 3.0]), 1.0], draws=2)
+        run("noncentral_chisquare", "gauss_cache", [A([3.0, 5.0, 0.5]), A([1.0, 2.0, 1.0])], draws=2)
+        run("beta", "gauss_cache", [A([3.0, 0.5]), A([2.0, 0.7])], draws=2)
+        run("negative_binomial", "n_nan", [A([nan, 3.0]), 0.5], draws=2)
+    run("geometric", "mixed", [A([0.5, 0.1, 0.9, 0.2, 1.0])], draws=2)
+    run("hypergeometric", "mixed", [A([5, 100, 0, 500]), A([5, 200, 10, 500]), A([3, 50, 5, 0])], draws=2)
+    run("hypergeometric", "neg_and_sum", [A([-100]), 50, 10])
+    run("hypergeometric", "neg_nbad", [A([10]), A([-1]), 5])
+    run("hypergeometric", "neg_nsample", [A([10]), 5, A([-1])])
+    run("hypergeometric", "zero_nsample", [A([10]), 5, A([0])])
+    run("uniform", "neg_range", [A([1.0]), A([0.0])])
+    run("uniform", "nan", [A([nan]), 1.0])
+    run("uniform", "zero_range", [A([1.0]), A([1.0])])
+    run("triangular", "eq", [A([1.0]), 1.0, 1.0])
+    run("triangular", "nan", [A([nan]), 1.0, 2.0])
+    run("negative_binomial", "mismatch_size", [A([5.0, 6.0]), 0.5], (3,))
+    run("negative_binomial", "nan_p", [A([5.0]), A([nan])])
+    run("negative_binomial", "huge_n", [A([5.0, 1e18]), 0.5])
+    run("binomial", "p_then_n", [A([-1]), A([2.0])])
+    run("binomial", "bool_n", [A([True, False]), 0.5])
+    run("f", "nan_params", [A([nan, 1.0]), 1.0])
+    run("wald", "nan", [A([nan, 1.0]), 1.0])
+    run("logseries", "zero", [A([0.0, 0.5])])
+    run("normal", "size_tuple3", [A([0.0, 1.0]), 1.0], (3, 2))
+    run("normal", "size_zero_bad", [A([0.0, 1.0]), 1.0], (0,))
+    run("normal", "param_empty_2d", [np.empty((0, 3)), A([1.0, 2.0, 3.0])])
+    run("normal", "param_1elem", [A([5.0]), 1.0])
+    run("normal", "param_1elem_size", [A([5.0]), 1.0], (2, 3))
+    run("normal", "param_3d", [A([[[0.0], [10.0]]]), A([1.0, 2.0])])
+    run("beta", "None_a", [None, 1.0])
+    run("beta", "None_b_arr", [A([1.0, 2.0]), None])
+    run("binomial", "None_n", [None, 0.5])
+    run("binomial", "None_p", [5, None])
+    run("binomial", "None_p_arr", [A([5, 6]), None])
+    run("hypergeometric", "None", [None, 1, 1])
+    run("negative_binomial", "None_n", [None, 0.5])
+    run("negative_binomial", "None_p_arr", [A([5.0]), None])
+    run("triangular", "None_mode", [0.0, None, 1.0])
+    run("gamma", "None_shape_scalar_bad_scale", [None, -1.0])
+    run("gamma", "bad_shape_None_scale", [-1.0, None])
+
+    if api == "gen":
+        # standard_gamma's float32 loop (FORCECAST: complex keeps its real part; the constraint runs on the float32
+        # values) and its out= contract (C-contiguous, the loop dtype, a shape the parameter broadcasts into).
+        run("standard_gamma", "f32_arr", [A([0.5, 1.0, 3.0])], dtype="float32")
+        run("standard_gamma", "f32_arr_size", [A([0.5, 1.0, 3.0])], (2, 3), dtype="float32")
+        run("standard_gamma", "f32_complex_arr", [A([1 + 2j, 2 + 0j])], dtype="float32")
+        run("standard_gamma", "f32_complex_0d", [A(2 + 1j)], dtype="float32")
+        run("standard_gamma", "f64_complex_0d", [A(2 + 1j)])
+        run("standard_gamma", "f32_neg_arr", [A([1.0, -1.0])], dtype="float32")
+        run("standard_gamma", "f32_tiny", [A([1e-50, 2.0])], dtype="float32")
+        run("standard_gamma", "f32_zero_d", [A(2.5)], dtype="float32")
+        run("standard_gamma", "f32_zero_d_size", [A(2.5)], (3,), dtype="float32")
+        run("standard_gamma", "f32_None", [None], dtype="float32")
+        run("standard_gamma", "out_ok", [A([0.5, 1.0, 3.0])], out={"dtype": "float64", "shape": [2, 3], "order": "C"})
+        run("standard_gamma", "out_mismatch", [A([0.5, 1.0])], out={"dtype": "float64", "shape": [3], "order": "C"})
+        run("standard_gamma", "out_size_mismatch", [A([0.5, 1.0, 3.0])], (4, 3),
+            out={"dtype": "float64", "shape": [2, 3], "order": "C"})
+        run("standard_gamma", "out_small", [A([0.5, 1.0, 3.0])], out={"dtype": "float64", "shape": [1], "order": "C"})
+        run("standard_gamma", "out_size_ok", [A([0.5, 1.0, 3.0])], (2, 3),
+            out={"dtype": "float64", "shape": [2, 3], "order": "C"})
+        run("standard_gamma", "f32_out_ok", [A([0.5, 1.0, 3.0])], dtype="float32",
+            out={"dtype": "float32", "shape": [2, 3], "order": "C"})
+        run("standard_gamma", "out_F", [A([0.5, 1.0])], out={"dtype": "float64", "shape": [2, 2], "order": "F"})
+        run("standard_gamma", "out_wrongdtype", [A([0.5, 1.0])], out={"dtype": "float32", "shape": [2], "order": "C"})
+        run("standard_gamma", "out_zero_d_param", [A(2.0)], out={"dtype": "float64", "shape": [3], "order": "C"})
+
+    for dist, ps in streams.items():
+        arrs = []
+        for k, p in enumerate(ps):
+            shape = [1] * len(ps)
+            shape[k] = len(p)
+            dt = np.int64 if dist == "hypergeometric" or (dist == "binomial" and k == 0) else np.float64
+            arrs.append(A(p, dtype=dt).reshape(shape))
+        bshape = np.broadcast_shapes(*[a.shape for a in arrs])
+        run(dist, "stream", arrs, (40,) + tuple(bshape))
+        run(dist, "stream", arrs, (40,) + tuple(bshape), draws=2)
+        run(dist, "stream_nosize", arrs)
+    return portable, host, n
 
 
 def gen_windows():

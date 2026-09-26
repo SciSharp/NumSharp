@@ -325,7 +325,7 @@ namespace NumSharp.Tests.Fuzz
             {
                 string m = grndMethod.GetString();
                 int bound = m == "pareto" ? 2
-                    : m == "power" ? (int)Math.Ceiling(2.0 / c.Params["args"][0].GetDouble()) + 3
+                    : m == "power" ? PowerExpm1Bound(c)
                     : -1;
                 if (bound > 0 && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, bound)))
                     return $"Generator.{m}: in-band expm1 (Sun's s_expm1) vs the closed ucrtbase expm1, <= {bound} ULP [documented]";
@@ -1157,6 +1157,48 @@ namespace NumSharp.Tests.Fuzz
         /// </summary>
         private static long TruthSlack(long dNPY)
             => dNPY >= (long.MaxValue - 8) / 4 ? long.MaxValue : Math.Max(4 * dNPY, dNPY + 8);
+
+        /// <summary>
+        ///     Generator.power's documented in-band expm1 bound, <c>ceil(2 / a) + 3</c> ULP, for the SMALLEST exponent
+        ///     parameter <c>a</c> the case draws with — the one that amplifies the expm1 difference most.
+        /// </summary>
+        /// <param name="c">A grnd power case: a scalar-parameter stream case (<c>a</c> in <c>args[0]</c>) or an
+        ///     array-parameter broadcast case (<c>a</c> in its first <c>bargs</c> entry — a literal, or an operand every
+        ///     element of which some output position draws with).</param>
+        /// <returns>The per-element ULP bound; -1 when the case carries no readable <c>a</c> (no excuse then).</returns>
+        /// <remarks>
+        ///     NaN elements are skipped: <c>power(NaN)</c> is NaN on both sides and never diverges. The validated
+        ///     <c>a</c> is positive, so the bound is finite for every real case.
+        /// </remarks>
+        private static int PowerExpm1Bound(FuzzCorpus.Case c)
+        {
+            double minA;
+            if (c.Params.TryGetValue("bargs", out var bargs))
+            {
+                var first = bargs[0];
+                if (first.TryGetProperty("f", out var f))
+                    minA = f.GetDouble();
+                else if (first.TryGetProperty("i", out var i))
+                    minA = i.GetInt64();
+                else if (first.TryGetProperty("op", out var k))
+                {
+                    using var a = FuzzCorpus.Reconstruct(c.Operands[k.GetInt32()]);
+                    using var ad = a.astype(np.float64);
+                    minA = double.PositiveInfinity;
+                    for (long e = 0; e < ad.size; e++)
+                    {
+                        double v = ad.GetAtIndex<double>(e);
+                        if (v < minA)
+                            minA = v;
+                    }
+                }
+                else
+                    return -1;
+            }
+            else
+                minA = c.Params["args"][0].GetDouble();
+            return minA > 0 && double.IsFinite(2.0 / minA) ? (int)Math.Ceiling(2.0 / minA) + 3 : -1;
+        }
 
         /// <summary>
         ///     The absolute-error envelope for the expm1/log1p Exp(x)-1 / Log(1+x) signature — a few

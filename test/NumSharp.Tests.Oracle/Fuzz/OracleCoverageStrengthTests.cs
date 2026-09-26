@@ -119,8 +119,8 @@ namespace NumSharp.Tests.Fuzz
             ["min_scalar_type"] = "scalar-value function: the axis is the VALUE param sweep",
             ["mintypecode"] = "typechar-string function: the axis is the typechars PARAM sweep",
 
-            // PRNG protocol: the stream IS the contract; dtype is the distribution's own.
-            ["rnd"] = "seeded RandomState stream bytes (int32/int64/float64 draws are the API's own dtypes)",
+            // PRNG protocol: the stream IS the contract; dtype is the distribution's own. ("rnd" retired 2026-09-26:
+            // its array-parameter broadcast cases carry the distribution parameters as operands of 9 dtypes.)
             ["seed"] = "seeding protocol case (float64 draw pinned after seeding)",
             ["get_state"] = "state-tuple serialization (text kind) — no operand dtype",
             ["set_state"] = "state-tuple round-trip (uint32 key vector by MT19937 contract)",

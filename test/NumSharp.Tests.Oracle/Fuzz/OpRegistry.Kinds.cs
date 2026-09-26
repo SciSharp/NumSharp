@@ -39,7 +39,9 @@ namespace NumSharp.Tests.Fuzz
                 "tuple" => ApplyTuple(op, p, ops),
                 "dtype" => ApplyDtype(op, p, ops),
                 "text" => ApplyText(op, p, ops),
-                _ => Apply(op, p, ops),
+                // The PCG64 Generator op has its own handler (it is not in Apply's switch); routing it here too means
+                // every caller of Invoke — the error-parity check included — reaches it, not only the value path.
+                _ => op == "grnd" ? GeneratorDraw(p, ops) : Apply(op, p, ops),
             };
 
         // ---- array / scalar results ---------------------------------------------------------

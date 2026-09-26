@@ -14,7 +14,11 @@ namespace NumSharp.Tests.Fuzz
         ///     replaying the oracle never mutates the global np.random stream. Pairs 1:1 with
         ///     gen_oracle.gen_generator_parity's `run` dispatcher.
         /// </summary>
-        internal static NDArray GeneratorDraw(IReadOnlyDictionary<string, JsonElement> p)
+        /// <param name="p">The case params.</param>
+        /// <param name="ops">The case operands — the array parameters of the <c>bargs</c> broadcast cases; null (or
+        ///     empty) for the scalar-parameter stream cases.</param>
+        /// <returns>The recorded draw (the last of <c>draws</c> identical calls).</returns>
+        internal static NDArray GeneratorDraw(IReadOnlyDictionary<string, JsonElement> p, NDArray[] ops = null)
         {
             string method = p["method"].GetString();
             long seed = p["seed"].GetInt64();
@@ -58,6 +62,12 @@ namespace NumSharp.Tests.Fuzz
             for (int k = 0; k < draws; k++)
             {
                 result?.Dispose();   // draws>1 pins advancement — dispose each superseded draw
+                if (p.ContainsKey("bargs"))
+                {
+                    // Array-valued parameters: the NDArray overloads over the case's operands.
+                    result = GeneratorBroadcastDraw(rng, p, ops);
+                    continue;
+                }
                 switch (method)
                 {
                     case "random":

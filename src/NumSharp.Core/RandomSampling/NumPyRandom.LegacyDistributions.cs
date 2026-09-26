@@ -1335,6 +1335,26 @@ namespace NumSharp
             return Distributions.ToInt64(Math.Ceiling(Generator.Log1p(-src.NextDouble()) / s.LogQ));
         }
 
+        /// <summary>
+        ///     The smallest kappa whose <c>4 * kappa * kappa</c> overflows, <c>2^511</c> (about <c>6.7e153</c>) — the first
+        ///     concentration whose legacy envelope is NaN (<see cref="LegacyVonmisesSetup.Draws"/> false: NumPy's rejection
+        ///     loop never exits there). A broadcast scan compares against it instead of evaluating the envelope per element.
+        /// </summary>
+        /// <remarks>
+        ///     <para>
+        ///     Exact: <c>(4 * k) * k</c> for <c>k = 2^511</c> is <c>2^1024</c>, which overflows; for the double just below,
+        ///     <c>k = 2^511 (1 - 2^-53)</c>, it is <c>2^1024 (1 - 2^-52 + 2^-106)</c>, which rounds to the finite
+        ///     <c>2^1024 - 2^972</c>; and each rounded product is monotonic in <c>k</c>, so every larger kappa overflows and
+        ///     every smaller one does not (a bisection of the doubles lands on the same bits, <c>0x5FE0000000000000</c>).
+        ///     </para>
+        ///     <para>
+        ///     Below it the envelope stays finite: <c>r = 1 + sqrt(1 + 4k^2)</c> is then at most about <c>1.3e154</c>, so
+        ///     <c>sqrt(2r)</c> and <c>rho</c> are finite and <c>rho</c> is never 0 for <c>kappa &gt;= 1e-5</c>; below <c>1e-5</c>
+        ///     the Taylor branch <c>1/kappa + kappa</c> is finite too.
+        ///     </para>
+        /// </remarks>
+        internal const double LegacyVonmisesOverflowKappa = 6.703903964971299e153;
+
         /// <summary>The setup of <c>legacy_vonmises</c>: the wrapped-Cauchy envelope parameter <c>s</c>.</summary>
         private readonly struct LegacyVonmisesSetup
         {

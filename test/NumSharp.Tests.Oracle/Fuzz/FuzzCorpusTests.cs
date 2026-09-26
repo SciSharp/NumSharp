@@ -313,6 +313,11 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Einsum() => RunCorpus("einsum.jsonl");
 
+        // np.random byte-parity, PORTABLE half: pure MT19937 bits + exactly-rounded IEEE (uniform, rand,
+        // random_sample, randint, permutation, shuffle, choice, the state surface) — plus, for every legacy
+        // sampler's ARRAY-valued parameters (params["bargs"], operands = the parameters), the validation
+        // contract (safe-cast gate, check_array_constraint texts and order, broadcast/size errors) and the
+        // broadcast uniform draws. Hard-gated on every host.
         [TestMethod]
         [TestCategory("FuzzMatrix")]
         public void RandomParity() => RunCorpus("random_parity.jsonl");
@@ -733,10 +738,10 @@ namespace NumSharp.Tests.Fuzz
             ["place.jsonl"] = 12,
             ["products.jsonl"] = 326,
             ["precision.jsonl"] = 80,
-            ["random_parity.jsonl"] = 40,
-            ["random_parity_host.jsonl"] = 86,
-            ["generator_parity.jsonl"] = 90,        // + the portable distribution surface (triangular, urn hypergeometric, geometric search, mvhg count)
-            ["generator_parity_host.jsonl"] = 215,  // + the libm distribution surface (29 Generator samplers, every internal branch)
+            ["random_parity.jsonl"] = 300,          // + the array-parameter (broadcast) validation/uniform cases of all 29 legacy samplers
+            ["random_parity_host.jsonl"] = 670,     // + the array-parameter (broadcast) value/stream cases of the legacy samplers
+            ["generator_parity.jsonl"] = 375,       // + the portable distribution surface (triangular, urn hypergeometric, geometric search, mvhg count) + broadcast validation
+            ["generator_parity_host.jsonl"] = 720,  // + the libm distribution surface (29 Generator samplers, every internal branch) + broadcast values/streams
             ["nan.jsonl"] = 140,   // NaN-parity grid (gen_nan_oracle.py): 27 complex + 3×31 float unary + 56 §B3 binary cross-grid
             ["random_smoke.jsonl"] = 1600,
             ["reduce.jsonl"] = 9004,
@@ -860,7 +865,7 @@ namespace NumSharp.Tests.Fuzz
         // Routes the "grnd" PCG64 Generator stream op to its dedicated handler (OpRegistry.Generator.cs)
         // without adding a case to OpRegistry.Apply's switch; every other op goes to Apply as usual.
         private static NDArray DispatchApply(string op, IReadOnlyDictionary<string, JsonElement> p, NDArray[] ops)
-            => op == "grnd" ? OpRegistry.GeneratorDraw(p) : OpRegistry.Apply(op, p, ops);
+            => op == "grnd" ? OpRegistry.GeneratorDraw(p, ops) : OpRegistry.Apply(op, p, ops);
 
         private static void Bump(Dictionary<string, int> d, string key) => d[key] = d.TryGetValue(key, out var n) ? n + 1 : 1;
 
