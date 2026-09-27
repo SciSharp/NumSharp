@@ -24,9 +24,16 @@ namespace NumSharp
     ///     named <c>polynomial</c> inside a type of that name.)
     /// </summary>
     /// <remarks>
-    ///     <para>Implemented so far: the evaluation family of every basis — <c>{p}val</c>, <c>{p}val2d</c>,
-    ///     <c>{p}val3d</c>, <c>{p}grid2d</c>, <c>{p}grid3d</c> and <c>{p}valnd</c> — bit-identical to NumPy 2.4.2
-    ///     for every dtype NumPy has, through one runtime-compiled IL kernel per (basis, dtypes, layout) class.</para>
+    ///     <para>Implemented so far, bit-identical to NumPy 2.4.2 for every dtype NumPy has:</para>
+    ///     <list type="bullet">
+    ///         <item>the evaluation family of every basis — <c>{p}val</c>, <c>{p}val2d</c>, <c>{p}val3d</c>,
+    ///         <c>{p}grid2d</c>, <c>{p}grid3d</c> and <c>{p}valnd</c> — through one runtime-compiled IL kernel per
+    ///         (basis, dtypes, layout) class;</item>
+    ///         <item>the additive family of every basis — the constants <c>{p}domain</c>/<c>{p}zero</c>/<c>{p}one</c>/
+    ///         <c>{p}x</c>, <c>{p}line</c>, <c>{p}add</c>, <c>{p}sub</c>, <c>{p}trim</c> — and the <see cref="polyutils"/>
+    ///         substrate (<c>as_series</c>, <c>trimseq</c>, <c>trimcoef</c>, <c>getdomain</c>, <c>mapparms</c>,
+    ///         <c>mapdomain</c>).</item>
+    ///     </list>
     ///     <para>https://numpy.org/doc/stable/reference/routines.polynomials-package.html</para>
     /// </remarks>
     [ModuleName("np.polynomial")]
@@ -55,5 +62,11 @@ namespace NumSharp
 
         /// <summary><c>numpy.polynomial.hermite_e</c> — probabilists' Hermite series.</summary>
         public HermiteEModule hermite_e { get; } = new HermiteEModule();
+
+        /// <summary>
+        ///     <c>numpy.polynomial.polyutils</c> — the helpers every basis is built on (series normalization and the
+        ///     linear domain maps; see <see cref="PolyUtilsModule"/>).
+        /// </summary>
+        public PolyUtilsModule polyutils { get; } = new PolyUtilsModule();
     }
 }

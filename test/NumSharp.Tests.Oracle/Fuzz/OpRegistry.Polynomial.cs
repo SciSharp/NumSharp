@@ -29,7 +29,7 @@ namespace NumSharp.Tests.Fuzz
     {
         /// <summary>The corpus module prefixes of the polynomial package, as written by the generator.</summary>
         private static readonly string[] PolynomialPrefixes =
-            { "polynomial.", "chebyshev.", "legendre.", "laguerre.", "hermite.", "hermite_e." };
+            { "polynomial.", "chebyshev.", "legendre.", "laguerre.", "hermite.", "hermite_e.", "polyutils." };
 
         /// <summary>Whether <paramref name="op"/> is a polynomial-package key.</summary>
         /// <param name="op">The corpus op key.</param>
@@ -56,6 +56,9 @@ namespace NumSharp.Tests.Fuzz
         {
             int dot = op.IndexOf('.');
             string module = op.Substring(0, dot), fn = op.Substring(dot + 1);
+            // The additive family and polyutils (U1, gen_polyseries) carry named arguments, not "xs".
+            if (module == "polyutils" || !p.ContainsKey("xs"))
+                return ApplyPolySeries(module, fn, p, ops);
             var xs = p["xs"];
             var args = new object[xs.GetArrayLength()];
             int next = 0;
@@ -167,12 +170,13 @@ namespace NumSharp.Tests.Fuzz
 
         /// <summary>
         ///     Rebuilds a Python scalar as the C# primitive the facade treats as that Python type: bool → bool,
-        ///     int → long (ulong when it only fits there), float → double (from its exact bit pattern, so NaN
-        ///     payloads and -0.0 survive), complex → <see cref="Complex"/>.
+        ///     int → long (ulong when it only fits there, <see cref="BigInteger"/> beyond — the polynomial facades
+        ///     accept it as a Python int of any size), float → double (from its exact bit pattern, so NaN payloads
+        ///     and -0.0 survive), complex → <see cref="Complex"/>.
         /// </summary>
         /// <param name="e">The generator's scalar spec.</param>
         /// <returns>The boxed primitive.</returns>
-        /// <exception cref="NotSupportedException">An int beyond ulong, or an unknown kind.</exception>
+        /// <exception cref="NotSupportedException">An unknown kind.</exception>
         private static object PythonScalar(JsonElement e)
         {
             string kind = e.GetProperty("kind").GetString();
@@ -184,7 +188,7 @@ namespace NumSharp.Tests.Fuzz
                     var bi = BigInteger.Parse(e.GetProperty("int").GetString(), CultureInfo.InvariantCulture);
                     if (bi >= long.MinValue && bi <= long.MaxValue) return (long)bi;
                     if (bi >= ulong.MinValue && bi <= ulong.MaxValue) return (ulong)bi;
-                    throw new NotSupportedException($"Python int {bi} has no C# primitive");
+                    return bi;
                 }
                 case "float": return Bits(e.GetProperty("bits").GetString());
                 case "complex": return new Complex(Bits(e.GetProperty("re").GetString()), Bits(e.GetProperty("im").GetString()));

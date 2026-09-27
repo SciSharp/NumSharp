@@ -269,10 +269,12 @@ namespace NumSharp.Backends.Kernels
         ///     array: the IL cast kernel when the pair has one (<c>NDIter.Copy</c>'s fast path 1), otherwise the
         ///     per-element <see cref="NDIterCasting.ConvertValue"/> (its scalar dispatch). No NDArray is built —
         ///     this runs per call for a Python-scalar x, where two allocations would cost more than the kernel.
+        ///     Also the one-element conversion of <c>numpy.polynomial</c>'s scalar engine (<c>PolyNumber</c>), where
+        ///     it carries every NumPy scalar and weak Python value into its NEP 50 loop dtype.
         /// </summary>
         /// <param name="src">Source elements.</param><param name="from">Source dtype.</param>
         /// <param name="dst">Destination elements.</param><param name="to">Target dtype.</param><param name="n">Count.</param>
-        private static void ConvertBuffer(void* src, NPTypeCode from, void* dst, NPTypeCode to, long n)
+        internal static void ConvertBuffer(void* src, NPTypeCode from, void* dst, NPTypeCode to, long n)
         {
             if (from == to)
             {

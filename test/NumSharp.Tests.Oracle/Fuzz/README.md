@@ -266,6 +266,7 @@ python test/oracle/gen_oracle.py products         # CBLAS product family values 
 python test/oracle/gen_oracle.py fft              # np.fft.* — 1-D/N-D/hermitian transforms + freq/shift helpers
 python test/oracle/gen_oracle.py random_parity    # seeded np.random stream bytes (portable + host-libm files)
 python test/oracle/gen_oracle.py polyeval         # np.polynomial.* evaluation family (module-qualified keys)
+python test/oracle/gen_oracle.py polyseries       # np.polynomial.* additive family + polyutils + the module constants
 python test/oracle/gen_index_oracle.py            # the four index_* corpora (seed pinned 20240626)
 python test/oracle/gen_nan_oracle.py              # nan.jsonl — NaN parity grid (standalone; complex bit-exact)
 python test/oracle/fuzz_random.py 1234 2000 random_smoke.jsonl
@@ -844,6 +845,32 @@ coincide. Planted-bug check: 12 mutants, 11 killed, and the survivor (the comple
 by design. Design and measurements: `docs/plans/numpy-polynomial-review.md`. Cells
 whose NumPy result is complex64 are skipped (one complex width, #569). `OpRegistry.Polynomial.cs` replays it;
 `MisalignedRegistry`'s generic unary/complex ULP branches are carved out for these ops, so any drift fails.
+
+### numpy.polynomial additive family + polyutils (`polyseries` tier)
+
+`polyseries.jsonl` (`gen_oracle.py polyseries`, 15,950 cases, floor 15,000) gates plan unit U1 — `{p}add`,
+`{p}sub`, `{p}trim`, `{p}line` for the six bases, the 24 module constants `{p}domain/zero/one/x`, and
+`polyutils.as_series/trimseq/trimcoef/getdomain/mapparms/mapdomain` — **bit-exact, 0 excused**. Keys are
+module-qualified like `polyeval`'s. Arguments are NAMED (`c1`, `c2`, `c`, `tol`, `off`, `scl`, `old`, `new`, `x`,
+`alist`, `seq`) and each is `"a"` (the next operand) or a Python-typed spec (int/float/complex/bool/list/tuple/str),
+so the facade sees the same KIND of argument NumPy saw — the kind decides whether CPython, NumPy's scalarmath or a
+ufunc computes `mapparms`/`mapdomain`/`{p}line`. The matrix: the full dtype-pair matrix of add/sub on the power
+basis (a subset on the others) × trailing-zero/all-zero/NaN-tail patterns × layouts, 0-d and broadcast operands,
+Python lists; trimcoef tolerances (weak Python vs strong NumPy, NaN, negative, complex, huge ints); trimseq views;
+as_series (tuple kind, arity asserted); getdomain (complex corners, signed zeros, strided); mapparms over Python
+tuples/lists of ints/floats/complexes (ints past 2^53, 2^63 and 2^64; `long` overflow inside a difference or
+product; `0 / -5 == -0.0`; both ZeroDivisionError texts), same-dtype 1-D array domains of every dtype (wrapping
+int intermediates, float specials, strided/reversed views), mixed Python/NumPy kinds, `pycomplex op np.float64`,
+2-D domains; mapdomain for every x dtype × domain form; `{p}line` over Python and NumPy scalars of every dtype; and
+four FACETS of each constant (value, identity, writeable, owndata — a constant has no argument to vary).
+
+`OpRegistry.PolySeries.cs` replays it. **Every `mapparms`/`mapdomain` case runs three routes** — the object
+overload, the generic tuple overload (tuples rebuilt element-typed by reflection, so a Python int is a `long`) and
+`NDPolySeries.MapParmsGeneral` (the exact `BigInteger` reference) — which must agree to the byte (or raise the same
+type and text) before the result is compared with NumPy; this is what proves the CPython machine-number lane and
+the fused same-dtype kernel. Planted-bug checks: dropping the lane's product-overflow bail (27 red), corrupting the
+list lane's `long` read (205 red), feeding the fused kernel the wrong numerator (129 red). Cells whose NumPy result
+is complex64 or an object array are skipped (133).
 
 ### einsum (`einsum` tier)
 

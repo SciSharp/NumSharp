@@ -385,6 +385,14 @@ namespace NumSharp.Tests.Fuzz
                 "np.fft" => new[] { new ReadTarget("np.fft", _ => (np.fft, Noop)) },
                 // The numpy.polynomial package facade: its members are the six submodule properties.
                 "np.polynomial" => new[] { new ReadTarget("np.polynomial", _ => (np.polynomial, Noop)) },
+                // The six basis submodules (process singletons): their properties are the shared module constants
+                // {p}domain/zero/one/x — both reads return the same instance, so the harness treats them as held.
+                "np.polynomial.polynomial" => new[] { new ReadTarget("np.polynomial.polynomial", _ => (np.polynomial.polynomial, Noop)) },
+                "np.polynomial.chebyshev" => new[] { new ReadTarget("np.polynomial.chebyshev", _ => (np.polynomial.chebyshev, Noop)) },
+                "np.polynomial.legendre" => new[] { new ReadTarget("np.polynomial.legendre", _ => (np.polynomial.legendre, Noop)) },
+                "np.polynomial.laguerre" => new[] { new ReadTarget("np.polynomial.laguerre", _ => (np.polynomial.laguerre, Noop)) },
+                "np.polynomial.hermite" => new[] { new ReadTarget("np.polynomial.hermite", _ => (np.polynomial.hermite, Noop)) },
+                "np.polynomial.hermite_e" => new[] { new ReadTarget("np.polynomial.hermite_e", _ => (np.polynomial.hermite_e, Noop)) },
                 "Generator" => new[] { new ReadTarget("default_rng(7)", _ => (np.random.default_rng(7), Noop)) },
                 "SeedSequence" => new[] { new ReadTarget("SeedSequence(5)", _ => (new SeedSequence(5), Noop)) },
                 "BitGenerator" or "PCG64" => new[] { new ReadTarget("PCG64(5)", _ => (new PCG64(5), Noop)) },

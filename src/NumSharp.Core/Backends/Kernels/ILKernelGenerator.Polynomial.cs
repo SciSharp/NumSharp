@@ -98,7 +98,16 @@ namespace NumSharp.Backends.Kernels
     ///     int/float to complex as <c>(value, +0.0)</c> — and the complex product is <c>_Py_c_prod</c>'s
     ///     naive formula. That conversion is observable: <c>2*(inf+1j)</c> is <c>(inf+nanj)</c> because
     ///     the int 2 becomes <c>(2+0j)</c> and <c>0*inf</c> is NaN.</para>
-    ///     <para>Only +, -, * and true division exist, because the step tables use no other operator.</para>
+    ///     <para>The operators are +, -, *, true division and negation, plus the two comparisons with the int 0
+    ///     that <c>numpy.polynomial</c> performs on a Python value (<c>scl != 0</c> in <c>{p}line</c>,
+    ///     <c>tol &lt; 0</c> in <c>trimcoef</c>). Division is CPython's exactly: int/int is
+    ///     <c>long_true_divide</c> (correctly rounded at ANY magnitude, <c>OverflowError</c> past the float
+    ///     range), and complex division is 3.12's <c>_Py_c_quot</c> (Smith's algorithm WITHOUT the C11 Annex G
+    ///     infinity recovery 3.13 added — probed: <c>(1+1j)/(inf+infj)</c> is <c>(nan+nanj)</c> on 3.12.12).</para>
+    ///     <para>A Python <c>bool</c> is an <see cref="PyKind.Int"/> tagged <see cref="IsBool"/>: CPython's bool
+    ///     IS an int subclass, so every arithmetic result is a plain int (<c>True + True == 2</c>,
+    ///     <c>-True == -1</c>) and only a LEAF carries the tag — which NEP 50 promotion (a weak bool keeps a
+    ///     bool partner bool) and array creation (<c>np.array([True, True])</c> is bool) read.</para>
     /// </remarks>
     internal readonly struct PyScalar
     {
@@ -110,8 +119,16 @@ namespace NumSharp.Backends.Kernels
         public readonly double F;
         /// <summary>The value when <see cref="Kind"/> is <see cref="PyKind.Complex"/>.</summary>
         public readonly Complex C;
+        /// <summary>
+        ///     Whether this int is a Python <c>bool</c> (<see cref="I"/> is then 0 or 1). Never set on an arithmetic
+        ///     result — CPython's bool arithmetic yields ints — so it is a property of a caller-supplied leaf only.
+        /// </summary>
+        public readonly bool IsBool;
 
-        private PyScalar(PyKind kind, BigInteger i, double f, Complex c) { Kind = kind; I = i; F = f; C = c; }
+        private PyScalar(PyKind kind, BigInteger i, double f, Complex c, bool isBool = false)
+        {
+            Kind = kind; I = i; F = f; C = c; IsBool = isBool;
+        }
 
         /// <summary>A Python int.</summary><param name="v">The value.</param><returns>The scalar.</returns>
         public static PyScalar Int(BigInteger v) => new PyScalar(PyKind.Int, v, 0, default);
@@ -119,6 +136,60 @@ namespace NumSharp.Backends.Kernels
         public static PyScalar Float(double v) => new PyScalar(PyKind.Float, default, v, default);
         /// <summary>A Python complex.</summary><param name="v">The value.</param><returns>The scalar.</returns>
         public static PyScalar Cplx(Complex v) => new PyScalar(PyKind.Complex, default, 0, v);
+        /// <summary>
+        ///     A Python bool: an int 0/1 carrying the <see cref="IsBool"/> tag. Arithmetic on it (which always
+        ///     yields a plain int) drops the tag, exactly as CPython's <c>True + 1</c> is the int 2.
+        /// </summary>
+        /// <param name="v">The value.</param><returns>The scalar.</returns>
+        public static PyScalar Bool(bool v) => new PyScalar(PyKind.Int, v ? BigInteger.One : BigInteger.Zero, 0, default, isBool: true);
+
+        /// <summary>
+        ///     The Python type name (<c>type(x).__name__</c>) — the word CPython's error messages quote, e.g.
+        ///     <c>'float' object is not subscriptable</c>.
+        /// </summary>
+        public string TypeName => IsBool ? "bool" : Kind switch
+        {
+            PyKind.Int => "int",
+            PyKind.Float => "float",
+            _ => "complex",
+        };
+
+        /// <summary>
+        ///     CPython's unary minus: an int (or bool) negates exactly to an int, a float flips its sign (NaN
+        ///     included), a complex negates both parts.
+        /// </summary>
+        /// <param name="a">The operand.</param>
+        /// <returns><c>-a</c>.</returns>
+        public static PyScalar Negate(in PyScalar a) => a.Kind switch
+        {
+            PyKind.Int => Int(-a.I),
+            PyKind.Float => Float(-a.F),
+            _ => Cplx(new Complex(-a.C.Real, -a.C.Imaginary)),
+        };
+
+        /// <summary>
+        ///     CPython's <c>x != 0</c>: an int compares exactly, a float is nonzero unless it is ±0 (NaN IS
+        ///     nonzero), a complex is nonzero unless both parts are ±0.
+        /// </summary>
+        public bool IsNonZero => Kind switch
+        {
+            PyKind.Int => !I.IsZero,
+            PyKind.Float => F != 0.0,
+            _ => C.Real != 0.0 || C.Imaginary != 0.0,
+        };
+
+        /// <summary>
+        ///     CPython's <c>x &lt; 0</c> for an int or float (NaN compares false). A complex has no ordering in
+        ///     Python, which raises <c>TypeError: '&lt;' not supported between instances of 'complex' and 'int'</c>.
+        /// </summary>
+        /// <returns>Whether the value is negative.</returns>
+        /// <exception cref="TypeError">The value is a complex.</exception>
+        public bool IsNegative() => Kind switch
+        {
+            PyKind.Int => I.Sign < 0,
+            PyKind.Float => F < 0.0,
+            _ => throw new TypeError("'<' not supported between instances of 'complex' and 'int'"),
+        };
 
         /// <summary>
         ///     CPython's int-to-float conversion (<c>float(i)</c> / <c>PyLong_AsDouble</c>): correctly
@@ -168,11 +239,13 @@ namespace NumSharp.Backends.Kernels
         /// <param name="a">Left operand.</param>
         /// <param name="b">Right operand.</param>
         /// <returns>The Python result.</returns>
-        /// <exception cref="DivideByZeroException">Division by a zero int/float (Python's ZeroDivisionError).</exception>
-        /// <exception cref="NotSupportedException">Another operator, a complex division, or an int/int division
-        ///     whose operands exceed 2^53 — none reachable from the step tables, whose only Python-level
-        ///     divisions are <c>(nd-1)/nd</c> and <c>(2*nd-1)/nd</c>.</exception>
-        /// <exception cref="OverflowException">An int too large for a float met a float or complex operand.</exception>
+        /// <exception cref="DivideByZeroException">Division by zero — Python's ZeroDivisionError with CPython's
+        ///     text for the operand kinds (<c>division by zero</c>, <c>float division by zero</c>,
+        ///     <c>complex division by zero</c>).</exception>
+        /// <exception cref="NotSupportedException">An operator other than the four.</exception>
+        /// <exception cref="OverflowException">An int too large for a float met a float or complex operand
+        ///     (<c>int too large to convert to float</c>), or an int/int quotient beyond the float range
+        ///     (<c>integer division result too large for a float</c>).</exception>
         public static PyScalar Apply(BinaryOp op, in PyScalar a, in PyScalar b)
         {
             if (a.Kind == PyKind.Complex || b.Kind == PyKind.Complex)
@@ -180,14 +253,11 @@ namespace NumSharp.Backends.Kernels
                 Complex x = a.AsComplex(), y = b.AsComplex();
                 return Cplx(op switch
                 {
-                    BinaryOp.Add => new Complex(x.Real + y.Real, x.Imaginary + y.Imaginary),
-                    BinaryOp.Subtract => new Complex(x.Real - y.Real, x.Imaginary - y.Imaginary),
-                    // _Py_c_prod: the naive four-product formula, left-to-right (no FMA in CPython).
-                    BinaryOp.Multiply => new Complex(x.Real * y.Real - x.Imaginary * y.Imaginary,
-                                                     x.Real * y.Imaginary + x.Imaginary * y.Real),
-                    // No step table divides a Python complex (lagval's divisions are array / nd), so
-                    // _Py_c_quot and its IEEE edge recovery are deliberately not ported.
-                    _ => throw new NotSupportedException($"Python complex {op} is not produced by the step tables"),
+                    BinaryOp.Add => ComplexSum(x, y),
+                    BinaryOp.Subtract => ComplexDiff(x, y),
+                    BinaryOp.Multiply => ComplexProd(x, y),
+                    BinaryOp.Divide => ComplexQuotient(x, y),
+                    _ => throw new NotSupportedException(op.ToString()),
                 });
             }
 
@@ -196,10 +266,10 @@ namespace NumSharp.Backends.Kernels
                 double x = a.AsDouble(), y = b.AsDouble();
                 return Float(op switch
                 {
-                    BinaryOp.Add => x + y,
-                    BinaryOp.Subtract => x - y,
-                    BinaryOp.Multiply => x * y,
-                    BinaryOp.Divide => y == 0 ? throw new DivideByZeroException("float division by zero") : x / y,
+                    BinaryOp.Add => FloatAdd(x, y),
+                    BinaryOp.Subtract => FloatSub(x, y),
+                    BinaryOp.Multiply => FloatMul(x, y),
+                    BinaryOp.Divide => FloatDiv(x, y),
                     _ => throw new NotSupportedException(op.ToString()),
                 });
             }
@@ -209,18 +279,217 @@ namespace NumSharp.Backends.Kernels
                 case BinaryOp.Add: return Int(a.I + b.I);
                 case BinaryOp.Subtract: return Int(a.I - b.I);
                 case BinaryOp.Multiply: return Int(a.I * b.I);
-                case BinaryOp.Divide:
-                {
-                    if (b.I.IsZero) throw new DivideByZeroException("division by zero");
-                    // Python's int/int is the correctly rounded quotient. Both operands exact in a double
-                    // make one IEEE division exactly that; larger ints never occur in the step tables.
-                    var limit = new BigInteger(1L << 53);
-                    if (BigInteger.Abs(a.I) > limit || BigInteger.Abs(b.I) > limit)
-                        throw new NotSupportedException("int/int true division beyond 2^53 is not needed by the step tables");
-                    return Float((double)a.I / (double)b.I);
-                }
+                case BinaryOp.Divide: return Float(IntTrueDivide(a.I, b.I));
                 default: throw new NotSupportedException(op.ToString());
             }
+        }
+
+        /// <summary>
+        ///     CPython 3.12's <c>_Py_c_quot</c> (Objects/complexobject.c): Smith's algorithm, dividing top and
+        ///     bottom by whichever of <c>b.real</c>/<c>b.imag</c> has the larger magnitude, with NO recovery of
+        ///     infinities from a NaN result (that block arrived in 3.13). A zero divisor is Python's
+        ///     <c>ZeroDivisionError: complex division by zero</c>; a NaN component of the divisor that defeats both
+        ///     magnitude tests yields <c>(nan+nanj)</c>.
+        /// </summary>
+        /// <param name="a">Dividend.</param>
+        /// <param name="b">Divisor.</param>
+        /// <returns>The quotient, bit for bit as CPython 3.12 computes it (MSVC x64 build: SSE2, no FMA
+        ///     contraction).</returns>
+        /// <exception cref="DivideByZeroException">Both parts of <paramref name="b"/> are ±0.</exception>
+        /// <remarks>
+        ///     NOT NumPy's complex division (<c>ComplexDivideNumPy</c>): NumPy multiplies by a reciprocal
+        ///     <c>scl = 1/denom</c> and turns division by zero into inf/nan, where CPython divides by
+        ///     <c>denom</c> directly and raises. The two differ in the last bit and on every edge — the reason
+        ///     Python-level arithmetic (a C# primitive) and NumPy-level arithmetic (an array element) are kept
+        ///     apart throughout <c>numpy.polynomial</c>.
+        /// </remarks>
+        public static Complex ComplexQuotient(Complex a, Complex b)
+        {
+            double abs_breal = b.Real < 0 ? -b.Real : b.Real;
+            double abs_bimag = b.Imaginary < 0 ? -b.Imaginary : b.Imaginary;
+            if (abs_breal >= abs_bimag)
+            {
+                // Divide top and bottom by b.real. (A NaN abs_breal fails this test and the next one.)
+                if (abs_breal == 0.0)
+                    throw new DivideByZeroException("complex division by zero");
+                double ratio = LeftDiv(b.Imaginary, b.Real);
+                double denom = LeftAdd(b.Real, LeftMul(b.Imaginary, ratio));
+                return new Complex(LeftDiv(LeftAdd(a.Real, LeftMul(a.Imaginary, ratio)), denom),
+                                   LeftDiv(LeftSub(a.Imaginary, LeftMul(a.Real, ratio)), denom));
+            }
+            if (abs_bimag >= abs_breal)
+            {
+                // Divide top and bottom by b.imag.
+                double ratio = LeftDiv(b.Real, b.Imaginary);
+                double denom = LeftAdd(LeftMul(b.Real, ratio), b.Imaginary);
+                return new Complex(LeftDiv(LeftAdd(LeftMul(a.Real, ratio), a.Imaginary), denom),
+                                   LeftDiv(LeftSub(LeftMul(a.Imaginary, ratio), a.Real), denom));
+            }
+            // At least one of b.real / b.imag is a NaN: CPython's Py_NAN, which this build defines as the POSITIVE
+            // quiet NaN (probed: (1+2j)/complex(nan, 1) is 0x7ff8000000000000 in both parts) — not .NET's
+            // double.NaN, whose sign bit is set.
+            return new Complex(s_pyNaN, s_pyNaN);
+        }
+
+        /// <summary>CPython's <c>Py_NAN</c> on win-amd64: the positive quiet NaN <c>0x7ff8000000000000</c>.</summary>
+        private static readonly double s_pyNaN = BitConverter.Int64BitsToDouble(0x7ff8000000000000L);
+
+        /// <summary>CPython's <c>_Py_c_sum</c>: componentwise addition, each part keeping the LEFT operand's NaN
+        ///     (a Python int/float operand joins as <c>(value, +0.0)</c> — the caller's <see cref="AsComplex"/>).</summary>
+        /// <param name="a">Left operand.</param><param name="b">Right operand.</param><returns>The sum.</returns>
+        public static Complex ComplexSum(Complex a, Complex b) => new Complex(LeftAdd(a.Real, b.Real), LeftAdd(a.Imaginary, b.Imaginary));
+
+        /// <summary>CPython's <c>_Py_c_diff</c>: componentwise subtraction (left operand's NaN first).</summary>
+        /// <param name="a">Left operand.</param><param name="b">Right operand.</param><returns>The difference.</returns>
+        public static Complex ComplexDiff(Complex a, Complex b) => new Complex(LeftSub(a.Real, b.Real), LeftSub(a.Imaginary, b.Imaginary));
+
+        /// <summary>
+        ///     CPython's <c>_Py_c_prod</c>: the naive four-product formula evaluated left to right —
+        ///     <c>(a.re*b.re - a.im*b.im, a.re*b.im + a.im*b.re)</c> — with no fused multiply-add (the MSVC build
+        ///     targets SSE2) and every operation keeping its left operand's NaN. NOT NumPy's array multiply (a
+        ///     fused <c>simd_cmul</c>) — the two differ in the last bit.
+        /// </summary>
+        /// <param name="a">Left operand.</param><param name="b">Right operand.</param><returns>The product.</returns>
+        public static Complex ComplexProd(Complex a, Complex b)
+            => new Complex(LeftSub(LeftMul(a.Real, b.Real), LeftMul(a.Imaginary, b.Imaginary)),
+                           LeftAdd(LeftMul(a.Real, b.Imaginary), LeftMul(a.Imaginary, b.Real)));
+
+        // ---------------------------------------------------------------------------------------------
+        //  CPython's IEEE arithmetic, NaN operand priority included
+        // ---------------------------------------------------------------------------------------------
+        //
+        // x86-64 SSE returns the FIRST source operand's NaN (quieted) when both operands are NaN, and any NaN
+        // input propagates quieted; an invalid operation on non-NaN operands (inf-inf, 0*inf) yields the default
+        // NaN (sign bit set). Which operand is the "first source" of a COMMUTATIVE operator is the compiler's
+        // choice: RyuJIT swaps `a + b` / `a * b` whenever its register allocation prefers the other order, so a C#
+        // operator does not pin the NaN a result carries — two call sites of the same expression can disagree.
+        // CPython 3.12 as MSVC compiled it (probed on the corpus's interpreter, per operator and operand order):
+        //   float_add ............ the RIGHT operand's NaN (generic and specialized BINARY_OP_ADD_FLOAT alike)
+        //   float_sub, float_div . the LEFT operand's NaN
+        //   float_mul ............ the LEFT operand's NaN once the call site is specialized
+        //                          (BINARY_OP_MULTIPLY_FLOAT, the steady state of any site executed twice); a
+        //                          site's FIRST, unspecialized execution (generic float_mul) returns the RIGHT
+        //                          one's — interpreter state no library can reproduce, so the steady state is modelled
+        //   _Py_c_sum/_diff/_prod/_quot: every operation the LEFT operand's NaN (source order)
+        // These helpers pin the order explicitly; the cost is two predictable NaN tests per operation.
+
+        /// <summary>A NaN as SSE propagates it: its quiet bit set (a signalling NaN keeps its payload and sign).</summary>
+        /// <param name="v">A NaN.</param>
+        /// <returns>The quieted NaN.</returns>
+        private static double Quiet(double v) => BitConverter.Int64BitsToDouble(BitConverter.DoubleToInt64Bits(v) | 0x0008000000000000L);
+
+        /// <summary>IEEE <c>a + b</c>, the LEFT operand's NaN winning when both are NaN.</summary>
+        /// <param name="a">Left operand.</param><param name="b">Right operand.</param><returns>The sum.</returns>
+        public static double LeftAdd(double a, double b) => double.IsNaN(a) ? Quiet(a) : double.IsNaN(b) ? Quiet(b) : a + b;
+
+        /// <summary>IEEE <c>a - b</c>, the LEFT operand's NaN winning (subtraction is never swapped, but a NaN
+        ///     input is still re-quieted explicitly for symmetry with the other helpers).</summary>
+        /// <param name="a">Left operand.</param><param name="b">Right operand.</param><returns>The difference.</returns>
+        public static double LeftSub(double a, double b) => double.IsNaN(a) ? Quiet(a) : double.IsNaN(b) ? Quiet(b) : a - b;
+
+        /// <summary>IEEE <c>a * b</c>, the LEFT operand's NaN winning when both are NaN.</summary>
+        /// <param name="a">Left operand.</param><param name="b">Right operand.</param><returns>The product.</returns>
+        public static double LeftMul(double a, double b) => double.IsNaN(a) ? Quiet(a) : double.IsNaN(b) ? Quiet(b) : a * b;
+
+        /// <summary>IEEE <c>a / b</c>, the LEFT operand's NaN winning.</summary>
+        /// <param name="a">Dividend.</param><param name="b">Divisor.</param><returns>The quotient.</returns>
+        public static double LeftDiv(double a, double b) => double.IsNaN(a) ? Quiet(a) : double.IsNaN(b) ? Quiet(b) : a / b;
+
+        /// <summary>CPython's <c>float + float</c>: the RIGHT operand's NaN wins when both are NaN.</summary>
+        /// <param name="a">Left operand.</param><param name="b">Right operand.</param><returns>The sum.</returns>
+        public static double FloatAdd(double a, double b) => double.IsNaN(b) ? Quiet(b) : double.IsNaN(a) ? Quiet(a) : a + b;
+
+        /// <summary>CPython's <c>float - float</c> (the left operand's NaN wins).</summary>
+        /// <param name="a">Left operand.</param><param name="b">Right operand.</param><returns>The difference.</returns>
+        public static double FloatSub(double a, double b) => LeftSub(a, b);
+
+        /// <summary>CPython's <c>float * float</c> at a specialized call site (the left operand's NaN wins).</summary>
+        /// <param name="a">Left operand.</param><param name="b">Right operand.</param><returns>The product.</returns>
+        public static double FloatMul(double a, double b) => LeftMul(a, b);
+
+        /// <summary>CPython's <c>float / float</c>: a ±0 divisor is ZeroDivisionError, else the left operand's NaN wins.</summary>
+        /// <param name="a">Dividend.</param><param name="b">Divisor.</param><returns>The quotient.</returns>
+        /// <exception cref="DivideByZeroException"><paramref name="b"/> is ±0 (<c>float division by zero</c>).</exception>
+        public static double FloatDiv(double a, double b)
+        {
+            if (b == 0)
+                throw new DivideByZeroException("float division by zero");
+            return LeftDiv(a, b);
+        }
+
+        /// <summary>2^53: an integer below this magnitude is exactly a double (CPython's "small" operand test).</summary>
+        private static readonly BigInteger s_twoPow53Exclusive = BigInteger.One << 53;
+
+        /// <summary>
+        ///     CPython's <c>long_true_divide</c> (Objects/longobject.c): the correctly rounded (round-half-even)
+        ///     quotient of two Python ints at ANY magnitude, subnormals included. Both operands below 2^53 take
+        ///     CPython's fast path — one IEEE division of the two exact doubles; otherwise the quotient is formed
+        ///     exactly with 55–56 significant bits, the sticky bit from the discarded remainder, and rounded once.
+        /// </summary>
+        /// <param name="a">Dividend.</param>
+        /// <param name="b">Divisor.</param>
+        /// <returns>The quotient; a zero result carries the XOR of the operand signs (<c>0 / -5</c> is <c>-0.0</c>).</returns>
+        /// <exception cref="DivideByZeroException"><paramref name="b"/> is 0 (<c>division by zero</c>).</exception>
+        /// <exception cref="OverflowException">The quotient exceeds the float range (<c>integer division result too
+        ///     large for a float</c>).</exception>
+        public static double IntTrueDivide(BigInteger a, BigInteger b)
+        {
+            if (b.IsZero)
+                throw new DivideByZeroException("division by zero");
+            // CPython: negate = (a < 0) != (b < 0), with a zero dividend never negative.
+            bool negate = (a.Sign < 0) != (b.Sign < 0);
+            if (a.IsZero)
+                return negate ? -0.0 : 0.0;
+            BigInteger aa = BigInteger.Abs(a), bb = BigInteger.Abs(b);
+            if (aa < s_twoPow53Exclusive && bb < s_twoPow53Exclusive)
+            {
+                // Both exactly representable: one IEEE division IS the correctly rounded quotient.
+                double q = (double)(long)aa / (double)(long)bb;
+                return negate ? -q : q;
+            }
+
+            const int DblMantDig = 53, DblMaxExp = 1024, DblMinExp = -1021;
+            long diff = (long)aa.GetBitLength() - (long)bb.GetBitLength();
+            if (diff > DblMaxExp)
+                throw new OverflowException("integer division result too large for a float");
+            if (diff < DblMinExp - DblMantDig - 1)
+                return negate ? -0.0 : 0.0;
+
+            // x = |a| * 2^-shift, with shift chosen so x // |b| has DBL_MANT_DIG + 1 or + 2 bits (fewer for a
+            // subnormal result); every bit shifted out, and a nonzero remainder, sets the sticky bit.
+            long shift = Math.Max(diff, DblMinExp) - DblMantDig - 2;
+            bool inexact = false;
+            BigInteger x;
+            if (shift <= 0)
+                x = aa << (int)(-shift);
+            else
+            {
+                x = aa >> (int)shift;
+                if (!(aa & ((BigInteger.One << (int)shift) - 1)).IsZero)
+                    inexact = true;
+            }
+            x = BigInteger.DivRem(x, bb, out BigInteger rem);
+            if (!rem.IsZero)
+                inexact = true;
+            long xBits = (long)x.GetBitLength();
+
+            // Round half-to-even at the bit that makes the result DBL_MANT_DIG bits (or the subnormal grid),
+            // exactly CPython's "modify the low digit" step: mask is the half-ulp bit, 3*mask-1 the ulp bit
+            // plus every bit below the half bit (with the sticky bit OR'd into bit 0).
+            long extraBits = Math.Max(xBits, DblMinExp - shift) - DblMantDig;
+            BigInteger mask = BigInteger.One << (int)(extraBits - 1);
+            if (inexact)
+                x |= BigInteger.One;
+            if (!(x & mask).IsZero && !(x & (3 * mask - 1)).IsZero)
+                x += mask;
+            x &= ~(2 * mask - 1);
+
+            // x now has at most DBL_MANT_DIG significant bits (plus trailing zeros): the conversion is exact.
+            double dx = (double)x;
+            if (shift + xBits >= DblMaxExp && (shift + xBits > DblMaxExp || dx == Math.ScaleB(1.0, (int)xBits)))
+                throw new OverflowException("integer division result too large for a float");
+            double result = Math.ScaleB(dx, (int)shift);
+            return negate ? -result : result;
         }
 
         /// <summary>A Python-like rendering for diagnostics and kernel names.</summary>

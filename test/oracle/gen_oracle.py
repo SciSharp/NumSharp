@@ -10819,6 +10819,567 @@ def gen_polyeval():
     return cases
 
 
+# ---- numpy.polynomial additive family + polyutils (plan docs/plans/numpy-polynomial.md U1) ---------------
+#
+# Op keys are module-qualified like the polyeval tier: "<basis module>.<name>" for the six bases
+# (polynomial.polyadd, laguerre.lagline, hermite_e.hermedomain, …) and "polyutils.<name>" for the helpers.
+# Arguments are recorded in params by NAME, each one of:
+#   "a"                                   -> the next operand (an ndarray, any layout; a 0-d one is STRONG)
+#   {"kind": "int"|"float"|"complex"|"bool", …}   -> a Python scalar (the _weak_spec form)
+#   {"kind": "list"|"tuple", "items": [...]}       -> a Python list / tuple of the same (nested)
+#   {"kind": "str", "str": s}             -> a Python str
+# and operands are consumed in the order the C# side decodes the params (per op: c1,c2 / c,tol / off,scl /
+# old,new / x,old,new / alist), items depth-first. The NumPy call receives exactly those objects, so a
+# domain given as a list/tuple runs CPython arithmetic and one given as an array NumPy's scalar math.
+# Results: arrays/scalars as (dtype, shape, bytes) — a Python float becomes 0-d float64 — and
+# as_series/mapparms as tuples (arity asserted). complex64 results (a Python complex meeting a float16/
+# float32 value) are skipped (#569), as are NumPy object arrays (NumSharp has no object dtype).
+
+
+class _PSArr:
+    """An ndarray argument together with the buffer it views (so its layout can be described)."""
+
+    def __init__(self, base, view=None):
+        self.base = base
+        self.view = base if view is None else view
+
+
+def _ps_enc(v, operands):
+    if isinstance(v, _PSArr):
+        operands.append(describe(v.base, v.view))
+        return "a"
+    if isinstance(v, list):
+        return {"kind": "list", "items": [_ps_enc(i, operands) for i in v]}
+    if isinstance(v, tuple):
+        return {"kind": "tuple", "items": [_ps_enc(i, operands) for i in v]}
+    if isinstance(v, str):
+        return {"kind": "str", "str": v}
+    return _weak_spec(v)
+
+
+def _ps_py(v):
+    if isinstance(v, _PSArr):
+        return v.view
+    if isinstance(v, list):
+        return [_ps_py(i) for i in v]
+    if isinstance(v, tuple):
+        return tuple(_ps_py(i) for i in v)
+    return v
+
+
+def _ps_series(n, dt, pattern="moderate", seed=0):
+    """A 1-D coefficient array of dtype dt: moderate values, or one of the trim/special patterns."""
+    dt = np.dtype(dt)
+    base = _poly_fill(n, dt, seed)
+    if pattern == "moderate":
+        return base
+    if pattern == "tz":                               # trailing zeros (and a -0.0 among them for floats)
+        z = np.zeros(3, dt)
+        if dt.kind in "fc":
+            z[1] = -0.0
+        return np.concatenate([base, z]).astype(dt)
+    if pattern == "allzero":
+        return np.zeros(n, dt)
+    if pattern == "lastnz":                           # zeros except the first element
+        a = np.zeros(n, dt)
+        a[0] = base[0] if base[0] != 0 else 1
+        return a
+    if pattern == "special":
+        if dt.kind == "f":
+            vals = [float("nan"), 1.5, float("-inf"), -0.0, float("inf"), 0.0, 2.0]
+        elif dt.kind == "c":
+            vals = [complex(float("nan"), 1), 1.5 - 2j, complex(0, float("inf")), complex(-0.0, 0.0),
+                    complex(float("inf"), float("nan")), 0j, 2 + 0j]
+        elif dt.kind == "b":
+            vals = [True, False, True, False]
+        else:
+            info = np.iinfo(dt)
+            vals = [int(info.min), int(info.max), 0, 1, int(info.max) - 1, 0]
+        with np.errstate(all="ignore"):
+            return np.array([vals[i % len(vals)] for i in range(max(n, len(vals)))]).astype(dt)
+    if pattern == "nantail":                          # a trailing NaN is NONZERO: never trimmed
+        if dt.kind not in "fc":
+            return base
+        a = base.copy()
+        a[-1] = np.nan
+        return a
+    raise ValueError(pattern)
+
+
+def _ps_layouts(arr):
+    """(name, _PSArr) for the 1-D layouts of arr's values: contiguous, strided, reversed, offset slice,
+    and — for a single value — stride-0 broadcast and 0-d."""
+    n = arr.size
+    out = [("c_contiguous_1d", _PSArr(arr.copy()))]
+    s = np.zeros(2 * n, arr.dtype)
+    s[::2] = arr
+    out.append(("strided_1d", _PSArr(s, s[::2])))
+    r = arr[::-1].copy()
+    out.append(("reversed_1d", _PSArr(r, r[::-1])))
+    o = np.concatenate([np.zeros(2, arr.dtype), arr, np.zeros(1, arr.dtype)])
+    out.append(("offset_1d", _PSArr(o, o[2:2 + n])))
+    return out
+
+
+def gen_polyseries():
+    import numpy.polynomial.polyutils as pu
+    cases = []
+    counter = [0]
+    skipped = [0]
+    ok_dtypes = set(ALL_DTYPES)
+
+    def emit(op, args, call, layout, cid, kind="array"):
+        operands = []
+        params = {k: _ps_enc(v, operands) for k, v in args.items()}
+        n = counter[0]
+        counter[0] += 1
+        try:
+            with np.errstate(all="ignore"):
+                r = call()
+        except Exception as e:
+            cases.append({"id": f"{cid}/{n}", "op": op, "params": params, "operands": operands,
+                          "expected": {"kind": kind} if kind != "array" else {}, "expects_throw": True,
+                          "error": _poly_exc(e), "layout": layout, "valueclass": "error"})
+            return
+        if kind == "tuple":
+            arrs = [np.asarray(v) for v in r]
+            if any(a.dtype.name not in ok_dtypes for a in arrs):
+                skipped[0] += 1
+                return
+            cases.append(_case(op, params, operands, _tuple_expected(arrs), layout, "polyseries", cid=f"{cid}/{n}"))
+        else:
+            a = np.asarray(r)
+            if a.dtype.name not in ok_dtypes:
+                skipped[0] += 1
+                return
+            cases.append(_case(op, params, operands, _arr_expected(a), layout, "polyseries", cid=f"{cid}/{n}"))
+
+    A = _PSArr
+    sub_dtypes = ["float64", "float32", "float16", "complex128", "int32", "uint64"]
+
+    # ---------------- (A) {p}add / {p}sub ----------------
+    for modname, p in POLY_MODULES:
+        mod = _poly_module(modname)
+        for opname in ("add", "sub"):
+            f = getattr(mod, p + opname)
+            op = f"{modname}.{p}{opname}"
+            full = modname == "polynomial"
+            dts = ALL_DTYPES if full else sub_dtypes
+            for d1 in dts:
+                for d2 in dts:
+                    for n1, n2 in ((3, 5), (5, 3), (4, 4)):
+                        c1 = _ps_series(n1, d1, seed=1)
+                        c2 = _ps_series(n2, d2, seed=2)
+                        emit(op, {"c1": A(c1), "c2": A(c2)}, lambda: f(c1, c2), "c_contiguous_1d",
+                             f"{op}/dt/{d1}/{d2}/{n1}/{n2}")
+            pat_dtypes = ["float64", "float32", "float16", "complex128", "int64", "uint8"] if full else ["float64", "complex128"]
+            for d1 in pat_dtypes:
+                for d2 in pat_dtypes:
+                    for pat1, pat2 in (("tz", "moderate"), ("moderate", "tz"), ("allzero", "allzero"),
+                                       ("special", "moderate"), ("moderate", "special"), ("nantail", "tz"),
+                                       ("lastnz", "tz"), ("tz", "tz")):
+                        for n1, n2 in ((3, 5), (5, 3), (4, 4)):
+                            c1 = _ps_series(n1, d1, pat1, seed=3)
+                            c2 = _ps_series(n2, d2, pat2, seed=4)
+                            emit(op, {"c1": A(c1), "c2": A(c2)}, lambda: f(c1, c2), "c_contiguous_1d",
+                                 f"{op}/pat/{d1}/{d2}/{pat1}/{pat2}/{n1}/{n2}")
+            if full:
+                # layouts of either operand
+                for d in ("float64", "complex128", "float16", "int16"):
+                    for n1, n2 in ((3, 5), (5, 3), (4, 4)):
+                        v1 = _ps_series(n1, d, "tz" if n1 == 4 else "moderate", seed=5)
+                        v2 = _ps_series(n2, d, seed=6)
+                        for ln, a1 in _ps_layouts(v1):
+                            for ln2, a2 in _ps_layouts(v2)[:2]:
+                                emit(op, {"c1": a1, "c2": a2}, lambda: f(_ps_py(a1), _ps_py(a2)), f"{ln}+{ln2}",
+                                     f"{op}/lay/{d}/{ln}/{ln2}/{n1}/{n2}")
+                    # a 0-d array and a stride-0 broadcast are length-1 / length-n series
+                    s0 = np.array(_ps_series(1, d, seed=7)[0])
+                    emit(op, {"c1": A(s0), "c2": A(_ps_series(3, d, seed=8))},
+                         lambda: f(s0, _ps_series(3, d, seed=8)), "scalar_0d", f"{op}/0d/{d}")
+                    bsrc = _ps_series(1, d, seed=9)
+                    bc = np.broadcast_to(bsrc, (4,))
+                    emit(op, {"c1": A(bsrc, bc), "c2": A(_ps_series(2, d, seed=10))},
+                         lambda: f(bc, _ps_series(2, d, seed=10)), "broadcast_1d", f"{op}/bcast/{d}")
+            # Python scalars and lists
+            py_args = [5, 2.5, -0.0, True, 1 + 2j, [1, 2, 0], [1.5, 2], [True, 2], [0, 0], [1, 2 ** 63],
+                       [2 ** 64 - 1], [1 + 1j, 0j], 7]
+            others = [A(_ps_series(3, "float64", seed=11)), A(_ps_series(4, "float32", seed=12)),
+                      A(_ps_series(2, "float16", seed=13)), 3, [0], [0.5, -1.0, 0.0]]
+            for a1 in py_args:
+                for a2 in others:
+                    emit(op, {"c1": a1, "c2": a2}, lambda: f(_ps_py(a1), _ps_py(a2)), "python",
+                         f"{op}/py/{type(a1).__name__}/{type(a2).__name__}")
+                    emit(op, {"c1": a2, "c2": a1}, lambda: f(_ps_py(a2), _ps_py(a1)), "python",
+                         f"{op}/pyr/{type(a2).__name__}/{type(a1).__name__}")
+            # errors: empty, 2-D, bool (no common type), order of the checks
+            emp = np.zeros(0)
+            two = np.zeros((2, 2))
+            bl = np.array([True, False])
+            for a1, a2, tag in ((A(emp), A(_ps_series(2, "float64")), "empty1"),
+                                (A(_ps_series(2, "float64")), A(emp), "empty2"),
+                                (A(two), A(_ps_series(2, "float64")), "2d"),
+                                (A(two), A(emp), "2d_then_empty"),
+                                (A(emp), A(two), "empty_then_2d"),
+                                (A(bl), A(_ps_series(2, "float64")), "bool"),
+                                (A(bl), A(emp), "bool_then_empty"),
+                                ([[1, 2], [3, 4]], [1], "nested"),
+                                ("ab", [1], "str")):
+                emit(op, {"c1": a1, "c2": a2}, lambda: f(_ps_py(a1), _ps_py(a2)), "error", f"{op}/err/{tag}")
+
+    # ---------------- (B) trimcoef / {p}trim ----------------
+    tol_forms = [None, 0, 0.5, 1, 1e-3, 1.5, float("nan"), float("inf"), 2 ** 70, True, -0.0]
+    for modname, p in [("polyutils", None)] + POLY_MODULES:
+        if p is None:
+            f = pu.trimcoef
+            op = "polyutils.trimcoef"
+            dts = ALL_DTYPES
+            pats = ("moderate", "tz", "allzero", "special", "nantail", "lastnz")
+        else:
+            f = getattr(_poly_module(modname), p + "trim")
+            op = f"{modname}.{p}trim"
+            dts = ["float64", "float32", "complex128", "int64"]
+            pats = ("tz", "allzero", "special")
+        for d in dts:
+            for pat in pats:
+                c = _ps_series(5, d, pat, seed=14)
+                for tol in tol_forms:
+                    if tol is None:
+                        emit(op, {"c": A(c)}, lambda: f(c), "c_contiguous_1d", f"{op}/dt/{d}/{pat}/default")
+                    else:
+                        emit(op, {"c": A(c), "tol": tol}, lambda: f(c, tol), "c_contiguous_1d",
+                             f"{op}/dt/{d}/{pat}/{type(tol).__name__}/{tol!r}")
+        if p is None:
+            # strong (NumPy-scalar / array) tolerances: the comparison runs in the PROMOTED dtype
+            for d in ("float16", "float32", "float64", "complex128"):
+                c = np.array([1.0, 1.0009765625, 0.25, 1.0001], dtype=np.float64).astype(d)
+                for tv, tdt in ((1.0001, "float64"), (1.0001, "float32"), (1.0001, "float16"), (0.25, "float16"),
+                                (1.0, "int8"), (0.5, "complex128")):
+                    t0 = np.array(tv, dtype=tdt)
+                    emit(op, {"c": A(c), "tol": A(t0)}, lambda: f(c, t0), "strong_tol", f"{op}/strong/{d}/{tdt}/{tv}")
+                    t1 = np.array([tv], dtype=tdt)
+                    emit(op, {"c": A(c), "tol": A(t1)}, lambda: f(c, t1), "strong_tol_1d", f"{op}/strong1d/{d}/{tdt}/{tv}")
+            # layouts of c
+            for d in ("float64", "complex128", "float16"):
+                for ln, ca in _ps_layouts(_ps_series(6, d, "tz", seed=15)):
+                    emit(op, {"c": ca, "tol": 0.5}, lambda: f(_ps_py(ca), 0.5), ln, f"{op}/lay/{d}/{ln}")
+            # Python-list series and a Python-scalar series
+            for cv in ([0, 0, 3, 0, 5, 0, 0], [0.0, 1e-3, 0.0, 1e-5], [1 + 1j, 0j, 1e-4j], 5, 0, [True, False, True]):
+                for tol in (0, 1e-3, 2):
+                    emit(op, {"c": cv, "tol": tol}, lambda: f(cv, tol), "python", f"{op}/py/{cv!r}/{tol!r}")
+            # errors, in NumPy's order (tol first)
+            c = _ps_series(3, "float64")
+            for tag, cv, tol in (("negtol", A(c), -1), ("negtol_float", A(c), -1e-300),
+                                 ("negtol_strong", A(c), A(np.array(-0.5))),
+                                 ("negtol_before_empty", A(np.zeros(0)), -1),
+                                 ("complextol", A(c), 1j), ("tolarray2", A(c), A(np.array([1.0, 2.0]))),
+                                 ("tolarray0", A(c), A(np.zeros(0))), ("toltoobig", A(c), 2 ** 1030),
+                                 ("empty", A(np.zeros(0)), 0), ("2d", A(np.zeros((2, 2))), 0),
+                                 ("bool", A(np.array([True, False])), 0)):
+                emit(op, {"c": cv, "tol": tol}, lambda: f(_ps_py(cv), _ps_py(tol)), "error", f"{op}/err/{tag}")
+
+    # ---------------- (C) polyutils.trimseq ----------------
+    op = "polyutils.trimseq"
+    for d in ALL_DTYPES:
+        for pat in ("moderate", "tz", "allzero", "special", "nantail", "lastnz"):
+            c = _ps_series(5, d, pat, seed=16)
+            emit(op, {"seq": A(c)}, lambda: pu.trimseq(c), "c_contiguous_1d", f"{op}/dt/{d}/{pat}")
+    for d in ("float64", "complex128", "float16"):
+        for ln, ca in _ps_layouts(_ps_series(5, d, "tz", seed=17)):
+            emit(op, {"seq": ca}, lambda: pu.trimseq(_ps_py(ca)), ln, f"{op}/lay/{d}/{ln}")
+        col = _ps_series(4, d, "tz", seed=18).reshape(-1, 1)
+        emit(op, {"seq": A(col)}, lambda: pu.trimseq(col), "column_2d", f"{op}/col/{d}")
+        col3 = _ps_series(4, d, "tz", seed=18).reshape(-1, 1, 1)
+        emit(op, {"seq": A(col3)}, lambda: pu.trimseq(col3), "column_3d", f"{op}/col3/{d}")
+    for tag, s in (("empty", np.zeros(0)), ("rows2", np.array([[1.0, 2.0], [0.0, 0.0]])),
+                   ("rows0", np.zeros((3, 0))), ("empty2d", np.zeros((0, 3))), ("zero_d", np.array(0.0)),
+                   ("rows2_nonzero_last", np.array([[1.0, 2.0], [3.0, 4.0]]))):
+        emit(op, {"seq": A(s)}, lambda: pu.trimseq(s), "error" if tag != "empty2d" else "empty",
+             f"{op}/edge/{tag}")
+
+    # ---------------- (D) polyutils.as_series ----------------
+    op = "polyutils.as_series"
+    for d1 in ALL_DTYPES:
+        for d2 in ("float64", "float16", "float32", "complex128", "int8", "bool"):
+            for trim in (True, False):
+                c1 = _ps_series(4, d1, "tz", seed=19)
+                c2 = _ps_series(3, d2, seed=20)
+                emit(op, {"alist": [A(c1), A(c2)], "trim": trim}, lambda: pu.as_series([c1, c2], trim=trim),
+                     "list_of_arrays", f"{op}/dt/{d1}/{d2}/{trim}", kind="tuple")
+    for d in ("float64", "int64", "complex128", "float16", "bool"):
+        m1 = _ps_series(4, d, "tz", seed=21)
+        m2 = _ps_series(6, d, seed=22).reshape(2, 3)
+        for trim in (True, False):
+            emit(op, {"alist": A(m1), "trim": trim}, lambda: pu.as_series(m1, trim=trim), "ndarray_1d",
+                 f"{op}/nd1/{d}/{trim}", kind="tuple")
+            emit(op, {"alist": A(m2), "trim": trim}, lambda: pu.as_series(m2, trim=trim), "ndarray_2d",
+                 f"{op}/nd2/{d}/{trim}", kind="tuple")
+    ar8 = np.arange(8.0)
+    for tag, al in (("pylists", [[1, 2, 0], [3.5]]), ("mixed", [2, [1.1, 0.0]]), ("scalars", [1, 2.5, 1j]),
+                    ("single", [[1, 0, 0]]), ("empty_list", []), ("u64", [[2 ** 64 - 1]]),
+                    ("big_mixed", [[1, 2 ** 63]]), ("bools_ints", [[True, 2]]), ("strided",
+                    [A(ar8, ar8[::2]), [0.0]])):
+        for trim in (True, False):
+            emit(op, {"alist": al, "trim": trim}, lambda: pu.as_series(_ps_py(al), trim=trim), "python",
+                 f"{op}/py/{tag}/{trim}", kind="tuple")
+    for tag, al in (("empty_item", [[1], []]), ("nd_item", [[[1]], []]), ("bool", [[True, False]]),
+                    ("bool_second", [[1.5], [True]]), ("zero_d", A(np.array(5.0))), ("scalar", 5),
+                    ("str", "ab"), ("nd3", A(np.zeros((2, 2, 2)))), ("rows0", A(np.zeros((2, 0))))):
+        emit(op, {"alist": al, "trim": True}, lambda: pu.as_series(_ps_py(al)), "error", f"{op}/err/{tag}", kind="tuple")
+
+    # ---------------- (E) polyutils.getdomain ----------------
+    op = "polyutils.getdomain"
+    for d in ALL_DTYPES:
+        for pat in ("moderate", "special", "allzero", "nantail"):
+            x = _ps_series(6, d, pat, seed=23)
+            emit(op, {"x": A(x)}, lambda: pu.getdomain(x), "c_contiguous_1d", f"{op}/dt/{d}/{pat}")
+        if d in ("float64", "float32", "float16", "complex128", "int32"):
+            for ln, xa in _ps_layouts(_ps_series(5, d, "special", seed=24)):
+                emit(op, {"x": xa}, lambda: pu.getdomain(_ps_py(xa)), ln, f"{op}/lay/{d}/{ln}")
+    for tag, xv in (("pz_nz", [0.0, -0.0]), ("nz_pz", [-0.0, 0.0]), ("nz_nz", [-0.0, -0.0]),
+                    ("c_signs", [complex(0.0, -0.0), complex(-0.0, 0.0)]), ("c_nan", [1 + 1j, complex(float("nan"), 2)]),
+                    ("one", [5.0]), ("pyint", 5), ("pylist", [3, -1, 2]), ("pycomplex", [1j, -2 + 0.5j])):
+        emit(op, {"x": xv if not isinstance(xv, list) or True else xv}, lambda: pu.getdomain(xv), "python",
+             f"{op}/py/{tag}")
+        if isinstance(xv, list) and not isinstance(xv[0], int):
+            arr = np.array(xv)
+            emit(op, {"x": A(arr)}, lambda: pu.getdomain(arr), "c_contiguous_1d", f"{op}/arr/{tag}")
+            rv = arr[::-1].copy()
+            emit(op, {"x": A(rv, rv[::-1])}, lambda: pu.getdomain(rv[::-1]), "reversed_1d", f"{op}/rev/{tag}")
+    for tag, xv in (("empty", A(np.zeros(0))), ("2d", A(np.zeros((2, 2)))), ("bool", A(np.array([True, False]))),
+                    ("pybool", True), ("str", "ab")):
+        emit(op, {"x": xv}, lambda: pu.getdomain(_ps_py(xv)), "error", f"{op}/err/{tag}")
+
+    # ---------------- (F) polyutils.mapparms ----------------
+    op = "polyutils.mapparms"
+    py_domains = [(-1, 1), (0, 2), (1, -1), (1, 1), (0.5, 1.5), (-1.0, 1.0), (1e308, -1e308), (0, float("inf")),
+                  (float("nan"), 1), (-1j, 1), (1j, 1j), (True, False), (0, 2 ** 64), (0, 10 ** 400), (10 ** 400, 0),
+                  (-2 ** 53 - 1, 2 ** 53 + 3), (0.1, 0.7), (2, 3 + 4j)]
+    for old in py_domains:
+        for new in ((-1, 1), (0, 1), (0.25, 3.5), (1j, -1), (2 ** 70, 1)):
+            for wrap in (tuple, list):
+                o, nw = wrap(old), wrap(new)
+                emit(op, {"old": o, "new": nw}, lambda: pu.mapparms(o, nw), "python",
+                     f"{op}/py/{wrap.__name__}/{old!r}/{new!r}", kind="tuple")
+    # The CPython int/float fast lane (NumSharp runs Python-real tuple domains on long/double): the edges where it
+    # must hand over to exact integers (a long overflow in a difference or a product, ulong-range ints), the int ->
+    # float conversions it must round like PyLong_AsDouble (2**62 + 513 is not a tie and not truncatable), the XOR
+    # sign of a zero int quotient (0 / -5 == -0.0), and ints beyond 2**53 in a true division.
+    lane_domains = [(2 ** 62, -2 ** 62), (-2 ** 63, 2 ** 63 - 1), (-5, 2 ** 63 - 1), (0, 2 ** 63 + 5),
+                    (2 ** 31 + 1, 2 ** 32 + 7), (2 ** 62 + 513, 1.5), (2 ** 60 + 1, 0.5), (True, 0.5), (0, -5),
+                    (1, -1), (-7, 3), (3, 10 ** 15 + 37)]
+    for old in lane_domains:
+        for new in ((0, 0), (3, 5), (-2 ** 62, 2 ** 61), (0.5, -0.0), (2 ** 53 + 1, 1)):
+            emit(op, {"old": old, "new": new}, lambda: pu.mapparms(old, new), "python",
+                 f"{op}/lane/{old!r}/{new!r}", kind="tuple")
+    for tag, old, new in (("zerolen_mixed", (1, 1.0), (0, 1)), ("zerolen_negzero", (0.0, -0.0), (0, 1)),
+                          ("zerolen_bool", (True, 1), (0, 1)), ("zerolen_big", (2 ** 62, 2 ** 62), (2 ** 62, 1)),
+                          ("zerolen_float_new", (2.5, 2.5), (0.5, 1))):
+        emit(op, {"old": old, "new": new}, lambda: pu.mapparms(_ps_py(old), _ps_py(new)), "error",
+             f"{op}/err/{tag}", kind="tuple")
+    for d in ALL_DTYPES:
+        for vals in ((-1, 1), (0, 3), (2, 2), (1, 0)):
+            with np.errstate(all="ignore"):
+                old = np.array(vals).astype(d)
+            for new in ((0, 1), (0.25, 3.5), (0, 300), (0, -1), (1j, 2), A(np.array([0.5, 2.0]))):
+                emit(op, {"old": A(old), "new": new}, lambda: pu.mapparms(old, _ps_py(new)), "ndarray",
+                     f"{op}/nd/{d}/{vals}/{new if not isinstance(new, _PSArr) else 'f64arr'}", kind="tuple")
+            emit(op, {"old": (0, 2), "new": A(old)}, lambda: pu.mapparms((0, 2), old), "ndarray",
+                 f"{op}/ndnew/{d}/{vals}", kind="tuple")
+    # same-dtype array domains with specials, complex products (scalarmath is the NAIVE complex product)
+    rng = np.random.default_rng(20260927)
+    for d in ("complex128", "float64", "float32", "float16"):
+        for draw in range(8):
+            re = rng.uniform(-2, 2, 4)
+            vals = re + 1j * rng.uniform(-2, 2, 4) if d == "complex128" else re
+            old = np.array(vals[:2]).astype(d)
+            new = np.array(vals[2:]).astype(d)
+            emit(op, {"old": A(old), "new": A(new)}, lambda: pu.mapparms(old, new), "ndarray",
+                 f"{op}/rand/{d}/{draw}", kind="tuple")
+            # lists of 0-d arrays: every product is a ufunc (the fused complex product)
+            ol = [A(np.array(old[0])), A(np.array(old[1]))]
+            nl = [A(np.array(new[0])), A(np.array(new[1]))]
+            emit(op, {"old": ol, "new": nl}, lambda: pu.mapparms(_ps_py(ol), _ps_py(nl)), "list_of_0d",
+                 f"{op}/rand0d/{d}/{draw}", kind="tuple")
+    # Same-dtype 1-D ndarray domains of every dtype (numpy.polynomial's own case: ABCPolyBase.domain/window are
+    # arrays): four NumPy scalars of ONE dtype, which NumSharp runs as one fused kernel that must equal the
+    # per-operation scalarmath chain — intermediates wrap / round in the dtype (int8 100 - -100 wraps), the two
+    # divisions of an integer dtype are float64, a zero-length domain is inf/nan, never a raise. Strided and
+    # reversed views read their elements through the strides.
+    for d in ALL_DTYPES:
+        if d == "bool":
+            continue
+        for ov, nv in (((-1, 1), (0, 3)), ((2, 2), (0, 1)), ((100, -100), (3, 7)), ((1, 0), (0, 0)),
+                       ((0, 5), (250, 7)), ((-3, 9), (-120, 127)), ((60000, 7), (3, 65000))):
+            with np.errstate(all="ignore"):
+                old = np.array(ov).astype(d)
+                new = np.array(nv).astype(d)
+            emit(op, {"old": A(old), "new": A(new)}, lambda: pu.mapparms(old, new), "ndarray",
+                 f"{op}/same/{d}/{ov}/{nv}", kind="tuple")
+        with np.errstate(all="ignore"):
+            ob = np.array([-1, 7, 1, 7]).astype(d)
+            nb = np.array([3, 0]).astype(d)
+        emit(op, {"old": A(ob, ob[::2]), "new": A(nb, nb[::-1])}, lambda: pu.mapparms(ob[::2], nb[::-1]), "strided",
+             f"{op}/same_view/{d}", kind="tuple")
+        if d in ("float16", "float32", "float64", "complex128"):
+            for ov, nv in (((float("nan"), 1), (0, 1)), ((float("inf"), float("-inf")), (1, 2)),
+                           ((0.1, 0.7), (1e308, -1e308)), ((-0.0, 0.0), (1, 1)), ((0.3, -0.7), (1.1, 2.9))):
+                with np.errstate(all="ignore"):
+                    old = np.array(ov).astype(d)
+                    new = np.array(nv).astype(d)
+                emit(op, {"old": A(old), "new": A(new)}, lambda: pu.mapparms(old, new), "ndarray",
+                     f"{op}/same_special/{d}/{ov}/{nv}", kind="tuple")
+    # Python complex against NumPy float64 scalars: `pycomplex op np.float64` is CPython's arithmetic (complex
+    # accepts a float subclass), `np.float64 op pycomplex` NumPy's — full-mantissa values separate the divisions.
+    for draw in range(12):
+        of = np.array(rng.uniform(-3, 3, 2))
+        nc = tuple(complex(v, w) for v, w in zip(rng.uniform(-3, 3, 2), rng.uniform(-3, 3, 2)))
+        emit(op, {"old": A(of), "new": nc}, lambda: pu.mapparms(of, nc), "mixed_py_np", f"{op}/pycplx_npf64/{draw}",
+             kind="tuple")
+        emit(op, {"old": nc, "new": A(of)}, lambda: pu.mapparms(nc, of), "mixed_py_np", f"{op}/npf64_pycplx/{draw}",
+             kind="tuple")
+        pr = tuple(float(v) for v in rng.uniform(-3, 3, 2))
+        emit(op, {"old": pr, "new": nc}, lambda: pu.mapparms(pr, nc), "python", f"{op}/pycplx_rand/{draw}",
+             kind="tuple")
+        emit(op, {"old": nc, "new": pr}, lambda: pu.mapparms(nc, pr), "python", f"{op}/pycplx_rand_r/{draw}",
+             kind="tuple")
+    for d in ("float64", "complex128"):
+        with np.errstate(all="ignore"):
+            old2 = np.array([[0.0, 1.0, -2.0], [2.0, 3.0, 5.0]]).astype(d)
+            new2 = np.array([[1.0, 0.5, 4.0], [-1.0, 2.5, 1.0]]).astype(d)
+        emit(op, {"old": A(old2), "new": A(new2)}, lambda: pu.mapparms(old2, new2), "ndarray_2d",
+             f"{op}/nd2/{d}", kind="tuple")
+        emit(op, {"old": A(old2), "new": (0, 1)}, lambda: pu.mapparms(old2, (0, 1)), "ndarray_2d",
+             f"{op}/nd2py/{d}", kind="tuple")
+        c21 = np.array([[1.0], [3.0]]).astype(d)
+        emit(op, {"old": A(c21), "new": A(np.array([[0.5, 2.0], [1.0, 3.0]]).astype(d))},
+             lambda: pu.mapparms(c21, np.array([[0.5, 2.0], [1.0, 3.0]]).astype(d)), "ndarray_2d",
+             f"{op}/nd21/{d}", kind="tuple")
+    for tag, old, new in (("short_tuple", (0,), (0, 1)), ("short_list", [0], (0, 1)),
+                          ("short_array", A(np.array([0.0])), (0, 1)), ("short_new", (0, 1), [0]),
+                          ("zero_d", A(np.array(5.0)), (0, 1)), ("pyint", 5, (0, 1)), ("pyfloat", 1.5, (0, 1)),
+                          ("pycomplex", 1j, (0, 1)), ("pybool", True, (0, 1)), ("str2", "ab", (0, 1)),
+                          ("str1", "a", (0, 1)), ("zerolen_int", (1, 1), (0, 1)), ("zerolen_float", (1.0, 1.0), (0, 1)),
+                          ("zerolen_complex", (1j, 1j), (0, 1)), ("bool_array", A(np.array([False, True])), (0, 1)),
+                          ("int8_oob", A(np.array([0, 1], np.int8)), (0, 300)),
+                          ("uint8_neg", A(np.array([0, 1], np.uint8)), (0, -1)),
+                          ("int64_big", A(np.array([0, 1], np.int64)), (0, 2 ** 63)),
+                          ("uint64_neg", A(np.array([0, 1], np.uint64)), (0, -1)),
+                          ("int32_big", A(np.array([0, 1], np.int32)), (0, 2 ** 31)),
+                          ("uint32_big", A(np.array([0, 1], np.uint32)), (0, 2 ** 32)),
+                          ("f32_huge", A(np.array([0, 1], np.float32)), (0, 2 ** 1030))):
+        emit(op, {"old": old, "new": new}, lambda: pu.mapparms(_ps_py(old), _ps_py(new)), "error",
+             f"{op}/err/{tag}", kind="tuple")
+
+    # ---------------- (G) polyutils.mapdomain ----------------
+    op = "polyutils.mapdomain"
+    dom_forms = [("pyint", (-1, 1), (0, 2)), ("pyfloat", (-1.0, 1.0), (0.0, 3.0)), ("pycomplex", (-1, 1), (0, 1j)),
+                 ("f64", A(np.array([-1.0, 1.0])), A(np.array([0.0, 2.0]))),
+                 ("f32", A(np.array([-1.0, 1.0], np.float32)), A(np.array([0.0, 2.5], np.float32))),
+                 ("f16", A(np.array([-1.0, 1.0], np.float16)), A(np.array([0.0, 3.0], np.float16))),
+                 ("i8", A(np.array([-1, 1], np.int8)), A(np.array([0, 2], np.int8))),
+                 ("c128", A(np.array([-1.0, 1.0 + 1j])), A(np.array([0.5j, 2.0]))),
+                 ("mixed", A(np.array([-1.0, 1.0], np.float32)), (0, 300)),
+                 # the int/float fast lane's hand-over edges (a long overflow in a product; a correctly rounded
+                 # big int meeting a float) — appended so the index-based picks above keep their forms
+                 ("lane_big", (2 ** 62, -2 ** 62), (3, 5)), ("lane_round", (2 ** 62 + 513, 1.5), (0, 1))]
+    for d in ALL_DTYPES:
+        x = _ps_series(7, d, "special" if d != "bool" else "moderate", seed=25)
+        for tag, old, new in dom_forms:
+            emit(op, {"x": A(x), "old": old, "new": new}, lambda: pu.mapdomain(x, _ps_py(old), _ps_py(new)),
+                 "c_contiguous_1d", f"{op}/dt/{d}/{tag}")
+        x0 = np.array(_ps_series(1, d, seed=26)[0])
+        for tag, old, new in dom_forms[:6]:
+            emit(op, {"x": A(x0), "old": old, "new": new}, lambda: pu.mapdomain(x0, _ps_py(old), _ps_py(new)),
+                 "scalar_0d", f"{op}/0d/{d}/{tag}")
+    for d in ("float64", "float32", "complex128", "int16"):
+        for ln, xa in _ps_layouts(_ps_series(9, d, seed=27)):
+            for tag, old, new in (dom_forms[1], dom_forms[3]):
+                emit(op, {"x": xa, "old": old, "new": new}, lambda: pu.mapdomain(_ps_py(xa), _ps_py(old), _ps_py(new)),
+                     ln, f"{op}/lay/{d}/{ln}/{tag}")
+        m = _ps_series(12, d, seed=28).reshape(3, 4)
+        emit(op, {"x": A(m), "old": dom_forms[1][1], "new": dom_forms[1][2]},
+             lambda: pu.mapdomain(m, (-1.0, 1.0), (0.0, 3.0)), "c_contiguous_2d", f"{op}/2d/{d}")
+        emit(op, {"x": A(m, m.T), "old": dom_forms[3][1], "new": dom_forms[3][2]},
+             lambda: pu.mapdomain(m.T, np.array([-1.0, 1.0]), np.array([0.0, 2.0])), "transposed_2d", f"{op}/T/{d}")
+    for xv in (0, 5, -3, 2 ** 70, 0.5, -0.0, float("nan"), 1j, complex(float("inf"), 1), True, [0.5, 1.0], [1, 2]):
+        for tag, old, new in dom_forms:
+            emit(op, {"x": xv, "old": old, "new": new}, lambda: pu.mapdomain(xv, _ps_py(old), _ps_py(new)),
+                 "python", f"{op}/py/{xv!r}/{tag}")
+    for tag, x, old, new in (("zerolen", 0.5, (1, 1), (0, 1)), ("zerolen_arr", A(np.array([0.5])), (1.0, 1.0), (0, 1)),
+                             ("short", A(np.array([0.5])), (0,), (0, 1)), ("scalar_dom", A(np.array([0.5])), 1, (0, 1))):
+        emit(op, {"x": x, "old": old, "new": new}, lambda: pu.mapdomain(_ps_py(x), _ps_py(old), _ps_py(new)), "error",
+             f"{op}/err/{tag}")
+
+    # ---------------- (H) {p}line ----------------
+    offs = [0, 1, -1, 2, 2 ** 63, -2 ** 63, 2 ** 64 - 1, 0.0, -0.0, 1.5, float("nan"), float("inf"), 1j, 0j,
+            complex(float("inf"), 1), True, False]
+    scls = [0, 1, 2, 3, -1, 2 ** 63, 2 ** 60 + 1, 2 ** 64 - 1, 2 ** 1030, 0.0, -0.0, 2.5, float("nan"), float("inf"), 1j,
+            0j, complex(0, float("nan")), complex(float("inf"), 1), True, False]
+    for modname, p in POLY_MODULES:
+        f = getattr(_poly_module(modname), p + "line")
+        op = f"{modname}.{p}line"
+        for off in offs:
+            for scl in scls:
+                emit(op, {"off": off, "scl": scl}, lambda: f(off, scl), "python", f"{op}/py/{off!r}/{scl!r}")
+        # NumPy scalars (0-d arrays: strong dtype) of every dtype, against each other and Python numbers
+        for d in ALL_DTYPES:
+            for sv in (0, 1, 3, 100):
+                with np.errstate(all="ignore"):
+                    s0 = np.array(sv).astype(d)
+                    o0 = np.array(1).astype(d)
+                for off in (A(o0), 1, 2.5, 1j):
+                    emit(op, {"off": off, "scl": A(s0)}, lambda: f(_ps_py(off), s0), "scalar_0d",
+                         f"{op}/np/{d}/{sv}/{off if not isinstance(off, _PSArr) else 'np'}")
+                for scl in (2, 300, -1, 2.5, 2 ** 63):
+                    emit(op, {"off": A(o0), "scl": scl}, lambda: f(o0, scl), "scalar_0d", f"{op}/npoff/{d}/{scl!r}")
+        for d1, d2 in (("int8", "uint8"), ("float16", "float32"), ("uint64", "int64"), ("float16", "int16"),
+                       ("int32", "uint32"), ("bool", "int8"), ("float32", "complex128")):
+            a0, b0 = np.array(1).astype(d1), np.array(3).astype(d2)
+            emit(op, {"off": A(a0), "scl": A(b0)}, lambda: f(a0, b0), "scalar_0d", f"{op}/mix/{d1}/{d2}")
+        # full-mantissa Python values: hermline's scl / 2 is CPython's _Py_c_quot / int true division
+        lrng = np.random.default_rng(20260928 + POLY_MODULES.index((modname, p)))
+        for draw in range(6):
+            cv = complex(*lrng.uniform(-5, 5, 2))
+            fv = float(lrng.uniform(-5, 5))
+            iv = int(lrng.integers(-2 ** 62, 2 ** 62))
+            for off, scl in ((fv, cv), (cv, fv), (iv, cv), (cv, iv), (fv, iv)):
+                emit(op, {"off": off, "scl": scl}, lambda: f(off, scl), "python", f"{op}/rand/{draw}/{off!r}/{scl!r}")
+        # array operands: 1-element arrays stack, others hit NumPy's truth-value / inhomogeneity errors
+        for tag, off, scl in (("arr1_arr1", A(np.array([1])), A(np.array([2]))),
+                              ("arr1_arr1_f", A(np.array([1.5])), A(np.array([2.5], np.float32))),
+                              ("arr1_zero", 1, A(np.array([0]))), ("arr1_py", 1, A(np.array([2]))),
+                              ("arr2", 1, A(np.array([1, 2]))), ("arr0", 1, A(np.zeros(0))),
+                              ("arr11_arr1", A(np.array([[1]])), A(np.array([2]))),
+                              ("arr2_arr1", A(np.array([1, 2])), A(np.array([3]))),
+                              ("big_obj", 2 ** 64, 1), ("big_obj2", 2 ** 63, 2 ** 63)):
+            emit(op, {"off": off, "scl": scl}, lambda: f(_ps_py(off), _ps_py(scl)), "array_args", f"{op}/arr/{tag}")
+
+    # ---------------- (I) constants ----------------
+    # Four observable facets of each module constant: its value, its identity (the SAME ndarray object on every
+    # attribute access — a write through it persists), and its flags (writeable, owning its buffer). A constant has
+    # no argument to vary, so the facets are the case axis.
+    for modname, p in POLY_MODULES:
+        mod = _poly_module(modname)
+        for name in ("domain", "zero", "one", "x"):
+            attr = p + name
+            op = f"{modname}.{attr}"
+            emit(op, {"facet": "value"}, lambda: getattr(mod, attr), "constant", f"{op}/value")
+            emit(op, {"facet": "identity"}, lambda: np.bool_(getattr(mod, attr) is getattr(mod, attr)), "constant",
+                 f"{op}/identity")
+            emit(op, {"facet": "writeable"}, lambda: np.bool_(getattr(mod, attr).flags.writeable), "constant",
+                 f"{op}/writeable")
+            emit(op, {"facet": "owndata"}, lambda: np.bool_(getattr(mod, attr).flags.owndata), "constant",
+                 f"{op}/owndata")
+
+    # Char: NumSharp's uint16-like dtype — the uint16 cells relabelled (bytes-exact oracle, the house weave).
+    cases += _relabel_dtype([c for c in cases if "/uint16" in (c.get("id") or "") and not c.get("expects_throw")],
+                            "uint16", "char")
+    if skipped[0]:
+        print(f"  (skipped {skipped[0]} complex64 / object-dtype cells — #569 / no object dtype)")
+    return cases
+
+
 def main():
     here = os.path.dirname(os.path.abspath(__file__))
     corpus_dir = os.path.normpath(os.path.join(here, "..", "NumSharp.Tests.Oracle", "Fuzz", "corpus"))
@@ -11088,8 +11649,11 @@ def main():
     elif mode == "polyeval":
         cases = gen_polyeval()                                          # numpy.polynomial {p}val family (U3)
         write_jsonl(os.path.join(corpus_dir, "polyeval.jsonl"), cases)
+    elif mode == "polyseries":
+        cases = gen_polyseries()                                        # numpy.polynomial additive family + polyutils (U1)
+        write_jsonl(os.path.join(corpus_dir, "polyseries.jsonl"), cases)
     else:
-        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | sinc | i0 | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows | evaluate | real_if_close | instance | emath | polyeval)")
+        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | sinc | i0 | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows | evaluate | real_if_close | instance | emath | polyeval | polyseries)")
         sys.exit(2)
 
 

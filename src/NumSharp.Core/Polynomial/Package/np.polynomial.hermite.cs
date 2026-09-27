@@ -112,5 +112,107 @@ namespace NumSharp
         /// <exception cref="ValueError">The coordinates differ in shape.</exception>
         /// <remarks>https://numpy.org/devdocs/reference/generated/numpy.polynomial.hermite.hermvalnd.html</remarks>
         public NDArray hermvalnd(NDArray[] pts, NDArray c) => NDPolyEval.ValNd(PolyBasis.Hermite, c, pts);
+
+        // ---- U1: constants, line, add/sub, trim ----
+
+        private static NDArray s_hermdomain, s_hermzero, s_hermone, s_hermx;
+
+        /// <summary>
+        ///     <c>hermdomain</c> — the default domain of the physicists' Hermite series class, float64 <c>[-1.0, 1.0]</c>.
+        /// </summary>
+        /// <remarks>
+        ///     NumPy's module constants are ordinary WRITEABLE ndarrays, the same object on every access, and so is
+        ///     this one: a process-wide instance (a write through it persists, as in NumPy). It is shared — do not
+        ///     dispose it (a dispose is harmless: the buffer is pinned for the process lifetime) and copy it before
+        ///     mutating unless the change is meant to be global.
+        ///     <para>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.hermite.html</para>
+        /// </remarks>
+        public NDArray hermdomain => NDPolySeries.Constant(ref s_hermdomain, static () => np.array(new double[] { -1.0, 1.0 }));
+
+        /// <summary><c>hermzero</c> — the physicists' Hermite series representing 0, int64 <c>[0]</c> (shared and writeable, see <see cref="hermdomain"/>).</summary>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.hermite.html</remarks>
+        public NDArray hermzero => NDPolySeries.Constant(ref s_hermzero, static () => np.array(new long[] { 0 }));
+
+        /// <summary><c>hermone</c> — the physicists' Hermite series representing 1, int64 <c>[1]</c> (shared and writeable, see <see cref="hermdomain"/>).</summary>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.hermite.html</remarks>
+        public NDArray hermone => NDPolySeries.Constant(ref s_hermone, static () => np.array(new long[] { 1 }));
+
+        /// <summary><c>hermx</c> — the physicists' Hermite series representing <c>x</c>, float64 <c>[0, 0.5]</c> (<c>x = H_1/2</c>; float64, because NumPy spells it <c>1/2</c>) (shared and writeable, see <see cref="hermdomain"/>).</summary>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.hermite.html</remarks>
+        public NDArray hermx => NDPolySeries.Constant(ref s_hermx, static () => np.array(new double[] { 0.0, 0.5 }));
+
+        /// <summary>
+        ///     The physicists' Hermite series of the line <c>off + scl*x</c>: <c>[off, scl / 2]</c> when <c>scl != 0</c>, else <c>[off]</c> — built
+        ///     with <c>np.array</c>, so the dtype is the one NumPy DISCOVERS for the entries (<c>hermline(1, 2)</c> is int64,
+        ///     <c>hermline(1.0, 2)</c> float64, a bool pair stays bool) rather than a coefficient dtype.
+        ///     The half is a TRUE division, so an integer scale gives a float64 series (<c>hermline(1, 3)</c> is
+        ///     <c>[1.0, 1.5]</c>), a Python int divides exactly (CPython's correctly rounded int/int) and a Python
+        ///     complex by CPython 3.12's <c>_Py_c_quot</c> (<c>hermline(1, inf+1j)</c> ends in <c>inf+nanj</c>).
+        /// </summary>
+        /// <param name="off">The offset: a Python number (C# bool / integer / float / double / <see cref="System.Numerics.Complex"/>),
+        ///     a NumPy scalar (<see cref="System.Half"/>, <c>char</c>, <c>decimal</c>, a 0-d NDArray) or an array.</param>
+        /// <param name="scl">The scale; its truth value <c>scl != 0</c> picks the one- or two-coefficient form (NaN is nonzero).</param>
+        /// <returns>A new 1-D array (2-D when the entries are equal-shape arrays, as NumPy stacks them).</returns>
+        /// <exception cref="ValueError">An array scale with several elements or none (NumPy's truth-value errors), or
+        ///     entries of different shapes (<c>setting an array element with a sequence…</c>).</exception>
+        /// <exception cref="TypeError">NumPy's boolean negative / subtract.</exception>
+        /// <exception cref="OverflowException">A Python int out of a NumPy integer dtype's range, or CPython's int/float overflow.</exception>
+        /// <exception cref="System.NotSupportedException">An entry NumPy would store in an object array: a Python int beyond
+        ///     uint64, null, a string.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.hermite.hermline.html</remarks>
+        public NDArray hermline(object off, object scl) => NDPolySeries.Line(PolyBasis.Hermite, off, scl);
+
+        /// <summary>
+        ///     Adds two physicists' Hermite seriess (<c>polyutils._add</c>): both converted to their common type (integers become float64),
+        ///     the shorter added into a copy of the longer, trailing zeros trimmed.
+        /// </summary>
+        /// <param name="c1">First series, low degree first (an array, a C# array or list, or a single number).</param>
+        /// <param name="c2">Second series.</param>
+        /// <returns>The sum: a new array, or a VIEW of one when trailing zeros were trimmed (as in NumPy).</returns>
+        /// <exception cref="ValueError">An empty or non-1-d series, or no common type (a bool series).</exception>
+        /// <exception cref="System.NotSupportedException">A null series (NumPy would build an object array).</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.hermite.hermadd.html</remarks>
+        [NDScoped]
+        public NDArray hermadd(object c1, object c2) => NDPolySeries.AddSub(c1, c2, subtract: false);
+
+        /// <summary>
+        ///     Subtracts the physicists' Hermite series <paramref name="c2"/> from <paramref name="c1"/> (<c>polyutils._sub</c>): both converted
+        ///     to their common type; when <paramref name="c2"/> is at least as long it is NEGATED first and
+        ///     <paramref name="c1"/> added into it (NumPy's operation order, visible in which NaN survives), then trailing
+        ///     zeros are trimmed.
+        /// </summary>
+        /// <param name="c1">Minuend series, low degree first.</param>
+        /// <param name="c2">Subtrahend series.</param>
+        /// <returns>The difference: a new array, or a VIEW of one when trailing zeros were trimmed.</returns>
+        /// <exception cref="ValueError">An empty or non-1-d series, or no common type (a bool series).</exception>
+        /// <exception cref="System.NotSupportedException">A null series (NumPy would build an object array).</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.hermite.hermsub.html</remarks>
+        [NDScoped]
+        public NDArray hermsub(object c1, object c2) => NDPolySeries.AddSub(c1, c2, subtract: true);
+
+        /// <summary>
+        ///     <c>hermtrim</c> — NumPy's alias of <see cref="PolyUtilsModule.trimcoef(object)"/>: removes the trailing
+        ///     zero coefficients (tolerance 0) and returns a fresh copy of the coefficient dtype.
+        /// </summary>
+        /// <param name="c">The series (1-D).</param>
+        /// <returns>The trimmed copy (an all-zero series becomes <c>c[:1]*0</c>).</returns>
+        /// <exception cref="ValueError">An empty or non-1-d series, or no common type.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.hermite.hermtrim.html</remarks>
+        [NDScoped]
+        public NDArray hermtrim(object c) => NDPolySeries.TrimCoef(c, PolyNumber.FromPython(PyScalar.Int(0)));
+
+        /// <summary>
+        ///     <c>hermtrim</c> — NumPy's alias of <see cref="PolyUtilsModule.trimcoef(object, object)"/>: removes the
+        ///     trailing coefficients whose magnitude is at most <paramref name="tol"/> and returns a fresh copy.
+        /// </summary>
+        /// <param name="c">The series (1-D).</param>
+        /// <param name="tol">The non-negative tolerance (a Python number, or a NumPy scalar compared in the promoted dtype).</param>
+        /// <returns>The trimmed copy (<c>c[:1]*0</c> when nothing exceeds the tolerance).</returns>
+        /// <exception cref="ValueError"><c>tol must be non-negative</c>, an empty or non-1-d series, or no common type.</exception>
+        /// <exception cref="TypeError">A complex or null tolerance.</exception>
+        /// <exception cref="OverflowException">A Python int tolerance too large to convert.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.hermite.hermtrim.html</remarks>
+        [NDScoped]
+        public NDArray hermtrim(object c, object tol) => NDPolySeries.TrimCoef(c, PolyUtilsModule.Tolerance(tol));
     }
 }

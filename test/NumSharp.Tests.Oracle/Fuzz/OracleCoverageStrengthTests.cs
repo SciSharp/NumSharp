@@ -164,6 +164,21 @@ namespace NumSharp.Tests.Fuzz
         };
 
         /// <summary>
+        ///     Adds the 24 numpy.polynomial module constants (<c>{module}.{p}domain/zero/one/x</c>) to
+        ///     <see cref="FixedDtypeOps"/> under ONE reviewed reason — a constant is a single NumPy-defined array
+        ///     (float64 domains and hermx, int64 zero/one/x), so its dtype axis is fixed by NumPy; its four corpus
+        ///     cases vary the observed FACET (value, identity, writeable, owndata) instead.
+        /// </summary>
+        static OracleCoverageStrengthTests()
+        {
+            foreach (var (module, prefix) in new[] { ("polynomial", "poly"), ("chebyshev", "cheb"), ("legendre", "leg"),
+                                                     ("laguerre", "lag"), ("hermite", "herm"), ("hermite_e", "herme") })
+                foreach (string name in new[] { "domain", "zero", "one", "x" })
+                    FixedDtypeOps[$"{module}.{prefix}{name}"] =
+                        "numpy.polynomial module constant: one NumPy-defined array (dtype fixed by NumPy); the facet param is the case axis";
+        }
+
+        /// <summary>
         ///     Per-dtype GLOBAL floors: how many distinct op keys must carry each dtype (gate
         ///     scope: ma_/index_/host files excluded). ~95% of the measured 2026-09-18 spread
         ///     after the dtype-axis widening pass (instance 13 dtypes + char weave, emath

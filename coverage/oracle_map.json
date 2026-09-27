@@ -16,7 +16,8 @@
       "legendre": ["numpy.polynomial.legendre.{rest}", "numsharp.polynomial.legendre.{rest}"],
       "laguerre": ["numpy.polynomial.laguerre.{rest}", "numsharp.polynomial.laguerre.{rest}"],
       "hermite": ["numpy.polynomial.hermite.{rest}", "numsharp.polynomial.hermite.{rest}"],
-      "hermite_e": ["numpy.polynomial.hermite_e.{rest}", "numsharp.polynomial.hermite_e.{rest}"]
+      "hermite_e": ["numpy.polynomial.hermite_e.{rest}", "numsharp.polynomial.hermite_e.{rest}"],
+      "polyutils": ["numpy.polynomial.polyutils.{rest}", "numsharp.polynomial.polyutils.{rest}"]
     },
     "files_without_op": {
       "note": "Corpus files whose schema predates the common op field. Their rows replay under the named key.",

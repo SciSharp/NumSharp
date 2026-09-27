@@ -334,10 +334,16 @@ class CommittedCorpusTests(unittest.TestCase):
         # evaluation twins) so the join sees the same id universe without building the tool.
         numsharp = {value for value in _strings(cls.map) if value.startswith("numsharp.")}
         numsharp.add("numsharp.np.evaluate")
+        # The module constants {p}domain/zero/one/x are facade PROPERTIES: NumPy documents them, but the extended
+        # catalog lists only callables, so the real generator emits each as a NumSharp-only property row, which
+        # the polynomial prefix rules then resolve.
+        properties = set()
         for basis, prefix in (("polynomial", "poly"), ("chebyshev", "cheb"), ("legendre", "leg"),
                               ("laguerre", "lag"), ("hermite", "herm"), ("hermite_e", "herme")):
             numsharp.add(f"numsharp.polynomial.{basis}.{prefix}valnd")
+            properties.update(f"numsharp.polynomial.{basis}.{prefix}{name}" for name in ("domain", "zero", "one", "x"))
         rows += [{"id": row_id, "kind": "method", "origin": "numsharp", "numsharp_target": None} for row_id in sorted(numsharp)]
+        rows += [{"id": row_id, "kind": "property", "origin": "numsharp", "numsharp_target": None} for row_id in sorted(properties)]
         cls.rows = rows
         cls.sources = oe.load_sources(cls.map)
         cls.result = oe.join(rows, cls.sources, cls.map)

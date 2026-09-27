@@ -25,7 +25,7 @@
 | Page section | NumPy API | NumSharp today |
 |---|---|---|
 | Legacy "polynomial module" (`numpy.lib.polynomial`) | `poly1d`, `polyval`, `poly`, `roots`, `polyfit`, `polyder`, `polyint`, `polyadd`, `polydiv`, `polymul`, `polysub` | **Done** — all 11 functions and `poly1d(c_or_r, r, variable)`, byte-exact. Oracle: `poly.jsonl` (portable); `roots`, `polyfit` and `poly`-of-a-matrix are in host-pinned `linalg_parity`. Unit tests + live-parity tests. Only `RankWarning` is absent: NumSharp emits no warnings anywhere. |
-| "Polynomial package" (`numpy.polynomial`) | 6 modules × ~31 names, `polyutils`, 6 classes, `set_default_printstyle` | **Not started** — 0 of 193 functions, 0 of 6 classes, no `np.polynomial` facade. `coverage/generate_coverage.py` already catalogues all seven `numpy.polynomial.*` submodules as out-of-headline **"candidate"** surfaces, every member currently "missing". |
+| "Polynomial package" (`numpy.polynomial`) | 6 modules × ~31 names, `polyutils`, 6 classes, `set_default_printstyle` | **U3 + U1 delivered** — 90 of 193 names: the evaluation family (36, `polyvalfromroots` open) and the additive family with `polyutils` (54: `{p}add/sub/trim/line`, the 24 constants, `as_series`/`trimseq`/`trimcoef`/`getdomain`/`mapparms`/`mapdomain`), all bit-exact (`polyeval.jsonl` 16,606 + `polyseries.jsonl` 15,950 cases). Facade `np.polynomial.{polynomial,chebyshev,legendre,laguerre,hermite,hermite_e,polyutils}`; 0 of 6 classes. `coverage/generate_coverage.py` catalogues all seven `numpy.polynomial.*` submodules as out-of-headline surfaces. |
 | "Transition guide" | the reversed coefficient order; `Polynomial.fit(...).convert()` | Documentation only. It is a real hazard for us, though, because the new package **reuses the legacy names with the opposite coefficient order** (§2 D5). |
 
 User demand on record: issue **#496** "Can NumSharp fit polynomial surface equations?" — that is exactly
@@ -200,11 +200,14 @@ mis-binds. **Every name-keyed gate would silently credit the new function with t
 - the new facade surface gate keys on qualified names;
 - each pair's XML docs cross-reference each other and state the coefficient order.
 
-**D6 — Constants are read-only singletons, dtype-exact.** `polydomain`, `chebzero` and the rest are mutable
-ndarrays in NumPy. Expose them as non-writeable process-wide singletons **detached from every `NDScope`** (the
-`np.ma.nomask` `Own(...)` pattern: a singleton first built inside a caller's scope would be disposed with it).
-Writing to one raises read-only (`[Misaligned]`). Their dtypes are NumPy's literal ones, probed from the
-source:
+**D6 — Constants are shared, WRITEABLE singletons, dtype-exact** (as built in U1, 2026-09-27; the original plan
+made them read-only, which would have been a needless divergence). `polydomain`, `chebzero` and the rest are
+mutable module-level ndarrays in NumPy, the SAME object on every attribute access, so a write through one
+persists. NumSharp reproduces exactly that: one process-wide instance each (`NDPolySeries.Constant`), writeable,
+**detached from every `NDScope`** (the `np.ma.nomask` `Own(...)` pattern: a singleton first built inside a caller's
+scope would be disposed with it) and holding one extra buffer reference, so a caller's `Dispose()` of the shared
+object cannot free the memory every later read still uses. The corpus pins four facets of each (value, identity,
+writeable, owndata). Their dtypes are NumPy's literal ones, probed from the source:
 - every `{p}domain` is float64 (`[-1., 1.]`; Laguerre `[0., 1.]`);
 - `{p}zero`/`{p}one`/`{p}x` are **int64** (`[0]`, `[1]`, `[0, 1]`; Laguerre `lagx = [1, -1]`);
 - **`hermx = [0, 0.5]` is float64**, because its literal is `1/2`.
@@ -303,7 +306,33 @@ NDIter.
 Every unit ships **for all six bases at once**: one shared driver plus six step tables. Names are
 machine-partitioned; the counts sum to 193 with no overlap (Appendix A).
 
-### U1 — Substrate, facades and the additive family (54 names)
+### U1 — Substrate, facades and the additive family (54 names) — DELIVERED 2026-09-27
+
+**As built** (the planned items below are kept for the record; where the build diverged, this block wins):
+- **Engine:** `Polynomial/Package/NDPolyNumber.cs` (`PolyNumber` — a Python scalar, a NumPy scalar or an ndarray,
+  with NumPy's operator dispatch between the three arithmetics: CPython, scalarmath, ufunc) and
+  `Polynomial/Package/NDPolySeries.cs` (the functions). Element loops are IL kernels in
+  `Backends/Kernels/Direct/DirectILKernelGenerator.PolySeries.cs` (trim scan, NumPy's in-place `_add`/`_sub`
+  combine, tolerance scan, cast, one-element scalarmath ops, and a fused `mapparms` for same-dtype ndarray domains).
+  CPython's arithmetic lives on `PyScalar` (`IntTrueDivide` = `long_true_divide`, `ComplexQuotient` = 3.12
+  `_Py_c_quot`, and NaN-priority `Float*`/`Complex*` helpers — CPython's per-operator NaN operand order, which a C#
+  operator does not pin). The "series primitives + arena", the "ops probe" and the step-table format planned here
+  were not needed by the additive family (U3 had already landed the typed emitter and step tables); they move to
+  U2, the first unit that needs a series arena.
+- **Fast paths, each proven against the exact general lane:** generic tuple overloads of `mapparms`/`mapdomain`
+  (one per x kind — `double`, `Complex`, `NDArray` — or a complex x becomes CS0121-ambiguous); a CPython
+  machine-number lane (`PyNum`: int within `long` / float / complex, bailing to exact big integers on overflow) for
+  tuples and lists; the fused scalarmath kernel for two 1-D ndarray domains of one dtype; per-thread reusable 0-d
+  parameters for `mapdomain`'s one `np.evaluate` pass.
+- **Oracle:** `polyseries.jsonl` (15,950 cases, `gen_oracle.py polyseries`, 0 excused). The registry replays every
+  `mapparms`/`mapdomain` case through three routes — the object overload, the generic overload (tuples rebuilt
+  element-typed by reflection) and `NDPolySeries.MapParmsGeneral` (the exact reference) — which must agree to the
+  byte. Unit tests: `Polynomial/PolynomialSeriesTests.cs` (83, incl. a 22,400-comparison lane-vs-reference
+  property test).
+- **Perf (NPY/NS, pinned, best-of-7):** add/sub 6.6–13.7×, trim 12.1–12.6×, trimseq 4.1×, as_series 3.1–3.5×,
+  getdomain 2.7–3.9×, mapparms 2.4–8.3× (lists 2.4, int tuples 4.3, arrays 8.3), mapdomain 2.8–18×. `{p}line` is
+  0.87–0.89× — bound by the ~230 ns NDArray allocation (NumPy's whole `np.array([off, scl])` is ~200 ns), not by the
+  algorithm.
 
 - **Scope:**
   - facades: `np.polynomial` + 7 submodules, `[ModuleName]` ×8;
@@ -670,7 +699,7 @@ edits to the same files survive.
 | M3 | `RankWarning` not emitted by `*fit`/`.fit` | NumSharp emits no warnings (same as legacy `polyfit`) |
 | M4 | `p(x)` → `p.Call(x)`; `p // q` → `floordiv`; `divmod(p, q)` → `p.divmod(q)`; `p ** n` → `p.pow(n)`; `__format__` → `IFormattable`; `_repr_latex_` → method; pickle n/a | C# operator set |
 | M5 | class attrs `Polynomial.domain/window` → `NDPolynomial.default_domain/default_window`; `np.polynomial.Polynomial.fit(...)` → `NDPolynomial.fit(...)` (or a `using` alias) | CS0102; a member cannot be both invocable and dotted |
-| M6 | module constants are read-only | shared singletons (D6) |
+| ~~M6~~ | ~~module constants are read-only~~ — RETIRED in U1: the constants are writeable shared singletons exactly as NumPy's (D6) | — |
 | M7 | NumPy-strong scalar `x` (`np.float64(0.5)`) behaves weak | house-wide 0-d-is-weak rule |
 | M8 | `symbol` identifier validation approximates Python's `str.isidentifier` (XID_Start/XID_Continue + NFKC) with .NET Unicode categories | no NFKC-identifier API in the BCL |
 | M9 | `__hash__ = None` (unhashable) vs .NET `GetHashCode` | decide in U10 (follow the `poly1d` precedent; never silently hash mutable coefficients by value) |

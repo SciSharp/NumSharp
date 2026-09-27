@@ -523,6 +523,17 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Polyeval() => RunCorpus("polyeval.jsonl");
 
+        // numpy.polynomial additive family + polyutils (plan docs/plans/numpy-polynomial.md U1): {p}add / {p}sub
+        // (every dtype pair on the power basis, trim patterns, layouts, Python scalars and lists, the error order),
+        // {p}trim / trimcoef (Python and NumPy-scalar tolerances), trimseq, as_series (tuples, arity asserted),
+        // getdomain (the ±0 / NaN reduction answers), mapparms / mapdomain (CPython arithmetic for Python domains,
+        // NumPy scalar math for array domains, the fused complex product for 0-d arrays, NumPy's win-amd64
+        // OverflowError texts), {p}line (np.array's dtype discovery) and the {p}domain/zero/one/x constants.
+        // Portable: + - * / comparisons and copies only.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Polyseries() => RunCorpus("polyseries.jsonl");
+
         // W11 operand-relationship flags (section C): input aliasing (a op a, same buffer) and
         // in-place out= (maximum/minimum/clip writing into an input operand).
         [TestMethod]
@@ -735,6 +746,7 @@ namespace NumSharp.Tests.Fuzz
             ["instance.jsonl"] = 7500,    // §D: ndarray.* instance surface — 13 NumPy dtypes + the char proxy weave (dtype-spread gate)
             ["emath.jsonl"] = 385,        // §A2/E5: np.emath scimath promotion (+ the unsigned lanes, dtype-spread gate)
             ["polyeval.jsonl"] = 16100,   // numpy.polynomial {p}val family (U3), 6 bases x the matrix above, + 4,392 single-element-broadcast cells
+            ["polyseries.jsonl"] = 15000, // numpy.polynomial additive family + polyutils (U1): 15,950 cases, 6 bases + polyutils + constant facets
             ["place.jsonl"] = 12,
             ["products.jsonl"] = 326,
             ["precision.jsonl"] = 80,

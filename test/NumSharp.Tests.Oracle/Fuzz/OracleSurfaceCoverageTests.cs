@@ -459,13 +459,14 @@ namespace NumSharp.Tests.Fuzz
         // ================= np.polynomial (docs/plans/numpy-polynomial.md, DoD item 5) ==============
 
         /// <summary>
-        ///     Every public member of the six <c>np.polynomial.*</c> basis submodules has corpus cases under
-        ///     its MODULE-QUALIFIED key (<c>chebyshev.chebval</c>) — or is listed in
-        ///     <see cref="PolynomialNotYetInCorpus"/> with a reason. The package reuses the legacy
-        ///     <c>np.polyval</c>/<c>polyder</c>/… names with the opposite coefficient order (plan D5), so a
-        ///     name-keyed check would credit the new functions with the legacy corpus; this gate keys on the
-        ///     qualified name only. The ledger self-retires: an entry whose member gained corpus cases, or no
-        ///     longer exists, fails.
+        ///     Every public member of the six <c>np.polynomial.*</c> basis submodules and of
+        ///     <c>np.polynomial.polyutils</c> — methods AND properties (the <c>{p}domain/zero/one/x</c> constants
+        ///     are properties) — has corpus cases under its MODULE-QUALIFIED key (<c>chebyshev.chebval</c>,
+        ///     <c>polyutils.mapparms</c>) — or is listed in <see cref="PolynomialNotYetInCorpus"/> with a reason.
+        ///     The package reuses the legacy <c>np.polyval</c>/<c>polyder</c>/… names with the opposite coefficient
+        ///     order (plan D5), so a name-keyed check would credit the new functions with the legacy corpus; this
+        ///     gate keys on the qualified name only. The ledger self-retires: an entry whose member gained corpus
+        ///     cases, or no longer exists, fails.
         /// </summary>
         [TestMethod]
         [TestCategory("FuzzMatrix")]
@@ -477,12 +478,13 @@ namespace NumSharp.Tests.Fuzz
                 ("polynomial", typeof(PowerSeriesModule)), ("chebyshev", typeof(ChebyshevModule)),
                 ("legendre", typeof(LegendreModule)), ("laguerre", typeof(LaguerreModule)),
                 ("hermite", typeof(HermiteModule)), ("hermite_e", typeof(HermiteEModule)),
+                ("polyutils", typeof(PolyUtilsModule)),
             };
             var failures = new List<string>();
             var seen = new HashSet<string>(StringComparer.Ordinal);
             foreach (var (key, type) in modules)
             {
-                foreach (string name in Surface(type, BindingFlags.Instance))
+                foreach (string name in Surface(type, BindingFlags.Instance).Concat(Properties(type, BindingFlags.Instance)))
                 {
                     string op = key + "." + name;
                     seen.Add(op);

@@ -186,6 +186,9 @@ namespace NumSharp.Tests.Fuzz
             // [post-call view, post-call whole base buffer] (OpRegistry.Instance.cs).
             if (op.StartsWith("ndarray.", StringComparison.Ordinal))
                 return ApplyInstanceTuple(op.Substring("ndarray.".Length), p, ops);
+            // numpy.polynomial.polyutils' tuple results (as_series, mapparms — OpRegistry.PolySeries.cs).
+            if (op.StartsWith("polyutils.", StringComparison.Ordinal))
+                return ApplyPolySeriesTuple(op, p, ops);
 
             switch (op)
             {

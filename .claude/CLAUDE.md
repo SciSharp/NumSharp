@@ -2643,6 +2643,71 @@ complex 23.7×@100K, float16 3.3×@10M, `lagval` (divider-bound) 2.7–14×, Pyt
   microsecond); one warm-up pass only QUEUES tier-1 (warm, sleep for the background JIT, warm again); and
   NumPy's loops are cheapest L1/L2-resident, so a 100K-only dtype sweep hides the worst cells.
 
+### Polynomial package — additive family + polyutils (U1)
+`{p}add`, `{p}sub`, `{p}trim`, `{p}line` for the six bases, the 24 module constants `{p}domain/zero/one/x`, and
+`np.polynomial.polyutils`: `as_series`, `trimseq`, `trimcoef`, `getdomain`, `mapparms`, `mapdomain` (54 names;
+`format_float` belongs to the printing unit)
+
+Plan `docs/plans/numpy-polynomial.md` (U1 delivered). Engine `Polynomial/Package/NDPolyNumber.cs` (`PolyNumber`: one
+operand of NumPy's Python-level scalar code) + `NDPolySeries.cs` (the functions) + facade
+`Polynomial/Package/np.polynomial.polyutils.cs` (`[ModuleName("np.polynomial.polyutils")]`, reachable as
+`np.polynomial.polyutils`); every element loop is an IL kernel in `Backends/Kernels/Direct/DirectILKernelGenerator.PolySeries.cs`
+(trim scan, in-place combine, tolerance scan, cast, and one-element scalarmath kernels behind flat slot arrays).
+**Bit-exact with NumPy 2.4.2** — oracle tier `polyseries.jsonl` (15,950 cases, 0 excused) + `Polynomial/PolynomialSeriesTests.cs`
+(83). The C# boundary is the house NEP 50 map: bool/integers/float/double/`Complex`/`BigInteger` are Python scalars,
+`Half`/`char`/`decimal` NumPy scalars, an `NDArray` (0-d too) or typed C# array an ndarray, `object[]`/`IList` a Python
+list, a `ValueTuple` a Python tuple — and that KIND decides whose arithmetic runs. NumPy never converts a domain, it
+indexes it, so there are THREE arithmetics: Python∘Python is CPython (exact ints, `long_true_divide`, 3.12
+`_Py_c_quot`, ZeroDivisionError with CPython's three texts), NumPy scalars are scalarmath (NEP 50, the NAIVE complex
+product, inf/nan instead of raising), and anything touching an ndarray is a ufunc (`pycomplex op np.float64` is still
+CPython — complex's methods accept a float subclass). `_add`/`_sub` update the LONGER operand in place (c2 on a tie;
+`_sub` with `len(c1) <= len(c2)` negates c2 then adds c1, visible in a NaN's sign) and trim; `trimseq` returns the
+input ITSELF or the VIEW `seq[:k]` (so writes reach the input); `trimcoef` checks `tol < 0` before converting;
+`{p}line` is `np.array` DISCOVERY (`polyline(1, 2)` is int64); `mapdomain` converts x only when it is not an
+int/float/complex/`np.generic` (a bool x becomes a 0-d array). The constants are ONE shared, writeable, scope-detached
+instance each (NumPy's module attributes — a write persists), holding an extra ARC reference so a caller's `Dispose()`
+cannot free them; their corpus cases vary the FACET (value, identity, writeable, owndata).
+
+**Fast paths (all proven against the exact general lane, never different):**
+- **Generic tuple overloads** `mapparms<T0..T3>((T0,T1), (T2,T3))` and `mapdomain<T0..T3>(double | Complex | NDArray x, …)`:
+  a C# tuple literal binds them (identity beats boxing), elements read without boxing (`PolyNumber.FromValue<T>`).
+  One per x kind is REQUIRED — with only the `NDArray` one, `mapdomain(complexX, (-1, 1), (0, 2))` is CS0121-ambiguous
+  against `mapdomain(Complex, object, object)`.
+- **The CPython machine-number lane** (`NDPolySeries.PyNum`): Python int (within `long`) / float / complex operands of
+  tuples AND lists run CPython's arithmetic on machine numbers; an int intermediate leaving `long` (checked subtract,
+  `Math.BigMul`) BAILS to the exact `BigInteger` lane, so the lane can only be faster.
+- **A fused scalarmath kernel** (`GetPolyMapParmsKernel`) for two 1-D ndarray domains of one non-bool dtype — the
+  `ABCPolyBase` case: the six operations in one call, intermediates wrapped/rounded in the dtype through locals of its
+  CLR type (`stloc` to an `int8` local truncates exactly like the per-op narrowing store), float64 true division for
+  integer dtypes via `EmitConvertTo`.
+- **Per-thread reusable 0-d parameters** for `mapdomain`'s one fused `np.evaluate` pass (a hoisted 0-d input is read
+  once, before the pass).
+
+The registry replays every `mapparms`/`mapdomain` case through the object overload, the generic overload (tuples
+rebuilt element-typed by reflection) AND `NDPolySeries.MapParmsGeneral` (the exact reference), requiring all three to
+agree to the byte; `MachineNumberLane_AgreesWithTheExactGeneralLane_BitForBit` adds 22,400 seeded comparisons.
+
+**Perf (NPY/NS, pinned, best-of-7, µs-scale calls):** add/sub 6.6–13.7×, trim 12.1–12.6×, trimseq 4.1×, as_series
+3.1–3.5×, getdomain 2.7–3.9×, mapparms 2.4× (lists) / 4.3× (int tuples) / 8.3× (arrays), mapdomain 2.8–18×.
+**`{p}line` is 0.87–0.89× — the NDArray allocation floor** (~230 ns to create and dispose a 2-element array; NumPy's
+whole `np.array([off, scl])` is ~200 ns), not the algorithm.
+
+**Traps this family hit — do not re-break:**
+- **CPython's NaN operand priority is per-operator, and a C# operator does not pin it.** When both operands are NaN
+  x86 returns the FIRST source's, and RyuJIT swaps commutative `a + b`/`a * b` for register allocation — two call sites
+  of one expression disagreed. CPython 3.12 (MSVC, probed): `float_add` returns the RIGHT operand's NaN,
+  `float_sub`/`float_div` the left's, `float_mul` the left's once the call site is specialized
+  (`BINARY_OP_MULTIPLY_FLOAT`) but the right's on its first, generic execution (interpreter state — the steady state
+  is modelled), and every operation inside `_Py_c_sum/_diff/_prod/_quot` the left's. `_Py_c_quot`'s NaN branch is
+  `Py_NAN` = the POSITIVE `0x7ff8…` (.NET's `double.NaN` is `0xfff8…`). All Python arithmetic goes through
+  `PyScalar.{FloatAdd,FloatSub,FloatMul,FloatDiv,ComplexSum,ComplexDiff,ComplexProd}` (explicit NaN tests), which the
+  seeded property test found by comparing the two lanes.
+- **A C# switch expression takes its arms' natural type:** `Kind switch { Int => long, Float => double, _ => Complex }`
+  is typed `Complex` (both convert to it), so an uncast arm boxed every real result as a Complex — cast each arm to
+  `object`.
+- **Python's evaluation order is observable only through errors:** mapparms reads each element ONCE, but in Python's
+  order (old's subtraction before new is indexed), so an error in `old` still wins over a short `new`.
+
 ### Random (`np.random.*`)
 `bernoulli`, `beta`, `binomial`, `chisquare`, `choice`, `dirichlet`, `exponential`, `f`, `gamma`, `geometric`, `get_bit_generator`, `gumbel`, `hypergeometric`, `laplace`, `logistic`, `lognormal`, `logseries`, `multinomial`, `multivariate_normal`, `negative_binomial`, `noncentral_chisquare`, `noncentral_f`, `normal`, `pareto`, `permutation`, `poisson`, `power`, `rand`, `randint`, `randn`, `random_sample`, `rayleigh`, `seed`, `set_bit_generator`, `shuffle`, `standard_cauchy`, `standard_exponential`, `standard_gamma`, `standard_normal`, `standard_t`, `triangular`, `uniform`, `vonmises`, `wald`, `weibull`, `zipf`
 
@@ -2878,6 +2943,7 @@ non-structured subset would only re-expose `loadtxt`.
 | Window functions | `Math/np.windows.cs` (bartlett/blackman/hamming/hanning/kaiser + the internal cephes `BesselI0`; fused via `np.evaluate`) |
 | Fourier / FFT (`np.fft.*`) | `Fourier/np.fft.cs` (`FourierModule` facade), `Fourier/np.fft.{Standard,Real,Hermitian,Helper}.cs` (the 18 funcs), `Fourier/np.fft.RawFft.cs` (layer-3 port: `_raw_fft`/`_raw_fftnd`/`_cook_nd_args`/`_swap_direction`), `Fourier/PocketFFTDriver.cs` (strided 1-D driver + FFTPACK packing), `Fourier/PocketFFT.{Twiddle,Complex,Real,Bluestein,Plan}.cs` (managed pocketfft engine); companion accessors `Math/np.{conjugate,real,imag,angle}.cs`. Design + parity ledger: `docs/FFT_PARITY.md` |
 | numpy.polynomial evaluation (`np.polynomial.*`) | `Polynomial/Package/np.polynomial{,.polynomial,.chebyshev,.legendre,.laguerre,.hermite,.hermite_e}.cs` (facades), `Polynomial/Package/NDPolyEval.cs` (NumPy's Python layer), `Backends/Kernels/ILKernelGenerator.Polynomial.cs` (step tables + `PyScalar`), `.Typing.cs` (NEP 50 per node, peeling), `.Emitter.cs` (typed emitter), `.Lanes.cs` (vector lane kinds for every dtype pair), `.ConstPool.cs` (weak-value regions), `.Eval.cs` (dispatcher/part/stage kernels). Plan + measurements: `docs/plans/numpy-polynomial.md` (U3); benchmark `benchmark/polynomial/` |
+| numpy.polynomial additive family + polyutils (U1) | `Polynomial/Package/np.polynomial.polyutils.cs` (`PolyUtilsModule` facade, incl. the generic tuple overloads), `Polynomial/Package/NDPolyNumber.cs` (`PolyNumber`: Python / NumPy-scalar / ndarray operand + NumPy's operator dispatch), `Polynomial/Package/NDPolySeries.cs` (as_series/trimseq/trimcoef/getdomain/mapparms/mapdomain/{p}add/sub/line/constants + the `PyNum` machine-number lane), `Backends/Kernels/Direct/DirectILKernelGenerator.PolySeries.cs` (trim/combine/tolerance/cast/scalarmath IL kernels + the fused mapparms kernel), CPython arithmetic in `ILKernelGenerator.Polynomial.cs` (`PyScalar`: `IntTrueDivide`, `ComplexQuotient`, NaN-priority `Float*`/`Complex*` helpers). Oracle `polyseries.jsonl` via `OpRegistry.PolySeries.cs` |
 | Grid / slice-expression DSL | `Creation/np.r_.cs` (`AxisConcatenator` + `RClass`), `Creation/np.c_.cs`, `Creation/np.ogrid.cs` (`OGridClass` + `OGridResult` + shared `nd_grid` helpers), `Creation/np.mgrid.cs` (`MGridClass` + `MGridResult`), `Creation/np.meshgrid.cs` (`MeshgridResult`), `Indexing/np.{ix_,s_}.cs` |
 | Array printing (NumPy parity) | `Backends/Printing/{PrintOptions,Dragon4,ElementFormatters,ArrayFormatter}.cs`, `APIs/np.array2string.cs`, `Casting/NDArray.ToString.cs` |
 | Iterators | `Backends/Iterators/NDIter.cs`, `NDIter.Detach.cs` (ref-struct → managed-owner bridge) |
