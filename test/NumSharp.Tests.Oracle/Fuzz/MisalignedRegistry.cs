@@ -250,6 +250,15 @@ namespace NumSharp.Tests.Fuzz
             byte[] expected, byte[] actual, NPTypeCode tc, IReadOnlyList<BitDiff.Diff> diffs,
             byte[] truth = null)
         {
+            // The numpy.polynomial package (polyeval U3, polyseries U1) is held to ZERO excuses: every one of
+            // its answers is NumPy's own arithmetic reproduced op for op (scalarmath, CPython, the ufunc loops),
+            // so no branch below describes a divergence it is allowed to have. The blanket branches were the
+            // hazard — branch (1) excused ANY dtype divergence of a multi-operand op with a 0-d operand, and
+            // the U1 surface makes a 0-d array a STRONG NumPy scalar on purpose, so a real promotion bug there
+            // would have been reported as "documented". Returning null here keeps every polynomial divergence red.
+            if (OpRegistry.IsPolynomialOp(c.Op))
+                return null;
+
             // The ndarray.* / emath.* namespaced tiers delegate to the SAME kernels as their np.*
             // twins (a.std() -> the var/std engine, emath.sqrt -> np.sqrt over the promoted
             // operand), so every excuse branch below must apply to the namespaced spelling too —

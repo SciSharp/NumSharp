@@ -4,6 +4,8 @@ using System.Numerics;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
+using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.X86;
 using System.Threading;
 using NumSharp.Backends.Iteration;
 
@@ -28,7 +30,9 @@ using NumSharp.Backends.Iteration;
 //   PolyCombineKernel      (a, sa, na, b, sb, nb, r)       -> _add/_sub into r, returns the trimmed length
 //   PolyLastAboveKernel    (p, n, stride, tol)             -> 1 + last i with |c[i]| > tol, or 0
 //   PolyCastKernel         (p, n, stride, r)               -> r[i] = (T)p[i]  (strided -> contiguous)
-//   PolyScalarBinaryKernel (a, b, r)                       -> *r = *a OP *b   (both already in the loop dtype)
+//   PolyScalarBinaryKernel (a, b, r)                       -> *r = *a OP *b   (both already in the loop dtype; the
+//                                                             complex64 variant runs NumPy's np.complex64 scalar
+//                                                             arithmetic in float32 on Complex carriers)
 //   PolyScalarUnaryKernel  (a, r)                          -> *r = -*a
 //   PolyScalarPredicateKernel (a)                          -> *a != 0   /   *a < 0
 //
@@ -175,7 +179,7 @@ namespace NumSharp.Backends.Kernels
         private readonly record struct PolySeriesKey(PolySeriesFamily Family, NPTypeCode T0, NPTypeCode T1, NPTypeCode T2, byte Flag);
 
         /// <summary>The kernel families of <see cref="PolySeriesKey"/>.</summary>
-        private enum PolySeriesFamily : byte { TrimLen, Combine, LastAbove, Cast, ScalarBinary, ScalarNegate, ScalarPredicate, ScalarBox, MapParms }
+        private enum PolySeriesFamily : byte { TrimLen, Combine, LastAbove, Cast, ScalarBinary, ScalarNegate, ScalarPredicate, ScalarBox, MapParms, ScalarBinaryComplex64 }
 
         /// <summary>
         ///     Every polynomial-series kernel, emitted once per key. Values are the typed delegates of this file;
@@ -217,6 +221,366 @@ namespace NumSharp.Backends.Kernels
         /// <returns>NumPy's <c>a &lt; 0</c>.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static bool PolyComplexScalarLessZero(Complex a) => a.Real < 0 || (a.Real == 0 && a.Imaginary < 0);
+
+        // ---------------------------------------------------------------------------------------------
+        //  complex64 SCALAR arithmetic (NumPy's np.complex64, carried in a Complex)
+        // ---------------------------------------------------------------------------------------------
+        //
+        // NumSharp has one complex dtype (complex128, #569), yet numpy.polynomial's scalar code creates complex64
+        // NumPy scalars whenever a float16/float32 NumPy value meets a Python complex (NEP 50): lagline(np.float32(a),
+        // 1j) computes `off + scl` in complex64 before np.array widens it, and mapdomain with a float32 domain and a
+        // complex tuple derives complex64 off/scl that then scale a float64 array in complex128. A complex64 value is
+        // exactly representable in complex128 (two float32 widen exactly), so the SCALAR arithmetic is emulated
+        // exactly: the operands are rounded to float32 on the way in (NumPy's conversion into the complex64 loop) and
+        // every elementary operation below rounds to float32 — each cast `(float)(…)` is a conv.r4, never an
+        // extended-precision intermediate. The three forms are NumPy's complex128 forms in float32, probed on 2.4.2
+        // (3000/3000 random full-mantissa pairs each): scalarmath's multiply is the naive product, a 0-d ufunc's is
+        // simd_cmul (fused), the division is CFLOAT_divide's un-fused Smith. A complex64 ARRAY (rank >= 1) is not
+        // emulated — NumSharp computes such loops in complex128 (the documented #569 dtype divergence).
+
+        /// <summary>
+        ///     NumPy's conversion of a value already in complex128 into the complex64 loop: each component rounded to
+        ///     float32 (ties to even; out-of-range → ±inf, NaN kept). A float16 / float32 / small-integer operand
+        ///     and an existing complex64 value pass unchanged; a Python float or complex rounds once; a Python int has
+        ///     already been rounded to float64 by <c>PyLong_AsDouble</c>, so it rounds twice — as NumPy's does.
+        /// </summary>
+        /// <param name="v">The complex128 carrier.</param>
+        /// <returns>The complex64 value, carried in a <see cref="Complex"/>.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static Complex PolyComplex64Round(Complex v) => new Complex((float)v.Real, (float)v.Imaginary);
+
+        /// <summary><c>np.complex64 + np.complex64</c>: component-wise float32 addition.</summary>
+        /// <param name="a">Left operand (float32-exact components).</param><param name="b">Right operand.</param>
+        /// <returns>The complex64 sum.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static Complex PolyComplex64Add(Complex a, Complex b)
+            => new Complex((float)((float)a.Real + (float)b.Real), (float)((float)a.Imaginary + (float)b.Imaginary));
+
+        /// <summary><c>np.complex64 - np.complex64</c>: component-wise float32 subtraction.</summary>
+        /// <param name="a">Left operand (float32-exact components).</param><param name="b">Right operand.</param>
+        /// <returns>The complex64 difference.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static Complex PolyComplex64Subtract(Complex a, Complex b)
+            => new Complex((float)((float)a.Real - (float)b.Real), (float)((float)a.Imaginary - (float)b.Imaginary));
+
+        /// <summary>
+        ///     scalarmath's complex64 product (<c>np.complex64 * np.complex64</c>): <c>(ar*br - ai*bi, ar*bi + ai*br)</c>
+        ///     with each product rounded to float32 before the add — NumPy's <c>@name@_ctype_multiply</c> for
+        ///     <c>npy_cfloat</c>, never contracted.
+        /// </summary>
+        /// <param name="a">Left operand (float32-exact components).</param><param name="b">Right operand.</param>
+        /// <returns>The naive complex64 product.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static Complex PolyComplex64MultiplyNaive(Complex a, Complex b)
+        {
+            float ar = (float)a.Real, ai = (float)a.Imaginary, br = (float)b.Real, bi = (float)b.Imaginary;
+            return new Complex((float)((float)(ar * br) - (float)(ai * bi)), (float)((float)(ar * bi) + (float)(ai * br)));
+        }
+
+        /// <summary>
+        ///     The complex64 ufunc product <c>simd_cmul</c> (a 0-d ufunc operand):
+        ///     <c>re = fmaf(ar, br, -(ai*bi))</c>, <c>im = fmaf(ar, bi, ai*br)</c> — the complex128 form of
+        ///     <see cref="NumSharp.Utilities.NDComplexMath"/>'s multiply, in float32.
+        /// </summary>
+        /// <param name="a">Left operand (float32-exact components).</param><param name="b">Right operand.</param>
+        /// <returns>The fused complex64 product.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static Complex PolyComplex64MultiplySimd(Complex a, Complex b)
+        {
+            float ar = (float)a.Real, ai = (float)a.Imaginary, br = (float)b.Real, bi = (float)b.Imaginary;
+            return new Complex(MathF.FusedMultiplyAdd(ar, br, -(float)(ai * bi)), MathF.FusedMultiplyAdd(ar, bi, (float)(ai * br)));
+        }
+
+        /// <summary>
+        ///     The complex64 ufunc's contracted fallback loop (<c>loop_scalar</c>): <c>re = fmaf(ar, br, -(ai*bi))</c>,
+        ///     <c>im = fmaf(ai, br, ar*bi)</c> — <see cref="ILKernelGenerator.PolyLoopScalarComplexMultiply"/> in float32.
+        ///     Kept for key completeness: the U1 scalar engine never picks it (a complex64 value is never an array).
+        /// </summary>
+        /// <param name="a">Left operand (float32-exact components).</param><param name="b">Right operand.</param>
+        /// <returns>The contracted complex64 product.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static Complex PolyComplex64MultiplyLoopScalar(Complex a, Complex b)
+        {
+            float ar = (float)a.Real, ai = (float)a.Imaginary, br = (float)b.Real, bi = (float)b.Imaginary;
+            return new Complex(MathF.FusedMultiplyAdd(ar, br, -(float)(ai * bi)), MathF.FusedMultiplyAdd(ai, br, (float)(ar * bi)));
+        }
+
+        /// <summary>
+        ///     <c>CFLOAT_divide</c> (NumPy <c>loops.c.src</c>, which scalarmath's complex64 division calls with one
+        ///     element): <see cref="ComplexDivideNumPy"/>'s Smith algorithm with the reciprocal formed once and
+        ///     multiplied, every step rounded to float32 and un-fused (the loop is baseline code: MSVC
+        ///     <c>/fp:precise</c> does not contract it). Probed 2.4.2: 3000/3000 random pairs, scalar and 0-d alike.
+        /// </summary>
+        /// <param name="a">Dividend (float32-exact components).</param><param name="b">Divisor.</param>
+        /// <returns>The complex64 quotient; a zero divisor gives the component-wise IEEE inf/nan.</returns>
+        internal static Complex PolyComplex64Divide(Complex a, Complex b)
+        {
+            float in1r = (float)a.Real, in1i = (float)a.Imaginary, in2r = (float)b.Real, in2i = (float)b.Imaginary;
+            float in2rAbs = MathF.Abs(in2r), in2iAbs = MathF.Abs(in2i);
+            if (in2rAbs >= in2iAbs)
+            {
+                // Divide by zero: component-wise division by +0 (NumPy's complex inf / nan).
+                if (in2rAbs == 0f && in2iAbs == 0f)
+                    return new Complex((float)(in1r / in2rAbs), (float)(in1i / in2iAbs));
+                float rat = (float)(in2i / in2r);
+                float scl = (float)(1.0f / (float)(in2r + (float)(in2i * rat)));
+                return new Complex((float)((float)(in1r + (float)(in1i * rat)) * scl), (float)((float)(in1i - (float)(in1r * rat)) * scl));
+            }
+            float rat2 = (float)(in2r / in2i);
+            float scl2 = (float)(1.0f / (float)(in2i + (float)(in2r * rat2)));
+            return new Complex((float)((float)((float)(in1r * rat2) + in1i) * scl2), (float)((float)((float)(in1i * rat2) - in1r) * scl2));
+        }
+
+        // ---------------------------------------------------------------------------------------------
+        //  complex64 ARRAY loops (polyutils.mapdomain)
+        // ---------------------------------------------------------------------------------------------
+        //
+        // mapdomain's `off + scl*x` runs NumPy's complex64 ufunc loops when NEP 50 makes an operation complex64 (a
+        // Python complex meeting a float16/float32 x, or a complex64 off/scl meeting a narrow x). NumSharp has no
+        // complex64 dtype (#569), so the result is a complex128 array — but these kernels store NumPy's complex64
+        // VALUES in it, exactly: each operation in float32, with CFLOAT_multiply's own product form. They are
+        // whole-array loops with an AVX2+FMA vector body (8 float32 lanes) and a scalar remainder computing the SAME
+        // per-lane arithmetic, so the vector/remainder split never changes a bit.
+
+        /// <summary>
+        ///     Stores 8 complex64 values given as separate real / imaginary float32 lanes into 8 contiguous
+        ///     <see cref="Complex"/> carriers (16 doubles, interleaved re/im) — each float32 widened exactly.
+        /// </summary>
+        /// <param name="re">The 8 real parts.</param>
+        /// <param name="im">The 8 imaginary parts.</param>
+        /// <param name="dst">The first of 16 doubles.</param>
+        /// <remarks>Requires AVX. <c>unpacklo/hi</c> interleave within each 128-bit half, so the four 4-double stores
+        ///     are ordered lo.lower, hi.lower, lo.upper, hi.upper to land elements 0..7 in order.</remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void PolyStoreComplex64(Vector256<float> re, Vector256<float> im, double* dst)
+        {
+            var lo = Avx.UnpackLow(re, im);    // r0 i0 r1 i1 | r4 i4 r5 i5
+            var hi = Avx.UnpackHigh(re, im);   // r2 i2 r3 i3 | r6 i6 r7 i7
+            Avx.Store(dst, Avx.ConvertToVector256Double(lo.GetLower()));
+            Avx.Store(dst + 4, Avx.ConvertToVector256Double(hi.GetLower()));
+            Avx.Store(dst + 8, Avx.ConvertToVector256Double(lo.GetUpper()));
+            Avx.Store(dst + 12, Avx.ConvertToVector256Double(hi.GetUpper()));
+        }
+
+        /// <summary>
+        ///     <c>scl * x</c> in NumPy's complex64 loop, for a complex64 scalar <c>scl = sr + si·j</c> and a REAL
+        ///     float32 array x promoted to complex64 (imaginary part +0): <c>CFLOAT_multiply</c>'s scalar-broadcast
+        ///     vector loop, i.e. <c>simd_cmul</c> — <c>re = fma(sr, x, -(si·0))</c>, <c>im = fma(sr, 0, si·x)</c> — at
+        ///     every length: a scalar operand makes the ufunc call trivially iterable, so even a one-element x runs the
+        ///     vector loop with a nonzero output stride (probed 2.4.2: <c>s * np.array([x])</c> matches simd_cmul on
+        ///     300/300 draws, the stride-0 <c>loop_scalar</c> form on 188/300 for complex128 x).
+        /// </summary>
+        /// <param name="x">The float32 values (contiguous; exact conversions of the caller's points).</param>
+        /// <param name="n">Element count (≥ 1).</param>
+        /// <param name="sr">The scale's real part (float32).</param>
+        /// <param name="si">The scale's imaginary part (float32).</param>
+        /// <param name="r">Destination: <paramref name="n"/> complex carriers of the complex64 products.</param>
+        internal static unsafe void PolyComplex64ScaleReal(float* x, long n, float sr, float si, Complex* r)
+        {
+            // -(a_im * b_im) with b_im = +0: one constant for the whole array (NaN when si is inf/NaN, else ±0).
+            float c = -(si * 0f);
+            long i = 0;
+            if (Avx2.IsSupported && Fma.IsSupported)
+            {
+                var vsr = Vector256.Create(sr);
+                var vsi = Vector256.Create(si);
+                var vc = Vector256.Create(c);
+                for (; i + 8 <= n; i += 8)
+                {
+                    var vx = Avx.LoadVector256(x + i);
+                    var re = Fma.MultiplyAdd(vsr, vx, vc);
+                    var im = Fma.MultiplyAdd(vsr, Vector256<float>.Zero, Avx.Multiply(vsi, vx));
+                    PolyStoreComplex64(re, im, (double*)(r + i));
+                }
+            }
+            for (; i < n; i++)
+            {
+                float xv = x[i];
+                r[i] = new Complex(MathF.FusedMultiplyAdd(sr, xv, c), MathF.FusedMultiplyAdd(sr, 0f, si * xv));
+            }
+        }
+
+        /// <summary>
+        ///     <c>off + scl*x</c> with BOTH operations in NumPy's complex64 loops, in one pass: the product of
+        ///     <see cref="PolyComplex64ScaleReal"/> (the same simd_cmul form at every length) followed by <c>CFLOAT_add</c>'s
+        ///     component-wise float32 sum with <c>off</c>, each component rounded to float32 at the same two points
+        ///     NumPy rounds it — the intermediate product never leaves a register, which halves the memory traffic of
+        ///     a product pass followed by a sum pass.
+        /// </summary>
+        /// <param name="x">The float32 values (contiguous; exact conversions of the caller's points).</param>
+        /// <param name="n">Element count (≥ 1).</param>
+        /// <param name="sr">The scale's real part (float32).</param>
+        /// <param name="si">The scale's imaginary part (float32).</param>
+        /// <param name="or">The offset's real part (float32).</param>
+        /// <param name="oi">The offset's imaginary part (float32).</param>
+        /// <param name="r">Destination: <paramref name="n"/> complex carriers.</param>
+        internal static unsafe void PolyComplex64AffineReal(float* x, long n, float sr, float si, float or, float oi, Complex* r)
+        {
+            float c = -(si * 0f);
+            long i = 0;
+            if (Avx2.IsSupported && Fma.IsSupported)
+            {
+                var vsr = Vector256.Create(sr);
+                var vsi = Vector256.Create(si);
+                var vc = Vector256.Create(c);
+                var vor = Vector256.Create(or);
+                var voi = Vector256.Create(oi);
+                for (; i + 8 <= n; i += 8)
+                {
+                    var vx = Avx.LoadVector256(x + i);
+                    var re = Avx.Add(vor, Fma.MultiplyAdd(vsr, vx, vc));
+                    var im = Avx.Add(voi, Fma.MultiplyAdd(vsr, Vector256<float>.Zero, Avx.Multiply(vsi, vx)));
+                    PolyStoreComplex64(re, im, (double*)(r + i));
+                }
+            }
+            for (; i < n; i++)
+            {
+                float xv = x[i];
+                float pr = MathF.FusedMultiplyAdd(sr, xv, c);
+                float pi = MathF.FusedMultiplyAdd(sr, 0f, si * xv);
+                r[i] = new Complex(or + pr, oi + pi);
+            }
+        }
+
+        /// <summary>
+        ///     <c>off + v</c> in NumPy's complex64 loop for a REAL float32 array v promoted to complex64 (imaginary
+        ///     part +0) and a complex64 scalar <c>off = or + oi·j</c>: <c>(or + v, oi + 0)</c> component-wise in
+        ///     float32 — the imaginary part is the same for every element, and a <c>-0</c> offset imaginary part
+        ///     turns into <c>+0</c> exactly as NumPy's addition does.
+        /// </summary>
+        /// <param name="v">The float32 values (contiguous; an exact conversion of a float16/float32 product).</param>
+        /// <param name="n">Element count.</param>
+        /// <param name="or">The offset's real part (float32).</param>
+        /// <param name="oi">The offset's imaginary part (float32).</param>
+        /// <param name="r">Destination: <paramref name="n"/> complex carriers.</param>
+        internal static unsafe void PolyComplex64AddScalarReal(float* v, long n, float or, float oi, Complex* r)
+        {
+            float im = oi + 0f;
+            long i = 0;
+            if (Avx.IsSupported)
+            {
+                var vor = Vector256.Create(or);
+                var vim = Vector256.Create(im);
+                for (; i + 8 <= n; i += 8)
+                    PolyStoreComplex64(Avx.Add(vor, Avx.LoadVector256(v + i)), vim, (double*)(r + i));
+            }
+            for (; i < n; i++)
+                r[i] = new Complex(or + v[i], im);
+        }
+
+        /// <summary>
+        ///     mapdomain's <c>off + scl*x</c> for a complex128 x and complex128 <c>off</c>/<c>scl</c>, in one pass:
+        ///     <c>CDOUBLE_multiply</c>'s scalar-broadcast vector loop — <c>simd_cmul</c>, <c>re = fma(sr, xr, -(si·xi))</c>,
+        ///     <c>im = fma(sr, xi, si·xr)</c>, at every length (the scalar operand makes the call trivially iterable) —
+        ///     then <c>CDOUBLE_add</c>'s component-wise sum with <c>off</c>. Two complex values per AVX2 vector:
+        ///     one lane permute, one multiply, one <c>vfmaddsub</c>, one add.
+        /// </summary>
+        /// <param name="x">Element 0 of the points (complex128).</param>
+        /// <param name="n">Element count.</param>
+        /// <param name="xStride">Signed ELEMENT stride of the points (1 contiguous, -1 reversed, 2 every other, …).</param>
+        /// <param name="scl">The scale.</param>
+        /// <param name="off">The offset.</param>
+        /// <param name="r">Destination: <paramref name="n"/> contiguous complex128 values (not overlapping
+        ///     <paramref name="x"/>).</param>
+        /// <remarks>Bit-identical to the fused np.evaluate pass it replaces for this shape (which computes the same
+        ///     simd_cmul per element in scalar code) and to NumPy; only a surviving NaN's payload may differ, which is
+        ///     not contractual. A complex128 value is exactly one 128-bit lane, so a strided x costs two 16-byte loads
+        ///     per vector instead of one 32-byte load — the same arithmetic, which is why one kernel serves every
+        ///     stride.</remarks>
+        internal static unsafe void PolyComplex128Affine(Complex* x, long n, long xStride, Complex scl, Complex off, Complex* r)
+        {
+            double sr = scl.Real, si = scl.Imaginary, or = off.Real, oi = off.Imaginary;
+            double* rp = (double*)r;
+            long i = 0;
+            if (Avx2.IsSupported && Fma.IsSupported)
+            {
+                var vsr = Vector256.Create(sr);
+                var vsi = Vector256.Create(si);
+                var vo = Vector256.Create(or, oi, or, oi);
+                for (; i + 2 <= n; i += 2)
+                {
+                    // xr0 xi0 xr1 xi1 — one load when contiguous, the two 128-bit values otherwise.
+                    Vector256<double> b = xStride == 1
+                        ? Avx.LoadVector256((double*)(x + i))
+                        : Vector256.Create(Sse2.LoadVector128((double*)(x + i * xStride)), Sse2.LoadVector128((double*)(x + (i + 1) * xStride)));
+                    var bRev = Avx.Permute(b, 0b0101);                // xi0 xr0 xi1 xr1
+                    // simd_cmul: even lanes sr*xr - si*xi, odd lanes sr*xi + si*xr (vfmaddsub).
+                    var prod = Fma.MultiplyAddSubtract(vsr, b, Avx.Multiply(vsi, bRev));
+                    Avx.Store(rp + 2 * i, Avx.Add(vo, prod));
+                }
+            }
+            for (; i < n; i++)
+            {
+                double* xe = (double*)(x + i * xStride);
+                double xr = xe[0], xi = xe[1];
+                double re = Math.FusedMultiplyAdd(sr, xr, -(si * xi));
+                double im = Math.FusedMultiplyAdd(sr, xi, si * xr);
+                rp[2 * i] = or + re;
+                rp[2 * i + 1] = oi + im;
+            }
+        }
+
+        /// <summary>
+        ///     mapdomain's <c>off + scl*x</c> in a float64 loop: NumPy's two ufunc calls — <c>DOUBLE_multiply</c> of the
+        ///     scale and the points, then <c>DOUBLE_add</c> of the offset and the product — as one pass, each operation
+        ///     rounded on its own (a multiply, then an add: never a fused multiply-add, which would round once and
+        ///     differ in the last bit). Eight points per iteration as two AVX vectors.
+        /// </summary>
+        /// <param name="x">The points, contiguous float64 (already converted to the loop dtype).</param>
+        /// <param name="n">Point count.</param>
+        /// <param name="scl">The scale, in the loop dtype.</param>
+        /// <param name="off">The offset, in the loop dtype.</param>
+        /// <param name="r">Destination: <paramref name="n"/> contiguous float64 values (may be <paramref name="x"/> itself,
+        ///     the pass reading each point before writing it; must not otherwise overlap it).</param>
+        /// <remarks>Bit-identical to NumPy and to the fused np.evaluate pass it replaces; a surviving NaN's payload may
+        ///     differ, which is not contractual. The operand order of each operation is NumPy's (<c>scl * x</c>, then
+        ///     <c>off + product</c>).</remarks>
+        internal static unsafe void PolyAffineDouble(double* x, long n, double scl, double off, double* r)
+        {
+            long i = 0;
+            if (Avx.IsSupported)
+            {
+                var vs = Vector256.Create(scl);
+                var vo = Vector256.Create(off);
+                for (; i + 8 <= n; i += 8)
+                {
+                    // Explicit multiply and add intrinsics: nothing may contract them into an FMA.
+                    Avx.Store(r + i, Avx.Add(vo, Avx.Multiply(vs, Avx.LoadVector256(x + i))));
+                    Avx.Store(r + i + 4, Avx.Add(vo, Avx.Multiply(vs, Avx.LoadVector256(x + i + 4))));
+                }
+            }
+            // RyuJIT never contracts a scalar multiply and add either.
+            for (; i < n; i++)
+                r[i] = off + scl * x[i];
+        }
+
+        /// <summary>
+        ///     <see cref="PolyAffineDouble"/> for a float32 loop: <c>FLOAT_multiply</c> then <c>FLOAT_add</c>, each rounded
+        ///     to float32 on its own, sixteen points per iteration.
+        /// </summary>
+        /// <param name="x">The points, contiguous float32.</param>
+        /// <param name="n">Point count.</param>
+        /// <param name="scl">The scale.</param>
+        /// <param name="off">The offset.</param>
+        /// <param name="r">Destination: <paramref name="n"/> contiguous float32 values (may be <paramref name="x"/>).</param>
+        /// <remarks>As <see cref="PolyAffineDouble"/>: two float32 roundings per point, never an FMA — and never a float64
+        ///     intermediate, which would round the product differently.</remarks>
+        internal static unsafe void PolyAffineSingle(float* x, long n, float scl, float off, float* r)
+        {
+            long i = 0;
+            if (Avx.IsSupported)
+            {
+                var vs = Vector256.Create(scl);
+                var vo = Vector256.Create(off);
+                for (; i + 16 <= n; i += 16)
+                {
+                    Avx.Store(r + i, Avx.Add(vo, Avx.Multiply(vs, Avx.LoadVector256(x + i))));
+                    Avx.Store(r + i + 8, Avx.Add(vo, Avx.Multiply(vs, Avx.LoadVector256(x + i + 8))));
+                }
+            }
+            for (; i < n; i++)
+                r[i] = off + scl * x[i];
+        }
 
         /// <summary>
         ///     The trimseq scan kernel for elements of <paramref name="t"/> (see <see cref="PolyTrimLenKernel"/>).
@@ -290,6 +654,32 @@ namespace NumSharp.Backends.Kernels
                 Volatile.Write(ref s_polyScalarBinarySlots[slot], k);
             return k;
         }
+
+        /// <summary>
+        ///     One NumPy complex64 SCALAR binary op (see <see cref="PolyComplex64Round"/>): both operands already
+        ///     rounded into the complex64 loop and carried as <see cref="Complex"/>, the result complex64 as well.
+        /// </summary>
+        /// <param name="op">Add, Subtract, Multiply or Divide.</param>
+        /// <param name="product">Which complex product a multiply reproduces: scalarmath's naive one for NumPy
+        ///     scalars, <c>simd_cmul</c> for a 0-d ufunc operand (ignored for every other op).</param>
+        /// <returns>The cached kernel.</returns>
+        /// <exception cref="NotSupportedException">An op other than the four arithmetic ones.</exception>
+        internal static PolyScalarBinaryKernel GetPolyScalarComplex64Kernel(BinaryOp op, PolyComplexProduct product)
+        {
+            if ((int)op > (int)BinaryOp.Divide)
+                throw new NotSupportedException($"complex64 scalar {op} has no NumPy scalarmath loop here");
+            int slot = (int)op * 3 + (int)product;
+            if (s_polyScalarComplex64Slots[slot] is { } fast)
+                return fast;
+            var k = (PolyScalarBinaryKernel)s_polySeriesKernels.GetOrAdd(
+                new PolySeriesKey(PolySeriesFamily.ScalarBinaryComplex64, NPTypeCode.Complex, NPTypeCode.Empty, NPTypeCode.Empty, (byte)slot),
+                static key => EmitPolyScalarComplex64((BinaryOp)(key.Flag / 3), (PolyComplexProduct)(key.Flag % 3)));
+            Volatile.Write(ref s_polyScalarComplex64Slots[slot], k);
+            return k;
+        }
+
+        /// <summary>Fast front of <see cref="GetPolyScalarComplex64Kernel"/>: four ops × three products.</summary>
+        private static readonly PolyScalarBinaryKernel[] s_polyScalarComplex64Slots = new PolyScalarBinaryKernel[4 * 3];
 
         /// <summary>Slots per op/product group of the fast lookup arrays: one per NPTypeCode value (Complex = 128 is the largest).</summary>
         private const int PolyDtypeSlots = 129;
@@ -380,6 +770,107 @@ namespace NumSharp.Backends.Kernels
                 Volatile.Write(ref s_polyMapParmsSlots[(int)t], k);
             return k;
         }
+
+        // ---------------------------------------------------------------------------------------------
+        //  Long series: routing onto the house SIMD kernels
+        // ---------------------------------------------------------------------------------------------
+
+        /// <summary>
+        ///     Series length from which the orchestration (<c>NDPolySeries</c>) runs a conversion copy or an
+        ///     <c>_add</c>/<c>_sub</c> through the house vector kernels (memcpy, <see cref="TryGetCastKernel"/>, the
+        ///     same-dtype <see cref="ExecutionPath.SimdFull"/> binary kernel) instead of this file's fused scalar loops.
+        /// </summary>
+        /// <remarks>
+        ///     Below it the fused scalar kernel wins: it makes one pass and needs no kernel lookup, while the house
+        ///     route pays a lookup per kernel and, for a converted or negated operand, an extra pass over the result.
+        ///     Measured on AVX2 at n = 1000: the house float32 add is 0.28 µs against 0.50 µs fused, float16 1.16 µs
+        ///     against 5.45 µs (the fused kernel widens float16 one element at a time), float64 0.58 µs against
+        ///     0.47 µs — the float64 loss is ~0.1 µs of lookups on a call NumPy takes several µs for, so one
+        ///     dtype-independent threshold is kept rather than a per-dtype table.
+        /// </remarks>
+        internal const long PolyHouseKernelThreshold = 64;
+
+        /// <summary>
+        ///     Resolved house contiguous cast kernels, one slot per (source, target) dtype pair indexed by
+        ///     <see cref="PolyPairSlot"/>: null = not yet resolved, <see cref="s_polyNoCastKernel"/> = the pair has
+        ///     no house kernel. <see cref="TryGetCastKernel"/> walks a dozen specialized resolvers before its own
+        ///     cache, so the answer is kept here per pair.
+        /// </summary>
+        private static readonly object[] s_polyContiguousCasts = new object[32 * 32];
+
+        /// <summary>Sentinel for "resolved: no house contiguous cast kernel" in <see cref="s_polyContiguousCasts"/>.</summary>
+        private static readonly object s_polyNoCastKernel = new object();
+
+        /// <summary>
+        ///     The slot of a dtype pair in a 32×32 table. Every storage dtype's code is below 32 except
+        ///     <see cref="NPTypeCode.Complex"/> (128), which masks to 0 — the slot of <see cref="NPTypeCode.Empty"/>, a
+        ///     code no array carries — so the mapping is collision-free over the dtypes that reach it.
+        /// </summary>
+        /// <param name="ts">Source dtype.</param>
+        /// <param name="tr">Target dtype.</param>
+        /// <returns>The slot index.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static int PolyPairSlot(NPTypeCode ts, NPTypeCode tr) => ((int)ts & 31) * 32 + ((int)tr & 31);
+
+        /// <summary>
+        ///     The house contiguous cast kernel for <paramref name="ts"/> → <paramref name="tr"/> (the SIMD widen /
+        ///     convert kernels astype runs, bit-exact with NumPy's cast and gated by the astype oracle tier), or null
+        ///     when the house has none for the pair — the caller then keeps <see cref="GetPolyCastKernel"/>.
+        /// </summary>
+        /// <param name="ts">Source dtype (never equal to <paramref name="tr"/>: a same-dtype copy is a memcpy).</param>
+        /// <param name="tr">Target dtype.</param>
+        /// <returns>The kernel, or null.</returns>
+        /// <remarks>The first answer for a pair is kept for the life of the process, including a null seen while IL
+        ///     generation was disabled — which only means the pair keeps the (equally exact) scalar poly kernel.</remarks>
+        internal static CastKernel GetPolyContiguousCast(NPTypeCode ts, NPTypeCode tr)
+        {
+            int slot = PolyPairSlot(ts, tr);
+            object resolved = Volatile.Read(ref s_polyContiguousCasts[slot]);
+            if (resolved is null)
+            {
+                resolved = (object)TryGetCastKernel(ts, tr) ?? s_polyNoCastKernel;
+                Volatile.Write(ref s_polyContiguousCasts[slot], resolved);
+            }
+            return resolved as CastKernel;
+        }
+
+        /// <summary>Resolved house strided cast kernels per dtype pair (same encoding as <see cref="s_polyContiguousCasts"/>).</summary>
+        private static readonly object[] s_polyStridedCasts = new object[32 * 32];
+
+        /// <summary>
+        ///     The house strided cast kernel for <paramref name="ts"/> → <paramref name="tr"/> (element strides; the
+        ///     sub-word SIMD deinterleave / stage-and-widen kernels for float16), or null when the house has none.
+        /// </summary>
+        /// <param name="ts">Source dtype (may equal <paramref name="tr"/>: a same-dtype strided copy).</param>
+        /// <param name="tr">Target dtype.</param>
+        /// <returns>The kernel, or null.</returns>
+        /// <remarks>Only worth calling where <see cref="PolyScalarIsEmulated"/> holds for a dtype of the pair: for a
+        ///     4/8-byte source the scalar poly cast kernel measured FASTER than the house's generic strided cast
+        ///     (100K float32 stride-2: 20 µs against 29 µs).</remarks>
+        internal static StridedCastKernel GetPolyStridedCast(NPTypeCode ts, NPTypeCode tr)
+        {
+            int slot = PolyPairSlot(ts, tr);
+            object resolved = Volatile.Read(ref s_polyStridedCasts[slot]);
+            if (resolved is null)
+            {
+                resolved = (object)TryGetStridedCastKernel(ts, tr) ?? s_polyNoCastKernel;
+                Volatile.Write(ref s_polyStridedCasts[slot], resolved);
+            }
+            return resolved as StridedCastKernel;
+        }
+
+        /// <summary>
+        ///     Whether this file's scalar kernels EMULATE element work in dtype <paramref name="t"/> in software — the
+        ///     cost-model fact behind every "house kernel even though it adds a pass" decision of the orchestration.
+        ///     float16 is the one: .NET has no scalar float16 arithmetic or conversion instruction, so each element a
+        ///     fused kernel touches is widened (and, for a float16 result, narrowed) by bit-level helpers — ~1.4 ns
+        ///     for a widen alone, where the house vector kernels do the same exact work 8 lanes at a time. Every
+        ///     other storage dtype maps to hardware scalar instructions, for which the fused kernel is already near
+        ///     the memory bound whenever a conversion or a strided read is involved.
+        /// </summary>
+        /// <param name="t">The dtype.</param>
+        /// <returns>True for float16.</returns>
+        internal static bool PolyScalarIsEmulated(NPTypeCode t) => t == NPTypeCode.Half;
 
         // ---------------------------------------------------------------------------------------------
         //  Emission
@@ -711,6 +1202,43 @@ namespace NumSharp.Backends.Kernels
             else
                 EmitScalarOperation(il, emitted, t);
             EmitStoreIndirect(il, t);
+            il.Emit(OpCodes.Ret);
+            return dm.CreateDelegate<PolyScalarBinaryKernel>();
+        }
+
+        /// <summary>
+        ///     Emits the complex64 <see cref="PolyScalarBinaryKernel"/>: load both <see cref="Complex"/> carriers, call
+        ///     the float32 helper of <paramref name="op"/> / <paramref name="product"/>, store the carrier.
+        /// </summary>
+        /// <param name="op">Add, Subtract, Multiply or Divide.</param>
+        /// <param name="product">The complex product form (Multiply only).</param>
+        /// <returns>The kernel.</returns>
+        /// <exception cref="MissingMethodException">A helper was renamed (fails fast at first emission).</exception>
+        private static PolyScalarBinaryKernel EmitPolyScalarComplex64(BinaryOp op, PolyComplexProduct product)
+        {
+            string helper = op switch
+            {
+                BinaryOp.Add => nameof(PolyComplex64Add),
+                BinaryOp.Subtract => nameof(PolyComplex64Subtract),
+                BinaryOp.Divide => nameof(PolyComplex64Divide),
+                _ => product switch
+                {
+                    PolyComplexProduct.Naive => nameof(PolyComplex64MultiplyNaive),
+                    PolyComplexProduct.LoopScalar => nameof(PolyComplex64MultiplyLoopScalar),
+                    _ => nameof(PolyComplex64MultiplySimd),
+                },
+            };
+            var method = typeof(DirectILKernelGenerator).GetMethod(helper, BindingFlags.NonPublic | BindingFlags.Static)
+                         ?? throw new MissingMethodException(helper);
+            var dm = NewPolySeriesMethod($"PolyScalar_{op}_Complex64_{product}", typeof(void), typeof(byte*), typeof(byte*), typeof(byte*));
+            var il = dm.GetILGenerator();
+            il.Emit(OpCodes.Ldarg_2);
+            il.Emit(OpCodes.Ldarg_0);
+            EmitLoadIndirect(il, NPTypeCode.Complex);
+            il.Emit(OpCodes.Ldarg_1);
+            EmitLoadIndirect(il, NPTypeCode.Complex);
+            il.EmitCall(OpCodes.Call, method, null);
+            EmitStoreIndirect(il, NPTypeCode.Complex);
             il.Emit(OpCodes.Ret);
             return dm.CreateDelegate<PolyScalarBinaryKernel>();
         }

@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Runtime.Intrinsics;
 using System.Threading;
 using NumSharp.Backends;
 using NumSharp.Backends.Iteration;
@@ -90,10 +91,41 @@ namespace NumSharp
             return new PolySeriesView(a, p, 1, 0, a.typecode, 1, 1, false);
         }
 
+        /// <summary>
+        ///     A C-contiguous array of any rank read as ONE run of its <c>size</c> elements (1-D, unit stride, from
+        ///     the first element) — the flat order of a C-contiguous array is its logical order.
+        /// </summary>
+        /// <param name="a">A C-contiguous array (not checked).</param>
+        /// <returns>The flat view.</returns>
+        public static PolySeriesView Flat(NDArray a)
+        {
+            byte* p = (byte*)a.Storage.Address + a.Shape.offset * a.dtypesize;
+            return new PolySeriesView(a, p, a.size, a.dtypesize, a.typecode, 1, a.size, false);
+        }
+
         /// <summary>A str array of <paramref name="size"/> elements (1-D): passes the size/ndim checks, fails the common type.</summary>
         /// <param name="size">Element count.</param>
         /// <returns>The view.</returns>
         public static PolySeriesView Str(long size) => new PolySeriesView(null, null, size, 0, NPTypeCode.Empty, 1, size, true);
+
+        /// <summary>
+        ///     The same series starting at element <paramref name="start"/> (<c>v[start:start+length]</c>): same dtype
+        ///     and stride, the address advanced along axis 0. Used to walk a long series in blocks.
+        /// </summary>
+        /// <param name="start">First element (0 ≤ start ≤ <see cref="Len"/>; not checked).</param>
+        /// <param name="length">Element count of the sub-series (not checked against <see cref="Len"/>).</param>
+        /// <returns>The sub-series view (1-D, <see cref="Size"/> = <paramref name="length"/>).</returns>
+        public PolySeriesView Slice(long start, long length)
+            => new PolySeriesView(Source, Ptr + start * Stride, length, Stride, Dtype, 1, length, NonNumeric);
+
+        /// <summary>
+        ///     The same elements in the opposite order (<c>v[::-1]</c>): the address of the last element along axis 0
+        ///     and the negated stride. Only meaningful for an ORDER-FREE consumer — an integer min/max reads a reversed
+        ///     view as the forward run it covers — since every other reader would see the elements reversed.
+        /// </summary>
+        /// <returns>The reversed view (1-D, same length and dtype; a one-element view is returned equivalent).</returns>
+        public PolySeriesView Reversed()
+            => new PolySeriesView(Source, Ptr + (Len - 1) * Stride, Len, -Stride, Dtype, 1, Len, NonNumeric);
     }
 
     /// <summary>
@@ -218,11 +250,104 @@ namespace NumSharp
         /// <param name="n">Element count.</param>
         /// <param name="t">Target dtype.</param>
         /// <returns>The copy.</returns>
+        /// <exception cref="NotSupportedException">A dtype pair the house conversion does not support.</exception>
         public static NDArray CopyAs(in PolySeriesView v, long n, NPTypeCode t)
         {
             var r = new NDArray(t, new Shape(n), false);
-            DirectILKernelGenerator.GetPolyCastKernel(v.Dtype, t)(v.Ptr, n, v.Stride, (byte*)r.Storage.Address);
+            CopyInto(v, n, t, (byte*)r.Storage.Address);
             return r;
+        }
+
+        /// <summary>
+        ///     Writes the first <paramref name="n"/> elements of <paramref name="v"/>, converted to
+        ///     <paramref name="t"/>, to the contiguous buffer <paramref name="dst"/> — the element loop of
+        ///     <see cref="CopyAs"/>, also used by <see cref="AddSub"/> to materialize its in-place target.
+        /// </summary>
+        /// <param name="v">The source (any stride).</param>
+        /// <param name="n">Element count.</param>
+        /// <param name="t">Target dtype.</param>
+        /// <param name="dst">Destination: room for <paramref name="n"/> elements of <paramref name="t"/>, not
+        ///     overlapping the source.</param>
+        /// <exception cref="NotSupportedException">A dtype pair the house conversion does not support.</exception>
+        /// <remarks>
+        ///     Every route stores NumPy's bits — they differ only in speed. A contiguous same-dtype source is a
+        ///     memcpy (at any length: there is nothing to convert). A contiguous source of another dtype takes the
+        ///     house SIMD cast kernel from <see cref="DirectILKernelGenerator.PolyHouseKernelThreshold"/> elements on
+        ///     (the scalar float16 widen costs ~1.4 ns an element, the house Giesen widen ~0.17; even float32 →
+        ///     float64 is 5× faster vectorized, because the scalar cvtss2sd chain carries a false register
+        ///     dependency). A strided or reversed source takes the house strided kernel when the copy is a pure bit
+        ///     copy of an element of at most 8 bytes (the SIMD reverse / deinterleave / gather copies: 100K
+        ///     stride-2 float32 8 µs, float16 5 µs, against 20-25 µs one element at a time), or when float16 is
+        ///     involved in a conversion (<see cref="DirectILKernelGenerator.PolyScalarIsEmulated"/>: the
+        ///     stage-and-widen casts); every other strided source — a converting one, whose house strided cast is
+        ///     generic scalar code — a short series, or a pair the house has no kernel for runs the scalar poly cast
+        ///     kernel.
+        ///     <para>[SkipLocalsInit]: the blocked strided-cast route's stack scratch is written by the strided copy
+        ///     before the cast reads it, and this method runs once per BLOCK inside the combine and mapdomain loops —
+        ///     zeroing up to 8 KB of scratch on every call cost more than converting the block.</para>
+        /// </remarks>
+        [SkipLocalsInit]
+        public static void CopyInto(in PolySeriesView v, long n, NPTypeCode t, byte* dst)
+        {
+            int size = DirectILKernelGenerator.GetTypeSize(v.Dtype);
+            // A 0-d source reads as one element with stride 0, so `Stride == size` also rules it out.
+            if (v.Stride == size && n > 0)
+            {
+                if (v.Dtype == t)
+                {
+                    long bytes = n * size;
+                    Buffer.MemoryCopy(v.Ptr, dst, bytes, bytes);
+                    return;
+                }
+                if (n >= DirectILKernelGenerator.PolyHouseKernelThreshold)
+                {
+                    var cast = DirectILKernelGenerator.GetPolyContiguousCast(v.Dtype, t);
+                    if (cast != null)
+                    {
+                        cast(v.Ptr, dst, n);
+                        return;
+                    }
+                }
+            }
+            else if (n >= DirectILKernelGenerator.PolyHouseKernelThreshold && v.Stride % size == 0)
+            {
+                // The house kernels take ELEMENT strides (the view's are bytes; a view's stride is always a whole
+                // number of elements, the modulo test above is defensive) and a 1-D shape.
+                long srcStride = v.Stride / size, dstStride = 1;
+                if ((v.Dtype == t && size <= 8)
+                    || DirectILKernelGenerator.PolyScalarIsEmulated(v.Dtype) || DirectILKernelGenerator.PolyScalarIsEmulated(t))
+                {
+                    var strided = DirectILKernelGenerator.GetPolyStridedCast(v.Dtype, t);
+                    if (strided != null)
+                    {
+                        long extent = n;
+                        strided(v.Ptr, dst, &srcStride, &dstStride, &extent, 1);
+                        return;
+                    }
+                }
+                else if (size <= 8 && DirectILKernelGenerator.IsVectorizedContiguousCast(v.Dtype, t))
+                {
+                    // A converting strided source: the house strided CAST is generic scalar code, but its two halves
+                    // both vectorize — the SIMD strided copy (same dtype) into an L1-resident block, then the SIMD
+                    // contiguous cast out of it — so the conversion runs block by block through a stack scratch.
+                    var copy = DirectILKernelGenerator.GetPolyStridedCast(v.Dtype, v.Dtype);
+                    var cast = DirectILKernelGenerator.GetPolyContiguousCast(v.Dtype, t);
+                    if (copy != null && cast != null)
+                    {
+                        const int block = 1024;
+                        byte* scratch = stackalloc byte[block * size];
+                        int tsize = DirectILKernelGenerator.GetTypeSize(t);
+                        for (long k = 0; k < n; k += block)
+                        {
+                            long m = Math.Min(block, n - k);
+                            copy(v.Ptr + k * v.Stride, scratch, &srcStride, &dstStride, &m, 1);
+                            cast(scratch, dst + k * tsize, m);
+                        }
+                        return;
+                    }
+                }
+            }
+            DirectILKernelGenerator.GetPolyCastKernel(v.Dtype, t)(v.Ptr, n, v.Stride, dst);
         }
 
         /// <summary>
@@ -392,10 +517,176 @@ namespace NumSharp
             PolyCombineOp op = !subtract ? PolyCombineOp.Add : firstIsTarget ? PolyCombineOp.Subtract : PolyCombineOp.NegateAdd;
 
             var r = new NDArray(t, new Shape(na), false);
-            long k = DirectILKernelGenerator.GetPolyCombineKernel(op, a.Dtype, b.Dtype, t)(
-                a.Ptr, a.Stride, na, b.Ptr, b.Stride, nb, (byte*)r.Storage.Address);
+            byte* rp = (byte*)r.Storage.Address;
+            BinaryOp update = op == PolyCombineOp.Subtract ? BinaryOp.Subtract : BinaryOp.Add;
+            long k = PreferHouseCombine(update, a, na, b, t)
+                ? CombineViaHouseKernels(op, update, a, na, b, nb, t, rp)
+                : DirectILKernelGenerator.GetPolyCombineKernel(op, a.Dtype, b.Dtype, t)(a.Ptr, a.Stride, na, b.Ptr, b.Stride, nb, rp);
             // trimseq(ret): the array itself (+na) or its slice ret[:k] (-k) — a view, as NumPy returns it.
             return k >= 0 ? r : Prefix(r, -k);
+        }
+
+        /// <summary>
+        ///     Whether <see cref="AddSub"/> should run through the house vector kernels
+        ///     (<see cref="CombineViaHouseKernels"/>) rather than the fused scalar combine kernel — a pure speed
+        ///     choice, both store NumPy's bits.
+        /// </summary>
+        /// <param name="update">The update's binary op.</param>
+        /// <param name="a">The in-place target.</param>
+        /// <param name="na">Its trimmed length.</param>
+        /// <param name="b">The other operand.</param>
+        /// <param name="t">The result dtype.</param>
+        /// <returns>True when the house route is the faster one.</returns>
+        /// <remarks>
+        ///     The house route needs a long series (<see cref="DirectILKernelGenerator.PolyHouseKernelThreshold"/>)
+        ///     and a result dtype whose same-dtype kernel is a vector loop, and then pays off when every step it
+        ///     adds is itself a vector loop (measured at 100K): each operand is either already contiguous in the
+        ///     result dtype or contiguous with a VECTORIZED house cast to it
+        ///     (<see cref="DirectILKernelGenerator.IsVectorizedContiguousCast"/> — int8…uint32, float16 and float32
+        ///     sources, and int64/uint64 into float64), so the conversions and the update all run SIMD in L1-resident
+        ///     blocks (float32 27 → 7 µs, float16 459 → 80 µs); or float16 is anywhere in the operation — the fused
+        ///     kernel emulates each float16 widen / add / narrow in software, which dwarfs any extra pass, strided or
+        ///     not. A strided operand beyond <see cref="VectorReadable"/>'s rule, or one whose cast has no vector form
+        ///     (int64/uint64 → float32, anything → complex), keeps the fused scalar kernel: it reads each element once
+        ///     and is at the memory bound, while the
+        ///     house route with a scalar cast measured slower (int32 → float64 via the old scalar-speed house cast
+        ///     38.8 → 51.6 µs; a stride-2 float64 series 49.2 → 70.7 µs).
+        /// </remarks>
+        private static bool PreferHouseCombine(BinaryOp update, in PolySeriesView a, long na, in PolySeriesView b, NPTypeCode t)
+        {
+            if (na < DirectILKernelGenerator.PolyHouseKernelThreshold || !DirectILKernelGenerator.IsVectorizedSameTypeBinary(update, t))
+                return false;
+            if (DirectILKernelGenerator.PolyScalarIsEmulated(t)
+                || DirectILKernelGenerator.PolyScalarIsEmulated(a.Dtype)
+                || DirectILKernelGenerator.PolyScalarIsEmulated(b.Dtype))
+                return true;
+            return VectorReadable(a, t) && VectorReadable(b, t);
+        }
+
+        /// <summary>
+        ///     Whether the house route reads operand <paramref name="v"/> into dtype <paramref name="t"/> with vector
+        ///     loops only (<see cref="CopyInto"/>'s routes) AND that pays off: already of <paramref name="t"/> (a direct
+        ///     read or memcpy when contiguous, the SIMD reverse / deinterleave / gather copy when strided), or of a dtype
+        ///     the house casts to <paramref name="t"/> with a SIMD kernel (directly when contiguous, after the SIMD
+        ///     strided copy into a block when strided).
+        /// </summary>
+        /// <param name="v">The operand.</param>
+        /// <param name="t">The result dtype.</param>
+        /// <returns>True when the house route reads the operand faster than the fused scalar kernel would.</returns>
+        /// <remarks>A STRIDED operand qualifies for a result of at most 4 bytes (float32), or when its own element is a
+        ///     sub-word (1-2 bytes, where the SIMD deinterleave / reverse copies are far faster than a scalar strided
+        ///     read): a strided 4/8-byte operand in a float64 result keeps the fused scalar loop, which is already
+        ///     bound by the strided reads (a stride-2 float64 series spans twice its size, past L2 at 100K) — the
+        ///     house route's extra passes measured slower there (stride-2 int32 → float64 41 → 65 µs, stride-2 float64
+        ///     49 → 66 µs), while a strided float32 add (29 → 16-26 µs) and a strided int16 → float64 add (55 → 44 µs)
+        ///     gained. (float16 anywhere takes the house route regardless: <see cref="PreferHouseCombine"/>.)</remarks>
+        private static bool VectorReadable(in PolySeriesView v, NPTypeCode t)
+        {
+            int size = DirectILKernelGenerator.GetTypeSize(v.Dtype);
+            bool contiguous = v.Stride == size;
+            if (!contiguous && (size > 8 || v.Stride % size != 0 || (DirectILKernelGenerator.GetTypeSize(t) > 4 && size > 2)))
+                return false;
+            return v.Dtype == t || DirectILKernelGenerator.IsVectorizedContiguousCast(v.Dtype, t);
+        }
+
+        /// <summary>
+        ///     Elements per block of <see cref="CombineViaHouseKernels"/>' blocked route: a block of the result, the
+        ///     converted block of the other operand and both source blocks (at most 8 bytes an element each — only
+        ///     float16/float32/float64 results take the route) stay inside a 48 KB L1 data cache.
+        /// </summary>
+        private const int CombineBlock = 1024;
+
+        /// <summary>
+        ///     The body of <see cref="AddSub"/> for a long series whose dtype has a vector same-dtype kernel:
+        ///     NumPy's own steps — the converted copy of the in-place target, <c>c2 = -c2</c> for a subtraction whose
+        ///     subtrahend is at least as long, then <c>c[:nb] OP= other</c> — each run by a house SIMD kernel, then
+        ///     trimseq over the result. Stores exactly what <see cref="DirectILKernelGenerator.GetPolyCombineKernel"/>
+        ///     stores (same conversions, same operand order), in vector passes instead of one scalar pass.
+        /// </summary>
+        /// <param name="op">The in-place update NumPy performs.</param>
+        /// <param name="update">The binary op of the update (<c>Add</c>, or <c>Subtract</c> for <see cref="PolyCombineOp.Subtract"/>).</param>
+        /// <param name="a">The in-place target (the longer operand, c2 on a tie).</param>
+        /// <param name="na">Its trimmed length (the result length).</param>
+        /// <param name="b">The other operand.</param>
+        /// <param name="nb">Its trimmed length (<c>1 &lt;= nb &lt;= na</c>).</param>
+        /// <param name="t">The result dtype (np.common_type of both; float16, float32 or float64 here).</param>
+        /// <param name="rp">The result buffer: <paramref name="na"/> contiguous elements of <paramref name="t"/>.</param>
+        /// <returns>trimseq of the result, encoded as <see cref="PolyTrimLenKernel"/> returns it.</returns>
+        /// <exception cref="NotSupportedException">A dtype pair the house conversion does not support.</exception>
+        /// <remarks>
+        ///     When both operands are already contiguous in <paramref name="t"/> and nothing is negated, the update
+        ///     is one pass straight from the two sources (<c>r[:nb] = a[:nb] OP b[:nb]</c>) plus a memcpy of the
+        ///     untouched tail. Otherwise the steps run BLOCK by block (<see cref="CombineBlock"/> elements, the shape
+        ///     of NumPy's own buffered ufunc loop): the target block is materialized into the result (memcpy, SIMD
+        ///     cast, or the strided poly cast), negated in place when NumPy negates it, and updated in place from the
+        ///     other operand's block — read directly when it is contiguous in <paramref name="t"/>, else converted into
+        ///     an L1-resident scratch block first. Blocking keeps the extra passes in L1, so the route costs the same
+        ///     memory traffic as the fused scalar kernel while every element-wise step is a vector loop; whole-series
+        ///     passes with a full-size temporary measured SLOWER than the fused kernel for converted or strided
+        ///     float64 operands (a 100K int32 + int32 → float64 add went 41 µs → 57 µs). The negation must come first
+        ///     and stay a separate step: <c>(-a) + b</c> and <c>b - a</c> keep different NaNs, and NumPy's is the
+        ///     negated one.
+        ///     <para>[SkipLocalsInit]: the scratch block is always written (<see cref="CopyInto"/>) before the update
+        ///     reads it, so the runtime's zeroing of it is pure overhead.</para>
+        /// </remarks>
+        [SkipLocalsInit]
+        private static long CombineViaHouseKernels(PolyCombineOp op, BinaryOp update, in PolySeriesView a, long na,
+                                                   in PolySeriesView b, long nb, NPTypeCode t, byte* rp)
+        {
+            int size = DirectILKernelGenerator.GetTypeSize(t);
+            var kernel = DirectILKernelGenerator.GetMixedTypeKernel(new MixedTypeKernelKey(t, t, t, update, ExecutionPath.SimdFull));
+            // The SimdFull contract reads only the element count (its last argument); the 1-D strides/shape it is
+            // handed are well-formed anyway, and the same holds for the contiguous unary kernel below.
+            long unit = 1, extent = nb;
+            bool aDirect = a.Dtype == t && a.Stride == size;
+            bool bDirect = b.Dtype == t && b.Stride == size;
+            bool negate = op == PolyCombineOp.NegateAdd;
+
+            if (!negate && aDirect && bDirect)
+            {
+                // r[:nb] = a[:nb] OP b[:nb] (NumPy's operand order: the target first), r[nb:] = a[nb:].
+                kernel(a.Ptr, b.Ptr, rp, &unit, &unit, &extent, 1, nb);
+                long tailBytes = (na - nb) * size;
+                if (tailBytes > 0)
+                    Buffer.MemoryCopy(a.Ptr + nb * size, rp + nb * size, tailBytes, tailBytes);
+                return DirectILKernelGenerator.GetPolyTrimLenKernel(t)(rp, na, size);
+            }
+
+            UnaryKernel negateKernel = negate
+                ? DirectILKernelGenerator.GetUnaryKernel(new UnaryKernelKey(t, t, UnaryOp.Negate, true))
+                : null;
+            // Scratch for a converted block of the other operand, sized by the dtype (at most 8 bytes an element on
+            // this route, so at most 8 KB of stack).
+            byte* scratch = stackalloc byte[CombineBlock * size];
+            for (long i = 0; i < na; i += CombineBlock)
+            {
+                long m = Math.Min(CombineBlock, na - i);
+                byte* rb = rp + i * size;
+                // as_series' converted copy of the target, block by block.
+                CopyInto(a.Slice(i, m), m, t, rb);
+                if (negate)
+                {
+                    // `c2 = -c2` over the whole target — every block, including those past nb — before the update.
+                    long len = m;
+                    negateKernel(rb, rb, &unit, &len, 1, m);
+                }
+                if (i >= nb)
+                    continue;
+                // `c[:nb] OP= other` on this block's overlap with other; the kernel reads r[j] and other[j] before it
+                // writes r[j], so the in-place update is safe.
+                long mb = Math.Min(m, nb - i);
+                byte* bb;
+                if (bDirect)
+                    bb = b.Ptr + i * size;
+                else
+                {
+                    CopyInto(b.Slice(i, mb), mb, t, scratch);
+                    bb = scratch;
+                }
+                long len2 = mb;
+                kernel(rb, bb, rb, &unit, &unit, &len2, 1, mb);
+            }
+            return DirectILKernelGenerator.GetPolyTrimLenKernel(t)(rp, na, size);
         }
 
         // ---------------------------------------------------------------------------------------------
@@ -461,9 +752,18 @@ namespace NumSharp
         /// <exception cref="ValueError">Empty / non-1-d x, or no common type (bool).</exception>
         /// <remarks>
         ///     NumPy reduces a fresh C-contiguous COPY, and the ±0 / NaN-payload answer of a float min/max depends
-        ///     on the reduction schedule, i.e. on the layout: a strided float x is therefore copied first, while a
-        ///     contiguous one is reduced in place (same schedule, same bits) and an integer one is reduced in its own
-        ///     dtype and the two results converted (int → float64 is monotone, so min/max commute with it).
+        ///     on the reduction schedule, i.e. on the layout: a strided float x is therefore reduced as that copy would
+        ///     be, while a contiguous one is reduced in place (same schedule, same bits). An integer x is reduced in its
+        ///     own dtype and the two results converted (int → float64 is monotone, so min/max commute with it) — in
+        ///     memory order, since its min/max do not depend on the order (see <see cref="IsOrderFreeForMinMax"/>).
+        ///     <para>An x of a dtype NumPy's exact min/max schedule serves (float64/float32 and the eight integer widths)
+        ///     takes <see cref="TryDomainBlocked"/> whatever its layout: ONE pass over 8 KB windows of the copy — read in
+        ///     place from a unit-stride x (a reversed integer x as the forward run it covers), packed into an L1 scratch
+        ///     otherwise — folding both the min and the max while each window is in L1, bit-identical to reducing the
+        ///     whole copy. The copy-then-reduce route it replaced allocated the copy and read it twice more (100K
+        ///     stride-2 float64 / int64 / uint64: ~37 / ~45 / ~50 µs, about NumPy's time; now ~23 / ~30 / ~31) and paid
+        ///     two engine reductions' fixed cost on a short x (16 points: ~0.9 → ~0.3 µs). A float16 / char x keeps
+        ///     that route (no exact schedule serves it).</para>
         /// </remarks>
         public static NDArray GetDomain(object x)
         {
@@ -486,14 +786,226 @@ namespace NumSharp
                 return r;
             }
 
-            NDArray src = v.Dtype == t && !contiguous ? CopyAs(v, v.Len, t) : Row(v);
-            using (var mn = np.amin(src))
-            using (var mx = np.amax(src))
+            // A dtype the exact schedule serves takes ONE blocked pass over every layout (TryDomainBlocked), writing the
+            // result itself. An integer / char x has no ±0 and no NaN, so its min and max are the same in ANY order: a
+            // reversed one is handed over as the forward run it covers, which the pass then folds in place.
+            int elem = DirectILKernelGenerator.GetTypeSize(v.Dtype);
+            bool reversedOrderFree = IsOrderFreeForMinMax(v.Dtype) && v.Stride == -elem;
+            if (TryDomainBlocked(reversedOrderFree ? v.Reversed() : v, t, dst, size))
+                return r;
+
+            // What the two reductions read when the blocked pass declines (float16 / char, or a test hook). A float x
+            // reduces NumPy's fresh C-contiguous copy (see remarks: its ±0 / NaN answer depends on the schedule). An
+            // integer / char x reduces in any order: a reversed view as the forward contiguous block it covers (a view,
+            // no copy), any other stride packed first with the SIMD strided copy — either way the reductions run their
+            // contiguous SIMD loops instead of the strided iterator schedule (100K int16 stride-2: 43 → ~10 µs).
+            NDArray src, temp = null;
+            if (contiguous)
+                src = Row(v);
+            else if (v.Dtype == t)
+                src = temp = CopyAs(v, v.Len, t);
+            else if (reversedOrderFree)
+                src = temp = Row(v)["::-1"];
+            else if (IsOrderFreeForMinMax(v.Dtype) && elem <= 8)
+                src = temp = CopyAs(v, v.Len, v.Dtype);
+            else
+                src = Row(v);
+            try
             {
-                PolyConstPool.ConvertBuffer((byte*)mn.Storage.Address + mn.Shape.offset * mn.dtypesize, mn.typecode, dst, t, 1);
-                PolyConstPool.ConvertBuffer((byte*)mx.Storage.Address + mx.Shape.offset * mx.dtypesize, mx.typecode, dst + size, t, 1);
+                using (var mn = np.amin(src))
+                using (var mx = np.amax(src))
+                {
+                    PolyConstPool.ConvertBuffer((byte*)mn.Storage.Address + mn.Shape.offset * mn.dtypesize, mn.typecode, dst, t, 1);
+                    PolyConstPool.ConvertBuffer((byte*)mx.Storage.Address + mx.Shape.offset * mx.dtypesize, mx.typecode, dst + size, t, 1);
+                }
+            }
+            finally
+            {
+                temp?.Dispose();
             }
             return r;
+        }
+
+        /// <summary>
+        ///     Whether min/max over dtype <paramref name="t"/> give the same BITS in any reduction order: true for the
+        ///     integers and char (no signed zero, no NaN, ties are identical values); false for the floats (a ±0 tie
+        ///     and a NaN payload follow the schedule), complex and decimal (whose zero carries a sign flag).
+        /// </summary>
+        /// <param name="t">The dtype.</param>
+        /// <returns>True for an order-free min/max.</returns>
+        private static bool IsOrderFreeForMinMax(NPTypeCode t)
+            => t is NPTypeCode.SByte or NPTypeCode.Byte or NPTypeCode.Int16 or NPTypeCode.UInt16 or NPTypeCode.Char
+                 or NPTypeCode.Int32 or NPTypeCode.UInt32 or NPTypeCode.Int64 or NPTypeCode.UInt64;
+
+        /// <summary>
+        ///     Bytes per block of <see cref="MinMaxBlocked{T}"/> — 1,024 float64 / 2,048 float32 / 8,192 int8 elements.
+        ///     It must be a whole number of NumPy's 8-vector groups for every lane width (8 × 32 bytes = 256 divides
+        ///     8,192), because every block but the last is folded group by group and a group straddling two blocks would
+        ///     change the fold order; and it must stay in L1 together with the SOURCE lines its strided copy reads (twice
+        ///     the block for a stride-2 x) — the limit <see cref="AffineBlockBytes"/> measured.
+        /// </summary>
+        private const int DomainBlockBytes = 8192;
+
+        /// <summary>
+        ///     Test and benchmark switch for <see cref="TryDomainBlocked"/>. While <see langword="true"/> on the calling
+        ///     thread, getdomain takes the copy-then-reduce route the blocked pass replaced — which lets a test compare the
+        ///     two routes on one input, byte for byte, and a benchmark time them in ONE process (100K-point timings move
+        ///     with the allocator's page state between runs).
+        /// </summary>
+        /// <remarks>Thread-static on purpose: MSTest runs test classes in parallel, and a process-wide switch flipped by
+        ///     one test would silently re-route another test's getdomain calls. Production code never sets it.</remarks>
+        [ThreadStatic] internal static bool DisableBlockedDomain;
+
+        /// <summary>
+        ///     Counts the getdomain calls <see cref="TryDomainBlocked"/> served on the calling thread — the copy route
+        ///     computes the same answer, so a test needs the count to prove the blocked pass actually ran.
+        /// </summary>
+        [ThreadStatic] internal static long BlockedDomainRuns;
+
+        /// <summary>
+        ///     getdomain's <c>[x.min(), x.max()]</c> of a 1-D <paramref name="v"/> in ONE blocked pass: the elements of
+        ///     NumPy's C-contiguous copy are read <see cref="DomainBlockBytes"/> at a time — in place when
+        ///     <paramref name="v"/> is a unit-stride run of the reduced dtype, else produced into an L1 scratch by
+        ///     <see cref="CopyInto"/> (the house SIMD strided copy / cast) — and folded by NumPy's exact min/max schedule
+        ///     (<see cref="MinMaxBlocked{T}"/>), then both results are converted to the coefficient dtype and written to
+        ///     <paramref name="dst"/>.
+        /// </summary>
+        /// <param name="v">The points: 1-D, at least one element, any stride. For an integer x the caller may pass a
+        ///     reversed view as its forward run (<see cref="PolySeriesView.Reversed"/>): integer min/max is order-free.
+        ///     A float x must be passed as it is — its order decides which ±0 / NaN survives.</param>
+        /// <param name="t">The coefficient dtype of the result.</param>
+        /// <param name="dst">The result's two elements (<paramref name="size"/> bytes each).</param>
+        /// <param name="size">Byte size of one element of <paramref name="t"/>.</param>
+        /// <returns>False — nothing written — when <see cref="DisableBlockedDomain"/> or
+        ///     <see cref="NDExpr.DisableExactMinMax"/> is set on this thread, or when the exact schedule does not serve
+        ///     the points' dtype (<see cref="NumPyMinMaxReduce.Supports"/>: float16, char, decimal and complex decline).</returns>
+        /// <remarks>
+        ///     <para>The points are reduced in their OWN dtype and the two results converted: for float64/float32 that
+        ///     dtype IS the coefficient dtype (<c>np.common_type</c> of one float array is itself), so this is NumPy's
+        ///     reduction of its copy exactly; for an integer the conversion to float64 is monotone, so converting the
+        ///     extremes equals taking the extremes of the converted copy (and integers carry no ±0 / NaN whose bits could
+        ///     depend on the order).</para>
+        ///     <para>uint64 is the exception: its points are converted to float64 as they are packed (the house
+        ///     exponent-splice cast) and the float64 copy is reduced — what NumPy does, and exact by the same monotonicity
+        ///     (the converted values are non-negative and NaN-free, so equal values have equal bits). AVX2 has no unsigned
+        ///     64-bit compare, and the emulated one costs two sign flips per min/max step: measured over an L1 block of
+        ///     100K points, the uint64 folds took 20.4 µs where the cast plus the float64 folds take ~14 (the int64 folds,
+        ///     13.9 µs, stay in int64 — its cast is the slower splice and would cost more than it saves).</para>
+        ///     <para>Honours <see cref="NDExpr.DisableExactMinMax"/> like every other exact min/max route: the fallback
+        ///     then reduces the copy with the engine's older kernels (value-identical, not NumPy's ±0 / NaN bits).</para>
+        ///     <para>[SkipLocalsInit]: the 8 KB scratch is written by the copy before any fold reads it, and zeroing it
+        ///     would be a measurable part of a short call.</para>
+        /// </remarks>
+        [SkipLocalsInit]
+        internal static bool TryDomainBlocked(in PolySeriesView v, NPTypeCode t, byte* dst, int size)
+        {
+            if (DisableBlockedDomain || NDExpr.DisableExactMinMax || !NumPyMinMaxReduce.Supports(v.Dtype))
+                return false;
+
+            // The dtype the packed copy holds and the folds reduce (see remarks: uint64 packs as float64 = t).
+            NPTypeCode rt = v.Dtype == NPTypeCode.UInt64 ? t : v.Dtype;
+            // One element of the reduced dtype each: Supports admits nothing wider than 8 bytes.
+            ulong lo = 0, hi = 0;
+            byte* scratch = stackalloc byte[DomainBlockBytes];
+            // The generic fold needs a static element type; every case runs the SAME code (MinMaxBlocked<T>).
+            switch (rt)
+            {
+                case NPTypeCode.Double: MinMaxBlocked(v, rt, scratch, (double*)&lo, (double*)&hi); break;
+                case NPTypeCode.Single: MinMaxBlocked(v, rt, scratch, (float*)&lo, (float*)&hi); break;
+                case NPTypeCode.SByte: MinMaxBlocked(v, rt, scratch, (sbyte*)&lo, (sbyte*)&hi); break;
+                case NPTypeCode.Byte: MinMaxBlocked(v, rt, scratch, (byte*)&lo, (byte*)&hi); break;
+                case NPTypeCode.Int16: MinMaxBlocked(v, rt, scratch, (short*)&lo, (short*)&hi); break;
+                case NPTypeCode.UInt16: MinMaxBlocked(v, rt, scratch, (ushort*)&lo, (ushort*)&hi); break;
+                case NPTypeCode.Int32: MinMaxBlocked(v, rt, scratch, (int*)&lo, (int*)&hi); break;
+                case NPTypeCode.UInt32: MinMaxBlocked(v, rt, scratch, (uint*)&lo, (uint*)&hi); break;
+                case NPTypeCode.Int64: MinMaxBlocked(v, rt, scratch, (long*)&lo, (long*)&hi); break;
+                default: return false;   // unreachable: Supports admits no other dtype, and uint64 reduces as float64
+            }
+
+            BlockedDomainRuns++;
+            PolyConstPool.ConvertBuffer(&lo, rt, dst, t, 1);
+            PolyConstPool.ConvertBuffer(&hi, rt, dst + size, t, 1);
+            return true;
+        }
+
+        /// <summary>
+        ///     NumPy's <c>(c.min(), c.max())</c> of <c>c</c> = the C-contiguous copy of <paramref name="v"/>, without
+        ///     the copy: element 0 seeds both accumulators (<c>splat(c[0])</c>, the value NumPy's reduce copies into its
+        ///     result), then the rest of <c>c</c> is taken block by block — read where it lies when <paramref name="v"/>
+        ///     is already a unit-stride run of <paramref name="rt"/> (the copy would equal it), produced into
+        ///     <paramref name="scratch"/> otherwise — and every block is folded by BOTH lanes while it is in L1: full
+        ///     blocks whole 8-vector groups at a time (<see cref="NumPyMinMaxReduce.FoldGroups{T,TLane}"/>), the last
+        ///     block through the single vectors, the horizontal reduce and the scalar tail
+        ///     (<see cref="NumPyMinMaxReduce.Finish{T,TLane}"/>).
+        /// </summary>
+        /// <typeparam name="T">The element type of <paramref name="rt"/>.</typeparam>
+        /// <param name="v">The points (1-D, any stride, at least one element).</param>
+        /// <param name="rt">The dtype the copy is produced in and reduced at (a dtype
+        ///     <see cref="NumPyMinMaxReduce.Supports"/> admits): the points' own, or the coefficient dtype they convert
+        ///     to (see <see cref="TryDomainBlocked"/>).</param>
+        /// <param name="scratch"><see cref="DomainBlockBytes"/> bytes of scratch, not overlapping the points.</param>
+        /// <param name="lo">Receives the minimum (NumPy's bits).</param>
+        /// <param name="hi">Receives the maximum (NumPy's bits).</param>
+        /// <remarks>
+        ///     Bit-identical to one <c>simd_reduce_c</c> call over the whole copy — the argument
+        ///     <c>DefaultEngine.StreamMinMax</c> rests on: the blocks are counted from the element AFTER the seed and
+        ///     hold a whole number of groups, so NumPy's groups never straddle a block, and within a lane NumPy's group
+        ///     tree and single-vector loop are one ordered fold of an associative op, which the carried accumulator
+        ///     continues across blocks unchanged. So which ±0 survives a tie and where a NaN turns canonical are
+        ///     exactly NumPy's. A one-element x returns its element untouched for both (NumPy never runs the loop).
+        ///     The seed is produced by the same <see cref="CopyInto"/> as the blocks, so a converting copy converts it
+        ///     exactly as it converts every other element.
+        ///     <para>In place, the first fold of a window pulls it into L1 and the second reads it there — one pass over
+        ///     memory where the two engine reductions made two (100K contiguous float64 / int32, same process: 11.2 /
+        ///     6.2 µs before, 9.4 / 4.8 after).</para>
+        /// </remarks>
+        private static void MinMaxBlocked<T>(in PolySeriesView v, NPTypeCode rt, byte* scratch, T* lo, T* hi)
+            where T : unmanaged, INumber<T>
+        {
+            long n = v.Len;
+            // A unit-stride run already of the reduced dtype IS its copy: its windows are folded where they lie.
+            bool inPlace = rt == v.Dtype && v.Stride == sizeof(T);
+            // Element 0 of the copy (v.Ptr is the logical first element whatever the stride, a reversed view included).
+            T seed;
+            if (inPlace)
+                seed = *(T*)v.Ptr;
+            else
+            {
+                CopyInto(v.Slice(0, 1), 1, rt, scratch);
+                seed = *(T*)scratch;
+            }
+            if (n == 1)
+            {
+                *lo = seed;
+                *hi = seed;
+                return;
+            }
+
+            var accMin = Vector256.Create(seed);
+            var accMax = accMin;
+            long block = DomainBlockBytes / sizeof(T);
+            long groupElems = Vector256<T>.Count * 8L;
+            for (long k = 1; ; k += block)
+            {
+                long m = Math.Min(block, n - k);
+                T* p;
+                if (inPlace)
+                    p = (T*)v.Ptr + k;
+                else
+                {
+                    CopyInto(v.Slice(k, m), m, rt, scratch);
+                    p = (T*)scratch;
+                }
+                if (k + m >= n)
+                {
+                    *lo = NumPyMinMaxReduce.Finish<T, NumPyMinMaxReduce.MinLane<T>>(accMin, p, m);
+                    *hi = NumPyMinMaxReduce.Finish<T, NumPyMinMaxReduce.MaxLane<T>>(accMax, p, m);
+                    return;
+                }
+                // A full block: `block` is a whole number of groups (see DomainBlockBytes), so this folds all of it.
+                accMin = NumPyMinMaxReduce.FoldGroups<T, NumPyMinMaxReduce.MinLane<T>>(accMin, p, m / groupElems);
+                accMax = NumPyMinMaxReduce.FoldGroups<T, NumPyMinMaxReduce.MaxLane<T>>(accMax, p, m / groupElems);
+            }
         }
 
         /// <summary>The 1-D array a converted argument reads (its source when that is already 1-D, else a 1-element view).</summary>
@@ -1109,11 +1621,18 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     <c>off + scl * x</c> as NumPy evaluates it. An ndarray x runs ONE fused pass
-        ///     (<see cref="np.evaluate(NDExpr, NDArray)"/>) whose dtypes are NumPy's two-ufunc sequence's: a Python
-        ///     off/scl is pre-converted to the dtype NEP 50 gives it against x, so the fused kernel's strong 0-d
-        ///     parameters promote exactly as the weak values do. Any other x (or an array-valued off/scl from a 2-D
-        ///     domain) runs the operator dispatch of <see cref="PolyNumber.Binary"/>.
+        ///     <c>off + scl * x</c> as NumPy evaluates it. An ndarray x of rank ≥ 1 runs ONE fused pass
+        ///     (<see cref="np.evaluate(NDExpr, NDArray)"/>) whose dtypes are NumPy's two-ufunc sequence's: off and scl
+        ///     are pre-converted to their operation's loop dtype (for a Python value, the dtype NEP 50 gives it against
+        ///     x; for a NumPy scalar, the promoted dtype the ufunc casts it to), so the fused kernel's strong 0-d
+        ///     parameters promote exactly as the originals do — unless NEP 50 makes an operation complex64, which runs
+        ///     on the float32 kernels of <see cref="MapDomainComplex64"/>, or both operations share a float64 / float32 /
+        ///     complex128 loop over 1-D or C-contiguous points, which <see cref="MapDomainAffine"/> maps block by block
+        ///     with the same roundings and no iterator. Any other x (or an array-valued off/scl from a 2-D
+        ///     domain) runs the operator dispatch of <see cref="PolyNumber.Binary"/> — a 0-d x included: NumPy's
+        ///     <c>scl * x</c> is then a one-element ufunc whose result is a NumPy SCALAR, and <c>off + that</c> is
+        ///     scalarmath, a sequence the scalar engine reproduces op for op (a complex64 off/scl stays in float32 —
+        ///     the fused pass would compute it in complex128), and faster than an iterator pass for one element.
         /// </summary>
         /// <param name="x">The points.</param>
         /// <param name="off">The offset (from mapparms).</param>
@@ -1123,15 +1642,429 @@ namespace NumSharp
         /// <exception cref="OverflowException">A Python int that does not fit its loop dtype.</exception>
         public static PolyNumber MapDomainWith(in PolyNumber x, in PolyNumber off, in PolyNumber scl)
         {
-            if (x.Kind != PolyNumberKind.Array || off.IsNdArray || scl.IsNdArray)
+            if (!x.IsNdArray || off.IsNdArray || scl.IsNdArray)
                 return PolyNumber.Binary(BinaryOp.Add, off, PolyNumber.Binary(BinaryOp.Multiply, scl, x));
 
             NDArray xa = x.Array;
             NPTypeCode t1 = scl.IsPython ? PolyNumber.WeakPromote(xa.typecode, scl.Py) : PolyTyping.Promote(scl.Dtype, xa.typecode);
             NPTypeCode t2 = off.IsPython ? PolyNumber.WeakPromote(t1, off.Py) : PolyTyping.Promote(off.Dtype, t1);
-            NDArray sclP = ParamArray(0, scl, scl.IsPython ? t1 : scl.Dtype);
-            NDArray offP = ParamArray(1, off, off.IsPython ? t2 : off.Dtype);
-            return PolyNumber.FromArray(np.evaluate(NDExpr.Arr(offP) + NDExpr.Arr(sclP) * NDExpr.Arr(xa)));
+            // Both parameters enter the fused pass already converted to their operation's loop dtype — the cast the
+            // ufunc applies to them — so the kernel promotes to the same t1 / t2 and converts nothing per element (a
+            // float32 NumPy scale left as float32 against a complex128 x was re-widened to complex at every point).
+            NDArray sclP = ParamArray(0, scl, t1);
+            NDArray offP = ParamArray(1, off, t2);
+
+            // A complex loop may be NumPy's COMPLEX64 one (NEP 50: a Python complex with a float16/float32 x, a
+            // complex64 off/scl with a narrow x): the fused pass would compute it in complex128, so it runs on the
+            // float32 kernels instead (see MapDomainComplex64).
+            if (t2 == NPTypeCode.Complex)
+            {
+                bool mulC64 = t1 == NPTypeCode.Complex && PolyNumber.IsComplex64Loop(scl, xa.typecode, false);
+                bool addC64 = PolyNumber.IsComplex64Loop(off, mulC64 ? NPTypeCode.Complex : t1, mulC64);
+                if (mulC64 || addC64)
+                    return PolyNumber.FromArray(MapDomainComplex64(xa, off, scl, t1, sclP, offP, mulC64, addC64));
+
+                // A complex128 x (contiguous, or any 1-D stride) with complex128 off/scl: the fused pass computes
+                // simd_cmul one element at a time (~0.8 ns each); the dedicated kernel runs the same arithmetic two
+                // values per AVX2 vector.
+                if (t1 == NPTypeCode.Complex && xa.typecode == NPTypeCode.Complex && xa.size > 0
+                    && (xa.Shape.IsContiguous || xa.ndim == 1))
+                {
+                    var r = new NDArray(NPTypeCode.Complex, new Shape((long[])xa.Shape.dimensions.Clone()), false);
+                    DirectILKernelGenerator.PolyComplex128Affine(
+                        (Complex*)((byte*)xa.Storage.Address + xa.Shape.offset * sizeof(Complex)), xa.size,
+                        xa.Shape.IsContiguous ? 1 : xa.Shape.strides[0],
+                        *(Complex*)((byte*)sclP.Storage.Address + sclP.Shape.offset * sizeof(Complex)),
+                        *(Complex*)((byte*)offP.Storage.Address + offP.Shape.offset * sizeof(Complex)),
+                        (Complex*)r.Storage.Address);
+                    return PolyNumber.FromArray(r);
+                }
+            }
+
+            // A float64 / float32 / complex128 loop whose offset shares the scale's loop dtype, over points that are
+            // 1-D (any stride) or C-contiguous: convert the points to the loop dtype block by block into an L1 scratch
+            // and map each block with the dedicated affine kernel — one read of x and one write of the result, with
+            // no temporary and no iterator setup (see MapDomainAffine). A complex128 x never gets here in those
+            // layouts (the branch above takes it). The shapes the fused pass already runs at vector speed stay on it
+            // (see FusedPassIsFaster).
+            if (t2 == t1 && t1 is NPTypeCode.Double or NPTypeCode.Single or NPTypeCode.Complex && xa.size > 0
+                && (xa.ndim == 1 || xa.Shape.IsContiguous) && !FusedPassIsFaster(xa, t1) && !DisableAffineMapDomain)
+                return PolyNumber.FromArray(MapDomainAffine(xa, t1, sclP, offP));
+
+            NDArray staged = StageMapDomainPoints(xa, t1);
+            try
+            {
+                return PolyNumber.FromArray(np.evaluate(NDExpr.Arr(offP) + NDExpr.Arr(sclP) * NDExpr.Arr(staged ?? xa)));
+            }
+            finally
+            {
+                staged?.Dispose();
+            }
+        }
+
+        /// <summary>
+        ///     Bytes per block of <see cref="MapDomainAffine"/> — 1,024 float64 / 2,048 float32 / 512 complex128
+        ///     points. The converted block must stay in L1 together with the SOURCE lines the conversion reads, which
+        ///     for a stride-2 x are twice its bytes: 16 KB blocks (2,048 float64) measured 0.72× the fused pass on a
+        ///     100K stride-2 float64 x where 8 KB blocks kept parity, because 32 KB of source plus 16 KB of scratch
+        ///     overflows a 48 KB L1.
+        /// </summary>
+        private const int AffineBlockBytes = 8192;
+
+        /// <summary>
+        ///     Point count from which a NON-contiguous x whose conversion the fused pass does in registers (x already of
+        ///     the loop dtype, or a vector widen edge) goes back to the fused pass — the point from which that pass
+        ///     packs a strided x contiguous (<see cref="StagedStridedMinPoints"/>), walks a reversed view in memory
+        ///     order (NDIter flips the negative stride) or gathers a same-width strided one, all at vector speed, so
+        ///     the affine route's copy of every block into scratch only adds work. Below it the fused pass's per-call
+        ///     setup and scalar strided loop cost more (measured in one process, fused/affine: 2,048 points 1.06-2.29,
+        ///     4,096 points 0.92-2.76; at 65,536 points 0.82-0.95 except int32 → float64 1.08-1.16). One threshold for
+        ///     every pair: the per-pair crossovers spread from ~4K (float64) to ~64K (float32), and at 8,192 the
+        ///     route it gives away is never more than ~20% faster.
+        /// </summary>
+        private const long AffineStridedFusedMinPoints = StagedStridedMinPoints;
+
+        /// <summary>
+        ///     Whether mapdomain's fused np.evaluate pass maps <paramref name="x"/> at least as fast as
+        ///     <see cref="MapDomainAffine"/> — measured in one process, same arrays, interleaved. On every other shape
+        ///     the affine route is the faster one (fused/affine over 249 shapes: geomean 1.34 at 16 points, 1.53-1.62
+        ///     at 1,000, 1.36-1.46 at 100K, up to 2.1 on a 100K contiguous int8/int16/int64/uint64 x; the worst cell
+        ///     0.94, a 100K stride-2 float16 x).
+        /// </summary>
+        /// <param name="x">The points (1-D, or C-contiguous).</param>
+        /// <param name="t1">The loop dtype (float64, float32 or complex128).</param>
+        /// <returns>True for: a CONTIGUOUS x the fused kernel widens with a vector edge (int32/uint32/float32 →
+        ///     float64, int16/uint16 → float32 — widened in registers, no scratch pass: 1,000 points fused 0.60-0.64 µs,
+        ///     affine 0.66-0.80) or of bool (0.63-0.73× on the affine route at 100K); a NON-contiguous x already of
+        ///     the loop dtype or on a vector edge from <see cref="AffineStridedFusedMinPoints"/> points.</returns>
+        private static bool FusedPassIsFaster(NDArray x, NPTypeCode t1)
+        {
+            NPTypeCode xt = x.typecode;
+            if (x.Shape.IsContiguous)
+                return NDExprVec.HasWidenEdge(xt, t1) || xt == NPTypeCode.Boolean;
+            return (xt == t1 || NDExprVec.HasWidenEdge(xt, t1)) && x.size >= AffineStridedFusedMinPoints;
+        }
+
+        /// <summary>
+        ///     Test and benchmark switch for <see cref="MapDomainAffine"/>. While <see langword="true"/> on the calling
+        ///     thread, mapdomain skips the affine route and runs the fused np.evaluate pass it replaced — which is what
+        ///     lets a test compare the two routes on one input, byte for byte, and a benchmark time them in ONE process
+        ///     (100K-point timings move 1.5-2× between runs with the allocator's page state, so two separate runs
+        ///     cannot be compared).
+        /// </summary>
+        /// <remarks>Thread-static on purpose: MSTest runs test classes in parallel, and a process-wide switch flipped by
+        ///     one test would silently re-route another test's mapdomain calls. Production code never sets it.</remarks>
+        [ThreadStatic] internal static bool DisableAffineMapDomain;
+
+        /// <summary>
+        ///     Counts the calls <see cref="MapDomainAffine"/> served on the calling thread. A test reads it before and
+        ///     after a mapdomain call to prove the affine route actually ran — the fused pass computes the same answer,
+        ///     so a silent decline would pass every value check.
+        /// </summary>
+        [ThreadStatic] internal static long AffineMapDomainRuns;
+
+        /// <summary>
+        ///     mapdomain's <c>off + scl*x</c> for a float64, float32 or complex128 loop <paramref name="t"/> shared by
+        ///     both operations: a new array of x's shape holding, for each point, the point converted to
+        ///     <paramref name="t"/> (NumPy's loop cast), multiplied by the scale and then offset — NumPy's two ufunc
+        ///     calls, rounded as they round them.
+        /// </summary>
+        /// <param name="x">The points: 1-D (any stride) or C-contiguous, at least one element.</param>
+        /// <param name="t">The loop dtype of both operations (float64, float32 or complex128).</param>
+        /// <param name="sclP">The scale as a 0-d array of <paramref name="t"/>.</param>
+        /// <param name="offP">The offset as a 0-d array of <paramref name="t"/>.</param>
+        /// <returns>A new C-contiguous array of <paramref name="t"/> with x's shape.</returns>
+        /// <exception cref="NotSupportedException">A points dtype the house conversion does not support.</exception>
+        /// <remarks>
+        ///     <para>The points are read in their memory order and the result written in the same order, so a 1-D
+        ///     view of any stride (reversed included) maps element for element; an N-D x must be C-contiguous (its
+        ///     flat order IS its logical order) — NumPy's K-order output for any other N-D layout keeps that layout,
+        ///     which the fused pass reproduces instead.</para>
+        ///     <para>Points already of <paramref name="t"/> and contiguous are mapped in place, with no conversion;
+        ///     any other points are converted <see cref="AffineBlockBytes"/> at a time by <see cref="CopyInto"/> — the house
+        ///     SIMD casts and strided copies (int64 → float64 is the exponent-splice cast, a reversed or stride-2 view
+        ///     the SIMD reverse / deinterleave copy) — into a stack scratch the kernel then reads, so the converted
+        ///     points never leave L1. The fused pass it replaces converted a dtype without a vector widen edge one
+        ///     point at a time, or staged it through a whole temporary array first.</para>
+        ///     <para>A float64/float32 loop multiplies then adds with separate roundings (<see
+        ///     cref="DirectILKernelGenerator.PolyAffineDouble"/>); a complex128 loop is <c>CDOUBLE_multiply</c>'s
+        ///     scalar-broadcast <c>simd_cmul</c> then the component-wise add (<see
+        ///     cref="DirectILKernelGenerator.PolyComplex128Affine"/>), the points converted to complex with a +0.0
+        ///     imaginary part as NumPy's loop cast gives them.</para>
+        ///     <para>[SkipLocalsInit]: every scratch block is written by the conversion before the kernel reads it; the
+        ///     runtime's zeroing of the 8 KB scratch would otherwise be most of the cost of a short call.</para>
+        /// </remarks>
+        [SkipLocalsInit]
+        private static NDArray MapDomainAffine(NDArray x, NPTypeCode t, NDArray sclP, NDArray offP)
+        {
+            int tsize = DirectILKernelGenerator.GetTypeSize(t);
+            byte* scl = (byte*)sclP.Storage.Address + sclP.Shape.offset * tsize;
+            byte* off = (byte*)offP.Storage.Address + offP.Shape.offset * tsize;
+            var r = new NDArray(t, new Shape((long[])x.Shape.dimensions.Clone()), false);
+            byte* dst = (byte*)r.Storage.Address;
+            long n = x.size;
+            // The points as one run: a 1-D view keeps its own (signed) stride; a C-contiguous N-D array is read flat
+            // (its elements are consecutive from the view's first one).
+            PolySeriesView v = x.ndim == 1 ? PolySeriesView.Of(x) : PolySeriesView.Flat(x);
+            AffineMapDomainRuns++;
+            if (v.Dtype == t && v.Stride == tsize)
+            {
+                // Already the loop dtype, contiguous: no conversion — the kernel reads the points directly.
+                Affine(t, v.Ptr, n, scl, off, dst);
+                return r;
+            }
+            int block = AffineBlockBytes / tsize;
+            byte* scratch = stackalloc byte[AffineBlockBytes];
+            for (long k = 0; k < n; k += block)
+            {
+                long m = Math.Min(block, n - k);
+                CopyInto(v.Slice(k, m), m, t, scratch);
+                Affine(t, scratch, m, scl, off, dst + k * tsize);
+            }
+            return r;
+        }
+
+        /// <summary>
+        ///     Runs the affine kernel of the loop dtype <paramref name="t"/> over <paramref name="n"/> contiguous points
+        ///     already converted to it.
+        /// </summary>
+        /// <param name="t">float64, float32 or complex128.</param>
+        /// <param name="x">The points.</param>
+        /// <param name="n">Point count.</param>
+        /// <param name="scl">Address of the scale (one element of <paramref name="t"/>).</param>
+        /// <param name="off">Address of the offset (one element of <paramref name="t"/>).</param>
+        /// <param name="r">Destination (<paramref name="n"/> elements of <paramref name="t"/>).</param>
+        private static void Affine(NPTypeCode t, byte* x, long n, byte* scl, byte* off, byte* r)
+        {
+            // The three loop kinds mapdomain's real/complex128 arithmetic has; float16 and complex64 loops never
+            // come here (the float16 fused pass and MapDomainComplex64 serve them).
+            if (t == NPTypeCode.Double)
+                DirectILKernelGenerator.PolyAffineDouble((double*)x, n, *(double*)scl, *(double*)off, (double*)r);
+            else if (t == NPTypeCode.Single)
+                DirectILKernelGenerator.PolyAffineSingle((float*)x, n, *(float*)scl, *(float*)off, (float*)r);
+            else
+                DirectILKernelGenerator.PolyComplex128Affine((Complex*)x, n, 1, *(Complex*)scl, *(Complex*)off, (Complex*)r);
+        }
+
+        /// <summary>
+        ///     The points array handed to mapdomain's fused pass in place of <paramref name="x"/> when the fused
+        ///     kernel would otherwise run an element-at-a-time path the house SIMD kernels can avoid — or null to
+        ///     use <paramref name="x"/> as it is. The substitute holds the SAME values, exactly converted to the
+        ///     multiply's loop dtype <paramref name="t1"/> (or left in x's dtype when the fused kernel widens it with
+        ///     vector code), so the kernel still computes in t1 and the result's bits are unchanged.
+        /// </summary>
+        /// <param name="x">The points (rank ≥ 1).</param>
+        /// <param name="t1">The loop dtype of <c>scl * x</c> (NumPy's; the fused kernel converts x to it anyway, and
+        ///     the 0-d scale it multiplies by is already of t1, so a t1 substitute promotes to the same loop).</param>
+        /// <returns>A new C-contiguous array (the caller disposes it), or null.</returns>
+        /// <remarks>
+        ///     <para>Most real and complex128 loops never get here — <see cref="MapDomainAffine"/> maps 1-D and
+        ///     C-contiguous points directly. What still runs the fused pass: a float16 loop, an offset whose loop
+        ///     dtype differs from the scale's, an N-D non-contiguous x (whose K-order result layout the fused pass
+        ///     keeps), and a contiguous x the fused kernel widens with a vector edge. For those:</para>
+        ///     <para>The fused kernel vectorizes over x only when x is contiguous and either already of t1 or of a dtype
+        ///     it widens to t1 with a vector edge (<see cref="NDExprVec.HasWidenEdge"/>: int16/uint16 → float32,
+        ///     int32/uint32/float32 → float64); its strided path for a mixed-width tree, and for float16, is one element
+        ///     at a time. So (100K points, NumPy in brackets):</para>
+        ///     <para>• a contiguous x of at least <see cref="StagedContiguousMinPoints"/> points (512 for float16, 1,024
+        ///     into a float32 loop, 4,096 into a float64 one) whose conversion has no
+        ///     vector edge but a vectorized house cast (<see cref="DirectILKernelGenerator.IsVectorizedContiguousCast"/>:
+        ///     float16 → float32/float64, int8/uint8 → float32, 8/16-bit and 64-bit integers → float64) is cast to t1
+        ///     first with one direct SIMD cast — measured before the affine route took these shapes over: float16 →
+        ///     float32 140 → 25 µs [92 µs], int8 → float32 38 → 9.5 µs [44 µs]; shorter ones keep the fused scalar
+        ///     conversion, which is cheaper than a temporary;</para>
+        ///     <para>• a non-contiguous x in a mixed-width or float16 tree is copied contiguous first with the house SIMD
+        ///     strided copy (reverse / deinterleave / gather, elements of at most 8 bytes), then cast to t1 when its edge
+        ///     is not a vector one — a stride-2 float16 x in a float16 loop 1,070 → 251 µs [620 µs];</para>
+        ///     <para>• anything else is used as is: a same-dtype x (the fused kernel's contiguous and gather paths are
+        ///     vector already — except float16's strided one, handled above), or a conversion the house has no vector
+        ///     cast for (int64/uint64 → float32, anything → complex).</para>
+        /// </remarks>
+        private static NDArray StageMapDomainPoints(NDArray x, NPTypeCode t1)
+        {
+            if (x.size < DirectILKernelGenerator.PolyHouseKernelThreshold)
+                return null;
+            NPTypeCode xt = x.typecode;
+            bool contiguous = x.Shape.IsContiguous;
+            if (xt == t1)
+                return !contiguous && DirectILKernelGenerator.PolyScalarIsEmulated(xt) ? x.copy() : null;
+
+            bool vectorEdge = NDExprVec.HasWidenEdge(xt, t1);
+            bool vectorCast = DirectILKernelGenerator.IsVectorizedContiguousCast(xt, t1);
+            if (contiguous)
+            {
+                // A contiguous x whose conversion the fused kernel runs one element at a time (no vector edge) but the
+                // house casts vectorize: ONE SIMD cast straight into the new buffer — not x.astype(t1), whose setup
+                // (~0.3 µs) is most of the cost of converting a thousand points — and only for enough points that the
+                // temporary pays (see StagedContiguousMinPoints).
+                if (vectorEdge || !vectorCast || x.size < StagedContiguousMinPoints(xt, t1))
+                    return null;
+                var cast = DirectILKernelGenerator.GetPolyContiguousCast(xt, t1);
+                if (cast == null)
+                    return null;
+                var staged = new NDArray(t1, new Shape((long[])x.Shape.dimensions.Clone()), false);
+                cast((byte*)x.Storage.Address + x.Shape.offset * DirectILKernelGenerator.GetTypeSize(xt), (byte*)staged.Storage.Address, x.size);
+                return staged;
+            }
+
+            // Non-contiguous in a mixed-width tree: the fused strided path would be scalar. Pack it contiguous with the
+            // SIMD strided copy (bit-exact) — converted to t1 on the way unless the fused kernel's widen edge is a
+            // vector one already. A 1-D x (mapdomain's usual points) goes through CopyInto's blocked copy-then-cast:
+            // ONE temporary, the converted block never leaving L1. Only worth an allocation for a long x: at 1,000
+            // points the scalar strided pass (0.9 µs) beats pack + fused pass (1.6 µs).
+            if (x.size < StagedStridedMinPoints || DirectILKernelGenerator.GetTypeSize(xt) > 8 || (!vectorEdge && !vectorCast))
+                return null;
+            NPTypeCode target = vectorEdge ? xt : t1;
+            if (x.ndim == 1)
+                return CopyAs(PolySeriesView.Of(x), x.size, target);
+            NDArray packed = x.copy();
+            if (vectorEdge)
+                return packed;
+            try
+            {
+                return packed.astype(t1);
+            }
+            finally
+            {
+                packed.Dispose();
+            }
+        }
+
+        /// <summary>
+        ///     Point count from which <see cref="StageMapDomainPoints"/> packs a NON-contiguous x before mapdomain's fused
+        ///     pass: the pack allocates a temporary, which pays for itself only once the scalar strided pass it replaces
+        ///     costs more than an allocation (measured: loses at 1,000 points, wins from ~8K).
+        /// </summary>
+        private const long StagedStridedMinPoints = 8192;
+
+        /// <summary>
+        ///     Point count from which <see cref="StageMapDomainPoints"/> casts a CONTIGUOUS x of dtype
+        ///     <paramref name="xt"/> to the loop dtype <paramref name="t1"/> before mapdomain's fused pass. The staged
+        ///     route costs a temporary (~0.3 µs) on top of a SIMD cast and the fused pass's vector body; what it saves
+        ///     is the fused kernel's per-point scalar conversion, so the break-even moves with that conversion's price:
+        /// </summary>
+        /// <param name="xt">x's dtype.</param>
+        /// <param name="t1">The multiply's loop dtype.</param>
+        /// <returns>The minimum point count for staging.</returns>
+        /// <remarks>
+        ///     Measured (µs, staged vs fused): a float16 x — the emulated scalar widen, ~1.5 ns a point — wins from
+        ///     ~256-512 points (f16 → f32 at 512: 0.91 vs 1.33; f16 → f64 at 512: 1.01 vs 1.33; at 256 a tie); an
+        ///     integer x into a float32 loop — whose vector body is 8 lanes — from ~1,000 (u8 → f32 at 1,000: 0.90 vs
+        ///     0.99; at 4,000: 1.26 vs 2.16); into a float64 loop, where the fused scalar conversion costs only ~0.45 ns
+        ///     a point, from ~4,000 (int8/uint8/int16/uint16/char/int64/uint64 at 1,000: 0.96-1.2 vs 0.87-0.96; at
+        ///     16,384: 4.9-6.4 vs 6.6-7.2).
+        /// </remarks>
+        private static long StagedContiguousMinPoints(NPTypeCode xt, NPTypeCode t1)
+            => DirectILKernelGenerator.PolyScalarIsEmulated(xt) ? 512
+                : DirectILKernelGenerator.GetTypeSize(t1) <= 4 ? 1024 : 4096;
+
+        /// <summary>
+        ///     mapdomain's <c>off + scl*x</c> for an ndarray x when NumPy runs at least one of the two operations in
+        ///     its COMPLEX64 loop — NumPy's values, carried in a complex128 array (NumSharp has no complex64 dtype, #569;
+        ///     the result dtype is the one documented divergence). Three shapes arise:
+        ///     <list type="bullet">
+        ///         <item><c>scl*x</c> complex64 and <c>off + …</c> complex64 — both steps on the float32 kernels;</item>
+        ///         <item><c>scl*x</c> complex64 and <c>off + …</c> complex128 (a complex128 / float64 NumPy off) — the
+        ///         complex64 product, widened exactly, then the fused complex128 add;</item>
+        ///         <item><c>scl*x</c> real (float16/float32) and <c>off + …</c> complex64 — the real product through
+        ///         the fused pass, then the complex64 add of the real values (imaginary part +0).</item>
+        ///     </list>
+        /// </summary>
+        /// <param name="x">The points (rank ≥ 1).</param>
+        /// <param name="off">The offset.</param>
+        /// <param name="scl">The scale.</param>
+        /// <param name="t1">The product's loop dtype as NumSharp spells it (<see cref="NPTypeCode.Complex"/> for complex64).</param>
+        /// <param name="sclP">The 0-d scale parameter.</param>
+        /// <param name="offP">The 0-d offset parameter (the complex128-add shape's fused pass).</param>
+        /// <param name="mulC64">The product runs in complex64.</param>
+        /// <param name="addC64">The sum runs in complex64.</param>
+        /// <returns>A new complex128 array of x's shape (C-contiguous).</returns>
+        /// <exception cref="OverflowException">A Python value that does not fit its loop dtype.</exception>
+        /// <remarks>
+        ///     x enters a complex64 product as float32 values: every dtype NEP 50 lets into that loop (bool, the 8/16-bit
+        ///     integers, char, float16, float32) converts to float32 exactly, so a float32 copy of x (or x itself when it
+        ///     already is a contiguous float32 array) IS NumPy's cast-to-complex64 buffer minus its +0 imaginary parts,
+        ///     which the kernels apply implicitly. A Python complex / float operand enters rounded per component to
+        ///     float32 (<see cref="Complex64Of"/>), as NumPy converts it into the complex64 loop.
+        /// </remarks>
+        private static NDArray MapDomainComplex64(NDArray x, in PolyNumber off, in PolyNumber scl, NPTypeCode t1,
+                                                  NDArray sclP, NDArray offP, bool mulC64, bool addC64)
+        {
+            long n = x.size;
+            var r = new NDArray(NPTypeCode.Complex, new Shape((long[])x.Shape.dimensions.Clone()), false);
+            var rp = (Complex*)r.Storage.Address;
+            NDArray temp = null, product = null;
+            try
+            {
+                if (mulC64)
+                {
+                    // The kernels walk memory linearly and the result is C-ordered, so x must be a C-contiguous
+                    // float32 buffer: x itself, or its C-order float32 copy (astype's default 'K' would keep an
+                    // F-ordered x F-ordered).
+                    bool direct = x.typecode == NPTypeCode.Single && x.Shape.IsContiguous;
+                    temp = direct ? null : x.astype(NPTypeCode.Single, true, 'C');
+                    float* xp = direct ? (float*)((byte*)x.Storage.Address + x.Shape.offset * 4) : (float*)temp.Storage.Address;
+                    Complex s = Complex64Of(scl);
+                    if (addC64)
+                    {
+                        // Both operations complex64: one fused pass (the product stays in a register).
+                        Complex o = Complex64Of(off);
+                        DirectILKernelGenerator.PolyComplex64AffineReal(xp, n, (float)s.Real, (float)s.Imaginary, (float)o.Real, (float)o.Imaginary, rp);
+                        return r;
+                    }
+                    DirectILKernelGenerator.PolyComplex64ScaleReal(xp, n, (float)s.Real, (float)s.Imaginary, rp);
+                    // complex128 sum: a complex128 / float64 NumPy off plus the exactly widened complex64 product.
+                    var sum = np.evaluate(NDExpr.Arr(offP) + NDExpr.Arr(r));
+                    r.Dispose();
+                    r = null;
+                    return sum;
+                }
+
+                // Real product (float16 / float32, NumPy's real loop — the fused pass is bit-exact for it), then the
+                // complex64 sum of its values.
+                NDArray staged = StageMapDomainPoints(x, t1);
+                try
+                {
+                    product = np.evaluate(NDExpr.Arr(sclP) * NDExpr.Arr(staged ?? x));
+                }
+                finally
+                {
+                    staged?.Dispose();
+                }
+                // Same C-contiguous float32 requirement for the product (a float16 product widens exactly).
+                bool productDirect = product.typecode == NPTypeCode.Single && product.Shape.IsContiguous;
+                temp = productDirect ? null : product.astype(NPTypeCode.Single, true, 'C');
+                NDArray values = temp ?? product;
+                float* vp = (float*)((byte*)values.Storage.Address + values.Shape.offset * 4);
+                Complex oo = Complex64Of(off);
+                DirectILKernelGenerator.PolyComplex64AddScalarReal(vp, n, (float)oo.Real, (float)oo.Imaginary, rp);
+                return r;
+            }
+            catch
+            {
+                r?.Dispose();
+                throw;
+            }
+            finally
+            {
+                temp?.Dispose();
+                product?.Dispose();
+            }
+        }
+
+        /// <summary>
+        ///     A scalar-sized operand as NumPy enters it into a complex64 loop: converted to complex, each component
+        ///     rounded to float32 (a Python complex or float is rounded; a complex64 carrier or a float16/float32 NumPy
+        ///     scalar is already exact).
+        /// </summary>
+        /// <param name="v">The operand.</param>
+        /// <returns>The complex64 value in a <see cref="Complex"/> carrier.</returns>
+        /// <exception cref="OverflowException">A Python int too large for the loop.</exception>
+        private static Complex Complex64Of(in PolyNumber v)
+        {
+            PolyRaw16 raw;
+            v.WriteAs(NPTypeCode.Complex, &raw);
+            return DirectILKernelGenerator.PolyComplex64Round(*(Complex*)&raw);
         }
 
         /// <summary>Slots per parameter role in <see cref="t_mapParams"/>: one per NPTypeCode value (Complex = 128 is the largest).</summary>

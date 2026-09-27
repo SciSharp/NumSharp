@@ -25,7 +25,7 @@
 | Page section | NumPy API | NumSharp today |
 |---|---|---|
 | Legacy "polynomial module" (`numpy.lib.polynomial`) | `poly1d`, `polyval`, `poly`, `roots`, `polyfit`, `polyder`, `polyint`, `polyadd`, `polydiv`, `polymul`, `polysub` | **Done** — all 11 functions and `poly1d(c_or_r, r, variable)`, byte-exact. Oracle: `poly.jsonl` (portable); `roots`, `polyfit` and `poly`-of-a-matrix are in host-pinned `linalg_parity`. Unit tests + live-parity tests. Only `RankWarning` is absent: NumSharp emits no warnings anywhere. |
-| "Polynomial package" (`numpy.polynomial`) | 6 modules × ~31 names, `polyutils`, 6 classes, `set_default_printstyle` | **U3 + U1 delivered** — 90 of 193 names: the evaluation family (36, `polyvalfromroots` open) and the additive family with `polyutils` (54: `{p}add/sub/trim/line`, the 24 constants, `as_series`/`trimseq`/`trimcoef`/`getdomain`/`mapparms`/`mapdomain`), all bit-exact (`polyeval.jsonl` 16,606 + `polyseries.jsonl` 15,950 cases). Facade `np.polynomial.{polynomial,chebyshev,legendre,laguerre,hermite,hermite_e,polyutils}`; 0 of 6 classes. `coverage/generate_coverage.py` catalogues all seven `numpy.polynomial.*` submodules as out-of-headline surfaces. |
+| "Polynomial package" (`numpy.polynomial`) | 6 modules × ~31 names, `polyutils`, 6 classes, `set_default_printstyle` | **U3 + U1 delivered** — 90 of 193 names: the evaluation family (36, `polyvalfromroots` open) and the additive family with `polyutils` (54: `{p}add/sub/trim/line`, the 24 constants, `as_series`/`trimseq`/`trimcoef`/`getdomain`/`mapparms`/`mapdomain`), all bit-exact (`polyeval.jsonl` 16,606 + `polyseries.jsonl` 18,437 cases). Facade `np.polynomial.{polynomial,chebyshev,legendre,laguerre,hermite,hermite_e,polyutils}`; 0 of 6 classes. `coverage/generate_coverage.py` catalogues all seven `numpy.polynomial.*` submodules as out-of-headline surfaces. |
 | "Transition guide" | the reversed coefficient order; `Polynomial.fit(...).convert()` | Documentation only. It is a real hazard for us, though, because the new package **reuses the legacy names with the opposite coefficient order** (§2 D5). |
 
 User demand on record: issue **#496** "Can NumSharp fit polynomial surface equations?" — that is exactly
@@ -324,15 +324,36 @@ machine-partitioned; the counts sum to 193 with no overlap (Appendix A).
   machine-number lane (`PyNum`: int within `long` / float / complex, bailing to exact big integers on overflow) for
   tuples and lists; the fused scalarmath kernel for two 1-D ndarray domains of one dtype; per-thread reusable 0-d
   parameters for `mapdomain`'s one `np.evaluate` pass.
-- **Oracle:** `polyseries.jsonl` (15,950 cases, `gen_oracle.py polyseries`, 0 excused). The registry replays every
-  `mapparms`/`mapdomain` case through three routes — the object overload, the generic overload (tuples rebuilt
-  element-typed by reflection) and `NDPolySeries.MapParmsGeneral` (the exact reference) — which must agree to the
-  byte. Unit tests: `Polynomial/PolynomialSeriesTests.cs` (83, incl. a 22,400-comparison lane-vs-reference
-  property test).
-- **Perf (NPY/NS, pinned, best-of-7):** add/sub 6.6–13.7×, trim 12.1–12.6×, trimseq 4.1×, as_series 3.1–3.5×,
-  getdomain 2.7–3.9×, mapparms 2.4–8.3× (lists 2.4, int tuples 4.3, arrays 8.3), mapdomain 2.8–18×. `{p}line` is
-  0.87–0.89× — bound by the ~230 ns NDArray allocation (NumPy's whole `np.array([off, scl])` is ~200 ns), not by the
-  algorithm.
+- **Oracle:** `polyseries.jsonl` (15,950 cases at delivery, 18,437 after the audit below; `gen_oracle.py polyseries`,
+  0 excused). The registry replays every `mapparms`/`mapdomain` case through three routes — the object overload, the
+  generic overload (tuples rebuilt element-typed by reflection) and `NDPolySeries.MapParmsGeneral` (the exact
+  reference) — which must agree to the byte. Unit tests: `Polynomial/PolynomialSeriesTests.cs` (38, incl. a
+  22,400-comparison lane-vs-reference property test and, since the audit, the affine-vs-fused mapdomain route check
+  and the blocked-vs-copy getdomain checks).
+- **Perf (NPY/NS, pinned, best-of-7, 867 cells after the audit below):** add/sub 1.70–24.3× (geo 6.7), trim
+  5.5–515×, trimseq 3.8–490×, getdomain 2.13–104× (geo 8.3), mapdomain 1.96–33× (geo 4.9), as_series 1.11–10.3×,
+  mapparms 1.18–8.7×; overall geomean 8.47×. `{p}line` is 0.80–1.03× — bound by the ~230 ns NDArray allocation
+  (NumPy's whole `np.array([off, scl])` is 260–430 ns), not by the algorithm.
+- **Parity + perf audit (2026-09-27/28).** The first corpus stopped at a dozen coefficients, so no cell reached the
+  routes a long series takes. Added: corpus sections K (1,458 long-series cases across the 64-element house threshold,
+  every dtype pair and layout, specials in both the updated prefix and the untouched tail), L (552 complex64 ARRAY
+  loops of mapdomain, value-compared — NumSharp emulates complex64 on its float32 kernels with NumPy's product forms)
+  M (45 cases on the 1,024-element block boundaries and the strided-staging threshold) and N (72 getdomain cases
+  across the blocked pass's 8 KB windows, incl. NumPy's lane-order ±0 tie and canonical-vs-payload NaN) — 18,437
+  cases, 0 excused.
+  The long routes: `{p}add`/`{p}sub` through the house SIMD kernels block by block (`CombineViaHouseKernels`), the
+  conversion copy through the house casts / SIMD strided copies (`CopyInto`), `getdomain` in ONE blocked pass (NumPy's
+  copy taken 8 KB at a time — in place, or packed into L1 — and folded for min AND max by the engine's exact
+  schedule, bit-identical to reducing the whole copy; an integer x read in any order, uint64 packed as float64), and
+  mapdomain's `MapDomainAffine` (points converted 8 KB at a time into an L1 scratch, then a
+  multiply-then-add kernel — never an FMA — or `simd_cmul`; the fused pass keeps the shapes it runs at vector speed).
+  New house kernels, library-wide and bit-exact: AVX2 int → float casts incl. int64/uint64 → float64 by the
+  exponent-bias splice (one RNE rounding), float16 → float64 as NumPy's `ToDoubleBits`, the 4/8-byte SIMD strided
+  copy, and packed float32 ↔ float64 in `EmitConvertTo` (the scalar `cvtss2sd` carries a false dependency). Full
+  benchmark matrix (867 cells, NumPy re-measured back to back): see the CLAUDE.md U1 section; the 26 cells still
+  under 1.5× are `{p}line` (21, the allocation floor), 100K `as_series` of two arrays (4, memcpy: two plain copies
+  into reused buffers take the whole call's time), and `mapparms` of a mixed ndarray/tuple domain (1, 1.18× — the
+  exact general lane's per-operation dispatch; a typed program per argument-kind signature is the lever).
 
 - **Scope:**
   - facades: `np.polynomial` + 7 submodules, `[ModuleName]` ×8;

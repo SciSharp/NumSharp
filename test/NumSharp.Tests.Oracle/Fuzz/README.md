@@ -852,7 +852,7 @@ whose NumPy result is complex64 are skipped (one complex width, #569). `OpRegist
 
 ### numpy.polynomial additive family + polyutils (`polyseries` tier)
 
-`polyseries.jsonl` (`gen_oracle.py polyseries`, 15,950 cases, floor 15,000) gates plan unit U1 — `{p}add`,
+`polyseries.jsonl` (`gen_oracle.py polyseries`, 18,437 cases, floor 15,000) gates plan unit U1 — `{p}add`,
 `{p}sub`, `{p}trim`, `{p}line` for the six bases, the 24 module constants `{p}domain/zero/one/x`, and
 `polyutils.as_series/trimseq/trimcoef/getdomain/mapparms/mapdomain` — **bit-exact, 0 excused**. Keys are
 module-qualified like `polyeval`'s. Arguments are NAMED (`c1`, `c2`, `c`, `tol`, `off`, `scl`, `old`, `new`, `x`,
@@ -868,13 +868,43 @@ int intermediates, float specials, strided/reversed views), mixed Python/NumPy k
 2-D domains; mapdomain for every x dtype × domain form; `{p}line` over Python and NumPy scalars of every dtype; and
 four FACETS of each constant (value, identity, writeable, owndata — a constant has no argument to vary).
 
+Four sections were added by the U1 parity audit (2026-09-27/28), because the original matrix never went past 12
+coefficients and so never reached the house-kernel routes a long series takes (every contiguous/strided series of
+64+ elements, mapdomain's block-converting affine route): **(K) long series** — add/sub/legsub across the 64-element
+threshold (63/64/65, 70/64, 257/100 … 1,000/1,000, 1,003/5) in float64/float32/float16/complex128, twelve mixed dtype
+pairs, contiguous/stride-2/reversed operand pairs, trailing zeros trimmed below the threshold, a cancelling tail, and
+specials (NaN, ±inf, ±0, subnormals, overflowing sums) in the updated prefix and the untouched tail; as_series/
+trimcoef/getdomain/mapdomain at 100 and 1,000 points over every dtype and layout (1,458 cases). **(M) block and
+staging boundaries** (45 cases, appended after L) — the 1,024-element blocks the in-place combine materializes a
+converted / strided / negated operand in (add/sub of 2,100 against 2,150 coefficients: int32+float64 both ways,
+float64 negated, float32 stride-2, int16 reversed, float16+float32), as_series' blocked strided cast (int16 stride-2,
+int64 reversed, uint32 stride-2, float32 reversed at 2,100), mapdomain's affine route over whole blocks and a partial
+last one (contiguous 8/16/64-bit integers at 2,100 points into a float64 loop, int8/uint8 at 1,030 into a float32
+loop, float16 at 600; int64 reversed, int16/uint8/int32/float32 stride-2 at 2,100), and the fused pass's staging of a
+transposed 2-D x (96×90 = 8,640 points, past the 8,192 threshold). **(L) complex64
+ARRAY loops of mapdomain** (552 cases) — a complex64 off/scl (mapparms of a float16/float32 domain and a Python
+complex tuple) with every narrow x, and a Python complex tuple domain with a float16/float32 x, at lengths 1
+(NumPy's trivially-iterable single-element call still runs `simd_cmul`) through vector-body lengths and strided/
+reversed layouts. NumSharp has no complex64 dtype (#569): those loops run on its float32 kernels with NumPy's
+product forms, the result is carried as complex128 holding the float32-exact values, and the replay VALUE-compares
+the up-cast pairs (`Complex64ValuesMatch`) — 752 complex64-result cases, 0 excused. **(N) getdomain across the
+blocked pass's windows** (72 cases, appended after M) — getdomain reduces NumPy's copy 8 KB at a time (in place, or
+packed into an L1 scratch) and carries its min/max accumulators across windows, so every dtype the pass serves
+crosses a window boundary (window + 37 elements) contiguous / stride-2 / reversed, plus stride 3 for int64 / float64 /
+uint8 (the AVX2 gather and the scalar sub-word copy); and the schedule facts the carried accumulators must keep are
+pinned at float64 and float32 over two windows with no scalar tail: a -0.0 early in the HIGHEST lane against a +0.0
+late in lane 0 (NumPy returns the early zero — the cascade lets the higher lane win the tie; a sequential fold would
+return the late one — and the mirror for min), and one NaN with a payload that comes back canonical from a window
+boundary inside the vector section and with its payload from the scalar tail.
+
 `OpRegistry.PolySeries.cs` replays it. **Every `mapparms`/`mapdomain` case runs three routes** — the object
 overload, the generic tuple overload (tuples rebuilt element-typed by reflection, so a Python int is a `long`) and
 `NDPolySeries.MapParmsGeneral` (the exact `BigInteger` reference) — which must agree to the byte (or raise the same
 type and text) before the result is compared with NumPy; this is what proves the CPython machine-number lane and
 the fused same-dtype kernel. Planted-bug checks: dropping the lane's product-overflow bail (27 red), corrupting the
 list lane's `long` read (205 red), feeding the fused kernel the wrong numerator (129 red). Cells whose NumPy result
-is complex64 or an object array are skipped (133).
+is a complex64 ARRAY outside mapdomain (a `{p}add` of float32 coefficients and a Python complex list, …) or an
+object array are skipped (109) — every complex64 SCALAR result and every mapdomain complex64 array is recorded.
 
 ### einsum (`einsum` tier)
 

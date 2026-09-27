@@ -277,6 +277,269 @@ namespace NumSharp.Tests.Polynomial
             b.Should().Throw<ValueError>().WithMessage("Coefficient arrays have no common type");
         }
 
+        /// <summary>
+        ///     getdomain's blocked pass (<see cref="NDPolySeries.TryDomainBlocked"/>: 8 KB windows of NumPy's copy —
+        ///     read in place, or packed into an L1 scratch — folded by the exact min/max schedule) against the
+        ///     copy-then-reduce route it replaced, on the same inputs, byte for byte. The copy route reduces NumPy's
+        ///     C-contiguous copy with the engine's NumPy-exact schedule (oracle-proven), so this pins the one thing
+        ///     the blocked pass adds: that carrying the accumulators across windows changes nothing. Every dtype the
+        ///     pass serves, contiguous / stride-2 / stride-3 / reversed / reversed-stride-2 layouts, lengths across
+        ///     the window boundaries of every width (a window holds 8,192 / itemsize elements and the windows start
+        ///     after element 0), and data built to expose a schedule slip: sign-mixed zeros (which ±0 survives a tie
+        ///     is decided lane by lane), a single NaN payload placed on the seed, on a window boundary, inside a
+        ///     window and in the scalar tail (it comes back canonical or with its payload depending on where the
+        ///     schedule meets it), and uint64 values that collide once converted to float64.
+        /// </summary>
+        [TestMethod]
+        public void GetDomain_BlockedPass_MatchesTheCopyRoute_BitForBit()
+        {
+            var served = new[]
+            {
+                NPTypeCode.SByte, NPTypeCode.Byte, NPTypeCode.Int16, NPTypeCode.UInt16, NPTypeCode.Int32, NPTypeCode.UInt32,
+                NPTypeCode.Int64, NPTypeCode.UInt64, NPTypeCode.Single, NPTypeCode.Double,
+            };
+            // Window boundaries fall after element 1 + k·(8192 / itemsize): 1,025 / 2,049 (8-byte), 2,049 / 4,097
+            // (4-byte), 4,097 / 8,193 (2-byte), 8,193 / 16,385 (1-byte).
+            int[] lengths = { 1, 2, 5, 33, 1024, 1025, 1026, 2049, 2050, 4097, 8193, 8200, 16390 };
+            long calls = 0, blocked = 0;
+            foreach (var dt in served)
+            foreach (int n in lengths)
+            foreach (var (kind, values) in DomainData(dt, n))
+            using (values)
+            foreach (var (layout, x) in DomainLayouts(values))
+            {
+                calls++;
+                blocked += AssertDomainRoutesAgree(x, $"{dt}/{n}/{kind}/{layout}");
+            }
+            blocked.Should().Be(calls, "every call of a served dtype must take the blocked pass");
+
+            // float16 has no exact schedule: the pass declines and the copy route answers.
+            using var h = Patterned(NPTypeCode.Half, 3000);
+            foreach (var (layout, x) in DomainLayouts(h))
+                AssertDomainRoutesAgree(x, $"Half/{layout}").Should().Be(0, "float16 is not served by the blocked pass");
+        }
+
+        /// <summary>
+        ///     NumPy 2.4.2 pins for the schedule the blocked pass must carry across windows. Lane order: 2,101 float64
+        ///     values of -1 with a -0.0 early in lane 3 (index 4, or 1,028 — a later window) and a +0.0 late in lane 0
+        ///     (index 2,097, the last window): NumPy's max is <c>-0.0</c> — each lane keeps its own last zero and the
+        ///     horizontal cascade lets the HIGHER lane win the tie — where a sequential fold would return the later
+        ///     +0.0; the mirror (+1 everywhere, +0.0 early in lane 3, -0.0 late in lane 0) gives min <c>+0.0</c>. The
+        ///     same bits through a stride-2 view, which NumPy copies first. NaN: one NaN with payload
+        ///     <c>0x7ff8000000000bad</c> comes back canonical from a window boundary (index 1,025, inside the vector
+        ///     section) but keeps its payload from the scalar tail (index 2,099). Probe:
+        ///     <c>x = np.full(2101, -1.0); x[4] = -0.0; x[2097] = 0.0; pu.getdomain(x).tobytes().hex()</c> (and the
+        ///     analogous calls). (Sign-mixed zeros ALONE cannot tell the schedules apart: with every element a tie, the
+        ///     highest lane holds the array's last element, so NumPy and a sequential fold agree.)
+        /// </summary>
+        [TestMethod]
+        public void GetDomain_BlockedPass_NumPyPins()
+        {
+            foreach (int early in new[] { 4, 1028 })
+            {
+                var mx = new double[2101];
+                var mn = new double[2101];
+                for (int i = 0; i < mx.Length; i++) { mx[i] = -1.0; mn[i] = 1.0; }
+                mx[early] = -0.0; mx[2097] = 0.0;
+                mn[early] = 0.0; mn[2097] = -0.0;
+                using var mxc = np.array(mx);
+                using var mnc = np.array(mn);
+                AssertBytes(PU.getdomain(mxc), "float64", new long[] { 2 }, "000000000000f0bf0000000000000080");
+                AssertBytes(PU.getdomain(mnc), "float64", new long[] { 2 }, "0000000000000000000000000000f03f");
+                var mx2 = np.zeros(new Shape(4202L), NPTypeCode.Double);
+                mx2["::2"] = mxc;
+                AssertBytes(PU.getdomain(mx2["::2"]), "float64", new long[] { 2 }, "000000000000f0bf0000000000000080");
+            }
+
+            double payload = BitConverter.Int64BitsToDouble(0x7ff8000000000badL);
+            var a = new double[2100];
+            for (int i = 0; i < a.Length; i++) a[i] = (i * 7919 % 2003) - 1001;
+            a[1025] = payload;
+            using var nb = np.array(a);
+            AssertBytes(PU.getdomain(nb), "float64", new long[] { 2 }, "000000000000f87f000000000000f87f");
+            a[1025] = 0; a[2099] = payload;
+            using var nt = np.array(a);
+            AssertBytes(PU.getdomain(nt), "float64", new long[] { 2 }, "ad0b00000000f87fad0b00000000f87f");
+        }
+
+        /// <summary>
+        ///     The blocked pass folds EVERY element exactly once: a unique maximum and a unique minimum are planted at
+        ///     each position around every window edge (and the seed and the tail) of a series three windows long, for
+        ///     every dtype the pass serves, contiguous / stride-2 / reversed. A window that folded too little — a group
+        ///     dropped at its end, which lane-aligned data with repeating extremes never notices — or too much would
+        ///     move one of them. Checked against the planted values themselves and against the copy route.
+        /// </summary>
+        [TestMethod]
+        public void GetDomain_BlockedPass_FoldsEveryElement()
+        {
+            var served = new[]
+            {
+                NPTypeCode.SByte, NPTypeCode.Byte, NPTypeCode.Int16, NPTypeCode.UInt16, NPTypeCode.Int32, NPTypeCode.UInt32,
+                NPTypeCode.Int64, NPTypeCode.UInt64, NPTypeCode.Single, NPTypeCode.Double,
+            };
+            foreach (var dt in served)
+            {
+                int itemsize = dt switch { NPTypeCode.SByte or NPTypeCode.Byte => 1, NPTypeCode.Int16 or NPTypeCode.UInt16 => 2,
+                                           NPTypeCode.Int32 or NPTypeCode.UInt32 or NPTypeCode.Single => 4, _ => 8 };
+                int window = 8192 / itemsize;
+                int n = 2 * window + 37;
+                var positions = new System.Collections.Generic.SortedSet<int> { 0, 1, 2, n - 1 };
+                foreach (int edge in new[] { window, 2 * window })          // windows are elements [1+k·w, (k+1)·w]
+                    for (int d = -9; d <= 9; d++)
+                        positions.Add(edge + d);
+                for (int d = 1; d <= 9; d++)
+                    positions.Add(n - 1 - d);
+                // Unsigned dtypes cannot hold the negative minimum: shift the three levels up.
+                double lo = dt is NPTypeCode.Byte or NPTypeCode.UInt16 or NPTypeCode.UInt32 or NPTypeCode.UInt64 ? 1 : -100;
+                double mid = lo + 60, hi = lo + 120;
+                foreach (int p in positions)
+                {
+                    int q = (p + n / 2) % n;   // the minimum's position: a different window
+                    var v = new double[n];
+                    for (int i = 0; i < n; i++) v[i] = mid;
+                    v[p] = hi;
+                    v[q] = lo;
+                    using var values = np.array(v).astype(dt);
+                    foreach (var (layout, x) in DomainLayouts(values))
+                    {
+                        string label = $"{dt}/p{p}/q{q}/{layout}";
+                        AssertDomainRoutesAgree(x, label).Should().Be(1, label);
+                        using var r = PU.getdomain(x);
+                        // GetAtIndex boxes the element's own type (float32 for a float32 x); the typed getters would
+                        // reinterpret its bits instead of converting them.
+                        Convert.ToDouble(r.GetAtIndex(0)).Should().Be(lo, label);
+                        Convert.ToDouble(r.GetAtIndex(1)).Should().Be(hi, label);
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        ///     The blocked pass honours <see cref="NumSharp.Backends.Iteration.NDExpr.DisableExactMinMax"/> like every
+        ///     other exact min/max route: with it set, getdomain declines to the copy route (which then reduces with the
+        ///     engine's older value-exact kernels), and the values still agree.
+        /// </summary>
+        [TestMethod]
+        public void GetDomain_BlockedPass_DeclinesWhenExactSchedulesAreDisabled()
+        {
+            using var x = Patterned(NPTypeCode.Int64, 3000);
+            long before = NDPolySeries.BlockedDomainRuns;
+            using var exact = PU.getdomain(x["::2"]);
+            (NDPolySeries.BlockedDomainRuns - before).Should().Be(1);
+            NumSharp.Backends.Iteration.NDExpr.DisableExactMinMax = true;
+            try
+            {
+                before = NDPolySeries.BlockedDomainRuns;
+                using var old = PU.getdomain(x["::2"]);
+                (NDPolySeries.BlockedDomainRuns - before).Should().Be(0);
+                RawBytes(old).Should().Equal(RawBytes(exact));
+            }
+            finally
+            {
+                NumSharp.Backends.Iteration.NDExpr.DisableExactMinMax = false;
+            }
+        }
+
+        /// <summary>
+        ///     Runs getdomain through the copy route (<see cref="NDPolySeries.DisableBlockedDomain"/>) and through the
+        ///     default routing, and asserts the same dtype, shape and bytes.
+        /// </summary>
+        /// <param name="x">The points.</param>
+        /// <param name="label">Case label for failures.</param>
+        /// <returns>1 when the blocked pass served the default-routed call, else 0.</returns>
+        private static long AssertDomainRoutesAgree(NDArray x, string label)
+        {
+            NDPolySeries.DisableBlockedDomain = true;
+            NDArray copy;
+            try { copy = PU.getdomain(x); }
+            finally { NDPolySeries.DisableBlockedDomain = false; }
+            long before = NDPolySeries.BlockedDomainRuns;
+            using var fast = PU.getdomain(x);
+            using (copy)
+            {
+                fast.dtype.name.Should().Be(copy.dtype.name, label);
+                fast.shape.Should().Equal(copy.shape, label);
+                RawBytes(fast).Should().Equal(RawBytes(copy), label);
+            }
+            return NDPolySeries.BlockedDomainRuns - before;
+        }
+
+        /// <summary>
+        ///     getdomain inputs of <paramref name="dt"/> and length <paramref name="n"/> built to expose a schedule
+        ///     slip (see <see cref="GetDomain_BlockedPass_MatchesTheCopyRoute_BitForBit"/>).
+        /// </summary>
+        /// <param name="dt">The dtype.</param>
+        /// <param name="n">Element count.</param>
+        /// <returns>(kind, array) pairs — new C-contiguous 1-D arrays the caller disposes.</returns>
+        private static System.Collections.Generic.IEnumerable<(string, NDArray)> DomainData(NPTypeCode dt, int n)
+        {
+            yield return ("patterned", Patterned(dt, n));
+            if (dt is NPTypeCode.Single or NPTypeCode.Double)
+            {
+                // Sign-mixed zeros: the min/max VALUE is 0 everywhere, so only the schedule picks the sign.
+                var z = new double[n];
+                var rnd = new System.Random(n);
+                for (int i = 0; i < n; i++) z[i] = rnd.Next(2) == 0 ? 0.0 : -0.0;
+                yield return ("zeros", np.array(z).astype(dt));
+                // Lane order (see GetDomain_BlockedPass_NumPyPins): a zero early in the highest lane and one of the other
+                // sign late in lane 0, among values that lose to both — NumPy's cascade answers with the EARLY zero, a
+                // sequential fold with the late one. For the max (negatives around) and the min (positives around).
+                int lanes = 32 / (dt == NPTypeCode.Double ? 8 : 4);
+                if (n > 2 * lanes + 1)
+                {
+                    int late = 1 + lanes * ((n - 1) / lanes - 1);   // lane 0 of the last whole vector
+                    var mx = new double[n];
+                    var mn = new double[n];
+                    for (int i = 0; i < n; i++) { mx[i] = -1.0; mn[i] = 1.0; }
+                    mx[lanes] = -0.0; mx[late] = 0.0;
+                    mn[lanes] = 0.0; mn[late] = -0.0;
+                    yield return ("lanes-max", np.array(mx).astype(dt));
+                    yield return ("lanes-min", np.array(mn).astype(dt));
+                }
+                // One NaN with a payload, on the seed / a window boundary / inside a window / the tail.
+                int window = 8192 / (dt == NPTypeCode.Double ? 8 : 4);
+                foreach (int at in new[] { 0, 1, window, window + 1, n / 2, n - 2, n - 1 })
+                {
+                    if (at < 0 || at >= n)
+                        continue;
+                    var v = new double[n];
+                    for (int i = 0; i < n; i++) v[i] = (i * 7919 % 2003) - 1001;
+                    v[at] = BitConverter.Int64BitsToDouble(unchecked((long)0xfff8000000000badUL));   // negative, payload
+                    yield return ($"nan@{at}", np.array(v).astype(dt));
+                }
+            }
+            if (dt == NPTypeCode.UInt64)
+            {
+                // Distinct uint64 values that convert to the same float64 (2^64-1 → 2^64, 2^53+1 → 2^53): the pass
+                // reduces the converted copy, the copy route converts its uint64 extremes — the same doubles.
+                var u = new ulong[n];
+                for (int i = 0; i < n; i++)
+                    u[i] = (i % 5) switch { 0 => ulong.MaxValue, 1 => ulong.MaxValue - 1, 2 => (1UL << 53) + 1, 3 => 1UL << 53, _ => (ulong)i };
+                yield return ("collide", np.array(u));
+            }
+        }
+
+        /// <summary>The layouts getdomain routes differently: contiguous, stride 2 and 3, reversed, reversed stride 2.</summary>
+        /// <param name="values">The values (1-D, C-contiguous).</param>
+        /// <returns>(name, view) pairs over the same values in logical order.</returns>
+        private static (string, NDArray)[] DomainLayouts(NDArray values)
+        {
+            var s2 = np.zeros(new Shape(2 * values.size), values.typecode);
+            s2["::2"] = values;
+            var s3 = np.zeros(new Shape(3 * values.size), values.typecode);
+            s3["::3"] = values;
+            var r2 = np.zeros(new Shape(2 * values.size), values.typecode);
+            r2["::-2"] = values;
+            return new[]
+            {
+                ("c", values),
+                ("s2", s2["::2"]),
+                ("s3", s3["::3"]),
+                ("r", values["::-1"].copy()["::-1"]),
+                ("r2", r2["::-2"]),
+            };
+        }
+
         // ---------------------------------------------------------------- mapparms / mapdomain
 
         [TestMethod]
@@ -339,6 +602,56 @@ namespace NumSharp.Tests.Polynomial
             Bits(sc.Imaginary).Should().Be(0xbfec962fc962fc94UL);
             Action shortDom = () => PU.mapparms(new[] { 0.0 }, new[] { 0.0, 1.0 });
             shortDom.Should().Throw<IndexError>().WithMessage("index 1 is out of bounds for axis 0 with size 1");
+        }
+
+        /// <summary>
+        ///     A float32/float16 NumPy value meeting a Python complex is NumPy's complex64 SCALAR (NEP 50): its arithmetic
+        ///     runs in float32 — scalarmath's naive product, CFLOAT_divide's reciprocal-multiply Smith, a 0-d operand's
+        ///     fused product — and the value is carried exactly in NumSharp's complex128 (#569: the dtype differs, the
+        ///     bits do not). Every literal is NumPy 2.4.2's (probed); the complex128 twin shows the precision matters.
+        /// </summary>
+        [TestMethod]
+        public void Complex64Scalars_ReproduceNumPysFloat32Arithmetic()
+        {
+            var dom = np.array(new[] { 0.3f, -1.7f });
+            var nw = (new Complex(1.1, -0.35), new Complex(-2.3, 0.9));
+            void Is(Complex z, ulong re, ulong im)
+            {
+                Bits(z.Real).Should().Be(re);
+                Bits(z.Imaginary).Should().Be(im);
+            }
+
+            // mapparms(f32 array, complex tuple): old[i] are np.float32 scalars -> complex64 off/scl
+            var (o, s) = PU.mapparms(dom, nw);
+            Is((Complex)o, 0x3fe2e147c0000000UL, 0xbfc4cccce0000000UL);
+            Is((Complex)s, 0x3ffb333340000000UL, 0xbfe4000000000000UL);
+            // a float64 domain stays complex128 — full-precision bits
+            var (o2, s2) = PU.mapparms(np.array(new[] { 0.3, -1.7 }), nw);
+            Is((Complex)o2, 0x3fe2e147ae147ae2UL, 0xbfc4ccccccccccccUL);
+            Is((Complex)s2, 0x3ffb333333333333UL, 0xbfe4000000000000UL);
+
+            // mapdomain at a Python complex x: complex64 scl * x is scalarmath's NAIVE product, in float32
+            Is((Complex)PU.mapdomain(new Complex(0.77, -1.21), dom, nw), 0x3ff248b440000000UL, 0xc0059b22e0000000UL);
+            // a float64 array x: the complex64 off/scl widen exactly into NumPy's complex128 loop
+            var ra = PU.mapdomain(np.array(new[] { 0.5, -1.25, 3.0 }), dom, nw);
+            ra.dtype.Should().Be(np.complex128);
+            Is(ra.GetAtIndex<Complex>(0), 0x3ff70a3d80000000UL, 0xbfde666670000000UL);
+            Is(ra.GetAtIndex<Complex>(1), 0xbff88f5c30000000UL, 0x3fe3ccccc8000000UL);
+            Is(ra.GetAtIndex<Complex>(2), 0x4016c28f68000000UL, 0xc0004cccce000000UL);
+            // a 0-d float32 x: `scl * x` is a one-element complex64 ufunc (a scalar result), `off + that` scalarmath
+            var r0 = PU.mapdomain(NDArray.Scalar(1.3f), dom, nw);
+            r0.ndim.Should().Be(0);
+            Is(r0.GetAtIndex<Complex>(0), 0x4006666680000000UL, 0xbfef333340000000UL);
+
+            // lagline: `off + scl` in complex64, then np.array with the Python complex -scl -> complex128
+            var lg = LA.lagline(NDArray.Scalar(0.3f), new Complex(1.1, -0.35));
+            lg.dtype.Should().Be(np.complex128);
+            Is(lg.GetAtIndex<Complex>(0), 0x3ff6666680000000UL, 0xbfd6666660000000UL);
+            Is(lg.GetAtIndex<Complex>(1), 0xbff199999999999aUL, 0x3fd6666666666666UL);
+            // np.float16 scl: [complex64, float16] is NumPy's complex64 array — here complex128 with the same values
+            var lr = LA.lagline(new Complex(1.1, -0.35), (Half)0.3);
+            Is(lr.GetAtIndex<Complex>(0), 0x3ff66699a0000000UL, 0xbfd6666660000000UL);
+            Is(lr.GetAtIndex<Complex>(1), 0xbfd3340000000000UL, 0x0000000000000000UL);
         }
 
         [TestMethod]
@@ -558,6 +871,179 @@ namespace NumSharp.Tests.Polynomial
             PU.mapdomain(0.5, new[] { -1.0, 1.0 }, new[] { 0.0, 2.0 }).Should().Be(1.5);
             // bool x: NumPy converts it with np.asanyarray -> np.float64(2.0)
             PU.mapdomain((object)true, (-1, 1), (0, 2)).Should().Be(2.0);
+        }
+
+        /// <summary>
+        ///     The affine route of mapdomain (<c>NDPolySeries.MapDomainAffine</c>: the points converted block by block
+        ///     into an L1 scratch, then one multiply-then-add kernel) against the fused np.evaluate pass it replaced, on
+        ///     the same inputs, byte for byte — every points dtype, contiguous / stride-2 / reversed / 2-D layouts,
+        ///     lengths across the 512 / 1,024 / 2,048-point block boundaries, and float64, float32 and complex128 loops
+        ///     with scales that round. The fused pass is the oracle-proven reference; the run counter proves the affine
+        ///     route actually served the calls it was expected to (a silent decline would pass every byte check).
+        /// </summary>
+        [TestMethod]
+        public void MapDomain_AffineRoute_MatchesTheFusedPass_BitForBit()
+        {
+            var f64Old = np.array(new[] { -2.0, 3.0 });
+            var f64New = np.array(new[] { 0.5, 4.0 });
+            var f32Old = np.array(new[] { -2f, 3f });
+            var f32New = np.array(new[] { 0.5f, 4f });
+            var dtypes = new[]
+            {
+                NPTypeCode.Boolean, NPTypeCode.SByte, NPTypeCode.Byte, NPTypeCode.Int16, NPTypeCode.UInt16, NPTypeCode.Char,
+                NPTypeCode.Int32, NPTypeCode.UInt32, NPTypeCode.Int64, NPTypeCode.UInt64, NPTypeCode.Half, NPTypeCode.Single,
+                NPTypeCode.Double,
+            };
+            long served = 0;
+            foreach (var dt in dtypes)
+            foreach (int n in new[] { 5, 37, 511, 1030, 2100 })
+            {
+                using var values = Patterned(dt, n);
+                foreach (var (layout, x) in Layouts(values))
+                {
+                    // float64 loop (Python domains / float64 arrays), float32 loop (float32 arrays — float64 for the
+                    // wide integers, as NumPy promotes them), complex128 loop (a Python complex domain).
+                    AssertRoutesAgree(() => PU.mapdomain(x, (-1.0, 3.0), (0.5, 4.0)), $"{dt}/{n}/{layout}/pyfloat", ref served);
+                    AssertRoutesAgree(() => PU.mapdomain(x, f64Old, f64New), $"{dt}/{n}/{layout}/f64", ref served);
+                    AssertRoutesAgree(() => PU.mapdomain(x, f32Old, f32New), $"{dt}/{n}/{layout}/f32", ref served);
+                    AssertRoutesAgree(() => PU.mapdomain(x, (-1, 3), (new Complex(0.5, 1), new Complex(4, -2))), $"{dt}/{n}/{layout}/c128", ref served);
+                }
+            }
+            // 814 of the 1,092 calls when written; the rest are the shapes the fused pass keeps (a contiguous x on a
+            // vector widen edge or of bool, the transposed 2-D layout, float16 and complex64 loops).
+            served.Should().BeGreaterThan(780, "the affine route must actually serve most of these calls");
+        }
+
+        /// <summary>
+        ///     The affine route multiplies and THEN adds, each rounded — NumPy's two ufunc calls — never a fused
+        ///     multiply-add: <c>np.float64(-0.3) + np.float64(0.1) * np.array([3.0])</c> is <c>5.551115123125783e-17</c>
+        ///     where <c>fma(0.1, 3, -0.3)</c> is <c>2.7755575615628914e-17</c>. The same over random points, at float64
+        ///     and float32, with the check that the chosen inputs do separate the two spellings.
+        /// </summary>
+        [TestMethod]
+        public void MapDomain_AffineRoute_RoundsMultiplyAndAddSeparately()
+        {
+            // NumPy 2.4.2: (np.float64(-0.3) + np.float64(0.1) * np.array([3.0])).tobytes().hex()
+            using var three = np.array(new[] { 3.0 });
+            var r = NDPolySeries.MapDomainWith(PolyNumber.FromArray(three), PolyNumber.FromScalar(-0.3), PolyNumber.FromScalar(0.1)).Array;
+            Bits(r.GetDouble(0)).Should().Be(Bits(5.551115123125783e-17));
+
+            var rnd = new System.Random(20260928);
+            var xs = new double[4099];
+            var xf = new float[4099];
+            for (int i = 0; i < xs.Length; i++) { xs[i] = rnd.NextDouble() * 200 - 100; xf[i] = (float)xs[i]; }
+            double scl = 0.1, off = -0.3;
+            float sclF = 0.1f, offF = -0.3f;
+            using var x64 = np.array(xs);
+            using var x32 = np.array(xf);
+            long before = NDPolySeries.AffineMapDomainRuns;
+            using var r64 = NDPolySeries.MapDomainWith(PolyNumber.FromArray(x64), PolyNumber.FromScalar(off), PolyNumber.FromScalar(scl)).Array;
+            using var r32 = NDPolySeries.MapDomainWith(PolyNumber.FromArray(x32), PolyNumber.FromScalar(offF), PolyNumber.FromScalar(sclF)).Array;
+            (NDPolySeries.AffineMapDomainRuns - before).Should().Be(2, "both calls take the affine route");
+            int fmaDiffers64 = 0, fmaDiffers32 = 0;
+            for (int i = 0; i < xs.Length; i++)
+            {
+                double want = off + scl * xs[i];
+                Bits(r64.GetDouble(i)).Should().Be(Bits(want), $"float64 point {i}");
+                if (Bits(System.Math.FusedMultiplyAdd(scl, xs[i], off)) != Bits(want)) fmaDiffers64++;
+                float wantF = offF + sclF * xf[i];
+                BitConverter.SingleToInt32Bits(r32.GetSingle(i)).Should().Be(BitConverter.SingleToInt32Bits(wantF), $"float32 point {i}");
+                if (BitConverter.SingleToInt32Bits(MathF.FusedMultiplyAdd(sclF, xf[i], offF)) != BitConverter.SingleToInt32Bits(wantF)) fmaDiffers32++;
+            }
+            fmaDiffers64.Should().BeGreaterThan(0, "the inputs must distinguish a fused multiply-add at float64");
+            fmaDiffers32.Should().BeGreaterThan(0, "the inputs must distinguish a fused multiply-add at float32");
+        }
+
+        /// <summary>
+        ///     Runs one mapdomain call through the fused pass and through the affine route and asserts the same dtype,
+        ///     shape and bytes; counts the calls the affine route served.
+        /// </summary>
+        /// <param name="call">The mapdomain call.</param>
+        /// <param name="label">Case label for failures.</param>
+        /// <param name="served">Incremented when the affine route served the second run.</param>
+        private static void AssertRoutesAgree(Func<object> call, string label, ref long served)
+        {
+            NDPolySeries.DisableAffineMapDomain = true;
+            NDArray fused;
+            try { fused = (NDArray)call(); }
+            finally { NDPolySeries.DisableAffineMapDomain = false; }
+            long before = NDPolySeries.AffineMapDomainRuns;
+            using var affine = (NDArray)call();
+            served += NDPolySeries.AffineMapDomainRuns - before;
+            using (fused)
+            {
+                affine.dtype.name.Should().Be(fused.dtype.name, label);
+                affine.shape.Should().Equal(fused.shape, label);
+                RawBytes(affine).Should().Equal(RawBytes(fused), label);
+            }
+        }
+
+        /// <summary>The bytes of <paramref name="a"/> in logical C order.</summary>
+        /// <param name="a">The array.</param>
+        /// <returns>Its bytes.</returns>
+        private static byte[] RawBytes(NDArray a)
+        {
+            using var c = np.ascontiguousarray(a);
+            var bytes = new byte[c.size * c.dtypesize];
+            unsafe
+            {
+                var p = (byte*)c.Storage.Address + c.Shape.offset * c.dtypesize;
+                for (int i = 0; i < bytes.Length; i++) bytes[i] = p[i];
+            }
+            return bytes;
+        }
+
+        /// <summary>
+        ///     <paramref name="n"/> values of <paramref name="dt"/> covering its range: integers from both extremes
+        ///     through zero, floats with ±0, ±inf, NaN, subnormals and large magnitudes among ordinary values.
+        /// </summary>
+        /// <param name="dt">The dtype.</param>
+        /// <param name="n">Element count.</param>
+        /// <returns>A new C-contiguous 1-D array.</returns>
+        private static NDArray Patterned(NPTypeCode dt, int n)
+        {
+            var d = new double[n];
+            for (int i = 0; i < n; i++)
+                d[i] = (i % 13) switch
+                {
+                    0 => 0.0,
+                    1 => -0.0,
+                    2 => double.PositiveInfinity,
+                    3 => double.NegativeInfinity,
+                    4 => double.NaN,
+                    5 => 5e-324,
+                    6 => 1.5e300,
+                    7 => -65504.0,
+                    _ => (i * 7919 % 2003 - 1001) * 0.37,
+                };
+            if (dt is NPTypeCode.Half or NPTypeCode.Single or NPTypeCode.Double)
+                return np.array(d).astype(dt);
+            // Integers: the extremes of the dtype and ordinary values (the float specials would wrap arbitrarily).
+            var v = new long[n];
+            for (int i = 0; i < n; i++)
+                v[i] = (i % 7) switch { 0 => long.MinValue, 1 => long.MaxValue, 2 => 0, 3 => -1, _ => i * 7919L % 20011 - 10005 };
+            return np.array(v).astype(dt);
+        }
+
+        /// <summary>The layouts the affine route serves (1-D any stride, C-contiguous N-D) plus one it must decline.</summary>
+        /// <param name="values">The values (1-D, C-contiguous).</param>
+        /// <returns>(name, view) pairs over the same values.</returns>
+        private static (string, NDArray)[] Layouts(NDArray values)
+        {
+            var s2 = np.zeros(new Shape(2 * values.size), values.typecode);
+            s2["::2"] = values;
+            var list = new System.Collections.Generic.List<(string, NDArray)>
+            {
+                ("c", values),
+                ("s2", s2["::2"]),
+                ("r", values["::-1"].copy()["::-1"]),
+            };
+            if (values.size % 5 == 0)
+            {
+                list.Add(("2d", values.reshape(5, values.size / 5)));
+                list.Add(("2dT", values.reshape(5, values.size / 5).T));   // non-contiguous N-D: the fused pass
+            }
+            return list.ToArray();
         }
 
         // ---------------------------------------------------------------- {p}line

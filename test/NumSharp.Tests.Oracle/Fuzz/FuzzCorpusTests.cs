@@ -746,7 +746,7 @@ namespace NumSharp.Tests.Fuzz
             ["instance.jsonl"] = 7500,    // §D: ndarray.* instance surface — 13 NumPy dtypes + the char proxy weave (dtype-spread gate)
             ["emath.jsonl"] = 385,        // §A2/E5: np.emath scimath promotion (+ the unsigned lanes, dtype-spread gate)
             ["polyeval.jsonl"] = 16100,   // numpy.polynomial {p}val family (U3), 6 bases x the matrix above, + 4,392 single-element-broadcast cells
-            ["polyseries.jsonl"] = 15000, // numpy.polynomial additive family + polyutils (U1): 15,950 cases, 6 bases + polyutils + constant facets
+            ["polyseries.jsonl"] = 18000, // numpy.polynomial additive family + polyutils (U1): 6 bases + polyutils + constant facets — 15,950 cases at delivery, 18,437 since the parity audit's long-series / complex64-loop / block-boundary / getdomain-window sections (K-N), which this floor keeps from silently dropping out
             ["place.jsonl"] = 12,
             ["products.jsonl"] = 326,
             ["precision.jsonl"] = 80,

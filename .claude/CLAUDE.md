@@ -2653,8 +2653,10 @@ operand of NumPy's Python-level scalar code) + `NDPolySeries.cs` (the functions)
 `Polynomial/Package/np.polynomial.polyutils.cs` (`[ModuleName("np.polynomial.polyutils")]`, reachable as
 `np.polynomial.polyutils`); every element loop is an IL kernel in `Backends/Kernels/Direct/DirectILKernelGenerator.PolySeries.cs`
 (trim scan, in-place combine, tolerance scan, cast, and one-element scalarmath kernels behind flat slot arrays).
-**Bit-exact with NumPy 2.4.2** — oracle tier `polyseries.jsonl` (15,950 cases, 0 excused) + `Polynomial/PolynomialSeriesTests.cs`
-(83). The C# boundary is the house NEP 50 map: bool/integers/float/double/`Complex`/`BigInteger` are Python scalars,
+**Bit-exact with NumPy 2.4.2** — oracle tier `polyseries.jsonl` (18,437 cases, 0 excused: incl. 1,458 long-series, 45
+block-boundary and 72 getdomain window-crossing cases, and 752 complex64 results value-compared) +
+`Polynomial/PolynomialSeriesTests.cs` (38 tests). The
+C# boundary is the house NEP 50 map: bool/integers/float/double/`Complex`/`BigInteger` are Python scalars,
 `Half`/`char`/`decimal` NumPy scalars, an `NDArray` (0-d too) or typed C# array an ndarray, `object[]`/`IList` a Python
 list, a `ValueTuple` a Python tuple — and that KIND decides whose arithmetic runs. NumPy never converts a domain, it
 indexes it, so there are THREE arithmetics: Python∘Python is CPython (exact ints, `long_true_divide`, 3.12
@@ -2687,10 +2689,52 @@ The registry replays every `mapparms`/`mapdomain` case through the object overlo
 rebuilt element-typed by reflection) AND `NDPolySeries.MapParmsGeneral` (the exact reference), requiring all three to
 agree to the byte; `MachineNumberLane_AgreesWithTheExactGeneralLane_BitForBit` adds 22,400 seeded comparisons.
 
-**Perf (NPY/NS, pinned, best-of-7, µs-scale calls):** add/sub 6.6–13.7×, trim 12.1–12.6×, trimseq 4.1×, as_series
-3.1–3.5×, getdomain 2.7–3.9×, mapparms 2.4× (lists) / 4.3× (int tuples) / 8.3× (arrays), mapdomain 2.8–18×.
-**`{p}line` is 0.87–0.89× — the NDArray allocation floor** (~230 ns to create and dispose a 2-element array; NumPy's
-whole `np.array([off, scl])` is ~200 ns), not the algorithm.
+**Long series take house SIMD routes (the 2026-09-27/28 parity audit).** The first corpus stopped at a dozen
+coefficients, so every cell ran the scalar IL kernels; from `PolyHouseKernelThreshold` (64 elements) on the same
+operations take vector routes, each byte-identical to the scalar one and pinned by corpus sections K (long series),
+L (complex64 array loops), M (block boundaries) and N (getdomain across its windows):
+- **`{p}add`/`{p}sub`** — `CombineViaHouseKernels`: the in-place target materialized block by block (1,024 elements:
+  memcpy / SIMD cast / SIMD strided copy), negated where NumPy negates it, then updated by the same-dtype `SimdFull`
+  kernel, when both operands are "vector-readable" (`VectorReadable`: contiguous, or strided with a result of at most 4
+  bytes or a sub-word source, and a vector cast); float16 always.
+- **`as_series`' conversion copy** (`CopyInto`) — memcpy / the house contiguous cast / the SIMD strided copy, a
+  converting strided source copied then cast through an L1 block.
+- **`getdomain`** — ONE blocked pass for every layout of a float64 / float32 / integer x (`TryDomainBlocked`): NumPy's
+  C-contiguous copy is taken 8 KB at a time — read in place from a unit-stride x, packed into an L1 scratch by
+  `CopyInto` otherwise — and both the min and the max are folded while the window is in L1 by the engine's exact
+  schedule (`NumPyMinMaxReduce.FoldGroups` per full window, `Finish` for the last), which is bit-identical to one
+  `simd_reduce_c` over the whole copy because windows are whole 8-vector groups counted after element 0 (the
+  `StreamMinMax` argument). An integer x is order-free, so a reversed one is folded as the forward run it covers
+  (`PolySeriesView.Reversed`); a float x keeps its order (the ±0 / NaN bits of min/max depend on it). uint64 packs
+  converted to float64 (AVX2 has no unsigned 64-bit compare: the emulated folds cost 20 µs per 100K, the splice cast +
+  float64 folds ~14). float16 / char decline to the copy-then-reduce route. Replaced: allocating the copy, then two
+  engine reductions (100K stride-2 float64 / int64 / uint64: ~37 / ~45 / ~50 → ~23 / ~30 / ~31 µs; 16 points ~0.9 →
+  ~0.3 µs; getdomain's 90 cells now 2.13–104× NumPy, were 1.26–75×).
+- **`mapdomain`** — `MapDomainAffine` for a float64 / float32 / complex128 loop shared by both operations over 1-D (any
+  stride) or C-contiguous points: converted 8 KB at a time into an L1 scratch, then `PolyAffineDouble`/
+  `PolyAffineSingle` (multiply THEN add, two roundings — never an FMA) or `PolyComplex128Affine` (`simd_cmul` + add).
+  The fused `np.evaluate` pass keeps what it runs at vector speed (`FusedPassIsFaster`: a contiguous x on a vector
+  widen edge or of bool; a strided x already of the loop dtype or on an edge from 8,192 points, where that pass packs
+  it). Measured in ONE process (`NDPolySeries.DisableAffineMapDomain`), fused/affine geomean 1.34 at 16 points,
+  1.53–1.62 at 1,000, 1.36–1.46 at 100K, min 0.94. complex64 loops run on the float32 kernels
+  (`MapDomainComplex64`).
+- **New house kernels, bit-exact and library-wide through `TryGetCastKernel`:** AVX2 int → float
+  (`Cast.IntToFloat.cs`: {int8, uint8, int16, uint16, char, int32, uint32} → {float32, float64}; int64 / uint64 →
+  float64 by the exponent-bias splice, one round-to-nearest-even rounding — 2.2–3.3× the scalar loop, 134M random
+  values identical); float16 → float64 exactly as NumPy's `ToDoubleBits` (a signalling NaN stays signalling, which
+  `cvtps2pd` and `(double)Half` would quiet); the 4/8-byte same-type strided copy (`Cast.WordCopy.cs`: SIMD reverse,
+  deinterleave, gather); and `EmitConvertTo`'s float32 ↔ float64 through the packed `cvtps2pd`/`cvtpd2ps`.
+
+**Perf (NPY/NS, P-cores pinned, best-of-7, NumPy re-measured back to back; 867 cells = dtypes × 16 / 1,000 / 100K
+(+1M) × contiguous / stride-2 / reversed; geomean 8.47×):** add/sub 1.70–24.3× (geo 6.7), trim 5.5–515× (geo 24.6),
+trimseq 3.8–490× (geo 18.2), getdomain 2.13–104× (geo 8.3), mapdomain 1.96–33× (geo 4.9), as_series 1.11–10.3×
+(geo 3.9), mapparms 1.18–8.7× (geo 4.1), `{p}line` 0.80–1.03×. The 26 cells under 1.5× are floors, measured:
+**`{p}line` (21) is the NDArray allocation floor** (~230 ns to create and dispose a 2-element array; NumPy's whole
+`np.array([off, scl])` is 260–430 ns); **`as_series` of two 100K arrays (4, 1.11–1.36×) is memcpy** — both sides copy
+the same 2 × 800 KB, and two plain `Buffer.MemoryCopy`s into already-allocated buffers take 45.5 µs of the call's
+44.7 (float64); **`mapparms(float64 array, (0, 2))` (1.18×, 0.35 vs 0.42 µs) is the exact general lane's dispatch** —
+four element reads (~60 ns) and six `PolyNumber.Binary` operations (~25 ns each, a >100-byte struct through every
+step) for a mix of NumPy scalars and Python ints; a typed program per argument-kind signature is the known lever.
 
 **Traps this family hit — do not re-break:**
 - **CPython's NaN operand priority is per-operator, and a C# operator does not pin it.** When both operands are NaN
@@ -2707,6 +2751,31 @@ whole `np.array([off, scl])` is ~200 ns), not the algorithm.
   `object`.
 - **Python's evaluation order is observable only through errors:** mapparms reads each element ONCE, but in Python's
   order (old's subtraction before new is indexed), so an error in `old` still wins over a short `new`.
+- **`stackalloc` scratch is ZERO-FILLED unless the method carries `[SkipLocalsInit]`.** `CopyInto` runs once per block
+  inside the combine and mapdomain loops, and zeroing its 8 KB scratch every call cost more than converting the block
+  (mapdomain at 16 points: 1.03 → 1.34× the fused pass once removed).
+- **A strided source reads more than its block:** a stride-2 float64 block of 16 KB drags 32 KB of source lines in,
+  which with the scratch overflows a 48 KB L1 — 16 KB blocks ran 0.72× the fused pass where 8 KB kept parity.
+- **100K-point timings move 1.5–2× between runs with the allocator's page state**, and a whole run can drift ~10%. A/B
+  two routes in ONE process, interleaved (`DisableAffineMapDomain`), and re-measure NumPy back to back before quoting.
+- **Measure a cast before calling it vectorized:** the generic emitter's int → float strategies ran at SCALAR speed
+  (0.19–0.37 ns an element on an L1 block; only int16/uint16 → float32 vectorized), and the scalar `cvtss2sd`/
+  `cvtsd2ss` behind `conv.r8`/`conv.r4` MERGE into their destination register — a false dependency that made a scalar
+  float32 → float64 loop latency-bound (128 vs 37 µs).
+- **NumPy's scalar-broadcast complex multiply is `simd_cmul` at every length for a trivially iterable call** — even ONE
+  element (`s * np.array([x])`, probed 300/300); `loop_scalar` needs NpyIter's stride-0 single-element iteration.
+- **Test trap: `GetUInt32(i)` on a 2-D array reads the ROW coordinate `i`, not flat index `i`** — flatten first.
+- **Sign-mixed zeros ALONE cannot tell NumPy's min/max schedule from a sequential fold:** with every element a tie,
+  each lane keeps its own last zero and the horizontal cascade lets the HIGHEST lane win, which holds the array's last
+  element — the same answer. A discriminating case needs the extreme shared by lanes out of order: a -0.0 early in the
+  highest lane and a +0.0 late in lane 0 among smaller values (NumPy returns the early -0.0). And a scalar tail
+  decides ties by itself (the last element wins), so the length must leave none.
+- **Repeating extremes hide a dropped element:** a window that skipped the last 8 elements of every block passed the
+  route-agreement test on patterned data (extremes every 13 elements) and was only caught by planting a UNIQUE min and
+  max at every position around each window edge (`GetDomain_BlockedPass_FoldsEveryElement`).
+- **An A/B that alternates routes batch by batch lets one route's allocations evict the other's working set:**
+  interleaved, the blocked getdomain measured 39–43 µs at 100K stride-2 int64/uint64; timed alone, 30. Time each
+  route as a whole warm batch, and confirm against a standalone run.
 
 ### Random (`np.random.*`)
 `bernoulli`, `beta`, `binomial`, `chisquare`, `choice`, `dirichlet`, `exponential`, `f`, `gamma`, `geometric`, `get_bit_generator`, `gumbel`, `hypergeometric`, `laplace`, `logistic`, `lognormal`, `logseries`, `multinomial`, `multivariate_normal`, `negative_binomial`, `noncentral_chisquare`, `noncentral_f`, `normal`, `pareto`, `permutation`, `poisson`, `power`, `rand`, `randint`, `randn`, `random_sample`, `rayleigh`, `seed`, `set_bit_generator`, `shuffle`, `standard_cauchy`, `standard_exponential`, `standard_gamma`, `standard_normal`, `standard_t`, `triangular`, `uniform`, `vonmises`, `wald`, `weibull`, `zipf`

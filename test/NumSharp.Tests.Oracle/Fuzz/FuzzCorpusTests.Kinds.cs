@@ -141,6 +141,23 @@ namespace NumSharp.Tests.Fuzz
             // unmappable dtype (verified), so this only fires for the fft float32/float16 cells.
             NPTypeCode tc;
             try { tc = FuzzCorpus.DtypeToTC(exp.Dtype); }
+            catch (NotSupportedException) when (OpRegistry.IsPolynomialOp(c.Op) && exp.Dtype == "complex64")
+            {
+                // numpy.polynomial makes complex64 values under NEP 50 (a float16/float32 value meeting a Python
+                // complex, or a complex64 NumPy scalar meeting a narrow value): complex64 SCALARS in its scalar code and
+                // complex64 ARRAY loops in mapdomain's `off + scl*x`. NumSharp emulates both in float32 exactly (the
+                // scalar engine; the mapdomain complex64 kernels) and carries the value in its one complex dtype,
+                // complex128 (#569). The generator records exactly those results, so the VALUES must match NumPy's:
+                // up-cast NumPy's complex64 (exact) and compare, NaN tokenized as for every binary op. The polynomial
+                // tiers take no registry excuse, so this is the one documented divergence they report — dtype-only,
+                // never a value.
+                if (result.typecode == NPTypeCode.Complex && Complex64ValuesMatch(exp, result))
+                    Bump(documented, "complex64 result carried as complex128 (#569: no complex64 dtype; values exact)");
+                else
+                    failures.Add($"{c.Id} [{c.Layout}]{at}: NumPy complex64 result, NumSharp {result.typecode}{result.Shape}: " +
+                                 "VALUES diverge after up-cast (not dtype-only)");
+                return;
+            }
             catch (NotSupportedException)
             {
                 var dr = MisalignedRegistry.Classify(c, DivergenceKind.Dtype, null, null, default, empty);
@@ -261,6 +278,28 @@ namespace NumSharp.Tests.Fuzz
             for (int i = 0; i < up.Length; i++)
                 if (up[i] != got[i]) return false;
             return true;
+        }
+
+        /// <summary>
+        ///     Whether NumSharp's complex128 <paramref name="result"/> holds exactly NumPy's complex64 values: the
+        ///     expected bytes (two float32 per element) are widened exactly to two float64 and compared with the
+        ///     result through <see cref="BitDiff.Compare(byte[],byte[],NPTypeCode)"/> — same shape, every finite
+        ///     component and signed zero bit-exact, NaN tokenized (which NaN payload survives a float32 operation is
+        ///     non-contractual, as for every binary op).
+        /// </summary>
+        /// <param name="exp">NumPy's expected result (dtype complex64).</param>
+        /// <param name="result">NumSharp's result (complex128).</param>
+        /// <returns>True when the values match: the divergence is the dtype alone.</returns>
+        private static bool Complex64ValuesMatch(FuzzCorpus.Expected exp, NDArray result)
+        {
+            if (!ShapeEquals(result.Shape.dimensions, exp.Shape))
+                return false;
+            byte[] want = FuzzCorpus.FromHex(exp.Buffer);
+            byte[] up = new byte[want.Length * 2];
+            for (int i = 0; i + 4 <= want.Length; i += 4)
+                BitConverter.GetBytes((double)BitConverter.ToSingle(want, i)).CopyTo(up, i * 2);
+            byte[] got = FuzzCorpus.ResultBytes(result);
+            return up.Length == got.Length && BitDiff.Compare(up, got, NPTypeCode.Complex).Count == 0;
         }
 
         /// <summary>

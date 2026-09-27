@@ -10906,6 +10906,18 @@ def _ps_series(n, dt, pattern="moderate", seed=0):
     raise ValueError(pattern)
 
 
+def _ps_c64_exact(op, operands, a):
+    """Whether a complex64 result is recorded (NumSharp carries it as complex128 with the SAME values): a 0-d result
+    (mapparms' off/scl, mapdomain at a scalar x), a {p}line of scalar operands (np.array stacking complex64 scalars),
+    and any polyutils.mapdomain result — its complex64 ARRAY loops (off + scl*x) run on NumSharp's float32 kernels
+    with NumPy's product forms. NumSharp has no complex64 dtype (#569), so the replay compares the VALUES up-cast."""
+    if a.dtype != np.complex64:
+        return False
+    if a.ndim == 0 or op == "polyutils.mapdomain":
+        return True
+    return op.endswith("line") and all(len(o["shape"]) == 0 for o in operands)
+
+
 def _ps_layouts(arr):
     """(name, _PSArr) for the 1-D layouts of arr's values: contiguous, strided, reversed, offset slice,
     and — for a single value — stride-0 broadcast and 0-d."""
@@ -10943,13 +10955,13 @@ def gen_polyseries():
             return
         if kind == "tuple":
             arrs = [np.asarray(v) for v in r]
-            if any(a.dtype.name not in ok_dtypes for a in arrs):
+            if any(a.dtype.name not in ok_dtypes and not _ps_c64_exact(op, operands, a) for a in arrs):
                 skipped[0] += 1
                 return
             cases.append(_case(op, params, operands, _tuple_expected(arrs), layout, "polyseries", cid=f"{cid}/{n}"))
         else:
             a = np.asarray(r)
-            if a.dtype.name not in ok_dtypes:
+            if a.dtype.name not in ok_dtypes and not _ps_c64_exact(op, operands, a):
                 skipped[0] += 1
                 return
             cases.append(_case(op, params, operands, _arr_expected(a), layout, "polyseries", cid=f"{cid}/{n}"))
@@ -11371,6 +11383,326 @@ def gen_polyseries():
                  f"{op}/writeable")
             emit(op, {"facet": "owndata"}, lambda: np.bool_(getattr(mod, attr).flags.owndata), "constant",
                  f"{op}/owndata")
+
+    # ---------------- (J) complex64 NumPy scalars ----------------
+    # NEP 50 turns a float16/float32 NumPy value meeting a Python complex into a complex64 NumPy SCALAR, which stays
+    # complex64 against Python numbers and narrow NumPy values. NumSharp has no complex64 dtype (#569) but emulates
+    # that scalar arithmetic in float32 exactly, so a complex128 result built from it must match NumPy bit for bit,
+    # and a complex64 result (recorded only where every step was scalar-sized, _ps_c64_exact) must carry NumPy's
+    # values. Full-mantissa draws separate the forms: scalarmath's NAIVE complex product (mapdomain at a Python
+    # complex x: complex64 scl times it), CFLOAT_divide's reciprocal-multiply Smith (mapparms' divisions by a float32
+    # oldlen), a 0-d operand's ufunc (a 0-d float32 x), and the rounding of a Python complex into the loop. A 1-D
+    # float32/float16 domain makes old[0]/old[1] genuine NumPy scalars (scalarmath); a 0-d array is a ufunc operand.
+    crng = np.random.default_rng(20260928)
+
+    def c64_draw():
+        return tuple(complex(*crng.uniform(-3, 3, 2)) for _ in range(2))
+
+    for draw in range(12):
+        for dt in ("float32", "float16"):
+            with np.errstate(all="ignore"):
+                dom = np.array(crng.uniform(-3, 3, 2)).astype(dt)
+            cdom = c64_draw()
+            op = "polyutils.mapparms"
+            emit(op, {"old": A(dom), "new": cdom}, lambda: pu.mapparms(dom, cdom), "complex64",
+                 f"{op}/c64/{dt}/{draw}", kind="tuple")
+            emit(op, {"old": cdom, "new": A(dom)}, lambda: pu.mapparms(cdom, dom), "complex64",
+                 f"{op}/c64r/{dt}/{draw}", kind="tuple")
+            ol = [A(np.array(dom[0])), A(np.array(dom[1]))]
+            emit(op, {"old": ol, "new": cdom}, lambda: pu.mapparms(_ps_py(ol), cdom), "complex64",
+                 f"{op}/c64_0d/{dt}/{draw}", kind="tuple")
+            op = "polyutils.mapdomain"
+            xc = complex(*crng.uniform(-3, 3, 2))
+            xf = float(crng.uniform(-3, 3))
+            x64 = crng.uniform(-3, 3, 5)
+            xc128 = crng.uniform(-3, 3, 5) + 1j * crng.uniform(-3, 3, 5)
+            x0 = np.array(crng.uniform(-3, 3)).astype(dt)
+            for tag, xv in (("pycomplex", xc), ("pyfloat", xf), ("f64", A(x64)), ("c128", A(xc128)), ("0d", A(x0))):
+                emit(op, {"x": xv, "old": A(dom), "new": cdom},
+                     lambda: pu.mapdomain(_ps_py(xv), dom, cdom), "complex64", f"{op}/c64/{dt}/{tag}/{draw}")
+            for modname, p in (("laguerre", "lag"), ("polynomial", "poly"), ("hermite", "herm")):
+                f = getattr(_poly_module(modname), p + "line")
+                op = f"{modname}.{p}line"
+                s0 = np.array(crng.uniform(-3, 3)).astype(dt)
+                cv = complex(*crng.uniform(-3, 3, 2))
+                emit(op, {"off": A(s0), "scl": cv}, lambda: f(s0, cv), "complex64", f"{op}/c64/{dt}/{draw}")
+                emit(op, {"off": cv, "scl": A(s0)}, lambda: f(cv, s0), "complex64", f"{op}/c64r/{dt}/{draw}")
+
+    # ---------------- (K) long series ----------------
+    # Every section above uses series of at most a dozen elements, all of which run the fused scalar kernels. From
+    # NumSharp's PolyHouseKernelThreshold (64 elements) on, the SAME operations run through the house SIMD kernels
+    # instead — memcpy / the astype cast kernels for as_series' conversion copy, the same-dtype SimdFull binary kernel
+    # (plus the house negate for `c2 = -c2`) for _add/_sub — so this block pins those routes to NumPy's bits: lengths
+    # on both sides of the threshold (63/64/65) and past a vector body into its remainder, every kind of update
+    # (add, subtract with the minuend longer, subtract with the subtrahend at least as long), converted operands,
+    # strided and reversed operands, results whose trailing zeros are trimmed back below the threshold, and specials
+    # (NaN, ±inf, ±0, subnormals, overflowing sums) in both the updated prefix and the untouched tail.
+    def long_series(n, dt, seed, tz=0):
+        lr = np.random.default_rng(seed)
+        dt = np.dtype(dt)
+        if dt.kind in "fc":
+            f = np.finfo(dt if dt.kind == "f" else np.float64)
+            big, tiny = float(f.max) * 0.75, float(f.smallest_subnormal)
+            spec = {3: float("nan"), 5: -0.0, 7: 0.0, 11: float("inf"), 13: tiny, 19: big, 20: big, 29: float("-inf"),
+                    n - 7: float("nan"), n - 4: -big}
+            if dt.kind == "f":
+                vals = lr.uniform(-4, 4, n)
+                for i, v in spec.items():
+                    if 0 <= i < n:
+                        vals[i] = v
+                with np.errstate(all="ignore"):
+                    a = vals.astype(dt)
+            else:
+                re, im = lr.uniform(-4, 4, n), lr.uniform(-4, 4, n)
+                for i, v in spec.items():
+                    if 0 <= i < n:
+                        re[i] = v
+                        im[i] = -v if i % 2 else 1.5
+                a = re + 1j * im
+        else:
+            info = np.iinfo(dt)
+            vals = lr.integers(max(int(info.min), -1000), min(int(info.max), 1000), n, endpoint=True)
+            a = vals.astype(dt)
+            for i, v in ((2, info.min), (9, info.max), (17, 0), (n - 3, info.max)):
+                if 0 <= i < n:
+                    a[i] = v
+        if tz:
+            z = np.zeros(tz, dt)
+            if dt.kind in "fc":
+                z[::2] = -0.0
+            a = np.concatenate([a, z]).astype(dt)
+        return a
+
+    def long_layouts(arr, which=("c", "s", "r")):
+        """(name, _PSArr) views of arr's values: contiguous, stride-2 and reversed (the three CopyInto routes)."""
+        out = []
+        if "c" in which:
+            out.append(("c_contiguous_1d", A(arr.copy())))
+        if "s" in which:
+            s = np.zeros(2 * arr.size, arr.dtype)
+            s[::2] = arr
+            out.append(("strided_1d", A(s, s[::2])))
+        if "r" in which:
+            r = arr[::-1].copy()
+            out.append(("reversed_1d", A(r, r[::-1])))
+        return out
+
+    long_pairs = ((63, 63), (64, 64), (65, 65), (70, 64), (64, 70), (71, 3), (3, 71), (257, 100), (100, 257),
+                  (1000, 1000), (1003, 5), (5, 1003))
+    for opname, f in (("polynomial.polyadd", _poly_module("polynomial").polyadd),
+                      ("polynomial.polysub", _poly_module("polynomial").polysub),
+                      ("legendre.legsub", _poly_module("legendre").legsub)):
+        for d in ("float64", "float32", "float16", "complex128"):
+            for n1, n2 in long_pairs:
+                c1 = long_series(n1, d, 100 + n1)
+                c2 = long_series(n2, d, 200 + n2)
+                emit(opname, {"c1": A(c1), "c2": A(c2)}, lambda: f(c1, c2), "c_contiguous_1d",
+                     f"{opname}/long/{d}/{n1}/{n2}")
+        for d1, d2 in (("float16", "float32"), ("float32", "float16"), ("float32", "float64"), ("int32", "float64"),
+                       ("int8", "float16"), ("uint8", "uint8"), ("int64", "int64"), ("uint64", "float64"),
+                       ("complex128", "float64"), ("float16", "complex128"), ("uint16", "float32"),
+                       ("float16", "float16")):
+            for n1, n2 in ((65, 70), (70, 65), (257, 257)):
+                c1 = long_series(n1, d1, 300 + n1)
+                c2 = long_series(n2, d2, 400 + n2)
+                emit(opname, {"c1": A(c1), "c2": A(c2)}, lambda: f(c1, c2), "c_contiguous_1d",
+                     f"{opname}/longmix/{d1}/{d2}/{n1}/{n2}")
+        for d1, d2 in (("float64", "float64"), ("float32", "float32"), ("float16", "float16"), ("float16", "float32"),
+                       ("int16", "float64")):
+            for n1, n2 in ((100, 70), (70, 100), (100, 100)):
+                for ln1, a1 in long_layouts(long_series(n1, d1, 500 + n1)):
+                    for ln2, a2 in long_layouts(long_series(n2, d2, 600 + n2)):
+                        emit(opname, {"c1": a1, "c2": a2}, lambda: f(_ps_py(a1), _ps_py(a2)), f"{ln1}+{ln2}",
+                             f"{opname}/longlay/{d1}/{d2}/{ln1}/{ln2}/{n1}/{n2}")
+        # Trimming: the operands' own trailing zeros (trimmed BEFORE the update, possibly below the threshold) and a
+        # result whose tail cancels (trimmed AFTER it, to a view).
+        for d in ("float64", "float32", "float16", "complex128"):
+            for n, tz in ((60, 30), (64, 1), (100, 40)):
+                c1 = long_series(n, d, 700 + n, tz=tz)
+                c2 = long_series(n // 2, d, 800 + n)
+                emit(opname, {"c1": A(c1), "c2": A(c2)}, lambda: f(c1, c2), "c_contiguous_1d",
+                     f"{opname}/longtz/{d}/{n}/{tz}")
+                emit(opname, {"c1": A(c2), "c2": A(c1)}, lambda: f(c2, c1), "c_contiguous_1d",
+                     f"{opname}/longtzr/{d}/{n}/{tz}")
+            base = long_series(120, d, 900)
+            other = base.copy()
+            other[:100] = long_series(100, d, 901)
+            with np.errstate(all="ignore"):
+                cancel = -other if opname.endswith("add") else other
+            emit(opname, {"c1": A(base), "c2": A(cancel)}, lambda: f(base, cancel), "c_contiguous_1d",
+                 f"{opname}/longcancel/{d}")
+
+    op = "polyutils.as_series"
+    for d1 in ALL_DTYPES:
+        if d1 == "bool":
+            continue
+        for d2 in ("float64", "float16", "complex128"):
+            for trim in (True, False):
+                for ln, a1 in long_layouts(long_series(100, d1, 1000, tz=3)):
+                    a2 = A(long_series(80, d2, 1001))
+                    emit(op, {"alist": [a1, a2], "trim": trim}, lambda: pu.as_series([_ps_py(a1), _ps_py(a2)], trim=trim),
+                         "list_of_arrays", f"{op}/long/{d1}/{d2}/{ln}/{trim}", kind="tuple")
+
+    op = "polyutils.trimcoef"
+    for d in ("float64", "float32", "float16", "complex128", "int32", "uint8"):
+        for ln, ca in long_layouts(long_series(100, d, 1100, tz=5), ("c", "s")):
+            for tol in (0, 0.5):
+                emit(op, {"c": ca, "tol": tol}, lambda: pu.trimcoef(_ps_py(ca), tol), ln, f"{op}/long/{d}/{ln}/{tol}")
+
+    op = "polyutils.getdomain"
+    for d in ALL_DTYPES:
+        if d == "bool":
+            continue
+        for n in (100, 1000):
+            if n == 1000 and d not in ("float64", "float32", "float16", "complex128", "int64"):
+                continue
+            for ln, xa in long_layouts(long_series(n, d, 1200 + n)):
+                emit(op, {"x": xa}, lambda: pu.getdomain(_ps_py(xa)), ln, f"{op}/long/{d}/{n}/{ln}")
+
+    op = "polyutils.mapdomain"
+    for d in ALL_DTYPES:
+        if d == "bool":
+            continue
+        for n in (100, 1000):
+            if n == 1000 and d not in ("float64", "float32", "float16", "complex128", "uint8"):
+                continue
+            for ln, xa in long_layouts(long_series(n, d, 1300 + n), ("c", "s", "r") if n == 100 else ("c",)):
+                for tag, old, new in dom_forms[:9]:
+                    emit(op, {"x": xa, "old": old, "new": new},
+                         lambda: pu.mapdomain(_ps_py(xa), _ps_py(old), _ps_py(new)), ln, f"{op}/long/{d}/{n}/{ln}/{tag}")
+
+    # ---------------- (L) complex64 ARRAY loops of mapdomain ----------------
+    # A complex64 off/scl (mapparms of a float32/float16 domain and a Python complex tuple) with every narrow x NEP 50
+    # keeps in complex64, and a Python complex tuple domain with a float16/float32 x. Lengths 1 (NpyIter's stride-0
+    # one-element iteration: CFLOAT_multiply's loop_scalar product form), 5 and 37 (the vector loop's body and
+    # remainder), plus strided and reversed views. Appended after (K) so the running case counter of every earlier
+    # case is unchanged.
+    op = "polyutils.mapdomain"
+    for draw in range(6):
+        for dt in ("float32", "float16"):
+            arng = np.random.default_rng(20260930 + 17 * draw + (dt == "float16"))
+            with np.errstate(all="ignore"):
+                dom = np.array(arng.uniform(-3, 3, 2)).astype(dt)
+                cdom = tuple(complex(*arng.uniform(-3, 3, 2)) for _ in range(2))
+                for xdt in ("float32", "float16", "int8", "uint8", "int16", "uint16", "bool"):
+                    for n in (1, 5, 37):
+                        raw = arng.uniform(-3, 3, n)
+                        xs = (raw > 0 if xdt == "bool" else raw * (40 if xdt[0] in "iu" else 1)).astype(xdt)
+                        emit(op, {"x": A(xs), "old": A(dom), "new": cdom},
+                             lambda: pu.mapdomain(xs, dom, cdom), "complex64", f"{op}/c64arr/{dt}/{xdt}/{n}/{draw}")
+                        if xdt in ("float32", "float16"):
+                            pc0 = complex(*arng.uniform(-3, 3, 2))
+                            pc1 = complex(*arng.uniform(-3, 3, 2))
+                            pold, pnew = (pc0, pc0 + 2), (0, pc1)
+                            emit(op, {"x": A(xs), "old": pold, "new": pnew},
+                                 lambda: pu.mapdomain(xs, pold, pnew), "complex64", f"{op}/c64py/{dt}/{xdt}/{n}/{draw}")
+                    xl = (arng.uniform(-3, 3, 23) * (40 if xdt[0] in "iu" else 1)).astype(xdt if xdt != "bool" else "float32")
+                    rb = np.repeat(xl, 2)
+                    rv = xl[::-1].copy()
+                    for ln, xa in (("strided_1d", A(rb, rb[::2])), ("reversed_1d", A(rv, rv[::-1]))):
+                        emit(op, {"x": xa, "old": A(dom), "new": cdom},
+                             lambda: pu.mapdomain(_ps_py(xa), dom, cdom), "complex64", f"{op}/c64lay/{dt}/{xdt}/{ln}/{draw}")
+
+    # ---------------- (M) block and staging boundaries ----------------
+    # (K) stops near 1,000 elements, below every boundary the long routes have beyond the 64-element house threshold:
+    # the 1,024-element blocks in which the in-place combine materializes a converted, strided or negated operand
+    # through a stack scratch, in which a strided source is copied then cast, and in which mapdomain's affine route
+    # converts its points (a float64 / float32 / complex128 loop over 1-D or C-contiguous points) before mapping them;
+    # and the fused pass's staging of an N-D non-contiguous x (from 8,192 points). One case per route past its
+    # boundary — several whole blocks and a partial last one — in the dtypes whose conversion takes that route. The
+    # series come from long_series (specials included), with seeds of their own; appended after (L) so every earlier
+    # case keeps its running counter.
+    for opname, f in (("polynomial.polyadd", _poly_module("polynomial").polyadd),
+                      ("polynomial.polysub", _poly_module("polynomial").polysub)):
+        for d1, d2, lay1 in (("int32", "float64", "c"), ("float64", "int32", "c"), ("float64", "float64", "c"),
+                             ("float32", "float32", "s"), ("int16", "float64", "r"), ("float16", "float32", "c")):
+            for n1, n2 in ((2100, 2150), (2150, 2100)):
+                (ln1, a1), = long_layouts(long_series(n1, d1, 2000 + n1), (lay1,))
+                a2 = A(long_series(n2, d2, 2100 + n2))
+                emit(opname, {"c1": a1, "c2": a2}, lambda: f(_ps_py(a1), _ps_py(a2)), f"{ln1}+c_contiguous_1d",
+                     f"{opname}/block/{d1}/{d2}/{ln1}/{n1}/{n2}")
+
+    op = "polyutils.as_series"
+    for d1, lay in (("int16", "s"), ("int64", "r"), ("uint32", "s"), ("float32", "r")):
+        (ln, a1), = long_layouts(long_series(2100, d1, 2200), (lay,))
+        a2 = A(long_series(10, "float64", 2201))
+        emit(op, {"alist": [a1, a2], "trim": True}, lambda: pu.as_series([_ps_py(a1), _ps_py(a2)]),
+             "list_of_arrays", f"{op}/block/{d1}/{ln}", kind="tuple")
+
+    op = "polyutils.mapdomain"
+    f64dom, f32dom = np.array([-2.0, 3.0]), np.array([-2.0, 3.0], np.float32)
+    new64, new32 = np.array([0.5, 4.0]), np.array([0.5, 4.0], np.float32)
+    # A contiguous x converted block by block into a float64 loop (Python-int domains) and into a float32 loop
+    # (float32 array domains).
+    for d, n, old, new, tag in (("int8", 2100, (-1, 1), (0, 2), "pyint"), ("uint8", 2100, (-1, 1), (0, 2), "pyint"),
+                                ("int16", 2100, (-1, 1), (0, 2), "pyint"), ("uint16", 2100, (-1, 1), (0, 2), "pyint"),
+                                ("int64", 2100, (-1, 1), (0, 2), "pyint"), ("uint64", 2100, (-1, 1), (0, 2), "pyint"),
+                                ("float16", 600, f64dom, new64, "f64"), ("int8", 1030, f32dom, new32, "f32"),
+                                ("uint8", 1030, f32dom, new32, "f32")):
+        xa = A(long_series(n, d, 2300 + n))
+        emit(op, {"x": xa, "old": old if isinstance(old, tuple) else A(old), "new": new if isinstance(new, tuple) else A(new)},
+             lambda: pu.mapdomain(_ps_py(xa), old, new), "c_contiguous_1d", f"{op}/stage/{d}/{n}/{tag}")
+    # A strided / reversed 1-D x: the house SIMD strided copy (then cast) of each block.
+    for d, lay, old, new, tag in (("int64", "r", (-1, 1), (0, 2), "pyint"), ("int16", "s", (-1, 1), (0, 2), "pyint"),
+                                  ("uint8", "s", (-1, 1), (0, 2), "pyint"), ("int32", "s", (-1, 1), (0, 2), "pyint"),
+                                  ("float32", "s", f64dom, new64, "f64")):
+        (ln, xa), = long_layouts(long_series(2100, d, 2400), (lay,))
+        emit(op, {"x": xa, "old": old if isinstance(old, tuple) else A(old), "new": new if isinstance(new, tuple) else A(new)},
+             lambda: pu.mapdomain(_ps_py(xa), old, new), ln, f"{op}/stage/{d}/{ln}/{tag}")
+    # A transposed 2-D x (N-D, not contiguous): packed contiguous before the fused pass, then cast.
+    for d in ("int16", "float32"):
+        base2 = long_series(96 * 90, d, 2500).reshape(96, 90)
+        xa = A(base2, base2.T)
+        emit(op, {"x": xa, "old": (-1, 1), "new": (0, 2)}, lambda: pu.mapdomain(_ps_py(xa), (-1, 1), (0, 2)),
+             "transposed_2d", f"{op}/stage/{d}/transposed_2d/pyint")
+
+    # ---------------- (N) getdomain across the blocked pass's windows ----------------
+    # NumSharp's getdomain reduces NumPy's copy in 8 KB windows (8,192 / itemsize elements, counted after element 0)
+    # and carries the min/max accumulators from window to window: read in place (contiguous; a reversed INTEGER x as
+    # the forward run it covers), packed by the SIMD strided copy otherwise, uint64 converted to float64 as it is
+    # packed. (K) stops at 1,000 points — inside one window — so these cases cross a window boundary (a full window
+    # folded group by group, then the partial last one finished: both halves of the pass) in every dtype the pass
+    # serves and every layout it reads differently, and pin the schedule facts the carried accumulators
+    # must preserve: which lane's zero survives a ±0 tie (a -0.0 early in the HIGHEST lane against a +0.0 late in
+    # lane 0: NumPy's horizontal cascade returns the early one, where a sequential fold would return the late one)
+    # and whether a NaN comes back canonical (met inside the vector section) or with its payload (met in the scalar
+    # tail). Appended after (M) so every earlier case keeps its running counter.
+    op = "polyutils.getdomain"
+    for d in ("int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64", "float32", "float64"):
+        window = 8192 // np.dtype(d).itemsize
+        n = window + 37
+        for ln, xa in long_layouts(long_series(n, d, 2600 + n)):
+            emit(op, {"x": xa}, lambda: pu.getdomain(_ps_py(xa)), ln, f"{op}/window/{d}/{n}/{ln}")
+    for d in ("int64", "float64", "uint8"):
+        # Stride 3: the AVX2 gather (8-byte) / the scalar sub-word copy.
+        window = 8192 // np.dtype(d).itemsize
+        arr = long_series(window + 37, d, 2650)
+        b3 = np.zeros(3 * arr.size, arr.dtype)
+        b3[::3] = arr
+        xa = A(b3, b3[::3])
+        emit(op, {"x": xa}, lambda: pu.getdomain(_ps_py(xa)), "strided3_1d", f"{op}/window/{d}/strided3_1d")
+    for d in ("float64", "float32"):
+        lanes = 32 // np.dtype(d).itemsize
+        window = 8192 // np.dtype(d).itemsize
+        n = 2 * window + 1          # a whole number of vectors after element 0: no scalar tail, the cascade decides
+        late = 1 + lanes * ((n - 1) // lanes - 1)       # lane 0 of the last vector (the last window)
+        for early in (lanes, window + lanes):           # the highest lane, in window 0 / in window 1
+            for tag, fill, zeros in (("max", -1.0, (-0.0, 0.0)), ("min", 1.0, (0.0, -0.0))):
+                x = np.full(n, fill, d)
+                x[early], x[late] = zeros
+                for ln, xa in long_layouts(x):
+                    emit(op, {"x": xa}, lambda: pu.getdomain(_ps_py(xa)), ln, f"{op}/lanes/{d}/{tag}/{early}/{ln}")
+        # One NaN with a payload (negative sign, 0xbad), on the first element of window 1 (inside the vector section:
+        # canonicalized by the horizontal reduce) and on the last element of a series whose length leaves a scalar
+        # tail (kept as is). The series' own NaNs are zeroed so the planted one is the only NaN.
+        payload = np.array([0xfff8000000000bad], "u8").view("f8")[0] if d == "float64" else \
+            np.array([0xffc00bad], "u4").view("f4")[0]
+        for m, at in ((n, window + 1), (n - 1, n - 2)):
+            x = long_series(m, d, 2700 + at)
+            x[np.isnan(x)] = 0
+            x[at] = payload
+            for ln, xa in long_layouts(x):
+                emit(op, {"x": xa}, lambda: pu.getdomain(_ps_py(xa)), ln, f"{op}/nan/{d}/{m}/{at}/{ln}")
 
     # Char: NumSharp's uint16-like dtype — the uint16 cells relabelled (bytes-exact oracle, the house weave).
     cases += _relabel_dtype([c for c in cases if "/uint16" in (c.get("id") or "") and not c.get("expects_throw")],

@@ -654,6 +654,36 @@ namespace NumSharp.Backends.Kernels
             public static readonly MethodInfo ConvertsUInt64ToSingle = ConvertsOverload(nameof(Converts.ToSingle), typeof(ulong));
             public static readonly MethodInfo ConvertsUInt64ToDouble = ConvertsOverload(nameof(Converts.ToDouble), typeof(ulong));
 
+            // The PACKED float32 <-> float64 conversions for a scalar value (see EmitConvertTo's Single/Double arms):
+            // cvtps2pd / cvtpd2ps write their whole destination register, where the scalar cvtss2sd / cvtsd2ss that
+            // conv.r8 / conv.r4 compile to MERGE into it — a false dependency on the register's previous value that
+            // the JIT does not break, which serializes an element loop on the conversion's latency (a 100K
+            // float32 -> float64 add loop: 128 us scalar, 37 us packed). Same IEEE conversion, same NaN quieting.
+            public static readonly MethodInfo Vector128CreateScalarUnsafeSingle =
+                typeof(Vector128).GetMethod(nameof(Vector128.CreateScalarUnsafe), new[] { typeof(float) })
+                ?? throw new MissingMethodException(typeof(Vector128).FullName, "CreateScalarUnsafe(float)");
+            public static readonly MethodInfo Vector128CreateScalarUnsafeDouble =
+                typeof(Vector128).GetMethod(nameof(Vector128.CreateScalarUnsafe), new[] { typeof(double) })
+                ?? throw new MissingMethodException(typeof(Vector128).FullName, "CreateScalarUnsafe(double)");
+            public static readonly MethodInfo Sse2ConvertSingleToDouble =
+                typeof(System.Runtime.Intrinsics.X86.Sse2).GetMethod(nameof(System.Runtime.Intrinsics.X86.Sse2.ConvertToVector128Double), new[] { typeof(Vector128<float>) })
+                ?? throw new MissingMethodException("Sse2", "ConvertToVector128Double(Vector128<float>)");
+            public static readonly MethodInfo Sse2ConvertDoubleToSingle =
+                typeof(System.Runtime.Intrinsics.X86.Sse2).GetMethod(nameof(System.Runtime.Intrinsics.X86.Sse2.ConvertToVector128Single), new[] { typeof(Vector128<double>) })
+                ?? throw new MissingMethodException("Sse2", "ConvertToVector128Single(Vector128<double>)");
+            public static readonly MethodInfo Vector128ToScalarDouble = Vector128ToScalar(typeof(double));
+            public static readonly MethodInfo Vector128ToScalarSingle = Vector128ToScalar(typeof(float));
+
+            /// <summary>Resolves <c>Vector128.ToScalar&lt;T&gt;(Vector128&lt;T&gt;)</c> closed over <paramref name="element"/>.</summary>
+            /// <param name="element">The element type.</param>
+            /// <returns>The closed generic method.</returns>
+            /// <exception cref="MissingMethodException">The BCL has no such method (fails the type's initialization, i.e. fast).</exception>
+            private static MethodInfo Vector128ToScalar(Type element) =>
+                (typeof(Vector128).GetMethods(BindingFlags.Public | BindingFlags.Static)
+                    .FirstOrDefault(m => m.Name == nameof(Vector128.ToScalar) && m.IsGenericMethodDefinition && m.GetParameters().Length == 1)
+                 ?? throw new MissingMethodException(typeof(Vector128).FullName, "ToScalar<T>"))
+                .MakeGenericMethod(element);
+
             /// <summary>Resolves the public one-parameter <c>Converts.{name}({parameter})</c> overload.</summary>
             /// <param name="name">The method name (ToSingle, ToDouble, ToHalf, ...).</param>
             /// <param name="parameter">The single parameter's type.</param>
@@ -1201,6 +1231,15 @@ namespace NumSharp.Backends.Kernels
                         il.EmitCall(OpCodes.Call, CachedMethods.ConvertsUInt64ToSingle, null);
                         break;
                     }
+                    // float64 -> float32 as the packed cvtpd2ps (see CachedMethods: no false dependency on the target
+                    // register, same round-to-nearest-even and NaN quieting as the scalar cvtsd2ss conv.r4 compiles to).
+                    if (from == NPTypeCode.Double && System.Runtime.Intrinsics.X86.Sse2.IsSupported)
+                    {
+                        il.EmitCall(OpCodes.Call, CachedMethods.Vector128CreateScalarUnsafeDouble, null);
+                        il.EmitCall(OpCodes.Call, CachedMethods.Sse2ConvertDoubleToSingle, null);
+                        il.EmitCall(OpCodes.Call, CachedMethods.Vector128ToScalarSingle, null);
+                        break;
+                    }
                     if (IsUnsigned(from))
                         il.Emit(OpCodes.Conv_R_Un);
                     il.Emit(OpCodes.Conv_R4);
@@ -1211,6 +1250,16 @@ namespace NumSharp.Backends.Kernels
                     if (from == NPTypeCode.UInt64)
                     {
                         il.EmitCall(OpCodes.Call, CachedMethods.ConvertsUInt64ToDouble, null);
+                        break;
+                    }
+                    // float32 -> float64 as the packed cvtps2pd (see CachedMethods: the scalar cvtss2sd that conv.r8
+                    // compiles to merges into its target register, and that false dependency made a float32 -> float64
+                    // element loop latency-bound — 3.5x slower). Exact either way; a signalling NaN is quieted either way.
+                    if (from == NPTypeCode.Single && System.Runtime.Intrinsics.X86.Sse2.IsSupported)
+                    {
+                        il.EmitCall(OpCodes.Call, CachedMethods.Vector128CreateScalarUnsafeSingle, null);
+                        il.EmitCall(OpCodes.Call, CachedMethods.Sse2ConvertSingleToDouble, null);
+                        il.EmitCall(OpCodes.Call, CachedMethods.Vector128ToScalarDouble, null);
                         break;
                     }
                     if (IsUnsigned(from))

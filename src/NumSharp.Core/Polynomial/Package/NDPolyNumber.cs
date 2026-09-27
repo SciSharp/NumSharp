@@ -33,6 +33,14 @@ using NumSharp.Utilities;
 // A NumPy scalar's value lives inline (16 raw bytes — every NumSharp dtype fits), so scalarmath chains such
 // as mapparms' seven operations never allocate; only an ndarray operand reaches the NDArray ufuncs.
 //
+// COMPLEX64. NumSharp has one complex dtype (complex128, #569), but NEP 50 makes a complex64 NumPy scalar out of
+// a float16/float32 NumPy value and a Python complex (np.float32(a) + 1j), and it stays complex64 against Python
+// numbers and narrow NumPy values. Such a scalar is carried as a Complex with float32-exact components and the
+// IsComplex64 flag, and its scalarmath runs in float32 (DirectILKernelGenerator.PolyComplex64*: the operands are
+// rounded into the loop, every operation rounds) — so a complex128 result built from it (np.array([c64, 1j]),
+// a complex64 offset scaling a float64 array) matches NumPy bit for bit, and a complex64 result has NumPy's
+// values in the complex128 dtype. A complex64 ARRAY loop (rank >= 1) is not emulated: it runs in complex128.
+//
 // PLATFORM NOTE (win-amd64, the NumPy build the corpus is generated from): a Python int converted to an
 // integer dtype goes through C `long` (32-bit on Windows) for int8..int32/uint8/uint16, `unsigned long` for
 // uint32, and `long long` for int64/uint64 — so the OverflowError TEXT for a huge int depends on the dtype
@@ -92,10 +100,17 @@ namespace NumSharp
         private readonly PolyRaw16 _raw;
         /// <summary>The ndarray (<see cref="PolyNumberKind.Array"/> only).</summary>
         public readonly NDArray Array;
+        /// <summary>
+        ///     A NumPy SCALAR of NumPy's complex64 (<see cref="Dtype"/> is <see cref="NPTypeCode.Complex"/>, both
+        ///     components float32-exact). NumSharp has no complex64 dtype (#569), but numpy.polynomial's scalar code
+        ///     makes such scalars — a float16/float32 NumPy value meeting a Python complex — and their arithmetic is
+        ///     NumPy's float32 scalarmath, emulated exactly. Only a scalar can carry it: an ndarray result is complex128.
+        /// </summary>
+        public readonly bool IsComplex64;
 
-        private PolyNumber(PolyNumberKind kind, in PyScalar py, NPTypeCode dtype, in PolyRaw16 raw, NDArray array)
+        private PolyNumber(PolyNumberKind kind, in PyScalar py, NPTypeCode dtype, in PolyRaw16 raw, NDArray array, bool complex64 = false)
         {
-            Kind = kind; Py = py; Dtype = dtype; _raw = raw; Array = array;
+            Kind = kind; Py = py; Dtype = dtype; _raw = raw; Array = array; IsComplex64 = complex64;
         }
 
         // Integer range bounds as BigIntegers, built once: comparing a BigInteger with a long/ulong literal converts
@@ -134,6 +149,19 @@ namespace NumSharp
         /// <param name="v">The value.</param>
         /// <returns>The number.</returns>
         public static PolyNumber FromScalar<T>(T v) where T : unmanaged => FromScalar(InfoOf<T>.NPTypeCode, &v);
+
+        /// <summary>
+        ///     A NumPy complex64 scalar (see <see cref="IsComplex64"/>) whose value is the <see cref="Complex"/> at
+        ///     <paramref name="value"/> — the caller guarantees float32-exact components (a complex64 kernel's result).
+        /// </summary>
+        /// <param name="value">Address of one <see cref="Complex"/> (copied).</param>
+        /// <returns>The number.</returns>
+        public static PolyNumber FromComplex64(void* value)
+        {
+            PolyRaw16 raw = default;
+            Buffer.MemoryCopy(value, &raw, 16, 16);
+            return new PolyNumber(PolyNumberKind.Scalar, default, NPTypeCode.Complex, raw, null, complex64: true);
+        }
 
         /// <summary>
         ///     The NumPy scalar a 0-d ufunc result unwraps to (NumPy returns <c>np.float64(…)</c>, not a 0-d array,
@@ -287,6 +315,61 @@ namespace NumSharp
                 t = NPTypeCode.Double;
             return t;
         }
+
+        /// <summary>
+        ///     Whether a <see cref="NPTypeCode.Complex"/> loop of <c>a op b</c> is NumPy's COMPLEX64 loop (probed
+        ///     2.4.2): a weak Python complex with a float16/float32 partner (<c>np.float32(1) + 1j</c>), a weak Python
+        ///     int/float/bool/complex with a complex64 partner, or a complex64 value with a NumPy bool/int8/uint8/
+        ///     int16/uint16/float16/float32 (or NumSharp char, a uint16) — every wider partner (int32+, float64,
+        ///     complex128) promotes to complex128. Only meaningful when <see cref="LoopDtype"/> is complex.
+        /// </summary>
+        /// <param name="a">Left operand.</param>
+        /// <param name="b">Right operand.</param>
+        /// <returns>True when NumPy computes the operation in complex64.</returns>
+        public static bool IsComplex64Loop(in PolyNumber a, in PolyNumber b)
+        {
+            if (a.IsPython)
+                return WeakMakesComplex64(b, a.Py);
+            if (b.IsPython)
+                return WeakMakesComplex64(a, b.Py);
+            if (a.IsComplex64)
+                return b.IsComplex64 || KeepsComplex64(b.Dtype);
+            return b.IsComplex64 && KeepsComplex64(a.Dtype);
+        }
+
+        /// <summary>
+        ///     <see cref="IsComplex64Loop(in PolyNumber, in PolyNumber)"/> against an operand known only by its dtype —
+        ///     an ndarray of rank ≥ 1 or an intermediate array result, which is never a Python value: whether
+        ///     <c>a op b</c>, with <paramref name="a"/> a scalar-sized operand and <c>b</c> an array of
+        ///     <paramref name="bDtype"/> (complex64 when <paramref name="bIsComplex64"/>), runs NumPy's complex64 loop.
+        /// </summary>
+        /// <param name="a">The scalar-sized operand (a Python value, a NumPy scalar, or a complex64 carrier).</param>
+        /// <param name="bDtype">The array operand's dtype (<see cref="NPTypeCode.Complex"/> for a complex64 array).</param>
+        /// <param name="bIsComplex64">The array operand is complex64 (an intermediate NumSharp carries as complex128).</param>
+        /// <returns>True when NumPy computes the operation in complex64.</returns>
+        public static bool IsComplex64Loop(in PolyNumber a, NPTypeCode bDtype, bool bIsComplex64)
+        {
+            if (a.IsPython)
+                return bIsComplex64 || (a.Py.Kind == PyKind.Complex && bDtype is NPTypeCode.Half or NPTypeCode.Single);
+            if (a.IsComplex64)
+                return bIsComplex64 || KeepsComplex64(bDtype);
+            return bIsComplex64 && KeepsComplex64(a.Dtype);
+        }
+
+        /// <summary>NEP 50 for a weak Python value meeting a NumPy value: complex64 stays complex64 whatever the Python
+        ///     kind; a Python complex turns a float16/float32 partner into complex64.</summary>
+        /// <param name="strong">The NumPy operand.</param>
+        /// <param name="py">The Python operand.</param>
+        /// <returns>True for a complex64 loop.</returns>
+        private static bool WeakMakesComplex64(in PolyNumber strong, in PyScalar py)
+            => strong.IsComplex64 || (py.Kind == PyKind.Complex && strong.Dtype is NPTypeCode.Half or NPTypeCode.Single);
+
+        /// <summary><c>np.promote_types(complex64, t) == complex64</c>: the dtypes a complex64 value absorbs.</summary>
+        /// <param name="t">The partner dtype.</param>
+        /// <returns>True for bool, int8, uint8, int16, uint16, char, float16 and float32.</returns>
+        private static bool KeepsComplex64(NPTypeCode t)
+            => t is NPTypeCode.Boolean or NPTypeCode.SByte or NPTypeCode.Byte or NPTypeCode.Int16 or NPTypeCode.UInt16
+                 or NPTypeCode.Char or NPTypeCode.Half or NPTypeCode.Single;
 
         /// <summary>
         ///     The dtype <c>np.array</c> DISCOVERS for this value as a list element (array coercion, not NEP 50
@@ -501,7 +584,9 @@ namespace NumSharp
         /// <summary>
         ///     <c>a op b</c> as Python evaluates it: CPython for two Python values, scalarmath when both are
         ///     scalar-sized and at least one is a NumPy scalar, a ufunc when an ndarray is involved — a 0-d
-        ///     ndarray included, whose ufunc result is a NumPy scalar again.
+        ///     ndarray included, whose ufunc result is a NumPy scalar again. A scalar-sized operation in NumPy's
+        ///     complex64 loop (<see cref="IsComplex64Loop"/>) runs in float32 and yields a complex64 scalar; one
+        ///     with an ndarray of rank ≥ 1 runs in complex128 (NumSharp has no complex64 arrays, #569).
         /// </summary>
         /// <param name="op">Add, Subtract, Multiply or Divide (true division).</param>
         /// <param name="a">Left operand.</param>
@@ -543,6 +628,15 @@ namespace NumSharp
             PolyRaw16 ra, rb, rr;
             a.WriteAs(t, &ra);
             b.WriteAs(t, &rb);
+            if (t == NPTypeCode.Complex && IsComplex64Loop(a, b))
+            {
+                // NumPy's complex64 loop: both operands enter it rounded to float32 per component, the operation
+                // runs in float32, and the result is a complex64 scalar (carried exactly in the Complex).
+                *(Complex*)&ra = DirectILKernelGenerator.PolyComplex64Round(*(Complex*)&ra);
+                *(Complex*)&rb = DirectILKernelGenerator.PolyComplex64Round(*(Complex*)&rb);
+                DirectILKernelGenerator.GetPolyScalarComplex64Kernel(op, product)((byte*)&ra, (byte*)&rb, (byte*)&rr);
+                return FromComplex64(&rr);
+            }
             DirectILKernelGenerator.GetPolyScalarBinaryKernel(op, t, product)((byte*)&ra, (byte*)&rb, (byte*)&rr);
             return FromScalar(t, &rr);
         }
@@ -601,7 +695,8 @@ namespace NumSharp
             PolyRaw16 ra, rr;
             a.WriteAs(a.Dtype, &ra);
             DirectILKernelGenerator.GetPolyScalarNegateKernel(a.Dtype)((byte*)&ra, (byte*)&rr);
-            return FromScalar(a.Dtype, &rr);
+            // A sign flip is exact in any precision: a complex64 scalar negates to a complex64 scalar.
+            return a.IsComplex64 ? FromComplex64(&rr) : FromScalar(a.Dtype, &rr);
         }
 
         /// <summary>
@@ -685,7 +780,8 @@ namespace NumSharp
         ///     This value as a C# object: a Python float / complex / int / bool as the matching boxed primitive
         ///     (<c>double</c>, <see cref="Complex"/>, <c>long</c> — <c>ulong</c> or <see cref="BigInteger"/> when it
         ///     does not fit — and <c>bool</c>); a NumPy scalar as its dtype's boxed C# value (<c>double</c> for
-        ///     float64, <c>float</c> for float32, <see cref="Half"/> for float16, …); an ndarray as the NDArray.
+        ///     float64, <c>float</c> for float32, <see cref="Half"/> for float16, …; a complex64 scalar as the
+        ///     <see cref="Complex"/> holding its exact value — NumSharp's one complex type); an ndarray as the NDArray.
         /// </summary>
         /// <returns>The boxed value or the array.</returns>
         public object ToObject()
