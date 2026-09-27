@@ -71,10 +71,10 @@ namespace NumSharp
         /// </remarks>
         private double LegacyGauss(ref DrawBufferDouble src)
         {
-            if (_hasGauss)
+            if (_hasGauss != 0)
             {
                 double temp = _gaussCache;
-                _hasGauss = false;
+                _hasGauss = 0;
                 _gaussCache = 0.0;
                 return temp;
             }
@@ -91,7 +91,7 @@ namespace NumSharp
             f = Math.Sqrt(-2.0 * Math.Log(r2) / r2);
             /* Keep for next call */
             _gaussCache = f * x1;
-            _hasGauss = true;
+            _hasGauss = 1;
             return f * x2;
         }
 
@@ -131,10 +131,10 @@ namespace NumSharp
             long i = 0;
             if (n <= 0)
                 return;
-            if (_hasGauss)
+            if (_hasGauss != 0)
             {
                 dst[i++] = _gaussCache;
-                _hasGauss = false;
+                _hasGauss = 0;
                 _gaussCache = 0.0;
             }
 
@@ -175,7 +175,7 @@ namespace NumSharp
                     {
                         // The final call's cached half stays cached, exactly as legacy_gauss leaves it.
                         _gaussCache = f * x1s[k];
-                        _hasGauss = true;
+                        _hasGauss = 1;
                     }
                 }
             }
@@ -761,7 +761,7 @@ namespace NumSharp
                 int m = n - i < Chunk ? (int)(n - i) : Chunk;
                 int pairs = 0;
                 double startCache = _gaussCache;
-                bool cached = _hasGauss; // whether the next legacy_gauss returns a cached half
+                bool cached = _hasGauss != 0; // whether the next legacy_gauss returns a cached half
 
                 // Phase A: the draws, in NumPy's order — each value's Gaussian, then its uniform.
                 for (int j = 0; j < m; j++)
@@ -807,12 +807,12 @@ namespace NumSharp
                 if (cached)
                 {
                     _gaussCache = fs[pairs - 1] * x1s[pairs - 1];
-                    _hasGauss = true;
+                    _hasGauss = 1;
                 }
                 else
                 {
                     _gaussCache = 0.0;
-                    _hasGauss = false;
+                    _hasGauss = 0;
                 }
             }
         }
@@ -1446,8 +1446,12 @@ namespace NumSharp
 
                 neg = (result < 0);
                 mod = Math.Abs(result);
-                // C's fmod: C# `%` on doubles is the same exact truncated remainder.
-                mod = ((mod + Math.PI) % (2 * Math.PI)) - Math.PI;
+                // C's fmod: C# `%` on doubles is the same exact truncated remainder for every finite value. A NaN
+                // (mu = NaN) goes through untouched: .NET 8's `%` returns the default NaN (sign bit SET) for a NaN
+                // dividend where C's fmod — NumPy — and .NET 10 propagate the input NaN, so the NaN's bits match on
+                // every runtime.
+                double shifted = mod + Math.PI;
+                mod = (double.IsNaN(shifted) ? shifted : shifted % (2 * Math.PI)) - Math.PI;
                 if (neg)
                     mod *= -1;
 

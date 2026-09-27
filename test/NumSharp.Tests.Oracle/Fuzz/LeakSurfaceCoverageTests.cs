@@ -442,9 +442,13 @@ namespace NumSharp.Tests.Fuzz
                         return "corpus: rnd stream";
                     if (RandomOpKeys.TryGetValue(m.Name, out var rndKey) && Has(rndKey))
                         return "corpus: random state/helper";
-                    return null;
+                    // The random-API tier invokes every overload by signature; its NumPy-level member for an np.random
+                    // (NumPyRandom) method is RandomState.<name>.
+                    return Has("random_api:RandomState." + m.Name) ? "corpus: random_api" : null;
                 case "Generator":
-                    return Has("grnd:" + m.Name) ? "corpus: grnd stream" : null;
+                    if (Has("grnd:" + m.Name))
+                        return "corpus: grnd stream";
+                    return Has("random_api:Generator." + m.Name) ? "corpus: random_api" : null;
                 default:
                     return null;
             }

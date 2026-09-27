@@ -459,11 +459,18 @@ namespace NumSharp
         ///     Seed the generator with <c>init_by_array</c> (NumPy's <c>_legacy_seeding(array)</c>). Discards
         ///     <see cref="BitGenerator.seed_seq"/>.
         /// </summary>
-        /// <param name="seed">The key words (non-empty).</param>
-        /// <exception cref="ValueError"><paramref name="seed"/> is null or empty (<c>Seed must be non-empty</c>).</exception>
+        /// <param name="seed">The key words (non-empty); null is NumPy's <c>None</c> — fresh OS entropy, exactly
+        ///     <see cref="_legacy_seeding()"/>.</param>
+        /// <exception cref="ValueError"><paramref name="seed"/> is empty (<c>Seed must be non-empty</c>).</exception>
         public void _legacy_seeding(uint[] seed)
         {
-            if (seed is null || seed.Length == 0)
+            // NumPy's _legacy_seeding tests `seed is None` before anything else and seeds from a new SeedSequence.
+            if (seed is null)
+            {
+                _legacy_seeding();
+                return;
+            }
+            if (seed.Length == 0)
                 throw new ValueError("Seed must be non-empty");
             lock (@lock)
             {
@@ -476,19 +483,32 @@ namespace NumSharp
         ///     Seed the generator with <c>init_by_array</c> from signed words, each validated to <c>[0, 2**32 - 1]</c>
         ///     (NumPy's <c>_legacy_seeding(list)</c>). Discards <see cref="BitGenerator.seed_seq"/>.
         /// </summary>
-        /// <param name="seed">The key words (non-empty, each in range).</param>
+        /// <param name="seed">The key words (non-empty, each in range); null is NumPy's <c>None</c> — fresh OS entropy.</param>
         /// <exception cref="ValueError">Empty (<c>Seed must be non-empty</c>) or an element out of range (<c>Seed must be between 0 and 2**32 - 1</c>).</exception>
-        public void _legacy_seeding(long[] seed) => _legacy_seeding(ValidateLegacyArray(seed));
+        public void _legacy_seeding(long[] seed)
+        {
+            if (seed is null)
+            {
+                _legacy_seeding();
+                return;
+            }
+            _legacy_seeding(ValidateLegacyArray(seed));
+        }
 
         /// <summary>
         ///     Seed the generator with <c>init_by_array</c> from signed words, each validated to be non-negative
         ///     (NumPy's <c>_legacy_seeding(list)</c>). Discards <see cref="BitGenerator.seed_seq"/>.
         /// </summary>
-        /// <param name="seed">The key words (non-empty, each non-negative).</param>
+        /// <param name="seed">The key words (non-empty, each non-negative); null is NumPy's <c>None</c> — fresh OS entropy.</param>
         /// <exception cref="ValueError">Empty (<c>Seed must be non-empty</c>) or a negative element (<c>Seed must be between 0 and 2**32 - 1</c>).</exception>
         public void _legacy_seeding(int[] seed)
         {
-            if (seed is null || seed.Length == 0)
+            if (seed is null)
+            {
+                _legacy_seeding();
+                return;
+            }
+            if (seed.Length == 0)
                 throw new ValueError("Seed must be non-empty");
             var words = new long[seed.Length];
             for (int i = 0; i < seed.Length; i++)

@@ -26,16 +26,25 @@ namespace NumSharp
         /// <summary>
         ///     Random values in a given shape.
         /// </summary>
-        /// <param name="shape">Shape of the returned array.</param>
+        /// <param name="shape">Shape of the returned array; <c>default</c> (no dimensions at all — NumPy's <c>rand()</c>)
+        ///     draws a single value, returned 0-d, exactly as <see cref="rand(long[])"/> with no dimensions.</param>
         /// <returns>Random values.</returns>
+        /// <exception cref="ValueError">A dimension is negative.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.rand.html
         ///     <br/>
         ///     Create an array of the given shape and populate it with random samples
         ///     from a uniform distribution over [0, 1).
+        ///     <br/>
+        ///     NumPy's <c>rand</c> takes loose dimensions (<c>rand(d0, …, dn)</c>); this overload spreads a shape into
+        ///     them, so <see cref="Shape.Scalar"/> and <c>default</c> are both <c>rand()</c> — one draw.
         /// </remarks>
         public NDArray rand(Shape shape)
         {
+            // default(Shape) carries no dimensions to allocate from; it is rand() — the single-draw path.
+            if (shape.IsEmpty)
+                return rand();
+
             // A fresh C-contiguous array of the requested dimensions: a view's Shape (strides/offset) must not leak
             // into the allocation, and NumPy's random_sample always fills a new C-order array.
             NDArray ret = new NDArray(typeof(double), shape.IsEmpty ? shape : new Shape(shape.dimensions), false);

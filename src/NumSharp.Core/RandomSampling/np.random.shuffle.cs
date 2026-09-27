@@ -8,7 +8,8 @@ namespace NumSharp
         ///     Modify a sequence in-place by shuffling its contents.
         /// </summary>
         /// <param name="x">The writeable array to be shuffled (at least 1-D).</param>
-        /// <exception cref="TypeError"><paramref name="x"/> is 0-d (<c>len() of unsized object</c> — NumPy evaluates <c>len(x)</c> first).</exception>
+        /// <exception cref="TypeError"><paramref name="x"/> is null (<c>object of type 'NoneType' has no len()</c>) or 0-d
+        ///     (<c>len() of unsized object</c>) — NumPy evaluates <c>len(x)</c> first.</exception>
         /// <exception cref="ValueError"><paramref name="x"/> is read-only (<c>array is read-only</c>).</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.shuffle.html
@@ -37,7 +38,9 @@ namespace NumSharp
         [NDScoped] // reclaims the N-D path's index array and gathered rows after the copy-back
         public unsafe void shuffle(NDArray x)
         {
-            // NumPy: `n = len(x)` is evaluated first, so a 0-d array is a TypeError.
+            // NumPy: `n = len(x)` is evaluated first, so None and a 0-d array are TypeErrors.
+            if (x is null)
+                throw new TypeError("object of type 'NoneType' has no len()");
             if (x.ndim == 0)
                 throw new TypeError("len() of unsized object");
 

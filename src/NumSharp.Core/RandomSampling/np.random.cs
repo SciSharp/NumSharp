@@ -57,10 +57,12 @@ namespace NumSharp
         protected internal BitGenerator randomizer;
 
         /// <summary>
-        ///     Cached Gaussian value from the polar method.
-        ///     NumPy caches the second value to maintain state reproducibility.
+        ///     Whether a Gaussian is cached — NumPy's C <c>int has_gauss</c>, kept as the int it was set to: any non-zero
+        ///     value means "cached" to the samplers, and <see cref="get_state()"/> reports the stored value itself (a
+        ///     <c>set_state</c> tuple with <c>has_gauss=2</c> reads back 2 until the cache is consumed, as in NumPy).
+        ///     The samplers only ever store 0 or 1.
         /// </summary>
-        private bool _hasGauss;
+        private int _hasGauss;
         private double _gaussCache;
 
         /// <summary>
@@ -258,9 +260,9 @@ namespace NumSharp
         ///     Returns a new <see cref="NumPyRandom"/> seeded with MT19937's <c>init_by_array</c> (NumPy's
         ///     <c>RandomState([w0, w1, ...])</c>).
         /// </summary>
-        /// <param name="seed">The key words (non-empty).</param>
+        /// <param name="seed">The key words (non-empty); null is NumPy's <c>RandomState(None)</c> — fresh OS entropy.</param>
         /// <returns>A legacy generator whose stream matches <c>np.random.RandomState(seed)</c>.</returns>
-        /// <exception cref="ValueError"><paramref name="seed"/> is null or empty (<c>Seed must be non-empty</c>).</exception>
+        /// <exception cref="ValueError"><paramref name="seed"/> is empty (<c>Seed must be non-empty</c>).</exception>
         public NumPyRandom RandomState(uint[] seed)
         {
             var bg = new MT19937();
@@ -272,7 +274,7 @@ namespace NumSharp
         ///     Returns a new <see cref="NumPyRandom"/> seeded with MT19937's <c>init_by_array</c> from signed words (NumPy's
         ///     <c>RandomState([w0, w1, ...])</c>); each word must lie in <c>[0, 2**32 - 1]</c>.
         /// </summary>
-        /// <param name="seed">The key words (non-empty, each in range).</param>
+        /// <param name="seed">The key words (non-empty, each in range); null is NumPy's <c>RandomState(None)</c> — fresh OS entropy.</param>
         /// <returns>A legacy generator whose stream matches <c>np.random.RandomState(seed)</c>.</returns>
         /// <exception cref="ValueError">Empty (<c>Seed must be non-empty</c>) or an element out of range (<c>Seed must be between 0 and 2**32 - 1</c>).</exception>
         public NumPyRandom RandomState(long[] seed)
@@ -286,7 +288,7 @@ namespace NumSharp
         ///     Returns a new <see cref="NumPyRandom"/> seeded with MT19937's <c>init_by_array</c> from signed words (NumPy's
         ///     <c>RandomState([w0, w1, ...])</c>); each word must be non-negative.
         /// </summary>
-        /// <param name="seed">The key words (non-empty, each non-negative).</param>
+        /// <param name="seed">The key words (non-empty, each non-negative); null is NumPy's <c>RandomState(None)</c> — fresh OS entropy.</param>
         /// <returns>A legacy generator whose stream matches <c>np.random.RandomState(seed)</c>.</returns>
         /// <exception cref="ValueError">Empty (<c>Seed must be non-empty</c>) or a negative element (<c>Seed must be between 0 and 2**32 - 1</c>).</exception>
         public NumPyRandom RandomState(int[] seed)
@@ -482,15 +484,22 @@ namespace NumSharp
         /// <summary>
         ///     Seeds the generator with an array of uint values (NumPy's <c>init_by_array</c> seeding).
         /// </summary>
-        /// <param name="seed">The key words (non-empty; on a hot-swapped <c>np.random</c> engine any sequence, empty included,
-        ///     and null for fresh entropy — NumPy's <c>SeedSequence</c> reading).</param>
+        /// <param name="seed">The key words (non-empty; on a hot-swapped <c>np.random</c> engine any sequence, empty included —
+        ///     NumPy's <c>SeedSequence</c> reading). Null is NumPy's <c>seed(None)</c>: fresh OS entropy, exactly
+        ///     <see cref="seed()"/>.</param>
         /// <exception cref="TypeError">The bit generator is not MT19937 (<c>can only re-seed a MT19937 BitGenerator</c>) — except
         ///     on <c>np.random</c> itself (see <see cref="seed(uint)"/>).</exception>
-        /// <exception cref="ValueError"><paramref name="seed"/> is null or empty (<c>Seed must be non-empty</c> — it used to seed 0 silently).</exception>
+        /// <exception cref="ValueError"><paramref name="seed"/> is empty (<c>Seed must be non-empty</c> — it used to seed 0 silently).</exception>
         public void seed(uint[] seed)
         {
             if (TrySeedSwappedSingleton(seed))
                 return;
+            // NumPy's seed(None): a null array is the fresh-entropy path, with seed()'s engine check and cache reset.
+            if (seed is null)
+            {
+                this.seed();
+                return;
+            }
             var mt = ReseedableGenerator();
             lock (mt.@lock)
             {
@@ -504,7 +513,8 @@ namespace NumSharp
         ///     Seeds the generator with an array of integers (NumPy's <c>seed([...])</c>): each element must lie in
         ///     <c>[0, 2**32 - 1]</c>.
         /// </summary>
-        /// <param name="seed">The key words (non-empty; see <see cref="seed(uint[])"/> for a hot-swapped <c>np.random</c> engine).</param>
+        /// <param name="seed">The key words (non-empty; see <see cref="seed(uint[])"/> for a hot-swapped <c>np.random</c> engine);
+        ///     null is NumPy's <c>seed(None)</c> — fresh OS entropy, exactly <see cref="seed()"/>.</param>
         /// <exception cref="TypeError">The bit generator is not MT19937 — checked BEFORE the words, as in NumPy (on
         ///     <c>np.random</c> itself a hot-swapped engine is re-seeded instead: see <see cref="seed(uint)"/>).</exception>
         /// <exception cref="ValueError">Empty (<c>Seed must be non-empty</c>) or an element out of range (<c>Seed must be between 0 and 2**32 - 1</c>;
@@ -513,6 +523,11 @@ namespace NumSharp
         {
             if (TrySeedSwappedSingleton(seed))
                 return;
+            if (seed is null)
+            {
+                this.seed();
+                return;
+            }
             ReseedableGenerator();
             this.seed(MT19937.ValidateLegacyArray(seed));
         }
@@ -520,7 +535,8 @@ namespace NumSharp
         /// <summary>
         ///     Seeds the generator with an array of integers (NumPy's <c>seed([...])</c>): each element must be non-negative.
         /// </summary>
-        /// <param name="seed">The key words (non-empty; see <see cref="seed(uint[])"/> for a hot-swapped <c>np.random</c> engine).</param>
+        /// <param name="seed">The key words (non-empty; see <see cref="seed(uint[])"/> for a hot-swapped <c>np.random</c> engine);
+        ///     null is NumPy's <c>seed(None)</c> — fresh OS entropy, exactly <see cref="seed()"/>.</param>
         /// <exception cref="TypeError">The bit generator is not MT19937 — checked BEFORE the words, as in NumPy (on
         ///     <c>np.random</c> itself a hot-swapped engine is re-seeded instead: see <see cref="seed(uint)"/>).</exception>
         /// <exception cref="ValueError">Empty (<c>Seed must be non-empty</c>) or a negative element (<c>Seed must be between 0 and 2**32 - 1</c>;
@@ -529,8 +545,13 @@ namespace NumSharp
         {
             if (TrySeedSwappedSingleton(seed))
                 return;
+            if (seed is null)
+            {
+                this.seed();
+                return;
+            }
             ReseedableGenerator();
-            if (seed is null || seed.Length == 0)
+            if (seed.Length == 0)
                 throw new ValueError("Seed must be non-empty");
             var words = new long[seed.Length];
             for (int i = 0; i < seed.Length; i++)
@@ -541,7 +562,7 @@ namespace NumSharp
         /// <summary>Clears the cached Gaussian (NumPy's <c>_reset_gauss</c>) — every re-seed does this.</summary>
         private void ResetGauss()
         {
-            _hasGauss = false;
+            _hasGauss = 0;
             _gaussCache = 0.0;
         }
 
@@ -634,7 +655,7 @@ namespace NumSharp
             {
                 // NumPy writes the cache before assigning the bit generator state; a rejected assignment keeps it.
                 _gaussCache = gauss;
-                _hasGauss = hasGauss != 0;
+                _hasGauss = hasGauss;
                 randomizer.state = bitGeneratorState;
             }
         }
@@ -659,7 +680,7 @@ namespace NumSharp
                 return new NativeRandomState(
                     key: mt.Key,
                     pos: mt.Pos,
-                    hasGauss: _hasGauss ? 1 : 0,
+                    hasGauss: _hasGauss,
                     cachedGaussian: _gaussCache
                 );
             }
@@ -685,7 +706,7 @@ namespace NumSharp
             {
                 if (legacy && randomizer is MT19937)
                     return get_state();
-                return new State(randomizer.state, _hasGauss ? 1 : 0, _gaussCache);
+                return new State(randomizer.state, _hasGauss, _gaussCache);
             }
         }
 

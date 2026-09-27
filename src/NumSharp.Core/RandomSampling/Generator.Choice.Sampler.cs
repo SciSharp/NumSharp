@@ -20,7 +20,8 @@ namespace NumSharp
         ///     <c>a.take(indices, axis)</c> — a single element (0-d) or one sub-array when <c>size=None</c>.
         /// </returns>
         /// <exception cref="ValueError">
-        ///     A 0-d population that is not an integer; a non-positive population or an empty <paramref name="a"/>
+        ///     A null <paramref name="a"/> (NumPy's <c>None</c>: <c>a must be a sequence or an integer, not &lt;class 'NoneType'&gt;</c>)
+        ///     or a 0-d population that is not an integer; a non-positive population or an empty <paramref name="a"/>
         ///     with samples requested; a <paramref name="p"/> that is not 1-D, has the wrong size, contains NaN or
         ///     negatives, or does not sum to 1; a sample larger than the population without replacement; fewer
         ///     non-zero probabilities than samples without replacement.
@@ -36,6 +37,11 @@ namespace NumSharp
         [NDScoped]
         public NDArray choice(NDArray a, Shape? size = null, bool replace = true, NDArray p = null, int axis = 0, bool shuffle = true)
         {
+            // NumPy: np.array(None) is 0-d and operator.index(None) fails — the 0-d branch's ValueError, naming the type
+            // of the ORIGINAL argument.
+            if (a is null)
+                throw new ValueError("a must be a sequence or an integer, not <class 'NoneType'>");
+
             // `shape == None` means `shape == ()`, with the sample unpacked at the end (NumPy's is_scalar).
             bool isScalar = size == null;
             Shape shape = isScalar ? Shape.Scalar : size.Value;

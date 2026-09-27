@@ -87,7 +87,8 @@ namespace NumSharp
         /// </summary>
         /// <param name="x">The array to permute (at least 1-D).</param>
         /// <returns>A permuted copy; <paramref name="x"/> is not modified.</returns>
-        /// <exception cref="IndexError"><paramref name="x"/> is 0-d (<c>x must be an integer or at least 1-dimensional</c>).</exception>
+        /// <exception cref="IndexError"><paramref name="x"/> is null (NumPy's <c>None</c>, a 0-d object array to
+        ///     <c>np.asarray</c>) or 0-d (<c>x must be an integer or at least 1-dimensional</c>).</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.permutation.html
         ///     <br/>
@@ -97,7 +98,8 @@ namespace NumSharp
         [NDScoped] // reclaims the N-D path's index vector; the gathered copy is yielded
         public NDArray permutation(NDArray x)
         {
-            if (x.ndim < 1)
+            // NumPy: np.asarray(None) is a 0-d object array, so None takes the same IndexError as a 0-d array.
+            if (x is null || x.ndim < 1)
                 throw new IndexError("x must be an integer or at least 1-dimensional");
 
             if (x.ndim == 1)

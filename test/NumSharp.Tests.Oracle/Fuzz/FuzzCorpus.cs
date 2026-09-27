@@ -136,6 +136,26 @@ namespace NumSharp.Tests.Fuzz
             /// <summary>Per-slot results for kind=tuple / masked_tuple, in NumPy's tuple order.</summary>
             public Expected[] Slots { get; set; }
 
+            /// <summary>
+            ///     RANDOM-API corpus only (kind=random_api): NumPy's canonical observation of the call's result — a JSON
+            ///     tree (array / scalar / text / object / sequence observations, see <c>RandomApi/RandomApiObservation.cs</c>).
+            ///     Absent (<see cref="JsonValueKind.Undefined"/>) on every other tier.
+            /// </summary>
+            public JsonElement Result { get; set; }
+
+            /// <summary>
+            ///     RANDOM-API corpus only: the receiver's canonical state text after the call (engine state, buffered 32-bit
+            ///     half, RandomState's Gaussian cache) — what pins the stream POSITION, not only the values. Null elsewhere
+            ///     and for receivers without state.
+            /// </summary>
+            public string State { get; set; }
+
+            /// <summary>
+            ///     RANDOM-API corpus only: the array observations of the operands a member mutates in place (<c>shuffle</c>),
+            ///     after the call, in the order of <c>params.watch</c>. Absent elsewhere.
+            /// </summary>
+            public JsonElement After { get; set; }
+
             /// <summary>Normalized kind — legacy cases carry none and mean "array".</summary>
             public string KindOrArray => string.IsNullOrEmpty(Kind) ? "array" : Kind;
         }

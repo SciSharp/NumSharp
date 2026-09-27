@@ -736,7 +736,9 @@ namespace NumSharp.Tests.Fuzz
         ///     <c>params.method</c>), so the completeness gate needs the sampler, not just the key.
         /// </summary>
         /// <param name="c">The corpus case.</param>
-        /// <returns><c>rnd:&lt;dist&gt;</c> / <c>grnd:&lt;method&gt;</c>, or null for every other op.</returns>
+        /// <returns><c>rnd:&lt;dist&gt;</c> / <c>grnd:&lt;method&gt;</c> / <c>random_api:&lt;Owner.member&gt;</c> (the
+        ///     random-API tier's NumPy-level member, e.g. <c>random_api:RandomState.poisson</c>), or null for every other
+        ///     op.</returns>
         private static string CoverageKey(FuzzCorpus.Case c)
         {
             if (c.Params == null)
@@ -745,6 +747,8 @@ namespace NumSharp.Tests.Fuzz
                 return "rnd:" + dist.GetString();
             if (c.Op == "grnd" && c.Params.TryGetValue("method", out var method))
                 return "grnd:" + method.GetString();
+            if (c.Op == "random_api" && c.Params.TryGetValue("member", out var member))
+                return "random_api:" + member.GetString();
             return null;
         }
 
@@ -1000,10 +1004,25 @@ namespace NumSharp.Tests.Fuzz
         // Plumbing.
         // ---------------------------------------------------------------------------------
 
+        /// <summary>
+        ///     Runs one ordinary-schema case the way its replay test does, so the sweep measures exactly the code path the
+        ///     oracle verifies.
+        /// </summary>
+        /// <param name="c">The corpus case.</param>
+        /// <param name="operands">Its reconstructed operands.</param>
+        /// <returns>The op's result (an NDArray, a tuple of them, a scalar, text, or a random-API object result).</returns>
+        /// <remarks>
+        ///     The random-API tier (<c>random_api*.jsonl</c>) names an exact C# overload per case and is replayed by its own
+        ///     reflective harness, not by <see cref="OpRegistry"/>; routing it anywhere else would count every one of its
+        ///     success paths as "threw" and leave the random world's overloads leak-unaudited.
+        /// </remarks>
         private static object Invoke(FuzzCorpus.Case c, NumSharp.NDArray[] operands)
-            => c.Op == "grnd"
-                ? OpRegistry.GeneratorDraw(c.Params, operands)
-                : OpRegistry.Invoke(c.Expected.KindOrArray, c.Op, c.Params, operands);
+            => c.Op switch
+            {
+                "grnd" => OpRegistry.GeneratorDraw(c.Params, operands),
+                "random_api" => RandomApi.RandomApiHarness.Run(c.Params, operands).Result,
+                _ => OpRegistry.Invoke(c.Expected.KindOrArray, c.Op, c.Params, operands),
+            };
 
         /// <summary>
         ///     Dispose every distinct NDArray in an op result exactly once — EXCEPT any that IS an

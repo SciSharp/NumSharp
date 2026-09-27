@@ -17,8 +17,9 @@ namespace NumSharp
         /// <returns>The drawn elements of <paramref name="a"/> (or, for an integer population, the drawn int64 indices — NumPy's
         ///     C <c>long</c>, modelled LP64: <see cref="LegacyLong"/>).</returns>
         /// <exception cref="ValueError">
-        ///     A 0-d population that is not an integer (<c>a must be 1-dimensional or an integer</c>) or not positive with
-        ///     samples requested; a multi-dimensional or empty <paramref name="a"/>; a <paramref name="p"/> that is not 1-D,
+        ///     A null <paramref name="a"/> (NumPy's <c>None</c>) or a 0-d population that is not an integer
+        ///     (<c>a must be 1-dimensional or an integer</c>), or one not positive with samples requested; a
+        ///     multi-dimensional or empty <paramref name="a"/>; a <paramref name="p"/> that is not 1-D,
         ///     has the wrong size, contains NaN or negatives, or does not sum to 1; a sample larger than the population
         ///     without replacement; fewer non-zero probabilities than samples without replacement.
         /// </exception>
@@ -35,6 +36,11 @@ namespace NumSharp
         [NDScoped]
         public NDArray choice(NDArray a, Shape size = default, bool replace = true, NDArray p = null)
         {
+            // NumPy: np.asarray(None) is 0-d and operator.index(None) raises, so None is the 0-d branch's ValueError
+            // whatever the size.
+            if (a is null)
+                throw new ValueError("a must be 1-dimensional or an integer");
+
             // `shape == None` means `shape == ()`, with the sample unpacked at the end (NumPy's is_scalar).
             bool isScalar = size.IsEmpty;
             Shape shape = isScalar ? Shape.Scalar : size;

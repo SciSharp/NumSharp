@@ -174,8 +174,17 @@ namespace NumSharp
             }
             var multin = new NDArray(LegacyLong.typecode, new Shape(dims), true);
 
-            // NumPy validates n only after the output exists (so a bad size is reported first).
-            RandomConstraints.Check(n, "n", ConstraintType.CONS_NON_NEGATIVE);
+            // NumPy validates n only after the output exists (so a bad size is reported first); the output is released
+            // when n is refused, so that error path leaves no pooled buffer behind.
+            try
+            {
+                RandomConstraints.Check(n, "n", ConstraintType.CONS_NON_NEGATIVE);
+            }
+            catch
+            {
+                multin.Dispose();
+                throw;
+            }
 
             var mnix = (long*)multin.Address;
             long sz = multin.size;

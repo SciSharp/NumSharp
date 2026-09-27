@@ -800,8 +800,12 @@ namespace NumSharp
             result += mu;
             neg = (result < 0);
             mod = Math.Abs(result);
-            // C's fmod: C# `%` on doubles is the same exact truncated remainder.
-            mod = ((mod + Math.PI) % (2 * Math.PI)) - Math.PI;
+            // C's fmod: C# `%` on doubles is the same exact truncated remainder for every finite value. A NaN
+            // (mu = NaN) goes through untouched: .NET 8's `%` returns the default NaN (sign bit SET) for a NaN
+            // dividend where C's fmod — NumPy — and .NET 10 propagate the input NaN, so the NaN's bits match on
+            // every runtime.
+            double shifted = mod + Math.PI;
+            mod = (double.IsNaN(shifted) ? shifted : shifted % (2 * Math.PI)) - Math.PI;
             if (neg)
                 mod *= -1;
             return mod;

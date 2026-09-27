@@ -365,7 +365,8 @@ class CommittedCorpusTests(unittest.TestCase):
             self.assertNotIn(strict, self.result.evidence, f"{strict} has a stricter contract than np.{strict[13:]}")
         for row_id in ("numpy.random.normal", "numpy.random.RandomState.normal"):
             normal = self.evidence(row_id)
-            self.assertEqual({"rnd:normal"}, normal.keys)
+            # The random-API oracle adds every overload of RandomState.normal (random_api_host.jsonl).
+            self.assertEqual({"rnd:normal", "random_api:RandomState.normal"}, normal.keys)
             # The legacy normal VALUE stream is host-libm (random_parity_host.jsonl). Its portable contracts can
             # only be error-message cells: 3a15871a added the array-parameter validation texts to the portable
             # tier. So the row is partly pinned, like np.fft.fft, and not "pinned" as a whole.

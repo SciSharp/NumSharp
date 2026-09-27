@@ -9,7 +9,8 @@ namespace NumSharp
         /// </summary>
         /// <param name="x">The writeable array to shuffle (at least 1-D).</param>
         /// <param name="axis">The axis whose slices are permuted (the other axes move with them).</param>
-        /// <exception cref="TypeError"><paramref name="x"/> is 0-d (<c>len() of unsized object</c> — NumPy evaluates <c>len(x)</c> first).</exception>
+        /// <exception cref="TypeError"><paramref name="x"/> is null (<c>object of type 'NoneType' has no len()</c>) or 0-d
+        ///     (<c>len() of unsized object</c>) — NumPy evaluates <c>len(x)</c> first.</exception>
         /// <exception cref="ValueError"><paramref name="x"/> is read-only.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is outside <c>[-x.ndim, x.ndim)</c> (NumPy's <c>normalize_axis_index</c>).</exception>
         /// <remarks>
@@ -20,8 +21,10 @@ namespace NumSharp
         [NDScoped] // void boundary: the N-D path's index array + reordered gather are reclaimed after the copy-back
         public void shuffle(NDArray x, int axis = 0)
         {
-            // NumPy evaluates `n = len(x)` before any other check, so a 0-d array raises TypeError here
-            // ("len() of unsized object") rather than an axis error.
+            // NumPy evaluates `n = len(x)` before any other check, so None and a 0-d array raise TypeError here
+            // rather than an axis error.
+            if (x is null)
+                throw new TypeError("object of type 'NoneType' has no len()");
             if (x.ndim == 0)
                 throw new TypeError("len() of unsized object");
 
@@ -84,7 +87,8 @@ namespace NumSharp
         /// <param name="axis">The axis whose slices are permuted.</param>
         /// <returns>A permuted copy (C-contiguous); <paramref name="x"/> is not modified.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is outside <c>[-x.ndim, x.ndim)</c> — which every axis is for a 0-d
-        /// <paramref name="x"/> (NumPy: <c>axis 0 is out of bounds for array of dimension 0</c>).</exception>
+        /// <paramref name="x"/>, and for a null one (NumPy's <c>np.asarray(None)</c> is 0-d): <c>axis 0 is out of bounds for
+        /// array of dimension 0</c>.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.permutation.html
         ///     <br/>1-D input: a copy shuffled in place; N-D input: a shuffled index vector gathered with
@@ -93,7 +97,8 @@ namespace NumSharp
         [NDScoped] // reclaims the N-D path's index-array temp; the gathered result is yielded
         public NDArray permutation(NDArray x, int axis = 0)
         {
-            int nd = x.ndim;
+            // NumPy: arr = np.asarray(x) — None is a 0-d object array, so it takes the 0-d axis error below.
+            int nd = x is null ? 0 : x.ndim;
             if (axis < -nd || axis >= nd)
                 throw new AxisError(axis, nd);
             int ax = axis < 0 ? axis + nd : axis;
@@ -124,6 +129,11 @@ namespace NumSharp
         /// <exception cref="TypeError"><paramref name="x"/>'s dtype cannot be cast to <paramref name="out"/>'s under <c>'safe'</c>; or <paramref name="axis"/> is null and <paramref name="x"/> is 0-d.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is outside <c>[-x.ndim, x.ndim)</c>.</exception>
         /// <remarks>
+        ///     A null <paramref name="x"/> is NumPy's <c>np.asarray(None)</c>: a 0-d OBJECT array, failing exactly where any
+        ///     0-d input fails (the <c>len()</c> TypeError without an axis, the AxisError with one), and an <paramref name="out"/>
+        ///     can only mismatch its shape or refuse the object-to-dtype cast.
+        /// </remarks>
+        /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.permuted.html
         ///     <br/>Byte-identical to NumPy: <c>axis=None</c> shuffles <c>out.ravel(order='A')</c> — the MEMORY
         ///     order of a C- or F-contiguous output (so an F-ordered input permutes a different sequence than its
@@ -134,6 +144,22 @@ namespace NumSharp
         [NDScoped] // reclaims the write-back copy of a non-contiguous out; the target is yielded
         public NDArray permuted(NDArray x, int? axis = null, NDArray @out = null)
         {
+            if (x is null)
+            {
+                // NumPy's x = np.asarray(None) is 0-d with dtype object; its checks run in NumPy's order.
+                if (@out is not null)
+                {
+                    if (!@out.Shape.IsWriteable)
+                        throw new ValueError("out is read-only");
+                    if (@out.ndim != 0)
+                        throw new ValueError("out must have the same shape as x");
+                    throw new TypeError($"Cannot cast scalar from dtype('O') to {@out.dtype.ToString(true)} according to the rule 'safe'");
+                }
+                if (axis is null)
+                    throw new TypeError("len() of unsized object");
+                throw new AxisError(axis.Value, 0);
+            }
+
             NDArray target;
             if (@out is null)
             {
@@ -147,9 +173,10 @@ namespace NumSharp
                     throw new ValueError("out is read-only");
                 if (!@out.Shape.Equals(x.Shape))
                     throw new ValueError("out must have the same shape as x");
-                // NumPy: np.copyto(out, x, casting='safe') — reported with copyto's TypeError text.
+                // NumPy: np.copyto(out, x, casting='safe') — reported with copyto's TypeError text, which calls a 0-d
+                // source a "scalar".
                 if (!np.can_cast(x.dtype, @out.dtype, "safe"))
-                    throw new TypeError($"Cannot cast array data from {x.dtype.ToString(true)} to {@out.dtype.ToString(true)} according to the rule 'safe'");
+                    throw new TypeError($"Cannot cast {(x.ndim == 0 ? "scalar" : "array data")} from {x.dtype.ToString(true)} to {@out.dtype.ToString(true)} according to the rule 'safe'");
                 np.copyto(@out, x, "safe");
                 target = @out;
             }
