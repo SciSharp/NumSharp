@@ -648,6 +648,26 @@ namespace NumSharp
             return (ushort)(m >> 16);
         }
 
+        /// <summary>
+        ///     The 8-bit Lemire rejection thresholds, <c>(255 - rng) % (rng + 1)</c> for every <c>rng</c> in <c>[0, 254]</c> —
+        ///     NumPy's expression in <c>buffered_bounded_lemire_uint8</c>, evaluated once per process instead of once per
+        ///     draw. Entry 255 is 0 and never read: the full range bypasses Lemire (NumPy returns the raw byte there).
+        /// </summary>
+        /// <remarks>
+        ///     A <c>byte</c> index into a 256-entry array needs no bounds check, so the lookup is one load.
+        /// </remarks>
+        private static readonly byte[] LemireThreshold8 = BuildLemireThreshold8();
+
+        /// <summary>Builds <see cref="LemireThreshold8"/> from NumPy's expression, in byte arithmetic as the C code does.</summary>
+        /// <returns>The 256-entry threshold table.</returns>
+        private static byte[] BuildLemireThreshold8()
+        {
+            var table = new byte[256];
+            for (int rng = 0; rng < 255; rng++)
+                table[rng] = (byte)((byte)(byte.MaxValue - rng) % (byte)(rng + 1));
+            return table;
+        }
+
         /// <summary>NumPy's <c>buffered_bounded_lemire_uint8</c>: Lemire over buffered bytes.</summary>
         /// <param name="bg">The bit generator.</param>
         /// <param name="rng">Closed-interval range (below 0xFF).</param>
@@ -661,7 +681,11 @@ namespace NumSharp
             byte leftover = (byte)m;
             if (leftover < rngExcl)
             {
-                byte threshold = (byte)((byte)(byte.MaxValue - rng) % rngExcl);
+                // NumPy's `(UINT8_MAX - rng) % rng_excl`, read from the table built from that same expression: this
+                // "rare" branch runs for rng_excl/256 of the draws (78% at rng = 199), and its division was ~17% of a
+                // 1M uint8 fill (5.01 -> 4.14 ms, P-core-pinned; NumPy 5.02). Identical threshold, identical
+                // accept/reject decisions, identical stream.
+                byte threshold = LemireThreshold8[rng];
                 while (leftover < threshold)
                 {
                     m = (uint)BufferedUInt8(bg, ref buf, ref bcnt) * rngExcl;

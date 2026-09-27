@@ -261,22 +261,27 @@ namespace NumSharp
                     using var walk = new BroadcastWalk(outIt, loIt, hiIt);
                     while (walk.Next())
                     {
-                        for (long j = 0; j < walk.Count; j++)
+                        // The chunk's pointers and BYTE strides, read once per chunk into locals: read through the walk
+                        // object inside the loop they were reloaded for every position (the virtual NextUInt32/NextUInt64
+                        // calls may, as far as the JIT can tell, write the object's fields).
+                        byte* pLo = walk.A, pHi = walk.B, pOut = walk.Out;
+                        long sLo = walk.StrideA * 8, sHi = walk.StrideB * 8, sOut = walk.OutStride * itemsize;
+                        long count = walk.Count;
+                        for (long j = 0; j < count; j++, pLo += sLo, pHi += sHi, pOut += sOut)
                         {
-                            ulong l = *(ulong*)(walk.A + j * walk.StrideA * 8);
-                            ulong h = *(ulong*)(walk.B + j * walk.StrideB * 8);
+                            ulong l = *(ulong*)pLo;
+                            ulong h = *(ulong*)pHi;
                             // rng = <utype>((high_v - is_open) - low_v); off = <utype>low_v — wrapping 64-bit arithmetic
                             // truncated to the draw width is bit-identical to the C loop's.
                             ulong rng = unchecked(h - isOpen - l) & widthMask;
                             ulong off = l & widthMask;
                             ulong v = DrawOne(bg, width, off, rng, useMasked, ref buf, ref bcnt);
-                            byte* dst = walk.Out + j * walk.OutStride * itemsize;
                             switch (itemsize)
                             {
-                                case 1: *dst = (byte)v; break;
-                                case 2: *(ushort*)dst = (ushort)v; break;
-                                case 4: *(uint*)dst = (uint)v; break;
-                                default: *(ulong*)dst = v; break;
+                                case 1: *pOut = (byte)v; break;
+                                case 2: *(ushort*)pOut = (ushort)v; break;
+                                case 4: *(uint*)pOut = (uint)v; break;
+                                default: *(ulong*)pOut = v; break;
                             }
                         }
                     }
@@ -371,7 +376,8 @@ namespace NumSharp
                         return (uint)(off + bg.NextUInt32());
                     return (uint)(off + (useMasked ? MaskedUInt32(bg, (uint)rng, (uint)GenMask(rng)) : LemireUInt32(bg, (uint)rng)));
                 default:
-                    return RandomBoundedUInt64(bg, off, rng, GenMask(rng), useMasked);
+                    // Only the masked sampler reads the mask (NumPy's Lemire callers pass 0), so Lemire skips the smear.
+                    return RandomBoundedUInt64(bg, off, rng, useMasked ? GenMask(rng) : 0UL, useMasked);
             }
         }
 

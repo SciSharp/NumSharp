@@ -2744,7 +2744,16 @@ the `Shape` overload — the `int[]`/`long[]`/`long` size shims carry priority -
 `randint` take NumPy's ARRAY bounds (`BoundedIntegers.Broadcast.cs`, the `_rand_<dtype>` broadcast path: `can_cast`-
 skipped bound checks in NumPy's order and words, buffered words carried across positions, the size-smaller-than-
 broadcast and non-C-layout-float-bounds quirks) and `BigInteger` (Python-int) bounds —
-`g.integers(0, BigInteger.Pow(2, 64), dtype: np.uint64)` is the full-range idiom.
+`g.integers(0, BigInteger.Pow(2, 64), dtype: np.uint64)` is the full-range idiom. **Perf of the array path (NPY/NS,
+P-cores `0xFFFF` pinned, best-of-21, 1K/100K/1M):** float bounds 5.4–6.2×, column-broadcast 2.7–2.9×, int64 1.0–2.1×
+(1K is fixed cost), int32 1.25–1.9×, uint8 1.1–1.55× — faster than NumPy everywhere, but the narrow widths sit UNDER
+the 1.5× bar. Cause, measured: ONE per-position loop serves every width, and PGO inlines each width's path plus the
+devirtualized engine step into it (248-byte frame, `buf`/`bcnt` spilled) — pulling the loop into its own method or
+force-inlining the sub-word helpers moved cost BETWEEN widths (uint8 up, int64/int32 down), never removed it.
+Per-width chunk loops (the scalar `Fill` → `FillUInt8/16/32/64/Bool` shape, NumPy's own per-dtype
+`_rand_<dtype>_broadcast`) are the known fix, deferred because the np-function rule forbids per-dtype functions. The
+uint8 Lemire threshold `(255 - rng) % (rng + 1)` is a 256-entry table (`BoundedIntegers.LemireThreshold8`): the
+division ran on 78% of draws at rng 199 — the pre-existing scalar uint8 fill went 1.00× → 1.21×, same stream.
 
 ### File I/O
 `fromfile`, `fromstring`, `load`, `load_npy`, `load_npz`, `loadtxt`, `save`, `savetxt`, `savez`, `savez_compressed`, `tofile`
