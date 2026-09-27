@@ -613,7 +613,8 @@ namespace NumSharp
         ///     Gets or sets the current internal state (NumPy's <c>bit_generator.state</c> property), typed. A legacy
         ///     <see cref="NativeRandomState"/> converts implicitly, as NumPy's setter accepts the legacy tuple.
         /// </summary>
-        /// <exception cref="TypeError">Setting null.</exception>
+        /// <exception cref="TypeError">Setting null, or a state whose key is unset (NumPy's <c>key[i]</c> on <c>None</c>:
+        /// <c>'NoneType' object is not subscriptable</c>).</exception>
         /// <exception cref="IndexError">The key has fewer than 624 words (NumPy's <c>key[i]</c> indexing error).</exception>
         /// <exception cref="ValueError">The position is outside <c>[0, 624]</c> — a deliberate guard: NumPy stores any position and then
         /// reads past the key (undefined behaviour in C); NumSharp rejects it at the assignment.</exception>
@@ -631,7 +632,9 @@ namespace NumSharp
         {
             if (value is not State s)
                 throw new ValueError("state must be for a MT19937 PRNG");
-            uint[] key = s.key ?? throw new TypeError("state['state']['key'] must be a sequence of 624 integers");
+            // NumPy's setter reads `key = value['state']['key']` and then `key[i]` for every i: an unset key (a
+            // parameterless State, NumPy's None) fails on the first subscript with CPython's own text.
+            uint[] key = s.key ?? throw new TypeError("'NoneType' object is not subscriptable");
             if (key.Length < N)
                 throw new IndexError($"index {key.Length} is out of bounds for axis 0 with size {key.Length}");
             if (s.pos < 0 || s.pos > N)

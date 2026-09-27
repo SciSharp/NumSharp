@@ -57,45 +57,48 @@ namespace NumSharp
         ///     Construct a new <see cref="Generator"/> (PCG64) seeded from an integer array (NumPy's
         ///     <c>default_rng(np.array([...]))</c>): flattened in C order; a uint32 array passes through.
         /// </summary>
-        /// <param name="seed">The integer seed array.</param>
+        /// <param name="seed">The integer seed array; null is NumPy's <c>default_rng(None)</c> — fresh OS entropy.</param>
         /// <returns>A new <see cref="Generator"/>.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="seed"/> is null.</exception>
         /// <exception cref="TypeError">A 0-d, bool or non-integer array.</exception>
         /// <exception cref="ValueError">A negative element.</exception>
         public Generator default_rng(NDArray seed)
-            => new Generator(new PCG64(new SeedSequence((object)(seed ?? throw new ArgumentNullException(nameof(seed))))));
+            // A null reference is the port of Python's None, which NumPy seeds from the OS like the no-argument call.
+            => seed is null ? default_rng() : new Generator(new PCG64(new SeedSequence((object)seed)));
 
         /// <summary>Construct a new <see cref="Generator"/> (PCG64) from a prepared seed sequence (NumPy's <c>PCG64(seed_seq)</c>).</summary>
-        /// <param name="seed">The seed sequence — normally a <see cref="SeedSequence"/> (e.g. one of its <c>spawn</c>ed children).</param>
+        /// <param name="seed">The seed sequence — normally a <see cref="SeedSequence"/> (e.g. one of its <c>spawn</c>ed children);
+        /// null is NumPy's <c>default_rng(None)</c> — fresh OS entropy.</param>
         /// <returns>A new <see cref="Generator"/>.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="seed"/> is null.</exception>
+        /// <exception cref="NotImplementedException">A <see cref="SeedlessSeedSequence"/>, which cannot generate the PCG64
+        /// state (NumPy's <c>seedless SeedSequences cannot generate state</c>).</exception>
         public Generator default_rng(ISeedSequence seed) => new Generator(new PCG64(seed));
 
         /// <summary>Wrap an existing bit generator in a <see cref="Generator"/> (NumPy passes it through).</summary>
-        /// <param name="bitGenerator">The bit generator; the new Generator shares its state and lock.</param>
-        /// <returns>A new <see cref="Generator"/> over <paramref name="bitGenerator"/>.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="bitGenerator"/> is null.</exception>
-        public Generator default_rng(BitGenerator bitGenerator) => new Generator(bitGenerator);
+        /// <param name="seed">The bit generator (NumPy's parameter is <c>seed</c> for every kind of argument); the new
+        /// Generator shares its state and lock. Null is NumPy's <c>default_rng(None)</c> — a fresh OS-entropy PCG64.</param>
+        /// <returns>A new <see cref="Generator"/> over <paramref name="seed"/>.</returns>
+        public Generator default_rng(BitGenerator seed) => seed is null ? default_rng() : new Generator(seed);
 
         /// <summary>Pass an existing <see cref="Generator"/> through unaltered (NumPy behavior).</summary>
-        /// <param name="generator">The generator.</param>
-        /// <returns>The same instance.</returns>
-        public Generator default_rng(Generator generator) => generator;
+        /// <param name="seed">The generator (NumPy's parameter is <c>seed</c> for every kind of argument). Null is NumPy's
+        /// <c>default_rng(None)</c> — a new OS-entropy Generator, never a null result.</param>
+        /// <returns>The same instance, or a new Generator for null.</returns>
+        public Generator default_rng(Generator seed) => seed ?? default_rng();
 
         /// <summary>
         ///     Wrap a legacy RandomState's bit generator in a <see cref="Generator"/> (NumPy's
         ///     <c>default_rng(RandomState)</c> → <c>Generator(random_state._bit_generator)</c>).
         /// </summary>
-        /// <param name="randomState">The legacy RandomState.</param>
-        /// <returns>A new <see cref="Generator"/> over the SAME <see cref="MT19937"/> — draws from either advance both.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="randomState"/> is null.</exception>
+        /// <param name="seed">The legacy RandomState (NumPy's parameter is <c>seed</c> for every kind of argument). Null is
+        /// NumPy's <c>default_rng(None)</c> — a fresh OS-entropy PCG64 Generator.</param>
+        /// <returns>A new <see cref="Generator"/> over the SAME engine — draws from either advance both.</returns>
         /// <remarks>
         ///     The Generator uses its own algorithms over the shared engine, so <c>default_rng(RandomState(42)).random(2)</c>
         ///     is <c>[0.3745401188473625, 0.9507143064099162]</c> — the same doubles as the legacy <c>random_sample</c>,
         ///     because MT19937's 53-bit double is common to both.
         /// </remarks>
-        public Generator default_rng(NumPyRandom randomState)
-            => new Generator((randomState ?? throw new ArgumentNullException(nameof(randomState))).randomizer);
+        public Generator default_rng(NumPyRandom seed)
+            => seed is null ? default_rng() : new Generator(seed.randomizer);
 
         /// <summary>
         ///     NumPy's dynamically-typed <c>default_rng(seed)</c>: a <see cref="BitGenerator"/> is wrapped, a

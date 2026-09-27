@@ -185,6 +185,16 @@ compliance page describe the new family.
 | `SeedSequence.spawn` past `2**32` children | NumPy hangs (uint32 loop variable wraps) | `BitGeneratorFamily.Test.cs` |
 | `randint(dtype='l')` (the explicit C-long char) | `np.dtype('l')` is the HOST's C long in both libraries (int32 on Windows, int64 on Linux), so no portable expectation exists; the omitted dtype (NumSharp's LP64 long) is covered | `RandomTypeParity.Test.cs` |
 | `multivariate_hypergeometric(method='count')` with `sum(colors)` near `10**9` | both libraries fill a `sum(colors)`-entry index array (8 GB); the corpus keeps it at `10**6` and pins the pre-allocation limits | — |
+| `BitGenerator.capsule` / `.cffi` / `.ctypes` (NumPy) | C-level interop handles; NumSharp has no counterpart members (the catalog lists them as missing) | — |
+| `MT19937.jumped` with large jump counts | NumPy loops one polynomial jump per count (`for i in range(jumps)`), seconds per thousand; the corpus uses 0, 1, 2 and a negative count for MT19937 (every count for the counter-based engines) | — |
+
+How a C# argument maps to the Python value NumPy receives, where the choice is not forced by the type:
+
+| C# argument | NumPy value | Why |
+|---|---|---|
+| `uint[]` seed / entropy of a `SeedSequence`, an engine constructor or `default_rng` | a `uint32` ndarray | NumSharp's `SeedSequence` repr prints it as `array([...], dtype=uint32)`, NumPy's pass-through branch |
+| `int[]` / `long[]` seeds anywhere; `uint[]` in the legacy seeding (`seed`, `RandomState(...)`, `MT19937._legacy_seeding`) | a Python list | a list takes `init_by_array` at every length; a one-element ndarray would be squeezed to the scalar seed |
+| a null reference | `None` | every overload: OS entropy where NumPy draws it, NumPy's error where it raises |
 
 Intended divergences (in the corpus, excused by `RandomApiDivergences` with a key AND a bound or condition, printed by
 every replay):
@@ -193,7 +203,9 @@ every replay):
 |---|---|---|---|
 | `Generator.pareto`, `Generator.power` | the win-amd64 CRT `expm1` | Sun's `s_expm1`: at most 2 ULP (pareto), `ceil(2/a) + 3` ULP (power); stream positions identical | the CRT's in-band `expm1` is not portable |
 | `NumPyRandom.get_state()` on a non-MT19937 engine | warns, returns the dict | `ValueError` naming `get_state(legacy: false)` | the overload is typed as the legacy tuple |
-| `set_state` / `RandomState(NativeRandomState)` with `pos` outside `[0, 624]` | stores it; the next draw reads past the key | `ValueError` | undefined behavior in NumPy |
+| `set_state` / `RandomState(NativeRandomState)` / `MT19937.state` with `pos` outside `[0, 624]` | stores it; the next draw reads past the key | `ValueError` | undefined behavior in NumPy |
+| `Philox.state` with a negative `buffer_pos` | stores it; the next draw reads the word before the buffer | `ValueError` | undefined behavior in NumPy |
+| `SeedSequence(..., spawn_key=<str / nested sequence / ndarray>)` | keeps `tuple(spawn_key)` as given: repr `('1', '2')`, `([1, 2],)`, `(np.int64(3), np.int64(4))` | stores the flattened Python ints (the typed `BigInteger[] spawn_key`): repr `(1, 2)`; the pool, and every stream built on it, identical | NumSharp's typed spawn key; excused only when everything but the repr's `spawn_key=` line matches |
 
 ## 8. Phases
 
@@ -208,13 +220,28 @@ every replay):
 - [x] **P2 — `NumPyRandom` bindings** (all 181 members + `NumPyRandom.State` + `NativeRandomState`), with errors —
   except the 13 `default_rng` overloads, which need the P4 seed-sequence/generator arguments.
 - [x] **P3 — `Generator` bindings** (all 84 members) × 5 engines, with errors.
-- [ ] **P4 — bit generators, seed sequences, state classes, `default_rng`, `RandomState` factories.**
+- [x] **P4 — bit generators, seed sequences, state classes, `default_rng`, `RandomState` factories.**
 - [ ] **P5 — gates G2–G6 on;** every divergence they surface triaged: fixed with a regression test, or recorded in §7.
 - [ ] **P6 — nightly soak job** with 10 fresh seeds.
 - [ ] **P7 — coverage join, docs, floors;** full verification (both TFMs, FuzzMatrix, coverage generator); commit.
 
 ## 9. State log
 
+- **2026-09-27 (P4 done)** — Every remaining member is generated: the five engines' constructors (every seed type,
+  seed sequences with every keyword, the seedless one, OS entropy masked; Philox's `seed`/`counter`/`key` in every
+  combination), `advance`, `jumped` (the new engine's entropy seed sequence masked, its state exact), the typed and the
+  base `state` getters and setters (valid, foreign, unset, short and long word arrays, out-of-range positions),
+  `MT19937._legacy_seeding`, BitGenerator's `random_raw`/`seed_seq`/`spawn` on every engine (and on a legacy-seeded
+  MT19937, which has no seed sequence), the five State classes (getters, setters, constructors, the legacy-tuple
+  conversion), `SeedSequence` (8 constructors, every getter, `generate_state` with both dtypes and NumPy's refusals,
+  `spawn`, repr), `SeedlessSeedSequence`, the two seed-sequence interfaces, and the 13 `default_rng` overloads. Corpus:
+  portable 8,399 (+1,888), host 15,733, mvn 705, LP64 206. The whole inventory is claimed (439 members; 3 exempt).
+  Findings fixed in NumSharp: §10 items 10-12, each pinned in `RandomOracleFindings.Test.cs`; two intended divergences
+  added to §7 (Philox's negative `buffer_pos`, the flattened spawn-key repr). The coverage join credits the engine and
+  seed-sequence rows (`default_rng`, `numpy.random.<ENGINE>[.member]`, `numpy.random.SeedSequence[.member]`, and
+  `numpy.random.BitGenerator.*` through the engines); oracle-verified headline 494 of 560, expanded 829 of 2,519.
+  Verified in the worktree: full Oracle suite (220 passed, 5 inconclusive by design) and full unit suite (17,487 /
+  17,486) on net10.0 / net8.0, the Linux replay of the portable and LP64 tiers, the coverage generator and its tests.
 - **2026-09-27 (P2 + P3 done, checkpoint commit)** — Every `NumPyRandom`, `NumPyRandom.State`, `NativeRandomState` and
   `Generator` member is generated (`default_rng` waits for P4). The generator gained a per-overload emitter
   (`emit_m`) and an API-generic `sweep`; object arguments (bit generators, state tuples/dicts built identically on
@@ -274,3 +301,13 @@ every replay):
    and .NET 10 propagate the input NaN. `vonmises(mu=NaN)` therefore returned `-NaN` on net8.0 only. FIXED in both
    vonmises wraps. The same `%` is NumSharp's float `np.fmod`/`np.mod` kernel on net8.0; the ordinary oracle tokenizes
    NaN bits, so that difference is invisible there and worth a separate look.
+10. **Engine state setters answered an unset word array with NumSharp's own text** (`state['state']['key'] must be a
+    sequence of 624 integers`). NumPy's setters subscript the array, so CPython speaks: `'NoneType' object is not
+    subscriptable` (MT19937, Philox), and SFC64's broadcast into its words gives `int() argument must be a string, a
+    bytes-like object or a real number, not 'NoneType'`. Philox now also checks in NumPy's read order (`counter[i]` and
+    `key[i]` interleaved, then the buffer), so an unset key is reported before a short counter's missing word. FIXED.
+11. **`default_rng` with a null typed argument** threw (`BitGenerator`: AttributeError `'NoneType' object has no
+    attribute 'capsule'`; `NDArray`, `NumPyRandom`: ArgumentNullException) or returned null (`Generator`), where NumPy's
+    `default_rng(None)` is a fresh OS-entropy PCG64 Generator — which the `object` overload already did. FIXED.
+12. **`default_rng`'s parameters were named `bitGenerator`, `generator` and `randomState`** on three overloads; NumPy's
+    only parameter is `seed`, so a ported `default_rng(seed=...)` did not bind. Renamed to `seed`. FIXED.

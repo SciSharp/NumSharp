@@ -5,7 +5,8 @@ namespace NumSharp.Tests.RandomSampling
     /// <summary>
     ///     Regression pins for the divergences the random-API oracle (<c>docs/plans/random-oracle-coverage.md</c>) surfaced
     ///     and NumSharp fixed: NumPy's handling of <c>None</c> arguments, a default <see cref="Shape"/> for <c>rand</c>, null
-    ///     seed arrays, the integer <c>has_gauss</c> flag, and the 0-d cast wording of <c>permuted</c>.
+    ///     seed arrays, the integer <c>has_gauss</c> flag, the 0-d cast wording of <c>permuted</c>, the engine state
+    ///     setters' unset arrays, and <c>default_rng</c>'s typed nulls and parameter names.
     /// </summary>
     /// <remarks>
     ///     Every expected value and message was produced by NumPy 2.4.2. The oracle gates the same behaviors across engines
@@ -122,6 +123,67 @@ namespace NumSharp.Tests.RandomSampling
             using var o = np.zeros(Shape.Scalar, np.int32);
             ((Action)(() => Gen().permuted(x, @out: o))).Should().Throw<TypeError>()
                 .WithMessage("Cannot cast scalar from dtype('int64') to dtype('int32') according to the rule 'safe'");
+        }
+
+        /// <summary>
+        ///     An engine state with an unset word array fails where NumPy's setter first subscripts it, with CPython's text:
+        ///     MT19937 and Philox index <c>None</c> (<c>'NoneType' object is not subscriptable</c>), SFC64 broadcasts it into
+        ///     its uint64 words (<c>int()</c>'s refusal). Philox reads <c>counter[i]</c> and <c>key[i]</c> interleaved, so an
+        ///     unset key is reported before a short counter's missing fourth word.
+        /// </summary>
+        [TestMethod]
+        public void EngineStateSetters_UnsetArrays_RaiseNumPysText()
+        {
+            const string notSubscriptable = "'NoneType' object is not subscriptable";
+            ((Action)(() => new MT19937(1).state = new MT19937.State(null, 3))).Should().Throw<TypeError>().WithMessage(notSubscriptable);
+            ((Action)(() => new Philox(1).state = new Philox.State(new ulong[] { 1, 2, 3 }, null, new ulong[4], 4)))
+                .Should().Throw<TypeError>().WithMessage(notSubscriptable);
+            ((Action)(() => new Philox(1).state = new Philox.State(null, new ulong[] { 5, 6, 7 }, new ulong[4], 4)))
+                .Should().Throw<TypeError>().WithMessage(notSubscriptable);
+            ((Action)(() => new Philox(1).state = new Philox.State(new ulong[] { 1, 2, 3, 4 }, new ulong[] { 5, 6 }, null, 4)))
+                .Should().Throw<TypeError>().WithMessage(notSubscriptable);
+            ((Action)(() => new SFC64(1).state = new SFC64.State(null)))
+                .Should().Throw<TypeError>().WithMessage("int() argument must be a string, a bytes-like object or a real number, not 'NoneType'");
+            // A short buffer is still NumPy's IndexError at the first missing word.
+            ((Action)(() => new Philox(1).state = new Philox.State(new ulong[] { 1, 2, 3, 4 }, new ulong[] { 5, 6 }, new ulong[] { 1, 2, 3 }, 4)))
+                .Should().Throw<IndexError>().WithMessage("index 3 is out of bounds for axis 0 with size 3");
+        }
+
+        /// <summary>
+        ///     A null reference passed to a typed <c>default_rng</c> overload is NumPy's <c>default_rng(None)</c>: a new
+        ///     OS-entropy PCG64 Generator (the <c>object</c> overload already did this; the typed ones threw or returned null).
+        /// </summary>
+        [TestMethod]
+        public void DefaultRng_TypedNull_IsOsEntropy()
+        {
+            var fromBitGenerator = np.random.default_rng((BitGenerator)null);
+            var fromGenerator = np.random.default_rng((Generator)null);
+            var fromArray = np.random.default_rng((NDArray)null);
+            var fromRandomState = np.random.default_rng((NumPyRandom)null);
+            foreach (var g in new[] { fromBitGenerator, fromGenerator, fromArray, fromRandomState })
+            {
+                g.Should().NotBeNull();
+                g.bit_generator.Should().BeOfType<PCG64>();
+                g.bit_generator.seed_seq.Should().BeOfType<SeedSequence>("an OS-entropy seed sequence, as NumPy's PCG64(None)");
+            }
+            ((PCG64.State)fromBitGenerator.bit_generator.state).state
+                .Should().NotBe(((PCG64.State)fromGenerator.bit_generator.state).state, "two entropy seedings differ");
+        }
+
+        /// <summary>
+        ///     Every <c>default_rng</c> overload names its parameter <c>seed</c>, NumPy's only parameter name — so a ported
+        ///     <c>default_rng(seed: bit_generator)</c> binds whatever the argument's type.
+        /// </summary>
+        [TestMethod]
+        public void DefaultRng_EveryOverloadNamesItsParameterSeed()
+        {
+            foreach (var m in typeof(NumPyRandom).GetMethods())
+            {
+                if (m.Name != "default_rng")
+                    continue;
+                foreach (var p in m.GetParameters())
+                    p.Name.Should().Be("seed", $"default_rng({p.ParameterType.Name}) follows NumPy's parameter name");
+            }
         }
     }
 }

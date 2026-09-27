@@ -51,6 +51,10 @@ namespace NumSharp.Tests.Fuzz.RandomApi
             // the comparison sees the dtype as well as the value; otherwise it is the Python scalar kind.
             if (want == "array" && TypedScalar(value) is { } typed)
                 return ArrayObsScalar(typed);
+            // An `object`-typed result that is not a state object is SeedSequence.entropy: NumPy's int / list / array,
+            // compared through its repr (NumSharp's own repr of the stored entropy).
+            if (returns == "object" && value is not (null or NativeRandomState or NumPyRandom.State or BitGeneratorState))
+                return new JsonObject { ["k"] = "text", ["v"] = ReprEntropy(value) };
             switch (value)
             {
                 case null:
@@ -73,11 +77,26 @@ namespace NumSharp.Tests.Fuzz.RandomApi
                     return ArrayObsScalar(NDArray.Scalar(c));
                 // Objects: by type and canonical state, the generator's obs() kinds.
                 case BitGenerator bg:
-                    return new JsonObject { ["k"] = "bitgen", ["type"] = bg.GetType().Name, ["state"] = BitGeneratorStateText(bg.state) };
+                    return new JsonObject
+                    {
+                        ["k"] = "bitgen", ["type"] = bg.GetType().Name, ["state"] = BitGeneratorStateText(bg.state),
+                        ["seed_seq"] = SeedSeqText(bg.seed_seq) ?? "None",
+                    };
                 case NumPyRandom rs:
                     return new JsonObject { ["k"] = "rs", ["str"] = rs.ToString(), ["state"] = RandomStateText((NumPyRandom.State)rs.get_state(false)) };
                 case Generator g:
-                    return new JsonObject { ["k"] = "gen", ["str"] = g.ToString(), ["state"] = BitGeneratorStateText(g.bit_generator.state) };
+                    return new JsonObject
+                    {
+                        ["k"] = "gen", ["str"] = g.ToString(), ["state"] = BitGeneratorStateText(g.bit_generator.state),
+                        ["seed_seq"] = SeedSeqText(g.bit_generator.seed_seq) ?? "None",
+                    };
+                case ISeedSequence seq:
+                    return new JsonObject { ["k"] = "seedseq", ["v"] = SeedSeqText(seq) };
+                // SeedSequence.spawn_key and .state: NumPy's tuple and dict, compared through their reprs.
+                case BigInteger[] key:
+                    return new JsonObject { ["k"] = "text", ["v"] = PyTupleRepr(key) };
+                case Dictionary<string, object> dict:
+                    return new JsonObject { ["k"] = "text", ["v"] = SeedSequenceStateRepr(dict) };
                 case NativeRandomState t:
                     return new JsonObject { ["k"] = "legacy_state", ["v"] = LegacyTupleText(t) };
                 case NumPyRandom.State st:
@@ -109,6 +128,69 @@ namespace NumSharp.Tests.Fuzz.RandomApi
             }
             throw new NotSupportedException($"the random-API observer does not render {value.GetType().Name} results yet");
         }
+
+        /// <summary>
+        ///     A seed sequence's canonical text — the generator's <c>seedseq_text</c>: the child counter, the mixed pool's
+        ///     SHA-256 and NumSharp's repr (which reproduces NumPy's) as the last field; <c>SeedlessSeedSequence</c> for the
+        ///     seedless one; null for none.
+        /// </summary>
+        /// <param name="seq">The sequence.</param>
+        /// <returns>The text, or null.</returns>
+        /// <exception cref="NotSupportedException">A custom <see cref="ISeedSequence"/> the observer cannot describe.</exception>
+        internal static string SeedSeqText(ISeedSequence seq)
+        {
+            switch (seq)
+            {
+                case null:
+                    return null;
+                case SeedlessSeedSequence:
+                    return "SeedlessSeedSequence";
+                case SeedSequence ss:
+                {
+                    using var pool = ss.pool;
+                    return $"SeedSequence|n_children_spawned={ss.n_children_spawned}|pool={Sha256Hex(pool.ToArray<uint>())}|repr={ss}";
+                }
+                default:
+                    throw new NotSupportedException($"the random-API observer does not render {seq.GetType().Name} seed sequences");
+            }
+        }
+
+        /// <summary>
+        ///     The repr NumPy prints for a seed-sequence entropy value, through NumSharp's own repr of the stored entropy
+        ///     (<c>SeedSequence.ReprEntropy</c>, the helper its <c>ToString</c> uses) — so the entropy getter is compared on
+        ///     the same text the repr comparison already pins.
+        /// </summary>
+        /// <param name="entropy">The entropy object.</param>
+        /// <returns>The repr text.</returns>
+        private static string ReprEntropy(object entropy)
+            => (string)ReprEntropyMethod.Invoke(null, new[] { entropy });
+
+        /// <summary>SeedSequence's private static repr helper, resolved once.</summary>
+        private static readonly System.Reflection.MethodInfo ReprEntropyMethod =
+            typeof(SeedSequence).GetMethod("ReprEntropy", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)
+            ?? throw new InvalidOperationException("SeedSequence.ReprEntropy not found");
+
+        /// <summary>Python's repr of a tuple of ints: <c>()</c>, <c>(5,)</c>, <c>(1, 2)</c>.</summary>
+        /// <param name="items">The ints.</param>
+        /// <returns>The repr.</returns>
+        private static string PyTupleRepr(BigInteger[] items)
+            => items.Length switch
+            {
+                0 => "()",
+                1 => "(" + items[0].ToString(CultureInfo.InvariantCulture) + ",)",
+                _ => "(" + string.Join(", ", items.Select(x => x.ToString(CultureInfo.InvariantCulture))) + ")",
+            };
+
+        /// <summary>
+        ///     Python's repr of <c>SeedSequence.state</c>: <c>{'entropy': …, 'spawn_key': (…), 'pool_size': n,
+        ///     'n_children_spawned': k}</c>, in NumPy's key order.
+        /// </summary>
+        /// <param name="d">NumSharp's state dictionary.</param>
+        /// <returns>The repr.</returns>
+        private static string SeedSequenceStateRepr(Dictionary<string, object> d)
+            => "{'entropy': " + ReprEntropy(d["entropy"]) + ", 'spawn_key': " + PyTupleRepr((BigInteger[])d["spawn_key"]) +
+               ", 'pool_size': " + Convert.ToString(d["pool_size"], CultureInfo.InvariantCulture) +
+               ", 'n_children_spawned': " + Convert.ToString(d["n_children_spawned"], CultureInfo.InvariantCulture) + "}";
 
         /// <summary>A managed array rendered as the NumPy array of the same element type (1-D, C order).</summary>
         /// <param name="a">The array.</param>
@@ -156,7 +238,7 @@ namespace NumSharp.Tests.Fuzz.RandomApi
 
         /// <summary>
         ///     <see cref="MaskText"/> applied to every state text inside an observation tree (string values under the keys
-        ///     <c>state</c> and <c>v</c>) — the generator's <c>mask_obs</c>. Mutates and returns the node.
+        ///     <c>state</c>, <c>v</c> and <c>seed_seq</c>) — the generator's <c>mask_obs</c>. Mutates and returns the node.
         /// </summary>
         /// <param name="node">The observation.</param>
         /// <param name="fields">The fields to mask (empty: unchanged).</param>
@@ -170,7 +252,7 @@ namespace NumSharp.Tests.Fuzz.RandomApi
                 foreach (var key in o.Select(kv => kv.Key).ToList())
                 {
                     var child = o[key];
-                    if ((key == "state" || key == "v") && child is JsonValue v && v.TryGetValue<string>(out var s))
+                    if ((key == "state" || key == "v" || key == "seed_seq") && child is JsonValue v && v.TryGetValue<string>(out var s))
                         o[key] = MaskText(s, fields);
                     else
                         MaskObs(child, fields);
@@ -308,6 +390,8 @@ namespace NumSharp.Tests.Fuzz.RandomApi
             // State-object receivers (their members read and write the object itself): the object's own text.
             NativeRandomState t => LegacyTupleText(t),
             NumPyRandom.State st => RsDictText(st),
+            BitGeneratorState bgs => "bgstate|" + BitGeneratorStateText(bgs),
+            ISeedSequence seq => SeedSeqText(seq),
             _ => "",
         };
 
@@ -326,7 +410,8 @@ namespace NumSharp.Tests.Fuzz.RandomApi
         /// <exception cref="NotSupportedException">A state type the observer does not know.</exception>
         internal static string BitGeneratorStateText(BitGeneratorState state) => state switch
         {
-            MT19937.State mt => $"MT19937|pos={mt.pos}|key={Sha256Hex(mt.key)}",
+            // An unset array (a parameterless State) reads "null", as the generator's text does.
+            MT19937.State mt => $"MT19937|pos={mt.pos}|key={(mt.key is null ? "null" : Sha256Hex(mt.key))}",
             PCG64.State p => $"PCG64|state={p.state}|inc={p.inc}|has_uint32={p.has_uint32}|uinteger={p.uinteger}",
             PCG64DXSM.State p => $"PCG64DXSM|state={p.state}|inc={p.inc}|has_uint32={p.has_uint32}|uinteger={p.uinteger}",
             Philox.State p => "Philox|counter=" + Join(p.counter) + "|key=" + Join(p.key) + "|buffer=" + Join(p.buffer) +
@@ -335,10 +420,11 @@ namespace NumSharp.Tests.Fuzz.RandomApi
             _ => throw new NotSupportedException($"unknown bit generator state {state?.GetType().Name}"),
         };
 
-        /// <summary>Comma-joined decimal words.</summary>
-        /// <param name="words">The words.</param>
+        /// <summary>Comma-joined decimal words; <c>null</c> for an unset array (a parameterless State's).</summary>
+        /// <param name="words">The words, or null.</param>
         /// <returns>The text.</returns>
-        private static string Join(ulong[] words) => string.Join(",", words.Select(w => w.ToString(CultureInfo.InvariantCulture)));
+        private static string Join(ulong[] words)
+            => words is null ? "null" : string.Join(",", words.Select(w => w.ToString(CultureInfo.InvariantCulture)));
 
         /// <summary>The SHA-256 of 32-bit words laid out little-endian (NumPy's uint32 <c>tobytes()</c>), as lowercase hex.</summary>
         /// <param name="words">The words.</param>
@@ -412,6 +498,7 @@ namespace NumSharp.Tests.Fuzz.RandomApi
                 case "legacy_state":
                 case "rsdict":
                 case "bgstate":
+                case "seedseq":
                     // Object observations are flat string fields (type, str, canonical state text): all must match.
                     foreach (var prop in expected.EnumerateObject())
                     {

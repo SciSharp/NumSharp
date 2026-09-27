@@ -146,9 +146,75 @@ namespace NumSharp.Tests.Fuzz.RandomApi
                     return InnerRandomState(spec.GetProperty("of")).get_state();
                 case "rs_dict":
                     return InnerRandomState(spec.GetProperty("of")).get_state(false);
+                // A bit generator's typed State object (the inner engine built and primed first).
+                case "bgstate":
+                {
+                    var of = spec.GetProperty("of");
+                    var bg = BuildReceiver(of) as BitGenerator
+                             ?? throw new NotSupportedException("a bgstate receiver's source must be a bit generator");
+                    Prime(bg, of.TryGetProperty("prime", out var bp) ? bp.GetString() : "none");
+                    return bg.state;
+                }
+                // A RandomState's engine (the legacy-seeded MT19937 has no seed sequence).
+                case "rs_bitgen":
+                    return InnerRandomState(spec.GetProperty("of"))._bit_generator;
+                case "seedseq":
+                    return BuildSeedSequence(spec.GetProperty("ss"));
+                case "seedless":
+                    return new SeedlessSeedSequence();
                 default:
                     throw new NotSupportedException($"unknown receiver kind '{kind}'");
             }
+        }
+
+        /// <summary>
+        ///     Builds the <see cref="SeedSequence"/> a spec describes — the generator's <c>build_seedseq</c>: the entropy
+        ///     through <see cref="DecodeValue"/>, and the keywords NumPy's constructor takes, absent ones at their defaults.
+        /// </summary>
+        /// <param name="spec">The <c>seedseq_spec</c> object.</param>
+        /// <returns>The sequence.</returns>
+        /// <exception cref="Exception">Whatever the constructor raises for the spec (the error-parity cases).</exception>
+        private static SeedSequence BuildSeedSequence(JsonElement spec)
+        {
+            object entropy = DecodeValue(spec.GetProperty("entropy"));
+            object spawnKey = spec.TryGetProperty("spawn_key", out var sk) ? DecodeValue(sk) : null;
+            long poolSize = spec.TryGetProperty("pool_size", out var ps) ? long.Parse(ps.GetString(), CultureInfo.InvariantCulture) : 4;
+            uint children = spec.TryGetProperty("n_children_spawned", out var nc) ? uint.Parse(nc.GetString(), CultureInfo.InvariantCulture) : 0;
+            return new SeedSequence(entropy, spawnKey, poolSize, children);
+        }
+
+        /// <summary>
+        ///     Decodes a plain Python value (the generator's <c>entropy_spec</c>) as the C# object a port would pass: an int
+        ///     as a <see cref="long"/> when it fits (else a <see cref="BigInteger"/>), a flat list of such ints as a
+        ///     <see cref="long"/>[] (a nested or mixed list as an <see cref="object"/>[] of decoded items), a uint32 array as
+        ///     a <see cref="uint"/>[] (NumSharp's stand-in for NumPy's uint32 ndarray), a str, a float, a bool, or null.
+        /// </summary>
+        /// <param name="v">The spec.</param>
+        /// <returns>The value.</returns>
+        /// <exception cref="NotSupportedException">An unknown spec.</exception>
+        private static object DecodeValue(JsonElement v)
+        {
+            if (v.TryGetProperty("none", out _))
+                return null;
+            if (v.TryGetProperty("bool", out var b))
+                return b.GetBoolean();
+            if (v.TryGetProperty("int", out var i))
+            {
+                var big = BigInteger.Parse(i.GetString(), CultureInfo.InvariantCulture);
+                return big >= long.MinValue && big <= long.MaxValue ? (object)(long)big : big;
+            }
+            if (v.TryGetProperty("float", out var f))
+                return BitConverter.Int64BitsToDouble(unchecked((long)ulong.Parse(f.GetString(), NumberStyles.HexNumber)));
+            if (v.TryGetProperty("str", out var s))
+                return s.GetString();
+            if (v.TryGetProperty("uint32", out var u))
+                return Array.ConvertAll(StringArray(u), x => uint.Parse(x, CultureInfo.InvariantCulture));
+            if (v.TryGetProperty("list", out var list))
+            {
+                var items = list.EnumerateArray().Select(DecodeValue).ToArray();
+                return items.All(x => x is long) ? items.Cast<long>().ToArray() : items;
+            }
+            throw new NotSupportedException($"unknown value spec {v.GetRawText()}");
         }
 
         /// <summary>
@@ -231,8 +297,65 @@ namespace NumSharp.Tests.Fuzz.RandomApi
                 }
                 case "str":
                     return s.GetString();
+                case "value":
+                    return DecodeValue(s);
+                case "seedseq":
+                    return BuildSeedSequence(s);
+                case "seedless":
+                    return new SeedlessSeedSequence();
+                case "generator":
+                {
+                    // Generator(ENGINE(seed)), primed as a Generator (u32 draws a buffered half through integers).
+                    var g = new Generator(MakeEngine(s.GetProperty("engine").GetString(),
+                        long.Parse(s.GetProperty("seed").GetString(), CultureInfo.InvariantCulture)));
+                    Prime(g, s.GetProperty("prime").GetString());
+                    return g;
+                }
+                case "randomstate":
+                    return InnerRandomState(s);
+                case "bgstate_explicit":
+                    return ExplicitState(s);
                 default:
                     throw new NotSupportedException($"unknown object argument kind '{prop.Name}'");
+            }
+        }
+
+        /// <summary>
+        ///     Builds an engine's typed State from spelled-out fields (the generator's <c>bgstate_explicit</c>): the full
+        ///     constructor of <c>ENGINE.State</c>, an absent field at the parameterless State's value (null array, zero).
+        /// </summary>
+        /// <param name="s">The flat field object (<c>engine</c> plus the named fields as decimal text or text arrays).</param>
+        /// <returns>The state.</returns>
+        /// <exception cref="NotSupportedException">An unknown engine name.</exception>
+        private static BitGeneratorState ExplicitState(JsonElement s)
+        {
+            ulong[] U64(string name) => s.TryGetProperty(name, out var e) && e.ValueKind == JsonValueKind.Array
+                ? Array.ConvertAll(StringArray(e), x => ulong.Parse(x, CultureInfo.InvariantCulture))
+                : null;
+            string Text(string name) => s.TryGetProperty(name, out var e) && e.ValueKind == JsonValueKind.String ? e.GetString() : null;
+            int I32(string name) => Text(name) is { } t ? int.Parse(t, CultureInfo.InvariantCulture) : 0;
+            uint U32(string name) => Text(name) is { } t ? uint.Parse(t, CultureInfo.InvariantCulture) : 0u;
+            UInt128 U128(string name) => Text(name) is { } t ? UInt128.Parse(t, CultureInfo.InvariantCulture) : UInt128.Zero;
+
+            switch (s.GetProperty("engine").GetString())
+            {
+                case "MT19937":
+                {
+                    uint[] key = s.TryGetProperty("key", out var k) && k.ValueKind == JsonValueKind.Array
+                        ? Array.ConvertAll(StringArray(k), x => uint.Parse(x, CultureInfo.InvariantCulture))
+                        : null;
+                    return new MT19937.State(key, I32("pos"));
+                }
+                case "PCG64":
+                    return new PCG64.State(U128("state"), U128("inc"), I32("has_uint32"), U32("uinteger"));
+                case "PCG64DXSM":
+                    return new PCG64DXSM.State(U128("state"), U128("inc"), I32("has_uint32"), U32("uinteger"));
+                case "Philox":
+                    return new Philox.State(U64("counter"), U64("key"), U64("buffer"), I32("buffer_pos"), I32("has_uint32"), U32("uinteger"));
+                case "SFC64":
+                    return new SFC64.State(U64("state"), I32("has_uint32"), U32("uinteger"));
+                default:
+                    throw new NotSupportedException($"unknown engine '{s.GetProperty("engine").GetString()}'");
             }
         }
 
@@ -368,6 +491,10 @@ namespace NumSharp.Tests.Fuzz.RandomApi
                 return null;
             if (a.TryGetProperty("obj", out var obj))
                 return DecodeObject(obj);
+            // An operand reference is the operand whatever the parameter's declared type (an ndarray passed where C#
+            // takes `object`: a seed, a spawn key, Philox's counter or key).
+            if (a.TryGetProperty("op", out var opRef))
+                return operands[opRef.GetInt32()];
             var under = Nullable.GetUnderlyingType(t) ?? t;
             if (under == typeof(double))
                 return BitConverter.Int64BitsToDouble(unchecked((long)ulong.Parse(a.GetProperty("bits").GetString(), NumberStyles.HexNumber)));

@@ -621,7 +621,8 @@ namespace NumSharp
         }
 
         /// <summary>Gets or sets the current internal state (NumPy's <c>bit_generator.state</c>), typed.</summary>
-        /// <exception cref="TypeError">Setting null, or a state with a null word array.</exception>
+        /// <exception cref="TypeError">Setting null, or a state with an unset (null) word array — NumPy's subscript of
+        /// <c>None</c>, <c>'NoneType' object is not subscriptable</c>, raised at the first read of that array.</exception>
         /// <exception cref="IndexError">A word array shorter than NumPy's loop reads (counter 4, key 2, buffer 4).</exception>
         /// <exception cref="ValueError">A negative <c>buffer_pos</c>.</exception>
         public new State state
@@ -636,27 +637,29 @@ namespace NumSharp
 
         /// <inheritdoc/>
         /// <remarks>
-        ///     Short arrays fail in NumPy's read order — <c>counter[i]</c> and <c>key[i]</c> interleaved for i = 0..3, then
-        ///     the buffer — with its IndexError text; the whole state is validated before any of it is applied, so a
-        ///     rejected state leaves the generator untouched (NumPy leaves the words it read before the failure written).
-        ///     A negative <c>buffer_pos</c> is refused: NumPy would read memory before its buffer (undefined behavior).
+        ///     Unset and short arrays fail in NumPy's read order — <c>counter[i]</c> and <c>key[i]</c> interleaved for
+        ///     i = 0..3, then the buffer — with the text NumPy's subscript raises there (<c>'NoneType' object is not
+        ///     subscriptable</c> for an unset array, the IndexError for a short one); the whole state is validated before any
+        ///     of it is applied, so a rejected state leaves the generator untouched (NumPy leaves the words it read before
+        ///     the failure written). A negative <c>buffer_pos</c> is refused: NumPy would read memory before its buffer
+        ///     (undefined behavior).
         /// </remarks>
         private protected override void SetStateCore(BitGeneratorState value)
         {
             if (value is not State s)
                 throw new ValueError("state must be for a Philox PRNG");
-            ulong[] counter = s.counter ?? throw new TypeError("state['state']['counter'] must be a sequence of 4 integers");
-            ulong[] key = s.key ?? throw new TypeError("state['state']['key'] must be a sequence of 2 integers");
-            ulong[] buffer = s.buffer ?? throw new TypeError("state['buffer'] must be a sequence of 4 integers");
+            ulong[] counter = s.counter, key = s.key, buffer = s.buffer;
+            // NumPy: `for i in range(4): ctr[i] = counter[i]; if i < 2: key[i] = key_arr[i]`, then `buffer[i]` for i < 4.
+            // Each read is checked where NumPy performs it, so whichever array fails FIRST in that order names the error
+            // (an unset key with a short counter reports the key: its first read comes before counter[3]).
             for (int i = 0; i < 4; i++)
             {
-                if (i >= counter.Length)
-                    throw new IndexError($"index {i} is out of bounds for axis 0 with size {counter.Length}");
-                if (i < 2 && i >= key.Length)
-                    throw new IndexError($"index {i} is out of bounds for axis 0 with size {key.Length}");
+                CheckWord(counter, i);
+                if (i < 2)
+                    CheckWord(key, i);
             }
-            if (buffer.Length < BufferSize)
-                throw new IndexError($"index {buffer.Length} is out of bounds for axis 0 with size {buffer.Length}");
+            for (int i = 0; i < BufferSize; i++)
+                CheckWord(buffer, i);
             if (s.buffer_pos < 0)
                 throw new ValueError($"state['buffer_pos'] must be non-negative, got {s.buffer_pos}");
 
@@ -670,6 +673,22 @@ namespace NumSharp
             _hasUint32 = s.has_uint32;
             _uinteger = s.uinteger;
             _bufferPos = s.buffer_pos;
+        }
+
+        /// <summary>
+        ///     One subscript of NumPy's state-setter loop, <c>words[i]</c>: the error NumPy raises at that read, or nothing.
+        /// </summary>
+        /// <param name="words">The state array being read (null = NumPy's <c>None</c>).</param>
+        /// <param name="i">The index read.</param>
+        /// <exception cref="TypeError"><paramref name="words"/> is null — CPython's <c>'NoneType' object is not subscriptable</c>.</exception>
+        /// <exception cref="IndexError"><paramref name="i"/> is past the end — NumPy's
+        /// <c>index i is out of bounds for axis 0 with size n</c>.</exception>
+        private static void CheckWord(ulong[] words, int i)
+        {
+            if (words is null)
+                throw new TypeError("'NoneType' object is not subscriptable");
+            if (i >= words.Length)
+                throw new IndexError($"index {i} is out of bounds for axis 0 with size {words.Length}");
         }
     }
 }

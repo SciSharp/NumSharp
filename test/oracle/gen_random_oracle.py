@@ -48,6 +48,7 @@ import numpy as np  # noqa: E402
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from layout_catalog import describe  # noqa: E402
+from numpy.random.bit_generator import SeedlessSeedSequence  # noqa: E402
 
 CORPUS_DIR = os.path.normpath(os.path.join(HERE, "..", "NumSharp.Tests.Oracle", "Fuzz", "corpus"))
 SURFACE_PATH = os.path.join(HERE, "random_surface.json")
@@ -122,7 +123,7 @@ def encode(name, ctype, value, ops):
     if value is None and (nullable or base in ("NDArray", "DType", "string", "object", "ISeedSequence", "BitGenerator",
                                                "Generator", "NumPyRandom", "NumPyRandom.State", "BitGeneratorState",
                                                "SeedSequence")
-                          or base.endswith("[]") or base.startswith("NDArray")):
+                          or base.endswith("[]") or base.startswith("NDArray") or base.endswith(".State")):
         j["null"] = True
         return Arg(name, ctype, j, None)
     if base == "double" or base == "float":
@@ -169,6 +170,15 @@ def encode(name, ctype, value, ops):
     elif isinstance(value, Obj):
         j["obj"] = value.json
         py = value.py
+    elif base == "object" and isinstance(value, (np.ndarray, tuple)):
+        # An ndarray passed where C# takes `object` (a seed, a spawn key, Philox's counter/key): an operand.
+        if isinstance(value, tuple):
+            b, v = value
+        else:
+            b = np.array(value, copy=True, order="C")
+            v = b
+        j["op"] = ops.add(b, v)
+        py = v
     else:
         raise TypeError(f"cannot encode {name}: {ctype} from {value!r}")
     return Arg(name, ctype, j, py)
@@ -259,6 +269,139 @@ def rs_dict_parts(state_obj, has_gauss, gauss):
                                   "has_gauss": str(has_gauss), "gauss": f64_bits(gauss)}}, make=make)
 
 
+def entropy_spec(e):
+    """The JSON of a seed-sequence entropy / object seed value: an int, a flat or nested list of ints, a uint32 array
+    (C#: uint[] — NumSharp's stand-in for NumPy's uint32 ndarray), a str, a float, a bool, or None (OS entropy)."""
+    if e is None:
+        return {"none": True}
+    if isinstance(e, bool):
+        return {"bool": e}
+    if isinstance(e, int):
+        return {"int": str(e)}
+    if isinstance(e, float):
+        return {"float": f64_bits(e)}
+    if isinstance(e, str):
+        return {"str": e}
+    if isinstance(e, np.ndarray) and e.dtype == np.uint32:
+        return {"uint32": [str(int(x)) for x in e]}
+    if isinstance(e, (list, tuple)):
+        return {"list": [entropy_spec(x) for x in e]}
+    raise TypeError(f"no entropy spec for {e!r}")
+
+
+def entropy_py(spec):
+    """The Python value an entropy spec stands for (the inverse of entropy_spec)."""
+    if "none" in spec:
+        return None
+    if "bool" in spec:
+        return spec["bool"]
+    if "int" in spec:
+        return int(spec["int"])
+    if "float" in spec:
+        return struct.unpack("<d", struct.pack("<Q", int(spec["float"], 16)))[0]
+    if "str" in spec:
+        return spec["str"]
+    if "uint32" in spec:
+        return np.array([int(x) for x in spec["uint32"]], dtype=np.uint32)
+    return [entropy_py(x) for x in spec["list"]]
+
+
+def seedseq_spec(entropy, spawn_key=None, pool_size=None, n_children_spawned=None):
+    """A SeedSequence description both sides build from: the entropy spec and the optional keywords (absent = NumPy's
+    default)."""
+    spec = {"entropy": entropy_spec(entropy)}
+    if spawn_key is not None:
+        spec["spawn_key"] = entropy_spec(list(spawn_key) if not isinstance(spawn_key, (str, int)) else spawn_key)
+    if pool_size is not None:
+        spec["pool_size"] = str(pool_size)
+    if n_children_spawned is not None:
+        spec["n_children_spawned"] = str(n_children_spawned)
+    return spec
+
+
+def build_seedseq(spec):
+    """np.random.SeedSequence from a seedseq_spec (C#: new SeedSequence(object entropy, object spawn_key, long
+    pool_size, uint n_children_spawned) with the same defaults)."""
+    kw = {}
+    if "spawn_key" in spec:
+        kw["spawn_key"] = entropy_py(spec["spawn_key"])
+    if "pool_size" in spec:
+        kw["pool_size"] = int(spec["pool_size"])
+    if "n_children_spawned" in spec:
+        kw["n_children_spawned"] = int(spec["n_children_spawned"])
+    return np.random.SeedSequence(entropy_py(spec["entropy"]), **kw)
+
+
+def seedseq_obj(entropy, spawn_key=None, pool_size=None, n_children_spawned=None):
+    """An ISeedSequence/SeedSequence argument."""
+    spec = seedseq_spec(entropy, spawn_key, pool_size, n_children_spawned)
+    return Obj({"seedseq": spec}, make=lambda: build_seedseq(spec))
+
+
+def seedless_obj():
+    """A SeedlessSeedSequence argument."""
+    return Obj({"seedless": True}, make=SeedlessSeedSequence)
+
+
+def generator_obj(engine, seed, prime_how="none"):
+    """A Generator argument: Generator(ENGINE(seed)), primed."""
+    def make():
+        g = np.random.Generator(make_engine(engine, seed))
+        prime(g, prime_how)
+        return g
+    return Obj({"generator": {"engine": engine, "seed": str(seed), "prime": prime_how}}, make=make)
+
+
+def randomstate_obj(recv):
+    """A NumPyRandom (RandomState) argument: another receiver, built and primed."""
+    spec = recv.spec()
+    spec["prime"] = recv.prime
+    return Obj({"randomstate": spec}, make=recv.build)
+
+
+def value_obj(v):
+    """An `object` argument holding a plain Python value (int, float, bool, str, list, uint32 array, None)."""
+    return Obj({"value": entropy_spec(v)}, make=lambda: entropy_py(entropy_spec(v)))
+
+
+def bgstate_explicit(engine, **fields):
+    """A bit generator state spelled out (the engine's typed State in C#, NumPy's state dict): unspecified fields take
+    the parameterless State's values in C# — the generator records them explicitly on both sides."""
+    if engine == "MT19937":
+        d = {"bit_generator": "MT19937", "state": {"key": fields.get("key"), "pos": fields.get("pos", 0)}}
+    elif engine in ("PCG64", "PCG64DXSM"):
+        d = {"bit_generator": engine, "state": {"state": fields.get("state", 0), "inc": fields.get("inc", 0)},
+             "has_uint32": fields.get("has_uint32", 0), "uinteger": fields.get("uinteger", 0)}
+    elif engine == "Philox":
+        d = {"bit_generator": "Philox", "state": {"counter": fields.get("counter"), "key": fields.get("key")},
+             "buffer": fields.get("buffer"), "buffer_pos": fields.get("buffer_pos", 0),
+             "has_uint32": fields.get("has_uint32", 0), "uinteger": fields.get("uinteger", 0)}
+    else:
+        d = {"bit_generator": "SFC64", "state": {"state": fields.get("state")},
+             "has_uint32": fields.get("has_uint32", 0), "uinteger": fields.get("uinteger", 0)}
+
+    def js(v):
+        if v is None:
+            return None
+        if isinstance(v, (list, tuple, np.ndarray)):
+            return [str(int(x)) for x in v]
+        return str(int(v))
+
+    def make():
+        out = json.loads(json.dumps(d, default=lambda o: [int(x) for x in o]))
+        core = out["state"]
+        for k in ("key", "counter", "state"):
+            if k in core and isinstance(core[k], list):
+                core[k] = np.array(core[k], dtype=np.uint32 if engine == "MT19937" else np.uint64)
+        if isinstance(out.get("buffer"), list):
+            out["buffer"] = np.array(out["buffer"], dtype=np.uint64)
+        return out
+    flat = {"engine": engine}
+    for k, v in fields.items():
+        flat[k] = js(v)
+    return Obj({"bgstate_explicit": flat}, make=make)
+
+
 def pyint_obj(v):
     """An `object` argument holding a Python int (C#: a boxed long)."""
     return Obj({"pyint": str(v)}, py=v)
@@ -283,7 +426,9 @@ class Recv:
 
     Stream receivers: `RandomState` (legacy-seeded when `engine` is None, else RandomState(ENGINE(seed))), `Generator`,
     `BitGenerator`. Object receivers wrap an inner stream receiver: `legacy_tuple` is its `get_state()` tuple (C#: the
-    NativeRandomState struct), `rs_dict` its `get_state(legacy=False)` dict (C#: NumPyRandom.State). `none` is for
+    NativeRandomState struct), `rs_dict` its `get_state(legacy=False)` dict (C#: NumPyRandom.State), `bgstate` a bit
+    generator's `state` (C#: the engine's typed State), `rs_bitgen` a RandomState's `_bit_generator`. `seedseq` is a
+    SeedSequence built from `extra['ss']` (see seedseq_spec), `seedless` a SeedlessSeedSequence. `none` is for
     constructors and static members.
     """
 
@@ -305,8 +450,11 @@ class Recv:
         return s
 
     def tag(self):
-        """The receiver's part of a case id (stable: kind, engine, seed, priming, and the inner receiver)."""
+        """The receiver's part of a case id (stable: kind, engine, seed, priming, the seed-sequence spec, and the inner
+        receiver)."""
         t = f"{self.kind}:{self.engine or '-'}:s{self.seed}:{self.prime}"
+        if "ss" in self.extra:
+            t += ":" + json.dumps(self.extra["ss"], separators=(",", ":"), sort_keys=True)
         return f"{t}({self.inner.tag()})" if self.inner is not None else t
 
     def build(self):
@@ -317,6 +465,14 @@ class Recv:
             return self.inner.build().get_state()
         if self.kind == "rs_dict":
             return self.inner.build().get_state(legacy=False)
+        if self.kind == "bgstate":
+            return self.inner.build().state
+        if self.kind == "rs_bitgen":
+            return self.inner.build()._bit_generator
+        if self.kind == "seedseq":
+            return build_seedseq(self.extra["ss"])
+        if self.kind == "seedless":
+            return SeedlessSeedSequence()
         if self.kind == "RandomState":
             r = np.random.RandomState(self.seed) if self.engine is None else np.random.RandomState(make_engine(self.engine, self.seed))
         elif self.kind == "Generator":
@@ -362,23 +518,28 @@ def arr_obs(a):
             "hex": np.ascontiguousarray(a).tobytes().hex()}
 
 
+def _words(v):
+    """Comma-joined decimal words of an integer sequence; `null` for an unset (None) one."""
+    return "null" if v is None else ",".join(str(int(x)) for x in v)
+
+
 def bitgen_state_text(st):
-    """Canonical text of a bit generator state dict (+ has_gauss/gauss when it is a RandomState's)."""
+    """Canonical text of a bit generator state dict (+ has_gauss/gauss when it is a RandomState's). A field the dict
+    leaves unset (None) reads `null` — the parameterless C# State objects start that way."""
     name = st["bit_generator"]
     core = st["state"]
     if name == "MT19937":
-        key = np.asarray(core["key"], dtype=np.uint32)
-        text = f"MT19937|pos={int(core['pos'])}|key={hashlib.sha256(key.tobytes()).hexdigest()}"
+        key = "null" if core["key"] is None else hashlib.sha256(np.asarray(core["key"], dtype=np.uint32).tobytes()).hexdigest()
+        text = f"MT19937|pos={int(core['pos'])}|key={key}"
     elif name in ("PCG64", "PCG64DXSM"):
         text = (f"{name}|state={int(core['state'])}|inc={int(core['inc'])}"
                 f"|has_uint32={int(st['has_uint32'])}|uinteger={int(st['uinteger'])}")
     elif name == "Philox":
-        text = ("Philox|counter=" + ",".join(str(int(x)) for x in core["counter"]) +
-                "|key=" + ",".join(str(int(x)) for x in core["key"]) +
-                "|buffer=" + ",".join(str(int(x)) for x in st["buffer"]) +
+        text = ("Philox|counter=" + _words(core["counter"]) + "|key=" + _words(core["key"]) +
+                "|buffer=" + _words(st["buffer"]) +
                 f"|buffer_pos={int(st['buffer_pos'])}|has_uint32={int(st['has_uint32'])}|uinteger={int(st['uinteger'])}")
     elif name == "SFC64":
-        text = ("SFC64|state=" + ",".join(str(int(x)) for x in core["state"]) +
+        text = ("SFC64|state=" + _words(core["state"]) +
                 f"|has_uint32={int(st['has_uint32'])}|uinteger={int(st['uinteger'])}")
     else:
         raise ValueError(f"unknown bit generator {name}")
@@ -401,6 +562,19 @@ def rsdict_text(d):
     return "rsdict|" + bitgen_state_text(d)
 
 
+def seedseq_text(ss):
+    """Canonical text of a seed sequence: NumPy's repr (entropy, spawn key, pool size, child counter as it prints them —
+    NumSharp's ToString reproduces it) plus the mixed pool's hash and the child counter; `SeedlessSeedSequence` for the
+    seedless one; None for none. The repr is the LAST field (it contains no '|'), so masks can blank it."""
+    if ss is None:
+        return None
+    if isinstance(ss, SeedlessSeedSequence):
+        return "SeedlessSeedSequence"
+    pool = np.asarray(ss.pool, dtype=np.uint32)
+    return (f"SeedSequence|n_children_spawned={int(ss.n_children_spawned)}"
+            f"|pool={hashlib.sha256(pool.tobytes()).hexdigest()}|repr={ss!r}")
+
+
 def recv_state_text(r):
     """The receiver's full state after the call, canonical ('' for receivers without one)."""
     if r is None:
@@ -414,7 +588,10 @@ def recv_state_text(r):
     if isinstance(r, tuple):
         return legacy_tuple_text(r)
     if isinstance(r, dict):
-        return rsdict_text(r)
+        # A RandomState dict carries the Gaussian cache; a bit generator's own state dict does not.
+        return rsdict_text(r) if "has_gauss" in r else "bgstate|" + bitgen_state_text(r)
+    if isinstance(r, (np.random.SeedSequence, SeedlessSeedSequence)):
+        return seedseq_text(r)
     return ""
 
 
@@ -431,7 +608,7 @@ def mask_obs(o, fields):
     if not fields:
         return o
     if isinstance(o, dict):
-        return {k: (mask_text(v, fields) if k in ("state", "v") and isinstance(v, str) else mask_obs(v, fields))
+        return {k: (mask_text(v, fields) if k in ("state", "v", "seed_seq") and isinstance(v, str) else mask_obs(v, fields))
                 for k, v in o.items()}
     if isinstance(o, list):
         return [mask_obs(x, fields) for x in o]
@@ -443,25 +620,43 @@ def obs(v, ctype):
     if ctype == "void":
         return {"k": "none"}
     if ctype in ("BitGenerator",) + tuple(ENGINES):
-        return {"k": "bitgen", "type": type(v).__name__, "state": bitgen_state_text(v.state)}
+        return {"k": "bitgen", "type": type(v).__name__, "state": bitgen_state_text(v.state),
+                "seed_seq": seedseq_text(v.seed_seq) or "None"}
     if ctype == "NumPyRandom":
         return {"k": "rs", "str": str(v), "state": bitgen_state_text(v.get_state(legacy=False))}
     if ctype == "Generator":
-        return {"k": "gen", "str": str(v), "state": bitgen_state_text(v.bit_generator.state)}
+        return {"k": "gen", "str": str(v), "state": bitgen_state_text(v.bit_generator.state),
+                "seed_seq": seedseq_text(v.bit_generator.seed_seq) or "None"}
+    if ctype in ("ISeedSequence", "SeedSequence", "SeedlessSeedSequence", "ISpawnableSeedSequence"):
+        return {"k": "none"} if v is None else {"k": "seedseq", "v": seedseq_text(v)}
+    if ctype == "BigInteger[]":
+        # SeedSequence.spawn_key: NumPy's tuple of Python ints, compared by its repr.
+        return {"k": "text", "v": repr(tuple(int(x) for x in v))}
+    if ctype == "Dictionary<string,object>":
+        # SeedSequence.state: NumPy's dict, compared by its repr (NumPy's key order).
+        return {"k": "text", "v": repr(v)}
+    if ctype == "object" and not isinstance(v, (tuple, dict)):
+        # SeedSequence.entropy: the int / list / array NumPy keeps, compared by its repr.
+        return {"k": "text", "v": repr(v)}
     if ctype in ("NativeRandomState", "NumPyRandom.State", "object") and isinstance(v, (tuple, dict)):
         # By the VALUE: get_state() answers a non-MT19937 RandomState with the dict (and a warning) although the C#
         # overload is typed as the tuple — recorded as NumPy's answer; the divergence is classified on the C# side.
         if isinstance(v, tuple):
             return {"k": "legacy_state", "v": legacy_tuple_text(v)}
         return {"k": "rsdict", "v": rsdict_text(v)}
-    if ctype == "BitGeneratorState":
+    if ctype == "BitGeneratorState" or (ctype.endswith(".State") and ctype != "NumPyRandom.State"):
+        # The base class and every engine's typed State: NumPy's state dict of that engine.
         return {"k": "bgstate", "v": bitgen_state_text(v)}
-    if ctype.endswith("[]") and ctype[:-2] in ("Generator", "BitGenerator", "SeedSequence", "NumPyRandom") + tuple(ENGINES):
+    if ctype.endswith("[]") and ctype[:-2] in ("Generator", "BitGenerator", "SeedSequence", "NumPyRandom",
+                                               "ISpawnableSeedSequence") + tuple(ENGINES):
         return {"k": "seq", "items": [obs(x, ctype[:-2]) for x in v]}
     if ctype in ("uint[]", "ulong[]", "long[]", "int[]"):
         dt = {"uint[]": np.uint32, "ulong[]": np.uint64, "long[]": np.int64, "int[]": np.int32}[ctype]
         return arr_obs(np.asarray(v, dtype=dt))
     if ctype.startswith("NDArray") or ctype == "T":
+        if v is None:
+            # random_raw(output=False): NumPy returns None, NumSharp a null NDArray.
+            return {"k": "none"}
         if isinstance(v, (bytes, bytearray)):
             return arr_obs(np.frombuffer(bytes(v), dtype=np.uint8))
         if isinstance(v, bool):
@@ -1667,7 +1862,7 @@ def fam_rs_factory(out, surface, name, seeds):
         pt = m["params"][0]["type"] if m["params"] else None
 
         def one(tag, values, fn, mask=()):
-            emit_m(out, PORTABLE, "RandomState.RandomState", m, recv, values, tag, fn, state=False, state_mask=mask)
+            emit_m(out, PORTABLE, "RandomState", m, recv, values, tag, fn, state=False, state_mask=mask)
         if pt is None:
             one("entropy", {}, lambda r, py: np.random.RandomState(), mask=("key",))
         elif pt in ("int", "long"):
@@ -2197,12 +2392,611 @@ def fam_gen_ctor(out, surface, name, seeds):
     for m in overloads(surface, "Generator", name):
         for e in ENGINES:
             for sd in seeds[:3]:
-                emit_m(out, PORTABLE, "Generator.Generator", m, none, {"bit_generator": bitgen_obj(e, sd)}, f"{e}_s{sd}",
+                emit_m(out, PORTABLE, "Generator", m, none, {"bit_generator": bitgen_obj(e, sd)}, f"{e}_s{sd}",
                        lambda r, py: np.random.Generator(py["bit_generator"]), state=False)
-            emit_m(out, PORTABLE, "Generator.Generator", m, none, {"bit_generator": bitgen_obj(e, 5, "raw3")}, f"{e}_primed",
+            emit_m(out, PORTABLE, "Generator", m, none, {"bit_generator": bitgen_obj(e, 5, "raw3")}, f"{e}_primed",
                    lambda r, py: np.random.Generator(py["bit_generator"]), state=False)
-        emit_m(out, PORTABLE, "Generator.Generator", m, none, {"bit_generator": None}, "null",
+        emit_m(out, PORTABLE, "Generator", m, none, {"bit_generator": None}, "null",
                lambda r, py: np.random.Generator(py["bit_generator"]), state=False)
+
+
+
+# ======================================================================================================================
+# Families: bit generators, their states, seed sequences, default_rng (P4)
+# ======================================================================================================================
+
+# State fields an OS-entropy-seeded engine draws, masked on both sides together with the seed sequence's pool and repr.
+ENGINE_ENTROPY_FIELDS = {"MT19937": ("key",), "PCG64": ("state", "inc"), "PCG64DXSM": ("state", "inc"),
+                         "Philox": ("key",), "SFC64": ("state",)}
+SEEDSEQ_MASK = ("pool", "repr")
+
+
+def engine_mask(engine):
+    return ENGINE_ENTROPY_FIELDS[engine] + SEEDSEQ_MASK
+
+
+# Seeds by the C# parameter type of an engine / SeedSequence constructor (each also taken by NumPy as that Python value).
+SEED_VALUES = {
+    "long": [0, 1, 42, 2 ** 32, 2 ** 63 - 1, -1],
+    "ulong": [0, 2 ** 63, 2 ** 64 - 1],
+    "BigInteger": [0, 2 ** 64, 2 ** 100, 2 ** 128 + 5, -1],
+    "int[]": [[1, 2, 3], [], [0], [2 ** 31 - 1], [-1]],
+    "long[]": [[1, 2, 3], [2 ** 40, 5], [], [-5]],
+    "uint[]": [[1, 2, 3], [2 ** 32 - 1], []],
+}
+
+
+def seed_py(ctype, v):
+    """The Python value NumPy receives for a C# seed of the given type: a uint[] stands for NumPy's uint32 ndarray (so
+    the SeedSequence reprs agree), every other array for a Python list."""
+    if v is None:
+        return None
+    return np.array(v, dtype=np.uint32) if ctype == "uint[]" else v
+
+
+def seed_seqs():
+    """ISeedSequence arguments: SeedSequences over every keyword, and the seedless one (NumPy refuses it)."""
+    return [("ss42", seedseq_obj(42)), ("ss_key", seedseq_obj(42, spawn_key=[1, 2])),
+            ("ss_pool8", seedseq_obj(42, pool_size=8)), ("ss_children", seedseq_obj(42, n_children_spawned=3)),
+            ("ss_list", seedseq_obj([1, 2, 3])), ("ss_big", seedseq_obj(2 ** 100)), ("seedless", seedless_obj())]
+
+
+def make_engine_ctor_family(E):
+    def fam(out, surface, name, seeds):
+        """ENGINE(seed) for every seed form: integers (fixed seeds and the edges), arrays (null is NumPy's None — OS
+        entropy), seed sequences (every keyword, seedless refused), Philox's (seed, counter, key)."""
+        none = Recv("none")
+        cls = ENGINE_CLASS[E]
+        for m in overloads(surface, E, "ctor"):
+            ps = m["params"]
+            if not ps:
+                emit_m(out, PORTABLE, E, m, none, {}, "entropy", lambda r, py: cls(), state=False, state_mask=engine_mask(E))
+                continue
+            if len(ps) == 3:
+                fam_philox_ctor3(out, m, seeds)
+                continue
+            pt = ps[0]["type"]
+            if pt == "ISeedSequence":
+                for tag, v in seed_seqs():
+                    emit_m(out, PORTABLE, E, m, none, {"seed": v}, tag, lambda r, py: cls(py["seed"]), state=False)
+                emit_m(out, PORTABLE, E, m, none, {"seed": None}, "null", lambda r, py: cls(None), state=False,
+                       state_mask=engine_mask(E))
+                continue
+            vals = (list(seeds) if pt == "long" else []) + SEED_VALUES[pt]
+            for v in dict.fromkeys(map(lambda x: json.dumps(x), vals)):
+                v = json.loads(v)
+                emit_m(out, PORTABLE, E, m, none, {"seed": v}, f"s{json.dumps(v, separators=(',', ':'))}",
+                       lambda r, py, pt=pt: cls(seed_py(pt, py["seed"])), state=False)
+            if pt.endswith("[]"):
+                emit_m(out, PORTABLE, E, m, none, {"seed": None}, "null", lambda r, py: cls(None), state=False,
+                       state_mask=engine_mask(E))
+    return fam
+
+
+def fam_philox_ctor3(out, m, seeds):
+    """Philox(seed, counter, key): seed with and without a counter, a key instead of a seed, both (refused), counters and
+    keys past their word counts and negative (refused), every argument omitted (OS entropy)."""
+    none = Recv("none")
+
+    def np_fn(r, py):
+        return np.random.Philox(**{k: py[k] for k in ("seed", "counter", "key") if k in py})
+    variants = [("seed", {"seed": value_obj(42)}), ("seed_counter", {"seed": value_obj(42), "counter": value_obj(5)}),
+                ("seed_counter_list", {"seed": value_obj(42), "counter": value_obj([1, 2, 3, 4])}),
+                ("seed_counter_arr", {"seed": value_obj(42), "counter": np.array([7, 0, 0, 1], dtype=np.uint64)}),
+                ("seed_counter_big", {"seed": value_obj(42), "counter": value_obj(2 ** 200)}),
+                ("seed_counter_neg", {"seed": value_obj(42), "counter": value_obj(-1)}),
+                ("key", {"key": value_obj(7)}), ("key_list", {"key": value_obj([1, 2])}),
+                ("key_arr", {"key": np.array([3, 4], dtype=np.uint64)}), ("key_big", {"key": value_obj(2 ** 128 - 1)}),
+                ("key_too_big", {"key": value_obj(2 ** 128)}), ("key_neg", {"key": value_obj(-1)}),
+                ("key_counter", {"key": value_obj(7), "counter": value_obj(3)}),
+                ("seed_and_key", {"seed": value_obj(42), "key": value_obj(7)}),
+                ("seed_seqseq", {"seed": seedseq_obj(9, spawn_key=[4])}), ("seed_list", {"seed": value_obj([1, 2, 3])}),
+                ("seed_str", {"seed": value_obj("123")}), ("seed_float", {"seed": value_obj(1.5)}),
+                ("seed_neg", {"seed": value_obj(-3)})]
+    for tag, vals in variants:
+        emit_m(out, PORTABLE, "Philox", m, none, vals, tag, np_fn, state=False)
+    # Every argument None: OS entropy, like the omitted call below (the key and the seed sequence are masked).
+    emit_m(out, PORTABLE, "Philox", m, none, {"seed": None, "counter": None, "key": None}, "nulls", np_fn, state=False,
+           state_mask=engine_mask("Philox"))
+    emit_m(out, PORTABLE, "Philox", m, none, {"seed": None, "counter": value_obj(9), "key": None}, "null_seed_counter",
+           np_fn, state=False, state_mask=engine_mask("Philox"))
+    emit_m(out, PORTABLE, "Philox", m, none, {}, "entropy", np_fn, state=False, state_mask=engine_mask("Philox"))
+
+
+def bitgen_sweep(out, tier, member, m, E, seeds, base, variants, np_fn, primes=("raw3",), calls2=True, **kw):
+    """The standard case set of one overload on a bare engine E: base on E(seed) for every seed, variants on two seeds,
+    then priming (three raw words) and a repeated call."""
+    recvs = [Recv("BitGenerator", E, sd) for sd in seeds]
+    vrecv = recvs[:2]
+    for recv in recvs:
+        emit_m(out, tier, member, m, recv, base, "base", np_fn, **kw)
+    for tag, vals in variants:
+        for recv in vrecv:
+            if not emit_m(out, tier, member, m, recv, vals, tag, np_fn, **kw):
+                break
+    for recv0 in vrecv:
+        for pr in primes:
+            emit_m(out, tier, member, m, Recv("BitGenerator", E, recv0.seed, prime=pr), base, f"prime_{pr}", np_fn, **kw)
+        if calls2:
+            emit_m(out, tier, member, m, recv0, base, "calls2", np_fn, calls=2, **kw)
+
+
+def other_engine(E):
+    return "SFC64" if E != "SFC64" else "PCG64"
+
+
+def state_set_variants(E, typed):
+    """Values for an engine's state setter: a state of the same engine from another seed and priming, another engine's
+    (refused — expressible only through the base `BitGenerator.state` setter, whose parameter is the base State: the
+    engine's own typed setter cannot even be handed another engine's State in C#), and states NumPy validates or not
+    (bad positions, wrong word counts, unset arrays)."""
+    v = [("same", {"value": bgstate_obj(E, 99, "raw3")}), ("same_fresh", {"value": bgstate_obj(E, 5)}),
+         ("null", {"value": None})]
+    if not typed:
+        v.append(("other", {"value": bgstate_obj(other_engine(E), 5)}))
+    if E == "MT19937":
+        key = [(i * 69069 + 1) % 2 ** 32 for i in range(624)]
+        v += [("pos0", {"value": bgstate_explicit(E, key=key, pos=0)}), ("pos624", {"value": bgstate_explicit(E, key=key, pos=624)}),
+              ("pos625", {"value": bgstate_explicit(E, key=key, pos=625)}), ("posneg", {"value": bgstate_explicit(E, key=key, pos=-1)}),
+              ("key10", {"value": bgstate_explicit(E, key=key[:10], pos=3)}), ("key_null", {"value": bgstate_explicit(E, pos=3)}),
+              # A longer key: NumPy copies its first 624 words.
+              ("key625", {"value": bgstate_explicit(E, key=key + [7], pos=3)})]
+    elif E in ("PCG64", "PCG64DXSM"):
+        v += [("explicit", {"value": bgstate_explicit(E, state=2 ** 100 + 7, inc=2 ** 64 + 1)}),
+              ("even_inc", {"value": bgstate_explicit(E, state=5, inc=4)}),
+              ("buffered", {"value": bgstate_explicit(E, state=5, inc=3, has_uint32=1, uinteger=123456)}),
+              ("has_uint32_2", {"value": bgstate_explicit(E, state=5, inc=3, has_uint32=2, uinteger=9)})]
+    elif E == "Philox":
+        v += [("explicit", {"value": bgstate_explicit(E, counter=[1, 2, 3, 4], key=[5, 6], buffer=[7, 8, 9, 10], buffer_pos=2)}),
+              ("buffer_pos4", {"value": bgstate_explicit(E, counter=[0, 0, 0, 0], key=[5, 6], buffer=[0, 0, 0, 0], buffer_pos=4)}),
+              ("buffer_pos5", {"value": bgstate_explicit(E, counter=[0, 0, 0, 0], key=[5, 6], buffer=[0, 0, 0, 0], buffer_pos=5)}),
+              ("buffer_pos_neg", {"value": bgstate_explicit(E, counter=[0, 0, 0, 0], key=[5, 6], buffer=[1, 2, 3, 4], buffer_pos=-1)}),
+              ("counter_null_key3", {"value": bgstate_explicit(E, key=[5, 6, 7], buffer=[0, 0, 0, 0], buffer_pos=4)}),
+              ("counter3_key_null", {"value": bgstate_explicit(E, counter=[1, 2, 3], buffer=[0, 0, 0, 0], buffer_pos=4)}),
+              ("buffer_null", {"value": bgstate_explicit(E, counter=[1, 2, 3, 4], key=[5, 6], buffer_pos=4)}),
+              ("buffer3", {"value": bgstate_explicit(E, counter=[1, 2, 3, 4], key=[5, 6], buffer=[1, 2, 3], buffer_pos=4)}),
+              ("counter3", {"value": bgstate_explicit(E, counter=[1, 2, 3], key=[5, 6], buffer=[0, 0, 0, 0], buffer_pos=4)}),
+              ("key_null", {"value": bgstate_explicit(E, counter=[1, 2, 3, 4], buffer=[0, 0, 0, 0], buffer_pos=4)})]
+    else:
+        v += [("explicit", {"value": bgstate_explicit(E, state=[1, 2, 3, 4], has_uint32=1, uinteger=77)}),
+              ("state3", {"value": bgstate_explicit(E, state=[1, 2, 3])}), ("state_null", {"value": bgstate_explicit(E)}),
+              # NumPy broadcasts the words into four (`state_vec[:] = …`): one word fills all four, none is an error.
+              ("state1", {"value": bgstate_explicit(E, state=[9])}), ("state_empty", {"value": bgstate_explicit(E, state=[])})]
+    return v
+
+
+def make_engine_method_family(E):
+    def fam(out, surface, name, seeds):
+        """ENGINE.advance / jumped / state / _legacy_seeding on E(seed) receivers."""
+        member = f"{E}.{name}"
+        for m in overloads(surface, E, name):
+            if name == "advance":
+                variants = [(f"d{t}", {"delta": d}) for t, d in (("0", 0), ("2e64", 2 ** 64), ("max", 2 ** 128 - 1),
+                                                                 ("2e128", 2 ** 128), ("neg", -1), ("2e200", 2 ** 200), ("7", 7))]
+                bitgen_sweep(out, PORTABLE, member, m, E, seeds, {"delta": 1}, variants, lambda r, py: r.advance(py["delta"]))
+            elif name == "jumped":
+                # A new engine built as NumPy builds it (a fresh OS-entropy seed sequence, then the jumped state): its
+                # seed sequence is masked, the state is exact; the receiver is untouched.
+                # MT19937's jump is a polynomial evaluation per jump (NumPy loops `for i in range(jumps)`): no large
+                # counts there; the counter-based engines take any count (one advance of jumps * step).
+                counts = ((("0", 0), ("2", 2), ("neg", -1)) if E == "MT19937"
+                          else (("0", 0), ("2", 2), ("7", 7), ("neg", -1), ("big", 2 ** 40)))
+                variants = [(f"j{t}", {"jumps": j}) for t, j in counts]
+                if m["params"][0]["type"] == "BigInteger":
+                    variants.append(("j2e70", {"jumps": 2 ** 70}))
+                if m["params"][0].get("optional"):
+                    variants.append(("omit", {"jumps": OMIT}))
+                bitgen_sweep(out, PORTABLE, member, m, E, seeds, {"jumps": 1}, variants,
+                             lambda r, py: r.jumped(**({"jumps": py["jumps"]} if "jumps" in py else {})),
+                             state_mask=SEEDSEQ_MASK)
+            elif name == "state" and m["kind"] == "get":
+                bitgen_sweep(out, PORTABLE, member, m, E, seeds, {}, [], lambda r, py: r.state, calls2=False)
+            elif name == "state":
+                def np_set(r, py):
+                    r.state = py["value"]
+                bitgen_sweep(out, PORTABLE, member, m, E, seeds, {"value": bgstate_obj(E, 31, "raw3")},
+                             state_set_variants(E, typed=True), np_set, calls2=False)
+            elif name == "_legacy_seeding":
+                fam_legacy_seeding_overload(out, m, seeds)
+            else:
+                raise ValueError(f"no family for {m['sig']}")
+    return fam
+
+
+def fam_legacy_seeding_overload(out, m, seeds):
+    """MT19937._legacy_seeding(seed): RandomState's seeding on a bare MT19937 — an int, init_by_array, or None (OS
+    entropy, key masked)."""
+    member = "MT19937._legacy_seeding"
+    if not m["params"]:
+        bitgen_sweep(out, PORTABLE, member, m, "MT19937", seeds, {}, [], lambda r, py: r._legacy_seeding(None),
+                     calls2=False, state_mask=("key",))
+        return
+    pt = m["params"][0]["type"]
+    if pt == "long":
+        variants = [(f"s{v}", {"seed": v}) for v in (0, 42, 2 ** 32 - 1, 2 ** 32, -1)]
+        base = {"seed": 1234}
+    else:
+        arrs = {"uint[]": [[1, 2, 3], [2 ** 32 - 1], []], "long[]": [[1, 2, 3], [2 ** 32], [-1], []],
+                "int[]": [[1, 2, 3], [-1], [], list(range(700))]}[pt]
+        variants = [(f"a{i}", {"seed": a}) for i, a in enumerate(arrs)]
+        base = {"seed": [5, 6, 7]}
+    # Every C# array is a Python LIST here, as in RandomState.seed and RandomState(int[]): a list of any length takes
+    # init_by_array, where a one-element ndarray would be squeezed to the scalar seed (NumPy's `seed.squeeze()` branch).
+    # (A SeedSequence entropy uint[] stands for the uint32 ndarray instead — its repr — see seed_py.)
+    bitgen_sweep(out, PORTABLE, member, m, "MT19937", seeds, base, variants,
+                 lambda r, py: r._legacy_seeding(py["seed"]), calls2=False)
+    if pt.endswith("[]"):
+        for sd in seeds[:2]:
+            emit_m(out, PORTABLE, member, m, Recv("BitGenerator", "MT19937", sd), {"seed": None}, "null",
+                   lambda r, py: r._legacy_seeding(None), state_mask=("key",))
+
+
+for _E in ENGINES:
+    FAMILIES[(_E, "ctor")] = make_engine_ctor_family(_E)
+    for _n in ("advance", "jumped", "state", "_legacy_seeding"):
+        FAMILIES[(_E, _n)] = make_engine_method_family(_E)
+
+
+@family("BitGenerator", "random_raw", "seed_seq", "spawn", "state", "lock")
+def fam_bitgen_base(out, surface, name, seeds):
+    """BitGenerator's own members, invoked on every engine (and, for seed_seq/spawn, on a legacy-seeded MT19937, which
+    has no seed sequence)."""
+    for m in overloads(surface, "BitGenerator", name):
+        if name == "lock":
+            exempt(m["sig"], "a threading primitive; nothing NumPy-observable (plan §7)")
+            continue
+        for E in ENGINES:
+            member = f"{E}.{name}"
+            if name == "random_raw":
+                variants = [("size_none", {"size": SHAPE_NONE}), ("size_scalar", {"size": ()}), ("size_2x3", {"size": (2, 3)}),
+                            ("size_zero", {"size": (0,)}), ("omit_size", {"size": OMIT}),
+                            ("no_output", {"size": (5,), "output": False}), ("no_output_scalar", {"size": SHAPE_NONE, "output": False}),
+                            ("no_output_2x3", {"size": (2, 3), "output": False}),
+                            ("omit_output", {"size": (4,), "output": OMIT}), ("big", {"size": (1000,)})]
+                bitgen_sweep(out, PORTABLE, member, m, E, seeds, {"size": (6,)}, variants,
+                             lambda r, py: r.random_raw(**gen_kw(py, ("size", "output"))))
+            elif name == "seed_seq":
+                bitgen_sweep(out, PORTABLE, member, m, E, seeds, {}, [], lambda r, py: r.seed_seq, calls2=False)
+            elif name == "spawn":
+                bitgen_sweep(out, PORTABLE, member, m, E, seeds, {"n_children": 3},
+                             [("n0", {"n_children": 0}), ("n1", {"n_children": 1}), ("nneg", {"n_children": -2})],
+                             lambda r, py: r.spawn(py["n_children"]))
+            elif name == "state" and m["kind"] == "get":
+                bitgen_sweep(out, PORTABLE, member, m, E, seeds, {}, [], lambda r, py: r.state, calls2=False)
+            else:
+                def np_set(r, py):
+                    r.state = py["value"]
+                bitgen_sweep(out, PORTABLE, member, m, E, seeds, {"value": bgstate_obj(E, 77)}, state_set_variants(E, typed=False),
+                             np_set, calls2=False)
+        if name in ("seed_seq", "spawn"):
+            # A legacy-seeded MT19937 (RandomState(seed)._bit_generator): no seed sequence, and spawning is refused.
+            for sd in seeds[:2]:
+                recv = Recv("rs_bitgen", inner=Recv("RandomState", None, sd))
+                vals = {} if name == "seed_seq" else {"n_children": 2}
+                fn = (lambda r, py: r.seed_seq) if name == "seed_seq" else (lambda r, py: r.spawn(py["n_children"]))
+                emit_m(out, PORTABLE, f"MT19937.{name}", m, recv, vals, "legacy_mt", fn)
+
+
+# ---- the engines' state classes ----------------------------------------------------------------------------------------
+
+# Where each State member lives in NumPy's state dict: the path of keys, and the element dtype of an array field.
+STATE_FIELDS = {
+    "MT19937": {"key": (("state", "key"), np.uint32), "pos": (("state", "pos"), None)},
+    "PCG64": {"state": (("state", "state"), None), "inc": (("state", "inc"), None),
+              "has_uint32": (("has_uint32",), None), "uinteger": (("uinteger",), None)},
+    "Philox": {"counter": (("state", "counter"), np.uint64), "key": (("state", "key"), np.uint64),
+               "buffer": (("buffer",), np.uint64), "buffer_pos": (("buffer_pos",), None),
+               "has_uint32": (("has_uint32",), None), "uinteger": (("uinteger",), None)},
+    "SFC64": {"state": (("state", "state"), np.uint64), "has_uint32": (("has_uint32",), None),
+              "uinteger": (("uinteger",), None)},
+}
+STATE_FIELDS["PCG64DXSM"] = STATE_FIELDS["PCG64"]
+
+# Setter values per field (valid and edge values; a state object holds whatever it is given — the engine validates).
+STATE_SET_VALUES = {
+    "key": {"MT19937": [[(i * 1812433253 + 7) % 2 ** 32 for i in range(624)], [1, 2, 3], None],
+            "Philox": [[11, 12], [1, 2, 3], None]},
+    "pos": [5, 0, 624, 625, -1],
+    "state": {"PCG64": [2 ** 100 + 1, 0, 2 ** 128 - 1], "PCG64DXSM": [2 ** 100 + 1, 0, 2 ** 128 - 1],
+              "SFC64": [[1, 2, 3, 4], [9], None]},
+    "inc": [2 ** 64 + 1, 2, 2 ** 128 - 1],
+    "has_uint32": [1, 0, 2, -1],
+    "uinteger": [123456, 0, 2 ** 32 - 1],
+    "counter": [[1, 2, 3, 4], [5], None],
+    "buffer": [[9, 8, 7, 6], [1, 2], None],
+    "buffer_pos": [0, 3, 4, 5],
+}
+
+
+def state_field_get(d, path):
+    for k in path:
+        d = d[k]
+    return d
+
+
+def state_field_set(d, path, value):
+    for k in path[:-1]:
+        d = d[k]
+    d[path[-1]] = value
+
+
+def bgstate_receivers(E, seeds):
+    return [Recv("bgstate", inner=Recv("BitGenerator", E, sd, prime=pr)) for sd in seeds[:2] for pr in ("none", "raw3")]
+
+
+def make_state_class_family(E):
+    def fam(out, surface, name, seeds):
+        """ENGINE.State: getters read NumPy's state dict, setters write it (the object's canonical text after the call is
+        the receiver state), constructors build one from parts (the parameterless one: unset arrays, zeros)."""
+        member = f"{E}.state"
+        fields = STATE_FIELDS[E]
+        for m in overloads(surface, f"{E}.State", name):
+            if name == "ctor":
+                none = Recv("none")
+                ptypes = [p["name"] for p in m["params"]]
+
+                def build(r, py, E=E, ptypes=tuple(ptypes)):
+                    d = bgstate_explicit(E, **{k: v for k, v in py.items() if v is not None}).py if ptypes else \
+                        bgstate_explicit(E).py
+                    return d
+                if not ptypes:
+                    emit_m(out, PORTABLE, member, m, none, {}, "empty", build, state=False)
+                    continue
+                full = {"MT19937": {"key": STATE_SET_VALUES["key"]["MT19937"][0], "pos": 5},
+                        "PCG64": {"state": 2 ** 100 + 1, "inc": 2 ** 64 + 1, "has_uint32": 1, "uinteger": 99},
+                        "PCG64DXSM": {"state": 2 ** 100 + 1, "inc": 2 ** 64 + 1, "has_uint32": 1, "uinteger": 99},
+                        "Philox": {"counter": [1, 2, 3, 4], "key": [5, 6], "buffer": [7, 8, 9, 10], "buffer_pos": 1,
+                                   "has_uint32": 1, "uinteger": 42},
+                        "SFC64": {"state": [1, 2, 3, 4], "has_uint32": 1, "uinteger": 42}}[E]
+                emit_m(out, PORTABLE, member, m, none, full, "full", build, state=False)
+                optional = [p["name"] for p in m["params"] if p.get("optional")]
+                if optional:
+                    emit_m(out, PORTABLE, member, m, none, dict(full, **{k: OMIT for k in optional}), "defaults", build, state=False)
+                arrays = [p["name"] for p in m["params"] if p["type"].endswith("[]")]
+                if arrays:
+                    emit_m(out, PORTABLE, member, m, none, dict(full, **{arrays[0]: None}), "null_array", build, state=False)
+                continue
+            if name == "bit_generator":
+                for recv in bgstate_receivers(E, seeds):
+                    emit_m(out, PORTABLE, member, m, recv, {}, "get", lambda r, py: r["bit_generator"])
+                continue
+            path, adt = fields[name]
+            if m["kind"] == "get":
+                for recv in bgstate_receivers(E, seeds):
+                    emit_m(out, PORTABLE, member, m, recv, {}, "get",
+                           lambda r, py, path=path, adt=adt: (np.asarray(state_field_get(r, path), dtype=adt)
+                                                            if adt is not None else state_field_get(r, path)))
+                continue
+            vals = STATE_SET_VALUES[name]
+            vals = vals[E] if isinstance(vals, dict) else vals
+
+            def np_set(r, py, path=path, adt=adt):
+                v = py["value"]
+                state_field_set(r, path, np.array(v, dtype=adt) if (adt is not None and v is not None) else v)
+            for i, v in enumerate(vals):
+                for recv in bgstate_receivers(E, seeds)[:2]:
+                    emit_m(out, PORTABLE, member, m, recv, {"value": v}, f"v{i}", np_set)
+    return fam
+
+
+for _E in ENGINES:
+    for _n in ("ctor", "bit_generator", "key", "pos", "state", "inc", "has_uint32", "uinteger", "counter", "buffer",
+               "buffer_pos"):
+        FAMILIES[(f"{_E}.State", _n)] = make_state_class_family(_E)
+
+
+@family("BitGeneratorState", "bit_generator")
+def fam_bgstate_base(out, surface, name, seeds):
+    """BitGeneratorState.bit_generator (the base property) on every engine's state."""
+    for m in overloads(surface, "BitGeneratorState", name):
+        for E in ENGINES:
+            for recv in bgstate_receivers(E, seeds)[:2]:
+                emit_m(out, PORTABLE, f"{E}.state", m, recv, {}, "get", lambda r, py: r["bit_generator"])
+
+
+@family("MT19937.State", "op_Implicit")
+def fam_mt_state_implicit(out, surface, name, seeds):
+    """The legacy tuple converts to MT19937's state — NumPy's MT19937.state setter translating a tuple: key and pos kept,
+    the Gaussian cache dropped; another algorithm's tuple is refused with that setter's text."""
+    none = Recv("none")
+
+    def conv(r, py):
+        t = py["legacy"]
+        if t[0] != "MT19937":
+            raise ValueError("state is not a legacy MT19937 state")
+        return {"bit_generator": "MT19937", "state": {"key": np.asarray(t[1], dtype=np.uint32), "pos": int(t[2])}}
+    for m in overloads(surface, "MT19937.State", name):
+        for sd in seeds[:3]:
+            for pr in ("none", "gauss"):
+                emit_m(out, PORTABLE, "MT19937.state", m, none, {"legacy": legacy_state_of(Recv("RandomState", None, sd, prime=pr))},
+                       f"s{sd}_{pr}", conv, state=False)
+        emit_m(out, PORTABLE, "MT19937.state", m, none, {"legacy": legacy_state_explicit(KEY624, 17, 1, 0.5)}, "explicit", conv, state=False)
+        emit_m(out, PORTABLE, "MT19937.state", m, none, {"legacy": legacy_state_explicit(KEY624, 5, algorithm="PCG64")}, "algo", conv,
+               state=False)
+
+
+# ---- seed sequences ----------------------------------------------------------------------------------------------------
+
+SS_RECEIVER_SPECS = [seedseq_spec(42), seedseq_spec([1, 2, 3], spawn_key=[5], pool_size=8),
+                     seedseq_spec(2 ** 100, n_children_spawned=2), seedseq_spec(0, spawn_key=[2 ** 70, 1])]
+
+
+def ss_receivers():
+    return [Recv("seedseq", extra={"ss": spec}) for spec in SS_RECEIVER_SPECS]
+
+
+@family("SeedSequence", "ctor")
+def fam_seedseq_ctor(out, surface, name, seeds):
+    """SeedSequence(entropy[, spawn_key, pool_size, n_children_spawned]) for every entropy form NumPy accepts or refuses:
+    ints, lists, uint32 arrays, strings (NumPy's seed-string rule), floats and negatives (refused), None (OS entropy)."""
+    none = Recv("none")
+    mask = SEEDSEQ_MASK
+    for m in overloads(surface, "SeedSequence", name):
+        ps = m["params"]
+        if not ps:
+            emit_m(out, PORTABLE, "SeedSequence", m, none, {}, "entropy", lambda r, py: np.random.SeedSequence(), state=False,
+                   state_mask=mask)
+            continue
+        pt = ps[0]["type"]
+        if pt == "object":
+            def np_fn(r, py):
+                kw = {k: py[k] for k in ("spawn_key", "pool_size", "n_children_spawned") if k in py}
+                return np.random.SeedSequence(py["entropy"], **kw)
+            variants = [("int", {"entropy": value_obj(42)}), ("big", {"entropy": value_obj(2 ** 100)}),
+                        ("list", {"entropy": value_obj([1, 2, 3])}), ("nested", {"entropy": value_obj([[1, 2], [3]])}),
+                        ("uint32", {"entropy": value_obj(np.array([7, 8], dtype=np.uint32))}),
+                        ("str_dec", {"entropy": value_obj("123")}), ("str_lead0", {"entropy": value_obj("012")}),
+                        ("str_hex", {"entropy": value_obj("0x1f")}), ("str_bad", {"entropy": value_obj("abc")}),
+                        ("float", {"entropy": value_obj(1.5)}), ("neg", {"entropy": value_obj(-1)}),
+                        ("bool", {"entropy": value_obj(True)}), ("ndarray", {"entropy": np.array([4, 5], dtype=np.int64)}),
+                        ("ndarray_0d", {"entropy": np.array(9, dtype=np.int64)}),
+                        ("key", {"entropy": value_obj(42), "spawn_key": value_obj([1, 2])}),
+                        ("key_big", {"entropy": value_obj(42), "spawn_key": value_obj([2 ** 70])}),
+                        ("key_str", {"entropy": value_obj(42), "spawn_key": value_obj("12")}),
+                        ("key_nested", {"entropy": value_obj(42), "spawn_key": value_obj([[1, 2]])}),
+                        ("key_int", {"entropy": value_obj(42), "spawn_key": value_obj(5)}),
+                        ("key_ndarray", {"entropy": value_obj(42), "spawn_key": np.array([3, 4], dtype=np.int64)}),
+                        ("key_0d", {"entropy": value_obj(42), "spawn_key": np.array(3, dtype=np.int64)}),
+                        ("key_neg", {"entropy": value_obj(42), "spawn_key": value_obj([-1])}),
+                        ("pool8", {"entropy": value_obj(42), "pool_size": 8}), ("pool3", {"entropy": value_obj(42), "pool_size": 3}),
+                        ("children", {"entropy": value_obj(42), "n_children_spawned": 5}),
+                        ("children_max", {"entropy": value_obj(42), "n_children_spawned": 2 ** 32 - 1}),
+                        ("all", {"entropy": value_obj([9, 9]), "spawn_key": value_obj([1]), "pool_size": 6, "n_children_spawned": 2}),
+                        ("omit_all", {"entropy": value_obj(3), "spawn_key": OMIT, "pool_size": OMIT, "n_children_spawned": OMIT})]
+            for tag, vals in variants:
+                emit_m(out, PORTABLE, "SeedSequence", m, none, vals, tag, np_fn, state=False)
+            emit_m(out, PORTABLE, "SeedSequence", m, none, {"entropy": None}, "none", np_fn, state=False, state_mask=mask)
+            emit_m(out, PORTABLE, "SeedSequence", m, none, {"entropy": None, "spawn_key": value_obj([4])}, "none_key", np_fn,
+                   state=False, state_mask=mask)
+            continue
+        vals = SEED_VALUES[pt]
+        for v in vals:
+            emit_m(out, PORTABLE, "SeedSequence", m, none, {"entropy": v}, f"e{json.dumps(v, separators=(',', ':'))}",
+                   lambda r, py, pt=pt: np.random.SeedSequence(seed_py(pt, py["entropy"])), state=False)
+        if pt.endswith("[]"):
+            emit_m(out, PORTABLE, "SeedSequence", m, none, {"entropy": None}, "null",
+                   lambda r, py: np.random.SeedSequence(None), state=False, state_mask=mask)
+
+
+@family("SeedSequence", "entropy", "spawn_key", "pool_size", "n_children_spawned", "pool", "state", "ToString",
+        "generate_state", "spawn")
+def fam_seedseq_members(out, surface, name, seeds):
+    """SeedSequence's getters (entropy/spawn_key/state by NumPy's repr), generate_state (both dtypes, NumPy's refusals),
+    spawn (the counter advances: the receiver's text after the call), repr."""
+    for m in overloads(surface, "SeedSequence", name):
+        emit_ss_member(out, m, name, "SeedSequence", ss_receivers())
+
+
+def emit_ss_member(out, m, name, owner, receivers):
+    member = f"SeedSequence.{name}" if owner != "SeedlessSeedSequence" else f"SeedlessSeedSequence.{name}"
+    for recv in receivers:
+        if name == "generate_state":
+            def np_fn(r, py):
+                return r.generate_state(py["n_words"], **({"dtype": py["dtype"]} if py.get("dtype") is not None else {}))
+            variants = [("n4", {"n_words": 4}), ("n0", {"n_words": 0}), ("n1", {"n_words": 1}), ("n1000", {"n_words": 1000}),
+                        ("u64", {"n_words": 3, "dtype": "uint64"}), ("u32", {"n_words": 3, "dtype": "uint32"}),
+                        ("dt_null", {"n_words": 3, "dtype": None}), ("omit_dtype", {"n_words": 3, "dtype": OMIT}),
+                        ("dt_i32", {"n_words": 3, "dtype": "int32"}), ("dt_f64", {"n_words": 3, "dtype": "float64"}),
+                        ("neg", {"n_words": -1})]
+            for tag, vals in variants:
+                emit_m(out, PORTABLE, member, m, recv, vals, tag, np_fn)
+        elif name == "spawn":
+            for tag, n in (("n3", 3), ("n0", 0), ("n1", 1), ("nneg", -1)):
+                emit_m(out, PORTABLE, member, m, recv, {"n_children": n}, tag, lambda r, py: r.spawn(py["n_children"]))
+            emit_m(out, PORTABLE, member, m, recv, {"n_children": 2}, "calls2", lambda r, py: r.spawn(py["n_children"]), calls=2)
+        elif name == "ToString":
+            emit_m(out, PORTABLE, member, m, recv, {}, "repr", lambda r, py: repr(r))
+        else:
+            emit_m(out, PORTABLE, member, m, recv, {}, "get", lambda r, py, name=name: getattr(r, name))
+
+
+@family("SeedlessSeedSequence", "ctor", "generate_state", "spawn")
+def fam_seedless(out, surface, name, seeds):
+    """SeedlessSeedSequence: constructible, cannot generate state (NumPy's NotImplementedError), spawns itself."""
+    for m in overloads(surface, "SeedlessSeedSequence", name):
+        if name == "ctor":
+            emit_m(out, PORTABLE, "SeedlessSeedSequence", m, Recv("none"), {}, "new", lambda r, py: SeedlessSeedSequence(), state=False)
+            continue
+        emit_ss_member(out, m, name, "SeedlessSeedSequence", [Recv("seedless")])
+
+
+@family("ISeedSequence", "generate_state")
+def fam_iseedseq(out, surface, name, seeds):
+    """The interface member, dispatched to a SeedSequence and to a SeedlessSeedSequence."""
+    for m in overloads(surface, "ISeedSequence", name):
+        emit_ss_member(out, m, name, "SeedSequence", ss_receivers()[:2])
+        emit_ss_member(out, m, name, "SeedlessSeedSequence", [Recv("seedless")])
+
+
+@family("ISpawnableSeedSequence", "spawn")
+def fam_ispawnable(out, surface, name, seeds):
+    for m in overloads(surface, "ISpawnableSeedSequence", name):
+        emit_ss_member(out, m, name, "SeedSequence", ss_receivers()[:2])
+        emit_ss_member(out, m, name, "SeedlessSeedSequence", [Recv("seedless")])
+
+
+# ---- default_rng -------------------------------------------------------------------------------------------------------
+
+@family("NumPyRandom", "default_rng")
+def fam_default_rng(out, surface, name, seeds):
+    """np.random.default_rng(seed) for every seed form: Generator(PCG64(seed)), a bit generator wrapped as is, a Generator
+    passed through, a RandomState's engine shared, seed sequences, arrays; None and null arrays draw OS entropy."""
+    recv = Recv("RandomState", None, 0)
+    mask = engine_mask("PCG64")
+    for m in overloads(surface, "NumPyRandom", name):
+        ps = m["params"]
+
+        def one(tag, vals, fn=lambda r, py: np.random.default_rng(*py.values()), masked=False):
+            emit_m(out, PORTABLE, "default_rng", m, recv, vals, tag, fn, state=False, state_mask=mask if masked else ())
+        if not ps:
+            one("entropy", {}, lambda r, py: np.random.default_rng(), masked=True)
+            continue
+        pn, pt = ps[0]["name"], ps[0]["type"]
+        if pt in ("long", "ulong", "BigInteger", "int[]", "long[]", "uint[]"):
+            vals = (list(seeds) if pt == "long" else []) + SEED_VALUES[pt]
+            for v in dict.fromkeys(map(json.dumps, vals)):
+                v = json.loads(v)
+                one(f"s{json.dumps(v, separators=(',', ':'))}", {pn: v},
+                    lambda r, py, pt=pt, pn=pn: np.random.default_rng(seed_py(pt, py[pn])))
+            if pt.endswith("[]"):
+                one("null", {pn: None}, lambda r, py: np.random.default_rng(None), masked=True)
+        elif pt == "BitGenerator":
+            for E in ENGINES:
+                one(f"{E}", {pn: bitgen_obj(E, 7)})
+                one(f"{E}_primed", {pn: bitgen_obj(E, 8, "raw3")})
+            one("null", {pn: None}, lambda r, py: np.random.default_rng(None), masked=True)
+        elif pt == "Generator":
+            for E in ENGINES:
+                one(f"{E}", {pn: generator_obj(E, 9, "u32")})
+            one("null", {pn: None}, lambda r, py: np.random.default_rng(None), masked=True)
+        elif pt == "ISeedSequence":
+            for tag, v in seed_seqs():
+                one(tag, {pn: v})
+            one("null", {pn: None}, lambda r, py: np.random.default_rng(None), masked=True)
+        elif pt == "NumPyRandom":
+            one("legacy", {pn: randomstate_obj(Recv("RandomState", None, 11))})
+            one("legacy_gauss", {pn: randomstate_obj(Recv("RandomState", None, 12, prime="gauss"))})
+            for E in ENGINES:
+                one(f"over_{E}", {pn: randomstate_obj(Recv("RandomState", E, 13))})
+            one("null", {pn: None}, lambda r, py: np.random.default_rng(None), masked=True)
+        elif pt == "NDArray":
+            for tag, a in (("i64", np.array([1, 2, 3], dtype=np.int64)), ("zerod", np.array(5, dtype=np.int64)),
+                           ("u32", np.array([7, 8], dtype=np.uint32)), ("empty", np.array([], dtype=np.int64)),
+                           ("f64", np.array([1.5])), ("neg", np.array([-1], dtype=np.int64)),
+                           ("strided", derived(np.arange(10, dtype=np.int64), lambda b: b[::3])),
+                           ("d2", np.array([[1, 2], [3, 4]], dtype=np.int64))):
+                one(tag, {pn: a})
+            one("null", {pn: None}, lambda r, py: np.random.default_rng(None), masked=True)
+        elif pt == "object":
+            for tag, v in (("int", value_obj(42)), ("big", value_obj(2 ** 100)), ("list", value_obj([1, 2, 3])),
+                           ("str", value_obj("123")), ("float", value_obj(1.5)), ("neg", value_obj(-1)),
+                           ("bitgen", bitgen_obj("Philox", 3)), ("generator", generator_obj("SFC64", 4)),
+                           ("seedseq", seedseq_obj(5, spawn_key=[1])), ("randomstate", randomstate_obj(Recv("RandomState", "PCG64", 6))),
+                           ("ndarray", np.array([4, 5], dtype=np.int64))):
+                one(tag, {pn: v})
+            one("none", {pn: None}, lambda r, py: np.random.default_rng(None), masked=True)
+        else:
+            raise ValueError(f"no default_rng family for {m['sig']}")
 
 
 # ---- the state objects: NativeRandomState (the legacy tuple) and NumPyRandom.State (the dict) ------------------------

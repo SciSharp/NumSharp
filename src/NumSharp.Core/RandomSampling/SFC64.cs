@@ -167,7 +167,9 @@ namespace NumSharp
         }
 
         /// <summary>Gets or sets the current internal state (NumPy's <c>bit_generator.state</c>), typed.</summary>
-        /// <exception cref="TypeError">Setting null, or a state whose word array is null.</exception>
+        /// <exception cref="TypeError">Setting null, or a state whose word array is unset — NumPy's broadcast of
+        /// <c>None</c> into the uint64 words, <c>int() argument must be a string, a bytes-like object or a real number, not
+        /// 'NoneType'</c>.</exception>
         /// <exception cref="ValueError">The word array neither has 4 elements nor 1 (NumPy's broadcast error).</exception>
         public new State state
         {
@@ -189,7 +191,9 @@ namespace NumSharp
         {
             if (value is not State s)
                 throw new ValueError("state must be for a {self.__class__.__name__} RNG");
-            ulong[] words = s.state ?? throw new TypeError("state['state']['state'] must be a sequence of 4 integers");
+            // `state_vec[:] = None` converts None to a uint64 element, which CPython's int() refuses with this text.
+            ulong[] words = s.state
+                            ?? throw new TypeError("int() argument must be a string, a bytes-like object or a real number, not 'NoneType'");
             if (words.Length != 4 && words.Length != 1)
                 throw new ValueError($"could not broadcast input array from shape ({words.Length},) into shape (4,)");
             if (words.Length == 1)

@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 
 namespace NumSharp.Tests.Fuzz.RandomApi
 {
@@ -19,6 +20,13 @@ namespace NumSharp.Tests.Fuzz.RandomApi
     ///             straight through; power's <c>pow(q, 1/a)</c> scales it to <c>ceil(2/a) + 3</c> ULP (the bound the
     ///             <c>grnd</c> tier already documents). Stream positions are identical: only the float64 values may move,
     ///             element by element, within the bound.</item>
+    ///         <item><b>SeedSequence(…, spawn_key=&lt;str / nested sequence / ndarray&gt;)</b> — NumPy keeps
+    ///             <c>tuple(spawn_key)</c> as given and prints it (<c>('1', '2')</c>, <c>([1, 2],)</c>,
+    ///             <c>(np.int64(3), np.int64(4))</c>); NumSharp stores the flattened Python ints its coercion reads (the
+    ///             typed <c>BigInteger[] spawn_key</c>) and prints <c>(1, 2)</c>. The mixed pool — hence every stream built on
+    ///             the sequence or on any descendant — is identical; only the repr's <c>spawn_key=</c> line differs.</item>
+    ///         <item><b>MT19937 / Philox state positions outside the buffer</b> (<see cref="ClassifyThrow"/>) — NumPy stores
+    ///             them and its next draw reads outside the array (undefined behaviour in C); NumSharp refuses the state.</item>
     ///     </list>
     /// </remarks>
     internal static class RandomApiDivergences
@@ -33,6 +41,8 @@ namespace NumSharp.Tests.Fuzz.RandomApi
         internal static string ClassifyValue(FuzzCorpus.Case c, JsonElement expected, JsonNode actual)
         {
             string member = c.Params["member"].GetString();
+            if (member == "SeedSequence")
+                return ClassifyFlattenedSpawnKey(c, expected, actual);
             if (member != "Generator.pareto" && member != "Generator.power")
                 return null;
             string kind = expected.GetProperty("k").GetString();
@@ -70,6 +80,57 @@ namespace NumSharp.Tests.Fuzz.RandomApi
         }
 
         /// <summary>
+        ///     The flattened spawn key (see the class remarks): a SeedSequence built with a spawn key NumPy keeps in a form
+        ///     other than flat Python ints — a string, a sequence holding a sequence, or an ndarray — may differ from NumPy's
+        ///     observation ONLY in the repr's <c>spawn_key=</c> line; the child counter and the mixed pool's SHA-256 (the
+        ///     other fields of the observation) must be identical.
+        /// </summary>
+        /// <param name="c">A SeedSequence construction case.</param>
+        /// <param name="expected">NumPy's observation (<c>seedseq</c>).</param>
+        /// <param name="actual">NumSharp's observation.</param>
+        /// <returns>The documented reason, or null (the difference is a failure).</returns>
+        private static string ClassifyFlattenedSpawnKey(FuzzCorpus.Case c, JsonElement expected, JsonNode actual)
+        {
+            if (expected.GetProperty("k").GetString() != "seedseq" || actual?["k"]?.GetValue<string>() != "seedseq")
+                return null;
+            if (!HasUnflattenedSpawnKey(c))
+                return null;
+            string want = expected.GetProperty("v").GetString(), got = actual["v"]!.GetValue<string>();
+            // Everything but the repr's spawn_key line: the counter, the pool hash, the entropy line, pool_size, children.
+            static string WithoutSpawnKeyLine(string text) => Regex.Replace(text, @"\n    spawn_key=[^\n]*", "");
+            return WithoutSpawnKeyLine(want) == WithoutSpawnKeyLine(got)
+                ? "SeedSequence: a str / nested / ndarray spawn_key is stored as its flattened Python ints (identical pool); only the repr's spawn_key line differs [documented]"
+                : null;
+        }
+
+        /// <summary>
+        ///     Whether the case's <c>spawn_key</c> argument is one NumPy keeps un-flattened: an NDArray operand, a string, or
+        ///     a list with a list element.
+        /// </summary>
+        /// <param name="c">The case.</param>
+        /// <returns>True for such a spawn key.</returns>
+        private static bool HasUnflattenedSpawnKey(FuzzCorpus.Case c)
+        {
+            foreach (var arg in c.Params["args"].EnumerateArray())
+            {
+                if (arg.GetProperty("n").GetString() != "spawn_key")
+                    continue;
+                if (arg.TryGetProperty("op", out _))
+                    return true;
+                if (!arg.TryGetProperty("obj", out var obj) || !obj.TryGetProperty("value", out var value))
+                    return false;
+                if (value.TryGetProperty("str", out _))
+                    return true;
+                if (value.TryGetProperty("list", out var list))
+                    foreach (var item in list.EnumerateArray())
+                        if (item.TryGetProperty("list", out _))
+                            return true;
+                return false;
+            }
+            return false;
+        }
+
+        /// <summary>
         ///     Classifies a NumSharp exception on a case where NumPy returns a value — only where the C# signature cannot
         ///     express NumPy's answer and NumSharp raises a deliberate, specific error instead.
         /// </summary>
@@ -99,6 +160,13 @@ namespace NumSharp.Tests.Fuzz.RandomApi
                 && long.TryParse(e.Message.AsSpan(posPrefix.Length), NumberStyles.Integer, CultureInfo.InvariantCulture, out long pos)
                 && (pos < 0 || pos > 624))
                 return "MT19937 position outside [0, 624]: NumPy stores it and its next draw reads past the key; NumSharp refuses [documented]";
+            // The same guard on Philox's block position: a negative buffer_pos makes NumPy's next draw read the word
+            // BEFORE its 4-word buffer. Keyed on NumSharp's refusal text and a really negative position.
+            const string bufPrefix = "state['buffer_pos'] must be non-negative, got ";
+            if (e is ValueError && e.Message.StartsWith(bufPrefix, StringComparison.Ordinal)
+                && long.TryParse(e.Message.AsSpan(bufPrefix.Length), NumberStyles.Integer, CultureInfo.InvariantCulture, out long bpos)
+                && bpos < 0)
+                return "Philox negative buffer_pos: NumPy stores it and its next draw reads before the buffer; NumSharp refuses [documented]";
             return null;
         }
 
