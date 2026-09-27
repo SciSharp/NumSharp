@@ -7,7 +7,8 @@ namespace NumSharp
         /// <summary>
         ///     Return a sample (or samples) from the "standard normal" distribution.
         /// </summary>
-        /// <param name="shape">Dimensions of the returned array (d0, d1, ..., dn).</param>
+        /// <param name="shape">Dimensions of the returned array (d0, d1, ..., dn); none — or a null array, the port of
+        ///     Python's <c>None</c> — is NumPy's <c>randn()</c>: one draw.</param>
         /// <returns>
         ///     Array of floating-point samples from the standard normal distribution.
         /// </returns>
@@ -21,7 +22,8 @@ namespace NumSharp
         /// </remarks>
         public NDArray randn(params long[] shape)
         {
-            if (shape.Length == 0)
+            // A null params array only arises from an explicit null: no dimensions, like the empty call.
+            if (shape is null || shape.Length == 0)
                 return standard_normal();
             return standard_normal(new Shape(shape));
         }

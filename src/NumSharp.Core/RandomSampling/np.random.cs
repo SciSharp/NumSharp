@@ -299,19 +299,20 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Returns a new <see cref="NumPyRandom"/> drawing from <paramref name="bit_generator"/> — NumPy's
+        ///     Returns a new <see cref="NumPyRandom"/> drawing from the bit generator <paramref name="seed"/> — NumPy's
         ///     <c>RandomState(bit_generator)</c>: the legacy samplers on any engine (PCG64, Philox, …).
         /// </summary>
-        /// <param name="bit_generator">The engine, shared rather than copied; null gives a fresh OS-entropy MT19937 (NumPy's <c>None</c>).</param>
-        /// <returns>A legacy generator over <paramref name="bit_generator"/>.</returns>
+        /// <param name="seed">The engine, shared rather than copied (NumPy's parameter is <c>seed</c> whatever it holds, so a
+        /// ported <c>RandomState(seed=PCG64(1))</c> binds); null gives a fresh OS-entropy MT19937 (NumPy's <c>None</c>).</param>
+        /// <returns>A legacy generator over <paramref name="seed"/>.</returns>
         /// <remarks>
         ///     Only an MT19937-backed instance can be re-seeded (<see cref="seed()"/>) or return the legacy state tuple
         ///     (<see cref="get_state()"/>); the dict form (<see cref="get_state(bool)"/> with <c>legacy: false</c>) and
         ///     <see cref="set_state(State)"/> work for every engine.
         /// </remarks>
-        public NumPyRandom RandomState(BitGenerator bit_generator)
+        public NumPyRandom RandomState(BitGenerator seed)
         {
-            return new NumPyRandom(bit_generator);
+            return new NumPyRandom(seed);
         }
 
         /// <summary>

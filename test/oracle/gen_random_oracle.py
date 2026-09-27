@@ -123,7 +123,8 @@ def encode(name, ctype, value, ops):
     if value is None and (nullable or base in ("NDArray", "DType", "string", "object", "ISeedSequence", "BitGenerator",
                                                "Generator", "NumPyRandom", "NumPyRandom.State", "BitGeneratorState",
                                                "SeedSequence")
-                          or base.endswith("[]") or base.startswith("NDArray") or base.endswith(".State")):
+                          # every array spelling (T[], T[,]) and the engines' typed State classes are references
+                          or base.endswith("]") or base.startswith("NDArray") or base.endswith(".State")):
         j["null"] = True
         return Arg(name, ctype, j, None)
     if base == "double" or base == "float":
@@ -825,7 +826,8 @@ def size_values(ctype):
         # One npy_intp dimension (the single-integer size overloads).
         return [3, 1, 0]
     if base in ("int[]", "long[]"):
-        return [[3], [], [2, 3], [0]]
+        # null last: NumPy's size=None (one draw) — every reference parameter takes null somewhere.
+        return [[3], [], [2, 3], [0], None]
     if base == "params long[]":
         return [[3], [], [2, 3], [0]]
     raise ValueError(f"no size domain for {ctype}")
@@ -897,7 +899,7 @@ SAMPLERS = {
     "gamma": dict(params=["shape", "scale"], defaults=[NODEFAULT, 1.0], base=[2.0, 3.0], tier=HOST,
                   variants=[{"shape": 0.5, "scale": 2.0}, {"shape": 1.0}, {"shape": 0.0}, {"shape": -1.0},
                             {"scale": -1.0}, {"scale": 0.0}, {"shape": -0.0}, {"shape": NAN}]),
-    "geometric": dict(params=["p"], defaults=[NODEFAULT], base=[0.35], tier=HOST,
+    "geometric": dict(params=["p"], defaults=[NODEFAULT], base=[0.35], tier=HOST, step=0.2,
                       variants=[{"p": 0.1}, {"p": 1e-5}, {"p": 1.0}, {"p": 0.0}, {"p": 1.5}, {"p": NAN}, {"p": 5e-324}]),
     "gumbel": dict(params=["loc", "scale"], defaults=[0.0, 1.0], base=[0.5, 2.0], tier=HOST,
                    variants=[{"scale": 0.0}, {"scale": -1.0}, {"loc": -5.0}, {"scale": NAN}]),
@@ -915,7 +917,7 @@ SAMPLERS = {
                      variants=[{"scale": 0.0}, {"scale": -1.0}, {"loc": NAN}]),
     "lognormal": dict(params=["mean", "sigma"], defaults=[0.0, 1.0], base=[1.0, 0.5], tier=HOST,
                       variants=[{"sigma": 0.0}, {"sigma": -1.0}, {"mean": NAN}, {"mean": 800.0}]),
-    "logseries": dict(params=["p"], defaults=[NODEFAULT], base=[0.6], tier=HOST,
+    "logseries": dict(params=["p"], defaults=[NODEFAULT], base=[0.6], tier=HOST, step=0.1,
                       variants=[{"p": 0.99}, {"p": 0.1}, {"p": 0.0}, {"p": 1.0}, {"p": -0.1}, {"p": NAN},
                                 {"p": 0.9999999999999999}]),
     "negative_binomial": dict(params=["n", "p"], defaults=[NODEFAULT, NODEFAULT], base=[5.0, 0.4], tier=HOST,
@@ -1093,7 +1095,9 @@ def sampler_array_variants(name, array_params):
     out = []
     first = array_params[0]
     b0 = base[first]
-    step = 1 if first in ints else 1.0
+    # The spacing of the 1-D/strided forms: 1 by default; a probability sampler's own step keeps every element inside
+    # its domain, so the engine x seed base sweep records streams instead of NumPy's domain error.
+    step = 1 if first in ints else spec.get("step", 1.0)
     out.append(("zerod", {p: arr(p, base[p]) for p in array_params}))
     one = {p: arr(p, base[p]) for p in array_params}
     one[first] = arr(first, [b0, b0 + step, b0 + 2 * step])
@@ -1121,7 +1125,7 @@ def sampler_array_variants(name, array_params):
         i64[first] = np.array([int(b0) + 1, int(b0) + 2, int(b0) + 3], dtype=np.int64)
         out.append(("int64", i64))
         f32 = {p: arr(p, base[p]) for p in array_params}
-        f32[first] = np.array([b0, b0 + 1.0, b0 + 2.0], dtype=np.float32)
+        f32[first] = np.array([b0, b0 + step, b0 + 2.0 * step], dtype=np.float32)
         out.append(("float32", f32))
         cplx = {p: arr(p, base[p]) for p in array_params}
         cplx[first] = np.array([b0 + 0j, b0 + 1j], dtype=np.complex128)   # NumPy: TypeError, 'safe' refuses complex
@@ -1252,8 +1256,10 @@ def dims_variants(pn, ctype):
     """The shape variants of a dimensions/size parameter, by its C# type: (tag, values) pairs, base first."""
     base = ctype.rstrip("?")
     if base in ("params long[]", "long[]", "int[]"):
+        # A null array is Python's None: size=None, i.e. no dimensions (for rand/randn, the no-argument call).
         return [("base", {pn: [3]}), ("empty", {pn: []}), ("d2x3", {pn: [2, 3]}), ("zero", {pn: [0]}),
-                ("d2x0x3", {pn: [2, 0, 3]}), ("d1", {pn: [1]}), ("neg", {pn: [-1]}), ("neg2", {pn: [3, -2]})]
+                ("d2x0x3", {pn: [2, 0, 3]}), ("d1", {pn: [1]}), ("neg", {pn: [-1]}), ("neg2", {pn: [3, -2]}),
+                ("null", {pn: None})]
     if base == "Shape":
         return [("base", {pn: (3,)}), ("none", {pn: None if ctype.endswith("?") else SHAPE_NONE}),
                 ("scalar", {pn: ()}), ("d2x3", {pn: (2, 3)}), ("zero", {pn: (0,)}), ("d1", {pn: (1,)})]
@@ -1302,7 +1308,8 @@ def fam_rand(out, surface, name, seeds):
         pn, ct = m["params"][0]["name"], m["params"][0]["type"]
         if ct == "params long[]":
             def np_fn(r, py, pn=pn):
-                return getattr(r, name)(*py.get(pn, []))
+                # A null params array is no dimensions at all: rand() / randn().
+                return getattr(r, name)(*(py.get(pn) or []))
         else:
             def np_fn(r, py, pn=pn):
                 return getattr(r, name)(*(py.get(pn) or ()))
@@ -1816,10 +1823,12 @@ def fam_set_state(out, surface, name, seeds):
                      calls2=False)
         for tag, recv in cross:
             emit_m(out, PORTABLE, "RandomState.set_state", m, recv, base, tag, lambda r, py: r.set_state(py["state"]))
-            if pt == "NumPyRandom.State":
-                emit_m(out, PORTABLE, "RandomState.set_state", m, recv,
-                       {"state": rs_dict_of(Recv("RandomState", recv.engine, 23, prime="raw3"))}, tag + "_same",
-                       lambda r, py: r.set_state(py["state"]))
+        if pt == "NumPyRandom.State":
+            # The receiver's own engine: restored on every engine x seed (a dict from another seed and a primed state).
+            for recv in legacy_receivers(seeds):
+                src = Recv("RandomState", recv.engine, 23, prime="raw3")
+                emit_m(out, PORTABLE, "RandomState.set_state", m, recv, {"state": rs_dict_of(src)},
+                       f"same_engine_{recv.engine or 'legacy'}", lambda r, py: r.set_state(py["state"]))
 
 
 @family("NumPyRandom", "seed")
@@ -1862,7 +1871,8 @@ def fam_rs_factory(out, surface, name, seeds):
         pt = m["params"][0]["type"] if m["params"] else None
 
         def one(tag, values, fn, mask=()):
-            emit_m(out, PORTABLE, "RandomState", m, recv, values, tag, fn, state=False, state_mask=mask)
+            # The receiver's state is recorded: the factory must not draw from the RandomState it is called on.
+            emit_m(out, PORTABLE, "RandomState", m, recv, values, tag, fn, state_mask=mask)
         if pt is None:
             one("entropy", {}, lambda r, py: np.random.RandomState(), mask=("key",))
         elif pt in ("int", "long"):
@@ -1884,10 +1894,10 @@ def fam_rs_factory(out, surface, name, seeds):
         elif pt == "BitGenerator":
             for e in ENGINES:
                 for s in seeds[:3]:
-                    one(f"{e}_s{s}", {"bit_generator": bitgen_obj(e, s)}, lambda r, py: np.random.RandomState(py["bit_generator"]))
-            one("primed", {"bit_generator": bitgen_obj("SFC64", 3, "raw3")},
-                lambda r, py: np.random.RandomState(py["bit_generator"]))
-            one("null", {"bit_generator": None}, lambda r, py: np.random.RandomState(None), mask=("key",))
+                    one(f"{e}_s{s}", {"seed": bitgen_obj(e, s)}, lambda r, py: np.random.RandomState(py["seed"]))
+            one("primed", {"seed": bitgen_obj("SFC64", 3, "raw3")},
+                lambda r, py: np.random.RandomState(py["seed"]))
+            one("null", {"seed": None}, lambda r, py: np.random.RandomState(None), mask=("key",))
         elif pt == "NativeRandomState":
             def restore(r, py):
                 rs = np.random.RandomState()
@@ -1951,19 +1961,22 @@ def mvn_variants(m, api):
               ("cov_nonsquare", dict(base, cov=np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]))),
               ("mean_i64", dict(base, mean=np.array([1, 2], dtype=np.int64))),
               ("cov_strided", dict(base, cov=derived(np.array([2.0, 9.0, 0.3, 9.0, 0.3, 9.0, 1.0, 9.0]),
-                                                     lambda b: b[::2].reshape(2, 2)))),
-              ("null_mean", dict(base, mean=None)), ("null_cov", dict(base, cov=None))]
+                                                     lambda b: b[::2].reshape(2, 2))))]
+    # Null (NumPy's None) for mean and cov in every overload: NumPy's np.array(None) is a 0-d object array.
+    v += [("null_mean", dict(base, mean=None)), ("null_cov", dict(base, cov=None))]
     if "check_valid" in pn:
         v += [("cv_raise_bad", dict(base, cov=bad, check_valid="raise")), ("cv_ignore_bad", dict(base, cov=bad, check_valid="ignore")),
               ("cv_warn_bad", dict(base, cov=bad, check_valid="warn")), ("cv_raise_ok", dict(base, check_valid="raise")),
-              ("cv_bogus", dict(base, check_valid="bogus")), ("omit_cv", dict(base, cov=bad, check_valid=OMIT))]
+              ("cv_bogus", dict(base, check_valid="bogus")), ("omit_cv", dict(base, cov=bad, check_valid=OMIT)),
+              ("cv_null", dict(base, check_valid=None))]
     if "tol" in pn:
         v += [("tol_tiny", dict(base, cov=sing, check_valid="raise", tol=1e-300)), ("tol_big", dict(base, cov=bad, check_valid="raise", tol=10.0)),
               ("omit_tol", dict(base, tol=OMIT))]
     if "method" in pn:
         v += [("m_eigh", dict(base, method="eigh")), ("m_cholesky", dict(base, method="cholesky")),
               ("m_cholesky_singular", dict(base, cov=sing, method="cholesky")), ("m_eigh_bad", dict(base, cov=bad, method="eigh")),
-              ("m_bogus", dict(base, method="bogus")), ("omit_method", dict(base, method=OMIT))]
+              ("m_bogus", dict(base, method="bogus")), ("omit_method", dict(base, method=OMIT)),
+              ("m_svd", dict(base, method="svd")), ("m_null", dict(base, method=None))]
     return base, v
 
 
@@ -2041,7 +2054,7 @@ def fam_gen_fill(out, surface, name, seeds):
         if "method" in pn:
             variants += [("inv", {"size": (5,), "method": "inv"}), ("zig", {"size": (5,), "method": "zig"}),
                          ("inv_f32", {"size": (5,), "method": "inv", "dtype": "float32"}), ("bogus", {"size": (5,), "method": "bogus"}),
-                         ("omit_method", {"size": (5,), "method": OMIT})]
+                         ("omit_method", {"size": (5,), "method": OMIT}), ("method_null", {"size": (5,), "method": None})]
         if "out" in pn:
             variants += out_variants("float64")
             variants += [("out_f32", lambda: {"out": np.zeros(4, dtype="float32"), "dtype": "float32", "size": OMIT}),
@@ -2068,7 +2081,8 @@ def fam_gen_standard_gamma(out, surface, name, seeds):
                      ("s_zero", dict(base, shape=sh(0.0))), ("s_neg", dict(base, shape=sh(-1.0))), ("s_nan", dict(base, shape=sh(NAN))),
                      ("f32", dict(base, dtype="float32")), ("f32_small", dict(base, shape=sh(0.3), dtype="float32")),
                      ("f32_one", dict(base, shape=sh(1.0), dtype="float32")), ("dt_i32", dict(base, dtype="int32")),
-                     ("dt_null", dict(base, dtype=None))]
+                     ("dt_null", dict(base, dtype=None)), ("f64", dict(base, dtype="float64")),
+                     ("dt_f16", dict(base, dtype="float16"))]
         variants += [(t, (lambda f: (lambda: dict(f(), shape=sh(2.5))))(f)) for t, f in out_variants("float64")]
         variants += [("out_f32", lambda: {"shape": sh(2.5), "out": np.zeros(4, dtype="float32"), "dtype": "float32", "size": OMIT})]
         if arr:
@@ -2358,7 +2372,8 @@ def fam_gen_mvhg(out, surface, name, seeds):
                              ("count_overflow", dict(base, colors=col([2 ** 62, 2 ** 62]), nsample=2)),
                              ("count_intmax", dict(base, colors=col([2 ** 62, 2 ** 62 - 1]), nsample=2))]
             else:
-                variants += [("omit_method", dict(base, method=OMIT)), ("bogus", dict(base, method="bogus"))]
+                variants += [("omit_method", dict(base, method=OMIT)), ("bogus", dict(base, method="bogus")),
+                             ("method_null", dict(base, method=None))]
             if arr:
                 variants += [("c_2d", dict(base, colors=np.array([[1, 2]], dtype=np.int64))),
                              ("c_f64", dict(base, colors=np.array([4.0, 5.0]))),
@@ -2749,12 +2764,20 @@ def make_state_class_family(E):
                                    "has_uint32": 1, "uinteger": 42},
                         "SFC64": {"state": [1, 2, 3, 4], "has_uint32": 1, "uinteger": 42}}[E]
                 emit_m(out, PORTABLE, member, m, none, full, "full", build, state=False)
+                full2 = {"MT19937": {"key": [(i * 7 + 3) % 2 ** 32 for i in range(624)], "pos": 624},
+                         "PCG64": {"state": 7, "inc": 9, "has_uint32": 0, "uinteger": 0},
+                         "PCG64DXSM": {"state": 7, "inc": 9, "has_uint32": 0, "uinteger": 0},
+                         "Philox": {"counter": [9, 8, 7, 6], "key": [3, 4], "buffer": [1, 1, 1, 1], "buffer_pos": 4,
+                                    "has_uint32": 0, "uinteger": 0},
+                         "SFC64": {"state": [5, 6, 7, 8], "has_uint32": 0, "uinteger": 7}}[E]
+                emit_m(out, PORTABLE, member, m, none, full2, "full2", build, state=False)
                 optional = [p["name"] for p in m["params"] if p.get("optional")]
                 if optional:
                     emit_m(out, PORTABLE, member, m, none, dict(full, **{k: OMIT for k in optional}), "defaults", build, state=False)
                 arrays = [p["name"] for p in m["params"] if p["type"].endswith("[]")]
-                if arrays:
-                    emit_m(out, PORTABLE, member, m, none, dict(full, **{arrays[0]: None}), "null_array", build, state=False)
+                for k, a in enumerate(arrays):
+                    emit_m(out, PORTABLE, member, m, none, dict(full, **{a: None}), "null_array" if k == 0 else f"null_{a}",
+                           build, state=False)
                 continue
             if name == "bit_generator":
                 for recv in bgstate_receivers(E, seeds):
@@ -2947,7 +2970,9 @@ def fam_default_rng(out, surface, name, seeds):
         ps = m["params"]
 
         def one(tag, vals, fn=lambda r, py: np.random.default_rng(*py.values()), masked=False):
-            emit_m(out, PORTABLE, "default_rng", m, recv, vals, tag, fn, state=False, state_mask=mask if masked else ())
+            # The receiver's state is recorded: default_rng must not draw from the RandomState it is called on (the
+            # masked fields belong to the NEW generator's entropy; the receiver's own MT19937 key is not masked by them).
+            emit_m(out, PORTABLE, "default_rng", m, recv, vals, tag, fn, state_mask=mask if masked else ())
         if not ps:
             one("entropy", {}, lambda r, py: np.random.default_rng(), masked=True)
             continue
@@ -2990,10 +3015,16 @@ def fam_default_rng(out, surface, name, seeds):
         elif pt == "object":
             for tag, v in (("int", value_obj(42)), ("big", value_obj(2 ** 100)), ("list", value_obj([1, 2, 3])),
                            ("str", value_obj("123")), ("float", value_obj(1.5)), ("neg", value_obj(-1)),
-                           ("bitgen", bitgen_obj("Philox", 3)), ("generator", generator_obj("SFC64", 4)),
-                           ("seedseq", seedseq_obj(5, spawn_key=[1])), ("randomstate", randomstate_obj(Recv("RandomState", "PCG64", 6))),
+                           ("seedseq", seedseq_obj(5, spawn_key=[1])), ("seedless", seedless_obj()),
                            ("ndarray", np.array([4, 5], dtype=np.int64))):
                 one(tag, {pn: v})
+            # The dynamic dispatch on every engine: a bit generator wrapped, a Generator passed through, a
+            # RandomState's engine shared (the legacy-seeded one too).
+            for E in ENGINES:
+                one(f"bitgen_{E}", {pn: bitgen_obj(E, 3)})
+                one(f"generator_{E}", {pn: generator_obj(E, 4)})
+                one(f"randomstate_{E}", {pn: randomstate_obj(Recv("RandomState", E, 6))})
+            one("randomstate_legacy", {pn: randomstate_obj(Recv("RandomState", None, 6))})
             one("none", {pn: None}, lambda r, py: np.random.default_rng(None), masked=True)
         else:
             raise ValueError(f"no default_rng family for {m['sig']}")
@@ -3217,6 +3248,102 @@ def merge_lp64(out, lp64_rows):
     return moved
 
 
+# ---- the NumPy signature table (parameter-name gate) --------------------------------------------------------------------
+
+SIGNATURES_PATH = os.path.join(HERE, "random_numpy_signatures.json")
+
+# The NumPy object behind each C# declaring type, and the members whose counterpart is elsewhere (module functions,
+# the RandomState constructor behind the np.random factory).
+NP_OWNERS = {
+    "NumPyRandom": ("numpy.random.RandomState", lambda: np.random.RandomState),
+    "Generator": ("numpy.random.Generator", lambda: np.random.Generator),
+    "BitGenerator": ("numpy.random.BitGenerator", lambda: np.random.BitGenerator),
+    "MT19937": ("numpy.random.MT19937", lambda: np.random.MT19937),
+    "PCG64": ("numpy.random.PCG64", lambda: np.random.PCG64),
+    "PCG64DXSM": ("numpy.random.PCG64DXSM", lambda: np.random.PCG64DXSM),
+    "Philox": ("numpy.random.Philox", lambda: np.random.Philox),
+    "SFC64": ("numpy.random.SFC64", lambda: np.random.SFC64),
+    "SeedSequence": ("numpy.random.SeedSequence", lambda: np.random.SeedSequence),
+    "SeedlessSeedSequence": ("numpy.random.bit_generator.SeedlessSeedSequence", lambda: SeedlessSeedSequence),
+    "ISeedSequence": ("numpy.random.bit_generator.ISeedSequence", lambda: np.random.bit_generator.ISeedSequence),
+    "ISpawnableSeedSequence": ("numpy.random.bit_generator.ISpawnableSeedSequence",
+                               lambda: np.random.bit_generator.ISpawnableSeedSequence),
+}
+NP_SPECIAL = {
+    ("NumPyRandom", "default_rng"): ("numpy.random.default_rng", lambda: np.random.default_rng),
+    ("NumPyRandom", "RandomState"): ("numpy.random.RandomState", lambda: np.random.RandomState),
+    ("NumPyRandom", "ranf"): ("numpy.random.ranf", lambda: np.random.ranf),
+    ("NumPyRandom", "sample"): ("numpy.random.sample", lambda: np.random.sample),
+    ("NumPyRandom", "get_bit_generator"): ("numpy.random.get_bit_generator", lambda: np.random.get_bit_generator),
+    ("NumPyRandom", "set_bit_generator"): ("numpy.random.set_bit_generator", lambda: np.random.set_bit_generator),
+}
+
+
+def numpy_parameter_names(obj):
+    """NumPy's parameter names of a callable, in order (`self` dropped), from inspect.signature or — for Cython
+    methods without one — the first docstring line (`name(a, b=None, *, c)`); None when neither is readable. A `*args`
+    parameter is reported as the single name `*`, a `**kwargs` one as `**`."""
+    import inspect
+    try:
+        params = list(inspect.signature(obj).parameters.values())
+    except (ValueError, TypeError):
+        doc = ((getattr(obj, "__doc__", "") or "").strip().splitlines() or [""])[0]
+        mm = re.match(r"^\w+\((.*)\)", doc)
+        if not mm:
+            return None
+        names = []
+        for part in mm.group(1).split(","):
+            part = part.strip().strip("[]").strip()
+            if not part or part in ("*", "/"):
+                continue
+            names.append("**" if part.startswith("**") else "*" if part.startswith("*") else part.split("=")[0].strip())
+        return names
+    out = []
+    for prm in params:
+        if prm.name in ("self", "cls"):
+            continue
+        out.append("*" if prm.kind == prm.VAR_POSITIONAL else "**" if prm.kind == prm.VAR_KEYWORD else prm.name)
+    return out
+
+
+def write_numpy_signatures(surface):
+    """Writes test/oracle/random_numpy_signatures.json: for every C# method/constructor name of the random world whose
+    NumPy counterpart exists, NumPy's qualified name and parameter names in order. The C# parameter-name gate checks
+    each overload's parameters against it (names NumPy has, in NumPy's order; `*` accepts any name)."""
+    table = {}
+    for m in surface["members"]:
+        if m["kind"] not in ("method", "ctor"):
+            continue
+        key = f"{m['type']}.{m['name']}"
+        if key in table:
+            continue
+        if (m["type"], m["name"]) in NP_SPECIAL:
+            qual, get = NP_SPECIAL[(m["type"], m["name"])]
+            obj = get()
+        elif m["type"] in NP_OWNERS:
+            qual, get = NP_OWNERS[m["type"]]
+            owner = get()
+            if m["kind"] == "ctor":
+                obj = owner
+            else:
+                obj = getattr(owner, m["name"], None)
+                qual = f"{qual}.{m['name']}"
+        else:
+            continue
+        if obj is None:
+            continue
+        names = numpy_parameter_names(obj)
+        if names is None:
+            raise SystemExit(f"no readable NumPy signature for {qual} (C# {key})")
+        table[key] = {"numpy": qual, "params": names}
+    with open(SIGNATURES_PATH, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write(json.dumps({"schema": 1, "numpy": np.__version__,
+                             "note": "NumPy's parameter names per random-API member (gen_random_oracle.py); read by "
+                                     "RandomApiCoverageTests' parameter-name gate.",
+                             "members": dict(sorted(table.items()))}, indent=1) + "\n")
+    print(f"random_numpy_signatures.json: {len(table)} members")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--seeds", help="comma-separated seeds (soak mode); default: the 10 fixed seeds")
@@ -3257,6 +3384,8 @@ def main(argv=None):
         moved = merge_lp64(out, run_lp64(seeds))
         print(f"LP64 merge: {moved} cases take Linux NumPy's answer (C long = 64 bits)")
 
+    if not only and not args.out:
+        write_numpy_signatures(surface)
     missing = [m["sig"] for m in surface["members"] if m["sig"] not in claimed]
     if missing and not (args.partial or only):
         raise SystemExit(f"{len(missing)} inventory members are neither generated nor exempt:\n  " + "\n  ".join(missing))

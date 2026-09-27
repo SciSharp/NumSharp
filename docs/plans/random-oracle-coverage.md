@@ -162,6 +162,24 @@ G1 inventory freshness (reflection == `random_surface.json`); G2 overload covera
 coverage; G5 seed coverage; G6 every stream case carries a state observation; plus the existing floors (`MinCases`)
 and the leak sweep over the new files.
 
+As built (P5; `Fuzz/RandomApi/RandomApiSurfaceTests.cs` for G1, `Fuzz/RandomApi/RandomApiCoverageTests.cs` for the
+rest — they read the corpus only, the replay tests check the values):
+
+| Gate | Rule |
+|---|---|
+| G2 | every inventory member has a case (by exact signature) or an exemption with a reason; an exempt member has none; every case and exemption names an inventory member |
+| G3 | per overload: every optional parameter omitted AND passed a non-default value; every required parameter at least two distinct values; every nullable parameter null (explicitly, or omitted where the default is null) and non-null; every `params` array lengths 0 and 2+ |
+| G3 enumerations | per overload: every value NumPy accepts (dtype names, `method`, `check_valid`) in a case NumPy answers, and a value outside the set in a case NumPy rejects (`standard_exponential(method=)` has no rejection: NumPy takes anything but `'zig'` as the inverse method) |
+| G3 names | every method/constructor parameter of the NumPy-mirroring types carries one of NumPy's parameter names for that member, in NumPy's order, against `test/oracle/random_numpy_signatures.json` (written by the generator from NumPy 2.4.2); NumPy `*args` members accept any names; NumSharp-only members are allow-listed |
+| G4 | Generator members on all five engines; legacy members on the legacy MT19937 and each engine; BitGenerator / BitGeneratorState / NumPyRandom.State members over every engine's receiver; engine-bearing arguments (bit generator, Generator, RandomState) of every engine |
+| G5 | per receiver kind and engine with answered stream cases: all ten fixed seeds answered |
+| G6 | every answered case on a stateful receiver records the state after the call |
+
+Exemptions live next to the gates, each with a reason, and are self-retiring (an exempt member that gains a case, an
+exempt rule the corpus meets, an allow-list entry NumPy turns out to have: red). The np.random factories
+(`RandomState(...)`, `default_rng(...)`) are receiver-independent: G4/G5 do not sweep their receiver, G6 still checks
+that it is left untouched, and G4 demands every engine among their engine-bearing arguments.
+
 ### 6.7 Nightly soak with 10 fresh seeds
 
 A new job in `fuzz-soak.yml` on `windows-latest` (the host the libm tier is authored on): draws 10 fresh seeds below
@@ -221,12 +239,28 @@ every replay):
   except the 13 `default_rng` overloads, which need the P4 seed-sequence/generator arguments.
 - [x] **P3 — `Generator` bindings** (all 84 members) × 5 engines, with errors.
 - [x] **P4 — bit generators, seed sequences, state classes, `default_rng`, `RandomState` factories.**
-- [ ] **P5 — gates G2–G6 on;** every divergence they surface triaged: fixed with a regression test, or recorded in §7.
+- [x] **P5 — gates G2–G6 on;** every divergence they surface triaged: fixed with a regression test, or recorded in §7.
 - [ ] **P6 — nightly soak job** with 10 fresh seeds.
 - [ ] **P7 — coverage join, docs, floors;** full verification (both TFMs, FuzzMatrix, coverage generator); commit.
 
 ## 9. State log
 
+- **2026-09-27 (P5 done)** — The gates are on (`RandomApiCoverageTests`, §6.6): G2 overloads, G3 parameters (rules,
+  enumerations, and a parameter-NAME gate against NumPy's signatures, a new committed table
+  `test/oracle/random_numpy_signatures.json` of 123 members), G4 engines, G5 seeds, G6 state. Their first run over the
+  P4 corpus found: reference parameters never passed null (string enumerations, `multivariate_normal`'s managed
+  arrays, typed size arrays, `params` dimension arrays, State-constructor arrays), 9 State-constructor parameters
+  with one value, the probability samplers' array overloads (`geometric`, `logseries`) answering no engine x seed
+  base case (the 1-D base
+  `[p, p + 1, p + 2]` left the domain, so every case was NumPy's domain error), `set_state(dict)` answered on engine
+  receivers under one seed only, the factories recording no receiver state, and `default_rng(object)` with one engine
+  per kind. All closed in the generator; the new cases found two NumSharp bugs (§10 items 13, 14). Corpus: portable
+  8,485, host 15,779, mvn 730, LP64 206. Verified on the new HEAD `c5ef9461` (a parallel session's polynomial U1 landed
+  meanwhile): full Oracle suite 228 passed / 5 inconclusive and the full unit suite (17,519 / 17,518) on net10.0 /
+  net8.0; the Linux replay of the portable and LP64 tiers and the gates; the coverage generator and its tests. A
+  verification trap found on the way: the worktree sync copied files with `cp -p`, keeping an edited file's OLDER
+  timestamp, so MSBuild's incremental check skipped the compile and the replay ran the previous code; the sync now
+  copies changed files only, with a fresh timestamp.
 - **2026-09-27 (P4 done)** — Every remaining member is generated: the five engines' constructors (every seed type,
   seed sequences with every keyword, the seedless one, OS entropy masked; Philox's `seed`/`counter`/`key` in every
   combination), `advance`, `jumped` (the new engine's entropy seed sequence masked, its state exact), the typed and the
@@ -311,3 +345,9 @@ every replay):
     `default_rng(None)` is a fresh OS-entropy PCG64 Generator — which the `object` overload already did. FIXED.
 12. **`default_rng`'s parameters were named `bitGenerator`, `generator` and `randomState`** on three overloads; NumPy's
     only parameter is `seed`, so a ported `default_rng(seed=...)` did not bind. Renamed to `seed`. FIXED.
+13. **A null `params` dimension array threw `NullReferenceException`** in `rand`, `randn`, `random_sample`, `random`,
+    `ranf` and `sample`. It is the port of Python's `None`: no dimensions, NumPy's `rand()` / `randn()` /
+    `random_sample(size=None)` — one draw, 0-d, from the same stream position. FIXED (G3's null rule found it).
+14. **`RandomState(BitGenerator)` named its parameter `bit_generator`**; NumPy's `RandomState(seed)` takes the engine as
+    `seed`. Renamed. FIXED (the parameter-name gate found it; every other method and constructor of the
+    NumPy-mirroring types already carried NumPy's names in NumPy's order).

@@ -1,0 +1,898 @@
+{
+ "schema": 1,
+ "numpy": "2.4.2",
+ "note": "NumPy's parameter names per random-API member (gen_random_oracle.py); read by RandomApiCoverageTests' parameter-name gate.",
+ "members": {
+  "BitGenerator.random_raw": {
+   "numpy": "numpy.random.BitGenerator.random_raw",
+   "params": [
+    "size",
+    "output"
+   ]
+  },
+  "BitGenerator.spawn": {
+   "numpy": "numpy.random.BitGenerator.spawn",
+   "params": [
+    "n_children"
+   ]
+  },
+  "Generator.beta": {
+   "numpy": "numpy.random.Generator.beta",
+   "params": [
+    "a",
+    "b",
+    "size"
+   ]
+  },
+  "Generator.binomial": {
+   "numpy": "numpy.random.Generator.binomial",
+   "params": [
+    "n",
+    "p",
+    "size"
+   ]
+  },
+  "Generator.bytes": {
+   "numpy": "numpy.random.Generator.bytes",
+   "params": [
+    "length"
+   ]
+  },
+  "Generator.chisquare": {
+   "numpy": "numpy.random.Generator.chisquare",
+   "params": [
+    "df",
+    "size"
+   ]
+  },
+  "Generator.choice": {
+   "numpy": "numpy.random.Generator.choice",
+   "params": [
+    "a",
+    "size",
+    "replace",
+    "p",
+    "axis",
+    "shuffle"
+   ]
+  },
+  "Generator.ctor": {
+   "numpy": "numpy.random.Generator",
+   "params": [
+    "bit_generator"
+   ]
+  },
+  "Generator.dirichlet": {
+   "numpy": "numpy.random.Generator.dirichlet",
+   "params": [
+    "alpha",
+    "size"
+   ]
+  },
+  "Generator.exponential": {
+   "numpy": "numpy.random.Generator.exponential",
+   "params": [
+    "scale",
+    "size"
+   ]
+  },
+  "Generator.f": {
+   "numpy": "numpy.random.Generator.f",
+   "params": [
+    "dfnum",
+    "dfden",
+    "size"
+   ]
+  },
+  "Generator.gamma": {
+   "numpy": "numpy.random.Generator.gamma",
+   "params": [
+    "shape",
+    "scale",
+    "size"
+   ]
+  },
+  "Generator.geometric": {
+   "numpy": "numpy.random.Generator.geometric",
+   "params": [
+    "p",
+    "size"
+   ]
+  },
+  "Generator.gumbel": {
+   "numpy": "numpy.random.Generator.gumbel",
+   "params": [
+    "loc",
+    "scale",
+    "size"
+   ]
+  },
+  "Generator.hypergeometric": {
+   "numpy": "numpy.random.Generator.hypergeometric",
+   "params": [
+    "ngood",
+    "nbad",
+    "nsample",
+    "size"
+   ]
+  },
+  "Generator.integers": {
+   "numpy": "numpy.random.Generator.integers",
+   "params": [
+    "low",
+    "high",
+    "size",
+    "dtype",
+    "endpoint"
+   ]
+  },
+  "Generator.laplace": {
+   "numpy": "numpy.random.Generator.laplace",
+   "params": [
+    "loc",
+    "scale",
+    "size"
+   ]
+  },
+  "Generator.logistic": {
+   "numpy": "numpy.random.Generator.logistic",
+   "params": [
+    "loc",
+    "scale",
+    "size"
+   ]
+  },
+  "Generator.lognormal": {
+   "numpy": "numpy.random.Generator.lognormal",
+   "params": [
+    "mean",
+    "sigma",
+    "size"
+   ]
+  },
+  "Generator.logseries": {
+   "numpy": "numpy.random.Generator.logseries",
+   "params": [
+    "p",
+    "size"
+   ]
+  },
+  "Generator.multinomial": {
+   "numpy": "numpy.random.Generator.multinomial",
+   "params": [
+    "n",
+    "pvals",
+    "size"
+   ]
+  },
+  "Generator.multivariate_hypergeometric": {
+   "numpy": "numpy.random.Generator.multivariate_hypergeometric",
+   "params": [
+    "colors",
+    "nsample",
+    "size",
+    "method"
+   ]
+  },
+  "Generator.multivariate_normal": {
+   "numpy": "numpy.random.Generator.multivariate_normal",
+   "params": [
+    "mean",
+    "cov",
+    "size",
+    "check_valid",
+    "tol",
+    "method"
+   ]
+  },
+  "Generator.negative_binomial": {
+   "numpy": "numpy.random.Generator.negative_binomial",
+   "params": [
+    "n",
+    "p",
+    "size"
+   ]
+  },
+  "Generator.noncentral_chisquare": {
+   "numpy": "numpy.random.Generator.noncentral_chisquare",
+   "params": [
+    "df",
+    "nonc",
+    "size"
+   ]
+  },
+  "Generator.noncentral_f": {
+   "numpy": "numpy.random.Generator.noncentral_f",
+   "params": [
+    "dfnum",
+    "dfden",
+    "nonc",
+    "size"
+   ]
+  },
+  "Generator.normal": {
+   "numpy": "numpy.random.Generator.normal",
+   "params": [
+    "loc",
+    "scale",
+    "size"
+   ]
+  },
+  "Generator.pareto": {
+   "numpy": "numpy.random.Generator.pareto",
+   "params": [
+    "a",
+    "size"
+   ]
+  },
+  "Generator.permutation": {
+   "numpy": "numpy.random.Generator.permutation",
+   "params": [
+    "x",
+    "axis"
+   ]
+  },
+  "Generator.permuted": {
+   "numpy": "numpy.random.Generator.permuted",
+   "params": [
+    "x",
+    "axis",
+    "out"
+   ]
+  },
+  "Generator.poisson": {
+   "numpy": "numpy.random.Generator.poisson",
+   "params": [
+    "lam",
+    "size"
+   ]
+  },
+  "Generator.power": {
+   "numpy": "numpy.random.Generator.power",
+   "params": [
+    "a",
+    "size"
+   ]
+  },
+  "Generator.random": {
+   "numpy": "numpy.random.Generator.random",
+   "params": [
+    "size",
+    "dtype",
+    "out"
+   ]
+  },
+  "Generator.rayleigh": {
+   "numpy": "numpy.random.Generator.rayleigh",
+   "params": [
+    "scale",
+    "size"
+   ]
+  },
+  "Generator.shuffle": {
+   "numpy": "numpy.random.Generator.shuffle",
+   "params": [
+    "x",
+    "axis"
+   ]
+  },
+  "Generator.spawn": {
+   "numpy": "numpy.random.Generator.spawn",
+   "params": [
+    "n_children"
+   ]
+  },
+  "Generator.standard_cauchy": {
+   "numpy": "numpy.random.Generator.standard_cauchy",
+   "params": [
+    "size"
+   ]
+  },
+  "Generator.standard_exponential": {
+   "numpy": "numpy.random.Generator.standard_exponential",
+   "params": [
+    "size",
+    "dtype",
+    "method",
+    "out"
+   ]
+  },
+  "Generator.standard_gamma": {
+   "numpy": "numpy.random.Generator.standard_gamma",
+   "params": [
+    "shape",
+    "size",
+    "dtype",
+    "out"
+   ]
+  },
+  "Generator.standard_normal": {
+   "numpy": "numpy.random.Generator.standard_normal",
+   "params": [
+    "size",
+    "dtype",
+    "out"
+   ]
+  },
+  "Generator.standard_t": {
+   "numpy": "numpy.random.Generator.standard_t",
+   "params": [
+    "df",
+    "size"
+   ]
+  },
+  "Generator.triangular": {
+   "numpy": "numpy.random.Generator.triangular",
+   "params": [
+    "left",
+    "mode",
+    "right",
+    "size"
+   ]
+  },
+  "Generator.uniform": {
+   "numpy": "numpy.random.Generator.uniform",
+   "params": [
+    "low",
+    "high",
+    "size"
+   ]
+  },
+  "Generator.vonmises": {
+   "numpy": "numpy.random.Generator.vonmises",
+   "params": [
+    "mu",
+    "kappa",
+    "size"
+   ]
+  },
+  "Generator.wald": {
+   "numpy": "numpy.random.Generator.wald",
+   "params": [
+    "mean",
+    "scale",
+    "size"
+   ]
+  },
+  "Generator.weibull": {
+   "numpy": "numpy.random.Generator.weibull",
+   "params": [
+    "a",
+    "size"
+   ]
+  },
+  "Generator.zipf": {
+   "numpy": "numpy.random.Generator.zipf",
+   "params": [
+    "a",
+    "size"
+   ]
+  },
+  "ISeedSequence.generate_state": {
+   "numpy": "numpy.random.bit_generator.ISeedSequence.generate_state",
+   "params": [
+    "n_words",
+    "dtype"
+   ]
+  },
+  "ISpawnableSeedSequence.spawn": {
+   "numpy": "numpy.random.bit_generator.ISpawnableSeedSequence.spawn",
+   "params": [
+    "n_children"
+   ]
+  },
+  "MT19937._legacy_seeding": {
+   "numpy": "numpy.random.MT19937._legacy_seeding",
+   "params": [
+    "seed"
+   ]
+  },
+  "MT19937.ctor": {
+   "numpy": "numpy.random.MT19937",
+   "params": [
+    "seed"
+   ]
+  },
+  "MT19937.jumped": {
+   "numpy": "numpy.random.MT19937.jumped",
+   "params": [
+    "jumps"
+   ]
+  },
+  "NumPyRandom.RandomState": {
+   "numpy": "numpy.random.RandomState",
+   "params": [
+    "seed"
+   ]
+  },
+  "NumPyRandom.beta": {
+   "numpy": "numpy.random.RandomState.beta",
+   "params": [
+    "a",
+    "b",
+    "size"
+   ]
+  },
+  "NumPyRandom.binomial": {
+   "numpy": "numpy.random.RandomState.binomial",
+   "params": [
+    "n",
+    "p",
+    "size"
+   ]
+  },
+  "NumPyRandom.bytes": {
+   "numpy": "numpy.random.RandomState.bytes",
+   "params": [
+    "length"
+   ]
+  },
+  "NumPyRandom.chisquare": {
+   "numpy": "numpy.random.RandomState.chisquare",
+   "params": [
+    "df",
+    "size"
+   ]
+  },
+  "NumPyRandom.choice": {
+   "numpy": "numpy.random.RandomState.choice",
+   "params": [
+    "a",
+    "size",
+    "replace",
+    "p"
+   ]
+  },
+  "NumPyRandom.default_rng": {
+   "numpy": "numpy.random.default_rng",
+   "params": [
+    "seed"
+   ]
+  },
+  "NumPyRandom.dirichlet": {
+   "numpy": "numpy.random.RandomState.dirichlet",
+   "params": [
+    "alpha",
+    "size"
+   ]
+  },
+  "NumPyRandom.exponential": {
+   "numpy": "numpy.random.RandomState.exponential",
+   "params": [
+    "scale",
+    "size"
+   ]
+  },
+  "NumPyRandom.f": {
+   "numpy": "numpy.random.RandomState.f",
+   "params": [
+    "dfnum",
+    "dfden",
+    "size"
+   ]
+  },
+  "NumPyRandom.gamma": {
+   "numpy": "numpy.random.RandomState.gamma",
+   "params": [
+    "shape",
+    "scale",
+    "size"
+   ]
+  },
+  "NumPyRandom.geometric": {
+   "numpy": "numpy.random.RandomState.geometric",
+   "params": [
+    "p",
+    "size"
+   ]
+  },
+  "NumPyRandom.get_bit_generator": {
+   "numpy": "numpy.random.get_bit_generator",
+   "params": []
+  },
+  "NumPyRandom.get_state": {
+   "numpy": "numpy.random.RandomState.get_state",
+   "params": [
+    "legacy"
+   ]
+  },
+  "NumPyRandom.gumbel": {
+   "numpy": "numpy.random.RandomState.gumbel",
+   "params": [
+    "loc",
+    "scale",
+    "size"
+   ]
+  },
+  "NumPyRandom.hypergeometric": {
+   "numpy": "numpy.random.RandomState.hypergeometric",
+   "params": [
+    "ngood",
+    "nbad",
+    "nsample",
+    "size"
+   ]
+  },
+  "NumPyRandom.laplace": {
+   "numpy": "numpy.random.RandomState.laplace",
+   "params": [
+    "loc",
+    "scale",
+    "size"
+   ]
+  },
+  "NumPyRandom.logistic": {
+   "numpy": "numpy.random.RandomState.logistic",
+   "params": [
+    "loc",
+    "scale",
+    "size"
+   ]
+  },
+  "NumPyRandom.lognormal": {
+   "numpy": "numpy.random.RandomState.lognormal",
+   "params": [
+    "mean",
+    "sigma",
+    "size"
+   ]
+  },
+  "NumPyRandom.logseries": {
+   "numpy": "numpy.random.RandomState.logseries",
+   "params": [
+    "p",
+    "size"
+   ]
+  },
+  "NumPyRandom.multinomial": {
+   "numpy": "numpy.random.RandomState.multinomial",
+   "params": [
+    "n",
+    "pvals",
+    "size"
+   ]
+  },
+  "NumPyRandom.multivariate_normal": {
+   "numpy": "numpy.random.RandomState.multivariate_normal",
+   "params": [
+    "mean",
+    "cov",
+    "size",
+    "check_valid",
+    "tol"
+   ]
+  },
+  "NumPyRandom.negative_binomial": {
+   "numpy": "numpy.random.RandomState.negative_binomial",
+   "params": [
+    "n",
+    "p",
+    "size"
+   ]
+  },
+  "NumPyRandom.noncentral_chisquare": {
+   "numpy": "numpy.random.RandomState.noncentral_chisquare",
+   "params": [
+    "df",
+    "nonc",
+    "size"
+   ]
+  },
+  "NumPyRandom.noncentral_f": {
+   "numpy": "numpy.random.RandomState.noncentral_f",
+   "params": [
+    "dfnum",
+    "dfden",
+    "nonc",
+    "size"
+   ]
+  },
+  "NumPyRandom.normal": {
+   "numpy": "numpy.random.RandomState.normal",
+   "params": [
+    "loc",
+    "scale",
+    "size"
+   ]
+  },
+  "NumPyRandom.pareto": {
+   "numpy": "numpy.random.RandomState.pareto",
+   "params": [
+    "a",
+    "size"
+   ]
+  },
+  "NumPyRandom.permutation": {
+   "numpy": "numpy.random.RandomState.permutation",
+   "params": [
+    "x"
+   ]
+  },
+  "NumPyRandom.poisson": {
+   "numpy": "numpy.random.RandomState.poisson",
+   "params": [
+    "lam",
+    "size"
+   ]
+  },
+  "NumPyRandom.power": {
+   "numpy": "numpy.random.RandomState.power",
+   "params": [
+    "a",
+    "size"
+   ]
+  },
+  "NumPyRandom.rand": {
+   "numpy": "numpy.random.RandomState.rand",
+   "params": [
+    "*"
+   ]
+  },
+  "NumPyRandom.randint": {
+   "numpy": "numpy.random.RandomState.randint",
+   "params": [
+    "low",
+    "high",
+    "size",
+    "dtype"
+   ]
+  },
+  "NumPyRandom.randn": {
+   "numpy": "numpy.random.RandomState.randn",
+   "params": [
+    "*"
+   ]
+  },
+  "NumPyRandom.random": {
+   "numpy": "numpy.random.RandomState.random",
+   "params": [
+    "size"
+   ]
+  },
+  "NumPyRandom.random_integers": {
+   "numpy": "numpy.random.RandomState.random_integers",
+   "params": [
+    "low",
+    "high",
+    "size"
+   ]
+  },
+  "NumPyRandom.random_sample": {
+   "numpy": "numpy.random.RandomState.random_sample",
+   "params": [
+    "size"
+   ]
+  },
+  "NumPyRandom.ranf": {
+   "numpy": "numpy.random.ranf",
+   "params": [
+    "*",
+    "**"
+   ]
+  },
+  "NumPyRandom.rayleigh": {
+   "numpy": "numpy.random.RandomState.rayleigh",
+   "params": [
+    "scale",
+    "size"
+   ]
+  },
+  "NumPyRandom.sample": {
+   "numpy": "numpy.random.sample",
+   "params": [
+    "*",
+    "**"
+   ]
+  },
+  "NumPyRandom.seed": {
+   "numpy": "numpy.random.RandomState.seed",
+   "params": [
+    "seed"
+   ]
+  },
+  "NumPyRandom.set_bit_generator": {
+   "numpy": "numpy.random.set_bit_generator",
+   "params": [
+    "bitgen"
+   ]
+  },
+  "NumPyRandom.set_state": {
+   "numpy": "numpy.random.RandomState.set_state",
+   "params": [
+    "state"
+   ]
+  },
+  "NumPyRandom.shuffle": {
+   "numpy": "numpy.random.RandomState.shuffle",
+   "params": [
+    "x"
+   ]
+  },
+  "NumPyRandom.standard_cauchy": {
+   "numpy": "numpy.random.RandomState.standard_cauchy",
+   "params": [
+    "size"
+   ]
+  },
+  "NumPyRandom.standard_exponential": {
+   "numpy": "numpy.random.RandomState.standard_exponential",
+   "params": [
+    "size"
+   ]
+  },
+  "NumPyRandom.standard_gamma": {
+   "numpy": "numpy.random.RandomState.standard_gamma",
+   "params": [
+    "shape",
+    "size"
+   ]
+  },
+  "NumPyRandom.standard_normal": {
+   "numpy": "numpy.random.RandomState.standard_normal",
+   "params": [
+    "size"
+   ]
+  },
+  "NumPyRandom.standard_t": {
+   "numpy": "numpy.random.RandomState.standard_t",
+   "params": [
+    "df",
+    "size"
+   ]
+  },
+  "NumPyRandom.tomaxint": {
+   "numpy": "numpy.random.RandomState.tomaxint",
+   "params": [
+    "size"
+   ]
+  },
+  "NumPyRandom.triangular": {
+   "numpy": "numpy.random.RandomState.triangular",
+   "params": [
+    "left",
+    "mode",
+    "right",
+    "size"
+   ]
+  },
+  "NumPyRandom.uniform": {
+   "numpy": "numpy.random.RandomState.uniform",
+   "params": [
+    "low",
+    "high",
+    "size"
+   ]
+  },
+  "NumPyRandom.vonmises": {
+   "numpy": "numpy.random.RandomState.vonmises",
+   "params": [
+    "mu",
+    "kappa",
+    "size"
+   ]
+  },
+  "NumPyRandom.wald": {
+   "numpy": "numpy.random.RandomState.wald",
+   "params": [
+    "mean",
+    "scale",
+    "size"
+   ]
+  },
+  "NumPyRandom.weibull": {
+   "numpy": "numpy.random.RandomState.weibull",
+   "params": [
+    "a",
+    "size"
+   ]
+  },
+  "NumPyRandom.zipf": {
+   "numpy": "numpy.random.RandomState.zipf",
+   "params": [
+    "a",
+    "size"
+   ]
+  },
+  "PCG64.advance": {
+   "numpy": "numpy.random.PCG64.advance",
+   "params": [
+    "delta"
+   ]
+  },
+  "PCG64.ctor": {
+   "numpy": "numpy.random.PCG64",
+   "params": [
+    "seed"
+   ]
+  },
+  "PCG64.jumped": {
+   "numpy": "numpy.random.PCG64.jumped",
+   "params": [
+    "jumps"
+   ]
+  },
+  "PCG64DXSM.advance": {
+   "numpy": "numpy.random.PCG64DXSM.advance",
+   "params": [
+    "delta"
+   ]
+  },
+  "PCG64DXSM.ctor": {
+   "numpy": "numpy.random.PCG64DXSM",
+   "params": [
+    "seed"
+   ]
+  },
+  "PCG64DXSM.jumped": {
+   "numpy": "numpy.random.PCG64DXSM.jumped",
+   "params": [
+    "jumps"
+   ]
+  },
+  "Philox.advance": {
+   "numpy": "numpy.random.Philox.advance",
+   "params": [
+    "delta"
+   ]
+  },
+  "Philox.ctor": {
+   "numpy": "numpy.random.Philox",
+   "params": [
+    "seed",
+    "counter",
+    "key"
+   ]
+  },
+  "Philox.jumped": {
+   "numpy": "numpy.random.Philox.jumped",
+   "params": [
+    "jumps"
+   ]
+  },
+  "SFC64.ctor": {
+   "numpy": "numpy.random.SFC64",
+   "params": [
+    "seed"
+   ]
+  },
+  "SeedSequence.ctor": {
+   "numpy": "numpy.random.SeedSequence",
+   "params": [
+    "entropy",
+    "spawn_key",
+    "pool_size",
+    "n_children_spawned"
+   ]
+  },
+  "SeedSequence.generate_state": {
+   "numpy": "numpy.random.SeedSequence.generate_state",
+   "params": [
+    "n_words",
+    "dtype"
+   ]
+  },
+  "SeedSequence.spawn": {
+   "numpy": "numpy.random.SeedSequence.spawn",
+   "params": [
+    "n_children"
+   ]
+  },
+  "SeedlessSeedSequence.ctor": {
+   "numpy": "numpy.random.bit_generator.SeedlessSeedSequence",
+   "params": []
+  },
+  "SeedlessSeedSequence.generate_state": {
+   "numpy": "numpy.random.bit_generator.SeedlessSeedSequence.generate_state",
+   "params": [
+    "n_words",
+    "dtype"
+   ]
+  },
+  "SeedlessSeedSequence.spawn": {
+   "numpy": "numpy.random.bit_generator.SeedlessSeedSequence.spawn",
+   "params": [
+    "n_children"
+   ]
+  }
+ }
+}

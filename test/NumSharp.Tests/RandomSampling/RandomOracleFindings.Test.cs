@@ -172,7 +172,8 @@ namespace NumSharp.Tests.RandomSampling
 
         /// <summary>
         ///     Every <c>default_rng</c> overload names its parameter <c>seed</c>, NumPy's only parameter name — so a ported
-        ///     <c>default_rng(seed: bit_generator)</c> binds whatever the argument's type.
+        ///     <c>default_rng(seed: bit_generator)</c> binds whatever the argument's type. <c>RandomState(BitGenerator)</c>
+        ///     follows NumPy's <c>RandomState(seed)</c> the same way.
         /// </summary>
         [TestMethod]
         public void DefaultRng_EveryOverloadNamesItsParameterSeed()
@@ -183,6 +184,37 @@ namespace NumSharp.Tests.RandomSampling
                     continue;
                 foreach (var p in m.GetParameters())
                     p.Name.Should().Be("seed", $"default_rng({p.ParameterType.Name}) follows NumPy's parameter name");
+            }
+            typeof(NumPyRandom).GetMethod("RandomState", new[] { typeof(BitGenerator) })!.GetParameters()[0].Name
+                .Should().Be("seed", "NumPy's RandomState(seed) takes the bit generator as `seed`");
+        }
+
+        /// <summary>
+        ///     A null <c>params</c> dimension array — only reachable by passing null explicitly — is no dimensions at all,
+        ///     NumPy's <c>rand()</c> / <c>randn()</c> / <c>random_sample(size=None)</c>: one draw from the same stream
+        ///     position, 0-d. It used to throw <see cref="NullReferenceException"/>.
+        /// </summary>
+        [TestMethod]
+        public void NullParamsDimensions_AreOneDraw()
+        {
+            // np.random.RandomState(42).rand() / .randn() on NumPy 2.4.2.
+            using (var r = np.random.RandomState(42).rand((long[])null))
+            {
+                r.ndim.Should().Be(0);
+                r.GetDouble().Should().Be(0.3745401188473625);
+            }
+            using (var r = np.random.RandomState(42).random_sample((long[])null))
+                r.GetDouble().Should().Be(0.3745401188473625);
+            using (var r = np.random.RandomState(42).random((long[])null))
+                r.GetDouble().Should().Be(0.3745401188473625);
+            using (var r = np.random.RandomState(42).ranf((long[])null))
+                r.GetDouble().Should().Be(0.3745401188473625);
+            using (var r = np.random.RandomState(42).sample((long[])null))
+                r.GetDouble().Should().Be(0.3745401188473625);
+            using (var r = np.random.RandomState(42).randn((long[])null))
+            {
+                r.ndim.Should().Be(0);
+                r.GetDouble().Should().Be(0.4967141530112327);
             }
         }
     }

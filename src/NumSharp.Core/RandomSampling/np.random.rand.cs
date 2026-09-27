@@ -5,8 +5,10 @@ namespace NumSharp
         /// <summary>
         ///     Random values in a given shape.
         /// </summary>
-        /// <param name="shape">Dimensions of the returned array (d0, d1, ..., dn).</param>
+        /// <param name="shape">Dimensions of the returned array (d0, d1, ..., dn); none — or a null array, the port of
+        ///     Python's <c>None</c> — is NumPy's <c>rand()</c>: one draw, returned 0-d.</param>
         /// <returns>Random values.</returns>
+        /// <exception cref="ValueError">A dimension is negative.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.rand.html
         ///     <br/>
@@ -17,7 +19,9 @@ namespace NumSharp
         /// </remarks>
         public NDArray rand(params long[] shape)
         {
-            if (shape.Length == 0)
+            // A null params array only arises from an explicit null: no dimensions at all, like the empty call (it used
+            // to dereference the null and throw NullReferenceException).
+            if (shape is null || shape.Length == 0)
                 lock (randomizer.@lock)
                     return NDArray.Scalar(randomizer.NextDouble());
             return rand(new Shape(shape));
@@ -66,7 +70,7 @@ namespace NumSharp
         /// <summary>
         ///     Return random floats in the half-open interval [0.0, 1.0).
         /// </summary>
-        /// <param name="size">Output shape.</param>
+        /// <param name="size">Output shape; none, or a null array (Python's <c>None</c>), is <c>size=None</c> — one draw, 0-d.</param>
         /// <returns>Array of random floats of shape size.</returns>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.random_sample.html
@@ -79,7 +83,7 @@ namespace NumSharp
         /// <summary>
         ///     Return random floats in the half-open interval [0.0, 1.0).
         /// </summary>
-        /// <param name="size">Output shape.</param>
+        /// <param name="size">Output shape; none, or a null array (Python's <c>None</c>), is <c>size=None</c> — one draw, 0-d.</param>
         /// <returns>Array of random floats.</returns>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.random.html
@@ -92,7 +96,7 @@ namespace NumSharp
         ///     Return random floats in the half-open interval [0.0, 1.0) — NumPy's legacy module-level alias
         ///     <c>np.random.ranf</c> of <see cref="random_sample"/>.
         /// </summary>
-        /// <param name="size">Output shape (none for a single value).</param>
+        /// <param name="size">Output shape (none, or a null array — Python's <c>None</c> — for a single value).</param>
         /// <returns>Array of random floats of shape size (0-d when no size is given).</returns>
         /// <exception cref="ValueError">A dimension is negative.</exception>
         /// <remarks>
@@ -106,7 +110,7 @@ namespace NumSharp
         ///     Return random floats in the half-open interval [0.0, 1.0) — NumPy's legacy module-level alias
         ///     <c>np.random.sample</c> of <see cref="random_sample"/>.
         /// </summary>
-        /// <param name="size">Output shape (none for a single value).</param>
+        /// <param name="size">Output shape (none, or a null array — Python's <c>None</c> — for a single value).</param>
         /// <returns>Array of random floats of shape size (0-d when no size is given).</returns>
         /// <exception cref="ValueError">A dimension is negative.</exception>
         /// <remarks>Module-level in NumPy (see <see cref="ranf"/>); same stream as <see cref="random_sample"/>.</remarks>
