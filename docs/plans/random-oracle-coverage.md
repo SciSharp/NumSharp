@@ -199,7 +199,8 @@ night and the whole corpus on failure. The soak tiers are held to the committed 
 
 `coverage/oracle_map.json` gains the `random_api` key (param `member`, ids `numpy.random.{value}`, overrides for
 NumSharp-only members) and host pins for the new tiers; the Fuzz README, CLAUDE.md's differential-fuzz section and the
-compliance page describe the new family.
+compliance page describe the new family. The key is rebuilt by `test/oracle/random_api_oracle_map.py` (corpus members
+x coverage catalog) whenever the member set changes.
 
 ## 7. Exemptions and intended divergences (filled in as found)
 

@@ -970,7 +970,9 @@ the G1 gate keeps equal to reflection.
   string / nested / ndarray `spawn_key` stored as its flattened ints (identical pool; only the repr line differs).
 
 Regenerate: `python test/oracle/gen_random_oracle.py` (NumPy 2.4.2; WSL with Linux NumPy at `~/np242/bin/python` for
-the LP64 tier), then rebuild. After a surface change: `NUMSHARP_WRITE_RANDOM_SURFACE=1` on the G1 test first.
+the LP64 tier), then rebuild. After a surface change: `NUMSHARP_WRITE_RANDOM_SURFACE=1` on the G1 test first. When the
+member set changes, `python test/oracle/random_api_oracle_map.py` rebuilds the `random_api` key of
+`coverage/oracle_map.json` (the strict coverage join) from the corpus and the coverage catalog.
 
 ### Decimal (independent oracle — no NumPy analog)
 
