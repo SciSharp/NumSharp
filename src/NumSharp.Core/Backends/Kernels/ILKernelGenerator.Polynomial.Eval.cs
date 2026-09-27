@@ -63,6 +63,34 @@ namespace NumSharp.Backends.Kernels
     }
 
     /// <summary>
+    ///     NumPy's single-element broadcast: an N-D series at a per-point x whose result has ONE element, where a
+    ///     coefficient read <c>c[k]</c> and x differ in ndim. NumPy's trivial ufunc loop refuses non-0-d operands
+    ///     of different ndim, so each such multiply runs on NpyIter, whose one-element iteration gives every
+    ///     operand stride 0 — and <c>CDOUBLE_multiply</c> then takes its MSVC-contracted fallback loop
+    ///     (<see cref="PolyComplexProduct.LoopScalar"/>) instead of <c>simd_cmul</c>. Which products that hits
+    ///     depends on which side is deeper, because a value that has absorbed x has the deeper ndim of the two.
+    /// </summary>
+    /// <remarks>
+    ///     Only complex products are affected (a real product is one IEEE multiply on every path, and a
+    ///     real-cast operand makes every form agree), so <c>NDPolyEval</c> sets a mode only for a complex loop.
+    ///     Measured against NumPy 2.4.2 for every basis over 8 single-element shape configurations x 7
+    ///     coefficient counts (docs/plans/numpy-polynomial-review.md).
+    /// </remarks>
+    internal enum PolyUnitBroadcast : byte
+    {
+        /// <summary>No single-element broadcast: every array product is <c>simd_cmul</c> (or scalar math).</summary>
+        None,
+        /// <summary><c>ndim(c[k]) &gt; x.ndim</c> — every <c>tensor=True</c> case, and <c>tensor=False</c> with a
+        ///     deeper series: every product of a coefficient-derived value and an x-derived value takes the
+        ///     fallback loop, at every step.</summary>
+        CoefDeeper,
+        /// <summary><c>ndim(c[k]) &lt; x.ndim</c> (<c>tensor=False</c>): only products whose coefficient-derived
+        ///     operand has not absorbed x yet — Clenshaw's first step (or the final product for two coefficients).
+        ///     Later values have x's ndim, and NumPy's trivial loop runs them.</summary>
+        PointsDeeper,
+    }
+
+    /// <summary>
     ///     The identity of one compiled evaluation kernel. <see cref="Cls"/> is the coefficient-count class
     ///     (<see cref="PolyTyping.Class"/>): every count at or above <c>peel + 3</c> shares one kernel.
     /// </summary>
@@ -74,8 +102,9 @@ namespace NumSharp.Backends.Kernels
     /// <param name="Cls">Coefficient-count class.</param>
     /// <param name="CoefOperand">The coefficients are an N-D operand (else 1-D, in aux).</param>
     /// <param name="ScalarMath">0-d result: NumPy runs every op as scalar math (the naive complex product).</param>
+    /// <param name="Unit">NumPy's single-element broadcast (the fallback complex product where operand ndims differ).</param>
     internal readonly record struct PolyEvalKey(PolyBasis Basis, PolyXMode XMode, NPTypeCode Tx, PyKind WeakKind,
-        NPTypeCode Tc, int Cls, bool CoefOperand, bool ScalarMath);
+        NPTypeCode Tc, int Cls, bool CoefOperand, bool ScalarMath, PolyUnitBroadcast Unit);
 
     /// <summary>A compiled evaluation kernel plus what its caller needs to run it.</summary>
     internal sealed class PolyEvalKernel
@@ -95,7 +124,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>Interleaved chains per block — 4 hides the add/multiply latency of one recurrence step.</summary>
         private const int PolyUnroll = 4;
 
-        private static readonly ConcurrentDictionary<(PolyBasis, PolyXMode, NPTypeCode, PyKind, NPTypeCode), int> s_polyPeel = new();
+        private static readonly ConcurrentDictionary<(PolyBasis, PolyXMode, NPTypeCode, PyKind, NPTypeCode, PolyUnitBroadcast), int> s_polyPeel = new();
         private static readonly ConcurrentDictionary<PolyEvalKey, Lazy<PolyEvalKernel>> s_polyEval = new();
 
         /// <summary>
@@ -107,13 +136,15 @@ namespace NumSharp.Backends.Kernels
         internal static PolyEvalProgram PolyProgram(PolyBasis basis, PolyXMode xMode, PyKind weakKind)
             => xMode == PolyXMode.Weak ? PolySteps.RewriteForWeakX(basis, weakKind) : PolySteps.Eval(basis);
 
-        /// <summary>The peel count of a (basis, x, coefficient dtype) triple, computed once.</summary>
+        /// <summary>The peel count of a (basis, x, coefficient dtype, broadcast mode) combination, computed once.</summary>
         /// <param name="basis">The basis.</param><param name="xMode">How x arrives.</param>
         /// <param name="tx">x dtype (ignored when weak).</param><param name="weakKind">Python type of a weak x.</param>
-        /// <param name="tc">Coefficient dtype.</param><returns>The peel count.</returns>
-        internal static int PolyPeel(PolyBasis basis, PolyXMode xMode, NPTypeCode tx, PyKind weakKind, NPTypeCode tc)
-            => s_polyPeel.GetOrAdd((basis, xMode, tx, weakKind, tc),
-                k => PolyTyping.PeelCount(PolyProgram(k.Item1, k.Item2, k.Item4), k.Item3, k.Item5));
+        /// <param name="tc">Coefficient dtype.</param>
+        /// <param name="unit">Single-element broadcast mode: its ndim state joins the dtype fixpoint.</param>
+        /// <returns>The peel count.</returns>
+        internal static int PolyPeel(PolyBasis basis, PolyXMode xMode, NPTypeCode tx, PyKind weakKind, NPTypeCode tc, PolyUnitBroadcast unit)
+            => s_polyPeel.GetOrAdd((basis, xMode, tx, weakKind, tc, unit),
+                k => PolyTyping.PeelCount(PolyProgram(k.Item1, k.Item2, k.Item4), k.Item3, k.Item5, k.Item6));
 
         /// <summary>
         ///     Returns (compiling once) the evaluation kernel for a call. Thread-safe: concurrent first calls
@@ -128,16 +159,21 @@ namespace NumSharp.Backends.Kernels
         /// <param name="nc">Coefficient count (≥ 1; only its class matters).</param>
         /// <param name="coefOperand">N-D coefficients (operand form) instead of 1-D (aux form).</param>
         /// <param name="scalarMath">The result is 0-d (NumPy's scalar-math complex product).</param>
+        /// <param name="unit">NumPy's single-element broadcast mode (<see cref="PolyUnitBroadcast"/>; None almost always).</param>
         /// <returns>The kernel.</returns>
         /// <exception cref="PlatformNotSupportedException">The runtime cannot emit dynamic code (NativeAOT).</exception>
+        /// <exception cref="ArgumentException"><paramref name="unit"/> is set for a call that is not an N-D series at
+        ///     a per-point x — a caller bug (only that form can be a single-element NpyIter broadcast).</exception>
         internal static PolyEvalKernel GetPolyEvalKernel(PolyBasis basis, PolyXMode xMode, NPTypeCode tx, PyKind weakKind,
-            NPTypeCode tc, long nc, bool coefOperand, bool scalarMath)
+            NPTypeCode tc, long nc, bool coefOperand, bool scalarMath, PolyUnitBroadcast unit)
         {
+            if (unit != PolyUnitBroadcast.None && !(coefOperand && xMode == PolyXMode.PerPoint))
+                throw new ArgumentException("a single-element broadcast needs an N-D series at a per-point x", nameof(unit));
             if (xMode == PolyXMode.Weak) tx = NPTypeCode.Empty; else weakKind = PyKind.Int;
             var prog = PolyProgram(basis, xMode, weakKind);
-            int peel = PolyPeel(basis, xMode, tx, weakKind, tc);
+            int peel = PolyPeel(basis, xMode, tx, weakKind, tc, unit);
             int cls = PolyTyping.Class(prog, nc, peel);
-            var key = new PolyEvalKey(basis, xMode, tx, weakKind, tc, cls, coefOperand, scalarMath);
+            var key = new PolyEvalKey(basis, xMode, tx, weakKind, tc, cls, coefOperand, scalarMath, unit);
             return s_polyEval.GetOrAdd(key, k => new Lazy<PolyEvalKernel>(() => CompilePolyEval(k, prog, peel))).Value;
         }
 
@@ -218,10 +254,13 @@ namespace NumSharp.Backends.Kernels
             var tl = PolyTyping.ResultType(prog, key.Tx, key.Tc, key.Cls, peel);
             bool preconv = !key.CoefOperand && key.Tc != tl && !key.ScalarMath;
             bool xPerPoint = key.XMode == PolyXMode.PerPoint;
-            // A 0-d result (ScalarMath) is one point: no vector part could run, so none is emitted.
-            bool vecB = allowVector && !key.ScalarMath && PolyLanes.VectorBlockOk(key.Tx, xPerPoint, key.Tc, perLaneCoef: false, tl);
-            bool vecL = allowVector && !key.ScalarMath && key.CoefOperand && PolyLanes.VectorBlockOk(key.Tx, xPerPoint, key.Tc, perLaneCoef: true, tl);
-            string name = $"NDPolyEval_{key.Basis}_{key.XMode}_{key.Tx}_{key.WeakKind}_{key.Tc}_c{key.Cls}_{(key.CoefOperand ? "op" : "aux")}{(key.ScalarMath ? "_s" : "")}";
+            // A 0-d result (ScalarMath) and a single-element broadcast (Unit) are one point: no vector part could
+            // run, so none is emitted — which is also what keeps their non-simd products off the vector kinds.
+            bool onePoint = key.ScalarMath || key.Unit != PolyUnitBroadcast.None;
+            bool vecB = allowVector && !onePoint && PolyLanes.VectorBlockOk(key.Tx, xPerPoint, key.Tc, perLaneCoef: false, tl);
+            bool vecL = allowVector && !onePoint && key.CoefOperand && PolyLanes.VectorBlockOk(key.Tx, xPerPoint, key.Tc, perLaneCoef: true, tl);
+            string name = $"NDPolyEval_{key.Basis}_{key.XMode}_{key.Tx}_{key.WeakKind}_{key.Tc}_c{key.Cls}_{(key.CoefOperand ? "op" : "aux")}"
+                          + $"{(key.ScalarMath ? "_s" : "")}{(key.Unit != PolyUnitBroadcast.None ? "_u" + key.Unit : "")}";
 
             PolyEvalCtx Ctx() => new PolyEvalCtx { Key = key, Prog = prog, Tl = tl, P = peel, Pool = pool, Preconv = preconv };
             DynamicMethod Part(PolyPart part)
@@ -230,7 +269,7 @@ namespace NumSharp.Backends.Kernels
                 bool bcast = part is PolyPart.VecBcast or PolyPart.ScalarBcast;
                 var rest = NewPolyDm($"{name}_{part}_rest", stage: true);
                 EmitPolyStage(rest.GetILGenerator(), Ctx(), vec, bcast, unrolled: false, next: null);
-                if (key.ScalarMath) return rest;   // one point: no U-chain stage
+                if (onePoint) return rest;   // one point: no U-chain stage
                 var main = NewPolyDm($"{name}_{part}", stage: true);
                 EmitPolyStage(main.GetILGenerator(), Ctx(), vec, bcast, unrolled: true, next: rest);
                 return main;
@@ -466,7 +505,7 @@ namespace NumSharp.Backends.Kernels
         private static void EmitPolyEvalBlock(ILGenerator il, PolyEvalCtx ctx, bool vec, bool bcast, int U, Label exit)
         {
             var key = ctx.Key;
-            var em = new PolyEmitter(il, U, vec, PolyLanes.LoopLanes(ctx.Tl), ctx.Pool, ctx.Table, ctx.Row, key.ScalarMath);
+            var em = new PolyEmitter(il, U, vec, PolyLanes.LoopLanes(ctx.Tl), ctx.Pool, ctx.Table, ctx.Row, key.ScalarMath, key.Unit);
             int W = em.W;
             int szC = DirectILKernelGenerator.GetTypeSize(key.Tc), szL = DirectILKernelGenerator.GetTypeSize(ctx.Tl);
             var top = il.DefineLabel();
@@ -492,7 +531,7 @@ namespace NumSharp.Backends.Kernels
                 case PolyXMode.PerPoint:
                 {
                     int szX = DirectILKernelGenerator.GetTypeSize(key.Tx);
-                    env.X = em.Fresh(key.Tx, false);
+                    env.X = em.Fresh(key.Tx, false, em.PointNd);   // x's ndim (single-element broadcast; 0 otherwise)
                     for (int u = 0; u < U; u++)
                     {
                         PolyAddr(il, ctx.Xp, ctx.I, u * W, vec ? null : ctx.Sx, szX);
@@ -532,16 +571,17 @@ namespace NumSharp.Backends.Kernels
         private static PolyValue PolyLoadCoef(PolyEmitter em, PolyCoefCtx cc, LocalBuilder kOff)
         {
             var il = em.IL;
+            // Every read is an array c[k] of the series' ndim (0 outside a single-element broadcast kernel).
             if (cc.Broadcast)
             {
-                var r = em.Fresh(cc.Tc, true);
+                var r = em.Fresh(cc.Tc, true, em.CoefNd);
                 il.Emit(OpCodes.Ldloc, cc.Cp); il.Emit(OpCodes.Ldloc, kOff); il.Emit(OpCodes.Conv_I); il.Emit(OpCodes.Add);
                 em.Scalar(cc.Tc).Load(il);
                 il.Emit(OpCodes.Stloc, r.L[0]);
                 return r;
             }
             var k = em.Lane(cc.Tc);
-            var v = em.Fresh(cc.Tc, false);
+            var v = em.Fresh(cc.Tc, false, em.CoefNd);
             if (em.Vec && cc.Tc == NPTypeCode.Half && em.W < 8 && em.U * em.W % 8 == 0)
             {
                 // Gang load: float16 series in a float64 (w = 4) or complex128 (w = 2) loop. A float16 lane value
@@ -602,7 +642,8 @@ namespace NumSharp.Backends.Kernels
         /// <param name="ccLoop">Coefficient context of the steady loop (possibly pre-converted).</param>
         /// <param name="loopStride">Byte stride of the steady loop's coefficients.</param>
         /// <param name="env">Bound x.</param><returns>The result value.</returns>
-        /// <exception cref="InvalidOperationException">The loop body changed a carried dtype (the peel count is wrong).</exception>
+        /// <exception cref="InvalidOperationException">The loop body changed a carried dtype or NumPy ndim (the peel
+        ///     count is wrong).</exception>
         private static PolyValue EmitPolyClenshaw(PolyEmitter em, PolyEvalCtx ctx, PolyCoefCtx cc, PolyCoefCtx ccLoop, LocalBuilder loopStride, PolyEnv env)
         {
             var il = em.IL; var prog = ctx.Prog; int cls = ctx.Key.Cls;
@@ -638,7 +679,8 @@ namespace NumSharp.Backends.Kernels
             }
             if (cls > ctx.P + 2)
             {
-                var s0 = em.Fresh(c0.T, false); var s1 = em.Fresh(c1.T, false);
+                // The carried pair keeps the dtype AND the ndim tag the straight steps reached (the fixpoint).
+                var s0 = em.Fresh(c0.T, false, c0.Nd); var s1 = em.Fresh(c1.T, false, c1.Nd);
                 em.CopyTo(c0, s0); em.CopyTo(c1, s1);
                 var k = il.DeclareLocal(typeof(long));
                 var top = il.DefineLabel(); var done = il.DefineLabel();
@@ -651,7 +693,8 @@ namespace NumSharp.Backends.Kernels
                 env.Ck = PolyLoadCoef(em, ccLoop, kOff); env.Tmp = s0; env.C1 = s1;
                 var n0 = em.Emit(prog.StepC0, env);
                 var n1 = em.Emit(prog.StepC1, env);
-                if (n0.T != s0.T || n1.T != s1.T) throw new InvalidOperationException("loop body changed a carried dtype: peel count wrong");
+                if (n0.T != s0.T || n1.T != s1.T || n0.Nd != s0.Nd || n1.Nd != s1.Nd)
+                    throw new InvalidOperationException("loop body changed a carried dtype or ndim: peel count wrong");
                 // tmp (= s0) was read above; only now overwrite the carried pair.
                 em.CopyTo(n0, s0); em.CopyTo(n1, s1);
                 il.Emit(OpCodes.Ldloc, k); il.Emit(OpCodes.Ldc_I8, 1L); il.Emit(OpCodes.Sub); il.Emit(OpCodes.Stloc, k);
@@ -670,7 +713,8 @@ namespace NumSharp.Backends.Kernels
         /// <param name="ccLoop">Coefficient context of the loop (possibly pre-converted).</param>
         /// <param name="loopStride">Byte stride of the loop's coefficients.</param>
         /// <param name="env">Bound x.</param><returns>The result value.</returns>
-        /// <exception cref="InvalidOperationException">The step changed the carried dtype (cannot happen: promotion is idempotent here).</exception>
+        /// <exception cref="InvalidOperationException">The step changed the carried dtype or NumPy ndim (cannot happen:
+        ///     promotion is idempotent here, and the init line already has x's and the series' broadcast ndim).</exception>
         private static PolyValue EmitPolyHorner(PolyEmitter em, PolyEvalCtx ctx, PolyCoefCtx cc, PolyCoefCtx ccLoop, LocalBuilder loopStride, PolyEnv env)
         {
             var il = em.IL; var prog = ctx.Prog;
@@ -678,7 +722,7 @@ namespace NumSharp.Backends.Kernels
             PolySetKOffFromEnd(il, ctx, kOff, 1);
             env.Ck = PolyLoadCoef(em, cc, kOff);
             var c0 = em.Emit(prog.HornerInit, env);
-            var s0 = em.Fresh(c0.T, false); em.CopyTo(c0, s0);
+            var s0 = em.Fresh(c0.T, false, c0.Nd); em.CopyTo(c0, s0);
             var k = il.DeclareLocal(typeof(long));
             var top = il.DefineLabel(); var done = il.DefineLabel();
             il.Emit(OpCodes.Ldloc, ctx.Nc); il.Emit(OpCodes.Ldc_I8, 2L); il.Emit(OpCodes.Sub); il.Emit(OpCodes.Stloc, k);
@@ -687,7 +731,7 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Ldloc, k); il.Emit(OpCodes.Ldc_I8, 0L); il.Emit(OpCodes.Blt, done);
             env.Ck = PolyLoadCoef(em, ccLoop, kOff); env.C0 = s0;
             var n0 = em.Emit(prog.HornerStep, env);
-            if (n0.T != s0.T) throw new InvalidOperationException("Horner step changed the carried dtype");
+            if (n0.T != s0.T || n0.Nd != s0.Nd) throw new InvalidOperationException("Horner step changed the carried dtype or ndim");
             em.CopyTo(n0, s0);
             il.Emit(OpCodes.Ldloc, k); il.Emit(OpCodes.Ldc_I8, 1L); il.Emit(OpCodes.Sub); il.Emit(OpCodes.Stloc, k);
             il.Emit(OpCodes.Ldloc, kOff); il.Emit(OpCodes.Ldloc, loopStride); il.Emit(OpCodes.Sub); il.Emit(OpCodes.Stloc, kOff);

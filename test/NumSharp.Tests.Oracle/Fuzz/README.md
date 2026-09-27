@@ -819,7 +819,7 @@ ported float32 kernels get).
 
 ### numpy.polynomial evaluation family (`polyeval` tier)
 
-`polyeval.jsonl` (`gen_oracle.py polyeval`, 12,214 cases, floor 11,800) gates the PACKAGE evaluation
+`polyeval.jsonl` (`gen_oracle.py polyeval`, 16,606 cases, floor 16,100) gates the PACKAGE evaluation
 family — `{p}val`/`{p}val2d`/`{p}val3d`/`{p}grid2d`/`{p}grid3d` for the six bases (`polynomial`,
 `chebyshev`, `legendre`, `laguerre`, `hermite`, `hermite_e`) plus NumSharp's `{p}valnd` twins — **bit-exact,
 0 excused**. Op keys are MODULE-QUALIFIED (`chebyshev.chebval`) because the package reuses the legacy
@@ -831,7 +831,17 @@ computes `2*x`/`x*0`/`(2*nd-1) - x` before NumPy sees them; ints may exceed 64 b
 dtype × 8 series dtypes × coefficient counts 1/2/3/4/7/12, 26 x layouts, N-D series (tensor True/False,
 transposed/reversed/broadcast), Python-scalar and 0-d x, NaN/±inf/-0 coefficients, every vector-lane width
 at 45 points (1-D and per-point series, at the dtype extremes, and column-strided), and the error cells
-(incl. `lagval`'s OverflowError); Char rides the uint16 proxy. Cells
+(incl. `lagval`'s OverflowError); Char rides the uint16 proxy. Section (I), 4,392 cells, covers single-element
+broadcasts: an N-D series at a per-point x whose ONE-element result comes from operands of different ndim.
+NumPy runs those complex products on NpyIter's stride-0 loop, i.e. `CDOUBLE_multiply`'s MSVC-contracted
+fallback, not `simd_cmul`. The cells cover:
+- every basis at 8 shape configurations x 4 dtype pairs x nc 1-7;
+- the 2-D/3-D/N-D compositions whose passes reach it;
+- the more-than-one-element near misses that must stay `simd_cmul`.
+
+Their values are seeded random FULL-MANTISSA draws, because this tier's moderate values make the forms
+coincide. Planted-bug check: 12 mutants, 11 killed, and the survivor (the complex-loop gate) is value-equivalent
+by design. Design and measurements: `docs/plans/numpy-polynomial-review.md`. Cells
 whose NumPy result is complex64 are skipped (one complex width, #569). `OpRegistry.Polynomial.cs` replays it;
 `MisalignedRegistry`'s generic unary/complex ULP branches are carved out for these ops, so any drift fails.
 

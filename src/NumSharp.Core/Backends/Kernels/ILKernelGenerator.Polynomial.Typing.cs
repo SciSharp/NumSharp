@@ -21,6 +21,9 @@ using System;
 // float32 series at a float64 x the first one or two steps run IN FLOAT32 — measured: pre-casting the
 // coefficients to float64 changes 100% of legval/lagval/hermval/hermeval results. PeelCount finds how
 // many straight-line steps precede the fixpoint; the kernel emits those, then a loop at fixed dtypes.
+// A single-element-broadcast kernel (PolyUnitBroadcast) also carries each value's NumPy ndim, which picks
+// the complex product; with the series shallower than x that ndim changes over the first two steps
+// ((c[k], c[k]) -> (c[k], x) -> (x, x)), so the peel runs to the joint (dtype, ndim) fixpoint.
 //
 // =============================================================================
 
@@ -105,32 +108,71 @@ namespace NumSharp.Backends.Kernels
             => prog.Pre is null ? tx : TypeOf(prog.Pre, _ => tx).Value;
 
         /// <summary>
-        ///     How many Clenshaw steps must be emitted straight-line before the carried <c>(c0, c1)</c> dtypes
-        ///     stop changing (see the file header). A homogeneous call needs 0.
+        ///     The representative NumPy ndims a <see cref="PolyUnitBroadcast"/> kernel tags its coefficient reads and
+        ///     its x-derived values with — (2, 1) when the series is deeper, (1, 2) when x is, (0, 0) otherwise.
+        ///     Only which side is deeper decides a product, so these stand in for the caller's actual ndims; the
+        ///     emitter (<see cref="PolyEmitter"/>) and <see cref="PeelCount"/> both read them from here.
+        /// </summary>
+        /// <param name="unit">The mode.</param>
+        /// <returns>(coefficient ndim, x ndim).</returns>
+        public static (int Coef, int Point) UnitNds(PolyUnitBroadcast unit) => unit switch
+        {
+            PolyUnitBroadcast.CoefDeeper => (2, 1),
+            PolyUnitBroadcast.PointsDeeper => (1, 2),
+            _ => (0, 0),
+        };
+
+        /// <summary>NumPy's broadcast ndim of a tree: the deepest leaf (a weak Python value is 0-d).</summary>
+        /// <param name="e">The tree.</param><param name="sym">Leaf ndims.</param><returns>The ndim.</returns>
+        /// <exception cref="InvalidOperationException">An unknown node type.</exception>
+        public static int NdOf(PolyExpr e, Func<PolySym, int> sym) => e switch
+        {
+            PolyLeaf l => sym(l.S),
+            PolyWeak => 0,
+            PolyBin b => Math.Max(NdOf(b.A, sym), NdOf(b.B, sym)),
+            _ => throw new InvalidOperationException("unknown step-tree node"),
+        };
+
+        /// <summary>
+        ///     How many Clenshaw steps must be emitted straight-line before the carried <c>(c0, c1)</c> dtypes — and,
+        ///     in a single-element-broadcast kernel, their NumPy ndims — stop changing (see the file header). A
+        ///     homogeneous call needs 0.
         /// </summary>
         /// <param name="prog">The program.</param><param name="tx">x dtype (unused when x is weak).</param>
         /// <param name="tc">Coefficient dtype.</param>
+        /// <param name="unit">Single-element broadcast mode (<see cref="PolyUnitBroadcast.None"/>: dtypes only).</param>
         /// <returns>The peel count (0 for Horner, whose state is typed once by its init line).</returns>
-        /// <exception cref="InvalidOperationException">The dtypes never settle (cannot happen: promotion only widens).</exception>
-        public static int PeelCount(PolyEvalProgram prog, NPTypeCode tx, NPTypeCode tc)
+        /// <exception cref="InvalidOperationException">The state never settles (cannot happen: promotion only widens,
+        ///     and an ndim only grows to the deeper of the two sides).</exception>
+        public static int PeelCount(PolyEvalProgram prog, NPTypeCode tx, NPTypeCode tc, PolyUnitBroadcast unit = PolyUnitBroadcast.None)
         {
             if (prog.Horner) return 0;
             NPTypeCode tx2 = X2Type(prog, tx);
+            var (dc, dx) = UnitNds(unit);
             NPTypeCode t0 = tc, t1 = tc;
+            int d0 = dc, d1 = dc;   // c0 = c[-2], c1 = c[-1]: both coefficient reads
             for (int p = 0; p < 8; p++)
             {
                 NPTypeCode s0 = t0, s1 = t1;
+                int e0 = d0, e1 = d1;
                 NPTypeCode Sym(PolySym s) => s switch
                 {
                     PolySym.X => tx, PolySym.X2 => tx2, PolySym.Ck => tc,
                     PolySym.Tmp => s0, PolySym.C0 => s0, PolySym.C1 => s1,
                     _ => throw new InvalidOperationException(),
                 };
+                int Nd(PolySym s) => s switch
+                {
+                    PolySym.X => dx, PolySym.X2 => dx, PolySym.Ck => dc,
+                    PolySym.Tmp => e0, PolySym.C0 => e0, PolySym.C1 => e1,
+                    _ => throw new InvalidOperationException(),
+                };
                 NPTypeCode n0 = TypeOf(prog.StepC0, Sym).Value, n1 = TypeOf(prog.StepC1, Sym).Value;
-                if (n0 == t0 && n1 == t1) return p;
-                t0 = n0; t1 = n1;
+                int m0 = NdOf(prog.StepC0, Nd), m1 = NdOf(prog.StepC1, Nd);
+                if (n0 == t0 && n1 == t1 && m0 == d0 && m1 == d1) return p;
+                t0 = n0; t1 = n1; d0 = m0; d1 = m1;
             }
-            throw new InvalidOperationException("Clenshaw dtypes never reach a fixpoint");
+            throw new InvalidOperationException("Clenshaw dtypes/ndims never reach a fixpoint");
         }
 
         /// <summary>

@@ -27,9 +27,13 @@ using System.Runtime.Intrinsics.X86;
 //
 // A "live" count below the container's lane count means the load reads EXACTLY W elements (never past
 // the chain's last point) and the spare lanes hold zeros that no store ever reads. Every conversion
-// listed by LaneConvertible is exact for all inputs (the int64/uint64 ones are .NET's correctly rounded
-// ConvertToDouble, verified against the scalar cast on 16M wide-magnitude values), so a vector chain
-// is bit-identical, lane for lane, to the scalar chain the same kernel runs for its tail.
+// listed by LaneConvertible is exact for all inputs, or rounds exactly once as NumPy's cast does: the
+// int64/uint64 ones are .NET's ConvertToDouble (vcvtuqq2pd with AVX-512DQ, else an exact hi/lo split and
+// ONE rounding add). The scalar tail rounds once too: EmitConvertTo's uint64 -> float64 goes through
+// Converts' round-once helper, because .NET 8's own cast rounds twice above 2^63 (ebe18b7c). So a
+// vector chain is bit-identical, lane for lane, to the scalar chain the same kernel runs for its tail.
+// Gated at the float64 ties above 2^63, on both TFMs, by the review probe's T1 block
+// (docs/plans/numpy-polynomial-review.md).
 //
 // COMPLEX LANES
 // -------------
@@ -347,7 +351,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <inheritdoc/>
-        public override void Bin(ILGenerator il, BinaryOp op, bool naiveComplex = false)
+        public override void Bin(ILGenerator il, BinaryOp op, PolyComplexProduct product = PolyComplexProduct.Simd)
         {
             if (op is not (BinaryOp.Add or BinaryOp.Subtract or BinaryOp.Multiply))
                 throw new NotSupportedException($"{op} on {_logical} lanes");   // integer true division is float64
@@ -403,7 +407,7 @@ namespace NumSharp.Backends.Kernels
         public PolyComplexLaneKind() : base(true, NPTypeCode.Double, 256) { }
 
         /// <inheritdoc/>
-        public override void Bin(ILGenerator il, BinaryOp op, bool naiveComplex = false)
+        public override void Bin(ILGenerator il, BinaryOp op, PolyComplexProduct product = PolyComplexProduct.Simd)
         {
             switch (op)
             {

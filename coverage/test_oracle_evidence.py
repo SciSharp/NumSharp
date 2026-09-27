@@ -364,8 +364,13 @@ class CommittedCorpusTests(unittest.TestCase):
         for strict in ("numpy.linalg.trace", "numpy.linalg.diagonal", "numpy.linalg.outer", "numpy.linalg.cross"):
             self.assertNotIn(strict, self.result.evidence, f"{strict} has a stricter contract than np.{strict[13:]}")
         for row_id in ("numpy.random.normal", "numpy.random.RandomState.normal"):
-            self.assertEqual({"rnd:normal"}, self.evidence(row_id).keys)
-            self.assertTrue(self.evidence(row_id).pinned, "legacy normal is a host-libm stream")
+            normal = self.evidence(row_id)
+            self.assertEqual({"rnd:normal"}, normal.keys)
+            # The legacy normal VALUE stream is host-libm (random_parity_host.jsonl). Its portable contracts can
+            # only be error-message cells: 3a15871a added the array-parameter validation texts to the portable
+            # tier. So the row is partly pinned, like np.fft.fft, and not "pinned" as a whole.
+            self.assertGreater(normal.contracts - normal.portable, 0, "legacy normal's values are host-libm pinned")
+            self.assertLessEqual(normal.portable, normal.errors, "only error contracts of normal are portable")
         self.assertEqual({"get", "set", "ndarray.__len__"}, self.evidence("numpy.ndarray").keys)
         self.assertEqual({"npy:header", "npy:npy"}, self.evidence("numpy.save").keys)
         self.assertEqual({"npy:npz:compressed"}, self.evidence("numpy.savez_compressed").keys)

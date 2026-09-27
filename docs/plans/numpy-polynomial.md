@@ -378,14 +378,22 @@ machine-partitioned; the counts sum to 193 with no overlap (Appendix A).
     (`PyScalar`, BigInteger ints); a 0-d NDArray x is STRONG. Weak values reach the kernel through a
     per-(constant, dtype) region pool (`...ConstPool.cs`), converted by astype's own cast path, with NumPy's
     `OverflowError` for a Python int that does not fit an integer x.
-  - **Complex has two NumPy multiplies:** an ARRAY op is the fused `simd_cmul`, a 0-d result is scalar
-    math (naive product) except where an operand is the raw 0-d x array. Reproduced per op.
+  - **Complex has THREE NumPy multiplies** (a third one was found by the 2026-09-26 review):
+    - An ARRAY op is the fused `simd_cmul`.
+    - A 0-d result is scalar math (naive product), except where an operand is the raw 0-d x array.
+    - An N-D series at a per-point x with a ONE-element result, where `c[k]` and x differ in ndim, is
+      NpyIter's stride-0 iteration. That runs `CDOUBLE_multiply`'s MSVC-contracted fallback:
+      im = `fma(ai, br, ar*bi)`.
+
+    Reproduced per op (`PolyComplexProduct`, `PolyUnitBroadcast`: values carry NumPy's ndim, and the peel
+    reaches the joint dtype+ndim fixpoint). See [numpy-polynomial-review.md](numpy-polynomial-review.md).
   - **Vector lanes for every dtype pair** (`...Lanes.cs`): 256-bit chains on AVX2 hosts (float64 4 lanes,
     float32/float16 8, complex128 2), and every other per-point dtype held at the SAME lane count —
     int32 containers re-wrapped to int8/uint8/int16/uint16/char width after every op, packed 2-lane
     float32/int32/uint32, float16 as 8 float32 lanes with 2/4/8 live, complex128 `[re, im]×2` with NumPy's
     `simd_cmul` (vfmaddsub) and Smith division (a shared divisor prepared once per block) — each conversion
-    exact (uint64/int64 via .NET's correctly rounded ConvertToDouble, verified on 16M values). A lane table
+    exact or rounded once as NumPy's cast is (uint64/int64 via .NET's ConvertToDouble — the scalar tail's
+    EmitConvertTo rounds once too since ebe18b7c; gated at the ties above 2^63 by the review probe). A lane table
     miss falls back to scalar chains (same bits), counted by `ILKernelGenerator.PolyVectorFallbacks` — zero
     across the whole dtype matrix (unit-tested).
   - **One DynamicMethod per STAGE** (dispatcher → part → U-chain stage → remainder stage): the JIT stops
@@ -394,16 +402,18 @@ machine-partitioned; the counts sum to 193 with no overlap (Appendix A).
     still left 95 in its float16-series twin (0.93× NumPy). Per stage: 0–2 calls.
   - `_valnd`/`_gridnd` stay NumPy's two-pass compositions over the N-D coefficient operand form (never
     buffered: the kernel reads past `c[0]`).
-- **Parity:** `test/NumSharp.Tests.Oracle/Fuzz/corpus/polyeval.jsonl` (`gen_oracle.py polyeval`, **12,214
-  cases, 0 excused**): the x-dtype × series-dtype × count-class matrix, x layouts, N-D series (tensor
+- **Parity:** `test/NumSharp.Tests.Oracle/Fuzz/corpus/polyeval.jsonl` (`gen_oracle.py polyeval`, **16,606
+  cases, 0 excused**; 4,392 of them are section (I), the single-element broadcasts added by the review):
+  the x-dtype × series-dtype × count-class matrix, x layouts, N-D series (tensor
   True/False, series layouts), weak and 0-d scalars incl. 2**64-1 / NaN / ±inf / complex, special
   coefficients, errors, 2-D/3-D/N-D, the lagval int8/uint8 OverflowError, and — section (H) — every x dtype
   × every inexact series dtype at 45 points (U-chain stage + 1-chain stage + scalar tail at every lane width)
   as a 1-D and a per-point series, at the dtype extremes (integer wrap-around, NaN/±inf/subnormal/overflow),
   plus column-strided per-point series (the scalar part). `MisalignedRegistry`'s generic unary/complex
   ULP excuses are carved out for these ops. Unit tests `test/NumSharp.Tests/Polynomial/
-  PolynomialEvaluationTests.cs` (16): NumPy bytes per basis, peeled float32, weak vs strong, complex
-  scalar-math/ufunc mix, float16 NaN priority (vector AND scalar path), int8 wrap, shapes/errors/layouts,
+  PolynomialEvaluationTests.cs` (17): NumPy bytes per basis, peeled float32, weak vs strong, complex
+  scalar-math/ufunc mix, the single-element-broadcast fallback product (series deeper and x deeper),
+  float16 NaN priority (vector AND scalar path), int8 wrap, shapes/errors/layouts,
   Decimal/Char, thread safety, zero vector fallbacks over the dtype matrix, vector part ≡ scalar part byte
   for byte. Mutation-checked (below).
 - **Measured (NPY/NS, pinned to 4 logical CPUs on both sides, Release, drained JIT warm-up, every cell

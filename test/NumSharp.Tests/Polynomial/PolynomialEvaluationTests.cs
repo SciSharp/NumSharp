@@ -145,6 +145,56 @@ namespace NumSharp.Tests.Polynomial
             }
         }
 
+        /// <summary>A complex128 from its two IEEE-754 bit patterns (the probe inputs below are NumPy's exact values).</summary>
+        /// <param name="re">Real part bits.</param><param name="im">Imaginary part bits.</param>
+        /// <returns>The value.</returns>
+        private static Complex Bits(ulong re, ulong im)
+            => new Complex(BitConverter.Int64BitsToDouble(unchecked((long)re)), BitConverter.Int64BitsToDouble(unchecked((long)im)));
+
+        [TestMethod]
+        public void Val_SingleElementBroadcast_RunsNumPysFallbackComplexProduct()
+        {
+            // How the case arises:
+            // - An N-D series at a per-point x with a ONE-element result, where c[k] and x differ in ndim.
+            // - NumPy's trivial ufunc loop refuses non-0-d operands of different ndim, so NpyIter iterates the
+            //   one element with every stride 0.
+            // - CDOUBLE_multiply then takes its MSVC-contracted fallback loop (im = fma(ai, br, ar*bi))
+            //   instead of simd_cmul (im = fma(ar, bi, ai*br)).
+            // The same series and point with EQUAL ndims run the trivial loop and simd_cmul (the (4,) line).
+
+            // Series deeper than x (tensor=True): every product takes the fallback.
+            // x = np.array([complex(bits 0xbfc6edc46f5f2c30, 0xbffa97b3ccf45646)]); c = [[4], [10], [39], [25]]
+            var x = np.array(new[] { Bits(0xbfc6edc46f5f2c30, 0xbffa97b3ccf45646) });
+            var c41 = np.array(new double[,] { { 4 }, { 10 }, { 39 }, { 25 } });
+            var hermeval = Val["hermeval"];
+            AssertBytes(hermeval(x, c41, true), "complex128", new long[] { 1, 1 }, "afdb0b5d9f3757c085cf2a4c14416e40", "c (4,1) x (1,)");
+            AssertBytes(hermeval(x, np.array(new double[] { 4, 10, 39, 25 }), true), "complex128", new long[] { 1 },
+                "b0db0b5d9f3757c085cf2a4c14416e40", "c (4,): c[k] and x both 1-D -> simd_cmul");
+            // The review's original divergence: hermeval2d's FIRST pass is that (4,1) evaluation.
+            var y = np.array(new[] { BitConverter.Int32BitsToSingle(1062450992) });   // np.float32(0.82701397)
+            var cu = np.array(new uint[,] { { 4 }, { 10 }, { 39 }, { 25 } });
+            AssertBytes(np.polynomial.hermite_e.hermeval2d(x, y, cu), "complex128", new long[] { 1 },
+                "afdb0b5d9f3757c085cf2a4c14416e40", "hermeval2d");
+
+            // Series shallower than x (tensor=False, c (4,1) vs x (1,1)).
+            // - Only the FIRST Clenshaw step multiplies the raw c[-1] (1-D) by the 2-D x2, so only it takes
+            //   the fallback.
+            // - After that c1 has x's ndim and the trivial loop runs, so NumPy's bits differ from both uniform
+            //   choices: (…76ce, …095c) with simd everywhere, (…76d1, …095e) with the fallback everywhere.
+            // x = complex(0x3fea8f36f9e39a2c, 0xbfffec58298ea850); c = the four bit pairs below
+            var cc = np.array(new[]
+            {
+                Bits(0x3f8b8ebf41362500, 0xbfd036968baa3358), Bits(0xbff2fde7d1046586, 0xbfe66847883c6b28),
+                Bits(0x3ff399083012e0ba, 0xbfe77e7f7cec6354), Bits(0xbff67626df7865ce, 0x3fe968d74523f840),
+            }).reshape(4, 1);
+            var xc = Bits(0x3fea8f36f9e39a2c, 0xbfffec58298ea850);
+            var chebval = Val["chebval"];
+            AssertBytes(chebval(np.array(new[,] { { xc } }), cc, false), "complex128", new long[] { 1, 1 },
+                "d1767b43408a36405d0975bb99404fc0", "x (1,1): fallback in the first step only");
+            AssertBytes(chebval(np.array(new[] { xc }), cc, false), "complex128", new long[] { 1 },
+                "ce767b43408a36405c0975bb99404fc0", "x (1,): equal ndims -> simd_cmul at every step");
+        }
+
         [TestMethod]
         public void Val_Float16_NaNPriority_IsTheWheelsOnBothTheVectorAndTheScalarPath()
         {

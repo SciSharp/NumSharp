@@ -10670,6 +10670,72 @@ def gen_polyeval():
             emit(op, ["a"], [describe(xv, xv), describe(cbase, cview)], lambda: val(xv, cview, tensor=False),
                  "nd_c_strided", f"{op}/vl/{xs}/{cs}/ppstrided", {"tensor": False})
 
+        # (I) single-element broadcasts: an N-D series at a per-point x whose result has ONE element.
+        # - When c[k] and x differ in ndim, NumPy's trivial ufunc loop refuses the operands.
+        # - NpyIter then iterates the one element with every stride 0, so CDOUBLE_multiply runs its
+        #   MSVC-contracted fallback loop, im = fma(ai, br, ar*bi), instead of simd_cmul,
+        #   im = fma(ar, bi, ai*br).
+        # - Once a value has absorbed x it has the deeper ndim. With the series shallower (tensor=False) only
+        #   the first Clenshaw step differs; with it deeper, every step does.
+        # - The forms only disagree on full-mantissa operands. This tier's moderate values are short dyadic
+        #   rationals whose products are exact, so these cells draw seeded random values.
+        # - There are three draws per cell, because a single product separates the two forms only ~1 time
+        #   in 6.
+        # - Real-x pairs are controls: a real-cast operand makes every form agree.
+        # Measured: docs/plans/numpy-polynomial-review.md.
+        urng = np.random.default_rng(20260927 + POLY_MODULES.index((modname, p)))
+
+        def unit_fill(shape, dt):
+            n = int(np.prod(shape)) if len(shape) else 1
+            re = urng.uniform(-2.0, 2.0, n)
+            if np.dtype(dt).kind == "c":
+                re = re + 1j * urng.uniform(-2.0, 2.0, n)
+            return np.ascontiguousarray(re.astype(dt).reshape(shape))
+
+        for tail, xshape, tensor in (((1,), (1,), True), ((1, 1), (1,), True), ((1,), (1, 1), True),
+                                     ((1, 1), (1,), False), ((1,), (1, 1), False), ((1,), (1, 1, 1), False),
+                                     ((1,), (1,), False), ((1, 1), (1, 1), False)):
+            for xs, cs in (("complex128", "complex128"), ("complex128", "float64"),
+                           ("float64", "complex128"), ("float32", "complex128")):
+                for nc in (1, 2, 3, 4, 5, 7):
+                    for draw in range(3):
+                        xv = unit_fill(xshape, xs)
+                        cv = unit_fill((nc,) + tail, cs)
+                        emit(op, ["a"], [describe(xv, xv), describe(cv, cv)], lambda: val(xv, cv, tensor=tensor),
+                             f"unit_{'tensor' if tensor else 'bcast'}",
+                             f"{op}/unit/{tail}/{xshape}/{tensor}/{xs}/{cs}/{nc}/{draw}", {"tensor": tensor})
+        # ... and the near misses: the same ndim mismatches with MORE than one result element. NpyIter's
+        # iteration then has a real stride, and NumPy runs simd_cmul. These gate the size-1 test on each side.
+        for tail, xshape, tensor in (((1,), (5,), True), ((3,), (1,), True),
+                                     ((1, 1), (4,), False), ((3,), (1, 1), False)):
+            for xs, cs in (("complex128", "complex128"), ("complex128", "float64")):
+                for nc in (2, 3, 5):
+                    for draw in range(3):
+                        xv = unit_fill(xshape, xs)
+                        cv = unit_fill((nc,) + tail, cs)
+                        emit(op, ["a"], [describe(xv, xv), describe(cv, cv)], lambda: val(xv, cv, tensor=tensor),
+                             f"unit_near_{'tensor' if tensor else 'bcast'}",
+                             f"{op}/unit_near/{tail}/{xshape}/{tensor}/{xs}/{cs}/{nc}/{draw}", {"tensor": tensor})
+        # ... reached by the 2-D / 3-D compositions too: a unit trailing series axis makes a pass single-element.
+        for kind in ("val2d", "val3d", "grid2d", "grid3d"):
+            f = getattr(mod, p + kind)
+            op2 = f"{modname}.{p}{kind}"
+            dims = 2 if kind.endswith("2d") else 3
+            for cshape in (((3, 1), (1, 3), (3, 4)) if dims == 2 else ((2, 1, 1), (2, 3, 1), (2, 1, 3))):
+                for xs, cs in (("complex128", "complex128"), ("complex128", "float64")):
+                    for draw in range(3):
+                        pts = [unit_fill((1,), xs) for _ in range(dims)]
+                        cv = unit_fill(cshape, cs)
+                        emit(op2, ["a"] * dims, [describe(q, q) for q in pts] + [describe(cv, cv)],
+                             lambda: f(*pts, cv), "unit_nd", f"{op2}/unit/{cshape}/{xs}/{cs}/{draw}")
+        opn = f"{modname}.{p}valnd"
+        for npts, cshape in ((1, (3, 1)), (2, (3, 1)), (3, (2, 1, 1)), (4, (2, 2, 1, 1))):
+            for draw in range(3):
+                pts = [unit_fill((1,), "complex128") for _ in range(npts)]
+                cv = unit_fill(cshape, "complex128")
+                emit(opn, ["a"] * npts, [describe(q, q) for q in pts] + [describe(cv, cv)],
+                     lambda: pu._valnd(val, cv, *pts), "unit_nd", f"{opn}/unit/{npts}/{cshape}/{draw}")
+
         # (G) errors: empty series (IndexError at NumPy's first coefficient read)
         ce = np.zeros((0,), np.float64)
         xv = _poly_fill(3, "float64")

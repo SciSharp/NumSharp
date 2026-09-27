@@ -197,7 +197,8 @@ namespace NumSharp
             var xMode = weak ? PolyXMode.Weak : xa.ndim == 0 ? PolyXMode.Shared : PolyXMode.PerPoint;
             NPTypeCode tx = weak ? NPTypeCode.Empty : xa.typecode;
             bool scalarMath = !coefOperand && xMode != PolyXMode.PerPoint;   // every value is a NumPy scalar
-            var k = ILKernelGenerator.GetPolyEvalKernel(basis, xMode, tx, xw.Kind, c.typecode, nc, coefOperand, scalarMath);
+            var unit = UnitBroadcast(c, xa, xMode, tx, tensor);             // NumPy's one-element NpyIter products
+            var k = ILKernelGenerator.GetPolyEvalKernel(basis, xMode, tx, xw.Kind, c.typecode, nc, coefOperand, scalarMath, unit);
 
             IntPtr scratch = IntPtr.Zero;
             NDArray preconv = null, c0 = null, y = null;
@@ -305,6 +306,39 @@ namespace NumSharp
                 c0?.Dispose();
                 y?.Dispose();   // non-null only when an exception escaped before Detach
             }
+        }
+
+        /// <summary>
+        ///     Whether this call is NumPy's single-element broadcast (<see cref="PolyUnitBroadcast"/>), and which side
+        ///     is deeper. It is when four things hold: the series is N-D, x is a per-point array, the loop is
+        ///     complex, and the result has ONE element while <c>c[k]</c> and x differ in ndim. NumPy then runs each
+        ///     complex product of a coefficient-derived and an x-derived array on NpyIter's one-element loop, i.e.
+        ///     <c>CDOUBLE_multiply</c>'s contracted fallback, not <c>simd_cmul</c>.
+        /// </summary>
+        /// <param name="c">Coefficients, at least 1-D.</param>
+        /// <param name="xa">x as an array (null when weak — never read then).</param>
+        /// <param name="xMode">How x arrives.</param>
+        /// <param name="tx">x's dtype.</param>
+        /// <param name="tensor">NumPy's tensor flag: a tensor evaluation appends <c>x.ndim</c> unit axes to every
+        ///     <c>c[k]</c> (<c>c.reshape(c.shape + (1,)*x.ndim)</c>), so the series side is then always deeper.</param>
+        /// <returns>The mode; <see cref="PolyUnitBroadcast.None"/> for every other call, so the common calls keep their
+        ///     kernels.</returns>
+        /// <remarks>
+        ///     Only complex products have more than one NumPy form (a real product is one IEEE multiply on every
+        ///     path), and a {p}val loop is complex exactly when x or the series is — the step tables hold no complex
+        ///     constants and a weak x is never per point. The result has one element exactly when every axis of
+        ///     <c>c.shape[1:]</c> and of x is 1: with <c>tensor=True</c> the result shape is their concatenation,
+        ///     with <c>tensor=False</c> their broadcast.
+        /// </remarks>
+        private static PolyUnitBroadcast UnitBroadcast(NDArray c, NDArray xa, PolyXMode xMode, NPTypeCode tx, bool tensor)
+        {
+            if (c.ndim < 2 || xMode != PolyXMode.PerPoint) return PolyUnitBroadcast.None;
+            if (tx != NPTypeCode.Complex && c.typecode != NPTypeCode.Complex) return PolyUnitBroadcast.None;
+            var cd = c.Shape.dimensions; var xd = xa.Shape.dimensions;
+            for (int i = 1; i < cd.Length; i++) if (cd[i] != 1) return PolyUnitBroadcast.None;
+            for (int i = 0; i < xd.Length; i++) if (xd[i] != 1) return PolyUnitBroadcast.None;
+            int dc = c.ndim - 1 + (tensor ? xa.ndim : 0), dx = xa.ndim;
+            return dc == dx ? PolyUnitBroadcast.None : dc > dx ? PolyUnitBroadcast.CoefDeeper : PolyUnitBroadcast.PointsDeeper;
         }
 
         /// <summary>Hands the result out of the <c>finally</c>'s cleanup: clears the local, returns the array.</summary>

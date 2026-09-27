@@ -28,14 +28,29 @@ using System.Runtime.Intrinsics.X86;
 // f16 grid (every op narrows and widens back through the house HalfNarrow8V/HalfWiden8V, NumPy's
 // HALF loop one op at a time), with the wheel's NaN priority re-imposed by an explicit blend.
 //
-// COMPLEX MULTIPLY: TWO NUMPY SEMANTICS
-// -------------------------------------
-// NumPy's ARRAY complex multiply is the fused simd_cmul (the house EmitScalarOperation), its SCALAR
-// multiply (np.complex128 * np.complex128, scalarmath) the naive four-product formula. When the
-// result is 0-d every value is a NumPy scalar, and an op is a ufunc only when one operand is the raw
-// 0-d x array — so the emitter, in "scalar math" mode, emits the naive product except next to the x
-// leaf. Measured against NumPy: chebval with a 0-d complex x differs from BOTH the array-x and the
-// Python-scalar-x results; this rule reproduces all three.
+// COMPLEX MULTIPLY: THREE NUMPY SEMANTICS
+// ---------------------------------------
+// NumPy 2.4.2 (win-amd64) multiplies complex128 three ways (PolyComplexProduct), picked by how the
+// operands reach the loop, never by their values:
+//   * Simd — the ufunc's vector body simd_cmul (loops_arithm_fp.dispatch.c.src):
+//     re = fma(ar, br, -(ai*bi)), im = fma(ar, bi, ai*br). Every ARRAY op of any size, on the trivial
+//     loop or on NpyIter, except the case below. The house EmitScalarOperation.
+//   * Naive — scalarmath (np.complex128 * np.complex128): the four-product formula, no FMA.
+//   * LoopScalar — the same ufunc's scalar fallback, which it jumps to when the OUTPUT stride is 0.
+//     MSVC compiled that fallback in the AVX2+FMA dispatch target and CONTRACTED it:
+//     re = fma(ar, br, -(ai*bi)) (Simd's), im = fma(ai, br, ar*bi) (the other product fused).
+//     An output stride of 0 happens when NpyIter iterates a SINGLE element: nditer_constr.c gives
+//     every length-1 axis stride 0. NpyIter (not the trivial loop) runs when the non-0-d operands
+//     differ in ndim (try_trivial_single_output_loop returns -2). For {p}val that is an N-D series
+//     at a per-point x whose result has one element (PolyUnitBroadcast, set by NDPolyEval).
+// When the result is 0-d every value is a NumPy scalar, and an op is a ufunc only when one operand is
+// the raw 0-d x array — so the emitter, in "scalar math" mode, emits the naive product except next to
+// the x leaf. Measured against NumPy: chebval with a 0-d complex x differs from BOTH the array-x and
+// the Python-scalar-x results; this rule reproduces all three. In PolyUnitBroadcast mode every value
+// carries NumPy's ndim (PolyValue.Nd, representative values — only comparisons matter) and a product
+// of two ARRAY values whose ndims differ is the LoopScalar one. Measured: 6,000 random pairs, every
+// basis at 8 single-element shape configurations x 7 coefficient counts (the review plan,
+// docs/plans/numpy-polynomial-review.md).
 //
 // =============================================================================
 
@@ -101,6 +116,31 @@ namespace NumSharp.Backends.Kernels
         internal static Complex PolyNaiveComplexMultiply(Complex a, Complex b)
             => new Complex(a.Real * b.Real - a.Imaginary * b.Imaginary, a.Real * b.Imaginary + a.Imaginary * b.Real);
 
+        /// <summary>
+        ///     NumPy's ufunc FALLBACK complex product — <c>CDOUBLE_multiply</c>'s <c>loop_scalar</c>
+        ///     (<c>loops_arithm_fp.dispatch.c.src</c>), written <c>a_r*b_r - a_i*b_i</c>, <c>a_r*b_i + a_i*b_r</c> and
+        ///     contracted by MSVC in the AVX2+FMA target: <c>re = fma(a.re, b.re, -(a.im*b.im))</c>,
+        ///     <c>im = fma(a.im, b.re, a.re*b.im)</c>. The real part equals <c>simd_cmul</c>'s; the imaginary part
+        ///     fuses the OTHER product, so it can differ from <c>simd_cmul</c>'s in the last bit, and the next
+        ///     recurrence step carries that difference into both parts.
+        /// </summary>
+        /// <param name="a">Left operand (NumPy's first input).</param><param name="b">Right operand.</param>
+        /// <returns>The product, as NumPy's fallback loop computes it.</returns>
+        /// <remarks>
+        ///     NumPy runs this loop only when the output stride is 0, i.e. NpyIter's single-element iteration of
+        ///     two array operands that differ in ndim. Only <see cref="PolyUnitBroadcast"/> kernels call it.
+        ///     The forms are MEASURED, not derived from the C source (which has no FMA): over 6,000 random pairs
+        ///     NumPy's real part always matched <c>fma(a.re, b.re, -round(a.im*b.im))</c> and its imaginary part
+        ///     always <c>fma(a.im, b.re, round(a.re*b.im))</c>, in exact rational arithmetic.
+        ///     <see cref="Math.FusedMultiplyAdd(double,double,double)"/> is IEEE fma on every host (one
+        ///     <c>vfmadd</c> with FMA3, the CRT's exact <c>fma</c> without), so the finite bits are host-independent;
+        ///     which NaN payload survives is not (the oracle tokenizes NaN for binary ops).
+        /// </remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static Complex PolyLoopScalarComplexMultiply(Complex a, Complex b)
+            => new Complex(Math.FusedMultiplyAdd(a.Real, b.Real, -(a.Imaginary * b.Imaginary)),
+                           Math.FusedMultiplyAdd(a.Imaginary, b.Real, a.Real * b.Imaginary));
+
         /// <summary><see cref="PolyHalfArith8"/>, called by the float16 lane kind's Bin.</summary>
         internal static readonly MethodInfo s_polyHalfArith8 = typeof(ILKernelGenerator).GetMethod(nameof(PolyHalfArith8),
             BindingFlags.NonPublic | BindingFlags.Static) ?? throw new MissingMethodException(nameof(PolyHalfArith8));
@@ -108,6 +148,29 @@ namespace NumSharp.Backends.Kernels
         /// <summary><see cref="PolyNaiveComplexMultiply"/>, called in scalar-math (0-d result) mode.</summary>
         internal static readonly MethodInfo s_polyNaiveComplexMultiply = typeof(ILKernelGenerator).GetMethod(nameof(PolyNaiveComplexMultiply),
             BindingFlags.NonPublic | BindingFlags.Static) ?? throw new MissingMethodException(nameof(PolyNaiveComplexMultiply));
+
+        /// <summary><see cref="PolyLoopScalarComplexMultiply"/>, called by <see cref="PolyUnitBroadcast"/> kernels for a
+        ///     product of two array values whose NumPy ndims differ.</summary>
+        internal static readonly MethodInfo s_polyLoopScalarComplexMultiply = typeof(ILKernelGenerator).GetMethod(nameof(PolyLoopScalarComplexMultiply),
+            BindingFlags.NonPublic | BindingFlags.Static) ?? throw new MissingMethodException(nameof(PolyLoopScalarComplexMultiply));
+    }
+
+    /// <summary>
+    ///     Which of NumPy's three complex128 products one multiply reproduces (see the file header). Only a
+    ///     SCALAR <see cref="NPTypeCode.Complex"/> multiply reads it. The kernel never emits vector chains where
+    ///     NumPy takes <see cref="Naive"/> or <see cref="LoopScalar"/> (both are one-point kernels), so a vector
+    ///     kind ignores it and always emits <c>simd_cmul</c>.
+    /// </summary>
+    internal enum PolyComplexProduct : byte
+    {
+        /// <summary>The ufunc vector body <c>simd_cmul</c>: <c>re = fma(ar, br, -(ai*bi))</c>,
+        ///     <c>im = fma(ar, bi, ai*br)</c>. Every array op except the <see cref="LoopScalar"/> case.</summary>
+        Simd,
+        /// <summary><c>scalarmath</c> (<c>np.complex128 * np.complex128</c>): each product rounded, no FMA.</summary>
+        Naive,
+        /// <summary>The ufunc's fallback loop as MSVC contracted it: <c>re = fma(ar, br, -(ai*bi))</c>,
+        ///     <c>im = fma(ai, br, ar*bi)</c>. NpyIter's single-element iteration (<see cref="PolyUnitBroadcast"/>).</summary>
+        LoopScalar,
     }
 
     /// <summary>
@@ -149,14 +212,16 @@ namespace NumSharp.Backends.Kernels
         /// <summary>[a, b] → [a op b].</summary>
         /// <param name="il">The generator.</param>
         /// <param name="op">The op.</param>
-        /// <param name="naiveComplex">Emit NumPy's SCALAR complex product instead of the fused array one
-        ///     (only meaningful for a scalar Complex multiply).</param>
-        public virtual void Bin(ILGenerator il, BinaryOp op, bool naiveComplex = false)
+        /// <param name="product">Which of NumPy's complex products a scalar Complex multiply reproduces
+        ///     (ignored by every other op, and by vector kinds — see <see cref="PolyComplexProduct"/>).</param>
+        public virtual void Bin(ILGenerator il, BinaryOp op, PolyComplexProduct product = PolyComplexProduct.Simd)
         {
             if (Vec)
                 PolyLanes.EmitVecOperator(il, op, LocalType);
-            else if (naiveComplex && op == BinaryOp.Multiply && T == NPTypeCode.Complex)
-                il.EmitCall(OpCodes.Call, ILKernelGenerator.s_polyNaiveComplexMultiply, null);
+            else if (product != PolyComplexProduct.Simd && op == BinaryOp.Multiply && T == NPTypeCode.Complex)
+                il.EmitCall(OpCodes.Call, product == PolyComplexProduct.Naive
+                    ? ILKernelGenerator.s_polyNaiveComplexMultiply
+                    : ILKernelGenerator.s_polyLoopScalarComplexMultiply, null);
             else
                 DirectILKernelGenerator.EmitScalarOperation(il, op, T);
         }
@@ -211,7 +276,7 @@ namespace NumSharp.Backends.Kernels
 
         /// <inheritdoc/>
         /// <remarks>The dead lanes (w &lt; 8) hold zeros; an op on them produces a value no store reads.</remarks>
-        public override void Bin(ILGenerator il, BinaryOp op, bool naiveComplex = false)
+        public override void Bin(ILGenerator il, BinaryOp op, PolyComplexProduct product = PolyComplexProduct.Simd)
         {
             il.Emit(OpCodes.Ldc_I4, (int)op);
             il.EmitCall(OpCodes.Call, ILKernelGenerator.s_polyHalfArith8, null);
@@ -265,10 +330,18 @@ namespace NumSharp.Backends.Kernels
         public readonly NPTypeCode T;
         /// <summary>One scalar for all chains.</summary>
         public readonly bool Shared;
+        /// <summary>
+        ///     The ndim NumPy's array for this value has, in a <see cref="PolyUnitBroadcast"/> kernel (0 in every
+        ///     other kernel, and for weak Python values). It picks the complex product: two array operands of
+        ///     different ndim are NumPy's single-element NpyIter loop (<see cref="PolyComplexProduct.LoopScalar"/>).
+        ///     The numbers are representative, not the caller's — only which operand is deeper matters.
+        /// </summary>
+        public readonly int Nd;
 
         /// <summary>Wraps locals.</summary>
         /// <param name="l">Locals.</param><param name="t">Dtype.</param><param name="shared">Shared flag.</param>
-        public PolyValue(LocalBuilder[] l, NPTypeCode t, bool shared) { L = l; T = t; Shared = shared; }
+        /// <param name="nd">NumPy ndim tag (see <see cref="Nd"/>).</param>
+        public PolyValue(LocalBuilder[] l, NPTypeCode t, bool shared, int nd = 0) { L = l; T = t; Shared = shared; Nd = nd; }
     }
 
     /// <summary>The values the step expressions may read, bound per block.</summary>
@@ -302,6 +375,13 @@ namespace NumSharp.Backends.Kernels
         public readonly bool Vec;
         /// <summary>Lanes per chain (1 for scalar chains).</summary>
         public readonly int W;
+        /// <summary>
+        ///     NumPy's ndim of a coefficient read (<see cref="PolySym.Ck"/>) and of the per-point x in a
+        ///     <see cref="PolyUnitBroadcast"/> kernel: representative values (2 and 1, or 1 and 2 — only which side
+        ///     is deeper matters). Both 0 in every other kernel, so no product there can become
+        ///     <see cref="PolyComplexProduct.LoopScalar"/>.
+        /// </summary>
+        public readonly int CoefNd, PointNd;
         private readonly PolyConstPool _pool;
         private readonly LocalBuilder _table, _row;
         private readonly bool _scalarMath;
@@ -317,9 +397,14 @@ namespace NumSharp.Backends.Kernels
         /// <param name="row">Local holding the current row (<c>nd</c>) for per-row constants.</param>
         /// <param name="scalarMath">NumPy runs every op as scalar math (0-d result): complex multiplies not
         ///     touching the x leaf are the naive product.</param>
-        public PolyEmitter(ILGenerator il, int u, bool vec, int lanes, PolyConstPool pool, LocalBuilder table, LocalBuilder row, bool scalarMath)
+        /// <param name="unit">NumPy's single-element broadcast (<see cref="PolyUnitBroadcast"/>): values are tagged
+        ///     with their ndim, and a product of two array values whose ndims differ is NumPy's fallback loop.</param>
+        public PolyEmitter(ILGenerator il, int u, bool vec, int lanes, PolyConstPool pool, LocalBuilder table, LocalBuilder row,
+            bool scalarMath, PolyUnitBroadcast unit)
         {
             IL = il; U = u; Vec = vec; W = vec ? lanes : 1; _pool = pool; _table = table; _row = row; _scalarMath = scalarMath;
+            // The same representative ndims PeelCount plans with, so the planned fixpoint is the emitted one.
+            (CoefNd, PointNd) = PolyTyping.UnitNds(unit);
         }
 
         /// <summary>The scalar kind of <paramref name="t"/> (shared values, scalar chains).</summary>
@@ -343,13 +428,15 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>Declares locals for a value.</summary>
-        /// <param name="t">Dtype.</param><param name="shared">One scalar for all chains.</param><returns>The value.</returns>
-        public PolyValue Fresh(NPTypeCode t, bool shared)
+        /// <param name="t">Dtype.</param><param name="shared">One scalar for all chains.</param>
+        /// <param name="nd">NumPy ndim tag (<see cref="PolyValue.Nd"/>; 0 outside <see cref="PolyUnitBroadcast"/> kernels).</param>
+        /// <returns>The value.</returns>
+        public PolyValue Fresh(NPTypeCode t, bool shared, int nd = 0)
         {
             var l = new LocalBuilder[U];
             if (shared) { var one = IL.DeclareLocal(Scalar(t).LocalType); for (int u = 0; u < U; u++) l[u] = one; }
             else { var type = Lane(t).LocalType; for (int u = 0; u < U; u++) l[u] = IL.DeclareLocal(type); }
-            return new PolyValue(l, t, shared);
+            return new PolyValue(l, t, shared, nd);
         }
 
         /// <summary>The per-point form of a shared value: in vector chains a broadcast vector (built once for
@@ -390,7 +477,13 @@ namespace NumSharp.Backends.Kernels
                     var vb = EmitAt(b.B, env, t);
                     // A ufunc (array) op in NumPy's eyes iff one operand is the raw x array; see the file header.
                     bool touchesX = b.A is PolyLeaf { S: PolySym.X } || b.B is PolyLeaf { S: PolySym.X };
-                    return Op(b.Op, va, vb, t, naiveComplex: _scalarMath && !touchesX);
+                    // The product NumPy runs (file header): scalar math when every value is a NumPy scalar; its
+                    // single-element NpyIter loop when BOTH operands are arrays (Nd 0 = a weak Python value, which
+                    // the trivial loop accepts as 0-d) of different ndim; simd_cmul otherwise.
+                    var product = _scalarMath && !touchesX ? PolyComplexProduct.Naive
+                        : va.Nd != 0 && vb.Nd != 0 && va.Nd != vb.Nd ? PolyComplexProduct.LoopScalar
+                        : PolyComplexProduct.Simd;
+                    return Op(b.Op, va, vb, t, product);
                 }
                 default: throw new InvalidOperationException("a weak value is typed by its partner operand");
             }
@@ -407,7 +500,7 @@ namespace NumSharp.Backends.Kernels
         public PolyValue Convert(PolyValue v, NPTypeCode t)
         {
             if (v.T == t) return v;
-            var r = Fresh(t, v.Shared);
+            var r = Fresh(t, v.Shared, v.Nd);   // a cast keeps the array's ndim
             int n = v.Shared ? 1 : U;
             for (int u = 0; u < n; u++)
             {
@@ -446,15 +539,16 @@ namespace NumSharp.Backends.Kernels
         /// <param name="a">Left (already in t).</param>
         /// <param name="b">Right (already in t).</param>
         /// <param name="t">Loop dtype.</param>
-        /// <param name="naiveComplex">NumPy would run this op as scalar math (see the file header).</param>
-        /// <returns>The result.</returns>
-        private PolyValue Op(BinaryOp op, PolyValue a, PolyValue b, NPTypeCode t, bool naiveComplex)
+        /// <param name="product">Which NumPy complex product a Complex multiply reproduces (see the file header).</param>
+        /// <returns>The result, tagged with NumPy's broadcast ndim (the larger operand ndim).</returns>
+        private PolyValue Op(BinaryOp op, PolyValue a, PolyValue b, NPTypeCode t, PolyComplexProduct product)
         {
+            int nd = Math.Max(a.Nd, b.Nd);
             if (a.Shared && b.Shared)
             {
-                var s = Fresh(t, true);
+                var s = Fresh(t, true, nd);
                 IL.Emit(OpCodes.Ldloc, a.L[0]); IL.Emit(OpCodes.Ldloc, b.L[0]);
-                Scalar(t).Bin(IL, op, naiveComplex);
+                Scalar(t).Bin(IL, op, product);
                 IL.Emit(OpCodes.Stloc, s.L[0]);
                 return s;
             }
@@ -467,7 +561,7 @@ namespace NumSharp.Backends.Kernels
                 IL.Emit(OpCodes.Ldloc, b.L[0]);
                 IL.EmitCall(OpCodes.Call, PolyLaneOps.s_cDivPrep, null);
                 IL.Emit(OpCodes.Stloc, prep);
-                var q = Fresh(t, false);
+                var q = Fresh(t, false, nd);
                 for (int u = 0; u < U; u++)
                 {
                     IL.Emit(OpCodes.Ldloc, a.L[u]);   // a is per point: two shared operands took the scalar path above
@@ -479,15 +573,16 @@ namespace NumSharp.Backends.Kernels
             }
             var sa = a.Shared ? Spread(a) : null;
             var sb = b.Shared ? Spread(b) : null;
-            var r = Fresh(t, false);
+            var r = Fresh(t, false, nd);
             var k = Lane(t);
             for (int u = 0; u < U; u++)
             {
                 IL.Emit(OpCodes.Ldloc, sa ?? a.L[u]);
                 IL.Emit(OpCodes.Ldloc, sb ?? b.L[u]);
-                // Scalar-math mode emits only scalar chains, whose loop-carried state (Horner's c0, Clenshaw's
-                // c0/c1) is per-point: those ops are NumPy scalar math too. A vector kind ignores the flag.
-                k.Bin(IL, op, naiveComplex);
+                // Scalar-math and single-element-broadcast kernels emit only scalar chains, whose loop-carried
+                // state (Horner's c0, Clenshaw's c0/c1) is per-point: those ops run NumPy's scalar-math or fallback
+                // product too. A vector kind ignores the choice (it only exists where NumPy runs simd_cmul).
+                k.Bin(IL, op, product);
                 IL.Emit(OpCodes.Stloc, r.L[u]);
             }
             return r;

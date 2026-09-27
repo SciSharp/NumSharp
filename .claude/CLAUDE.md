@@ -2594,7 +2594,7 @@ errors). Kernels `Backends/Kernels/ILKernelGenerator.Polynomial{,.Typing,.Emitte
 Tier-3A per-chunk IL over `NDIterRef.ForEach`, emitted by ONE typed emitter from per-basis STEP TABLES
 (NumPy's source-order expression trees, never re-associated, each node typed by NEP 50) — so no per-basis and
 no per-dtype C#. **Bit-exact with NumPy 2.4.2** on every dtype pair and layout (oracle tier `polyeval.jsonl`,
-12,214 cases, 0 excused; `MisalignedRegistry`'s generic unary/complex ULP branches are carved out for these
+16,606 cases, 0 excused; `MisalignedRegistry`'s generic unary/complex ULP branches are carved out for these
 ops so a drift fails). **Perf (NPY/NS, `benchmark/polynomial/`, 1,320 cells, every one SHA-256-checked):
 geomean 7.5×, min 1.62×** — float64 `chebval` d10 16.9×/11.2×/36.5× at 1K/100K/10M, `chebval2d` 41.5×,
 complex 23.7×@100K, float16 3.3×@10M, `lagval` (divider-bound) 2.7–14×, Python-scalar x 4.8–5.7×.
@@ -2607,9 +2607,20 @@ complex 23.7×@100K, float16 3.3×@10M, `lagval` (divider-bound) 2.7–14×, Pyt
   `x*0`, `(2*nd-1) - x`) are CPython arithmetic — BigInteger ints, and a Python int → double is CORRECTLY
   ROUNDED (.NET's `(double)BigInteger` TRUNCATES: 42 oracle cells of `2**64-1` caught it). A 0-d NDArray x
   is STRONG. C# `char`/`Half`/`decimal` have no Python literal → strong 0-d arrays (the `np.r_` rule).
-- **Two complex multiplies:** an ARRAY op is NumPy's fused `simd_cmul`, a 0-d result is scalar math (the
-  naive product) — except an op touching the raw 0-d x array, which NumPy runs as a ufunc. chebval with a
-  0-d complex x differs from BOTH the array-x and the Python-scalar results; the emitter reproduces all three.
+- **THREE complex multiplies:**
+  - An ARRAY op is NumPy's fused `simd_cmul`.
+  - A 0-d result is scalar math (the naive product), except an op touching the raw 0-d x array, which NumPy
+    runs as a ufunc. chebval with a 0-d complex x differs from BOTH the array-x and the Python-scalar
+    results.
+  - An N-D series at a per-point x whose result has ONE element, with `c[k]` and x of different ndim, gets a
+    third form. The trivial ufunc loop refuses mixed ndims, and NpyIter's one-element iteration gives every
+    stride 0 (`nditer_constr.c` `if (bshape == 1) strides[iop] = 0`). So `CDOUBLE_multiply` runs its
+    MSVC-contracted `loop_scalar`: im = `fma(ai, br, ar*bi)`, where simd_cmul has `fma(ar, bi, ai*br)`.
+    This is `PolyUnitBroadcast` + `PolyComplexProduct.LoopScalar`: values carry NumPy's ndim, and the peel
+    runs to the joint dtype+ndim fixpoint.
+
+  The emitter reproduces all three, per op. The third form is probably library-wide for `np.multiply` too,
+  unverified: `docs/plans/numpy-polynomial-review.md` step 10.
 - **Vector lanes for EVERY dtype pair** (`...Lanes.cs`): 256-bit on AVX2 (float64 4 lanes, float32/float16
   8, complex128 2) and every other per-point dtype at the same lane count — int32 containers re-wrapped to
   int8/uint8/int16/uint16/char width after each op (NumPy's `2*x` WRAPS in int8), packed 2-lane containers,
