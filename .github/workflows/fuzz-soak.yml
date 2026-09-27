@@ -24,8 +24,9 @@ name: Fuzz Soak
 # inputs to the ops NumPy hands to the platform's C99 complex library — see its comment blocks), and
 # the job env below pins NumPy's CPU dispatch below AVX-512.
 #
-# A second, independent job (`collections-stress`, at the end) runs the concurrent-collection storms at
-# their golden budgets — the per-push CI runs them at the smaller CI budget (see that job's comment).
+# Two more independent jobs (`random-api-lp64` + `random-api-soak`) replay the random-API oracle's families
+# under 10 fresh seeds (see their comment), and `collections-stress`, at the end, runs the concurrent-collection
+# storms at their golden budgets — the per-push CI runs them at the smaller CI budget (see that job's comment).
 
 on:
   schedule:
@@ -39,6 +40,9 @@ on:
       count:
         description: 'Random cases per seed'
         default: '200000'
+      random_api_seeds:
+        description: 'Random-API soak: comma-separated seeds in [0, 2**32) to replay a night (empty: 10 fresh ones)'
+        default: ''
 
 permissions:
   contents: read
@@ -241,6 +245,165 @@ jobs:
       with:
         name: fuzz-soak-failures
         path: failing-seed-*.jsonl
+        retention-days: 14
+
+  # ── The random-API oracle under 10 FRESH seeds ───────────────────────────────────────────────────
+  #
+  # The committed random_api*.jsonl tiers (docs/plans/random-oracle-coverage.md) replay every overload of the random
+  # world — NumPyRandom, Generator, the five bit generators, their State classes, SeedSequence, default_rng — under
+  # 10 FIXED seeds on every push. These two jobs regenerate the SAME families under 10 seeds drawn fresh every night
+  # and replay them through the same harness, so a stream divergence that only some seeds reach still surfaces.
+  #
+  # Two jobs because the corpus needs two NumPys: the legacy integer samplers' answers that depend on C long being
+  # 64-bit come from Linux NumPy (`random-api-lp64`, the generator's --lp64-only mode), and everything else — the
+  # libm tier above all — is authored by win-amd64 NumPy (`random-api-soak`, which merges the Linux rows with
+  # --lp64-rows, exactly as the committed corpus merges them from WSL). The replay binds NumPy's OWN scipy-openblas
+  # (numpy.libs) for the multivariate-normal tier, whose bytes are reproducible only through that library.
+  #
+  # On a divergence the replay lists every failing case (id, NumPy's answer, NumSharp's), and the whole corpus plus
+  # manifest.json (the seeds) is uploaded; `workflow_dispatch -f random_api_seeds=a,b,...` regenerates that night.
+  random-api-lp64:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      seeds: ${{ steps.seeds.outputs.seeds }}
+    steps:
+    - uses: actions/checkout@v7
+
+    - name: Setup Python
+      uses: actions/setup-python@v7
+      with:
+        python-version: '3.12'
+
+    - name: Install NumPy 2.4.2 (the oracle)
+      shell: bash
+      run: pip install "numpy==2.4.2"
+
+    # 10 distinct seeds in [0, 2**32) (the legacy RandomState(int) domain every family runs), none of them one of the
+    # committed corpus's fixed seeds (those are replayed on every push already). A dispatch may pin them instead.
+    - name: Draw the seeds
+      id: seeds
+      shell: bash
+      env:
+        PINNED: ${{ github.event.inputs.random_api_seeds }}
+      run: |
+        SEEDS=$(python - <<'PY'
+        import os
+        import secrets
+        fixed = {0, 1, 7, 42, 1234, 65535, 2147483647, 2147483648, 987654321, 4294967295}
+        pinned = os.environ.get("PINNED", "").strip()
+        if pinned:
+            seeds = [int(x) for x in pinned.split(",")]
+            if len(set(seeds)) != len(seeds) or not all(0 <= x < 2 ** 32 for x in seeds):
+                raise SystemExit(f"random_api_seeds must be distinct integers in [0, 2**32): {pinned}")
+        else:
+            drawn = set()
+            while len(drawn) < 10:
+                x = secrets.randbelow(2 ** 32)
+                if x not in fixed:
+                    drawn.add(x)
+            seeds = sorted(drawn)
+        print(",".join(str(x) for x in seeds))
+        PY
+        )
+        if [[ -z "$SEEDS" ]]; then
+          echo "::error::no seeds drawn"
+          exit 1
+        fi
+        echo "Random-API soak seeds: $SEEDS"
+        echo "seeds=$SEEDS" >> "$GITHUB_OUTPUT"
+
+    - name: Linux NumPy's answers for the LP64 families
+      shell: bash
+      run: |
+        python test/oracle/gen_random_oracle.py --lp64-only --seeds "${{ steps.seeds.outputs.seeds }}" --out random-api-lp64
+
+    - name: Upload the LP64 rows
+      uses: actions/upload-artifact@v7
+      with:
+        name: random-api-lp64-rows
+        path: random-api-lp64/lp64_rows.jsonl
+        if-no-files-found: error
+        retention-days: 14
+
+  random-api-soak:
+    needs: random-api-lp64
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+    - uses: actions/checkout@v7
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v6
+      with:
+        dotnet-version: |
+          8.0.x
+          10.0.x
+
+    - name: Setup Python
+      uses: actions/setup-python@v7
+      with:
+        python-version: '3.12'
+
+    - name: Install NumPy 2.4.2 (the oracle)
+      shell: bash
+      run: pip install "numpy==2.4.2"
+
+    - name: Download the LP64 rows
+      uses: actions/download-artifact@v8
+      with:
+        name: random-api-lp64-rows
+        path: random-api-lp64
+
+    - name: Generate the random-API corpus under the fresh seeds
+      shell: bash
+      run: |
+        python test/oracle/gen_random_oracle.py --seeds "${{ needs.random-api-lp64.outputs.seeds }}" \
+          --out random-api-soak --lp64-rows random-api-lp64/lp64_rows.jsonl
+        cat random-api-soak/manifest.json
+
+    - name: Build
+      run: dotnet build test/NumSharp.Tests.Oracle/NumSharp.Tests.Oracle.csproj --configuration Release -p:NoWarn=CS1591
+
+    # Both frameworks: the committed corpus showed one runtime-only divergence (.NET 8's double % NaN), so a
+    # fresh-seed divergence could be runtime-specific too. NUMSHARP_OPENBLAS_LIBRARY binds NumPy's own
+    # scipy-openblas (content-pinned; the mvn tier goes Inconclusive, not red, if it ever stops matching).
+    - name: Replay (net10.0, net8.0)
+      shell: bash
+      run: |
+        NUMSHARP_OPENBLAS_LIBRARY=$(python -c "import glob, os, numpy; d = os.path.join(os.path.dirname(os.path.dirname(numpy.__file__)), 'numpy.libs'); print(glob.glob(os.path.join(d, 'libscipy_openblas*.dll'))[0])")
+        export NUMSHARP_OPENBLAS_LIBRARY
+        export NUMSHARP_RANDOM_SOAK_DIR="$PWD/random-api-soak"
+        echo "OpenBLAS: $NUMSHARP_OPENBLAS_LIBRARY"
+        STATUS=0
+        for tfm in net10.0 net8.0; do
+          if ! dotnet test test/NumSharp.Tests.Oracle/NumSharp.Tests.Oracle.csproj \
+              --configuration Release --no-build --framework "$tfm" \
+              --filter "Name=RandomApiSoak" --logger "trx;LogFileName=random-api-soak-$tfm.trx" \
+              --logger "console;verbosity=normal"; then
+            echo "::error::The random-API soak diverged on $tfm (seeds: ${{ needs.random-api-lp64.outputs.seeds }})"
+            STATUS=1
+          fi
+        done
+        exit $STATUS
+
+    - name: Upload soak evidence
+      if: always()
+      uses: actions/upload-artifact@v7
+      with:
+        name: random-api-soak-evidence
+        path: |
+          random-api-soak/manifest.json
+          test/NumSharp.Tests.Oracle/TestResults/random-api-soak-*.trx
+        if-no-files-found: warn
+        retention-days: 14
+
+    - name: Upload the failing corpus
+      if: failure()
+      uses: actions/upload-artifact@v7
+      with:
+        name: random-api-soak-corpus
+        path: random-api-soak/
         retention-days: 14
 
   # ── The concurrent-collection storms at their GOLDEN budgets ─────────────────────────────────────

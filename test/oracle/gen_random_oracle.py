@@ -27,6 +27,11 @@ Usage:
     python test/oracle/gen_random_oracle.py                      # the committed corpus (10 fixed seeds; LP64 via WSL)
     python test/oracle/gen_random_oracle.py --seeds 11,22 --out DIR   # soak mode: fresh seeds into DIR
     python test/oracle/gen_random_oracle.py --lp64-only --out DIR     # (run under Linux NumPy) the LP64 tier only
+    python test/oracle/gen_random_oracle.py --seeds S --out DIR --lp64-rows ROWS  # soak: LP64 rows from a Linux job
+
+The nightly soak (.github/workflows/fuzz-soak.yml, jobs random-api-lp64 + random-api-soak) draws 10 fresh seeds, runs
+the --lp64-only mode on a Linux runner, then this script on windows-latest with --lp64-rows, and replays DIR through
+FuzzCorpusTests.RandomApiSoak (NUMSHARP_RANDOM_SOAK_DIR). A soak DIR also gets manifest.json (seeds, NumPy, counts).
 """
 import argparse
 import hashlib
@@ -3353,10 +3358,19 @@ def main(argv=None):
     ap.add_argument("--lp64-only", action="store_true", help="(Linux NumPy) write only the LP64-eligible rows")
     ap.add_argument("--no-lp64", action="store_true", help="skip the LP64 sub-run (development only; the corpus then "
                                                             "keeps Windows answers that may depend on a 32-bit long)")
+    ap.add_argument("--lp64-rows", help="the rows of an --lp64-only run made elsewhere (a Linux CI job) with the SAME "
+                                        "seeds, merged instead of running the WSL sub-run")
     args = ap.parse_args(argv)
 
     seeds = [int(s) for s in args.seeds.split(",")] if args.seeds else FIXED_SEEDS
+    # Every family runs the legacy RandomState(int) on these seeds, whose domain is [0, 2**32); a repeated seed would
+    # generate the same cases twice (their ids would collide into `#k` duplicates).
+    bad = [x for x in seeds if not 0 <= x < 2 ** 32]
+    if bad or len(set(seeds)) != len(seeds):
+        raise SystemExit(f"--seeds must be distinct integers in [0, 2**32); got {seeds}")
     out_dir = args.out or CORPUS_DIR
+    # A soak / scratch directory is created on demand (a CI job passes a fresh path).
+    os.makedirs(out_dir, exist_ok=True)
     surface = load_surface()
     only = set(args.only.split(",")) if args.only else None
     if args.lp64_only and np.dtype(np.long).itemsize != 8:
@@ -3380,8 +3394,18 @@ def main(argv=None):
         print(f"lp64_rows.jsonl: {len(rows)} rows")
         return
 
+    lp64_source = None
     if out.lp64_ids and not args.no_lp64:
-        moved = merge_lp64(out, run_lp64(seeds))
+        if args.lp64_rows:
+            # A Linux job's --lp64-only output for the same seeds (the ids are content-derived, so the merge pairs them;
+            # a row naming a different case than the Windows one aborts the merge).
+            with open(args.lp64_rows, encoding="utf-8") as fh:
+                lp64_rows = [json.loads(line) for line in fh if line.strip()]
+            lp64_source = os.path.abspath(args.lp64_rows)
+        else:
+            lp64_rows = run_lp64(seeds)
+            lp64_source = "wsl"
+        moved = merge_lp64(out, lp64_rows)
         print(f"LP64 merge: {moved} cases take Linux NumPy's answer (C long = 64 bits)")
 
     if not only and not args.out:
@@ -3402,6 +3426,13 @@ def main(argv=None):
         print(f"{t}.jsonl: {len(out.rows[t])} cases")
     if missing:
         print(f"(partial: {len(missing)} members unclaimed)")
+    if args.out:
+        # A soak (or scratch) corpus records what produced it, for the replay's report and the uploaded evidence.
+        manifest = {"seeds": seeds, "numpy": np.__version__, "python": sys.version.split()[0],
+                    "platform": sys.platform, "lp64": lp64_source,
+                    "tiers": {f"{t}.jsonl": len(out.rows[t]) for t in TIERS}, "partial": bool(missing)}
+        with open(os.path.join(out_dir, "manifest.json"), "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(json.dumps(manifest, indent=1) + "\n")
 
 
 if __name__ == "__main__":

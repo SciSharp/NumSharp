@@ -186,6 +186,15 @@ A new job in `fuzz-soak.yml` on `windows-latest` (the host the libm tier is auth
 `2**32`, runs the generator in soak mode with them, replays the result through the same harness (a test that reads the
 generated directory from an environment variable and is Inconclusive without it), and uploads failing corpora.
 
+As built (P6), two jobs, because the corpus needs two NumPys: `random-api-lp64` (ubuntu-latest) draws the 10 seeds
+(distinct, in `[0, 2**32)`, none of the committed fixed seeds; a `workflow_dispatch` input `random_api_seeds` pins them
+to replay a night) and writes Linux NumPy's answers for the LP64 families (`--lp64-only`); `random-api-soak`
+(windows-latest) generates every tier under those seeds with `--lp64-rows` (the Linux rows merged exactly as the
+committed corpus merges them from WSL), builds, and replays the directory on net10.0 and net8.0 through
+`FuzzCorpusTests.RandomApiSoak` (`NUMSHARP_RANDOM_SOAK_DIR`), binding NumPy's own scipy-openblas for the mvn tier. The
+generated directory carries `manifest.json` (seeds, NumPy, counts); the evidence (manifest + trx) is uploaded every
+night and the whole corpus on failure. The soak tiers are held to the committed floors (`RandomApiMinCases`).
+
 ### 6.8 Coverage join and docs
 
 `coverage/oracle_map.json` gains the `random_api` key (param `member`, ids `numpy.random.{value}`, overrides for
@@ -240,11 +249,20 @@ every replay):
 - [x] **P3 — `Generator` bindings** (all 84 members) × 5 engines, with errors.
 - [x] **P4 — bit generators, seed sequences, state classes, `default_rng`, `RandomState` factories.**
 - [x] **P5 — gates G2–G6 on;** every divergence they surface triaged: fixed with a regression test, or recorded in §7.
-- [ ] **P6 — nightly soak job** with 10 fresh seeds.
+- [x] **P6 — nightly soak job** with 10 fresh seeds.
 - [ ] **P7 — coverage join, docs, floors;** full verification (both TFMs, FuzzMatrix, coverage generator); commit.
 
 ## 9. State log
 
+- **2026-09-27 (P6 done)** — The nightly soak is wired (§6.7): generator soak mode (`--lp64-rows` for a Linux job's
+  rows instead of WSL, seed validation, the output directory created on demand, `manifest.json`),
+  `FuzzCorpusTests.RandomApiSoak` (every tier of the soak directory, each under its own host gating, failures of all
+  tiers collected), the two `fuzz-soak.yml` jobs, and committed floors for the four tiers (`RandomApiMinCases`: 8,300 /
+  15,500 / 700 / 120). Dry run on this machine with 10 fresh seeds (926935571, 1468300824, 1968923127, 2214447923,
+  2274677550, 3076328221, 3260894170, 3702504375, 3941943068, 4114009221; LP64 rows from WSL through `--lp64-rows`):
+  25,225 cases (8,510 / 15,778 / 730 / 207), green on net10.0 and net8.0. Full Oracle suite green on both frameworks
+  (the soak test Inconclusive without its variable). Correction to the P5 commit's title: the corpus delta there was
+  +157 cases, not +132.
 - **2026-09-27 (P5 done)** — The gates are on (`RandomApiCoverageTests`, §6.6): G2 overloads, G3 parameters (rules,
   enumerations, and a parameter-NAME gate against NumPy's signatures, a new committed table
   `test/oracle/random_numpy_signatures.json` of 123 members), G4 engines, G5 seeds, G6 state. Their first run over the
