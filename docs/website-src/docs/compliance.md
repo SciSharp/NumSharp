@@ -366,14 +366,28 @@ NumSharp implements both NumPy random APIs:
   starts with a digit is decimal (`"012"` is 12 — there is no octal reading), a string key is a
   sequence of one-character strings. `BitGenerator.spawn(n)` and `Generator.spawn(n)` derive
   independent children from it — the recommended way to hand streams to parallel workers. Any
-  `ISeedSequence` can seed a bit generator (`SeedlessSeedSequence` included); every engine names its
-  parameter `seed` as NumPy does, and a null one is NumPy's `seed=None` (fresh OS entropy).
+  `ISeedSequence` is accepted as a bit generator's seed (a `SeedlessSeedSequence` is refused as NumPy
+  refuses it: `seedless SeedSequences cannot generate state`); every engine names its parameter `seed` as
+  NumPy does, and a null one is NumPy's `seed=None` (fresh OS entropy).
 - `default_rng` accepts every NumPy seed form: an integer (up to any `BigInteger`), a sequence or
   integer array, a `SeedSequence`, a `BitGenerator` (wrapped), a `Generator` (passed through) or a
-  legacy `RandomState` (its MT19937 engine is wrapped, as `default_rng(RandomState)` does).
+  legacy `RandomState` (its engine is wrapped, as `default_rng(RandomState)` does). Every overload names
+  its parameter `seed`, NumPy's only parameter, and a null argument of any type is `default_rng(None)`.
 - Every `Generator` and `RandomState` draw holds the bit generator's `lock`, so one generator (or
   several over the same bit generator) can be shared between threads: each call consumes a contiguous
   piece of the one stream.
+- **The whole random surface is oracle-checked, overload by overload.** Every public member — each
+  overload of `RandomState`, `Generator`, the five bit generators and their `State` classes,
+  `SeedSequence`, `SeedlessSeedSequence` and `default_rng`, 439 in all (four NumSharp-only members
+  exempt) — is replayed against NumPy 2.4.2 by its exact C# signature: every legacy sampler on the legacy
+  MT19937 and on `RandomState(engine)` for each engine, every `Generator` member on all five engines,
+  under 10 fixed seeds, comparing NumPy's result AND the generator's full state after the call (so drawing
+  one value too many or too few fails, not only a wrong value). CI gates prove the coverage itself —
+  every overload, every parameter (omitted, non-default, null, every accepted `dtype`/`method` value,
+  NumPy's parameter names in NumPy's order), every engine, every seed — and a nightly job replays the same
+  families under 10 fresh seeds. About 25,000 cases; the few intended differences (the modern
+  `pareto`/`power` within a few ULP where the Windows CRT's in-band `expm1` differs, and states NumPy
+  would store and then read outside an array) are listed in the fuzz README.
 
 The familiar legacy example matches NumPy:
 
