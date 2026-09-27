@@ -16,9 +16,9 @@ Every public member of NumSharp's random world is checked against NumPy 2.4.2 by
 (no Python at test time), and CI fails when that stops being true. Concretely:
 
 1. **Every overload.** Each public constructor, method overload, property getter/setter, field and operator of the 20
-   random types (402 members, inventory in §2) is invoked by at least one oracle case, by its exact C# signature. A
-   member without a NumPy counterpart is listed in an exemption table with a reason; an exemption that gains a case
-   fails CI (self-retiring).
+   random types (439 members at P7 — 402 when this plan was written; inventory in §2) is invoked by at least one
+   oracle case, by its exact C# signature. A member without a NumPy counterpart is listed in an exemption table with
+   a reason; an exemption that gains a case fails CI (self-retiring).
 2. **Every parameter.** For each overload: every optional parameter is exercised both omitted (the default path) and
    with a non-default value; every required value parameter takes at least two distinct values; nullable parameters
    take null and non-null; `params` arrays take zero and several elements; every enumerated value NumPy accepts (dtype
@@ -250,10 +250,23 @@ every replay):
 - [x] **P4 — bit generators, seed sequences, state classes, `default_rng`, `RandomState` factories.**
 - [x] **P5 — gates G2–G6 on;** every divergence they surface triaged: fixed with a regression test, or recorded in §7.
 - [x] **P6 — nightly soak job** with 10 fresh seeds.
-- [ ] **P7 — coverage join, docs, floors;** full verification (both TFMs, FuzzMatrix, coverage generator); commit.
+- [x] **P7 — coverage join, docs, floors;** full verification (both TFMs, FuzzMatrix, coverage generator); commit.
 
 ## 9. State log
 
+- **2026-09-27 (P7 done — the plan is complete)** — Docs: the Fuzz README gained "The random-API oracle" (tiers,
+  harness, receivers, observations, gates, soak, intended divergences, regeneration) and the generator in its file
+  tree; its stale `gen_random_parity` carve row now names `multivariate_normal` only (the other seven samplers were
+  uncarved 2026-09-25); CLAUDE.md's differential-fuzz section gained the random-API bullet and lost the same stale
+  carve claim; the compliance page's random section gained the oracle-coverage bullet and two corrections
+  (`SeedlessSeedSequence` is REFUSED as a seed, as NumPy refuses it; `default_rng(RandomState)` wraps whatever
+  engine the RandomState has; every `default_rng` overload's parameter is `seed`). Floors landed in P6. Final
+  verification at `780fe625`: full Oracle suite 228 passed / 6 inconclusive by design and full unit suite 17,519 /
+  17,518 on net10.0 / net8.0; the corpus regenerates byte-identical (determinism check). Acceptance (§1): 1 — every
+  overload, G2 (439 members, 4 exempt with reasons, self-retiring); 2 — every parameter, G3 (rules, enumerations,
+  names); 3 — every generator type, G4; 4 — 10 fixed seeds in the corpus (G5) and 10 fresh seeds nightly (P6);
+  5 — the post-call state on every stateful case, G6; 6 — NumPy's errors verbatim in NumPy's check order (every
+  error case compares type and text); 7 — every gate is a FuzzMatrix test.
 - **2026-09-27 (P6 done)** — The nightly soak is wired (§6.7): generator soak mode (`--lp64-rows` for a Linux job's
   rows instead of WSL, seed validation, the output directory created on demand, `manifest.json`),
   `FuzzCorpusTests.RandomApiSoak` (every tier of the soak directory, each under its own host gating, failures of all

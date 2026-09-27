@@ -3331,8 +3331,21 @@ test/NumSharp.Tests/IO/            .npy/.npz format gate (no Python)
 - **Truthful vs precise** (`precision.jsonl`, 72 truth-bearing cases): each case carries `expected.truth` — the correctly-rounded mathematical reference (exact `Fraction` / 200-bit mpmath, generator-side only) — over precision-ADVERSARIAL inputs (wide-magnitude/cancellation sums at N≤2049, large-mean variance, near-1 products, expm1/log1p small-|x|) the ordinary 8–36-element pools cannot express. Policy (the vision is byte-identical NumPy parity): **bit-exact to NumPy passes without truth ever being read — precise never fails**; truth only adjudicates divergences. Not-less-truthful than NumPy → excused "prefer-precise" parity debt (being MORE accurate than NumPy is still a divergence to close by porting NumPy's algorithm, never a win); less truthful beyond 4×/+8 ULP slack → precision LOSS, red unless a bounded known-bug branch covers it (`MisalignedRegistry` P1–P3; the unbounded summation blanket is gated on truth-absence so losses can't hide in it). Findings on arrival, excused bounded ≤256 ULP (P3): f32 var/std accumulation 55/26 ULP vs truth (NumPy 3/2), negative-stride reduce path 11–32 ULP (NumPy exact).
 - **Products & random streams**: `products.jsonl` (408) gates the CBLAS family, tensor products,
   cross/cov/corrcoef, and Array-API vector/matrix norms. `random_parity.jsonl` (38 portable) +
-  `random_parity_host.jsonl` (108 host-libm) pin 35 stream methods/distributions; seven public samplers
-  plus gamma(shape&lt;1) remain carved and `[OpenBugs]`-pinned.
+  `random_parity_host.jsonl` (108 host-libm) pin 35 stream methods/distributions; only managed
+  `multivariate_normal` (no LAPACK backend) stays carved and `[OpenBugs]`-pinned (the other seven samplers were
+  uncarved 2026-09-25).
+- **Random-API oracle** (`test/oracle/gen_random_oracle.py`, plan `docs/plans/random-oracle-coverage.md`, README
+  "The random-API oracle"): every public member of the random world (439 in `test/oracle/random_surface.json`,
+  G1-pinned to reflection) replayed by EXACT C# signature (`params.sig`, reflection-invoked; an omitted optional is
+  the declared default, NumPy is called without it) on every engine x the 10 fixed seeds, recording NumPy's result
+  AND the receiver's full post-call state. Tiers `random_api` (portable 8,485) / `_host` (win-amd64 libm 15,779) /
+  `_mvn` (NumPy's own scipy-openblas 730) / `_lp64` (Linux NumPy via WSL 206). Gates `RandomApiCoverageTests`
+  (corpus-only): G2 overloads, G3 parameters (omitted + non-default, two values, null + non-null, `params` 0 and 2+,
+  every accepted enumerated value + one rejection, NumPy's parameter NAMES and order vs
+  `test/oracle/random_numpy_signatures.json`), G4 engines, G5 seeds, G6 state; exemptions reasoned and self-retiring.
+  Nightly `fuzz-soak.yml` jobs `random-api-lp64` + `random-api-soak` replay the families under 10 fresh seeds
+  (`RandomApiSoak`, `NUMSHARP_RANDOM_SOAK_DIR`). After a surface change: `NUMSHARP_WRITE_RANDOM_SURFACE=1` on the G1
+  test, then regenerate.
 - **Managed vs OpenBLAS without duplicate noise**: ordinary tiers always run Core managed. The
   host-pinned `matmul_parity`/`linalg_parity` tiers run backend-on. `BlasBackendDelta` replays only
   the 1,775 affected ordinary cases: 1,747 identical outcomes are deduplicated; the 28 flips are
