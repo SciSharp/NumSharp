@@ -2644,7 +2644,21 @@ complex 23.7×@100K, float16 3.3×@10M, `lagval` (divider-bound) 2.7–14×, Pyt
   NumPy's loops are cheapest L1/L2-resident, so a 100K-only dtype sweep hides the worst cells.
 
 ### Random (`np.random.*`)
-`bernoulli`, `beta`, `binomial`, `chisquare`, `choice`, `dirichlet`, `exponential`, `f`, `gamma`, `geometric`, `gumbel`, `hypergeometric`, `laplace`, `logistic`, `lognormal`, `logseries`, `multinomial`, `multivariate_normal`, `negative_binomial`, `noncentral_chisquare`, `noncentral_f`, `normal`, `pareto`, `permutation`, `poisson`, `power`, `rand`, `randint`, `randn`, `random_sample`, `rayleigh`, `seed`, `shuffle`, `standard_cauchy`, `standard_exponential`, `standard_gamma`, `standard_normal`, `standard_t`, `triangular`, `uniform`, `vonmises`, `wald`, `weibull`, `zipf`
+`bernoulli`, `beta`, `binomial`, `chisquare`, `choice`, `dirichlet`, `exponential`, `f`, `gamma`, `geometric`, `get_bit_generator`, `gumbel`, `hypergeometric`, `laplace`, `logistic`, `lognormal`, `logseries`, `multinomial`, `multivariate_normal`, `negative_binomial`, `noncentral_chisquare`, `noncentral_f`, `normal`, `pareto`, `permutation`, `poisson`, `power`, `rand`, `randint`, `randn`, `random_sample`, `rayleigh`, `seed`, `set_bit_generator`, `shuffle`, `standard_cauchy`, `standard_exponential`, `standard_gamma`, `standard_normal`, `standard_t`, `triangular`, `uniform`, `vonmises`, `wald`, `weibull`, `zipf`
+
+**Integer types are NumPy's (the 2026-09-27 type-parity audit; gate `RandomSampling/RandomTypeParity.Test.cs`).** The
+legacy integers are C `long` in NumPy, and NumSharp models ONE width for all of them — the LP64 (Linux/macOS) int64,
+`NumPyRandom.LegacyLong`: `randint`'s default dtype, `random_integers`, `permutation(n)`, `choice`'s indices,
+`multinomial`'s counts and the discrete samplers, with `long` counts in. Windows NumPy returns the same VALUES as int32
+wherever it accepts the input (it rejects bounds past `2**31`), which is why the Windows-authored `random_parity` /
+`generator_parity` corpora record every legacy int WIDENED to int64 (`gen_oracle.py` `_RND_INT64_CAST`, the
+`random_integers` branch). Where NumPy's own messages differ by platform (`Python int too large to convert to C long`
+vs `int too big to convert`, `value too large to convert to uint32_t` vs `…C unsigned long`) the Linux text is pinned.
+`SeedSequence` carries NumPy's member types (`spawn_key` `BigInteger[]`, `pool_size` `long`, `n_children_spawned`
+`uint`, `pool`/`generate_state(long n_words, …)` NDArrays) and NumPy's string rule (`"0x…"` hex, a leading digit
+DECIMAL — no octal: `"012"` is 12). `Seed` is a `uint`. After `set_bit_generator` swaps the singleton to a non-MT19937
+engine, `np.random.seed(x)` re-seeds it as NumPy's MODULE function does (`engine.state = type(engine)(x).state`, cached
+Gaussian kept) — only for `np.random` itself; another `RandomState` over such an engine refuses (the method rule).
 
 ### File I/O
 `fromfile`, `fromstring`, `load`, `load_npy`, `load_npz`, `loadtxt`, `save`, `savetxt`, `savez`, `savez_compressed`, `tofile`

@@ -522,7 +522,7 @@ namespace NumSharp.Tests.RandomSampling
             AssertValues(np.random.RandomState(new PCG64(42)).randn(3),
                 "-0.33091407603531797, 1.4832067819346502, 0.43138215439433264", "randn (polar method on PCG64 doubles)");
             var ri = np.random.RandomState(new PCG64(42)).randint(0, 10, new Shape(5));
-            ri.dtype.Should().Be(np.int32);
+            ri.dtype.Should().Be(np.int64); // NumPy's C long, LP64
             AssertValues(ri, "8, 1, 1, 4, 2", "randint");
             AssertValues(np.random.RandomState(new PCG64(42)).standard_exponential(new Shape(3)),
                 "1.4870258232016522, 0.5778177119982773, 1.9561478149587175", "standard_exponential");
@@ -779,7 +779,7 @@ namespace NumSharp.Tests.RandomSampling
         public void Multinomial_MatchesNumPy()
         {
             var one = np.random.RandomState(42).multinomial(20, new[] { 0.2, 0.3, 0.5 });
-            one.dtype.Should().Be(np.int32);
+            one.dtype.Should().Be(np.int64); // np.zeros(..., np.long): the LP64 C long
             one.shape.Should().Equal(3L);
             AssertValues(one, "3, 10, 7", "single");
             var four = np.random.RandomState(42).multinomial(20, new[] { 0.2, 0.3, 0.5 }, 4);

@@ -62,11 +62,14 @@ namespace NumSharp
         ///     Randomly permute <c>arange(x)</c>.
         /// </summary>
         /// <param name="x">The length of the range.</param>
+        /// <param name="axis">Accepted for NumPy's signature <c>permutation(x, axis=0)</c> and, as in NumPy, ignored for an
+        ///     integer <paramref name="x"/> (its <c>isinstance(x, int)</c> branch shuffles <c>np.arange(x)</c> before the axis
+        ///     is ever normalized), so any value is accepted.</param>
         /// <returns>A shuffled int64 range.</returns>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.permutation.html
         /// </remarks>
-        public NDArray permutation(long x)
+        public NDArray permutation(long x, int axis = 0)
         {
             var arr = np.arange(x);
             lock (_bitGenerator.@lock)

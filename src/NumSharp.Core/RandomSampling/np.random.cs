@@ -32,6 +32,21 @@ namespace NumSharp
         public const double _poisson_lam_max = RandomConstraints.PoissonLamMax;
 
         /// <summary>
+        ///     The dtype of NumPy's C <c>long</c> in NumSharp's legacy model: int64, the LP64 (Linux/macOS) width. Every
+        ///     legacy integer mtrand types as <c>long</c> takes it — <c>randint</c>'s default (<c>dtype=int</c>, which mtrand
+        ///     maps to <c>np.dtype("long")</c>), <c>random_integers</c> (<c>dtype='l'</c>), <c>permutation(int)</c>
+        ///     (<c>np.result_type(x, np.long)</c>), <c>choice</c>'s indices, <c>multinomial</c>'s counts and the discrete
+        ///     samplers (<c>int64_to_long</c>).
+        /// </summary>
+        /// <remarks>
+        ///     NumPy's Windows build has a 32-bit <c>long</c>, so there every one of those is int32 (and bounds past
+        ///     <c>2**31</c> are rejected or truncated), while its Linux/macOS build returns int64. NumSharp follows ONE
+        ///     platform for all of them — the LP64 one, whose values never truncate — rather than a mix no NumPy build
+        ///     produces. The values themselves do not depend on the width wherever both builds accept the input.
+        /// </remarks>
+        internal static readonly DType LegacyLong = DType.Int64;
+
+        /// <summary>
         ///     The bit generator every draw comes from (NumPy's <c>RandomState._bit_generator</c>) — MT19937 unless the
         ///     instance was built from another <see cref="BitGenerator"/>.
         /// </summary>
@@ -48,8 +63,18 @@ namespace NumSharp
         private bool _hasGauss;
         private double _gaussCache;
 
-        /// <summary>The last explicit integer seed (NumSharp bookkeeping; not part of NumPy's API).</summary>
-        public int Seed { get; set; }
+        /// <summary>
+        ///     The last explicit integer seed, or the first word of an array seed (NumSharp bookkeeping; not part of NumPy's
+        ///     API, which keeps no seed). A uint32 like the seed itself: NumPy's legacy seed spans <c>[0, 2**32 - 1]</c>.
+        /// </summary>
+        /// <remarks>
+        ///     Setting it records a value only — it does NOT re-seed; use <see cref="seed(uint)"/>. It is not updated by
+        ///     OS-entropy seeding (<see cref="seed()"/>), <see cref="set_state(State)"/>, a <see cref="BitGenerator"/>-built
+        ///     instance or the re-seed of a hot-swapped <c>np.random</c> engine (<see cref="set_bit_generator"/>), so it
+        ///     describes the stream only when a legacy integer seed was the last thing applied. It used to be an
+        ///     <c>int</c>, which silently turned a valid seed in <c>[2**31, 2**32 - 1]</c> negative.
+        /// </remarks>
+        public uint Seed { get; set; }
 
         #region Constructors
 
@@ -83,7 +108,7 @@ namespace NumSharp
         {
             if (seed < 0)
                 throw new ValueError("Seed must be between 0 and 2**32 - 1");
-            Seed = seed;
+            Seed = (uint)seed; // validated non-negative above
             randomizer = MT19937.LegacySeeded((uint)seed);
         }
 
@@ -111,6 +136,55 @@ namespace NumSharp
         ///     this RandomState's stream too, and both serialize on its <see cref="BitGenerator.@lock"/>.
         /// </remarks>
         public BitGenerator _bit_generator => randomizer;
+
+        /// <summary>
+        ///     Returns the bit generator this RandomState draws from — NumPy's module function
+        ///     <c>np.random.get_bit_generator()</c>, which returns the singleton RandomState's (<c>np.random</c> IS that
+        ///     singleton here).
+        /// </summary>
+        /// <returns>The bit generator itself (not a copy): the instance <see cref="_bit_generator"/> returns.</returns>
+        /// <remarks>
+        ///     NumPy provides it, with <see cref="set_bit_generator"/>, so one engine can serve both APIs:
+        ///     <c>new Generator(np.random.get_bit_generator())</c> draws from the very stream the module functions consume,
+        ///     each draw under the engine's shared lock. Called on another RandomState it returns that instance's engine (a
+        ///     NumSharp extension — NumPy's is a module function only).
+        /// </remarks>
+        public BitGenerator get_bit_generator() => randomizer;
+
+        /// <summary>
+        ///     Replaces the bit generator this RandomState draws from — NumPy's module function
+        ///     <c>np.random.set_bit_generator(bitgen)</c>, i.e. the singleton's <c>_initialize_bit_generator</c>: later draws
+        ///     come from <paramref name="bitgen"/> under its lock, and the cached Gaussian is discarded.
+        /// </summary>
+        /// <param name="bitgen">The new bit generator, shared rather than copied.</param>
+        /// <exception cref="AttributeError"><paramref name="bitgen"/> is null (NumPy's
+        ///     <c>'NoneType' object has no attribute 'capsule'</c>).</exception>
+        /// <remarks>
+        ///     <para>
+        ///     NumPy assigns <c>_bit_generator</c> BEFORE it validates the new object's capsule, so a failed call leaves its
+        ///     singleton's attribute pointing at the bad object (probed: <c>None</c>); here a null is refused before anything
+        ///     changes (C#'s type rules the other bad inputs out). A draw already running keeps the engine it started on.
+        ///     </para>
+        ///     <para>
+        ///     After a swap to a non-MT19937 engine, <c>np.random.seed(x)</c> re-seeds that engine the way NumPy's module
+        ///     function does — <c>engine.state = type(engine)(x).state</c>, the cached Gaussian kept (see <see cref="seed(uint)"/>) —
+        ///     while any OTHER RandomState over such an engine refuses re-seeding, NumPy's method behaviour. The legacy
+        ///     <see cref="get_state()"/> tuple exists only for MT19937: NumPy warns and returns its dict form, which here is
+        ///     <see cref="get_state(bool)"/> with <c>legacy: false</c>. The integer <see cref="Seed"/> bookkeeping is left as
+        ///     it was.
+        ///     </para>
+        /// </remarks>
+        public void set_bit_generator(BitGenerator bitgen)
+        {
+            if (bitgen is null)
+                throw new AttributeError("'NoneType' object has no attribute 'capsule'");
+            // NumPy resets the Gaussian cache under the NEW engine's lock (self.lock = bit_generator.lock first).
+            lock (bitgen.@lock)
+            {
+                randomizer = bitgen;
+                ResetGauss();
+            }
+        }
 
         /// <summary>NumPy's <c>str(RandomState)</c>: the class name and the bit generator's, e.g. <c>RandomState(MT19937)</c>.</summary>
         /// <returns>The display string.</returns>
@@ -177,7 +251,7 @@ namespace NumSharp
         {
             var bg = new MT19937();
             bg._legacy_seeding(seed);
-            return new NumPyRandom(bg) { Seed = (int)seed };
+            return new NumPyRandom(bg) { Seed = (uint)seed }; // _legacy_seeding validated [0, 2**32 - 1]
         }
 
         /// <summary>
@@ -263,15 +337,55 @@ namespace NumSharp
             => randomizer as MT19937 ?? throw new TypeError("can only re-seed a MT19937 BitGenerator");
 
         /// <summary>
+        ///     NumPy's MODULE-level <c>np.random.seed(seed)</c> when the singleton's bit generator has been hot-swapped away
+        ///     from MT19937 (<see cref="set_bit_generator"/>): <c>_rand._bit_generator.state = type(_rand._bit_generator)(seed).state</c>.
+        /// </summary>
+        /// <param name="entropy">The seed as NumPy's <see cref="SeedSequence"/> reads it: null for fresh OS entropy (NumPy's
+        ///     <c>None</c>), an integer, or an integer array.</param>
+        /// <returns>True when the engine was re-seeded (the caller is done); false for an MT19937 engine or for any
+        ///     RandomState other than <c>np.random</c> — those take the legacy seeding, which requires MT19937.</returns>
+        /// <exception cref="ValueError">A negative seed or element (<c>expected non-negative integer</c> — the SeedSequence's
+        ///     check: the legacy <c>[0, 2**32 - 1]</c> range does not apply, so <c>seed(2**40)</c> is legal here).</exception>
+        /// <remarks>
+        ///     <para>
+        ///     NumPy's module function and its RandomState METHOD differ exactly here: <c>np.random.seed(5)</c> on a PCG64
+        ///     singleton re-seeds it, while <c>RandomState(PCG64()).seed(5)</c> raises <c>can only re-seed a MT19937
+        ///     BitGenerator</c>. NumSharp's <c>np.random</c> IS the singleton instance, so the module branch applies precisely
+        ///     when this instance is <see cref="np.random"/>.
+        ///     </para>
+        ///     <para>
+        ///     The fresh engine is built — and the seed validated — before the live one is touched, then its state is copied
+        ///     into the live engine (the same object, so a <see cref="Generator"/> sharing it follows the new stream; its
+        ///     <see cref="BitGenerator.seed_seq"/> keeps reporting the original sequence, as NumPy's state setter leaves it).
+        ///     NumPy does NOT reset the cached Gaussian on this path, and neither does this: after
+        ///     <c>standard_normal()</c> cached the second value of a pair, the next one returns it even across the re-seed
+        ///     (probed). <see cref="Seed"/> is not updated either (it records legacy MT19937 seeds).
+        ///     </para>
+        /// </remarks>
+        private bool TrySeedSwappedSingleton(object entropy)
+        {
+            BitGenerator bg = randomizer;
+            if (bg is MT19937 || !ReferenceEquals(this, np.random))
+                return false;
+            BitGenerator fresh = bg.NewSeeded(entropy is null ? new SeedSequence() : new SeedSequence(entropy));
+            bg.state = fresh.state; // the setter holds bg's lock
+            return true;
+        }
+
+        /// <summary>
         ///     Re-seeds from fresh OS entropy (NumPy's <c>seed()</c> / <c>seed(None)</c>).
         /// </summary>
-        /// <exception cref="TypeError">The bit generator is not MT19937 (<c>can only re-seed a MT19937 BitGenerator</c>).</exception>
+        /// <exception cref="TypeError">The bit generator is not MT19937 (<c>can only re-seed a MT19937 BitGenerator</c>) — except
+        ///     on <c>np.random</c> itself, whose hot-swapped engine NumPy's module function re-seeds instead
+        ///     (<see cref="set_bit_generator"/>).</exception>
         /// <remarks>
         ///     NumPy's <c>_legacy_seeding(None)</c> fills the key from a new <see cref="SeedSequence"/> and LEAVES the
         ///     position where it was (observable through <see cref="get_state()"/>); the Gaussian cache is cleared.
         /// </remarks>
         public void seed()
         {
+            if (TrySeedSwappedSingleton(null))
+                return;
             var mt = ReseedableGenerator();
             lock (mt.@lock)
             {
@@ -285,17 +399,21 @@ namespace NumSharp
         ///     It can be called again to re-seed the generator.
         /// </summary>
         /// <param name="seed">Seed value in range [0, 2^32-1].</param>
-        /// <exception cref="TypeError">The bit generator is not MT19937 (<c>can only re-seed a MT19937 BitGenerator</c>).</exception>
+        /// <exception cref="TypeError">The bit generator is not MT19937 (<c>can only re-seed a MT19937 BitGenerator</c>) — except
+        ///     on <c>np.random</c> itself, whose hot-swapped engine is re-seeded as <c>type(engine)(seed)</c> (NumPy's module
+        ///     function; see <see cref="set_bit_generator"/>).</exception>
         /// <remarks>
         ///     This uses the MT19937 algorithm matching NumPy exactly.
         ///     Same seed produces identical sequences to NumPy.
         /// </remarks>
         public void seed(uint seed)
         {
+            if (TrySeedSwappedSingleton(seed))
+                return;
             var mt = ReseedableGenerator();
             lock (mt.@lock)
             {
-                Seed = (int)seed;
+                Seed = seed;
                 mt._legacy_seeding(seed);
                 ResetGauss();
             }
@@ -306,14 +424,18 @@ namespace NumSharp
         ///     Validates that seed is non-negative (NumPy behavior).
         /// </summary>
         /// <param name="seed">Seed value in range [0, 2^31-1].</param>
-        /// <exception cref="TypeError">The bit generator is not MT19937 — checked BEFORE the seed value, as in NumPy.</exception>
-        /// <exception cref="ValueError">If seed is negative.</exception>
+        /// <exception cref="TypeError">The bit generator is not MT19937 — checked BEFORE the seed value, as in NumPy (on
+        ///     <c>np.random</c> itself a hot-swapped engine is re-seeded instead: see <see cref="seed(uint)"/>).</exception>
+        /// <exception cref="ValueError">If seed is negative (<c>Seed must be between 0 and 2**32 - 1</c>; on a hot-swapped
+        ///     <c>np.random</c> engine the SeedSequence's <c>expected non-negative integer</c>).</exception>
         /// <remarks>
         ///     NumPy accepts 0 to 2^32-1. Negative values throw:
         ///     "Seed must be between 0 and 2**32 - 1"
         /// </remarks>
         public void seed(int seed)
         {
+            if (TrySeedSwappedSingleton(seed))
+                return;
             ReseedableGenerator();
             if (seed < 0)
                 throw new ValueError("Seed must be between 0 and 2**32 - 1");
@@ -324,11 +446,15 @@ namespace NumSharp
         ///     Seeds the generator with a long value.
         ///     Validates that seed is in range [0, 2^32-1] (NumPy behavior).
         /// </summary>
-        /// <param name="seed">Seed value in range [0, 2^32-1].</param>
-        /// <exception cref="TypeError">The bit generator is not MT19937 — checked BEFORE the seed value, as in NumPy.</exception>
-        /// <exception cref="ValueError">If seed is out of range.</exception>
+        /// <param name="seed">Seed value in range [0, 2^32-1] (any non-negative value on a hot-swapped <c>np.random</c> engine).</param>
+        /// <exception cref="TypeError">The bit generator is not MT19937 — checked BEFORE the seed value, as in NumPy (on
+        ///     <c>np.random</c> itself a hot-swapped engine is re-seeded instead: see <see cref="seed(uint)"/>).</exception>
+        /// <exception cref="ValueError">If seed is out of range (a hot-swapped <c>np.random</c> engine rejects only a negative
+        ///     seed, with the SeedSequence's <c>expected non-negative integer</c>).</exception>
         public void seed(long seed)
         {
+            if (TrySeedSwappedSingleton(seed))
+                return;
             ReseedableGenerator();
             if (seed < 0 || seed > uint.MaxValue)
                 throw new ValueError("Seed must be between 0 and 2**32 - 1");
@@ -339,11 +465,14 @@ namespace NumSharp
         ///     Seeds the generator with a ulong value.
         ///     Validates that seed is in range [0, 2^32-1] (NumPy behavior).
         /// </summary>
-        /// <param name="seed">Seed value in range [0, 2^32-1].</param>
-        /// <exception cref="TypeError">The bit generator is not MT19937 — checked BEFORE the seed value, as in NumPy.</exception>
+        /// <param name="seed">Seed value in range [0, 2^32-1] (any value on a hot-swapped <c>np.random</c> engine).</param>
+        /// <exception cref="TypeError">The bit generator is not MT19937 — checked BEFORE the seed value, as in NumPy (on
+        ///     <c>np.random</c> itself a hot-swapped engine is re-seeded instead: see <see cref="seed(uint)"/>).</exception>
         /// <exception cref="ValueError">If seed is out of range.</exception>
         public void seed(ulong seed)
         {
+            if (TrySeedSwappedSingleton(seed))
+                return;
             ReseedableGenerator();
             if (seed > uint.MaxValue)
                 throw new ValueError("Seed must be between 0 and 2**32 - 1");
@@ -353,16 +482,20 @@ namespace NumSharp
         /// <summary>
         ///     Seeds the generator with an array of uint values (NumPy's <c>init_by_array</c> seeding).
         /// </summary>
-        /// <param name="seed">The key words (non-empty).</param>
-        /// <exception cref="TypeError">The bit generator is not MT19937 (<c>can only re-seed a MT19937 BitGenerator</c>).</exception>
+        /// <param name="seed">The key words (non-empty; on a hot-swapped <c>np.random</c> engine any sequence, empty included,
+        ///     and null for fresh entropy — NumPy's <c>SeedSequence</c> reading).</param>
+        /// <exception cref="TypeError">The bit generator is not MT19937 (<c>can only re-seed a MT19937 BitGenerator</c>) — except
+        ///     on <c>np.random</c> itself (see <see cref="seed(uint)"/>).</exception>
         /// <exception cref="ValueError"><paramref name="seed"/> is null or empty (<c>Seed must be non-empty</c> — it used to seed 0 silently).</exception>
         public void seed(uint[] seed)
         {
+            if (TrySeedSwappedSingleton(seed))
+                return;
             var mt = ReseedableGenerator();
             lock (mt.@lock)
             {
                 mt._legacy_seeding(seed);
-                Seed = (int)seed[0];
+                Seed = seed[0]; // _legacy_seeding rejected an empty key first
                 ResetGauss();
             }
         }
@@ -371,11 +504,15 @@ namespace NumSharp
         ///     Seeds the generator with an array of integers (NumPy's <c>seed([...])</c>): each element must lie in
         ///     <c>[0, 2**32 - 1]</c>.
         /// </summary>
-        /// <param name="seed">The key words (non-empty).</param>
-        /// <exception cref="TypeError">The bit generator is not MT19937 — checked BEFORE the words, as in NumPy.</exception>
-        /// <exception cref="ValueError">Empty (<c>Seed must be non-empty</c>) or an element out of range (<c>Seed must be between 0 and 2**32 - 1</c>).</exception>
+        /// <param name="seed">The key words (non-empty; see <see cref="seed(uint[])"/> for a hot-swapped <c>np.random</c> engine).</param>
+        /// <exception cref="TypeError">The bit generator is not MT19937 — checked BEFORE the words, as in NumPy (on
+        ///     <c>np.random</c> itself a hot-swapped engine is re-seeded instead: see <see cref="seed(uint)"/>).</exception>
+        /// <exception cref="ValueError">Empty (<c>Seed must be non-empty</c>) or an element out of range (<c>Seed must be between 0 and 2**32 - 1</c>;
+        ///     a hot-swapped <c>np.random</c> engine rejects only a negative element, <c>expected non-negative integer</c>).</exception>
         public void seed(long[] seed)
         {
+            if (TrySeedSwappedSingleton(seed))
+                return;
             ReseedableGenerator();
             this.seed(MT19937.ValidateLegacyArray(seed));
         }
@@ -383,11 +520,15 @@ namespace NumSharp
         /// <summary>
         ///     Seeds the generator with an array of integers (NumPy's <c>seed([...])</c>): each element must be non-negative.
         /// </summary>
-        /// <param name="seed">The key words (non-empty).</param>
-        /// <exception cref="TypeError">The bit generator is not MT19937 — checked BEFORE the words, as in NumPy.</exception>
-        /// <exception cref="ValueError">Empty (<c>Seed must be non-empty</c>) or a negative element (<c>Seed must be between 0 and 2**32 - 1</c>).</exception>
+        /// <param name="seed">The key words (non-empty; see <see cref="seed(uint[])"/> for a hot-swapped <c>np.random</c> engine).</param>
+        /// <exception cref="TypeError">The bit generator is not MT19937 — checked BEFORE the words, as in NumPy (on
+        ///     <c>np.random</c> itself a hot-swapped engine is re-seeded instead: see <see cref="seed(uint)"/>).</exception>
+        /// <exception cref="ValueError">Empty (<c>Seed must be non-empty</c>) or a negative element (<c>Seed must be between 0 and 2**32 - 1</c>;
+        ///     on a hot-swapped <c>np.random</c> engine <c>expected non-negative integer</c>).</exception>
         public void seed(int[] seed)
         {
+            if (TrySeedSwappedSingleton(seed))
+                return;
             ReseedableGenerator();
             if (seed is null || seed.Length == 0)
                 throw new ValueError("Seed must be non-empty");

@@ -152,12 +152,12 @@ namespace NumSharp
         /// <param name="ngood">Number of ways to make a good selection. Must be non-negative.</param>
         /// <param name="nbad">Number of ways to make a bad selection. Must be non-negative.</param>
         /// <param name="nsample">Number of items sampled. Must be &gt;= 1 and &lt;= ngood + nbad.</param>
-        /// <param name="size">Output shape as single int.</param>
+        /// <param name="size">Output shape as a single integer — NumPy's integer <c>size</c>: one npy_intp (int64) dimension.</param>
         /// <returns>Drawn samples from the hypergeometric distribution.</returns>
         /// <exception cref="ValueError">A parameter violates its constraint (see <see cref="hypergeometric(long, long, long, Shape?)"/>)
         ///     or <paramref name="size"/> is negative.</exception>
-        public NDArray hypergeometric(long ngood, long nbad, long nsample, int size)
-            => hypergeometric(ngood, nbad, nsample, new int[] { size });
+        public NDArray hypergeometric(long ngood, long nbad, long nsample, long size)
+            => hypergeometric(ngood, nbad, nsample, new long[] { size });
 
         /// <summary>
         ///     Draw a single sample from a Hypergeometric distribution.

@@ -9,19 +9,19 @@ namespace NumSharp
     /// <remarks>
     ///     A bit generator calls <see cref="generate_state"/> once in its constructor with the number of words its
     ///     state needs. <see cref="SeedSequence"/> is the standard implementation; <see cref="SeedlessSeedSequence"/>
-    ///     is the placeholder for engines that need no seed. Implementations must return a <c>uint[]</c> for
-    ///     <c>uint32</c> and a <c>ulong[]</c> for <c>uint64</c> — the bit generators read the words through that
-    ///     contract.
+    ///     is the placeholder for engines that need no seed. Implementations return what NumPy's protocol returns: a 1-D
+    ///     uint32 (the default) or uint64 <see cref="NDArray"/> of at least <c>n_words</c> words, which the bit generators
+    ///     read in C order.
     /// </remarks>
     public interface ISeedSequence
     {
         /// <summary>
         ///     Return the requested number of words for PRNG seeding (NumPy's <c>generate_state(n_words, dtype=np.uint32)</c>).
         /// </summary>
-        /// <param name="n_words">The number of words.</param>
+        /// <param name="n_words">The number of words (a Python int in NumPy, allocated as <c>np.zeros(n_words)</c>).</param>
         /// <param name="dtype"><c>uint32</c> (default) or <c>uint64</c>; a uint64 word costs two uint32 words.</param>
-        /// <returns>A <c>uint[]</c> (uint32) or <c>ulong[]</c> (uint64) of <paramref name="n_words"/> words.</returns>
-        Array generate_state(int n_words, DType dtype = null);
+        /// <returns>A 1-D uint32 or uint64 NDArray of <paramref name="n_words"/> words.</returns>
+        NDArray generate_state(long n_words, DType dtype = null);
     }
 
     /// <summary>
@@ -52,7 +52,7 @@ namespace NumSharp
         /// <param name="dtype">Ignored.</param>
         /// <returns>Never returns.</returns>
         /// <exception cref="NotImplementedException">Always (NumPy's <c>NotImplementedError('seedless SeedSequences cannot generate state')</c>).</exception>
-        public Array generate_state(int n_words, DType dtype = null)
+        public NDArray generate_state(long n_words, DType dtype = null)
             => throw new NotImplementedException("seedless SeedSequences cannot generate state");
 
         /// <summary>Returns this same instance <paramref name="n_children"/> times (NumPy's <c>[self] * n_children</c>).</summary>

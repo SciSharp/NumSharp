@@ -85,11 +85,11 @@ namespace NumSharp
         ///     Draws samples in [0, 1] from a power distribution with positive exponent a - 1.
         /// </summary>
         /// <param name="a">Shape parameter of the distribution. Must be positive (&gt; 0).</param>
-        /// <param name="size">Output shape as single int.</param>
+        /// <param name="size">Output shape as a single integer — NumPy's integer <c>size</c>: one npy_intp (int64) dimension.</param>
         /// <returns>Drawn samples from the parameterized power distribution, in range [0, 1].</returns>
         /// <exception cref="ValueError"><paramref name="a"/> is <c>&lt;= 0</c>, or <paramref name="size"/> is negative.</exception>
-        public NDArray power(double a, int size)
-            => power(a, new int[] { size });
+        public NDArray power(double a, long size)
+            => power(a, new long[] { size });
 
         /// <summary>
         ///     Draws a single sample in [0, 1] from a power distribution with positive exponent a - 1.

@@ -41,7 +41,7 @@ namespace NumSharp.Tests.RandomSampling
         /// <summary>Reads the <c>uint[]</c>/<c>ulong[]</c> that <see cref="SeedSequence.generate_state"/> returns as <see cref="ulong"/> values.</summary>
         /// <param name="words">The generated words.</param>
         /// <returns>The values.</returns>
-        private static ulong[] W(Array words) => words.Cast<object>().Select(Convert.ToUInt64).ToArray();
+        private static ulong[] W(NDArray words) => Enumerable.Range(0, checked((int)words.size)).Select(i => Convert.ToUInt64(words.GetAtIndex(i))).ToArray();
 
         /// <summary>Asserts that <paramref name="act"/> throws <typeparamref name="TEx"/> with EXACTLY <paramref name="message"/>.</summary>
         /// <typeparam name="TEx">The expected exception type (NumPy's exception mapped to NumSharp's).</typeparam>
@@ -108,11 +108,12 @@ namespace NumSharp.Tests.RandomSampling
         public void SeedSequence_PoolSize8()
         {
             var s = new SeedSequence(42, null, 8);
-            s.pool_size.Should().Be(8);
-            s.pool.Should().Equal(2438911046u, 2499837615u, 2402278905u, 1814575481u, 575835601u, 2584694812u, 3897248574u, 124566269u);
+            s.pool_size.Should().Be(8L);
+            s.pool.dtype.Should().Be(np.uint32);
+            W(s.pool).Should().Equal(2438911046UL, 2499837615UL, 2402278905UL, 1814575481UL, 575835601UL, 2584694812UL, 3897248574UL, 124566269UL);
             W(s.generate_state(4)).Should().Equal(3148411915UL, 2066703841UL, 814058201UL, 172636690UL);
             var child = s.spawn(1)[0];
-            child.pool_size.Should().Be(8);
+            child.pool_size.Should().Be(8L);
             W(child.generate_state(4)).Should().Equal(3475118689UL, 157057634UL, 2577142221UL, 3008509395UL);
         }
 
@@ -145,8 +146,9 @@ namespace NumSharp.Tests.RandomSampling
             Throws<TypeError>(() => new SeedSequence((object)"5"), "SeedSequence expects int or sequence of ints for entropy not 5");
             Throws<ValueError>(() => new SeedSequence(-1), "expected non-negative integer");
             Throws<ValueError>(() => new SeedSequence(0, new long[] { -1 }), "expected non-negative integer");
-            Throws<OverflowException>(() => new SeedSequence(1, null, 4, -1), "can't convert negative value to uint32_t");
-            Throws<OverflowException>(() => new SeedSequence(1, null, 4, 1L << 32), "Python int too large to convert to C unsigned long");
+            // n_children_spawned is NumPy's uint32_t: the parameter IS a uint, so the out-of-range values NumPy rejects at
+            // assignment (-1, 2**32) do not compile, and the whole uint32 range is accepted.
+            new SeedSequence(1, null, 4, uint.MaxValue).n_children_spawned.Should().Be(uint.MaxValue);
             Throws<OverflowException>(() => new SeedSequence(1).spawn(-1), "can't convert negative value to uint32_t");
         }
 
@@ -159,7 +161,8 @@ namespace NumSharp.Tests.RandomSampling
         public void SeedSequence_SpawnPastUInt32_RaisesInsteadOfHanging()
         {
             var s = new SeedSequence(1, null, 4, uint.MaxValue);
-            Throws<OverflowException>(() => s.spawn(2), "Python int too large to convert to C unsigned long");
+            // LP64 NumPy's uint32_t conversion text (the Windows build says "Python int too large to convert to C unsigned long").
+            Throws<OverflowException>(() => s.spawn(2), "value too large to convert to uint32_t");
             s.n_children_spawned.Should().Be(uint.MaxValue);
         }
 
@@ -200,9 +203,10 @@ namespace NumSharp.Tests.RandomSampling
             var st = new SeedSequence(42, new long[] { 1 }).state;
             st.Keys.Should().Equal("entropy", "spawn_key", "pool_size", "n_children_spawned");
             st["entropy"].Should().Be(42L);
-            ((long[])st["spawn_key"]).Should().Equal(1L);
-            st["pool_size"].Should().Be(4);
-            st["n_children_spawned"].Should().Be(0L);
+            // NumPy's value types: a tuple of Python ints, a Py_ssize_t, a uint32_t.
+            ((BigInteger[])st["spawn_key"]).Should().Equal(new BigInteger(1));
+            st["pool_size"].Should().Be(4L);
+            st["n_children_spawned"].Should().Be(0u);
         }
 
         /// <summary>A value of 2**40 spans two words whether it arrives as int64, uint64 or a C# long array.</summary>
@@ -216,8 +220,8 @@ namespace NumSharp.Tests.RandomSampling
         }
 
         /// <summary>
-        ///     NumPy's <c>_coerce_to_uint32_array</c> corners: nested sequences flatten, string elements parse (hex/octal/
-        ///     decimal by prefix), a 2-D int array flattens in C order, a uint32 array element passes through, empties are
+        ///     NumPy's <c>_coerce_to_uint32_array</c> corners: nested sequences flatten, string elements parse (hex after
+        ///     <c>0x</c>, decimal after a leading digit), a 2-D int array flattens in C order, a uint32 array element passes through, empties are
         ///     empty, bools count as ints, and a C# list stands for a Python list.
         /// </summary>
         [TestMethod]
@@ -250,8 +254,14 @@ namespace NumSharp.Tests.RandomSampling
                 "all the input arrays must have same number of dimensions, but the array at index 0 has 2 dimension(s) and the array at index 1 has 1 dimension(s)");
             Throws<ValueError>(() => new SeedSequence((object)NDArray.Scalar(5u)), "zero-dimensional arrays cannot be concatenated");
             Throws<TypeError>(() => new SeedSequence(NDArray.Scalar(5u), new long[] { 1 }), "len() of unsized object");
-            Throws<ValueError>(() => new SeedSequence((object)new object[] { "abc" }), "invalid literal for int() with base 10: 'abc'");
-            Throws<ValueError>(() => new SeedSequence((object)new object[] { "08" }), "invalid literal for int() with base 8: '08'");
+            // NumPy's string rule is "0x..." -> int(x, 16), a leading decimal digit -> int(x), anything else unrecognized:
+            // there is no octal branch ("08" is 8 and "010" is 10 - the "08" pin used to encode an octal reading NumPy
+            // never had).
+            Throws<ValueError>(() => new SeedSequence((object)new object[] { "abc" }), "unrecognized seed string");
+            Throws<ValueError>(() => new SeedSequence((object)new object[] { "0b11" }), "invalid literal for int() with base 10: '0b11'");
+            W(new SeedSequence((object)new object[] { "08" }).generate_state(2)).Should().Equal(765685289UL, 1246540596UL);
+            W(new SeedSequence(new long[] { 8 }).generate_state(2)).Should().Equal(765685289UL, 1246540596UL);
+            W(new SeedSequence((object)new object[] { "010" }).generate_state(2)).Should().Equal(3528835259UL, 2589590227UL);
         }
 
         /// <summary><c>generate_state</c>: uint64 words, the empty request, and NumPy's dtype check (native uint32/uint64 only).</summary>
@@ -260,7 +270,7 @@ namespace NumSharp.Tests.RandomSampling
         {
             W(new SeedSequence(42).generate_state(3, np.uint64)).Should().Equal(11465652750463011511UL, 15382171918060459190UL, 9018504550953525431UL);
             W(new SeedSequence(42).generate_state(2, "<u8")).Should().Equal(11465652750463011511UL, 15382171918060459190UL);
-            new SeedSequence(42).generate_state(0).Length.Should().Be(0);
+            new SeedSequence(42).generate_state(0).size.Should().Be(0);
             Throws<ValueError>(() => new SeedSequence(42).generate_state(2, np.int32), "only support uint32 or uint64");
             Throws<ValueError>(() => new SeedSequence(42).generate_state(2, ">u4"), "only support uint32 or uint64");
         }
@@ -521,10 +531,11 @@ namespace NumSharp.Tests.RandomSampling
             new Philox(key: new object[] { p63 + 1, 5 }).state.key.Should().Equal(9223372036854775808UL, 5UL);
             new Philox(key: new object[] { p63 + 1, p63 + 3 }).state.key.Should().Equal(9223372036854775809UL, 9223372036854775811UL);
             new Philox(key: new object[] { -5, p63 + 1025 }).state.key.Should().Equal(18446744073709551611UL, 9223372036854777856UL);
-            Throws<OverflowException>(() => new Philox(key: new object[] { p64, 1 }), "int too big to convert");
-            Throws<OverflowException>(() => new Philox(key: new object[] { p64, -1 }), "int too big to convert");
+            // LP64 NumPy's text (probed on Linux 2.4.2; the Windows build says "int too big to convert").
+            Throws<OverflowException>(() => new Philox(key: new object[] { p64, 1 }), "Python int too large to convert to C long");
+            Throws<OverflowException>(() => new Philox(key: new object[] { p64, -1 }), "Python int too large to convert to C long");
             Throws<OverflowException>(() => new Philox(key: new object[] { -1, p64 }), "Python integer -1 out of bounds for uint64");
-            Throws<OverflowException>(() => new Philox(key: new object[] { -p63 - 1, 5 }), "int too big to convert");
+            Throws<OverflowException>(() => new Philox(key: new object[] { -p63 - 1, 5 }), "Python int too large to convert to C long");
         }
 
         /// <summary>Philox's constructor errors, in NumPy's order (seed/key conflict, seed, key, counter).</summary>

@@ -95,7 +95,7 @@ namespace NumSharp.Tests.Fuzz
                         NDArray pv = p.TryGetValue("p", out var pj) ? np.array(ParseDoubleArray(pj)) : null;
                         bool replace = !p.TryGetValue("replace", out var rp) || rp.GetBoolean();
                         bool cshuffle = !p.TryGetValue("cshuffle", out var cs) || cs.GetBoolean();
-                        result = rng.choice(AL(0), S(), replace, pv, cshuffle);
+                        result = rng.choice(AL(0), S(), replace, pv, shuffle: cshuffle);
                         pv?.Dispose();   // harness-built probability array; choice reads it, never retains it
                         break;
                     }

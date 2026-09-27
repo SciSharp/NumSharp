@@ -10,7 +10,9 @@ namespace NumSharp
         /// <param name="low">Lowest (signed) integer to be drawn from the distribution (unless high is not provided, in which case this parameter is one above the highest such integer).</param>
         /// <param name="high">If provided, one above the largest (signed) integer to be drawn from the distribution. If null (NumPy's <c>None</c>), results are from [0, low).</param>
         /// <param name="size">Output shape. If None, a single value is returned.</param>
-        /// <param name="dtype">Desired dtype of the result. Default is NumPy's <c>'l'</c> (C long), which is int32 on the win-amd64 reference build.</param>
+        /// <param name="dtype">Desired dtype of the result. Default is NumPy's <c>dtype=int</c>, which mtrand maps to C <c>long</c>
+        ///     (<c>np.dtype("long")</c>): int64 here, the LP64 (Linux/macOS) width NumSharp's legacy integers model — NumPy's
+        ///     Windows build, whose <c>long</c> is 32-bit, returns int32 and rejects bounds past <c>2**31</c>.</param>
         /// <returns>Random integers from the appropriate distribution, or a single such random int if size not provided.</returns>
         /// <exception cref="TypeError"><paramref name="dtype"/> is not an integer/bool dtype (<c>Unsupported dtype dtype('float64') for randint</c>).</exception>
         /// <exception cref="ValueError">The bounds fall outside the dtype (<c>low/high is out of bounds for &lt;dtype&gt;</c>) or the interval is empty (<c>low &gt;= high</c>; <c>high &lt;= 0</c> for the one-argument form).</exception>
@@ -23,11 +25,13 @@ namespace NumSharp
         ///     <c>np.random.RandomState(seed).randint(...)</c>. <c>high=-1</c> is a real bound (NumPy's
         ///     <c>randint(-10, -1)</c>); only null means "high omitted". A non-native byte order is drawn as the
         ///     native dtype (NumPy only warns). A zero-size request returns an empty array before the bounds are
-        ///     checked. Holds the bit generator's lock for the fill.
+        ///     checked. Holds the bit generator's lock for the fill. The default dtype does not change the draws: a
+        ///     range that fits 32 bits takes the same buffered 32-bit masked sampler at either integer width, so the
+        ///     values equal the win-amd64 int32 results NumPy's Windows build returns for the same seed.
         /// </remarks>
         public NDArray randint(long low, long? high = null, Shape size = default, DType dtype = null)
             => BoundedIntegers.Draw(randomizer, low, high.HasValue ? (Int128)high.Value : (Int128?)null, size,
-                                    dtype ?? DType.Int32, endpoint: false, useMasked: true, "randint", legacyByteOrder: true);
+                                    dtype ?? LegacyLong, endpoint: false, useMasked: true, "randint", legacyByteOrder: true);
 
         /// <summary>
         ///     Unsigned overload of <see cref="randint(long, long?, Shape, DType)"/> — the C# spelling of a bound above
@@ -37,12 +41,12 @@ namespace NumSharp
         /// <param name="low">Lowest integer drawn (or, when <paramref name="high"/> is null, one above the highest with low = 0).</param>
         /// <param name="high">If provided, one above the largest integer drawn.</param>
         /// <param name="size">Output shape. If None, a single value is returned.</param>
-        /// <param name="dtype">Desired integer dtype. Default is NumPy's <c>'l'</c> (int32 on win-amd64).</param>
+        /// <param name="dtype">Desired integer dtype. Default is NumPy's C <c>long</c> — int64 in NumSharp's LP64 model.</param>
         /// <returns>Random integers from the appropriate distribution, or a single such random int if size not provided.</returns>
         /// <exception cref="TypeError"><paramref name="dtype"/> is not an integer/bool dtype.</exception>
         /// <exception cref="ValueError">The bounds fall outside the dtype or the interval is empty.</exception>
         public NDArray randint(ulong low, ulong? high = null, Shape size = default, DType dtype = null)
             => BoundedIntegers.Draw(randomizer, low, high.HasValue ? (Int128)high.Value : (Int128?)null, size,
-                                    dtype ?? DType.Int32, endpoint: false, useMasked: true, "randint", legacyByteOrder: true);
+                                    dtype ?? LegacyLong, endpoint: false, useMasked: true, "randint", legacyByteOrder: true);
     }
 }

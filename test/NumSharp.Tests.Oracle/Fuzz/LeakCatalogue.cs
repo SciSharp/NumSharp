@@ -524,8 +524,9 @@ namespace NumSharp.Tests.Fuzz
         /// <summary>The samplers that were carved out of the byte-parity stream corpus (all but
         /// multivariate_normal are back in it since 2026-09-25; their allocation paths stay leak-gated here
         /// too), the platform-dependent <c>tomaxint</c> and the module-level <c>ranf</c>/<c>sample</c>
-        /// aliases (no stream corpus entry — see OracleSurfaceCoverageTests), <c>str(RandomState)</c>, and
-        /// the non-stream factories.</summary>
+        /// aliases (no stream corpus entry — see OracleSurfaceCoverageTests), <c>str(RandomState)</c>, the
+        /// non-stream factories, and the <c>get_bit_generator</c>/<c>set_bit_generator</c> engine accessors
+        /// (measured on the fixture's own RandomState, so the process-wide <c>np.random</c> is never swapped).</summary>
         /// <param name="l">The entry list.</param>
         private static void AddRandom(List<LeakCase> l)
         {
@@ -546,6 +547,10 @@ namespace NumSharp.Tests.Fuzz
             E(l, "np.random.ranf", "sized", f => f.Rs.ranf(20));
             E(l, "np.random.sample", "sized", f => f.Rs.sample(20));
             E(l, "np.random.ToString", "str", f => f.Rs.ToString());
+            E(l, "np.random.get_bit_generator", "engine", f => Box(f.Rs.get_bit_generator()));
+            // A self-swap: the same engine goes back in (only the cached Gaussian resets), so a fixture shared with later
+            // entries keeps its stream.
+            E(l, "np.random.set_bit_generator", "self-swap", f => { f.Rs.set_bit_generator(f.Rs.get_bit_generator()); return Box(0); });
         }
 
         // ============================ object surfaces (object_surfaces.py owners) ===========

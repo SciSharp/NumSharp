@@ -104,10 +104,10 @@ namespace NumSharp
         ///     Draw samples from a logarithmic series distribution.
         /// </summary>
         /// <param name="p">Shape parameter for the distribution. Must be in the range [0, 1).</param>
-        /// <param name="size">Output shape as single int.</param>
+        /// <param name="size">Output shape as a single integer — NumPy's integer <c>size</c>: one npy_intp (int64) dimension.</param>
         /// <returns>Drawn samples from the parameterized logarithmic series distribution.</returns>
         /// <exception cref="ValueError"><paramref name="p"/> is outside <c>[0, 1)</c> or NaN, or <paramref name="size"/> is negative.</exception>
-        public NDArray logseries(double p, int size)
-            => logseries(p, new int[] { size });
+        public NDArray logseries(double p, long size)
+            => logseries(p, new long[] { size });
     }
 }

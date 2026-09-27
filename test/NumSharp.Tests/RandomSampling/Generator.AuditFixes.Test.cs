@@ -552,7 +552,7 @@ namespace NumSharp.Tests.RandomSampling
         {
             ((Action)(() => new SeedSequence(0).generate_state(-1))).Should().Throw<ValueError>()
                 .WithMessage("negative dimensions are not allowed");
-            new SeedSequence(0).generate_state(0).Length.Should().Be(0);
+            new SeedSequence(0).generate_state(0).size.Should().Be(0);
         }
     }
 }

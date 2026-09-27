@@ -150,11 +150,13 @@ namespace NumSharp.Tests
             var rng = np.random.RandomState(42);
             var result = rng.randint(0, 10, new Shape(5));
 
-            var expected = new int[] { 6, 3, 7, 4, 6 };
+            // NumPy's C long, modelled LP64: int64 (Windows NumPy returns the same values as int32).
+            result.dtype.Should().Be(np.int64);
+            var expected = new long[] { 6, 3, 7, 4, 6 };
 
             for (int i = 0; i < 5; i++)
             {
-                var actual = result.GetInt32(i);
+                var actual = result.GetInt64(i);
                 actual.Should().Be(expected[i],
                     $"randint(0,10,5)[{i}] should match NumPy");
             }
@@ -207,8 +209,8 @@ namespace NumSharp.Tests
             var rng = np.random.RandomState(42);
             var result = rng.choice(10);
 
-            const int expected = 6;
-            var actual = result.GetInt32(0);
+            const long expected = 6;
+            var actual = result.GetInt64(0); // int64: the LP64 C long
 
             actual.Should().Be(expected,
                 "choice(10) with seed=42 should match NumPy");
@@ -223,11 +225,13 @@ namespace NumSharp.Tests
             var rng = np.random.RandomState(42);
             var result = rng.permutation(5);
 
-            var expected = new int[] { 1, 4, 2, 0, 3 };
+            // arange(x, dtype=result_type(x, np.long)): int64 under the LP64 C long.
+            result.dtype.Should().Be(np.int64);
+            var expected = new long[] { 1, 4, 2, 0, 3 };
 
             for (int i = 0; i < 5; i++)
             {
-                var actual = result.GetInt32(i);
+                var actual = result.GetInt64(i);
                 actual.Should().Be(expected[i],
                     $"permutation(5)[{i}] should match NumPy");
             }

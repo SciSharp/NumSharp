@@ -51,12 +51,12 @@ namespace NumSharp
         public SFC64(uint[] seed) : this(new SeedSequence(seed)) { }
 
         /// <summary>Constructs and seeds an SFC64 from the given seed sequence (<c>generate_state(3, uint64)</c> + <c>sfc64_set_seed</c>).</summary>
-        /// <param name="seedSeq">The seed sequence — normally a <see cref="SeedSequence"/>; any <see cref="ISeedSequence"/> works.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="seedSeq"/> is null.</exception>
-        /// <exception cref="NotImplementedException"><paramref name="seedSeq"/> is a <see cref="SeedlessSeedSequence"/>.</exception>
-        public SFC64(ISeedSequence seedSeq) : base(seedSeq ?? throw new ArgumentNullException(nameof(seedSeq)))
+        /// <param name="seed">The seed sequence — normally a <see cref="SeedSequence"/>; any <see cref="ISeedSequence"/> works;
+        ///     null is NumPy's <c>seed=None</c>: a fresh OS-entropy <see cref="SeedSequence"/> (the parameter name is NumPy's, so <c>seed: sequence</c> ports verbatim).</param>
+        /// <exception cref="NotImplementedException"><paramref name="seed"/> is a <see cref="SeedlessSeedSequence"/>.</exception>
+        public SFC64(ISeedSequence seed) : base(seed ?? new SeedSequence())
         {
-            ulong[] val = SeedWords64(seedSeq, 3);
+            ulong[] val = SeedWords64(seed_seq, 3);
             _s0 = val[0];
             _s1 = val[1];
             _s2 = val[2];

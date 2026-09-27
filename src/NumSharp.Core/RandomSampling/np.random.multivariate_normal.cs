@@ -88,12 +88,12 @@ namespace NumSharp
         /// </summary>
         /// <param name="mean">Mean of the N-dimensional distribution.</param>
         /// <param name="cov">Covariance matrix of the distribution.</param>
-        /// <param name="size">Number of samples to draw (NumPy's integer <c>size</c>).</param>
+        /// <param name="size">Number of samples to draw — NumPy's integer <c>size</c>: one npy_intp (int64) dimension.</param>
         /// <param name="check_valid">Behavior when the covariance matrix is not positive semidefinite.</param>
         /// <param name="tol">Tolerance when checking covariance matrix validity.</param>
         /// <returns>Drawn samples of shape (size, N).</returns>
         /// <exception cref="ValueError">See <see cref="multivariate_normal(double[], double[,], Shape?, string, double)"/>.</exception>
-        public NDArray multivariate_normal(double[] mean, double[,] cov, int size,
+        public NDArray multivariate_normal(double[] mean, double[,] cov, long size,
             string check_valid = "warn", double tol = 1e-8)
             => multivariate_normal(mean, cov, new Shape(size), check_valid, tol);
 

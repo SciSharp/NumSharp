@@ -56,12 +56,11 @@ namespace NumSharp
         public PCG64DXSM(uint[] seed) : this(new SeedSequence(seed)) { }
 
         /// <summary>Constructs and seeds a PCG64DXSM from the given seed sequence (<c>generate_state(4, uint64)</c>).</summary>
-        /// <param name="seedSeq">The seed sequence.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="seedSeq"/> is null.</exception>
-        /// <exception cref="NotImplementedException"><paramref name="seedSeq"/> is a <see cref="SeedlessSeedSequence"/>.</exception>
-        public PCG64DXSM(ISeedSequence seedSeq) : base(seedSeq ?? throw new ArgumentNullException(nameof(seedSeq)))
+        /// <param name="seed">The seed sequence — null is NumPy's <c>seed=None</c>: a fresh OS-entropy <see cref="SeedSequence"/> (the parameter name is NumPy's, so <c>seed: sequence</c> ports verbatim).</param>
+        /// <exception cref="NotImplementedException"><paramref name="seed"/> is a <see cref="SeedlessSeedSequence"/>.</exception>
+        public PCG64DXSM(ISeedSequence seed) : base(seed ?? new SeedSequence())
         {
-            ulong[] val = SeedWords64(seedSeq, 4);
+            ulong[] val = SeedWords64(seed_seq, 4);
             Pcg128.Srandom(((UInt128)val[0] << 64) | val[1], ((UInt128)val[2] << 64) | val[3], out UInt128 state, out UInt128 inc);
             SetState128(state, inc);
         }

@@ -200,7 +200,8 @@ NumSharp implements both NumPy random APIs:
 
 - The legacy `np.random`/`RandomState` surface uses MT19937, including NumPy-compatible state,
   array seeding, cached Gaussian state, and legacy distribution algorithms (`randint`'s masked
-  per-dtype sampler, `shuffle`/`permutation`/`choice` with the legacy messages and `np.long` dtype).
+  per-dtype sampler, `shuffle`/`permutation`/`choice` with the legacy messages and the C `long`
+  dtype, modelled as int64 — see below).
   An unseeded `RandomState()` draws OS entropy through `SeedSequence`, as NumPy's does.
 - Every legacy distribution is a line-by-line port of NumPy's frozen `legacy-distributions.c` (and
   the shared `distributions.c` samplers it calls: Poisson PTRS, BTPE binomial, HRUA hypergeometric,
@@ -212,16 +213,29 @@ NumSharp implements both NumPy random APIs:
   is drawn. `multivariate_normal` follows NumPy's SVD algorithm and is byte-identical when
   `NumSharp.Interop.OpenBLAS` supplies LAPACK's `gesdd`; without it a managed Jacobi SVD stands in and
   a singular vector's sign can differ.
-- The legacy integer samplers compute in C `long`. NumSharp returns int64 and models a 64-bit `long`
-  — NumPy's Linux/macOS (LP64) build, which it matches exactly; NumPy's Windows build (32-bit `long`)
-  differs only where that width overflows (`zipf` near `a = 1`, `poisson` above `2**31`, `tomaxint`'s
-  range, `negative_binomial` with an infinite mean).
+- The legacy integers are C `long` in NumPy, and NumSharp models ONE width for all of them: a 64-bit
+  `long`, NumPy's Linux/macOS (LP64) build, which it matches exactly. That covers `randint`'s default
+  dtype, `random_integers`, `permutation(n)`, `choice`'s indices and `multinomial`'s counts (all int64),
+  the discrete samplers, and the integer parameters (`multinomial`'s `n`, `binomial`'s `n`, the counts
+  of `hypergeometric`). NumPy's Windows build (32-bit `long`) returns the same values as int32 wherever
+  both builds accept the input, but it rejects bounds past `2**31` (`randint(0, 2**40)`,
+  `random_integers(0, 2**31)`, `choice(2**40)`), raises for `multinomial(2**31, …)`, and differs where
+  that width overflows inside a sampler (`zipf` near `a = 1`, `poisson` above `2**31`, `tomaxint`'s
+  range, `negative_binomial` with an infinite mean). `permutation(n)` also reproduces NumPy's arange
+  length arithmetic at the int64 edge: a length whose double rounds to `2**63` gives an empty range, as
+  on NumPy's x86 builds.
 - `RandomState(bit_generator)` runs the legacy samplers on any bit generator
   (`np.random.RandomState(new PCG64(42))`), with NumPy's `str()` (`RandomState(PCG64)`), `seed()`
   refused on a non-MT19937 engine (`TypeError`), and both state forms: `get_state()` returns the legacy
   MT19937 tuple, `get_state(legacy: false)` the dict (`NumPyRandom.State`: the bit generator's state
   plus the cached Gaussian), and `set_state` accepts either. Consuming the cached Gaussian zeroes it,
-  as NumPy's `legacy_gauss` does. `tomaxint`, `ranf` and `sample` complete the legacy surface. Two
+  as NumPy's `legacy_gauss` does. `get_bit_generator()` and `set_bit_generator(bitgen)` read and
+  hot-swap the `np.random` singleton's engine (the swap discards the cached Gaussian), and after a swap
+  the module's `np.random.seed(x)` re-seeds the new engine as NumPy's module function does
+  (`engine.state = type(engine)(x).state`, the cached Gaussian kept) — only that singleton: any other
+  `RandomState` over a non-MT19937 engine refuses to re-seed, NumPy's method behaviour. `Seed` records
+  the last legacy seed as a `uint`, NumPy's `[0, 2**32 - 1]`. `tomaxint`, `ranf` and `sample` (each also
+  taking the size as one `Shape`, as NumPy's `random_sample(size)` does) complete the legacy surface. Two
   NumPy inputs never return (`zipf(a)` for `a >= 1025`, `vonmises` once `4*kappa^2` overflows); NumSharp
   returns the distribution's limit there instead of hanging.
 - Sized legacy draws are fast without changing a bit.
@@ -343,11 +357,17 @@ NumSharp implements both NumPy random APIs:
   integer and array forms and error texts included). As in NumPy, `new MT19937(42)` seeds through
   `SeedSequence`; the legacy stream of `RandomState(42)` is `mt._legacy_seeding(42)`, and
   `MT19937.jumped(n)` advances a copy by `n * 2**128` draws with NumPy's jump polynomial.
-- `SeedSequence` has NumPy's whole surface: `spawn(n)` (child `spawn_key`s, `n_children_spawned`),
-  `pool_size`, `pool`, `state`, `entropy` (the 128-bit OS entropy of an unseeded sequence, to log for
-  reproducibility) and NumPy's repr. `BitGenerator.spawn(n)` and `Generator.spawn(n)` derive
+- `SeedSequence` has NumPy's whole surface, with NumPy's types: `spawn(n)` (child `spawn_key`s — Python
+  ints, so `BigInteger`s — and `n_children_spawned`, a `uint32_t`), `pool_size` (a `Py_ssize_t`: `long`),
+  `pool` and `generate_state(n_words, dtype)` (uint32/uint64 `NDArray`s over a 64-bit count, with
+  NumPy's allocation errors), `state`, `entropy` (the 128-bit OS entropy of an unseeded sequence, to
+  log for reproducibility) and NumPy's repr. Entropy and spawn keys coerce exactly as NumPy's
+  `_coerce_to_uint32_array` does: nested sequences flatten, a `"0x…"` string is hex and a string that
+  starts with a digit is decimal (`"012"` is 12 — there is no octal reading), a string key is a
+  sequence of one-character strings. `BitGenerator.spawn(n)` and `Generator.spawn(n)` derive
   independent children from it — the recommended way to hand streams to parallel workers. Any
-  `ISeedSequence` can seed a bit generator (`SeedlessSeedSequence` included).
+  `ISeedSequence` can seed a bit generator (`SeedlessSeedSequence` included); every engine names its
+  parameter `seed` as NumPy does, and a null one is NumPy's `seed=None` (fresh OS entropy).
 - `default_rng` accepts every NumPy seed form: an integer (up to any `BigInteger`), a sequence or
   integer array, a `SeedSequence`, a `BitGenerator` (wrapped), a `Generator` (passed through) or a
   legacy `RandomState` (its MT19937 engine is wrapped, as `default_rng(RandomState)` does).

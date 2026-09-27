@@ -8,8 +8,9 @@ namespace NumSharp.Tests.RandomSampling
     ///     divergences surfaced while turning <see cref="MT19937"/> into a real bit generator: unseeded
     ///     seeding, seed validation, <c>randint</c>'s per-dtype stream consumption and messages, and the
     ///     legacy <c>shuffle</c>/<c>permutation</c>/<c>choice</c> contracts. Every expected value and message
-    ///     comes from running the same call on NumPy 2.4.2 (win-amd64, where the C <c>long</c> — NumPy's
-    ///     default integer for these legacy APIs — is int32).
+    ///     comes from running the same call on NumPy 2.4.2. The legacy APIs' default integer is the C <c>long</c>, which
+    ///     NumSharp models LP64 (int64, Linux/macOS NumPy): the values below are identical on win-amd64, whose 32-bit
+    ///     <c>long</c> only changes the dtype and rejects bounds past <c>2**31</c>.
     /// </summary>
     [TestClass]
     public class RandomStateAuditFixesTest
@@ -133,7 +134,7 @@ namespace NumSharp.Tests.RandomSampling
             L(RS().randint(0, 100, new Shape(6), np.int32)).Should().Equal(51, 92, 14, 71, 60, 20);
             L(RS().randint(0, 100, new Shape(6), np.int64)).Should().Equal(51, 92, 14, 71, 60, 20);
             L(RS().randint(0, 100, new Shape(5))).Should().Equal(51, 92, 14, 71, 60);
-            RS().randint(0, 100, new Shape(5)).dtype.Should().Be(np.int32);
+            RS().randint(0, 100, new Shape(5)).dtype.Should().Be(np.int64);
             L(RS().randint(0, 1099511627776L, new Shape(6), np.int64))
                 .Should().Equal(441507790259, 395924837646, 458615280711, 810017303572, 440001501305, 902372521174);
             foreach (var dt in new[] { np.int32, np.uint32, np.int64, np.uint64 })
@@ -177,7 +178,7 @@ namespace NumSharp.Tests.RandomSampling
         {
             var e = RS().randint(10, 5, new Shape(0));
             e.shape.Should().Equal(0L);
-            e.dtype.Should().Be(np.int32);
+            e.dtype.Should().Be(np.int64);
         }
 
         /// <summary>
@@ -192,15 +193,23 @@ namespace NumSharp.Tests.RandomSampling
             r.dtype.isnative.Should().BeTrue();
         }
 
-        /// <summary><c>random_integers</c> is <c>randint(low, high + 1, dtype='l')</c> and inherits every fix above.</summary>
+        /// <summary>
+        ///     <c>random_integers</c> is <c>randint(low, high + 1, dtype='l')</c> and inherits every fix above. With the LP64
+        ///     <c>long</c> the whole int64 range is drawable (Linux NumPy 2.4.2 values; Windows NumPy rejects the last three as
+        ///     <c>high is out of bounds for int32</c> / <c>low is out of bounds for int32</c>).
+        /// </summary>
         [TestMethod]
         public void RandomIntegers_ByteExact_AndBounds()
         {
             L(RS().random_integers(5, 10, new Shape(6))).Should().Equal(8, 9, 7, 9, 9, 6);
             Convert.ToInt64(RS().random_integers(5).GetAtIndex(0)).Should().Be(4);
             L(RS().random_integers(0, 2147483647L, new Shape(3))).Should().Equal(1608637542, 1273642419, 1935803228);
-            ((Action)(() => RS().random_integers(0, 2147483648L, new Shape(3)))).Should().Throw<ValueError>()
-                .WithMessage("high is out of bounds for int32");
+            // [0, 2**31] still takes one 32-bit masked word per draw (mask 2**32 - 1, rejecting words above 2**31).
+            L(RS().random_integers(0, 2147483648L, new Shape(3))).Should().Equal(1608637542, 787846414, 670094950);
+            // high + 1 == 2**63 is exact (NumPy's Python int): the int64 maximum is reachable, never wrapped.
+            L(RS().random_integers(0, long.MaxValue, new Shape(3))).Should().Equal(6909045637428952499, 8314211556539077902, 4279532810384561223);
+            L(RS().random_integers(long.MinValue, long.MinValue + 5, new Shape(3))).Should().Equal(-9223372036854775805, -9223372036854775804, -9223372036854775806);
+            RS().random_integers(0, 2147483648L, new Shape(3)).dtype.Should().Be(np.int64);
         }
 
         // =====================================================================================
@@ -228,14 +237,15 @@ namespace NumSharp.Tests.RandomSampling
         }
 
         /// <summary>
-        ///     <c>permutation(int)</c> is <c>arange(x, dtype=result_type(x, np.long))</c> — int32 on win-amd64 —
-        ///     and a 0-d array is <c>IndexError: x must be an integer or at least 1-dimensional</c>.
+        ///     <c>permutation(int)</c> is <c>arange(x, dtype=result_type(x, np.long))</c> — int64 under the LP64 <c>long</c>
+        ///     (int32 on win-amd64, same values) — and a 0-d array is <c>IndexError: x must be an integer or at least
+        ///     1-dimensional</c>.
         /// </summary>
         [TestMethod]
         public void Permutation_DtypeValuesAndErrors()
         {
             var p = RS().permutation(10);
-            p.dtype.Should().Be(np.int32);
+            p.dtype.Should().Be(np.int64);
             L(p).Should().Equal(8, 1, 5, 0, 7, 2, 9, 4, 3, 6);
 
             L(RS().permutation(np.array(new long[] { 10, 20, 30, 40, 50 }))).Should().Equal(20, 50, 30, 10, 40);
@@ -250,7 +260,7 @@ namespace NumSharp.Tests.RandomSampling
         // =====================================================================================
 
         /// <summary>
-        ///     The legacy sampling paths, byte-exact: uniform (<c>randint(0, pop)</c>, int32), without
+        ///     The legacy sampling paths, byte-exact: uniform (<c>randint(0, pop)</c>, the LP64 long: int64), without
         ///     replacement (<c>permutation(pop)[:size]</c> — NumSharp ignored <c>replace=False</c>), weighted
         ///     (<c>searchsorted(side='right')</c> — NumSharp used 'left') and weighted without replacement.
         /// </summary>
@@ -258,7 +268,7 @@ namespace NumSharp.Tests.RandomSampling
         public void Choice_SamplingPaths_ByteExact()
         {
             var u = RS().choice(5, new Shape(3));
-            u.dtype.Should().Be(np.int32);
+            u.dtype.Should().Be(np.int64);
             L(u).Should().Equal(3, 4, 2);
             Convert.ToInt64(RS().choice(5).GetAtIndex(0)).Should().Be(3);
 
@@ -269,7 +279,7 @@ namespace NumSharp.Tests.RandomSampling
 
             var p = new[] { 0.1, 0.2, 0.3, 0.2, 0.2 };
             var w = RS().choice(5, new Shape(3), p: p);
-            w.dtype.Should().Be(np.int32);
+            w.dtype.Should().Be(np.int64);
             L(w).Should().Equal(2, 4, 3);
             L(RS().choice(5, new Shape(3), replace: false, p: p)).Should().Equal(2, 4, 3);
         }

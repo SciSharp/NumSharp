@@ -12,7 +12,7 @@
         public void SeedTest()
         {
             NumPyRandom rando = np.random.RandomState(1000);
-            Assert.AreEqual(1000, rando.Seed, "The seed value given in the ctor does not match the seed value attribute.");
+            Assert.AreEqual(1000u, rando.Seed, "The seed value given in the ctor does not match the seed value attribute.");
         }
 
         [TestMethod]

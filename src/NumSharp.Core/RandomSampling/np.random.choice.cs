@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Numerics;
 
 namespace NumSharp
 {
@@ -13,7 +14,8 @@ namespace NumSharp
         /// <param name="size">Output shape. Default (NumPy's <c>None</c>) returns a single value; <c>()</c> returns a 0-d array.</param>
         /// <param name="replace">Whether the sample is with or without replacement. Default is True.</param>
         /// <param name="p">Optional 1-D probabilities, one per entry of <paramref name="a"/>. If not given, the sample is uniform.</param>
-        /// <returns>The drawn elements of <paramref name="a"/> (or, for an integer population, the drawn int32 indices).</returns>
+        /// <returns>The drawn elements of <paramref name="a"/> (or, for an integer population, the drawn int64 indices — NumPy's
+        ///     C <c>long</c>, modelled LP64: <see cref="LegacyLong"/>).</returns>
         /// <exception cref="ValueError">
         ///     A 0-d population that is not an integer (<c>a must be 1-dimensional or an integer</c>) or not positive with
         ///     samples requested; a multi-dimensional or empty <paramref name="a"/>; a <paramref name="p"/> that is not 1-D,
@@ -25,7 +27,7 @@ namespace NumSharp
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.choice.html
         ///     <br/>
         ///     Byte-identical port of NumPy's legacy <c>RandomState.choice</c> (<c>mtrand.pyx</c>): with replacement it is
-        ///     <c>randint(0, pop, shape)</c> (dtype <c>'l'</c>, int32 on win-amd64) or the <paramref name="p"/>-weighted
+        ///     <c>randint(0, pop, shape)</c> (dtype <c>long</c>: int64 in NumSharp's LP64 model) or the <paramref name="p"/>-weighted
         ///     CDF search <c>searchsorted(random_sample(shape), side='right')</c>; without replacement it is
         ///     <c>permutation(pop)[:size]</c> or the weighted rounds. The messages are the legacy module's (they differ
         ///     from <see cref="Generator.choice(NDArray, Shape?, bool, NDArray, int, bool)"/>'s).
@@ -41,9 +43,12 @@ namespace NumSharp
             // ---- resolve the population (NumPy: a = np.asarray(a); legacy: 1-D or an integer only) ----
             long popSize;
             bool popExceedsInt64 = false;
+            ulong bigPop = 0; // the exact population when a uint64 scalar exceeds int64 (NumPy keeps the Python int)
             if (a.ndim == 0)
             {
                 popSize = Generator.ScalarPopulation(a, "a must be 1-dimensional or an integer", out popExceedsInt64);
+                if (popExceedsInt64)
+                    bigPop = a.GetAtIndex<ulong>(0);
                 if (!popExceedsInt64 && popSize <= 0 && count != 0)
                     throw new ValueError("a must be greater than 0 unless no samples are taken");
             }
@@ -70,17 +75,18 @@ namespace NumSharp
                     if (pw is not null)
                     {
                         // cdf = p.cumsum(); cdf /= cdf[-1]; idx = cdf.searchsorted(random_sample(shape), 'right')
-                        // then np.asarray(idx).astype(np.long, casting='unsafe') — int32 on win-amd64.
+                        // then np.asarray(idx).astype(np.long, casting='unsafe') — the LP64 long, int64.
                         var cdf = np.cumsum(np.array(pw));
                         double total = Convert.ToDouble(cdf.GetAtIndex(cdf.size - 1));
                         cdf = cdf / total;
                         var uniformSamples = rand(shape);
-                        idx = np.searchsorted(cdf, uniformSamples, "right").astype(np.int32);
+                        idx = np.searchsorted(cdf, uniformSamples, "right").astype(LegacyLong);
                     }
                     else if (popExceedsInt64)
                     {
-                        // randint(0, pop_size) with dtype 'l' (int32): the high cannot fit.
-                        throw new ValueError("high is out of bounds for int32");
+                        // randint(0, pop_size) with dtype long (int64): the exclusive high 2**63 still fits — the draws
+                        // stop at the int64 maximum — and a larger one is NumPy's "high is out of bounds for int64".
+                        idx = randint(0UL, bigPop, shape);
                     }
                     else
                     {
@@ -100,10 +106,12 @@ namespace NumSharp
                     }
                     else
                     {
-                        // idx = self.permutation(pop_size)[:size]; idx.shape = shape
-                        if (popExceedsInt64)
-                            throw new OverflowException("Python int too large to convert to C long");
-                        var perm = permutation(popSize);
+                        // idx = self.permutation(pop_size)[:size]; idx.shape = shape. A population whose arange length
+                        // falls in NumPy's empty band (see ArangeLength) leaves too few indices, and the shape assignment
+                        // is then NumPy's reshape ValueError (NumSharp's reshape reports it as IncorrectShapeException).
+                        var perm = LegacyPermutation(popExceedsInt64 ? new BigInteger(bigPop) : new BigInteger(popSize));
+                        if (perm.size < count)
+                            throw new ValueError($"cannot reshape array of size {perm.size} into shape {shape.ToPythonTuple()}");
                         idx = perm[$":{count}"].reshape(shape);
                     }
                 }
@@ -123,7 +131,7 @@ namespace NumSharp
         /// <param name="size">Output shape. Default (NumPy's <c>None</c>) returns a single value.</param>
         /// <param name="replace">Whether the sample is with or without replacement. Default is True.</param>
         /// <param name="p">Optional 1-D probabilities of length <paramref name="a"/>.</param>
-        /// <returns>The drawn int32 indices.</returns>
+        /// <returns>The drawn int64 indices (NumPy's C <c>long</c>, modelled LP64).</returns>
         /// <exception cref="ValueError">See <see cref="choice(NDArray, Shape, bool, NDArray)"/>.</exception>
         /// <exception cref="TypeError"><paramref name="p"/> is 0-d.</exception>
         /// <remarks>
@@ -140,7 +148,7 @@ namespace NumSharp
         /// <param name="size">Output shape. Default (NumPy's <c>None</c>) returns a single value.</param>
         /// <param name="replace">Whether the sample is with or without replacement. Default is True.</param>
         /// <param name="p">Optional 1-D probabilities of length <paramref name="a"/>.</param>
-        /// <returns>The drawn int32 indices.</returns>
+        /// <returns>The drawn int64 indices (NumPy's C <c>long</c>, modelled LP64).</returns>
         /// <exception cref="ValueError">See <see cref="choice(NDArray, Shape, bool, NDArray)"/>.</exception>
         /// <exception cref="TypeError"><paramref name="p"/> is 0-d.</exception>
         /// <remarks>
@@ -157,7 +165,7 @@ namespace NumSharp
         /// <param name="pw">The validated float64 probabilities (a private copy — found entries are zeroed in place).</param>
         /// <param name="size">The number of distinct samples.</param>
         /// <param name="shape">The output shape.</param>
-        /// <returns>The int32 (<c>np.long</c>) indices shaped to <paramref name="shape"/>.</returns>
+        /// <returns>The int64 (<c>np.long</c>, modelled LP64) indices shaped to <paramref name="shape"/>.</returns>
         /// <exception cref="ValueError">Fewer non-zero probabilities than <paramref name="size"/>.</exception>
         /// <remarks>The caller holds the bit generator's lock.</remarks>
         private unsafe NDArray LegacyChoiceNoReplaceWeighted(double[] pw, long size, Shape shape)
@@ -169,7 +177,7 @@ namespace NumSharp
             if (nonzero < size)
                 throw new ValueError("Fewer non-zero entries in p than size");
 
-            var found = new int[size]; // np.zeros(shape, dtype=np.long): int32 on win-amd64
+            var found = new long[size]; // np.zeros(shape, dtype=np.long): the LP64 long, int64
             var seen = new HashSet<long>();
             var cdf = new double[d];
             long nUniq = 0;
@@ -190,7 +198,7 @@ namespace NumSharp
                 {
                     long ins = BisectRight(cdf, xp[t]);
                     if (seen.Add(ins))
-                        found[nUniq++] = (int)ins;
+                        found[nUniq++] = ins;
                 }
             }
 

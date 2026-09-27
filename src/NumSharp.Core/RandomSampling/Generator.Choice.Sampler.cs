@@ -125,13 +125,19 @@ namespace NumSharp
         /// <param name="size">Output shape; null is NumPy's <c>size=None</c> (a 0-d int64 result).</param>
         /// <param name="replace">Whether an index may be drawn more than once.</param>
         /// <param name="p">Optional 1-D probabilities of length <paramref name="a"/>.</param>
+        /// <param name="axis">Accepted for NumPy's signature and position — <c>choice(a, size, replace, p, axis, shuffle)</c>
+        ///     — and, as in NumPy, never read for an integer population (only an array's <c>a.shape[axis]</c> uses it).</param>
         /// <param name="shuffle">Without replacement and without <paramref name="p"/>: whether the selection is shuffled.</param>
         /// <returns>The int64 indices.</returns>
         /// <exception cref="ValueError">See <see cref="choice(NDArray, Shape?, bool, NDArray, int, bool)"/>.</exception>
         /// <exception cref="TypeError"><paramref name="p"/> is 0-d.</exception>
+        /// <remarks>
+        ///     The <paramref name="axis"/> slot keeps a positional call aligned with NumPy's: without it the fifth positional
+        ///     argument would bind <paramref name="shuffle"/>, where NumPy's fifth is <c>axis</c>.
+        /// </remarks>
         [NDScoped]
-        public NDArray choice(long a, Shape? size = null, bool replace = true, NDArray p = null, bool shuffle = true)
-            => choice(NDArray.Scalar(a), size, replace, p, 0, shuffle);
+        public NDArray choice(long a, Shape? size = null, bool replace = true, NDArray p = null, int axis = 0, bool shuffle = true)
+            => choice(NDArray.Scalar(a), size, replace, p, axis, shuffle);
 
         /// <summary>
         ///     NumPy's <c>pop_size = operator.index(a.item())</c> for a 0-d population.

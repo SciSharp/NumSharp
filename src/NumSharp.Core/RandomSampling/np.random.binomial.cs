@@ -34,7 +34,7 @@ namespace NumSharp
         ///     <br/>
         ///     NumPy's <c>legacy_random_binomial</c>: the legacy inversion (<c>q^n = exp(n*log(q))</c>) when
         ///     <c>n*min(p, 1-p) &lt;= 30</c>, BTPE above, both sharing this RandomState's setup cache with
-        ///     <see cref="multinomial(int, double[], Shape?)"/> — byte-identical to <c>np.random.RandomState(seed).binomial</c>.
+        ///     <see cref="multinomial(long, double[], Shape?)"/> — byte-identical to <c>np.random.RandomState(seed).binomial</c>.
         ///     There is no shortcut for <c>n == 0</c> or <c>p == 0</c>: each still consumes one uniform, as in NumPy.
         ///     The output is int64 (NumPy returns C <c>long</c>: int64 on Linux, int32 on Windows; the values agree).
         ///     Holds the bit generator's lock for the draws.

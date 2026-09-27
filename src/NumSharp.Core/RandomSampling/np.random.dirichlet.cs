@@ -114,12 +114,12 @@ namespace NumSharp
         ///     Draw samples from the Dirichlet distribution.
         /// </summary>
         /// <param name="alpha">Concentration parameters.</param>
-        /// <param name="size">Number of samples to draw.</param>
+        /// <param name="size">Number of samples to draw — NumPy's integer <c>size</c>: one npy_intp (int64) dimension.</param>
         /// <returns>Drawn samples from the Dirichlet distribution.</returns>
         /// <exception cref="TypeError"><paramref name="alpha"/> is null.</exception>
         /// <exception cref="ValueError">An element of <paramref name="alpha"/> is <c>&lt;= 0</c>, or <paramref name="size"/> is negative.</exception>
-        public NDArray dirichlet(double[] alpha, int size)
-            => dirichlet(alpha, new int[] { size });
+        public NDArray dirichlet(double[] alpha, long size)
+            => dirichlet(alpha, new long[] { size });
 
         /// <summary>
         ///     The shared body of the <c>dirichlet</c> overloads — NumPy's legacy loop over a contiguous float64 alpha.

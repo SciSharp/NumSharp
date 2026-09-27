@@ -6982,10 +6982,11 @@ def gen_precision():
 #     pins in "Host-dependent values").
 #
 # int-output distributions (randint/permutation/poisson/binomial/...) are ALSO
-# host-dtype-pinned by NumPy itself: legacy RandomState uses C long, so this corpus
-# (authored on win-amd64) records int32 — regenerating on Linux would record int64.
-# NumSharp's int32 matches the Windows authoring host. Sequential-draw cases
-# ("draws": 2) pin stream ADVANCEMENT, not just the first block.
+# host-dtype-pinned by NumPy itself: legacy RandomState uses C long — int32 on this
+# win-amd64 authoring host, int64 on Linux/macOS. NumSharp models the LP64 long (int64)
+# for every one of them, so the corpus records them widened to int64 (_RND_INT64_CAST
+# below; the values fit, since every bound here is far below 2**31). Sequential-draw
+# cases ("draws": 2) pin stream ADVANCEMENT, not just the first block.
 _RND_SEEDS = [42, 987654321]
 _RND_SIZES = [[7], [2, 3]]
 
@@ -7058,14 +7059,15 @@ _RND_DRAWS2 = {"uniform", "randint", "normal", "standard_gamma", "poisson",
 # R1 registry envelope that excused them is gone: a single-ULP regression fails the tier.
 #
 # int-output samplers: legacy RandomState returns C long — int32 on win-amd64, int64 on
-# Linux — while NumSharp's remaining legacy int samplers fix int64 (the Linux-NumPy shape).
-# The corpus records THOSE widened to int64 so the VALUE stream stays hard-gated and the
-# dtype policy is documented here rather than silently failing per-host. randint,
-# permutation and choice (with or without `p`) are recorded UNWIDENED — NumSharp returns
-# NumPy's win-amd64 C-long (int32) for all of them since the 2026-09-25 legacy-RandomState
-# alignment (permutation used to be int64 and weighted choice int64 while plain choice was
-# int32 — the inconsistency this tier used to paper over by widening).
-_RND_INT64_CAST = {"poisson", "zipf", "logseries", "hypergeometric", "geometric", "binomial", "negative_binomial"}
+# Linux — and NumSharp models ONE width for all of them, the LP64 int64 (since the
+# 2026-09-27 type-parity audit: randint's default dtype, random_integers, permutation(int),
+# choice's indices and multinomial's counts moved from the win-amd64 int32 to int64 to join
+# the discrete samplers, which were already int64). The corpus records every one widened
+# to int64 so the VALUE stream stays hard-gated and the dtype policy is documented here
+# rather than silently failing per-host. (2026-09-25 to 2026-09-27 randint, permutation,
+# choice and multinomial were recorded UNWIDENED, matching NumSharp's int32 of that time.)
+_RND_INT64_CAST = {"poisson", "zipf", "logseries", "hypergeometric", "geometric", "binomial", "negative_binomial",
+                   "randint", "permutation", "choice", "multinomial"}
 
 
 def gen_random_parity():
@@ -7861,8 +7863,9 @@ def gen_fft():
 # Every case seeds a FRESH default_rng / RandomState, so replaying never mutates global
 # np.random state (matches the fresh-instance isolation the rnd tier uses). Op key "grnd";
 # pairs 1:1 with OpRegistry.GeneratorDraw. int-output methods are int64 on BOTH sides
-# (Generator.integers defaults int64; NumSharp matches) except random_integers, which is
-# C-long == int32 on the win-amd64 authoring host (NumSharp matches, same as randint).
+# (Generator.integers defaults int64; NumSharp matches). random_integers is the legacy C long
+# — int32 on this win-amd64 authoring host — and is recorded widened to int64, NumSharp's
+# LP64 model (the rnd tier's _RND_INT64_CAST policy).
 _GEN_DTYPE = {
     "float64": np.float64, "float32": np.float32,
     "int8": np.int8, "int16": np.int16, "int32": np.int32, "int64": np.int64,
@@ -7915,7 +7918,7 @@ def gen_generator_parity():
             r = None
             for _ in range(draws):
                 r = rs.random_integers(int(args[0]), hi, size if size else None)
-            return np.asarray(r)
+            return np.asarray(r).astype(np.int64)   # C long (int32 here) -> NumSharp's LP64 int64; the values fit
         if method == "rs_bytes":
             rs = np.random.RandomState(seed)
             r = None

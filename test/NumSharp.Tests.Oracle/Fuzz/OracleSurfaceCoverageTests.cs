@@ -165,13 +165,15 @@ namespace NumSharp.Tests.Fuzz
             "tomaxint",
         };
 
-        // Non-stream Generator/RandomState API surface: these return a Generator, a byte[], or are a
-        // deterministic randint alias, so they have no per-draw "rnd" stream corpus entry. Each is
-        // gated by dedicated unit tests (np.random.default_rng.Test.cs / np.random.bytes.Test.cs /
-        // np.random.random_integers.Test.cs) verified byte-exact against NumPy 2.4.2.
+        // Non-stream Generator/RandomState API surface: these return a Generator, a byte[], are a
+        // deterministic randint alias, or read/swap the singleton's bit generator, so they have no per-draw
+        // "rnd" stream corpus entry. Each is gated by dedicated unit tests (np.random.default_rng.Test.cs /
+        // np.random.bytes.Test.cs / np.random.random_integers.Test.cs / RandomTypeParity.Test.cs's
+        // RandomSingletonBitGeneratorTests for get_bit_generator/set_bit_generator and the module seed of a
+        // swapped engine) verified byte-exact against NumPy 2.4.2.
         private static readonly HashSet<string> GeneratorApiSurface = new()
         {
-            "default_rng", "bytes", "random_integers",
+            "default_rng", "bytes", "random_integers", "get_bit_generator", "set_bit_generator",
         };
 
         // Stream algorithms carved and pinned under OpenBugs.Random.cs. Re-adding any one to

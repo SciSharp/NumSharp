@@ -55,8 +55,10 @@ namespace NumSharp.Tests.Backends.Kernels
             var rng = np.random.RandomState(44);
             var size = 1000;
             var cond = rng.rand(size) > 0.5;
-            var x = rng.randint(0, 1000, new[] { size });
-            var y = rng.randint(0, 1000, new[] { size });
+            // An explicit int32 keeps this test on the int32 SIMD path: randint's default dtype is the legacy C long
+            // (int64 in NumSharp's LP64 model).
+            var x = rng.randint(0, 1000, new[] { size }, np.int32);
+            var y = rng.randint(0, 1000, new[] { size }, np.int32);
 
             var result = np.where(cond, x, y);
 

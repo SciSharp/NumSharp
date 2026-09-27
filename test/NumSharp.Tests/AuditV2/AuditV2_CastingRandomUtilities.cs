@@ -108,8 +108,8 @@ public class AuditV2_CastingRandomUtilities
         arr.size.Should().Be(3);
         for (int i = 0; i < (int)arr.size; i++)
         {
-            // randint's default dtype is int32 (NumPy's C long on win-amd64): read by value, not GetInt64
-            // (which would reinterpret 8 bytes of the int32 buffer).
+            // Read by value: randint's default dtype is NumPy's C long (int64 in NumSharp's LP64 model; Windows NumPy's
+            // is int32), so a width-specific accessor would be tied to that choice.
             long v = System.Convert.ToInt64(arr.GetAtIndex(i));
             v.Should().BeGreaterThanOrEqualTo(-10);
             v.Should().BeLessThan(-1);

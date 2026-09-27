@@ -38,7 +38,8 @@ public abstract class BenchmarkBase
             NPTypeCode.SByte => np.random.randint(-100, 100, new Shape(n)).astype(NPTypeCode.SByte),
             NPTypeCode.Int16 => np.random.randint(-1000, 1000, new Shape(n)).astype(np.int16),
             NPTypeCode.UInt16 => np.random.randint(0, 2000, new Shape(n)).astype(np.uint16),
-            NPTypeCode.Int32 => np.random.randint(-1000, 1000, new Shape(n)),
+            // randint's default dtype is the legacy C long (int64 in NumSharp's LP64 model): cast like every other row.
+            NPTypeCode.Int32 => np.random.randint(-1000, 1000, new Shape(n)).astype(np.int32),
             NPTypeCode.UInt32 => np.random.randint(0, 2000, new Shape(n)).astype(np.uint32),
             NPTypeCode.Int64 => np.random.randint(-1000, 1000, new Shape(n)).astype(np.int64),
             NPTypeCode.UInt64 => np.random.randint(0, 2000, new Shape(n)).astype(np.uint64),
@@ -94,7 +95,7 @@ public abstract class BenchmarkBase
             NPTypeCode.SByte => np.random.randint(1, 100, new Shape(n)).astype(NPTypeCode.SByte),
             NPTypeCode.Int16 => np.random.randint(1, 1000, new Shape(n)).astype(np.int16),
             NPTypeCode.UInt16 => np.random.randint(1, 2000, new Shape(n)).astype(np.uint16),
-            NPTypeCode.Int32 => np.random.randint(1, 1000, new Shape(n)),
+            NPTypeCode.Int32 => np.random.randint(1, 1000, new Shape(n)).astype(np.int32),
             NPTypeCode.UInt32 => np.random.randint(1, 2000, new Shape(n)).astype(np.uint32),
             NPTypeCode.Int64 => np.random.randint(1, 1000, new Shape(n)).astype(np.int64),
             NPTypeCode.UInt64 => np.random.randint(1, 2000, new Shape(n)).astype(np.uint64),

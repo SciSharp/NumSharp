@@ -102,5 +102,42 @@ namespace NumSharp
         /// <exception cref="ValueError">A dimension is negative.</exception>
         /// <remarks>Module-level in NumPy (see <see cref="ranf"/>); same stream as <see cref="random_sample"/>.</remarks>
         public NDArray sample(params long[] size) => random_sample(size);
+
+        /// <summary>
+        ///     Return random floats in the half-open interval [0.0, 1.0) — NumPy's <c>random_sample(size)</c> with the size
+        ///     given as ONE shape argument, the way NumPy takes it (<c>size=(2, 3)</c> is <c>new Shape(2, 3)</c>).
+        /// </summary>
+        /// <param name="size">Output shape: <c>default</c> is NumPy's <c>size=None</c> (a single value, returned 0-d);
+        ///     <see cref="Shape.Scalar"/> is <c>size=()</c> (a 0-d array); anything else the array's dimensions.</param>
+        /// <returns>The draws, one per element in C order (the stream <see cref="random_sample(long[])"/> consumes).</returns>
+        /// <exception cref="ValueError">A dimension is negative, or the array is too big to address.</exception>
+        /// <exception cref="OutOfMemoryException">A valid size that cannot be allocated (NumPy's <c>MemoryError</c>).</exception>
+        /// <remarks>
+        ///     NumPy's <c>random_sample(size=None)</c> takes one <c>size</c> — an int or a tuple — not the loose dimensions
+        ///     <see cref="rand(long[])"/> takes; the <c>params long[]</c> overload is NumSharp's convenience spelling of the
+        ///     same call, this one its NumPy shape (an <c>int[]</c>/<c>long[]</c> tuple converts to <see cref="Shape"/>).
+        /// </remarks>
+        public NDArray random_sample(Shape size) => size.IsEmpty ? random_sample() : rand(size);
+
+        /// <summary>NumPy's <c>random(size)</c> (an alias of <see cref="random_sample(Shape)"/>) with the size as one shape.</summary>
+        /// <param name="size">Output shape (see <see cref="random_sample(Shape)"/>).</param>
+        /// <returns>The draws.</returns>
+        /// <exception cref="ValueError">A dimension is negative, or the array is too big to address.</exception>
+        /// <exception cref="OutOfMemoryException">A valid size that cannot be allocated.</exception>
+        public NDArray random(Shape size) => random_sample(size);
+
+        /// <summary>NumPy's module-level <c>ranf(size)</c> (an alias of <see cref="random_sample(Shape)"/>) with the size as one shape.</summary>
+        /// <param name="size">Output shape (see <see cref="random_sample(Shape)"/>).</param>
+        /// <returns>The draws.</returns>
+        /// <exception cref="ValueError">A dimension is negative, or the array is too big to address.</exception>
+        /// <exception cref="OutOfMemoryException">A valid size that cannot be allocated.</exception>
+        public NDArray ranf(Shape size) => random_sample(size);
+
+        /// <summary>NumPy's module-level <c>sample(size)</c> (an alias of <see cref="random_sample(Shape)"/>) with the size as one shape.</summary>
+        /// <param name="size">Output shape (see <see cref="random_sample(Shape)"/>).</param>
+        /// <returns>The draws.</returns>
+        /// <exception cref="ValueError">A dimension is negative, or the array is too big to address.</exception>
+        /// <exception cref="OutOfMemoryException">A valid size that cannot be allocated.</exception>
+        public NDArray sample(Shape size) => random_sample(size);
     }
 }

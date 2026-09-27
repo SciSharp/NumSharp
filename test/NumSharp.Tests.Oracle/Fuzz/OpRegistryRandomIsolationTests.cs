@@ -14,12 +14,12 @@ namespace NumSharp.Tests.Fuzz
         public void StatefulRandomOperations_DoNotMutateGlobalRandomState()
         {
             NativeRandomState original = np.random.get_state();
-            int originalSeed = np.random.Seed;
+            uint originalSeed = np.random.Seed;
             try
             {
                 np.random.seed(123456789u);
                 NativeRandomState expected = np.random.get_state();
-                int expectedSeed = np.random.Seed;
+                uint expectedSeed = np.random.Seed;
 
                 void AssertGlobalStateUnchanged(string operation)
                 {

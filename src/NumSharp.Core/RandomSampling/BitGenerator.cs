@@ -89,41 +89,66 @@ namespace NumSharp
         private protected abstract BitGenerator CreateFromSeed(ISeedSequence seed);
 
         /// <summary>
+        ///     NumPy's <c>type(bit_generator)(seed)</c> for code outside the hierarchy: a new, independent generator of this
+        ///     instance's concrete type seeded from <paramref name="seed"/> — the module-level <c>np.random.seed</c> reads its
+        ///     <see cref="state"/> to re-seed a hot-swapped engine in place.
+        /// </summary>
+        /// <param name="seed">The seed sequence (normally a fresh <see cref="SeedSequence"/> over the caller's entropy).</param>
+        /// <returns>The new generator; this instance is not touched.</returns>
+        /// <exception cref="NotImplementedException"><paramref name="seed"/> is a <see cref="SeedlessSeedSequence"/>.</exception>
+        internal BitGenerator NewSeeded(ISeedSequence seed) => CreateFromSeed(seed);
+
+        /// <summary>
         ///     Reads <paramref name="n_words"/> uint32 seeding words from any <see cref="ISeedSequence"/> (the fast path for
-        ///     <see cref="SeedSequence"/>, the interface contract — a <c>uint[]</c> — otherwise).
+        ///     <see cref="SeedSequence"/>, the interface contract — a uint32 NDArray — otherwise).
         /// </summary>
         /// <param name="seed">The seed sequence.</param>
         /// <param name="n_words">The word count.</param>
         /// <returns>The words.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="seed"/> is null.</exception>
-        /// <exception cref="TypeError">A custom sequence returned something other than a <c>uint[]</c>.</exception>
+        /// <exception cref="TypeError">A custom sequence returned something other than a uint32 array of at least
+        ///     <paramref name="n_words"/> words.</exception>
         private protected static uint[] SeedWords32(ISeedSequence seed, int n_words)
         {
             if (seed is null)
                 throw new ArgumentNullException(nameof(seed));
             if (seed is SeedSequence ss)
                 return ss.GenerateState(n_words);
-            return seed.generate_state(n_words, DType.UInt32) as uint[]
-                   ?? throw new TypeError("generate_state(n_words, np.uint32) must return a uint32 array");
+            // NumPy reads PyArray_DATA(val) as n_words words without checking what came back; a wrong dtype or a short
+            // array is refused here rather than seeding from whatever bytes follow it.
+            NDArray words = seed.generate_state(n_words, DType.UInt32);
+            if (words is null || words.typecode != NPTypeCode.UInt32 || words.size < n_words)
+                throw new TypeError("generate_state(n_words, np.uint32) must return a uint32 array of n_words words");
+            var r = new uint[n_words];
+            for (int i = 0; i < n_words; i++)
+                r[i] = words.GetAtIndex<uint>(i);
+            return r;
         }
 
         /// <summary>
         ///     Reads <paramref name="n_words"/> uint64 seeding words from any <see cref="ISeedSequence"/> (the fast path for
-        ///     <see cref="SeedSequence"/>, the interface contract — a <c>ulong[]</c> — otherwise).
+        ///     <see cref="SeedSequence"/>, the interface contract — a uint64 NDArray — otherwise).
         /// </summary>
         /// <param name="seed">The seed sequence.</param>
         /// <param name="n_words">The word count.</param>
         /// <returns>The words.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="seed"/> is null.</exception>
-        /// <exception cref="TypeError">A custom sequence returned something other than a <c>ulong[]</c>.</exception>
+        /// <exception cref="TypeError">A custom sequence returned something other than a uint64 array of at least
+        ///     <paramref name="n_words"/> words.</exception>
         private protected static ulong[] SeedWords64(ISeedSequence seed, int n_words)
         {
             if (seed is null)
                 throw new ArgumentNullException(nameof(seed));
             if (seed is SeedSequence ss)
                 return ss.GenerateState64(n_words);
-            return seed.generate_state(n_words, DType.UInt64) as ulong[]
-                   ?? throw new TypeError("generate_state(n_words, np.uint64) must return a uint64 array");
+            // As SeedWords32: NumPy's unchecked PyArray_DATA read becomes a checked one.
+            NDArray words = seed.generate_state(n_words, DType.UInt64);
+            if (words is null || words.typecode != NPTypeCode.UInt64 || words.size < n_words)
+                throw new TypeError("generate_state(n_words, np.uint64) must return a uint64 array of n_words words");
+            var r = new ulong[n_words];
+            for (int i = 0; i < n_words; i++)
+                r[i] = words.GetAtIndex<ulong>(i);
+            return r;
         }
 
         /// <summary>

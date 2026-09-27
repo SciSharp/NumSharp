@@ -84,11 +84,11 @@ namespace NumSharp
         ///     Draw samples from a Pareto II or Lomax distribution with specified shape.
         /// </summary>
         /// <param name="a">Shape of the distribution. Must be positive (&gt; 0).</param>
-        /// <param name="size">Output shape as single int.</param>
+        /// <param name="size">Output shape as a single integer — NumPy's integer <c>size</c>: one npy_intp (int64) dimension.</param>
         /// <returns>Drawn samples from the parameterized Pareto distribution.</returns>
         /// <exception cref="ValueError"><paramref name="a"/> is <c>&lt;= 0</c>, or <paramref name="size"/> is negative.</exception>
-        public NDArray pareto(double a, int size)
-            => pareto(a, new int[] { size });
+        public NDArray pareto(double a, long size)
+            => pareto(a, new long[] { size });
 
         /// <summary>
         ///     Draw a single sample from a Pareto II or Lomax distribution.

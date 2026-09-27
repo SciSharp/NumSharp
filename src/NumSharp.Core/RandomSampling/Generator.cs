@@ -23,16 +23,35 @@ namespace NumSharp
     {
         private readonly BitGenerator _bitGenerator;
 
-        /// <summary>Constructs a Generator over the given bit generator.</summary>
-        /// <param name="bitGenerator">The bit generator supplying the stream; its lock is shared with every other consumer.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="bitGenerator"/> is null.</exception>
-        public Generator(BitGenerator bitGenerator)
+        /// <summary>
+        ///     NumPy's <c>Generator._poisson_lam_max</c>: the largest <c>lam</c> the Poisson sampler accepts,
+        ///     <c>&lt;double&gt;iinfo(int64).max - sqrt(iinfo(int64).max) * 10</c> (the same value RandomState exposes).
+        /// </summary>
+        public const double _poisson_lam_max = RandomConstraints.PoissonLamMax;
+
+        /// <summary>Constructs a Generator over the given bit generator (NumPy's <c>Generator(bit_generator)</c>).</summary>
+        /// <param name="bit_generator">The bit generator supplying the stream; its lock is shared with every other consumer.
+        ///     The name is NumPy's, so a named argument ports verbatim (<c>new Generator(bit_generator: pcg)</c>).</param>
+        /// <exception cref="AttributeError"><paramref name="bit_generator"/> is null — NumPy's
+        ///     <c>'NoneType' object has no attribute 'capsule'</c> (its constructor reads <c>bit_generator.capsule</c>).</exception>
+        public Generator(BitGenerator bit_generator)
         {
-            _bitGenerator = bitGenerator ?? throw new ArgumentNullException(nameof(bitGenerator));
+            _bitGenerator = bit_generator ?? throw new AttributeError("'NoneType' object has no attribute 'capsule'");
         }
 
         /// <summary>The bit generator supplying this Generator's stream.</summary>
         public BitGenerator bit_generator => _bitGenerator;
+
+        /// <summary>
+        ///     The bit generator supplying this Generator's stream — NumPy's public <c>Generator._bit_generator</c>
+        ///     attribute (<c>cdef public object _bit_generator</c>), the same instance <see cref="bit_generator"/> returns.
+        /// </summary>
+        /// <remarks>
+        ///     Read-only here: NumPy lets Python rebind the attribute, but its draws keep using the engine captured at
+        ///     construction (the <c>bitgen_t</c> copy), so rebinding it there only desynchronizes the two — nothing a caller
+        ///     can rely on.
+        /// </remarks>
+        public BitGenerator _bit_generator => _bitGenerator;
 
         /// <summary>
         ///     Create new independent child generators (NumPy's <c>Generator.spawn</c>): each wraps a child of

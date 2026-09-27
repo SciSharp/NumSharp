@@ -77,17 +77,16 @@ namespace NumSharp
         ///     <c>val = seed_seq.generate_state(624, np.uint32)</c>, <c>key[0] = 0x80000000</c>, <c>key[1:] = val[1:]</c>,
         ///     <c>pos = 623</c>.
         /// </summary>
-        /// <param name="seedSeq">The seed sequence — normally a <see cref="SeedSequence"/>; any <see cref="ISeedSequence"/>
-        /// works (NumPy uses it as-is when <c>isinstance(seed, ISeedSequence)</c>).</param>
-        /// <exception cref="ArgumentNullException"><paramref name="seedSeq"/> is null.</exception>
-        /// <exception cref="NotImplementedException"><paramref name="seedSeq"/> is a <see cref="SeedlessSeedSequence"/>.</exception>
+        /// <param name="seed">The seed sequence — normally a <see cref="SeedSequence"/>; any <see cref="ISeedSequence"/>
+        /// works (NumPy uses it as-is when <c>isinstance(seed, ISeedSequence)</c>); null is NumPy's <c>seed=None</c>: a fresh OS-entropy <see cref="SeedSequence"/> (the parameter name is NumPy's, so <c>seed: sequence</c> ports verbatim).</param>
+        /// <exception cref="NotImplementedException"><paramref name="seed"/> is a <see cref="SeedlessSeedSequence"/>.</exception>
         /// <remarks>
         ///     <c>pos</c> is 623, not 624: NumPy's fill loop leaves <c>i = 623</c> behind and stores it, so the first
         ///     draw tempers <c>key[623]</c> before the first twist. That is part of the stream and is kept.
         /// </remarks>
-        public MT19937(ISeedSequence seedSeq) : base(seedSeq ?? throw new ArgumentNullException(nameof(seedSeq)))
+        public MT19937(ISeedSequence seed) : base(seed ?? new SeedSequence())
         {
-            SeedFromSequence(seedSeq);
+            SeedFromSequence(seed_seq);
         }
 
         /// <summary>Constructs an MT19937 in the legacy integer-seeded state without drawing OS entropy (RandomState(seed)).</summary>

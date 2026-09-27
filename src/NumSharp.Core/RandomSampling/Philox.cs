@@ -82,10 +82,10 @@ namespace NumSharp
         public Philox(uint[] seed) : this((ISeedSequence)new SeedSequence(seed)) { }
 
         /// <summary>Constructs a Philox keyed from the given seed sequence (<c>generate_state(2, uint64)</c>), counter zero.</summary>
-        /// <param name="seedSeq">The seed sequence — normally a <see cref="SeedSequence"/>; any <see cref="ISeedSequence"/> works.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="seedSeq"/> is null.</exception>
-        /// <exception cref="NotImplementedException"><paramref name="seedSeq"/> is a <see cref="SeedlessSeedSequence"/>.</exception>
-        public Philox(ISeedSequence seedSeq) : this((object)(seedSeq ?? throw new ArgumentNullException(nameof(seedSeq))), null, null) { }
+        /// <param name="seed">The seed sequence — normally a <see cref="SeedSequence"/>; any <see cref="ISeedSequence"/> works;
+        ///     null is NumPy's <c>seed=None</c>: a fresh OS-entropy <see cref="SeedSequence"/> (the parameter name is NumPy's, so <c>seed: sequence</c> ports verbatim).</param>
+        /// <exception cref="NotImplementedException"><paramref name="seed"/> is a <see cref="SeedlessSeedSequence"/>.</exception>
+        public Philox(ISeedSequence seed) : this((object)seed, null, null) { }
 
         /// <summary>
         ///     Constructs a Philox with NumPy's full signature, <c>Philox(seed=None, counter=None, key=None)</c>.
@@ -518,8 +518,9 @@ namespace NumSharp
         /// <param name="big">The integers.</param>
         /// <returns>The uint64 words.</returns>
         /// <exception cref="OverflowException">An element outside <c>[-2**63, 2**64)</c> forces an object array: the first
-        /// element that cannot convert raises — <c>int too big to convert</c> beyond the range, <c>Python integer -1 out of
-        /// bounds for uint64</c> for a negative.</exception>
+        /// element that cannot convert raises — <c>Python int too large to convert to C long</c> beyond the range (LP64
+        /// NumPy's text, the model NumSharp's legacy integers follow; NumPy's Windows build words the same failure
+        /// <c>int too big to convert</c>), <c>Python integer -1 out of bounds for uint64</c> for a negative.</exception>
         private static ulong[] BigIntegersToWords(BigInteger[] big)
         {
             BigInteger int64Min = long.MinValue, int64Max = long.MaxValue, uint64Max = ulong.MaxValue;
@@ -538,7 +539,7 @@ namespace NumSharp
                 foreach (BigInteger b in big)
                 {
                     if (b < int64Min || b > uint64Max)
-                        throw new OverflowException("int too big to convert");
+                        throw new OverflowException("Python int too large to convert to C long");
                     if (b.Sign < 0)
                         throw new OverflowException($"Python integer {b} out of bounds for uint64");
                 }
