@@ -399,10 +399,57 @@
     "jumps"
    ]
   },
+  "NumPyRandom.Generator": {
+   "numpy": "numpy.random.Generator",
+   "params": [
+    "bit_generator"
+   ]
+  },
+  "NumPyRandom.MT19937": {
+   "numpy": "numpy.random.MT19937",
+   "params": [
+    "seed"
+   ]
+  },
+  "NumPyRandom.PCG64": {
+   "numpy": "numpy.random.PCG64",
+   "params": [
+    "seed"
+   ]
+  },
+  "NumPyRandom.PCG64DXSM": {
+   "numpy": "numpy.random.PCG64DXSM",
+   "params": [
+    "seed"
+   ]
+  },
+  "NumPyRandom.Philox": {
+   "numpy": "numpy.random.Philox",
+   "params": [
+    "seed",
+    "counter",
+    "key"
+   ]
+  },
   "NumPyRandom.RandomState": {
    "numpy": "numpy.random.RandomState",
    "params": [
     "seed"
+   ]
+  },
+  "NumPyRandom.SFC64": {
+   "numpy": "numpy.random.SFC64",
+   "params": [
+    "seed"
+   ]
+  },
+  "NumPyRandom.SeedSequence": {
+   "numpy": "numpy.random.SeedSequence",
+   "params": [
+    "entropy",
+    "spawn_key",
+    "pool_size",
+    "n_children_spawned"
    ]
   },
   "NumPyRandom.beta": {

@@ -16,7 +16,8 @@ Every public member of NumSharp's random world is checked against NumPy 2.4.2 by
 (no Python at test time), and CI fails when that stops being true. Concretely:
 
 1. **Every overload.** Each public constructor, method overload, property getter/setter, field and operator of the 20
-   random types (439 members at P7 — 402 when this plan was written; inventory in §2) is invoked by at least one
+   random types (493 members after the wholeness pass, 439 at P7, 402 when this plan was written; inventory in §2) is
+   invoked by at least one
    oracle case, by its exact C# signature. A member without a NumPy counterpart is listed in an exemption table with
    a reason; an exemption that gains a case fails CI (self-retiring).
 2. **Every parameter.** For each overload: every optional parameter is exercised both omitted (the default path) and
@@ -56,6 +57,12 @@ Reflected on 2026-09-27 (`scratchpad/p7/inventory.cs`), committed as `test/oracl
 
 NumPy side: the coverage catalog's 218 `numpy.random.*` rows (module functions, `RandomState`, `Generator`, the five
 engines, `BitGenerator`, `SeedSequence`). Rows NumSharp cannot have (`capsule`, `cffi`, `ctypes`) are out of scope.
+
+The table is the P0 snapshot. At P7 the inventory held 439 members (`NumPyRandom` 188, `Generator` 86, the State classes
+grown by their setters and constructors); the wholeness pass (§9) brought it to **493**: `NumPyRandom` 240 (+50
+factories for numpy.random's classes — `np.random.PCG64(42)`, `np.random.SeedSequence(...)`,
+`np.random.Generator(bit_generator)` — and `randint`'s `NDArray` and `BigInteger` bounds) and `Generator` 88
+(`integers`' `NDArray` and `BigInteger` bounds); every other type unchanged.
 
 ## 3. Baseline (before this plan)
 
@@ -222,7 +229,7 @@ How a C# argument maps to the Python value NumPy receives, where the choice is n
 |---|---|---|
 | `uint[]` seed / entropy of a `SeedSequence`, an engine constructor or `default_rng` | a `uint32` ndarray | NumSharp's `SeedSequence` repr prints it as `array([...], dtype=uint32)`, NumPy's pass-through branch |
 | `int[]` / `long[]` seeds anywhere; `uint[]` in the legacy seeding (`seed`, `RandomState(...)`, `MT19937._legacy_seeding`) | a Python list | a list takes `init_by_array` at every length; a one-element ndarray would be squeezed to the scalar seed |
-| a null reference | `None` | every overload: OS entropy where NumPy draws it, NumPy's error where it raises |
+| a null reference (a `null` literal, or a typed null array such as `(int[])null`) | `None` | every overload: OS entropy where NumPy draws it, NumPy's error where it raises (a typed null seed ARRAY seeded the empty list until the wholeness pass, §10 item 18; the entropy masks could not show it) |
 
 Intended divergences (in the corpus, excused by `RandomApiDivergences` with a key AND a bound or condition, printed by
 every replay):
@@ -252,9 +259,51 @@ every replay):
 - [x] **P5 — gates G2–G6 on;** every divergence they surface triaged: fixed with a regression test, or recorded in §7.
 - [x] **P6 — nightly soak job** with 10 fresh seeds.
 - [x] **P7 — coverage join, docs, floors;** full verification (both TFMs, FuzzMatrix, coverage generator); commit.
+- [x] **Wholeness pass (after P7).** The oracle binds every overload by reflection, so it proves what each overload does
+  but not that NumPy's call, spelled verbatim in C#, compiles and binds it. 1,793 NumPy spellings compiled and compared
+  with NumPy 2.4.2 (the legacy ones with Linux NumPy too); the call-shape defects fixed and pinned by
+  `RandomApiWholeness.Test.cs`, the missing `integers`/`randint` bound forms added, the oracle regenerated over the
+  grown surface (§9 top entry, §10 items 15–20).
 
 ## 9. State log
 
+- **2026-09-27 (wholeness pass — every NumPy call spelling compiles and binds)** — Asked for "another pass validating
+  and confirming the random APIs are whole and fully supported, including edge cases". The oracle cannot answer that
+  alone: it resolves each overload by reflection, so a NumPy call that does not COMPILE in C#, or binds a different
+  overload than the one the oracle proved, is invisible to it. A scratchpad harness (not committed) therefore wrote
+  1,793 NumPy spellings verbatim in C# — 960 call forms (for every member: the required arguments only, each keyword
+  alone, all keywords, positional prefixes, NumPy's defaults spelled out, the `None` forms), 579 edge values and 254
+  array/big-bound `integers`/`randint` cases — compiled each in isolation, and compared its result with NumPy 2.4.2's
+  (721 legacy cases also against Linux NumPy, NumSharp's LP64 model). Found and fixed (§10 items 15–20): nine legacy
+  samplers rejected NumPy's size-only call; numpy.random's classes had no `np.random.<Class>(...)` spelling; a bare
+  `null` seed was ambiguous at every seeding entry point; a typed null seed ARRAY seeded the fixed empty-list stream
+  instead of OS entropy (hidden from the oracle by its entropy masks); `size: default` was ambiguous for seven legacy
+  samplers and bound `multivariate_normal`'s `long` shim (size 0, an empty result); and `integers`/`randint` lacked
+  NumPy's array bounds and Python-int (`BigInteger`) bounds. Each is pinned by `RandomApiWholeness.Test.cs` (11 tests,
+  each a compile-time proof of the NumPy spelling plus NumPy's values). Residual harness differences, all explained, none
+  a NumSharp defect: `size: null` does not compile for a `Shape` (a struct; `size: default` is the spelling, 79 forms),
+  `multivariate_normal` without the OpenBLAS backend (the `random_api_mvn` tier covers it), `seed()` entropy,
+  `random_raw()`'s Python int (value-identical 0-d uint64), the house AxisError suffix, the library-wide MemoryError text,
+  `vonmises` under glibc's libm, NumPy's documented `zipf` hang, and the harness's own spellings (C#'s `double.NaN` is
+  the NEGATIVE NaN, NumPy's `np.nan` the positive one; a nested Python list is not an `NDArray`). The oracle grew with
+  the surface: the G1 inventory to 493 members (§2), the parameter-name table to 130 (the seven module classes), the
+  generator gained `make_module_class_family` (every factory overload on the constructor families' arguments),
+  `integer_array_variants` (per-dtype bounds at, past and inside each dtype's range, NaN/infinity/None, mixed and
+  broadcast shapes, every layout through `derived`, endpoints, the size quirk) and `integer_big_extra`; corpus portable
+  9,820 (+1,335), host 15,795, mvn 730, LP64 234 (+28); the portable floor rose to 9,600. Two LP64-merge rules came with
+  the array path: a portable-tier value difference between the platforms now counts as LP64-dependent (float bounds in a
+  non-C layout take the 64-bit element-wise conversion on Linux only — values in range, no error), and a Windows row
+  flagged LP64 is dropped when Linux NumPy raised at an earlier receiver of the same (signature, variant) (validation
+  precedes the draw and depends on neither engine nor seed). Gates: `RandomApiCoverageTests.ReceiverIndependent` lists
+  the seven factories beside `RandomState` and `default_rng` (a factory builds from its arguments, never from the
+  receiver; the cases record the receiver's state to prove it); `OracleSurfaceCoverageTests` and
+  `LeakSurfaceCoverageTests` credit an `np.random` method the random-API tier replays by signature (the factories are
+  the first members that need it: no stream draw exercises them). Verified in the isolated worktree on HEAD `3d4392e6`
+  + this pass: full unit suite 17,751 / 17,750 and full Oracle suite 228 passed / 6 skipped (the unstaged bundled
+  OpenBLAS packaging tests and the soak) on net10.0 / net8.0; the coverage generator (300,350 contracts, the seven
+  `numpy.random.<Class>` rows now `exact` instead of `type`, headline oracle-verified 494/560) with its 32 tests and the
+  dashboard's 15, the documentation audit and the test inventory. Out of scope, reported: NumPy's positional
+  `np.empty(shape, dtype, order)` has no C# spelling (NumSharp's third positional parameter is `device`).
 - **2026-09-27 (P7 done — the plan is complete)** — Docs: the Fuzz README gained "The random-API oracle" (tiers,
   harness, receivers, observations, gates, soak, intended divergences, regeneration) and the generator in its file
   tree; its stale `gen_random_parity` carve row now names `multivariate_normal` only (the other seven samplers were
@@ -383,3 +432,48 @@ every replay):
 14. **`RandomState(BitGenerator)` named its parameter `bit_generator`**; NumPy's `RandomState(seed)` takes the engine as
     `seed`. Renamed. FIXED (the parameter-name gate found it; every other method and constructor of the
     NumPy-mirroring types already carried NumPy's names in NumPy's order).
+
+Items 15–20 come from the wholeness pass (§9), which compiles NumPy's spellings instead of reflecting — the class of
+defect the oracle cannot see by construction.
+
+15. **NumPy's size-only call did not compile for nine legacy samplers.** `normal`, `uniform`, `exponential`, `poisson`,
+    `gumbel`, `laplace`, `logistic`, `lognormal` and `rayleigh` default every parameter in NumPy
+    (`normal(loc=0.0, scale=1.0, size=None)`), but NumSharp split each into a defaulted one-draw overload without `size`
+    and a `size` overload without defaults, so `normal(size: 3)` and `uniform(high: 5.0, size: 2)` matched neither. The
+    size overload now carries NumPy's defaults and the one-draw overload's parameters are required, so the two never
+    compete (`normal()` and `normal(0.0, 1.0)` still draw one value, 0-d). FIXED.
+16. **numpy.random's classes were not reachable through the module.** `np.random.PCG64(42)`,
+    `np.random.Generator(np.random.PCG64(seed))` and `np.random.SeedSequence(42)` — NumPy's idiomatic spellings — did not
+    compile: NumSharp's `np.random` is a `NumPyRandom` instance and only `new PCG64(42)` existed. 50 `NumPyRandom` factory
+    methods (`RandomSampling/np.random.classes.cs`) now mirror every constructor overload of the five engines,
+    `SeedSequence` and `Generator`; `BitGenerator` has none, because NumPy refuses to instantiate the base class too.
+    Trap: inside `NumPyRandom` the factories shadow the class names in expressions and in crefs, so the file's own code
+    spells `global::NumSharp.X.Member` and `cref="NumSharp.X"` (type positions are unaffected). FIXED.
+17. **A bare `null` seed was ambiguous (CS0121)** between the `int[]`/`long[]`/`uint[]`/`ISeedSequence` overloads (and
+    `BitGenerator` for `RandomState`) of every engine constructor, `SeedSequence`, `default_rng`, `RandomState(...)`,
+    `seed(...)` and `MT19937._legacy_seeding(...)`: NumPy's `PCG64(None)`, `default_rng(None)` and `seed(None)` had no C#
+    spelling. `[OverloadResolutionPriority(1)]` names the overload that takes it (`Assembly/
+    OverloadResolutionPriorityAttribute.cs` polyfills the attribute for net8.0; the C# 13 compiler honors it across
+    assemblies, so callers on either framework bind the same overload). FIXED.
+18. **A typed null seed array was the empty list, not `None`.** `new SeedSequence((int[])null)` — and through it every
+    engine's and `default_rng`'s array overloads — seeded `SeedSequence([])`, the SAME stream on every run, where a null
+    means Python's `None` (fresh OS entropy) everywhere else. The oracle's entropy cases mask the state words on both
+    sides, so a deterministic "entropy" passed them. The typed constructors now forward to the object constructor, which
+    reads null as `None`; the pin asserts two constructions differ. FIXED.
+19. **`size: default` bound the wrong overload** — the C# spelling of NumPy's explicit `size=None` (`size: null` cannot
+    convert to the `Shape` struct). The `int[]`/`long[]`/`long` size shims of `dirichlet`, `hypergeometric`, `logseries`,
+    `multinomial`, `multivariate_normal`, `pareto` and `power` made it ambiguous, and for `multivariate_normal` it bound
+    the `long` shim: `size = 0`, an empty `(0, 2)` result where NumPy draws one vector — silently.
+    `[OverloadResolutionPriority(-1)]` on the shims; they still bind for callers that pass them. FIXED.
+20. **`integers`/`randint` lacked NumPy's array bounds and Python-int bounds**: `g.integers(lows, highs)`,
+    `rs.randint(0, highs, dtype=np.uint8)` and the full-range idiom `g.integers(0, 2**64, dtype=np.uint64)` had no
+    overload. Added `integers`/`randint(NDArray low, NDArray high = null, …)` — `RandomSampling/BoundedIntegers.Broadcast.cs`,
+    a port of `_bounded_integers.pyx.in`'s `_rand_<dtype>` path: two 0-d bounds take the scalar path through Python's
+    `int()`; otherwise each bound is checked against the dtype (skipped where `np.can_cast` guarantees it) and against
+    the other, in NumPy's order and words (`low is out of bounds for uint64`, `high <= 0`, `low >= high`, `cannot convert
+    float NaN to integer`), and the draws run per broadcast position with the buffered 8/16/32-bit words carried across
+    positions, `randint` on the legacy masked sampler. NumPy's two quirks are reproduced: a `size` smaller than the
+    bounds' broadcast takes the first positions (no error), and 64-bit float bounds in a non-C layout come out scrambled
+    (NumPy converts them element by element into a layout-keeping `empty_like`). Also added
+    `integers`/`randint(BigInteger low, BigInteger? high = null, …)` for bounds past `long`/`ulong`, with NumPy's
+    out-of-bounds texts beyond them. FIXED (missing feature).

@@ -197,6 +197,7 @@ namespace NumSharp.Tests.Fuzz
                 foreach (var c in file.Cases)
                     if (c.Op == "rnd" && c.Dist != null)
                         randomDists.Add(c.Dist);
+            var randomApiMethods = RandomApiReplayedMethods();
 
             var failures = new List<string>();
             var npNames = Surface(typeof(np), BindingFlags.Static);
@@ -239,7 +240,13 @@ namespace NumSharp.Tests.Fuzz
                     continue; // NumSharp extension; dedicated tests (NumPy spells it binomial(1,p))
                 if (RandomKnownGaps.Contains(name))
                     continue;
-                failures.Add($"np.random.{name}: neither stream corpus nor explicit classification");
+                // Checked last so the classifications above keep their meaning (and their prose) where they apply: this
+                // route is what covers numpy.random's classes called through the module — np.random.PCG64(42),
+                // np.random.SeedSequence(...), np.random.Generator(bit_generator), NumPyRandom's factory methods, which
+                // no stream draw exercises — and any later method the random-API oracle replays by signature.
+                if (randomApiMethods.Contains(name))
+                    continue;
+                failures.Add($"np.random.{name}: neither stream corpus, random-API oracle case nor explicit classification");
             }
 
             // Classification entries must self-retire: a renamed/deleted method or a newly direct
@@ -256,7 +263,8 @@ namespace NumSharp.Tests.Fuzz
                     failures.Add($"stale random known-gap classification: {name} is now in the stream corpus");
 
             Console.WriteLine($"[OracleSurface] np={npNames.Length}, corpus_ops={corpusOps.Count}, " +
-                              $"random_streams={randomDists.Count}, aliases={EquivalentAliases.Count}, " +
+                              $"random_streams={randomDists.Count}, random_api_methods={randomApiMethods.Count}, " +
+                              $"aliases={EquivalentAliases.Count}, " +
                               $"sibling={SiblingOwned.Count}, compatibility={CompatibilityOnly.Count}, " +
                               $"random_open_gaps={RandomKnownGaps.Count}");
 
@@ -297,6 +305,58 @@ namespace NumSharp.Tests.Fuzz
                     if (!string.IsNullOrEmpty(c.Op))
                         ops.Add(c.Op);
             return ops;
+        }
+
+        /// <summary>
+        ///     The <see cref="NumPyRandom"/> methods the random-API oracle replays by exact C# signature: the method name of
+        ///     every <c>random_api</c> case whose <c>params.sig</c> is a <c>NumPyRandom.&lt;name&gt;(…)</c> overload, read off
+        ///     the process-wide <see cref="CorpusSurvey"/> rather than a second parse of the random-API tiers.
+        /// </summary>
+        /// <returns>A new method-name set, ordinal-compared (generic arity stripped: <c>randn&lt;T&gt;</c> is <c>randn</c>).</returns>
+        /// <remarks>
+        ///     <para>
+        ///     The survey keeps a case's params only as <see cref="SurveyCase.ParamSignature"/> — <c>key=rawJson</c> pairs
+        ///     ordinal by key, joined by <c>|</c> — so the signature is the raw JSON string after a leading or <c>|</c>-preceded
+        ///     <c>sig=</c>. A signature holds no quote or backslash (C# type names and punctuation only), so the name runs to
+        ///     the first <c>(</c> or <c>&lt;</c>; a signature with no parameter list before its closing quote is a property or
+        ///     field, which <see cref="Surface"/> (methods) never asks about, and is skipped.
+        ///     </para>
+        ///     <para>
+        ///     One case per name is the right granularity for this gate, as one <c>dist</c> per sampler is for the stream tier:
+        ///     the random-API gates (<c>RandomApiCoverageTests</c>, G2 in particular) prove that every OVERLOAD of the name has
+        ///     a case, and the leak sweep replays all of them.
+        ///     </para>
+        /// </remarks>
+        private static HashSet<string> RandomApiReplayedMethods()
+        {
+            const string Key = "sig=\"NumPyRandom.";
+            var names = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var file in CorpusSurvey.Files)
+                foreach (var c in file.Cases)
+                {
+                    if (c.Op != "random_api" || string.IsNullOrEmpty(c.ParamSignature))
+                        continue;
+                    string p = c.ParamSignature;
+                    // The key must start a pair: at the very beginning, or right after the '|' separator — never inside
+                    // another pair's raw JSON value.
+                    int at;
+                    if (p.StartsWith(Key, StringComparison.Ordinal))
+                        at = 0;
+                    else
+                    {
+                        int bar = p.IndexOf("|" + Key, StringComparison.Ordinal);
+                        if (bar < 0)
+                            continue;
+                        at = bar + 1;
+                    }
+                    int start = at + Key.Length;
+                    int quote = p.IndexOf('"', start);
+                    int end = p.IndexOfAny(new[] { '(', '<' }, start);
+                    if (end < 0 || (quote >= 0 && quote < end))
+                        continue;
+                    names.Add(p.Substring(start, end - start));
+                }
+            return names;
         }
 
         // ================= ndarray (the instance surface, coverage plan §A1 / row G0) =========

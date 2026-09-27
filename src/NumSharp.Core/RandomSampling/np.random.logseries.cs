@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 namespace NumSharp
 {
     public partial class NumPyRandom
@@ -35,6 +36,14 @@ namespace NumSharp
         /// <param name="size">Output shape as int array.</param>
         /// <returns>Drawn samples from the parameterized logarithmic series distribution.</returns>
         /// <exception cref="ValueError"><paramref name="p"/> is outside <c>[0, 1)</c> or NaN, or a size dimension is negative.</exception>
+        /// <remarks>
+        ///     A source-compatibility shim ranked BELOW the <c>Shape</c> overloads
+        ///     (<c>OverloadResolutionPriority(-1)</c>): an int, an array or a tuple converts to <c>Shape</c> with the same
+        ///     meaning, so a C# 13+ caller always binds the NumPy-shaped overload — and <c>size: default</c> (NumPy's
+        ///     explicit <c>size=None</c>) is no longer ambiguous between the shims (or, for a <c>long</c> shim, silently a
+        ///     zero-length size). Kept so code compiled against it keeps binding.
+        /// </remarks>
+        [OverloadResolutionPriority(-1)]
         public NDArray logseries(double p, int[] size)
             => logseries(p, new Shape(size));
 
@@ -45,6 +54,14 @@ namespace NumSharp
         /// <param name="size">Output shape.</param>
         /// <returns>Drawn samples from the parameterized logarithmic series distribution.</returns>
         /// <exception cref="ValueError"><paramref name="p"/> is outside <c>[0, 1)</c> or NaN, or a size dimension is negative.</exception>
+        /// <remarks>
+        ///     A source-compatibility shim ranked BELOW the <c>Shape</c> overloads
+        ///     (<c>OverloadResolutionPriority(-1)</c>): an int, an array or a tuple converts to <c>Shape</c> with the same
+        ///     meaning, so a C# 13+ caller always binds the NumPy-shaped overload — and <c>size: default</c> (NumPy's
+        ///     explicit <c>size=None</c>) is no longer ambiguous between the shims (or, for a <c>long</c> shim, silently a
+        ///     zero-length size). Kept so code compiled against it keeps binding.
+        /// </remarks>
+        [OverloadResolutionPriority(-1)]
         public NDArray logseries(double p, long[] size)
             => logseries(p, new Shape(size));
 
@@ -107,6 +124,14 @@ namespace NumSharp
         /// <param name="size">Output shape as a single integer — NumPy's integer <c>size</c>: one npy_intp (int64) dimension.</param>
         /// <returns>Drawn samples from the parameterized logarithmic series distribution.</returns>
         /// <exception cref="ValueError"><paramref name="p"/> is outside <c>[0, 1)</c> or NaN, or <paramref name="size"/> is negative.</exception>
+        /// <remarks>
+        ///     A source-compatibility shim ranked BELOW the <c>Shape</c> overloads
+        ///     (<c>OverloadResolutionPriority(-1)</c>): an int, an array or a tuple converts to <c>Shape</c> with the same
+        ///     meaning, so a C# 13+ caller always binds the NumPy-shaped overload — and <c>size: default</c> (NumPy's
+        ///     explicit <c>size=None</c>) is no longer ambiguous between the shims (or, for a <c>long</c> shim, silently a
+        ///     zero-length size). Kept so code compiled against it keeps binding.
+        /// </remarks>
+        [OverloadResolutionPriority(-1)]
         public NDArray logseries(double p, long size)
             => logseries(p, new long[] { size });
     }

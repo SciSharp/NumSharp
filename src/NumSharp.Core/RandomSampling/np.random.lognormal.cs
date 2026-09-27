@@ -5,11 +5,18 @@ namespace NumSharp
         /// <summary>
         ///     Draw a single sample from a log-normal distribution.
         /// </summary>
-        /// <param name="mean">Mean value of the underlying normal distribution. Default is 0.</param>
-        /// <param name="sigma">Standard deviation of the underlying normal distribution. Must be non-negative. Default is 1.</param>
+        /// <param name="mean">Mean value of the underlying normal distribution.</param>
+        /// <param name="sigma">Standard deviation of the underlying normal distribution. Must be non-negative.</param>
         /// <returns>A 0-d float64 array holding the draw.</returns>
         /// <exception cref="ValueError"><paramref name="sigma"/> is negative, including <c>-0.0</c> (<c>sigma &lt; 0</c>).</exception>
-        public NDArray lognormal(double mean = 0.0, double sigma = 1.0) => lognormal(mean, sigma, Shape.Scalar);
+        /// <remarks>
+        ///     Every distribution argument given, no size: one draw (a 0-d array, NumPy's size <c>()</c>, which draws
+        ///     exactly what <c>None</c> draws). NumPy's defaults live on the size overload, which carries NumPy's whole
+        ///     <c>lognormal(mean=0.0, sigma=1.0, size=None)</c> signature — so <c>lognormal()</c>, <c>lognormal(size:
+        ///     3)</c> and any argument left out bind there. This overload has no defaults on purpose: two overloads
+        ///     that both need defaults filled in are ambiguous to C#, and the size-only call would not compile.
+        /// </remarks>
+        public NDArray lognormal(double mean, double sigma) => lognormal(mean, sigma, Shape.Scalar);
 
         /// <summary>
         ///     Draw samples from a log-normal distribution.
@@ -32,7 +39,7 @@ namespace NumSharp
         ///     (no intermediate array; the split lets the CPU overlap the <c>exp</c> calls). Holds the bit generator's lock for
         ///     the draws.
         /// </remarks>
-        public NDArray lognormal(double mean, double sigma, Shape size)
+        public NDArray lognormal(double mean = 0.0, double sigma = 1.0, Shape size = default)
         {
             RandomConstraints.Check(sigma, "sigma", ConstraintType.CONS_NON_NEGATIVE);
 

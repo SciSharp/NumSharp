@@ -5,11 +5,18 @@ namespace NumSharp
         /// <summary>
         ///     Draw a single sample from a Gumbel distribution.
         /// </summary>
-        /// <param name="loc">The location of the mode of the distribution. Default is 0.</param>
-        /// <param name="scale">The scale parameter of the distribution. Must be non-negative. Default is 1.</param>
+        /// <param name="loc">The location of the mode of the distribution.</param>
+        /// <param name="scale">The scale parameter of the distribution. Must be non-negative.</param>
         /// <returns>A 0-d float64 array holding the draw.</returns>
         /// <exception cref="ValueError"><paramref name="scale"/> is negative, including <c>-0.0</c> (<c>scale &lt; 0</c>).</exception>
-        public NDArray gumbel(double loc = 0.0, double scale = 1.0) => gumbel(loc, scale, Shape.Scalar);
+        /// <remarks>
+        ///     Every distribution argument given, no size: one draw (a 0-d array, NumPy's size <c>()</c>, which draws
+        ///     exactly what <c>None</c> draws). NumPy's defaults live on the size overload, which carries NumPy's whole
+        ///     <c>gumbel(loc=0.0, scale=1.0, size=None)</c> signature — so <c>gumbel()</c>, <c>gumbel(size: 3)</c> and
+        ///     any argument left out bind there. This overload has no defaults on purpose: two overloads that both need
+        ///     defaults filled in are ambiguous to C#, and the size-only call would not compile.
+        /// </remarks>
+        public NDArray gumbel(double loc, double scale) => gumbel(loc, scale, Shape.Scalar);
 
         /// <summary>
         ///     Draw samples from a Gumbel distribution (extreme value type I).
@@ -38,7 +45,7 @@ namespace NumSharp
         ///     only when <c>U == 1</c>. <c>scale == 0</c> STILL consumes a uniform per value (the former shortcut skipped
         ///     the draw and desynchronized every later value). Holds the bit generator's lock for the draws.
         /// </remarks>
-        public NDArray gumbel(double loc, double scale, Shape size)
+        public NDArray gumbel(double loc = 0.0, double scale = 1.0, Shape size = default)
         {
             RandomConstraints.Check(scale, "scale", ConstraintType.CONS_NON_NEGATIVE);
 

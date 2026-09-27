@@ -7,11 +7,18 @@ namespace NumSharp
         /// <summary>
         ///     Draw a single sample from a uniform distribution.
         /// </summary>
-        /// <param name="low">Lower boundary of the output interval. Default is 0.</param>
-        /// <param name="high">Upper boundary of the output interval. Default is 1.0.</param>
+        /// <param name="low">Lower boundary of the output interval.</param>
+        /// <param name="high">Upper boundary of the output interval.</param>
         /// <returns>A 0-d float64 array holding the draw.</returns>
         /// <exception cref="OverflowException"><c>high - low</c> is not finite (NumPy's <c>OverflowError: Range exceeds valid bounds</c>).</exception>
-        public NDArray uniform(double low = 0.0, double high = 1.0) => uniform(low, high, Shape.Scalar);
+        /// <remarks>
+        ///     Every distribution argument given, no size: one draw (a 0-d array, NumPy's size <c>()</c>, which draws
+        ///     exactly what <c>None</c> draws). NumPy's defaults live on the size overload, which carries NumPy's whole
+        ///     <c>uniform(low=0.0, high=1.0, size=None)</c> signature — so <c>uniform()</c>, <c>uniform(size: 3)</c>
+        ///     and any argument left out bind there. This overload has no defaults on purpose: two overloads that both
+        ///     need defaults filled in are ambiguous to C#, and the size-only call would not compile.
+        /// </remarks>
+        public NDArray uniform(double low, double high) => uniform(low, high, Shape.Scalar);
 
         /// <summary>
         ///     Draw samples from a uniform distribution.
@@ -34,7 +41,7 @@ namespace NumSharp
         ///     transformed in place). <c>high &lt; low</c> is legal and samples <c>(high, low]</c>, as in NumPy. Holds the bit
         ///     generator's lock for the draws.
         /// </remarks>
-        public NDArray uniform(double low, double high, Shape size)
+        public NDArray uniform(double low = 0.0, double high = 1.0, Shape size = default)
         {
             double range = high - low;
             if (!double.IsFinite(range))

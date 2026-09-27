@@ -1,5 +1,6 @@
 using System;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
 
 namespace NumSharp
@@ -59,21 +60,21 @@ namespace NumSharp
         public MT19937(BigInteger seed) : this(new SeedSequence(seed)) { }
 
         /// <summary>Constructs an MT19937 seeded from a sequence of non-negative integers through <see cref="SeedSequence"/>.</summary>
-        /// <param name="seed">The seed words (each must be non-negative).</param>
+        /// <param name="seed">The seed words (each must be non-negative). Null is NumPy's <c>None</c> — fresh OS entropy (it used to seed the fixed empty-list stream).</param>
         /// <exception cref="ValueError">An element is negative.</exception>
         public MT19937(int[] seed) : this(new SeedSequence(seed)) { }
 
         /// <summary>Constructs an MT19937 seeded from a sequence of non-negative integers through <see cref="SeedSequence"/>.</summary>
-        /// <param name="seed">The seed words (each must be non-negative).</param>
+        /// <param name="seed">The seed words (each must be non-negative). Null is NumPy's <c>None</c> — fresh OS entropy (it used to seed the fixed empty-list stream).</param>
         /// <exception cref="ValueError">An element is negative.</exception>
         public MT19937(long[] seed) : this(new SeedSequence(seed)) { }
 
         /// <summary>Constructs an MT19937 seeded from uint32 words through <see cref="SeedSequence"/>.</summary>
-        /// <param name="seed">The seed words.</param>
+        /// <param name="seed">The seed words. Null is NumPy's <c>None</c> — fresh OS entropy (it used to seed the fixed empty-list stream).</param>
         public MT19937(uint[] seed) : this(new SeedSequence(seed)) { }
 
         /// <summary>
-        ///     Constructs an MT19937 seeded from <paramref name="seedSeq"/> exactly as NumPy's <c>MT19937.__init__</c>:
+        ///     Constructs an MT19937 seeded from <paramref name="seed"/> exactly as NumPy's <c>MT19937.__init__</c>:
         ///     <c>val = seed_seq.generate_state(624, np.uint32)</c>, <c>key[0] = 0x80000000</c>, <c>key[1:] = val[1:]</c>,
         ///     <c>pos = 623</c>.
         /// </summary>
@@ -83,7 +84,13 @@ namespace NumSharp
         /// <remarks>
         ///     <c>pos</c> is 623, not 624: NumPy's fill loop leaves <c>i = 623</c> behind and stores it, so the first
         ///     draw tempers <c>key[623]</c> before the first twist. That is part of the stream and is kept.
+        ///     <br/>
+        ///     The overload a bare <c>null</c> literal binds (<c>new MT19937(null)</c>, NumPy's <c>MT19937(None)</c>): the
+        ///     <c>int[]</c>/<c>long[]</c>/<c>uint[]</c> overloads are equally good targets for it under plain C# rules, so
+        ///     this one carries the higher <c>OverloadResolutionPriority</c> — harmless for every non-null argument, since
+        ///     only a seed sequence converts to <see cref="ISeedSequence"/>.
         /// </remarks>
+        [OverloadResolutionPriority(1)]
         public MT19937(ISeedSequence seed) : base(seed ?? new SeedSequence())
         {
             SeedFromSequence(seed_seq);
@@ -462,6 +469,13 @@ namespace NumSharp
         /// <param name="seed">The key words (non-empty); null is NumPy's <c>None</c> — fresh OS entropy, exactly
         ///     <see cref="_legacy_seeding()"/>.</param>
         /// <exception cref="ValueError"><paramref name="seed"/> is empty (<c>Seed must be non-empty</c>).</exception>
+        /// <remarks>
+        ///     The overload a bare <c>null</c> literal binds (<c>_legacy_seeding(null)</c>, NumPy's
+        ///     <c>_legacy_seeding(None)</c>): the <c>int[]</c>/<c>long[]</c>/<c>uint[]</c> overloads are equally good targets
+        ///     for it under plain C# rules, so this one carries the higher <c>OverloadResolutionPriority</c> — harmless for
+        ///     every non-null argument, since no other array converts to <c>uint[]</c>.
+        /// </remarks>
+        [OverloadResolutionPriority(1)]
         public void _legacy_seeding(uint[] seed)
         {
             // NumPy's _legacy_seeding tests `seed is None` before anything else and seeds from a new SeedSequence.

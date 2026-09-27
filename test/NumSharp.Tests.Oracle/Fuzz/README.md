@@ -934,13 +934,22 @@ Plan and state: `docs/plans/random-oracle-coverage.md`. The `random_parity` tier
 hand-written dispatch (one C# call per NumPy call pattern); this family covers the WHOLE random world by exact
 overload: every public member of `NumPyRandom`, `NumPyRandom.State`, `NativeRandomState`, `Generator`, `BitGenerator`,
 the five engines (`MT19937`, `PCG64`, `PCG64DXSM`, `Philox`, `SFC64`) and their `State` classes, `SeedSequence`,
-`SeedlessSeedSequence` and the two seed-sequence interfaces — 439 members in `test/oracle/random_surface.json`, which
-the G1 gate keeps equal to reflection.
+`SeedlessSeedSequence` and the two seed-sequence interfaces — 493 members in `test/oracle/random_surface.json` (439 at
+the plan's P7; the wholeness pass added the 50 `np.random.<Class>(...)` factories and the `NDArray`/`BigInteger` bounds
+of `integers` and `randint`), which the G1 gate keeps equal to reflection.
 
 - **Signature-addressed cases.** Each case names the canonical C# signature it exercises (`params.sig`); the harness
   (`RandomApi/RandomApiHarness.cs`) resolves it by reflection and invokes exactly that member — an omitted optional
   argument gets the declared default, as a compiled call would, while NumPy is called without it, so a default that
   differs from NumPy's is a divergence. `params.member` (`<Owner>.<member>`) is the coverage join's key.
+- **Call shapes are not the replay's job.** Because the harness reflects, it proves what each overload DOES, never that
+  NumPy's call spelled verbatim in C# compiles and binds that overload. The wholeness pass (plan §9) compiled 1,793
+  NumPy spellings against NumPy 2.4.2 and fixed what did not bind: the size-only call of nine legacy samplers, the
+  `np.random.<Class>(...)` spellings, a bare `null` seed, `size: default` against the size shims (it bound
+  `multivariate_normal`'s `long` shim: size 0, silently), plus a typed null seed ARRAY that seeded the empty list — hidden
+  here because entropy cases mask the state on both sides. `RandomSampling/RandomApiWholeness.Test.cs` pins each: a
+  compile-time proof of the NumPy spelling, then NumPy's values. Add a pin there when a new overload could change what
+  an existing NumPy spelling binds.
 - **Receivers.** Legacy members run on the legacy-seeded MT19937 and on `RandomState(ENGINE(seed))` for every engine;
   `Generator` members on `Generator(ENGINE(seed))` for every engine; bit-generator members on every engine; state
   objects, seed sequences and constructors on their own receivers. Primings (`u32` buffered half, `gauss` cached
@@ -950,11 +959,15 @@ the G1 gate keeps equal to reflection.
   sequence); seed sequences by pool hash and repr. Every answered case on a stateful receiver ALSO records the
   receiver's full state after the call, so over- and under-drawing is caught, not only wrong values. OS-entropy words
   are masked identically on both sides.
-- **Tiers.** `random_api.jsonl` (portable, 8,485), `random_api_host.jsonl` (samplers consuming libm, win-amd64
-  authored, 15,779), `random_api_mvn.jsonl` (`multivariate_normal`, byte-exact only through NumPy's own
+- **Tiers.** `random_api.jsonl` (portable, 9,820), `random_api_host.jsonl` (samplers consuming libm, win-amd64
+  authored, 15,795), `random_api_mvn.jsonl` (`multivariate_normal`, byte-exact only through NumPy's own
   scipy-openblas at one thread, 730) and `random_api_lp64.jsonl` (answers that depend on C long being 64-bit, from
-  Linux NumPy through the generator's WSL sub-run, 206; hard-gated on x64 Windows and Linux). 10 fixed seeds; committed
-  floors in `FuzzCorpusTests.RandomApi.RandomApiMinCases`.
+  Linux NumPy through the generator's WSL sub-run, 234; hard-gated on x64 Windows and Linux). 10 fixed seeds; committed
+  floors in `FuzzCorpusTests.RandomApi.RandomApiMinCases`. A case moves to the LP64 tier when Linux's answer leaves
+  int32, when the platforms disagree on raising, or when a PORTABLE case's value differs between them (no libm is
+  involved there, so the difference is the C long: `randint`'s float bounds in a non-C layout take the 64-bit
+  element-wise conversion on Linux only); a Windows row is dropped when Linux NumPy raised at an earlier receiver of the
+  same signature and variant.
 - **Gates** (`RandomApi/RandomApiCoverageTests.cs`, corpus-only): G2 every overload has a case or a reasoned
   exemption; G3 every parameter omitted and non-default, every required one two values, every nullable one null and
   non-null, `params` arrays 0 and 2+ elements, every enumerated value NumPy accepts plus one it rejects, and NumPy's

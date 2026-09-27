@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using NumSharp.Backends;
 using NumSharp.Backends.Unmanaged;
 
@@ -93,6 +94,14 @@ namespace NumSharp
         /// <param name="tol">Tolerance when checking covariance matrix validity.</param>
         /// <returns>Drawn samples of shape (size, N).</returns>
         /// <exception cref="ValueError">See <see cref="multivariate_normal(double[], double[,], Shape?, string, double)"/>.</exception>
+        /// <remarks>
+        ///     A source-compatibility shim ranked BELOW the <c>Shape</c> overloads
+        ///     (<c>OverloadResolutionPriority(-1)</c>): an int, an array or a tuple converts to <c>Shape</c> with the same
+        ///     meaning, so a C# 13+ caller always binds the NumPy-shaped overload — and <c>size: default</c> (NumPy's
+        ///     explicit <c>size=None</c>) is no longer ambiguous between the shims (or, for a <c>long</c> shim, silently a
+        ///     zero-length size). Kept so code compiled against it keeps binding.
+        /// </remarks>
+        [OverloadResolutionPriority(-1)]
         public NDArray multivariate_normal(double[] mean, double[,] cov, long size,
             string check_valid = "warn", double tol = 1e-8)
             => multivariate_normal(mean, cov, new Shape(size), check_valid, tol);
@@ -105,6 +114,14 @@ namespace NumSharp
         /// <param name="size">Sample shape as int array.</param>
         /// <returns>Drawn samples of shape (*size, N).</returns>
         /// <exception cref="ValueError">See <see cref="multivariate_normal(double[], double[,], Shape?, string, double)"/>.</exception>
+        /// <remarks>
+        ///     A source-compatibility shim ranked BELOW the <c>Shape</c> overloads
+        ///     (<c>OverloadResolutionPriority(-1)</c>): an int, an array or a tuple converts to <c>Shape</c> with the same
+        ///     meaning, so a C# 13+ caller always binds the NumPy-shaped overload — and <c>size: default</c> (NumPy's
+        ///     explicit <c>size=None</c>) is no longer ambiguous between the shims (or, for a <c>long</c> shim, silently a
+        ///     zero-length size). Kept so code compiled against it keeps binding.
+        /// </remarks>
+        [OverloadResolutionPriority(-1)]
         public NDArray multivariate_normal(double[] mean, double[,] cov, int[] size)
             => multivariate_normal(mean, cov, new Shape(size));
 
@@ -116,6 +133,14 @@ namespace NumSharp
         /// <param name="size">Sample shape as long array.</param>
         /// <returns>Drawn samples of shape (*size, N).</returns>
         /// <exception cref="ValueError">See <see cref="multivariate_normal(double[], double[,], Shape?, string, double)"/>.</exception>
+        /// <remarks>
+        ///     A source-compatibility shim ranked BELOW the <c>Shape</c> overloads
+        ///     (<c>OverloadResolutionPriority(-1)</c>): an int, an array or a tuple converts to <c>Shape</c> with the same
+        ///     meaning, so a C# 13+ caller always binds the NumPy-shaped overload — and <c>size: default</c> (NumPy's
+        ///     explicit <c>size=None</c>) is no longer ambiguous between the shims (or, for a <c>long</c> shim, silently a
+        ///     zero-length size). Kept so code compiled against it keeps binding.
+        /// </remarks>
+        [OverloadResolutionPriority(-1)]
         public NDArray multivariate_normal(double[] mean, double[,] cov, long[] size)
             => multivariate_normal(mean, cov, new Shape(size));
 

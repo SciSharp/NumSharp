@@ -71,6 +71,15 @@ namespace NumSharp.Tests.Fuzz.RandomApi
         {
             ["NumPyRandom.RandomState"] = "np.random.RandomState(...) builds a new RandomState from its seed argument",
             ["NumPyRandom.default_rng"] = "np.random.default_rng(...) builds a Generator from its seed argument",
+            // numpy.random's classes through the module: each factory builds what the constructor builds, from its own
+            // arguments (the cases record the receiver's state to prove it is never drawn from).
+            ["NumPyRandom.MT19937"] = "np.random.MT19937(...) builds a new engine from its seed argument",
+            ["NumPyRandom.PCG64"] = "np.random.PCG64(...) builds a new engine from its seed argument",
+            ["NumPyRandom.PCG64DXSM"] = "np.random.PCG64DXSM(...) builds a new engine from its seed argument",
+            ["NumPyRandom.Philox"] = "np.random.Philox(...) builds a new engine from its seed/counter/key arguments",
+            ["NumPyRandom.SFC64"] = "np.random.SFC64(...) builds a new engine from its seed argument",
+            ["NumPyRandom.SeedSequence"] = "np.random.SeedSequence(...) builds a new sequence from its entropy argument",
+            ["NumPyRandom.Generator"] = "np.random.Generator(...) wraps its bit_generator argument",
         };
 
         /// <summary>

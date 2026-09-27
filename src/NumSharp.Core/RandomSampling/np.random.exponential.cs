@@ -7,15 +7,23 @@ namespace NumSharp
         /// <summary>
         ///     Draw a single sample from an exponential distribution.
         /// </summary>
-        /// <param name="scale">The scale parameter, β = 1/λ. Must be non-negative. Default is 1.0.</param>
+        /// <param name="scale">The scale parameter, β = 1/λ. Must be non-negative.</param>
         /// <returns>A 0-d float64 array holding the draw.</returns>
         /// <exception cref="ValueError"><paramref name="scale"/> is negative, including <c>-0.0</c> (<c>scale &lt; 0</c>).</exception>
-        public NDArray exponential(double scale = 1.0) => exponential(scale, Shape.Scalar);
+        /// <remarks>
+        ///     Every distribution argument given, no size: one draw (a 0-d array, NumPy's size <c>()</c>, which draws
+        ///     exactly what <c>None</c> draws). NumPy's defaults live on the size overload, which carries NumPy's whole
+        ///     <c>exponential(scale=1.0, size=None)</c> signature — so <c>exponential()</c>, <c>exponential(size:
+        ///     3)</c> and any argument left out bind there. This overload has no defaults on purpose: two overloads
+        ///     that both need defaults filled in are ambiguous to C#, and the size-only call would not compile.
+        /// </remarks>
+        public NDArray exponential(double scale) => exponential(scale, Shape.Scalar);
 
         /// <summary>
         ///     Draw samples from an exponential distribution.
         /// </summary>
-        /// <param name="scale">The scale parameter, β = 1/λ. Must be non-negative (NaN is accepted and samples NaN, as in NumPy).</param>
+        /// <param name="scale">The scale parameter, β = 1/λ. Must be non-negative (NaN is accepted and samples NaN, as in NumPy).
+        ///     Default is 1.0.</param>
         /// <param name="size">Output shape; <c>default</c> (NumPy's <c>None</c>) draws a single value.</param>
         /// <returns>Drawn samples from the parameterized exponential distribution (float64).</returns>
         /// <exception cref="ValueError"><paramref name="scale"/> is negative, including <c>-0.0</c> (<c>scale &lt; 0</c>), or
@@ -32,7 +40,7 @@ namespace NumSharp
         ///     output and transformed in place — the same stream as NumPy's per-value calls, with no intermediate arrays.
         ///     Holds the bit generator's lock for the draws.
         /// </remarks>
-        public NDArray exponential(double scale, Shape size)
+        public NDArray exponential(double scale = 1.0, Shape size = default)
         {
             RandomConstraints.Check(scale, "scale", ConstraintType.CONS_NON_NEGATIVE);
 

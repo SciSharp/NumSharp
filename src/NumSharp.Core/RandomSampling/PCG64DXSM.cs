@@ -1,5 +1,6 @@
 using System;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 
 namespace NumSharp
 {
@@ -42,22 +43,29 @@ namespace NumSharp
         public PCG64DXSM(BigInteger seed) : this(new SeedSequence(seed)) { }
 
         /// <summary>Constructs a PCG64DXSM seeded from a sequence of non-negative integers through <see cref="SeedSequence"/>.</summary>
-        /// <param name="seed">The seed words (each must be non-negative).</param>
+        /// <param name="seed">The seed words (each must be non-negative). Null is NumPy's <c>None</c> — fresh OS entropy (it used to seed the fixed empty-list stream).</param>
         /// <exception cref="ValueError">An element is negative.</exception>
         public PCG64DXSM(int[] seed) : this(new SeedSequence(seed)) { }
 
         /// <summary>Constructs a PCG64DXSM seeded from a sequence of non-negative integers through <see cref="SeedSequence"/>.</summary>
-        /// <param name="seed">The seed words (each must be non-negative).</param>
+        /// <param name="seed">The seed words (each must be non-negative). Null is NumPy's <c>None</c> — fresh OS entropy (it used to seed the fixed empty-list stream).</param>
         /// <exception cref="ValueError">An element is negative.</exception>
         public PCG64DXSM(long[] seed) : this(new SeedSequence(seed)) { }
 
         /// <summary>Constructs a PCG64DXSM seeded from uint32 words through <see cref="SeedSequence"/>.</summary>
-        /// <param name="seed">The seed words.</param>
+        /// <param name="seed">The seed words. Null is NumPy's <c>None</c> — fresh OS entropy (it used to seed the fixed empty-list stream).</param>
         public PCG64DXSM(uint[] seed) : this(new SeedSequence(seed)) { }
 
         /// <summary>Constructs and seeds a PCG64DXSM from the given seed sequence (<c>generate_state(4, uint64)</c>).</summary>
         /// <param name="seed">The seed sequence — null is NumPy's <c>seed=None</c>: a fresh OS-entropy <see cref="SeedSequence"/> (the parameter name is NumPy's, so <c>seed: sequence</c> ports verbatim).</param>
         /// <exception cref="NotImplementedException"><paramref name="seed"/> is a <see cref="SeedlessSeedSequence"/>.</exception>
+        /// <remarks>
+        ///     The overload a bare <c>null</c> literal binds (<c>new PCG64DXSM(null)</c>, NumPy's <c>PCG64DXSM(None)</c>): the
+        ///     <c>int[]</c>/<c>long[]</c>/<c>uint[]</c> overloads are equally good targets for it under plain C# rules, so
+        ///     this one carries the higher <c>OverloadResolutionPriority</c> — harmless for every non-null argument, since
+        ///     only a seed sequence converts to <see cref="ISeedSequence"/>.
+        /// </remarks>
+        [OverloadResolutionPriority(1)]
         public PCG64DXSM(ISeedSequence seed) : base(seed ?? new SeedSequence())
         {
             ulong[] val = SeedWords64(seed_seq, 4);

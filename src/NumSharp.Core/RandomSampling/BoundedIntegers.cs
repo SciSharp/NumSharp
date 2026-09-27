@@ -15,7 +15,7 @@ namespace NumSharp
     ///     that fit 32 bits even when the bounds need 64 — so a generator's integer draws stay byte-identical to
     ///     NumPy's for every dtype. Callers hold the bit generator's lock around a fill.
     /// </remarks>
-    internal static class BoundedIntegers
+    internal static partial class BoundedIntegers
     {
         /// <summary>
         ///     Validates a bounded-integer request and draws it: NumPy's <c>Generator.integers</c> /

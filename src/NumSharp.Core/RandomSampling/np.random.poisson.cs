@@ -5,10 +5,17 @@ namespace NumSharp
         /// <summary>
         ///     Draw a single sample from a Poisson distribution.
         /// </summary>
-        /// <param name="lam">Expected number of events occurring in a fixed-time interval, must be &gt;= 0. Default is 1.0.</param>
+        /// <param name="lam">Expected number of events occurring in a fixed-time interval, must be &gt;= 0.</param>
         /// <returns>A 0-d int64 array holding the count.</returns>
         /// <exception cref="ValueError"><paramref name="lam"/> is negative or NaN, or too large.</exception>
-        public NDArray poisson(double lam = 1.0) => poisson(lam, Shape.Scalar);
+        /// <remarks>
+        ///     Every distribution argument given, no size: one draw (a 0-d array, NumPy's size <c>()</c>, which draws
+        ///     exactly what <c>None</c> draws). NumPy's defaults live on the size overload, which carries NumPy's whole
+        ///     <c>poisson(lam=1.0, size=None)</c> signature — so <c>poisson()</c>, <c>poisson(size: 3)</c> and any
+        ///     argument left out bind there. This overload has no defaults on purpose: two overloads that both need
+        ///     defaults filled in are ambiguous to C#, and the size-only call would not compile.
+        /// </remarks>
+        public NDArray poisson(double lam) => poisson(lam, Shape.Scalar);
 
         /// <summary>
         ///     Draw samples from a Poisson distribution.
@@ -30,7 +37,7 @@ namespace NumSharp
         ///     <c>np.random.RandomState(seed).poisson</c>. int64 output with the int64 bound — NumPy's LP64 shape; its win-amd64
         ///     build returns int32 and stops at <c>lam = 2147020237.4999895</c>. Holds the bit generator's lock for the draws.
         /// </remarks>
-        public NDArray poisson(double lam, Shape size)
+        public NDArray poisson(double lam = 1.0, Shape size = default)
         {
             RandomConstraints.Check(lam, "lam", ConstraintType.LEGACY_CONS_POISSON);
 

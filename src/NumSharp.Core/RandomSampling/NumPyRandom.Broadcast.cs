@@ -1044,7 +1044,7 @@ namespace NumSharp
                 {
                     double* o = (double*)w.Out, s = (double*)w.A;
                     for (long j = 0; j < w.Count; j++)
-                        o[j * w.OutStride] = s[j * w.StrideA] * Math.Sqrt(-2.0 * Generator.Log1p(-o[j * w.OutStride]));
+                        o[j * w.OutStride] = s[j * w.StrideA] * Math.Sqrt(-2.0 * global::NumSharp.Generator.Log1p(-o[j * w.OutStride]));
                 }
             }
             return ret;

@@ -350,8 +350,10 @@ NumSharp implements both NumPy random APIs:
     measures 1.2–2.4×.
 - All five NumPy bit generators exist — `PCG64`, `PCG64DXSM`, `Philox`, `SFC64` and `MT19937` — each a
   `BitGenerator` with NumPy's surface: `random_raw`, `state` (typed `PCG64.State`, `Philox.State`, …),
-  `seed_seq`, `lock` and `spawn`, so `new Generator(new Philox(seed))` works like
-  `np.random.Generator(np.random.Philox(seed))` and reproduces its stream byte for byte. `PCG64`,
+  `seed_seq`, `lock` and `spawn`. NumPy's spelling `np.random.Generator(np.random.Philox(seed))` works
+  verbatim — `np.random` carries a factory for every class NumPy's module exposes (`MT19937`, `PCG64`,
+  `PCG64DXSM`, `Philox`, `SFC64`, `SeedSequence`, `Generator`), each mirroring every constructor overload —
+  as does `new Generator(new Philox(seed))`, and either reproduces NumPy's stream byte for byte. `PCG64`,
   `PCG64DXSM` and `Philox` have `advance(delta)` (any `BigInteger`, wrapped like NumPy's `wrap_int`)
   and `jumped(n)`; `Philox` also takes an explicit `key`/`counter` (`new Philox(key: 5)`, NumPy's
   integer and array forms and error texts included). As in NumPy, `new MT19937(42)` seeds through
@@ -368,26 +370,39 @@ NumSharp implements both NumPy random APIs:
   independent children from it — the recommended way to hand streams to parallel workers. Any
   `ISeedSequence` is accepted as a bit generator's seed (a `SeedlessSeedSequence` is refused as NumPy
   refuses it: `seedless SeedSequences cannot generate state`); every engine names its parameter `seed` as
-  NumPy does, and a null one is NumPy's `seed=None` (fresh OS entropy).
+  NumPy does, and a null one — a `null` literal or a typed null array alike — is NumPy's `seed=None` (fresh OS
+  entropy).
 - `default_rng` accepts every NumPy seed form: an integer (up to any `BigInteger`), a sequence or
   integer array, a `SeedSequence`, a `BitGenerator` (wrapped), a `Generator` (passed through) or a
   legacy `RandomState` (its engine is wrapped, as `default_rng(RandomState)` does). Every overload names
   its parameter `seed`, NumPy's only parameter, and a null argument of any type is `default_rng(None)`.
+- `Generator.integers` and the legacy `randint` take NumPy's array bounds (`g.integers(lows, highs)`,
+  `rs.randint(0, highs, dtype: np.uint8)`) through NumPy's own broadcast path: each bound is checked against the
+  dtype and against the other in NumPy's order and words (`low is out of bounds for uint64`, `high <= 0`,
+  `low >= high`, `cannot convert float NaN to integer`) before anything is drawn, the draws continue one buffered
+  stream across positions, and NumPy's two quirks carry over — a `size` smaller than the bounds' broadcast takes the
+  first positions, and 64-bit float bounds in a non-C layout come out in NumPy's scrambled order. Bounds past
+  `long`/`ulong` are `BigInteger`s, NumPy's Python ints: `g.integers(0, BigInteger.Pow(2, 64), dtype: np.uint64)` is
+  the full-range idiom, and anything beyond a dtype raises NumPy's out-of-bounds message.
 - Every `Generator` and `RandomState` draw holds the bit generator's `lock`, so one generator (or
   several over the same bit generator) can be shared between threads: each call consumes a contiguous
   piece of the one stream.
 - **The whole random surface is oracle-checked, overload by overload.** Every public member — each
   overload of `RandomState`, `Generator`, the five bit generators and their `State` classes,
-  `SeedSequence`, `SeedlessSeedSequence` and `default_rng`, 439 in all (four NumSharp-only members
+  `SeedSequence`, `SeedlessSeedSequence` and `default_rng`, 493 in all (four NumSharp-only members
   exempt) — is replayed against NumPy 2.4.2 by its exact C# signature: every legacy sampler on the legacy
   MT19937 and on `RandomState(engine)` for each engine, every `Generator` member on all five engines,
   under 10 fixed seeds, comparing NumPy's result AND the generator's full state after the call (so drawing
   one value too many or too few fails, not only a wrong value). CI gates prove the coverage itself —
   every overload, every parameter (omitted, non-default, null, every accepted `dtype`/`method` value,
   NumPy's parameter names in NumPy's order), every engine, every seed — and a nightly job replays the same
-  families under 10 fresh seeds. About 25,000 cases; the few intended differences (the modern
+  families under 10 fresh seeds. About 26,600 cases; the few intended differences (the modern
   `pareto`/`power` within a few ULP where the Windows CRT's in-band `expm1` differs, and states NumPy
-  would store and then read outside an array) are listed in the fuzz README.
+  would store and then read outside an array) are listed in the fuzz README. A replay that invokes
+  overloads by reflection cannot tell whether NumPy's CALL compiles in C# and binds the right overload, so
+  1,793 of NumPy's spellings were also compiled verbatim and compared: every legacy sampler whose parameters
+  all default takes `size:` alone or any keyword subset, a `null` seed binds everywhere, and NumPy's
+  `size=None` is spelled `size: default` (a `Shape` is a struct, so `size: null` cannot compile).
 
 The familiar legacy example matches NumPy:
 

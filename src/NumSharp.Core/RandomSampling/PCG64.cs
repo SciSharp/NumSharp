@@ -1,5 +1,6 @@
 using System;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 
 namespace NumSharp
 {
@@ -47,23 +48,30 @@ namespace NumSharp
         public PCG64(BigInteger seed) : this(new SeedSequence(seed)) { }
 
         /// <summary>Constructs a PCG64 seeded from a sequence of non-negative integers through <see cref="SeedSequence"/>.</summary>
-        /// <param name="seed">The seed words (each must be non-negative).</param>
+        /// <param name="seed">The seed words (each must be non-negative). Null is NumPy's <c>None</c> — fresh OS entropy (it used to seed the fixed empty-list stream).</param>
         /// <exception cref="ValueError">An element is negative.</exception>
         public PCG64(int[] seed) : this(new SeedSequence(seed)) { }
 
         /// <summary>Constructs a PCG64 seeded from a sequence of non-negative integers through <see cref="SeedSequence"/>.</summary>
-        /// <param name="seed">The seed words (each must be non-negative; values of 2**32 and above span several words).</param>
+        /// <param name="seed">The seed words (each must be non-negative; values of 2**32 and above span several words). Null is NumPy's <c>None</c> — fresh OS entropy (it used to seed the fixed empty-list stream).</param>
         /// <exception cref="ValueError">An element is negative.</exception>
         public PCG64(long[] seed) : this(new SeedSequence(seed)) { }
 
         /// <summary>Constructs a PCG64 seeded from uint32 words through <see cref="SeedSequence"/> (NumPy's uint32-array pass-through).</summary>
-        /// <param name="seed">The seed words.</param>
+        /// <param name="seed">The seed words. Null is NumPy's <c>None</c> — fresh OS entropy (it used to seed the fixed empty-list stream).</param>
         public PCG64(uint[] seed) : this(new SeedSequence(seed)) { }
 
         /// <summary>Constructs and seeds a PCG64 from the given seed sequence.</summary>
         /// <param name="seed">The seed sequence; <c>generate_state(4, uint64)</c> supplies the state and the stream —
         ///     null is NumPy's <c>seed=None</c>: a fresh OS-entropy <see cref="SeedSequence"/> (the parameter name is NumPy's, so <c>seed: sequence</c> ports verbatim).</param>
         /// <exception cref="NotImplementedException"><paramref name="seed"/> is a <see cref="SeedlessSeedSequence"/>.</exception>
+        /// <remarks>
+        ///     The overload a bare <c>null</c> literal binds (<c>new PCG64(null)</c>, NumPy's <c>PCG64(None)</c>): the
+        ///     <c>int[]</c>/<c>long[]</c>/<c>uint[]</c> overloads are equally good targets for it under plain C# rules, so
+        ///     this one carries the higher <c>OverloadResolutionPriority</c> — harmless for every non-null argument, since
+        ///     only a seed sequence converts to <see cref="ISeedSequence"/>.
+        /// </remarks>
+        [OverloadResolutionPriority(1)]
         public PCG64(ISeedSequence seed) : base(seed ?? new SeedSequence())
         {
             ulong[] val = SeedWords64(seed_seq, 4);

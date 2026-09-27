@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 
 namespace NumSharp
 {
@@ -11,13 +12,13 @@ namespace NumSharp
     ///     https://numpy.org/doc/stable/reference/random/index.html
     ///     <para>
     ///     Seeding follows NumPy's RandomState: an unseeded instance draws 128 bits of OS entropy through
-    ///     <see cref="SeedSequence"/> (NumPy's <c>MT19937()</c>), while <c>RandomState(seed)</c> /
-    ///     <c>seed(seed)</c> use MT19937's legacy integer/array initializers (<see cref="MT19937._legacy_seeding(long)"/>),
+    ///     <see cref="NumSharp.SeedSequence"/> (NumPy's <c>MT19937()</c>), while <c>RandomState(seed)</c> /
+    ///     <c>seed(seed)</c> use MT19937's legacy integer/array initializers (<see cref="NumSharp.MT19937._legacy_seeding(long)"/>),
     ///     so seeded streams are byte-identical to NumPy's legacy streams.
     ///     </para>
     ///     <para>
     ///     Every sampler validates its parameters with NumPy's constraints and messages, then draws under the bit
-    ///     generator's <see cref="BitGenerator.@lock"/> — the same lock a <see cref="Generator"/> sharing the bit generator
+    ///     generator's <see cref="BitGenerator.@lock"/> — the same lock a <see cref="NumSharp.Generator"/> sharing the bit generator
     ///     takes — so concurrent callers interleave whole calls, never half-drawn values. The legacy algorithms are ports of
     ///     NumPy's frozen <c>legacy-distributions.c</c> (see <c>NumPyRandom.LegacyDistributions.cs</c>).
     ///     </para>
@@ -99,7 +100,7 @@ namespace NumSharp
         /// <exception cref="IndexError">The key is shorter than 624 words.</exception>
         protected internal NumPyRandom(NativeRandomState nativeRandomState)
         {
-            randomizer = MT19937.LegacySeeded(0);
+            randomizer = global::NumSharp.MT19937.LegacySeeded(0);
             set_state(nativeRandomState);
         }
 
@@ -111,12 +112,12 @@ namespace NumSharp
             if (seed < 0)
                 throw new ValueError("Seed must be between 0 and 2**32 - 1");
             Seed = (uint)seed; // validated non-negative above
-            randomizer = MT19937.LegacySeeded((uint)seed);
+            randomizer = global::NumSharp.MT19937.LegacySeeded((uint)seed);
         }
 
         /// <summary>
         ///     Creates a RandomState seeded from fresh OS entropy (NumPy's <c>RandomState()</c>: an
-        ///     <c>MT19937()</c> seeded through <see cref="SeedSequence"/>, so its state has <c>key[0] = 0x80000000</c>
+        ///     <c>MT19937()</c> seeded through <see cref="NumSharp.SeedSequence"/>, so its state has <c>key[0] = 0x80000000</c>
         ///     and <c>pos = 623</c>).
         /// </summary>
         /// <remarks>
@@ -134,7 +135,7 @@ namespace NumSharp
         ///     The bit generator this RandomState draws from (NumPy's public <c>RandomState._bit_generator</c> attribute).
         /// </summary>
         /// <remarks>
-        ///     Shared, not copied: drawing from it directly (or through a <see cref="Generator"/> wrapped around it) advances
+        ///     Shared, not copied: drawing from it directly (or through a <see cref="NumSharp.Generator"/> wrapped around it) advances
         ///     this RandomState's stream too, and both serialize on its <see cref="BitGenerator.@lock"/>.
         /// </remarks>
         public BitGenerator _bit_generator => randomizer;
@@ -309,7 +310,14 @@ namespace NumSharp
         ///     Only an MT19937-backed instance can be re-seeded (<see cref="seed()"/>) or return the legacy state tuple
         ///     (<see cref="get_state()"/>); the dict form (<see cref="get_state(bool)"/> with <c>legacy: false</c>) and
         ///     <see cref="set_state(State)"/> work for every engine.
+        ///     <br/>
+        ///     The overload a bare <c>null</c> literal binds (<c>np.random.RandomState(null)</c>, NumPy's
+        ///     <c>RandomState(None)</c>, which builds a fresh <c>MT19937()</c> exactly as this overload does for null): the
+        ///     array overloads are equally good targets for it under plain C# rules, so this one carries the higher
+        ///     <c>OverloadResolutionPriority</c> — harmless for every non-null argument, since only a bit generator
+        ///     converts to <see cref="BitGenerator"/>.
         /// </remarks>
+        [OverloadResolutionPriority(1)]
         public NumPyRandom RandomState(BitGenerator seed)
         {
             return new NumPyRandom(seed);
@@ -343,7 +351,7 @@ namespace NumSharp
         ///     NumPy's MODULE-level <c>np.random.seed(seed)</c> when the singleton's bit generator has been hot-swapped away
         ///     from MT19937 (<see cref="set_bit_generator"/>): <c>_rand._bit_generator.state = type(_rand._bit_generator)(seed).state</c>.
         /// </summary>
-        /// <param name="entropy">The seed as NumPy's <see cref="SeedSequence"/> reads it: null for fresh OS entropy (NumPy's
+        /// <param name="entropy">The seed as NumPy's <see cref="NumSharp.SeedSequence"/> reads it: null for fresh OS entropy (NumPy's
         ///     <c>None</c>), an integer, or an integer array.</param>
         /// <returns>True when the engine was re-seeded (the caller is done); false for an MT19937 engine or for any
         ///     RandomState other than <c>np.random</c> — those take the legacy seeding, which requires MT19937.</returns>
@@ -358,7 +366,7 @@ namespace NumSharp
         ///     </para>
         ///     <para>
         ///     The fresh engine is built — and the seed validated — before the live one is touched, then its state is copied
-        ///     into the live engine (the same object, so a <see cref="Generator"/> sharing it follows the new stream; its
+        ///     into the live engine (the same object, so a <see cref="NumSharp.Generator"/> sharing it follows the new stream; its
         ///     <see cref="BitGenerator.seed_seq"/> keeps reporting the original sequence, as NumPy's state setter leaves it).
         ///     NumPy does NOT reset the cached Gaussian on this path, and neither does this: after
         ///     <c>standard_normal()</c> cached the second value of a pair, the next one returns it even across the re-seed
@@ -382,7 +390,7 @@ namespace NumSharp
         ///     on <c>np.random</c> itself, whose hot-swapped engine NumPy's module function re-seeds instead
         ///     (<see cref="set_bit_generator"/>).</exception>
         /// <remarks>
-        ///     NumPy's <c>_legacy_seeding(None)</c> fills the key from a new <see cref="SeedSequence"/> and LEAVES the
+        ///     NumPy's <c>_legacy_seeding(None)</c> fills the key from a new <see cref="NumSharp.SeedSequence"/> and LEAVES the
         ///     position where it was (observable through <see cref="get_state()"/>); the Gaussian cache is cleared.
         /// </remarks>
         public void seed()
@@ -491,6 +499,13 @@ namespace NumSharp
         /// <exception cref="TypeError">The bit generator is not MT19937 (<c>can only re-seed a MT19937 BitGenerator</c>) — except
         ///     on <c>np.random</c> itself (see <see cref="seed(uint)"/>).</exception>
         /// <exception cref="ValueError"><paramref name="seed"/> is empty (<c>Seed must be non-empty</c> — it used to seed 0 silently).</exception>
+        /// <remarks>
+        ///     The overload a bare <c>null</c> literal binds (<c>np.random.seed(null)</c>, NumPy's <c>seed(None)</c>): the
+        ///     <c>int[]</c>/<c>long[]</c>/<c>uint[]</c> overloads are equally good targets for it under plain C# rules, so this
+        ///     one carries the higher <c>OverloadResolutionPriority</c> — harmless for every non-null argument, since no
+        ///     other array converts to <c>uint[]</c>.
+        /// </remarks>
+        [OverloadResolutionPriority(1)]
         public void seed(uint[] seed)
         {
             if (TrySeedSwappedSingleton(seed))
@@ -530,7 +545,7 @@ namespace NumSharp
                 return;
             }
             ReseedableGenerator();
-            this.seed(MT19937.ValidateLegacyArray(seed));
+            this.seed(global::NumSharp.MT19937.ValidateLegacyArray(seed));
         }
 
         /// <summary>

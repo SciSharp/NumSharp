@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -105,18 +106,32 @@ namespace NumSharp
         public SeedSequence(BigInteger entropy) : this((object)entropy) { }
 
         /// <summary>Constructs a sequence from a sequence of non-negative integers.</summary>
-        /// <param name="entropy">The seed words (a value of 2**32 or more spans several words, as in NumPy).</param>
+        /// <param name="entropy">The seed words (a value of 2**32 or more spans several words, as in NumPy); null is NumPy's
+        ///     <c>None</c> — fresh OS entropy, never the empty list (an empty array is <c>[]</c>, a fixed seed).</param>
         /// <exception cref="ValueError">An element is negative.</exception>
-        public SeedSequence(int[] entropy) : this((object)(entropy ?? Array.Empty<int>())) { }
+        /// <remarks>
+        ///     A null array used to become <c>[]</c>, so a "no seed" array seeded every run with the SAME stream (NumPy's
+        ///     <c>SeedSequence([])</c>) — silently, since an entropy-seeded result is not reproducible to begin with. It now
+        ///     forwards null to the dynamically-typed overload, which reads OS entropy like <see cref="SeedSequence()"/>.
+        /// </remarks>
+        public SeedSequence(int[] entropy) : this((object)entropy) { }
 
         /// <summary>Constructs a sequence from a sequence of non-negative integers.</summary>
-        /// <param name="entropy">The seed words (a value of 2**32 or more spans several words, as in NumPy).</param>
+        /// <param name="entropy">The seed words (a value of 2**32 or more spans several words, as in NumPy); null is NumPy's
+        ///     <c>None</c> — fresh OS entropy, never the empty list.</param>
         /// <exception cref="ValueError">An element is negative.</exception>
-        public SeedSequence(long[] entropy) : this((object)(entropy ?? Array.Empty<long>())) { }
+        public SeedSequence(long[] entropy) : this((object)entropy) { }
 
         /// <summary>Constructs a sequence directly from uint32 words (NumPy's uint32-ndarray pass-through).</summary>
-        /// <param name="entropy">The seed words.</param>
-        public SeedSequence(uint[] entropy) : this((object)(entropy ?? Array.Empty<uint>())) { }
+        /// <param name="entropy">The seed words; null is NumPy's <c>None</c> — fresh OS entropy, never the empty list.</param>
+        /// <remarks>
+        ///     The overload a bare <c>null</c> literal binds (<c>new SeedSequence(null)</c>, NumPy's
+        ///     <c>SeedSequence(None)</c>): the <c>int[]</c>/<c>long[]</c>/<c>uint[]</c> overloads are equally good targets for
+        ///     it under plain C# rules, so this one carries the higher <see cref="OverloadResolutionPriorityAttribute"/> —
+        ///     harmless for every non-null argument, since no other array converts to <c>uint[]</c>.
+        /// </remarks>
+        [OverloadResolutionPriority(1)]
+        public SeedSequence(uint[] entropy) : this((object)entropy) { }
 
         /// <summary>
         ///     Constructs a sequence with NumPy's full signature:

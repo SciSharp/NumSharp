@@ -5,11 +5,18 @@ namespace NumSharp
         /// <summary>
         ///     Draw a single sample from a logistic distribution.
         /// </summary>
-        /// <param name="loc">Mean of the distribution. Default is 0.</param>
-        /// <param name="scale">Scale parameter (must be &gt;= 0). Default is 1.</param>
+        /// <param name="loc">Mean of the distribution.</param>
+        /// <param name="scale">Scale parameter (must be &gt;= 0).</param>
         /// <returns>A 0-d float64 array holding the draw.</returns>
         /// <exception cref="ValueError"><paramref name="scale"/> is negative, including <c>-0.0</c> (<c>scale &lt; 0</c>).</exception>
-        public NDArray logistic(double loc = 0.0, double scale = 1.0) => logistic(loc, scale, Shape.Scalar);
+        /// <remarks>
+        ///     Every distribution argument given, no size: one draw (a 0-d array, NumPy's size <c>()</c>, which draws
+        ///     exactly what <c>None</c> draws). NumPy's defaults live on the size overload, which carries NumPy's whole
+        ///     <c>logistic(loc=0.0, scale=1.0, size=None)</c> signature — so <c>logistic()</c>, <c>logistic(size:
+        ///     3)</c> and any argument left out bind there. This overload has no defaults on purpose: two overloads
+        ///     that both need defaults filled in are ambiguous to C#, and the size-only call would not compile.
+        /// </remarks>
+        public NDArray logistic(double loc, double scale) => logistic(loc, scale, Shape.Scalar);
 
         /// <summary>
         ///     Draw samples from a logistic distribution.
@@ -36,7 +43,7 @@ namespace NumSharp
         ///     <c>scale == 0</c> STILL consumes a uniform per value (the former shortcut skipped the draw and desynchronized
         ///     every later value). Holds the bit generator's lock for the draws.
         /// </remarks>
-        public NDArray logistic(double loc, double scale, Shape size)
+        public NDArray logistic(double loc = 0.0, double scale = 1.0, Shape size = default)
         {
             RandomConstraints.Check(scale, "scale", ConstraintType.CONS_NON_NEGATIVE);
 

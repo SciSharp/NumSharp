@@ -7,10 +7,17 @@ namespace NumSharp
         /// <summary>
         ///     Draw a single sample from a Rayleigh distribution.
         /// </summary>
-        /// <param name="scale">Scale parameter (also equals the mode). Must be non-negative. Default is 1.</param>
+        /// <param name="scale">Scale parameter (also equals the mode). Must be non-negative.</param>
         /// <returns>A 0-d float64 array holding the draw.</returns>
         /// <exception cref="ValueError"><paramref name="scale"/> is negative, including <c>-0.0</c> (<c>scale &lt; 0</c>).</exception>
-        public NDArray rayleigh(double scale = 1.0) => rayleigh(scale, Shape.Scalar);
+        /// <remarks>
+        ///     Every distribution argument given, no size: one draw (a 0-d array, NumPy's size <c>()</c>, which draws
+        ///     exactly what <c>None</c> draws). NumPy's defaults live on the size overload, which carries NumPy's whole
+        ///     <c>rayleigh(scale=1.0, size=None)</c> signature — so <c>rayleigh()</c>, <c>rayleigh(size: 3)</c> and any
+        ///     argument left out bind there. This overload has no defaults on purpose: two overloads that both need
+        ///     defaults filled in are ambiguous to C#, and the size-only call would not compile.
+        /// </remarks>
+        public NDArray rayleigh(double scale) => rayleigh(scale, Shape.Scalar);
 
         /// <summary>
         ///     Draw samples from a Rayleigh distribution.
@@ -36,7 +43,7 @@ namespace NumSharp
         ///     <c>scale == 0</c>, which the former shortcut answered without drawing. Bulk-filled and transformed in place;
         ///     byte-identical to <c>np.random.RandomState(seed).rayleigh</c>. Holds the bit generator's lock for the draws.
         /// </remarks>
-        public NDArray rayleigh(double scale, Shape size)
+        public NDArray rayleigh(double scale = 1.0, Shape size = default)
         {
             RandomConstraints.Check(scale, "scale", ConstraintType.CONS_NON_NEGATIVE);
 
@@ -61,7 +68,7 @@ namespace NumSharp
                     randomizer.FillDouble(dst, n);
                 // The draws are all taken; legacy_rayleigh's transform of each, in place.
                 for (long i = 0; i < n; i++)
-                    dst[i] = scale * Math.Sqrt(-2.0 * Generator.Log1p(-dst[i]));
+                    dst[i] = scale * Math.Sqrt(-2.0 * global::NumSharp.Generator.Log1p(-dst[i]));
             }
 
             return ret;

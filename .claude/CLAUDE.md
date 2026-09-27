@@ -2725,6 +2725,27 @@ DECIMAL — no octal: `"012"` is 12). `Seed` is a `uint`. After `set_bit_generat
 engine, `np.random.seed(x)` re-seeds it as NumPy's MODULE function does (`engine.state = type(engine)(x).state`, cached
 Gaussian kept) — only for `np.random` itself; another `RandomState` over such an engine refuses (the method rule).
 
+**NumPy's call spellings port verbatim (the 2026-09-27 wholeness pass; gate `RandomSampling/RandomApiWholeness.Test.cs`,
+plan `docs/plans/random-oracle-coverage.md` §10 items 15–20).** The random-API oracle binds overloads by reflection, so
+call shapes are pinned at COMPILE time instead — 1,793 NumPy spellings were compiled and compared with NumPy 2.4.2 to
+find these: (1) the nine all-default legacy samplers (`normal`, `uniform`, `exponential`, `poisson`, `gumbel`, `laplace`,
+`logistic`, `lognormal`, `rayleigh`) take `size:` alone or any keyword subset — the size overload carries NumPy's
+defaults and the one-draw overload's parameters are REQUIRED, so the two never compete; (2) numpy.random's classes through
+the module — `np.random.PCG64(42)`, `np.random.SeedSequence(...)`, `np.random.Generator(bit_generator)`: 50 `NumPyRandom`
+factories mirroring every constructor overload of the five engines, `SeedSequence` and `Generator`
+(`np.random.classes.cs`; no `BitGenerator`, which NumPy refuses to instantiate) — **TRAP: inside `NumPyRandom` the
+factories SHADOW the class names in expressions and crefs; spell `global::NumSharp.X.Member` / `cref="NumSharp.X"`**;
+(3) a bare `null` seed binds (`[OverloadResolutionPriority(1)]` on the overload that takes it, polyfilled for net8.0 in
+`Assembly/OverloadResolutionPriorityAttribute.cs` and honored across assemblies) and a typed null seed ARRAY is NumPy's
+`None` too — fresh entropy; it used to seed `SeedSequence([])`, the same stream every run, invisible to the oracle's
+entropy masks; (4) `size: default` is NumPy's `size=None` (`Shape` is a struct: `size: null` cannot compile) and binds
+the `Shape` overload — the `int[]`/`long[]`/`long` size shims carry priority -1, without which
+`multivariate_normal(mean, cov, size: default)` bound the `long` shim (size 0, an empty result); (5) `integers` and
+`randint` take NumPy's ARRAY bounds (`BoundedIntegers.Broadcast.cs`, the `_rand_<dtype>` broadcast path: `can_cast`-
+skipped bound checks in NumPy's order and words, buffered words carried across positions, the size-smaller-than-
+broadcast and non-C-layout-float-bounds quirks) and `BigInteger` (Python-int) bounds —
+`g.integers(0, BigInteger.Pow(2, 64), dtype: np.uint64)` is the full-range idiom.
+
 ### File I/O
 `fromfile`, `fromstring`, `load`, `load_npy`, `load_npz`, `loadtxt`, `save`, `savetxt`, `savez`, `savez_compressed`, `tofile`
 
@@ -3335,11 +3356,13 @@ test/NumSharp.Tests/IO/            .npy/.npz format gate (no Python)
   `multivariate_normal` (no LAPACK backend) stays carved and `[OpenBugs]`-pinned (the other seven samplers were
   uncarved 2026-09-25).
 - **Random-API oracle** (`test/oracle/gen_random_oracle.py`, plan `docs/plans/random-oracle-coverage.md`, README
-  "The random-API oracle"): every public member of the random world (439 in `test/oracle/random_surface.json`,
+  "The random-API oracle"): every public member of the random world (493 in `test/oracle/random_surface.json`,
   G1-pinned to reflection) replayed by EXACT C# signature (`params.sig`, reflection-invoked; an omitted optional is
   the declared default, NumPy is called without it) on every engine x the 10 fixed seeds, recording NumPy's result
-  AND the receiver's full post-call state. Tiers `random_api` (portable 8,485) / `_host` (win-amd64 libm 15,779) /
-  `_mvn` (NumPy's own scipy-openblas 730) / `_lp64` (Linux NumPy via WSL 206). Gates `RandomApiCoverageTests`
+  AND the receiver's full post-call state. Tiers `random_api` (portable 9,820) / `_host` (win-amd64 libm 15,795) /
+  `_mvn` (NumPy's own scipy-openblas 730) / `_lp64` (Linux NumPy via WSL 234). Reflection means the replay cannot
+  see CALL SHAPES — whether NumPy's spelling compiles in C# and binds the overload it proved; those are pinned
+  compile-time by `RandomSampling/RandomApiWholeness.Test.cs` (the wholeness pass, see "Random"). Gates `RandomApiCoverageTests`
   (corpus-only): G2 overloads, G3 parameters (omitted + non-default, two values, null + non-null, `params` 0 and 2+,
   every accepted enumerated value + one rejection, NumPy's parameter NAMES and order vs
   `test/oracle/random_numpy_signatures.json`), G4 engines, G5 seeds, G6 state; exemptions reasoned and self-retiring.

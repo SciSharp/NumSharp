@@ -1,5 +1,6 @@
 using System;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 
 namespace NumSharp
 {
@@ -68,23 +69,30 @@ namespace NumSharp
         public Philox(BigInteger seed) : this((ISeedSequence)new SeedSequence(seed)) { }
 
         /// <summary>Constructs a Philox keyed from a sequence of non-negative integers through <see cref="SeedSequence"/>.</summary>
-        /// <param name="seed">The seed words (each must be non-negative).</param>
+        /// <param name="seed">The seed words (each must be non-negative). Null is NumPy's <c>None</c> — fresh OS entropy (it used to seed the fixed empty-list stream).</param>
         /// <exception cref="ValueError">An element is negative.</exception>
         public Philox(int[] seed) : this((ISeedSequence)new SeedSequence(seed)) { }
 
         /// <summary>Constructs a Philox keyed from a sequence of non-negative integers through <see cref="SeedSequence"/>.</summary>
-        /// <param name="seed">The seed words (each must be non-negative).</param>
+        /// <param name="seed">The seed words (each must be non-negative). Null is NumPy's <c>None</c> — fresh OS entropy (it used to seed the fixed empty-list stream).</param>
         /// <exception cref="ValueError">An element is negative.</exception>
         public Philox(long[] seed) : this((ISeedSequence)new SeedSequence(seed)) { }
 
         /// <summary>Constructs a Philox keyed from uint32 words through <see cref="SeedSequence"/>.</summary>
-        /// <param name="seed">The seed words.</param>
+        /// <param name="seed">The seed words. Null is NumPy's <c>None</c> — fresh OS entropy (it used to seed the fixed empty-list stream).</param>
         public Philox(uint[] seed) : this((ISeedSequence)new SeedSequence(seed)) { }
 
         /// <summary>Constructs a Philox keyed from the given seed sequence (<c>generate_state(2, uint64)</c>), counter zero.</summary>
         /// <param name="seed">The seed sequence — normally a <see cref="SeedSequence"/>; any <see cref="ISeedSequence"/> works;
         ///     null is NumPy's <c>seed=None</c>: a fresh OS-entropy <see cref="SeedSequence"/> (the parameter name is NumPy's, so <c>seed: sequence</c> ports verbatim).</param>
         /// <exception cref="NotImplementedException"><paramref name="seed"/> is a <see cref="SeedlessSeedSequence"/>.</exception>
+        /// <remarks>
+        ///     The overload a bare <c>null</c> literal binds (<c>new Philox(null)</c>, NumPy's <c>Philox(None)</c>): the
+        ///     <c>int[]</c>/<c>long[]</c>/<c>uint[]</c> overloads are equally good targets for it under plain C# rules, so
+        ///     this one carries the higher <c>OverloadResolutionPriority</c> — harmless for every non-null argument, since
+        ///     only a seed sequence converts to <see cref="ISeedSequence"/>.
+        /// </remarks>
+        [OverloadResolutionPriority(1)]
         public Philox(ISeedSequence seed) : this((object)seed, null, null) { }
 
         /// <summary>

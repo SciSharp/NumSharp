@@ -445,8 +445,14 @@ namespace NumSharp.Tests.Fuzz
                     if (RandomOpKeys.TryGetValue(m.Name, out var rndKey) && Has(rndKey))
                         return "corpus: random state/helper";
                     // The random-API tier invokes every overload by signature; its NumPy-level member for an np.random
-                    // (NumPyRandom) method is RandomState.<name>.
-                    return Has("random_api:RandomState." + m.Name) ? "corpus: random_api" : null;
+                    // (NumPyRandom) method is RandomState.<name> ...
+                    if (Has("random_api:RandomState." + m.Name))
+                        return "corpus: random_api";
+                    // ... except numpy.random's classes called through the module (np.random.PCG64(42),
+                    // np.random.SeedSequence(...), np.random.Generator(bit_generator)): NumPyRandom's factory methods,
+                    // which the tier records under the class's own NumPy name — the key their constructor cases share,
+                    // both replayed by the sweep (G2 proves each factory overload has cases of its own).
+                    return Has("random_api:" + m.Name) ? "corpus: random_api" : null;
                 case "Generator":
                     if (Has("grnd:" + m.Name))
                         return "corpus: grnd stream";

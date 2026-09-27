@@ -1653,7 +1653,8 @@ def fam_randint(out, surface, name, seeds):
     """randint(low, high, size, dtype): the one-argument form, bounds at every dtype's edges, NumPy's rejections, and
     every dtype (the default is the C long)."""
     for m in overloads(surface, "NumPyRandom", name):
-        unsigned = m["params"][0]["type"] == "ulong"
+        first = m["params"][0]["type"]
+        unsigned = first == "ulong"
 
         def np_fn(r, py):
             kw = {}
@@ -1664,6 +1665,13 @@ def fam_randint(out, surface, name, seeds):
             if py.get("dtype") is not None:
                 kw["dtype"] = py["dtype"]
             return r.randint(py["low"], **kw)
+        if first == "NDArray":
+            # The array-bounds overload (NumPy's _rand_<dtype>_broadcast with the masked sampler). The C long cases take
+            # the 32-bit path on Windows and the 64-bit one on Linux — the LP64 merge keeps NumSharp's (Linux) answer.
+            legacy_sweep(out, PORTABLE, "RandomState.randint", m, seeds,
+                         {"low": np.array([0, 10, -5], dtype=np.int64), "high": np.array([5, 20, 3], dtype=np.int64)},
+                         integer_array_variants(gen=False), np_fn, widen=randint_long, lp64=randint_long)
+            continue
         base = {"low": 0 if unsigned else -5, "high": 17, "size": (6,)}
         variants = [("one_arg", {"low": 10, "high": OMIT, "size": (5,)}), ("high_null", {"low": 10, "high": None, "size": (5,)}),
                     ("empty_range", {"low": 5, "high": 5, "size": (3,)}), ("inverted", {"low": 6, "high": 5, "size": (3,)}),
@@ -1701,6 +1709,13 @@ def fam_randint(out, surface, name, seeds):
         if unsigned:
             variants = [(t, v) for t, v in variants if isinstance(v.get("low"), int) and v["low"] >= 0
                         and (v.get("high") in (OMIT, None) or v["high"] >= 0)]
+        if first == "BigInteger":
+            # Every value either integer overload takes, plus the Python ints past 64 bits only this one can spell
+            # (the endpoint forms of the shared extras do not exist for randint).
+            variants += [("u_2e63", {"low": 2 ** 63, "high": 2 ** 63 + 10, "size": (4,), "dtype": "uint64"}),
+                         ("u_max", {"low": 0, "high": 2 ** 64 - 1, "size": (4,), "dtype": "uint64"}),
+                         ("u_2e63_long", {"low": 2 ** 63, "high": 2 ** 63 + 10, "size": (4,)})]
+            variants += [(t, v) for t, v in integer_big_extra() if "endpoint" not in v]
         legacy_sweep(out, PORTABLE, "RandomState.randint", m, seeds, base, variants, np_fn, widen=randint_long,
                      lp64=randint_long)
 
@@ -2101,12 +2116,152 @@ def fam_gen_standard_gamma(out, surface, name, seeds):
         gen_sweep(out, HOST, "Generator.standard_gamma", m, seeds, base, variants, np_fn, watch=("out",))
 
 
+def integer_array_variants(gen):
+    """The array-bounds overload's variants (`integers(NDArray low, NDArray high, ...)` / `randint(...)`): NumPy's
+    `_rand_<dtype>` with array-like bounds — the scalar path when both are 0-d (Python's int() of each: floats truncate,
+    NaN/inf/complex/None raise), else `_rand_<dtype>_broadcast`: per-position bounds and draws, the bounds' input dtypes
+    (the safe-cast skip, the forced casts), every output dtype at its full range and past it (8/16-bit and bool positions
+    sharing 32-bit words), NumPy's rejections in its check order, and its two quirks (a size smaller than the bounds'
+    broadcast; 64-bit float bounds in a non-C layout scrambled by the element-wise conversion). `gen` adds endpoint forms."""
+    I = lambda *v: np.array(v, dtype=np.int64)   # noqa: E731
+    F = lambda *v: np.array(v, dtype=np.float64)   # noqa: E731
+    z = np.array
+    V = [("arr", {"low": I(0, 10, -5), "high": I(5, 20, 3)}),
+         ("arr_size", {"low": I(0, 10, -5), "high": I(5, 20, 3), "size": (3,)}),
+         ("arr_size_bigger", {"low": I(0, 10, -5), "high": I(5, 20, 3), "size": (2, 3)}),
+         ("arr_size_smaller", {"low": np.zeros((2, 3), dtype=np.int64), "high": z(10), "size": (3,)}),
+         ("arr_size_smaller_2d", {"low": np.arange(12, dtype=np.int64).reshape(4, 3), "high": z(100), "size": (2, 3)}),
+         ("arr_size_mismatch", {"low": I(0, 0, 0), "high": z(10), "size": (2,)}),
+         ("arr_col_row", {"low": np.array([[0], [100]], dtype=np.int64), "high": I(5, 10, 200)}),
+         ("arr_high_0d", {"low": I(0, 5, 9), "high": z(20)}),
+         ("arr_low_0d", {"low": z(3), "high": I(5, 10, 20)}),
+         ("one_arg", {"low": I(5, 10, 1000), "high": OMIT}),
+         ("one_arg_null", {"low": I(5, 10), "high": None}),
+         ("one_arg_zero", {"low": I(0, 10), "high": OMIT}),
+         ("zd_both", {"low": z(3), "high": z(9), "size": (4,)}),
+         ("zd_both_none", {"low": z(3), "high": z(9)}),
+         ("zd_one_arg", {"low": z(7), "high": OMIT, "size": (3,)}),
+         ("zd_float", {"low": z(0.5), "high": z(5.9), "size": (3,)}),
+         ("zd_neg_float", {"low": z(-2.5), "high": z(3.5), "size": (3,)}),
+         ("zd_nan", {"low": z(NAN), "high": z(5)}),
+         ("zd_inf", {"low": z(0), "high": z(INF)}),
+         ("zd_bool", {"low": z(True), "high": z(5), "size": (3,)}),
+         ("zd_complex", {"low": z(1 + 0j), "high": z(5)}),
+         ("zd_huge_float", {"low": z(0), "high": z(1e300)}),
+         ("float_arr", {"low": F(0.5, 1.7, -2.5), "high": F(5.9, 10.2, 3.99)}),
+         ("float_nan", {"low": F(NAN, 1.0), "high": z(5)}),
+         ("float_inf", {"low": F(0.0, 1.0), "high": F(INF, 5.0)}),
+         ("float_neg_inf_low", {"low": F(-INF, 1.0), "high": z(5)}),
+         ("low_ge_high", {"low": I(5, 0), "high": I(5, 10)}),
+         ("low_zero_bad", {"low": I(0, 0), "high": I(0, 10)}),
+         ("bounds_mismatch", {"low": I(0, 0, 0), "high": I(5, 6)}),
+         ("empty", {"low": np.zeros(0, dtype=np.int64), "high": z(5)}),
+         ("empty_2d", {"low": np.zeros((2, 0), dtype=np.int64), "high": z(5)}),
+         ("size_zero_bad", {"low": I(5), "high": I(1), "size": (0,)}),
+         ("low_null", {"low": None, "high": I(5, 6)}),
+         ("low_null_i32", {"low": None, "high": I(5, 6), "dtype": "int32"}),
+         ("high_null_low_null", {"low": None, "high": OMIT}),
+         ("u64_in", {"low": np.array([2 ** 63], dtype=np.uint64), "high": np.array([2 ** 63 + 5], dtype=np.uint64),
+                     "dtype": "uint64"}),
+         ("u64_to_i64", {"low": np.array([2 ** 63], dtype=np.uint64), "high": np.array([2 ** 63 + 5], dtype=np.uint64)}),
+         ("u64_small_i32", {"low": np.array([0, 5], dtype=np.uint64), "high": np.array([10, 9], dtype=np.uint64),
+                            "dtype": "int32"}),
+         ("i8_in_i16", {"low": np.array([-5, 5], dtype=np.int8), "high": z(50), "dtype": "int16"}),
+         ("i32_in", {"low": np.array([-5, 5], dtype=np.int32), "high": np.array([5, 50], dtype=np.int32)}),
+         ("u32_in", {"low": np.array([0, 5], dtype=np.uint32), "high": np.array([7, 50], dtype=np.uint32), "dtype": "uint32"}),
+         ("f32_in", {"low": np.array([0.5, 1.5], dtype=np.float32), "high": z(7)}),
+         ("complex_in_i32", {"low": np.array([1 + 0j, 2]), "high": z(5), "dtype": "int32"}),
+         ("complex_in_i64", {"low": np.array([1 + 0j, 2]), "high": z(5)}),
+         ("i64_neg_to_u64", {"low": I(-1, 0), "high": z(5), "dtype": "uint64"}),
+         ("f_order_int", {"low": derived(np.arange(6, dtype=np.int64), lambda b: b.reshape(3, 2).T), "high": z(100)}),
+         ("f_order_float", {"low": derived(np.arange(6, dtype=np.float64), lambda b: b.reshape(3, 2).T), "high": z(100)}),
+         ("f_order_float_high", {"low": z(0), "high": derived(np.arange(10, 16, dtype=np.float64),
+                                                              lambda b: b.reshape(3, 2).T)}),
+         ("bcast_view_float", {"low": derived(np.arange(3, dtype=np.float64), lambda b: np.broadcast_to(b, (2, 3))),
+                               "high": z(100)}),
+         ("bcast_view_int", {"low": derived(np.arange(3, dtype=np.int64), lambda b: np.broadcast_to(b, (2, 3))),
+                             "high": z(100)}),
+         ("permuted3d_float", {"low": derived(np.arange(24, dtype=np.float64), lambda b: b.reshape(2, 3, 4).transpose(1, 0, 2)),
+                               "high": z(100)}),
+         ("negstride_float", {"low": derived(np.arange(6, dtype=np.float64), lambda b: b[::-1]), "high": z(100)}),
+         ("strided_int", {"low": derived(np.arange(12, dtype=np.int64), lambda b: b[::3]), "high": z(100)}),
+         ("f_order_i32", {"low": z(0), "high": derived(np.arange(1, 7, dtype=np.int64), lambda b: b.reshape(3, 2).T),
+                          "dtype": "int32"}),
+         ("big", {"low": np.arange(0, 1000, dtype=np.int64), "high": z(2000)}),
+         ("omit_size", {"low": I(0, 10), "high": I(5, 20), "size": OMIT}),
+         ("omit_dtype", {"low": I(0, 10), "high": I(5, 20), "dtype": OMIT}),
+         ("dt_null", {"low": I(0, 10), "high": I(5, 20), "dtype": None}),
+         ("dt_float", {"low": I(0, 10), "high": I(5, 20), "dtype": "float64"})]
+    if gen:
+        V += [("endpoint", {"low": I(5, 0, -3), "high": I(5, 10, -3), "endpoint": True}),
+              ("endpoint_one_arg", {"low": I(0, 7), "high": OMIT, "endpoint": True}),
+              ("endpoint_low_gt", {"low": I(6, 0), "high": I(5, 10), "endpoint": True}),
+              ("endpoint_zero_bad", {"low": I(0, 0), "high": I(-1, 10), "endpoint": True}),
+              ("omit_endpoint", {"low": I(0, 10), "high": I(5, 20), "endpoint": OMIT}),
+              ("endpoint_bool", {"low": np.array([False, True]), "high": np.array([True, True]), "endpoint": True})]
+    else:
+        V += [("bool_in", {"low": np.array([False, False]), "high": np.array([True, True])})]
+    def A(*vals):
+        """Bounds as an array whose dtype holds them exactly: int64 when they fit, else uint64, else float64 (past
+        2**64; the callers pick values a float represents exactly, so Python's int() of each gives the intended bound)."""
+        if all(-2 ** 63 <= v < 2 ** 63 for v in vals):
+            return np.array(vals, dtype=np.int64)
+        if all(0 <= v < 2 ** 64 for v in vals):
+            return np.array(vals, dtype=np.uint64)
+        return np.array([float(v) for v in vals], dtype=np.float64)
+
+    for dt in ["int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64", "bool"]:
+        vmin = 0 if dt == "bool" else int(np.iinfo(dt).min)
+        vmax = 1 if dt == "bool" else int(np.iinfo(dt).max)
+        signed = dt.startswith("int")
+        # Past the dtype by one, except where float64 (the only array that holds it) cannot tell it from the bound:
+        # 2**64 + 4096 and -2**63 - 2048 are exact floats, 2**64 + 1 and -2**63 - 1 are not.
+        over = 2 ** 64 + 4096 if dt == "uint64" else vmax + 2
+        under = -2 ** 63 - 2048 if dt == "int64" else vmin - 1
+        V += [(f"dt_{dt}", {"low": I(0, 0) if not signed else I(-5, 3), "high": I(2, 1) if dt == "bool" else I(17, 9),
+                            "dtype": dt}),
+              (f"dt_{dt}_many", {"low": np.zeros(70, dtype=np.int64),
+                                 "high": np.full(70, 2 if dt == "bool" else min(vmax + 1, 200), dtype=np.int64),
+                                 "dtype": dt}),
+              (f"dt_{dt}_mixed_ranges", {"low": I(0, 0, 0, 0), "high": I(1, 2, 3, 2) if dt == "bool" else I(1, 7, 100, 3),
+                                         "dtype": dt}),
+              (f"dt_{dt}_single", {"low": A(vmax, 0), "high": A(vmax, 0) if gen else A(vmax, 1), "dtype": dt,
+                                   **({"endpoint": True} if gen else {})}),
+              (f"dt_{dt}_scalar_path", {"low": z(1), "high": z(2), "dtype": dt}),
+              (f"dt_{dt}_full", {"low": A(vmin, 0), "high": A(vmax + 1, 5), "dtype": dt}),
+              (f"dt_{dt}_over", {"low": A(0, 0), "high": A(over, 5), "dtype": dt})]
+        if gen:
+            V += [(f"dt_{dt}_full_ep", {"low": A(vmin, 0), "high": A(vmax, 5), "dtype": dt, "endpoint": True}),
+                  (f"dt_{dt}_over_ep", {"low": A(0, 0), "high": A(2 ** 64 if dt == "uint64" else vmax + 1, 5), "dtype": dt,
+                                        "endpoint": True})]
+        if signed:
+            V.append((f"dt_{dt}_under", {"low": A(under, 0), "high": A(0, 5), "dtype": dt}))
+        else:
+            V.append((f"dt_{dt}_neg", {"low": A(-1, 0), "high": A(1, 5), "dtype": dt}))
+    return V
+
+
+def integer_big_extra(unsigned_ok=True):
+    """Extra BigInteger-overload variants: Python ints past the long/ulong range (NumPy's full-range idiom with an
+    EXCLUSIVE 2**64, and values past every dtype, clamped by NumSharp at 2**100 to the same verdicts)."""
+    return [("big_u64_excl", {"low": 0, "high": 2 ** 64, "size": (4,), "dtype": "uint64"}),
+            ("big_u64_one_arg", {"low": 2 ** 64, "high": OMIT, "size": (4,), "dtype": "uint64"}),
+            ("big_over_i64", {"low": 0, "high": 2 ** 100, "size": (3,)}),
+            ("big_under_i64", {"low": -2 ** 200, "high": 2 ** 200, "size": (3,)}),
+            ("big_both_huge", {"low": 2 ** 200, "high": 2 ** 201, "size": (3,)}),
+            ("big_high_null", {"low": 5, "high": None, "size": (3,)}),
+            ("big_i64_edges", {"low": -2 ** 63, "high": 2 ** 63, "size": (4,)}),
+            ("big_i64_over_by_one", {"low": -2 ** 63 - 1, "high": 0, "size": (3,)})]
+
+
 @family("Generator", "integers")
 def fam_gen_integers(out, surface, name, seeds):
     """Generator.integers(low, high, size, dtype, endpoint): the one-argument form, endpoint on and off, every dtype
-    at its full range and just past it, NumPy's rejections (default dtype int64 — no C long involved)."""
+    at its full range and just past it, NumPy's rejections (default dtype int64 — no C long involved). The array-bounds
+    overload takes integer_array_variants; the arbitrary-precision one the scalar variants plus Python ints past 64 bits."""
     for m in overloads(surface, "Generator", name):
-        unsigned = m["params"][0]["type"] == "ulong"
+        first = m["params"][0]["type"]
+        unsigned = first == "ulong"
 
         def np_fn(r, py):
             kw = {}
@@ -2114,6 +2269,11 @@ def fam_gen_integers(out, surface, name, seeds):
                 kw["high"] = py["high"]
             kw.update(gen_kw(py, ("size", "dtype", "endpoint")))
             return r.integers(py["low"], **kw)
+        if first == "NDArray":
+            gen_sweep(out, PORTABLE, "Generator.integers", m, seeds,
+                      {"low": np.array([0, 10, -5], dtype=np.int64), "high": np.array([5, 20, 3], dtype=np.int64)},
+                      integer_array_variants(gen=True), np_fn)
+            continue
         base = {"low": 0 if unsigned else -5, "high": 17, "size": (6,)}
         variants = [("one_arg", {"low": 10, "high": OMIT, "size": (5,)}), ("high_null", {"low": 10, "high": None, "size": (5,)}),
                     ("endpoint", {"low": 5, "high": 9, "size": (6,), "endpoint": True}),
@@ -2153,6 +2313,13 @@ def fam_gen_integers(out, surface, name, seeds):
                          (f"dt_{dt}_single", {"low": vmax, "high": vmax, "size": (3,), "dtype": dt, "endpoint": True})]
             if not unsigned:
                 variants.append((f"dt_{dt}_under", {"low": vmin - 1, "high": 0, "size": (3,), "dtype": dt}))
+        if first == "BigInteger":
+            # Every value either integer overload takes, plus the Python ints past 64 bits only this one can spell.
+            variants += [("u_2e63", {"low": 2 ** 63, "high": 2 ** 63 + 10, "size": (4,), "dtype": "uint64"}),
+                         ("u_max", {"low": 0, "high": 2 ** 64 - 1, "size": (4,), "dtype": "uint64"}),
+                         ("u_max_ep", {"low": 0, "high": 2 ** 64 - 1, "size": (4,), "dtype": "uint64", "endpoint": True}),
+                         ("u_2e63_default", {"low": 2 ** 63, "high": 2 ** 63 + 10, "size": (4,)})]
+            variants += integer_big_extra()
         gen_sweep(out, PORTABLE, "Generator.integers", m, seeds, base, variants, np_fn)
 
 
@@ -2408,16 +2575,41 @@ def fam_gen_attrs(out, surface, name, seeds):
 @family("Generator", "ctor")
 def fam_gen_ctor(out, surface, name, seeds):
     """Generator(bit_generator): wraps the engine as is (primed state carried over); None is NumPy's AttributeError."""
-    none = Recv("none")
     for m in overloads(surface, "Generator", name):
-        for e in ENGINES:
-            for sd in seeds[:3]:
-                emit_m(out, PORTABLE, "Generator", m, none, {"bit_generator": bitgen_obj(e, sd)}, f"{e}_s{sd}",
-                       lambda r, py: np.random.Generator(py["bit_generator"]), state=False)
-            emit_m(out, PORTABLE, "Generator", m, none, {"bit_generator": bitgen_obj(e, 5, "raw3")}, f"{e}_primed",
-                   lambda r, py: np.random.Generator(py["bit_generator"]), state=False)
-        emit_m(out, PORTABLE, "Generator", m, none, {"bit_generator": None}, "null",
-               lambda r, py: np.random.Generator(py["bit_generator"]), state=False)
+        emit_gen_ctor_overload(out, m, seeds, Recv("none"), state=False)
+
+
+def emit_gen_ctor_overload(out, m, seeds, none, state):
+    """Every case of the Generator(bit_generator) overload — the constructor's (no receiver, no state) or the
+    np.random.Generator factory's (its RandomState receiver, whose state is recorded)."""
+    for e in ENGINES:
+        for sd in seeds[:3]:
+            emit_m(out, PORTABLE, "Generator", m, none, {"bit_generator": bitgen_obj(e, sd)}, f"{e}_s{sd}",
+                   lambda r, py: np.random.Generator(py["bit_generator"]), state=state)
+        emit_m(out, PORTABLE, "Generator", m, none, {"bit_generator": bitgen_obj(e, 5, "raw3")}, f"{e}_primed",
+               lambda r, py: np.random.Generator(py["bit_generator"]), state=state)
+    emit_m(out, PORTABLE, "Generator", m, none, {"bit_generator": None}, "null",
+           lambda r, py: np.random.Generator(py["bit_generator"]), state=state)
+
+
+def make_module_class_family(cls_name):
+    """np.random.<Class>(...) — numpy.random's classes reached through the module, NumPyRandom factories mirroring each
+    constructor overload: replayed exactly as the constructor (the member is the class name, as NumPy's np.random.PCG64
+    IS the class), on a RandomState receiver whose state is recorded — a factory must build, never draw."""
+    def fam(out, surface, name, seeds):
+        recv = Recv("RandomState", None, 0)
+        for m in overloads(surface, "NumPyRandom", name):
+            if cls_name in ENGINE_CLASS:
+                emit_engine_ctor_overload(out, m, cls_name, seeds, recv, state=True)
+            elif cls_name == "SeedSequence":
+                emit_seedseq_ctor_overload(out, m, recv, state=True)
+            else:
+                emit_gen_ctor_overload(out, m, seeds, recv, state=True)
+    return fam
+
+
+for _cls in ENGINES + ["SeedSequence", "Generator"]:
+    FAMILIES[("NumPyRandom", _cls)] = make_module_class_family(_cls)
 
 
 
@@ -2461,42 +2653,49 @@ def seed_seqs():
             ("ss_list", seedseq_obj([1, 2, 3])), ("ss_big", seedseq_obj(2 ** 100)), ("seedless", seedless_obj())]
 
 
+def emit_engine_ctor_overload(out, m, E, seeds, recv, state):
+    """Every case of one ENGINE(seed) overload — the constructor's own (`recv` = none, state=False) or the np.random
+    factory that mirrors it (`recv` = the RandomState it is called on, whose state is recorded to prove the factory never
+    draws from it). The member is the class name either way (NumPy's np.random.PCG64 IS the class)."""
+    cls = ENGINE_CLASS[E]
+    ps = m["params"]
+    if not ps:
+        emit_m(out, PORTABLE, E, m, recv, {}, "entropy", lambda r, py: cls(), state=state, state_mask=engine_mask(E))
+        return
+    if len(ps) == 3:
+        fam_philox_ctor3(out, m, seeds, recv=recv, state=state)
+        return
+    pt = ps[0]["type"]
+    if pt == "ISeedSequence":
+        for tag, v in seed_seqs():
+            emit_m(out, PORTABLE, E, m, recv, {"seed": v}, tag, lambda r, py: cls(py["seed"]), state=state)
+        emit_m(out, PORTABLE, E, m, recv, {"seed": None}, "null", lambda r, py: cls(None), state=state,
+               state_mask=engine_mask(E))
+        return
+    vals = (list(seeds) if pt == "long" else []) + SEED_VALUES[pt]
+    for v in dict.fromkeys(map(lambda x: json.dumps(x), vals)):
+        v = json.loads(v)
+        emit_m(out, PORTABLE, E, m, recv, {"seed": v}, f"s{json.dumps(v, separators=(',', ':'))}",
+               lambda r, py, pt=pt: cls(seed_py(pt, py["seed"])), state=state)
+    if pt.endswith("[]"):
+        emit_m(out, PORTABLE, E, m, recv, {"seed": None}, "null", lambda r, py: cls(None), state=state,
+               state_mask=engine_mask(E))
+
+
 def make_engine_ctor_family(E):
     def fam(out, surface, name, seeds):
         """ENGINE(seed) for every seed form: integers (fixed seeds and the edges), arrays (null is NumPy's None — OS
         entropy), seed sequences (every keyword, seedless refused), Philox's (seed, counter, key)."""
-        none = Recv("none")
-        cls = ENGINE_CLASS[E]
         for m in overloads(surface, E, "ctor"):
-            ps = m["params"]
-            if not ps:
-                emit_m(out, PORTABLE, E, m, none, {}, "entropy", lambda r, py: cls(), state=False, state_mask=engine_mask(E))
-                continue
-            if len(ps) == 3:
-                fam_philox_ctor3(out, m, seeds)
-                continue
-            pt = ps[0]["type"]
-            if pt == "ISeedSequence":
-                for tag, v in seed_seqs():
-                    emit_m(out, PORTABLE, E, m, none, {"seed": v}, tag, lambda r, py: cls(py["seed"]), state=False)
-                emit_m(out, PORTABLE, E, m, none, {"seed": None}, "null", lambda r, py: cls(None), state=False,
-                       state_mask=engine_mask(E))
-                continue
-            vals = (list(seeds) if pt == "long" else []) + SEED_VALUES[pt]
-            for v in dict.fromkeys(map(lambda x: json.dumps(x), vals)):
-                v = json.loads(v)
-                emit_m(out, PORTABLE, E, m, none, {"seed": v}, f"s{json.dumps(v, separators=(',', ':'))}",
-                       lambda r, py, pt=pt: cls(seed_py(pt, py["seed"])), state=False)
-            if pt.endswith("[]"):
-                emit_m(out, PORTABLE, E, m, none, {"seed": None}, "null", lambda r, py: cls(None), state=False,
-                       state_mask=engine_mask(E))
+            emit_engine_ctor_overload(out, m, E, seeds, Recv("none"), state=False)
     return fam
 
 
-def fam_philox_ctor3(out, m, seeds):
+def fam_philox_ctor3(out, m, seeds, recv=None, state=False):
     """Philox(seed, counter, key): seed with and without a counter, a key instead of a seed, both (refused), counters and
-    keys past their word counts and negative (refused), every argument omitted (OS entropy)."""
-    none = Recv("none")
+    keys past their word counts and negative (refused), every argument omitted (OS entropy). `recv`/`state` as for
+    emit_engine_ctor_overload (the np.random.Philox factory passes its RandomState receiver)."""
+    none = recv if recv is not None else Recv("none")
 
     def np_fn(r, py):
         return np.random.Philox(**{k: py[k] for k in ("seed", "counter", "key") if k in py})
@@ -2514,13 +2713,13 @@ def fam_philox_ctor3(out, m, seeds):
                 ("seed_str", {"seed": value_obj("123")}), ("seed_float", {"seed": value_obj(1.5)}),
                 ("seed_neg", {"seed": value_obj(-3)})]
     for tag, vals in variants:
-        emit_m(out, PORTABLE, "Philox", m, none, vals, tag, np_fn, state=False)
+        emit_m(out, PORTABLE, "Philox", m, none, vals, tag, np_fn, state=state)
     # Every argument None: OS entropy, like the omitted call below (the key and the seed sequence are masked).
-    emit_m(out, PORTABLE, "Philox", m, none, {"seed": None, "counter": None, "key": None}, "nulls", np_fn, state=False,
+    emit_m(out, PORTABLE, "Philox", m, none, {"seed": None, "counter": None, "key": None}, "nulls", np_fn, state=state,
            state_mask=engine_mask("Philox"))
     emit_m(out, PORTABLE, "Philox", m, none, {"seed": None, "counter": value_obj(9), "key": None}, "null_seed_counter",
-           np_fn, state=False, state_mask=engine_mask("Philox"))
-    emit_m(out, PORTABLE, "Philox", m, none, {}, "entropy", np_fn, state=False, state_mask=engine_mask("Philox"))
+           np_fn, state=state, state_mask=engine_mask("Philox"))
+    emit_m(out, PORTABLE, "Philox", m, none, {}, "entropy", np_fn, state=state, state_mask=engine_mask("Philox"))
 
 
 def bitgen_sweep(out, tier, member, m, E, seeds, base, variants, np_fn, primes=("raw3",), calls2=True, **kw):
@@ -2857,53 +3056,58 @@ def ss_receivers():
 def fam_seedseq_ctor(out, surface, name, seeds):
     """SeedSequence(entropy[, spawn_key, pool_size, n_children_spawned]) for every entropy form NumPy accepts or refuses:
     ints, lists, uint32 arrays, strings (NumPy's seed-string rule), floats and negatives (refused), None (OS entropy)."""
-    none = Recv("none")
-    mask = SEEDSEQ_MASK
     for m in overloads(surface, "SeedSequence", name):
-        ps = m["params"]
-        if not ps:
-            emit_m(out, PORTABLE, "SeedSequence", m, none, {}, "entropy", lambda r, py: np.random.SeedSequence(), state=False,
-                   state_mask=mask)
-            continue
-        pt = ps[0]["type"]
-        if pt == "object":
-            def np_fn(r, py):
-                kw = {k: py[k] for k in ("spawn_key", "pool_size", "n_children_spawned") if k in py}
-                return np.random.SeedSequence(py["entropy"], **kw)
-            variants = [("int", {"entropy": value_obj(42)}), ("big", {"entropy": value_obj(2 ** 100)}),
-                        ("list", {"entropy": value_obj([1, 2, 3])}), ("nested", {"entropy": value_obj([[1, 2], [3]])}),
-                        ("uint32", {"entropy": value_obj(np.array([7, 8], dtype=np.uint32))}),
-                        ("str_dec", {"entropy": value_obj("123")}), ("str_lead0", {"entropy": value_obj("012")}),
-                        ("str_hex", {"entropy": value_obj("0x1f")}), ("str_bad", {"entropy": value_obj("abc")}),
-                        ("float", {"entropy": value_obj(1.5)}), ("neg", {"entropy": value_obj(-1)}),
-                        ("bool", {"entropy": value_obj(True)}), ("ndarray", {"entropy": np.array([4, 5], dtype=np.int64)}),
-                        ("ndarray_0d", {"entropy": np.array(9, dtype=np.int64)}),
-                        ("key", {"entropy": value_obj(42), "spawn_key": value_obj([1, 2])}),
-                        ("key_big", {"entropy": value_obj(42), "spawn_key": value_obj([2 ** 70])}),
-                        ("key_str", {"entropy": value_obj(42), "spawn_key": value_obj("12")}),
-                        ("key_nested", {"entropy": value_obj(42), "spawn_key": value_obj([[1, 2]])}),
-                        ("key_int", {"entropy": value_obj(42), "spawn_key": value_obj(5)}),
-                        ("key_ndarray", {"entropy": value_obj(42), "spawn_key": np.array([3, 4], dtype=np.int64)}),
-                        ("key_0d", {"entropy": value_obj(42), "spawn_key": np.array(3, dtype=np.int64)}),
-                        ("key_neg", {"entropy": value_obj(42), "spawn_key": value_obj([-1])}),
-                        ("pool8", {"entropy": value_obj(42), "pool_size": 8}), ("pool3", {"entropy": value_obj(42), "pool_size": 3}),
-                        ("children", {"entropy": value_obj(42), "n_children_spawned": 5}),
-                        ("children_max", {"entropy": value_obj(42), "n_children_spawned": 2 ** 32 - 1}),
-                        ("all", {"entropy": value_obj([9, 9]), "spawn_key": value_obj([1]), "pool_size": 6, "n_children_spawned": 2}),
-                        ("omit_all", {"entropy": value_obj(3), "spawn_key": OMIT, "pool_size": OMIT, "n_children_spawned": OMIT})]
-            for tag, vals in variants:
-                emit_m(out, PORTABLE, "SeedSequence", m, none, vals, tag, np_fn, state=False)
-            emit_m(out, PORTABLE, "SeedSequence", m, none, {"entropy": None}, "none", np_fn, state=False, state_mask=mask)
-            emit_m(out, PORTABLE, "SeedSequence", m, none, {"entropy": None, "spawn_key": value_obj([4])}, "none_key", np_fn,
-                   state=False, state_mask=mask)
-            continue
-        vals = SEED_VALUES[pt]
-        for v in vals:
-            emit_m(out, PORTABLE, "SeedSequence", m, none, {"entropy": v}, f"e{json.dumps(v, separators=(',', ':'))}",
-                   lambda r, py, pt=pt: np.random.SeedSequence(seed_py(pt, py["entropy"])), state=False)
-        if pt.endswith("[]"):
-            emit_m(out, PORTABLE, "SeedSequence", m, none, {"entropy": None}, "null",
-                   lambda r, py: np.random.SeedSequence(None), state=False, state_mask=mask)
+        emit_seedseq_ctor_overload(out, m, Recv("none"), state=False)
+
+
+def emit_seedseq_ctor_overload(out, m, none, state):
+    """Every case of one SeedSequence(...) overload — the constructor's (`none` = the no-receiver, no state) or the
+    np.random.SeedSequence factory's (its RandomState receiver, whose state is recorded)."""
+    mask = SEEDSEQ_MASK
+    ps = m["params"]
+    if not ps:
+        emit_m(out, PORTABLE, "SeedSequence", m, none, {}, "entropy", lambda r, py: np.random.SeedSequence(), state=state,
+               state_mask=mask)
+        return
+    pt = ps[0]["type"]
+    if pt == "object":
+        def np_fn(r, py):
+            kw = {k: py[k] for k in ("spawn_key", "pool_size", "n_children_spawned") if k in py}
+            return np.random.SeedSequence(py["entropy"], **kw)
+        variants = [("int", {"entropy": value_obj(42)}), ("big", {"entropy": value_obj(2 ** 100)}),
+                    ("list", {"entropy": value_obj([1, 2, 3])}), ("nested", {"entropy": value_obj([[1, 2], [3]])}),
+                    ("uint32", {"entropy": value_obj(np.array([7, 8], dtype=np.uint32))}),
+                    ("str_dec", {"entropy": value_obj("123")}), ("str_lead0", {"entropy": value_obj("012")}),
+                    ("str_hex", {"entropy": value_obj("0x1f")}), ("str_bad", {"entropy": value_obj("abc")}),
+                    ("float", {"entropy": value_obj(1.5)}), ("neg", {"entropy": value_obj(-1)}),
+                    ("bool", {"entropy": value_obj(True)}), ("ndarray", {"entropy": np.array([4, 5], dtype=np.int64)}),
+                    ("ndarray_0d", {"entropy": np.array(9, dtype=np.int64)}),
+                    ("key", {"entropy": value_obj(42), "spawn_key": value_obj([1, 2])}),
+                    ("key_big", {"entropy": value_obj(42), "spawn_key": value_obj([2 ** 70])}),
+                    ("key_str", {"entropy": value_obj(42), "spawn_key": value_obj("12")}),
+                    ("key_nested", {"entropy": value_obj(42), "spawn_key": value_obj([[1, 2]])}),
+                    ("key_int", {"entropy": value_obj(42), "spawn_key": value_obj(5)}),
+                    ("key_ndarray", {"entropy": value_obj(42), "spawn_key": np.array([3, 4], dtype=np.int64)}),
+                    ("key_0d", {"entropy": value_obj(42), "spawn_key": np.array(3, dtype=np.int64)}),
+                    ("key_neg", {"entropy": value_obj(42), "spawn_key": value_obj([-1])}),
+                    ("pool8", {"entropy": value_obj(42), "pool_size": 8}), ("pool3", {"entropy": value_obj(42), "pool_size": 3}),
+                    ("children", {"entropy": value_obj(42), "n_children_spawned": 5}),
+                    ("children_max", {"entropy": value_obj(42), "n_children_spawned": 2 ** 32 - 1}),
+                    ("all", {"entropy": value_obj([9, 9]), "spawn_key": value_obj([1]), "pool_size": 6, "n_children_spawned": 2}),
+                    ("omit_all", {"entropy": value_obj(3), "spawn_key": OMIT, "pool_size": OMIT, "n_children_spawned": OMIT})]
+        for tag, vals in variants:
+            emit_m(out, PORTABLE, "SeedSequence", m, none, vals, tag, np_fn, state=state)
+        emit_m(out, PORTABLE, "SeedSequence", m, none, {"entropy": None}, "none", np_fn, state=state, state_mask=mask)
+        emit_m(out, PORTABLE, "SeedSequence", m, none, {"entropy": None, "spawn_key": value_obj([4])}, "none_key", np_fn,
+               state=state, state_mask=mask)
+        return
+    vals = SEED_VALUES[pt]
+    for v in vals:
+        emit_m(out, PORTABLE, "SeedSequence", m, none, {"entropy": v}, f"e{json.dumps(v, separators=(',', ':'))}",
+               lambda r, py, pt=pt: np.random.SeedSequence(seed_py(pt, py["entropy"])), state=state)
+    if pt.endswith("[]"):
+        emit_m(out, PORTABLE, "SeedSequence", m, none, {"entropy": None}, "null",
+               lambda r, py: np.random.SeedSequence(None), state=state, state_mask=mask)
 
 
 @family("SeedSequence", "entropy", "spawn_key", "pool_size", "n_children_spawned", "pool", "state", "ToString",
@@ -3238,7 +3442,13 @@ def merge_lp64(out, lp64_rows):
         else:
             needed = False
             if win is not None and win[1]["expected"] != lrow["expected"]:
-                libm_only.append(lrow["id"])
+                if win[0] == PORTABLE:
+                    # A portable row involves no libm, so a platform difference there IS the C long: e.g. randint's
+                    # array bounds take the 32-bit path on Windows and the 64-bit one on Linux, whose element-wise
+                    # conversion of float bounds scrambles a non-C layout — values in range, no error, yet LP64-only.
+                    needed = True
+                else:
+                    libm_only.append(lrow["id"])
         if not needed:
             continue
         if win is not None:
@@ -3249,6 +3459,25 @@ def merge_lp64(out, lp64_rows):
         print(f"LP64 merge: {len(libm_only)} cases differ between Windows and Linux NumPy without an LP64 signature "
               "(kept with the Windows answer; libm):")
         for ident in libm_only[:40]:
+            print(f"  {ident}")
+    # LP64-flagged Windows rows the Linux run does not have: the Linux sweep stopped that variant at an earlier receiver
+    # because NumPy RAISED there (validation precedes the draws and depends on neither engine nor seed — the sweep's own
+    # one-error rule), so on the platform NumSharp models these receivers raise too and the Windows answers are not
+    # NumSharp's. E.g. randint(low=[nan, 1.0], high=5): Windows' 32-bit path draws, Linux's 64-bit path raises int(nan).
+    linux_ids = {r["id"] for r in lp64_rows}
+    linux_raised = {(r["id"].split("/")[1], r["id"].split("/")[-1]) for r in lp64_rows if r.get("expects_throw")}
+    dropped = []
+    for ident, (tier, row) in by_id.items():
+        if ident in linux_ids:
+            continue
+        parts = ident.split("/")
+        if (parts[1], parts[-1]) in linux_raised and row in out.rows[tier]:
+            out.rows[tier].remove(row)
+            dropped.append(ident)
+    if dropped:
+        print(f"LP64 merge: {len(dropped)} Windows cases dropped (Linux NumPy raised on an earlier receiver of the same "
+              "variant, so their C-long answer is not NumSharp's):")
+        for ident in dropped[:40]:
             print(f"  {ident}")
     return moved
 
@@ -3281,6 +3510,14 @@ NP_SPECIAL = {
     ("NumPyRandom", "sample"): ("numpy.random.sample", lambda: np.random.sample),
     ("NumPyRandom", "get_bit_generator"): ("numpy.random.get_bit_generator", lambda: np.random.get_bit_generator),
     ("NumPyRandom", "set_bit_generator"): ("numpy.random.set_bit_generator", lambda: np.random.set_bit_generator),
+    # numpy.random's classes through the module (np.random.PCG64(42), np.random.Generator(...)): the class signatures.
+    ("NumPyRandom", "MT19937"): ("numpy.random.MT19937", lambda: np.random.MT19937),
+    ("NumPyRandom", "PCG64"): ("numpy.random.PCG64", lambda: np.random.PCG64),
+    ("NumPyRandom", "PCG64DXSM"): ("numpy.random.PCG64DXSM", lambda: np.random.PCG64DXSM),
+    ("NumPyRandom", "Philox"): ("numpy.random.Philox", lambda: np.random.Philox),
+    ("NumPyRandom", "SFC64"): ("numpy.random.SFC64", lambda: np.random.SFC64),
+    ("NumPyRandom", "SeedSequence"): ("numpy.random.SeedSequence", lambda: np.random.SeedSequence),
+    ("NumPyRandom", "Generator"): ("numpy.random.Generator", lambda: np.random.Generator),
 }
 
 

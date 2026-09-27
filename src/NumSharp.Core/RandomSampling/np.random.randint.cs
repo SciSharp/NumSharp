@@ -1,4 +1,5 @@
 using System;
+using System.Numerics;
 
 namespace NumSharp
 {
@@ -48,5 +49,53 @@ namespace NumSharp
         public NDArray randint(ulong low, ulong? high = null, Shape size = default, DType dtype = null)
             => BoundedIntegers.Draw(randomizer, low, high.HasValue ? (Int128)high.Value : (Int128?)null, size,
                                     dtype ?? LegacyLong, endpoint: false, useMasked: true, "randint", legacyByteOrder: true);
+
+        /// <summary>
+        ///     Arbitrary-precision overload of <see cref="randint(long, long?, Shape, DType)"/> — the C# spelling of a Python
+        ///     int past the <c>long</c>/<c>ulong</c> range (<c>randint(0, 2**64, dtype=np.uint64)</c>, or a bound NumPy rejects).
+        /// </summary>
+        /// <param name="low">Lowest integer drawn (or, when <paramref name="high"/> is null, one above the highest with low = 0).</param>
+        /// <param name="high">If provided, one above the largest integer drawn.</param>
+        /// <param name="size">Output shape. If None, a single value is returned.</param>
+        /// <param name="dtype">Desired integer dtype. Default is NumPy's C <c>long</c> — int64 in NumSharp's LP64 model.</param>
+        /// <returns>Random integers from the appropriate distribution, or a single such random int if size not provided.</returns>
+        /// <exception cref="TypeError"><paramref name="dtype"/> is not an integer/bool dtype.</exception>
+        /// <exception cref="ValueError">The bounds fall outside the dtype or the interval is empty.</exception>
+        /// <remarks>
+        ///     Validated exactly as NumPy validates the Python int: a value past <c>±2**100</c> — beyond every dtype's range —
+        ///     reaches the checks clamped, which report the same error the exact value would.
+        /// </remarks>
+        public NDArray randint(BigInteger low, BigInteger? high = null, Shape size = default, DType dtype = null)
+            => BoundedIntegers.Draw(randomizer, BoundedIntegers.ClampToInt128(low),
+                                    high.HasValue ? BoundedIntegers.ClampToInt128(high.Value) : (Int128?)null, size,
+                                    dtype ?? LegacyLong, endpoint: false, useMasked: true, "randint", legacyByteOrder: true);
+
+        /// <summary>
+        ///     Array-bounds overload of <see cref="randint(long, long?, Shape, DType)"/>: NumPy's <c>randint(low, high)</c>
+        ///     with array-like bounds, which broadcast against each other (and against <paramref name="size"/> when one is
+        ///     given) — one draw per output position, each from its own <c>[low, high)</c>.
+        /// </summary>
+        /// <param name="low">The low bound(s) — any integer, bool or float array (a float truncates toward zero). Null is
+        ///     Python's <c>None</c> (a <see cref="TypeError"/>).</param>
+        /// <param name="high">The high bound(s); null is NumPy's <c>high=None</c>: the bounds are <c>[0, low)</c>.</param>
+        /// <param name="size">Output shape; default is the bounds' broadcast shape (or one value when both are 0-d).</param>
+        /// <param name="dtype">Desired integer dtype. Default is NumPy's C <c>long</c> — int64 in NumSharp's LP64 model.</param>
+        /// <returns>The draws, of <paramref name="dtype"/>.</returns>
+        /// <exception cref="TypeError"><paramref name="dtype"/> is not an integer/bool dtype; a bound is <c>None</c> or a 0-d
+        ///     complex.</exception>
+        /// <exception cref="ValueError">A bound outside the dtype; an empty interval anywhere; a NaN bound; bounds that do not
+        ///     broadcast, or a size they do not broadcast with; a negative size.</exception>
+        /// <exception cref="OverflowException">An infinite bound (NumPy's <c>OverflowError</c>).</exception>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.randint.html
+        ///     <br/>
+        ///     NumPy's <c>_rand_&lt;dtype&gt;</c> with the legacy masked rejection: two 0-d bounds take the scalar path; otherwise
+        ///     <c>_rand_&lt;dtype&gt;_broadcast</c>, one draw per position in C order (see <see cref="BoundedIntegers.DrawArray"/>
+        ///     for NumPy's check order and its two broadcast quirks). Byte-identical to
+        ///     <c>np.random.RandomState(seed).randint(low_arr, high_arr, ...)</c> — the LP64 width, as for every legacy integer.
+        /// </remarks>
+        public NDArray randint(NDArray low, NDArray high = null, Shape size = default, DType dtype = null)
+            => BoundedIntegers.DrawArray(randomizer, low, high, size, dtype ?? LegacyLong, endpoint: false, useMasked: true,
+                                         "randint", legacyByteOrder: true);
     }
 }

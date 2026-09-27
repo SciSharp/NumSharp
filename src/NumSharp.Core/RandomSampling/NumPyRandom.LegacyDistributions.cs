@@ -13,7 +13,7 @@ namespace NumSharp
     ///     with <c>RandomState</c>'s cached Gaussian (<see cref="NextGaussian"/>) — and the binomial samplers additionally
     ///     take <c>RandomState</c>'s <see cref="_binomial"/> cache. Every expression keeps NumPy's operand order and every
     ///     draw is taken in NumPy's order (see <see cref="Distributions"/> for the byte-parity rules); several legacy formulas
-    ///     are deliberately less precise than their <see cref="Generator"/> successors (<c>exp(x) - 1</c> rather than
+    ///     are deliberately less precise than their <see cref="NumSharp.Generator"/> successors (<c>exp(x) - 1</c> rather than
     ///     <c>expm1</c>, <c>log(1 - p)</c> rather than <c>log1p</c>) and must stay that way to reproduce the stream.
     ///     </para>
     ///     <para>
@@ -670,8 +670,8 @@ namespace NumSharp
         /// <param name="src">The draw source — per-draw, or a read-ahead whose no-overdraw accounting the caller keeps.</param>
         /// <param name="mode">The scale.</param>
         /// <returns>The draw.</returns>
-        /// <remarks><see cref="Generator.Log1p"/> reproduces the CRT's <c>log1p</c> bit for bit (NumPy's <c>npy_log1p</c>).</remarks>
-        private double LegacyRayleigh(ref DrawBufferDouble src, double mode) => mode * Math.Sqrt(-2.0 * Generator.Log1p(-src.NextDouble()));
+        /// <remarks><see cref="NumSharp.Generator.Log1p"/> reproduces the CRT's <c>log1p</c> bit for bit (NumPy's <c>npy_log1p</c>).</remarks>
+        private double LegacyRayleigh(ref DrawBufferDouble src, double mode) => mode * Math.Sqrt(-2.0 * global::NumSharp.Generator.Log1p(-src.NextDouble()));
 
         // ------------------------------------------------------------------------------------------------ Gaussian-based
 
@@ -1249,7 +1249,7 @@ namespace NumSharp
 
         /// <summary>
         ///     NumPy's <c>legacy_random_zipf</c>: rejection from a Pareto envelope over <c>U = 1 - next_double</c>, truncated to
-        ///     C <c>long</c> (the pre-<see cref="Generator"/> algorithm, without the modern <c>Umin</c> window).
+        ///     C <c>long</c> (the pre-<see cref="NumSharp.Generator"/> algorithm, without the modern <c>Umin</c> window).
         /// </summary>
         /// <param name="src">The draw source — per-draw, or a read-ahead whose no-overdraw accounting the caller keeps.</param>
         /// <param name="s">The setup.</param>
@@ -1332,7 +1332,7 @@ namespace NumSharp
         {
             if (s.P >= 0.333333333333333333333333)
                 return Distributions.RandomGeometricSearch(ref src, s.P);
-            return Distributions.ToInt64(Math.Ceiling(Generator.Log1p(-src.NextDouble()) / s.LogQ));
+            return Distributions.ToInt64(Math.Ceiling(global::NumSharp.Generator.Log1p(-src.NextDouble()) / s.LogQ));
         }
 
         /// <summary>

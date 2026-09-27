@@ -31,7 +31,7 @@ namespace NumSharp
         ///     <c>randint(0, pop, shape)</c> (dtype <c>long</c>: int64 in NumSharp's LP64 model) or the <paramref name="p"/>-weighted
         ///     CDF search <c>searchsorted(random_sample(shape), side='right')</c>; without replacement it is
         ///     <c>permutation(pop)[:size]</c> or the weighted rounds. The messages are the legacy module's (they differ
-        ///     from <see cref="Generator.choice(NDArray, Shape?, bool, NDArray, int, bool)"/>'s).
+        ///     from <see cref="NumSharp.Generator.choice(NDArray, Shape?, bool, NDArray, int, bool)"/>'s).
         /// </remarks>
         [NDScoped]
         public NDArray choice(NDArray a, Shape size = default, bool replace = true, NDArray p = null)
@@ -52,7 +52,7 @@ namespace NumSharp
             ulong bigPop = 0; // the exact population when a uint64 scalar exceeds int64 (NumPy keeps the Python int)
             if (a.ndim == 0)
             {
-                popSize = Generator.ScalarPopulation(a, "a must be 1-dimensional or an integer", out popExceedsInt64);
+                popSize = global::NumSharp.Generator.ScalarPopulation(a, "a must be 1-dimensional or an integer", out popExceedsInt64);
                 if (popExceedsInt64)
                     bigPop = a.GetAtIndex<ulong>(0);
                 if (!popExceedsInt64 && popSize <= 0 && count != 0)
@@ -71,7 +71,7 @@ namespace NumSharp
 
             double[] pw = null;
             if (p is not null)
-                pw = Generator.ValidateChoiceProbabilities(p, popSize, legacyMessages: true);
+                pw = global::NumSharp.Generator.ValidateChoiceProbabilities(p, popSize, legacyMessages: true);
 
             NDArray idx;
             lock (randomizer.@lock)

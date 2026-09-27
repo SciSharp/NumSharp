@@ -5,11 +5,18 @@ namespace NumSharp
         /// <summary>
         ///     Draw a single sample from the Laplace distribution.
         /// </summary>
-        /// <param name="loc">The position of the distribution peak. Default is 0.</param>
-        /// <param name="scale">The exponential decay. Must be non-negative. Default is 1.</param>
+        /// <param name="loc">The position of the distribution peak.</param>
+        /// <param name="scale">The exponential decay. Must be non-negative.</param>
         /// <returns>A 0-d float64 array holding the draw.</returns>
         /// <exception cref="ValueError"><paramref name="scale"/> is negative, including <c>-0.0</c> (<c>scale &lt; 0</c>).</exception>
-        public NDArray laplace(double loc = 0.0, double scale = 1.0) => laplace(loc, scale, Shape.Scalar);
+        /// <remarks>
+        ///     Every distribution argument given, no size: one draw (a 0-d array, NumPy's size <c>()</c>, which draws
+        ///     exactly what <c>None</c> draws). NumPy's defaults live on the size overload, which carries NumPy's whole
+        ///     <c>laplace(loc=0.0, scale=1.0, size=None)</c> signature — so <c>laplace()</c>, <c>laplace(size: 3)</c>
+        ///     and any argument left out bind there. This overload has no defaults on purpose: two overloads that both
+        ///     need defaults filled in are ambiguous to C#, and the size-only call would not compile.
+        /// </remarks>
+        public NDArray laplace(double loc, double scale) => laplace(loc, scale, Shape.Scalar);
 
         /// <summary>
         ///     Draw samples from the Laplace or double exponential distribution with
@@ -38,7 +45,7 @@ namespace NumSharp
         ///     <c>U &gt;= 0.5</c>, <c>loc + scale*log(2U)</c> for <c>0 &lt; U &lt; 0.5</c>, redrawing <c>U == 0</c>.
         ///     Holds the bit generator's lock for the draws.
         /// </remarks>
-        public NDArray laplace(double loc, double scale, Shape size)
+        public NDArray laplace(double loc = 0.0, double scale = 1.0, Shape size = default)
         {
             RandomConstraints.Check(scale, "scale", ConstraintType.CONS_NON_NEGATIVE);
 
