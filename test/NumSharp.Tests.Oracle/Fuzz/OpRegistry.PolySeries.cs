@@ -45,6 +45,36 @@ namespace NumSharp.Tests.Fuzz
             /// <returns>The C# value.</returns>
             public object Get(string name) => Decode(_p[name]);
 
+            /// <summary>Decodes an optional argument: null when absent — the calculus facades' spelling of NumPy's default
+            ///     (<c>k=[]</c>, <c>lbnd=0</c>, <c>scl=1</c>).</summary>
+            /// <param name="name">The argument name.</param>
+            /// <returns>The C# value, or null.</returns>
+            public object Opt(string name) => _p.ContainsKey(name) ? Decode(_p[name]) : null;
+
+            /// <summary>Reads an int argument written as a plain JSON number (the calculus <c>m</c> and <c>axis</c>).</summary>
+            /// <param name="name">The argument name.</param>
+            /// <param name="fallback">NumPy's default when absent.</param>
+            /// <returns>The int.</returns>
+            public int Int(string name, int fallback) => _p.TryGetValue(name, out var v) ? v.GetInt32() : fallback;
+
+            /// <summary>
+            ///     The calculus result as the corpus records it: the array itself, or — for a <c>"facet": "flags"</c> case —
+            ///     the bool array <c>[C_CONTIGUOUS, F_CONTIGUOUS, OWNDATA]</c> of the result, NumPy's layout contract
+            ///     (moveaxis views of fresh C-order buffers, K-order copies, NpyIter-allocated <c>c[:1]*0</c>).
+            /// </summary>
+            /// <param name="r">The facade's result (always a fresh array or a view of a fresh buffer — never an operand).</param>
+            /// <returns>The recorded array.</returns>
+            public NDArray CalcFacet(NDArray r)
+            {
+                if (!_p.TryGetValue("facet", out var f) || f.GetString() != "flags")
+                    return r;
+                var flags = new[] { r.flags.c_contiguous, r.flags.f_contiguous, r.flags.owndata };
+                // The facet REPLACES the result, so the harness never sees (or disposes) it: release it here, or the
+                // leak gate (UndisposedIntermediateTests) reads its buffer as escaped on every flags case.
+                r.Dispose();
+                return np.array(flags);
+            }
+
             /// <summary>Decodes a bool parameter (as_series' <c>trim</c>), written as a Python-bool spec or a JSON bool.</summary>
             /// <param name="name">The parameter name.</param>
             /// <param name="fallback">Value when absent.</param>
@@ -344,6 +374,8 @@ namespace NumSharp.Tests.Fuzz
                         "zero" => ConstantFacet(() => m.polyzero, a),
                         "one" => ConstantFacet(() => m.polyone, a),
                         "x" => ConstantFacet(() => m.polyx, a),
+                        "der" => a.CalcFacet(m.polyder(a.Get("c"), a.Int("m", 1), a.Opt("scl"), a.Int("axis", 0))),
+                        "int" => a.CalcFacet(m.polyint(a.Get("c"), a.Int("m", 1), a.Opt("k"), a.Opt("lbnd"), a.Opt("scl"), a.Int("axis", 0))),
                         _ => throw new NotSupportedException($"polynomial op '{fn}' is not registered in OpRegistry"),
                     };
                 }
@@ -360,6 +392,8 @@ namespace NumSharp.Tests.Fuzz
                         "zero" => ConstantFacet(() => m.chebzero, a),
                         "one" => ConstantFacet(() => m.chebone, a),
                         "x" => ConstantFacet(() => m.chebx, a),
+                        "der" => a.CalcFacet(m.chebder(a.Get("c"), a.Int("m", 1), a.Opt("scl"), a.Int("axis", 0))),
+                        "int" => a.CalcFacet(m.chebint(a.Get("c"), a.Int("m", 1), a.Opt("k"), a.Opt("lbnd"), a.Opt("scl"), a.Int("axis", 0))),
                         _ => throw new NotSupportedException($"chebyshev op '{fn}' is not registered in OpRegistry"),
                     };
                 }
@@ -376,6 +410,8 @@ namespace NumSharp.Tests.Fuzz
                         "zero" => ConstantFacet(() => m.legzero, a),
                         "one" => ConstantFacet(() => m.legone, a),
                         "x" => ConstantFacet(() => m.legx, a),
+                        "der" => a.CalcFacet(m.legder(a.Get("c"), a.Int("m", 1), a.Opt("scl"), a.Int("axis", 0))),
+                        "int" => a.CalcFacet(m.legint(a.Get("c"), a.Int("m", 1), a.Opt("k"), a.Opt("lbnd"), a.Opt("scl"), a.Int("axis", 0))),
                         _ => throw new NotSupportedException($"legendre op '{fn}' is not registered in OpRegistry"),
                     };
                 }
@@ -392,6 +428,8 @@ namespace NumSharp.Tests.Fuzz
                         "zero" => ConstantFacet(() => m.lagzero, a),
                         "one" => ConstantFacet(() => m.lagone, a),
                         "x" => ConstantFacet(() => m.lagx, a),
+                        "der" => a.CalcFacet(m.lagder(a.Get("c"), a.Int("m", 1), a.Opt("scl"), a.Int("axis", 0))),
+                        "int" => a.CalcFacet(m.lagint(a.Get("c"), a.Int("m", 1), a.Opt("k"), a.Opt("lbnd"), a.Opt("scl"), a.Int("axis", 0))),
                         _ => throw new NotSupportedException($"laguerre op '{fn}' is not registered in OpRegistry"),
                     };
                 }
@@ -408,6 +446,8 @@ namespace NumSharp.Tests.Fuzz
                         "zero" => ConstantFacet(() => m.hermzero, a),
                         "one" => ConstantFacet(() => m.hermone, a),
                         "x" => ConstantFacet(() => m.hermx, a),
+                        "der" => a.CalcFacet(m.hermder(a.Get("c"), a.Int("m", 1), a.Opt("scl"), a.Int("axis", 0))),
+                        "int" => a.CalcFacet(m.hermint(a.Get("c"), a.Int("m", 1), a.Opt("k"), a.Opt("lbnd"), a.Opt("scl"), a.Int("axis", 0))),
                         _ => throw new NotSupportedException($"hermite op '{fn}' is not registered in OpRegistry"),
                     };
                 }
@@ -424,6 +464,8 @@ namespace NumSharp.Tests.Fuzz
                         "zero" => ConstantFacet(() => m.hermezero, a),
                         "one" => ConstantFacet(() => m.hermeone, a),
                         "x" => ConstantFacet(() => m.hermex, a),
+                        "der" => a.CalcFacet(m.hermeder(a.Get("c"), a.Int("m", 1), a.Opt("scl"), a.Int("axis", 0))),
+                        "int" => a.CalcFacet(m.hermeint(a.Get("c"), a.Int("m", 1), a.Opt("k"), a.Opt("lbnd"), a.Opt("scl"), a.Int("axis", 0))),
                         _ => throw new NotSupportedException($"hermite_e op '{fn}' is not registered in OpRegistry"),
                     };
                 }

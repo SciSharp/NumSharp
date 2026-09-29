@@ -2777,6 +2777,75 @@ step) for a mix of NumPy scalars and Python ints; a typed program per argument-k
   interleaved, the blocked getdomain measured 39–43 µs at 100K stride-2 int64/uint64; timed alone, 30. Time each
   route as a whole warm batch, and confirm against a standalone run.
 
+### Polynomial package — calculus family (U4)
+`{p}der` and `{p}int` for the six bases (12 names), with every parameter — `m`, `k`, `lbnd`, `scl`, `axis`
+
+Plan `docs/plans/numpy-polynomial.md` (U4 delivered). Driver `Polynomial/Package/NDPolyCalc.cs` = NumPy's Python
+prologue in NumPy's statement order, which is also its error order. Kernel
+`Backends/Kernels/Direct/DirectILKernelGenerator.PolyCalculus.cs`: the six recurrences are DATA (`PolyCalcRoutines`
+— head steps, a j loop, tail steps; each step's statements are NumPy's source expressions token for token) and ONE
+whole-array kernel is emitted per (basis, der/int, dtype, source dtype, 1-D, fused scale). **Bit-exact with NumPy
+2.4.2** — oracle tier `polycalc.jsonl` (21,646 cases, 0 excused), 10/10 planted bugs killed. The smallest kill is
+8 cases: the block-boundary mutant, which only the >4096-column cells can see. Unit tests:
+`Polynomial/PolynomialCalculusTests.cs` (20 — NumPy's `TestIntegral`/`TestDerivative` ported, made bitwise where
+NumPy's statement sequence makes them exact; byte dumps per dtype family; kernel structure).
+**Perf (NPY/NS, `benchmark/polynomial/polycalc_*`, 606 cells, every one SHA-256-checked): min 2.02×, geomean 8.71×**:
+- 1-D series: geomean 25× (NumPy runs a Python loop over the coefficients);
+- N-D float64: 2.0–13×, geomean 4.8×;
+- dtypes: geomean 8.0×;
+- small N-D: geomean 12×.
+
+How it is built:
+- **One buffer, in place, for any order.** The recurrences never need a value after they overwrite it, provided
+  the result is written one row over. A derivative writes `der[q]` to row q+1 (the result is rows [m, n)). An
+  integral writes `tmp[q]` to row q with `c[q]` at row q+1, so m spare rows sit above the loaded series.
+- **Columns are independent.** A position in `c.shape[1:]` never meets another, so the kernel takes them in
+  cache-resident blocks (~512 KB) through EVERY order of a derivative. It uses the house lane kinds of U3
+  (`.Lanes.cs`) over the columns, then a scalar tail.
+- **The load stage fuses the conversion and the scale.** It converts int/bool series to float64 and applies
+  `c *= scl` in the same first pass. It reads the caller's layout in place when every row's columns sit at one
+  stride (every 1-D and 2-D series, C-mergeable N-D); otherwise NDIter copies first.
+- **NumPy's three arithmetics, per statement.** `c *= scl` is always an array op: `simd_cmul`, operands (c, scl).
+  A 1-D series' recurrence statements are SCALARMATH (the naive complex product, the `ScalarMath` key); an N-D
+  series' are ufuncs.
+- **The integral's correction reuses U3 and U1.** `tmp[0] += k[i] - {p}val(lbnd, tmp)` runs through U3's
+  `NDPolyEval.Val` plus U1's `PolyNumber`: scalarmath and setitem's cast for a 1-D series, an in-place ufunc for
+  an N-D one.
+- **Weak Python ints** of the recurrence (`2*j`, `j+1`, …) are converted per (block, j) through a double and then
+  the house cast. So float16 constants past 2048 round to even, and past 65504 become inf, as in NumPy.
+
+**Result objects are NumPy's** (the corpus records C/F/OWNDATA of each result as a `"facet": "flags"` case):
+- the growing orders: `np.moveaxis` views of fresh C-order buffers (OWNDATA false);
+- `m == 0`: the K-order copy (OWNDATA true; an F series stays F);
+- der with `m >= n`: `c[:1]*0`, laid out by NpyIter's KEEPORDER vote over `c[:1]` (`Shape.MultiSortedStridePerm`),
+  then moved back — except by **hermeder, which skips the moveaxis** (a NumPy quirk, reproduced);
+- an integral whose every order took the n == 1 zero branch: a view of the moved copy.
+
+**Errors, in NumPy's order and texts:**
+- a complex scl into a real series is caught at the first `c *= scl`, so it is reported before an empty series'
+  IndexError;
+- an array constant for a 1-D series is setitem's ValueError into a REAL series, but `complex()`'s TypeError
+  (`only 0-dimensional arrays can be converted to Python scalars`) into a COMPLEX one — probed for every shape;
+- for an N-D series, a complex correction is the in-place add's UFuncTypeError, which names **complex64** when the
+  series is float16/float32 and the lbnd or k is a Python complex (NumPy's complex64 loop).
+
+**The 1-D complex64 value.** A 1-D float16/float32 series with a Python-complex lbnd makes NumPy compute `{p}val` in
+complex64 SCALARMATH. U3's evaluation kernel works in complex128, so `NDPolyCalc.PyVal1D` interprets U3's weak-x step
+trees (`PolySteps.RewriteForWeakX`) with `PolyNumber` instead; `PolyNumber` emulates complex64 scalars exactly.
+
+Traps:
+- **float16 N-D is ~30× slower than float32** (still 2.1–2.6× NumPy). The U3 float16 lane kind rounds every op back
+  onto the f16 grid (narrow + widen), then the store narrows again. A cheaper in-float round buys only ~1.25×; the
+  real lever, NOT done, is a float32 working buffer narrowed once at the end.
+- **The oracle's flags facet REPLACES the result**, so the registry (`OpRegistry.PolySeries.cs` `CalcFacet`) must
+  dispose the result it drops. Otherwise the leak gate (`UndisposedIntermediateTests`) reads one escaped buffer per
+  flags case.
+- **A quoted `--filter` passed from Git Bash through `cmd //c` reaches dotnet with LITERAL quotes** (`\"X\"`). A
+  `TestCategory!=…` filter then matches EVERYTHING and a `ClassName~…` filter NOTHING. Read the filter from a file
+  in the `.cmd` script (`set /p FILTER=<filter.txt`).
+- **describe() serializes an operand's BASE in C order.** A layout must therefore be a C-contiguous base plus a view:
+  an F series is the `.T` of a C buffer holding `base.T`. An F base broke 1,311 cases in the first oracle run.
+
 ### Random (`np.random.*`)
 `bernoulli`, `beta`, `binomial`, `chisquare`, `choice`, `dirichlet`, `exponential`, `f`, `gamma`, `geometric`, `get_bit_generator`, `gumbel`, `hypergeometric`, `laplace`, `logistic`, `lognormal`, `logseries`, `multinomial`, `multivariate_normal`, `negative_binomial`, `noncentral_chisquare`, `noncentral_f`, `normal`, `pareto`, `permutation`, `poisson`, `power`, `rand`, `randint`, `randn`, `random_sample`, `rayleigh`, `seed`, `set_bit_generator`, `shuffle`, `standard_cauchy`, `standard_exponential`, `standard_gamma`, `standard_normal`, `standard_t`, `triangular`, `uniform`, `vonmises`, `wald`, `weibull`, `zipf`
 
@@ -3043,6 +3112,7 @@ non-structured subset would only re-expose `loadtxt`.
 | Fourier / FFT (`np.fft.*`) | `Fourier/np.fft.cs` (`FourierModule` facade), `Fourier/np.fft.{Standard,Real,Hermitian,Helper}.cs` (the 18 funcs), `Fourier/np.fft.RawFft.cs` (layer-3 port: `_raw_fft`/`_raw_fftnd`/`_cook_nd_args`/`_swap_direction`), `Fourier/PocketFFTDriver.cs` (strided 1-D driver + FFTPACK packing), `Fourier/PocketFFT.{Twiddle,Complex,Real,Bluestein,Plan}.cs` (managed pocketfft engine); companion accessors `Math/np.{conjugate,real,imag,angle}.cs`. Design + parity ledger: `docs/FFT_PARITY.md` |
 | numpy.polynomial evaluation (`np.polynomial.*`) | `Polynomial/Package/np.polynomial{,.polynomial,.chebyshev,.legendre,.laguerre,.hermite,.hermite_e}.cs` (facades), `Polynomial/Package/NDPolyEval.cs` (NumPy's Python layer), `Backends/Kernels/ILKernelGenerator.Polynomial.cs` (step tables + `PyScalar`), `.Typing.cs` (NEP 50 per node, peeling), `.Emitter.cs` (typed emitter), `.Lanes.cs` (vector lane kinds for every dtype pair), `.ConstPool.cs` (weak-value regions), `.Eval.cs` (dispatcher/part/stage kernels). Plan + measurements: `docs/plans/numpy-polynomial.md` (U3); benchmark `benchmark/polynomial/` |
 | numpy.polynomial additive family + polyutils (U1) | `Polynomial/Package/np.polynomial.polyutils.cs` (`PolyUtilsModule` facade, incl. the generic tuple overloads), `Polynomial/Package/NDPolyNumber.cs` (`PolyNumber`: Python / NumPy-scalar / ndarray operand + NumPy's operator dispatch), `Polynomial/Package/NDPolySeries.cs` (as_series/trimseq/trimcoef/getdomain/mapparms/mapdomain/{p}add/sub/line/constants + the `PyNum` machine-number lane), `Backends/Kernels/Direct/DirectILKernelGenerator.PolySeries.cs` (trim/combine/tolerance/cast/scalarmath IL kernels + the fused mapparms kernel), CPython arithmetic in `ILKernelGenerator.Polynomial.cs` (`PyScalar`: `IntTrueDivide`, `ComplexQuotient`, NaN-priority `Float*`/`Complex*` helpers). Oracle `polyseries.jsonl` via `OpRegistry.PolySeries.cs` |
+| numpy.polynomial calculus family (U4) | `Polynomial/Package/NDPolyCalc.cs` (`{p}der`/`{p}int` driver: NumPy's prologue, one-buffer orchestration, the integral's lbnd correction, NumPy's result layouts, `PyVal1D`), `Backends/Kernels/Direct/DirectILKernelGenerator.PolyCalculus.cs` (`PolyCalcRoutines` recurrence tables + the per-(basis, direction, dtypes) whole-array kernel: load/convert/scale stage, recurrence stage, column blocks). Oracle `polycalc.jsonl` via `OpRegistry.PolySeries.cs`; benchmark `benchmark/polynomial/polycalc_*` |
 | Grid / slice-expression DSL | `Creation/np.r_.cs` (`AxisConcatenator` + `RClass`), `Creation/np.c_.cs`, `Creation/np.ogrid.cs` (`OGridClass` + `OGridResult` + shared `nd_grid` helpers), `Creation/np.mgrid.cs` (`MGridClass` + `MGridResult`), `Creation/np.meshgrid.cs` (`MeshgridResult`), `Indexing/np.{ix_,s_}.cs` |
 | Array printing (NumPy parity) | `Backends/Printing/{PrintOptions,Dragon4,ElementFormatters,ArrayFormatter}.cs`, `APIs/np.array2string.cs`, `Casting/NDArray.ToString.cs` |
 | Iterators | `Backends/Iterators/NDIter.cs`, `NDIter.Detach.cs` (ref-struct → managed-owner bridge) |

@@ -211,5 +211,53 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.legendre.legtrim.html</remarks>
         [NDScoped]
         public NDArray legtrim(object c, object tol) => NDPolySeries.TrimCoef(c, PolyUtilsModule.Tolerance(tol));
+
+        /// <summary>
+        ///     Differentiates the Legendre series <paramref name="c"/> <paramref name="m"/> times along <paramref name="axis"/>,
+        ///     multiplying by <paramref name="scl"/> at every order. Bit-identical to NumPy 2.4.2's <c>legder</c>: its
+        ///     recurrence <c>der[j-1] = (2*j - 1)*c[j]; c[j-2] += c[j]</c> (then <c>der[1] = 3*c[2]</c>,
+        ///     <c>der[0] = c[1]</c>), with <c>c *= scl</c> before every order, in NumPy's statement order and NEP 50 dtypes.
+        /// </summary>
+        /// <param name="c">The coefficients, LOW degree first (see <see cref="PowerSeriesModule.polyder"/>).</param>
+        /// <param name="m">How many times to differentiate (≥ 0). 0 returns a copy; <c>m &gt;= len(c)</c> returns
+        ///     <c>c[:1]*0</c>.</param>
+        /// <param name="scl">The multiplier applied at each order (null for NumPy's 1; a scalar or a broadcasting array).</param>
+        /// <param name="axis">The axis the series runs along (negative counts from the end).</param>
+        /// <returns>The derivative's coefficients, of the series' dtype (a view of a new array in NumPy's layout).</returns>
+        /// <exception cref="ValueError"><c>The order of derivation must be non-negative</c>, or an array scl whose
+        ///     broadcast would stretch the series.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
+        /// <exception cref="System.ArgumentException">A scl the series cannot absorb in place (NumPy's UFuncTypeError).</exception>
+        /// <exception cref="IncorrectShapeException">An array scl that does not broadcast with the series.</exception>
+        /// <exception cref="System.NotSupportedException">A null or string series.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.legendre.legder.html</remarks>
+        [NDScoped]
+        public NDArray legder(object c, int m = 1, object scl = null, int axis = 0) => NDPolyCalc.Der(PolyBasis.Legendre, c, m, scl, axis);
+
+        /// <summary>
+        ///     Integrates the Legendre series <paramref name="c"/> <paramref name="m"/> times along <paramref name="axis"/>:
+        ///     each order multiplies by <paramref name="scl"/>, integrates (<c>t = c[j]/(2*j + 1); tmp[j+1] = t;
+        ///     tmp[j-1] -= t</c>, with <c>tmp[2] = c[1]/3</c>) and adds the constant that makes the new series equal
+        ///     <c>k[i]</c> at <paramref name="lbnd"/> (<c>tmp[0] += k[i] - legval(lbnd, tmp)</c>). Bit-identical to NumPy
+        ///     2.4.2's <c>legint</c>.
+        /// </summary>
+        /// <param name="c">The coefficients, LOW degree first.</param>
+        /// <param name="m">How many times to integrate (≥ 0); 0 returns a copy.</param>
+        /// <param name="k">The integration constants (see <see cref="PowerSeriesModule.polyint"/>).</param>
+        /// <param name="lbnd">The lower bound (null for NumPy's 0); a scalar.</param>
+        /// <param name="scl">The multiplier applied at each order (null for NumPy's 1); a scalar.</param>
+        /// <param name="axis">The axis the series runs along.</param>
+        /// <returns>The integral's coefficients, of the series' dtype (a view of a new array in NumPy's layout).</returns>
+        /// <exception cref="ValueError">NumPy's argument checks (see <see cref="PowerSeriesModule.polyint"/>).</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
+        /// <exception cref="IndexError">An empty series.</exception>
+        /// <exception cref="TypeError">An array constant for a complex 1-D series (NumPy's <c>complex()</c> text).</exception>
+        /// <exception cref="System.ArgumentException">A value an N-D series cannot absorb in place (NumPy's UFuncTypeError).</exception>
+        /// <exception cref="IncorrectShapeException">Constants that do not broadcast with the series' columns.</exception>
+        /// <exception cref="System.NotSupportedException">A null or string series, constant or bound.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.legendre.legint.html</remarks>
+        [NDScoped]
+        public NDArray legint(object c, int m = 1, object k = null, object lbnd = null, object scl = null, int axis = 0)
+            => NDPolyCalc.Int(PolyBasis.Legendre, c, m, k, lbnd, scl, axis);
     }
 }

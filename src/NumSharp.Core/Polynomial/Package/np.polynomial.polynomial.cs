@@ -214,5 +214,75 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polynomial.polytrim.html</remarks>
         [NDScoped]
         public NDArray polytrim(object c, object tol) => NDPolySeries.TrimCoef(c, PolyUtilsModule.Tolerance(tol));
+
+        /// <summary>
+        ///     Differentiates the power series <paramref name="c"/> <paramref name="m"/> times along <paramref name="axis"/>,
+        ///     multiplying by <paramref name="scl"/> at every order (the chain-rule factor of a linear change of variable).
+        ///     Bit-identical to NumPy 2.4.2's <c>polyder</c>: its recurrence <c>der[j-1] = j*c[j]</c>, with <c>c *= scl</c>
+        ///     before every order, in NumPy's statement order and NEP 50 dtypes — one IL kernel pass per call, where NumPy
+        ///     runs a Python loop per coefficient.
+        /// </summary>
+        /// <param name="c">
+        ///     The coefficients, LOW degree first: an <see cref="NDArray"/> (any layout; an N-D array holds one series per
+        ///     position of its other axes), a C# array or list, or a single number. Integer and bool series are
+        ///     differentiated as float64.
+        /// </param>
+        /// <param name="m">How many times to differentiate (≥ 0). 0 returns a copy; <c>m &gt;= len(c)</c> returns
+        ///     <c>c[:1]*0</c> — zeros, except NaN where c[0] is inf or NaN.</param>
+        /// <param name="scl">
+        ///     The multiplier applied at each order: null for NumPy's default (the Python int 1); a C# number — a Python
+        ///     scalar that ADOPTS the series dtype (<c>0.1</c> on a float32 series multiplies by float32 0.1); a
+        ///     <see cref="System.Half"/>/<c>char</c>/<c>decimal</c> or a 0-d NDArray — a NumPy scalar that may WIDEN the
+        ///     arithmetic (<c>np.float64</c> on a float32 series multiplies in float64, then rounds); or an array that
+        ///     broadcasts against the series in place (one factor per column, say). Even the default 1 is applied: a complex
+        ///     inf coefficient becomes <c>inf+nanj</c> exactly as in NumPy.
+        /// </param>
+        /// <param name="axis">The axis the series runs along (negative counts from the end).</param>
+        /// <returns>The derivative's coefficients, of the series' dtype: a new array — a view of it in NumPy's layout
+        ///     (the series axis back in place), so <c>flags.owndata</c> is false, as in NumPy.</returns>
+        /// <exception cref="ValueError"><c>The order of derivation must be non-negative</c>, or an array
+        ///     <paramref name="scl"/> whose broadcast would stretch the series.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
+        /// <exception cref="System.ArgumentException">A <paramref name="scl"/> the series cannot absorb in place — NumPy's
+        ///     UFuncTypeError, e.g. a complex scl on a real series.</exception>
+        /// <exception cref="IncorrectShapeException">An array <paramref name="scl"/> that does not broadcast with the series.</exception>
+        /// <exception cref="System.NotSupportedException">A null or string series (NumPy's object/str arrays).</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polynomial.polyder.html</remarks>
+        [NDScoped]
+        public NDArray polyder(object c, int m = 1, object scl = null, int axis = 0) => NDPolyCalc.Der(PolyBasis.Power, c, m, scl, axis);
+
+        /// <summary>
+        ///     Integrates the power series <paramref name="c"/> <paramref name="m"/> times along <paramref name="axis"/>:
+        ///     each order multiplies by <paramref name="scl"/>, integrates (<c>tmp[j+1] = c[j]/(j+1)</c>) and adds the
+        ///     constant that makes the new series equal <c>k[i]</c> at <paramref name="lbnd"/>
+        ///     (<c>tmp[0] += k[i] - polyval(lbnd, tmp)</c>). Bit-identical to NumPy 2.4.2's <c>polyint</c>, NumPy's
+        ///     statement order and NEP 50 dtypes included.
+        /// </summary>
+        /// <param name="c">The coefficients, LOW degree first (see <see cref="polyder"/>).</param>
+        /// <param name="m">How many times to integrate (≥ 0); 0 returns a copy.</param>
+        /// <param name="k">
+        ///     The integration constants, one per order (missing ones are 0; more than <paramref name="m"/> is an error):
+        ///     null for none, a single number, a Python list (<c>object[]</c> / <c>IList</c> — Python numbers, which adopt
+        ///     the series dtype), or an array (an NDArray or typed C# array — NumPy scalars of its dtype; for an N-D series
+        ///     a row per order that broadcasts over the series' columns).
+        /// </param>
+        /// <param name="lbnd">The lower bound (null for NumPy's 0); a scalar, Python (weak) or NumPy (strong).</param>
+        /// <param name="scl">The multiplier applied at each order (null for NumPy's 1); a scalar — see <see cref="polyder"/>.</param>
+        /// <param name="axis">The axis the series runs along.</param>
+        /// <returns>The integral's coefficients, of the series' dtype (a view of a new array in NumPy's layout).</returns>
+        /// <exception cref="ValueError">NumPy's texts: <c>The order of integration must be non-negative</c>, <c>Too many
+        ///     integration constants</c>, <c>lbnd must be a scalar.</c>, <c>scl must be a scalar.</c>, <c>setting an array
+        ///     element with a sequence.</c> (an array constant for a 1-D series), or a constant that would stretch the series.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
+        /// <exception cref="IndexError">An empty series (<c>index 0 is out of bounds for axis 0 with size 0</c>).</exception>
+        /// <exception cref="TypeError">An array constant for a complex 1-D series (NumPy's <c>complex()</c> text).</exception>
+        /// <exception cref="System.ArgumentException">A scl, constant or complex lbnd the (N-D) series cannot absorb in
+        ///     place — NumPy's UFuncTypeError. (A 1-D series keeps the real part, as NumPy's setitem does.)</exception>
+        /// <exception cref="IncorrectShapeException">Constants that do not broadcast with the series' columns.</exception>
+        /// <exception cref="System.NotSupportedException">A null or string series, constant or bound.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polynomial.polyint.html</remarks>
+        [NDScoped]
+        public NDArray polyint(object c, int m = 1, object k = null, object lbnd = null, object scl = null, int axis = 0)
+            => NDPolyCalc.Int(PolyBasis.Power, c, m, k, lbnd, scl, axis);
     }
 }

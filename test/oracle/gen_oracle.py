@@ -11712,6 +11712,380 @@ def gen_polyseries():
     return cases
 
 
+# ---- numpy.polynomial calculus family (plan docs/plans/numpy-polynomial.md U4) ----------------------------
+#
+# {p}der(c, m=1, scl=1, axis=0) and {p}int(c, m=1, k=[], lbnd=0, scl=1, axis=0) for the six bases. Op keys are
+# module-qualified ("chebyshev.chebder"); arguments are recorded by NAME with the polyseries encoding (_ps_enc:
+# "a" = the next operand, a 0-d array being NumPy's STRONG scalar; a Python scalar / list spec otherwise), except
+# the two ints m and axis, written as plain JSON numbers (the C# facade takes them as ints). An absent argument is
+# NumPy's default (the C# facade's null / default). A "facet": "flags" case records the RESULT's layout as the
+# bool array [C_CONTIGUOUS, F_CONTIGUOUS, OWNDATA] instead of its values — NumPy returns moveaxis views of fresh
+# C-order buffers, K-order copies (m == 0) and NpyIter-allocated c[:1]*0 arrays, and those layouts are part of
+# the contract. The generator's value choices, section by section:
+#   (A) every dtype x length x order at the defaults — the recurrences' j ranges, NumPy's `if n > 1` branches,
+#       m == 0 (the copy), m >= len(c) (c[:1]*0), ints/bool -> float64;
+#   (B) scl kinds — Python int/float/complex (weak: adopts the series dtype), 0-d arrays (strong: may widen,
+#       then cast back same_kind), and the UFuncTypeError of a complex scl on a real series;
+#   (C) array scl on derivatives (it broadcasts in place; NumPy's two broadcast error texts);
+#   (D) integration constants: scalars, Python lists, typed arrays (NumPy scalars), 0-d arrays, N-D rows, and
+#       the too-many / sequence / broadcast / cast errors;
+#   (E) lbnd kinds (weak, strong 0-d, complex into a real series: 1-D keeps the real part, N-D raises);
+#   (F) N-D series at every axis and memory layout, values and result flags;
+#   (G) specials (NaN/inf/-0/subnormal) 1-D and N-D — 1-D runs scalarmath, N-D ufuncs;
+#   (H) full-mantissa complex values, 1-D vs N-D: the naive (scalarmath) and fused (simd_cmul) products differ
+#       in the last bit only on such operands;
+#   (I) long series and wide N-D series — the kernel's vector loops, scalar tails and column blocks, and float16's
+#       constant rounding (2*(j+1) > 2048) and overflow (j > 65504);
+#   (J) argument errors in NumPy's check order; (K) Python-list series; (L) the n == 1 zero branch.
+# complex64 results (none arise from NumSharp-representable inputs) would be skipped (#569).
+
+def _pc_random(shape, dt, seed):
+    """Seeded full-mantissa values (the product forms of complex arithmetic only differ on such operands)."""
+    rng = np.random.default_rng(seed)
+    n = int(np.prod(shape)) if len(shape) else 1
+    dt = np.dtype(dt)
+    re = rng.uniform(-3.0, 3.0, n)
+    if dt.kind == "c":
+        re = re + 1j * rng.uniform(-3.0, 3.0, n)
+    with np.errstate(all="ignore"):
+        return np.ascontiguousarray(re.astype(dt).reshape(shape))
+
+
+def _pc_special(shape, dt, seed=0):
+    """Coefficients mixing NaN, +-inf, +-0, subnormals and ordinary values."""
+    dt = np.dtype(dt)
+    n = int(np.prod(shape)) if len(shape) else 1
+    vals = [1.5, float("nan"), -0.0, float("inf"), 2.0, float("-inf"), 0.0, -0.75, 5e-324, 3.0, -1e-310, 0.5]
+    re = np.array([vals[(i * 5 + seed) % len(vals)] for i in range(n)])
+    if dt.kind == "c":
+        im = np.array([vals[(i * 7 + seed + 3) % len(vals)] for i in range(n)])
+        arr = re + 1j * im
+    else:
+        arr = re
+    with np.errstate(all="ignore"):
+        return np.ascontiguousarray(arr.astype(dt).reshape(shape))
+
+
+def gen_polycalc():
+    cases = []
+    counter = [0]
+    skipped = [0]
+    ok_dtypes = set(ALL_DTYPES)
+    A = _PSArr
+
+    def emit(op, args, call, layout, cid, facet=None):
+        operands = []
+        params = {}
+        # Canonical order: the C# replay decodes c, k, lbnd, scl in this order and consumes operands as it goes.
+        for key in ("c", "m", "k", "lbnd", "scl", "axis"):
+            if key in args:
+                v = args[key]
+                params[key] = v if key in ("m", "axis") else _ps_enc(v, operands)
+        if facet:
+            params["facet"] = facet
+        n = counter[0]
+        counter[0] += 1
+        try:
+            with np.errstate(all="ignore"), warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                r = call()
+        except Exception as e:
+            cases.append({"id": f"{cid}/{n}", "op": op, "params": params, "operands": operands,
+                          "expected": {}, "expects_throw": True, "error": _poly_exc(e),
+                          "layout": layout, "valueclass": "error"})
+            return
+        a = np.asarray(r)
+        if facet == "flags":
+            a = np.array([a.flags.c_contiguous, a.flags.f_contiguous, a.flags.owndata])
+        if a.dtype.name not in ok_dtypes:
+            skipped[0] += 1
+            return
+        cases.append(_case(op, params, operands, _arr_expected(a), layout, "polycalc", cid=f"{cid}/{n}"))
+
+    float_dtypes = ("float64", "float32", "float16", "complex128")
+
+    for modname, p in POLY_MODULES:
+        mod = _poly_module(modname)
+        for kind in ("der", "int"):
+            f = getattr(mod, p + kind)
+            op = f"{modname}.{p}{kind}"
+            integ = kind == "int"
+
+            # (A) dtype x length x order, default arguments
+            for dt in ALL_DTYPES:
+                inexact = np.dtype(dt).kind in "fc"
+                lengths = (0, 1, 2, 3, 4, 5, 8, 13) if inexact else (0, 1, 3, 5, 13)
+                for n in lengths:
+                    orders = sorted({0, 1, 2, 3, max(n - 1, 0), n, n + 1}) if inexact else sorted({0, 1, 2, n})
+                    c = _poly_coef((n,), dt, seed=11) if n else np.zeros(0, dt)
+                    for m in orders:
+                        emit(op, {"c": A(c), "m": m}, lambda: f(c, m), "c_contiguous_1d", f"{op}/dt/{dt}/{n}/{m}")
+
+            # (B) scl kinds on 1-D series (and a few on N-D)
+            weak_scl = [2, -1, 0, 3, True, 0.5, -1.25, 0.1, -0.0, float("nan"), float("inf"), 1.5j, complex(1, -2)]
+            strong_scl = [np.array(0.5), np.array(0.1), np.array(0.1, np.float32), np.array(0.1, np.float16),
+                          np.array(2, np.int8), np.array(True), np.array(1 + 1j), np.array(-3, np.int64)]
+            for dt in float_dtypes:
+                c = _poly_coef((6,), dt, seed=12)
+                for m in (1, 2):
+                    for s in weak_scl:
+                        emit(op, {"c": A(c), "m": m, "scl": s}, lambda: f(c, m, scl=s), "c_contiguous_1d",
+                             f"{op}/sclw/{dt}/{m}/{s!r}")
+                    for s in strong_scl:
+                        emit(op, {"c": A(c), "m": m, "scl": A(s)}, lambda: f(c, m, scl=s), "c_contiguous_1d",
+                             f"{op}/scls/{dt}/{m}/{s.dtype}/{s.item()!r}")
+                c2 = _poly_coef((4, 3), dt, seed=13)
+                for s in (0.5, 0.1, 1.5j, np.array(0.1), np.array(0.1, np.float16), np.array(1 + 1j)):
+                    sv = A(s) if isinstance(s, np.ndarray) else s
+                    emit(op, {"c": A(c2), "m": 2, "scl": sv}, lambda: f(c2, 2, scl=s), "c_contiguous_2d",
+                         f"{op}/scl2d/{dt}/{s!r}")
+
+            # (C) array scl on derivatives (broadcast in place, per order); the int form rejects it
+            c2 = _poly_coef((5, 3), "float64", seed=14)
+            c1 = _poly_coef((5,), "float64", seed=15)
+            for sname, s, cc, m in (("col", np.array([2.0, -0.5, 3.0]), c2, 2), ("row1", np.array([[2.0, 0.5, -1.0]]), c2, 1),
+                                    ("perrow_m1", np.array([[2.0], [3.0], [4.0], [5.0], [6.0]]), c2, 1),
+                                    ("perrow_m2", np.array([[2.0], [3.0], [4.0], [5.0], [6.0]]), c2, 2),
+                                    ("bad", np.array([1.0, 2.0]), c2, 1), ("stretch", np.ones((2, 5, 3)), c2, 1),
+                                    ("vec1d_m1", np.array([2.0, 3.0, 4.0, 5.0, 6.0]), c1, 1),
+                                    ("vec1d_m2", np.array([2.0, 3.0, 4.0, 5.0, 6.0]), c1, 2),
+                                    ("complex_col", np.array([1j, 1.0, 2.0]), c2, 1),
+                                    ("f32_col", np.array([0.1, 0.2, 0.3], np.float32), c2, 1)):
+                emit(op, {"c": A(cc), "m": m, "scl": A(s)}, lambda: f(cc, m, scl=s), "scl_array",
+                     f"{op}/sclarr/{sname}")
+
+            if integ:
+                # (D) integration constants
+                for dt in float_dtypes:
+                    c = _poly_coef((4,), dt, seed=16)
+                    for kname, kv in (("int", 3), ("float", 2.5), ("complex", 1j), ("list1", [1]), ("list2", [1, 2]),
+                                      ("list3", [1, 2, 3]), ("listf", [1.5, -2.5]), ("listc", [0.5j, 1]),
+                                      ("f64arr", np.array([1.0, 2.0])), ("i8arr", np.array([1, 2], np.int8)),
+                                      ("f32arr", np.array([0.1], np.float32)), ("c128arr", np.array([1 + 1j])),
+                                      ("zerod", np.array(5.0)), ("zerod32", np.array(0.1, np.float32)),
+                                      ("toomany", [1, 2, 3, 4]), ("seq", [np.array([1.0])]), ("seq0d", [np.array(2.0)]),
+                                      ("bool", True), ("bigint", 2 ** 40)):
+                        kenc = A(kv) if isinstance(kv, np.ndarray) else ([A(e) if isinstance(e, np.ndarray) else e for e in kv]
+                                                                        if isinstance(kv, list) else kv)
+                        for m in (1, 2, 3):
+                            emit(op, {"c": A(c), "m": m, "k": kenc}, lambda: f(c, m, k=kv), "c_contiguous_1d",
+                                 f"{op}/k/{dt}/{kname}/{m}")
+                for dt in ("float64", "complex128", "float32"):
+                    c = _poly_coef((4, 3), dt, seed=17)
+                    for kname, kv in (("rows_list", [[1, 2, 3]]), ("rows_arr", np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])),
+                                      ("scalar", 2.5), ("arr_bcast", [np.array([1.0, 2.0])]), ("arr_2d", [np.ones((2, 3))]),
+                                      ("complex", [1j]), ("complex_arr", [np.array([1j, 2, 3])]), ("f64", [np.array(0.1)])):
+                        kenc = A(kv) if isinstance(kv, np.ndarray) else ([A(e) if isinstance(e, np.ndarray) else e for e in kv]
+                                                                        if isinstance(kv, list) else kv)
+                        for m in (1, 2):
+                            emit(op, {"c": A(c), "m": m, "k": kenc}, lambda: f(c, m, k=kv), "c_contiguous_2d",
+                                 f"{op}/k2d/{dt}/{kname}/{m}")
+
+                # (E) lbnd kinds
+                lbnds = [-1, 0.5, -0.0, 2.5, float("inf"), float("nan"), 1j, complex(0.5, -1),
+                         np.array(0.3), np.array(0.3, np.float32), np.array(0.5, np.float16), np.array(1j), np.array([0.0])]
+                for dt in float_dtypes:
+                    for shape in ((4,), (4, 3)):
+                        c = _poly_coef(shape, dt, seed=18)
+                        for lb in lbnds:
+                            lenc = A(lb) if isinstance(lb, np.ndarray) else lb
+                            for m, kv in ((1, None), (2, [1, -2])):
+                                args = {"c": A(c), "m": m, "lbnd": lenc}
+                                if kv is not None:
+                                    args["k"] = kv
+                                emit(op, args, lambda: f(c, m, k=kv if kv is not None else [], lbnd=lb),
+                                     f"c_contiguous_{len(shape)}d", f"{op}/lbnd/{dt}/{shape}/{lb!r}/{m}")
+                # scl must be a scalar for integrals
+                c = _poly_coef((4,), "float64", seed=19)
+                emit(op, {"c": A(c), "m": 1, "scl": A(np.array([2.0]))}, lambda: f(c, 1, scl=np.array([2.0])),
+                     "c_contiguous_1d", f"{op}/err/sclarr")
+
+            # (F) N-D series: every axis, memory layouts, values + result flags
+            # Values for float64 and complex128 (int32 on the C/F views: the converting direct load), flags for
+            # float64 — the layout does not depend on the dtype.
+            for shape in ((6, 3), (3, 6), (4, 3, 2), (2, 5, 3), (1, 4), (4, 1)):
+                for dt in ("float64", "complex128", "int32"):
+                    base = _poly_coef(shape, dt, seed=20)
+                    views = [("c", base, base)]
+                    # describe() serializes the BASE in C order, so every base must be C-contiguous and the layout
+                    # expressed as the view: F order = the transpose of a C buffer holding base.T.
+                    fb = np.ascontiguousarray(base.T)
+                    views.append(("f", fb, fb.T))
+                    if len(shape) >= 3:
+                        perm = (1, 0) + tuple(range(2, len(shape)))
+                        tb = np.ascontiguousarray(base.transpose(perm))
+                        views.append(("t", tb, tb.transpose(perm)))
+                    if len(shape) >= 2:
+                        wide = np.zeros(shape[:-1] + (2 * shape[-1],), dt)
+                        wide[..., ::2] = base
+                        views.append(("strided", wide, wide[..., ::2]))
+                        rb = np.ascontiguousarray(base[::-1])
+                        views.append(("reversed", rb, rb[::-1]))
+                    for vname, vb, vv in views:
+                        if dt == "int32" and vname not in ("c", "f"):
+                            continue
+                        for ax in range(-1, len(shape)):
+                            n = shape[ax]
+                            for m in sorted({1, n}):
+                                layout = f"nd_{vname}"
+                                args = {"c": A(vb, vv), "m": m, "axis": ax}
+                                emit(op, args, lambda: f(vv, m, axis=ax), layout, f"{op}/nd/{shape}/{dt}/{vname}/{ax}/{m}")
+                                if dt == "float64":
+                                    emit(op, args, lambda: f(vv, m, axis=ax), layout,
+                                         f"{op}/ndflags/{shape}/{dt}/{vname}/{ax}/{m}", facet="flags")
+                            if dt == "float64":
+                                emit(op, {"c": A(vb, vv), "m": 0, "axis": ax}, lambda: f(vv, 0, axis=ax), f"nd_{vname}",
+                                     f"{op}/ndflags0/{shape}/{dt}/{vname}/{ax}", facet="flags")
+            # broadcast (stride 0) series and a 0-d series
+            src = _poly_coef((1, 3), "float64", seed=21)
+            bc = np.broadcast_to(src, (5, 3))
+            for ax in (0, 1):
+                for m in (1, 2, 5):
+                    emit(op, {"c": A(src, bc), "m": m, "axis": ax}, lambda: f(bc, m, axis=ax), "nd_broadcast",
+                         f"{op}/ndbc/{ax}/{m}")
+                    emit(op, {"c": A(src, bc), "m": m, "axis": ax}, lambda: f(bc, m, axis=ax), "nd_broadcast",
+                         f"{op}/ndbcflags/{ax}/{m}", facet="flags")
+            src1 = _poly_coef((1,), "float64", seed=22)
+            bc1 = np.broadcast_to(src1, (6,))
+            emit(op, {"c": A(src1, bc1), "m": 2}, lambda: f(bc1, 2), "broadcast_1d", f"{op}/bc1d")
+            z0 = np.array(2.5)
+            for m in (0, 1, 2):
+                emit(op, {"c": A(z0), "m": m}, lambda: f(z0, m), "scalar_0d", f"{op}/zerod/{m}")
+            for ax in (0, -1, 1, -2):
+                emit(op, {"c": A(z0), "m": 1, "axis": ax}, lambda: f(z0, 1, axis=ax), "scalar_0d", f"{op}/zerod_ax/{ax}")
+
+            # (G) special values, 1-D (scalarmath) and N-D (ufuncs)
+            for dt in float_dtypes:
+                for shape in ((7,), (7, 1), (7, 3)):
+                    c = _pc_special(shape, dt, seed=3)
+                    for m in (1, 2):
+                        emit(op, {"c": A(c), "m": m}, lambda: f(c, m), f"special_{len(shape)}d", f"{op}/spec/{dt}/{shape}/{m}")
+                        emit(op, {"c": A(c), "m": m, "scl": 0.5}, lambda: f(c, m, scl=0.5), f"special_{len(shape)}d",
+                             f"{op}/specs/{dt}/{shape}/{m}")
+                        if integ:
+                            kv = [1.5, -0.0][:m]
+                            emit(op, {"c": A(c), "m": m, "k": kv, "lbnd": 0.5}, lambda: f(c, m, k=kv, lbnd=0.5),
+                                 f"special_{len(shape)}d", f"{op}/speck/{dt}/{shape}/{m}")
+
+            # (H) full-mantissa complex values: 1-D scalarmath (naive product) vs N-D ufuncs (simd_cmul)
+            for shape in ((6,), (9,), (6, 1), (6, 2), (9, 5)):
+                for draw in range(3):
+                    c = _pc_random(shape, "complex128", 900 + 31 * draw + len(shape))
+                    for m in (1, 2):
+                        emit(op, {"c": A(c), "m": m}, lambda: f(c, m), f"cfull_{len(shape)}d", f"{op}/cfull/{shape}/{draw}/{m}")
+                        s = complex(*_pc_random((2,), "float64", 1000 + draw))
+                        emit(op, {"c": A(c), "m": m, "scl": s}, lambda: f(c, m, scl=s), f"cfull_{len(shape)}d",
+                             f"{op}/cfulls/{shape}/{draw}/{m}")
+                        if integ:
+                            lb = float(_pc_random((1,), "float64", 1100 + draw)[0])
+                            emit(op, {"c": A(c), "m": m, "lbnd": lb, "k": [1.25, -0.5][:m]},
+                                 lambda: f(c, m, k=[1.25, -0.5][:m], lbnd=lb), f"cfull_{len(shape)}d",
+                                 f"{op}/cfullk/{shape}/{draw}/{m}")
+
+            # (I) long series and wide N-D series (vector loops, tails, column blocks)
+            for dt in float_dtypes:
+                for n in (64, 257):
+                    c = _pc_random((n,), dt, 1200 + n)
+                    for m in (1, 3):
+                        emit(op, {"c": A(c), "m": m}, lambda: f(c, m), "long_1d", f"{op}/long/{dt}/{n}/{m}")
+                # widths around every lane count (W = 2, 4, 8): vector loop only, loop + tail, tail only
+                for cols in (1, 3, 7, 8, 9, 45):
+                    c = _pc_random((6, cols), dt, 1300 + cols)
+                    for m in (1, 2):
+                        emit(op, {"c": A(c), "m": m}, lambda: f(c, m), "wide_2d", f"{op}/wide/{dt}/{cols}/{m}")
+                        if integ and cols in (3, 9, 45):
+                            emit(op, {"c": A(c), "m": m, "k": [0.5, 1.5][:m], "lbnd": -0.75},
+                                 lambda: f(c, m, k=[0.5, 1.5][:m], lbnd=-0.75), "wide_2d", f"{op}/widek/{dt}/{cols}/{m}")
+            c = _pc_random((1000,), "float64", 2200)
+            emit(op, {"c": A(c), "m": 2}, lambda: f(c, 2), "long_1d", f"{op}/long/float64/1000/2")
+            if p in ("cheb", "leg"):
+                # More columns than one kernel block (4096) — the block loop and its partial last block. The loop is
+                # the same for every basis, so two bases carry it.
+                cb = _pc_random((3, 4200), "float32", 1400)
+                emit(op, {"c": A(cb), "m": 2}, lambda: f(cb, 2), "blocks_2d", f"{op}/blocks/float32")
+                cb = _pc_random((2, 4200), "complex128", 1401)
+                emit(op, {"c": A(cb), "m": 1}, lambda: f(cb, 1), "blocks_2d", f"{op}/blocks/complex128")
+
+            # (J) argument errors, NumPy's check order
+            c = _poly_coef((4,), "float64", seed=23)
+            emit(op, {"c": A(c), "m": -1}, lambda: f(c, -1), "c_contiguous_1d", f"{op}/err/mneg")
+            emit(op, {"c": A(c), "m": 1, "axis": 1}, lambda: f(c, 1, axis=1), "c_contiguous_1d", f"{op}/err/axis")
+            emit(op, {"c": A(c), "m": 1, "axis": -2}, lambda: f(c, 1, axis=-2), "c_contiguous_1d", f"{op}/err/axisneg")
+            emit(op, {"c": A(c), "m": -1, "axis": 5}, lambda: f(c, -1, axis=5), "c_contiguous_1d", f"{op}/err/order")
+            emit(op, {"c": A(c), "m": 0, "axis": 5}, lambda: f(c, 0, axis=5), "c_contiguous_1d", f"{op}/err/axism0")
+            emit(op, {"c": A(c), "m": 1, "scl": 1j}, lambda: f(c, 1, scl=1j), "c_contiguous_1d", f"{op}/err/sclc")
+            emit(op, {"c": A(c), "m": 9, "scl": 1j}, lambda: f(c, 9, scl=1j), "c_contiguous_1d", f"{op}/err/sclc_big")
+            e0 = np.zeros(0)
+            emit(op, {"c": A(e0), "m": 1, "scl": 1j}, lambda: f(e0, 1, scl=1j), "c_contiguous_1d", f"{op}/err/sclc_empty")
+            if integ:
+                emit(op, {"c": A(c), "m": -1, "k": [1, 2]}, lambda: f(c, -1, k=[1, 2]), "c_contiguous_1d", f"{op}/err/mneg_k")
+                emit(op, {"c": A(c), "m": 1, "k": [1, 2], "lbnd": A(np.array([0.0]))},
+                     lambda: f(c, 1, k=[1, 2], lbnd=np.array([0.0])), "c_contiguous_1d", f"{op}/err/k_before_lbnd")
+                emit(op, {"c": A(c), "m": 1, "lbnd": A(np.array([0.0])), "scl": A(np.array([1.0]))},
+                     lambda: f(c, 1, lbnd=np.array([0.0]), scl=np.array([1.0])), "c_contiguous_1d", f"{op}/err/lbnd_before_scl")
+                emit(op, {"c": A(c), "m": 1, "scl": A(np.array([1.0])), "axis": 3},
+                     lambda: f(c, 1, scl=np.array([1.0]), axis=3), "c_contiguous_1d", f"{op}/err/scl_before_axis")
+                emit(op, {"c": A(c), "m": 0, "k": [1]}, lambda: f(c, 0, k=[1]), "c_contiguous_1d", f"{op}/err/k_m0")
+
+            # (K) Python-list series
+            for lname, lv in (("ints", [1, 2, 3]), ("mixed", [1, 2.5, -3]), ("complex", [1j, 2]), ("bools", [True, False, True]),
+                              ("nested", [[1, 2], [3, 4], [5, 6]]), ("empty", []), ("scalar", 5), ("fscalar", 2.5)):
+                for m in (0, 1, 2):
+                    emit(op, {"c": lv, "m": m}, lambda: f(lv, m), "python_list", f"{op}/list/{lname}/{m}")
+
+            # (L) the n == 1 branch of integrals (and one-coefficient derivatives)
+            for cname, cv in (("zero", np.zeros(1)), ("negzero", np.array([-0.0])), ("nan", np.array([np.nan])),
+                              ("czero", np.zeros(1, complex)), ("two", np.array([2.0])), ("zeros_row", np.zeros((1, 3))),
+                              ("mixed_row", np.array([[0.0, 1.0, 0.0]])), ("f16zero", np.zeros(1, np.float16))):
+                for m, kv, s in ((1, None, None), (2, [0, 3], None), (3, [0, 0, 3], None), (2, [3], None), (1, [0], 0),
+                                 (2, [1, 2], 0), (3, [0, 1], None)):
+                    if not integ and kv is not None:
+                        continue
+                    args = {"c": A(cv), "m": m}
+                    kw = {}
+                    if kv is not None:
+                        args["k"] = kv
+                        kw["k"] = kv
+                    if s is not None:
+                        args["scl"] = s
+                        kw["scl"] = s
+                    emit(op, args, lambda: f(cv, m, **kw), "one_coef", f"{op}/one/{cname}/{m}/{kv}/{s}")
+                    emit(op, args, lambda: f(cv, m, **kw), "one_coef", f"{op}/oneflags/{cname}/{m}/{kv}/{s}", facet="flags")
+            for (shape, ax) in (((1, 3, 2), 0), ((3, 1, 2), 1), ((2, 3, 1), 2)):
+                zb = np.zeros(shape[::-1])      # C buffer; its transpose is the F-ordered series
+                zf = zb.T
+                for m, kv in ((1, [3]), (2, [0, 3]), (2, [3, 4])):
+                    if not integ:
+                        kv = None
+                    args = {"c": A(zb, zf), "m": m, "axis": ax}
+                    if kv is not None:
+                        args["k"] = kv
+                    call = (lambda: f(zf, m, k=kv, axis=ax)) if kv is not None else (lambda: f(zf, m, axis=ax))
+                    emit(op, args, call, "one_coef_nd", f"{op}/onend/{shape}/{ax}/{m}/{kv}")
+                    emit(op, args, call, "one_coef_nd", f"{op}/onendflags/{shape}/{ax}/{m}/{kv}", facet="flags")
+
+        # float16 constants past float16's exact integers (2*(j+1) > 2048: the Python int rounds to nearest-even) for
+        # every basis, and past its range (a constant > 65504 is inf) where a basis reaches it at a corpus-sized length:
+        # hermder's 2*j at j = 32753, polyint's j + 1 at j = 65504.
+        for kind, n in (("der", 2100), ("int", 2100)):
+            f = getattr(mod, p + kind)
+            op = f"{modname}.{p}{kind}"
+            c = np.ones(n, np.float16)
+            emit(op, {"c": A(c), "m": 1}, lambda: f(c, 1), "long_1d", f"{op}/f16range/{n}")
+        for kind, n in ({"herm": (("der", 33000),), "poly": (("int", 66000),)}.get(p, ())):
+            f = getattr(mod, p + kind)
+            op = f"{modname}.{p}{kind}"
+            c = np.ones(n, np.float16)
+            emit(op, {"c": A(c), "m": 1}, lambda: f(c, 1), "long_1d", f"{op}/f16range/{n}")
+
+    # Char: NumSharp's uint16-like dtype converts to float64 exactly as uint16 does (the house weave).
+    cases += _relabel_dtype([c for c in cases if "/dt/uint16/" in (c.get("id") or "") and not c.get("expects_throw")],
+                            "uint16", "char")
+    if skipped[0]:
+        print(f"  (skipped {skipped[0]} complex64 cells — #569)")
+    return cases
+
+
 def main():
     here = os.path.dirname(os.path.abspath(__file__))
     corpus_dir = os.path.normpath(os.path.join(here, "..", "NumSharp.Tests.Oracle", "Fuzz", "corpus"))
@@ -11984,8 +12358,11 @@ def main():
     elif mode == "polyseries":
         cases = gen_polyseries()                                        # numpy.polynomial additive family + polyutils (U1)
         write_jsonl(os.path.join(corpus_dir, "polyseries.jsonl"), cases)
+    elif mode == "polycalc":
+        cases = gen_polycalc()                                          # numpy.polynomial calculus: {p}der / {p}int (U4)
+        write_jsonl(os.path.join(corpus_dir, "polycalc.jsonl"), cases)
     else:
-        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | sinc | i0 | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows | evaluate | real_if_close | instance | emath | polyeval | polyseries)")
+        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | sinc | i0 | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows | evaluate | real_if_close | instance | emath | polyeval | polyseries | polycalc)")
         sys.exit(2)
 
 

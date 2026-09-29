@@ -32,7 +32,10 @@ namespace NumSharp
     ///         <item>the additive family of every basis — the constants <c>{p}domain</c>/<c>{p}zero</c>/<c>{p}one</c>/
     ///         <c>{p}x</c>, <c>{p}line</c>, <c>{p}add</c>, <c>{p}sub</c>, <c>{p}trim</c> — and the <see cref="polyutils"/>
     ///         substrate (<c>as_series</c>, <c>trimseq</c>, <c>trimcoef</c>, <c>getdomain</c>, <c>mapparms</c>,
-    ///         <c>mapdomain</c>).</item>
+    ///         <c>mapdomain</c>);</item>
+    ///         <item>the calculus family of every basis — <c>{p}der</c> and <c>{p}int</c> with every parameter
+    ///         (<c>m</c>, <c>k</c>, <c>lbnd</c>, <c>scl</c>, <c>axis</c>) — through one runtime-compiled IL kernel per
+    ///         (basis, direction, dtypes) that runs every order in place in one buffer.</item>
     ///     </list>
     ///     <para>https://numpy.org/doc/stable/reference/routines.polynomials-package.html</para>
     /// </remarks>

@@ -356,7 +356,9 @@ namespace NumSharp
         ///     its sorted stride permutation (<see cref="Shape.KeepOrder"/>), all dense with offset 0.
         /// </summary>
         /// <param name="s">The source shape.</param><returns>A fresh owned-allocation shape.</returns>
-        private static Shape LikeKeepOrder(Shape s)
+        /// <remarks>Also the layout of NumPy's <c>np.array(c, copy=True)</c> (order='K') — the copy the calculus family
+        ///     (<c>NDPolyCalc</c>) returns for <c>m=0</c> and builds its degenerate results from.</remarks>
+        internal static Shape LikeKeepOrder(Shape s)
         {
             if (s.NDim == 0) return Shape.NewScalar();
             if (!s.IsContiguous && !s.IsFContiguous) return s.KeepOrder();

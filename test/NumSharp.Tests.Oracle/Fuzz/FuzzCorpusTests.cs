@@ -534,6 +534,19 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Polyseries() => RunCorpus("polyseries.jsonl");
 
+        // numpy.polynomial calculus family (plan docs/plans/numpy-polynomial.md U4): {p}der / {p}int for the six
+        // bases — every dtype x length x order at the defaults, scl kinds (Python scalars adopt the series dtype,
+        // 0-d arrays may widen; array scl broadcasting in place on derivatives), integration constants (scalars,
+        // Python lists, typed arrays, N-D rows) and lbnd kinds (1-D keeps a complex value's real part, N-D raises),
+        // N-D series at every axis x memory layout (values AND the result's C/F/OWNDATA flags), specials and
+        // full-mantissa complex values on 1-D (scalarmath: the naive product) vs N-D (ufuncs: simd_cmul) series,
+        // long and wide series (the kernel's vector loops, tails and column blocks), float16's constant rounding
+        // and overflow, the argument errors in NumPy's order, Python-list series and the n == 1 zero branch.
+        // Portable: + - * / and negation only, so strict on every host.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Polycalc() => RunCorpus("polycalc.jsonl");
+
         // W11 operand-relationship flags (section C): input aliasing (a op a, same buffer) and
         // in-place out= (maximum/minimum/clip writing into an input operand).
         [TestMethod]
@@ -747,6 +760,7 @@ namespace NumSharp.Tests.Fuzz
             ["emath.jsonl"] = 385,        // §A2/E5: np.emath scimath promotion (+ the unsigned lanes, dtype-spread gate)
             ["polyeval.jsonl"] = 16100,   // numpy.polynomial {p}val family (U3), 6 bases x the matrix above, + 4,392 single-element-broadcast cells
             ["polyseries.jsonl"] = 18000, // numpy.polynomial additive family + polyutils (U1): 6 bases + polyutils + constant facets — 15,950 cases at delivery, 18,437 since the parity audit's long-series / complex64-loop / block-boundary / getdomain-window sections (K-N), which this floor keeps from silently dropping out
+            ["polycalc.jsonl"] = 21000,   // numpy.polynomial calculus family (U4): {p}der / {p}int x 6 bases, sections A-L of gen_polycalc
             ["place.jsonl"] = 12,
             ["products.jsonl"] = 326,
             ["precision.jsonl"] = 80,

@@ -271,6 +271,7 @@ python test/oracle/gen_oracle.py fft              # np.fft.* — 1-D/N-D/hermiti
 python test/oracle/gen_oracle.py random_parity    # seeded np.random stream bytes (portable + host-libm files)
 python test/oracle/gen_oracle.py polyeval         # np.polynomial.* evaluation family (module-qualified keys)
 python test/oracle/gen_oracle.py polyseries       # np.polynomial.* additive family + polyutils + the module constants
+python test/oracle/gen_oracle.py polycalc         # np.polynomial.* calculus family ({p}der / {p}int, every parameter)
 python test/oracle/gen_index_oracle.py            # the four index_* corpora (seed pinned 20240626)
 python test/oracle/gen_nan_oracle.py              # nan.jsonl — NaN parity grid (standalone; complex bit-exact)
 python test/oracle/fuzz_random.py 1234 2000 random_smoke.jsonl
@@ -905,6 +906,46 @@ the fused same-dtype kernel. Planted-bug checks: dropping the lane's product-ove
 list lane's `long` read (205 red), feeding the fused kernel the wrong numerator (129 red). Cells whose NumPy result
 is a complex64 ARRAY outside mapdomain (a `{p}add` of float32 coefficients and a Python complex list, …) or an
 object array are skipped (109) — every complex64 SCALAR result and every mapdomain complex64 array is recorded.
+
+### numpy.polynomial calculus family (`polycalc` tier)
+
+`polycalc.jsonl` (`gen_oracle.py polycalc`, 21,646 cases, floor 21,000) gates plan unit U4 — `{p}der` and `{p}int`
+for the six bases, with every parameter (`m`, `k`, `lbnd`, `scl`, `axis`) — **bit-exact, 0 excused**. Keys are
+module-qualified like `polyeval`'s (`chebyshev.chebint`). Arguments are NAMED (`c`, `m`, `k`, `lbnd`, `scl`, `axis`);
+`c`/`k`/`lbnd`/`scl` are `"a"` (the next operand) or a Python-typed spec, so a weak Python `scl`/`lbnd`/constant and
+a strong 0-d array reach the facade as the same KIND NumPy saw — the kind decides the NEP 50 dtype of `c *= scl`
+and of the integral's correction `tmp[0] += k[i] - {p}val(lbnd, tmp)`. The sections of `gen_polycalc`:
+- **(A)** every dtype × length 0–13 × order 0 … n+1 at the defaults (integer/bool series become float64);
+- **(B)** scl kinds on 1-D and N-D series — weak ints/bools/floats/complexes (signed zero, NaN, inf) and strong 0-d
+  arrays of every width (a 0-d float64 scl multiplies a float32 series in float64 and casts back);
+- **(C)** ARRAY scl on derivatives (it broadcasts IN PLACE against the series, per order; stretching or
+  non-broadcasting shapes raise NumPy's texts; the integral rejects any array scl);
+- **(D)** integration constants: weak scalars, Python lists (short/long/too many), typed arrays of every width, 0-d
+  arrays, lists of arrays, and N-D rows (broadcast, 2-D, complex into a real series — the in-place add's error);
+- **(E)** lbnd kinds × 1-D / N-D × float dtypes: a complex value into a 1-D real series keeps its real part
+  (setitem's ComplexWarning), into an N-D one raises the add's UFuncTypeError — naming NumPy's **complex64** for a
+  float16/float32 series, whose 1-D `{p}val` also runs in complex64 scalarmath (reproduced exactly);
+- **(F)** N-D series at every axis × memory layouts (C, F, transposed 3-D, column-strided, reversed; int32 on C/F for
+  the converting direct load) — values AND a `"facet": "flags"` case recording `[C_CONTIGUOUS, F_CONTIGUOUS,
+  OWNDATA]`, because NumPy's result objects differ: moveaxis views of fresh C-order buffers, the m == 0 K-order
+  copy, `c[:1]*0` (hermeder alone returns it unmoved), and the n == 1 zero branch's view of the moved copy;
+  broadcast and 0-d series;
+- **(G)** special values (NaN, ±inf, ±0, subnormals) on 1-D (scalarmath) and N-D (ufunc) series;
+- **(H)** full-mantissa complex values: a 1-D series runs NumPy scalarmath (the NAIVE complex product), an N-D one
+  ufuncs (`simd_cmul`) — the integral's lbnd correction differs in the last bits between the two;
+- **(I)** long 1-D series (64/257/1,000 coefficients) and widths around every lane count (1/3/7/8/9/45 columns), plus
+  wider-than-one-block series (4,200 columns, float32 and complex128) for the kernel's block loop;
+- **(J)** argument errors in NumPy's check order (order sign before the axis, constants before lbnd before scl before
+  the axis, a complex scl caught at the first `c *= scl` even for an empty series);
+- **(K)** Python-list series (ints, mixed, complex, bools, nested, empty, scalars);
+- **(L)** the integral's n == 1 branch (`np.all(c[0] == 0)` keeps the series one coefficient long until a nonzero
+  constant lands): zero, -0.0, NaN, complex and float16 zeros, N-D rows, with the result flags;
+- float16's weak-int constants past its exact integers (2,100 coefficients: `2*(j+1)` rounds to nearest-even) and
+  past its range (hermder's `2*j` and polyint's `j + 1` become inf) — 33,000 and 66,000 coefficients.
+
+Char rides the uint16 proxy (section A). Cells whose NumPy result is complex64 are skipped (#569). `OpRegistry.
+PolySeries.cs` replays it; a flags case disposes the result it replaces (the leak gate reads an undisposed result
+as an escaped buffer). Design and measurements: `docs/plans/numpy-polynomial.md` (U4).
 
 ### einsum (`einsum` tier)
 

@@ -25,7 +25,7 @@
 | Page section | NumPy API | NumSharp today |
 |---|---|---|
 | Legacy "polynomial module" (`numpy.lib.polynomial`) | `poly1d`, `polyval`, `poly`, `roots`, `polyfit`, `polyder`, `polyint`, `polyadd`, `polydiv`, `polymul`, `polysub` | **Done** — all 11 functions and `poly1d(c_or_r, r, variable)`, byte-exact. Oracle: `poly.jsonl` (portable); `roots`, `polyfit` and `poly`-of-a-matrix are in host-pinned `linalg_parity`. Unit tests + live-parity tests. Only `RankWarning` is absent: NumSharp emits no warnings anywhere. |
-| "Polynomial package" (`numpy.polynomial`) | 6 modules × ~31 names, `polyutils`, 6 classes, `set_default_printstyle` | **U3 + U1 delivered** — 90 of 193 names: the evaluation family (36, `polyvalfromroots` open) and the additive family with `polyutils` (54: `{p}add/sub/trim/line`, the 24 constants, `as_series`/`trimseq`/`trimcoef`/`getdomain`/`mapparms`/`mapdomain`), all bit-exact (`polyeval.jsonl` 16,606 + `polyseries.jsonl` 18,437 cases). Facade `np.polynomial.{polynomial,chebyshev,legendre,laguerre,hermite,hermite_e,polyutils}`; 0 of 6 classes. `coverage/generate_coverage.py` catalogues all seven `numpy.polynomial.*` submodules as out-of-headline surfaces. |
+| "Polynomial package" (`numpy.polynomial`) | 6 modules × ~31 names, `polyutils`, 6 classes, `set_default_printstyle` | **U3 + U1 + U4 delivered** — 102 of 193 names: the evaluation family (36, `polyvalfromroots` open), the additive family with `polyutils` (54: `{p}add/sub/trim/line`, the 24 constants, `as_series`/`trimseq`/`trimcoef`/`getdomain`/`mapparms`/`mapdomain`) and the calculus family (12: `{p}der`/`{p}int`), all bit-exact (`polyeval.jsonl` 16,606 + `polyseries.jsonl` 18,437 + `polycalc.jsonl` 21,646 cases). Facade `np.polynomial.{polynomial,chebyshev,legendre,laguerre,hermite,hermite_e,polyutils}`; 0 of 6 classes. `coverage/generate_coverage.py` catalogues all seven `numpy.polynomial.*` submodules as out-of-headline surfaces. |
 | "Transition guide" | the reversed coefficient order; `Polynomial.fit(...).convert()` | Documentation only. It is a real hazard for us, though, because the new package **reuses the legacy names with the opposite coefficient order** (§2 D5). |
 
 User demand on record: issue **#496** "Can NumSharp fit polynomial surface equations?" — that is exactly
@@ -498,7 +498,65 @@ machine-partitioned; the counts sum to 193 with no overlap (Appendix A).
   float16 4-lane load width — all killed by the oracle tier, 7 of 8 also by the unit tests.
 - **Tests to port:** `TestEvaluation` × 6 (covered by the oracle tier + unit tests above).
 
-### U4 — Calculus (12 names)
+### U4 — Calculus (12 names) — DELIVERED 2026-09-29
+
+**As built.** Where the build diverges from the plan below, this block wins; the plan is kept for the record.
+- **Engine:** the driver is `Polynomial/Package/NDPolyCalc.cs`: NumPy's prologue in NumPy's statement order,
+  which is also its error order. The kernel is `Backends/Kernels/Direct/DirectILKernelGenerator.PolyCalculus.cs`:
+  - the six recurrences are data (`PolyCalcRoutines`: head steps, a j loop, tail steps; each statement is NumPy's
+    source expression token for token);
+  - one whole-array kernel is emitted per (basis, der/int, dtype, source dtype, 1-D scalarmath, fused scale);
+  - each stage (load/convert/scale and recurrence) is its own DynamicMethod, so the JIT's inline budget covers one
+    stage's lane helpers.
+- **One buffer, in place, for any order:**
+  - a derivative writes `der[q]` one row below `c[q]`, so the result is rows [m, n);
+  - an integral writes `tmp[q]` one row above `c[q]`, with m spare rows above the loaded series.
+
+  Columns (positions in `c.shape[1:]`) never meet, so the kernel takes them in ~512 KB blocks through every order
+  of a derivative. It is vector over columns (U3's lane kinds), with a scalar tail. The load stage converts
+  int/bool series to float64 and applies `c *= scl` in the same pass. It reads the caller's layout in place when a
+  row's columns sit at one stride; otherwise NDIter copies first.
+- **Three arithmetics, as planned (R10):**
+  - `c *= scl` is always the ufunc (`simd_cmul`, operands (c, scl));
+  - a 1-D series' recurrence is scalarmath (the naive product);
+  - an N-D series' recurrence is ufuncs.
+
+  The integral's `tmp[0] += k[i] - {p}val(lbnd, tmp)` runs through U3's `NDPolyEval.Val` plus U1's `PolyNumber`.
+  One gap needed its own route: a 1-D float16/float32 series with a Python-complex lbnd, where NumPy's `{p}val` is
+  complex64 SCALARMATH. U3's kernel computes complex in complex128, so `NDPolyCalc.PyVal1D` interprets U3's weak-x
+  step trees with `PolyNumber` instead, which emulates complex64 scalars exactly.
+- **Result objects are NumPy's:** moveaxis views of fresh C buffers; the m == 0 K-order copy; `c[:1]*0` from
+  NpyIter's KEEPORDER vote, left unmoved by hermeder (a NumPy quirk); and the n == 1 zero branch's view of the
+  moved copy.
+- **Oracle:** `polycalc.jsonl` (`gen_oracle.py polycalc`, 21,646 cases, sections A–L, 0 excused), described in
+  `test/NumSharp.Tests.Oracle/Fuzz/README.md`.
+  - Planted-bug check: 10 mutants, 10 killed, 8 to 7,981 red cases each:
+    - the 1-D scale product;
+    - both loop bounds;
+    - the block width;
+    - the strided load;
+    - vector negation;
+    - the correction's sign;
+    - later-order scaling;
+    - the complex64 error name;
+    - the complex64 `{p}val`.
+  - Unit tests: `Polynomial/PolynomialCalculusTests.cs` (20).
+- **Perf:** `benchmark/polynomial/polycalc_{numpy.py,bench.cs,report.py}`, committed summary `polycalc_results.md`;
+  606 cells, all bit-exact.
+
+  | Section | min NPY/NS | geomean NPY/NS |
+  |---|---:|---:|
+  | 1-D | 3.69 | 25.3 |
+  | parameters | 2.47 | 7.7 |
+  | N-D | 2.02 | 4.8 |
+  | dtypes | 2.14 | 8.0 |
+  | layouts | 2.91 | 7.3 |
+  | orders | 3.10 | 6.6 |
+  | small N-D | 3.87 | 12.4 |
+  | **all** | **2.02** | **8.71** |
+- **Open lever, measured:** float16 N-D runs ~30× slower than float32 (2.1–2.6× NumPy). U3's float16 lane kind rounds
+  every op back onto the f16 grid (narrow + widen) and the store narrows again. An in-float round would buy only
+  ~1.25×. A float32 working buffer, narrowed once at the end, is the real fix.
 
 - **Scope:** `{p}der`, `{p}int`.
 - **Shared backend:** one prologue driver:
