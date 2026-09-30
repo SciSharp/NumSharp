@@ -589,8 +589,27 @@ namespace NumSharp.Backends.Kernels
         /// <returns>The cached kernel.</returns>
         /// <exception cref="NotSupportedException"><paramref name="t"/> has no house comparison.</exception>
         internal static PolyTrimLenKernel GetPolyTrimLenKernel(NPTypeCode t)
-            => (PolyTrimLenKernel)s_polySeriesKernels.GetOrAdd(new PolySeriesKey(PolySeriesFamily.TrimLen, t, NPTypeCode.Empty, NPTypeCode.Empty, 0),
-                static k => EmitPolyTrimLen(k.T0));
+        {
+            // The series-algebra engine (U2) trims every intermediate series, several times per Python-level step, so a
+            // flat slot array fronts the dictionary lookup.
+            if ((int)t < PolyDtypeSlots && s_polyTrimLenSlots[(int)t] is { } fast)
+                return fast;
+            var k = (PolyTrimLenKernel)s_polySeriesKernels.GetOrAdd(new PolySeriesKey(PolySeriesFamily.TrimLen, t, NPTypeCode.Empty, NPTypeCode.Empty, 0),
+                static key => EmitPolyTrimLen(key.T0));
+            if ((int)t < PolyDtypeSlots)
+                Volatile.Write(ref s_polyTrimLenSlots[(int)t], k);
+            return k;
+        }
+
+        /// <summary>Fast front of <see cref="GetPolyTrimLenKernel"/>.</summary>
+        private static readonly PolyTrimLenKernel[] s_polyTrimLenSlots = new PolyTrimLenKernel[PolyDtypeSlots];
+
+        /// <summary>Fast front of <see cref="GetPolyCombineKernel"/> for the same-dtype case (<c>ta == tb == tr</c>): one
+        ///     slot per (op, dtype).</summary>
+        private static readonly PolyCombineKernel[] s_polyCombineSlots = new PolyCombineKernel[3 * PolyDtypeSlots];
+
+        /// <summary>Fast front of <see cref="GetPolyCastKernel"/>, one slot per (source, target) pair (<see cref="PolyPairSlot"/>).</summary>
+        private static readonly PolyCastSlot[] s_polyCastSlots = new PolyCastSlot[32 * 32];
 
         /// <summary>
         ///     The <c>_add</c>/<c>_sub</c> kernel (see <see cref="PolyCombineKernel"/>).
@@ -602,8 +621,18 @@ namespace NumSharp.Backends.Kernels
         /// <returns>The cached kernel.</returns>
         /// <exception cref="NotSupportedException">A dtype pair the house conversion or op does not support.</exception>
         internal static PolyCombineKernel GetPolyCombineKernel(PolyCombineOp op, NPTypeCode ta, NPTypeCode tb, NPTypeCode tr)
-            => (PolyCombineKernel)s_polySeriesKernels.GetOrAdd(new PolySeriesKey(PolySeriesFamily.Combine, ta, tb, tr, (byte)op),
-                static k => EmitPolyCombine((PolyCombineOp)k.Flag, k.T0, k.T1, k.T2));
+        {
+            // The series-algebra engine combines intermediates of one dtype in every Python-level step: those keys take a
+            // flat slot front; a converting combine (a user call's mixed operands) keeps the dictionary.
+            int slot = ta == tb && tb == tr && (int)tr < PolyDtypeSlots ? (int)op * PolyDtypeSlots + (int)tr : -1;
+            if (slot >= 0 && s_polyCombineSlots[slot] is { } fast)
+                return fast;
+            var k = (PolyCombineKernel)s_polySeriesKernels.GetOrAdd(new PolySeriesKey(PolySeriesFamily.Combine, ta, tb, tr, (byte)op),
+                static key => EmitPolyCombine((PolyCombineOp)key.Flag, key.T0, key.T1, key.T2));
+            if (slot >= 0)
+                Volatile.Write(ref s_polyCombineSlots[slot], k);
+            return k;
+        }
 
         /// <summary>
         ///     The trimcoef tolerance scan (see <see cref="PolyLastAboveKernel"/>).
@@ -625,8 +654,34 @@ namespace NumSharp.Backends.Kernels
         /// <returns>The cached kernel.</returns>
         /// <exception cref="NotSupportedException">A pair the house conversion does not support.</exception>
         internal static PolyCastKernel GetPolyCastKernel(NPTypeCode ts, NPTypeCode tr)
-            => (PolyCastKernel)s_polySeriesKernels.GetOrAdd(new PolySeriesKey(PolySeriesFamily.Cast, ts, tr, NPTypeCode.Empty, 0),
-                static k => EmitPolyCast(k.T0, k.T1));
+        {
+            // The series-algebra engine converts one element at a time (a weak Python int into the series dtype, a quotient
+            // into quo's dtype) inside its Python-level loops, so a flat slot array fronts the dictionary.
+            int slot = PolyPairSlot(ts, tr);
+            int pair = (int)ts << 8 | (int)tr;
+            if (Volatile.Read(ref s_polyCastSlots[slot]) is { } fast && fast.Pair == pair)
+                return fast.Kernel;
+            var k = (PolyCastKernel)s_polySeriesKernels.GetOrAdd(new PolySeriesKey(PolySeriesFamily.Cast, ts, tr, NPTypeCode.Empty, 0),
+                static key => EmitPolyCast(key.T0, key.T1));
+            // The pair slot folds dtype codes modulo 32 (Complex = 128 shares a slot with Empty), so a slot holds its
+            // exact pair next to the kernel in ONE immutable object — read with one reference load, never torn — and a
+            // colliding pair only costs the dictionary lookup.
+            Volatile.Write(ref s_polyCastSlots[slot], new PolyCastSlot(pair, k));
+            return k;
+        }
+
+        /// <summary>One <see cref="s_polyCastSlots"/> entry: the exact (source, target) pair, as <c>ts &lt;&lt; 8 | tr</c>, and its kernel.</summary>
+        private sealed class PolyCastSlot
+        {
+            /// <summary>The pair the kernel converts.</summary>
+            public readonly int Pair;
+            /// <summary>The kernel.</summary>
+            public readonly PolyCastKernel Kernel;
+
+            /// <summary>Pairs a kernel with the dtype pair it converts.</summary>
+            /// <param name="pair"><c>ts &lt;&lt; 8 | tr</c>.</param><param name="kernel">The kernel.</param>
+            public PolyCastSlot(int pair, PolyCastKernel kernel) { Pair = pair; Kernel = kernel; }
+        }
 
         /// <summary>
         ///     One NumPy scalar binary op in dtype <paramref name="t"/> (see <see cref="PolyScalarBinaryKernel"/>).

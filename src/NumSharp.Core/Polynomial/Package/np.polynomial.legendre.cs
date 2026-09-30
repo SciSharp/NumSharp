@@ -290,5 +290,147 @@ namespace NumSharp
         [NDScoped]
         public NDArray legint(object c, int m = 1, object k = null, object lbnd = null, object scl = null, int axis = 0)
             => NDPolyCalc.Int(PolyBasis.Legendre, c, m, k, lbnd, scl, axis);
+
+        // ---------------------------------------------------------------------------------------------
+        //  Series algebra (plan U2): legmulx / legmul / legdiv / legpow / legfromroots / leg2poly / poly2leg
+        // ---------------------------------------------------------------------------------------------
+
+        /// <summary>
+        ///     Multiplies the Legendre series <paramref name="c"/> by x: <c>x*P_i = ((i+1)*P_{i+1} + i*P_{i-1})/(2i+1)</c>: NumPy's <c>prd[i+1] = (c[i]*(i+1))/(2i+1); prd[i-1] += (c[i]*i)/(2i+1)</c> per coefficient. The zero series <c>[0]</c> is returned as is.
+        ///     Bit-identical to NumPy 2.4.2's <c>legmulx</c> — one IL kernel pass where NumPy runs a Python loop.
+        /// </summary>
+        /// <param name="c">The coefficients, LOW degree first: an <see cref="NDArray"/> (any layout), a typed C# array, a Python list or tuple (<c>object[]</c>, a <c>ValueTuple</c>, a jagged array — np.array's coercion), or a single number. Integer series are computed in float64; a bool series has no common type.</param>
+        /// <returns>A new array one coefficient longer (the zero series: a one-element copy), of <c>np.common_type(c)</c>.</returns>
+        /// <exception cref="ValueError">An empty series (<c>Coefficient array is empty</c>), a series that is not 1-d
+        ///     (<c>Coefficient array is not 1-d</c>), or no common type (a bool series), in NumPy's order; a ragged list
+        ///     (np.array's inhomogeneous-shape text).</exception>
+        /// <exception cref="System.NotSupportedException">A null or str series, or a list holding one (NumPy's object / str
+        ///     arrays, dtypes NumSharp does not have).</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.legendre.legmulx.html</remarks>
+        [NDScoped]
+        public NDArray legmulx(object c) => NDPolyAlgebra.Mulx(PolyBasis.Legendre, c);
+
+        /// <summary>
+        ///     Multiplies two Legendre seriess: NumPy's backward recurrence over series — for each coefficient of the shorter factor, <c>c0 = legsub(c[-i]*xs, (c1*(nd-1))/nd); c1 = legadd(tmp, (legmulx(c1)*(2*nd-1))/nd)</c> — ending in <c>legadd(c0, legmulx(c1))</c>. When either factor is a single term, NumPy's recurrence binds the Python int 0, so a float16 / float32 product is float64 (probed 2.4.2). Bit-identical to NumPy 2.4.2: every statement runs through the kernel NumPy's statement runs through (the house ufunc loops, the U1 combine, the mulx kernel) in NumPy's order and dtypes.
+        /// </summary>
+        /// <param name="c1">First factor. The coefficients, LOW degree first: an <see cref="NDArray"/> (any layout), a typed C# array, a Python list or tuple (<c>object[]</c>, a <c>ValueTuple</c>, a jagged array — np.array's coercion), or a single number. Integer series are computed in float64; a bool series has no common type.</param>
+        /// <param name="c2">Second factor.</param>
+        /// <returns>The product: a new array, or a VIEW of one when trailing zeros were trimmed (as in NumPy).</returns>
+        /// <exception cref="ValueError">An empty series (<c>Coefficient array is empty</c>), a series that is not 1-d
+        ///     (<c>Coefficient array is not 1-d</c>), or no common type (a bool series), in NumPy's order; a ragged list
+        ///     (np.array's inhomogeneous-shape text).</exception>
+        /// <exception cref="System.NotSupportedException">A null or str series, or a list holding one (NumPy's object / str
+        ///     arrays, dtypes NumSharp does not have).</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.legendre.legmul.html</remarks>
+        [NDScoped]
+        public NDArray legmul(object c1, object c2) => NDPolyAlgebra.Mul(PolyBasis.Legendre, c1, c2);
+
+        /// <summary>
+        ///     Divides the Legendre series <paramref name="c1"/> by <paramref name="c2"/>, returning quotient and remainder:
+        ///     <c>polyutils._div</c>: for each quotient coefficient, the divisor times the i-th basis polynomial (<c>legmul([0]*i + [1], c2)</c>) is scaled and subtracted from the remainder. A dividend shorter than the divisor gives <c>(c1[:1]*0, c1)</c>, a one-term divisor
+        ///     <c>(c1/c2[-1], c1[:1]*0)</c>. The quotient keeps the common type of the series, but the remainder is computed against divisor products NumPy promotes with an int list, so it is float64 for float16 / float32 series (probed 2.4.2). Bit-identical to NumPy 2.4.2's <c>legdiv</c>.
+        /// </summary>
+        /// <param name="c1">The dividend. The coefficients, LOW degree first: an <see cref="NDArray"/> (any layout), a typed C# array, a Python list or tuple (<c>object[]</c>, a <c>ValueTuple</c>, a jagged array — np.array's coercion), or a single number. Integer series are computed in float64; a bool series has no common type.</param>
+        /// <param name="c2">The divisor.</param>
+        /// <returns>(quo, rem): NumPy's tuple, each a new array or a view of one.</returns>
+        /// <exception cref="ValueError">An empty series (<c>Coefficient array is empty</c>), a series that is not 1-d
+        ///     (<c>Coefficient array is not 1-d</c>), or no common type (a bool series), in NumPy's order; a ragged list
+        ///     (np.array's inhomogeneous-shape text).</exception>
+        /// <exception cref="System.NotSupportedException">A null or str series, or a list holding one (NumPy's object / str
+        ///     arrays, dtypes NumSharp does not have).</exception>
+        /// <exception cref="System.DivideByZeroException">The divisor is zero (all its coefficients, after trimming) —
+        ///     NumPy's bare <c>ZeroDivisionError</c>, empty message.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.legendre.legdiv.html</remarks>
+        [NDScoped]
+        public (NDArray quo, NDArray rem) legdiv(object c1, object c2) => NDPolyAlgebra.Div(PolyBasis.Legendre, c1, c2);
+
+        /// <summary>
+        ///     Raises the Legendre series <paramref name="c"/> to the power <paramref name="pow"/>: <c>[1]</c> of the series' dtype
+        ///     for 0, the (trimmed) series for 1, otherwise <c>legmul</c> applied pow - 1 times. Bit-identical to NumPy 2.4.2's <c>legpow</c>.
+        /// </summary>
+        /// <param name="c">The coefficients, LOW degree first: an <see cref="NDArray"/> (any layout), a typed C# array, a Python list or tuple (<c>object[]</c>, a <c>ValueTuple</c>, a jagged array — np.array's coercion), or a single number. Integer series are computed in float64; a bool series has no common type.</param>
+        /// <param name="pow">The power (≥ 0).</param>
+        /// <param name="maxpower">The largest power allowed: 16; null for no limit. NumPy's default keeps an accidental huge power from
+        ///     running away.</param>
+        /// <returns>The power series, a new array of <c>np.common_type(c)</c>.</returns>
+        /// <exception cref="ValueError">The series' errors (see <see cref="legmul"/>), then
+        ///     <c>Power must be a non-negative integer.</c>, then <c>Power is too large</c> — NumPy's order.</exception>
+        /// <exception cref="System.NotSupportedException">A null or str series.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.legendre.legpow.html</remarks>
+        [NDScoped]
+        public NDArray legpow(object c, int pow, int? maxpower = 16) => NDPolyAlgebra.Pow(PolyBasis.Legendre, c, pow, maxpower);
+
+        /// <summary>
+        ///     <see cref="legpow(object, int, int?)"/> with a Python-float power: NumPy's <c>power = int(pow)</c>
+        ///     truncates, so 2.0 is 2 while 2.5 fails <c>power != pow</c>.
+        /// </summary>
+        /// <param name="c">The coefficients, LOW degree first: an <see cref="NDArray"/> (any layout), a typed C# array, a Python list or tuple (<c>object[]</c>, a <c>ValueTuple</c>, a jagged array — np.array's coercion), or a single number. Integer series are computed in float64; a bool series has no common type.</param>
+        /// <param name="pow">The power; it must equal its integer part and be ≥ 0.</param>
+        /// <param name="maxpower">The largest power allowed: 16; null for no limit.</param>
+        /// <returns>The power series.</returns>
+        /// <exception cref="ValueError">The series' errors; <c>cannot convert float NaN to integer</c>;
+        ///     <c>Power must be a non-negative integer.</c> (a fractional or negative power); <c>Power is too large</c>.</exception>
+        /// <exception cref="System.OverflowException"><c>cannot convert float infinity to integer</c>; a power beyond
+        ///     int64 with no limit (NumPy would run until memory is exhausted).</exception>
+        /// <exception cref="System.NotSupportedException">A null or str series.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.legendre.legpow.html</remarks>
+        [NDScoped]
+        public NDArray legpow(object c, double pow, int? maxpower = 16) => NDPolyAlgebra.Pow(PolyBasis.Legendre, c, pow, maxpower);
+
+        /// <summary>
+        ///     The Legendre series whose roots are <paramref name="roots"/>: the roots sorted, one linear factor per root
+        ///     (<c>legline(-r, 1) = [-r, 1]</c>), multiplied pairwise as a balanced tree (<c>polyutils._fromroots</c>) with <c>legmul</c>.
+        ///     Empty roots give <c>[1.]</c>. The factors are built by <c>np.array([-r, …])</c>, whose coercion promotes a
+        ///     float16 / float32 root to float64 — so the series is float64 (complex128 for complex roots). Bit-identical to
+        ///     NumPy 2.4.2's <c>legfromroots</c>; one documented difference: roots that compare equal but differ in bits (+0.0 and -0.0) are ordered
+        ///     deterministically here, where NumPy's unstable SIMD sort decides by CPU, which can flip the sign of a zero
+        ///     coefficient.
+        /// </summary>
+        /// <param name="roots">The roots: an <see cref="NDArray"/>, a typed C# array, a Python list or tuple, …
+        ///     (anything with a length — NumPy's <c>len(roots)</c> runs first).</param>
+        /// <returns>A new array of <c>len(roots) + 1</c> coefficients.</returns>
+        /// <exception cref="TypeError">A scalar (<c>object of type 'float' has no len()</c>) or a 0-d array (<c>len() of
+        ///     unsized object</c>).</exception>
+        /// <exception cref="ValueError">Roots that are not 1-d, a zero-size array of nonzero length, or no common type
+        ///     (bool roots).</exception>
+        /// <exception cref="System.NotSupportedException">A null or str root.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.legendre.legfromroots.html</remarks>
+        [NDScoped]
+        public NDArray legfromroots(object roots) => NDPolyAlgebra.FromRoots(PolyBasis.Legendre, roots);
+
+        /// <summary>
+        ///     Converts the Legendre series <paramref name="c"/> to a power series — NumPy's backward recurrence over power-series
+        ///     ops (<c>polyadd</c>, <c>polysub</c>, <c>polymulx</c>) from the highest coefficient down; a series of fewer than three terms is returned as is. Keeps the
+        ///     series' common type. Bit-identical to NumPy 2.4.2's <c>leg2poly</c>.
+        /// </summary>
+        /// <param name="c">The Legendre series's coefficients. The coefficients, LOW degree first: an <see cref="NDArray"/> (any layout), a typed C# array, a Python list or tuple (<c>object[]</c>, a <c>ValueTuple</c>, a jagged array — np.array's coercion), or a single number. Integer series are computed in float64; a bool series has no common type.</param>
+        /// <returns>The power-series coefficients, low degree first (a new array, or a view of one when trailing zeros
+        ///     were trimmed).</returns>
+        /// <exception cref="ValueError">An empty series (<c>Coefficient array is empty</c>), a series that is not 1-d
+        ///     (<c>Coefficient array is not 1-d</c>), or no common type (a bool series), in NumPy's order; a ragged list
+        ///     (np.array's inhomogeneous-shape text).</exception>
+        /// <exception cref="System.NotSupportedException">A null or str series, or a list holding one (NumPy's object / str
+        ///     arrays, dtypes NumSharp does not have).</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.legendre.leg2poly.html</remarks>
+        [NDScoped]
+        public NDArray leg2poly(object c) => NDPolyAlgebra.ToPower(PolyBasis.Legendre, c);
+
+        /// <summary>
+        ///     Converts the power series <paramref name="pol"/> to a Legendre series — Horner's scheme over the Legendre series's own ops:
+        ///     <c>res = legadd(legmulx(res), pol[i])</c> from the highest coefficient down, starting from the Python int 0,
+        ///     which makes the result float64 for any real series (complex128 for a complex one). Bit-identical to NumPy
+        ///     2.4.2's <c>poly2leg</c>.
+        /// </summary>
+        /// <param name="pol">The power-series coefficients. The coefficients, LOW degree first: an <see cref="NDArray"/> (any layout), a typed C# array, a Python list or tuple (<c>object[]</c>, a <c>ValueTuple</c>, a jagged array — np.array's coercion), or a single number. Integer series are computed in float64; a bool series has no common type.</param>
+        /// <returns>The Legendre series's coefficients, low degree first (a new array, or a view of one when trailing zeros
+        ///     were trimmed).</returns>
+        /// <exception cref="ValueError">An empty series (<c>Coefficient array is empty</c>), a series that is not 1-d
+        ///     (<c>Coefficient array is not 1-d</c>), or no common type (a bool series), in NumPy's order; a ragged list
+        ///     (np.array's inhomogeneous-shape text).</exception>
+        /// <exception cref="System.NotSupportedException">A null or str series, or a list holding one (NumPy's object / str
+        ///     arrays, dtypes NumSharp does not have).</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.legendre.poly2leg.html</remarks>
+        [NDScoped]
+        public NDArray poly2leg(object pol) => NDPolyAlgebra.FromPower(PolyBasis.Legendre, pol);
     }
 }

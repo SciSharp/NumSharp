@@ -62,6 +62,17 @@ using System.Threading;
 //   Division (complex: CDOUBLE_divide's Smith algorithm, which scalarmath also calls), add, subtract and
 //   negation have one form each. float16 runs NumPy's HALF loop per op (widen, float32 op, RTNE narrow).
 //
+// {p}mulx RIDES THE INTEGRAL LAYOUT (plan U2)
+// -------------------------------------------
+// NumPy's {p}mulx builds `prd = np.empty(len(c) + 1)` from c with the same shape of loop as an integral:
+// `prd[0] = c[0]*0; prd[1] = c[0]; for i in range(1, n): prd[i+1] = f(c[i]); prd[i-1] += g(c[i])` (lagmulx
+// and hermmulx differ only in their head, which is lagint's / hermint's). With prd[q] at row q and c[q] at
+// row q + 1, prd[i+1] lands on c[i]'s own row — the integral's in-place layout exactly — so a mulx kernel is
+// an integral kernel of ONE order with its own routine table (PolyCalcKey.Mulx, PolyCalcRoutines.GetMulx).
+// The series is always 1-D (as_series), so these kernels are ScalarMath ones: NumPy's statements there are
+// scalarmath on c[i] (legmulx … hermemulx) or array ops whose per-element arithmetic is the same
+// (chebmulx's `c[1:] / 2` and `prd[0:-2] += tmp`, polymulx's `c[0] * 0`).
+//
 // =============================================================================
 
 namespace NumSharp.Backends.Kernels
@@ -106,8 +117,11 @@ namespace NumSharp.Backends.Kernels
     ///     the series is widened, multiplied in that loop and cast back per element, NumPy's in-place ufunc
     ///     (<see cref="PolyLaneOps.F32ScaleF64"/>, <see cref="PolyLaneOps.HalfScaleF64"/>,
     ///     <see cref="PolyLaneOps.HalfScaleF32"/>). <see cref="NPTypeCode.Empty"/> for a non-scaling kernel.</param>
+    /// <param name="Mulx">The kernel runs the basis's <c>{p}mulx</c> routine (<see cref="PolyCalcRoutines.GetMulx"/>) instead of
+    ///     its integral — same in-place layout (prd[q] at row q, c[q] at row q + 1), one order. Requires
+    ///     <see cref="Integrate"/> (the layout) and no <see cref="Scale"/>; see the file header.</param>
     internal readonly record struct PolyCalcKey(PolyBasis Basis, bool Integrate, NPTypeCode T, NPTypeCode Src, bool ScalarMath, bool Scale,
-        NPTypeCode ScaleLoop = NPTypeCode.Empty)
+        NPTypeCode ScaleLoop = NPTypeCode.Empty, bool Mulx = false)
     {
         /// <summary>Whether <c>c *= scl</c> runs in a loop wider than the coefficient dtype (see <see cref="ScaleLoop"/>).</summary>
         public bool WidenedScale => Scale && ScaleLoop != T;
@@ -255,9 +269,9 @@ namespace NumSharp.Backends.Kernels
     /// </summary>
     internal sealed class PolyCalcRoutine
     {
-        /// <summary>Steps before the loop (int only).</summary>
+        /// <summary>Steps before the loop (int and mulx only).</summary>
         public PolyCalcStep[] Head = Array.Empty<PolyCalcStep>();
-        /// <summary>The loop step.</summary>
+        /// <summary>The loop step, or null for a routine with no loop (<c>polymulx</c>: <c>prd[1:] = c</c> is the load itself).</summary>
         public PolyCalcStep Loop;
         /// <summary>The loop's last (der) or first (int) j.</summary>
         public long LoopLo;
@@ -287,6 +301,15 @@ namespace NumSharp.Backends.Kernels
 
         private static readonly PolyCalcRoutine[] s_der = BuildDer();
         private static readonly PolyCalcRoutine[] s_int = BuildInt();
+        private static readonly PolyCalcRoutine[] s_mulx = BuildMulx();
+
+        /// <summary>
+        ///     The <c>{p}mulx</c> routine of one basis, in the INTEGRAL layout (prd[q] at row q, c[q] at row q + 1; one
+        ///     order, j = i running 1 … len(c) - 1 — see the file header).
+        /// </summary>
+        /// <param name="basis">The basis.</param>
+        /// <returns>The routine.</returns>
+        public static PolyCalcRoutine GetMulx(PolyBasis basis) => s_mulx[(int)basis];
 
         /// <summary>The recurrence of one basis.</summary>
         /// <param name="basis">The basis.</param>
@@ -462,7 +485,122 @@ namespace NumSharp.Backends.Kernels
             }
             foreach (var s in r.Head) if (S(s)) return true;
             foreach (var s in r.Tail) if (S(s)) return true;
-            return S(r.Loop);
+            return r.Loop is not null && S(r.Loop);
+        }
+
+        /// <summary>
+        ///     NumPy 2.4.2's six <c>{p}mulx</c> routines, transcribed statement for statement into the integral layout
+        ///     (prd[q] at row q, c[q] at row q + 1, so prd[i + 1] is written onto c[i]'s own row). Every statement that
+        ///     reads c[i] after its row is overwritten binds it first (<see cref="PolyCalcLet"/>), as NumPy's separate
+        ///     <c>c</c> and <c>prd</c> arrays allow. The loops run i = 1 … len(c) - 1 (NumPy's <c>range(1, len(c))</c>).
+        /// </summary>
+        /// <returns>The six routines, indexed by <see cref="PolyBasis"/>.</returns>
+        private static PolyCalcRoutine[] BuildMulx()
+        {
+            var r = new PolyCalcRoutine[6];
+            // polymulx:  prd[0] = c[0] * 0; prd[1:] = c           (the load IS prd[1:] = c: no loop)
+            r[(int)PolyBasis.Power] = new PolyCalcRoutine { Head = new[] { ZeroHead() } };
+            // chebmulx:  prd[0] = c[0] * 0; prd[1] = c[0]
+            //            if len(c) > 1: tmp = c[1:] / 2; prd[2:] = tmp; prd[0:-2] += tmp
+            // As a loop over i = 1 .. n-1 (tmp[i-1] = c[i] / 2): t = c[i] / 2; prd[i + 1] = t; prd[i - 1] += t. The
+            // interleaving is exact: row i - 1 still holds NumPy's pre-update prd[i - 1] (tmp[i-3], c[0], or c[0]*0)
+            // when step i adds into it, and tmp[i-1] is computed from c[i] before its row is overwritten. The
+            // statements are NumPy's ARRAY ops, whose per-element arithmetic (true division by the weak int 2, the
+            // add with prd first) is the scalar op emitted here.
+            r[(int)PolyBasis.Chebyshev] = new PolyCalcRoutine
+            {
+                Head = new[] { ZeroHead() },
+                LoopLo = 1,
+                Loop = new PolyCalcStep
+                {
+                    Rows = new[] { J(1, 1), J(1, -1) },
+                    Consts = new[] { Fixed(2) },
+                    Vars = 1,
+                    Body = new[] { Let(0, Div(L(0), K(0))), Store(0, V(0)), Store(1, Add(L(1), V(0))) },
+                },
+            };
+            // legmulx:   prd[0] = c[0] * 0; prd[1] = c[0]
+            //            for i in range(1, len(c)): j = i + 1; k = i - 1; s = i + j
+            //                prd[j] = (c[i] * j) / s; prd[k] += (c[i] * i) / s
+            r[(int)PolyBasis.Legendre] = new PolyCalcRoutine
+            {
+                Head = new[] { ZeroHead() },
+                LoopLo = 1,
+                Loop = new PolyCalcStep
+                {
+                    Rows = new[] { J(1, 1), J(1, -1) },
+                    Consts = new[] { J(1, 1), J(2, 1), J(1, 0) },
+                    Vars = 1,
+                    Body = new[]
+                    {
+                        Let(0, L(0)),
+                        Store(0, Div(Mul(V(0), K(0)), K(1))),
+                        Store(1, Add(L(1), Div(Mul(V(0), K(2)), K(1)))),
+                    },
+                },
+            };
+            // lagmulx:   prd[0] = c[0]; prd[1] = -c[0]            (lagint's head)
+            //            for i in range(1, len(c)):
+            //                prd[i + 1] = -c[i] * (i + 1); prd[i] += c[i] * (2 * i + 1); prd[i - 1] -= c[i] * i
+            r[(int)PolyBasis.Laguerre] = new PolyCalcRoutine
+            {
+                Head = new[]
+                {
+                    new PolyCalcStep { Rows = new[] { Fixed(1), Fixed(0) }, Vars = 1, Body = new[] { Let(0, L(0)), Store(1, V(0)), Store(0, Neg(V(0))) } },
+                },
+                LoopLo = 1,
+                Loop = new PolyCalcStep
+                {
+                    Rows = new[] { J(1, 1), J(1, 0), J(1, -1) },
+                    Consts = new[] { J(1, 1), J(2, 1), J(1, 0) },
+                    Vars = 1,
+                    Body = new[]
+                    {
+                        Let(0, L(0)),
+                        Store(0, Mul(Neg(V(0)), K(0))),
+                        Store(1, Add(L(1), Mul(V(0), K(1)))),
+                        Store(2, Sub(L(2), Mul(V(0), K(2)))),
+                    },
+                },
+            };
+            // hermmulx:  prd[0] = c[0] * 0; prd[1] = c[0] / 2     (hermint's head)
+            //            for i in range(1, len(c)): prd[i + 1] = c[i] / 2; prd[i - 1] += c[i] * i
+            r[(int)PolyBasis.Hermite] = new PolyCalcRoutine
+            {
+                Head = new[]
+                {
+                    new PolyCalcStep
+                    {
+                        Rows = new[] { Fixed(1), Fixed(0) },
+                        Consts = new[] { Fixed(0), Fixed(2) },
+                        Vars = 1,
+                        Body = new[] { Let(0, L(0)), Store(1, Mul(V(0), K(0))), Store(0, Div(V(0), K(1))) },
+                    },
+                },
+                LoopLo = 1,
+                Loop = new PolyCalcStep
+                {
+                    Rows = new[] { J(1, 1), J(1, -1) },
+                    Consts = new[] { Fixed(2), J(1, 0) },
+                    Vars = 1,
+                    Body = new[] { Let(0, L(0)), Store(0, Div(V(0), K(0))), Store(1, Add(L(1), Mul(V(0), K(1)))) },
+                },
+            };
+            // hermemulx: prd[0] = c[0] * 0; prd[1] = c[0]
+            //            for i in range(1, len(c)): prd[i + 1] = c[i]; prd[i - 1] += c[i] * i
+            //            (prd[i + 1] = c[i] is c[i]'s own row: nothing to write)
+            r[(int)PolyBasis.HermiteE] = new PolyCalcRoutine
+            {
+                Head = new[] { ZeroHead() },
+                LoopLo = 1,
+                Loop = new PolyCalcStep
+                {
+                    Rows = new[] { J(1, 1), J(1, -1) },
+                    Consts = new[] { J(1, 0) },
+                    Body = new[] { Store(1, Add(L(1), Mul(L(0), K(0)))) },
+                },
+            };
+            return r;
         }
     }
 
@@ -541,7 +679,8 @@ namespace NumSharp.Backends.Kernels
             var e = new PolyCalcEmit
             {
                 Key = key,
-                Routine = PolyCalcRoutines.Get(key.Basis, key.Integrate),
+                // A mulx kernel keeps the integral's layout and root (one order, prd one row above c) with its own table.
+                Routine = key.Mulx ? PolyCalcRoutines.GetMulx(key.Basis) : PolyCalcRoutines.Get(key.Basis, key.Integrate),
                 Size = GetTypeSize(key.T),
                 SrcSize = GetTypeSize(key.Src),
             };
@@ -565,7 +704,7 @@ namespace NumSharp.Backends.Kernels
                     e.SrcVk = PolyLanes.CreateLaneKind(key.Src, e.W);
             }
 
-            string name = $"NDPolyCalc_{key.Basis}_{(key.Integrate ? "int" : "der")}_{key.T}_{key.Src}"
+            string name = $"NDPolyCalc_{key.Basis}_{(key.Mulx ? "mulx" : key.Integrate ? "int" : "der")}_{key.T}_{key.Src}"
                           + $"{(key.ScalarMath ? "_s" : "")}{(key.Scale ? "_scl" : "")}{(key.WidenedScale ? $"_{key.ScaleLoop}" : "")}"
                           + $"{(e.Vk is null ? "_scalar" : "")}";
 
@@ -951,25 +1090,29 @@ namespace NumSharp.Backends.Kernels
 
             foreach (var s in r.Head) Fixed(s);
 
-            var top = il.DefineLabel(); var end = il.DefineLabel();
-            if (e.Key.Integrate)
+            // A routine without a loop (polymulx) is its head alone.
+            if (r.Loop is not null)
             {
-                il.Emit(OpCodes.Ldc_I8, r.LoopLo); il.Emit(OpCodes.Stloc, j);
-                il.MarkLabel(top);
-                il.Emit(OpCodes.Ldloc, j); il.Emit(OpCodes.Ldarg_2); il.Emit(OpCodes.Bge, end);
-                EmitPolyCalcStep(il, e, r.Loop, j, negMask);
-                EmitPolyCalcBump(il, j, 1);
+                var top = il.DefineLabel(); var end = il.DefineLabel();
+                if (e.Key.Integrate)
+                {
+                    il.Emit(OpCodes.Ldc_I8, r.LoopLo); il.Emit(OpCodes.Stloc, j);
+                    il.MarkLabel(top);
+                    il.Emit(OpCodes.Ldloc, j); il.Emit(OpCodes.Ldarg_2); il.Emit(OpCodes.Bge, end);
+                    EmitPolyCalcStep(il, e, r.Loop, j, negMask);
+                    EmitPolyCalcBump(il, j, 1);
+                }
+                else
+                {
+                    il.Emit(OpCodes.Ldarg_2); il.Emit(OpCodes.Stloc, j);
+                    il.MarkLabel(top);
+                    il.Emit(OpCodes.Ldloc, j); il.Emit(OpCodes.Ldc_I8, r.LoopLo); il.Emit(OpCodes.Blt, end);
+                    EmitPolyCalcStep(il, e, r.Loop, j, negMask);
+                    EmitPolyCalcBump(il, j, -1);
+                }
+                il.Emit(OpCodes.Br, top);
+                il.MarkLabel(end);
             }
-            else
-            {
-                il.Emit(OpCodes.Ldarg_2); il.Emit(OpCodes.Stloc, j);
-                il.MarkLabel(top);
-                il.Emit(OpCodes.Ldloc, j); il.Emit(OpCodes.Ldc_I8, r.LoopLo); il.Emit(OpCodes.Blt, end);
-                EmitPolyCalcStep(il, e, r.Loop, j, negMask);
-                EmitPolyCalcBump(il, j, -1);
-            }
-            il.Emit(OpCodes.Br, top);
-            il.MarkLabel(end);
 
             foreach (var s in r.Tail) Fixed(s);
             il.Emit(OpCodes.Ret);

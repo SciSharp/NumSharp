@@ -12396,6 +12396,553 @@ def gen_polycalc():
     return cases
 
 
+# ---- numpy.polynomial series algebra (plan docs/plans/numpy-polynomial.md U2) -------------------------------------
+#
+# {p}mulx(c), {p}mul(c1, c2), {p}div(c1, c2) -> (quo, rem), {p}pow(c, pow, maxpower), {p}fromroots(roots) for the six
+# bases, and X2poly(c) / poly2X(pol) for the five non-power ones. Op keys are module-qualified ("legendre.legmul",
+# "chebyshev.poly2cheb"); arguments are recorded by NAME with the polyseries encoding (_ps_enc), in the fixed order
+# c, c1, c2, roots, pol, pow — the order the C# replay decodes them and consumes operands in — except maxpower: a
+# plain JSON int, or JSON null for an explicit None (absent = NumPy's default: None for polypow, 16 for the others).
+# {p}div is a tuple case (both slots recorded, arity asserted). A "facet": "flags" case records each result's
+# [C_CONTIGUOUS, F_CONTIGUOUS, OWNDATA] instead of its values: NumPy returns trimseq VIEWS (polymul's trimmed
+# product, polydiv's remainder, _div's trimmed remainder) next to fresh arrays and as_series copies, and which one
+# comes back is part of the contract.
+#
+# TWO FILES. np.convolve (polymul, chebmul's z-series product, polypow, chebpow, polyfromroots, chebfromroots) reduces
+# every output position with NumPy's per-dtype dot: small_correlate's sequential sum for float/double kernels of at
+# most 11 terms, else cblas ?dot / ?dotu — sequential below the OpenBLAS kernel's vector block (ddot: 16 terms; sdot:
+# 32, products summed in a double; zdotu: 8, four separate sums), a vector kernel from there on. NumSharp's managed
+# sliding engine reproduces the sequential regime byte for byte; the vector regime is reproducible only through the
+# scipy-openblas NumSharp.Interop.OpenBLAS bundles. Every call runs under a np.convolve recorder, and a case whose
+# products reach the vector regime — float64 with both factors of 16 or more coefficients, float32 32 or more,
+# complex128 8 or more, or a complex product of non-finite values (the contiguous zdotu mixes lanes, so an infinity
+# puts a NaN in the real part) — goes to polyalgebra_parity.jsonl, host-pinned like linalg_parity (threads = 1).
+# Everything else — the four recurrence bases (no convolution), the divisions, the conversions and every short
+# product — is portable, in polyalgebra.jsonl.
+#
+# Sections: (A) dtype x length at the defaults; (B) full-mantissa values; (C) the trim / special patterns; (D) layouts;
+# (E) Python-typed arguments; (F) errors in NumPy's check order; (G) pow / maxpower kinds; (H) long series across the
+# managed / BLAS boundary; (I) result flags; (J) fromroots' root kinds; (K) underflow and overflow.
+# complex64 and object results would be skipped (#569 / no object dtype).
+
+class _PAConvRecorder:
+    """Records every np.convolve call a polynomial function makes. The polynomial modules reach np.convolve through the
+    numpy module at call time (polymul's `np.convolve(c1, c2)`, chebyshev's `_zseries_mul`, polypow's
+    `pu._pow(np.convolve, ...)`), so replacing the module attribute for the duration of one call sees every product."""
+
+    def __init__(self):
+        self.calls = []
+        self._orig = None
+
+    def __enter__(self):
+        self._orig = np.convolve
+        orig = self._orig
+        calls = self.calls
+
+        def conv(a, v, mode="full"):
+            aa = np.asarray(a)
+            vv = np.asarray(v)
+            with np.errstate(all="ignore"):
+                finite = bool(np.all(np.isfinite(aa))) and bool(np.all(np.isfinite(vv)))
+            calls.append((int(aa.size), int(vv.size), np.result_type(aa, vv), finite))
+            return orig(a, v, mode)
+
+        np.convolve = conv
+        return self
+
+    def __exit__(self, *exc):
+        np.convolve = self._orig
+        return False
+
+    def blas_bound(self):
+        """Whether any recorded product reaches OpenBLAS's vector regime (see the section comment): the longest dot of
+        a full convolution is the shorter operand's length."""
+        for n1, n2, dt, finite in self.calls:
+            m = min(n1, n2)
+            if dt == np.float64 and m >= 16:
+                return True
+            if dt == np.float32 and m >= 32:
+                return True
+            if dt == np.complex128 and (m >= 8 or not finite):
+                return True
+        return False
+
+
+# Roots with ONE zero only: NumPy's SIMD sort orders +0.0 / -0.0 by CPU, NumSharp's puts -0.0 first, and the product
+# order then decides a zero's sign (a documented divergence, pinned by a unit test, kept out of the corpus).
+_PA_ROOTS = [0.5, -1.25, 2.0, -0.75, 1.5, -2.0, 0.25, 1.0, -0.5, 3.0, -3.0, 0.125, 1.75, -1.5, 2.5, -0.375, 0.0,
+             0.625, -2.5, 1.25]
+_PA_IROOTS = [1, -2, 3, 0, -1, 2, 5, -4, 7, 4, -3, 6, -5, 8, -6, 9]
+
+
+def _pa_roots(k, dt, seed=0):
+    """k distinct-ish roots of dtype dt (repeats are harmless — equal values have equal bits — but never both zeros)."""
+    dt = np.dtype(dt)
+    if k == 0:
+        return np.zeros(0, dt)
+    if dt.kind == "f":
+        return np.array([_PA_ROOTS[(i * 3 + seed) % len(_PA_ROOTS)] for i in range(k)]).astype(dt)
+    if dt.kind == "c":
+        re = [_PA_ROOTS[(i * 3 + seed) % len(_PA_ROOTS)] for i in range(k)]
+        im = [_PA_ROOTS[(i * 5 + seed + 7) % len(_PA_ROOTS)] for i in range(k)]
+        return (np.array(re) + 1j * np.array(im)).astype(dt)
+    if dt.kind == "b":
+        return np.array([(i + seed) % 2 == 0 for i in range(k)], dtype=bool)
+    with np.errstate(all="ignore"):
+        return np.array([_PA_IROOTS[(i * 3 + seed) % len(_PA_IROOTS)] for i in range(k)]).astype(dt)
+
+
+def _pa_random(n, dt, seed, scale=1.0):
+    """Seeded full-mantissa series in [-scale, scale] (the complex product forms and the dot schedules differ only on
+    such operands)."""
+    rng = np.random.default_rng(seed)
+    dt = np.dtype(dt)
+    v = rng.uniform(-scale, scale, n)
+    if dt.kind == "c":
+        v = v + 1j * rng.uniform(-scale, scale, n)
+    with np.errstate(all="ignore"):
+        return v.astype(dt)
+
+
+def gen_polyalgebra():
+    cases = []
+    host = []
+    counter = [0]
+    skipped = [0]
+    ok_dtypes = set(ALL_DTYPES)
+    A = _PSArr
+    arg_order = ("c", "c1", "c2", "roots", "pol", "pow", "maxpower")
+
+    def flags(a):
+        return np.array([a.flags.c_contiguous, a.flags.f_contiguous, a.flags.owndata])
+
+    def emit(op, args, call, layout, cid, kind="array", facet=None):
+        operands = []
+        params = {}
+        for key in arg_order:
+            if key in args:
+                v = args[key]
+                params[key] = v if key == "maxpower" else _ps_enc(v, operands)
+        if facet:
+            params["facet"] = facet
+        n = counter[0]
+        counter[0] += 1
+        rec = _PAConvRecorder()
+        try:
+            with np.errstate(all="ignore"), warnings.catch_warnings(), rec:
+                warnings.simplefilter("ignore")
+                r = call()
+        except Exception as e:
+            dest = host if rec.blas_bound() else cases
+            dest.append({"id": f"{cid}/{n}", "op": op, "params": params, "operands": operands,
+                         "expected": {"kind": kind} if kind != "array" else {}, "expects_throw": True,
+                         "error": _poly_exc(e), "layout": layout, "valueclass": "error"})
+            return
+        dest = host if rec.blas_bound() else cases
+        if kind == "tuple":
+            arrs = [flags(v) if facet == "flags" else np.asarray(v) for v in r]
+            if any(a.dtype.name not in ok_dtypes for a in arrs):
+                skipped[0] += 1
+                return
+            dest.append(_case(op, params, operands, _tuple_expected(arrs), layout, "polyalgebra", cid=f"{cid}/{n}"))
+        else:
+            a = flags(r) if facet == "flags" else np.asarray(r)
+            if a.dtype.name not in ok_dtypes:
+                skipped[0] += 1
+                return
+            dest.append(_case(op, params, operands, _arr_expected(a), layout, "polyalgebra", cid=f"{cid}/{n}"))
+
+    sub_dtypes = ["float64", "float32", "float16", "complex128", "int32", "uint64", "bool"]
+    patterns = ("tz", "allzero", "lastnz", "special", "nantail")
+    pat_dtypes = ("float64", "float32", "float16", "complex128", "int64")
+
+    for modname, p in POLY_MODULES:
+        mod = _poly_module(modname)
+        power = modname == "polynomial"
+        full = modname in ("polynomial", "chebyshev", "legendre")
+        dts = ALL_DTYPES if full else sub_dtypes
+        mulx = getattr(mod, p + "mulx")
+        mul = getattr(mod, p + "mul")
+        div = getattr(mod, p + "div")
+        pw = getattr(mod, p + "pow")
+        fr = getattr(mod, p + "fromroots")
+        o_mulx, o_mul, o_div = f"{modname}.{p}mulx", f"{modname}.{p}mul", f"{modname}.{p}div"
+        o_pow, o_fr = f"{modname}.{p}pow", f"{modname}.{p}fromroots"
+        # The two conversions of a non-power basis: (op key, function, argument name).
+        convs = [] if power else [(f"{modname}.{p}2poly", getattr(mod, p + "2poly"), "c"),
+                                  (f"{modname}.poly2{p}", getattr(mod, "poly2" + p), "pol")]
+        # A NumPy-default maxpower, spelled explicitly only where a case needs it (polypow's None would loop forever
+        # on a huge power, so those cases pass 16 by hand).
+        cap = 16 if power else None
+
+        # ---------------- (A) dtype x length at the defaults ----------------
+        for dt in ALL_DTYPES:
+            for n in (1, 2, 3, 4, 5, 8, 13):
+                c = _ps_series(n, dt, seed=1)
+                emit(o_mulx, {"c": A(c)}, lambda: mulx(c), "c_contiguous_1d", f"{o_mulx}/dt/{dt}/{n}")
+                for cop, cf, cname in convs:
+                    emit(cop, {cname: A(c)}, lambda: cf(c), "c_contiguous_1d", f"{cop}/dt/{dt}/{n}")
+            for n in (1, 2, 3, 4):
+                c = _ps_series(n, dt, seed=2)
+                for k in (0, 1, 2, 3, 4):
+                    emit(o_pow, {"c": A(c), "pow": k}, lambda: pw(c, k), "c_contiguous_1d", f"{o_pow}/dt/{dt}/{n}/{k}")
+            for k in (0, 1, 2, 3, 4, 5, 7, 9, 12):
+                roots = _pa_roots(k, dt, seed=3)
+                emit(o_fr, {"roots": A(roots)}, lambda: fr(roots), "c_contiguous_1d", f"{o_fr}/dt/{dt}/{k}")
+        for d1 in dts:
+            for d2 in dts:
+                for n1, n2 in ((1, 1), (1, 4), (4, 1), (3, 5), (5, 3), (4, 4)):
+                    c1 = _ps_series(n1, d1, seed=4)
+                    c2 = _ps_series(n2, d2, seed=5)
+                    emit(o_mul, {"c1": A(c1), "c2": A(c2)}, lambda: mul(c1, c2), "c_contiguous_1d",
+                         f"{o_mul}/dt/{d1}/{d2}/{n1}/{n2}")
+                for n1, n2 in ((1, 1), (4, 1), (1, 4), (5, 3), (3, 5), (4, 4), (6, 2)):
+                    c1 = _ps_series(n1, d1, seed=6)
+                    c2 = _ps_series(n2, d2, seed=7)
+                    emit(o_div, {"c1": A(c1), "c2": A(c2)}, lambda: div(c1, c2), "c_contiguous_1d",
+                         f"{o_div}/dt/{d1}/{d2}/{n1}/{n2}", kind="tuple")
+
+        # ---------------- (B) full-mantissa values ----------------
+        for dt in ("float64", "float32", "float16", "complex128"):
+            for n in (1, 2, 3, 7, 17, 64):
+                c = _pa_random(n, dt, seed=100 + n)
+                emit(o_mulx, {"c": A(c)}, lambda: mulx(c), "c_contiguous_1d", f"{o_mulx}/rand/{dt}/{n}")
+            for n1, n2 in ((1, 1), (2, 3), (5, 5), (7, 7), (8, 8), (11, 11), (12, 12), (15, 15), (16, 16), (12, 30),
+                           (31, 31), (32, 32), (3, 40)):
+                c1 = _pa_random(n1, dt, seed=200 + n1)
+                c2 = _pa_random(n2, dt, seed=300 + n2)
+                emit(o_mul, {"c1": A(c1), "c2": A(c2)}, lambda: mul(c1, c2), "c_contiguous_1d",
+                     f"{o_mul}/rand/{dt}/{n1}/{n2}")
+            for n1, n2 in ((5, 3), (9, 4), (12, 12), (17, 5), (20, 11), (3, 3), (2, 7)):
+                c1 = _pa_random(n1, dt, seed=400 + n1)
+                c2 = _pa_random(n2, dt, seed=500 + n2)
+                emit(o_div, {"c1": A(c1), "c2": A(c2)}, lambda: div(c1, c2), "c_contiguous_1d",
+                     f"{o_div}/rand/{dt}/{n1}/{n2}", kind="tuple")
+            for n in (2, 3, 5):
+                c = _pa_random(n, dt, seed=600 + n)
+                for k in (2, 3, 5):
+                    emit(o_pow, {"c": A(c), "pow": k}, lambda: pw(c, k), "c_contiguous_1d", f"{o_pow}/rand/{dt}/{n}/{k}")
+            for k in (2, 5, 8, 13, 20):
+                roots = _pa_random(k, dt, seed=700 + k, scale=2.0)
+                emit(o_fr, {"roots": A(roots)}, lambda: fr(roots), "c_contiguous_1d", f"{o_fr}/rand/{dt}/{k}")
+            for cop, cf, cname in convs:
+                for n in (3, 6, 11, 20):
+                    c = _pa_random(n, dt, seed=800 + n)
+                    emit(cop, {cname: A(c)}, lambda: cf(c), "c_contiguous_1d", f"{cop}/rand/{dt}/{n}")
+
+        # ---------------- (C) trim / special patterns ----------------
+        for dt in pat_dtypes:
+            for pat in patterns:
+                for n in (3, 5):
+                    c = _ps_series(n, dt, pat, seed=8)
+                    emit(o_mulx, {"c": A(c)}, lambda: mulx(c), "c_contiguous_1d", f"{o_mulx}/pat/{dt}/{pat}/{n}")
+                    for k in (0, 1, 2, 3):
+                        emit(o_pow, {"c": A(c), "pow": k}, lambda: pw(c, k), "c_contiguous_1d",
+                             f"{o_pow}/pat/{dt}/{pat}/{n}/{k}")
+                    for cop, cf, cname in convs:
+                        emit(cop, {cname: A(c)}, lambda: cf(c), "c_contiguous_1d", f"{cop}/pat/{dt}/{pat}/{n}")
+                for n1, n2 in ((3, 5), (4, 4), (5, 2)):
+                    mod1 = _ps_series(n1, dt, seed=9)
+                    mod2 = _ps_series(n2, dt, seed=10)
+                    pt1 = _ps_series(n1, dt, pat, seed=11)
+                    pt2 = _ps_series(n2, dt, pat, seed=12)
+                    for tag, c1, c2 in (("pm", pt1, mod2), ("mp", mod1, pt2), ("pp", pt1, pt2)):
+                        emit(o_mul, {"c1": A(c1), "c2": A(c2)}, lambda: mul(c1, c2), "c_contiguous_1d",
+                             f"{o_mul}/pat/{dt}/{pat}/{tag}/{n1}/{n2}")
+                        emit(o_div, {"c1": A(c1), "c2": A(c2)}, lambda: div(c1, c2), "c_contiguous_1d",
+                             f"{o_div}/pat/{dt}/{pat}/{tag}/{n1}/{n2}", kind="tuple")
+
+        # ---------------- (D) layouts ----------------
+        for d in ("float64", "complex128", "float16", "int16"):
+            v = _ps_series(5, d, "tz", seed=13)
+            w = _ps_series(3, d, seed=14)
+            for ln, a in _ps_layouts(v):
+                emit(o_mulx, {"c": a}, lambda: mulx(_ps_py(a)), ln, f"{o_mulx}/lay/{d}/{ln}")
+                emit(o_pow, {"c": a, "pow": 2}, lambda: pw(_ps_py(a), 2), ln, f"{o_pow}/lay/{d}/{ln}")
+                emit(o_fr, {"roots": a}, lambda: fr(_ps_py(a)), ln, f"{o_fr}/lay/{d}/{ln}")
+                for cop, cf, cname in convs:
+                    emit(cop, {cname: a}, lambda: cf(_ps_py(a)), ln, f"{cop}/lay/{d}/{ln}")
+                for ln2, b in _ps_layouts(w)[:2]:
+                    emit(o_mul, {"c1": a, "c2": b}, lambda: mul(_ps_py(a), _ps_py(b)), f"{ln}+{ln2}",
+                         f"{o_mul}/lay/{d}/{ln}/{ln2}")
+                    emit(o_mul, {"c1": b, "c2": a}, lambda: mul(_ps_py(b), _ps_py(a)), f"{ln2}+{ln}",
+                         f"{o_mul}/layr/{d}/{ln2}/{ln}")
+                    emit(o_div, {"c1": a, "c2": b}, lambda: div(_ps_py(a), _ps_py(b)), f"{ln}+{ln2}",
+                         f"{o_div}/lay/{d}/{ln}/{ln2}", kind="tuple")
+                    emit(o_div, {"c1": b, "c2": a}, lambda: div(_ps_py(b), _ps_py(a)), f"{ln2}+{ln}",
+                         f"{o_div}/layr/{d}/{ln2}/{ln}", kind="tuple")
+            # A 0-d array is a length-1 series; a stride-0 broadcast a length-n one.
+            s0 = np.array(_ps_series(1, d, seed=15)[0])
+            emit(o_mulx, {"c": A(s0)}, lambda: mulx(s0), "scalar_0d", f"{o_mulx}/0d/{d}")
+            emit(o_mul, {"c1": A(s0), "c2": A(w)}, lambda: mul(s0, w), "scalar_0d", f"{o_mul}/0d/{d}")
+            emit(o_div, {"c1": A(w), "c2": A(s0)}, lambda: div(w, s0), "scalar_0d", f"{o_div}/0d/{d}", kind="tuple")
+            emit(o_pow, {"c": A(s0), "pow": 3}, lambda: pw(s0, 3), "scalar_0d", f"{o_pow}/0d/{d}")
+            emit(o_fr, {"roots": A(s0)}, lambda: fr(s0), "scalar_0d", f"{o_fr}/0d/{d}")
+            for cop, cf, cname in convs:
+                emit(cop, {cname: A(s0)}, lambda: cf(s0), "scalar_0d", f"{cop}/0d/{d}")
+            bsrc = _ps_series(1, d, seed=16)
+            if bsrc[0] == 0:
+                bsrc = np.ones(1, d)
+            bc = np.broadcast_to(bsrc, (4,))
+            emit(o_mulx, {"c": A(bsrc, bc)}, lambda: mulx(bc), "broadcast_1d", f"{o_mulx}/bcast/{d}")
+            emit(o_mul, {"c1": A(bsrc, bc), "c2": A(w)}, lambda: mul(bc, w), "broadcast_1d", f"{o_mul}/bcast/{d}")
+            emit(o_div, {"c1": A(bsrc, bc), "c2": A(w)}, lambda: div(bc, w), "broadcast_1d", f"{o_div}/bcast/{d}",
+                 kind="tuple")
+            emit(o_pow, {"c": A(bsrc, bc), "pow": 2}, lambda: pw(bc, 2), "broadcast_1d", f"{o_pow}/bcast/{d}")
+            emit(o_fr, {"roots": A(bsrc, bc)}, lambda: fr(bc), "broadcast_1d", f"{o_fr}/bcast/{d}")
+            for cop, cf, cname in convs:
+                emit(cop, {cname: A(bsrc, bc)}, lambda: cf(bc), "broadcast_1d", f"{cop}/bcast/{d}")
+
+        # ---------------- (E) Python-typed arguments ----------------
+        py_series = [5, 2.5, -0.0, 1 + 2j, True, [1, 2, 0], [1.5, 2], [True, 2], [0, 0], [1, 2 ** 63],
+                     [2 ** 64 - 1], [1 + 1j, 0j], (1, 2, 3), (0.5,), [3], (2 + 0j, -1), [[1.0, 2.0]]]
+        others = [A(_ps_series(3, "float64", seed=17)), A(_ps_series(4, "float32", seed=18)),
+                  A(_ps_series(2, "float16", seed=19)), 3, [0.5, -1.0, 0.0], (1, 1)]
+        for a1 in py_series:
+            tn = type(a1).__name__
+            emit(o_mulx, {"c": a1}, lambda: mulx(_ps_py(a1)), "python", f"{o_mulx}/py/{tn}")
+            emit(o_pow, {"c": a1, "pow": 2}, lambda: pw(_ps_py(a1), 2), "python", f"{o_pow}/py/{tn}")
+            for cop, cf, cname in convs:
+                emit(cop, {cname: a1}, lambda: cf(_ps_py(a1)), "python", f"{cop}/py/{tn}")
+            for a2 in others:
+                t2 = type(a2).__name__
+                emit(o_mul, {"c1": a1, "c2": a2}, lambda: mul(_ps_py(a1), _ps_py(a2)), "python", f"{o_mul}/py/{tn}/{t2}")
+                emit(o_mul, {"c1": a2, "c2": a1}, lambda: mul(_ps_py(a2), _ps_py(a1)), "python", f"{o_mul}/pyr/{t2}/{tn}")
+                emit(o_div, {"c1": a1, "c2": a2}, lambda: div(_ps_py(a1), _ps_py(a2)), "python", f"{o_div}/py/{tn}/{t2}",
+                     kind="tuple")
+                emit(o_div, {"c1": a2, "c2": a1}, lambda: div(_ps_py(a2), _ps_py(a1)), "python",
+                     f"{o_div}/pyr/{t2}/{tn}", kind="tuple")
+        for roots in ([1, 2, 3], (1, -2), [1.5, 2j], [2 ** 63], [], (), [0.5], (2.5, -1.0, 4.0), [True, False],
+                      [1, 2.5, 3 + 1j], 5, 2.5, 1j, True, 2 ** 70, "ab", [[1.0, 2.0], [3.0, 4.0]], [[1.0]], [[]]):
+            tn = type(roots).__name__
+            emit(o_fr, {"roots": roots}, lambda: fr(_ps_py(roots)), "python", f"{o_fr}/py/{tn}/{len(str(roots))}")
+
+        # ---------------- (F) errors in NumPy's check order ----------------
+        emp = np.zeros(0)
+        two = np.zeros((2, 2))
+        bl = np.array([True, False])
+        good = _ps_series(3, "float64", seed=20)
+        z0 = np.zeros(1)
+        z2 = np.array([0.0, -0.0])
+        zc = np.zeros(2, np.complex128)
+        for tag, x in (("empty", emp), ("2d", two), ("bool", bl), ("str", "ab"), ("ragged", [[1, 2], [3]]),
+                       ("emptylist", []), ("nested_empty", [[]])):
+            xa = A(x) if isinstance(x, np.ndarray) else x
+            emit(o_mulx, {"c": xa}, lambda: mulx(_ps_py(xa)), "error", f"{o_mulx}/err/{tag}")
+            emit(o_pow, {"c": xa, "pow": 2}, lambda: pw(_ps_py(xa), 2), "error", f"{o_pow}/err/{tag}")
+            for cop, cf, cname in convs:
+                emit(cop, {cname: xa}, lambda: cf(_ps_py(xa)), "error", f"{cop}/err/{tag}")
+            for tag2, a1, a2 in ((f"{tag}_first", xa, A(good)), (f"{tag}_second", A(good), xa)):
+                emit(o_mul, {"c1": a1, "c2": a2}, lambda: mul(_ps_py(a1), _ps_py(a2)), "error", f"{o_mul}/err/{tag2}")
+                emit(o_div, {"c1": a1, "c2": a2}, lambda: div(_ps_py(a1), _ps_py(a2)), "error", f"{o_div}/err/{tag2}",
+                     kind="tuple")
+        for tag, a1, a2 in (("2d_then_empty", A(two), A(emp)), ("empty_then_2d", A(emp), A(two)),
+                            ("bool_then_empty", A(bl), A(emp))):
+            emit(o_mul, {"c1": a1, "c2": a2}, lambda: mul(_ps_py(a1), _ps_py(a2)), "error", f"{o_mul}/err/{tag}")
+            emit(o_div, {"c1": a1, "c2": a2}, lambda: div(_ps_py(a1), _ps_py(a2)), "error", f"{o_div}/err/{tag}",
+                 kind="tuple")
+        # Division by a zero series (ZeroDivisionError with an empty message), checked before the lengths; a NaN or
+        # -0.0-only divisor, and the empty dividend against a zero divisor (as_series first).
+        for tag, a1, a2 in (("zero", A(good), A(z0)), ("zeros", A(good), A(z2)), ("czero", A(good), A(zc)),
+                            ("zero_short_dividend", A(z0), A(z0)), ("empty_vs_zero", A(emp), A(z0)),
+                            ("negzero", A(good), A(np.array([-0.0]))), ("nan", A(good), A(np.array([1.0, np.nan]))),
+                            ("int_zero", A(good), [0]), ("py_zero", [1, 2], 0), ("zero_vs_zero", 0, 0)):
+            emit(o_div, {"c1": a1, "c2": a2}, lambda: div(_ps_py(a1), _ps_py(a2)), "error", f"{o_div}/err/{tag}",
+                 kind="tuple")
+        # fromroots: len() first (a scalar / 0-d array raise TypeError before as_series), then as_series' checks.
+        for tag, x in (("0d", A(np.array(2.0))), ("0d_int", A(np.array(3))), ("2d", A(two)), ("2d_empty", A(np.zeros((0, 3)))),
+                       ("bool", A(bl)), ("empty", A(emp)), ("str", "ab"), ("ragged", [[1, 2], [3]])):
+            emit(o_fr, {"roots": x}, lambda: fr(_ps_py(x)), "error", f"{o_fr}/err/{tag}")
+
+        # ---------------- (G) pow / maxpower kinds ----------------
+        c = _ps_series(3, "float64", seed=21)
+        for pv in (2.0, 2.5, -1, -1.0, -0.0, 0.0, 1.0, float("nan"), float("inf"), float("-inf"), 3.0000000000000004,
+                   1e300, 2 ** 40, 17, 16, -2 ** 40):
+            # polypow's default maxpower is None: a huge VALID power would loop for ever, so those cases cap it by hand.
+            huge = (isinstance(pv, float) and pv >= 1e300) or (isinstance(pv, int) and pv >= 2 ** 40)
+            kw = {"maxpower": 16} if power and huge else {}
+            args = {"c": A(c), "pow": pv}
+            args.update(kw)
+            emit(o_pow, args, lambda: pw(c, pv, **kw), "pow_kind", f"{o_pow}/kind/{pv!r}/{kw}")
+        for mp in (None, 0, 3, -1, 16, 5):
+            for pv in (0, 1, 3, 5, 6, 3.0):
+                emit(o_pow, {"c": A(c), "pow": pv, "maxpower": mp}, lambda: pw(c, pv, mp), "pow_kind",
+                     f"{o_pow}/maxpower/{mp}/{pv!r}")
+        # The as_series checks come before the power checks.
+        for tag, cc, pv in (("empty_nan", A(emp), float("nan")), ("empty_neg", A(emp), -1), ("2d_frac", A(two), 2.5),
+                            ("bool_big", A(bl), 1e300)):
+            emit(o_pow, {"c": cc, "pow": pv, "maxpower": 16}, lambda: pw(_ps_py(cc), pv, 16), "error",
+                 f"{o_pow}/err/{tag}")
+
+        # ---------------- (H) long series across the managed / BLAS boundary ----------------
+        if modname in ("polynomial", "chebyshev"):
+            # cheb multiplies z-series of 2n - 1 coefficients: the boundaries sit at n = 8/9 (float64), 16/17 (float32),
+            # 4/5 (complex128).
+            if power:
+                pairs = {"float64": ((15, 15), (16, 16), (15, 100), (16, 100), (40, 40), (1, 200), (100, 100)),
+                         "float32": ((31, 31), (32, 32), (20, 200), (64, 64)),
+                         "complex128": ((7, 7), (8, 8), (7, 50), (30, 30)),
+                         "float16": ((40, 40), (100, 100)), "int64": ((50, 50),)}
+            else:
+                pairs = {"float64": ((8, 8), (9, 9), (8, 60), (9, 60), (30, 30)),
+                         "float32": ((16, 16), (17, 17), (10, 80)),
+                         "complex128": ((4, 4), (5, 5), (4, 30), (20, 20)),
+                         "float16": ((20, 20), (50, 50)), "int64": ((25, 25),)}
+            for dt, prs in pairs.items():
+                for n1, n2 in prs:
+                    c1 = _pa_random(n1, dt, seed=900 + n1) if dt != "int64" else _ps_series(n1, dt, seed=22)
+                    c2 = _pa_random(n2, dt, seed=950 + n2) if dt != "int64" else _ps_series(n2, dt, seed=23)
+                    emit(o_mul, {"c1": A(c1), "c2": A(c2)}, lambda: mul(c1, c2), "long_1d", f"{o_mul}/long/{dt}/{n1}/{n2}")
+                    emit(o_mul, {"c1": A(c2), "c2": A(c1)}, lambda: mul(c2, c1), "long_1d", f"{o_mul}/longr/{dt}/{n2}/{n1}")
+            for dt, ns in (("float64", (8, 9, 15, 16)), ("float32", (16, 17, 31, 32)), ("complex128", (4, 5, 7, 8)),
+                           ("float16", (12,))):
+                for n in ns:
+                    c = _pa_random(n, dt, seed=1000 + n)
+                    for k in (2, 3):
+                        emit(o_pow, {"c": A(c), "pow": k}, lambda: pw(c, k), "long_1d", f"{o_pow}/long/{dt}/{n}/{k}")
+            for dt, ks in (("float64", (20, 31, 32, 40)), ("float32", (40, 64, 65)), ("complex128", (14, 15, 16, 17)),
+                           ("float16", (24,))):
+                for k in ks:
+                    roots = _pa_random(k, dt, seed=1100 + k, scale=1.5)
+                    emit(o_fr, {"roots": A(roots)}, lambda: fr(roots), "long_1d", f"{o_fr}/long/{dt}/{k}")
+        else:
+            # The recurrence bases: no convolution, long series stay portable (the arena's growth, the recurrence
+            # loop's Keep moves, the division's unit series).
+            for dt in ("float64", "complex128", "float32", "float16"):
+                for n1, n2 in ((20, 20), (33, 12), (12, 33), (40, 40)):
+                    c1 = _pa_random(n1, dt, seed=1200 + n1, scale=0.5)
+                    c2 = _pa_random(n2, dt, seed=1250 + n2, scale=0.5)
+                    emit(o_mul, {"c1": A(c1), "c2": A(c2)}, lambda: mul(c1, c2), "long_1d", f"{o_mul}/long/{dt}/{n1}/{n2}")
+                for n1, n2 in ((40, 13), (33, 32), (25, 2)):
+                    c1 = _pa_random(n1, dt, seed=1300 + n1, scale=0.5)
+                    c2 = _pa_random(n2, dt, seed=1350 + n2, scale=0.5)
+                    emit(o_div, {"c1": A(c1), "c2": A(c2)}, lambda: div(c1, c2), "long_1d",
+                         f"{o_div}/long/{dt}/{n1}/{n2}", kind="tuple")
+                c = _pa_random(6, dt, seed=1400, scale=0.5)
+                emit(o_pow, {"c": A(c), "pow": 5}, lambda: pw(c, 5), "long_1d", f"{o_pow}/long/{dt}")
+                roots = _pa_random(24, dt, seed=1450, scale=1.0)
+                emit(o_fr, {"roots": A(roots)}, lambda: fr(roots), "long_1d", f"{o_fr}/long/{dt}")
+        for dt in ("float64", "complex128", "float32", "float16"):
+            for n in (257, 1000):
+                c = _pa_random(n, dt, seed=1500 + n)
+                emit(o_mulx, {"c": A(c)}, lambda: mulx(c), "long_1d", f"{o_mulx}/long/{dt}/{n}")
+            for cop, cf, cname in convs:
+                for n in (30, 64):
+                    c = _pa_random(n, dt, seed=1600 + n, scale=0.25)
+                    emit(cop, {cname: A(c)}, lambda: cf(c), "long_1d", f"{cop}/long/{dt}/{n}")
+            if power:
+                for n1, n2 in ((200, 7), (60, 59), (100, 3)):
+                    c1 = _pa_random(n1, dt, seed=1700 + n1)
+                    c2 = _pa_random(n2, dt, seed=1750 + n2)
+                    emit(o_div, {"c1": A(c1), "c2": A(c2)}, lambda: div(c1, c2), "long_1d",
+                         f"{o_div}/long/{dt}/{n1}/{n2}", kind="tuple")
+            elif modname == "chebyshev":
+                for n1, n2 in ((60, 7), (40, 39), (50, 3)):
+                    c1 = _pa_random(n1, dt, seed=1800 + n1)
+                    c2 = _pa_random(n2, dt, seed=1850 + n2)
+                    emit(o_div, {"c1": A(c1), "c2": A(c2)}, lambda: div(c1, c2), "long_1d",
+                         f"{o_div}/long/{dt}/{n1}/{n2}", kind="tuple")
+
+        # ---------------- (I) result flags ----------------
+        for dt in ("float64", "float16", "complex128", "int64"):
+            for pat in ("moderate", "tz", "lastnz", "allzero"):
+                c = _ps_series(4, dt, pat, seed=24)
+                d = _ps_series(3, dt, seed=25)
+                emit(o_mulx, {"c": A(c)}, lambda: mulx(c), "flags", f"{o_mulx}/flags/{dt}/{pat}", facet="flags")
+                for k in (0, 1, 2):
+                    emit(o_pow, {"c": A(c), "pow": k}, lambda: pw(c, k), "flags", f"{o_pow}/flags/{dt}/{pat}/{k}",
+                         facet="flags")
+                emit(o_mul, {"c1": A(c), "c2": A(d)}, lambda: mul(c, d), "flags", f"{o_mul}/flags/{dt}/{pat}",
+                     facet="flags")
+                emit(o_div, {"c1": A(c), "c2": A(d)}, lambda: div(c, d), "flags", f"{o_div}/flags/{dt}/{pat}",
+                     kind="tuple", facet="flags")
+                emit(o_div, {"c1": A(d), "c2": A(c)}, lambda: div(d, c), "flags", f"{o_div}/flagsr/{dt}/{pat}",
+                     kind="tuple", facet="flags")
+                for cop, cf, cname in convs:
+                    emit(cop, {cname: A(c)}, lambda: cf(c), "flags", f"{cop}/flags/{dt}/{pat}", facet="flags")
+            for k in (0, 1, 3):
+                roots = _pa_roots(k, dt, seed=26)
+                emit(o_fr, {"roots": A(roots)}, lambda: fr(roots), "flags", f"{o_fr}/flags/{dt}/{k}", facet="flags")
+        # The product whose trailing coefficient cancels (trimseq returns a VIEW) and a division whose remainder trims.
+        for dt in ("float64", "complex128"):
+            c1 = np.array([1.0, 1.0], dt)
+            c2 = np.array([1.0, -1.0], dt)
+            emit(o_mul, {"c1": A(c1), "c2": A(c2)}, lambda: mul(c1, c2), "flags", f"{o_mul}/flags_cancel/{dt}",
+                 facet="flags")
+            emit(o_mul, {"c1": A(c1), "c2": A(c2)}, lambda: mul(c1, c2), "c_contiguous_1d", f"{o_mul}/cancel/{dt}")
+            c3 = np.array([2.0, 3.0, 1.0], dt)
+            emit(o_div, {"c1": A(c3), "c2": A(c1)}, lambda: div(c3, c1), "flags", f"{o_div}/flags_exact/{dt}",
+                 kind="tuple", facet="flags")
+            emit(o_div, {"c1": A(c3), "c2": A(c1)}, lambda: div(c3, c1), "c_contiguous_1d", f"{o_div}/exact/{dt}",
+                 kind="tuple")
+
+        # ---------------- (J) fromroots' root kinds ----------------
+        rkinds = [("nan", [1.0, np.nan, 2.0]), ("inf", [1.0, np.inf, -2.0]), ("neginf", [-np.inf, 0.5]),
+                  ("repeat", [2.0, 2.0, 2.0, -1.0]), ("allnegzero", [-0.0, -0.0, -0.0]), ("allzero", [0.0, 0.0]),
+                  ("unsorted", [3.0, -1.0, 2.0, -5.0, 0.5, 4.0, -2.5]), ("big", [1e200, 1e200, -3e150]),
+                  ("subnormal", [5e-324, -1e-310, 2.0]), ("ints_as_float", [1.0, 2.0, 3.0, 4.0, 5.0, 6.0])]
+        for tag, vals in rkinds:
+            for dt in ("float64", "float32", "float16"):
+                roots = np.array(vals).astype(dt)
+                emit(o_fr, {"roots": A(roots)}, lambda: fr(roots), "roots_kind", f"{o_fr}/rk/{tag}/{dt}")
+        ckinds = [("conj", [1 + 2j, 1 - 2j, -0.5 + 0j]), ("lexi", [1 + 3j, 1 - 1j, 0.5 + 9j, 1 + 0.5j]),
+                  ("realonly", [2 + 0j, -1 + 0j, 0.5 + 0j]), ("nan", [complex(np.nan, 1), 1 + 1j]),
+                  ("inf", [complex(np.inf, 0), 1 + 1j])]
+        for tag, vals in ckinds:
+            roots = np.array(vals, np.complex128)
+            emit(o_fr, {"roots": A(roots)}, lambda: fr(roots), "roots_kind", f"{o_fr}/rk/c/{tag}")
+
+        # ---------------- (K) underflow and overflow ----------------
+        for dt in ("float64", "float32", "complex128"):
+            tiny = np.array([1.0, 1e-200 if dt != "float32" else 1e-30], dt)
+            huge = np.array([1e200 if dt != "float32" else 1e30, 1e200 if dt != "float32" else 1e30], dt)
+            for tag, c in (("tiny", tiny), ("huge", huge)):
+                for k in (2, 3):
+                    emit(o_pow, {"c": A(c), "pow": k}, lambda: pw(c, k), "extreme", f"{o_pow}/ext/{dt}/{tag}/{k}")
+                emit(o_mul, {"c1": A(c), "c2": A(c)}, lambda: mul(c, c), "extreme", f"{o_mul}/ext/{dt}/{tag}")
+                emit(o_div, {"c1": A(np.concatenate([c, c])), "c2": A(c)}, lambda: div(np.concatenate([c, c]), c),
+                     "extreme", f"{o_div}/ext/{dt}/{tag}", kind="tuple")
+                emit(o_mulx, {"c": A(c)}, lambda: mulx(c), "extreme", f"{o_mulx}/ext/{dt}/{tag}")
+                for cop, cf, cname in convs:
+                    emit(cop, {cname: A(c)}, lambda: cf(c), "extreme", f"{cop}/ext/{dt}/{tag}")
+
+        # ---------------- (L) chebmulx's fused kernel: special values through its vector stage ----------------
+        if modname == "chebyshev":
+            # NumSharp runs chebmulx's three array statements as one pass whose vector stage halves by a multiply by 0.5
+            # (float16: then rounds the half to the float16 grid, which only a subnormal half leaves; complex: Smith's
+            # branch with the divisor 2+0j prepared once). Series long enough for that stage, holding the special
+            # values, both float16 halving regimes, and float32 / float64 subnormals.
+            for dt in ("float64", "float32", "float16", "complex128"):
+                for n in (40, 101):
+                    c = _ps_series(n, dt, "special")
+                    emit(o_mulx, {"c": A(c)}, lambda: mulx(c), "long_1d", f"{o_mulx}/vspecial/{dt}/{n}")
+            # Every float16 bit pattern below 2^-12 (exponent fields 0-2, both signs: the halves that round and their
+            # neighbours) plus the infinities, NaNs and the largest finite values, each once as c[j-1] and once as c[j+1]
+            # of an output, beside seeded random partners; a final 1.0 keeps as_series' trim away.
+            pats = np.concatenate([np.arange(0x0000, 0x0C00), np.arange(0x8000, 0x8C00),
+                                   np.array([0x7C00, 0xFC00, 0x7E00, 0xFE00, 0x7C01, 0x7BFF, 0xFBFF])]).astype(np.uint16)
+            rng = np.random.default_rng(1900)
+            for shift in (0, 1):
+                bits = np.empty(2 * pats.size + 2, np.uint16)
+                bits[shift:shift + 2 * pats.size:2] = pats
+                bits[1 - shift:1 - shift + 2 * pats.size:2] = rng.integers(0, 65536, pats.size).astype(np.uint16)
+                bits[-2:] = 0x3C00
+                c = bits.view(np.float16)
+                emit(o_mulx, {"c": A(c)}, lambda: mulx(c), "long_1d", f"{o_mulx}/f16grid/{shift}")
+            for dt, lo, hi in (("float64", -1e-307, 1e-307), ("float32", -1e-37, 1e-37)):
+                c = np.random.default_rng(1950).uniform(lo, hi, 300).astype(dt)
+                c[-1] = 1.0
+                emit(o_mulx, {"c": A(c)}, lambda: mulx(c), "long_1d", f"{o_mulx}/subnormal/{dt}")
+
+    # Char: NumSharp's uint16-like dtype converts to float64 exactly as uint16 does (the house weave).
+    cases += _relabel_dtype([c for c in cases if "/uint16/" in (c.get("id") or "") and not c.get("expects_throw")],
+                            "uint16", "char")
+    if skipped[0]:
+        print(f"  (skipped {skipped[0]} complex64 / object-dtype cells — #569 / no object dtype)")
+    print(f"  portable {len(cases)}, host-pinned {len(host)}")
+    return cases, host
+
+
 def main():
     here = os.path.dirname(os.path.abspath(__file__))
     corpus_dir = os.path.normpath(os.path.join(here, "..", "NumSharp.Tests.Oracle", "Fuzz", "corpus"))
@@ -12671,8 +13218,16 @@ def main():
     elif mode == "polycalc":
         cases = gen_polycalc()                                          # numpy.polynomial calculus: {p}der / {p}int (U4)
         write_jsonl(os.path.join(corpus_dir, "polycalc.jsonl"), cases)
+    elif mode == "polyalgebra":
+        # The BLAS-bound products (np.convolve's vector-kernel regime) are host-pinned like linalg_parity: the bytes
+        # come out of numpy's own scipy-openblas at threads=1 (forced first), so the pin travels with them.
+        _set_openblas_threads(1)
+        cases, host = gen_polyalgebra()                                 # numpy.polynomial series algebra (U2)
+        write_jsonl(os.path.join(corpus_dir, "polyalgebra.jsonl"), cases)
+        write_jsonl(os.path.join(corpus_dir, "polyalgebra_parity.jsonl"), host)
+        write_jsonl(os.path.join(corpus_dir, "polyalgebra_parity.host.jsonl"), [blas_identity()])
     else:
-        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | sinc | i0 | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows | evaluate | real_if_close | instance | emath | polyeval | polyseries | polycalc)")
+        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | sinc | i0 | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows | evaluate | real_if_close | instance | emath | polyeval | polyseries | polycalc | polyalgebra)")
         sys.exit(2)
 
 

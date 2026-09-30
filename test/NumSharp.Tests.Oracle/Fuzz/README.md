@@ -272,6 +272,7 @@ python test/oracle/gen_oracle.py random_parity    # seeded np.random stream byte
 python test/oracle/gen_oracle.py polyeval         # np.polynomial.* evaluation family (module-qualified keys)
 python test/oracle/gen_oracle.py polyseries       # np.polynomial.* additive family + polyutils + the module constants
 python test/oracle/gen_oracle.py polycalc         # np.polynomial.* calculus family ({p}der / {p}int, every parameter)
+python test/oracle/gen_oracle.py polyalgebra      # np.polynomial.* series algebra (+ the host-pinned polyalgebra_parity tier)
 python test/oracle/gen_index_oracle.py            # the four index_* corpora (seed pinned 20240626)
 python test/oracle/gen_nan_oracle.py              # nan.jsonl — NaN parity grid (standalone; complex bit-exact)
 python test/oracle/fuzz_random.py 1234 2000 random_smoke.jsonl
@@ -992,6 +993,60 @@ against NumPy found the sequence conversions wrong (reverting the fix turns 1,27
 Char rides the uint16 proxy (section A). Cells whose NumPy result is complex64 are skipped (#569). `OpRegistry.
 PolySeries.cs` replays it; a flags case disposes the result it replaces (the leak gate reads an undisposed result
 as an escaped buffer). Design and measurements: `docs/plans/numpy-polynomial.md` (U4).
+
+### numpy.polynomial series algebra (`polyalgebra` + `polyalgebra_parity` tiers)
+
+`polyalgebra.jsonl` (`gen_oracle.py polyalgebra`, 26,163 cases, floor 25,500) gates plan unit U2: `{p}mulx`, `{p}mul`,
+`{p}div` (a `tuple` kind: quo, rem), `{p}pow`, `{p}fromroots` for the six bases, and `X2poly`/`poly2X` for the five
+non-power ones. It is **bit-exact, 0 excused**. Keys are module-qualified (`chebyshev.chebmul`). Arguments are NAMED
+(`c`, `c1`, `c2`, `roots`, `pol`, `pow`, `maxpower`): `"a"` (the next operand) or a Python-typed spec (a weak
+int/float/complex, a list, a tuple, a big int). A `maxpower` is a raw JSON int or `null` (NumPy's None).
+
+**The split.** NumPy's power- and Chebyshev-basis products are `np.convolve`, whose `?dot` switches to OpenBLAS's
+VECTOR kernel once a dot reaches ddot's 16 / sdot's 32 / zdotu's 8 terms (or a complex operand is non-finite). No
+managed engine reproduces that summation order. The generator therefore patches `np.convolve` while it runs a case
+(`_PAConvRecorder`: operand lengths, dtype, finiteness) and routes every case with a BLAS-bound product to
+`polyalgebra_parity.jsonl` (186 cases). That file is **host-pinned** exactly like `matmul_parity`
+(`polyalgebra_parity.host.jsonl`, the same `MatmulParityPin`): it is replayed with the OpenBLAS backend at threads=1,
+byte-exact on NumPy's own pinned scipy-openblas, and Inconclusive off the pinned host. Everything else, the scalar
+regimes included, stays in the portable file. `BlasBackendDelta` replays the portable tier's six convolving ops
+backend-on (`polymul`/`polypow`/`polyfromroots`, `chebmul`/`chebpow`/`chebfromroots`): 6,522 affected, 6,480
+identical, 42 flips, every one byte-checked against NumPy. 14 of the 42 differ only in a NaN's payload, which no gate
+compares.
+
+The sections of `gen_polyalgebra`:
+- **(A)** every dtype × length at the defaults: mulx, the conversions, pow 0–4, fromroots of 0–12 roots, and mul / div
+  over every dtype PAIR (the full matrix for the power, Chebyshev and Legendre modules; a subset for the rest);
+- **(B)** full-mantissa values (float64/float32/float16/complex128): the product forms and dot schedules differ only
+  on such operands, and lengths straddle every scalar/vector boundary;
+- **(C)** trim / special patterns (trailing zeros with a −0.0, all-zero, zeros after the first term, NaN/±inf/±0,
+  a trailing NaN) on each operand and both;
+- **(D)** layouts: contiguous, strided, reversed and offset views on either operand, 0-d arrays (a length-1 series),
+  stride-0 broadcasts;
+- **(E)** Python-typed arguments: scalars, lists, tuples, `[1, 2**63]` (uint64 / float64 coercion), `[2**64-1]`,
+  nested and bool lists, on each side of mul / div; fromroots of lists, tuples, scalars, big ints, a str, 2-D and
+  empty sequences;
+- **(F)** errors in NumPy's check order: empty / 2-D / bool / str / ragged series on either side, the zero divisor
+  (`ZeroDivisionError`, empty message, checked before the lengths), fromroots' `len()` TypeError before as_series;
+- **(G)** pow and maxpower kinds: float powers (2.0 binds, 2.5 fails), −1, −0.0, NaN, ±inf, 1e300, 2^40 (a huge valid
+  power passes `maxpower=16` explicitly: polypow's default None would run forever), and maxpower None / 0 / 3 / −1 / 16;
+- **(H)** long series across the managed / BLAS boundary (power and Chebyshev at 15/16, 31/32, 7/8 terms and far past
+  them; the recurrence bases at 20–40 terms), long mulx (257 / 1,000 terms), long conversions and divisions;
+- **(I)** result flags (`"facet": "flags"`: C_CONTIGUOUS, F_CONTIGUOUS, OWNDATA): a trimseq slice is a VIEW, polydiv's
+  remainder a view of its working copy;
+- **(J)** fromroots' root kinds: NaN, ±inf, repeats, all −0.0, unsorted, huge, subnormal, conjugate pairs,
+  lexicographic complex order. Only ONE zero per list: NumPy's SIMD sort orders +0.0/−0.0 by CPU (a unit-pinned
+  `[Misaligned]`);
+- **(K)** underflow and overflow in pow / mul / div / mulx / the conversions;
+- **(L)** chebmulx's fused kernel through its vector stage: the special pattern at 40 / 101 terms per float dtype;
+  every float16 bit pattern below 2^-12 plus the infinities, NaNs and extremes, once as c[j−1] and once as c[j+1] of
+  an output; float32 / float64 subnormals. Planted-bug check: dropping the float16 grid rounding turns this
+  section's 2 f16 cases red (nothing else in the corpus reaches it), a plain complex multiply 5 cases.
+
+Char rides the uint16 proxy. Cells whose NumPy result is complex64 or an object array are skipped (#569).
+`OpRegistry.PolyAlgebra.cs` replays both files. `{p}pow` binds NumPy's argument kinds: an in-range int → the int
+overload, a float / huge int → the double one, and maxpower only when the case has it. Design and measurements:
+`docs/plans/numpy-polynomial.md` (U2).
 
 ### einsum (`einsum` tier)
 

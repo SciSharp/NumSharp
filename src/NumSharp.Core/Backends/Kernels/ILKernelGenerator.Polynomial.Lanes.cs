@@ -305,6 +305,32 @@ namespace NumSharp.Backends.Kernels
             return Avx.Divide(a, p.Rat);
         }
 
+        /// <summary>
+        ///     NumPy's <c>HALF_divide(h, 2)</c> of 8 float16 values held as exact float32 lanes (<see cref="PolyHalfLaneKind"/>),
+        ///     returned the same way: the exact half (a float32 multiply by 0.5 — f16 halves never leave float32's normal
+        ///     range) rounded to the float16 grid with ties to even, as <c>npy_float_to_half</c> rounds it. Only a half below
+        ///     2^-14 (float16's subnormal range) can leave the grid, by one bit; it is rounded to a multiple of 2^-24 by the
+        ///     magic-number trick — <c>0.75 + |y|</c> stays in [0.5, 1), whose float32 ulp IS 2^-24, and 0.75 is an even
+        ///     multiple of it, so the add rounds |y| to the grid with ties to even and the subtraction is exact — with the sign
+        ///     ORed back so a tie to zero stays -0. Infinities and NaNs pass through the multiply (a NaN quieted, NumPy's
+        ///     payload rule for one NaN operand). One multiply and five cheap ops, where a narrow + widen round trip per
+        ///     halving (the lane kind's generic <c>Bin</c>) made the fused chebmulx kernel's float16 pass 5x slower.
+        /// </summary>
+        /// <param name="x">8 float16 values as float32 lanes.</param>
+        /// <returns>The 8 halves, on the float16 grid.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Vector256<float> HalfHalveOnGrid(Vector256<float> x)
+        {
+            var y = Avx.Multiply(x, Vector256.Create(0.5f));
+            var sign = Vector256.Create(-0.0f);
+            var abs = Avx.AndNot(sign, y);
+            // NaN compares false: a NaN keeps y.
+            var sub = Avx.Compare(abs, Vector256.Create(6.103515625e-05f), FloatComparisonMode.OrderedLessThanNonSignaling);
+            var magic = Vector256.Create(0.75f);
+            var rounded = Avx.Or(Avx.Subtract(Avx.Add(abs, magic), magic), Avx.And(y, sign));
+            return Avx.BlendVariable(y, rounded, sub);
+        }
+
         // ---------------------------------------------------------------- the calculus kernel's widened c *= scl
         //
         // numpy.polynomial's `c *= scl` with a strong scalar that PROMOTES the series (np.float64 on float32, an int16 or
@@ -447,6 +473,7 @@ namespace NumSharp.Backends.Kernels
             s_f32LowToF64x4 = M(nameof(F32LowToF64x4)), s_f32LowToF64x2 = M(nameof(F32LowToF64x2)),
             s_f64ToC128x2 = M(nameof(F64ToC128x2)), s_cBroadcast = M(nameof(CBroadcast)), s_cMul = M(nameof(CMul)),
             s_cDiv = M(nameof(CDiv)), s_cDivPrep = M(nameof(CDivPrep)), s_cDivBy = M(nameof(CDivBy)),
+            s_halfHalveOnGrid = M(nameof(HalfHalveOnGrid)),
             s_halfLoad8 = M(nameof(HalfLoad8)),
             s_f32ScaleF64 = M(nameof(F32ScaleF64)), s_f32ScaleF64Scalar = M(nameof(F32ScaleF64Scalar)),
             s_halfScaleF64 = M(nameof(HalfScaleF64)), s_halfScaleF64Scalar = M(nameof(HalfScaleF64Scalar)),

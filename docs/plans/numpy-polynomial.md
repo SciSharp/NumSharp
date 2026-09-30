@@ -25,7 +25,7 @@
 | Page section | NumPy API | NumSharp today |
 |---|---|---|
 | Legacy "polynomial module" (`numpy.lib.polynomial`) | `poly1d`, `polyval`, `poly`, `roots`, `polyfit`, `polyder`, `polyint`, `polyadd`, `polydiv`, `polymul`, `polysub` | **Done** — all 11 functions and `poly1d(c_or_r, r, variable)`, byte-exact. Oracle: `poly.jsonl` (portable); `roots`, `polyfit` and `poly`-of-a-matrix are in host-pinned `linalg_parity`. Unit tests + live-parity tests. Only `RankWarning` is absent: NumSharp emits no warnings anywhere. |
-| "Polynomial package" (`numpy.polynomial`) | 6 modules × ~31 names, `polyutils`, 6 classes, `set_default_printstyle` | **U3 + U1 + U4 delivered** — 102 of 193 names: the evaluation family (36, `polyvalfromroots` open), the additive family with `polyutils` (54: `{p}add/sub/trim/line`, the 24 constants, `as_series`/`trimseq`/`trimcoef`/`getdomain`/`mapparms`/`mapdomain`) and the calculus family (12: `{p}der`/`{p}int`), all bit-exact (`polyeval.jsonl` 19,216 + `polyseries.jsonl` 18,647 + `polycalc.jsonl` 27,526 cases). Facade `np.polynomial.{polynomial,chebyshev,legendre,laguerre,hermite,hermite_e,polyutils}`; 0 of 6 classes. `coverage/generate_coverage.py` catalogues all seven `numpy.polynomial.*` submodules as out-of-headline surfaces. |
+| "Polynomial package" (`numpy.polynomial`) | 6 modules × ~31 names, `polyutils`, 6 classes, `set_default_printstyle` | **U3 + U1 + U4 + U2 delivered** — 142 of 193 names: the evaluation family (36, `polyvalfromroots` open), the additive family with `polyutils` (54: `{p}add/sub/trim/line`, the 24 constants, `as_series`/`trimseq`/`trimcoef`/`getdomain`/`mapparms`/`mapdomain`), the calculus family (12: `{p}der`/`{p}int`) and the series algebra (40: `{p}mulx/mul/div/pow/fromroots`, `X2poly`/`poly2X`), all bit-exact (`polyeval.jsonl` 19,216 + `polyseries.jsonl` 18,647 + `polycalc.jsonl` 27,526 + `polyalgebra.jsonl` 26,163 cases; the BLAS-bound products byte-exact with the OpenBLAS backend, `polyalgebra_parity.jsonl` 186). Facade `np.polynomial.{polynomial,chebyshev,legendre,laguerre,hermite,hermite_e,polyutils}`; 0 of 6 classes. `coverage/generate_coverage.py` catalogues all seven `numpy.polynomial.*` submodules as out-of-headline surfaces. |
 | "Transition guide" | the reversed coefficient order; `Polynomial.fit(...).convert()` | Documentation only. It is a real hazard for us, though, because the new package **reuses the legacy names with the opposite coefficient order** (§2 D5). |
 
 User demand on record: issue **#496** "Can NumSharp fit polynomial surface equations?" — that is exactly
@@ -373,7 +373,61 @@ machine-partitioned; the counts sum to 193 with no overlap (Appendix A).
 - **Tests to port:** `test_polyutils.py`; `TestConstants`; the add/sub/trim/line cases of
   `TestArithmetic`/`TestMisc` in all six files.
 
-### U2 — Series algebra: products, division, powers, roots → series, basis conversion (40 names)
+### U2 — Series algebra: products, division, powers, roots → series, basis conversion (40 names) — DELIVERED 2026-09-30
+
+**As built.** Where the build diverges from the plan below, this block wins; the plan is kept for the record.
+- **Engine:** NumPy's Python replayed statement for statement over a per-thread bump arena, not three separate
+  engines. The code is `Polynomial/Package/NDPolyAlgebra.cs` (the engine and the shared statements) and
+  `NDPolyAlgebra.Bases.cs` (the recurrence products, polydiv / chebdiv, the ten conversions).
+  - A series is a `PolySer`: pointer, length, dtype, and whether NumPy returns it as a view.
+  - Each statement runs through the kernel NumPy's statement runs through in NumSharp: house ufunc kernels behind
+    flat slot fronts (`DirectILKernelGenerator.PolyAlgebra.cs`), U1's substrate, `PolyCalcKey.Mulx` calculus kernels,
+    `NDArray.SlidingCorrelateInto` for `np.convolve`, and U1's scalarmath kernels.
+  - The dtype is carried per series, because NumPy's changes mid-algorithm (the one-term `c1 = 0` branch, `_div`'s
+    int unit series, poly2X's `res = 0`).
+- **The arena** hands out series by pointer bump. `Keep` moves a function's result down to its entry mark, so memory
+  is bounded by the live series. Blocks come from `SizeBucketedBufferPool` (power-of-two growth), because fresh OS
+  memory cost ~150 µs of page faults per 800 KB per call on long products.
+- **Parity, as planned (R3):**
+  - the recurrence bases are portable and bit-exact;
+  - the convolution bases' products are bit-exact wherever NumPy's `?dot` runs its scalar regime;
+  - positions in the vector regime are byte-exact with `NumSharp.Interop.OpenBLAS` and bounded-ULP without it.
+
+  The scalar regimes had to be modelled first, per dtype (see `.claude/CLAUDE.md` → correlate / convolve):
+  - ddot: sequential below 16 terms;
+  - sdot: float32 products summed in a double below 32;
+  - zdotu: four separate sums below 8;
+  - HALF_dot: a sequential float32 sum at every length.
+- **Oracle:** `polyalgebra.jsonl` (`gen_oracle.py polyalgebra`, 26,163 cases, sections A–L, 0 excused) plus the
+  host-pinned `polyalgebra_parity.jsonl` (186 BLAS-bound products). The generator records every `np.convolve` a case
+  makes and routes BLAS-bound cases to the pinned file. `BlasBackendDelta` gained the six convolving ops: 6,522
+  affected, 6,480 identical, 42 flips byte-checked.
+  - Unit tests: `Polynomial/PolynomialAlgebraTests.cs` (20).
+  - Two `[Misaligned]` divergences: fromroots' ±0 root order (NumPy's SIMD sort is CPU-dependent), and a
+    non-finite complex product without the backend.
+- **Perf:** `benchmark/polynomial/polyalg_{numpy.py,bench.cs,report.py}`, committed summary `polyalg_results.md`. 404
+  cells, 371 bit-exact and 33 BLAS-bound checked to a relative 1e-12:
+
+  | Section | min NPY/NS | geomean NPY/NS |
+  |---|---:|---:|
+  | mulx | 2.41 | 23.6 |
+  | mul float64 | 1.98 | 29.0 |
+  | mul other dtypes | 1.45 | 26.9 |
+  | div | 7.99 | 61.2 |
+  | pow | 5.26 | 26.3 |
+  | fromroots | 6.19 | 31.9 |
+  | conversions | 40.5 | 91.8 |
+  | Python-list arguments | 5.04 | 36.0 |
+  | **all** | **1.45** | **34.9** |
+
+  Three kernels were added for the long products:
+  - blocked FMA long-product kernels without the backend (`Math/NDArray.SlidingDot.Long.cs`);
+  - an exact blocked float16 kernel;
+  - a fused one-pass chebmulx IL kernel (`GetPolyChebMulxKernel`), which took chebmulx at 10000 terms from
+    1.05–1.48× to 5.5–6.5×.
+- **The ceiling, measured:** complex128 1000×1000 `polymul` is 1.45×. Both sides do one 256-bit FMA per complex MAC,
+  and the blocked kernel runs at ~90% of FMA peak, so only NumPy's per-position overhead is left to win. Gauss's
+  3-multiply product (componentwise accuracy) and FFT convolution (normwise error) were rejected.
 
 - **Scope:** `{p}mulx`, `{p}mul`, `{p}div`, `{p}pow`, `{p}fromroots` (30) + `X2poly`/`poly2X` for the five
   non-power bases (10).

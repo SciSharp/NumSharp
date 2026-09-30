@@ -63,6 +63,14 @@ namespace NumSharp.Tests.Fuzz
             /// <returns>The C# value, or null.</returns>
             public object Opt(string name) => _p.ContainsKey(name) ? Decode(_p[name]) : null;
 
+            /// <summary>
+            ///     Reads an optional-int argument written as a plain JSON number or JSON null (the series algebra's
+            ///     <c>maxpower</c>, where null is NumPy's explicit <c>None</c>).
+            /// </summary>
+            /// <param name="name">The argument name (must be present).</param>
+            /// <returns>The int, or null for JSON null.</returns>
+            public int? NullableInt(string name) => _p[name].ValueKind == JsonValueKind.Null ? null : _p[name].GetInt32();
+
             /// <summary>Reads an int argument written as a plain JSON number (the calculus <c>m</c> and <c>axis</c>).</summary>
             /// <param name="name">The argument name.</param>
             /// <param name="fallback">NumPy's default when absent.</param>
@@ -390,6 +398,9 @@ namespace NumSharp.Tests.Fuzz
                 _ => throw new NotSupportedException($"polynomial module '{module}' is not registered in OpRegistry"),
             };
             string name = fn.StartsWith(prefix, StringComparison.Ordinal) ? fn.Substring(prefix.Length) : fn;
+            // The series algebra (U2, OpRegistry.PolyAlgebra.cs) first; the additive family / calculus below otherwise.
+            if (TryApplyPolyAlgebra(module, name, a, out var algebra))
+                return algebra;
             switch (module)
             {
                 case "polynomial":
@@ -504,8 +515,9 @@ namespace NumSharp.Tests.Fuzz
         }
 
         /// <summary>
-        ///     The tuple-valued polyutils functions: <c>as_series</c> (one slot per series — arity asserted) and
-        ///     <c>mapparms</c> (<c>(off, scl)</c>, each a Python / NumPy scalar recorded as a 0-d array, or an array).
+        ///     The tuple-valued polynomial functions: <c>as_series</c> (one slot per series — arity asserted),
+        ///     <c>mapparms</c> (<c>(off, scl)</c>, each a Python / NumPy scalar recorded as a 0-d array, or an array),
+        ///     and the six <c>{p}div</c> (<c>(quo, rem)</c>, dispatched by <see cref="ApplyPolyAlgebraTuple"/>).
         /// </summary>
         /// <param name="op">The key.</param>
         /// <param name="p">The params.</param>
@@ -530,6 +542,9 @@ namespace NumSharp.Tests.Fuzz
                     return new[] { PolyResultArray(off), PolyResultArray(scl) };
                 }
                 default:
+                    // {p}div's (quo, rem) — the series algebra's one tuple (OpRegistry.PolyAlgebra.cs).
+                    if (!op.StartsWith("polyutils.", StringComparison.Ordinal))
+                        return ApplyPolyAlgebraTuple(op, a);
                     throw new NotSupportedException($"polynomial tuple op '{op}' is not registered in OpRegistry");
             }
         }

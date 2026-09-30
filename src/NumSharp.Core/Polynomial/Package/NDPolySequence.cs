@@ -180,6 +180,12 @@ namespace NumSharp
         ///     NumPy would build a str or object array, dtypes NumSharp does not have.</exception>
         public static NDArray ToArray(object seq)
         {
+            // The overwhelmingly common argument — a flat Python list of Python floats (`[1.5, -2.0, 0.25]`, a float
+            // array's tolist()) or of Python ints — needs no discovery: its shape is (n,) and its dtype float64 / int64,
+            // exactly what the walk below concludes for it, so it is filled directly (the walk costs ~50 ns an item in
+            // node, dispatch and promotion bookkeeping; a 100-item list took longer to coerce than NumPy's whole call).
+            if (seq is object[] flat && TryFlatScalars(flat, out var fast))
+                return fast;
             // Arrays converted from typed C# arrays during the walk are intermediates of this call (the fill copies
             // them): the Discovery releases them however the call ends.
             using var d = new Discovery(shapeOnly: false);
@@ -212,6 +218,50 @@ namespace NumSharp
                 r.Dispose();
                 throw;
             }
+        }
+
+        /// <summary>
+        ///     <see cref="ToArray"/>'s fast path: a non-empty flat list whose items are ALL Python floats (boxed
+        ///     <see cref="double"/>) — float64 — or ALL Python ints that fit int64 (boxed <see cref="long"/> or
+        ///     <see cref="int"/>) — int64 —, filled straight into a new (n,) array. Anything else (a mix, a nested item, an
+        ///     array, a bool, a NumPy scalar, an int past int64) declines to the full walk, which alone knows their rules.
+        /// </summary>
+        /// <param name="items">The list's items.</param>
+        /// <param name="result">The array, when the fast path applies.</param>
+        /// <returns>True when <paramref name="result"/> was built.</returns>
+        private static bool TryFlatScalars(object[] items, out NDArray result)
+        {
+            result = null;
+            int n = items.Length;
+            if (n == 0)
+                return false;
+            // One classifying pass before any allocation: a mixed or nested list is the walk's business.
+            bool doubles = items[0] is double, ints = items[0] is long || items[0] is int;
+            if (!doubles && !ints)
+                return false;
+            for (int i = 1; i < n; i++)
+            {
+                object o = items[i];
+                if (doubles ? o is not double : o is not long && o is not int)
+                    return false;
+            }
+            if (doubles)
+            {
+                var r = new NDArray(NPTypeCode.Double, new Shape(n), false);
+                double* p = (double*)r.Storage.Address;
+                for (int i = 0; i < n; i++)
+                    p[i] = (double)items[i];
+                result = r;
+            }
+            else
+            {
+                var r = new NDArray(NPTypeCode.Int64, new Shape(n), false);
+                long* p = (long*)r.Storage.Address;
+                for (int i = 0; i < n; i++)
+                    p[i] = items[i] is long l ? l : (int)items[i];
+                result = r;
+            }
+            return true;
         }
 
         /// <summary>

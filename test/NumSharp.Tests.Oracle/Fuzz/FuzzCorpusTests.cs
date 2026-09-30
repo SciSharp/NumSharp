@@ -551,6 +551,47 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Polycalc() => RunCorpus("polycalc.jsonl");
 
+        // numpy.polynomial series algebra (plan docs/plans/numpy-polynomial.md U2): {p}mulx / {p}mul / {p}div (quo, rem) /
+        // {p}pow / {p}fromroots for the six bases and X2poly / poly2X for the five non-power ones — every dtype x length at
+        // the defaults (ints -> float64; the recurrence bases' float16 / float32 products turning float64 through NumPy's
+        // `c1 = 0` Python int; _div's remainder in common_type(int64, dtype)), full-mantissa values (the naive complex
+        // products of scalarmath vs simd_cmul of array ops), the trim / special patterns, every layout, Python-typed
+        // series / roots / powers, the argument errors in NumPy's order (as_series' texts, the empty ZeroDivisionError,
+        // pow's ValueError / OverflowError, fromroots' len() TypeErrors), result flags (trimseq views vs fresh arrays),
+        // root kinds (NaN / inf / repeated / unsorted / subnormal) and underflow / overflow (polypow / chebpow do NOT
+        // trim). PORTABLE: every np.convolve here stays in NumPy's sequential-dot regime (float64 dots under 16 terms,
+        // float32 under 32 with a double accumulator, complex128 under 8 and finite), which NumSharp's managed sliding
+        // engine reproduces byte for byte; the longer products are the host-pinned PolyalgebraParity tier.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Polyalgebra() => RunCorpus("polyalgebra.jsonl");
+
+        // The series algebra's BLAS-bound products — polymul / chebmul / polypow / chebpow / polyfromroots /
+        // chebfromroots whose np.convolve reaches OpenBLAS's vector dot kernels (float64 factors of 16+ coefficients,
+        // float32 32+, complex128 8+, or a complex product of non-finite values, where the contiguous zdotu mixes lanes).
+        // NumSharp reproduces those positions only through NumSharp.Interop.OpenBLAS's ISlidingDotBackend — the same
+        // scipy-openblas ?dot NumPy calls — so the tier is HOST-PINNED exactly like LinalgParity (threads = 1):
+        // Inconclusive, never red, on a host that cannot load the pinned library.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        [DoNotParallelize]   // Enables/Disables the process-global OpenBLAS engine; must not overlap other tiers.
+        public void PolyalgebraParity()
+        {
+            var pin = MatmulParityPin.Load("polyalgebra_parity.host.jsonl");
+            string mismatch = pin.TryEnableParityBackend();
+            if (mismatch != null)
+                Assert.Inconclusive(mismatch);
+
+            try
+            {
+                RunCorpus("polyalgebra_parity.jsonl");
+            }
+            finally
+            {
+                NumSharp.Interop.OpenBLAS.OpenBlasEngine.Disable();
+            }
+        }
+
         // W11 operand-relationship flags (section C): input aliasing (a op a, same buffer) and
         // in-place out= (maximum/minimum/clip writing into an input operand).
         [TestMethod]
@@ -765,6 +806,8 @@ namespace NumSharp.Tests.Fuzz
             ["polyeval.jsonl"] = 19100,   // numpy.polynomial {p}val family (U3), 6 bases x the matrix above, + 4,392 single-element-broadcast cells, + 720 sequence / big-int x cells (J), + 1,890 array_like c / ordinate cells (K) — 19,216
             ["polyseries.jsonl"] = 18600, // numpy.polynomial additive family + polyutils (U1): 6 bases + polyutils + constant facets — 15,950 cases at delivery, 18,437 since the parity audit's long-series / complex64-loop / block-boundary / getdomain-window sections (K-N), 18,621 with the tuple / nested-sequence section (O), 18,647 with trimseq of Python sequences (P), which this floor keeps from silently dropping out
             ["polycalc.jsonl"] = 26400,   // numpy.polynomial calculus family (U4): {p}der / {p}int x 6 bases, sections A-O of gen_polycalc — 21,646 at delivery, 27,526 with the argument-kind (M), zero-size / 5-D / extreme-int (N) and widened-scale (O) sections
+            ["polyalgebra.jsonl"] = 25500,   // numpy.polynomial series algebra (U2): mulx/mul/div/pow/fromroots x 6 bases + X2poly/poly2X x 5, sections A-K of gen_polyalgebra — 26,151 at delivery
+            ["polyalgebra_parity.jsonl"] = 175,   // U2's BLAS-bound products (host-pinned): 186 at delivery
             ["place.jsonl"] = 12,
             ["products.jsonl"] = 326,
             ["precision.jsonl"] = 80,

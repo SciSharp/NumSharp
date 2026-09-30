@@ -110,6 +110,18 @@ namespace NumSharp
         public static PolySeriesView Str(long size) => new PolySeriesView(null, null, size, 0, NPTypeCode.Empty, 1, size, true);
 
         /// <summary>
+        ///     A contiguous 1-D series in raw memory that no NDArray owns — an intermediate of the series-algebra engine
+        ///     (<see cref="PolySer"/>, living in its arena) handed to the substrate's kernels. <see cref="Source"/> is null;
+        ///     the caller keeps the memory alive for as long as the view is used.
+        /// </summary>
+        /// <param name="p">Element 0.</param>
+        /// <param name="n">Element count.</param>
+        /// <param name="t">The elements' dtype.</param>
+        /// <returns>The view (unit stride).</returns>
+        public static PolySeriesView Raw(byte* p, long n, NPTypeCode t)
+            => new PolySeriesView(null, p, n, DirectILKernelGenerator.GetTypeSize(t), t, 1, n, false);
+
+        /// <summary>
         ///     The same series starting at element <paramref name="start"/> (<c>v[start:start+length]</c>): same dtype
         ///     and stride, the address advanced along axis 0. Used to walk a long series in blocks.
         /// </summary>
@@ -436,7 +448,7 @@ namespace NumSharp
         /// <param name="o">The value (not null).</param>
         /// <returns><c>int</c>, <c>float</c>, <c>complex</c>, <c>bool</c>, NumPy's scalar names for Half/char/decimal,
         ///     or the CLR type name.</returns>
-        private static string PythonTypeName(object o) => o switch
+        internal static string PythonTypeName(object o) => o switch
         {
             bool => "bool",
             sbyte or byte or short or ushort or int or uint or long or ulong or BigInteger => "int",
@@ -662,19 +674,45 @@ namespace NumSharp
             long n1 = TrimLength(v1), n2 = TrimLength(v2);
             NPTypeCode t = CommonType(new[] { v1, v2 });
 
-            // `if len(c1) > len(c2)` updates c1, else c2 — the in-place target is kernel operand A.
-            bool firstIsTarget = n1 > n2;
-            var (a, na, b, nb) = firstIsTarget ? (v1, n1, v2, n2) : (v2, n2, v1, n1);
-            PolyCombineOp op = !subtract ? PolyCombineOp.Add : firstIsTarget ? PolyCombineOp.Subtract : PolyCombineOp.NegateAdd;
-
-            var r = new NDArray(t, new Shape(na), false);
-            byte* rp = (byte*)r.Storage.Address;
-            BinaryOp update = op == PolyCombineOp.Subtract ? BinaryOp.Subtract : BinaryOp.Add;
-            long k = PreferHouseCombine(update, a, na, b, t)
-                ? CombineViaHouseKernels(op, update, a, na, b, nb, t, rp)
-                : DirectILKernelGenerator.GetPolyCombineKernel(op, a.Dtype, b.Dtype, t)(a.Ptr, a.Stride, na, b.Ptr, b.Stride, nb, rp);
+            // The result has the in-place target's length: the longer series, c2 on a tie (see CombineInto).
+            var r = new NDArray(t, new Shape(n1 > n2 ? n1 : n2), false);
+            long k = CombineInto(v1, n1, v2, n2, t, subtract, (byte*)r.Storage.Address, out _);
             // trimseq(ret): the array itself (+na) or its slice ret[:k] (-k) — a view, as NumPy returns it.
             return k >= 0 ? r : Prefix(r, -k);
+        }
+
+        /// <summary>
+        ///     The body of <c>polyutils._add</c> / <c>_sub</c> after <c>as_series</c>, into caller-owned memory: the
+        ///     longer series (<paramref name="v2"/> on a tie) is the in-place target NumPy updates — <c>+=</c> the other for
+        ///     <c>_add</c>, <c>-=</c> it for <c>_sub</c> with the longer minuend, or NEGATED first and then <c>+=</c> the
+        ///     minuend when the subtrahend is not shorter — written converted to <paramref name="t"/> into
+        ///     <paramref name="r"/>, then trimseq'd. Shared by <see cref="AddSub"/> (a user call) and the series-algebra
+        ///     engine (intermediate series in its arena).
+        /// </summary>
+        /// <param name="v1">The first series (NumPy's <c>c1</c>), any stride and dtype.</param>
+        /// <param name="n1">Its trimmed length (≥ 1).</param>
+        /// <param name="v2">The second series (<c>c2</c>).</param>
+        /// <param name="n2">Its trimmed length (≥ 1).</param>
+        /// <param name="t">The result dtype: <c>np.common_type</c> of both.</param>
+        /// <param name="subtract">Run <c>_sub</c> (c1 - c2) instead of <c>_add</c>.</param>
+        /// <param name="r">Destination: room for <c>max(n1, n2)</c> contiguous elements of <paramref name="t"/>, not
+        ///     overlapping either source.</param>
+        /// <param name="na">The result's length before trimming (<c>max(n1, n2)</c>).</param>
+        /// <returns>trimseq of the result, encoded as <see cref="PolyTrimLenKernel"/> returns it: <paramref name="na"/> for
+        ///     the array itself, <c>-k</c> for the slice <c>r[:k]</c>.</returns>
+        /// <exception cref="NotSupportedException">A dtype pair the house conversion or op does not support.</exception>
+        internal static long CombineInto(in PolySeriesView v1, long n1, in PolySeriesView v2, long n2, NPTypeCode t, bool subtract, byte* r, out long na)
+        {
+            // `if len(c1) > len(c2)` updates c1, else c2 — the in-place target is kernel operand A.
+            bool firstIsTarget = n1 > n2;
+            var (a, nA, b, nb) = firstIsTarget ? (v1, n1, v2, n2) : (v2, n2, v1, n1);
+            PolyCombineOp op = !subtract ? PolyCombineOp.Add : firstIsTarget ? PolyCombineOp.Subtract : PolyCombineOp.NegateAdd;
+            na = nA;
+
+            BinaryOp update = op == PolyCombineOp.Subtract ? BinaryOp.Subtract : BinaryOp.Add;
+            return PreferHouseCombine(update, a, nA, b, t)
+                ? CombineViaHouseKernels(op, update, a, nA, b, nb, t, r)
+                : DirectILKernelGenerator.GetPolyCombineKernel(op, a.Dtype, b.Dtype, t)(a.Ptr, a.Stride, nA, b.Ptr, b.Stride, nb, r);
         }
 
         /// <summary>

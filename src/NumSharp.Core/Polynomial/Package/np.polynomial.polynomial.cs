@@ -327,5 +327,112 @@ namespace NumSharp
         [NDScoped]
         public NDArray polyint(object c, int m = 1, object k = null, object lbnd = null, object scl = null, int axis = 0)
             => NDPolyCalc.Int(PolyBasis.Power, c, m, k, lbnd, scl, axis);
+
+        // ---------------------------------------------------------------------------------------------
+        //  Series algebra (plan U2): polymulx / polymul / polydiv / polypow / polyfromroots
+        // ---------------------------------------------------------------------------------------------
+
+        /// <summary>
+        ///     Multiplies the power series <paramref name="c"/> by x: <c>prd[0] = c[0]*0; prd[1:] = c</c> — the coefficients shift up one degree (<c>c[0]*0</c> keeps NaN/inf and the sign of zero NumPy's way). The zero series <c>[0]</c> is returned as is.
+        ///     Bit-identical to NumPy 2.4.2's <c>polymulx</c> — one IL kernel pass where NumPy runs a Python loop.
+        /// </summary>
+        /// <param name="c">The coefficients, LOW degree first: an <see cref="NDArray"/> (any layout), a typed C# array, a Python list or tuple (<c>object[]</c>, a <c>ValueTuple</c>, a jagged array — np.array's coercion), or a single number. Integer series are computed in float64; a bool series has no common type.</param>
+        /// <returns>A new array one coefficient longer (the zero series: a one-element copy), of <c>np.common_type(c)</c>.</returns>
+        /// <exception cref="ValueError">An empty series (<c>Coefficient array is empty</c>), a series that is not 1-d
+        ///     (<c>Coefficient array is not 1-d</c>), or no common type (a bool series), in NumPy's order; a ragged list
+        ///     (np.array's inhomogeneous-shape text).</exception>
+        /// <exception cref="System.NotSupportedException">A null or str series, or a list holding one (NumPy's object / str
+        ///     arrays, dtypes NumSharp does not have).</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polynomial.polymulx.html</remarks>
+        [NDScoped]
+        public NDArray polymulx(object c) => NDPolyAlgebra.Mulx(PolyBasis.Power, c);
+
+        /// <summary>
+        ///     Multiplies two power seriess: <c>np.convolve(c1, c2)</c>, trailing zeros trimmed. The product is np.convolve's arithmetic — NumPy's sequential sum for real series whose shorter factor has at most ~15 terms, cblas <c>?dot</c> beyond that and for every complex product; with <c>NumSharp.Interop.OpenBLAS</c> installed those run through NumPy's own BLAS and are byte-identical, without it they agree to a few ULP.
+        /// </summary>
+        /// <param name="c1">First factor. The coefficients, LOW degree first: an <see cref="NDArray"/> (any layout), a typed C# array, a Python list or tuple (<c>object[]</c>, a <c>ValueTuple</c>, a jagged array — np.array's coercion), or a single number. Integer series are computed in float64; a bool series has no common type.</param>
+        /// <param name="c2">Second factor.</param>
+        /// <returns>The product: a new array, or a VIEW of one when trailing zeros were trimmed (as in NumPy).</returns>
+        /// <exception cref="ValueError">An empty series (<c>Coefficient array is empty</c>), a series that is not 1-d
+        ///     (<c>Coefficient array is not 1-d</c>), or no common type (a bool series), in NumPy's order; a ragged list
+        ///     (np.array's inhomogeneous-shape text).</exception>
+        /// <exception cref="System.NotSupportedException">A null or str series, or a list holding one (NumPy's object / str
+        ///     arrays, dtypes NumSharp does not have).</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polynomial.polymul.html</remarks>
+        [NDScoped]
+        public NDArray polymul(object c1, object c2) => NDPolyAlgebra.Mul(PolyBasis.Power, c1, c2);
+
+        /// <summary>
+        ///     Divides the power series <paramref name="c1"/> by <paramref name="c2"/>, returning quotient and remainder:
+        ///     NumPy's synthetic division in place on a copy of <paramref name="c1"/> (<c>c1[i:j] -= (c2[:-1]/c2[-1]) * c1[j]</c>); the remainder is a VIEW of that copy (<c>c1[:lc2-1]</c>, trimmed), as NumPy returns it. A dividend shorter than the divisor gives <c>(c1[:1]*0, c1)</c>, a one-term divisor
+        ///     <c>(c1/c2[-1], c1[:1]*0)</c>. Bit-identical to NumPy 2.4.2's <c>polydiv</c>.
+        /// </summary>
+        /// <param name="c1">The dividend. The coefficients, LOW degree first: an <see cref="NDArray"/> (any layout), a typed C# array, a Python list or tuple (<c>object[]</c>, a <c>ValueTuple</c>, a jagged array — np.array's coercion), or a single number. Integer series are computed in float64; a bool series has no common type.</param>
+        /// <param name="c2">The divisor.</param>
+        /// <returns>(quo, rem): NumPy's tuple, each a new array or a view of one.</returns>
+        /// <exception cref="ValueError">An empty series (<c>Coefficient array is empty</c>), a series that is not 1-d
+        ///     (<c>Coefficient array is not 1-d</c>), or no common type (a bool series), in NumPy's order; a ragged list
+        ///     (np.array's inhomogeneous-shape text).</exception>
+        /// <exception cref="System.NotSupportedException">A null or str series, or a list holding one (NumPy's object / str
+        ///     arrays, dtypes NumSharp does not have).</exception>
+        /// <exception cref="System.DivideByZeroException">The divisor is zero (all its coefficients, after trimming) —
+        ///     NumPy's bare <c>ZeroDivisionError</c>, empty message.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polynomial.polydiv.html</remarks>
+        [NDScoped]
+        public (NDArray quo, NDArray rem) polydiv(object c1, object c2) => NDPolyAlgebra.Div(PolyBasis.Power, c1, c2);
+
+        /// <summary>
+        ///     Raises the power series <paramref name="c"/> to the power <paramref name="pow"/>: <c>[1]</c> of the series' dtype
+        ///     for 0, the (trimmed) series for 1, otherwise <c>np.convolve</c> applied pow - 1 times (no trimming between steps). Bit-identical to NumPy 2.4.2's <c>polypow</c> (the product's parity notes on <see cref="polymul"/> apply).
+        /// </summary>
+        /// <param name="c">The coefficients, LOW degree first: an <see cref="NDArray"/> (any layout), a typed C# array, a Python list or tuple (<c>object[]</c>, a <c>ValueTuple</c>, a jagged array — np.array's coercion), or a single number. Integer series are computed in float64; a bool series has no common type.</param>
+        /// <param name="pow">The power (≥ 0).</param>
+        /// <param name="maxpower">The largest power allowed: null (NumPy's None: no limit). NumPy's default keeps an accidental huge power from
+        ///     running away.</param>
+        /// <returns>The power series, a new array of <c>np.common_type(c)</c>.</returns>
+        /// <exception cref="ValueError">The series' errors (see <see cref="polymul"/>), then
+        ///     <c>Power must be a non-negative integer.</c>, then <c>Power is too large</c> — NumPy's order.</exception>
+        /// <exception cref="System.NotSupportedException">A null or str series.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polynomial.polypow.html</remarks>
+        [NDScoped]
+        public NDArray polypow(object c, int pow, int? maxpower = null) => NDPolyAlgebra.Pow(PolyBasis.Power, c, pow, maxpower);
+
+        /// <summary>
+        ///     <see cref="polypow(object, int, int?)"/> with a Python-float power: NumPy's <c>power = int(pow)</c>
+        ///     truncates, so 2.0 is 2 while 2.5 fails <c>power != pow</c>.
+        /// </summary>
+        /// <param name="c">The coefficients, LOW degree first: an <see cref="NDArray"/> (any layout), a typed C# array, a Python list or tuple (<c>object[]</c>, a <c>ValueTuple</c>, a jagged array — np.array's coercion), or a single number. Integer series are computed in float64; a bool series has no common type.</param>
+        /// <param name="pow">The power; it must equal its integer part and be ≥ 0.</param>
+        /// <param name="maxpower">The largest power allowed: null (NumPy's None: no limit).</param>
+        /// <returns>The power series.</returns>
+        /// <exception cref="ValueError">The series' errors; <c>cannot convert float NaN to integer</c>;
+        ///     <c>Power must be a non-negative integer.</c> (a fractional or negative power); <c>Power is too large</c>.</exception>
+        /// <exception cref="System.OverflowException"><c>cannot convert float infinity to integer</c>; a power beyond
+        ///     int64 with no limit (NumPy would run until memory is exhausted).</exception>
+        /// <exception cref="System.NotSupportedException">A null or str series.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polynomial.polypow.html</remarks>
+        [NDScoped]
+        public NDArray polypow(object c, double pow, int? maxpower = null) => NDPolyAlgebra.Pow(PolyBasis.Power, c, pow, maxpower);
+
+        /// <summary>
+        ///     The power series whose roots are <paramref name="roots"/>: the roots sorted, one linear factor per root
+        ///     (<c>polyline(-r, 1) = [-r, 1]</c>), multiplied pairwise as a balanced tree (<c>polyutils._fromroots</c>) with <c>polymul</c>.
+        ///     Empty roots give <c>[1.]</c>. The factors are built by <c>np.array([-r, …])</c>, whose coercion promotes a
+        ///     float16 / float32 root to float64 — so the series is float64 (complex128 for complex roots). Bit-identical to
+        ///     NumPy 2.4.2's <c>polyfromroots</c> (the product's parity notes on <see cref="polymul"/> apply); one documented difference: roots that compare equal but differ in bits (+0.0 and -0.0) are ordered
+        ///     deterministically here, where NumPy's unstable SIMD sort decides by CPU, which can flip the sign of a zero
+        ///     coefficient.
+        /// </summary>
+        /// <param name="roots">The roots: an <see cref="NDArray"/>, a typed C# array, a Python list or tuple, …
+        ///     (anything with a length — NumPy's <c>len(roots)</c> runs first).</param>
+        /// <returns>A new array of <c>len(roots) + 1</c> coefficients.</returns>
+        /// <exception cref="TypeError">A scalar (<c>object of type 'float' has no len()</c>) or a 0-d array (<c>len() of
+        ///     unsized object</c>).</exception>
+        /// <exception cref="ValueError">Roots that are not 1-d, a zero-size array of nonzero length, or no common type
+        ///     (bool roots).</exception>
+        /// <exception cref="System.NotSupportedException">A null or str root.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polynomial.polyfromroots.html</remarks>
+        [NDScoped]
+        public NDArray polyfromroots(object roots) => NDPolyAlgebra.FromRoots(PolyBasis.Power, roots);
     }
 }
