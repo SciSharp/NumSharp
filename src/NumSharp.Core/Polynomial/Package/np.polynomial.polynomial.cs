@@ -483,5 +483,99 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polynomial.polyfromroots.html</remarks>
         [NDScoped]
         public NDArray polyfromroots(object roots) => NDPolyAlgebra.FromRoots(PolyBasis.Power, roots);
+
+        // ---------------------------------------------------------------------------------------------
+        //  Vandermonde matrices (plan U5): polyvander / polyvander2d / polyvander3d
+        // ---------------------------------------------------------------------------------------------
+
+        /// <summary>
+        ///     The Vandermonde matrix of degree <paramref name="deg"/>: <c>V[..., i] = x**i</c>, by NumPy's forward recurrence
+        ///     <c>v[0] = x*0 + 1; v[1] = x; v[i] = v[i-1] * x</c> — so <c>polyvander(x, n) @ c == polyval(x, c)</c> for a
+        ///     series of n + 1 coefficients (up to rounding). Bit-identical to NumPy 2.4.2's <c>polyvander</c>: one IL kernel pass
+        ///     where NumPy runs a Python loop over the degrees; every statement is NumPy's array op in its dtype.
+        /// </summary>
+        /// <param name="x">The points: an <see cref="NDArray"/> of any layout (a 0-d one is one point), a typed C# array, a
+        ///     Python list or tuple (<c>object[]</c>, a <c>ValueTuple</c>, a jagged array — np.array's coercion), or a scalar.
+        ///     The matrix is computed in <c>(x + 0.0).dtype</c>: float16 / float32 / float64 / complex128 are kept (a float32
+        ///     x gives a float32 matrix), bool, integer and char points become float64; -0.0 reads as +0.0.</param>
+        /// <param name="deg">The degree (≥ 0).</param>
+        /// <returns>A view of shape <c>x.shape + (deg + 1,)</c> (<c>(1, deg + 1)</c> for a scalar x) over a new array — the
+        ///     degree axis last, as NumPy's <c>np.moveaxis</c> leaves it (OWNDATA false; F-contiguous for a 1-D x).</returns>
+        /// <exception cref="ValueError"><c>deg must be non-negative</c>; a ragged list x (np.array's inhomogeneous-shape
+        ///     text); a matrix too large to describe (<c>array is too big; …</c>).</exception>
+        /// <exception cref="System.OutOfMemoryException">The matrix cannot be allocated (NumPy's MemoryError).</exception>
+        /// <exception cref="System.NotSupportedException">A null or str x, or a list holding a str / None / a Python int
+        ///     past uint64 (NumPy's str / object arrays, dtypes NumSharp does not have).</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polynomial.polyvander.html</remarks>
+        [NDScoped]
+        public NDArray polyvander(object x, int deg) => NDPolyVander.Vander(PolyBasis.Power, x, deg);
+
+        /// <summary>
+        ///     <see cref="polyvander(object, int)"/> with a degree of ANY kind, read as NumPy's <c>polyutils._as_int</c> reads it
+        ///     (Python's <c>operator.index</c>): a C# integer, bool (True is 1), <see cref="System.Numerics.BigInteger"/>, char,
+        ///     or a 0-d integer <see cref="NDArray"/>. Anything else — a float or double (even 2.0), a complex, a str, null, a
+        ///     0-d bool / float array, an array of one or more dims, a list or tuple — raises NumPy's TypeError, whose text
+        ///     formats the value as NumPy's f-string does (<c>deg must be an integer, received 1e+20</c>,
+        ///     <c>… received [1 2]</c>, <c>… received None</c>).
+        /// </summary>
+        /// <param name="x">The points (see <see cref="polyvander(object, int)"/>).</param>
+        /// <param name="deg">The degree, any value (see the summary).</param>
+        /// <returns>The matrix (see <see cref="polyvander(object, int)"/>).</returns>
+        /// <exception cref="TypeError">A degree operator.index refuses: <c>deg must be an integer, received …</c> — raised
+        ///     before x is looked at.</exception>
+        /// <exception cref="ValueError"><c>deg must be non-negative</c> (before x is converted); a ragged list x;
+        ///     <c>Maximum allowed dimension exceeded</c> (a degree of 2^63 - 1 or more) or <c>array is too big; …</c>.</exception>
+        /// <exception cref="System.OutOfMemoryException">The matrix cannot be allocated (NumPy's MemoryError).</exception>
+        /// <exception cref="System.NotSupportedException">A null or str x, or a list NumPy makes a str / object array of.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polynomial.polyvander.html</remarks>
+        [NDScoped]
+        public NDArray polyvander(object x, object deg) => NDPolyVander.Vander(PolyBasis.Power, x, deg);
+
+        /// <summary>
+        ///     The 2-D Vandermonde matrix: column <c>a*(deg[1] + 1) + b</c> is <c>x**a * y**b</c> at every point pair — NumPy's
+        ///     <c>polyutils._vander_nd_flat</c>, the outer product <c>V_x[..., :, None] * V_y[..., None, :]</c> of the two 1-D
+        ///     matrices, flattened. Bit-identical to NumPy 2.4.2's <c>polyvander2d</c>: one IL kernel pass builds each block of
+        ///     points' per-axis matrices in cache and writes the products straight into the result.
+        /// </summary>
+        /// <param name="x">The first coordinates. x and y are STACKED as <c>np.asarray((x, y))</c> — they must have exactly the
+        ///     same shape (no broadcasting), and the matrix dtype is np.promote_types over both (array coercion's rule: a
+        ///     Python float is float64 there, so a float16 array with a Python-float y is float64) plus 0.0.</param>
+        /// <param name="y">The second coordinates (same shape as x).</param>
+        /// <param name="deg">The two degrees <c>[x_deg, y_deg]</c>: a list / tuple, a typed C# array, an NDArray or a str of
+        ///     length 2, each item read as <see cref="polyvander(object, object)"/>'s deg.</param>
+        /// <returns>A view of shape <c>x.shape + ((deg[0] + 1) * (deg[1] + 1),)</c> over a new array (OWNDATA false; a scalar x, y
+        ///     is one point).</returns>
+        /// <exception cref="TypeError">A deg without a length (<c>object of type 'int' has no len()</c>, <c>len() of unsized
+        ///     object</c>) — before the points are converted — or a non-integer degree (checked axis by axis, after the
+        ///     points).</exception>
+        /// <exception cref="ValueError"><c>Expected 2 dimensions of degrees, got {len}</c>; points of different shapes
+        ///     (np.array's inhomogeneous-shape text); <c>deg must be non-negative</c>; <c>array is too big; …</c>.</exception>
+        /// <exception cref="IncorrectShapeException">No points (an empty x, y): NumPy's reshape text <c>cannot reshape array of
+        ///     size 0 into shape (0,newaxis)</c>.</exception>
+        /// <exception cref="System.OutOfMemoryException">A matrix NumPy allocates on the way cannot be allocated.</exception>
+        /// <exception cref="System.NotSupportedException">Points NumPy stacks into a str or object array.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polynomial.polyvander2d.html</remarks>
+        [NDScoped]
+        public NDArray polyvander2d(object x, object y, object deg) => NDPolyVander.VanderNd(PolyBasis.Power, new[] { x, y }, deg);
+
+        /// <summary>
+        ///     The 3-D Vandermonde matrix: column <c>(a*(deg[1] + 1) + b)*(deg[2] + 1) + c</c> is <c>x**a * y**b * z**c</c> —
+        ///     NumPy's <c>((V_x[..., :, None, None] * V_y[..., None, :, None]) * V_z[..., None, None, :])</c> flattened, the
+        ///     first product rounded to the dtype before the second. Bit-identical to NumPy 2.4.2's <c>polyvander3d</c>.
+        /// </summary>
+        /// <param name="x">The first coordinates (x, y and z are stacked: one shape — see <see cref="polyvander2d"/>).</param>
+        /// <param name="y">The second coordinates.</param>
+        /// <param name="z">The third coordinates.</param>
+        /// <param name="deg">The three degrees <c>[x_deg, y_deg, z_deg]</c> (see <see cref="polyvander2d"/>).</param>
+        /// <returns>A view of shape <c>x.shape + ((deg[0] + 1) * (deg[1] + 1) * (deg[2] + 1),)</c> over a new array.</returns>
+        /// <exception cref="TypeError">A deg without a length, or a non-integer degree (see <see cref="polyvander2d"/>).</exception>
+        /// <exception cref="ValueError"><c>Expected 3 dimensions of degrees, got {len}</c>, and <see cref="polyvander2d"/>'s
+        ///     other errors.</exception>
+        /// <exception cref="IncorrectShapeException">No points (NumPy's reshape text).</exception>
+        /// <exception cref="System.OutOfMemoryException">A matrix NumPy allocates on the way cannot be allocated.</exception>
+        /// <exception cref="System.NotSupportedException">Points NumPy stacks into a str or object array.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polynomial.polyvander3d.html</remarks>
+        [NDScoped]
+        public NDArray polyvander3d(object x, object y, object z, object deg) => NDPolyVander.VanderNd(PolyBasis.Power, new[] { x, y, z }, deg);
     }
 }

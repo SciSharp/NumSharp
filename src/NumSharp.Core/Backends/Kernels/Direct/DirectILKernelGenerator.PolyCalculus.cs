@@ -159,12 +159,21 @@ namespace NumSharp.Backends.Kernels
     /// <summary>The value at one of the step's rows (the current column).</summary>
     internal sealed class PolyCalcLoad : PolyCalcExpr
     {
-        /// <summary>Index into the step's row table.</summary>
+        /// <summary>Index into the step's row table — or, when <see cref="Scratch"/>, the kernel's scratch slot.</summary>
         public readonly int Row;
 
-        /// <summary>Reads row slot <paramref name="row"/>.</summary>
-        /// <param name="row">The row slot.</param>
-        public PolyCalcLoad(int row) { Row = row; }
+        /// <summary>
+        ///     <see cref="Row"/> names one of the kernel's per-block SCRATCH slots (a row of the current block's columns
+        ///     outside the buffer: the Vandermonde kernels' converted points <c>x</c> and chebvander's <c>2*x</c>,
+        ///     <see cref="PolyVanderRoutines"/>) instead of a buffer row of the step's row table. The calculus routines never
+        ///     set it; only a stage that binds scratch slots (<c>EmitPolyCalcStep</c>'s <c>scratch</c>) may run such a step.
+        /// </summary>
+        public readonly bool Scratch;
+
+        /// <summary>Reads row slot <paramref name="row"/> (or scratch slot <paramref name="row"/>, see <see cref="Scratch"/>).</summary>
+        /// <param name="row">The row slot, or the scratch slot when <paramref name="scratch"/> is true.</param>
+        /// <param name="scratch">Read the kernel's scratch slot instead of a buffer row.</param>
+        public PolyCalcLoad(int row, bool scratch = false) { Row = row; Scratch = scratch; }
     }
 
     /// <summary>A value bound earlier in the step by <see cref="PolyCalcLet"/> (NumPy reads it twice, e.g. <c>c[j]</c>).</summary>
@@ -233,14 +242,22 @@ namespace NumSharp.Backends.Kernels
     /// <summary>Writes a value to one of the step's rows (the current column).</summary>
     internal sealed class PolyCalcStore : PolyCalcStmt
     {
-        /// <summary>The row slot.</summary>
+        /// <summary>The row slot — or, when <see cref="Scratch"/>, the kernel's scratch slot.</summary>
         public readonly int Row;
         /// <summary>The value.</summary>
         public readonly PolyCalcExpr E;
+        /// <summary>
+        ///     <see cref="Row"/> names one of the kernel's per-block scratch slots (see <see cref="PolyCalcLoad.Scratch"/>):
+        ///     a value NumPy holds in its own array for the whole call (chebvander's <c>x2 = 2 * x</c>) is written there
+        ///     once per block and read back by every later step.
+        /// </summary>
+        public readonly bool Scratch;
 
-        /// <summary>Creates <c>row = e</c>.</summary>
-        /// <param name="row">The row slot.</param><param name="e">The value.</param>
-        public PolyCalcStore(int row, PolyCalcExpr e) { Row = row; E = e; }
+        /// <summary>Creates <c>row = e</c> (or <c>scratch[row] = e</c>, see <see cref="Scratch"/>).</summary>
+        /// <param name="row">The row slot, or the scratch slot when <paramref name="scratch"/> is true.</param>
+        /// <param name="e">The value.</param>
+        /// <param name="scratch">Write the kernel's scratch slot instead of a buffer row.</param>
+        public PolyCalcStore(int row, PolyCalcExpr e, bool scratch = false) { Row = row; E = e; Scratch = scratch; }
     }
 
     /// <summary>
@@ -1143,7 +1160,11 @@ namespace NumSharp.Backends.Kernels
         /// <param name="s">The step.</param>
         /// <param name="j">The j local, or null for a fixed step.</param>
         /// <param name="negMask">The sign mask local (vector kernels that negate), or null.</param>
-        private static void EmitPolyCalcStep(ILGenerator il, PolyCalcEmit e, PolyCalcStep s, LocalBuilder j, LocalBuilder negMask)
+        /// <param name="scratch">The per-block scratch slot pointers (<c>byte*</c> locals, column 0 of each slot) the step's
+        ///     <see cref="PolyCalcLoad.Scratch"/> loads and <see cref="PolyCalcStore.Scratch"/> stores address — the
+        ///     Vandermonde kernels' <c>x</c> / <c>2*x</c> rows; null for the calculus kernels, whose steps have none.</param>
+        private static void EmitPolyCalcStep(ILGenerator il, PolyCalcEmit e, PolyCalcStep s, LocalBuilder j, LocalBuilder negMask,
+            LocalBuilder[] scratch = null)
         {
             var t = e.Key.T;
             var rows = new LocalBuilder[s.Rows.Length];
@@ -1192,7 +1213,7 @@ namespace NumSharp.Backends.Kernels
                 il.Emit(OpCodes.Ldloc, i); il.Emit(OpCodes.Ldc_I8, (long)e.W); il.Emit(OpCodes.Add); il.Emit(OpCodes.Ldarg_3); il.Emit(OpCodes.Bgt, vEnd);
                 var vars = new LocalBuilder[s.Vars];
                 for (int v = 0; v < vars.Length; v++) vars[v] = il.DeclareLocal(e.Vk.LocalType);
-                var ctx = new PolyCalcBodyCtx { E = e, Rows = rows, Consts = constV, Prep = prep, Vars = vars, I = i, Vector = true, NegMask = negMask };
+                var ctx = new PolyCalcBodyCtx { E = e, Rows = rows, Consts = constV, Prep = prep, Vars = vars, I = i, Vector = true, NegMask = negMask, Scratch = scratch };
                 foreach (var st in s.Body) EmitPolyCalcStmt(il, ctx, st);
                 EmitPolyCalcBump(il, i, e.W);
                 il.Emit(OpCodes.Br, vTop);
@@ -1205,7 +1226,7 @@ namespace NumSharp.Backends.Kernels
             {
                 var vars = new LocalBuilder[s.Vars];
                 for (int v = 0; v < vars.Length; v++) vars[v] = il.DeclareLocal(GetClrType(t));
-                var ctx = new PolyCalcBodyCtx { E = e, Rows = rows, Consts = constS, Prep = prep, Vars = vars, I = i, Vector = false, NegMask = null };
+                var ctx = new PolyCalcBodyCtx { E = e, Rows = rows, Consts = constS, Prep = prep, Vars = vars, I = i, Vector = false, NegMask = null, Scratch = scratch };
                 foreach (var st in s.Body) EmitPolyCalcStmt(il, ctx, st);
             }
             EmitPolyCalcBump(il, i, 1);
@@ -1247,6 +1268,27 @@ namespace NumSharp.Backends.Kernels
             public bool Vector;
             /// <summary>The sign mask (vector mode, negating routines).</summary>
             public LocalBuilder NegMask;
+            /// <summary>The per-block scratch slot pointers (null when the stage binds none — every calculus kernel).</summary>
+            public LocalBuilder[] Scratch;
+        }
+
+        /// <summary>
+        ///     The pointer local a load or store of the current body addresses: buffer row <paramref name="row"/> of the step,
+        ///     or scratch slot <paramref name="row"/> when <paramref name="scratch"/> is set.
+        /// </summary>
+        /// <param name="ctx">The body state.</param>
+        /// <param name="row">The row / scratch slot index.</param>
+        /// <param name="scratch">Whether the index names a scratch slot.</param>
+        /// <returns>The <c>byte*</c> local holding column 0 of that row.</returns>
+        /// <exception cref="InvalidOperationException">A scratch access in a stage that binds no scratch slots — a routine
+        ///     table and its stage disagree (never for the shipped tables; guards a future edit).</exception>
+        private static LocalBuilder PolyCalcRowPointer(PolyCalcBodyCtx ctx, int row, bool scratch)
+        {
+            if (!scratch)
+                return ctx.Rows[row];
+            if (ctx.Scratch is null || (uint)row >= (uint)ctx.Scratch.Length)
+                throw new InvalidOperationException($"the step reads scratch slot {row}, which its stage does not bind");
+            return ctx.Scratch[row];
         }
 
         /// <summary>Emits one statement of a step body.</summary>
@@ -1261,19 +1303,23 @@ namespace NumSharp.Backends.Kernels
                     il.Emit(OpCodes.Stloc, ctx.Vars[let.Var]);
                     break;
                 case PolyCalcStore store:
+                {
+                    // A buffer row of the step, or a scratch slot (the Vandermonde kernels' 2*x): the same element store.
+                    var target = PolyCalcRowPointer(ctx, store.Row, store.Scratch);
                     if (ctx.Vector)
                     {
                         EmitPolyCalcExpr(il, ctx, store.E);
-                        EmitPolyCalcAddr(il, ctx.Rows[store.Row], ctx.I, e.Size);
+                        EmitPolyCalcAddr(il, target, ctx.I, e.Size);
                         e.Vk.StoreValueFirst(il);
                     }
                     else
                     {
-                        EmitPolyCalcAddr(il, ctx.Rows[store.Row], ctx.I, e.Size);
+                        EmitPolyCalcAddr(il, target, ctx.I, e.Size);
                         EmitPolyCalcExpr(il, ctx, store.E);
                         EmitStoreIndirect(il, e.Key.T);
                     }
                     break;
+                }
                 default:
                     throw new InvalidOperationException("unknown calculus statement");
             }
@@ -1288,7 +1334,8 @@ namespace NumSharp.Backends.Kernels
             switch (x)
             {
                 case PolyCalcLoad ld:
-                    EmitPolyCalcAddr(il, ctx.Rows[ld.Row], ctx.I, e.Size);
+                    // A buffer row of the step, or a scratch slot (the Vandermonde kernels' x / 2*x): the same element load.
+                    EmitPolyCalcAddr(il, PolyCalcRowPointer(ctx, ld.Row, ld.Scratch), ctx.I, e.Size);
                     if (ctx.Vector) e.Vk.Load(il);
                     else EmitLoadIndirect(il, t);
                     break;

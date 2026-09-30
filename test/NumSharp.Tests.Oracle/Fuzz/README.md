@@ -273,6 +273,7 @@ python test/oracle/gen_oracle.py polyeval         # np.polynomial.* evaluation f
 python test/oracle/gen_oracle.py polyseries       # np.polynomial.* additive family + polyutils + the module constants
 python test/oracle/gen_oracle.py polycalc         # np.polynomial.* calculus family ({p}der / {p}int, every parameter)
 python test/oracle/gen_oracle.py polyalgebra      # np.polynomial.* series algebra (+ the host-pinned polyalgebra_parity tier)
+python test/oracle/gen_oracle.py polyvander       # np.polynomial.* Vandermonde family ({p}vander / {p}vander2d / {p}vander3d)
 python test/oracle/gen_index_oracle.py            # the four index_* corpora (seed pinned 20240626)
 python test/oracle/gen_nan_oracle.py              # nan.jsonl — NaN parity grid (standalone; complex bit-exact)
 python test/oracle/fuzz_random.py 1234 2000 random_smoke.jsonl
@@ -1071,6 +1072,53 @@ Char rides the uint16 proxy. Cells whose NumPy result is complex64 or an object 
 `OpRegistry.PolyAlgebra.cs` replays both files. `{p}pow` binds NumPy's argument kinds: an in-range int → the int
 overload, a float / huge int → the double one, and maxpower only when the case has it. Design and measurements:
 `docs/plans/numpy-polynomial.md` (U2).
+
+### numpy.polynomial Vandermonde family (`polyvander` tier)
+
+`polyvander.jsonl` (`gen_oracle.py polyvander`, 16,612 cases, floor 16,500) gates plan unit U5 — `{p}vander`,
+`{p}vander2d` and `{p}vander3d` for the six bases (8,224 / 4,986 / 3,402 cases) — **bit-exact, 0 excused**. Keys are
+module-qualified like `polyeval`'s (`legendre.legvander2d`). Arguments are NAMED (`x`, `y`, `z`, `deg`) with the
+polyseries encoding (`_ps_enc`), decoded in that fixed order; `deg` keeps its Python KIND (an int, a bool, a 0-d array,
+a float, a str, a list / tuple / ndarray container), because the kind decides `operator.index`'s answer and NumPy's
+error. 846 cases record NumPy's error type and text (390 ValueError, 456 TypeError); 840 are `"facet": "flags"` cases
+recording `[C_CONTIGUOUS, F_CONTIGUOUS, OWNDATA]` of the result — NumPy returns `np.moveaxis` VIEWS (OWNDATA false:
+F-contiguous for 1-D points, C and F for a scalar / degree 0 / empty points, neither for N-D points), and which one
+comes back is part of the contract. The sections of `gen_polyvander`:
+- **(A)** every dtype × length 0–33 × degree 0–14 on a contiguous 1-D x (bool / integers / char become float64; the
+  `+ 0.0` turns -0.0 into +0.0);
+- **(B)** full-mantissa random values around every lane width (2 complex, 4 float64, 8 float32 / float16);
+- **(C)** special values (`_pv_special`: signalling and negative-payload NaNs — quieted, payload kept — ±inf, ±0,
+  subnormals, max bit patterns; complex built through view bit copies);
+- **(D)** memory layouts of x (strided, reversed, offset, F and transposed N-D views, broadcast, 0-d) with values
+  AND flags, N-D point shapes, and the zero-size shapes (`(0,)`, `(0, 3)`, `(2, 0, 2)`);
+- **(E)** float16's Python-int constants past its exact integers (degree 2,100: `2*i - 1` rounds to nearest even) and
+  past its range (degree 33,000 / 65,600: the constant becomes inf), and degree-300 recurrences at float32 / float64 /
+  complex128;
+- **(F)** 2-D / 3-D at every dtype × point shape × degree pair / triple, 14 MIXED dtype pairs (the stack's strong
+  promotion: float32+int32 is float64, float16+int8 float16), special and full-mantissa values in every coordinate
+  (the outer product is where two independently sourced NaNs meet: NumPy's multiply keeps the SECOND operand's NaN),
+  point layouts per coordinate, the result flags, and Python-typed points (floats, ints, bools, complexes, lists,
+  tuples, nested lists, np.float16 items, uint64-range ints, empty lists, lists of 0-d arrays) stacked by
+  `np.asarray`'s coercion;
+- **(G)** argument kinds and errors in NumPy's order: 54 degree kinds for the 1-D form (bool is an int, a 0-d integer
+  array converts, a 0-d bool does not; floats, NaN, complex, str, None, lists and huge ints raise `deg must be an
+  integer, received {format(deg,'')}` — NumPy formats a 0-d array through its scalar, a list through its items' repr);
+  `deg must be non-negative`; `Maximum allowed dimension exceeded` at ≥ 2^63 - 1 rows and AllocationGuard's `array is
+  too big` below it — the degree checked BEFORE x is converted (only where NumPy's check comes first: a valid huge
+  degree over an object x lets NumPy compute `x + 0.0` with Python objects, which NumSharp refuses); ragged x;
+  20 x kinds; 37 / 14 degree containers for the 2-D / 3-D forms (`object of type 'int' has no len()`, `len() of unsized object`,
+  `Expected 2 dimensions of degrees, got 3`, str containers read per character, items checked dimension by dimension
+  with the per-dimension allocation between them); and points' errors in NumPy's order (a ragged stack's inhomogeneous
+  text, the empty stack's reshape error `cannot reshape array of size 0 into shape (0,newaxis)`);
+- **(I)** inputs longer than one kernel block (cheb and lag carry it: 1,700–9,000 points, strided included);
+- **(H)** Char: the uint16 section relabelled (600 cases).
+
+MemoryError texts (machine-dependent) and the str / object refusals are unit-test-pinned instead
+(`Polynomial/PolynomialVanderTests.cs`), and so are results past 32 MiB, whose product rows stream through
+non-temporal stores (forced on and off at every alignment there; the corpus' matrices are all small). NaN payloads
+through a complex product are tokenized (the house `simd_cmul` picks a different NaN operand than NumPy's; the value
+is NaN either way). Planted-bug check at delivery: two kernel mutants turned 2,403 and 117 cases red. `OpRegistry.PolyVander.cs` replays it: a 1-D degree that is a C# long in int range
+binds the int overload, every other kind the object one. Design and measurements: `docs/plans/numpy-polynomial.md` (U5).
 
 ### einsum (`einsum` tier)
 

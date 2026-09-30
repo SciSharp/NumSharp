@@ -432,6 +432,9 @@ namespace NumSharp.Tests.Fuzz
                         "x" => ConstantFacet(() => m.polyx, a),
                         "der" => a.CalcFacet(m.polyder(a.Get("c"), a.Int("m", 1), a.Opt("scl"), a.Int("axis", 0))),
                         "int" => a.CalcFacet(m.polyint(a.Get("c"), a.Int("m", 1), a.Opt("k"), a.Opt("lbnd"), a.Opt("scl"), a.Int("axis", 0))),
+                        "vander" => a.CalcFacet(PolyVander1(a, m.polyvander, m.polyvander)),
+                        "vander2d" => a.CalcFacet(m.polyvander2d(a.Get("x"), a.Get("y"), a.Get("deg"))),
+                        "vander3d" => a.CalcFacet(m.polyvander3d(a.Get("x"), a.Get("y"), a.Get("z"), a.Get("deg"))),
                         _ => throw new NotSupportedException($"polynomial op '{fn}' is not registered in OpRegistry"),
                     };
                 }
@@ -450,6 +453,9 @@ namespace NumSharp.Tests.Fuzz
                         "x" => ConstantFacet(() => m.chebx, a),
                         "der" => a.CalcFacet(m.chebder(a.Get("c"), a.Int("m", 1), a.Opt("scl"), a.Int("axis", 0))),
                         "int" => a.CalcFacet(m.chebint(a.Get("c"), a.Int("m", 1), a.Opt("k"), a.Opt("lbnd"), a.Opt("scl"), a.Int("axis", 0))),
+                        "vander" => a.CalcFacet(PolyVander1(a, m.chebvander, m.chebvander)),
+                        "vander2d" => a.CalcFacet(m.chebvander2d(a.Get("x"), a.Get("y"), a.Get("deg"))),
+                        "vander3d" => a.CalcFacet(m.chebvander3d(a.Get("x"), a.Get("y"), a.Get("z"), a.Get("deg"))),
                         _ => throw new NotSupportedException($"chebyshev op '{fn}' is not registered in OpRegistry"),
                     };
                 }
@@ -468,6 +474,9 @@ namespace NumSharp.Tests.Fuzz
                         "x" => ConstantFacet(() => m.legx, a),
                         "der" => a.CalcFacet(m.legder(a.Get("c"), a.Int("m", 1), a.Opt("scl"), a.Int("axis", 0))),
                         "int" => a.CalcFacet(m.legint(a.Get("c"), a.Int("m", 1), a.Opt("k"), a.Opt("lbnd"), a.Opt("scl"), a.Int("axis", 0))),
+                        "vander" => a.CalcFacet(PolyVander1(a, m.legvander, m.legvander)),
+                        "vander2d" => a.CalcFacet(m.legvander2d(a.Get("x"), a.Get("y"), a.Get("deg"))),
+                        "vander3d" => a.CalcFacet(m.legvander3d(a.Get("x"), a.Get("y"), a.Get("z"), a.Get("deg"))),
                         _ => throw new NotSupportedException($"legendre op '{fn}' is not registered in OpRegistry"),
                     };
                 }
@@ -486,6 +495,9 @@ namespace NumSharp.Tests.Fuzz
                         "x" => ConstantFacet(() => m.lagx, a),
                         "der" => a.CalcFacet(m.lagder(a.Get("c"), a.Int("m", 1), a.Opt("scl"), a.Int("axis", 0))),
                         "int" => a.CalcFacet(m.lagint(a.Get("c"), a.Int("m", 1), a.Opt("k"), a.Opt("lbnd"), a.Opt("scl"), a.Int("axis", 0))),
+                        "vander" => a.CalcFacet(PolyVander1(a, m.lagvander, m.lagvander)),
+                        "vander2d" => a.CalcFacet(m.lagvander2d(a.Get("x"), a.Get("y"), a.Get("deg"))),
+                        "vander3d" => a.CalcFacet(m.lagvander3d(a.Get("x"), a.Get("y"), a.Get("z"), a.Get("deg"))),
                         _ => throw new NotSupportedException($"laguerre op '{fn}' is not registered in OpRegistry"),
                     };
                 }
@@ -504,6 +516,9 @@ namespace NumSharp.Tests.Fuzz
                         "x" => ConstantFacet(() => m.hermx, a),
                         "der" => a.CalcFacet(m.hermder(a.Get("c"), a.Int("m", 1), a.Opt("scl"), a.Int("axis", 0))),
                         "int" => a.CalcFacet(m.hermint(a.Get("c"), a.Int("m", 1), a.Opt("k"), a.Opt("lbnd"), a.Opt("scl"), a.Int("axis", 0))),
+                        "vander" => a.CalcFacet(PolyVander1(a, m.hermvander, m.hermvander)),
+                        "vander2d" => a.CalcFacet(m.hermvander2d(a.Get("x"), a.Get("y"), a.Get("deg"))),
+                        "vander3d" => a.CalcFacet(m.hermvander3d(a.Get("x"), a.Get("y"), a.Get("z"), a.Get("deg"))),
                         _ => throw new NotSupportedException($"hermite op '{fn}' is not registered in OpRegistry"),
                     };
                 }
@@ -522,6 +537,9 @@ namespace NumSharp.Tests.Fuzz
                         "x" => ConstantFacet(() => m.hermex, a),
                         "der" => a.CalcFacet(m.hermeder(a.Get("c"), a.Int("m", 1), a.Opt("scl"), a.Int("axis", 0))),
                         "int" => a.CalcFacet(m.hermeint(a.Get("c"), a.Int("m", 1), a.Opt("k"), a.Opt("lbnd"), a.Opt("scl"), a.Int("axis", 0))),
+                        "vander" => a.CalcFacet(PolyVander1(a, m.hermevander, m.hermevander)),
+                        "vander2d" => a.CalcFacet(m.hermevander2d(a.Get("x"), a.Get("y"), a.Get("deg"))),
+                        "vander3d" => a.CalcFacet(m.hermevander3d(a.Get("x"), a.Get("y"), a.Get("z"), a.Get("deg"))),
                         _ => throw new NotSupportedException($"hermite_e op '{fn}' is not registered in OpRegistry"),
                     };
                 }

@@ -551,6 +551,18 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Polycalc() => RunCorpus("polycalc.jsonl");
 
+        // numpy.polynomial Vandermonde family (plan docs/plans/numpy-polynomial.md U5): {p}vander / {p}vander2d / {p}vander3d for
+        // the six bases — every dtype x length x degree (bool / int / char points computed in float64), full-mantissa and
+        // special values (quiet / signalling NaNs, infinities, signed zeros, subnormals), every memory layout of x (values AND
+        // the result's C/F/OWNDATA flags — NumPy's moveaxis / reshape views), float16's Python-int constants rounding past
+        // 2048 and overflowing past 65504, the 2-D / 3-D outer products over every dtype and mixed pairs (np.asarray's
+        // promotion), point layouts, Python-typed points, the argument kinds and errors in NumPy's order (operator.index and
+        // the f-string text of a refused degree, len() / count errors of the degree containers, ragged points, the empty
+        // reshape error, npy_intp / array-too-big degrees) and inputs longer than one kernel block. Portable: + - * / only.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Polyvander() => RunCorpus("polyvander.jsonl");
+
         // numpy.polynomial series algebra (plan docs/plans/numpy-polynomial.md U2): {p}mulx / {p}mul / {p}div (quo, rem) /
         // {p}pow / {p}fromroots for the six bases and X2poly / poly2X for the five non-power ones — every dtype x length at
         // the defaults (ints -> float64; the recurrence bases' float16 / float32 products turning float64 through NumPy's
@@ -806,6 +818,7 @@ namespace NumSharp.Tests.Fuzz
             ["polyeval.jsonl"] = 19100,   // numpy.polynomial {p}val family (U3), 6 bases x the matrix above, + 4,392 single-element-broadcast cells, + 720 sequence / big-int x cells (J), + 1,890 array_like c / ordinate cells (K) — 19,216
             ["polyseries.jsonl"] = 18690, // numpy.polynomial additive family + polyutils (U1): 6 bases + polyutils + constant facets — 15,950 cases at delivery, 18,437 since the parity audit's long-series / complex64-loop / block-boundary / getdomain-window sections (K-N), 18,621 with the tuple / nested-sequence section (O), 18,647 with trimseq of Python sequences (P), 18,698 with the deferred object / str refusal (Q), which this floor keeps from silently dropping out
             ["polycalc.jsonl"] = 26400,   // numpy.polynomial calculus family (U4): {p}der / {p}int x 6 bases, sections A-O of gen_polycalc — 21,646 at delivery, 27,526 with the argument-kind (M), zero-size / 5-D / extreme-int (N) and widened-scale (O) sections
+            ["polyvander.jsonl"] = 16500,   // numpy.polynomial Vandermonde family (U5): {p}vander / vander2d / vander3d x 6 bases, sections A-I of gen_polyvander — 16,612 at delivery
             ["polyalgebra.jsonl"] = 28100,   // numpy.polynomial series algebra (U2): mulx/mul/div/pow/fromroots x 6 bases + X2poly/poly2X x 5, sections A-L of gen_polyalgebra — 26,163 at delivery, 28,144 with the wholeness section (M: pow / maxpower argument kinds, the deferred object refusal, non-finite complex products — 43 of which moved here from the host tier)
             ["polyalgebra_parity.jsonl"] = 135,   // U2's BLAS-bound products (host-pinned): 186 at delivery, 139 once complex products with infinities / NaNs below zdotu's vector block moved to the portable tier (the managed dot reproduces zdotu's C99 result and CDOUBLE_dot's plain loop)
             ["place.jsonl"] = 12,

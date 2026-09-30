@@ -483,5 +483,81 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.legendre.poly2leg.html</remarks>
         [NDScoped]
         public NDArray poly2leg(object pol) => NDPolyAlgebra.FromPower(PolyBasis.Legendre, pol);
+
+        // ---------------------------------------------------------------------------------------------
+        //  Vandermonde matrices (plan U5): legvander / legvander2d / legvander3d
+        // ---------------------------------------------------------------------------------------------
+
+        /// <summary>
+        ///     The pseudo-Vandermonde matrix of degree <paramref name="deg"/>: <c>V[..., i] = L_i(x)</c>, by NumPy's forward
+        ///     recurrence <c>v[0] = x*0 + 1; v[1] = x; v[i] = (v[i-1]*x*(2*i - 1) - v[i-2]*(i - 1)) / i</c> (the Python ints
+        ///     converted to the dtype NEP 50's way — in float16 they round past 2048). Bit-identical to NumPy 2.4.2's
+        ///     <c>legvander</c> (one IL kernel pass).
+        /// </summary>
+        /// <param name="x">The points (see <see cref="PowerSeriesModule.polyvander(object, int)"/>: any layout; the matrix dtype is
+        ///     <c>(x + 0.0).dtype</c>).</param>
+        /// <param name="deg">The degree (≥ 0).</param>
+        /// <returns>A view of shape <c>x.shape + (deg + 1,)</c> over a new array, the degree axis last (OWNDATA false).</returns>
+        /// <exception cref="ValueError"><c>deg must be non-negative</c>; a ragged list x; <c>array is too big; …</c>.</exception>
+        /// <exception cref="System.OutOfMemoryException">The matrix cannot be allocated (NumPy's MemoryError).</exception>
+        /// <exception cref="System.NotSupportedException">A null or str x, or a list NumPy makes a str / object array of.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.legendre.legvander.html</remarks>
+        [NDScoped]
+        public NDArray legvander(object x, int deg) => NDPolyVander.Vander(PolyBasis.Legendre, x, deg);
+
+        /// <summary>
+        ///     <see cref="legvander(object, int)"/> with a degree of ANY kind, read as NumPy's <c>polyutils._as_int</c> (Python's
+        ///     <c>operator.index</c>) — see <see cref="PowerSeriesModule.polyvander(object, object)"/> for what passes and how a
+        ///     refused value reads in the TypeError.
+        /// </summary>
+        /// <param name="x">The points.</param>
+        /// <param name="deg">The degree, any value.</param>
+        /// <returns>The matrix.</returns>
+        /// <exception cref="TypeError"><c>deg must be an integer, received …</c> — before x is looked at.</exception>
+        /// <exception cref="ValueError"><c>deg must be non-negative</c>; a ragged list x; <c>Maximum allowed dimension
+        ///     exceeded</c> or <c>array is too big; …</c>.</exception>
+        /// <exception cref="System.OutOfMemoryException">The matrix cannot be allocated.</exception>
+        /// <exception cref="System.NotSupportedException">A null or str x, or a list NumPy makes a str / object array of.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.legendre.legvander.html</remarks>
+        [NDScoped]
+        public NDArray legvander(object x, object deg) => NDPolyVander.Vander(PolyBasis.Legendre, x, deg);
+
+        /// <summary>
+        ///     The 2-D pseudo-Vandermonde matrix: column <c>a*(deg[1] + 1) + b</c> is <c>L_a(x) * L_b(y)</c> — NumPy's
+        ///     <c>_vander_nd_flat</c> outer product of the two 1-D matrices. Bit-identical to NumPy 2.4.2's <c>legvander2d</c>.
+        /// </summary>
+        /// <param name="x">The first coordinates (stacked with y: one shape, one promoted dtype — see
+        ///     <see cref="PowerSeriesModule.polyvander2d"/>).</param>
+        /// <param name="y">The second coordinates.</param>
+        /// <param name="deg">The two degrees <c>[x_deg, y_deg]</c>.</param>
+        /// <returns>A view of shape <c>x.shape + ((deg[0] + 1) * (deg[1] + 1),)</c> over a new array.</returns>
+        /// <exception cref="TypeError">A deg without a length, or a non-integer degree.</exception>
+        /// <exception cref="ValueError"><c>Expected 2 dimensions of degrees, got {len}</c>; points of different shapes;
+        ///     <c>deg must be non-negative</c>; <c>array is too big; …</c>.</exception>
+        /// <exception cref="IncorrectShapeException">No points (NumPy's reshape text).</exception>
+        /// <exception cref="System.OutOfMemoryException">A matrix NumPy allocates on the way cannot be allocated.</exception>
+        /// <exception cref="System.NotSupportedException">Points NumPy stacks into a str or object array.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.legendre.legvander2d.html</remarks>
+        [NDScoped]
+        public NDArray legvander2d(object x, object y, object deg) => NDPolyVander.VanderNd(PolyBasis.Legendre, new[] { x, y }, deg);
+
+        /// <summary>
+        ///     The 3-D pseudo-Vandermonde matrix: column <c>(a*(deg[1] + 1) + b)*(deg[2] + 1) + c</c> is
+        ///     <c>L_a(x) * L_b(y) * L_c(z)</c>, the first product rounded before the second (NumPy's reduce). Bit-identical to
+        ///     NumPy 2.4.2's <c>legvander3d</c>.
+        /// </summary>
+        /// <param name="x">The first coordinates (x, y, z stacked: one shape).</param>
+        /// <param name="y">The second coordinates.</param>
+        /// <param name="z">The third coordinates.</param>
+        /// <param name="deg">The three degrees.</param>
+        /// <returns>A view of shape <c>x.shape + ((deg[0] + 1) * (deg[1] + 1) * (deg[2] + 1),)</c> over a new array.</returns>
+        /// <exception cref="TypeError">A deg without a length, or a non-integer degree.</exception>
+        /// <exception cref="ValueError"><c>Expected 3 dimensions of degrees, got {len}</c>, and the 2-D form's other errors.</exception>
+        /// <exception cref="IncorrectShapeException">No points (NumPy's reshape text).</exception>
+        /// <exception cref="System.OutOfMemoryException">A matrix NumPy allocates on the way cannot be allocated.</exception>
+        /// <exception cref="System.NotSupportedException">Points NumPy stacks into a str or object array.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.legendre.legvander3d.html</remarks>
+        [NDScoped]
+        public NDArray legvander3d(object x, object y, object z, object deg) => NDPolyVander.VanderNd(PolyBasis.Legendre, new[] { x, y, z }, deg);
     }
 }

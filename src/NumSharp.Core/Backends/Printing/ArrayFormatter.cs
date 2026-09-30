@@ -419,8 +419,9 @@ namespace NumSharp.Backends.Printing
             return sign + lead + rest + "e" + es;
         }
 
-        // str() of a 0d complex array, matching Python's complex repr "(a+bj)".
-        private static string PythonComplexRepr(Complex c)
+        // str() of a 0d complex array, matching Python's complex repr "(a+bj)". Internal: numpy.polynomial's error texts
+        // (PolyIndexArgument.Format) interpolate a Python complex with the same repr.
+        internal static string PythonComplexRepr(Complex c)
         {
             // Pure-imaginary form when the real part is +0.0: just "<imag>j" carrying the imaginary's
             // OWN sign (no forced '+'). Python: str(0j)='0j', str(1j)='1j', str(-1j)='-1j', str(0-0j)='-0j'.

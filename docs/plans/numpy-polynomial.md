@@ -25,7 +25,7 @@
 | Page section | NumPy API | NumSharp today |
 |---|---|---|
 | Legacy "polynomial module" (`numpy.lib.polynomial`) | `poly1d`, `polyval`, `poly`, `roots`, `polyfit`, `polyder`, `polyint`, `polyadd`, `polydiv`, `polymul`, `polysub` | **Done** — all 11 functions and `poly1d(c_or_r, r, variable)`, byte-exact. Oracle: `poly.jsonl` (portable); `roots`, `polyfit` and `poly`-of-a-matrix are in host-pinned `linalg_parity`. Unit tests + live-parity tests. Only `RankWarning` is absent: NumSharp emits no warnings anywhere. |
-| "Polynomial package" (`numpy.polynomial`) | 6 modules × ~31 names, `polyutils`, 6 classes, `set_default_printstyle` | **U3 + U1 + U4 + U2 delivered** — 142 of 193 names: the evaluation family (36, `polyvalfromroots` open), the additive family with `polyutils` (54: `{p}add/sub/trim/line`, the 24 constants, `as_series`/`trimseq`/`trimcoef`/`getdomain`/`mapparms`/`mapdomain`), the calculus family (12: `{p}der`/`{p}int`) and the series algebra (40: `{p}mulx/mul/div/pow/fromroots`, `X2poly`/`poly2X`), all bit-exact (`polyeval.jsonl` 19,216 + `polyseries.jsonl` 18,698 + `polycalc.jsonl` 27,526 + `polyalgebra.jsonl` 28,144 cases; the BLAS-bound products byte-exact with the OpenBLAS backend, `polyalgebra_parity.jsonl` 139). Facade `np.polynomial.{polynomial,chebyshev,legendre,laguerre,hermite,hermite_e,polyutils}`; 0 of 6 classes. `coverage/generate_coverage.py` catalogues all seven `numpy.polynomial.*` submodules as out-of-headline surfaces. |
+| "Polynomial package" (`numpy.polynomial`) | 6 modules × ~31 names, `polyutils`, 6 classes, `set_default_printstyle` | **U3 + U1 + U4 + U2 + U5 delivered** — 160 of 193 names: the evaluation family (36, `polyvalfromroots` open), the additive family with `polyutils` (54: `{p}add/sub/trim/line`, the 24 constants, `as_series`/`trimseq`/`trimcoef`/`getdomain`/`mapparms`/`mapdomain`), the calculus family (12: `{p}der`/`{p}int`), the series algebra (40: `{p}mulx/mul/div/pow/fromroots`, `X2poly`/`poly2X`) and the Vandermonde family (18: `{p}vander`/`{p}vander2d`/`{p}vander3d`), all bit-exact (`polyeval.jsonl` 19,216 + `polyseries.jsonl` 18,698 + `polycalc.jsonl` 27,526 + `polyalgebra.jsonl` 28,144 + `polyvander.jsonl` 16,612 cases; the BLAS-bound products byte-exact with the OpenBLAS backend, `polyalgebra_parity.jsonl` 139). Facade `np.polynomial.{polynomial,chebyshev,legendre,laguerre,hermite,hermite_e,polyutils}`; 0 of 6 classes. `coverage/generate_coverage.py` catalogues all seven `numpy.polynomial.*` submodules as out-of-headline surfaces. |
 | "Transition guide" | the reversed coefficient order; `Polynomial.fit(...).convert()` | Documentation only. It is a real hazard for us, though, because the new package **reuses the legacy names with the opposite coefficient order** (§2 D5). |
 
 User demand on record: issue **#496** "Can NumSharp fit polynomial surface equations?" — that is exactly
@@ -680,7 +680,85 @@ machine-partitioned; the counts sum to 193 with no overlap (Appendix A).
     scalar∘scalar, so they need the naive multiply (R10).
 - **Tests to port:** `TestIntegral`, `TestDerivative` × 6.
 
-### U5 — Vandermonde (18 names)
+### U5 — Vandermonde (18 names) — DELIVERED 2026-09-30
+
+**As built.** Where the build diverges from the plan below, this block wins; the plan is kept for the record.
+- **Engine.** The driver is `Polynomial/Package/NDPolyVander.cs`. It runs NumPy's statements in NumPy's order, which is
+  also its error order:
+  - `_as_int(deg)`, the sign check, `np.array(x, ndmin=1)`;
+  - `np.empty`'s dimension conversion: `Maximum allowed dimension exceeded` at ≥ 2^63 − 1 rows, AllocationGuard's
+    `array is too big` below that, and MemoryError past what the allocator gives;
+  - the recurrence;
+  - `np.moveaxis`, returning a VIEW (OWNDATA false).
+
+  2-D / 3-D run `_vander_nd`'s order: `len(deg)`, the dimension count, `np.asarray(points) + 0.0`, then per dimension
+  its degree checks and allocation, with the product's allocation from the second dimension on, and last the reshape
+  error of an empty stack. `operator.index` and NumPy's `format(deg, '')` error text are
+  `Polynomial/Package/NDPolyIndexArgument.cs`: a 0-d array formats through its scalar, a list through its items'
+  repr (`np.float16(1e+03)`, `array([1.5])`).
+
+  The kernel is `Backends/Kernels/Direct/DirectILKernelGenerator.PolyVander.cs`. The six recurrences are
+  `PolyVanderRoutines`, written in the calculus family's step language (U4's `PolyCalcRoutine`, run forward; `x` and
+  chebvander's `x2` live in per-block scratch slots, `PolyCalcLoad.Scratch`). One kernel is emitted per (basis, dtype,
+  1/2/3-D, source dtypes, streamed), as four DynamicMethod stages:
+  - a LOAD fusing the conversion with NumPy's `+ 0.0` (-0.0 → +0.0, sNaN quieted with its payload kept);
+  - the RECURRENCE over a block of points;
+  - for 2-D / 3-D, a PRODUCT writing each output row `(a*(dy+1)+b)[*(dz+1)+c]` straight into the final layout (3-D
+    through a scratch row holding `V_x[a]*V_y[b]`, NumPy's rounded temporary);
+  - the ROOT walking the blocks.
+
+  The per-dimension matrices never leave L1/L2. NumPy materializes three to five full temporaries per degree.
+- **The outer product's NaN priority.** NumPy's `FLOAT/DOUBLE_multiply` (MSVC, win-amd64) returns the SECOND operand's
+  NaN when both are NaN. x86 `mulpd`/`mulps` — and RyuJIT, which may swap commutative operands — return the first's.
+  `PolyVanderOps.Mul*` therefore blends explicitly, but only for a vector whose product holds a NaN lane: a NaN-free
+  product had no NaN operand, so the plain product is NumPy's. Complex products keep the house `simd_cmul`, and the
+  oracle tokenizes complex NaN payloads.
+- **Streamed products (`PolyVanderKey.NonTemporal`).** A 2-D / 3-D result of 32 MiB or more
+  (`NDPolyVander.NonTemporalMinBytes`) writes its product rows with non-temporal stores:
+  - each row runs a scalar head up to the store's alignment (row starts are only element-aligned), then aligned
+    `vmovntdq`, then the scalar tail;
+  - the stage ends with `sfence`;
+  - the bytes are the same.
+
+  A 96.8 MB `(100000, 121)` float64 result takes ~12 ms streamed vs 15–18 ms with normal stores. About 10.4 ms of
+  either is the fresh pages' demand-zero faults, which NumPy pays as well (a fresh allocation above the 64 MiB pool
+  cap: 0.44 µs a page on the dev host). On reused pages it is 1.6 vs 3.7 ms at 63.9 MB. The 1-D form never streams,
+  because its recurrence reads its rows back.
+- **Oracle.** `polyvander.jsonl` (`gen_oracle.py polyvander`, 16,612 cases, sections A–I, 0 excused), described in
+  `test/NumSharp.Tests.Oracle/Fuzz/README.md`.
+  - The tier covers every dtype, lane width, special value, layout, flags facet, mixed-dtype stack, Python-typed
+    point, degree kind and container, and argument error in NumPy's order.
+  - Two planted kernel bugs turned 2,403 and 117 cases red.
+  - Unit tests: `Polynomial/PolynomialVanderTests.cs` (16). They cover NumPy's `TestVander` × 6 ported, byte dumps
+    per dtype family, the NaN bits, the refusals, decimal, the view flags, forced small blocks, and the streamed
+    product forced on and off at every alignment. A skipped-head mutant turns the streamed test red; the automatic
+    38.7 MB path is checked too.
+- **Perf.** `benchmark/polynomial/polyvander_{numpy.py,bench.cs,report.py}`, committed summary `polyvander_results.md`;
+  480 cells, all bit-exact.
+
+  | Section | min NPY/NS | geomean NPY/NS |
+  |---|---:|---:|
+  | 1-D float64 | 2.23 | 16.3 |
+  | dtypes | 1.65 | 7.8 |
+  | layouts | 6.95 | 8.5 |
+  | N-D points | 7.81 | 9.3 |
+  | 2-D products | 1.55 | 11.7 |
+  | 3-D products | 2.40 | 12.8 |
+  | mixed dtypes | 2.33 | 4.7 |
+  | small calls | 5.10 | 10.2 |
+  | argument forms | 2.54 | 7.2 |
+  | **all** | **1.55** | **10.43** |
+
+  The floor is the six `(100000, 121)` 2-D cells, at 1.55–1.66×: NumPy 21.9–24.2 ms against 14.1–14.9 ms, with
+  ~10.4 ms of each side in page faults. The float16 dtype cells (1.65–2.7×) are the U4 float16 lever again: the lane
+  kind rounds every op to the f16 grid.
+- **Traps:**
+  - A random corpus never pairs two NaNs in the product's operands. That needed `_pv_special` in BOTH coordinates, and
+    it caught the NaN priority.
+  - NumPy's degree text is `format(deg, '')` (f-string interpolation), not `str()`.
+  - A valid huge degree over an object x makes NumPy compute `x + 0.0` with Python objects before the dimension error,
+    so the corpus keeps those pairings out.
+  - A NumPy-side benchmark of a huge degree over empty x hangs (its Python loop runs anyway).
 
 - **Scope:** `{p}vander`, `{p}vander2d`, `{p}vander3d`.
 - **Shared backend:** a forward-recurrence driver (the same step constants as U3's table, used forward),

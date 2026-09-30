@@ -12488,6 +12488,403 @@ def gen_polycalc():
     return cases
 
 
+# ---- numpy.polynomial Vandermonde family (plan docs/plans/numpy-polynomial.md U5) ---------------------------------
+#
+# Op keys "<basis module>.<p>vander" / "<p>vander2d" / "<p>vander3d". Arguments by NAME in call order — x (the 1-D form)
+# or x, y[, z] (2-D / 3-D), then deg — each a _ps_enc spec: "a" (the next operand, any layout; a 0-d one is STRONG), a
+# Python scalar / list / tuple / str / None, or an np.float16 (C#'s Half). Results: the matrix (dtype, shape, bytes), or
+# with "facet": "flags" its [C_CONTIGUOUS, F_CONTIGUOUS, OWNDATA] (NumPy's moveaxis / reshape views: OWNDATA is False).
+# Sections:
+#   (A) dtype x length x degree, every basis, 1-D contiguous x (the load stage's conversions, the vector loops' tails);
+#   (B) full-mantissa random values (complex128's simd_cmul and Smith forms, float16's HALF loops);
+#   (C) special values — quiet / signalling / negative NaNs, +-inf, +-0, subnormals, the largest finite values;
+#   (D) memory layouts of x (1-D strided / reversed / offset / broadcast / 0-d; N-D C / F / transposed / strided /
+#       reversed) — values, and the result's flags (plus zero-size and size-1 shapes);
+#   (E) float16's Python-int constants past its exact integers (rounded to even) and past its range (inf);
+#   (F) 2-D / 3-D: every dtype (and mixed pairs — np.asarray's strong promotion), point shapes 0-d / 1-D / N-D, layouts
+#       (each point read in place with its own strides), degree combinations, flags, Python-typed points (stacked);
+#   (G) argument kinds and errors in NumPy's order: deg kinds (operator.index, and the f-string text of a refused value),
+#       x kinds (Python sequences), deg-before-x, 2-D / 3-D deg containers (len(), the count), points stacking (ragged),
+#       empty points (the reshape error), huge degrees (npy_intp, "array is too big");
+#   (H) Char (the uint16 proxy, relabelled);
+#   (I) inputs longer than one kernel block (the block loop, the partial last block, the scratch reuse).
+# Not recorded: complex64 x (NumSharp has one complex width, #569), object results (a Python int past uint64), NumPy's
+# str / object `x + 0.0` failures (NumSharp refuses str / object arrays — unit-tested), MemoryError (its text and even
+# its occurrence depend on the machine) and degrees that make NumPy's Python loop run for hours (2**40 over empty x).
+
+def _pv_special(dt):
+    """Points mixing quiet / signalling / negative-payload NaNs, +-inf, +-0, subnormals, the largest finite value and
+    ordinary values — as bit patterns, so the signalling NaN survives into the operand."""
+    dt = np.dtype(dt)
+    table = {
+        "float64": (np.uint64, [0x7ff8000000000000, 0x7ff4000000000001, 0xfff8000000000123, 0x7ff0000000000000,
+                                0xfff0000000000000, 0, 0x8000000000000000, 1, 0x800fffffffffffff, 0x7fefffffffffffff,
+                                0x3fe0000000000000, 0xc008000000000000, 0x3ff8000000000000]),
+        "float32": (np.uint32, [0x7fc00000, 0x7fa00001, 0xffc00123, 0x7f800000, 0xff800000, 0, 0x80000000, 1, 0x807fffff,
+                                0x7f7fffff, 0x3f000000, 0xc0400000, 0x3fc00000]),
+        "float16": (np.uint16, [0x7e00, 0x7d01, 0xfe23, 0x7c00, 0xfc00, 0, 0x8000, 1, 0x83ff, 0x7bff, 0x3800, 0xc200, 0x3e00]),
+    }
+    if dt.kind == "c":
+        re = _pv_special("float64")
+        c = np.zeros(len(re), np.complex128)
+        # Bit copies (no arithmetic): the payloads, the signalling NaN and the signed zeros reach the operand as is.
+        c.view(np.float64)[0::2] = re
+        c.view(np.float64)[1::2] = np.roll(re, 4)
+        return c
+    ut, bits = table[dt.name]
+    return np.array(bits, dtype=ut).view(dt).copy()
+
+
+def _pv_refused(e):
+    """NumPy failures NumSharp answers with its own refusal (not recorded): `x + 0.0` on a str array (UFuncTypeError)
+    or an object array holding None / a non-numeric object, and MemoryError."""
+    t = type(e).__name__
+    return t in ("UFuncTypeError", "MemoryError") or str(e).startswith("unsupported operand type(s) for +")
+
+
+def gen_polyvander():
+    cases = []
+    counter = [0]
+    skipped = [0]
+    ok_dtypes = set(ALL_DTYPES)
+    A = _PSArr
+
+    def emit(op, args, call, layout, cid, facet=None):
+        operands = []
+        params = {}
+        # Canonical order: the C# replay decodes x, y, z, deg in this order and consumes operands as it goes.
+        for key in ("x", "y", "z", "deg"):
+            if key in args:
+                params[key] = _ps_enc(args[key], operands)
+        if facet:
+            params["facet"] = facet
+        n = counter[0]
+        counter[0] += 1
+        try:
+            with np.errstate(all="ignore"), warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                r = call()
+        except Exception as e:
+            if _pv_refused(e):
+                skipped[0] += 1
+                return
+            cases.append({"id": f"{cid}/{n}", "op": op, "params": params, "operands": operands,
+                          "expected": {}, "expects_throw": True, "error": _poly_exc(e),
+                          "layout": layout, "valueclass": "error"})
+            return
+        a = np.asarray(r)
+        if facet == "flags":
+            a = np.array([a.flags.c_contiguous, a.flags.f_contiguous, a.flags.owndata])
+        if a.dtype.name not in ok_dtypes:
+            skipped[0] += 1
+            return
+        cases.append(_case(op, params, operands, _arr_expected(a), layout, "polyvander", cid=f"{cid}/{n}"))
+
+    def nd_views(base):
+        """(name, base, view) layouts of an N-D array's values (describe() serializes the BASE in C order, so every base
+        is C-contiguous and the layout lives in the view: F order is the transpose of a C buffer holding base.T)."""
+        shape = base.shape
+        out = [("c", base, base)]
+        fb = np.ascontiguousarray(base.T)
+        out.append(("f", fb, fb.T))
+        if len(shape) >= 3:
+            perm = (1, 0) + tuple(range(2, len(shape)))
+            tb = np.ascontiguousarray(base.transpose(perm))
+            out.append(("t", tb, tb.transpose(perm)))
+        if len(shape) >= 2:
+            wide = np.zeros(shape[:-1] + (2 * shape[-1],), base.dtype)
+            wide[..., ::2] = base
+            out.append(("strided", wide, wide[..., ::2]))
+            rb = np.ascontiguousarray(base[::-1])
+            out.append(("reversed", rb, rb[::-1]))
+        return out
+
+    float_dtypes = ("float64", "float32", "float16", "complex128")
+
+    for modname, p in POLY_MODULES:
+        mod = _poly_module(modname)
+        v1 = getattr(mod, p + "vander")
+        v2 = getattr(mod, p + "vander2d")
+        v3 = getattr(mod, p + "vander3d")
+        op1, op2, op3 = f"{modname}.{p}vander", f"{modname}.{p}vander2d", f"{modname}.{p}vander3d"
+
+        # (A) dtype x length x degree, 1-D contiguous x
+        for dt in ALL_DTYPES:
+            inexact = np.dtype(dt).kind in "fc"
+            lengths = (0, 1, 2, 3, 4, 5, 7, 8, 9, 16, 17, 33) if inexact else (0, 1, 3, 5, 9, 17)
+            degs = (0, 1, 2, 3, 5, 9, 14) if inexact else (0, 1, 2, 5, 9)
+            for n in lengths:
+                x = _poly_fill(n, dt, seed=3) if n else np.zeros(0, dt)
+                for d in degs:
+                    emit(op1, {"x": A(x), "deg": d}, lambda: v1(x, d), "c_contiguous_1d", f"{op1}/dt/{dt}/{n}/{d}")
+
+        # (B) full-mantissa random values around the lane widths (W = 2 complex, 4 float64, 8 float32 / float16)
+        for dt in float_dtypes:
+            for n in (1, 2, 5, 8, 9, 17, 33):
+                for draw in range(2):
+                    x = _pc_random((n,), dt, 3000 + 17 * draw + n)
+                    for d in (4, 8):
+                        emit(op1, {"x": A(x), "deg": d}, lambda: v1(x, d), "cfull_1d", f"{op1}/rand/{dt}/{n}/{draw}/{d}")
+
+        # (C) special values
+        for dt in float_dtypes:
+            x = _pv_special(dt)
+            for d in (0, 1, 2, 3, 6):
+                emit(op1, {"x": A(x), "deg": d}, lambda: v1(x, d), "special_1d", f"{op1}/spec/{dt}/{d}")
+
+        # (D) memory layouts of x, values and flags
+        for dt in ("float64", "complex128", "int32", "float16", "bool"):
+            base = _poly_fill(7, dt, seed=4)
+            for lname, ax in _ps_layouts(base):
+                for d in (0, 2, 5):
+                    emit(op1, {"x": ax, "deg": d}, lambda: v1(ax.view, d), lname, f"{op1}/lay1/{dt}/{lname}/{d}")
+                    if dt == "float64":
+                        emit(op1, {"x": ax, "deg": d}, lambda: v1(ax.view, d), lname, f"{op1}/lay1flags/{lname}/{d}",
+                             facet="flags")
+            src = base[:1].copy()
+            bc = np.broadcast_to(src, (6,))
+            z0 = np.array(base[1])
+            for d in (0, 3):
+                emit(op1, {"x": A(src, bc), "deg": d}, lambda: v1(bc, d), "broadcast_1d", f"{op1}/lay1/{dt}/broadcast/{d}")
+                emit(op1, {"x": A(z0), "deg": d}, lambda: v1(z0, d), "scalar_0d", f"{op1}/lay1/{dt}/0d/{d}")
+        for shape in ((2, 3), (3, 1, 2), (1, 4), (4, 1), (2, 3, 4)):
+            for dt in ("float64", "complex128", "int32", "float16"):
+                base = _poly_coef(shape, dt, seed=5)
+                for vname, vb, vv in nd_views(base):
+                    for d in (0, 2, 5):
+                        emit(op1, {"x": A(vb, vv), "deg": d}, lambda: v1(vv, d), f"nd_{vname}",
+                             f"{op1}/nd/{shape}/{dt}/{vname}/{d}")
+                        if dt == "float64":
+                            emit(op1, {"x": A(vb, vv), "deg": d}, lambda: v1(vv, d), f"nd_{vname}",
+                                 f"{op1}/ndflags/{shape}/{vname}/{d}", facet="flags")
+        for shape in ((), (1,), (5,), (0,), (0, 3), (3, 0), (1, 1), (4, 1, 1), (2, 0, 2)):
+            x = np.zeros(shape) + 0.5
+            for d in (0, 1, 3):
+                emit(op1, {"x": A(x), "deg": d}, lambda: v1(x, d), "flags", f"{op1}/flags/{shape}/{d}", facet="flags")
+                emit(op1, {"x": A(x), "deg": d}, lambda: v1(x, d), "zero_size", f"{op1}/shape/{shape}/{d}")
+
+        # (E) float16's Python-int constants past its exact integers (rounded to even), and past its range (inf) where the
+        #     basis reaches 65504 at a corpus-sized degree (leg / lag: 2*i - 1, herm: 2*(i - 1), herme: i - 1).
+        x16 = np.array([0.5, -0.25, 0.75], np.float16)
+        emit(op1, {"x": A(x16), "deg": 2100}, lambda: v1(x16, 2100), "long_deg", f"{op1}/f16range/2100")
+        x16b = np.array([0.5], np.float16)
+        big = {"leg": 33000, "lag": 33000, "herm": 33000, "herme": 65600}.get(p)
+        if big:
+            emit(op1, {"x": A(x16b), "deg": big}, lambda: v1(x16b, big), "long_deg", f"{op1}/f16range/{big}")
+        for dt in ("float32", "float64", "complex128"):
+            xl = _pc_random((3,), dt, 3500) / 3.0
+            emit(op1, {"x": A(xl), "deg": 300}, lambda: v1(xl, 300), "long_deg", f"{op1}/longdeg/{dt}/300")
+
+        # (F) 2-D / 3-D
+        pts_shapes = ((), (1,), (3,), (8,), (9,), (17,), (2, 3))
+        deg2 = ((0, 0), (1, 0), (0, 2), (2, 3), (3, 1), (4, 4))
+        deg3 = ((0, 0, 0), (1, 2, 1), (2, 0, 3), (3, 3, 2))
+        for dt in ALL_DTYPES:
+            for shape in pts_shapes:
+                x = _poly_coef(shape, dt, seed=6)
+                y = _poly_coef(shape, dt, seed=7)
+                z = _poly_coef(shape, dt, seed=8)
+                for dg in deg2:
+                    dl = list(dg)
+                    emit(op2, {"x": A(x), "y": A(y), "deg": dl}, lambda: v2(x, y, dl), f"nd2_{len(shape)}d",
+                         f"{op2}/dt/{dt}/{shape}/{dg}")
+                for dg in deg3:
+                    dl = list(dg)
+                    emit(op3, {"x": A(x), "y": A(y), "z": A(z), "deg": dl}, lambda: v3(x, y, z, dl), f"nd3_{len(shape)}d",
+                         f"{op3}/dt/{dt}/{shape}/{dg}")
+        mixed = [("float32", "float64"), ("float16", "int8"), ("float16", "uint8"), ("float16", "int16"),
+                 ("float32", "int32"), ("int8", "uint8"), ("bool", "float16"), ("complex128", "float64"),
+                 ("int64", "uint64"), ("float32", "int16"), ("uint16", "int32"), ("complex128", "int32"),
+                 ("float16", "float32"), ("bool", "int8")]
+        for dx, dy in mixed:
+            for shape in ((), (3,), (9,)):
+                x = _poly_coef(shape, dx, seed=9)
+                y = _poly_coef(shape, dy, seed=10)
+                z = _poly_coef(shape, dy, seed=11)
+                for dg in ((1, 2), (3, 3)):
+                    dl = list(dg)
+                    emit(op2, {"x": A(x), "y": A(y), "deg": dl}, lambda: v2(x, y, dl), "mixed_dtypes",
+                         f"{op2}/mixed/{dx}/{dy}/{shape}/{dg}")
+                emit(op3, {"x": A(x), "y": A(y), "z": A(z), "deg": [1, 2, 1]}, lambda: v3(x, y, z, [1, 2, 1]),
+                     "mixed_dtypes", f"{op3}/mixed/{dx}/{dy}/{shape}")
+                emit(op3, {"x": A(y), "y": A(x), "z": A(x), "deg": [2, 1, 1]}, lambda: v3(y, x, x, [2, 1, 1]),
+                     "mixed_dtypes", f"{op3}/mixed_rev/{dx}/{dy}/{shape}")
+        # special and full-mantissa values in both coordinates (the products' NaN / inf / complex forms)
+        for dt in float_dtypes:
+            sx = _pv_special(dt)
+            sy = np.roll(sx, 5).copy()
+            sz = np.roll(sx, 2).copy()
+            for dg in ((0, 0), (1, 1), (2, 3)):
+                dl = list(dg)
+                emit(op2, {"x": A(sx), "y": A(sy), "deg": dl}, lambda: v2(sx, sy, dl), "special_2d", f"{op2}/spec/{dt}/{dg}")
+            emit(op3, {"x": A(sx), "y": A(sy), "z": A(sz), "deg": [1, 2, 1]}, lambda: v3(sx, sy, sz, [1, 2, 1]),
+                 "special_3d", f"{op3}/spec/{dt}")
+            for n in (1, 3, 9):
+                rx = _pc_random((n,), dt, 3600 + n)
+                ry = _pc_random((n,), dt, 3700 + n)
+                rz = _pc_random((n,), dt, 3800 + n)
+                emit(op2, {"x": A(rx), "y": A(ry), "deg": [3, 4]}, lambda: v2(rx, ry, [3, 4]), "cfull_2d", f"{op2}/rand/{dt}/{n}")
+                emit(op3, {"x": A(rx), "y": A(ry), "z": A(rz), "deg": [2, 2, 3]}, lambda: v3(rx, ry, rz, [2, 2, 3]),
+                     "cfull_3d", f"{op3}/rand/{dt}/{n}")
+        # point layouts: each coordinate read in place with its own strides (a non-flat one copied first)
+        for dt in ("float64", "complex128", "int32"):
+            for shape in ((3, 4), (2, 3, 2)):
+                bx = _poly_coef(shape, dt, seed=12)
+                by = _poly_coef(shape, dt, seed=13)
+                vx = nd_views(bx)
+                vy = nd_views(by)
+                for (nx, bxb, bxv), (ny, byb, byv) in zip(vx, vy[1:] + vy[:1]):
+                    emit(op2, {"x": A(bxb, bxv), "y": A(byb, byv), "deg": [2, 1]}, lambda: v2(bxv, byv, [2, 1]),
+                         f"nd2_{nx}_{ny}", f"{op2}/lay/{dt}/{shape}/{nx}/{ny}")
+                    emit(op3, {"x": A(bxb, bxv), "y": A(byb, byv), "z": A(bxb, bxv), "deg": [1, 1, 2]},
+                         lambda: v3(bxv, byv, bxv, [1, 1, 2]), f"nd3_{nx}_{ny}", f"{op3}/lay/{dt}/{shape}/{nx}/{ny}")
+            b1 = _poly_fill(7, dt, seed=14)
+            b2 = _poly_fill(7, dt, seed=15)
+            lx = _ps_layouts(b1)
+            ly = _ps_layouts(b2)
+            for (nx, ax), (ny, ay) in zip(lx, ly[2:] + ly[:2]):
+                emit(op2, {"x": ax, "y": ay, "deg": [2, 2]}, lambda: v2(ax.view, ay.view, [2, 2]), f"lay1_{nx}_{ny}",
+                     f"{op2}/lay1/{dt}/{nx}/{ny}")
+            src = b1[:1].copy()
+            bc = np.broadcast_to(src, (7,))
+            emit(op2, {"x": A(src, bc), "y": A(b2), "deg": [1, 3]}, lambda: v2(bc, b2, [1, 3]), "broadcast_1d",
+                 f"{op2}/lay1/{dt}/broadcast")
+        for shape in ((), (1,), (5,), (2, 3), (1, 1), (3, 1), (1, 4)):
+            x = np.zeros(shape) + 0.5
+            for dg in ((0, 0), (1, 2), (2, 0)):
+                dl = list(dg)
+                emit(op2, {"x": A(x), "y": A(x), "deg": dl}, lambda: v2(x, x, dl), "flags", f"{op2}/flags/{shape}/{dg}",
+                     facet="flags")
+            for dg in ((0, 0, 0), (1, 1, 2)):
+                dl = list(dg)
+                emit(op3, {"x": A(x), "y": A(x), "z": A(x), "deg": dl}, lambda: v3(x, x, x, dl), "flags",
+                     f"{op3}/flags/{shape}/{dg}", facet="flags")
+        # Python-typed points (stacked by np.asarray's coercion; a Python float is float64 there, np.float16 is not)
+        for pname, xv, yv in (("pyfloat", 0.5, 0.25), ("pyint", 1, 2), ("pybool", True, False), ("pycomplex", 1j, 2),
+                              ("list", [0.5, 1.5], [2, 3]), ("tuple", (0.5, 1.5), (2.0, 3.0)),
+                              ("nested", [[1, 2], [3, 4]], [[5, 6], [7, 8]]),
+                              ("f16_list", A(np.array([0.5, 1.5], np.float16)), [0.5, 1.0]),
+                              ("f16_0d_py", A(np.array(0.5, np.float16)), 0.5),
+                              ("npf16", np.float16(0.5), np.float16(1.5)), ("npf16_py", np.float16(0.5), 1.5),
+                              ("u64", [2 ** 64 - 1, 3], [1, 2]), ("arr_list", A(np.array([1.0, 2.0])), [3, 4]),
+                              ("f32_0d_pair", A(np.array(0.5, np.float32)), A(np.array(0.25, np.float32))),
+                              ("empty_lists", [], []), ("list_of_0d", [A(np.array(1.0)), A(np.array(2.0))], [3, 4])):
+            emit(op2, {"x": xv, "y": yv, "deg": [2, 1]}, lambda: v2(_ps_py(xv), _ps_py(yv), [2, 1]), "arg_points",
+                 f"{op2}/argpts/{pname}")
+            emit(op3, {"x": xv, "y": yv, "z": xv, "deg": [1, 1, 1]}, lambda: v3(_ps_py(xv), _ps_py(yv), _ps_py(xv), [1, 1, 1]),
+                 "arg_points", f"{op3}/argpts/{pname}")
+
+        # (G) argument kinds and errors, NumPy's order
+        xg = np.array([0.5, -1.5, 2.0])
+        deg_kinds = [
+            ("int", 3), ("true", True), ("false", False), ("zero", 0), ("neg", -1), ("neg_big", -2 ** 70),
+            ("0d_i8", A(np.array(2, np.int8))), ("0d_u64", A(np.array(2, np.uint64))), ("0d_i32", A(np.array(2, np.int32))),
+            ("0d_bool", A(np.array(True))), ("0d_f64", A(np.array(2.0))), ("0d_f16", A(np.array(2.0, np.float16))),
+            ("0d_f32", A(np.array(2.5, np.float32))), ("0d_c", A(np.array(2 + 0j))), ("0d_neg", A(np.array(-1))),
+            ("1d_i", A(np.array([2]))), ("1d_i2", A(np.array([1, 2]))), ("2d_i", A(np.array([[2]]))), ("1d_f", A(np.array([2.0]))),
+            ("npf16", np.float16(2)), ("npf16_1000", np.float16(1000)), ("float", 2.0), ("float_frac", 1.5),
+            ("negzero", -0.0), ("f_1e20", 1e20), ("f_inf", float("inf")), ("f_nan", float("nan")), ("f_neg", -1.0),
+            ("f_small", 1e-7), ("complex", 2 + 0j), ("complex_j", 1j), ("complex_neg0", complex(-0.0, 1.0)),
+            ("str", "2"), ("str_abc", "abc"), ("none", None), ("list", [2]), ("list2", [1, 2]), ("tuple", (2,)),
+            ("tuple2", (1, 2)), ("list_f", [2.0]), ("list_mixed", [1, "a", None, 2.5]), ("tuple_empty", ()),
+            ("list_empty", []), ("list_nested", [[1, 2], [3]]), ("list_arr", [A(np.array([1.5]))]),
+            ("list_0d", [A(np.array(2.0))]), ("list_npf16", [np.float16(2)]), ("tuple_str", ("a", "b'c")),
+            ("big_max", 2 ** 63 - 1), ("big_max2", 2 ** 63 - 2), ("big_62", 2 ** 62), ("big_60", 2 ** 60),
+            ("big_64", 2 ** 64), ("big_100", 2 ** 100),
+        ]
+        for dname, dv in deg_kinds:
+            emit(op1, {"x": A(xg), "deg": dv}, lambda: v1(xg, _ps_py(dv)), "arg_deg", f"{op1}/argdeg/{dname}")
+        e0 = np.zeros(0)
+        for dname, dv in (("big_62", 2 ** 62), ("big_max", 2 ** 63 - 1), ("big_60_2x0", 2 ** 60)):
+            xe = e0 if dname != "big_60_2x0" else np.zeros((2, 0))
+            emit(op1, {"x": A(xe), "deg": dv}, lambda: v1(xe, dv), "arg_deg", f"{op1}/argdeg_empty/{dname}")
+        # the degree is checked before x is converted (a VALID degree would let NumPy compute `x + 0.0` with the str /
+        # object array — where NumSharp refuses it — so only the degree errors that come first are recorded here)
+        for dname, dv in (("neg", -1), ("frac", 1.5), ("none", None)):
+            for xname, xv in (("str", "abc"), ("none", None), ("ragged", [[1, 2], [3]]), ("obj", [1, None]),
+                              ("bigint", [2 ** 70])):
+                emit(op1, {"x": xv, "deg": dv}, lambda: v1(xv, _ps_py(dv)), "arg_order", f"{op1}/order/{xname}/{dname}")
+        for xname, xv in (("ragged", [[1, 2], [3]]), ("ragged_deep", [[[1], [1, 2]]]), ("ragged_depth", [[1], [[2]]]),
+                          ("ragged_arrays", [A(np.zeros(2)), A(np.zeros(3))])):
+            for dv in (2, 2 ** 63 - 1):
+                emit(op1, {"x": xv, "deg": dv}, lambda: v1(_ps_py(xv), dv), "arg_order", f"{op1}/ragged/{xname}/{dv}")
+        x_kinds = [("pyint", 3), ("pyfloat", 0.5), ("pycomplex", 0.5j), ("pybool", True), ("list_int", [1, 2]),
+                   ("list_float", [0.5, -1.5]), ("tuple", (0.5, 1.0)), ("nested", [[0.5, 1], [2, 3]]),
+                   ("list_bool", [True, False]), ("list_npf16", [np.float16(0.5), np.float16(1)]),
+                   ("list_npf16_py", [np.float16(0.5), 1.0]), ("empty", []), ("empty_nested", [[], []]),
+                   ("u64max", [2 ** 64 - 1]), ("list_complex", [1j, 2]), ("npf16", np.float16(0.5)),
+                   ("list_0d", [A(np.array(0.5, np.float32)), A(np.array(1.5, np.float32))]),
+                   ("list_arrays", [A(np.array([1.0, 2.0])), A(np.array([3.0, 4.0]))]),
+                   ("tuple_nested", ((1, 2), (3, 4))), ("negzero", [-0.0, 0.0])]
+        for xname, xv in x_kinds:
+            for d in (0, 2):
+                emit(op1, {"x": xv, "deg": d}, lambda: v1(_ps_py(xv), d), "arg_x", f"{op1}/argx/{xname}/{d}")
+        # 2-D / 3-D degree containers
+        a2 = np.array([0.5, 0.25])
+        b2 = np.array([0.1, 0.2])
+        deg2_kinds = [
+            ("int", 2), ("float", 2.0), ("none", None), ("0d", A(np.array(2))), ("str_ab", "ab"), ("str_12", "12"),
+            ("str_1", "1"), ("bool", True), ("complex", 1j), ("npf16", np.float16(2)), ("list3", [1, 1, 1]), ("list1", [1]),
+            ("list0", []), ("tuple", (1, 2)), ("arr_f", A(np.array([1.0, 2.0]))), ("arr_bool", A(np.array([True, False]))),
+            ("arr_2d_col", A(np.array([[1], [2]]))), ("arr_2d_row", A(np.array([[1, 2]]))),
+            ("arr_u8", A(np.array([1, 2], np.uint8))), ("arr_i64", A(np.array([2, 1]))), ("list_nested", [[1], [2]]),
+            ("list_f", [1, 2.0]), ("list_neg_first", [-1, 1.5]), ("list_f_first", [1.5, -1]), ("list_ok", [1, 2]),
+            ("list_none", [None, 1]), ("list_str", ["1", 2]), ("list_big", [2 ** 63, 1]), ("list_true", [True, 2]),
+            ("list_npf16", [np.float16(1), 1]), ("list_0d", [A(np.array(1)), A(np.array(2, np.int16))]),
+            ("list_neg_second", [1, -1]), ("list_maxdim_second", [1, 2 ** 63 - 1]), ("list_toobig", [2 ** 61, 1]),
+            ("list_toobig_then_frac", [2 ** 61, 1.5]), ("list_frac_then_toobig", [1.5, 2 ** 61]), ("list_c", [1j, 1]),
+        ]
+        for dname, dv in deg2_kinds:
+            emit(op2, {"x": A(a2), "y": A(b2), "deg": dv}, lambda: v2(a2, b2, _ps_py(dv)), "arg_deg2", f"{op2}/argdeg/{dname}")
+        deg3_kinds = [("int", 2), ("none", None), ("0d", A(np.array(1))), ("str_abc", "abc"), ("str_12", "12"), ("list2", [1, 2]),
+                      ("list4", [1, 2, 3, 4]), ("tuple", (1, 2, 0)), ("arr_i", A(np.array([1, 0, 2]))),
+                      ("arr_f", A(np.array([1.0, 0.0, 2.0]))), ("list_neg_third", [1, 1, -1]), ("list_frac_third", [1, 1, 0.5]),
+                      ("list_maxdim_third", [1, 1, 2 ** 63 - 1]), ("list_toobig_first", [2 ** 61, 1, 1.5])]
+        for dname, dv in deg3_kinds:
+            emit(op3, {"x": A(a2), "y": A(b2), "z": A(a2), "deg": dv}, lambda: v3(a2, b2, a2, _ps_py(dv)), "arg_deg3",
+                 f"{op3}/argdeg/{dname}")
+        # points: shape mismatches (np.asarray's ragged text), error order, empty points (the reshape error)
+        z2 = np.zeros(0)
+        for oname, xv, yv, dv in (
+                ("ragged_bad_deg", [1, 2], [3, 4, 5], [1, -1]), ("ragged_deg_int", [1, 2], [3], 2),
+                ("ragged_deg_len3", [1, 2], [3], [1, 1, 1]), ("str_deg_int", "ab", "cd", 2),
+                ("str_bad_deg", "ab", "cd", [1, -1]), ("none_deg_len1", None, None, [1]),
+                ("empty_bad_deg2", A(z2), A(z2), [1, -1]), ("empty_bad_deg1", A(z2), A(z2), [-1, 1]),
+                ("empty_ok", A(z2), A(z2), [1, 2]), ("empty_0x3", A(np.zeros((0, 3))), A(np.zeros((0, 3))), [1, 1]),
+                ("empty_2x0", A(np.zeros((2, 0))), A(np.zeros((2, 0))), [1, 2]), ("empty_lists", [], [], [0, 0]),
+                ("scalar_1d", 0.5, [1.0, 2.0], [1, 1]), ("0d_1d1", A(np.array(0.5)), A(np.array([2.0])), [1, 1]),
+                ("1d_2d", [0.5, 1], [[1.0, 2.0]], [1, 1]), ("arrays_2_3", A(np.zeros(2)), A(np.zeros(3)), [1, 1]),
+                ("arrays_23_24", A(np.zeros((2, 3))), A(np.zeros((2, 4))), [1, 1]),
+                ("empty_huge", A(z2), A(z2), [2 ** 62, 1]), ("empty_maxdim", A(z2), A(z2), [1, 2 ** 63 - 1]),
+                ("ragged_huge", [1, 2], [3], [2 ** 63 - 1, 1])):
+            emit(op2, {"x": xv, "y": yv, "deg": dv}, lambda: v2(_ps_py(xv), _ps_py(yv), _ps_py(dv)), "arg_order2",
+                 f"{op2}/order/{oname}")
+        for oname, xv, yv, zv, dv in (
+                ("empty_ok", A(z2), A(z2), A(z2), [1, 2, 1]), ("empty_3x0x2", A(np.zeros((3, 0, 2))), A(np.zeros((3, 0, 2))),
+                                                                A(np.zeros((3, 0, 2))), [1, 2, 1]),
+                ("ragged_third", [1, 2], [3, 4], [5], [1, 1, 1]), ("empty_bad_deg3", A(z2), A(z2), A(z2), [1, 1, -1])):
+            emit(op3, {"x": xv, "y": yv, "z": zv, "deg": dv}, lambda: v3(_ps_py(xv), _ps_py(yv), _ps_py(zv), _ps_py(dv)),
+                 "arg_order3", f"{op3}/order/{oname}")
+
+        # (I) inputs longer than one kernel block — two bases carry it (the block loop is the same for every basis)
+        if p in ("cheb", "lag"):
+            for dt, n, d in (("float32", 5000, 3), ("float16", 9000, 2), ("complex128", 1700, 3), ("float64", 3100, 4),
+                             ("int16", 3500, 3)):
+                xb = _pc_random((n,), dt, 4000 + n) if np.dtype(dt).kind in "fc" else _poly_fill(n, dt, 5)
+                emit(op1, {"x": A(xb), "deg": d}, lambda: v1(xb, d), "blocks_1d", f"{op1}/blocks/{dt}/{n}/{d}")
+            xs = _pc_random((3000,), "float32", 4100)
+            ss = np.zeros(6000, np.float32)
+            ss[::2] = xs
+            emit(op1, {"x": A(ss, ss[::2]), "deg": 3}, lambda: v1(ss[::2], 3), "blocks_strided", f"{op1}/blocks/strided")
+
+    # (H) Char: NumSharp's uint16-like dtype converts to float64 exactly as uint16 does (the house weave).
+    cases += _relabel_dtype([c for c in cases if "/dt/uint16/" in (c.get("id") or "") and not c.get("expects_throw")],
+                            "uint16", "char")
+    if skipped[0]:
+        print(f"  (skipped {skipped[0]} refused / complex64 / object cells)")
+    return cases
+
+
 # ---- numpy.polynomial series algebra (plan docs/plans/numpy-polynomial.md U2) -------------------------------------
 #
 # {p}mulx(c), {p}mul(c1, c2), {p}div(c1, c2) -> (quo, rem), {p}pow(c, pow, maxpower), {p}fromroots(roots) for the six
@@ -13464,6 +13861,9 @@ def main():
     elif mode == "polycalc":
         cases = gen_polycalc()                                          # numpy.polynomial calculus: {p}der / {p}int (U4)
         write_jsonl(os.path.join(corpus_dir, "polycalc.jsonl"), cases)
+    elif mode == "polyvander":
+        cases = gen_polyvander()                                        # numpy.polynomial Vandermonde family (U5)
+        write_jsonl(os.path.join(corpus_dir, "polyvander.jsonl"), cases)
     elif mode == "polyalgebra":
         # The BLAS-bound products (np.convolve's vector-kernel regime) are host-pinned like linalg_parity: the bytes
         # come out of numpy's own scipy-openblas at threads=1 (forced first), so the pin travels with them.
@@ -13473,7 +13873,7 @@ def main():
         write_jsonl(os.path.join(corpus_dir, "polyalgebra_parity.jsonl"), host)
         write_jsonl(os.path.join(corpus_dir, "polyalgebra_parity.host.jsonl"), [blas_identity()])
     else:
-        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | sinc | i0 | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows | evaluate | real_if_close | instance | emath | polyeval | polyseries | polycalc | polyalgebra)")
+        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | sinc | i0 | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows | evaluate | real_if_close | instance | emath | polyeval | polyseries | polycalc | polyvander | polyalgebra)")
         sys.exit(2)
 
 

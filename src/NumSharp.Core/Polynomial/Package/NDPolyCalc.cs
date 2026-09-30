@@ -980,8 +980,9 @@ namespace NumSharp
         /// <summary>A view of <paramref name="a"/>'s storage with explicit dims, element strides and offset.</summary>
         /// <param name="a">The array.</param><param name="dims">Dims.</param><param name="strides">Element strides.</param>
         /// <param name="offset">Element offset into the storage.</param>
-        /// <returns>The view (writes go through).</returns>
-        private static NDArray View(NDArray a, long[] dims, long[] strides, long offset)
+        /// <returns>The view (writes go through). Internal: the Vandermonde family (<see cref="NDPolyVander"/>) builds NumPy's
+        ///     moveaxis / reshape result views with it too.</returns>
+        internal static NDArray View(NDArray a, long[] dims, long[] strides, long offset)
         {
             var shape = new Shape(dims, strides, offset, a.Shape.bufferSize);
             return new NDArray(a.Storage.Alias(ref shape), a.TensorEngine, skipEngineResolve: true);

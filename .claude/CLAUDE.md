@@ -3117,6 +3117,65 @@ Traps:
   the limit comparison's / len()'s) rather than by hand — the filter keeps exactly the errors NumPy raises
   before it computes.
 
+### Polynomial package — Vandermonde family (U5)
+`{p}vander`, `{p}vander2d` and `{p}vander3d` for the six bases (18 names)
+
+Plan `docs/plans/numpy-polynomial.md` (U5 delivered). **Bit-exact with NumPy 2.4.2**: oracle tier
+`polyvander.jsonl` (16,612 cases, 0 excused) and unit tests `Polynomial/PolynomialVanderTests.cs` (16). **Perf
+(NPY/NS, `benchmark/polynomial/polyvander_*`, 480 cells, every one SHA-256-checked): min 1.55×, geomean 10.43×.**
+
+- **Driver** (`Polynomial/Package/NDPolyVander.cs`): NumPy's statements in NumPy's order, which is also its error
+  order.
+  - 1-D: `_as_int(deg)` → `deg must be non-negative` → `np.array(x, ndmin=1)` → `np.empty`'s dimension conversion
+    (`Maximum allowed dimension exceeded` at ≥ 2^63 − 1 rows, AllocationGuard's `array is too big` below it,
+    MemoryError past the allocator) → the recurrence → `np.moveaxis`.
+  - 2-D / 3-D run `_vander_nd`'s order: `len(deg)` (`object of type 'int' has no len()`, `len() of unsized object`) →
+    `Expected N dimensions of degrees, got K` → `np.asarray(points) + 0.0` (strong promotion; a ragged stack is the
+    inhomogeneous ValueError) → per dimension its checks and allocation, the product's from the second dimension on →
+    an empty stack's reshape error.
+  - The result is always a VIEW (OWNDATA false): F-contiguous for 1-D points, C and F for a scalar / degree 0 / empty,
+    neither for N-D points.
+- **The degree text is `format(deg, '')`, not `str()`** (`PolyIndexArgument` in `NDPolyIndexArgument.cs`): a 0-d
+  array formats through its scalar (`np.float16(1000)` → `1000.0`), an ndim ≥ 1 array through `array_str`, a list /
+  tuple through its items' REPR (`[np.float16(1e+03), array([1.5]), (2,)]`). `operator.index` takes bool, every
+  integer width, `BigInteger`, char and a 0-d integer array — not a 0-d bool.
+- **Kernel** (`Backends/Kernels/Direct/DirectILKernelGenerator.PolyVander.cs`):
+  - the six recurrences are DATA (`PolyVanderRoutines`) in U4's step language, run forward, NumPy's source
+    expressions token for token (`legvander`'s `v[i-1]*x*(2i-1)` is `(v[i-1]*x)*(2i-1)`);
+  - one whole-array kernel per (basis, dtype, 1/2/3-D, source dtypes, streamed), as four DynamicMethod stages:
+    - LOAD, fusing the conversion with NumPy's `+ 0.0` (-0.0 → +0.0, a sNaN quieted with its payload kept);
+    - RECURRENCE over a block of points;
+    - PRODUCT, writing each output row `(a*(dy+1)+b)[*(dz+1)+c]` straight into the final layout (3-D through a
+      scratch row holding NumPy's rounded `V_x[a]*V_y[b]` temporary);
+    - ROOT, walking the blocks;
+  - blocks are sized so every per-dimension matrix stays in L1/L2 (NumPy materializes three to five full
+    temporaries per degree);
+  - a 2-D / 3-D stack of same-shape NDArrays is read IN PLACE per coordinate (each loaded from its own dtype: the
+    two-step `stack + 0.0` rounds at most once, the same value).
+- **Streamed products for results ≥ 32 MiB** (`NDPolyVander.NonTemporalMinBytes`, `PolyVanderKey.NonTemporal`):
+  - each product row runs a scalar head up to the store alignment, then aligned non-temporal vector stores
+    (`vmovntdq`; 16-byte for float16), then the scalar tail; the stage ends with `sfence`; the bytes are identical;
+  - a 96.8 MB result takes ~12 ms instead of 15–18 ms, and a reused 63.9 MB buffer 1.6 instead of 3.7 ms;
+  - test hooks `NDPolyVander.NonTemporalOverride` (force on / off) and `BlockOverride` (tiny blocks).
+- **The floor** is the six `(100000, 121)` 2-D cells, at 1.55–1.66×. A fresh result above the pool's 64 MiB cap costs
+  ~0.44 µs of demand-zero fault per 4 KB page on both sides (~10.4 ms of the ~14 ms). The float16 cells (1.65–2.7×)
+  are U4's open float16 lever.
+
+Traps:
+- **NumPy's float multiply keeps the SECOND operand's NaN** when both are NaN (MSVC `FLOAT/DOUBLE_multiply`, every
+  loop length). x86 `mulpd` keeps the first, and RyuJIT may swap a commutative multiply's operands. The outer product
+  is the one place two independently sourced NaNs meet. `PolyVanderOps.Mul*` blends explicitly, but only when the
+  product holds a NaN lane: a NaN-free product had no NaN operand. A random corpus never pairs two NaNs; it took
+  special values in BOTH coordinates.
+- **A valid huge degree over an object x**: NumPy computes `x + 0.0` with Python objects BEFORE the dimension error,
+  where NumSharp refuses the object stack. Only degree errors that come first are corpus cases.
+- **NumPy hangs on a huge degree over EMPTY points whose byte count does not overflow** (its Python loop runs 2^50
+  times over nothing). NumSharp returns at once; never put one in a generator.
+- **A page-fault-bound benchmark cell measures the host.** Fresh >64 MiB results swing with the OS's zeroed-page list
+  (the same streamed kernel measured 11.8–16.2 ms across best-of-9 runs), so the biggest cells run best-of-9 on
+  both sides. A/B such a kernel change in ONE process,
+  interleaving the configurations round by round.
+
 ### Random (`np.random.*`)
 `bernoulli`, `beta`, `binomial`, `chisquare`, `choice`, `dirichlet`, `exponential`, `f`, `gamma`, `geometric`, `get_bit_generator`, `gumbel`, `hypergeometric`, `laplace`, `logistic`, `lognormal`, `logseries`, `multinomial`, `multivariate_normal`, `negative_binomial`, `noncentral_chisquare`, `noncentral_f`, `normal`, `pareto`, `permutation`, `poisson`, `power`, `rand`, `randint`, `randn`, `random_sample`, `rayleigh`, `seed`, `set_bit_generator`, `shuffle`, `standard_cauchy`, `standard_exponential`, `standard_gamma`, `standard_normal`, `standard_t`, `triangular`, `uniform`, `vonmises`, `wald`, `weibull`, `zipf`
 
@@ -3385,6 +3444,7 @@ non-structured subset would only re-expose `loadtxt`.
 | numpy.polynomial additive family + polyutils (U1) | `Polynomial/Package/np.polynomial.polyutils.cs` (`PolyUtilsModule` facade, incl. the generic tuple overloads), `Polynomial/Package/NDPolyNumber.cs` (`PolyNumber`: Python / NumPy-scalar / ndarray operand + NumPy's operator dispatch), `Polynomial/Package/NDPolySeries.cs` (as_series/trimseq/trimcoef/getdomain/mapparms/mapdomain/{p}add/sub/line/constants + the `PyNum` machine-number lane), `Backends/Kernels/Direct/DirectILKernelGenerator.PolySeries.cs` (trim/combine/tolerance/cast/scalarmath IL kernels + the fused mapparms kernel), CPython arithmetic in `ILKernelGenerator.Polynomial.cs` (`PyScalar`: `IntTrueDivide`, `ComplexQuotient`, NaN-priority `Float*`/`Complex*` helpers). Oracle `polyseries.jsonl` via `OpRegistry.PolySeries.cs` |
 | numpy.polynomial calculus family (U4) | `Polynomial/Package/NDPolyCalc.cs` (`{p}der`/`{p}int` driver: NumPy's prologue, one-buffer orchestration, the integral's lbnd correction, NumPy's result layouts, `PyVal1D`), `Backends/Kernels/Direct/DirectILKernelGenerator.PolyCalculus.cs` (`PolyCalcRoutines` recurrence tables + the per-(basis, direction, dtypes) whole-array kernel: load/convert/scale stage, recurrence stage, column blocks). Oracle `polycalc.jsonl` via `OpRegistry.PolySeries.cs`; benchmark `benchmark/polynomial/polycalc_*` |
 | numpy.polynomial series algebra (U2) | `Polynomial/Package/NDPolyAlgebra.cs` (engine: `PolySer`, the pooled per-thread `PolyArena`, the entry points, the shared statements — as_series, `{p}mulx`, `np.convolve`, `_div`/`_pow`/`_fromroots`), `NDPolyAlgebra.Bases.cs` (the recurrence products, polydiv / chebdiv, the ten conversions), `NDPolyPowerArgument.cs` (`int(pow)` / `power != pow` / `power > maxpower` for the object-typed `{p}pow` overloads), `Backends/Kernels/Direct/DirectILKernelGenerator.PolyAlgebra.cs` (house-kernel / mulx slot fronts + the fused chebmulx IL kernel), `Math/NDArray.SlidingDot{,.Long}.cs` (`SlidingCorrelateInto`, NumPy's per-dtype dotfunc models, the blocked long products). Oracle `polyalgebra.jsonl` + host-pinned `polyalgebra_parity.jsonl` via `OpRegistry.PolyAlgebra.cs`; benchmark `benchmark/polynomial/polyalg_*` |
+| numpy.polynomial Vandermonde family (U5) | `Polynomial/Package/NDPolyVander.cs` (`{p}vander`/`{p}vander2d`/`{p}vander3d` driver: NumPy's statement and error order, the in-place point sources, block sizing, the streamed-product switch), `NDPolyIndexArgument.cs` (`operator.index` + NumPy's `format(deg, '')` error text), `Backends/Kernels/Direct/DirectILKernelGenerator.PolyVander.cs` (`PolyVanderRoutines` recurrence tables, `PolyVanderOps` NaN-priority multiply + non-temporal stores, the load / recurrence / product / root stages). Oracle `polyvander.jsonl` via `OpRegistry.PolyVander.cs` + `OpRegistry.PolySeries.cs`; benchmark `benchmark/polynomial/polyvander_*` |
 | Grid / slice-expression DSL | `Creation/np.r_.cs` (`AxisConcatenator` + `RClass`), `Creation/np.c_.cs`, `Creation/np.ogrid.cs` (`OGridClass` + `OGridResult` + shared `nd_grid` helpers), `Creation/np.mgrid.cs` (`MGridClass` + `MGridResult`), `Creation/np.meshgrid.cs` (`MeshgridResult`), `Indexing/np.{ix_,s_}.cs` |
 | Array printing (NumPy parity) | `Backends/Printing/{PrintOptions,Dragon4,ElementFormatters,ArrayFormatter}.cs`, `APIs/np.array2string.cs`, `Casting/NDArray.ToString.cs` |
 | Iterators | `Backends/Iterators/NDIter.cs`, `NDIter.Detach.cs` (ref-struct → managed-owner bridge) |
