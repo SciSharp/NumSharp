@@ -784,7 +784,7 @@ namespace NumSharp.Tests.Fuzz
             ["errors_full.jsonl"] = 720,   // +87: curated §B1 recipes (reshape/expand_dims/flip/take/put/partition/linalg/fft), 50 distinct messages
             ["evaluate.jsonl"] = 11800,   // np.evaluate fused-tree tier (14,742 at 2026-09-08)
             ["fft.jsonl"] = 1700,
-            ["groupa.jsonl"] = 237,
+            ["groupa.jsonl"] = 590,   // 364 before the complex convolve / correlate section: infinities / NaNs (zdotu's C99 result) and one-element operands with their own strides (CDOUBLE_dot's plain loop) — 601
             ["iter.jsonl"] = 4400,
             ["logic.jsonl"] = 2648,   // +873: iscomplex/isreal widened to ALL dtypes (complex128) × EVERY layout
             ["manip.jsonl"] = 13397,
@@ -804,10 +804,10 @@ namespace NumSharp.Tests.Fuzz
             ["instance.jsonl"] = 7500,    // §D: ndarray.* instance surface — 13 NumPy dtypes + the char proxy weave (dtype-spread gate)
             ["emath.jsonl"] = 385,        // §A2/E5: np.emath scimath promotion (+ the unsigned lanes, dtype-spread gate)
             ["polyeval.jsonl"] = 19100,   // numpy.polynomial {p}val family (U3), 6 bases x the matrix above, + 4,392 single-element-broadcast cells, + 720 sequence / big-int x cells (J), + 1,890 array_like c / ordinate cells (K) — 19,216
-            ["polyseries.jsonl"] = 18600, // numpy.polynomial additive family + polyutils (U1): 6 bases + polyutils + constant facets — 15,950 cases at delivery, 18,437 since the parity audit's long-series / complex64-loop / block-boundary / getdomain-window sections (K-N), 18,621 with the tuple / nested-sequence section (O), 18,647 with trimseq of Python sequences (P), which this floor keeps from silently dropping out
+            ["polyseries.jsonl"] = 18690, // numpy.polynomial additive family + polyutils (U1): 6 bases + polyutils + constant facets — 15,950 cases at delivery, 18,437 since the parity audit's long-series / complex64-loop / block-boundary / getdomain-window sections (K-N), 18,621 with the tuple / nested-sequence section (O), 18,647 with trimseq of Python sequences (P), 18,698 with the deferred object / str refusal (Q), which this floor keeps from silently dropping out
             ["polycalc.jsonl"] = 26400,   // numpy.polynomial calculus family (U4): {p}der / {p}int x 6 bases, sections A-O of gen_polycalc — 21,646 at delivery, 27,526 with the argument-kind (M), zero-size / 5-D / extreme-int (N) and widened-scale (O) sections
-            ["polyalgebra.jsonl"] = 25500,   // numpy.polynomial series algebra (U2): mulx/mul/div/pow/fromroots x 6 bases + X2poly/poly2X x 5, sections A-K of gen_polyalgebra — 26,151 at delivery
-            ["polyalgebra_parity.jsonl"] = 175,   // U2's BLAS-bound products (host-pinned): 186 at delivery
+            ["polyalgebra.jsonl"] = 28100,   // numpy.polynomial series algebra (U2): mulx/mul/div/pow/fromroots x 6 bases + X2poly/poly2X x 5, sections A-L of gen_polyalgebra — 26,163 at delivery, 28,144 with the wholeness section (M: pow / maxpower argument kinds, the deferred object refusal, non-finite complex products — 43 of which moved here from the host tier)
+            ["polyalgebra_parity.jsonl"] = 135,   // U2's BLAS-bound products (host-pinned): 186 at delivery, 139 once complex products with infinities / NaNs below zdotu's vector block moved to the portable tier (the managed dot reproduces zdotu's C99 result and CDOUBLE_dot's plain loop)
             ["place.jsonl"] = 12,
             ["products.jsonl"] = 326,
             ["precision.jsonl"] = 80,

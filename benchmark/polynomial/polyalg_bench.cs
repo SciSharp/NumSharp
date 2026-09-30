@@ -54,33 +54,51 @@ if (args.Length > 1)
     }
 
 var P = np.polynomial;
-// Every facade member the manifest names, as a call taking the built arguments (+ the manifest's extra: pow).
-// A {p}div returns its two slots as an array of two.
-var fns = new Dictionary<string, Func<object[], JsonElement?, NDArray[]>>(StringComparer.Ordinal);
-void One(string name, Func<object[], JsonElement?, NDArray> f) => fns[name] = (a, x) => new[] { f(a, x) };
+// Every facade member the manifest names, as a call taking the built arguments (+ the manifest's extra, pre-decoded
+// once by MakeCall: the pow / maxpower arguments). A {p}div returns its two slots as an array of two.
+var fns = new Dictionary<string, Func<object[], PowArgs, NDArray[]>>(StringComparer.Ordinal);
+void One(string name, Func<object[], PowArgs, NDArray> f) => fns[name] = (a, x) => new[] { f(a, x) };
 void Two(string name, Func<object, object, (NDArray quo, NDArray rem)> f) => fns[name] = (a, _) => { var (q, r) = f(a[0], a[1]); return new[] { q, r }; };
-int Pow(JsonElement? x) => x.Value.GetProperty("pow").GetInt32();
+// A {p}pow cell binds the overload C# source spelling its arguments would: a plain int power with no limit or an
+// int? one (null / an int) the int overload, anything else the object overloads (K section).
+void PowFn(string name, Func<object, int, NDArray> intDefault, Func<object, int, int?, NDArray> intMax,
+           Func<object, object?, NDArray> objDefault, Func<object, object?, object?, NDArray> objMax)
+    => One(name, (a, x) => x.Pow is int k && (!x.HasMax || x.Max is null or int)
+        ? (x.HasMax ? intMax(a[0], k, (int?)x.Max) : intDefault(a[0], k))
+        : (x.HasMax ? objMax(a[0], x.Pow, x.Max) : objDefault(a[0], x.Pow)));
 One("polymulx", (a, _) => P.polynomial.polymulx(a[0])); One("polymul", (a, _) => P.polynomial.polymul(a[0], a[1]));
-Two("polydiv", P.polynomial.polydiv); One("polypow", (a, x) => P.polynomial.polypow(a[0], Pow(x)));
+Two("polydiv", P.polynomial.polydiv);
+PowFn("polypow", (c, k) => P.polynomial.polypow(c, k), (c, k, m) => P.polynomial.polypow(c, k, m),
+      (c, p) => P.polynomial.polypow(c, p), (c, p, m) => P.polynomial.polypow(c, p, m));
 One("polyfromroots", (a, _) => P.polynomial.polyfromroots(a[0]));
 One("chebmulx", (a, _) => P.chebyshev.chebmulx(a[0])); One("chebmul", (a, _) => P.chebyshev.chebmul(a[0], a[1]));
-Two("chebdiv", P.chebyshev.chebdiv); One("chebpow", (a, x) => P.chebyshev.chebpow(a[0], Pow(x)));
+Two("chebdiv", P.chebyshev.chebdiv);
+PowFn("chebpow", (c, k) => P.chebyshev.chebpow(c, k), (c, k, m) => P.chebyshev.chebpow(c, k, m),
+      (c, p) => P.chebyshev.chebpow(c, p), (c, p, m) => P.chebyshev.chebpow(c, p, m));
 One("chebfromroots", (a, _) => P.chebyshev.chebfromroots(a[0]));
 One("cheb2poly", (a, _) => P.chebyshev.cheb2poly(a[0])); One("poly2cheb", (a, _) => P.chebyshev.poly2cheb(a[0]));
 One("legmulx", (a, _) => P.legendre.legmulx(a[0])); One("legmul", (a, _) => P.legendre.legmul(a[0], a[1]));
-Two("legdiv", P.legendre.legdiv); One("legpow", (a, x) => P.legendre.legpow(a[0], Pow(x)));
+Two("legdiv", P.legendre.legdiv);
+PowFn("legpow", (c, k) => P.legendre.legpow(c, k), (c, k, m) => P.legendre.legpow(c, k, m),
+      (c, p) => P.legendre.legpow(c, p), (c, p, m) => P.legendre.legpow(c, p, m));
 One("legfromroots", (a, _) => P.legendre.legfromroots(a[0]));
 One("leg2poly", (a, _) => P.legendre.leg2poly(a[0])); One("poly2leg", (a, _) => P.legendre.poly2leg(a[0]));
 One("lagmulx", (a, _) => P.laguerre.lagmulx(a[0])); One("lagmul", (a, _) => P.laguerre.lagmul(a[0], a[1]));
-Two("lagdiv", P.laguerre.lagdiv); One("lagpow", (a, x) => P.laguerre.lagpow(a[0], Pow(x)));
+Two("lagdiv", P.laguerre.lagdiv);
+PowFn("lagpow", (c, k) => P.laguerre.lagpow(c, k), (c, k, m) => P.laguerre.lagpow(c, k, m),
+      (c, p) => P.laguerre.lagpow(c, p), (c, p, m) => P.laguerre.lagpow(c, p, m));
 One("lagfromroots", (a, _) => P.laguerre.lagfromroots(a[0]));
 One("lag2poly", (a, _) => P.laguerre.lag2poly(a[0])); One("poly2lag", (a, _) => P.laguerre.poly2lag(a[0]));
 One("hermmulx", (a, _) => P.hermite.hermmulx(a[0])); One("hermmul", (a, _) => P.hermite.hermmul(a[0], a[1]));
-Two("hermdiv", P.hermite.hermdiv); One("hermpow", (a, x) => P.hermite.hermpow(a[0], Pow(x)));
+Two("hermdiv", P.hermite.hermdiv);
+PowFn("hermpow", (c, k) => P.hermite.hermpow(c, k), (c, k, m) => P.hermite.hermpow(c, k, m),
+      (c, p) => P.hermite.hermpow(c, p), (c, p, m) => P.hermite.hermpow(c, p, m));
 One("hermfromroots", (a, _) => P.hermite.hermfromroots(a[0]));
 One("herm2poly", (a, _) => P.hermite.herm2poly(a[0])); One("poly2herm", (a, _) => P.hermite.poly2herm(a[0]));
 One("hermemulx", (a, _) => P.hermite_e.hermemulx(a[0])); One("hermemul", (a, _) => P.hermite_e.hermemul(a[0], a[1]));
-Two("hermediv", P.hermite_e.hermediv); One("hermepow", (a, x) => P.hermite_e.hermepow(a[0], Pow(x)));
+Two("hermediv", P.hermite_e.hermediv);
+PowFn("hermepow", (c, k) => P.hermite_e.hermepow(c, k), (c, k, m) => P.hermite_e.hermepow(c, k, m),
+      (c, p) => P.hermite_e.hermepow(c, p), (c, p, m) => P.hermite_e.hermepow(c, p, m));
 One("hermefromroots", (a, _) => P.hermite_e.hermefromroots(a[0]));
 One("herme2poly", (a, _) => P.hermite_e.herme2poly(a[0])); One("poly2herme", (a, _) => P.hermite_e.poly2herme(a[0]));
 
@@ -143,7 +161,7 @@ Func<NDArray[]> MakeCall(JsonElement cell)
             ? (object)arr.ToArray<double>().Select(x => (object)x).ToArray()
             : (object)arr;
     }).ToArray();
-    JsonElement? extra = cell.TryGetProperty("extra", out var e) ? e : null;
+    var extra = cell.TryGetProperty("extra", out var e) ? PowArgs.Decode(e) : default;
     return () => f(argv, extra);
 }
 
@@ -306,4 +324,41 @@ static byte[] CanonicalNaN(ReadOnlySpan<byte> bytes, NPTypeCode t)
             break;
     }
     return b;
+}
+
+/// <summary>
+///     A cell's pow / maxpower arguments as the C# values NumPy's spellings map to, decoded ONCE (an ndarray limit is
+///     built before timing, like NumPy's exists before its call): a JSON int is a Python int (an <see cref="int"/>, the
+///     literal a port writes), a JSON float a Python float, true / false a bool, null None; <c>{"f16": bits}</c> is
+///     np.float16 (<see cref="Half"/>), <c>{"nd0": v}</c> <c>np.array(v)</c>, <c>{"nd1": v}</c> <c>np.array([v])</c>.
+/// </summary>
+/// <param name="Pow">The power (null when the cell has none).</param>
+/// <param name="Max">The limit (null is None).</param>
+/// <param name="HasMax">The cell passes a limit (else the facade's default).</param>
+record struct PowArgs(object? Pow, object? Max, bool HasMax)
+{
+    /// <summary>Decodes a cell's <c>extra</c>.</summary>
+    /// <param name="e">The JSON object.</param>
+    /// <returns>The arguments.</returns>
+    public static PowArgs Decode(JsonElement e)
+    {
+        object? pow = e.TryGetProperty("pow", out var p) ? Value(p) : null;
+        bool hasMax = e.TryGetProperty("maxpower", out var m);
+        return new PowArgs(pow, hasMax ? Value(m) : null, hasMax);
+    }
+
+    /// <summary>One spec as its C# value (see the record's summary).</summary>
+    /// <param name="v">The JSON value.</param>
+    /// <returns>The value.</returns>
+    private static object? Value(JsonElement v) => v.ValueKind switch
+    {
+        JsonValueKind.Null => null,
+        JsonValueKind.True => true,
+        JsonValueKind.False => false,
+        JsonValueKind.Number => v.TryGetInt32(out int i) ? i : v.GetDouble(),
+        _ when v.TryGetProperty("f16", out var h) => BitConverter.UInt16BitsToHalf(Convert.ToUInt16(h.GetString()!.Substring(2), 16)),
+        _ when v.TryGetProperty("nd0", out var s) => NDArray.Scalar(s.GetInt64()),
+        _ when v.TryGetProperty("nd1", out var s1) => np.array(new[] { s1.GetInt64() }),
+        _ => throw new NotSupportedException($"pow / maxpower spec {v}"),
+    };
 }

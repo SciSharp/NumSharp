@@ -328,8 +328,8 @@ namespace NumSharp
         /// <param name="basis">The basis.</param>
         /// <param name="c">The series (anything <c>np.array</c> accepts, 1-D).</param>
         /// <returns>A new array of <c>np.common_type(c)</c>.</returns>
-        /// <exception cref="ValueError">An empty or non-1-d series, or no common type (a bool series).</exception>
-        /// <exception cref="NotSupportedException">A null or str series (NumPy's object / str arrays).</exception>
+        /// <exception cref="ValueError">An empty or non-1-d series, or no common type (a bool or str series).</exception>
+        /// <exception cref="NotSupportedException">An object series (None, or one holding None, a non-numeric object or a Python int past uint64), refused where NumPy starts computing with it.</exception>
         public static NDArray Mulx(PolyBasis basis, object c)
         {
             var v = NDPolySeries.AsCoefficientArray(c);
@@ -365,7 +365,7 @@ namespace NumSharp
         /// <param name="c2">Second series.</param>
         /// <returns>The product: a new array, or a view of one when trailing zeros were trimmed (as in NumPy).</returns>
         /// <exception cref="ValueError">An empty or non-1-d series, or no common type.</exception>
-        /// <exception cref="NotSupportedException">A null or str series.</exception>
+        /// <exception cref="NotSupportedException">An object series (None, or one holding None, a non-numeric object or a Python int past uint64 — NumPy computes with Python objects), refused where NumPy starts computing with it.</exception>
         public static NDArray Mul(PolyBasis basis, object c1, object c2)
         {
             var (v1, v2, t) = AsSeriesViews(c1, c2);
@@ -389,10 +389,23 @@ namespace NumSharp
         /// <returns>(quotient, remainder), each a new array or a view of one.</returns>
         /// <exception cref="ValueError">An empty or non-1-d series, or no common type.</exception>
         /// <exception cref="DivideByZeroException">The divisor is zero (NumPy's bare ZeroDivisionError).</exception>
-        /// <exception cref="NotSupportedException">A null or str series.</exception>
+        /// <exception cref="NotSupportedException">An object series (None, or one holding None, a non-numeric object or a Python int past uint64 — NumPy computes with Python objects), refused where NumPy starts computing with it.</exception>
         public static (NDArray quo, NDArray rem) Div(PolyBasis basis, object c1, object c2)
         {
-            var (v1, v2, t) = AsSeriesViews(c1, c2);
+            var v1 = NDPolySeries.AsCoefficientArray(c1);
+            var v2 = NDPolySeries.AsCoefficientArray(c2);
+            NDPolySeries.Validate(v1);
+            NDPolySeries.Validate(v2);
+            var views = new[] { v1, v2 };
+            if (!NDPolySeries.TryCommonType(views, out NPTypeCode t))
+            {
+                // as_series went on in the object dtype. NumPy's next statement, `if c2[-1] == 0: raise ZeroDivisionError`,
+                // still runs before any object arithmetic: a numeric divisor whose trimmed last coefficient is zero (a False
+                // bool included) raises it; an object or str divisor's last element never equals 0.
+                if (!v2.NonNumeric && IsZero(v2.Ptr + (NDPolySeries.TrimLength(v2) - 1) * v2.Stride, v2.Dtype))
+                    throw new DivideByZeroException(string.Empty);
+                throw NDPolySeries.FirstObjectRefusal(views);
+            }
             var a = PolyArena.Enter();
             try
             {
@@ -419,12 +432,14 @@ namespace NumSharp
         /// <param name="maxpower">The limit, or null for none.</param>
         /// <returns>The power series.</returns>
         /// <exception cref="ValueError">An invalid series, a negative power, or a power above <paramref name="maxpower"/>.</exception>
+        /// <exception cref="NotSupportedException">An object series (None, a non-numeric object, an oversized Python int —
+        ///     NumPy computes with Python objects), once the power checks have passed.</exception>
         public static NDArray Pow(PolyBasis basis, object c, long power, long? maxpower)
         {
             var v = NDPolySeries.AsCoefficientArray(c);
             NDPolySeries.Validate(v);
-            NPTypeCode t = NDPolySeries.CommonType(new[] { v });
-            return PowChecked(basis, v, t, power, maxpower);
+            bool numeric = NDPolySeries.TryCommonType(new[] { v }, out NPTypeCode t);
+            return PowChecked(basis, v, numeric, t, power, maxpower);
         }
 
         /// <summary>
@@ -434,17 +449,37 @@ namespace NumSharp
         /// </summary>
         /// <param name="basis">The basis.</param>
         /// <param name="v">The series' view (validated).</param>
-        /// <param name="t">Its common type.</param>
+        /// <param name="numeric">The series has a common type (false: an object series, whose refusal is raised once the
+        ///     checks have passed — NumPy would then compute with Python objects, even for power 0 or 1, which return an
+        ///     object array).</param>
+        /// <param name="t">Its common type (when <paramref name="numeric"/>).</param>
         /// <param name="power">The integer power.</param>
         /// <param name="maxpower">The limit, or null for none.</param>
         /// <returns>The power series.</returns>
         /// <exception cref="ValueError">A negative power, or one above <paramref name="maxpower"/>.</exception>
-        private static NDArray PowChecked(PolyBasis basis, in PolySeriesView v, NPTypeCode t, long power, long? maxpower)
+        /// <exception cref="NotSupportedException">An object series.</exception>
+        private static NDArray PowChecked(PolyBasis basis, in PolySeriesView v, bool numeric, NPTypeCode t, long power, long? maxpower)
         {
             if (power < 0)
                 throw new ValueError("Power must be a non-negative integer.");
             if (maxpower is long mp && power > mp)
                 throw new ValueError("Power is too large");
+            if (!numeric)
+                throw v.Refusal;
+            return PowProduct(basis, v, t, power);
+        }
+
+        /// <summary>
+        ///     The body of <c>_pow</c> / <c>chebpow</c> after every check: <c>[1]</c> of the series' dtype for 0, the trimmed
+        ///     series for 1, otherwise the repeated product.
+        /// </summary>
+        /// <param name="basis">The basis.</param>
+        /// <param name="v">The series' view (validated, numeric).</param>
+        /// <param name="t">Its common type.</param>
+        /// <param name="power">The power (≥ 0).</param>
+        /// <returns>The power series.</returns>
+        private static NDArray PowProduct(PolyBasis basis, in PolySeriesView v, NPTypeCode t, long power)
+        {
             long n = NDPolySeries.TrimLength(v);
             var a = PolyArena.Enter();
             try
@@ -471,12 +506,13 @@ namespace NumSharp
         ///     negative power; a power above <paramref name="maxpower"/>.</exception>
         /// <exception cref="OverflowException"><c>cannot convert float infinity to integer</c>, or a power beyond int64
         ///     (NumPy would loop until memory runs out).</exception>
+        /// <exception cref="NotSupportedException">An object series, once the power checks have passed.</exception>
         public static NDArray Pow(PolyBasis basis, object c, double pow, long? maxpower)
         {
             // as_series runs BEFORE int(pow): an invalid series is reported first.
             var v = NDPolySeries.AsCoefficientArray(c);
             NDPolySeries.Validate(v);
-            NPTypeCode t = NDPolySeries.CommonType(new[] { v });
+            bool numeric = NDPolySeries.TryCommonType(new[] { v }, out NPTypeCode t);
             if (double.IsNaN(pow))
                 throw new ValueError("cannot convert float NaN to integer");
             if (double.IsInfinity(pow))
@@ -487,13 +523,60 @@ namespace NumSharp
             if (truncated >= 9.2233720368547758E18)
             {
                 // int(pow) is a Python int past int64: `power > maxpower` still decides for a finite limit; without one NumPy
-                // would multiply until memory runs out.
+                // would multiply until memory runs out — or, for an object series, fail in its first object product.
                 if (maxpower is not null)
                     throw new ValueError("Power is too large");
+                if (!numeric)
+                    throw v.Refusal;
                 throw new OverflowException($"power {pow} is beyond int64: NumPy would run out of memory computing it");
             }
-            return PowChecked(basis, v, t, (long)truncated, maxpower);
+            return PowChecked(basis, v, numeric, t, (long)truncated, maxpower);
         }
+
+        /// <summary>
+        ///     <c>{p}pow(c, pow, maxpower)</c> for ANY power and limit argument — NumPy's three statements
+        ///     <c>power = int(pow)</c>, <c>if power != pow or power &lt; 0</c>, <c>elif maxpower is not None and power &gt;
+        ///     maxpower</c> with CPython's and NumPy's semantics for every C# value (<see cref="PolyPowerArgument"/>), after
+        ///     <c>as_series</c> and before the product.
+        /// </summary>
+        /// <param name="basis">The basis.</param>
+        /// <param name="c">The series.</param>
+        /// <param name="pow">The power: a Python int / bool / float, np.float16 (Half), a NumPy integer scalar (char),
+        ///     decimal, a str, a 0-d NDArray — or anything else, which raises NumPy's error for it.</param>
+        /// <param name="maxpower">The limit: null for None (no limit), otherwise compared as Python compares
+        ///     <c>power &gt; maxpower</c>.</param>
+        /// <returns>The power series.</returns>
+        /// <exception cref="ValueError">An invalid series; <c>cannot convert float NaN to integer</c> or <c>invalid literal
+        ///     for int() with base 10: '…'</c>; <c>Power must be a non-negative integer.</c>; <c>Power is too large</c>; an
+        ///     ndarray limit with no element or several (NumPy's truth-value texts).</exception>
+        /// <exception cref="TypeError">A power int() refuses (complex, None, list, tuple, an ndarray of one or more dims), or
+        ///     a limit that does not compare with an int (complex, str, list, tuple).</exception>
+        /// <exception cref="OverflowException"><c>cannot convert float infinity to integer</c>; a power too large for the
+        ///     limit's comparison dtype; a power beyond int64 with no limit (NumPy would loop until memory runs out).</exception>
+        /// <exception cref="NotSupportedException">An object series, once the power checks have passed.</exception>
+        public static NDArray Pow(PolyBasis basis, object c, object pow, object maxpower)
+        {
+            // `[c] = as_series([c])` first: an invalid series is reported before any power argument is read.
+            var v = NDPolySeries.AsCoefficientArray(c);
+            NDPolySeries.Validate(v);
+            bool numeric = NDPolySeries.TryCommonType(new[] { v }, out NPTypeCode t);
+            BigInteger power = PolyPowerArgument.Int(pow);
+            if (PolyPowerArgument.DiffersFromInt(power, pow) || power.Sign < 0)
+                throw new ValueError("Power must be a non-negative integer.");
+            if (maxpower is not null && PolyPowerArgument.Exceeds(power, maxpower))
+                throw new ValueError("Power is too large");
+            if (!numeric)
+                throw v.Refusal;
+            if (power > long.MaxValue)
+                throw new OverflowException($"power {power} is beyond int64: NumPy would run out of memory computing it");
+            return PowProduct(basis, v, t, (long)power);
+        }
+
+        /// <summary>
+        ///     NumPy's default <c>maxpower=16</c> of every <c>{p}pow</c> but <c>polypow</c>, boxed once as the Python int the
+        ///     object-typed facades pass.
+        /// </summary>
+        internal static readonly object DefaultMaxPower = 16;
 
         /// <summary><c>{p}fromroots(roots)</c> (see the basis's facade).</summary>
         /// <param name="basis">The basis.</param>
@@ -501,7 +584,7 @@ namespace NumSharp
         /// <returns>The series whose roots they are, float64 (complex128 for complex roots).</returns>
         /// <exception cref="TypeError"><c>len()</c> fails: a scalar or a 0-d array (CPython's texts).</exception>
         /// <exception cref="ValueError">A non-1-d root array, an empty one of nonzero length, or no common type.</exception>
-        /// <exception cref="NotSupportedException">A str / null root (NumPy's str / object arrays).</exception>
+        /// <exception cref="NotSupportedException">An object root array (None, or roots holding None, a non-numeric object or a Python int past uint64), refused after its checks; str roots are the common-type ValueError.</exception>
         public static NDArray FromRoots(PolyBasis basis, object roots)
         {
             // `if len(roots) == 0: return np.ones(1)` — Python's len() of the argument itself, before any conversion.
@@ -530,7 +613,7 @@ namespace NumSharp
         /// <param name="c">The series.</param>
         /// <returns>The power-series coefficients, of <c>np.common_type(c)</c>.</returns>
         /// <exception cref="ValueError">An empty or non-1-d series, or no common type.</exception>
-        /// <exception cref="NotSupportedException">A null or str series.</exception>
+        /// <exception cref="NotSupportedException">An object series (None, or one holding None, a non-numeric object or a Python int past uint64 — NumPy computes with Python objects), refused where NumPy starts computing with it.</exception>
         public static NDArray ToPower(PolyBasis basis, object c)
         {
             var v = NDPolySeries.AsCoefficientArray(c);
@@ -554,7 +637,7 @@ namespace NumSharp
         /// <returns>The basis coefficients: float64 for a real series (NumPy starts from the Python int 0), complex128 for a
         ///     complex one.</returns>
         /// <exception cref="ValueError">An empty or non-1-d series, or no common type.</exception>
-        /// <exception cref="NotSupportedException">A null or str series.</exception>
+        /// <exception cref="NotSupportedException">An object series (None, or one holding None, a non-numeric object or a Python int past uint64 — NumPy computes with Python objects), refused where NumPy starts computing with it.</exception>
         public static NDArray FromPower(PolyBasis basis, object pol)
         {
             var v = NDPolySeries.AsCoefficientArray(pol);
@@ -584,7 +667,7 @@ namespace NumSharp
         /// <param name="c2">Second argument.</param>
         /// <returns>Both views and their common type.</returns>
         /// <exception cref="ValueError">NumPy's as_series texts.</exception>
-        /// <exception cref="NotSupportedException">A null or str argument.</exception>
+        /// <exception cref="NotSupportedException">An object argument, refused where NumPy starts computing with it (see <see cref="NDPolySeries.CommonType"/>).</exception>
         private static (PolySeriesView v1, PolySeriesView v2, NPTypeCode t) AsSeriesViews(object c1, object c2)
         {
             var v1 = NDPolySeries.AsCoefficientArray(c1);
@@ -1002,8 +1085,11 @@ namespace NumSharp
             var mark = a.Position;
             byte* k = a.Alloc(v.N * v.Size);
             NDPolySeries.CopyInto(v.View.Reversed(), v.N, v.T, k);
+            // Both factors are fresh arrays of one dtype here (as_series copies, the z-series and power products are new),
+            // so NumPy's dot sees a positive stride except for np.convolve's reversed ONE-element kernel, which NumPy passes
+            // through as `v[::-1]` (stride -itemsize): a one-term complex factor keeps CDOUBLE_dot off cblas.
             NDArray.SlidingCorrelateInto(d.P, d.N, k, v.N, r.P, d.T, NDArray.SlidingMode.Full,
-                BackendFactory.GetEngine().Blas as ISlidingDotBackend);
+                BackendFactory.GetEngine().Blas as ISlidingDotBackend, complexDotViaBlas: v.N != 1);
             a.Release(mark);
             return r;
         }

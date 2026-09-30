@@ -27,6 +27,8 @@ Sections (cell-label prefixes):
     R  {p}fromroots: 3 / 10 / 30 / 100 float64 roots; complex128 10 / 30
     C  X2poly / poly2X: 3 / 10 / 50 / 200 float64 coefficients; float32 / complex128 at 50
     A  argument forms: Python lists (mulx 100, mul 10x10, div 20/7, pow (10, 3), fromroots 10)
+    K  pow / maxpower argument kinds through the object-typed overloads (10 coefficients, power 3): a bool, np.float16
+       and 0-d array power; a float, np.float16, 0-d and one-element array limit, and None
 """
 import hashlib
 import json
@@ -84,10 +86,11 @@ class ConvRecorder:
         return False
 
     def blas_bound(self):
+        # Complex products with infinities / NaNs below zdotu's vector block are managed-exact now (zdotu's C99 result
+        # construction and CDOUBLE_dot's plain loop are modelled), so only the vector regime is BLAS-bound.
         for n1, n2, dt, finite in self.calls:
             m = min(n1, n2)
-            if (dt == np.float64 and m >= 16) or (dt == np.float32 and m >= 32) or \
-                    (dt == np.complex128 and (m >= 8 or not finite)):
+            if (dt == np.float64 and m >= 16) or (dt == np.float32 and m >= 32) or (dt == np.complex128 and m >= 8):
                 return True
         return False
 
@@ -126,15 +129,17 @@ def arg(v, form):
     return ({"gen": v.spec, "form": form} if form else {"gen": v.spec}), (v.array.tolist() if form == "list" else v.array)
 
 
-def cell(label, base, fn, args, extra=None, form=None):
+def cell(label, base, fn, args, extra=None, form=None, extra_py=None):
     """Register one cell: {module}.{fn}(*args[, **extra]). args are G arrays (form "list" passes each as a Python list
     of Python floats — the conversion is part of the timed call on both sides, as np.array(c, ndmin=1) is part of
-    NumPy's); extra holds pow / maxpower. POLYALG_ONLY=prefix[,prefix...] restricts the run to matching labels."""
+    NumPy's); extra holds pow / maxpower as the manifest records them (JSON), extra_py — when the Python values are not
+    JSON (np.float16, arrays) — as NumPy receives them. POLYALG_ONLY=prefix[,prefix...] restricts the run to matching
+    labels."""
     if ONLY and not any(label.startswith(p) for p in ONLY):
         return
     f = getattr(MODULES[base], fn)
     specs, pyargs = zip(*(arg(a, form) for a in args))
-    kw = dict(extra or {})
+    kw = dict(extra_py if extra_py is not None else (extra or {}))
     call = lambda: f(*pyargs, **kw)
     rec = ConvRecorder()
     with rec:
@@ -205,6 +210,20 @@ def build():
         cell(f"A/{b}/div/list20by7", b, b + "div", [G((20,), seed=7), G((7,), seed=11)], form="list")
         cell(f"A/{b}/pow/list10k3", b, b + "pow", [G((10,), seed=7)], extra={"pow": 3}, form="list")
         cell(f"A/{b}/fromroots/list10", b, b + "fromroots", [G((10,), seed=7)], form="list")
+        # K: pow / maxpower argument kinds (the object-typed overloads: int(pow) and `power > maxpower` in Python's /
+        # NumPy's semantics). JSON spec -> NumPy value: {"f16": bits} np.float16, {"nd0": v} np.array(v),
+        # {"nd1": v} np.array([v]); a JSON float is a Python float, true a bool, null None.
+        f16 = lambda v: {"f16": "0x%04x" % int(np.array(v, np.float16).view(np.uint16))}
+        kinds = [("pow_true", {"pow": True}, {"pow": True}),
+                 ("pow_f16", {"pow": f16(3)}, {"pow": np.float16(3)}),
+                 ("pow_nd0", {"pow": {"nd0": 3}}, {"pow": np.array(3)}),
+                 ("max_float", {"pow": 3, "maxpower": 16.0}, {"pow": 3, "maxpower": 16.0}),
+                 ("max_f16", {"pow": 3, "maxpower": f16(16)}, {"pow": 3, "maxpower": np.float16(16)}),
+                 ("max_nd0", {"pow": 3, "maxpower": {"nd0": 16}}, {"pow": 3, "maxpower": np.array(16)}),
+                 ("max_nd1", {"pow": 3, "maxpower": {"nd1": 16}}, {"pow": 3, "maxpower": np.array([16])}),
+                 ("max_none", {"pow": 3, "maxpower": None}, {"pow": 3, "maxpower": None})]
+        for tag, spec, py in kinds:
+            cell(f"K/{b}/{tag}", b, b + "pow", [G((10,), seed=7)], extra=spec, extra_py=py)
 
 
 def main():

@@ -826,7 +826,16 @@ byte-exact without the backend:
 - sdot: float32 products rounded, then summed in a DOUBLE below 32 terms (`SdotManaged`; probed 0 of 9,300 differ, a
   float32 sum differed on up to 72%);
 - zdotu: four separate double sums `Σar·br − Σai·bi`, `Σar·bi + Σai·br` below 8 terms (`ZdotuManaged`; 0 of 2,100
-  differ, the naive per-term product on up to 90%).
+  differ, the naive per-term product on up to 90%) — then its RESULT, built with C99 complex arithmetic: scipy-openblas'
+  `openblas_make_complex_double(re, im)` is `re + im*_Complex_I`, whose real part is `re + im*0`, so an infinite or NaN
+  imaginary part turns the real part into NaN (`ZdotuResult`, also on the blocked kernel's stores; probed against the
+  DLL NumPy loads: `np.convolve([1+0j], [inf+0j])` is `nan+nanj`, the plain sums give `inf+nanj`). Only when BOTH
+  operands reach CDOUBLE_dot with a positive stride, though: `PyArray_Correlate` passes a ONE-element operand through
+  with its own stride (a size-1 array is C-contiguous whatever its stride), and np.convolve's kernel is `v[::-1]`, so a
+  fresh one-element kernel arrives with stride -16, which `blas_stride` refuses — CDOUBLE_dot's plain loop runs, no
+  such NaN (`CdoubleDotPlain`; the caller decides with `DotOperandBlasable`: np.convolve reverses its kernel's stride,
+  np.correlate's `conj(v)` is always fresh, a cast is always fresh). The backend is skipped there too, as NumPy skips
+  cblas.
 
 Only positions at or past the vector block stay bounded-ULP. **Long products without the backend**
 (`Math/NDArray.SlidingDot.Long.cs`) run blocked kernels over exactly those positions:
@@ -2896,7 +2905,10 @@ ordinates, `mapdomain`'s x, `as_series`' items, `{p}add`/`{p}sub`'s operands, `t
 - **Dtype:** each leaf's DEFAULT descriptor (Python int → int64, uint64 up to 2^64−1; a NumPy scalar / array keeps
   its own), promoted STRONGLY — array coercion is not NEP 50 (`[np.float32(1), 1.0]` is float64). A str / None leaf,
   a Python int past uint64 and any unknown object are refused (`NotSupportedException`) AFTER the walk, so a ragged
-  input still reports NumPy's ValueError.
+  input still reports NumPy's ValueError. That holds where NumPy computes with the array at once (U3's evaluation,
+  U4's calculus). `polyutils.as_series` — U1's additive family, U2's whole series algebra — first checks every
+  argument's size and dims and then its common type, so there `ToArrayOrNonNumeric` hands back NumPy's str / object
+  array as a SHAPE plus a deferred refusal (`PolySeriesView.NonNumericArray`, the U2 wholeness pass below).
 - **Calculus-specific order, all probed:** `np.ndim` runs on lbnd and scl before anything is converted (a ragged
   sequence raises the inhomogeneous text there; a str is 0-d); k's items are converted only when their order uses
   them, AFTER that order's `{p}val(lbnd, tmp)` (Python's left-to-right `k[i] - {p}val(…)`), so a bad lbnd wins over a
@@ -2968,15 +2980,17 @@ NumPy's statement runs through in NumSharp:
 - scalarmath: U1's one-element kernels (the naive complex product, NumPy's scalar division).
 
 So the only C# is NumPy's own Python: its loops are over SERIES, never elements. **Bit-exact with NumPy 2.4.2**
-except the convolution bases' BLAS-bound products without the backend (below). Oracle: `polyalgebra.jsonl` (26,163
-portable cases, 0 excused) + the host-pinned `polyalgebra_parity.jsonl` (186 BLAS-bound products, byte-exact with
-`NumSharp.Interop.OpenBLAS` at threads=1, Inconclusive off the pinned host). Unit tests
-`Polynomial/PolynomialAlgebraTests.cs` (20): NumPy's `TestArithmetic`/`TestMisc` ported, dtype-quirk byte dumps,
-decimal/char, the arena, the fused chebmulx kernel, the two divergences.
-**Perf (NPY/NS, `benchmark/polynomial/polyalg_*`, 404 cells, every one checked against NumPy): min 1.45×, geomean
-34.9×**. By section: mulx 2.4–24×, mul float64 2.0–29×, div 8.0–61×, pow 5.3–26×, fromroots 6.2–32×, conversions
-40–92×, Python-list arguments 5.0–36×. The one cell under 1.5× is the complex128 1000×1000 product at 1.45×, a
-physical ceiling (below).
+except the convolution bases' BLAS-bound products without the backend (below). Oracle: `polyalgebra.jsonl` (28,144
+portable cases, 0 excused; 26,163 at delivery) + the host-pinned `polyalgebra_parity.jsonl` (139 BLAS-bound products,
+byte-exact with `NumSharp.Interop.OpenBLAS` at threads=1, Inconclusive off the pinned host). Unit tests
+`Polynomial/PolynomialAlgebraTests.cs` (20: NumPy's `TestArithmetic`/`TestMisc` ported, dtype-quirk byte dumps,
+decimal/char, the arena, the fused chebmulx kernel, the non-finite complex product, the ±0 divergence) and
+`PolynomialAlgebraArgumentKindsTests.cs` (5: the wholeness pass below).
+**Perf (NPY/NS, `benchmark/polynomial/polyalg_*`, 452 cells, every one checked against NumPy): min 1.57×, geomean
+37.8×** (404 cells, min 1.45×, geomean 34.9× at delivery). By section (geomean): mulx 25×, mul float64 31×, other
+dtypes 29×, div 67×, pow 28×, fromroots 35×, conversions 100×, Python-list arguments 39×, pow / maxpower argument
+kinds 39× (min 5.1×: the object overloads' int() / comparison cost ~20 ns). The lowest cell is the complex128
+1000×1000 product at 1.45–1.57× (run to run), a physical ceiling (below).
 
 Dtypes follow NumPy's Python statement by statement, not a promotion rule:
 - a recurrence-basis product (leg/lag/herm/herme) whose SHORTER factor has one term binds the Python int `c1 = 0`,
@@ -3001,7 +3015,8 @@ sequential float32 sum at every length. Without the backend, NumSharp reproduces
 `NumSharp.Interop.OpenBLAS` those positions run the same `?dot` NumPy calls, byte-exact. That split is why the corpus
 has two tiers: the generator records every `np.convolve` a case makes (`_PAConvRecorder`) and routes a case with a
 BLAS-bound product to the host-pinned file. `BlasBackendDelta` replays the affected ordinary cases backend-on:
-6,522 affected, 6,480 identical outcomes, 42 flips byte-checked against NumPy.
+6,522 affected, 6,480 identical outcomes, 42 flips byte-checked against NumPy at delivery; 7,064 / 7,001 / 63 with the
+wholeness pass's cases (convolve / correlate included).
 
 **The long managed products** (`Math/NDArray.SlidingDot.Long.cs`) are blocked kernels:
 - a block of B consecutive output positions shares ONE loop over the kernel;
@@ -3039,10 +3054,48 @@ Now 5.5–6.5× NumPy at 10000 terms. Gates: `ChebMulx_FusedKernel_VectorStage_M
 every float16 pattern below 2^-12). Planted-bug check: dropping the grid rounding turns 2 cases red, a plain complex
 multiply 5.
 
-**Two documented divergences** (`[Misaligned]`, unit-pinned, kept out of the corpus):
-- fromroots sorts its roots, and where +0.0 and −0.0 meet, NumPy's x86-simd-sort keeps an order that depends on the
-  CPU. NumSharp's sort puts −0.0 first, which decides a zero coefficient's sign in the recurrence bases;
-- a complex product of NON-finite values without the backend: zdotu's vector kernel mixes real and imaginary lanes.
+**One documented divergence** (`[Misaligned]`, unit-pinned, kept out of the corpus): fromroots sorts its roots, and
+where +0.0 and −0.0 meet, NumPy's x86-simd-sort keeps an order that depends on the CPU. NumSharp's sort puts −0.0
+first, which decides a zero coefficient's sign in the recurrence bases. (A second one — a complex product of
+non-finite values without the backend — was zdotu's C99 result construction, now modelled: see the wholeness pass.)
+
+**The wholeness pass (2026-09-30).** A probe generator (every C# argument kind of the boundary map × every U2
+function and module, pow / maxpower kinds, error-order pairs, non-finite complex products, np.convolve /
+np.correlate: 6,675 NumPy-generated cases) replayed through the facades by reflection found three gaps, all closed:
+- **pow / maxpower took only `int` / `double` / `int?`.** Every facade gained `{p}pow(object c, object pow)` (the
+  default limit: 16, None for polypow) and `{p}pow(object c, object pow, object maxpower)` (null is None), ported in
+  `Polynomial/Package/NDPolyPowerArgument.cs` from NumPy's three statements: `power = int(pow)` is CPython's int() —
+  bool 0/1, np.float16 (Half) / decimal truncate, a str parses (`"3"`, `" 3 "`, `"3_0"`) and then fails
+  `power != pow`, NaN / inf / complex / None / list / tuple raise CPython's texts, an ndarray of one or more dims
+  `only 0-dimensional arrays can be converted to Python scalars` whatever its size, a 0-d one converts its element;
+  `power > maxpower` is exact for Python numbers (NaN never exceeded, -inf always), decimal, char, BigInteger and
+  integer ndarrays, but NEP 50 for np.float16 and float / complex / bool ndarrays: the weak int goes to a double first
+  (`int too large to convert to float` at 2**1024), then to the dtype (2049 rounds to float16 2048 — not exceeded;
+  float32 double-rounds), complex compares by NumPy's CGT, bool in int64 (`int too big to convert` past int64); an
+  ndarray's result must then have exactly one element (NumPy's two truth-value texts), its conversion error first.
+  C# binds `pow` to the int / double overloads first (a `long` / `ulong` converts to double), so only kinds they cannot
+  take reach the object ones. The corpus replays them (`OpRegistry.PolyAlgebra.cs` `PolyPow` binds as C# source would:
+  a spec-encoded limit or a non-int / non-double power the object overloads).
+- **A None / str series was refused on conversion**, before NumPy's own errors. `polyutils.as_series` converts every
+  argument, checks sizes and dims, and only THEN meets the common type: a str array (a list holding a str) fails it
+  (`Coefficient arrays have no common type`), an object array (None, a non-numeric object, an oversized int) makes it
+  compute with Python objects. So `PolySequence.ToArrayOrNonNumeric` now reports such a sequence as NumPy's array
+  SHAPE (`PolyNonNumericArray`: dims, object-or-str, the refusal), `AsCoefficientArray` makes it a
+  `PolySeriesView.NonNumericArray` (None and an unconvertible scalar are one-element object arrays), and the refusal
+  is raised by `NDPolySeries.CommonType` — or later, where NumPy still has checks to run: div's `c2[-1] == 0` (on the
+  object copies: `polydiv([None], [False])` is ZeroDivisionError) and pow's power checks. U3 / U4 compute at once and
+  keep refusing on conversion (`v.Refusal`), so their error order is unchanged.
+- **np.convolve's complex dot** (see the dotfunc paragraph under correlate/convolve): zdotu's C99 result and
+  CDOUBLE_dot's plain loop for a one-element operand. That made complex products with infinities / NaNs below the
+  vector block managed-exact: 43 host-tier cases moved to the portable tier (`_PAConvRecorder.blas_bound` no longer
+  counts non-finite values), and np.convolve / np.correlate gained the same fix (the `groupa` tier's new complex
+  section, one-element operands of every stride included).
+What remains is inherent: an OBJECT array's computation (NumPy returns object arrays of Python ints / None, or raises
+its object arithmetic's TypeError) is `NotSupportedException`, and a vector-regime product can overflow to inf in one
+summation order and not the other (3 of 1,510 probe cases).
+Corpus: section M of `gen_polyalgebra` (pow / maxpower kinds, the deferred refusal filtered to outcomes NumPy reaches
+before any object arithmetic — `_pa_object_land` — and the non-finite complex products), section Q of
+`gen_polyseries` (the deferred refusal in U1), the `groupa` complex convolve / correlate block.
 
 Traps:
 - **A float16 lane kind's generic `Bin` rounds every op to the f16 grid** (narrow + widen + NaN blends). Three of
@@ -3055,6 +3108,14 @@ Traps:
   them it was invisible. Build the edge set explicitly.
 - **Slow SIMD with no calls is instruction count, not inlining.** `DOTNET_JitDisasm="NDPolyChebMulx_*"` +
   `DOTNET_JitStdOutFile` showed the slow float16 stage fully inlined (0 calls) — the cost was the grid round trips.
+- **A one-element array's stride is observable.** NumPy's dot passes a size-1 operand through with whatever stride it
+  has (it is C-contiguous regardless), and cblas refuses a non-positive one — so `polymul(c, [x])` and
+  `polymul(c, [x, y])` reach different complex dot code. Materializing operands (`MaterializeForSliding`) loses
+  that stride: decide `DotOperandBlasable` from the caller's array first.
+- **A corpus case NumPy only reaches through object arithmetic cannot be gated.** Filter the generator's
+  candidates by NumPy's outcome (`_pa_object_land`: an object-array result, or a TypeError other than int()'s /
+  the limit comparison's / len()'s) rather than by hand — the filter keeps exactly the errors NumPy raises
+  before it computes.
 
 ### Random (`np.random.*`)
 `bernoulli`, `beta`, `binomial`, `chisquare`, `choice`, `dirichlet`, `exponential`, `f`, `gamma`, `geometric`, `get_bit_generator`, `gumbel`, `hypergeometric`, `laplace`, `logistic`, `lognormal`, `logseries`, `multinomial`, `multivariate_normal`, `negative_binomial`, `noncentral_chisquare`, `noncentral_f`, `normal`, `pareto`, `permutation`, `poisson`, `power`, `rand`, `randint`, `randn`, `random_sample`, `rayleigh`, `seed`, `set_bit_generator`, `shuffle`, `standard_cauchy`, `standard_exponential`, `standard_gamma`, `standard_normal`, `standard_t`, `triangular`, `uniform`, `vonmises`, `wald`, `weibull`, `zipf`
@@ -3323,7 +3384,7 @@ non-structured subset would only re-expose `loadtxt`.
 | numpy.polynomial evaluation (`np.polynomial.*`) | `Polynomial/Package/np.polynomial{,.polynomial,.chebyshev,.legendre,.laguerre,.hermite,.hermite_e}.cs` (facades), `Polynomial/Package/NDPolyEval.cs` (NumPy's Python layer), `Backends/Kernels/ILKernelGenerator.Polynomial.cs` (step tables + `PyScalar`), `.Typing.cs` (NEP 50 per node, peeling), `.Emitter.cs` (typed emitter), `.Lanes.cs` (vector lane kinds for every dtype pair), `.ConstPool.cs` (weak-value regions), `.Eval.cs` (dispatcher/part/stage kernels). Plan + measurements: `docs/plans/numpy-polynomial.md` (U3); benchmark `benchmark/polynomial/` |
 | numpy.polynomial additive family + polyutils (U1) | `Polynomial/Package/np.polynomial.polyutils.cs` (`PolyUtilsModule` facade, incl. the generic tuple overloads), `Polynomial/Package/NDPolyNumber.cs` (`PolyNumber`: Python / NumPy-scalar / ndarray operand + NumPy's operator dispatch), `Polynomial/Package/NDPolySeries.cs` (as_series/trimseq/trimcoef/getdomain/mapparms/mapdomain/{p}add/sub/line/constants + the `PyNum` machine-number lane), `Backends/Kernels/Direct/DirectILKernelGenerator.PolySeries.cs` (trim/combine/tolerance/cast/scalarmath IL kernels + the fused mapparms kernel), CPython arithmetic in `ILKernelGenerator.Polynomial.cs` (`PyScalar`: `IntTrueDivide`, `ComplexQuotient`, NaN-priority `Float*`/`Complex*` helpers). Oracle `polyseries.jsonl` via `OpRegistry.PolySeries.cs` |
 | numpy.polynomial calculus family (U4) | `Polynomial/Package/NDPolyCalc.cs` (`{p}der`/`{p}int` driver: NumPy's prologue, one-buffer orchestration, the integral's lbnd correction, NumPy's result layouts, `PyVal1D`), `Backends/Kernels/Direct/DirectILKernelGenerator.PolyCalculus.cs` (`PolyCalcRoutines` recurrence tables + the per-(basis, direction, dtypes) whole-array kernel: load/convert/scale stage, recurrence stage, column blocks). Oracle `polycalc.jsonl` via `OpRegistry.PolySeries.cs`; benchmark `benchmark/polynomial/polycalc_*` |
-| numpy.polynomial series algebra (U2) | `Polynomial/Package/NDPolyAlgebra.cs` (engine: `PolySer`, the pooled per-thread `PolyArena`, the entry points, the shared statements — as_series, `{p}mulx`, `np.convolve`, `_div`/`_pow`/`_fromroots`), `NDPolyAlgebra.Bases.cs` (the recurrence products, polydiv / chebdiv, the ten conversions), `Backends/Kernels/Direct/DirectILKernelGenerator.PolyAlgebra.cs` (house-kernel / mulx slot fronts + the fused chebmulx IL kernel), `Math/NDArray.SlidingDot{,.Long}.cs` (`SlidingCorrelateInto`, NumPy's per-dtype dotfunc models, the blocked long products). Oracle `polyalgebra.jsonl` + host-pinned `polyalgebra_parity.jsonl` via `OpRegistry.PolyAlgebra.cs`; benchmark `benchmark/polynomial/polyalg_*` |
+| numpy.polynomial series algebra (U2) | `Polynomial/Package/NDPolyAlgebra.cs` (engine: `PolySer`, the pooled per-thread `PolyArena`, the entry points, the shared statements — as_series, `{p}mulx`, `np.convolve`, `_div`/`_pow`/`_fromroots`), `NDPolyAlgebra.Bases.cs` (the recurrence products, polydiv / chebdiv, the ten conversions), `NDPolyPowerArgument.cs` (`int(pow)` / `power != pow` / `power > maxpower` for the object-typed `{p}pow` overloads), `Backends/Kernels/Direct/DirectILKernelGenerator.PolyAlgebra.cs` (house-kernel / mulx slot fronts + the fused chebmulx IL kernel), `Math/NDArray.SlidingDot{,.Long}.cs` (`SlidingCorrelateInto`, NumPy's per-dtype dotfunc models, the blocked long products). Oracle `polyalgebra.jsonl` + host-pinned `polyalgebra_parity.jsonl` via `OpRegistry.PolyAlgebra.cs`; benchmark `benchmark/polynomial/polyalg_*` |
 | Grid / slice-expression DSL | `Creation/np.r_.cs` (`AxisConcatenator` + `RClass`), `Creation/np.c_.cs`, `Creation/np.ogrid.cs` (`OGridClass` + `OGridResult` + shared `nd_grid` helpers), `Creation/np.mgrid.cs` (`MGridClass` + `MGridResult`), `Creation/np.meshgrid.cs` (`MeshgridResult`), `Indexing/np.{ix_,s_}.cs` |
 | Array printing (NumPy parity) | `Backends/Printing/{PrintOptions,Dragon4,ElementFormatters,ArrayFormatter}.cs`, `APIs/np.array2string.cs`, `Casting/NDArray.ToString.cs` |
 | Iterators | `Backends/Iterators/NDIter.cs`, `NDIter.Detach.cs` (ref-struct → managed-owner bridge) |

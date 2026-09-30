@@ -71,6 +71,12 @@ namespace NumSharp.Tests.Fuzz
             /// <returns>The int, or null for JSON null.</returns>
             public int? NullableInt(string name) => _p[name].ValueKind == JsonValueKind.Null ? null : _p[name].GetInt32();
 
+            /// <summary>The raw JSON of argument <paramref name="name"/> (must be present): how the series algebra tells a
+            ///     plain <c>maxpower</c> (a JSON int or null) from a spec-encoded one (any other kind).</summary>
+            /// <param name="name">The argument name.</param>
+            /// <returns>The JSON element.</returns>
+            public JsonElement Raw(string name) => _p[name];
+
             /// <summary>Reads an int argument written as a plain JSON number (the calculus <c>m</c> and <c>axis</c>).</summary>
             /// <param name="name">The argument name.</param>
             /// <param name="fallback">NumPy's default when absent.</param>
@@ -136,6 +142,14 @@ namespace NumSharp.Tests.Fuzz
                     }
                     case "str":
                         return e.GetProperty("str").GetString();
+                    case "none":
+                        return null;   // Python's None: C# null (the house map)
+                    case "npscalar":
+                        // A NumPy scalar with a C# spelling of its own: np.float16 is Half (the house map); the other
+                        // NumPy scalar kinds have none (a C# float / double / long IS the Python float / int).
+                        if (e.GetProperty("dtype").GetString() != "float16")
+                            throw new NotSupportedException($"NumPy scalar of dtype {e.GetProperty("dtype").GetString()} has no C# spelling");
+                        return BitConverter.UInt16BitsToHalf(Convert.ToUInt16(e.GetProperty("bits").GetString().Substring(2), 16));
                     default:
                         return PythonScalar(e);
                 }

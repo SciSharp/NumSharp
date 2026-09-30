@@ -194,14 +194,14 @@ namespace NumSharp
         public NDArray hermline(object off, object scl) => NDPolySeries.Line(PolyBasis.Hermite, off, scl);
 
         /// <summary>
-        ///     Adds two physicists' Hermite seriess (<c>polyutils._add</c>): both converted to their common type (integers become float64),
+        ///     Adds two physicists' Hermite series (<c>polyutils._add</c>): both converted to their common type (integers become float64),
         ///     the shorter added into a copy of the longer, trailing zeros trimmed.
         /// </summary>
         /// <param name="c1">First series, low degree first (an array, a C# array or list, or a single number).</param>
         /// <param name="c2">Second series.</param>
         /// <returns>The sum: a new array, or a VIEW of one when trailing zeros were trimmed (as in NumPy).</returns>
         /// <exception cref="ValueError">An empty or non-1-d series, or no common type (a bool series).</exception>
-        /// <exception cref="System.NotSupportedException">A null series (NumPy would build an object array).</exception>
+        /// <exception cref="System.NotSupportedException">A null series, or one holding None, a non-numeric object or a Python int past uint64 (NumPy's object array), raised after both series' checks.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.hermite.hermadd.html</remarks>
         [NDScoped]
         public NDArray hermadd(object c1, object c2) => NDPolySeries.AddSub(c1, c2, subtract: false);
@@ -216,7 +216,7 @@ namespace NumSharp
         /// <param name="c2">Subtrahend series.</param>
         /// <returns>The difference: a new array, or a VIEW of one when trailing zeros were trimmed.</returns>
         /// <exception cref="ValueError">An empty or non-1-d series, or no common type (a bool series).</exception>
-        /// <exception cref="System.NotSupportedException">A null series (NumPy would build an object array).</exception>
+        /// <exception cref="System.NotSupportedException">A null series, or one holding None, a non-numeric object or a Python int past uint64 (NumPy's object array), raised after both series' checks.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.hermite.hermsub.html</remarks>
         [NDScoped]
         public NDArray hermsub(object c1, object c2) => NDPolySeries.AddSub(c1, c2, subtract: true);
@@ -305,25 +305,27 @@ namespace NumSharp
         /// <param name="c">The coefficients, LOW degree first: an <see cref="NDArray"/> (any layout), a typed C# array, a Python list or tuple (<c>object[]</c>, a <c>ValueTuple</c>, a jagged array — np.array's coercion), or a single number. Integer series are computed in float64; a bool series has no common type.</param>
         /// <returns>A new array one coefficient longer (the zero series: a one-element copy), of <c>np.common_type(c)</c>.</returns>
         /// <exception cref="ValueError">An empty series (<c>Coefficient array is empty</c>), a series that is not 1-d
-        ///     (<c>Coefficient array is not 1-d</c>), or no common type (a bool series), in NumPy's order; a ragged list
+        ///     (<c>Coefficient array is not 1-d</c>), or no common type (a bool or str series), in NumPy's order; a ragged list
         ///     (np.array's inhomogeneous-shape text).</exception>
-        /// <exception cref="System.NotSupportedException">A null or str series, or a list holding one (NumPy's object / str
-        ///     arrays, dtypes NumSharp does not have).</exception>
+        /// <exception cref="System.NotSupportedException">A null series, or one holding None, a non-numeric object or a Python int past
+        ///     uint64 (NumPy's object array, a dtype NumSharp does not have) — raised where NumPy starts computing with
+        ///     it, after every series check. A str series is NumPy's ValueError (no common type).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.hermite.hermmulx.html</remarks>
         [NDScoped]
         public NDArray hermmulx(object c) => NDPolyAlgebra.Mulx(PolyBasis.Hermite, c);
 
         /// <summary>
-        ///     Multiplies two Hermite seriess: NumPy's backward recurrence over series — for each coefficient of the shorter factor, <c>c0 = hermsub(c[-i]*xs, c1*(2*(nd-1))); c1 = hermadd(tmp, hermmulx(c1)*2)</c> — ending in <c>hermadd(c0, hermmulx(c1)*2)</c>. When either factor is a single term, NumPy's recurrence binds the Python int 0, so a float16 / float32 product is float64 (probed 2.4.2). Bit-identical to NumPy 2.4.2: every statement runs through the kernel NumPy's statement runs through (the house ufunc loops, the U1 combine, the mulx kernel) in NumPy's order and dtypes.
+        ///     Multiplies two Hermite series: NumPy's backward recurrence over series — for each coefficient of the shorter factor, <c>c0 = hermsub(c[-i]*xs, c1*(2*(nd-1))); c1 = hermadd(tmp, hermmulx(c1)*2)</c> — ending in <c>hermadd(c0, hermmulx(c1)*2)</c>. When either factor is a single term, NumPy's recurrence binds the Python int 0, so a float16 / float32 product is float64 (probed 2.4.2). Bit-identical to NumPy 2.4.2: every statement runs through the kernel NumPy's statement runs through (the house ufunc loops, the U1 combine, the mulx kernel) in NumPy's order and dtypes.
         /// </summary>
         /// <param name="c1">First factor. The coefficients, LOW degree first: an <see cref="NDArray"/> (any layout), a typed C# array, a Python list or tuple (<c>object[]</c>, a <c>ValueTuple</c>, a jagged array — np.array's coercion), or a single number. Integer series are computed in float64; a bool series has no common type.</param>
         /// <param name="c2">Second factor.</param>
         /// <returns>The product: a new array, or a VIEW of one when trailing zeros were trimmed (as in NumPy).</returns>
         /// <exception cref="ValueError">An empty series (<c>Coefficient array is empty</c>), a series that is not 1-d
-        ///     (<c>Coefficient array is not 1-d</c>), or no common type (a bool series), in NumPy's order; a ragged list
+        ///     (<c>Coefficient array is not 1-d</c>), or no common type (a bool or str series), in NumPy's order; a ragged list
         ///     (np.array's inhomogeneous-shape text).</exception>
-        /// <exception cref="System.NotSupportedException">A null or str series, or a list holding one (NumPy's object / str
-        ///     arrays, dtypes NumSharp does not have).</exception>
+        /// <exception cref="System.NotSupportedException">A null series, or one holding None, a non-numeric object or a Python int past
+        ///     uint64 (NumPy's object array, a dtype NumSharp does not have) — raised where NumPy starts computing with
+        ///     it, after every series check. A str series is NumPy's ValueError (no common type).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.hermite.hermmul.html</remarks>
         [NDScoped]
         public NDArray hermmul(object c1, object c2) => NDPolyAlgebra.Mul(PolyBasis.Hermite, c1, c2);
@@ -337,10 +339,11 @@ namespace NumSharp
         /// <param name="c2">The divisor.</param>
         /// <returns>(quo, rem): NumPy's tuple, each a new array or a view of one.</returns>
         /// <exception cref="ValueError">An empty series (<c>Coefficient array is empty</c>), a series that is not 1-d
-        ///     (<c>Coefficient array is not 1-d</c>), or no common type (a bool series), in NumPy's order; a ragged list
+        ///     (<c>Coefficient array is not 1-d</c>), or no common type (a bool or str series), in NumPy's order; a ragged list
         ///     (np.array's inhomogeneous-shape text).</exception>
-        /// <exception cref="System.NotSupportedException">A null or str series, or a list holding one (NumPy's object / str
-        ///     arrays, dtypes NumSharp does not have).</exception>
+        /// <exception cref="System.NotSupportedException">A null series, or one holding None, a non-numeric object or a Python int past
+        ///     uint64 (NumPy's object array, a dtype NumSharp does not have) — raised where NumPy starts computing with
+        ///     it, after every series check. A str series is NumPy's ValueError (no common type).</exception>
         /// <exception cref="System.DivideByZeroException">The divisor is zero (all its coefficients, after trimming) —
         ///     NumPy's bare <c>ZeroDivisionError</c>, empty message.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.hermite.hermdiv.html</remarks>
@@ -358,7 +361,7 @@ namespace NumSharp
         /// <returns>The power series, a new array of <c>np.common_type(c)</c>.</returns>
         /// <exception cref="ValueError">The series' errors (see <see cref="hermmul"/>), then
         ///     <c>Power must be a non-negative integer.</c>, then <c>Power is too large</c> — NumPy's order.</exception>
-        /// <exception cref="System.NotSupportedException">A null or str series.</exception>
+        /// <exception cref="System.NotSupportedException">An object series (see <see cref="hermmul"/>), raised after the power checks.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.hermite.hermpow.html</remarks>
         [NDScoped]
         public NDArray hermpow(object c, int pow, int? maxpower = 16) => NDPolyAlgebra.Pow(PolyBasis.Hermite, c, pow, maxpower);
@@ -375,10 +378,56 @@ namespace NumSharp
         ///     <c>Power must be a non-negative integer.</c> (a fractional or negative power); <c>Power is too large</c>.</exception>
         /// <exception cref="System.OverflowException"><c>cannot convert float infinity to integer</c>; a power beyond
         ///     int64 with no limit (NumPy would run until memory is exhausted).</exception>
-        /// <exception cref="System.NotSupportedException">A null or str series.</exception>
+        /// <exception cref="System.NotSupportedException">An object series (see <see cref="hermmul"/>), raised after the power checks.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.hermite.hermpow.html</remarks>
         [NDScoped]
         public NDArray hermpow(object c, double pow, int? maxpower = 16) => NDPolyAlgebra.Pow(PolyBasis.Hermite, c, pow, maxpower);
+
+        /// <summary>
+        ///     <see cref="hermpow(object, int, int?)"/> for ANY power argument, with NumPy's default limit 16: <c>power =
+        ///     int(pow)</c> with Python's semantics — a bool is 0 / 1, np.float16 (Half) or decimal truncates like a float, a
+        ///     str parses with int()'s grammar (and then fails <c>power != pow</c>), a 0-d NDArray converts its element — and
+        ///     NumPy's error for every value int() refuses.
+        /// </summary>
+        /// <param name="c">The coefficients, LOW degree first: an <see cref="NDArray"/> (any layout), a typed C# array, a Python list or tuple (<c>object[]</c>, a <c>ValueTuple</c>, a jagged array — np.array's coercion), or a single number. Integer series are computed in float64; a bool series has no common type.</param>
+        /// <param name="pow">The power: any value (see the summary).</param>
+        /// <returns>The power series.</returns>
+        /// <exception cref="ValueError">The series' errors (see <see cref="hermmul"/>); <c>cannot convert float NaN to
+        ///     integer</c>; <c>invalid literal for int() with base 10: '…'</c>; <c>Power must be a non-negative
+        ///     integer.</c>; <c>Power is too large</c>.</exception>
+        /// <exception cref="TypeError">A power int() refuses: a complex, null (None), a list or tuple (<c>int() argument must
+        ///     be a string, a bytes-like object or a real number, not '…'</c>), an ndarray of one or more dims (<c>only
+        ///     0-dimensional arrays can be converted to Python scalars</c>).</exception>
+        /// <exception cref="System.OverflowException"><c>cannot convert float infinity to integer</c>; a power beyond int64
+        ///     with no limit (NumPy would run until memory is exhausted).</exception>
+        /// <exception cref="System.NotSupportedException">An object series (see <see cref="hermmul"/>), raised after the
+        ///     power checks.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.hermite.hermpow.html</remarks>
+        [NDScoped]
+        public NDArray hermpow(object c, object pow) => NDPolyAlgebra.Pow(PolyBasis.Hermite, c, pow, NDPolyAlgebra.DefaultMaxPower);
+
+        /// <summary>
+        ///     <see cref="hermpow(object, object)"/> with ANY limit: null is None (no limit); anything else is compared as
+        ///     NumPy compares <c>power &gt; maxpower</c> — exactly for a Python int / bool / float, a NumPy integer scalar
+        ///     (char) or decimal; in float16 for np.float16 (Half); for an ndarray (an NDArray, a typed C# array) in its dtype
+        ///     (float16 / float32 / float64 rounding the power first, complex lexicographically, bool as int64, integers
+        ///     exactly), the comparison's truth value then needing exactly one element.
+        /// </summary>
+        /// <param name="c">The coefficients, LOW degree first: an <see cref="NDArray"/> (any layout), a typed C# array, a Python list or tuple (<c>object[]</c>, a <c>ValueTuple</c>, a jagged array — np.array's coercion), or a single number. Integer series are computed in float64; a bool series has no common type.</param>
+        /// <param name="pow">The power: any value (see <see cref="hermpow(object, object)"/>).</param>
+        /// <param name="maxpower">The largest power allowed: any value, null for no limit.</param>
+        /// <returns>The power series.</returns>
+        /// <exception cref="ValueError">The series' and the power's errors; <c>Power is too large</c>; an ndarray limit with
+        ///     no element or several (NumPy's truth-value texts).</exception>
+        /// <exception cref="TypeError">A power int() refuses, or a limit that does not compare with an int: a complex, str,
+        ///     list or tuple (<c>'&gt;' not supported between instances of 'int' and '…'</c>).</exception>
+        /// <exception cref="System.OverflowException"><c>cannot convert float infinity to integer</c>; a power the limit's
+        ///     comparison dtype cannot hold (<c>int too large to convert to float</c> for a float limit ndarray or np.float16,
+        ///     <c>int too big to convert</c> for a bool one); a power beyond int64 with no limit.</exception>
+        /// <exception cref="System.NotSupportedException">An object series, raised after the power checks.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.hermite.hermpow.html</remarks>
+        [NDScoped]
+        public NDArray hermpow(object c, object pow, object maxpower) => NDPolyAlgebra.Pow(PolyBasis.Hermite, c, pow, maxpower);
 
         /// <summary>
         ///     The Hermite series whose roots are <paramref name="roots"/>: the roots sorted, one linear factor per root
@@ -396,7 +445,7 @@ namespace NumSharp
         ///     unsized object</c>).</exception>
         /// <exception cref="ValueError">Roots that are not 1-d, a zero-size array of nonzero length, or no common type
         ///     (bool roots).</exception>
-        /// <exception cref="System.NotSupportedException">A null or str root.</exception>
+        /// <exception cref="System.NotSupportedException">An object root array (None, or roots holding None, a non-numeric object or a Python int past uint64), raised after its checks; str roots are NumPy's ValueError (no common type).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.hermite.hermfromroots.html</remarks>
         [NDScoped]
         public NDArray hermfromroots(object roots) => NDPolyAlgebra.FromRoots(PolyBasis.Hermite, roots);
@@ -410,10 +459,11 @@ namespace NumSharp
         /// <returns>The power-series coefficients, low degree first (a new array, or a view of one when trailing zeros
         ///     were trimmed).</returns>
         /// <exception cref="ValueError">An empty series (<c>Coefficient array is empty</c>), a series that is not 1-d
-        ///     (<c>Coefficient array is not 1-d</c>), or no common type (a bool series), in NumPy's order; a ragged list
+        ///     (<c>Coefficient array is not 1-d</c>), or no common type (a bool or str series), in NumPy's order; a ragged list
         ///     (np.array's inhomogeneous-shape text).</exception>
-        /// <exception cref="System.NotSupportedException">A null or str series, or a list holding one (NumPy's object / str
-        ///     arrays, dtypes NumSharp does not have).</exception>
+        /// <exception cref="System.NotSupportedException">A null series, or one holding None, a non-numeric object or a Python int past
+        ///     uint64 (NumPy's object array, a dtype NumSharp does not have) — raised where NumPy starts computing with
+        ///     it, after every series check. A str series is NumPy's ValueError (no common type).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.hermite.herm2poly.html</remarks>
         [NDScoped]
         public NDArray herm2poly(object c) => NDPolyAlgebra.ToPower(PolyBasis.Hermite, c);
@@ -428,10 +478,11 @@ namespace NumSharp
         /// <returns>The Hermite series's coefficients, low degree first (a new array, or a view of one when trailing zeros
         ///     were trimmed).</returns>
         /// <exception cref="ValueError">An empty series (<c>Coefficient array is empty</c>), a series that is not 1-d
-        ///     (<c>Coefficient array is not 1-d</c>), or no common type (a bool series), in NumPy's order; a ragged list
+        ///     (<c>Coefficient array is not 1-d</c>), or no common type (a bool or str series), in NumPy's order; a ragged list
         ///     (np.array's inhomogeneous-shape text).</exception>
-        /// <exception cref="System.NotSupportedException">A null or str series, or a list holding one (NumPy's object / str
-        ///     arrays, dtypes NumSharp does not have).</exception>
+        /// <exception cref="System.NotSupportedException">A null series, or one holding None, a non-numeric object or a Python int past
+        ///     uint64 (NumPy's object array, a dtype NumSharp does not have) — raised where NumPy starts computing with
+        ///     it, after every series check. A str series is NumPy's ValueError (no common type).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.hermite.poly2herm.html</remarks>
         [NDScoped]
         public NDArray poly2herm(object pol) => NDPolyAlgebra.FromPower(PolyBasis.Hermite, pol);

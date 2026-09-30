@@ -634,7 +634,10 @@ exp2 malformed-IL crash (W3-C) · power(float16) scalar-broadcast crash (W1-B) �
 **invert(float/complex/decimal) illegal-instruction crash** (guard @ `Default.Invert.cs`, pinned by
 5 always-run tests in `FuzzGateRegressionTests`) · **convolve(complex) discarded the imaginary
 dimension** + int64/decimal/bool convolve accumulator (ledger L5, @737c59d6) · **all/any Half+Complex
-ignored `Shape.offset`** (ledger L4, @7804b2ad) · **round_(char)→Double** (ledger L8, @1a9cfa9f).
+ignored `Shape.offset`** (ledger L4, @7804b2ad) · **round_(char)→Double** (ledger L8, @1a9cfa9f) ·
+**complex convolve / correlate with infinities or NaNs** (zdotu's C99 result construction turns a non-finite
+imaginary part's `im*0` into a NaN real part, while a one-element operand with a non-positive stride takes
+CDOUBLE_dot's plain loop; the `groupa` tier's complex block, the U2 wholeness pass).
 
 The 2026-08-21 completeness pass additionally fixed: `angle(deg=True)` scalar dtype ·
 `full_like` dtype selection · integer `linspace` floor semantics · Char numeric-one creation ·
@@ -865,7 +868,7 @@ whose NumPy result is complex64 are skipped (one complex width, #569). `OpRegist
 
 ### numpy.polynomial additive family + polyutils (`polyseries` tier)
 
-`polyseries.jsonl` (`gen_oracle.py polyseries`, 18,647 cases, floor 18,600) gates plan unit U1 — `{p}add`,
+`polyseries.jsonl` (`gen_oracle.py polyseries`, 18,698 cases, floor 18,690) gates plan unit U1 — `{p}add`,
 `{p}sub`, `{p}trim`, `{p}line` for the six bases, the 24 module constants `{p}domain/zero/one/x`, and
 `polyutils.as_series/trimseq/trimcoef/getdomain/mapparms/mapdomain` — **bit-exact, 0 excused**. Keys are
 module-qualified like `polyeval`'s. Arguments are NAMED (`c1`, `c2`, `c`, `tol`, `off`, `scl`, `old`, `new`, `x`,
@@ -919,6 +922,11 @@ it was given (the list / tuple itself or its slice); the corpus records `np.asar
 compares the same coercion of what the facade returned: lists and tuples (trailing zeros, none, all, empty, a
 10-item tuple past C#'s 7-item flat ValueTuple), NaN / -0.0 / complex / bool items, float16 0-d items, one-element
 array items (by their truth value), and NumPy's truth-value errors for a tested array item of two elements or none.
+**(Q) the deferred object / str refusal** (51 cases, from the U2 wholeness pass) — a None / str / oversized-int series
+makes NumPy's array an object or str one, which as_series still checks for size and dims (every argument) before its
+common type fails (str, bool) or it computes with Python objects (NumSharp refuses there — not recorded): add / sub of
+the power and Chebyshev bases with the bad series on either side, as_series of mixed lists, getdomain / trimcoef (and
+trimcoef's `tol < 0` check, which runs first), filtered by NumPy's outcome (`_pa_object_land`).
 
 `OpRegistry.PolySeries.cs` replays it. **Every `mapparms`/`mapdomain` case runs three routes** — the object
 overload, the generic tuple overload (tuples rebuilt element-typed by reflection, so a Python int is a `long`) and
@@ -996,23 +1004,30 @@ as an escaped buffer). Design and measurements: `docs/plans/numpy-polynomial.md`
 
 ### numpy.polynomial series algebra (`polyalgebra` + `polyalgebra_parity` tiers)
 
-`polyalgebra.jsonl` (`gen_oracle.py polyalgebra`, 26,163 cases, floor 25,500) gates plan unit U2: `{p}mulx`, `{p}mul`,
+`polyalgebra.jsonl` (`gen_oracle.py polyalgebra`, 28,144 cases, floor 28,100; 26,163 at delivery) gates plan unit U2: `{p}mulx`, `{p}mul`,
 `{p}div` (a `tuple` kind: quo, rem), `{p}pow`, `{p}fromroots` for the six bases, and `X2poly`/`poly2X` for the five
 non-power ones. It is **bit-exact, 0 excused**. Keys are module-qualified (`chebyshev.chebmul`). Arguments are NAMED
 (`c`, `c1`, `c2`, `roots`, `pol`, `pow`, `maxpower`): `"a"` (the next operand) or a Python-typed spec (a weak
-int/float/complex, a list, a tuple, a big int). A `maxpower` is a raw JSON int or `null` (NumPy's None).
+int/float/complex, a list, a tuple, a big int, a str, `{"kind": "none"}` for None, `{"kind": "npscalar"}` for
+np.float16). A `maxpower` is a raw JSON int or `null` (NumPy's None) where the facades' `int?` parameter takes it, a
+spec for any other kind — which, like a power the int / double overloads cannot take, binds the object-typed
+overloads (`PolyPow` binds as C# source would).
 
 **The split.** NumPy's power- and Chebyshev-basis products are `np.convolve`, whose `?dot` switches to OpenBLAS's
-VECTOR kernel once a dot reaches ddot's 16 / sdot's 32 / zdotu's 8 terms (or a complex operand is non-finite). No
-managed engine reproduces that summation order. The generator therefore patches `np.convolve` while it runs a case
+VECTOR kernel once a dot reaches ddot's 16 / sdot's 32 / zdotu's 8 terms. No managed engine reproduces that summation
+order. (A complex product with infinities / NaNs used to count too — zdotu's C99 result construction was not
+modelled; it is now, with CDOUBLE_dot's plain loop for a one-element kernel, so 43 such cases moved to the portable
+file.) The generator therefore patches `np.convolve` while it runs a case
 (`_PAConvRecorder`: operand lengths, dtype, finiteness) and routes every case with a BLAS-bound product to
-`polyalgebra_parity.jsonl` (186 cases). That file is **host-pinned** exactly like `matmul_parity`
+`polyalgebra_parity.jsonl` (139 cases; 186 at delivery). That file is **host-pinned** exactly like `matmul_parity`
 (`polyalgebra_parity.host.jsonl`, the same `MatmulParityPin`): it is replayed with the OpenBLAS backend at threads=1,
 byte-exact on NumPy's own pinned scipy-openblas, and Inconclusive off the pinned host. Everything else, the scalar
 regimes included, stays in the portable file. `BlasBackendDelta` replays the portable tier's six convolving ops
 backend-on (`polymul`/`polypow`/`polyfromroots`, `chebmul`/`chebpow`/`chebfromroots`): 6,522 affected, 6,480
-identical, 42 flips, every one byte-checked against NumPy. 14 of the 42 differ only in a NaN's payload, which no gate
-compares.
+identical, 42 flips at delivery, every one byte-checked against NumPy (14 of the 42 differ only in a NaN's payload,
+which no gate compares); 7,064 / 7,001 / 63 with the wholeness pass's cases — the new non-finite complex products and
+the `groupa` complex convolve / correlate block, whose one-element-operand cases pin that the backend is bypassed
+where NumPy's CDOUBLE_dot takes its plain loop.
 
 The sections of `gen_polyalgebra`:
 - **(A)** every dtype × length at the defaults: mulx, the conversions, pow 0–4, fromroots of 0–12 roots, and mul / div
@@ -1041,7 +1056,16 @@ The sections of `gen_polyalgebra`:
 - **(L)** chebmulx's fused kernel through its vector stage: the special pattern at 40 / 101 terms per float dtype;
   every float16 bit pattern below 2^-12 plus the infinities, NaNs and extremes, once as c[j−1] and once as c[j+1] of
   an output; float32 / float64 subnormals. Planted-bug check: dropping the float16 grid rounding turns this
-  section's 2 f16 cases red (nothing else in the corpus reaches it), a plain complex multiply 5 cases.
+  section's 2 f16 cases red (nothing else in the corpus reaches it), a plain complex multiply 5 cases;
+- **(M)** the wholeness pass (1,934 cases): every pow kind the object overload takes (bool, np.float16, str, None,
+  list, tuple, complex, 0-d arrays of every kind, 1-D / 2-D / empty arrays, ints past int64) and every maxpower kind
+  (float, NaN, ±inf, big int, bool, np.float16, complex, str, list, tuple, 0-d / one-element / two-element / empty
+  arrays, uint64 / int8 / float16 / float32 0-d) with NumPy's texts; the comparison-dtype edges (2049 vs float16 2048
+  computes, 70000 vs float16 65504 raises, 2**1100 against float / complex / bool / uint64 / int8 limits); the DEFERRED
+  object / str refusal — None / str / oversized-int series checked by as_series, np.array's raggedness, div's zero
+  divisor and pow's checks in NumPy's order, filtered to outcomes NumPy reaches before any object arithmetic
+  (`_pa_object_land`); and complex series with infinities / NaNs through every function, one-term factors (the plain
+  loop) included.
 
 Char rides the uint16 proxy. Cells whose NumPy result is complex64 or an object array are skipped (#569).
 `OpRegistry.PolyAlgebra.cs` replays both files. `{p}pow` binds NumPy's argument kinds: an in-range int → the int

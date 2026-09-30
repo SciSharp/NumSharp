@@ -649,8 +649,10 @@ namespace NumSharp
         private static NDArray Coefficients(object c)
         {
             var v = NDPolySeries.AsCoefficientArray(c);
+            // A str / object series is refused as soon as it exists, as before the conversion learned to describe one
+            // (U4's argument checks follow the series in this order); the conversion's refusal names the item that made it.
             if (v.NonNumeric)
-                throw new NotSupportedException("a str series makes NumPy build a str array, a dtype NumSharp does not have");
+                throw v.Refusal ?? new NotSupportedException("a str series makes NumPy build a str array, a dtype NumSharp does not have");
             var a = v.Source;
             return a.ndim == 0 ? np.expand_dims(a, 0) : a;
         }

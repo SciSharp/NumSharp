@@ -23,6 +23,8 @@ SECTIONS = {
     "R": "{p}fromroots: 3 / 10 / 30 / 100 float64 roots; complex128 10 / 30",
     "C": "X2poly / poly2X: 3 / 10 / 50 / 200 float64 coefficients; float32 / complex128 at 50",
     "A": "Python-list arguments: mulx 100, mul 10x10, div 20/7, pow (10, 3), fromroots 10",
+    "K": "pow / maxpower argument kinds (object-typed overloads; 10 coefficients, power 3): a bool / np.float16 / 0-d "
+         "array power; a float / np.float16 / 0-d / one-element array limit, and None",
 }
 
 

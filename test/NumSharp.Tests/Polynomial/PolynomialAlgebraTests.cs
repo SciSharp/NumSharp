@@ -14,8 +14,10 @@ namespace NumSharp.Tests.Polynomial
     ///     (exact where NumPy asserts equality, almost-equal where it does); byte dumps NumPy produced for the dtype and
     ///     layout quirks (inputs spelled out next to each test); and the facts the byte oracle
     ///     (<c>polyalgebra.jsonl</c> / <c>polyalgebra_parity.jsonl</c>) cannot see — decimal and char (no NumPy
-    ///     dtype), the C# call spellings of <c>{p}pow</c>, the per-thread arena's lifetime, and the two documented
-    ///     divergences.
+    ///     dtype), the C# call spellings of <c>{p}pow</c>, the per-thread arena's lifetime, the non-finite complex
+    ///     product (NumPy's zdotu result, once a documented divergence), and the one documented divergence left
+    ///     (fromroots' ±0 root order). The wholeness pass's argument kinds live in
+    ///     <see cref="PolynomialAlgebraArgumentKindsTests"/>.
     /// </summary>
     [TestClass]
     public class PolynomialAlgebraTests
@@ -815,29 +817,36 @@ namespace NumSharp.Tests.Polynomial
         }
 
         /// <summary>
-        ///     [Misaligned] a complex product of NON-FINITE values without the OpenBLAS backend. NumPy reduces every
-        ///     complex convolution position with cblas <c>zdotu</c>, whose contiguous kernel mixes the real and imaginary
-        ///     lanes: <c>polymul([inf+0j, 1+1j], [1+0j, 2-1j])</c> is <c>[nan+nanj, nan-infj, 3+1j]</c>. NumSharp's
-        ///     managed kernel sums the four products separately (zdotu's own formula for finite values, byte-exact
-        ///     there) and keeps the infinity: <c>[inf+nanj, inf-infj, 3+1j]</c>. With <c>NumSharp.Interop.OpenBLAS</c>
-        ///     the product runs through the same zdotu and matches NumPy (the host-pinned <c>polyalgebra_parity</c> tier).
+        ///     A complex product of NON-FINITE values without the OpenBLAS backend is NumPy's, byte for byte. NumPy
+        ///     reduces a complex convolution position with cblas <c>zdotu</c>, which sums the four products separately
+        ///     and returns C99 complex <c>re + im*_Complex_I</c> — the real part picks up <c>im*0</c>, a NaN whenever the
+        ///     imaginary part is infinite or NaN: <c>polymul([inf+0j, 1+1j], [1+0j, 2-1j])</c> is
+        ///     <c>[nan+nanj, nan-infj, 3+1j]</c>, where the plain four sums give <c>[inf+nanj, inf-infj, 3+1j]</c> (this
+        ///     test pinned that divergence as [Misaligned] until the managed dot learned the result construction). A
+        ///     ONE-term factor is np.convolve's reversed one-element kernel (<c>v[::-1]</c>, stride -16, which cblas
+        ///     refuses), so CDOUBLE_dot's plain loop runs and no such NaN appears: <c>polymul([inf+0j, 1+1j], [1+0j])</c>
+        ///     is <c>[inf+nanj, 1+1j]</c>.
         /// </summary>
         [TestMethod]
-        [Misaligned]
-        public void ComplexNonFiniteProduct_WithoutBackend_KeepsTheFourSumAnswer()
+        public void ComplexNonFiniteProduct_WithoutBackend_MatchesZdotu()
         {
             var engine = BackendFactory.GetEngine();
             var saved = engine.Blas;
             engine.Blas = null;
             try
             {
-                var r = np.polynomial.polynomial.polymul(
-                    np.array(new[] { new Complex(double.PositiveInfinity, 0), new Complex(1, 1) }),
-                    np.array(new[] { new Complex(1, 0), new Complex(2, -1) }));
-                // NumPy 2.4.2: 000000000000f8ff000000000000f8ff 000000000000f8ff000000000000f0ff 0000000000000840000000000000f03f.
+                var inf = new Complex(double.PositiveInfinity, 0);
+                var r = np.polynomial.polynomial.polymul(np.array(new[] { inf, new Complex(1, 1) }),
+                                                         np.array(new[] { new Complex(1, 0), new Complex(2, -1) }));
                 AssertBytes(r, "complex128", new long[] { 3 },
-                            "000000000000f07f000000000000f8ff000000000000f07f000000000000f0ff0000000000000840000000000000f03f",
-                            "the managed four-sum product");
+                            "000000000000f8ff000000000000f8ff000000000000f8ff000000000000f0ff0000000000000840000000000000f03f",
+                            "zdotu's C99 result: an infinite / NaN imaginary part turns the real part into NaN");
+                var one = np.polynomial.polynomial.polymul(np.array(new[] { inf, new Complex(1, 1) }), np.array(new[] { new Complex(1, 0) }));
+                AssertBytes(one, "complex128", new long[] { 2 }, "000000000000f07f000000000000f8ff000000000000f03f000000000000f03f",
+                            "a one-term factor takes CDOUBLE_dot's plain loop");
+                var pw = np.polynomial.polynomial.polypow(np.array(new[] { new Complex(double.PositiveInfinity, 1) }), 3);
+                AssertBytes(pw, "complex128", new long[] { 1 }, "000000000000f8ff000000000000f07f",
+                            "a power of a one-term series multiplies one-element kernels: the plain loop each time");
             }
             finally
             {

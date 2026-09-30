@@ -82,8 +82,10 @@ namespace NumSharp
         private static NDArray ArrayOf(object a)
         {
             var v = NDPolySeries.AsCoefficientArray(a);
+            // A str / object array is refused as soon as it exists: evaluation computes with it right away (a str series
+            // is not rejected by any check first). The conversion's own refusal names the item that made it.
             if (v.NonNumeric)
-                throw new NotSupportedException("a str argument makes NumPy build a str array, a dtype NumSharp does not have");
+                throw v.Refusal ?? new NotSupportedException("a str argument makes NumPy build a str array, a dtype NumSharp does not have");
             return v.Source;
         }
 

@@ -63,12 +63,29 @@ namespace NumSharp
         public readonly int Ndim;
         /// <summary>Total element count (<c>a.size</c>).</summary>
         public readonly long Size;
-        /// <summary>A str array: sized like NumPy's, but np.common_type rejects it.</summary>
+        /// <summary>
+        ///     A str or object array: sized like NumPy's (so as_series' empty / not-1-d checks see it), but with no memory —
+        ///     np.common_type rejects it (see <see cref="NDPolySeries.CommonType"/>).
+        /// </summary>
         public readonly bool NonNumeric;
+        /// <summary>
+        ///     The non-numeric array is an OBJECT array (None, a non-numeric object or an oversized Python int), which
+        ///     as_series keeps and NumPy then computes with as Python objects; false for a str array (which as_series
+        ///     rejects: <c>Coefficient arrays have no common type</c>) and for every numeric view.
+        /// </summary>
+        public readonly bool IsObject;
+        /// <summary>
+        ///     What NumSharp raises where NumPy would compute with this non-numeric array (NumSharp has no str / object
+        ///     dtype); null for a numeric view and for a bare str argument (callers that cannot use a str array word their
+        ///     own refusal then).
+        /// </summary>
+        public readonly NotSupportedException Refusal;
 
-        private PolySeriesView(NDArray source, byte* ptr, long len, long stride, NPTypeCode dtype, int ndim, long size, bool nonNumeric)
+        private PolySeriesView(NDArray source, byte* ptr, long len, long stride, NPTypeCode dtype, int ndim, long size, bool nonNumeric,
+            bool isObject = false, NotSupportedException refusal = null)
         {
             Source = source; Ptr = ptr; Len = len; Stride = stride; Dtype = dtype; Ndim = ndim; Size = size; NonNumeric = nonNumeric;
+            IsObject = isObject; Refusal = refusal;
         }
 
         /// <summary>A view of <paramref name="a"/>'s axis 0 (a 0-d array reads as one element).</summary>
@@ -110,6 +127,24 @@ namespace NumSharp
         public static PolySeriesView Str(long size) => new PolySeriesView(null, null, size, 0, NPTypeCode.Empty, 1, size, true);
 
         /// <summary>
+        ///     NumPy's str or object array of dims <paramref name="dims"/> (after <c>ndmin=1</c>): no memory, only what as_series
+        ///     reads before its common type — the size and the dims — plus the refusal to raise where NumPy would compute.
+        /// </summary>
+        /// <param name="dims">NumPy's dims (an empty array reads as the 0-d array <c>ndmin=1</c> makes one element long).</param>
+        /// <param name="isObject">An object array (else str).</param>
+        /// <param name="refusal">The deferred refusal (null only for a caller that words its own).</param>
+        /// <returns>The view.</returns>
+        public static PolySeriesView NonNumericArray(long[] dims, bool isObject, NotSupportedException refusal)
+        {
+            // ndmin=1 turns a 0-d array into a one-element 1-D one; any other rank is kept.
+            long len = dims.Length == 0 ? 1 : dims[0];
+            long size = 1;
+            foreach (long dim in dims)
+                size *= dim;
+            return new PolySeriesView(null, null, len, 0, NPTypeCode.Empty, Math.Max(1, dims.Length), size, true, isObject, refusal);
+        }
+
+        /// <summary>
         ///     A contiguous 1-D series in raw memory that no NDArray owns — an intermediate of the series-algebra engine
         ///     (<see cref="PolySer"/>, living in its arena) handed to the substrate's kernels. <see cref="Source"/> is null;
         ///     the caller keeps the memory alive for as long as the view is used.
@@ -129,7 +164,7 @@ namespace NumSharp
         /// <param name="length">Element count of the sub-series (not checked against <see cref="Len"/>).</param>
         /// <returns>The sub-series view (1-D, <see cref="Size"/> = <paramref name="length"/>).</returns>
         public PolySeriesView Slice(long start, long length)
-            => new PolySeriesView(Source, Ptr + start * Stride, length, Stride, Dtype, 1, length, NonNumeric);
+            => new PolySeriesView(Source, Ptr + start * Stride, length, Stride, Dtype, 1, length, NonNumeric, IsObject, Refusal);
 
         /// <summary>
         ///     The same elements in the opposite order (<c>v[::-1]</c>): the address of the last element along axis 0
@@ -138,7 +173,7 @@ namespace NumSharp
         /// </summary>
         /// <returns>The reversed view (1-D, same length and dtype; a one-element view is returned equivalent).</returns>
         public PolySeriesView Reversed()
-            => new PolySeriesView(Source, Ptr + (Len - 1) * Stride, Len, -Stride, Dtype, 1, Len, NonNumeric);
+            => new PolySeriesView(Source, Ptr + (Len - 1) * Stride, Len, -Stride, Dtype, 1, Len, NonNumeric, IsObject, Refusal);
     }
 
     /// <summary>
@@ -156,16 +191,20 @@ namespace NumSharp
         ///     <see cref="PolySeriesView"/> (see the file header for the C# → Python mapping).
         /// </summary>
         /// <param name="a">The argument.</param>
-        /// <returns>The view.</returns>
-        /// <exception cref="NotSupportedException">null (NumPy builds an object array), a sequence holding a str / None
-        ///     item, or a Python int beyond uint64.</exception>
+        /// <returns>The view: a numeric one, or — for what NumPy makes a str or object array (null, a str, a sequence holding
+        ///     a str / None / non-numeric item, a Python int beyond uint64, any other non-numeric object) — a
+        ///     <see cref="PolySeriesView.NonNumeric"/> one of NumPy's shape, whose refusal is raised where NumPy would
+        ///     compute with it (<see cref="CommonType"/>), so that as_series' checks of it and of the OTHER arguments come
+        ///     first, in NumPy's order.</returns>
         /// <exception cref="ValueError">A ragged Python sequence (NumPy's inhomogeneous-shape text).</exception>
         public static PolySeriesView AsCoefficientArray(object a)
         {
             switch (a)
             {
                 case null:
-                    throw new NotSupportedException("None has no NumSharp equivalent: NumPy builds an object array from it, a dtype NumSharp does not have");
+                    // np.array(None, ndmin=1): a one-element object array.
+                    return PolySeriesView.NonNumericArray(s_oneDim, isObject: true,
+                        new NotSupportedException("None has no NumSharp equivalent: NumPy builds an object array from it, a dtype NumSharp does not have"));
                 case NDArray nd:
                     return PolySeriesView.Of(nd);
                 case string:
@@ -177,14 +216,34 @@ namespace NumSharp
             if (PolySequence.IsArrayLike(a))
                 return PolySeriesView.Of(np.asanyarray(a));
             // A Python tuple / list — nested to any depth, a jagged or NDArray[] array included: np.array's coercion
-            // (an empty sequence is NumPy's float64 (0,)).
+            // (an empty sequence is NumPy's float64 (0,)); one NumPy turns into a str or object array comes back as its shape.
             if (PolySequence.IsSequence(a))
-                return PolySeriesView.Of(PolySequence.ToArray(a));
+            {
+                var arr = PolySequence.ToArrayOrNonNumeric(a, out var nonNumeric);
+                return arr is not null
+                    ? PolySeriesView.Of(arr)
+                    : PolySeriesView.NonNumericArray(nonNumeric.Dims, nonNumeric.IsObject, nonNumeric.Refusal);
+            }
             // A scalar: np.array discovers its dtype (Python) or keeps it (NumPy scalar). FromObject hands back an
             // array only for an ndarray-like np.asanyarray understands, which is then the series itself.
-            var num = PolyNumber.FromObject(a);
+            PolyNumber num;
+            try
+            {
+                num = PolyNumber.FromObject(a);
+                if (num.Kind != PolyNumberKind.Array)
+                    num.DiscoveredDtype();   // a Python int past uint64 is refused here, before anything is allocated
+            }
+            catch (NotSupportedException e)
+            {
+                // What the scalar conversion refuses — a Python int past uint64, an object np.asanyarray cannot read — is,
+                // in NumPy, a one-element object array (np.array of an arbitrary object is a 0-d object array).
+                return PolySeriesView.NonNumericArray(s_oneDim, isObject: true, e);
+            }
             return PolySeriesView.Of(num.Kind == PolyNumberKind.Array ? num.Array : PolyNumber.MakeArray(num));
         }
+
+        /// <summary>The dims of a one-element 1-D array (shared: <see cref="PolySeriesView.NonNumericArray"/> only reads them).</summary>
+        private static readonly long[] s_oneDim = { 1 };
 
         /// <summary>
         ///     NumPy's per-array checks in <c>as_series</c>: <c>Coefficient array is empty</c> before
@@ -201,14 +260,43 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     <c>np.common_type</c> over the converted arguments, with <c>as_series</c>' rejection: a bool or str
-        ///     array has no common type, and NumPy (no object dtype to fall back to here) raises.
+        ///     <c>np.common_type</c> over the converted arguments, with <c>as_series</c>' fallback: when it fails (a bool,
+        ///     str or object array), as_series retries in the object dtype if ANY argument is an object array — and then
+        ///     computes with Python objects, which NumSharp refuses here, where NumPy would start — and otherwise raises.
         /// </summary>
         /// <param name="views">The arguments (at least one).</param>
         /// <returns>The coefficient dtype: float16/float32/float64/complex128, or NumSharp's decimal.</returns>
-        /// <exception cref="ValueError"><c>Coefficient arrays have no common type</c>.</exception>
+        /// <exception cref="ValueError"><c>Coefficient arrays have no common type</c> (a bool or str array, no object one).</exception>
+        /// <exception cref="NotSupportedException">An object array among the arguments (its deferred refusal).</exception>
         public static NPTypeCode CommonType(ReadOnlySpan<PolySeriesView> views)
         {
+            if (TryCommonType(views, out NPTypeCode t))
+                return t;
+            throw FirstObjectRefusal(views);
+        }
+
+        /// <summary>
+        ///     <see cref="CommonType"/> for a caller that still has NumPy statements to run before it computes with an object
+        ///     array (pow's power checks, div's zero-divisor test): the common type, or false when as_series would go on in
+        ///     the object dtype.
+        /// </summary>
+        /// <param name="views">The arguments (at least one).</param>
+        /// <param name="t">The coefficient dtype when the result is true.</param>
+        /// <returns>False when an object array is among the arguments (the caller raises its <see cref="PolySeriesView.Refusal"/>
+        ///     once NumPy's remaining checks have passed — <see cref="FirstObjectRefusal"/>).</returns>
+        /// <exception cref="ValueError"><c>Coefficient arrays have no common type</c> (a bool or str array, no object one).</exception>
+        public static bool TryCommonType(ReadOnlySpan<PolySeriesView> views, out NPTypeCode t)
+        {
+            // np.common_type fails on any non-numeric array, and the except path looks for an object array among ALL the
+            // arguments before deciding: an object array anywhere wins over a str / bool one elsewhere.
+            for (int i = 0; i < views.Length; i++)
+            {
+                if (views[i].IsObject)
+                {
+                    t = NPTypeCode.Empty;
+                    return false;
+                }
+            }
             var codes = new NPTypeCode[views.Length];
             for (int i = 0; i < views.Length; i++)
             {
@@ -218,14 +306,28 @@ namespace NumSharp
             }
             try
             {
-                return np.common_type_code(codes);
+                t = np.common_type_code(codes);
+                return true;
             }
             catch (TypeError)
             {
-                // np.common_type's "can't get common type for non-numeric array" (a bool array): as_series has no
-                // object dtype to retry with, so it raises its own ValueError.
+                // np.common_type's "can't get common type for non-numeric array" (a bool array): with no object array to
+                // retry with, as_series raises its own ValueError.
                 throw new ValueError("Coefficient arrays have no common type");
             }
+        }
+
+        /// <summary>The refusal of the first object array among <paramref name="views"/> (see <see cref="TryCommonType"/>).</summary>
+        /// <param name="views">The arguments, at least one of them an object array.</param>
+        /// <returns>Its deferred refusal, to throw.</returns>
+        /// <exception cref="InvalidOperationException">No object array among <paramref name="views"/> (a caller bug:
+        ///     call it only when <see cref="TryCommonType"/> returned false).</exception>
+        public static NotSupportedException FirstObjectRefusal(ReadOnlySpan<PolySeriesView> views)
+        {
+            foreach (var v in views)
+                if (v.IsObject)
+                    return v.Refusal;
+            throw new InvalidOperationException("no object array among the arguments");
         }
 
         /// <summary>trimseq's kept length of a converted 1-D argument (a str array is never trimmed: 'a' != 0).</summary>

@@ -40,6 +40,13 @@ using NumSharp.Backends.Kernels;
 // [[], []]). A str or None leaf (NumPy's str / object arrays), any other unsupported object and a Python int past
 // uint64 are refused with NotSupportedException — AFTER the walk, so a ragged input reports NumPy's ValueError.
 //
+// STR AND OBJECT ARRAYS AS SHAPES. polyutils.as_series checks its arrays' sizes and dims, and the other arguments',
+// BEFORE the common type decides anything, and a str array never computes there at all ("Coefficient arrays have no
+// common type"). ToArrayOrNonNumeric therefore reports such a sequence as NumPy's array SHAPE — its discovered dims,
+// whether NumPy's dtype is object (a None / non-numeric / oversized-int leaf: str promotes with numbers to a str dtype,
+// with object to object) or str — and the refusal, instead of raising it; NDPolySeries carries that as a non-numeric
+// view and raises the refusal only where NumPy would start computing with Python objects.
+//
 // NDim is np.ndim of a sequence: the same walk without dtypes (a str / None leaf is simply a scalar there), which
 // is what numpy.polynomial's "lbnd must be a scalar." / "scl must be a scalar." checks evaluate — and why a ragged
 // lbnd raises the inhomogeneous ValueError instead.
@@ -179,7 +186,24 @@ namespace NumSharp
         /// <exception cref="NotSupportedException">A str / None / other non-numeric item, or a Python int past uint64 —
         ///     NumPy would build a str or object array, dtypes NumSharp does not have.</exception>
         public static NDArray ToArray(object seq)
+            => ToArrayOrNonNumeric(seq, out var nonNumeric) ?? throw nonNumeric.Refusal;
+
+        /// <summary>
+        ///     <see cref="ToArray"/> for a caller that can carry NumPy's str / object array as a SHAPE (see the file header):
+        ///     the same coercion, but a sequence NumPy turns into a str or object array returns null and describes that
+        ///     array in <paramref name="nonNumeric"/> instead of raising.
+        /// </summary>
+        /// <param name="seq">A value <see cref="IsSequence"/> accepts.</param>
+        /// <param name="nonNumeric">When the result is null: the dims NumPy's array would have, whether its dtype is
+        ///     object (else str), and the refusal to raise where NumPy would compute with it. Default otherwise.</param>
+        /// <returns>A new, owning, C-contiguous array (float64 <c>(0,)</c> for an empty sequence), or null for NumPy's str /
+        ///     object array.</returns>
+        /// <exception cref="ValueError">A ragged sequence (NumPy's inhomogeneous-shape text — raggedness is reported before
+        ///     any refusal, as NumPy's walk does), or an array item that cannot be assigned into its slot after an empty
+        ///     sibling ended the dims (NumPy's broadcast text).</exception>
+        public static NDArray ToArrayOrNonNumeric(object seq, out PolyNonNumericArray nonNumeric)
         {
+            nonNumeric = default;
             // The overwhelmingly common argument — a flat Python list of Python floats (`[1.5, -2.0, 0.25]`, a float
             // array's tolist()) or of Python ints — needs no discovery: its shape is (n,) and its dtype float64 / int64,
             // exactly what the walk below concludes for it, so it is filled directly (the walk costs ~50 ns an item in
@@ -193,7 +217,14 @@ namespace NumSharp
             if (d.Ragged)
                 throw Inhomogeneous(d);
             if (d.Refused is not null)
-                throw d.Refused;
+            {
+                // NumPy's array exists — a str or object one — and only its shape can be observed before it computes: the
+                // walk's dims are its dims (a str / None leaf is a scalar leaf, exactly as in NumPy's walk).
+                var shape = new long[d.MaxDims];
+                System.Array.Copy(d.Shape, shape, shape.Length);
+                nonNumeric = new PolyNonNumericArray(shape, d.ObjectLeaf, d.Refused);
+                return null;
+            }
             NPTypeCode t = d.Dtype == NPTypeCode.Empty ? NPTypeCode.Double : d.Dtype;
             var dims = new long[d.MaxDims];
             System.Array.Copy(d.Shape, dims, dims.Length);
@@ -304,6 +335,11 @@ namespace NumSharp
             public readonly bool ShapeOnly;
             /// <summary>The first refused item, raised only if the input is not ragged (NumPy reports raggedness first).</summary>
             public NotSupportedException Refused;
+            /// <summary>
+            ///     A refused item makes NumPy's dtype OBJECT: None, a non-numeric object or a Python int past uint64 (str
+            ///     items alone make a str dtype — NumPy promotes str with every number to str, and with object to object).
+            /// </summary>
+            public bool ObjectLeaf;
             /// <summary>Arrays converted from typed C# arrays (disposed after the fill).</summary>
             public List<NDArray> Owned;
 
@@ -456,6 +492,9 @@ namespace NumSharp
                     string => "a Python str operand makes NumPy build a str/object array, a dtype NumSharp does not have",
                     _ => $"a {o.GetType().Name} item makes NumPy build an object array, a dtype NumSharp does not have",
                 });
+                // A str leaf alone leaves NumPy's dtype a str one; anything else here makes it object.
+                if (o is not string)
+                    d.ObjectLeaf = true;
                 return;
             }
             try
@@ -465,6 +504,7 @@ namespace NumSharp
             catch (NotSupportedException e)
             {
                 d.Refused ??= e;   // a Python int past uint64: NumPy's object array
+                d.ObjectLeaf = true;
             }
         }
 
@@ -706,6 +746,31 @@ namespace NumSharp
                 }
                 return r;
             }
+        }
+    }
+
+    /// <summary>
+    ///     The array NumPy's <c>np.array</c> builds from a sequence NumSharp cannot hold — a str or object one — described by
+    ///     what can be observed of it before NumPy computes with it (see <see cref="PolySequence.ToArrayOrNonNumeric"/>).
+    /// </summary>
+    internal readonly struct PolyNonNumericArray
+    {
+        /// <summary>NumPy's array dims (the coercion walk's; at least one dim for a sequence).</summary>
+        public readonly long[] Dims;
+        /// <summary>NumPy's dtype is object (else a str dtype): None, a non-numeric object or an oversized Python int.</summary>
+        public readonly bool IsObject;
+        /// <summary>What NumSharp raises where NumPy would compute with the array (it has no str / object dtype).</summary>
+        public readonly NotSupportedException Refusal;
+
+        /// <summary>Describes one such array.</summary>
+        /// <param name="dims">Its dims.</param>
+        /// <param name="isObject">Its dtype is object.</param>
+        /// <param name="refusal">The deferred refusal.</param>
+        public PolyNonNumericArray(long[] dims, bool isObject, NotSupportedException refusal)
+        {
+            Dims = dims;
+            IsObject = isObject;
+            Refusal = refusal;
         }
     }
 }

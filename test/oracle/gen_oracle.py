@@ -3333,6 +3333,52 @@ def gen_groupa():
                     continue
                 emit("correlate", {"mode": mode}, [describe(ea, ea), describe(ev, ev)], r)
 
+        # convolve / correlate of complex values holding infinities and NaNs. cblas' zdotu builds its result with C99
+        # complex arithmetic (re + im*_Complex_I): an infinite / NaN imaginary part turns the real part into NaN — unless
+        # NumPy's dot cannot hand an operand to cblas: a ONE-element operand keeps its own stride (np.convolve's kernel is
+        # v[::-1], and a one-element array is C-contiguous whatever its stride), and a non-positive stride takes
+        # CDOUBLE_dot's plain loop. Kernels shorter than zdotu's vector block (8) only: longer ones reorder the sums.
+        if dt == "complex128":
+            crng = np.random.default_rng(31)
+            specials = [complex(np.inf, 0), complex(-np.inf, -0.0), complex(0, np.inf), complex(np.inf, np.inf),
+                        complex(np.nan, 0), complex(0, np.nan), complex(1e308, 1e308), complex(-1e308, 1e308)]
+            for n1c, n2c in ((1, 1), (3, 1), (1, 3), (5, 2), (2, 5), (6, 3), (9, 4), (12, 7), (7, 7)):
+                for trial in range(3):
+                    ac = (crng.standard_normal(n1c) + 1j * crng.standard_normal(n1c)).round(3)
+                    vc = (crng.standard_normal(n2c) + 1j * crng.standard_normal(n2c)).round(3)
+                    for _ in range(1 + trial % 2):
+                        ac[crng.integers(n1c)] = specials[crng.integers(len(specials))]
+                    if trial == 2:
+                        vc[crng.integers(n2c)] = specials[crng.integers(len(specials))]
+                    for mode in ["full", "same", "valid"]:
+                        emit("convolve", {"mode": mode}, [describe(ac, ac), describe(vc, vc)], np.convolve(ac, vc, mode))
+                        emit("correlate", {"mode": mode}, [describe(ac, ac), describe(vc, vc)], np.correlate(ac, vc, mode))
+            # One-element operands with their own strides: fresh (+16: cblas), reversed (-16), stepped (+32 / -32),
+            # stride 0 — as np.convolve's kernel (reversed first), as its data, and as np.correlate's first argument.
+            cdata = np.array([1.5 - 0.5j, complex(0, np.inf), -2 + 1j, complex(np.inf, 1), 0.5j])
+            src = np.array([complex(np.inf, 1.0), 2 + 3j, complex(1.0, np.inf)])
+            ones = [("fresh", src[:1].copy(), None), ("reversed", src[:1].copy(), None),
+                    ("step", src, src[::2][:1]), ("negstep", src, src[::-2][:1]),
+                    ("stride0", src[:1].copy(), None)]
+            for oname, obase, oview in ones:
+                if oname == "fresh":
+                    oview = obase
+                elif oname == "reversed":
+                    oview = obase[::-1]
+                elif oname == "stride0":
+                    oview = np.lib.stride_tricks.as_strided(obase, (1,), (0,))
+                for mode in ["full", "same", "valid"]:
+                    emit("convolve", {"mode": mode}, [describe(cdata, cdata), describe(obase, oview)],
+                         np.convolve(cdata, oview, mode))
+                    emit("convolve", {"mode": mode}, [describe(obase, oview), describe(cdata, cdata)],
+                         np.convolve(oview, cdata, mode))
+                    emit("correlate", {"mode": mode}, [describe(obase, oview), describe(cdata, cdata)],
+                         np.correlate(oview, cdata, mode))
+                    emit("correlate", {"mode": mode}, [describe(cdata, cdata), describe(obase, oview)],
+                         np.correlate(cdata, oview, mode))
+                    emit("convolve", {"mode": mode}, [describe(obase, oview), describe(obase, oview)],
+                         np.convolve(oview, oview, mode))
+
         # append — flatten form (axis=None) + along axis 0.
         vals1 = _cbase((4,), d)
         emit("append", {}, [describe(a2, a2), describe(vals1, vals1)], np.append(a2, vals1))
@@ -10946,6 +10992,12 @@ def _ps_enc(v, operands):
         return {"kind": "tuple", "items": [_ps_enc(i, operands) for i in v]}
     if isinstance(v, str):
         return {"kind": "str", "str": v}
+    if v is None:
+        return {"kind": "none"}
+    if isinstance(v, np.float16):
+        # np.float16 is the one NumPy scalar with a C# spelling of its own (Half); every other NumPy scalar kind is
+        # spelled as the Python value a C# primitive stands for.
+        return {"kind": "npscalar", "dtype": "float16", "bits": "0x%04x" % int(np.array(v).view(np.uint16))}
     return _weak_spec(v)
 
 
@@ -11857,6 +11909,46 @@ def gen_polyseries():
                      ("list_nested", [[1], [0]]), ("list_u64", [2 ** 64 - 1, 0]), ("list_bigneg", [-(2 ** 63), 0])):
         emit("polyutils.trimseq", {"seq": seq}, lambda: pu.trimseq(_ps_py(seq)), "python_seq", f"polyutils.trimseq/seq/{tag}")
 
+    # ---------------- (Q) the deferred object / str refusal ----------------
+    # A None / non-numeric / oversized-int item makes NumPy's array an OBJECT one and a str item a str one; as_series still
+    # checks every argument's size and dims, then fails the common type (str, bool) or computes with Python objects (then
+    # NumSharp refuses — not recorded). Only outcomes NumPy reaches before any object arithmetic are recorded.
+    obj1 = [1.0, None]
+    strl = [1.0, "a"]
+    two = np.zeros((2, 2))
+    for modname, p in (("polynomial", "poly"), ("chebyshev", "cheb")):
+        mod = _poly_module(modname)
+        for opname in ("add", "sub"):
+            f = getattr(mod, p + opname)
+            op = f"{modname}.{p}{opname}"
+            for tag, c1v, c2v in (("obj_empty", None, A(np.zeros(0))), ("empty_obj", A(np.zeros(0)), obj1),
+                                  ("obj_2d", obj1, A(two)), ("obj_ragged", None, [[1, 2], [3]]),
+                                  ("ragged_obj", [[1, 2], [3]], None), ("str_f", strl, [0.5]), ("f_str", [0.5], strl),
+                                  ("str_bool", strl, A(np.array([True]))), ("str_2d", [["a", 1.0]], [0.5]),
+                                  ("str_obj", strl, obj1)):
+                call = (lambda f=f, c1v=c1v, c2v=c2v: f(_ps_py(c1v), _ps_py(c2v)))
+                if _pa_object_land(call):
+                    continue
+                emit(op, {"c1": c1v, "c2": c2v}, call, "object_order", f"{op}/objorder/{tag}")
+    for tag, alist in (("obj_empty", [None, A(np.zeros(0))]), ("str_2d", [strl, A(two)]), ("str_only", [strl]),
+                       ("obj_str", [obj1, strl]), ("empty_str", [A(np.zeros(0)), strl]), ("str_tuple", (["x"], [1.0]))):
+        call = (lambda alist=alist: pu.as_series(_ps_py(alist)))
+        if _pa_object_land(call):
+            continue
+        emit("polyutils.as_series", {"alist": alist}, call, "object_order", f"polyutils.as_series/objorder/{tag}",
+             kind="tuple")
+    for tag, xv in (("obj", obj1), ("str", strl), ("str_2d", [["a", 1.0]]), ("obj_empty_list", [None, []])):
+        call = (lambda xv=xv: pu.getdomain(_ps_py(xv)))
+        if not _pa_object_land(call):
+            emit("polyutils.getdomain", {"x": xv}, call, "object_order", f"polyutils.getdomain/objorder/{tag}")
+        call = (lambda xv=xv: pu.trimcoef(_ps_py(xv)))
+        if not _pa_object_land(call):
+            emit("polyutils.trimcoef", {"c": xv}, call, "object_order", f"polyutils.trimcoef/objorder/{tag}")
+        call = (lambda xv=xv: pu.trimcoef(_ps_py(xv), -1.0))
+        if not _pa_object_land(call):
+            emit("polyutils.trimcoef", {"c": xv, "tol": -1.0}, call, "object_order",
+                 f"polyutils.trimcoef/objorder/{tag}_negtol")
+
     # Char: NumSharp's uint16-like dtype — the uint16 cells relabelled (bytes-exact oracle, the house weave).
     cases += _relabel_dtype([c for c in cases if "/uint16" in (c.get("id") or "") and not c.get("expects_throw")],
                             "uint16", "char")
@@ -12456,14 +12548,17 @@ class _PAConvRecorder:
 
     def blas_bound(self):
         """Whether any recorded product reaches OpenBLAS's vector regime (see the section comment): the longest dot of
-        a full convolution is the shorter operand's length."""
+        a full convolution is the shorter operand's length. A complex product holding infinities or NaNs used to count
+        too; NumSharp's managed dot now reproduces zdotu's C99 result construction (an infinite / NaN imaginary part
+        turns the real part into NaN) and CDOUBLE_dot's plain loop for a one-element kernel, so only the vector regime
+        is BLAS-bound. (`finite` is still recorded: it documents which cases hold non-finite values.)"""
         for n1, n2, dt, finite in self.calls:
             m = min(n1, n2)
             if dt == np.float64 and m >= 16:
                 return True
             if dt == np.float32 and m >= 32:
                 return True
-            if dt == np.complex128 and (m >= 8 or not finite):
+            if dt == np.complex128 and m >= 8:
                 return True
         return False
 
@@ -12504,6 +12599,26 @@ def _pa_random(n, dt, seed, scale=1.0):
         return v.astype(dt)
 
 
+def _pa_object_land(call):
+    """Whether NumPy's outcome of `call` is a computation with Python objects: an object-array result, or a TypeError the
+    object arithmetic raises (None * 0.0, str * float, sorting None). NumSharp has no object dtype and refuses there with
+    NotSupportedException (the documented divergence), so such a case cannot be gated; every error NumPy raises BEFORE it
+    computes with objects — as_series' checks, np.array's raggedness, the zero divisor, the power checks, int(pow) and the
+    maxpower comparison — can, and is kept."""
+    try:
+        with np.errstate(all="ignore"), warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            r = call()
+    except TypeError as e:
+        m = str(e)
+        return not (m.startswith("int() argument must be") or m.startswith("'>' not supported between instances of 'int'")
+                    or m.startswith("only 0-dimensional arrays") or m.startswith("object of type"))
+    except Exception:
+        return False
+    rs = r if isinstance(r, (tuple, list)) else (r,)
+    return any(np.asarray(x).dtype == object for x in rs)
+
+
 def gen_polyalgebra():
     cases = []
     host = []
@@ -12522,7 +12637,10 @@ def gen_polyalgebra():
         for key in arg_order:
             if key in args:
                 v = args[key]
-                params[key] = v if key == "maxpower" else _ps_enc(v, operands)
+                # maxpower stays a plain JSON int / null where the facades' int? parameter takes it; any other kind
+                # (a float, a bool, a str, an ndarray, an int past int32, np.float16) travels as a spec.
+                plain = v is None or (type(v) is int and -2 ** 31 <= v < 2 ** 31)
+                params[key] = v if key == "maxpower" and plain else _ps_enc(v, operands)
         if facet:
             params["facet"] = facet
         n = counter[0]
@@ -12933,6 +13051,134 @@ def gen_polyalgebra():
                 c = np.random.default_rng(1950).uniform(lo, hi, 300).astype(dt)
                 c[-1] = 1.0
                 emit(o_mulx, {"c": A(c)}, lambda: mulx(c), "long_1d", f"{o_mulx}/subnormal/{dt}")
+
+        # ---------------- (M) argument kinds (the wholeness pass) ----------------
+        # (M1) pow through the object-typed overloads: int(pow) and `power != pow` with Python's / NumPy's semantics for
+        # every kind a C# caller can spell (NDPolyPowerArgument.cs) — bool, np.float16 (Half), a str (int()'s grammar,
+        # then never equal), None / list / tuple / complex (int()'s TypeError), 0-d arrays of every kind (a complex one
+        # int()'s TypeError), arrays of one or more dims (TypeError whatever their size), Python ints past int64.
+        one = np.array([1.5])                  # one coefficient: every product of a power of it is one cheap term
+        three = _ps_series(3, "float64", seed=27)
+        f16 = np.float16
+        pkinds = [("true", True), ("false", False), ("h2", f16(2.0)), ("h2_5", f16(2.5)), ("hnan", f16("nan")),
+                  ("hinf", f16("inf")), ("s3", "3"), ("s_sp", " 3 "), ("s_us", "3_0"), ("sx", "x"), ("s_empty", ""),
+                  ("s_neg", "-1"), ("none", None), ("list", [3]), ("tuple", (3,)), ("cplx", 2 + 0j),
+                  ("nd0_i64", A(np.array(3))), ("nd0_f64", A(np.array(2.0))), ("nd0_f64_frac", A(np.array(2.5))),
+                  ("nd0_bool", A(np.array(True))), ("nd0_c128", A(np.array(2 + 0j))),
+                  ("nd0_u8", A(np.array(250, np.uint8))), ("nd0_f16", A(np.array(2, np.float16))),
+                  ("nd0_i8_neg", A(np.array(-1, np.int8))), ("nd0_nan", A(np.array(np.nan))),
+                  ("nd0_f32_inf", A(np.array(np.inf, np.float32))), ("nd1", A(np.array([3]))), ("nd2", A(np.array([[3]]))),
+                  ("nd_2elem", A(np.array([2, 3]))), ("nd_empty", A(np.zeros(0))), ("big70", 2 ** 70),
+                  ("u64max", 2 ** 64 - 1), ("nd0_u64max", A(np.array(2 ** 64 - 1, np.uint64)))]
+        for tag, pv in pkinds:
+            big = tag in ("nd0_u8", "big70", "u64max", "nd0_u64max")
+            cc = one if big else three
+            # A huge VALID power with no limit (polypow's None) would loop for ever: those cap it at 16 like section G.
+            args = {"c": A(cc), "pow": pv}
+            kw = {}
+            if power and big:
+                args["maxpower"] = 16
+                kw = {"maxpower": 16}
+            emit(o_pow, args, lambda: pw(cc, _ps_py(pv), **kw), "pow_kind", f"{o_pow}/argkind/{tag}")
+        # (M2) maxpower through the object-typed overload: `power > maxpower` exactly for Python ints / bools / floats,
+        # in the dtype of np.float16 or of an ndarray (NEP 50: the int rounded to float16 / float32 first, complex
+        # compared lexicographically, bool as int64), the ndarray result then tested for truth (one element only).
+        mkinds = [("f2_5", 2.5), ("fnan", float("nan")), ("fninf", float("-inf")), ("finf", float("inf")), ("big70", 2 ** 70),
+                  ("true", True), ("false", False), ("h1_5", f16(1.5)), ("hnan", f16("nan")), ("cplx", 1 + 0j), ("s", "5"),
+                  ("list", [5]), ("tuple", (5,)), ("nd0_5", A(np.array(5))), ("nd0_1", A(np.array(1))),
+                  ("nd0_nan", A(np.array(np.nan))), ("nd0_c5", A(np.array(5 + 0j))), ("nd0_c1", A(np.array(1 + 0j))),
+                  ("nd0_c2m5", A(np.array(2 - 5j))), ("nd0_c2p5", A(np.array(2 + 5j))), ("nd0_bool", A(np.array(True))),
+                  ("nd1_5", A(np.array([5]))), ("nd2_1", A(np.array([[1]]))), ("nd_2elem", A(np.array([1, 5]))),
+                  ("nd_empty", A(np.zeros(0))), ("nd0_u64max", A(np.array(2 ** 64 - 1, np.uint64))),
+                  ("nd0_i8", A(np.array(2, np.int8))), ("nd0_f16", A(np.array(2.5, np.float16))),
+                  ("nd0_f32", A(np.array(2.5, np.float32)))]
+        for mtag, mv in mkinds:
+            for ptag, pv in (("int2", 2), ("int3", 3), ("f2", 2.0), ("nd0_2", A(np.array(2))), ("true", True)):
+                emit(o_pow, {"c": A(three), "pow": pv, "maxpower": mv}, lambda: pw(three, _ps_py(pv), _ps_py(mv)),
+                     "pow_kind", f"{o_pow}/maxkind/{mtag}/{ptag}")
+        # The comparison's dtype decides at the boundaries: 2049 rounds to float16 2048 (not exceeded, so the power is
+        # computed), 70000 to float16 inf; the weak int's conversion into a float / complex loop overflows past 2**1024
+        # (OverflowError, before an ndarray's truth test), into a bool one past int64; integer ndarrays and Python floats
+        # compare exactly.
+        for tag, pv, mv in (("h2048_2049", 2049, f16(2048)), ("nd_h2048_2049", 2049, A(np.array(2048, np.float16))),
+                            ("h65504_70000", 70000, f16(65504)), ("nd_h65504_70000", 70000, A(np.array(65504, np.float16))),
+                            ("h_big1100", 2 ** 1100, f16(1)), ("nd_f64_big1100", 2 ** 1100, A(np.array(1.0))),
+                            ("nd_c_big1100", 2 ** 1100, A(np.array(1 + 0j))), ("nd_bool_big63", 2 ** 63, A(np.array(True))),
+                            ("nd_bool_big62", 2 ** 62, A(np.array(True))),
+                            ("nd_u64_big1100", 2 ** 1100, A(np.array(2 ** 64 - 1, np.uint64))),
+                            ("nd_i8_big70", 2 ** 70, A(np.array(5, np.int8))), ("f_big1100", 2 ** 1100, 1.0),
+                            ("f_exact", 2 ** 53 + 1, float(2 ** 53)), ("nd_empty_big1100", 2 ** 1100, A(np.zeros(0))),
+                            ("nd_2elem_big1100", 2 ** 1100, A(np.zeros(2))), ("nd_empty_int", 3, A(np.zeros(0, np.int64)))):
+            emit(o_pow, {"c": A(one), "pow": pv, "maxpower": mv}, lambda: pw(one, pv, _ps_py(mv)), "pow_kind",
+                 f"{o_pow}/maxedge/{tag}")
+        # (M3) the object / str refusal is DEFERRED to where NumPy computes with Python objects: as_series' checks of
+        # every argument, np.array's raggedness, div's zero-divisor test (run on the object copies) and pow's checks come
+        # first, in NumPy's order. Only outcomes NumPy reaches before any object arithmetic are recorded.
+        obj1 = [1.0, None]
+        strl = [1.0, "a"]
+        NO = object()
+        for tag, c1v, c2v in (("obj_empty", None, A(np.zeros(0))), ("empty_obj", A(np.zeros(0)), obj1),
+                              ("obj_2d", obj1, A(np.zeros((2, 2)))), ("obj_ragged", None, [[1, 2], [3]]),
+                              ("ragged_obj", [[1, 2], [3]], None), ("str_f", strl, A(three)), ("f_str", A(three), strl),
+                              ("str_bool", strl, A(np.array([True]))), ("str_obj", strl, obj1),
+                              ("obj_zero", None, A(np.zeros(1))), ("obj_zeros", obj1, A(np.array([0.0, -0.0]))),
+                              ("obj_false", None, A(np.array([False]))), ("obj_c0", None, A(np.zeros(1, np.complex128))),
+                              ("obj_i0", None, A(np.zeros(1, np.int32))), ("big_zero", 2 ** 70, A(np.zeros(1))),
+                              ("str_2d", [["a", 1.0]], A(three)), ("str_tuple", ("x",), A(three)),
+                              ("str_empty", strl, A(np.zeros(0)))):
+            for opx, fx, kd in ((o_mul, mul, "array"), (o_div, div, "tuple")):
+                call = (lambda fx=fx, c1v=c1v, c2v=c2v: fx(_ps_py(c1v), _ps_py(c2v)))
+                if _pa_object_land(call):
+                    continue
+                emit(opx, {"c1": c1v, "c2": c2v}, call, "object_order", f"{opx}/objorder/{tag}", kind=kd)
+        for tag, cv, pv, mv in (("obj_neg", None, -1, NO), ("obj_frac", None, 2.5, NO), ("obj_toobig", obj1, 17, 16),
+                                ("obj_strx", None, "x", NO), ("obj_cplx", None, 1 + 0j, NO), ("obj_strmax", None, 2, "5"),
+                                ("obj_nanpow", None, float("nan"), NO), ("str_neg", strl, -1, NO), ("big_neg", 2 ** 70, -1, NO),
+                                ("empty_strpow", A(np.zeros(0)), "x", NO), ("obj_huge_cap", obj1, 1e19, 16),
+                                ("str_2d_pow", [["a", 1.0]], 2, NO)):
+            args = {"c": cv, "pow": pv}
+            if mv is not NO:
+                args["maxpower"] = mv
+            call = (lambda cv=cv, pv=pv, mv=mv: pw(_ps_py(cv), pv) if mv is NO else pw(_ps_py(cv), pv, mv))
+            if _pa_object_land(call):
+                continue
+            emit(o_pow, args, call, "object_order", f"{o_pow}/objorder/{tag}")
+        for tag, cv in (("obj_2d", [[None, 1.0]]), ("str_2d", [["a", 1.0]]), ("str_only", ["a", "b"]), ("str_tuple", ("x",)),
+                        ("str_list_one", ["x"])):
+            singles = [(o_mulx, mulx, "c")] + [(cop, cf, cname) for cop, cf, cname in convs]
+            for opx, fx, cname in singles:
+                call = (lambda fx=fx, cv=cv: fx(_ps_py(cv)))
+                if _pa_object_land(call):
+                    continue
+                emit(opx, {cname: cv}, call, "object_order", f"{opx}/objorder/{tag}")
+            call = (lambda cv=cv: fr(_ps_py(cv)))
+            if not _pa_object_land(call):
+                emit(o_fr, {"roots": cv}, call, "object_order", f"{o_fr}/objorder/{tag}")
+        # (M4) complex series holding infinities and NaNs. cblas' zdotu builds its result with C99 complex arithmetic
+        # (re + im*_Complex_I), so an infinite / NaN imaginary part turns the real part into NaN — while a ONE-term factor
+        # is np.convolve's reversed one-element kernel, whose negative stride keeps CDOUBLE_dot off cblas (plain loop, no
+        # such NaN). Below zdotu's vector block both are managed-exact, hence portable.
+        cvals = [("inf_re", [complex(np.inf, 0), 1 + 1j, -2 + 0.5j]), ("ninf_im", [complex(0, -np.inf), 1 + 1j]),
+                 ("inf_both", [complex(np.inf, np.inf), 2 - 1j, 0.5j]), ("big", [complex(1e308, 1e308), 3 + 1j, -1 + 2j]),
+                 ("nan_im", [complex(1, np.nan), 1 + 1j, 3 - 2j]), ("negzero_inf", [complex(-0.0, np.inf), -0.5 + 0j])]
+        fac2 = np.array([2 - 1j, 1 + 3j])
+        fac1 = np.array([2 + 1j])
+        for tag, vals in cvals:
+            cv = np.array(vals, np.complex128)
+            single = cv[:1].copy()
+            emit(o_fr, {"roots": A(cv)}, lambda: fr(cv), "cspecial", f"{o_fr}/cspecial/{tag}")
+            emit(o_mul, {"c1": A(cv), "c2": A(fac2)}, lambda: mul(cv, fac2), "cspecial", f"{o_mul}/cspecial/{tag}")
+            emit(o_mul, {"c1": A(fac2), "c2": A(cv)}, lambda: mul(fac2, cv), "cspecial", f"{o_mul}/cspecialr/{tag}")
+            emit(o_mul, {"c1": A(cv), "c2": A(fac1)}, lambda: mul(cv, fac1), "cspecial", f"{o_mul}/cspecial1/{tag}")
+            emit(o_mul, {"c1": A(fac1), "c2": A(cv)}, lambda: mul(fac1, cv), "cspecial", f"{o_mul}/cspecial1r/{tag}")
+            emit(o_mul, {"c1": A(single), "c2": A(fac1)}, lambda: mul(single, fac1), "cspecial", f"{o_mul}/cspecial11/{tag}")
+            emit(o_pow, {"c": A(cv), "pow": 3}, lambda: pw(cv, 3), "cspecial", f"{o_pow}/cspecial/{tag}")
+            emit(o_pow, {"c": A(single), "pow": 3}, lambda: pw(single, 3), "cspecial", f"{o_pow}/cspecial1/{tag}")
+            emit(o_div, {"c1": A(np.concatenate([cv, fac2])), "c2": A(fac2)},
+                 lambda: div(np.concatenate([cv, fac2]), fac2), "cspecial", f"{o_div}/cspecial/{tag}", kind="tuple")
+            emit(o_mulx, {"c": A(cv)}, lambda: mulx(cv), "cspecial", f"{o_mulx}/cspecial/{tag}")
+            for cop, cf, cname in convs:
+                emit(cop, {cname: A(cv)}, lambda: cf(cv), "cspecial", f"{cop}/cspecial/{tag}")
 
     # Char: NumSharp's uint16-like dtype converts to float64 exactly as uint16 does (the house weave).
     cases += _relabel_dtype([c for c in cases if "/uint16/" in (c.get("id") or "") and not c.get("expects_throw")],

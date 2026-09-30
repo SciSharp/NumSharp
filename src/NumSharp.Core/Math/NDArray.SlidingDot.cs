@@ -61,7 +61,14 @@ namespace NumSharp
         /// <c>data.size &gt;= kernel.size</c>. The kernel is read forward. Returns a fresh,
         /// C-contiguous, owning result of the mode-appropriate length.
         /// </summary>
-        internal static NDArray SlidingCorrelate(NDArray data, NDArray kernel, NPTypeCode retType, SlidingMode mode)
+        /// <param name="data">The data operand (contiguous, offset 0, of <paramref name="retType"/>).</param>
+        /// <param name="kernel">The kernel operand, read forward (contiguous, offset 0, of <paramref name="retType"/>).</param>
+        /// <param name="retType">The dtype of both operands and of the result.</param>
+        /// <param name="mode">Valid, same or full.</param>
+        /// <param name="complexDotViaBlas">Whether NumPy's complex dotfunc reaches cblas (both operand strides positive as
+        ///     its dot sees them — <see cref="DotOperandBlasable"/>); false runs CDOUBLE_dot's plain loop instead.</param>
+        /// <returns>The correlation.</returns>
+        internal static NDArray SlidingCorrelate(NDArray data, NDArray kernel, NPTypeCode retType, SlidingMode mode, bool complexDotViaBlas = true)
         {
             long n1 = data.size;
             long n2 = kernel.size;
@@ -73,9 +80,35 @@ namespace NumSharp
             unsafe
             {
                 SlidingCorrelateInto((void*)data.Address, n1, (void*)kernel.Address, n2, (void*)result.Address, retType, mode,
-                    data.TensorEngine.Blas as ISlidingDotBackend);
+                    data.TensorEngine.Blas as ISlidingDotBackend, complexDotViaBlas);
             }
             return result;
+        }
+
+        /// <summary>
+        ///     Whether one operand of NumPy's <c>_pyarray_correlate</c> reaches its dotfunc with a stride cblas accepts
+        ///     (<c>blas_stride</c>: positive and a multiple of the itemsize). <c>PyArray_Correlate(2)</c> takes each operand
+        ///     through <c>PyArray_FromAny(op, dtype, 1, 1, NPY_ARRAY_DEFAULT)</c>, which COPIES — into a fresh, positive
+        ///     stride — an operand of another dtype or one that is not C-contiguous; but an array of ONE element is always
+        ///     C-contiguous whatever its stride, so it is passed through as it is, and np.convolve's kernel is <c>v[::-1]</c>,
+        ///     whose stride is the negation of <c>v</c>'s. Only such a one-element operand can therefore be unblasable.
+        /// </summary>
+        /// <param name="x">The operand as the caller received it.</param>
+        /// <param name="retType">The dtype NumPy converts it to.</param>
+        /// <param name="reversed">The operand is np.convolve's kernel, which NumPy reverses before the conversion.</param>
+        /// <returns>False when NumPy's dot sees a non-positive stride (a one-element operand of the final dtype whose
+        ///     stride, after the reversal, is not positive).</returns>
+        /// <remarks>Only the complex dotfunc behaves differently on the two paths (cblas' zdotu builds its result with C99
+        ///     complex arithmetic, which turns a non-finite imaginary part's <c>im*0</c> into a NaN real part — see
+        ///     <see cref="ZdotuResult"/>); a real dot of the single term such an operand allows is identical on both.</remarks>
+        internal static bool DotOperandBlasable(NDArray x, NPTypeCode retType, bool reversed)
+        {
+            // Another dtype is a cast (a fresh array), more than one element a copy unless already C-contiguous — both a
+            // positive stride.
+            if (x.GetTypeCode != retType || x.size != 1)
+                return true;
+            long stride = x.Shape.strides.Length == 0 ? 1 : x.Shape.strides[0];
+            return (reversed ? -stride : stride) > 0;
         }
 
         /// <summary>
@@ -110,9 +143,14 @@ namespace NumSharp
         /// <param name="mode">Valid, same or full.</param>
         /// <param name="slidingBlas">The installed byte-parity backend (<c>TensorEngine.Blas as ISlidingDotBackend</c>), or
         ///     null for NumSharp's managed kernels.</param>
+        /// <param name="complexDotViaBlas">For complex128: whether NumPy's CDOUBLE_dot reaches <c>cblas_zdotu_sub</c> — both
+        ///     operands' strides positive as its dot sees them (<see cref="DotOperandBlasable"/>). False (a one-element
+        ///     operand passed through with a non-positive stride, e.g. np.convolve's reversed one-element kernel) runs its
+        ///     plain loop instead, NOT the backend: that loop builds no C99 complex, so an infinite imaginary part leaves the
+        ///     real part alone.</param>
         /// <exception cref="NotSupportedException"><paramref name="retType"/> has no sliding kernel.</exception>
         internal static unsafe void SlidingCorrelateInto(void* a, long n1, void* k, long n2, void* o, NPTypeCode retType, SlidingMode mode,
-            ISlidingDotBackend slidingBlas)
+            ISlidingDotBackend slidingBlas, bool complexDotViaBlas = true)
         {
             long nLeft, nRight;
             switch (mode)
@@ -189,7 +227,10 @@ namespace NumSharp
                             SlidingHalf((Half*)a, (Half*)k, (Half*)o, n2, nLeft, nRight, mid);
                         break;
                     case NPTypeCode.Complex:
-                        if (useBlas) SlidingBlas(slidingBlas, NPTypeCode.Complex, (Complex*)a, (Complex*)k, (Complex*)o, n2, nLeft, nRight, mid);
+                        // An operand NumPy's dot cannot hand to cblas takes CDOUBLE_dot's own loop — ahead of the backend,
+                        // which NumPy does not call then either.
+                        if (!complexDotViaBlas) SlidingComplexPlain((Complex*)a, (Complex*)k, (Complex*)o, n2, nLeft, nRight, mid);
+                        else if (useBlas) SlidingBlas(slidingBlas, NPTypeCode.Complex, (Complex*)a, (Complex*)k, (Complex*)o, n2, nLeft, nRight, mid);
                         else if (!TrySlidingComplexLong((Complex*)a, (Complex*)k, (Complex*)o, n2, nLeft, nRight, mid))
                             SlidingComplex((Complex*)a, (Complex*)k, (Complex*)o, n2, nLeft, nRight, mid);
                         break;
@@ -517,12 +558,56 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     The complex128 sliding engine when NumPy's CDOUBLE_dot does NOT reach cblas (an operand whose stride its dot
+        ///     cannot pass on — <see cref="DotOperandBlasable"/>): every position through CDOUBLE_dot's own loop,
+        ///     <see cref="CdoubleDotPlain"/>. Same positions as <see cref="SlidingComplex"/>.
+        /// </summary>
+        /// <param name="a">Data element 0.</param><param name="k">Kernel element 0 (forward).</param>
+        /// <param name="o">Output element 0.</param><param name="n2">Kernel length.</param>
+        /// <param name="nLeft">Left-ramp positions.</param><param name="nRight">Right-ramp positions.</param>
+        /// <param name="mid">Fully overlapping positions.</param>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe void SlidingComplexPlain(Complex* a, Complex* k, Complex* o, long n2, long nLeft, long nRight, long mid)
+        {
+            for (long j = 0; j < nLeft; j++)
+                o[j] = CdoubleDotPlain(a, k + (nLeft - j), n2 - nLeft + j);
+            Complex* om = o + nLeft;
+            for (long i = 0; i < mid; i++)
+                om[i] = CdoubleDotPlain(a + i, k, n2);
+            Complex* orr = o + nLeft + mid;
+            for (long j = 0; j < nRight; j++)
+                orr[j] = CdoubleDotPlain(a + mid + j, k, n2 - 1 - j);
+        }
+
+        /// <summary>
+        ///     CDOUBLE_dot's loop without cblas (arraytypes.c.src): <c>sumr += ip1r*ip2r - ip1i*ip2i; sumi += ip1r*ip2i +
+        ///     ip1i*ip2r</c> from +0, the first operand's parts first — plain double arithmetic, so a non-finite imaginary
+        ///     part does not reach the real part (compare <see cref="ZdotuResult"/>).
+        /// </summary>
+        /// <param name="ap">First operand (NumPy's <c>ip1</c>, the data).</param>
+        /// <param name="kp">Second operand (<c>ip2</c>, the kernel; not conjugated).</param>
+        /// <param name="len">Terms.</param>
+        /// <returns>The dot product.</returns>
+        private static unsafe Complex CdoubleDotPlain(Complex* ap, Complex* kp, long len)
+        {
+            double sumr = 0.0, sumi = 0.0;
+            for (long t = 0; t < len; t++)
+            {
+                var x = ap[t]; var y = kp[t];
+                sumr += x.Real * y.Real - x.Imaginary * y.Imaginary;
+                sumi += x.Real * y.Imaginary + x.Imaginary * y.Real;
+            }
+            return new Complex(sumr, sumi);
+        }
+
+        /// <summary>
         ///     NumPy's complex dotfunc for one position. CDOUBLE_dot calls cblas_zdotu_sub, and scipy-openblas' zdotu below
         ///     its vector threshold keeps FOUR plain double sums — re = Σ ar*br − Σ ai*bi, im = Σ ar*bi + Σ ai*br — which
         ///     CDOUBLE_dot adds into a zeroed double pair (probed 2.4.2, np.dot of 1..7 random complex terms: 0 of 2,100
         ///     differ from this model; the per-term naive product differs on up to 90%). From <see cref="ZdotuVectorMin"/>
         ///     terms the vector kernel reorders the sums (byte parity through the backend only); those keep the naive per-term
-        ///     product, whose NaN in either component propagates into BOTH result components exactly like NumPy.
+        ///     product. Both regimes end in zdotu's C99 result construction (<see cref="ZdotuResult"/>), which is what makes a
+        ///     non-finite imaginary part poison the real part exactly as NumPy's does.
         /// </summary>
         /// <param name="ap">First operand.</param>
         /// <param name="kp">Second operand (not conjugated).</param>
@@ -541,10 +626,7 @@ namespace NumSharp
                     d2 += x.Real * y.Imaginary;
                     d3 += x.Imaginary * y.Real;
                 }
-                double sum0 = 0, sum1 = 0;   // CDOUBLE_dot's `sum += tmp` over its one chunk
-                sum0 += d0 - d1;
-                sum1 += d2 + d3;
-                return new Complex(sum0, sum1);
+                return ZdotuResult(d0 - d1, d2 + d3);
             }
             double sr = 0, si = 0;
             for (long t = 0; t < len; t++)
@@ -553,7 +635,32 @@ namespace NumSharp
                 sr += x.Real * y.Real - x.Imaginary * y.Imaginary;
                 si += x.Real * y.Imaginary + x.Imaginary * y.Real;
             }
-            return new Complex(sr, si);
+            return ZdotuResult(sr, si);
+        }
+
+        /// <summary>
+        ///     zdotu's result as CDOUBLE_dot receives it, then added into CDOUBLE_dot's zeroed double pair: scipy-openblas is
+        ///     built with C99 complex, so zdot_compute returns <c>openblas_make_complex_double(re, im)</c> =
+        ///     <c>re + im * _Complex_I</c>, and C's real-by-complex product <c>im * (0 + 1i)</c> is <c>(im*0) + (im*1)i</c> —
+        ///     the real part becomes <c>re + im*0</c>.
+        /// </summary>
+        /// <param name="re">The real sum <c>dot[0] - dot[1]</c>.</param>
+        /// <param name="im">The imaginary sum <c>dot[2] + dot[3]</c>.</param>
+        /// <returns>The dot product NumPy stores.</returns>
+        /// <remarks>
+        ///     Invisible for finite values (<c>im*0</c> is a zero, and <c>re</c> is never -0.0 here: every sum starts at +0),
+        ///     but an infinite or NaN imaginary part makes <c>im*0</c> NaN, so the real part is NaN too: NumPy's
+        ///     <c>np.convolve([1+0j], [inf+0j])</c> is <c>nan+nanj</c> and a product holding <c>inf+infj</c> reads
+        ///     <c>nan+infj</c>, where the plain sums give <c>inf+nanj</c> and <c>inf+infj</c> (probed against the DLL NumPy
+        ///     2.4.2 loads: <c>scipy_cblas_zdotu_sub64_</c> on 1..8-term operands). Neither Roslyn nor the JIT folds a
+        ///     floating-point <c>x * 0.0</c> (it is not an identity under IEEE rules), and the unit tests pin the NaN.
+        /// </remarks>
+        private static Complex ZdotuResult(double re, double im)
+        {
+            double sum0 = 0, sum1 = 0;   // CDOUBLE_dot's `sum += tmp` over its one chunk
+            sum0 += re + im * 0.0;
+            sum1 += im;
+            return new Complex(sum0, sum1);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]

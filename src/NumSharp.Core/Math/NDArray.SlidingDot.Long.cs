@@ -134,8 +134,10 @@ namespace NumSharp
 
         /// <summary>
         ///     The complex128 correlation of a kernel of <see cref="ZdotuVectorMin"/> or more terms without the backend: the
-        ///     positions shorter than zdotu's vector block through <see cref="ZdotuManaged"/> (the four separate sums, byte
-        ///     for byte for finite values), every other position through the blocked complex FMA kernel.
+        ///     positions shorter than zdotu's vector block through <see cref="ZdotuManaged"/> (the four separate sums and
+        ///     zdotu's C99 result construction, byte for byte, non-finite values included), every other position through the
+        ///     blocked complex FMA kernel (NumPy's sums reordered, so a few ULP apart, but ending in the same result
+        ///     construction, so an infinite or NaN imaginary part poisons the real part exactly as in NumPy).
         /// </summary>
         /// <param name="a">Data element 0.</param><param name="k">Kernel element 0 (forward).</param>
         /// <param name="o">Output element 0.</param><param name="n2">Kernel length.</param>
@@ -495,10 +497,28 @@ namespace NumSharp
             double* d = (double*)dst;
             // 0b0101 swaps the two doubles of each 128-bit lane ([re*ki, im*ki] -> [im*ki, re*ki]); addsubpd then takes
             // even lanes a - b (re*kr - im*ki) and odd lanes a + b (im*kr + re*ki).
-            Avx.AddSubtract(a0, Avx.Permute(b0, 0b0101)).Store(d);
-            Avx.AddSubtract(a1, Avx.Permute(b1, 0b0101)).Store(d + 4);
-            Avx.AddSubtract(a2, Avx.Permute(b2, 0b0101)).Store(d + 8);
-            Avx.AddSubtract(a3, Avx.Permute(b3, 0b0101)).Store(d + 12);
+            ZdotuResult(Avx.AddSubtract(a0, Avx.Permute(b0, 0b0101))).Store(d);
+            ZdotuResult(Avx.AddSubtract(a1, Avx.Permute(b1, 0b0101))).Store(d + 4);
+            ZdotuResult(Avx.AddSubtract(a2, Avx.Permute(b2, 0b0101))).Store(d + 8);
+            ZdotuResult(Avx.AddSubtract(a3, Avx.Permute(b3, 0b0101))).Store(d + 12);
+        }
+
+        /// <summary>
+        ///     <see cref="ZdotuResult(double, double)"/> for two positions at once: zdotu's C99 result construction
+        ///     (<c>re + im * _Complex_I</c>) adds <c>im*0</c> to each REAL part — a NaN when the imaginary part is infinite
+        ///     or NaN, nothing otherwise — and leaves the imaginary parts untouched.
+        /// </summary>
+        /// <param name="r">Two results as [re0, im0, re1, im1].</param>
+        /// <returns>The results as NumPy stores them.</returns>
+        /// <remarks>The imaginary lanes are blended back from <paramref name="r"/> rather than added a zero: <c>im + re*0</c>
+        ///     would poison an imaginary part with an infinite real part, which zdotu does not do.</remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static Vector256<double> ZdotuResult(Vector256<double> r)
+        {
+            // [im0, re0, im1, re1] * 0: the even lanes hold im*0, the product each real part receives.
+            var poisoned = Avx.Add(r, Avx.Multiply(Avx.Permute(r, 0b0101), Vector256<double>.Zero));
+            // Blend control 0b1010: lanes 1 and 3 (the imaginary parts) from r, lanes 0 and 2 from the sums.
+            return Avx.Blend(poisoned, r, 0b1010);
         }
 
         /// <summary>Terms [<paramref name="from"/>, <paramref name="to"/>) of <see cref="FmaBlockComplex"/>.</summary>
