@@ -537,7 +537,11 @@ namespace NumSharp
         ///     <c>deg must be non-negative</c>; <c>array is too big; …</c>.</exception>
         /// <exception cref="IncorrectShapeException">No points (NumPy's reshape text).</exception>
         /// <exception cref="System.OutOfMemoryException">A matrix NumPy allocates on the way cannot be allocated.</exception>
-        /// <exception cref="System.NotSupportedException">Points NumPy stacks into a str or object array.</exception>
+        /// <exception cref="System.OverflowException">Scalar points with a Python int past the float range (NumPy's
+        ///     <c>int too large to convert to float</c> at its per-element <c>+ 0.0</c>).</exception>
+        /// <exception cref="System.NotSupportedException">Points NumPy stacks into a str array, or into an object array it
+        ///     computes with as Python objects or fails on. Scalar points that are all numbers but stack into an object array
+        ///     (a Python int past uint64 among them) ARE computed: each dimension gets its own number, as in NumPy.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.hermite_e.hermevander2d.html</remarks>
         [NDScoped]
         public NDArray hermevander2d(object x, object y, object deg) => NDPolyVander.VanderNd(PolyBasis.HermiteE, new[] { x, y }, deg);
@@ -556,7 +560,11 @@ namespace NumSharp
         /// <exception cref="ValueError"><c>Expected 3 dimensions of degrees, got {len}</c>, and the 2-D form's other errors.</exception>
         /// <exception cref="IncorrectShapeException">No points (NumPy's reshape text).</exception>
         /// <exception cref="System.OutOfMemoryException">A matrix NumPy allocates on the way cannot be allocated.</exception>
-        /// <exception cref="System.NotSupportedException">Points NumPy stacks into a str or object array.</exception>
+        /// <exception cref="System.OverflowException">Scalar points with a Python int past the float range (NumPy's
+        ///     <c>int too large to convert to float</c> at its per-element <c>+ 0.0</c>).</exception>
+        /// <exception cref="System.NotSupportedException">Points NumPy stacks into a str array, or into an object array it
+        ///     computes with as Python objects or fails on. Scalar points that are all numbers but stack into an object array
+        ///     (a Python int past uint64 among them) ARE computed: each dimension gets its own number, as in NumPy.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.hermite_e.hermevander3d.html</remarks>
         [NDScoped]
         public NDArray hermevander3d(object x, object y, object z, object deg) => NDPolyVander.VanderNd(PolyBasis.HermiteE, new[] { x, y, z }, deg);

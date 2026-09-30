@@ -1,7 +1,9 @@
 using System;
 using System.Collections;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using NumSharp.Backends;
 using NumSharp.Backends.Iteration;
@@ -19,7 +21,9 @@ using NumSharp.Backends.Kernels;
 //   object[] and every other C# array whose elements are not a NumSharp dtype — jagged double[][], NDArray[],
 //     BigInteger[], ValueTuple[] …; a multi-dimensional one (object[,]) is a list of rows
 //                                                                     a list
-//   any other IList / IEnumerable (List<T>, LINQ)                     a list
+//   any other IList / IEnumerable (List<T>, LINQ)                     a list — one of a NumSharp dtype T (List<double>,
+//                                                                     List<int> …) is coerced from its values in one pass
+//                                                                     (TryTypedCollection), the same array the walk builds
 // while an NDArray, a typed C# array (double[], int[,], Half[] …) and a Memory<T> of a dtype are NDARRAYS, and a
 // string is a str scalar. Items classify the same way at every depth; any other item is a scalar: a Python scalar
 // (bool, the integer primitives, BigInteger, float, double, Complex) or a NumPy scalar (Half, char, decimal).
@@ -210,6 +214,11 @@ namespace NumSharp
             // node, dispatch and promotion bookkeeping; a 100-item list took longer to coerce than NumPy's whole call).
             if (seq is object[] flat && TryFlatScalars(flat, out var fast))
                 return fast;
+            // A typed C# COLLECTION (List<double>, List<int> …) is one flat Python list of scalars of a single C# kind: its
+            // dtype needs no walk, and its values convert in one pass (item by item through the walk it cost ~40 ns an item —
+            // a 1000-point List<double> took longer than NumPy's whole {p}vander). An empty one is the walk's (no dtype vote).
+            if (TryTypedCollection(seq, out var values) && values.Length > 0)
+                return CollectionArray(values);
             // Arrays converted from typed C# arrays during the walk are intermediates of this call (the fill copies
             // them): the Discovery releases them however the call ends.
             using var d = new Discovery(shapeOnly: false);
@@ -409,6 +418,14 @@ namespace NumSharp
                 }
                 if (IsSequence(o))
                 {
+                    // A flat list of one scalar kind — a typed collection, or an object[] of Python floats / of Python ints
+                    // (the top level's fast path, nested: the 2-D / 3-D point stacks, the rows of an N-D series) — takes the
+                    // same shape updates in two calls and fills as one array.
+                    if (!d.ShapeOnly && TryFlatLeaf(o, out var flatLeaf))
+                    {
+                        FlatLeaf(d, node, i, flatLeaf, curr + 1);
+                        continue;
+                    }
                     var child = Walk(d, o, curr + 1);
                     if (child is not null && !d.ShapeOnly)
                         (node.Kids ??= new object[items.Length])[i] = child;
@@ -450,6 +467,51 @@ namespace NumSharp
             }
             if (d.ShapeOnly)
                 return;
+            Promote(d, a.typecode);
+            (node.Kids ??= new object[node.Items.Length])[i] = a;
+        }
+
+        /// <summary>
+        ///     Whether a sequence item is a FLAT list of one scalar kind, and its values as one array: a non-empty typed
+        ///     collection (<see cref="TryTypedCollection"/>), or a non-empty <c>object[]</c> whose items are all Python floats or
+        ///     all Python ints within int64 (<see cref="TryFlatScalars"/>). Anything else — empty, mixed, nested — is walked item
+        ///     by item.
+        /// </summary>
+        /// <param name="o">The sequence item.</param>
+        /// <param name="a">Its values as a new (n,) array of the list's discovered dtype, when the result is true.</param>
+        /// <returns>True for a flat list of one scalar kind.</returns>
+        private static bool TryFlatLeaf(object o, out NDArray a)
+        {
+            a = null;
+            if (o is object[] items)
+                return TryFlatScalars(items, out a);
+            if (TryTypedCollection(o, out var values) && values.Length > 0)
+            {
+                a = CollectionArray(values);
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        ///     A flat-list item (<see cref="TryFlatLeaf"/>) at depth <paramref name="curr"/>: the shape updates the walk makes for
+        ///     a sequence of scalars — the sequence's own at <paramref name="curr"/>, then ONE scalar leaf at
+        ///     <paramref name="curr"/> + 1 (every item is a scalar at that depth, so the other n - 1 updates are the same
+        ///     comparison and change nothing) — and its values as ONE array leaf of the list's dtype, which the fill casts into
+        ///     the result like any array leaf (the same values the per-item conversion writes: every leaf dtype here converts
+        ///     into the promoted dtype exactly, or with the one correctly rounded int64 / uint64 -> float64 step both take).
+        /// </summary>
+        /// <param name="d">The walk.</param><param name="node">The parent.</param><param name="i">The item's index.</param>
+        /// <param name="a">The list's values (non-empty, owned by the walk from here on).</param><param name="curr">The list's depth.</param>
+        private static void FlatLeaf(Discovery d, Node node, int i, NDArray a, int curr)
+        {
+            (d.Owned ??= new List<NDArray>()).Add(a);   // an intermediate: the fill copies it (or the walk is abandoned)
+            long len = a.size;
+            if (!UpdateShape(d, curr, 1, &len, sequence: true) || !UpdateShape(d, curr + 1, 0, null, sequence: false))
+            {
+                d.Ragged = true;
+                return;
+            }
             Promote(d, a.typecode);
             (node.Kids ??= new object[node.Items.Length])[i] = a;
         }
@@ -696,6 +758,114 @@ namespace NumSharp
                 default:
                     return false;
             }
+        }
+
+        // ---------------------------------------------------------------------------------------------
+        //  Typed collections: List<double>, List<int> … — Python lists of one scalar kind
+        // ---------------------------------------------------------------------------------------------
+
+        /// <summary>Per runtime type: the materializer of a typed collection (its values as a <c>T[]</c>), or null when the
+        ///     type is not one. The interface scan runs once per type.</summary>
+        private static readonly ConcurrentDictionary<Type, Func<object, Array>> s_collectionMaterializers = new();
+
+        /// <summary>The open generic <see cref="MaterializeCollection{T}"/>, closed per element type.</summary>
+        private static readonly MethodInfo s_materializeCollection =
+            typeof(PolySequence).GetMethod(nameof(MaterializeCollection), BindingFlags.NonPublic | BindingFlags.Static)
+            ?? throw new MissingMethodException(nameof(PolySequence), nameof(MaterializeCollection));
+
+        /// <summary>
+        ///     Whether <paramref name="o"/> is a typed C# COLLECTION — an <see cref="IEnumerable{T}"/> of one of NumSharp's element
+        ///     types that is not a C# array (those are ndarrays), a string (a str), an NDArray or a tuple: a <c>List&lt;T&gt;</c>,
+        ///     any other collection, a LINQ sequence — which the house map reads as a Python LIST of T's scalars. Its values are
+        ///     copied out (one <see cref="ICollection{T}.CopyTo"/>, or one enumeration of a lazy sequence).
+        /// </summary>
+        /// <param name="o">The value (may be null).</param>
+        /// <param name="values">The collection's values as a <c>T[]</c>, when the result is true.</param>
+        /// <returns>True for a typed collection.</returns>
+        private static bool TryTypedCollection(object o, out Array values)
+        {
+            values = null;
+            if (o is null or Array or string or NDArray or ITuple or ArrayRows)
+                return false;
+            var materialize = s_collectionMaterializers.GetOrAdd(o.GetType(), static t =>
+            {
+                foreach (var itf in t.GetInterfaces())
+                {
+                    if (!itf.IsGenericType || itf.GetGenericTypeDefinition() != typeof(IEnumerable<>))
+                        continue;
+                    var e = itf.GetGenericArguments()[0];
+                    if (IsDtypeElement(e))
+                        return s_materializeCollection.MakeGenericMethod(e).CreateDelegate<Func<object, Array>>();
+                }
+                return null;
+            });
+            if (materialize is null)
+                return false;
+            values = materialize(o);
+            return true;
+        }
+
+        /// <summary>A typed collection's values: one <see cref="ICollection{T}.CopyTo"/> into a new array, or one enumeration
+        ///     of a lazy sequence.</summary>
+        /// <typeparam name="T">The element type (a NumSharp dtype's).</typeparam>
+        /// <param name="o">The collection (an <see cref="IEnumerable{T}"/>).</param>
+        /// <returns>The values, in enumeration order.</returns>
+        private static Array MaterializeCollection<T>(object o)
+        {
+            if (o is ICollection<T> c)
+            {
+                var a = new T[c.Count];
+                c.CopyTo(a, 0);
+                return a;
+            }
+            return System.Linq.Enumerable.ToArray((IEnumerable<T>)o);
+        }
+
+        /// <summary>
+        ///     <c>np.array</c> of the Python list a typed collection stands for: its values in the dtype array coercion DISCOVERS
+        ///     for the scalars its C# elements are — bool a Python bool (bool); every integer primitive a Python int (int64 —
+        ///     a <c>ulong</c> past int64 is uint64, and a mix of both magnitudes float64, NumPy's promotion of the two); float
+        ///     and double Python floats (float64: a C# float widens exactly); Complex a Python complex (complex128); Half,
+        ///     char and decimal NumPy scalars (their own dtype).
+        /// </summary>
+        /// <param name="values">The values (a non-empty <c>T[]</c>).</param>
+        /// <returns>A new (n,) array; the caller owns it.</returns>
+        private static NDArray CollectionArray(Array values)
+        {
+            var a = np.asanyarray(values);   // an ndarray of T (a copy into NumSharp memory)
+            NPTypeCode t = a.typecode switch
+            {
+                NPTypeCode.SByte or NPTypeCode.Byte or NPTypeCode.Int16 or NPTypeCode.UInt16 or NPTypeCode.Int32
+                    or NPTypeCode.UInt32 or NPTypeCode.Int64 => NPTypeCode.Int64,
+                NPTypeCode.UInt64 => ULongListDtype(a),
+                NPTypeCode.Single => NPTypeCode.Double,
+                var same => same,
+            };
+            if (t == a.typecode)
+                return a;
+            try
+            {
+                return a.astype(t);
+            }
+            finally
+            {
+                a.Dispose();   // the T-typed copy was an intermediate of the conversion
+            }
+        }
+
+        /// <summary>
+        ///     The dtype of a Python list of non-negative ints (a <c>ulong</c> collection): int64 when every value fits int64,
+        ///     uint64 when none does, float64 for a mix (np.promote_types(int64, uint64), as NumPy's discovery promotes them).
+        /// </summary>
+        /// <param name="a">The values as a uint64 array.</param>
+        /// <returns>The dtype.</returns>
+        private static NPTypeCode ULongListDtype(NDArray a)
+        {
+            using var max = np.amax(a);   // 0-d reductions (house kernels): intermediates of the classification
+            using var min = np.amin(a);
+            bool big = max.GetAtIndex<ulong>(0) > long.MaxValue;
+            bool small = min.GetAtIndex<ulong>(0) <= long.MaxValue;
+            return big ? (small ? NPTypeCode.Double : NPTypeCode.UInt64) : NPTypeCode.Int64;
         }
 
         /// <summary>Whether <paramref name="o"/> is a <see cref="Memory{T}"/> / <see cref="ReadOnlyMemory{T}"/> of a dtype.</summary>

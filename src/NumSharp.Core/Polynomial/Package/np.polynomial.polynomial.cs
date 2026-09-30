@@ -553,7 +553,11 @@ namespace NumSharp
         /// <exception cref="IncorrectShapeException">No points (an empty x, y): NumPy's reshape text <c>cannot reshape array of
         ///     size 0 into shape (0,newaxis)</c>.</exception>
         /// <exception cref="System.OutOfMemoryException">A matrix NumPy allocates on the way cannot be allocated.</exception>
-        /// <exception cref="System.NotSupportedException">Points NumPy stacks into a str or object array.</exception>
+        /// <exception cref="System.OverflowException">Scalar points with a Python int past the float range (NumPy's
+        ///     <c>int too large to convert to float</c> at its per-element <c>+ 0.0</c>).</exception>
+        /// <exception cref="System.NotSupportedException">Points NumPy stacks into a str array, or into an object array it
+        ///     computes with as Python objects or fails on. Scalar points that are all numbers but stack into an object array
+        ///     (a Python int past uint64 among them) ARE computed: each dimension gets its own number, as in NumPy.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polynomial.polyvander2d.html</remarks>
         [NDScoped]
         public NDArray polyvander2d(object x, object y, object deg) => NDPolyVander.VanderNd(PolyBasis.Power, new[] { x, y }, deg);
@@ -573,7 +577,11 @@ namespace NumSharp
         ///     other errors.</exception>
         /// <exception cref="IncorrectShapeException">No points (NumPy's reshape text).</exception>
         /// <exception cref="System.OutOfMemoryException">A matrix NumPy allocates on the way cannot be allocated.</exception>
-        /// <exception cref="System.NotSupportedException">Points NumPy stacks into a str or object array.</exception>
+        /// <exception cref="System.OverflowException">Scalar points with a Python int past the float range (NumPy's
+        ///     <c>int too large to convert to float</c> at its per-element <c>+ 0.0</c>).</exception>
+        /// <exception cref="System.NotSupportedException">Points NumPy stacks into a str array, or into an object array it
+        ///     computes with as Python objects or fails on. Scalar points that are all numbers but stack into an object array
+        ///     (a Python int past uint64 among them) ARE computed: each dimension gets its own number, as in NumPy.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polynomial.polyvander3d.html</remarks>
         [NDScoped]
         public NDArray polyvander3d(object x, object y, object z, object deg) => NDPolyVander.VanderNd(PolyBasis.Power, new[] { x, y, z }, deg);

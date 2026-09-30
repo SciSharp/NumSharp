@@ -557,6 +557,7 @@ namespace NumSharp
             float or double => "float",
             Complex => "complex",
             Half => "numpy.float16",
+            char => "numpy.uint16",   // NumSharp's char dtype is NumPy's uint16 (the house proxy): a NumPy scalar
             _ => o.GetType().Name,
         };
 

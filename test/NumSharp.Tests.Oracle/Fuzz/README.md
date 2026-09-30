@@ -1075,8 +1075,8 @@ overload, a float / huge int → the double one, and maxpower only when the case
 
 ### numpy.polynomial Vandermonde family (`polyvander` tier)
 
-`polyvander.jsonl` (`gen_oracle.py polyvander`, 16,612 cases, floor 16,500) gates plan unit U5 — `{p}vander`,
-`{p}vander2d` and `{p}vander3d` for the six bases (8,224 / 4,986 / 3,402 cases) — **bit-exact, 0 excused**. Keys are
+`polyvander.jsonl` (`gen_oracle.py polyvander`, 31,180 cases, floor 31,000; 16,612 at delivery) gates plan unit U5 —
+`{p}vander`, `{p}vander2d` and `{p}vander3d` for the six bases — **bit-exact, 0 excused**. Keys are
 module-qualified like `polyeval`'s (`legendre.legvander2d`). Arguments are NAMED (`x`, `y`, `z`, `deg`) with the
 polyseries encoding (`_ps_enc`), decoded in that fixed order; `deg` keeps its Python KIND (an int, a bool, a 0-d array,
 a float, a str, a list / tuple / ndarray container), because the kind decides `operator.index`'s answer and NumPy's
@@ -1111,10 +1111,23 @@ comes back is part of the contract. The sections of `gen_polyvander`:
   with the per-dimension allocation between them); and points' errors in NumPy's order (a ragged stack's inhomogeneous
   text, the empty stack's reshape error `cannot reshape array of size 0 into shape (0,newaxis)`);
 - **(I)** inputs longer than one kernel block (cheb and lag carry it: 1,700–9,000 points, strided included);
-- **(H)** Char: the uint16 section relabelled (600 cases).
+- **(H)** Char: the uint16 section relabelled (600 cases);
+- **(J)** the OBJECT stack of scalars (the 2026-09-30 wholeness pass, 14,568 cases, in its own pass after A–I so every
+  earlier id is unchanged): a Python int past uint64 among scalar points makes `np.asarray((x, y[, z]))` an object
+  array, and NumPy's per-element `+ 0.0` then hands every dimension its OWN number — `float(int)`, correctly rounded
+  (`2**64 + 2**11 + 1` rounds up, `2**1024 - 2**970 - 1` down to the largest double) or CPython's OverflowError past
+  the float range (the tie `2**1024 - 2**970` rounds up to it), a Python float / bool / complex, an np.float16 or a
+  0-d array keeping NEP 50's dtype — so the dimensions' matrices can have different dtypes, promoted by the outer
+  product's multiply. Twelve huge ints × 23 partner kinds (NaN, -0.0, complex NaN, np.float16 NaN / -0.0, 0-d float32 /
+  int8 / bool / float16 / complex / uint64-max / NaN arrays, another huge int), both argument orders, three degree pairs,
+  three 3-D arrangements, and the degree errors after the stack. A None / str partner is skipped (`_pv_refused`: NumPy
+  raises TypeError at that element; NumSharp refuses the object stack there, as everywhere). Planted-bug check: a
+  truncating int -> float conversion turns 3,132 cases red.
 
 MemoryError texts (machine-dependent) and the str / object refusals are unit-test-pinned instead
-(`Polynomial/PolynomialVanderTests.cs`), and so are results past 32 MiB, whose product rows stream through
+(`Polynomial/PolynomialVanderTests.cs`; the C#-only argument kinds — typed arrays, `List<T>`, LINQ, `System.Tuple`,
+`object[,]`, `Memory<T>`, `short` / `char` degrees binding the int overload, the typed-collection coercion — in
+`Polynomial/PolynomialVanderArgumentKindsTests.cs`), and so are results past 32 MiB, whose product rows stream through
 non-temporal stores (forced on and off at every alignment there; the corpus' matrices are all small). NaN payloads
 through a complex product are tokenized (the house `simd_cmul` picks a different NaN operand than NumPy's; the value
 is NaN either way). Planted-bug check at delivery: two kernel mutants turned 2,403 and 117 cases red. `OpRegistry.PolyVander.cs` replays it: a 1-D degree that is a C# long in int range

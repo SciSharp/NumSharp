@@ -21,7 +21,9 @@ SECTIONS = {
     "M": "2-D mixed / other dtypes @ 10K points, degrees (3, 3): float32+int32, float16+int8, float32, complex128, "
          "a strided + reversed pair",
     "S": "small calls (the fixed per-call cost): a scalar x, 3 points; 2-D / 3-D scalar points",
-    "A": "argument forms: a Python-list x (16 / 1000 points), Python-list 2-D points, a tuple / an ndarray of degrees",
+    "A": "argument forms: a Python-list x (16 / 1000 points), Python-list 2-D points (100 / 1000), a tuple / an ndarray "
+         "of degrees; the C#-only kinds (a typed double[] x, a List<double> x / 2-D points, a 0-d array degree); the object "
+         "stack of scalars (a BigInteger past uint64 among 2-D / 3-D scalar points, one dtype and mixed dtypes)",
 }
 
 

@@ -53,6 +53,12 @@ var vander = new Dictionary<string, Func<object, int, NDArray>>
     ["poly"] = P.polynomial.polyvander, ["cheb"] = P.chebyshev.chebvander, ["leg"] = P.legendre.legvander,
     ["lag"] = P.laguerre.lagvander, ["herm"] = P.hermite.hermvander, ["herme"] = P.hermite_e.hermevander,
 };
+// The object overload of {p}vander (a degree of any kind — the 0-d array degree cells).
+var vanderObj = new Dictionary<string, Func<object, object, NDArray>>
+{
+    ["poly"] = P.polynomial.polyvander, ["cheb"] = P.chebyshev.chebvander, ["leg"] = P.legendre.legvander,
+    ["lag"] = P.laguerre.lagvander, ["herm"] = P.hermite.hermvander, ["herme"] = P.hermite_e.hermevander,
+};
 var vander2d = new Dictionary<string, Func<object, object, object, NDArray>>
 {
     ["poly"] = P.polynomial.polyvander2d, ["cheb"] = P.chebyshev.chebvander2d, ["leg"] = P.legendre.legvander2d,
@@ -112,6 +118,27 @@ Func<NDArray> MakeCall(JsonElement cell)
 {
     string b = cell.GetProperty("base").GetString();
     string form = cell.GetProperty("form").GetString();
+    if (form == "special")
+    {
+        // The object stack of scalars (polyvander_numpy.py's special()): a BigInteger past uint64 among scalar points.
+        var big = BigInteger.Pow(2, 70);
+        switch (cell.GetProperty("special").GetString())
+        {
+            case "objstack2d":
+            {
+                var d2 = new object[] { 3, 3 };
+                return () => vander2d[b](big, 1.5, d2);
+            }
+            case "objstack3d_mixed":
+            {
+                var d3 = new object[] { 2, 2, 2 };
+                var f32 = NDArray.Scalar(1.5f);
+                return () => vander3d[b](big, (Half)0.5, f32, d3);
+            }
+            case var k:
+                throw new NotSupportedException(k);
+        }
+    }
     string pform = cell.TryGetProperty("pform", out var pf) ? pf.GetString() : null;
     // The points' argument form (built once, like NumPy's list exists before its call): the array, a Python list (an
     // object[] of boxed doubles — NumPy's a.tolist()) or a Python float (a 0-d array's value). Every arm is cast to object:
@@ -123,6 +150,8 @@ Func<NDArray> MakeCall(JsonElement cell)
         {
             "list" => (object)ToPythonList(arr),
             "scalar" => (object)arr.GetDouble(),
+            "typed" => (object)arr.ToArray<double>(),                    // a typed C# array: an ndarray (converted per call)
+            "glist" => (object)new List<double>(arr.ToArray<double>()),  // a List<double>: a Python list of floats
             null => (object)arr,
             var f => throw new NotSupportedException(f),
         };
@@ -131,6 +160,12 @@ Func<NDArray> MakeCall(JsonElement cell)
     if (form == "1d")
     {
         int d = degEl.GetInt32();
+        if (cell.TryGetProperty("degform", out var df1) && df1.GetString() == "nd0")
+        {
+            // A 0-d int64 array degree (NumPy's np.array(5)): the object overload, operator.index of the array.
+            var dnd = NDArray.Scalar((long)d);
+            return () => vanderObj[b](points[0], dnd);
+        }
         return () => vander[b](points[0], d);
     }
     int[] ds = degEl.EnumerateArray().Select(e => e.GetInt32()).ToArray();

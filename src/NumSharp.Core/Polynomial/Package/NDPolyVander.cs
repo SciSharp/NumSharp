@@ -44,6 +44,17 @@ using NumSharp.Backends.Unmanaged.Pooling;
 // the two-step NumPy conversion (P_k -> S exactly for integer promotion, S -> T rounding once; or P_k -> S = T) rounds
 // at most once, the same value, so no stacked copy is made when every point is an NDArray of the same shape.
 //
+// THE OBJECT STACK OF SCALARS. One case of step 2 leaves NumPy's arrays: scalar points one of which is a Python int past
+// uint64 (C# BigInteger 2**70, or -2**70) stack into an OBJECT array — and NumPy still computes a numeric matrix,
+// because the `+ 0.0` then runs per element in Python and `tuple(...)` hands every dimension its own NUMBER: the int
+// becomes float(int) (OverflowError "int too large to convert to float" past the float range), a Python float / bool /
+// complex its float / complex, a NumPy scalar or 0-d array keeps NEP 50's dtype of `+ 0.0` (np.float16 stays float16,
+// np.uint16 becomes float64). Every dimension's matrix is then that number's own {p}vander. When the numbers share a
+// dtype (float64 whenever only Python numbers are involved) the kernel path runs over them unchanged; otherwise the
+// dimensions have different dtypes, and the outer product is NumPy's functools.reduce(operator.mul, ...) of the
+// per-dimension matrices through np.multiply's promotion (MixedDtypeVander). A None / str element there, and every
+// non-scalar object stack (whose matrices NumPy computes as Python-object arrays), stay refused.
+//
 // =============================================================================
 
 namespace NumSharp
@@ -172,11 +183,16 @@ namespace NumSharp
         /// <exception cref="IncorrectShapeException">No points: NumPy's reshape ValueError text (<c>cannot reshape array of size
         ///     0 into shape (0,newaxis)</c>).</exception>
         /// <exception cref="OutOfMemoryException">A matrix NumPy allocates on the way cannot be allocated (MemoryError).</exception>
-        /// <exception cref="NotSupportedException">Points NumPy stacks into a str or object array.</exception>
+        /// <exception cref="OverflowException">Scalar points with a Python int past the float range (<c>int too large to convert
+        ///     to float</c>, NumPy's OverflowError at its per-element <c>+ 0.0</c> of the object stack).</exception>
+        /// <exception cref="NotSupportedException">Points NumPy stacks into a str array, or into an object array it computes
+        ///     with as Python objects (non-scalar points holding a Python int past uint64) or fails on (a None / str element) —
+        ///     an object stack of scalars that are all numbers is computed (see the file header).</exception>
         internal static NDArray VanderNd(PolyBasis basis, object[] points, object deg)
         {
             int n = points.Length;
             NDArray degArray = null, stacked = null;
+            NDArray[] objectPoints = null;
             var views = new List<NDArray>(3);
             var temps = new NDArray[n];
             try
@@ -210,8 +226,19 @@ namespace NumSharp
                 {
                     stacked = PolySequence.ToArrayOrNonNumeric(PolySequence.MakeTuple(points, n), out var nonNumeric);
                     if (stacked is null)
-                        throw nonNumeric.Refusal ?? new NotSupportedException(
-                            "the points stack into a str array (NumPy's `+ 0.0` then raises), a dtype NumSharp does not have");
+                    {
+                        // An object stack of SCALARS (a Python int past uint64 among them) is numeric again after NumPy's
+                        // per-element `+ 0.0` (see the file header); every other str / object stack is refused — NumPy either
+                        // raises at that `+ 0.0` or computes the matrices as Python-object arrays.
+                        if (!nonNumeric.IsObject || nonNumeric.Dims.Length != 1)
+                            throw nonNumeric.Refusal ?? new NotSupportedException(
+                                "the points stack into a str array (NumPy's `+ 0.0` then raises), a dtype NumSharp does not have");
+                        objectPoints = ObjectScalarPoints(points);
+                        if (!SameDtype(objectPoints))
+                            return MixedDtypeVander(basis, objectPoints, degItems);
+                        // One dtype for every dimension: exactly a numeric stack of these numbers, so the kernel path runs.
+                        stacked = StackScalars(objectPoints);
+                    }
                     s = stacked.typecode;
                     var sd = stacked.Shape.dimensions;
                     pdims = sd.Length == 1 ? new long[] { 1 } : sd[1..];
@@ -268,8 +295,126 @@ namespace NumSharp
             {
                 foreach (var tmp in temps) tmp?.Dispose();
                 foreach (var v in views) v.Dispose();
+                if (objectPoints is not null)
+                    foreach (var p in objectPoints) p?.Dispose();
                 stacked?.Dispose();
                 degArray?.Dispose();
+            }
+        }
+
+        // ---------------------------------------------------------------------------------------------
+        //  The object stack of scalars (see the file header)
+        // ---------------------------------------------------------------------------------------------
+
+        /// <summary>The Python float <c>0.0</c> of NumPy's <c>+ 0.0</c> (a weak Python scalar).</summary>
+        private static readonly PolyNumber s_pyZero = PolyNumber.FromPython(PyScalar.Float(0.0));
+
+        /// <summary>
+        ///     NumPy's <c>tuple(np.asarray(points) + 0.0)</c> for an OBJECT stack of scalars: the add runs per element, left to
+        ///     right, with Python's operators (<see cref="PolyNumber.Binary"/>) — an int becomes <c>float(int)</c>, correctly
+        ///     rounded; a bool 1.0 / 0.0; a complex stays complex; a NumPy scalar or 0-d array takes NEP 50's dtype of
+        ///     <c>+ 0.0</c> — and each element becomes its own dimension's point.
+        /// </summary>
+        /// <param name="points">The 2 or 3 scalar points (C# numbers, <see cref="BigInteger"/>, 0-d NDArrays).</param>
+        /// <returns>Per dimension, a new 0-d array of that number (its dtype is what NumPy's <c>{p}vander</c> receives). The
+        ///     caller disposes them.</returns>
+        /// <exception cref="OverflowException">A Python int past the float range (<c>int too large to convert to float</c>),
+        ///     raised where NumPy raises it — at the first such element, before any later one is looked at.</exception>
+        /// <exception cref="NotSupportedException">A None / str element (NumPy's <c>+ 0.0</c> raises a TypeError on it; NumSharp
+        ///     refuses the object stack there, as everywhere).</exception>
+        private static NDArray[] ObjectScalarPoints(object[] points)
+        {
+            var ps = new NDArray[points.Length];
+            try
+            {
+                for (int k = 0; k < points.Length; k++)
+                    ps[k] = PolyNumber.Binary(BinaryOp.Add, PolyNumber.FromObject(points[k]), s_pyZero).ToNDArray();
+                return ps;
+            }
+            catch
+            {
+                // Cleanup-on-failure: the numbers already made belong to no caller yet.
+                foreach (var p in ps) p?.Dispose();
+                throw;
+            }
+        }
+
+        /// <summary>Whether every point number has the same dtype (then the kernel path computes them all in it).</summary>
+        /// <param name="ps">The points' numbers (0-d arrays).</param>
+        /// <returns>True for one dtype.</returns>
+        private static bool SameDtype(NDArray[] ps)
+        {
+            for (int k = 1; k < ps.Length; k++)
+                if (ps[k].typecode != ps[0].typecode)
+                    return false;
+            return true;
+        }
+
+        /// <summary>
+        ///     The 1-D stack <c>(n,)</c> of same-dtype point numbers — what <c>np.asarray</c> would have built of them had they
+        ///     been an ordinary numeric stack — so the kernel path can read dimension k at element k. The element bytes are
+        ///     copied as they are (a NaN keeps its payload).
+        /// </summary>
+        /// <param name="ps">The numbers (0-d arrays of one dtype).</param>
+        /// <returns>A new C-contiguous array; the caller disposes it.</returns>
+        private static NDArray StackScalars(NDArray[] ps)
+        {
+            var st = new NDArray(ps[0].typecode, new Shape(ps.Length), false);
+            int size = st.dtypesize;
+            for (int k = 0; k < ps.Length; k++)
+                Buffer.MemoryCopy(Ptr(ps[k]), Ptr(st) + k * size, size, size);
+            return st;
+        }
+
+        /// <summary>
+        ///     <c>_vander_nd</c> when the dimensions' points have DIFFERENT dtypes (only an object stack of scalars gets here,
+        ///     e.g. <c>(2**70, np.float16(0.5))</c>): each dimension's matrix is <c>{p}vander</c> of its own number — so a float16
+        ///     matrix is computed in float16 — and <c>functools.reduce(operator.mul, …)</c> multiplies
+        ///     <c>V_k[..., None…, :, None…]</c> in NumPy's order through np.multiply, which casts both operands to the promoted
+        ///     dtype first (float16 × float64 multiplies in float64) and allocates each product where NumPy does. The flattened
+        ///     result is a view (OWNDATA false), as NumPy's reshape of the fresh product is.
+        /// </summary>
+        /// <param name="basis">The basis.</param>
+        /// <param name="ps">Per dimension, its point (a 0-d array).</param>
+        /// <param name="degItems">Per dimension, its degree item (checked by <see cref="Vander"/>, dimension by dimension).</param>
+        /// <returns>The <c>(1, prod(deg + 1))</c> matrix.</returns>
+        /// <exception cref="TypeError">A non-integer degree item.</exception>
+        /// <exception cref="ValueError">A negative degree, or a dimension / product NumPy cannot allocate.</exception>
+        /// <exception cref="OutOfMemoryException">An allocation fails (NumPy's MemoryError).</exception>
+        private static NDArray MixedDtypeVander(PolyBasis basis, NDArray[] ps, object[] degItems)
+        {
+            int n = ps.Length;
+            NDArray acc = null;
+            var dead = new List<NDArray>(3 * n);
+            try
+            {
+                for (int k = 0; k < n; k++)
+                {
+                    var v = Vander(basis, ps[k], degItems[k]);   // (1, deg_k + 1), in the point's own dtype
+                    dead.Add(v);
+                    // V_k[..., None * k, :, None * (n-1-k)]: the degree axis moved to position k + 1 of a rank n + 1 shape.
+                    var dims = new long[n + 1];
+                    for (int d = 0; d <= n; d++) dims[d] = 1;
+                    dims[k + 1] = v.Shape.dimensions[1];
+                    var vk = v.reshape(new Shape(dims));
+                    dead.Add(vk);
+                    if (k == 0)
+                    {
+                        acc = vk;
+                        continue;
+                    }
+                    var product = np.multiply(acc, vk);
+                    if (k < n - 1)
+                        dead.Add(product);   // 3-D's first product is an intermediate; the last is the result's buffer
+                    acc = product;
+                }
+                // reshape(points.shape + (-1,)): (1, R), a view of the last product.
+                long r = acc.size;
+                return NDPolyCalc.View(acc, new long[] { 1, r }, new long[] { r, 1 }, acc.Shape.offset);
+            }
+            finally
+            {
+                foreach (var d in dead) d.Dispose();
             }
         }
 

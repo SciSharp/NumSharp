@@ -24,7 +24,10 @@ Sections (cell-label prefixes; every section covers all six bases):
     M  2-D mixed / other dtypes @ 10K points, degrees (3, 3): float32+int32 (float64), float16+int8 (float16),
        float32, complex128, and a strided / reversed pair
     S  small calls (the fixed per-call cost): a scalar x, 3 points; 2-D / 3-D scalar points
-    A  argument forms: a Python-list x (16 / 1000 points), Python-list 2-D points, a tuple / an ndarray of degrees
+    A  argument forms: a Python-list x (16 / 1000 points), Python-list 2-D points, a tuple / an ndarray of degrees; the
+       C#-only kinds (a typed double[] x — an ndarray to NumPy — a List<double> x / 2-D points — a list — a 0-d array
+       degree), 1000-point Python-list 2-D points, and the object stack of scalars (a Python int past uint64 among 2-D / 3-D
+       scalar points, one dtype and mixed dtypes)
 """
 import hashlib
 import json
@@ -81,13 +84,15 @@ def cell(label, base, form, points, deg, pform=None, degform=None):
     suffix = "" if form == "1d" else form
     fn = getattr(MODULES[base], base + "vander" + suffix)
     arrays = [p.array for p in points]
-    if pform == "list":
+    if pform in ("list", "glist"):
+        # glist: the C# side passes a List<double> — a Python list of floats to NumPy, like "list"'s object[]
         args = [a.tolist() for a in arrays]
     elif pform == "scalar":
         args = [float(a) for a in arrays]
     else:
+        # "typed": the C# side passes a typed double[] — an ndarray to NumPy (the house boundary map)
         args = arrays
-    degarg = tuple(deg) if degform == "tuple" else np.array(deg) if degform == "array" else deg
+    degarg = (tuple(deg) if degform == "tuple" else np.array(deg) if degform in ("array", "nd0") else deg)
     call = lambda: fn(*args, degarg)
     ref = np.asarray(call())
     npts = max(int(np.prod(arrays[0].shape)), 1)
@@ -100,6 +105,29 @@ def cell(label, base, form, points, deg, pform=None, degform=None):
     if pform:
         spec["pform"] = pform
     CELLS.append({**spec, "_call": call})
+
+
+def special(label, base, kind):
+    """Register a cell whose arguments are not G arrays: the object stack of scalars. objstack2d is
+    {p}vander2d(2**70, 1.5, [3, 3]) — both points become Python floats, one dtype (the kernel path on the C# side);
+    objstack3d_mixed is {p}vander3d(2**70, np.float16(0.5), np.array(1.5, np.float32), [2, 2, 2]) — float64, float16 and
+    float32 matrices multiplied with promotion (the C# side's np.multiply composition)."""
+    if ONLY and not any(label.startswith(p) for p in ONLY):
+        return
+    m = MODULES[base]
+    if kind == "objstack2d":
+        fn = getattr(m, base + "vander2d")
+        call = lambda: fn(2 ** 70, 1.5, [3, 3])
+    elif kind == "objstack3d_mixed":
+        fn = getattr(m, base + "vander3d")
+        f32 = np.array(1.5, np.float32)
+        call = lambda: fn(2 ** 70, np.float16(0.5), f32, [2, 2, 2])
+    else:
+        raise ValueError(kind)
+    ref = np.asarray(call())
+    calls, rounds = loops_for(1)
+    CELLS.append({"label": label, "module": MODNAME[base], "base": base, "form": "special", "special": kind, "points": [],
+                  "deg": 0, "expect": digest(ref), "calls": calls, "rounds": rounds, "_call": call})
 
 
 def build():
@@ -149,8 +177,15 @@ def build():
         cell(f"A/{b}/list/n16", b, "1d", [G((16,), seed=7)], 5, pform="list")
         cell(f"A/{b}/list/n1000", b, "1d", [G((1_000,), seed=7)], 5, pform="list")
         cell(f"A/{b}/list2d/n100", b, "2d", [G((100,), seed=7), G((100,), seed=8)], [3, 3], pform="list")
+        cell(f"A/{b}/list2d/n1000", b, "2d", [G((1_000,), seed=7), G((1_000,), seed=8)], [3, 3], pform="list")
         cell(f"A/{b}/degtuple/n1000", b, "2d", [G((1_000,), seed=7), G((1_000,), seed=8)], [3, 2], degform="tuple")
         cell(f"A/{b}/degarray/n1000", b, "2d", [G((1_000,), seed=7), G((1_000,), seed=8)], [3, 2], degform="array")
+        cell(f"A/{b}/typed/n1000", b, "1d", [G((1_000,), seed=7)], 5, pform="typed")
+        cell(f"A/{b}/glist/n1000", b, "1d", [G((1_000,), seed=7)], 5, pform="glist")
+        cell(f"A/{b}/glist2d/n1000", b, "2d", [G((1_000,), seed=7), G((1_000,), seed=8)], [3, 2], pform="glist")
+        cell(f"A/{b}/deg_nd0/n1000", b, "1d", [G((1_000,), seed=7)], 5, degform="nd0")
+        special(f"A/{b}/objstack2d", b, "objstack2d")
+        special(f"A/{b}/objstack3d_mixed", b, "objstack3d_mixed")
 
 
 def main():

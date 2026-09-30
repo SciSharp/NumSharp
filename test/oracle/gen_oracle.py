@@ -12537,9 +12537,12 @@ def _pv_special(dt):
 
 def _pv_refused(e):
     """NumPy failures NumSharp answers with its own refusal (not recorded): `x + 0.0` on a str array (UFuncTypeError)
-    or an object array holding None / a non-numeric object, and MemoryError."""
+    or an object array holding None / a non-numeric object / a str (the object stack's per-element add), and
+    MemoryError."""
     t = type(e).__name__
-    return t in ("UFuncTypeError", "MemoryError") or str(e).startswith("unsupported operand type(s) for +")
+    m = str(e)
+    return (t in ("UFuncTypeError", "MemoryError") or m.startswith("unsupported operand type(s) for +")
+            or m.startswith("can only concatenate str"))
 
 
 def gen_polyvander():
@@ -12876,6 +12879,55 @@ def gen_polyvander():
             ss = np.zeros(6000, np.float32)
             ss[::2] = xs
             emit(op1, {"x": A(ss, ss[::2]), "deg": 3}, lambda: v1(ss[::2], 3), "blocks_strided", f"{op1}/blocks/strided")
+
+    # Section J runs in its own pass over the modules, after A-I, so the running id counter of every earlier case is
+    # unchanged by it (the ids end in that counter).
+    for modname, p in POLY_MODULES:
+        v2 = getattr(_poly_module(modname), p + "vander2d")
+        v3 = getattr(_poly_module(modname), p + "vander3d")
+        op2, op3 = f"{modname}.{p}vander2d", f"{modname}.{p}vander3d"
+        # (J) the OBJECT stack of scalars (wholeness pass 2026-09-30): a Python int past uint64 among scalar points makes
+        #     np.asarray((x, y[, z])) an object array, whose `+ 0.0` then runs per element in Python and hands every
+        #     dimension its OWN number — float(int) (OverflowError past the float range), a Python float / bool / complex,
+        #     a NumPy scalar or 0-d array keeping NEP 50's dtype — so the dimensions' matrices can have different dtypes
+        #     (a float16 point's matrix computed in float16, then promoted by the outer product's multiply). Both orders,
+        #     2-D and 3-D, the stack's OverflowError before any degree error, and the degree errors after it.
+        # float(int) is CORRECTLY ROUNDED (round-half-even; .NET's BigInteger -> double truncates): values that round
+        # (2**70 + 1 down, 2**64 + 2**11 + 1 up, 3**45, one just below the overflow tie rounding down to the largest
+        # double) next to exactly representable ones, the tie that rounds up to 2**1024 (OverflowError) and 2**1024.
+        bigs = [("big70", 2 ** 70), ("negbig70", -(2 ** 70)), ("big64", 2 ** 64), ("bigmaxf", 2 ** 1023 + 2 ** 1022),
+                ("bigover", 2 ** 1024), ("bigtie", 2 ** 1024 - 2 ** 970), ("bigbelow", 2 ** 1024 - 2 ** 971),
+                ("big70p1", 2 ** 70 + 1), ("bigup", 2 ** 64 + 2 ** 11 + 1), ("bigodd", 3 ** 45), ("negbigodd", -(3 ** 45)),
+                ("belowtie", 2 ** 1024 - 2 ** 970 - 1)]
+        others = [("int", 3), ("u64max", 2 ** 64 - 1), ("f", 1.5), ("fnan", float("nan")), ("finf", float("-inf")),
+                  ("fneg0", -0.0), ("c", complex(0.5, -1.0)), ("cnan", complex(float("nan"), 1.0)), ("b", True), ("bf", False),
+                  ("h", np.float16(0.5)), ("hnan", np.float16("nan")), ("hneg0", np.float16(-0.0)),
+                  ("nd0_f32", A(np.array(0.1, np.float32))), ("nd0_i8", A(np.array(-3, np.int8))), ("nd0_b", A(np.array(True))),
+                  ("nd0_f16", A(np.array(0.25, np.float16))), ("nd0_c", A(np.array(1 + 2j))),
+                  ("nd0_u64max", A(np.array(2 ** 64 - 1, np.uint64))), ("nd0_f64nan", A(np.array(float("nan")))), ("big", 2 ** 80),
+                  ("none", None), ("str", "a")]
+        for bname, bv in bigs:
+            for oname, ov in others:
+                for dg in ((1, 2), (0, 0), (3, 1)):
+                    dl = list(dg)
+                    emit(op2, {"x": bv, "y": ov, "deg": dl}, lambda: v2(bv, _ps_py(ov), dl), "objstack",
+                         f"{op2}/objstack/{bname}_{oname}/{dg}")
+                    emit(op2, {"x": ov, "y": bv, "deg": dl}, lambda: v2(_ps_py(ov), bv, dl), "objstack",
+                         f"{op2}/objstack/{oname}_{bname}/{dg}")
+                emit(op3, {"x": bv, "y": ov, "z": ov, "deg": [1, 2, 1]}, lambda: v3(bv, _ps_py(ov), _ps_py(ov), [1, 2, 1]),
+                     "objstack", f"{op3}/objstack/{bname}_{oname}")
+                emit(op3, {"x": ov, "y": bv, "z": np.float16(0.75), "deg": [2, 1, 2]},
+                     lambda: v3(_ps_py(ov), bv, np.float16(0.75), [2, 1, 2]), "objstack", f"{op3}/objstack/{oname}_{bname}_h")
+                emit(op3, {"x": ov, "y": A(np.array(1.5, np.float32)), "z": bv, "deg": [1, 1, 3]},
+                     lambda: v3(_ps_py(ov), np.array(1.5, np.float32), bv, [1, 1, 3]), "objstack",
+                     f"{op3}/objstack/{oname}_nd0f32_{bname}")
+            for dname, dv in (("neg_first", [-1, 1]), ("frac_second", [1, 1.5]), ("len3", [1, 1, 1]), ("int", 2),
+                              ("maxdim_second", [1, 2 ** 63 - 1]), ("toobig", [2 ** 61, 1])):
+                emit(op2, {"x": bv, "y": np.float16(0.5), "deg": dv}, lambda: v2(bv, np.float16(0.5), _ps_py(dv)),
+                     "objstack_deg", f"{op2}/objstack_deg/{bname}/{dname}")
+                emit(op2, {"x": bv, "y": 0.5, "deg": dv}, lambda: v2(bv, 0.5, _ps_py(dv)), "objstack_deg",
+                     f"{op2}/objstack_deg/{bname}_f/{dname}")
+
 
     # (H) Char: NumSharp's uint16-like dtype converts to float64 exactly as uint16 does (the house weave).
     cases += _relabel_dtype([c for c in cases if "/dt/uint16/" in (c.get("id") or "") and not c.get("expects_throw")],

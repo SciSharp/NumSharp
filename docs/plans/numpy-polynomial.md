@@ -25,7 +25,7 @@
 | Page section | NumPy API | NumSharp today |
 |---|---|---|
 | Legacy "polynomial module" (`numpy.lib.polynomial`) | `poly1d`, `polyval`, `poly`, `roots`, `polyfit`, `polyder`, `polyint`, `polyadd`, `polydiv`, `polymul`, `polysub` | **Done** — all 11 functions and `poly1d(c_or_r, r, variable)`, byte-exact. Oracle: `poly.jsonl` (portable); `roots`, `polyfit` and `poly`-of-a-matrix are in host-pinned `linalg_parity`. Unit tests + live-parity tests. Only `RankWarning` is absent: NumSharp emits no warnings anywhere. |
-| "Polynomial package" (`numpy.polynomial`) | 6 modules × ~31 names, `polyutils`, 6 classes, `set_default_printstyle` | **U3 + U1 + U4 + U2 + U5 delivered** — 160 of 193 names: the evaluation family (36, `polyvalfromroots` open), the additive family with `polyutils` (54: `{p}add/sub/trim/line`, the 24 constants, `as_series`/`trimseq`/`trimcoef`/`getdomain`/`mapparms`/`mapdomain`), the calculus family (12: `{p}der`/`{p}int`), the series algebra (40: `{p}mulx/mul/div/pow/fromroots`, `X2poly`/`poly2X`) and the Vandermonde family (18: `{p}vander`/`{p}vander2d`/`{p}vander3d`), all bit-exact (`polyeval.jsonl` 19,216 + `polyseries.jsonl` 18,698 + `polycalc.jsonl` 27,526 + `polyalgebra.jsonl` 28,144 + `polyvander.jsonl` 16,612 cases; the BLAS-bound products byte-exact with the OpenBLAS backend, `polyalgebra_parity.jsonl` 139). Facade `np.polynomial.{polynomial,chebyshev,legendre,laguerre,hermite,hermite_e,polyutils}`; 0 of 6 classes. `coverage/generate_coverage.py` catalogues all seven `numpy.polynomial.*` submodules as out-of-headline surfaces. |
+| "Polynomial package" (`numpy.polynomial`) | 6 modules × ~31 names, `polyutils`, 6 classes, `set_default_printstyle` | **U3 + U1 + U4 + U2 + U5 delivered** — 160 of 193 names: the evaluation family (36, `polyvalfromroots` open), the additive family with `polyutils` (54: `{p}add/sub/trim/line`, the 24 constants, `as_series`/`trimseq`/`trimcoef`/`getdomain`/`mapparms`/`mapdomain`), the calculus family (12: `{p}der`/`{p}int`), the series algebra (40: `{p}mulx/mul/div/pow/fromroots`, `X2poly`/`poly2X`) and the Vandermonde family (18: `{p}vander`/`{p}vander2d`/`{p}vander3d`), all bit-exact (`polyeval.jsonl` 19,216 + `polyseries.jsonl` 18,698 + `polycalc.jsonl` 27,526 + `polyalgebra.jsonl` 28,144 + `polyvander.jsonl` 31,180 cases; the BLAS-bound products byte-exact with the OpenBLAS backend, `polyalgebra_parity.jsonl` 139). Facade `np.polynomial.{polynomial,chebyshev,legendre,laguerre,hermite,hermite_e,polyutils}`; 0 of 6 classes. `coverage/generate_coverage.py` catalogues all seven `numpy.polynomial.*` submodules as out-of-headline surfaces. |
 | "Transition guide" | the reversed coefficient order; `Polynomial.fit(...).convert()` | Documentation only. It is a real hazard for us, though, because the new package **reuses the legacy names with the opposite coefficient order** (§2 D5). |
 
 User demand on record: issue **#496** "Can NumSharp fit polynomial surface equations?" — that is exactly
@@ -734,24 +734,53 @@ machine-partitioned; the counts sum to 193 with no overlap (Appendix A).
     product forced on and off at every alignment. A skipped-head mutant turns the streamed test red; the automatic
     38.7 MB path is checked too.
 - **Perf.** `benchmark/polynomial/polyvander_{numpy.py,bench.cs,report.py}`, committed summary `polyvander_results.md`;
-  480 cells, all bit-exact.
+  522 cells, all bit-exact (480 at delivery; the wholeness pass added 42 argument-form cells: a typed `double[]` x,
+  `List<double>` x and 2-D points, a 0-d array degree, 1000-point list 2-D points, and the object stack of scalars).
 
   | Section | min NPY/NS | geomean NPY/NS |
   |---|---:|---:|
-  | 1-D float64 | 2.23 | 16.3 |
-  | dtypes | 1.65 | 7.8 |
-  | layouts | 6.95 | 8.5 |
-  | N-D points | 7.81 | 9.3 |
-  | 2-D products | 1.55 | 11.7 |
-  | 3-D products | 2.40 | 12.8 |
-  | mixed dtypes | 2.33 | 4.7 |
-  | small calls | 5.10 | 10.2 |
-  | argument forms | 2.54 | 7.2 |
-  | **all** | **1.55** | **10.43** |
+  | 1-D float64 | 2.31 | 16.1 |
+  | dtypes | 1.59 | 7.9 |
+  | layouts | 6.92 | 8.4 |
+  | N-D points | 7.19 | 9.3 |
+  | 2-D products | 1.53 | 11.0 |
+  | 3-D products | 2.09 | 12.6 |
+  | mixed dtypes | 1.87 | 4.9 |
+  | small calls | 5.60 | 10.5 |
+  | argument forms | 2.98 | 8.5 |
+  | **all** | **1.53** | **10.22** |
 
-  The floor is the six `(100000, 121)` 2-D cells, at 1.55–1.66×: NumPy 21.9–24.2 ms against 14.1–14.9 ms, with
-  ~10.4 ms of each side in page faults. The float16 dtype cells (1.65–2.7×) are the U4 float16 lever again: the lane
+  The floor is the six `(100000, 121)` 2-D cells, at 1.53–1.67×: NumPy 21.7–23.9 ms against 13.6–15.1 ms, with
+  ~10.4 ms of each side in page faults. The float16 dtype cells (1.59–2.7×) are the U4 float16 lever again: the lane
   kind rounds every op to the f16 grid.
+- **Wholeness pass (2026-09-30).** A probe (15,366 cases) replayed every C# argument kind of the boundary map through
+  the facades against NumPy, binding each call to the overload C# overload resolution picks:
+  - x / y / z points: typed arrays of every dtype, `Memory<T>`, typed 2-D arrays, `object[,]`, jagged, `NDArray[]`,
+    `List<T>`, LINQ, `ValueTuple` / `System.Tuple`, every C# scalar width, char, BigInteger;
+  - degrees and degree containers of every kind;
+  - cross-kind point stacks and error-order pairs.
+
+  Three gaps, all closed:
+  - **The object stack of scalars.** A Python int past uint64 among vander2d/3d scalar points makes NumPy's
+    `np.asarray(points)` an OBJECT array — and NumPy still computes a numeric matrix. Its `+ 0.0` runs per element in
+    Python, and `tuple(...)` hands every dimension its own number: `float(int)` correctly rounded (OverflowError past
+    the float range), a float / complex, NEP 50's dtype for an np.float16 or a 0-d array. NumSharp refused it.
+    `NDPolyVander.ObjectScalarPoints` now computes those numbers (`PolyNumber.Binary`). With one dtype the kernel path
+    runs over them; with mixed dtypes `MixedDtypeVander` builds each dimension's matrix in its own dtype and multiplies
+    through np.multiply's promotion. A None / str element stays refused. Corpus section J (14,568 cases); a planted
+    truncating int→float conversion turns 3,132 red.
+  - **A `char` degree container's len() text** reads `'numpy.uint16'` (it said `'Char'`).
+  - **`List<T>` points coerced item by item** (~40 ns an item: a 1000-point `List<double>` ran 0.70–0.97× NumPy). The
+    shared np.array coercion (`NDPolySequence`, used by every unit) now reads any non-array `IEnumerable<T>` of a dtype
+    from its values in one pass, with NumPy's discovered dtype. A NESTED flat list — a typed collection or an
+    `object[]` of Python floats / ints — becomes one array leaf in the walk, with the same shape updates and values.
+    Result: 13.6–18.3× for 1-D; 7.7–11.7× for nested 1000-point 2-D lists.
+
+  Checked and matching: 5-D/6-D transposed / reversed points, result writeability, and concurrency (576 contended
+  first compiles, 6,400 contended calls). Unit tests: `Polynomial/PolynomialVanderArgumentKindsTests.cs` (8).
+  - Found on the way, not fixed (library-wide): `np.multiply` of two same-shape float64 arrays keeps the FIRST
+    operand's NaN, where NumPy keeps the second's. The oracle compares NaNs as tokens. The vander kernel imposes the
+    priority itself.
 - **Traps:**
   - A random corpus never pairs two NaNs in the product's operands. That needed `_pv_special` in BOTH coordinates, and
     it caught the NaN priority.
