@@ -30,6 +30,84 @@ namespace NumSharp
     internal static unsafe class NDPolyEval
     {
         /// <summary>
+        ///     <c>{p}val(x, c, tensor)</c> with an array_like <paramref name="c"/>: NumPy's <c>np.array(c, ndmin=1)</c> of
+        ///     any argument kind, done FIRST — before x is looked at, NumPy's statement order, so a ragged c is reported
+        ///     before a ragged x — then the evaluation of <see cref="Val(PolyBasis, object, NDArray, bool)"/>.
+        /// </summary>
+        /// <param name="basis">The basis.</param>
+        /// <param name="x">Points (see <see cref="Val(PolyBasis, object, NDArray, bool)"/>).</param>
+        /// <param name="c">Coefficients, anything <c>np.array</c> accepts under the house mapping: an <see cref="NDArray"/>
+        ///     (used as is), a typed C# array or <c>Memory&lt;T&gt;</c> of a dtype (an ndarray), a Python tuple / list (a
+        ///     ValueTuple, <c>object[]</c>, a jagged or <c>NDArray[]</c> array, any enumerable — coerced by
+        ///     <see cref="PolySequence"/>, nested to any depth), or a scalar (a Python scalar keeps NumPy's discovered
+        ///     dtype: an int is int64, and integer / bool series are evaluated as float64 either way).</param>
+        /// <param name="tensor">NumPy's <c>tensor</c> flag.</param>
+        /// <returns>The values; a 0-d array for a scalar x with a 1-D series.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="x"/> is null.</exception>
+        /// <exception cref="ValueError">A ragged tuple / list c or x (np.array's inhomogeneous-shape text; c's first).</exception>
+        /// <exception cref="NotSupportedException">A null or str c, or a sequence holding one (NumPy builds an object /
+        ///     str array, dtypes NumSharp does not have).</exception>
+        /// <exception cref="IndexError">The series is empty.</exception>
+        /// <exception cref="IncorrectShapeException"><c>tensor=False</c> and the shapes do not broadcast.</exception>
+        /// <exception cref="OverflowException">A Python int in the recurrence does not fit an integer x dtype.</exception>
+        internal static NDArray Val(PolyBasis basis, object x, object c, bool tensor)
+        {
+            if (c is NDArray nd)
+                return Val(basis, x, nd, tensor);
+            // The converted series is this call's intermediate: the evaluation always returns a fresh array — never c, x
+            // or a view of either — so it is released however the call ends.
+            NDArray cc = ArrayOf(c);
+            try
+            {
+                return Val(basis, x, cc, tensor);
+            }
+            finally
+            {
+                cc.Dispose();
+            }
+        }
+
+        /// <summary>
+        ///     <c>np.array(a, ndmin=1)</c> of an argument that is not an <see cref="NDArray"/> — a series — under the house
+        ///     mapping (<see cref="NDPolySeries.AsCoefficientArray"/>): a typed C# array is an ndarray of its dtype, a Python
+        ///     tuple / list goes through np.array's coercion (<see cref="PolySequence"/>), and a Python scalar becomes a
+        ///     one-element 1-D array of NumPy's discovered dtype (int64 / float64 / complex128 / bool), a NumPy scalar (Half,
+        ///     char, decimal) one of its own. An ordinate, which keeps a scalar 0-D, goes through <see cref="OrdinateArray"/>.
+        /// </summary>
+        /// <param name="a">The argument (not an NDArray).</param>
+        /// <returns>A NEW array the caller owns and must dispose.</returns>
+        /// <exception cref="ValueError">A ragged tuple / list.</exception>
+        /// <exception cref="NotSupportedException">null (NumPy's object array) or a str (NumPy's str array), or a sequence
+        ///     holding one.</exception>
+        private static NDArray ArrayOf(object a)
+        {
+            var v = NDPolySeries.AsCoefficientArray(a);
+            if (v.NonNumeric)
+                throw new NotSupportedException("a str argument makes NumPy build a str array, a dtype NumSharp does not have");
+            return v.Source;
+        }
+
+        /// <summary>
+        ///     <c>np.asanyarray(a)</c> of an ordinate that is not an <see cref="NDArray"/> (<c>_valnd</c>'s conversion): a
+        ///     Python or NumPy scalar becomes a 0-D array of the dtype np.array discovers for it (a Python int is int64 —
+        ///     uint64 when it only fits there —, a float float64, a complex complex128, a bool bool; Half / char / decimal
+        ///     keep theirs), so it is a STRONG operand; anything else converts as <see cref="ArrayOf"/> does.
+        /// </summary>
+        /// <param name="a">The ordinate (not null, not an NDArray).</param>
+        /// <returns>A NEW array the caller owns and must dispose.</returns>
+        /// <exception cref="ValueError">A ragged tuple / list.</exception>
+        /// <exception cref="NotSupportedException">A str, a sequence holding a str / null, or a Python int past uint64
+        ///     (NumPy's str / object arrays).</exception>
+        private static NDArray OrdinateArray(object a)
+        {
+            if (!PolyNumber.IsScalarValue(a))
+                return ArrayOf(a);
+            // Not ArrayOf: that is np.array(a, ndmin=1), which would make the scalar a one-element 1-D array.
+            var num = PolyNumber.FromObject(a);
+            return num.AsArrayOf(num.DiscoveredDtype());
+        }
+
+        /// <summary>
         ///     <c>{p}val(x, c, tensor)</c> for any basis (see the class remarks for the NumPy semantics).
         /// </summary>
         /// <param name="basis">The basis.</param>
@@ -51,7 +129,7 @@ namespace NumSharp
             if (x is null) throw new ArgumentNullException(nameof(x));
             if (c is null) throw new ArgumentNullException(nameof(c));
 
-            NDArray expanded = null, converted = null;
+            NDArray expanded = null, converted = null, convertedX = null;
             try
             {
                 // c = np.array(c, ndmin=1); integer/bool series -> float64. A view keeps pointing into the
@@ -61,94 +139,150 @@ namespace NumSharp
                     cc = converted = cc.astype(NPTypeCode.Double);
 
                 NDArray xa = ClassifyX(x, out var xw, out bool weak);
+                // An x array built HERE (a Python sequence, a typed C# array, a Half / char / decimal scalar) is this
+                // call's intermediate, never the caller's: Evaluate always returns a fresh result, not x or a view of
+                // it, so the conversion is released with the others. A caller's NDArray comes back as itself.
+                if (xa is not null && !ReferenceEquals(xa, x))
+                    convertedX = xa;
                 return Evaluate(basis, xa, xw, weak, cc, tensor);
             }
             finally
             {
+                convertedX?.Dispose();
                 converted?.Dispose();
                 expanded?.Dispose();
             }
         }
 
         /// <summary>
-        ///     <c>polyutils._valnd(val_f, c, *args)</c>: every ordinate is <c>np.asanyarray</c>'d (so a scalar is a
-        ///     STRONG 0-d array here, unlike <c>{p}val</c>), all shapes must be equal, then the first ordinate is
-        ///     evaluated with <c>tensor=True</c> and every later one with <c>tensor=False</c> over the previous
-        ///     result — NumPy's exact two-pass intermediate.
+        ///     <c>polyutils._valnd(val_f, c, *args)</c>: every ordinate is <c>np.asanyarray</c>'d first (so a scalar is a
+        ///     STRONG 0-d array here, unlike <c>{p}val</c>'s x, and a tuple / list goes through np.array's coercion), all
+        ///     shapes must be equal, then the first ordinate is evaluated with <c>tensor=True</c> — which is where c is
+        ///     converted — and every later one with <c>tensor=False</c> over the previous result: NumPy's exact two-pass
+        ///     intermediate, and its error order (a ragged ordinate, then the shape check, then c).
         /// </summary>
         /// <param name="basis">The basis.</param>
-        /// <param name="c">Coefficients; axis i is ordinate i's degree.</param>
-        /// <param name="args">The ordinates (x, y[, z]).</param>
+        /// <param name="c">Coefficients, any array_like (see <see cref="Val(PolyBasis, object, object, bool)"/>); axis i is
+        ///     ordinate i's degree.</param>
+        /// <param name="args">The ordinates (x, y[, z]): each an <see cref="NDArray"/> (used as is), a typed C# array, a
+        ///     Python tuple / list, or a scalar (a Python int becomes an int64 0-d array, NumPy's discovered dtype).</param>
         /// <returns>The values, shape of the ordinates (plus <c>c.shape[len(args):]</c>).</returns>
-        /// <exception cref="ArgumentNullException">An argument is null.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="args"/> or an ordinate is null.</exception>
         /// <exception cref="IndexError"><paramref name="args"/> is empty — NumPy's <c>args[0]</c> on an empty list.</exception>
-        /// <exception cref="ValueError">The ordinates differ in shape: <c>x, y are incompatible</c>,
-        ///     <c>x, y, z are incompatible</c> or (any other count) <c>ordinates are incompatible</c>.</exception>
-        internal static NDArray ValNd(PolyBasis basis, NDArray c, NDArray[] args)
+        /// <exception cref="ValueError">A ragged tuple / list ordinate or c (np.array's inhomogeneous-shape text), or
+        ///     ordinates that differ in shape: <c>x, y are incompatible</c>, <c>x, y, z are incompatible</c> or (any other
+        ///     count) <c>ordinates are incompatible</c>.</exception>
+        /// <exception cref="NotSupportedException">A null / str c, or a str ordinate (NumPy's object / str arrays).</exception>
+        internal static NDArray ValNd(PolyBasis basis, object c, object[] args)
         {
-            if (c is null) throw new ArgumentNullException(nameof(c));
             if (args is null) throw new ArgumentNullException(nameof(args));
             if (args.Length == 0) throw new IndexError("list index out of range");
             for (int i = 0; i < args.Length; i++)
                 if (args[i] is null) throw new ArgumentNullException(nameof(args));
 
-            var shape0 = args[0].shape;
-            for (int i = 1; i < args.Length; i++)
+            // args = [np.asanyarray(a) for a in args]: all converted before anything else is looked at, in order, so a
+            // ragged ordinate raises here — before the shape check and before c is read. A conversion is this call's
+            // intermediate (released below); a caller's NDArray is used as it is.
+            var arrays = new NDArray[args.Length];
+            var converted = new NDArray[args.Length];
+            try
             {
-                if (!SameShape(args[i].shape, shape0))
-                    throw new ValueError(args.Length switch
-                    {
-                        3 => "x, y, z are incompatible",
-                        2 => "x, y are incompatible",
-                        _ => "ordinates are incompatible",
-                    });
-            }
+                for (int i = 0; i < args.Length; i++)
+                    arrays[i] = args[i] as NDArray ?? (converted[i] = OrdinateArray(args[i]));
 
-            // use tensor on only the first
-            NDArray r = Val(basis, args[0], c, tensor: true);
-            for (int i = 1; i < args.Length; i++)
-            {
-                var next = Val(basis, args[i], r, tensor: false);
-                r.Dispose();   // each intermediate is ours; the caller's c is never disposed
-                r = next;
+                var shape0 = arrays[0].shape;
+                for (int i = 1; i < arrays.Length; i++)
+                {
+                    if (!SameShape(arrays[i].shape, shape0))
+                        throw new ValueError(arrays.Length switch
+                        {
+                            3 => "x, y, z are incompatible",
+                            2 => "x, y are incompatible",
+                            _ => "ordinates are incompatible",
+                        });
+                }
+
+                // use tensor on only the first (its {p}val converts c, after the ordinates — NumPy's order)
+                NDArray r = Val(basis, arrays[0], c, tensor: true);
+                try
+                {
+                    for (int i = 1; i < arrays.Length; i++)
+                    {
+                        var next = Val(basis, arrays[i], r, tensor: false);
+                        r.Dispose();   // each intermediate is ours; the caller's c is never disposed
+                        r = next;
+                    }
+                    return r;
+                }
+                catch
+                {
+                    // A later pass failed (a broadcast mismatch, an OverflowError): the partial result is ours.
+                    r.Dispose();
+                    throw;
+                }
             }
-            return r;
+            finally
+            {
+                // The results are fresh arrays, never views of an ordinate, so the conversions can always go.
+                foreach (var a in converted)
+                    a?.Dispose();
+            }
         }
 
         /// <summary>
         ///     <c>polyutils._gridnd(val_f, c, *args)</c>: <c>c = val_f(xi, c)</c> for each ordinate, with
-        ///     <c>tensor=True</c> and WITHOUT converting the ordinates — a Python-scalar ordinate stays weak.
+        ///     <c>tensor=True</c> and WITHOUT converting the ordinates — a Python-scalar ordinate stays weak. The first
+        ///     call converts an array_like c, before its own x (<c>{p}val</c>'s statement order).
         /// </summary>
         /// <param name="basis">The basis.</param>
-        /// <param name="c">Coefficients.</param>
-        /// <param name="args">The ordinates, each anything <see cref="Val"/> accepts.</param>
+        /// <param name="c">Coefficients, any array_like (see <see cref="Val(PolyBasis, object, object, bool)"/>).</param>
+        /// <param name="args">The ordinates, each anything <see cref="Val(PolyBasis, object, NDArray, bool)"/> accepts.</param>
         /// <returns>The grid, shape <c>x.shape + y.shape[ + z.shape]</c> (plus trailing coefficient axes).</returns>
-        /// <exception cref="ArgumentNullException">An argument is null.</exception>
-        internal static NDArray GridNd(PolyBasis basis, NDArray c, object[] args)
+        /// <exception cref="ArgumentNullException"><paramref name="args"/> or an ordinate is null.</exception>
+        /// <exception cref="ValueError">A ragged tuple / list c or ordinate (np.array's inhomogeneous-shape text).</exception>
+        /// <exception cref="NotSupportedException">A null / str c (NumPy's object / str arrays).</exception>
+        internal static NDArray GridNd(PolyBasis basis, object c, object[] args)
         {
-            if (c is null) throw new ArgumentNullException(nameof(c));
             if (args is null) throw new ArgumentNullException(nameof(args));
-            NDArray r = c;
-            for (int i = 0; i < args.Length; i++)
+            // _gridnd with no ordinates returns c itself (NumPy hands back the same object): the caller's array, or np.array
+            // of any other value — C# has no untyped return here. Unreachable from the fixed-arity grid2d / grid3d facades.
+            if (args.Length == 0)
+                return c as NDArray ?? ArrayOf(c);
+            NDArray r = Val(basis, args[0], c, tensor: true);
+            try
             {
-                var next = Val(basis, args[i], r, tensor: true);
-                if (!ReferenceEquals(r, c)) r.Dispose();
-                r = next;
+                for (int i = 1; i < args.Length; i++)
+                {
+                    var next = Val(basis, args[i], r, tensor: true);
+                    r.Dispose();   // each intermediate is ours; the caller's c is never disposed
+                    r = next;
+                }
+                return r;
             }
-            // _gridnd with no ordinates returns c itself (NumPy hands back the same object).
-            return r;
+            catch
+            {
+                // A later ordinate failed (a ragged tuple / list, an OverflowError): the partial grid is ours.
+                r.Dispose();
+                throw;
+            }
         }
 
         /// <summary>
         ///     Maps a C# argument onto NumPy's x forms: an <see cref="NDArray"/> stays an array; the C# primitives
         ///     that ARE Python literals become weak Python scalars (the <c>np.r_</c> house convention: bool,
-        ///     the integer types, float/double and <see cref="Complex"/>); everything else goes through
-        ///     <c>np.asanyarray</c> (C# arrays ≙ Python lists; char/Half/decimal become strong 0-d arrays).
+        ///     the integer types, <see cref="BigInteger"/> — a Python int of any size — float/double and
+        ///     <see cref="Complex"/>); a Python tuple / list (<see cref="PolySequence.IsSequence"/>: a ValueTuple,
+        ///     object[], a jagged or NDArray[] array, any other enumerable) is NumPy's <c>np.asarray(x)</c> of it, nested
+        ///     to any depth; everything else goes through <c>np.asanyarray</c> (a typed C# array is an ndarray of its
+        ///     dtype; char/Half/decimal become strong 0-d arrays).
         /// </summary>
         /// <param name="x">The argument.</param>
         /// <param name="weakValue">The Python value when weak.</param>
         /// <param name="isWeak">Whether x is a Python scalar.</param>
         /// <returns>The array form, or null when weak.</returns>
+        /// <exception cref="ValueError">A ragged Python sequence (NumPy's inhomogeneous-shape text).</exception>
+        /// <exception cref="NotSupportedException">A sequence holding a str / None item, or a value np.asanyarray does not
+        ///     understand.</exception>
         private static NDArray ClassifyX(object x, out PyScalar weakValue, out bool isWeak)
         {
             weakValue = default;
@@ -167,12 +301,15 @@ namespace NumSharp
                 case uint v: weakValue = PyScalar.Int(v); return null;
                 case long v: weakValue = PyScalar.Int(v); return null;
                 case ulong v: weakValue = PyScalar.Int(new BigInteger(v)); return null;
+                // A Python int past uint64 (2**70): the x-only subtrees run CPython's exact int arithmetic and the
+                // constant pool converts it with NumPy's rounding / OverflowError, like any other Python int.
+                case BigInteger v: weakValue = PyScalar.Int(v); return null;
                 case float v: weakValue = PyScalar.Float(v); return null;   // the float's exact value as a Python float
                 case double v: weakValue = PyScalar.Float(v); return null;
                 case Complex v: weakValue = PyScalar.Cplx(v); return null;
                 default:
                     isWeak = false;
-                    return np.asanyarray(x);
+                    return PolySequence.IsSequence(x) ? PolySequence.ToArray(x) : np.asanyarray(x);
             }
         }
 

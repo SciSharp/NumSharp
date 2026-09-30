@@ -108,7 +108,17 @@ Func<NDArray> MakeCall(JsonElement cell)
     string kind = cell.GetProperty("kind").GetString();
     int m = cell.GetProperty("m").GetInt32(), axis = cell.GetProperty("axis").GetInt32();
     object Opt(string name) => cell.TryGetProperty(name, out var s) ? BuildArg(s) : null;
-    NDArray c = Gen(cell.GetProperty("c"));
+    NDArray arr = Gen(cell.GetProperty("c"));
+    // The series' argument form (built once, like NumPy's list exists before its call): the array, a Python list
+    // (nested object[] of boxed doubles — NumPy's c.tolist()) or rows (a jagged double[][] — NumPy's list(c)).
+    // Every arm is cast to object: otherwise the conditional unifies object[] with NDArray through NDArray's implicit
+    // conversion from Array, converting the list the facade was meant to receive.
+    object c = cell.TryGetProperty("cform", out var form) ? form.GetString() switch
+    {
+        "list" => (object)ToPythonList(arr),
+        "rows" => (object)Enumerable.Range(0, (int)arr.shape[0]).Select(i => arr[i].ToArray<double>()).ToArray(),
+        var f => throw new NotSupportedException(f),
+    } : (object)arr;
     object scl = Opt("scl"), k = Opt("k"), lbnd = Opt("lbnd");
     return kind switch
     {
@@ -133,6 +143,17 @@ Console.WriteLine();
 Console.WriteLine("cells below 1.5x:");
 foreach (var x in rows.Where(x => x.Np / x.Ns < 1.5).OrderBy(x => x.Np / x.Ns))
     Console.WriteLine($"  {x.Label}\t{x.Np / x.Ns:F2}\t(ns {x.Ns:F2} us, numpy {x.Np:F2} us)");
+
+/// <summary>NumPy's <c>a.tolist()</c> of a float64 array as the C# spelling of a Python list: nested <c>object[]</c>
+///     whose leaves are boxed doubles (Python floats).</summary>
+/// <param name="a">A float64 array of rank ≥ 1.</param>
+/// <returns>The nested list.</returns>
+static object[] ToPythonList(NDArray a)
+{
+    if (a.ndim == 1)
+        return a.ToArray<double>().Select(v => (object)v).ToArray();
+    return Enumerable.Range(0, (int)a.shape[0]).Select(i => (object)ToPythonList(a[i])).ToArray();
+}
 
 /// <summary>Rebuilds one argument: a generated array (optionally re-viewed), a Python scalar as its C# primitive, or
 ///     a Python list (object[]) of those.</summary>

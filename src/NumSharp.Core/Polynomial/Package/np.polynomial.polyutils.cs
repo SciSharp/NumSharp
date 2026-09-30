@@ -65,6 +65,37 @@ namespace NumSharp
         public NDArray trimseq(NDArray seq) => NDPolySeries.TrimSeq(seq);
 
         /// <summary>
+        ///     <see cref="trimseq(NDArray)"/> for a Python LIST — an <c>object[]</c>, or by array covariance a jagged or
+        ///     <c>NDArray[]</c> array: <paramref name="seq"/> ITSELF when it is empty or its last item is nonzero, otherwise
+        ///     a NEW array of the items up to the last nonzero one (at least one), NumPy's list slice <c>seq[:i+1]</c> (of the
+        ///     same element type). An item is zero exactly when Python's <c>item != 0</c> is false: a number by value (NaN is
+        ///     nonzero, -0.0 zero, a complex zero only when both parts are), an array item by its truth value, and anything
+        ///     else — a str, a nested list, null — never equals 0.
+        /// </summary>
+        /// <param name="seq">The list.</param>
+        /// <returns>The same instance, or the trimmed copy.</returns>
+        /// <exception cref="TypeError"><paramref name="seq"/> is null (<c>object of type 'NoneType' has no len()</c>).</exception>
+        /// <exception cref="ValueError">A tested array item holds several elements or none (NumPy's truth-value
+        ///     errors).</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polyutils.trimseq.html</remarks>
+        public object[] trimseq(object[] seq) => NDPolySeries.TrimSeqList(seq);
+
+        /// <summary>
+        ///     <see cref="trimseq(NDArray)"/> for any other argument — NumPy returns the KIND it was given: a Python tuple
+        ///     (a <see cref="ValueTuple"/> / <see cref="Tuple"/>) itself or a new ValueTuple of the kept items; any other
+        ///     Python sequence (a <see cref="System.Collections.IEnumerable"/>) itself or an <c>object[]</c> of the kept
+        ///     items; a str itself; an <see cref="NDArray"/>, a typed C# array or a <c>Memory&lt;T&gt;</c> (ndarrays) itself
+        ///     or a view, as <see cref="trimseq(NDArray)"/> does.
+        /// </summary>
+        /// <param name="seq">The sequence.</param>
+        /// <returns>The same instance, or the trimmed sequence of the same kind.</returns>
+        /// <exception cref="TypeError">A value without a length: null or a number (<c>object of type 'int' has no
+        ///     len()</c>), a 0-d array (<c>len() of unsized object</c>).</exception>
+        /// <exception cref="ValueError">A tested array item or row holds several elements or none.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polyutils.trimseq.html</remarks>
+        public object trimseq(object seq) => NDPolySeries.TrimSeqAny(seq);
+
+        /// <summary>
         ///     Removes the trailing coefficients whose magnitude does not exceed <c>tol = 0</c> — i.e. the trailing
         ///     exact zeros — and returns the rest as a fresh copy of the coefficient dtype; an all-zero series
         ///     becomes <c>c[:1]*0</c>. See <see cref="trimcoef(object, object)"/>.
@@ -220,7 +251,8 @@ namespace NumSharp
         ///     NumPy's result dtype (a Python-number domain keeps a float32/float16 x's precision; an array domain's
         ///     dtype promotes with x's).
         /// </summary>
-        /// <param name="x">The points (any shape; a C# array converts to an ndarray).</param>
+        /// <param name="x">The points (any shape; a TYPED C# array converts to an ndarray of its dtype — a Python list,
+        ///     an <c>object[]</c> or a jagged / <c>NDArray[]</c> array, binds <see cref="mapdomain(object[], object, object)"/>).</param>
         /// <param name="old">The source domain (see the class remarks).</param>
         /// <param name="new">The target domain.</param>
         /// <returns>The mapped points (a new array; 0-d for a 0-d x).</returns>
@@ -274,7 +306,9 @@ namespace NumSharp
         /// <summary>
         ///     <see cref="mapdomain(NDArray, object, object)"/> for any <paramref name="x"/>: a Python number (C#
         ///     bool excepted — NumPy converts a bool with np.asanyarray) or a NumPy scalar (<see cref="Half"/>,
-        ///     <c>char</c>, <c>decimal</c>) is mapped unconverted; anything else is converted to an array first.
+        ///     <c>char</c>, <c>decimal</c>) is mapped unconverted; anything else is converted to an array first — a
+        ///     typed C# array as an ndarray of its dtype, a Python tuple / list (a ValueTuple, <c>object[]</c>, a jagged or
+        ///     <c>NDArray[]</c> array, any enumerable) by np.array's coercion, nested to any depth.
         /// </summary>
         /// <param name="x">The point(s).</param>
         /// <param name="old">The source domain.</param>
@@ -285,27 +319,69 @@ namespace NumSharp
         /// <exception cref="TypeError">A domain that is not subscriptable.</exception>
         /// <exception cref="DivideByZeroException">A zero-length domain of Python numbers.</exception>
         /// <exception cref="OverflowException">Python int overflow.</exception>
+        /// <exception cref="ValueError">A ragged tuple / list of points (np.array's inhomogeneous-shape text).</exception>
+        /// <exception cref="NotSupportedException">A str point, or a list holding one (NumPy's str arrays).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polyutils.mapdomain.html</remarks>
         public object mapdomain(object x, object old, object @new)
         {
             if (x is null) throw new ArgumentNullException(nameof(x));
             PolyNumber px;
+            NDArray converted = null;   // an array built here from x: this call's intermediate
             switch (x)
             {
                 case bool b:
                     // type(True) is bool, not in (int, float, complex): NumPy's np.asanyarray makes it a 0-d array.
-                    px = PolyNumber.FromArray(NDArray.Scalar(b));
+                    px = PolyNumber.FromArray(converted = NDArray.Scalar(b));
                     break;
-                case NDArray:
-                case System.Array:
-                case System.Collections.IEnumerable when x is not string:
-                    px = PolyNumber.FromArray(x as NDArray ?? np.asanyarray(x));
+                case NDArray nd:
+                    px = PolyNumber.FromArray(nd);
                     break;
                 default:
+                    // `if type(x) not in (int, float, complex) and not isinstance(x, np.generic): x = np.asanyarray(x)`:
+                    // FromObject keeps a Python number or NumPy scalar a scalar and converts a typed C# array (whole) or a
+                    // Python tuple / list (np.array's nested coercion) to an ndarray — the only way it yields an array
+                    // here, since a caller's NDArray took the case above.
                     px = PolyNumber.FromObject(x);
+                    if (px.Kind == PolyNumberKind.Array)
+                        converted = px.Array;
                     break;
             }
-            return MapDomainBoxed(px, old, @new);
+            try
+            {
+                return MapDomainBoxed(px, old, @new);
+            }
+            finally
+            {
+                // off + scl*x is always a fresh array (never x or a view of it), so the conversion can always go.
+                converted?.Dispose();
+            }
+        }
+
+        /// <summary>
+        ///     <see cref="mapdomain(object, object, object)"/> for a Python LIST of points — an <c>object[]</c>, or by array
+        ///     covariance a jagged or <c>NDArray[]</c> array. Without it a C# array argument would bind the
+        ///     <see cref="NDArray"/> overload through the implicit array conversion, which only understands TYPED arrays; here
+        ///     the list goes through np.array's coercion (nested to any depth, the dtype discovered over every item, a
+        ///     ragged list raising NumPy's text) before the domains are read, as NumPy's <c>np.asanyarray(x)</c> does.
+        /// </summary>
+        /// <param name="x">The points.</param>
+        /// <param name="old">The source domain.</param>
+        /// <param name="new">The target domain.</param>
+        /// <returns>The mapped points (a new array).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="x"/> is null.</exception>
+        /// <exception cref="ValueError">A ragged list (np.array's inhomogeneous-shape text).</exception>
+        /// <exception cref="NotSupportedException">A list holding a str or null (NumPy's str / object arrays).</exception>
+        /// <exception cref="IndexError">A domain shorter than 2.</exception>
+        /// <exception cref="TypeError">A domain that is not subscriptable.</exception>
+        /// <exception cref="DivideByZeroException">A zero-length domain of Python numbers.</exception>
+        /// <exception cref="OverflowException">Python int overflow.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polyutils.mapdomain.html</remarks>
+        public NDArray mapdomain(object[] x, object old, object @new)
+        {
+            if (x is null) throw new ArgumentNullException(nameof(x));
+            // The conversion is this call's intermediate; the NDArray overload always returns a fresh array.
+            using var xa = PolySequence.ToArray(x);
+            return mapdomain(xa, old, @new);
         }
 
         /// <summary>
@@ -335,7 +411,8 @@ namespace NumSharp
         /// <typeparam name="T1">Type of <c>old[1]</c>.</typeparam>
         /// <typeparam name="T2">Type of <c>new[0]</c>.</typeparam>
         /// <typeparam name="T3">Type of <c>new[1]</c>.</typeparam>
-        /// <param name="x">The points (any shape).</param>
+        /// <param name="x">The points (any shape; a typed C# array converts to an ndarray — a Python list binds the
+        ///     <c>object[]</c> overload).</param>
         /// <param name="old">The source domain.</param>
         /// <param name="new">The target domain.</param>
         /// <returns>The mapped points (a new array; 0-d for a 0-d x).</returns>
@@ -351,6 +428,36 @@ namespace NumSharp
             using var scope = NDScope.Open();   // array domain elements leave ufunc intermediates behind
             var (off, scl) = NDPolySeries.MapParms(old, @new);
             return scope.Returns(NDPolySeries.MapDomainWith(PolyNumber.FromArray(x), off, scl).ToNDArray());
+        }
+
+        /// <summary>
+        ///     <see cref="mapdomain{T0,T1,T2,T3}(NDArray, ValueTuple{T0,T1}, ValueTuple{T2,T3})"/> for a Python LIST of
+        ///     points (an <c>object[]</c>, a jagged or <c>NDArray[]</c> array) — see
+        ///     <see cref="mapdomain(object[], object, object)"/> for why a list needs its own overload: np.array's coercion of
+        ///     the list first, then the tuple-domain map.
+        /// </summary>
+        /// <typeparam name="T0">Type of <c>old[0]</c>.</typeparam>
+        /// <typeparam name="T1">Type of <c>old[1]</c>.</typeparam>
+        /// <typeparam name="T2">Type of <c>new[0]</c>.</typeparam>
+        /// <typeparam name="T3">Type of <c>new[1]</c>.</typeparam>
+        /// <param name="x">The points.</param>
+        /// <param name="old">The source domain.</param>
+        /// <param name="new">The target domain.</param>
+        /// <returns>The mapped points (a new array).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="x"/> is null.</exception>
+        /// <exception cref="ValueError">A ragged list (np.array's inhomogeneous-shape text).</exception>
+        /// <exception cref="NotSupportedException">A list holding a str or null, or a null / string domain element.</exception>
+        /// <exception cref="DivideByZeroException">A zero-length domain of Python numbers.</exception>
+        /// <exception cref="TypeError">NumPy's bool subtraction (NumPy bool elements).</exception>
+        /// <exception cref="OverflowException">Python int overflow.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polyutils.mapdomain.html</remarks>
+        public NDArray mapdomain<T0, T1, T2, T3>(object[] x, (T0, T1) old, (T2, T3) @new)
+        {
+            if (x is null) throw new ArgumentNullException(nameof(x));
+            // np.asanyarray(x) happens before mapparms reads the domains (NumPy's statement order); the conversion is
+            // this call's intermediate and the tuple-domain overload always returns a fresh array.
+            using var xa = PolySequence.ToArray(x);
+            return mapdomain(xa, old, @new);
         }
 
         /// <summary>

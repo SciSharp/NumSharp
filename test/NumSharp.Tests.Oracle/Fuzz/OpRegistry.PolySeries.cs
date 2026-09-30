@@ -45,6 +45,18 @@ namespace NumSharp.Tests.Fuzz
             /// <returns>The C# value.</returns>
             public object Get(string name) => Decode(_p[name]);
 
+            /// <summary>
+            ///     Decodes one spec that is not a named argument — an entry of the evaluation family's <c>xs</c> list —
+            ///     consuming operands in the same order as the named decoder (<see cref="Consumed"/> reports how many).
+            /// </summary>
+            /// <param name="e">The spec: <c>"a"</c>, a Python scalar, a list / tuple (nested, holding operands), or a str.</param>
+            /// <returns>The C# value.</returns>
+            /// <exception cref="NotSupportedException">An unknown spec kind or a tuple of more than 8 items.</exception>
+            public object Spec(JsonElement e) => Decode(e);
+
+            /// <summary>How many operands the decoded specs have consumed (the next operand's index).</summary>
+            public int Consumed => _next;
+
             /// <summary>Decodes an optional argument: null when absent — the calculus facades' spelling of NumPy's default
             ///     (<c>k=[]</c>, <c>lbnd=0</c>, <c>scl=1</c>).</summary>
             /// <param name="name">The argument name.</param>
@@ -88,8 +100,9 @@ namespace NumSharp.Tests.Fuzz
 
             /// <summary>One spec → its C# value (recursive for lists/tuples, depth-first operand consumption).</summary>
             /// <param name="e">The spec.</param>
-            /// <returns>The value.</returns>
-            /// <exception cref="NotSupportedException">An unknown spec kind or a tuple arity the decoder does not build.</exception>
+            /// <returns>The value: an operand NDArray, an <c>object[]</c> (list), a <c>ValueTuple</c> of any arity (tuple),
+            ///     a string, or a Python scalar's C# type.</returns>
+            /// <exception cref="NotSupportedException">An unknown spec kind.</exception>
             private object Decode(JsonElement e)
             {
                 if (e.ValueKind == JsonValueKind.String)
@@ -109,13 +122,9 @@ namespace NumSharp.Tests.Fuzz
                         var items = new List<object>();
                         foreach (var it in e.GetProperty("items").EnumerateArray())
                             items.Add(Decode(it));
-                        return items.Count switch
-                        {
-                            1 => ValueTuple.Create(items[0]),
-                            2 => ValueTuple.Create(items[0], items[1]),
-                            3 => ValueTuple.Create(items[0], items[1], items[2]),
-                            _ => throw new NotSupportedException($"tuple of {items.Count} items"),
-                        };
+                        // A C# tuple literal of that arity (the empty ValueTuple for Python's (); eight or more items nest
+                        // in TRest the way the compiler nests them, which ITuple flattens back into one tuple).
+                        return PolySequence.MakeTuple(items.ToArray(), items.Count);
                     }
                     case "str":
                         return e.GetProperty("str").GetString();
@@ -188,8 +197,13 @@ namespace NumSharp.Tests.Fuzz
                 Run("general lane", () => GeneralLane(name, x, old, nw)),
             };
 
-            // mapdomain's generic overloads exist for the x types C# binds them from: NDArray, double, Complex.
-            Type xType = x switch { null => null, NDArray => typeof(NDArray), double => typeof(double), Complex => typeof(Complex), _ => typeof(void) };
+            // mapdomain's generic overloads exist for the x types C# binds them from: NDArray, object[] (a Python list),
+            // double, Complex.
+            Type xType = x switch
+            {
+                null => null, NDArray => typeof(NDArray), object[] => typeof(object[]), double => typeof(double),
+                Complex => typeof(Complex), _ => typeof(void),
+            };
             if (old is ValueTuple<object, object> to && nw is ValueTuple<object, object> tn && xType != typeof(void))
             {
                 Type ElementType(object e) => e?.GetType() ?? typeof(object);
@@ -272,12 +286,14 @@ namespace NumSharp.Tests.Fuzz
         private static object GeneralLane(string name, object x, object old, object nw)
         {
             PolyNumber px = default;
+            // The facade's classification: an ndarray as is, a bool as NumPy's 0-d array, anything else through FromObject
+            // (a Python number / NumPy scalar stays a scalar; a typed C# array converts whole; a Python tuple / list by
+            // np.array's nested coercion).
             if (name == "mapdomain")
                 px = x switch
                 {
                     NDArray xa => PolyNumber.FromArray(xa),
                     bool b => PolyNumber.FromArray(NDArray.Scalar(b)),
-                    Array or System.Collections.IEnumerable when x is not string => PolyNumber.FromArray(np.asanyarray(x)),
                     _ => PolyNumber.FromObject(x),
                 };
             var (off, scl) = NDPolySeries.MapParmsGeneral(old, nw);
@@ -330,17 +346,32 @@ namespace NumSharp.Tests.Fuzz
                 var u = np.polynomial.polyutils;
                 switch (fn)
                 {
-                    case "trimseq": return u.trimseq((NDArray)a.Get("seq"));
+                    case "trimseq":
+                    {
+                        var seq = a.Get("seq");
+                        if (seq is NDArray nd)
+                            return u.trimseq(nd);
+                        // A Python list binds the object[] overload and a tuple the general one, as ported code binds them;
+                        // NumPy returns the same KIND (the sequence itself or its slice), and the corpus records np.asarray
+                        // of it — so the replay compares np.array's coercion of the returned sequence.
+                        object r = seq is object[] list ? u.trimseq(list) : u.trimseq(seq);
+                        return r as NDArray ?? PolySequence.ToArray(r);
+                    }
                     case "trimcoef": return a.Has("tol") ? u.trimcoef(a.Get("c"), a.Get("tol")) : u.trimcoef(a.Get("c"));
                     case "getdomain": return u.getdomain(a.Get("x"));
                     case "mapdomain":
                     {
                         var x = a.Get("x");
                         object old = a.Get("old"), nw = a.Get("new");
-                        // An array x takes the NDArray overload (the one ported code binds); anything else the general
-                        // one — and tuple domains additionally the generic overload, which must agree with it.
-                        object r = ViaDomainRoutes("mapdomain", x, old, nw,
-                            () => x is NDArray xa ? u.mapdomain(xa, old, nw) : u.mapdomain(x, old, nw));
+                        // An array x takes the NDArray overload and a Python list (object[]) the list overload — the ones
+                        // ported code binds; anything else the general one — and tuple domains additionally the generic
+                        // overload of that x kind, which must agree with it.
+                        object r = ViaDomainRoutes("mapdomain", x, old, nw, () => x switch
+                        {
+                            NDArray xa => u.mapdomain(xa, old, nw),
+                            object[] xl => u.mapdomain(xl, old, nw),
+                            _ => u.mapdomain(x, old, nw),
+                        });
                         return PolyResultArray(r);
                     }
                     default:

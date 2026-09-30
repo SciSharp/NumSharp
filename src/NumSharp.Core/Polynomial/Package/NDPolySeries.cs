@@ -27,10 +27,11 @@ using NumSharp.Backends.Kernels;
 //   * bool / integer / float / double / Complex / BigInteger
 //                                     -> a Python scalar: np.array discovers bool / int64 / float64 / complex128
 //   * Half / char / decimal           -> a NumPy scalar of that dtype
-//   * a typed C# array (double[], int[,], Complex[], …)
+//   * a typed C# array (double[], int[,], Complex[], …) or Memory<T> of a dtype
 //                                     -> an ndarray of its element dtype (the house mapping)
-//   * object[] / IList / other IEnumerable
-//                                     -> a Python list: element dtypes DISCOVERED like np.array([...])
+//   * ValueTuple / object[] (jagged double[][], NDArray[] and every other non-dtype array) / IList / other
+//     IEnumerable                     -> a Python tuple / list: nested to any depth, shape and element dtypes
+//                                        DISCOVERED like np.array([...]) (NDPolySequence)
 //   * string / string[]               -> a str array: sized like NumPy's, then "no common type"
 // Domains passed to mapparms/mapdomain are INDEXED, never converted, exactly as NumPy indexes them: a typed
 // C# array is an ndarray (its elements are NumPy scalars), an object[]/IList a Python list and a ValueTuple a
@@ -144,8 +145,9 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">The argument.</param>
         /// <returns>The view.</returns>
-        /// <exception cref="NotSupportedException">null (NumPy builds an object array), or a Python int beyond uint64.</exception>
-        /// <exception cref="ValueError">A Python list whose items have inhomogeneous shapes.</exception>
+        /// <exception cref="NotSupportedException">null (NumPy builds an object array), a sequence holding a str / None
+        ///     item, or a Python int beyond uint64.</exception>
+        /// <exception cref="ValueError">A ragged Python sequence (NumPy's inhomogeneous-shape text).</exception>
         public static PolySeriesView AsCoefficientArray(object a)
         {
             switch (a)
@@ -158,34 +160,18 @@ namespace NumSharp
                     return PolySeriesView.Str(1);
                 case string[] strs:
                     return PolySeriesView.Str(strs.Length);
-                case Array arr when arr.GetType().GetElementType() != typeof(object):
-                    // A typed C# array is an ndarray of its element dtype (the house mapping).
-                    return PolySeriesView.Of(np.asanyarray(arr));
-                case IEnumerable seq:
-                    return PolySeriesView.Of(ListToArray(seq));
-                default:
-                    // A scalar: np.array discovers its dtype (Python) or keeps it (NumPy scalar).
-                    return PolySeriesView.Of(PolyNumber.MakeArray(PolyNumber.FromObject(a)));
             }
-        }
-
-        /// <summary>
-        ///     <c>np.array(list)</c> for a Python list given as an <see cref="IEnumerable"/> of C# values: each item
-        ///     is classified by <see cref="PolyNumber.FromObject"/> and the dtype DISCOVERED over all of them
-        ///     (<c>[1, 2.5]</c> is float64, <c>[True, 2]</c> int64), items of one shape stacking into a new axis.
-        /// </summary>
-        /// <param name="seq">The list.</param>
-        /// <returns>The new array (an empty list is NumPy's float64 <c>(0,)</c>).</returns>
-        /// <exception cref="ValueError">Items of different shapes.</exception>
-        /// <exception cref="NotSupportedException">A null or string item (object / str arrays).</exception>
-        private static NDArray ListToArray(IEnumerable seq)
-        {
-            var items = new List<PolyNumber>();
-            foreach (var o in seq)
-                items.Add(PolyNumber.FromObject(o));
-            if (items.Count == 0)
-                return new NDArray(NPTypeCode.Double, new Shape(0L), false);
-            return PolyNumber.MakeArray(items.ToArray());
+            // A typed C# array (or Memory<T>) of a dtype is an ndarray of its element dtype (the house mapping).
+            if (PolySequence.IsArrayLike(a))
+                return PolySeriesView.Of(np.asanyarray(a));
+            // A Python tuple / list — nested to any depth, a jagged or NDArray[] array included: np.array's coercion
+            // (an empty sequence is NumPy's float64 (0,)).
+            if (PolySequence.IsSequence(a))
+                return PolySeriesView.Of(PolySequence.ToArray(a));
+            // A scalar: np.array discovers its dtype (Python) or keeps it (NumPy scalar). FromObject hands back an
+            // array only for an ndarray-like np.asanyarray understands, which is then the series itself.
+            var num = PolyNumber.FromObject(a);
+            return PolySeriesView.Of(num.Kind == PolyNumberKind.Array ? num.Array : PolyNumber.MakeArray(num));
         }
 
         /// <summary>
@@ -397,7 +383,9 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Python's iteration of <c>alist</c>, each item converted by <c>np.array(a, ndmin=1)</c>.
+        ///     Python's iteration of <c>alist</c>, each item converted by <c>np.array(a, ndmin=1)</c>: an ndarray (an
+        ///     NDArray, a typed C# array, a Memory&lt;T&gt; of a dtype) yields NumPy scalars (1-D) or rows, a Python tuple /
+        ///     list (<see cref="PolySequence.IsSequence"/>) its items, a str its characters.
         /// </summary>
         /// <param name="alist">The iterable.</param>
         /// <returns>The converted items.</returns>
@@ -427,18 +415,21 @@ namespace NumSharp
                         r[i] = PolySeriesView.Str(1);
                     return r;
                 }
-                case Array arr when arr.Rank > 1:
-                    return Items(np.asanyarray(arr));   // a rectangular array iterates its rows, like the list of lists
-                case IEnumerable seq:
-                {
-                    var r = new List<PolySeriesView>();
-                    foreach (var item in seq)
-                        r.Add(AsCoefficientArray(item));
-                    return r.ToArray();
-                }
-                default:
-                    throw new TypeError($"'{PythonTypeName(alist)}' object is not iterable");
             }
+            // A typed C# array is an ndarray and iterates like one: NumPy SCALARS of its dtype along a 1-D array (a
+            // float[] yields np.float32 items, not the Python floats a boxed C# float would be), rows otherwise.
+            if (PolySequence.IsArrayLike(alist))
+                return Items(np.asanyarray(alist));
+            // A Python tuple / list — a jagged array's or NDArray[]'s items, a multi-dimensional object[,]'s rows.
+            if (PolySequence.IsSequence(alist))
+            {
+                var items = PolySequence.Items(alist);
+                var r = new PolySeriesView[items.Length];
+                for (int i = 0; i < items.Length; i++)
+                    r[i] = AsCoefficientArray(items[i]);
+                return r;
+            }
+            throw new TypeError($"'{PythonTypeName(alist)}' object is not iterable");
         }
 
         /// <summary>The Python type name CPython's messages quote for a C# value.</summary>
@@ -486,6 +477,166 @@ namespace NumSharp
             long k = DirectILKernelGenerator.GetPolyTrimLenKernel(v.Dtype)(v.Ptr, v.Len, v.Stride);
             // +len: NumPy's `return seq` (the same object); -k: its slice `seq[:k]`, a view even when k == len.
             return k >= 0 ? seq : Prefix(seq, -k);
+        }
+
+        /// <summary>
+        ///     <c>polyutils.trimseq(seq)</c> of a Python LIST (an <c>object[]</c>; by array covariance also a jagged or
+        ///     <c>NDArray[]</c> array): <paramref name="seq"/> ITSELF when it is empty or its last item is nonzero,
+        ///     otherwise a NEW array holding the items up to the last nonzero one (at least one) — NumPy's list slice
+        ///     <c>seq[:i+1]</c>, here of the same runtime element type. Zero-ness is Python's <c>item != 0</c>
+        ///     (<see cref="TrimSeqCount"/>).
+        /// </summary>
+        /// <param name="seq">The list.</param>
+        /// <returns>The same instance, or the trimmed copy.</returns>
+        /// <exception cref="TypeError"><paramref name="seq"/> is null — NumPy's <c>len(None)</c>.</exception>
+        /// <exception cref="ValueError">An array item of several elements or of none is tested (NumPy's truth-value
+        ///     errors).</exception>
+        public static object[] TrimSeqList(object[] seq)
+        {
+            if (seq is null)
+                throw new TypeError("object of type 'NoneType' has no len()");
+            int k = TrimSeqCount(seq);
+            if (k == seq.Length)
+                return seq;
+            // A slice of a list is a new list: an array of the same element type, so an NDArray[] stays an NDArray[].
+            var r = (object[])Array.CreateInstance(seq.GetType().GetElementType(), k);
+            Array.Copy(seq, r, k);
+            return r;
+        }
+
+        /// <summary>
+        ///     <c>polyutils.trimseq(seq)</c> of any argument kind — NumPy hands back the KIND it was given: an
+        ///     <see cref="NDArray"/> as <see cref="TrimSeq"/> (itself or a view); a typed C# array or <c>Memory&lt;T&gt;</c>
+        ///     is an ndarray, so the same, over its conversion; a list (<see cref="TrimSeqList"/>); a Python tuple
+        ///     (<see cref="ITuple"/>) itself or a new ValueTuple of the kept items; any other Python sequence
+        ///     (<see cref="IEnumerable"/>) itself or an <c>object[]</c> of the kept items; a str itself (its items are
+        ///     one-character strs, never equal to the int 0).
+        /// </summary>
+        /// <param name="seq">The sequence.</param>
+        /// <returns>The same instance, or the trimmed sequence of the same kind.</returns>
+        /// <exception cref="TypeError">A value without a length — null or a number (<c>object of type 'int' has no
+        ///     len()</c>), a 0-d array (<c>len() of unsized object</c>).</exception>
+        /// <exception cref="ValueError">An array item or row of several elements or of none is tested.</exception>
+        public static object TrimSeqAny(object seq)
+        {
+            switch (seq)
+            {
+                case null:
+                    throw new TypeError("object of type 'NoneType' has no len()");
+                case NDArray nd:
+                    return TrimSeq(nd);
+                case string:
+                    // seq[-1] is a one-character str and `'x' != 0` is always true: NumPy returns the str itself.
+                    return seq;
+                case object[] list:
+                    return TrimSeqList(list);
+                case ITuple tuple:
+                {
+                    var items = PolySequence.Items(tuple);
+                    int k = TrimSeqCount(items);
+                    return k == items.Length ? seq : PolySequence.MakeTuple(items, k);
+                }
+            }
+            if (PolySequence.IsArrayLike(seq))
+            {
+                // An ndarray-like: NumPy's ndarray semantics over the conversion. The result is the conversion itself
+                // (kept) or a view that holds its own reference to the buffer, so only the wrapper of a trimmed one goes.
+                var a = np.asanyarray(seq);
+                var r = TrimSeq(a);
+                if (!ReferenceEquals(r, a))
+                    a.Dispose();
+                return r;
+            }
+            if (PolySequence.IsSequence(seq))
+            {
+                var items = PolySequence.Items(seq);
+                int k = TrimSeqCount(items);
+                if (k == items.Length)
+                    return seq;
+                var r = new object[k];
+                Array.Copy(items, r, k);
+                return r;
+            }
+            throw new TypeError($"object of type '{PythonTypeName(seq)}' has no len()");
+        }
+
+        /// <summary>
+        ///     How many items <c>trimseq</c> keeps of a Python sequence, by NumPy's own statements:
+        ///     <c>if len(seq) == 0 or seq[-1] != 0: return seq</c>, else
+        ///     <c>for i in range(len(seq) - 1, -1, -1): if seq[i] != 0: break</c> and <c>seq[:i+1]</c>. Python's loop
+        ///     variable stays at 0 when no item is nonzero, so at least one item is kept; every item down to the first
+        ///     nonzero one is TESTED (an array item's truth-value error included), the last one twice, as in NumPy.
+        /// </summary>
+        /// <param name="items">The items.</param>
+        /// <returns>The number of leading items kept.</returns>
+        /// <exception cref="ValueError">A tested array item of several elements or of none.</exception>
+        private static int TrimSeqCount(object[] items)
+        {
+            int n = items.Length;
+            if (n == 0 || TrimSeqItemIsNonzero(items[n - 1]))
+                return n;
+            int i = n - 1;
+            for (; i >= 0; i--)
+                if (TrimSeqItemIsNonzero(items[i]))
+                    break;
+            return Math.Max(i, 0) + 1;
+        }
+
+        /// <summary>
+        ///     Python's <c>bool(item != 0)</c> for one item of a Python sequence: a Python or NumPy number compares by value
+        ///     (NaN is nonzero, -0.0 is zero, a complex is zero only when both parts are, a bool is itself); an array — an
+        ///     <see cref="NDArray"/>, a typed C# array, a <c>Memory&lt;T&gt;</c> — gives an elementwise result whose truth
+        ///     value NumPy defines only for exactly one element; anything else (a str, a nested list or tuple, null / None)
+        ///     never equals the int 0.
+        /// </summary>
+        /// <param name="item">The item.</param>
+        /// <returns>True when NumPy's test counts the item as nonzero.</returns>
+        /// <exception cref="ValueError">An array item of several elements or of none.</exception>
+        private static bool TrimSeqItemIsNonzero(object item)
+        {
+            switch (item)
+            {
+                case null: return true;
+                case bool b: return b;
+                case sbyte v: return v != 0;
+                case byte v: return v != 0;
+                case short v: return v != 0;
+                case ushort v: return v != 0;
+                case int v: return v != 0;
+                case uint v: return v != 0;
+                case long v: return v != 0;
+                case ulong v: return v != 0;
+                case BigInteger v: return !v.IsZero;
+                case float v: return v != 0;                   // NaN != 0; -0.0 == 0
+                case double v: return v != 0;
+                case Complex v: return v.Real != 0 || v.Imaginary != 0;
+                case Half v: return (float)v != 0;              // exact widening: NaN stays NaN, -0 stays zero
+                case char v: return v != 0;
+                case decimal v: return v != 0m;
+                case NDArray a: return ArrayItemTruth(a);
+            }
+            if (PolySequence.IsArrayLike(item))
+            {
+                using var a = np.asanyarray(item);
+                return ArrayItemTruth(a);
+            }
+            return true;
+        }
+
+        /// <summary>
+        ///     NumPy's truth value of <c>a != 0</c> for an array item of a sequence: the one element's zero-ness, or
+        ///     NumPy's ValueError for an empty array or one of several elements.
+        /// </summary>
+        /// <param name="a">The array item.</param>
+        /// <returns>True when the single element is nonzero.</returns>
+        /// <exception cref="ValueError">The array does not hold exactly one element.</exception>
+        private static bool ArrayItemTruth(NDArray a)
+        {
+            if (a.size == 1)
+                return TrimSeqItemIsNonzero(a.GetAtIndex(0));
+            if (a.size == 0)
+                throw new ValueError("The truth value of an empty array is ambiguous. Use `array.size > 0` to check that an array is not empty.");
+            throw new ValueError("The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()");
         }
 
         // ---------------------------------------------------------------------------------------------

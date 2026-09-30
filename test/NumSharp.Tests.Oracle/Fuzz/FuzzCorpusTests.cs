@@ -517,8 +517,10 @@ namespace NumSharp.Tests.Fuzz
         // x count class, x layouts, N-D coefficients (tensor / broadcast / coefficient layouts), Python-
         // scalar (weak) and 0-d (strong) x, special coefficients, the vector-lane matrix at 45 points
         // (every x dtype x series dtype, 1-D and per point, integer bounds and float specials, column-
-        // strided per-point series for the scalar part), and the IndexError / ValueError / OverflowError
-        // cells. Portable: + - * / only, so strict on every host.
+        // strided per-point series for the scalar part), Python-sequence x (tuples / nested lists, NumPy's
+        // np.asarray(x), replayed as ValueTuple / object[]) and Python ints past int64 (BigInteger x: inf, nan or
+        // OverflowError), and the IndexError / ValueError / OverflowError cells. Portable: + - * / only, so strict on
+        // every host.
         [TestMethod]
         [TestCategory("FuzzMatrix")]
         public void Polyeval() => RunCorpus("polyeval.jsonl");
@@ -528,8 +530,9 @@ namespace NumSharp.Tests.Fuzz
         // {p}trim / trimcoef (Python and NumPy-scalar tolerances), trimseq, as_series (tuples, arity asserted),
         // getdomain (the ±0 / NaN reduction answers), mapparms / mapdomain (CPython arithmetic for Python domains,
         // NumPy scalar math for array domains, the fused complex product for 0-d arrays, NumPy's win-amd64
-        // OverflowError texts), {p}line (np.array's dtype discovery) and the {p}domain/zero/one/x constants.
-        // Portable: + - * / comparisons and copies only.
+        // OverflowError texts), {p}line (np.array's dtype discovery), the {p}domain/zero/one/x constants, and Python
+        // tuples / nested sequences as coefficients, as_series lists, getdomain / mapdomain points (np.array's nested
+        // coercion and its ragged texts). Portable: + - * / comparisons and copies only.
         [TestMethod]
         [TestCategory("FuzzMatrix")]
         public void Polyseries() => RunCorpus("polyseries.jsonl");
@@ -541,8 +544,9 @@ namespace NumSharp.Tests.Fuzz
         // N-D series at every axis x memory layout (values AND the result's C/F/OWNDATA flags), specials and
         // full-mantissa complex values on 1-D (scalarmath: the naive product) vs N-D (ufuncs: simd_cmul) series,
         // long and wide series (the kernel's vector loops, tails and column blocks), float16's constant rounding
-        // and overflow, the argument errors in NumPy's order, Python-list series and the n == 1 zero branch.
-        // Portable: + - * / and negation only, so strict on every host.
+        // and overflow, the argument errors in NumPy's order, Python-list series, the n == 1 zero branch, the C#
+        // boundary argument kinds (tuples, nested / ragged / empty lists, Python ints past int64, str k / lbnd timing)
+        // and zero-size / 5-D series and extreme integers. Portable: + - * / and negation only, so strict on every host.
         [TestMethod]
         [TestCategory("FuzzMatrix")]
         public void Polycalc() => RunCorpus("polycalc.jsonl");
@@ -758,9 +762,9 @@ namespace NumSharp.Tests.Fuzz
             ["params.jsonl"] = 1190,      // +288 §C1: multi-axis median/average/nanmedian (tuple-axis int[] overloads)
             ["instance.jsonl"] = 7500,    // §D: ndarray.* instance surface — 13 NumPy dtypes + the char proxy weave (dtype-spread gate)
             ["emath.jsonl"] = 385,        // §A2/E5: np.emath scimath promotion (+ the unsigned lanes, dtype-spread gate)
-            ["polyeval.jsonl"] = 16100,   // numpy.polynomial {p}val family (U3), 6 bases x the matrix above, + 4,392 single-element-broadcast cells
-            ["polyseries.jsonl"] = 18000, // numpy.polynomial additive family + polyutils (U1): 6 bases + polyutils + constant facets — 15,950 cases at delivery, 18,437 since the parity audit's long-series / complex64-loop / block-boundary / getdomain-window sections (K-N), which this floor keeps from silently dropping out
-            ["polycalc.jsonl"] = 21000,   // numpy.polynomial calculus family (U4): {p}der / {p}int x 6 bases, sections A-L of gen_polycalc
+            ["polyeval.jsonl"] = 19100,   // numpy.polynomial {p}val family (U3), 6 bases x the matrix above, + 4,392 single-element-broadcast cells, + 720 sequence / big-int x cells (J), + 1,890 array_like c / ordinate cells (K) — 19,216
+            ["polyseries.jsonl"] = 18600, // numpy.polynomial additive family + polyutils (U1): 6 bases + polyutils + constant facets — 15,950 cases at delivery, 18,437 since the parity audit's long-series / complex64-loop / block-boundary / getdomain-window sections (K-N), 18,621 with the tuple / nested-sequence section (O), 18,647 with trimseq of Python sequences (P), which this floor keeps from silently dropping out
+            ["polycalc.jsonl"] = 26400,   // numpy.polynomial calculus family (U4): {p}der / {p}int x 6 bases, sections A-O of gen_polycalc — 21,646 at delivery, 27,526 with the argument-kind (M), zero-size / 5-D / extreme-int (N) and widened-scale (O) sections
             ["place.jsonl"] = 12,
             ["products.jsonl"] = 326,
             ["precision.jsonl"] = 80,

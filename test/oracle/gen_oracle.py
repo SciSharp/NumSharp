@@ -10507,6 +10507,7 @@ def gen_polyeval():
     n = 0
     skipped = 0
     ok_dtypes = set(ALL_DTYPES)
+    A = _PSArr   # an ndarray argument inside a Python-typed spec (sections J and K)
 
     def emit(op, xs, operands, call, layout, cid, extra=None):
         nonlocal n, skipped
@@ -10598,6 +10599,27 @@ def gen_polyeval():
                     cv = _poly_coef(cshape, cs)
                     emit(op, [_weak_spec(wv)], [describe(cv, cv)], lambda: val(wv, cv), "weak_scalar",
                          f"{op}/weak/{type(wv).__name__}/{cs}/{cshape}")
+
+        # (J) Python-sequence x — NumPy's `if isinstance(x, (tuple, list)): x = np.asarray(x)`, nested to any depth,
+        #     dtype discovered over every item (the C# replay: object[] / ValueTuple, NDPolySequence) — and Python ints
+        #     past int64 (weak: CPython's int arithmetic on the x-only terms, then NumPy's conversion — inf, nan, or
+        #     OverflowError past float64; the C# replay: BigInteger).
+        seq_x = [("tuple", (0.5, 1.5, -2.0)), ("list_int", [1, 2, 3]), ("nested", [[0.5, 1.0], [2.0, 3.0]]),
+                 ("nested_tuple", ((1, 2), (3, 4))), ("mixed", [(0.5, 1), [2, 3.5]]), ("empty", []),
+                 ("complex", [1j, 0.5]), ("bool", [True, False]), ("ragged", [[1], [1, 2]]),
+                 ("f16_item", [_PSArr(np.array(0.5, np.float16)), 2.0])]
+        big_x = [("p70", 2 ** 70), ("n70", -(2 ** 70)), ("p200", 2 ** 200), ("p1030", 2 ** 1030), ("n1030", -(2 ** 1030))]
+        for cs in ("float64", "float32", "float16", "complex128"):
+            for cshape in ((3,), (4, 2)):
+                cv = _poly_coef(cshape, cs, seed=31)
+                for xname, xv in seq_x:
+                    xops = []
+                    spec = _ps_enc(xv, xops)
+                    emit(op, [spec], xops + [describe(cv, cv)], lambda: val(_ps_py(xv), cv), "python_seq_x",
+                         f"{op}/seqx/{xname}/{cs}/{cshape}")
+                for bname, bv in big_x:
+                    emit(op, [_weak_spec(bv)], [describe(cv, cv)], lambda: val(bv, cv), "big_int_x",
+                         f"{op}/bigx/{bname}/{cs}/{cshape}")
 
         # (E) 0-d array x (STRONG), including complex 0-d x, whose ops mix ufunc and scalar math.
         for xs in ("float64", "float32", "float16", "complex128", "int32", "bool"):
@@ -10801,6 +10823,76 @@ def gen_polyeval():
         pts = [_poly_fill(4, "float64"), _poly_fill(4, "float64"), _poly_fill(3, "float64"), _poly_fill(4, "float64")]
         emit(opn, ["a"] * 4, [describe(q, q) for q in pts] + [describe(cv, cv)],
              lambda: pu._valnd(val, cv, *pts), "c_contiguous", f"{opn}/err/shapes")
+
+        # (K) array_like c and ordinates. The C# replay turns a Python list into object[], a tuple into a ValueTuple and a
+        #     NumPy scalar item into a 0-d array (params "c" holds the series spec when it is not an operand):
+        #     * {p}val: c = np.array(c, ndmin=1) of any kind, BEFORE x (a ragged c's error wins over a ragged x);
+        #     * {p}val2d / {p}val3d / valnd: the ordinates np.asanyarray'd first (a Python scalar is a STRONG 0-d array, a
+        #       Python int an int64 one; a ragged ordinate raises before the shape check, the shape check before c);
+        #     * {p}grid2d / {p}grid3d: the ordinates handed to {p}val as they are (a Python scalar stays WEAK), c converted by
+        #       the first {p}val, before its x.
+        #     Python ints past uint64 (NumPy's object arrays) are not used: NumSharp has no object dtype.
+        c_forms = [("list", [1, 2.5, -0.5]), ("tuple", (1, 2.5, -0.5)), ("int_list", [1, 2, 3]),
+                   ("bool_list", [True, False, True]), ("complex_list", [1, 2j, 0.5]), ("nested", [[1, 2], [3, 4], [0.5, -1]]),
+                   ("nested_tuple", ((1, 2), (3, 4))), ("f16_items", [A(np.array(1.0, np.float16)), A(np.array(0.5, np.float16))]),
+                   ("f16_py_mix", [A(np.array(1.0, np.float16)), 2.0]),
+                   ("f32_rows", [A(np.array([1.0, 2.0], np.float32)), A(np.array([0.5, 0.25], np.float32))]),
+                   ("scalar_int", 3), ("scalar_float", 2.5), ("scalar_bool", True), ("scalar_complex", 1.5j),
+                   ("empty", []), ("ragged", [[1], [1, 2]]), ("u64", [2 ** 64 - 1, 1])]
+        x_forms = [("weak", 0.5), ("weak_int", 2), ("arr", A(_poly_fill(3, "float64", seed=40))), ("list_x", [0.5, -1.5]),
+                   ("ragged_x", [[[1], [1, 2]]]), ("f32_arr", A(_poly_fill(3, "float32", seed=41)))]
+        # ragged_x's text ("after 2 dimensions ... (1, 2)") differs from a ragged c's ("after 1 dimensions ... (2,)"), so the
+        # pair shows which one NumPy converts first.
+        for cname, cform in c_forms:
+            for xname, xform in x_forms:
+                for tensor in (True, False):
+                    # tensor only matters for an N-D series at an array x
+                    if not tensor and not (xname in ("arr", "list_x", "f32_arr") and cname in ("nested", "nested_tuple", "f32_rows")):
+                        continue
+                    kops = []
+                    xspec = _ps_enc(xform, kops)
+                    extra = {"c": _ps_enc(cform, kops)}
+                    if not tensor:
+                        extra["tensor"] = False
+                    emit(op, [xspec], kops, lambda: val(_ps_py(xform), _ps_py(cform), tensor=tensor), "array_like_c",
+                         f"{op}/argc/{cname}/{xname}/{tensor}", extra=extra)
+        for kind, dims in (("val2d", 2), ("val3d", 3), ("grid2d", 2), ("grid3d", 3)):
+            f = getattr(mod, p + kind)
+            op2 = f"{modname}.{p}{kind}"
+            c64 = _poly_coef((3, 2) if dims == 2 else (2, 2, 2), "float64", seed=42)
+            c32 = c64.astype(np.float32)
+            ordinate_forms = [
+                ("lists", [[0.5, 1.0], [1.0, 2.0], [-1.0, 0.25]]),
+                ("tuples", [(0.5, 1.0), (1.0, 2.0), (-1.0, 0.25)]),
+                ("scalars_float", [0.5, 1.5, -2.0]),
+                ("scalars_int", [2, 3, -1]),
+                ("scalars_bool", [True, False, True]),
+                ("mixed", [A(_poly_fill(2, "float32", seed=43)), [1, 2], (0.5, 1.5)]),
+                ("nested", [[[0.5], [1.0]], [[1.0], [2.0]], [[3.0], [4.0]]]),
+                ("f16_items", [[A(np.array(0.5, np.float16))], [A(np.array(1.0, np.float16))], [A(np.array(2.0, np.float16))]]),
+                ("empty", [[], [], []]),
+                ("incompatible", [[0.5, 1.0], [1.0, 2.0, 3.0], [1.0, 2.0]]),
+                ("ragged_first", [[[1], [1, 2]], [1.0, 2.0, 3.0], [1.0]]),
+                ("ragged_second", [[1.0, 2.0], [[1], [1, 2]], [1.0, 2.0]]),
+            ]
+            for oname, ords in ordinate_forms:
+                ords = ords[:dims]
+                # the ragged c differs in shape from the ragged ordinates, so a case holding both shows the order
+                for cname, cform in (("arr64", A(c64)), ("arr32", A(c32)), ("list", c64.tolist()), ("ragged", [[[1], [1, 2]]])):
+                    kops = []
+                    xs = [_ps_enc(o, kops) for o in ords]
+                    extra = {"c": _ps_enc(cform, kops)}
+                    emit(op2, xs, kops, lambda: f(*[_ps_py(o) for o in ords], _ps_py(cform)), "array_like_ordinates",
+                         f"{op2}/argo/{oname}/{cname}", extra=extra)
+        for oname, ords in (("lists", [[0.5, 1.0], (1.0, 2.0)]), ("scalars", [2, 0.5]), ("ragged", [[[1], [1, 2]], [1.0]]),
+                            ("incompatible", [[0.5], [1.0, 2.0]])):
+            c2 = _poly_coef((3, 2), "float64", seed=44)
+            for cname, cform in (("arr", A(c2)), ("list", c2.tolist()), ("ragged", [[[1], [1, 2]]])):
+                kops = []
+                xs = [_ps_enc(o, kops) for o in ords]
+                extra = {"c": _ps_enc(cform, kops)}
+                emit(opn, xs, kops, lambda: pu._valnd(val, _ps_py(cform), *[_ps_py(o) for o in ords]), "array_like_ordinates",
+                     f"{opn}/argo/{oname}/{cname}", extra=extra)
 
     # The recurrence's Python ints meeting an integer x: lagval's (2*nd - 1) - x overflows int8 at
     # 70 coefficients and uint8 at 130 (NumPy's OverflowError, raised before any shape check).
@@ -11704,6 +11796,67 @@ def gen_polyseries():
             for ln, xa in long_layouts(x):
                 emit(op, {"x": xa}, lambda: pu.getdomain(_ps_py(xa)), ln, f"{op}/nan/{d}/{m}/{at}/{ln}")
 
+    # ---------------- (O) Python tuples and nested sequences ----------------
+    # The C# boundary's ValueTuple (a Python tuple) and nested object[] (lists), coerced by np.array's walk (NDPolySequence):
+    # a tuple is a sequence like a list, nesting makes an N-D array (as_series / {p}add / getdomain then say "not 1-d"),
+    # a ragged one raises np.array's inhomogeneous text, an empty one is float64 (0,) — and as_series iterates a tuple.
+    f32a = np.array([1.0, 2.0, 0.0], np.float32)
+    f32b = np.array([3.0, 4.0], np.float32)
+    tuple_coefs = [("tuple", (1, 2)), ("tuple_f", (1.5, -2.0, 0.0)), ("tuple_mixed", (1, 2.5, 1j)),
+                   ("tuple_nested", ((1, 2), (3, 4))), ("list_of_tuples", [(1, 2), (3, 4)]),
+                   ("tuple_arrays", (A(f32a), A(np.array([3.0, 4.0, 5.0], np.float32)))), ("empty_tuple", ()),
+                   ("ragged", [[1], [1, 2]]), ("ragged_deep", [[[1], [1, 2]], [[1], [1, 2]]]), ("nested3", [[[1.0]]])]
+    for modname, p in (("polynomial", "poly"), ("chebyshev", "cheb")):
+        mod = _poly_module(modname)
+        for opname in ("add", "sub"):
+            f = getattr(mod, p + opname)
+            op = f"{modname}.{p}{opname}"
+            for tname, tv in tuple_coefs:
+                for other in ((3, 4, 5), [0.5]):
+                    emit(op, {"c1": tv, "c2": other}, lambda: f(_ps_py(tv), other), "python_tuple",
+                         f"{op}/tuple/{tname}/{len(other)}")
+                    emit(op, {"c1": other, "c2": tv}, lambda: f(other, _ps_py(tv)), "python_tuple",
+                         f"{op}/tupler/{tname}/{len(other)}")
+    for tag, alist, trim in (("tuple_arrays", (A(f32a), A(f32b)), False), ("tuple_arrays_trim", (A(f32a), A(f32b)), True),
+                             ("tuple_tuples", ((1, 2, 0), (3.5, 4)), True), ("tuple_lists", ([1, 2], [3, 4, 0]), True),
+                             ("list_tuples", [(1, 2), (3, 4, 0)], False), ("tuple_nested_err", ([[1, 2]], [3]), False),
+                             ("tuple_ragged_err", ([[1], [1, 2]], [3]), False), ("empty_tuple", (), True),
+                             ("tuple_scalars", (1, 2.5), True), ("tuple_empty_item", ((), [1]), True)):
+        emit("polyutils.as_series", {"alist": alist, "trim": trim}, lambda: pu.as_series(_ps_py(alist), trim=trim),
+             "python_tuple", f"polyutils.as_series/tuple/{tag}", kind="tuple")
+    for tag, cv in (("tuple", (1, 2, 0, 0)), ("tuple_f", (0.5, 1e-3, 0.0)), ("tuple_nested", ((1, 2), (0, 0))),
+                    ("ragged", [[1], [1, 2]])):
+        emit("polyutils.trimcoef", {"c": cv, "tol": 1e-2}, lambda: pu.trimcoef(_ps_py(cv), 1e-2), "python_tuple",
+             f"polyutils.trimcoef/tuple/{tag}")
+    for tag, xv in (("tuple", (1.0, 5.0, -2.0)), ("tuple_int", (3, -7, 2)), ("tuple_nested", ((1.0, 5.0),)),
+                    ("ragged", [[1], [1, 2]]), ("empty_tuple", ())):
+        emit("polyutils.getdomain", {"x": xv}, lambda: pu.getdomain(_ps_py(xv)), "python_tuple",
+             f"polyutils.getdomain/tuple/{tag}")
+    for tag, xv in (("tuple", (0.5, 1.5)), ("nested", [[0.5, 1.5], [2, 3]]), ("nested_tuple", ((1, 2), (3, 4))),
+                    ("ragged", [[1], [1, 2]]), ("empty", [])):
+        emit("polyutils.mapdomain", {"x": xv, "old": (0, 2), "new": (-1, 1)},
+             lambda: pu.mapdomain(_ps_py(xv), (0, 2), (-1, 1)), "python_tuple", f"polyutils.mapdomain/tuple/{tag}")
+
+    # ---------------- (P) trimseq of Python sequences ----------------
+    # NumPy returns the KIND it was given — the list / tuple itself, or its slice seq[:i+1] (a list / tuple); the corpus
+    # records np.asarray of it. An item's zero-ness is Python's `item != 0`: a number by value (NaN nonzero, -0.0 zero, a
+    # complex zero only when both parts are, a bool itself), a NumPy scalar likewise, a one-element array by its truth
+    # value (an empty or longer array raises NumPy's ValueError when TESTED — seq[0] included), a nested list never 0.
+    for tag, seq in (("list", [1, 2, 0]), ("list_keep", [1, 2]), ("list_allzero", [0, 0, 0]), ("list_empty", []),
+                     ("list_nan", [1, float("nan")]), ("list_negzero", [1.5, 0.0, -0.0]), ("list_complex", [1, 0j]),
+                     ("list_complex_im", [1, 1j, 0]), ("list_bool", [True, False]), ("list_mixed", [1, 2.5, 0, 0.0]),
+                     ("list_one_zero", [0]), ("tuple", (1, 0, 0)), ("tuple_keep", (1, 2)), ("tuple_empty", ()),
+                     ("tuple_allzero", (0, 0)), ("tuple_long", (1, 2, 3, 4, 5, 6, 7, 8, 9, 0)),
+                     ("list_f16", [A(np.array(1.0, np.float16)), A(np.array(0.0, np.float16))]),
+                     ("list_f16_negzero", [A(np.array(2.0, np.float16)), A(np.array(-0.0, np.float16))]),
+                     ("list_1elem_arrays", [A(np.array([1.0])), A(np.array([0.0]))]),
+                     ("list_2d_1elem", [A(np.array([[3]])), A(np.array([[0]]))]),
+                     ("list_multi_array", [A(np.array([1.0, 2.0])), 0]),
+                     ("list_multi_array_last", [1, A(np.array([0.0, 0.0]))]),
+                     ("list_empty_array", [A(np.array([1.0])), A(np.zeros(0))]),
+                     ("list_nested", [[1], [0]]), ("list_u64", [2 ** 64 - 1, 0]), ("list_bigneg", [-(2 ** 63), 0])):
+        emit("polyutils.trimseq", {"seq": seq}, lambda: pu.trimseq(_ps_py(seq)), "python_seq", f"polyutils.trimseq/seq/{tag}")
+
     # Char: NumSharp's uint16-like dtype — the uint16 cells relabelled (bytes-exact oracle, the house weave).
     cases += _relabel_dtype([c for c in cases if "/uint16" in (c.get("id") or "") and not c.get("expects_throw")],
                             "uint16", "char")
@@ -11736,8 +11889,13 @@ def gen_polyseries():
 #       in the last bit only on such operands;
 #   (I) long series and wide N-D series — the kernel's vector loops, scalar tails and column blocks, and float16's
 #       constant rounding (2*(j+1) > 2048) and overflow (j > 65504);
-#   (J) argument errors in NumPy's check order; (K) Python-list series; (L) the n == 1 zero branch.
-# complex64 results (none arise from NumSharp-representable inputs) would be skipped (#569).
+#   (J) argument errors in NumPy's check order; (K) Python-list series; (L) the n == 1 zero branch;
+#   (M) C# boundary argument kinds — tuples, nested / ragged / empty lists, lists holding arrays, Python ints past
+#       int64 (inf / nan / OverflowError), str k / lbnd timing, the ndim checks on sequences;
+#   (N) zero-size and 5-D series (values and flags), extreme integers through the converting direct load;
+#   (O) the kernel's widened c *= scl — float16 products just past a float16 tie, NaN / inf coefficients and scales,
+#       a float16 series' exact float32 scale.
+# complex64 and object results (a Python int past uint64 in a series) would be skipped (#569 / no object dtype).
 
 def _pc_random(shape, dt, seed):
     """Seeded full-mantissa values (the product forms of complex arithmetic only differ on such operands)."""
@@ -11764,6 +11922,25 @@ def _pc_special(shape, dt, seed=0):
         arr = re
     with np.errstate(all="ignore"):
         return np.ascontiguousarray(arr.astype(dt).reshape(shape))
+
+
+def _pc_f16_hazards():
+    """(scale, float16 coefficients) pairs whose float64 product lands just past a float16 TIE: NumPy's in-place
+    multiply rounds it f64 -> f16 once, an f64 -> f32 -> f16 chain would round it to even. Every finite float16 is
+    scanned against scales built to put the powers of two (and more) on such a band."""
+    h = np.arange(0, 65536, dtype=np.uint16).view(np.float16)
+    h = h[np.isfinite(h)]
+    sets = []
+    for s in (1 + 2.0 ** -11 + 2.0 ** -40, 1 + 2.0 ** -11 - 2.0 ** -40, 1.5 * (1 + 2.0 ** -12 + 2.0 ** -41),
+              -(1 + 2.0 ** -11 + 2.0 ** -38), 0.75 * (1 + 2.0 ** -11 + 2.0 ** -40)):
+        with np.errstate(all="ignore"):
+            y = h.astype(np.float64) * s
+            hazard = y.astype(np.float16).view(np.uint16) != y.astype(np.float32).astype(np.float16).view(np.uint16)
+        found = h[hazard]
+        if len(found) >= 8:
+            pick = found[np.linspace(0, len(found) - 1, min(len(found), 37)).astype(int)]
+            sets.append((s, np.concatenate([pick, np.array([1.5, -2.25, 0.0], np.float16)]).astype(np.float16)))
+    return sets
 
 
 def gen_polycalc():
@@ -11803,6 +11980,7 @@ def gen_polycalc():
         cases.append(_case(op, params, operands, _arr_expected(a), layout, "polycalc", cid=f"{cid}/{n}"))
 
     float_dtypes = ("float64", "float32", "float16", "complex128")
+    hazard_sets = _pc_f16_hazards()
 
     for modname, p in POLY_MODULES:
         mod = _poly_module(modname)
@@ -12063,6 +12241,138 @@ def gen_polycalc():
                     call = (lambda: f(zf, m, k=kv, axis=ax)) if kv is not None else (lambda: f(zf, m, axis=ax))
                     emit(op, args, call, "one_coef_nd", f"{op}/onend/{shape}/{ax}/{m}/{kv}")
                     emit(op, args, call, "one_coef_nd", f"{op}/onendflags/{shape}/{ax}/{m}/{kv}", facet="flags")
+
+            # (M) C# boundary argument kinds. A Python tuple replays as a ValueTuple, a list as object[], a big Python int as
+            #     ulong / BigInteger, a NumPy scalar item as a 0-d array (the same dtype discovery). np.array's coercion walk
+            #     (NDPolySequence): nesting to any depth, dtype discovery over every leaf, NumPy's ragged texts (the shape the
+            #     walk still agreed on), an empty sequence ending the dims, and the ndim checks; k's items converted only when
+            #     their order uses them (after that order's {p}val), a str lbnd refused only where NumPy evaluates at it.
+            f32a = np.array([1.0, 2.0], np.float32)
+            f32b = np.array([3.0, 4.0], np.float32)
+            c_kinds = [
+                ("tuple", (1.0, 2.0, 3.0)), ("tuple_int", (1, 2, 3)), ("tuple_nested", ((1, 2), (3, 4))),
+                ("mixed_list_tuple", [(1, 2), [3, 4]]),
+                ("nested3", [[[1, 2], [3, 4]], [[5, 6], [7, 8]], [[9, 10], [11, 12]]]),
+                ("tuple_arrays_f32", (A(f32a), A(f32b))), ("list_array_tuple", [A(f32a), (3, 4)]),
+                ("list_f16_0d", [A(np.array(1.0, np.float16)), A(np.array(2.5, np.float16))]),
+                ("list_f16_py", [A(np.array(1.0, np.float16)), 2.0]), ("bool_int_rows", [[True, False], [2, 3]]),
+                ("complex_rows", [[1j, 2], [3, 4 - 1j]]), ("u64", [2 ** 64 - 1, 1]), ("u64_neg", [2 ** 63, -1]),
+                ("empty", []), ("empty_tuple", ()), ("empties", [[], []]), ("empties_tuple", ((), ())),
+                ("empty_deep", [[[]], [[]]]), ("empty_f32", [A(np.zeros(0, np.float32)), []]),
+                ("ragged", [[1], [1, 2]]), ("ragged_deep", [[[1], [1, 2]], [[1], [1, 2]]]), ("ragged_depth", [[1], [[2]]]),
+                ("ragged_scalar_seq", [1, [2, 3]]), ("ragged_seq_scalar", [[2, 3], 1]), ("ragged_empty", [[], [1]]),
+                ("ragged_empty2", [[1], []]), ("ragged_arrays", [A(np.zeros(2)), A(np.zeros(3))]),
+                ("ragged_array_scalar", [A(np.zeros(2)), 5]), ("empty_broadcast", [A(np.zeros((0, 3))), []]),
+            ]
+            for cname, cv in c_kinds:
+                try:
+                    nd = np.asarray(_ps_py(cv)).ndim
+                except Exception:
+                    nd = 1                      # ragged: axis 0 only (the conversion raises before the axis matters)
+                for m in (1, 2):
+                    for ax in sorted({0, nd - 1}):
+                        emit(op, {"c": cv, "m": m, "axis": ax}, lambda: f(_ps_py(cv), m, axis=ax), "arg_kinds",
+                             f"{op}/argc/{cname}/{m}/{ax}")
+            big_ints = [("big20", 2 ** 20), ("big200", 2 ** 200), ("bigneg70", -(2 ** 70)), ("u64", 2 ** 64 - 1),
+                        ("overflow", 2 ** 1030)]
+            for sname, s in [("tuple1", (2.0,)), ("list1", [2.0]), ("nested_col", [[2.0], [3.0], [4.0]]),
+                             ("tuple_row", ((2.0, 3.0),)), ("ragged", [[1], [1, 2]])] + big_ints:
+                for dt in float_dtypes:
+                    for shape in ((3,), (3, 2)):
+                        cc = _poly_coef(shape, dt, seed=28)
+                        for m in (1, 5):       # 5 >= len(c): a derivative returns before it scales
+                            emit(op, {"c": A(cc), "m": m, "scl": s}, lambda: f(cc, m, scl=s), "arg_kinds",
+                                 f"{op}/argscl/{sname}/{dt}/{shape}/{m}")
+            if integ:
+                c1 = _poly_coef((3,), "float64", seed=25)
+                c2 = _poly_coef((3, 2), "float64", seed=24)
+                c3 = _poly_coef((3, 2, 2), "float64", seed=26)
+                for kname, cc, m, kv in (
+                        ("tuple", c1, 2, (1, 2)), ("tuple1", c1, 1, (0.25,)), ("tuple_mixed", c1, 3, (1, 2.5, 1j)),
+                        ("tuple_empty", c1, 2, ()), ("tuple_toomany", c1, 1, (1, 2)),
+                        ("tuple_rows", c2, 2, ((1, 2), (3, 4))), ("list_of_tuples", c2, 2, [(1, 2), (3, 4)]),
+                        ("tuple_row", c2, 1, ((1.0, 2.0),)), ("tuple_scalars_nd", c2, 2, (1, 2)),
+                        ("nested3", c3, 1, [[[1, 2], [3, 4]]]), ("big70", c1, 1, 2 ** 70),
+                        ("big_list", c1, 2, [2 ** 200, -(2 ** 70)]), ("overflow", c1, 1, 2 ** 1030), ("u64", c1, 1, 2 ** 64 - 1),
+                        ("ragged_item", c2, 1, [[[1], [1, 2]]]), ("ragged_item_mneg", c2, -1, [[[1], [1, 2]]]),
+                        ("ragged_item_toomany", c2, 1, [[[1], [1, 2]], 1]), ("ragged_second", c2, 2, [[1, 2], [[1], [1, 2]]]),
+                        ("str_mneg", c1, -1, "ab"), ("str_toomany", c1, 1, "ab"), ("str_m0", c1, 0, "")):
+                    emit(op, {"c": A(cc), "m": m, "k": kv}, lambda: f(cc, m, k=kv), "arg_kinds", f"{op}/argk/{kname}")
+                # the order's lbnd is evaluated before its constant is converted
+                emit(op, {"c": A(c2), "m": 1, "k": [[[1], [1, 2]]], "lbnd": 2 ** 1030},
+                     lambda: f(c2, 1, k=[[[1], [1, 2]]], lbnd=2 ** 1030), "arg_kinds", f"{op}/argk/ragged_after_lbnd")
+                for lname, lb in [("tuple", (0,)), ("list", [0.5]), ("ragged", [[1], [1, 2]]), ("empty_tuple", ())] + big_ints:
+                    for dt in float_dtypes:
+                        for shape in ((3,), (3, 2)):
+                            cc = _poly_coef(shape, dt, seed=27)
+                            emit(op, {"c": A(cc), "m": 1, "lbnd": lb}, lambda: f(cc, 1, lbnd=lb), "arg_kinds",
+                                 f"{op}/arglbnd/{lname}/{dt}/{shape}")
+                emit(op, {"c": A(c1), "m": 1, "lbnd": [[1], [1, 2]], "scl": [1]},
+                     lambda: f(c1, 1, lbnd=[[1], [1, 2]], scl=[1]), "arg_kinds", f"{op}/arglbnd/ragged_before_scl")
+                # A str lbnd: np.ndim('a') is 0, and NumPy only fails where it EVALUATES at it — never on m == 0, never in
+                # the one-coefficient zero branch, never before a later argument's own error.
+                z1 = np.zeros(1)
+                for lname, cc, m, extra in (("str_m0", c1, 0, {}), ("str_zero1", z1, 1, {}), ("str_zero2", z1, 2, {}),
+                                            ("str_sclarr", c1, 1, {"scl": [1]}), ("str_axis", c1, 1, {"axis": 3})):
+                    args = {"c": A(cc), "m": m, "lbnd": "a"}
+                    args.update(extra)
+                    emit(op, args, lambda: f(cc, m, lbnd="a", **extra), "arg_kinds", f"{op}/arglbnd/{lname}")
+
+            # (N) zero-size and 5-D series, and extreme integers through the converting direct load (vector lanes + tail)
+            for shape in ((3, 0), (0, 3), (1, 0), (3, 0, 2), (2, 0, 0)):
+                z = np.zeros(shape)
+                for ax in range(len(shape)):
+                    for m in (1, 2):
+                        emit(op, {"c": A(z), "m": m, "axis": ax}, lambda: f(z, m, axis=ax), "zero_size",
+                             f"{op}/zsize/{shape}/{ax}/{m}")
+                        emit(op, {"c": A(z), "m": m, "axis": ax}, lambda: f(z, m, axis=ax), "zero_size",
+                             f"{op}/zsizeflags/{shape}/{ax}/{m}", facet="flags")
+                        if integ:
+                            kv = [1, 2][:m]
+                            emit(op, {"c": A(z), "m": m, "k": kv, "axis": ax}, lambda: f(z, m, k=kv, axis=ax), "zero_size",
+                                 f"{op}/zsizek/{shape}/{ax}/{m}")
+            for dt in ("float64", "complex128"):
+                c5 = _pc_random((2, 3, 1, 2, 3), dt, 2300)
+                for ax in range(-1, 5):
+                    for m in (1, 2):
+                        emit(op, {"c": A(c5), "m": m, "axis": ax}, lambda: f(c5, m, axis=ax), "rank5", f"{op}/rank5/{dt}/{ax}/{m}")
+                        if dt == "float64":
+                            emit(op, {"c": A(c5), "m": m, "axis": ax}, lambda: f(c5, m, axis=ax), "rank5",
+                                 f"{op}/rank5flags/{ax}/{m}", facet="flags")
+            for dt in ("int64", "uint64", "int32", "uint32", "int16", "uint16", "int8", "uint8"):
+                info = np.iinfo(dt)
+                vals = [int(info.min), int(info.max), int(info.max) - 1, int(info.min) + 1, 0, 1,
+                        int(info.max) // 3, int(info.min) // 3]
+                c1 = np.array([vals[i % len(vals)] for i in range(19)], dt)
+                c2 = np.array([[vals[(i * 3 + j) % len(vals)] for j in range(9)] for i in range(7)], dt)
+                for m in (1, 2):
+                    emit(op, {"c": A(c1), "m": m}, lambda: f(c1, m), "extreme_int", f"{op}/xint/{dt}/1d/{m}")
+                    for ax in (0, 1):
+                        emit(op, {"c": A(c2), "m": m, "axis": ax}, lambda: f(c2, m, axis=ax), "extreme_int",
+                             f"{op}/xint/{dt}/2d/{ax}/{m}")
+
+            # (O) the kernel's WIDENED c *= scl — a strong scalar promoting a float16 / float32 series runs NumPy's wider loop
+            #     and casts back: float16 products just past a float16 tie (rounded f64 -> f16 once), NaN / inf coefficients
+            #     and scales (the lane helpers' per-lane NaN route, the series' NaN winning), and a float16 series' float32
+            #     loop, whose scale is the EXACT float32 value (int16 2049 and float32 0.1 are not float16 values). 1-D series
+            #     run the scalar tails, (3, n) series the vector lanes.
+            for hs, hc in hazard_sets:
+                for shape in ((len(hc),), (3, len(hc))):
+                    c = np.ascontiguousarray(np.broadcast_to(hc, shape) if len(shape) == 2 else hc)
+                    for m in (1, 2):
+                        sa = np.array(hs)
+                        emit(op, {"c": A(c), "m": m, "scl": A(sa)}, lambda: f(c, m, scl=sa), "widened_scale",
+                             f"{op}/widen/f16tie/{hs!r}/{len(shape)}d/{m}")
+            for dt, scls in (("float16", (np.array(0.75), np.array(np.nan), np.array(-np.inf), np.array(3, np.int16),
+                                          np.array(2049, np.int16), np.array(0.1, np.float32), np.array(70000, np.int32))),
+                             ("float32", (np.array(0.75), np.array(np.nan), np.array(1e300), np.array(-3, np.int64),
+                                          np.array(2 ** 40 + 1, np.int64)))):
+                for shape in ((13,), (3, 13)):
+                    c = _pc_special(shape, dt, seed=5)
+                    for sa in scls:
+                        for m in (1, 2):
+                            emit(op, {"c": A(c), "m": m, "scl": A(sa)}, lambda: f(c, m, scl=sa), "widened_scale",
+                                 f"{op}/widen/{dt}/{sa.dtype}/{sa.item()!r}/{len(shape)}d/{m}")
 
         # float16 constants past float16's exact integers (2*(j+1) > 2048: the Python int rounds to nearest-even) for
         # every basis, and past its range (a constant > 65504 is inf) where a basis reaches it at a corpus-sized length:

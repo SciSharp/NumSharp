@@ -305,6 +305,131 @@ namespace NumSharp.Backends.Kernels
             return Avx.Divide(a, p.Rat);
         }
 
+        // ---------------------------------------------------------------- the calculus kernel's widened c *= scl
+        //
+        // numpy.polynomial's `c *= scl` with a strong scalar that PROMOTES the series (np.float64 on float32, an int16 or
+        // float32 scalar on float16, an int32+ or float64 one on float16) runs in the WIDER loop dtype and casts back:
+        // DOUBLE_multiply / FLOAT_multiply over the widened series, then the output cast. Both loops take the FIRST
+        // operand's NaN (vmulpd / vmulps(in1, in2)) when both are NaN — the series' — which is imposed explicitly: RyuJIT
+        // may swap a commutative multiply's operands. The DirectILKernelGenerator.PolyCalculus load / scale stages call
+        // these per 8 series lanes (float32, or float16 as exact float32 values on the f16 grid); the *Scalar twins are
+        // the stages' scalar tails, the same bits for one value.
+
+        /// <summary>
+        ///     <c>c *= s</c> of 8 float32 lanes in a float64 loop: each lane widened exactly, multiplied in float64, rounded
+        ///     once back to float32 (NumPy's output cast) — a NaN lane of <paramref name="c"/> stays <c>quiet(c)</c> whatever
+        ///     <paramref name="s"/> is.
+        /// </summary>
+        /// <param name="c">8 float32 series lanes.</param><param name="s">The float64 scale in every lane.</param>
+        /// <returns>The 8 scaled float32 lanes.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Vector256<float> F32ScaleF64(Vector256<float> c, Vector256<double> s)
+        {
+            var lo = Avx.ConvertToVector128Single(Avx.Multiply(Avx.ConvertToVector256Double(c.GetLower()), s));
+            var hi = Avx.ConvertToVector128Single(Avx.Multiply(Avx.ConvertToVector256Double(c.GetUpper()), s));
+            var r = Vector256.Create(lo, hi);
+            // quiet(c) is exactly what cvtps2pd -> vmulpd -> cvtpd2ps makes of a NaN c (all 23 payload bits survive).
+            return Avx.BlendVariable(r, Avx.Or(c, Vector256.Create(0x00400000).AsSingle()), Avx.CompareUnordered(c, c));
+        }
+
+        /// <summary>One value of <see cref="F32ScaleF64"/> (the scalar tail): the same bits.</summary>
+        /// <param name="c">The series value.</param><param name="s">The float64 scale.</param><returns>The scaled value.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static float F32ScaleF64Scalar(float c, double s)
+        {
+            if (float.IsNaN(c))
+                return BitConverter.Int32BitsToSingle(BitConverter.SingleToInt32Bits(c) | 0x00400000);
+            return (float)((double)c * s);   // a NaN s: quiet(s), narrowed as cvtsd2ss narrows it
+        }
+
+        /// <summary>
+        ///     <c>c *= s</c> of 8 float16 lanes (exact float32 values) in a float64 loop: widened, multiplied in float64, and
+        ///     rounded ONCE to float16 as NumPy's cast (<c>npy_double_to_half</c>) rounds a double. A plain f64 → f32 → f16
+        ///     chain would double-round the products that land just past a float16 tie, so each product is first rounded to
+        ///     ODD at float32 precision (<see cref="RoundToOddF32"/>), which the RTNE narrow then rounds exactly as the direct
+        ///     f64 → f16 rounding would (float32's 24 bits ≥ float16's 11 + 2). NaN products take <c>cvtpd2ps</c>'s quiet NaN
+        ///     (the payload's top bits, as <c>npy_double_to_half</c> keeps them) and a NaN c wins over a NaN s, quieted — the
+        ///     float64 loop's first-operand rule, imposed explicitly.
+        /// </summary>
+        /// <param name="c">8 float16 series lanes as float32.</param><param name="s">The float64 scale in every lane.</param>
+        /// <returns>The 8 scaled lanes, on the float16 grid.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Vector256<float> HalfScaleF64(Vector256<float> c, Vector256<double> s)
+        {
+            var lo = Avx.Multiply(Avx.ConvertToVector256Double(c.GetLower()), s);
+            var hi = Avx.Multiply(Avx.ConvertToVector256Double(c.GetUpper()), s);
+            var f = Vector256.Create(RoundToOddF32(lo), RoundToOddF32(hi));
+            // A NaN product: RoundToOddF32 may have cleared its payload to an inf; cvtpd2ps keeps the payload's top bits.
+            var fn = Vector256.Create(Avx.ConvertToVector128Single(lo), Avx.ConvertToVector128Single(hi));
+            f = Avx.BlendVariable(f, fn, Avx.CompareUnordered(fn, fn));
+            var r = DirectILKernelGenerator.HalfWiden8V(DirectILKernelGenerator.HalfNarrow8V(f));
+            return Avx.BlendVariable(r, Avx.Or(c, Vector256.Create(0x00400000).AsSingle()), Avx.CompareUnordered(c, c));
+        }
+
+        /// <summary>
+        ///     4 doubles rounded to ODD at float32 precision: the low 29 mantissa bits truncated (toward zero — the bits are
+        ///     sign-magnitude) and the last kept bit set when any truncated bit was, then converted to float32 — EXACTLY for
+        ///     every value in float32's normal range (24 significant bits). Values past it convert to ±inf and values below it
+        ///     to a subnormal, neither of which any float16 result can tell apart from the true round-to-odd (they are ±inf /
+        ///     ±0 in float16). NaN lanes come out as garbage (possibly inf): callers blend them.
+        /// </summary>
+        /// <param name="d">4 doubles.</param><returns>4 floats.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static Vector128<float> RoundToOddF32(Vector256<double> d)
+        {
+            var mask = Vector256.Create(0x1FFFFFFFUL);
+            var bits = d.AsUInt64();
+            var exact = Avx2.CompareEqual(Avx2.And(bits, mask), Vector256<ulong>.Zero);
+            var kept = Avx2.AndNot(mask, bits);
+            var odd = Avx2.AndNot(exact, Vector256.Create(0x20000000UL));
+            return Avx.ConvertToVector128Single(Avx2.Or(kept, odd).AsDouble());
+        }
+
+        /// <summary>
+        ///     One float16 value (as an exact float32, its NaN payload in bits 13..22) times a float64 scale in NumPy's
+        ///     float64 loop, as float16 bits: <c>npy_double_to_half(c * s)</c> — a NaN c wins, quieted (cvtss2sd quiets it,
+        ///     as NumPy's multiply does); a NaN s alone gives quiet(s).
+        /// </summary>
+        /// <param name="c">The series value.</param><param name="s">The scale.</param><returns>The float16 bits.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static ushort HalfScaleF64Bits(float c, double s)
+        {
+            double c64 = c;
+            return DirectILKernelGenerator.DoubleToHalfBits(double.IsNaN(c64) ? c64 : c64 * s);
+        }
+
+        /// <summary>One value of <see cref="HalfScaleF64"/> (the scalar tail): the same bits.</summary>
+        /// <param name="c">The series value.</param><param name="s">The float64 scale.</param><returns>The scaled value.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Half HalfScaleF64Scalar(Half c, double s)
+            => BitConverter.UInt16BitsToHalf(HalfScaleF64Bits(DirectILKernelGenerator.HalfToFloatScalarExact(BitConverter.HalfToUInt16Bits(c)), s));
+
+        /// <summary>
+        ///     <c>c *= s</c> of 8 float16 lanes in a float32 loop (an int16 / uint16 / char / float32 scale): the float32
+        ///     product of the lanes and the EXACT float32 scale (not rounded to float16, as a float16 loop would round it),
+        ///     then NumPy's cast back — one RTNE narrow — with a NaN c winning, quieted.
+        /// </summary>
+        /// <param name="c">8 float16 series lanes as float32.</param><param name="s">The float32 scale in every lane.</param>
+        /// <returns>The 8 scaled lanes, on the float16 grid.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Vector256<float> HalfScaleF32(Vector256<float> c, Vector256<float> s)
+        {
+            var r = DirectILKernelGenerator.HalfWiden8V(DirectILKernelGenerator.HalfNarrow8V(Avx.Multiply(c, s)));
+            // A widened f16 NaN has its payload in float bits 13..22: | 0x00400000 is the half quiet bit 0x0200.
+            return Avx.BlendVariable(r, Avx.Or(c, Vector256.Create(0x00400000).AsSingle()), Avx.CompareUnordered(c, c));
+        }
+
+        /// <summary>One value of <see cref="HalfScaleF32"/> (the scalar tail): the same bits.</summary>
+        /// <param name="c">The series value.</param><param name="s">The float32 scale.</param><returns>The scaled value.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Half HalfScaleF32Scalar(Half c, float s)
+        {
+            ushort bits = BitConverter.HalfToUInt16Bits(c);
+            if ((bits & 0x7fff) > 0x7c00)
+                return BitConverter.UInt16BitsToHalf((ushort)(bits | 0x0200));   // quiet(c)
+            return BitConverter.UInt16BitsToHalf(DirectILKernelGenerator.SingleToHalfBits(DirectILKernelGenerator.HalfToFloatScalarExact(bits) * s));
+        }
+
         // ---------------------------------------------------------------- reflection handles
 
         /// <summary>A public static method of this class by name — fails at type load, never at emission.</summary>
@@ -322,7 +447,10 @@ namespace NumSharp.Backends.Kernels
             s_f32LowToF64x4 = M(nameof(F32LowToF64x4)), s_f32LowToF64x2 = M(nameof(F32LowToF64x2)),
             s_f64ToC128x2 = M(nameof(F64ToC128x2)), s_cBroadcast = M(nameof(CBroadcast)), s_cMul = M(nameof(CMul)),
             s_cDiv = M(nameof(CDiv)), s_cDivPrep = M(nameof(CDivPrep)), s_cDivBy = M(nameof(CDivBy)),
-            s_halfLoad8 = M(nameof(HalfLoad8));
+            s_halfLoad8 = M(nameof(HalfLoad8)),
+            s_f32ScaleF64 = M(nameof(F32ScaleF64)), s_f32ScaleF64Scalar = M(nameof(F32ScaleF64Scalar)),
+            s_halfScaleF64 = M(nameof(HalfScaleF64)), s_halfScaleF64Scalar = M(nameof(HalfScaleF64Scalar)),
+            s_halfScaleF32 = M(nameof(HalfScaleF32)), s_halfScaleF32Scalar = M(nameof(HalfScaleF32Scalar));
 
         /// <summary><c>Avx2.Permute4x64(Vector256&lt;double&gt;, byte)</c> — the 64-bit-lane shuffle the gang load
         ///     emits with a constant control.</summary>

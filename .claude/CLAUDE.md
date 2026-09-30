@@ -2594,8 +2594,16 @@ errors). Kernels `Backends/Kernels/ILKernelGenerator.Polynomial{,.Typing,.Emitte
 Tier-3A per-chunk IL over `NDIterRef.ForEach`, emitted by ONE typed emitter from per-basis STEP TABLES
 (NumPy's source-order expression trees, never re-associated, each node typed by NEP 50) — so no per-basis and
 no per-dtype C#. **Bit-exact with NumPy 2.4.2** on every dtype pair and layout (oracle tier `polyeval.jsonl`,
-16,606 cases, 0 excused; `MisalignedRegistry`'s generic unary/complex ULP branches are carved out for these
-ops so a drift fails). **Perf (NPY/NS, `benchmark/polynomial/`, 1,320 cells, every one SHA-256-checked):
+19,216 cases, 0 excused — 2,610 of them from the 2026-09-29 wholeness pass: section J, a Python-sequence x (tuples,
+nested lists, empty, ragged, NumPy-scalar items — coerced by `PolySequence`, see U4) and a Python int x past int64 (a C#
+`BigInteger`, weak: CPython int arithmetic on the x-only terms, inf / OverflowError past float64); section K, an
+array_like c and array_like ordinates (below); `MisalignedRegistry`'s generic unary/complex ULP branches are carved out
+for these ops so a drift fails). **Every array_like parameter is `object`** (the wholeness pass): c of `{p}val*`/
+`{p}grid*`/`{p}valnd` (NumPy's `np.array(c, ndmin=1)`, converted BEFORE x, so a ragged c's error wins) and the
+ordinates of `{p}val2d`/`{p}val3d`/`{p}valnd` (`_valnd`'s `np.asanyarray`: a Python int is a STRONG int64 0-d array,
+so `polyval2d(2, 3, float32_c)` is float64 where `polygrid2d(2, 3, float32_c)`, whose scalars stay weak, is float32;
+every ordinate converts before the shape check, the shape check runs before c). They were `NDArray`, so an
+`object[]` compiled through the implicit array conversion and failed at run time, and a tuple did not compile. **Perf (NPY/NS, `benchmark/polynomial/`, 1,320 cells, every one SHA-256-checked):
 geomean 7.5×, min 1.62×** — float64 `chebval` d10 16.9×/11.2×/36.5× at 1K/100K/10M, `chebval2d` 41.5×,
 complex 23.7×@100K, float16 3.3×@10M, `lagval` (divider-bound) 2.7–14×, Python-scalar x 4.8–5.7×.
 
@@ -2653,8 +2661,9 @@ operand of NumPy's Python-level scalar code) + `NDPolySeries.cs` (the functions)
 `Polynomial/Package/np.polynomial.polyutils.cs` (`[ModuleName("np.polynomial.polyutils")]`, reachable as
 `np.polynomial.polyutils`); every element loop is an IL kernel in `Backends/Kernels/Direct/DirectILKernelGenerator.PolySeries.cs`
 (trim scan, in-place combine, tolerance scan, cast, and one-element scalarmath kernels behind flat slot arrays).
-**Bit-exact with NumPy 2.4.2** — oracle tier `polyseries.jsonl` (18,437 cases, 0 excused: incl. 1,458 long-series, 45
-block-boundary and 72 getdomain window-crossing cases, and 752 complex64 results value-compared) +
+**Bit-exact with NumPy 2.4.2** — oracle tier `polyseries.jsonl` (18,647 cases, 0 excused: incl. 1,458 long-series, 45
+block-boundary and 72 getdomain window-crossing cases, 752 complex64 results value-compared, 184 tuple / nested-sequence
+cases — section O, coerced by `PolySequence`, see U4 — and 26 `trimseq` cases over Python sequences, section P) +
 `Polynomial/PolynomialSeriesTests.cs` (38 tests). The
 C# boundary is the house NEP 50 map: bool/integers/float/double/`Complex`/`BigInteger` are Python scalars,
 `Half`/`char`/`decimal` NumPy scalars, an `NDArray` (0-d too) or typed C# array an ndarray, `object[]`/`IList` a Python
@@ -2664,7 +2673,11 @@ indexes it, so there are THREE arithmetics: Python∘Python is CPython (exact in
 product, inf/nan instead of raising), and anything touching an ndarray is a ufunc (`pycomplex op np.float64` is still
 CPython — complex's methods accept a float subclass). `_add`/`_sub` update the LONGER operand in place (c2 on a tie;
 `_sub` with `len(c1) <= len(c2)` negates c2 then adds c1, visible in a NaN's sign) and trim; `trimseq` returns the
-input ITSELF or the VIEW `seq[:k]` (so writes reach the input); `trimcoef` checks `tol < 0` before converting;
+input ITSELF or the VIEW `seq[:k]` (so writes reach the input) — and of a Python sequence the same KIND (the wholeness
+pass: `trimseq(object[])` is the list itself or a new list of the kept items, an `NDArray[]` staying one; a tuple itself or
+a new ValueTuple; any other enumerable itself or an `object[]`; zero-ness is Python's `item != 0`, an array item by its
+truth value with NumPy's ValueError past one element; None or a number is `len()`'s TypeError); `trimcoef` checks
+`tol < 0` before converting;
 `{p}line` is `np.array` DISCOVERY (`polyline(1, 2)` is int64); `mapdomain` converts x only when it is not an
 int/float/complex/`np.generic` (a bool x becomes a 0-d array). The constants are ONE shared, writeable, scope-detached
 instance each (NumPy's module attributes — a write persists), holding an extra ARC reference so a caller's `Dispose()`
@@ -2765,6 +2778,11 @@ step) for a mix of NumPy scalars and Python ints; a typed program per argument-k
 - **NumPy's scalar-broadcast complex multiply is `simd_cmul` at every length for a trivially iterable call** — even ONE
   element (`s * np.array([x])`, probed 300/300); `loop_scalar` needs NpyIter's stride-0 single-element iteration.
 - **Test trap: `GetUInt32(i)` on a 2-D array reads the ROW coordinate `i`, not flat index `i`** — flatten first.
+- **C# picks an `NDArray` overload over an `object` one for ANY C# array argument** — `NDArray` is the "better conversion
+  target" (it converts to `object`, never back), even though the conversion into it is user-defined. So with both
+  `mapdomain(NDArray x, …)` and `mapdomain(object x, …)` an `object[]` (a Python list) went through NumSharp's implicit
+  array conversion, which cannot interpret `object` elements, and threw at run time. A list gets its own `object[]`
+  overload (`mapdomain`, `trimseq`), which beats both by identity; a typed `double[]` still binds the NDArray one.
 - **Sign-mixed zeros ALONE cannot tell NumPy's min/max schedule from a sequential fold:** with every element a tie,
   each lane keeps its own last zero and the horizontal cascade lets the HIGHEST lane win, which holds the array's last
   element — the same answer. A discriminating case needs the extreme shared by lanes out of order: a -0.0 early in the
@@ -2785,15 +2803,20 @@ prologue in NumPy's statement order, which is also its error order. Kernel
 `Backends/Kernels/Direct/DirectILKernelGenerator.PolyCalculus.cs`: the six recurrences are DATA (`PolyCalcRoutines`
 — head steps, a j loop, tail steps; each step's statements are NumPy's source expressions token for token) and ONE
 whole-array kernel is emitted per (basis, der/int, dtype, source dtype, 1-D, fused scale). **Bit-exact with NumPy
-2.4.2** — oracle tier `polycalc.jsonl` (21,646 cases, 0 excused), 10/10 planted bugs killed. The smallest kill is
-8 cases: the block-boundary mutant, which only the >4096-column cells can see. Unit tests:
-`Polynomial/PolynomialCalculusTests.cs` (20 — NumPy's `TestIntegral`/`TestDerivative` ported, made bitwise where
-NumPy's statement sequence makes them exact; byte dumps per dtype family; kernel structure).
-**Perf (NPY/NS, `benchmark/polynomial/polycalc_*`, 606 cells, every one SHA-256-checked): min 2.02×, geomean 8.71×**:
+2.4.2** — oracle tier `polycalc.jsonl` (27,526 cases, 0 excused; 21,646 at delivery, +5,880 from the 2026-09-29
+wholeness pass: argument kinds (M), zero-size / 5-D / extreme-int series (N), widened scale (O)), 10/10 planted bugs
+killed at delivery plus 4/4 widened-scale ones (44–73 red cases each). The smallest kill is 8 cases: the
+block-boundary mutant, which only the >4096-column cells can see. Unit tests: `Polynomial/PolynomialCalculusTests.cs`
+(20 — NumPy's `TestIntegral`/`TestDerivative` ported, made bitwise where NumPy's statement sequence makes them exact;
+byte dumps per dtype family; kernel structure) + `Polynomial/PolynomialArgumentKindsTests.cs` (21 — the C# boundary
+kinds with NumPy-probed bytes and texts).
+**Perf (NPY/NS, `benchmark/polynomial/polycalc_*`, 720 cells, every one SHA-256-checked): min 1.71×, geomean 7.62×**:
 - 1-D series: geomean 25× (NumPy runs a Python loop over the coefficients);
-- N-D float64: 2.0–13×, geomean 4.8×;
-- dtypes: geomean 8.0×;
-- small N-D: geomean 12×.
+- N-D float64: 1.8–13×, geomean 4.7×;
+- dtypes: geomean 7.3×;
+- small N-D: geomean 11.7×;
+- argument forms (lists, widened scale, array scl): 1.71–13×, geomean 5.7× — the floor is the float16 widened-scale N-D
+  cells, the open float16 lever below.
 
 How it is built:
 - **One buffer, in place, for any order.** The recurrences never need a value after they overwrite it, provided
@@ -2833,6 +2856,51 @@ How it is built:
 complex64 SCALARMATH. U3's evaluation kernel works in complex128, so `NDPolyCalc.PyVal1D` interprets U3's weak-x step
 trees (`PolySteps.RewriteForWeakX`) with `PolyNumber` instead; `PolyNumber` emulates complex64 scalars exactly.
 
+**Argument kinds — `np.array`'s coercion, ported (the 2026-09-29 wholeness pass).** Every array_like the package
+converts — `{p}der`/`{p}int`'s c, k, lbnd and scl, `{p}val*`/`{p}grid*`'s c and x, `{p}val2d`/`{p}val3d`/`{p}valnd`'s
+ordinates, `mapdomain`'s x, `as_series`' items, `{p}add`/`{p}sub`'s operands, `trimseq`'s items — goes through `Polynomial/Package/NDPolySequence.cs` (`PolySequence`), a statement-for-statement port of
+`array_coercion.c` (`PyArray_DiscoverDTypeAndShape_Recursive` + `update_shape`) and its fill:
+- **The C# map** (header of `NDPolyNumber.cs`): `ITuple` (ValueTuple, System.Tuple) is a Python tuple; `object[]` and
+  every other C# array whose elements are not a NumSharp dtype (jagged `double[][]`, `NDArray[]`, `BigInteger[]`) and any
+  other `IList`/`IEnumerable` are lists, a multi-dimensional `object[,]` a list of rows; a typed dtype array
+  (`double[]`, `float[,]`) and a `Memory<T>` of a dtype are NDARRAYS (strong dtype); `bool`/integer primitives/
+  `BigInteger`/`float`/`double`/`Complex` are Python scalars, `Half`/`char`/`decimal` NumPy scalars, a string a str.
+- **Shape:** the first leaf reached fixes the dims; a later leaf at another depth, or a sequence of another length,
+  is ragged — NumPy's verbatim `setting an array element with a sequence. The requested array has an inhomogeneous
+  shape after N dimensions. The detected shape was (…) + inhomogeneous part.` (ValueError), N and the shape being
+  what the walk still agreed on. An EMPTY sequence ends the dims without a dtype vote (`[]` is float64 `(0,)`,
+  `[np.zeros(0, int8), []]` int8 `(2, 0)`); an array leaf that cannot be assigned raises the broadcast ValueError
+  (`could not broadcast input array from shape (0,3) into shape (0,)`).
+- **Dtype:** each leaf's DEFAULT descriptor (Python int → int64, uint64 up to 2^64−1; a NumPy scalar / array keeps
+  its own), promoted STRONGLY — array coercion is not NEP 50 (`[np.float32(1), 1.0]` is float64). A str / None leaf,
+  a Python int past uint64 and any unknown object are refused (`NotSupportedException`) AFTER the walk, so a ragged
+  input still reports NumPy's ValueError.
+- **Calculus-specific order, all probed:** `np.ndim` runs on lbnd and scl before anything is converted (a ragged
+  sequence raises the inhomogeneous text there; a str is 0-d); k's items are converted only when their order uses
+  them, AFTER that order's `{p}val(lbnd, tmp)` (Python's left-to-right `k[i] - {p}val(…)`), so a bad lbnd wins over a
+  bad later constant; a str lbnd is refused only where NumPy evaluates at it (never for m == 0, the one-coefficient
+  zero branch, or before a later argument's own error); a `BigInteger` past float64 raises CPython's
+  `int too large to convert to float` (`OverflowException`), one within float64 but past float32 / float16 is inf.
+- **A conversion is the call's intermediate, released however the call ends.** `{p}val` disposes an x it converted
+  (the leak gate caught 432 sequence-x cases leaking one buffer each), `_valnd`/`_gridnd` dispose a partial result when
+  a later pass fails (a ragged second ordinate), `mapdomain(object x)` its converted points; the U1/U4 facades are
+  `[NDScoped]`, the U3 ones dispose by hand. A pool-balance probe (`SizeBucketedBufferPool` takes − returns around a
+  call whose result is disposed) found the non-corpus ones — build its operands OUTSIDE the measured lambda, or the
+  probe counts its own arrays.
+
+**Widened scale.** A strong scalar that PROMOTES the series — float64 against float32, float32/float64 against
+float16 — makes NumPy's `c *= scl` run the WIDER multiply loop and cast back. The kernel fuses that too: `PolyCalcKey`
+carries the loop dtype (`ScaleLoop`, `HasWidenedScale`), and the load stage calls `PolyLaneOps.{F32ScaleF64,
+HalfScaleF64,HalfScaleF32}` (vector) and their `*Scalar` twins (tails, 1-D series). The float64 → float16 narrow must
+round ONCE (`npy_double_to_half`): the vector path rounds the float64 product to float32 with ROUND-TO-ODD
+(`RoundToOddF32`: truncate + sticky bit) and then narrows to float16 to-nearest-even, which is exact because 24 ≥ 11 + 2
+bits; a plain f64 → f32 → f16 chain double-rounds at float16 ties (section O's hazard cases, built by
+`_pc_f16_hazards`). A NaN coefficient keeps its own payload, quieted (the first operand's NaN wins in NumPy's loop). An
+ARRAY scl (derivatives only) and a promotion the kernel has no widened loop for (decimal) run `ScaleInPlace` =
+`np.multiply(c, scl, out: c, dtype: promote(series, scl))` per order — the explicit `dtype:` is load-bearing, because
+the house ufunc computes a float32 array times a 0-d float64 with `out` float32 in FLOAT32 (44 corpus cells red
+without it); a complex scale into a real series raises NumPy's UFuncTypeError there.
+
 Traps:
 - **float16 N-D is ~30× slower than float32** (still 2.1–2.6× NumPy). The U3 float16 lane kind rounds every op back
   onto the f16 grid (narrow + widen), then the store narrows again. A cheaper in-float round buys only ~1.25×; the
@@ -2845,6 +2913,17 @@ Traps:
   in the `.cmd` script (`set /p FILTER=<filter.txt`).
 - **describe() serializes an operand's BASE in C order.** A layout must therefore be a C-contiguous base plus a view:
   an F series is the `.T` of a C buffer holding `base.T`. An F base broke 1,311 cases in the first oracle run.
+- **Random scales never hit a float16 double-rounding hazard.** A product must land within ~2^-24 (relative) of a
+  float16 tie for f64 → f32 → f16 to differ from NumPy's single rounding, which a random scale almost never does —
+  the first hazard search found none. Build them: `_pc_f16_hazards` scans every finite float16 against scales like
+  `1 + 2^-11 ± 2^-40`, which put the powers of two just past a tie.
+- **Two C# traps when building nested Python sequences in tests and benchmarks:** a lone `object[]` passed to a
+  `params object[]` parameter IS the params array, not its one item (wrap it: `new object[] { inner }`); and a `?:` or
+  switch expression whose arms are `object[]` and `NDArray` is typed `NDArray` through NumSharp's implicit
+  `Array → NDArray` conversion, so the list silently becomes an ndarray (or fails, `Cannot interpret System.Object as a
+  data type`) — cast every arm to `object`.
+- **`start /b /wait X.cmd` from Git Bash runs X under `cmd /K`**, which can wait on console input forever after X
+  finishes; wrap it: `start /b /wait /affinity … cmd /c X.cmd`.
 
 ### Random (`np.random.*`)
 `bernoulli`, `beta`, `binomial`, `chisquare`, `choice`, `dirichlet`, `exponential`, `f`, `gamma`, `geometric`, `get_bit_generator`, `gumbel`, `hypergeometric`, `laplace`, `logistic`, `lognormal`, `logseries`, `multinomial`, `multivariate_normal`, `negative_binomial`, `noncentral_chisquare`, `noncentral_f`, `normal`, `pareto`, `permutation`, `poisson`, `power`, `rand`, `randint`, `randn`, `random_sample`, `rayleigh`, `seed`, `set_bit_generator`, `shuffle`, `standard_cauchy`, `standard_exponential`, `standard_gamma`, `standard_normal`, `standard_t`, `triangular`, `uniform`, `vonmises`, `wald`, `weibull`, `zipf`

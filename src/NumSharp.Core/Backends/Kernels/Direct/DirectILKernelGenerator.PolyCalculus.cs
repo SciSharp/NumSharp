@@ -82,8 +82,9 @@ namespace NumSharp.Backends.Kernels
     /// <param name="orders">A derivative's order count, 1 ≤ orders &lt; n (each order shortens the series by one);
     ///     an integral kernel runs exactly one order and ignores it.</param>
     /// <param name="block">Columns per block (≥ 1): how many columns stay cache-resident through the recurrence.</param>
-    /// <param name="scl">One element of the coefficient dtype holding NumPy's <c>scl</c> after its NEP 50
-    ///     conversion (read only by a kernel compiled with <see cref="PolyCalcKey.Scale"/>).</param>
+    /// <param name="scl">One element of the SCALE LOOP dtype (<see cref="PolyCalcKey.ScaleLoop"/> — the coefficient dtype,
+    ///     or the wider loop a promoting strong scalar makes) holding NumPy's <c>scl</c> after its conversion into that loop
+    ///     (read only by a kernel compiled with <see cref="PolyCalcKey.Scale"/>).</param>
     public unsafe delegate void PolyCalcKernel(byte* src, long srcRow, long srcCol, byte* buf, long bufRow,
         long cols, long n, long orders, long block, byte* scl);
 
@@ -98,8 +99,29 @@ namespace NumSharp.Backends.Kernels
     /// <param name="ScalarMath">The series is 1-D: every recurrence op is NumPy scalarmath (naive complex product)
     ///     and the kernel is one column (no vector code).</param>
     /// <param name="Scale">The kernel applies <c>c *= scl</c> itself (false when the caller has already scaled
-    ///     the series, or scales it through the house ufunc for a promoting / array <c>scl</c>).</param>
-    internal readonly record struct PolyCalcKey(PolyBasis Basis, bool Integrate, NPTypeCode T, NPTypeCode Src, bool ScalarMath, bool Scale);
+    ///     the series, or scales it through the house ufunc for an array <c>scl</c>).</param>
+    /// <param name="ScaleLoop">The loop dtype of <c>c *= scl</c> when <see cref="Scale"/>: <see cref="T"/> for a Python
+    ///     scale or a strong one of T's dtype family, the WIDER loop a promoting strong scalar makes — float64 for a float32
+    ///     series (np.float64, int32+), float32 or float64 for a float16 series (int16/uint16/char/float32, int32+/float64):
+    ///     the series is widened, multiplied in that loop and cast back per element, NumPy's in-place ufunc
+    ///     (<see cref="PolyLaneOps.F32ScaleF64"/>, <see cref="PolyLaneOps.HalfScaleF64"/>,
+    ///     <see cref="PolyLaneOps.HalfScaleF32"/>). <see cref="NPTypeCode.Empty"/> for a non-scaling kernel.</param>
+    internal readonly record struct PolyCalcKey(PolyBasis Basis, bool Integrate, NPTypeCode T, NPTypeCode Src, bool ScalarMath, bool Scale,
+        NPTypeCode ScaleLoop = NPTypeCode.Empty)
+    {
+        /// <summary>Whether <c>c *= scl</c> runs in a loop wider than the coefficient dtype (see <see cref="ScaleLoop"/>).</summary>
+        public bool WidenedScale => Scale && ScaleLoop != T;
+
+        /// <summary>
+        ///     Whether a scale of loop dtype <paramref name="loop"/> on a series of <paramref name="t"/> has a widened kernel:
+        ///     the three promotions a strong real scalar can make of a float16 / float32 series.
+        /// </summary>
+        /// <param name="t">The coefficient dtype.</param><param name="loop">The scale's NumPy loop dtype.</param>
+        /// <returns>True for (float32, float64), (float16, float32) and (float16, float64).</returns>
+        public static bool HasWidenedScale(NPTypeCode t, NPTypeCode loop)
+            => (t == NPTypeCode.Single && loop == NPTypeCode.Double)
+               || (t == NPTypeCode.Half && loop is NPTypeCode.Single or NPTypeCode.Double);
+    }
 
     // -------------------------------------------------------------------------------------------------
     //  The recurrences as DATA
@@ -523,7 +545,9 @@ namespace NumSharp.Backends.Kernels
                 Size = GetTypeSize(key.T),
                 SrcSize = GetTypeSize(key.Src),
             };
-            if (allowVector && !key.ScalarMath && key.T != NPTypeCode.Decimal)
+            // A widened scale's lane helpers are 256-bit AVX2 code over the 8-lane float32 / float16 kinds: without the mixed
+            // lanes the whole kernel runs scalar (the same bits).
+            if (allowVector && !key.ScalarMath && key.T != NPTypeCode.Decimal && (!key.WidenedScale || PolyLanes.MixedLanes))
             {
                 int lanes = PolyLanes.LoopLanes(key.T);
                 if (lanes > 1 && PolyLanes.HasLaneKind(key.T, lanes))
@@ -542,7 +566,8 @@ namespace NumSharp.Backends.Kernels
             }
 
             string name = $"NDPolyCalc_{key.Basis}_{(key.Integrate ? "int" : "der")}_{key.T}_{key.Src}"
-                          + $"{(key.ScalarMath ? "_s" : "")}{(key.Scale ? "_scl" : "")}{(e.Vk is null ? "_scalar" : "")}";
+                          + $"{(key.ScalarMath ? "_s" : "")}{(key.Scale ? "_scl" : "")}{(key.WidenedScale ? $"_{key.ScaleLoop}" : "")}"
+                          + $"{(e.Vk is null ? "_scalar" : "")}";
 
             var loadSrcVec = e.SrcVk is null ? null : EmitPolyCalcLoad(e, key.Src, e.SrcVk, name + "_loadv");
             var loadSrcScalar = EmitPolyCalcLoad(e, key.Src, null, name + "_loads");
@@ -771,12 +796,24 @@ namespace NumSharp.Backends.Kernels
             LocalBuilder sclS = null, sclV = null;
             if (key.Scale)
             {
-                sclS = il.DeclareLocal(GetClrType(key.T));
-                il.Emit(OpCodes.Ldarg_S, (byte)7); EmitLoadIndirect(il, key.T); il.Emit(OpCodes.Stloc, sclS);
-                if (vec)
+                // The scale arrives converted into its LOOP dtype (T, or the wider loop of a promoting strong scalar).
+                NPTypeCode sl = key.ScaleLoop;
+                sclS = il.DeclareLocal(GetClrType(sl));
+                il.Emit(OpCodes.Ldarg_S, (byte)7); EmitLoadIndirect(il, sl); il.Emit(OpCodes.Stloc, sclS);
+                if (vec && !key.WidenedScale)
                 {
                     sclV = il.DeclareLocal(e.Vk.LocalType);
                     il.Emit(OpCodes.Ldloc, sclS); e.Vk.BroadcastFromScalar(il); il.Emit(OpCodes.Stloc, sclV);
+                }
+                else if (vec)
+                {
+                    // The loop dtype's 256-bit broadcast: Vector256<double> for a float64 loop, the EXACT float32 scale
+                    // (never rounded to float16) for a float16 series' float32 loop.
+                    var clr = GetClrType(sl);
+                    sclV = il.DeclareLocal(typeof(System.Runtime.Intrinsics.Vector256<>).MakeGenericType(clr));
+                    il.Emit(OpCodes.Ldloc, sclS);
+                    il.EmitCall(OpCodes.Call, VectorMethodCache.CreateBroadcast(256, clr), null);
+                    il.Emit(OpCodes.Stloc, sclV);
                 }
             }
 
@@ -796,7 +833,7 @@ namespace NumSharp.Backends.Kernels
                 EmitPolyCalcAddr(il, sp, i, fromSize);
                 fromVk.Load(il);
                 if (from != key.T) PolyLanes.EmitLaneConvert(il, from, key.T, e.W);
-                if (key.Scale) { il.Emit(OpCodes.Ldloc, sclV); e.Vk.Bin(il, BinaryOp.Multiply, PolyComplexProduct.Simd); }
+                if (key.Scale) { il.Emit(OpCodes.Ldloc, sclV); EmitPolyCalcScaleVector(il, e); }
                 EmitPolyCalcAddr(il, dp, i, e.Size);
                 e.Vk.StoreValueFirst(il);
                 EmitPolyCalcBump(il, i, e.W);
@@ -812,7 +849,7 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Ldloc, sp); il.Emit(OpCodes.Ldloc, i); il.Emit(OpCodes.Ldarg_2); il.Emit(OpCodes.Mul); il.Emit(OpCodes.Conv_I); il.Emit(OpCodes.Add);
             EmitLoadIndirect(il, from);
             EmitConvertTo(il, from, key.T);
-            if (key.Scale) { il.Emit(OpCodes.Ldloc, sclS); EmitPolyCalcScalarBin(il, BinaryOp.Multiply, key.T, PolyComplexProduct.Simd); }
+            if (key.Scale) { il.Emit(OpCodes.Ldloc, sclS); EmitPolyCalcScaleScalar(il, key); }
             EmitStoreIndirect(il, key.T);
             EmitPolyCalcBump(il, i, 1);
             il.Emit(OpCodes.Br, tTop);
@@ -823,6 +860,53 @@ namespace NumSharp.Backends.Kernels
             il.MarkLabel(qEnd);
             il.Emit(OpCodes.Ret);
             return dm;
+        }
+
+        /// <summary>
+        ///     [series lanes (T), scale lanes] → [scaled series lanes]: NumPy's <c>c *= scl</c> for one vector — the lane
+        ///     kind's multiply in T (operand order (c, scl): simd_cmul for complex), or for a widened scale the lane helper of
+        ///     the (T, loop) pair, which widens, multiplies in the loop dtype and casts back exactly as NumPy's in-place ufunc.
+        /// </summary>
+        /// <param name="il">The generator.</param><param name="e">The kernel's shared facts (its lane kind is the 8-lane
+        ///     float32 / float16 one for a widened scale — EmitPolyCalc's gate).</param>
+        /// <exception cref="NotSupportedException">A widened pair without a lane helper (the key's gate prevents it).</exception>
+        private static void EmitPolyCalcScaleVector(ILGenerator il, PolyCalcEmit e)
+        {
+            var key = e.Key;
+            if (!key.WidenedScale)
+            {
+                e.Vk.Bin(il, BinaryOp.Multiply, PolyComplexProduct.Simd);
+                return;
+            }
+            il.EmitCall(OpCodes.Call, (key.T, key.ScaleLoop) switch
+            {
+                (NPTypeCode.Single, NPTypeCode.Double) => PolyLaneOps.s_f32ScaleF64,
+                (NPTypeCode.Half, NPTypeCode.Double) => PolyLaneOps.s_halfScaleF64,
+                (NPTypeCode.Half, NPTypeCode.Single) => PolyLaneOps.s_halfScaleF32,
+                _ => throw new NotSupportedException($"no widened scale {key.T} x {key.ScaleLoop}"),
+            }, null);
+        }
+
+        /// <summary>
+        ///     [series value (T), scale (loop dtype)] → [scaled value (T)]: the scalar twin of
+        ///     <see cref="EmitPolyCalcScaleVector"/> (the stages' tails and scalar-only kernels), bit-identical per value.
+        /// </summary>
+        /// <param name="il">The generator.</param><param name="key">The kernel identity.</param>
+        /// <exception cref="NotSupportedException">A widened pair without a helper (the key's gate prevents it).</exception>
+        private static void EmitPolyCalcScaleScalar(ILGenerator il, in PolyCalcKey key)
+        {
+            if (!key.WidenedScale)
+            {
+                EmitPolyCalcScalarBin(il, BinaryOp.Multiply, key.T, PolyComplexProduct.Simd);
+                return;
+            }
+            il.EmitCall(OpCodes.Call, (key.T, key.ScaleLoop) switch
+            {
+                (NPTypeCode.Single, NPTypeCode.Double) => PolyLaneOps.s_f32ScaleF64Scalar,
+                (NPTypeCode.Half, NPTypeCode.Double) => PolyLaneOps.s_halfScaleF64Scalar,
+                (NPTypeCode.Half, NPTypeCode.Single) => PolyLaneOps.s_halfScaleF32Scalar,
+                _ => throw new NotSupportedException($"no widened scale {key.T} x {key.ScaleLoop}"),
+            }, null);
         }
 
         /// <summary>

@@ -22,7 +22,10 @@ namespace NumSharp.Tests.Fuzz
     ///     <b>The x forms.</b> <c>params["xs"]</c> lists one entry per point argument, in order: <c>"a"</c>
     ///     consumes the next operand (an array — a 0-d one included, which NumPy treats as STRONG), a JSON
     ///     object is a Python scalar rebuilt as the C# primitive that means the same thing to the facade (a
-    ///     WEAK value). The coefficients are always the last operand.
+    ///     WEAK value) or a Python list / tuple rebuilt as <c>object[]</c> / <c>ValueTuple</c> (NumPy's
+    ///     <c>np.asarray(x)</c> of it). The coefficients are the last operand, unless <c>params["c"]</c> gives them as a
+    ///     spec of the same forms (section K: a list / tuple / scalar series); the 2-D / 3-D / N-D ordinates are passed as
+    ///     rebuilt, since those facades take any array_like too.
     ///     </para>
     /// </summary>
     public static partial class OpRegistry
@@ -61,11 +64,15 @@ namespace NumSharp.Tests.Fuzz
                 return ApplyPolySeries(module, fn, p, ops);
             var xs = p["xs"];
             var args = new object[xs.GetArrayLength()];
-            int next = 0;
+            // An x spec is "a" (the next operand), a Python scalar, or a Python list / tuple (object[] / ValueTuple, nested,
+            // possibly holding operands) — the named-argument decoder's forms, consuming operands in encode order.
+            var dec = new PolyArgs(p, ops);
             int i = 0;
             foreach (var e in xs.EnumerateArray())
-                args[i++] = e.ValueKind == JsonValueKind.String ? ops[next++] : PythonScalar(e);
-            NDArray c = ops[next];
+                args[i++] = dec.Spec(e);
+            // c: a Python-typed spec when the case gives one (section K: a list / tuple / scalar series, decoded after the
+            // x forms because the generator encodes it after them), else the next operand.
+            object c = p.TryGetValue("c", out var cSpec) ? dec.Spec(cSpec) : ops[dec.Consumed];
             bool tensor = !p.TryGetValue("tensor", out var t) || t.GetBoolean();
 
             switch (module)
@@ -76,11 +83,11 @@ namespace NumSharp.Tests.Fuzz
                     return fn switch
                     {
                         "polyval" => m.polyval(args[0], c, tensor),
-                        "polyval2d" => m.polyval2d((NDArray)args[0], (NDArray)args[1], c),
-                        "polyval3d" => m.polyval3d((NDArray)args[0], (NDArray)args[1], (NDArray)args[2], c),
+                        "polyval2d" => m.polyval2d(args[0], args[1], c),
+                        "polyval3d" => m.polyval3d(args[0], args[1], args[2], c),
                         "polygrid2d" => m.polygrid2d(args[0], args[1], c),
                         "polygrid3d" => m.polygrid3d(args[0], args[1], args[2], c),
-                        "polyvalnd" => m.polyvalnd(AsArrays(args), c),
+                        "polyvalnd" => m.polyvalnd(args, c),
                         _ => throw new NotSupportedException($"polynomial op '{op}' is not registered in OpRegistry"),
                     };
                 }
@@ -90,11 +97,11 @@ namespace NumSharp.Tests.Fuzz
                     return fn switch
                     {
                         "chebval" => m.chebval(args[0], c, tensor),
-                        "chebval2d" => m.chebval2d((NDArray)args[0], (NDArray)args[1], c),
-                        "chebval3d" => m.chebval3d((NDArray)args[0], (NDArray)args[1], (NDArray)args[2], c),
+                        "chebval2d" => m.chebval2d(args[0], args[1], c),
+                        "chebval3d" => m.chebval3d(args[0], args[1], args[2], c),
                         "chebgrid2d" => m.chebgrid2d(args[0], args[1], c),
                         "chebgrid3d" => m.chebgrid3d(args[0], args[1], args[2], c),
-                        "chebvalnd" => m.chebvalnd(AsArrays(args), c),
+                        "chebvalnd" => m.chebvalnd(args, c),
                         _ => throw new NotSupportedException($"polynomial op '{op}' is not registered in OpRegistry"),
                     };
                 }
@@ -104,11 +111,11 @@ namespace NumSharp.Tests.Fuzz
                     return fn switch
                     {
                         "legval" => m.legval(args[0], c, tensor),
-                        "legval2d" => m.legval2d((NDArray)args[0], (NDArray)args[1], c),
-                        "legval3d" => m.legval3d((NDArray)args[0], (NDArray)args[1], (NDArray)args[2], c),
+                        "legval2d" => m.legval2d(args[0], args[1], c),
+                        "legval3d" => m.legval3d(args[0], args[1], args[2], c),
                         "leggrid2d" => m.leggrid2d(args[0], args[1], c),
                         "leggrid3d" => m.leggrid3d(args[0], args[1], args[2], c),
-                        "legvalnd" => m.legvalnd(AsArrays(args), c),
+                        "legvalnd" => m.legvalnd(args, c),
                         _ => throw new NotSupportedException($"polynomial op '{op}' is not registered in OpRegistry"),
                     };
                 }
@@ -118,11 +125,11 @@ namespace NumSharp.Tests.Fuzz
                     return fn switch
                     {
                         "lagval" => m.lagval(args[0], c, tensor),
-                        "lagval2d" => m.lagval2d((NDArray)args[0], (NDArray)args[1], c),
-                        "lagval3d" => m.lagval3d((NDArray)args[0], (NDArray)args[1], (NDArray)args[2], c),
+                        "lagval2d" => m.lagval2d(args[0], args[1], c),
+                        "lagval3d" => m.lagval3d(args[0], args[1], args[2], c),
                         "laggrid2d" => m.laggrid2d(args[0], args[1], c),
                         "laggrid3d" => m.laggrid3d(args[0], args[1], args[2], c),
-                        "lagvalnd" => m.lagvalnd(AsArrays(args), c),
+                        "lagvalnd" => m.lagvalnd(args, c),
                         _ => throw new NotSupportedException($"polynomial op '{op}' is not registered in OpRegistry"),
                     };
                 }
@@ -132,11 +139,11 @@ namespace NumSharp.Tests.Fuzz
                     return fn switch
                     {
                         "hermval" => m.hermval(args[0], c, tensor),
-                        "hermval2d" => m.hermval2d((NDArray)args[0], (NDArray)args[1], c),
-                        "hermval3d" => m.hermval3d((NDArray)args[0], (NDArray)args[1], (NDArray)args[2], c),
+                        "hermval2d" => m.hermval2d(args[0], args[1], c),
+                        "hermval3d" => m.hermval3d(args[0], args[1], args[2], c),
                         "hermgrid2d" => m.hermgrid2d(args[0], args[1], c),
                         "hermgrid3d" => m.hermgrid3d(args[0], args[1], args[2], c),
-                        "hermvalnd" => m.hermvalnd(AsArrays(args), c),
+                        "hermvalnd" => m.hermvalnd(args, c),
                         _ => throw new NotSupportedException($"polynomial op '{op}' is not registered in OpRegistry"),
                     };
                 }
@@ -146,26 +153,17 @@ namespace NumSharp.Tests.Fuzz
                     return fn switch
                     {
                         "hermeval" => m.hermeval(args[0], c, tensor),
-                        "hermeval2d" => m.hermeval2d((NDArray)args[0], (NDArray)args[1], c),
-                        "hermeval3d" => m.hermeval3d((NDArray)args[0], (NDArray)args[1], (NDArray)args[2], c),
+                        "hermeval2d" => m.hermeval2d(args[0], args[1], c),
+                        "hermeval3d" => m.hermeval3d(args[0], args[1], args[2], c),
                         "hermegrid2d" => m.hermegrid2d(args[0], args[1], c),
                         "hermegrid3d" => m.hermegrid3d(args[0], args[1], args[2], c),
-                        "hermevalnd" => m.hermevalnd(AsArrays(args), c),
+                        "hermevalnd" => m.hermevalnd(args, c),
                         _ => throw new NotSupportedException($"polynomial op '{op}' is not registered in OpRegistry"),
                     };
                 }
                 default:
                     throw new NotSupportedException($"polynomial module '{module}' is not registered in OpRegistry");
             }
-        }
-
-        /// <summary>The point arguments as arrays (valnd takes arrays only; the generator never emits a weak one).</summary>
-        /// <param name="args">The rebuilt point arguments.</param><returns>The arrays.</returns>
-        private static NDArray[] AsArrays(object[] args)
-        {
-            var r = new NDArray[args.Length];
-            for (int i = 0; i < args.Length; i++) r[i] = (NDArray)args[i];
-            return r;
         }
 
         /// <summary>

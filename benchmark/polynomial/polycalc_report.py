@@ -19,6 +19,8 @@ SECTIONS = {
     "L": "layouts @ (11, 100K): F order, column-strided, reversed rows, transposed, broadcast",
     "M": "orders m = 1/2/5/10 on (16, 100K)",
     "S": "small N-D series: (3, 3), (11, 10), (11, 100) — the fixed per-call cost",
+    "A": "argument forms: Python-list / nested-list / row-list series, a float64 0-d scl widening a float32 / "
+         "float16 series (the fused widened-scale kernels), array scl per column / row / coefficient",
 }
 
 

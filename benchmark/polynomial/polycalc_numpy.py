@@ -23,6 +23,9 @@ Sections (cell-label prefixes; every section covers all six bases, derivatives a
     L  layouts: F order, column-strided, reversed rows, a transposed 3-D view, a broadcast series
     M  orders: m = 1 / 2 / 5 / 10 on (16, 100K) — the fused multi-order derivative and the per-order integral
     S  small N-D series: (3, 3), (11, 10), (11, 100) — the fixed per-call cost
+    A  argument forms: a Python-list series (1-D n = 11 / 100 / 1000 and nested 11x10), rows (list of arrays /
+       jagged double[][], 11x1000), and the House scale route — a 0-d float64 scl promoting a float32 / float16
+       series (N-D and 1-D), an array scl per column (100K,) / per row (11, 1) / per coefficient (1-D)
 """
 import hashlib
 import json
@@ -82,20 +85,26 @@ def arg(v):
     raise TypeError(type(v))
 
 
-def cell(label, base, kind, c, m=1, axis=0, scl=None, k=None, lbnd=None):
+def cell(label, base, kind, c, m=1, axis=0, scl=None, k=None, lbnd=None, cform=None):
     """Register one cell: {base}{kind}(c, m, [k, lbnd,] scl, axis); None = NumPy's default (the argument is not
-    passed). POLYCALC_ONLY=prefix[,prefix...] restricts the run (and the manifest) to matching labels."""
+    passed). cform passes the series as a Python "list" (c.tolist(): nested lists of Python floats — the C# side
+    builds nested object[]) or as "rows" (list(c): a list of row arrays — the C# side a jagged double[][]); the
+    conversion is part of the timed call on both sides, as it is part of NumPy's np.array(c, ndmin=1).
+    POLYCALC_ONLY=prefix[,prefix...] restricts the run (and the manifest) to matching labels."""
     if ONLY and not any(label.startswith(p) for p in ONLY):
         return
     fn = getattr(MODULES[base], base + kind)
     carr = c.array
+    carg = carr.tolist() if cform == "list" else list(carr) if cform == "rows" else carr
     kw, spec = {"axis": axis}, {}
     for name, v in (("scl", scl), ("k", k), ("lbnd", lbnd)):
         if v is not None:
             s, py = arg(v)
             spec[name] = s
             kw[name] = py
-    call = lambda: fn(carr, m, **kw)
+    if cform:
+        spec["cform"] = cform
+    call = lambda: fn(carg, m, **kw)
     ref = np.asarray(call())
     work = max(carr.size, 1) * m
     calls, rounds = loops_for(work)
@@ -150,6 +159,23 @@ def build():
             tag = "x".join(str(d) for d in shape)
             cell(f"S/{b}/der/{tag}", b, "der", G(shape, seed=7), 1)
             cell(f"S/{b}/int/{tag}", b, "int", G(shape, seed=7), 1)
+        # A: argument forms — a Python-list series (NDPolySequence's coercion walk), rows (a list of arrays / jagged
+        #    double[][]), and the House scale route: a 0-d float64 scl that PROMOTES a float32 / float16 series (NumPy's
+        #    in-place multiply computes in float64, then casts back) and an array scl broadcasting per column / per row
+        for n in (11, 100, 1000):
+            cell(f"A/{b}/der/list/n{n}", b, "der", G((n,), seed=7), 1, cform="list")
+            cell(f"A/{b}/int/list/n{n}", b, "int", G((n,), seed=7), 1, cform="list")
+        cell(f"A/{b}/der/list2d/11x10", b, "der", G((11, 10), seed=7), 1, cform="list")
+        cell(f"A/{b}/int/list2d/11x10", b, "int", G((11, 10), seed=7), 1, cform="list")
+        cell(f"A/{b}/der/rows/11x1000", b, "der", G((11, 1_000), seed=7), 1, cform="rows")
+        cell(f"A/{b}/int/rows/11x1000", b, "int", G((11, 1_000), seed=7), 1, cform="rows")
+        for dt in ("float32", "float16"):
+            cell(f"A/{b}/der/sclf64/{dt}/nd", b, "der", G((11, 100_000), dt, 7), 2, scl=G((), seed=3))
+            cell(f"A/{b}/int/sclf64/{dt}/nd", b, "int", G((11, 100_000), dt, 7), 2, scl=G((), seed=3))
+            cell(f"A/{b}/der/sclf64/{dt}/1d", b, "der", G((11,), dt, 7), 2, scl=G((), seed=3))
+        cell(f"A/{b}/der/sclcol/nd", b, "der", G((11, 100_000), seed=7), 2, scl=G((100_000,), seed=5))
+        cell(f"A/{b}/der/sclrow/nd", b, "der", G((11, 100_000), seed=7), 1, scl=G((11, 1), seed=5))
+        cell(f"A/{b}/der/sclvec/1d", b, "der", G((100,), seed=7), 1, scl=G((100,), seed=5))
 
 
 def main():

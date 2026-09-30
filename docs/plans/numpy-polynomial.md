@@ -25,7 +25,7 @@
 | Page section | NumPy API | NumSharp today |
 |---|---|---|
 | Legacy "polynomial module" (`numpy.lib.polynomial`) | `poly1d`, `polyval`, `poly`, `roots`, `polyfit`, `polyder`, `polyint`, `polyadd`, `polydiv`, `polymul`, `polysub` | **Done** — all 11 functions and `poly1d(c_or_r, r, variable)`, byte-exact. Oracle: `poly.jsonl` (portable); `roots`, `polyfit` and `poly`-of-a-matrix are in host-pinned `linalg_parity`. Unit tests + live-parity tests. Only `RankWarning` is absent: NumSharp emits no warnings anywhere. |
-| "Polynomial package" (`numpy.polynomial`) | 6 modules × ~31 names, `polyutils`, 6 classes, `set_default_printstyle` | **U3 + U1 + U4 delivered** — 102 of 193 names: the evaluation family (36, `polyvalfromroots` open), the additive family with `polyutils` (54: `{p}add/sub/trim/line`, the 24 constants, `as_series`/`trimseq`/`trimcoef`/`getdomain`/`mapparms`/`mapdomain`) and the calculus family (12: `{p}der`/`{p}int`), all bit-exact (`polyeval.jsonl` 16,606 + `polyseries.jsonl` 18,437 + `polycalc.jsonl` 21,646 cases). Facade `np.polynomial.{polynomial,chebyshev,legendre,laguerre,hermite,hermite_e,polyutils}`; 0 of 6 classes. `coverage/generate_coverage.py` catalogues all seven `numpy.polynomial.*` submodules as out-of-headline surfaces. |
+| "Polynomial package" (`numpy.polynomial`) | 6 modules × ~31 names, `polyutils`, 6 classes, `set_default_printstyle` | **U3 + U1 + U4 delivered** — 102 of 193 names: the evaluation family (36, `polyvalfromroots` open), the additive family with `polyutils` (54: `{p}add/sub/trim/line`, the 24 constants, `as_series`/`trimseq`/`trimcoef`/`getdomain`/`mapparms`/`mapdomain`) and the calculus family (12: `{p}der`/`{p}int`), all bit-exact (`polyeval.jsonl` 19,216 + `polyseries.jsonl` 18,647 + `polycalc.jsonl` 27,526 cases). Facade `np.polynomial.{polynomial,chebyshev,legendre,laguerre,hermite,hermite_e,polyutils}`; 0 of 6 classes. `coverage/generate_coverage.py` catalogues all seven `numpy.polynomial.*` submodules as out-of-headline surfaces. |
 | "Transition guide" | the reversed coefficient order; `Polynomial.fit(...).convert()` | Documentation only. It is a real hazard for us, though, because the new package **reuses the legacy names with the opposite coefficient order** (§2 D5). |
 
 User demand on record: issue **#496** "Can NumSharp fit polynomial surface equations?" — that is exactly
@@ -528,8 +528,8 @@ machine-partitioned; the counts sum to 193 with no overlap (Appendix A).
 - **Result objects are NumPy's:** moveaxis views of fresh C buffers; the m == 0 K-order copy; `c[:1]*0` from
   NpyIter's KEEPORDER vote, left unmoved by hermeder (a NumPy quirk); and the n == 1 zero branch's view of the
   moved copy.
-- **Oracle:** `polycalc.jsonl` (`gen_oracle.py polycalc`, 21,646 cases, sections A–L, 0 excused), described in
-  `test/NumSharp.Tests.Oracle/Fuzz/README.md`.
+- **Oracle:** `polycalc.jsonl` (`gen_oracle.py polycalc`, 27,526 cases, sections A–O, 0 excused; 21,646 at delivery),
+  described in `test/NumSharp.Tests.Oracle/Fuzz/README.md`.
   - Planted-bug check: 10 mutants, 10 killed, 8 to 7,981 red cases each:
     - the 1-D scale product;
     - both loop bounds;
@@ -542,21 +542,51 @@ machine-partitioned; the counts sum to 193 with no overlap (Appendix A).
     - the complex64 `{p}val`.
   - Unit tests: `Polynomial/PolynomialCalculusTests.cs` (20).
 - **Perf:** `benchmark/polynomial/polycalc_{numpy.py,bench.cs,report.py}`, committed summary `polycalc_results.md`;
-  606 cells, all bit-exact.
+  720 cells, all bit-exact (606 at delivery; the wholeness pass added section A, 114 argument-form cells, and the
+  rerun moved the older sections by host drift, within ~10%).
 
   | Section | min NPY/NS | geomean NPY/NS |
   |---|---:|---:|
-  | 1-D | 3.69 | 25.3 |
-  | parameters | 2.47 | 7.7 |
-  | N-D | 2.02 | 4.8 |
-  | dtypes | 2.14 | 8.0 |
-  | layouts | 2.91 | 7.3 |
-  | orders | 3.10 | 6.6 |
-  | small N-D | 3.87 | 12.4 |
-  | **all** | **2.02** | **8.71** |
+  | 1-D | 4.20 | 25.0 |
+  | parameters | 2.35 | 6.9 |
+  | N-D | 1.82 | 4.7 |
+  | dtypes | 2.18 | 7.3 |
+  | layouts | 2.29 | 6.0 |
+  | orders | 2.68 | 5.7 |
+  | small N-D | 2.78 | 11.7 |
+  | argument forms | 1.71 | 5.7 |
+  | **all** | **1.71** | **7.62** |
 - **Open lever, measured:** float16 N-D runs ~30× slower than float32 (2.1–2.6× NumPy). U3's float16 lane kind rounds
   every op back onto the f16 grid (narrow + widen) and the store narrows again. An in-float round would buy only
   ~1.25×. A float32 working buffer, narrowed once at the end, is the real fix.
+- **Wholeness pass (2026-09-29).** Every argument kind the C# boundary maps to a Python value was replayed against
+  NumPy (three probes, 330 calls), which found the conversions of Python SEQUENCES wrong in several places. They are
+  now one port of `np.array`'s coercion (`array_coercion.c`), `Polynomial/Package/NDPolySequence.cs`, used by U1, U3
+  and U4 alike:
+  - nesting to any depth, the dtype discovered over every leaf (strong promotion, not NEP 50), an empty sequence
+    ending the dims without a dtype vote, NumPy's ragged ValueError texts (with the shape the walk still agreed on),
+    tuples (`ITuple`), jagged arrays, `NDArray[]`, `BigInteger[]`, `object[,]` rows, `IEnumerable`;
+  - `BigInteger` everywhere a Python int goes (scl, lbnd, k, x): inf past float32/float16, CPython's OverflowError
+    past float64;
+  - the calculus order NumPy's statements imply: `np.ndim(lbnd)` / `np.ndim(scl)` first (a ragged one raises there),
+    k converted only when its order uses it (after that order's `{p}val`), a str lbnd refused only where it is
+    evaluated.
+
+  The kernel gained the WIDENED `c *= scl`: a strong float64 scale against a float32 series (or float32/float64
+  against float16) runs NumPy's wider multiply loop and casts back, fused into the load stage (`PolyCalcKey.ScaleLoop`,
+  lane helpers `PolyLaneOps.{F32ScaleF64,HalfScaleF64,HalfScaleF32}`). float64 → float16 is ONE rounding in NumPy;
+  the vector path gets it by rounding to float32 with round-to-odd before the to-nearest-even narrow. Array scales take
+  `np.multiply(…, out: c, dtype: promoted)` per order.
+  - U3's c (and the ordinates of `{p}val2d`/`{p}val3d`/`{p}valnd`) became `object` — they were `NDArray`, so a list
+    compiled through the implicit array conversion and threw at run time; `mapdomain` and `trimseq` gained `object[]`
+    list overloads (C# binds an array argument to an `NDArray` overload over an `object` one); and every conversion is
+    released however the call ends (`{p}val`'s converted x leaked one buffer per call — the leak gate caught it).
+  - Oracle: `polycalc` +5,880 cases (M argument kinds, N zero-size / 5-D / extreme ints, O widened scale), `polyeval`
+    +2,610 (J sequence / big-int x, K array_like c and ordinates), `polyseries` +210 (O tuples, P `trimseq` of
+    sequences). The fix is load-bearing: reverting the conversions turns 1,278 cases red, and 4 widened-scale mutants
+    are killed (44–73 cases each).
+  - Unit tests: `Polynomial/PolynomialArgumentKindsTests.cs` (21).
+  - Perf: section A of the benchmark (argument forms, widened scale, array scales), every cell ≥ 1.5× NumPy.
 
 - **Scope:** `{p}der`, `{p}int`.
 - **Shared backend:** one prologue driver:

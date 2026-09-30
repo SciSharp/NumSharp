@@ -37,8 +37,9 @@ using NumSharp.Backends.Kernels;
 //     value into a real series raises NumPy's UFuncTypeError);
 //   * the n == 1 branch (NumPy only takes it for a one-coefficient series, so it is one row of work);
 //   * a `scl` the kernel cannot fold: an array (derivatives accept one — it broadcasts, per NumPy's in-place
-//     rules) or a NumPy scalar/0-d array whose dtype promotes the series (`c *= np.float64(x)` of a float32
-//     series computes in float64 and casts back).
+//     rules; one `np.multiply(c, scl, out=c, dtype=loop)` pass per order) or a promotion the kernel has no widened
+//     loop for (decimal). A NumPy scalar / 0-d array that promotes a float16 / float32 series (`c *= np.float64(x)`
+//     computes in float64 and casts back) IS folded: the kernel widens, multiplies in that loop and casts back.
 //
 // LAYOUT — the result is the same view NumPy returns
 // --------------------------------------------------
@@ -63,9 +64,11 @@ namespace NumSharp
         /// <summary>How <c>c *= scl</c> is carried out.</summary>
         private enum ScaleRoute
         {
-            /// <summary>The kernel multiplies by the NEP 50-converted scalar as it loads/scales the series.</summary>
+            /// <summary>The kernel multiplies by the converted scalar as it loads/scales the series — in the series dtype, or
+            ///     widened into a promoting strong scalar's loop (<see cref="PolyCalcKey.ScaleLoop"/>).</summary>
             Fused,
-            /// <summary>An in-place ufunc per order (<see cref="InPlace"/>): an array scl, or a promoting strong scalar.</summary>
+            /// <summary>An in-place ufunc per order (<see cref="ScaleInPlace"/>): an array scl, or a promotion the kernel has
+            ///     no widened loop for.</summary>
             House,
         }
 
@@ -114,7 +117,7 @@ namespace NumSharp
 
             // NumPy raises a scl it cannot cast at the first `c *= scl`: before any work, so here.
             byte* sclRaw = stackalloc byte[16];
-            var route = ClassifyScale(scl, t, out var sclNum, sclRaw);
+            var route = ClassifyScale(scl, t, out var sclNum, sclRaw, out var scaleLoop);
 
             bool oneD = md.Length == 1;
             long cols = Cols(md);
@@ -129,7 +132,7 @@ namespace NumSharp
                 if (TryDirectSource(src, md, ms, out var sp, out long sRow, out long sCol))
                 {
                     // One pass: load + convert + scale + all m orders, block by block.
-                    var k = DirectILKernelGenerator.GetPolyCalcKernel(new PolyCalcKey(basis, false, t, src.typecode, oneD, true));
+                    var k = DirectILKernelGenerator.GetPolyCalcKernel(new PolyCalcKey(basis, false, t, src.typecode, oneD, true, scaleLoop));
                     k(sp, sRow, sCol, b0, bufRow, cols, n, m, block, sclRaw);
                 }
                 else
@@ -138,7 +141,7 @@ namespace NumSharp
                     // buffer first, then the kernel scales it in place.
                     using (var dst = MovedBackView(buf, 0, n, md, iaxis))
                         NDIter.Copy(dst, src);
-                    var k = DirectILKernelGenerator.GetPolyCalcKernel(new PolyCalcKey(basis, false, t, t, oneD, true));
+                    var k = DirectILKernelGenerator.GetPolyCalcKernel(new PolyCalcKey(basis, false, t, t, oneD, true, scaleLoop));
                     k(null, 0, 0, b0, bufRow, cols, n, m, block, sclRaw);
                 }
             }
@@ -151,7 +154,7 @@ namespace NumSharp
                 {
                     // c *= scl for this order's c (rows [o, n)), then one order of the recurrence.
                     using (var win = MovedView(buf, o, n - o, md))
-                        InPlace(BinaryOp.Multiply, win, sclNum, "multiply");
+                        ScaleInPlace(win, sclNum);
                     k(null, 0, 0, b0 + o * bufRow, bufRow, cols, n - o, 1, block, null);
                 }
             }
@@ -167,24 +170,30 @@ namespace NumSharp
         /// <param name="basis">The basis.</param>
         /// <param name="c">The coefficients (anything <c>np.array</c> accepts).</param>
         /// <param name="m">The order (≥ 0).</param>
-        /// <param name="k">The integration constants (null for NumPy's <c>[]</c>): a scalar, a Python list
-        ///     (object[] / IList — Python elements), or an array (a typed C# array or NDArray — NumPy-scalar elements, or
-        ///     rows of an N-D array); missing ones are 0.</param>
+        /// <param name="k">The integration constants (null for NumPy's <c>[]</c>): a scalar, a Python tuple / list
+        ///     (ValueTuple, object[], jagged / NDArray[] arrays, any IList — Python items, each converted only when its
+        ///     order uses it, as NumPy does), a str (its characters), or an array (a typed C# array or NDArray —
+        ///     NumPy-scalar elements, or rows of an N-D array); missing ones are 0.</param>
         /// <param name="lbnd">The lower bound (null for NumPy's Python int 0); must be a scalar.</param>
         /// <param name="scl">The scale (null for NumPy's Python int 1); must be a scalar.</param>
         /// <param name="axis">The series axis.</param>
         /// <returns>The integral, of the series' dtype (integer and bool series become float64).</returns>
         /// <exception cref="ValueError">NumPy's texts: <c>The order of integration must be non-negative</c>,
         ///     <c>Too many integration constants</c>, <c>lbnd must be a scalar.</c>, <c>scl must be a scalar.</c>,
-        ///     <c>setting an array element with a sequence.</c> (an array constant for a 1-D series), or a
-        ///     non-broadcastable constant.</exception>
+        ///     <c>setting an array element with a sequence.</c> (an array constant for a 1-D series), a
+        ///     non-broadcastable constant, or a ragged sequence (np.array's inhomogeneous-shape text — for lbnd/scl at the
+        ///     ndim checks, for a constant when its order uses it).</exception>
         /// <exception cref="AxisError">The axis is out of range.</exception>
         /// <exception cref="IndexError">An empty series: <c>index 0 is out of bounds for axis 0 with size 0</c>.</exception>
         /// <exception cref="TypeError">An array constant for a complex 1-D series (<c>complex()</c>'s text).</exception>
         /// <exception cref="ArgumentException">A scl, constant or lbnd value the series cannot absorb in place (NumPy's
         ///     UFuncTypeError text).</exception>
         /// <exception cref="IncorrectShapeException">Constants that do not broadcast with the series' columns.</exception>
-        /// <exception cref="NotSupportedException">A null or string series, a string or null constant / lbnd.</exception>
+        /// <exception cref="OverflowException">A Python-int scl / lbnd / constant too large for the series' float dtype
+        ///     (<c>int too large to convert to float</c>).</exception>
+        /// <exception cref="NotSupportedException">A null or string series; a str / null constant or a str lbnd when an
+        ///     order USES it (NumPy fails there with a str-dtype error; a str lbnd is never read by an order that takes the
+        ///     one-coefficient zero branch, nor at all when <paramref name="m"/> is 0).</exception>
         internal static NDArray Int(PolyBasis basis, object c, int m, object k, object lbnd, object scl, int axis)
         {
             NDArray src = Coefficients(c);
@@ -194,8 +203,8 @@ namespace NumSharp
                 throw new ValueError("The order of integration must be non-negative");
             if (ks.Count > m)
                 throw new ValueError("Too many integration constants");
-            if (lbnd is string)
-                throw new NotSupportedException("a str lbnd makes NumPy evaluate the series at a str, which NumSharp has no dtype for");
+            // np.ndim: a scalar (a str too — NumPy only fails when it EVALUATES at a str lbnd, see Correct) is 0; a
+            // ragged sequence raises np.asarray's inhomogeneous ValueError from here.
             if (NDim(lbnd) != 0)
                 throw new ValueError("lbnd must be a scalar.");
             if (NDim(scl) != 0)
@@ -206,19 +215,19 @@ namespace NumSharp
 
             // k = list(k) + [0] * (cnt - len(k))
             while (ks.Count < m)
-                ks.Add(PolyNumber.FromPython(PyScalar.Int(0)));
+                ks.Add(s_zero);
             object lbndArg = lbnd ?? s_zero;
 
             Moved(src.Shape, iaxis, out var md, out var ms);
             long n = md[0];
             // `c *= scl` runs before NumPy reads c[0], so a scl it cannot cast is reported before an empty series.
             byte* sclRaw = stackalloc byte[16];
-            var route = ClassifyScale(scl, t, out var sclNum, sclRaw);
+            var route = ClassifyScale(scl, t, out var sclNum, sclRaw, out var scaleLoop);
             if (n == 0)
                 throw new IndexError("index 0 is out of bounds for axis 0 with size 0");
 
             if (n > 1)
-                return Grow(basis, src, null, t, md, ms, iaxis, 0, m, ks, lbndArg, route, sclNum, sclRaw);
+                return Grow(basis, src, null, t, md, ms, iaxis, 0, m, ks, lbndArg, route, sclNum, sclRaw, scaleLoop);
 
             // One coefficient: NumPy's `n == 1 and np.all(c[0] == 0)` branch keeps the series one coefficient long
             // for as long as it holds. It works on NumPy's own copy (whose layout the result then keeps).
@@ -229,7 +238,7 @@ namespace NumSharp
             {
                 InPlace(BinaryOp.Multiply, cm, sclNum, "multiply");
                 if (!FirstRowIsZero(cm, oneD))
-                    return Grow(basis, null, cm, t, md, ms, iaxis, i, m, ks, lbndArg, route, sclNum, sclRaw);
+                    return Grow(basis, null, cm, t, md, ms, iaxis, i, m, ks, lbndArg, route, sclNum, sclRaw, scaleLoop);
                 AddToFirstRow(cm, ks[i], oneD);
             }
             // NumPy returns np.moveaxis(c, 0, iaxis) of its moved copy: a VIEW (OWNDATA false) in the copy's layout.
@@ -255,14 +264,15 @@ namespace NumSharp
         /// <param name="iaxis">The normalized series axis.</param>
         /// <param name="first">The first order to run.</param>
         /// <param name="m">The order count.</param>
-        /// <param name="ks">The padded constants.</param>
+        /// <param name="ks">The padded constants (see <see cref="IntegrationConstants"/>: converted where an order uses them).</param>
         /// <param name="lbndArg">The lower bound as {p}val takes it.</param>
         /// <param name="route">How scl is applied.</param>
         /// <param name="sclNum">The scale (House route).</param>
         /// <param name="sclRaw">The converted scale (Fused route).</param>
+        /// <param name="scaleLoop">The Fused route's multiply loop dtype (<paramref name="t"/> or the wider loop).</param>
         /// <returns>The integral (a moveaxis view of the buffer).</returns>
         private static NDArray Grow(PolyBasis basis, NDArray src, NDArray scaled, NPTypeCode t, long[] md, long[] ms, int iaxis,
-            int first, int m, List<PolyNumber> ks, object lbndArg, ScaleRoute route, in PolyNumber sclNum, byte* sclRaw)
+            int first, int m, List<object> ks, object lbndArg, ScaleRoute route, in PolyNumber sclNum, byte* sclRaw, NPTypeCode scaleLoop)
         {
             bool oneD = md.Length == 1;
             long len = scaled is null ? md[0] : 1;
@@ -275,7 +285,7 @@ namespace NumSharp
             long block = Block(len + remaining, size, cols);
             long ws = remaining;   // the row c[0] sits at
             var scaleKernel = route == ScaleRoute.Fused
-                ? DirectILKernelGenerator.GetPolyCalcKernel(new PolyCalcKey(basis, true, t, t, oneD, true))
+                ? DirectILKernelGenerator.GetPolyCalcKernel(new PolyCalcKey(basis, true, t, t, oneD, true, scaleLoop))
                 : null;
             var plainKernel = DirectILKernelGenerator.GetPolyCalcKernel(new PolyCalcKey(basis, true, t, t, oneD, false));
 
@@ -292,7 +302,7 @@ namespace NumSharp
                 {
                     if (route == ScaleRoute.Fused && TryDirectSource(src, md, ms, out var sp, out long sRow, out long sCol))
                     {
-                        var k = DirectILKernelGenerator.GetPolyCalcKernel(new PolyCalcKey(basis, true, t, src.typecode, oneD, true));
+                        var k = DirectILKernelGenerator.GetPolyCalcKernel(new PolyCalcKey(basis, true, t, src.typecode, oneD, true, scaleLoop));
                         k(sp, sRow, sCol, tmp0, bufRow, cols, len, 1, block, sclRaw);
                     }
                     else
@@ -329,7 +339,7 @@ namespace NumSharp
                 return;
             }
             using (var win = MovedView(buf, ws, len, md))
-                InPlace(BinaryOp.Multiply, win, sclNum, "multiply");
+                ScaleInPlace(win, sclNum);
             plainKernel(null, 0, 0, tmp0, bufRow, cols, len, 1, block, null);
         }
 
@@ -340,16 +350,25 @@ namespace NumSharp
         /// <param name="basis">The basis ({p}val's).</param><param name="buf">The buffer.</param>
         /// <param name="ws">tmp[0]'s row.</param><param name="len">len(tmp).</param><param name="md">Moved dims.</param>
         /// <param name="oneD">A 1-D series.</param><param name="t">The coefficient dtype.</param>
-        /// <param name="ki">The order's constant.</param><param name="lbndArg">The lower bound.</param>
-        /// <exception cref="ValueError">An array constant for a real 1-D series (NumPy's setitem text), or a constant whose
-        ///     broadcast would stretch tmp[0].</exception>
+        /// <param name="kRaw">The order's constant as <see cref="IntegrationConstants"/> holds it (converted here, AFTER
+        ///     {p}val ran: Python evaluates <c>k[i] - chebval(lbnd, tmp)</c> left to right and only the subtraction
+        ///     converts <c>k[i]</c>, so an lbnd error is reported before a constant's).</param>
+        /// <param name="lbndArg">The lower bound.</param>
+        /// <exception cref="ValueError">An array constant for a real 1-D series (NumPy's setitem text), a constant whose
+        ///     broadcast would stretch tmp[0], or a ragged constant (np.array's inhomogeneous-shape text).</exception>
         /// <exception cref="TypeError">An array constant for a complex 1-D series (<c>complex()</c>'s text).</exception>
         /// <exception cref="ArgumentException">A result tmp[0] cannot hold in place (N-D) — named complex64 where NumPy's
         ///     value is complex64.</exception>
         /// <exception cref="IncorrectShapeException">A constant that does not broadcast with tmp[0] (N-D).</exception>
+        /// <exception cref="OverflowException">A Python-int lbnd or constant too large for the series' dtype.</exception>
+        /// <exception cref="NotSupportedException">A str lbnd (NumPy evaluates the series AT it — a str-dtype error), or a str /
+        ///     None constant.</exception>
         private static void Correct(PolyBasis basis, NDArray buf, long ws, long len, long[] md, bool oneD, NPTypeCode t,
-            in PolyNumber ki, object lbndArg)
+            object kRaw, object lbndArg)
         {
+            // np.ndim('a') is 0, so a str lbnd passes the scalar check and NumPy only fails here, at {p}val(lbnd, tmp).
+            if (lbndArg is string)
+                throw new NotSupportedException("a str lbnd makes NumPy evaluate the series at a str, which NumSharp has no dtype for");
             // A Python complex lbnd against a float16/float32 series is NumPy's complex64 loop: {p}val's value is a
             // complex64 (a 1-D series) or complex64 array (N-D), which NumSharp's single complex width carries as
             // complex128 — so the 1-D value is interpreted in NumPy's complex64 scalarmath here (PyVal1D), and the N-D
@@ -368,7 +387,7 @@ namespace NumSharp
                     using (var val = NDPolyEval.Val(basis, lbndArg, tmp, tensor: true))
                         v = PolyNumber.ScalarOf(val);
                 }
-                var r = PolyNumber.Binary(BinaryOp.Subtract, ki, v);
+                var r = PolyNumber.Binary(BinaryOp.Subtract, Constant(kRaw), v);
                 StoreFirst(p, t, PolyNumber.Binary(BinaryOp.Add, PolyNumber.FromScalar(t, p), r));
                 return;
             }
@@ -378,6 +397,7 @@ namespace NumSharp
                 arr = NDPolyEval.Val(basis, lbndArg, tmp, tensor: true);
             try
             {
+                var ki = Constant(kRaw);
                 var r = PolyNumber.Binary(BinaryOp.Subtract, ki, PolyNumber.FromArray(arr));
                 bool rC64 = PolyNumber.IsComplex64Loop(ki, valC64 ? NPTypeCode.Complex : arr.typecode, valC64);
                 using (var row0 = RowView(buf, ws, md))
@@ -483,9 +503,17 @@ namespace NumSharp
         }
 
         /// <summary>NumPy's <c>c[0] += k[i]</c>: scalarmath + setitem for a 1-D series, an in-place ufunc on the row otherwise.</summary>
-        /// <param name="cm">The moved one-coefficient series.</param><param name="ki">The constant.</param><param name="oneD">A 1-D series.</param>
-        private static void AddToFirstRow(NDArray cm, in PolyNumber ki, bool oneD)
+        /// <param name="cm">The moved one-coefficient series.</param>
+        /// <param name="kRaw">The constant as <see cref="IntegrationConstants"/> holds it (converted here, where NumPy uses it).</param>
+        /// <param name="oneD">A 1-D series.</param>
+        /// <exception cref="ValueError">An array constant into a real 1-D series, a stretching broadcast, or a ragged constant.</exception>
+        /// <exception cref="TypeError">An array constant into a complex 1-D series.</exception>
+        /// <exception cref="ArgumentException">A constant the series cannot absorb in place (NumPy's UFuncTypeError text).</exception>
+        /// <exception cref="IncorrectShapeException">A constant that does not broadcast with the row.</exception>
+        /// <exception cref="NotSupportedException">A str / None constant.</exception>
+        private static void AddToFirstRow(NDArray cm, object kRaw, bool oneD)
         {
+            var ki = Constant(kRaw);
             if (oneD)
             {
                 byte* p = Ptr(cm);
@@ -540,6 +568,44 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     The House route's <c>c *= scl</c> over a buffer window: NumPy's in-place ufunc. For a real operand — an array
+        ///     scl (one factor per column / row / coefficient, derivatives only), or a scalar-sized promotion the kernel has
+        ///     no widened loop for — the house <c>np.multiply(win, scl, out: win, dtype: loop)</c> runs it as one pass in
+        ///     NumPy's loop dtype, exactly NumPy's <c>multiply(c, scl, out=c)</c>; the general <see cref="InPlace"/> would
+        ///     first materialize the whole window in the loop dtype (a float32 window's float64 copy, then the float64
+        ///     product) — two series-sized temporaries per order, 8x the in-place pass's cost on a (11, 100K) float32 series.
+        ///     The loop is PINNED with <c>dtype:</c> rather than left to the house ufunc's own resolution, which computes a
+        ///     float32 window times a 0-d float64 operand in float32 (one ULP off NumPy's float64 loop in the corpus). A
+        ///     complex, decimal or char operand or series keeps <see cref="InPlace"/> (NumPy's complex product forms and the
+        ///     NumSharp-only dtypes are pinned there).
+        /// </summary>
+        /// <param name="win">The window (a C-contiguous view of the calculus buffer, the series' dtype).</param>
+        /// <param name="scl">The scale: a NumPy scalar, a 0-d array, or an array (ClassifyScale has already refused a scale
+        ///     the series cannot absorb with NumPy's cast text).</param>
+        /// <exception cref="IncorrectShapeException">An array scl that does not broadcast with the window (NumPy's text).</exception>
+        /// <exception cref="ValueError">An array scl whose broadcast would stretch the window.</exception>
+        private static void ScaleInPlace(NDArray win, in PolyNumber scl)
+        {
+            var t = win.typecode;
+            bool realSeries = t is NPTypeCode.Half or NPTypeCode.Single or NPTypeCode.Double;
+            bool realOperand = !scl.IsPython && !scl.IsComplex64 && scl.Dtype is not (NPTypeCode.Complex or NPTypeCode.Decimal or NPTypeCode.Char);
+            if (!realSeries || !realOperand)
+            {
+                InPlace(BinaryOp.Multiply, win, scl, "multiply");
+                return;
+            }
+            // NumPy validates the broadcast (target as output) before the loop runs; same texts as InPlace.
+            if (scl.IsNdArray)
+                CheckInPlaceBroadcast(win.Shape, scl.Array.Shape);
+            // A NumPy scalar enters the ufunc as a strong 0-d operand of its own dtype, built here and released after the
+            // pass (an array scl is the caller's and is used as it is); the loop is NumPy's promotion of the two (both
+            // strong), which ClassifyScale already proved casts back into the series same_kind.
+            using NDArray built = scl.Kind == PolyNumberKind.Array ? null : scl.AsArrayOf(scl.Dtype);
+            NPTypeCode loop = PolyTyping.Promote(t, scl.Dtype);
+            np.multiply(win, built ?? scl.Array, @out: win, dtype: loop);
+        }
+
+        /// <summary>
         ///     NpyIter's broadcast of <c>(target, operand, out=target)</c>: incompatible dims raise NumPy's text listing all
         ///     three shapes; a broadcast shape other than the target's raises the non-broadcastable-output text.
         /// </summary>
@@ -590,41 +656,53 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     NumPy's <c>if not np.iterable(k): k = [k]</c> then <c>list(k)</c>: a scalar (or 0-d array) is one constant;
-        ///     a Python list (object[], IList, any other IEnumerable) yields its elements as Python values; an array (an
-        ///     NDArray or typed C# array) yields NumPy scalars (1-D) or row views (N-D).
+        ///     NumPy's <c>if not np.iterable(k): k = [k]</c> then <c>list(k)</c>. An array (an NDArray, a typed C# array,
+        ///     a Memory&lt;T&gt;) yields NumPy scalars (1-D) or row views (N-D) as <see cref="PolyNumber"/>s — a 0-d array
+        ///     is not iterable and is one constant; a Python tuple / list (<see cref="PolySequence.IsSequence"/>) yields its
+        ///     items and a str its characters, RAW: Python converts an item only when its order uses it
+        ///     (<see cref="Constant"/>), so a bad item is reported after the argument checks and after the lbnd
+        ///     evaluation of its order, as in NumPy; anything else is one raw constant.
         /// </summary>
         /// <param name="k">The argument (null: NumPy's default empty list).</param>
-        /// <returns>The constants.</returns>
-        /// <exception cref="NotSupportedException">A string (its characters would be str constants) or a null element.</exception>
-        private static List<PolyNumber> IntegrationConstants(object k)
+        /// <returns>The constants: boxed <see cref="PolyNumber"/>s (array items) or the raw Python items.</returns>
+        private static List<object> IntegrationConstants(object k)
         {
-            var list = new List<PolyNumber>();
+            var list = new List<object>();
             switch (k)
             {
                 case null:
                     return list;
-                case string:
-                    throw new NotSupportedException("a str k is iterated into str constants, a dtype NumSharp does not have");
+                case string s:
+                    // A str is iterable: its one-character strs are the constants — refused only when an order uses one.
+                    foreach (char ch in s)
+                        list.Add(ch.ToString());
+                    return list;
                 case NDArray nd:
                     AddArrayItems(list, nd);
                     return list;
-                case Array arr when arr.GetType().GetElementType() != typeof(object):
-                    AddArrayItems(list, np.asanyarray(arr));
-                    return list;
-                case IEnumerable seq:
-                    foreach (var o in seq)
-                        list.Add(PolyNumber.FromObject(o));
-                    return list;
-                default:
-                    list.Add(PolyNumber.FromObject(k));
-                    return list;
             }
+            if (PolySequence.IsArrayLike(k))
+                AddArrayItems(list, np.asanyarray(k));
+            else if (PolySequence.IsSequence(k))
+                list.AddRange(PolySequence.Items(k));
+            else
+                list.Add(k);   // not iterable: k = [k]
+            return list;
         }
 
+        /// <summary>
+        ///     One constant as the operand of its order's arithmetic: an array item as collected, a raw Python item
+        ///     converted by the house mapping (a nested tuple / list by np.array's coercion).
+        /// </summary>
+        /// <param name="kRaw">An entry of <see cref="IntegrationConstants"/>.</param>
+        /// <returns>The operand.</returns>
+        /// <exception cref="ValueError">A ragged tuple / list.</exception>
+        /// <exception cref="NotSupportedException">A str / None item (NumPy's str / object operand).</exception>
+        private static PolyNumber Constant(object kRaw) => kRaw is PolyNumber p ? p : PolyNumber.FromObject(kRaw);
+
         /// <summary><c>list(nd)</c>: a 0-d array is not iterable (one constant); rank 1 yields NumPy scalars, rank ≥ 2 row views.</summary>
-        /// <param name="list">The destination.</param><param name="nd">The array.</param>
-        private static void AddArrayItems(List<PolyNumber> list, NDArray nd)
+        /// <param name="list">The destination (items boxed as <see cref="PolyNumber"/>s).</param><param name="nd">The array.</param>
+        private static void AddArrayItems(List<object> list, NDArray nd)
         {
             if (nd.ndim == 0)
             {
@@ -647,19 +725,30 @@ namespace NumSharp
             }
         }
 
-        /// <summary><c>np.ndim(x)</c> for the lbnd/scl checks: 0 for C# scalars and null (the default), an NDArray's
-        ///     rank, at least 1 for C# arrays and other sequences.</summary>
+        /// <summary>
+        ///     <c>np.ndim(x)</c> for the lbnd/scl checks: 0 for null (the default), a str and every scalar; an NDArray's or
+        ///     typed C# array's rank; 1 for a Memory&lt;T&gt;; a Python tuple / list's <c>asarray(x).ndim</c> — which raises
+        ///     np.array's inhomogeneous ValueError for a ragged one, exactly where NumPy's check does.
+        /// </summary>
         /// <param name="x">The argument.</param>
         /// <returns>The rank (only "nonzero" matters).</returns>
-        private static int NDim(object x) => x switch
+        /// <exception cref="ValueError">A ragged tuple / list.</exception>
+        private static int NDim(object x)
         {
-            null => 0,
-            NDArray nd => nd.ndim,
-            string => 0,
-            Array arr => Math.Max(arr.Rank, 1),
-            IEnumerable => 1,
-            _ => 0,
-        };
+            switch (x)
+            {
+                case null:
+                case string:
+                    return 0;
+                case NDArray nd:
+                    return nd.ndim;
+            }
+            if (PolySequence.IsSequence(x))
+                return PolySequence.NDim(x);
+            if (x is Array arr)
+                return arr.Rank;   // a typed C# array (IsSequence took every other array)
+            return PolySequence.IsArrayLike(x) ? 1 : 0;
+        }
 
         /// <summary><c>normalize_axis_index(axis, ndim)</c>.</summary>
         /// <param name="axis">The axis.</param><param name="ndim">The rank.</param>
@@ -674,18 +763,25 @@ namespace NumSharp
 
         /// <summary>
         ///     How <c>c *= scl</c> runs, raising NumPy's cast error up front. The loop dtype is NEP 50's (a Python scl is
-        ///     weak and adopts the series dtype); when it is the series dtype and scl is scalar-sized, the kernel folds the
-        ///     multiply in, with scl converted exactly as NumPy converts the operand entering its loop.
+        ///     weak and adopts the series dtype; a strong one — a NumPy scalar, a 0-d array — may promote it). A scalar-sized
+        ///     scl the kernel folds in: in the series dtype, or — for a promoting strong scalar on a float16 / float32 series
+        ///     (<see cref="PolyCalcKey.HasWidenedScale"/>) — in the wider loop, the series widened, multiplied and cast back per
+        ///     element; either way scl is converted exactly as NumPy converts the operand entering its loop. An array scl
+        ///     (derivatives only) and the remaining promotions (decimal) run as NumPy's in-place ufunc per order.
         /// </summary>
         /// <param name="scl">The argument (null: NumPy's Python int 1).</param>
         /// <param name="t">The series dtype.</param>
         /// <param name="num">The scale as a <see cref="PolyNumber"/>.</param>
         /// <param name="raw">16 bytes that receive the converted scalar (Fused route).</param>
+        /// <param name="scaleLoop">The loop dtype the Fused kernel multiplies in (<paramref name="t"/>, or the wider loop);
+        ///     <see cref="NPTypeCode.Empty"/> for the House route.</param>
         /// <returns>The route.</returns>
         /// <exception cref="ArgumentException">A scl whose loop dtype cannot be cast back into the series (NumPy's
         ///     UFuncTypeError text).</exception>
         /// <exception cref="NotSupportedException">A string scl.</exception>
-        private static ScaleRoute ClassifyScale(object scl, NPTypeCode t, out PolyNumber num, byte* raw)
+        /// <exception cref="ValueError">A ragged list / tuple scl.</exception>
+        /// <exception cref="OverflowException">A Python int scl too large for the series' dtype.</exception>
+        private static ScaleRoute ClassifyScale(object scl, NPTypeCode t, out PolyNumber num, byte* raw, out NPTypeCode scaleLoop)
         {
             num = scl is null ? PolyNumber.FromPython(s_one) : PolyNumber.FromObject(scl);
             var loop = num.IsPython ? PolyNumber.WeakPromote(t, num.Py) : PolyTyping.Promote(t, num.Dtype);
@@ -696,11 +792,13 @@ namespace NumSharp
                 throw new ArgumentException($"Cannot cast ufunc 'multiply' output from dtype('{loopName}') to " +
                                             $"dtype('{t.AsNumpyDtypeName()}') with casting rule 'same_kind'");
             }
-            if (loop == t && !num.IsNdArray)
+            if (!num.IsNdArray && (loop == t || PolyCalcKey.HasWidenedScale(t, loop)))
             {
-                num.WriteAs(t, raw);
+                num.WriteAs(loop, raw);
+                scaleLoop = loop;
                 return ScaleRoute.Fused;
             }
+            scaleLoop = NPTypeCode.Empty;
             return ScaleRoute.House;
         }
 

@@ -25,51 +25,68 @@ namespace NumSharp
         ///     (<c>2*x</c>, <c>1 - x</c>) is done in double as CPython does, and a 1-D series then yields a 0-d result.
         ///     <c>char</c>/<see cref="System.Half"/>/<c>decimal</c> are strong 0-d arrays.
         /// </param>
-        /// <param name="c">Coefficients, low degree first; for an N-D array the series run along axis 0 and the other
+        /// <param name="c">Coefficients (anything <c>np.array</c> accepts — an <see cref="NDArray"/> of any layout, a typed C# array, a Python tuple / list such as a ValueTuple, <c>object[]</c> or a jagged / <c>NDArray[]</c> array, nested to any depth, or a scalar), low degree first; for an N-D array the series run along axis 0 and the other
         ///     axes index independent series. Integer and bool coefficients are evaluated as float64.</param>
         /// <param name="tensor">When true (the default) and x is an array, every series is evaluated at every point
         ///     and the result has shape <c>c.shape[1:] + x.shape</c>; when false x is broadcast over the series
         ///     (<c>c.shape[1:]</c> against <c>x.shape</c>). Irrelevant for a 1-D series or a scalar x.</param>
         /// <returns>The values, of NumPy's result dtype.</returns>
-        /// <exception cref="System.ArgumentNullException"><paramref name="x"/> or <paramref name="c"/> is null.</exception>
+        /// <exception cref="System.ArgumentNullException"><paramref name="x"/> is null.</exception>
+        /// <exception cref="ValueError">A ragged tuple / list <paramref name="c"/> or <paramref name="x"/> (np.array's
+        ///     inhomogeneous-shape text; c is converted first, so its error wins).</exception>
+        /// <exception cref="System.NotSupportedException">A null or str <paramref name="c"/>, or a tuple / list holding a
+        ///     str or null (NumPy builds an object / str array, dtypes NumSharp does not have).</exception>
         /// <exception cref="IndexError"><paramref name="c"/> is empty: <c>index -2 is out of bounds for axis 0 with size 0</c>.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="tensor"/> is false and the shapes do not broadcast
         ///     (NumPy's ValueError text).</exception>
         /// <exception cref="System.OverflowException">A Python int of the recurrence does not fit an integer x dtype
         ///     (NumPy's OverflowError).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.chebyshev.chebval.html</remarks>
-        public NDArray chebval(object x, NDArray c, bool tensor = true) => NDPolyEval.Val(PolyBasis.Chebyshev, x, c, tensor);
+        public NDArray chebval(object x, object c, bool tensor = true) => NDPolyEval.Val(PolyBasis.Chebyshev, x, c, tensor);
 
         /// <summary>
         ///     Evaluates the 2-D Chebyshev series of the first kind <c>Σ c[i,j] * T_i(x) * T_j(y)</c> at the point pairs <c>(x, y)</c>.
         ///     NumPy's <c>_valnd</c>: <c>chebval(x, c)</c> then <c>chebval(y, ·, tensor=False)</c> — its exact
         ///     intermediate, so the bits match.
         /// </summary>
-        /// <param name="x">First coordinates. Scalars become 0-d arrays (NumPy's <c>np.asanyarray</c>).</param>
-        /// <param name="y">Second coordinates; must have <paramref name="x"/>'s shape.</param>
-        /// <param name="c">Coefficients; <c>c[i,j]</c> is the coefficient of the degree (i, j) term. Extra trailing
+        /// <param name="x">First coordinates: an <see cref="NDArray"/>, a typed C# array, a Python tuple / list (np.array's coercion) or a
+        ///     scalar, converted before anything else (NumPy's <c>np.asanyarray</c>) — so a scalar is a STRONG 0-d array
+        ///     (a Python int an int64 one).</param>
+        /// <param name="y">Second coordinates (converted like <paramref name="x"/>); must have x's shape.</param>
+        /// <param name="c">Coefficients (anything <c>np.array</c> accepts — an <see cref="NDArray"/> of any layout, a typed C# array, a Python tuple / list such as a ValueTuple, <c>object[]</c> or a jagged / <c>NDArray[]</c> array, nested to any depth, or a scalar); <c>c[i,j]</c> is the coefficient of the degree (i, j) term. Extra trailing
         ///     axes index independent series (they lead the result's shape).</param>
         /// <returns>The values, shape <c>c.shape[2:] + x.shape</c>.</returns>
-        /// <exception cref="System.ArgumentNullException">An argument is null.</exception>
-        /// <exception cref="ValueError">x and y differ in shape: <c>x, y are incompatible</c>.</exception>
+        /// <exception cref="System.ArgumentNullException">A coordinate (or <c>pts</c>) is null; a null c is
+        ///     <see cref="System.NotSupportedException"/> (NumPy's object array).</exception>
+        /// <exception cref="ValueError">x and y differ in shape (<c>x, y are incompatible</c>), or a tuple / list argument
+        ///     is ragged (np.array's inhomogeneous-shape text: the coordinates' before the shape check, c's after
+        ///     it).</exception>
+        /// <exception cref="System.NotSupportedException">A null or str <paramref name="c"/>, a str coordinate, or a
+        ///     tuple / list holding one (NumPy's object / str arrays).</exception>
         /// <exception cref="IndexError"><paramref name="c"/> is empty along axis 0.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.chebyshev.chebval2d.html</remarks>
-        public NDArray chebval2d(NDArray x, NDArray y, NDArray c) => NDPolyEval.ValNd(PolyBasis.Chebyshev, c, new[] { x, y });
+        public NDArray chebval2d(object x, object y, object c) => NDPolyEval.ValNd(PolyBasis.Chebyshev, c, new[] { x, y });
 
         /// <summary>
         ///     Evaluates the 3-D Chebyshev series of the first kind at the point triples <c>(x, y, z)</c> (NumPy's <c>_valnd</c>: one tensor
         ///     pass, then two per-point passes).
         /// </summary>
-        /// <param name="x">First coordinates.</param>
-        /// <param name="y">Second coordinates (x's shape).</param>
-        /// <param name="z">Third coordinates (x's shape).</param>
-        /// <param name="c">Coefficients; <c>c[i,j,k]</c> is the coefficient of the degree (i, j, k) term.</param>
+        /// <param name="x">First coordinates: an <see cref="NDArray"/>, a typed C# array, a Python tuple / list (np.array's coercion) or a
+        ///     scalar, converted before anything else (NumPy's <c>np.asanyarray</c>) — so a scalar is a STRONG 0-d array
+        ///     (a Python int an int64 one).</param>
+        /// <param name="y">Second coordinates (converted like <paramref name="x"/>; x's shape).</param>
+        /// <param name="z">Third coordinates (converted like <paramref name="x"/>; x's shape).</param>
+        /// <param name="c">Coefficients (anything <c>np.array</c> accepts — an <see cref="NDArray"/> of any layout, a typed C# array, a Python tuple / list such as a ValueTuple, <c>object[]</c> or a jagged / <c>NDArray[]</c> array, nested to any depth, or a scalar); <c>c[i,j,k]</c> is the coefficient of the degree (i, j, k) term.</param>
         /// <returns>The values, shape <c>c.shape[3:] + x.shape</c>.</returns>
-        /// <exception cref="System.ArgumentNullException">An argument is null.</exception>
-        /// <exception cref="ValueError">The coordinates differ in shape: <c>x, y, z are incompatible</c>.</exception>
+        /// <exception cref="System.ArgumentNullException">A coordinate (or <c>pts</c>) is null; a null c is
+        ///     <see cref="System.NotSupportedException"/> (NumPy's object array).</exception>
+        /// <exception cref="ValueError">The coordinates differ in shape (<c>x, y, z are incompatible</c>), or a tuple /
+        ///     list argument is ragged (the coordinates' before the shape check, c's after it).</exception>
+        /// <exception cref="System.NotSupportedException">A null or str <paramref name="c"/>, a str coordinate, or a
+        ///     tuple / list holding one (NumPy's object / str arrays).</exception>
         /// <exception cref="IndexError"><paramref name="c"/> is empty along axis 0.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.chebyshev.chebval3d.html</remarks>
-        public NDArray chebval3d(NDArray x, NDArray y, NDArray z, NDArray c) => NDPolyEval.ValNd(PolyBasis.Chebyshev, c, new[] { x, y, z });
+        public NDArray chebval3d(object x, object y, object z, object c) => NDPolyEval.ValNd(PolyBasis.Chebyshev, c, new[] { x, y, z });
 
         /// <summary>
         ///     Evaluates the 2-D Chebyshev series of the first kind on the Cartesian product of <paramref name="x"/> and <paramref name="y"/>
@@ -78,12 +95,17 @@ namespace NumSharp
         /// </summary>
         /// <param name="x">First-axis points (array or Python scalar, as in <see cref="chebval"/>).</param>
         /// <param name="y">Second-axis points.</param>
-        /// <param name="c">Coefficients; <c>c[i,j]</c> is the coefficient of the degree (i, j) term.</param>
+        /// <param name="c">Coefficients (anything <c>np.array</c> accepts — an <see cref="NDArray"/> of any layout, a typed C# array, a Python tuple / list such as a ValueTuple, <c>object[]</c> or a jagged / <c>NDArray[]</c> array, nested to any depth, or a scalar); <c>c[i,j]</c> is the coefficient of the degree (i, j) term.</param>
         /// <returns>The grid, shape <c>c.shape[2:] + x.shape + y.shape</c>.</returns>
-        /// <exception cref="System.ArgumentNullException">An argument is null.</exception>
+        /// <exception cref="System.ArgumentNullException">A coordinate (or <c>pts</c>) is null; a null c is
+        ///     <see cref="System.NotSupportedException"/> (NumPy's object array).</exception>
         /// <exception cref="IndexError"><paramref name="c"/> is empty along an evaluated axis.</exception>
+        /// <exception cref="ValueError">A ragged tuple / list c or point argument (np.array's inhomogeneous-shape
+        ///     text; c is converted before the first points).</exception>
+        /// <exception cref="System.NotSupportedException">A null or str <paramref name="c"/>, or a tuple / list
+        ///     holding a str / null.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.chebyshev.chebgrid2d.html</remarks>
-        public NDArray chebgrid2d(object x, object y, NDArray c) => NDPolyEval.GridNd(PolyBasis.Chebyshev, c, new[] { x, y });
+        public NDArray chebgrid2d(object x, object y, object c) => NDPolyEval.GridNd(PolyBasis.Chebyshev, c, new[] { x, y });
 
         /// <summary>
         ///     Evaluates the 3-D Chebyshev series of the first kind on the Cartesian product of <paramref name="x"/>, <paramref name="y"/> and
@@ -92,26 +114,35 @@ namespace NumSharp
         /// <param name="x">First-axis points.</param>
         /// <param name="y">Second-axis points.</param>
         /// <param name="z">Third-axis points.</param>
-        /// <param name="c">Coefficients; <c>c[i,j,k]</c> is the coefficient of the degree (i, j, k) term.</param>
+        /// <param name="c">Coefficients (anything <c>np.array</c> accepts — an <see cref="NDArray"/> of any layout, a typed C# array, a Python tuple / list such as a ValueTuple, <c>object[]</c> or a jagged / <c>NDArray[]</c> array, nested to any depth, or a scalar); <c>c[i,j,k]</c> is the coefficient of the degree (i, j, k) term.</param>
         /// <returns>The grid, shape <c>c.shape[3:] + x.shape + y.shape + z.shape</c>.</returns>
-        /// <exception cref="System.ArgumentNullException">An argument is null.</exception>
+        /// <exception cref="System.ArgumentNullException">A coordinate (or <c>pts</c>) is null; a null c is
+        ///     <see cref="System.NotSupportedException"/> (NumPy's object array).</exception>
         /// <exception cref="IndexError"><paramref name="c"/> is empty along an evaluated axis.</exception>
+        /// <exception cref="ValueError">A ragged tuple / list c or point argument (np.array's inhomogeneous-shape
+        ///     text; c is converted before the first points).</exception>
+        /// <exception cref="System.NotSupportedException">A null or str <paramref name="c"/>, or a tuple / list
+        ///     holding a str / null.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.chebyshev.chebgrid3d.html</remarks>
-        public NDArray chebgrid3d(object x, object y, object z, NDArray c) => NDPolyEval.GridNd(PolyBasis.Chebyshev, c, new[] { x, y, z });
+        public NDArray chebgrid3d(object x, object y, object z, object c) => NDPolyEval.GridNd(PolyBasis.Chebyshev, c, new[] { x, y, z });
 
         /// <summary>
         ///     Evaluates the N-D Chebyshev series of the first kind at the points <c>pts = (x, y, …)</c> — the n-dimensional
         ///     <see cref="chebval2d"/>. Added in NumPy's development branch (<c>pu._valnd(chebval, c, *pts)</c>); not in
         ///     NumPy 2.4.2, where the same computation is the private <c>polyutils._valnd</c>.
         /// </summary>
-        /// <param name="pts">The coordinate arrays, all of one shape (one per series axis evaluated).</param>
-        /// <param name="c">Coefficients; axis i is <c>pts[i]</c>'s degree.</param>
+        /// <param name="pts">The coordinates, all of one shape (one per series axis evaluated): each an
+        ///     <see cref="NDArray"/>, a typed C# array, a Python tuple / list or a scalar, converted first as in
+        ///     <c>_valnd</c> (a scalar is a STRONG 0-d array). An <c>NDArray[]</c> passes as it is.</param>
+        /// <param name="c">Coefficients (anything <c>np.array</c> accepts — an <see cref="NDArray"/> of any layout, a typed C# array, a Python tuple / list such as a ValueTuple, <c>object[]</c> or a jagged / <c>NDArray[]</c> array, nested to any depth, or a scalar); axis i is <c>pts[i]</c>'s degree.</param>
         /// <returns>The values, shape <c>c.shape[len(pts):] + pts[0].shape</c>.</returns>
-        /// <exception cref="System.ArgumentNullException">An argument is null.</exception>
+        /// <exception cref="System.ArgumentNullException">A coordinate (or <c>pts</c>) is null; a null c is
+        ///     <see cref="System.NotSupportedException"/> (NumPy's object array).</exception>
         /// <exception cref="IndexError"><paramref name="pts"/> is empty (<c>list index out of range</c>).</exception>
-        /// <exception cref="ValueError">The coordinates differ in shape.</exception>
+        /// <exception cref="ValueError">The coordinates differ in shape, or a tuple / list argument is ragged.</exception>
+        /// <exception cref="System.NotSupportedException">A null or str <paramref name="c"/>, or a str coordinate.</exception>
         /// <remarks>https://numpy.org/devdocs/reference/generated/numpy.polynomial.chebyshev.chebvalnd.html</remarks>
-        public NDArray chebvalnd(NDArray[] pts, NDArray c) => NDPolyEval.ValNd(PolyBasis.Chebyshev, c, pts);
+        public NDArray chebvalnd(object[] pts, object c) => NDPolyEval.ValNd(PolyBasis.Chebyshev, c, pts);
 
         // ---- U1: constants, line, add/sub, trim ----
 

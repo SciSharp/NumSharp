@@ -28,7 +28,8 @@ using NumSharp.Utilities;
 // house NEP 50 convention: bool, every integer primitive, float, double and Complex are PYTHON scalars
 // (weak); Half, char and decimal have no Python literal and are NumPy SCALARS (strong); an NDArray is an
 // ndarray (a 0-d one included — NumPy's np.asanyarray keeps it an array); a typed C# array is an ndarray of
-// its element dtype, while object[]/IList/ValueTuple are Python sequences (see NDPolySeries).
+// its element dtype, while a ValueTuple, object[] (and any other non-dtype array: jagged, NDArray[]) and any other
+// IList/IEnumerable are Python sequences, coerced by np.array's nested discovery (see NDPolySequence).
 //
 // A NumPy scalar's value lives inline (16 raw bytes — every NumSharp dtype fits), so scalarmath chains such
 // as mapparms' seven operations never allocate; only an ndarray operand reaches the NDArray ufuncs.
@@ -194,13 +195,16 @@ namespace NumSharp
         /// <summary>
         ///     Classifies a C# value by the house NEP 50 mapping: bool / integer primitives / BigInteger / float /
         ///     double / Complex are Python scalars; Half / char / decimal are NumPy scalars of their dtype; an
-        ///     NDArray is an ndarray; any other C# array or enumerable is converted with
-        ///     <see cref="np.asanyarray(object, DType, char)"/> to an ndarray.
+        ///     NDArray is an ndarray; a typed C# array (or <see cref="Memory{T}"/>) of a dtype is converted with
+        ///     <see cref="np.asanyarray(object, DType, char)"/> to an ndarray; a Python SEQUENCE — a tuple
+        ///     (<see cref="ITuple"/>), <c>object[]</c> or any other non-dtype C# array (jagged, <c>NDArray[]</c>), any other
+        ///     enumerable — is coerced by np.array's rules, nested to any depth (<see cref="PolySequence.ToArray"/>).
         /// </summary>
         /// <param name="o">The value.</param>
         /// <returns>The number.</returns>
         /// <exception cref="NotSupportedException"><paramref name="o"/> is null or a string — NumPy would build an
-        ///     object/str array from it, dtypes NumSharp does not have.</exception>
+        ///     object/str array from it, dtypes NumSharp does not have — or a sequence holding one.</exception>
+        /// <exception cref="ValueError">A ragged sequence (NumPy's inhomogeneous-shape text).</exception>
         public static PolyNumber FromObject(object o)
         {
             switch (o)
@@ -227,7 +231,10 @@ namespace NumSharp
                 case string:
                     throw new NotSupportedException("a Python str operand makes NumPy build a str/object array, a dtype NumSharp does not have");
                 default:
-                    return FromArray(np.asanyarray(o));
+                    // A Python sequence goes through np.array's coercion (np.asanyarray converts only ONE level of an
+                    // object[] / tuple, and discovers a C# int as int32 where a Python int is int64); an ndarray-like
+                    // (a typed C# array, Memory<T>) converts as a whole.
+                    return FromArray(PolySequence.IsSequence(o) ? PolySequence.ToArray(o) : np.asanyarray(o));
             }
         }
 

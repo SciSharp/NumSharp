@@ -825,7 +825,7 @@ ported float32 kernels get).
 
 ### numpy.polynomial evaluation family (`polyeval` tier)
 
-`polyeval.jsonl` (`gen_oracle.py polyeval`, 16,606 cases, floor 16,100) gates the PACKAGE evaluation
+`polyeval.jsonl` (`gen_oracle.py polyeval`, 19,216 cases, floor 19,100) gates the PACKAGE evaluation
 family — `{p}val`/`{p}val2d`/`{p}val3d`/`{p}grid2d`/`{p}grid3d` for the six bases (`polynomial`,
 `chebyshev`, `legendre`, `laguerre`, `hermite`, `hermite_e`) plus NumSharp's `{p}valnd` twins — **bit-exact,
 0 excused**. Op keys are MODULE-QUALIFIED (`chebyshev.chebval`) because the package reuses the legacy
@@ -837,7 +837,18 @@ computes `2*x`/`x*0`/`(2*nd-1) - x` before NumPy sees them; ints may exceed 64 b
 dtype × 8 series dtypes × coefficient counts 1/2/3/4/7/12, 26 x layouts, N-D series (tensor True/False,
 transposed/reversed/broadcast), Python-scalar and 0-d x, NaN/±inf/-0 coefficients, every vector-lane width
 at 45 points (1-D and per-point series, at the dtype extremes, and column-strided), and the error cells
-(incl. `lagval`'s OverflowError); Char rides the uint16 proxy. Section (I), 4,392 cells, covers single-element
+(incl. `lagval`'s OverflowError); Char rides the uint16 proxy. Section (J), 720 cells from the 2026-09-29 wholeness
+pass, covers the x forms a C# caller spells differently: a Python-sequence x (tuples, nested lists and tuples, mixed
+nesting, empty, complex and bool items, a float16 0-d item, ragged → NumPy's inhomogeneous ValueError), coerced by
+`NDPolySequence`'s port of `np.array`, and a Python int x past int64 (a C# `BigInteger`, WEAK: CPython's int
+arithmetic on the x-only terms, then NumPy's conversion — inf or nan, and OverflowError past float64). Section (K),
+1,890 cells from the same pass, gives c and the ordinates as Python values too (`params["c"]` holds c's spec when it is
+not an operand): a list / tuple / nested / scalar / bool / complex / NumPy-scalar-item / empty / ragged / uint64 c for
+`{p}val` at a weak, an array and a list x (`tensor=False` on the N-D series); list / tuple / Python-scalar / mixed /
+nested / empty ordinates for `{p}val2d`/`{p}val3d`/`{p}grid2d`/`{p}grid3d`/`valnd` against an array, a float32 array
+(a strong int64 ordinate makes it float64, a weak grid scalar keeps float32), a list and a ragged c; and the three
+error orders — a ragged c before a ragged x (the two ragged at DIFFERENT depths, so the texts differ), a ragged
+ordinate before the shape check, the shape check before a ragged c. Section (I), 4,392 cells, covers single-element
 broadcasts: an N-D series at a per-point x whose ONE-element result comes from operands of different ndim.
 NumPy runs those complex products on NpyIter's stride-0 loop, i.e. `CDOUBLE_multiply`'s MSVC-contracted
 fallback, not `simd_cmul`. The cells cover:
@@ -853,7 +864,7 @@ whose NumPy result is complex64 are skipped (one complex width, #569). `OpRegist
 
 ### numpy.polynomial additive family + polyutils (`polyseries` tier)
 
-`polyseries.jsonl` (`gen_oracle.py polyseries`, 18,437 cases, floor 15,000) gates plan unit U1 — `{p}add`,
+`polyseries.jsonl` (`gen_oracle.py polyseries`, 18,647 cases, floor 18,600) gates plan unit U1 — `{p}add`,
 `{p}sub`, `{p}trim`, `{p}line` for the six bases, the 24 module constants `{p}domain/zero/one/x`, and
 `polyutils.as_series/trimseq/trimcoef/getdomain/mapparms/mapdomain` — **bit-exact, 0 excused**. Keys are
 module-qualified like `polyeval`'s. Arguments are NAMED (`c1`, `c2`, `c`, `tol`, `off`, `scl`, `old`, `new`, `x`,
@@ -896,7 +907,17 @@ uint8 (the AVX2 gather and the scalar sub-word copy); and the schedule facts the
 pinned at float64 and float32 over two windows with no scalar tail: a -0.0 early in the HIGHEST lane against a +0.0
 late in lane 0 (NumPy returns the early zero — the cascade lets the higher lane win the tie; a sequential fold would
 return the late one — and the mirror for min), and one NaN with a payload that comes back canonical from a window
-boundary inside the vector section and with its payload from the scalar tail.
+boundary inside the vector section and with its payload from the scalar tail. **(O) Python tuples and nested
+sequences** (184 cases, appended after N, from the 2026-09-29 wholeness pass) — the C# replay's `ValueTuple` (a Python
+tuple) and nested `object[]` (lists), coerced by `NDPolySequence`'s port of `np.array`: tuple operands of
+`polyadd`/`polysub`/`chebadd`/`chebsub` on either side (ints, floats, mixed with a complex, nested → "not 1-d", tuples
+of float32 arrays, the empty tuple, ragged → NumPy's inhomogeneous ValueError), `as_series` iterating a tuple (of
+arrays, tuples, lists, scalars; nested and ragged items; trim on and off), and tuple / nested / ragged / empty inputs
+of `trimcoef`, `getdomain` and `mapdomain`. **(P) `trimseq` of Python sequences** (26 cases) — NumPy returns the KIND
+it was given (the list / tuple itself or its slice); the corpus records `np.asarray` of the result and the replay
+compares the same coercion of what the facade returned: lists and tuples (trailing zeros, none, all, empty, a
+10-item tuple past C#'s 7-item flat ValueTuple), NaN / -0.0 / complex / bool items, float16 0-d items, one-element
+array items (by their truth value), and NumPy's truth-value errors for a tested array item of two elements or none.
 
 `OpRegistry.PolySeries.cs` replays it. **Every `mapparms`/`mapdomain` case runs three routes** — the object
 overload, the generic tuple overload (tuples rebuilt element-typed by reflection, so a Python int is a `long`) and
@@ -909,7 +930,7 @@ object array are skipped (109) — every complex64 SCALAR result and every mapdo
 
 ### numpy.polynomial calculus family (`polycalc` tier)
 
-`polycalc.jsonl` (`gen_oracle.py polycalc`, 21,646 cases, floor 21,000) gates plan unit U4 — `{p}der` and `{p}int`
+`polycalc.jsonl` (`gen_oracle.py polycalc`, 27,526 cases, floor 26,400) gates plan unit U4 — `{p}der` and `{p}int`
 for the six bases, with every parameter (`m`, `k`, `lbnd`, `scl`, `axis`) — **bit-exact, 0 excused**. Keys are
 module-qualified like `polyeval`'s (`chebyshev.chebint`). Arguments are NAMED (`c`, `m`, `k`, `lbnd`, `scl`, `axis`);
 `c`/`k`/`lbnd`/`scl` are `"a"` (the next operand) or a Python-typed spec, so a weak Python `scl`/`lbnd`/constant and
@@ -942,6 +963,31 @@ and of the integral's correction `tmp[0] += k[i] - {p}val(lbnd, tmp)`. The secti
   constant lands): zero, -0.0, NaN, complex and float16 zeros, N-D rows, with the result flags;
 - float16's weak-int constants past its exact integers (2,100 coefficients: `2*(j+1)` rounds to nearest-even) and
   past its range (hermder's `2*j` and polyint's `j + 1` become inf) — 33,000 and 66,000 coefficients.
+
+Three sections were added by the 2026-09-29 wholeness pass (5,880 cases), after a replay of every C# boundary kind
+against NumPy found the sequence conversions wrong (reverting the fix turns 1,278 of them red):
+- **(M) argument kinds** (3,480) — the C# replay turns a Python tuple into a `ValueTuple`, a list into `object[]`, a
+  big Python int into `ulong`/`BigInteger` and a NumPy scalar item into a 0-d array, so these cells drive
+  `NDPolySequence`'s port of `np.array`'s coercion: c as tuples, nested lists/tuples to depth 3, rows of arrays,
+  float16 0-d items, `[2**64-1, 1]` (uint64) and `[2**63, -1]` (float64), empty sequences (`[]`, `()`, `[[], []]`, deep
+  empties, an empty array leaf), and ragged input along every detection path (NumPy's texts, with the shape the walk
+  still agreed on); scl as tuples/lists/nested columns (the `scl must be a scalar.` ndim check), ragged, and Python
+  ints 2^20 / 2^200 / −2^70 / 2^64−1 / 2^1030 (inf in float32/float16, OverflowError past float64); k as tuples,
+  lists of tuples, nested rows, big ints, strs (their characters) and ragged items — converted only when their order
+  runs, AFTER that order's `{p}val`, so an overflowing lbnd wins; lbnd as tuples/lists/ragged/big ints, and a str
+  lbnd, which fails only where NumPy evaluates at it (not for m == 0, not in the one-coefficient zero branch, not before
+  an array scl's or a bad axis' own error);
+- **(N) zero-size, 5-D and extreme-int series** (1,728) — shapes (3,0) (0,3) (1,0) (3,0,2) (2,0,0) at every axis with
+  m 1/2 (values + flags, integrals with k), a (2,3,1,2,3) float64/complex128 series at every axis, and the extremes
+  of every integer width (min, max, ±1 from them, ⅓ of them) through the converting direct load's vector lanes and
+  scalar tail;
+- **(O) the widened `c *= scl`** (672) — a strong scale that promotes the series runs NumPy's wider multiply loop and
+  casts back: float16 products just past a float16 tie (`_pc_f16_hazards`; NumPy rounds float64 → float16 ONCE), NaN
+  and inf coefficients and scales (the series' NaN wins), a float16 series' float32 loop (int16 2049, float32 0.1,
+  int32 70000 — the exact float32 scale, not a float16 one) and a float32 series' float64 loop (1e300 → inf,
+  2^40+1); 1-D series run the scalar tails, (3, n) series the vector lanes. Planted-bug check: 4 widened-lane mutants
+  (an f64 → f32 → f16 chain in the vector and the scalar helper, a float16-rounded scale, a float32 multiply), 44–73
+  red cases each.
 
 Char rides the uint16 proxy (section A). Cells whose NumPy result is complex64 are skipped (#569). `OpRegistry.
 PolySeries.cs` replays it; a flags case disposes the result it replaces (the leak gate reads an undisposed result
