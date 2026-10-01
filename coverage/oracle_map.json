@@ -140,6 +140,8 @@
     "note": "Tiers that are hard-gated only on the pinned host and Inconclusive elsewhere, beyond the RunHostLibmCorpus(...) tiers oracle_evidence.py discovers from FuzzCorpusTests*.cs by itself.",
     "matmul_parity.jsonl": {"class": "pinned-blas", "reason": "Byte parity through NumSharp.Interop.OpenBLAS; strict only when the content-hash-pinned scipy-openblas loads (matmul_parity.host.jsonl)."},
     "linalg_parity.jsonl": {"class": "pinned-blas", "reason": "LAPACK factorisations through NumSharp.Interop.OpenBLAS at threads=1; strict only on the pinned library (linalg_parity.host.jsonl)."},
+    "polyalgebra_parity.jsonl": {"class": "pinned-blas", "reason": "numpy.polynomial series algebra (U2) whose np.convolve reaches OpenBLAS's vector ?dot kernels; byte parity through NumSharp.Interop.OpenBLAS's ISlidingDotBackend at threads=1, strict only on the pinned library (polyalgebra_parity.host.jsonl)."},
+    "polyroots_parity.jsonl": {"class": "pinned-blas", "reason": "numpy.polynomial {p}roots (U7) that run LAPACK geev through NumSharp.Interop.OpenBLAS at threads=1; strict only on the pinned library (polyroots_parity.host.jsonl)."},
     "random_parity_host.jsonl": {"class": "host-libm", "reason": "Legacy samplers whose transform consumes libm; authored against the win-amd64 CRT, Inconclusive elsewhere."},
     "generator_parity_host.jsonl": {"class": "host-libm", "reason": "Generator ziggurat/rejection samplers consume libm; authored against the win-amd64 CRT, Inconclusive elsewhere."},
     "random_api_host.jsonl": {"class": "host-libm", "reason": "Random-API oracle: transform/rejection samplers whose values consume libm; authored against the win-amd64 CRT, Inconclusive elsewhere."},

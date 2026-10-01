@@ -604,6 +604,46 @@ namespace NumSharp.Tests.Fuzz
             }
         }
 
+        // numpy.polynomial companion matrices and roots (plan docs/plans/numpy-polynomial.md U7): {p}companion for the six
+        // bases — every dtype x length (ints / bools / char through float64; the float64 helper vectors of cheb / leg /
+        // herm / herme taking a float16 / float32 series' last column through float64 and ONE rounding, the power / Laguerre
+        // forms staying in the series' dtype), full-mantissa values with a small leading coefficient (float16's quotient
+        // overflowing), the trim / special patterns, every layout of c (0-d, stride-0 broadcast, strided, reversed,
+        // offset), Python-typed series, the object / str series NumPy refuses before computing with Python objects (the
+        // length check on the TRIMMED object array), errors in NumPy's order, result flags and long series — plus the
+        // {p}roots calls that never reach LAPACK: a constant series' empty array in its dtype, a linear series' scalarmath
+        // root (every special-value pair), float16's linalg TypeError and a non-finite companion's LinAlgError. PORTABLE:
+        // + - * / sqrt and cumprod only; the roots that run geev are the host-pinned PolyrootsParity tier.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Polyroots() => RunCorpus("polyroots.jsonl");
+
+        // The {p}roots calls that reach LAPACK geev (np.linalg.eigvals of the companion — rotated [::-1, ::-1] for every
+        // basis but the power series — sorted in place): NumSharp computes them only through NumSharp.Interop.OpenBLAS's
+        // LAPACK seam, the scipy-openblas NumPy itself calls, so the tier is HOST-PINNED exactly like LinalgParity
+        // (threads = 1): Inconclusive, never red, on a host that cannot load the pinned library. Real roots of a float64
+        // series are a strided VIEW of eigvals' complex result (the flags cases record it); a float32 series' complex
+        // roots are NumPy's complex64 values, compared up-cast (np.linalg.eigvals rounds them exactly, #569).
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        [DoNotParallelize]   // Enables/Disables the process-global OpenBLAS engine; must not overlap other tiers.
+        public void PolyrootsParity()
+        {
+            var pin = MatmulParityPin.Load("polyroots_parity.host.jsonl");
+            string mismatch = pin.TryEnableParityBackend();
+            if (mismatch != null)
+                Assert.Inconclusive(mismatch);
+
+            try
+            {
+                RunCorpus("polyroots_parity.jsonl");
+            }
+            finally
+            {
+                NumSharp.Interop.OpenBLAS.OpenBlasEngine.Disable();
+            }
+        }
+
         // W11 operand-relationship flags (section C): input aliasing (a op a, same buffer) and
         // in-place out= (maximum/minimum/clip writing into an input operand).
         [TestMethod]
@@ -821,6 +861,8 @@ namespace NumSharp.Tests.Fuzz
             ["polyvander.jsonl"] = 31000,   // numpy.polynomial Vandermonde family (U5): {p}vander / vander2d / vander3d x 6 bases, sections A-J of gen_polyvander — 16,612 at delivery, 31,180 with the 2026-09-30 wholeness pass (J: the object stack of scalars)
             ["polyalgebra.jsonl"] = 28100,   // numpy.polynomial series algebra (U2): mulx/mul/div/pow/fromroots x 6 bases + X2poly/poly2X x 5, sections A-L of gen_polyalgebra — 26,163 at delivery, 28,144 with the wholeness section (M: pow / maxpower argument kinds, the deferred object refusal, non-finite complex products — 43 of which moved here from the host tier)
             ["polyalgebra_parity.jsonl"] = 135,   // U2's BLAS-bound products (host-pinned): 186 at delivery, 139 once complex products with infinities / NaNs below zdotu's vector block moved to the portable tier (the managed dot reproduces zdotu's C99 result and CDOUBLE_dot's plain loop)
+            ["polyroots.jsonl"] = 6600,   // numpy.polynomial companion matrices + the roots that never reach LAPACK (U7): {p}companion / {p}roots x 6 bases, sections A-J of gen_polyroots — 6,681 at delivery
+            ["polyroots_parity.jsonl"] = 1200,   // U7's roots that run LAPACK geev (host-pinned, threads = 1): 1,242 at delivery
             ["place.jsonl"] = 12,
             ["products.jsonl"] = 326,
             ["precision.jsonl"] = 80,

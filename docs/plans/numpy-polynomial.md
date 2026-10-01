@@ -25,7 +25,7 @@
 | Page section | NumPy API | NumSharp today |
 |---|---|---|
 | Legacy "polynomial module" (`numpy.lib.polynomial`) | `poly1d`, `polyval`, `poly`, `roots`, `polyfit`, `polyder`, `polyint`, `polyadd`, `polydiv`, `polymul`, `polysub` | **Done** — all 11 functions and `poly1d(c_or_r, r, variable)`, byte-exact. Oracle: `poly.jsonl` (portable); `roots`, `polyfit` and `poly`-of-a-matrix are in host-pinned `linalg_parity`. Unit tests + live-parity tests. Only `RankWarning` is absent: NumSharp emits no warnings anywhere. |
-| "Polynomial package" (`numpy.polynomial`) | 6 modules × ~31 names, `polyutils`, 6 classes, `set_default_printstyle` | **U3 + U1 + U4 + U2 + U5 delivered** — 160 of 193 names: the evaluation family (36, `polyvalfromroots` open), the additive family with `polyutils` (54: `{p}add/sub/trim/line`, the 24 constants, `as_series`/`trimseq`/`trimcoef`/`getdomain`/`mapparms`/`mapdomain`), the calculus family (12: `{p}der`/`{p}int`), the series algebra (40: `{p}mulx/mul/div/pow/fromroots`, `X2poly`/`poly2X`) and the Vandermonde family (18: `{p}vander`/`{p}vander2d`/`{p}vander3d`), all bit-exact (`polyeval.jsonl` 19,216 + `polyseries.jsonl` 18,698 + `polycalc.jsonl` 27,526 + `polyalgebra.jsonl` 28,144 + `polyvander.jsonl` 31,180 cases; the BLAS-bound products byte-exact with the OpenBLAS backend, `polyalgebra_parity.jsonl` 139). Facade `np.polynomial.{polynomial,chebyshev,legendre,laguerre,hermite,hermite_e,polyutils}`; 0 of 6 classes. `coverage/generate_coverage.py` catalogues all seven `numpy.polynomial.*` submodules as out-of-headline surfaces. |
+| "Polynomial package" (`numpy.polynomial`) | 6 modules × ~31 names, `polyutils`, 6 classes, `set_default_printstyle` | **U3 + U1 + U4 + U2 + U5 + U7 delivered** — 172 of 193 names: the evaluation family (36, `polyvalfromroots` open), the additive family with `polyutils` (54: `{p}add/sub/trim/line`, the 24 constants, `as_series`/`trimseq`/`trimcoef`/`getdomain`/`mapparms`/`mapdomain`), the calculus family (12: `{p}der`/`{p}int`), the series algebra (40: `{p}mulx/mul/div/pow/fromroots`, `X2poly`/`poly2X`), the Vandermonde family (18: `{p}vander`/`{p}vander2d`/`{p}vander3d`) and the companion / roots pair (12: `{p}companion`/`{p}roots`), all bit-exact (`polyeval.jsonl` 19,216 + `polyseries.jsonl` 18,698 + `polycalc.jsonl` 27,526 + `polyalgebra.jsonl` 28,144 + `polyvander.jsonl` 31,180 + `polyroots.jsonl` 6,681 cases; the BLAS-bound products and the LAPACK-bound roots byte-exact with the OpenBLAS backend, `polyalgebra_parity.jsonl` 139 + `polyroots_parity.jsonl` 1,242). Facade `np.polynomial.{polynomial,chebyshev,legendre,laguerre,hermite,hermite_e,polyutils}`; 0 of 6 classes. `coverage/generate_coverage.py` catalogues all seven `numpy.polynomial.*` submodules as out-of-headline surfaces. |
 | "Transition guide" | the reversed coefficient order; `Polynomial.fit(...).convert()` | Documentation only. It is a real hazard for us, though, because the new package **reuses the legacy names with the opposite coefficient order** (§2 D5). |
 
 User demand on record: issue **#496** "Can NumSharp fit polynomial surface equations?" — that is exactly
@@ -828,7 +828,92 @@ machine-partitioned; the counts sum to 193 with no overlap (Appendix A).
 - **Closes #496** (together with U5).
 - **Tests to port:** `TestFitting` × 6.
 
-### U7 — Companion and roots (12 names)
+### U7 — Companion and roots (12 names) — DELIVERED 2026-10-01
+
+**As built.** Where the build diverges from the plan below, this block wins; the plan is kept for the record.
+- **Engine.** `Polynomial/Package/NDPolyAlgebra.Roots.cs`, a partial of U2's `NDPolyAlgebra` on its arena:
+  - `{p}companion` runs as_series, then fewer than two terms after trimming raise `Series must have maximum degree of
+    at least 1.`, two terms give the linear root's 1×1 matrix, and otherwise NumPy's statements build the matrix;
+  - the matrix statements: `np.zeros((n, n))`; the diagonals through `mat.reshape(-1)[k::n+1]`
+    (`GetDiagWriteKernel`, with a stride-0 source broadcasting a scalar); ONE in-place update of the last column;
+  - the linear root is NumPy's scalarmath on the series' scalars (`PolyNumber`): `-c0/c1`, lag `1 + c0/c1` (the Python
+    int is weak), herm `-.5*c0/c1` (the Python float multiplies first);
+  - every element operation runs through the house kernel NumPy's statement runs through: binary ufunc loops (`House`),
+    the conversions (`GetPolyCastKernel`), np.sqrt's unary loop, np.multiply.accumulate's sequential scan (herm /
+    herme's `scl`), and np.arange through a new int64 ramp IL kernel (`DirectILKernelGenerator.PolyRoots.cs`);
+  - `{p}roots`: as_series; an empty array of the series dtype below two terms; the linear root as a 1-element array;
+    otherwise `np.linalg.eigvals` of the companion — rotated for every basis but the power series (`np.flip` over both
+    axes: NumPy's `[::-1, ::-1]` view, no slice string) — sorted in place. Real roots are a VIEW of eigvals' complex
+    result (OWNDATA false, stride 16 bytes), exactly NumPy's object.
+- **The dtype rule.** The helper vectors (`scl`, `top`, `mid`) are float64, so where one meets the series the loop is
+  `result_type(c.dtype, float64)`: a float16 / float32 series' cheb / leg / herm / herme last column is computed in
+  float64 and rounded ONCE by the in-place op's output cast; the diagonals are float64 values cast by setitem; poly / lag
+  stay in the series dtype throughout. A complex series runs complex128 loops (the house `simd_cmul`, operand order
+  kept); decimal runs the same statements in decimal. Verified before any code: an explicit Python model of exactly these
+  statements matched NumPy on 9,600 / 9,600 random and special-value series (every basis × float16 / float32 / float64 /
+  complex128, raw bytes, NaN payloads included).
+- **Write-once zero matrix.** `new NDArray(fillZeros: true)` is calloc's lazily zeroed OS pages; the diagonal writes
+  touch every 4 KB page, one demand-zero fault each (~0.9 µs): a degree-200 companion took 75 µs, ~70 of them faulting.
+  The matrix now follows np.tri's policy (`np.PrefersWriteOnce`): up to 64 MiB a pooled buffer cleared by
+  `np.ZeroBytes` (one pass over a hot buffer), above it the OS-zeroed pages (only the touched ones fault).
+- **eigvals' float32 complex result (library-wide fix).** NumPy's `eig`/`eigvals` of a float32 operand return complex64
+  when an eigenvalue is complex: geev runs in double and `astype(complex64)` rounds every component. NumSharp kept the
+  double-precision values, so float32 `{p}roots` differed on 113 of 3,000 probe cases. `CollapseEig` now rounds each
+  component to float32, keeping complex128 (#569): one cast and copy through a float64 view of a contiguous result, the
+  per-lane form for any other layout. The live `EigLiveParityTests` used a float32-exact spectrum (1±1j) and could not
+  see the gap; it now also checks ±i√2 (values and vectors).
+- **`AssertFinite` on the fused kernel.** eig / eigvals' `isfinite(a).all()` now runs `FiniteScan.IsAllFinite`, the
+  `asarray_chkfinite` kernel, instead of a bool temp plus a reduction. The predicate is the same per dtype and layout,
+  including the rotated companion's negative strides; this saves 0.45 µs of eigvals' wrapper on a 10×10.
+- **Object series.** as_series continues in the object dtype, and companion's next statement is the length check on the
+  TRIMMED object array. `ObjectTrimLength` therefore applies Python's `item != 0` scan from the end: `[None, 0]`,
+  `[None, 0.0, -0.0]` and `[2**70, 0]` raise NumPy's ValueError; longer object series are NotSupportedException
+  (NumPy computes with Python objects). Every object series' roots are refused (`[Misaligned]`: NumPy returns
+  `np.array([], dtype=object)` for one term and computes with objects otherwise).
+- **Oracle.**
+  - `polyroots.jsonl` (`gen_oracle.py polyroots`, 6,681 cases, sections A–J) holds every companion and the roots that
+    never reach LAPACK: the constant and linear short cuts, float16's linalg TypeError, a non-finite companion's
+    LinAlgError, and every special-value pair of the linear scalarmath.
+  - `polyroots_parity.jsonl` (1,242 cases) holds the roots that run geev. It is host-pinned like `linalg_parity`
+    (threads = 1, Inconclusive off the pinned host).
+  - The generator splits the two by RECORDING: it replaces `np.linalg.eigvals`, which the modules look up at call
+    time, and geev ran exactly when eigvals got a finite float32 / float64 / complex128 matrix.
+  - A float32 series' complex roots (complex64) are compared by value up-cast.
+  - Both tiers are bit-exact with 0 excused. Planted bugs turned these cases red:
+    - cheb's last column in the series dtype: 21 + 5;
+    - no `[::-1, ::-1]` rotation: 695;
+    - herm's linear root reassociated: 18;
+    - no complex64 rounding: 116.
+  - Unit tests: `Polynomial/PolynomialRootsTests.cs` (14). They cover NumPy's `TestCompanion` and roots cases × 6
+    (polyroots' 1,000 large-root round trips included), byte dumps per basis × float32 / float16 / complex128 / int64,
+    the linear scalarmath dumps, the error order, the object length check, the `[Misaligned]` object roots, the
+    backend-missing path, the view flags, decimal / char, both allocation paths (a NaN-dirtied pooled buffer and a
+    67 MB OS-zeroed one) and the ramp kernel. `LapackEigTests` adds the float32 complex64-values pin.
+- **Perf.** `benchmark/polynomial/polyroots_{numpy.py,bench.cs,report.py}`, committed summary `polyroots_results.md`:
+  229 cells, all bit-exact (NumSharp with OpenBLAS at one thread).
+
+  | Section | min NPY/NS | geomean NPY/NS |
+  |---|---:|---:|
+  | companion, float64 (2–2898 terms) | 0.89 | 7.69 |
+  | companion, other dtypes | 1.42 | 6.77 |
+  | roots, float64 | 0.98 | 2.65 |
+  | roots, other dtypes | 0.99 | 1.84 |
+  | layouts | 1.93 | 6.02 |
+  | Python lists | 1.88 | 4.93 |
+  | **all** | **0.89** | **4.65** |
+
+  Every cell under 1.5× is bound by work both sides do identically (probed):
+  - roots of degree 50 and 200 are LAPACK `geev`, the same scipy-openblas call on both sides (~1.0×);
+  - a degree-10 complex root spends 20.7 of ~22 µs in zgeev, while NumPy's eigvals alone takes 23.8 µs: ceiling
+    1.43× (measured 1.35–1.5×);
+  - a degree-200 companion is zeroing its 320 KB matrix: NumSharp's alloc + zero takes 4.1 µs, NumPy's `np.zeros`
+    3.9 µs, and the rest 0.4–0.8 µs against NumPy's ~3.3 µs of Python statements. That gives 1.27–1.63× from run to
+    run on this host; the pinned cores' hyperthread siblings are shared with desktop load.
+  - the 67 MB power-series companion pays one demand-zero fault per touched page on both sides (~1.0×).
+
+  Measured on the way: a hot 312 KB buffer clears at ~86 GB/s with `Span.Clear`, `InitBlock` or an AVX2 loop (3.6 µs);
+  non-temporal stores took 5.9 µs, and a fused row-by-row build (clear a row, write its nonzeros) was slower than
+  clearing then writing.
 
 - **Scope:** `{p}companion`, `{p}roots`.
 - **Shared backend:**

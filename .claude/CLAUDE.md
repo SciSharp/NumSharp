@@ -2184,7 +2184,7 @@ costs — a property of the problem, not a decision: the products and the LU fam
 |---|---|---|
 | **Products** (CBLAS) | `inner`, `vdot`, `vecdot`, `matvec`, `vecmat`, `tensordot`, `linalg.multi_dot`, `matrix_power` (n ≥ 0), the `linalg` Array-API forms, `linalg.norm` except matrix ord ∈ {2, -2, 'nuc'} | **They compute.** Managed kernels; the `IBlasBackend` invariant holds — a backend changes WHICH implementation runs, never WHETHER an answer exists. **With `NumSharp.Interop.OpenBLAS` referenced**, `dot`/`matmul`/`inner`/`vdot`/`vecdot`/`matvec`/`vecmat` route through cblas for **float32/float64/complex128**, byte-identical to NumPy (complex via `zgemm`/`zgemv`/`zsyrk`/`zdotu`/`zdotc`; `tensordot`/`multi_dot`/`matrix_power` inherit it by composing over `dot`/`matmul`) — the 5 product gufuncs override `IBlasBackend.Try{Inner,Vdot,Vecdot,Matvec,Vecmat}`. |
 | **LU family** (LAPACK LU) | `det`, `slogdet`, `solve`, `inv`, and `tensorinv`/`tensorsolve`/`matrix_power` (n < 0) that compose on them | **They compute — managed fallback (`Backends/Default/LinearAlgebra/ManagedLu.cs`).** Without a backend, a from-scratch right-looking UNBLOCKED LU (`getf2`) + triangular substitution (`getrs`) runs: `allclose` to NumPy (bit-exact for tiny matrices, a few ULP apart as they grow — Core ships no BLOCKED LU to reproduce LAPACK's exact `gemm` accumulation, the same reason the products need the bundled binary for byte-parity), det via the `sign·exp(Σ log|Uᵢᵢ|)` fold (so `det([[5.]])` is `4.999999999999999`, not `5.0`), a singular operand (exact-0 pivot) → `LinAlgError("Singular matrix")` for solve/inv and `(0,-inf)`/det 0 for det/slogdet. The generic `<T,TOps>` core monomorphises for double/Complex (Single upcasts to double, NumPy's lite rule). The double hot loops are hand-written `Vector256<double>`+FMA kernels the same shape as `SimdMatMul`'s micro-kernel — the O(m³) rank-1 elimination is a REGISTER-BLOCKED GER (4 trailing rows/pass, pivot-row vector reused, 4 independent `Fma.MultiplyAddNegated` chains), the substitution's row updates 4×-unrolled FMA axpys — and past `BlockedThreshold`=256 the double factorisation takes a BLOCKED path (`FactorDoubleBlocked`: panel getf2 + laswp + TRSM + Schur GEMM) whose Schur update rides the cache-tiled `SimdMatMul.MatMulDouble`; complex stays scalar. **Faster than NumPy for small matrices** (n≤16: 2.2–4.7× det/inv/solve — dispatch-overhead bound, so SIMD on the tiny loops is a wash), ~parity at n≈64, and **below NumPy for large** (n≥256 ≈ 0.4–0.6×) — capped by the same managed-GEMM-vs-OpenBLAS ceiling as the products (SimdMatMul's managed dgemm is slower than the OpenBLAS dgemm NumPy's getrf calls), which the blocked path narrows but cannot close. **With `NumSharp.Interop.OpenBLAS` referenced** they route through LAPACK `gesv`/`getrf` instead, byte-identical to NumPy. **One documented `[Misaligned]` divergence:** a matrix whose zero pivot only surfaces after several eliminations (textbook `[[1,2,3],[4,5,6],[7,8,9]]`) lands on ~1e-16 in the unblocked kernel where blocked LAPACK cancels to exact 0 — so det is ~0 (allclose) but inv/solve return the large-but-finite inverse instead of raising. |
-| **Other factorisations** (LAPACK) | `cholesky`, `eig`, `eigvals`, `eigh`, `eigvalsh`, `pinv`, `lstsq`, `qr`, `svd`, `svdvals`, `matrix_rank`, `cond`, `norm` matrix ord ∈ {2, -2, 'nuc'} | **No backend: `NotSupportedException` from `TensorEngine`** — Core ships no managed QR/SVD/eigensolver, so there is nothing to fall back to; the message names the NumPy API, the LAPACK routine and the `IBlasBackend.Try*` member. **With `NumSharp.Interop.OpenBLAS` referenced**, these compute through LAPACK for **float32/float64/complex128** (`potrf`/`geev`/`syevd`/`heevd`/`gesdd`/`geqrf`/`orgqr`/`gelsd`), byte-identical to NumPy — float32 upcast to double and cast back exactly as NumPy's `_commonType` forces (complex via the `z` routines); the factorisation `Try*` are overridden in `OpenBlasBackend`. |
+| **Other factorisations** (LAPACK) | `cholesky`, `eig`, `eigvals`, `eigh`, `eigvalsh`, `pinv`, `lstsq`, `qr`, `svd`, `svdvals`, `matrix_rank`, `cond`, `norm` matrix ord ∈ {2, -2, 'nuc'} | **No backend: `NotSupportedException` from `TensorEngine`** — Core ships no managed QR/SVD/eigensolver, so there is nothing to fall back to; the message names the NumPy API, the LAPACK routine and the `IBlasBackend.Try*` member. **With `NumSharp.Interop.OpenBLAS` referenced**, these compute through LAPACK for **float32/float64/complex128** (`potrf`/`geev`/`syevd`/`heevd`/`gesdd`/`geqrf`/`orgqr`/`gelsd`), byte-identical to NumPy — float32 upcast to double and cast back exactly as NumPy's `_commonType` forces (complex via the `z` routines; a float32 operand's COMPLEX `eig`/`eigvals` result is NumPy's complex64 — every component rounded to float32 — carried in complex128, #569); the factorisation `Try*` are overridden in `OpenBlasBackend`. |
 
 **The seam is `TensorEngine.Blas` — one property, not two.** `IBlasBackend.LinearAlgebra.cs` adds 15
 `Try*` members, ALL of them **default interface implementations returning false**, which is what let
@@ -3208,6 +3208,68 @@ Traps:
   both sides. A/B such a kernel change in ONE process,
   interleaving the configurations round by round.
 
+### Polynomial package — companion matrices and roots (U7)
+`{p}companion` and `{p}roots` for the six bases (12 names)
+
+Plan `docs/plans/numpy-polynomial.md` (U7 delivered). **Bit-exact with NumPy 2.4.2**: oracle tier `polyroots.jsonl`
+(6,681 portable cases: every companion, plus the roots that never reach LAPACK) and the host-pinned
+`polyroots_parity.jsonl` (1,242 roots that run geev — byte-exact with `NumSharp.Interop.OpenBLAS` at threads=1,
+Inconclusive off the pinned host), 0 excused; four planted bugs turned 26 / 695 / 18 / 116 cases red. Unit tests
+`Polynomial/PolynomialRootsTests.cs` (14). **Perf (NPY/NS, `benchmark/polynomial/polyroots_*`, 229 cells, every one
+checked): geomean 4.65×** — companion geomean 7.7× (2.2–20× up to degree 50, 4–9× at degree 500–1000), degree-1–10
+roots 1.5–5×. The cells under 1.5× are floors both sides share: LAPACK `geev` for roots of degree ≥ 50 (~1.0×) and
+~90 % of a degree-10 complex root (zgeev 20.7 of ~22 µs: ceiling 1.43×), zeroing the 320 KB degree-200 companion
+(alloc+zero 4.1 µs vs NumPy's `np.zeros` 3.9 µs; 1.27–1.63× run to run), and a 67 MB companion's page faults (~1.0×).
+
+- **Engine** (`Polynomial/Package/NDPolyAlgebra.Roots.cs`, on U2's arena) — NumPy's statements in NumPy's order:
+  - as_series, the length checks, and for two terms the linear root's 1×1 matrix (scalarmath: `-c0/c1`,
+    lag `1 + c0/c1`, herm `-.5*c0/c1`);
+  - `np.zeros((n, n))`, then the diagonals through `mat.reshape(-1)[k::n+1]` (`GetDiagWriteKernel`; a stride-0
+    source broadcasts a scalar), then ONE in-place update of the last column.
+
+  Every element operation runs through the house kernel NumPy's statement runs through: the binary ufunc loops, the
+  conversions, np.sqrt's unary loop, np.multiply.accumulate's scan (herm/herme's `scl`), and np.arange through a new
+  int64 ramp IL kernel (`DirectILKernelGenerator.PolyRoots.cs`). Roots = `np.linalg.eigvals` of the companion — ROTATED
+  for every basis but the power series (`np.flip` over both axes, NumPy's `[::-1, ::-1]` view without a slice string)
+  — sorted in place. Real roots are a VIEW of eigvals' complex result (OWNDATA false, stride 16 bytes), as NumPy's.
+- **The dtype rule decides the bits.** The helper vectors (`scl`, `top`, `mid`) are FLOAT64, so wherever one meets the
+  series the loop is `result_type(c.dtype, float64)`. A float16 / float32 series' cheb / leg / herm / herme last
+  column is therefore computed in float64 and rounded ONCE into the matrix; poly / lag stay in the series dtype.
+  This was verified over 9,600 random / special series with an explicit model of the statements before the code was
+  written.
+- **The zero matrix is a write-once allocation.** `new NDArray(fillZeros: true)` (calloc) handed out fresh OS pages,
+  and the diagonal writes faulted each one: ~0.9 µs a page, 75 µs at degree 200. It now follows np.tri's policy
+  (`np.PrefersWriteOnce`): up to 64 MiB a pooled buffer plus `np.ZeroBytes`; above that, OS-zeroed pages.
+- **Library-wide fixes that rode along:**
+  - **`np.linalg.eig`/`eigvals` of a float32 operand with complex eigenvalues** returned double-precision values.
+    NumPy returns complex64 (geev in double, then `astype(complex64)`). `CollapseEig` now rounds each component to
+    float32, keeping complex128 (#569): one cast and copy through a float64 view of a contiguous result, the per-lane
+    form otherwise. Before the fix 113 of 3,000 float32 probe roots differed, and the live
+    `EigLiveParityTests` matrix (1±1j) was float32-exact, so it could not see the gap; it now has ±i√2 too.
+  - **`AssertFinite`** (eig/eigvals) uses the fused `FiniteScan.IsAllFinite` kernel instead of `np.all(np.isfinite)`.
+    It is the same predicate; the bool temp cost 0.45 of eigvals' 0.9 µs wrapper on a 10×10.
+- **Object series.** as_series goes on in the object dtype, and companion's next statement is the length check on the
+  TRIMMED object array. `ObjectTrimLength` scans Python's `item != 0` from the end, so `[None, 0]` and `[2**70, 0]`
+  raise NumPy's ValueError. Past that check NumPy computes with Python objects, and NumSharp raises
+  NotSupportedException. Roots of an object series are always refused (`[Misaligned]`): NumPy returns
+  `np.array([], dtype=object)` for one term.
+- **Errors in NumPy's order.** as_series' texts come first, then `Series must have maximum degree of at least 1.`.
+  Roots of degree ≥ 2 then meet eigvals' checks in eigvals' order: finiteness (LinAlgError) before dtype (the float16
+  / decimal TypeError). All of these fire before LAPACK, so they need no backend; with no backend, a root of
+  degree ≥ 2 raises MissingBackendException.
+
+Traps:
+- **Decide the host split by recording, not predicting.** The generator replaces `np.linalg.eigvals` per case: the
+  polynomial modules look it up at call time. geev ran exactly when eigvals got a finite float32 / float64 /
+  complex128 matrix.
+- **NumPy's SIMD sort orders value-tied ±0 elements by CPU.** The generator skips such results (none appeared in
+  7,923 cases).
+- **Zeroing is a floor, not overhead.** A hot 312 KB buffer clears at ~86 GB/s whatever the method: `Span.Clear`,
+  `InitBlock` and an AVX2 loop all take 3.6 µs, and non-temporal stores 5.9 µs. A fused row-by-row build was slower.
+- **Never put a `?:` with an `object[]` arm and an `NDArray` arm in a benchmark.** It is typed NDArray through the
+  implicit Array→NDArray conversion. The runner crashed on the list cells until both arms were cast to `object`.
+- **cmd's `%1` splits on commas.** `bench.cmd C/poly/,T/poly/` passes only `C/poly/`.
+
 ### Random (`np.random.*`)
 `bernoulli`, `beta`, `binomial`, `chisquare`, `choice`, `dirichlet`, `exponential`, `f`, `gamma`, `geometric`, `get_bit_generator`, `gumbel`, `hypergeometric`, `laplace`, `logistic`, `lognormal`, `logseries`, `multinomial`, `multivariate_normal`, `negative_binomial`, `noncentral_chisquare`, `noncentral_f`, `normal`, `pareto`, `permutation`, `poisson`, `power`, `rand`, `randint`, `randn`, `random_sample`, `rayleigh`, `seed`, `set_bit_generator`, `shuffle`, `standard_cauchy`, `standard_exponential`, `standard_gamma`, `standard_normal`, `standard_t`, `triangular`, `uniform`, `vonmises`, `wald`, `weibull`, `zipf`
 
@@ -3477,6 +3539,7 @@ non-structured subset would only re-expose `loadtxt`.
 | numpy.polynomial calculus family (U4) | `Polynomial/Package/NDPolyCalc.cs` (`{p}der`/`{p}int` driver: NumPy's prologue, one-buffer orchestration, the integral's lbnd correction, NumPy's result layouts, `PyVal1D`), `Backends/Kernels/Direct/DirectILKernelGenerator.PolyCalculus.cs` (`PolyCalcRoutines` recurrence tables + the per-(basis, direction, dtypes) whole-array kernel: load/convert/scale stage, recurrence stage, column blocks). Oracle `polycalc.jsonl` via `OpRegistry.PolySeries.cs`; benchmark `benchmark/polynomial/polycalc_*` |
 | numpy.polynomial series algebra (U2) | `Polynomial/Package/NDPolyAlgebra.cs` (engine: `PolySer`, the pooled per-thread `PolyArena`, the entry points, the shared statements — as_series, `{p}mulx`, `np.convolve`, `_div`/`_pow`/`_fromroots`), `NDPolyAlgebra.Bases.cs` (the recurrence products, polydiv / chebdiv, the ten conversions), `NDPolyPowerArgument.cs` (`int(pow)` / `power != pow` / `power > maxpower` for the object-typed `{p}pow` overloads), `Backends/Kernels/Direct/DirectILKernelGenerator.PolyAlgebra.cs` (house-kernel / mulx slot fronts + the fused chebmulx IL kernel), `Math/NDArray.SlidingDot{,.Long}.cs` (`SlidingCorrelateInto`, NumPy's per-dtype dotfunc models, the blocked long products). Oracle `polyalgebra.jsonl` + host-pinned `polyalgebra_parity.jsonl` via `OpRegistry.PolyAlgebra.cs`; benchmark `benchmark/polynomial/polyalg_*` |
 | numpy.polynomial Vandermonde family (U5) | `Polynomial/Package/NDPolyVander.cs` (`{p}vander`/`{p}vander2d`/`{p}vander3d` driver: NumPy's statement and error order, the in-place point sources, block sizing, the streamed-product switch, the object stack of scalars — `ObjectScalarPoints` / `MixedDtypeVander`), `NDPolyIndexArgument.cs` (`operator.index` + NumPy's `format(deg, '')` error text), `Backends/Kernels/Direct/DirectILKernelGenerator.PolyVander.cs` (`PolyVanderRoutines` recurrence tables, `PolyVanderOps` NaN-priority multiply + non-temporal stores, the load / recurrence / product / root stages). Oracle `polyvander.jsonl` via `OpRegistry.PolyVander.cs` + `OpRegistry.PolySeries.cs`; benchmark `benchmark/polynomial/polyvander_*` |
+| numpy.polynomial companion / roots (U7) | `Polynomial/Package/NDPolyAlgebra.Roots.cs` (`{p}companion`/`{p}roots`: NumPy's statements over U2's arena — as_series, the length checks, the linear root's scalarmath, the write-once zero matrix, the diagonals through `GetDiagWriteKernel`, the last-column update through the house ufunc / cast / sqrt / cumprod kernels, the rotated `np.linalg.eigvals` + in-place sort; `ObjectTrimLength` for object series), `Backends/Kernels/Direct/DirectILKernelGenerator.PolyRoots.cs` (the int64 ramp IL kernel behind np.arange), `LinearAlgebra/linalg/np.linalg.eig.cs` (`RoundComponentsToSingle`: a float32 operand's complex result carries NumPy's complex64 values). Oracle `polyroots.jsonl` + host-pinned `polyroots_parity.jsonl` via `OpRegistry.PolySeries.cs`; benchmark `benchmark/polynomial/polyroots_*` |
 | Grid / slice-expression DSL | `Creation/np.r_.cs` (`AxisConcatenator` + `RClass`), `Creation/np.c_.cs`, `Creation/np.ogrid.cs` (`OGridClass` + `OGridResult` + shared `nd_grid` helpers), `Creation/np.mgrid.cs` (`MGridClass` + `MGridResult`), `Creation/np.meshgrid.cs` (`MeshgridResult`), `Indexing/np.{ix_,s_}.cs` |
 | Array printing (NumPy parity) | `Backends/Printing/{PrintOptions,Dragon4,ElementFormatters,ArrayFormatter}.cs`, `APIs/np.array2string.cs`, `Casting/NDArray.ToString.cs` |
 | Iterators | `Backends/Iterators/NDIter.cs`, `NDIter.Detach.cs` (ref-struct → managed-owner bridge) |

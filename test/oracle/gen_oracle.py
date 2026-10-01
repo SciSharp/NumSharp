@@ -13638,6 +13638,258 @@ def gen_polyalgebra():
     return cases, host
 
 
+# ---- numpy.polynomial companion matrices and roots (plan U7) -----------------------------------------------------------
+#
+# {p}companion(c) and {p}roots(c) for the six bases. The companion is NumPy's statements over the as_series copy — the
+# zero matrix, diagonals assigned through mat.reshape(-1)[k::n+1], one in-place update of the last column, whose float64
+# helper vectors (cheb / leg / herm / herme) put a float16 / float32 series' last column through float64 and one rounding
+# — so it is portable. {p}roots is np.linalg.eigvals of the companion (ROTATED [::-1, ::-1] for every basis but the power
+# series) sorted in place: a constant series' empty array, a linear series' one scalarmath root and every error NumPy
+# raises before LAPACK (float16's linalg TypeError, a non-finite companion's LinAlgError) are portable; a call that reaches
+# LAPACK geev goes to polyroots_parity.jsonl, host-pinned like linalg_parity (threads = 1).
+#
+# Recorded as NumPy produces them: real roots of a float64 series are a VIEW of eigvals' complex result (OWNDATA false,
+# the flags facet records it); a float32 series' complex roots are complex64, which the replay compares by VALUE (NumSharp
+# carries them as complex128 — np.linalg.eigvals rounds a float32 operand's complex result to complex64 values exactly).
+# Results whose sorted order is not fixed by value — two elements equal by value but different in bits (+0.0 / -0.0) —
+# are skipped: NumPy's SIMD sort orders them by CPU, NumSharp's sort deterministically (the documented divergence of
+# fromroots, pinned by a unit test).
+#
+# Sections: (A) dtype x length; (B) full-mantissa values; (C) trim / special patterns; (D) layouts; (E) Python-typed and
+# object arguments (only outcomes NumPy reaches before object arithmetic); (F) errors in NumPy's order; (G) roots of known
+# polynomials (real, repeated, conjugate pairs, clustered, wide); (H) result flags; (I) long series; (J) the linear
+# roots' scalarmath with special values.
+
+class _PREigRecorder:
+    """Records whether a polynomial call reached LAPACK: the modules call np.linalg.eigvals through the numpy module at
+    call time, so replacing the attribute for one call sees the companion matrix eigvals received. eigvals asserts
+    finiteness, then rejects float16 / object dtypes, and only then runs geev — so geev ran exactly when the matrix is
+    finite and float32 / float64 / complex128."""
+
+    def __init__(self):
+        self.lapack = False
+        self._orig = None
+
+    def __enter__(self):
+        self._orig = np.linalg.eigvals
+        orig = self._orig
+        rec = self
+
+        def eig(a):
+            m = np.asarray(a)
+            with np.errstate(all="ignore"):
+                if m.dtype in (np.float32, np.float64, np.complex128) and m.size and bool(np.isfinite(m).all()):
+                    rec.lapack = True
+            return orig(a)
+
+        np.linalg.eigvals = eig
+        return self
+
+    def __exit__(self, *exc):
+        np.linalg.eigvals = self._orig
+        return False
+
+
+def _pr_order_fixed(a):
+    """Whether a 1-D result's order is decided by values alone: no two elements equal by value but different in bits."""
+    a = np.asarray(a)
+    if a.ndim != 1 or a.size < 2 or a.dtype.kind not in "fc":
+        return True
+    raw = np.ascontiguousarray(a).view(np.uint8).reshape(a.size, -1)
+    for i in range(a.size):
+        for j in range(i + 1, a.size):
+            if a[i] == a[j] and not np.array_equal(raw[i], raw[j]):
+                return False
+    return True
+
+
+def gen_polyroots():
+    cases = []
+    host = []
+    counter = [0]
+    skipped = {"dtype": 0, "order": 0, "object": 0}
+    ok_dtypes = set(ALL_DTYPES) | {"complex64"}
+    A = _PSArr
+
+    def flags(a):
+        return np.array([a.flags.c_contiguous, a.flags.f_contiguous, a.flags.owndata])
+
+    def emit(op, cv, call, layout, cid, facet=None):
+        operands = []
+        params = {"c": _ps_enc(cv, operands)}
+        if facet:
+            params["facet"] = facet
+        n = counter[0]
+        counter[0] += 1
+        rec = _PREigRecorder()
+        try:
+            with np.errstate(all="ignore"), warnings.catch_warnings(), rec:
+                warnings.simplefilter("ignore")
+                r = call()
+        except Exception as e:
+            (host if rec.lapack else cases).append(
+                {"id": f"{cid}/{n}", "op": op, "params": params, "operands": operands, "expected": {},
+                 "expects_throw": True, "error": _poly_exc(e), "layout": layout, "valueclass": "error"})
+            return
+        dest = host if rec.lapack else cases
+        a = np.asarray(r)
+        if facet == "flags":
+            a = flags(a)
+        elif a.dtype.name not in ok_dtypes:
+            skipped["dtype"] += 1
+            return
+        elif not _pr_order_fixed(a):
+            skipped["order"] += 1
+            return
+        dest.append(_case(op, params, operands, _arr_expected(a), layout, "polyroots", cid=f"{cid}/{n}"))
+
+    def both(ops, cv, layout, cid, facet=None):
+        """Emits companion and roots of one argument (`cv`: an _PSArr or a Python-typed value)."""
+        for op, f in ops:
+            emit(op, cv, lambda: f(_ps_py(cv)), layout, f"{op}/{cid}", facet)
+
+    sub_dtypes = ["float64", "float32", "float16", "complex128", "int32", "uint64", "bool", "int8"]
+    patterns = ("tz", "allzero", "lastnz", "special", "nantail")
+    pat_dtypes = ("float64", "float32", "float16", "complex128", "int64")
+
+    for modname, p in POLY_MODULES:
+        mod = _poly_module(modname)
+        comp = getattr(mod, p + "companion")
+        roots = getattr(mod, p + "roots")
+        fromroots = getattr(mod, p + "fromroots")
+        o_comp, o_roots = f"{modname}.{p}companion", f"{modname}.{p}roots"
+        ops = ((o_comp, comp), (o_roots, roots))
+        full = modname in ("polynomial", "chebyshev", "legendre")
+        dts = ALL_DTYPES if full else sub_dtypes
+
+        # ---------------- (A) dtype x length ----------------
+        for dt in dts:
+            for n in (1, 2, 3, 4, 5, 6, 9, 13):
+                c = _ps_series(n, dt, seed=1)
+                both(ops, A(c), "c_contiguous_1d", f"dt/{dt}/{n}")
+
+        # ---------------- (B) full-mantissa values ----------------
+        for dt in ("float64", "float32", "float16", "complex128"):
+            for n in (2, 3, 4, 5, 7, 12, 20, 33):
+                c = _pa_random(n, dt, seed=100 + n)
+                both(ops, A(c), "c_contiguous_1d", f"rand/{dt}/{n}")
+                # A small leading coefficient: the quotient c[:-1] / c[-1] grows large (float16 overflows to inf).
+                c2 = c.copy()
+                c2[-1] = c2[-1] * np.asarray(1e-3, dtype=c2.dtype)
+                both(ops, A(c2), "c_contiguous_1d", f"randsmall/{dt}/{n}")
+
+        # ---------------- (C) trim / special patterns ----------------
+        for dt in pat_dtypes:
+            for pat in patterns:
+                for n in (3, 5, 8):
+                    c = _ps_series(n, dt, pat, seed=8)
+                    both(ops, A(c), "c_contiguous_1d", f"pat/{dt}/{pat}/{n}")
+
+        # ---------------- (D) layouts ----------------
+        for d in ("float64", "complex128", "float32", "float16", "int16"):
+            for tag, v in (("tz", _ps_series(6, d, "tz", seed=13)),
+                           ("rand", _pa_random(7, d, seed=14) if d != "int16" else _ps_series(7, d, seed=14))):
+                for ln, a in _ps_layouts(v):
+                    both(ops, a, ln, f"lay/{d}/{tag}/{ln}")
+            # A 0-d array is a one-term series; a stride-0 broadcast a series of equal terms.
+            s0 = np.array(_ps_series(1, d, seed=15)[0])
+            both(ops, A(s0), "scalar_0d", f"0d/{d}")
+            bsrc = _ps_series(1, d, seed=16)
+            if bsrc[0] == 0:
+                bsrc = np.ones(1, d)
+            for k in (2, 3, 5):
+                bc = np.broadcast_to(bsrc, (k,))
+                both(ops, A(bsrc, bc), "broadcast_1d", f"bcast/{d}/{k}")
+
+        # ---------------- (E) Python-typed and object arguments ----------------
+        f16 = np.float16
+        py_series = [5, 2.5, -0.0, 1 + 2j, [1, 2, 3], [1.5, -2, 0.5], (1, -2, 0.5), [1.5, 2j, 1], [2 ** 63, 1, 1],
+                     [2 ** 64 - 1, 3], [0, 0, 0], [1, 2, 0, 0], [0.0, -0.0, 1.0], (2 + 0j, -1), [3], (0.5,), (),
+                     [f16(1.5), 2.0, f16(-0.5)], [True, 2, 3], [1, 2 ** 62], (1, 1, 1, 1)]
+        for cv in py_series:
+            both(ops, cv, "python", f"py/{type(cv).__name__}/{len(str(cv))}")
+        # The object / str refusal is deferred to where NumPy computes with Python objects: the length check runs on the
+        # TRIMMED object array first (so [None, 0] is NumPy's ValueError), as_series' common-type check rejects a str array.
+        for cv in ([None], [None, 0], [None, 0, 0], [None, 0.0, -0.0], [2 ** 70, 0], [2 ** 70, 0, 0], [0, None],
+                   [None, 1, 0], [2 ** 70, 1, 2], ["a", 1], ["a"], [1.0, "x", 0], None, "ab", [None, 1.5],
+                   [[None, 1.0]], [[1.0, "a"]], [f16(0), None]):
+            for op, f in ops:
+                call = (lambda f=f, cv=cv: f(_ps_py(cv)))
+                if _pa_object_land(call):
+                    skipped["object"] += 1
+                    continue
+                emit(op, cv, call, "object_order", f"{op}/obj/{len(str(cv))}/{type(cv).__name__}")
+
+        # ---------------- (F) errors in NumPy's check order ----------------
+        for tag, x in (("empty", A(np.zeros(0))), ("2d", A(np.zeros((2, 2)))), ("2d_empty", A(np.zeros((0, 3)))),
+                       ("3d", A(np.ones((1, 2, 2)))), ("bool", A(np.array([True, False, True]))), ("str", "ab"),
+                       ("ragged", [[1, 2], [3]]), ("emptylist", []), ("nested_empty", [[]]),
+                       ("f16_nan", A(np.array([1.0, np.nan, 2.0], np.float16))),
+                       ("f16_inf", A(np.array([np.inf, 1.0, 2.0], np.float16)))):
+            both(ops, x, "error", f"err/{tag}")
+
+        # ---------------- (G) roots of known polynomials ----------------
+        known = [("distinct", [-1.5, 0.25, 2.0]), ("repeat2", [1.0, 1.0, -2.0]), ("repeat3", [0.5, 0.5, 0.5, -1.0]),
+                 ("clustered", [1.0, 1.0001, 1.0002, -3.0]), ("wide", [1e-3, 2.0, 1e3]),
+                 ("wilkinson", [1.0, 2, 3, 4, 5, 6, 7, 8, 9, 10]), ("conj", [1 + 2j, 1 - 2j, -0.5 + 0j]),
+                 ("lexi", [1 + 3j, 1 - 1j, 0.5 + 9j, 1 + 0.5j]), ("imag", [2j, -2j]), ("mixed", [3.0, -1 + 1j, -1 - 1j, 0.5])]
+        for tag, rts in known:
+            iscplx = any(isinstance(r, complex) for r in rts)
+            for dt in (("complex128",) if iscplx else ("float64", "float32", "complex128")):
+                with np.errstate(all="ignore"):
+                    c = np.asarray(fromroots(np.array(rts, dtype=dt))).astype(dt)
+                both(ops, A(c), "roots_kind", f"known/{tag}/{dt}")
+        # Real coefficients with complex roots in float32: NumPy's complex64 result (value-compared by the replay).
+        for n in (3, 4, 6, 9):
+            c = _pa_random(n, "float32", seed=1600 + n)
+            emit(o_roots, A(c), lambda: roots(c), "roots_kind", f"{o_roots}/f32mix/{n}")
+
+        # ---------------- (H) result flags ----------------
+        for dt in ("float64", "float32", "float16", "complex128", "int64"):
+            for n in (1, 2, 3, 5):
+                c = _ps_series(n, dt, seed=24)
+                both(ops, A(c), "flags", f"flags/{dt}/{n}", facet="flags")
+        for tag, rts in (("real", [1.0, -2.0, 0.5]), ("cplx", [1 + 1j, 1 - 1j, 2 + 0j])):
+            for dt in ("float64", "float32"):
+                with np.errstate(all="ignore"):
+                    c = np.real_if_close(np.asarray(fromroots(np.array(rts)))).astype(dt)
+                emit(o_roots, A(c), lambda: roots(c), "flags", f"{o_roots}/flags/{tag}/{dt}", facet="flags")
+
+        # ---------------- (I) long series ----------------
+        for dt in ("float64", "complex128", "float32", "float16"):
+            for n in (40, 65):
+                c = _pa_random(n, dt, seed=1800 + n, scale=0.5)
+                emit(o_comp, A(c), lambda: comp(c), "long_1d", f"{o_comp}/long/{dt}/{n}")
+            if dt != "float16":
+                for n in (25, 51):
+                    c = _pa_random(n, dt, seed=1850 + n, scale=0.5)
+                    emit(o_roots, A(c), lambda: roots(c), "long_1d", f"{o_roots}/long/{dt}/{n}")
+
+        # ---------------- (J) the linear roots' scalarmath ----------------
+        sp = [1.0, -0.0, 0.0, np.inf, -np.inf, np.nan, 5e-324, 1e308, -2.5]
+        for dt in ("float64", "float32", "float16"):
+            for a0 in sp:
+                for a1 in sp:
+                    with np.errstate(all="ignore"):   # 1e308 / 5e-324 overflow / underflow the narrow dtypes
+                        c = np.array([a0, a1], dtype=dt)
+                    both(ops, A(c), "linear", f"lin/{dt}/{a0!r}/{a1!r}")
+        csp = [complex(1, 2), complex(-0.0, 0.0), complex(np.inf, 1), complex(1, np.nan), complex(0, 1e308), complex(3, 0)]
+        for a0 in csp:
+            for a1 in csp:
+                c = np.array([a0, a1], dtype=np.complex128)
+                both(ops, A(c), "linear", f"lin/c/{a0!r}/{a1!r}")
+
+    # Char: NumSharp's uint16-like dtype converts to float64 exactly as uint16 does (the house weave) — in both tiers,
+    # since a uint16 series' roots reach LAPACK like any other integer series'.
+    cases += _relabel_dtype([c for c in cases if "/uint16/" in (c.get("id") or "") and not c.get("expects_throw")],
+                            "uint16", "char")
+    host += _relabel_dtype([c for c in host if "/uint16/" in (c.get("id") or "") and not c.get("expects_throw")],
+                           "uint16", "char")
+    print(f"  portable {len(cases)}, host-pinned {len(host)}  (skipped: {skipped['dtype']} object-dtype results, "
+          f"{skipped['order']} value-tied orders, {skipped['object']} object-arithmetic outcomes)")
+    return cases, host
+
+
 def main():
     here = os.path.dirname(os.path.abspath(__file__))
     corpus_dir = os.path.normpath(os.path.join(here, "..", "NumSharp.Tests.Oracle", "Fuzz", "corpus"))
@@ -13924,8 +14176,17 @@ def main():
         write_jsonl(os.path.join(corpus_dir, "polyalgebra.jsonl"), cases)
         write_jsonl(os.path.join(corpus_dir, "polyalgebra_parity.jsonl"), host)
         write_jsonl(os.path.join(corpus_dir, "polyalgebra_parity.host.jsonl"), [blas_identity()])
+    elif mode == "polyroots":
+        # numpy.polynomial companion matrices and roots (U7): portable + host-pinned (LAPACK geev at threads = 1).
+        for var in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS"):
+            if os.environ.get(var) != "1":
+                sys.exit(f"polyroots needs {var}=1 set before Python starts (eigvals' bits depend on the thread count)")
+        cases, host = gen_polyroots()
+        write_jsonl(os.path.join(corpus_dir, "polyroots.jsonl"), cases)
+        write_jsonl(os.path.join(corpus_dir, "polyroots_parity.jsonl"), host)
+        write_jsonl(os.path.join(corpus_dir, "polyroots_parity.host.jsonl"), [blas_identity()])
     else:
-        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | sinc | i0 | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows | evaluate | real_if_close | instance | emath | polyeval | polyseries | polycalc | polyvander | polyalgebra)")
+        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | sinc | i0 | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows | evaluate | real_if_close | instance | emath | polyeval | polyseries | polycalc | polyvander | polyalgebra | polyroots)")
         sys.exit(2)
 
 

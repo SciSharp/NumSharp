@@ -285,6 +285,42 @@ namespace NumSharp.Tests.Backends
             AssertCloseComplex(wCplx, 1e-6, new Complex(1, 1), new Complex(1, -1));
         }
 
+        /// <summary>
+        ///     A float32 operand's complex result is NumPy's complex64: geev runs in double and <c>astype(complex64)</c> rounds
+        ///     every component to float32. NumSharp keeps the complex128 dtype (#569) but must carry exactly those values —
+        ///     numpy.polynomial's <c>{p}roots</c> of a float32 series sort them, so a component left at double precision
+        ///     would differ from NumPy's in its low bits. NumPy 2.4.2: <c>np.linalg.eigvals(np.array([[0, -2], [1, 0]],
+        ///     np.float32))</c> is <c>[1.4142135j, -1.4142135j]</c> (complex64), widened <c>0x3ff6a09e60000000</c>.
+        /// </summary>
+        [TestMethod]
+        public void Eig_Float32ComplexResult_CarriesNumPysComplex64Values()
+        {
+            RequireLapack();
+            static bool IsSingle(double d) => (double)(float)d == d || double.IsNaN(d);
+
+            var a = np.array(new float[,] { { 0, -2 }, { 1, 0 } });
+            var w = np.linalg.eigvals(a);
+            Assert.AreEqual(NPTypeCode.Complex, w.typecode);
+            double root2 = BitConverter.Int64BitsToDouble(0x3ff6a09e60000000);   // (double)(float)Math.Sqrt(2)
+            var z0 = (Complex)w.GetAtIndex(0);
+            var z1 = (Complex)w.GetAtIndex(1);
+            Assert.AreEqual(0.0, z0.Real);
+            Assert.AreEqual(root2, z0.Imaginary, 0.0);
+            Assert.AreEqual(0.0, z1.Real);
+            Assert.AreEqual(-root2, z1.Imaginary, 0.0);
+
+            // eig rounds the eigenvectors the same way (NumPy's `v.astype(complex64)`), and a non-trivial spectrum keeps
+            // every component single-representable.
+            var (we, ve) = np.linalg.eig(np.array(new float[,] { { 1, -3, 0.5f }, { 2, 0.25f, -1 }, { 0, 1, 1.5f } }));
+            foreach (var arr in new[] { we, ve })
+                foreach (Complex z in arr.ravel().ToArray<Complex>())
+                    Assert.IsTrue(IsSingle(z.Real) && IsSingle(z.Imaginary), $"component of {z} is not a float32 value");
+
+            // Control: a float64 operand's complex eigenvalues keep double precision.
+            var w64 = np.linalg.eigvals(np.array(new double[,] { { 0, -2 }, { 1, 0 } }));
+            Assert.IsFalse(IsSingle(((Complex)w64.GetAtIndex(0)).Imaginary));
+        }
+
         [TestMethod]
         public void Eig_IntegerWidensToFloat64()
         {

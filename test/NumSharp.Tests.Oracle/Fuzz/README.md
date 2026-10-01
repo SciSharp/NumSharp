@@ -274,6 +274,7 @@ python test/oracle/gen_oracle.py polyseries       # np.polynomial.* additive fam
 python test/oracle/gen_oracle.py polycalc         # np.polynomial.* calculus family ({p}der / {p}int, every parameter)
 python test/oracle/gen_oracle.py polyalgebra      # np.polynomial.* series algebra (+ the host-pinned polyalgebra_parity tier)
 python test/oracle/gen_oracle.py polyvander       # np.polynomial.* Vandermonde family ({p}vander / {p}vander2d / {p}vander3d)
+python test/oracle/gen_oracle.py polyroots        # np.polynomial.* companion / roots (+ the host-pinned polyroots_parity tier; needs OPENBLAS_NUM_THREADS=1)
 python test/oracle/gen_index_oracle.py            # the four index_* corpora (seed pinned 20240626)
 python test/oracle/gen_nan_oracle.py              # nan.jsonl — NaN parity grid (standalone; complex bit-exact)
 python test/oracle/fuzz_random.py 1234 2000 random_smoke.jsonl
@@ -1132,6 +1133,46 @@ non-temporal stores (forced on and off at every alignment there; the corpus' mat
 through a complex product are tokenized (the house `simd_cmul` picks a different NaN operand than NumPy's; the value
 is NaN either way). Planted-bug check at delivery: two kernel mutants turned 2,403 and 117 cases red. `OpRegistry.PolyVander.cs` replays it: a 1-D degree that is a C# long in int range
 binds the int overload, every other kind the object one. Design and measurements: `docs/plans/numpy-polynomial.md` (U5).
+
+### numpy.polynomial companion matrices and roots (`polyroots` + `polyroots_parity` tiers)
+
+`polyroots.jsonl` (`gen_oracle.py polyroots`, 6,681 cases, floor 6,600) gates plan unit U7 — `{p}companion` and
+`{p}roots` for the six bases — **bit-exact, 0 excused**. Keys are module-qualified (`laguerre.lagcompanion`); the one
+argument `c` uses the polyseries encoding (`_ps_enc`). The companion is NumPy's statements over the as_series copy (the
+zero matrix, diagonals assigned through `mat.reshape(-1)[k::n+1]`, one in-place update of the last column) — `+ - * /`,
+`sqrt` and `cumprod` only — so every companion case is portable; so is every `{p}roots` call that never reaches LAPACK
+(a constant series' empty array in its dtype, a linear series' scalarmath root, float16's linalg TypeError and a
+non-finite companion's LinAlgError). The roots that run geev go to `polyroots_parity.jsonl` (1,242 cases, floor 1,200),
+**host-pinned** exactly like `linalg_parity` (`polyroots_parity.host.jsonl`, the same `MatmulParityPin`, threads=1).
+The generator decides the split by replacing `np.linalg.eigvals` while it runs a case (`_PREigRecorder` — the polynomial
+modules look it up at call time): geev ran exactly when eigvals received a finite float32 / float64 / complex128 matrix.
+The sections of `gen_polyroots`:
+- **(A)** every dtype × length 1–13 (the power, Chebyshev and Legendre modules over all 13 dtypes, a subset for the
+  rest; bool is as_series' no-common-type ValueError, integers / char compute in float64);
+- **(B)** full-mantissa values, and the same series with a 1000× smaller leading coefficient (float16's quotient
+  overflows to inf, so its roots are the LinAlgError);
+- **(C)** trim / special patterns (trailing zeros with a −0.0, all-zero, zeros after the first term, NaN / ±inf / ±0, a
+  trailing NaN — never trimmed);
+- **(D)** layouts: strided, reversed, offset views, a 0-d array (a one-term series) and a stride-0 broadcast;
+- **(E)** Python-typed series (scalars, lists, tuples, uint64-range ints, np.float16 items, empty tuples) and the OBJECT
+  series NumPy refuses before it computes with Python objects (`_pa_object_land` filters the rest): the length check
+  runs on the TRIMMED object array, so `[None, 0]` and `[2**70, 0]` are companion's ValueError; a str series is
+  as_series' no-common-type ValueError;
+- **(F)** errors in NumPy's order (empty, 2-D, bool, str, ragged, nested-empty, a float16 NaN / inf reaching eigvals'
+  finiteness check before its dtype check);
+- **(G)** roots of known polynomials built by `{p}fromroots` (distinct, repeated, clustered, wide, Wilkinson's 10,
+  conjugate pairs, lexicographic complex ties) and float32 series with complex roots — NumPy's complex64, which the
+  replay compares by VALUE up-cast (`np.linalg.eigvals` rounds a float32 operand's complex result to float32
+  components, exactly);
+- **(H)** result flags (`"facet": "flags"`): the companion is a fresh C-contiguous owning matrix; a float64 series' real
+  roots are a strided VIEW of eigvals' complex result (OWNDATA false), a float32 series' a fresh cast;
+- **(I)** long series (companion of 40 / 65 terms, roots of 25 / 51 terms);
+- **(J)** the linear roots' scalarmath over every special-value pair (float64 / float32 / float16, and complex).
+Char is the uint16 weave in both files. A result whose sorted order is not fixed by its values — two elements equal by
+value but different in bits (+0.0 / −0.0) — is skipped: NumPy's SIMD sort orders such ties by CPU (none occurred in
+the 7,923 generated cases). Unit tests (`Polynomial/PolynomialRootsTests.cs`) pin what the corpus cannot: the object
+roots NumPy answers with an object array (`[Misaligned]`), decimal, the backend-missing path, both write-once
+allocation paths and the ramp kernel. Design and measurements: `docs/plans/numpy-polynomial.md` (U7).
 
 ### einsum (`einsum` tier)
 

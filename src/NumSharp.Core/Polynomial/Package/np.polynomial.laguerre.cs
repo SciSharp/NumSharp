@@ -570,5 +570,50 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.laguerre.lagvander3d.html</remarks>
         [NDScoped]
         public NDArray lagvander3d(object x, object y, object z, object deg) => NDPolyVander.VanderNd(PolyBasis.Laguerre, new[] { x, y, z }, deg);
+
+        // ---------------------------------------------------------------------------------------------
+        //  Companion matrix and roots (plan U7): lagcompanion / lagroots
+        // ---------------------------------------------------------------------------------------------
+
+        /// <summary>
+        ///     The companion matrix of the Laguerre series <paramref name="c"/>: tridiagonal and symmetric, <c>2k + 1</c> on the diagonal and <c>-k</c> on both off-diagonals, the last column increased by <c>(c[:-1] / c[-1]) * n</c>. Every value of the update stays in the series' common type (the Python int n is weak), while the diagonals are int64 / float64 values cast by assignment. Bit-identical to NumPy 2.4.2's <c>lagcompanion</c>.
+        /// </summary>
+        /// <param name="c">The coefficients, LOW degree first: an <see cref="NDArray"/> (any layout), a typed C# array, a Python list or tuple (<c>object[]</c>, a <c>ValueTuple</c>, a jagged array — np.array's coercion), or a single number. Trailing zeros are trimmed first; integer series are computed in float64; a bool series has no common type.</param>
+        /// <returns>A new owning (deg, deg) matrix of the series' common type; a two-term series gives the 1x1 matrix
+        ///     <c>[[1 + c[0] / c[1]]]</c> (NumPy's scalarmath on the two coefficients).</returns>
+        /// <exception cref="ValueError">An empty series (<c>Coefficient array is empty</c>), a series that is not 1-d (<c>Coefficient array is not 1-d</c>), or no common type (a bool or str series), in NumPy's order; a ragged list (np.array's inhomogeneous-shape text). Fewer than two terms after trimming:
+        ///     <c>Series must have maximum degree of at least 1.</c></exception>
+        /// <exception cref="System.NotSupportedException">An object series of two or more terms (None, a non-numeric object or a
+        ///     Python int past uint64 — NumPy's object array, a dtype NumSharp does not have), raised where NumPy starts
+        ///     computing with Python objects: after the length check. A str series is NumPy's ValueError (no common type).</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.laguerre.lagcompanion.html</remarks>
+        [NDScoped]
+        public NDArray lagcompanion(object c) => NDPolyAlgebra.Companion(PolyBasis.Laguerre, c);
+
+        /// <summary>
+        ///     The roots of the Laguerre series <paramref name="c"/>: the eigenvalues of <c>lagcompanion(c)[::-1, ::-1]</c> — the ROTATED companion matrix, which NumPy notes reduces the error, computed by
+        ///     <see cref="np.linalg.eigvals"/> and sorted in place, ascending (complex numbers lexicographically, real part
+        ///     first). A constant series has no roots — an empty array of its dtype — and a linear one the single root
+        ///     <c>1 + c[0] / c[1]</c> (scalarmath, in its own dtype). Roots far from the origin, and multiple roots, carry larger
+        ///     errors (NumPy's documented caveat). With NumSharp.Interop.OpenBLAS referenced the eigenvalues come from NumPy's
+        ///     own LAPACK <c>geev</c> and are bit-identical to NumPy 2.4.2's <c>lagroots</c> (one BLAS thread); where
+        ///     +0.0 and -0.0 roots meet, NumPy's SIMD sort orders them by CPU and NumSharp's sort deterministically.
+        /// </summary>
+        /// <param name="c">The coefficients, LOW degree first: an <see cref="NDArray"/> (any layout), a typed C# array, a Python list or tuple (<c>object[]</c>, a <c>ValueTuple</c>, a jagged array — np.array's coercion), or a single number. Trailing zeros are trimmed first; integer series are computed in float64; a bool series has no common type.</param>
+        /// <returns>The sorted roots: REAL when every eigenvalue is — a view of the eigenvalue array's real parts for a float64
+        ///     series (OWNDATA false, as NumPy's <c>w.real</c>), a new float32 array for a float32 series — otherwise
+        ///     complex128 (NumPy's complex64 for a float32 series: NumSharp has one complex width).</returns>
+        /// <exception cref="ValueError">An empty series (<c>Coefficient array is empty</c>), a series that is not 1-d (<c>Coefficient array is not 1-d</c>), or no common type (a bool or str series), in NumPy's order; a ragged list (np.array's inhomogeneous-shape text).</exception>
+        /// <exception cref="TypeError">A float16 (or decimal) series of degree 2 or more: linalg's
+        ///     <c>array type float16 is unsupported in linalg</c>.</exception>
+        /// <exception cref="LinAlgError">A companion matrix holding an infinity or NaN (<c>Array must not contain infs or
+        ///     NaNs</c>, checked before the dtype), or eigenvalues that do not converge.</exception>
+        /// <exception cref="MissingBackendException">Degree 2 or more with no LAPACK backend: reference
+        ///     NumSharp.Interop.OpenBLAS (NumSharp.Core ships no eigensolver).</exception>
+        /// <exception cref="System.NotSupportedException">An object series (None, a non-numeric object or a Python int past
+        ///     uint64): NumPy returns an object array or computes with Python objects.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.laguerre.lagroots.html</remarks>
+        [NDScoped]
+        public NDArray lagroots(object c) => NDPolyAlgebra.Roots(PolyBasis.Laguerre, c);
     }
 }

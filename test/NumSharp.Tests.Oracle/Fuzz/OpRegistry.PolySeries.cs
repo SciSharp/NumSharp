@@ -86,7 +86,8 @@ namespace NumSharp.Tests.Fuzz
             /// <summary>
             ///     The calculus result as the corpus records it: the array itself, or — for a <c>"facet": "flags"</c> case —
             ///     the bool array <c>[C_CONTIGUOUS, F_CONTIGUOUS, OWNDATA]</c> of the result, NumPy's layout contract
-            ///     (moveaxis views of fresh C-order buffers, K-order copies, NpyIter-allocated <c>c[:1]*0</c>).
+            ///     (moveaxis views of fresh C-order buffers, K-order copies, NpyIter-allocated <c>c[:1]*0</c>, and
+            ///     <c>{p}roots</c>' real roots: a strided view of the real parts of eigvals' complex result).
             /// </summary>
             /// <param name="r">The facade's result (always a fresh array or a view of a fresh buffer — never an operand).</param>
             /// <returns>The recorded array.</returns>
@@ -350,9 +351,10 @@ namespace NumSharp.Tests.Fuzz
         }
 
         /// <summary>
-        ///     Dispatches an additive-family / polyutils key to the facade member NumPy's name refers to (the
-        ///     SAME member: the module part picks the submodule, so <c>laguerre.lagline</c> is exercised on
-        ///     <c>np.polynomial.laguerre</c>).
+        ///     Dispatches an additive-family / polyutils key (U1), a calculus key (U4), a Vandermonde key (U5) or a
+        ///     companion / roots key (U7) to the facade member NumPy's name refers to (the SAME member: the module part
+        ///     picks the submodule, so <c>laguerre.lagline</c> is exercised on <c>np.polynomial.laguerre</c>). The series
+        ///     algebra (U2) is tried first (<see cref="TryApplyPolyAlgebra"/>).
         /// </summary>
         /// <param name="module">The corpus module (<c>polynomial</c> … <c>hermite_e</c>, <c>polyutils</c>).</param>
         /// <param name="fn">NumPy's function name.</param>
@@ -435,6 +437,8 @@ namespace NumSharp.Tests.Fuzz
                         "vander" => a.CalcFacet(PolyVander1(a, m.polyvander, m.polyvander)),
                         "vander2d" => a.CalcFacet(m.polyvander2d(a.Get("x"), a.Get("y"), a.Get("deg"))),
                         "vander3d" => a.CalcFacet(m.polyvander3d(a.Get("x"), a.Get("y"), a.Get("z"), a.Get("deg"))),
+                        "companion" => a.CalcFacet(m.polycompanion(a.Get("c"))),
+                        "roots" => a.CalcFacet(m.polyroots(a.Get("c"))),
                         _ => throw new NotSupportedException($"polynomial op '{fn}' is not registered in OpRegistry"),
                     };
                 }
@@ -456,6 +460,8 @@ namespace NumSharp.Tests.Fuzz
                         "vander" => a.CalcFacet(PolyVander1(a, m.chebvander, m.chebvander)),
                         "vander2d" => a.CalcFacet(m.chebvander2d(a.Get("x"), a.Get("y"), a.Get("deg"))),
                         "vander3d" => a.CalcFacet(m.chebvander3d(a.Get("x"), a.Get("y"), a.Get("z"), a.Get("deg"))),
+                        "companion" => a.CalcFacet(m.chebcompanion(a.Get("c"))),
+                        "roots" => a.CalcFacet(m.chebroots(a.Get("c"))),
                         _ => throw new NotSupportedException($"chebyshev op '{fn}' is not registered in OpRegistry"),
                     };
                 }
@@ -477,6 +483,8 @@ namespace NumSharp.Tests.Fuzz
                         "vander" => a.CalcFacet(PolyVander1(a, m.legvander, m.legvander)),
                         "vander2d" => a.CalcFacet(m.legvander2d(a.Get("x"), a.Get("y"), a.Get("deg"))),
                         "vander3d" => a.CalcFacet(m.legvander3d(a.Get("x"), a.Get("y"), a.Get("z"), a.Get("deg"))),
+                        "companion" => a.CalcFacet(m.legcompanion(a.Get("c"))),
+                        "roots" => a.CalcFacet(m.legroots(a.Get("c"))),
                         _ => throw new NotSupportedException($"legendre op '{fn}' is not registered in OpRegistry"),
                     };
                 }
@@ -498,6 +506,8 @@ namespace NumSharp.Tests.Fuzz
                         "vander" => a.CalcFacet(PolyVander1(a, m.lagvander, m.lagvander)),
                         "vander2d" => a.CalcFacet(m.lagvander2d(a.Get("x"), a.Get("y"), a.Get("deg"))),
                         "vander3d" => a.CalcFacet(m.lagvander3d(a.Get("x"), a.Get("y"), a.Get("z"), a.Get("deg"))),
+                        "companion" => a.CalcFacet(m.lagcompanion(a.Get("c"))),
+                        "roots" => a.CalcFacet(m.lagroots(a.Get("c"))),
                         _ => throw new NotSupportedException($"laguerre op '{fn}' is not registered in OpRegistry"),
                     };
                 }
@@ -519,6 +529,8 @@ namespace NumSharp.Tests.Fuzz
                         "vander" => a.CalcFacet(PolyVander1(a, m.hermvander, m.hermvander)),
                         "vander2d" => a.CalcFacet(m.hermvander2d(a.Get("x"), a.Get("y"), a.Get("deg"))),
                         "vander3d" => a.CalcFacet(m.hermvander3d(a.Get("x"), a.Get("y"), a.Get("z"), a.Get("deg"))),
+                        "companion" => a.CalcFacet(m.hermcompanion(a.Get("c"))),
+                        "roots" => a.CalcFacet(m.hermroots(a.Get("c"))),
                         _ => throw new NotSupportedException($"hermite op '{fn}' is not registered in OpRegistry"),
                     };
                 }
@@ -540,6 +552,8 @@ namespace NumSharp.Tests.Fuzz
                         "vander" => a.CalcFacet(PolyVander1(a, m.hermevander, m.hermevander)),
                         "vander2d" => a.CalcFacet(m.hermevander2d(a.Get("x"), a.Get("y"), a.Get("deg"))),
                         "vander3d" => a.CalcFacet(m.hermevander3d(a.Get("x"), a.Get("y"), a.Get("z"), a.Get("deg"))),
+                        "companion" => a.CalcFacet(m.hermecompanion(a.Get("c"))),
+                        "roots" => a.CalcFacet(m.hermeroots(a.Get("c"))),
                         _ => throw new NotSupportedException($"hermite_e op '{fn}' is not registered in OpRegistry"),
                     };
                 }

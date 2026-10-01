@@ -1,0 +1,1 @@
+{"numpy":"2.4.2","platform":"Windows-11-10.0.26200-SP0","machine":"AMD64","blas_library":"libscipy_openblas64_-74a408729250596b0973e69fdd954eea.dll","blas_library_sha256":"74a408729250596b0973e69fdd954eea07a70ff527a1dbaccf9ae21247b80377","blas_config":"OpenBLAS 0.3.31.dev  USE64BITINT DYNAMIC_ARCH NO_AFFINITY Haswell MAX_THREADS=24","blas_corename":"Haswell","blas_threads":1}
