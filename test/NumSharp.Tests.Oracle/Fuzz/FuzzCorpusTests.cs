@@ -861,8 +861,8 @@ namespace NumSharp.Tests.Fuzz
             ["polyvander.jsonl"] = 31000,   // numpy.polynomial Vandermonde family (U5): {p}vander / vander2d / vander3d x 6 bases, sections A-J of gen_polyvander — 16,612 at delivery, 31,180 with the 2026-09-30 wholeness pass (J: the object stack of scalars)
             ["polyalgebra.jsonl"] = 28100,   // numpy.polynomial series algebra (U2): mulx/mul/div/pow/fromroots x 6 bases + X2poly/poly2X x 5, sections A-L of gen_polyalgebra — 26,163 at delivery, 28,144 with the wholeness section (M: pow / maxpower argument kinds, the deferred object refusal, non-finite complex products — 43 of which moved here from the host tier)
             ["polyalgebra_parity.jsonl"] = 135,   // U2's BLAS-bound products (host-pinned): 186 at delivery, 139 once complex products with infinities / NaNs below zdotu's vector block moved to the portable tier (the managed dot reproduces zdotu's C99 result and CDOUBLE_dot's plain loop)
-            ["polyroots.jsonl"] = 6600,   // numpy.polynomial companion matrices + the roots that never reach LAPACK (U7): {p}companion / {p}roots x 6 bases, sections A-J of gen_polyroots — 6,681 at delivery
-            ["polyroots_parity.jsonl"] = 1200,   // U7's roots that run LAPACK geev (host-pinned, threads = 1): 1,242 at delivery
+            ["polyroots.jsonl"] = 8150,   // numpy.polynomial companion matrices + the roots that never reach LAPACK (U7): {p}companion / {p}roots x 6 bases, sections A-L of gen_polyroots — 6,681 at delivery, 8,195 with the wholeness sections (K: two-term OBJECT series NumPy still computes, 0-d-zero trims, edge numeric series; L: object series of three or more terms — the companion arithmetic's OverflowErrors and eigvals' isfinite TypeError)
+            ["polyroots_parity.jsonl"] = 1350,   // U7's roots that run LAPACK geev (host-pinned, threads = 1): 1,242 at delivery, 1,354 with section K's edge series
             ["place.jsonl"] = 12,
             ["products.jsonl"] = 326,
             ["precision.jsonl"] = 80,

@@ -1,4 +1,5 @@
 using System;
+using System.Numerics;
 using NumSharp.Backends;
 using NumSharp.Backends.Kernels;
 
@@ -61,6 +62,13 @@ namespace NumSharp
         /// <summary>NumPy's text for a series of fewer than two terms passed to <c>{p}companion</c>.</summary>
         private const string DegreeTooLow = "Series must have maximum degree of at least 1.";
 
+        /// <summary>
+        ///     NumPy's text for <c>np.isfinite</c> of an OBJECT array — the TypeError np.linalg.eigvals' <c>_assert_finite</c>
+        ///     raises on the object companion matrix of an object series (its first check that reads the dtype).
+        /// </summary>
+        private const string ObjectIsFinite = "ufunc 'isfinite' not supported for the input types, and the inputs could not be " +
+                                              "safely coerced to any supported types according to the casting rule ''safe''";
+
         // =============================================================================================
         //  Entry points
         // =============================================================================================
@@ -74,8 +82,13 @@ namespace NumSharp
         /// <returns>A new (deg, deg) matrix of the series' common type (owning, C-contiguous).</returns>
         /// <exception cref="ValueError">An empty or non-1-d series, no common type (a bool or str series), or fewer than two
         ///     terms after trimming (<c>Series must have maximum degree of at least 1.</c>) — in NumPy's order.</exception>
-        /// <exception cref="NotSupportedException">An object series of two or more terms (None, a non-numeric object, a Python
-        ///     int past uint64): NumPy computes with Python objects from there on, a dtype NumSharp does not have.</exception>
+        /// <exception cref="NotSupportedException">An object series (None, a non-numeric object, a Python int past uint64) of
+        ///     three or more terms after trimming whose arithmetic does not raise — NumPy's object companion matrix, a dtype
+        ///     NumSharp does not have — or one holding None / a str where NumPy's object arithmetic reaches it (CPython's
+        ///     TypeError).</exception>
+        /// <exception cref="OverflowException">An object series whose arithmetic meets a Python int too large for a float:
+        ///     CPython's <c>integer division result too large for a float</c> (Python int / Python int) or <c>int too large to
+        ///     convert to float</c> (any other operand), whichever NumPy's statements raise first.</exception>
         public static NDArray Companion(PolyBasis basis, object c)
         {
             var v = NDPolySeries.AsCoefficientArray(c);
@@ -83,9 +96,16 @@ namespace NumSharp
             if (!NDPolySeries.TryCommonType(new ReadOnlySpan<PolySeriesView>(in v), out NPTypeCode t))
             {
                 // as_series went on in the object dtype, and NumPy's next statement is the length check on the TRIMMED object
-                // array — so a series whose trailing zeros leave one term raises NumPy's ValueError, not the refusal.
-                if (ObjectTrimLength(c, v) < 2)
+                // array — so a series whose trailing zeros leave one term raises NumPy's ValueError, not the refusal. Two terms
+                // make the linear root, arithmetic on the object array's ITEMS whose result NumPy wraps in a numeric array. A
+                // longer object series is an object matrix NumSharp cannot hold — unless the last-column arithmetic raises
+                // first, which is NumPy's answer then.
+                long trimmed = ObjectTrimLength(c, v);
+                if (trimmed < 2)
                     throw new ValueError(DegreeTooLow);
+                if (trimmed == 2)
+                    return ObjectLinearRoot(basis, c, new Shape(1, 1));
+                ObjectCompanionArithmetic(basis, c, trimmed);
                 throw v.Refusal;
             }
             long len = NDPolySeries.TrimLength(v);
@@ -119,21 +139,37 @@ namespace NumSharp
         /// </returns>
         /// <exception cref="ValueError">An empty or non-1-d series, or no common type (a bool or str series).</exception>
         /// <exception cref="TypeError">A float16 or decimal series of degree 2 or more (linalg's
-        ///     <c>array type float16 is unsupported in linalg</c>).</exception>
+        ///     <c>array type float16 is unsupported in linalg</c>); an OBJECT series of three or more terms whose companion
+        ///     arithmetic does not raise (eigvals' <c>ufunc 'isfinite' not supported for the input types, …</c> on NumPy's object
+        ///     companion matrix — raised before LAPACK, so no backend is needed).</exception>
         /// <exception cref="LinAlgError">A companion matrix holding an infinity or NaN (<c>Array must not contain infs or
         ///     NaNs</c>), or eigenvalues that do not converge.</exception>
         /// <exception cref="MissingBackendException">Degree 2 or more with no LAPACK backend (reference
         ///     NumSharp.Interop.OpenBLAS — NumSharp.Core ships no eigensolver).</exception>
-        /// <exception cref="NotSupportedException">An object series: NumPy returns an object array or computes with Python
-        ///     objects, a dtype NumSharp does not have.</exception>
+        /// <exception cref="NotSupportedException">An object series of one term (NumPy's <c>np.array([], dtype=object)</c>), or
+        ///     one holding None / a str where NumPy's object arithmetic reaches it (CPython's TypeError) — NumSharp has no
+        ///     object dtype.</exception>
+        /// <exception cref="OverflowException">An object series whose arithmetic meets a Python int too large for a float:
+        ///     CPython's <c>integer division result too large for a float</c> (Python int / Python int) or <c>int too large to
+        ///     convert to float</c> (any other operand), whichever NumPy's statements raise first.</exception>
         public static NDArray Roots(PolyBasis basis, object c)
         {
             var v = NDPolySeries.AsCoefficientArray(c);
             NDPolySeries.Validate(v);
-            // An object series is refused whatever its length: one term is `np.array([], dtype=object)`, two or more are
-            // object arithmetic — NumPy builds or computes with Python objects either way.
+            // An object series: one term is `np.array([], dtype=object)` — refused, NumSharp has no object dtype. Two terms are
+            // the linear root, computed from the ITEMS into a numeric array exactly as NumPy's `np.array([root])` is. Three or
+            // more build NumPy's object companion matrix, whose arithmetic may raise first; otherwise eigvals' first check that
+            // reads the dtype, isfinite, rejects the object matrix with a TypeError — never an object result.
             if (!NDPolySeries.TryCommonType(new ReadOnlySpan<PolySeriesView>(in v), out NPTypeCode t))
-                throw v.Refusal;
+            {
+                long trimmed = ObjectTrimLength(c, v);
+                if (trimmed == 2)
+                    return ObjectLinearRoot(basis, c, new Shape(1));
+                if (trimmed < 2)
+                    throw v.Refusal;
+                ObjectCompanionArithmetic(basis, c, trimmed);
+                throw new TypeError(ObjectIsFinite);
+            }
             long len = NDPolySeries.TrimLength(v);
             if (len < 2)
                 return new NDArray(t, new Shape(0), false);   // np.array([], dtype=c.dtype)
@@ -172,9 +208,23 @@ namespace NumSharp
         /// <param name="c">The two-term series.</param>
         /// <returns>A NumPy scalar of the series dtype.</returns>
         private static PolyNumber LinearRoot(PolyBasis basis, in PolySer c)
+            => LinearRoot(basis, PolyNumber.FromScalar(c.T, c.At(0)), PolyNumber.FromScalar(c.T, c.At(1)));
+
+        /// <summary>
+        ///     The linear root's expression on two operands of any kind (see <see cref="LinearRoot(PolyBasis, in PolySer)"/>):
+        ///     NumPy scalars of the as_series copy, or the ITEMS of an object series — Python numbers (CPython arithmetic:
+        ///     exact ints, correctly rounded int / int), NumPy scalars (scalarmath) and 0-d arrays (ufuncs), the three
+        ///     arithmetics <see cref="PolyNumber.Binary"/> dispatches between.
+        /// </summary>
+        /// <param name="basis">The basis.</param>
+        /// <param name="c0">The constant term.</param>
+        /// <param name="c1">The linear term.</param>
+        /// <returns>The root, of the kind and dtype NumPy's expression produces.</returns>
+        /// <exception cref="OverflowException">Python int operands whose quotient exceeds the float range (CPython's
+        ///     <c>integer division result too large for a float</c>). The linear term is never zero here: trimseq removed
+        ///     it, so CPython's ZeroDivisionError cannot arise.</exception>
+        private static PolyNumber LinearRoot(PolyBasis basis, in PolyNumber c0, in PolyNumber c1)
         {
-            var c0 = PolyNumber.FromScalar(c.T, c.At(0));
-            var c1 = PolyNumber.FromScalar(c.T, c.At(1));
             return basis switch
             {
                 PolyBasis.Laguerre => PolyNumber.Binary(BinaryOp.Add, PolyNumber.FromPython(PyScalar.Int(1)),
@@ -198,6 +248,130 @@ namespace NumSharp
             var r = new NDArray(t, shape, false);
             x.WriteElement(t, (byte*)r.Storage.Address);
             return r;
+        }
+
+        /// <summary>
+        ///     The linear root of a two-term OBJECT series (a Python int past uint64 among the terms makes NumPy's as_series
+        ///     copy an object array, whose items keep their kinds — Python numbers, NumPy scalars, 0-d arrays): NumPy's
+        ///     expression evaluated on the items, then <c>np.array([...])</c> of the result — a numeric array (float64 for a
+        ///     Python float, complex128 for a Python complex, a NumPy scalar's or 0-d array's own dtype), not an object one.
+        /// </summary>
+        /// <param name="basis">The basis.</param>
+        /// <param name="c">The caller's argument: a Python sequence whose first two items are the trimmed series.</param>
+        /// <param name="shape"><c>(1, 1)</c> for <c>{p}companion</c>, <c>(1,)</c> for <c>{p}roots</c>.</param>
+        /// <returns>The fresh owning array.</returns>
+        /// <exception cref="NotSupportedException">A None or str item: NumPy's object arithmetic raises its TypeError there
+        ///     (<c>bad operand type for unary -: 'NoneType'</c>), and NumSharp has no object dtype to compute it with.</exception>
+        /// <exception cref="OverflowException">Python int items whose quotient exceeds the float range (CPython's
+        ///     <c>integer division result too large for a float</c>).</exception>
+        private static NDArray ObjectLinearRoot(PolyBasis basis, object c, Shape shape)
+        {
+            object[] items = PolySequence.Items(c);
+            // FromObject keeps each item's kind: a BigInteger is a Python int, Half a NumPy float16 scalar, an NDArray a 0-d
+            // array (its operations are ufuncs) — the same objects NumPy's object array holds.
+            var root = LinearRoot(basis, PolyNumber.FromObject(items[0]), PolyNumber.FromObject(items[1]));
+            return ScalarArray(root, shape);
+        }
+
+        /// <summary>
+        ///     The element operations of NumPy's OBJECT companion statements that can raise, run in NumPy's order for an object
+        ///     series of three or more terms — so the caller reports NumPy's first error, or knows there is none (NumPy then
+        ///     holds an object matrix: <c>{p}companion</c>'s result, which NumSharp refuses, and <c>{p}roots</c>' isfinite
+        ///     TypeError).
+        /// </summary>
+        /// <param name="basis">The basis.</param>
+        /// <param name="c">The caller's argument: a Python sequence whose first <paramref name="len"/> items are the trimmed
+        ///     series.</param>
+        /// <param name="len">The trimmed length (≥ 3).</param>
+        /// <remarks>
+        ///     <para>
+        ///     NumPy's last-column statement (file header) runs object-dtype ufuncs: each item meets its operand through
+        ///     Python's own operator, element by element in order, and the first exception ends the statement. With numeric
+        ///     items only one error is possible — a Python int too large for a float (≥ 2**1024 after rounding): CPython's
+        ///     <c>integer division result too large for a float</c> when it is divided by a Python int (or bool) and the
+        ///     quotient overflows, <c>int too large to convert to float</c> when it meets anything else. Only the FIRST array
+        ///     operation can meet a Python int — its results are floats (true division) or the products of a Python float —
+        ///     except Hermite's <c>2.0 * c[-1]</c> and HermiteE's <c>/ c[-1]</c>, which meet the leading item again:
+        ///     </para>
+        ///     <list type="bullet">
+        ///       <item>poly / cheb / leg / lag: <c>c[:-1] / c[-1]</c>; what follows multiplies floats and adds them to the
+        ///         matrix's numbers.</item>
+        ///       <item>herm: <c>scl * c[:-1]</c>, then the plain Python product <c>2.0 * c[-1]</c>; their quotient divides floats
+        ///         by a nonzero float.</item>
+        ///       <item>herme: <c>scl * c[:-1]</c>, then <c>... / c[-1]</c>.</item>
+        ///     </list>
+        ///     <para>
+        ///     An operand that is not the object array's own item — the float64 helper <c>scl</c>, a divisor <c>c[-1]</c> — is
+        ///     first CAST to the object dtype by the ufunc, which makes a NumPy scalar or 0-d array its Python value
+        ///     (<see cref="ObjectLoopValue"/>): <c>huge / np.int64(3)</c> inside the loop is Python int / Python int (the
+        ///     division text), where the bare expression would be the conversion text. The helper's values cannot change
+        ///     whether a product raises (a Python float meeting a too-large int raises whatever its value), so 1.0 stands for
+        ///     each. None, a str or another object an operation reaches is CPython's TypeError there — NotSupportedException
+        ///     here (<see cref="PolyNumber.FromObject"/>), the documented object-arithmetic divergence.
+        ///     </para>
+        /// </remarks>
+        /// <exception cref="OverflowException">CPython's overflow texts above, from the first element that raises.</exception>
+        /// <exception cref="NotSupportedException">An operation reaches None, a str or another object NumSharp cannot read as a
+        ///     number (NumPy raises CPython's TypeError there).</exception>
+        private static void ObjectCompanionArithmetic(PolyBasis basis, object c, long len)
+        {
+            object[] items = PolySequence.Items(c);
+            long n = len - 1;
+            if (basis == PolyBasis.Hermite || basis == PolyBasis.HermiteE)
+            {
+                // `scl * c[:-1]`: the float64 helper array, cast to the object dtype, times each item, in order.
+                var helper = PolyNumber.FromPython(PyScalar.Float(1.0));
+                var products = new PolyNumber[n];
+                for (long i = 0; i < n; i++)
+                    products[i] = PolyNumber.Binary(BinaryOp.Multiply, helper, PolyNumber.FromObject(items[i]));
+                if (basis == PolyBasis.Hermite)
+                {
+                    // `(2.0 * c[-1])`: Python's own operator on the item (outside any ufunc, so the item keeps its kind).
+                    PolyNumber.Binary(BinaryOp.Multiply, PolyNumber.FromPython(PyScalar.Float(2.0)), PolyNumber.FromObject(items[n]));
+                    return;
+                }
+                var divisor = ObjectLoopValue(items[n]);
+                for (long i = 0; i < n; i++)
+                    PolyNumber.Binary(BinaryOp.Divide, products[i], divisor);
+                return;
+            }
+            // `c[:-1] / c[-1]` (power, Chebyshev, Legendre, Laguerre): the divisor cast to the object dtype once, before the loop.
+            var d = ObjectLoopValue(items[n]);
+            for (long i = 0; i < n; i++)
+                PolyNumber.Binary(BinaryOp.Divide, PolyNumber.FromObject(items[i]), d);
+        }
+
+        /// <summary>
+        ///     An operand as an object-dtype ufunc loop receives it after NumPy's cast to the object dtype: a Python number
+        ///     unchanged; a NumPy scalar or 0-d array its element as the Python value NumPy's getitem makes — float16 / float32 /
+        ///     float64 a Python float (exact widening), an integer (char included) a Python int, a bool a Python bool, a complex
+        ///     a Python complex.
+        /// </summary>
+        /// <param name="item">The operand (an item of the caller's sequence).</param>
+        /// <returns>The Python value.</returns>
+        /// <exception cref="NotSupportedException">None, a str or another object NumSharp cannot read as a number (NumPy's
+        ///     object arithmetic raises CPython's TypeError when it reaches it), or a decimal — NumSharp's dtype with no NumPy
+        ///     analog, so no Python value an object array could hold.</exception>
+        private static PolyNumber ObjectLoopValue(object item)
+        {
+            var x = PolyNumber.FromObject(item);
+            if (x.IsPython)
+                return x;
+            // The element, boxed as its CLR type (a 0-d array's single element, or the NumPy scalar's value).
+            object e = x.Kind == PolyNumberKind.Array ? x.Array.GetAtIndex(0) : x.ToObject();
+            return PolyNumber.FromPython(e switch
+            {
+                bool b => PyScalar.Bool(b),
+                Half h => PyScalar.Float((double)h),
+                float f => PyScalar.Float(f),
+                double f => PyScalar.Float(f),
+                Complex z => PyScalar.Cplx(z),
+                char ch => PyScalar.Int(ch),
+                ulong u => PyScalar.Int(new BigInteger(u)),
+                decimal => throw new NotSupportedException(
+                    "a decimal item has no Python value NumPy's object array could hold (NumSharp's decimal has no NumPy analog)"),
+                _ => PyScalar.Int(Convert.ToInt64(e)),   // the remaining signed / unsigned integer scalars
+            });
         }
 
         /// <summary>
@@ -229,6 +403,10 @@ namespace NumSharp
         /// <returns>True when Python's <c>o != 0</c> is False.</returns>
         private static bool IsPythonZero(object o)
         {
+            // An object array keeps a 0-d array item AS an array, and `ndarray != 0` is its one-element elementwise comparison,
+            // whose truth value trimseq reads: `np.array(0.0)` and `np.array(-0.0)` are trimmed like the number zero.
+            if (o is NDArray nd)
+                return nd.ndim == 0 && !PolyNumber.FromObject(nd).NotZero();
             if (o is null || o is string || !PolyNumber.IsScalarValue(o))
                 return false;
             try

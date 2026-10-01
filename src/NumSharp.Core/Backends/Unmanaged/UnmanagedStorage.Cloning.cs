@@ -276,9 +276,12 @@ namespace NumSharp.Backends
 
         /// <summary>
         /// Builds a byte-reinterpreting alias: a new storage of dtype <typeparamref name="T"/> over the
-        /// SAME memory, carrying <paramref name="shape"/> (dims/strides/offset) and a non-owning wrap of
-        /// <paramref name="wrapCount"/> new-dtype elements. A read-only source stays read-only, and the
-        /// ultimate owner is rooted through <c>_baseStorage</c> so the shared buffer outlives the view.
+        /// SAME memory, carrying <paramref name="shape"/> (dims/strides/offset) and a non-owning slice of
+        /// <paramref name="wrapCount"/> new-dtype elements whose reference counting forwards to this storage's
+        /// block (<see cref="ArraySlice.WrapShared{T}"/>): an NDArray over the alias holds a counted reference on
+        /// the owner's buffer, so disposing the owner while the alias lives does not free it (a plain wrap did —
+        /// the alias then read the next same-size allocation). A read-only source stays read-only, and the
+        /// ultimate owner is rooted through <c>_baseStorage</c> for the GC.
         /// </summary>
         private unsafe UnmanagedStorage WrapReinterpreted<T>(Shape shape, long wrapCount) where T : unmanaged
         {
@@ -292,7 +295,9 @@ namespace NumSharp.Backends
             if ((shape._flags & (int)ArrayFlags.ALIGNED) == 0)
                 shape = shape.WithFlags(flagsToSet: ArrayFlags.ALIGNED);
 
-            var newSlice = ArraySlice.Wrap<T>((T*)InternalArray.Address, wrapCount);
+            // The alias counts its references on THIS storage's block (WrapShared), so disposing the owner while the
+            // reinterpreted view lives does not free the buffer under it.
+            var newSlice = ArraySlice.WrapShared<T>(InternalArray.Address, wrapCount, InternalArray);
             var r = new UnmanagedStorage();
             r._shape = shape;
             r._typecode = InfoOf<T>.NPTypeCode;
@@ -360,7 +365,9 @@ namespace NumSharp.Backends
         /// <param name="imaginary"><c>false</c> selects the real lane, <c>true</c> the imaginary lane.</param>
         /// <returns>
         ///     A float64 <see cref="UnmanagedStorage"/> aliasing this storage's chosen lane. Writes through
-        ///     to the Complex base; the base is kept alive via <c>_baseStorage</c>.
+        ///     to the Complex base; the base's buffer is kept alive by the lane's counted reference on the base's
+        ///     block (<see cref="ArraySlice.WrapShared{T}"/>) — disposing the base while the lane lives does not free
+        ///     it — and the base object by <c>_baseStorage</c>.
         /// </returns>
         /// <remarks>
         ///     <para>
@@ -400,8 +407,9 @@ namespace NumSharp.Backends
             if (!_shape.IsWriteable && laneShape.IsWriteable)
                 laneShape = laneShape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
 
-            // Non-owning float64 slice over the SAME memory; lifetime handed to the Complex owner.
-            var slice = ArraySlice.Wrap<double>((double*)InternalArray.Address, doubleCount);
+            // Non-owning float64 slice over the SAME memory.
+            // Counted on the Complex owner's block (WrapShared): disposing the owner while the lane lives keeps the buffer.
+            var slice = ArraySlice.WrapShared<double>(InternalArray.Address, doubleCount, InternalArray);
 
             var r = new UnmanagedStorage();
             r._shape = laneShape;

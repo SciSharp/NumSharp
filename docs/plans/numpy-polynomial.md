@@ -25,7 +25,7 @@
 | Page section | NumPy API | NumSharp today |
 |---|---|---|
 | Legacy "polynomial module" (`numpy.lib.polynomial`) | `poly1d`, `polyval`, `poly`, `roots`, `polyfit`, `polyder`, `polyint`, `polyadd`, `polydiv`, `polymul`, `polysub` | **Done** — all 11 functions and `poly1d(c_or_r, r, variable)`, byte-exact. Oracle: `poly.jsonl` (portable); `roots`, `polyfit` and `poly`-of-a-matrix are in host-pinned `linalg_parity`. Unit tests + live-parity tests. Only `RankWarning` is absent: NumSharp emits no warnings anywhere. |
-| "Polynomial package" (`numpy.polynomial`) | 6 modules × ~31 names, `polyutils`, 6 classes, `set_default_printstyle` | **U3 + U1 + U4 + U2 + U5 + U7 delivered** — 172 of 193 names: the evaluation family (36, `polyvalfromroots` open), the additive family with `polyutils` (54: `{p}add/sub/trim/line`, the 24 constants, `as_series`/`trimseq`/`trimcoef`/`getdomain`/`mapparms`/`mapdomain`), the calculus family (12: `{p}der`/`{p}int`), the series algebra (40: `{p}mulx/mul/div/pow/fromroots`, `X2poly`/`poly2X`), the Vandermonde family (18: `{p}vander`/`{p}vander2d`/`{p}vander3d`) and the companion / roots pair (12: `{p}companion`/`{p}roots`), all bit-exact (`polyeval.jsonl` 19,216 + `polyseries.jsonl` 18,698 + `polycalc.jsonl` 27,526 + `polyalgebra.jsonl` 28,144 + `polyvander.jsonl` 31,180 + `polyroots.jsonl` 6,681 cases; the BLAS-bound products and the LAPACK-bound roots byte-exact with the OpenBLAS backend, `polyalgebra_parity.jsonl` 139 + `polyroots_parity.jsonl` 1,242). Facade `np.polynomial.{polynomial,chebyshev,legendre,laguerre,hermite,hermite_e,polyutils}`; 0 of 6 classes. `coverage/generate_coverage.py` catalogues all seven `numpy.polynomial.*` submodules as out-of-headline surfaces. |
+| "Polynomial package" (`numpy.polynomial`) | 6 modules × ~31 names, `polyutils`, 6 classes, `set_default_printstyle` | **U3 + U1 + U4 + U2 + U5 + U7 delivered** — 172 of 193 names: the evaluation family (36, `polyvalfromroots` open), the additive family with `polyutils` (54: `{p}add/sub/trim/line`, the 24 constants, `as_series`/`trimseq`/`trimcoef`/`getdomain`/`mapparms`/`mapdomain`), the calculus family (12: `{p}der`/`{p}int`), the series algebra (40: `{p}mulx/mul/div/pow/fromroots`, `X2poly`/`poly2X`), the Vandermonde family (18: `{p}vander`/`{p}vander2d`/`{p}vander3d`) and the companion / roots pair (12: `{p}companion`/`{p}roots`), all bit-exact (`polyeval.jsonl` 19,216 + `polyseries.jsonl` 18,698 + `polycalc.jsonl` 27,526 + `polyalgebra.jsonl` 28,144 + `polyvander.jsonl` 31,180 + `polyroots.jsonl` 8,195 cases; the BLAS-bound products and the LAPACK-bound roots byte-exact with the OpenBLAS backend, `polyalgebra_parity.jsonl` 139 + `polyroots_parity.jsonl` 1,354). Facade `np.polynomial.{polynomial,chebyshev,legendre,laguerre,hermite,hermite_e,polyutils}`; 0 of 6 classes. `coverage/generate_coverage.py` catalogues all seven `numpy.polynomial.*` submodules as out-of-headline surfaces. |
 | "Transition guide" | the reversed coefficient order; `Polynomial.fit(...).convert()` | Documentation only. It is a real hazard for us, though, because the new package **reuses the legacy names with the opposite coefficient order** (§2 D5). |
 
 User demand on record: issue **#496** "Can NumSharp fit polynomial surface equations?" — that is exactly
@@ -828,7 +828,7 @@ machine-partitioned; the counts sum to 193 with no overlap (Appendix A).
 - **Closes #496** (together with U5).
 - **Tests to port:** `TestFitting` × 6.
 
-### U7 — Companion and roots (12 names) — DELIVERED 2026-10-01
+### U7 — Companion and roots (12 names) — DELIVERED 2026-10-01 (+ wholeness pass)
 
 **As built.** Where the build diverges from the plan below, this block wins; the plan is kept for the record.
 - **Engine.** `Polynomial/Package/NDPolyAlgebra.Roots.cs`, a partial of U2's `NDPolyAlgebra` on its arena:
@@ -867,9 +867,87 @@ machine-partitioned; the counts sum to 193 with no overlap (Appendix A).
   including the rotated companion's negative strides; this saves 0.45 µs of eigvals' wrapper on a 10×10.
 - **Object series.** as_series continues in the object dtype, and companion's next statement is the length check on the
   TRIMMED object array. `ObjectTrimLength` therefore applies Python's `item != 0` scan from the end: `[None, 0]`,
-  `[None, 0.0, -0.0]` and `[2**70, 0]` raise NumPy's ValueError; longer object series are NotSupportedException
-  (NumPy computes with Python objects). Every object series' roots are refused (`[Misaligned]`: NumPy returns
-  `np.array([], dtype=object)` for one term and computes with objects otherwise).
+  `[None, 0.0, -0.0]` and `[2**70, 0]` raise NumPy's ValueError. At delivery every longer object series was
+  NotSupportedException and every object series' roots were refused; the wholeness pass below computes what NumPy
+  answers with a number or a deterministic error.
+- **Wholeness pass (2026-10-01).** A probe of 3,096 cases was generated against NumPy and replayed through the facades.
+  It covered:
+  - every C# argument kind × both functions × six bases: typed arrays, `Memory<T>`, tuples, lists, jagged and
+    `NDArray[]` series, Half/char/decimal items, 0-d arrays, BigInteger items;
+  - long series up to 1,100 terms (Hermite's `scl` underflow, float16 rounding past 2048);
+  - edge numeric series: ±inf / NaN leading or interior terms, all-NaN, tiny / huge leading terms, subnormals,
+    int64 / uint64 / int8 extremes, complex non-finite components, signed-zero trims.
+
+  Result: 2,982 exact, 0 wrong, 114 refused, all in the object-dtype classes below. It found:
+  - **A two-term object series is computed.** NumPy's linear statement runs on the object array's ITEMS
+    (`ObjectLinearRoot` → `PolyNumber`: CPython for Python numbers, scalarmath for NumPy scalars, ufuncs for 0-d arrays),
+    and `np.array` makes a NUMERIC array of the one result. For `[2**70, np.float16(1.5)]` that is float16 -inf (the
+    Python int converted to float16 overflows). For `[2**70, np.array(1.5, float32)]` it is float32. A Python int past
+    the float range is CPython's `integer division result too large for a float` (Hermite: `int too large to convert
+    to float`, because `-.5 * c[0]` converts first).
+  - **An object series of three or more terms raises NumPy's error.** NumPy builds an object companion matrix:
+    `{p}companion` returns it (refused here), and `{p}roots` hands it to eigvals, whose `_assert_finite` raises
+    `ufunc 'isfinite' not supported for the input types, …` (TypeError) before LAPACK. Both run the last-column
+    arithmetic first, and that raises when a Python int too large for a float meets it. `ObjectCompanionArithmetic`
+    replays exactly the element operations that can raise, in NumPy's order:
+    - poly / cheb / leg / lag: `c[:-1] / c[-1]`;
+    - herm: `scl * c[:-1]`, then `2.0 * c[-1]`;
+    - herme: `scl * c[:-1]`, then `/ c[-1]`.
+
+    The divisor is CAST to the object dtype before the loop, so a 0-d integer (or np.int64) divisor is a Python int
+    there, and `huge / it` is the int/int text, where the bare expression would be the conversion text. The float64
+    helper's items are Python floats. Probed over a 25-series grid × 6 bases × 2 functions: all 200 comparable
+    outcomes exact, 88 in the documented object classes.
+  - **A trailing 0-d array zero is trimmed** (`np.array(0.0) != 0` is its elementwise comparison).
+  - **LIBRARY-WIDE: byte-reinterpreting aliases did not keep their owner's buffer alive.**
+    - The leak: `np.real`/`np.imag`/`.real`/`.imag`, `view(dtype)` and `getfield` carve a slice of another element type
+      over the owner's memory. It was a plain non-owning wrap (`Disposer.Null`), so disposing the owner returned the
+      buffer to the pool under a live alias.
+    - The consequence: eigvals' `[NDScoped]` wrapper disposes the complex result `w` while returning `w.real`. The
+      next same-size allocation (the next eigvals call) overwrote the first result, single-threaded, and under 16
+      threads one call read another's eigenvalues. NumPy showed 0 differences under the same load.
+    - The fix: `ArraySlice.WrapShared` gives the alias an `AllocationType.Forward` disposer that forwards every ARC
+      operation to the owner's slice. As in NumPy, the owner's refcount now counts its aliases (`resize(refcheck)`
+      refuses while one lives).
+    - Verified: 0 differences at 16 threads (366 first calls + 6,400 steady-state, every stage: companion, the
+      rotated flip copy, eigvals over every layout).
+  - **Remaining divergences** (NotSupportedException): a one-term object series' roots (NumPy's
+    `np.array([], dtype=object)`, `[Misaligned]`), the object companion matrix itself, and CPython's TypeErrors from
+    None / str arithmetic (the U2 policy: object arithmetic is not emulated).
+  - **Perf of the object value path.** NumPy 2.4.2 vs NumSharp, pinned 0xF0, best-of-9. The new path first ran at
+    1.13–1.66× NumPy: the shared coercion (`NDPolySequence`'s leaf classification, `NDPolySeries.AsCoefficientArray`'s
+    scalar path) classified a Python int past uint64 by throwing and catching NotSupportedException, ~1.4 µs a leaf.
+    `PolyNumber.TryDiscoveredDtype` and `ObjectArrayRefusal` (the refusal built, never thrown) remove it. Every unit's
+    object-series path shares this coercion, so all of them speed up.
+
+    | Cell | NumPy µs | NumSharp µs | NPY/NS |
+    |---|---:|---:|---:|
+    | `polyroots([2**70, 1])` | 2.344 | 0.696 | 3.37 |
+    | `polycompanion([2**70, 1])` | 2.447 | 0.694 | 3.53 |
+    | `hermroots([2**70, np.float16(1.5)])` | 3.455 | 0.749 | 4.61 |
+    | `lagroots([2**70, np.array(1.5, float32)])` | 3.987 | 1.364 | 2.92 |
+    | `polyroots([2**70, 1, 0, 0.0])` | 2.731 | 0.812 | 3.36 |
+  - **Oracle:** two new sections, each in its own pass so every earlier id is unchanged.
+    - K: two-term object series and 0-d-zero trims (`_pa_object_land`-filtered), plus edge numeric series;
+      1,142 portable + 112 host-pinned cases.
+    - L: object series of three or more terms (OverflowErrors and the isfinite TypeError); 372 cases.
+
+    Planted bugs:
+    - K: object linear root refused (companion / roots), 0-d items never trimmed — 210 / 210 / 54 red;
+    - L:
+      - roots refused instead of the TypeError: 104;
+      - arithmetic skipped (roots / companion): 118 / 118;
+      - divisor not cast: 24;
+      - Hermite on the division path: 34;
+      - `2.0 * c[-1]` skipped: 8;
+      - only the first element checked: 24.
+  - **Unit tests** (+4 in PolynomialRootsTests, +4 alias-lifetime tests in ArcLifecycleTests, +1 in LapackEigTests):
+    - the object two-term bytes per basis;
+    - the OverflowError texts;
+    - the three-or-more-term error order;
+    - real roots / real eigvals surviving later calls;
+    - every reinterpreting alias surviving its owner's dispose, the refcount in either dispose order, alias-of-alias
+      chains, `resize` refcheck.
 - **Oracle.**
   - `polyroots.jsonl` (`gen_oracle.py polyroots`, 6,681 cases, sections A–J) holds every companion and the roots that
     never reach LAPACK: the constant and linear short cuts, float16's linalg TypeError, a non-finite companion's

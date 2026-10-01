@@ -387,21 +387,62 @@ namespace NumSharp
         /// <exception cref="NotSupportedException">A Python int beyond uint64: NumPy builds an OBJECT array
         ///     (<c>np.array([2**64, 1])</c>), a dtype NumSharp does not have.</exception>
         public NPTypeCode DiscoveredDtype()
+            => TryDiscoveredDtype(out NPTypeCode t) ? t : throw ObjectArrayRefusal();
+
+        /// <summary>
+        ///     <see cref="DiscoveredDtype"/> without the exception: false for a Python int beyond uint64, the one value
+        ///     np.array cannot give a numeric dtype (it builds an OBJECT array).
+        /// </summary>
+        /// <param name="t">The discovered dtype (<see cref="NPTypeCode.Empty"/> when false).</param>
+        /// <returns>False for a Python int beyond uint64; true otherwise.</returns>
+        /// <remarks>
+        ///     Array coercion classifies EVERY leaf of a sequence, and an object series (a Python int past uint64 among its
+        ///     terms) is a legitimate input numpy.polynomial computes with — throwing and catching here cost ~1 µs a leaf, half
+        ///     of a two-term object series' whole <c>{p}roots</c>. The refusal object is <see cref="ObjectArrayRefusal"/>.
+        /// </remarks>
+        public bool TryDiscoveredDtype(out NPTypeCode t)
         {
             if (!IsPython)
-                return Dtype;
-            if (Py.IsBool) return NPTypeCode.Boolean;
+            {
+                t = Dtype;
+                return true;
+            }
+            if (Py.IsBool)
+            {
+                t = NPTypeCode.Boolean;
+                return true;
+            }
             switch (Py.Kind)
             {
                 case PyKind.Int:
-                    if (Py.I >= s_longMin && Py.I <= s_longMax) return NPTypeCode.Int64;
-                    if (Py.I.Sign >= 0 && Py.I <= s_ulongMax) return NPTypeCode.UInt64;
-                    throw new NotSupportedException(
-                        $"Python int {Py.I} fits neither int64 nor uint64: NumPy builds an object array for it, a dtype NumSharp does not have");
-                case PyKind.Float: return NPTypeCode.Double;
-                default: return NPTypeCode.Complex;
+                    if (Py.I >= s_longMin && Py.I <= s_longMax)
+                        t = NPTypeCode.Int64;
+                    else if (Py.I.Sign >= 0 && Py.I <= s_ulongMax)
+                        t = NPTypeCode.UInt64;
+                    else
+                    {
+                        t = NPTypeCode.Empty;
+                        return false;
+                    }
+                    return true;
+                case PyKind.Float:
+                    t = NPTypeCode.Double;
+                    return true;
+                default:
+                    t = NPTypeCode.Complex;
+                    return true;
             }
         }
+
+        /// <summary>
+        ///     The NotSupportedException <see cref="DiscoveredDtype"/> raises for a Python int beyond uint64, built but NOT
+        ///     thrown — array coercion keeps it as the deferred refusal of an object array and raises it only where NumPy
+        ///     would start computing with Python objects.
+        /// </summary>
+        /// <returns>The exception (its message names the value).</returns>
+        public NotSupportedException ObjectArrayRefusal()
+            => new NotSupportedException(
+                $"Python int {Py.I} fits neither int64 nor uint64: NumPy builds an object array for it, a dtype NumSharp does not have");
 
         // ---------------------------------------------------------------------------------------------
         //  Value conversion

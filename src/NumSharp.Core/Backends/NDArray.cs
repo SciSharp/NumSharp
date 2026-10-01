@@ -914,10 +914,21 @@ namespace NumSharp
         ///     Data-type descriptor of the returned view, e.g., float32 or int16. The default, None, results in the view having the same data-type as a.
         ///     This argument can also be specified as an ndarray sub-class, which then specifies the type of the returned object (this is equivalent to setting the type parameter).
         /// </param>
-        /// <returns></returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.view.html</remarks>
-        public NDArray<T> view<T>() where T : unmanaged 
-            => view(typeof(T)).AsGeneric<T>();
+        /// <typeparam name="T">The element type the bytes are read as (the view's dtype).</typeparam>
+        /// <returns>The typed view (shares memory with this array; keeps its buffer alive while it lives).</returns>
+        /// <exception cref="ArgumentException">A 0-d array whose itemsize changes, or a larger dtype that does not divide the
+        ///     last axis' byte length.</exception>
+        /// <exception cref="InvalidOperationException">A dtype of a different size over a non-contiguous last axis.</exception>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.ndarray.view.html
+        ///     <para>
+        ///     Built as the typed array directly over the alias storage <see cref="view(DType)"/> would wrap: going through
+        ///     <c>view(typeof(T)).AsGeneric&lt;T&gt;()</c> made a SECOND NDArray over that storage, leaving the first — a
+        ///     counted reference on this array's buffer — to the finalizer.
+        ///     </para>
+        /// </remarks>
+        public NDArray<T> view<T>() where T : unmanaged
+            => new NDArray<T>(Storage.AliasAs(InfoOf<T>.NPTypeCode)) { TensorEngine = TensorEngine };
 
         #region Getters
 

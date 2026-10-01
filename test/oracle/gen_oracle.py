@@ -13879,6 +13879,125 @@ def gen_polyroots():
                 c = np.array([a0, a1], dtype=np.complex128)
                 both(ops, A(c), "linear", f"lin/c/{a0!r}/{a1!r}")
 
+    # ---------------- (K) the wholeness pass: object series NumPy still computes, edge numeric series ----------------
+    # Its own pass after A-J, so every earlier id (they end in a running counter) is unchanged. A Python int past uint64
+    # among the terms makes as_series' copy an OBJECT array whose items keep their kinds (Python numbers, NumPy scalars,
+    # 0-d ARRAYS): two terms after trimming are the linear root — arithmetic on the items (CPython for Python numbers,
+    # scalarmath for NumPy scalars, ufuncs for 0-d arrays) wrapped by np.array into a NUMERIC array. trimseq compares each
+    # item with 0, so a trailing 0-d array zero is trimmed too. Outcomes that are object arrays or object-arithmetic
+    # TypeErrors are filtered (_pa_object_land); the length ValueError and CPython's int/int OverflowError are kept.
+    big = 2 ** 70
+    nan, inf = float("nan"), float("inf")
+    obj_series = [
+        ("big_one", [big, 1]), ("big_three", [big, 3]), ("big_float", [big, 1.5]), ("float_big", [1.5, big]),
+        ("big_big", [big, big]), ("nbig_big", [-big, big]), ("big_complex", [big, 1j]), ("complex_big", [1 + 2j, big]),
+        ("big_half", [big, np.float16(2.0)]), ("half_big", [np.float16(1.0), big]), ("big_true", [big, True]),
+        ("true_big", [True, big]), ("big_one_zero", [big, 1, 0]), ("big_one_zeros", [big, 1, 0.0, -0.0]),
+        ("big_nan", [big, nan]), ("big_inf", [big, inf]), ("huge_one", [2 ** 1024, 1]), ("huge_huge", [2 ** 1024, 2 ** 1023]),
+        ("one_huge", [1, 2 ** 1024]), ("big64_one", [2 ** 64, 1]), ("u64max_big", [2 ** 64 - 1, big]),
+        ("big_negone", [big, -1]), ("big_negzero", [big, -0.0]), ("big_zero", [big, 0]), ("big_alone", [big]),
+        ("big_tuple", (big, 3)), ("big_tuple_trim", (big, 1, 0.0)), ("big_three_terms", [big, 1, 2]),
+        ("big_nd0f32", [big, A(np.array(1.5, np.float32))]), ("nd0f16_big", [A(np.array(1.5, np.float16)), big]),
+        ("big_nd0c", [big, A(np.array(1 + 1j))]), ("big_nd0i8", [big, A(np.array(-3, np.int8))]),
+        ("big_nd0u64max", [big, A(np.array(2 ** 64 - 1, np.uint64))]), ("nd0c_big", [A(np.array(1 - 2j)), big]),
+        ("big_one_nd0zero", [big, 1, A(np.array(0.0))]), ("big_nd0zero", [big, A(np.array(0.0))]),
+        ("big_one_nd0negzero16", [big, 1, A(np.array(-0.0, np.float16))]), ("big_one_nd0false", [big, 1, A(np.array(False))]),
+        ("big_nd0one_nd0zero", [big, A(np.array(2, np.int16)), A(np.array(0, np.uint8))]),
+        ("big_c0zero", [big, 2 + 0j, complex(0.0, -0.0)]), ("big_one_nd0nan", [big, 1, A(np.array(nan))]),
+        ("none_one", [None, 1]), ("one_none", [1, None]), ("none_zero", [None, 0]),
+    ]
+
+    def edge(dt, vals):
+        with np.errstate(all="ignore"):
+            return A(np.array(vals, dtype=dt))
+
+    edges = []
+    for dt, tiny, huge in (("float64", 1e-300, 1e300), ("float32", 1e-40, 3e38), ("float16", 6e-8, 65504.0)):
+        edges += [(f"lead_inf/{dt}", edge(dt, [1.0, -2.0, inf])), (f"lead_ninf/{dt}", edge(dt, [1.0, 2.0, 3.0, -inf])),
+                  (f"lead_nan/{dt}", edge(dt, [1.0, 2.0, nan])), (f"inf_mid/{dt}", edge(dt, [1.0, inf, 2.0])),
+                  (f"all_nan/{dt}", edge(dt, [nan, nan, nan])), (f"inf_zero_tail/{dt}", edge(dt, [inf, 1.0, 0.0, -0.0])),
+                  (f"lin_inf/{dt}", edge(dt, [inf, 2.0])), (f"lin_zero_inf/{dt}", edge(dt, [0.0, inf])),
+                  (f"lin_nan/{dt}", edge(dt, [nan, 2.0])), (f"tiny_lead/{dt}", edge(dt, [1.0, 2.0, 3.0, tiny])),
+                  (f"huge_lead/{dt}", edge(dt, [1.0, 2.0, huge])), (f"huge_rest/{dt}", edge(dt, [huge, -huge, 1e-3])),
+                  (f"negzero_lead_trim/{dt}", edge(dt, [1.0, 2.0, 3.0, -0.0])), (f"trim_to_lin/{dt}", edge(dt, [2.0, 3.0, 0.0, 0.0])),
+                  (f"trim_to_one/{dt}", edge(dt, [5.0, 0.0, -0.0])), (f"zeros/{dt}", edge(dt, [0.0, 0.0, 0.0])),
+                  (f"subnormals/{dt}", edge(dt, [5e-324 if dt == "float64" else 1e-45 if dt == "float32" else 6e-8, 1.0,
+                                                 5e-324 if dt == "float64" else 1e-45 if dt == "float32" else 6e-8]))]
+    cx = complex
+    edges += [("c_lead_inf", edge("complex128", [1 + 1j, 2.0, cx(inf, 0)])), ("c_lead_infim", edge("complex128", [1 + 1j, 2.0, cx(0, inf)])),
+              ("c_lead_nan", edge("complex128", [1 + 1j, 2.0, cx(nan, 1)])), ("c_lead_nanim", edge("complex128", [1 + 1j, 2.0, cx(1, nan)])),
+              ("c_lead_tiny", edge("complex128", [1 + 1j, 2.0, cx(1e-300, 1e-300)])), ("c_lin_inf", edge("complex128", [cx(inf, 1), 2 + 0j])),
+              ("c_lin_negzero", edge("complex128", [cx(-0.0, 0.0), cx(2, -0.0)])),
+              ("c_trim_negzero", edge("complex128", [1 + 1j, 2.0, cx(-0.0, -0.0)])),
+              ("i64_extremes", edge("int64", [-2 ** 63, 2 ** 63 - 1, 1])), ("i64_lead_min", edge("int64", [1, 2, -2 ** 63])),
+              ("u64_max_lead", edge("uint64", [1, 2, 2 ** 64 - 1])), ("u64_max_rest", edge("uint64", [2 ** 64 - 1, 2 ** 64 - 2, 3])),
+              ("i8_extremes", edge("int8", [-128, 127, -1])), ("u8_max", edge("uint8", [255, 255, 255])),
+              ("i32_lin", edge("int32", [7, -3])), ("u16_lin", edge("uint16", [65535, 3]))]
+    for modname, p in POLY_MODULES:
+        mod = _poly_module(modname)
+        ops = ((f"{modname}.{p}companion", getattr(mod, p + "companion")), (f"{modname}.{p}roots", getattr(mod, p + "roots")))
+        for tag, cv in obj_series:
+            for op, f in ops:
+                call = (lambda f=f, cv=cv: f(_ps_py(cv)))
+                if _pa_object_land(call):
+                    skipped["object"] += 1
+                    continue
+                emit(op, cv, call, "object_linear", f"{op}/K/obj/{tag}")
+        for tag, cv in edges:
+            both(ops, cv, "edge", f"K/edge/{tag}")
+
+    # ---------------- (L) object series of three or more terms ----------------
+    # NumPy computes the OBJECT companion matrix: {p}companion returns it (an object array — filtered) and {p}roots hands
+    # it to eigvals, whose isfinite rejects the object dtype with a TypeError before LAPACK — unless the last-column
+    # arithmetic raises first: a Python int too large for a float, divided by a Python int (`c[-1]` is cast to the object
+    # dtype, so a 0-d integer divisor is one there: CPython's int/int text) or meeting anything else (the conversion text —
+    # herm / herme multiply by their float64 helper first). TypeErrors of None / str arithmetic stay filtered. Its own
+    # pass after K, so every earlier id is unchanged.
+    huge = 2 ** 1100
+    obj3_series = [
+        ("big_1_1", [big, 1, 1]), ("huge_1_1", [huge, 1, 1]), ("1_huge_1", [1, huge, 1]), ("1_1_huge", [1, 1, huge]),
+        ("huge_1_nd0i64", [huge, 1, A(np.array(3))]), ("huge_1_f16", [huge, 1, np.float16(1.5)]),
+        ("huge_1_true", [huge, 1, True]), ("huge_1_float", [huge, 1, 1.5]), ("huge_1_complex", [huge, 1, 2j]),
+        ("f16_huge_1", [np.float16(2), huge, 1]), ("nd0f32_huge_1", [A(np.array(1.5, np.float32)), huge, 1]),
+        ("huge_huge_huge", [huge, huge, huge]), ("big_f16_nd0", [big, np.float16(2.5), A(np.array(-1.25))]),
+        ("big_1_1_0", [big, 1, 1, 0]), ("big_1_1_nd0zero", [big, 1, 1, A(np.array(0.0))]),
+        ("one_one_one_big", [1, 1, 1, big]), ("huge_none_1", [huge, None, 1]), ("huge_str_1", [huge, "a", 1]),
+        ("huge_1_big", [huge, 1, 2 ** 80]), ("p1024_1_2", [2 ** 1024, 1, 2]), ("p1023_1_half", [2 ** 1023, 1, 0.5]),
+        ("big_tuple3", (big, 2, 3)), ("big_long", [big] + [1] * 8), ("big_nan_1", [big, nan, 1]),
+        ("big_inf_1", [big, inf, 1]), ("big_c_c", [big, 1 + 1j, 2 - 1j]), ("huge_c_c", [huge, 1 + 1j, 2 - 1j]),
+        ("big_1_negzero_tail", [big, 1, 1, -0.0]), ("big_1_nd0false_tail", [big, 1, 1, A(np.array(False))]),
+        ("big_nd0u64_1", [big, A(np.array(2 ** 64 - 1, np.uint64)), 1]), ("huge_1_nd0u8", [huge, 1, A(np.array(7, np.uint8))]),
+        ("huge_1_nd0f16", [huge, 1, A(np.array(1.5, np.float16))]), ("huge_1_nd0c", [huge, 1, A(np.array(1 + 1j))]),
+        ("huge_1_nd0bool", [huge, 1, A(np.array(True))]), ("neg_huge_1_1", [-huge, 1, 1]), ("huge_1_neg1", [huge, 1, -1]),
+        ("huge_1_huge", [huge, 1, huge]), ("big_1_1_none", [big, 1, 1, None]),
+        ("one_two_three_huge", [1, 2, 3, huge]), ("half_cplx_huge", [0.5, 1j, huge]),
+        ("nd0_one_huge", [A(np.array(2.5)), 1, huge]),
+    ]
+
+    def obj3_object_land(call):
+        """Whether NumPy's outcome is an object array or a TypeError of object arithmetic (None / str) — everything but
+        an OverflowError, eigvals' isfinite TypeError and an earlier ValueError can be gated."""
+        try:
+            with np.errstate(all="ignore"), warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                r = call()
+        except TypeError as e:
+            return not str(e).startswith("ufunc 'isfinite' not supported")
+        except Exception:
+            return False
+        return np.asarray(r).dtype == object
+
+    for modname, p in POLY_MODULES:
+        mod = _poly_module(modname)
+        ops = ((f"{modname}.{p}companion", getattr(mod, p + "companion")), (f"{modname}.{p}roots", getattr(mod, p + "roots")))
+        for tag, cv in obj3_series:
+            for op, f in ops:
+                call = (lambda f=f, cv=cv: f(_ps_py(cv)))
+                if obj3_object_land(call):
+                    skipped["object"] += 1
+                    continue
+                emit(op, cv, call, "object_companion", f"{op}/L/obj3/{tag}")
+
     # Char: NumSharp's uint16-like dtype converts to float64 exactly as uint16 does (the house weave) — in both tiers,
     # since a uint16 series' roots reach LAPACK like any other integer series'.
     cases += _relabel_dtype([c for c in cases if "/uint16/" in (c.get("id") or "") and not c.get("expects_throw")],

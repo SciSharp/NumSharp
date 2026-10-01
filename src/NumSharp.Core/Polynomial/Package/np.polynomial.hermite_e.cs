@@ -578,12 +578,18 @@ namespace NumSharp
         /// </summary>
         /// <param name="c">The coefficients, LOW degree first: an <see cref="NDArray"/> (any layout), a typed C# array, a Python list or tuple (<c>object[]</c>, a <c>ValueTuple</c>, a jagged array — np.array's coercion), or a single number. Trailing zeros are trimmed first; integer series are computed in float64; a bool series has no common type.</param>
         /// <returns>A new owning (deg, deg) matrix of the series' common type; a two-term series gives the 1x1 matrix
-        ///     <c>[[-c[0] / c[1]]]</c> (NumPy's scalarmath on the two coefficients).</returns>
+        ///     <c>[[-c[0] / c[1]]]</c> (NumPy's arithmetic on the two coefficients: scalarmath, or — for an object series — the items' own: CPython for Python
+        ///     numbers, ufuncs for 0-d arrays; the 1x1 array is numeric either way).</returns>
         /// <exception cref="ValueError">An empty series (<c>Coefficient array is empty</c>), a series that is not 1-d (<c>Coefficient array is not 1-d</c>), or no common type (a bool or str series), in NumPy's order; a ragged list (np.array's inhomogeneous-shape text). Fewer than two terms after trimming:
         ///     <c>Series must have maximum degree of at least 1.</c></exception>
-        /// <exception cref="System.NotSupportedException">An object series of two or more terms (None, a non-numeric object or a
-        ///     Python int past uint64 — NumPy's object array, a dtype NumSharp does not have), raised where NumPy starts
-        ///     computing with Python objects: after the length check. A str series is NumPy's ValueError (no common type).</exception>
+        /// <exception cref="System.NotSupportedException">An OBJECT series (None, a non-numeric object or a Python int past
+        ///     uint64 among the terms makes NumPy's as_series copy an object array) of three or more terms after trimming whose
+        ///     arithmetic does not raise — NumPy's result is an object matrix, a dtype NumSharp does not have; or one where NumPy's
+        ///     object arithmetic reaches None or a str (CPython's TypeError there). A two-term object series of numbers computes:
+        ///     NumPy's linear root of the items is a numeric 1x1 array. A str series is NumPy's ValueError (no common type).</exception>
+        /// <exception cref="System.OverflowException">An object series whose arithmetic meets a Python int too large for a
+        ///     float — CPython's <c>integer division result too large for a float</c> when it is divided by a Python int,
+        ///     <c>int too large to convert to float</c> when it meets anything else — whichever NumPy's statements raise first.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.hermite_e.hermecompanion.html</remarks>
         [NDScoped]
         public NDArray hermecompanion(object c) => NDPolyAlgebra.Companion(PolyBasis.HermiteE, c);
@@ -603,13 +609,20 @@ namespace NumSharp
         ///     complex128 (NumPy's complex64 for a float32 series: NumSharp has one complex width).</returns>
         /// <exception cref="ValueError">An empty series (<c>Coefficient array is empty</c>), a series that is not 1-d (<c>Coefficient array is not 1-d</c>), or no common type (a bool or str series), in NumPy's order; a ragged list (np.array's inhomogeneous-shape text).</exception>
         /// <exception cref="TypeError">A float16 (or decimal) series of degree 2 or more: linalg's
-        ///     <c>array type float16 is unsupported in linalg</c>.</exception>
+        ///     <c>array type float16 is unsupported in linalg</c>. An OBJECT series of three or more terms whose arithmetic
+        ///     does not raise: eigvals' <c>ufunc 'isfinite' not supported for the input types, …</c> on NumPy's object
+        ///     companion matrix (raised before LAPACK — no backend needed).</exception>
         /// <exception cref="LinAlgError">A companion matrix holding an infinity or NaN (<c>Array must not contain infs or
         ///     NaNs</c>, checked before the dtype), or eigenvalues that do not converge.</exception>
         /// <exception cref="MissingBackendException">Degree 2 or more with no LAPACK backend: reference
         ///     NumSharp.Interop.OpenBLAS (NumSharp.Core ships no eigensolver).</exception>
-        /// <exception cref="System.NotSupportedException">An object series (None, a non-numeric object or a Python int past
-        ///     uint64): NumPy returns an object array or computes with Python objects.</exception>
+        /// <exception cref="System.NotSupportedException">An OBJECT series (None, a non-numeric object or a Python int past
+        ///     uint64 among the terms) of one term — NumPy returns <c>np.array([], dtype=object)</c> — or one where NumPy's
+        ///     object arithmetic reaches None or a str (CPython's TypeError there). A two-term object series of numbers
+        ///     computes: NumPy's linear root of the items is a numeric array.</exception>
+        /// <exception cref="System.OverflowException">An object series whose arithmetic meets a Python int too large for a
+        ///     float — CPython's <c>integer division result too large for a float</c> when it is divided by a Python int,
+        ///     <c>int too large to convert to float</c> when it meets anything else — whichever NumPy's statements raise first.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.hermite_e.hermeroots.html</remarks>
         [NDScoped]
         public NDArray hermeroots(object c) => NDPolyAlgebra.Roots(PolyBasis.HermiteE, c);

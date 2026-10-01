@@ -230,15 +230,18 @@ namespace NumSharp
             try
             {
                 num = PolyNumber.FromObject(a);
-                if (num.Kind != PolyNumberKind.Array)
-                    num.DiscoveredDtype();   // a Python int past uint64 is refused here, before anything is allocated
             }
             catch (NotSupportedException e)
             {
-                // What the scalar conversion refuses — a Python int past uint64, an object np.asanyarray cannot read — is,
-                // in NumPy, a one-element object array (np.array of an arbitrary object is a 0-d object array).
+                // What the scalar conversion refuses — None, a str, an object np.asanyarray cannot read — is, in NumPy, a
+                // one-element object array (np.array of an arbitrary object is a 0-d object array).
                 return PolySeriesView.NonNumericArray(s_oneDim, isObject: true, e);
             }
+            // A Python int past uint64 is the same one-element object array, refused here before anything is allocated —
+            // classified without throwing (it is a legitimate input: numpy.polynomial computes with object series), the
+            // refusal built for the caller to raise where NumPy would compute with it.
+            if (num.Kind != PolyNumberKind.Array && !num.TryDiscoveredDtype(out _))
+                return PolySeriesView.NonNumericArray(s_oneDim, isObject: true, num.ObjectArrayRefusal());
             return PolySeriesView.Of(num.Kind == PolyNumberKind.Array ? num.Array : PolyNumber.MakeArray(num));
         }
 

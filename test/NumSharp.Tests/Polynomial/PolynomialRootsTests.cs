@@ -341,8 +341,9 @@ namespace NumSharp.Tests.Polynomial
 
         /// <summary>
         ///     DIVERGENCE: NumPy's <c>{p}roots([None])</c> and <c>{p}roots([None, 0])</c> return <c>np.array([], dtype=object)</c>
-        ///     — an object array, a dtype NumSharp does not have — so NumSharp refuses every object series' roots with
-        ///     NotSupportedException rather than return a numeric empty array NumPy does not.
+        ///     — an object array, a dtype NumSharp does not have — so NumSharp refuses a ONE-term object series' roots with
+        ///     NotSupportedException rather than return a numeric empty array NumPy does not (two terms and three or more are
+        ///     NumPy's numeric array or error — the ObjectSeries_* tests below).
         /// </summary>
         [TestMethod]
         [Misaligned]
@@ -352,6 +353,117 @@ namespace NumSharp.Tests.Polynomial
             {
                 b.Invoking(x => x.Roots(new object[] { null })).Should().Throw<NotSupportedException>(b.Name);
                 b.Invoking(x => x.Roots(new object[] { null, 0 })).Should().Throw<NotSupportedException>(b.Name);
+            }
+        }
+
+        /// <summary>
+        ///     A two-term OBJECT series (a Python int past uint64 among its items) is answered with a NUMERIC array: the linear
+        ///     statements (<c>-c[0]/c[1]</c>, Laguerre <c>1 + c[0]/c[1]</c>, Hermite <c>-.5*c[0]/c[1]</c>) run on the object
+        ///     array's ITEMS — CPython arithmetic between Python numbers (int / int correctly rounded; a Python complex's
+        ///     quotient keeps CPython's +0.0 real part), scalarmath with a NumPy scalar (np.float16: the Python int converted to
+        ///     float16 overflows to ±inf), a ufunc with a 0-d array (float32) — and np.array takes its dtype from that one
+        ///     number. trimseq compares each item with 0, so a trailing 0-d zero is trimmed first. Bytes from NumPy 2.4.2.
+        /// </summary>
+        [TestMethod]
+        public void ObjectSeries_TwoTerms_ComputeTheLinearRootOnTheItems()
+        {
+            var big = BigInteger.Pow(2, 70);
+            // NumPy's bytes per basis: (Python int, np.float16, 0-d float32, Python complex) second term.
+            var power = ("00000000000050c4", "00fc", "abaa2ae2", "00000000000000000000000000004044");
+            var want = new System.Collections.Generic.Dictionary<string, (string f64, string f16, string f32, string c128)>
+            {
+                ["poly"] = power, ["cheb"] = power, ["leg"] = power, ["herme"] = power,
+                ["lag"] = ("0000000000005044", "007c", "abaa2a62", "000000000000f03f00000000000040c4"),
+                ["herm"] = ("00000000000040c4", "00fc", "abaaaae1", "00000000000000000000000000003044"),
+            };
+            foreach (var b in Bases)
+            {
+                var w = want[b.Name];
+                AssertBytes(b.Companion(new object[] { big, 1 }), "float64", new long[] { 1, 1 }, w.f64, b.Name);
+                AssertBytes(b.Roots(new object[] { big, 1 }), "float64", new long[] { 1 }, w.f64, b.Name);
+                AssertBytes(b.Roots(new object[] { big, 1, NDArray.Scalar(0.0) }), "float64", new long[] { 1 }, w.f64,
+                    b.Name + ": a trailing 0-d zero is trimmed");
+                AssertBytes(b.Roots(new object[] { big, (Half)1.5 }), "float16", new long[] { 1 }, w.f16, b.Name);
+                AssertBytes(b.Roots(new object[] { big, NDArray.Scalar(1.5f) }), "float32", new long[] { 1 }, w.f32, b.Name);
+                AssertBytes(b.Companion(new object[] { big, new Complex(0, 2) }), "complex128", new long[] { 1, 1 }, w.c128, b.Name);
+            }
+        }
+
+        /// <summary>
+        ///     Past the float range a Python int raises CPython's OverflowError from the linear statement itself: Python int /
+        ///     Python int is <c>integer division result too large for a float</c>, while Hermite's <c>-.5 * c[0]</c> converts the
+        ///     int first — <c>int too large to convert to float</c>. A None term is CPython's TypeError in NumPy (<c>bad operand
+        ///     type for unary -: 'NoneType'</c>), arithmetic on an object NumSharp has no dtype for: refused.
+        /// </summary>
+        [TestMethod]
+        public void ObjectSeries_TwoTerms_TooLargeForAFloat_IsCPythonsOverflowError()
+        {
+            var huge = BigInteger.Pow(2, 1100);
+            foreach (var b in Bases)
+            {
+                string text = b.Name == "herm" ? "int too large to convert to float" : "integer division result too large for a float";
+                Raises<OverflowException>(() => b.Companion(new object[] { huge, 1 }), text, b.Name);
+                Raises<OverflowException>(() => b.Roots(new object[] { huge, 1 }), text, b.Name);
+                b.Invoking(x => x.Roots(new object[] { null, 1 })).Should().Throw<NotSupportedException>(b.Name);
+            }
+        }
+
+        /// <summary>
+        ///     Three or more object terms: NumPy computes the OBJECT companion matrix — which {p}companion returns, a dtype
+        ///     NumSharp does not have (refused) — and {p}roots hands it to eigvals, whose isfinite rejects the object dtype with a
+        ///     TypeError before LAPACK (so no backend is needed). Unless the companion's arithmetic raises first: a Python int
+        ///     too large for a float, divided by a Python int (the division text — <c>c[-1]</c> is CAST to the object dtype, so
+        ///     a 0-d int64 divisor is a Python int there), or meeting anything else (the conversion text — Hermite and HermiteE
+        ///     multiply by their float64 helper first). Outcomes probed from NumPy 2.4.2.
+        /// </summary>
+        [TestMethod]
+        public void ObjectSeries_ThreeOrMoreTerms_RootsRaiseNumPysErrorInNumPysOrder()
+        {
+            OpenBlasEngine.Disable();
+            var big = BigInteger.Pow(2, 70);
+            var huge = BigInteger.Pow(2, 1100);
+            const string isFinite = "ufunc 'isfinite' not supported for the input types, and the inputs could not be safely " +
+                                    "coerced to any supported types according to the casting rule ''safe''";
+            const string div = "integer division result too large for a float", conv = "int too large to convert to float";
+            foreach (var b in Bases)
+            {
+                bool hermFamily = b.Name is "herm" or "herme";
+                // No error in the arithmetic: the object matrix (companion refused) and eigvals' isfinite (roots).
+                foreach (var c in new[] { new object[] { big, 1, 1 }, new object[] { big, (Half)2.5, NDArray.Scalar(-1.25) },
+                             new object[] { big, 1, 1, NDArray.Scalar(0.0) }, new object[] { 1, 1, 1, big },
+                             new object[] { BigInteger.Pow(2, 1023), 1, 0.5 } })
+                {
+                    Raises<TypeError>(() => b.Roots(c), isFinite, b.Name);
+                    b.Invoking(x => x.Companion(c)).Should().Throw<NotSupportedException>(b.Name);
+                }
+                // The first element that raises decides the text.
+                foreach (var (c, plain) in new (object[], string)[]
+                         {
+                             (new object[] { huge, 1, 1 }, div), (new object[] { 1, huge, 1 }, div),
+                             (new object[] { huge, 1, NDArray.Scalar(3L) }, div), (new object[] { huge, 1, true }, div),
+                             (new object[] { (Half)2, huge, 1 }, div), (new object[] { NDArray.Scalar(1.5f), huge, 1 }, div),
+                             (new object[] { huge, 1, (Half)1.5 }, conv), (new object[] { huge, 1, 1.5 }, conv),
+                             (new object[] { huge, 1, new Complex(0, 2) }, conv),
+                             (new object[] { huge, null, 1 }, div), (new object[] { huge, "a", 1 }, div),
+                         })
+                {
+                    string text = hermFamily ? conv : plain;
+                    Raises<OverflowException>(() => b.Roots(c), text, b.Name);
+                    Raises<OverflowException>(() => b.Companion(c), text, b.Name);
+                }
+                // A too-large LEADING term only Hermite / HermiteE meet again (2.0 * c[-1], / c[-1]); a quotient that fits
+                // (2**1024 / 2) raises nowhere else.
+                foreach (var c in new[] { new object[] { 1, 1, huge }, new object[] { huge, huge, huge },
+                             new object[] { BigInteger.Pow(2, 1024), 1, 2 } })
+                {
+                    if (hermFamily)
+                        Raises<OverflowException>(() => b.Roots(c), conv, b.Name);
+                    else
+                        Raises<TypeError>(() => b.Roots(c), isFinite, b.Name);
+                }
+                // None / a str reached by the arithmetic: CPython's TypeError in NumPy, refused here.
+                b.Invoking(x => x.Roots(new object[] { big, 1, null })).Should().Throw<NotSupportedException>(b.Name);
+                b.Invoking(x => x.Roots(new object[] { big, "a", 1 })).Should().Throw<NotSupportedException>(b.Name);
             }
         }
 
@@ -402,6 +514,27 @@ namespace NumSharp.Tests.Polynomial
                 var r32 = b.Roots(c.astype(np.float32));
                 r32.dtype.name.Should().Be("float32", b.Name);
                 (r32.flags.c_contiguous && r32.flags.owndata).Should().BeTrue(b.Name);
+            }
+        }
+
+        /// <summary>
+        ///     Real roots are a view of eigvals' complex result, so they must keep that buffer alive after the call returns: a
+        ///     later call (which reuses a same-size buffer from the pool) and a same-size allocation must not change them. The
+        ///     lane view used to be a non-counted alias, and the second call's roots overwrote the first's.
+        /// </summary>
+        [TestMethod]
+        public void Roots_RealRoots_SurviveLaterCallsAndAllocations()
+        {
+            RequireLapack();
+            foreach (var b in Bases)
+            {
+                var first = b.Roots(b.FromRoots(new[] { 2.0, 3.0 }));
+                var second = b.Roots(b.FromRoots(new[] { 7.0, 9.0 }));
+                using (var thief = np.full(new Shape(2), new Complex(-5, -5)))
+                {
+                    AlmostEqual(first, new[] { 2.0, 3.0 }, 9, b.Name + ": the first call's roots");
+                    AlmostEqual(second, new[] { 7.0, 9.0 }, 9, b.Name + ": the second call's roots");
+                }
             }
         }
 

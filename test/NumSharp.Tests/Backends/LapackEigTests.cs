@@ -269,6 +269,29 @@ namespace NumSharp.Tests.Backends
                 new Complex(1, 1), new Complex(1, -1));
         }
 
+        /// <summary>
+        ///     A real-collapsed result (<c>w.real</c>: a lane VIEW of the complex eigenvalue buffer, whose own handle the eig
+        ///     scope disposes) must keep that buffer alive. It used to be a non-counted alias, so the buffer went back to the
+        ///     pool the moment eigvals returned and the next same-size allocation — another eigvals call — overwrote the
+        ///     first result (single-threaded; under threads it read other threads' eigenvalues).
+        /// </summary>
+        [TestMethod]
+        public void Eigvals_RealResult_OwnsItsBuffer_SurvivesLaterCallsAndAllocations()
+        {
+            RequireLapack();
+            var r1 = np.linalg.eigvals(np.array(new double[,] { { 2, 0 }, { 0, 3 } }));
+            var (w1, _) = np.linalg.eig(np.array(new double[,] { { 4, 0 }, { 0, 5 } }));
+            var r2 = np.linalg.eigvals(np.array(new double[,] { { 7, 0 }, { 0, 9 } }));
+            using (var thief = np.full(new Shape(2), new Complex(-111, -222)))
+            {
+                AssertClose(r1, 0, 2, 3);
+                AssertClose(w1, 0, 4, 5);
+                AssertClose(r2, 0, 7, 9);
+            }
+            r1.Storage.InternalArray.IsReleased.Should().BeFalse();
+            r1.flags.owndata.Should().BeFalse("the real parts are a view of the complex result, as NumPy's w.real is");
+        }
+
         [TestMethod]
         public void Eig_Float32_RealEigsStaySingle_ComplexEigsBecomeComplex128()
         {

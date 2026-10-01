@@ -427,6 +427,25 @@ view[0] = 999;               // Modifies original[2]!
 var copy = original["2:5"].copy();  // Explicit copy
 ```
 
+**A view keeps its owner's buffer alive, and so does a byte-reinterpreting alias (fixed 2026-10-01).** Every NDArray
+holds one counted reference on its storage's slice (`TryAddRef` at construction, `Release` on `Dispose`, `Abandon`
+from the finalizer), and an ordinary view shares the owner's slice. A view that REINTERPRETS the bytes as another
+element type needs a slice of its own: a complex array's real/imaginary lane (`np.real`/`np.imag`/`.real`/`.imag`),
+`view(dtype)`, `getfield`. That slice used to be a plain non-owning wrap (`ArraySlice.Wrap`, an immortal
+`Disposer.Null`), so disposing the owner freed the buffer under a live alias. The alias then read whatever the pool
+handed out next. `np.linalg.eigvals`' real result is `w.real` of a complex buffer its `[NDScoped]` wrapper disposes, so
+a second eigvals call (or `{p}roots`) overwrote the first's values single-threaded, and under threads read other
+threads' eigenvalues. Now `ArraySlice.WrapShared` gives the alias an `AllocationType.Forward` disposer, which forwards
+`TryAddRef`/`Release`/`Abandon`/`IsReleased`/`IsUniquelyReferenced` to the owner's slice (an alias of an alias reaches
+the owning block). Observable consequences, both NumPy's: the owner's refcount counts each live alias, so
+`ndarray.resize(refcheck: true)` refuses while one lives; and the buffer returns to the pool when the LAST of owner
+and aliases is released. Gate: `Backends/Unmanaged/ArcLifecycleTests.cs` (`ReinterpretingAlias_*`). **Corollary: an
+INTERNAL alias must now be disposed** — or created inside an `[NDScoped]` member — because an undisposed one holds the
+owner's buffer out of the pool until the finalizer runs. The leak gates caught the four unscoped members that left one
+behind: the `real`/`imag` SETTERS and `setfield` (now `[NDScoped]`), and `view<T>()`/`getfield<T>()`. Those two used
+to wrap the alias in an untyped NDArray and then `AsGeneric<T>()` it, which built a SECOND NDArray; they now construct
+the typed array directly.
+
 ## Slicing Syntax
 
 ```csharp
@@ -3211,11 +3230,12 @@ Traps:
 ### Polynomial package — companion matrices and roots (U7)
 `{p}companion` and `{p}roots` for the six bases (12 names)
 
-Plan `docs/plans/numpy-polynomial.md` (U7 delivered). **Bit-exact with NumPy 2.4.2**: oracle tier `polyroots.jsonl`
-(6,681 portable cases: every companion, plus the roots that never reach LAPACK) and the host-pinned
-`polyroots_parity.jsonl` (1,242 roots that run geev — byte-exact with `NumSharp.Interop.OpenBLAS` at threads=1,
-Inconclusive off the pinned host), 0 excused; four planted bugs turned 26 / 695 / 18 / 116 cases red. Unit tests
-`Polynomial/PolynomialRootsTests.cs` (14). **Perf (NPY/NS, `benchmark/polynomial/polyroots_*`, 229 cells, every one
+Plan `docs/plans/numpy-polynomial.md` (U7 delivered + 2026-10-01 wholeness pass). **Bit-exact with NumPy 2.4.2**:
+oracle tier `polyroots.jsonl` (8,195 portable cases: every companion, plus the roots that never reach LAPACK; 6,681 at
+delivery) and the host-pinned `polyroots_parity.jsonl` (1,354 roots that run geev; 1,242 at delivery — byte-exact with
+`NumSharp.Interop.OpenBLAS` at threads=1, Inconclusive off the pinned host), 0 excused. Planted bugs: four at delivery
+turned 26 / 695 / 18 / 116 cases red, the wholeness pass's ten turned 8–210 red each. Unit tests
+`Polynomial/PolynomialRootsTests.cs` (18). **Perf (NPY/NS, `benchmark/polynomial/polyroots_*`, 229 cells, every one
 checked): geomean 4.65×** — companion geomean 7.7× (2.2–20× up to degree 50, 4–9× at degree 500–1000), degree-1–10
 roots 1.5–5×. The cells under 1.5× are floors both sides share: LAPACK `geev` for roots of degree ≥ 50 (~1.0×) and
 ~90 % of a degree-10 complex root (zgeev 20.7 of ~22 µs: ceiling 1.43×), zeroing the 320 KB degree-200 companion
@@ -3248,11 +3268,44 @@ roots 1.5–5×. The cells under 1.5× are floors both sides share: LAPACK `geev
     `EigLiveParityTests` matrix (1±1j) was float32-exact, so it could not see the gap; it now has ±i√2 too.
   - **`AssertFinite`** (eig/eigvals) uses the fused `FiniteScan.IsAllFinite` kernel instead of `np.all(np.isfinite)`.
     It is the same predicate; the bool temp cost 0.45 of eigvals' 0.9 µs wrapper on a 10×10.
-- **Object series.** as_series goes on in the object dtype, and companion's next statement is the length check on the
-  TRIMMED object array. `ObjectTrimLength` scans Python's `item != 0` from the end, so `[None, 0]` and `[2**70, 0]`
-  raise NumPy's ValueError. Past that check NumPy computes with Python objects, and NumSharp raises
-  NotSupportedException. Roots of an object series are always refused (`[Misaligned]`): NumPy returns
-  `np.array([], dtype=object)` for one term.
+- **Object series.** A Python int past uint64, None or another object among the terms makes as_series go on in the
+  OBJECT dtype. The items keep their kinds (Python numbers, NumPy scalars, 0-d arrays):
+  - **The length check** runs on the TRIMMED object array. `ObjectTrimLength` scans Python's `item != 0` from the end.
+    A 0-d array item compares elementwise, so a trailing 0-d zero is trimmed too. `[None, 0]` and `[2**70, 0]` raise
+    NumPy's ValueError.
+  - **Two terms** are the linear root computed on the ITEMS (`ObjectLinearRoot`). The arithmetic is CPython for
+    Python numbers, scalarmath for NumPy scalars and ufuncs for 0-d arrays, and the result is a numeric array of that
+    number's dtype.
+  - **Three or more**: NumPy builds an object companion matrix. `ObjectCompanionArithmetic` replays the element
+    operations of its last-column statement that can raise, and raises NumPy's first error. That error is always a
+    Python int too large for a float:
+    - `integer division result too large for a float` for Python int / Python int;
+    - `int too large to convert to float` for any other operand.
+
+    The divisor is cast to the object dtype first, so a 0-d integer divisor is a Python int there. herm/herme
+    multiply by their float64 helper first. When nothing raises, `{p}companion` refuses (an object matrix), and
+    `{p}roots` raises eigvals' `ufunc 'isfinite' not supported…` TypeError before LAPACK, so no backend is needed.
+  - **Remaining divergences** (NotSupportedException):
+    - a one-term object series' roots (NumPy's `np.array([], dtype=object)`, `[Misaligned]`);
+    - the object companion matrix itself;
+    - CPython's TypeErrors from None/str arithmetic (the U2 policy).
+- **Wholeness pass (2026-10-01).** A 3,096-case probe replayed against NumPy, with 2,982 exact, 0 wrong, and 114 in the
+  object-dtype classes above. It covered:
+  - every C# argument kind × both functions × six bases;
+  - long series up to 1,100 terms, Hermite's `scl` underflow and float16 rounding past 2048;
+  - edge numeric series: non-finite, extreme, subnormal, int64/uint64 extremes.
+
+  It found the object-series gaps above, plus one LIBRARY-WIDE use-after-free. Byte-reinterpreting aliases did not keep
+  their owner's buffer alive (see "Critical: View Semantics"), so eigvals' real result, and with it every real
+  `{p}roots` result, could be overwritten by the next call. Concurrency was checked at 16 threads: 366 first calls and
+  6,400 steady-state calls against the single-threaded bytes, 0 differences after the fix (NumPy: 0).
+
+  Perf of the new object value path: the shared coercion (`NDPolySequence`, `NDPolySeries.AsCoefficientArray`)
+  classified a Python int past uint64 by THROWING and catching NotSupportedException, ~1.4 µs a leaf. Two-term object
+  roots ran at 1.13–1.66× NumPy. `PolyNumber.TryDiscoveredDtype` + `ObjectArrayRefusal` (the refusal built, never
+  thrown) bring them to 2.9–4.6×, which speeds every unit's object-series path. New corpus sections:
+  - K: two-term object series and edge numeric series, 1,142 portable + 112 host cases;
+  - L: object series of three or more terms, 372 cases.
 - **Errors in NumPy's order.** as_series' texts come first, then `Series must have maximum degree of at least 1.`.
   Roots of degree ≥ 2 then meet eigvals' checks in eigvals' order: finiteness (LinAlgError) before dtype (the float16
   / decimal TypeError). All of these fire before LAPACK, so they need no backend; with no backend, a root of
@@ -3539,7 +3592,7 @@ non-structured subset would only re-expose `loadtxt`.
 | numpy.polynomial calculus family (U4) | `Polynomial/Package/NDPolyCalc.cs` (`{p}der`/`{p}int` driver: NumPy's prologue, one-buffer orchestration, the integral's lbnd correction, NumPy's result layouts, `PyVal1D`), `Backends/Kernels/Direct/DirectILKernelGenerator.PolyCalculus.cs` (`PolyCalcRoutines` recurrence tables + the per-(basis, direction, dtypes) whole-array kernel: load/convert/scale stage, recurrence stage, column blocks). Oracle `polycalc.jsonl` via `OpRegistry.PolySeries.cs`; benchmark `benchmark/polynomial/polycalc_*` |
 | numpy.polynomial series algebra (U2) | `Polynomial/Package/NDPolyAlgebra.cs` (engine: `PolySer`, the pooled per-thread `PolyArena`, the entry points, the shared statements — as_series, `{p}mulx`, `np.convolve`, `_div`/`_pow`/`_fromroots`), `NDPolyAlgebra.Bases.cs` (the recurrence products, polydiv / chebdiv, the ten conversions), `NDPolyPowerArgument.cs` (`int(pow)` / `power != pow` / `power > maxpower` for the object-typed `{p}pow` overloads), `Backends/Kernels/Direct/DirectILKernelGenerator.PolyAlgebra.cs` (house-kernel / mulx slot fronts + the fused chebmulx IL kernel), `Math/NDArray.SlidingDot{,.Long}.cs` (`SlidingCorrelateInto`, NumPy's per-dtype dotfunc models, the blocked long products). Oracle `polyalgebra.jsonl` + host-pinned `polyalgebra_parity.jsonl` via `OpRegistry.PolyAlgebra.cs`; benchmark `benchmark/polynomial/polyalg_*` |
 | numpy.polynomial Vandermonde family (U5) | `Polynomial/Package/NDPolyVander.cs` (`{p}vander`/`{p}vander2d`/`{p}vander3d` driver: NumPy's statement and error order, the in-place point sources, block sizing, the streamed-product switch, the object stack of scalars — `ObjectScalarPoints` / `MixedDtypeVander`), `NDPolyIndexArgument.cs` (`operator.index` + NumPy's `format(deg, '')` error text), `Backends/Kernels/Direct/DirectILKernelGenerator.PolyVander.cs` (`PolyVanderRoutines` recurrence tables, `PolyVanderOps` NaN-priority multiply + non-temporal stores, the load / recurrence / product / root stages). Oracle `polyvander.jsonl` via `OpRegistry.PolyVander.cs` + `OpRegistry.PolySeries.cs`; benchmark `benchmark/polynomial/polyvander_*` |
-| numpy.polynomial companion / roots (U7) | `Polynomial/Package/NDPolyAlgebra.Roots.cs` (`{p}companion`/`{p}roots`: NumPy's statements over U2's arena — as_series, the length checks, the linear root's scalarmath, the write-once zero matrix, the diagonals through `GetDiagWriteKernel`, the last-column update through the house ufunc / cast / sqrt / cumprod kernels, the rotated `np.linalg.eigvals` + in-place sort; `ObjectTrimLength` for object series), `Backends/Kernels/Direct/DirectILKernelGenerator.PolyRoots.cs` (the int64 ramp IL kernel behind np.arange), `LinearAlgebra/linalg/np.linalg.eig.cs` (`RoundComponentsToSingle`: a float32 operand's complex result carries NumPy's complex64 values). Oracle `polyroots.jsonl` + host-pinned `polyroots_parity.jsonl` via `OpRegistry.PolySeries.cs`; benchmark `benchmark/polynomial/polyroots_*` |
+| numpy.polynomial companion / roots (U7) | `Polynomial/Package/NDPolyAlgebra.Roots.cs` (`{p}companion`/`{p}roots`: NumPy's statements over U2's arena — as_series, the length checks, the linear root's scalarmath, the write-once zero matrix, the diagonals through `GetDiagWriteKernel`, the last-column update through the house ufunc / cast / sqrt / cumprod kernels, the rotated `np.linalg.eigvals` + in-place sort; object series: `ObjectTrimLength`, `ObjectLinearRoot`, `ObjectCompanionArithmetic`), `Backends/Unmanaged/UnmanagedMemoryBlock`1.cs` (`AllocationType.Forward`: a reinterpreting alias's ARC forwards to its owner — `ArraySlice.WrapShared`), `Backends/Kernels/Direct/DirectILKernelGenerator.PolyRoots.cs` (the int64 ramp IL kernel behind np.arange), `LinearAlgebra/linalg/np.linalg.eig.cs` (`RoundComponentsToSingle`: a float32 operand's complex result carries NumPy's complex64 values). Oracle `polyroots.jsonl` + host-pinned `polyroots_parity.jsonl` via `OpRegistry.PolySeries.cs`; benchmark `benchmark/polynomial/polyroots_*` |
 | Grid / slice-expression DSL | `Creation/np.r_.cs` (`AxisConcatenator` + `RClass`), `Creation/np.c_.cs`, `Creation/np.ogrid.cs` (`OGridClass` + `OGridResult` + shared `nd_grid` helpers), `Creation/np.mgrid.cs` (`MGridClass` + `MGridResult`), `Creation/np.meshgrid.cs` (`MeshgridResult`), `Indexing/np.{ix_,s_}.cs` |
 | Array printing (NumPy parity) | `Backends/Printing/{PrintOptions,Dragon4,ElementFormatters,ArrayFormatter}.cs`, `APIs/np.array2string.cs`, `Casting/NDArray.ToString.cs` |
 | Iterators | `Backends/Iterators/NDIter.cs`, `NDIter.Detach.cs` (ref-struct → managed-owner bridge) |

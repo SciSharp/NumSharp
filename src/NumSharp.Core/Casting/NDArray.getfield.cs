@@ -51,8 +51,15 @@ namespace NumSharp
         /// </summary>
         /// <typeparam name="T">The field dtype (its itemsize must be ≤ this array's itemsize).</typeparam>
         /// <param name="offset">Byte offset of the field within each element.</param>
+        /// <returns>The typed field view (shares memory with this array; keeps its buffer alive while it lives).</returns>
+        /// <exception cref="ValueError">One of <see cref="getfield(DType,int)"/>'s dtype / offset texts.</exception>
+        /// <remarks>
+        ///     Built as the typed array directly: wrapping an untyped NDArray first and calling <c>AsGeneric</c> made a
+        ///     SECOND NDArray over the alias, leaving the first — a counted reference on this array's buffer — to the
+        ///     finalizer, and dropping the engine the first one carried.
+        /// </remarks>
         public NDArray<T> getfield<T>(int offset = 0) where T : unmanaged
-            => new NDArray(Storage.GetFieldAlias<T>(offset)) { TensorEngine = TensorEngine }.AsGeneric<T>();
+            => new NDArray<T>(Storage.GetFieldAlias<T>(offset)) { TensorEngine = TensorEngine };
 
         /// <summary>
         ///     Puts a value into a specified place in a field defined by a dtype — writes <paramref name="value"/>
@@ -80,6 +87,7 @@ namespace NumSharp
         ///     <c>assignment destination is read-only</c> (this array is not writeable), or one of
         ///     <c>getfield</c>'s three dtype/offset <see cref="ValueError"/>s.
         /// </exception>
+        [NDScoped] // void boundary: reclaims the field view (a counted reference on this array's buffer) and a value converted here
         public void setfield(object value, DType dtype, int offset = 0)
         {
             if (dtype is null)

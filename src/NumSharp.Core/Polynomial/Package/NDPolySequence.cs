@@ -559,13 +559,16 @@ namespace NumSharp
                     d.ObjectLeaf = true;
                 return;
             }
-            try
+            // A scalar value always converts (FromObject throws only for None / str / unknown objects, handled above). A
+            // Python int past uint64 makes NumPy's array an OBJECT one: classified without an exception — a throw and catch
+            // per leaf cost ~1 µs, half of a two-term object series' whole {p}roots — and its refusal is built, not thrown,
+            // raised only where NumPy would start computing with Python objects.
+            var num = PolyNumber.FromObject(o);
+            if (num.TryDiscoveredDtype(out NPTypeCode t))
+                Promote(d, t);
+            else
             {
-                Promote(d, PolyNumber.FromObject(o).DiscoveredDtype());
-            }
-            catch (NotSupportedException e)
-            {
-                d.Refused ??= e;   // a Python int past uint64: NumPy's object array
+                d.Refused ??= num.ObjectArrayRefusal();
                 d.ObjectLeaf = true;
             }
         }

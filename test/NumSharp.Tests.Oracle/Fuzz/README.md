@@ -1136,13 +1136,13 @@ binds the int overload, every other kind the object one. Design and measurements
 
 ### numpy.polynomial companion matrices and roots (`polyroots` + `polyroots_parity` tiers)
 
-`polyroots.jsonl` (`gen_oracle.py polyroots`, 6,681 cases, floor 6,600) gates plan unit U7 — `{p}companion` and
+`polyroots.jsonl` (`gen_oracle.py polyroots`, 8,195 cases, floor 8,150; 6,681 at delivery) gates plan unit U7 — `{p}companion` and
 `{p}roots` for the six bases — **bit-exact, 0 excused**. Keys are module-qualified (`laguerre.lagcompanion`); the one
 argument `c` uses the polyseries encoding (`_ps_enc`). The companion is NumPy's statements over the as_series copy (the
 zero matrix, diagonals assigned through `mat.reshape(-1)[k::n+1]`, one in-place update of the last column) — `+ - * /`,
 `sqrt` and `cumprod` only — so every companion case is portable; so is every `{p}roots` call that never reaches LAPACK
 (a constant series' empty array in its dtype, a linear series' scalarmath root, float16's linalg TypeError and a
-non-finite companion's LinAlgError). The roots that run geev go to `polyroots_parity.jsonl` (1,242 cases, floor 1,200),
+non-finite companion's LinAlgError). The roots that run geev go to `polyroots_parity.jsonl` (1,354 cases, floor 1,350; 1,242 at delivery),
 **host-pinned** exactly like `linalg_parity` (`polyroots_parity.host.jsonl`, the same `MatmulParityPin`, threads=1).
 The generator decides the split by replacing `np.linalg.eigvals` while it runs a case (`_PREigRecorder` — the polynomial
 modules look it up at call time): geev ran exactly when eigvals received a finite float32 / float64 / complex128 matrix.
@@ -1167,12 +1167,26 @@ The sections of `gen_polyroots`:
 - **(H)** result flags (`"facet": "flags"`): the companion is a fresh C-contiguous owning matrix; a float64 series' real
   roots are a strided VIEW of eigvals' complex result (OWNDATA false), a float32 series' a fresh cast;
 - **(I)** long series (companion of 40 / 65 terms, roots of 25 / 51 terms);
-- **(J)** the linear roots' scalarmath over every special-value pair (float64 / float32 / float16, and complex).
+- **(J)** the linear roots' scalarmath over every special-value pair (float64 / float32 / float16, and complex);
+- **(K)** the wholeness pass (its own pass, so A–J ids hold): two-term OBJECT series NumPy still computes — a Python
+  int past uint64 makes as_series' copy an object array whose items keep their kinds (Python numbers, NumPy scalars,
+  0-d ARRAYS), and the linear statement runs on the items (CPython / scalarmath / ufunc) into a NUMERIC array;
+  trailing 0-d zeros are trimmed (`item != 0`); CPython's int/int OverflowError is kept, object results and
+  object-arithmetic TypeErrors are filtered (`_pa_object_land`) — plus edge numeric series (±inf / NaN leading or
+  interior terms, tiny / huge leading terms, subnormals, signed-zero trims, int64 / uint64 / int8 extremes, complex
+  non-finite components): 1,142 portable + 112 host-pinned cases;
+- **(L)** object series of THREE or more terms (its own pass after K): NumPy computes the object companion matrix, so
+  `{p}companion`'s result is an object array (filtered) and `{p}roots` raises eigvals' `ufunc 'isfinite' not supported`
+  TypeError before LAPACK — unless the last-column arithmetic raises first, a Python int too large for a float:
+  `integer division result too large for a float` when divided by a Python int (the divisor `c[-1]` is CAST to the
+  object dtype first, so a 0-d integer divisor is one there) or `int too large to convert to float` when it meets
+  anything else (herm / herme multiply by their float64 helper first). 372 cases, `obj3_object_land`-filtered.
 Char is the uint16 weave in both files. A result whose sorted order is not fixed by its values — two elements equal by
 value but different in bits (+0.0 / −0.0) — is skipped: NumPy's SIMD sort orders such ties by CPU (none occurred in
 the 7,923 generated cases). Unit tests (`Polynomial/PolynomialRootsTests.cs`) pin what the corpus cannot: the object
-roots NumPy answers with an object array (`[Misaligned]`), decimal, the backend-missing path, both write-once
-allocation paths and the ramp kernel. Design and measurements: `docs/plans/numpy-polynomial.md` (U7).
+roots NumPy answers with an object array (`[Misaligned]`), the object series' C# spellings (BigInteger, Half, 0-d
+arrays), decimal, the backend-missing path, real roots surviving a later call (the reinterpreting-alias
+use-after-free, `ArcLifecycleTests.ReinterpretingAlias_*`), both write-once allocation paths and the ramp kernel. Design and measurements: `docs/plans/numpy-polynomial.md` (U7).
 
 ### einsum (`einsum` tier)
 
