@@ -21,7 +21,10 @@
     <RepositoryUrl>https://github.com/SciSharp/NumSharp</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
-    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <!-- No PackageReadmeFile, deliberately: the package embeds no README, so each version's README
+         tab stays owner-editable on nuget.org, where the release notes are pasted after publishing.
+         README.md in this folder is repo documentation only and is not packed. See "No embedded
+         package README" in ../../Directory.Build.props, whose guard fails `dotnet pack` if this returns. -->
     <PackageOutputPath>../../packages</PackageOutputPath>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
@@ -29,7 +32,6 @@
 
   <ItemGroup>
     <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
-    <None Include="README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
   <ItemGroup>

@@ -65,7 +65,10 @@
     <RepositoryType>git</RepositoryType>
     <PackageTags>NumSharp, NDScope, NDScoped, NDScopedAsync, weaver, IL, Mono.Cecil, MSBuild, memory, pooling, NumPy, SciSharp</PackageTags>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
-    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <!-- No PackageReadmeFile, deliberately: the package embeds no README, so each version's README
+         tab stays owner-editable on nuget.org, where the release notes are pasted after publishing.
+         README.md in this folder is repo documentation only and is not packed. See "No embedded
+         package README" in ../../Directory.Build.props, whose guard fails `dotnet pack` if this returns. -->
     <PackageOutputPath>../../packages</PackageOutputPath>
 
     <DevelopmentDependency>true</DevelopmentDependency>
@@ -87,7 +90,6 @@
   <ItemGroup>
     <None Include="build/**" Pack="true" PackagePath="build/" />
     <None Include="../../LICENSE" Pack="true" PackagePath="\" Visible="false" />
-    <None Include="README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
   <!-- The tool payload is the PUBLISH output (dll + runtimeconfig + deps + Mono.Cecil), not the

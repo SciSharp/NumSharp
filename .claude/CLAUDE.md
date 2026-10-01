@@ -4030,7 +4030,7 @@ claim is stronger: NumSharp's writer must be **byte-identical** to `np.save`, no
 
 ## CI Pipeline
 
-`.github/workflows/build-and-release.yml` — test on 3 OSes (Windows/Ubuntu/macOS), build NuGet on tag push, create GitHub Release, publish to nuget.org. The `FuzzMatrix` gate runs here (replays the committed corpora; no Python).
+`.github/workflows/build-and-release.yml` — test on 3 OSes (Windows/Ubuntu/macOS), build NuGet on tag push, create GitHub Release, publish to nuget.org. The `FuzzMatrix` gate runs here (replays the committed corpora; no Python). **The packages embed NO README** (since after 0.70.0; the "No embedded package README" guard in `Directory.Build.props` fails `dotnet pack` if a project sets `PackageReadmeFile`): an embedded readme would lock each version's nuget.org README tab, so after a release publishes the owner pastes the GitHub release markdown into every package version's README by hand (nuget.org → Manage → Readme) — the step is in the `changelog` skill.
 
 `.github/workflows/fuzz-soak.yml` — nightly soak: sweeps one fixed seed (a deterministic canary whose corpus `source_sha256` should repeat night to night) plus nine fresh random seeds through `test/oracle/fuzz_random.py` (200K cases each, ~1.8M fresh cases/night), replays them, and uploads any failing corpus; copy a shrunk repro into `Fuzz/corpus/regressions/` to pin it on every CI thereafter.
 
