@@ -568,7 +568,14 @@ namespace NumSharp.Tests.RandomSampling
         ///     <c>p = 5e-324</c>, logseries <c>p = 1 - ulp</c>, zipf <c>a = 1 + ulp</c>, a NaN exponential scale, a
         ///     zero gamma shape) — and rejects the bound itself with NumPy's array text.
         /// </summary>
+        /// <remarks>
+        ///     The <c>[Timeout]</c>: zipf at <c>a = 1</c> is rejected here, and its rejection loop never returns on that value
+        ///     once a check lets it through — so a regression would HANG this test instead of failing it (see
+        ///     <see cref="Constraints_LoopGuardingBounds_AreRejectedOnEveryPath"/>; logseries at <c>p = 1</c> returns 2 here
+        ///     instead, and fails the assertion).
+        /// </remarks>
         [TestMethod]
+        [Timeout(60_000)]
         public void Constraints_StrictBounds_AcceptTheNeighbouringDouble_Generator()
         {
             // The smallest valid element next to the rejected bound — NumPy's draws and stream position (win-amd64).
@@ -642,6 +649,156 @@ namespace NumSharp.Tests.RandomSampling
             foreach (var (expected, call) in rejected)
                 Assert.AreEqual(expected, Assert.ThrowsException<ValueError>(() => call()).Message);
         }
+
+        /// <summary>
+        ///     The parameters at which a sampler's rejection loop can never accept a draw are REJECTED on every path —
+        ///     RandomState and Generator; the scalar path (a double, a 0-d array) and the array path with the bad value in
+        ///     the range scan's vector body, in its scalar tail, and in F-ordered (used in place), strided and broadcast
+        ///     (copied) parameters — with NumPy 2.4.2's texts (324 + 12 calls probed: every one raises there).
+        /// </summary>
+        /// <remarks>
+        ///     <para>
+        ///     The legacy logseries at <c>p = 1</c>: <c>r = log(1 - p) = -inf</c> makes <c>q = 1 - exp(r*U) = 1</c>, so every
+        ///     candidate count <c>floor(1 + log(V)/log(q))</c> is <c>-inf</c> and is rejected. zipf (both APIs) at
+        ///     <c>a &lt;= 1</c> or NaN: every candidate <c>X = floor(U^(-1/(a-1)))</c> is <c>+inf</c>, 0 or NaN and is
+        ///     rejected. NumPy's C samplers loop forever there too (its Generator logseries as well) — its parameter checks
+        ///     keep these inputs out — so the checks are ALL that separates them from a hang, and a check that regresses
+        ///     makes the call hang rather than fail: an in-progress build whose array check read <c>p &lt;= 1</c>
+        ///     (<c>AllInRange(arr, 0.0, 1.0)</c> where <c>p &lt; 1</c> is <c>AllInRange(arr, 0.0, BitDecrement(1.0))</c>) spun
+        ///     an oracle test host for 84 CPU-hours (2026-09-26 → 2026-10-01) on the corpus case
+        ///     <c>rnd/logseries/bcast:viol:p&gt;=1/857</c>, <c>p = [0.5, 1.0]</c>. (NumSharp's Generator logseries returns 2
+        ///     at an unchecked <c>p = 1</c> instead — its <c>log1p(-1)</c> is NaN, see <c>Generator.Log1p</c> — a wrong answer
+        ///     this test reports as "returned instead of raising".)
+        ///     </para>
+        ///     <para>
+        ///     So the calls run on a background thread under a deadline, and the test FAILS — naming the call — when one does
+        ///     not return. Nothing can stop the abandoned thread (.NET has no thread abort); it spins on until the test host
+        ///     exits, which a background thread does not delay.
+        ///     </para>
+        /// </remarks>
+        [TestMethod]
+        public void Constraints_LoopGuardingBounds_AreRejectedOnEveryPath()
+        {
+            double posNaN = BitConverter.Int64BitsToDouble(0x7FF8000000000000), negNaN = BitConverter.Int64BitsToDouble(unchecked((long)0xFFF8000000000000UL));
+            // NumPy's scalar path (a Python float or a 0-d array) says "is NaN", its array path "contains NaNs".
+            var samplers = new (string dist, double fill, string scalarText, string arrayText, double[] bad)[]
+            {
+                ("logseries", 0.5, "p < 0, p >= 1 or p is NaN", "p < 0, p >= 1 or p contains NaNs",
+                    new[] { 1.0, System.Math.BitIncrement(1.0), 2.0, double.PositiveInfinity, posNaN, negNaN, -double.Epsilon, -1.0, double.NegativeInfinity }),
+                ("zipf", 2.0, "a <= 1 or a is NaN", "a <= 1 or a contains NaNs",
+                    new[] { 1.0, System.Math.BitDecrement(1.0), 0.5, 0.0, -0.0, -1.0, double.NegativeInfinity, posNaN, negNaN }),
+            };
+            // (length, position): a one-element tail, positions inside the first vector of a 256-bit scan (n >= 4), its
+            // scalar tail (n = 5, 9) and a later vector body (n = 17) — the AVX-512 tail too (n = 9, position 8).
+            var positions = new (int n, int at)[] { (1, 0), (2, 1), (4, 0), (4, 3), (5, 4), (9, 8), (17, 5) };
+
+            // The whole matrix runs on ONE background thread that publishes the call it is in; the test thread waits.
+            var failures = new System.Collections.Generic.List<string>();
+            string current = "(not started)";
+            var worker = Task.Factory.StartNew(() =>
+            {
+                foreach (var (dist, fill, scalarText, arrayText, bad) in samplers)
+                    foreach (string api in new[] { "RandomState", "Generator" })
+                        foreach (double v in bad)
+                        {
+                            string value = $"{v:R} (0x{BitConverter.DoubleToInt64Bits(v):X16})";
+                            Expect($"{api}.{dist}({value})", scalarText, () => DrawScalar(api, dist, v));
+                            Expect($"{api}.{dist}(0-d {value})", scalarText, () =>
+                            {
+                                using var a = NDArray.Scalar(v);
+                                return DrawArray(api, dist, a);
+                            });
+                            foreach (var (n, at) in positions)
+                                Expect($"{api}.{dist}(array n={n}, {value} at {at})", arrayText, () =>
+                                {
+                                    using var a = np.full(new Shape(n), fill);
+                                    a.SetDouble(v, at);
+                                    return DrawArray(api, dist, a);
+                                });
+                        }
+
+                // The parameter conversion's other branches, with the boundary value itself: an F-ordered parameter is
+                // scanned in place, a strided or broadcast one is copied dense first.
+                foreach (var (dist, fill, _, arrayText, bad) in samplers)
+                    foreach (string api in new[] { "RandomState", "Generator" })
+                    {
+                        double v = bad[0];
+                        Expect($"{api}.{dist}(F-ordered, {v:R} at [1, 2])", arrayText, () =>
+                        {
+                            using var a = np.full(new Shape(3, 3), fill);
+                            a.SetDouble(v, 2, 1);
+                            using var t = a.T;
+                            return DrawArray(api, dist, t);
+                        });
+                        Expect($"{api}.{dist}(strided, {v:R} at 3)", arrayText, () =>
+                        {
+                            using var a = np.full(new Shape(10), fill);
+                            a.SetDouble(v, 6);
+                            using var s = a["::2"];
+                            return DrawArray(api, dist, s);
+                        });
+                        Expect($"{api}.{dist}(broadcast {v:R} to (4,))", arrayText, () =>
+                        {
+                            using var one = np.full(new Shape(1), v);
+                            using var b = np.broadcast_to(one, new Shape(4));
+                            return DrawArray(api, dist, b);
+                        });
+                    }
+            }, System.Threading.CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+
+            // ~350 calls take milliseconds; 60 s (the [Timeout] of the sibling tests) only ever runs out on a call that never returns.
+            if (!worker.Wait(TimeSpan.FromSeconds(60)))
+                Assert.Fail($"{System.Threading.Volatile.Read(ref current)} did not return within 60 s: the constraint check let a value " +
+                            "through that the sampler's rejection loop never accepts (the thread is abandoned, spinning).");
+            worker.GetAwaiter().GetResult();   // a harness exception, if any, surfaces with its own stack
+            Assert.AreEqual(0, failures.Count, "\n" + string.Join("\n", failures));
+
+            // One call: it must raise NumPy's ValueError with NumPy's text. Runs on the worker thread only.
+            void Expect(string label, string expected, Func<NDArray> call)
+            {
+                System.Threading.Volatile.Write(ref current, label);
+                try
+                {
+                    using var r = call();
+                    failures.Add($"{label}: returned instead of raising ValueError('{expected}')");
+                }
+                catch (ValueError e) when (e.Message == expected)
+                {
+                }
+                catch (Exception e)
+                {
+                    failures.Add($"{label}: {e.GetType().Name}('{e.Message}') instead of ValueError('{expected}')");
+                }
+            }
+        }
+
+        /// <summary>One draw through the scalar (<c>double</c>) overload of logseries or zipf, on a fresh seed-42 receiver.</summary>
+        /// <param name="api"><c>"RandomState"</c> (legacy) or <c>"Generator"</c> (PCG64).</param>
+        /// <param name="dist"><c>"logseries"</c> or <c>"zipf"</c>.</param>
+        /// <param name="v">The parameter (<c>p</c> or <c>a</c>).</param>
+        /// <returns>The draw (a 0-d int64 array).</returns>
+        /// <exception cref="ValueError">The parameter violates the sampler's constraint.</exception>
+        private static NDArray DrawScalar(string api, string dist, double v) => (api, dist) switch
+        {
+            ("RandomState", "logseries") => np.random.RandomState(42).logseries(v),
+            ("RandomState", _) => np.random.RandomState(42).zipf(v),
+            (_, "logseries") => np.random.default_rng(42).logseries(v),
+            _ => np.random.default_rng(42).zipf(v),
+        };
+
+        /// <summary>One draw through the array-parameter (<c>NDArray</c>) overload of logseries or zipf, on a fresh seed-42 receiver.</summary>
+        /// <param name="api"><c>"RandomState"</c> (legacy) or <c>"Generator"</c> (PCG64).</param>
+        /// <param name="dist"><c>"logseries"</c> or <c>"zipf"</c>.</param>
+        /// <param name="p">The parameter array (a 0-d array takes NumPy's scalar path).</param>
+        /// <returns>The draws (int64, the parameter's shape).</returns>
+        /// <exception cref="ValueError">An element violates the sampler's constraint.</exception>
+        private static NDArray DrawArray(string api, string dist, NDArray p) => (api, dist) switch
+        {
+            ("RandomState", "logseries") => np.random.RandomState(42).logseries(p),
+            ("RandomState", _) => np.random.RandomState(42).zipf(p),
+            (_, "logseries") => np.random.default_rng(42).logseries(p),
+            _ => np.random.default_rng(42).zipf(p),
+        };
 
         // ---------------------------------------------------------------- draw-free thresholds NumPy never returns from
 

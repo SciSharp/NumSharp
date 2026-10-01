@@ -226,7 +226,15 @@ namespace NumSharp.Tests.RandomSampling
         ///     <c>CONS_POSITIVE</c>, the zero-draw paths (<c>weibull(0)</c>, <c>poisson(0)</c>), and the draw-consuming
         ///     <c>scale == 0</c> paths (<c>gumbel</c>/<c>logistic</c>/<c>laplace</c>/<c>rayleigh</c>).
         /// </summary>
+        /// <remarks>
+        ///     The <c>[Timeout]</c>: some rows are values whose sampler can never return once its check is bypassed — the
+        ///     rejection loops of <c>logseries</c> at <c>p = 1</c> and of <c>zipf</c> at <c>a &lt;= 1</c> or NaN never accept a
+        ///     draw, in NumPy's C as here — so a regression in <see cref="RandomConstraints"/> would HANG this row instead of
+        ///     failing it (an oracle host once spun 84 CPU-hours that way). A row takes milliseconds; the limit only ever
+        ///     ends a call that does not return.
+        /// </remarks>
         [TestMethod]
+        [Timeout(60_000)]
         [DataRow("exponential(-1.0)", "ERR ValueError: scale < 0")]
         [DataRow("normal(0,-1.0)", "ERR ValueError: scale < 0")]
         [DataRow("standard_gamma(-1.0)", "ERR ValueError: shape < 0")]

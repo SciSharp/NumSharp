@@ -8,6 +8,14 @@ namespace NumSharp
         // the Kahan/Goldberg correction recovers the log1p precision the raw Math.Log(1+x) loses.
         // NumPy's npy_log1p is `#define npy_log1p log1p` (the CRT), so this reproduces it bit-for-bit
         // (verified 0-diff over 300k values), which is what keeps the ziggurat tail byte-exact.
+        //
+        // Bit-for-bit for x > -1 — the only domain any caller reaches (-U of a uniform in [0, 1), a probability its
+        // parameter check keeps below 1) — and NOT at the edge (probed against np.log1p, 2026-10-01): x = -1 returns NaN
+        // where the CRT's pole gives -inf (u = 0 turns the correction into -inf - 0/0), and x < -1 returns .NET's NEGATIVE
+        // NaN (Math.Log's) where the CRT gives 0x7ff8000000000000. Consequence: an UNCHECKED p = 1 makes the Generator's
+        // logseries return 2 (r = NaN) where NumPy's loops forever. Deliberately not branched: the u <= 0 test measured
+        // 4.0-5.7% slower on the inversion fill's per-element loop (in-process interleaved A/B, 10M doubles), a path only
+        // ~1.2x NumPy, for inputs no validated call produces.
         internal static double Log1p(double x)
         {
             double u = 1.0 + x;

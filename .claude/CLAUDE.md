@@ -3829,6 +3829,20 @@ of finding them (the diagnosis, per-test numbers and mutation checks are in comm
   windowless `testhost` on a hybrid CPU's E-cores (i9-13900K: NumSharp.Tests 47 s unpinned vs 27 s on P-cores).
   **Measurement trap:** A/B single-threaded suites pinned to the P-cores (affinity `0xFFFF` on the dev box) —
   unpinned runs mix two ~1.8×-apart populations and swamp any knob.
+- **A test that can never return must FAIL, not hang** (2026-10-01). NumPy's rejection samplers never accept a
+  draw at some values their checks reject (`logseries` at `p = 1`; `zipf` at `a <= 1` or NaN), so a regressed
+  check HANGS a test instead of failing it. A local `dotnet test` has no timeout; CI's test steps have
+  `timeout-minutes`. An in-progress build whose array check read `p <= 1` left an oracle testhost spinning for 5
+  days (84 CPU-hours) on `rnd/logseries/bcast:viol:p>=1/857`, and a process dump was needed to name the case.
+  The guards now in place:
+  - Oracle corpus replays: the per-case `CaseWatchdog` (`Fuzz/README.md` → Gate semantics). It ends the host
+    with `FailFast`, naming the case, after 2 min (`NUMSHARP_ORACLE_CASE_TIMEOUT_SECONDS`; 0 disables).
+  - Unit tests that drive those bounds: `[Timeout]` or an explicit deadline thread.
+
+  Give any new test that feeds a sampler its rejected boundary the same guard. Diagnose a hung testhost with
+  `dotnet-dump collect -p <pid>`, then `analyze` with `clrthreads` (the Cooperative thread is the spinner),
+  `setthread <n>` + `clrstack`, and `dso` → `dumpobj` on the `FuzzCorpus+Case` for its `Id`. A zombie
+  testhost also LOCKS its build output (`bin/Debug`): build Release until it is gone.
 
 ## Test Categories
 

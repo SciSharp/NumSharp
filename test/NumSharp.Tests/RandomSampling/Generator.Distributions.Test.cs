@@ -343,7 +343,15 @@ namespace NumSharp.Tests.RandomSampling
         /// </summary>
         /// <param name="probe">The call as NumPy's probe named it (<c>method(arg,...)</c>).</param>
         /// <param name="expected">NumPy 2.4.2's first two values, or <c>ERR Type: message</c>.</param>
+        /// <remarks>
+        ///     The <c>[Timeout]</c>: some rows are values whose sampler can never return once its check is bypassed — the
+        ///     rejection loop of <c>zipf</c> at <c>a &lt;= 1</c> or NaN never accepts a draw, in NumPy's C as here — so a
+        ///     regression in <see cref="RandomConstraints"/> would HANG this row instead of failing it (an oracle host once
+        ///     spun 84 CPU-hours that way, on the legacy <c>logseries</c>). A row takes milliseconds; the limit only ever ends
+        ///     a call that does not return.
+        /// </remarks>
         [TestMethod]
+        [Timeout(60_000)]
         [DataRow("f(-1.0,1)", "ERR ValueError: dfnum <= 0")]
         [DataRow("f(1,-1.0)", "ERR ValueError: dfden <= 0")]
         [DataRow("noncentral_f(-1.0,1,1)", "ERR ValueError: dfnum <= 0")]

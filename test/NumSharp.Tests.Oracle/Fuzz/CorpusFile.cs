@@ -110,8 +110,16 @@ namespace NumSharp.Tests.Fuzz
         ///     <c>yield</c>, so the cursor is an integer offset and each line is re-sliced from the buffer per step.
         /// </summary>
         /// <returns>The cases, lazily parsed.</returns>
+        /// <remarks>
+        ///     Every enumeration is watched (<see cref="CaseWatchdog"/>): the case handed out last is the one the replay loop
+        ///     is running, so it arms the enumeration's slot with that case's id, and a case that never finishes terminates
+        ///     the test host by name instead of hanging the run. The slot opens on the first <c>MoveNext</c> (the iterator
+        ///     body starts there) and closes in the iterator's <c>finally</c> — on completion, on an early exit from the
+        ///     consumer's loop, and when a parse throws.
+        /// </remarks>
         private IEnumerator<FuzzCorpus.Case> Parse()
         {
+            using CaseWatchdog.Slot watch = CaseWatchdog.Watch(Name);
             int position = 0;
             while (true)
             {
@@ -124,6 +132,9 @@ namespace NumSharp.Tests.Fuzz
                         yield break;
                     next = FuzzCorpus.ParseLine(content.Slice(start, length));
                 }
+                // The consumer runs this case between this yield and its next MoveNext. (A literal `null` line, which no
+                // generator writes, parses to null and disarms the slot rather than throwing here.)
+                watch.Enter(next?.Id);
                 yield return next;
             }
         }

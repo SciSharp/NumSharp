@@ -59,8 +59,13 @@ namespace NumSharp.Tests.Fuzz
 
                 foreach (string corpus in new[] { "random_parity.jsonl", "random_parity_host.jsonl" })
                 {
+                    // These replays run every rnd case, NumPy's error cases included — the cases whose constraint check is
+                    // all that keeps a sampler out of a loop that never ends (logseries p = 1). The list comes from Load, not a
+                    // streaming enumeration, so the hang watchdog is armed here, per case (see CaseWatchdog).
+                    using var watch = CaseWatchdog.Watch(corpus);
                     foreach (var c in FuzzCorpus.Load(corpus).Where(c => c.Op == "rnd"))
                     {
+                        watch.Enter(c.Id);
                         var operands = c.Operands.Select(FuzzCorpus.Reconstruct).ToArray();
                         try
                         {

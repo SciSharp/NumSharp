@@ -101,6 +101,21 @@ A divergence is one of: **bit-exact** (passes), a **documented difference** in `
   classifies is counted and printed per tier even when the test passes —
   `[<file>] documented Misaligned divergences excused: <n>x <reason>; …` — so growth in an
   excused class stays visible in the test output. Anything unclassified is red.
+- **A case that never returns ends the run, by name** (`CaseWatchdog`, 2026-10-01). Some samplers
+  can never return on the values their constraint checks reject: NumPy's rejection loops never
+  accept a draw for legacy/Generator `logseries` at `p = 1` or `zipf` at `a <= 1` or NaN, so for
+  those error cases the check is all that stands between NumPy's ValueError and an infinite loop.
+  A regressed check therefore HANGS its case instead of failing it. On 2026-09-26 an in-progress build
+  whose array check read `p <= 1` replayed `rnd/logseries/bcast:viol:p>=1/857` (`p = [0.5, 1.0]`),
+  and its test host was still spinning five days later, 84 CPU-hours in. Every `CorpusFile`
+  enumeration now arms a per-case deadline as it hands each case out; the `rnd` replay from
+  `FuzzCorpus.Load` in `OpRegistryRandomIsolationTests` arms it per case explicitly. When one case
+  passes the limit (2 min; `NUMSHARP_ORACLE_CASE_TIMEOUT_SECONDS` overrides, 0 disables), the test
+  host is ended with `Environment.FailFast`, and `dotnet test` reports the case id as the crash
+  reason. Under an attached debugger the report is printed and the process lives. Failing the test is
+  impossible: the loop runs on the test thread, and nothing in .NET stops a running thread. A
+  `CorpusFile` enumeration must therefore be disposed (`foreach` does it); an abandoned enumerator
+  keeps its last case armed.
 
 ### Host-dependent values — what the oracle must never assert
 
