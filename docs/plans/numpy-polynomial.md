@@ -238,7 +238,17 @@ Portable escape hatches: a degree-≤1 `roots` is closed-form, and `chebgauss` i
   `(8, 32)`).
 - `*vander2d`/`*vander3d` are F-contiguous.
 - `*der`/`*int` with `axis≠0` come back in the `moveaxis`-back layout (F-contiguous for 2-D).
-- `*val` with a 2-D `c` returns C-contiguous `c.shape[1:] + x.shape`.
+- `*val` comes back laid out as NumPy's LAST ufunc call lays it out (corrected by the 2026-10-01 review, §11: this
+  line used to read "a 2-D `c` returns C-contiguous `c.shape[1:] + x.shape`", true only for C-ordered operands —
+  the N-D-series path allocated C whatever its operands were). Every ufunc output is NpyIter's layout over that
+  call's operands (`Shape.NpyIterOutputShape`), so the result follows x's and the series' memory orders:
+  - a scalar x: the layout of `c[0]`; a 1-D series at an array x: x's (a broadcast axis abstains);
+  - an N-D series under `tensor=True`: the series block outside, x's block inside;
+  - `tensor=False` with an N-D series: C when a C-contiguous x or series spans the result, else the step table
+    replayed over layouts (`NDPolyEval.ReplayResultShape`);
+  - which `c` the recurrence reads matters: `chebval` copies it (order 'K'), the other five read it as given, and
+    an integer series is converted by `astype` (order 'K') or, in `polyval`, by `c + 0.0` (NpyIter).
+- `polyutils.mapdomain` comes back in NpyIter's layout over x alone (x's memory order; a broadcast axis abstains).
 
 **D10 — Errors verbatim** (Appendix C). The house types apply (ValueError, TypeError, AxisError). NumPy's bare
 `raise ZeroDivisionError` has an **empty** message, so pass `""` explicitly: .NET's default text would
@@ -293,9 +303,12 @@ NDIter.
     chain instead of interleaving independent ones, and it is 1.15–1.46× slower than Tier 3A (§10.3 B).
   - **Struct kernels / per-dtype C#** are forbidden by the house rules. §9's `Span` variant is kept only as
     the speed reference: Tier 3A lands within 10–20% of it.
-- **Without dynamic code** (NativeAOT) the IL route is unavailable, as for every house IL kernel. The package
-  then falls back to the out= composition over NumSharp's own ufuncs: exact by construction, 1–3× NumPy
-  (§9 `P1out`).
+- **Without dynamic code** (NativeAOT) the IL route is unavailable, as for every house IL kernel. **As built,
+  there is no fallback** (corrected by the 2026-10-01 review, §11; this bullet used to promise the out=
+  composition over NumSharp's own ufuncs, 1–3× NumPy, §9 `P1out`, which was never written): every polynomial
+  kernel factory raises `PlatformNotSupportedException` when `RuntimeFeature.IsDynamicCodeSupported` is false
+  (`ILKernelGenerator.Polynomial.Eval.cs`, `DirectILKernelGenerator.Poly{Algebra,Calculus,Vander,Roots}.cs`).
+  The composition remains the known route if NativeAOT support is ever wanted.
 - **Glue stays a plain composition:** validation, the `_fit`/`_fromroots` drivers, the class layer and the
   BLAS-bound members. Their cost is the leaf kernels or LAPACK.
 
@@ -354,6 +367,17 @@ machine-partitioned; the counts sum to 193 with no overlap (Appendix A).
   under 1.5× are `{p}line` (21, the allocation floor), 100K `as_series` of two arrays (4, memcpy: two plain copies
   into reused buffers take the whole call's time), and `mapparms` of a mixed ndarray/tuple domain (1, 1.18× — the
   exact general lane's per-operation dispatch; a typed program per argument-kind signature is the lever).
+- **Review 2026-10-01 (§11).**
+  - **Layout.** `mapdomain` over an N-D, non-C-contiguous x returned a C-ordered result. NumPy keeps x's memory
+    order. It now runs every route over `np.transpose(x, perm)` and relabels the C result's storage into NumPy's
+    layout: no element moves, and the result keeps OWNDATA.
+  - **Perf.** The same shapes were BELOW NumPy before: a transposed 3-D float64 x ran 0.62×, because the fused pass
+    gathered every element. The 867-cell matrix above measured 1-D layouts only. The transposed view of a dense
+    permuted x is C-contiguous, so the affine route now takes it: 2.13×. A float32 one runs 2.48×, a complex
+    domain 2.72×, an F-ordered x 1.94×.
+  - **NaN sign.** `{p}sub` lost a NaN's sign when a float16 subtrahend was converted to float32 or float64 inside
+    the fused NegateAdd kernel: RyuJIT rewrote `(-a)+b` as `b-a`. Fixed.
+  - **Oracle.** Section R (780 cases: values and a "strides" facet).
 
 - **Scope:**
   - facades: `np.polynomial` + 7 submodules, `[ModuleName]` ×8;
@@ -567,6 +591,16 @@ machine-partitioned; the counts sum to 193 with no overlap (Appendix A).
   payloads) — plus 8 lane mutations — int8 wrap width, uint16 wrap mask, complex multiply fused/addend swap,
   shared complex divide scale, uint32→float64 bias, float16 gang-load lane, float64→complex imaginary lane,
   float16 4-lane load width — all killed by the oracle tier, 7 of 8 also by the unit tests.
+- **Review 2026-10-01 (§11): result layouts.**
+  - **The defect.** The N-D-series path allocated its result C-ordered, and a broadcast x's result was laid out by
+    np.copy's 'K' rule. NumPy's result is its last ufunc output, laid out by NpyIter (D9). Unpinned until now:
+    the oracle compared bytes in C order and never strides.
+  - **The fix.** `NDPolyEval.SeriesLayout` gives the series layout each basis's copy leaves.
+    `NDPolyEval.ResultShape` holds the closed forms, with C fast paths. It was checked against NumPy on 32,740
+    random layouts and against its own replay on 27,595, with 0 differences.
+  - **Gates.** Corpus section L: 4,650 cases, 3,174 of them a "strides" facet. 1,337 of those turn red without
+    the fix.
+  - **Cost.** 30–100 ns on a non-C call; C calls are unchanged. Every measured layout stays 2–25× NumPy.
 - **Tests to port:** `TestEvaluation` × 6 (covered by the oracle tier + unit tests above).
 
 ### U4 — Calculus (12 names) — DELIVERED 2026-09-29
@@ -1687,6 +1721,81 @@ Non-exact rows (excluding the deliberate pre-cast control): 0
 - **Zero-size x:** needs NDIter's zero-size flag or an early return; the probe does not cover it.
 - **Decimal** rides scalar chains through the house decimal ops and is gated by the independent decimal
   oracle.
+
+---
+
+## 11. Review 2026-10-01 — every delivered unit (U1–U5, U7)
+
+A review of the whole package as delivered (cb64deb1 … 890ff1dd) against NumPy 2.4.2: API, parity beyond what the
+oracle tiers pin, performance on layouts the unit matrices did not measure, and the plan's own claims. Probes ran in
+an isolated worktree; NumPy numbers are best-of-9 on the same host, NumSharp's pinned to the P-cores.
+
+**Clean, and worth not re-proving:**
+- **API.** Every delivered name has NumPy's parameter names, order and defaults (reflected against 2.4.2's
+  signatures). The 27 names NumPy has and NumSharp lacks all belong to undelivered units: U6 fit, U8
+  gauss/weight, U9 chebpts/chebinterpolate, U11 format_float, the six classes (U10), and `polyvalfromroots`.
+- **Values, dtypes, flags, errors.** A fresh random probe, independent of the corpora, compared 19,837 calls over
+  U1/U2/U4/U5/U7. The only differences are the NaN-bit class below.
+- **Threads.** 16 and 32 concurrent callers reproduce the single-threaded bytes.
+- **Decimal / Char.** Both work through every unit. Decimal roots are refused with NumPy's linalg text.
+
+**Fixed:**
+- **F1 — `{p}val` result layout (U3).** The N-D-series path allocated C whatever its operands were, and a broadcast
+  x's result was laid out by np.copy's 'K' rule instead of NpyIter's. D9 now states NumPy's rule. Pieces:
+  - `Shape.NpyIterOutputShape`: NpyIter's output layout, ported line for line;
+  - `NDPolyEval.SeriesLayout`: the layout each basis's copy of `c` leaves;
+  - `NDPolyEval.ResultShape`: the closed forms, plus `ReplayResultShape` for tensor=False.
+
+  The closed forms were validated against NumPy on 32,740 random layouts and against the replay on 27,595. 1,302
+  probe mismatches dropped to 22, all extent-1 strides, which no flag reads.
+- **F2 — `mapdomain` layout and speed (U1).** The result was C for an N-D non-C x, and slow: a transposed 3-D
+  float64 x ran 0.62× NumPy (1-D layouts only in the 867-cell matrix). Two traps made the obvious fix wrong:
+  - **Writing NumPy's layout directly is 2.7× slower, library-wide.** NDIter walks a pair of operands sharing a
+    permuted layout in LOGICAL order, gathering from both. It only reverses axes for all-F operands, so
+    `np.add(xp, 1.0, out=)` costs 41 µs into xp's own layout against 17.5 µs into C.
+  - **The fix sidesteps NDIter.** Every route runs over `np.transpose(x, perm)`, which is C-contiguous for a dense
+    permuted x and so takes the affine SIMD route. The C result's storage is relabelled into NumPy's layout
+    (`UnmanagedStorage.SetShapeUnsafe`, the ndarray.shape setter's mechanism): no element moves, OWNDATA is kept.
+  - **Measured, NPY/NS:**
+
+    | x | before | now |
+    |---|---|---|
+    | permuted 3-D float64 | 0.62× | 2.13× |
+    | permuted float32 | | 2.48× |
+    | complex domain | | 2.72× |
+    | F-ordered | | 1.94× |
+    | stepped | | 2.55× |
+- **F3 — NaN sign in `{p}sub` (U1).** The fused NegateAdd combine kernel negates the converted subtrahend, then adds
+  the minuend. When the conversion was an inlined float16 → float32/float64 helper, RyuJIT rewrote `(-a)+b` as
+  `b-a`. That subtraction gives a NaN subtrahend the minuend's sign rule instead of the negated sign. Fixed by
+  storing the negated value and reloading it before the add. Pinned by
+  `Sub_EqualLengths_ConvertedFloat16Subtrahend_StillNegatesFirst`; the oracle tokenizes NaN and cannot see it.
+- **D9 / D12.** Both corrected in §2. D9's `{p}val` layout line was wrong. D12 promised a NativeAOT composition
+  fallback that was never built: the kernels raise `PlatformNotSupportedException`.
+
+**Gates added:**
+- `polyeval.jsonl` section L: 4,650 cases. 3,174 are "strides" facets: `_result_strides`, element strides with every
+  extent ≤ 1 axis and every empty result zeroed. The other 1,476 are value twins of the small results. Total
+  23,866.
+- `polyseries.jsonl` section R: 780 mapdomain cases, all layouts × 5 dtypes × 3 domain kinds, values and strides.
+  Total 19,478.
+- `Polynomial/PolynomialResultLayoutTests.cs`: 13 NumPy-probed layout pins, including a 6,000-case
+  closed-form-vs-replay cross-check that exercises the C shortcut.
+- Mutation check: planted bugs in the shortcut, the relabel and the layout rule are each killed.
+
+**Left as is (documented):**
+- **NaN bits.** 91 of the 19,837 probe calls differ ONLY in a NaN's sign or payload. They come from NaNs a
+  recurrence generates (`inf - inf`) and from NaN-vs-NaN operand priority, where RyuJIT may swap commutative
+  operands. This is library-wide ([np-multiply-nan-priority] in the session memory), and the oracle tokenizes NaN,
+  so it is ungated.
+- **M1 — complex64 values in U3.** NumSharp has one complex width (#569). U1's mapdomain, U4 and U7 emulate NumPy's
+  complex64 VALUES on float32 kernels. U3's evaluation computes complex64 loops in complex128, so those values are
+  more precise than NumPy's: the dtype divergence of #569 plus a value divergence the other units avoid.
+- **Library-wide, not polynomial:**
+  - NDIter's permuted-pair walk (above).
+  - The general ufunc output allocation is C or F, not NpyIter's K-order. `c0(2,1,1) + F(3,4)` is (12,1,3) in
+    NumPy and (1,2,6) here, and NDIter's ALLOCATE operands are C.
+  - NumPy 2.x reports all-zero strides for a zero-size array.
 
 ---
 

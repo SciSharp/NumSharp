@@ -138,6 +138,28 @@ namespace NumSharp.Tests.Polynomial
             Bits(r.GetDouble(1)).Should().Be(0x7ff8000000000000UL);
         }
 
+        /// <summary>
+        ///     Pins the NaN SIGN of <c>_sub</c>'s "negate c2, then add c1" when the fused combine kernel converts a float16
+        ///     subtrahend on the fly: a JIT rewrite of <c>(-a)+b</c> into <c>b-a</c> silently keeps the NaN positive. The
+        ///     oracle tokenizes NaN, so this byte-level test is the only gate on it.
+        /// </summary>
+        [TestMethod]
+        public void Sub_EqualLengths_ConvertedFloat16Subtrahend_StillNegatesFirst()
+        {
+            // The same rule through a CONVERTING combine (2026-10-01 review): the float16 subtrahend widens to the
+            // common type, is negated, then the minuend is added. RyuJIT rewrote the fused kernel's `(-a) + b` as
+            // `b - a` once the widening was an inlinable helper, keeping the NaN positive.
+            //   P.polysub(np.array([1., 2.], np.float32), np.array([np.nan, 3.], np.float16)) -> 0000c0ff 000080bf
+            //   P.polysub(np.array([1., 2.]),             np.array([np.nan, 3.], np.float16)) -> 000000000000f8ff ...
+            var h = np.array(new[] { (Half)NpNanF, (Half)3 });
+            var r32 = P.polysub(np.array(new[] { 1f, 2f }), h);
+            AssertBytes(r32, "float32", new long[] { 2 }, "0000c0ff000080bf");
+            var r64 = P.polysub(np.array(new[] { 1.0, 2.0 }), h);
+            AssertBytes(r64, "float64", new long[] { 2 }, "000000000000f8ff000000000000f0bf");
+            // an int64 minuend (common type float64) too: NumPy 000000000000f8ff
+            Bits(P.polysub(np.array(new long[] { 1, 2 }), h).GetDouble(0)).Should().Be(0xfff8000000000000UL);
+        }
+
         [TestMethod]
         public void AddSub_Dtypes_FollowCommonType()
         {

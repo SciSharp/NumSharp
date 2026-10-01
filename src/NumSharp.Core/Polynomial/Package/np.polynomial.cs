@@ -24,19 +24,35 @@ namespace NumSharp
     ///     named <c>polynomial</c> inside a type of that name.)
     /// </summary>
     /// <remarks>
-    ///     <para>Implemented so far, bit-identical to NumPy 2.4.2 for every dtype NumPy has:</para>
+    ///     <para>Implemented so far, bit-identical to NumPy 2.4.2 for every dtype NumPy has (values, dtypes, result
+    ///     layouts and error texts; the one dtype divergence is NumSharp's single complex width, #569):</para>
     ///     <list type="bullet">
     ///         <item>the evaluation family of every basis — <c>{p}val</c>, <c>{p}val2d</c>, <c>{p}val3d</c>,
     ///         <c>{p}grid2d</c>, <c>{p}grid3d</c> and <c>{p}valnd</c> — through one runtime-compiled IL kernel per
-    ///         (basis, dtypes, layout) class;</item>
+    ///         (basis, dtypes, layout) class, the result laid out as NumPy's last ufunc call lays it out (an
+    ///         F-ordered or permuted x or series keeps its memory order);</item>
     ///         <item>the additive family of every basis — the constants <c>{p}domain</c>/<c>{p}zero</c>/<c>{p}one</c>/
     ///         <c>{p}x</c>, <c>{p}line</c>, <c>{p}add</c>, <c>{p}sub</c>, <c>{p}trim</c> — and the <see cref="polyutils"/>
     ///         substrate (<c>as_series</c>, <c>trimseq</c>, <c>trimcoef</c>, <c>getdomain</c>, <c>mapparms</c>,
     ///         <c>mapdomain</c>);</item>
     ///         <item>the calculus family of every basis — <c>{p}der</c> and <c>{p}int</c> with every parameter
     ///         (<c>m</c>, <c>k</c>, <c>lbnd</c>, <c>scl</c>, <c>axis</c>) — through one runtime-compiled IL kernel per
-    ///         (basis, direction, dtypes) that runs every order in place in one buffer.</item>
+    ///         (basis, direction, dtypes) that runs every order in place in one buffer;</item>
+    ///         <item>the series algebra of every basis — <c>{p}mulx</c>, <c>{p}mul</c>, <c>{p}div</c>, <c>{p}pow</c>,
+    ///         <c>{p}fromroots</c> and the <c>X2poly</c>/<c>poly2X</c> conversions — NumPy's Python statements replayed
+    ///         over a pooled per-thread arena, each statement on the house kernel NumPy's statement runs through
+    ///         (long products byte-exact with <c>NumSharp.Interop.OpenBLAS</c>, bounded-ULP without it);</item>
+    ///         <item>the Vandermonde family of every basis — <c>{p}vander</c>, <c>{p}vander2d</c>, <c>{p}vander3d</c> —
+    ///         one whole-array kernel per (basis, dtype, rank), returning NumPy's <c>moveaxis</c> view;</item>
+    ///         <item>companion matrices and roots of every basis — <c>{p}companion</c>, <c>{p}roots</c> (roots of
+    ///         degree ≥ 2 run <c>np.linalg.eigvals</c>, so they need a LAPACK backend such as
+    ///         <c>NumSharp.Interop.OpenBLAS</c>).</item>
     ///     </list>
+    ///     <para>Still open: least-squares fit, Gauss quadrature and weights, Chebyshev sampling / interpolation,
+    ///     <c>polyvalfromroots</c>, the six convenience classes and printing. The kernels are emitted at run time and
+    ///     have no fallback: under NativeAOT (no dynamic code) a call that reaches one raises
+    ///     <see cref="System.PlatformNotSupportedException"/>, and the evaluation, calculus, algebra, Vandermonde and
+    ///     companion paths all reach one.</para>
     ///     <para>https://numpy.org/doc/stable/reference/routines.polynomials-package.html</para>
     /// </remarks>
     [ModuleName("np.polynomial")]

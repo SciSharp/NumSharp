@@ -1080,6 +1080,19 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Bge, tail);
             il.Emit(OpCodes.Ldloc, pr);
             PushA();
+            if (op == PolyCombineOp.NegateAdd)
+            {
+                // NumPy negates the WHOLE converted copy first (`c2 = -c2`, materialized) and adds after, so the
+                // negated value must reach memory before the add reads it back. Kept in one expression, RyuJIT may
+                // rewrite `(-a) + b` as `b - a` — equal for every number, but `b - NaN` keeps the NaN's sign where
+                // NumPy's `(-NaN) + b` flips it (observed whenever the conversion is an inlinable helper: a float16
+                // series' +NaN came back +NaN instead of -NaN). The store/reload is a statement boundary the
+                // rewrite cannot cross.
+                EmitStoreIndirect(il, tr);
+                il.Emit(OpCodes.Ldloc, pr);
+                il.Emit(OpCodes.Ldloc, pr);
+                EmitLoadIndirect(il, tr);
+            }
             il.Emit(OpCodes.Ldloc, pb);
             EmitLoadIndirect(il, tb);
             EmitConvertTo(il, tb, tr);

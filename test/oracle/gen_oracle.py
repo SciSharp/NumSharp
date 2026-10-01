@@ -10547,6 +10547,15 @@ def _poly_exc(e):
     return {"type": type(e).__name__, "text": str(e).strip()}
 
 
+def _result_strides(r):
+    """The "facet": "strides" record of a result: its ELEMENT strides as an int64 array, with the stride of every
+    extent-1 axis (and every stride of an empty result) zeroed — NumPy assigns those per loop path (its trivial loop
+    fills C/F strides, NpyIter a sort position), and no flag reads them; every other stride IS the layout."""
+    r = np.asarray(r)
+    empty = r.size == 0
+    return np.array([0 if empty or d <= 1 else s // r.itemsize for d, s in zip(r.shape, r.strides)], dtype=np.int64)
+
+
 def gen_polyeval():
     import numpy.polynomial.polyutils as pu
     cases = []
@@ -10555,11 +10564,13 @@ def gen_polyeval():
     ok_dtypes = set(ALL_DTYPES)
     A = _PSArr   # an ndarray argument inside a Python-typed spec (sections J and K)
 
-    def emit(op, xs, operands, call, layout, cid, extra=None):
+    def emit(op, xs, operands, call, layout, cid, extra=None, facet=None):
         nonlocal n, skipped
         params = {"xs": xs}
         if extra:
             params.update(extra)
+        if facet:
+            params["facet"] = facet
         try:
             with np.errstate(all="ignore"):
                 r = np.asarray(call())
@@ -10569,6 +10580,8 @@ def gen_polyeval():
                           "layout": layout, "valueclass": "error"})
             n += 1
             return
+        if facet == "strides":
+            r = _result_strides(r)   # the layout, not the values (section L)
         if r.dtype.name not in ok_dtypes:
             skipped += 1          # complex64 lane (#569)
             return
@@ -10948,6 +10961,120 @@ def gen_polyeval():
         emit("laguerre.lagval", ["a"], [describe(xv, xv), describe(cv, cv)],
              lambda: _poly_module("laguerre").lagval(xv, cv), "c_contiguous_1d", f"laguerre.lagval/overflow/{xs}/{nc}")
 
+    # (L) RESULT LAYOUTS (2026-10-01 review). Every case above compares dtype, shape and bytes only, so where the result
+    #     is STORED went ungated, and the N-D-series path allocated C order whatever its operands were. NumPy's result is
+    #     the output of the recurrence's LAST ufunc call, which NpyIter lays out from its operands: the series' axes keep
+    #     the series' memory order (chebval's copy=True copy keeps it as order 'K'; an integer series is copied by
+    #     astype's 'K' — polyval's `c + 0.0` by NpyIter, which lets a broadcast axis abstain), x's axes keep x's, and a
+    #     conflict on a shared axis resolves to C. Each case is emitted twice: once for the values and once with
+    #     "facet": "strides" — the result's element strides, every extent-1 axis (and an empty result) zeroed: NumPy
+    #     assigns those per loop path (its trivial loop fills C/F strides, NpyIter its sort position), and no flag reads
+    #     them. Appended after every other section so the running case counter leaves the existing ids untouched.
+    def series_layout(name, cs):
+        if name == "c1d":
+            b = _poly_coef((4,), cs, seed=50)
+            return b, b
+        if name == "nd_c":
+            b = _poly_coef((4, 2, 3), cs, seed=51)
+            return b, b
+        if name == "nd_f":
+            b = _poly_coef((3, 2, 4), cs, seed=52)
+            return b, b.transpose(2, 1, 0)
+        if name == "nd_perm":
+            b = _poly_coef((2, 3, 4), cs, seed=53)
+            return b, b.transpose(2, 0, 1)
+        if name == "nd_inner":
+            b = _poly_coef((3, 4), cs, seed=54)
+            return b, b.T
+        if name == "nd_rev":
+            b = _poly_coef((4, 2, 3), cs, seed=55)
+            return b, b[:, ::-1, :]
+        if name == "nd_step":
+            b = _poly_coef((4, 2, 6), cs, seed=56)
+            return b, b[:, :, ::2]
+        if name == "nd_bcast":
+            b = _poly_coef((4, 1, 3), cs, seed=57)
+            return b, np.broadcast_to(b, (4, 2, 3))
+        b = _poly_coef((1, 2, 3), cs, seed=58)             # nd_bcast_series: the series axis itself is stride 0
+        return b, np.broadcast_to(b, (4, 2, 3))
+
+    def x_layout(name):
+        if name in LAYOUTS:
+            base, view = LAYOUTS[name](np.dtype("float64"))
+            base[...] = _poly_fill(base.size, "float64", seed=60).reshape(base.shape)
+            return base, view
+        if name == "x_f23":
+            b = _poly_coef((3, 2), "float64", seed=61)
+            return b, b.T
+        if name == "x_rev23":
+            b = _poly_coef((2, 3), "float64", seed=62)
+            return b, b[::-1, :]
+        if name == "x_bc23":
+            b = _poly_coef((3,), "float64", seed=63)
+            return b, np.broadcast_to(b, (2, 3))
+        b = _poly_coef((2, 1), "float64", seed=64)        # x_col23
+        return b, np.broadcast_to(b, (2, 3))
+
+    lay_c = [("c1d", "float64"), ("nd_c", "float64"), ("nd_f", "float64"), ("nd_perm", "float64"),
+             ("nd_inner", "float64"), ("nd_rev", "float64"), ("nd_step", "float64"), ("nd_bcast", "float64"),
+             ("nd_bcast_series", "float64"), ("nd_f", "int64"), ("nd_perm", "int64"), ("nd_bcast", "int64"),
+             ("nd_bcast_series", "int64"), ("nd_perm", "float32"), ("nd_f", "complex128")]
+    lay_x_all = sorted(LAYOUTS) + ["x_f23", "x_rev23", "x_bc23", "x_col23"]
+    # An N-D series meets one x of each distinct layout class (the remaining catalog entries repeat a class already
+    # here and would only grow the file: a tensor result holds c.shape[1:] + x.shape elements).
+    lay_x_nd = ["c_contiguous_2d", "f_contiguous_2d", "transposed_3d", "transposed_2d", "strided_2d_cols",
+                "negstride_2d_offset", "broadcast_1d_to_2d", "broadcast_row_partial", "scalar_broadcast",
+                "singleton_dim_3d", "sliced_composed", "f_contiguous_3d", "empty_2d", "scalar_0d", "strided_step2_1d",
+                "highrank_5d", "x_f23", "x_rev23", "x_bc23", "x_col23"]
+    for modname, p in POLY_MODULES:
+        mod = _poly_module(modname)
+        val = getattr(mod, p + "val")
+        op = f"{modname}.{p}val"
+        for cname, cs in lay_c:
+            cbase, cview = series_layout(cname, cs)
+            for xname in (lay_x_all if cname == "c1d" else lay_x_nd):
+                xbase, xview = x_layout(xname)
+                for tensor in (True, False):
+                    if tensor:
+                        out_shape = cview.shape[1:] + xview.shape
+                    else:
+                        try:
+                            out_shape = np.broadcast_shapes(cview.shape[1:], xview.shape)
+                        except ValueError:
+                            continue
+                    # The strides facet for every pair; the values twin only for a small result (the values of these
+                    # layouts are the kernel's, independent of where it stores them, and sections B/C/I already gate
+                    # them — the twin pins that no layout path changes a value, without bloating the file).
+                    facets = ("strides",) if int(np.prod(out_shape)) > 24 else (None, "strides")
+                    for facet in facets:
+                        emit(op, ["a"], [describe(xbase, xview), describe(cbase, cview)],
+                             lambda: val(xview, cview, tensor=tensor), f"layout_{cname}",
+                             f"{op}/lay/{cname}/{cs}/{xname}/{tensor}/{facet or 'values'}",
+                             {"tensor": tensor} if not tensor else None, facet)
+            # a scalar x — Python (weak) and 0-d array: the result is laid out by the series alone
+            x0 = np.array(0.75)
+            for facet in (None, "strides"):
+                emit(op, [_weak_spec(0.75)], [describe(cbase, cview)], lambda: val(0.75, cview), f"layout_{cname}",
+                     f"{op}/lay/{cname}/{cs}/weak/{facet or 'values'}", None, facet)
+                emit(op, ["a"], [describe(x0, x0), describe(cbase, cview)], lambda: val(x0, cview), f"layout_{cname}",
+                     f"{op}/lay/{cname}/{cs}/x0d/{facet or 'values'}", None, facet)
+        # the multi-ordinate functions: every ordinate of one layout (the same values), the series C or F
+        for kind, dims in (("val2d", 2), ("val3d", 3), ("grid2d", 2), ("grid3d", 3)):
+            f = getattr(mod, p + kind)
+            op2 = f"{modname}.{p}{kind}"
+            cb = _poly_coef((3, 2) if dims == 2 else (2, 3, 2), "float64", seed=65)
+            ct = np.ascontiguousarray(cb.T)                  # the F-ordered series is the transpose of a C buffer
+            for cname, cbase, cview in (("c", cb, cb), ("f", ct, ct.T)):
+                for xname in ("f_contiguous_2d", "transposed_3d", "transposed_2d", "negstride_2d_offset",
+                              "strided_2d_cols", "broadcast_1d_to_2d", "sliced_composed", "c_contiguous_2d", "x_f23"):
+                    xbase, xview = x_layout(xname)
+                    ords = [(xbase, xview)] * dims
+                    # a grid holds x.size**dims points: the values twin only for the val forms (x's own shape)
+                    for facet in ((None, "strides") if kind.startswith("val") else ("strides",)):
+                        emit(op2, ["a"] * dims, [describe(b, v) for b, v in ords] + [describe(cbase, cview)],
+                             lambda: f(*[v for _, v in ords], cview), f"layout_{cname}",
+                             f"{op2}/lay/{cname}/{xname}/{facet or 'values'}", None, facet)
+
     # Char: NumSharp's uint16-like dtype has no NumPy analog; the uint16 x cells of the dtype matrix
     # are the bytes-exact oracle for it (the house char weave).
     cases += _relabel_dtype([c for c in cases if any(t in (c.get("id") or "") for t in ("/dt/uint16/", "/vl/uint16/", "/vlx/uint16/"))],
@@ -11084,9 +11211,11 @@ def gen_polyseries():
     skipped = [0]
     ok_dtypes = set(ALL_DTYPES)
 
-    def emit(op, args, call, layout, cid, kind="array"):
+    def emit(op, args, call, layout, cid, kind="array", facet=None):
         operands = []
         params = {k: _ps_enc(v, operands) for k, v in args.items()}
+        if facet:
+            params["facet"] = facet
         n = counter[0]
         counter[0] += 1
         try:
@@ -11097,6 +11226,8 @@ def gen_polyseries():
                           "expected": {"kind": kind} if kind != "array" else {}, "expects_throw": True,
                           "error": _poly_exc(e), "layout": layout, "valueclass": "error"})
             return
+        if facet == "strides":
+            r = _result_strides(r)   # the layout, not the values (section R)
         if kind == "tuple":
             arrs = [np.asarray(v) for v in r]
             if any(a.dtype.name not in ok_dtypes and not _ps_c64_exact(op, operands, a) for a in arrs):
@@ -11948,6 +12079,26 @@ def gen_polyseries():
         if not _pa_object_land(call):
             emit("polyutils.trimcoef", {"c": xv, "tol": -1.0}, call, "object_order",
                  f"polyutils.trimcoef/objorder/{tag}_negtol")
+
+    # ---------------- (R) mapdomain's RESULT LAYOUT (2026-10-01 review) ----------------
+    # `off + scl * x` is two ufunc calls whose only array operand is x, so NumPy's result is laid out as NpyIter lays
+    # out an output over x alone: x's memory order (an F-ordered or permuted x stays so), a broadcast axis abstaining.
+    # The fused and complex64 routes used to write C order for every N-D x. Every layout, emitted twice: the values and
+    # "facet": "strides" (the element strides, extent-1 axes and empty results zeroed — see _result_strides), through
+    # each route's loop kind: Python and ndarray float64 domains (affine / fused), a complex domain (complex128 for a
+    # float64 x, NEP 50's complex64 for a float32 / float16 one — the MapDomainComplex64 route), an int64 and a float16 x.
+    op = "polyutils.mapdomain"
+    lay_doms = [("py", (-1, 1), (0, 2.5)), ("nd", A(np.array([-1.0, 1.0])), A(np.array([0.5, 2.0]))),
+                ("cplx", (-1, 1), (0, 2 + 1j))]
+    for ln in sorted(LAYOUTS):
+        for xd in ("float64", "float32", "float16", "int64", "complex128"):
+            base, view = LAYOUTS[ln](np.dtype(xd))
+            base[...] = _ps_series(base.size, xd, seed=70).reshape(base.shape)
+            for dname, old, new in lay_doms:
+                for facet in (None, "strides"):
+                    emit(op, {"x": A(base, view), "old": old, "new": new},
+                         lambda: pu.mapdomain(view, _ps_py(old), _ps_py(new)), ln,
+                         f"{op}/lay/{ln}/{xd}/{dname}/{facet or 'values'}", facet=facet)
 
     # Char: NumSharp's uint16-like dtype — the uint16 cells relabelled (bytes-exact oracle, the house weave).
     cases += _relabel_dtype([c for c in cases if "/uint16" in (c.get("id") or "") and not c.get("expects_throw")],

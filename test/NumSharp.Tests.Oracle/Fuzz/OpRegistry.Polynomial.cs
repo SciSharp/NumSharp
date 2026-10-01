@@ -46,6 +46,46 @@ namespace NumSharp.Tests.Fuzz
         }
 
         /// <summary>
+        ///     Dispatch a polynomial-package corpus op (<see cref="ApplyPolynomialResult"/>), then apply the case's
+        ///     layout facet: a <c>"facet": "strides"</c> case compares WHERE NumPy stored the result, not its values
+        ///     (<see cref="PolyLayoutFacet"/>).
+        /// </summary>
+        /// <param name="op">The full key (<c>chebyshev.chebval2d</c>).</param>
+        /// <param name="p">The case's params.</param>
+        /// <param name="ops">Reconstructed operands.</param>
+        /// <returns>The facade's result, or its strides record for a strides-facet case.</returns>
+        /// <exception cref="NotSupportedException">An unknown module or function name.</exception>
+        internal static NDArray ApplyPolynomial(string op, IReadOnlyDictionary<string, JsonElement> p, NDArray[] ops)
+            => PolyLayoutFacet(p, ApplyPolynomialResult(op, p, ops));
+
+        /// <summary>
+        ///     The <c>"facet": "strides"</c> record of a result (gen_oracle.py's <c>_result_strides</c>): its ELEMENT
+        ///     strides as an int64 array, with every extent-1 axis — and every axis of an empty result — zeroed (NumPy
+        ///     assigns those per loop path, and no flag reads them); every other stride is the layout itself, so the
+        ///     case pins NumPy's C / F / K order exactly. Any other case passes the result through untouched (the
+        ///     calculus family's <c>"flags"</c> facet is applied inside its own dispatch).
+        /// </summary>
+        /// <param name="p">The case's params.</param>
+        /// <param name="r">The facade's result (a fresh array — the facet replaces it, so it is released here, or the leak
+        ///     gate would read its buffer as escaped on every facet case).</param>
+        /// <returns>The strides record, or <paramref name="r"/>.</returns>
+        internal static NDArray PolyLayoutFacet(IReadOnlyDictionary<string, JsonElement> p, NDArray r)
+        {
+            // A plain JSON string only: the module constants' "facet" is an ENCODED argument (a Python str spec object,
+            // decoded by their own dispatch), and the calculus family's "flags" facet is applied inside its dispatch.
+            if (!p.TryGetValue("facet", out var f) || f.ValueKind != JsonValueKind.String || f.GetString() != "strides")
+                return r;
+            var dims = r.Shape.dimensions;
+            var strides = r.Shape.strides;
+            bool empty = r.size == 0;
+            var rec = new long[dims.Length];
+            for (int i = 0; i < dims.Length; i++)
+                rec[i] = empty || dims[i] <= 1 ? 0 : strides[i];
+            r.Dispose();
+            return np.array(rec);
+        }
+
+        /// <summary>
         ///     Dispatch a polynomial-package corpus op. The function kind (val / val2d / val3d / grid2d /
         ///     grid3d / valnd) is the name's suffix after the basis prefix; the submodule comes from the key's
         ///     module part, so the SAME facade member NumPy's name refers to is the one exercised.
@@ -55,7 +95,7 @@ namespace NumSharp.Tests.Fuzz
         /// <param name="ops">Reconstructed operands: the array x/y/z/pts in order, then the coefficients.</param>
         /// <returns>The facade's result.</returns>
         /// <exception cref="NotSupportedException">An unknown module or function name.</exception>
-        internal static NDArray ApplyPolynomial(string op, IReadOnlyDictionary<string, JsonElement> p, NDArray[] ops)
+        private static NDArray ApplyPolynomialResult(string op, IReadOnlyDictionary<string, JsonElement> p, NDArray[] ops)
         {
             int dot = op.IndexOf('.');
             string module = op.Substring(0, dot), fn = op.Substring(dot + 1);

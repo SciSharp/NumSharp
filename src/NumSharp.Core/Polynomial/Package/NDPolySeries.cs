@@ -1928,13 +1928,33 @@ namespace NumSharp
         ///     <c>scl * x</c> is then a one-element ufunc whose result is a NumPy SCALAR, and <c>off + that</c> is
         ///     scalarmath, a sequence the scalar engine reproduces op for op (a complex64 off/scl stays in float32 —
         ///     the fused pass would compute it in complex128), and faster than an iterator pass for one element.
+        ///     Whatever the route, an array result comes back in NumPy's layout: NpyIter's output over x alone
+        ///     (<see cref="Shape.NpyIterOutputShape"/> — an F-ordered or permuted x keeps its memory order, a broadcast
+        ///     axis abstains).
         /// </summary>
         /// <param name="x">The points.</param>
         /// <param name="off">The offset (from mapparms).</param>
         /// <param name="scl">The scale (from mapparms).</param>
-        /// <returns>The mapped points.</returns>
+        /// <returns>The mapped points (an array result laid out as NumPy's).</returns>
         /// <exception cref="IncorrectShapeException">Array operands that do not broadcast.</exception>
         /// <exception cref="OverflowException">A Python int that does not fit its loop dtype.</exception>
+        /// <remarks>
+        ///     <para><b>The layout, and why it is reached through a transposed view.</b> <c>scl * x</c> and
+        ///     <c>off + …</c> are two ufunc calls whose only array operand is x (a NumPy/Python scalar never votes), so
+        ///     NumPy lays the result out as NpyIter lays out an output over x alone. Only an N-D x that is not
+        ///     C-contiguous can make that anything but C. For such an x every route runs over
+        ///     <c>np.transpose(x, perm)</c> — perm = that layout's axes in memory order (<see cref="Shape.DenseAxisOrder"/>)
+        ///     — and its C-ordered result is RELABELLED with NumPy's layout: a C-contiguous buffer of the transposed dims
+        ///     is exactly that layout's buffer, so no element moves and the array keeps owning its data
+        ///     (<see cref="AdoptLayout"/>).</para>
+        ///     <para>Writing NumPy's layout directly is the obvious alternative, and it is 2.7× slower: NDIter walks a
+        ///     pair of operands sharing a permuted layout in LOGICAL order, gathering every element from both
+        ///     (measured, 32³ float64 transposed (2,0,1): <c>np.evaluate</c> into the matching layout 40.6 µs, into a C
+        ///     array 14.8 µs — <c>np.add(x, 1.0, out=)</c> shows the same, it is the iterator, library-wide). The
+        ///     transposed view of a dense permuted x is C-contiguous, so it takes the affine SIMD route at memory
+        ///     speed — which also lifts the case above NumPy: it ran at 0.62× NumPy before this layout work, because
+        ///     the fused pass over the permuted x was the gather-scatter walk.</para>
+        /// </remarks>
         public static PolyNumber MapDomainWith(in PolyNumber x, in PolyNumber off, in PolyNumber scl)
         {
             if (!x.IsNdArray || off.IsNdArray || scl.IsNdArray)
@@ -1949,6 +1969,46 @@ namespace NumSharp
             NDArray sclP = ParamArray(0, scl, t1);
             NDArray offP = ParamArray(1, off, t2);
 
+            // C unless an N-D, non-C-contiguous, non-empty x lays NumPy's result out otherwise (remarks). An empty
+            // result's strides are meaningless (NumPy 2.x reports zeros for every zero-size array).
+            if (xa.ndim < 2 || xa.size == 0 || xa.Shape.IsContiguous)
+                return PolyNumber.FromArray(MapDomainIntoC(xa, off, scl, t1, t2, sclP, offP));
+            Shape xs = xa.Shape;
+            Shape layout = Shape.NpyIterOutputShape((long[])xs.dimensions.Clone(), new ReadOnlySpan<Shape>(in xs));
+            if (layout.IsContiguous)
+                return PolyNumber.FromArray(MapDomainIntoC(xa, off, scl, t1, t2, sclP, offP));
+
+            // The routes run over x seen in the layout's memory order; their C result is relabelled into it.
+            NDArray xv = np.transpose(xa, layout.DenseAxisOrder());
+            try
+            {
+                return PolyNumber.FromArray(AdoptLayout(MapDomainIntoC(xv, off, scl, t1, t2, sclP, offP), layout));
+            }
+            finally
+            {
+                xv.Dispose();   // the view's own counted reference; xa (the caller's) is untouched
+            }
+        }
+
+        /// <summary>
+        ///     The routes of <see cref="MapDomainWith"/> for an ndarray x, each writing a fresh C-contiguous result of x's
+        ///     shape: the complex64 kernels, the complex128 affine kernel, the float64/float32/complex128 affine route,
+        ///     else the fused <see cref="np.evaluate(NDExpr)"/> pass.
+        /// </summary>
+        /// <param name="xa">The points (rank ≥ 0, any layout; a transposed view of the caller's x when NumPy's layout is
+        ///     not C — see <see cref="MapDomainWith"/>).</param>
+        /// <param name="off">The offset (from mapparms; a scalar).</param>
+        /// <param name="scl">The scale (from mapparms; a scalar).</param>
+        /// <param name="t1">The loop dtype of <c>scl * x</c>.</param>
+        /// <param name="t2">The loop dtype of <c>off + …</c> (the result dtype).</param>
+        /// <param name="sclP">The scale as a 0-d parameter of <paramref name="t1"/>.</param>
+        /// <param name="offP">The offset as a 0-d parameter of <paramref name="t2"/>.</param>
+        /// <returns>A new C-contiguous array of <paramref name="xa"/>'s shape — the caller relabels it when NumPy's layout
+        ///     differs (<see cref="AdoptLayout"/> checks this contract instead of trusting it).</returns>
+        /// <exception cref="OverflowException">A Python int that does not fit its loop dtype.</exception>
+        private static NDArray MapDomainIntoC(NDArray xa, in PolyNumber off, in PolyNumber scl, NPTypeCode t1, NPTypeCode t2,
+                                              NDArray sclP, NDArray offP)
+        {
             // A complex loop may be NumPy's COMPLEX64 one (NEP 50: a Python complex with a float16/float32 x, a
             // complex64 off/scl with a narrow x): the fused pass would compute it in complex128, so it runs on the
             // float32 kernels instead (see MapDomainComplex64).
@@ -1957,7 +2017,7 @@ namespace NumSharp
                 bool mulC64 = t1 == NPTypeCode.Complex && PolyNumber.IsComplex64Loop(scl, xa.typecode, false);
                 bool addC64 = PolyNumber.IsComplex64Loop(off, mulC64 ? NPTypeCode.Complex : t1, mulC64);
                 if (mulC64 || addC64)
-                    return PolyNumber.FromArray(MapDomainComplex64(xa, off, scl, t1, sclP, offP, mulC64, addC64));
+                    return MapDomainComplex64(xa, off, scl, t1, sclP, offP, mulC64, addC64);
 
                 // A complex128 x (contiguous, or any 1-D stride) with complex128 off/scl: the fused pass computes
                 // simd_cmul one element at a time (~0.8 ns each); the dedicated kernel runs the same arithmetic two
@@ -1972,7 +2032,7 @@ namespace NumSharp
                         *(Complex*)((byte*)sclP.Storage.Address + sclP.Shape.offset * sizeof(Complex)),
                         *(Complex*)((byte*)offP.Storage.Address + offP.Shape.offset * sizeof(Complex)),
                         (Complex*)r.Storage.Address);
-                    return PolyNumber.FromArray(r);
+                    return r;
                 }
             }
 
@@ -1984,16 +2044,61 @@ namespace NumSharp
             // (see FusedPassIsFaster).
             if (t2 == t1 && t1 is NPTypeCode.Double or NPTypeCode.Single or NPTypeCode.Complex && xa.size > 0
                 && (xa.ndim == 1 || xa.Shape.IsContiguous) && !FusedPassIsFaster(xa, t1) && !DisableAffineMapDomain)
-                return PolyNumber.FromArray(MapDomainAffine(xa, t1, sclP, offP));
+                return MapDomainAffine(xa, t1, sclP, offP);
 
             NDArray staged = StageMapDomainPoints(xa, t1);
             try
             {
-                return PolyNumber.FromArray(np.evaluate(NDExpr.Arr(offP) + NDExpr.Arr(sclP) * NDExpr.Arr(staged ?? xa)));
+                // np.evaluate allocates its result C-ordered; AdoptLayout checks that rather than trusting it.
+                return np.evaluate(NDExpr.Arr(offP) + NDExpr.Arr(sclP) * NDExpr.Arr(staged ?? xa));
             }
             finally
             {
                 staged?.Dispose();
+            }
+        }
+
+        /// <summary>
+        ///     Turns a route's C-ordered result over the transposed points into NumPy's result layout: relabels its
+        ///     storage with <paramref name="layout"/> in place (<see cref="UnmanagedStorage.SetShapeUnsafe(Shape)"/>, the
+        ///     ndarray.shape setter's mechanism) — no element moves, and the array keeps owning its buffer, as NumPy's
+        ///     ufunc result does.
+        /// </summary>
+        /// <param name="r">The route's result over the transposed points <c>np.transpose(x, layout.DenseAxisOrder())</c>
+        ///     (consumed: returned relabelled, or disposed after its values are copied).</param>
+        /// <param name="layout">NumPy's layout (dense, non-empty) of the caller's x.</param>
+        /// <returns>The values in <paramref name="layout"/>.</returns>
+        /// <remarks>
+        ///     Correct because a C-contiguous buffer of the transposed dims stores element <c>x[j0, …, jn]</c> at
+        ///     <c>Σ j_a·layout.strides[a]</c>: the transposed dims put the axes in the layout's memory order, so each
+        ///     axis's C stride over them is the product of the extents inside it — the layout's stride. The routes
+        ///     all allocate a fresh C-contiguous, offset-0 result; should one ever return anything else, the values are
+        ///     copied through the C-contiguous transposed view of a fresh <paramref name="layout"/> array instead
+        ///     (a copy between two same-ordered views, never NDIter's permuted walk).
+        /// </remarks>
+        private static NDArray AdoptLayout(NDArray r, Shape layout)
+        {
+            if (r.Shape.IsContiguous && r.Shape.offset == 0 && r.Storage.Count == layout.size && r.size == layout.size)
+            {
+                r.Storage.SetShapeUnsafe(layout);
+                return r;
+            }
+
+            NDArray o = null, ov = null;
+            try
+            {
+                o = new NDArray(r.typecode, layout, false);
+                ov = np.transpose(o, layout.DenseAxisOrder());   // C-contiguous over xv's dims
+                np.copyto(ov, r);
+                var done = o;
+                o = null;
+                return done;
+            }
+            finally
+            {
+                ov?.Dispose();
+                o?.Dispose();   // non-null only when the copy threw
+                r.Dispose();
             }
         }
 

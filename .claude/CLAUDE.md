@@ -2643,8 +2643,9 @@ float64, Python-scalar x stays WEAK, `tensor` reshape, `_valnd`/`_gridnd` two-pa
 errors). Kernels `Backends/Kernels/ILKernelGenerator.Polynomial{,.Typing,.Emitter,.Lanes,.ConstPool,.Eval}.cs`:
 Tier-3A per-chunk IL over `NDIterRef.ForEach`, emitted by ONE typed emitter from per-basis STEP TABLES
 (NumPy's source-order expression trees, never re-associated, each node typed by NEP 50) — so no per-basis and
-no per-dtype C#. **Bit-exact with NumPy 2.4.2** on every dtype pair and layout (oracle tier `polyeval.jsonl`,
-19,216 cases, 0 excused — 2,610 of them from the 2026-09-29 wholeness pass: section J, a Python-sequence x (tuples,
+no per-dtype C#. **Bit-exact with NumPy 2.4.2** on every dtype pair and layout, result LAYOUT included (oracle tier
+`polyeval.jsonl`, 23,866 cases, 0 excused — 4,650 of them from the 2026-10-01 review, section L: a "strides" facet over
+every x × series layout, see the traps; 2,610 from the 2026-09-29 wholeness pass: section J, a Python-sequence x (tuples,
 nested lists, empty, ragged, NumPy-scalar items — coerced by `PolySequence`, see U4) and a Python int x past int64 (a C#
 `BigInteger`, weak: CPython int arithmetic on the x-only terms, inf / OverflowError past float64); section K, an
 array_like c and array_like ordinates (below); `MisalignedRegistry`'s generic unary/complex ULP branches are carved out
@@ -2696,6 +2697,19 @@ complex 23.7×@100K, float16 3.3×@10M, `lagval` (divider-bound) 2.7–14×, Pyt
   adjacent chains (each takes its lanes by one `vpermpd`); per-chain widening held those cells at 0.93–1.47×.
 - **N-D series are NEVER buffered** (the kernel reads `c[k]` at `c0 + k*kstride`, outside the operand the
   iterator knows); the 1-D form buffers a strided x (coefficients live in auxdata).
+- **The result LAYOUT is NumPy's last ufunc output's — and nothing pinned it until 2026-10-01.**
+  - **Why it went unnoticed.** The oracle compares bytes in C order, so a result in the wrong order passes every
+    value check. The N-D-series path had allocated C whatever its operands were.
+  - **NumPy's rule.** NpyIter lays out each ufunc output from its operands (`Shape.NpyIterOutputShape`, a
+    line-for-line port of `npyiter_find_best_axis_ordering` + `npyiter_new_temp_array`). An operand abstains on a
+    stride-0 or extent-1 axis, and between disagreeing operands C order wins. That differs from np.copy's 'K' rule
+    (`KeepOrder`), which sorts a broadcast axis innermost.
+  - **The basis copies matter.** chebval copies its series with order 'K'; the other five read it as given. An
+    int series converts by `astype` ('K'), except in polyval, where it is `c + 0.0` (NpyIter).
+  - **Where it lives.** `NDPolyEval.SeriesLayout` and `ResultShape`: closed forms with C fast paths, and the step
+    table replayed over layouts for an N-D series at tensor=False.
+  - **The facet trap.** The section-L facet ZEROES the strides of extent-1 axes and of empty results. NumPy assigns
+    those per loop path, and NumPy 2.x reports all-zero strides for any zero-size array. Never compare them raw.
 - **Benchmark traps:** a file-based `dotnet run` REUSES its cached build — NumSharp.Core included — when the
   script did not change (`--no-cache` after every Core edit; a 936-cell run reproduced the old kernels to the
   microsecond); one warm-up pass only QUEUES tier-1 (warm, sleep for the background JIT, warm again); and
@@ -2711,10 +2725,11 @@ operand of NumPy's Python-level scalar code) + `NDPolySeries.cs` (the functions)
 `Polynomial/Package/np.polynomial.polyutils.cs` (`[ModuleName("np.polynomial.polyutils")]`, reachable as
 `np.polynomial.polyutils`); every element loop is an IL kernel in `Backends/Kernels/Direct/DirectILKernelGenerator.PolySeries.cs`
 (trim scan, in-place combine, tolerance scan, cast, and one-element scalarmath kernels behind flat slot arrays).
-**Bit-exact with NumPy 2.4.2** — oracle tier `polyseries.jsonl` (18,647 cases, 0 excused: incl. 1,458 long-series, 45
+**Bit-exact with NumPy 2.4.2** — oracle tier `polyseries.jsonl` (19,478 cases, 0 excused: incl. 1,458 long-series, 45
 block-boundary and 72 getdomain window-crossing cases, 752 complex64 results value-compared, 184 tuple / nested-sequence
-cases — section O, coerced by `PolySequence`, see U4 — and 26 `trimseq` cases over Python sequences, section P) +
-`Polynomial/PolynomialSeriesTests.cs` (38 tests). The
+cases — section O, coerced by `PolySequence`, see U4 — 26 `trimseq` cases over Python sequences, section P, the deferred
+object / str refusal, section Q, and 780 mapdomain result layouts, section R: values + a "strides" facet over every
+layout) + `Polynomial/PolynomialSeriesTests.cs` (39 tests) + `PolynomialResultLayoutTests.cs`. The
 C# boundary is the house NEP 50 map: bool/integers/float/double/`Complex`/`BigInteger` are Python scalars,
 `Half`/`char`/`decimal` NumPy scalars, an `NDArray` (0-d too) or typed C# array an ndarray, `object[]`/`IList` a Python
 list, a `ValueTuple` a Python tuple — and that KIND decides whose arithmetic runs. NumPy never converts a domain, it
@@ -2844,6 +2859,20 @@ step) for a mix of NumPy scalars and Python ints; a typed program per argument-k
 - **An A/B that alternates routes batch by batch lets one route's allocations evict the other's working set:**
   interleaved, the blocked getdomain measured 39–43 µs at 100K stride-2 int64/uint64; timed alone, 30. Time each
   route as a whole warm batch, and confirm against a standalone run.
+- **mapdomain over an N-D non-C x: transpose, compute C, RELABEL — never write NumPy's layout directly.** NumPy keeps x's
+  memory order, but NumSharp's NDIter walks a pair of operands sharing a PERMUTED layout in logical order, gathering
+  from both. It only reverses axes for all-F operands. `np.add(xp, 1.0, out=)` costs 41 µs into xp's own (3-D
+  transposed, 32³) layout against 17.5 µs into C — library-wide. So `MapDomainWith` runs every route over
+  `np.transpose(x, layout.DenseAxisOrder())`, which is C-contiguous for a dense permuted x and takes the affine SIMD
+  route. Then `AdoptLayout` relabels the C result's storage with NumPy's layout (`UnmanagedStorage.SetShapeUnsafe`):
+  no element moves, OWNDATA is kept. That shape had been 0.62× NumPy (the 867-cell matrix measured 1-D layouts only)
+  and is now 2.13×.
+- **RyuJIT rewrites `(-a) + b` into `b - a`, and that changes a NaN's sign.** The NegateAdd combine kernel (`_sub`'s
+  "negate c2, then add c1") got it when the subtrahend's conversion was an inlined float16 → float32/float64 helper.
+  `b - a` gives a NaN subtrahend the subtraction's sign rule instead of the negated sign. Fixed by storing the
+  negated value and reloading it before the add (`EmitPolyCombine`), and pinned by
+  `Sub_EqualLengths_ConvertedFloat16Subtrahend_StillNegatesFirst`. The oracle tokenizes NaN, so only a byte-level
+  unit test sees it.
 
 ### Polynomial package — calculus family (U4)
 `{p}der` and `{p}int` for the six bases (12 names), with every parameter — `m`, `k`, `lbnd`, `scl`, `axis`

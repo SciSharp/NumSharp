@@ -846,7 +846,7 @@ ported float32 kernels get).
 
 ### numpy.polynomial evaluation family (`polyeval` tier)
 
-`polyeval.jsonl` (`gen_oracle.py polyeval`, 19,216 cases, floor 19,100) gates the PACKAGE evaluation
+`polyeval.jsonl` (`gen_oracle.py polyeval`, 23,866 cases, floor 23,800) gates the PACKAGE evaluation
 family — `{p}val`/`{p}val2d`/`{p}val3d`/`{p}grid2d`/`{p}grid3d` for the six bases (`polynomial`,
 `chebyshev`, `legendre`, `laguerre`, `hermite`, `hermite_e`) plus NumSharp's `{p}valnd` twins — **bit-exact,
 0 excused**. Op keys are MODULE-QUALIFIED (`chebyshev.chebval`) because the package reuses the legacy
@@ -883,9 +883,26 @@ by design. Design and measurements: `docs/plans/numpy-polynomial-review.md`. Cel
 whose NumPy result is complex64 are skipped (one complex width, #569). `OpRegistry.Polynomial.cs` replays it;
 `MisalignedRegistry`'s generic unary/complex ULP branches are carved out for these ops, so any drift fails.
 
+**Section (L): the result LAYOUT.** 4,650 cells from the 2026-10-01 review. Every other cell compares a result's
+bytes in C order, so a value stored in the wrong order passes; the N-D-series path had allocated C whatever its
+operands were. NumPy's result is its last ufunc output, laid out by NpyIter from that call's operands.
+- **The facet.** A cell with `params["facet"] == "strides"` records the result's element strides as an int64 array
+  (`_result_strides`). The strides of every extent ≤ 1 axis, and of a zero-size result, are ZEROED: NumPy assigns
+  those per loop path, and NumPy 2.x reports all-zero strides for any empty array. `PolyLayoutFacet` applies the same
+  normalization to NumSharp's result before the byte compare.
+- **The matrix.** For every basis, 15 series entries: nine layouts in float64 — a 1-D series, C, F, permuted, a
+  transposed 2-D, reversed, stepped, a broadcast axis, and the series axis itself broadcast — plus F / permuted /
+  broadcast int64, permuted float32 and F complex128, which reach the per-basis copy rules (`chebval` copies with
+  order 'K', an int series converts by `astype` or polyval's `c + 0.0`). A 1-D series meets every catalogue x
+  layout; an N-D one meets a 20-layout subset with one x of each layout class. x layouts add a transposed 2-D, a
+  reversed 2-D, a broadcast row and a broadcast column. Every pair runs both tensor modes where the shapes broadcast,
+  plus a weak scalar and a 0-d x. Also val2d / val3d / grid2d / grid3d over C and F series at nine x layouts.
+- **Value twins.** A small result (≤ 24 elements) also gets a plain value cell, 1,476 in all.
+- **Planted bug.** Allocating every N-D-series result C again turns 1,337 strides cells red.
+
 ### numpy.polynomial additive family + polyutils (`polyseries` tier)
 
-`polyseries.jsonl` (`gen_oracle.py polyseries`, 18,698 cases, floor 18,690) gates plan unit U1 — `{p}add`,
+`polyseries.jsonl` (`gen_oracle.py polyseries`, 19,478 cases, floor 19,400) gates plan unit U1 — `{p}add`,
 `{p}sub`, `{p}trim`, `{p}line` for the six bases, the 24 module constants `{p}domain/zero/one/x`, and
 `polyutils.as_series/trimseq/trimcoef/getdomain/mapparms/mapdomain` — **bit-exact, 0 excused**. Keys are
 module-qualified like `polyeval`'s. Arguments are NAMED (`c1`, `c2`, `c`, `tol`, `off`, `scl`, `old`, `new`, `x`,
@@ -943,7 +960,13 @@ array items (by their truth value), and NumPy's truth-value errors for a tested 
 makes NumPy's array an object or str one, which as_series still checks for size and dims (every argument) before its
 common type fails (str, bool) or it computes with Python objects (NumSharp refuses there — not recorded): add / sub of
 the power and Chebyshev bases with the bad series on either side, as_series of mixed lists, getdomain / trimcoef (and
-trimcoef's `tol < 0` check, which runs first), filtered by NumPy's outcome (`_pa_object_land`).
+trimcoef's `tol < 0` check, which runs first), filtered by NumPy's outcome (`_pa_object_land`). **(R) mapdomain's result
+layout** (780 cases, from the 2026-10-01 review) — NumPy lays the result out as NpyIter lays out an output over x alone
+(x's memory order; a broadcast axis abstains), where NumSharp returned C for any N-D non-C x. Every layout of the
+catalogue × float64 / float32 / float16 / int64 / complex128 × three domain kinds (a Python tuple pair; 1-D array
+domains, whose elements are NumPy scalars; a Python complex target), each as a value cell and a "strides" facet (the
+`polyeval` section-L normalization). The fix runs the routes over the transposed view and relabels, so these cells
+also pin the affine / fused / complex64 routes over permuted points.
 
 `OpRegistry.PolySeries.cs` replays it. **Every `mapparms`/`mapdomain` case runs three routes** — the object
 overload, the generic tuple overload (tuples rebuilt element-typed by reflection, so a Python int is a `long`) and

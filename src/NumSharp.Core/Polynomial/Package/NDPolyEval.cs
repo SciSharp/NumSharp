@@ -137,7 +137,11 @@ namespace NumSharp
                 // c = np.array(c, ndmin=1); integer/bool series -> float64. A view keeps pointing into the
                 // caller's buffer (the kernel only reads it); only the float64 conversion allocates.
                 NDArray cc = c.ndim == 0 ? (expanded = np.expand_dims(c, 0)) : c;
-                if (PolyTyping.IsIntLike(cc.typecode))
+                bool intLike = PolyTyping.IsIntLike(cc.typecode);
+                // The layout NumPy's recurrence reads c[k] through — taken BEFORE NumSharp's own float64 conversion,
+                // whose layout is NumSharp's business; the result's layout is decided from NumPy's (see SeriesLayout).
+                Shape cLayout = SeriesLayout(basis, cc.Shape, intLike);
+                if (intLike)
                     cc = converted = cc.astype(NPTypeCode.Double);
 
                 NDArray xa = ClassifyX(x, out var xw, out bool weak);
@@ -146,7 +150,7 @@ namespace NumSharp
                 // it, so the conversion is released with the others. A caller's NDArray comes back as itself.
                 if (xa is not null && !ReferenceEquals(xa, x))
                     convertedX = xa;
-                return Evaluate(basis, xa, xw, weak, cc, tensor);
+                return Evaluate(basis, xa, xw, weak, cc, cLayout, tensor);
             }
             finally
             {
@@ -321,12 +325,14 @@ namespace NumSharp
         /// <param name="xw">x as a Python value (when weak).</param>
         /// <param name="weak">x is a Python scalar.</param>
         /// <param name="c">Coefficients, at least 1-D, never int-like.</param>
+        /// <param name="cLayout">The layout NumPy's own recurrence reads the series through (<see cref="SeriesLayout"/>) —
+        ///     same dims as <paramref name="c"/>; decides the result's strides, never its values.</param>
         /// <param name="tensor">NumPy's tensor flag.</param>
-        /// <returns>The values.</returns>
+        /// <returns>The values, laid out as NumPy's result is (<see cref="ResultShape"/>).</returns>
         /// <exception cref="IndexError">Empty series.</exception>
         /// <exception cref="IncorrectShapeException">tensor=False broadcast mismatch.</exception>
         /// <exception cref="OverflowException">A Python int does not fit an integer x dtype.</exception>
-        private static NDArray Evaluate(PolyBasis basis, NDArray xa, PyScalar xw, bool weak, NDArray c, bool tensor)
+        private static NDArray Evaluate(PolyBasis basis, NDArray xa, PyScalar xw, bool weak, NDArray c, Shape cLayout, bool tensor)
         {
             long nc = c.shape[0];
             if (nc == 0)
@@ -375,9 +381,10 @@ namespace NumSharp
                         return Detach(ref y);
                     }
 
-                    // 1-D series at an array x: result has x's shape, allocated in x's memory order (NumPy's
-                    // ufunc order='K' output) so the iterator walks both contiguously.
-                    y = new NDArray(k.Tl, LikeKeepOrder(xa.Shape), false);
+                    // 1-D series at an array x: result has x's shape, laid out as NumPy's ufunc chain lays it out —
+                    // x's memory order, a broadcast axis abstaining (ResultShape) — so the iterator walks both
+                    // contiguously wherever x is dense.
+                    y = new NDArray(k.Tl, ResultShape(basis, cLayout, xa, tensor, (long[])xa.Shape.dimensions.Clone()), false);
                     if (y.size == 0) return Detach(ref y);
                     var gflags = NDIterGlobalFlags.EXTERNAL_LOOP;
                     var xflags = NDIterPerOpFlags.READONLY;
@@ -418,7 +425,9 @@ namespace NumSharp
                         c0 = c[0];
                         outDims = BroadcastDims(c0.Shape, xa.Shape);
                     }
-                    y = new NDArray(k.Tl, new Shape(outDims), false);   // dims only: never a view's Shape
+                    // A fresh dense layout built from the dims (never a view's Shape, which would overrun the
+                    // buffer): NumPy's, which follows the series' and x's memory orders (ResultShape).
+                    y = new NDArray(k.Tl, ResultShape(basis, cLayout, xa, tensor, outDims), false);
                     if (y.size == 0) return Detach(ref y);
                     // NEVER buffered: the kernel reads beyond c0 (see the kernel file header).
                     using (var iter = NDIterRef.MultiNew(3, new[] { xa, c0, y }, NDIterGlobalFlags.EXTERNAL_LOOP,
@@ -428,9 +437,10 @@ namespace NumSharp
                     return Detach(ref y);
                 }
 
-                // Scalar x (weak or 0-d) over an N-D series: the points are c's columns, shape c.shape[1:].
+                // Scalar x (weak or 0-d) over an N-D series: the points are c's columns, shape c.shape[1:], laid out
+                // in the series' memory order as NumPy's c[k]-only ufunc chain lays them out (ResultShape).
                 c0 = c[0];
-                y = new NDArray(k.Tl, new Shape(cOuter), false);
+                y = new NDArray(k.Tl, ResultShape(basis, cLayout, null, tensor, cOuter), false);
                 if (y.size == 0) return Detach(ref y);
                 using (var iter = NDIterRef.MultiNew(2, new[] { c0, y }, NDIterGlobalFlags.EXTERNAL_LOOP,
                            NPY_ORDER.NPY_KEEPORDER, NPY_CASTING.NPY_SAFE_CASTING,
@@ -478,6 +488,306 @@ namespace NumSharp
             for (int i = 0; i < xd.Length; i++) if (xd[i] != 1) return PolyUnitBroadcast.None;
             int dc = c.ndim - 1 + (tensor ? xa.ndim : 0), dx = xa.ndim;
             return dc == dx ? PolyUnitBroadcast.None : dc > dx ? PolyUnitBroadcast.CoefDeeper : PolyUnitBroadcast.PointsDeeper;
+        }
+
+        /// <summary>
+        ///     The layout through which NumPy's <c>{p}val</c> reads its series: <c>np.array(c, ndmin=1, copy=…)</c> then, for
+        ///     an integer / bool series, its float64 conversion — taken from the caller's <paramref name="c"/>, never from
+        ///     NumSharp's own conversion. It only decides the RESULT's strides (<see cref="ResultShape"/>).
+        /// </summary>
+        /// <param name="basis">The basis — the six sources differ here.</param>
+        /// <param name="c">The caller's series layout (at least 1-D).</param>
+        /// <param name="intLike">The series is integer / bool (NumPy converts it to float64 first).</param>
+        /// <returns>The layout NumPy's <c>c[k]</c> views are taken from.</returns>
+        /// <remarks>
+        ///     NumPy 2.4.2's sources, per basis: <c>chebval</c> copies (<c>copy=True</c>, order 'K' — a C- or F-contiguous
+        ///     series keeps its order, any other its stride order, a broadcast axis sorting innermost:
+        ///     <see cref="Shape.KeepOrder"/>), and its int conversion <c>astype(np.double)</c> keeps that layout. The
+        ///     other Clenshaw bases do not copy (<c>copy=None</c>: the caller's own strides, a broadcast series included)
+        ///     unless the series is integer, where <c>astype(np.double)</c> copies with order 'K'. <c>polyval</c> does not
+        ///     copy either, and converts an integer series with <c>c + 0.0</c> — a ufunc, laid out by NpyIter
+        ///     (<see cref="Shape.NpyIterOutputShape"/>), which differs from 'K' on a broadcast axis.
+        /// </remarks>
+        internal static Shape SeriesLayout(PolyBasis basis, Shape c, bool intLike)
+        {
+            // A C- or F-contiguous (or ≤ 1-D) series comes out of every one of those copies in its own order, so the
+            // common calls skip the copy layout's allocation (a 1-D series' c[k] never votes on the result anyway).
+            if (c.NDim <= 1 || c.IsContiguous || c.IsFContiguous)
+                return c;
+            if (basis == PolyBasis.Power)
+                return intLike ? Shape.NpyIterOutputShape((long[])c.dimensions.Clone(), new ReadOnlySpan<Shape>(in c)) : c;
+            return basis == PolyBasis.Chebyshev || intLike ? c.KeepOrder() : c;
+        }
+
+        /// <summary>
+        ///     The layout of NumPy's <c>{p}val</c> result — the strides its chain of ufunc calls leaves the last value
+        ///     with — for a result of <paramref name="outDims"/>. The kernel computes every element independently, so
+        ///     this decides only where each value is stored: NumPy's flags and strides, the values untouched.
+        /// </summary>
+        /// <param name="basis">The basis (its step table is the chain replayed).</param>
+        /// <param name="cLayout">The series layout NumPy's recurrence indexes (<see cref="SeriesLayout"/>).</param>
+        /// <param name="xa">x as an array, or null for a Python scalar (a 0-d array reads as a scalar too).</param>
+        /// <param name="tensor">NumPy's tensor flag (with an array x, every <c>c[k]</c> gains x's rank of unit axes).</param>
+        /// <param name="outDims">The result dims the caller already computed (and validated). The returned shape ADOPTS
+        ///     this array — pass a fresh one (the callers clone x's dims or build the array themselves).</param>
+        /// <returns>A fresh dense, offset-0 shape of <paramref name="outDims"/>.</returns>
+        /// <remarks>
+        ///     <para><b>The rule.</b> NumPy's result is the output of the recurrence's LAST ufunc call, and every call's
+        ///     output is laid out by NpyIter from the layouts of its operands (<see cref="Shape.NpyIterOutputShape"/>) —
+        ///     <c>c[k]</c> views of the series (stride 0 on x's axes under tensor), x, Python scalars (no vote), and the
+        ///     earlier outputs. Which operands can vote on which axes settles every case but one in closed form:</para>
+        ///     <list type="bullet">
+        ///         <item>a C-contiguous series with a C-contiguous (or scalar) x, or a result of rank ≤ 1: C — every
+        ///         vote is C-ordered (the common calls pay nothing);</item>
+        ///         <item>at most a 2-D series with an x that is C-contiguous, at most 1-D, or a scalar: C without any vote
+        ///         — the series block (one axis) and x's block are each C, and so is their concatenation;</item>
+        ///         <item>a scalar x (Python, or a 0-d array): only <c>c[k]</c> ever votes — NpyIter's layout of
+        ///         <c>c[0]</c>;</item>
+        ///         <item>a 1-D series: <c>c[k]</c> is a scalar or all unit axes and never votes — NpyIter's layout of x
+        ///         (an output laid out from x votes exactly as x does, so the chain never moves off it);</item>
+        ///         <item>an N-D series under tensor: every pair of a series axis and an x axis is seen by no operand
+        ///         until the first mixed value, whose sort cannot move a series axis inside an x axis (ambiguous pairs
+        ///         never shift the insertion point), and every later value votes that order — the series block
+        ///         (NpyIter's layout of <c>c[0]</c>) outside, x's block (NpyIter's layout of x) inside.</item>
+        ///     </list>
+        ///     <para>The remaining case — an N-D series broadcast against a per-point x (tensor=False), where the two
+        ///     share axes and the votes interleave with NumPy's "C order wins conflicts" — replays the basis's step
+        ///     table over layouts (<see cref="ReplayResultShape"/>, 0.5–2.4 µs), except when one operand settles it: a
+        ///     C-contiguous x, or a C-contiguous series, whose extents ARE the result's. Such an operand votes C on every
+        ///     pair of non-unit axes, so every value computed from it is C, and the conflict rule makes every op that
+        ///     meets a C value C too. Every basis's last op meets x (<c>c0 + c1*x</c> and its variants; Horner's
+        ///     <c>c[-i] + c0*x</c>), and a C series makes every <c>c[k]</c>-derived value C. So the result is C without
+        ///     a replay. Every closed form was checked against NumPy 2.4.2 (32,740 random layouts, 0 differences) and
+        ///     the replay itself (27,595, 0); a unit test cross-checks them, the replay shortcut included, in C#.</para>
+        ///     <para>Extent-1 axes are not modelled: NumPy's own strides there depend on which loop path each call took;
+        ///     no flag reads them.</para>
+        /// </remarks>
+        internal static Shape ResultShape(PolyBasis basis, Shape cLayout, NDArray xa, bool tensor, long[] outDims)
+        {
+            // C: a rank ≤ 1 result, or C-ordered voters only (a 1-D series never votes — its c[k] is a scalar or all
+            // unit axes — so any 1-D series counts as C here).
+            if (outDims.Length <= 1 || ((cLayout.NDim <= 1 || cLayout.IsContiguous) && (xa is null || xa.Shape.IsContiguous)))
+                return new Shape(outDims);
+
+            bool scalarX = xa is null || xa.ndim == 0;
+            if (scalarX || cLayout.NDim == 1 || tensor)
+            {
+                // Both blocks C without a vote: c[0]'s block has at most one axis (a 2-D series, or none for a 1-D
+                // one) and x's block is C (a scalar, at most 1-D, or C-contiguous) — the common non-C-series calls
+                // (an F-ordered (n, k) series at a vector of points) skip every allocation below.
+                if (cLayout.NDim <= 2 && (scalarX || xa.ndim <= 1 || xa.Shape.IsContiguous))
+                    return new Shape(outDims);
+                var xDims = scalarX ? Array.Empty<long>() : xa.Shape.dimensions;
+                Shape xs = scalarX ? default : xa.Shape;
+                var xBlock = scalarX ? default : Shape.NpyIterOutputShape((long[])xDims.Clone(), new ReadOnlySpan<Shape>(in xs));
+                if (cLayout.NDim == 1 && !scalarX)
+                    return xBlock;   // a 1-D series at an array x (a scalar x with a 1-D series is a 0-d result, above)
+                int ncd = cLayout.NDim - 1;
+                var cDims = new long[ncd];
+                var cStrides = new long[ncd];
+                Array.Copy(cLayout.dimensions, 1, cDims, 0, ncd);
+                Array.Copy(cLayout.strides, 1, cStrides, 0, ncd);
+                // The operand shape and the block share cDims: neither is ever written again.
+                var cOperand = new Shape(cDims, cStrides);
+                var cBlock = Shape.NpyIterOutputShape(cDims, new ReadOnlySpan<Shape>(in cOperand));
+                if (scalarX)
+                    return cBlock;
+                // tensor: the series block outside, x's block inside (x.size elements per series point).
+                long xSize = xa.size;
+                var strides = new long[ncd + xDims.Length];
+                for (int d = 0; d < ncd; d++)
+                    strides[d] = cBlock.strides[d] * xSize;
+                for (int d = 0; d < xDims.Length; d++)
+                    strides[ncd + d] = xBlock.strides[d];
+                return new Shape(outDims, strides);
+            }
+
+            // tensor=False with an N-D series: a C-contiguous operand spanning the whole result makes it C (remarks).
+            if ((xa.Shape.IsContiguous && SameDims(xa.Shape.dimensions, 0, outDims))
+                || (cLayout.IsContiguous && SameDims(cLayout.dimensions, 1, outDims)))
+                return new Shape(outDims);
+            return ReplayResultShape(basis, cLayout, xa, tensor, outDims);
+        }
+
+        /// <summary>Whether <c>dims[from..]</c> equals <paramref name="outDims"/> extent for extent (no broadcasting).</summary>
+        /// <param name="dims">An operand's dims.</param>
+        /// <param name="from">The first operand axis compared (1 drops a series' coefficient axis).</param>
+        /// <param name="outDims">The result dims.</param>
+        /// <returns>True when the operand spans the result exactly.</returns>
+        private static bool SameDims(long[] dims, int from, long[] outDims)
+        {
+            if (dims.Length - from != outDims.Length)
+                return false;
+            for (int d = 0; d < outDims.Length; d++)
+                if (dims[from + d] != outDims[d])
+                    return false;
+            return true;
+        }
+
+        /// <summary>
+        ///     <see cref="ResultShape"/> by brute force: NumPy's statements replayed over layouts — the basis's step table
+        ///     (<see cref="PolySteps.Eval"/>, the same table the kernel is emitted from) walked with every value's layout
+        ///     in place of its data, each array op laid out by <see cref="Shape.NpyIterOutputShape"/> from its two operands.
+        ///     The general path for an N-D series broadcast against a per-point x (tensor=False); internal so a test can
+        ///     check the closed forms of <see cref="ResultShape"/> against it.
+        /// </summary>
+        /// <param name="basis">The basis.</param>
+        /// <param name="cLayout">The series layout NumPy's recurrence indexes (<see cref="SeriesLayout"/>).</param>
+        /// <param name="xa">x as an array, or null for a Python scalar (a 0-d array reads as a scalar too).</param>
+        /// <param name="tensor">NumPy's tensor flag.</param>
+        /// <param name="outDims">The result dims.</param>
+        /// <returns>A fresh dense, offset-0 shape of <paramref name="outDims"/> (C if the replay's broadcast ever
+        ///     disagreed with them — a defensive fallback, never reached when the caller validated the shapes).</returns>
+        /// <remarks>The recurrence's loop stops at its fixpoint: a step maps the accumulators' layouts to the next ones
+        ///     by a fixed rule, so the first repeat ends it — in practice after one or two steps, whatever the series
+        ///     length (0.5–2.4 µs a call, measured; the closed forms cost ~0.1 µs).</remarks>
+        internal static Shape ReplayResultShape(PolyBasis basis, Shape cLayout, NDArray xa, bool tensor, long[] outDims)
+        {
+            // c[k]: axis 0 dropped; c.reshape(c.shape + (1,)*x.ndim) under tensor with an array x (unit axes abstain).
+            int extra = xa is not null && tensor ? xa.ndim : 0;
+            int nck = cLayout.NDim - 1 + extra;
+            var ckDims = new long[nck];
+            var ckStrides = new long[nck];
+            for (int d = 1; d < cLayout.NDim; d++)
+            {
+                ckDims[d - 1] = cLayout.dimensions[d];
+                ckStrides[d - 1] = cLayout.strides[d];
+            }
+            for (int d = cLayout.NDim - 1; d < nck; d++)
+                ckDims[d] = 1;
+            // Every slot starts as a scalar layout: a default(Shape) has null dims, and a slot a basis never assigns
+            // before reading would otherwise crash the replay instead of abstaining.
+            var env = new LayoutEnv
+            {
+                Ck = nck == 0 ? Shape.NewScalar() : new Shape(ckDims, ckStrides),
+                X = xa is null || xa.ndim == 0 ? Shape.NewScalar() : xa.Shape,
+                X2 = Shape.NewScalar(),
+                C0 = Shape.NewScalar(),
+                C1 = Shape.NewScalar(),
+                Tmp = Shape.NewScalar(),
+            };
+            var prog = PolySteps.Eval(basis);
+            env.X2 = prog.Pre is null ? Shape.NewScalar() : LayoutOf(prog.Pre, env);
+            long nc = cLayout.dimensions[0];
+
+            Shape r;
+            if (prog.Horner)
+            {
+                // c0 = c[-1] + x*0 ; c0 = c[-i] + c0*x
+                env.C0 = LayoutOf(prog.HornerInit, env);
+                for (long i = 2; i <= nc; i++)
+                {
+                    var next = LayoutOf(prog.HornerStep, env);
+                    if (SameLayout(next, env.C0))
+                        break;   // a fixpoint: every later step maps it to itself
+                    env.C0 = next;
+                }
+                r = env.C0;
+            }
+            else if (nc == 1)
+            {
+                env.C0 = env.Ck;   // c0 = c[0], c1 = 0 (a Python int, folded into FinalLen1)
+                r = LayoutOf(prog.FinalLen1, env);
+            }
+            else
+            {
+                env.C0 = env.Ck;
+                env.C1 = env.Ck;
+                for (long i = 3; i <= nc; i++)
+                {
+                    // tmp = c0 ; c0 = <StepC0 over c[-i], c1> ; c1 = <StepC1 over tmp, c1, x, x2> — both from the old c1.
+                    env.Tmp = env.C0;
+                    var n0 = LayoutOf(prog.StepC0, env);
+                    var n1 = LayoutOf(prog.StepC1, env);
+                    if (SameLayout(n0, env.C0) && SameLayout(n1, env.C1))
+                        break;
+                    env.C0 = n0;
+                    env.C1 = n1;
+                }
+                r = LayoutOf(prog.Final, env);
+            }
+
+            // Defensive: the replay's broadcast must reproduce the caller's dims; anything else falls back to C.
+            if (r.NDim != outDims.Length)
+                return new Shape((long[])outDims.Clone());
+            for (int d = 0; d < outDims.Length; d++)
+                if (r.dimensions[d] != outDims[d])
+                    return new Shape((long[])outDims.Clone());
+            return r;
+        }
+
+        /// <summary>The layouts of the step table's leaves during a <see cref="ReplayResultShape"/> replay.</summary>
+        private struct LayoutEnv
+        {
+            /// <summary><c>x</c> (0-d for a scalar x).</summary>
+            public Shape X;
+            /// <summary><c>x2</c> (the x-only pre-op's output; 0-d when the basis has none).</summary>
+            public Shape X2;
+            /// <summary>The current <c>c0</c>.</summary>
+            public Shape C0;
+            /// <summary>The current <c>c1</c>.</summary>
+            public Shape C1;
+            /// <summary>The <c>tmp</c> of a Clenshaw step (the previous <c>c0</c>).</summary>
+            public Shape Tmp;
+            /// <summary>Every <c>c[k]</c> view (they share one layout).</summary>
+            public Shape Ck;
+        }
+
+        /// <summary>
+        ///     The layout of one step-table expression: a leaf reads <paramref name="env"/>, a Python value is 0-d (it never
+        ///     votes), and an array op is a ufunc call whose output NpyIter lays out from its two operands.
+        /// </summary>
+        /// <param name="e">The expression.</param><param name="env">The leaves' layouts.</param>
+        /// <returns>The layout of the expression's value.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">An expression node of an unknown kind.</exception>
+        private static Shape LayoutOf(PolyExpr e, in LayoutEnv env)
+        {
+            switch (e)
+            {
+                case PolyLeaf l:
+                    return l.S switch
+                    {
+                        PolySym.X => env.X,
+                        PolySym.X2 => env.X2,
+                        PolySym.C0 => env.C0,
+                        PolySym.C1 => env.C1,
+                        PolySym.Tmp => env.Tmp,
+                        _ => env.Ck,
+                    };
+                case PolyWeak:
+                    return Shape.NewScalar();
+                case PolyBin b:
+                {
+                    Shape a = LayoutOf(b.A, env), c = LayoutOf(b.B, env);
+                    if (a.NDim == 0 && c.NDim == 0)
+                        return Shape.NewScalar();
+                    // The operands broadcast (the caller validated the whole evaluation's shapes): right-aligned, an
+                    // extent of 1 yielding to the other.
+                    int nd = Math.Max(a.NDim, c.NDim);
+                    var dims = new long[nd];
+                    for (int d = 0; d < nd; d++)
+                    {
+                        int ia = d - (nd - a.NDim), ic = d - (nd - c.NDim);
+                        long da = ia < 0 ? 1 : a.dimensions[ia], dc = ic < 0 ? 1 : c.dimensions[ic];
+                        dims[d] = da == 1 ? dc : da;
+                    }
+                    return Shape.NpyIterOutputShape(dims, new[] { a, c });
+                }
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(e), e?.GetType().Name, "unknown step-table node");
+            }
+        }
+
+        /// <summary>Whether two layouts are the same dims and strides (a replay fixpoint test).</summary>
+        /// <param name="a">One layout.</param><param name="b">The other.</param>
+        /// <returns>True when identical.</returns>
+        private static bool SameLayout(in Shape a, in Shape b)
+        {
+            if (a.NDim != b.NDim) return false;
+            for (int d = 0; d < a.NDim; d++)
+                if (a.dimensions[d] != b.dimensions[d] || a.strides[d] != b.strides[d])
+                    return false;
+            return true;
         }
 
         /// <summary>Hands the result out of the <c>finally</c>'s cleanup: clears the local, returns the array.</summary>
