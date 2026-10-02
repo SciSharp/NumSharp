@@ -689,7 +689,7 @@ np.savetxt("np.csv", a, fmt: "%.2f", delimiter: ",", header: "1,2,3,4");
 
 `np.loadtxt` reads columns with `usecols`, skips headers with `skiprows`, and takes a `delimiter` - see [I/O with NumSharp](fundamentals/io.md).
 
-> **Mixed / labeled CSVs** (string *and* numeric columns, like a `music.csv` with an `Artist` name column) don't fit a single homogeneous `NDArray`, and NumSharp has no structured/string dtype. For those, use a .NET CSV/dataframe library, [ML.NET](interop/mlnet.md), or pandas through the [pythonnet bridge](interop/pandas.md), then hand the numeric columns to NumSharp. See [Structured arrays](fundamentals/structured-arrays.md) for why and the alternatives.
+> **Mixed / labeled CSVs** (string *and* numeric columns, like a `music.csv` with an `Artist` name column) don't fit a single homogeneous `NDArray`, and NumSharp has no structured/string dtype. For those, use a .NET CSV/dataframe library or pandas through the [pythonnet bridge](interop/pandas.md), then hand the numeric columns to NumSharp. See [Structured arrays](fundamentals/structured-arrays.md) for why and the alternatives.
 
 ---
 
