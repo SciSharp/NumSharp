@@ -15,7 +15,7 @@ crosses zero-copy and what cannot, who frees what, dtypes, frameworks.
 
 > Verified on `System.Numerics.Tensors` 10.0.0 · net8.0/net10.0 · Windows, Linux, macOS.
 > Every claim below is reproduced by a test in `NumSharp.Tests.Interop.System.Numerics.Tensors`
-> (64 tests, green on net8.0 AND net10.0; no Python, no native code).
+> (101 tests, green on net8.0 AND net10.0; no Python, no native code).
 
 ---
 
@@ -180,10 +180,11 @@ future 11.x (free to break the experimental API) from resolving automatically.
 
 - **Negative-stride views** cannot be shared zero-copy (the BCL forbids negative strides) - `ToTensor` /
   `ascontiguousarray` them.
-- **The copies are `int`-indexed.** `ToTensor` fills a managed `T[]`, and `ToNDArray` fills through
-  `FlattenTo`'s `Span<T>`: over `int.MaxValue` elements they throw `NotSupportedException`, before allocating
-  anything. The zero-copy verbs have no such limit: `AsTensorSpan` fronts a native pointer, and `AsNDArray`
-  of a stride-0 tensor gives a read-only broadcast view of any size.
+- **The copies are size-limited.** `ToTensor` fills a managed `T[]`, which holds at most `Array.MaxLength`
+  (2,147,483,591) elements, and `ToNDArray` fills through `FlattenTo`'s `Span<T>`, at most `int.MaxValue`.
+  Past those limits they throw `NotSupportedException`, before allocating anything. The zero-copy verbs have
+  no such limit: `AsTensorSpan` fronts a native pointer, and `AsNDArray` of a stride-0 tensor gives a
+  read-only broadcast view of any size.
 - **A `ref struct` span cannot be leased**: importing a `TensorSpan<T>` / `ReadOnlyTensorSpan<T>` always
   copies (`span.ToNDArray()`). Only a `Tensor<T>` (a heap object whose backing can be pinned) supports the
   zero-copy `AsNDArray` view.
@@ -219,7 +220,15 @@ away. `System.Numerics.Tensors` does not compute NumSharp operations - which is 
 | 14 | A 0-d array crosses as `[1]` through `AsTensorSpan` and `ToTensor` with its value kept, for all 15 dtypes | [`ExportTests`][gate] |
 | 15 | An empty array exports with its shape and all-zero strides; the BCL can flatten, fill and reduce the span, and it imports back to the same shape, for all 15 dtypes; the BCL's rank-0 values import as `(0,)` | [`ExportTests`][gate], [`ImportTests`][gate] |
 | 16 | Both export verbs refuse a released buffer with `ObjectDisposedException`, for every layout | [`LifetimeTests`][gate] |
-| 17 | The copies refuse more than `int.MaxValue` elements before allocating; `AsNDArray` of a stride-0 tensor shares any size zero-copy | [`ImportTests`][gate] |
+| 17 | The copies refuse what they cannot hold before allocating (`ToTensor` past `Array.MaxLength`, `ToNDArray` past `int.MaxValue`); `AsNDArray` of a stride-0 tensor shares any size zero-copy | [`ImportTests`][gate], [`BoundaryTests`][gate] |
+| 18 | Every dtype × every catalogued layout (≈45: offsets, steps, transposes, broadcasts, empties at offsets, unit axes, read-only flags, ranks 40/70) × every export verb holds, element by element through the BCL's own indexer, and each write through a span changes exactly the element it names | [`LayoutMatrixTests`][gate] |
+| 19 | Seeded random views (slices with any step sign, transposes, expand_dims, broadcasts) and random tensors (sub-blocks at offsets, permutations, slices, stride-0 axes) satisfy the export and import contracts; so does every slice of a small vector and every axis-slice pair of a small matrix | [`PropertyBasedTests`][gate] |
+| 20 | Slicing and permuting commute with crossing in both directions; the copy equals the view; repeated round trips change nothing; a zero-copy chain aliases one buffer | [`MetamorphicTests`][gate] |
+| 21 | Real BCL operations (`Tensor.Sum`, in-place `Tensor.Add`/`Multiply`, `Fill`, `Clear`, `CopyTo`, `Tensor.Equals`) read and write through exported spans exactly as NumSharp's views address them | [`BclConsumerTests`][gate] |
+| 22 | Concurrent exports, copies, imports and disposals release every reference and lease exactly once | [`ConcurrencyTests`][gate] |
+| 23 | Refused exports leave no reference behind; a handle holds exactly one, which `resize(refcheck)` sees; a lease pins while live and unpins on release (as the GC counts pinned objects), also when only the finalizer releases it | [`ArcAccountingTests`][gate] |
+| 24 | Random bit patterns (bool bytes beyond 0/1, NaN payloads, invalid decimals) survive every path byte-identical, contiguous and strided | [`BitPatternFuzzTests`][gate] |
+| 25 | The public surface is exactly the approved one, every type and verb marked `[Experimental("NUMSHARP_TENSORS")]` | [`ApiSurfaceTests`][gate] |
 
 ## See also
 
