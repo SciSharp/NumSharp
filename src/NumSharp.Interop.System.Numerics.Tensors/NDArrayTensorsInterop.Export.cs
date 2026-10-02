@@ -138,7 +138,10 @@ namespace NumSharp.Interop.Tensors
         /// <returns>A new dense tensor holding the array's values in logical (C) order.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="source"/> is null.</exception>
         /// <exception cref="ArgumentException"><typeparamref name="T"/> is not the array's element type.</exception>
-        /// <exception cref="NotSupportedException">The array exceeds the <see cref="int.MaxValue"/>-element limit of a managed <c>T[]</c>.</exception>
+        /// <exception cref="NotSupportedException">
+        ///     The array has more elements than a managed <c>T[]</c> can hold (<see cref="Array.MaxLength"/>,
+        ///     2,147,483,591 — a little below <see cref="int.MaxValue"/>); it is refused before anything is allocated.
+        /// </exception>
         /// <exception cref="ObjectDisposedException">The array's buffer has already been released.</exception>
         [Experimental("NUMSHARP_TENSORS")]
         public static unsafe Tensor<T> ToTensor<T>(this NDArray source) where T : unmanaged
@@ -147,10 +150,13 @@ namespace NumSharp.Interop.Tensors
                 throw new ArgumentNullException(nameof(source));
             EnsureElementType<T>(source.typecode, nameof(ToTensor));
 
+            // The limit is Array.MaxLength, NOT int.MaxValue: a managed array holds at most 2,147,483,591 elements, so
+            // comparing against int.MaxValue let every size in between reach `new T[n]`, which fails with
+            // OutOfMemoryException ("Array dimensions exceeded supported range") instead of this documented refusal.
             Shape shape = source.Shape;
-            if (shape.Size > int.MaxValue)
+            if (shape.Size > Array.MaxLength)
                 throw new NotSupportedException(
-                    $"ToTensor: a managed T[] holds at most {int.MaxValue} elements, the array has {shape.Size}. " +
+                    $"ToTensor: a managed T[] holds at most {Array.MaxLength} elements (Array.MaxLength), the array has {shape.Size}. " +
                     "Share the buffer zero-copy with AsTensorSpan (a native pointer, no such limit) instead.");
 
             // Take the reference on the SOURCE's buffer before reading it in any way: Pin's TryAddRef is the only
