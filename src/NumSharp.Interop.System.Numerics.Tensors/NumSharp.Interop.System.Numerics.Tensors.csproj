@@ -1,4 +1,10 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk" TreatAsLocalProperty="NoWarn">
+  <!-- TreatAsLocalProperty="NoWarn": CI passes `-p:NoWarn=...` (build-and-release.yml's DOTNET_NOWARN) on every
+       build, test and pack. A command-line property is GLOBAL, and MSBuild silently ignores a project's own
+       assignment to a global property, so the <NoWarn> below would be dropped and the [Experimental] diagnostics
+       it suppresses (SYSLIB5001, NUMSHARP_TENSORS) would fail the build as errors: they did, on all three OSes,
+       the first time CI built this package (2026-10-02). With the attribute, the project's assignment wins and
+       still starts from the command-line value, so CI's list and this project's two codes both apply. -->
 
   <PropertyGroup>
     <!-- Frameworks we BUILD and ship an assembly for. net9.0 consumers are served by the net8.0 asset and
