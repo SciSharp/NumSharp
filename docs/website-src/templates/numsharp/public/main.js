@@ -1,5 +1,384 @@
 // NumSharp DocFX Template Customization
 // https://dotnet.github.io/docfx/docs/template.html
+//
+// The modern template auto-imports this file's default export via its
+// `options()` hook (docfx.min.js -> import('./main.js')). This is the
+// supported way to add site JavaScript without forking docfx.min.js.
+//
+// Beyond the navbar icon links, this adds ONE behavior: it remembers which
+// #toc sections the reader expanded/collapsed and restores them on the next
+// page, for a 48h window that slides forward on every visit. See
+// installTocStatePersistence below.
+
+/**
+ * How long a remembered TOC layout survives with no visits, in milliseconds
+ * (48 hours). Every read/write of the record re-stamps this from "now", so the
+ * window is sliding: the state only expires after 48h of *inactivity*.
+ * @type {number}
+ */
+const TOC_STATE_TTL_MS = 48 * 60 * 60 * 1000
+
+/**
+ * Storage-format version. Bump to invalidate every reader's saved TOC state at
+ * once when the record shape below changes (a mismatched version is discarded
+ * as if expired), so an old blob can never be misread as the new shape.
+ * @type {number}
+ */
+const TOC_STATE_SCHEMA = 1
+
+/**
+ * Separator joining ancestor labels into a node key. U+203A (›) is chosen
+ * because it does not occur in these TOC titles; a title that contained it
+ * could collide two distinct nodes onto one key (a cosmetic, non-fatal glitch).
+ * @type {string}
+ */
+const TOC_KEY_SEP = '›'
+
+/**
+ * Wire up 48h sliding-window persistence of the modern-template TOC's
+ * expand/collapse state onto `localStorage`.
+ *
+ * Why this is not a one-liner: the modern template keeps each node's expanded
+ * flag in a private JavaScript closure and re-renders the ENTIRE `#toc` subtree
+ * on every toggle (lit-html). So we cannot simply set the `.expanded` CSS class
+ * on restore — the next toggle of any node would regenerate the tree from
+ * docfx's own model and wipe our change. Instead we drive docfx's model by
+ * synthesizing clicks on the nodes whose remembered state differs from what
+ * docfx rendered, which is the only state the template treats as authoritative.
+ *
+ * Safe to call before `#toc` is populated: population is asynchronous (after
+ * toc.json is fetched), so a MutationObserver defers the restore until the
+ * first expander node appears, and the function no-ops when there is no `#toc`
+ * or no usable `localStorage` (private mode, file://, the PDF renderer).
+ *
+ * @returns {void}
+ */
+function installTocStatePersistence() {
+  // localStorage access itself can throw (blocked cookies/site-data), so probe
+  // it behind try/catch and bail rather than breaking the rest of page init.
+  let store
+  try {
+    store = window.localStorage
+  } catch {
+    return
+  }
+  if (!store) {
+    return
+  }
+
+  const toc = document.getElementById('toc')
+  if (!toc) {
+    return
+  }
+
+  // Scope the record to THIS page's toc.json. Two reasons: (1) folders with
+  // their own toc keep independent state; (2) localStorage is per-ORIGIN, not
+  // per-path, so OptunaSharp and NumSharp docs served from the same
+  // *.github.io host would otherwise share (and clobber) one record.
+  const tocRelMeta = document.querySelector('meta[name="docfx:tocrel"]')
+  const tocRel = tocRelMeta ? tocRelMeta.content || '' : ''
+  let scope
+  try {
+    scope = new URL(tocRel, window.location.href).href
+  } catch {
+    scope = tocRel
+  }
+  const storageKey = 'docfx:tocExpanded:' + scope
+
+  // DocFX overwrites configured expansion when it marks the active branch.
+  // Read the original defaults so section landing pages honor toc.yml too.
+  const defaultsReady = fetch(scope.replace(/\.html(?=$|[?#])/i, '.json'))
+    .then(response => response.ok ? response.json() : null)
+    .then(data => {
+      const defaults = Object.create(null)
+      function visit(items, ancestors = []) {
+        for (const item of items || []) {
+          const path = [...ancestors, item.name]
+          if (typeof item.expanded === 'boolean') {
+            defaults[path.join(TOC_KEY_SEP)] = item.expanded
+          }
+          visit(item.items, path)
+        }
+      }
+      visit(data?.items)
+      return defaults
+    })
+    .catch(() => Object.create(null))
+  let defaultStates = Object.create(null)
+
+  /**
+   * Read the remembered per-node states, discarding an expired, malformed, or
+   * wrong-version record (any of which is treated as "nothing remembered").
+   * @returns {{[nodeKey: string]: boolean}} map of node key -> expanded flag; empty when nothing valid is stored.
+   */
+  function loadNodes() {
+    const nodes = Object.create(null)
+    let raw
+    try {
+      raw = store.getItem(storageKey)
+    } catch {
+      return nodes
+    }
+    if (!raw) {
+      return nodes
+    }
+    let data
+    try {
+      data = JSON.parse(raw)
+    } catch {
+      // A corrupt blob is unrecoverable; drop it so it cannot keep erroring.
+      removeRecord()
+      return nodes
+    }
+    const expired = !data ||
+      data.v !== TOC_STATE_SCHEMA ||
+      !Number.isFinite(data.expiresAt) ||
+      data.expiresAt <= Date.now()
+    if (expired) {
+      removeRecord()
+      return nodes
+    }
+    if (data.nodes && typeof data.nodes === 'object' && !Array.isArray(data.nodes)) {
+      for (const [key, value] of Object.entries(data.nodes)) {
+        if (typeof value === 'boolean') nodes[key] = value
+      }
+    }
+    return nodes
+  }
+
+  /**
+   * Persist the per-node states and (re-)stamp the 48h expiry from now, which
+   * is what makes the window slide forward on every visit and every toggle.
+   * @param {{[nodeKey: string]: boolean}} nodeStates map of node key -> expanded flag to persist.
+   * @returns {void}
+   */
+  function saveNodes(nodeStates) {
+    const record = { v: TOC_STATE_SCHEMA, expiresAt: Date.now() + TOC_STATE_TTL_MS, nodes: nodeStates }
+    try {
+      store.setItem(storageKey, JSON.stringify(record))
+    } catch {
+      // Quota/availability failures are non-fatal: the TOC still works, it just
+      // won't remember state this time.
+    }
+  }
+
+  /** Delete this scope's record; used when it is expired or corrupt. @returns {void} */
+  function removeRecord() {
+    try {
+      store.removeItem(storageKey)
+    } catch {
+      // Ignore: nothing we can do, and it must not break page init.
+    }
+  }
+
+  /** Remembered node states, refreshed before restore and each reader toggle. */
+  let nodeStates = loadNodes()
+  if (Object.keys(nodeStates).length > 0) saveNodes(nodeStates)
+
+  /**
+   * The label text of an `<li>`'s own node (its direct `<a>`, or the
+   * `name-only` span for group nodes that have no link). Deliberately excludes
+   * the empty `.expand-stub` span and the nested child `<ul>` so the key is the
+   * node's title alone. `<wbr>` word-break elements the template injects carry
+   * no text, so `textContent` is the clean title.
+   * @param {Element} li the TOC list item.
+   * @returns {string} the node's own label, trimmed (empty string if none found).
+   */
+  function labelOf(li) {
+    const anchor = li.querySelector(':scope > a')
+    if (anchor) {
+      return anchor.textContent.trim()
+    }
+    const nameSpan = li.querySelector(':scope > span.name-only')
+    return nameSpan ? nameSpan.textContent.trim() : ''
+  }
+
+  /**
+   * A stable identity for a TOC node: the chain of ancestor labels from the
+   * root down to it. This survives docfx's full re-render on every toggle (the
+   * `<li>` elements are recreated but their titles are not) and is identical
+   * across pages that share one toc.json — which is exactly what lets a choice
+   * made on one page be restored on the next.
+   * @param {Element} li the TOC list item to identify.
+   * @returns {string} the ancestor-label path, joined by {@link TOC_KEY_SEP}.
+   */
+  function keyOf(li) {
+    const parts = []
+    // Walk up to (but not including) the #toc container, collecting each <li>.
+    for (let cur = li; cur && cur !== toc; cur = cur.parentElement) {
+      if (cur.tagName === 'LI') {
+        parts.unshift(labelOf(cur))
+      }
+    }
+    return parts.join(TOC_KEY_SEP)
+  }
+
+  /**
+   * True while we are synthesizing restore clicks, so the click listener can
+   * tell our own programmatic toggles apart from real reader interaction and
+   * not re-record them.
+   * @type {boolean}
+   */
+  let applyingRestore = false
+
+  /**
+   * Find an expander whose state needs restoring. DocFX opens active sections
+   * even when toc.yml says expanded:false. When a section links to the current
+   * page itself, restore its configured default: its own visible label already
+   * reaches that page (including dashboards with a duplicate child link). A
+   * remembered choice overrides that default. Keep ancestors of an active child
+   * open so the current page remains visible; leave other defaults untouched.
+   * @returns {Element|null} the mismatched `<li>` to toggle, or null when the DOM already matches the (allowed) remembered state.
+   */
+  function findMismatchedExpander() {
+    const expanders = toc.querySelectorAll('li.expander')
+    for (const li of expanders) {
+      const key = keyOf(li)
+      const anchor = li.querySelector(':scope > a')
+      const url = anchor && anchor.getAttribute('href') !== '#'
+        ? new URL(anchor.href, window.location.href)
+        : null
+      // Match DocFX's equivalence for index pages and extensionless URLs.
+      const normalize = path => path.replace(/\/index\.html$/gi, '/')
+        .replace(/\.html$/gi, '').replace(/\/$/g, '').toLowerCase()
+      const isCurrentPage = url && url.origin === window.location.origin &&
+        normalize(url.pathname) === normalize(window.location.pathname)
+      const remembered = Object.hasOwn(nodeStates, key)
+      if (!remembered && (!isCurrentPage || !Object.hasOwn(defaultStates, key))) {
+        continue
+      }
+      const wanted = remembered ? nodeStates[key] : defaultStates[key]
+      // Only a true ancestor needs to stay open to reveal the current page.
+      if (wanted === false && li.classList.contains('active') && !isCurrentPage) {
+        continue
+      }
+      const isExpanded = li.classList.contains('expanded')
+      if (isExpanded !== wanted) {
+        return li
+      }
+    }
+    return null
+  }
+
+  /**
+   * Reconcile the rendered TOC with the remembered states by clicking the
+   * `.expand-stub` of each mismatched node. Each click triggers a synchronous
+   * re-render that replaces the elements, so we re-query every pass rather than
+   * hold stale references. Toggling one node never changes another node's
+   * rendered state (docfx re-renders each from its own model), so every pass
+   * fixes exactly one node and the loop makes monotonic progress; the budget is
+   * a safety cap against a pathological tree, not the expected exit.
+   * @returns {void}
+   */
+  function restore() {
+    applyingRestore = true
+    try {
+      const budget = toc.querySelectorAll('li.expander').length * 2 + 8
+      for (let pass = 0; pass < budget; pass++) {
+        const li = findMismatchedExpander()
+        if (!li) {
+          break
+        }
+        const stub = li.querySelector(':scope > .expand-stub')
+        if (!stub) {
+          // No toggle handle to drive docfx's model; stop rather than spin.
+          break
+        }
+        stub.click()
+      }
+    } finally {
+      applyingRestore = false
+    }
+  }
+
+  // Capture the identity before DocFX can replace the clicked element. Read the
+  // result in the BUBBLE listener, after its target handler renders. A microtask
+  // queued in capture can run BEFORE the target handler for native user input.
+  const toggles = new WeakMap()
+  toc.addEventListener('click', event => {
+    // Ignore our restore clicks (untrusted) and any stray untrusted events.
+    if (applyingRestore || !event.isTrusted) {
+      return
+    }
+    const target = event.target
+    if (!(target instanceof Element)) {
+      return
+    }
+    // A toggle is either the expand caret, or a group node's own href='#' link;
+    // a real navigation link (href to a page) is not a toggle and is ignored.
+    const onStub = target.closest('.expand-stub')
+    const anchor = target.closest('a')
+    const onGroupToggle = anchor && anchor.getAttribute('href') === '#'
+    if (!onStub && !onGroupToggle) {
+      return
+    }
+    const li = target.closest('li.expander')
+    if (!li) {
+      return
+    }
+    toggles.set(event, keyOf(li))
+  }, true)
+
+  toc.addEventListener('click', event => {
+    if (!toggles.has(event)) return
+    const key = toggles.get(event)
+    toggles.delete(event)
+    for (const current of toc.querySelectorAll('li.expander')) {
+      if (keyOf(current) !== key) continue
+      // Merge this one choice into the latest record. Another open page may
+      // have changed a different branch since this page initially loaded.
+      nodeStates = loadNodes()
+      nodeStates[key] = current.classList.contains('expanded')
+      saveNodes(nodeStates)
+      break
+    }
+  })
+
+  /**
+   * True once we have restored for this page load, so the MutationObserver's
+   * repeated firings (and our own restore-driven mutations) do not re-run it.
+   * @type {boolean}
+   */
+  let booted = false
+
+  /**
+   * Restore once the unfiltered TOC has rendered. DocFX restores its title
+   * filter across reloads; hidden branches cannot be reconciled until cleared.
+   * @returns {void}
+   */
+  async function boot() {
+    if (booted) {
+      return
+    }
+    const filter = toc.querySelector('input')
+    if (filter && filter.value.trim()) return
+    if (!toc.querySelector('li.expander')) {
+      // TOC not populated yet; wait for the next mutation.
+      return
+    }
+    booted = true
+    // Stop observing BEFORE restoring so our own restore mutations don't re-fire
+    // this callback.
+    observer.disconnect()
+    defaultStates = await defaultsReady
+    // The reader may have started filtering while the defaults were loading.
+    if (filter && filter.value.trim()) {
+      booted = false
+      observer.observe(toc, { childList: true, subtree: true })
+      return
+    }
+    // A restored filter can postpone boot while another tab changes the layout.
+    nodeStates = loadNodes()
+    restore()
+  }
+
+  // #toc is filled asynchronously after toc.json loads, so observe it for the
+  // first expander. Also call boot() immediately in case the TOC was already
+  // rendered before this ran.
+  const observer = new MutationObserver(boot)
+  observer.observe(toc, { childList: true, subtree: true })
+  boot()
+}
 
 export default {
   // Icon links displayed in the navbar (top-right)
@@ -21,8 +400,9 @@ export default {
 
   // Startup script (runs when page loads)
   start: () => {
-    // Add any custom initialization here
-    // console.log('NumSharp docs loaded');
+    // Remember TOC expand/collapse state for 48h (sliding window). See
+    // installTocStatePersistence above.
+    installTocStatePersistence()
   },
 
   // Customize syntax highlighting (highlight.js)

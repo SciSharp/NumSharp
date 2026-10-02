@@ -34,8 +34,9 @@ namespace NumSharp.Tests.Interop
     ///     WITHIN a process. So complex-Hermitian eigenvectors are checked by the phase-invariant
     ///     reconstruction <c>A·V == V·diag(w)</c> (as SVD checks its sign-ambiguous U/Vh), while eigenvalues
     ///     stay byte-exact. The one dtype divergence is <c>eig</c> of a <b>float32</b> operand with COMPLEX
-    ///     eigenvalues: NumPy yields complex64, NumSharp complex128 (no complex64 type); that case up-casts
-    ///     NumPy's result and compares values.
+    ///     eigenvalues: NumPy yields complex64, NumSharp complex128 (no complex64 type) holding exactly NumPy's
+    ///     complex64 VALUES (every component rounded to float32); that case up-casts NumPy's result and compares
+    ///     bytes.
     ///     </para>
     /// </remarks>
     [TestClass]
@@ -281,6 +282,26 @@ namespace NumSharp.Tests.Interop
                 using PyObject va = a.ToNumpy();
                 using PyObject npW = Python.np.with("np.linalg.eig(a)[0].astype('complex128')", ("a", va));
                 ByteContract.AssertSameBytes(w, npW, "eig float32 complex eigs (numpy complex64 up-cast to complex128)");
+            }
+
+            // Rotish's spectrum (1 ± 1j) is float32-exact, so it cannot tell whether NumSharp carries NumPy's complex64
+            // VALUES. ±i·sqrt(2) is not: NumPy's astype(complex64) rounds every component (eigenvalues and eigenvectors),
+            // and NumSharp's complex128 must hold exactly those rounded values (numpy.polynomial's {p}roots of a float32
+            // series sort them).
+            var b = np.array(new float[,] { { 0, -2 }, { 1, 0 } });
+            var (wb, vb) = np.linalg.eig(b);
+            using (wb)
+            using (vb)
+            using (Gil())
+            {
+                using PyObject pb = b.ToNumpy();
+                using PyObject npWb = Python.np.with("np.linalg.eig(a)[0].astype('complex128')", ("a", pb));
+                using PyObject npVb = Python.np.with("np.linalg.eig(a)[1].astype('complex128')", ("a", pb));
+                using PyObject npEv = Python.np.with("np.linalg.eigvals(a).astype('complex128')", ("a", pb));
+                ByteContract.AssertSameBytes(wb, npWb, "eig float32 sqrt(2) eigenvalues (numpy complex64 up-cast)");
+                ByteContract.AssertSameBytes(vb, npVb, "eig float32 sqrt(2) eigenvectors (numpy complex64 up-cast)");
+                using var ev = np.linalg.eigvals(b);
+                ByteContract.AssertSameBytes(ev, npEv, "eigvals float32 sqrt(2) (numpy complex64 up-cast)");
             }
         }
     }

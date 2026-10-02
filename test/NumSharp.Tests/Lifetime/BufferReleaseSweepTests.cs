@@ -36,16 +36,52 @@ namespace NumSharp.Tests.Lifetime
     ///     there is no magic number to tune. One-time kernel/cache setup can add the same constant
     ///     offset at both sample sizes and therefore correctly reads as clean.
     ///     </para>
-    ///     <para><b>Sequencing.</b> The pool counters are process-wide, so the window is drained
-    ///     with a full GC + finalizer pass before <c>ResetCounters</c>. A neighbouring test's
-    ///     finalizer landing mid-window can only ADD releases, which masks a defect rather than
-    ///     inventing one — the sweep fails safe. <c>[DoNotParallelize]</c> is mandatory for the
-    ///     same reason.
+    ///     <para><b>Sequencing.</b> The pool counters are process-wide, so each window is opened
+    ///     with the <see cref="GcQuiescence"/> protocol: a young-generation collection finalizes
+    ///     what the previous window stranded, the finalizer queue is drained after the epoch is
+    ///     taken, and the window is re-run whenever a collection started — or a background
+    ///     collection finished — while it was open. No finalizer can therefore land inside an
+    ///     accepted window, which makes every accepted reading exact. (A finalizer landing
+    ///     mid-window could only ADD releases, masking a defect rather than inventing one, so even
+    ///     the fallback reading below fails safe.) The class first runs one full drain for the
+    ///     backlog earlier test classes left. <c>[DoNotParallelize]</c> is mandatory for the same reason.
+    ///     </para>
+    ///     <para><b>Why not a full collection per window.</b> Until 2026-09-24 every window was
+    ///     drained with <c>GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect()</c>. In a full
+    ///     suite run that drain marks ~120 MiB of the test framework's own per-test bookkeeping and
+    ///     cost ~78 ms, so the 840 windows of <see cref="NoOperationDefersItsBufferRelease"/> took
+    ///     68 s of a 262 s run — and grew with every test added to the suite. Exactness never needed
+    ///     the full collection; see <see cref="GcQuiescence"/> for the argument.
     ///     </para>
     /// </remarks>
     [TestClass]
     public class BufferReleaseSweepTests
     {
+        /// <summary>
+        ///     How many times one window is re-run when a collection disturbed it, before the last
+        ///     reading is accepted as-is (see <see cref="Deficit"/>). The young collection that opens
+        ///     every attempt resets the gen-0 budget, so a second disturbance in a row is already rare.
+        /// </summary>
+        private const int MaxWindowAttempts = 5;
+
+        /// <summary>
+        ///     Runs ONE full drain before the class's sweeps so the backlog earlier test classes left on
+        ///     the finalizer queue (or as unvisited finalizable garbage) is cleared up front, instead of
+        ///     surfacing as a disturbed window later. Once per CLASS: the per-window hygiene is the young
+        ///     collection in <see cref="Deficit"/>, and the sweeps that follow one another here leave only
+        ///     garbage that hygiene handles.
+        /// </summary>
+        /// <param name="context">The MSTest class context (unused).</param>
+        /// <remarks>
+        ///     Formerly a <c>[TestInitialize]</c>: a full drain costs ~80 ms in a full run (it marks the whole
+        ///     test host's heap) and bought nothing after the first sweep — exactness never depended on it,
+        ///     since every window is re-run when <see cref="GcQuiescence.Undisturbed"/> reports a collection
+        ///     inside it; the drain only makes such re-runs rarer, and the backlog it clears is the one
+        ///     OTHER classes left, which exists only before this class's first test.
+        /// </remarks>
+        [ClassInitialize]
+        public static void DrainEarlierClasses(TestContext context) => GcQuiescence.CollectFull();
+
         /// <summary>
         ///     The two sample sizes. Both sit far below the knee where the GC starts finalizing
         ///     stranded buffers mid-loop — see <see cref="PerCallDeficit"/> for the measured curve.
@@ -91,28 +127,55 @@ namespace NumSharp.Tests.Lifetime
         private static readonly HashSet<string> KnownDeferred = new();
 
         /// <summary>
-        ///     Buffers acquired but not released across <paramref name="iterations"/> runs, with no
-        ///     GC inside the window.
+        ///     Buffers acquired but not released across <paramref name="iterations"/> runs, measured
+        ///     in a window no collection (and so no finalizer) touched.
         /// </summary>
+        /// <param name="op">The operation under test.</param>
+        /// <param name="operands">Its operands, built outside the window and reused by every run.</param>
+        /// <param name="iterations">How many times the window runs the operation.</param>
+        /// <returns>
+        ///     Acquisitions minus releases over the window: 0 for an operation that releases everything
+        ///     before returning, <c>strandRate × iterations</c> (+ any one-time retained buffers) otherwise.
+        /// </returns>
+        /// <remarks>
+        ///     The window is re-run (up to <see cref="MaxWindowAttempts"/> times) whenever
+        ///     <see cref="GcQuiescence.Undisturbed"/> reports a collection inside it — the pool's own
+        ///     gen-0 pacing collection included, which fires once per 16 MiB handed out and so lands in
+        ///     some window every few dozen. Re-running is sound because the window is re-executable: the
+        ///     operands persist and every run of the operation produces the same pool traffic.
+        /// </remarks>
         private static long Deficit(LifetimeCase op, NDArray[] operands, int iterations)
         {
-            // Drain anything an earlier test left pending so it cannot land inside our window.
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
+            long deficit = 0;
+            for (int attempt = 1; attempt <= MaxWindowAttempts; attempt++)
+            {
+                // Hygiene, not correctness: finalize what the previous window stranded (young garbage)
+                // so those buffers are home again, and start the window with a fresh gen-0 budget.
+                GcQuiescence.CollectYoung();
 
-            SizeBucketedBufferPool.ResetCounters();
+                // Exactness: everything queued before this point has run once OpenWindow returns, and
+                // Undisturbed below proves no collection queued anything while the window was open.
+                var window = GcQuiescence.OpenWindow();
+                SizeBucketedBufferPool.ResetCounters();
 
-            for (int i = 0; i < iterations; i++)
-                LifetimeCase.DisposeResult(op.Run(operands));
+                for (int i = 0; i < iterations; i++)
+                    LifetimeCase.DisposeResult(op.Run(operands));
 
-            long acquired = SizeBucketedBufferPool.Hits
-                          + SizeBucketedBufferPool.Misses
-                          + SizeBucketedBufferPool.ZeroedAllocs;
-            long released = SizeBucketedBufferPool.Returns
-                          + SizeBucketedBufferPool.ReturnsFreed;
+                long acquired = SizeBucketedBufferPool.Hits
+                              + SizeBucketedBufferPool.Misses
+                              + SizeBucketedBufferPool.ZeroedAllocs;
+                long released = SizeBucketedBufferPool.Returns
+                              + SizeBucketedBufferPool.ReturnsFreed;
+                deficit = acquired - released;
 
-            return acquired - released;
+                if (GcQuiescence.Undisturbed(window))
+                    return deficit;
+            }
+
+            // A collection landed in every attempt. Accept the last reading, exactly as the sweep did
+            // before it could detect interference at all: a mid-window finalizer can only ADD releases,
+            // so this reading errs toward innocence and never invents a defect.
+            return deficit;
         }
 
         /// <summary>
@@ -140,6 +203,12 @@ namespace NumSharp.Tests.Lifetime
         ///     the old np.allclose defect as clean in one process and 2/call in another — the plateau flattens the
         ///     slope and reads as innocence. N=10 and N=20 sit far below the knee for every op in
         ///     the catalogue.
+        ///     </para>
+        ///     <para>
+        ///     Since <see cref="Deficit"/> re-runs any window a collection touched, an ACCEPTED window
+        ///     is linear by construction — the knee can only reach the fallback reading taken after
+        ///     every attempt was disturbed. The small sample sizes still matter: they keep a window
+        ///     short enough that disturbance stays rare.
         ///     </para>
         ///     <para><b>Why the maximum, not the minimum.</b> The perturbation here is asymmetric,
         ///     and in the opposite direction to a timing or allocation measurement: the GC finalizing

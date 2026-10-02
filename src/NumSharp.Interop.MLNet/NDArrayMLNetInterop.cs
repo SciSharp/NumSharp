@@ -74,17 +74,18 @@ namespace NumSharp.Interop.MLNet
         ///     Single / Double first; the view-producing verbs do so automatically) or <see cref="NPTypeCode.Complex"/>
         ///     (ML.NET has no complex column type).
         /// </exception>
-        public static PrimitiveDataViewType ToDataViewType(NPTypeCode code)
+        public static PrimitiveDataViewType ToDataViewType(DType dtype)
         {
-            if (!TryToDataViewType(code, out PrimitiveDataViewType type))
+            NPTypeCode code = (dtype ?? throw new ArgumentNullException(nameof(dtype))).GetTypeCode();
+            if (!TryToDataViewType(dtype, out PrimitiveDataViewType type))
                 throw new NotSupportedException(UnsupportedExportMessage(code));
             return type;
         }
 
         /// <summary><see cref="ToDataViewType"/> without the throw; <c>false</c> for Half / Decimal / Complex.</summary>
-        public static bool TryToDataViewType(NPTypeCode code, out PrimitiveDataViewType type)
+        public static bool TryToDataViewType(DType dtype, out PrimitiveDataViewType type)
         {
-            switch (code)
+            switch (dtype?.GetTypeCode())
             {
                 case NPTypeCode.Boolean: type = BooleanDataViewType.Instance; return true;
                 case NPTypeCode.Byte: type = NumberDataViewType.Byte; return true;
@@ -114,21 +115,27 @@ namespace NumSharp.Interop.MLNet
         /// </exception>
         public static NPTypeCode FromDataViewType(DataViewType type)
         {
-            if (!TryFromDataViewType(type, out NPTypeCode code))
+            if (!TryFromDataViewType(type, out DType dtype))
                 throw new NotSupportedException(UnsupportedImportMessage(type));
-            return code;
+            return dtype.GetTypeCode();
         }
 
         /// <summary><see cref="FromDataViewType"/> without the throw.</summary>
-        public static bool TryFromDataViewType(DataViewType type, out NPTypeCode code)
+        public static bool TryFromDataViewType(DataViewType type, out DType dtype)
         {
             if (type is null)
             {
-                code = default;
+                dtype = null;
                 return false;
             }
             Type raw = type is VectorDataViewType vector ? vector.ItemType.RawType : type.RawType;
-            return TryFromRawType(raw, out code);
+            if (TryFromRawType(raw, out NPTypeCode code))
+            {
+                dtype = code;
+                return true;
+            }
+            dtype = null;
+            return false;
         }
 
         /// <summary>The NumSharp dtype for a column's CLR <see cref="DataViewType.RawType"/>.</summary>
@@ -154,8 +161,9 @@ namespace NumSharp.Interop.MLNet
         ///     <see cref="ushort"/>; <c>null</c> for Half / Decimal / Complex (no ML.NET column type). This is the
         ///     <typeparamref name="T"/> a <see cref="VBuffer{T}"/> / <see cref="ValueGetter{T}"/> for the column uses.
         /// </summary>
-        public static Type ToDataViewClrType(NPTypeCode code)
+        public static Type ToDataViewClrType(DType dtype)
         {
+            NPTypeCode code = (dtype ?? throw new ArgumentNullException(nameof(dtype))).GetTypeCode();
             switch (code)
             {
                 case NPTypeCode.Boolean: return typeof(bool);

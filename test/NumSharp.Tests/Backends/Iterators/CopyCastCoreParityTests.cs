@@ -296,5 +296,80 @@ namespace NumSharp.Tests.Backends.Iterators
             }
             Assert.AreEqual(0, fail.Count, $"{fail.Count}/{n} overlap copyto checks diverged:\n  {string.Join("\n  ", fail)}");
         }
+
+        // ===================== copying a BROADCAST view — the contiguity-flag contract =====================
+
+        /// <summary>
+        ///     Copying a row-broadcast view produces a FRESH, OWNED, WRITEABLE, dense buffer whose
+        ///     contiguity flags match NumPy 2.4.2 EXACTLY — and <c>c_contiguous</c> is therefore
+        ///     <b>legitimately false</b> for the default <c>order='K'</c>, not a stale/un-recomputed flag.
+        ///     A row-broadcast (leading stride-0 axis) copied with <c>order='K'</c> mirrors the source's
+        ///     memory order, which lays the result out <b>F-contiguous</b> (NumPy <c>PyArray_NewLikeArray</c>
+        ///     KEEPORDER / <c>PyArray_CreateSortedStridePerm</c>) — so the copy reports C=false, F=true, exactly
+        ///     as NumPy does (pinned against the real NumPy oracle as <c>parity.copy_bcast_K</c>). The
+        ///     <b>correct tool</b> for a guaranteed C-contiguous dense copy (e.g. gating a zero-copy crossing
+        ///     on <c>c_contiguous</c>) is <c>order='C'</c> or <see cref="np.ascontiguousarray(NDArray, DType)"/>,
+        ///     both verified here to yield C=true. This refutes the "NumSharp doesn't recompute the flag after
+        ///     copying a broadcast view" hypothesis: every flag below is recomputed from the result's real strides
+        ///     and agrees with NumPy. Self-validating — the expected flags are the probed NumPy 2.4.2 truth, and
+        ///     the values are checked against an independent stride-walk of the broadcast source.
+        /// </summary>
+        [TestMethod]
+        public unsafe void CopyOfBroadcast_Contiguity_AndIndependence_MatchNumpy()
+        {
+            // Each producer of a C-contiguous-or-F-contiguous dense copy, with the NumPy 2.4.2 truth for
+            // a ROW-broadcast (3,)->(4,3): 'K'/'F'/asfortranarray mirror the source => F-contig; 'C'/'A'/
+            // ascontiguousarray flatten the stride-0 axis => C-contig. (expectC, expectF) probed on 2.4.2.
+            var producers = new (string tag, Func<NDArray, NDArray> make, bool expectC, bool expectF)[]
+            {
+                ("copy_K",            b => np.copy(b),                 false, true),   // default order='K' — F-contig, NOT C
+                ("copy_C",            b => np.copy(b, order: 'C'),     true,  false),  // the C-contiguous tool
+                ("copy_A",            b => np.copy(b, order: 'A'),     true,  false),
+                ("copy_F",            b => np.copy(b, order: 'F'),     false, true),
+                ("ascontiguousarray", b => np.ascontiguousarray(b),    true,  false),  // the C-contiguous tool
+                ("asfortranarray",    b => np.asfortranarray(b),       false, true),
+            };
+
+            var fail = new List<string>();
+            int n = 0;
+            foreach (var (tc, nm) in Dtypes)
+            {
+                // Row-broadcast: a (3,) source stretched to (4,3) — leading axis stride 0, read-only, not owned.
+                var src1d = np.arange(3).astype(tc);
+                var bcast = np.broadcast_to(src1d, new Shape(4, 3));
+                string srcHex = RawLogicalHex(bcast);  // independent ground truth: the broadcast's logical values
+
+                foreach (var (tag, make, expectC, expectF) in producers)
+                {
+                    n++;
+                    var c = make(bcast);
+                    var sh = c.Shape;
+
+                    // (1) Flags match NumPy exactly — the crux: c_contiguous reflects the REAL layout.
+                    if (sh.IsContiguous != expectC)
+                        fail.Add($"{nm}/{tag}: IsContiguous={sh.IsContiguous}, expected {expectC} (NumPy truth)");
+                    if (sh.IsFContiguous != expectF)
+                        fail.Add($"{nm}/{tag}: IsFContiguous={sh.IsFContiguous}, expected {expectF} (NumPy truth)");
+
+                    // (2) A genuinely fresh, independent, writeable buffer — no stride-0 axis survives the copy.
+                    if (!c.Storage.OwnsData)
+                        fail.Add($"{nm}/{tag}: copy is not owned (OwnsData=false)");
+                    if (!sh.IsWriteable)
+                        fail.Add($"{nm}/{tag}: copy is not writeable");
+                    if (sh.IsBroadcasted)
+                        fail.Add($"{nm}/{tag}: copy still reports IsBroadcasted");
+                    if ((IntPtr)c.Storage.Address == (IntPtr)bcast.Storage.Address)
+                        fail.Add($"{nm}/{tag}: copy aliases the broadcast's backing buffer (not independent)");
+
+                    // (3) Correct values — the copy's logical C-order content equals the broadcast's.
+                    if (RawLogicalHex(c) != srcHex)
+                        fail.Add($"{nm}/{tag}: copied values differ from the broadcast source");
+                }
+            }
+
+            Assert.AreEqual(0, fail.Count,
+                $"{fail.Count}/{n} broadcast-copy contiguity/independence checks diverged from NumPy:\n  "
+                + string.Join("\n  ", fail));
+        }
     }
 }

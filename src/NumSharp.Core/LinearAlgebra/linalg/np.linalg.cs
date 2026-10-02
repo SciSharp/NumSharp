@@ -93,14 +93,23 @@ namespace NumSharp
             ///     is equivalent to NumPy's check and avoids running <c>isfinite</c> on a dtype NumPy has
             ///     no loop for. Runs BEFORE <see cref="CommonType"/>, so a float16 NaN reports this
             ///     message rather than the "unsupported in linalg" one — matching NumPy's order.
+            ///     <para>
+            ///     NumPy's <c>isfinite(a).all()</c> is answered by the fused single-pass
+            ///     <see cref="Backends.Kernels.FiniteScan.IsAllFinite"/> (the <c>asarray_chkfinite</c> kernel: the
+            ///     same predicate per dtype, every layout) instead of a bool temp plus a reduction — on the small
+            ///     matrices numpy.polynomial's <c>{p}roots</c> hands eigvals that temp was ~0.4 µs of a ~10 µs call.
+            ///     </para>
             /// </remarks>
+            /// <param name="arrays">The operands to check (any dtype, any layout).</param>
+            /// <exception cref="LinAlgError"><c>Array must not contain infs or NaNs</c> — an operand holds ±inf or a NaN
+            ///     (a complex one in either component).</exception>
             internal static void AssertFinite(params NDArray[] arrays)
             {
                 foreach (var a in arrays)
                 {
                     bool floaty = a.typecode is NPTypeCode.Half or NPTypeCode.Single
                         or NPTypeCode.Double or NPTypeCode.Complex;
-                    if (floaty && !np.all(np.isfinite(a)))
+                    if (floaty && !Backends.Kernels.FiniteScan.IsAllFinite(a))
                         throw new LinAlgError("Array must not contain infs or NaNs");
                 }
             }

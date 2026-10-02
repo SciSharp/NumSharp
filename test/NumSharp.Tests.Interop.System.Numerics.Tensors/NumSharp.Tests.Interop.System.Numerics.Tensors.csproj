@@ -1,4 +1,7 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk" TreatAsLocalProperty="NoWarn">
+  <!-- TreatAsLocalProperty="NoWarn": CI passes `-p:NoWarn=...` on the command line, a GLOBAL property that would
+       otherwise override the <NoWarn> below and turn this suite's deliberate [Experimental] uses (SYSLIB5001,
+       NUMSHARP_TENSORS) into build errors. Same fix and reason as the package's csproj. -->
 
   <PropertyGroup>
     <TargetFrameworks>net8.0;net10.0</TargetFrameworks>

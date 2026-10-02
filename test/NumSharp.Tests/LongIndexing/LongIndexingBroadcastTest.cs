@@ -274,7 +274,9 @@ public class LongIndexingBroadcastTest
 
     // ================================================================
     // KNOWN LIMITATIONS - Tests below document current limitations
-    // These are marked as OpenBugs to exclude from CI
+    // The ones that materialize a LargeSize output are [LargeMemoryTest] (excluded from CI, like the
+    // rest of this class); Broadcast_Sum_InternalError is still an [OpenBugs] reproduction; the slice
+    // test builds a 100-element view and runs everywhere.
     // ================================================================
 
     /// <summary>
@@ -298,27 +300,42 @@ public class LongIndexingBroadcastTest
     /// LIMITATION: Binary operations allocate full output arrays.
     /// Even with broadcast inputs, the output is allocated at full size.
     /// </summary>
-    [TestMethod]
+    /// <remarks>
+    /// Materializes a LargeSize (~2.36 GB) uint8 output, so it carries the class's
+    /// <see cref="LargeMemoryTestAttribute"/> like every other 2.36-billion-element test here. It had
+    /// been <c>[OpenBugs]</c> until a18b594b (2026-04-12) removed that once the add stopped throwing
+    /// OutOfMemoryException, without restoring the class's exclusion — so from then on every CI leg
+    /// allocated 2.36 GB for it (~2 s per run).
+    /// </remarks>
+    [TestMethod, LargeMemoryTest]
     public void Broadcast_Add_AllocatesFullOutput()
     {
         var a = BroadcastScalar((byte)10);
         var b = BroadcastScalar((byte)20);
 
-        // This throws OutOfMemoryException because it allocates LargeSize output
-        var result = np.add(a, b);
+        // Allocates the full LargeSize output; disposed at once so the 2.36 GB is not left to the finalizer.
+        using var result = np.add(a, b);
         Assert.AreEqual(30, result.GetByte(0));
     }
 
     /// <summary>
     /// LIMITATION: Unary operations allocate full output arrays.
     /// </summary>
-    [TestMethod]
+    /// <remarks>
+    /// Same history and category as <see cref="Broadcast_Add_AllocatesFullOutput"/>, and the dearer of
+    /// the two on CI (9-16 s per run): above int.MaxValue elements the unary route skips its NDIter
+    /// path (<c>TryExecuteUnaryOpViaNDIter</c> refuses any dimension &gt; int.MaxValue) and falls to the
+    /// per-element coordinate kernel — measured 3.9 ns/element at 2.36 B elements against 0.72 at 2.0 B
+    /// (net10.0, 2026-09-24). That cliff is a product performance gap, not something this test exists
+    /// to time.
+    /// </remarks>
+    [TestMethod, LargeMemoryTest]
     public void Broadcast_Square_AllocatesFullOutput()
     {
         var arr = BroadcastScalar((byte)5);
 
-        // This throws OutOfMemoryException
-        var result = np.square(arr);
+        // Allocates the full LargeSize output; disposed at once so the 2.36 GB is not left to the finalizer.
+        using var result = np.square(arr);
         Assert.AreEqual(25, result.GetByte(0));
     }
 

@@ -122,7 +122,7 @@ namespace NumSharp.Tests.View
         public void Parity_RandomIndices()
         {
             // Test with random indices
-            var rnd = new MT19937();
+            var rnd = new System.Random();
             var dims = new[] { rnd.Next(2, 10), rnd.Next(2, 10), rnd.Next(2, 10) };
             var shape = new Shape(dims);
 

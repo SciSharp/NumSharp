@@ -94,6 +94,56 @@ for dt in (np.float64, np.float32, np.float16):
         # pinning; drop cases with no NaN and no special value to avoid duplicating unary.jsonl.
         cases.append(case(f"nan/{DTYPE_NAME[np.dtype(dt)]}/{op}/{idx}", op, grid_f, out)); idx += 1
 
+# --- BINARY ops over the full special-pair CROSS grid (coverage plan §B3) ---
+# The pairwise value tiers align A[i] with B[i] drawn from the SAME pool in the SAME order, so
+# the cross-operand NaN interactions (nan+finite, ±inf against BOTH NaN signs, 0*inf, inf-inf,
+# 0/0, mod-by-0, copysign-from-NaN, maximum/fmax NaN priority) never occur there; the specials
+# tier forces a curated subset. This grid is EXHAUSTIVE over FLOAT_VALS x FLOAT_VALS — both NaN
+# signs included — with NumPy 2.4.2's exact bytes recorded. Float NaN stays tokenized (the sign
+# is non-contractual) while every non-NaN slot — the sign of a produced zero/inf included — is
+# byte-exact. The op sets are per-width: float16 keeps the widen-compute-narrow / bit-level ops
+# whose f16 parity NumSharp pins bit-exactly; power/arctan2/hypot/logaddexp* ride the f32/f64
+# CRT-libm lanes only (their f16 loops bridge differently — unit-suite territory, not this pin).
+BIN_OPS_WIDE = ["add", "subtract", "multiply", "divide", "floor_divide", "mod", "fmod",
+                "maximum", "minimum", "fmax", "fmin", "copysign", "heaviside", "nextafter",
+                "power", "arctan2", "hypot", "logaddexp", "logaddexp2"]
+BIN_OPS_F16 = ["add", "subtract", "multiply", "divide", "floor_divide", "mod", "fmod",
+               "maximum", "minimum", "fmax", "fmin", "copysign", "heaviside"]
+
+def case2(cid, op, a, b, out):
+    return {"id": cid, "op": op, "params": {}, "operands": [operand(a), operand(b)],
+            "expected": {"dtype": DTYPE_NAME[np.ascontiguousarray(out).dtype],
+                         "shape": list(np.ascontiguousarray(out).shape),
+                         "buffer": np.ascontiguousarray(out).tobytes().hex()},
+            "layout": "nan_grid_pair", "valueclass": "nan"}
+
+for dt in (np.float64, np.float32, np.float16):
+    vals = np.array(FLOAT_VALS, dtype=dt)
+    A = np.repeat(vals, len(vals))          # every (a, b) combination, both operand orders
+    B = np.tile(vals, len(vals))
+    ops = BIN_OPS_F16 if dt is np.float16 else BIN_OPS_WIDE
+    for op in ops:
+        try:
+            with np.errstate(all='ignore'):
+                out = np.asarray(npf(op)(A, B))
+        except Exception as e:
+            sys.stderr.write(f"skip binary {DTYPE_NAME[np.dtype(dt)]} {op}: {e}\n"); continue
+        cases.append(case2(f"nan/{DTYPE_NAME[np.dtype(dt)]}/bin/{op}/{idx}", op, A, B, out)); idx += 1
+
+# --- complex128 binary: the 64-element re x im grid against a rolled copy ---
+# divide/multiply are BYTE-EXACT ports (Smith reciprocal-multiply / fused simd_cmul); add/
+# subtract are pure IEEE; power's finite ULP envelope + NaN edges ride the registry's
+# complex-binary excuse. NaN stays tokenized here (complex BINARY NaN sign is non-contractual —
+# only the unary NDComplexMath family carries the sign pin, see ComplexNanContractOps).
+zroll = np.roll(grid_c, 7)
+for op in ["add", "subtract", "multiply", "divide", "power"]:
+    try:
+        with np.errstate(all='ignore'):
+            out = np.asarray(npf(op)(grid_c, zroll))
+    except Exception as e:
+        sys.stderr.write(f"skip binary complex {op}: {e}\n"); continue
+    cases.append(case2(f"nan/complex128/bin/{op}/{idx}", op, grid_c, zroll, out)); idx += 1
+
 os.makedirs(os.path.dirname(OUT), exist_ok=True)
 with open(OUT, "w", newline="\n") as f:
     for c in cases:

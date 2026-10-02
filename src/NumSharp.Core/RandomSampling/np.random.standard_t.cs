@@ -1,7 +1,3 @@
-using System;
-using NumSharp.Backends.Unmanaged;
-using NumSharp.Generic;
-
 namespace NumSharp
 {
     public partial class NumPyRandom
@@ -9,14 +5,19 @@ namespace NumSharp
         /// <summary>
         ///     Draw a single sample from a standard Student's t distribution.
         /// </summary>
+        /// <param name="df">Degrees of freedom, must be &gt; 0.</param>
+        /// <returns>A 0-d float64 array holding the draw.</returns>
+        /// <exception cref="ValueError"><paramref name="df"/> is <c>&lt;= 0</c> (<c>df &lt;= 0</c>).</exception>
         public NDArray standard_t(double df) => standard_t(df, Shape.Scalar);
 
         /// <summary>
         ///     Draw samples from a standard Student's t distribution with df degrees of freedom.
         /// </summary>
-        /// <param name="df">Degrees of freedom, must be > 0.</param>
-        /// <param name="size">Output shape.</param>
-        /// <returns>Drawn samples from the parameterized standard Student's t distribution.</returns>
+        /// <param name="df">Degrees of freedom, must be &gt; 0 (NaN is accepted and samples NaN, as in NumPy).</param>
+        /// <param name="size">Output shape; <c>default</c> (NumPy's <c>None</c>) draws a single value.</param>
+        /// <returns>Drawn samples from the parameterized standard Student's t distribution (float64).</returns>
+        /// <exception cref="ValueError"><paramref name="df"/> is <c>&lt;= 0</c> (<c>df &lt;= 0</c>), or <paramref name="size"/> has
+        ///     a negative dimension.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.standard_t.html
         ///     <br/>
@@ -25,120 +26,47 @@ namespace NumSharp
         ///     <br/>
         ///     The probability density function is:
         ///     P(x, df) = Gamma((df+1)/2) / (sqrt(pi*df) * Gamma(df/2)) * (1 + x^2/df)^(-(df+1)/2)
+        ///     <br/>
+        ///     NumPy's <c>legacy_standard_t</c>: <c>sqrt(df/2) * N / sqrt(G)</c> with the cached-polar normal drawn before the
+        ///     legacy gamma <c>G(df/2)</c>. Byte-identical to <c>np.random.RandomState(seed).standard_t</c>; holds the bit
+        ///     generator's lock for the draws.
         /// </remarks>
         public NDArray standard_t(double df, Shape size)
         {
-            // Parameter validation (matches NumPy error message)
-            if (df <= 0)
-                throw new ArgumentException("df <= 0", nameof(df));
+            RandomConstraints.Check(df, "df", ConstraintType.CONS_POSITIVE);
 
-            if (size.IsScalar || size.IsEmpty)
-                return NDArray.Scalar(SampleStandardT(df));
+            // The per-call setup NumPy recomputes for every value, evaluated once (the same expressions — bit-neutral).
+            var setup = new LegacyStandardTSetup(df);
 
-            var result = new NDArray<double>(size);
-            ArraySlice<double> resultArray = result.Data<double>();
-
-            for (long i = 0; i < result.size; ++i)
-                resultArray[i] = SampleStandardT(df);
-
-            result.ReplaceData(resultArray);
-            return result;
-        }
-
-        /// <summary>
-        ///     Sample a single value from the standard Student's t distribution.
-        /// </summary>
-        /// <remarks>
-        ///     Algorithm from NumPy's random_standard_t in distributions.c:
-        ///     num = standard_normal()
-        ///     denom = standard_gamma(df/2)
-        ///     return sqrt(df/2) * num / sqrt(denom)
-        /// </remarks>
-        private double SampleStandardT(double df)
-        {
-            // NumPy's exact implementation from distributions.c
-            double num = NextGaussian();
-            double denom = SampleStandardGamma(df / 2.0);
-            return Math.Sqrt(df / 2.0) * num / Math.Sqrt(denom);
-        }
-
-        /// <summary>
-        ///     Sample a single value from the standard gamma distribution (scale=1).
-        ///     Uses NumPy's legacy algorithm exactly for RNG parity.
-        /// </summary>
-        private double SampleStandardGamma(double shape)
-        {
-            if (shape == 1.0)
+            if (IsScalarDraw(size))
             {
-                // Shape=1 is exponential distribution: -log(1 - U)
-                return -Math.Log(1.0 - randomizer.NextDouble());
-            }
-            else if (shape == 0.0)
-            {
-                return 0.0;
-            }
-            else if (shape < 1.0)
-            {
-                // NumPy legacy: Vaduva's algorithm for shape < 1
-                double invShape = 1.0 / shape;
-                while (true)
+                unsafe
                 {
-                    double U = randomizer.NextDouble();
-                    double V = -Math.Log(1.0 - randomizer.NextDouble()); // standard_exponential
+                    // A one-double buffer IS NumPy's per-draw call sequence.
+                    double word;
+                    var one = new DrawBufferDouble(randomizer, &word, 1);
+                    lock (randomizer.@lock)
+                        return NDArray.Scalar(LegacyStandardT(ref one, in setup));
+                }
+            }
 
-                    if (U <= 1.0 - shape)
+            var ret = LegacyOutput(NPTypeCode.Double, size);
+            unsafe
+            {
+                var dst = (double*)ret.Address;
+                long n = ret.size;
+                // Read-ahead draws (bulk-filled by the bit generator): every value draws unless df / 2 underflows to 0 (then per-draw).
+                double* storage = stackalloc double[DrawBufferDouble.Capacity];
+                var src = new DrawBufferDouble(randomizer, storage, setup.Half.Draws ? DrawBufferDouble.Capacity : 1);
+                lock (randomizer.@lock)
+                    for (long i = 0; i < n; i++)
                     {
-                        double X = Math.Pow(U, invShape);
-                        if (X <= V)
-                            return X;
+                        src.Owed = n - i;
+                        dst[i] = LegacyStandardT(ref src, in setup);
                     }
-                    else
-                    {
-                        double Y = -Math.Log((1 - U) / shape);
-                        double X = Math.Pow(1.0 - shape + shape * Y, invShape);
-                        if (X <= V + Y)
-                            return X;
-                    }
-                }
             }
-            else
-            {
-                // Marsaglia-Tsang for shape > 1
-                double d = shape - 1.0 / 3.0;
-                double c = (1.0 / 3.0) / Math.Sqrt(d);
-                return SampleMarsaglia(d, c);
-            }
-        }
 
-        /// <summary>
-        ///     Marsaglia and Tsang's method for gamma sampling.
-        /// </summary>
-        private double SampleMarsaglia(double d, double c)
-        {
-            while (true)
-            {
-                double x, t, v;
-
-                do
-                {
-                    x = NextGaussian();
-                    t = 1.0 + c * x;
-                    v = t * t * t;
-                } while (v <= 0);
-
-                double U = randomizer.NextDouble();
-                double x2 = x * x;
-
-                if (U < 1.0 - 0.0331 * x2 * x2)
-                {
-                    return d * v;
-                }
-
-                if (Math.Log(U) < 0.5 * x2 + d * (1.0 - v + Math.Log(v)))
-                {
-                    return d * v;
-                }
-            }
+            return ret;
         }
     }
 }

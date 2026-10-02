@@ -29,7 +29,11 @@ namespace NumSharp
             get => np.real(this);
             // PyArray_CopyInto uses NPY_UNSAFE_CASTING; np.real(this) is the writeable target (the real
             // lane view for complex, `this` for a real array) whose writeability guard reproduces NumPy's
-            // "assignment destination is read-only".
+            // "assignment destination is read-only". The scope reclaims the lane view: it holds a counted
+            // reference on this array's buffer (a byte-reinterpreting alias forwards its ARC to the owner),
+            // so leaving it to the finalizer would keep the buffer out of the pool after this array is
+            // disposed. `this` (a real array's target) was not created in the scope and is never touched.
+            [NDScoped]
             set => np.copyto(np.real(this), value, casting: "unsafe");
         }
 
@@ -54,6 +58,9 @@ namespace NumSharp
         public NDArray imag
         {
             get => np.imag(this);
+            // The scope reclaims the imaginary-lane view the copy targets: a counted reference on this
+            // array's buffer (see the real setter), not a finalizer's job.
+            [NDScoped]
             set
             {
                 if (typecode != NPTypeCode.Complex)

@@ -38,9 +38,12 @@ namespace NumSharp
         public ulong maxUnsigned { get; }
 
         /// <summary>
-        /// The NPTypeCode of this integer type.
+        /// The dtype of this integer type — NumPy's <c>iinfo.dtype</c> (a <see cref="DType"/> descriptor, like
+        /// <c>np.iinfo(np.int32).dtype</c>). Being a <see cref="DType"/> it exposes <see cref="DType.kind"/> /
+        /// <see cref="DType.name"/> / <see cref="DType.itemsize"/> and compares structurally
+        /// (<c>info.dtype == np.int32</c>); an <see cref="NPTypeCode"/> also converts back implicitly.
         /// </summary>
-        public NPTypeCode dtype { get; }
+        public DType dtype { get; }
 
         /// <summary>
         /// Character code for this type.
@@ -69,7 +72,7 @@ namespace NumSharp
         /// <inheritdoc />
         public override string ToString()
         {
-            return $"iinfo(min={min}, max={max}, dtype={dtype.AsNumpyDtypeName()})";
+            return $"iinfo(min={min}, max={max}, dtype={dtype.name})";
         }
 
         private static bool IsIntegerType(NPTypeCode typeCode)

@@ -10,6 +10,7 @@ namespace NumSharp.Tests.Interop.Examples
 {
     /// <summary>The proof of <c>examples/NumSharp.Interop.pythonnet.Examples/10-pandas.cs</c>, section by section.</summary>
     [TestClass]
+    [PythonEcosystem]
     public class Example10_Pandas : ExampleTestBase
     {
         [TestInitialize]

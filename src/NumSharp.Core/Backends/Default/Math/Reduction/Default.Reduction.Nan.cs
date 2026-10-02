@@ -104,63 +104,147 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// Return minimum of an array or minimum along an axis, ignoring NaNs.
+        /// Return minimum of an array or minimum along an axis, ignoring NaNs — NumPy's <c>np.nanmin</c>, which on an
+        /// ndarray IS <c>np.fmin.reduce</c> (see <see cref="NanMinMax"/>).
         /// </summary>
+        /// <param name="a">The array to reduce.</param>
+        /// <param name="axis">The axis to reduce (null = all axes).</param>
+        /// <param name="keepdims">Keep the reduced axes as size 1.</param>
+        /// <returns>The reduced array (a 0-d scalar for a flat reduction without keepdims).</returns>
+        /// <exception cref="ArgumentException">The reduction is empty — "zero-size array to reduction operation fmin which
+        /// has no identity", NumPy's ValueError.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         public override NDArray NanMin(NDArray a, int? axis = null, bool keepdims = false)
-        {
-            var arr = a;
-            var shape = arr.Shape;
-
-            // Non-float types: fall back to regular amin (no NaN possible)
-            if (arr.GetTypeCode != NPTypeCode.Single && arr.GetTypeCode != NPTypeCode.Double && arr.GetTypeCode != NPTypeCode.Half)
-                return ReduceAMin(arr, axis, keepdims: keepdims);
-
-            if (shape.IsEmpty)
-                return arr;
-
-            if (shape.IsScalar || (shape.size == 1 && shape.NDim == 1))
-            {
-                return a.Clone();
-            }
-
-            if (axis == null)
-            {
-                return NanReductionElementWise(arr, ReductionOp.NanMin, keepdims);
-            }
-            else
-            {
-                return ExecuteNanAxisReduction(arr, axis.Value, keepdims, ReductionOp.NanMin);
-            }
-        }
+            => NanMinMax(a, axis, keepdims, MinMaxOp.FMin);
 
         /// <summary>
-        /// Return maximum of an array or maximum along an axis, ignoring NaNs.
+        /// Return maximum of an array or maximum along an axis, ignoring NaNs — NumPy's <c>np.nanmax</c>, which on an
+        /// ndarray IS <c>np.fmax.reduce</c> (see <see cref="NanMinMax"/>).
         /// </summary>
+        /// <param name="a">The array to reduce.</param>
+        /// <param name="axis">The axis to reduce (null = all axes).</param>
+        /// <param name="keepdims">Keep the reduced axes as size 1.</param>
+        /// <returns>The reduced array (a 0-d scalar for a flat reduction without keepdims).</returns>
+        /// <exception cref="ArgumentException">The reduction is empty — "zero-size array to reduction operation fmax which
+        /// has no identity", NumPy's ValueError.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         public override NDArray NanMax(NDArray a, int? axis = null, bool keepdims = false)
+            => NanMinMax(a, axis, keepdims, MinMaxOp.FMax);
+
+        /// <summary>
+        /// The shared body of <see cref="NanMax"/> / <see cref="NanMin"/>. NumPy's <c>nanmax(a)</c> for a plain ndarray is
+        /// <c>np.fmax.reduce(a, axis)</c> plus an "All-NaN slice" RuntimeWarning (NumSharp has no warnings), so float32 /
+        /// float64 run NumPy's own fmax / fmin reduction schedules through the exact core
+        /// (<see cref="TryExactFlatMinMaxScalar"/>, <see cref="TryExactAxisMinMax"/> with <see cref="MinMaxOp.FMax"/> /
+        /// <see cref="MinMaxOp.FMin"/>).
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Consequence for floats: the result's BITS are NumPy's — which zero survives a ±0 tie (the CRT scalar op keeps
+        /// <c>+0</c> for max / <c>-0</c> for min where the vector op keeps the later operand, so it depends on where
+        /// NumPy's calls put each element) and which payload an all-NaN reduction returns (never the canonical NaN: an
+        /// all-NaN accumulator hands back its lane 0 as is). The kernels it replaces matched only the value.
+        /// </para>
+        /// <para>
+        /// Edges, probed against NumPy 2.4.2: an empty reduction raises with the <c>fmax</c> / <c>fmin</c> name even for an
+        /// integer array (a reduced axis of extent 0, or a flat reduction of an empty array; a non-empty reduced axis of an
+        /// empty array yields the empty result); a 0-d or one-element 1-D input returns its element as a 0-d scalar (a
+        /// NaN keeps its payload — NumPy copies the first element and never calls the loop). Integer and bool arrays are
+        /// the plain <c>np.amax</c> / <c>np.amin</c> (fmax of integers IS max).
+        /// </para>
+        /// <para>
+        /// float16 and complex128 have no SIMD loop in NumPy — <c>HALF_fmax</c> / <c>CDOUBLE_fmax</c> are sequential — and
+        /// run <see cref="NanMinMaxSequential"/> on every layout (a flat C-contiguous float16 keeps its bit-level kernel,
+        /// which implements the same rule): NaN elements skipped (complex: a NaN in either part), a tie keeping the
+        /// EARLIER element in NumPy's visiting order, an all-NaN reduction returning its first NaN verbatim. Complex used
+        /// to go to <c>np.amax</c> / <c>np.amin</c>, which PROPAGATE a NaN — a value bug. A broadcast float32 / float64
+        /// input — which the exact core declines (a zero stride changes NpyIter's axis sort) — keeps the previous kernels:
+        /// the right value, but a ±0 tie's sign and an all-NaN slice's payload are not pinned.
+        /// </para>
+        /// </remarks>
+        /// <param name="a">The array to reduce.</param>
+        /// <param name="axis">The axis to reduce (null = all axes).</param>
+        /// <param name="keepdims">Keep the reduced axes as size 1.</param>
+        /// <param name="op"><see cref="MinMaxOp.FMax"/> or <see cref="MinMaxOp.FMin"/>.</param>
+        /// <returns>The reduced array.</returns>
+        /// <exception cref="ArgumentException">The reduction is empty (NumPy's ValueError text).</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
+        private NDArray NanMinMax(NDArray a, int? axis, bool keepdims, MinMaxOp op)
         {
             var arr = a;
             var shape = arr.Shape;
-
-            // Non-float types: fall back to regular amax (no NaN possible)
-            if (arr.GetTypeCode != NPTypeCode.Single && arr.GetTypeCode != NPTypeCode.Double && arr.GetTypeCode != NPTypeCode.Half)
-                return ReduceAMax(arr, axis, keepdims: keepdims);
+            var tc = arr.GetTypeCode;
+            bool isMax = op == MinMaxOp.FMax;
+            var nanOp = isMax ? ReductionOp.NanMax : ReductionOp.NanMin;
 
             if (shape.IsEmpty)
                 return arr;
 
-            if (shape.IsScalar || (shape.size == 1 && shape.NDim == 1))
-            {
-                return a.Clone();
-            }
+            // fmax / fmin have no identity: an empty reduction raises with THEIR name (not "maximum"), for every dtype —
+            // so this precedes the integer delegation below.
+            if (shape.size == 0)
+                return HandleEmptyArrayMinMaxReduction(arr, axis, keepdims, null, NumPyMinMaxReduce.UfuncName(op));
 
+            // Types that cannot hold a NaN: fmax / fmin of them ARE max / min — the exact amax / amin. Complex is NOT one of
+            // them (a NaN in either part makes the element NaN, which fmax SKIPS where amax would propagate it), so it is
+            // kept for the sequential fold below.
+            if (tc != NPTypeCode.Single && tc != NPTypeCode.Double && tc != NPTypeCode.Half && tc != NPTypeCode.Complex)
+                return isMax ? ReduceAMax(arr, axis, keepdims: keepdims) : ReduceAMin(arr, axis, keepdims: keepdims);
+
+            // A single element: NumPy copies it into the result and never calls the loop (bits, NaN payload included, kept).
+            if (shape.IsScalar || (shape.size == 1 && shape.NDim == 1))
+                return HandleScalarReduction(arr, keepdims, null, null);
+
+            // float16 / complex128: NumPy's HALF_fmax / CDOUBLE_fmax are plain sequential loops — the fold in
+            // Default.Reduction.Nan.Sequential.cs, NumPy's visiting order on every layout (broadcast included). A flat
+            // C-contiguous float16 keeps its bit-level kernel below, which implements the same first-zero / first-NaN rule.
+            if (tc == NPTypeCode.Complex || (tc == NPTypeCode.Half && !(axis == null && shape.IsContiguous)))
+                return NanMinMaxSequential(arr, axis, keepdims, isMax);
+
+            bool exactDtype = tc == NPTypeCode.Single || tc == NPTypeCode.Double;
             if (axis == null)
             {
-                return NanReductionElementWise(arr, ReductionOp.NanMax, keepdims);
+                if (exactDtype)
+                {
+                    // NumPy's flat fmax / fmin schedule (null = declined: a broadcast input → the kernels below).
+                    var r = TryExactFlatMinMaxScalar(arr, op);
+                    if (r is not null)
+                    {
+                        if (keepdims)
+                        {
+                            var ks = new long[arr.ndim];
+                            for (int i = 0; i < arr.ndim; i++)
+                                ks[i] = 1;
+                            r.Storage.Reshape(new Shape(ks));
+                        }
+
+                        return r.MarkReductionScalar();
+                    }
+                }
+
+                return NanReductionElementWise(arr, nanOp, keepdims);
             }
-            else
+
+            if (exactDtype)
             {
-                return ExecuteNanAxisReduction(arr, axis.Value, keepdims, ReductionOp.NanMax);
+                int ax = NormalizeAxis(axis.Value, arr.ndim);
+
+                // An extent-1 reduced axis: NumPy copies each lone element (payload kept) — no loop call.
+                if (shape[ax] == 1)
+                    return HandleTrivialAxisReduction(arr, ax, keepdims, tc, null);
+
+                // NumPy's per-element fmax / fmin schedule (null = declined: a broadcast input → the kernel below).
+                var exact = TryExactAxisMinMax(arr, ax, op);
+                if (exact is not null)
+                {
+                    if (keepdims)
+                        exact.Storage.ExpandDimension(ax);
+                    // Same PyArray_Return rule as ReduceAMax: a fresh 0-d result is a read-only scalar.
+                    return exact.MarkReductionScalar();
+                }
             }
+
+            return ExecuteNanAxisReduction(arr, axis.Value, keepdims, nanOp);
         }
 
         /// <summary>

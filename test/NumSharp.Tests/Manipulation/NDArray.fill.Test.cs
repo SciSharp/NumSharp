@@ -365,7 +365,7 @@ namespace NumSharp.Tests.Manipulation
         {
             var b = np.broadcast_to(np.array(new[] { 0 }).reshape(1, 1), new Shape(3, 3));
             Action act = () => b.fill(300);   // bad value too, but read-only fires first
-            act.Should().Throw<NumSharpException>().WithMessage("*read-only*");
+            act.Should().Throw<ValueError>().WithMessage("*read-only*");
         }
 
         [TestMethod]

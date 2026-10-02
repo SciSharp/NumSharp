@@ -59,6 +59,8 @@ if (args.Length == 0)
     Console.WriteLine();
     Console.WriteLine("=== Performance Analysis ===");
     Console.WriteLine("13. SIMD vs Scalar Comparison (binary ops, reductions)");
+    Console.WriteLine("14. Iteration Techniques (foreach/flat/flatiter/nditer/nested_iters/broadcast × kind × size)");
+    Console.WriteLine("15. Collections (ConcurrentOrderedDictionary vs List / ConcurrentDictionary)");
     Console.WriteLine();
     Console.WriteLine("=== Meta Options ===");
     Console.WriteLine("A. All Benchmarks");
@@ -82,6 +84,8 @@ if (args.Length == 0)
         "11" => ["--filter", "*Slice*"],
         "12" => ["--filter", "*MultiDim*"],
         "13" => ["--filter", "*SimdVsScalar*,*SimdReductionType*"],
+        "14" => ["--filter", "*Iteration*"],
+        "15" => ["--filter", "*ConcurrentOrderedDictionary*"],
         "A" => [],
         "Q" => ["--job", "Dry"],
         _ => []

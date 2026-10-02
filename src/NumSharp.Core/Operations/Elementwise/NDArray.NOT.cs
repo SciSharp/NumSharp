@@ -16,6 +16,18 @@ namespace NumSharp
         [NDScoped]
         public static unsafe NDArray<bool> operator !(NDArray self)
         {
+            // The raw-buffer fast path below walks self.Address LINEARLY (from[i]), which matches the
+            // logical C-order of the elements ONLY when self is C-contiguous with offset 0. For any
+            // other layout — F-contiguous, transposed, strided, a sliced view with a non-zero offset,
+            // or a broadcast (stride-0) view — the linear read visits the backing buffer in memory
+            // order, not logical order, and the fresh C-contiguous `result` then holds scrambled
+            // values. Route those through the layout-aware logical_not ufunc, which honours strides and
+            // offset (correctness over the raw-loop speed; the contiguous hot path is unchanged).
+            // np.logical_not now returns the untyped NDArray (its out=/where= overload shape); a plain
+            // call still yields a bool array, so re-view it as the typed NDArray<bool> the operator returns.
+            if (!self.Shape.IsContiguous || self.Shape.offset != 0)
+                return np.logical_not(self).MakeGeneric<bool>();
+
             var result = new NDArray(typeof(bool), self.shape);
             NpFunc.Invoke(self.GetTypeCode, NotExecute<int>, (nint)self.Address, (nint)result.Address, result.size);
             return result.MakeGeneric<bool>();

@@ -3,11 +3,15 @@ using System;
 namespace NumSharp.Tests
 {
     /// <summary>
-    ///     Random number generator alignment bugs with NumPy.
+    ///     Legacy <c>np.random</c> (RandomState) stream pins against NumPy.
     ///
-    ///     CRITICAL FINDING: NumSharp's Randomizer uses .NET's Subtractive Generator
-    ///     (Knuth's algorithm), NOT NumPy's Mersenne Twister (MT19937).
-    ///     This means same seed produces completely different sequences.
+    ///     History: NumSharp's RandomState once ran .NET's subtractive generator, so every seeded stream differed from
+    ///     NumPy's MT19937. It runs NumPy's MT19937 with the legacy seeding now, and the tests without <c>[OpenBugs]</c>
+    ///     pin that. Since 2026-09-25 every legacy sampler is a port of NumPy's <c>legacy-distributions.c</c> (the seven
+    ///     former <c>RandomParity_*</c> pins below now pass and are ordinary tests); the one <c>[OpenBugs]</c> pin left is
+    ///     <c>multivariate_normal</c> WITHOUT a LAPACK backend, whose managed Jacobi SVD cannot reproduce LAPACK's
+    ///     singular-vector signs (with <c>NumSharp.Interop.OpenBLAS</c> it is byte-identical — see
+    ///     <c>LegacyRandomStateTests.MultivariateNormal_WithLapackBackend_ByteIdenticalToNumPy</c>).
     ///
     ///     NumPy 2.4.2 expected values generated with:
     ///     <code>
@@ -19,30 +23,31 @@ namespace NumSharp.Tests
     [TestClass]
     public class OpenBugsRandom : TestClass
     {
-        // ===== CRITICAL: RNG Algorithm Mismatch =====
-        // NumPy uses Mersenne Twister (MT19937)
-        // NumSharp uses .NET Subtractive Generator (Knuth)
-        // These tests document the expected NumPy values that NumSharp should produce
-
         /// <summary>
-        ///     BUG: rand() produces different values than NumPy with same seed.
-        ///
-        ///     NumPy seed=42:    0.3745401188473625
-        ///     NumSharp seed=42: 0.668106465911542 (WRONG - different algorithm)
+        ///     <c>rand()</c> — NO arguments — is the scalar draw, NumPy seed=42: 0.3745401188473625. (This test used to
+        ///     call <c>rand(0)</c>, which in NumPy is the EMPTY array <c>array([], dtype=float64)</c>, and then read element
+        ///     0 of it; <see cref="Rand0_IsEmpty"/> pins that shape.)
         /// </summary>
         [TestMethod]
-        [OpenBugs]
         public void Rand_Seed42_ShouldMatchNumPy()
         {
             var rng = np.random.RandomState(42);
-            var result = rng.rand(0L);
+            var result = rng.rand();
 
-            // NumPy expected value
             const double expected = 0.3745401188473625;
-            var actual = result.GetDouble(0);
+            result.ndim.Should().Be(0);
+            result.GetDouble(0).Should().Be(expected, "rand() with seed=42 should match NumPy");
+        }
 
-            actual.Should().BeApproximately(expected, 1e-10,
-                $"rand() with seed=42 should match NumPy. NumSharp uses different RNG algorithm.");
+        /// <summary><c>rand(0)</c> is NumPy's empty float64 array (shape <c>(0,)</c>), and it draws nothing.</summary>
+        [TestMethod]
+        public void Rand0_IsEmpty()
+        {
+            var rng = np.random.RandomState(42);
+            var empty = rng.rand(0L);
+            empty.shape.Should().Equal(0L);
+            empty.dtype.Should().Be(np.float64);
+            rng.rand().GetDouble(0).Should().Be(0.3745401188473625, "an empty draw must not consume the stream");
         }
 
         /// <summary>
@@ -74,24 +79,18 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     BUG: randn() produces different values than NumPy with same seed.
-        ///
-        ///     NumPy seed=42:    0.4967141530112327
-        ///     NumSharp seed=42: Different value (wrong RNG + Box-Muller may differ)
+        ///     <c>randn()</c> — NO arguments — is the scalar draw, NumPy seed=42: 0.4967141530112327. (This test used to
+        ///     call <c>randn(0)</c>, NumPy's EMPTY array, and read element 0 of it.)
         /// </summary>
         [TestMethod]
-        [OpenBugs]
         public void Randn_Seed42_ShouldMatchNumPy()
         {
             var rng = np.random.RandomState(42);
-            var result = rng.randn(0L);
+            var result = rng.randn();
 
-            // NumPy expected value
             const double expected = 0.4967141530112327;
-            var actual = result.GetDouble(0);
-
-            actual.Should().BeApproximately(expected, 1e-10,
-                "randn() with seed=42 should match NumPy");
+            result.ndim.Should().Be(0);
+            result.GetDouble(0).Should().Be(expected, "randn() with seed=42 should match NumPy");
         }
 
         /// <summary>
@@ -151,11 +150,13 @@ namespace NumSharp.Tests
             var rng = np.random.RandomState(42);
             var result = rng.randint(0, 10, new Shape(5));
 
-            var expected = new int[] { 6, 3, 7, 4, 6 };
+            // NumPy's C long, modelled LP64: int64 (Windows NumPy returns the same values as int32).
+            result.dtype.Should().Be(np.int64);
+            var expected = new long[] { 6, 3, 7, 4, 6 };
 
             for (int i = 0; i < 5; i++)
             {
-                var actual = result.GetInt32(i);
+                var actual = result.GetInt64(i);
                 actual.Should().Be(expected[i],
                     $"randint(0,10,5)[{i}] should match NumPy");
             }
@@ -208,30 +209,29 @@ namespace NumSharp.Tests
             var rng = np.random.RandomState(42);
             var result = rng.choice(10);
 
-            const int expected = 6;
-            var actual = result.GetInt32(0);
+            const long expected = 6;
+            var actual = result.GetInt64(0); // int64: the LP64 C long
 
             actual.Should().Be(expected,
                 "choice(10) with seed=42 should match NumPy");
         }
 
         /// <summary>
-        ///     BUG: permutation(5) produces different sequence than NumPy.
-        ///
-        ///     NumPy seed=42: [1, 4, 2, 0, 3]
+        ///     <c>permutation(5)</c>, NumPy seed=42: [1, 4, 2, 0, 3] (fixed with the legacy shuffle port).
         /// </summary>
         [TestMethod]
-        [OpenBugs]
         public void Permutation_Seed42_ShouldMatchNumPy()
         {
             var rng = np.random.RandomState(42);
             var result = rng.permutation(5);
 
-            var expected = new int[] { 1, 4, 2, 0, 3 };
+            // arange(x, dtype=result_type(x, np.long)): int64 under the LP64 C long.
+            result.dtype.Should().Be(np.int64);
+            var expected = new long[] { 1, 4, 2, 0, 3 };
 
             for (int i = 0; i < 5; i++)
             {
-                var actual = result.GetInt32(i);
+                var actual = result.GetInt64(i);
                 actual.Should().Be(expected[i],
                     $"permutation(5)[{i}] should match NumPy");
             }
@@ -331,20 +331,16 @@ namespace NumSharp.Tests
                 "gamma(2,1) with seed=42 should match NumPy");
         }
 
-        // ===== random_parity tier carve-outs (2026-08-14) ==================================
-        // Six samplers whose whole STREAM diverges from NumPy 2.4.2 (different algorithm /
-        // draw order, not rounding) — found by the random_parity differential tiers and
-        // CARVED from the green corpus (gen_oracle.gen_random_parity documents each). The
-        // underlying MT19937 stream and most transforms are byte-identical (uniform/randint/
-        // normal/standard_gamma/... all match), so these are per-sampler composition bugs.
-        // Expected values are real NumPy 2.4.2 output. Remove a pin AND re-add the spec to
-        // gen_random_parity when its sampler is fixed.
+        // ===== random_parity tier carve-outs (2026-08-14; fixed 2026-09-25) ==================
+        // Samplers whose whole STREAM diverged from NumPy 2.4.2 (different algorithm / draw
+        // order, not rounding) — found by the random_parity differential tiers and CARVED from
+        // the green corpus. All but multivariate_normal are now line-by-line ports of NumPy's
+        // legacy-distributions.c and pass; their [OpenBugs] attributes are gone and their specs
+        // are back in gen_random_parity. Expected values are real NumPy 2.4.2 output.
 
-        /// <summary>gamma(shape&lt;1) via the two-arg API gross-diverges while NumSharp's own
-        /// standard_gamma(shape&lt;1) and gamma(shape&gt;=1, any scale) match byte-for-byte —
-        /// the two-arg route handles shape&lt;1 with a different sampler than standard_gamma.</summary>
+        /// <summary>gamma(shape&lt;1) via the two-arg API: now legacy_gamma = scale * legacy_standard_gamma, the same
+        /// Johnk/Ahrens-Dieter branch standard_gamma(shape&lt;1) takes (it used a different boost and diverged).</summary>
         [TestMethod]
-        [OpenBugs]
         public void RandomParity_GammaShapeBelowOne_Seed42_ShouldMatchNumPy()
         {
             np.random.seed(42);
@@ -352,10 +348,9 @@ namespace NumSharp.Tests
             r.GetDouble(0).Should().Be(0.14028030062619642, "np.random.gamma(0.5, 1) first draw, seed 42");
         }
 
-        /// <summary>binomial counts drift on BOTH internal algorithms (inversion at small n*p,
-        /// BTPE at large) — accept/reject boundaries land differently from NumPy's.</summary>
+        /// <summary>binomial: now NumPy's legacy inversion (exp(n*log(q))) and BTPE with the shared setup cache (it
+        /// counted Bernoulli trials and drifted on both regimes).</summary>
         [TestMethod]
-        [OpenBugs]
         public void RandomParity_Binomial_Seed42_ShouldMatchNumPy()
         {
             np.random.seed(42);
@@ -366,10 +361,9 @@ namespace NumSharp.Tests
                     $"np.random.binomial(10, 0.35)[{i}], seed 42");
         }
 
-        /// <summary>negative_binomial = poisson(gamma(n, (1-p)/p)): occasional count flips
-        /// downstream of ~ULP lambda differences, incl. a gross 21-vs-29 at index 6.</summary>
+        /// <summary>negative_binomial = poisson(legacy_gamma(n, (1-p)/p)) with NumPy's PTRS Poisson (the count flips,
+        /// incl. the gross 21-vs-29 at index 6, came from a Knuth/approximate Poisson over a non-legacy gamma).</summary>
         [TestMethod]
-        [OpenBugs]
         public void RandomParity_NegativeBinomial_Seed42_ShouldMatchNumPy()
         {
             np.random.seed(42);
@@ -380,9 +374,9 @@ namespace NumSharp.Tests
                     $"np.random.negative_binomial(5, 0.4)[{i}], seed 42");
         }
 
-        /// <summary>f() is not NumPy's (chisquare(dfnum)/dfnum)/(chisquare(dfden)/dfden) composition.</summary>
+        /// <summary>f(): now legacy_f, (chi2(dfnum) * dfden) / (chi2(dfden) * dfnum) drawn per value, numerator
+        /// first (the whole-array composition drew every numerator before any denominator).</summary>
         [TestMethod]
-        [OpenBugs]
         public void RandomParity_F_Seed42_ShouldMatchNumPy()
         {
             np.random.seed(42);
@@ -390,9 +384,9 @@ namespace NumSharp.Tests
             r.GetDouble(0).Should().Be(1.426878677609774, "np.random.f(5, 7) first draw, seed 42");
         }
 
-        /// <summary>pareto() is not NumPy's expm1(standard_exponential()/a).</summary>
+        /// <summary>pareto(): now legacy_pareto, exp(E / a) - 1 over the legacy exponential (the U^(-1/a) - 1 inverse
+        /// consumed the same uniform but rounded differently).</summary>
         [TestMethod]
-        [OpenBugs]
         public void RandomParity_Pareto_Seed42_ShouldMatchNumPy()
         {
             np.random.seed(42);
@@ -400,9 +394,9 @@ namespace NumSharp.Tests
             r.GetDouble(0).Should().Be(0.16932036645405568, "np.random.pareto(3) first draw, seed 42");
         }
 
-        /// <summary>standard_cauchy() is not NumPy's gauss/gauss ratio.</summary>
+        /// <summary>standard_cauchy(): now legacy_standard_cauchy, the ratio of two cached-polar normals (it used the
+        /// tan(pi*(U - 0.5)) inverse).</summary>
         [TestMethod]
-        [OpenBugs]
         public void RandomParity_StandardCauchy_Seed42_ShouldMatchNumPy()
         {
             np.random.seed(42);
@@ -410,10 +404,9 @@ namespace NumSharp.Tests
             r.GetDouble(0).Should().Be(-3.5924974762375737, "np.random.standard_cauchy() first draw, seed 42");
         }
 
-        /// <summary>multinomial's per-category binomial loop consumes the stream differently
-        /// (dtype matches; the COUNTS diverge).</summary>
+        /// <summary>multinomial: now NumPy's random_multinomial over the modern random_binomial with RandomState's shared
+        /// binomial cache (its Bernoulli/normal-approximation binomial consumed the stream differently).</summary>
         [TestMethod]
-        [OpenBugs]
         public void RandomParity_Multinomial_Seed42_ShouldMatchNumPy()
         {
             np.random.seed(42);
@@ -423,7 +416,13 @@ namespace NumSharp.Tests
             Convert.ToInt64(r.GetAtIndex(2)).Should().Be(7);
         }
 
-        /// <summary>multivariate_normal uses a different factorization/transform (sign flips + values).</summary>
+        /// <summary>
+        ///     multivariate_normal now follows NumPy step for step — normals first, <c>svd(cov)</c>, then
+        ///     <c>dot(x, sqrt(s)[:, None] * v) + mean</c> — and is byte-identical when a LAPACK backend supplies NumPy's own
+        ///     <c>gesdd</c>. This pin runs WITHOUT a backend: the managed Jacobi SVD cannot reproduce LAPACK's
+        ///     singular-vector signs (here it flips the first vector), so the samples are a valid draw from the same
+        ///     distribution but not NumPy's bytes. Fixable only by a managed port of LAPACK's divide-and-conquer SVD.
+        /// </summary>
         [TestMethod]
         [OpenBugs]
         public void RandomParity_MultivariateNormal_Seed42_ShouldMatchNumPy()

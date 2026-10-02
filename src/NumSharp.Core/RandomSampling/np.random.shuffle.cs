@@ -1,7 +1,4 @@
 using System;
-using System.Runtime.CompilerServices;
-using NumSharp.Backends;
-using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp
 {
@@ -10,15 +7,21 @@ namespace NumSharp
         /// <summary>
         ///     Modify a sequence in-place by shuffling its contents.
         /// </summary>
-        /// <param name="x">The array or list to be shuffled.</param>
+        /// <param name="x">The writeable array to be shuffled (at least 1-D).</param>
+        /// <exception cref="TypeError"><paramref name="x"/> is null (<c>object of type 'NoneType' has no len()</c>) or 0-d
+        ///     (<c>len() of unsized object</c>) — NumPy evaluates <c>len(x)</c> first.</exception>
+        /// <exception cref="ValueError"><paramref name="x"/> is read-only (<c>array is read-only</c>).</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.shuffle.html
         ///     <br/>
         ///     This function only shuffles the array along the first axis of a multi-dimensional array.
         ///     The order of sub-arrays is changed but their contents remain the same.
         ///     <br/>
-        ///     Note: NumPy's Generator API (rng.shuffle) supports an axis parameter, but the legacy
-        ///     np.random.shuffle does not. This implementation matches the legacy API.
+        ///     Byte-identical to NumPy's legacy <c>RandomState.shuffle</c>: a Fisher–Yates with
+        ///     <c>random_interval</c> (mask rejection) — over the raw elements of a 1-D array (honouring its stride),
+        ///     or over the rows of an N-D array (the same draws, applied as one gather + NDIter copy-back). Holds the
+        ///     bit generator's lock for the draws. NumPy's Generator API (<c>rng.shuffle</c>) adds an axis parameter;
+        ///     the legacy one does not.
         /// </remarks>
         /// <example>
         ///     <code>
@@ -32,91 +35,41 @@ namespace NumSharp
         ///     // e.g. [[6,7,8], [0,1,2], [3,4,5]] - rows reordered
         ///     </code>
         /// </example>
-        public void shuffle(NDArray x)
+        [NDScoped] // reclaims the N-D path's index array and gathered rows after the copy-back
+        public unsafe void shuffle(NDArray x)
         {
+            // NumPy: `n = len(x)` is evaluated first, so None and a 0-d array are TypeErrors.
+            if (x is null)
+                throw new TypeError("object of type 'NoneType' has no len()");
             if (x.ndim == 0)
-                throw new ArgumentException("cannot shuffle a 0-dimensional array", nameof(x));
+                throw new TypeError("len() of unsized object");
 
-            // Fisher-Yates swaps write x.Address / SwapSlicesAxis0 directly, bypassing the guarded
-            // setters, so a non-writeable target (a broadcast view, or a read-only interop /
-            // mmap('r') array) must be rejected up front — NumPy: "array is read-only".
+            // Fisher-Yates swaps write the buffer directly, bypassing the guarded setters, so a non-writeable
+            // target (a broadcast view, or a read-only interop / mmap('r') array) must be rejected up front —
+            // NumPy: "array is read-only".
             NumSharpException.ThrowIfNotWriteable(x.Shape, "array");
 
-            var n = x.shape[0];  // Always shuffle along first axis
-            if (n <= 1)
-                return; // Nothing to shuffle
+            long n = x.shape[0];
+            if (x.size == 0 || n <= 1)
+                return;
 
-            // For 1D contiguous arrays, use optimized path
-            if (x.ndim == 1 && x.Shape.IsContiguous)
+            if (x.ndim == 1)
             {
-                Shuffle1DContiguous(x, n);
+                // NumPy's fast path: _shuffle_raw over the buffer with the array's own stride.
+                int itemsize = x.dtypesize;
+                lock (randomizer.@lock)
+                    BoundedIntegers.ShuffleRaw(randomizer, x.Storage.Address + x.Shape.offset * itemsize, n,
+                                               x.Shape.strides[0] * itemsize, itemsize);
                 return;
             }
 
-            // For multi-dimensional arrays, shuffle along axis 0
-            // Fisher-Yates shuffle using NumPy's bounded_uint32 (rejection sampling)
-            for (long i = n - 1; i > 0; i--)
-            {
-                // NumPy uses bounded_uint32 for shuffle which uses rejection sampling
-                // For values that fit in int32, use Next(int) which implements this correctly
-                long j = (i < int.MaxValue)
-                    ? randomizer.Next((int)(i + 1))
-                    : randomizer.NextLong(i + 1);
-                if (i != j)
-                {
-                    SwapSlicesAxis0(x, i, j);
-                }
-            }
-        }
-
-        /// <summary>
-        ///     Optimized shuffle for 1D contiguous arrays.
-        /// </summary>
-        private unsafe void Shuffle1DContiguous(NDArray x, long n)
-        {
-            var itemSize = x.dtypesize;
-            var addr = (byte*)x.Address;
-
-            // Allocate temp buffer for swapping
-            var temp = stackalloc byte[itemSize];
-
-            // Fisher-Yates shuffle using NumPy's bounded_uint32 (rejection sampling)
-            for (long i = n - 1; i > 0; i--)
-            {
-                // NumPy uses bounded_uint32 for shuffle which uses rejection sampling
-                long j = (i < int.MaxValue)
-                    ? randomizer.Next((int)(i + 1))
-                    : randomizer.NextLong(i + 1);
-                if (i != j)
-                {
-                    var ptrI = addr + i * itemSize;
-                    var ptrJ = addr + j * itemSize;
-
-                    // Swap elements
-                    Buffer.MemoryCopy(ptrI, temp, itemSize, itemSize);
-                    Buffer.MemoryCopy(ptrJ, ptrI, itemSize, itemSize);
-                    Buffer.MemoryCopy(temp, ptrJ, itemSize, itemSize);
-                }
-            }
-        }
-
-        /// <summary>
-        ///     Swap two slices along axis 0.
-        /// </summary>
-        private static void SwapSlicesAxis0(NDArray x, long i, long j)
-        {
-            // sliceI, sliceJ are owning view wrappers (they index into x's storage);
-            // temp is an owning fresh copy of sliceI's contents. Each shuffle iteration
-            // would otherwise leak three NDArray wrappers + one unmanaged copy buffer
-            // onto the finalizer queue — Fisher-Yates on an N-element array calls this
-            // N times.
-            using var sliceI = x[i];
-            using var sliceJ = x[j];
-            using var temp = sliceI.copy();
-
-            // Copy j to i, then temp (original i) to j.
-            np.copyto(sliceI, sliceJ);
-            np.copyto(sliceJ, temp);
+            // NumPy's N-D path swaps rows x[i] <-> x[random_interval(i)] for i = n-1..1; running the same draws
+            // over an index vector yields the identical permutation, applied as a gather + write-back.
+            long[] idx;
+            lock (randomizer.@lock)
+                idx = BoundedIntegers.FisherYatesIndices(randomizer, n);
+            var reordered = np.take(x, np.array(idx), axis: 0);
+            np.copyto(x, reordered);
         }
     }
 }

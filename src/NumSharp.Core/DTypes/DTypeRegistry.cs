@@ -76,16 +76,30 @@ namespace NumSharp
             string[] longAliases64 = CLongIs32Bit ? new[] { "LongLongDType" } : new[] { "LongLongDType", "LongDType" };
             string[] ulongAliases64 = CLongIs32Bit ? new[] { "ULongLongDType" } : new[] { "ULongLongDType", "ULongDType" };
 
-            // NumPy type numbers (NPY_TYPES, LP64 convention), kinds and chars per docs/plans/dtype-system.md §2.2.
+            // NumPy's type_num AND type char for the fixed-width 32/64-bit integers are PLATFORM-DEPENDENT, because
+            // `np.dtype('int32')`/`np.dtype('int64')` resolve to whichever C integer is that width (verified against
+            // numpy 2.4.2). On LP64 (Linux/macOS) C `long` is 64-bit: int32 == NPY_INT (5,'i'), int64 == NPY_LONG (7,'l').
+            // On LLP64 (Windows / any 32-bit process) C `long` is 32-bit: int32 == NPY_LONG (7,'l'), int64 ==
+            // NPY_LONGLONG (9,'q'). We register NumSharp's single Int32/Int64/UInt32/UInt64 with the LOCAL platform's
+            // (num, char) so `a.dtype.num`/`.type_num`/`.char` are byte-identical to `np.dtype(...)` on the host — the
+            // same `CLongIs32Bit` switch the LongDType/LongLongDType name aliases above already use (this also makes the
+            // nums CONSISTENT with those aliases, which they were not while the nums were hard-coded LP64).
+            int int32Num = CLongIs32Bit ? 7 : 5;   char int32Char = CLongIs32Bit ? 'l' : 'i';
+            int uint32Num = CLongIs32Bit ? 8 : 6;   char uint32Char = CLongIs32Bit ? 'L' : 'I';
+            int int64Num = CLongIs32Bit ? 9 : 7;   char int64Char = CLongIs32Bit ? 'q' : 'l';
+            int uint64Num = CLongIs32Bit ? 10 : 8;  char uint64Char = CLongIs32Bit ? 'Q' : 'L';
+
+            // NumPy type numbers (NPY_TYPES), kinds and chars per docs/plans/dtype-system.md §2.2 (the four C-integer
+            // types are platform-resolved above).
             Bool = Legacy("BoolDType", numpy, 0, NPTypeCode.Boolean, typeof(bool), "bool", 'b', '?', 1, 1, builtin, null);
             Int8 = Legacy("Int8DType", numpy, 1, NPTypeCode.SByte, typeof(sbyte), "int8", 'i', 'b', 1, 1, builtin, new[] { "ByteDType" });
             UInt8 = Legacy("UInt8DType", numpy, 2, NPTypeCode.Byte, typeof(byte), "uint8", 'u', 'B', 1, 1, builtin, new[] { "UByteDType" });
             Int16 = Legacy("Int16DType", numpy, 3, NPTypeCode.Int16, typeof(short), "int16", 'i', 'h', 2, 2, builtin, new[] { "ShortDType" });
             UInt16 = Legacy("UInt16DType", numpy, 4, NPTypeCode.UInt16, typeof(ushort), "uint16", 'u', 'H', 2, 2, builtin, new[] { "UShortDType" });
-            Int32 = Legacy("Int32DType", numpy, 5, NPTypeCode.Int32, typeof(int), "int32", 'i', 'i', 4, 4, builtin, longAliases32);
-            UInt32 = Legacy("UInt32DType", numpy, 6, NPTypeCode.UInt32, typeof(uint), "uint32", 'u', 'I', 4, 4, builtin, ulongAliases32);
-            Int64 = Legacy("Int64DType", numpy, 7, NPTypeCode.Int64, typeof(long), "int64", 'i', 'l', 8, 8, builtin, longAliases64);
-            UInt64 = Legacy("UInt64DType", numpy, 8, NPTypeCode.UInt64, typeof(ulong), "uint64", 'u', 'L', 8, 8, builtin, ulongAliases64);
+            Int32 = Legacy("Int32DType", numpy, int32Num, NPTypeCode.Int32, typeof(int), "int32", 'i', int32Char, 4, 4, builtin, longAliases32);
+            UInt32 = Legacy("UInt32DType", numpy, uint32Num, NPTypeCode.UInt32, typeof(uint), "uint32", 'u', uint32Char, 4, 4, builtin, ulongAliases32);
+            Int64 = Legacy("Int64DType", numpy, int64Num, NPTypeCode.Int64, typeof(long), "int64", 'i', int64Char, 8, 8, builtin, longAliases64);
+            UInt64 = Legacy("UInt64DType", numpy, uint64Num, NPTypeCode.UInt64, typeof(ulong), "uint64", 'u', uint64Char, 8, 8, builtin, ulongAliases64);
             Single = Legacy("Float32DType", numpy, 11, NPTypeCode.Single, typeof(float), "float32", 'f', 'f', 4, 4, builtin, null);
             Double = Legacy("Float64DType", numpy, 12, NPTypeCode.Double, typeof(double), "float64", 'f', 'd', 8, 8, builtin, new[] { "LongDoubleDType" });
             Complex128 = Legacy("Complex128DType", numpy, 15, NPTypeCode.Complex, typeof(Complex), "complex128", 'c', 'D', 16, 8, builtin, new[] { "CLongDoubleDType" });

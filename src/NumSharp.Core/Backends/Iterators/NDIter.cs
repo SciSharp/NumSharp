@@ -4282,7 +4282,7 @@ namespace NumSharp.Backends.Iteration
         /// matches its broadcast-src-to-dst-shape semantics and its cast-on-write
         /// behavior (read src as src.TypeCode, convert, write dst.TypeCode).
         /// </summary>
-        /// <exception cref="NumSharpException">If <paramref name="dst"/> is not writeable (e.g., broadcast view).</exception>
+        /// <exception cref="ValueError">If <paramref name="dst"/> is not writeable (e.g., broadcast view) — NumPy's "… is read-only".</exception>
         public static void Copy(NDArray dst, NDArray src)
         {
             if (dst is null) throw new ArgumentNullException(nameof(dst));

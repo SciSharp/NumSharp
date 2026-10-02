@@ -36,7 +36,10 @@
          here and would have failed the release; https://licenses.nuget.org/<expression> answering
          200 rather than 404 is the pre-flight check for any change to this line. -->
     <PackageLicenseExpression>Apache-2.0 AND BSD-3-Clause AND BSD-2-Clause AND (GPL-3.0-or-later WITH GCC-exception-3.1)</PackageLicenseExpression>
-    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <!-- No PackageReadmeFile, deliberately: the package embeds no README, so each version's README
+         tab stays owner-editable on nuget.org, where the release notes are pasted after publishing.
+         README.md in this folder is repo documentation only and is not packed. See "No embedded
+         package README" in ../../Directory.Build.props, whose guard fails `dotnet pack` if this returns. -->
     <!-- Packed explicitly (`dotnet pack`), never on build: see the release workflow. License
          acceptance and the icon are repo-wide settings in ../../Directory.Build.props. -->
     <PackageOutputPath>../../packages</PackageOutputPath>
@@ -47,7 +50,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Include="README.md" Pack="true" PackagePath="\" />
     <None Include="THIRD-PARTY-NOTICES.txt" Pack="true" PackagePath="\" Condition="Exists('THIRD-PARTY-NOTICES.txt')" />
     <None Remove="runtimes\**" />
   </ItemGroup>

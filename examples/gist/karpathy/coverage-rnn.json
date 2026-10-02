@@ -1,0 +1,311 @@
+{
+  "schema_version": 1,
+  "status": "Two explicit interop levels: KarpathyShortRun executes pinned original definitions and the functional C# trainer; KarpathyByteParity independently verifies exact NumPy state. Centralized run outcomes remain separate.",
+  "gist": "https://gist.github.com/karpathy/d4dee566867f8291f086",
+  "source_file": "min-char-rnn.py",
+  "source_cache": "outputs/karpathy-gists-2026-09-09/cache/rnn.py",
+  "raw_file_revision": "45350b64ab738fa1ca2bf170969494339eab5633",
+  "raw_revision_is_verified_gist_head": false,
+  "source_sha256": "98a0eaa61092f9541e883f3e8b6c02dae28b5658dbc5f692ffe0881be37a390a",
+  "source_line_count": 112,
+  "license_observation": "Original header declares BSD License; this is not a separately verified full license text.",
+  "reference_probe": {
+    "numpy": "2.4.2",
+    "performed_before_port": true,
+    "source100_sequence25_loss": 40.226833494060116,
+    "small_loss": 5.54474603545919,
+    "bounded_training_first_loss": 54.929665653107975,
+    "bounded_training_final_loss": 0.6994428739514988,
+    "source_scope": "Full source read; independently expressed mathematical references executed, not Python2 top-level file IO/infinite loop."
+  },
+  "cases": [
+    {
+      "case_id": "rnn-vocabulary",
+      "source_lines": [
+        [
+          8,
+          13
+        ]
+      ],
+      "kind": "adapted_source_preparation",
+      "tests": [
+        "KarpathyRnnTests.Vocabulary_OrderingRoundtripAndUnknownCharacters_AreExplicit"
+      ],
+      "assertions": [
+        "Sorted vocabulary encoding/decoding, exact counts and rejected unknown tokens."
+      ],
+      "limits": [
+        "Unspecified input.txt is replaced with an explicit tiny corpus; sorted UTF-16 character order replaces Python's nondeterministic set order."
+      ]
+    },
+    {
+      "case_id": "rnn-source-shapes",
+      "source_lines": [
+        [
+          16,
+          25
+        ],
+        [
+          37,
+          43
+        ]
+      ],
+      "kind": "source_parameter_workflow",
+      "tests": [
+        "KarpathyRnnTests.OriginalHidden100AndSequence25_ComputeFullTracesAndAllFiveGradients",
+        "KarpathyRnnLiveTests.FullForwardLossAndBptt_IncludeOriginal100By25Shape_ExactLiveNumpy"
+      ],
+      "assertions": [
+        "Original hidden size100 and sequence length25, with stated five-character input fixture.",
+        "All 25 hidden states, probability distributions, accumulated loss, final state and five gradient arrays checked against live NumPy."
+      ],
+      "limits": [
+        "The source does not supply a concrete corpus, initialization seed or recorded loss; no historical output is invented."
+      ]
+    },
+    {
+      "case_id": "rnn-small-forward",
+      "source_lines": [
+        [
+          27,
+          43
+        ],
+        [
+          61,
+          61
+        ]
+      ],
+      "kind": "measured_explicit_fixture",
+      "tests": [
+        "KarpathyRnnTests.SmallForwardAndBptt_MatchPrecomputedNumpy_AndDoNotMutateInputs",
+        "KarpathyRnnLiveTests.FullForwardLossAndBptt_IncludeOriginal100By25Shape_ExactLiveNumpy"
+      ],
+      "assertions": [
+        "Pre-port NumPy2.4.2 reference loss5.54474603545919 for H3/V4/seed7 and four tokens.",
+        "Full forward arrays, probability normalization, initial-state preservation, exact live comparison on strided initial state."
+      ]
+    },
+    {
+      "case_id": "rnn-bptt",
+      "source_lines": [
+        [
+          44,
+          58
+        ]
+      ],
+      "kind": "source_algorithm",
+      "tests": [
+        "KarpathyRnnTests.Bptt_AllFortySmallModelParameters_PassIndependentFiniteDifferences",
+        "KarpathyRnnLiveTests.FullForwardLossAndBptt_IncludeOriginal100By25Shape_ExactLiveNumpy"
+      ],
+      "assertions": [
+        "All40 small-model trainable scalars checked by independent central finite differences (epsilon1e-5, absolute error1e-8).",
+        "Each of Wxh/Whh/Why/bh/by gradients compared with live NumPy on small and source-sized problems."
+      ]
+    },
+    {
+      "case_id": "rnn-gradient-clipping",
+      "source_lines": [
+        [
+          59,
+          60
+        ]
+      ],
+      "kind": "source_algorithm",
+      "tests": [
+        "KarpathyRnnTests.ClippingAndAdagrad_UpdateEveryParameterAndPersistentAccumulator",
+        "KarpathyRnnLiveTests.ClippingAndTwoAdagradUpdates_AllParametersAndMemories_ExactLiveNumpy"
+      ],
+      "assertions": [
+        "Explicit gradient entries beyond both bounds become exactly -5 and5; all five arrays checked.",
+        "Clipped derivative arrays match NumPy byte-for-byte."
+      ]
+    },
+    {
+      "case_id": "rnn-adagrad",
+      "source_lines": [
+        [
+          82,
+          83
+        ],
+        [
+          104,
+          109
+        ]
+      ],
+      "kind": "source_optimizer",
+      "tests": [
+        "KarpathyRnnTests.ClippingAndAdagrad_UpdateEveryParameterAndPersistentAccumulator",
+        "KarpathyRnnLiveTests.ClippingAndTwoAdagradUpdates_AllParametersAndMemories_ExactLiveNumpy"
+      ],
+      "assertions": [
+        "Every accumulator update is g*g and every parameter follows learning-rate0.1 / sqrt(memory+1e-8).",
+        "Two consecutive updates compared for all five parameter arrays and all five persistent memories."
+      ]
+    },
+    {
+      "case_id": "rnn-sampling",
+      "source_lines": [
+        [
+          63,
+          79
+        ],
+        [
+          93,
+          97
+        ]
+      ],
+      "kind": "source_parameter_workflow",
+      "tests": [
+        "KarpathyRnnTests.Sampling_IsSeededFunctionalAndDoesNotMutateInitialState",
+        "KarpathyRnnLiveTests.Sampling_AllOriginal200Draws_ExactLiveNumpyFromSharedParameters"
+      ],
+      "assertions": [
+        "All original200 sample draws at hidden100 compared as exact token indices against live NumPy.",
+        "Twenty-token seeded small-model sequence recorded independently and asserted; initial state preserved."
+      ],
+      "limits": [
+        "Samples are from explicit seeded numerical models, not an unidentified historical corpus or checkpoint."
+      ]
+    },
+    {
+      "case_id": "rnn-bounded-training",
+      "source_lines": [
+        [
+          84,
+          112
+        ]
+      ],
+      "kind": "bounded_source_training",
+      "tests": [
+        "KarpathyRnnTests.BoundedTraining_LearnsTinyCorpus_ResetsAndSamplesAtSpecifiedIntervals",
+        "KarpathyRnnLiveTests.BoundedTraining_AllFortyLossesParametersMemoriesAndSamples_ExactLiveNumpy"
+      ],
+      "assertions": [
+        "40 complete updates of a real H16 RNN on 'hello world\\n' repeated40times, sequence25, learning-rate0.1, initialization seed1.",
+        "All40 losses, smoothed losses, positions and reset flags compared; all trained parameters/memories and final hidden state compared.",
+        "Loss decreases from54.929665653107975 to0.6994428739514988 in the independently measured reference; no monotonic-improvement promise.",
+        "Resets at0/19/38 and40-token pre-update samples at0/20 are asserted."
+      ],
+      "limits": [
+        "The original infinite loop is replaced with a required finite iteration count; the demo uses H16 and shorter periodic samples, while separate tests cover original H100/sequence25/sample200 settings.",
+        "No external input.txt is read and no original unbounded run is executed."
+      ]
+    },
+    {
+      "case_id": "rnn-ownership",
+      "source_lines": [
+        [
+          21,
+          25
+        ],
+        [
+          34,
+          34
+        ],
+        [
+          61,
+          61
+        ],
+        [
+          82,
+          83
+        ]
+      ],
+      "kind": "port_ownership_contract",
+      "tests": [
+        "KarpathyRnnTests.ModelAndReturnedResults_OutliveCallerTemporaryScope"
+      ],
+      "assertions": [
+        "Model parameters, optimizer memories, gradients and returned states survive disposal of an enclosing temporary NDScope.",
+        "Each owning model/result implements IDisposable; borrowed properties do not transfer ownership."
+      ]
+    },
+    {
+      "case_id": "rnn-demo-output",
+      "source_lines": [
+        [
+          11,
+          11
+        ],
+        [
+          94,
+          102
+        ]
+      ],
+      "kind": "ported_demo_output_regression",
+      "tests": [
+        "KarpathyRnnTests.Demo_PrintsTheActualMeasuredTrainingAndSamples",
+        "KarpathyRnnTests.BoundedTraining_LearnsTinyCorpus_ResetsAndSamplesAtSpecifiedIntervals"
+      ],
+      "assertions": [
+        "Actual Demo prints480characters, vocabulary9, hidden16 and40updates.",
+        "Both printed losses are parsed and checked against independently observed NumPy results.",
+        "All characters in the two actual printed samples are asserted, not merely their lengths."
+      ]
+    },
+    {
+      "case_id": "rnn-original-pythonnet-short-run",
+      "source_lines": [[27,79],[81,112]],
+      "kind": "original_source_bounded_interop_workflow",
+      "test_category": "KarpathyShortRun",
+      "tests": ["KarpathyRnnLiveTests.OriginalPinnedDefinitions_CompleteFourTrainingUpdatesAndSamples_ThroughPythonNet"],
+      "assertions": [
+        "Hash-pinned original lossFun and sample execute inside the pythonnet interpreter, not replacement Python equations.",
+        "Four complete H100/sequence25 updates over an explicit65-token corpus include hidden-state carry/reset, clipped BPTT, all five Adagrad memories, smoothed losses and48 sampled tokens.",
+        "The actual C# Train API also executes the same short workload; all four functional losses equal the original run, all samples are valid, reset boundaries and state changes are asserted.",
+        "The first original NumPy2.4.2 loss was independently probed as17.318640025562782 before adding the test."
+      ],
+      "limits": [
+        "The loader checks original SHA256 and selects only lossFun/sample definitions after Python2 syntax adaptation; source imports, input.txt IO and while True are never executed.",
+        "Sampling every step with12tokens is an explicit bounded branch-coverage fixture; the existing test separately covers the original200-draw sample size.",
+        "This aggressive four-update fixture exercises real clipping and is not a claim of monotonic loss improvement or a historical-corpus reproduction."
+      ]
+    },
+    {
+      "case_id": "rnn-every-update-byte-state-ledger",
+      "source_lines": [[37,61],[63,79],[84,112]],
+      "kind": "independent_numpy_complete_state_byte_contract",
+      "test_category": "KarpathyByteParity",
+      "tests": ["KarpathyRnnLiveTests.FourSourceSizedUpdates_EveryRawClippedGradientHiddenAndOptimizerState_ByteExact"],
+      "assertions": [
+        "At every one of four updates, dtype/shape/canonical bytes are checked for loss, smoothed loss, data position and reset flag; all48 samples; every forward hidden/probability value; and carried hidden state.",
+        "All five raw gradient arrays and all five clipped arrays are compared before every optimizer update; the fixture must actually exceed the clipping bound.",
+        "All five parameter arrays and all five Adagrad memories are checked after every update, replacing the earlier final-state-only gap.",
+        "Both engines start from the same zero-copy-exported parameter bits, then evolve independent owned buffers; no updated C# state is used to create its own oracle."
+      ],
+      "limits": [
+        "The independent NumPy reference is separate from the original-source functional level. No tolerance fallback exists.",
+        "The original five interop executions remain as explicit KarpathyByteParity tests, including the40-update loss trace, original100x25 forward/BPTT dimensions,200-draw sampling and two-update Adagrad gate."
+      ]
+    }
+  ],
+  "exclusions": [
+    {
+      "case_id": "rnn-unspecified-historical-corpus",
+      "source_lines": [
+        [
+          8,
+          11
+        ],
+        [
+          94,
+          102
+        ]
+      ],
+      "status": "not_reproduced_missing_input",
+      "reason": "No original input.txt, vocabulary enumeration seed or output transcript is available. The port is a full functioning RNN, but its explicit corpus and generated samples are not represented as historical author outputs."
+    },
+    {
+      "case_id": "rnn-infinite-loop",
+      "source_lines": [
+        [
+          85,
+          112
+        ]
+      ],
+      "status": "deliberately_bounded",
+      "reason": "Unbounded training is replaced by a finite caller-selected number of iterations. All update/reset/smoothing/sampling behavior within the chosen finite run is functional."
+    }
+  ]
+}

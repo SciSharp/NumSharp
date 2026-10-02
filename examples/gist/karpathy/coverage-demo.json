@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "scope": "All six actual runner demo outputs; four newly ported examples plus two existing Karpathy ports.",
+  "golden": "examples/gist/karpathy/demo-output.txt",
+  "cases": [
+    {
+      "case_id": "demo-rnn",
+      "kind": "ported_demo_output_regression",
+      "tests": [
+        "KarpathyDemoTests.EveryActualDemo_PrintsItsMeasuredResultsAndSamples"
+      ],
+      "data_row": "rnn",
+      "assertions": [
+        "Execute the actual compiled Demo() and compare its complete invariant-culture output, including printed measurements and sampled characters, to the retained transcript."
+      ],
+      "limits": [
+        "The transcript is an output regression fixture, not its own numerical oracle. Independent NumPy/formula tests establish the underlying computation."
+      ]
+    },
+    {
+      "case_id": "demo-pong",
+      "kind": "ported_demo_output_regression",
+      "tests": [
+        "KarpathyDemoTests.EveryActualDemo_PrintsItsMeasuredResultsAndSamples"
+      ],
+      "data_row": "pong",
+      "assertions": [
+        "Execute the actual compiled Demo() and compare its complete invariant-culture output, including printed measurements and sampled characters, to the retained transcript."
+      ],
+      "limits": [
+        "The transcript is an output regression fixture, not its own numerical oracle. Independent NumPy/formula tests establish the underlying computation."
+      ]
+    },
+    {
+      "case_id": "demo-lstm",
+      "kind": "ported_demo_output_regression",
+      "tests": [
+        "KarpathyDemoTests.EveryActualDemo_PrintsItsMeasuredResultsAndSamples"
+      ],
+      "data_row": "lstm",
+      "assertions": [
+        "Execute the actual compiled Demo() and compare its complete invariant-culture output, including printed measurements and sampled characters, to the retained transcript."
+      ],
+      "limits": [
+        "The transcript is an output regression fixture, not its own numerical oracle. Independent NumPy/formula tests establish the underlying computation."
+      ]
+    },
+    {
+      "case_id": "demo-microgpt",
+      "kind": "ported_demo_output_regression",
+      "tests": [
+        "KarpathyDemoTests.EveryActualDemo_PrintsItsMeasuredResultsAndSamples"
+      ],
+      "data_row": "microgpt",
+      "assertions": [
+        "Execute the actual compiled Demo() and compare its complete invariant-culture output, including printed measurements and sampled characters, to the retained transcript."
+      ],
+      "limits": [
+        "The transcript is an output regression fixture, not its own numerical oracle. Independent NumPy/formula tests establish the underlying computation."
+      ]
+    },
+    {
+      "case_id": "demo-nes",
+      "kind": "ported_demo_output_regression",
+      "tests": [
+        "KarpathyDemoTests.EveryActualDemo_PrintsItsMeasuredResultsAndSamples"
+      ],
+      "data_row": "nes",
+      "assertions": [
+        "Execute the actual compiled Demo() and compare its complete invariant-culture output, including printed measurements and sampled characters, to the retained transcript."
+      ],
+      "limits": [
+        "The transcript is an output regression fixture, not its own numerical oracle. Independent NumPy/formula tests establish the underlying computation."
+      ]
+    },
+    {
+      "case_id": "demo-walk",
+      "kind": "ported_demo_output_regression",
+      "tests": [
+        "KarpathyDemoTests.EveryActualDemo_PrintsItsMeasuredResultsAndSamples"
+      ],
+      "data_row": "walk",
+      "assertions": [
+        "Execute the actual compiled Demo() and compare its complete invariant-culture output, including printed measurements and sampled characters, to the retained transcript."
+      ],
+      "limits": [
+        "The transcript is an output regression fixture, not its own numerical oracle. Independent NumPy/formula tests establish the underlying computation."
+      ]
+    }
+  ]
+}

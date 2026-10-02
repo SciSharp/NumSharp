@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -144,10 +145,10 @@ namespace NumSharp.Tests.Backends.Unmanaged
             firstValue.Should().Be(0d, "the abandoned-but-aliased buffer stays readable");
 
             // The alias was dropped inside the helper: the block's own finalizer
-            // must now reclaim the buffer (abandoned refs never leak).
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
+            // must now reclaim the buffer (abandoned refs never leak). Young collection
+            // first (the Disposer is at most gen 1 here), full ones only if it survived —
+            // as strong as the full collection this replaced (GcQuiescence.WaitCollected).
+            GcQuiescence.WaitCollected(weakDisposer);
 
             weakDisposer.IsAlive.Should().BeFalse(
                 "once the last alias dies the Disposer finalizes — freeing (and pooling) the buffer");
@@ -164,9 +165,9 @@ namespace NumSharp.Tests.Backends.Unmanaged
             static (bool ndAlive, bool released, long refCount, double firstValue, WeakReference weakDisposer)
                 ObserveWhileAliasHeld_ThenDropAlias(WeakReference weak, IArraySlice[] holder)
             {
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
-                GC.Collect();
+                // The wrapper was allocated a moment ago: a young collection finalizes it, a full
+                // one is the fallback if it somehow survived (GcQuiescence.WaitCollected).
+                GcQuiescence.WaitCollected(weak);
 
                 var slice = holder[0];
                 var result = (weak.IsAlive, slice.IsReleased, GetRefCount(slice),
@@ -783,9 +784,8 @@ namespace NumSharp.Tests.Backends.Unmanaged
             }
 
             var w = MakeAndDispose();
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
+            // Young collection first, full ones only if it survived (GcQuiescence.WaitCollected).
+            GcQuiescence.WaitCollected(w);
 
             w.IsAlive.Should().BeFalse();
         }
@@ -803,11 +803,10 @@ namespace NumSharp.Tests.Backends.Unmanaged
 
             var (w, slice) = MakeAndDrop();
 
-            // Two passes: first GC.Collect surfaces it to finalizer; second
-            // GC reclaims after finalizer ran.
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
+            // The wrapper is young: a young collection surfaces it to the finalizer and the
+            // drain runs it (a short weak reference is cleared at that first collection);
+            // full collections only if it survived (GcQuiescence.WaitCollected).
+            GcQuiescence.WaitCollected(w);
 
             w.IsAlive.Should().BeFalse("NDArray should be reclaimed");
             slice.IsReleased.Should().BeFalse(
@@ -850,6 +849,16 @@ namespace NumSharp.Tests.Backends.Unmanaged
         ///     — a free here returned the buffer to the pool under the live alias, so the
         ///     next same-size allocation overwrote it (CI read 0 where 8 was stored).
         /// </summary>
+        /// <remarks>
+        ///     Each iteration forces the temp's finalizer with a YOUNG collection
+        ///     (<see cref="GcQuiescence.CollectYoung"/>) and then proves it ran: the temp held the
+        ///     buffer's only counted reference, so a refcount of 0 means its finalizer abandoned it in
+        ///     THIS iteration — an iteration that silently skipped the finalizer cannot pass. The temp
+        ///     is allocated immediately before the collection, so it is gen-0 garbage; should it ever
+        ///     have been promoted past gen 1, the iteration falls back to a full drain rather than
+        ///     assert vacuously. A full drain per iteration (the original form) marked the whole
+        ///     test-run heap — ~95 ms each in a full suite run, 19 s for this loop.
+        /// </remarks>
         [TestMethod]
         public void AliasedBaseBuffer_SurvivesFinalizerOfItsLastNDArray()
         {
@@ -859,10 +868,12 @@ namespace NumSharp.Tests.Backends.Unmanaged
             for (int i = 0; i < 200; i++)
             {
                 var a = Make();
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
-                GC.Collect();
+                GcQuiescence.CollectYoung();
+                if (GetRefCount(a.InternalArray) != 0)
+                    GcQuiescence.CollectFull();   // the temp outlived gen 1 somehow: find it the slow way
 
+                GetRefCount(a.InternalArray).Should().Be(0,
+                    "iteration {0}: the arange temp's finalizer must have run and ABANDONED its reference", i);
                 a.InternalArray.IsReleased.Should().BeFalse(
                     "iteration {0}: the aliased base buffer must survive the arange temp's finalizer", i);
                 // A same-size allocation would steal a wrongly-pooled buffer and
@@ -871,6 +882,105 @@ namespace NumSharp.Tests.Backends.Unmanaged
                 a.GetView(":, 1:").GetView("-1, -2").GetValue<long>(0, 0).Should().Be(8L,
                     "iteration {0}: the alias must still read the arange data", i);
             }
+        }
+
+        // ----- byte-reinterpreting aliases -----------------------------------
+        //
+        // A complex array's real / imaginary lane (np.real, np.imag, .real, .imag), view(dtype) and getfield carve
+        // a NEW slice of another element type over the owner's memory. It used to be a plain non-owning wrap, which
+        // counted the alias NDArray's reference on an immortal marker: disposing the owner returned its buffer to the
+        // pool while the alias still read it, so the alias showed the NEXT same-size allocation. That is how
+        // np.linalg.eigvals' real result (a lane view of the complex result its [NDScoped] wrapper disposes) and
+        // numpy.polynomial's {p}roots read another call's eigenvalues. The alias now forwards its reference counting
+        // to the owner's block (ArraySlice.WrapShared), exactly as an ordinary view shares the owner's slice.
+
+        /// <summary>The byte-reinterpreting aliases, each built over a fresh owner: (name, owner, alias, alias values).</summary>
+        private static (string name, NDArray owner, NDArray alias, double[] want)[] ReinterpretingAliases()
+        {
+            NDArray Z() => np.array(new[] { new System.Numerics.Complex(1, 2), new System.Numerics.Complex(3, 4) });
+            NDArray F() => np.array(new[] { 1.5, 2.5, 3.5, 4.5 });
+            var z1 = Z(); var z2 = Z(); var z3 = Z(); var z4 = Z(); var z5 = Z(); var f1 = F(); var f2 = F(); var f3 = F();
+            return new[]
+            {
+                ("np.real", z1, np.real(z1), new[] { 1.0, 3.0 }),
+                ("np.imag", z2, np.imag(z2), new[] { 2.0, 4.0 }),
+                ("ndarray.real", z3, z3.real, new[] { 1.0, 3.0 }),
+                ("ndarray.imag", z4, z4.imag, new[] { 2.0, 4.0 }),
+                ("view(float64) of complex128", z5, z5.view(np.float64), new[] { 1.0, 2.0, 3.0, 4.0 }),
+                ("view(int64) of float64", f1, f1.view(np.int64), new[] { 1.5, 2.5, 3.5, 4.5 }.Select(v => (double)BitConverter.DoubleToInt64Bits(v)).ToArray()),
+                ("view(uint8) of float64", f2, f2.view(np.uint8), BitConverter.GetBytes(1.5).Concat(BitConverter.GetBytes(2.5)).Concat(BitConverter.GetBytes(3.5)).Concat(BitConverter.GetBytes(4.5)).Select(b => (double)b).ToArray()),
+                ("getfield(float32, 4)", f3, f3.getfield(np.float32, 4), new[] { 1.5, 2.5, 3.5, 4.5 }.Select(v => (double)BitConverter.Int32BitsToSingle((int)(BitConverter.DoubleToInt64Bits(v) >> 32))).ToArray()),
+            };
+        }
+
+        /// <summary>An alias's values, read element by element in logical order as doubles (exact for every dtype here).</summary>
+        private static double[] Values(NDArray a) => Enumerable.Range(0, (int)a.size).Select(i => Convert.ToDouble(a.GetAtIndex(i))).ToArray();
+
+        [TestMethod]
+        public void ReinterpretingAlias_SurvivesItsOwnersDispose()
+        {
+            foreach (var (name, owner, alias, want) in ReinterpretingAliases())
+            {
+                var ownerSlice = owner.Storage.InternalArray;
+                long bytes = owner.size * owner.dtypesize;
+                owner.Dispose();
+                ownerSlice.IsReleased.Should().BeFalse($"{name}: the alias still holds a counted reference on the owner's buffer");
+                // A same-size allocation (pool reuse is by exact byte size) would land on a wrongly freed buffer.
+                using (var thief1 = np.full(new Shape(bytes), (byte)0xAB))
+                using (var thief2 = np.full(new Shape(bytes / 8), -12345.0))
+                    Values(alias).Should().Equal(want, $"{name}: the alias must still read the owner's data");
+                alias.Dispose();
+                ownerSlice.IsReleased.Should().BeTrue($"{name}: the alias held the last reference");
+                GetRefCount(ownerSlice).Should().Be(-1, $"{name}: freed exactly once");
+            }
+        }
+
+        [TestMethod]
+        public void ReinterpretingAlias_CountsOnTheOwnersBlock_InEitherDisposeOrder()
+        {
+            var z = np.array(new[] { new System.Numerics.Complex(1, 2), new System.Numerics.Complex(3, 4) });
+            var slice = z.Storage.InternalArray;
+            var re = np.real(z);
+            var im = np.imag(z);
+            GetRefCount(slice).Should().Be(3, "the owner and both lanes are counted on the owner's block");
+            re.Dispose();
+            GetRefCount(slice).Should().Be(2);
+            z.Dispose();
+            GetRefCount(slice).Should().Be(1);
+            slice.IsReleased.Should().BeFalse();
+            Values(im).Should().Equal(2.0, 4.0);
+            im.Dispose();
+            slice.IsReleased.Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void ReinterpretingAlias_OfAnAlias_ForwardsToTheBlockThatOwnsTheMemory()
+        {
+            var z = np.array(new[] { new System.Numerics.Complex(1.5, -2.5), new System.Numerics.Complex(3.5, 4.5) });
+            var slice = z.Storage.InternalArray;
+            var lane = np.real(z);
+            var bits = lane.view(np.int64);       // an alias of an alias: the chain reaches z's block
+            lane.Dispose();
+            z.Dispose();
+            slice.IsReleased.Should().BeFalse("the int64 view of the lane still references z's buffer");
+            using (var thief = np.full(new Shape(4), -1.0))
+                bits.GetInt64(1).Should().Be(BitConverter.DoubleToInt64Bits(3.5));
+            bits.Dispose();
+            slice.IsReleased.Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void ReinterpretingAlias_ResizeRefcheck_SeesTheAlias()
+        {
+            // NumPy: z.real references z's data, so z.resize(...) refuses until it is gone (refcheck=True).
+            var z = np.zeros(new Shape(2), np.complex128);
+            var re = z.real;
+            z.Invoking(a => a.resize(new Shape(4))).Should().Throw<Exception>()
+                .WithMessage("cannot resize an array that references or is referenced*");
+            re.Dispose();
+            z.resize(new Shape(4));
+            z.size.Should().Be(4);
+            z.Dispose();
         }
     }
 }

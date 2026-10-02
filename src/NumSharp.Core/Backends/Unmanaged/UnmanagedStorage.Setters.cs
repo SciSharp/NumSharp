@@ -447,11 +447,35 @@ namespace NumSharp.Backends
             if (vForBc.Shape.size == subShape.size && vForBc.Shape.dimensions.SequenceEqual(subShape.dimensions))
             {
                 //by now this ndarray is not broadcasted nor sliced
-                unsafe
+                // CastIfNecessary hands back the value's OWN storage when the dtypes agree and a FRESH cast
+                // storage otherwise (a cross-dtype write, e.g. a float64 row into an int32 array). The fresh
+                // one is a bare UnmanagedStorage — never wrapped in an NDArray, so no NDScope tracks it and
+                // nothing ever took a counted reference on its pooled block — which stranded one buffer per
+                // cross-dtype sub-array assignment until a GC. It is released below, after the copy.
+                var source = value.Storage.CastIfNecessary(_typecode);
+                try
                 {
-                    //ReSharper disable once RedundantCast
-                    //this must be a void* so it'll go through a typed switch.
-                    value.Storage.CastIfNecessary(_typecode).CopyTo((void*)(this.Address + (this.InternalArray.ItemLength * offset)));
+                    unsafe
+                    {
+                        //ReSharper disable once RedundantCast
+                        //this must be a void* so it'll go through a typed switch.
+                        source.CopyTo((void*)(this.Address + (this.InternalArray.ItemLength * offset)));
+                    }
+                }
+                finally
+                {
+                    if (!ReferenceEquals(source, value.Storage))
+                    {
+                        // The NDIter overlap-temp idiom: the bare block sits at refcount 0, so a lone Release()
+                        // would be a no-op stray. Take the one owning reference the cast storage implicitly
+                        // holds, then drop it — 0 → 1 → 0 frees the block straight back to the pool.
+                        var castBlock = source.InternalArray;
+                        if (castBlock is not null)
+                        {
+                            castBlock.TryAddRef();
+                            castBlock.Release();
+                        }
+                    }
                 }
                 return;
             }

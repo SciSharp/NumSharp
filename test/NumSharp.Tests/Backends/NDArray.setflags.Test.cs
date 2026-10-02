@@ -30,7 +30,7 @@ namespace NumSharp.Tests.Backends
             var a = np.arange(6);
             a.setflags(write: false);
             a.flags.writeable.Should().BeFalse();
-            ((Action)(() => a[0] = (NDArray)9L)).Should().Throw<NumSharpException>().WithMessage("*read-only*");
+            ((Action)(() => a[0] = (NDArray)9L)).Should().Throw<ValueError>().WithMessage("*read-only*");
             a.setflags(write: true);
             a.flags.writeable.Should().BeTrue();
             a[0] = (NDArray)9L;
@@ -167,8 +167,8 @@ namespace NumSharp.Tests.Backends
             }
             finally
             {
-                FullGc();
-                try { Directory.Delete(dir, recursive: true); } catch { /* best-effort */ }
+                // Young collection first, full only if the mapping still holds the directory (MappedFileCleanup).
+                MappedFileCleanup.DeleteDirectory(dir);
             }
         }
 
@@ -193,8 +193,8 @@ namespace NumSharp.Tests.Backends
             }
             finally
             {
-                FullGc();
-                try { Directory.Delete(dir, recursive: true); } catch { /* best-effort */ }
+                // Young collection first, full only if the mapping still holds the directory (MappedFileCleanup).
+                MappedFileCleanup.DeleteDirectory(dir);
             }
         }
 
@@ -217,16 +217,9 @@ namespace NumSharp.Tests.Backends
             }
             finally
             {
-                FullGc();
-                try { Directory.Delete(dir, recursive: true); } catch { /* best-effort */ }
+                // Young collection first, full only if the mapping still holds the directory (MappedFileCleanup).
+                MappedFileCleanup.DeleteDirectory(dir);
             }
-        }
-
-        private static void FullGc()
-        {
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
         }
 
         // ---- align ------------------------------------------------------------------------

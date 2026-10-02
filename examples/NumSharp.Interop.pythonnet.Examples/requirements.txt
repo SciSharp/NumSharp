@@ -1,4 +1,5 @@
-# Python side of the NumSharp.Interop.pythonnet examples (and of test/NumSharp.Tests.Interop).
+# Python side of the NumSharp.Interop.pythonnet examples. (test/NumSharp.Tests.Interop builds its own
+# isolated, exactly-pinned environments instead: see its python-envs/make_env.py.)
 #
 #   python -m pip install -r requirements.txt
 #

@@ -104,11 +104,12 @@ namespace NumSharp.Backends
             // Several NumPy ufuncs have NO bool loop — their smallest integer loop starts at int8,
             // so a bool×bool input promotes to int8 (probed 2.4.2):
             //   left_shift/right_shift (bb->b absent),  floor_divide (True//True -> 1:int8),
-            //   remainder/mod (True%True -> 0:int8),    power (True**True -> 1:int8).
+            //   remainder/mod (True%True -> 0:int8),    power (True**True -> 1:int8),
+            //   fmod (True fmod True -> 0:int8).
             // Bump BEFORE the bool->logical remap below so these never take the bitwise-OR/AND path.
             if (resultType == NPTypeCode.Boolean &&
                 (op == BinaryOp.LeftShift || op == BinaryOp.RightShift ||
-                 op == BinaryOp.FloorDivide || op == BinaryOp.Mod || op == BinaryOp.Power))
+                 op == BinaryOp.FloorDivide || op == BinaryOp.Mod || op == BinaryOp.Fmod || op == BinaryOp.Power))
                 resultType = NPTypeCode.SByte;
 
             // NumPy bool arithmetic: the bool dtype has no integer add/multiply ufunc loop — `+`

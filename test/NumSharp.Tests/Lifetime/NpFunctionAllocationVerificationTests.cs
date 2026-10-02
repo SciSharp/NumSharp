@@ -24,12 +24,24 @@ namespace NumSharp.Tests.Lifetime
     {
         // ------------------------------------------------------------------ measurement harness
 
-        private static void DrainGC()
-        {
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
-        }
+        /// <summary>
+        ///     Clears, ONCE before this class's first test, what EARLIER test classes left for the finalizer: their dead
+        ///     undisposed arrays have typically been promoted to gen 2, where only a full collection finds them, and a
+        ///     finalizer that returned one of their buffers inside a counter window below would read as a release this
+        ///     class never made.
+        /// </summary>
+        /// <param name="context">Unused; the signature MSTest requires.</param>
+        [ClassInitialize]
+        public static void DrainEarlierClasses(TestContext context) => GcQuiescence.CollectFull();
+
+        /// <summary>
+        ///     Settles the garbage this class's previous test left, before a counter window opens: a young collection
+        ///     plus finalizer drain (<see cref="GcQuiescence.CollectYoung"/>). With the older backlog cleared by
+        ///     <see cref="DrainEarlierClasses"/>, what could still reach the finalizer mid-window is at most this
+        ///     class's own few promoted leftovers — while the full collection each test used to force here marked the
+        ///     whole test run's heap every time (tens of milliseconds in-suite; see <see cref="GcQuiescence"/>).
+        /// </summary>
+        private static void DrainGC() => GcQuiescence.CollectYoung();
 
         private static long Acquisitions => SizeBucketedBufferPool.Hits + SizeBucketedBufferPool.Misses + SizeBucketedBufferPool.ZeroedAllocs;
         private static long Releases => SizeBucketedBufferPool.Returns + SizeBucketedBufferPool.ReturnsFreed;

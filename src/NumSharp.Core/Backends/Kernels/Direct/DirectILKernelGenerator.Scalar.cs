@@ -84,11 +84,12 @@ namespace NumSharp.Backends.Kernels
             // Load input argument
             il.Emit(OpCodes.Ldarg_0);
 
-            // For predicate operations (IsFinite, IsNan, IsInf), operate on INPUT type
-            // and the operation itself produces bool. For other ops, convert first.
-            if (IsPredicateOp(key.Op))
+            // For ops that consume the INPUT type and produce a different output directly (the float
+            // classification predicates → bool, and bitwise_count → uint8), operate on the input type and
+            // let the emitter yield the result. For other ops, convert first.
+            if (EmitsResultFromInputType(key.Op))
             {
-                // Perform operation on input type - produces bool
+                // Perform operation on input type - the emitter produces the output value
                 EmitUnaryScalarOperation(il, key.Op, key.InputType);
             }
             else if (key.Op == UnaryOp.Abs && key.InputType == NPTypeCode.Complex)

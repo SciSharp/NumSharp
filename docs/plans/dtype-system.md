@@ -173,8 +173,8 @@ DTypePromotionError : TypeError   numpy.exceptions.DTypePromotionError, verbatim
 | Boolean | BoolDType | 0 | `b` (was `'?'` — fixed, AuditV2 T1.52) | `?` | |
 | SByte / Byte | Int8DType / UInt8DType | 1 / 2 | i / u | b / B | |
 | Int16 / UInt16 | Int16DType / UInt16DType | 3 / 4 | i / u | h / H | |
-| Int32 / UInt32 | Int32DType / UInt32DType | 5 / 6 | i / u | i / I | `IntDType` alias; `LongDType` on Windows |
-| Int64 / UInt64 | Int64DType / UInt64DType | 7 / 8 | i / u | l / L | LP64 convention (existing `ToTYPECHAR`); `LongLongDType` alias; `LongDType` on LP64 |
+| Int32 / UInt32 | Int32DType / UInt32DType | LP64 **5 / 6**, LLP64 **7 / 8** | i / u | LP64 `i / I`, LLP64 `l / L` | **platform-resolved** (see below); `IntDType` alias; `LongDType` on Windows |
+| Int64 / UInt64 | Int64DType / UInt64DType | LP64 **7 / 8**, LLP64 **9 / 10** | i / u | LP64 `l / L`, LLP64 `q / Q` | **platform-resolved**; `LongLongDType` alias; `LongDType` on LP64 |
 | Half / Single / Double | Float16/32/64DType | 23 / 11 / 12 | f | e / f / d | `LongDoubleDType` → Float64 (`'g'` collapses) |
 | Complex | Complex128DType | 15 | c | D | `CLongDoubleDType` → Complex128; complex64 stays unsupported |
 | Decimal | DecimalDType (NumSharp) | 256 | f | q (legacy `ToTYPECHAR`) | `isbuiltin 2` (user-defined range), name `decimal`, str `<f16` |
@@ -182,6 +182,25 @@ DTypePromotionError : TypeError   numpy.exceptions.DTypePromotionError, verbatim
 | String (vestigial) | — | 19 | U | none | no storage; only the `"string"`/`"String"` aliases reach it |
 | — | DateTime64DType | 21 | M | M | parametric, descriptor-level in stage A |
 | — | TimeDelta64DType | 22 | m | m | parametric, descriptor-level in stage A |
+
+**The four C-integer types are platform-resolved (2026-09-13), so `dtype.num`/`.char` are byte-identical to the
+LOCAL NumPy.** `np.dtype('int32')`/`np.dtype('int64')` resolve to whichever C integer is that width: on LP64
+(Linux/macOS, C `long` = 64-bit) `int32 == NPY_INT (5,'i')` and `int64 == NPY_LONG (7,'l')`; on LLP64 (Windows / any
+32-bit process, C `long` = 32-bit) `int32 == NPY_LONG (7,'l')` and `int64 == NPY_LONGLONG (9,'q')` — verified against
+numpy 2.4.2. `DTypeRegistry` maps NumSharp's single Int32/UInt32/Int64/UInt64 onto the platform-correct `(num, char)`
+via the existing `CLongIs32Bit` switch (the same switch the `LongDType`/`LongLongDType` aliases already used — the nums
+are now CONSISTENT with those aliases, where before they were hard-coded LP64). Everything else (bool 0, float32 11,
+float64 12, complex128 15, half 23, str 19, datetime 21, timedelta 22, Decimal 256, Char 257) is platform-independent.
+
+**`NPY_TYPES` (the identity enum) landed alongside `NPTypeCode` (the computational switch).** `Creation/np.dtype.cs`
+now carries `public enum NPY_TYPES` — a byte-identical mirror of NumPy's C `NPY_TYPES` (`ndarraytypes.h`), sibling to
+the existing `NPY_TYPECHAR`, plus the NumSharp user-range extras `NUMSHARP_DECIMAL`(256)/`NUMSHARP_CHAR`(257).
+`DType.type_num` returns it (`(NPY_TYPES)Meta.TypeNum`); `DType.num` stays `int` (NumPy's `.num` is an int);
+`DType.From(NPY_TYPES)` is the `PyArray_DescrFromType` reverse (rejecting a number with no NumSharp class on the
+platform). `NPTypeCode` is untouched — it remains the storage/kernel discriminator every backend `switch`/IL generator
+dispatches on; the `DType` descriptor is served ALONGSIDE it into the kernels (Stage C). Gate: `DTypeDescriptorTests`
+(`Builtin_Surface` + `type_num`) and `NpDtypesModuleTests` are now platform-aware; full DType/promotion/parity suite
+1523 green, `dtype_text` fuzz tier + `OracleSurfaceCoverage` green.
 
 ## 3. Stages
 

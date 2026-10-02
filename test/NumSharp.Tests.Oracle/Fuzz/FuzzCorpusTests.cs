@@ -69,6 +69,17 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Reduce() => RunCorpus("reduce.jsonl");
 
+        // np.evaluate / NDExpr: fused trees over the pairwise + single layouts, every dtype, weak /
+        // strong literals, comparisons / where / min-max / logical nodes, the unary catalog, root
+        // reductions (flat + axis + keepdims) and out= (returned view + whole out base). NumPy has
+        // no fusion, so the oracle is its UNFUSED node-by-node chain — exactly the contract
+        // np.evaluate claims (per-node result_type incl. NEP50 weak literals, bit-compatible values).
+        // Grammar + node map: OpRegistry.Evaluate.cs <-> gen_oracle.gen_evaluate. Windows-CRT-pinned
+        // like the unary tier: the transcendental nodes call the same ucrtbase libm NumPy does.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Evaluate() => RunHostLibmCorpus("evaluate.jsonl");
+
         [TestMethod]
         [TestCategory("FuzzMatrix")]
         public void Where() => RunCorpus("where.jsonl");
@@ -76,6 +87,13 @@ namespace NumSharp.Tests.Fuzz
         [TestMethod]
         [TestCategory("FuzzMatrix")]
         public void Place() => RunCorpus("place.jsonl");
+
+        // np.putmask — sibling of place, but the values cursor advances by POSITION (every element),
+        // so a.flat[i] = values.flat[i % nv]. 11 dtypes x 3 value modes (scalar nv==1 / cycle nv==3 /
+        // long nv==size) x 8 layouts incl. the non-contiguous writeback path (f/transposed/strided/negstride).
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void PutMask() => RunCorpus("putmask.jsonl");
 
         // T8 linear algebra: matmul / dot / outer across the gufunc shape space (2-D, 1-D promotion,
         // batched/broadcast stacks), 6 dtypes, and C/F operand layouts.
@@ -160,6 +178,13 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Bitwise() => RunCorpus("bitwise.jsonl");
 
+        // np.gcd / np.lcm — number-theoretic binary ufuncs, integer-only. Every valid integer dtype
+        // pair × pairwise layout (bit-exact incl. signed-MIN wrap and lcm overflow wrap); Char woven
+        // via char_tier. Invalid-dtype no-loop errors are gated in errors_full.jsonl.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void GcdLcm() => RunCorpus("gcd.jsonl");
+
         // Char dtype (NumSharp-only, bit-identical to uint16) is WOVEN into the applicable tiers:
         // each Char op is generated through the uint16 NumPy proxy and relabelled uint16->char
         // (gen_oracle.char_tier), appended into its native tier file (binary_arith/divmod_power/
@@ -174,6 +199,28 @@ namespace NumSharp.Tests.Fuzz
         [TestMethod]
         [TestCategory("FuzzMatrix")]
         public void UnaryExtra() => RunCorpus("unary_extra.jsonl");
+
+        // np.sinc — sin(pi*x)/(pi*x) over every REAL dtype (bool/all-ints/Char -> float64,
+        // float16/float32/float64 preserved) × all single-array layouts. HOST-PINNED to win-amd64
+        // (RunHostLibmCorpus, like the sibling Unary tier): sinc's near-zero-crossing results
+        // (sin(pi*integer) ≈ 0) are catastrophically sensitive to the exact libm/CRT sin bits, so
+        // they reproduce bit-for-bit only on the host that generated the corpus (Inconclusive
+        // off-Windows). complex128 is deliberately absent — it amplifies the complex-sin ULP
+        // envelope past the byte-reproducible threshold (pinned by an allclose unit test instead).
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Sinc() => RunHostLibmCorpus("sinc.jsonl");
+
+        // np.i0 — modified Bessel I_0 over every REAL dtype (bool/all-ints/Char -> float64,
+        // float16/float32/float64 preserved) × all single-array layouts. HOST-PINNED to win-amd64
+        // (RunHostLibmCorpus, like the sibling Unary/Sinc tiers): the cephes routine composes exp/sqrt,
+        // so float64 (Math.Exp == win-amd64 ucrtbase) and float16 (BCL Half.Exp) reproduce bit-for-bit
+        // only on the host that generated the corpus (Inconclusive off-Windows) — float32 rides NumPy's
+        // OWN portable exp kernel but shares the tier. complex128 is absent (NumPy rejects it; the
+        // rejection is pinned by a unit test). Bit-exact vs NumPy 2.4.2 across every included dtype.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void I0() => RunHostLibmCorpus("i0.jsonl");
 
         // W4 NaN-aware reductions (T10): nansum/nanprod/nanmax/nanmin/nanmean/nanstd/nanvar/
         // nanmedian over NaN-laced float operands — must IGNORE NaN per NumPy contract.
@@ -266,6 +313,11 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Einsum() => RunCorpus("einsum.jsonl");
 
+        // np.random byte-parity, PORTABLE half: pure MT19937 bits + exactly-rounded IEEE (uniform, rand,
+        // random_sample, randint, permutation, shuffle, choice, the state surface) — plus, for every legacy
+        // sampler's ARRAY-valued parameters (params["bargs"], operands = the parameters), the validation
+        // contract (safe-cast gate, check_array_constraint texts and order, broadcast/size errors) and the
+        // broadcast uniform draws. Hard-gated on every host.
         [TestMethod]
         [TestCategory("FuzzMatrix")]
         public void RandomParity() => RunCorpus("random_parity.jsonl");
@@ -290,8 +342,10 @@ namespace NumSharp.Tests.Fuzz
         }
 
         // PCG64 Generator (np.random.default_rng) byte-parity, PORTABLE half: pure PCG64 bits +
-        // exactly-rounded IEEE (random, integers, uniform, permutation, shuffle, choice, bytes) plus
-        // the new RandomState helpers random_integers/bytes (pure MT19937 bits). Hard-gated on every
+        // exactly-rounded IEEE (random, integers, uniform, permutation, shuffle, choice, bytes, and the
+        // distributions built from next_double/sqrt/random_interval alone: triangular, the urn-walk
+        // hypergeometric, the geometric search, multivariate_hypergeometric(method='count')) plus the
+        // new RandomState helpers random_integers/bytes (pure MT19937 bits). Hard-gated on every
         // host — NumSharp's Generator stream is bit-identical to default_rng(seed) by construction.
         [TestMethod]
         [TestCategory("FuzzMatrix")]
@@ -299,9 +353,13 @@ namespace NumSharp.Tests.Fuzz
 
         // PCG64 Generator byte-parity, HOST-LIBM half: the ziggurat / rejection samplers whose
         // transform consumes log1p/exp/pow (standard_normal, standard_exponential, normal,
-        // exponential, standard_gamma, gamma). Byte-exact on win-amd64 (Kahan log1p + Math.* ==
-        // ucrtbase); off-Windows both sides shift with their local libm, so it is Inconclusive there
-        // (the random_parity_host / matmul_parity pattern).
+        // exponential, standard_gamma, gamma) and the distribution surface over them (beta ...
+        // logseries, multinomial, dirichlet, multivariate_hypergeometric marginals — every internal
+        // branch). Byte-exact on win-amd64 (Kahan log1p + Math.* == ucrtbase) except pareto/power,
+        // whose closed in-band ucrtbase expm1 MisalignedRegistry bounds per element; off-Windows both
+        // sides shift with their local libm, so it is Inconclusive there (the random_parity_host /
+        // matmul_parity pattern). multivariate_normal is not here: it is byte-exact only with a
+        // LAPACK backend (Generator.Distributions.Test.cs pins it with OpenBLAS).
         [TestMethod]
         [TestCategory("FuzzMatrix")]
         public void GeneratorParityHostLibm()
@@ -328,6 +386,16 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void NanScan() => RunCorpus("nanscan.jsonl");
 
+        // np.unwrap: the phase-unwrapping composition (diff -> fused mod/where -> cumsum), swept over
+        // the scan layouts x every dtype x {default period, float period, discont, integer period
+        // even/odd} x axes. Values are pure arithmetic (subtract/mod/add/cumsum, no libm), so it is a
+        // PORTABLE tier — bit-exact vs NumPy 2.4.2 including the integer-preserving path, with NaN
+        // results (from the catalog's nan/inf pool) tokenized by the comparator. Complex (TypeError)
+        // and unsigned integer-period (OverflowError) are gated by np.unwrap.Test.cs, not here.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Unwrap() => RunCorpus("unwrap.jsonl");
+
         // W6 statistics (T12): median/average/ptp (axis+keepdims), count_nonzero, percentile/
         // quantile (q in {0,25,50,75,100}/{0,.25,.5,.75,1}, axis None/0/last), clip (a,min,max).
         [TestMethod]
@@ -339,6 +407,16 @@ namespace NumSharp.Tests.Fuzz
         [TestMethod]
         [TestCategory("FuzzMatrix")]
         public void Logic() => RunCorpus("logic.jsonl");
+
+        // np.real_if_close — collapse a near-real complex array to its float64 real lane (or leave it
+        // complex). Exercises BOTH outcomes across the tol modes (tol>1 => eps multiples, tol<=1 =>
+        // absolute, tol<=0 => nothing collapses) and every scan path (dense contiguous/F-contiguous,
+        // negative-stride, strided-inner gather, broadcast, 0-d, empty vacuous-all) + NaN/inf/boundary
+        // imaginary parts + non-complex passthrough. Result is pure copies of stored bits (real lane or
+        // the array unchanged), so it is host-INDEPENDENT and byte-exact everywhere (RunCorpus).
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void RealIfClose() => RunCorpus("real_if_close.jsonl");
 
         // W8 multi-output (T15): np.modf -> (fractional, integral), each output bit-compared,
         // with C-standard signed-zero/inf edges from the float pools.
@@ -361,8 +439,10 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Sort() => RunCorpus("sort.jsonl");
 
-        // Group A: np.round_/around with decimals in {0,1,2,-1} over every layout (banker's rounding;
-        // int + negative-decimals genuinely rounds to tens).
+        // Group A: np.round_/around with decimals in {-2,-1,0,1,2} over every layout and dtype (banker's
+        // rounding via the PyArray_Round port). Negative decimals genuinely round to tens/hundreds (int
+        // computes in float64 then wraps back), float16 fractional and complex dec!=0 are bit-exact, bool
+        // is float16 at dec=0 and RAISES at dec!=0 (those cells skipped by the generator, as NumPy raises).
         [TestMethod]
         [TestCategory("FuzzMatrix")]
         public void Rounding() => RunCorpus("rounding.jsonl");
@@ -391,11 +471,178 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Fft() => RunHostLibmCorpus("fft.jsonl");
 
+        // Window functions (np.bartlett/blackman/hamming/hanning/kaiser): pure float64 GENERATORS
+        // from a scalar M (kaiser also takes beta), swept over the empty/single/even/odd/multi-
+        // SIMD-chunk corners; kaiser's beta sweep crosses the Bessel i0 Chebyshev split at x == 8.
+        // The elementwise transform is fused into ONE np.evaluate pass in NumPy's exact operation
+        // order, so the result is bit-identical to NumPy's unfused ufunc chain. Host-libm gated
+        // like Fft: the trig windows call Math.Cos and kaiser's i0 calls Math.Exp (float64 == the
+        // win-amd64 ucrtbase NumPy uses; other platforms round the last bit differently), so this
+        // is HARD-GATED on Windows and INCONCLUSIVE elsewhere.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Windows() => RunHostLibmCorpus("windows.jsonl");
+
         // W12 parameter sweep: middle + negative axes (-1/-2/-3) for all reductions, ddof=1
-        // sample std/var, and order='F' ravel across C/transposed/F-contiguous sources.
+        // sample std/var, order='F' ravel across C/transposed/F-contiguous sources, and the §C1
+        // multi-axis (tuple-axis) cells for the reductions with an int[] overload
+        // (median/average/nanmedian).
         [TestMethod]
         [TestCategory("FuzzMatrix")]
         public void Params() => RunCorpus("params.jsonl");
+
+        // ndarray.* INSTANCE surface (coverage plan §D / row G0): the dual-form methods through
+        // their instance defaults (a.max(axis), a.reshape(-1), a.round(n), a.astype/view/byteswap/
+        // getfield), the instance-only members (item/tobytes/__len__/property reads), nonzero's
+        // tuple, and the IN-PLACE mutators (sort/partition/fill/put/resize) compared as
+        // [post-call view, post-call whole base buffer] — NumPy's post-call operand is the oracle.
+        // Portable: the covered methods are arithmetic/manipulation (no libm), so the tier is
+        // strict on every host exactly like Reduce/Manip.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Instance() => RunCorpus("instance.jsonl");
+
+        // np.emath scimath module (plan §A2/E5): the real->complex promotion DECISION (any(x<0),
+        // |x|>1) and the promoted complex values, over the dtype lanes whose NumPy promotion lands
+        // on complex128/float64 (int8/16/uint16/float32/float16 promote to complex64 — NumSharp
+        // has no complex64 (#569), so those lanes stay on the np.emath.Test.cs sibling suite).
+        // HOST-PINNED like Unary: the complex sqrt/log/arc family and float64 log/arccos are
+        // win-amd64 CRT-libm cells.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Emath() => RunHostLibmCorpus("emath.jsonl");
+
+        // numpy.polynomial evaluation family (plan docs/plans/numpy-polynomial.md U3): {p}val /
+        // val2d / val3d / grid2d / grid3d / valnd for the six bases — every x dtype x coefficient dtype
+        // x count class, x layouts, N-D coefficients (tensor / broadcast / coefficient layouts), Python-
+        // scalar (weak) and 0-d (strong) x, special coefficients, the vector-lane matrix at 45 points
+        // (every x dtype x series dtype, 1-D and per point, integer bounds and float specials, column-
+        // strided per-point series for the scalar part), Python-sequence x (tuples / nested lists, NumPy's
+        // np.asarray(x), replayed as ValueTuple / object[]) and Python ints past int64 (BigInteger x: inf, nan or
+        // OverflowError), and the IndexError / ValueError / OverflowError cells. Portable: + - * / only, so strict on
+        // every host.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Polyeval() => RunCorpus("polyeval.jsonl");
+
+        // numpy.polynomial additive family + polyutils (plan docs/plans/numpy-polynomial.md U1): {p}add / {p}sub
+        // (every dtype pair on the power basis, trim patterns, layouts, Python scalars and lists, the error order),
+        // {p}trim / trimcoef (Python and NumPy-scalar tolerances), trimseq, as_series (tuples, arity asserted),
+        // getdomain (the ±0 / NaN reduction answers), mapparms / mapdomain (CPython arithmetic for Python domains,
+        // NumPy scalar math for array domains, the fused complex product for 0-d arrays, NumPy's win-amd64
+        // OverflowError texts), {p}line (np.array's dtype discovery), the {p}domain/zero/one/x constants, and Python
+        // tuples / nested sequences as coefficients, as_series lists, getdomain / mapdomain points (np.array's nested
+        // coercion and its ragged texts). Portable: + - * / comparisons and copies only.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Polyseries() => RunCorpus("polyseries.jsonl");
+
+        // numpy.polynomial calculus family (plan docs/plans/numpy-polynomial.md U4): {p}der / {p}int for the six
+        // bases — every dtype x length x order at the defaults, scl kinds (Python scalars adopt the series dtype,
+        // 0-d arrays may widen; array scl broadcasting in place on derivatives), integration constants (scalars,
+        // Python lists, typed arrays, N-D rows) and lbnd kinds (1-D keeps a complex value's real part, N-D raises),
+        // N-D series at every axis x memory layout (values AND the result's C/F/OWNDATA flags), specials and
+        // full-mantissa complex values on 1-D (scalarmath: the naive product) vs N-D (ufuncs: simd_cmul) series,
+        // long and wide series (the kernel's vector loops, tails and column blocks), float16's constant rounding
+        // and overflow, the argument errors in NumPy's order, Python-list series, the n == 1 zero branch, the C#
+        // boundary argument kinds (tuples, nested / ragged / empty lists, Python ints past int64, str k / lbnd timing)
+        // and zero-size / 5-D series and extreme integers. Portable: + - * / and negation only, so strict on every host.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Polycalc() => RunCorpus("polycalc.jsonl");
+
+        // numpy.polynomial Vandermonde family (plan docs/plans/numpy-polynomial.md U5): {p}vander / {p}vander2d / {p}vander3d for
+        // the six bases — every dtype x length x degree (bool / int / char points computed in float64), full-mantissa and
+        // special values (quiet / signalling NaNs, infinities, signed zeros, subnormals), every memory layout of x (values AND
+        // the result's C/F/OWNDATA flags — NumPy's moveaxis / reshape views), float16's Python-int constants rounding past
+        // 2048 and overflowing past 65504, the 2-D / 3-D outer products over every dtype and mixed pairs (np.asarray's
+        // promotion), point layouts, Python-typed points, the argument kinds and errors in NumPy's order (operator.index and
+        // the f-string text of a refused degree, len() / count errors of the degree containers, ragged points, the empty
+        // reshape error, npy_intp / array-too-big degrees) and inputs longer than one kernel block. Portable: + - * / only.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Polyvander() => RunCorpus("polyvander.jsonl");
+
+        // numpy.polynomial series algebra (plan docs/plans/numpy-polynomial.md U2): {p}mulx / {p}mul / {p}div (quo, rem) /
+        // {p}pow / {p}fromroots for the six bases and X2poly / poly2X for the five non-power ones — every dtype x length at
+        // the defaults (ints -> float64; the recurrence bases' float16 / float32 products turning float64 through NumPy's
+        // `c1 = 0` Python int; _div's remainder in common_type(int64, dtype)), full-mantissa values (the naive complex
+        // products of scalarmath vs simd_cmul of array ops), the trim / special patterns, every layout, Python-typed
+        // series / roots / powers, the argument errors in NumPy's order (as_series' texts, the empty ZeroDivisionError,
+        // pow's ValueError / OverflowError, fromroots' len() TypeErrors), result flags (trimseq views vs fresh arrays),
+        // root kinds (NaN / inf / repeated / unsorted / subnormal) and underflow / overflow (polypow / chebpow do NOT
+        // trim). PORTABLE: every np.convolve here stays in NumPy's sequential-dot regime (float64 dots under 16 terms,
+        // float32 under 32 with a double accumulator, complex128 under 8 and finite), which NumSharp's managed sliding
+        // engine reproduces byte for byte; the longer products are the host-pinned PolyalgebraParity tier.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Polyalgebra() => RunCorpus("polyalgebra.jsonl");
+
+        // The series algebra's BLAS-bound products — polymul / chebmul / polypow / chebpow / polyfromroots /
+        // chebfromroots whose np.convolve reaches OpenBLAS's vector dot kernels (float64 factors of 16+ coefficients,
+        // float32 32+, complex128 8+, or a complex product of non-finite values, where the contiguous zdotu mixes lanes).
+        // NumSharp reproduces those positions only through NumSharp.Interop.OpenBLAS's ISlidingDotBackend — the same
+        // scipy-openblas ?dot NumPy calls — so the tier is HOST-PINNED exactly like LinalgParity (threads = 1):
+        // Inconclusive, never red, on a host that cannot load the pinned library.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        [DoNotParallelize]   // Enables/Disables the process-global OpenBLAS engine; must not overlap other tiers.
+        public void PolyalgebraParity()
+        {
+            var pin = MatmulParityPin.Load("polyalgebra_parity.host.jsonl");
+            string mismatch = pin.TryEnableParityBackend();
+            if (mismatch != null)
+                Assert.Inconclusive(mismatch);
+
+            try
+            {
+                RunCorpus("polyalgebra_parity.jsonl");
+            }
+            finally
+            {
+                NumSharp.Interop.OpenBLAS.OpenBlasEngine.Disable();
+            }
+        }
+
+        // numpy.polynomial companion matrices and roots (plan docs/plans/numpy-polynomial.md U7): {p}companion for the six
+        // bases — every dtype x length (ints / bools / char through float64; the float64 helper vectors of cheb / leg /
+        // herm / herme taking a float16 / float32 series' last column through float64 and ONE rounding, the power / Laguerre
+        // forms staying in the series' dtype), full-mantissa values with a small leading coefficient (float16's quotient
+        // overflowing), the trim / special patterns, every layout of c (0-d, stride-0 broadcast, strided, reversed,
+        // offset), Python-typed series, the object / str series NumPy refuses before computing with Python objects (the
+        // length check on the TRIMMED object array), errors in NumPy's order, result flags and long series — plus the
+        // {p}roots calls that never reach LAPACK: a constant series' empty array in its dtype, a linear series' scalarmath
+        // root (every special-value pair), float16's linalg TypeError and a non-finite companion's LinAlgError. PORTABLE:
+        // + - * / sqrt and cumprod only; the roots that run geev are the host-pinned PolyrootsParity tier.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Polyroots() => RunCorpus("polyroots.jsonl");
+
+        // The {p}roots calls that reach LAPACK geev (np.linalg.eigvals of the companion — rotated [::-1, ::-1] for every
+        // basis but the power series — sorted in place): NumSharp computes them only through NumSharp.Interop.OpenBLAS's
+        // LAPACK seam, the scipy-openblas NumPy itself calls, so the tier is HOST-PINNED exactly like LinalgParity
+        // (threads = 1): Inconclusive, never red, on a host that cannot load the pinned library. Real roots of a float64
+        // series are a strided VIEW of eigvals' complex result (the flags cases record it); a float32 series' complex
+        // roots are NumPy's complex64 values, compared up-cast (np.linalg.eigvals rounds them exactly, #569).
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        [DoNotParallelize]   // Enables/Disables the process-global OpenBLAS engine; must not overlap other tiers.
+        public void PolyrootsParity()
+        {
+            var pin = MatmulParityPin.Load("polyroots_parity.host.jsonl");
+            string mismatch = pin.TryEnableParityBackend();
+            if (mismatch != null)
+                Assert.Inconclusive(mismatch);
+
+            try
+            {
+                RunCorpus("polyroots_parity.jsonl");
+            }
+            finally
+            {
+                NumSharp.Interop.OpenBLAS.OpenBlasEngine.Disable();
+            }
+        }
 
         // W11 operand-relationship flags (section C): input aliasing (a op a, same buffer) and
         // in-place out= (maximum/minimum/clip writing into an input operand).
@@ -506,6 +753,47 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void DecimalManip() => RunCorpus("decimal_manip.jsonl");
 
+        // G14 (2026-09-18) coverage-audit expansion — decimal is the ONLY dtype scope this whole
+        // pipeline exercises for the ops below (no other corpus file carries a decimal operand), so an
+        // unexercised branch here is a live silent-bug risk (the class that hid the G13 flat-argmax bug).
+
+        // Extended unary decimal->decimal (reciprocal/positive/fabs/rint/spacing/deg2rad/rad2deg/modf
+        // split) + signbit (->bool, strictly-negative) + round_ at decimals {-1,0,1,2} (the PyArray_Round
+        // path, DISTINCT from rint's UnaryOp.Round). All exact or portable-arithmetic -> strict tier.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void DecimalExtra() => RunCorpus("decimal_extra.jsonl");
+
+        // sqrt/cbrt/exp/log/trig/... via the kernel's EXACT (decimal)Math.X((double)v) double-bridge —
+        // the oracle replicates that bridge per logical element, so a divergence is a decimal iteration
+        // bug, not a math difference. HOST-PINNED (RunHostLibmCorpus): Math.Exp/Log/Sin/... are the
+        // win-amd64 CRT libm, so the cast-to-decimal bytes reproduce only on the authoring host
+        // (Inconclusive off-Windows — the sibling Unary/Sinc/I0 tier policy).
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void DecimalTranscend() => RunHostLibmCorpus("decimal_transcend.jsonl");
+
+        // The 16-byte gather/scatter/conditional-copy family: take/put/place/putmask/select/choose/
+        // compress/extract/take_along_axis. Only `where` was covered — yet these share the widest,
+        // least-tested byte-width-keyed copy kernels (16-byte = decimal/Complex; Complex has a NumPy
+        // oracle, decimal does not, so this is the only differential coverage of the 16-byte path).
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void DecimalSelect() => RunCorpus("decimal_select.jsonl");
+
+        // dot/inner/outer/vdot/tensordot/trace/kron — matmul was the ONLY covered product, yet each of
+        // these routes through a DIFFERENT decimal accumulate/iterate path (the same 16-byte scalar-
+        // compare/accumulate class as the argmax bug). decimal + is exact -> byte-reproducible.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void DecimalProducts() => RunCorpus("decimal_products.jsonl");
+
+        // argsort/searchsorted/unique/nonzero/flatnonzero/lexsort — the decimal compare-driven sort/
+        // search paths (Bgt/Blt on a 16-byte struct is exactly what silently mis-answered in flat argmax).
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void DecimalSearch() => RunCorpus("decimal_search.jsonl");
+
         // B9 (F26): minimum case-count floor per corpus file, ~80 % of the committed count at
         // 2026-07-07 (post G1-G5/G11/G12 regenerations). `Count > 0` alone would let a silently
         // TRUNCATED regeneration (encoding hiccup, generator early-exit, partial copy) pass the
@@ -518,8 +806,9 @@ namespace NumSharp.Tests.Fuzz
             ["astype_full.jsonl"] = 4056,
             ["astype_smoke.jsonl"] = 249,
             ["binary_arith.jsonl"] = 1296,
-            ["binary_divmod_power.jsonl"] = 793,
+            ["binary_divmod_power.jsonl"] = 1360,
             ["bitwise.jsonl"] = 590,
+            ["gcd.jsonl"] = 244,
             ["comparison.jsonl"] = 1857,
             ["creation.jsonl"] = 241,
             ["conversion.jsonl"] = 862,
@@ -536,11 +825,18 @@ namespace NumSharp.Tests.Fuzz
             ["decimal_unary.jsonl"] = 72,
             ["decimal_varstd.jsonl"] = 17,
             ["decimal_where.jsonl"] = 3,
+            // G14 coverage-audit expansion (2026-09-18): ~80% of the committed counts.
+            ["decimal_extra.jsonl"] = 45,
+            ["decimal_transcend.jsonl"] = 50,
+            ["decimal_select.jsonl"] = 8,
+            ["decimal_products.jsonl"] = 9,
+            ["decimal_search.jsonl"] = 7,
             ["dtype_text.jsonl"] = 2094,
             ["errors.jsonl"] = 8,
-            ["errors_full.jsonl"] = 650,
+            ["errors_full.jsonl"] = 720,   // +87: curated §B1 recipes (reshape/expand_dims/flip/take/put/partition/linalg/fft), 50 distinct messages
+            ["evaluate.jsonl"] = 11800,   // np.evaluate fused-tree tier (14,742 at 2026-09-08)
             ["fft.jsonl"] = 1700,
-            ["groupa.jsonl"] = 237,
+            ["groupa.jsonl"] = 590,   // 364 before the complex convolve / correlate section: infinities / NaNs (zdotu's C99 result) and one-element operands with their own strides (CDOUBLE_dot's plain loop) — 601
             ["iter.jsonl"] = 4400,
             ["logic.jsonl"] = 2648,   // +873: iscomplex/isreal widened to ALL dtypes (complex128) × EVERY layout
             ["manip.jsonl"] = 13397,
@@ -549,33 +845,45 @@ namespace NumSharp.Tests.Fuzz
             ["linalg_parity.jsonl"] = 340,   // +90: LU family (solve/inv/det/slogdet/tensorinv/tensorsolve) + matrix_power(n<0)
             ["poly.jsonl"] = 60,
             ["einsum.jsonl"] = 35,
-            ["modf.jsonl"] = 51,
+            ["modf.jsonl"] = 165,   // all non-complex lanes + char (the 59f99320 per-width promotion, dtype-spread gate)
             ["multioutput.jsonl"] = 51,
-            ["nanreduce.jsonl"] = 6692,
+            ["nanreduce.jsonl"] = 8300,   // + nanpercentile/nanquantile integer/bool degenerate lanes (dtype-spread gate)
             ["nanscan.jsonl"] = 525,   // nancumsum all 13 dtypes; nancumprod carves complex128 (host-FMA multiply)
             ["numpy_f32_kernels.jsonl"] = 140,
             ["numpy_f64_kernels.jsonl"] = 24,
-            ["out_where.jsonl"] = 3500,
-            ["params.jsonl"] = 966,
+            ["out_where.jsonl"] = 6300,   // §B2 out_scan/out_round/out_clip/out_nanarg + the f16/uint8 lanes (dtype-spread gate)
+            ["params.jsonl"] = 1190,      // +288 §C1: multi-axis median/average/nanmedian (tuple-axis int[] overloads)
+            ["instance.jsonl"] = 7500,    // §D: ndarray.* instance surface — 13 NumPy dtypes + the char proxy weave (dtype-spread gate)
+            ["emath.jsonl"] = 385,        // §A2/E5: np.emath scimath promotion (+ the unsigned lanes, dtype-spread gate)
+            ["polyeval.jsonl"] = 23800,   // numpy.polynomial {p}val family (U3), 6 bases x the matrix above, + 4,392 single-element-broadcast cells, + 720 sequence / big-int x cells (J), + 1,890 array_like c / ordinate cells (K) — 19,216, + 4,650 result-layout cells (L: 3,174 "strides" facets + 1,476 small-result value twins, the N-D-series layout the 2026-10-01 review fixed) — 23,866
+            ["polyseries.jsonl"] = 19400, // numpy.polynomial additive family + polyutils (U1): 6 bases + polyutils + constant facets — 15,950 cases at delivery, 18,437 since the parity audit's long-series / complex64-loop / block-boundary / getdomain-window sections (K-N), 18,621 with the tuple / nested-sequence section (O), 18,647 with trimseq of Python sequences (P), 18,698 with the deferred object / str refusal (Q), 19,478 with mapdomain's result layouts (R: values + "strides" facet), which this floor keeps from silently dropping out
+            ["polycalc.jsonl"] = 26400,   // numpy.polynomial calculus family (U4): {p}der / {p}int x 6 bases, sections A-O of gen_polycalc — 21,646 at delivery, 27,526 with the argument-kind (M), zero-size / 5-D / extreme-int (N) and widened-scale (O) sections
+            ["polyvander.jsonl"] = 31000,   // numpy.polynomial Vandermonde family (U5): {p}vander / vander2d / vander3d x 6 bases, sections A-J of gen_polyvander — 16,612 at delivery, 31,180 with the 2026-09-30 wholeness pass (J: the object stack of scalars)
+            ["polyalgebra.jsonl"] = 28100,   // numpy.polynomial series algebra (U2): mulx/mul/div/pow/fromroots x 6 bases + X2poly/poly2X x 5, sections A-L of gen_polyalgebra — 26,163 at delivery, 28,144 with the wholeness section (M: pow / maxpower argument kinds, the deferred object refusal, non-finite complex products — 43 of which moved here from the host tier)
+            ["polyalgebra_parity.jsonl"] = 135,   // U2's BLAS-bound products (host-pinned): 186 at delivery, 139 once complex products with infinities / NaNs below zdotu's vector block moved to the portable tier (the managed dot reproduces zdotu's C99 result and CDOUBLE_dot's plain loop)
+            ["polyroots.jsonl"] = 8150,   // numpy.polynomial companion matrices + the roots that never reach LAPACK (U7): {p}companion / {p}roots x 6 bases, sections A-L of gen_polyroots — 6,681 at delivery, 8,195 with the wholeness sections (K: two-term OBJECT series NumPy still computes, 0-d-zero trims, edge numeric series; L: object series of three or more terms — the companion arithmetic's OverflowErrors and eigvals' isfinite TypeError)
+            ["polyroots_parity.jsonl"] = 1350,   // U7's roots that run LAPACK geev (host-pinned, threads = 1): 1,242 at delivery, 1,354 with section K's edge series
             ["place.jsonl"] = 12,
             ["products.jsonl"] = 326,
             ["precision.jsonl"] = 80,
-            ["random_parity.jsonl"] = 40,
-            ["random_parity_host.jsonl"] = 86,
-            ["generator_parity.jsonl"] = 68,
-            ["generator_parity_host.jsonl"] = 32,
-            ["nan.jsonl"] = 100,   // NaN-parity grid (gen_nan_oracle.py): 27 complex + 3×31 float
+            ["random_parity.jsonl"] = 300,          // + the array-parameter (broadcast) validation/uniform cases of all 29 legacy samplers
+            ["random_parity_host.jsonl"] = 670,     // + the array-parameter (broadcast) value/stream cases of the legacy samplers
+            ["generator_parity.jsonl"] = 375,       // + the portable distribution surface (triangular, urn hypergeometric, geometric search, mvhg count) + broadcast validation
+            ["generator_parity_host.jsonl"] = 720,  // + the libm distribution surface (29 Generator samplers, every internal branch) + broadcast values/streams
+            ["nan.jsonl"] = 140,   // NaN-parity grid (gen_nan_oracle.py): 27 complex + 3×31 float unary + 56 §B3 binary cross-grid
             ["random_smoke.jsonl"] = 1600,
             ["reduce.jsonl"] = 9004,
-            ["rounding.jsonl"] = 665,
+            ["rounding.jsonl"] = 1372,
             ["scan.jsonl"] = 907,
+            ["sinc.jsonl"] = 338,   // sin(pi*x)/(pi*x): 12 real dtypes + Char × 26 layouts (complex excluded)
             ["sort.jsonl"] = 940,   // +102: searchsorted expansion (dup/mixed-promotion/sorter/nan/complex-lex/strided/empty)
-            ["specials.jsonl"] = 1866,
+            ["specials.jsonl"] = 1920,
             ["stat.jsonl"] = 3412,
             ["tail.jsonl"] = 1872,
             ["unary.jsonl"] = 5969,
             ["unary_extra.jsonl"] = 6052,
             ["where.jsonl"] = 75,
+            ["windows.jsonl"] = 200,
         };
 
         // Corpus tiers authored against the win-amd64 CRT libm (ucrtbase) and NumSharp's host SIMD
@@ -605,7 +913,10 @@ namespace NumSharp.Tests.Fuzz
 
         private static void RunCorpus(string file)
         {
-            var cases = FuzzCorpus.Load(file);
+            // Streamed, not loaded: the count (for the floor below) comes from a line scan and each case is parsed
+            // as the loop reaches it, so a 17 MB tier never holds its whole parsed list — whose promotion through the
+            // GC generations cost more than the parsing did (see CorpusFile).
+            using var cases = FuzzCorpus.Open(file);
             int floor = MinCases.TryGetValue(file, out var f) ? f : 1;
             Assert.IsTrue(cases.Count >= floor,
                 $"corpus '{file}' has {cases.Count} cases, below the committed floor of {floor} " +
@@ -682,7 +993,7 @@ namespace NumSharp.Tests.Fuzz
         // Routes the "grnd" PCG64 Generator stream op to its dedicated handler (OpRegistry.Generator.cs)
         // without adding a case to OpRegistry.Apply's switch; every other op goes to Apply as usual.
         private static NDArray DispatchApply(string op, IReadOnlyDictionary<string, JsonElement> p, NDArray[] ops)
-            => op == "grnd" ? OpRegistry.GeneratorDraw(p) : OpRegistry.Apply(op, p, ops);
+            => op == "grnd" ? OpRegistry.GeneratorDraw(p, ops) : OpRegistry.Apply(op, p, ops);
 
         private static void Bump(Dictionary<string, int> d, string key) => d[key] = d.TryGetValue(key, out var n) ? n + 1 : 1;
 

@@ -31,7 +31,15 @@ postprocess_f32.onnx    X ['N','C'] float32 -> Softmax(axis=-1) -> probs ; ArgMa
 topk_f32.onnx           X ['N','C'] float32, K [1] int64 -> TopK(axis=-1) -> Values, Indices.
                         The oracle for Postprocess.TopK.
 sequence_out.onnx       X float32 -> SequenceConstruct -> seq (a sequence<tensor(float)>). Proves
-                        the NDArray verbs decline a non-tensor OrtValue with a clear message.
+                        the NDArray verbs decline a non-tensor OrtValue with a clear message, and
+                        the ToNDArrays reader (sequence of tensors).
+zipmap_int64.onnx       X [N,3] float32 -> ZipMap(ai.onnx.ml, classlabels_int64s) -> Z, a
+                        sequence(map(int64, float)) -- the scikit-learn classifier output. Oracle for
+                        the ToMap / ToMaps map readers.
+string_io.onnx          X string -> Identity -> Y string. The ReadStringTensor reader (string OUTPUT)
+                        and the refusal of a string model INPUT.
+sequence_input.onnx     seq sequence<tensor(float)> -> SequenceLength -> len int64. A NON-tensor model
+                        INPUT: Tier-2 Run must refuse feeding it an NDArray.
 """
 from __future__ import annotations
 
@@ -65,10 +73,10 @@ DTYPES = {
 }
 
 
-def _model(name, nodes, inputs, outputs, value_info=(), check=True):
+def _model(name, nodes, inputs, outputs, value_info=(), check=True, opset_imports=None):
     graph = helper.make_graph(nodes, name, inputs, outputs, value_info=list(value_info))
     model = helper.make_model(graph, producer_name="NumSharp.Interop.OnnxRuntime tests",
-                              opset_imports=[helper.make_opsetid("", OPSET)])
+                              opset_imports=opset_imports or [helper.make_opsetid("", OPSET)])
     model.ir_version = IR_VERSION
     # onnx.checker insists on a `shape` field for graph inputs/outputs, so the RANK-AGNOSTIC models
     # (tensor type with no shape at all -- legal ONNX, "unknown rank", and accepted by ORT) skip the
@@ -142,6 +150,31 @@ def build_all():
         [helper.make_node("SequenceConstruct", ["X"], ["seq"])],
         [_tensor("X", TensorProto.FLOAT)], [seq_out], check=False)
 
+    # ZipMap (ai.onnx.ml) -> sequence(map(int64, float)): the scikit-learn classifier output shape
+    # (probabilities keyed by class label). Exercises BOTH the sequence walk and the map reader.
+    map_type = helper.make_map_type_proto(TensorProto.INT64, helper.make_tensor_type_proto(TensorProto.FLOAT, None))
+    zipmap_out = helper.make_value_info("Z", helper.make_sequence_type_proto(map_type))
+    models["zipmap_int64"] = _model(
+        "zipmap_int64",
+        [helper.make_node("ZipMap", ["X"], ["Z"], domain="ai.onnx.ml", classlabels_int64s=[10, 20, 30])],
+        [_tensor("X", TensorProto.FLOAT, ["N", 3])], [zipmap_out], check=False,
+        opset_imports=[helper.make_opsetid("", OPSET), helper.make_opsetid("ai.onnx.ml", 1)])
+
+    # String Identity: a string tensor in AND out. The interop reads string OUTPUTS with a dedicated
+    # helper (NumSharp has no string dtype) and refuses a string model INPUT with a clear message.
+    models["string_io"] = _model(
+        "string_io",
+        [helper.make_node("Identity", ["X"], ["Y"])],
+        [_tensor("X", TensorProto.STRING)], [_tensor("Y", TensorProto.STRING)], check=False)
+
+    # A NON-tensor (sequence) model INPUT: SequenceLength(sequence<tensor(float)>) -> int64 scalar.
+    # Tier-2 Run must refuse feeding an NDArray to it with a "not a tensor" message.
+    seq_in = helper.make_tensor_sequence_value_info("seq", TensorProto.FLOAT, None)
+    models["sequence_input"] = _model(
+        "sequence_input",
+        [helper.make_node("SequenceLength", ["seq"], ["len"])],
+        [seq_in], [_tensor("len", TensorProto.INT64, [])], check=False)
+
     return models
 
 
@@ -188,6 +221,17 @@ def self_check(path: str, name: str) -> None:
     elif name == "sequence_out":
         seq, = sess.run(None, {"X": np.arange(3, dtype=np.float32)})
         assert isinstance(seq, list) and len(seq) == 1, name
+    elif name == "zipmap_int64":
+        z, = sess.run(None, {"X": np.array([[0.1, 0.7, 0.2], [0.5, 0.3, 0.2]], np.float32)})
+        assert isinstance(z, list) and len(z) == 2, name           # sequence of 2 maps
+        assert isinstance(z[0], dict) and set(z[0]) == {10, 20, 30}, name
+        assert abs(z[0][20] - 0.7) < 1e-6, name
+    elif name == "string_io":
+        y, = sess.run(None, {"X": np.array(["héllo", "world"], dtype=object)})
+        assert list(y) == ["héllo", "world"], name
+    elif name == "sequence_input":
+        n, = sess.run(None, {"seq": [np.arange(3, dtype=np.float32), np.arange(2, dtype=np.float32)]})
+        assert int(n) == 2, name
     else:
         raise AssertionError(f"no self-check for {name}")
 

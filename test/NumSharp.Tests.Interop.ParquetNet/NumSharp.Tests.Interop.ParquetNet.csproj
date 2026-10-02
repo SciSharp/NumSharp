@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <LangVersion>latest</LangVersion>
+    <Platforms>AnyCPU</Platforms>
+    <!-- Strong-naming is set repo-wide in ../../Directory.Build.props. Signed because
+         NumSharp.Interop.ParquetNet grants it InternalsVisibleTo, which names a PublicKey. -->
+    <Configurations>Debug;Release;Publish</Configurations>
+
+    <!-- Which Parquet.Net the suite runs against. Default is the package floor (6.1.0 — the version the
+         interop package is compiled against and the version NuGet resolves for a bare consumer). Override
+         locally to exercise a newer one: dotnet test -p:ParquetNetVersion=6.1.1 -->
+    <ParquetNetVersion Condition="'$(ParquetNetVersion)' == ''">6.1.0</ParquetNetVersion>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Publish|AnyCPU'">
+    <DocumentationFile />
+    <Optimize>true</Optimize>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MSTest" Version="3.8.3" />
+    <PackageReference Include="AwesomeAssertions" Version="9.3.0" />
+    <!-- The suite is a Parquet.Net consumer: it uses ParquetSerializer to WRITE the sample files it then
+         reads back through the interop package. -->
+    <PackageReference Include="Parquet.Net" Version="$(ParquetNetVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\NumSharp.Core\NumSharp.Core.csproj" />
+    <ProjectReference Include="..\..\src\NumSharp.Interop.ParquetNet\NumSharp.Interop.ParquetNet.csproj" />
+  </ItemGroup>
+
+</Project>

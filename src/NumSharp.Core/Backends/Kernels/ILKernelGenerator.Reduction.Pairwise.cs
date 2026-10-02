@@ -2,6 +2,8 @@ using System;
 using System.Collections.Concurrent;
 using System.Reflection;
 using System.Reflection.Emit;
+using System.Runtime.Intrinsics;
+using System.Threading;
 using NumSharp.Backends.Iteration;
 
 // =============================================================================
@@ -38,20 +40,153 @@ using NumSharp.Backends.Iteration;
 
 namespace NumSharp.Backends.Kernels
 {
+    /// <summary>
+    /// Typed entry to the float64 recursive pairwise fold — NumPy's <c>pairwise_sum</c> over
+    /// <paramref name="n"/> elements, returned WITHOUT the reduce loop's <c>*out +=</c> (so a caller can
+    /// combine subtrees exactly as the fold's own recursion does). Obtain it through
+    /// <see cref="ILKernelGenerator.TryGetPairwiseFoldDouble"/>.
+    /// </summary>
+    /// <param name="a">Address of logical element 0.</param>
+    /// <param name="n">Element count (≥ 0; an empty fold returns <c>-0.0</c>, the BASE seed).</param>
+    /// <param name="strideElements">Distance between consecutive elements, in ELEMENTS (1 = contiguous — the SIMD leaf).</param>
+    /// <returns>The pairwise sum, bit-identical to NumPy's <c>DOUBLE_pairwise_sum</c> over the same range.</returns>
+    internal unsafe delegate double PairwiseFoldDouble(void* a, long n, long strideElements);
+
+    /// <summary>
+    /// Typed entry to the float32 recursive pairwise fold (NumPy's <c>FLOAT_pairwise_sum</c>, accumulating in
+    /// float32). Obtain it through <see cref="ILKernelGenerator.TryGetPairwiseFoldSingle"/>.
+    /// </summary>
+    /// <param name="a">Address of logical element 0.</param>
+    /// <param name="n">Element count (≥ 0; an empty fold returns <c>-0.0f</c>).</param>
+    /// <param name="strideElements">Distance between consecutive elements, in ELEMENTS.</param>
+    /// <returns>The float32 pairwise sum, bit-identical to NumPy's over the same range.</returns>
+    internal unsafe delegate float PairwiseFoldSingle(void* a, long n, long strideElements);
+
+    /// <summary>
+    /// Typed entry to the complex128 recursive pairwise fold (NumPy's <c>CDOUBLE_pairwise_sum</c>) returning the
+    /// <c>(re, im)</c> sums as one <see cref="Vector128{T}"/>. Note the stride is in BYTES (the fold walks whole
+    /// complexes), unlike the real folds. Obtain it through <see cref="ILKernelGenerator.TryGetPairwiseFoldComplex"/>.
+    /// </summary>
+    /// <param name="a">Address of logical complex 0.</param>
+    /// <param name="nComplex">Complex element count (≥ 0; an empty fold returns <c>(-0.0, -0.0)</c>).</param>
+    /// <param name="strideBytes">Distance between consecutive complexes in BYTES (16 = contiguous).</param>
+    /// <returns><c>[reSum, imSum]</c>, bit-identical to NumPy's over the same range.</returns>
+    internal unsafe delegate Vector128<double> PairwiseFoldComplex(void* a, long nComplex, long strideBytes);
+
     public static partial class ILKernelGenerator
     {
         // Recursive pairwise fold DynamicMethods, rooted here so cross-DynamicMethod
         // `call` sites (the kernel below, and the fold's own self-recursion) stay alive.
         internal static readonly ConcurrentDictionary<NPTypeCode, DynamicMethod> _pwFolds = new();
 
+        // The COMPILED per-chunk pairwise-sum kernels, one per dtype — memoized like _pwFolds so the
+        // ~0.2 ms DynamicMethod JIT stays off the per-call path. See TryEmitPairwiseSumKernel's remarks.
+        internal static readonly ConcurrentDictionary<NPTypeCode, NDInnerLoopFunc> _pwKernels = new();
+
+        // Typed delegates over the cached _pwFolds DynamicMethods (built once on first request, see
+        // TryGetPairwiseFold). Published with Volatile so a racing reader sees a fully-built delegate.
+        private static PairwiseFoldDouble s_pwFoldDouble;
+        private static PairwiseFoldSingle s_pwFoldSingle;
+        private static PairwiseFoldComplex s_pwFoldComplex;
+
         /// <summary>
-        /// Try to build an IL-emitted SIMD pairwise Sum per-chunk kernel for
-        /// <paramref name="tc"/> (same-type accumulation). Returns null when the dtype
-        /// has no clean SIMD pairwise form (caller keeps the generic scalar fold).
-        /// Currently emitted for the IEEE binary floats (Single/Double); the same
-        /// emitter generalizes to any (clrType, elemSize) whose lane count divides 8.
+        /// The float64 pairwise fold as a typed delegate — the SAME DynamicMethod every float64 pairwise-sum
+        /// kernel <c>call</c>s, so a caller that folds sub-ranges with it and combines them with the fold's own
+        /// split rule (<c>n2 = n/2; n2 -= n2 % 8</c>) reproduces <c>np.add.reduce</c> bit for bit. Used by the
+        /// streaming (no-temp) fused reductions of <c>np.evaluate</c> (DefaultEngine.Evaluate.Stream.cs).
         /// </summary>
+        /// <returns>The typed fold, or null when the host has no SIMD pairwise kernel (the caller keeps its fallback).</returns>
+        internal static PairwiseFoldDouble TryGetPairwiseFoldDouble()
+            => TryGetPairwiseFold(NPTypeCode.Double, ref s_pwFoldDouble);
+
+        /// <summary>
+        /// The float32 pairwise fold as a typed delegate (float32 accumulation, NumPy's <c>FLOAT_pairwise_sum</c>);
+        /// same split rule and contract as <see cref="TryGetPairwiseFoldDouble"/>.
+        /// </summary>
+        /// <returns>The typed fold, or null when unavailable on this host.</returns>
+        internal static PairwiseFoldSingle TryGetPairwiseFoldSingle()
+            => TryGetPairwiseFold(NPTypeCode.Single, ref s_pwFoldSingle);
+
+        /// <summary>
+        /// The complex128 pairwise fold as a typed delegate. Its recursion splits a range of <c>nc</c> complexes as
+        /// <c>left = (nc - nc % 8) / 2</c> (NumPy halves the interleaved DOUBLE count, keeping it a multiple of 8),
+        /// which is NOT the real folds' rule — a caller combining sub-ranges must use this one.
+        /// </summary>
+        /// <returns>The typed fold, or null when unavailable on this host.</returns>
+        internal static PairwiseFoldComplex TryGetPairwiseFoldComplex()
+            => TryGetPairwiseFold(NPTypeCode.Complex, ref s_pwFoldComplex);
+
+        /// <summary>
+        /// Build (once) and publish a typed delegate over the cached pairwise fold for <paramref name="tc"/>.
+        /// Emitting the per-chunk kernel first is what populates <see cref="_pwFolds"/> (the kernel <c>call</c>s the
+        /// fold), so a host without SIMD / dynamic codegen yields null here exactly where
+        /// <see cref="TryEmitPairwiseSumKernel"/> does. Two racing threads may each bind a delegate to the same
+        /// immutable DynamicMethod; either one is correct, the last write wins.
+        /// </summary>
+        /// <typeparam name="TFold">The typed fold delegate matching <paramref name="tc"/>'s fold signature.</typeparam>
+        /// <param name="tc">Double, Single or Complex.</param>
+        /// <param name="cache">The static slot memoizing the delegate.</param>
+        /// <returns>The typed fold, or null when no pairwise fold exists for this dtype/host.</returns>
+        private static TFold TryGetPairwiseFold<TFold>(NPTypeCode tc, ref TFold cache) where TFold : Delegate
+        {
+            var existing = Volatile.Read(ref cache);
+            if (existing != null)
+                return existing;
+
+            // The kernel emission is what creates (and roots) the fold DynamicMethod — a null kernel means no
+            // SIMD pairwise path on this host, so there is no fold to hand out either.
+            if (TryEmitPairwiseSumKernel(tc) == null || !_pwFolds.TryGetValue(tc, out var fold))
+                return null;
+
+            var typed = (TFold)fold.CreateDelegate(typeof(TFold));
+            Volatile.Write(ref cache, typed);
+            return typed;
+        }
+
+        /// <summary>
+        /// The IL-emitted SIMD pairwise Sum per-chunk kernel for <paramref name="tc"/> (same-type
+        /// accumulation) — bit-for-bit NumPy's <c>pairwise_sum</c>, cached per dtype. Returns null when the
+        /// dtype has no clean SIMD pairwise form (Complex / Single / Double only) or the host has no SIMD /
+        /// dynamic codegen, so the caller keeps the generic scalar fold.
+        /// </summary>
+        /// <remarks>
+        /// The compiled delegate is a PURE function of the dtype: every build input derives from
+        /// <paramref name="tc"/>, and the recursive fold it <c>call</c>s is itself cached in
+        /// <see cref="_pwFolds"/> — so it is memoized in <see cref="_pwKernels"/> exactly as the fold is.
+        /// Without this cache the per-call flat-sum divert (<c>DefaultEngine.PairwiseSumInto</c>, added with
+        /// plan P2 M1) re-emitted a fresh <see cref="DynamicMethod"/> on EVERY <c>np.evaluate(Sum(float…))</c>
+        /// call — a ~0.22 ms JIT that dominated small/medium flat reductions (measured 0.00× / 0.05× NumPy at
+        /// 1K / 100K, amortized away only at 4M). The axis / general reduce callers
+        /// (<see cref="CreateReduceInnerLoop"/>) already cache their result per <c>ReduceKernelKey</c>, so they
+        /// reach this at most once per key and are unaffected. Two threads racing on a fresh dtype compile the
+        /// same immutable kernel and one wins — a benign race, mirroring the fold cache.
+        /// </remarks>
+        /// <param name="tc">The element dtype (Single, Double or Complex); any other returns null.</param>
+        /// <returns>The cached pairwise-sum kernel, or null when unavailable for this dtype/host.</returns>
         internal static unsafe NDInnerLoopFunc TryEmitPairwiseSumKernel(NPTypeCode tc)
+        {
+            // A hit is the whole point — the flat-sum divert calls this once per np.evaluate(Sum) call.
+            if (_pwKernels.TryGetValue(tc, out var cached))
+                return cached;
+
+            var kernel = EmitPairwiseSumKernelUncached(tc);
+            // Cache only a successful emission: a null (no SIMD / AOT / unsupported dtype) is the cheap
+            // early-return path below, so leaving it uncached costs nothing and never stores a null.
+            if (kernel != null)
+                _pwKernels[tc] = kernel;
+            return kernel;
+        }
+
+        /// <summary>
+        /// The cold path behind <see cref="TryEmitPairwiseSumKernel"/>: bind the fold and emit a fresh
+        /// per-chunk kernel for <paramref name="tc"/>. Emitted for the IEEE binary floats (Single / Double)
+        /// and Complex; the same emitter generalizes to any (clrType, elemSize) whose lane count divides 8.
+        /// Never throws — returns null on any unsupported dtype/host or emission failure (the caller then
+        /// keeps the generic scalar fold).
+        /// </summary>
+        /// <param name="tc">The element dtype to emit for.</param>
+        /// <returns>A freshly compiled kernel, or null when none applies.</returns>
+        private static unsafe NDInnerLoopFunc EmitPairwiseSumKernelUncached(NPTypeCode tc)
         {
             if (!DirectILKernelGenerator.Enabled) return null;
             if (DirectILKernelGenerator.VectorBits < 128) return null; // no SIMD host → keep generic fold

@@ -125,7 +125,9 @@ namespace NumSharp.Backends.Iteration
                 vectorBody = il =>
                 {
                     var vectorLocals = new LocalBuilder[nIn];
-                    var vecType = DirectILKernelGenerator.GetVectorType(DirectILKernelGenerator.GetClrType(inputTypes[0]));
+                    // Vector locals take the SIMD LANE type: a bool operand rides the byte lanes
+                    // (Vector{N}<bool> is not a type — declaring it made the loads type-confused).
+                    var vecType = DirectILKernelGenerator.GetVectorType(DirectILKernelGenerator.GetSimdLaneType(inputTypes[0]));
                     for (int i = nIn - 1; i >= 0; i--)
                     {
                         vectorLocals[i] = il.DeclareLocal(vecType);
@@ -163,6 +165,25 @@ namespace NumSharp.Backends.Iteration
             return true;
         }
 
+        /// <summary>
+        /// A sub-32-bit integer result lives on the IL stack as an int32 that the arithmetic did
+        /// NOT wrap (byte 200 + 100 is 300 there; a ROOT node is truncated for free by its stind.i1
+        /// store). A PARENT node converts the intermediate to a wider dtype, so the wrap must
+        /// happen at the node or <c>sqrt(add(u8, u8))</c> reads 300 where NumPy reads 44 — the
+        /// uint8/int8/int16 cells of the evaluate oracle tier. One conv.* opcode; no-op elsewhere.
+        /// </summary>
+        internal static void EmitNormalizeNarrowInt(ILGenerator il, NPTypeCode t)
+        {
+            switch (t)
+            {
+                case NPTypeCode.Byte: il.Emit(OpCodes.Conv_U1); break;
+                case NPTypeCode.SByte: il.Emit(OpCodes.Conv_I1); break;
+                case NPTypeCode.Int16: il.Emit(OpCodes.Conv_I2); break;
+                case NPTypeCode.UInt16:
+                case NPTypeCode.Char: il.Emit(OpCodes.Conv_U2); break;
+            }
+        }
+
         // ===================================================================
         // Leaf factories
         // ===================================================================
@@ -170,11 +191,23 @@ namespace NumSharp.Backends.Iteration
         /// <summary>Reference the i-th operand of the iterator (0-based input index).</summary>
         public static NDExpr Input(int index) => new InputNode(index);
 
-        /// <summary>Push a constant of the given .NET type. Value is converted to the output dtype when evaluated.</summary>
+        /// <summary>
+        /// A literal. NEP50 kind follows the CLR type (see <see cref="NDExprLiteralKind"/>): the
+        /// numeric primitives, <c>bool</c> and <c>Complex</c> are WEAK Python literals that adopt the
+        /// dtype of the array they meet (<c>i4 + 2 → i4</c>, <c>f2 + 2.5 → f2</c>, <c>u8 + 2^64-1 → u8</c>);
+        /// <c>Half</c>, <c>decimal</c> and <c>char</c> are STRONG and promote like a 0-d array of their dtype.
+        /// </summary>
         public static NDExpr Const(double value) => new ConstNode(value);
         public static NDExpr Const(float value) => new ConstNode(value);
         public static NDExpr Const(long value) => new ConstNode(value);
         public static NDExpr Const(int value) => new ConstNode(value);
+        public static NDExpr Const(uint value) => new ConstNode(value);
+        public static NDExpr Const(ulong value) => new ConstNode(value);
+        public static NDExpr Const(bool value) => new ConstNode(value);
+        public static NDExpr Const(System.Numerics.Complex value) => new ConstNode(value);
+        public static NDExpr Const(Half value) => new ConstNode(value);
+        public static NDExpr Const(decimal value) => new ConstNode(value);
+        public static NDExpr Const(char value) => new ConstNode(value);
 
         // ===================================================================
         // Binary factories
@@ -200,6 +233,287 @@ namespace NumSharp.Backends.Iteration
         public static NDExpr Max(NDExpr a, NDExpr b) => new MinMaxNode(isMin: false, a, b);
         public static NDExpr Clamp(NDExpr x, NDExpr lo, NDExpr hi) => Min(Max(x, lo), hi);
         public static NDExpr Where(NDExpr cond, NDExpr a, NDExpr b) => new WhereNode(cond, a, b);
+
+        // ===================================================================
+        // Logical / N-ary selection / clip (Phase 4.3)
+        //
+        // LogicalAnd/Or/Xor are a DEDICATED node (LogicalNode), not the 4.2
+        // mechanical BinaryOp route: their result is always Boolean via a
+        // NONZERO-TEST of each operand at its OWN dtype (`(a != 0) op (b != 0)`),
+        // which no engine BinaryOp expresses. Select and Clip are pure LOWERINGS
+        // over the existing WhereNode / MinMaxNode kernels — no new node.
+        // ===================================================================
+
+        /// <summary>
+        /// Element-wise logical AND (np.logical_and): the result is ALWAYS Boolean, formed by
+        /// nonzero-testing each operand at its OWN dtype — <c>(a != 0) &amp; (b != 0)</c> — so it is
+        /// NOT the bitwise <see cref="BitwiseAnd"/> (<c>&amp;</c>). Every dtype is accepted, complex
+        /// included (a complex is truthy iff either component is nonzero); a NaN is truthy
+        /// (<c>NaN != 0</c>), and ±0 is falsy. Vectorizes on a SIMD lane (each operand becomes a
+        /// truthiness mask, combined by a vector AND).
+        /// </summary>
+        /// <param name="a">First operand (nonzero-tested).</param>
+        /// <param name="b">Second operand (nonzero-tested).</param>
+        /// <returns>A Boolean-typed expression node computing the logical AND.</returns>
+        public static NDExpr LogicalAnd(NDExpr a, NDExpr b) => new LogicalNode(LogicalOp.And, a, b);
+
+        /// <summary>
+        /// Element-wise logical OR (np.logical_or) — <c>(a != 0) | (b != 0)</c>, always Boolean. See
+        /// <see cref="LogicalAnd"/> for the nonzero-test / dtype / NaN semantics; NOT the bitwise
+        /// <see cref="BitwiseOr"/>.
+        /// </summary>
+        /// <param name="a">First operand (nonzero-tested).</param>
+        /// <param name="b">Second operand (nonzero-tested).</param>
+        /// <returns>A Boolean-typed expression node computing the logical OR.</returns>
+        public static NDExpr LogicalOr(NDExpr a, NDExpr b) => new LogicalNode(LogicalOp.Or, a, b);
+
+        /// <summary>
+        /// Element-wise logical XOR (np.logical_xor) — <c>(a != 0) ^ (b != 0)</c>, always Boolean. See
+        /// <see cref="LogicalAnd"/>; NOT the bitwise <see cref="BitwiseXor"/>.
+        /// </summary>
+        /// <param name="a">First operand (nonzero-tested).</param>
+        /// <param name="b">Second operand (nonzero-tested).</param>
+        /// <returns>A Boolean-typed expression node computing the logical XOR.</returns>
+        public static NDExpr LogicalXor(NDExpr a, NDExpr b) => new LogicalNode(LogicalOp.Xor, a, b);
+
+        /// <summary>
+        /// Piecewise selection (np.select): each output element is drawn from the choice whose condition
+        /// is true, the FIRST matching condition winning; positions where every condition is false take
+        /// <paramref name="default"/>. Lowered to a reverse <see cref="Where"/> chain
+        /// (<c>where(c0, v0, where(c1, v1, … where(cN, vN, default)))</c>), so the result dtype is
+        /// <c>result_type(*choices, default)</c> (the nested where nodes compose the same promotion) and
+        /// the conditions are nonzero-tested at their own dtype exactly like <see cref="Where"/>'s
+        /// condition — in practice each is a Boolean comparison, matching np.select's bool condlist.
+        /// </summary>
+        /// <param name="condlist">The conditions, outermost (highest priority) first.</param>
+        /// <param name="choicelist">The choices, aligned with <paramref name="condlist"/>.</param>
+        /// <param name="default">The fill where no condition is true; <c>null</c> ≙ NumPy's default weak-int <c>0</c>.</param>
+        /// <returns>An expression node selecting per element from the first true condition's choice.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="condlist"/> or <paramref name="choicelist"/> (or an element) is null.</exception>
+        /// <exception cref="ArgumentException">The lists differ in length (NumPy "list of cases must be same length as list of conditions"), or <paramref name="condlist"/> is empty (NumPy "select with an empty condition list is not possible").</exception>
+        public static NDExpr Select(NDExpr[] condlist, NDExpr[] choicelist, NDExpr @default = null)
+        {
+            if (condlist is null) throw new ArgumentNullException(nameof(condlist));
+            if (choicelist is null) throw new ArgumentNullException(nameof(choicelist));
+            // NumPy validation ORDER + verbatim text: length mismatch before emptiness.
+            if (condlist.Length != choicelist.Length)
+                throw new ArgumentException("list of cases must be same length as list of conditions");
+            if (condlist.Length == 0)
+                throw new ArgumentException("select with an empty condition list is not possible");
+
+            // First-true-wins ⇒ fold from the LAST pair inward so condlist[0] is the OUTERMOST where.
+            NDExpr result = @default ?? Const(0);
+            for (int i = condlist.Length - 1; i >= 0; i--)
+            {
+                var cond = condlist[i] ?? throw new ArgumentNullException(nameof(condlist));
+                var choice = choicelist[i] ?? throw new ArgumentNullException(nameof(choicelist));
+                result = new WhereNode(cond, choice, result);
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Clip (limit) the values of <paramref name="x"/> to a range (np.clip). Either bound may be
+        /// <c>null</c> (NumPy's <c>None</c>): a one-sided clip lowers to the NaN-propagating
+        /// <see cref="Max"/>/<see cref="Min"/> (<c>np.clip(x, lo, None) ≡ np.maximum(x, lo)</c>,
+        /// <c>np.clip(x, None, hi) ≡ np.minimum(x, hi)</c>), and a two-sided clip to
+        /// <c>Min(Max(x, lo), hi)</c> (= <see cref="Clamp"/>), which is the exact general clip ufunc
+        /// (<c>_NPY_MIN(_NPY_MAX(x, lo), hi)</c>). Result dtype is <c>result_type(x, lo, hi)</c>.
+        /// </summary>
+        /// <param name="x">The values to clip.</param>
+        /// <param name="lo">Lower bound, or <c>null</c> for no lower bound.</param>
+        /// <param name="hi">Upper bound, or <c>null</c> for no upper bound.</param>
+        /// <returns>An expression node clipping <paramref name="x"/> to <c>[lo, hi]</c>.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="x"/> is null.</exception>
+        /// <exception cref="ArgumentException">Both bounds are null (NumPy "One of max or min must be given").</exception>
+        /// <remarks>
+        /// Bit-exact with NumPy 2.4.2 for one-sided clips and for two-sided clips with ARRAY bounds. A
+        /// two-sided clip with SCALAR (0-d) bounds differs from NumPy ONLY in the pathological
+        /// signed-zero-exactly-at-a-finite-bound corner (e.g. <c>clip(-0.0, -inf, +0.0)</c>): NumPy's
+        /// const-scalar fast path returns <c>-0.0</c> while the general min(max) path — which NumSharp
+        /// always takes — returns <c>+0.0</c>; NaN-sign-of-bound corners are float-NaN differences the
+        /// oracle tokenizes.
+        /// </remarks>
+        public static NDExpr Clip(NDExpr x, NDExpr lo, NDExpr hi)
+        {
+            if (x is null) throw new ArgumentNullException(nameof(x));
+            if (lo is null && hi is null)
+                throw new ArgumentException("One of max or min must be given");
+            if (lo is null) return Min(x, hi);          // np.clip(x, None, hi) ≡ np.minimum(x, hi)
+            if (hi is null) return Max(x, lo);          // np.clip(x, lo, None) ≡ np.maximum(x, lo)
+            return Min(Max(x, lo), hi);                 // _NPY_MIN(_NPY_MAX(x, lo), hi)
+        }
+
+        // ===================================================================
+        // Elementwise binary ufunc family (Phase 4 coverage) — every node here
+        // rides the shared BinaryNode kernel; the scalar emit is the SAME per-op
+        // emitter the engine's own ufuncs use (DirectILKernelGenerator.
+        // EmitScalarOperation), so results are byte-for-byte the unfused chain.
+        // ===================================================================
+
+        /// <summary>
+        /// NaN-PROPAGATING element-wise maximum (np.maximum) — an exact alias of <see cref="Max"/>.
+        /// A NaN operand WINS (the result is NaN if either input is NaN); contrast <see cref="FMax"/>,
+        /// which ignores NaN. Provided so <c>np.maximum</c> ports verbatim; identical node, cost and
+        /// dtype to <see cref="Max"/> (plain result_type promotion, complex compares lexicographically).
+        /// </summary>
+        /// <param name="a">First operand.</param>
+        /// <param name="b">Second operand.</param>
+        /// <returns>An expression node computing the NaN-propagating maximum of <paramref name="a"/> and <paramref name="b"/>.</returns>
+        public static NDExpr Maximum(NDExpr a, NDExpr b) => Max(a, b);
+
+        /// <summary>
+        /// NaN-PROPAGATING element-wise minimum (np.minimum) — an exact alias of <see cref="Min"/>.
+        /// A NaN operand WINS; contrast <see cref="FMin"/>. See <see cref="Maximum"/>.
+        /// </summary>
+        /// <param name="a">First operand.</param>
+        /// <param name="b">Second operand.</param>
+        /// <returns>An expression node computing the NaN-propagating minimum of <paramref name="a"/> and <paramref name="b"/>.</returns>
+        public static NDExpr Minimum(NDExpr a, NDExpr b) => Min(a, b);
+
+        /// <summary>
+        /// NaN-IGNORING element-wise maximum (np.fmax): when exactly one operand is NaN the OTHER
+        /// (the number) is returned — the opposite of <see cref="Maximum"/>/<see cref="Max"/>, which
+        /// propagate NaN. Dtype-preserving (plain result_type promotion, like maximum). Scalar-only in
+        /// the fused kernel (no SIMD lane), so a tree containing it runs scalar end-to-end.
+        /// </summary>
+        /// <param name="a">First operand.</param>
+        /// <param name="b">Second operand.</param>
+        /// <returns>An expression node computing the NaN-ignoring maximum.</returns>
+        public static NDExpr FMax(NDExpr a, NDExpr b) => new BinaryNode(BinaryOp.FMax, a, b);
+
+        /// <summary>
+        /// NaN-IGNORING element-wise minimum (np.fmin): the non-NaN operand wins. See <see cref="FMax"/>.
+        /// </summary>
+        /// <param name="a">First operand.</param>
+        /// <param name="b">Second operand.</param>
+        /// <returns>An expression node computing the NaN-ignoring minimum.</returns>
+        public static NDExpr FMin(NDExpr a, NDExpr b) => new BinaryNode(BinaryOp.FMin, a, b);
+
+        /// <summary>
+        /// C-style floating remainder (np.fmod): the result takes the sign of the DIVIDEND
+        /// (<paramref name="a"/>), unlike <see cref="Mod"/> which is floored and takes the divisor's
+        /// sign — so <c>Fmod(-7,3) == -1</c> where <c>Mod(-7,3) == 2</c>. Promotion follows Mod:
+        /// integer stays integer, a bool pair falls to the int8 loop; there is NO complex loop, so a
+        /// complex operand throws a no-loop <see cref="NotSupportedException"/> at typing time.
+        /// </summary>
+        /// <param name="a">Dividend (its sign is the result's sign).</param>
+        /// <param name="b">Divisor.</param>
+        /// <returns>An expression node computing the truncated remainder.</returns>
+        public static NDExpr Fmod(NDExpr a, NDExpr b) => new BinaryNode(BinaryOp.Fmod, a, b);
+
+        /// <summary>
+        /// Magnitude of <paramref name="a"/> with the sign of <paramref name="b"/> (np.copysign) — an
+        /// EXACT sign-bit copy, so <c>CopySign(3, -0.0)</c> is <c>-3</c> and the sign of ±0/±NaN is
+        /// honoured bit-for-bit. Float-only ufunc: bool/int operands PROMOTE to their tier float
+        /// (bool/i8/u8→f16, i16/u16→f32, i32+→f64, chosen per input like arctan2), and a complex
+        /// operand has no loop (throws at typing time).
+        /// </summary>
+        /// <param name="a">The value whose magnitude is kept.</param>
+        /// <param name="b">The value whose sign is copied.</param>
+        /// <returns>An expression node computing the copysign.</returns>
+        public static NDExpr CopySign(NDExpr a, NDExpr b) => new BinaryNode(BinaryOp.CopySign, a, b);
+
+        /// <summary>
+        /// The next representable value after <paramref name="a"/> toward <paramref name="b"/>
+        /// (np.nextafter) — an EXACT one-ULP bit step (bit-exact with NumPy). Same float-tier promotion
+        /// as <see cref="CopySign"/>; complex has no loop (throws at typing time).
+        /// </summary>
+        /// <param name="a">Start value.</param>
+        /// <param name="b">Direction to step toward.</param>
+        /// <returns>An expression node computing nextafter.</returns>
+        public static NDExpr NextAfter(NDExpr a, NDExpr b) => new BinaryNode(BinaryOp.NextAfter, a, b);
+
+        /// <summary>
+        /// Numerically stable <c>log(exp(a)+exp(b))</c> (np.logaddexp). Same float-tier promotion as
+        /// <see cref="CopySign"/> (complex has no loop). NOT bit-exact with NumPy — the managed fdlibm
+        /// <c>log1p</c> it composes over differs ≤2 ULP from NumPy's closed UCRT <c>log1p</c> (the same
+        /// documented ~ULP envelope as the unary transcendentals), so it is gated within 2 ULP, not
+        /// byte-for-byte.
+        /// </summary>
+        /// <param name="a">First log-domain value.</param>
+        /// <param name="b">Second log-domain value.</param>
+        /// <returns>An expression node computing logaddexp.</returns>
+        public static NDExpr LogAddExp(NDExpr a, NDExpr b) => new BinaryNode(BinaryOp.LogAddExp, a, b);
+
+        /// <summary>
+        /// Base-2 stable log-sum-exp <c>log2(2**a + 2**b)</c> (np.logaddexp2). See
+        /// <see cref="LogAddExp"/> — ≤2 ULP vs NumPy (the extra LOG2E product), not bit-exact.
+        /// </summary>
+        /// <param name="a">First value.</param>
+        /// <param name="b">Second value.</param>
+        /// <returns>An expression node computing logaddexp2.</returns>
+        public static NDExpr LogAddExp2(NDExpr a, NDExpr b) => new BinaryNode(BinaryOp.LogAddExp2, a, b);
+
+        /// <summary>
+        /// <c>sqrt(a**2 + b**2)</c> without spurious overflow/underflow (np.hypot). Same float-tier
+        /// promotion as <see cref="CopySign"/> (complex has no loop). float32/float16 are bit-exact with
+        /// NumPy; float64 is NumSharp's correctly-rounded Borges-FMA result, which is MORE accurate than
+        /// NumPy's faithfully-rounded UCRT hypot and so differs ≤1 ULP on ~9 % of inputs (gated within
+        /// that envelope, not byte-for-byte at float64).
+        /// </summary>
+        /// <param name="a">First leg.</param>
+        /// <param name="b">Second leg.</param>
+        /// <returns>An expression node computing the hypotenuse.</returns>
+        public static NDExpr Hypot(NDExpr a, NDExpr b) => new BinaryNode(BinaryOp.Hypot, a, b);
+
+        /// <summary>
+        /// The Heaviside step function (np.heaviside): <c>0</c> if <paramref name="x"/>&lt;0,
+        /// <paramref name="h0"/> if <paramref name="x"/>==0, <c>1</c> if <paramref name="x"/>&gt;0, and
+        /// the positive canonical NaN if <paramref name="x"/> is NaN. NOT commutative — <paramref name="x"/>
+        /// selects the branch and <paramref name="h0"/> is ONLY the exact-zero fill (its bits, NaN sign
+        /// included, pass through). Same float-tier promotion as <see cref="CopySign"/>; complex has no
+        /// loop. Bit-exact with NumPy at every supported dtype.
+        /// </summary>
+        /// <param name="x">The value whose sign selects the step branch.</param>
+        /// <param name="h0">The fill returned where <paramref name="x"/> is exactly zero.</param>
+        /// <returns>An expression node computing the Heaviside step.</returns>
+        public static NDExpr Heaviside(NDExpr x, NDExpr h0) => new BinaryNode(BinaryOp.Heaviside, x, h0);
+
+        /// <summary>
+        /// Greatest common divisor of |a| and |b| (np.gcd). INTEGER-ONLY: valid only when the two
+        /// operands promote to a real integer dtype (a bool paired with an integer is fine, but a
+        /// bool/bool pair, any float/complex/decimal, and the uint64+signed pair — which promotes to
+        /// float64 — all have NO loop and throw a "did not contain a loop" <see cref="NotSupportedException"/>
+        /// at typing time). The result can be NEGATIVE where the magnitude wraps the signed range
+        /// (<c>Gcd(int8 -128, -128) == -128</c>); <c>Gcd(0,0) == 0</c>. Scalar-only in the fused kernel.
+        /// </summary>
+        /// <param name="a">First operand.</param>
+        /// <param name="b">Second operand.</param>
+        /// <returns>An expression node computing the GCD.</returns>
+        public static NDExpr Gcd(NDExpr a, NDExpr b) => new BinaryNode(BinaryOp.Gcd, a, b);
+
+        /// <summary>
+        /// Lowest common multiple of |a| and |b| (np.lcm): 0 if either is 0, else <c>|a|/gcd*|b|</c>
+        /// (divide-before-multiply, so the product WRAPS the dtype on overflow, matching NumPy).
+        /// Same INTEGER-ONLY loop coverage / no-loop errors as <see cref="Gcd"/>.
+        /// </summary>
+        /// <param name="a">First operand.</param>
+        /// <param name="b">Second operand.</param>
+        /// <returns>An expression node computing the LCM.</returns>
+        public static NDExpr Lcm(NDExpr a, NDExpr b) => new BinaryNode(BinaryOp.Lcm, a, b);
+
+        /// <summary>
+        /// Bit shift left (np.left_shift). Integer loops only: a bool pair falls to the int8 loop, an
+        /// integer pair keeps its promoted integer dtype, and float/complex — plus the uint64+signed
+        /// pair (which promotes to float64) — have NO loop and throw a "not supported for the input
+        /// types" <see cref="NotSupportedException"/> at typing time. A shift count outside
+        /// <c>[0, bitwidth)</c> follows NumPy's overflow rule at the result width. Scalar-only.
+        /// </summary>
+        /// <param name="a">The value to shift.</param>
+        /// <param name="b">The shift count.</param>
+        /// <returns>An expression node computing the left shift.</returns>
+        public static NDExpr LeftShift(NDExpr a, NDExpr b) => new BinaryNode(BinaryOp.LeftShift, a, b);
+
+        /// <summary>
+        /// Bit shift right (np.right_shift) — arithmetic for signed, logical for unsigned. Same integer
+        /// loop coverage / no-loop errors and overflow rule as <see cref="LeftShift"/>.
+        /// </summary>
+        /// <param name="a">The value to shift.</param>
+        /// <param name="b">The shift count.</param>
+        /// <returns>An expression node computing the right shift.</returns>
+        public static NDExpr RightShift(NDExpr a, NDExpr b) => new BinaryNode(BinaryOp.RightShift, a, b);
 
         // ===================================================================
         // Unary factories
@@ -243,6 +557,41 @@ namespace NumSharp.Backends.Iteration
         public static NDExpr Floor(NDExpr x) => new UnaryNode(UnaryOp.Floor, x);
         public static NDExpr Ceil(NDExpr x) => new UnaryNode(UnaryOp.Ceil, x);
         public static NDExpr Round(NDExpr x) => new UnaryNode(UnaryOp.Round, x);
+
+        /// <summary>
+        /// Round to <paramref name="decimals"/> decimal places (np.round(x, decimals) / np.around) — a
+        /// DTYPE-PRESERVING port of NumPy's <c>PyArray_Round</c>. For <c>decimals == 0</c> this is exactly
+        /// <see cref="Round(NDExpr)"/> (banker's rint); for <c>decimals != 0</c> it composes
+        /// <c>op2(rint(op1(x, 10^|decimals|)), 10^|decimals|)</c> (mul→div for positive, div→mul for
+        /// negative). Every dtype behaves as NumPy 2.4.2 does:
+        /// <list type="bullet">
+        /// <item>float / complex: computed at the input's own float dtype (complex rounds each lane), dtype PRESERVED;</item>
+        /// <item>INTEGER, <c>decimals ≥ 0</c>: the IDENTITY (an integer has no fractional part — no float round-trip, so a huge int64 is untouched);</item>
+        /// <item>INTEGER, <c>decimals &lt; 0</c>: the round runs in float64 and is CAST BACK to the integer dtype, so an out-of-range result WRAPS (e.g. <c>round(uint8 255, -1)</c> → 4);</item>
+        /// <item>BOOL with <c>decimals != 0</c>: THROWS NumPy's <c>UFuncTypeError</c> "Cannot cast ufunc 'multiply'/'divide' output from dtype('float64') to dtype('bool')…" (the multiply/divide output cannot cast back to bool).</item>
+        /// </list>
+        /// Scalar-only in the fused kernel (the multi-step composition's SIMD form is deferred).
+        /// </summary>
+        /// <param name="x">The operand to round.</param>
+        /// <param name="decimals">The number of decimal places (negative rounds to tens/hundreds/…).</param>
+        /// <returns>An expression node computing <paramref name="x"/> rounded to <paramref name="decimals"/> places, dtype preserved.</returns>
+        public static NDExpr Round(NDExpr x, int decimals)
+            => decimals == 0 ? new UnaryNode(UnaryOp.Round, x) : new RoundNode(x, decimals);
+
+        /// <summary>
+        /// Round to the nearest integer, half-to-even (np.rint) — the TRUE ufunc form of round-half-to-even.
+        /// The VALUE is identical to <see cref="Round"/> (both are banker's rounding, and Rint aliases Round
+        /// at every kernel emit site), but the DTYPE differs: where <see cref="Round"/> PRESERVES the input
+        /// dtype (an integer array rounds to itself unchanged), <c>Rint</c> PROMOTES to a float tier
+        /// (bool/int8/uint8→float16, int16/uint16→float32, int32+→float64; float/complex/decimal preserved) —
+        /// so <c>Rint(int32)</c> is a float64 while <c>Round(int32)</c> is the int32 identity. Complex rounds
+        /// the real and imaginary parts separately. Vectorizes at float32/float64 on a capable runtime, exactly
+        /// like <see cref="Round"/>.
+        /// </summary>
+        /// <param name="x">The operand.</param>
+        /// <returns>An expression node computing <paramref name="x"/> rounded half-to-even, at the promoted float tier.</returns>
+        public static NDExpr Rint(NDExpr x) => new UnaryNode(UnaryOp.Rint, x);
+
         public static NDExpr Truncate(NDExpr x) => new UnaryNode(UnaryOp.Truncate, x);
 
         // Bitwise / logical
@@ -253,6 +602,183 @@ namespace NumSharp.Backends.Iteration
         public static NDExpr IsNaN(NDExpr x) => new UnaryNode(UnaryOp.IsNan, x);
         public static NDExpr IsFinite(NDExpr x) => new UnaryNode(UnaryOp.IsFinite, x);
         public static NDExpr IsInf(NDExpr x) => new UnaryNode(UnaryOp.IsInf, x);
+
+        // ===================================================================
+        // Elementwise unary ufunc family (Phase 4 coverage) — every node here
+        // rides the shared UnaryNode kernel; the scalar/vector emit is the SAME
+        // per-op emitter the engine's own ufuncs use (DirectILKernelGenerator.
+        // EmitUnary{Scalar,Vector}Operation), so a fused unary node is
+        // byte-for-byte the unfused chain. Real/Imag/Angle/Rint/Round(decimals)/
+        // Cast (the dtype-CHANGING unary set) are a separate follow-up.
+        // ===================================================================
+
+        /// <summary>
+        /// Identity at every numeric dtype (np.positive). The loaded value IS the result — a fused
+        /// tree wrapping an operand in <see cref="Positive"/> compiles to a pure copy (and vectorizes
+        /// as one). Its only observable effect is dtype: it is dtype-PRESERVING, so unlike a bare
+        /// operand it forces the result to that operand's dtype. **BOOL has no loop** — NumPy rejects
+        /// <c>np.positive</c> on a boolean array (there is no <c>dtype=</c> escape in the fused tier),
+        /// so a bool child throws at typing.
+        /// </summary>
+        /// <param name="x">The operand.</param>
+        /// <returns>An expression node evaluating to <paramref name="x"/> unchanged (dtype preserved).</returns>
+        public static NDExpr Positive(NDExpr x) => new UnaryNode(UnaryOp.Positive, x);
+
+        /// <summary>
+        /// Complex conjugate (np.conjugate). For Complex it flips the sign of the imaginary part; for
+        /// every REAL float/int dtype it is the identity (dtype preserved) — with ONE NumPy quirk: a
+        /// <b>bool</b> child promotes to <b>int8</b> (probed 2.4.2: <c>np.conjugate(bool_).dtype ==
+        /// int8</c>), it does not stay bool. Scalar-only in the fused kernel (the complex path has no
+        /// SIMD lane), so a tree containing it runs scalar end-to-end.
+        /// </summary>
+        /// <param name="x">The operand.</param>
+        /// <returns>An expression node computing the element-wise complex conjugate of <paramref name="x"/>.</returns>
+        public static NDExpr Conjugate(NDExpr x) => new UnaryNode(UnaryOp.Conjugate, x);
+
+        /// <summary>NumPy alias of <see cref="Conjugate"/> (np.conj). Identical node, cost and dtype.</summary>
+        /// <param name="x">The operand.</param>
+        /// <returns>An expression node computing the element-wise complex conjugate of <paramref name="x"/>.</returns>
+        public static NDExpr Conj(NDExpr x) => new UnaryNode(UnaryOp.Conjugate, x);
+
+        /// <summary>
+        /// Float-only absolute value (np.fabs). Differs from <see cref="Abs"/> in two dtype-level ways:
+        /// it PROMOTES bool/int to the tier float (bool/int8/uint8→float16, int16/uint16→float32,
+        /// int32+→float64; floats/decimal preserved) — so <c>Fabs(int)</c> is always a float where
+        /// <c>Abs(int)</c> preserves int — and it has NO COMPLEX loop (a complex child throws at typing
+        /// with NumPy's coercion TypeError). The operation itself is <see cref="Abs"/>'s (clear the IEEE
+        /// sign bit), applied AFTER the int→float promotion, so <c>Fabs(int.MinValue)</c> is the exact
+        /// float magnitude, never the wrapped integer abs.
+        /// </summary>
+        /// <param name="x">The operand.</param>
+        /// <returns>An expression node computing the float-valued absolute value of <paramref name="x"/>.</returns>
+        public static NDExpr Fabs(NDExpr x) => new UnaryNode(UnaryOp.Fabs, x);
+
+        /// <summary>
+        /// Distance to the adjacent representable value away from zero — one ULP (np.spacing). A
+        /// float-only ufunc: it PROMOTES bool/int to the tier float (like <see cref="Fabs"/>), preserves
+        /// floats/decimal, and has NO COMPLEX loop (a complex child throws at typing). float32/float64
+        /// are SIGNED (carry the sign of x); float16 is NumPy's separate always-positive
+        /// <c>npy_half_spacing</c>. Pure bit-arithmetic (no transcendental), so it is IEEE-exact and
+        /// portable — no host-libm dependence.
+        /// </summary>
+        /// <param name="x">The operand.</param>
+        /// <returns>An expression node computing the one-ULP spacing at each element of <paramref name="x"/>.</returns>
+        public static NDExpr Spacing(NDExpr x) => new UnaryNode(UnaryOp.Spacing, x);
+
+        /// <summary>
+        /// IEEE sign-bit predicate (np.signbit) — result is always <b>bool</b>. NOT <c>x &lt; 0</c>: it
+        /// reads the raw sign bit, so <c>-0.0</c> and a NEGATIVE NaN are True while <c>+0.0</c>, <c>+inf</c>
+        /// and a positive NaN are False. Signed integers use the two's-complement MSB (<c>x &lt; 0</c>);
+        /// unsigned/bool/char are always False; COMPLEX has no loop (a complex child throws at typing).
+        /// Scalar-only in the fused kernel (bool result, no vector body here), so a tree containing it
+        /// runs scalar end-to-end.
+        /// </summary>
+        /// <param name="x">The operand.</param>
+        /// <returns>An expression node evaluating True where <paramref name="x"/>'s sign bit is set.</returns>
+        public static NDExpr SignBit(NDExpr x) => new UnaryNode(UnaryOp.SignBit, x);
+
+        /// <summary>
+        /// Test for positive infinity (np.isposinf) — result is <b>bool</b>, True only where <c>x == +inf</c>.
+        /// Integer/bool inputs are all-False (no infinity). A COMPLEX child throws at typing with NumPy's
+        /// ambiguity TypeError ("…not supported for complex128 values because it would be ambiguous.") —
+        /// a DIFFERENT message from the ufunc no-loop family, because isposinf is a FUNCTION, not a ufunc.
+        /// Scalar-only in the fused kernel.
+        /// </summary>
+        /// <param name="x">The operand.</param>
+        /// <returns>An expression node evaluating True where <paramref name="x"/> is positive infinity.</returns>
+        public static NDExpr IsPosInf(NDExpr x) => new UnaryNode(UnaryOp.IsPosInf, x);
+
+        /// <summary>
+        /// Test for negative infinity (np.isneginf) — result is <b>bool</b>, True only where <c>x == -inf</c>.
+        /// See <see cref="IsPosInf"/> for the integer/bool (all-False) and complex (ambiguity TypeError)
+        /// behavior. Scalar-only in the fused kernel.
+        /// </summary>
+        /// <param name="x">The operand.</param>
+        /// <returns>An expression node evaluating True where <paramref name="x"/> is negative infinity.</returns>
+        public static NDExpr IsNegInf(NDExpr x) => new UnaryNode(UnaryOp.IsNegInf, x);
+
+        /// <summary>
+        /// Population count of the absolute value — the number of set bits in <c>|x|</c> (np.bitwise_count).
+        /// INTEGER/BOOL ONLY: every integer/bool/char dtype maps to a <b>uint8</b> result, while
+        /// float/float16/complex/decimal have NO loop and throw at typing. It CONSUMES the input dtype
+        /// (a wide value is counted at its own width, never truncated to the uint8 output first) and a
+        /// signed negative counts the magnitude (<c>bitwise_count(-1) == 1</c>, not 8). Scalar-only in
+        /// the fused kernel.
+        /// </summary>
+        /// <param name="x">The operand.</param>
+        /// <returns>An expression node computing the per-element set-bit count of <c>|x|</c> as uint8.</returns>
+        public static NDExpr BitwiseCount(NDExpr x) => new UnaryNode(UnaryOp.BitwiseCount, x);
+
+        /// <summary>
+        /// Real part (np.real) — the complex→real component extractor. A COMPLEX child yields its real
+        /// lane as <b>float64</b>; every REAL child is the IDENTITY with its dtype PRESERVED (the real
+        /// part of a real number is itself), so <c>Real(int32)</c> is int32, not a float. Unlike the
+        /// standalone <c>np.real</c> (which returns a writeable VIEW onto a complex array's real lane),
+        /// the fused node produces a fresh value stream — a read, not an alias. Scalar-only in the fused
+        /// kernel (the complex path has no SIMD lane), so a tree containing it runs scalar end-to-end.
+        /// </summary>
+        /// <param name="x">The operand.</param>
+        /// <returns>An expression node computing the element-wise real part of <paramref name="x"/>.</returns>
+        public static NDExpr Real(NDExpr x) => new UnaryNode(UnaryOp.Real, x);
+
+        /// <summary>
+        /// Imaginary part (np.imag) — the complex→real component extractor. A COMPLEX child yields its
+        /// imaginary lane as <b>float64</b>; every REAL child yields <b>zero</b> with its dtype PRESERVED
+        /// (the imaginary part of a real number is zero, so <c>Imag(int32)</c> is int32 zeros) — and the
+        /// child's VALUE is not read on that path (the result does not depend on it), matching np.imag's
+        /// <c>zeros_like</c>. Scalar-only in the fused kernel.
+        /// </summary>
+        /// <param name="x">The operand.</param>
+        /// <returns>An expression node computing the element-wise imaginary part of <paramref name="x"/>.</returns>
+        public static NDExpr Imag(NDExpr x) => new UnaryNode(UnaryOp.Imag, x);
+
+        /// <summary>
+        /// Phase angle in radians (np.angle) — the counterclockwise angle from the positive real axis in
+        /// <c>(-pi, pi]</c>. A COMPLEX child yields <c>atan2(imag, real)</c> as <b>float64</b>; a REAL
+        /// child yields <c>atan2(0, x)</c> — <c>0</c> for x ≥ 0, <c>pi</c> for x &lt; 0, <c>NaN</c> for
+        /// NaN — at NumPy's per-dtype float tier (bool/int32+/f64→f64, int8/uint8/f16→f16,
+        /// int16/uint16/char/f32→f32). <b>Radians only</b>: the fused primitive has no <c>deg=</c> — a
+        /// caller wanting degrees composes <c>Angle(x) * (180/pi)</c>. Uses the host <c>atan2</c>, so it
+        /// is bit-exact vs NumPy only within the host-pinned evaluate tier (win-amd64 shares MSVC
+        /// <c>ucrtbase</c>). Scalar-only in the fused kernel.
+        /// </summary>
+        /// <param name="x">The operand.</param>
+        /// <returns>An expression node computing the element-wise phase angle of <paramref name="x"/> in radians.</returns>
+        public static NDExpr Angle(NDExpr x) => new UnaryNode(UnaryOp.Angle, x);
+
+        /// <summary>
+        /// Convert to <paramref name="dtype"/> (np.ndarray.astype with the default <c>casting='unsafe'</c>) —
+        /// the fused analog of <c>expr.astype(dtype)</c>. Computes <paramref name="x"/> at its own dtype,
+        /// then converts each element to <paramref name="dtype"/> with the SAME per-element conversion the
+        /// engine's own casts use, so the RESULT dtype is exactly <paramref name="dtype"/> regardless of the
+        /// child. Every conversion is allowed (float→int TRUNCATES toward zero, over/underflow WRAPS, a
+        /// complex→real cast drops the imaginary part), matching NumPy's default-unsafe astype. Cast is the
+        /// building block for <c>Round(decimals)</c> (which must cast a float round back to an integer dtype)
+        /// and for a future root <c>dtype=</c> keyword.
+        /// </summary>
+        /// <remarks>
+        /// <b>Scalar-only in the fused kernel</b> for now: a tree containing a <c>Cast</c> runs scalar
+        /// end-to-end (the SIMD-widening cast lanes are Phase 5). <b>Parity envelope:</b> bit-exact vs
+        /// NumPy's <c>astype</c> for IN-RANGE, non-NaN conversions; the C-undefined edges (NaN/±inf/
+        /// out-of-range → integer, complex→real) inherit the engine's own documented cast behaviour
+        /// (host-dependent, the <c>astype_full</c> class), not a distinct guarantee.
+        /// </remarks>
+        /// <param name="x">The operand to convert.</param>
+        /// <param name="dtype">The target element dtype (any of the 15 NumSharp types).</param>
+        /// <returns>An expression node evaluating <paramref name="x"/> converted to <paramref name="dtype"/>.</returns>
+        public static NDExpr Cast(NDExpr x, NPTypeCode dtype) => new CastNode(x, dtype);
+
+        /// <summary>
+        /// Convert to the dtype of <paramref name="dtype"/> (the <see cref="System.Type"/> overload of
+        /// <see cref="Cast(NDExpr, NPTypeCode)"/>, e.g. <c>NDExpr.Cast(x, typeof(float))</c>). See that
+        /// overload for the full astype semantics and parity envelope.
+        /// </summary>
+        /// <param name="x">The operand to convert.</param>
+        /// <param name="dtype">The target element type, mapped to its <see cref="NPTypeCode"/>.</param>
+        /// <returns>An expression node evaluating <paramref name="x"/> converted to <paramref name="dtype"/>'s dtype.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is null.</exception>
+        public static NDExpr Cast(NDExpr x, Type dtype)
+            => new CastNode(x, (dtype ?? throw new ArgumentNullException(nameof(dtype))).GetTypeCode());
 
         // ===================================================================
         // Comparison factories (produce 0/1 at output dtype)
@@ -335,6 +861,20 @@ namespace NumSharp.Backends.Iteration
         public static NDExpr operator -(NDExpr a) => Negate(a);
         public static NDExpr operator ~(NDExpr a) => BitwiseNot(a);
         public static NDExpr operator !(NDExpr a) => LogicalNot(a);
+
+        // Comparison operators (Phase 4.4). These build a Boolean-typed ComparisonNode and RETURN an
+        // NDExpr (not a bool) — the numexpr / expression-builder convention, so `a < b` composes into a
+        // larger tree. C# requires `<`/`>` and `<=`/`>=` in pairs. `==`/`!=` are deliberately NOT
+        // overloaded (they would hijack `expr == null` reference checks); use Equal/NotEqual instead.
+        // An NDArray or scalar operand converts implicitly to NDExpr, so `expr < 0.5` and `arr < expr`
+        // both bind here.
+        public static NDExpr operator <(NDExpr a, NDExpr b) => Less(a, b);
+        public static NDExpr operator >(NDExpr a, NDExpr b) => Greater(a, b);
+        public static NDExpr operator <=(NDExpr a, NDExpr b) => LessEqual(a, b);
+        public static NDExpr operator >=(NDExpr a, NDExpr b) => GreaterEqual(a, b);
+
+        /// <summary>Unary plus (np's <c>+a</c>): the identity copy <see cref="Positive"/> — dtype-preserving, no bool loop.</summary>
+        public static NDExpr operator +(NDExpr a) => Positive(a);
     }
 
     // =========================================================================
@@ -356,6 +896,58 @@ namespace NumSharp.Backends.Iteration
         /// </summary>
         public IReadOnlyDictionary<NDExpr, NPTypeCode>? NodeTypes { get; }
 
+        /// <summary>
+        /// Vector mode: the kernel's compute lane dtype W. Every node typed W emits a
+        /// <c>Vector&lt;W&gt;</c>; every Boolean-typed node emits a <c>Vector&lt;W&gt;</c> LANE MASK
+        /// (all-ones / zero lanes). <see cref="NPTypeCode.Boolean"/> is "byte mode": every operand is
+        /// bool and nodes carry canonical 0/1 bytes. Equals <see cref="OutputType"/> in legacy mode.
+        /// </summary>
+        public NPTypeCode VectorLaneType { get; }
+
+        internal bool ByteMode => VectorLaneType == NPTypeCode.Boolean;
+
+        /// <summary>
+        /// P5.2 mixed-width vector mode (ndexpr-evaluate.md): nodes compute at their OWN dtype in a
+        /// container of <c>elemCount·sizeof(dtype)</c> bytes — <c>Vector128</c> for a half-lane
+        /// dtype, the full <c>Vector256</c> for a lane-sized one — and each node edge widens exactly
+        /// (<see cref="NDExprVec.EmitWidenEdge"/>). False = the uniform v2 contract, where every node
+        /// emits one shared <c>Vector&lt;W&gt;</c>. Only meaningful when <see cref="VectorMode"/>.
+        /// </summary>
+        internal bool MixedWidth { get; }
+
+        /// <summary>
+        /// The vector container width (bits) a node of dtype <paramref name="t"/> emits at: the
+        /// full <see cref="DirectILKernelGenerator.VectorBits"/> in uniform mode, or — in mixed-width
+        /// mode — the lane's element count times <paramref name="t"/>'s size (always 128 or 256; the
+        /// plan's container rule admits nothing else).
+        /// </summary>
+        /// <param name="t">The node's dtype (never Boolean/Half in mixed mode — the plan excludes them).</param>
+        /// <returns>The container width in bits.</returns>
+        internal int ContainerBits(NPTypeCode t)
+            => MixedWidth
+                ? DirectILKernelGenerator.VectorBits * DirectILKernelGenerator.GetTypeSize(t)
+                    / DirectILKernelGenerator.GetTypeSize(VectorLaneType)
+                : DirectILKernelGenerator.VectorBits;
+
+        /// <summary>
+        /// Per input index: the position of that input among the kernel's ITERATOR operands (an
+        /// index into <see cref="InputLocals"/>), or -1 when the input is a PARAMETER — a 0-d array
+        /// np.evaluate hoists into the kernel's aux block once per call instead of streaming it
+        /// through the iterator (<see cref="ParamLocals"/>). Null = every input is an operand at its
+        /// own index (the legacy / positional-handle contract).
+        /// </summary>
+        internal int[]? InputSlots { get; }
+
+        /// <summary>Per input index: its index into <see cref="ParamLocals"/>, or -1 for an iterator operand. Null when there are no parameters.</summary>
+        internal int[]? InputParams { get; }
+
+        /// <summary>
+        /// The parameters' locals, loaded ONCE by the kernel prologue: the scalar value in scalar
+        /// mode, its broadcast <c>Vector&lt;lane(W)&gt;</c> (a lane mask for a bool parameter in
+        /// W-mode) in vector mode — so a parameter costs nothing per element, exactly like a literal.
+        /// </summary>
+        internal LocalBuilder[]? ParamLocals { get; }
+
         public NDExprCompileContext(
             NPTypeCode[] inputTypes, NPTypeCode outputType,
             LocalBuilder[] inputLocals, bool vectorMode)
@@ -366,13 +958,55 @@ namespace NumSharp.Backends.Iteration
         public NDExprCompileContext(
             NPTypeCode[] inputTypes, NPTypeCode outputType,
             LocalBuilder[] inputLocals, bool vectorMode,
-            IReadOnlyDictionary<NDExpr, NPTypeCode>? nodeTypes)
+            IReadOnlyDictionary<NDExpr, NPTypeCode>? nodeTypes,
+            NPTypeCode vectorLaneType = NPTypeCode.Empty)
+            : this(inputTypes, outputType, inputLocals, vectorMode, nodeTypes, vectorLaneType, null, null, null)
+        {
+        }
+
+        /// <summary>
+        /// The parameter-aware context np.evaluate compiles with: <paramref name="inputSlots"/> /
+        /// <paramref name="inputParams"/> route each <see cref="InputNode"/> to an iterator local or a
+        /// parameter local (see <see cref="InputSlots"/>).
+        /// </summary>
+        /// <param name="inputTypes">Every input's dtype, parameters included, in input order.</param>
+        /// <param name="outputType">The kernel's output dtype.</param>
+        /// <param name="inputLocals">The iterator operands' locals, in operand order.</param>
+        /// <param name="vectorMode">True when emitting the vector body.</param>
+        /// <param name="nodeTypes">The typing pass's node→dtype table (NumPy mode), or null (legacy).</param>
+        /// <param name="vectorLaneType">The vector body's lane dtype W (vector mode).</param>
+        /// <param name="inputSlots">Input → operand slot map, or null for the identity map.</param>
+        /// <param name="inputParams">Input → parameter index map, or null when there are no parameters.</param>
+        /// <param name="paramLocals">The parameters' prologue-loaded locals, or null.</param>
+        /// <param name="mixedWidth">P5.2 mixed-width vector mode (see <see cref="MixedWidth"/>); false = uniform v2.</param>
+        internal NDExprCompileContext(
+            NPTypeCode[] inputTypes, NPTypeCode outputType,
+            LocalBuilder[] inputLocals, bool vectorMode,
+            IReadOnlyDictionary<NDExpr, NPTypeCode>? nodeTypes,
+            NPTypeCode vectorLaneType,
+            int[]? inputSlots, int[]? inputParams, LocalBuilder[]? paramLocals,
+            bool mixedWidth = false)
         {
             InputTypes = inputTypes;
             OutputType = outputType;
             InputLocals = inputLocals;
             VectorMode = vectorMode;
             NodeTypes = nodeTypes;
+            VectorLaneType = vectorLaneType == NPTypeCode.Empty ? outputType : vectorLaneType;
+            InputSlots = inputSlots;
+            InputParams = inputParams;
+            ParamLocals = paramLocals;
+            MixedWidth = mixedWidth;
+        }
+
+        /// <summary>The local holding input <paramref name="index"/>'s current value (operand local or parameter local).</summary>
+        /// <param name="index">The input index (the <see cref="InputNode"/> index).</param>
+        /// <returns>The local to <c>Ldloc</c>.</returns>
+        internal LocalBuilder LocalOfInput(int index)
+        {
+            if (InputParams is not null && InputParams[index] >= 0)
+                return ParamLocals![InputParams[index]];
+            return InputLocals[InputSlots is null ? index : InputSlots[index]];
         }
 
         /// <summary>
@@ -411,7 +1045,9 @@ namespace NumSharp.Backends.Iteration
                 throw new InvalidOperationException(
                     $"Input({_index}) out of range; compile provided {ctx.InputTypes.Length} inputs.");
 
-            il.Emit(OpCodes.Ldloc, ctx.InputLocals[_index]);
+            // An iterator operand's per-element local, or a parameter's once-loaded local (a 0-d
+            // array np.evaluate hoisted into the aux block) — the node cannot tell the two apart.
+            il.Emit(OpCodes.Ldloc, ctx.LocalOfInput(_index));
             // Leave this node's resolved dtype on the stack. Legacy mode
             // resolves every node to OutputType (auto-promote at load);
             // NumPy mode resolves to the operand's native dtype, so parents
@@ -426,9 +1062,13 @@ namespace NumSharp.Backends.Iteration
                 throw new InvalidOperationException(
                     $"Input({_index}) out of range; compile provided {ctx.InputTypes.Length} inputs.");
 
-            // Vector mode is only used when all input types == output type
-            // (enforced by Compile), so no conversion is needed here.
-            il.Emit(OpCodes.Ldloc, ctx.InputLocals[_index]);
+            // The local already holds this input's vector in the representation the plan chose:
+            // the shared Vector<lane(W)> (uniform v2 — a bool operand's local is its lane mask), or
+            // the input's OWN-dtype, possibly partial, vector in mixed-width mode. Any conversion
+            // to the CONSUMING node's dtype happens at that parent's edge (EmitVectorChildAs), never
+            // here — a leaf read twice by nodes of different dtypes widens per edge. A parameter's
+            // local likewise holds its prologue-built broadcast vector.
+            il.Emit(OpCodes.Ldloc, ctx.LocalOfInput(_index));
         }
 
         public override void AppendSignature(StringBuilder sb)
@@ -439,22 +1079,71 @@ namespace NumSharp.Backends.Iteration
     // Node: Constant
     // =========================================================================
 
+    /// <summary>
+    /// The CLR spelling of a literal, which decides its NEP50 behaviour. NumPy tells a Python
+    /// literal (weak: adopts the dtype of the array it meets) from a NumPy scalar (strong: a full
+    /// promotion participant); C# has no such split, so NumSharp maps it by TYPE, the same house
+    /// rule <c>np.r_</c> and <c>np.select</c> use: <c>bool</c>, the integer primitives, <c>float</c>/
+    /// <c>double</c> and <c>Complex</c> are the Python literals (weak); <c>Half</c>, <c>decimal</c>
+    /// and <c>char</c> — which have no Python literal — are strong. A <c>ulong</c> above
+    /// <c>long.MaxValue</c> is still a Python int, but only <c>uint64</c> can carry it (NumPy:
+    /// <c>np.uint64(1) + 2**64-1</c> is uint64; <c>np.int64(1) + 2**64-1</c> raises OverflowError).
+    /// </summary>
+    internal enum NDExprLiteralKind : byte
+    {
+        Bool,      // weak — Python bool
+        Int,       // weak — Python int (fits long)
+        UInt64,    // weak — Python int above long.MaxValue (default dtype uint64)
+        Float,     // weak — Python float
+        Complex,   // weak — Python complex
+        Half,      // strong — np.float16 scalar (no Python literal)
+        Decimal,   // strong — NumSharp-only dtype
+        Char,      // strong — NumSharp-only dtype
+    }
+
     public sealed partial class ConstNode : NDExpr
     {
-        // Store as double — widest scalar; convert down to outputType on emit.
-        // Also preserve an exact-int path for integer-typed outputs.
-        private readonly double _valueFp;
-        private readonly long _valueInt;
-        private readonly bool _isIntegerLiteral;
+        private readonly NDExprLiteralKind _kind;
+        private readonly long _i;                      // Bool (0/1) / Int / Char (code unit)
+        private readonly ulong _u;                     // UInt64
+        private readonly double _f;                    // Float / Half (exact as double)
+        private readonly System.Numerics.Complex _c;   // Complex
+        private readonly decimal _m;                   // Decimal
 
-        public ConstNode(double v) { _valueFp = v; _valueInt = 0; _isIntegerLiteral = false; }
-        public ConstNode(float v) { _valueFp = v; _valueInt = 0; _isIntegerLiteral = false; }
-        public ConstNode(long v) { _valueInt = v; _valueFp = v; _isIntegerLiteral = true; }
-        public ConstNode(int v) { _valueInt = v; _valueFp = v; _isIntegerLiteral = true; }
+        public ConstNode(double v) { _kind = NDExprLiteralKind.Float; _f = v; }
+        public ConstNode(float v) { _kind = NDExprLiteralKind.Float; _f = v; }
+        public ConstNode(long v) { _kind = NDExprLiteralKind.Int; _i = v; _f = v; }
+        public ConstNode(int v) { _kind = NDExprLiteralKind.Int; _i = v; _f = v; }
+        public ConstNode(uint v) { _kind = NDExprLiteralKind.Int; _i = v; _f = v; }
+        public ConstNode(ulong v)
+        {
+            // A Python int is one kind; only its VALUE decides whether int64 can hold it.
+            if (v <= long.MaxValue) { _kind = NDExprLiteralKind.Int; _i = (long)v; _f = v; }
+            else { _kind = NDExprLiteralKind.UInt64; _u = v; _f = v; }
+        }
+        public ConstNode(bool v) { _kind = NDExprLiteralKind.Bool; _i = v ? 1 : 0; _f = _i; }
+        public ConstNode(System.Numerics.Complex v) { _kind = NDExprLiteralKind.Complex; _c = v; _f = v.Real; }
+        public ConstNode(Half v) { _kind = NDExprLiteralKind.Half; _f = (double)v; }
+        public ConstNode(decimal v) { _kind = NDExprLiteralKind.Decimal; _m = v; _f = (double)v; }
+        public ConstNode(char v) { _kind = NDExprLiteralKind.Char; _i = v; _f = v; }
 
-        internal bool IsIntegerLiteral => _isIntegerLiteral;
-        internal long IntegerValue => _valueInt;
-        internal double FloatValue => _valueFp;
+        internal NDExprLiteralKind Kind => _kind;
+
+        /// <summary>True for a Python-int literal that fits <c>long</c> (the negative-exponent check reads <see cref="IntegerValue"/>).</summary>
+        internal bool IsIntegerLiteral => _kind == NDExprLiteralKind.Int;
+        internal long IntegerValue => _i;
+        internal double FloatValue => _f;
+
+        /// <summary>Strong literals (Half / decimal / char) participate in promotion as a 0-d array of that dtype.</summary>
+        internal bool IsStrong => _kind == NDExprLiteralKind.Half || _kind == NDExprLiteralKind.Decimal || _kind == NDExprLiteralKind.Char;
+
+        internal NPTypeCode StrongType => _kind switch
+        {
+            NDExprLiteralKind.Half => NPTypeCode.Half,
+            NDExprLiteralKind.Decimal => NPTypeCode.Decimal,
+            NDExprLiteralKind.Char => NPTypeCode.Char,
+            _ => throw new InvalidOperationException($"{_kind} literal is weak — it has no fixed dtype."),
+        };
 
         public override bool SupportsSimd => true;
 
@@ -465,23 +1154,91 @@ namespace NumSharp.Backends.Iteration
 
         public override void EmitVector(ILGenerator il, NDExprCompileContext ctx)
         {
-            EmitLoadTyped(il, ctx.TypeOf(this));
-            DirectILKernelGenerator.EmitVectorCreate(il, ctx.TypeOf(this));
+            var t = ctx.TypeOf(this);
+            if (t == NPTypeCode.Boolean && !ctx.ByteMode)
+            {
+                // A Boolean-typed literal in W-mode is a constant lane mask.
+                if (AsDouble() != 0.0 || (_kind == NDExprLiteralKind.Complex && _c != System.Numerics.Complex.Zero))
+                    NDExprVec.EmitAllBitsSet(il, ctx.VectorLaneType);
+                else
+                    NDExprVec.EmitZero(il, ctx.VectorLaneType);
+                return;
+            }
+
+            if (t == NPTypeCode.Half)
+            {
+                // The f16 tree's lane is Vector256<ushort> of raw f16 bits, so a Half literal broadcasts
+                // its bit pattern — computed as (Half)AsDouble(), the SAME narrow EmitLoadTyped's scalar
+                // Half case runs — rather than a Half struct (which Vector256.Create(ushort) can't take).
+                ushort bits = System.BitConverter.HalfToUInt16Bits((Half)AsDouble());
+                il.Emit(OpCodes.Ldc_I4, (int)bits);
+                il.Emit(OpCodes.Conv_U2);
+                DirectILKernelGenerator.EmitVectorCreate(il, NPTypeCode.Half);   // Vector256.Create(ushort)
+                return;
+            }
+
+            // The literal's container follows its ADOPTED dtype: the full lane vector in uniform
+            // mode (ContainerBits == VectorBits there, so this is the pre-P5.2 emission verbatim),
+            // or the partial Vector128 of a half-lane dtype in mixed-width mode (e.g. the int32 `2`
+            // of `i4*2+f8` — the parent's edge widens the PRODUCT, never the literal).
+            EmitLoadTyped(il, t);
+            DirectILKernelGenerator.EmitVectorCreateAt(il, t, ctx.ContainerBits(t));
         }
 
-        private void EmitLoadTyped(ILGenerator il, NPTypeCode target)
+        // ---- the literal's value in the widest carrier of each family --------------------
+
+        /// <summary>The value as an integer (truncating a float literal toward zero, like NumPy's int cast of an adopted float).</summary>
+        private long AsInt64() => _kind switch
+        {
+            NDExprLiteralKind.UInt64 => unchecked((long)_u),
+            NDExprLiteralKind.Float or NDExprLiteralKind.Half => (long)_f,
+            NDExprLiteralKind.Decimal => (long)_m,
+            NDExprLiteralKind.Complex => (long)_c.Real,
+            _ => _i,
+        };
+
+        private double AsDouble() => _kind switch
+        {
+            NDExprLiteralKind.UInt64 => _u,
+            NDExprLiteralKind.Decimal => (double)_m,
+            NDExprLiteralKind.Complex => _c.Real,
+            _ => _f,
+        };
+
+        private decimal AsDecimal() => _kind switch
+        {
+            NDExprLiteralKind.Decimal => _m,
+            NDExprLiteralKind.UInt64 => _u,
+            NDExprLiteralKind.Int or NDExprLiteralKind.Bool or NDExprLiteralKind.Char => _i,
+            NDExprLiteralKind.Complex => (decimal)_c.Real,
+            _ => (decimal)_f,
+        };
+
+        private System.Numerics.Complex AsComplex() => _kind switch
+        {
+            NDExprLiteralKind.Complex => _c,
+            _ => new System.Numerics.Complex(AsDouble(), 0.0),
+        };
+
+        /// <summary>Push the literal as a value of <paramref name="target"/> (its adopted / resolved dtype).</summary>
+        internal void EmitLoadTyped(ILGenerator il, NPTypeCode target)
         {
             switch (target)
             {
                 case NPTypeCode.Single:
-                    il.Emit(OpCodes.Ldc_R4, (float)_valueFp);
+                    il.Emit(OpCodes.Ldc_R4, (float)AsDouble());
                     return;
                 case NPTypeCode.Double:
-                    il.Emit(OpCodes.Ldc_R8, _valueFp);
+                    il.Emit(OpCodes.Ldc_R8, AsDouble());
                     return;
                 case NPTypeCode.Int64:
                 case NPTypeCode.UInt64:
-                    il.Emit(OpCodes.Ldc_I8, _isIntegerLiteral ? _valueInt : (long)_valueFp);
+                    il.Emit(OpCodes.Ldc_I8, AsInt64());
+                    return;
+                case NPTypeCode.Boolean:
+                    // A bool's numeric value is exactly 0 or 1 (NumPy: bool(x) of a nonzero literal is True).
+                    il.Emit(AsDouble() != 0.0 || (_kind == NDExprLiteralKind.Complex && _c != System.Numerics.Complex.Zero)
+                        ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
                     return;
                 case NPTypeCode.Byte:
                 case NPTypeCode.SByte:
@@ -490,31 +1247,39 @@ namespace NumSharp.Backends.Iteration
                 case NPTypeCode.Int32:
                 case NPTypeCode.UInt32:
                 case NPTypeCode.Char:
-                case NPTypeCode.Boolean:
-                    il.Emit(OpCodes.Ldc_I4, _isIntegerLiteral ? (int)_valueInt : (int)_valueFp);
+                    // The IL stack holds sub-64-bit integers as int32 bit patterns — a uint32 above
+                    // int.MaxValue is its two's-complement image, exactly what Ldc_I4 wants.
+                    il.Emit(OpCodes.Ldc_I4, unchecked((int)AsInt64()));
                     return;
                 case NPTypeCode.Half:
-                    // No Ldc for Half — load double then convert (Half consts
-                    // arise from NEP50 weak adoption: f2_array + 2.5 stays f2).
-                    il.Emit(OpCodes.Ldc_R8, _isIntegerLiteral ? _valueInt : _valueFp);
+                    // No Ldc for Half — load double then convert (Half consts arise from NEP50 weak
+                    // adoption: f2_array + 2.5 stays f2; a strong Half literal stores its exact double).
+                    il.Emit(OpCodes.Ldc_R8, AsDouble());
                     DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Double, NPTypeCode.Half);
                     return;
                 case NPTypeCode.Decimal:
-                    if (_isIntegerLiteral)
-                    {
-                        il.Emit(OpCodes.Ldc_I8, _valueInt);
-                        DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Int64, NPTypeCode.Decimal);
-                    }
-                    else
-                    {
-                        il.Emit(OpCodes.Ldc_R8, _valueFp);
-                        DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Double, NPTypeCode.Decimal);
-                    }
+                {
+                    // decimal(int lo, int mid, int hi, bool isNegative, byte scale) — exact for every
+                    // literal kind (an integer literal is a scale-0 decimal, a decimal literal is itself).
+                    int[] bits = decimal.GetBits(AsDecimal());
+                    il.Emit(OpCodes.Ldc_I4, bits[0]);
+                    il.Emit(OpCodes.Ldc_I4, bits[1]);
+                    il.Emit(OpCodes.Ldc_I4, bits[2]);
+                    il.Emit((bits[3] & unchecked((int)0x80000000)) != 0 ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
+                    il.Emit(OpCodes.Ldc_I4, (bits[3] >> 16) & 0xFF);
+                    il.Emit(OpCodes.Newobj, typeof(decimal).GetConstructor(new[] { typeof(int), typeof(int), typeof(int), typeof(bool), typeof(byte) })
+                        ?? throw new MissingMethodException(typeof(decimal).FullName, ".ctor(int,int,int,bool,byte)"));
                     return;
+                }
                 case NPTypeCode.Complex:
-                    il.Emit(OpCodes.Ldc_R8, _isIntegerLiteral ? _valueInt : _valueFp);
-                    DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Double, NPTypeCode.Complex);
+                {
+                    var z = AsComplex();
+                    il.Emit(OpCodes.Ldc_R8, z.Real);
+                    il.Emit(OpCodes.Ldc_R8, z.Imaginary);
+                    il.Emit(OpCodes.Newobj, typeof(System.Numerics.Complex).GetConstructor(new[] { typeof(double), typeof(double) })
+                        ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, ".ctor(double,double)"));
                     return;
+                }
                 default:
                     throw new NotSupportedException(
                         $"ConstNode cannot emit for output dtype {target}.");
@@ -523,8 +1288,18 @@ namespace NumSharp.Backends.Iteration
 
         public override void AppendSignature(StringBuilder sb)
         {
-            sb.Append("Const[");
-            if (_isIntegerLiteral) sb.Append(_valueInt); else sb.Append(_valueFp);
+            // Kind + exact value: two literals that differ in either compile to distinct kernels
+            // (2 and 2.0 type differently; 2m and 2 emit differently at a Decimal target).
+            sb.Append("Const").Append((int)_kind).Append('[');
+            switch (_kind)
+            {
+                case NDExprLiteralKind.UInt64: sb.Append(_u); break;
+                case NDExprLiteralKind.Complex: sb.Append(_c.Real.ToString("R")).Append(',').Append(_c.Imaginary.ToString("R")); break;
+                case NDExprLiteralKind.Decimal: sb.Append(_m.ToString(System.Globalization.CultureInfo.InvariantCulture)); break;
+                case NDExprLiteralKind.Float:
+                case NDExprLiteralKind.Half: sb.Append(_f.ToString("R", System.Globalization.CultureInfo.InvariantCulture)); break;
+                default: sb.Append(_i); break;
+            }
             sb.Append(']');
         }
     }
@@ -583,14 +1358,88 @@ namespace NumSharp.Backends.Iteration
                 return;
             }
 
+            // NumPy's integer power loops refuse a negative exponent PER ELEMENT ("Integers to
+            // negative integer powers are not allowed."). A literal exponent is rejected at typing
+            // time; an exponent ARRAY can only be checked here, on the converted value.
+            if (_op == BinaryOp.Power && NDExprTypeRules.IsSignedInteger(my))
+                EmitNegativeExponentGuard(il, my);
+
             DirectILKernelGenerator.EmitScalarOperation(il, _op, my);
+            EmitNormalizeNarrowInt(il, my);
+        }
+
+        internal const string NegativeIntegerPowerMessage = "Integers to negative integer powers are not allowed.";
+
+        /// <summary>
+        /// Stack: [base, exp] → unchanged; throws NumPy's ValueError text when exp &lt; 0. Unsigned
+        /// exponents cannot be negative and skip the guard entirely.
+        /// </summary>
+        private static void EmitNegativeExponentGuard(ILGenerator il, NPTypeCode expType)
+        {
+            var ok = il.DefineLabel();
+            il.Emit(OpCodes.Dup);
+            if (expType == NPTypeCode.Int64) il.Emit(OpCodes.Ldc_I8, 0L); else il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Bge, ok);
+            il.Emit(OpCodes.Ldstr, NegativeIntegerPowerMessage);
+            il.Emit(OpCodes.Newobj, typeof(ArgumentException).GetConstructor(new[] { typeof(string) })
+                ?? throw new MissingMethodException(typeof(ArgumentException).FullName, ".ctor(string)"));
+            il.Emit(OpCodes.Throw);
+            il.MarkLabel(ok);
         }
 
         public override void EmitVector(ILGenerator il, NDExprCompileContext ctx)
         {
-            _left.EmitVector(il, ctx);
-            _right.EmitVector(il, ctx);
-            DirectILKernelGenerator.EmitVectorOperation(il, _op, ctx.OutputType);
+            var my = ctx.TypeOf(this);
+
+            if (my == NPTypeCode.Boolean)
+            {
+                // NumPy's bool add / multiply are logical or / and (see EmitScalar); bitwise ops on
+                // bools are the logical ops too. Byte mode runs the engine's normalized 0/1 byte ops
+                // (Vector{N}<bool> arithmetic does not exist — emitting it threw NotSupportedException
+                // once the SIMD block ran); W-mode combines lane masks bitwise.
+                EmitVectorChildAs(il, ctx, _left, NPTypeCode.Boolean);
+                EmitVectorChildAs(il, ctx, _right, NPTypeCode.Boolean);
+                var logical = _op == BinaryOp.Add ? BinaryOp.BitwiseOr
+                            : _op == BinaryOp.Multiply ? BinaryOp.BitwiseAnd
+                            : _op;
+                if (ctx.ByteMode)
+                {
+                    DirectILKernelGenerator.EmitVectorOperation(il, logical, NPTypeCode.Boolean);
+                    return;
+                }
+
+                var clr = DirectILKernelGenerator.GetClrType(ctx.VectorLaneType);
+                switch (logical)
+                {
+                    case BinaryOp.BitwiseOr: NDExprVec.EmitOr(il, clr); return;
+                    case BinaryOp.BitwiseAnd: NDExprVec.EmitAnd(il, clr); return;
+                    default: NDExprVec.EmitXor(il, clr); return;
+                }
+            }
+
+            if (my == NPTypeCode.Half)
+            {
+                // f16 arithmetic lane: both children arrive as Vector256<ushort> (raw f16 bits, the
+                // Half tree's lane). HalfArithVec256 widens to float32, runs one Avx.Add/Sub/Mul/Div,
+                // and narrows (RTNE) with the operand-order NaN pin — round-to-f16 PER NODE, exactly as
+                // the scalar HalfArithScalarStruct and NumPy's HALF loop (astype 'e'->'f') do, so the
+                // vector body is bit-for-bit the scalar body (the vector==scalar contract).
+                EmitVectorChildAs(il, ctx, _left, NPTypeCode.Half);
+                EmitVectorChildAs(il, ctx, _right, NPTypeCode.Half);
+                il.Emit(OpCodes.Ldc_I4, (int)_op);
+                il.EmitCall(OpCodes.Call,
+                    DirectILKernelGenerator.GetHelper(nameof(DirectILKernelGenerator.HalfArithVec256)), null);
+                return;
+            }
+
+            // Uniform mode: my == lane, children arrive at the lane dtype (a bool child becomes
+            // exact 1/0 lanes) and ContainerBits == VectorBits, so the op emission is the pre-P5.2
+            // one verbatim. Mixed-width mode: children arrive at their OWN dtype and the edge
+            // widens exactly; the op runs at THIS node's dtype in its own container — a half-lane
+            // node at Vector128, which is what keeps e.g. an int32 multiply wrapping at int32.
+            EmitVectorChildAs(il, ctx, _left, my);
+            EmitVectorChildAs(il, ctx, _right, my);
+            DirectILKernelGenerator.EmitVectorOperationAt(il, _op, my, ctx.ContainerBits(my));
         }
 
         public override void AppendSignature(StringBuilder sb)
@@ -640,14 +1489,31 @@ namespace NumSharp.Backends.Iteration
                 : (op == UnaryOp.Exp || op == UnaryOp.Log ||
                    op == UnaryOp.Sin || op == UnaryOp.Cos || op == UnaryOp.Tanh)
                     ? DirectILKernelGenerator.NumPyFloatKernelSimdAvailable(op, t)
-                    : IsSimdUnary(op);
+                    // integer reciprocal is the sentinel'd C division (no vector integer divide);
+                    // integer sqrt does not exist (the node types to a float tier first).
+                    : op == UnaryOp.Reciprocal
+                        ? (t == NPTypeCode.Single || t == NPTypeCode.Double)
+                        : IsSimdUnary(op);
 
         // Structural SIMD set used by the type-independent SupportsSimd. The rounding family
         // (Floor/Ceil/Round/Truncate) is gated per type+runtime by IsSimdUnaryAt instead, so it is
         // omitted here — SupportsSimdAt is the gate the compiler actually consults.
+        //
+        // Positive (identity vector = a load→store copy) and Fabs (Vector.Abs, same as Abs) have a
+        // proven vector body in EmitUnaryVectorOperation, and each only ever reaches a float/int SIMD
+        // lane where that body is bit-identical to its scalar body: identity copies bits exactly, and
+        // sign-bit-clear (Fabs=Abs) is exact incl. inf/NaN; Fabs PROMOTES int→float so the plan declines
+        // the mixed-dtype tree before asking (my=float ≠ int lane), and Half is never a SIMD lane
+        // (CanUseSimd(Half) is false), so a f16 tree stays scalar regardless.
+        //
+        // Spacing is deliberately SCALAR-ONLY: EmitVectorSpacing and the scalar SpacingD produce a
+        // DIFFERENT NaN PAYLOAD at an inf/NaN input (7ff8…0001 vs C#'s fff8…0000) — both NaN, but the
+        // difference surfaces bit-for-bit through composition (spacing(inf)+inf), which the fused-vs-
+        // scalar metamorphic contract would flag. The scalar path is bit-exact vs NumPy for finite
+        // values (NaN is tokenized by the oracle), and spacing is rare, so parity beats the SIMD win.
         private static bool IsSimdUnary(UnaryOp op)
-            => op == UnaryOp.Negate || op == UnaryOp.Abs || op == UnaryOp.Sqrt ||
-               op == UnaryOp.Square || op == UnaryOp.Reciprocal ||
+            => op == UnaryOp.Negate || op == UnaryOp.Abs || op == UnaryOp.Fabs || op == UnaryOp.Sqrt ||
+               op == UnaryOp.Square || op == UnaryOp.Reciprocal || op == UnaryOp.Positive ||
                op == UnaryOp.Deg2Rad || op == UnaryOp.Rad2Deg || op == UnaryOp.BitwiseNot;
 
         // Predicates leave a bool (I4 0/1) on the stack — not outputType. The wrapper
@@ -657,15 +1523,44 @@ namespace NumSharp.Backends.Iteration
 
         // NumPy preserves integer dtypes through floor/ceil/round/trunc — the op
         // is an identity there (and Math.Floor has no integer overloads to call).
+        // Rint shares Round's kernel, so it belongs to the rounding family for the SIMD gate
+        // (IsSimdUnaryAt → RoundingVectorSimdAvailable) and the identity-early-returns. Those
+        // early-returns fire only for an INTEGER result dtype, which Rint never has (it promotes
+        // int→float), so including it here is correct AND inert on that branch — it matters only for
+        // routing the SIMD-availability probe to the Vector.Round path (which Rint vectorizes through).
         private static bool IsRoundingOp(UnaryOp op)
             => op == UnaryOp.Floor || op == UnaryOp.Ceil ||
-               op == UnaryOp.Round || op == UnaryOp.Truncate;
+               op == UnaryOp.Round || op == UnaryOp.Rint || op == UnaryOp.Truncate;
 
         private static bool IsIntegerKind(NPTypeCode t)
             => t == NPTypeCode.Boolean || t == NPTypeCode.Byte || t == NPTypeCode.SByte ||
                t == NPTypeCode.Int16 || t == NPTypeCode.UInt16 || t == NPTypeCode.Char ||
                t == NPTypeCode.Int32 || t == NPTypeCode.UInt32 ||
                t == NPTypeCode.Int64 || t == NPTypeCode.UInt64;
+
+        // NumPy's npy_cabs (hypot, positive NaN) — the engine's own complex |z| helper, which the
+        // generic complex Abs emitter wraps back into a Complex(|z|, 0); np.absolute's loop is D->d.
+        private static readonly System.Reflection.MethodInfo s_complexAbs =
+            typeof(NumSharp.Utilities.NDComplexMath).GetMethod("Abs", new[] { typeof(System.Numerics.Complex) })
+            ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "Abs");
+
+        // np.real / np.imag / np.angle over a COMPLEX child — static pass-by-value extractors so the
+        // Complex already on the IL stack is consumed with one call (no local/address), mirroring the
+        // s_complexAbs pattern above. Real/Imag are lane extracts (→double); Angle is atan2(im,re) (host-libm).
+        private static readonly System.Reflection.MethodInfo s_complexReal =
+            typeof(NumSharp.Utilities.NDComplexMath).GetMethod("RealPart", new[] { typeof(System.Numerics.Complex) })
+            ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "RealPart");
+        private static readonly System.Reflection.MethodInfo s_complexImag =
+            typeof(NumSharp.Utilities.NDComplexMath).GetMethod("ImagPart", new[] { typeof(System.Numerics.Complex) })
+            ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "ImagPart");
+        private static readonly System.Reflection.MethodInfo s_complexAngle =
+            typeof(NumSharp.Utilities.NDComplexMath).GetMethod("Angle", new[] { typeof(System.Numerics.Complex) })
+            ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "Angle");
+
+        // Math.Atan2(y, x) for the REAL-input np.angle path: atan2(0, x).
+        private static readonly System.Reflection.MethodInfo s_atan2 =
+            typeof(System.Math).GetMethod("Atan2", new[] { typeof(double), typeof(double) })
+            ?? throw new MissingMethodException(typeof(System.Math).FullName, "Atan2");
 
         public override void EmitScalar(ILGenerator il, NDExprCompileContext ctx)
         {
@@ -686,13 +1581,89 @@ namespace NumSharp.Backends.Iteration
                 return;
             }
 
-            // Predicates also run at the child's dtype (NumPy: isnan(int) is
-            // all-False without promoting the input).
-            if (IsPredicateResult(_op))
+            // The "emit at the child's dtype, then convert the result" family: the classification
+            // predicates (isnan/isinf/isfinite — NumPy inspects the input at its own dtype without
+            // promoting it), the sign-bit / ±inf predicates (signbit/isposinf/isneginf, bool result),
+            // and bitwise_count (a uint8 count that must NOT pre-convert the input to the output width,
+            // which would truncate a wide value before counting). All leave an I4 on the stack — a 0/1
+            // bool for the predicates, the int32 count for bitwise_count — which EmitConvertTo casts to
+            // `my` (Boolean for the predicates, Byte for bitwise_count). Complex children of the ops
+            // without a complex loop are rejected at typing, so this path only ever sees a valid dtype.
+            if (IsPredicateResult(_op) || _op == UnaryOp.SignBit ||
+                _op == UnaryOp.IsPosInf || _op == UnaryOp.IsNegInf || _op == UnaryOp.BitwiseCount)
             {
                 _child.EmitScalar(il, ctx);
                 DirectILKernelGenerator.EmitUnaryScalarOperation(il, _op, childType);
                 DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Int32, my);
+                return;
+            }
+
+            // np.absolute's complex loop is `D->d`: |z| is a float64 magnitude (npy_cabs = hypot),
+            // not a complex with a zero imaginary part. The engine's complex Abs emitter already
+            // leaves that double on the stack, so the child is consumed at its own dtype and no
+            // edge conversion applies (the typing pass resolves this node to Double).
+            if (_op == UnaryOp.Abs && childType == NPTypeCode.Complex)
+            {
+                _child.EmitScalar(il, ctx);
+                il.EmitCall(OpCodes.Call, s_complexAbs, null);   // Complex -> double (npy_cabs)
+                DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Double, my);
+                return;
+            }
+
+            // np.real / np.imag / np.angle — the complex→real component extractors (NOT ufuncs, so no
+            // engine kernel; handled entirely here before the generic EmitUnaryScalarOperation tail,
+            // which would throw for these ops). For a COMPLEX child the value is extracted as a double
+            // (real lane / imag lane / atan2(im,re)); for a REAL child the op degenerates — real is the
+            // identity (dtype preserved), imag is a constant zero (the child value is NOT read), and
+            // angle is atan2(0, x) computed in double then narrowed to the AngleRealTier `my`. Complex
+            // never reaches the SIMD path (scalar-only), so these live only in the scalar emit.
+            if (_op == UnaryOp.Real)
+            {
+                _child.EmitScalar(il, ctx);
+                if (childType == NPTypeCode.Complex)
+                {
+                    il.EmitCall(OpCodes.Call, s_complexReal, null);          // Complex -> double (z.Real)
+                    DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Double, my);   // my == Double: no-op
+                }
+                // else: my == childType (dtype preserved), the loaded value IS the result — identity.
+                return;
+            }
+            if (_op == UnaryOp.Imag)
+            {
+                if (childType == NPTypeCode.Complex)
+                {
+                    _child.EmitScalar(il, ctx);
+                    il.EmitCall(OpCodes.Call, s_complexImag, null);          // Complex -> double (z.Imaginary)
+                    DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Double, my);   // my == Double: no-op
+                }
+                else
+                {
+                    // imag(real) is zeros_like — the result does not depend on the child value, so the
+                    // child is NOT emitted (its operand pointer is still advanced by the iterator). Push
+                    // a zero of the preserved dtype `my`.
+                    WhereNode.EmitPushZeroPublic(il, my);
+                }
+                return;
+            }
+            if (_op == UnaryOp.Angle)
+            {
+                if (childType == NPTypeCode.Complex)
+                {
+                    _child.EmitScalar(il, ctx);
+                    il.EmitCall(OpCodes.Call, s_complexAngle, null);         // Complex -> double atan2(im,re)
+                    DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Double, my);   // my == Double: no-op
+                }
+                else
+                {
+                    // atan2(0, x): 0 for x >= 0, pi for x < 0, NaN for NaN. Compute in double (the only
+                    // possible outputs {+0, pi, NaN} narrow to the AngleRealTier exactly, so this matches
+                    // NumPy computing arctan2 directly at that tier — the engine np.angle route).
+                    il.Emit(OpCodes.Ldc_R8, 0.0);                            // y = 0
+                    _child.EmitScalar(il, ctx);
+                    DirectILKernelGenerator.EmitConvertTo(il, childType, NPTypeCode.Double);   // x -> double
+                    il.EmitCall(OpCodes.Call, s_atan2, null);               // Math.Atan2(0, x)
+                    DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Double, my);
+                }
                 return;
             }
 
@@ -714,13 +1685,127 @@ namespace NumSharp.Backends.Iteration
                 return;
             }
 
+            // Integer reciprocal is C truncating 1/x with NumPy's probed per-dtype 1/0 sentinel
+            // (0x80..0 for int32/int64/uint64, 0 for every narrower type and uint32) — the same
+            // table the engine's ReciprocalInteger route implements; the generic emitter's
+            // double round-trip / raw div would throw or mis-sentinel.
+            if (_op == UnaryOp.Reciprocal && NDExprTypeRules.IsIntegerKind(my))
+            {
+                il.EmitCall(OpCodes.Call, NDExprIntegerReciprocal.For(my), null);
+                return;
+            }
+
             DirectILKernelGenerator.EmitUnaryScalarOperation(il, _op, my);
+            // negate / invert / square / abs(int8 min) leave an unwrapped int32 for narrow ints — see BinaryNode.
+            EmitNormalizeNarrowInt(il, my);
         }
 
         public override void EmitVector(ILGenerator il, NDExprCompileContext ctx)
         {
-            _child.EmitVector(il, ctx);
-            DirectILKernelGenerator.EmitUnaryVectorOperation(il, _op, ctx.OutputType);
+            var my = ctx.TypeOf(this);
+            var childType = ctx.TypeOf(_child);
+            var lane = ctx.VectorLaneType;
+
+            if (my == NPTypeCode.Boolean)
+            {
+                EmitBooleanVector(il, ctx, childType, lane);
+                return;
+            }
+
+            // my == lane: the child arrives at the lane dtype (a bool child becomes exact 1/0 lanes).
+            EmitVectorChildAs(il, ctx, _child, my);
+            if (IsRoundingOp(_op) && IsIntegerKind(my))
+                return;                                   // floor/ceil/round/trunc are the identity on integers
+            DirectILKernelGenerator.EmitUnaryVectorOperation(il, _op, my);
+        }
+
+        /// <summary>The Boolean-typed unary nodes: predicates, logical not, and the bool identities.</summary>
+        private void EmitBooleanVector(ILGenerator il, NDExprCompileContext ctx, NPTypeCode childType, NPTypeCode lane)
+        {
+            if (ctx.ByteMode)
+            {
+                // Everything is a 0/1 byte vector here.
+                switch (_op)
+                {
+                    case UnaryOp.LogicalNot:
+                    case UnaryOp.BitwiseNot:
+                        _child.EmitVector(il, ctx);
+                        DirectILKernelGenerator.EmitUnaryVectorOperation(il, UnaryOp.LogicalNot, NPTypeCode.Boolean);
+                        return;
+                    case UnaryOp.IsNan:
+                    case UnaryOp.IsInf:
+                        il.EmitCall(OpCodes.Call, VectorMethodCache.Zero(DirectILKernelGenerator.VectorBits, typeof(byte)), null);
+                        return;
+                    case UnaryOp.IsFinite:
+                        il.Emit(OpCodes.Ldc_I4_1);
+                        DirectILKernelGenerator.EmitVectorCreate(il, NPTypeCode.Boolean);
+                        return;
+                    default:                              // abs / floor / ceil / trunc on bool: identity
+                        _child.EmitVector(il, ctx);
+                        return;
+                }
+            }
+
+            switch (_op)
+            {
+                case UnaryOp.LogicalNot:
+                    if (childType == NPTypeCode.Boolean)
+                    {
+                        _child.EmitVector(il, ctx);
+                        NDExprVec.EmitNot(il, lane);
+                    }
+                    else
+                    {
+                        _child.EmitVector(il, ctx);       // value at lane
+                        NDExprVec.EmitIsZeroMask(il, lane);
+                    }
+                    return;
+
+                case UnaryOp.BitwiseNot:                  // ~bool == logical not (child is bool by the gate)
+                    _child.EmitVector(il, ctx);
+                    NDExprVec.EmitNot(il, lane);
+                    return;
+
+                case UnaryOp.IsNan:
+                    if (!NDExprVec.IsFloatLane(lane) || childType == NPTypeCode.Boolean)
+                    {
+                        NDExprVec.EmitZero(il, lane);      // integers / bools are never NaN
+                        return;
+                    }
+                    _child.EmitVector(il, ctx);
+                    il.Emit(OpCodes.Dup);
+                    il.EmitCall(OpCodes.Call, VectorMethodCache.Equals(DirectILKernelGenerator.VectorBits, DirectILKernelGenerator.GetClrType(lane)), null);
+                    NDExprVec.EmitNot(il, lane);           // ~(x == x)
+                    return;
+
+                case UnaryOp.IsInf:
+                    if (!NDExprVec.IsFloatLane(lane) || childType == NPTypeCode.Boolean)
+                    {
+                        NDExprVec.EmitZero(il, lane);
+                        return;
+                    }
+                    _child.EmitVector(il, ctx);
+                    NDExprVec.EmitAbs(il, lane);
+                    NDExprVec.EmitPositiveInfinity(il, lane);
+                    il.EmitCall(OpCodes.Call, VectorMethodCache.Equals(DirectILKernelGenerator.VectorBits, DirectILKernelGenerator.GetClrType(lane)), null);
+                    return;
+
+                case UnaryOp.IsFinite:
+                    if (!NDExprVec.IsFloatLane(lane) || childType == NPTypeCode.Boolean)
+                    {
+                        NDExprVec.EmitAllBitsSet(il, lane);
+                        return;
+                    }
+                    _child.EmitVector(il, ctx);
+                    NDExprVec.EmitAbs(il, lane);
+                    NDExprVec.EmitPositiveInfinity(il, lane);
+                    il.EmitCall(OpCodes.Call, VectorMethodCache.LessThan(DirectILKernelGenerator.VectorBits, DirectILKernelGenerator.GetClrType(lane)), null);
+                    return;                                // |x| < inf: NaN lanes compare false, like np.isfinite
+
+                default:                                   // abs / floor / ceil / trunc on a bool mask: identity
+                    _child.EmitVector(il, ctx);
+                    return;
+            }
         }
 
         public override void AppendSignature(StringBuilder sb)
@@ -729,6 +1814,292 @@ namespace NumSharp.Backends.Iteration
             _child.AppendSignature(sb);
             sb.Append(')');
         }
+    }
+
+    /// <summary>
+    /// Cast node — <c>expr.astype(target)</c> in the fused tree. Wraps a child and carries the TARGET
+    /// dtype (which a plain <see cref="UnaryOp"/> enum cannot, having no payload), so it is a distinct
+    /// node type rather than a <see cref="UnaryNode"/>. Its result dtype is the target; the child is
+    /// computed at its own dtype and converted per element with <see cref="DirectILKernelGenerator.EmitConvertTo"/>
+    /// — the exact conversion the engine's casts and every other node edge already use, which is why a
+    /// <c>Cast</c> is byte-for-byte <c>np.evaluate(child).astype(target)</c> for in-range values.
+    /// SCALAR-ONLY for now (<see cref="CanEmitVectorV2"/> is false), deferring the widening cast lanes to
+    /// Phase 5; a tree containing a <c>Cast</c> therefore runs scalar end-to-end.
+    /// </summary>
+    public sealed partial class CastNode : NDExpr
+    {
+        private readonly NDExpr _child;
+        private readonly NPTypeCode _target;
+
+        /// <summary>Construct a cast of <paramref name="child"/> to <paramref name="target"/>.</summary>
+        /// <param name="child">The sub-expression to convert.</param>
+        /// <param name="target">The target element dtype.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="child"/> is null.</exception>
+        public CastNode(NDExpr child, NPTypeCode target)
+        {
+            _child = child ?? throw new ArgumentNullException(nameof(child));
+            _target = target;
+        }
+
+        /// <summary>The target dtype this node converts to (its result dtype).</summary>
+        internal NPTypeCode Target => _target;
+
+        // NDComplexMath.RealPart(Complex)->double — np.astype's complex→real rule is "take the real
+        // part" (with a ComplexWarning), so a complex source is reduced to its real lane BEFORE the
+        // numeric convert. Static pass-by-value (a Complex on the IL stack consumed with one call).
+        private static readonly System.Reflection.MethodInfo s_complexRealForCast =
+            typeof(NumSharp.Utilities.NDComplexMath).GetMethod("RealPart", new[] { typeof(System.Numerics.Complex) })
+            ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "RealPart");
+
+        // Scalar-only: the SIMD-widening cast lanes are Phase 5. Keeping SupportsSimd false is
+        // consistent with CanEmitVectorV2 (the gate np.evaluate actually consults) returning false.
+        public override bool SupportsSimd => false;
+
+        public override void EmitScalar(ILGenerator il, NDExprCompileContext ctx)
+        {
+            var childType = ctx.TypeOf(_child);
+
+            // Identity — nothing to convert.
+            if (_target == childType)
+            {
+                _child.EmitScalar(il, ctx);
+                return;
+            }
+
+            // astype-to-bool is a NONZERO test at the SOURCE dtype (np: 0→False, everything else incl.
+            // NaN/±inf→True; complex → any-part-nonzero). EmitConvertTo's to==Boolean branch does
+            // `ldc.i4.0; cgt.un`, which is a stack-type mismatch for a float/double/complex source (it
+            // was only ever reached from a 0/1 Int32 at node edges — this Cast is its first float/complex
+            // caller). Emit the type-correct `child != 0` via the comparison kernel instead, which leaves
+            // a 0/1 the Boolean store writes as-is.
+            if (_target == NPTypeCode.Boolean)
+            {
+                _child.EmitScalar(il, ctx);
+                WhereNode.EmitPushZeroPublic(il, childType);
+                DirectILKernelGenerator.EmitComparisonOperation(il, ComparisonOp.NotEqual, childType);
+                return;
+            }
+
+            // complex → a NON-complex, NON-bool target: NumPy takes the REAL part (ComplexWarning), then
+            // converts real→target. EmitConvertTo has no complex-source path here (it mis-handles
+            // complex→int and ACCESS-VIOLATES on complex→Half), so extract the real lane to a double
+            // first and let EmitConvertTo do the real→target step it already handles bit-exactly.
+            if (childType == NPTypeCode.Complex)
+            {
+                _child.EmitScalar(il, ctx);
+                il.EmitCall(OpCodes.Call, s_complexRealForCast, null);        // Complex -> double (real part)
+                DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Double, _target);
+                return;
+            }
+
+            // Everything else — real→real, int→int, float→int (NumPy-faithful Converts.*), any→complex,
+            // real↔half, decimal — is what EmitConvertTo handles bit-exactly at node edges.
+            _child.EmitScalar(il, ctx);
+            DirectILKernelGenerator.EmitConvertTo(il, childType, _target);
+        }
+
+        // Never invoked: CanEmitVectorV2 returns false, so no tree containing a CastNode takes the
+        // vector body. Kept as an explicit guard rather than a silent scalar fallback.
+        public override void EmitVector(ILGenerator il, NDExprCompileContext ctx)
+            => throw new InvalidOperationException(
+                "CastNode is scalar-only (Phase 5 adds the widening cast lanes); it must not reach the vector body.");
+
+        public override void AppendSignature(StringBuilder sb)
+        {
+            sb.Append("cast").Append((int)_target).Append('(');
+            _child.AppendSignature(sb);
+            sb.Append(')');
+        }
+    }
+
+    /// <summary>
+    /// Round-to-decimals node — <c>np.round(x, decimals)</c> with <c>decimals != 0</c> (the
+    /// <c>decimals == 0</c> case is the plain <see cref="UnaryOp.Round"/> node, so the factory only
+    /// builds a <c>RoundNode</c> for a nonzero <c>decimals</c>, which is baked into the node and folded
+    /// into its identity). A DTYPE-PRESERVING port of NumPy's <c>PyArray_Round</c>: it composes
+    /// <c>op2(rint(op1(x, f)), f)</c> with <c>f = 10^|decimals|</c> (mul→div for positive decimals,
+    /// div→mul for negative), at the input's own float dtype for a float/complex child, at float64 (then
+    /// cast back, wrapping) for an integer child with negative decimals, and as the identity for an
+    /// integer child with positive decimals. Scalar-only (<see cref="CanEmitVectorV2"/> false) — the
+    /// multi-step composition's SIMD form is deferred.
+    /// </summary>
+    public sealed partial class RoundNode : NDExpr
+    {
+        private readonly NDExpr _child;
+        private readonly int _decimals;   // guaranteed != 0 (the factory routes 0 to UnaryOp.Round)
+
+        /// <summary>Construct <c>round(child, decimals)</c>; <paramref name="decimals"/> must be nonzero.</summary>
+        /// <param name="child">The sub-expression to round.</param>
+        /// <param name="decimals">The number of decimal places (nonzero).</param>
+        /// <exception cref="ArgumentNullException"><paramref name="child"/> is null.</exception>
+        public RoundNode(NDExpr child, int decimals)
+        {
+            _child = child ?? throw new ArgumentNullException(nameof(child));
+            _decimals = decimals;
+        }
+
+        /// <summary>The decimals this node rounds to (part of its program identity).</summary>
+        internal int Decimals => _decimals;
+
+        // NDComplexMath.RealPart/ImagPart(Complex)->double and the Complex(double,double) ctor — the
+        // complex child is rounded LANE BY LANE at float64 (its real/imag parts are float64), then
+        // reassembled, matching NumPy's `arr.real = a.real.round(); arr.imag = a.imag.round()`.
+        private static readonly System.Reflection.MethodInfo s_realPart =
+            typeof(NumSharp.Utilities.NDComplexMath).GetMethod("RealPart", new[] { typeof(System.Numerics.Complex) })
+            ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "RealPart");
+        private static readonly System.Reflection.MethodInfo s_imagPart =
+            typeof(NumSharp.Utilities.NDComplexMath).GetMethod("ImagPart", new[] { typeof(System.Numerics.Complex) })
+            ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "ImagPart");
+        private static readonly System.Reflection.ConstructorInfo s_complexCtor =
+            typeof(System.Numerics.Complex).GetConstructor(new[] { typeof(double), typeof(double) })
+            ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, ".ctor(double,double)");
+        private static readonly System.Reflection.MethodInfo s_floatToHalf =
+            typeof(Half).GetMethod("op_Explicit", new[] { typeof(float) })
+            ?? throw new MissingMethodException(typeof(Half).FullName, "op_Explicit(float)");
+
+        public override bool SupportsSimd => false;
+
+        // NumPy's power_of_ten (calculation.c): a small exact table for n < 9, then 1e9 multiplied by
+        // 10 exactly (n-9) more times — reproduced so `f` is bit-identical to NumPy's (Math.Pow(10,n)
+        // can be 1 ULP off, and f is applied then un-applied, so the error would not fully cancel).
+        // n is always the NON-negative magnitude |decimals|.
+        private static readonly double[] s_p10 = { 1e0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8 };
+        private static double PowerOfTen(int n)
+        {
+            if (n < 9)
+                return s_p10[n];
+            double ret = 1e9;
+            for (int k = 9; k < n; k++)
+                ret *= 10.0;
+            return ret;
+        }
+
+        // The 8 integer widths + Char (NOT bool — a bool child with decimals != 0 throws at typing).
+        private static bool IsIntType(NPTypeCode t)
+            => t == NPTypeCode.Byte || t == NPTypeCode.SByte ||
+               t == NPTypeCode.Int16 || t == NPTypeCode.UInt16 || t == NPTypeCode.Char ||
+               t == NPTypeCode.Int32 || t == NPTypeCode.UInt32 ||
+               t == NPTypeCode.Int64 || t == NPTypeCode.UInt64;
+
+        // Push the constant f (a double) onto the stack at working dtype w (Double / Single / Half only —
+        // integer/decimal children round via the Double bridge, so w is never those here).
+        private static void EmitPushConst(ILGenerator il, double f, NPTypeCode w)
+        {
+            switch (w)
+            {
+                case NPTypeCode.Double: il.Emit(OpCodes.Ldc_R8, f); break;
+                case NPTypeCode.Single: il.Emit(OpCodes.Ldc_R4, (float)f); break;
+                case NPTypeCode.Half: il.Emit(OpCodes.Ldc_R4, (float)f); il.EmitCall(OpCodes.Call, s_floatToHalf, null); break;
+                default: throw new InvalidOperationException($"RoundNode constant push unsupported for {w}.");
+            }
+        }
+
+        // Given a value of dtype w on the stack, leave `op2(rint(op1(value, f)), f)` (dtype w). This IS
+        // NumPy's PyArray_Round inner sequence at precision w: multiply→rint→divide (decimals > 0) or
+        // divide→rint→multiply (decimals < 0), reusing the SAME per-element multiply/divide (BinaryNode)
+        // and rint (UnaryOp.Round) emitters the engine's own ufuncs use.
+        private void EmitRoundSequence(ILGenerator il, NPTypeCode w)
+        {
+            double f = PowerOfTen(System.Math.Abs(_decimals));
+            var op1 = _decimals > 0 ? BinaryOp.Multiply : BinaryOp.Divide;
+            var op2 = _decimals > 0 ? BinaryOp.Divide : BinaryOp.Multiply;
+            EmitPushConst(il, f, w);
+            DirectILKernelGenerator.EmitScalarOperation(il, op1, w);        // value op1 f
+            DirectILKernelGenerator.EmitUnaryScalarOperation(il, UnaryOp.Round, w);   // rint (banker's)
+            EmitPushConst(il, f, w);
+            DirectILKernelGenerator.EmitScalarOperation(il, op2, w);        // (rinted) op2 f
+        }
+
+        public override void EmitScalar(ILGenerator il, NDExprCompileContext ctx)
+        {
+            var ct = ctx.TypeOf(_child);
+            var my = ctx.TypeOf(this);   // == ct (dtype-preserving); bool threw at typing.
+
+            // Complex: round each float64 lane and reassemble (NumPy rounds .real and .imag separately).
+            if (ct == NPTypeCode.Complex)
+            {
+                _child.EmitScalar(il, ctx);
+                var zloc = il.DeclareLocal(typeof(System.Numerics.Complex));
+                il.Emit(OpCodes.Stloc, zloc);
+                il.Emit(OpCodes.Ldloc, zloc); il.EmitCall(OpCodes.Call, s_realPart, null);   // -> double (real)
+                EmitRoundSequence(il, NPTypeCode.Double);
+                il.Emit(OpCodes.Ldloc, zloc); il.EmitCall(OpCodes.Call, s_imagPart, null);   // -> double (imag)
+                EmitRoundSequence(il, NPTypeCode.Double);
+                il.Emit(OpCodes.Newobj, s_complexCtor);                                       // new Complex(rr, ri)
+                return;
+            }
+
+            // Integer / char with POSITIVE decimals: the identity (no fractional part — and no float
+            // round-trip, so a huge int64 is untouched). Result dtype = the integer dtype.
+            if (IsIntType(ct) && _decimals > 0)
+            {
+                _child.EmitScalar(il, ctx);
+                return;
+            }
+
+            // Everything else — float (at its own dtype), integer with negative decimals (float64 bridge
+            // then cast BACK, wrapping), decimal (float64 bridge). Working dtype w: a float child rounds
+            // at its own precision; an integer/decimal child rounds in float64.
+            NPTypeCode w = (ct == NPTypeCode.Half || ct == NPTypeCode.Single || ct == NPTypeCode.Double)
+                ? ct : NPTypeCode.Double;
+            _child.EmitScalar(il, ctx);
+            DirectILKernelGenerator.EmitConvertTo(il, ct, w);   // int/decimal -> double; float ct==w no-op
+            EmitRoundSequence(il, w);
+            DirectILKernelGenerator.EmitConvertTo(il, w, my);   // double -> int (WRAP) / decimal; float w==my no-op
+        }
+
+        // Never invoked: CanEmitVectorV2 returns false, so no tree containing a RoundNode vectorizes.
+        public override void EmitVector(ILGenerator il, NDExprCompileContext ctx)
+            => throw new InvalidOperationException(
+                "RoundNode is scalar-only; it must not reach the vector body.");
+
+        public override void AppendSignature(StringBuilder sb)
+        {
+            sb.Append("round").Append(_decimals).Append('(');
+            _child.AppendSignature(sb);
+            sb.Append(')');
+        }
+    }
+
+    /// <summary>
+    /// NumPy's integer reciprocal loop is <c>1/x</c> in C with the platform's 1/0 result, probed
+    /// per dtype against 2.4.2 (win-amd64): the sign-bit sentinel for int32 / int64 / uint64, 0 for
+    /// every narrower type and uint32. Mirrors <c>DefaultEngine.ReciprocalInteger</c> so the fused
+    /// and unfused paths agree bit-for-bit; one static per dtype, resolved once for the emitters.
+    /// </summary>
+    internal static class NDExprIntegerReciprocal
+    {
+        public static sbyte SByte(sbyte x) => x == 0 ? (sbyte)0 : (sbyte)(1 / x);
+        public static byte Byte(byte x) => x == 0 ? (byte)0 : (byte)(1 / x);
+        public static short Int16(short x) => x == 0 ? (short)0 : (short)(1 / x);
+        public static ushort UInt16(ushort x) => x == 0 ? (ushort)0 : (ushort)(1 / x);
+        public static char Char(char x) => x == 0 ? (char)0 : (char)(1 / x);
+        public static int Int32(int x) => x == 0 ? int.MinValue : 1 / x;
+        public static uint UInt32(uint x) => x == 0 ? 0u : 1u / x;
+        public static long Int64(long x) => x == 0 ? long.MinValue : 1 / x;
+        public static ulong UInt64(ulong x) => x == 0 ? 0x8000000000000000UL : 1UL / x;
+
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<NPTypeCode, System.Reflection.MethodInfo> s_cache = new();
+
+        public static System.Reflection.MethodInfo For(NPTypeCode t)
+            => s_cache.GetOrAdd(t, static tc =>
+            {
+                string name = tc switch
+                {
+                    NPTypeCode.SByte => nameof(SByte),
+                    NPTypeCode.Byte => nameof(Byte),
+                    NPTypeCode.Int16 => nameof(Int16),
+                    NPTypeCode.UInt16 => nameof(UInt16),
+                    NPTypeCode.Char => nameof(Char),
+                    NPTypeCode.Int32 => nameof(Int32),
+                    NPTypeCode.UInt32 => nameof(UInt32),
+                    NPTypeCode.Int64 => nameof(Int64),
+                    NPTypeCode.UInt64 => nameof(UInt64),
+                    _ => throw new NotSupportedException($"integer reciprocal has no {tc} loop"),
+                };
+                return typeof(NDExprIntegerReciprocal).GetMethod(name)
+                       ?? throw new MissingMethodException(typeof(NDExprIntegerReciprocal).FullName, name);
+            });
     }
 
     // =========================================================================
@@ -756,6 +2127,20 @@ namespace NumSharp.Backends.Iteration
             _right = right ?? throw new ArgumentNullException(nameof(right));
         }
 
+        /// <summary>
+        /// The tested operand <c>x</c> when this node is the reduction factories' nonzero test <c>x != 0</c> — a
+        /// <see cref="ComparisonOp.NotEqual"/> whose right operand is the integer literal 0, exactly the form
+        /// <see cref="NDExpr.Any(NDExpr)"/>, <see cref="NDExpr.All(NDExpr)"/> and <see cref="NDExpr.CountNonzero(NDExpr)"/>
+        /// build — otherwise null. For a Boolean-typed <c>x</c> the test is the identity (a bool is nonzero iff it is
+        /// true), which lets the host reduce <c>x</c>'s own mask kernel rather than the comparison NEP50 types as
+        /// <c>bool</c> vs a weak int, i.e. an int64 compare the vector plan declines as mixed-width. Any other
+        /// literal, operand order or comparison returns null, so a caller never rewrites a genuine comparison.
+        /// </summary>
+        internal NDExpr NonzeroTestOperand
+            => _op == ComparisonOp.NotEqual && _right is ConstNode c && c.IsIntegerLiteral && c.IntegerValue == 0
+                ? _left
+                : null;
+
         public override bool SupportsSimd => false;
 
         public override void EmitScalar(ILGenerator il, NDExprCompileContext ctx)
@@ -764,11 +2149,12 @@ namespace NumSharp.Backends.Iteration
             var lT = ctx.TypeOf(_left);
             var rT = ctx.TypeOf(_right);
             // NumPy compares at the operands' common dtype (result_type of the
-            // two children), then yields bool. Legacy mode compares at
-            // OutputType, where both children already sit.
+            // two children — with the exact int64/uint64 `qQ` loops, see
+            // NDExprTypeRules.ComparisonType), then yields bool. Legacy mode
+            // compares at OutputType, where both children already sit.
             var cmpType = ctx.NodeTypes is null
                 ? ctx.OutputType
-                : NDExprTypeRules.PromoteStrong(lT, rT);
+                : NDExprTypeRules.ComparisonType(lT, rT);
 
             _left.EmitScalar(il, ctx);
             DirectILKernelGenerator.EmitConvertTo(il, lT, cmpType);
@@ -781,7 +2167,52 @@ namespace NumSharp.Backends.Iteration
 
         public override void EmitVector(ILGenerator il, NDExprCompileContext ctx)
         {
-            throw new InvalidOperationException("ComparisonNode has no vector path.");
+            var lane = ctx.VectorLaneType;
+            var cmpType = ctx.NodeTypes is null
+                ? ctx.OutputType
+                : NDExprTypeRules.ComparisonType(ctx.TypeOf(_left), ctx.TypeOf(_right));
+
+            if (cmpType == NPTypeCode.Boolean && !ctx.ByteMode)
+            {
+                // Two bool masks compared in W-mode: the truth table on lane masks.
+                //   eq: a == b  ne: a ^ b  lt: ~a & b  le: ~a | b  gt: a & ~b  ge: a | ~b
+                var clr = DirectILKernelGenerator.GetClrType(lane);
+                var vecType = VectorMethodCache.V(DirectILKernelGenerator.VectorBits, clr);
+                var locA = il.DeclareLocal(vecType);
+                var locB = il.DeclareLocal(vecType);
+                EmitVectorChildAs(il, ctx, _left, NPTypeCode.Boolean);
+                il.Emit(OpCodes.Stloc, locA);
+                EmitVectorChildAs(il, ctx, _right, NPTypeCode.Boolean);
+                il.Emit(OpCodes.Stloc, locB);
+                switch (_op)
+                {
+                    case ComparisonOp.Equal:
+                        il.Emit(OpCodes.Ldloc, locA); il.Emit(OpCodes.Ldloc, locB); NDExprVec.EmitXor(il, clr); NDExprVec.EmitNot(il, lane);
+                        return;
+                    case ComparisonOp.NotEqual:
+                        il.Emit(OpCodes.Ldloc, locA); il.Emit(OpCodes.Ldloc, locB); NDExprVec.EmitXor(il, clr);
+                        return;
+                    case ComparisonOp.Less:
+                        il.Emit(OpCodes.Ldloc, locB); il.Emit(OpCodes.Ldloc, locA); NDExprVec.EmitAndNot(il, clr);   // b & ~a
+                        return;
+                    case ComparisonOp.LessEqual:
+                        il.Emit(OpCodes.Ldloc, locA); NDExprVec.EmitNot(il, lane); il.Emit(OpCodes.Ldloc, locB); NDExprVec.EmitOr(il, clr);
+                        return;
+                    case ComparisonOp.Greater:
+                        il.Emit(OpCodes.Ldloc, locA); il.Emit(OpCodes.Ldloc, locB); NDExprVec.EmitAndNot(il, clr);   // a & ~b
+                        return;
+                    default: // GreaterEqual
+                        il.Emit(OpCodes.Ldloc, locB); NDExprVec.EmitNot(il, lane); il.Emit(OpCodes.Ldloc, locA); NDExprVec.EmitOr(il, clr);
+                        return;
+                }
+            }
+
+            // Compare at the common dtype (== the lane, or bool bytes in byte mode): the comparison
+            // kernel's own vector compare — NaN lanes false, NotEqual as ~Equals (NaN != NaN true),
+            // unsigned lanes through the unsigned-aware generic compares.
+            EmitVectorChildAs(il, ctx, _left, cmpType);
+            EmitVectorChildAs(il, ctx, _right, cmpType);
+            DirectILKernelGenerator.EmitVectorCompareMask(il, _op, cmpType);
         }
 
         public override void AppendSignature(StringBuilder sb)
@@ -825,62 +2256,43 @@ namespace NumSharp.Backends.Iteration
 
         public override void EmitScalar(ILGenerator il, NDExprCompileContext ctx)
         {
-            // Prefer Math.Min/Max — they propagate NaN per IEEE 754, matching NumPy's
-            // np.minimum/np.maximum. Fall back to a branchy select for dtypes without
-            // a Math.Min/Max overload (Char, Boolean, Half, Complex).
-            EmitBranchy(il, ctx);
-        }
-
-        private void EmitBranchy(ILGenerator il, NDExprCompileContext ctx)
-        {
             var my = ctx.TypeOf(this);
-            var clrType = DirectILKernelGenerator.GetClrType(my);
-            var locL = il.DeclareLocal(clrType);
-            var locR = il.DeclareLocal(clrType);
-
             _left.EmitScalar(il, ctx);
             DirectILKernelGenerator.EmitConvertTo(il, ctx.TypeOf(_left), my);
-            il.Emit(OpCodes.Stloc, locL);
             _right.EmitScalar(il, ctx);
             DirectILKernelGenerator.EmitConvertTo(il, ctx.TypeOf(_right), my);
-            il.Emit(OpCodes.Stloc, locR);
 
-            // Prefer Math.Min/Max if available (NaN-propagating for floats).
-            // ScalarMethodCache.Get throws on missing; fall back to the manual ldloc/branch
-            // path below for types without a Math overload (e.g. Char).
-            string methodName = _isMin ? "Min" : "Max";
-            System.Reflection.MethodInfo method = null;
-            try { method = ScalarMethodCache.Get(typeof(Math), methodName, clrType, clrType); }
-            catch (MissingMethodException) { /* fall through */ }
-            if (method != null)
-            {
-                il.Emit(OpCodes.Ldloc, locL);
-                il.Emit(OpCodes.Ldloc, locR);
-                il.EmitCall(OpCodes.Call, method, null);
-                return;
-            }
-
-            // Fallback: branchy select via comparison (for Char / Boolean / Half).
-            var lblElse = il.DefineLabel();
-            var lblEnd = il.DefineLabel();
-
-            il.Emit(OpCodes.Ldloc, locL);
-            il.Emit(OpCodes.Ldloc, locR);
-            DirectILKernelGenerator.EmitComparisonOperation(
-                il,
-                _isMin ? ComparisonOp.LessEqual : ComparisonOp.GreaterEqual,
-                my);
-            il.Emit(OpCodes.Brfalse, lblElse);
-            il.Emit(OpCodes.Ldloc, locL);
-            il.Emit(OpCodes.Br, lblEnd);
-            il.MarkLabel(lblElse);
-            il.Emit(OpCodes.Ldloc, locR);
-            il.MarkLabel(lblEnd);
+            // np.maximum / np.minimum: the engine's own scalar clamp, the body its ufunc kernels
+            // run — NaN-propagating with the SECOND operand winning a ±0 / equal tie (Math.Max
+            // resolves a -0/+0 tie to +0 and diverged from np.maximum), the lexicographic
+            // (real, imag) order with NaN-sticks for complex, Half / char / decimal / bool covered.
+            // One body for all 15 dtypes, so fused and unfused agree bit-for-bit.
+            DirectILKernelGenerator.EmitScalarOperation(il, _isMin ? BinaryOp.Minimum : BinaryOp.Maximum, my);
         }
 
         public override void EmitVector(ILGenerator il, NDExprCompileContext ctx)
         {
-            throw new InvalidOperationException("MinMaxNode has no vector path.");
+            var my = ctx.TypeOf(this);
+            if (my == NPTypeCode.Boolean)
+            {
+                // np.maximum(bool, bool) is logical or, minimum is logical and.
+                EmitVectorChildAs(il, ctx, _left, NPTypeCode.Boolean);
+                EmitVectorChildAs(il, ctx, _right, NPTypeCode.Boolean);
+                if (ctx.ByteMode)
+                {
+                    DirectILKernelGenerator.EmitVectorOperation(il, _isMin ? BinaryOp.BitwiseAnd : BinaryOp.BitwiseOr, NPTypeCode.Boolean);
+                    return;
+                }
+                var clr = DirectILKernelGenerator.GetClrType(ctx.VectorLaneType);
+                if (_isMin) NDExprVec.EmitAnd(il, clr); else NDExprVec.EmitOr(il, clr);
+                return;
+            }
+
+            // The fuzz-validated np.maximum / np.minimum vector body: NaN-propagating (first operand's
+            // NaN preferred), ±0 tie → second operand, integer lanes on the bare hardware min/max.
+            EmitVectorChildAs(il, ctx, _left, my);
+            EmitVectorChildAs(il, ctx, _right, my);
+            DirectILKernelGenerator.EmitVectorMinOrMax(il, isMax: !_isMin, my, propagateNaN: true);
         }
 
         public override void AppendSignature(StringBuilder sb)
@@ -961,11 +2373,15 @@ namespace NumSharp.Backends.Iteration
                     break;
                 case NPTypeCode.Boolean:
                 case NPTypeCode.Byte:
+                case NPTypeCode.SByte:
                 case NPTypeCode.Int16:
                 case NPTypeCode.UInt16:
                 case NPTypeCode.Int32:
                 case NPTypeCode.UInt32:
                 case NPTypeCode.Char:
+                    // Every sub-64-bit integer (SByte included — its absence used to throw
+                    // "Zero-push unsupported for SByte" out of Where/LogicalNot over an int8
+                    // operand) sits on the IL stack as an int32.
                     il.Emit(OpCodes.Ldc_I4_0);
                     break;
                 case NPTypeCode.Decimal:
@@ -991,7 +2407,29 @@ namespace NumSharp.Backends.Iteration
 
         public override void EmitVector(ILGenerator il, NDExprCompileContext ctx)
         {
-            throw new InvalidOperationException("WhereNode has no vector path.");
+            var my = ctx.TypeOf(this);
+            var lane = ctx.VectorLaneType;
+            var vecType = VectorMethodCache.V(DirectILKernelGenerator.VectorBits, DirectILKernelGenerator.GetSimdLaneType(lane));
+            var locMask = il.DeclareLocal(vecType);
+            var locA = il.DeclareLocal(vecType);
+            var locB = il.DeclareLocal(vecType);
+
+            // cond → lane mask: a bool child already IS one (W-mode); a numeric child is nonzero-
+            // tested at its own dtype; byte mode turns the 0/1 (or any nonzero) bytes into a mask.
+            EmitVectorChildAs(il, ctx, _cond, NPTypeCode.Boolean);
+            if (ctx.ByteMode)
+                NDExprVec.EmitBytesToMask(il);
+            il.Emit(OpCodes.Stloc, locMask);
+
+            EmitVectorChildAs(il, ctx, _a, my);
+            il.Emit(OpCodes.Stloc, locA);
+            EmitVectorChildAs(il, ctx, _b, my);
+            il.Emit(OpCodes.Stloc, locB);
+
+            il.Emit(OpCodes.Ldloc, locMask);
+            il.Emit(OpCodes.Ldloc, locA);
+            il.Emit(OpCodes.Ldloc, locB);
+            NDExprVec.EmitSelect(il, lane);
         }
 
         public override void AppendSignature(StringBuilder sb)
@@ -1002,6 +2440,116 @@ namespace NumSharp.Backends.Iteration
             _a.AppendSignature(sb);
             sb.Append(',');
             _b.AppendSignature(sb);
+            sb.Append(')');
+        }
+    }
+
+    // =========================================================================
+    // Node: Logical — element-wise logical_and / logical_or / logical_xor
+    //
+    // Result is ALWAYS Boolean, formed by NONZERO-TESTING each operand at its
+    // own dtype (`(a != 0) op (b != 0)`) — NumPy's logical-ufunc semantics, and
+    // the reason this is a dedicated node rather than a BinaryOp: no engine op
+    // both nonzero-tests and yields bool. Every dtype is accepted, complex
+    // included; a NaN is truthy, ±0 falsy. Vectorizes: each child becomes a
+    // truthiness lane mask, combined by a vector AND/OR/XOR (byte mode uses the
+    // engine's canonical-bool logical op).
+    // =========================================================================
+
+    /// <summary>The three logical combinators of <see cref="LogicalNode"/>.</summary>
+    public enum LogicalOp : byte
+    {
+        /// <summary>logical_and — <c>(a != 0) &amp; (b != 0)</c>.</summary>
+        And = 0,
+        /// <summary>logical_or — <c>(a != 0) | (b != 0)</c>.</summary>
+        Or = 1,
+        /// <summary>logical_xor — <c>(a != 0) ^ (b != 0)</c>.</summary>
+        Xor = 2,
+    }
+
+    public sealed partial class LogicalNode : NDExpr
+    {
+        private readonly LogicalOp _op;
+        private readonly NDExpr _left;
+        private readonly NDExpr _right;
+
+        public LogicalNode(LogicalOp op, NDExpr left, NDExpr right)
+        {
+            _op = op;
+            _left = left ?? throw new ArgumentNullException(nameof(left));
+            _right = right ?? throw new ArgumentNullException(nameof(right));
+        }
+
+        public override bool SupportsSimd => false;
+
+        public override void EmitScalar(ILGenerator il, NDExprCompileContext ctx)
+        {
+            var my = ctx.TypeOf(this); // Boolean in NumPy mode; OutputType in legacy mode.
+
+            // Each operand nonzero-tested at its OWN dtype: `child != 0` leaves an I4 (0/1) on the
+            // stack (EmitComparisonOperation covers every dtype — Boolean by truth value, Complex by
+            // `z != 0+0i`, Decimal/Half by their operators). Two I4 0/1 values combine with the plain
+            // integer And/Or/Xor opcode (identical to the logical combination on 0/1).
+            EmitNonzero(il, ctx, _left);
+            EmitNonzero(il, ctx, _right);
+            switch (_op)
+            {
+                case LogicalOp.And: il.Emit(OpCodes.And); break;
+                case LogicalOp.Or: il.Emit(OpCodes.Or); break;
+                default: il.Emit(OpCodes.Xor); break;
+            }
+
+            // The result is an I4 0/1; normalize to `my` (a no-op for Boolean, whose stack form IS an
+            // I4 0/1 — reached from an Int32 source so EmitConvertTo's →bool path is safe here).
+            DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Int32, my);
+        }
+
+        /// <summary>Emit <paramref name="child"/> then <c>!= 0</c> at the child's own dtype, leaving an I4 0/1.</summary>
+        private static void EmitNonzero(ILGenerator il, NDExprCompileContext ctx, NDExpr child)
+        {
+            var ct = ctx.TypeOf(child);
+            child.EmitScalar(il, ctx);
+            WhereNode.EmitPushZeroPublic(il, ct);
+            DirectILKernelGenerator.EmitComparisonOperation(il, ComparisonOp.NotEqual, ct);
+        }
+
+        public override void EmitVector(ILGenerator il, NDExprCompileContext ctx)
+        {
+            // Each child → a Boolean lane mask (a comparison child already IS one; a numeric child is
+            // nonzero-tested via EmitValueToMask; byte mode carries canonical 0/1 bytes). The masks
+            // combine with the vector AND/OR/XOR — canonical all-ones/zero masks stay canonical, so the
+            // root packs a correct bool output.
+            EmitVectorChildAs(il, ctx, _left, NPTypeCode.Boolean);
+            EmitVectorChildAs(il, ctx, _right, NPTypeCode.Boolean);
+
+            if (ctx.ByteMode)
+            {
+                // Every operand is bool: the engine's canonical-bool logical op (xor → not_equal).
+                var boolOp = _op switch
+                {
+                    LogicalOp.And => BinaryOp.BitwiseAnd,
+                    LogicalOp.Or => BinaryOp.BitwiseOr,
+                    _ => BinaryOp.BitwiseXor,
+                };
+                DirectILKernelGenerator.EmitVectorOperation(il, boolOp, NPTypeCode.Boolean);
+                return;
+            }
+
+            var clr = DirectILKernelGenerator.GetClrType(ctx.VectorLaneType);
+            switch (_op)
+            {
+                case LogicalOp.And: NDExprVec.EmitAnd(il, clr); break;
+                case LogicalOp.Or: NDExprVec.EmitOr(il, clr); break;
+                default: NDExprVec.EmitXor(il, clr); break;
+            }
+        }
+
+        public override void AppendSignature(StringBuilder sb)
+        {
+            sb.Append("Logical").Append(_op).Append('(');
+            _left.AppendSignature(sb);
+            sb.Append(',');
+            _right.AppendSignature(sb);
             sb.Append(')');
         }
     }
@@ -1149,7 +2697,7 @@ namespace NumSharp.Backends.Iteration
                 var tc = pt.GetTypeCode();
                 if (!IsSupported(tc))
                     throw new ArgumentException(
-                        $"Parameter {i} type {pt.Name} is not one of the 12 supported NPTypeCode dtypes.",
+                        $"Parameter {i} type {pt.Name} is not one of the 15 supported NPTypeCode dtypes.",
                         nameof(parameters));
                 codes[i] = tc;
             }
@@ -1164,16 +2712,19 @@ namespace NumSharp.Backends.Iteration
             var tc = returnType.GetTypeCode();
             if (!IsSupported(tc))
                 throw new ArgumentException(
-                    $"Return type {returnType.Name} of {mi.Name} is not one of the 12 supported NPTypeCode dtypes.");
+                    $"Return type {returnType.Name} of {mi.Name} is not one of the 15 supported NPTypeCode dtypes.");
             return tc;
         }
 
+        // All 15 NumSharp dtypes: every one has a CLR type the edge conversions (EmitConvertTo)
+        // handle, so a method taking/returning sbyte, Half or Complex composes like any other.
         private static bool IsSupported(NPTypeCode code)
             => code switch
             {
-                NPTypeCode.Boolean or NPTypeCode.Byte or NPTypeCode.Int16 or NPTypeCode.UInt16 or
+                NPTypeCode.Boolean or NPTypeCode.Byte or NPTypeCode.SByte or NPTypeCode.Int16 or NPTypeCode.UInt16 or
                 NPTypeCode.Int32 or NPTypeCode.UInt32 or NPTypeCode.Int64 or NPTypeCode.UInt64 or
-                NPTypeCode.Char or NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Decimal => true,
+                NPTypeCode.Char or NPTypeCode.Half or NPTypeCode.Single or NPTypeCode.Double or
+                NPTypeCode.Decimal or NPTypeCode.Complex => true,
                 _ => false,
             };
 
@@ -1252,8 +2803,14 @@ namespace NumSharp.Backends.Iteration
         public override void AppendSignature(StringBuilder sb)
         {
             sb.Append("Call[").Append(_signatureId);
-            if (_kind == Kind.BoundTarget)
-                sb.Append(",target#").Append(_slotId);
+            // The slot is part of the kernel's identity for BOTH slot-backed kinds: the IL bakes the slot
+            // id and calls whatever object sits there. Two closures over the same lambda body share the
+            // MethodInfo (hence the signature id) but capture different state — keying the kernel on the
+            // method alone handed the second closure the first one's kernel, i.e. the first closure's
+            // captured values. (DelegateSlots dedups by delegate identity, so the SAME delegate instance
+            // rebuilt into a fresh tree every call keeps one slot and one kernel.)
+            if (_kind != Kind.StaticMethod)
+                sb.Append(",slot#").Append(_slotId);
             sb.Append("](");
             for (int i = 0; i < _args.Length; i++)
             {
@@ -1270,8 +2827,12 @@ namespace NumSharp.Backends.Iteration
     //
     // The IL emitter stores an integer ID in the kernel's bytecode and looks
     // up the managed object at runtime. Strong references — entries live for
-    // the process lifetime. Users should register delegates once at startup
-    // (static field or DI singleton), not inside a hot loop.
+    // the process lifetime. Registration DEDUPS by identity (the same delegate
+    // instance / the same target object gets its first slot back), so a tree
+    // rebuilt per call around a delegate held in a field keeps ONE slot and ONE
+    // kernel; a NEW closure allocated per call is a new identity and gets a new
+    // slot (and, since the slot is baked into the kernel, a new kernel JIT) —
+    // hold delegates in a field, never allocate them inside the hot loop.
     //
     // Thread-safe: ConcurrentDictionary + Interlocked.Increment.
     // =========================================================================
@@ -1280,6 +2841,11 @@ namespace NumSharp.Backends.Iteration
     {
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, Delegate> _delegates = new();
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, object> _targets = new();
+        // Reverse maps for the identity dedup. A delegate's identity is (target reference, method):
+        // Delegate.Equals compares exactly that, but Delegate.GetHashCode ignores the target, so a
+        // custom comparer keeps distinct closures out of one bucket; targets dedup by reference.
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<Delegate, int> _delegateIds = new(DelegateIdentityComparer.Instance);
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<object, object> _targetIds = new(ReferenceEqualityComparer.Instance);
         private static int _nextId;
 
         public static readonly System.Reflection.MethodInfo LookupDelegateMethod =
@@ -1290,18 +2856,42 @@ namespace NumSharp.Backends.Iteration
             typeof(DelegateSlots).GetMethod(nameof(LookupTarget),
                 System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)!;
 
+        /// <summary>
+        /// The slot of <paramref name="d"/>: its existing slot when an identical delegate (same target
+        /// object, same method) was registered before, else a fresh one. The kernel bakes the slot id,
+        /// so this dedup is what lets a per-call rebuilt tree reuse its compiled kernel.
+        /// </summary>
+        /// <param name="d">The delegate a <see cref="CallNode"/> invokes through its slot.</param>
+        /// <returns>The slot id the emitted IL loads it by.</returns>
         public static int RegisterDelegate(Delegate d)
         {
+            if (_delegateIds.TryGetValue(d, out int existing))
+                return existing;
             int id = System.Threading.Interlocked.Increment(ref _nextId);
             _delegates[id] = d;
-            return id;
+            // Two threads registering the same delegate at once: the loser drops its orphan slot.
+            int winner = _delegateIds.GetOrAdd(d, id);
+            if (winner != id)
+                _delegates.TryRemove(id, out _);
+            return winner;
         }
 
+        /// <summary>
+        /// The slot of a bound instance target: its existing slot when the SAME object (by reference) was
+        /// registered before, else a fresh one.
+        /// </summary>
+        /// <param name="t">The instance a <see cref="CallNode"/> calls its method on.</param>
+        /// <returns>The slot id the emitted IL loads it by.</returns>
         public static int RegisterTarget(object t)
         {
+            if (_targetIds.TryGetValue(t, out var existing))
+                return (int)existing;
             int id = System.Threading.Interlocked.Increment(ref _nextId);
             _targets[id] = t;
-            return id;
+            object winner = _targetIds.GetOrAdd(t, id);
+            if ((int)winner != id)
+                _targets.TryRemove(id, out _);
+            return (int)winner;
         }
 
         // Called from emitted IL.
@@ -1315,6 +2905,30 @@ namespace NumSharp.Backends.Iteration
         {
             _delegates.Clear();
             _targets.Clear();
+            _delegateIds.Clear();
+            _targetIds.Clear();
+        }
+
+        /// <summary>
+        /// Delegate identity = (target reference, method): what decides which code a slot's callvirt
+        /// runs. <see cref="Delegate.GetHashCode"/> hashes the method only, which would chain every
+        /// closure of one lambda into a single bucket.
+        /// </summary>
+        private sealed class DelegateIdentityComparer : IEqualityComparer<Delegate>
+        {
+            public static readonly DelegateIdentityComparer Instance = new();
+
+            public bool Equals(Delegate x, Delegate y)
+                => ReferenceEquals(x, y)
+                   || (x is not null && y is not null
+                       && ReferenceEquals(x.Target, y.Target)
+                       && x.Method == y.Method
+                       && x.GetType() == y.GetType());
+
+            public int GetHashCode(Delegate d)
+                => System.HashCode.Combine(
+                    d.Target is null ? 0 : System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(d.Target),
+                    d.Method.GetHashCode());
         }
     }
 }

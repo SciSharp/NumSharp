@@ -18,10 +18,10 @@ namespace NumSharp
         /// <param name="where">Optional boolean mask broadcast to <paramref name="dst"/>'s shape. Elements of
         ///     <paramref name="src"/> are only written to <paramref name="dst"/> where the mask is <c>true</c>.
         ///     <c>null</c> (default) is equivalent to <c>where=True</c> — every element is copied.</param>
-        /// <exception cref="NumSharpException">If <paramref name="dst"/> is read-only (NumPy raises
-        ///     <c>ValueError: assignment destination is read-only</c>; the standard write guard —
-        ///     <see cref="NumSharpException.ThrowIfNotWriteable"/> — is the same one every other
-        ///     write path uses).</exception>
+        /// <exception cref="ValueError">If <paramref name="dst"/> is read-only — raises NumPy's exact
+        ///     <c>ValueError: assignment destination is read-only</c> via the standard write guard
+        ///     <see cref="NumSharpException.ThrowIfNotWriteable"/>, the same one every other
+        ///     write path uses.</exception>
         /// <exception cref="ArgumentException">If <paramref name="casting"/> is not a recognised casting
         ///     name, or <paramref name="where"/> is not a boolean array.</exception>
         /// <exception cref="InvalidCastException">If casting from <paramref name="src"/>'s dtype to

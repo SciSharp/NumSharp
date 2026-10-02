@@ -208,7 +208,7 @@ public class AuditV2_MathSelectionSorting
     /// T1.32 — Public-API typo: np.modf returns (NDArray Fractional, NDArray Intergral).
     /// The second tuple element must be renamed to `Integral` (compile-time API break).
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.32")]
+    [TestMethod]
     public void T1_32_Modf_IntegralFieldName_Typo()
     {
         // Locate the public np.modf method(s) and inspect tuple element names.

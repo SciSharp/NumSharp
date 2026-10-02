@@ -12,8 +12,11 @@ namespace NumSharp
         /// <remarks>
         ///     Mirrors <c>numpy.getbufsize()</c>. The value is <b>thread-local</b>: it reflects the last
         ///     <see cref="setbufsize(long)"/> call on the current thread (or the 8192 default if none),
-        ///     matching NumPy 2.x's context-local error/buffer state. The buffer size affects only how
-        ///     buffered iteration is chunked internally — it never changes any computed result.
+        ///     matching NumPy 2.x's context-local error/buffer state. The buffer size sets how buffered
+        ///     iteration is chunked. For almost every operation that is invisible, but — exactly as in NumPy —
+        ///     a reduction that CASTS through the buffer sums chunk by chunk: <c>np.evaluate</c>'s flat
+        ///     <c>Mean</c> of an integer / bool child adds one pairwise sum per chunk (NumPy's
+        ///     <c>np.mean(int_array)</c> does the same), so its last bits follow this value.
         ///     <example>
         ///     <code>
         ///     np.getbufsize();          // 8192
@@ -46,8 +49,9 @@ namespace NumSharp
         /// <remarks>
         ///     Mirrors <c>numpy.setbufsize(size)</c>. The setting is <b>thread-local</b> (matching NumPy
         ///     2.x's context-local buffer state) and persists until changed again on the same thread; it
-        ///     never affects other threads. Buffering is purely a performance/chunking knob, so changing
-        ///     it leaves every computed result bit-for-bit identical.
+        ///     never affects other threads. Buffering is a performance/chunking knob: results are
+        ///     unchanged EXCEPT where NumPy's own are — a reduction that casts through the buffer (see
+        ///     <see cref="getbufsize"/>) pairwise-sums per chunk, so its last bits follow the size, as NumPy's do.
         ///     <para>
         ///     Unlike NumPy — which accepts any Python int and raises <c>TypeError</c> for a
         ///     <c>float</c>/<c>bool</c> and <c>OverflowError</c> for a value beyond the platform integer —

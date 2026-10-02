@@ -1,7 +1,3 @@
-using System;
-using NumSharp.Backends.Unmanaged;
-using NumSharp.Generic;
-
 namespace NumSharp
 {
     public partial class NumPyRandom
@@ -9,15 +5,28 @@ namespace NumSharp
         /// <summary>
         ///     Draw a single sample from a Gumbel distribution.
         /// </summary>
-        public NDArray gumbel(double loc = 0.0, double scale = 1.0) => gumbel(loc, scale, Shape.Scalar);
+        /// <param name="loc">The location of the mode of the distribution.</param>
+        /// <param name="scale">The scale parameter of the distribution. Must be non-negative.</param>
+        /// <returns>A 0-d float64 array holding the draw.</returns>
+        /// <exception cref="ValueError"><paramref name="scale"/> is negative, including <c>-0.0</c> (<c>scale &lt; 0</c>).</exception>
+        /// <remarks>
+        ///     Every distribution argument given, no size: one draw (a 0-d array, NumPy's size <c>()</c>, which draws
+        ///     exactly what <c>None</c> draws). NumPy's defaults live on the size overload, which carries NumPy's whole
+        ///     <c>gumbel(loc=0.0, scale=1.0, size=None)</c> signature — so <c>gumbel()</c>, <c>gumbel(size: 3)</c> and
+        ///     any argument left out bind there. This overload has no defaults on purpose: two overloads that both need
+        ///     defaults filled in are ambiguous to C#, and the size-only call would not compile.
+        /// </remarks>
+        public NDArray gumbel(double loc, double scale) => gumbel(loc, scale, Shape.Scalar);
 
         /// <summary>
         ///     Draw samples from a Gumbel distribution (extreme value type I).
         /// </summary>
         /// <param name="loc">The location of the mode of the distribution. Default is 0.</param>
         /// <param name="scale">The scale parameter of the distribution. Must be non-negative. Default is 1.</param>
-        /// <param name="size">Output shape.</param>
-        /// <returns>Drawn samples from the parameterized Gumbel distribution.</returns>
+        /// <param name="size">Output shape; <c>default</c> (NumPy's <c>None</c>) draws a single value.</param>
+        /// <returns>Drawn samples from the parameterized Gumbel distribution (float64).</returns>
+        /// <exception cref="ValueError"><paramref name="scale"/> is negative, including <c>-0.0</c> (<c>scale &lt; 0</c>), or
+        ///     <paramref name="size"/> has a negative dimension.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.gumbel.html
         ///     <br/>
@@ -31,49 +40,44 @@ namespace NumSharp
         ///     For Gumbel(loc, scale):
         ///     - mean = loc + scale * γ (where γ ≈ 0.5772 is the Euler-Mascheroni constant)
         ///     - std = scale * π / sqrt(6) ≈ 1.283 * scale
+        ///     <br/>
+        ///     NumPy's <c>random_gumbel</c>: <c>loc - scale * log(-log(U))</c> with <c>U = 1 - next_double</c>, redrawing
+        ///     only when <c>U == 1</c>. <c>scale == 0</c> STILL consumes a uniform per value (the former shortcut skipped
+        ///     the draw and desynchronized every later value). Holds the bit generator's lock for the draws.
         /// </remarks>
-        public NDArray gumbel(double loc, double scale, Shape size)
+        public NDArray gumbel(double loc = 0.0, double scale = 1.0, Shape size = default)
         {
-            if (scale < 0)
-                throw new ArgumentException("scale < 0", nameof(scale));
+            RandomConstraints.Check(scale, "scale", ConstraintType.CONS_NON_NEGATIVE);
 
-            if (size.IsScalar || size.IsEmpty)
-                return NDArray.Scalar(SampleGumbel(loc, scale));
-
-            var ret = new NDArray<double>(size);
-            ArraySlice<double> data = ret.Data<double>();
-
-            for (int i = 0; i < ret.size; i++)
+            if (IsScalarDraw(size))
             {
-                data[i] = SampleGumbel(loc, scale);
+                unsafe
+                {
+                    // A one-double buffer IS NumPy's per-draw call sequence.
+                    double word;
+                    var one = new DrawBufferDouble(randomizer, &word, 1);
+                    lock (randomizer.@lock)
+                        return NDArray.Scalar(Distributions.RandomGumbel(ref one, loc, scale));
+                }
+            }
+
+            var ret = LegacyOutput(NPTypeCode.Double, size);
+            unsafe
+            {
+                var dst = (double*)ret.Address;
+                long n = ret.size;
+                // Read-ahead draws (bulk-filled by the bit generator): every value draws at least one uniform.
+                double* storage = stackalloc double[DrawBufferDouble.Capacity];
+                var src = new DrawBufferDouble(randomizer, storage, DrawBufferDouble.Capacity);
+                lock (randomizer.@lock)
+                    for (long i = 0; i < n; i++)
+                    {
+                        src.Owed = n - i;
+                        dst[i] = Distributions.RandomGumbel(ref src, loc, scale);
+                    }
             }
 
             return ret;
-        }
-
-        /// <summary>
-        ///     Sample from the Gumbel distribution using the same algorithm as NumPy.
-        /// </summary>
-        /// <remarks>
-        ///     Based on NumPy's random_gumbel in distributions.c:
-        ///     U = 1.0 - next_double();  // U in (0, 1]
-        ///     if (U &lt; 1.0) return loc - scale * log(-log(U));
-        ///     // Reject U == 1.0 and retry
-        /// </remarks>
-        private double SampleGumbel(double loc, double scale)
-        {
-            if (scale == 0.0)
-                return loc;
-
-            double U;
-            do
-            {
-                // U = 1.0 - NextDouble() gives U in (0, 1]
-                // We need U < 1.0 to avoid log(0) = -inf
-                U = 1.0 - randomizer.NextDouble();
-            } while (U >= 1.0); // Reject U == 1.0 (which happens when NextDouble() == 0.0)
-
-            return loc - scale * Math.Log(-Math.Log(U));
         }
     }
 }

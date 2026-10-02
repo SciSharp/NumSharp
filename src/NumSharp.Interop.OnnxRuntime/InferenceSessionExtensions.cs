@@ -226,8 +226,9 @@ namespace NumSharp.Interop.OnnxRuntime
                 throw new ArgumentException($"the model has no input named '{name}'; its inputs are [{string.Join(", ", session.InputNames)}].", nameof(name));
             if (!meta.IsTensor)
                 throw new NotSupportedException($"input '{name}' is {meta.OnnxValueType}, not a tensor; feed it with the OrtValue API (OrtValue.CreateSequence / CreateMap).");
-            if (!NDArrayOnnxInterop.TryFromTensorElementType(meta.ElementDataType, out NPTypeCode want))
+            if (!NDArrayOnnxInterop.TryFromTensorElementType(meta.ElementDataType, out DType wantDtype))
                 throw new NotSupportedException($"input '{name}' is declared {meta.ElementDataType}: {NDArrayOnnxInterop.UnsupportedImportMessage(meta.ElementDataType)}");
+            NPTypeCode want = wantDtype.GetTypeCode();
 
             NDArray fed = array;
             bool owned = false;

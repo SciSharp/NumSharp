@@ -21,7 +21,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/user/basics.indexing.html</remarks>
         /// <exception cref="IndexOutOfRangeException">When one of the indices exceeds limits.</exception>
         /// <exception cref="ArgumentException">indices must be of Int type (byte, u/short, u/int, u/long).</exception>
-        /// <exception cref="NumSharpException">If this array is not writeable (e.g., broadcast array).</exception>
+        /// <exception cref="ValueError">If this array is not writeable (e.g., broadcast array) — NumPy's "assignment destination is read-only".</exception>
         public void SetIndices(NDArray values, NDArray[] indices)
         {
             NumSharpException.ThrowIfNotWriteable(Shape);

@@ -536,5 +536,20 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="count">The count of items of type <typeparamref name="T"/> (not bytes count)</param>
         /// <returns>A wrapped memory block as <see cref="ArraySlice{T}"/></returns>
         public static unsafe ArraySlice<T> Wrap<T>(void* address, long count) where T : unmanaged => new ArraySlice<T>(new UnmanagedMemoryBlock<T>((T*)address, count));
+
+        /// <summary>
+        ///     Wrap an ALIAS of memory another array owns — reinterpreted as <typeparamref name="T"/> — whose reference
+        ///     counting is the owner's. Use it for every byte-reinterpreting view (a complex lane, <c>view(dtype)</c>,
+        ///     <c>getfield</c>): an <see cref="NDArray"/> over the returned slice keeps the owner's buffer alive until the
+        ///     alias itself is disposed, exactly as an ordinary view sharing the owner's slice does. (A plain
+        ///     <see cref="Wrap{T}(void*, long)"/> counts nothing, so disposing the owner freed the buffer under the alias.)
+        /// </summary>
+        /// <param name="address">The first aliased element (inside <paramref name="arcOwner"/>'s buffer).</param>
+        /// <param name="count">The count of items of type <typeparamref name="T"/> (not bytes count).</param>
+        /// <param name="arcOwner">The owner's slice — the source storage's <c>InternalArray</c>.</param>
+        /// <returns>A non-owning slice whose ARC operations forward to <paramref name="arcOwner"/>.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="arcOwner"/> is null.</exception>
+        internal static unsafe ArraySlice<T> WrapShared<T>(void* address, long count, IArraySlice arcOwner) where T : unmanaged
+            => new ArraySlice<T>(new UnmanagedMemoryBlock<T>((T*)address, count, arcOwner));
     }
 }

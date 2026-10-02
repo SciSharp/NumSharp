@@ -154,6 +154,52 @@ namespace NumSharp.Backends.Kernels
             }
         }
 
+        /// <summary>
+        /// Emit the IEEE sign-bit test (np.signbit) for the scalar / tail path.
+        /// Stack has one input value; leaves an int32 bool (0/1).
+        /// <list type="bullet">
+        ///   <item>Single/Double: <c>float.IsNegative</c> / <c>double.IsNegative</c> — the sign bit
+        ///     of the raw pattern, so <c>-0.0</c> and a negative NaN are True (a plain <c>x &lt; 0</c>
+        ///     would wrongly report both as False).</item>
+        ///   <item>Signed integers (SByte/Int16/Int32/Int64): <c>x &lt; 0</c> — the two's-complement
+        ///     MSB, which IS the sign bit.</item>
+        ///   <item>Unsigned integers (Byte/UInt16/UInt32/UInt64/Char) and Boolean: no sign bit is ever
+        ///     set → always False (pop the value, push 0).</item>
+        /// </list>
+        /// Half and Decimal are handled by their own scalar emitters (<c>EmitUnaryHalfOperation</c> /
+        /// <c>EmitUnaryDecimalOperation</c>) and never reach this method; Complex is rejected at the
+        /// np.* layer.
+        /// </summary>
+        private static void EmitSignBitCall(ILGenerator il, NPTypeCode type)
+        {
+            switch (type)
+            {
+                case NPTypeCode.Single:
+                    il.EmitCall(OpCodes.Call, typeof(float).GetMethod("IsNegative", new[] { typeof(float) })!, null);
+                    break;
+                case NPTypeCode.Double:
+                    il.EmitCall(OpCodes.Call, typeof(double).GetMethod("IsNegative", new[] { typeof(double) })!, null);
+                    break;
+                case NPTypeCode.SByte:
+                case NPTypeCode.Int16:
+                case NPTypeCode.Int32:
+                    // value (sign-extended to int32 on load) < 0  →  clt against 0.
+                    il.Emit(OpCodes.Ldc_I4_0);
+                    il.Emit(OpCodes.Clt);
+                    break;
+                case NPTypeCode.Int64:
+                    // value < 0L  →  signed clt against a 64-bit zero.
+                    il.Emit(OpCodes.Ldc_I8, 0L);
+                    il.Emit(OpCodes.Clt);
+                    break;
+                default:
+                    // Unsigned (Byte/UInt16/UInt32/UInt64/Char) and Boolean: no sign bit → false.
+                    il.Emit(OpCodes.Pop);
+                    il.Emit(OpCodes.Ldc_I4_0);
+                    break;
+            }
+        }
+
         #endregion
 
         #region SIMD Predicate Kernels (float/double -> bool)
@@ -191,16 +237,37 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         public static UnaryKernel? GetPredicateContiguousKernel(UnaryOp op, NPTypeCode inputType)
         {
-            if (op != UnaryOp.IsNan && op != UnaryOp.IsInf && op != UnaryOp.IsFinite
-                && op != UnaryOp.IsPosInf && op != UnaryOp.IsNegInf)
-                return null;
-            if (inputType != NPTypeCode.Single && inputType != NPTypeCode.Double)
+            if (!IsSimdPredicateType(op, inputType))
                 return null;
             if (!Vector128.IsHardwareAccelerated)
                 return null;
 
             return _predicateContigKernels.GetOrAdd((op, inputType),
                 static key => GeneratePredicateContiguousKernel(key.Op, key.Input));
+        }
+
+        /// <summary>
+        ///     Gate for the dedicated SIMD predicate kernels (contiguous + strided). The
+        ///     float-classification predicates (IsNan/IsInf/IsFinite/IsPosInf/IsNegInf) vectorize only
+        ///     over Single/Double (NumPy's own HALF/int loops for these are scalar). <see cref="UnaryOp.SignBit"/>
+        ///     additionally vectorizes over signed <b>Int32/Int64</b>: signbit is a pure per-lane MSB
+        ///     read (<c>ExtractMostSignificantBits</c>), which is the two's-complement sign bit for a
+        ///     signed integer exactly as it is the IEEE sign bit for a float — and their 8/4 lane counts
+        ///     (V256) fit the PDEP bool store's ≤8-lane fast path. Narrow signed ints (SByte/Int16) are
+        ///     excluded because their 16/32 lanes fall to the slow per-lane store; unsigned/bool have no
+        ///     sign bit (always False) and Half/Decimal have no vector arithmetic — all take the scalar
+        ///     route, which already beats NumPy's own scalar loops for these dtypes.
+        /// </summary>
+        private static bool IsSimdPredicateType(UnaryOp op, NPTypeCode inputType)
+        {
+            bool floatClass = op == UnaryOp.IsNan || op == UnaryOp.IsInf || op == UnaryOp.IsFinite
+                || op == UnaryOp.IsPosInf || op == UnaryOp.IsNegInf;
+            if (floatClass)
+                return inputType == NPTypeCode.Single || inputType == NPTypeCode.Double;
+            if (op == UnaryOp.SignBit)
+                return inputType == NPTypeCode.Single || inputType == NPTypeCode.Double
+                    || inputType == NPTypeCode.Int32 || inputType == NPTypeCode.Int64;
+            return false;
         }
 
         private static UnaryKernel GeneratePredicateContiguousKernel(UnaryOp op, NPTypeCode inputType)
@@ -250,9 +317,11 @@ namespace NumSharp.Backends.Kernels
             var maskLocals = new[] { locMask0, locMask1, locMask2, locMask3 };
 
             // Hoisted +inf broadcast for the Abs-compare predicates (scalar
-            // pre-broadcast pattern). IsNan needs no constant.
+            // pre-broadcast pattern). IsNan and SignBit need no constant (SignBit
+            // reads the MSB directly; a float inf broadcast would also be invalid
+            // for the Int32/Int64 SignBit kernels).
             LocalBuilder? locInf = null;
-            if (op != UnaryOp.IsNan)
+            if (op != UnaryOp.IsNan && op != UnaryOp.SignBit)
             {
                 // +inf for IsInf/IsFinite/IsPosInf; -inf for IsNegInf (the signed
                 // constant the Equals(v, locInf) mask compares against).
@@ -394,6 +463,7 @@ namespace NumSharp.Backends.Kernels
                 case UnaryOp.IsInf: EmitIsInfCall(il, inputType); break;
                 case UnaryOp.IsPosInf: EmitIsPosInfCall(il, inputType); break;
                 case UnaryOp.IsNegInf: EmitIsNegInfCall(il, inputType); break;
+                case UnaryOp.SignBit: EmitSignBitCall(il, inputType); break;
                 default: EmitIsFiniteCall(il, inputType); break;
             }
 
@@ -443,6 +513,13 @@ namespace NumSharp.Backends.Kernels
                     // Equals(v, -inf) — no Abs; locInf holds -inf for this op.
                     il.Emit(OpCodes.Ldloc, locInf!);
                     il.EmitCall(OpCodes.Call, VectorMethodCache.Equals(bits, clrType), null);
+                    break;
+
+                case UnaryOp.SignBit:
+                    // No-op: the loaded vector's per-lane MOST-SIGNIFICANT BIT already IS the
+                    // predicate (the IEEE sign bit for Single/Double, the two's-complement sign
+                    // bit for Int32/Int64). Leave v on the stack so EmitPredicateMaskToBool's
+                    // ExtractMostSignificantBits reads it directly — no compare, no constant.
                     break;
 
                 default: // IsFinite
@@ -558,10 +635,7 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         public static StridedUnaryKernel? GetPredicateStridedKernel(UnaryOp op, NPTypeCode inputType)
         {
-            if (op != UnaryOp.IsNan && op != UnaryOp.IsInf && op != UnaryOp.IsFinite
-                && op != UnaryOp.IsPosInf && op != UnaryOp.IsNegInf)
-                return null;
-            if (inputType != NPTypeCode.Single && inputType != NPTypeCode.Double)
+            if (!IsSimdPredicateType(op, inputType))
                 return null;
             if (!Vector128.IsHardwareAccelerated)
                 return null;
@@ -621,9 +695,10 @@ namespace NumSharp.Backends.Kernels
             var locMask = il.DeclareLocal(vectorType);
 
             LocalBuilder? locInf = null;
-            if (op != UnaryOp.IsNan)
+            if (op != UnaryOp.IsNan && op != UnaryOp.SignBit)
             {
-                // +inf for IsInf/IsFinite/IsPosInf; -inf for IsNegInf.
+                // +inf for IsInf/IsFinite/IsPosInf; -inf for IsNegInf. SignBit reads the MSB
+                // directly (no constant) and its Int32/Int64 kernels cannot broadcast a float inf.
                 locInf = il.DeclareLocal(vectorType);
                 if (inputType == NPTypeCode.Single)
                     il.Emit(OpCodes.Ldc_R4, op == UnaryOp.IsNegInf ? float.NegativeInfinity : float.PositiveInfinity);
@@ -713,6 +788,7 @@ namespace NumSharp.Backends.Kernels
                 case UnaryOp.IsInf: EmitIsInfCall(il, inputType); break;
                 case UnaryOp.IsPosInf: EmitIsPosInfCall(il, inputType); break;
                 case UnaryOp.IsNegInf: EmitIsNegInfCall(il, inputType); break;
+                case UnaryOp.SignBit: EmitSignBitCall(il, inputType); break;
                 default: EmitIsFiniteCall(il, inputType); break;
             }
             il.Emit(OpCodes.Stind_I1);

@@ -40,24 +40,38 @@ namespace NumSharp.Backends
                 ? t : 262144;
 
         /// <summary>
-        /// Bitwise left shift (x1 &lt;&lt; x2).
+        /// Bitwise left shift (x1 &lt;&lt; x2), with the ufunc <c>out=</c>/<c>where=</c>/<c>dtype=</c>
+        /// parameters. See <see cref="ExecuteShift"/> for the loop-selection and error contract.
         /// </summary>
-        public override NDArray LeftShift(NDArray lhs, NDArray rhs)
+        /// <param name="lhs">Value operand (integer/bool/char).</param>
+        /// <param name="rhs">Shift-count operand (integer/bool/char).</param>
+        /// <param name="dtype">Optional loop dtype override; must be an integer/char loop (a
+        /// float/complex/decimal request raises NumPy's no-loop <see cref="TypeError"/>).</param>
+        /// <param name="@out">Optional provided output (same_kind-castable from the loop dtype).</param>
+        /// <param name="where">Optional bool write mask.</param>
+        /// <returns>The shifted result, or <paramref name="@out"/> when provided.</returns>
+        public override NDArray LeftShift(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
             ValidateShiftType(lhs, "left_shift");
             ValidateShiftType(rhs, "left_shift");
-            return ExecuteShift(lhs, rhs, isLeftShift: true);
+            return ExecuteShift(lhs, rhs, isLeftShift: true, dtype, @out, where);
         }
 
         /// <summary>
-        /// Bitwise right shift (x1 &gt;&gt; x2).
-        /// Arithmetic shift for signed types (sign bit extended); logical shift for unsigned.
+        /// Bitwise right shift (x1 &gt;&gt; x2), with the ufunc <c>out=</c>/<c>where=</c>/<c>dtype=</c>
+        /// parameters. Arithmetic shift for signed types (sign bit extended); logical shift for unsigned.
         /// </summary>
-        public override NDArray RightShift(NDArray lhs, NDArray rhs)
+        /// <param name="lhs">Value operand (integer/bool/char).</param>
+        /// <param name="rhs">Shift-count operand (integer/bool/char).</param>
+        /// <param name="dtype">Optional loop dtype override; must be an integer/char loop.</param>
+        /// <param name="@out">Optional provided output (same_kind-castable from the loop dtype).</param>
+        /// <param name="where">Optional bool write mask.</param>
+        /// <returns>The shifted result, or <paramref name="@out"/> when provided.</returns>
+        public override NDArray RightShift(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
             ValidateShiftType(lhs, "right_shift");
             ValidateShiftType(rhs, "right_shift");
-            return ExecuteShift(lhs, rhs, isLeftShift: false);
+            return ExecuteShift(lhs, rhs, isLeftShift: false, dtype, @out, where);
         }
 
         /// <summary>
@@ -81,8 +95,48 @@ namespace NumSharp.Backends
         /// broadcast, scalar×scalar) flows through <see cref="ExecuteBinaryOp"/>, which handles
         /// NEP50 promotion and drives the per-element shift IL via NDIter.
         /// </summary>
-        private unsafe NDArray ExecuteShift(NDArray lhs, NDArray rhs, bool isLeftShift)
+        /// <remarks>
+        /// The loop-selection contract (probed against NumPy 2.4.2) is enforced up front so it holds
+        /// on every path (fast + out=/where=/dtype=):
+        ///   • an explicit <paramref name="dtype"/> must be an integer/char loop — a float/complex/decimal
+        ///     request raises the verbatim "No loop matching the specified signature and casting was
+        ///     found for ufunc {left,right}_shift" (dtype=float64 has no shift loop);
+        ///   • the promoted result dtype must itself be an integer/char loop — a uint64×signed pair
+        ///     promotes to float64 (NEP50) with no shift loop, so it raises the same "not supported for
+        ///     the input types" TypeError <see cref="ValidateShiftType"/> uses for a float operand.
+        /// When <paramref name="@out"/>/<paramref name="where"/>/<paramref name="dtype"/> is present the
+        /// call routes to <see cref="ExecuteBinaryOp"/>, whose ufunc out=/where= machinery drives the
+        /// per-element shift kernel (EmitScalarOperation already emits EmitShiftFromStack for
+        /// LeftShift/RightShift); the SIMD fast paths below are the bare-call optimizers only.
+        /// </remarks>
+        private unsafe NDArray ExecuteShift(NDArray lhs, NDArray rhs, bool isLeftShift,
+            DType dtype = null, NDArray @out = null, NDArray where = null)
         {
+            var op = isLeftShift ? BinaryOp.LeftShift : BinaryOp.RightShift;
+            string opName = isLeftShift ? "left_shift" : "right_shift";
+
+            // dtype= must select an integer/char shift loop. A float/complex/decimal request has no
+            // loop to bind (shift loops are bb->b .. QQ->Q), so NumPy raises the no-loop TypeError.
+            NPTypeCode? dtc = dtype?.GetTypeCode();
+            if (dtc.HasValue && !(dtc.Value.IsInteger() || dtc.Value == NPTypeCode.Boolean || dtc.Value == NPTypeCode.Char))
+                throw new IncorrectTypeException(
+                    $"No loop matching the specified signature and casting was found for ufunc {opName}");
+
+            // The promoted result dtype must also be an integer/char loop. The only integer-input pair
+            // that promotes OUT of the integer range is uint64×signed → float64 (NEP50), which has no
+            // shift loop — NumPy reports it as "not supported for the input types" (the same text a
+            // float operand gets), so reproduce that rather than shifting at float64.
+            var resultType = dtc ?? ShiftResultType(lhs, rhs);
+            if (!(resultType.IsInteger() || resultType == NPTypeCode.Boolean || resultType == NPTypeCode.Char))
+                throw new TypeError($"ufunc '{opName}' not supported for the input types, and the inputs could not be safely coerced to any supported types according to the casting rule ''safe''");
+
+            // out=/where=/dtype= route through the unified binary ufunc pipeline: ExecuteBinaryOp's
+            // out/where machinery (ExecuteBinaryUfuncInto) drives the shift kernel via NDIter, handling
+            // the provided output, the masked write, the same_kind out cast and the dtype-overridden
+            // loop. The bare-call SIMD fast paths below don't take a provided output, so they're bypassed.
+            if (@out is not null || where is not null || dtc.HasValue)
+                return ExecuteBinaryOp(lhs, rhs, op, @out, where, dtc);
+
             // Algebraic fast path: `bool_array >> scalar` with a nonzero count is ALL ZEROS —
             // the loop dtype's value set is {0, 1} (NumPy casts bool normalized, probed 2.4.2),
             // so 1 >> s == 0 for s in [1, bits-1] and every overflow count (s < 0, s >= bits)
@@ -109,7 +163,6 @@ namespace NumSharp.Backends
 
             // Backstop for scalar×scalar and shapes beyond int range: the unified binary pipeline
             // (with the EmitShiftFromStack scalar kernel) handles them correctly.
-            var op = isLeftShift ? BinaryOp.LeftShift : BinaryOp.RightShift;
             return ExecuteBinaryOp(lhs, rhs, op);
         }
 

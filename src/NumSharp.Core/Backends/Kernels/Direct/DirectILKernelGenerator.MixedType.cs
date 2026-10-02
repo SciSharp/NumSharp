@@ -228,6 +228,27 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
+        ///     Whether the same-dtype <see cref="ExecutionPath.SimdFull"/> kernel that
+        ///     <see cref="GetMixedTypeKernel"/> returns for (<paramref name="type"/>, <paramref name="type"/>) →
+        ///     <paramref name="type"/> runs a VECTOR loop — the question a caller asks before preferring that kernel
+        ///     over a fused scalar loop of its own. It mirrors <see cref="GenerateMixedTypeKernel"/>'s own dispatch:
+        ///     float16 add/subtract/multiply/divide ride the static widen-compute-narrow kernel (vectorized only
+        ///     under AVX2, a scalar loop otherwise); every other dtype vectorizes exactly when
+        ///     <see cref="CanUseSimdBinary"/> admits it (complex, decimal and char stay scalar).
+        /// </summary>
+        /// <param name="op">The binary operation.</param>
+        /// <param name="type">The dtype of both operands and the result.</param>
+        /// <returns>True when the kernel's main loop is SIMD on this host.</returns>
+        internal static bool IsVectorizedSameTypeBinary(BinaryOp op, NPTypeCode type)
+        {
+            // The four ops TryGetHalfArithKernel serves (asked by op, not by calling it: it builds a new closure).
+            if (type == NPTypeCode.Half)
+                return System.Runtime.Intrinsics.X86.Avx2.IsSupported
+                       && op is BinaryOp.Add or BinaryOp.Subtract or BinaryOp.Multiply or BinaryOp.Divide;
+            return CanUseSimdBinary(op, type);
+        }
+
+        /// <summary>
         /// Generate a SimdScalarRight kernel (right operand is scalar).
         /// Uses SIMD when LHS type equals result type (no per-element conversion needed).
         /// </summary>

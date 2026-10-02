@@ -56,20 +56,32 @@ namespace NumSharp
             // transposed); copy('F') leaves a buffer whose linear bytes are exactly the column-major readout.
             NDArray src = directable ? this : this.copy(physical);
 
-            unsafe
+            try
             {
-                var addr = src.Storage.Address;
-                long len = checked((long)src.size * src.dtypesize);
+                unsafe
+                {
+                    var addr = src.Storage.Address;
+                    long len = checked((long)src.size * src.dtypesize);
 
-                // Allocate uninitialized: every byte is overwritten by the copy below, so the CLR's
-                // default zero-fill would be pure waste (a redundant 2nd write over the whole buffer).
-                // This mirrors NumPy's PyBytes_FromStringAndSize(NULL, n) — uninitialized then memcpy'd.
-                // A byte[] is capped at int.MaxValue length anyway, so the checked (int) cast is the
-                // real allocatable bound (a >2GB result throws OverflowException, as new byte[len] would).
-                byte[] bytes = GC.AllocateUninitializedArray<byte>(checked((int)len));
-                fixed (byte* @out = bytes)
-                    Buffer.MemoryCopy(addr, @out, len, len);
-                return bytes;
+                    // Allocate uninitialized: every byte is overwritten by the copy below, so the CLR's
+                    // default zero-fill would be pure waste (a redundant 2nd write over the whole buffer).
+                    // This mirrors NumPy's PyBytes_FromStringAndSize(NULL, n) — uninitialized then memcpy'd.
+                    // A byte[] is capped at int.MaxValue length anyway, so the checked (int) cast is the
+                    // real allocatable bound (a >2GB result throws OverflowException, as new byte[len] would).
+                    byte[] bytes = GC.AllocateUninitializedArray<byte>(checked((int)len));
+                    fixed (byte* @out = bytes)
+                        Buffer.MemoryCopy(addr, @out, len, len);
+                    return bytes;
+                }
+            }
+            finally
+            {
+                // The materialized reorder copy is this method's own intermediate — the caller only
+                // ever sees the detached byte[] — so it must return its pooled buffer here rather
+                // than strand it for the finalizer (caught by UndisposedIntermediateTests once the
+                // instance oracle tier began replaying tobytes over non-directable layouts).
+                if (!ReferenceEquals(src, this))
+                    src.Dispose();
             }
         }
     }

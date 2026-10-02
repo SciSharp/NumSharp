@@ -20,7 +20,7 @@ remarks: |
   using NumSharp;
 
   var a = np.arange(6).reshape(2, 3);
-  var b = np.array(new[] { 10, 20, 30 });
+  var b = np.array([10, 20, 30]);
   NDArray c = a + b;        // NumPy-style broadcasting
   NDArray col = c[":, 1"];  // Slicing returns a view
   ```

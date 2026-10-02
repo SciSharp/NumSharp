@@ -74,6 +74,17 @@ namespace NumSharp
                 {
                     // csingle and cdouble both collapse onto NumSharp's single complex width.
                     resultType = NPTypeCode.Complex;
+                    // A float32 operand's complex result is NumPy's csingle: geev ran in double and `astype(complex64)`
+                    // rounded each component to float32. NumSharp keeps the complex128 dtype (#569) but carries exactly
+                    // those values — so a float32 matrix's eigenvalues, eigenvectors and everything sorted from them
+                    // (numpy.polynomial's {p}roots) are NumPy's complex64 values, widened exactly. The imaginary-part
+                    // test above already ran on the unrounded result, as NumPy's does.
+                    if (common == NPTypeCode.Single)
+                    {
+                        RoundComponentsToSingle(w);
+                        if (v is not null)
+                            RoundComponentsToSingle(v);
+                    }
                 }
 
                 // NumPy's `w.astype(result_t, copy=False)`: for a real operand np.real already produced
@@ -84,6 +95,32 @@ namespace NumSharp
                 w = w.astype(resultType, copy: false);
                 v = v is null ? null : v.astype(resultType, copy: false);
                 return (w, v);
+            }
+
+            /// <summary>
+            ///     NumPy's <c>astype(complex64)</c> of a complex128 result, in place and keeping the complex128 dtype: each
+            ///     component narrowed to float32 (round to nearest even, the house cast) and widened back, which is exact.
+            /// </summary>
+            /// <param name="z">A complex128 array the caller owns (the geev seam's fresh result), overwritten.</param>
+            /// <remarks>
+            ///     A C-contiguous result (the eigenvalues always) is rounded through ONE float64 view of its interleaved
+            ///     components — a cast and a copy back, half the array operations of the per-lane form, which matters at
+            ///     the small sizes numpy.polynomial's <c>{p}roots</c> runs (0.7 of 1.4 µs on a degree-10 float32 series).
+            ///     Any other layout (an F-ordered eigenvector matrix: <c>view</c> needs a contiguous last axis) rounds the
+            ///     real and the imaginary lane separately, strided float64 views of the same buffer.
+            /// </remarks>
+            private static void RoundComponentsToSingle(NDArray z)
+            {
+                if (z.Shape.IsContiguous)
+                {
+                    var parts = z.view(np.float64);
+                    np.copyto(parts, parts.astype(NPTypeCode.Single));
+                    return;
+                }
+                var re = np.real(z);
+                np.copyto(re, re.astype(NPTypeCode.Single));
+                var im = np.imag(z);
+                np.copyto(im, im.astype(NPTypeCode.Single));
             }
 
             /// <summary>

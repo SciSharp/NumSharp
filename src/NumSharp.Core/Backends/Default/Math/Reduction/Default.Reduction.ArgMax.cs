@@ -154,6 +154,19 @@ namespace NumSharp.Backends
             if (inputType == NPTypeCode.Complex)
                 return ArgReductionAxisComplex(arr, axis, keepdims, outputShape, axisedShape, op);
 
+            // Boolean / integers / Char / Single / Double: fold the axis in place with the loop order the strides
+            // favour (SIMD rows, vectorized lane slabs, or a strided walk — see Default.Reduction.ArgAxis.Fast.cs).
+            // Null means declined (disabled, rank > 64, or a dtype it does not serve) and nothing was allocated,
+            // so the per-output IL kernel below runs exactly as before.
+            var fast = TryExecuteAxisArgFast(arr, axis, axisedShape, op);
+            // `is not null`, never `!= null`: NDArray's != operator is ELEMENTWISE and returns an NDArray<bool>.
+            if (fast is not null)
+            {
+                if (keepdims)
+                    fast.Storage.Reshape(outputShape);
+                return fast.MarkReductionScalar();
+            }
+
             // ArgMax/ArgMin always output Int64
             var key = new AxisReductionKernelKey(inputType, NPTypeCode.Int64, op, shape.IsContiguous && axis == arr.ndim - 1);
             var kernel = DirectILKernelGenerator.TryGetAxisReductionKernel(key);

@@ -137,9 +137,13 @@ namespace NumSharp.Tests.Lifetime
 
                 if ((i & 511) == 0)
                 {
-                    GC.Collect();
-                    GC.WaitForPendingFinalizers();
-                    GC.Collect();
+                    // Periodic forced collection + finalizer drain: the "GC pressure" half of the reproducing
+                    // conditions. YOUNG generations only — every object at risk here (a materialized transient,
+                    // a view, a scope's tracked temps) was created by the last few iterations, which is also
+                    // what Default.NonZero's documented hazard is about (a GC collecting the FRESHLY
+                    // materialized array mid-scan). A full collection here marked the whole test-run heap:
+                    // 24 of them were ~1.9 s of this test in a full suite run (2026-09-24).
+                    GcQuiescence.CollectYoung();
                 }
             }
 

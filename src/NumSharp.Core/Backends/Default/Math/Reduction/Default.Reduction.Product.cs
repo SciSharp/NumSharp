@@ -39,8 +39,13 @@ namespace NumSharp.Backends
                 return result;
             }
 
+            // Degenerate flat reduction (0-d scalar or single-element 1-D). NumPy still applies the
+            // NEP50 prod accumulator here — prod(int32)->int64, prod(bool)->int64 — REGARDLESS of size,
+            // so resolve the accumulating dtype at the call site (mirrors ReduceAdd and the n>=2 path).
+            // HandleScalarReduction is shared with amin/amax, which must PRESERVE the input dtype, so the
+            // widening is applied here rather than in the helper.
             if (shape.IsScalar || (shape.size == 1 && shape.NDim == 1))
-                return HandleScalarReduction(arr, keepdims, typeCode, null);
+                return HandleScalarReduction(arr, keepdims, typeCode ?? arr.GetTypeCode.GetAccumulatingType(), null);
 
             if (axis_ == null)
             {

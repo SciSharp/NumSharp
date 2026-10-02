@@ -10,9 +10,10 @@ dependency**; the seam lives entirely in the optional package.
   The answer this package gives: **yes — build the tensor directly on an `NDArray`'s buffer (no copy,
   no loop), and do the pixel math as vectorized NDArray ops.**
 - **Status:** IMPLEMENTED (2026-09-08, branch `onnxruntime` on top of `journey3`) — package
-  `src/NumSharp.Interop.OnnxRuntime/`, gate `test/NumSharp.Tests.Interop.OnnxRuntime/` (128 tests over 20
+  `src/NumSharp.Interop.OnnxRuntime/`, gate `test/NumSharp.Tests.Interop.OnnxRuntime/` (148 tests over 23
   committed `.onnx` models from `test/oracle/gen_onnx_models.py`, green on net8.0/net10.0 against ORT 1.16.0
-  and 1.29.0), docs page `docs/website-src/docs/interop/onnxruntime.md`, CI job `onnxruntime-interop-test`,
+  and 1.29.0), docs page `docs/website-src/docs/interop/onnxruntime.md`, CI job `onnxruntime-interop-test` (folded into
+  `interop-test` 2026-09-23),
   release build/pack wiring. Open decisions (§13) resolved as: 1 handle (`OrtTensor`); 2 copy-default
   (`ToNDArray`) with `AsNDArray(ownsValue)` opt-in; 3 Char→UInt16 one-way; 4 the two `Run` shapes PLUS a
   pre-allocated-outputs `Run(inputs, outputs)` (zero-copy both ways); 5 floor **1.16.0** (verified at the tag —

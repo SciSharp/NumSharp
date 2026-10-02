@@ -177,7 +177,11 @@ namespace NumSharp.Tests.Lifetime
                         if (!r.IsDisposed) Interlocked.Increment(ref errors);
                         Interlocked.Increment(ref reclaimed);
                     }
-                    if (batch.Count == 0) Thread.SpinWait(200);
+                    // Idle with Thread.Yield, not Thread.SpinWait: on .NET 8 SpinWait is an FCALL a thread cannot be
+                    // suspended inside, so a poller that lives in it stalls every blocking GC the producers trigger
+                    // (NDScopeStressTests.ProducersAndConsumers traced 24–43 s gen-0 pauses that way). Yield is a
+                    // GC-safe transition; the handoff this test proves is unchanged.
+                    if (batch.Count == 0) Thread.Yield();
                 }
             });
             consumer.Start();

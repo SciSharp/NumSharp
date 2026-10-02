@@ -10,6 +10,7 @@ namespace NumSharp.Tests.Interop.Examples
 {
     /// <summary>The proof of <c>examples/NumSharp.Interop.pythonnet.Examples/09-pytorch.cs</c>, section by section.</summary>
     [TestClass]
+    [PythonEcosystem]
     public class Example09_PyTorch : ExampleTestBase
     {
         [TestInitialize]

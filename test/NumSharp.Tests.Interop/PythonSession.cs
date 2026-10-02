@@ -12,15 +12,38 @@ namespace NumSharp.Tests.Interop
     /// <summary>
     ///     One embedded CPython engine per test process (CPython + numpy cannot re-initialize after
     ///     <c>Py_Finalize</c>, so <c>[AssemblyInitialize]</c>/<c>[AssemblyCleanup]</c> own the lifecycle).
-    ///     Python is discovered from <c>PYTHONNET_PYDLL</c> or by probing common interpreters for one
-    ///     that imports numpy; when none is found every interop test reports Inconclusive instead of
-    ///     failing, so the suite is safe on machines and CI images without Python.
+    ///     Python is discovered from <c>NUMSHARP_PYTHONNET_PYTHON</c> (a named interpreter — binding),
+    ///     then <c>PYTHONNET_PYDLL</c>, then by probing common interpreters for one that imports numpy;
+    ///     when none is found every interop test reports Inconclusive (or fails, under
+    ///     <c>NUMSHARP_PYTHONNET_REQUIRE_ENGINE</c>) instead of silently passing.
     /// </summary>
+    /// <remarks>
+    ///     <b>Virtual environments.</b> A venv has no libpython of its own: its <c>pyvenv.cfg</c> points
+    ///     at the base install, and pythonnet must load THAT install's library. Loaded alone, the
+    ///     library starts an interpreter whose <c>sys.prefix</c> is the base install — the venv's
+    ///     site-packages (and so the numpy the venv was built for) are simply not on <c>sys.path</c>,
+    ///     and the base install's packages, if any, answer instead. When the probed interpreter is a
+    ///     venv's, <see cref="Start"/> therefore sets <see cref="PythonEngine.ProgramName"/> to it
+    ///     before initializing: CPython's own path calculation (<c>getpath.py</c>) then finds the
+    ///     venv's <c>pyvenv.cfg</c> beside that program, and <c>site.py</c> makes the venv the prefix —
+    ///     exactly what running the venv's <c>python</c> does. The embedded <c>sys.prefix</c> is then
+    ///     checked against the probe's, so a mismatch fails the session instead of testing against
+    ///     the wrong packages. The environments CI uses are built by
+    ///     <c>python-envs/make_env.py</c> beside this project.
+    /// </remarks>
     [TestClass]
     public sealed class PythonSession
     {
         public static bool Available { get; private set; }
         public static string Reason { get; private set; } = "not initialized";
+
+        /// <summary>
+        ///     The interpreter discovery chose (a venv's <c>python</c> when one was named) — set as soon
+        ///     as discovery succeeds, so it also names the interpreter of a session whose engine then
+        ///     failed to start. <c>null</c> when the library came from <c>PYTHONNET_PYDLL</c> without a
+        ///     probe, or when discovery found nothing. Diagnostics only: it is what failure messages name.
+        /// </summary>
+        public static string Interpreter { get; private set; }
 
         /// <summary>
         ///     Whether an unavailable Python+numpy engine is a HARD FAILURE rather than an Inconclusive
@@ -45,19 +68,34 @@ namespace NumSharp.Tests.Interop
 
             try
             {
-                string dll = DiscoverPythonDll(out string reason);
-                if (dll is null)
+                PythonHost host = DiscoverPython(out string reason);
+                if (host is null)
                 {
                     Reason = reason;
                     return;
                 }
 
-                Runtime.PythonDLL = dll;
+                Interpreter = host.Executable;
+                Runtime.PythonDLL = host.Library;
+
+                // The library is the BASE install's (a venv has none); naming the venv's interpreter as
+                // the program is what makes CPython adopt the venv — see the class remarks. Set only for
+                // a venv, so a base-install session keeps exactly the configuration it always had.
+                if (host.IsVirtualEnvironment)
+                    PythonEngine.ProgramName = host.Executable;
+
                 PythonEngine.Initialize();
                 PythonEngine.BeginAllowThreads();
                 using (Py.GIL())
                 {
                     using var np = Py.Import("numpy");   // fail fast if the found Python lacks numpy
+
+                    // Only a venv is checked: that is where adoption can silently fail over to the base
+                    // install. A base install's prefix is computed from the loaded library itself, and
+                    // demanding the probe's exact spelling of it (a macOS framework path vs its toolcache
+                    // alias) would add a failure mode to the configuration that already works everywhere.
+                    if (host.IsVirtualEnvironment)
+                        VerifyEmbeddedPrefix(host);
                 }
 
                 Available = true;
@@ -165,11 +203,74 @@ namespace NumSharp.Tests.Interop
             Assert.Inconclusive($"Python with numpy is unavailable on this machine: {Reason}");
         }
 
+        /// <summary>
+        ///     Asserts that the embedded interpreter's <c>sys.prefix</c> is the probed interpreter's,
+        ///     i.e. that a venv really was adopted and its site-packages are the ones on <c>sys.path</c>.
+        /// </summary>
+        /// <param name="host">The discovered interpreter; a virtual environment, so its <see cref="PythonHost.Prefix"/> is set.</param>
+        /// <exception cref="InvalidOperationException">
+        ///     The prefixes differ — the engine is running against another install's packages (e.g. a
+        ///     venv whose adoption failed and fell back to its base install). <see cref="Start"/> turns
+        ///     this into an unavailable session whose reason names both prefixes.
+        /// </exception>
+        /// <remarks>Must run under the GIL.</remarks>
+        private static void VerifyEmbeddedPrefix(PythonHost host)
+        {
+            using PyObject sys = Py.Import("sys");
+            using PyObject prefixObject = sys.GetAttr("prefix");
+            string embedded = prefixObject.As<string>();
+            if (!SamePath(embedded, host.Prefix))
+                throw new InvalidOperationException(
+                    $"the embedded interpreter's sys.prefix is '{embedded}', but '{host.Executable}' reports " +
+                    $"'{host.Prefix}' — the engine is not running in that environment, so its packages " +
+                    "(and numpy) would not be the ones the tests were pointed at.");
+        }
+
         // ---- discovery -------------------------------------------------------------------------
 
-        private static string DiscoverPythonDll(out string reason)
+        /// <summary>What discovery found: the shared library to load and, when probed, whose it is.</summary>
+        private sealed class PythonHost
+        {
+            /// <summary>The libpython / <c>pythonXY.dll</c> pythonnet loads (always a BASE install's).</summary>
+            public string Library;
+
+            /// <summary>The probed interpreter's <c>sys.executable</c>; <c>null</c> for an unprobed <c>PYTHONNET_PYDLL</c>.</summary>
+            public string Executable;
+
+            /// <summary>The probed interpreter's <c>sys.prefix</c> (a venv's own root); <c>null</c> when unprobed.</summary>
+            public string Prefix;
+
+            /// <summary>The probed interpreter's <c>sys.base_prefix</c> (the install the library belongs to).</summary>
+            public string BasePrefix;
+
+            /// <summary>Whether the probed interpreter runs inside a virtual environment (its prefix is not its base prefix).</summary>
+            public bool IsVirtualEnvironment => Prefix is not null && !SamePath(Prefix, BasePrefix);
+        }
+
+        /// <summary>
+        ///     Finds the Python to embed, in priority order: <c>NUMSHARP_PYTHONNET_PYTHON</c> (binding),
+        ///     <c>PYTHONNET_PYDLL</c>, then the <see cref="CandidateInterpreters"/> probe chain.
+        /// </summary>
+        /// <param name="reason">Why nothing usable was found; <c>null</c> on success.</param>
+        /// <returns>The host to embed, or <c>null</c> when none qualifies.</returns>
+        private static PythonHost DiscoverPython(out string reason)
         {
             var attempts = new List<string>();
+
+            // A NAMED interpreter is binding: if it cannot be used the session fails with that reason
+            // rather than quietly embedding some other Python, whose numpy the tests were not aimed at.
+            string named = NumSharp.EnvVars.PythonnetPython;
+            if (named is not null)
+            {
+                if (Probe(named, out PythonHost chosen, out string why))
+                {
+                    reason = null;
+                    return chosen;
+                }
+
+                reason = $"NUMSHARP_PYTHONNET_PYTHON='{named}': {why} (a named interpreter is binding; no other Python was tried)";
+                return null;
+            }
 
             string env = NumSharp.EnvVars.PythonNetPyDll;
             if (!string.IsNullOrEmpty(env))
@@ -177,7 +278,7 @@ namespace NumSharp.Tests.Interop
                 if (File.Exists(env) || !Path.IsPathRooted(env))
                 {
                     reason = null;
-                    return env;
+                    return new PythonHost { Library = env };
                 }
 
                 attempts.Add($"PYTHONNET_PYDLL='{env}' does not exist");
@@ -185,14 +286,14 @@ namespace NumSharp.Tests.Interop
 
             foreach (string exe in CandidateInterpreters())
             {
-                if (!Probe(exe, out string dll, out string detail))
+                if (!Probe(exe, out PythonHost host, out string detail))
                 {
                     attempts.Add($"{exe}: {detail}");
                     continue;
                 }
 
                 reason = null;
-                return dll;
+                return host;
             }
 
             reason = attempts.Count == 0 ? "no python interpreter candidates" : string.Join(" | ", attempts);
@@ -226,18 +327,31 @@ namespace NumSharp.Tests.Interop
 
         /// <summary>
         ///     Runs the candidate interpreter once to (a) prove numpy imports, (b) locate the shared
-        ///     library pythonnet must load, (c) reject versions outside pythonnet 3.0.5's support.
+        ///     library pythonnet must load, (c) reject versions outside pythonnet 3.0.5's support,
+        ///     (d) learn whether it runs inside a virtual environment.
         /// </summary>
-        private static bool Probe(string exe, out string dll, out string detail)
+        /// <param name="exe">The interpreter to run: a bare name resolved on <c>PATH</c>, or a path.</param>
+        /// <param name="host">The discovered host when the probe succeeds; <c>null</c> otherwise.</param>
+        /// <param name="detail">Why the candidate was rejected; <c>null</c> on success.</param>
+        /// <returns>Whether the candidate can be embedded.</returns>
+        /// <remarks>
+        ///     The library is located from <c>sys.base_prefix</c>, not <c>sys.prefix</c>: inside a venv
+        ///     the two differ and only the base install holds libpython. <c>sys.prefix</c> and
+        ///     <c>sys.executable</c> are appended LAST so the first five lines keep their historical
+        ///     meaning.
+        /// </remarks>
+        private static bool Probe(string exe, out PythonHost host, out string detail)
         {
-            dll = null;
+            host = null;
             const string script =
                 "import sys, sysconfig, numpy;" +
                 "print(sys.base_prefix);" +
                 "print(sys.version_info.major);" +
                 "print(sys.version_info.minor);" +
                 "print(sysconfig.get_config_var('INSTSONAME') or '');" +
-                "print(sysconfig.get_config_var('LIBDIR') or '')";
+                "print(sysconfig.get_config_var('LIBDIR') or '');" +
+                "print(sys.prefix);" +
+                "print(sys.executable)";
             try
             {
                 var psi = new ProcessStartInfo(exe, $"-c \"{script}\"")
@@ -274,6 +388,7 @@ namespace NumSharp.Tests.Interop
                     return false;
                 }
 
+                string dll;
                 if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
                 {
                     dll = Path.Combine(prefix, $"python{major}{minor}.dll");
@@ -288,6 +403,29 @@ namespace NumSharp.Tests.Interop
                 if (dll is null || !File.Exists(dll))
                 {
                     detail = $"shared library not found (prefix '{prefix}')";
+                    return false;
+                }
+
+                string ownPrefix = lines.Length > 5 ? lines[5].Trim() : "";
+                string executable = lines.Length > 6 ? lines[6].Trim() : "";
+                host = new PythonHost
+                {
+                    Library = dll,
+                    BasePrefix = prefix,
+                    // An empty field (an interpreter embedded elsewhere that cannot name itself) leaves the
+                    // host "unprobed": no venv adoption and no prefix check, exactly as before this probe
+                    // learned about venvs.
+                    Prefix = ownPrefix.Length > 0 ? ownPrefix : null,
+                    Executable = executable.Length > 0 ? executable : exe,
+                };
+
+                // A venv is embedded through its interpreter's file path (the program name CPython
+                // resolves pyvenv.cfg from); without one there is no way to adopt it, so refuse rather
+                // than silently embed its base install.
+                if (host.IsVirtualEnvironment && executable.Length == 0)
+                {
+                    host = null;
+                    detail = $"runs in a virtual environment ('{ownPrefix}') but reports no sys.executable to embed it through";
                     return false;
                 }
 
@@ -346,6 +484,32 @@ namespace NumSharp.Tests.Interop
             if (string.IsNullOrEmpty(s)) return "no stderr";
             int i = s.IndexOfAny(new[] { '\r', '\n' });
             return i < 0 ? s : s.Substring(0, i);
+        }
+
+        /// <summary>
+        ///     Whether two filesystem paths name the same directory, ignoring a trailing separator and —
+        ///     off Linux — case, since Windows and default macOS volumes are case-insensitive.
+        /// </summary>
+        /// <param name="a">The first path; <c>null</c> equals only <c>null</c>.</param>
+        /// <param name="b">The second path.</param>
+        /// <returns>True when both normalize to the same full path.</returns>
+        /// <remarks>
+        ///     Deliberately lexical (no symlink resolution): both values come from Python computing
+        ///     <c>sys.prefix</c> from the same interpreter path, so a real difference is a real
+        ///     environment mismatch, not an alias.
+        /// </remarks>
+        private static bool SamePath(string a, string b)
+        {
+            if (a is null || b is null)
+                return a is null && b is null;
+
+            static string Normalize(string p) =>
+                Path.GetFullPath(p).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+            var comparison = RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
+                ? StringComparison.Ordinal
+                : StringComparison.OrdinalIgnoreCase;
+            return string.Equals(Normalize(a), Normalize(b), comparison);
         }
     }
 }

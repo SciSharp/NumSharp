@@ -67,8 +67,10 @@ namespace NumSharp
         ///     <c>arctan2(0, z)</c> where <c>0</c> is a weak Python int (probed against NumPy 2.4.2).
         ///     Note <c>bool</c> resolves to float64 (unlike the ordinary unary-math tier's float16).
         ///     Char (uint16-like) follows uint16 -&gt; float32; Decimal (no NumPy analog) -&gt; float64.
+        ///     Exposed as <c>internal</c> so the fused expression engine's <c>UnaryNode</c> (np.angle's
+        ///     NDExpr node) resolves its real-input result dtype through the SAME table, not a copy.
         /// </summary>
-        private static NPTypeCode AngleRealTier(NPTypeCode tc)
+        internal static NPTypeCode AngleRealTier(NPTypeCode tc)
         {
             switch (tc)
             {

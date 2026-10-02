@@ -434,10 +434,9 @@ namespace NumSharp.Backends
                 ? NPY_ORDER.NPY_FORTRANORDER
                 : NPY_ORDER.NPY_CORDER;
 
-            // Resolve common comparison type once (same rule as the kernel key).
-            var comparisonType = lhsType == rhsType
-                ? lhsType
-                : np._FindCommonScalarType(lhsType, rhsType);
+            // Resolve common comparison type once (same rule as the kernel key — incl. the exact
+            // int64/uint64 pair compared at Decimal, NumPy's qQ/Qq loops).
+            var comparisonType = ComparisonKernelKey.GetComparisonType(lhsType, rhsType);
 
             // Per-element body. Stack on entry: [lhs (lhsType), rhs (rhsType)].
             // Stash rhs into a local so we can convert lhs (bottom of stack)

@@ -133,6 +133,11 @@ namespace NumSharp.Backends.Kernels
             // was ~0.69x). Bit-exact with Converts.To{X}(Half).
             var halfToX = TryGetHalfToXKernel(srcType, dstType);
             if (halfToX != null) return halfToX;
+            // {i8,u8,i16,u16,char,i32,u32} -> {f32,f64} via AVX2 widening loads + cvtdq2pd/ps (the generic
+            // emitter's int->float strategies measured at scalar speed). Exact / single-rounding, like the
+            // scalar Converts path (Cast.IntToFloat.cs).
+            var intToFloat = TryGetIntToFloatKernel(srcType, dstType);
+            if (intToFloat != null) return intToFloat;
             // {bool,u8,i8,i16,u16,char,i32,f32} -> Half via Giesen vectorized float->f16 narrow
             // (no F16C in this .NET; f16 was the only losing dst column). Bit-exact with NumPy 2.4.2
             // incl. sNaN payload (the BCL (Half) cast quiets sNaN — this fixes that latent bug).
@@ -183,6 +188,11 @@ namespace NumSharp.Backends.Kernels
             // cross-type and 4/8/16-byte same-type fall through to the existing fast paths.
             var subwordCopy = TryGetSubwordCopyStridedKernel(srcType, dstType);
             if (subwordCopy != null) return subwordCopy;
+            // Same-type 4B/8B strided copy (and same-size int reinterprets): SIMD reverse (ss==-1) /
+            // deinterleave (ss==2) / AVX2 gather (other strides) / per-row memcpy (ss==1) — the generic
+            // MemoryCopy strategy ran any non-unit inner stride one element at a time (Cast.WordCopy.cs).
+            var wordCopy = TryGetWordCopyStridedKernel(srcType, dstType);
+            if (wordCopy != null) return wordCopy;
             // 2-byte-int -> 1-byte strided: {i16,u16,char}->{i8,u8} (low-byte truncate) /
             // ->bool (!=0) via deinterleave/reverse + narrow (2-byte src is not gatherable).
             var subwordNarrow = TryGetSubwordNarrowStridedKernel(srcType, dstType);

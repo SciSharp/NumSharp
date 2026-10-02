@@ -205,7 +205,8 @@ namespace NumSharp
             {
                 ExecuteTakeKernel(source, idx64, result,
                     outerSize: outerSize, indicesCount: indicesCount,
-                    maxItem: maxItem, innerSize: innerBytes, mode: mode, idx32: idx32);
+                    maxItem: maxItem, innerSize: innerBytes, mode: mode, idx32: idx32,
+                    axis: axis);   // axis form: the raise-mode IndexError names this axis (NumPy wording)
             }
             finally
             {
@@ -223,9 +224,37 @@ namespace NumSharp
         /// </summary>
         private const long IndexPrefetchThresholdBytes = 2L * 1024 * 1024;
 
+        /// <summary>
+        ///     Run the compiled take gather over <paramref name="source"/> into
+        ///     <paramref name="result"/>, choosing between the lean flat kernel and the general
+        ///     outer×inner kernel, and — under mode 'raise' — converting a kernel-reported
+        ///     out-of-bounds index into NumPy's exact IndexError wording.
+        /// </summary>
+        /// <param name="source">The gathered array (read through raw pointer + offset).</param>
+        /// <param name="idx64">The contiguous index array (int64 storage; reinterpreted as int32
+        ///     values when <paramref name="idx32"/> is true).</param>
+        /// <param name="result">Preallocated C-contiguous destination the kernel fills.</param>
+        /// <param name="outerSize">Product of the dims before the take axis (1 for a flat take).</param>
+        /// <param name="indicesCount">Number of indices gathered per outer position.</param>
+        /// <param name="maxItem">The take axis's extent — the bound a raise-mode index must satisfy
+        ///     after one negative wrap.</param>
+        /// <param name="innerSize">Bytes per gathered slab (element bytes × trailing dims).</param>
+        /// <param name="mode">0 = raise, 1 = wrap, 2 = clip (NumPy's mode order).</param>
+        /// <param name="idx32">True when the index buffer holds int32 values read in place.</param>
+        /// <param name="axis">The take axis as the CALLER spelled it, or null for a flat
+        ///     (axis=None) take — load-bearing for the error text only: NumPy's raise-mode message
+        ///     names the axis ("for axis 0 with size 8") on an axis take but drops the clause
+        ///     entirely ("for size 8") on a flat one.</param>
+        /// <exception cref="NotSupportedException">No IL kernel exists for this element width
+        ///     (dynamic codegen unavailable).</exception>
+        /// <exception cref="ArgumentOutOfRangeException">Mode 'raise' met an index still out of
+        ///     [0, <paramref name="maxItem"/>) after the single negative wrap — message per
+        ///     <paramref name="axis"/> above, and nothing has been partially written that the
+        ///     caller exposes (the result buffer is discarded on throw).</exception>
         private static unsafe void ExecuteTakeKernel(
             NDArray source, NDArray idx64, NDArray result,
-            long outerSize, long indicesCount, long maxItem, long innerSize, int mode, bool idx32 = false)
+            long outerSize, long indicesCount, long maxItem, long innerSize, int mode, bool idx32 = false,
+            int? axis = null)
         {
             int copyKind = DirectILKernelGenerator.CopyKindFor(innerSize);
             // Software prefetch pays off only when the randomly-gathered region misses cache; below that
@@ -266,9 +295,15 @@ namespace NumSharp
                 long failPair = status;
                 long badJ = failPair % indicesCount;
                 long badVal = idx32 ? ((int*)idxPtr)[badJ] : idxPtr[badJ];
+                // NumPy's two IndexError spellings, verbatim (probed 2.4.2, gated by errors_full):
+                // an axis take says "for axis {n} with size", the flat (axis=None) form drops the
+                // axis clause entirely ("for size {n}") — the old single wording ("for axis with
+                // size") matched neither.
                 throw new ArgumentOutOfRangeException(
                     nameof(idx64),
-                    $"index {badVal} is out of bounds for axis with size {maxItem}");
+                    axis.HasValue
+                        ? $"index {badVal} is out of bounds for axis {axis.Value} with size {maxItem}"
+                        : $"index {badVal} is out of bounds for size {maxItem}");
             }
         }
 

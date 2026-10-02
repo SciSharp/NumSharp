@@ -1,6 +1,6 @@
-# NumSharp.Bitmap
+# System.Drawing
 
-The **NumSharp.Bitmap** package provides seamless conversion between `System.Drawing.Bitmap` and `NDArray`. If you're working with images in .NET—loading them, processing pixels, applying filters, or feeding them to ML models—this extension makes it easy to move data between the image world and the array world.
+The **NumSharp.Bitmap** package provides seamless conversion between `System.Drawing.Bitmap` and `NDArray`. If you're working with images in .NET-loading them, processing pixels, applying filters, or feeding them to ML models-this extension makes it easy to move data between the image world and the array world.
 
 ---
 
@@ -63,8 +63,8 @@ public static NDArray ToNDArray(
 
 **Return Shape:**
 
-- `flat=false`: `(1, height, width, channels)` — 4-D tensor suitable for ML models
-- `flat=true`: `(height * width * channels,)` — 1-D array of raw pixel bytes
+- `flat=false`: `(1, height, width, channels)` - 4-D tensor suitable for ML models
+- `flat=true`: `(height * width * channels,)` - 1-D array of raw pixel bytes
 
 ### Examples
 
@@ -97,7 +97,7 @@ Console.WriteLine(flat.ndim);  // 1
 **Zero-copy mode (advanced):**
 
 ```csharp
-// Wraps bitmap memory directly — faster but risky
+// Wraps bitmap memory directly - faster but risky
 var wrapped = bitmap.ToNDArray(copy: false);
 // WARNING: The NDArray becomes invalid if the bitmap is disposed
 // or modified. The bitmap remains locked until the NDArray is GC'd.

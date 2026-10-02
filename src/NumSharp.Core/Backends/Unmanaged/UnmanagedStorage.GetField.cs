@@ -100,7 +100,9 @@ namespace NumSharp.Backends
             if (!_shape.IsWriteable && newShape.IsWriteable)
                 newShape = newShape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
 
-            var newSlice = ArraySlice.Wrap<T>((void*)wrapBase, newBufferCount);
+            // The field alias counts its references on THIS storage's block (WrapShared): disposing the owner while the
+            // field view lives does not free the buffer under it.
+            var newSlice = ArraySlice.WrapShared<T>(wrapBase, newBufferCount, InternalArray);
             var r2 = new UnmanagedStorage();
             r2._shape = newShape;
             r2._typecode = InfoOf<T>.NPTypeCode;

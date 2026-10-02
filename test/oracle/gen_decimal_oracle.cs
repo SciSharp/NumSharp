@@ -383,6 +383,15 @@ static class Gen
         var where = new List<string>();
         var sort = new List<string>();
         var manip = new List<string>();
+        // G14 (2026-09-18): the coverage-audit expansion. These are the decimal-capable ops the tier
+        // MISSED — and decimal is the ONLY dtype-scope this whole differential pipeline exercises for
+        // them (no other corpus file carries a decimal operand), so an unexercised branch here is a
+        // live silent-bug risk (the class that hid the G13 flat-argmax 16-byte IL-compare bug).
+        var extra = new List<string>();       // reciprocal/positive/fabs/rint/round_/signbit/spacing/deg2rad/rad2deg/modf
+        var transcend = new List<string>();   // sqrt/cbrt/exp/log/trig/... via the exact decimal->double->Math.*->decimal bridge (HOST-PINNED)
+        var select = new List<string>();      // take/put/place/putmask/select/choose/compress/extract/take_along_axis (16-byte gather/scatter)
+        var products = new List<string>();    // dot/inner/outer/vdot/tensordot/trace/kron (scalar decimal MAC — matmul was the ONLY covered product)
+        var search = new List<string>();      // argsort/searchsorted/unique/nonzero/flatnonzero/lexsort (decimal compare-driven sort/search)
 
         // ----- POWER decimal^int (exact: repeated multiply / reciprocal). Exponent is a 0-D
         // decimal whose value is a whole number — DecimalMath.Pow must be exact for integer powers.
@@ -558,6 +567,454 @@ static class Gen
             }
         }
 
+        // =====================================================================================
+        // G14 (2026-09-18) COVERAGE-AUDIT EXPANSION. Everything below closes a decimal gap the tier
+        // missed. decimal is the ONLY dtype scope the whole differential pipeline exercises for these
+        // ops (no other corpus file carries a decimal operand), and it is the widest (16-byte),
+        // scalar-only lane — the branch class that hid the G13 flat-argmax IL-compare bug.
+        // =====================================================================================
+
+        // ----- EXTRA: extended unary decimal->decimal (reciprocal/positive/fabs/rint/spacing/
+        // deg2rad/rad2deg + modf split), signbit (->bool), and round_ at decimals {-1,0,1,2}
+        // (the PyArray_Round path, DISTINCT from rint's UnaryOp.Round). All exact or portable
+        // (spacing/deg2rad/rad2deg bridge through double but are pure arithmetic, no libm) -> strict tier. -----
+        var EXTRA_UNARY = new (string, Func<decimal, decimal>)[]
+        {
+            ("positive", x => x),
+            ("fabs",     Math.Abs),
+            ("rint",     x => Math.Round(x, MidpointRounding.ToEven)),
+            ("spacing",  SpacingDec),
+            ("deg2rad",  x => (decimal)((double)x * (Math.PI / 180.0))),
+            ("rad2deg",  x => (decimal)((double)x * (180.0 / Math.PI))),
+            ("modf_frac", x => x - decimal.Truncate(x)),
+            ("modf_int",  decimal.Truncate),
+        };
+        foreach (var ln in new[] { "c_contiguous_1d", "c_contiguous_2d", "strided_step2_1d", "negstride_1d" })
+        {
+            var o = SingleLayout(ln, 5, false);
+            var log = o.Logical();
+            foreach (var (name, f) in EXTRA_UNARY)
+                extra.Add(Case($"{name}/decimal/{ln}/{n++}", name, "{}", new[] { o.Describe() },
+                    "decimal", o.Shape, HexOf(log.Select(f).ToArray())));
+            // signbit -> bool (strictly-negative test; -0m reads non-negative, ties 0 under BitDiff).
+            extra.Add(Case($"signbit/decimal/{ln}/{n++}", "signbit", "{}", new[] { o.Describe() },
+                "bool", o.Shape, HexOf(log.Select(x => (byte)(Math.Sign(x) < 0 ? 1 : 0)).ToArray())));
+            // reciprocal 1/x -> needs a nonzero source (decimal 1/0 throws on both sides).
+            var onz = SingleLayout(ln, 5, true);
+            var lognz = onz.Logical();
+            extra.Add(Case($"reciprocal/decimal/{ln}/{n++}", "reciprocal", "{}", new[] { onz.Describe() },
+                "decimal", onz.Shape, HexOf(lognz.Select(x => 1m / x).ToArray())));
+            // round_ at several decimals — banker's; base-10 makes scale/round/unscale exact.
+            foreach (int dec in new[] { -1, 0, 1, 2 })
+                extra.Add(Case($"round_/decimal/{ln}/d{dec}/{n++}", "round_", $"{{\"decimals\":{dec}}}",
+                    new[] { o.Describe() }, "decimal", o.Shape, HexOf(log.Select(x => RoundDec(x, dec)).ToArray())));
+        }
+
+        // ----- TRANSCEND: sqrt/cbrt/exp/exp2/expm1/log/log2/log10/log1p/sin/cos/tan/sinh/cosh/tanh/
+        // arcsin/arccos/arctan/arcsinh/arccosh/arctanh. The kernel computes each as the EXACT
+        // (decimal)Math.X((double)v) bridge (DirectILKernelGenerator.Unary.Decimal.cs), so the oracle
+        // replicates that bridge per LOGICAL element — a divergence is a decimal iteration bug, not a
+        // math difference. HOST-PINNED (RunHostLibmCorpus): Math.Exp/Log/Sin/... are win-amd64 CRT libm,
+        // so the cast-to-decimal bytes reproduce only on the authoring host (Inconclusive off-Windows).
+        // Inputs are DOMAIN-SAFE: `(decimal)NaN/Inf` throws, so log/sqrt take >0, asin/acos [-1,1], etc. -----
+        {
+            decimal[] POS = { 0.1m, 0.5m, 1m, 2m, 2.5m, 4m, 7m, 10m };          // > 0     (sqrt/log/log2/log10)
+            decimal[] ANY = { -8m, -2m, -0.5m, 0m, 0.5m, 2m, 3.375m, 8m };      // any     (cbrt)
+            decimal[] SMALL = { -3m, -1.5m, -0.5m, 0m, 0.5m, 1m, 2m, 3m };      // small   (exp/trig/sinh/arctan/arcsinh)
+            decimal[] UNIT = { -0.9m, -0.5m, -0.25m, 0m, 0.25m, 0.5m, 0.75m, 0.9m }; // (-1,1) (asin/acos/atanh)
+            decimal[] GTM1 = { -0.9m, -0.5m, 0m, 0.5m, 1m, 2m, 5m, 9m };        // > -1    (log1p)
+            decimal[] GE1 = { 1m, 1.25m, 2m, 3m, 5m, 8m, 1.5m, 4m };           // >= 1    (acosh)
+            var TRANSCEND = new (string, decimal[], Func<decimal, decimal>)[]
+            {
+                ("sqrt",     POS,   x => (decimal)Math.Sqrt((double)x)),
+                ("cbrt",     ANY,   x => (decimal)Math.Cbrt((double)x)),
+                ("exp",      SMALL, x => (decimal)Math.Exp((double)x)),
+                ("exp2",     SMALL, x => (decimal)Math.Pow(2.0, (double)x)),
+                ("expm1",    SMALL, x => (decimal)(Math.Exp((double)x) - 1.0)),
+                ("log",      POS,   x => (decimal)Math.Log((double)x)),
+                ("log2",     POS,   x => (decimal)Math.Log2((double)x)),
+                ("log10",    POS,   x => (decimal)Math.Log10((double)x)),
+                ("log1p",    GTM1,  x => (decimal)Math.Log(1.0 + (double)x)),
+                ("sin",      SMALL, x => (decimal)Math.Sin((double)x)),
+                ("cos",      SMALL, x => (decimal)Math.Cos((double)x)),
+                ("tan",      SMALL, x => (decimal)Math.Tan((double)x)),
+                ("sinh",     SMALL, x => (decimal)Math.Sinh((double)x)),
+                ("cosh",     SMALL, x => (decimal)Math.Cosh((double)x)),
+                ("tanh",     SMALL, x => (decimal)Math.Tanh((double)x)),
+                ("arcsin",   UNIT,  x => (decimal)Math.Asin((double)x)),
+                ("arccos",   UNIT,  x => (decimal)Math.Acos((double)x)),
+                ("arctan",   SMALL, x => (decimal)Math.Atan((double)x)),
+                ("arcsinh",  SMALL, x => (decimal)Math.Asinh((double)x)),
+                ("arccosh",  GE1,   x => (decimal)Math.Acosh((double)x)),
+                ("arctanh",  UNIT,  x => (decimal)Math.Atanh((double)x)),
+            };
+            // Build a 1-D operand whose Logical()==vals in each of three layouts (contiguous / step-2 /
+            // reversed) so the transcendental exercises the strided + negative-stride iteration.
+            Operand TOp(decimal[] vals, string ln)
+            {
+                switch (ln)
+                {
+                    case "c_contiguous_1d":
+                        return new Operand { Base = (decimal[])vals.Clone(), Shape = new[] { vals.Length }, Strides = new long[] { 1 }, Offset = 0 };
+                    case "strided_step2_1d":
+                        { var b = new decimal[vals.Length * 2]; for (int i = 0; i < vals.Length; i++) b[2 * i] = vals[i]; return new Operand { Base = b, Shape = new[] { vals.Length }, Strides = new long[] { 2 }, Offset = 0 }; }
+                    case "negstride_1d":
+                        { var b = (decimal[])vals.Clone(); Array.Reverse(b); return new Operand { Base = b, Shape = new[] { vals.Length }, Strides = new long[] { -1 }, Offset = vals.Length - 1 }; }
+                    default: throw new Exception("TOp layout " + ln);
+                }
+            }
+            foreach (var (name, pool, f) in TRANSCEND)
+                foreach (var ln in new[] { "c_contiguous_1d", "strided_step2_1d", "negstride_1d" })
+                {
+                    var o = TOp(pool, ln);
+                    transcend.Add(Case($"{name}/decimal/{ln}/{n++}", name, "{}", new[] { o.Describe() },
+                        "decimal", o.Shape, HexOf(pool.Select(f).ToArray())));
+                }
+        }
+
+        // ----- BINARY2: fmod (truncated remainder, sign of DIVIDEND — distinct from the covered floored
+        // mod), heaviside, copysign — over the pair layouts. Appended to the binary corpus. -----
+        foreach (var ln in PAIR_LAYOUTS)
+        {
+            var (af, bf) = PairLayout(ln, true);   // fmod: nonzero divisor
+            var rsf = BroadcastShape(af.Shape, bf.Shape);
+            binary.Add(Case($"fmod/decimal/{ln}/{n++}", "fmod", "{}", new[] { af.Describe(), bf.Describe() },
+                "decimal", rsf, HexOf(BroadcastApply(af.Logical(), af.Shape, bf.Logical(), bf.Shape, rsf, Fmod))));
+            var (a2, b2) = PairLayout(ln, false);
+            var rs2 = BroadcastShape(a2.Shape, b2.Shape);
+            binary.Add(Case($"heaviside/decimal/{ln}/{n++}", "heaviside", "{}", new[] { a2.Describe(), b2.Describe() },
+                "decimal", rs2, HexOf(BroadcastApply(a2.Logical(), a2.Shape, b2.Logical(), b2.Shape, rs2, Heaviside))));
+            binary.Add(Case($"copysign/decimal/{ln}/{n++}", "copysign", "{}", new[] { a2.Describe(), b2.Describe() },
+                "decimal", rs2, HexOf(BroadcastApply(a2.Logical(), a2.Shape, b2.Logical(), b2.Shape, rs2, Copysign))));
+        }
+
+        // ----- SELECT: the 16-byte gather/scatter/conditional-copy family. Only `where` was covered.
+        // Each expected value is a pure reindex/filter of the decimal logical values. -----
+        {
+            decimal[] sv  = { 1m, -2m, 3m, -4m, 5m, 6m, -7m, 8m };
+            decimal[] sv2 = { 10m, 20m, 30m, 40m, 50m, 60m, 70m, 80m };
+            var svShape = new[] { 8 };
+            Operand SvC() => new Operand { Base = (decimal[])sv.Clone(), Shape = svShape, Strides = new long[] { 1 }, Offset = 0 };
+            // take (axis=0) over a contiguous AND a reversed source (16-byte strided gather).
+            int[] tIdx = { 0, 2, 4, 7, 1 };
+            var tExp = tIdx.Select(k => sv[k]).ToArray();
+            select.Add(Case($"take/decimal/c/{n++}", "take", "{\"axis\":0}",
+                new[] { SvC().Describe(), Int32OperandDesc(tIdx, new[] { tIdx.Length }) },
+                "decimal", new[] { tIdx.Length }, HexOf(tExp)));
+            { var neg = new Operand { Base = ((Func<decimal[]>)(() => { var b = (decimal[])sv.Clone(); Array.Reverse(b); return b; }))(),
+                                      Shape = svShape, Strides = new long[] { -1 }, Offset = 7 };  // logical == sv
+              select.Add(Case($"take/decimal/negstride/{n++}", "take", "{\"axis\":0}",
+                new[] { neg.Describe(), Int32OperandDesc(tIdx, new[] { tIdx.Length }) },
+                "decimal", new[] { tIdx.Length }, HexOf(tExp))); }
+            // take_along_axis (axis=0, int64 indices).
+            long[] taIdx = { 3, 1, 0, 2, 6, 7 };
+            select.Add(Case($"take_along_axis/decimal/c/{n++}", "take_along_axis", "{\"axis\":0}",
+                new[] { SvC().Describe(), Int64OperandDesc(taIdx, new[] { taIdx.Length }) },
+                "decimal", new[] { taIdx.Length }, HexOf(taIdx.Select(k => sv[(int)k]).ToArray())));
+            // put (mutating): sv with selected positions overwritten. values length == indices length.
+            { int[] pIdx = { 0, 2, 5 }; decimal[] pVal = { 90m, 91m, 92m };
+              var exp = (decimal[])sv.Clone(); for (int i = 0; i < pIdx.Length; i++) exp[pIdx[i]] = pVal[i];
+              select.Add(Case($"put/decimal/c/{n++}", "put", "{}",
+                new[] { SvC().Describe(), Int32OperandDesc(pIdx, new[] { pIdx.Length }),
+                        new Operand { Base = pVal, Shape = new[] { pVal.Length }, Strides = new long[] { 1 }, Offset = 0 }.Describe() },
+                "decimal", svShape, HexOf(exp))); }
+            // place (mutating): a.flat[mask] = values CYCLED per True. mask = sv > 0.
+            { var mask = sv.Select(x => (byte)(x > 0m ? 1 : 0)).ToArray(); decimal[] plVal = { 70m, 71m };
+              var exp = (decimal[])sv.Clone(); int j = 0;
+              for (int i = 0; i < exp.Length; i++) if (mask[i] != 0) exp[i] = plVal[(j++) % plVal.Length];
+              select.Add(Case($"place/decimal/c/{n++}", "place", "{}",
+                new[] { SvC().Describe(), BoolOperandDesc(mask, svShape),
+                        new Operand { Base = plVal, Shape = new[] { plVal.Length }, Strides = new long[] { 1 }, Offset = 0 }.Describe() },
+                "decimal", svShape, HexOf(exp))); }
+            // putmask (mutating): a.flat[i] = values[i % nv] WHERE mask (position cursor, not per-True).
+            { var mask = sv.Select(x => (byte)(x > 0m ? 1 : 0)).ToArray(); decimal[] pmVal = { 70m, 71m, 72m };
+              var exp = (decimal[])sv.Clone();
+              for (int i = 0; i < exp.Length; i++) if (mask[i] != 0) exp[i] = pmVal[i % pmVal.Length];
+              select.Add(Case($"putmask/decimal/c/{n++}", "putmask", "{}",
+                new[] { SvC().Describe(), BoolOperandDesc(mask, svShape),
+                        new Operand { Base = pmVal, Shape = new[] { pmVal.Length }, Strides = new long[] { 1 }, Offset = 0 }.Describe() },
+                "decimal", svShape, HexOf(exp))); }
+            // select (nc=1): cond ? choice : default. operands [cond, choice, default(0-d)].
+            { var mask = sv.Select(x => (byte)(x > 0m ? 1 : 0)).ToArray(); decimal dflt = -99m;
+              var exp = new decimal[sv.Length];
+              for (int i = 0; i < exp.Length; i++) exp[i] = mask[i] != 0 ? sv2[i] : dflt;
+              select.Add(Case($"select/decimal/c/{n++}", "select", "{\"nc\":1}",
+                new[] { BoolOperandDesc(mask, svShape),
+                        new Operand { Base = (decimal[])sv2.Clone(), Shape = svShape, Strides = new long[] { 1 }, Offset = 0 }.Describe(),
+                        new Operand { Base = new[] { dflt }, Shape = new int[0], Strides = new long[0], Offset = 0 }.Describe() },
+                "decimal", svShape, HexOf(exp))); }
+            // choose (nc=2): out[i] = choices[index[i]][i]. index in {0,1}.
+            { int[] cidx = { 0, 1, 0, 1, 1, 0, 1, 0 };
+              var exp = new decimal[sv.Length];
+              for (int i = 0; i < exp.Length; i++) exp[i] = cidx[i] == 0 ? sv[i] : sv2[i];
+              select.Add(Case($"choose/decimal/c/{n++}", "choose", "{\"nc\":2}",
+                new[] { Int32OperandDesc(cidx, svShape),
+                        SvC().Describe(),
+                        new Operand { Base = (decimal[])sv2.Clone(), Shape = svShape, Strides = new long[] { 1 }, Offset = 0 }.Describe() },
+                "decimal", svShape, HexOf(exp))); }
+            // compress (axis=0): a[cond]. operands [cond(bool), data]. cond = sv > 0.
+            { var mask = sv.Select(x => (byte)(x > 0m ? 1 : 0)).ToArray();
+              var exp = new List<decimal>(); for (int i = 0; i < sv.Length; i++) if (mask[i] != 0) exp.Add(sv[i]);
+              select.Add(Case($"compress/decimal/c/{n++}", "compress", "{\"axis\":0}",
+                new[] { BoolOperandDesc(mask, svShape), SvC().Describe() },
+                "decimal", new[] { exp.Count }, HexOf(exp.ToArray()))); }
+            // extract: a.flat[cond.flat]. operands [cond(bool), arr]. cond = sv != 0 (all nonzero here => full).
+            { var mask = sv.Select(x => (byte)(x < 0m ? 1 : 0)).ToArray();   // negatives only
+              var exp = new List<decimal>(); for (int i = 0; i < sv.Length; i++) if (mask[i] != 0) exp.Add(sv[i]);
+              select.Add(Case($"extract/decimal/c/{n++}", "extract", "{}",
+                new[] { BoolOperandDesc(mask, svShape), SvC().Describe() },
+                "decimal", new[] { exp.Count }, HexOf(exp.ToArray()))); }
+        }
+
+        // ----- PRODUCTS: dot/inner/outer/vdot/tensordot/trace/kron — matmul was the ONLY covered
+        // product, yet each of these routes through a DIFFERENT decimal accumulate/iterate path. -----
+        {
+            decimal[] a4 = { 1m, 2m, 3m, 4m }, b4 = { 5m, 6m, 7m, 8m };  // dot/inner/vdot/tensordot(1d)
+            Operand V(decimal[] v) => new Operand { Base = (decimal[])v.Clone(), Shape = new[] { v.Length }, Strides = new long[] { 1 }, Offset = 0 };
+            decimal dot4 = 0m; for (int i = 0; i < 4; i++) dot4 += a4[i] * b4[i];   // 70
+            products.Add(Case($"dot/decimal/1d/{n++}", "dot", "{}", new[] { V(a4).Describe(), V(b4).Describe() }, "decimal", new int[0], HexOf(new[] { dot4 })));
+            products.Add(Case($"inner/decimal/1d/{n++}", "inner", "{}", new[] { V(a4).Describe(), V(b4).Describe() }, "decimal", new int[0], HexOf(new[] { dot4 })));
+            products.Add(Case($"vdot/decimal/1d/{n++}", "vdot", "{}", new[] { V(a4).Describe(), V(b4).Describe() }, "decimal", new int[0], HexOf(new[] { dot4 })));
+            products.Add(Case($"tensordot/decimal/1d/{n++}", "tensordot", "{\"axes\":1}", new[] { V(a4).Describe(), V(b4).Describe() }, "decimal", new int[0], HexOf(new[] { dot4 })));
+            // outer (na,nb)
+            { decimal[] oa = { 1m, 2m, 3m }, ob = { 4m, 5m };
+              var exp = new decimal[oa.Length * ob.Length];
+              for (int i = 0; i < oa.Length; i++) for (int j = 0; j < ob.Length; j++) exp[i * ob.Length + j] = oa[i] * ob[j];
+              products.Add(Case($"outer/decimal/{n++}", "outer", "{}", new[] { V(oa).Describe(), V(ob).Describe() }, "decimal", new[] { oa.Length, ob.Length }, HexOf(exp))); }
+            // kron (1-D -> na*nb flat)
+            { decimal[] ka = { 1m, 2m }, kb = { 3m, 4m, 5m };
+              var exp = new decimal[ka.Length * kb.Length];
+              for (int i = 0; i < ka.Length; i++) for (int j = 0; j < kb.Length; j++) exp[i * kb.Length + j] = ka[i] * kb[j];
+              products.Add(Case($"kron/decimal/1d/{n++}", "kron", "{}", new[] { V(ka).Describe(), V(kb).Describe() }, "decimal", new[] { ka.Length * kb.Length }, HexOf(exp))); }
+            // dot / tensordot 2-D @ 2-D (reuse the exact matmul), and vdot 2-D (flattened).
+            { decimal[] A = { 1m, 2m, 3m, 4m, 5m, 6m }; int m = 2, k = 3, p2 = 2; decimal[] B = { 7m, 8m, 9m, 10m, 11m, 12m };
+              var exp = MatMul2D(A, m, k, B, p2);
+              var Aop = new Operand { Base = A, Shape = new[] { m, k }, Strides = CStrides(new[] { m, k }), Offset = 0 };
+              var Bop = new Operand { Base = B, Shape = new[] { k, p2 }, Strides = CStrides(new[] { k, p2 }), Offset = 0 };
+              products.Add(Case($"dot/decimal/2d/{n++}", "dot", "{}", new[] { Aop.Describe(), Bop.Describe() }, "decimal", new[] { m, p2 }, HexOf(exp)));
+              products.Add(Case($"tensordot/decimal/2d/{n++}", "tensordot", "{\"axes\":1}", new[] { Aop.Describe(), Bop.Describe() }, "decimal", new[] { m, p2 }, HexOf(exp))); }
+            { decimal[] A = { 1m, 2m, 3m, 4m }, B = { 5m, 6m, 7m, 8m };   // vdot flattens both -> scalar
+              decimal vd = 0m; for (int i = 0; i < 4; i++) vd += A[i] * B[i];
+              var Aop = new Operand { Base = A, Shape = new[] { 2, 2 }, Strides = CStrides(new[] { 2, 2 }), Offset = 0 };
+              var Bop = new Operand { Base = B, Shape = new[] { 2, 2 }, Strides = CStrides(new[] { 2, 2 }), Offset = 0 };
+              products.Add(Case($"vdot/decimal/2d/{n++}", "vdot", "{}", new[] { Aop.Describe(), Bop.Describe() }, "decimal", new int[0], HexOf(new[] { vd }))); }
+            // trace: square (3,3) and non-square (2,3) — sum of the main diagonal.
+            { decimal[] T = { 1m, 2m, 3m, 4m, 5m, 6m, 7m, 8m, 9m };
+              var Top = new Operand { Base = T, Shape = new[] { 3, 3 }, Strides = CStrides(new[] { 3, 3 }), Offset = 0 };
+              products.Add(Case($"trace/decimal/3x3/{n++}", "trace", "{}", new[] { Top.Describe() }, "decimal", new int[0], HexOf(new[] { T[0] + T[4] + T[8] }))); }
+            { decimal[] T = { 1m, 2m, 3m, 4m, 5m, 6m };
+              var Top = new Operand { Base = T, Shape = new[] { 2, 3 }, Strides = CStrides(new[] { 2, 3 }), Offset = 0 };
+              products.Add(Case($"trace/decimal/2x3/{n++}", "trace", "{}", new[] { Top.Describe() }, "decimal", new int[0], HexOf(new[] { T[0] + T[4] }))); }
+        }
+
+        // ----- SEARCH: argsort/searchsorted/unique/nonzero/flatnonzero/lexsort — the decimal
+        // compare-driven sort/search paths (the same 16-byte-compare hazard the flat-argmax bug hit). -----
+        {
+            decimal[] dist = { 3m, -1m, 4m, 1m, -5m, 9m, 2m, 6m };            // distinct (unambiguous argsort)
+            var dShape = new[] { dist.Length };
+            Operand D() => new Operand { Base = (decimal[])dist.Clone(), Shape = dShape, Strides = new long[] { 1 }, Offset = 0 };
+            search.Add(Case($"argsort/decimal/1d/{n++}", "argsort", "{\"axis\":0}", new[] { D().Describe() },
+                "int64", dShape, HexOf(Bytes(ArgsortStable(dist)))));
+            // negstride source (same logical values) — exercises argsort over a reversed 16-byte view.
+            { var b = (decimal[])dist.Clone(); Array.Reverse(b);
+              var neg = new Operand { Base = b, Shape = dShape, Strides = new long[] { -1 }, Offset = dist.Length - 1 };
+              search.Add(Case($"argsort/decimal/negstride/{n++}", "argsort", "{\"axis\":0}", new[] { neg.Describe() },
+                "int64", dShape, HexOf(Bytes(ArgsortStable(dist))))); }
+            // searchsorted: sorted haystack + arbitrary needles, both sides.
+            { decimal[] sorted = { -5m, -1m, 1m, 2m, 3m, 4m, 6m, 9m }; decimal[] vals = { 0m, 3m, 10m, -6m, 2m };
+              var sOp = new Operand { Base = sorted, Shape = new[] { sorted.Length }, Strides = new long[] { 1 }, Offset = 0 };
+              var vOp = new Operand { Base = vals, Shape = new[] { vals.Length }, Strides = new long[] { 1 }, Offset = 0 };
+              foreach (var side in new[] { "left", "right" })
+                search.Add(Case($"searchsorted/decimal/{side}/{n++}", "searchsorted", $"{{\"side\":\"{side}\"}}",
+                    new[] { sOp.Describe(), vOp.Describe() }, "int64", new[] { vals.Length },
+                    HexOf(Bytes(SearchSortedIdx(sorted, vals, side == "right"))))); }
+            // unique: sorted distinct over a duplicate-laced source.
+            { decimal[] dup = { 3m, 1m, 3m, -2m, 1m, 5m, -2m, 3m };
+              var u = UniqueSorted(dup);
+              var uOp = new Operand { Base = dup, Shape = new[] { dup.Length }, Strides = new long[] { 1 }, Offset = 0 };
+              search.Add(Case($"unique/decimal/1d/{n++}", "unique", "{}", new[] { uOp.Describe() }, "decimal", new[] { u.Length }, HexOf(u))); }
+            // nonzero()[0] and flatnonzero over a zero-laced source.
+            { decimal[] z = { 0m, 3m, 0m, -2m, 0m, 0m, 5m, 1m };
+              var idx = NonzeroIdx(z);
+              var zOp = new Operand { Base = z, Shape = new[] { z.Length }, Strides = new long[] { 1 }, Offset = 0 };
+              search.Add(Case($"nonzero/decimal/1d/{n++}", "nonzero", "{}", new[] { zOp.Describe() }, "int64", new[] { idx.Length }, HexOf(Bytes(idx))));
+              search.Add(Case($"flatnonzero/decimal/1d/{n++}", "flatnonzero", "{}", new[] { zOp.Describe() }, "int64", new[] { idx.Length }, HexOf(Bytes(idx)))); }
+            // lexsort: single key (== argsort) and two keys (primary last; ties broken by secondary).
+            search.Add(Case($"lexsort/decimal/1key/{n++}", "lexsort", "{\"axis\":-1}", new[] { D().Describe() },
+                "int64", dShape, HexOf(Bytes(ArgsortStable(dist)))));
+            { decimal[] primary = { 1m, 1m, 2m, 2m, 0m, 0m }, secondary = { 5m, 1m, 9m, 2m, 7m, 3m };
+              // np.lexsort(keys) sorts by the LAST key first: OpRegistry passes ops=[secondary, primary].
+              var order = Enumerable.Range(0, primary.Length)
+                                    .OrderBy(i => primary[i]).ThenBy(i => secondary[i])
+                                    .Select(i => (long)i).ToArray();
+              var pOp = new Operand { Base = primary, Shape = new[] { primary.Length }, Strides = new long[] { 1 }, Offset = 0 };
+              var sOp = new Operand { Base = secondary, Shape = new[] { secondary.Length }, Strides = new long[] { 1 }, Offset = 0 };
+              search.Add(Case($"lexsort/decimal/2key/{n++}", "lexsort", "{\"axis\":-1}",
+                new[] { sOp.Describe(), pOp.Describe() }, "int64", new[] { primary.Length }, HexOf(Bytes(order)))); }
+        }
+
+        // ----- MANIP EXTEND: flip/roll/concatenate/stack/hstack/vstack/squeeze/moveaxis/swapaxes/
+        // expand_dims/broadcast_to/pad/append/insert/delete/repeat/tile/ediff1d. Value-preserving
+        // reindex/copy — ravel/transpose/reshape already cover the core materialize path; these carry
+        // their own slab-copy / stride logic. Appended to the manip corpus. -----
+        {
+            decimal[] mv = { 1m, -2m, 3m, -4m, 5m, 6m };
+            decimal[] nv = { 10m, 20m, 30m, 40m, 50m, 60m };
+            Operand M1() => new Operand { Base = (decimal[])mv.Clone(), Shape = new[] { 6 }, Strides = new long[] { 1 }, Offset = 0 };
+            Operand N1() => new Operand { Base = (decimal[])nv.Clone(), Shape = new[] { 6 }, Strides = new long[] { 1 }, Offset = 0 };
+            Operand M23() => new Operand { Base = (decimal[])mv.Clone(), Shape = new[] { 2, 3 }, Strides = CStrides(new[] { 2, 3 }), Offset = 0 };
+            Operand N23() => new Operand { Base = (decimal[])nv.Clone(), Shape = new[] { 2, 3 }, Strides = CStrides(new[] { 2, 3 }), Offset = 0 };
+
+            // flip 1-D (reverse), flip 2-D all-axes / axis0 / axis1.
+            manip.Add(Case($"flip/decimal/1d/{n++}", "flip", "{}", new[] { M1().Describe() }, "decimal", new[] { 6 },
+                HexOf(mv.Reverse().ToArray())));
+            { var e = new decimal[6]; for (int i = 0; i < 2; i++) for (int j = 0; j < 3; j++) e[i * 3 + j] = mv[(1 - i) * 3 + (2 - j)];
+              manip.Add(Case($"flip/decimal/2d/all/{n++}", "flip", "{}", new[] { M23().Describe() }, "decimal", new[] { 2, 3 }, HexOf(e))); }
+            { var e = new decimal[6]; for (int i = 0; i < 2; i++) for (int j = 0; j < 3; j++) e[i * 3 + j] = mv[(1 - i) * 3 + j];
+              manip.Add(Case($"flip/decimal/2d/ax0/{n++}", "flip", "{\"axis\":0}", new[] { M23().Describe() }, "decimal", new[] { 2, 3 }, HexOf(e))); }
+            { var e = new decimal[6]; for (int i = 0; i < 2; i++) for (int j = 0; j < 3; j++) e[i * 3 + j] = mv[i * 3 + (2 - j)];
+              manip.Add(Case($"flip/decimal/2d/ax1/{n++}", "flip", "{\"axis\":1}", new[] { M23().Describe() }, "decimal", new[] { 2, 3 }, HexOf(e))); }
+            // roll (flat) by shift 2.
+            { int sh = 2; var e = new decimal[6]; for (int i = 0; i < 6; i++) e[i] = mv[((i - sh) % 6 + 6) % 6];
+              manip.Add(Case($"roll/decimal/1d/{n++}", "roll", "{\"shift\":2}", new[] { M1().Describe() }, "decimal", new[] { 6 }, HexOf(e))); }
+            // concatenate 1-D (axis 0), 2-D axis 0 / axis 1.
+            manip.Add(Case($"concatenate/decimal/1d/{n++}", "concatenate", "{\"axis\":0}", new[] { M1().Describe(), N1().Describe() },
+                "decimal", new[] { 12 }, HexOf(mv.Concat(nv).ToArray())));
+            manip.Add(Case($"concatenate/decimal/2d/ax0/{n++}", "concatenate", "{\"axis\":0}", new[] { M23().Describe(), N23().Describe() },
+                "decimal", new[] { 4, 3 }, HexOf(mv.Concat(nv).ToArray())));
+            { var e = new decimal[12]; // (2,3)|(2,3) along axis1 -> (2,6): row i = mv row i then nv row i
+              for (int i = 0; i < 2; i++) { for (int j = 0; j < 3; j++) e[i * 6 + j] = mv[i * 3 + j]; for (int j = 0; j < 3; j++) e[i * 6 + 3 + j] = nv[i * 3 + j]; }
+              manip.Add(Case($"concatenate/decimal/2d/ax1/{n++}", "concatenate", "{\"axis\":1}", new[] { M23().Describe(), N23().Describe() },
+                "decimal", new[] { 2, 6 }, HexOf(e))); }
+            // stack 1-D axis0 -> (2,6) ; axis1 -> (6,2).
+            manip.Add(Case($"stack/decimal/ax0/{n++}", "stack", "{\"axis\":0}", new[] { M1().Describe(), N1().Describe() },
+                "decimal", new[] { 2, 6 }, HexOf(mv.Concat(nv).ToArray())));
+            { var e = new decimal[12]; for (int i = 0; i < 6; i++) { e[i * 2] = mv[i]; e[i * 2 + 1] = nv[i]; }
+              manip.Add(Case($"stack/decimal/ax1/{n++}", "stack", "{\"axis\":1}", new[] { M1().Describe(), N1().Describe() },
+                "decimal", new[] { 6, 2 }, HexOf(e))); }
+            // hstack (1-D -> concat) ; vstack (1-D -> (2,6)).
+            manip.Add(Case($"hstack/decimal/1d/{n++}", "hstack", "{}", new[] { M1().Describe(), N1().Describe() },
+                "decimal", new[] { 12 }, HexOf(mv.Concat(nv).ToArray())));
+            manip.Add(Case($"vstack/decimal/1d/{n++}", "vstack", "{}", new[] { M1().Describe(), N1().Describe() },
+                "decimal", new[] { 2, 6 }, HexOf(mv.Concat(nv).ToArray())));
+            // squeeze (1,6) -> (6,).
+            { var s16 = new Operand { Base = (decimal[])mv.Clone(), Shape = new[] { 1, 6 }, Strides = CStrides(new[] { 1, 6 }), Offset = 0 };
+              manip.Add(Case($"squeeze/decimal/{n++}", "squeeze", "{}", new[] { s16.Describe() }, "decimal", new[] { 6 }, HexOf(mv))); }
+            // moveaxis / swapaxes on (2,3) -> transpose (3,2).
+            manip.Add(Case($"moveaxis/decimal/{n++}", "moveaxis", "{\"src\":0,\"dst\":1}", new[] { M23().Describe() },
+                "decimal", new[] { 3, 2 }, HexOf(TransposeReverse(mv, new[] { 2, 3 }))));
+            manip.Add(Case($"swapaxes/decimal/{n++}", "swapaxes", "{\"a1\":0,\"a2\":1}", new[] { M23().Describe() },
+                "decimal", new[] { 3, 2 }, HexOf(TransposeReverse(mv, new[] { 2, 3 }))));
+            // expand_dims axis 0 -> (1,6) ; values unchanged.
+            manip.Add(Case($"expand_dims/decimal/{n++}", "expand_dims", "{\"axis\":0}", new[] { M1().Describe() },
+                "decimal", new[] { 1, 6 }, HexOf(mv)));
+            // broadcast_to (6,) -> (2,6): each row = mv.
+            manip.Add(Case($"broadcast_to/decimal/{n++}", "broadcast_to", "{\"shape\":[2,6]}", new[] { M1().Describe() },
+                "decimal", new[] { 2, 6 }, HexOf(mv.Concat(mv).ToArray())));
+            // pad (constant 0) width 1 -> [0, mv..., 0].
+            { var e = new List<decimal> { 0m }; e.AddRange(mv); e.Add(0m);
+              manip.Add(Case($"pad/decimal/{n++}", "pad", "{\"pad_width\":1,\"mode\":\"constant\"}", new[] { M1().Describe() },
+                "decimal", new[] { 8 }, HexOf(e.ToArray()))); }
+            // append (no axis -> flatten-append).
+            manip.Add(Case($"append/decimal/{n++}", "append", "{}", new[] { M1().Describe(), N1().Describe() },
+                "decimal", new[] { 12 }, HexOf(mv.Concat(nv).ToArray())));
+            // insert one value before index 2 (axis 0).
+            { decimal[] iv = { 99m }; var e = new List<decimal>(mv); e.Insert(2, iv[0]);
+              manip.Add(Case($"insert/decimal/{n++}", "insert", "{\"obj\":2,\"axis\":0}",
+                new[] { M1().Describe(), new Operand { Base = iv, Shape = new[] { 1 }, Strides = new long[] { 1 }, Offset = 0 }.Describe() },
+                "decimal", new[] { 7 }, HexOf(e.ToArray()))); }
+            // delete index 2 (axis 0).
+            { var e = new List<decimal>(mv); e.RemoveAt(2);
+              manip.Add(Case($"delete/decimal/{n++}", "delete", "{\"obj\":2,\"axis\":0}", new[] { M1().Describe() },
+                "decimal", new[] { 5 }, HexOf(e.ToArray()))); }
+            // repeat each element twice ; tile the array twice.
+            { var e = new decimal[12]; for (int i = 0; i < 6; i++) { e[2 * i] = mv[i]; e[2 * i + 1] = mv[i]; }
+              manip.Add(Case($"repeat/decimal/{n++}", "repeat", "{\"repeats\":2}", new[] { M1().Describe() }, "decimal", new[] { 12 }, HexOf(e))); }
+            manip.Add(Case($"tile/decimal/{n++}", "tile", "{\"reps\":2}", new[] { M1().Describe() }, "decimal", new[] { 12 }, HexOf(mv.Concat(mv).ToArray())));
+            // ediff1d: consecutive difference (len-1).
+            { var e = new decimal[5]; for (int i = 0; i < 5; i++) e[i] = mv[i + 1] - mv[i];
+              manip.Add(Case($"ediff1d/decimal/{n++}", "ediff1d", "{}", new[] { M1().Describe() }, "decimal", new[] { 5 }, HexOf(e))); }
+        }
+
+        // ----- AXIS GRANULARITY within already-covered families: the reduce tier had axis sum/min/max/
+        // mean but NOT prod/argmax/argmin; scan/varstd/stat were flat-only. Add axis prod + argmax/argmin
+        // (reduce), axis var/std (varstd), axis median/percentile/quantile (stat), axis cumsum/cumprod
+        // (scan) over the three 2-D layouts × axis {0,1}. decimal + is exact, so accumulation order is
+        // irrelevant; std=sqrt(var) is oracled by the same INDEPENDENT Newton DecSqrt as the flat tier. -----
+        foreach (var ln in new[] { "c_contiguous_2d", "f_contiguous_2d", "strided_2d_cols" })
+        {
+            var o = SingleLayout(ln, 6, false);
+            var log = o.Logical();
+            int rows = o.Shape[0], cols = o.Shape[1];
+            foreach (int axis in new[] { 0, 1 })
+            {
+                var slices = Slices2D(log, rows, cols, axis);
+                int outN = slices.Length;
+                // prod
+                { var v = slices.Select(ProdSafe).ToArray();
+                  foreach (var kd in new[] { false, true })
+                    reduce.Add(Case($"prod/decimal/{ln}/ax{axis}kd{(kd ? 1 : 0)}/{n++}", "prod",
+                        $"{{\"axis\":{axis},\"keepdims\":{(kd ? "true" : "false")}}}", new[] { o.Describe() },
+                        "decimal", AxisOutShape(rows, cols, axis, outN, kd), HexOf(v))); }
+                // argmax / argmin -> int64 index within each slice (first-occurrence on ties; pools distinct).
+                { var amax = new long[outN]; var amin = new long[outN];
+                  for (int s = 0; s < outN; s++)
+                  { int im = 0, in_ = 0; var sl = slices[s];
+                    for (int t = 1; t < sl.Length; t++) { if (sl[t] > sl[im]) im = t; if (sl[t] < sl[in_]) in_ = t; }
+                    amax[s] = im; amin[s] = in_; }
+                  reduce.Add(Case($"argmax/decimal/{ln}/ax{axis}/{n++}", "argmax", $"{{\"axis\":{axis},\"keepdims\":false}}",
+                    new[] { o.Describe() }, "int64", new[] { outN }, HexOf(Bytes(amax))));
+                  reduce.Add(Case($"argmin/decimal/{ln}/ax{axis}/{n++}", "argmin", $"{{\"axis\":{axis},\"keepdims\":false}}",
+                    new[] { o.Describe() }, "int64", new[] { outN }, HexOf(Bytes(amin)))); }
+                // var / std (ddof=0). The AXIS decimal var/std kernel (AxisVarStdDecimalHelper) computes
+                // the mean and sum-of-squared-deviations in EXACT decimal but then rounds the variance
+                // through a DOUBLE intermediate (`variance = (double)(sqDiffSum/divisor)`; std =
+                // Math.Sqrt(variance)) before storing — UNLIKE the flat path (VarMomentsDecimal +
+                // DecimalMath.Sqrt), which stays full-precision. So the axis result carries ~15
+                // significant digits, not 28. The oracle replicates that EXACT double intermediate
+                // (portable: Math.Sqrt is IEEE-correctly-rounded, the casts are deterministic) so it
+                // still catches an iteration / mean / divisor bug (which diverges by orders of
+                // magnitude) without over-claiming a precision the axis path does not provide — the
+                // same per-path-fidelity policy the decimal TRANSCEND tier uses for its double bridge.
+                { var vv = new decimal[outN]; var sd = new decimal[outN];
+                  for (int s = 0; s < outN; s++)
+                  { var sl = slices[s]; decimal mean = sl.Aggregate(0m, (x, y) => x + y) / sl.Length;
+                    decimal sqDiff = sl.Aggregate(0m, (acc, x) => acc + (x - mean) * (x - mean));
+                    double varD = (double)(sqDiff / (decimal)sl.Length);   // the kernel's double intermediate
+                    vv[s] = (decimal)varD; sd[s] = (decimal)Math.Sqrt(varD); }
+                  varstd.Add(Case($"var/decimal/{ln}/ax{axis}/{n++}", "var", $"{{\"axis\":{axis},\"keepdims\":false}}",
+                    new[] { o.Describe() }, "decimal", new[] { outN }, HexOf(vv)));
+                  varstd.Add(Case($"std/decimal/{ln}/ax{axis}/{n++}", "std", $"{{\"axis\":{axis},\"keepdims\":false}}",
+                    new[] { o.Describe() }, "decimal", new[] { outN }, HexOf(sd))); }
+                // median / percentile / quantile (per-slice order statistics)
+                { var med = new decimal[outN];
+                  for (int s = 0; s < outN; s++) { var sl = (decimal[])slices[s].Clone(); Array.Sort(sl); med[s] = Median(sl); }
+                  stat.Add(Case($"median/decimal/{ln}/ax{axis}/{n++}", "median", $"{{\"axis\":{axis},\"keepdims\":false}}",
+                    new[] { o.Describe() }, "decimal", new[] { outN }, HexOf(med)));
+                  foreach (var (pq, frac) in new[] { ("25.0", 0.25), ("50.0", 0.5), ("75.0", 0.75) })
+                  { var v = new decimal[outN];
+                    for (int s = 0; s < outN; s++) { var sl = (decimal[])slices[s].Clone(); Array.Sort(sl); v[s] = Quantile(sl, frac); }
+                    stat.Add(Case($"percentile/decimal/{ln}/ax{axis}/p{pq}/{n++}", "percentile", $"{{\"q\":{pq},\"axis\":{axis},\"keepdims\":false}}",
+                        new[] { o.Describe() }, "decimal", new[] { outN }, HexOf(v))); }
+                  foreach (var (qq, frac) in new[] { ("0.25", 0.25), ("0.5", 0.5), ("0.75", 0.75) })
+                  { var v = new decimal[outN];
+                    for (int s = 0; s < outN; s++) { var sl = (decimal[])slices[s].Clone(); Array.Sort(sl); v[s] = Quantile(sl, frac); }
+                    stat.Add(Case($"quantile/decimal/{ln}/ax{axis}/q{qq}/{n++}", "quantile", $"{{\"q\":{qq},\"axis\":{axis},\"keepdims\":false}}",
+                        new[] { o.Describe() }, "decimal", new[] { outN }, HexOf(v))); }
+                }
+                // cumsum / cumprod ALONG the axis (full-shape output).
+                { var cs = new decimal[rows * cols]; var cp = new decimal[rows * cols];
+                  if (axis == 0)
+                    for (int j = 0; j < cols; j++)
+                    { decimal s = 0m, p = 1m; for (int i = 0; i < rows; i++) { s += log[i * cols + j]; cs[i * cols + j] = s; p *= log[i * cols + j]; cp[i * cols + j] = p; } }
+                  else
+                    for (int i = 0; i < rows; i++)
+                    { decimal s = 0m, p = 1m; for (int j = 0; j < cols; j++) { s += log[i * cols + j]; cs[i * cols + j] = s; p *= log[i * cols + j]; cp[i * cols + j] = p; } }
+                  scan.Add(Case($"cumsum/decimal/{ln}/ax{axis}/{n++}", "cumsum", $"{{\"axis\":{axis}}}", new[] { o.Describe() }, "decimal", new[] { rows, cols }, HexOf(cs)));
+                  scan.Add(Case($"cumprod/decimal/{ln}/ax{axis}/{n++}", "cumprod", $"{{\"axis\":{axis}}}", new[] { o.Describe() }, "decimal", new[] { rows, cols }, HexOf(cp))); }
+            }
+        }
+
         Write(Path.Combine(corpus, "decimal_unary.jsonl"), unary);
         Write(Path.Combine(corpus, "decimal_binary.jsonl"), binary);
         Write(Path.Combine(corpus, "decimal_reduce.jsonl"), reduce);
@@ -570,6 +1027,13 @@ static class Gen
         Write(Path.Combine(corpus, "decimal_where.jsonl"), where);
         Write(Path.Combine(corpus, "decimal_sort.jsonl"), sort);
         Write(Path.Combine(corpus, "decimal_manip.jsonl"), manip);
+        // G14 coverage-audit expansion (new files; the extended binary/reduce/scan/varstd/stat/manip
+        // rows land in their existing files above).
+        Write(Path.Combine(corpus, "decimal_extra.jsonl"), extra);
+        Write(Path.Combine(corpus, "decimal_transcend.jsonl"), transcend);
+        Write(Path.Combine(corpus, "decimal_select.jsonl"), select);
+        Write(Path.Combine(corpus, "decimal_products.jsonl"), products);
+        Write(Path.Combine(corpus, "decimal_search.jsonl"), search);
     }
 
     // small in-range decimal source for decimal->narrow casts (truncation toward zero).
@@ -724,6 +1188,139 @@ static class Gen
     static byte[] Bytes(float[] v) { var b = new byte[v.Length*4]; Buffer.BlockCopy(v, 0, b, 0, b.Length); return b; }
 
     static decimal ProdSafe(decimal[] v) { decimal p = 1m; foreach (var x in v) p *= x; return p; }
+
+    // ============================ G14 coverage-audit helpers ============================
+    // Each computes an expected value with NAIVE scalar System.Decimal (or the EXACT double bridge the
+    // decimal kernel uses for transcendentals — DirectILKernelGenerator.Unary.Decimal.cs) — never a
+    // NumSharp kernel. BitDiff tokenizes decimal by canonical VALUE (trailing zeros stripped, -0 == 0),
+    // so scale variants and sign-of-zero never false-fail; only wrong VALUES / wrong iteration do.
+
+    /// <summary>C-contiguous int64 operand descriptor — index arrays for take/take_along_axis/lexsort
+    /// (int64 is same_kind/safe-castable so every selection op accepts it).</summary>
+    static string Int64OperandDesc(long[] v, int[] shape)
+        => $"{{\"dtype\":\"int64\",\"shape\":[{string.Join(",", shape)}],"
+         + $"\"strides\":[{string.Join(",", CStrides(shape))}],\"offset\":0,"
+         + $"\"bufferSize\":{v.Length},\"buffer\":\"{HexOf(Bytes(v))}\"}}";
+
+    /// <summary>C-contiguous int32 operand descriptor — the put/choose index arrays (np.array(int[])
+    /// is int32, the common call form; int32 casts same_kind to intp for take and safe for put).</summary>
+    static string Int32OperandDesc(int[] v, int[] shape)
+        => $"{{\"dtype\":\"int32\",\"shape\":[{string.Join(",", shape)}],"
+         + $"\"strides\":[{string.Join(",", CStrides(shape))}],\"offset\":0,"
+         + $"\"bufferSize\":{v.Length},\"buffer\":\"{HexOf(Bytes(v))}\"}}";
+
+    /// <summary>10^k as an exact decimal (k>=0) — round_'s scale factor for negative decimals.</summary>
+    static decimal Pow10(int k) { decimal p = 1m; for (int i = 0; i < k; i++) p *= 10m; return p; }
+
+    /// <summary>np.round_ / np.around for decimal: banker's (half-to-even) at `decimals` places.
+    /// decimals&gt;=0 is Math.Round(x, decimals); decimals&lt;0 rounds to tens/hundreds via scale-round-
+    /// unscale (matches the probed kernel: around(125,-1)=120, around(-2.5,-1)=-0m≡0m).</summary>
+    static decimal RoundDec(decimal x, int decimals)
+    {
+        if (decimals >= 0) return Math.Round(x, decimals, MidpointRounding.ToEven);
+        decimal s = Pow10(-decimals);
+        return Math.Round(x / s, 0, MidpointRounding.ToEven) * s;
+    }
+
+    /// <summary>np.spacing(decimal) — the kernel's (decimal)npy_spacing((double)x) bridge. Pure bit
+    /// arithmetic on the double (no libm), so this is PORTABLE and rides the strict tier. A decimal is
+    /// always finite, so the inf/NaN branches of npy_spacing are unreachable.</summary>
+    static decimal SpacingDec(decimal x)
+    {
+        double d = (double)x;
+        double sp = d == 0.0 ? double.Epsilon
+                  : BitConverter.Int64BitsToDouble(BitConverter.DoubleToInt64Bits(d) + 1L) - d;
+        return (decimal)sp;   // d finite => sp finite and within decimal range
+    }
+
+    /// <summary>fmod (C fmod / truncated remainder): sign follows the DIVIDEND, unlike the floored
+    /// np.mod. C# decimal `%` IS truncated remainder, so this is a % b (probed: fmod(-7,3)=-1).</summary>
+    static decimal Fmod(decimal a, decimal b) => a % b;
+
+    /// <summary>np.heaviside(x1, x2): 0 for x1&lt;0, x2 for x1==0, 1 for x1&gt;0.</summary>
+    static decimal Heaviside(decimal x1, decimal x2) => x1 < 0m ? 0m : (x1 == 0m ? x2 : 1m);
+
+    /// <summary>np.copysign(a, b): |a| with the sign of b. b's sign is Math.Sign (a +0/-0 decimal both
+    /// read non-negative); the -0m produced by copysign(0,-x) ties 0m under BitDiff.</summary>
+    static decimal Copysign(decimal a, decimal b) => Math.Sign(b) < 0 ? -Math.Abs(a) : Math.Abs(a);
+
+    /// <summary>Stable ascending argsort (ties broken by original position), int64 positions — matches
+    /// NumSharp's stable decimal argsort. Pools used are distinct-valued so ties do not arise.</summary>
+    static long[] ArgsortStable(decimal[] a)
+    {
+        var idx = new long[a.Length];
+        for (int i = 0; i < a.Length; i++) idx[i] = i;
+        Array.Sort(idx, (x, y) => { int c = a[x].CompareTo(a[y]); return c != 0 ? c : x.CompareTo(y); });
+        return idx;
+    }
+
+    /// <summary>np.searchsorted insertion points (int64): leftmost (right=false) / rightmost
+    /// (right=true) index keeping `sorted` sorted after inserting each value.</summary>
+    static long[] SearchSortedIdx(decimal[] sorted, decimal[] vals, bool right)
+    {
+        var r = new long[vals.Length];
+        for (int k = 0; k < vals.Length; k++)
+        {
+            int lo = 0, hi = sorted.Length;
+            while (lo < hi)
+            {
+                int mid = (lo + hi) >> 1;
+                bool goRight = right ? sorted[mid] <= vals[k] : sorted[mid] < vals[k];
+                if (goRight) lo = mid + 1; else hi = mid;
+            }
+            r[k] = lo;
+        }
+        return r;
+    }
+
+    /// <summary>Sorted distinct values — np.unique over a flat decimal view (the sort path decimal takes).</summary>
+    static decimal[] UniqueSorted(decimal[] a)
+    {
+        var s = (decimal[])a.Clone(); Array.Sort(s);
+        var outv = new List<decimal>();
+        for (int i = 0; i < s.Length; i++) if (i == 0 || s[i] != s[i - 1]) outv.Add(s[i]);
+        return outv.ToArray();
+    }
+
+    /// <summary>Flat int64 positions where the value is non-zero (np.flatnonzero / np.nonzero()[0]).</summary>
+    static long[] NonzeroIdx(decimal[] a)
+    {
+        var outv = new List<long>();
+        for (int i = 0; i < a.Length; i++) if (a[i] != 0m) outv.Add((long)i);
+        return outv.ToArray();
+    }
+
+    /// <summary>Exact 2-D decimal matrix product (m,k)@(k,p) -> (m,p) C-order. decimal + is exact, so
+    /// the accumulation ORDER is irrelevant — any kernel order gives byte-identical values.</summary>
+    static decimal[] MatMul2D(decimal[] a, int m, int k, decimal[] b, int p)
+    {
+        var outv = new decimal[m * p];
+        for (int i = 0; i < m; i++)
+            for (int j = 0; j < p; j++)
+            { decimal acc = 0m; for (int t = 0; t < k; t++) acc += a[i * k + t] * b[t * p + j]; outv[i * p + j] = acc; }
+        return outv;
+    }
+
+    /// <summary>The 1-D slices along `axis` of a 2-D (rows,cols) C-order array, in output order
+    /// (one per column for axis 0, one per row for axis 1) — the building block for the axis reduce/
+    /// scan/stat expected values below.</summary>
+    static decimal[][] Slices2D(decimal[] log, int rows, int cols, int axis)
+    {
+        int outN = axis == 0 ? cols : rows, m = axis == 0 ? rows : cols;
+        var res = new decimal[outN][];
+        for (int s = 0; s < outN; s++)
+        {
+            var slice = new decimal[m];
+            for (int t = 0; t < m; t++) slice[t] = axis == 0 ? log[t * cols + s] : log[s * cols + t];
+            res[s] = slice;
+        }
+        return res;
+    }
+
+    /// <summary>The keepdims-aware output shape for a 2-D axis reduction to `outN` values: (outN,) when
+    /// keepdims is false, else (1,cols) for axis 0 / (rows,1) for axis 1.</summary>
+    static int[] AxisOutShape(int rows, int cols, int axis, int outN, bool keepdims)
+        => !keepdims ? new[] { outN } : (axis == 0 ? new[] { 1, cols } : new[] { rows, 1 });
 
     static decimal[] BroadcastApply(decimal[] la, int[] sa, decimal[] lb, int[] sb, int[] rs, Func<decimal,decimal,decimal> f)
     {

@@ -19,6 +19,10 @@
     <!-- Strong-naming is set repo-wide in ../../Directory.Build.props. Signed because
          NumSharp.Core grants it InternalsVisibleTo, which now names a PublicKey. -->
     <Configurations>Debug;Release;Publish</Configurations>
+    <!-- TieredPGO OFF for this short-lived, JIT-bound test host (tiering stays on) — overrides the repo-wide
+         default in ../../Directory.Build.props; the measured rationale is in ../NumSharp.Tests/NumSharp.Tests.csproj
+         (this suite: 16.6 s -> 14.2 s summed on net10.0, 2026-09-24). -->
+    <TieredPGO>false</TieredPGO>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Publish|AnyCPU'">
@@ -39,6 +43,18 @@
          before any interop type is touched), because every other tier asserts NumSharp's own managed
          kernels; the parity tests enable it per-test and disable it again. -->
     <ProjectReference Include="..\..\src\NumSharp.Interop.OpenBLAS\NumSharp.Interop.OpenBLAS.csproj" />
+  </ItemGroup>
+
+  <!-- The exact-and-cheap GC window protocol the leak sweep's ScopeAudit measures with. Linked (not
+       copied) from NumSharp.Tests so both projects' process-global counter tests share ONE implementation
+       of a subtle protocol (young collection + finalizer drain + collection-count AND background-GC-index
+       check); see the file's remarks for why a full GC per measurement was the dominant cost. -->
+  <ItemGroup>
+    <Compile Include="..\NumSharp.Tests\Utilities\GcQuiescence.cs" Link="Fuzz\GcQuiescence.cs" />
+    <!-- Opts the test host out of Windows' efficiency-mode scheduling (a windowless child of `dotnet test` is
+         treated as background work and parked on a hybrid CPU's E-cores: this suite ran 12 s on P-cores vs
+         22 s placed by the scheduler). A module initializer; a no-op off Windows. See the file's remarks. -->
+    <Compile Include="..\NumSharp.Tests\Utilities\TestHostQualityOfService.cs" Link="Fuzz\TestHostQualityOfService.cs" />
   </ItemGroup>
 
   <!-- Differential-fuzzer oracle corpus: committed JSONL replayed by MSTest (no Python in CI). -->

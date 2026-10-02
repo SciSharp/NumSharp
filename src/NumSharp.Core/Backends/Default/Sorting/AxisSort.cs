@@ -166,6 +166,20 @@ namespace NumSharp.Backends.Sorting
             }
         }
 
+        /// <summary>
+        /// Write the indices that sort every line of <paramref name="src"/> along
+        /// <paramref name="axis"/> into <paramref name="dst"/> (stable radix for the integer/float
+        /// dtypes with NaN last; a managed comparison sort for Half/Complex/Decimal).
+        /// </summary>
+        /// <param name="src">The C-contiguous array to argsort (read only).</param>
+        /// <param name="dst">An int64 array with <paramref name="src"/>'s dims; every line along <paramref name="axis"/> is overwritten.</param>
+        /// <param name="axis">The already-normalised sort axis.</param>
+        /// <exception cref="NotSupportedException">A Half/Complex/Decimal line is longer than <see cref="int.MaxValue"/> (the comparison sort uses managed buffers).</exception>
+        /// <remarks>
+        /// Radix scratch is unmanaged and sized for ONE line; the line kernels reuse it for every line,
+        /// sorting <c>LineCtx.n</c> elements regardless of the iterator's per-call count. That is why
+        /// an input with no lines (<c>size == 0</c>) must return before the drive: see the guard below.
+        /// </remarks>
         private static void ArgSortInto(NDArray src, NDArray dst, int axis)
         {
             long N = src.shape[axis];
@@ -177,7 +191,14 @@ namespace NumSharp.Backends.Sorting
                 inStride = (long)src.Shape.strides[axis] * elsize,
                 outStride = (long)dst.Shape.strides[axis] * sizeof(long),
             };
-            if (N == 0) return;
+            // An empty axis OR zero lines (another dimension is 0, e.g. (0,3) along the last axis):
+            // dst has src's dims, so it is empty too and there is nothing to write. The size guard is
+            // load-bearing, not an optimisation: the line kernels ignore the iterator's per-call count
+            // and always write a full line of N indices, so letting a zero-line drive through wrote N
+            // int64s into dst's ZERO-byte buffer — native heap corruption (Windows killed the process
+            // with 0xC0000374 STATUS_HEAP_CORRUPTION; glibc stayed silent). SortInPlace and
+            // AxisPartition already carried this guard; argsort was the one sibling without it.
+            if (N == 0 || src.size == 0) return;
 
             // Radix scratch is UNMANAGED so a line may exceed int.MaxValue (the index column idx/it
             // and the key column are both element-sized and would otherwise cap at ~2^31). The scalar
@@ -226,12 +247,30 @@ namespace NumSharp.Backends.Sorting
         /// op_axes so it can't coalesce); the kernel receives each operand's line start per call.
         /// Internal: <see cref="AxisPartition"/> drives its partition/argpartition line kernels through
         /// the same loop (NumPy routes _new_sortlike AND _new_partitionlike through one drive too).</summary>
+        /// <param name="ops">The operands whose lines are visited together (all share <c>ops[0]</c>'s dims).</param>
+        /// <param name="flags">Per-operand NDIter access flags (READONLY / WRITEONLY / READWRITE).</param>
+        /// <param name="axis">The normalised line axis — the one axis the iterator does NOT walk.</param>
+        /// <param name="kern">The line kernel, called once per line with each operand's line start.</param>
+        /// <param name="aux">The kernel's context (a <c>LineCtx*</c> or the partition equivalent).</param>
+        /// <remarks>
+        /// A zero-size <c>ops[0]</c> returns without calling <paramref name="kern"/>: there are no lines,
+        /// and the line kernels would otherwise sort/write a full line into an empty buffer.
+        /// </remarks>
         [NDScoped]
         internal static void DriveAllButAxis(NDArray[] ops, NDIterPerOpFlags[] flags, int axis, NDInnerLoopFunc kern, void* aux)
         {
             // Scope: the 1-D (1, N) promotion views below are pure iteration aids over the caller's
             // operands — without eager reclamation a dropped view held the result buffer's last
             // extra ref until the finalizer, pinning every 1-D sort/argsort/partition result.
+
+            // Defence in depth for every caller: a zero-size operand means there are no lines to
+            // visit, but the iterator still makes a kernel call for it, and the line kernels ignore
+            // that call's count and sort/write a WHOLE line (LineCtx.n elements). Returning here keeps
+            // an unguarded caller from overrunning a zero-byte buffer. The callers also check size
+            // themselves; this only catches one that forgets (argsort did — see ArgSortInto).
+            if (ops[0].size == 0)
+                return;
+
             int ndim = ops[0].ndim;
 
             // 1-D input drops its only axis -> a 0-dimensional all-but-axis iterator. Our NDIter

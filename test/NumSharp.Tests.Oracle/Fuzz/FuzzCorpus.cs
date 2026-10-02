@@ -62,6 +62,25 @@ namespace NumSharp.Tests.Fuzz
             public long Offset { get; set; }
             public long BufferSize { get; set; }
             public string Buffer { get; set; }
+
+            /// <summary>
+            ///     MASKED-ARRAY corpus only: hex of a C-contiguous bool buffer (one byte per element,
+            ///     <c>product(Shape)</c> bytes) giving the mask at the DATA view's logical C-order
+            ///     positions. Absent (null) means <c>nomask</c> — NumPy's fast path where an operand
+            ///     is an ordinary unmasked array. Ordinary (non-ma) tiers never set this, so their
+            ///     operand serialization is byte-identical to before.
+            /// </summary>
+            public string Mask { get; set; }
+
+            /// <summary>
+            ///     Explicit writeable flag, serialized by <c>layout_catalog.describe()</c> ONLY when
+            ///     the NumPy view was READ-ONLY in a way its strides cannot convey — a SAME-SHAPE
+            ///     <c>np.broadcast_to</c> keeps ordinary strides, so without this the reconstructed
+            ///     operand was silently writeable and the out_where broadcast-out refusal cells
+            ///     (NumPy: ValueError "output array is read-only") could never pass. Absent (null)
+            ///     means writeable — every pre-flag corpus row deserializes exactly as before.
+            /// </summary>
+            public bool? Writeable { get; set; }
         }
 
         /// <summary>
@@ -104,8 +123,38 @@ namespace NumSharp.Tests.Fuzz
             /// <summary>Expected dtype name (kind=dtype) or expected string (kind=text).</summary>
             public string Value { get; set; }
 
-            /// <summary>Per-slot results for kind=tuple, in NumPy's tuple order.</summary>
+            /// <summary>
+            ///     MASKED-ARRAY corpus only (kind=masked / masked_tuple slots): hex of the result's
+            ///     <c>getmaskarray</c> — a C-contiguous bool buffer of <c>product(Shape)</c> bytes.
+            ///     <see cref="Buffer"/> then holds the <c>filled(0)</c> data (masked slots zeroed), so
+            ///     the pair together is the observable masked value: unmasked data bit-for-bit + the
+            ///     mask bit-for-bit, with masked-slot underlying data left a wildcard (it is
+            ///     implementation-defined for unique/set-ops and merely input-restored for ufuncs).
+            /// </summary>
+            public string Mask { get; set; }
+
+            /// <summary>Per-slot results for kind=tuple / masked_tuple, in NumPy's tuple order.</summary>
             public Expected[] Slots { get; set; }
+
+            /// <summary>
+            ///     RANDOM-API corpus only (kind=random_api): NumPy's canonical observation of the call's result — a JSON
+            ///     tree (array / scalar / text / object / sequence observations, see <c>RandomApi/RandomApiObservation.cs</c>).
+            ///     Absent (<see cref="JsonValueKind.Undefined"/>) on every other tier.
+            /// </summary>
+            public JsonElement Result { get; set; }
+
+            /// <summary>
+            ///     RANDOM-API corpus only: the receiver's canonical state text after the call (engine state, buffered 32-bit
+            ///     half, RandomState's Gaussian cache) — what pins the stream POSITION, not only the values. Null elsewhere
+            ///     and for receivers without state.
+            /// </summary>
+            public string State { get; set; }
+
+            /// <summary>
+            ///     RANDOM-API corpus only: the array observations of the operands a member mutates in place (<c>shuffle</c>),
+            ///     after the call, in the order of <c>params.watch</c>. Absent elsewhere.
+            /// </summary>
+            public JsonElement After { get; set; }
 
             /// <summary>Normalized kind — legacy cases carry none and mean "array".</summary>
             public string KindOrArray => string.IsNullOrEmpty(Kind) ? "array" : Kind;
@@ -115,18 +164,42 @@ namespace NumSharp.Tests.Fuzz
         public static string CorpusPath(string fileName)
             => Path.Combine(AppContext.BaseDirectory, "Fuzz", "corpus", fileName);
 
+        /// <summary>
+        ///     Opens a corpus file for ONE streaming pass: its case count is known up front and its cases are parsed
+        ///     one at a time as they are enumerated. Prefer this over <see cref="Load"/> for any replay that visits
+        ///     each case once — see <see cref="CorpusFile"/> for why holding a whole tier's parsed cases was the cost.
+        /// </summary>
+        /// <param name="fileName">The corpus file name under <c>Fuzz/corpus/</c>.</param>
+        /// <returns>The opened file; dispose it (it holds a pooled buffer).</returns>
+        /// <exception cref="IOException">The file does not exist or cannot be read.</exception>
+        public static CorpusFile Open(string fileName) => new(fileName, CorpusPath(fileName));
+
+        /// <summary>
+        ///     Parses a whole corpus file into a list, for the callers that need random access or several passes
+        ///     (a filtered subset, a two-variation replay). A single-pass replay should enumerate <see cref="Open"/>
+        ///     instead, so the parsed cases die young rather than surviving — and being promoted — as a list.
+        /// </summary>
+        /// <param name="fileName">The corpus file name under <c>Fuzz/corpus/</c>.</param>
+        /// <returns>Every case, in file order (one per non-blank line).</returns>
+        /// <exception cref="IOException">The file does not exist or cannot be read.</exception>
+        /// <exception cref="JsonException">A line is not valid corpus JSON.</exception>
         public static List<Case> Load(string fileName)
         {
-            var path = CorpusPath(fileName);
-            var list = new List<Case>();
-            foreach (var line in File.ReadLines(path))
-            {
-                if (string.IsNullOrWhiteSpace(line))
-                    continue;
-                list.Add(JsonSerializer.Deserialize<Case>(line, J));
-            }
+            using var file = Open(fileName);
+            var list = new List<Case>(file.Count);
+            foreach (var c in file)
+                list.Add(c);
             return list;
         }
+
+        /// <summary>
+        ///     Deserializes one corpus line (UTF-8, terminator excluded) with the corpus serializer options —
+        ///     case-insensitive property names, unknown properties ignored.
+        /// </summary>
+        /// <param name="utf8Line">One JSONL line.</param>
+        /// <returns>The parsed case (null only for a literal <c>null</c> line, which no generator writes).</returns>
+        /// <exception cref="JsonException">The line is not a valid corpus case.</exception>
+        internal static Case ParseLine(ReadOnlySpan<byte> utf8Line) => JsonSerializer.Deserialize<Case>(utf8Line, J);
 
         // -- dtype token <-> NPTypeCode. 13 NumPy-representable types + "char": NumSharp's Char
         // is bit-identical to uint16, so the oracle emits Char cases as uint16-proxy bytes
@@ -185,14 +258,52 @@ namespace NumSharp.Tests.Fuzz
             // Empty operands: strides/offset are vacuous (0 elements). Build a plain empty array.
             for (int i = 0; i < o.Shape.Length; i++)
                 if (o.Shape[i] == 0)
-                    return new NDArray(tc, new Shape(o.Shape), false);
+                    return ApplyWriteable(new NDArray(tc, new Shape(o.Shape), false), o);
 
             var bytes = FromHex(o.Buffer);
             var slice = SliceFromBytes(bytes, tc);                       // Count == bufferSize
             var baseShape = new Shape(new[] { o.BufferSize });          // 1-D contiguous, size == Count
             var storage = new UnmanagedStorage(slice, baseShape);
             var viewShape = new Shape(o.Shape, o.Strides, o.Offset, o.BufferSize); // operand view (alias, no checks)
-            return new NDArray(storage, viewShape);
+            return ApplyWriteable(new NDArray(storage, viewShape), o);
+        }
+
+        /// <summary>
+        ///     Honor the operand's explicit <see cref="Operand.Writeable"/> flag: a same-shape
+        ///     broadcast view is read-only in NumPy while its (shape, strides) reconstruction looks
+        ///     writeable, so the flag is cleared through the public <c>setflags</c> route (the same
+        ///     path the flags oracle audits). Stride-derived read-onlyness (a genuine stride-0
+        ///     broadcast dim) needs no flag and is untouched.
+        /// </summary>
+        /// <param name="nd">The freshly reconstructed operand.</param>
+        /// <param name="o">Its corpus descriptor (carries the optional flag).</param>
+        /// <returns><paramref name="nd"/>, non-writeable when the descriptor says so.</returns>
+        private static NDArray ApplyWriteable(NDArray nd, Operand o)
+        {
+            if (o.Writeable == false)
+                nd.setflags(write: false);
+            return nd;
+        }
+
+        /// <summary>
+        ///     Rebuild the C-contiguous bool mask NDArray a masked operand carries, from its hex and
+        ///     the DATA view's logical shape. The bytes are one-per-element in C-order, so the mask is
+        ///     a plain contiguous array (never strided) even when the data view is — exactly how NumPy
+        ///     stores <c>MaskedArray._mask</c> and how <c>np.ma.array(view, mask=cmask)</c> pairs them.
+        /// </summary>
+        /// <param name="shape">The data view's shape (the mask has the same shape).</param>
+        /// <param name="maskHex">Hex of the C-contiguous bool buffer, or null for nomask.</param>
+        /// <returns>The bool mask NDArray, or null when <paramref name="maskHex"/> is null (nomask).</returns>
+        public static NDArray ReconstructMask(long[] shape, string maskHex)
+        {
+            if (maskHex == null)
+                return null;                                     // nomask: keep _mask == null (the fast path)
+            for (int i = 0; i < shape.Length; i++)
+                if (shape[i] == 0)
+                    return new NDArray(NPTypeCode.Boolean, new Shape(shape), false);   // empty: no bytes
+            var bytes = FromHex(maskHex);
+            var slice = ArraySlice.FromBuffer<bool>(bytes, true);
+            return new NDArray(new UnmanagedStorage(slice, new Shape(shape)), new Shape(shape));
         }
 
         /// <summary>Materialize an op result to C-contiguous, offset-0 logical bytes for bit comparison.</summary>

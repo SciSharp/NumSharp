@@ -25,7 +25,7 @@ namespace NumSharp.Tests.Fuzz
     ///     float32/float64/complex128 (integer/bool are modular-exact; Decimal/Half/Char always
     ///     fall through the managed kernel). Every OTHER op in every OTHER tier runs the identical
     ///     <c>DefaultEngine</c> code in both variations, so replaying it under the backend is pure
-    ///     noise. This runner loads only the three tiers that CONTAIN an affected op, keeps only the
+    ///     noise. This runner streams only the tiers that CONTAIN an affected op, keeps only the
     ///     affected cases, and reports each once — labelled by whether the backend changed its bytes.
     ///     </para>
     ///
@@ -77,6 +77,16 @@ namespace NumSharp.Tests.Fuzz
             "inner", "vdot", "vecdot", "matvec", "vecmat",
             "tensordot", "multi_dot", "matrix_power", "cov", "corrcoef", "einsum",
             "convolve", "correlate",
+            // numpy.polynomial's series products run np.convolve (the ISlidingDotBackend seam): polymul / polypow /
+            // polyfromroots directly, chebmul / chebpow / chebfromroots on the z-series. Their portable corpus stays in
+            // NumPy's sequential-dot regime, so under the backend the VALUES cannot move — the tier is here for the
+            // "no unexpected flips" claim. What can move is a NaN's payload/sign where two NaNs meet (OpenBLAS's C
+            // loop and the managed sum hand a different operand's NaN on; measured 2026-09-30: 14 chebmul / chebpow
+            // cases of the NaN/inf "special" pattern, float64 + float32), and the flip is then byte-checked against
+            // NumPy with NaN tokenized like every tier. The BLAS-bound products are gated by
+            // FuzzCorpusTests.PolyalgebraParity.
+            "polynomial.polymul", "polynomial.polypow", "polynomial.polyfromroots",
+            "chebyshev.chebmul", "chebyshev.chebpow", "chebyshev.chebfromroots",
         };
 
         /// <summary>
@@ -97,7 +107,7 @@ namespace NumSharp.Tests.Fuzz
         /// </summary>
         private static readonly string[] BlasAffectedTiers =
         {
-            "matmul.jsonl", "products.jsonl", "groupa.jsonl", "specials.jsonl", "einsum.jsonl",
+            "matmul.jsonl", "products.jsonl", "groupa.jsonl", "specials.jsonl", "einsum.jsonl", "polyalgebra.jsonl",
         };
 
         [TestMethod]
@@ -105,13 +115,18 @@ namespace NumSharp.Tests.Fuzz
         [DoNotParallelize]   // toggles the process-global engine.Blas; must not overlap other tiers
         public void BlasBackendDelta()
         {
-            // Gather the affected, comparable-as-one-array cases across the three affected tiers.
+            // Gather the affected, comparable-as-one-array cases across the affected tiers. Streamed (FuzzCorpus.Open),
+            // not loaded: only the affected cases are kept, so a large tier (polyalgebra's 15 MB) is never held parsed
+            // in full — the promotion of a whole-tier case list through the GC generations costs more than the parse.
             var cases = new List<FuzzCorpus.Case>();
             foreach (var tier in BlasAffectedTiers)
-                foreach (var c in FuzzCorpus.Load(tier))
+            {
+                using var stream = FuzzCorpus.Open(tier);
+                foreach (var c in stream)
                     if (c.Op != null && BlasAffectedOps.Contains(c.Op) && !c.Expects_Throw
                         && (c.Expected?.KindOrArray == "array" || c.Expected?.KindOrArray == "scalar"))
                         cases.Add(c);
+            }
 
             const int floor = 1400;  // ~80% of the current 1.7K+ affected ordinary-corpus cases
             Assert.IsTrue(cases.Count >= floor,

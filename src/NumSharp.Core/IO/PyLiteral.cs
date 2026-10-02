@@ -138,21 +138,57 @@ namespace NumSharp.IO
         {
             char quote = s.Contains('\'') && !s.Contains('"') ? '"' : '\'';
             sb.Append(quote);
-            foreach (char c in s)
+            // Iterate CODE POINTS, not UTF-16 units: a non-printable supplementary character must escape
+            // as ONE \UNNNNNNNN (its scalar value), not as two lone-surrogate \uNNNN — matching CPython's
+            // unicode_repr. Rune enumeration also yields the scalar value its Unicode category is keyed on.
+            foreach (Rune rune in s.EnumerateRunes())
             {
-                switch (c)
-                {
-                    case '\\': sb.Append("\\\\"); break;
-                    case '\n': sb.Append("\\n"); break;
-                    case '\r': sb.Append("\\r"); break;
-                    case '\t': sb.Append("\\t"); break;
-                    default:
-                        if (c == quote) sb.Append('\\');
-                        sb.Append(c);
-                        break;
-                }
+                int cp = rune.Value;
+                if (cp == quote || cp == '\\')          // the active quote and backslash are backslash-escaped
+                    sb.Append('\\').Append((char)cp);
+                else if (cp == '\t') sb.Append("\\t");
+                else if (cp == '\n') sb.Append("\\n");
+                else if (cp == '\r') sb.Append("\\r");
+                else if (!IsPythonPrintable(cp))
+                    // Non-printable: \xNN (<0x100), \uNNNN (<0x10000), else \UNNNNNNNN. Lowercase hex, as
+                    // CPython — this is the branch that makes a control char / NBSP / zero-width space read
+                    // as '\x00' / '\xa0' / '​' instead of an invisible raw byte, so NumPy error text matches.
+                    sb.Append(cp < 0x100 ? "\\x" : cp < 0x10000 ? "\\u" : "\\U")
+                      .Append(cp.ToString(cp < 0x100 ? "x2" : cp < 0x10000 ? "x4" : "x8", CultureInfo.InvariantCulture));
+                else
+                    sb.Append(rune.ToString());         // printable (incl. non-ASCII like 'ü'/'😀'): verbatim
             }
             sb.Append(quote);
+        }
+
+        /// <summary>
+        ///     CPython's <c>str.isprintable</c> for a single Unicode scalar: printable UNLESS its category is
+        ///     "Other" (Cc/Cf/Cs/Co/Cn) or "Separator" (Zs/Zl/Zp), with the one exception that U+0020 SPACE
+        ///     is printable (repr renders it verbatim, every other separator escapes). This decides which
+        ///     characters <see cref="ReprString"/> escapes, so the emitted string matches CPython's
+        ///     <c>repr()</c> byte-for-byte — the property NumPy's error messages rely on when they interpolate
+        ///     a repr. .NET's Unicode table drives this and agrees with CPython across the tested range
+        ///     (control, NBSP U+00A0, soft hyphen U+00AD, zero-width space U+200B, supplementary planes).
+        /// </summary>
+        /// <param name="codePoint">A Unicode scalar value (0..0x10FFFF), e.g. <see cref="Rune.Value"/>.</param>
+        /// <returns><c>true</c> if CPython renders it verbatim; <c>false</c> if it escapes it as \x/\u/\U.</returns>
+        private static bool IsPythonPrintable(int codePoint)
+        {
+            if (codePoint == 0x20) return true;   // SPACE — the sole Separator CPython keeps printable
+            switch (CharUnicodeInfo.GetUnicodeCategory(codePoint))
+            {
+                case UnicodeCategory.Control:            // Cc
+                case UnicodeCategory.Format:             // Cf (soft hyphen, zero-width space, …)
+                case UnicodeCategory.Surrogate:          // Cs
+                case UnicodeCategory.PrivateUse:         // Co
+                case UnicodeCategory.OtherNotAssigned:   // Cn
+                case UnicodeCategory.SpaceSeparator:     // Zs (NBSP, … — but NOT U+0020, handled above)
+                case UnicodeCategory.LineSeparator:      // Zl
+                case UnicodeCategory.ParagraphSeparator: // Zp
+                    return false;
+                default:
+                    return true;
+            }
         }
 
         private static void ReprDouble(double d, StringBuilder sb)

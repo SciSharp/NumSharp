@@ -23,6 +23,9 @@ namespace NumSharp.Tests.Backends
         [TestMethod]
         public void MemoryLeak_ManyViews_NoLeak()
         {
+            // Everything this test reasons about is built after this epoch, so CollectSince decides it with a
+            // young collection whenever none has run in between (a full one otherwise).
+            var since = GcQuiescence.Epoch.Capture();
             var original = np.arange(1000);
             var views = new List<NDArray>();
 
@@ -33,9 +36,7 @@ namespace NumSharp.Tests.Backends
             }
 
             // Force GC
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
+            GcQuiescence.CollectSince(since);
 
             // All views should still be valid
             foreach (var view in views)
@@ -51,6 +52,9 @@ namespace NumSharp.Tests.Backends
         [TestMethod]
         public void MemoryLeak_DeepNesting_NoLeak()
         {
+            // Everything this test reasons about is built after this epoch, so CollectSince decides it with a
+            // young collection whenever none has run in between (a full one otherwise).
+            var since = GcQuiescence.Epoch.Capture();
             var original = np.arange(10000);
             NDArray current = original;
 
@@ -61,9 +65,7 @@ namespace NumSharp.Tests.Backends
                 if (current.size < 2) break;
             }
 
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
+            GcQuiescence.CollectSince(since);
 
             // Deepest view should chain to original
             current.@base!.Storage.Should().BeSameAs(original.Storage);
@@ -75,6 +77,9 @@ namespace NumSharp.Tests.Backends
         [TestMethod]
         public void MemoryLeak_IndependentChains_NoInterference()
         {
+            // Everything this test reasons about is built after this epoch, so CollectSince decides it with a
+            // young collection whenever none has run in between (a full one otherwise).
+            var since = GcQuiescence.Epoch.Capture();
             var chains = new List<(NDArray original, List<NDArray> views)>();
 
             // Create 10 independent chains
@@ -93,9 +98,7 @@ namespace NumSharp.Tests.Backends
                 chains.Add((original, views));
             }
 
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
+            GcQuiescence.CollectSince(since);
 
             // Each chain should be independent
             foreach (var (original, views) in chains)
@@ -117,11 +120,12 @@ namespace NumSharp.Tests.Backends
         [TestMethod]
         public void Lifecycle_ViewSurvivesDroppedOriginalReference()
         {
+            // Everything this test reasons about is built after this epoch, so CollectSince decides it with a
+            // young collection whenever none has run in between (a full one otherwise).
+            var since = GcQuiescence.Epoch.Capture();
             var view = CreateViewAndDropOriginal();
 
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
+            GcQuiescence.CollectSince(since);
 
             // View should still work
             view.size.Should().Be(5);
@@ -144,11 +148,12 @@ namespace NumSharp.Tests.Backends
         [TestMethod]
         public void Lifecycle_MultipleViewsSurvive()
         {
+            // Everything this test reasons about is built after this epoch, so CollectSince decides it with a
+            // young collection whenever none has run in between (a full one otherwise).
+            var since = GcQuiescence.Epoch.Capture();
             var views = CreateMultipleViewsAndDropOriginal();
 
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
+            GcQuiescence.CollectSince(since);
 
             // All views should still work
             foreach (var view in views)
@@ -188,6 +193,9 @@ namespace NumSharp.Tests.Backends
         [TestMethod]
         public void LargeArray_ViewsWork()
         {
+            // Everything this test reasons about is built after this epoch, so CollectSince decides it with a
+            // young collection whenever none has run in between (a full one otherwise).
+            var since = GcQuiescence.Epoch.Capture();
             // 10 million elements
             var large = np.arange(10_000_000);
 
@@ -196,9 +204,7 @@ namespace NumSharp.Tests.Backends
             var view2 = large["5000000:6000000"];
             var view3 = large.reshape(1000, 10000);
 
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
+            GcQuiescence.CollectSince(since);
 
             // All should chain to original
             view1.@base!.Storage.Should().BeSameAs(large.Storage);
@@ -284,13 +290,10 @@ namespace NumSharp.Tests.Backends
 
             CreateAndGetReferences(out weakOriginal, out view);
 
-            // Force collection of original CLR object
-            for (int i = 0; i < 3; i++)
-            {
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
-                GC.Collect();
-            }
+            // Force collection of original CLR object: one young collection first (it was allocated a moment
+            // ago), full ones only if it survived — as strong as the three full collections this replaced, which
+            // each marked the whole test run's heap.
+            GcQuiescence.WaitCollected(weakOriginal!, fullAttempts: 3);
 
             // Original CLR object should be collected
             // (but not its underlying data due to shared storage)

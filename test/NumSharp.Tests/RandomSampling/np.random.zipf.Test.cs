@@ -133,21 +133,21 @@ namespace NumSharp.Tests.RandomSampling
         public void Zipf_AEqualsOne_ThrowsArgumentException()
         {
             // a must be > 1
-            Assert.ThrowsException<ArgumentException>(() => np.random.zipf(1.0, 5));
+            Assert.ThrowsException<ValueError>(() => np.random.zipf(1.0, 5));
         }
 
         [TestMethod]
         public void Zipf_ALessThanOne_ThrowsArgumentException()
         {
-            Assert.ThrowsException<ArgumentException>(() => np.random.zipf(0.5, 5));
-            Assert.ThrowsException<ArgumentException>(() => np.random.zipf(0, 5));
-            Assert.ThrowsException<ArgumentException>(() => np.random.zipf(-1, 5));
+            Assert.ThrowsException<ValueError>(() => np.random.zipf(0.5, 5));
+            Assert.ThrowsException<ValueError>(() => np.random.zipf(0, 5));
+            Assert.ThrowsException<ValueError>(() => np.random.zipf(-1, 5));
         }
 
         [TestMethod]
         public void Zipf_ANaN_ThrowsArgumentException()
         {
-            Assert.ThrowsException<ArgumentException>(() => np.random.zipf(double.NaN, 5));
+            Assert.ThrowsException<ValueError>(() => np.random.zipf(double.NaN, 5));
         }
 
         // ========== Tests migrated from NumPy ==========
@@ -188,7 +188,7 @@ namespace NumSharp.Tests.RandomSampling
         public void Zipf_NumPy_BadAThrows()
         {
             // From NumPy: assert_raises(ValueError, zipf, bad_a * 3) where bad_a = [0]
-            Assert.ThrowsException<ArgumentException>(() => np.random.zipf(0, 3));
+            Assert.ThrowsException<ValueError>(() => np.random.zipf(0, 3));
         }
 
         /// <summary>
