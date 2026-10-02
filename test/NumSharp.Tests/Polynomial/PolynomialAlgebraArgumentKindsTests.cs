@@ -287,25 +287,28 @@ namespace NumSharp.Tests.Polynomial
                 var v = np.array(new[] { new Complex(inf, 1), new Complex(2, 3) });
                 var one = np.array(new[] { new Complex(inf, 1) });
                 var rev = one["::-1"];
+                // The operands hold infinities but no NaN, so every NaN below is GENERATED (inf*0, inf-inf): the CPU's
+                // default NaN, NumPy win-amd64's 000000000000f8ff on x86 and 000000000000f87f on arm64 (see HostCpu).
+                string N = HostCpu.DefaultNaN64Hex;
                 AssertBytes(np.convolve(a, v), "complex128", new long[] { 4 },
-                            "000000000000f8ff000000000000f0ff000000000000f8ff000000000000f07f000000000000f8ff000000000000f07f0000000000001cc000000000000010c0",
+                            $"{N}000000000000f0ff{N}000000000000f07f{N}000000000000f07f0000000000001cc000000000000010c0",
                             "np.convolve(a, v): zdotu");
                 AssertBytes(np.convolve(a, one), "complex128", new long[] { 3 },
-                            "000000000000f07f000000000000f0ff000000000000f8ff000000000000f07f000000000000f0ff000000000000f07f",
+                            $"000000000000f07f000000000000f0ff{N}000000000000f07f000000000000f0ff000000000000f07f",
                             "np.convolve(a, one): one[::-1] has stride -16, the plain loop");
                 AssertBytes(np.convolve(a, rev), "complex128", new long[] { 3 },
-                            "000000000000f8ff000000000000f0ff000000000000f8ff000000000000f07f000000000000f8ff000000000000f07f",
+                            $"{N}000000000000f0ff{N}000000000000f07f{N}000000000000f07f",
                             "np.convolve(a, one[::-1]): reversed again, stride +16, zdotu");
                 AssertBytes(np.convolve(one, one), "complex128", new long[] { 1 }, "000000000000f07f000000000000f07f",
                             "np.convolve(one, one): the kernel reversed, the plain loop");
                 AssertBytes(np.correlate(a, one, "full"), "complex128", new long[] { 3 },
-                            "000000000000f8ff000000000000f0ff000000000000f8ff000000000000f07f000000000000f8ff000000000000f07f",
+                            $"{N}000000000000f0ff{N}000000000000f07f{N}000000000000f07f",
                             "np.correlate(a, one): conj(one) is a fresh array, zdotu");
                 AssertBytes(np.correlate(one, a, "full"), "complex128", new long[] { 3 },
-                            "000000000000f8ff000000000000f0ff000000000000f8ff000000000000f0ff000000000000f8ff000000000000f07f",
+                            $"{N}000000000000f0ff{N}000000000000f0ff{N}000000000000f07f",
                             "np.correlate(one, a): one keeps stride +16, zdotu");
                 AssertBytes(np.correlate(rev, a, "full"), "complex128", new long[] { 3 },
-                            "000000000000f0ff000000000000f0ff000000000000f8ff000000000000f0ff000000000000f07f000000000000f07f",
+                            $"000000000000f0ff000000000000f0ff{N}000000000000f0ff000000000000f07f000000000000f07f",
                             "np.correlate(one[::-1], a): stride -16, the plain loop");
             }
             finally

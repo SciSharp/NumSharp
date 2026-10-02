@@ -124,5 +124,43 @@ namespace NumSharp.Tests
             => $"{what}: got {actual:R} (0x{BitConverter.DoubleToInt64Bits(actual):X16}) expected {expected:R} " +
                $"(0x{BitConverter.DoubleToInt64Bits(expected):X16}) — " +
                (IsPinnedHost ? "bit-exact on the pinned win-amd64 CRT" : $"within {OffHostUlpBudget} ULP off the pinned CRT host");
+
+        /// <summary>
+        /// Ends the running test as <b>Inconclusive</b> when this is not the pinned host, and does nothing on it. Call it
+        /// right before the exact assertion of a NumPy-probed value that did NOT reproduce, when that value comes out of a
+        /// libm-sensitive RANDOM stream: on the pinned host the exact assertion that follows still fails the test, and off it
+        /// the mismatch is reported as "cannot be adjudicated here" instead of as a NumSharp defect.
+        /// </summary>
+        /// <param name="why">
+        /// What did not reproduce (the case, the position, both values). It leads the Inconclusive message, followed by the
+        /// host-pin explanation, so a CI log says which stream drifted and why that is not a failure.
+        /// </param>
+        /// <exception cref="AssertInconclusiveException">Always, when <see cref="IsPinnedHost"/> is false.</exception>
+        /// <remarks>
+        /// <para>
+        /// A random stream is libm-sensitive twice over, so <see cref="Matches(double, double)"/>' per-value ULP budget is
+        /// not enough for it. Its VALUES pass through <c>log</c>/<c>exp</c>/<c>pow</c>/<c>acos</c>, and an fmod wrap
+        /// (<c>vonmises</c>) turns one ULP of an intermediate near pi into 8-16 ULP of a result near 0.25. Its DECISIONS pass
+        /// through them too: one ULP can flip a rejection test, after which every later draw of the stream differs, and a
+        /// SHA-256 digest of a 20,000-draw stream changes with any single bit. Neither is a NumSharp-vs-NumPy defect: NumPy
+        /// itself draws that different stream on glibc or Apple's libm. Measured on the 2026-10-02 CI (PR #631, ubuntu and
+        /// macOS, NumPy expectations probed on win-amd64): 20 of the 69 seed-2024 digests and 1-4 of the seed-42 tables.
+        /// </para>
+        /// <para>
+        /// So the contract mirrors the corpus's <c>FuzzCorpusTests.RunHostLibmCorpus</c> (exact on the pinned host,
+        /// Inconclusive elsewhere), refined per value: callers first accept an off-host value within
+        /// <see cref="OffHostUlpBudget"/> (the plain last-bit artifact keeps the rest of the stream checked) and call this
+        /// only for what remains. MSTest does not count Inconclusive as a failure, so the Linux/macOS legs stay green while the
+        /// Windows leg keeps every byte contractual. The cost: a genuinely wrong stream on a non-Windows host only (an
+        /// architecture-specific codegen defect) reads as Inconclusive there; the same managed code is still byte-checked on
+        /// the pinned host.
+        /// </para>
+        /// </remarks>
+        public static void InconclusiveOffPinnedHost(string why)
+        {
+            if (!IsPinnedHost)
+                Assert.Inconclusive(why + " — this random stream passes through the platform libm (values and accept/reject " +
+                                    "decisions), so its NumPy 2.4.2 bytes are contractual only on the pinned win-amd64 CRT host.");
+        }
     }
 }

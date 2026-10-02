@@ -221,13 +221,15 @@ namespace NumSharp.Tests.Polynomial
             }
 
             // inf*0 / inf-inf make the default NaN (0xfe00) meet an input NaN (0x7e33): x = +inf x16,
-            // c = [NaN(0x7e33), 1, 1].
+            // c = [NaN(0x7e33), 1, 1]. The default NaN's SIGN is the CPU's (0xfe00 on x86 — NumPy win-amd64's bits —,
+            // 0x7e00 on arm64; see HostCpu). WHICH of the two NaNs survives does not depend on the CPU: polyval keeps the
+            // generated one and the other five bases the input one, on x64 and on arm64 alike.
             var xi = np.full(new Shape(16), Half.PositiveInfinity, NPTypeCode.Half);
             var ci = np.array(new[] { (Half)0.0, (Half)1.0, (Half)1.0 });
             unsafe { *(ushort*)ci.Storage.Address = 0x7E33; }
             var infMix = new Dictionary<string, string>
             {
-                ["polyval"] = "00fe", ["chebval"] = "337e", ["legval"] = "337e",
+                ["polyval"] = HostCpu.DefaultNaN16Hex, ["chebval"] = "337e", ["legval"] = "337e",
                 ["lagval"] = "337e", ["hermval"] = "337e", ["hermeval"] = "337e",
             };
             foreach (var (name, f) in Val)

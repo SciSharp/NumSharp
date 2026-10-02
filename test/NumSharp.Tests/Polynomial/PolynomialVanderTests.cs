@@ -286,8 +286,13 @@ namespace NumSharp.Tests.Polynomial
             Raises<ValueError>(() => P.polyvander(x, BigInteger.Pow(2, 64)), "Maximum allowed dimension exceeded");
             Raises<ValueError>(() => P.polyvander(x, long.MaxValue - 1), "array is too big; `arr.size * arr.dtype.itemsize` is larger than the maximum possible size.");
             Raises<ValueError>(() => P.polyvander(np.zeros(0), 1L << 62), "array is too big;");
-            // np.empty((2**40 + 1, 3)): 26 TB — NumPy's MemoryError (the text is machine-dependent, so the oracle skips it).
-            FluentActions.Invoking(() => P.polyvander(x, 1L << 40)).Should().Throw<OutOfMemoryException>();
+            // np.empty((2**56 + 1, 3)): ~1.5 EiB — NumPy's MemoryError (the text is machine-dependent, so the oracle skips it).
+            // The size is chosen past ANY user address space (47-bit, or 57-bit with 5-level paging), so every OS refuses it
+            // when it is reserved. A merely huge request is host-dependent: 2**40 rows (26 TB) is refused up front only where
+            // commit is accounted (Windows, Linux overcommit_memory=0/2). macOS and Linux overcommit_memory=1 reserve it lazily,
+            // the kernel then writes it, and the OS kills the test host: the macOS CI leg died here after 3,809 tests on
+            // 2026-10-02 (reproduced in WSL: "Out of memory: Killed process (dotnet) total-vm:26046099528kB").
+            FluentActions.Invoking(() => P.polyvander(x, 1L << 56)).Should().Throw<OutOfMemoryException>();
         }
 
         /// <summary>

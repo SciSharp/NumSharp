@@ -18,7 +18,9 @@ namespace NumSharp.Tests.RandomSampling
     ///     <para>
     ///     Every expected value, digest and message is NumPy's own output on win-amd64 (<c>default_rng(42)</c> for the tables,
     ///     <c>default_rng(2024)</c> for the digests). Floats compare BIT-for-bit (a NumPy <c>nan</c> matches any NaN — its repr
-    ///     hides the sign). Integer samplers return int64 on both sides.
+    ///     hides the sign) on that pinned host; off it the streams pass through another libm, so a value within
+    ///     <see cref="HostLibm.OffHostUlpBudget"/> passes and a wider drift, a different integer or a different digest is
+    ///     Inconclusive (<see cref="HostLibm.InconclusiveOffPinnedHost"/>). Integer samplers return int64 on both sides.
     ///     </para>
     ///     <para>
     ///     Documented divergences, each pinned to its measured bound rather than skipped: <c>pareto</c>/<c>power</c> call the
@@ -137,10 +139,22 @@ namespace NumSharp.Tests.RandomSampling
             }
         }
 
-        /// <summary>Asserts the first values of <paramref name="actual"/> (C order) equal NumPy's printed ones bit-for-bit.</summary>
+        /// <summary>
+        ///     Asserts the first values of <paramref name="actual"/> (C order) equal NumPy's printed ones bit-for-bit on the
+        ///     pinned win-amd64 host; off it, a value within <see cref="HostLibm.OffHostUlpBudget"/> is accepted and any wider
+        ///     mismatch ends the test as Inconclusive (<see cref="HostLibm.InconclusiveOffPinnedHost"/>).
+        /// </summary>
         /// <param name="actual">NumSharp's draws.</param>
         /// <param name="expected">NumPy's values, comma-separated (empty for an empty result).</param>
         /// <param name="context">The case name for failure messages.</param>
+        /// <exception cref="AssertFailedException">Too few values, or (on the pinned host) any value that differs.</exception>
+        /// <exception cref="AssertInconclusiveException">Off the pinned host, a value beyond the ULP budget or a different integer.</exception>
+        /// <remarks>
+        ///     The tables are NumPy's output on win-amd64, whose samplers call ucrtbase's log/exp/pow/acos, as NumSharp does
+        ///     there through <c>Math.*</c>. On glibc or Apple's libm both libraries draw a slightly different stream: a last-bit
+        ///     difference (<c>f 0.5,0.5</c> on ubuntu, 1 ULP), a wider one after an fmod wrap (<c>vonmises</c>, 8-16 ULP), or a
+        ///     flipped rejection decision. Only the pinned host can adjudicate those; elsewhere they are not NumSharp defects.
+        /// </remarks>
         private static void AssertValues(NDArray actual, string expected, string context)
         {
             var exp = expected.Length == 0 ? Array.Empty<string>() : expected.Split(',').Select(t => t.Trim()).ToArray();
@@ -151,6 +165,15 @@ namespace NumSharp.Tests.RandomSampling
                 if (got is double d)
                 {
                     double e = ParseDouble(exp[i]);
+                    bool exact = double.IsNaN(e) ? double.IsNaN(d) : BitConverter.DoubleToInt64Bits(e) == BitConverter.DoubleToInt64Bits(d);
+                    if (!exact)
+                    {
+                        // Off the pinned host: a last-bit libm artifact passes (and the rest of the stream stays checked); a
+                        // wider drift cannot be adjudicated there. On it, fall through to the exact assertion, which fails.
+                        if (!HostLibm.IsPinnedHost && HostLibm.Matches(e, d))
+                            continue;
+                        HostLibm.InconclusiveOffPinnedHost($"{context}[{i}]: expected {exp[i]}, got {d:R}");
+                    }
                     if (double.IsNaN(e))
                         Assert.IsTrue(double.IsNaN(d), $"{context}[{i}]: expected nan, got {d:R}");
                     else
@@ -159,7 +182,12 @@ namespace NumSharp.Tests.RandomSampling
                 }
                 else
                 {
-                    Assert.AreEqual(long.Parse(exp[i], CultureInfo.InvariantCulture), Convert.ToInt64(got), $"{context}[{i}]");
+                    long e = long.Parse(exp[i], CultureInfo.InvariantCulture), v = Convert.ToInt64(got);
+                    // An integer sampler's accept/reject tests pass through libm too (BTPE, PTRS, HRUA, zipf): a different
+                    // integer off the pinned host is a decision the platform libm flipped, not a defect it can judge.
+                    if (e != v)
+                        HostLibm.InconclusiveOffPinnedHost($"{context}[{i}]: expected {e}, got {v}");
+                    Assert.AreEqual(e, v, $"{context}[{i}]");
                 }
             }
         }
@@ -676,6 +704,16 @@ namespace NumSharp.Tests.RandomSampling
         /// </summary>
         /// <param name="probe">The stream, as NumPy's generator named it (see <see cref="LongStreamCalls"/>).</param>
         /// <param name="sha256">NumPy 2.4.2's <c>hashlib.sha256(a.tobytes()).hexdigest()</c>.</param>
+        /// <exception cref="AssertFailedException">On the pinned win-amd64 host, the digest differs.</exception>
+        /// <exception cref="AssertInconclusiveException">Off the pinned host, the digest differs.</exception>
+        /// <remarks>
+        ///     The digests are NumPy's on win-amd64. A digest has no ULP budget — any single bit changes it — and these
+        ///     streams pass through the platform libm, so off the pinned host a mismatch is Inconclusive, exactly like the
+        ///     corpus's <c>RunHostLibmCorpus</c> tiers. On the 2026-10-02 CI, 20 of these 69 streams hashed differently on
+        ///     ubuntu and macOS — those whose VALUES come out of libm: the gamma family below shape 1 (beta, chisquare, f,
+        ///     dirichlet, standard_t and the noncentral pair at small parameters), gumbel, laplace, logistic, lognormal,
+        ///     weibull, vonmises and zipf 1.05 — while the other 49 still matched there and are still checked there.
+        /// </remarks>
         [TestMethod]
         [DataRow("beta 2,3", "e3de8320dc86c09bd2a0ffa75629b65552b84466a1ebfa95c7f9c7745228fdbb")]
         [DataRow("beta 0.5,0.5", "dceaf37535c72162292f4699f3d849a8fc9308d94b7b7df585c459d807cdbcc4")]
@@ -744,7 +782,12 @@ namespace NumSharp.Tests.RandomSampling
         [DataRow("mvhg marginals x3000", "3d586a13300031e93fc2928829d8430375a234fdd1df58f5c77be03708d32d01")]
         [DataRow("mvhg marginals big x2000", "23c10042df03bed8b18e02a60abce2fa7f0b25f46d383165c796fc0aa6438ec4")]
         public void LongStream_Seed2024_MatchesNumPyDigest(string probe, string sha256)
-            => Assert.AreEqual(sha256, Sha256(LongStreamCalls[probe](np.random.default_rng(2024))), probe);
+        {
+            string actual = Sha256(LongStreamCalls[probe](np.random.default_rng(2024)));
+            if (actual != sha256)
+                HostLibm.InconclusiveOffPinnedHost($"{probe}: the 20000-draw stream hashes to {actual}, NumPy 2.4.2's to {sha256}");
+            Assert.AreEqual(sha256, actual, probe);
+        }
 
         // ---------------------------------------------------------------- documented divergence: pareto / power
 

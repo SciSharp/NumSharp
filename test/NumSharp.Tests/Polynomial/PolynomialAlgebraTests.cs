@@ -836,16 +836,19 @@ namespace NumSharp.Tests.Polynomial
             try
             {
                 var inf = new Complex(double.PositiveInfinity, 0);
+                // No operand holds a NaN, so every NaN below is GENERATED (inf*0, inf-inf): the CPU's default NaN, NumPy
+                // win-amd64's 000000000000f8ff on x86 and 000000000000f87f on arm64 (see HostCpu).
+                string N = HostCpu.DefaultNaN64Hex;
                 var r = np.polynomial.polynomial.polymul(np.array(new[] { inf, new Complex(1, 1) }),
                                                          np.array(new[] { new Complex(1, 0), new Complex(2, -1) }));
                 AssertBytes(r, "complex128", new long[] { 3 },
-                            "000000000000f8ff000000000000f8ff000000000000f8ff000000000000f0ff0000000000000840000000000000f03f",
+                            $"{N}{N}{N}000000000000f0ff0000000000000840000000000000f03f",
                             "zdotu's C99 result: an infinite / NaN imaginary part turns the real part into NaN");
                 var one = np.polynomial.polynomial.polymul(np.array(new[] { inf, new Complex(1, 1) }), np.array(new[] { new Complex(1, 0) }));
-                AssertBytes(one, "complex128", new long[] { 2 }, "000000000000f07f000000000000f8ff000000000000f03f000000000000f03f",
+                AssertBytes(one, "complex128", new long[] { 2 }, $"000000000000f07f{N}000000000000f03f000000000000f03f",
                             "a one-term factor takes CDOUBLE_dot's plain loop");
                 var pw = np.polynomial.polynomial.polypow(np.array(new[] { new Complex(double.PositiveInfinity, 1) }), 3);
-                AssertBytes(pw, "complex128", new long[] { 1 }, "000000000000f8ff000000000000f07f",
+                AssertBytes(pw, "complex128", new long[] { 1 }, $"{N}000000000000f07f",
                             "a power of a one-term series multiplies one-element kernels: the plain loop each time");
             }
             finally

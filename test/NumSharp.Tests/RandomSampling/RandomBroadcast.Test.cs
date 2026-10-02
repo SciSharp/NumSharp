@@ -211,11 +211,12 @@ namespace NumSharp.Tests.RandomSampling
         public void Legacy_StandardT_DfHalvingToZero_UsesTheCacheAndDrawsNothing()
         {
             // df = 5e-324 halves to 0: that position's normal comes from the cache and its gamma returns 0 without
-            // drawing — a position that draws NOTHING, which the read-ahead must not run past.
+            // drawing — a position that draws NOTHING, which the read-ahead must not run past. Its value is 0/0, the CPU's
+            // generated NaN (NumPy win-amd64's 0xFFF8...; positive on arm64, where NumPy's own wheel draws that too).
             var rs = np.random.RandomState(42);
             using var df = np.array(new[] { 3.0, 5e-324 });
             using var r = rs.standard_t(df);
-            AssertBits(r, new long[] { 2 }, 0x3FE33DC9C1F9191EUL, 0xFFF8000000000000UL);
+            AssertBits(r, new long[] { 2 }, 0x3FE33DC9C1F9191EUL, HostCpu.DefaultNaN64Bits);
             Assert.AreEqual(0x3FD468E4B5774960UL, (ulong)BitConverter.DoubleToInt64Bits(rs.standard_normal().GetAtIndex<double>(0)));
         }
 
@@ -237,10 +238,11 @@ namespace NumSharp.Tests.RandomSampling
                 Assert.AreEqual(0x3FEE6C4068BBD654UL, NextSample(rs));
             }
             {
+                // The two df = 5e-324 positions are 0/0: the CPU's generated NaN (see HostCpu).
                 var rs = np.random.RandomState(42);
                 using var df = np.array(new[] { 3.0, 5e-324, 5e-324, 2.0 });
                 using var r = rs.standard_t(df);
-                AssertBits(r, new long[] { 4 }, 0x3FE33DC9C1F9191EUL, 0xFFF8000000000000UL, 0xFFF8000000000000UL, 0x3FD0182BDF940F61UL);
+                AssertBits(r, new long[] { 4 }, 0x3FE33DC9C1F9191EUL, HostCpu.DefaultNaN64Bits, HostCpu.DefaultNaN64Bits, 0x3FD0182BDF940F61UL);
                 Assert.AreEqual(0x3F95141A07387E80UL, NextSample(rs));
             }
         }
@@ -262,11 +264,12 @@ namespace NumSharp.Tests.RandomSampling
                 Assert.AreEqual(0x3FDC16959869E47EUL, NextRandom(g));
             }
             {
+                // f(5e-324, 5e-324) is 0/0 (both chi-squares draw nothing and return 0): the CPU's generated NaN (see HostCpu).
                 var g = np.random.default_rng(42);
                 using var dfnum = np.array(new[] { 5e-324, 5e-324 });
                 using var dfden = np.array(new[] { 2.0, 5e-324 });
                 using var r = g.f(dfnum, dfden);
-                AssertBits(r, new long[] { 2 }, 0UL, 0xFFF8000000000000UL);
+                AssertBits(r, new long[] { 2 }, 0UL, HostCpu.DefaultNaN64Bits);
                 Assert.AreEqual(0x3FDC16959869E47EUL, NextRandom(g));
             }
         }
