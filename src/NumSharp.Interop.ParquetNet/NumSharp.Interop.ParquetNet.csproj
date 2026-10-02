@@ -11,6 +11,11 @@
     <!-- NuGet package (co-versioned with NumSharp: the version comes from the repo-root
          Directory.Build.props VersionPrefix, never a number in this file). -->
     <PackageId>NumSharp.Interop.ParquetNet</PackageId>
+    <!-- UNRELEASED: merged, but hidden until the owner releases it. With IsPackable=false, `dotnet pack`
+         is a silent no-op (exit 0, no .nupkg), so CI packs, signs, publishes and lists nothing for this
+         project. It has no docs page yet. To release it, set this back to true and write the page that
+         PackageProjectUrl points at: "Unreleased packages" in ../../.claude/CLAUDE.md. -->
+    <IsPackable>false</IsPackable>
     <Authors>Eli Belash, Haiping Chen, Meinrad Recheis</Authors>
     <Product>NumSharp</Product>
     <Company>SciSharp STACK</Company>
