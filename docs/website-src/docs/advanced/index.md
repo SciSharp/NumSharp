@@ -15,7 +15,7 @@ If the [Fundamentals](../fundamentals/index.md) pages are about *using* `NDArray
 | [Extending NumSharp](extending-numsharp.md) | The managed extension seams - custom kernels via `NDIter`/typed iterators, fused ops via `np.evaluate`/`NDExpr`, the `TensorEngine` seam, runtime IL generation, the `NumSharp.Build` weaver | [Using NumPy C-API](https://numpy.org/doc/stable/user/c-info.html) |
 | [Native code & backends](native-backends.md) | Why Core has no native dependency, how a native BLAS/LAPACK plugs in through `IBlasBackend`, and how to write your own backend | [F2PY](https://numpy.org/doc/stable/f2py/) |
 | [Under the hood - internals](under-the-hood.md) | The buffer + metadata split, `UnmanagedStorage`/`Shape`/strides/offset/flags, the ARC memory model, and C-order indexing | [Under-the-hood for developers](https://numpy.org/doc/stable/dev/underthehood.html) |
-| [Interoperability](../interop/index.md) | The one-buffer contract every bridge builds on, and the bridges themselves (pythonnet/numpy, PyTorch, Pandas, `np.frombuffer`) | [Interoperability with NumPy](https://numpy.org/doc/stable/user/basics.interoperability.html) |
+| [Interoperability](../interop/index.md) | The one-buffer contract every bridge builds on, and the bridges themselves (pythonnet/numpy, PyTorch, Pandas, System.Numerics.Tensors, `np.frombuffer`) | [Interoperability with NumPy](https://numpy.org/doc/stable/user/basics.interoperability.html) |
 
 > **Interoperability** already has a dedicated, in-depth NumSharp hub ([Interoperability](../interop/index.md) and its per-bridge pages); it *is* the NumSharp conversion of NumPy's interoperability article - the one-buffer contract plus every bridge - so it is linked here rather than duplicated.
 

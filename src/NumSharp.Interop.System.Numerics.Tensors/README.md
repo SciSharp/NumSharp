@@ -3,9 +3,8 @@
 Zero-copy interop between NumSharp's `NDArray` and the BCL's **`System.Numerics.Tensors`** types —
 `Tensor<T>`, `TensorSpan<T>` and `ReadOnlyTensorSpan<T>`.
 
-It is a **conversion library** in the mould of `NumSharp.Interop.OnnxRuntime` /
-`NumSharp.Interop.MLNet`: it moves data (or rather, descriptions of the same memory) across the
-boundary. It is **not** an engine backend — `System.Numerics.Tensors` does not compute NumSharp
+It is a **conversion library**: it moves data (or rather, descriptions of the same memory) across
+the boundary. It is **not** an engine backend — `System.Numerics.Tensors` does not compute NumSharp
 operations, so there is no `TensorEngine` seam, no `[ModuleInitializer]`, and **no native
 dependency**. Referencing the package changes nothing until you call a verb.
 
@@ -26,8 +25,7 @@ dependency**. Referencing the package changes nothing until you call a verb.
 
 ## Dtypes — all 15 cross as themselves
 
-Unlike ONNX Runtime (a fixed `TensorElementType` enum with real gaps), `System.Numerics.Tensors`
-containers are **unconstrained generics** over an unmanaged `T`. So **every** NumSharp dtype crosses
+`System.Numerics.Tensors` containers are **unconstrained generics** over an unmanaged `T`. So **every** NumSharp dtype crosses
 zero-copy as its own CLR type — `bool`, the eight integers, `char`, **`System.Half`** (directly, no
 `Float16` wrapper), `float`, `double`, **`System.Decimal`** and **`System.Numerics.Complex`**. Nothing
 is refused and nothing is converted.

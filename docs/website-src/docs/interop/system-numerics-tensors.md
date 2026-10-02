@@ -5,9 +5,8 @@
 `Tensor<T>`, `TensorSpan<T>` and `ReadOnlyTensorSpan<T>` - without copying. An array of **any** layout
 (contiguous, sliced, transposed, strided, even broadcast) becomes a `TensorSpan<T>` over the very same
 unmanaged bytes; a `Tensor<T>` produced anywhere comes back as an `NDArray` - an owning copy, or a
-zero-copy view over the tensor's pinned buffer. It is a **conversion library**, the sibling of the
-[ONNX Runtime](onnxruntime.md) and [ML.NET](mlnet.md) bridges: no `TensorEngine` seam, no
-`[ModuleInitializer]`, **no native dependency**. This page is its reference: setup, the verbs, what
+zero-copy view over the tensor's pinned buffer. It is a **conversion library**: no `TensorEngine`
+seam, no `[ModuleInitializer]`, **no native dependency**. This page is its reference: setup, the verbs, what
 crosses zero-copy and what cannot, who frees what, dtypes, frameworks.
 
 **On this page:** [From zero](#from-zero) · [The verbs](#the-verbs) · [Zero-copy: the rules](#zero-copy-the-rules) ·
@@ -94,8 +93,8 @@ outlive the pin that keeps its memory valid. So `AsTensorSpan` returns a small `
 
 ## Zero-copy: the rules
 
-A `TensorSpan<T>` carries **explicit lengths and strides**, so unlike an ONNX tensor (row-major, no
-strides), a strided NumSharp view can be shared as-is:
+A `TensorSpan<T>` carries **explicit lengths and strides**, so a strided NumSharp view can be shared
+as-is:
 
 - **Every non-negative-stride layout shares.** Contiguous, an offset slice (`nd["2:5"]`), a transpose
   (`nd.T`), a stepped slice (`nd["::2"]`), a Fortran-contiguous array, and a **broadcast** view (stride-0
@@ -157,10 +156,10 @@ type**; nothing is refused and nothing is converted:
 | NumSharp | Crosses as | Note |
 |---|---|---|
 | Boolean, Byte, SByte, Int16, UInt16, Int32, UInt32, Int64, UInt64, Single, Double | `bool`, `byte`, `sbyte`, `short`, `ushort`, `int`, `uint`, `long`, `ulong`, `float`, `double` | zero-copy |
-| Half | `System.Half` | **directly** - no `Float16` wrapper (unlike ONNX); NaN payloads and subnormals cross untouched |
+| Half | `System.Half` | **directly** - no `Float16` wrapper; NaN payloads and subnormals cross untouched |
 | Char | `char` | zero-copy, UTF-16 code units; **directional** - a `ushort` element type reads back as `UInt16`, never `Char` |
-| Decimal | `System.Decimal` | zero-copy (a 16-byte unmanaged struct) - no conversion, unlike the ONNX/ML.NET bridges |
-| Complex | `System.Numerics.Complex` | zero-copy (a 16-byte unmanaged struct) - no refusal, unlike the ONNX/ML.NET bridges |
+| Decimal | `System.Decimal` | zero-copy (a 16-byte unmanaged struct) - no conversion |
+| Complex | `System.Numerics.Complex` | zero-copy (a 16-byte unmanaged struct) - no refusal |
 
 `T` must be the array's own element type: a mismatch (`AsTensorSpan<int>()` on a `float` array) is refused
 up front rather than silently reinterpreting the bytes.
@@ -225,8 +224,6 @@ away. `System.Numerics.Tensors` does not compute NumSharp operations - which is 
 ## See also
 
 - [Interoperability overview](index.md) - the contract every bridge builds on
-- [ONNX Runtime](onnxruntime.md) - the sibling bridge whose handle / lease lifetime model this one mirrors
-- [ML.NET](mlnet.md) - the other conversion bridge (an `IDataView` over an `NDArray`)
 - Package README: `src/NumSharp.Interop.System.Numerics.Tensors/README.md`
 
 [gate]: https://github.com/SciSharp/NumSharp/tree/master/test/NumSharp.Tests.Interop.System.Numerics.Tensors

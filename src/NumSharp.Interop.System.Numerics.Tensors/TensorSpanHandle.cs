@@ -155,7 +155,7 @@ namespace NumSharp.Interop.Tensors
     ///     store, wired as the <see cref="UnmanagedMemoryBlock{T}"/> dispose hook so it fires exactly once when
     ///     the LAST NumSharp view over the memory (derived slices included) drops its ARC reference — via
     ///     <see cref="NDArray.Dispose"/>, the NDArray finalizer, or the memory-block Disposer finalizer.
-    ///     Lock-free and safe from finalizer threads. The analog of the ONNX bridge's <c>ImportLease</c>.
+    ///     Lock-free and safe from finalizer threads.
     /// </summary>
     internal sealed class ImportLease
     {

@@ -181,9 +181,8 @@ jobs:
     # delay-) signature. It inspects the PACKED artifact because that is what users install; a
     # compile gate cannot see "builds fine, ships with no identity". Publishes nothing.
     #
-    # The loop also names the UNRELEASED packages (OnnxRuntime, MLNet, System.Numerics.Tensors,
-    # ParquetNet: <IsPackable>false</IsPackable> in each csproj, "Unreleased packages" in
-    # .claude/CLAUDE.md). Their `dotnet pack` is a silent no-op that writes no .nupkg, so today they
+    # The loop also names the UNRELEASED packages (OnnxRuntime, MLNet, ParquetNet:
+    # <IsPackable>false</IsPackable> in each csproj, "Unreleased packages" in .claude/CLAUDE.md). Their `dotnet pack` is a silent no-op that writes no .nupkg, so today they
     # add nothing to verify; the day one is released by flipping that property, it is packed and
     # verified here with no edit to this step.
     #
@@ -254,9 +253,9 @@ jobs:
   # of the gate: this is the ONLY place CI compiles the pythonnet, OnnxRuntime, MLNet,
   # System.Numerics.Tensors and ParquetNet packages, whose sources reach into NumSharp.Core internals
   # through keyed friend grants and would otherwise break unnoticed. That holds for the UNRELEASED
-  # ones too (OnnxRuntime, MLNet, System.Numerics.Tensors, ParquetNet — "Unreleased packages" in
-  # .claude/CLAUDE.md): they are merged code that nothing packs, so this job is all that keeps them
-  # building and passing until they ship.
+  # ones too (OnnxRuntime, MLNet, ParquetNet — "Unreleased packages" in .claude/CLAUDE.md): they are
+  # merged code that nothing packs, so this job is all that keeps them building and passing until
+  # they ship.
   #
   # Why one job:
   #   - Slots. The SciSharp org is on the GitHub Free plan: 5 concurrent macOS jobs ORG-WIDE. This
@@ -604,10 +603,10 @@ jobs:
     #
     # No Python, no native code: the suite crosses NDArrays of all 15 dtypes and every layout to and
     # from the BCL's Tensor<T> / TensorSpan<T> (System.Numerics.Tensors 10.x, the range the package
-    # pins), on both TFMs. The package is UNRELEASED, so nothing packs it and this suite is the only
-    # place CI compiles or runs it. The OpenBugs filter keeps a future known-bug reproduction from
-    # failing the job, as in the main test job; today the suite has none. Independent of every suite
-    # above, like the ORT one.
+    # pins), on both TFMs. The package ships from 0.71.0 (packed by build-nuget); this suite is the
+    # only place CI compiles and tests it before a release. The OpenBugs filter keeps a future
+    # known-bug reproduction from failing the job, as in the main test job. Independent of every
+    # suite above, like the ORT one.
     - name: "System.Numerics.Tensors: Build"
       id: tensors_build
       if: ${{ !cancelled() }}
@@ -636,8 +635,8 @@ jobs:
     # No Python, no native code: the suite writes Parquet files with Parquet.Net's ParquetSerializer
     # and reads them back through the package, straight into NDArray buffers. It runs against the
     # package's FLOOR Parquet.Net (6.1.0: the version the package compiles against and the one NuGet
-    # resolves for a bare consumer; the suite's ParquetNetVersion property) on both TFMs. UNRELEASED
-    # like the Tensors package, so this suite is its only CI gate too; same OpenBugs filter.
+    # resolves for a bare consumer; the suite's ParquetNetVersion property) on both TFMs. The package
+    # is UNRELEASED, so nothing packs it and this suite is its only CI gate; same OpenBugs filter.
     - name: "ParquetNet: Build (floor)"
       id: parquet_build
       if: ${{ !cancelled() }}
@@ -845,7 +844,7 @@ jobs:
           -p:SourceRevisionId=${{ github.sha }} \
           -p:ContinuousIntegrationBuild=true
 
-        # The four UNRELEASED packages (OnnxRuntime, MLNet, System.Numerics.Tensors, ParquetNet) are
+        # The three UNRELEASED packages (OnnxRuntime, MLNet, ParquetNet) are
         # built here and named in the Pack step below like every other package, but each csproj sets
         # <IsPackable>false</IsPackable>, which makes its `dotnet pack` a silent no-op: no .nupkg, so
         # nothing is uploaded, published or listed in the release notes. Releasing one is that
@@ -874,7 +873,7 @@ jobs:
           -p:ContinuousIntegrationBuild=true
 
         # System.Numerics.Tensors interop: managed-only (depends on System.Numerics.Tensors 10.x, no
-        # native asset), so a plain Rebuild is the whole build. Unreleased: see the note above.
+        # native asset), so a plain Rebuild is the whole build. Released from 0.71.0.
         dotnet build src/NumSharp.Interop.System.Numerics.Tensors/NumSharp.Interop.System.Numerics.Tensors.csproj \
           --configuration Release \
           -t:Rebuild \
@@ -935,8 +934,8 @@ jobs:
           -p:SourceRevisionId=${{ github.sha }} \
           -p:ContinuousIntegrationBuild=true
 
-        # Unreleased (IsPackable=false, see the Build step): this and the MLNet, System.Numerics.Tensors
-        # and ParquetNet packs below write no .nupkg until the package is released.
+        # Unreleased (IsPackable=false, see the Build step): this and the MLNet and ParquetNet packs
+        # below write no .nupkg until the package is released.
         dotnet pack src/NumSharp.Interop.OnnxRuntime/NumSharp.Interop.OnnxRuntime.csproj \
           --configuration Release \
           --no-build \

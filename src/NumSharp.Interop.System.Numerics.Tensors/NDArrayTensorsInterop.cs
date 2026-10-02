@@ -13,7 +13,7 @@ namespace NumSharp.Interop.Tensors
     ///     <see cref="System.Numerics.Tensors.TensorSpan{T}"/> and
     ///     <see cref="System.Numerics.Tensors.ReadOnlyTensorSpan{T}"/>.
     ///
-    ///     <para>This is a CONVERSION library in the mould of the ONNX Runtime / ML.NET bridges: it moves data
+    ///     <para>This is a CONVERSION library: it moves data
     ///     (or rather, descriptions of the same memory) across the boundary. It is NOT an engine backend —
     ///     <c>System.Numerics.Tensors</c> does not compute NumSharp operations (and routing NumSharp's kernels
     ///     through <c>TensorPrimitives</c> would abandon NumSharp's bit-exact-with-NumPy results), so there is
@@ -29,7 +29,7 @@ namespace NumSharp.Interop.Tensors
     ///         <item><term><see cref="AsNDArray{T}(System.Numerics.Tensors.Tensor{T})"/></term><description>Tensors → NumSharp, a zero-copy view over the pinned managed backing store</description></item>
     ///     </list>
     ///
-    ///     <para><b>Dtype map.</b> Unlike ONNX Runtime (a fixed <c>TensorElementType</c> enum),
+    ///     <para><b>Dtype map.</b>
     ///     <c>System.Numerics.Tensors</c> containers are pure generics over an unmanaged <c>T</c> with NO dtype
     ///     tag, so <b>all 15 NumSharp dtypes cross zero-copy as their own CLR type</b> — bool, the eight
     ///     integers, <see cref="System.Char"/>, <see cref="System.Half"/> (directly, no <c>Float16</c>
@@ -38,8 +38,8 @@ namespace NumSharp.Interop.Tensors
     ///     <see cref="TypeCodeOf{T}"/>.</para>
     ///
     ///     <para><b>Layout.</b> A <see cref="System.Numerics.Tensors.TensorSpan{T}"/> carries explicit
-    ///     lengths+strides, so a sliced / transposed / strided / broadcast NDArray view shares zero-copy —
-    ///     a real advantage over the row-major-only ONNX bridge. The one exception is a <b>negative-stride</b>
+    ///     lengths+strides, so a sliced / transposed / strided / broadcast NDArray view shares zero-copy.
+    ///     The one exception is a <b>negative-stride</b>
     ///     view (e.g. <c>a[::-1]</c>): <c>System.Numerics.Tensors</c> forbids negative strides, so those are
     ///     refused with a message pointing at <see cref="ToTensor{T}(NDArray)"/> / <c>np.ascontiguousarray</c>.</para>
     ///
@@ -171,8 +171,7 @@ namespace NumSharp.Interop.Tensors
         ///     Take an ARC reference on the array's buffer and resolve the pointer to its first logical element
         ///     (<c>slice.Address + Shape.Offset × itemsize</c> — right for both a contiguous slice that re-seats
         ///     the storage address and a strided view that keeps the base address with a non-zero offset). The
-        ///     caller owns the reference and must <see cref="IArraySlice.Release"/> it. Identical to the ONNX
-        ///     bridge's <c>Pin</c>.
+        ///     caller owns the reference and must <see cref="IArraySlice.Release"/> it.
         /// </summary>
         internal static unsafe IArraySlice Pin(NDArray source, out byte* data)
         {
@@ -245,7 +244,7 @@ namespace NumSharp.Interop.Tensors
         ///     Wrap foreign (pinned managed) memory as a NumSharp <see cref="IArraySlice"/> whose memory-block
         ///     Disposer invokes <paramref name="dispose"/> exactly once when the LAST NumSharp reference (any
         ///     view sharing the block) is released — deterministically via <see cref="NDArray.Dispose"/> or by
-        ///     the finalizer safety net. The same primitive the ONNX / pythonnet bridges lease foreign buffers with.
+        ///     the finalizer safety net. The same primitive the pythonnet bridge leases foreign buffers with.
         /// </summary>
         internal static unsafe IArraySlice WrapExternal(NPTypeCode tc, void* p, long count, Action dispose)
         {

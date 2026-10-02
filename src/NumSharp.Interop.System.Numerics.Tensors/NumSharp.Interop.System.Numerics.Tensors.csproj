@@ -29,11 +29,6 @@
     <!-- NuGet package (co-versioned with NumSharp via the repo-root Directory.Build.props VersionPrefix; no
          version literal lives in this file, so the nuspec dependency on NumSharp cannot drift from our own). -->
     <PackageId>NumSharp.Interop.System.Numerics.Tensors</PackageId>
-    <!-- UNRELEASED: merged, but hidden until the owner releases it. With IsPackable=false, `dotnet pack`
-         is a silent no-op (exit 0, no .nupkg), so CI packs, signs, publishes and lists nothing for this
-         project, and ../../docs/website-src/docfx.json excludes its docs page. To release it, set this
-         back to true and publish the page again: "Unreleased packages" in ../../.claude/CLAUDE.md. -->
-    <IsPackable>false</IsPackable>
     <Authors>Eli Belash, Haiping Chen, Meinrad Recheis</Authors>
     <Product>NumSharp</Product>
     <Company>SciSharp STACK</Company>
