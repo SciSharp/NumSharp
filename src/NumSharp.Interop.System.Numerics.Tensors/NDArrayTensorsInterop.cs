@@ -23,10 +23,10 @@ namespace NumSharp.Interop.Tensors
     ///     <para><b>The verbs</b> follow the house convention: <c>As…</c> shares memory (zero-copy view),
     ///     <c>To…</c> copies.</para>
     ///     <list type="table">
-    ///         <item><term><see cref="Export.AsTensorSpan{T}"/></term><description>NumSharp → a <see cref="System.Numerics.Tensors.TensorSpan{T}"/> / <see cref="System.Numerics.Tensors.ReadOnlyTensorSpan{T}"/> over the NDArray's own buffer (ANY non-negative-stride layout — contiguous, sliced, transposed, strided, broadcast; the buffer is ARC-rooted for the handle's lifetime)</description></item>
-    ///         <item><term><see cref="Export.ToTensor{T}"/></term><description>NumSharp → an independent, dense <see cref="System.Numerics.Tensors.Tensor{T}"/> copy (any layout, no lifetime coupling)</description></item>
-    ///         <item><term><see cref="Import.ToNDArray{T}(System.Numerics.Tensors.Tensor{T})"/></term><description>Tensors → NumSharp, a fresh owning C-contiguous copy (the safe default)</description></item>
-    ///         <item><term><see cref="Import.AsNDArray{T}(System.Numerics.Tensors.Tensor{T}, bool)"/></term><description>Tensors → NumSharp, a zero-copy view over the pinned managed backing store</description></item>
+    ///         <item><term><see cref="AsTensorSpan{T}(NDArray)"/></term><description>NumSharp → a <see cref="System.Numerics.Tensors.TensorSpan{T}"/> / <see cref="System.Numerics.Tensors.ReadOnlyTensorSpan{T}"/> over the NDArray's own buffer (ANY non-negative-stride layout — contiguous, sliced, transposed, strided, broadcast; the buffer is ARC-rooted for the handle's lifetime)</description></item>
+    ///         <item><term><see cref="ToTensor{T}(NDArray)"/></term><description>NumSharp → an independent, dense <see cref="System.Numerics.Tensors.Tensor{T}"/> copy (any layout, no lifetime coupling)</description></item>
+    ///         <item><term><see cref="ToNDArray{T}(System.Numerics.Tensors.Tensor{T})"/></term><description>Tensors → NumSharp, a fresh owning C-contiguous copy (the safe default)</description></item>
+    ///         <item><term><see cref="AsNDArray{T}(System.Numerics.Tensors.Tensor{T})"/></term><description>Tensors → NumSharp, a zero-copy view over the pinned managed backing store</description></item>
     ///     </list>
     ///
     ///     <para><b>Dtype map.</b> Unlike ONNX Runtime (a fixed <c>TensorElementType</c> enum),
@@ -41,7 +41,14 @@ namespace NumSharp.Interop.Tensors
     ///     lengths+strides, so a sliced / transposed / strided / broadcast NDArray view shares zero-copy —
     ///     a real advantage over the row-major-only ONNX bridge. The one exception is a <b>negative-stride</b>
     ///     view (e.g. <c>a[::-1]</c>): <c>System.Numerics.Tensors</c> forbids negative strides, so those are
-    ///     refused with a message pointing at <see cref="Export.ToTensor{T}"/> / <c>np.ascontiguousarray</c>.</para>
+    ///     refused with a message pointing at <see cref="ToTensor{T}(NDArray)"/> / <c>np.ascontiguousarray</c>.</para>
+    ///
+    ///     <para><b>Edge shapes.</b> The BCL has no rank 0, so a 0-d NumSharp scalar crosses as a single-element
+    ///     vector <c>[1]</c> through both export verbs, and the BCL's own rank-0 values
+    ///     (<c>Tensor&lt;T&gt;.Empty</c>, <c>ReadOnlyTensorSpan&lt;T&gt;.Empty</c>) hold no element and import as the
+    ///     empty vector <c>(0,)</c>. An empty array keeps its shape both ways (exported with every stride 0, the
+    ///     form the BCL accepts for a zero-size span). A tensor that starts past element 0 of its backing array
+    ///     (a <c>Slice</c>, a range indexer, <c>Tensor.Create(array, start, …)</c>) imports its own elements.</para>
     ///
     ///     <para><b>Experimental.</b> The BCL marks <c>Tensor{T}</c>/<c>TensorSpan{T}</c>
     ///     <c>[Experimental("SYSLIB5001")]</c>; this surface re-marks itself
@@ -63,7 +70,7 @@ namespace NumSharp.Interop.Tensors
         public static int LiveExports => Volatile.Read(ref _liveExports);
 
         /// <summary>
-        ///     Number of live import leases — NumSharp views (<see cref="Import.AsNDArray{T}(System.Numerics.Tensors.Tensor{T}, bool)"/>)
+        ///     Number of live import leases — NumSharp views (<see cref="AsNDArray{T}(System.Numerics.Tensors.Tensor{T})"/>)
         ///     currently holding a pinned <see cref="System.Numerics.Tensors.Tensor{T}"/> backing store. Released
         ///     when the LAST NumSharp view over the memory — derived slices included — is disposed or collected.
         /// </summary>

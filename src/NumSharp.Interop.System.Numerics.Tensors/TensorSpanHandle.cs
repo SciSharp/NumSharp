@@ -64,6 +64,12 @@ namespace NumSharp.Interop.Tensors
         ///     The mutable tensor view over the NumSharp buffer. Writing through it mutates the array. Rebuilt on
         ///     each access (the span is a <c>ref struct</c> and cannot be cached).
         /// </summary>
+        /// <remarks>
+        ///     For an empty array the span keeps the array's shape, with every stride 0, and fronts an empty managed
+        ///     array instead of the NumSharp buffer: it has no element to address, so where it points is unobservable,
+        ///     and it does not depend on what address NumSharp gives a zero-size buffer.
+        /// </remarks>
+        /// <value>A <see cref="TensorSpan{T}"/> with the array's lengths and element strides.</value>
         /// <exception cref="ObjectDisposedException">The handle has been disposed.</exception>
         /// <exception cref="InvalidOperationException">The source array is a broadcast / read-only view (use <see cref="ReadOnlySpan"/>).</exception>
         public TensorSpan<T> Span
@@ -75,18 +81,22 @@ namespace NumSharp.Interop.Tensors
                     throw new InvalidOperationException(
                         "the source is a broadcast / read-only NumSharp view (flags.writeable == False), so a mutable TensorSpan<T> " +
                         "would write through overlapping stride-0 lanes. Use ReadOnlySpan, or nd.copy() for a writeable array.");
-                return _empty ? TensorSpan<T>.Empty : new TensorSpan<T>(_data, _dataLength, _lengths, _strides);
+                // Not TensorSpan<T>.Empty: that is rank 0 (the shape would be lost) and the BCL's own FlattenTo /
+                // Tensor.Sum throw IndexOutOfRangeException on it. The all-zero strides make the shaped span legal.
+                return _empty ? new TensorSpan<T>(Array.Empty<T>(), _lengths, _strides) : new TensorSpan<T>(_data, _dataLength, _lengths, _strides);
             }
         }
 
         /// <summary>The read-only tensor view over the NumSharp buffer. Available for every layout, broadcast included. Rebuilt on each access.</summary>
+        /// <remarks>An empty array's span keeps its shape, with every stride 0 (see <see cref="Span"/>).</remarks>
+        /// <value>A <see cref="ReadOnlyTensorSpan{T}"/> with the array's lengths and element strides.</value>
         /// <exception cref="ObjectDisposedException">The handle has been disposed.</exception>
         public ReadOnlyTensorSpan<T> ReadOnlySpan
         {
             get
             {
                 ThrowIfDisposed();
-                return _empty ? ReadOnlyTensorSpan<T>.Empty : new ReadOnlyTensorSpan<T>(_data, _dataLength, _lengths, _strides);
+                return _empty ? new ReadOnlyTensorSpan<T>(Array.Empty<T>(), _lengths, _strides) : new ReadOnlyTensorSpan<T>(_data, _dataLength, _lengths, _strides);
             }
         }
 

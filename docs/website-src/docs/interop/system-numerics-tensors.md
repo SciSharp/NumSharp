@@ -16,7 +16,7 @@ crosses zero-copy and what cannot, who frees what, dtypes, frameworks.
 
 > Verified on `System.Numerics.Tensors` 10.0.0 · net8.0/net10.0 · Windows, Linux, macOS.
 > Every claim below is reproduced by a test in `NumSharp.Tests.Interop.System.Numerics.Tensors`
-> (54 tests, green on net8.0 AND net10.0; no Python, no native code).
+> (64 tests, green on net8.0 AND net10.0; no Python, no native code).
 
 ---
 
@@ -110,25 +110,36 @@ strides), a strided NumSharp view can be shared as-is:
   `System.Numerics.Tensors` requires such an axis to have stride 0 (a nonzero stride there reads as
   over-claiming the buffer). The bridge normalizes it - safe, because a single-element axis is never
   stepped, so the addressing is identical.
-- **A 0-d scalar crosses as a rank-1 `[1]` span**, and an **empty array as `TensorSpan<T>.Empty`** - the
-  BCL's pointer ctor cannot express rank 0 and rejects a zero-length backing, so these two shapes take the
-  documented fallback.
+- **A 0-d scalar crosses as a rank-1 `[1]` span** (and as a `[1]` tensor through `ToTensor`), value
+  intact. The BCL has no rank 0: empty lengths do not mean "scalar" to it, they build a rank-1 span or tensor
+  of length 0, so the bridge passes `[1]` explicitly.
+- **An empty array keeps its shape.** A `(3,0,4)` array exports as a rank-3 span with every stride 0 - the
+  BCL refuses a zero-length backing only when a stride is nonzero - and the BCL can flatten, fill and reduce
+  it like any other span. (`TensorSpan<T>.Empty` is no substitute: it is rank 0, and the BCL's own
+  `FlattenTo` and `Tensor.Sum` throw `IndexOutOfRangeException` on it.)
 - **No 2 GB limit on `AsTensorSpan`.** The span fronts a native pointer with an `nint` length, unlike a
   `Memory<T>`-backed tensor; arrays over 2 GB share fine. (`ToTensor` / `ToNDArray` copy into a managed
   `T[]`, which is `int`-indexed - see [Limits](#limits).)
 
 Under the hood the export is `new TensorSpan<T>(pointer, dataLength, lengths, strides)` on
 `slice.Address + Shape.Offset × itemsize` with the element strides from `Shape.Strides`; the import pins
-the tensor's backing array (`Tensor<T>.GetPinnedHandle()`) and wraps the pointer as a NumSharp memory
-block with a release hook - the same "wrap foreign memory" primitive the whole [interop family](index.md)
-is built on.
+the tensor's backing array (`Tensor<T>.GetPinnedHandle()`) and wraps the tensor's own first element as a
+NumSharp memory block with a release hook - the same "wrap foreign memory" primitive the whole
+[interop family](index.md) is built on. The first element comes from the tensor's span
+(`GetPinnableReference()`), **not** from the handle: the handle points at the backing array's element 0,
+which is not where a sliced tensor (`t.Slice(â€¦)`, a range indexer, `Tensor.Create(array, start, â€¦)`) starts.
+
+The BCL's own rank-0 values (`Tensor<T>.Empty`, `ReadOnlyTensorSpan<T>.Empty`, a `default` span) hold no
+element, so they import as the empty vector `(0,)`, never as a one-element 0-d array.
 
 ## Lifetime: who frees what
 
 - **Exports.** `AsTensorSpan` takes an atomic reference on the NumSharp buffer, so the memory outlives the
   source array if it is disposed or collected while a span is in use. Disposing the `TensorSpanHandle<T>`
   drops the reference; a forgotten handle is released by a finalizer safety net. `LiveExports` counts open
-  handles.
+  handles. Both export verbs take that reference **before** reading anything, so an array whose buffer has
+  already been released is refused with `ObjectDisposedException` whatever its layout (a strided one is never
+  densified from freed memory first).
 - **Imports.** `AsNDArray` leases the tensor's pinned backing through NumSharp's memory-block reference
   count: the lease fires (unpinning the array) when the *last* NumSharp view over the memory - slices
   derived from it included - is disposed or collected. The view roots the `Tensor<T>` so its backing cannot
@@ -170,13 +181,15 @@ future 11.x (free to break the experimental API) from resolving automatically.
 
 - **Negative-stride views** cannot be shared zero-copy (the BCL forbids negative strides) - `ToTensor` /
   `ascontiguousarray` them.
-- **`ToTensor` / `ToNDArray` copy into a managed array**, which is `int`-indexed: over `int.MaxValue`
-  elements they throw. Share zero-copy with `AsTensorSpan` (a native pointer, no such limit) instead.
+- **The copies are `int`-indexed.** `ToTensor` fills a managed `T[]`, and `ToNDArray` fills through
+  `FlattenTo`'s `Span<T>`: over `int.MaxValue` elements they throw `NotSupportedException`, before allocating
+  anything. The zero-copy verbs have no such limit: `AsTensorSpan` fronts a native pointer, and `AsNDArray`
+  of a stride-0 tensor gives a read-only broadcast view of any size.
 - **A `ref struct` span cannot be leased**: importing a `TensorSpan<T>` / `ReadOnlyTensorSpan<T>` always
   copies (`span.ToNDArray()`). Only a `Tensor<T>` (a heap object whose backing can be pinned) supports the
   zero-copy `AsNDArray` view.
-- **A 0-d scalar crosses as rank-1 `[1]`** and an **empty array as `TensorSpan<T>.Empty`** - the BCL's
-  rank-0 / zero-length handling forces these two documented shapes.
+- **A 0-d scalar crosses as rank-1 `[1]`** - the BCL has no rank 0 - so importing it back gives shape
+  `(1,)`, not `()`. The value is kept.
 
 ## Not a compute backend
 
@@ -202,6 +215,11 @@ away. `System.Numerics.Tensors` does not compute NumSharp operations - which is 
 | 9 | The import lease releases only when the last view (derived slices included) dies; a forgotten handle/view is released by GC | [`LifetimeTests`][gate] |
 | 10 | Special values (NaN sign/payload/signaling, ±inf, ±0, subnormals, every dtype extreme) survive every crossing bit-exact | [`SpecialValueFidelityTests`][gate] |
 | 11 | NDArray → Tensor → NDArray and NDArray → TensorSpan → NDArray preserve values across all dtypes and layouts | [`RoundTripTests`][gate] |
+| 13 | A tensor that starts past element 0 of its backing array (a `Slice`, a range indexer, `Tensor.Create(array, start, â€¦)`) imports its own elements through `ToNDArray` and `AsNDArray`, for all 15 dtypes; a write through the view lands on the element it names | [`ImportTests`][gate] |
+| 14 | A 0-d array crosses as `[1]` through `AsTensorSpan` and `ToTensor` with its value kept, for all 15 dtypes | [`ExportTests`][gate] |
+| 15 | An empty array exports with its shape and all-zero strides; the BCL can flatten, fill and reduce the span, and it imports back to the same shape, for all 15 dtypes; the BCL's rank-0 values import as `(0,)` | [`ExportTests`][gate], [`ImportTests`][gate] |
+| 16 | Both export verbs refuse a released buffer with `ObjectDisposedException`, for every layout | [`LifetimeTests`][gate] |
+| 17 | The copies refuse more than `int.MaxValue` elements before allocating; `AsNDArray` of a stride-0 tensor shares any size zero-copy | [`ImportTests`][gate] |
 | 12 | The examples on this page run as written | [`DocExampleTests`][gate] |
 
 ## See also

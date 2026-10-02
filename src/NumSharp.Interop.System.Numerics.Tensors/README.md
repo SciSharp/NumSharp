@@ -40,6 +40,20 @@ stride-0 lanes would corrupt data). The one refusal is a **negative-stride** vie
 `a[::-1]`): `System.Numerics.Tensors` forbids negative strides — materialize it first
 (`np.ascontiguousarray(nd)`, `nd.copy()`) or use `ToTensor`.
 
+## Edge shapes
+
+- **0-d scalar → `[1]`.** The BCL has no rank 0, so both `AsTensorSpan` and `ToTensor` give a 0-d array
+  the shape `[1]`, keeping its value; importing that tensor back gives `(1,)`.
+- **Empty arrays keep their shape.** A `(3,0,4)` array exports as a rank-3 span with every stride 0 (the
+  form the BCL accepts for a zero-size span), which the BCL can flatten, fill and reduce. The BCL's own
+  rank-0 values (`Tensor<T>.Empty`, `ReadOnlyTensorSpan<T>.Empty`) hold no element and import as `(0,)`.
+- **Sliced tensors import their own elements.** A tensor that starts past element 0 of its backing array
+  (`t.Slice(…)`, a range indexer, `Tensor.Create(array, start, …)`) is copied or viewed from its own start.
+  (`Tensor<T>.GetPinnedHandle()` points at the backing array's element 0, so the bridge reads the start from
+  the tensor's span instead.)
+- **Released buffers are refused.** `AsTensorSpan` and `ToTensor` throw `ObjectDisposedException` for an
+  array whose buffer has been released, whatever its layout.
+
 ## Example
 
 ```csharp
