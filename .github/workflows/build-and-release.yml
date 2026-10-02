@@ -183,6 +183,10 @@ jobs:
         [ "$SIZE" = "596" ] || { echo "::error::Open.snk is $SIZE bytes, expected 596 — likely line-ending corruption; check the '*.snk binary' rule in .gitattributes."; exit 1; }
         [ "$SHA" = "b897629e0b20090c9219ac80392c037fa4cfcc2bdc21d3c45d9bf74b8df0f671" ] || { echo "::error::Open.snk content changed."; exit 1; }
 
+    # OnnxRuntime and MLNet below are UNRELEASED (<IsPackable>false</IsPackable> in each csproj,
+    # "Unreleased packages" in .claude/CLAUDE.md): their `dotnet pack` is a silent no-op that writes
+    # no .nupkg, so today they add nothing to verify. The day one is released by flipping that
+    # property, it is packed and verified here with no edit to this step.
     - name: Pack (throwaway) and verify every shipped assembly is signed
       run: |
         mkdir -p artifacts/signing-check
@@ -645,6 +649,13 @@ jobs:
           -p:SourceRevisionId=${{ github.sha }} \
           -p:ContinuousIntegrationBuild=true
 
+        # The UNRELEASED packages (OnnxRuntime, MLNet) are built here and named in the Pack step below
+        # like every other package, but each csproj sets <IsPackable>false</IsPackable>, which makes
+        # its `dotnet pack` a silent no-op: no .nupkg, so nothing is uploaded, published or listed in
+        # the release notes. Releasing one is that property set back to true ("Unreleased packages"
+        # in .claude/CLAUDE.md); this step and the Pack step then need no edit. The builds stay so
+        # that switch keeps working: the Pack step runs --no-build.
+        #
         # ONNX Runtime interop: managed-only (depends on Microsoft.ML.OnnxRuntime.Managed, no native
         # asset of its own), so a plain Rebuild is the whole build.
         dotnet build src/NumSharp.Interop.OnnxRuntime/NumSharp.Interop.OnnxRuntime.csproj \
@@ -707,6 +718,8 @@ jobs:
           -p:SourceRevisionId=${{ github.sha }} \
           -p:ContinuousIntegrationBuild=true
 
+        # Unreleased (IsPackable=false, see the Build step): this and the MLNet pack below write no
+        # .nupkg until the package is released.
         dotnet pack src/NumSharp.Interop.OnnxRuntime/NumSharp.Interop.OnnxRuntime.csproj \
           --configuration Release \
           --no-build \
@@ -803,32 +816,51 @@ jobs:
       run: |
         VERSION="${{ steps.version.outputs.VERSION }}"
         NOTES_FILE="docs/releases/RELEASE_${VERSION}.md"
+
+        # The install lines and the package table list exactly the packages this release PACKED,
+        # read from the .nupkg files downloaded above, never from a hand-kept list. An unreleased
+        # package (<IsPackable>false</IsPackable>, "Unreleased packages" in .claude/CLAUDE.md) packs
+        # to nothing, so it cannot be advertised here, and releasing one needs no edit to this step.
+        # Each id comes from the package's own nuspec rather than its file name, so NuGet's version
+        # normalization cannot break the match. The ids are read in a process substitution, where
+        # `bash -e` sees no failure, so the count check turns an unreadable package into a failed
+        # release instead of a line silently missing from the notes.
+        mapfile -t PACKAGE_IDS < <(
+          for f in artifacts/*.nupkg; do
+            unzip -p "$f" '*.nuspec' | sed -n 's:.*<id>\([^<]*\)</id>.*:\1:p' | head -n 1
+          done | LC_ALL=C sort -u)
+        NUPKG_COUNT=$(find artifacts -maxdepth 1 -name '*.nupkg' | wc -l)
+        if [ "${#PACKAGE_IDS[@]}" -eq 0 ] || [ "${#PACKAGE_IDS[@]}" -ne "$NUPKG_COUNT" ]; then
+          echo "::error::read ${#PACKAGE_IDS[@]} package ids from ${NUPKG_COUNT} .nupkg files in artifacts/"
+          exit 1
+        fi
+        # NumSharp first and NumSharp.Build last, as the notes have always listed them; every other
+        # package between them in ordinal order. `if` rather than `[ ] &&`, so no test result can
+        # become a loop's exit status under `bash -e`.
+        ORDERED_IDS=()
+        for id in "${PACKAGE_IDS[@]}"; do if [ "$id" = "NumSharp" ]; then ORDERED_IDS+=("$id"); fi; done
+        for id in "${PACKAGE_IDS[@]}"; do if [ "$id" != "NumSharp" ] && [ "$id" != "NumSharp.Build" ]; then ORDERED_IDS+=("$id"); fi; done
+        for id in "${PACKAGE_IDS[@]}"; do if [ "$id" = "NumSharp.Build" ]; then ORDERED_IDS+=("$id"); fi; done
+        echo "Packages listed in the release notes: ${ORDERED_IDS[*]}"
+
         {
           echo "## NumSharp v${VERSION}"
           echo ""
           echo "### Install via NuGet"
           echo ""
           echo '```'
-          echo "dotnet add package NumSharp --version ${VERSION}"
-          echo "dotnet add package NumSharp.Bitmap --version ${VERSION}"
-          echo "dotnet add package NumSharp.Interop.pythonnet --version ${VERSION}"
-          echo "dotnet add package NumSharp.Interop.OpenBLAS --version ${VERSION}"
-          echo "dotnet add package NumSharp.Interop.OnnxRuntime --version ${VERSION}"
-          echo "dotnet add package NumSharp.Interop.MLNet --version ${VERSION}"
-          echo "dotnet add package NumSharp.Build --version ${VERSION}"
+          for id in "${ORDERED_IDS[@]}"; do
+            echo "dotnet add package ${id} --version ${VERSION}"
+          done
           echo '```'
           echo ""
           echo "### Packages"
           echo ""
           echo "| Package | NuGet |"
           echo "|---------|-------|"
-          echo "| NumSharp | [![NuGet](https://img.shields.io/nuget/v/NumSharp.svg)](https://www.nuget.org/packages/NumSharp/${VERSION}) |"
-          echo "| NumSharp.Bitmap | [![NuGet](https://img.shields.io/nuget/v/NumSharp.Bitmap.svg)](https://www.nuget.org/packages/NumSharp.Bitmap/${VERSION}) |"
-          echo "| NumSharp.Interop.pythonnet | [![NuGet](https://img.shields.io/nuget/v/NumSharp.Interop.pythonnet.svg)](https://www.nuget.org/packages/NumSharp.Interop.pythonnet/${VERSION}) |"
-          echo "| NumSharp.Interop.OpenBLAS | [![NuGet](https://img.shields.io/nuget/v/NumSharp.Interop.OpenBLAS.svg)](https://www.nuget.org/packages/NumSharp.Interop.OpenBLAS/${VERSION}) |"
-          echo "| NumSharp.Interop.OnnxRuntime | [![NuGet](https://img.shields.io/nuget/v/NumSharp.Interop.OnnxRuntime.svg)](https://www.nuget.org/packages/NumSharp.Interop.OnnxRuntime/${VERSION}) |"
-          echo "| NumSharp.Interop.MLNet | [![NuGet](https://img.shields.io/nuget/v/NumSharp.Interop.MLNet.svg)](https://www.nuget.org/packages/NumSharp.Interop.MLNet/${VERSION}) |"
-          echo "| NumSharp.Build | [![NuGet](https://img.shields.io/nuget/v/NumSharp.Build.svg)](https://www.nuget.org/packages/NumSharp.Build/${VERSION}) |"
+          for id in "${ORDERED_IDS[@]}"; do
+            echo "| ${id} | [![NuGet](https://img.shields.io/nuget/v/${id}.svg)](https://www.nuget.org/packages/${id}/${VERSION}) |"
+          done
         } > RELEASE_BODY.md
         if [ -f "$NOTES_FILE" ]; then
           { echo ""; echo "---"; echo ""; cat "$NOTES_FILE"; } >> RELEASE_BODY.md

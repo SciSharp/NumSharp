@@ -23,7 +23,7 @@
     "content": [
       {
         "files": ["**/*.{md,yml}"],
-        "exclude": ["_site/**", "obj/**", "scripts/**", "filterConfig.yml", "templates/**", "api/overwrites/**", "docs/data/**"]
+        "exclude": ["_site/**", "obj/**", "scripts/**", "filterConfig.yml", "templates/**", "api/overwrites/**", "docs/data/**", "docs/interop/onnxruntime.md", "docs/interop/mlnet.md", "docs/interop/system-numerics-tensors.md"]
       },
       {
         "src": "../../refs/data/benchmark/latest",
