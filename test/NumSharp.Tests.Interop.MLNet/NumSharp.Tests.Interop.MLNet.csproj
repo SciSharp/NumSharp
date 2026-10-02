@@ -39,4 +39,18 @@
     <ProjectReference Include="..\..\src\NumSharp.Interop.MLNet\NumSharp.Interop.MLNet.csproj" />
   </ItemGroup>
 
+  <!-- The GC window protocol the pool-balance checks (ArcAccountingTests) measure in: buffers taken minus returned
+       is only meaningful while no collection runs finalizers that return unrelated buffers. Linked, not copied, so
+       every suite that reads the process-global pool counters shares ONE implementation of the protocol. -->
+  <ItemGroup>
+    <Compile Include="..\NumSharp.Tests\Utilities\GcQuiescence.cs" Link="Support\GcQuiescence.cs" />
+  </ItemGroup>
+
+  <!-- The public-surface formatter the API-approval test (ApiSurfaceTests) compares against its approved list. Linked
+       from the ONNX Runtime suite so both packages' approvals render a surface the same way (defaults, `this`, `params`
+       and by-reference modifiers included). -->
+  <ItemGroup>
+    <Compile Include="..\NumSharp.Tests.Interop.OnnxRuntime\ApiSurface.cs" Link="Support\ApiSurface.cs" />
+  </ItemGroup>
+
 </Project>

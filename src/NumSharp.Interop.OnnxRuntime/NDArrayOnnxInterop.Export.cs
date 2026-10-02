@@ -214,6 +214,12 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     non-C layout ORT's tensor can express); any other view throws. <see cref="NPTypeCode.Decimal"/>
         ///     converts to an owned float64 temporary (request <c>AsDenseTensor&lt;double&gt;</c>).</para>
         /// </summary>
+        /// <remarks>
+        ///     Refusals come in the order of what they cost to decide: the element type, the element count and the
+        ///     <see cref="int"/> dimensions first (they need only the dtype and the shape, so a Decimal array that cannot
+        ///     cross is not converted), then the layout and the buffer's liveness (a Decimal array's liveness is checked
+        ///     by its conversion, which comes before the layout of the converted array is known).
+        /// </remarks>
         /// <typeparam name="T">The C# element type ORT uses for the array's dtype (<see cref="ToTensorElementClrType"/>); anything else is refused.</typeparam>
         /// <param name="source">The array to share; C- or Fortran-contiguous (any layout once Decimal is converted).</param>
         /// <returns>A disposable handle owning the tensor and the buffer pin; keep it alive while the tensor is used.</returns>
@@ -243,6 +249,16 @@ namespace NumSharp.Interop.OnnxRuntime
             if (source is null)
                 throw new ArgumentNullException(nameof(source));
 
+            // Decide everything the dtype and the shape alone decide BEFORE the Decimal conversion: the element type is
+            // that of the FED dtype (Decimal is fed as float64), and the conversion never changes the shape, so the
+            // source's shape is the tensor's. These ran after the conversion, so a refused call still converted the whole
+            // array first — for a broadcast view, a full-size float64 temporary of every element it addresses.
+            EnsureElementType<T>(FeedTypeCode(source.typecode), nameof(AsDenseTensor));
+            Shape sourceShape = source.Shape;
+            if (sourceShape.Size > int.MaxValue)
+                throw new NotSupportedException($"AsDenseTensor: Memory<T> holds at most {int.MaxValue} elements, the array has {sourceShape.Size}. Use AsOrtValue (a native pointer, no such limit).");
+            int[] dims = IntDims(sourceShape, nameof(AsDenseTensor));
+
             // The Decimal → float64 conversion is the first read of the source, so it runs under a reference on the
             // source's buffer (ConvertPinned, see AsOrtValueCore): a bare astype read a released buffer silently.
             NDArray converted = null;
@@ -252,7 +268,8 @@ namespace NumSharp.Interop.OnnxRuntime
 
             try
             {
-                EnsureElementType<T>(fed.typecode, nameof(AsDenseTensor));
+                // The layout is the one decision that waits for the conversion: astype lays its result out in order 'K',
+                // so a Decimal view that is neither C- nor F-contiguous converts to one that is.
                 Shape shape = fed.Shape;
                 bool reverseStride;
                 if (shape.IsContiguous)
@@ -265,14 +282,12 @@ namespace NumSharp.Interop.OnnxRuntime
                         "express a sliced / transposed / negative-stride / broadcast view. Materialize first (np.ascontiguousarray(nd) " +
                         "or nd.copy()) or call ToDenseTensor(nd) for a managed copy.");
 
-                if (shape.Size > int.MaxValue)
-                    throw new NotSupportedException($"AsDenseTensor: Memory<T> holds at most {int.MaxValue} elements, the array has {shape.Size}. Use AsOrtValue (a native pointer, no such limit).");
-
-                int[] dims = IntDims(shape, nameof(AsDenseTensor));
                 IArraySlice slice = Pin(fed, out byte* data, out _);
                 try
                 {
-                    var manager = new UnmanagedMemoryManager<T>((T*)data, (int)shape.Size);
+                    // The manager gets the buffer too: each pin of the tensor's Memory takes its own reference on it, so a
+                    // consumer that pins (ORT's CreateTensorValueFromMemory, tensor.AsNDArray()) outlives this handle safely.
+                    var manager = new UnmanagedMemoryManager<T>((T*)data, (int)shape.Size, slice);
                     var tensor = new DenseTensor<T>(manager.Memory, dims, reverseStride);
                     var handle = new OrtTensor<T>(tensor, manager, fed, slice, ownsSource: converted is not null || ownsSource);
                     if (converted is not null && ownsSource)
@@ -379,9 +394,32 @@ namespace NumSharp.Interop.OnnxRuntime
         /// </summary>
         /// <param name="count">The number of elements to copy.</param>
         /// <param name="itemsize">The size in bytes of one element of the dtype that crosses.</param>
-        /// <returns>The message, naming the zero-copy verbs that have no such limit.</returns>
+        /// <returns>The message, naming the zero-copy export that has no such limit.</returns>
+        /// <remarks>
+        ///     It used to name <c>AsNDArray</c> as well, but that is an IMPORT, and it cannot take a tensor past 2 GB either
+        ///     (<see cref="ImportTooLargeMessage"/>): only the export, <see cref="AsOrtValue"/>, hands ORT a native pointer.
+        /// </remarks>
         internal static string TooLargeForSpanMessage(long count, int itemsize) =>
             $"the tensor is {(decimal)count * itemsize} bytes, beyond the 2 GB System.Span limit of ONNX Runtime's managed data API " +
-            "(GetTensorMutableRawData / GetTensorDataAsSpan). Share the buffer zero-copy with AsOrtValue / AsNDArray instead of copying it.";
+            "(GetTensorMutableRawData / GetTensorDataAsSpan). Share the buffer zero-copy with AsOrtValue instead of copying it: " +
+            "ORT then reads NumSharp's memory through a native pointer, with no size limit.";
+
+        /// <summary>
+        ///     The refusal for reading a tensor past 2 GB out of an <see cref="OrtValue"/> (<see cref="ToNDArray(OrtValue)"/>,
+        ///     <see cref="AsNDArray(OrtValue, bool)"/>). ORT's managed API exposes a tensor's memory only as a
+        ///     <see cref="Span{T}"/> of bytes (<c>GetTensorMutableRawData</c> and every typed or <c>TensorSpan</c> variant go
+        ///     through it), whose length it computes with an unchecked <c>int</c> cast; there is no other public route to the
+        ///     pointer. So such a tensor can be neither copied nor viewed — but ORT can WRITE one into NumSharp's memory, which
+        ///     the message names.
+        /// </summary>
+        /// <param name="verb">The import verb refusing (named in the message).</param>
+        /// <param name="count">The tensor's element count.</param>
+        /// <param name="itemsize">The size in bytes of one element.</param>
+        /// <returns>The message, naming the pre-allocated-output route that has no size limit.</returns>
+        internal static string ImportTooLargeMessage(string verb, long count, int itemsize) =>
+            $"{verb}: the tensor is {(decimal)count * itemsize} bytes, beyond the 2 GB System.Span limit of ONNX Runtime's managed data API: " +
+            "ORT exposes a tensor's memory only as a Span of bytes (GetTensorMutableRawData), so a tensor this large can be neither copied " +
+            "nor viewed out of an OrtValue. Let ORT write it into NumSharp's memory instead: pre-allocate the output (np.empty(shape, dtype)) " +
+            "and run session.Run(inputs, outputs), or bind nd.AsOrtValue() as the output OrtValue.";
     }
 }

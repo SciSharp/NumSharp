@@ -39,6 +39,13 @@
     <ProjectReference Include="..\..\src\NumSharp.Interop.OnnxRuntime\NumSharp.Interop.OnnxRuntime.csproj" />
   </ItemGroup>
 
+  <!-- The GC window protocol the pool-balance checks (ArcAccountingTests) measure in: buffers taken minus returned
+       is only meaningful while no collection runs finalizers that return unrelated buffers. Linked, not copied, so
+       every suite that reads the process-global pool counters shares ONE implementation of the protocol. -->
+  <ItemGroup>
+    <Compile Include="..\NumSharp.Tests\Utilities\GcQuiescence.cs" Link="Support\GcQuiescence.cs" />
+  </ItemGroup>
+
   <ItemGroup>
     <!-- The committed ONNX models the suite runs (generated + self-checked by test/oracle/gen_onnx_models.py;
          real .onnx files ORT executes, ~100-250 bytes each). Copied beside the test binaries. -->

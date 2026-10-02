@@ -117,7 +117,20 @@ buffer. The pin takes its own atomic reference, so:
 - Every cursor takes its **own** pin too, so a cursor mid-iteration survives the view being disposed
   underneath it.
 - Not disposing the view leaks the pin until the finalizer reclaims it (a safety net, not a lifetime
-  model).
+  model). Cursors have the same net: ML.NET abandons cursors itself - `ShuffleRows`, which training
+  pipelines use, never disposes the cursor it opens on its input - and before the net one shuffle kept the
+  NumSharp buffer referenced for the life of the process (the pool never got it back, and
+  `resize(refcheck)` refused).
+
+**Cursors follow ML.NET's own contract**, checked against the cursors of ML.NET's `Cache`,
+`FilterRowsByColumn`, `TakeRows` and `LoadFromEnumerable`:
+
+- `Position` is `-1` before the first row, after the last one and after `Dispose`.
+- A getter called off a row throws ML.NET's own `InvalidOperationException` ("Values cannot be fetched at
+  this time...") and reads nothing. Off-row getters used to read the element before the first row or past
+  the last one - and, after `Dispose`, a buffer the cursor no longer kept alive.
+- `MoveNext` stays `false` once it returned `false` or the cursor was disposed.
+- `Schema` still answers after the view is disposed (the view's own property throws then).
 
 `ToDataView` copies first, so its view has no coupling to the source at all.
 
@@ -202,3 +215,8 @@ leaves the native runtime to the consumer.
 - **No `Complex` column.** ML.NET has no complex type (see [Dtypes](#dtypes)).
 - **`ToNDArray` rectangularizes.** A variable-length vector column cannot become a rectangular NDArray and
   is refused with a message naming the cause.
+- **Imports have no managed-array cap.** `ToNDArray` stages rows straight into NumSharp memory - one exact
+  allocation when the view reports its row count, growing chunks copied together once when it does not (an
+  ML.NET row filter) - so a column of more than `Array.MaxLength` elements in total imports; it used to stage
+  through a managed `T[]` and fail there. A sparse `VBuffer` densifies at any size (the clear used to count
+  bytes in an `int` and threw at 2 GB).

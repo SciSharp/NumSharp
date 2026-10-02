@@ -25,7 +25,9 @@ NumSharp reads. So there is no `TensorEngine` seam, no `[ModuleInitializer]`, an
 changes nothing until a verb is called.
 
 > Verified against ONNX Runtime **1.16.0** (the package floor) and **1.29.0** (current) on net8.0 / net10.0,
-> by `test/NumSharp.Tests.Interop.OnnxRuntime` (148 tests over 23 committed `.onnx` models ORT actually executes).
+> by `test/NumSharp.Tests.Interop.OnnxRuntime` (200 tests over 23 committed `.onnx` models ORT actually executes, among
+> them an every-dtype × every-layout matrix, property-based, metamorphic, bit-pattern-fuzz, concurrency, boundary,
+> reference-accounting and API-approval suites).
 
 ## Install
 
@@ -137,6 +139,12 @@ The one copy left — `stack` + `astype`/divide producing the planar normalized 
   across `Run`** — pass `handle.Value`, dispose after the run (`using`). While exported,
   `ndarray.resize(refcheck: true)` on the source refuses (`cannot resize an array that references or is
   referenced by another array`), exactly NumPy's rule.
+- **Pins of an `AsDenseTensor<T>` handle's `Memory<T>` outlive the handle.** Whoever pins that memory —
+  ORT's `CreateTensorValueFromMemory`, a `tensor.AsNDArray()` view, any `Memory<T>.Pin()` — takes a reference
+  of its own on the NumSharp buffer, released with the pin, so it stays valid after the handle and the source
+  are disposed. A disposed handle only refuses NEW access: its tensor's `Memory<T>` throws
+  `ObjectDisposedException` for a new span or pin, and so do `ToNDArray` / `AsNDArray` of that tensor (before
+  allocating anything).
 - **A released source is refused** with `ObjectDisposedException` by every verb that reads it (the exports,
   the copies, `Run`'s cast and C-order copy): each takes its reference on the buffer before its first read,
   so it never reads memory the pool may have handed to another array. Dtype and size refusals come first, so
@@ -147,6 +155,11 @@ The one copy left — `stack` + `astype`/divide producing the planar normalized 
   it while a view is in use — the rule ORT documents for `GetTensorDataAsSpan`. `ownsValue: true` transfers
   ownership: the last view disposes the `OrtValue`, and the caller must not. Views do not own their data
   (`flags.owndata == False`): a size-changing `resize` refuses instead of detaching from ORT's memory.
+- **A `DenseTensor<T>` view keeps its tensor reachable.** `denseTensor.AsNDArray()` over a legacy `session.Run`
+  output (`DisposableNamedOnnxValue.AsTensor<T>()`) roots the tensor — and through it the `OrtValue` — so
+  results that are merely dropped are not finalized under the view (they used to be, and the next run's output
+  showed through it). Disposing the results explicitly while a view lives still frees the memory under it:
+  keep them alive, or copy with `ToNDArray`.
 - **Only CPU-addressable tensors** can be read or viewed. A CUDA / DirectML / TensorRT-resident output is
   refused (`the tensor lives in 'Cuda' memory ... which the CPU cannot address`) — bind a CPU output or copy
   to CPU first. Host-accessible device memory (`CudaPinned`) is fine.
@@ -161,9 +174,15 @@ The one copy left — `stack` + `astype`/divide producing the planar normalized 
   no NumSharp dtype either, but string tensor OUTPUTS read as `string[]` via `ReadStringTensor()`; only a string
   model INPUT is refused. Sequence / map outputs read via `ToNDArrays` / `ToMap` / `ToMaps`.
 - **GPU-resident tensors** cannot be viewed as `NDArray`s.
-- ORT's managed data API (`GetTensorMutableRawData`, spans) is `int`-indexed: copying a tensor over 2 GB
-  through `ToOrtValue` / `ToNDArray` throws — share it zero-copy instead. `ToOrtValue` refuses before it copies
-  or allocates anything.
+- ORT's managed data API (`GetTensorMutableRawData` and every span over it) is `int`-indexed — it hands out a
+  tensor's memory only as a `Span` of bytes, whose length it casts to `int` unchecked. **Export:** an array over
+  2 GB is refused by `ToOrtValue` before anything is copied or allocated — share it zero-copy with `AsOrtValue`,
+  which hands ORT a native pointer (no limit). **Import:** a tensor of 2 GB or more can be neither copied
+  (`ToNDArray`) nor viewed (`AsNDArray`) out of an `OrtValue`; both refuse up front, before anything is
+  allocated (`ToNDArray` used to allocate the whole result first and then fail; `AsNDArray` failed or worked
+  depending on bit 31 of the byte count). Let ORT write such an output into NumSharp's memory instead:
+  pre-allocate it and run `session.Run(inputs, outputs)`. A `DenseTensor<T>` has no byte limit (up to
+  `int.MaxValue` elements): `ToNDArray` / `AsNDArray` take it whole.
 - `ToDenseTensor<T>` copies into a managed `T[]`, which holds at most `Array.MaxLength` (2,147,483,591)
   elements; a larger array is refused up front (`AsDenseTensor<T>` shares up to `int.MaxValue` elements,
   `AsOrtValue` has no element limit).

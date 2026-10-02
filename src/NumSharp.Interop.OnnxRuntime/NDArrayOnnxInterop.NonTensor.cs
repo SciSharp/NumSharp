@@ -22,10 +22,17 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     <see cref="NDArray"/> copies — e.g. a <c>SequenceConstruct</c> / <c>SplitToSequence</c> output.
         ///     Each element follows <see cref="ToNDArray(OrtValue)"/> (dtype from the tensor, C-contiguous copy).
         /// </summary>
+        /// <param name="sequence">A sequence OrtValue whose elements are dense tensors.</param>
+        /// <returns>One owning array per element, in sequence order.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="sequence"/> is null.</exception>
         /// <exception cref="NotSupportedException">
         ///     Not a sequence, or an element is not a dense tensor (a sequence of MAPs — the ZipMap shape — is
-        ///     read with <see cref="ToMaps"/> instead).
+        ///     read with <see cref="ToMaps"/> instead), or an element's element type has no NumSharp dtype.
         /// </exception>
+        /// <remarks>
+        ///     All or nothing: when an element fails half-way through, the arrays already read are disposed before the
+        ///     exception propagates — the caller never sees them, so nobody else could give their buffers back.
+        /// </remarks>
         public static NDArray[] ToNDArrays(this OrtValue sequence)
         {
             if (sequence is null)
@@ -38,25 +45,46 @@ namespace NumSharp.Interop.OnnxRuntime
             int count = sequence.GetValueCount();
             var result = new NDArray[count];
             OrtAllocator allocator = OrtAllocator.DefaultInstance;
-            for (int i = 0; i < count; i++)
+            try
             {
-                using OrtValue element = sequence.GetValue(i, allocator);
-                if (element.OnnxType != OnnxValueType.ONNX_TYPE_TENSOR)
-                    throw new NotSupportedException(
-                        $"ToNDArrays: sequence element {i} is {element.OnnxType}, not a dense tensor. A sequence of maps " +
-                        "(e.g. a scikit-learn ZipMap output) is read with ToMaps.");
-                result[i] = element.ToNDArray();
+                for (int i = 0; i < count; i++)
+                {
+                    using OrtValue element = sequence.GetValue(i, allocator);
+                    if (element.OnnxType != OnnxValueType.ONNX_TYPE_TENSOR)
+                        throw new NotSupportedException(
+                            $"ToNDArrays: sequence element {i} is {element.OnnxType}, not a dense tensor. A sequence of maps " +
+                            "(e.g. a scikit-learn ZipMap output) is read with ToMaps.");
+                    result[i] = element.ToNDArray();
+                }
+                return result;
             }
-            return result;
+            catch
+            {
+                // The arrays read so far never reach the caller: give their buffers back now instead of to the finalizer.
+                foreach (NDArray made in result)
+                    made?.Dispose();
+                throw;
+            }
         }
 
         /// <summary>
-        ///     Read a MAP <see cref="OrtValue"/> as two parallel owning arrays: <paramref name="keys"/> and the
-        ///     <paramref name="values"/> at the same positions (ORT stores a map as a keys tensor + a values
+        ///     Read a MAP <see cref="OrtValue"/> as two parallel owning arrays: <c>keys</c> and the
+        ///     <c>values</c> at the same positions (ORT stores a map as a keys tensor + a values
         ///     tensor). Key dtype follows the map (int64 or — for a string-keyed map — refused, since NumSharp
         ///     has no string dtype: read those with <see cref="ReadStringTensor"/> on <see cref="GetMapKeys"/>).
         /// </summary>
-        /// <exception cref="NotSupportedException">Not a map (or a string-keyed map — its keys have no NumSharp dtype).</exception>
+        /// <param name="map">A map OrtValue with numeric keys and numeric values.</param>
+        /// <returns>The keys and the values, each a fresh owning 1-D array.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="map"/> is null.</exception>
+        /// <exception cref="NotSupportedException">
+        ///     Not a map, or its keys or its values are strings (no NumSharp dtype) or another type NumSharp lacks; the
+        ///     message names the reader to use instead.
+        /// </exception>
+        /// <remarks>
+        ///     Both refusals for string keys and string values are decided before anything is converted. Any other failure
+        ///     converting the values disposes the keys already converted, so a refused map leaves no array behind (it used to
+        ///     drop the keys array on the floor for every string-valued map).
+        /// </remarks>
         public static (NDArray keys, NDArray values) ToMap(this OrtValue map)
         {
             if (map is null)
@@ -70,8 +98,24 @@ namespace NumSharp.Interop.OnnxRuntime
             if (keys.GetTensorTypeAndShape().IsString)
                 throw new NotSupportedException(
                     "ToMap: this map has STRING keys, which have no NumSharp dtype. Read the keys with " +
-                    "GetMapKeys(map).ReadStringTensor() and the values with ToMap-of-the-values, or use the OrtValue API directly.");
-            return (keys.ToNDArray(), values.ToNDArray());
+                    "GetMapKeys(map).ReadStringTensor() and the values with map.GetValue(1, OrtAllocator.DefaultInstance).ToNDArray(), " +
+                    "or use the OrtValue API directly.");
+            if (values.GetTensorTypeAndShape().IsString)
+                throw new NotSupportedException(
+                    "ToMap: this map has STRING values, which have no NumSharp dtype. Read the values with " +
+                    "map.GetValue(1, OrtAllocator.DefaultInstance).ReadStringTensor() and the keys with GetMapKeys(map).ToNDArray().");
+
+            NDArray keyArray = keys.ToNDArray();
+            try
+            {
+                return (keyArray, values.ToNDArray());
+            }
+            catch
+            {
+                // The keys were converted first; a values failure (e.g. a BFloat16 value tensor) must not strand them.
+                keyArray.Dispose();
+                throw;
+            }
         }
 
         /// <summary>
@@ -80,7 +124,11 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     <see cref="ToMap"/> returns; typically every map shares the same class-label keys, so
         ///     <c>result[i].values</c> is sample <c>i</c>'s per-class scores.
         /// </summary>
-        /// <exception cref="NotSupportedException">Not a sequence, or an element is not a map.</exception>
+        /// <param name="sequenceOfMaps">A sequence OrtValue whose elements are maps.</param>
+        /// <returns>One (keys, values) pair per element, in sequence order.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="sequenceOfMaps"/> is null.</exception>
+        /// <exception cref="NotSupportedException">Not a sequence, an element is not a map, or a map is refused by <see cref="ToMap"/>.</exception>
+        /// <remarks>All or nothing, like <see cref="ToNDArrays"/>: a failing element disposes the pairs already read.</remarks>
         public static (NDArray keys, NDArray values)[] ToMaps(this OrtValue sequenceOfMaps)
         {
             if (sequenceOfMaps is null)
@@ -91,15 +139,28 @@ namespace NumSharp.Interop.OnnxRuntime
             int count = sequenceOfMaps.GetValueCount();
             var result = new (NDArray keys, NDArray values)[count];
             OrtAllocator allocator = OrtAllocator.DefaultInstance;
-            for (int i = 0; i < count; i++)
+            try
             {
-                using OrtValue element = sequenceOfMaps.GetValue(i, allocator);
-                if (element.OnnxType != OnnxValueType.ONNX_TYPE_MAP)
-                    throw new NotSupportedException(
-                        $"ToMaps: sequence element {i} is {element.OnnxType}, not a map. A sequence of tensors is read with ToNDArrays.");
-                result[i] = element.ToMap();
+                for (int i = 0; i < count; i++)
+                {
+                    using OrtValue element = sequenceOfMaps.GetValue(i, allocator);
+                    if (element.OnnxType != OnnxValueType.ONNX_TYPE_MAP)
+                        throw new NotSupportedException(
+                            $"ToMaps: sequence element {i} is {element.OnnxType}, not a map. A sequence of tensors is read with ToNDArrays.");
+                    result[i] = element.ToMap();
+                }
+                return result;
             }
-            return result;
+            catch
+            {
+                // The pairs read so far never reach the caller: give their buffers back now.
+                foreach ((NDArray keys, NDArray values) in result)
+                {
+                    keys?.Dispose();
+                    values?.Dispose();
+                }
+                throw;
+            }
         }
 
         /// <summary>The keys tensor of a MAP <see cref="OrtValue"/> as a standalone value — for a string-keyed map, feed it to <see cref="ReadStringTensor"/>.</summary>

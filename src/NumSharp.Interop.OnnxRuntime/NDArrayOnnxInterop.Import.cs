@@ -23,8 +23,18 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     must be a dense tensor in CPU-addressable memory: sequences / maps / sparse tensors and
         ///     device-resident (CUDA / DirectML) outputs are refused with a message naming the alternative.</para>
         /// </summary>
-        /// <exception cref="NotSupportedException">Not a dense tensor, or a String / BFloat16 element type.</exception>
-        /// <exception cref="InvalidOperationException">The tensor lives in device memory the CPU cannot address.</exception>
+        /// <remarks>
+        ///     Every refusal is decided before the result is allocated. A tensor of more than 2 GB is refused: ORT's
+        ///     managed API exposes a tensor's memory only as a <see cref="Span{T}"/> of bytes, which cannot cover it (see
+        ///     <see cref="ImportTooLargeMessage"/> for the route that works at any size — ORT writing into a pre-allocated
+        ///     NumSharp output).
+        /// </remarks>
+        /// <param name="value">A dense tensor OrtValue in CPU-accessible memory; it stays the caller's to dispose.</param>
+        /// <returns>A new owning C-contiguous array holding a copy of the tensor's elements.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="value"/> is null.</exception>
+        /// <exception cref="NotSupportedException">Not a dense tensor; a String / BFloat16 element type; or a tensor of more than 2 GB.</exception>
+        /// <exception cref="ArgumentException">The tensor's shape has a negative (symbolic) dimension.</exception>
+        /// <exception cref="InvalidOperationException">The tensor lives in device memory the CPU cannot address, or ORT reports a byte count its shape contradicts.</exception>
         public static unsafe NDArray ToNDArray(this OrtValue value)
         {
             EnsureTensor(value, nameof(ToNDArray));
@@ -35,16 +45,24 @@ namespace NumSharp.Interop.OnnxRuntime
             Shape shape = ShapeFrom(info.Shape);
             EnsureCpuAccessible(value, nameof(ToNDArray));
 
-            var nd = new NDArray(tc, shape, fillZeros: false);
-            if (info.ElementCount > 0)
-            {
-                Span<byte> src = value.GetTensorMutableRawData();
-                long nbytes = shape.Size * nd.dtypesize;
-                if (src.Length != nbytes)
-                    throw new InvalidOperationException($"ORT reports {src.Length} tensor bytes but shape {shape} × itemsize {nd.dtypesize} needs {nbytes}.");
-                src.CopyTo(new Span<byte>(nd.Storage.InternalArray.Address, src.Length));
-            }
+            // Decide the size and read the source span BEFORE allocating the result. The result used to be allocated
+            // first, so a tensor past 2 GB cost a full-size allocation (2 GB for a 2 GB tensor, 4 GB for a 4 GB one) that
+            // was then abandoned to the finalizer when ORT's span failed — with ArgumentOutOfRangeException when the byte
+            // count's int cast came out negative, or the "ORT reports 16 tensor bytes" InvalidOperationException below
+            // when it wrapped to a small positive number. Neither said why.
+            int itemsize = tc.SizeOf();
+            long count = info.ElementCount;
+            if (count > int.MaxValue / itemsize)
+                throw new NotSupportedException(ImportTooLargeMessage(nameof(ToNDArray), count, itemsize));
+            Span<byte> src = count > 0 ? value.GetTensorMutableRawData() : Span<byte>.Empty;
+            long nbytes = shape.Size * itemsize;
+            if (src.Length != nbytes)
+                throw new InvalidOperationException($"ORT reports {src.Length} tensor bytes but shape {shape} × itemsize {itemsize} needs {nbytes}.");
 
+            // Nothing below can fail once the result exists: the lengths match, so the copy cannot throw.
+            var nd = new NDArray(tc, shape, fillZeros: false);
+            if (nbytes > 0)
+                src.CopyTo(new Span<byte>(nd.Storage.InternalArray.Address, src.Length));
             return nd;
         }
 
@@ -68,8 +86,20 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     size-changing <c>ndarray.resize</c> refuses instead of detaching from ORT's memory. CPU-addressable
         ///     tensors only; an empty tensor yields an empty array (nothing to share).</para>
         /// </summary>
+        /// <remarks>
+        ///     A tensor of more than 2 GB is refused, whatever its exact size: ORT's managed API hands out a tensor's memory
+        ///     only through a <see cref="Span{T}"/> of bytes, whose length it computes with an unchecked <c>int</c> cast, so
+        ///     past 2 GB the span either fails to construct or comes back truncated (see <see cref="ImportTooLargeMessage"/>).
+        ///     Every refusal leaves <paramref name="value"/> untouched and still the caller's, even with
+        ///     <paramref name="ownsValue"/> = <c>true</c>: ownership transfers only with a returned view.
+        /// </remarks>
         /// <param name="value">A dense tensor OrtValue in CPU-accessible memory.</param>
         /// <param name="ownsValue"><c>true</c> to dispose the OrtValue when the last view dies; <c>false</c> (default) to leave it the caller's.</param>
+        /// <returns>A NumSharp view over ORT's buffer (an empty array for an empty tensor, which has nothing to share).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="value"/> is null.</exception>
+        /// <exception cref="NotSupportedException">Not a dense tensor; a String / BFloat16 element type; or a tensor of more than 2 GB.</exception>
+        /// <exception cref="ArgumentException">The tensor's shape has a negative (symbolic) dimension.</exception>
+        /// <exception cref="InvalidOperationException">The tensor lives in device memory the CPU cannot address.</exception>
         public static unsafe NDArray AsNDArray(this OrtValue value, bool ownsValue = false)
         {
             EnsureTensor(value, nameof(AsNDArray));
@@ -81,6 +111,13 @@ namespace NumSharp.Interop.OnnxRuntime
             EnsureCpuAccessible(value, nameof(AsNDArray));
 
             long count = info.ElementCount;
+            // The pointer comes from GetTensorMutableRawData, whose (int) byte count is negative for some sizes past 2 GB
+            // (2 GB + 16 threw ArgumentOutOfRangeException) and wraps to a small positive number for others (4 GB + 16
+            // returned a 16-byte span at the right address, so the view happened to work). Which one a tensor got depended
+            // on bit 31 of its byte count; refusing every size past the span limit makes the outcome the documented one.
+            int itemsize = tc.SizeOf();
+            if (count > int.MaxValue / itemsize)
+                throw new NotSupportedException(ImportTooLargeMessage(nameof(AsNDArray), count, itemsize));
             if (count == 0)
             {
                 // Nothing to share — an empty array of the right dtype/shape IS the view.
@@ -120,6 +157,20 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     column-major (<c>IsReversedStride</c>) tensor is transposed back to its logical order on the way.
         ///     <see cref="Float16"/> reads back as <see cref="NPTypeCode.Half"/>.
         /// </summary>
+        /// <remarks>
+        ///     Any size a <see cref="DenseTensor{T}"/> can hold crosses (up to <see cref="int.MaxValue"/> elements, so up to
+        ///     16 GB of bytes): the copy counts bytes in a <see cref="long"/>. It counted them in an <c>int</c> through
+        ///     <see cref="MemoryMarshal.AsBytes{T}(Span{T})"/>, which threw <see cref="OverflowException"/> for every tensor
+        ///     past 2 GB — including the ones <see cref="AsDenseTensor{T}"/> and <see cref="ToDenseTensor{T}"/> produce.
+        ///     The buffer is pinned for the copy, so a NumSharp buffer behind an <see cref="AsDenseTensor{T}"/> handle stays
+        ///     alive while it is read (and is refused once released) and a managed array cannot move.
+        /// </remarks>
+        /// <typeparam name="T">The tensor's element type: bool, the eight integers, <see cref="Float16"/>, float or double.</typeparam>
+        /// <param name="tensor">The tensor to copy; row- or column-major.</param>
+        /// <returns>A new owning C-contiguous array holding the tensor's elements in logical (row-major) order.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="tensor"/> is null.</exception>
+        /// <exception cref="NotSupportedException"><typeparamref name="T"/> has no NumSharp dtype (BFloat16, string, ...).</exception>
+        /// <exception cref="ObjectDisposedException">The tensor's memory is a NumSharp buffer whose <see cref="OrtTensor{T}"/> handle has been disposed.</exception>
         public static unsafe NDArray ToNDArray<T>(this DenseTensor<T> tensor) where T : unmanaged
         {
             if (tensor is null)
@@ -127,35 +178,84 @@ namespace NumSharp.Interop.OnnxRuntime
             NPTypeCode tc = TypeCodeOf<T>();
             long[] dims = ToLongDims(tensor.Dimensions);
             long count = tensor.Length;
-            ReadOnlySpan<byte> src = MemoryMarshal.AsBytes(tensor.Buffer.Span.Slice(0, (int)count));
+            bool reversedStride = tensor.IsReversedStride && dims.Length >= 2;
 
-            if (!tensor.IsReversedStride || dims.Length < 2)
+            // Column-major memory is the C-order layout of the REVERSED shape: copy it as such, transpose back (a view)
+            // and take a C-order copy of the logical array.
+            long[] copied = dims;
+            if (reversedStride)
             {
-                var nd = new NDArray(tc, ShapeFrom(dims), fillZeros: false);
-                if (count > 0)
-                    src.CopyTo(new Span<byte>(nd.Storage.InternalArray.Address, src.Length));
-                return nd;
+                copied = new long[dims.Length];
+                for (int i = 0; i < dims.Length; i++)
+                    copied[i] = dims[dims.Length - 1 - i];
             }
 
-            // Column-major memory is the C-order layout of the REVERSED shape: copy it as such, transpose back
-            // (a view) and take a C-order copy of the logical array.
-            var reversed = new long[dims.Length];
-            for (int i = 0; i < dims.Length; i++)
-                reversed[i] = dims[dims.Length - 1 - i];
-            using var tmp = new NDArray(tc, ShapeFrom(reversed), fillZeros: false);
-            if (count > 0)
-                src.CopyTo(new Span<byte>(tmp.Storage.InternalArray.Address, src.Length));
-            using NDArray transposed = tmp.transpose();
-            return transposed.copy();
+            if (count == 0)
+            {
+                // Nothing to read, and nothing to pin: ORT's own memory manager (a legacy output's OrtValueTensor) refuses
+                // to pin element 0 of an empty tensor. The span is still asked for, so a NumSharp buffer behind a disposed
+                // AsDenseTensor handle is refused exactly as a non-empty one is.
+                _ = tensor.Buffer.Span;
+                var empty = new NDArray(tc, ShapeFrom(copied), fillZeros: false);
+                if (!reversedStride)
+                    return empty;
+                using (empty)
+                using (NDArray transposedEmpty = empty.transpose())
+                    return transposedEmpty.copy();
+            }
+
+            // Pin before allocating, so a released NumSharp buffer is refused with nothing allocated.
+            MemoryHandle pin = tensor.Buffer.Pin();
+            try
+            {
+                var flat = new NDArray(tc, ShapeFrom(copied), fillZeros: false);
+                CopyPinnedTensor(pin, flat, count * sizeof(T));
+                if (!reversedStride)
+                    return flat;
+                using (flat)
+                using (NDArray transposed = flat.transpose())
+                    return transposed.copy();
+            }
+            finally
+            {
+                pin.Dispose();
+            }
         }
 
         /// <summary>
-        ///     View an ORT <see cref="DenseTensor{T}"/> as a NumSharp array over the tensor's own
-        ///     <see cref="DenseTensor{T}.Buffer"/> — zero-copy. A managed buffer is pinned for the view's lifetime
-        ///     (the pin is released when the last NumSharp view over it dies); a buffer that already fronts native
-        ///     memory (an ORT output's tensor, or a NumSharp buffer from <see cref="AsDenseTensor{T}"/>) is simply
-        ///     addressed. Column-major tensors come back as Fortran-ordered views — no transpose copy.
+        ///     Copies <paramref name="nbytes"/> bytes from a pinned tensor buffer into a freshly allocated array — the one
+        ///     copy both layouts of <see cref="ToNDArray{T}(DenseTensor{T})"/> share, with the byte count in a
+        ///     <see cref="long"/> so a tensor past 2 GB crosses.
         /// </summary>
+        /// <param name="pin">The pinned source buffer; the caller keeps the pin for the duration of the call.</param>
+        /// <param name="destination">A fresh C-contiguous array of at least <paramref name="nbytes"/> bytes.</param>
+        /// <param name="nbytes">The number of bytes to copy (the tensor's element count × element size).</param>
+        private static unsafe void CopyPinnedTensor(MemoryHandle pin, NDArray destination, long nbytes) =>
+            Buffer.MemoryCopy(pin.Pointer, destination.Storage.InternalArray.Address, nbytes, nbytes);
+
+        /// <summary>
+        ///     View an ORT <see cref="DenseTensor{T}"/> as a NumSharp array over the tensor's own
+        ///     <see cref="DenseTensor{T}.Buffer"/> — zero-copy. The buffer is pinned for the view's lifetime (the pin is
+        ///     released when the last NumSharp view over it dies), and the view keeps the tensor itself reachable, so neither
+        ///     a managed array nor a native buffer can be collected under it. Column-major tensors come back as
+        ///     Fortran-ordered views — no transpose copy.
+        /// </summary>
+        /// <remarks>
+        ///     What the pin guarantees depends on who owns the memory. A managed array (a tensor you built) is pinned, so it
+        ///     neither moves nor dies. A NumSharp buffer behind <see cref="AsDenseTensor{T}"/> takes a reference of its own,
+        ///     so the view outlives the handle and the source. An ORT output's memory (the legacy <c>session.Run</c> results,
+        ///     <c>DisposableNamedOnnxValue.AsTensor&lt;T&gt;()</c>) is a bare native pointer: the view keeps the tensor — and
+        ///     through it the <see cref="OrtValue"/> — reachable, so a results collection that is merely DROPPED is not
+        ///     finalized under the view, but disposing it explicitly while a view lives frees the memory under the view; keep
+        ///     the results alive, or copy with <see cref="ToNDArray{T}(DenseTensor{T})"/>. That is the rule
+        ///     <see cref="AsNDArray(OrtValue, bool)"/> with <c>ownsValue: false</c> follows too.
+        /// </remarks>
+        /// <typeparam name="T">The tensor's element type: bool, the eight integers, <see cref="Float16"/>, float or double.</typeparam>
+        /// <param name="tensor">The tensor to view; row- or column-major.</param>
+        /// <returns>A NumSharp view over the tensor's buffer (an empty array for an empty tensor, which has nothing to share).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="tensor"/> is null.</exception>
+        /// <exception cref="NotSupportedException"><typeparamref name="T"/> has no NumSharp dtype (BFloat16, string, ...).</exception>
+        /// <exception cref="ObjectDisposedException">The tensor's memory is a NumSharp buffer whose <see cref="OrtTensor{T}"/> handle has been disposed.</exception>
         public static unsafe NDArray AsNDArray<T>(this DenseTensor<T> tensor) where T : unmanaged
         {
             if (tensor is null)
@@ -165,10 +265,25 @@ namespace NumSharp.Interop.OnnxRuntime
             Shape shape = ShapeFrom(dims);
             long count = tensor.Length;
             if (count == 0)
+            {
+                // Nothing to share and nothing to pin (ORT's legacy memory manager refuses to pin element 0 of an empty
+                // tensor), but the span is still asked for: a NumSharp buffer behind a disposed AsDenseTensor handle is
+                // refused for an empty tensor exactly as for a non-empty one, as ToNDArray refuses it.
+                _ = tensor.Buffer.Span;
                 return new NDArray(tc, shape, fillZeros: false);
+            }
 
             MemoryHandle handle = tensor.Buffer.Pin();
-            var lease = new ImportLease(handle.Dispose, count * sizeof(T));
+            // The lease roots the TENSOR as well as releasing the pin. ORT's memory manager for a legacy output
+            // (OrtValueTensor<T>) hands out a bare pointer whose pin keeps nothing alive, so once the caller dropped the
+            // results, the OrtValue's finalizer freed the native buffer under the view and the next run's output showed
+            // through it (20 of 20 rounds in a probe). The tensor holds its Memory, the Memory its manager, the manager
+            // its OrtValue: keeping the tensor reachable keeps the buffer valid until the last view dies.
+            var lease = new ImportLease(() =>
+            {
+                handle.Dispose();
+                GC.KeepAlive(tensor);
+            }, count * sizeof(T));
             try
             {
                 IArraySlice slice = WrapExternal(tc, handle.Pointer, count, lease.Release);

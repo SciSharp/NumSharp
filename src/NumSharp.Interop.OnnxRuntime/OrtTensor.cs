@@ -137,6 +137,13 @@ namespace NumSharp.Interop.OnnxRuntime
     ///     <para>Feed <see cref="Tensor"/> to the legacy <c>NamedOnnxValue.CreateFromTensor</c> /
     ///     <c>session.Run(IReadOnlyCollection&lt;NamedOnnxValue&gt;)</c> API, or wrap <see cref="Memory"/> with
     ///     <c>OrtValue.CreateTensorValueFromMemory</c>. Keep the handle alive across the run.</para>
+    ///
+    ///     <para><b>Pins outlive the handle safely.</b> Every pin of <see cref="Memory"/> — the one
+    ///     <c>CreateTensorValueFromMemory</c> keeps inside the <c>OrtValue</c>, the lease of a NumSharp view made with
+    ///     <c>Tensor.AsNDArray()</c>, any <c>Memory.Pin()</c> — holds its own reference on the NumSharp buffer, so the
+    ///     buffer stays alive until the last pin is released even if this handle and the source array are disposed
+    ///     first. What the disposed handle refuses is NEW access: <c>Memory.Span</c>, <c>Memory.Pin()</c> and the
+    ///     properties below throw <see cref="ObjectDisposedException"/>.</para>
     /// </summary>
     public sealed class OrtTensor<T> : IDisposable where T : unmanaged
     {
@@ -167,7 +174,12 @@ namespace NumSharp.Interop.OnnxRuntime
             }
         }
 
-        /// <summary>The tensor's backing <see cref="Memory{T}"/> — NumSharp's memory, for <c>OrtValue.CreateTensorValueFromMemory</c>.</summary>
+        /// <summary>
+        ///     The tensor's backing <see cref="Memory{T}"/> — NumSharp's memory, for <c>OrtValue.CreateTensorValueFromMemory</c>.
+        ///     A pin taken on it (which that factory takes and keeps in the <c>OrtValue</c>) holds its own reference on the
+        ///     NumSharp buffer until the pin is released, so the <c>OrtValue</c> stays valid even after this handle is disposed.
+        /// </summary>
+        /// <exception cref="ObjectDisposedException">The handle has been disposed.</exception>
         public Memory<T> Memory
         {
             get

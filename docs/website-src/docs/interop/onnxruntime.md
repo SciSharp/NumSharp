@@ -135,6 +135,12 @@ bytes)` on `slice.Address + Shape.Offset × itemsize`; the import takes the poin
   Disposing the handle disposes the `OrtValue` and drops the reference; a forgotten handle is released by
   a finalizer safety net. While exported, `ndarray.resize(refcheck: true)` refuses - NumPy's rule for a
   referenced buffer - and works again once the handle is gone.
+- **Pins outlive the handle.** Whoever pins an `AsDenseTensor<T>` handle's `Memory<T>` - ORT's
+  `CreateTensorValueFromMemory`, a `tensor.AsNDArray()` view, any `Memory<T>.Pin()` - takes its own reference
+  on the NumSharp buffer, released with the pin, so the pin stays valid after the handle and the source are
+  disposed (it used to take none, and those consumers read memory the pool had handed to another array). A
+  disposed handle refuses only NEW access: a new span or pin of its `Memory<T>`, and `ToNDArray` /
+  `AsNDArray` of its tensor, throw `ObjectDisposedException` before anything is allocated.
 - **A released source is refused.** Every verb that reads an array - the exports, the copies, and `Run`'s
   cast and C-order copy of an input - takes its reference on the array's buffer before its first read, and
   throws `ObjectDisposedException` if the buffer has already been released. Reading first would read memory
@@ -147,6 +153,11 @@ bytes)` on `slice.Address + Shape.Offset × itemsize`; the import takes the poin
   `Dispose` the `OrtValue` (or the `Run` result collection) while a view is in use - exactly ORT's rule for
   `GetTensorDataAsSpan`. With `ownsValue: true` the last view disposes the `OrtValue` and you must not.
   Views do not own their data (`owndata == false`): a size-changing `resize` refuses instead of detaching.
+- **A `DenseTensor<T>` view roots its tensor.** ORT's memory manager for a legacy `session.Run` output
+  (`DisposableNamedOnnxValue.AsTensor<T>()`) pins nothing, so `denseTensor.AsNDArray()` keeps the tensor - and
+  through it the `OrtValue` - reachable itself: results that are merely dropped are no longer finalized under
+  the view (in a probe the next run's output showed through it every time). Disposing the results explicitly
+  while a view lives still frees the memory under it - the same rule as a non-owning `AsNDArray(OrtValue)`.
 - **No GIL, no interpreter, no thread affinity** - ORT is thread-safe and the verbs are plain calls. The
   one rule is the handle rule: **pass `handle.Value`, keep the handle alive across `Run`, dispose after.**
 
@@ -188,8 +199,17 @@ runs the suite at both ends of the range.
 
 - Complex tensors (ORT has none), BFloat16 / String / float8 / 4-bit (NumSharp has none).
 - GPU-resident tensors cannot be viewed or copied through this package - bring them to CPU first.
-- ORT's managed data API is `int`-indexed: copying a tensor over 2 GB (`ToOrtValue`, `ToNDArray`) throws;
-  share it zero-copy instead. `ToOrtValue` refuses before it copies or allocates anything.
+- ORT's managed data API is `int`-indexed: it exposes a tensor's memory only as a `Span` of bytes, whose length
+  it casts to `int` unchecked, and offers no other route to the pointer.
+  - **Export**: `ToOrtValue` refuses an array over 2 GB before it copies or allocates anything; share it with
+    `AsOrtValue` (a native pointer, no limit).
+  - **Import**: a tensor of 2 GB or more can be neither copied (`ToNDArray`) nor viewed (`AsNDArray`) out of an
+    `OrtValue`. Both refuse it up front, allocating nothing. `ToNDArray` used to allocate the whole result and
+    then fail with ORT's `ArgumentOutOfRangeException`; `AsNDArray` failed at 2 GB + 16 bytes and "worked" at
+    4 GB + 16, where the truncated span happened to start at the right address. To get such an output, let ORT
+    write it into memory you allocated: `session.Run(inputs, outputs)`.
+  - A `DenseTensor<T>` is limited by elements (`int.MaxValue`), not bytes: `ToNDArray` / `AsNDArray` take one past
+    2 GB whole (the copy used to count bytes in an `int` and threw `OverflowException`).
 - `ToDenseTensor<T>` copies into a managed `T[]`, which holds at most `Array.MaxLength` (2,147,483,591)
   elements; a larger array is refused up front (`AsDenseTensor<T>` shares up to `int.MaxValue` elements,
   `AsOrtValue` has no element limit).
@@ -212,6 +232,14 @@ runs the suite at both ends of the range.
 | 10 | Softmax / Argmax / TopK agree with ORT's own operators, ties lower-index-first | `PostprocessTests` |
 | 11 | The #512 BGRA → NCHW example and the Stable-Diffusion step run as written | `DocExampleTests` |
 | 12 | A released source is refused by every verb and `Run`, in every layout, conversion and cast; dtype and size refusals come first, and an oversize copy is refused before anything is allocated | `ReleasedSourceTests` |
+| 13 | Every export verb satisfies its contract (bytes against NumSharp's and ORT's own reads, write-through, round trips, the refusals) for every dtype × 47 catalogued layouts - 0-d, empties, offsets, negative strides, broadcasts, F-order, rank 40 and 70 - and for 100 seeded random views per dtype plus every slice of a small vector and every axis-slice pair of a small matrix | `LayoutMatrixTests`, `PropertyBasedTests` |
+| 14 | Every feed route (`session.Run(NDArray)`, `session.Run` with zero-copy outputs, a raw `Run` over `AsOrtValue` and over `ToOrtValue`, `NamedOnnxValue` over both dense-tensor verbs) through ORT's own `Identity` returns the elements byte for byte, for every dtype and layout; a pre-allocated output window receives exactly the result; `Add` / `MatMul` over strided and broadcast inputs match NumSharp | `OrtConsumerTests` |
+| 15 | Routes that must agree do: slicing commutes with exporting, a view and its copy cross identically, round trips are idempotent | `MetamorphicTests` |
+| 16 | Every path - success, refusal, failure half-way - leaves the buffer references and the pool balanced; `Memory<T>` pins outlive the handle; a stale tensor and a shape-decided refusal allocate nothing; a view over a dropped legacy output survives | `ArcAccountingTests` |
+| 17 | Handles disposed by many threads release once; pins racing a dispose stay valid or are refused; one session run from many threads over one shared input | `ConcurrencyStressTests` |
+| 18 | Random bit patterns - every NaN payload, signalling NaNs, bool bytes other than 0 and 1 - cross every verb and ORT's `Identity` byte-identical | `BitPatternFuzzTests` |
+| 19 | Tensors of 2 GB or more are refused by both `OrtValue` imports before anything is allocated; a `DenseTensor` past 2 GB copies whole; `ToOrtValue` refuses exactly past the span limit for every item size; a zero-size array with an axis past `int.MaxValue` crosses as an `OrtValue`; the legacy `Run` releases every pin it takes | `BoundaryTests` |
+| 20 | The public surface equals the approved list (defaults included) | `ApiSurfaceTests` |
 
 ## See also
 
