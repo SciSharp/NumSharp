@@ -121,6 +121,13 @@ buffer. The pin takes its own atomic reference, so:
 
 `ToDataView` copies first, so its view has no coupling to the source at all.
 
+**A released source is refused.** Every export verb takes its reference on the source's buffer before its
+first read of it - the Half / Decimal conversion, `ToDataView`'s snapshot, `ToVBuffer`'s copy - and throws
+`ObjectDisposedException` if the buffer has already been released. Reading first would read memory the pool
+may already have handed to another array, and serve that array's values. Refusals that need only the shape,
+the dtype and the names (rank, Complex, a column-name mismatch, the size limit below) come first, so nothing
+is converted, snapshotted or allocated for an array that cannot cross.
+
 `NDArrayMLNetInterop.LiveExports` counts live views - the tests assert it returns to its baseline after
 every case, so each test doubles as a no-leak gate.
 
@@ -187,6 +194,11 @@ leaves the native runtime to the consumer.
   instead; zero-copy is safe for a standalone VBuffer you own.
 - **Rank 1 or 2 only.** An `IDataView` is a table of rows; `AsDataView` accepts 1-D and 2-D arrays.
   Reshape higher-rank data first.
+- **ML.NET's buffers stop at 2,146,435,071 elements** (its internal `ArrayUtils.ArrayMaxSize`, a little
+  below `Array.MaxLength`): `VBufferEditor.Create` - behind every cursor getter and `VBuffer.CopyTo` -
+  refuses a longer length. So a vector column wider than that (`AsDataView` / `ToDataView`) and a
+  `ToVBuffer` longer than that are refused at export, before anything is allocated; use more rows, or
+  expose a long 1-D array as one scalar column.
 - **No `Complex` column.** ML.NET has no complex type (see [Dtypes](#dtypes)).
 - **`ToNDArray` rectangularizes.** A variable-length vector column cannot become a rectangular NDArray and
   is refused with a message naming the cause.

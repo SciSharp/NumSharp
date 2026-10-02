@@ -135,6 +135,12 @@ bytes)` on `slice.Address + Shape.Offset × itemsize`; the import takes the poin
   Disposing the handle disposes the `OrtValue` and drops the reference; a forgotten handle is released by
   a finalizer safety net. While exported, `ndarray.resize(refcheck: true)` refuses - NumPy's rule for a
   referenced buffer - and works again once the handle is gone.
+- **A released source is refused.** Every verb that reads an array - the exports, the copies, and `Run`'s
+  cast and C-order copy of an input - takes its reference on the array's buffer before its first read, and
+  throws `ObjectDisposedException` if the buffer has already been released. Reading first would read memory
+  the pool may already have handed to another array, and export that array's values. Refusals that need only
+  the dtype and the shape (Complex, the 2 GB and `T[]` limits below) come first, so nothing is converted,
+  copied or allocated for an array that cannot cross.
 - **Imports.** `AsNDArray` leases ORT's buffer through NumSharp's memory-block reference count: the lease
   fires when the *last* NumSharp view over the memory - slices derived from it included - is disposed or
   collected. A non-owning view roots the `OrtValue` so it cannot be finalized under it, but you must not
@@ -183,7 +189,10 @@ runs the suite at both ends of the range.
 - Complex tensors (ORT has none), BFloat16 / String / float8 / 4-bit (NumSharp has none).
 - GPU-resident tensors cannot be viewed or copied through this package - bring them to CPU first.
 - ORT's managed data API is `int`-indexed: copying a tensor over 2 GB (`ToOrtValue`, `ToNDArray`) throws;
-  share it zero-copy instead.
+  share it zero-copy instead. `ToOrtValue` refuses before it copies or allocates anything.
+- `ToDenseTensor<T>` copies into a managed `T[]`, which holds at most `Array.MaxLength` (2,147,483,591)
+  elements; a larger array is refused up front (`AsDenseTensor<T>` shares up to `int.MaxValue` elements,
+  `AsOrtValue` has no element limit).
 - `Run`'s shape check sees what `NodeMetadata` reports; a declaration with no dimensions is either a scalar
   or unknown-rank (indistinguishable there) and is left to ORT's own validation.
 
@@ -202,6 +211,7 @@ runs the suite at both ends of the range.
 | 9 | Pre-allocated outputs are written in place; zero-copy outputs own their values | `SessionRunTests.Run_PreallocatedOutputs…`, `Run_ZeroCopyOutputs…` |
 | 10 | Softmax / Argmax / TopK agree with ORT's own operators, ties lower-index-first | `PostprocessTests` |
 | 11 | The #512 BGRA → NCHW example and the Stable-Diffusion step run as written | `DocExampleTests` |
+| 12 | A released source is refused by every verb and `Run`, in every layout, conversion and cast; dtype and size refusals come first, and an oversize copy is refused before anything is allocated | `ReleasedSourceTests` |
 
 ## See also
 
