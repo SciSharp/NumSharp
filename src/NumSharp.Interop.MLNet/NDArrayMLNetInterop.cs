@@ -258,14 +258,108 @@ namespace NumSharp.Interop.MLNet
         ///     digits) to a TEMPORARY the caller owns; every other dtype is fed unchanged. Returns the array to feed
         ///     and, via <paramref name="converted"/>, the temporary to dispose (null when none was made).
         /// </summary>
+        /// <remarks>
+        ///     The conversion is the first read of the source, so it runs under a reference on the source's buffer
+        ///     (<see cref="ConvertPinned"/>). A bare <c>astype</c> read a RELEASED buffer silently, and the pin the data
+        ///     view then took landed on the fresh conversion — always alive — so the view served another array's values.
+        /// </remarks>
+        /// <param name="source">The array to feed.</param>
+        /// <param name="converted">The conversion this made, which the caller owns and must dispose; <c>null</c> when the source is fed as is.</param>
+        /// <returns>The array to feed: <paramref name="converted"/> when one was made, else <paramref name="source"/> itself.</returns>
+        /// <exception cref="ObjectDisposedException">A conversion was needed and the source's buffer has already been released.</exception>
         internal static NDArray ResolveFeedArray(NDArray source, out NDArray converted)
         {
             converted = null;
-            switch (source.typecode)
+
+            // One mapping (FeedTypeCode) decides both the up-front refusals and the conversion, so a verb can never
+            // validate one dtype and then feed another.
+            NPTypeCode feedCode = FeedTypeCode(source.typecode);
+            if (feedCode == source.typecode)
+                return source;
+            return converted = ConvertPinned(source, feedCode);
+        }
+
+        /// <summary>
+        ///     The longest <see cref="VBuffer{T}"/> ML.NET can work with: 2,146,435,071 elements (<c>0x7FEFFFFF</c>), the
+        ///     cap of ML.NET's own buffer sizing (<c>Microsoft.ML.Internal.Utilities.ArrayUtils.ArrayMaxSize</c>, internal,
+        ///     so it is restated here and pinned to ML.NET's value by a test at both ends of the supported range).
+        /// </summary>
+        /// <remarks>
+        ///     It is the .NET Framework's array limit for elements wider than a byte, 1,048,520 below
+        ///     <see cref="Array.MaxLength"/> (2,147,483,591), the limit of a <c>T[]</c> itself. Between the two, a
+        ///     <see cref="VBuffer{T}"/> can be built and read, but <c>VBufferEditor.Create</c> refuses the length
+        ///     (ArgumentOutOfRangeException "min must not exceed max"), and every cursor getter and
+        ///     <see cref="VBuffer{T}.CopyTo(ref VBuffer{T})"/> goes through it. So a vector column wider than this fails on
+        ///     its first row read, and a longer buffer cannot be copied, which is why the export verbs refuse past it,
+        ///     up front.
+        /// </remarks>
+        internal const int MaxBufferLength = 0x7FEFFFFF;
+
+        /// <summary>
+        ///     The dtype a NumSharp array is fed to ML.NET as, decided from the dtype alone (the mapping
+        ///     <see cref="ResolveFeedArray"/> converts by): Half → Single, Decimal → Double, every other dtype as itself.
+        ///     Lets a verb make its dtype, shape and size refusals before it converts, copies or reads anything.
+        /// </summary>
+        /// <param name="code">The source array's dtype.</param>
+        /// <returns>The dtype the array crosses as.</returns>
+        internal static NPTypeCode FeedTypeCode(NPTypeCode code)
+        {
+            switch (code)
             {
-                case NPTypeCode.Half: return converted = source.astype(NPTypeCode.Single);
-                case NPTypeCode.Decimal: return converted = source.astype(NPTypeCode.Double);
-                default: return source;
+                case NPTypeCode.Half: return NPTypeCode.Single;
+                case NPTypeCode.Decimal: return NPTypeCode.Double;
+                default: return code;
+            }
+        }
+
+        /// <summary>
+        ///     <c>source.astype(code)</c> while holding a reference on the source's buffer — how every verb converts a
+        ///     caller's array. Use it instead of a bare <c>astype</c>, which reads the buffer without asking whether it
+        ///     is still alive.
+        /// </summary>
+        /// <remarks>
+        ///     <see cref="Pin"/>'s <c>TryAddRef</c> is the only liveness check: every read goes ahead on a released
+        ///     buffer and, once the pool has handed the memory to another array, returns that array's values. Holding
+        ///     the reference across the conversion also keeps another thread's dispose from releasing the buffer while
+        ///     it is read.
+        /// </remarks>
+        /// <param name="source">The array to convert; any layout.</param>
+        /// <param name="code">The dtype to convert to.</param>
+        /// <returns>A new array the caller owns and must dispose, laid out as <c>astype</c> lays it out (NumPy's order 'K').</returns>
+        /// <exception cref="ObjectDisposedException">The source's buffer has already been released.</exception>
+        internal static NDArray ConvertPinned(NDArray source, NPTypeCode code)
+        {
+            IArraySlice pin = Pin(source);
+            try
+            {
+                return source.astype(code);
+            }
+            finally
+            {
+                pin.Release();
+                GC.KeepAlive(source);
+            }
+        }
+
+        /// <summary>
+        ///     <c>source.copy()</c> — an independent C-order copy — while holding a reference on the source's buffer,
+        ///     for the reason <see cref="ConvertPinned"/> gives: the copy reads the buffer without checking that it is
+        ///     still alive.
+        /// </summary>
+        /// <param name="source">The array to copy; any layout.</param>
+        /// <returns>A new C-contiguous array the caller owns and must dispose.</returns>
+        /// <exception cref="ObjectDisposedException">The source's buffer has already been released.</exception>
+        internal static NDArray CopyPinned(NDArray source)
+        {
+            IArraySlice pin = Pin(source);
+            try
+            {
+                return source.copy();
+            }
+            finally
+            {
+                pin.Release();
+                GC.KeepAlive(source);
             }
         }
 
@@ -308,7 +402,12 @@ namespace NumSharp.Interop.MLNet
         /// <summary>
         ///     Take an ARC reference on the array's buffer so it survives an explicit dispose / collection of the
         ///     source while a view still reads it. The caller owns the reference and must <see cref="IArraySlice.Release"/> it.
+        ///     It is also the only check that the buffer is still alive (<c>TryAddRef</c> fails once it has been
+        ///     released), so every verb takes it before its first read of a caller's array.
         /// </summary>
+        /// <param name="source">The array whose buffer is pinned.</param>
+        /// <returns>The pinned buffer; release it exactly once.</returns>
+        /// <exception cref="ObjectDisposedException">The array's buffer has already been released.</exception>
         internal static IArraySlice Pin(NDArray source)
         {
             IArraySlice slice = source.Storage.InternalArray;

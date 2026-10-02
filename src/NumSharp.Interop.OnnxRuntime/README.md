@@ -137,6 +137,10 @@ The one copy left — `stack` + `astype`/divide producing the planar normalized 
   across `Run`** — pass `handle.Value`, dispose after the run (`using`). While exported,
   `ndarray.resize(refcheck: true)` on the source refuses (`cannot resize an array that references or is
   referenced by another array`), exactly NumPy's rule.
+- **A released source is refused** with `ObjectDisposedException` by every verb that reads it (the exports,
+  the copies, `Run`'s cast and C-order copy): each takes its reference on the buffer before its first read,
+  so it never reads memory the pool may have handed to another array. Dtype and size refusals come first, so
+  nothing is converted, copied or allocated for an array that cannot cross.
 - **Imports** (`AsNDArray`) lease ORT's buffer through NumSharp's memory-block reference counting: the lease
   fires when the last NumSharp view over the memory — derived slices included — is disposed or collected.
   Non-owning views root the `OrtValue` (it cannot be finalized under them) but the caller must not `Dispose`
@@ -158,6 +162,10 @@ The one copy left — `stack` + `astype`/divide producing the planar normalized 
   model INPUT is refused. Sequence / map outputs read via `ToNDArrays` / `ToMap` / `ToMaps`.
 - **GPU-resident tensors** cannot be viewed as `NDArray`s.
 - ORT's managed data API (`GetTensorMutableRawData`, spans) is `int`-indexed: copying a tensor over 2 GB
-  through `ToOrtValue` / `ToNDArray` throws — share it zero-copy instead.
+  through `ToOrtValue` / `ToNDArray` throws — share it zero-copy instead. `ToOrtValue` refuses before it copies
+  or allocates anything.
+- `ToDenseTensor<T>` copies into a managed `T[]`, which holds at most `Array.MaxLength` (2,147,483,591)
+  elements; a larger array is refused up front (`AsDenseTensor<T>` shares up to `int.MaxValue` elements,
+  `AsOrtValue` has no element limit).
 - `Run(...)` shape validation can only see what `NodeMetadata` reports: a declaration without dimensions is
   either a scalar or an unknown-rank tensor (indistinguishable there) and is left to ORT's own check.

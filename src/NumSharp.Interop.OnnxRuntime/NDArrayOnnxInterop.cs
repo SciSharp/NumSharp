@@ -385,16 +385,102 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     that re-seats the storage address and a view that keeps the base address with a non-zero
         ///     offset). The caller owns the reference and must <see cref="IArraySlice.Release"/> it.
         /// </summary>
+        /// <param name="source">The array whose buffer is pinned.</param>
+        /// <param name="data">The address of the array's first logical element.</param>
+        /// <param name="nbytes">The byte length of the array's elements (<c>size × itemsize</c>), meaningful as one run only for a contiguous array.</param>
+        /// <returns>The pinned buffer; release it exactly once.</returns>
+        /// <exception cref="ObjectDisposedException">The array's buffer has already been released.</exception>
         internal static unsafe IArraySlice Pin(NDArray source, out byte* data, out long nbytes)
         {
-            IArraySlice slice = source.Storage.InternalArray;
-            if (!slice.TryAddRef())
-                throw new ObjectDisposedException(nameof(source), "the NumSharp buffer has already been released.");
+            IArraySlice slice = Pin(source);
             Shape shape = source.Shape;
             int itemsize = source.dtypesize;
             nbytes = shape.Size * itemsize;
             data = (byte*)slice.Address + shape.Offset * itemsize;
             return slice;
+        }
+
+        /// <summary>
+        ///     Take an ARC reference on the array's buffer, refusing a buffer that has already been released. This is
+        ///     the ONLY liveness check NumSharp offers: <c>TryAddRef</c> fails once the last reference is gone, while
+        ///     every read (<c>astype</c>, <c>copy()</c>, a raw pointer) goes ahead regardless and, once the pool has
+        ///     handed the memory to another array, returns that array's values. So every verb takes this reference
+        ///     before its first read of a caller's array, and holds it until the read is done.
+        /// </summary>
+        /// <param name="source">The array whose buffer is pinned.</param>
+        /// <returns>The pinned buffer; release it exactly once (<see cref="IArraySlice.Release"/>).</returns>
+        /// <exception cref="ObjectDisposedException">The array's buffer has already been released.</exception>
+        internal static IArraySlice Pin(NDArray source)
+        {
+            IArraySlice slice = source.Storage.InternalArray;
+            if (!slice.TryAddRef())
+                throw new ObjectDisposedException(nameof(source), "the NumSharp buffer has already been released.");
+            return slice;
+        }
+
+        /// <summary>
+        ///     The dtype a NumSharp array is fed to ONNX Runtime as: <see cref="NPTypeCode.Decimal"/>, which has no ONNX
+        ///     element type, becomes <see cref="NPTypeCode.Double"/>; every other dtype is fed as itself (Char and Half
+        ///     cross bit-for-bit as UInt16 / Float16, see <see cref="ToTensorElementType"/>). Lets a verb decide its
+        ///     dtype and size refusals from the source's dtype and shape alone, before it converts or reads anything.
+        /// </summary>
+        /// <param name="code">The source array's dtype.</param>
+        /// <returns>The dtype the conversion verbs produce for it.</returns>
+        internal static NPTypeCode FeedTypeCode(NPTypeCode code) => code == NPTypeCode.Decimal ? NPTypeCode.Double : code;
+
+        /// <summary>
+        ///     <c>source.astype(code)</c> while holding a reference on the source's buffer — how every verb converts a
+        ///     caller's array. Use it instead of a bare <c>astype</c>, which reads the buffer without asking whether it
+        ///     is still alive.
+        /// </summary>
+        /// <remarks>
+        ///     The verbs used to convert first and pin afterwards, so the pin (<see cref="Pin(NDArray)"/>, the only
+        ///     liveness check) ran on the fresh conversion and always succeeded: a source whose buffer had been released
+        ///     was converted from whatever the pool had put there, and the export carried another array's values.
+        ///     Holding the reference across the conversion also keeps another thread's dispose from releasing the
+        ///     buffer while it is read.
+        /// </remarks>
+        /// <param name="source">The array to convert; any layout.</param>
+        /// <param name="code">The dtype to convert to.</param>
+        /// <returns>
+        ///     A new array the caller owns and must dispose, laid out as <c>astype</c> lays it out (NumPy's order 'K':
+        ///     a transposed source gives a Fortran-ordered result, so callers needing C order still check).
+        /// </returns>
+        /// <exception cref="ObjectDisposedException">The source's buffer has already been released.</exception>
+        internal static NDArray ConvertPinned(NDArray source, NPTypeCode code)
+        {
+            IArraySlice pin = Pin(source);
+            try
+            {
+                return source.astype(code);
+            }
+            finally
+            {
+                pin.Release();
+                GC.KeepAlive(source);
+            }
+        }
+
+        /// <summary>
+        ///     <c>source.copy()</c> — a C-order copy, the densifying step for a view ONNX Runtime cannot share — while
+        ///     holding a reference on the source's buffer, for the reason <see cref="ConvertPinned"/> gives: the copy
+        ///     reads the buffer without checking that it is still alive.
+        /// </summary>
+        /// <param name="source">The array to copy; any layout (0-d stays 0-d, unlike <c>np.ascontiguousarray</c>).</param>
+        /// <returns>A new C-contiguous array the caller owns and must dispose.</returns>
+        /// <exception cref="ObjectDisposedException">The source's buffer has already been released.</exception>
+        internal static NDArray CopyPinned(NDArray source)
+        {
+            IArraySlice pin = Pin(source);
+            try
+            {
+                return source.copy();
+            }
+            finally
+            {
+                pin.Release();
+                GC.KeepAlive(source);
+            }
         }
     }
 }

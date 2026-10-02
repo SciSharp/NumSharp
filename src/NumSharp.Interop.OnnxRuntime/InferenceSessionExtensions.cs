@@ -216,6 +216,22 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     a C-order copy only when the array is not C-contiguous. Any temporary this creates is owned by the
         ///     returned handle and disposed with it.
         /// </summary>
+        /// <remarks>
+        ///     Every read of the caller's array — the cast, the C-order copy, the share — happens under a reference on
+        ///     its buffer (<see cref="NDArrayOnnxInterop.ConvertPinned"/>, <see cref="NDArrayOnnxInterop.CopyPinned"/>,
+        ///     the pin inside <see cref="NDArrayOnnxInterop.AsOrtValueCore"/>), so an input whose buffer has been
+        ///     released is refused instead of being cast or copied from freed memory and fed to the model.
+        /// </remarks>
+        /// <param name="session">The session whose input metadata declares the input.</param>
+        /// <param name="name">The model input's name.</param>
+        /// <param name="array">The array to feed; any layout and any dtype castable to the declared one.</param>
+        /// <param name="casting">The NumPy casting rule a dtype coercion must satisfy ("no", "equiv", "safe", "same_kind", "unsafe").</param>
+        /// <returns>A handle sharing the (possibly cast or copied) array with ORT; it owns any temporary it was given.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="name"/> or <paramref name="array"/> is null.</exception>
+        /// <exception cref="ArgumentException">The model has no input named <paramref name="name"/>, or the array's shape contradicts the declared one.</exception>
+        /// <exception cref="NotSupportedException">The input is not a tensor, or its declared element type has no NumSharp dtype.</exception>
+        /// <exception cref="InvalidCastException">The array's dtype does not cast to the declared one under <paramref name="casting"/>.</exception>
+        /// <exception cref="ObjectDisposedException">The array's buffer has already been released.</exception>
         internal static OrtTensor PrepareInput(InferenceSession session, string name, NDArray array, string casting)
         {
             if (name is null)
@@ -246,7 +262,10 @@ namespace NumSharp.Interop.OnnxRuntime
                         throw new InvalidCastException(
                             $"input '{name}' holds {have} but the model declares {want} ({meta.ElementDataType}); the cast is not allowed under " +
                             $"casting='{casting}'. Convert explicitly — nd.astype(NPTypeCode.{want}) — or relax the rule (casting: \"same_kind\" / \"unsafe\").");
-                    fed = array.astype(want);
+                    // The cast is the first read of the caller's array, so it runs under a reference on its buffer: a
+                    // bare astype read a RELEASED buffer silently, and the model then ran on whatever the pool had put
+                    // in the freed memory (the share below pins only the fresh cast, which is always alive).
+                    fed = NDArrayOnnxInterop.ConvertPinned(array, want);
                     owned = true;
                 }
 
@@ -254,8 +273,9 @@ namespace NumSharp.Interop.OnnxRuntime
 
                 if (!fed.Shape.IsContiguous)
                 {
-                    // AsOrtValue shares only C-contiguous memory; a view is copied in logical order for the run.
-                    NDArray dense = fed.copy();
+                    // AsOrtValue shares only C-contiguous memory; a view is copied in logical order for the run. The
+                    // copy reads the caller's array when no cast was made, so it too checks the buffer is alive first.
+                    NDArray dense = NDArrayOnnxInterop.CopyPinned(fed);
                     if (owned)
                         fed.Dispose();
                     fed = dense;

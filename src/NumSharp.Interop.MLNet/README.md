@@ -71,6 +71,14 @@ dispose it — a `using`, or wire it into your `MLContext` lifetime — to relea
 takes its own ARC reference, so it is even safe to dispose the source array while the view (or its
 cursors) still read it. Not disposing leaks the pin until finalization.
 
+A source whose buffer has already been released is refused (`ObjectDisposedException`) by every export
+verb: each takes its reference before its first read (the Half / Decimal conversion, `ToDataView`'s
+snapshot, `ToVBuffer`'s copy), so it never reads memory the pool may have handed to another array.
+
+ML.NET's buffers hold at most 2,146,435,071 elements (its internal `ArrayUtils.ArrayMaxSize`, a little
+below `Array.MaxLength`): a vector column wider than that, or a `ToVBuffer` longer than that, is refused at
+export, before anything is allocated — ML.NET could not read such a row or copy such a buffer.
+
 `NDArrayMLNetInterop.LiveExports` counts live views, for leak detection in tests.
 
 ## Dependency
