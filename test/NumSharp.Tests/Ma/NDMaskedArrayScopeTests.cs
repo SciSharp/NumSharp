@@ -156,6 +156,98 @@ namespace NumSharp.Tests.Ma
         }
 
         /// <summary>
+        ///     A slice of a hard-masked array is hard (it inherits the flag), so writes through it run the hard
+        ///     branch of <c>SetItem</c> INSIDE the caller's scope. Ownership must hold on that path: the parent was
+        ///     built before the scope, so its data and mask survive it and the mask keeps its identity; the slice's
+        ///     data and mask were handed back to the caller's scope by the indexer, so they are reclaimed with it
+        ///     rather than stranded. NumPy 2.4.2: <c>x = ma.array([1.,2,3,4], mask=[0,1,0,0], hard_mask=True);
+        ///     v = x[0:3]; v[1] = 99; v[0] = 11; v[...] = 50; v[2] = ma.masked</c> → data <c>[50,2,50,4]</c>, mask
+        ///     <c>[F,T,T,F]</c>, <c>x._mask is m0</c>.
+        /// </summary>
+        [TestMethod]
+        public void HardSlice_WritesInsideACallersScope_ParentSurvives_SliceReclaimedWithTheScope()
+        {
+            var x = np.ma.array(np.array(new double[] { 1, 2, 3, 4 }), np.array(new[] { false, true, false, false }), hard_mask: true);
+            var data0 = x._data;
+            var mask0 = x._mask;
+
+            NDMaskedArray v;
+            using (NDScope.Open())
+            {
+                v = (NDMaskedArray)x["0:3"];
+                Assert.IsTrue(v.hardmask);
+                v[1] = 99.0;
+                v[0] = 11.0;
+                v["..."] = 50.0;
+                v[2] = np.ma.masked;
+            }
+
+            Assert.IsFalse(data0.IsDisposed);
+            Assert.IsFalse(mask0.IsDisposed);
+            Assert.IsTrue(ReferenceEquals(mask0, x._mask));
+            Assert.IsTrue(D(x).SequenceEqual(new double[] { 50, 2, 50, 4 }));
+            Assert.IsTrue(M(x).SequenceEqual(new[] { false, true, true, false }));
+            Assert.IsTrue(v._data.IsDisposed);
+            Assert.IsTrue(v._mask.IsDisposed);
+        }
+
+        /// <summary>
+        ///     <c>SetItem</c> carries <c>[NDScoped]</c>, so its own scope releases the hard-mask snapshots (a data
+        ///     copy and a mask copy per write) before it returns, even when the caller has NO scope open. Without that
+        ///     scope each hard write would leave two pooled buffers to the finalizer: a hard write through a slice
+        ///     copies the whole slice, so a loop of writes would hold that memory until a collection. Measured in an
+        ///     exact pool window (re-run when a collection lands in it); the slice is taken outside the window, so
+        ///     only the writes are counted.
+        /// </summary>
+        [TestMethod]
+        [DoNotParallelize] // reads the process-wide pool counters
+        public void HardSlice_SetItem_ReleasesItsSnapshots_WithNoEnclosingScope()
+        {
+            const int n = 4096; // large enough that both snapshots come from the bucketed pool
+            var x = np.ma.array(np.arange(n).astype(np.float64), np.equal(np.mod(np.arange(n), 7), 1), hard_mask: true);
+            var v = (NDMaskedArray)x["0:4000"];
+            v[1] = 99.0; // warm-up: kernels and the pool bucket exist before the window
+
+            long acquired = 0, released = 0;
+            bool exact = false;
+            for (int attempt = 0; attempt < 5 && !exact; attempt++)
+            {
+                // Hygiene: finalize the previous attempt's garbage and start with a fresh gen-0 budget.
+                GcQuiescence.CollectYoung();
+                var window = GcQuiescence.OpenWindow();
+                long a0 = Acquisitions, r0 = Releases;
+                for (int i = 0; i < 4; i++)
+                {
+                    v[1] = 99.0;  // masked slot: ignored
+                    v[0] = 11.0;  // unmasked slot: written
+                }
+                acquired = Acquisitions - a0;
+                released = Releases - r0;
+                // Exact only when no collection (and so no finalizer) ran inside the window.
+                exact = GcQuiescence.Undisturbed(window);
+            }
+
+            Assert.IsTrue(acquired > 0, "the hard writes must take snapshots from the pool, or the window measures nothing");
+            if (exact)
+                Assert.AreEqual(acquired, released, "every snapshot buffer is released by SetItem's own scope");
+            else
+                // A collection landed in every attempt: a finalizer can only ADD releases, so this reading errs
+                // toward innocence and still fails when the scope released nothing.
+                Assert.IsTrue(released >= acquired, "every snapshot buffer is released by SetItem's own scope");
+            Assert.AreEqual(1.0, x._data.GetAtIndex<double>(1)); // the masked slot kept its data
+            Assert.AreEqual(11.0, x._data.GetAtIndex<double>(0));
+        }
+
+        /// <summary>Pooled buffers handed out so far (process-wide).</summary>
+        private static long Acquisitions => NumSharp.Backends.Unmanaged.Pooling.SizeBucketedBufferPool.Hits
+                                            + NumSharp.Backends.Unmanaged.Pooling.SizeBucketedBufferPool.Misses
+                                            + NumSharp.Backends.Unmanaged.Pooling.SizeBucketedBufferPool.ZeroedAllocs;
+
+        /// <summary>Pooled buffers given back so far (process-wide).</summary>
+        private static long Releases => NumSharp.Backends.Unmanaged.Pooling.SizeBucketedBufferPool.Returns
+                                        + NumSharp.Backends.Unmanaged.Pooling.SizeBucketedBufferPool.ReturnsFreed;
+
+        /// <summary>
         ///     <c>fromfunction</c> releases the index grids it handed to the callback — except one the callback
         ///     returned VERBATIM, which is the result's data. NumPy 2.4.2:
         ///     <c>ma.fromfunction(lambda i, j: i, (2, 3))</c> → data <c>[[0,0,0],[1,1,1]]</c> (float64), nomask.

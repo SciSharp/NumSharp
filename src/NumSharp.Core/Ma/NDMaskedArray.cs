@@ -902,9 +902,12 @@ namespace NumSharp
         {
             get
             {
-                // Scoped by hand (an object-returning accessor the weaver cannot yield through): the scalar path
-                // reads its value out of two 0-D index views and must reclaim both; the sub-array path hands its
-                // views back through Yield so they outlive the scope.
+                // Scoped by hand, because [NDScoped] cannot take this accessor: the weaver rejects an `object`
+                // return (NDW003) and yields a carrier only when it is a struct, so a NDMaskedArray result has no
+                // woven egress. The scalar path reads its value out of two 0-D index views and must reclaim both;
+                // the sub-array path hands its views back through Yield so they outlive the scope. Yield re-parents
+                // only arrays THIS scope tracked (NDScope.Returns ignores the rest), and the parent's own _data and
+                // _mask were built before the scope opened, so they are never handed to the caller's scope.
                 using var scope = NDScope.Open();
                 // Apply the identical index to data and (if present) mask — the two stay aligned by construction.
                 var subData = _data[indices];
@@ -930,17 +933,20 @@ namespace NumSharp
         /// <param name="indices">The index expression.</param>
         /// <param name="value">Scalar/array/NDArray/NDMaskedArray/the masked singleton.</param>
         /// <remarks>
-        ///     Scoped by hand: the 0-D True/False scalars, the value normalized from a scalar/array-like, and the
-        ///     hard-mask snapshots are all transient and reclaimed on return (exceptions included). A mask this
-        ///     write has to CREATE (<see cref="EnsureMask"/>) is a field store and is detached instead, so it lives
-        ///     as long as this array rather than as long as the scope. Under a hard mask the restored mask is
-        ///     written back INTO the existing mask buffer (NumPy's <c>_mask[indx] = mindx</c> is in place too), so
-        ///     the mask keeps its identity — no replacement array is created and the old one is never orphaned.
+        ///     Scoped by <c>[NDScoped]</c> (a <c>void</c> method has no egress, so the weaver needs nothing from the
+        ///     body): the 0-D True/False scalars, the value normalized from a scalar/array-like, and the hard-mask
+        ///     snapshots are all transient and reclaimed on return (exceptions included). Nothing here is handed
+        ///     back to the caller's scope. The arrays this write touches in place (<see cref="_data"/>,
+        ///     <see cref="_mask"/>, and the parent buffers a slice shares) were built before the scope opened, so the
+        ///     scope never tracks them and cannot dispose them. A mask this write has to CREATE
+        ///     (<see cref="EnsureMask"/>) is a field store and is detached instead, so it lives as long as this array
+        ///     rather than as long as the scope. Under a hard mask the restored mask is written back INTO the existing
+        ///     mask buffer (NumPy's <c>_mask[indx] = mindx</c> is in place too), so the mask keeps its identity — no
+        ///     replacement array is created and the old one is never orphaned.
         /// </remarks>
+        [NDScoped]
         private void SetItem(object[] indices, object value)
         {
-            using var scope = NDScope.Open();
-
             // `x[i] = masked`: set the mask True at the slots, leave the DATA as-is (NumPy hides but keeps it).
             // Masking a slot is ALWAYS allowed, even under a hard mask (hardening only forbids UNmasking).
             if (value is NDMaskedConstant)
