@@ -112,19 +112,31 @@ namespace NumSharp
             return take(a, idxArr, axis, @out, mode);
         }
 
+        /// <summary>
+        ///     Flat <c>np.take</c> (no axis): gathers <c>a.flat[indices]</c> through the IL take kernel into a fresh
+        ///     C-contiguous array shaped like <paramref name="indices"/>.
+        /// </summary>
+        /// <param name="a">The source array, any layout (a non-contiguous source is first copied to C order).</param>
+        /// <param name="indices">The integer index array; a C-contiguous int32/int64 one is read in place.</param>
+        /// <param name="mode">The parsed out-of-bounds policy (raise / wrap / clip).</param>
+        /// <returns>The gathered values: dtype of <paramref name="a"/>, shape of <paramref name="indices"/>.</returns>
+        /// <exception cref="ArgumentException"><paramref name="a"/> is empty and <paramref name="indices"/> is not.</exception>
+        /// <exception cref="TypeError">The index dtype cannot be cast to int64 under <c>same_kind</c> (float/complex).</exception>
+        /// <exception cref="ArgumentOutOfRangeException">An index is out of bounds under mode <c>raise</c>.</exception>
+        /// <remarks>Scoped by <c>[NDScoped]</c>: the C-order copy of a non-contiguous source and the int64 copy of
+        /// the indices are released on return, exceptions included. The caller's <paramref name="a"/> and
+        /// <paramref name="indices"/> were built before the scope opened, so a source or index array used as-is
+        /// is never disposed.</remarks>
+        [NDScoped]
         private static unsafe NDArray TakeFlat(NDArray a, NDArray indices, int mode)
         {
             // Materialise non-contig source to C-contig so the kernel can walk linearly.
-            NDArray sourceOwned = null;
             NDArray source = a;
             if (!a.Shape.IsContiguous)
-            {
-                sourceOwned = np.ascontiguousarray(a);
-                source = sourceOwned;
-            }
+                source = np.ascontiguousarray(a);
 
             // Cast indices to contig int64 (a contig int32 array is read in place).
-            var idx64 = CastIndicesToInt64(indices, "same_kind", out bool ownIdx, out bool idx32);
+            var idx64 = CastIndicesToInt64(indices, "same_kind", out _, out bool idx32);
 
             // Output shape = indices.shape, dtype = a.dtype, C-contig allocated.
             var outShape = new Shape((long[])indices.Shape.dimensions.Clone());
@@ -135,41 +147,43 @@ namespace NumSharp
             long elemBytes = a.dtypesize;
 
             if (indicesCount == 0)
-            {
-                if (ownIdx) idx64.Dispose();
-                sourceOwned?.Dispose();
                 return result;
-            }
 
             if (maxItem == 0)
                 throw new ArgumentException("cannot do a non-empty take from an empty array.", nameof(a));
 
-            try
-            {
-                ExecuteTakeKernel(source, idx64, result,
-                    outerSize: 1, indicesCount: indicesCount,
-                    maxItem: maxItem, innerSize: elemBytes, mode: mode, idx32: idx32);
-            }
-            finally
-            {
-                if (ownIdx) idx64.Dispose();
-                sourceOwned?.Dispose();
-            }
+            ExecuteTakeKernel(source, idx64, result,
+                outerSize: 1, indicesCount: indicesCount,
+                maxItem: maxItem, innerSize: elemBytes, mode: mode, idx32: idx32);
 
             return result;
         }
 
+        /// <summary>
+        ///     <c>np.take</c> along <paramref name="axis"/>: gathers whole slabs <c>a[..., indices, ...]</c> through
+        ///     the IL take kernel into a fresh C-contiguous array of shape
+        ///     <c>a.shape[:axis] + indices.shape + a.shape[axis+1:]</c>.
+        /// </summary>
+        /// <param name="a">The source array, any layout (a non-contiguous source is first copied to C order).</param>
+        /// <param name="indices">The integer index array; a C-contiguous int32/int64 one is read in place.</param>
+        /// <param name="axis">The normalized (non-negative, in-range) axis to take along.</param>
+        /// <param name="mode">The parsed out-of-bounds policy (raise / wrap / clip).</param>
+        /// <returns>The gathered slabs, dtype of <paramref name="a"/>.</returns>
+        /// <exception cref="ArgumentException">The axis is empty and <paramref name="indices"/> is not.</exception>
+        /// <exception cref="TypeError">The index dtype cannot be cast to int64 under <c>same_kind</c> (float/complex).</exception>
+        /// <exception cref="ArgumentOutOfRangeException">An index is out of bounds under mode <c>raise</c>.</exception>
+        /// <remarks>Scoped by <c>[NDScoped]</c>: the C-order copy of a non-contiguous source and the int64 copy of
+        /// the indices are released on return, exceptions included. The caller's <paramref name="a"/> and
+        /// <paramref name="indices"/> were built before the scope opened, so a source or index array used as-is
+        /// is never disposed.</remarks>
+        [NDScoped]
         private static unsafe NDArray TakeAxis(NDArray a, NDArray indices, int axis, int mode)
         {
-            NDArray sourceOwned = null;
             NDArray source = a;
             if (!a.Shape.IsContiguous)
-            {
-                sourceOwned = np.ascontiguousarray(a);
-                source = sourceOwned;
-            }
+                source = np.ascontiguousarray(a);
 
-            var idx64 = CastIndicesToInt64(indices, "same_kind", out bool ownIdx, out bool idx32);
+            var idx64 = CastIndicesToInt64(indices, "same_kind", out _, out bool idx32);
 
             // Compute outer × inner factorisation around `axis`.
             long outerSize = 1;
@@ -192,27 +206,15 @@ namespace NumSharp
 
             long indicesCount = indices.size;
             if (indicesCount == 0 || outerSize == 0)
-            {
-                if (ownIdx) idx64.Dispose();
-                sourceOwned?.Dispose();
                 return result;
-            }
 
             if (maxItem == 0)
                 throw new ArgumentException("cannot do a non-empty take from an empty axis.", nameof(a));
 
-            try
-            {
-                ExecuteTakeKernel(source, idx64, result,
-                    outerSize: outerSize, indicesCount: indicesCount,
-                    maxItem: maxItem, innerSize: innerBytes, mode: mode, idx32: idx32,
-                    axis: axis);   // axis form: the raise-mode IndexError names this axis (NumPy wording)
-            }
-            finally
-            {
-                if (ownIdx) idx64.Dispose();
-                sourceOwned?.Dispose();
-            }
+            ExecuteTakeKernel(source, idx64, result,
+                outerSize: outerSize, indicesCount: indicesCount,
+                maxItem: maxItem, innerSize: innerBytes, mode: mode, idx32: idx32,
+                axis: axis);   // axis form: the raise-mode IndexError names this axis (NumPy wording)
 
             return result;
         }

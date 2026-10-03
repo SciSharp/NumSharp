@@ -435,14 +435,29 @@ namespace NumSharp
             return new GradientResult(outvals, single: len_axes == 1);
         }
 
-        // out[0]/out[-1] = (hi - lo) / d. Uniform spacing uses the weak C# double `d` (so the quotient
-        // stays in the input dtype, matching NumPy's weak `ax_dx`); non-uniform spacing divides by the
-        // STRONG float64 coordinate scalar. When <paramref name="widenTo"/> is non-null (a reduced-
-        // precision float16/float32 input) the difference is widened to it (float64) BEFORE the divide,
-        // so the quotient is computed in float64 and rounded once to otype on store — reproducing NumPy,
-        // which a weak 0-D NDArray.Scalar(double) would otherwise demote back to the input precision.
-        // The subtraction is done first in the input dtype (as NumPy does — `f[s2]-f[s3]` is f32), then
-        // widened, because widening is exact and commuting it would not change the result.
+        /// <summary>
+        ///     One first-order gradient edge, <c>out[0]</c> or <c>out[-1]</c> = <c>(hi - lo) / d</c>. Uniform spacing
+        ///     uses the weak C# double <paramref name="d"/>, so the quotient stays in the input dtype (NumPy's weak
+        ///     <c>ax_dx</c>); non-uniform spacing divides by the STRONG float64 coordinate scalar.
+        /// </summary>
+        /// <param name="hi">The later length-1 slice along the axis (<c>f[1]</c> or <c>f[-1]</c>).</param>
+        /// <param name="lo">The earlier length-1 slice along the axis (<c>f[0]</c> or <c>f[-2]</c>).</param>
+        /// <param name="d">The spacing to divide by.</param>
+        /// <param name="uniform">True for scalar spacing (weak double divisor); false for coordinate spacing
+        /// (strong float64 divisor).</param>
+        /// <param name="widenTo">float64 for a reduced-precision float16/float32 input, else null. The difference
+        /// is widened to it BEFORE the divide, so the quotient is computed in float64 and rounded once to otype on
+        /// store, reproducing NumPy; a weak 0-D <c>NDArray.Scalar(double)</c> would demote it back to the input
+        /// precision. The subtraction itself runs in the input dtype first (as NumPy's <c>f[s2]-f[s3]</c> does);
+        /// widening is exact, so the order cannot change the result.</param>
+        /// <returns>The edge values, length 1 along the axis.</returns>
+        /// <remarks>
+        ///     Scoped by <c>[NDScoped]</c>: the difference, the widened copy and the 0-d divisor are released when
+        ///     the edge returns, and the result is yielded to the caller. <paramref name="hi"/> and
+        ///     <paramref name="lo"/> are views the caller built before this scope opened, so this method no longer
+        ///     disposes them: <c>GradientImpl</c>'s own scope releases them.
+        /// </remarks>
+        [NDScoped]
         private static NDArray Edge1(NDArray hi, NDArray lo, double d, bool uniform, DType widenTo)
         {
             NDArray num = hi - lo;
@@ -455,27 +470,44 @@ namespace NumSharp
             {
                 // float64 / complex128 / Decimal input: the float64 scalar promotes up to the operand's
                 // dtype, so the edge already computes at full precision — keep the existing path.
-                using var sd = NDArray.Scalar(d);
+                var sd = NDArray.Scalar(d);
                 res = num / sd;
             }
             else
             {
-                using NDArray w = num.astype(widenTo);   // exact widen f16/f32 -> f64
-                using var sd = NDArray.Scalar(d);        // f64 / f64 -> f64 (no weak demotion)
+                NDArray w = num.astype(widenTo);   // exact widen f16/f32 -> f64
+                var sd = NDArray.Scalar(d);        // f64 / f64 -> f64 (no weak demotion)
                 res = w / sd;
             }
-            num.Dispose(); hi.Dispose(); lo.Dispose();
             return res;
         }
 
-        // a*f0 + b*f1 + c*f2, left-associative exactly as NumPy evaluates it. Uniform spacing uses the
-        // weak C# double coefficients (so the combination stays in the input dtype, matching NumPy's
-        // weak coefficients); non-uniform spacing uses STRONG float64 coordinate coefficients. When
-        // <paramref name="widenTo"/> is non-null (a reduced-precision float16/float32 input) the three
-        // slices are widened to it (float64) BEFORE the products, so `a*f0` etc. are computed in float64
-        // (NumPy widens the f32 operand into the float64 multiply) and the float64 sum is rounded once to
-        // otype on store — a weak 0-D NDArray.Scalar(double) coefficient would instead demote each product
-        // back to the input precision and diverge by several ULP.
+        /// <summary>
+        ///     One second-order gradient edge: <c>a*f0 + b*f1 + c*f2</c>, left-associative exactly as NumPy evaluates
+        ///     it. Uniform spacing uses the weak C# double coefficients, so the combination stays in the input dtype
+        ///     (NumPy's weak coefficients); non-uniform spacing uses STRONG float64 coordinate coefficients.
+        /// </summary>
+        /// <param name="f0">The first length-1 slice of the three-point stencil.</param>
+        /// <param name="f1">The second length-1 slice.</param>
+        /// <param name="f2">The third length-1 slice.</param>
+        /// <param name="a">The coefficient of <paramref name="f0"/>.</param>
+        /// <param name="b">The coefficient of <paramref name="f1"/>.</param>
+        /// <param name="c">The coefficient of <paramref name="f2"/>.</param>
+        /// <param name="uniform">True for scalar spacing (weak double coefficients); false for coordinate spacing
+        /// (strong float64 coefficients).</param>
+        /// <param name="widenTo">float64 for a reduced-precision float16/float32 input, else null. The three slices
+        /// are widened to it BEFORE the products, so <c>a*f0</c> and the rest are computed in float64 (NumPy widens
+        /// the f32 operand into the float64 multiply) and the float64 sum is rounded once to otype on store; a weak
+        /// 0-D <c>NDArray.Scalar(double)</c> coefficient would instead demote each product back to the input
+        /// precision and diverge by several ULP.</param>
+        /// <returns>The edge values, length 1 along the axis.</returns>
+        /// <remarks>
+        ///     Scoped by <c>[NDScoped]</c>: the 0-d coefficients, the widened slices, the three products and the
+        ///     partial sum are released when the edge returns, and the result is yielded to the caller. The three
+        ///     slices are views the caller built before this scope opened, so this method no longer disposes them:
+        ///     <c>GradientImpl</c>'s own scope releases them.
+        /// </remarks>
+        [NDScoped]
         private static NDArray Edge2(NDArray f0, NDArray f1, NDArray f2, double a, double b, double c, bool uniform, DType widenTo)
         {
             NDArray res;
@@ -483,7 +515,6 @@ namespace NumSharp
             {
                 NDArray t0 = f0 * a, t1 = f1 * b, t2 = f2 * c;
                 NDArray s01 = t0 + t1; res = s01 + t2;
-                t0.Dispose(); t1.Dispose(); t2.Dispose(); s01.Dispose();
             }
             else if (widenTo is null)
             {
@@ -492,22 +523,17 @@ namespace NumSharp
                 NDArray na = NDArray.Scalar(a), nb = NDArray.Scalar(b), nc = NDArray.Scalar(c);
                 NDArray t0 = na * f0, t1 = nb * f1, t2 = nc * f2;
                 NDArray s01 = t0 + t1; res = s01 + t2;
-                na.Dispose(); nb.Dispose(); nc.Dispose();
-                t0.Dispose(); t1.Dispose(); t2.Dispose(); s01.Dispose();
             }
             else
             {
                 // reduced precision: widen the slices to float64 so the products and sum run in float64
                 // (the f64 scalar coefficients no longer demote against an f32/f16 operand), then the
                 // caller's store rounds the float64 combination once to otype — bit-identical to NumPy.
-                using NDArray w0 = f0.astype(widenTo), w1 = f1.astype(widenTo), w2 = f2.astype(widenTo);
+                NDArray w0 = f0.astype(widenTo), w1 = f1.astype(widenTo), w2 = f2.astype(widenTo);
                 NDArray na = NDArray.Scalar(a), nb = NDArray.Scalar(b), nc = NDArray.Scalar(c);
                 NDArray t0 = na * w0, t1 = nb * w1, t2 = nc * w2;
                 NDArray s01 = t0 + t1; res = s01 + t2;
-                na.Dispose(); nb.Dispose(); nc.Dispose();
-                t0.Dispose(); t1.Dispose(); t2.Dispose(); s01.Dispose();
             }
-            f0.Dispose(); f1.Dispose(); f2.Dispose();
             return res;
         }
 

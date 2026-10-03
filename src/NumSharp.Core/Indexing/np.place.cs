@@ -22,7 +22,18 @@ namespace NumSharp
         ///     to fill the True positions. Must be non-empty when at least one
         ///     mask entry is True (NumPy parity).
         /// </param>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.place.html</remarks>
+        /// <exception cref="ArgumentNullException">An argument is null.</exception>
+        /// <exception cref="ValueError"><paramref name="arr"/> is read-only (checked first, as NumPy does).</exception>
+        /// <exception cref="ArgumentException"><paramref name="mask"/>'s size differs from <paramref name="arr"/>'s,
+        /// or <paramref name="vals"/> is empty while some mask entry is True.</exception>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.place.html
+        ///     <para>Scoped by <c>[NDScoped]</c>: the contiguous scratch of a non-contiguous target and the
+        ///     bool/dtype-converted copies of <paramref name="mask"/> and <paramref name="vals"/> are released on
+        ///     return, exceptions included. A mask or values array used as-is is the caller's (built before the scope
+        ///     opened), so the scope never disposes it.</para>
+        /// </remarks>
+        [NDScoped]
         public static void place(NDArray arr, NDArray mask, NDArray vals)
         {
             if (arr is null) throw new ArgumentNullException(nameof(arr));
@@ -50,66 +61,48 @@ namespace NumSharp
             // changes back through the view's strides to the parent storage.
             if (!arr.Shape.IsContiguous)
             {
+                // The recursive call opens its own nested scope; the scratch itself is released by this one.
                 var scratch = np.ascontiguousarray(arr);
-                try
-                {
-                    place(scratch, mask, vals);
-                    np.copyto(arr, scratch, casting: "unsafe");
-                }
-                finally { scratch.Dispose(); }
+                place(scratch, mask, vals);
+                np.copyto(arr, scratch, casting: "unsafe");
                 return;
             }
 
-            // Cast mask to contig bool; cast vals to contig arr.dtype.
+            // Cast mask to contig bool; cast vals to contig arr.dtype. A converted copy is built inside the
+            // scope and released with it; an operand used as-is is the caller's and is never disposed.
             NDArray maskCast;
-            bool ownMask;
             if (mask.GetTypeCode == NPTypeCode.Boolean && mask.Shape.IsContiguous)
             {
                 maskCast = mask;
-                ownMask = false;
             }
             else
             {
                 maskCast = mask.GetTypeCode == NPTypeCode.Boolean
                     ? np.ascontiguousarray(mask)
                     : mask.astype(NPTypeCode.Boolean);
-                ownMask = !ReferenceEquals(maskCast, mask);
             }
 
             NDArray valsCast;
-            bool ownVals;
             if (vals.GetTypeCode == arr.GetTypeCode && vals.Shape.IsContiguous)
             {
                 valsCast = vals;
-                ownVals = false;
             }
             else if (vals.GetTypeCode == arr.GetTypeCode)
             {
-                var c = np.ascontiguousarray(vals);
-                valsCast = c;
-                ownVals = !ReferenceEquals(c, vals);
+                valsCast = np.ascontiguousarray(vals);
             }
             else
             {
                 valsCast = vals.astype(arr.GetTypeCode);
-                ownVals = true;
             }
 
-            try
-            {
-                if (valsCast.size == 0 && AnyTrueMask(maskCast))
-                    throw new ArgumentException("Cannot insert from an empty array!", nameof(vals));
+            if (valsCast.size == 0 && AnyTrueMask(maskCast))
+                throw new ArgumentException("Cannot insert from an empty array!", nameof(vals));
 
-                if (valsCast.size == 0)
-                    return;   // mask all-false and empty vals — NumPy treats as no-op
+            if (valsCast.size == 0)
+                return;   // mask all-false and empty vals — NumPy treats as no-op
 
-                ExecutePlace(arr, maskCast, valsCast);
-            }
-            finally
-            {
-                if (ownMask) maskCast.Dispose();
-                if (ownVals) valsCast.Dispose();
-            }
+            ExecutePlace(arr, maskCast, valsCast);
         }
 
         private static unsafe bool AnyTrueMask(NDArray maskBool)

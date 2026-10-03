@@ -35,7 +35,16 @@ namespace NumSharp
         ///     True, and an empty <paramref name="values"/> is a silent no-op rather
         ///     than a <c>ValueError</c>.
         ///     </para>
+        ///     <para>Scoped by <c>[NDScoped]</c>: the scratch copy (a non-contiguous target, or one that may overlap
+        ///     <paramref name="values"/>/<paramref name="mask"/>) and the bool/dtype-converted copies of
+        ///     <paramref name="mask"/> and <paramref name="values"/> are released on return, exceptions included. A
+        ///     mask or values array used as-is is the caller's (built before the scope opened), so the scope never
+        ///     disposes it.</para>
         /// </remarks>
+        /// <exception cref="ArgumentNullException">An argument is null.</exception>
+        /// <exception cref="ValueError"><paramref name="a"/> is read-only (checked first, as NumPy does).</exception>
+        /// <exception cref="ArgumentException"><paramref name="mask"/>'s size differs from <paramref name="a"/>'s.</exception>
+        [NDScoped]
         public static void putmask(NDArray a, NDArray mask, NDArray values)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
@@ -82,62 +91,44 @@ namespace NumSharp
             {
                 // C-contiguous a (the overlap case) → a.copy() is a fresh C-order buffer;
                 // any non-contiguous layout → ascontiguousarray makes the C-order copy.
+                // The recursive call opens its own nested scope; the scratch itself is released by this one.
                 var scratch = a.Shape.IsContiguous ? a.copy() : np.ascontiguousarray(a);
-                try
-                {
-                    putmask(scratch, mask, values);
-                    np.copyto(a, scratch, casting: "unsafe");
-                }
-                finally { scratch.Dispose(); }
+                putmask(scratch, mask, values);
+                np.copyto(a, scratch, casting: "unsafe");
                 return;
             }
 
             // Cast mask to contig bool; cast values to contig a.dtype. Both are raveled in C-order,
             // aligning flat position i of the mask with flat position i of a (shapes need not match,
-            // only sizes — NumPy checks size, not shape).
+            // only sizes — NumPy checks size, not shape). A converted copy is built inside the scope and
+            // released with it; an operand used as-is is the caller's and is never disposed.
             NDArray maskCast;
-            bool ownMask;
             if (mask.GetTypeCode == NPTypeCode.Boolean && mask.Shape.IsContiguous)
             {
                 maskCast = mask;
-                ownMask = false;
             }
             else
             {
                 maskCast = mask.GetTypeCode == NPTypeCode.Boolean
                     ? np.ascontiguousarray(mask)
                     : mask.astype(NPTypeCode.Boolean);
-                ownMask = !ReferenceEquals(maskCast, mask);
             }
 
             NDArray valsCast;
-            bool ownVals;
             if (values.GetTypeCode == a.GetTypeCode && values.Shape.IsContiguous)
             {
                 valsCast = values;
-                ownVals = false;
             }
             else if (values.GetTypeCode == a.GetTypeCode)
             {
-                var c = np.ascontiguousarray(values);
-                valsCast = c;
-                ownVals = !ReferenceEquals(c, values);
+                valsCast = np.ascontiguousarray(values);
             }
             else
             {
                 valsCast = values.astype(a.GetTypeCode);
-                ownVals = true;
             }
 
-            try
-            {
-                ExecutePutMask(a, maskCast, valsCast);
-            }
-            finally
-            {
-                if (ownMask) maskCast.Dispose();
-                if (ownVals) valsCast.Dispose();
-            }
+            ExecutePutMask(a, maskCast, valsCast);
         }
 
         private static unsafe void ExecutePutMask(NDArray a, NDArray maskBool, NDArray valsCast)

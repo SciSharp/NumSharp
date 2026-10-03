@@ -124,8 +124,12 @@ namespace NumSharp
         ///     that cannot hold NaN (bool / all integer widths / char / decimal) skip the NaN machinery: their
         ///     <c>isnan</c> is uniformly false, so the fast path yields the identical result NumPy would (this
         ///     also sidesteps calling <c>isnan</c> on Char/Decimal, which have no NumPy analog).
+        ///     Scoped by <c>[NDScoped]</c>: every comparison/isnan mask the method builds is released on return
+        ///     (it returns a <c>bool</c>, so nothing is yielded), and the operands, built before the scope
+        ///     opened, are never touched.
         ///     https://numpy.org/doc/stable/reference/generated/numpy.array_equal.html
         /// </remarks>
+        [NDScoped]
         public bool array_equal(NDArray rhs, bool equal_nan = false)
         {
             // A null operand can never match a real array.
@@ -142,7 +146,7 @@ namespace NumSharp
             // reference/storage short-circuit is taken here (one would wrongly report such arrays equal).
             if (!equal_nan)
             {
-                using var eq = this == rhs;
+                var eq = this == rhs;
                 return np.all(eq);
             }
 
@@ -155,14 +159,14 @@ namespace NumSharp
             // NaN-aware branch below would reduce to exactly this. Result-identical to NumPy's structure.
             if (!CanHoldNaN(this) && !CanHoldNaN(rhs))
             {
-                using var eq = this == rhs;
+                var eq = this == rhs;
                 return np.all(eq);
             }
 
             // NaN-aware path: NaN must occur at the SAME positions in both operands...
-            using var a1nan = np.isnan(this);
-            using var a2nan = np.isnan(rhs);
-            using var nanPositionsEq = a1nan == a2nan;
+            var a1nan = np.isnan(this);
+            var a2nan = np.isnan(rhs);
+            var nanPositionsEq = a1nan == a2nan;
             if (!np.all(nanPositionsEq))
                 return false;
 
@@ -170,8 +174,8 @@ namespace NumSharp
             // the positions were just proven to coincide). This `all((this == rhs) | isnan(this))` form is
             // algebraically identical to NumPy's `all(this[~a1nan] == rhs[~a1nan])` once the positions
             // agree, but needs no gather/copy and handles empty / 0-d inputs uniformly.
-            using var elementsEq = this == rhs;
-            using var okOrNan = elementsEq | a1nan;
+            var elementsEq = this == rhs;
+            var okOrNan = elementsEq | a1nan;
             return np.all(okOrNan);
         }
 
