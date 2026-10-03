@@ -238,6 +238,14 @@ namespace NumSharp.Tests.Fuzz
                 case "quantile": return np.quantile(ops[0], p["q"].GetDouble(), ParseAxis(p),
                     keepdims: ParseKeepdims(p));
                 case "clip": return np.clip(ops[0], ops[1], ops[2]);
+                // np.clip with Python-int bounds (gen_oracle.py gen_clip_pyint): _methods._clip's drop rule and
+                // NEP 50 packing. The bounds ride as PARAMS and are passed as C# integer literals (PyIntLiteral),
+                // which is how a caller writes np.clip(a, -1, 256). An optional 2nd operand is the out= buffer,
+                // returned as-is like NumPy's out.
+                case "clip_pyint":
+                    return np.clip(ops[0], PyIntLiteral(p["lo"]), PyIntLiteral(p["hi"]),
+                                   ops.Length > 1 ? ops[1] : null,
+                                   p.TryGetValue("dtype", out var cpd) ? (DType)FuzzCorpus.DtypeToTC(cpd.GetString()) : null);
                 case "interp":
                 {
                     double? left = p.TryGetValue("left", out var pil) ? pil.GetDouble() : (double?)null;
@@ -907,6 +915,27 @@ namespace NumSharp.Tests.Fuzz
             foreach (var e in arr.EnumerateArray())
                 list.Add(e.GetInt32());
             return list.ToArray();
+        }
+
+        /// <summary>
+        ///     A Python-int param as the C# integer literal of that value: int when it fits, then uint, long and
+        ///     ulong — the type C# gives an unsuffixed literal. np.clip then sees the 0-d array that literal converts
+        ///     to, exactly as a caller's <c>np.clip(a, -1, 256)</c> does, so the corpus exercises every 0-d integer
+        ///     width NumSharp reads as NumPy's Python int.
+        /// </summary>
+        /// <param name="e">A JSON integer (any size Python wrote, up to 2^64-1) or null.</param>
+        /// <returns>The 0-d bound, or null for a JSON null (NumPy's None).</returns>
+        /// <exception cref="OverflowException">The value is outside [-2^63, 2^64-1], which no C# literal holds
+        ///     (the generator never emits one).</exception>
+        private static NDArray PyIntLiteral(JsonElement e)
+        {
+            if (e.ValueKind == JsonValueKind.Null)
+                return null;
+            var v = Int128.Parse(e.GetRawText(), System.Globalization.CultureInfo.InvariantCulture);
+            if (v >= int.MinValue && v <= int.MaxValue) return (int)v;
+            if (v >= 0 && v <= uint.MaxValue) return (uint)v;
+            if (v >= long.MinValue && v <= long.MaxValue) return (long)v;
+            return checked((ulong)v);
         }
 
         /// <summary>UPLO for the symmetric/Hermitian eigensolvers — 'L' (default) or 'U'.</summary>

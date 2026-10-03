@@ -31,6 +31,7 @@
       "byteswap": {"ids": ["numpy.ndarray.byteswap"], "note": "a.byteswap() - an ndarray method keyed without the ndarray. prefix."},
       "c_": {"ids": ["numpy.c_"], "note": "np.c_[...] column-stacking index expression."},
       "clip_out": {"ids": ["numpy.clip"], "note": "Aliasing tier: np.clip with out= aliasing an input."},
+      "clip_pyint": {"ids": ["numpy.clip"], "note": "np.clip with Python-int bounds: _methods._clip's drop rule, NEP 50 OverflowError packing, dtype=/out= casts named after the routed ufunc."},
       "copyto_overlap": {"ids": ["numpy.copyto"], "note": "np.copyto between overlapping views."},
       "dot_aat": {"ids": ["numpy.dot"], "note": "np.dot(a, a.T) - NumPy's syrk shortcut."},
       "dot_ata": {"ids": ["numpy.dot"], "note": "np.dot(a.T, a) - NumPy's syrk shortcut."},

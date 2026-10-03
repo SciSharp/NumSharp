@@ -262,7 +262,15 @@ namespace NumSharp.Backends.Iteration
             return value >= min && (value < 0 || (ulong)value <= max);
         }
 
-        private static (long min, ulong max) IntBounds(NPTypeCode dtype) => dtype switch
+        /// <summary>
+        /// The inclusive value range of an integer (or bool) dtype — NumPy's <c>np.iinfo(dtype)</c> as a
+        /// (min, max) pair, with Char riding uint16's range (NumSharp-only dtype). A non-integer dtype
+        /// returns the full long/ulong span, so a range test against it always passes: float, complex and
+        /// decimal adoptions never overflow-check here.
+        /// </summary>
+        /// <param name="dtype">The dtype whose range is wanted.</param>
+        /// <returns>The smallest and largest value the dtype holds; uint64's max does not fit a long, hence the ulong.</returns>
+        internal static (long min, ulong max) IntBounds(NPTypeCode dtype) => dtype switch
         {
             NPTypeCode.Boolean => (0L, 1UL),
             NPTypeCode.Byte => (0L, (ulong)byte.MaxValue),
@@ -312,6 +320,61 @@ namespace NumSharp.Backends.Iteration
             if (!IntLiteralFits(value, adopted))
                 throw new OverflowException(
                     $"Python integer {value} out of bounds for {adopted.AsNumpyDtypeName()}");
+        }
+
+        /// <summary>
+        /// The check a ufunc runs when it packs a weak Python-int ARRAY operand into its loop dtype:
+        /// NumPy's <c>@TYPE@_safe_pyint_setitem</c> (numpy/_core/src/multiarray/arraytypes.c.src), under
+        /// the LP64 data model whose texts NumSharp pins. It raises instead of wrapping, and it runs before
+        /// any element is read, so an empty array raises too. <see cref="CheckIntLiteralFits"/> covers only
+        /// values that fit a long; this one also covers values past long.MaxValue (a C# ulong literal).
+        /// </summary>
+        /// <param name="value">The Python int's value. 128 bits hold every C# integer literal, int64 and uint64 alike.</param>
+        /// <param name="loop">The ufunc's resolved loop dtype, which the value must be packed into.</param>
+        /// <exception cref="OverflowException">
+        /// The value does not fit an integer <paramref name="loop"/>: NumPy's <c>OverflowError</c>
+        /// "Python integer {value} out of bounds for {dtype}". When the value is past long.MaxValue the
+        /// text is CPython's "Python int too large to convert to C long" instead, because NumPy first
+        /// converts the value to a C long for every integer loop except uint32 and uint64 (both convert
+        /// through C unsigned long). A bool loop packs nothing, but its weak int still goes through int64
+        /// and fails with the same CPython text past long.MaxValue.
+        /// </exception>
+        /// <remarks>
+        /// The platform split, probed on NumPy 2.4.2: C long is 64-bit on Linux and macOS (LP64) but 32-bit
+        /// on Windows (LLP64). So on Windows every 8/16/32-bit loop already fails the C long conversion
+        /// past ±2^31 ("Python int too large to convert to C long"), and int64/uint64 report "int too big to
+        /// convert". For a C# value inside ±2^31 both platforms say "Python integer ... out of bounds", so the
+        /// oracle corpus, which is generated on Windows, keeps to that range. The LP64 texts are pinned by unit tests.
+        /// <para>
+        /// Float, complex and decimal loops never raise here. A Python int converts to float with
+        /// rounding: 100000 into float16 is +inf, with only a RuntimeWarning in NumPy.
+        /// </para>
+        /// </remarks>
+        internal static void CheckPyIntPacksIntoLoop(Int128 value, NPTypeCode loop)
+        {
+            if (loop == NPTypeCode.Boolean)
+            {
+                // A Python int never adapts to a bool loop (the dtype= cast check reports it as int64),
+                // but NumPy still converts it to int64 first, which only a value past long.MaxValue fails.
+                if (value > long.MaxValue)
+                    throw new OverflowException("Python int too large to convert to C long");
+                return;
+            }
+
+            if (!IsIntegerKind(loop))
+                return;
+
+            (long min, ulong max) = IntBounds(loop);
+            if (value >= min && value <= max)
+                return;
+
+            // NumPy converts through PyLong_AsLong for every integer loop except uint32 and uint64, and a
+            // C# value can only miss the 64-bit C long on the high side (ulong past long.MaxValue).
+            if (value > long.MaxValue && loop != NPTypeCode.UInt32 && loop != NPTypeCode.UInt64)
+                throw new OverflowException("Python int too large to convert to C long");
+
+            throw new OverflowException(
+                $"Python integer {value} out of bounds for {loop.AsNumpyDtypeName()}");
         }
     }
 

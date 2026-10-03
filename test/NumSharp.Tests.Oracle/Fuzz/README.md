@@ -461,7 +461,10 @@ stable; excused ONLY when `ArgsortPermutationsEquivalent` re-derives from the op
 both index vectors are in-range permutations selecting pairwise IEEE-equal values (the main sort
 tier uses distinct values and never reaches it). *K13 extended to `out_clip`* — clip IS
 maximum(minimum(x, hi), lo), so a ±0-sign result inherits the same non-contractual lane-dependence;
-still guarded by every-diff-is-a-pure-±0-flip. The `ndarray.`/`emath.` prefixes are stripped at
+still guarded by every-diff-is-a-pure-±0-flip. **Withdrawn 2026-10-03:** the out_clip ±0 was never lane
+noise. It is NumPy's const fast path for scalar float bounds, which keeps the element on a tie, and the clip
+kernel now ports it. The 10 out_clip cells whose NumPy result holds a -0.0 are held bit-exact, and out_clip is
+out of K13 (see the `clip_pyint` section). The `ndarray.`/`emath.` prefixes are stripped at
 `Classify` entry (the `ma.` convention), so instance/emath spellings ride the shared branches.
 
 **New gates.** `OracleSurfaceCoverageTests` now reflects ALL 8 `[ModuleName]` facades: `ndarray`
@@ -631,6 +634,7 @@ rather than portable IEEE parity — the same status as the "Host-dependent valu
 | `char_tier "bitwise"` (invert absent) | invert(char) N≥16 SIMD → NotSupportedException | `Char_Invert_LargeN_NotSupported` |
 | `char_tier "matmul"` filters `(dot,(4,))` | dot(char) 1-D·1-D → "Sum not supported for Char" (ledger L9) | `OpenBugsFuzzGapsTests.Dot_Char_1D_Throws` |
 | `CLIP_DTYPES` excludes bool | clip(bool) non-contiguous → NotSupportedException (contiguous works) | `OpenBugsDtypeCoverageTests.Clip_Bool_*` |
+| `char_tier "clip_pyint"` drops the rows whose text names `UInt16DType` | clip(char, dtype=bool) with no bound left: positive's no-loop text names the input's DType CLASS, and Char's is NumSharp's own `np.dtypes.CharDType` (not a defect — the uint16 proxy cannot spell it) | `np_clip_python_int_bounds_tests.NoBoundLeft_IsPositive` |
 | `gen_round` dec ∈ {0,1,2} only | round_ dec=-1 (int throws / float wrong) | `Round_NegativeDecimals_Broken` |
 | `gen_round` skips float16 dec≥1 | round_(float16) fractional diverges | `Round_Float16_Fractional_Diverges` |
 | `ROUND_DTYPES` excludes bool | round_(bool) → Double, NumPy → float16 (ledger L2) | `OpenBugsFuzzGapsTests.Round_Bool_Dtype_Diverges` |
@@ -1249,6 +1253,42 @@ left out). **`cov`/`corrcoef`** are normalized dot products, byte-exact for the 
 here (the dot is an exact short float sum) across rowvar/bias/ddof/y/complex/int-widen; the WEIGHTED cov path
 (`fweights`/`aweights`) rounds 1 ULP off in the `fact` normalisation (measured) and is left to cov's
 tolerance battle-tests.
+
+### np.clip with Python-int bounds (`clip_pyint` tier)
+
+`clip_pyint.jsonl` (`gen_oracle.py clip_pyint`, 4,170 cases, floor 3,900; 2026-10-03) gates the half of
+np.clip that `stat.jsonl` never reached. stat's clip bounds are 0-d arrays of the operand's own dtype,
+always in range, so `np.clip(uint8, 0, 256)` returned `[0 0 0 0]` (256 wrapped to 0) while the gate stayed
+green. Here the bounds are Python ints. They ride as PARAMS, and the replay passes each one as the C#
+literal of that value (`PyIntLiteral`: int, uint, long, then ulong). The tier covers:
+- `numpy/_core/_methods.py::_clip`'s drop rule: on an integer array, a bound at or past `iinfo` is ignored;
+- NEP 50 packing: a kept bound that does not fit raises OverflowError, even on an empty array;
+- the routing: no bound left → `positive`, one → `minimum`/`maximum`, two → `clip`. The routed name appears in
+  every `dtype=` input-cast and `out=` output-cast error;
+- `dtype=` (the drop uses the input's range, the packing the loop's);
+- `out=` of a same_kind-reachable other dtype, which is legal;
+- NumPy's error order.
+
+The matrix is the 8 integer dtypes × ~28 bound pairs at, inside and past the limits × 12 layouts, plus
+dtype=/out= rows on 5 layouts, Char (the uint16 proxy), and bool/float/complex arrays. **Bit-exact, 0
+excused, and held strict.** `clip_pyint` is listed in `ByteExactArithmeticUnaryOps` (its one operand made
+it look like a unary op, and the blanket unary ~ULP excuse hid 4 real signed-zero divergences) and is
+excluded from K7 (its 0-d operand is the clipped array, not a weak scalar).
+
+**Portable by construction.** Past ±2³¹, NumPy's OverflowError text depends on the platform's C `long`.
+Windows says "Python int too large to convert to C long" / "int too big to convert"; Linux and macOS say
+"Python integer … out of bounds for …". The generator therefore keeps a raising case only when its value
+lies inside ±2³¹, or for a uint64 negative (64-bit on both). It skips 150 platform-dependent cases, and the
+whole tier regenerates byte-identically under WSL's Linux NumPy 2.4.2. The LP64 texts past ±2³¹ are pinned
+by `test/NumSharp.Tests/Math/np.clip.PythonIntBounds.Test.cs`.
+
+**Signed zeros.** The tier surfaced NumPy's CONST fast path (clip.cpp `_npy_clip_const_minmax_`). Two
+scalar float32/float64 bounds run `x < lo ? lo : x; x > hi ? hi : x`, which keeps the element on a tie, so
+`np.clip(-0.0, 0, 1)` is -0.0. Array bounds run the general `MIN(MAX(x, lo), hi)`, which takes the bound
+(+0.0). The clip kernel now reproduces the split (`DirectILKernelGenerator.UsesConstSelect`). That is also
+why `out_clip` left K13 (see the 2026-09-18 note above). One corner remains unported: NumPy also takes the
+const path for ARRAY bounds that are constant along its inner loop (a size-1 bound broadcast over n ≥ 2
+elements).
 
 ### np.random byte-parity (`random_parity` tiers)
 

@@ -14,24 +14,7 @@ namespace NumSharp.Backends
         public override NDArray Positive(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
             NPTypeCode? typeCode = dtype?.GetTypeCode();
-            // NumPy: positive has identity loops for every numeric dtype EXCEPT
-            // bool ('b->b'..'G->G' in ufunc.types, no '?->?'). The guard keys
-            // off the LOOP: positive(bool, dtype=f64) is legal ([1., 0.]) while
-            // positive(f64, dtype=bool) raises naming both sides — probed 2.4.2,
-            // texts verbatim.
-            if (typeCode == NPTypeCode.Boolean)
-                throw new TypeError(
-                    "ufunc 'positive' did not contain a loop with signature matching types " +
-                    $"<class 'numpy.dtypes.{NumPyDTypeClassName(nd.GetTypeCode)}'> -> <class 'numpy.dtypes.BoolDType'>");
-            if (typeCode is null && nd.GetTypeCode == NPTypeCode.Boolean)
-                throw new TypeError(
-                    "ufunc 'positive' did not contain a loop with signature matching types " +
-                    "<class 'numpy.dtypes.BoolDType'> -> None");
-
-            // dtype= runs the identity loop in that dtype: the input must reach
-            // it via a same_kind cast (positive(f64, dtype=i32) raises, probed).
-            if (typeCode.HasValue)
-                ValidateUnaryInputCast(nd.GetTypeCode, typeCode.Value, "positive");
+            ValidatePositiveLoop(nd.GetTypeCode, typeCode);
 
             // out=/where=: iterator Into-path; the loop dtype is dtype ?? input
             // (explicit outputType — ExecuteUnaryOp's null-typeCode default
@@ -46,6 +29,42 @@ namespace NumSharp.Backends
 
             // Plain +x: identity copy (layout-preserving bulk clone).
             return nd.Clone();
+        }
+
+        /// <summary>
+        /// NumPy's loop resolution for the <c>positive</c> ufunc, shared by <see cref="Positive"/> and by
+        /// np.clip's no-bound route (NumPy's <c>_methods._clip</c> returns <c>um.positive(a, out=out, **kwargs)</c>
+        /// when neither bound is left). Call it before any allocation. The input-cast check uses the house
+        /// exception type, which the oracle maps to NumPy's UFuncTypeError.
+        /// </summary>
+        /// <param name="inputType">The dtype of the array positive is applied to.</param>
+        /// <param name="dtype">The explicit <c>dtype=</c> loop request, or null for the input's own loop.</param>
+        /// <exception cref="TypeError">The loop would be bool: positive has identity loops for every numeric dtype
+        /// EXCEPT bool ('b->b'..'G->G' in ufunc.types, no '?->?'). A plain bool input reports "... BoolDType'> -> None",
+        /// and a dtype=bool request names both sides. NumPy texts verbatim.</exception>
+        /// <exception cref="ArgumentException">A <paramref name="dtype"/> request the input cannot reach by a same_kind cast:
+        /// "Cannot cast ufunc 'positive' input from dtype('X') to dtype('Y') with casting rule 'same_kind'" (no input index,
+        /// because positive is unary).</exception>
+        internal static void ValidatePositiveLoop(NPTypeCode inputType, NPTypeCode? dtype)
+        {
+            // NumPy: positive has identity loops for every numeric dtype EXCEPT
+            // bool ('b->b'..'G->G' in ufunc.types, no '?->?'). The guard keys
+            // off the LOOP: positive(bool, dtype=f64) is legal ([1., 0.]) while
+            // positive(f64, dtype=bool) raises naming both sides — probed 2.4.2,
+            // texts verbatim.
+            if (dtype == NPTypeCode.Boolean)
+                throw new TypeError(
+                    "ufunc 'positive' did not contain a loop with signature matching types " +
+                    $"<class 'numpy.dtypes.{NumPyDTypeClassName(inputType)}'> -> <class 'numpy.dtypes.BoolDType'>");
+            if (dtype is null && inputType == NPTypeCode.Boolean)
+                throw new TypeError(
+                    "ufunc 'positive' did not contain a loop with signature matching types " +
+                    "<class 'numpy.dtypes.BoolDType'> -> None");
+
+            // dtype= runs the identity loop in that dtype: the input must reach
+            // it via a same_kind cast (positive(f64, dtype=i32) raises, probed).
+            if (dtype.HasValue)
+                ValidateUnaryInputCast(inputType, dtype.Value, "positive");
         }
 
         /// <summary>

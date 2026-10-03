@@ -451,16 +451,16 @@ namespace NumSharp.Tests.NumPyPortedTests
         [TestMethod]
         public void Clip_DtypeOverrideForcesNarrowerType()
         {
-            // NumPy: np.clip(float64_arr, min=3.0, dtype=np.int32) → int32 (truncates).
+            // NumPy 2.4.2: dtype= is a ufunc loop request, so every input must reach it by a same_kind cast.
+            // np.clip(float64_arr, min=3.0, dtype=np.int32) routes to maximum (no max given) and raises
+            // UFuncTypeError: "Cannot cast ufunc 'maximum' input 0 from dtype('float64') to dtype('int32')
+            // with casting rule 'same_kind'". NumSharp used to truncate silently instead.
             var arr = np.arange(10.0) + 0.5; // 0.5, 1.5, ..., 9.5
 
-            var result = np.clip(arr, min: 3.0, dtype: NPTypeCode.Int32);
-
-            Assert.AreEqual(np.int32, result.dtype);
-            // 0.5/1.5/2.5 clipped up to 3 → int 3. 3.5+ → truncated to 3.
-            Assert.AreEqual(3, result.GetInt32(0));
-            Assert.AreEqual(3, result.GetInt32(3));
-            Assert.AreEqual(9, result.GetInt32(9));
+            var e = Assert.ThrowsExactly<ArgumentException>(() => np.clip(arr, min: 3.0, dtype: NPTypeCode.Int32));
+            Assert.AreEqual(
+                "Cannot cast ufunc 'maximum' input 0 from dtype('float64') to dtype('int32') with casting rule 'same_kind'",
+                e.Message);
         }
 
         [TestMethod]

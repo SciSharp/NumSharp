@@ -791,6 +791,52 @@ unlike `absolute`), while NumSharp rides `Vector.Abs`: float16 **4.5–24.8×**,
 **1.6–10.8×**, `out=` paths 2.5–14× (the one sub-1.5× cell, fresh-alloc float32@100K at 1.19×, is the shared
 allocation floor — its `out=` variant is 12.2×). See `Math/np.fabs.cs`, `Backends/Default/Math/Default.Fabs.cs`.
 
+**`np.clip`** — a port of `numpy/_core/_methods.py::_clip` (the code behind `np.clip` and `ndarray.clip`) plus the
+argument handling of the ufunc it routes to (2026-10-03; probed against 2.4.2; gates the `clip_pyint` fuzz tier
+(4,170 cases, strict) + `Math/np.clip.PythonIntBounds.Test.cs`). A 0-d integer bound (any C# integer literal, or a
+char) is NumPy's Python int:
+- **Drop rule.** On an integer array, a bound at or past `iinfo(a.dtype)` (`min <= iinfo.min`, `max >= iinfo.max`)
+  cannot clip anything and is DROPPED: `np.clip(uint8, 0, 256)` returns the array unchanged, and
+  `np.clip(uint8, -1, 100)` only clips from above. Before this, the 0-d bound adopted the array's dtype and
+  `astype` WRAPPED it (256→0 gave all zeros, int8 ±1000 gave all -24).
+- **Routing.** No bound left → `positive` (a typed copy, with positive's own rules: `np.clip(bool_array)` raises
+  its no-loop TypeError). One bound → `minimum`/`maximum`. Two → the clip kernel. The routed name is what every
+  cast error quotes.
+- **Packing.** A kept bound that does not fit the LOOP dtype raises OverflowError "Python integer 1000 out of bounds
+  for int8" before any element is read, so an empty array raises too (`NDExprTypeRules.CheckPyIntPacksIntoLoop`,
+  NumPy's `@TYPE@_safe_pyint_setitem`).
+- **Range vs loop.** The drop rule uses the INPUT's range, while `dtype=` moves the packing:
+  `np.clip(int8, 1000, 2000, dtype: np.int16)` is legal (all 1000).
+- **Platform texts.** Past ±2³¹ NumPy's text follows the platform C `long`; NumSharp pins the LP64 (Linux/macOS)
+  texts. A value past long.MaxValue reports "Python int too large to convert to C long", except into uint32/uint64.
+- **Casts.** `dtype=` validates each input same_kind, in operand order (a Python int reaches any integer or inexact
+  loop but not bool, named int64), so `np.clip(f64, min: 3.0, dtype: int32)` now RAISES as in NumPy. `out=` accepts
+  any same_kind-reachable dtype (computed at the loop dtype, then cast in), not only an exact match. A given `out` is
+  returned itself, also for an F-contiguous input.
+- **Error order** (NumPy's): read-only out → packing → dtype= input casts → out cast → out shape.
+- **Promotion.** 0-d bounds use the ufunc array-scalar table (`np._FindCommonArrayScalarType`), so a Char array with a
+  float bound promotes to float64 instead of truncating the bound into char.
+- **Signed zeros.** Two scalar float32/float64 bounds run NumPy's CONST fast path (clip.cpp
+  `_npy_clip_const_minmax_`: `x < lo ? lo : x; x > hi ? hi : x`, a tie keeps the element, so
+  `np.clip(-0.0, 0, 1)` is -0.0). Array bounds keep the general `MIN(MAX())` (a tie takes the bound).
+
+Remaining divergences:
+- A strong 0-d NDArray bound (NumPy's `np.int64(5)` / `np.array(5)`) cannot be told from a literal, so it is treated
+  as a Python int; NumPy promotes with it (an int8 clip by `np.int64(1000)` is int64 there).
+- NumPy's const path for array bounds that are constant along its inner loop is not ported.
+- A NaN bound fills with .NET's NaN bits (the oracle tokenizes NaN).
+
+**Perf (NPY/NS, P-core pinned):** the drop routes run 2.6–13× faster at 1K/100K (a dropped pair is a memcpy, where
+NumPy's `positive` loops). The 10M cells of 8-byte dtypes sit at ~1.0× on both base and new code; that is the shared
+fresh-output page-fault floor. The pre-existing sub-1.5× cells are the follow-up:
+- float clip at 100K is ~0.8–1.0× (L2 bandwidth);
+- `dtype=` widening at 10M is ~0.4–0.5× (a full-array cast, then a second clip pass, where NumPy buffers both in one
+  pass);
+- the `out=`-cast relay at 10M is ~0.9–1.1× (two passes).
+
+See `Math/np.clip.cs`, `Backends/Default/Math/Default.ClipNDArray.cs`,
+`Backends/Kernels/Direct/DirectILKernelGenerator.Clip.cs`.
+
 **The divmod family** — `remainder`/`mod`, `fmod`, `divmod` (all probed against 2.4.2; gates the
 `divmod_power`/`multioutput` fuzz tiers + `Math` unit tests). `np.remainder` is an exact ALIAS of the existing
 `np.mod` (in NumPy `remainder` IS the `mod` ufunc — floored remainder, result takes the DIVISOR's sign). **`np.fmod`**

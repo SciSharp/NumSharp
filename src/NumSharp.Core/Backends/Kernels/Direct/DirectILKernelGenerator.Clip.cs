@@ -23,6 +23,12 @@ using System.Runtime.CompilerServices;
 //   - BothBounds: both clamps applied (in that order, so min > max gives max).
 //   - MinOnly:    only Max(src, lo).
 //   - MaxOnly:    only Min(src, hi).
+//   - BothBounds + Scalar bounds + float32/float64: NumPy's CONST fast path instead
+//     (clip.cpp _npy_clip_const_minmax_, taken whenever both bound strides are 0):
+//     x = x < lo ? lo : x ; x = x > hi ? hi : x. It keeps x on a tie, where
+//     Min(Max()) takes the bound: clip(-0.0, 0, 1) is -0.0 in NumPy, not +0.0.
+//     float16 and complex have no such path in NumPy (half_tag / complex_tag are
+//     not floating_point_tag), and the integers cannot tell the two forms apart.
 //
 // Bounds kind:
 //   - Scalar: `lo`, `hi` point to one element of the dtype. Broadcast into
@@ -189,6 +195,7 @@ namespace NumSharp.Backends.Kernels
             int vectorCount = GetVectorCount(dtype);
             bool needLo = mode != ClipMode.MaxOnly;
             bool needHi = mode != ClipMode.MinOnly;
+            bool constSelect = UsesConstSelect(dtype, mode, kind);
 
             // Hoist Vector.Create(scalarValue) outside the loop for scalar bounds.
             LocalBuilder locLoVec = (needLo && kind == ClipBoundsKind.Scalar) ? il.DeclareLocal(vectorType) : null;
@@ -244,7 +251,7 @@ namespace NumSharp.Backends.Kernels
                 il.Emit(OpCodes.Stloc, bo[k]);
             }
             for (int k = 0; k < ClipUnroll; k++)
-                EmitClipVectorBody(il, dtype, kind, bo[k], needLo, needHi, locLoVec, locHiVec);
+                EmitClipVectorBody(il, dtype, kind, bo[k], needLo, needHi, locLoVec, locHiVec, constSelect);
 
             // i += ClipUnroll * vectorCount
             il.Emit(OpCodes.Ldloc, locI);
@@ -275,7 +282,7 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Ldc_I8, (long)sz);
             il.Emit(OpCodes.Mul);
             il.Emit(OpCodes.Stloc, bo[0]);
-            EmitClipVectorBody(il, dtype, kind, bo[0], needLo, needHi, locLoVec, locHiVec);
+            EmitClipVectorBody(il, dtype, kind, bo[0], needLo, needHi, locLoVec, locHiVec, constSelect);
 
             // i += vectorCount
             il.Emit(OpCodes.Ldloc, locI);
@@ -287,15 +294,58 @@ namespace NumSharp.Backends.Kernels
             il.MarkLabel(lblEnd);
         }
 
+        /// <summary>
+        /// True when NumPy runs its CONST fast path for this kernel: a two-sided clip of float32/float64
+        /// with scalar bounds (clip.cpp <c>_npy_clip_const_minmax_</c>, the <c>steps[1] == 0 &amp;&amp; steps[2] == 0</c>
+        /// branch, floating_point_tag only). Its compare-select keeps the element on a tie with a bound, where the
+        /// general <c>_NPY_MIN(_NPY_MAX(x, lo), hi)</c> path takes the bound, so the two disagree on signed zeros:
+        /// clip(-0.0, 0.0, 1.0) is -0.0 on the fast path and +0.0 on the general one.
+        /// </summary>
+        /// <param name="dtype">The loop dtype.</param>
+        /// <param name="mode">The clip mode. A one-sided clip is NumPy's minimum / maximum (np.clip routes it there),
+        /// whose ties take the second operand, so it never uses the const path.</param>
+        /// <param name="kind">The bound kind. Array bounds take NumPy's general path; NumPy also takes the const path
+        /// for array bounds that are constant along its inner loop, a corner this kernel does not reproduce.</param>
+        /// <returns>True to emit the const fast path's compare-select instead of min/max.</returns>
+        private static bool UsesConstSelect(NPTypeCode dtype, ClipMode mode, ClipBoundsKind kind)
+            => mode == ClipMode.BothBounds && kind == ClipBoundsKind.Scalar
+               && (dtype == NPTypeCode.Single || dtype == NPTypeCode.Double);
+
         // Emits ONE vector clip step: load src at byteOff, clamp to lo/hi (NaN-propagating
         // float min/max via EmitVectorMinOrMax), store at dst+byteOff. Stack-neutral. Shared
         // by the unrolled body and the single-vector remainder so both stay bit-identical.
+        // constSelect emits NumPy's const fast path instead (see UsesConstSelect): a NaN element
+        // fails both compares and passes through, so no NaN fix-up is needed there.
         private static void EmitClipVectorBody(
             ILGenerator il, NPTypeCode dtype, ClipBoundsKind kind, LocalBuilder locByteOff,
-            bool needLo, bool needHi, LocalBuilder locLoVec, LocalBuilder locHiVec)
+            bool needLo, bool needHi, LocalBuilder locLoVec, LocalBuilder locHiVec, bool constSelect)
         {
             EmitOffsetAddrFromLocal(il, 0, locByteOff);
             EmitVectorLoad(il, dtype);                                         // [vec]
+
+            if (constSelect)
+            {
+                // x = ConditionalSelect(x < lo, lo, x) ; x = ConditionalSelect(x > hi, hi, x)
+                var clrType = GetClrType(dtype);
+                var locX = il.DeclareLocal(VectorMethodCache.V(VectorBits, clrType));
+                il.Emit(OpCodes.Stloc, locX);                                  // []
+                il.Emit(OpCodes.Ldloc, locX);
+                il.Emit(OpCodes.Ldloc, locLoVec);
+                il.EmitCall(OpCodes.Call, VectorMethodCache.LessThan(VectorBits, clrType), null);          // [x<lo]
+                il.Emit(OpCodes.Ldloc, locLoVec);
+                il.Emit(OpCodes.Ldloc, locX);
+                il.EmitCall(OpCodes.Call, VectorMethodCache.ConditionalSelect(VectorBits, clrType), null); // [x']
+                il.Emit(OpCodes.Stloc, locX);                                  // []
+                il.Emit(OpCodes.Ldloc, locX);
+                il.Emit(OpCodes.Ldloc, locHiVec);
+                il.EmitCall(OpCodes.Call, VectorMethodCache.GreaterThan(VectorBits, clrType), null);       // [x>hi]
+                il.Emit(OpCodes.Ldloc, locHiVec);
+                il.Emit(OpCodes.Ldloc, locX);
+                il.EmitCall(OpCodes.Call, VectorMethodCache.ConditionalSelect(VectorBits, clrType), null); // [x'']
+                EmitOffsetAddrFromLocal(il, 1, locByteOff);
+                EmitVectorStore(il, dtype);                                    // []
+                return;
+            }
 
             if (needLo)
             {
@@ -332,6 +382,9 @@ namespace NumSharp.Backends.Kernels
             var clrType = GetClrType(dtype);
             bool needLo = mode != ClipMode.MaxOnly;
             bool needHi = mode != ClipMode.MinOnly;
+            // NumPy's const fast path for float32/float64 scalar bounds (see UsesConstSelect): the tail must
+            // agree with the SIMD body element for element, signed zeros included.
+            bool constSelect = UsesConstSelect(dtype, mode, kind);
 
             // Reusable temp for the in-flight value
             var locVal = il.DeclareLocal(clrType);
@@ -367,7 +420,10 @@ namespace NumSharp.Backends.Kernels
                     EmitOffsetAddrFromLocal(il, 3, locByteOff);
                     EmitLoadIndirect(il, dtype);
                 }
-                EmitScalarClamp(il, dtype, isMax: true);      // val = Max(val, lo)
+                if (constSelect)
+                    il.EmitCall(OpCodes.Call, GetHelper(dtype == NPTypeCode.Single ? nameof(FloatClipLowSelect) : nameof(DoubleClipLowSelect)), null);
+                else
+                    EmitScalarClamp(il, dtype, isMax: true);      // val = Max(val, lo)
                 il.Emit(OpCodes.Stloc, locVal);
             }
 
@@ -381,7 +437,10 @@ namespace NumSharp.Backends.Kernels
                     EmitOffsetAddrFromLocal(il, 4, locByteOff);
                     EmitLoadIndirect(il, dtype);
                 }
-                EmitScalarClamp(il, dtype, isMax: false);     // val = Min(val, hi)
+                if (constSelect)
+                    il.EmitCall(OpCodes.Call, GetHelper(dtype == NPTypeCode.Single ? nameof(FloatClipHighSelect) : nameof(DoubleClipHighSelect)), null);
+                else
+                    EmitScalarClamp(il, dtype, isMax: false);     // val = Min(val, hi)
                 il.Emit(OpCodes.Stloc, locVal);
             }
 
@@ -556,6 +615,21 @@ namespace NumSharp.Backends.Kernels
         internal static double DoubleMaxNaN(double a, double b) => double.IsNaN(a) ? a : (a > b ? a : b);
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         internal static double DoubleMinNaN(double a, double b) => double.IsNaN(a) ? a : (a < b ? a : b);
+
+        // float32/float64 clip with two SCALAR bounds — NumPy's const fast path (clip.cpp
+        // _npy_clip_const_minmax_, floating_point_tag): x < lo ? lo : x, then x > hi ? hi : x. A tie keeps
+        // the ELEMENT (clip(-0.0, 0.0, 1.0) = -0.0, where Min(Max()) gives +0.0), a NaN element fails both
+        // compares and passes through with its own bits, and min > max still yields max. Used by the IL
+        // kernel's scalar tail and by ClipStrided, so every layout agrees with the SIMD body. NaN BOUNDS
+        // never reach these: ClipNDArray answers them before any kernel runs.
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        internal static float FloatClipLowSelect(float x, float lo) => x < lo ? lo : x;
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        internal static float FloatClipHighSelect(float x, float hi) => x > hi ? hi : x;
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        internal static double DoubleClipLowSelect(double x, double lo) => x < lo ? lo : x;
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        internal static double DoubleClipHighSelect(double x, double hi) => x > hi ? hi : x;
 
         // float32/float64 NaN-IGNORING max/min — np.fmax / np.fmin ARRAY semantics (probed
         // 2.4.2): a NaN operand is skipped and the OTHER operand returned. The NaN checks are

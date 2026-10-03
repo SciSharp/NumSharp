@@ -402,6 +402,16 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Stat() => RunCorpus("stat.jsonl");
 
+        // np.clip with Python-int bounds (gen_clip_pyint): numpy/_core/_methods.py::_clip's drop rule (a bound at
+        // or past an integer dtype's limit is ignored), NEP 50 packing (a kept bound that does not fit raises
+        // OverflowError, empties included), dtype= / out= casts named after the routed ufunc
+        // (positive / minimum / maximum / clip), across the 8 integer dtypes + Char (uint16 proxy), bool and the
+        // inexact dtypes. stat.jsonl's clip cases only use in-range bounds of the array's own dtype, which is why
+        // np.clip(uint8, 0, 256) returning [0 0 0 0] went unnoticed. Portable: generated identically on Linux.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void ClipPyInt() => RunCorpus("clip_pyint.jsonl");
+
         // W7 logic (T13): isnan/isinf/isfinite (unary->bool), maximum/minimum (NaN-propagating),
         // fmax/fmin (NaN-ignoring), isclose (binary->bool) — NaN/inf-laced operands.
         [TestMethod]
@@ -879,6 +889,7 @@ namespace NumSharp.Tests.Fuzz
             ["sort.jsonl"] = 940,   // +102: searchsorted expansion (dup/mixed-promotion/sorter/nan/complex-lex/strided/empty)
             ["specials.jsonl"] = 1920,
             ["stat.jsonl"] = 3412,
+            ["clip_pyint.jsonl"] = 3900,   // np.clip with Python-int bounds: 4,175 at delivery (8 integer dtypes + Char x bound pairs x 12 layouts, the dtype=/out= rows, bool/float/complex)
             ["tail.jsonl"] = 1872,
             ["unary.jsonl"] = 5969,
             ["unary_extra.jsonl"] = 6052,

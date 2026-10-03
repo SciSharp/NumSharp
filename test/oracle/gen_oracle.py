@@ -527,6 +527,171 @@ def gen_clip(dtypes, layout_names):
     return cases
 
 
+# ---- np.clip with Python-int bounds (numpy/_core/_methods.py::_clip + NEP 50 packing) ----------------
+#
+# gen_clip's bounds are 0-d arrays of the operand's own dtype, always in range, so neither half of _clip's
+# integer handling was ever exercised: np.clip(uint8, 0, 256) returned [0 0 0 0] in NumSharp (256 wrapped
+# to 0) while the gate stayed green. Here the bounds are Python ints, and the C# replay passes each one as
+# the C# integer literal of that value (int, then uint / long / ulong). They sit at, inside and past each
+# integer dtype's limits:
+#   * a bound at or past the limit on the harmless side is DROPPED (min <= iinfo.min, max >= iinfo.max),
+#     and the call is routed to positive / minimum / maximum;
+#   * a kept bound on the impossible side is packed into the loop dtype and raises OverflowError
+#     ("Python integer 1000 out of bounds for int8") before any element is read, so empties raise too;
+#   * dtype= moves the packing into the requested loop while the drop rule keeps the input's range, and
+#     both the dtype= input casts and the out= casts are validated under the ROUTED ufunc's name.
+#
+# Portability: past +-2**31 NumPy's OverflowError text depends on the platform's C long (Windows: "Python
+# int too large to convert to C long" / "int too big to convert"; Linux and macOS: "Python integer ... out
+# of bounds for ..."). A case is kept only when its outcome matches on every platform:
+#   * every case that does not raise, since a dropped bound is never converted;
+#   * an OverflowError whose value lies inside +-2**31;
+#   * a uint64 negative down to -2**63, which converts through a 64-bit C long long on both.
+# The texts past that are LP64-pinned by C# unit tests (test/NumSharp.Tests/Math/np.clip.PythonIntBounds.Test.cs).
+# Char rides the uint16 proxy (char_tier): its drop range is [0, 65535], and its texts name uint16, as NumSharp's do.
+CLIP_PYINT_INT_DTYPES = ["int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64"]
+CLIP_PYINT_LAYOUTS = ["c_contiguous_1d", "c_contiguous_2d", "f_contiguous_2d", "transposed_3d",
+                      "strided_2d_cols", "negstride_2d_offset", "broadcast_1d_to_2d", "scalar_0d",
+                      "zerod_from_index", "one_element_1d", "empty_2d", "highrank_5d"]
+# The dtype= / out= variants and the non-integer arrays ride fewer layouts: their claims are about the
+# routing and the casts, which no layout changes.
+CLIP_PYINT_VARIANT_LAYOUTS = ["c_contiguous_1d", "f_contiguous_2d", "strided_2d_cols", "scalar_0d", "empty_2d"]
+# Bounds on non-integer arrays: no drop rule (NumPy's 'iu' kinds only), so a Python int promotes (bool -> int64)
+# or converts with rounding (100000 into float16 is inf, a RuntimeWarning in NumPy). Rows are (lo, hi, dtype, out).
+CLIP_PYINT_INEXACT = {
+    "bool": [(0, 2, None, None), (-1000, 1000, None, None), (0, None, None, None), (None, 1, None, None),
+             (2, None, None, None), (None, -1, None, None), (None, None, None, None),
+             (None, None, "float64", None), (None, None, "bool", None), (0, 2, "bool", None),
+             (None, 0, "bool", None), (0, 2, None, "int8"), (0, 2, None, "bool")],
+    "float16": [(0, 100000, None, None), (-100000, 100000, None, None), (100000, None, None, None),
+                (None, -100000, None, None), (-2**63, 2**64 - 1, None, None), (-1000, 1000, None, None),
+                (0, 1, "int8", None), (0, 100000, None, "float64")],
+    "float32": [(-2**63, 2**64 - 1, None, None), (2**63, None, None, None), (None, -2**63, None, None),
+                (-1000, 1000, None, None), (0, 2**40, None, None), (0, 1, None, "int8")],
+    "float64": [(-2**63, 2**64 - 1, None, None), (2**63, None, None, None), (None, -2**63, None, None),
+                (-1000, 1000, None, None), (0, 2**40, None, None), (0, 1, "float16", None)],
+    "complex128": [(-1000, 1000, None, None), (0, 2**40, None, None), (None, None, None, None),
+                   (0, 1, "float64", None)],
+}
+_CLIP_PYINT_CSHARP = (-2**63, 2**64 - 1)          # what a C# integer literal can hold
+_CLIP_PYINT_WIDER = {"int8": "int16", "uint8": "uint16", "int16": "int32", "uint16": "uint32",
+                     "int32": "int64", "uint32": "uint64", "int64": "float64", "uint64": "float64"}
+_CLIP_PYINT_OTHER_SIGN = {"int8": "uint8", "uint8": "int8", "int16": "uint16", "uint16": "int16",
+                          "int32": "uint32", "uint32": "int32", "int64": "uint64", "uint64": "int64"}
+
+
+def _clip_pyint_rows(s):
+    """(lo, hi, dtype, out) rows for the integer dtype `s`, deduplicated, C#-representable only.
+
+    The plain (lo, hi) pairs probe the limits; the dtype=/out= rows probe the packing loop, the routed
+    ufunc names of the cast errors and NumPy's error order (packing -> input casts -> out cast).
+    """
+    info = np.iinfo(s)
+    lo, hi = int(info.min), int(info.max)
+    w, o = _CLIP_PYINT_WIDER[s], _CLIP_PYINT_OTHER_SIGN[s]
+    plain = [
+        (lo, hi), (lo - 1, hi + 1), (lo + 1, hi - 1),               # at (dropped) / past (dropped) / inside
+        (-2**63, 2**64 - 1), (-1000, 1000), (-2**40, 2**40),         # far past: dropped where past
+        (None, None), (lo - 1, None), (None, hi + 1),                # nothing left -> positive
+        (lo - 1, 5), (5, hi + 1), (-5, None), (None, 3),             # one dropped, the other clips
+        (hi, None), (None, lo), (hi, lo),                            # a limit on the far side: kept, clips all
+        (hi + 1, None), (None, lo - 1),                              # the impossible side, one-sided
+        (hi + 1, hi + 2), (lo - 2, lo - 1), (hi + 1, lo - 1),        # impossible (other dropped / both: min first)
+        (hi - 1, lo + 1),                                            # min > max inside the range: all = max
+        (1000, 2000), (-2000, -1000), (300, 100), (100, -1), (200, 50), (-50, -200),
+    ]
+    variants = [
+        (hi + 1, hi + 2, w, None), (lo - 1, 5, w, None), (-1000, 1000, w, None), (5, hi + 1, w, None),
+        (hi + 1, None, w, None), (None, lo - 1, w, None), (1000, -1000, w, None),
+        (5, 10, o, None), (lo - 1, hi + 1, o, None), (lo - 1, 5, o, None), (5, hi + 1, o, None),
+        (-1, 5, o, None), (-1, None, "uint64", None), (hi + 1, None, "float64", None),
+        (0, 1, "bool", None), (None, None, "bool", None), (None, None, w, None), (None, None, o, None),
+        (5, 10, None, s), (5, 10, None, w), (5, 10, None, o), (5, 10, None, "float64"), (5, 10, None, "bool"),
+        (lo - 1, hi + 1, None, w), (lo - 1, hi + 1, None, o), (lo - 1, 5, None, o), (5, hi + 1, None, o),
+        (hi + 1, None, None, w), (hi + 1, None, None, "bool"), (hi + 1, hi + 2, w, w), (5, 10, w, s),
+    ]
+    rows = [(a, b, None, None, "b") for a, b in plain] + [(a, b, d, out, "v") for a, b, d, out in variants]
+    seen, kept = set(), []
+    for r in rows:
+        if r[:4] in seen:
+            continue
+        if all(v is None or _CLIP_PYINT_CSHARP[0] <= v <= _CLIP_PYINT_CSHARP[1] for v in r[:2]):
+            seen.add(r[:4])
+            kept.append(r)
+    return kept
+
+
+def _clip_pyint_portable(exc):
+    """True when NumPy raises the same thing (or nothing) on every platform — see the tier header."""
+    if not isinstance(exc, OverflowError):
+        return True                       # no exception, a cast error or positive's no-loop: no C long involved
+    m = re.fullmatch(r"Python integer (-?\d+) out of bounds for (\w+)", str(exc))
+    if not m:
+        return False                      # a C long / long long text: platform-dependent
+    v = int(m.group(1))
+    return -2**31 <= v < 2**31 or (m.group(2) == "uint64" and v >= -2**63)
+
+
+def gen_clip_pyint(dtypes=None):
+    """np.clip with Python-int bounds (op key ``clip_pyint``) — see the header above.
+
+    Operands: the clipped array, plus a zero-filled C-contiguous ``out`` of the out dtype when a row names one
+    (NumPy returns ``out``, so the expected array is its final content). Params: ``lo``/``hi`` (Python ints or
+    null) and an optional ``dtype``. NumPy's exception is recorded verbatim for the raising rows.
+    """
+    dtypes = dtypes or (CLIP_PYINT_INT_DTYPES + list(CLIP_PYINT_INEXACT))
+    cases = []
+    n = 0
+    skipped = 0
+
+    def run(ln, s, lo, hi, dtype, out_dtype, tag):
+        nonlocal n, skipped
+        base, view = LAYOUTS[ln](np.dtype(s))
+        params = {"lo": lo, "hi": hi}
+        kw = {}
+        if dtype is not None:
+            params["dtype"] = dtype
+            kw["dtype"] = np.dtype(dtype)
+        operands = [describe(base, view)]
+        if out_dtype is not None:
+            obase = np.zeros(view.shape, dtype=out_dtype)
+            operands.append(describe(obase, obase))
+            kw["out"] = obase.copy()      # NumPy writes the copy; the operand keeps the zeros the replay starts from
+        exc, r = None, None
+        try:
+            with warnings.catch_warnings(), np.errstate(all="ignore"):
+                warnings.simplefilter("ignore")        # float16 overflow casts warn; the value (inf) is the claim
+                r = np.clip(view, lo, hi, **kw)
+        except Exception as e:                          # noqa: BLE001 — every NumPy outcome is recorded
+            exc = e
+        if not _clip_pyint_portable(exc):
+            skipped += 1
+            return
+        cid = f"clip_pyint/{ln}/{s}/{tag}/{n}"
+        if exc is not None:
+            cases.append({"id": cid, "op": "clip_pyint", "params": params, "operands": operands,
+                          "expected": {}, "expects_throw": True, "error": _exc(exc),
+                          "layout": ln, "valueclass": "error"})
+        else:
+            cases.append({"id": cid, "op": "clip_pyint", "params": params, "operands": operands,
+                          "expected": _arr_expected(r), "layout": ln, "valueclass": "mixed"})
+        n += 1
+
+    for s in dtypes:
+        if np.dtype(s).kind in "iu":
+            for lo, hi, dtype, out_dtype, tag in _clip_pyint_rows(s):
+                layouts = CLIP_PYINT_LAYOUTS if tag == "b" else CLIP_PYINT_VARIANT_LAYOUTS
+                for ln in layouts:
+                    run(ln, s, lo, hi, dtype, out_dtype, tag)
+        else:
+            for lo, hi, dtype, out_dtype in CLIP_PYINT_INEXACT[s]:
+                for ln in CLIP_PYINT_VARIANT_LAYOUTS:
+                    run(ln, s, lo, hi, dtype, out_dtype, "x")
+    if skipped:
+        print(f"  (skipped {skipped} clip_pyint cases whose NumPy outcome is platform-dependent)")
+    return cases
+
+
 # np.where(cond, x, y) -> select. Result dtype = result_type(x, y); NumPy is the oracle.
 WHERE_DT_PAIRS = [
     ("int32", "int32"), ("int32", "float64"), ("float32", "float64"), ("int32", "int64"),
@@ -4159,6 +4324,11 @@ def char_tier(mode):
         raw = gen_instance([_C])
     elif mode == "modf":                                           # modf(char) -> (float32, float32) per the
         raw = gen_modf([_C], MODF_LAYOUTS)                         # 59f99320 per-width promotion tier
+    elif mode == "clip_pyint":                                     # char drops on [0, 65535]; texts name uint16
+        # CARVED: positive's no-loop text names the input's DType CLASS, and Char's is NumSharp's own
+        # np.dtypes.CharDType, which the uint16 proxy cannot spell (it says UInt16DType). Unit-test-pinned
+        # (np_clip_python_int_bounds_tests.NoBoundLeft_IsPositive).
+        raw = [c for c in gen_clip_pyint([_C]) if "UInt16DType" not in (c.get("error") or {}).get("text", "")]
     return _relabel_dtype(raw, _C, "char")
 
 
@@ -14303,6 +14473,12 @@ def main():
         cases += gen_interp()                                  # np.interp (1-D linear interpolation)
         cases += char_tier("stat")
         write_jsonl(os.path.join(corpus_dir, "stat.jsonl"), cases)
+    elif mode == "clip_pyint":
+        # np.clip with Python-int bounds: _methods._clip's drop rule, NEP 50 packing (OverflowError),
+        # dtype= / out= casts under the routed ufunc's name. Its own file, so regenerating it renumbers nothing else.
+        cases = gen_clip_pyint()
+        cases += char_tier("clip_pyint")
+        write_jsonl(os.path.join(corpus_dir, "clip_pyint.jsonl"), cases)
     elif mode == "logic":
         cases = gen_unary(LOGIC_UNARY_OPS, LOGIC_UNARY_DTYPES, list(LAYOUTS.keys()))
         cases += gen_binary(LOGIC_BIN_OPS, LOGIC_BIN_PAIRS, list(PAIR_LAYOUTS.keys()))

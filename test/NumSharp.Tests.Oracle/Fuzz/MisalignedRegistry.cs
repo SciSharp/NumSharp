@@ -130,7 +130,11 @@ namespace NumSharp.Tests.Fuzz
             // spacing is a pure bit-fiddle (npy_spacing / npy_half_spacing), bit-exact vs NumPy at
             // every width incl. float16 exhaustively — no transcendental-libm reason to drift, so a
             // ≤2-ULP change is a regression, not algorithm noise. Held strict.
-            "spacing"
+            "spacing",
+            // np.clip with Python-int bounds selects one of {element, converted bound} per element (a
+            // min/max — no arithmetic), so a 1-ULP difference is a wrong BOUND conversion, never noise.
+            // Held strict: its one operand (the bounds ride as params) made it look like a unary op.
+            "clip_pyint"
         };
 
         /// <summary>
@@ -1128,15 +1132,14 @@ namespace NumSharp.Tests.Fuzz
             // happened to record. Excused ONLY when EVERY diff is a pure ±0 sign flip (both values
             // exactly zero) — a wrong NON-zero result, or a NaN-bit flip, is NOT a signed zero and
             // falls through to fail. Same class as the documented float32-sum NaN-bit order excuse.
-            // out_clip joins the same class: clip IS maximum(minimum(x, hi), lo), so the sign of a
-            // ±0 result (input -0.0 against a +0.0 bound) inherits the identical non-contractual
-            // lane-dependence — NumPy's clip kernel keeps the input's zero where NumSharp's
-            // composition keeps the bound's; both are IEEE-equal zeros.
+            // out_clip is NO LONGER in this class: its ±0 difference was never lane noise but NumPy's
+            // const fast path for scalar float bounds (clip.cpp _npy_clip_const_minmax_ keeps the
+            // element on a tie, x < lo ? lo : x), which the clip kernel now reproduces
+            // (DirectILKernelGenerator.UsesConstSelect). The out_clip cells are held bit-exact.
             if (kind == DivergenceKind.Value
-                && (c.Op == "out_clip"
-                    || (c.Op == "out_binary"
-                        && c.Params != null && c.Params.TryGetValue("ufunc", out var mmUf)
-                        && mmUf.GetString() is "maximum" or "minimum" or "fmax" or "fmin"))
+                && c.Op == "out_binary"
+                && c.Params != null && c.Params.TryGetValue("ufunc", out var mmUf)
+                && mmUf.GetString() is "maximum" or "minimum" or "fmax" or "fmin"
                 && diffs.Count > 0 && diffs.All(d => BitDiff.IsSignedZeroFlip(expected, actual, d.Index, tc)))
                 return "min/max family signed-zero: the sign of a ±0 result is non-contractual "
                      + "(NumPy varies it by SIMD lane) — every diff is a pure +0/-0 flip [non-contractual]";
@@ -1149,8 +1152,13 @@ namespace NumSharp.Tests.Fuzz
             // EXCLUDES the out=/where= tier: there a 0-D operand is usually the `where` MASK
             // (scalar_true / scalar_false), which has nothing to do with promotion — without this
             // guard the branch silently swallowed 60 mask cases it had no business classifying.
+            //
+            // EXCLUDES clip_pyint too: its 0-D operand is the CLIPPED array (the scalar_0d layouts, with
+            // an out= operand beside it) — its bounds ride as params, so there is no weak 0-D operand to
+            // promote, and a divergence there is a real clip bug.
             if ((kind == DivergenceKind.Value || kind == DivergenceKind.ErrorText)
                 && (c.Op == null || !c.Op.StartsWith("out_"))
+                && c.Op != "clip_pyint"
                 && c.Operands.Length >= 2 && c.Operands.Any(o => o.Shape.Length == 0))
                 return "NEP50 weak-scalar (error path): a 0-D operand promotes weakly, so a pairing "
                      + "NumPy refuses succeeds instead";
