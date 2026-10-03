@@ -4088,7 +4088,7 @@ dotnet test --filter "TestCategory=Misaligned"
 dotnet test --filter "TestCategory!=OpenBugs&TestCategory!=HighMemory&TestCategory!=WindowsOnly"
 ```
 
-**OpenBugs files**: `OpenBugs.cs` (general), `OpenBugs.Bitmap.cs` (bitmap), `OpenBugs.ApiAudit.cs` (API audit), `OpenBugs.ILKernelBattle.cs` (IL kernel), `OpenBugs.Random.cs` (random), `OpenBugs.BroadcastReduce.cs` (broadcast reduce), `OpenBugs.ViewShape.cs` (a caller's `Shape` reaching an array's storage: wrap constructors, shared dimension arrays).
+**OpenBugs files**: `OpenBugs.cs` (general), `OpenBugs.Bitmap.cs` (bitmap), `OpenBugs.ApiAudit.cs` (API audit), `OpenBugs.ILKernelBattle.cs` (IL kernel), `OpenBugs.Random.cs` (random), `OpenBugs.BroadcastReduce.cs` (broadcast reduce), `OpenBugs.ViewShape.cs` (a caller's `Shape` reaching an array's storage: wrap constructors, shared dimension arrays), `OpenBugs.Reductions.cs` (how a reduction STARTS: a sum/mean of only `-0.0` keeps `-0.0` where NumPy's `+0.0` identity gives `+0.0`, flat `cumsum` loses a leading `-0.0`, the managed length-1 `dot` loses the product's sign, one-element `nansum`/`nanprod`/`nanmean` return `(1,)`; raw-bit asserts, because `0.0 == -0.0`).
 
 ## Differential-Fuzz Pipeline (NumPy oracle)
 
