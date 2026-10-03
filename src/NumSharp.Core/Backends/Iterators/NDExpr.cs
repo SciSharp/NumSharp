@@ -1364,7 +1364,9 @@ namespace NumSharp.Backends.Iteration
             if (_op == BinaryOp.Power && NDExprTypeRules.IsSignedInteger(my))
                 EmitNegativeExponentGuard(il, my);
 
-            DirectILKernelGenerator.EmitScalarOperation(il, _op, my);
+            // The unfused NumPy chain runs this node as an elementwise ufunc: float add/multiply keep the SECOND
+            // operand's NaN when both are NaN (NaNOperandOrder.NumPyUfunc), whatever order RyuJIT gives the instruction.
+            DirectILKernelGenerator.EmitScalarOperation(il, _op, my, NaNOperandOrder.NumPyUfunc);
             EmitNormalizeNarrowInt(il, my);
         }
 
@@ -1439,7 +1441,8 @@ namespace NumSharp.Backends.Iteration
             // node at Vector128, which is what keeps e.g. an int32 multiply wrapping at int32.
             EmitVectorChildAs(il, ctx, _left, my);
             EmitVectorChildAs(il, ctx, _right, my);
-            DirectILKernelGenerator.EmitVectorOperationAt(il, _op, my, ctx.ContainerBits(my));
+            // Same NaN operand order as EmitScalar, so the vector body stays bit-for-bit the scalar body.
+            DirectILKernelGenerator.EmitVectorOperationAt(il, _op, my, ctx.ContainerBits(my), NaNOperandOrder.NumPyUfunc);
         }
 
         public override void AppendSignature(StringBuilder sb)

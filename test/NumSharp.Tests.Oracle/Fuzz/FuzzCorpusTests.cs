@@ -65,6 +65,17 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void NumPyFloat64Kernels() => RunCorpus("numpy_f64_kernels.jsonl");
 
+        // The NaN-operand order of float add / multiply, with subtract / divide as controls: when BOTH
+        // operands are NaN, numpy 2.4.2 win-amd64 keeps the SECOND operand's NaN on every loop path but
+        // one — the AVX2 scalar-broadcast loop keeps the broadcast operand's NaN in its 2-vector blocks
+        // and the array operand's in its tail (gen_oracle.gen_nan_order has the probed rule). Every
+        // other tier tokenizes NaN; these cases carry params.nan_bits, so their NaN payloads compare
+        // RAW on an x86 X86_V3 host (IsNaNOperandOrderCase) and any payload or sign difference fails.
+        // Portable across operating systems: NumSharp's NaN choice is explicit, not the JIT's.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void NaNOperandOrder() => RunCorpus("nan_order.jsonl");
+
         [TestMethod]
         [TestCategory("FuzzMatrix")]
         public void Reduce() => RunCorpus("reduce.jsonl");
@@ -861,6 +872,7 @@ namespace NumSharp.Tests.Fuzz
             ["nanscan.jsonl"] = 525,   // nancumsum all 13 dtypes; nancumprod carves complex128 (host-FMA multiply)
             ["numpy_f32_kernels.jsonl"] = 140,
             ["numpy_f64_kernels.jsonl"] = 24,
+            ["nan_order.jsonl"] = 2600,   // float add / multiply NaN-operand order (win-amd64), NaN payloads raw: 2,678 at delivery
             ["out_where.jsonl"] = 6300,   // §B2 out_scan/out_round/out_clip/out_nanarg + the f16/uint8 lanes (dtype-spread gate)
             ["params.jsonl"] = 1190,      // +288 §C1: multi-axis median/average/nanmedian (tuple-axis int[] overloads)
             ["instance.jsonl"] = 7500,    // §D: ndarray.* instance surface — 13 NumPy dtypes + the char proxy weave (dtype-spread gate)

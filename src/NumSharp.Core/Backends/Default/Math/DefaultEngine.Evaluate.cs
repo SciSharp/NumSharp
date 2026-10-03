@@ -410,6 +410,28 @@ namespace NumSharp.Backends
         {
             var d = program.DirectOp;
             var a = inputs[d.Input0];
+
+            // A same-dtype float add/multiply against a 0-d operand is delegated for NaN parity (see the
+            // 0-d exception below). Its array operand may also be F-contiguous: both paths then allocate an
+            // F result (the fused strict-F rule ignores the 0-d operand; TryScalarBroadcastBinaryOp keeps the
+            // array's layout), so the layouts still agree.
+            if (d.Kind == NDExprDirectKind.Binary)
+            {
+                var b0 = inputs[d.Input1];
+                if ((a.ndim == 0) != (b0.ndim == 0)
+                    && a.typecode == b0.typecode && a.typecode == program.ResultType
+                    && DirectILKernelGenerator.HasNaNOperandOrder(d.BinOp, a.typecode))
+                {
+                    var arrayShape = a.ndim == 0 ? b0.Shape : a.Shape;
+                    if (!arrayShape.IsBroadcasted && (arrayShape.IsContiguous || arrayShape.IsFContiguous))
+                    {
+                        NDExpr.DirectOpDelegations++;
+                        return ExecuteBinaryOp(a, b0, d.BinOp);
+                    }
+                    return null;
+                }
+            }
+
             // A non-C-contiguous leaf (F/transposed/strided/negative-stride/broadcast) would let the two
             // paths disagree on the RESULT layout (the fused strict-F heuristic vs the engine kernel), so
             // it is not delegated — the fused pass handles every layout correctly.
@@ -437,6 +459,13 @@ namespace NumSharp.Backends
             // guards intact (a forced dtype= bypassed the "Integers to negative integer powers" check that
             // the fused path raises). So delegate only when neither operand is 0-d; a 0-d-operand binary
             // (a rare single-op form) stays on the fused pass.
+            //
+            // The exception, handled at the top: a same-dtype float add/multiply has no promotion question
+            // (both engines answer that dtype), and it is the one 0-d case the fused pass cannot reproduce
+            // bit-for-bit. NumPy runs `a + k` as its trivial loop, whose SIMD body keeps the 0-d operand's
+            // NaN and whose tail the array's when both are NaN (DirectILKernelGenerator.NaNOperandOrder.cs);
+            // the engine's scalar-broadcast kernel models that region split, the fused kernel (a hoisted
+            // parameter) keeps the second operand's NaN.
             if (a.ndim == 0 || b.ndim == 0)
                 return null;
 

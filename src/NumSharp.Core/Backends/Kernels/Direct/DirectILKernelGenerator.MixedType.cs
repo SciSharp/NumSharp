@@ -454,7 +454,7 @@ namespace NumSharp.Backends.Kernels
             EmitConvertTo(il, key.RhsType, key.ResultType);
 
             // Perform operation
-            EmitScalarOperation(il, key.Op, key.ResultType);
+            EmitScalarOperation(il, key.Op, key.ResultType, NaNOperandOrder.NumPyUfunc);
 
             // Store result
             EmitStoreIndirect(il, key.ResultType);
@@ -548,7 +548,7 @@ namespace NumSharp.Backends.Kernels
                 EmitVectorLoad(il, key.RhsType);
 
                 // Vector operation
-                EmitVectorOperation(il, key.Op, key.ResultType);
+                EmitVectorOperation(il, key.Op, key.ResultType, NaNOperandOrder.NumPyUfunc);
 
                 // Store result vector at (i + offset)
                 il.Emit(OpCodes.Ldarg_2); // result
@@ -601,7 +601,7 @@ namespace NumSharp.Backends.Kernels
             EmitVectorLoad(il, key.RhsType);
 
             // Vector operation
-            EmitVectorOperation(il, key.Op, key.ResultType);
+            EmitVectorOperation(il, key.Op, key.ResultType, NaNOperandOrder.NumPyUfunc);
 
             // Store result vector
             il.Emit(OpCodes.Ldarg_2); // result
@@ -653,7 +653,7 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Add);
             EmitLoadIndirect(il, key.RhsType);
 
-            EmitScalarOperation(il, key.Op, key.ResultType);
+            EmitScalarOperation(il, key.Op, key.ResultType, NaNOperandOrder.NumPyUfunc);
             EmitStoreIndirect(il, key.ResultType);
 
             // i++
@@ -716,7 +716,7 @@ namespace NumSharp.Backends.Kernels
             // Load cached rhs scalar
             il.Emit(OpCodes.Ldloc, locRhsVal);
 
-            EmitScalarOperation(il, key.Op, key.ResultType);
+            EmitScalarOperation(il, key.Op, key.ResultType, NaNOperandOrder.NumPyUfunc);
             EmitStoreIndirect(il, key.ResultType);
 
             // i++
@@ -779,7 +779,7 @@ namespace NumSharp.Backends.Kernels
             EmitLoadIndirect(il, key.RhsType);
             EmitConvertTo(il, key.RhsType, key.ResultType);
 
-            EmitScalarOperation(il, key.Op, key.ResultType);
+            EmitScalarOperation(il, key.Op, key.ResultType, NaNOperandOrder.NumPyUfunc);
             EmitStoreIndirect(il, key.ResultType);
 
             // i++
@@ -796,6 +796,15 @@ namespace NumSharp.Backends.Kernels
         /// Emit SIMD loop for scalar right operand (broadcast scalar to vector).
         /// Requires: LHS type == Result type (no per-element conversion needed).
         /// </summary>
+        /// <remarks>
+        /// For a float add/multiply (<see cref="HasNaNOperandOrder"/>) the kernel is one NumPy trivial-loop call over the
+        /// whole array, so a NaN broadcast value branches to <see cref="EmitBroadcastNaNRegion"/> (NumPy's SIMD region split,
+        /// <c>SplitPerCall = 1</c>) and the hot loops below run only for a non-NaN scalar, where the plain instruction's NaN
+        /// operand order cannot matter (only the array element can be NaN).
+        /// </remarks>
+        /// <param name="il">The kernel's IL stream (the 8-argument <see cref="MixedTypeKernel"/> signature).</param>
+        /// <param name="key">The kernel key; the left operand is the contiguous array, the right the broadcast scalar.</param>
+        /// <param name="elemSize">The result (and left operand) element size in bytes.</param>
         private static void EmitSimdScalarRightLoop(ILGenerator il, MixedTypeKernelKey key, int elemSize)
         {
             // Args: void* lhs (0), void* rhs (1), void* result (2),
@@ -810,11 +819,15 @@ namespace NumSharp.Backends.Kernels
             var locI = il.DeclareLocal(typeof(long));           // loop counter
             var locVectorEnd = il.DeclareLocal(typeof(long));   // totalSize - vectorCount
             var locScalarVec = il.DeclareLocal(vectorType);    // broadcasted scalar vector
+            var locScalarVal = il.DeclareLocal(clrType);       // the scalar at the result type (tail + NaN test)
 
             var lblSimdLoop = il.DefineLabel();
             var lblSimdLoopEnd = il.DefineLabel();
             var lblTailLoop = il.DefineLabel();
             var lblTailLoopEnd = il.DefineLabel();
+            var lblEnd = il.DefineLabel();
+            bool nanOrdered = HasNaNOperandOrder(key.Op, key.ResultType);
+            var lblNaNScalar = il.DefineLabel();
 
             // === Load scalar, convert to result type, broadcast to vector ===
             // Load rhs[0] (the scalar)
@@ -825,7 +838,14 @@ namespace NumSharp.Backends.Kernels
             {
                 EmitConvertTo(il, key.RhsType, key.ResultType);
             }
+            il.Emit(OpCodes.Stloc, locScalarVal);
+
+            // A NaN broadcast value decides the output NaN per region of NumPy's call — the cold path below.
+            if (nanOrdered)
+                EmitBranchIfNaN(il, locScalarVal, lblNaNScalar);
+
             // Broadcast to Vector256: Vector256.Create(scalar)
+            il.Emit(OpCodes.Ldloc, locScalarVal);
             EmitVectorCreate(il, key.ResultType);
             il.Emit(OpCodes.Stloc, locScalarVec);
 
@@ -881,16 +901,7 @@ namespace NumSharp.Backends.Kernels
             il.MarkLabel(lblSimdLoopEnd);
 
             // === TAIL LOOP (scalar remainder) ===
-            // Load scalar value once for tail loop
-            var locScalarVal = il.DeclareLocal(clrType);
-            il.Emit(OpCodes.Ldarg_1); // rhs
-            EmitLoadIndirect(il, key.RhsType);
-            if (key.RhsType != key.ResultType)
-            {
-                EmitConvertTo(il, key.RhsType, key.ResultType);
-            }
-            il.Emit(OpCodes.Stloc, locScalarVal);
-
+            // The scalar value was loaded (and converted) once, into locScalarVal, before the SIMD loop.
             il.MarkLabel(lblTailLoop);
 
             // if (i >= totalSize) goto end
@@ -927,12 +938,58 @@ namespace NumSharp.Backends.Kernels
 
             il.Emit(OpCodes.Br, lblTailLoop);
             il.MarkLabel(lblTailLoopEnd);
+
+            if (nanOrdered)
+            {
+                il.Emit(OpCodes.Br, lblEnd);
+                il.MarkLabel(lblNaNScalar);
+                EmitDirectBroadcastNaNRegion(il, key, scalarIsSecond: true, locScalarVal, lblEnd);
+            }
+
+            il.MarkLabel(lblEnd);
+        }
+
+        /// <summary>
+        ///     Emits the cold NaN-broadcast path of a direct scalar-broadcast kernel (<see cref="EmitSimdScalarRightLoop"/> /
+        ///     <see cref="EmitSimdScalarLeftLoop"/>): the whole array is ONE NumPy call (its trivial loop, or an unbuffered 1-D
+        ///     iterator), with the array operand and the fresh result contiguous, so NumPy's SIMD region split applies.
+        /// </summary>
+        /// <param name="il">The kernel's IL stream; the 8-argument <see cref="MixedTypeKernel"/> signature.</param>
+        /// <param name="key">The kernel key (same dtype on the array operand and the result).</param>
+        /// <param name="scalarIsSecond">True for <c>array op scalar</c> (the scalar is argument 1), false for <c>scalar op array</c>.</param>
+        /// <param name="scalarValue">Local holding the (NaN) broadcast value at the result dtype.</param>
+        /// <param name="done">The label after the kernel's loops.</param>
+        private static void EmitDirectBroadcastNaNRegion(ILGenerator il, MixedTypeKernelKey key, bool scalarIsSecond,
+            LocalBuilder scalarValue, Label done)
+        {
+            var locArray = il.DeclareLocal(typeof(byte*));
+            var locOut = il.DeclareLocal(typeof(byte*));
+            il.Emit(scalarIsSecond ? OpCodes.Ldarg_0 : OpCodes.Ldarg_1);   // the array operand
+            il.Emit(OpCodes.Stloc, locArray);
+            il.Emit(OpCodes.Ldarg_2);                                       // result
+            il.Emit(OpCodes.Stloc, locOut);
+
+            EmitBroadcastNaNRegion(il, key.ResultType, scalarValue,
+                locArray, scalarIsSecond ? key.LhsType : key.RhsType, arrayStride: null,
+                locOut, outStride: null,
+                pushCount: g => g.Emit(OpCodes.Ldarg_S, (byte)7),           // totalSize
+                scalarIsSecond,
+                pushSplitPerCall: g => g.Emit(OpCodes.Ldc_I4_1),
+                pushBufferChunk: g => g.Emit(OpCodes.Ldc_I8, 0L),
+                contiguous: true, done);
         }
 
         /// <summary>
         /// Emit SIMD loop for scalar left operand (broadcast scalar to vector).
         /// Requires: RHS type == Result type (no per-element conversion needed).
         /// </summary>
+        /// <remarks>
+        /// Mirror of <see cref="EmitSimdScalarRightLoop"/>: a NaN broadcast value of a float add/multiply branches to the
+        /// cold region path, so the hot loops keep the plain instruction.
+        /// </remarks>
+        /// <param name="il">The kernel's IL stream (the 8-argument <see cref="MixedTypeKernel"/> signature).</param>
+        /// <param name="key">The kernel key; the left operand is the broadcast scalar, the right the contiguous array.</param>
+        /// <param name="elemSize">The result (and right operand) element size in bytes.</param>
         private static void EmitSimdScalarLeftLoop(ILGenerator il, MixedTypeKernelKey key, int elemSize)
         {
             // Args: void* lhs (0), void* rhs (1), void* result (2),
@@ -947,11 +1004,15 @@ namespace NumSharp.Backends.Kernels
             var locI = il.DeclareLocal(typeof(long));           // loop counter
             var locVectorEnd = il.DeclareLocal(typeof(long));   // totalSize - vectorCount
             var locScalarVec = il.DeclareLocal(vectorType);    // broadcasted scalar vector
+            var locScalarVal = il.DeclareLocal(clrType);       // the scalar at the result type (tail + NaN test)
 
             var lblSimdLoop = il.DefineLabel();
             var lblSimdLoopEnd = il.DefineLabel();
             var lblTailLoop = il.DefineLabel();
             var lblTailLoopEnd = il.DefineLabel();
+            var lblEnd = il.DefineLabel();
+            bool nanOrdered = HasNaNOperandOrder(key.Op, key.ResultType);
+            var lblNaNScalar = il.DefineLabel();
 
             // === Load scalar, convert to result type, broadcast to vector ===
             // Load lhs[0] (the scalar)
@@ -962,7 +1023,14 @@ namespace NumSharp.Backends.Kernels
             {
                 EmitConvertTo(il, key.LhsType, key.ResultType);
             }
+            il.Emit(OpCodes.Stloc, locScalarVal);
+
+            // A NaN broadcast value decides the output NaN per region of NumPy's call — the cold path below.
+            if (nanOrdered)
+                EmitBranchIfNaN(il, locScalarVal, lblNaNScalar);
+
             // Broadcast to Vector256: Vector256.Create(scalar)
+            il.Emit(OpCodes.Ldloc, locScalarVal);
             EmitVectorCreate(il, key.ResultType);
             il.Emit(OpCodes.Stloc, locScalarVec);
 
@@ -1018,16 +1086,7 @@ namespace NumSharp.Backends.Kernels
             il.MarkLabel(lblSimdLoopEnd);
 
             // === TAIL LOOP (scalar remainder) ===
-            // Load scalar value once for tail loop
-            var locScalarVal = il.DeclareLocal(clrType);
-            il.Emit(OpCodes.Ldarg_0); // lhs
-            EmitLoadIndirect(il, key.LhsType);
-            if (key.LhsType != key.ResultType)
-            {
-                EmitConvertTo(il, key.LhsType, key.ResultType);
-            }
-            il.Emit(OpCodes.Stloc, locScalarVal);
-
+            // The scalar value was loaded (and converted) once, into locScalarVal, before the SIMD loop.
             il.MarkLabel(lblTailLoop);
 
             // if (i >= totalSize) goto end
@@ -1064,6 +1123,15 @@ namespace NumSharp.Backends.Kernels
 
             il.Emit(OpCodes.Br, lblTailLoop);
             il.MarkLabel(lblTailLoopEnd);
+
+            if (nanOrdered)
+            {
+                il.Emit(OpCodes.Br, lblEnd);
+                il.MarkLabel(lblNaNScalar);
+                EmitDirectBroadcastNaNRegion(il, key, scalarIsSecond: false, locScalarVal, lblEnd);
+            }
+
+            il.MarkLabel(lblEnd);
         }
 
         /// <summary>
@@ -1367,7 +1435,7 @@ namespace NumSharp.Backends.Kernels
             EmitConvertTo(il, key.RhsType, key.ResultType);
 
             // op + store
-            EmitScalarOperation(il, key.Op, key.ResultType);
+            EmitScalarOperation(il, key.Op, key.ResultType, NaNOperandOrder.NumPyUfunc);
             EmitStoreIndirect(il, key.ResultType);
 
             // i++
@@ -1433,7 +1501,7 @@ namespace NumSharp.Backends.Kernels
                 EmitVectorLoad(il, key.RhsType);
 
                 // v_result = op(v_lhs, v_rhs)
-                EmitVectorOperation(il, key.Op, key.ResultType);
+                EmitVectorOperation(il, key.Op, key.ResultType, NaNOperandOrder.NumPyUfunc);
 
                 // Store: Vector.Store(v_result, result + (resBase + i) * resultSize)
                 il.Emit(OpCodes.Ldarg_2); // result
@@ -1496,7 +1564,7 @@ namespace NumSharp.Backends.Kernels
                 EmitConvertTo(il, key.RhsType, key.ResultType);
 
                 // op + store
-                EmitScalarOperation(il, key.Op, key.ResultType);
+                EmitScalarOperation(il, key.Op, key.ResultType, NaNOperandOrder.NumPyUfunc);
                 EmitStoreIndirect(il, key.ResultType);
 
                 // i++
@@ -1631,7 +1699,7 @@ namespace NumSharp.Backends.Kernels
             }
 
             // v_result = op(v_lhs, v_rhs)
-            EmitVectorOperation(il, key.Op, key.ResultType);
+            EmitVectorOperation(il, key.Op, key.ResultType, NaNOperandOrder.NumPyUfunc);
 
             // Store v_result to result + (resBase + i) * resultSize
             il.Emit(OpCodes.Ldarg_2);
@@ -1702,7 +1770,7 @@ namespace NumSharp.Backends.Kernels
             EmitLoadIndirect(il, key.RhsType);
             EmitConvertTo(il, key.RhsType, key.ResultType);
 
-            EmitScalarOperation(il, key.Op, key.ResultType);
+            EmitScalarOperation(il, key.Op, key.ResultType, NaNOperandOrder.NumPyUfunc);
             EmitStoreIndirect(il, key.ResultType);
 
             il.Emit(OpCodes.Ldloc, locI);
@@ -1865,7 +1933,7 @@ namespace NumSharp.Backends.Kernels
             EmitConvertTo(il, key.RhsType, key.ResultType);
 
             // Operation
-            EmitScalarOperation(il, key.Op, key.ResultType);
+            EmitScalarOperation(il, key.Op, key.ResultType, NaNOperandOrder.NumPyUfunc);
 
             // Store
             EmitStoreIndirect(il, key.ResultType);

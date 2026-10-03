@@ -145,8 +145,10 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Ldarg_1);
             EmitConvertTo(il, key.RhsType, key.ResultType);
 
-            // Perform binary operation
-            EmitScalarOperation(il, key.Op, key.ResultType);
+            // Perform binary operation. The only caller is the 0-d x 0-d ufunc route (ExecuteScalarScalar): NumPy runs it
+            // as a one-element elementwise loop, whose float add/multiply keep the SECOND operand's NaN — not NumPy's
+            // scalar-math rule (np.float64 + np.float64 keeps the first), which a NumSharp 0-d array never reaches.
+            EmitScalarOperation(il, key.Op, key.ResultType, NaNOperandOrder.NumPyUfunc);
 
             // Return
             il.Emit(OpCodes.Ret);

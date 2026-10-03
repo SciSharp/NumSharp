@@ -55,6 +55,51 @@ namespace NumSharp.Tests.Fuzz
                 is System.Runtime.InteropServices.Architecture.X86
                 or System.Runtime.InteropServices.Architecture.X64;
 
+        /// <summary>
+        ///     True on a host where the NaN-operand-order tier (<c>nan_order.jsonl</c>) is a byte contract:
+        ///     an x86 process with NumPy's X86_V3 feature set (AVX2, FMA3, BMI1, BMI2, LZCNT).
+        /// </summary>
+        /// <remarks>
+        ///     The tier is authored against numpy 2.4.2 win-amd64, whose AVX2 scalar-broadcast loop
+        ///     splits its NaN choice at blocks of two 32-byte vectors. NumSharp derives that block from
+        ///     the host's features exactly as NumPy's dispatcher would (16-byte vectors without X86_V3),
+        ///     so on a host without X86_V3 BOTH libraries would split at a different point than the
+        ///     recorded bytes and the comparison would fail on a platform artifact. Such hosts, and
+        ///     arm64 (whose NumPy is compiled by another compiler with another operand order), compare
+        ///     NaN as one token instead — the same host rule as <see cref="NanSignIsX86Reference"/>.
+        ///     NumSharp's own NaN choice does not depend on the operating system, so Linux x64 is gated
+        ///     like Windows.
+        /// </remarks>
+        private static readonly bool NaNOperandOrderHost =
+            NanSignIsX86Reference
+            && System.Runtime.Intrinsics.X86.Avx2.IsSupported
+            && System.Runtime.Intrinsics.X86.Fma.IsSupported
+            && System.Runtime.Intrinsics.X86.Bmi1.IsSupported
+            && System.Runtime.Intrinsics.X86.Bmi2.IsSupported
+            && System.Runtime.Intrinsics.X86.Lzcnt.IsSupported;
+
+        /// <summary>
+        ///     True for a case of the NaN-operand-order tier on a host where that tier is a byte contract.
+        /// </summary>
+        /// <param name="c">The corpus case to test.</param>
+        /// <returns>
+        ///     <see langword="true"/> when the case carries <c>params.nan_bits = true</c> (written only by
+        ///     <c>gen_oracle.gen_nan_order</c>) and <see cref="NaNOperandOrderHost"/> holds; then its NaN
+        ///     payloads compare raw and any payload or sign difference fails outright.
+        /// </returns>
+        /// <remarks>
+        ///     When both operands of a float add or multiply are NaN, the result is the NaN of the
+        ///     operand the compiled loop put first. Every other tier tokenizes NaN, so this marker is the
+        ///     one place that choice is gated; it rides on the case rather than the op name because the
+        ///     same ops (<c>add</c>, <c>multiply</c>, <c>out_binary</c>, <c>evaluate</c>) appear in
+        ///     tiers whose layouts include NumSharp's documented residuals.
+        /// </remarks>
+        private static bool IsNaNOperandOrderCase(FuzzCorpus.Case c)
+            => NaNOperandOrderHost
+               && c.Params != null
+               && c.Params.TryGetValue("nan_bits", out var marker)
+               && marker.ValueKind == System.Text.Json.JsonValueKind.True;
+
         // ---- new tiers ---------------------------------------------------------------------
 
         /// <summary>
@@ -203,9 +248,12 @@ namespace NumSharp.Tests.Fuzz
             // CONTRACTUAL and is compared by raw bytes. The trigger keys on a complex OPERAND, not the
             // result dtype, so `abs`/`absolute` (complex128 -> float64) is gated too. Everywhere else NaN
             // stays tokenized (a differing payload/sign is non-contractual — order/algorithm-dependent).
-            bool nanExact = ComplexNanContractOps.Contains(c.Op)
-                            && (tc == NPTypeCode.Complex || c.Operands.Any(o => o.Dtype == "complex128"))
-                            && NanSignIsX86Reference;   // win-amd64 NaN-sign contract; tokenize off x86 (arm64)
+            // The nan_order tier's cases (params.nan_bits) gate the float add / multiply NaN-operand
+            // order the same way: their NaN payloads are contractual, so they compare raw as well.
+            bool nanExact = (ComplexNanContractOps.Contains(c.Op)
+                             && (tc == NPTypeCode.Complex || c.Operands.Any(o => o.Dtype == "complex128"))
+                             && NanSignIsX86Reference)   // win-amd64 NaN-sign contract; tokenize off x86 (arm64)
+                            || IsNaNOperandOrderCase(c);
 
             // Bit-exact to NumPy ("precise") passes HERE, before truth is ever read — matching
             // NumPy's bytes is the contract, and truth can never turn a precise result red.

@@ -4257,6 +4257,296 @@ def gen_numpy_f64_kernels():
     return cases
 
 
+# ---- NaN OPERAND ORDER of float add / multiply (NaN-bit-exact tier) -------------------------
+#
+# When BOTH inputs of an add or a multiply are NaN, the result is one of the two NaNs, and WHICH
+# one is a property of the compiled loop, not of IEEE 754: x86 addpd / mulpd return their FIRST
+# source operand (quieted), and add / multiply are commutative, so the compiler decides which
+# ufunc operand lands in that slot. numpy 2.4.2 win-amd64 (MSVC 19.44), probed on every loop path:
+#   * add / multiply keep the SECOND operand's NaN — contiguous, strided, reversed, out=, where=,
+#     transposed, buffered 2-D broadcasts and 0-d x 0-d alike;
+#   * except the AVX2 scalar-broadcast SIMD loop (one input stride 0, the other input and the out
+#     contiguous, length > 2 vectors): its 2-vector blocks keep the BROADCAST operand's NaN and its
+#     scalar tail the ARRAY operand's (the "region" rule), restarting per inner-loop call — per
+#     8192-element buffer chunk when an operand is cast, per mask-true run under where=;
+#   * subtract / divide keep the FIRST operand's NaN (not commutative), and float16 keeps the
+#     second everywhere (the npy_half loop has no SIMD path).
+# The linux-x86_64 GCC wheel orders them DIFFERENTLY on the same CPU (2026-10-03: its contiguous
+# SIMD body keeps the first operand's NaN and its broadcast loop the broadcast operand's
+# everywhere), so this is a win-amd64 contract, like the complex NaN-sign one.
+#
+# Every other tier TOKENIZES NaN (a differing payload or sign passes). These cases carry
+# params.nan_bits = true, which makes the C# comparator compare NaN payloads raw and fail any
+# payload or sign difference outright — on x86 hosts with the X86_V3 feature set (the region
+# rule's block is two AVX2 vectors). Operand a holds one NaN payload and b another, so every
+# output element names the operand whose NaN won.
+#
+# Kept OUT on purpose (NumSharp's documented residuals, unit-pinned [Misaligned]): N-D broadcasts
+# NumPy runs UNBUFFERED (an outer product with <= 2 rows such as (2,1)+(1,64), and (m,n)+(m,1) past
+# n = 4096), a 0-d against a non-contiguous N-D array past one buffer, a reversed cast operand past
+# one buffer, where= together with a cast, np.evaluate trees deeper than one node with a NaN 0-d or
+# size-1 broadcast input, and complex128 (MSVC's 2x-unrolled body alternates the order by vector
+# parity).
+
+_NO_SPECS = {
+    # dtype: (raw-bits view type, quiet NaN of a, quiet NaN of b, signalling NaN of a, of b).
+    # a's NaNs are negative with payload 1 (0x11 signalling), b's positive with payload 2 (0x22).
+    "float64": (np.uint64, 0xfff8000000000001, 0x7ff8000000000002, 0xfff0000000000011, 0x7ff0000000000022),
+    "float32": (np.uint32, 0xffc00001, 0x7fc00002, 0xff800011, 0x7f800022),
+    "float16": (np.uint16, 0xfe01, 0x7e02, 0xfc11, 0x7c22),
+}
+
+_NO_BINARY = {"add": np.add, "subtract": np.subtract, "multiply": np.multiply, "divide": np.divide}
+
+
+def _no_bits(dt, bits, shape):
+    """A fresh C-contiguous array of `shape` (() = 0-d) whose every element holds the raw `bits` -
+    written through an unsigned view, so a signalling NaN reaches the operand bytes unquieted."""
+    it = _NO_SPECS[dt][0]
+    n = int(np.prod(shape)) if shape else 1
+    return np.full(n, bits, dtype=it).view(np.dtype(dt)).reshape(shape)
+
+
+def _no_mixed(dt, nanbits, shape, nan_every, scale):
+    """A fresh C-contiguous array of finite values ((i+1)*scale) with the raw NaN `nanbits` at every
+    `nan_every`-th element. a (every 3rd) against b (every 2nd) gives both-NaN, a-only, b-only and
+    finite lanes in one operand pair, so the order rule and the plain arithmetic are gated together."""
+    it = _NO_SPECS[dt][0]
+    n = int(np.prod(shape)) if shape else 1
+    v = ((np.arange(n) + 1) * scale).astype(dt)
+    v.view(it)[::nan_every] = nanbits
+    return v.reshape(shape)
+
+
+def _no_layouts(mkA, mkB):
+    """(layout, (base_a, view_a), (base_b, view_b)) for every loop path the win-amd64 probe
+    separated. mkA / mkB build a FRESH operand of a shape (() = 0-d) carrying a's / b's pattern.
+
+    The lengths straddle the region rule's blocks: 2 AVX2 vectors = 8 float64 / 16 float32 lanes, so
+    a broadcast of 9, 17, 25 or 33 elements splits into a block part and a tail, 8 / 16 / 32 are
+    whole blocks, and 1-7 never take the SIMD loop. Contiguous pairs cover the scalar, the
+    4x-unrolled body and the tail; the strided / reversed / mixed-stride pairs leave the SIMD
+    loops; the 2-D set holds the buffered broadcasts NumPy collapses to one contiguous call, the
+    transposed (F-ordered) operands, and a 0-d against C and transposed 2-D arrays."""
+    def own(x):
+        return (x, x)
+
+    out = []
+    for n in (1, 2, 3, 5, 7, 8, 9, 15, 16, 17, 31, 32, 33, 63, 64, 65, 257, 1000):
+        out.append((f"contig_{n}", own(mkA((n,))), own(mkB((n,)))))
+    for n in (1, 3, 7, 8, 9, 15, 16, 17, 23, 24, 25, 31, 32, 33, 47, 48, 49, 257):
+        out.append((f"sl0d_{n}", own(mkA(())), own(mkB((n,)))))
+        out.append((f"sr0d_{n}", own(mkA((n,))), own(mkB(()))))
+        out.append((f"sl1_{n}", own(mkA((1,))), own(mkB((n,)))))
+        out.append((f"sr1_{n}", own(mkA((n,))), own(mkB((1,)))))
+    for n in (3, 9, 17, 33, 257):
+        a2, b2, a, b = mkA((2 * n,)), mkB((2 * n,)), mkA((n,)), mkB((n,))
+        out.append((f"strided_{n}", (a2, a2[::2]), (b2, b2[::2])))
+        out.append((f"rev_{n}", (a, a[::-1]), (b, b[::-1])))
+        out.append((f"astr_{n}", (a2, a2[::2]), own(b)))
+        out.append((f"bstr_{n}", own(a), (b2, b2[::2])))
+        out.append((f"sr0d_astr_{n}", (a2, a2[::2]), own(mkB(()))))
+        out.append((f"sl0d_brev_{n}", own(mkA(())), (b, b[::-1])))
+    for (m, k) in ((4, 5), (4, 20), (3, 33), (2, 64)):
+        if (m, k) != (2, 64):        # (2,1)+(1,64): NumPy runs this outer product UNBUFFERED (residual)
+            out.append((f"2d_m1_1k_{m}x{k}", own(mkA((m, 1))), own(mkB((1, k)))))
+        out.append((f"2d_mk_1k_{m}x{k}", own(mkA((m, k))), own(mkB((1, k)))))
+        out.append((f"2d_mk_m1_{m}x{k}", own(mkA((m, k))), own(mkB((m, 1)))))
+        out.append((f"2d_m1_mk_{m}x{k}", own(mkA((m, 1))), own(mkB((m, k)))))
+        out.append((f"2d_1k_mk_{m}x{k}", own(mkA((1, k))), own(mkB((m, k)))))
+        # NB: an F-ordered operand is the transpose of a C base - describe() serializes base bytes
+        # in C order, so an asfortranarray base would record bytes that disagree with its strides.
+        at, bt = mkA((k, m)), mkB((k, m))
+        out.append((f"2d_T_{m}x{k}", (at, at.T), (bt, bt.T)))
+        out.append((f"2d_0d_mk_{m}x{k}", own(mkA(())), own(mkB((m, k)))))
+        out.append((f"2d_mk_0d_{m}x{k}", own(mkA((m, k))), own(mkB(()))))
+        out.append((f"2d_mkT_0d_{m}x{k}", (at, at.T), own(mkB(()))))
+    out.append(("both0d", own(mkA(())), own(mkB(()))))
+    return out
+
+
+def gen_nan_order():
+    """The NaN-operand-order tier (nan_order.jsonl) - see the block comment above for the rule.
+
+    Sections:
+      A. all-NaN pairs (a quiet NaN against b's) over every layout, the four arithmetic ufuncs x
+         float16 / float32 / float64 - each output element shows which operand's NaN won;
+      B. signalling NaNs (contiguous and both broadcast sides) - the winner is quieted, payload kept;
+      C. finite values mixed with NaNs (both-NaN, a-only, b-only and finite lanes), incl. a FINITE
+         0-d broadcast, where the region rule must not touch the finite arithmetic;
+      D. a cast operand (float32 or float16 array against a strong size-1 float64 / float32
+         operand) - one trivial-loop call up to np.getbufsize(), then one call per 8192-element
+         chunk, the region rule restarting at every chunk;
+      E. out= (fresh, strided, a float64 out for a float32 loop) and where= (runs, alternating),
+         recorded as the out_where tier's [returned view, whole out base] tuple;
+      F. np.evaluate trees - single nodes over every broadcast side (delegated to the direct
+         kernels) and multi-node trees over array-array layouts (the fused kernel's NaN order).
+    """
+    cases = []
+
+    def emit(op, layout, pa, pb, valueclass):
+        (ba, va), (bb, vb) = pa, pb
+        r = np.asarray(_NO_BINARY[op](va, vb))
+        cid = f"{op}/{layout}/{va.dtype.name},{vb.dtype.name}/{valueclass}/{len(cases)}"
+        cases.append(_case(op, {"nan_bits": True}, [describe(ba, va), describe(bb, vb)],
+                           _arr_expected(r), layout, valueclass, cid=cid))
+
+    def allnan(dt, signalling=False):
+        _, qa, qb, sa, sb = _NO_SPECS[dt]
+        a_bits, b_bits = (sa, sb) if signalling else (qa, qb)
+        return (lambda shape: _no_bits(dt, a_bits, shape)), (lambda shape: _no_bits(dt, b_bits, shape))
+
+    # ---- A. all-NaN pairs over every layout ----------------------------------------------
+    for dt in ("float64", "float32", "float16"):
+        mkA, mkB = allnan(dt)
+        layouts = _no_layouts(mkA, mkB)
+        for op in ("add", "multiply", "subtract", "divide"):
+            for layout, pa, pb in layouts:
+                emit(op, layout, pa, pb, "allnan")
+
+    # ---- B. signalling NaNs ----------------------------------------------------------------
+    for dt in ("float64", "float32", "float16"):
+        mkA, mkB = allnan(dt, signalling=True)
+        for op in ("add", "multiply", "subtract", "divide"):
+            for n in (3, 17, 33):
+                a, b = mkA((n,)), mkB((n,))
+                emit(op, f"contig_{n}", (a, a), (b, b), "snan")
+                a0, b0 = mkA(()), mkB(())
+                emit(op, f"sl0d_{n}", (a0, a0), (b, b), "snan")
+                emit(op, f"sr0d_{n}", (a, a), (b0, b0), "snan")
+
+    # ---- C. finite values mixed with NaNs -------------------------------------------------
+    for dt in ("float64", "float32", "float16"):
+        _, qa, qb, _, _ = _NO_SPECS[dt]
+        mkA = lambda shape, dt=dt, qa=qa: _no_mixed(dt, qa, shape, 3, 0.5)
+        mkB = lambda shape, dt=dt, qb=qb: _no_mixed(dt, qb, shape, 2, 0.25)
+        finite0 = np.array(2.5, dtype=dt)
+        for op in ("add", "multiply", "subtract", "divide"):
+            for n in (21, 33, 257):
+                a, b = mkA((n,)), mkB((n,))
+                emit(op, f"contig_{n}", (a, a), (b, b), "mixed")
+                a0, b0 = _no_bits(dt, qa, ()), _no_bits(dt, qb, ())
+                emit(op, f"sl0d_{n}", (a0, a0), (b, b), "mixed")
+                emit(op, f"sr0d_{n}", (a, a), (b0, b0), "mixed")
+                emit(op, f"sl0d_finite_{n}", (finite0, finite0), (b, b), "mixed")
+                emit(op, f"sr0d_finite_{n}", (a, a), (finite0, finite0), "mixed")
+                a2, b2 = mkA((2 * n,)), mkB((2 * n,))
+                emit(op, f"strided_{n}", (a2, a2[::2]), (b2, b2[::2]), "mixed")
+            am, bm = mkA((4, 20)), mkB((4, 1))
+            emit(op, "2d_mk_m1_4x20", (am, am), (bm, bm), "mixed")
+
+    # ---- D. a cast operand ----------------------------------------------------------------
+    f64qa, f64qb = _NO_SPECS["float64"][1], _NO_SPECS["float64"][2]
+    f32qa, f32qb = _NO_SPECS["float32"][1], _NO_SPECS["float32"][2]
+    f16qa = _NO_SPECS["float16"][1]
+    for op in ("add", "multiply"):
+        for n in (9, 17, 8197, 8203):
+            a32, b32 = _no_bits("float32", f32qa, (n,)), _no_bits("float32", f32qb, (n,))
+            a64one, b64one = _no_bits("float64", f64qa, (1,)), _no_bits("float64", f64qb, (1,))
+            emit(op, f"mix_f32arr_f64one_{n}", (a32, a32), (b64one, b64one), "cast")
+            emit(op, f"mix_f64one_f32arr_{n}", (a64one, a64one), (b32, b32), "cast")
+        for n in (9, 8197):
+            a64, b64 = _no_bits("float64", f64qa, (n,)), _no_bits("float64", f64qb, (n,))
+            a32one, b32one = _no_bits("float32", f32qa, (1,)), _no_bits("float32", f32qb, (1,))
+            emit(op, f"mix_f64arr_f32one_{n}", (a64, a64), (b32one, b32one), "cast")
+            emit(op, f"mix_f32one_f64arr_{n}", (a32one, a32one), (b64, b64), "cast")
+        for n in (9, 17, 33):
+            a16 = _no_bits("float16", f16qa, (n,))
+            b32one = _no_bits("float32", f32qb, (1,))
+            emit(op, f"mix_f16arr_f32one_{n}", (a16, a16), (b32one, b32one), "cast")
+
+    # ---- E. out= and where= -----------------------------------------------------------------
+    def runs_mask(n):
+        m = np.zeros(n, dtype=bool)
+        m[0:12] = True
+        m[13:14] = True
+        m[15:35] = True
+        m[36:n] = True
+        return m
+
+    def emit_out(ufunc, layout, pa, pb, out_kind, out_dtype, mask):
+        (ba, va), (bb, vb) = pa, pb
+        n = np.broadcast_shapes(va.shape, vb.shape)
+        if out_kind == "fresh":
+            ob = np.zeros(n, dtype=out_dtype)
+            ov = ob
+        else:                                            # every 2nd element of a twice-as-long base
+            ob = np.zeros((2 * n[0],), dtype=out_dtype)
+            ov = ob[::2]
+        operands = [describe(ba, va), describe(bb, vb), describe(ob, ov)]   # PRIOR out contents
+        params = {"ufunc": ufunc, "where": mask is not None, "nan_bits": True}
+        if mask is not None:
+            operands.append(describe(mask, mask))
+            returned = _NO_BINARY[ufunc](va, vb, out=ov, where=mask)
+        else:
+            returned = _NO_BINARY[ufunc](va, vb, out=ov)
+        cid = f"out_binary/{ufunc}/{layout}/out={out_kind}:{np.dtype(out_dtype).name}/" \
+              f"where={'runs' if mask is not None else None}/{len(cases)}"
+        cases.append(_case("out_binary", params, operands,
+                           _tuple_expected([np.asarray(returned), ob.ravel()]),
+                           f"out_{out_kind}", "outwhere", cid=cid))
+
+    for dt in ("float64", "float32"):
+        mkA, mkB = allnan(dt)
+        for ufunc in ("add", "multiply"):
+            for n in (9, 17, 33):
+                a, b, a0, b0 = mkA((n,)), mkB((n,)), mkA(()), mkB(())
+                for out_kind in ("fresh", "strided"):
+                    emit_out(ufunc, f"sl0d_{n}", (a0, a0), (b, b), out_kind, dt, None)
+                    emit_out(ufunc, f"sr0d_{n}", (a, a), (b0, b0), out_kind, dt, None)
+                    emit_out(ufunc, f"contig_{n}", (a, a), (b, b), out_kind, dt, None)
+            n = 40
+            a, b, a0, b0 = mkA((n,)), mkB((n,)), mkA(()), mkB(())
+            for mask_name, mask in (("runs", runs_mask(n)), ("alternating", np.arange(n) % 2 == 0)):
+                emit_out(ufunc, f"sl0d_{n}_{mask_name}", (a0, a0), (b, b), "fresh", dt, mask)
+                emit_out(ufunc, f"sr0d_{n}_{mask_name}", (a, a), (b0, b0), "fresh", dt, mask)
+                emit_out(ufunc, f"contig_{n}_{mask_name}", (a, a), (b, b), "fresh", dt, mask)
+    mkA, mkB = allnan("float32")
+    for ufunc in ("add", "multiply"):
+        for n in (9, 17):
+            a, b, a0, b0 = mkA((n,)), mkB((n,)), mkA(()), mkB(())
+            emit_out(ufunc, f"sl0d_{n}_f64out", (a0, a0), (b, b), "fresh", "float64", None)
+            emit_out(ufunc, f"sr0d_{n}_f64out", (a, a), (b0, b0), "fresh", "float64", None)
+
+    # ---- F. np.evaluate trees -----------------------------------------------------------------
+    def emit_eval(expr, layout, pa, pb, valueclass):
+        (ba, va), (bb, vb) = pa, pb
+        r = np.asarray(_ev_eval(expr, [va, vb]))
+        cid = f"evaluate/{layout}/{expr}/{va.dtype.name},{vb.dtype.name}/{valueclass}/{len(cases)}"
+        cases.append(_case("evaluate", {"expr": expr, "nan_bits": True},
+                           [describe(ba, va), describe(bb, vb)], _arr_expected(r), layout,
+                           valueclass, cid=cid))
+
+    deep = ("add(mul(in0,lf:1.0),in1)", "mul(add(in0,in1),in1)", "add(mul(in0,in1),in0)",
+            "mul(sub(in0,lf:0.5),add(in1,in0))")
+    for dt in ("float64", "float32"):
+        _, qa, qb, _, _ = _NO_SPECS[dt]
+        patterns = [("allnan",) + allnan(dt),
+                    ("mixed", lambda shape, dt=dt, qa=qa: _no_mixed(dt, qa, shape, 3, 0.5),
+                     lambda shape, dt=dt, qb=qb: _no_mixed(dt, qb, shape, 2, 0.25))]
+        for valueclass, mkA, mkB in patterns:
+            for expr in ("add(in0,in1)", "mul(in0,in1)"):
+                for n in (9, 17, 33):
+                    a, b, a0, b0, a1, b1 = mkA((n,)), mkB((n,)), mkA(()), mkB(()), mkA((1,)), mkB((1,))
+                    emit_eval(expr, f"sl0d_{n}", (a0, a0), (b, b), valueclass)
+                    emit_eval(expr, f"sr0d_{n}", (a, a), (b0, b0), valueclass)
+                    emit_eval(expr, f"sl1_{n}", (a1, a1), (b, b), valueclass)
+                    emit_eval(expr, f"sr1_{n}", (a, a), (b1, b1), valueclass)
+            for expr in ("add(in0,in1)", "mul(in0,in1)") + deep:
+                for n in (3, 9, 17, 33, 257):
+                    a, b = mkA((n,)), mkB((n,))
+                    emit_eval(expr, f"contig_{n}", (a, a), (b, b), valueclass)
+                a2, b2, a, b = mkA((34,)), mkB((34,)), mkA((17,)), mkB((17,))
+                emit_eval(expr, "strided_17", (a2, a2[::2]), (b2, b2[::2]), valueclass)
+                emit_eval(expr, "rev_17", (a, a[::-1]), (b, b[::-1]), valueclass)
+                at, bt = mkA((20, 4)), mkB((20, 4))
+                emit_eval(expr, "2d_T_4x20", (at, at.T), (bt, bt.T), valueclass)
+                am, b1k, bm1 = mkA((4, 20)), mkB((1, 20)), mkB((4, 1))
+                emit_eval(expr, "2d_mk_1k_4x20", (am, am), (b1k, b1k), valueclass)
+                emit_eval(expr, "2d_mk_m1_4x20", (am, am), (bm1, bm1), valueclass)
+    return cases
+
+
 def char_tier(mode):
     """Relabelled Char cases to append into tier-file `mode` (woven coverage)."""
     L = list(LAYOUTS.keys())
@@ -14646,6 +14936,10 @@ def main():
     elif mode == "groupa":
         cases = gen_groupa()                                            # Group A B4-6
         write_jsonl(os.path.join(corpus_dir, "groupa.jsonl"), cases)
+    elif mode == "nan_order":
+        # float add / multiply NaN-operand order (win-amd64), NaN payloads compared raw - its own
+        # file, so regenerating it renumbers nothing else.
+        write_jsonl(os.path.join(corpus_dir, "nan_order.jsonl"), gen_nan_order())
     elif mode == "numpy_f32":
         cases = gen_numpy_f32_kernels()                                 # bit-exact float32 kernel tier
         write_jsonl(os.path.join(corpus_dir, "numpy_f32_kernels.jsonl"), cases)
@@ -14737,7 +15031,7 @@ def main():
         write_jsonl(os.path.join(corpus_dir, "polyroots_parity.jsonl"), host)
         write_jsonl(os.path.join(corpus_dir, "polyroots_parity.host.jsonl"), [blas_identity()])
     else:
-        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | sinc | i0 | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows | evaluate | real_if_close | instance | emath | polyeval | polyseries | polycalc | polyvander | polyalgebra | polyroots)")
+        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | sinc | i0 | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | nan_order | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows | evaluate | real_if_close | instance | emath | polyeval | polyseries | polycalc | polyvander | polyalgebra | polyroots)")
         sys.exit(2)
 
 

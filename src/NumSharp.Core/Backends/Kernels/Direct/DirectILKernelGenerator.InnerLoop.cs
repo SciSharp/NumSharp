@@ -98,7 +98,11 @@ namespace NumSharp.Backends.Kernels
             if (_innerLoopKeyCache.TryGetValue(key, out var cached))
                 return cached;
 
-            var kernel = CompileInnerLoop(operandTypes, scalarBody, vectorBody, key.ToCacheKey());
+            // A binary-ufunc key names its op, which is what tells the shell that a float add/multiply needs NumPy's
+            // broadcast-NaN region rule (HasNaNOperandOrder). The "npy_binop_*" string keys are minted ONLY here, so the
+            // string cache can never hold a kernel of the same name compiled without the rule.
+            BinaryOp? nanOrderedOp = key.Family == InnerLoopKernelKey.KernelFamily.Binary ? (BinaryOp)key.Op : null;
+            var kernel = CompileInnerLoop(operandTypes, scalarBody, vectorBody, key.ToCacheKey(), nanOrderedOp);
             _innerLoopKeyCache.TryAdd(key, kernel);
             return kernel;
         }
@@ -165,6 +169,31 @@ namespace NumSharp.Backends.Kernels
             Action<ILGenerator> scalarBody,
             Action<ILGenerator>? vectorBody,
             string cacheKey)
+            => CompileInnerLoop(operandTypes, scalarBody, vectorBody, cacheKey, nanOrderedOp: null);
+
+        /// <summary>
+        ///     <see cref="CompileInnerLoop(NPTypeCode[], Action{ILGenerator}, Action{ILGenerator}?, string)"/> that also knows
+        ///     the binary op the bodies implement, so a float add/multiply gets NumPy's broadcast-NaN region rule.
+        /// </summary>
+        /// <param name="operandTypes">Input dtypes followed by the output dtype.</param>
+        /// <param name="scalarBody">Per-element body (see the 4-argument overload).</param>
+        /// <param name="vectorBody">Optional per-vector body (see the 4-argument overload).</param>
+        /// <param name="cacheKey">The kernel's cache key; a kernel compiled under it is reused as-is.</param>
+        /// <param name="nanOrderedOp">
+        ///     The binary op of a 2-input ufunc kernel, or <see langword="null"/>. When it is a float add/multiply
+        ///     (<see cref="HasNaNOperandOrder"/>), every call whose stride-0 input holds a NaN runs
+        ///     <see cref="EmitBroadcastNaNRegion"/> with the <see cref="BroadcastNaNRule"/> passed as <c>auxdata</c>, and the
+        ///     broadcast SIMD loops keep the plain instruction (the value they broadcast is then never NaN).
+        /// </param>
+        /// <returns>The cached or newly compiled kernel.</returns>
+        /// <exception cref="ArgumentNullException">A required argument is null.</exception>
+        /// <exception cref="ArgumentException">Fewer than two operand types.</exception>
+        internal static NDInnerLoopFunc CompileInnerLoop(
+            NPTypeCode[] operandTypes,
+            Action<ILGenerator> scalarBody,
+            Action<ILGenerator>? vectorBody,
+            string cacheKey,
+            BinaryOp? nanOrderedOp)
         {
             if (operandTypes is null) throw new ArgumentNullException(nameof(operandTypes));
             if (operandTypes.Length < 2)
@@ -173,18 +202,23 @@ namespace NumSharp.Backends.Kernels
             if (cacheKey is null) throw new ArgumentNullException(nameof(cacheKey));
 
             return _innerLoopCache.GetOrAdd(cacheKey, _ =>
-                GenerateTemplatedInnerLoop(operandTypes, scalarBody, vectorBody, cacheKey));
+                GenerateTemplatedInnerLoop(operandTypes, scalarBody, vectorBody, cacheKey, nanOrderedOp));
         }
 
         private static NDInnerLoopFunc GenerateTemplatedInnerLoop(
             NPTypeCode[] operandTypes,
             Action<ILGenerator> scalarBody,
             Action<ILGenerator>? vectorBody,
-            string cacheKey)
+            string cacheKey,
+            BinaryOp? nanOrderedOp)
         {
             int nOp = operandTypes.Length;
             int nIn = nOp - 1;
             NPTypeCode outType = operandTypes[nIn];
+
+            // A 2-input float add/multiply whose stride-0 input can be NaN: that case runs NumPy's region rule
+            // (EmitBroadcastNaNRegion), everything else the supplied bodies.
+            bool nanOrdered = nanOrderedOp.HasValue && nIn == 2 && HasNaNOperandOrder(nanOrderedOp.Value, outType);
 
             var dm = new DynamicMethod(
                 name: $"NDInnerLoop_{Sanitize(cacheKey)}",
@@ -298,14 +332,14 @@ namespace NumSharp.Backends.Kernels
                     il.MarkLabel(lblSimdSL);
                     EmitSimdBroadcastBinaryLoop(
                         il, operandTypes[0], ptrLocals, scalarSide: 0,
-                        vectorBody!, scalarBody);
+                        vectorBody!, scalarBody, nanOrdered ? nanOrderedOp : null, lblEnd);
                     il.Emit(OpCodes.Br, lblEnd);
 
                     // ── SIMD scalar-rhs (lhs contig, rhs broadcast) ─────────
                     il.MarkLabel(lblSimdSR);
                     EmitSimdBroadcastBinaryLoop(
                         il, operandTypes[0], ptrLocals, scalarSide: 1,
-                        vectorBody!, scalarBody);
+                        vectorBody!, scalarBody, nanOrdered ? nanOrderedOp : null, lblEnd);
                     il.Emit(OpCodes.Br, lblEnd);
                 }
                 else
@@ -392,6 +426,12 @@ namespace NumSharp.Backends.Kernels
                 EmitScalarContigLoop(il, operandTypes, ptrLocals, scalarBody);
                 il.Emit(OpCodes.Br, lblEnd);
                 il.MarkLabel(lblScalarStrided);
+
+                // A mixed-dtype float add/multiply with a stride-0 input (a STRONG 0-d of another dtype): NumPy buffers
+                // the cast operand, so its calls split per BroadcastNaNRule.BufferChunk — a NaN broadcast value takes
+                // the region rule, everything else the strided loop below.
+                if (nanOrdered)
+                    EmitStridedBroadcastNaNDispatch(il, operandTypes, ptrLocals, strideLocals, lblEnd);
             }
 
             // Scalar strided fallback (always present).
@@ -609,14 +649,30 @@ namespace NumSharp.Backends.Kernels
         ///     (NDIter has already advanced them to the outer-iter start)
         ///   - scalarSide ∈ {0, 1}: 0 = lhs broadcast, 1 = rhs broadcast
         ///   - 4× unroll mirrors EmitSimdContigLoop for consistent pipelining
+        ///
+        /// For a float add/multiply (<paramref name="nanOrderedOp"/> set) a NaN broadcast value branches to
+        /// <see cref="EmitBroadcastNaNRegion"/> (NumPy's call model from the <see cref="BroadcastNaNRule"/> in
+        /// <c>auxdata</c>), and the loops run the PLAIN instruction instead of the supplied bodies: with a non-NaN
+        /// broadcast value only the array element can be NaN, so the operand order cannot change any result and the
+        /// order-pinning compare would be wasted work.
         /// </summary>
+        /// <param name="il">The kernel's IL stream (the <see cref="NDInnerLoopFunc"/> signature).</param>
+        /// <param name="dtype">The shared dtype of both inputs and the output.</param>
+        /// <param name="ptrLocals">Per-operand data-pointer locals (input 0, input 1, output).</param>
+        /// <param name="scalarSide">0 when input 0 is the broadcast operand, 1 when input 1 is.</param>
+        /// <param name="vectorBody">The caller's vector body (used when <paramref name="nanOrderedOp"/> is null).</param>
+        /// <param name="scalarBody">The caller's scalar body (used when <paramref name="nanOrderedOp"/> is null).</param>
+        /// <param name="nanOrderedOp">The float add/multiply this kernel implements, or <see langword="null"/>.</param>
+        /// <param name="lblEnd">The kernel's exit label (the NaN path branches there).</param>
         private static void EmitSimdBroadcastBinaryLoop(
             ILGenerator il,
             NPTypeCode dtype,
             LocalBuilder[] ptrLocals,
             int scalarSide,
             Action<ILGenerator> vectorBody,
-            Action<ILGenerator> scalarBody)
+            Action<ILGenerator> scalarBody,
+            BinaryOp? nanOrderedOp,
+            Label lblEnd)
         {
             int elemSize = GetTypeSize(dtype);
             long vectorCount = GetVectorCount(dtype);
@@ -633,14 +689,24 @@ namespace NumSharp.Backends.Kernels
 
             var locVScalar = il.DeclareLocal(vecType);
             var locScalarVal = il.DeclareLocal(clrType);
+            var lblNaNScalar = il.DefineLabel();
+
+            if (nanOrderedOp is BinaryOp op)
+            {
+                // Non-NaN broadcast value ⇒ order-independent results ⇒ the plain instruction suffices.
+                vectorBody = g => EmitVectorOperation(g, op, dtype);
+                scalarBody = g => EmitScalarOperation(g, op, dtype);
+            }
 
             // ── Pre-load + pre-broadcast the scalar once. ───────────────────
             // scalarVal = *scalarPtr;
             il.Emit(OpCodes.Ldloc, scalarPtr);
             EmitLoadIndirect(il, dtype);
-            il.Emit(OpCodes.Dup);
-            il.Emit(OpCodes.Stloc, locScalarVal);  // save for scalar tail
+            il.Emit(OpCodes.Stloc, locScalarVal);  // save for scalar tail (and the NaN test)
+            if (nanOrderedOp.HasValue)
+                EmitBranchIfNaN(il, locScalarVal, lblNaNScalar);
             // vScalar = Vector.Create(scalarVal);
+            il.Emit(OpCodes.Ldloc, locScalarVal);
             EmitVectorCreate(il, dtype);
             il.Emit(OpCodes.Stloc, locVScalar);
 
@@ -752,6 +818,120 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Stloc, locI);
             il.Emit(OpCodes.Br, lblTail);
             il.MarkLabel(lblTailEnd);
+
+            if (nanOrderedOp.HasValue)
+            {
+                il.Emit(OpCodes.Br, lblEnd);
+                il.MarkLabel(lblNaNScalar);
+                // Both the array input and the output are element-contiguous here (the shell's stride dispatch).
+                EmitBroadcastNaNRegion(il, dtype, locScalarVal,
+                    contigPtr, dtype, arrayStride: null, outPtr, outStride: null,
+                    pushCount: g => g.Emit(OpCodes.Ldarg_2),
+                    scalarIsSecond: scalarSide == 1,
+                    pushSplitPerCall: EmitLoadRuleSplitPerCall,
+                    pushBufferChunk: EmitLoadRuleBufferChunk,
+                    contiguous: true, lblEnd);
+            }
+        }
+
+        /// <summary>
+        ///     The cold dispatch of a MIXED-dtype float add/multiply inner loop (no SIMD) at its strided entry: when exactly
+        ///     one input has stride 0 and its value, converted to the loop dtype, is NaN, runs
+        ///     <see cref="EmitBroadcastNaNRegion"/> over the strided operands and branches to <paramref name="lblEnd"/>;
+        ///     otherwise falls through to the strided loop the caller emits next.
+        /// </summary>
+        /// <remarks>
+        ///     NumPy buffers the cast operand of such a call, so its own inner loop sees contiguous buffers and splits the
+        ///     call into <see cref="BroadcastNaNRule.BufferChunk"/>-sized pieces; the dispatcher only sets
+        ///     <see cref="BroadcastNaNRule.SplitPerCall"/> when that model holds, and a null rule keeps the second-operand rule.
+        /// </remarks>
+        /// <param name="il">The kernel's IL stream.</param>
+        /// <param name="operandTypes">Input 0, input 1 and output dtypes.</param>
+        /// <param name="ptrLocals">Per-operand data-pointer locals.</param>
+        /// <param name="strideLocals">Per-operand byte-stride locals.</param>
+        /// <param name="lblEnd">The kernel's exit label.</param>
+        private static void EmitStridedBroadcastNaNDispatch(
+            ILGenerator il, NPTypeCode[] operandTypes, LocalBuilder[] ptrLocals, LocalBuilder[] strideLocals, Label lblEnd)
+        {
+            NPTypeCode outType = operandTypes[2];
+            var lblCheckRight = il.DefineLabel();
+            var lblFallThrough = il.DefineLabel();
+
+            for (int side = 0; side < 2; side++)
+            {
+                if (side == 1)
+                    il.MarkLabel(lblCheckRight);
+
+                // This side broadcast (stride 0) and the other not (two stride-0 inputs = one repeated element; NumPy
+                // takes its scalar loop there, which the strided loop already reproduces).
+                il.Emit(OpCodes.Ldloc, strideLocals[side]);
+                il.Emit(OpCodes.Ldc_I8, 0L);
+                il.Emit(OpCodes.Bne_Un, side == 0 ? lblCheckRight : lblFallThrough);
+                il.Emit(OpCodes.Ldloc, strideLocals[1 - side]);
+                il.Emit(OpCodes.Ldc_I8, 0L);
+                il.Emit(OpCodes.Beq, lblFallThrough);
+
+                var locS = il.DeclareLocal(GetClrType(outType));
+                il.Emit(OpCodes.Ldloc, ptrLocals[side]);
+                EmitLoadIndirect(il, operandTypes[side]);
+                EmitConvertTo(il, operandTypes[side], outType);
+                il.Emit(OpCodes.Stloc, locS);
+                il.Emit(OpCodes.Ldloc, locS);
+                il.Emit(OpCodes.Ldloc, locS);
+                il.Emit(OpCodes.Beq, lblFallThrough);   // ordered → not NaN (and the other input is not stride-0)
+
+                EmitBroadcastNaNRegion(il, outType, locS,
+                    ptrLocals[1 - side], operandTypes[1 - side], strideLocals[1 - side],
+                    ptrLocals[2], strideLocals[2],
+                    pushCount: g => g.Emit(OpCodes.Ldarg_2),
+                    scalarIsSecond: side == 1,
+                    pushSplitPerCall: EmitLoadRuleSplitPerCall,
+                    pushBufferChunk: EmitLoadRuleBufferChunk,
+                    contiguous: false, lblEnd);
+            }
+
+            il.MarkLabel(lblFallThrough);
+        }
+
+        /// <summary>
+        ///     Pushes <see cref="BroadcastNaNRule.SplitPerCall"/> from the kernel's <c>auxdata</c> argument (int32), or 0 when
+        ///     <c>auxdata</c> is null.
+        /// </summary>
+        /// <param name="il">The IL stream of an <see cref="NDInnerLoopFunc"/> kernel.</param>
+        private static void EmitLoadRuleSplitPerCall(ILGenerator il)
+        {
+            var lblNull = il.DefineLabel();
+            var lblDone = il.DefineLabel();
+            il.Emit(OpCodes.Ldarg_3);
+            il.Emit(OpCodes.Brfalse, lblNull);
+            il.Emit(OpCodes.Ldarg_3);
+            il.Emit(OpCodes.Ldind_I4);                       // BroadcastNaNRule.SplitPerCall at byte offset 0
+            il.Emit(OpCodes.Br, lblDone);
+            il.MarkLabel(lblNull);
+            il.Emit(OpCodes.Ldc_I4_0);
+            il.MarkLabel(lblDone);
+        }
+
+        /// <summary>
+        ///     Pushes <see cref="BroadcastNaNRule.BufferChunk"/> from the kernel's <c>auxdata</c> argument (int64), or 0 when
+        ///     <c>auxdata</c> is null.
+        /// </summary>
+        /// <param name="il">The IL stream of an <see cref="NDInnerLoopFunc"/> kernel.</param>
+        private static void EmitLoadRuleBufferChunk(ILGenerator il)
+        {
+            var lblNull = il.DefineLabel();
+            var lblDone = il.DefineLabel();
+            il.Emit(OpCodes.Ldarg_3);
+            il.Emit(OpCodes.Brfalse, lblNull);
+            il.Emit(OpCodes.Ldarg_3);
+            il.Emit(OpCodes.Ldc_I4_8);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Ldind_I8);                       // BroadcastNaNRule.BufferChunk at byte offset 8
+            il.Emit(OpCodes.Br, lblDone);
+            il.MarkLabel(lblNull);
+            il.Emit(OpCodes.Ldc_I8, 0L);
+            il.MarkLabel(lblDone);
         }
 
         /// <summary>

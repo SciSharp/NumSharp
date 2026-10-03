@@ -1021,6 +1021,59 @@ Decimal (no NumPy analog) rides the same fused expression through the decimal→
 ~1.5–2.0× — the single-pass fusion halves NumPy's memory traffic); at 1K sinc sits at the per-op NDIter-setup floor
 (~parity), sin being the dominant cost on both sides there. See `Math/np.sinc.cs`.
 
+**NaN operand order of float add / multiply — a win-amd64 pin (2026-10-03).** When BOTH operands of a float32 /
+float64 add or multiply are NaN, the result is one operand's NaN, and the COMPILED LOOP picks which: x86
+`addpd`/`mulpd` return their FIRST source operand quieted, and the operations are commutative, so the compiler
+chooses the order. numpy 2.4.2 win-amd64 (MSVC 19.44), probed on every path:
+- add / multiply keep the SECOND operand's NaN: contiguous, strided, reversed, `out=`, `where=`, transposed,
+  buffered 2-D broadcasts, 0-d × 0-d;
+- except the AVX2 scalar-broadcast SIMD loop (one input stride 0, the other input and the out contiguous, length > 2
+  vectors). Its blocks of 2 vectors (8 f64 / 16 f32 lanes) keep the BROADCAST operand's NaN, and its scalar tail the
+  ARRAY operand's. The split restarts per inner-loop call: per `where=` run, per `np.getbufsize()` chunk when an
+  operand is cast (a cast 0-d or ≤ bufsize 1-D input is copied whole: one call);
+- subtract / divide keep the FIRST operand's NaN; float16 the second everywhere; scalar math (np.float64) the first.
+- The reductions and scans run their own compiled orders, and NumSharp does NOT follow them yet. `sum` / `prod` use a
+  pairwise order (over 9 NaNs with payloads 1–9, `sum` returns payload 8 and NumSharp payload 2): this is the
+  accepted multi-accumulator reduction-order difference. `cumsum` / `cumprod` (= `add.accumulate` /
+  `multiply.accumulate`) keep the NEW element's NaN at each step (payloads 1, 2, 3, …). NumSharp's scan kernels keep
+  the accumulator's (1, 1, 1, …): an open follow-up (`DirectILKernelGenerator.Scan.cs`).
+
+NumSharp encodes the order EXPLICITLY (`Backends/Kernels/Direct/DirectILKernelGenerator.NaNOperandOrder.cs`), because
+RyuJIT may swap a commutative operation's operands, so the IL operand order proves nothing:
+- vector: `(va & (vb == vb)) op vb` — a NaN in `vb` zeroes `va`, so the hardware can only return `vb`;
+- scalar: `r = a op b; if (r != r && b != b) r = b + b`;
+- broadcast: a COLD region path (`EmitBroadcastNaNRegion`), taken only when the broadcast value is NaN. The hot loops
+  keep the plain instruction (the order is unobservable then). The NDIter, `out=` and `where=` routes pass the rule
+  (`BroadcastNaNRule`: split per call, buffer chunk) as kernel auxdata, computed by
+  `DefaultEngine.NumPyBroadcastNaNRule`.
+
+Wired into the MixedType kernels (SimdFull / ScalarFull / SimdScalarLeft / SimdScalarRight / SimdChunk / General), the
+Tier-3B inner-loop shell plus its strided broadcast dispatch, the 0-d × 0-d scalar delegate and NDExpr's
+`BinaryNode`. A single np.evaluate node with a 0-d operand delegates to the direct kernel.
+
+**Linux NumPy (GCC build) orders the operands DIFFERENTLY on the same CPU** (probed through WSL): its contiguous SIMD
+body keeps the first operand's NaN and its tail the second's; its broadcast loop keeps the broadcast operand's NaN
+everywhere; its strided / `out=` / `where=` paths keep the first. The order is a compiler artifact, pinned to
+win-amd64 like the float16 and complex NaN-sign contracts.
+
+Gates:
+- oracle `nan_order.jsonl` (2,678 cases): NaN payloads compare raw through `params.nan_bits` on x86 hosts with
+  X86_V3. 1,032 of the cases fail on the pre-fix build;
+- `Math/NaNOperandOrderTests.cs` (15 tests). 13 fail on the pre-fix build. It includes the fuzz finding
+  `max(lxor(isnan(b), a*0.0), (a+m)*(a+b))`, whose result is now SHA-256-identical to NumPy's.
+
+Residuals (`[Misaligned]`):
+- N-D broadcasts that NumPy runs UNBUFFERED: outer products with ≤ 2 rows such as `(2,1)+(1,64)`, and `(m,n)+(m,1)`
+  past n = 4096;
+- a 0-d operand against a non-contiguous N-D array longer than one buffer;
+- a reversed cast operand longer than one buffer;
+- `where=` together with a cast;
+- np.evaluate trees deeper than one node with a NaN 0-d or size-1 broadcast input;
+- complex128 (MSVC's 2×-unrolled complex loop alternates the order by vector parity).
+
+Cost: 2 extra µops per add / multiply vector. No measurable change at ≥ 4K elements, ≤ ~5–10 % at 1K (inside the
+host's ±10–15 % run-to-run noise). A NaN 0-d broadcast got faster (0.60–0.80× the old time) through the fill path.
+
 **ufunc `out=` / `where=` parameters** are supported on the elementwise core (NumPy semantics, probed against 2.4.2): binary `add`/`subtract`/`multiply`/`divide`/`true_divide`/`mod`/`power`/`floor_divide`/`arctan2`/`bitwise_and`/`bitwise_or`/`bitwise_xor`, unary `sqrt`/`exp`/`log`/`sin`/`cos`/`tan`/`abs`/`absolute`/`negative`/`square`/`log2`/`log10`/`log1p`/`exp2`/`expm1`/`cbrt`/`sign`/`floor`/`ceil`/`trunc`/`reciprocal`/`sinh`/`cosh`/`tanh`/`arcsin`/`arccos`/`arctan`/`deg2rad`(`radians`)/`rad2deg`(`degrees`)/`invert`(`bitwise_not`)/`rint`. `round_`/`around` take `out=` ONLY (np.round is a function, not a ufunc — no where/dtype; decimals≠0 cast errors name ufunc 'multiply' per NumPy's composition). `rint` is the TRUE ufunc form of round-half-to-even: unlike `round_`/`around` (which preserve integer dtype) it is float-tier (bool/i8/u8→f16, i16/u16→f32, i32+→f64, floats/complex preserved) and reuses `UnaryOp.Round`'s kernel (complex rounds real+imag; `dtype=<int>`→no-loop). floor/ceil/trunc have IDENTITY loops on every bool/int dtype (dtype preserved; np.round's int path is an identity copy); the loop dtype comes from the input tier (`sinh(i1, out=f8)` stores float16-precision values); reciprocal int 1/0 → signed MinValue (NumPy 2.4.2); sign/positive reject bool with the verbatim no-loop UFuncTypeError; bitwise/invert raise the no-loop TypeError for float inputs (probed order: bad where → no-loop → out-cast → shape). `out` joins the broadcast but is never stretched, requires a same_kind cast from the loop dtype (resolved from inputs), returns the same instance, and may alias an input (overlap-safe via COPY_IF_OVERLAP). `where` must be bool, broadcasts and joins the output shape; masked-off `out` slots keep prior contents. Engine plumbing: `Backends/Default/Math/DefaultEngine.UfuncOut.cs`.
 
 **Each of those ufuncs exposes ONE NumPy-shaped overload** — `f(x[, x2], NDArray out = null, NDArray where = null, NPTypeCode? dtype = null)` mirroring NumPy's `f(x1[, x2], /, out=None, *, where=True, dtype=None)`: `out` is the second/third positional slot exactly like NumPy, `where`/`dtype` are reachable by name without `out`. `dtype=` selects the LOOP (NumPy loop-signature semantics, probed): computation runs at that precision even with `out=` (`sqrt([2.], out=f64, dtype=f32)` stores the f32-rounded value; `add(0.1, 0.2, out=f64, dtype=f32)` stores `0.30000001…`), `power(2, -1, dtype: f64) = 0.5` (the negative-int-exponent ValueError applies only to integer loops), `power(10, 11, dtype: f64) = 1e11` exactly (no compute-then-cast), `add(True, True, dtype: i32) = 2` (the bool→logical-OR remap keys off the FINAL loop dtype), `negative(bool, dtype: f64)` is legal, and inputs must reach the loop via same_kind casts (verbatim `Cannot cast ufunc '<name>' input [N] from ...` errors; binary errors are indexed, unary are not). Loop-existence gates raise `No loop matching ... ufunc <name>`: float-only ufuncs (sqrt/exp/log/trig + `divide`/`true_divide`) reject int/bool dtype; bitwise rejects float/complex/decimal dtype. `positive` is a full ufunc (identity loops at every dtype EXCEPT bool: plain `positive(bool)` and `dtype: bool` raise the verbatim `did not contain a loop with signature matching types <class 'numpy.dtypes.XDType'> -> ...` texts; `positive(bool, dtype: f64)` works). `round_`/`around` follow NumPy's non-ufunc shape `round(a, int decimals = 0, NDArray out = null)` (2nd positional is decimals, NOT out). Positional-dtype overloads (`np.sqrt(x, NPTypeCode.Single)`, `(x, Type)`) also exist for source compat as non-NumPy call forms (NumPy's 2nd positional is `out`). Tests: `Math/UfuncDtypeOverloadTests.cs`.

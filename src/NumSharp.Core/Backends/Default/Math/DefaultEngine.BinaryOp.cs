@@ -470,10 +470,12 @@ namespace NumSharp.Backends
             // EmitScalarOperation directly. For mixed-dtype we wrap it with
             // a per-operand convert pass (the direct path's
             // EmitGeneralLoop / EmitChunkLoop does the same).
+            // NumPy's elementwise NaN operand order (float add/multiply keep the SECOND operand's NaN when both are
+            // NaN): see DirectILKernelGenerator.NaNOperandOrder.cs.
             Action<ILGenerator> scalarBody;
             if (sameDtype)
             {
-                scalarBody = il => DirectILKernelGenerator.EmitScalarOperation(il, op, resultType);
+                scalarBody = il => DirectILKernelGenerator.EmitScalarOperation(il, op, resultType, NaNOperandOrder.NumPyUfunc);
             }
             else
             {
@@ -483,7 +485,7 @@ namespace NumSharp.Backends
             }
 
             Action<ILGenerator>? vectorBody = simdViable
-                ? il => DirectILKernelGenerator.EmitVectorOperation(il, op, resultType)
+                ? il => DirectILKernelGenerator.EmitVectorOperation(il, op, resultType, NaNOperandOrder.NumPyUfunc)
                 : null;
 
             // Cache key MUST encode all three dtypes; mixed-dtype kernels
@@ -505,7 +507,11 @@ namespace NumSharp.Backends
                     NPY_CASTING.NPY_SAFE_CASTING,
                     s_binaryIterFlags);
 
-                iter.ExecuteElementWiseBinary(lhsType, rhsType, resultType, scalarBody, vectorBody, cacheKey);
+                // How NumPy would split this iteration into inner-loop calls — read only by the cold path of a
+                // float add/multiply whose broadcast operand is NaN (the struct outlives the call below).
+                BroadcastNaNRule nanRule = NumPyBroadcastNaNRule(op, lhsType, rhsType, resultType, resultType,
+                    lhs.size, rhs.size, masked: false, iter.NDim, iter.HasNegPerm, iter.GetInnerStrideArray());
+                iter.ExecuteElementWiseBinary(lhsType, rhsType, resultType, scalarBody, vectorBody, cacheKey, &nanRule);
             }
             catch (NotSupportedException)
             {
@@ -715,7 +721,79 @@ namespace NumSharp.Backends
             if (rhsType != resultType)
                 DirectILKernelGenerator.EmitConvertTo(il, rhsType, resultType);
 
-            DirectILKernelGenerator.EmitScalarOperation(il, op, resultType);
+            // NumPy's cast loop hands the converted values to the same elementwise loop: the second operand's NaN wins.
+            DirectILKernelGenerator.EmitScalarOperation(il, op, resultType, NaNOperandOrder.NumPyUfunc);
+        }
+
+        /// <summary>
+        ///     Decides how NumPy 2.4.2 would split a binary ufunc iteration into inner-loop calls, for the one thing that
+        ///     depends on it: which NaN a float add/multiply returns when its broadcast (stride-0) operand is NaN
+        ///     (<see cref="DirectILKernelGenerator.EmitBroadcastNaNRegion"/>). Every other result is unaffected.
+        /// </summary>
+        /// <remarks>
+        ///     <para>
+        ///     A rule is returned only when NumPy's calls provably coincide with NumSharp's kernel calls: exactly one input of
+        ///     size 1 (stride 0 everywhere), and NumSharp's iterator walking ONE 1-D run (all axes coalesced) in memory order
+        ///     without flipping an axis — the run NumPy also makes, as its trivial loop (<c>try_trivial_single_output_loop</c>),
+        ///     an unbuffered 1-D iterator, or one mask-true run of either (<c>generic_masked_strided_loop</c>).
+        ///     </para>
+        ///     <para>
+        ///     Inside such a call NumPy takes its SIMD broadcast path only when the array input and the output are
+        ///     element-contiguous — or are the contiguous copy/buffer NumPy makes of a cast operand. A cast ARRAY or OUTPUT is
+        ///     buffered in <c>np.getbufsize()</c>-element chunks (<c>npyiter_find_buffering_setup</c>; a cast 1-D input of at
+        ///     most that size is copied whole by <c>check_for_trivial_loop</c>, one chunk either way); a cast 0-d input is
+        ///     copied whole, so it never chunks. A reversed array (negative stride) is refused: NumPy's iterator may flip it
+        ///     where NumSharp's does not (NumSharp allocates the output before iterating). Buffered chunks of a MASKED call are
+        ///     not modeled either. Refused or unmodeled cases get the default rule — the second operand's NaN — which is also
+        ///     what NumPy does whenever it buffers a broadcast operand of a multi-axis iteration.
+        ///     </para>
+        /// </remarks>
+        /// <param name="op">The binary op (only float add/multiply get a non-default rule).</param>
+        /// <param name="lhsType">The first input's stored dtype.</param>
+        /// <param name="rhsType">The second input's stored dtype.</param>
+        /// <param name="resultType">The loop dtype.</param>
+        /// <param name="outType">The output array's dtype (differs from the loop dtype for a cast out=).</param>
+        /// <param name="lhsSize">The first input's element count (1 = broadcast with stride 0).</param>
+        /// <param name="rhsSize">The second input's element count.</param>
+        /// <param name="masked">True for a <c>where=</c> iteration (calls are mask-true runs).</param>
+        /// <param name="iterNDim">The iterator's dimension count after coalescing.</param>
+        /// <param name="negPerm">Whether the iterator flipped a negative-stride axis.</param>
+        /// <param name="innerElementStrides">The iterator's per-operand inner strides in ELEMENTS (input 0, input 1, output, …).</param>
+        /// <returns>The rule to pass as the kernel's <c>auxdata</c>; <c>default</c> keeps the second-operand rule.</returns>
+        internal static unsafe BroadcastNaNRule NumPyBroadcastNaNRule(
+            BinaryOp op, NPTypeCode lhsType, NPTypeCode rhsType, NPTypeCode resultType, NPTypeCode outType,
+            long lhsSize, long rhsSize, bool masked, int iterNDim, bool negPerm, long* innerElementStrides)
+        {
+            if (!DirectILKernelGenerator.HasNaNOperandOrder(op, resultType))
+                return default;
+
+            bool lhsScalar = lhsSize == 1, rhsScalar = rhsSize == 1;
+            if (lhsScalar == rhsScalar)
+                return default;                                   // no broadcast operand, or two (NumPy's scalar loop)
+            if (iterNDim != 1 || negPerm || innerElementStrides is null)
+                return default;                                   // not one run in memory order: NumPy's calls differ
+
+            int arrayOp = lhsScalar ? 1 : 0;
+            long arrayStride = innerElementStrides[arrayOp];
+            long outStride = innerElementStrides[2];
+            if (arrayStride <= 0)
+                return default;
+
+            bool arrayCast = (lhsScalar ? rhsType : lhsType) != resultType;
+            bool outCast = outType != resultType;
+
+            // NumPy's SIMD broadcast path needs a contiguous array input and output; a cast operand is a contiguous copy.
+            if (!arrayCast && arrayStride != 1)
+                return default;
+            if (!outCast && outStride != 1)
+                return default;
+
+            // A cast 0-d input alone is copied whole by check_for_trivial_loop, so it keeps the single call.
+            if (!arrayCast && !outCast)
+                return BroadcastNaNRule.PerCall();                // trivial loop / unbuffered iterator: one call (per mask run)
+            if (masked)
+                return default;                                   // buffered chunks crossed with mask runs: not modeled
+            return BroadcastNaNRule.PerCall(np.getbufsize());
         }
 
         /// <summary>

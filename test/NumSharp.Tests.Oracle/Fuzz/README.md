@@ -280,6 +280,7 @@ python test/oracle/gen_oracle.py out_where        # ufunc out=/where= x out layo
 python test/oracle/gen_oracle.py place            # np.place(arr,mask,vals)
 python test/oracle/gen_oracle.py matmul           # T8 linalg: matmul/dot/outer (gufunc shapes, C/F layouts)
 python test/oracle/gen_oracle.py specials         # IEEE special-value parity (nan/±inf/±0/subnormal/max)
+python test/oracle/gen_oracle.py nan_order        # float add/multiply NaN-operand order (win-amd64), NaN payloads raw
 python test/oracle/gen_oracle.py precision        # truthful-vs-precise (adversarial accumulation; needs mpmath)
 python test/oracle/gen_oracle.py products         # CBLAS product family values (inner/vdot/vecdot/matvec/...)
 python test/oracle/gen_oracle.py fft              # np.fft.* — 1-D/N-D/hermitian transforms + freq/shift helpers
@@ -716,7 +717,62 @@ Green on both frameworks; the only excused entries are ~18 `unary ~ULP` on the n
 explicit "NaN-sign/signed-zero contract violation". This is the permanent form of the one-off
 103,229-case raw-byte audit that found the 73 detectable NaN-bit divergences (2 fixed — complex
 `abs`/`sign`; the other 71 non-contractual/documented — float reductions, sort, log1p, complex
-binary/reductions, floor_divide/mod-f16).
+binary/reductions, floor_divide/mod-f16). The float add / multiply NaN ORDER (which of two NaN
+operands wins) left that list on 2026-10-03 and has its own raw-byte tier, `nan_order` (next).
+
+### Float NaN-operand order (`nan_order` tier)
+
+`nan_order.jsonl` (`gen_oracle.py nan_order`, 2,678 cases, floor 2,600; 2026-10-03) gates WHICH NaN a
+float add or multiply returns when BOTH operands are NaN. x86 `addpd`/`mulpd` return their FIRST source
+operand's NaN (quieted), and the operations are commutative, so the answer is the operand order the
+compiled loop emits. numpy 2.4.2 win-amd64 (MSVC 19.44), probed on every loop path:
+
+- add / multiply keep the SECOND operand's NaN: contiguous (scalar, 4×-unrolled body, tail), strided,
+  reversed, `out=` (also aliasing an input), `where=`, transposed, buffered 2-D broadcasts, 0-d × 0-d;
+- except the AVX2 scalar-broadcast SIMD loop (one input stride 0, the other input and the out
+  contiguous, length > 2 vectors). Its blocks of 2 vectors (8 float64 / 16 float32 lanes) keep the
+  BROADCAST operand's NaN and its scalar tail the ARRAY operand's. The split restarts at every
+  inner-loop call: per mask-true run under `where=`, and per `np.getbufsize()` = 8192-element chunk
+  when an operand is cast;
+- subtract / divide keep the FIRST operand's NaN; float16 keeps the second everywhere (no SIMD loop).
+
+NumSharp encodes the order explicitly (`DirectILKernelGenerator.NaNOperandOrder.cs`), because RyuJIT
+may swap a commutative operation's operands. Before 2026-10-03 every path returned the first
+operand's NaN. Every case carries `params.nan_bits = true`, which makes `CompareArray` compare NaN
+payloads RAW (`IsNaNOperandOrderCase`) and hard-fail any payload or sign difference through
+`DiffHasSignFlip`, before any registry excuse.
+
+**Sections:** all-NaN pairs over ~150 layouts × the four ufuncs × float16/float32/float64 (each
+output element names its winner); signalling NaNs (quieted, payload kept); finite values mixed with
+NaNs (both-NaN, one-NaN and finite lanes, a finite 0-d broadcast); a cast operand at 9 / 17 / 8197 /
+8203 elements; `out=` (fresh, strided, a float64 out for a float32 loop) and `where=` (runs,
+alternating) as the out_where tuple; np.evaluate trees, single nodes over every broadcast side and
+multi-node trees over array-array layouts. **Bit-exact, 0 excused.** On the pre-fix build 1,032 of
+the 2,678 cases fail.
+
+**Host rule.** Linux NumPy (GCC build, same CPU, probed through WSL) orders the operands
+DIFFERENTLY: its contiguous SIMD body keeps the first operand's NaN and its tail the second's; its
+broadcast loop keeps the broadcast operand's NaN everywhere; strided / `out=` / `where=` paths keep
+the first. So the order is a compiler artifact, and this tier is a win-amd64 contract, like the
+complex NaN-sign tier. NumSharp's choice does not depend on the operating system, so the raw
+comparison runs on every x86 host with NumPy's X86_V3 features (`NaNOperandOrderHost`). Hosts
+without X86_V3 split at 16-byte vectors on both sides, and arm64 NumPy is a different compiler
+build, so both tokenize NaN.
+
+**Kept out (documented residuals, `[Misaligned]` in `Math/NaNOperandOrderTests.cs`):**
+
+- N-D broadcasts that NumPy runs UNBUFFERED. One example is an outer product with at most two rows,
+  such as `(2,1)+(1,64)`: NumPy runs one broadcast loop per row and keeps the first operand's NaN,
+  NumSharp keeps the second. Another is `(m,n)+(m,1)` past n = 4096.
+- A 0-d operand against a non-contiguous N-D array longer than one buffer.
+- A reversed cast operand longer than one buffer.
+- `where=` together with a cast.
+- np.evaluate trees deeper than one node with a NaN 0-d or size-1 broadcast input.
+- complex128 add / multiply. MSVC's 2×-unrolled complex loop alternates the order by vector parity
+  (`bbbbaaaabbbb` over six elements), and NumSharp keeps the first operand's NaN.
+- `cumsum` / `cumprod` (`add.accumulate` / `multiply.accumulate`): NumPy keeps the NEW element's NaN
+  at each step, NumSharp's scan kernels the accumulator's. This is an open follow-up, not a tier case.
+  `sum` / `prod` stay out by policy (the accepted reduction-order difference).
 
 ### Truthful vs precise (`precision` tier)
 

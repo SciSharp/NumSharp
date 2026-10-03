@@ -400,10 +400,12 @@ namespace NumSharp.Backends
             bool simdViable = sameDtype
                               && DirectILKernelGenerator.CanUseSimdBinary(op, resultType);
 
+            // NumPy's elementwise NaN operand order (float add/multiply keep the SECOND operand's NaN when both are
+            // NaN): see DirectILKernelGenerator.NaNOperandOrder.cs.
             Action<ILGenerator> scalarBody;
             if (sameDtype)
             {
-                scalarBody = il => DirectILKernelGenerator.EmitScalarOperation(il, op, resultType);
+                scalarBody = il => DirectILKernelGenerator.EmitScalarOperation(il, op, resultType, NaNOperandOrder.NumPyUfunc);
             }
             else
             {
@@ -420,7 +422,7 @@ namespace NumSharp.Backends
             bool shiftSimd = sameDtype && (op == BinaryOp.LeftShift || op == BinaryOp.RightShift)
                              && DirectILKernelGenerator.ShiftVariableSupported(resultType, op == BinaryOp.LeftShift);
             Action<ILGenerator>? vectorBody = simdViable
-                ? il => DirectILKernelGenerator.EmitVectorOperation(il, op, resultType)
+                ? il => DirectILKernelGenerator.EmitVectorOperation(il, op, resultType, NaNOperandOrder.NumPyUfunc)
                 : shiftSimd
                     ? il => DirectILKernelGenerator.EmitShiftVectorBody(il, resultType, op == BinaryOp.LeftShift)
                     : null;
@@ -459,7 +461,11 @@ namespace NumSharp.Backends
                     s_ufuncBinaryOutFlags,
                     opDtypes);
 
-                iter.ExecuteElementWiseBinary(lhsType, rhsType, resultType, scalarBody, vectorBody, cacheKey);
+                // How NumPy would split this iteration into inner-loop calls (read only when a float add/multiply's
+                // broadcast operand is NaN); the struct outlives the call below.
+                BroadcastNaNRule nanRule = NumPyBroadcastNaNRule(op, lhsType, rhsType, resultType, target.typecode,
+                    lhs.size, rhs.size, masked: false, iter.NDim, iter.HasNegPerm, iter.GetInnerStrideArray());
+                iter.ExecuteElementWiseBinary(lhsType, rhsType, resultType, scalarBody, vectorBody, cacheKey, &nanRule);
             }
             else
             {
@@ -477,8 +483,11 @@ namespace NumSharp.Backends
                     s_ufuncBinaryOutMaskedFlags,
                     opDtypes);
 
+                // NumPy calls the inner loop once per mask-true run; the rule applies per run.
+                BroadcastNaNRule nanRule = NumPyBroadcastNaNRule(op, lhsType, rhsType, resultType, target.typecode,
+                    lhs.size, rhs.size, masked: true, iter.NDim, iter.HasNegPerm, iter.GetInnerStrideArray());
                 iter.ExecuteElementWise(
-                    new[] { lhsType, rhsType, resultType }, scalarBody, vectorBody, cacheKey);
+                    new[] { lhsType, rhsType, resultType }, scalarBody, vectorBody, cacheKey, &nanRule);
             }
 
             return target;
