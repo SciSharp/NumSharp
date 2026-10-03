@@ -380,6 +380,41 @@ namespace NumSharp.Interop.OnnxRuntime
         }
 
         /// <summary>
+        ///     Wrap a window of a NumSharp buffer — viewed as <paramref name="tc"/> elements — as an ALIAS whose reference
+        ///     counting is <paramref name="owner"/>'s own (<c>ArraySlice.WrapShared</c>): an <see cref="NDArray"/> over the
+        ///     returned slice holds a counted reference on the owner's buffer and keeps it reachable, exactly as an ordinary
+        ///     view does, and the owner's last release frees the buffer once. The element type may differ from the owner's
+        ///     (Float16 viewed as Half, a Char buffer viewed as UInt16) — the reinterpreting-alias case the primitive exists for.
+        /// </summary>
+        /// <param name="tc">The dtype the alias carries.</param>
+        /// <param name="p">The first aliased element, inside <paramref name="owner"/>'s buffer.</param>
+        /// <param name="count">The number of <paramref name="tc"/> elements aliased.</param>
+        /// <param name="owner">The buffer's slice, to which every reference-counting call of the alias is forwarded.</param>
+        /// <returns>The alias; it holds no reference until an <see cref="NDArray"/> is built over it.</returns>
+        /// <exception cref="NotSupportedException"><paramref name="tc"/> is not a storage dtype.</exception>
+        internal static unsafe IArraySlice WrapShared(NPTypeCode tc, void* p, long count, IArraySlice owner)
+        {
+            switch (tc)
+            {
+                case NPTypeCode.Boolean: return ArraySlice.WrapShared<bool>(p, count, owner);
+                case NPTypeCode.Byte: return ArraySlice.WrapShared<byte>(p, count, owner);
+                case NPTypeCode.SByte: return ArraySlice.WrapShared<sbyte>(p, count, owner);
+                case NPTypeCode.Int16: return ArraySlice.WrapShared<short>(p, count, owner);
+                case NPTypeCode.UInt16: return ArraySlice.WrapShared<ushort>(p, count, owner);
+                case NPTypeCode.Int32: return ArraySlice.WrapShared<int>(p, count, owner);
+                case NPTypeCode.UInt32: return ArraySlice.WrapShared<uint>(p, count, owner);
+                case NPTypeCode.Int64: return ArraySlice.WrapShared<long>(p, count, owner);
+                case NPTypeCode.UInt64: return ArraySlice.WrapShared<ulong>(p, count, owner);
+                case NPTypeCode.Char: return ArraySlice.WrapShared<char>(p, count, owner);
+                case NPTypeCode.Half: return ArraySlice.WrapShared<Half>(p, count, owner);
+                case NPTypeCode.Single: return ArraySlice.WrapShared<float>(p, count, owner);
+                case NPTypeCode.Double: return ArraySlice.WrapShared<double>(p, count, owner);
+                case NPTypeCode.Complex: return ArraySlice.WrapShared<Complex>(p, count, owner);
+                default: throw new NotSupportedException(tc.ToString());
+            }
+        }
+
+        /// <summary>
         ///     Take an ARC reference on the array's buffer and resolve the pointer to its first logical
         ///     element (<c>slice.Address + Shape.Offset × itemsize</c> — right for both a contiguous slice
         ///     that re-seats the storage address and a view that keeps the base address with a non-zero

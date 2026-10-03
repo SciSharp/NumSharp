@@ -71,6 +71,11 @@ dispose it — a `using`, or wire it into your `MLContext` lifetime — to relea
 takes its own ARC reference, so it is even safe to dispose the source array while the view (or its
 cursors) still read it. Not disposing leaks the pin until finalization.
 
+**Reachable means valid.** Whatever can reach the view — you, a transform's output, a cursor, a getter delegate —
+keeps the pins and the buffer alive, and a getter keeps its cursor reachable until its read is done, so a collection
+landing mid-copy cannot release the row under it. The finalizers of the view and its cursors only give their reference
+back (never free eagerly), so an alias of the buffer you still hold stays valid after they run, in any order.
+
 A source whose buffer has already been released is refused (`ObjectDisposedException`) by every export
 verb: each takes its reference before its first read (the Half / Decimal conversion, `ToDataView`'s
 snapshot, `ToVBuffer`'s copy), so it never reads memory the pool may have handed to another array.

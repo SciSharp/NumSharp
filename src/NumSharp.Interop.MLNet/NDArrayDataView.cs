@@ -22,6 +22,13 @@ namespace NumSharp.Interop.MLNet
     ///     own pin, so a cursor mid-iteration keeps the buffer alive even if the view is disposed underneath it.
     ///     Because the pin survives an explicit <c>source.Dispose()</c>, it is safe to dispose the source array
     ///     while the view (or its cursors) still read it — unlike a raw ML.NET data source over a managed array.</para>
+    ///
+    ///     <para><b>Reachable means valid.</b> Whatever can reach the view — the caller, an ML.NET transform's output, a
+    ///     cursor, a getter delegate (its closure holds the cursor, the cursor the view) — keeps the pins and the buffer
+    ///     alive; a getter keeps its cursor reachable until its read is complete, so a collection that lands while it
+    ///     copies a row cannot release the memory under it. The finalizers of the view and of its cursors only ABANDON
+    ///     their references (never the eager free at zero), so an alias of the buffer that the caller still holds stays
+    ///     valid after they run, in any order.</para>
     /// </summary>
     public sealed class NDArrayDataView : IDataView, IDisposable
     {
@@ -119,25 +126,34 @@ namespace NumSharp.Interop.MLNet
             if (Interlocked.Exchange(ref _disposed, 1) != 0)
                 return;
             GC.SuppressFinalize(this);
-            ReleaseCore();
-        }
-
-        /// <summary>Safety net for a view that was never disposed (drops the ARC pin).</summary>
-        ~NDArrayDataView()
-        {
-            if (Interlocked.Exchange(ref _disposed, 1) != 0)
-                return;
-            ReleaseCore();
-        }
-
-        private void ReleaseCore()
-        {
             _slice.Release();
             NDArrayMLNetInterop.ExportClosed();
             if (_ownsFed)
                 _fed.Dispose();   // the Half→Single / Decimal→Double / snapshot temporary nobody else can dispose
             else
                 GC.KeepAlive(_fed);
+        }
+
+        /// <summary>
+        ///     Safety net for a view that was never disposed: gives the view's reference on the buffer back — abandoning
+        ///     it, never freeing eagerly — and does nothing else.
+        /// </summary>
+        /// <remarks>
+        ///     <para><see cref="IArraySlice.Abandon"/> rather than <see cref="IArraySlice.Release"/>: this view being
+        ///     unreachable proves nothing about OTHER reachable aliases of the buffer that hold no counted reference (a bare
+        ///     <c>IArraySlice</c> taken from the source array), and releasing the last reference here freed the buffer under
+        ///     such an alias. The memory block's own finalizer frees the buffer once nothing can reach it — NumSharp's own
+        ///     <c>~NDArray</c> rule.</para>
+        ///     <para>The owned temporary is not disposed here: it is reachable only through this view, so it is unreachable
+        ///     too and its own finalizer gives its reference back. Any finalization order is safe: this only decrements a
+        ///     count and a counter.</para>
+        /// </remarks>
+        ~NDArrayDataView()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) != 0)
+                return;
+            _slice.Abandon();
+            NDArrayMLNetInterop.ExportClosed();
         }
 
         private void ThrowIfDisposed()
@@ -279,6 +295,9 @@ namespace NumSharp.Interop.MLNet
                 {
                     long phys = elemBase + CurrentRow() * rowStride;
                     unsafe { value = Unsafe.Read<TValue>((void*)(baseAddr + (nint)(phys * itemsize))); }
+                    // The raw address does not keep the cursor alive, and nothing else may: the caller can hold only this
+                    // delegate, which is not reported live while it runs. See the vector getter.
+                    GC.KeepAlive(this);
                 };
                 return getter;
             }
@@ -346,6 +365,13 @@ namespace NumSharp.Interop.MLNet
                         }
                     }
                     dst = editor.Commit();
+                    // The cursor (and through it the view and the pins) must stay reachable until the copy above is done.
+                    // The raw address does not root it, and a caller holding only this delegate does not either: once the
+                    // getter's last field read is behind it, the JIT reports nothing live, and a collection that lands while
+                    // the row is copied finalizes the cursor, whose release can free the buffer mid-copy. Probed: under GC
+                    // pressure, 117 of 279 cursors reachable only through their getter were finalized during that getter's
+                    // own call.
+                    GC.KeepAlive(this);
                 };
             }
 
@@ -363,18 +389,27 @@ namespace NumSharp.Interop.MLNet
             }
 
             /// <summary>
-            ///     Releases the cursor's pin, once (an explicit dispose and the finalizer race through the same interlocked
+            ///     Gives the cursor's pin back, once (an explicit dispose and the finalizer race through the same interlocked
             ///     guard). The cursor is parked off any row first (position -1, done), so a getter still held by the caller
             ///     throws instead of reading a buffer this pin no longer keeps alive.
             /// </summary>
-            /// <param name="disposing"><c>true</c> from <c>Dispose()</c>, <c>false</c> from the finalizer; the pin is released either way.</param>
+            /// <remarks>
+            ///     From <c>Dispose()</c> the pin is RELEASED (freeing the buffer if it was the last reference — the caller
+            ///     asserts nothing reads it any more); from the finalizer it is ABANDONED: the cursor being unreachable proves
+            ///     nothing about other reachable aliases of the buffer that hold no counted reference, so the finalizer must not
+            ///     claim the eager free (the memory block's own finalizer frees the buffer once nothing can reach it).
+            /// </remarks>
+            /// <param name="disposing"><c>true</c> from <c>Dispose()</c>, <c>false</c> from the finalizer.</param>
             protected override void Dispose(bool disposing)
             {
                 if (Interlocked.Exchange(ref _disposed, 1) == 0)
                 {
                     _done = true;
                     _position = -1;
-                    _slice.Release();
+                    if (disposing)
+                        _slice.Release();
+                    else
+                        _slice.Abandon();
                     NDArrayMLNetInterop.ExportClosed();
                     GC.KeepAlive(_view);
                 }

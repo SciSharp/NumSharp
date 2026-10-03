@@ -132,15 +132,23 @@ bytes)` on `slice.Address + Shape.Offset × itemsize`; the import takes the poin
 
 - **Exports.** `AsOrtValue` / `AsDenseTensor<T>` take an atomic reference on the NumSharp buffer, so the
   memory outlives the source array if the array is disposed or collected while ORT holds the tensor.
-  Disposing the handle disposes the `OrtValue` and drops the reference; a forgotten handle is released by
-  a finalizer safety net. While exported, `ndarray.resize(refcheck: true)` refuses - NumPy's rule for a
-  referenced buffer - and works again once the handle is gone.
+  Disposing the handle disposes the `OrtValue` and drops the reference. While exported,
+  `ndarray.resize(refcheck: true)` refuses - NumPy's rule for a referenced buffer - and works again once the
+  handle is gone.
+- **Reachable means valid.** The handle and what it hands out keep each other alive: holding only
+  `handle.Value`, or only `Tensor` / `Memory`, keeps the handle and its reference, so a collection never
+  disposes an `OrtValue` or disables a tensor you still hold, and never lets `resize` reallocate under it. A
+  forgotten handle is released by a finalizer safety net once nothing reaches any of them; it only gives the
+  reference back (never frees eagerly), so an alias of the buffer you still hold stays valid, and it never
+  disposes the `OrtValue` or a `Source` conversion you can still reach.
 - **Pins outlive the handle.** Whoever pins an `AsDenseTensor<T>` handle's `Memory<T>` - ORT's
-  `CreateTensorValueFromMemory`, a `tensor.AsNDArray()` view, any `Memory<T>.Pin()` - takes its own reference
-  on the NumSharp buffer, released with the pin, so the pin stays valid after the handle and the source are
-  disposed (it used to take none, and those consumers read memory the pool had handed to another array). A
-  disposed handle refuses only NEW access: a new span or pin of its `Memory<T>`, and `ToNDArray` /
-  `AsNDArray` of its tensor, throw `ObjectDisposedException` before anything is allocated.
+  `CreateTensorValueFromMemory`, any `Memory<T>.Pin()` - takes its own reference on the NumSharp buffer,
+  given back exactly once: when the pin is disposed (two copies of one `MemoryHandle` count once), or when
+  it is collected undisposed (ORT's own `OrtValue` finalizer never disposes the pin it holds). So the pin
+  stays valid after the handle and the source are disposed. A `tensor.AsNDArray()` view is an ordinary
+  NumSharp view of the buffer, counted on it like any view. A disposed handle refuses only NEW access: a new
+  span or pin of its `Memory<T>`, and `ToNDArray` / `AsNDArray` of its tensor, throw
+  `ObjectDisposedException` before anything is allocated.
 - **A released source is refused.** Every verb that reads an array - the exports, the copies, and `Run`'s
   cast and C-order copy of an input - takes its reference on the array's buffer before its first read, and
   throws `ObjectDisposedException` if the buffer has already been released. Reading first would read memory
@@ -159,7 +167,12 @@ bytes)` on `slice.Address + Shape.Offset × itemsize`; the import takes the poin
   the view (in a probe the next run's output showed through it every time). Disposing the results explicitly
   while a view lives still frees the memory under it - the same rule as a non-owning `AsNDArray(OrtValue)`.
 - **No GIL, no interpreter, no thread affinity** - ORT is thread-safe and the verbs are plain calls. The
-  one rule is the handle rule: **pass `handle.Value`, keep the handle alive across `Run`, dispose after.**
+  one rule is the handle rule: **pass `handle.Value`, keep the handle (or its `Value`) reachable across
+  `Run`, dispose after.** ORT's own `Run` reads the inputs' native handles and holds no reference to the
+  managed values during the run, so an input referenced only by the argument list can be collected while
+  native code reads it; the same holds for anything that keeps a value past a call (`OrtIoBinding`,
+  `SessionOptions.AddInitializer`, `OrtValue.CreateSequence`). `session.Run(NDArray…)` does this for you.
+  The full lifetime and garbage-collection analysis: `docs/plans/interop-lifetime-gc-analysis.md`.
 
 ## Post-processing
 
@@ -240,6 +253,7 @@ runs the suite at both ends of the range.
 | 18 | Random bit patterns - every NaN payload, signalling NaNs, bool bytes other than 0 and 1 - cross every verb and ORT's `Identity` byte-identical | `BitPatternFuzzTests` |
 | 19 | Tensors of 2 GB or more are refused by both `OrtValue` imports before anything is allocated; a `DenseTensor` past 2 GB copies whole; `ToOrtValue` refuses exactly past the span limit for every item size; a zero-size array with an axis past `int.MaxValue` crosses as an `OrtValue`; the legacy `Run` releases every pin it takes | `BoundaryTests` |
 | 20 | The public surface equals the approved list (defaults included) | `ApiSurfaceTests` |
+| 21 | In every order the runtime may run their finalizers (212 orders of 8 scenarios, each a real collection), the handles, pins, views and imports never free a buffer an alias still reaches and give each reference back exactly once; a held `Value`, `Tensor` or `Source` survives a collection of its handle; a copy keeps its source alive until it is done | `LifetimeGcTests` |
 
 ## See also
 

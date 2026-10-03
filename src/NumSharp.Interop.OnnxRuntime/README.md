@@ -135,16 +135,23 @@ The one copy left — `stack` + `astype`/divide producing the planar normalized 
 - **Exports** (`AsOrtValue` / `AsDenseTensor<T>`) take their own atomic reference on the NumSharp buffer
   (NumSharp's ARC), so the memory survives even if the source `NDArray` is disposed or collected while ORT
   holds the tensor. Release is deterministic and owned by the returned handle (`OrtTensor.Dispose` /
-  `OrtTensor<T>.Dispose`); a forgotten handle is released by a finalizer safety net. **Keep the handle alive
-  across `Run`** — pass `handle.Value`, dispose after the run (`using`). While exported,
-  `ndarray.resize(refcheck: true)` on the source refuses (`cannot resize an array that references or is
-  referenced by another array`), exactly NumPy's rule.
+  `OrtTensor<T>.Dispose`). **Keep the handle (or its `Value`) reachable across `Run`** — pass `handle.Value`,
+  dispose after the run (`using`): ORT's own `Run` holds no reference to the managed inputs while native code
+  reads them, and neither do `OrtIoBinding`, `SessionOptions.AddInitializer` or `OrtValue.CreateSequence`.
+  While exported, `ndarray.resize(refcheck: true)` on the source refuses (`cannot resize an array that
+  references or is referenced by another array`), exactly NumPy's rule.
+- **Reachable means valid.** Holding only `handle.Value`, or only `Tensor` / `Memory`, keeps the handle — and
+  its reference on the buffer — alive, so a collection never disposes an `OrtValue` or disables a tensor you
+  still hold. A forgotten handle is released by a finalizer safety net once nothing reaches any of them; it only
+  gives the reference back (never frees eagerly), so an alias of the buffer you still hold stays valid, and it
+  never disposes the `OrtValue` or a `Source` conversion you can still reach.
 - **Pins of an `AsDenseTensor<T>` handle's `Memory<T>` outlive the handle.** Whoever pins that memory —
-  ORT's `CreateTensorValueFromMemory`, a `tensor.AsNDArray()` view, any `Memory<T>.Pin()` — takes a reference
-  of its own on the NumSharp buffer, released with the pin, so it stays valid after the handle and the source
-  are disposed. A disposed handle only refuses NEW access: its tensor's `Memory<T>` throws
-  `ObjectDisposedException` for a new span or pin, and so do `ToNDArray` / `AsNDArray` of that tensor (before
-  allocating anything).
+  ORT's `CreateTensorValueFromMemory`, any `Memory<T>.Pin()` — takes a reference of its own on the NumSharp
+  buffer, given back exactly once: when the pin is disposed (two copies of one `MemoryHandle` count once) or
+  when it is collected undisposed (ORT's `OrtValue` finalizer never disposes the pin it holds). A
+  `tensor.AsNDArray()` view is an ordinary NumSharp view of the buffer, counted on it like any view. A disposed
+  handle only refuses NEW access: its tensor's `Memory<T>` throws `ObjectDisposedException` for a new span or
+  pin, and so do `ToNDArray` / `AsNDArray` of that tensor (before allocating anything).
 - **A released source is refused** with `ObjectDisposedException` by every verb that reads it (the exports,
   the copies, `Run`'s cast and C-order copy): each takes its reference on the buffer before its first read,
   so it never reads memory the pool may have handed to another array. Dtype and size refusals come first, so

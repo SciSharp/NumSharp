@@ -17,6 +17,18 @@
          second time with `-p:OnnxRuntimeVersion=<current>` so the current ORT is covered too. Override
          locally the same way: dotnet test -p:OnnxRuntimeVersion=1.29.0. -->
     <OnnxRuntimeVersion Condition="'$(OnnxRuntimeVersion)' == ''">1.16.0</OnnxRuntimeVersion>
+
+    <!-- JIT posture for this TEST HOST: tiered compilation OFF, so every method is compiled fully optimized on its
+         first call. The lifetime suite (LifetimeGcTests) probes windows in which an object is already unreachable
+         while code still reads memory it owns. Those windows exist only in OPTIMIZED code: tier-0 code reports every
+         local as live for the whole method. With tiering on, a method reaches tier 1 only after 30 calls, a quiet
+         period and a background compile. In a whole-suite run (other tests' compile backlog, their jitting resetting
+         the call-counting delay), the probes' warm-up never got there: the ML.NET suite's no-KeepAlive control was
+         caught in 0 of 12 rounds, against 12 of 12 when run alone or with tiering off. This posture also runs EVERY
+         other test of the bridge against optimized code, where a missing KeepAlive is a live bug rather than a latent
+         one. Cost, measured 2026-10-03 (net10.0, Release, whole suite): 13.3 s -> 15.6 s. Overrides the repo-wide
+         default in ../../Directory.Build.props; TieredPGO needs tiering, so it is off with it. -->
+    <TieredCompilation>false</TieredCompilation>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Publish|AnyCPU'">

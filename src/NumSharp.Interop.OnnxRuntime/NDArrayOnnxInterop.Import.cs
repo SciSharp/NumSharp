@@ -63,6 +63,13 @@ namespace NumSharp.Interop.OnnxRuntime
             var nd = new NDArray(tc, shape, fillZeros: false);
             if (nbytes > 0)
                 src.CopyTo(new Span<byte>(nd.Storage.InternalArray.Address, src.Length));
+            // The span reads ORT's native memory, which the OrtValue frees when it is finalized, and the span does not keep
+            // the OrtValue alive: once its last use above is behind us, a caller that holds no other reference to it (a
+            // value made just for this call) lets the GC collect it — during the allocation of the result or while the copy
+            // runs — and the copy read freed memory. Probed: copying 2^14-element outputs nobody else referenced, under GC
+            // pressure, ended the process within seconds (a fatal access violation inside the copy). ORT's own rule: a
+            // tensor's span is valid only while its OrtValue is alive.
+            GC.KeepAlive(value);
             return nd;
         }
 
@@ -219,6 +226,12 @@ namespace NumSharp.Interop.OnnxRuntime
             finally
             {
                 pin.Dispose();
+                // The pin does not always keep the memory alive: ORT's memory manager for a legacy output
+                // (OrtValueTensor<T>) hands out a bare pointer, and its native buffer lives only as long as the tensor
+                // (tensor → Memory → manager → OrtValue, whose finalizer frees it). Without this the tensor's last use was
+                // the Pin() above, so a tensor the caller does not otherwise hold (`results.First().AsTensor<T>()` of a
+                // dropped results list) could be collected while the copy read it.
+                GC.KeepAlive(tensor);
             }
         }
 
@@ -242,8 +255,10 @@ namespace NumSharp.Interop.OnnxRuntime
         /// </summary>
         /// <remarks>
         ///     What the pin guarantees depends on who owns the memory. A managed array (a tensor you built) is pinned, so it
-        ///     neither moves nor dies. A NumSharp buffer behind <see cref="AsDenseTensor{T}"/> takes a reference of its own,
-        ///     so the view outlives the handle and the source. An ORT output's memory (the legacy <c>session.Run</c> results,
+        ///     neither moves nor dies. A NumSharp buffer behind <see cref="AsDenseTensor{T}"/> is not pinned at all: the view
+        ///     is an ordinary NumSharp alias of that buffer, holding a counted reference on it like any view, so it outlives the
+        ///     handle and the source and is released through NumSharp's own rules (no import lease, so <see cref="LiveImports"/>
+        ///     does not count it). An ORT output's memory (the legacy <c>session.Run</c> results,
         ///     <c>DisposableNamedOnnxValue.AsTensor&lt;T&gt;()</c>) is a bare native pointer: the view keeps the tensor — and
         ///     through it the <see cref="OrtValue"/> — reachable, so a results collection that is merely DROPPED is not
         ///     finalized under the view, but disposing it explicitly while a view lives frees the memory under the view; keep
@@ -273,6 +288,11 @@ namespace NumSharp.Interop.OnnxRuntime
                 return new NDArray(tc, shape, fillZeros: false);
             }
 
+            // A tensor over NumSharp's own memory (an AsDenseTensor handle's) is viewed as an ordinary NumSharp alias of
+            // that buffer, not leased like foreign memory.
+            if (MemoryMarshal.TryGetMemoryManager<T, UnmanagedMemoryManager<T>>(tensor.Buffer, out UnmanagedMemoryManager<T> numsharp, out int start, out _))
+                return AliasNumSharpTensor(numsharp, start, tc, dims, shape, count, tensor.IsReversedStride);
+
             MemoryHandle handle = tensor.Buffer.Pin();
             // The lease roots the TENSOR as well as releasing the pin. ORT's memory manager for a legacy output
             // (OrtValueTensor<T>) hands out a bare pointer whose pin keeps nothing alive, so once the caller dropped the
@@ -298,6 +318,62 @@ namespace NumSharp.Interop.OnnxRuntime
             {
                 lease.Release();
                 throw;
+            }
+        }
+
+        /// <summary>
+        ///     The view <see cref="AsNDArray{T}(DenseTensor{T})"/> returns for a tensor over NumSharp's own memory (an
+        ///     <see cref="AsDenseTensor{T}"/> handle's): an alias of the buffer whose reference counting is the buffer's own
+        ///     (<c>ArraySlice.WrapShared</c>, the alias NumSharp builds for <c>np.real</c> or <c>view(dtype)</c>), so the view
+        ///     keeps the buffer alive exactly as any NumSharp view does, whatever happens to the handle and the source.
+        /// </summary>
+        /// <remarks>
+        ///     <para>It used to be leased like foreign memory: the view pinned the tensor's Memory and the pin's release ran
+        ///     when the view's memory block was released — from the block's FINALIZER when the view was collected. The pin's
+        ///     release then claimed the eager free at zero from a finalizer, which frees a buffer that an uncounted alias
+        ///     (a bare <c>IArraySlice</c> of the source) may still be reading; and the import counter treated NumSharp's own
+        ///     memory as foreign. An alias forwards its finalizer path to <see cref="IArraySlice.Abandon"/> like every view.</para>
+        ///     <para>A tensor over a SLICE of the handle's Memory (<c>new DenseTensor&lt;T&gt;(h.Memory.Slice(k), …)</c>) is
+        ///     an alias of that window: <paramref name="start"/> is the slice's offset into the manager's elements.</para>
+        /// </remarks>
+        /// <typeparam name="T">The tensor's element type (ORT's type for the dtype: Float16 for Half, ushort for Char).</typeparam>
+        /// <param name="manager">The NumSharp memory manager behind the tensor's Memory.</param>
+        /// <param name="start">The element offset of the tensor's Memory within the manager's memory.</param>
+        /// <param name="tc">The dtype the view carries (<see cref="TypeCodeOf{T}"/>).</param>
+        /// <param name="dims">The tensor's dimensions.</param>
+        /// <param name="shape">The tensor's row-major shape.</param>
+        /// <param name="count">The tensor's element count (non-zero).</param>
+        /// <param name="reversedStride">Whether the tensor is column-major (<c>IsReversedStride</c>).</param>
+        /// <returns>A view sharing the buffer, holding its own reference on it.</returns>
+        /// <exception cref="ObjectDisposedException">The tensor's handle has been disposed, or the buffer is already released.</exception>
+        private static unsafe NDArray AliasNumSharpTensor<T>(UnmanagedMemoryManager<T> manager, int start, NPTypeCode tc, long[] dims, Shape shape, long count, bool reversedStride)
+            where T : unmanaged
+        {
+            // The same refusal the tensor's Memory gives once its handle is disposed (Pin and Span throw then): a disposed
+            // handle refuses new access, and a view is new access.
+            if (manager.IsDisposed)
+                throw new ObjectDisposedException(nameof(UnmanagedMemoryManager<T>), "the NumSharp buffer behind this Memory<T> has been released (its OrtTensor handle was disposed).");
+
+            // A temporary reference: the liveness check (it fails once every reference is gone) and what keeps the buffer
+            // alive until the view holds its own. The NDArray constructor takes the view's reference without checking that
+            // it succeeded, so the check must come first.
+            IArraySlice owner = manager.Owner;
+            if (!owner.TryAddRef())
+                throw new ObjectDisposedException(nameof(UnmanagedMemoryManager<T>), "the NumSharp buffer behind this Memory<T> has already been released.");
+            try
+            {
+                IArraySlice slice = WrapShared(tc, manager.Pointer + start, count, owner);
+                UnmanagedStorage storage = reversedStride && dims.Length > 1
+                    // the Fortran view of a flat storage, as for foreign memory below
+                    ? new UnmanagedStorage(slice, Shape.Vector(count)).Alias(new Shape(dims, FortranStrides(dims), offset: 0, bufferSize: count))
+                    : new UnmanagedStorage(slice, shape).Alias();
+                return new NDArray(storage);   // takes the view's reference, forwarded to the buffer
+            }
+            finally
+            {
+                // The temporary reference. Once the view exists its own reference keeps the count above zero, so this never
+                // frees; if building the view failed, it gives the buffer back like any deterministic release.
+                owner.Release();
             }
         }
 
