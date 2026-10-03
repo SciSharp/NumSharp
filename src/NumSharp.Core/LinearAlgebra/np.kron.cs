@@ -22,7 +22,13 @@ namespace NumSharp
         ///     promotion (NEP50). If <paramref name="b"/> is 0-d the result is the element-wise
         ///     <c>a * b</c> (which is itself the degenerate Kronecker product).
         /// </returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.kron.html</remarks>
+        /// <exception cref="NullReferenceException"><paramref name="a"/> or <paramref name="b"/> is null.</exception>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.kron.html
+        ///     <para>Scoped by <c>[NDScoped]</c>: the interleaved reshapes, the broadcast views, the tile path's two
+        ///     materialized operands and the product that the final reshape views are released on return, and that
+        ///     reshape is yielded. The tile path no longer adds hand-written <c>using</c> declarations on top.</para>
+        /// </remarks>
         [NDScoped]
         public static NDArray kron(NDArray a, NDArray b)
         {
@@ -93,8 +99,10 @@ namespace NumSharp
 
                 // repeat-a and tile-b, both materialised C-contiguous at the interleaved shape, then one
                 // SimdFull multiply. The final reshape to (rt*st) is a view over the contiguous product.
-                using var aRep = broadcast_to(a.reshape(aInter), bcShape).copy();
-                using var bTiled = broadcast_to(b.reshape(bInter), bcShape).copy();
+                // Both operands (and the reshape/broadcast views they came from) are released by this
+                // method's scope as soon as it returns — the same moment a `using` would release them.
+                var aRep = broadcast_to(a.reshape(aInter), bcShape).copy();
+                var bTiled = broadcast_to(b.reshape(bInter), bcShape).copy();
                 return multiply(aRep, bTiled).reshape(outShape);
             }
 

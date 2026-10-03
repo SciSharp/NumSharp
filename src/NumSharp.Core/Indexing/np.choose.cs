@@ -44,14 +44,27 @@ namespace NumSharp
         ///     choices against <paramref name="a"/>.
         /// </returns>
         /// <exception cref="ValueError">
-        ///     <paramref name="choices"/> is empty (<c>"0-length sequence."</c>), or an index is out of
-        ///     range under <c>mode="raise"</c> (<c>"invalid entry in choice array"</c>).
+        ///     <paramref name="choices"/> is empty (<c>"0-length sequence."</c>), an index is out of
+        ///     range under <c>mode="raise"</c> (<c>"invalid entry in choice array"</c>), or
+        ///     <paramref name="mode"/> is not a known clip mode (NumPy's two clip-mode texts).
         /// </exception>
         /// <exception cref="TypeError">
         ///     <paramref name="a"/> cannot be safe-cast to <c>int64</c>, or <paramref name="out"/> has the
         ///     wrong shape (<c>"choose: invalid shape for output array."</c>).
         /// </exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.choose.html</remarks>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/>, <paramref name="choices"/> or a choice entry is null.</exception>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.choose.html
+        ///     <para>Scoped by <c>[NDScoped]</c>: the int64 copy of a non-int64 index array, the 0-d arrays of
+        ///     scalar choices, the converted copies of collection choices, the dtype casts of the choices, their
+        ///     broadcast views and, when <paramref name="out"/> is given, the computed result that is copied into
+        ///     it are all released on return, exceptions included. The result is yielded when <paramref name="out"/>
+        ///     is null. Before the scope, only the index copy was released by hand: the casts, the scalar arrays and
+        ///     the <c>out=</c> temporary were left to the finalizer, and a broadcast view of a cast choice kept that
+        ///     cast's buffer out of the pool. The caller's arrays were built before the scope opened, so the scope
+        ///     never disposes them.</para>
+        /// </remarks>
+        [NDScoped]
         public static NDArray choose(NDArray a, object[] choices, NDArray @out = null, string mode = "raise")
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
@@ -64,6 +77,18 @@ namespace NumSharp
         ///     choices (the common case — every choice is an <see cref="NDArray"/>). The result dtype is
         ///     <see cref="result_type"/> of the choices.
         /// </summary>
+        /// <param name="a">The index array (see <see cref="choose(NDArray,object[],NDArray,string)"/>).</param>
+        /// <param name="choices">The choice arrays.</param>
+        /// <param name="out">Optional destination whose shape must equal the broadcast result shape.</param>
+        /// <param name="mode"><c>"raise"</c> (default), <c>"wrap"</c> or <c>"clip"</c>.</param>
+        /// <returns>A fresh C-contiguous array, or <paramref name="out"/> when given.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/>, <paramref name="choices"/> or a choice is null.</exception>
+        /// <exception cref="ValueError"><paramref name="choices"/> is empty, an index is out of range under
+        ///     <c>mode="raise"</c>, or <paramref name="mode"/> is not a known clip mode.</exception>
+        /// <exception cref="TypeError"><paramref name="a"/> cannot be safe-cast to int64, or <paramref name="out"/>
+        ///     has the wrong shape.</exception>
+        /// <remarks>Scoped by <c>[NDScoped]</c>, with the same reclaimed set as the <see cref="object"/>[] overload.</remarks>
+        [NDScoped]
         public static NDArray choose(NDArray a, NDArray[] choices, NDArray @out = null, string mode = "raise")
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
@@ -79,6 +104,20 @@ namespace NumSharp
         ///     abuse — <c>choices.shape[0]</c> choice sub-arrays). A 0-d <paramref name="choices"/> is a
         ///     <see cref="TypeError"/> (<c>"iteration over a 0-d array"</c>), exactly as NumPy raises.
         /// </summary>
+        /// <param name="a">The index array (see <see cref="choose(NDArray,object[],NDArray,string)"/>).</param>
+        /// <param name="choices">An array whose outermost dimension enumerates the choices.</param>
+        /// <param name="out">Optional destination whose shape must equal the broadcast result shape.</param>
+        /// <param name="mode"><c>"raise"</c> (default), <c>"wrap"</c> or <c>"clip"</c>.</param>
+        /// <returns>A fresh C-contiguous array, or <paramref name="out"/> when given.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> or <paramref name="choices"/> is null.</exception>
+        /// <exception cref="TypeError"><paramref name="choices"/> is 0-d, <paramref name="a"/> cannot be safe-cast
+        ///     to int64, or <paramref name="out"/> has the wrong shape.</exception>
+        /// <exception cref="ValueError"><paramref name="choices"/> has length 0 along its first axis, an index is out
+        ///     of range under <c>mode="raise"</c>, or <paramref name="mode"/> is not a known clip mode.</exception>
+        /// <remarks>Scoped by <c>[NDScoped]</c>, with the same reclaimed set as the <see cref="object"/>[] overload,
+        ///     plus the views along axis 0 this overload builds (each held a reference on the caller's buffer until
+        ///     the finalizer ran).</remarks>
+        [NDScoped]
         public static NDArray choose(NDArray a, NDArray choices, NDArray @out = null, string mode = "raise")
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
@@ -92,6 +131,28 @@ namespace NumSharp
             return ChooseCore(a, objs, @out, mode);
         }
 
+        /// <summary>
+        ///     The shared body of the three <c>choose</c> overloads: classifies each choice (NEP50 weak scalar or
+        ///     strong array), resolves the common dtype, casts the choices and the index array, broadcasts them to
+        ///     the result shape and runs the IL gather kernel.
+        /// </summary>
+        /// <param name="a">The index array.</param>
+        /// <param name="choices">The choices: <see cref="NDArray"/>s, boxed C# scalars, or array-likes.</param>
+        /// <param name="out">Optional destination (shape must equal the result shape).</param>
+        /// <param name="mode">The clip mode string, parsed by NumPy's rules.</param>
+        /// <returns>The fresh result, or <paramref name="out"/> after the result is copied into it.</returns>
+        /// <exception cref="ArgumentNullException">A choice entry is null.</exception>
+        /// <exception cref="ValueError">No choices, an out-of-range index under raise, a bad clip mode, or a
+        ///     read-only <paramref name="out"/>.</exception>
+        /// <exception cref="TypeError">The index array cannot be safe-cast to int64, or <paramref name="out"/> has
+        ///     the wrong shape.</exception>
+        /// <remarks>
+        ///     Covered by <c>[NDScopedCovered]</c>: its only callers are the three <c>[NDScoped]</c> <c>choose</c>
+        ///     overloads, so every array built here except the returned result is released by the caller's scope,
+        ///     exceptions included. The scope also keeps the int64 index copy reachable while the kernel reads it
+        ///     through raw pointers.
+        /// </remarks>
+        [NDScopedCovered]
         private static unsafe NDArray ChooseCore(NDArray a, object[] choices, NDArray @out, string mode)
         {
             int modeInt = ParseChooseMode(mode);
@@ -164,16 +225,10 @@ namespace NumSharp
                 castChoices[i] = mats[i].GetTypeCode == dtype ? mats[i] : mats[i].astype(dtype, copy: false);
 
             // ── 3) index → int64 under the 'safe' rule ────────────────────────────────────
+            // idx64 is EITHER `a` itself (already int64 — the caller's, built before any scope opened, so never
+            // disposed) OR a fresh int64 astype built under the caller's scope, which releases it — and its
+            // broadcast view below — on return or on the out-of-range throw.
             NDArray idx64 = CastChooseIndexToInt64(a);
-            // idx64 is EITHER `a` itself (already int64 — caller-owned, must NOT be disposed) OR a fresh
-            // int64 astype we allocated from the buffer pool. In the fresh case it must be disposed once
-            // every read completes (its only consumers are the broadcast idxView and the gather kernel,
-            // all done before any return), otherwise the pooled buffer leaks on EVERY non-int64 index —
-            // the zero-leak gate flags exactly that. The try/finally also covers the out-of-range throw.
-            bool idx64Owned = !ReferenceEquals(idx64, a);
-            NDArray idxView = null;   // step-7 broadcast view of idx64; retains idx64's (possibly fresh) block
-            try
-            {
 
             // ── 4) common broadcast shape of (all choices + index) ────────────────────────
             var shapes = new Shape[n + 1];
@@ -208,7 +263,7 @@ namespace NumSharp
                 chViews[i] = v;
                 if (!v.Shape.IsContiguous) allContig = false;
             }
-            idxView = broadcast_to(idx64, common);
+            var idxView = broadcast_to(idx64, common);
             if (!idxView.Shape.IsContiguous) allContig = false;
 
             // ── 8) run the IL kernel (flat when every operand is C-contiguous, else strided) ─
@@ -220,22 +275,6 @@ namespace NumSharp
                 throw new ValueError("invalid entry in choice array");
 
             return FinishChoose(result, @out);
-            }
-            finally
-            {
-                // Release the pooled int64 index buffer we allocated (never `a`, the caller's array).
-                // When idx64 is fresh its broadcast VIEW also references that pooled block, so the view
-                // must be released FIRST or the buffer never returns to the pool (the leak the zero-leak
-                // gate flagged for a non-int64 index). Guarded to a fresh idx64 AND a distinct view
-                // object, so a caller array (idx64 == a) and the no-broadcast identity (idxView == idx64)
-                // are never double-disposed or wrongly freed. The choice views (chViews) alias the
-                // caller's own choice arrays, so they take no pooled buffer and need no disposal here.
-                if (idx64Owned)
-                {
-                    if (idxView is not null && !ReferenceEquals(idxView, idx64)) idxView.Dispose();
-                    idx64.Dispose();
-                }
-            }
         }
 
         /// <summary>

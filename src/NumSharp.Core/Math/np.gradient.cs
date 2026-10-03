@@ -456,6 +456,11 @@ namespace NumSharp
         ///     the edge returns, and the result is yielded to the caller. <paramref name="hi"/> and
         ///     <paramref name="lo"/> are views the caller built before this scope opened, so this method no longer
         ///     disposes them: <c>GradientImpl</c>'s own scope releases them.
+        ///     <para>This helper keeps a scope of its own instead of <c>[NDScopedCovered]</c>, although its only
+        ///     caller is scoped. An edge slice holds one hyperplane of the input, which is as large as the whole
+        ///     array divided by the axis length: along a short axis (length 3, say) each temporary here is a third
+        ///     of the input. <c>GradientImpl</c>'s scope would hold them until every axis is done. The nested scope
+        ///     costs one scope allocation per call (about 220 bytes), two calls per gradient axis.</para>
         /// </remarks>
         [NDScoped]
         private static NDArray Edge1(NDArray hi, NDArray lo, double d, bool uniform, DType widenTo)
@@ -506,6 +511,9 @@ namespace NumSharp
         ///     partial sum are released when the edge returns, and the result is yielded to the caller. The three
         ///     slices are views the caller built before this scope opened, so this method no longer disposes them:
         ///     <c>GradientImpl</c>'s own scope releases them.
+        ///     <para>This helper keeps a scope of its own instead of <c>[NDScopedCovered]</c> for the reason given
+        ///     on <see cref="Edge1"/>: the widened slices, the products and the partial sum are each one hyperplane
+        ///     of the input, and the caller's scope would hold them until every axis is done.</para>
         /// </remarks>
         [NDScoped]
         private static NDArray Edge2(NDArray f0, NDArray f1, NDArray f2, double a, double b, double c, bool uniform, DType widenTo)

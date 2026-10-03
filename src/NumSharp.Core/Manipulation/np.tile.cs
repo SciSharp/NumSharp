@@ -30,6 +30,19 @@ namespace NumSharp
         ///     Construct an array by repeating <paramref name="A"/> the number of times given by <paramref name="reps"/>.
         ///     <para>Long overload — see <see cref="tile(NDArray, int[])"/>.</para>
         /// </summary>
+        /// <param name="A">The input array.</param>
+        /// <param name="reps">The number of repetitions of A along each axis. Each rep must be non-negative.</param>
+        /// <returns>The tiled output array (see <see cref="tile(NDArray, int[])"/>).</returns>
+        /// <exception cref="ArgumentNullException">If <paramref name="A"/> or <paramref name="reps"/> is null.</exception>
+        /// <exception cref="ArgumentException">If any element of <paramref name="reps"/> is negative.</exception>
+        /// <remarks>
+        ///     Scoped by <c>[NDScoped]</c>: the interleaved reshape of <paramref name="A"/>, its broadcast view and the
+        ///     materialized copy are released on return, and the final reshape (a view that holds its own reference on
+        ///     the copy's buffer) is yielded. On the all-ones path the reshape of a lower-rank <paramref name="A"/> is
+        ///     released too; it was left to the finalizer before. The <c>int[]</c> overload delegates here, so it
+        ///     needs no scope of its own.
+        /// </remarks>
+        [NDScoped]
         public static NDArray tile(NDArray A, long[] reps)
         {
             if (A is null) throw new ArgumentNullException(nameof(A));
@@ -100,12 +113,13 @@ namespace NumSharp
 
             // promoted is a new wrapper (view or copy depending on A's contiguity);
             // broadcasted is a stride-0 broadcast view of promoted; contiguous is a
-            // fresh materialized copy. All three are owning intermediates that the
-            // final reshape doesn't keep — the returned NDArray shares contiguous's
-            // storage but holds its own ARC ref via InitializeArc.
-            using var promoted = A.reshape(new Shape(interleaved));
-            using var broadcasted = broadcast_to(promoted, new Shape(broadcastTarget));
-            using var contiguous = broadcasted.copy();
+            // fresh materialized copy. All three are intermediates that the final
+            // reshape doesn't keep, released by this method's scope — the returned
+            // NDArray shares contiguous's storage but holds its own ARC ref via
+            // InitializeArc, so releasing contiguous does not free that buffer.
+            var promoted = A.reshape(new Shape(interleaved));
+            var broadcasted = broadcast_to(promoted, new Shape(broadcastTarget));
+            var contiguous = broadcasted.copy();
             return contiguous.reshape(new Shape(outShape));
         }
 

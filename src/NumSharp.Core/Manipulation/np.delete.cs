@@ -64,7 +64,8 @@ namespace NumSharp
         // and WithSourceOrder mints an asfortranarray copy for an F-contiguous source (orphaning the
         // C-contiguous intermediate). None were reclaimed (measured: one bucketed buffer escaped per
         // delete). [NDScoped] reclaims them all while yielding the fresh result; a passthrough `work`
-        // (already 1-D input) is never tracked, and the bool-path's hand-disposed keepArr is idempotent.
+        // (already 1-D input) is never tracked. The DeleteXxx helpers are [NDScopedCovered] and the
+        // bool paths' keepArr is left to the scope too: no member of this family disposes by hand.
         [NDScoped]
         public static NDArray delete(NDArray arr, long obj, int? axis = null)
         {
@@ -123,6 +124,14 @@ namespace NumSharp
         ///     inversion. Length must match the targeted axis size (NumPy raises
         ///     <c>ValueError</c> otherwise).
         /// </summary>
+        /// <param name="arr">Input array.</param>
+        /// <param name="obj">True at each position to remove along <paramref name="axis"/>.</param>
+        /// <param name="axis">The axis to delete along; <c>null</c> deletes from the flattened array.</param>
+        /// <returns>A fresh array without the masked sub-arrays (F-ordered when <paramref name="arr"/> is).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="arr"/> or <paramref name="obj"/> is null.</exception>
+        /// <exception cref="ArgumentException"><paramref name="obj"/>'s length differs from the axis length.</exception>
+        /// <remarks>Scoped by <c>[NDScoped]</c>: the ravel work array, the keep mask and the C-order result that an
+        ///     F-ordered relabel supersedes are released on return.</remarks>
         [NDScoped]
         public static NDArray delete(NDArray arr, bool[] obj, int? axis = null)
         {
@@ -141,9 +150,9 @@ namespace NumSharp
             var keep = new bool[obj.Length];
             for (int i = 0; i < obj.Length; i++) keep[i] = !obj[i];
 
+            // keepArr is released by this method's scope (exceptions included).
             var keepArr = np.array(keep);
-            try { return WithSourceOrder(arr, np.compress(keepArr, ctx.work, ctx.axis)); }
-            finally { keepArr.Dispose(); }
+            return WithSourceOrder(arr, np.compress(keepArr, ctx.work, ctx.axis));
         }
 
         /// <summary>
@@ -152,6 +161,16 @@ namespace NumSharp
         ///     integer arrays collapse to the scalar-index fast path (matching
         ///     NumPy's <c>obj.size == 1 and obj.dtype.kind in "ui": obj = obj.item()</c>).
         /// </summary>
+        /// <param name="arr">Input array.</param>
+        /// <param name="obj">A boolean mask (removed where true) or an integer index array.</param>
+        /// <param name="axis">The axis to delete along; <c>null</c> deletes from the flattened array.</param>
+        /// <returns>A fresh array without the selected sub-arrays (F-ordered when <paramref name="arr"/> is).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="arr"/> or <paramref name="obj"/> is null.</exception>
+        /// <exception cref="ArgumentException">A boolean <paramref name="obj"/> is not 1-D or its length differs
+        ///     from the axis length, or <paramref name="obj"/>'s dtype is neither boolean nor integer.</exception>
+        /// <exception cref="IndexOutOfRangeException">An index is outside <c>[-N, N)</c>.</exception>
+        /// <remarks>Scoped by <c>[NDScoped]</c>: the ravel work array, the keep mask, the helpers' chunk views and
+        ///     the C-order result that an F-ordered relabel supersedes are released on return.</remarks>
         [NDScoped]
         public static NDArray delete(NDArray arr, NDArray obj, int? axis = null)
         {
@@ -173,9 +192,9 @@ namespace NumSharp
                 // bitwise-not over a possibly-strided NDArray.
                 bool[] keep = new bool[N];
                 for (long i = 0; i < N; i++) keep[i] = !obj.GetBoolean((int)i);
+                // keepArr is released by this method's scope (exceptions included).
                 var keepArr = np.array(keep);
-                try { return WithSourceOrder(arr, np.compress(keepArr, ctx.work, ctx.axis)); }
-                finally { keepArr.Dispose(); }
+                return WithSourceOrder(arr, np.compress(keepArr, ctx.work, ctx.axis));
             }
 
             // Integer obj. Size-1 ⇒ collapse to scalar path (NumPy parity).
@@ -292,6 +311,14 @@ namespace NumSharp
         ///     Single-chunk fall-throughs route through <see cref="np.copy"/>
         ///     to produce an owning C-contig duplicate.
         /// </summary>
+        /// <param name="arr">The working array (the input, or its ravel for <c>axis=None</c>).</param>
+        /// <param name="obj">The index to remove; negative values count from the end.</param>
+        /// <param name="axis">The normalized axis.</param>
+        /// <returns>A fresh array without the sub-array at <paramref name="obj"/>.</returns>
+        /// <exception cref="IndexOutOfRangeException"><paramref name="obj"/> is outside <c>[-N, N)</c>.</exception>
+        /// <remarks>Covered by <c>[NDScopedCovered]</c>: its callers are the <c>[NDScoped]</c> <c>delete</c>
+        ///     overloads, so the pre/post views are released by the caller's scope, exceptions included.</remarks>
+        [NDScopedCovered]
         private static NDArray DeleteSingleIndex(NDArray arr, long obj, int axis)
         {
             long N = arr.shape[axis];
@@ -303,13 +330,9 @@ namespace NumSharp
             var pre = SliceAlongAxis(arr, axis, 0, obj);
             var post = SliceAlongAxis(arr, axis, obj + 1, N);
 
-            try
-            {
-                if (pre.shape[axis] == 0) return np.copy(post);
-                if (post.shape[axis] == 0) return np.copy(pre);
-                return np.concatenate(new[] { pre, post }, axis);
-            }
-            finally { pre.Dispose(); post.Dispose(); }
+            if (pre.shape[axis] == 0) return np.copy(post);
+            if (post.shape[axis] == 0) return np.copy(pre);
+            return np.concatenate(new[] { pre, post }, axis);
         }
 
         /// <summary>
@@ -319,6 +342,14 @@ namespace NumSharp
         ///     keep-mask path which is identical to the array-obj path with the
         ///     slice expanded.
         /// </summary>
+        /// <param name="arr">The working array (the input, or its ravel for <c>axis=None</c>).</param>
+        /// <param name="obj">The slice of positions to remove, read as Python's <c>slice.indices(N)</c>.</param>
+        /// <param name="axis">The normalized axis.</param>
+        /// <returns>A fresh array without the sliced sub-arrays.</returns>
+        /// <remarks>Covered by <c>[NDScopedCovered]</c>: its only caller is the <c>[NDScoped]</c> slice overload of
+        ///     <c>delete</c>, so the pre/post views of the step-1 path are released by the caller's scope, exceptions
+        ///     included.</remarks>
+        [NDScopedCovered]
         private static NDArray DeleteSlice(NDArray arr, Slice obj, int axis)
         {
             long N = arr.shape[axis];
@@ -361,13 +392,9 @@ namespace NumSharp
             {
                 var pre = SliceAlongAxis(arr, axis, 0, start);
                 var post = SliceAlongAxis(arr, axis, stop, N);
-                try
-                {
-                    if (pre.shape[axis] == 0) return np.copy(post);
-                    if (post.shape[axis] == 0) return np.copy(pre);
-                    return np.concatenate(new[] { pre, post }, axis);
-                }
-                finally { pre.Dispose(); post.Dispose(); }
+                if (pre.shape[axis] == 0) return np.copy(post);
+                if (post.shape[axis] == 0) return np.copy(pre);
+                return np.concatenate(new[] { pre, post }, axis);
             }
 
             // Strided slice: expand to indices array and route through the mask path.
@@ -391,6 +418,16 @@ namespace NumSharp
         ///             exactly once, beats chunk-concat when chunks would be tiny.</item>
         ///     </list>
         /// </summary>
+        /// <param name="arr">The working array (the input, or its ravel for <c>axis=None</c>).</param>
+        /// <param name="indices">The positions to remove; normalized in place (negative values count from the end).
+        ///     The caller passes an array it owns (a copy of the user's).</param>
+        /// <param name="axis">The normalized axis.</param>
+        /// <returns>A fresh array without the indexed sub-arrays.</returns>
+        /// <exception cref="IndexOutOfRangeException">An index is outside <c>[-N, N)</c>.</exception>
+        /// <remarks>Covered by <c>[NDScopedCovered]</c>: its callers are the <c>[NDScoped]</c> <c>delete</c>
+        ///     overloads and the covered <see cref="DeleteSlice"/>, so the dense path's keep mask is released by the
+        ///     caller's scope, exceptions included.</remarks>
+        [NDScopedCovered]
         private static NDArray DeleteIndexArray(NDArray arr, long[] indices, int axis)
         {
             long N = arr.shape[axis];
@@ -420,9 +457,9 @@ namespace NumSharp
             for (long i = 0; i < N; i++) keep[i] = true;
             for (int k = 0; k < indices.Length; k++) keep[indices[k]] = false;
 
+            // keepArr is released by the caller's scope (exceptions included).
             var keepArr = np.array(keep);
-            try { return np.compress(keepArr, arr, axis); }
-            finally { keepArr.Dispose(); }
+            return np.compress(keepArr, arr, axis);
         }
 
         /// <summary>
@@ -439,6 +476,12 @@ namespace NumSharp
         ///     between deleted positions. Equivalent to the bool-mask + compress
         ///     path but skips the O(N) mask scan.
         /// </summary>
+        /// <param name="arr">The working array.</param>
+        /// <param name="indices">The normalized, in-bounds positions to remove; sorted and deduplicated in place.</param>
+        /// <param name="axis">The normalized axis.</param>
+        /// <returns>The concatenation of the kept chunks, or an empty array when every position is removed.</returns>
+        /// <remarks>Its chunk views are released by the caller's scope; they share <paramref name="arr"/>'s buffer,
+        ///     so holding them until that scope closes keeps no extra memory alive.</remarks>
         [NDScopedCovered] // only caller: DeleteIndexArray ← the [NDScoped] delete overloads
         private static NDArray DeleteChunkConcat(NDArray arr, long[] indices, int axis)
         {
@@ -456,46 +499,38 @@ namespace NumSharp
 
             // Build chunks: arr[prev:idx_0], arr[idx_0+1:idx_1], ..., arr[idx_{n-1}+1:N].
             // The first chunk uses prev=0; subsequent chunks use prev = idx_{k-1}+1.
-            // Skip zero-length chunks so concatenate sees only real data.
+            // Skip zero-length chunks so concatenate sees only real data. The chunk views are
+            // released by the caller's scope (they share arr's buffer, so holding them until the
+            // scope closes keeps no extra memory alive).
             var chunks = new System.Collections.Generic.List<NDArray>(unique + 1);
-            var disposable = new System.Collections.Generic.List<NDArray>(unique + 1);
-            try
+            long prev = 0;
+            for (int k = 0; k < unique; k++)
             {
-                long prev = 0;
-                for (int k = 0; k < unique; k++)
+                long idx = indices[k];
+                if (idx > prev)
                 {
-                    long idx = indices[k];
-                    if (idx > prev)
-                    {
-                        var chunk = SliceAlongAxis(arr, axis, prev, idx);
-                        chunks.Add(chunk);
-                        disposable.Add(chunk);
-                    }
-                    prev = idx + 1;
+                    var chunk = SliceAlongAxis(arr, axis, prev, idx);
+                    chunks.Add(chunk);
                 }
-                if (prev < N)
-                {
-                    var tail = SliceAlongAxis(arr, axis, prev, N);
-                    chunks.Add(tail);
-                    disposable.Add(tail);
-                }
-
-                if (chunks.Count == 0)
-                {
-                    // Every axis position was deleted ⇒ allocate an empty
-                    // result with axis dim 0 (NumPy parity).
-                    var emptyDims = new long[arr.ndim];
-                    for (int d = 0; d < arr.ndim; d++) emptyDims[d] = arr.shape[d];
-                    emptyDims[axis] = 0;
-                    return new NDArray(arr.GetTypeCode, new Shape(emptyDims), false);
-                }
-
-                return np.concatenate(chunks.ToArray(), axis);
+                prev = idx + 1;
             }
-            finally
+            if (prev < N)
             {
-                foreach (var nd in disposable) nd.Dispose();
+                var tail = SliceAlongAxis(arr, axis, prev, N);
+                chunks.Add(tail);
             }
+
+            if (chunks.Count == 0)
+            {
+                // Every axis position was deleted ⇒ allocate an empty
+                // result with axis dim 0 (NumPy parity).
+                var emptyDims = new long[arr.ndim];
+                for (int d = 0; d < arr.ndim; d++) emptyDims[d] = arr.shape[d];
+                emptyDims[axis] = 0;
+                return new NDArray(arr.GetTypeCode, new Shape(emptyDims), false);
+            }
+
+            return np.concatenate(chunks.ToArray(), axis);
         }
 
         /// <summary>

@@ -123,11 +123,14 @@ namespace NumSharp
         /// <exception cref="ArgumentException"><paramref name="a"/> is empty and <paramref name="indices"/> is not.</exception>
         /// <exception cref="TypeError">The index dtype cannot be cast to int64 under <c>same_kind</c> (float/complex).</exception>
         /// <exception cref="ArgumentOutOfRangeException">An index is out of bounds under mode <c>raise</c>.</exception>
-        /// <remarks>Scoped by <c>[NDScoped]</c>: the C-order copy of a non-contiguous source and the int64 copy of
-        /// the indices are released on return, exceptions included. The caller's <paramref name="a"/> and
-        /// <paramref name="indices"/> were built before the scope opened, so a source or index array used as-is
-        /// is never disposed.</remarks>
-        [NDScoped]
+        /// <remarks>Covered by <c>[NDScopedCovered]</c>: the only caller is the <c>[NDScoped]</c>
+        /// <see cref="take(NDArray, NDArray, int?, NDArray, string)"/>, so the C-order copy of a non-contiguous source
+        /// and the int64 copy of the indices are released by that caller's scope, exceptions included. A scope of this
+        /// helper's own would be nested under the caller's and cost one scope allocation per call; the caller returns
+        /// right after this helper, so it would release nothing sooner. The caller's <paramref name="a"/> and
+        /// <paramref name="indices"/> were built before any scope opened, so a source or index array used as-is is
+        /// never disposed.</remarks>
+        [NDScopedCovered]
         private static unsafe NDArray TakeFlat(NDArray a, NDArray indices, int mode)
         {
             // Materialise non-contig source to C-contig so the kernel can walk linearly.
@@ -172,11 +175,14 @@ namespace NumSharp
         /// <exception cref="ArgumentException">The axis is empty and <paramref name="indices"/> is not.</exception>
         /// <exception cref="TypeError">The index dtype cannot be cast to int64 under <c>same_kind</c> (float/complex).</exception>
         /// <exception cref="ArgumentOutOfRangeException">An index is out of bounds under mode <c>raise</c>.</exception>
-        /// <remarks>Scoped by <c>[NDScoped]</c>: the C-order copy of a non-contiguous source and the int64 copy of
-        /// the indices are released on return, exceptions included. The caller's <paramref name="a"/> and
-        /// <paramref name="indices"/> were built before the scope opened, so a source or index array used as-is
-        /// is never disposed.</remarks>
-        [NDScoped]
+        /// <remarks>Covered by <c>[NDScopedCovered]</c>: the only caller is the <c>[NDScoped]</c>
+        /// <see cref="take(NDArray, NDArray, int?, NDArray, string)"/>, so the C-order copy of a non-contiguous source
+        /// and the int64 copy of the indices are released by that caller's scope, exceptions included. A scope of this
+        /// helper's own would be nested under the caller's and cost one scope allocation per call; the caller returns
+        /// right after this helper, so it would release nothing sooner. The caller's <paramref name="a"/> and
+        /// <paramref name="indices"/> were built before any scope opened, so a source or index array used as-is is
+        /// never disposed.</remarks>
+        [NDScopedCovered]
         private static unsafe NDArray TakeAxis(NDArray a, NDArray indices, int axis, int mode)
         {
             NDArray source = a;
