@@ -856,7 +856,7 @@ namespace NumSharp.Tests.Fuzz
             ["poly.jsonl"] = 60,
             ["einsum.jsonl"] = 35,
             ["modf.jsonl"] = 165,   // all non-complex lanes + char (the 59f99320 per-width promotion, dtype-spread gate)
-            ["multioutput.jsonl"] = 51,
+            ["multioutput.jsonl"] = 575,  // 473 before the np.trapezoid section (108: broadcast / unit-axis / permuted / F y, 1-D and N-D x of any rank, bool and wrapping x, three NumPy errors — the NpyIter layout rule) — 581
             ["nanreduce.jsonl"] = 8300,   // + nanpercentile/nanquantile integer/bool degenerate lanes (dtype-spread gate)
             ["nanscan.jsonl"] = 525,   // nancumsum all 13 dtypes; nancumprod carves complex128 (host-FMA multiply)
             ["numpy_f32_kernels.jsonl"] = 140,

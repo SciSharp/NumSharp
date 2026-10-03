@@ -201,10 +201,11 @@ namespace NumSharp.Tests.Fuzz
                         return np.unwrap(ops[0], unwDiscont, unwAxis, pup.GetDouble());
                     return np.unwrap(ops[0], unwDiscont, unwAxis);
                 }
-                // Composite trapezoidal integration (array/scalar result). x=None in the corpus, so
-                // only dx/axis vary; a 1-D operand reduces to a 0-d scalar.
+                // Composite trapezoidal integration (array/scalar result). A second operand is the
+                // coordinate x (1-D or N-D, any layout); without one, dx/axis vary. A 1-D product
+                // reduces to a 0-d scalar.
                 case "trapezoid":
-                    return np.trapezoid(ops[0], null,
+                    return np.trapezoid(ops[0], ops.Length > 1 ? ops[1] : null,
                                         p.ContainsKey("dx") ? p["dx"].GetDouble() : 1.0,
                                         p.ContainsKey("axis") ? p["axis"].GetInt32() : -1);
 

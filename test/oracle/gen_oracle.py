@@ -5489,6 +5489,111 @@ def gen_multioutput():
                        _arr_expected(np.ldexp(xb, eb)), "ldexp/bcast", "array",
                        cid=f"ldexp/bcast/{n}")); n += 1
 
+    # np.trapezoid with a coordinate x and the layouts NumPy's NpyIter rule decides. trapezoid ends in
+    # (d*(y[1:]+y[:-1])/2).sum(axis), and the sum adds a reduced axis that is innermost in memory
+    # pairwise (float16: in float32) and an outer one sequentially, so the layout NumPy's ufuncs give
+    # that half decides the bits. NpyIter lays each output out with every stride-0 OR extent-1 axis
+    # abstaining and C order winning conflicts: a broadcast y, an x with an extent-1 axis against an F
+    # y, a C y with an extent-1 axis against an F x, permuted / F y (whose result is itself F or
+    # permuted), and an x of another rank than y (NumPy hands the RAW axis to diff and to sum). Values
+    # are inexact so a wrong order changes the bits. Errors are recorded stripped (the harness trims
+    # NumSharp's message); y's axis out of range is skipped — NumPy leaks a list IndexError there and
+    # NumSharp's clearer axis error is unit-tested instead.
+    def _trap_vals(nn, dt):
+        vals = ((np.arange(nn) * 37) % 101) * 0.1
+        if np.dtype(dt).kind == "c":
+            return (vals + 1j * (((np.arange(nn) * 53) % 89) * 0.07)).astype(dt)
+        if np.dtype(dt).kind == "b":
+            return ((np.arange(nn) * 37) % 7) < 3
+        if np.dtype(dt).kind in "iu":
+            return ((np.arange(nn) * 37) % 101).astype(dt) * np.array(5, dtype=dt)
+        return vals.astype(dt)
+
+    def trap_emit(tag, ybase, yview, xbase=None, xview=None, params=None):
+        nonlocal n
+        params = dict(params or {})
+        operands = [describe(ybase, yview)] + ([describe(xbase, xview)] if xview is not None else [])
+        cid = f"trapezoid/{tag}/{n}"
+        try:
+            with np.errstate(all="ignore"):
+                r = np.asarray(np.trapezoid(yview, x=xview, dx=params.get("dx", 1.0),
+                                            axis=params.get("axis", -1)))
+        except Exception as e:                       # noqa: BLE001 — every NumPy outcome is recorded
+            if type(e) is IndexError:                # y's slice list; AxisError (an IndexError too) is kept
+                return
+            cases.append({"id": cid, "op": "trapezoid", "params": params, "operands": operands,
+                          "expected": {}, "expects_throw": True,
+                          "error": {"type": type(e).__name__, "text": str(e).strip()},
+                          "layout": tag, "valueclass": "error"})
+            n += 1
+            return
+        cases.append(_case("trapezoid", params, operands, _arr_expected(r), tag, "mixed", cid=cid))
+        n += 1
+
+    for dt in ["float16", "float32", "float64", "complex128", "int32"]:
+        # broadcast y: a stride-0 axis never votes (row, column, and a 3-D broadcast over an F block)
+        row = _trap_vals(7, dt)
+        for ax in (0, 1):
+            trap_emit(f"bcast_row/{dt}", row, np.broadcast_to(row, (33, 7)), params={"axis": ax})
+        col = _trap_vals(6, dt).reshape(6, 1)
+        trap_emit(f"bcast_col/{dt}", col, np.broadcast_to(col, (6, 50)), params={"axis": 1})
+        blk = _trap_vals(54, dt).reshape(9, 6)
+        for ax in (0, 1, 2):
+            trap_emit(f"bcast_3d_F/{dt}", blk, np.broadcast_to(blk.T[None], (4, 6, 9)), params={"axis": ax})
+        # an x whose extent-1 axis abstains, against an F y
+        yb = _trap_vals(240, dt).reshape(40, 6)
+        xr = (np.arange(40) * 0.25).reshape(1, 40).astype(dt if np.dtype(dt).kind == "f" else "float64")
+        trap_emit(f"x_unit_axis_vs_F_y/{dt}", yb, yb.T, xr, xr, {"axis": 1})
+        # a C y with an extent-1 axis, against an F x
+        yc = _trap_vals(40, dt).reshape(1, 40)
+        xf = ((np.arange(240) * 0.125) % 7).reshape(40, 6).astype(dt if np.dtype(dt).kind == "f" else "float64")
+        trap_emit(f"C_y_unit_axis_vs_F_x/{dt}", yc, yc, xf, xf.T, {"axis": 1})
+        # permuted and F 3-D y (the result's layout and the flat route along an inner / outer axis)
+        pb = _trap_vals(120, dt).reshape(5, 6, 4)
+        for ax in (0, 1, 2):
+            trap_emit(f"perm201/{dt}", pb, pb.transpose(2, 0, 1), params={"axis": ax, "dx": 0.5})
+        fb = _trap_vals(120, dt).reshape(6, 5, 4)
+        for ax in (0, 1, 2):
+            trap_emit(f"F_3d/{dt}", fb, fb.T, params={"axis": ax})
+        # a 1-D x along either axis of an F y
+        y2 = _trap_vals(56, dt).reshape(8, 7)
+        x8 = np.arange(8) * 0.5
+        x7 = np.arange(7) * 0.75
+        trap_emit(f"x1d_vs_F_y/{dt}", y2, y2.T, x8, x8, {"axis": 1})
+        trap_emit(f"x1d_vs_F_y/{dt}", y2, y2.T, x7, x7, {"axis": 0})
+        # an N-D x of another rank than y: the raw axis reaches diff (x.ndim) and sum (the product's rank)
+        y8 = _trap_vals(8, dt)
+        x3 = ((np.arange(48) * 0.375) % 5.5).reshape(3, 2, 8)
+        trap_emit(f"x_higher_rank/{dt}", y8, y8, x3, x3, {})
+        y23 = _trap_vals(6, dt).reshape(2, 3)
+        x4 = ((np.arange(24) * 0.625) % 4.25).reshape(4, 2, 3)
+        for ax in (-1, 0):
+            trap_emit(f"x_higher_rank/{dt}", y23, y23, x4, x4, {"axis": ax})
+        y3 = _trap_vals(30, dt).reshape(5, 3, 2)
+        x2 = ((np.arange(6) * 0.5) % 2.75).reshape(3, 2)
+        trap_emit(f"x_lower_rank/{dt}", y3, y3, x2, x2, {})
+    # the flat route over long float16 rows (pairwise in float32 across many blocks)
+    lr = _trap_vals(900, "float16").reshape(3, 300)
+    trap_emit("flat_long_rows/float16", lr, lr, params={"axis": 1, "dx": 0.5})
+    trap_emit("flat_long_rows/float16", lr, lr.T, params={"axis": 0, "dx": 0.5})
+    # bool and wrapping-integer coordinates: NumPy's diff is not_equal / subtract in x's dtype
+    yv = _trap_vals(10, "float64").reshape(2, 5)
+    xbool = np.array([[True, False, False, True, True], [False, False, True, True, False]])
+    trap_emit("x_bool/float64", yv, yv, xbool, xbool, {"axis": 1})
+    xu8 = np.array([[10, 5, 7, 7, 250], [0, 255, 1, 200, 3]], dtype=np.uint8)
+    xu8f = xu8.T.copy()                               # its .T is xu8's values, F-ordered
+    trap_emit("x_uint8_wrap/float64", yv, yv, xu8f, xu8f.T, {"axis": 1})
+    yi8 = np.array([[100, 90, -128, 127, 5], [-100, -90, 120, 7, -128]], dtype=np.int8)
+    trap_emit("y_int8_wrap/x_int8", yi8, yi8, yi8, yi8, {"axis": 1})
+    # errors, NumPy's text: a spacing that does not broadcast, a 0-d x, an axis outside x
+    e2 = np.ones((2, 3))
+    xe = np.ones((2, 5))
+    trap_emit("err_broadcast", e2, e2, xe, xe, {"axis": 1})
+    x0 = np.array([2.5])
+    trap_emit("err_x_0d", e2, e2, x0, x0.reshape(()), {"axis": 1})
+    x3e = np.ones((2, 2, 3))
+    trap_emit("err_axis_outside_x", e2, e2, x3e, x3e, {"axis": 5})
+
     return cases
 
 

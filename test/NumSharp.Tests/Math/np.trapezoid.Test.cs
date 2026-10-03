@@ -301,5 +301,185 @@ namespace NumSharp.Tests.Math
             BitConverter.DoubleToUInt64Bits(rC.GetAtIndex<System.Numerics.Complex>(0).Real)
                 .Should().Be(4611940808611965019);
         }
+
+        // ------------------- NpyIter layout rule (broadcast y, unit-axis x, F x) -------------------
+        // NumPy lays out every ufunc output with NpyIter's rule, where an operand abstains on an axis
+        // with extent 1 OR stride 0 (a broadcast axis). The earlier relayout used concatenate's vote
+        // (abstaining only on extent 1), let an N-D x vote with the result's dims, and skipped a
+        // C-contiguous y entirely — three layouts whose sum ran in the wrong order. Each test pins NumPy
+        // 2.4.2's bits and the bits the wrong layout gives, so it fails if the layout regresses.
+
+        /// <summary><c>((arange(n) * 37) % 101) * 0.1</c>: inexact values, so the summation order shows.</summary>
+        private static NDArray Inexact(long n) => ((np.arange(n) * 37) % 101) * 0.1;
+
+        /// <summary><c>((arange(n) * 37) % 101) / 64.0</c>: values exact in float16.</summary>
+        private static NDArray Sixtyfourths(long n) => ((np.arange(n) * 37) % 101) / 64.0;
+
+        /// <summary>Raw uint64 bit patterns of a float64 result, in C-order.</summary>
+        private static ulong[] DoubleBitsOf(NDArray a)
+        {
+            var r = new ulong[a.size];
+            for (int i = 0; i < r.Length; i++) r[i] = BitConverter.DoubleToUInt64Bits(a.GetAtIndex<double>(i));
+            return r;
+        }
+
+        [TestMethod]
+        public void Trapezoid_BroadcastRowY_SumsInNumpysOrder()
+        {
+            // y = broadcast_to(row, (33, 7)): axis 0 has stride 0, so it casts no vote and the half is C —
+            // axis 0 is summed sequentially. The old vote made the stride-0 axis the innermost one (F),
+            // summing it pairwise (float16: in float32).
+            var y16 = np.broadcast_to(Inexact(7).astype(np.float16), new Shape(33, 7));
+            var r16 = np.trapezoid(y16, axis: 0);
+            HalfBitsOf(r16).Should().Equal(new ushort[] { 0, 22370, 23394, 20480, 22707, 23602, 21504 });
+
+            // Non-vacuous: the same half summed F-ordered gives NumPy's other answer.
+            var h16 = (y16["1:"] + y16[":-1"]) * 1.0 / 2.0;
+            HalfBitsOf(np.sum(np.asfortranarray(h16), 0)).Should()
+                .Equal(new ushort[] { 0, 22374, 23398, 20480, 22707, 23603, 21504 });
+
+            var y64 = np.broadcast_to(Inexact(7), new Shape(33, 7));
+            DoubleBitsOf(np.trapezoid(y64, axis: 0)).Should().Equal(new ulong[]
+            {
+                0, 4638032076247505310, 4642535675874875806, 4629700416936869888, 4639495746126400717,
+                4643436395800349902, 4634204016564240384,
+            });
+        }
+
+        [TestMethod]
+        public void Trapezoid_XWithUnitAxis_AgainstFOrderedY_SumsInNumpysOrder()
+        {
+            // x (1, 40) has one axis of extent > 1, so it never votes: y's F order lays the half out and
+            // axis 1 (outer in memory) is summed sequentially. The old vote let x vote with the RESULT's
+            // dims, C won the conflict, and axis 1 was summed pairwise ([18364, 18312, 18260, ...]).
+            var y = np.asfortranarray(Sixtyfourths(240).astype(np.float16).reshape(6, 40));
+            var x = (np.arange(40) * 0.25).reshape(1, 40).astype(np.float16);
+            HalfBitsOf(np.trapezoid(y, x, axis: 1)).Should()
+                .Equal(new ushort[] { 18361, 18308, 18256, 18357, 18356, 18304 });
+        }
+
+        [TestMethod]
+        public void Trapezoid_CContiguousYWithUnitAxis_AgainstFOrderedX_SumsInNumpysOrder()
+        {
+            // y (1, 40) is C-contiguous but has one axis of extent > 1, so only the F-ordered x's
+            // difference votes and the half is F. The old code skipped every C-contiguous y and summed
+            // C-ordered ([17340, 49985, 49201, ...]).
+            var y = Sixtyfourths(40).astype(np.float16).reshape(1, 40);
+            var x = np.asfortranarray(((np.arange(240) * 0.125) % 7).astype(np.float16).reshape(6, 40));
+            HalfBitsOf(np.trapezoid(y, x, axis: 1)).Should()
+                .Equal(new ushort[] { 17337, 49989, 49203, 17337, 50278, 49595 });
+        }
+
+        [TestMethod]
+        public void Trapezoid_FlatRoute_Float16LongRows()
+        {
+            // A dense y integrated along its innermost memory axis runs as one contiguous pass; the
+            // 299-sample rows are summed pairwise in float32 like NumPy's (sequential gives
+            // [22344, 22344, 22347]).
+            var y = Sixtyfourths(900).astype(np.float16).reshape(3, 300);
+            HalfBitsOf(np.trapezoid(y, dx: 0.5, axis: 1)).Should().Equal(new ushort[] { 22348, 22346, 22351 });
+            var yf = np.asfortranarray(y.T.copy());     // (300, 3) F: axis 0 is innermost
+            HalfBitsOf(np.trapezoid(yf, dx: 0.5, axis: 0)).Should().Equal(new ushort[] { 22348, 22346, 22351 });
+        }
+
+        [TestMethod]
+        public void Trapezoid_ResultLayout_FollowsNumpysReduction()
+        {
+            // NumPy's reduction lays its result out along the half's remaining axes in memory order.
+            var f = np.asfortranarray(Inexact(120).reshape(4, 5, 6));
+            var rf = np.trapezoid(f, axis: 0);
+            rf.Shape.IsFContiguous.Should().BeTrue("an F half (4,5,6) reduced over axis 0 is (5,6) F in NumPy");
+            rf.Shape.IsContiguous.Should().BeFalse();
+
+            var p = Inexact(120).reshape(5, 6, 4).transpose(new[] { 2, 0, 1 });   // (4,5,6), strides (1,24,4)
+            var rp = np.trapezoid(p, axis: 1);
+            rp.shape.Should().Equal(4, 6);
+            rp.Shape.IsFContiguous.Should().BeTrue("NumPy: strides (8, 32) bytes");
+            rp.Shape.strides.Should().Equal(1, 4);
+        }
+
+        // ------------------- the axis, read the way NumPy reads it -------------------
+
+        [TestMethod]
+        public void Trapezoid_XOfHigherRank_DiffsAndSumsItsOwnLastAxis()
+        {
+            // NumPy passes the RAW axis to diff(x, axis) and .sum(axis): a higher-rank x is differenced
+            // along its own last axis and the product's last axis is summed.
+            var x = ((np.arange(48) * 0.375) % 5.5).reshape(3, 2, 8);
+            var r = np.trapezoid(Inexact(8), x);
+            r.shape.Should().Equal(3, 2);
+            DoubleBitsOf(r).Should().Equal(new ulong[]
+            {
+                4622533360342374811, 13845138377885614078, 4622533360342374811, 13848943567727021260,
+                4622533360342374811, 13840019051746689024,
+            });
+
+            var x2 = ((np.arange(24) * 0.625) % 4.25).reshape(4, 2, 3);
+            var r2 = np.trapezoid(Inexact(6).reshape(2, 3), x2);
+            r2.shape.Should().Equal(4, 2);
+            DoubleBitsOf(r2).Should().Equal(new ulong[]
+            {
+                4616893305496535040, 4618300680380088320, 13837844657551599207, 4618300680380088320,
+                13849402723782780519, 4618300680380088320, 4616893305496535040, 4618300680380088320,
+            });
+
+            // axis 0: x's axis 0 is differenced, y's axis 0 sliced, the product's axis 0 summed.
+            var r3 = np.trapezoid(Inexact(6).reshape(2, 3), x2, axis: 0);
+            r3.shape.Should().Equal(2, 3);
+            DoubleBitsOf(r3).Should().Equal(new ulong[]
+            {
+                4608871268660281344, 4622691690016774554, 4626808261551167898, 13828302655841107968,
+                13842151224695272244, 13846232611857576756,
+            });
+        }
+
+        [TestMethod]
+        public void Trapezoid_XErrorsComeBeforeYAxisErrors()
+        {
+            // NumPy resolves the spacing before slicing y: a 0-D x fails in diff even when y is 0-D, and an
+            // axis outside an N-D x is reported against x's rank.
+            Action zeroD = () => np.trapezoid(np.array(5.0), np.array(2.0));
+            zeroD.Should().Throw<ArgumentException>().WithMessage("diff requires input that is at least one dimensional*");
+
+            Action outsideX = () => np.trapezoid(np.ones(new Shape(2, 3)), np.ones(new Shape(2, 2, 3)), axis: 5);
+            outsideX.Should().Throw<ArgumentOutOfRangeException>().WithMessage("axis 5 is out of bounds for array of dimension 3*");
+
+            // An axis inside x but outside y fails at y's slicing (NumPy: IndexError).
+            Action outsideY = () => np.trapezoid(np.ones(new Shape(2, 3)), np.ones(new Shape(2, 2, 3)), axis: 2);
+            outsideY.Should().Throw<ArgumentOutOfRangeException>().WithMessage("axis 2 is out of bounds for array of dimension 2*");
+
+            // A spacing that does not broadcast: NumPy's multiply error, verbatim.
+            Action mismatch = () => np.trapezoid(np.ones(new Shape(2, 3)), np.ones(new Shape(2, 5)), axis: 1);
+            mismatch.Should().Throw<IncorrectShapeException>()
+                .WithMessage("operands could not be broadcast together with shapes (2,4) (2,2) ");
+        }
+
+        // ------------------- the N-D difference, computed in the fused pass -------------------
+
+        [TestMethod]
+        public void Trapezoid_BoolX_DiffsByNotEqual()
+        {
+            // NumPy's diff of a bool array is not_equal, so d is 0/1.
+            var y = Inexact(10).reshape(2, 5);
+            var xb = np.array(new bool[,] { { true, false, false, true, true }, { false, false, true, true, false } });
+            DoubleBitsOf(np.trapezoid(y, xb, axis: 1)).Should().Equal(new ulong[] { 4618497712863785780, 4621847265086642586 });
+
+            // bool y with bool x: or-sum times and-product, then the float division.
+            var yb = np.array(new bool[,] { { true, false, true, true, false }, { true, true, false, false, true } });
+            var r = np.trapezoid(yb, xb, axis: 1);
+            r.dtype.Should().Be(np.float64);
+            r.Data<double>().Should().Equal(new[] { 1.0, 1.0 });
+        }
+
+        [TestMethod]
+        public void Trapezoid_Uint8X_DiffWrapsAtUint8()
+        {
+            // The difference wraps in x's own dtype before it meets y (5 - 10 → 251), as NumPy's diff does.
+            var y = Inexact(10).reshape(2, 5);
+            var xu = np.array(new byte[,] { { 10, 5, 7, 7, 250 }, { 0, 255, 1, 200, 3 } });
+            var r = np.trapezoid(y, xu, axis: 1);
+            DoubleBitsOf(r).Should().Equal(new ulong[] { 4652851733771321344, 4659259577586837095 });
+            r.GetDouble(0).Should().Be(1168.0);
+        }
     }
 }

@@ -1946,7 +1946,7 @@ namespace NumSharp
         ///     <c>np.transpose(x, perm)</c> — perm = that layout's axes in memory order (<see cref="Shape.DenseAxisOrder"/>)
         ///     — and its C-ordered result is RELABELLED with NumPy's layout: a C-contiguous buffer of the transposed dims
         ///     is exactly that layout's buffer, so no element moves and the array keeps owning its data
-        ///     (<see cref="AdoptLayout"/>).</para>
+        ///     (<see cref="NDArray.AdoptLayout"/>).</para>
         ///     <para>Writing NumPy's layout directly is the obvious alternative, and it is 2.7× slower: NDIter walks a
         ///     pair of operands sharing a permuted layout in LOGICAL order, gathering every element from both
         ///     (measured, 32³ float64 transposed (2,0,1): <c>np.evaluate</c> into the matching layout 40.6 µs, into a C
@@ -1982,7 +1982,7 @@ namespace NumSharp
             NDArray xv = np.transpose(xa, layout.DenseAxisOrder());
             try
             {
-                return PolyNumber.FromArray(AdoptLayout(MapDomainIntoC(xv, off, scl, t1, t2, sclP, offP), layout));
+                return PolyNumber.FromArray(NDArray.AdoptLayout(MapDomainIntoC(xv, off, scl, t1, t2, sclP, offP), layout));
             }
             finally
             {
@@ -2004,7 +2004,7 @@ namespace NumSharp
         /// <param name="sclP">The scale as a 0-d parameter of <paramref name="t1"/>.</param>
         /// <param name="offP">The offset as a 0-d parameter of <paramref name="t2"/>.</param>
         /// <returns>A new C-contiguous array of <paramref name="xa"/>'s shape — the caller relabels it when NumPy's layout
-        ///     differs (<see cref="AdoptLayout"/> checks this contract instead of trusting it).</returns>
+        ///     differs (<see cref="NDArray.AdoptLayout"/> checks this contract instead of trusting it).</returns>
         /// <exception cref="OverflowException">A Python int that does not fit its loop dtype.</exception>
         private static NDArray MapDomainIntoC(NDArray xa, in PolyNumber off, in PolyNumber scl, NPTypeCode t1, NPTypeCode t2,
                                               NDArray sclP, NDArray offP)
@@ -2049,56 +2049,12 @@ namespace NumSharp
             NDArray staged = StageMapDomainPoints(xa, t1);
             try
             {
-                // np.evaluate allocates its result C-ordered; AdoptLayout checks that rather than trusting it.
+                // np.evaluate allocates its result C-ordered; NDArray.AdoptLayout checks that rather than trusting it.
                 return np.evaluate(NDExpr.Arr(offP) + NDExpr.Arr(sclP) * NDExpr.Arr(staged ?? xa));
             }
             finally
             {
                 staged?.Dispose();
-            }
-        }
-
-        /// <summary>
-        ///     Turns a route's C-ordered result over the transposed points into NumPy's result layout: relabels its
-        ///     storage with <paramref name="layout"/> in place (<see cref="UnmanagedStorage.SetShapeUnsafe(Shape)"/>, the
-        ///     ndarray.shape setter's mechanism) — no element moves, and the array keeps owning its buffer, as NumPy's
-        ///     ufunc result does.
-        /// </summary>
-        /// <param name="r">The route's result over the transposed points <c>np.transpose(x, layout.DenseAxisOrder())</c>
-        ///     (consumed: returned relabelled, or disposed after its values are copied).</param>
-        /// <param name="layout">NumPy's layout (dense, non-empty) of the caller's x.</param>
-        /// <returns>The values in <paramref name="layout"/>.</returns>
-        /// <remarks>
-        ///     Correct because a C-contiguous buffer of the transposed dims stores element <c>x[j0, …, jn]</c> at
-        ///     <c>Σ j_a·layout.strides[a]</c>: the transposed dims put the axes in the layout's memory order, so each
-        ///     axis's C stride over them is the product of the extents inside it — the layout's stride. The routes
-        ///     all allocate a fresh C-contiguous, offset-0 result; should one ever return anything else, the values are
-        ///     copied through the C-contiguous transposed view of a fresh <paramref name="layout"/> array instead
-        ///     (a copy between two same-ordered views, never NDIter's permuted walk).
-        /// </remarks>
-        private static NDArray AdoptLayout(NDArray r, Shape layout)
-        {
-            if (r.Shape.IsContiguous && r.Shape.offset == 0 && r.Storage.Count == layout.size && r.size == layout.size)
-            {
-                r.Storage.SetShapeUnsafe(layout);
-                return r;
-            }
-
-            NDArray o = null, ov = null;
-            try
-            {
-                o = new NDArray(r.typecode, layout, false);
-                ov = np.transpose(o, layout.DenseAxisOrder());   // C-contiguous over xv's dims
-                np.copyto(ov, r);
-                var done = o;
-                o = null;
-                return done;
-            }
-            finally
-            {
-                ov?.Dispose();
-                o?.Dispose();   // non-null only when the copy threw
-                r.Dispose();
             }
         }
 
