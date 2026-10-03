@@ -154,9 +154,10 @@ namespace NumSharp.Backends
         /// </para>
         /// <para>
         /// float16 and complex128 have no SIMD loop in NumPy — <c>HALF_fmax</c> / <c>CDOUBLE_fmax</c> are sequential — and
-        /// run <see cref="NanMinMaxSequential"/> on every layout (a flat C-contiguous float16 keeps its bit-level kernel,
-        /// which implements the same rule): NaN elements skipped (complex: a NaN in either part), a tie keeping the
-        /// EARLIER element in NumPy's visiting order, an all-NaN reduction returning its first NaN verbatim. Complex used
+        /// fold in NumPy's visiting order on every layout: float16 through the bit-level SIMD walks it shares with np.max /
+        /// np.min (<see cref="HalfMinMaxReduce"/>), complex128 through <see cref="NanMinMaxSequential"/>. NaN elements
+        /// skipped (complex: a NaN in either part), a tie keeping the EARLIER element in NumPy's visiting order, an all-NaN
+        /// reduction returning its first NaN verbatim. Complex used
         /// to go to <c>np.amax</c> / <c>np.amin</c>, which PROPAGATE a NaN — a value bug. A broadcast float32 / float64
         /// input — which the exact core declines (a zero stride changes NpyIter's axis sort) — keeps the previous kernels:
         /// the right value, but a ±0 tie's sign and an all-NaN slice's payload are not pinned.
@@ -195,10 +196,13 @@ namespace NumSharp.Backends
             if (shape.IsScalar || (shape.size == 1 && shape.NDim == 1))
                 return HandleScalarReduction(arr, keepdims, null, null);
 
-            // float16 / complex128: NumPy's HALF_fmax / CDOUBLE_fmax are plain sequential loops — the fold in
-            // Default.Reduction.Nan.Sequential.cs, NumPy's visiting order on every layout (broadcast included). A flat
-            // C-contiguous float16 keeps its bit-level kernel below, which implements the same first-zero / first-NaN rule.
-            if (tc == NPTypeCode.Complex || (tc == NPTypeCode.Half && !(axis == null && shape.IsContiguous)))
+            // float16 / complex128: NumPy's HALF_fmax / CDOUBLE_fmax are plain sequential loops, folded in NumPy's visiting
+            // order on every layout (broadcast included). float16 runs the bit-level SIMD walks of
+            // Default.Reduction.MinMax.Half.cs (the same walks as np.max / np.min, with the NaN-skipping rule); complex128
+            // the scalar fold of Default.Reduction.Nan.Sequential.cs.
+            if (tc == NPTypeCode.Half)
+                return HalfMinMaxReduce(arr, axis, keepdims, isMax, nanIgnore: true);
+            if (tc == NPTypeCode.Complex)
                 return NanMinMaxSequential(arr, axis, keepdims, isMax);
 
             bool exactDtype = tc == NPTypeCode.Single || tc == NPTypeCode.Double;

@@ -314,6 +314,138 @@ NAN_REDUCE_OPS = {
 NAN_REDUCE_DTYPES = list(ALL_DTYPES)   # widened: every dtype (NaN-erroring combos skipped by the gen)
 
 
+# float16 max / min / nanmax / nanmin — NumPy's HALF_maximum / HALF_minimum / HALF_fmax / HALF_fmin are plain sequential
+# loops (numpy/_core/src/umath/loops.c.src): a reduction keeps the FIRST NaN verbatim (maximum / minimum; payload, sign and
+# a signalling NaN unquieted) or the first element of an all-NaN slice (fmax / fmin), else the first extreme element (a ±0
+# tie keeps the earlier zero), "first" in the reduction iterator's visiting order (each axis in increasing logical index,
+# a flat reduction in K order). The ordinary pools hold ONE NaN (+qNaN), so no tier could see WHICH NaN came back; these
+# cases refill every float16 operand with distinct NaNs of both signs, quiet and signalling, and with ±0 ties, over every
+# catalog layout plus larger layouts that reach the SIMD runs (>= 32 elements), the reversed runs and the 4096-lane slab
+# blocks. The harness compares these results by RAW BYTES (FuzzCorpusTests.Kinds HalfSelectionContractOps): a selection
+# copies an input element, so its bits are host-independent and any difference is a hard failure.
+# ptp rides along: NumPy's _ptp is subtract(maximum.reduce, minimum.reduce), so its NaN is the same first NaN, quieted by
+# HALF_subtract's float32 arithmetic. Its bits are compared raw on x86 hosts only (HalfPtpContract): inf - inf yields the
+# HARDWARE default NaN, negative on x86 (the recorded 0xfe00) and positive on arm64.
+HALF_MINMAX_OPS = {
+    "max": lambda a, ax, kd: np.max(a, axis=ax, keepdims=kd),
+    "min": lambda a, ax, kd: np.min(a, axis=ax, keepdims=kd),
+    "nanmax": lambda a, ax, kd: np.nanmax(a, axis=ax, keepdims=kd),
+    "nanmin": lambda a, ax, kd: np.nanmin(a, axis=ax, keepdims=kd),
+    "ptp": lambda a, ax, kd: np.ptp(a, axis=ax, keepdims=kd),
+}
+
+# Finite float16 bit patterns: ±0 (twice, so ties are common), ±1, ±2, ±inf, ±smallest subnormal, ±max, ±1/3.
+_HALF_MINMAX_FINITE = [0x0000, 0x8000, 0x0000, 0x8000, 0x3C00, 0xBC00, 0x4000, 0xC000, 0x7C00, 0xFC00,
+                       0x0001, 0x8001, 0x7BFF, 0xFBFF, 0x3555, 0xB555]
+
+# Larger (shape, view) layouts beyond the catalog's 8–24-element ones: contiguous / reversed / stepped runs of >= 32
+# elements (the SIMD cores, their reversed rescans), short rows (the branch-free fold), slabs wider than one 4096-lane
+# block (contiguous, and reversed — a gathered inner run), a stepped slab inner run (the gather), broadcast and offset
+# views.
+_HALF_MINMAX_BIG = {
+    "h_run70": ((70,), lambda b: b),
+    "h_run70_rev": ((70,), lambda b: b[::-1]),
+    "h_run300_step2": ((300,), lambda b: b[::2]),
+    "h_run300_negstep3": ((300,), lambda b: b[::-3]),
+    "h_rows3x40": ((3, 40), lambda b: b),
+    "h_rows3x40_rev1": ((3, 40), lambda b: b[:, ::-1]),
+    "h_rows3x40_rev0": ((3, 40), lambda b: b[::-1]),
+    "h_rows40x3": ((40, 3), lambda b: b),
+    "h_rows40x3_T": ((40, 3), lambda b: b.T),
+    "h_rows70x2_T": ((2, 70), lambda b: b.T),
+    "h_cube2x3x40": ((2, 3, 40), lambda b: b),
+    "h_cube2x3x40_perm": ((2, 3, 40), lambda b: b.transpose(2, 0, 1)),
+    "h_cube40x3x2_perm_rev": ((40, 3, 2), lambda b: b.transpose(1, 2, 0)[:, ::-1, :]),
+    "h_offset65x18": ((65, 18), lambda b: b[1:, 1:]),
+    "h_bcast_row1x40": ((1, 40), lambda b: np.broadcast_to(b, (3, 40))),
+    "h_bcast_col40x1": ((40, 1), lambda b: np.broadcast_to(b, (40, 5))),
+    "h_slab3x4100": ((3, 4100), lambda b: b),
+    "h_slab3x4100_rev1": ((3, 4100), lambda b: b[:, ::-1]),
+    "h_slab5x300_step2": ((5, 300), lambda b: b[:, ::2]),
+}
+
+
+def _half_minmax_nan(rng):
+    """One random float16 NaN bit pattern: either sign, quiet (0x200 set) or signalling, payload never zero."""
+    payload = int(rng.integers(1, 1 << 10))
+    bits = 0x7C00 | (payload & 0x3FF)
+    if rng.integers(0, 2):
+        bits |= 0x200
+    elif (bits & 0x3FF) == 0:
+        bits |= 1
+    if rng.integers(0, 2):
+        bits |= 0x8000
+    return bits
+
+
+def _half_minmax_fill(n, mode, rng):
+    """n float16 bit patterns for a fill mode (see gen_half_minmax)."""
+    if mode == "zeros":
+        # Only zeros and one sign of finite values: the extremum on the zeros' side is a ±0 tie.
+        pool = [0x0000, 0x8000, 0xBC00, 0xC000] if rng.integers(0, 2) else [0x0000, 0x8000, 0x3C00, 0x4000]
+        return np.array(rng.choice(pool, n), dtype=np.uint16)
+    bits = np.array(rng.choice(_HALF_MINMAX_FINITE, n), dtype=np.uint16)
+    if mode == "payload":
+        k = int(rng.integers(1, max(2, n // 5) + 1))
+        for p in rng.choice(n, size=min(k, n), replace=False):
+            bits[p] = _half_minmax_nan(rng)
+    elif mode == "dense":
+        for p in range(n):
+            if rng.integers(0, 3) == 0:
+                bits[p] = _half_minmax_nan(rng)
+    elif mode == "allnan":
+        for p in range(n):
+            bits[p] = _half_minmax_nan(rng)
+    return bits
+
+
+def gen_half_minmax():
+    rng = np.random.default_rng(20261003)
+    cases = []
+    n = 0
+    skipped = 0
+    layouts = []
+    for ln in LAYOUTS:
+        base, view = LAYOUTS[ln](np.dtype("float16"))
+        layouts.append((ln, base, view, False))
+    for ln, (shape, make) in _HALF_MINMAX_BIG.items():
+        base = np.zeros(shape, dtype=np.float16)
+        layouts.append((ln, base, make(base), int(np.prod(shape)) > 1000))
+    for ln, base, view, big in layouts:
+        # A wide layout (> 1000 elements) stores its whole base in every case, so it keeps one fill mode, keepdims False
+        # and no negative-axis duplicate — its job is the long runs and the 4096-lane slab-block seam.
+        modes = ("payload",) if big else ("payload", "dense", "allnan", "zeros")
+        for mode in modes:
+            # Refill the C-contiguous base in place: the view shares its buffer, so it sees the new bits.
+            base.view(np.uint16)[...] = _half_minmax_fill(base.size, mode, rng).reshape(base.shape)
+            operand = describe(base, view)
+            axes = [None] + list(range(view.ndim)) + ([-1] if view.ndim >= 2 and not big else [])
+            for opname, f in HALF_MINMAX_OPS.items():
+                for axis in axes:
+                    for keepdims in ((False,) if big else (False, True)):
+                        try:
+                            with warnings.catch_warnings():
+                                warnings.simplefilter("ignore")          # All-NaN slice RuntimeWarning
+                                r = np.asarray(f(view, axis, keepdims))
+                        except Exception:
+                            skipped += 1                                 # empty reductions raise in NumPy
+                            continue
+                        cases.append({
+                            "id": f"{opname}/{ln}/float16/{mode}/axis={axis}/kd={int(keepdims)}/{n}",
+                            "op": opname,
+                            "params": {"axis": axis, "keepdims": keepdims},
+                            "operands": [operand],
+                            "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                                         "buffer": np.ascontiguousarray(r).tobytes().hex()},
+                            "layout": ln,
+                            "valueclass": mode,
+                        })
+                        n += 1
+    if skipped:
+        print(f"  (skipped {skipped} cases where NumPy raised)")
+    return cases
+
+
 def gen_binary(ops, dt_pairs, pair_layout_names):
     cases = []
     n = 0
@@ -15039,6 +15171,10 @@ def main():
         cases = gen_reduce(NAN_REDUCE_OPS, NAN_REDUCE_DTYPES, REDUCE_LAYOUTS)
         cases += gen_nanquantile(NANQ_DTYPES)                           # Group A: nanpercentile/nanquantile
         write_jsonl(os.path.join(corpus_dir, "nanreduce.jsonl"), cases)
+    elif mode == "half_minmax":
+        # float16 max / min / nanmax / nanmin / ptp with distinct NaN payloads + ±0 ties over every layout (gen_half_minmax);
+        # the harness compares these by raw bytes (the float16 selection contract; ptp on x86 hosts only).
+        write_jsonl(os.path.join(corpus_dir, "half_minmax.jsonl"), gen_half_minmax())
     elif mode == "scan":
         cases = gen_scan(SCAN_OPS, SCAN_DTYPES, SCAN_LAYOUTS)
         cases += gen_diff(SCAN_DTYPES, SCAN_LAYOUTS)

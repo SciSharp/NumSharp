@@ -241,6 +241,18 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void NanReduce() => RunCorpus("nanreduce.jsonl");
 
+        // float16 max / min / nanmax / nanmin / ptp (gen_oracle.py gen_half_minmax): NumPy's HALF loops are sequential
+        // SELECTIONS, so WHICH NaN (payload, sign, a signalling NaN unquieted) and which ±0 come back is decided by the
+        // reduction's visiting order — the first NaN / first extreme element of every output, each axis in increasing
+        // logical index, a flat reduction in K order. Every operand holds distinct NaNs of both signs and ±0 ties, over
+        // every catalog layout plus runs / rows / slabs long enough for the SIMD walks (reversed runs, 4096-lane slab
+        // blocks, gathered slab rows, broadcast). Compared by RAW BYTES with no registry excuse (CompareArray's float16
+        // selection contract): a selection copies an input element, so the bits are host-independent and portable.
+        // ptp (= max - min through HALF_subtract) rides along, raw on x86 hosts only: inf - inf is the CPU's default NaN.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void HalfMinMax() => RunCorpus("half_minmax.jsonl");
+
         // IEEE special-value parity: nan / ±inf / ±0 / smallest-subnormal / ±max FORCED through
         // the elementwise-math, reduction, scan and matmul/dot/outer ops across float16/float32/
         // float64/complex128 and every memory layout (contiguous/2-D/F/strided/negative-stride).
@@ -871,6 +883,7 @@ namespace NumSharp.Tests.Fuzz
             ["modf.jsonl"] = 165,   // all non-complex lanes + char (the 59f99320 per-width promotion, dtype-spread gate)
             ["multioutput.jsonl"] = 575,  // 473 before the np.trapezoid section (108: broadcast / unit-axis / permuted / F y, 1-D and N-D x of any rank, bool and wrapping x, three NumPy errors — the NpyIter layout rule) — 581
             ["nanreduce.jsonl"] = 8300,   // + nanpercentile/nanquantile integer/bool degenerate lanes (dtype-spread gate)
+            ["half_minmax.jsonl"] = 5800, // float16 max/min/nanmax/nanmin/ptp, distinct NaN payloads + ±0 ties x 45 layouts — 5,900 at delivery (2026-10-03; 1,180 per op)
             ["nanscan.jsonl"] = 525,   // nancumsum all 13 dtypes; nancumprod carves complex128 (host-FMA multiply)
             ["numpy_f32_kernels.jsonl"] = 140,
             ["numpy_f64_kernels.jsonl"] = 24,

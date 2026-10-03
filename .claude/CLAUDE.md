@@ -58,7 +58,7 @@ All operations must handle all 15 types via type switch pattern.
 
 **Perf notes:**
 - SByte / Byte / Int*/UInt* / Single / Double — full SIMD via the mixed-type kernel's `SimdFull` execution path (V128/V256/V512 detected at startup).
-- Half — **no vector f16 arithmetic or F16C in the BCL** (`Vector<Half>` throws), yet most of the f16 ufunc surface BEATS NumPy 2–60× bit-exactly via three techniques picked by "does the op need real float math?": bit-level AVX2 on raw ushort lanes (sign/negate/abs, min/max/ptp, maximum/minimum/fmax/fmin, the six comparisons, nanmin/nanmax (flat C-contiguous only — every other layout and every axis run NumPy's sequential `HALF_fmax` fold, correct but 0.41–0.62× NumPy, see "Math — NaN-Aware"), clip, floor/ceil/trunc/rint — all on the proven sign-magnitude order map `key = bits ^ (0x8000 | asr(bits,15))`, NaN keys strictly outside the finite band), SIMD widen-compute-narrow for add/sub/mul/div (Giesen f16→f32 → one f32 vector op → RTNE narrow — bit-exact incl. the MSVC operand-order NaN-payload host pin, 2.2–3.6×), and scalar-F16C widen-unary (`EmitUnaryHalfViaFloat`: `(Half)MathF.X((float)h)`, NumPy's npy_half model) for 16 transcendentals — conversion-bound ≈ parity, the physical ceiling. `np.power` still bridges `Half→double→Math.Pow→Half`. Full design, semantics contract (NaN-guarded npy_half comparators, first-NaN/first-zero folds, sNaN quieting), dispatch map and traps (portable Vector256 ushort ops don't lower — 30×; RyuJIT re-swaps commutative intrinsic operands — NaN priority must be an explicit blend; AVX2 lacks 16-bit variable shifts): **`docs/FLOAT16_DESIGN.md`**.
+- Half — **no vector f16 arithmetic or F16C in the BCL** (`Vector<Half>` throws), yet most of the f16 ufunc surface BEATS NumPy 2–60× bit-exactly via three techniques picked by "does the op need real float math?": bit-level AVX2 on raw ushort lanes (sign/negate/abs, min/max/ptp/nanmin/nanmax on every layout flat and per axis — NumPy's sequential HALF loops bit for bit, first NaN / first ±0 in NumPy's visiting order, see "Math — Reductions" —, maximum/minimum/fmax/fmin, the six comparisons, clip, floor/ceil/trunc/rint — all on the proven sign-magnitude order map `key = bits ^ (0x8000 | asr(bits,15))`, NaN keys strictly outside the finite band), SIMD widen-compute-narrow for add/sub/mul/div (Giesen f16→f32 → one f32 vector op → RTNE narrow — bit-exact incl. the MSVC operand-order NaN-payload host pin, 2.2–3.6×), and scalar-F16C widen-unary (`EmitUnaryHalfViaFloat`: `(Half)MathF.X((float)h)`, NumPy's npy_half model) for 16 transcendentals — conversion-bound ≈ parity, the physical ceiling. `np.power` still bridges `Half→double→Math.Pow→Half`. Full design, semantics contract (NaN-guarded npy_half comparators, first-NaN/first-zero folds, sNaN quieting), dispatch map and traps (portable Vector256 ushort ops don't lower — 30×; RyuJIT re-swaps commutative intrinsic operands — NaN priority must be an explicit blend; AVX2 lacks 16-bit variable shifts): **`docs/FLOAT16_DESIGN.md`**.
 - Complex — scalar path via `System.Numerics.Complex` operators / `Complex.Pow`. ~2× slower than NumPy. The
   complex128 **unary** ufuncs (`Utilities/NDComplexMath.cs`: sqrt/log/log2/log10/log1p/exp/exp2/expm1/square/
   reciprocal/sin/cos/tan/sinh/cosh/tanh/arcsin/arccos/arctan/arcsinh/arccosh/arctanh/conjugate/negative/positive)
@@ -1212,8 +1212,8 @@ contiguous `simd_reduce_c` call, so fill boundaries decide ties and re-canonical
 associative, so the strided unroll is "the latest of x[0], lane 0…7, tail wins a tie" (probed 1,056/1,056) — which is
 why its eight accumulators run as VECTOR lanes (a stride of −1 is one contiguous load + a lane reverse). A NaN-free
 fast fold (plain `vmaxp` on groups proven NaN-free by `vcmpunordp`, breaking to NumPy's blend at the first NaN group)
-keeps the exact contiguous path fast. Declines (old kernels, value-exact): broadcast operands, Half/Decimal/Complex/
-Bool/Char, `dtype=` casts, rank > 64. Hooks `NDExpr.DisableExactMinMax`/`ExactMinMaxRuns` (shared with np.evaluate).
+keeps the exact contiguous path fast. Declines (old kernels, value-exact): broadcast operands, Decimal/Complex/
+Bool/Char, `dtype=` casts, rank > 64 (float16 never reaches it — its own exact route, below). Hooks `NDExpr.DisableExactMinMax`/`ExactMinMaxRuns` (shared with np.evaluate).
 NPY/NS @100K: flat 1.14–2.30 on every layout (F/transposed/permuted 1.61–1.85, were 0.61–0.63), axis 1.28–5.2 (were
 0.28–1.0 on non-C layouts); the slab fusion put the SLAB cells at 1.38–3.08 @100K (were 1.10–2.31) and the DRAM-bound
 f64-family ones at 1.75–2.10 @4M (were 1.06–1.45). Gates: `Backends/Kernels/MinMaxExactScheduleTests.cs` (27,
@@ -1223,6 +1223,35 @@ NumPy-probed literals incl. the every-lane-pair tie test and a ±0 tie / NaN pai
 NumPy's identical schedule (flat/row 0.70–0.87, f32/i32 slab 0.87–0.95; pre-existing, NumSharp's 16-byte buffer
 alignment suspected); the UNFUSED `np.max(x * 1, axis)` over a permuted input differs because NumSharp's eager
 elementwise writes C order where NumPy's ufunc keeps the K-order layout.
+
+**float16 `np.max`/`np.min`/`np.nanmax`/`np.nanmin` (flat AND axis, every layout incl. broadcast) are NumPy's sequential
+HALF loops, bit for bit** (`Backends/Default/Math/Reduction/Default.Reduction.MinMax.Half.cs`, `DefaultEngine.HalfMinMaxReduce`,
+taken before any other route; 2026-10-03). NumPy has no SIMD float16 compare loop: `HALF_maximum` is
+`(ge(acc,x) || isnan(acc)) ? acc : x` (fmax: `|| isnan(x)`), a SELECTION, so the answer is "the FIRST NaN verbatim (payload,
+sign, a signalling NaN unquieted), else the first extreme element" (fmax: NaN skipped, an all-NaN slice → its first element),
+a ±0 tie keeping the earlier zero — "first" in NumPy's visiting order: each axis in increasing logical index
+(`DONT_NEGATE_STRIDES` — a reversed run is visited from its HIGH address down), a flat reduction in K order
+(`NumPySequentialReduce.FlatVisitOrder`). The selection is associative, so the walks run SIMD and stitch run winners in
+order: FLAT drops broadcast axes, coalesces runs, sends ±1-stride runs ≥ 32 to the bit-level cores (`HalfRunWinnerBits`,
+reversed runs rescan from the top) and folds the rest by a branch-light PRIORITY KEY (`HalfPriorityKey`: order key with ±0
+merged, inverted for min, NaN → 0xFFFF or 0 — "take iff strictly greater" IS the fold step for all four rules); AXIS picks
+ROW (a SIMD core per ±1-stride row, a branch-free masked fold for rows ≤ 16 — the improve-branch is a coin flip there —
+the out-of-line branchy fold otherwise) or SLAB (the elementwise pair-select over 4096-lane blocks, a stepped inner run
+gathered first). It replaced a last-NaN-wins axis kernel, a canonical-`Half.NaN` flat NDIter fallback and a reversed-order
+flat walk (values right, bits wrong — the oracle tokenizes NaN and its pools hold one NaN), and nanmax/nanmin's scalar fold
+(0.4–0.9× NumPy). Rode along: np.evaluate's flat `Max`/`Min` over a float16 child (`TryExactFlatMinMaxHalf`: leaf in place,
+computed child in NumPy's layout — was last-NaN-wins), the `dtype=float16` flat path over another dtype (read float32
+memory as float16 — now cast first, like the axis path), and the old `(Half,Half)` axis kernel key (an adapter onto the
+walk). NPY/NS over 276 cells (4 ops × 23 layouts × 1K/100K/1M, P-core pinned): geomean 26× (1K 5.6×, 100K 41×, 1M 79×; was
+1.6× with 169 cells under 1.5×) — NumPy's HALF loops cost ~5 ns/element; slowest cells: the 1K fixed-cost floor (rows of 3:
+2.3×) and rows of 3 along axis 1 at 100K (4.2×). `np.ptp` (NumPy's `subtract(maximum.reduce, minimum.reduce)`) inherits the
+walks: its NaN is the same first NaN, quieted by HALF_subtract's float32 arithmetic (3,622 of a 6,034-case NumPy probe had
+other bits before, 0 now). Gates: `Math/HalfMinMaxLayoutTests.cs` (16, NumPy-probed bit literals — 15 fail on the old code;
+the unit tests alone kill all 14 planted bugs of a mutation run, the oracle tiers 11) + the raw-byte `half_minmax` oracle
+tier (5,900 cases, 1,789 of them fail on the old code) + the float16 SELECTION CONTRACT
+(`FuzzCorpusTests.Kinds.HalfSelectionContractOps`: these four ops on a float16 operand are compared by raw bytes in EVERY
+tier and any difference is a hard failure, no registry excuse) + the float16 ptp contract (the same, on x86 hosts only:
+`inf - inf` makes the CPU's default NaN, negative on x86 and positive on arm64).
 
 `cov(m, y=None, rowvar=True, bias=False, ddof=None, fweights=None, aweights=None, dtype=None)` is a **pure
 composition** over `average`/`dot`/`concatenate`/`atleast_2d`/`conjugate`/`squeeze` (no new kernel), a line-for-line
@@ -1260,9 +1289,10 @@ FIRST) inside each inner-loop call's vector section, the MSVC CRT `fmax` (tie �
 every lane is NaN. So the answer depends on where NumPy's calls CUT the reduction — `SlabCallTiling.Build` ports that
 cut (`npyiter_find_buffering_setup`, `np.getbufsize()` honoured; a float32 in-place negative-stride input runs every
 call scalar), the flat/row paths reuse `NumPyMinMaxReduce` with `TLane.PropagatesNaN == false`. **float16/complex128**
-run NumPy's sequential BINARY_LOOPs (`HALF_fmax`/`CDOUBLE_fmax`, `Default.Reduction.Nan.Sequential.cs`) in NpyIter's
-visiting order: NaN skipped (complex: a NaN in either part), the EARLIER of a tie kept, complex lexicographic, an
-all-NaN slice → its first NaN verbatim. Integers/bool/char/decimal are `np.amax`/`np.amin`. **BREAKING
+run NumPy's sequential BINARY_LOOPs (`HALF_fmax`/`CDOUBLE_fmax`) in NpyIter's visiting order: NaN skipped (complex: a NaN
+in either part), the EARLIER of a tie kept, complex lexicographic, an all-NaN slice → its first NaN verbatim — float16
+through the bit-level SIMD walks it shares with np.max/np.min (`Default.Reduction.MinMax.Half.cs`, "Math — Reductions"),
+complex128 through the scalar fold of `Default.Reduction.Nan.Sequential.cs`. Integers/bool/char/decimal are `np.amax`/`np.amin`. **BREAKING
 (NumPy-aligned):** an empty reduction RAISES `zero-size array to reduction operation fmax/fmin which has no identity`
 (was a 0-d NaN); complex used to go to `np.amax` and PROPAGATE a NaN; float16 non-C layouts misread strides. Gates:
 `Backends/Kernels/NanMinMaxExactScheduleTests.cs` (31, NumPy-probed literals; 36/36 schedule mutants + 21/24 fold
@@ -1283,8 +1313,8 @@ cold whenever long reductions ran first (short rows 0.69–0.84×). NPY/NS @100K
 1.93/2.40, the exact route now 0.96–1.01× the old kernel in-process — it was 0.74/0.67×, the "1.10×" once claimed did
 not reproduce), F 2.98, rows of 1000 3.54 / f32 4.31, axis slab 2.07–2.55, evaluate `nanmax(a*b)` 2.16 (the 9.3 once
 quoted was measured while NumPy's temporary page-faulted — the allocator-regime trap); rows below the threshold
-0.96–1.05× unchanged. Known gaps: float16/complex128 axis & non-C cells are a scalar fold at 0.41–0.69× NumPy (the next
-lever); flat contiguous @4M is DRAM-bound (0.89–1.06× the old kernel in-process, NPY/NS f64 ~1.5–1.6 / f32 ~1.0); a
+0.96–1.05× unchanged. Known gaps: complex128 axis & non-C cells are a scalar fold (float16's were 0.41–0.69× NumPy until
+2026-10-03, now the SIMD walks at ~25× geomean); flat contiguous @4M is DRAM-bound (0.89–1.06× the old kernel in-process, NPY/NS f64 ~1.5–1.6 / f32 ~1.0); a
 broadcast float32/float64 input keeps the old kernels (value-exact only). Design + measurements + gates:
 `docs/plans/ndexpr-evaluate.md` → "The P rules' order-free aligned fold".
 

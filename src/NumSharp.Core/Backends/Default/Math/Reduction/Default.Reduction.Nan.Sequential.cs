@@ -27,11 +27,13 @@ using NumSharp.Backends.Iteration;
 //     from reversed C order, where a comparison involving a zero stride is AMBIGUOUS and skipped (so a broadcast axis
 //     keeps its place), each axis walked in increasing logical index. Coalescing and buffering never reorder a fold.
 //
-// The engine routes here (DefaultEngine.NanMinMax): complex128 on every layout (it used to be np.amax / np.amin, which
-// PROPAGATE a NaN — a value bug, not a bit one), float16 on every layout but the flat C-contiguous one (whose bit-level
-// kernel already implements this rule). The float16 kernels this replaces misread non-C layouts (a byte-vs-element
-// stride in the flat iterator kernel, logical-vs-physical indices in the axis fallback) and returned the canonical NaN
-// for an all-NaN slice.
+// The engine routes complex128 here (DefaultEngine.NanMinMax, every layout — it used to be np.amax / np.amin, which
+// PROPAGATE a NaN: a value bug, not a bit one). float16 went through this scalar fold too until 2026-10-03; it now runs
+// the bit-level SIMD walks of Default.Reduction.MinMax.Half.cs (the same HALF_fmax rule and visiting order, shared with
+// np.max / np.min — this fold converted every element to float and ran at 0.4–0.9× NumPy). NanMinMaxSequential still
+// accepts float16 (HalfFMaxRule / HalfFMinRule), which keeps it a scalar reference for the walks. The float16 kernels
+// the first port replaced misread non-C layouts (a byte-vs-element stride in the flat iterator kernel,
+// logical-vs-physical indices in the axis fallback) and returned the canonical NaN for an all-NaN slice.
 // =============================================================================
 
 namespace NumSharp.Backends

@@ -40,6 +40,50 @@ namespace NumSharp.Tests.Fuzz
         };
 
         /// <summary>
+        ///     The float16 reductions whose result is a SELECTED input element — NumPy's HALF_maximum / HALF_minimum /
+        ///     HALF_fmax / HALF_fmin (numpy/_core/src/umath/loops.c.src) are sequential loops that copy one operand, never
+        ///     compute a new value. So the result's bits — which NaN (payload, sign, a signalling NaN unquieted), which ±0 —
+        ///     follow from the reduction's visiting order alone, with no libm, compiler or CPU in the path: portable, and
+        ///     contractual. For a float16 operand these ops are compared by RAW BYTES and any difference is a HARD failure
+        ///     (no registry excuse: a selection has no rounding to excuse, and the generic ULP excuses read NaN-vs-NaN as
+        ///     0 ULP). Gated across every tier that holds them (reduce, nanreduce, specials, instance, half_minmax).
+        /// </summary>
+        private static readonly HashSet<string> HalfSelectionContractOps = new() { "max", "min", "nanmax", "nanmin" };
+
+        /// <summary>
+        ///     True when the case reduces exactly one float16 operand to a float16 result — the shape of every case the
+        ///     float16 min/max contracts (<see cref="HalfSelectionContractOps"/>, <see cref="IsHalfPtpContractCase"/>) cover.
+        /// </summary>
+        /// <param name="c">The corpus case.</param>
+        /// <param name="tc">The type code of the result being compared.</param>
+        /// <returns>
+        ///     <see langword="true"/> for a float16 result of a single float16 operand; <see langword="false"/> for a
+        ///     <c>dtype=</c> cast or a multi-operand case, whose bits the contracts do not describe.
+        /// </returns>
+        private static bool IsSingleHalfOperand(FuzzCorpus.Case c, NPTypeCode tc)
+            => tc == NPTypeCode.Half && c.Operands.Length == 1 && c.Operands[0].Dtype == "float16";
+
+        /// <summary>
+        ///     True when the case is a float16 <c>ptp</c> whose bits are a contract on this host.
+        /// </summary>
+        /// <param name="c">The corpus case.</param>
+        /// <param name="tc">The type code of the result being compared.</param>
+        /// <returns>
+        ///     <see langword="true"/> on an x86 host (<see cref="NanSignIsX86Reference"/>) for a <c>ptp</c> of one float16
+        ///     operand; its bytes then compare raw and any difference is a hard failure.
+        /// </returns>
+        /// <remarks>
+        ///     NumPy's <c>_ptp</c> (numpy/_core/_methods.py) is <c>subtract(maximum.reduce(a), minimum.reduce(a))</c>: two of
+        ///     the selections above, which return the SAME first NaN, and one HALF_subtract, which computes in float32 and
+        ///     narrows once — so a signalling NaN comes back quieted, identically on every host. One step is hardware
+        ///     dependent: <c>inf - inf</c> makes the CPU's default NaN, negative on x86 (the recorded win-amd64 0xfe00) and
+        ///     positive on arm64. So the raw-byte comparison holds on x86 hosts only; elsewhere NaN stays tokenized, as for
+        ///     every other op.
+        /// </remarks>
+        private static bool IsHalfPtpContractCase(FuzzCorpus.Case c, NPTypeCode tc)
+            => NanSignIsX86Reference && c.Op == "ptp" && IsSingleHalfOperand(c, tc);
+
+        /// <summary>
         ///     The complex NaN-SIGN contract above is authored against numpy 2.4.2 win-amd64 (MSVC UCRT),
         ///     and NumSharp reproduces it in managed code + x64 SSE — so it holds bit-for-bit on the whole
         ///     x86 family (Windows AND Linux, shared deterministic SSE), but NOT on AArch64: a fresh NaN
@@ -250,9 +294,15 @@ namespace NumSharp.Tests.Fuzz
             // stays tokenized (a differing payload/sign is non-contractual — order/algorithm-dependent).
             // The nan_order tier's cases (params.nan_bits) gate the float add / multiply NaN-operand
             // order the same way: their NaN payloads are contractual, so they compare raw as well.
-            bool nanExact = (ComplexNanContractOps.Contains(c.Op)
-                             && (tc == NPTypeCode.Complex || c.Operands.Any(o => o.Dtype == "complex128"))
-                             && NanSignIsX86Reference)   // win-amd64 NaN-sign contract; tokenize off x86 (arm64)
+            // float16 max / min / nanmax / nanmin copy an input element (HalfSelectionContractOps): raw bytes, portable.
+            // float16 ptp subtracts two of those selections: raw bytes on x86 hosts (IsHalfPtpContractCase).
+            bool halfSelection = HalfSelectionContractOps.Contains(c.Op) && IsSingleHalfOperand(c, tc);
+            bool halfPtp = IsHalfPtpContractCase(c, tc);
+            bool nanExact = halfSelection
+                            || halfPtp
+                            || (ComplexNanContractOps.Contains(c.Op)
+                                && (tc == NPTypeCode.Complex || c.Operands.Any(o => o.Dtype == "complex128"))
+                                && NanSignIsX86Reference)   // win-amd64 NaN-sign contract; tokenize off x86 (arm64)
                             || IsNaNOperandOrderCase(c);
 
             // Bit-exact to NumPy ("precise") passes HERE, before truth is ever read — matching
@@ -267,8 +317,10 @@ namespace NumSharp.Tests.Fuzz
             // it must bypass the ULP / pathological-edge excuses, which report NaN-vs-NaN as 0 ULP and
             // would otherwise swallow the regression this gate exists to catch. A finite rounding
             // residual (nanExact but no sign flip) still flows through the registry (the ≤3-ULP excuse).
+            // A float16 selection has no rounding residual at all, and float16 ptp rounds exactly as NumPy's HALF_subtract
+            // does (float32 arithmetic, one narrowing): every difference is hard.
             bool signFlip = nanExact && diffs.Any(d => BitDiff.DiffHasSignFlip(expected, actual, d.Index, tc));
-            var vreason = signFlip ? null
+            var vreason = signFlip || halfSelection || halfPtp ? null
                 : MisalignedRegistry.Classify(c, DivergenceKind.Value, expected, actual, tc, diffs, truth);
             if (vreason != null)
             {
@@ -279,7 +331,10 @@ namespace NumSharp.Tests.Fuzz
             // Shrinking rebuilds the case as a 1-element repro, which only makes sense for the
             // elementwise single-array shape — skip it for tuple slots.
             var shrunk = slot == null ? Shrinker.ShrinkElementwise(c, diffs[0].Index) : null;
-            failures.Add($"{c.Id} [{c.Layout}]{at}: " + (signFlip ? "NaN-sign/signed-zero contract violation " : "") +
+            failures.Add($"{c.Id} [{c.Layout}]{at}: " +
+                (halfSelection ? "float16 selection contract violation "
+                    : halfPtp ? "float16 ptp contract violation "
+                    : signFlip ? "NaN-sign/signed-zero contract violation " : "") +
                 string.Join(", ", diffs.Take(3).Select(d => $"@{d.Index} exp {d.Expected} act {d.Actual}" +
                     TruthNote(expected, actual, truth, d.Index, tc))) +
                 (diffs.Count > 3 ? $" (+{diffs.Count - 3} more)" : "") +

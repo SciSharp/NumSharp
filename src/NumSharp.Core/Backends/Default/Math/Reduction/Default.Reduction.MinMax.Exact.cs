@@ -93,8 +93,9 @@ using NumSharp.Utilities;
 //     (SlabCallTiling.AllScalar: npyv_loadable_stride_f32 divides the signed stride by an unsigned size).
 //
 // Both P ops are associative SELECTIONS (see CombineRun8), so the eight-slab balanced tree stays exact under either.
-// float16 and complex128 are NOT here: NumPy's HALF_fmax / CDOUBLE_fmax are plain sequential BINARY_LOOPs with their
-// own comparisons, ported in Default.Reduction.Nan.Sequential.cs. A broadcast input declines to the old value-exact
+// float16 and complex128 are NOT here: NumPy's HALF / CDOUBLE loops are plain sequential BINARY_LOOPs with their own
+// comparisons — float16 maximum / minimum / fmax / fmin ported in Default.Reduction.MinMax.Half.cs, complex128 fmax /
+// fmin in Default.Reduction.Nan.Sequential.cs. A broadcast input declines to the old value-exact
 // kernels (its zero stride makes NpyIter's axis sort ambiguous — the same gap np.max has), as do rank > 64 and dtypes
 // other than float32/float64 (integers never reach here: nanmax of an integer array IS np.max).
 // =============================================================================

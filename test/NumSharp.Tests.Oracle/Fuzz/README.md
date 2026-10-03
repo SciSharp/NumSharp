@@ -57,8 +57,11 @@ test/NumSharp.Tests.Oracle/Fuzz/
                                      the full parser
   BitDiff.cs                         bit-exact compare; NaN tokenized (payload/sign non-contractual) EXCEPT
                                      the complex-unary ops, whose NaN sign IS contractual and is raw-byte
-                                     compared (Compare nanBitExact + DiffHasSignFlip); Decimal by canonical
-                                     VALUE (scale-insensitive 1.0m == 1.00m); ULP helpers (documented near-misses)
+                                     compared (Compare nanBitExact + DiffHasSignFlip), the nan_order cases
+                                     (params.nan_bits, x86 X86_V3 hosts), and the float16
+                                     max/min/nanmax/nanmin selections (raw bytes, any diff hard — see the
+                                     half_minmax section); Decimal by canonical VALUE (scale-insensitive
+                                     1.0m == 1.00m); ULP helpers (documented near-misses)
   OpRegistry.cs                      op-name -> NumSharp call
   MisalignedRegistry.cs              the explicit, documented set of intended/known divergences
   Shrinker.cs                        minimizes a failing element-wise case to a 1-element repro
@@ -786,6 +789,40 @@ bits as `[OpenBugs]` in `NumSharp.Tests/OpenBugs.NaNOperandOrder.cs`, one test p
 - np.evaluate trees deeper than one node with a NaN 0-d or size-1 broadcast input.
 
 `sum` / `prod` stay out by policy (the accepted reduction-order difference).
+
+### float16 selections (`half_minmax` tier + the selection contract) — 2026-10-03
+
+`half_minmax.jsonl` (5,900 cases, 1,180 per op, `gen_oracle.py half_minmax`) runs `max` / `min` / `nanmax` / `nanmin`
+/ `ptp` over float16 operands REFILLED with distinct NaNs (both signs, quiet and signalling, random payloads), dense-NaN and all-NaN
+slices, and ±0 ties, over every catalog layout plus larger layouts the catalog lacks: runs of 70–300 (forward,
+reversed, stepped — the SIMD cores and their reversed rescans), rows of 3 (the branch-free fold), 3×4100 slabs (the
+4096-lane block seam, contiguous and reversed), a stepped slab inner run (the gather), broadcast and offset views —
+flat and every axis, keepdims both ways (one fill mode and no keepdims for the three >1000-element layouts, which
+store their whole base per case).
+
+NumPy's HALF_maximum / HALF_minimum / HALF_fmax / HALF_fmin are sequential SELECTIONS: the result is an input element
+copied verbatim, decided only by the reduction's visiting order (each axis in increasing logical index, a flat
+reduction in K order). No libm, compiler or CPU is in that path, so `CompareArray` holds these four ops on a float16
+operand to RAW BYTES in every tier (`HalfSelectionContractOps` — this tier and the float16 cells of reduce, nanreduce,
+specials and instance), and ANY difference is a hard failure that never reaches `MisalignedRegistry` (a selection
+has no rounding to excuse; the generic ULP branches would read NaN-vs-NaN as 0 ULP). Portable: gated on every OS.
+
+`ptp` is NumPy's `subtract(maximum.reduce(a), minimum.reduce(a))`: the same first NaN from both walks, then one
+HALF_subtract (float32 arithmetic, one narrowing) that quiets a signalling NaN. Its bits are a contract too, with one
+hardware step: `inf - inf` makes the CPU's default NaN, negative on x86 (the recorded 0xfe00) and positive on arm64.
+So `IsHalfPtpContractCase` compares float16 `ptp` by raw bytes, hard failures included, on x86 hosts only (this tier
+and the float16 `ptp` cells of reduce, stat and specials); elsewhere its NaN stays tokenized.
+
+Found by it (all fixed 2026-10-03; the ordinary pools hold ONE NaN, so tokenized tiers could not see any of them):
+the axis kernel let a LATER NaN replace an earlier one; the flat non-contiguous path returned .NET's canonical
+`Half.NaN` (0xfe00) for any NaN; the flat walk visited reversed / permuted views in another order (a different ±0);
+np.evaluate's flat `Max` / `Min` over a float16 child folded last-NaN-wins too; and `ptp` inherited all of it.
+Teeth: on the old code 1,789 of this tier's 5,900 cases fail, the two contracts alone turn the reduce (24), specials
+(12) and stat (6, float16 `ptp`) tiers red, 15 of the 16 `HalfMinMaxLayoutTests` fail, and 876 of a 4,416-case
+large-shape probe differ. A 14-mutant run over the new walks (tie order, ±0 merge, rescan direction and lane, block
+seam, coalescing, the evaluate leaf, the `dtype=` cast, the Direct-kernel adapter) is killed in full by the unit tests
+alone; the oracle tiers alone kill 11 of them (the three they miss — the evaluate leaf, the `dtype=` cast and the
+adapter — are not reached by their op keys).
 
 ### Truthful vs precise (`precision` tier)
 

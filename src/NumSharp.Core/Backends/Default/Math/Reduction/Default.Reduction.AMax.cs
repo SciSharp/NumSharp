@@ -20,6 +20,12 @@ namespace NumSharp.Backends
             if (shape.IsScalar || (shape.size == 1 && shape.NDim == 1))
                 return HandleScalarReduction(arr, keepdims, typeCode, null);
 
+            // float16 without a dtype= cast: NumPy's sequential HALF_maximum fold in its visiting order, bit for bit on every
+            // layout (first NaN verbatim, first ±0) — Default.Reduction.MinMax.Half.cs, flat and per axis. A reduced axis of
+            // extent 1 copies its lone elements there too, exactly as HandleTrivialAxisReduction would.
+            if (arr.GetTypeCode == NPTypeCode.Half && (typeCode == null || typeCode == NPTypeCode.Half))
+                return HalfMinMaxReduce(arr, axis_, keepdims, isMax: true, nanIgnore: false);
+
             if (axis_ == null)
             {
                 // NumPy's exact flat schedule (coalesced runs, NumPy's buffering decision, chained contiguous / strided

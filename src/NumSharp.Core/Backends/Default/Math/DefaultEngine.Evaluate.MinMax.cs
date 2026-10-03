@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
 using NumSharp.Backends.Iteration;
+using NumSharp.Backends.Kernels;
 
 // =============================================================================
 // DefaultEngine.Evaluate.MinMax.cs — NumPy-EXACT flat Min / Max for np.evaluate
@@ -114,8 +115,9 @@ namespace NumSharp.Backends
     {
         /// <summary>
         /// True for the dtypes this reduction serves: float64 / float32 (NumPy-exact bits) and the eight integer
-        /// widths (order-free, so exact by construction). Half, Char, Decimal, Complex and Boolean are left to the
-        /// fold — they have no <see cref="Vector256{T}"/> lane type or no NumPy SIMD loop to reproduce.
+        /// widths (order-free, so exact by construction). Char, Decimal, Complex and Boolean are left to the fold — they
+        /// have no <see cref="Vector256{T}"/> lane type or no NumPy SIMD loop to reproduce; Half has no NumPy SIMD loop
+        /// either and takes its own sequential route (<c>DefaultEngine.TryExactFlatMinMaxHalf</c>).
         /// </summary>
         /// <param name="t">The child (== result) dtype.</param>
         /// <returns>Whether <see cref="ReduceContiguous"/> and the streamed form accept <paramref name="t"/>.</returns>
@@ -1663,6 +1665,71 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
+        /// Flat <c>Min</c> / <c>Max</c> of a FLOAT16 child as NumPy computes it: <c>HALF_maximum</c> / <c>HALF_minimum</c>
+        /// folded sequentially over the buffer NumPy reduces (<see cref="NumPyHalfMinMaxReduce"/>) — the first NaN
+        /// verbatim, else the first extreme element, a ±0 tie keeping the earlier zero, "first" in that buffer's visiting
+        /// order.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The buffer: a bare leaf is reduced in place, through NumPy's K visiting order of its own strides (broadcast
+        /// included — a revisited element never changes the answer); any computed child is materialized in the layout
+        /// NumPy's ufunc would allocate (<see cref="MaterializeChildNumPyLayout"/>) and reduced in that buffer's memory
+        /// order, which is the K order of a dense block. The scalar fold it replaces matched only the value: it let a
+        /// LATER NaN replace an earlier one (probed: <c>max([1, nan(0xfe01), 2, nan(0x7e02)])</c> returned the second NaN,
+        /// NumPy the first).
+        /// </para>
+        /// <para>
+        /// Declines (false, <paramref name="slot"/> untouched) only when the hook <see cref="NDExpr.DisableExactMinMax"/>
+        /// is set, so a probe can still time the fold.
+        /// </para>
+        /// </remarks>
+        /// <param name="child">The reduction's child elementwise program (float16 result).</param>
+        /// <param name="inputs">Every input of the call, in input order.</param>
+        /// <param name="n">The child's element count (&gt; 0).</param>
+        /// <param name="op">The reduction op (<see cref="MinMaxOp.Max"/> or <see cref="MinMaxOp.Min"/>; the NaN-skipping
+        /// twins are accepted too).</param>
+        /// <param name="slot">Receives the result's raw float16 bits (at least 2 bytes).</param>
+        /// <returns>True when the reduction was computed here.</returns>
+        private unsafe bool TryExactFlatMinMaxHalf(NDExprProgram child, NDArray[] inputs, long n, MinMaxOp op, byte* slot)
+        {
+            if (NDExpr.DisableExactMinMax)
+                return false;
+
+            bool isMax = NumPyMinMaxReduce.IsMaxLike(op);
+            bool nanIgnore = op is MinMaxOp.FMax or MinMaxOp.FMin;
+            var ops = child.IteratorOperands(inputs);
+
+            if (child.Bound is InputNode && ops.Length == 1)
+            {
+                // NumPy reduces the array itself; logical element 0 is Address + offset·itemsize for every layout.
+                var s = ops[0].Shape;
+                ushort* x = (ushort*)((byte*)ops[0].Address + (long)s.offset * sizeof(ushort));
+                *(ushort*)slot = NumPyHalfMinMaxReduce.Flat(x, s.dimensions, s.strides, isMax, nanIgnore);
+                NDExpr.ExactMinMaxRuns++;
+                return true;
+            }
+
+            // A computed child: materialized as NumPy's ufunc would lay it out, then one forward run over its dense buffer.
+            // Both arrays are released as soon as the reduction has read them.
+            var view = MaterializeChildNumPyLayout(child, inputs, ops, out var buffer);
+            try
+            {
+                ushort* m = (ushort*)((byte*)buffer.Address + (long)buffer.Shape.offset * sizeof(ushort));
+                *(ushort*)slot = DirectILKernelGenerator.HalfRunWinnerBits(m, 1, n, isMax, nanIgnore);
+            }
+            finally
+            {
+                if (!ReferenceEquals(view, buffer))
+                    view.Dispose();
+                buffer.Dispose();
+            }
+
+            NDExpr.ExactMinMaxRuns++;
+            return true;
+        }
+
+        /// <summary>
         /// The streamed form of <see cref="NumPyMinMaxReduce.Reduce{T,TLane}"/>: bind <paramref name="child"/> for
         /// streaming, evaluate element 0 (the seed), then the rest in 8 KB blocks, and write the result to
         /// <paramref name="slot"/>. Every block but the last holds a whole number of 8-vector groups (8 KB is a
@@ -1781,7 +1848,8 @@ namespace NumSharp.Backends.Iteration
     {
         /// <summary>
         /// Test / diagnostics hook: when set on the current thread, the NumPy-exact min/max schedules are SKIPPED —
-        /// np.evaluate's flat <c>Min</c> / <c>Max</c> (<c>DefaultEngine.TryExactFlatMinMax</c>) folds with the
+        /// np.evaluate's flat <c>Min</c> / <c>Max</c> (<c>DefaultEngine.TryExactFlatMinMax</c>, and
+        /// <c>TryExactFlatMinMaxHalf</c> for a float16 child) folds with the
         /// 4-accumulator scalar kernel, the engine's flat <c>np.max</c> / <c>np.min</c> / <c>np.ptp</c>
         /// (<c>DefaultEngine.TryExactFlatMinMaxArray</c>) take the IL kernels, and every AXIS <c>Min</c> / <c>Max</c>
         /// (np.evaluate's and the engine's, <c>DefaultEngine.TryExactAxisMinMax</c>) takes the kernels it used before —

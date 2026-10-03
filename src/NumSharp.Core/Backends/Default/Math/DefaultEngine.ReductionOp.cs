@@ -550,42 +550,58 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// Max/min for Half. The IL reduction kernel can't drive Half (OpCodes.Bgt/Blt don't
-        /// apply to the struct), but the flat extremum needs no float math at all: f16 ordering is
-        /// sign-magnitude on the raw bits, so the contiguous buffer rides the bit-level AVX2
-        /// key-transform kernel (<see cref="DirectILKernelGenerator.HalfMaxBitsContiguous"/> —
-        /// zero conversions, pmaxuw/pminuw over order keys). This replaced the scalar
-        /// Half-operator scan (two hardware F16C converts per element) at ~9× its speed AND
-        /// fixed its NaN rule: the scan's <c>x &gt; acc || IsNaN(x)</c> let a LATER NaN overwrite
-        /// the accumulator, where NumPy's fold <c>(ge(acc,x) || isnan(acc)) ? acc : x</c> sticks
-        /// at the FIRST NaN (payload + sign verbatim) — the kernel rescans for exactly that
-        /// element, and likewise returns the FIRST zero's sign on a ±0 extremum (npy_half ge/le
-        /// call -0 == +0, probed 2.4.2). Non-contiguous / empty inputs keep the iterator fallback.
+        /// Max/min with a float16 RESULT. The IL reduction kernel can't drive Half (OpCodes.Bgt/Blt don't
+        /// apply to the struct), but the extremum needs no float math at all: f16 ordering is
+        /// sign-magnitude on the raw bits, so the reduction rides the bit-level kernels of
+        /// <see cref="NumPyHalfMinMaxReduce.Flat"/> — NumPy's fold <c>(ge(acc,x) || isnan(acc)) ? acc : x</c>
+        /// on every layout: the FIRST NaN verbatim (payload + sign), else the first extreme element,
+        /// a ±0 tie keeping the earlier zero, "first" in NumPy's K visiting order.
         /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The engine's own float16 np.max / np.min no longer come here (<see cref="HalfMinMaxReduce"/>
+        /// takes them before the dtype dispatch); this serves a <c>dtype=float16</c> request over ANOTHER dtype
+        /// — NumSharp's extension, which computes in the requested dtype exactly as the axis path's casting
+        /// kernel does: the input is cast to float16 first, then reduced. It used to hand the other dtype's
+        /// buffer to the float16 kernel unconverted (probed: <c>np.max(float32[1, 5, -2, 3, 100, 0.5],
+        /// dtype: float16)</c> returned 5.0, a strided input 0.0), and a non-contiguous float16 input used to
+        /// come back as the canonical <see cref="Half.NaN"/> for any NaN.
+        /// </para>
+        /// </remarks>
+        /// <param name="arr">The array to reduce (any dtype, any layout; non-empty — np.max / np.min raise on empty upstream).</param>
+        /// <returns>The boxed float16 result.</returns>
         private unsafe object MaxElementwiseHalfFallback(NDArray arr)
-        {
-            long n = arr.size;
-            if (arr.Shape.IsContiguous && n > 0)
-            {
-                ushort* p = (ushort*)((byte*)arr.Address + arr.Shape.offset * 2);
-                return BitConverter.UInt16BitsToHalf(Kernels.DirectILKernelGenerator.HalfMaxBitsContiguous(p, n));
-            }
+            => HalfFlatMinMaxValue(arr, isMax: true);
 
-            // non-contiguous → NDIter chunked path (no per-element AsIterator dispatch)
-            return HalfMinMaxViaNDIter(arr, isMin: false);
-        }
-
+        /// <summary>The minimum twin of <see cref="MaxElementwiseHalfFallback"/>.</summary>
+        /// <param name="arr">The array to reduce (any dtype, any layout; non-empty).</param>
+        /// <returns>The boxed float16 result.</returns>
         private unsafe object MinElementwiseHalfFallback(NDArray arr)
+            => HalfFlatMinMaxValue(arr, isMax: false);
+
+        /// <summary>
+        /// The flat float16 maximum / minimum of <paramref name="arr"/>, casting a non-float16 input to float16 first
+        /// (see <see cref="MaxElementwiseHalfFallback"/>).
+        /// </summary>
+        /// <param name="arr">The array to reduce (any dtype, any layout).</param>
+        /// <param name="isMax">maximum when true, minimum when false.</param>
+        /// <returns>The result, with NumPy's bits; ∓inf for an empty array (the prior fallback's answer — np.max /
+        /// np.min raise on an empty array before reaching here).</returns>
+        private static unsafe Half HalfFlatMinMaxValue(NDArray arr, bool isMax)
         {
-            long n = arr.size;
-            if (arr.Shape.IsContiguous && n > 0)
+            if (arr.size == 0)
+                return isMax ? Half.NegativeInfinity : Half.PositiveInfinity;
+
+            if (arr.GetTypeCode != NPTypeCode.Half)
             {
-                ushort* p = (ushort*)((byte*)arr.Address + arr.Shape.offset * 2);
-                return BitConverter.UInt16BitsToHalf(Kernels.DirectILKernelGenerator.HalfMinBitsContiguous(p, n));
+                // The cast is a fresh C-contiguous temp that never escapes.
+                using var h = arr.astype(np.float16);
+                return HalfFlatMinMaxValue(h, isMax);
             }
 
-            // non-contiguous → NDIter chunked path (no per-element AsIterator dispatch)
-            return HalfMinMaxViaNDIter(arr, isMin: true);
+            var s = arr.Shape;
+            ushort* x = (ushort*)((byte*)arr.Address + s.offset * sizeof(ushort));
+            return BitConverter.UInt16BitsToHalf(NumPyHalfMinMaxReduce.Flat(x, s.dimensions, s.strides, isMax, nanIgnore: false));
         }
 
         /// <summary>
@@ -992,32 +1008,6 @@ namespace NumSharp.Backends
             return isProd
                 ? iter.ExecuteReducing<HalfProdKernel, double>(default, acc)
                 : iter.ExecuteReducing<HalfSumKernel, double>(default, acc);
-        }
-
-        /// <summary>
-        /// Non-contiguous Half min/max via NDIter's chunked EXTERNAL_LOOP. The min/max VALUE is
-        /// order-independent and NaN propagation (any NaN → NaN) is too, so NDIter's permuted
-        /// traversal is safe here — unlike argmin/argmax, whose returned index would shift under the
-        /// permutation. Empty → ±inf (matching the prior iterator fallback); any NaN → NaN.
-        /// Contiguous inputs take the direct-pointer scan upstream.
-        ///
-        /// Struct-generic ExecuteReducing (HalfMaxKernel/HalfMinKernel) replaces the ForEach
-        /// delegate: a 4-accumulator unroll on the contiguous inner chunk breaks the per-element
-        /// dependency chain (~1.3× on 4M) and the JIT inlines the kernel.
-        /// </summary>
-        private static unsafe object HalfMinMaxViaNDIter(NDArray arr, bool isMin)
-        {
-            if (arr.size == 0)
-                return isMin ? Half.PositiveInfinity : Half.NegativeInfinity;
-
-            using var iter = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP);
-            var acc = isMin
-                ? iter.ExecuteReducing<HalfMinKernel, HalfMinMaxAccumulator>(default, default)
-                : iter.ExecuteReducing<HalfMaxKernel, HalfMinMaxAccumulator>(default, default);
-
-            if (acc.SawNaN) return Half.NaN;
-            if (!acc.Seen) return isMin ? Half.PositiveInfinity : Half.NegativeInfinity;
-            return (Half)acc.Best;
         }
 
         /// <summary>

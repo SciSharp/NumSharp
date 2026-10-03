@@ -343,8 +343,9 @@ namespace NumSharp.Tests.Backends.Iterators
         /// the flat walker (<c>NumPyMinMaxReduce.ReduceFlat</c>, the same one the engine's <c>np.max</c> runs) reproduces
         /// that in place. What still declines to the fold, value still right: a bare BROADCAST leaf (NumPy's stride-0
         /// reduce path is not ported), an integer child that does not stream (the fold is exact — min/max of integers is
-        /// order-free), and every dtype outside the served set (Half, Complex, Boolean). A strided FLOAT computed child is
-        /// materialized (NumPy materializes it too) and does take the exact schedule.
+        /// order-free), and every dtype outside the served set (Complex, Boolean). A strided FLOAT computed child is
+        /// materialized (NumPy materializes it too) and does take the exact schedule; a float16 child takes NumPy's
+        /// sequential HALF fold (served since 2026-10-03).
         /// </summary>
         /// <remarks>
         /// The counter is reset before every evaluate it checks: the engine's own <c>np.amax</c> / <c>np.amin</c> —
@@ -387,7 +388,7 @@ namespace NumSharp.Tests.Backends.Iterators
             Assert.AreEqual(1, NDExpr.ExactMinMaxRuns, "a broadcast float product is materialized, then exact");
             Assert.AreEqual(39.0 * 49.0, bc.GetAtIndex<double>(0));
 
-            foreach (var tc in new[] { NPTypeCode.Half, NPTypeCode.Complex, NPTypeCode.Boolean })
+            foreach (var tc in new[] { NPTypeCode.Complex, NPTypeCode.Boolean })
             {
                 var a = (np.arange(100) % 5).astype(tc);
                 NDExpr.ExactMinMaxRuns = 0;
@@ -395,6 +396,14 @@ namespace NumSharp.Tests.Backends.Iterators
                 Assert.AreEqual(0, NDExpr.ExactMinMaxRuns, $"{tc} is not served");
                 Assert.AreEqual(np.amax(a).GetAtIndex(0), r.GetAtIndex(0), $"{tc} value");
             }
+
+            // float16 IS served (2026-10-03): NumPy's sequential HALF_maximum fold over the leaf in place
+            // (DefaultEngine.TryExactFlatMinMaxHalf), so its first NaN and first ±0 are NumPy's, not the fold's.
+            var h = (np.arange(100) % 5).astype(NPTypeCode.Half);
+            NDExpr.ExactMinMaxRuns = 0;
+            var hr = np.evaluate(NDExpr.Max((NDExpr)h));
+            Assert.AreEqual(1, NDExpr.ExactMinMaxRuns, "Half runs NumPy's sequential fold");
+            Assert.AreEqual(np.amax(h).GetAtIndex(0), hr.GetAtIndex(0), "Half value");
 
             Assert.ThrowsException<ArgumentException>(() => np.evaluate(NDExpr.Max((NDExpr)np.zeros(new Shape(0), NPTypeCode.Double))),
                 "an empty max still raises (no identity) — the exact route only runs for n > 0");

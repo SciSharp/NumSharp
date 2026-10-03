@@ -737,11 +737,16 @@ namespace NumSharp.Backends
                 // contiguous reduction schedule (DefaultEngine.Evaluate.MinMax.cs): the same ±0-tie and
                 // NaN-payload bits as np.max / np.min (the fold below only matched the value), streamed without a
                 // temp where the operands allow. Declines to the fold for the layouts / dtypes it does not serve.
+                // A float16 child takes NumPy's sequential HALF_maximum / HALF_minimum fold instead
+                // (TryExactFlatMinMaxHalf): its first NaN and first ±0 are decided by the visiting order.
                 if ((reduce.Kind == NDExprReduceKind.Min || reduce.Kind == NDExprReduceKind.Max)
-                    && NumPyMinMaxReduce.Supports(exprType))
+                    && (NumPyMinMaxReduce.Supports(exprType) || exprType == NPTypeCode.Half))
                 {
                     byte* mmSlot = stackalloc byte[NDExprParamPlan.SlotBytes];
-                    if (TryExactFlatMinMax(childProgram, inputs, n, reduce.Kind == NDExprReduceKind.Max ? MinMaxOp.Max : MinMaxOp.Min, exprType, mmSlot))
+                    var mmOp = reduce.Kind == NDExprReduceKind.Max ? MinMaxOp.Max : MinMaxOp.Min;
+                    if (exprType == NPTypeCode.Half
+                            ? TryExactFlatMinMaxHalf(childProgram, inputs, n, mmOp, mmSlot)
+                            : TryExactFlatMinMax(childProgram, inputs, n, mmOp, exprType, mmSlot))
                     {
                         // Min / Max preserve the child dtype, so the slot already holds the result dtype; a caller
                         // out= (validated above) takes the same same_kind conversion the fold path uses.
