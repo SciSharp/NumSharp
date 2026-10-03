@@ -97,12 +97,16 @@ namespace NumSharp
         private static bool IsNoSize(Shape size) => size.IsEmpty;
 
         /// <summary>Allocates <paramref name="shape"/> as float64 and fills it with <c>next_double</c> draws.</summary>
-        /// <param name="shape">The output shape (may be 0-d or empty).</param>
+        /// <param name="shape">The output shape (may be 0-d or empty). Only its dimensions are used — NumPy's
+        ///     <c>np.empty(size)</c> of a dims tuple — so a Shape read off a view lays out like any other.</param>
         /// <param name="bg">The bit generator to draw from; the caller holds its lock.</param>
         /// <returns>A fresh C-contiguous float64 array.</returns>
+        /// <exception cref="ValueError">A dimension is negative (<c>negative dimensions are not allowed</c>).</exception>
         private static unsafe NDArray FillDoubles(Shape shape, BitGenerator bg)
         {
-            var ret = new NDArray(typeof(double), shape, false);
+            // AsClean: the draws are written in memory order, so the result must be C-ordered whatever layout the
+            // caller's Shape carried (a view's strides would read past the buffer, an F layout would transpose them).
+            var ret = new NDArray(typeof(double), shape.AsClean(), false);
             if (shape.size == 0)
                 return ret;
             bg.FillDouble((double*)ret.Address, shape.size);
@@ -110,12 +114,15 @@ namespace NumSharp
         }
 
         /// <summary>Allocates <paramref name="shape"/> as float32 and fills it with <c>next_float</c> draws.</summary>
-        /// <param name="shape">The output shape (may be 0-d or empty).</param>
+        /// <param name="shape">The output shape (may be 0-d or empty). Only its dimensions are used — NumPy's
+        ///     <c>np.empty(size)</c> of a dims tuple — so a Shape read off a view lays out like any other.</param>
         /// <param name="bg">The bit generator to draw from; the caller holds its lock.</param>
         /// <returns>A fresh C-contiguous float32 array.</returns>
+        /// <exception cref="ValueError">A dimension is negative (<c>negative dimensions are not allowed</c>).</exception>
         private static unsafe NDArray FillFloats(Shape shape, BitGenerator bg)
         {
-            var ret = new NDArray(typeof(float), shape, false);
+            // AsClean: the draws are written in memory order (see FillDoubles).
+            var ret = new NDArray(typeof(float), shape.AsClean(), false);
             if (shape.size == 0)
                 return ret;
             bg.FillFloat((float*)ret.Address, shape.size);

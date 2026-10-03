@@ -59,9 +59,10 @@ namespace NumSharp
             DType resultType = DType.From(tc); // the native builtin (a non-native legacy request draws native)
 
             // NumPy _rand_*: `if size is not None and np.prod(size) == 0: return np.empty(size, dtype)` runs
-            // BEFORE the bounds are looked at, and consumes nothing from the stream.
+            // BEFORE the bounds are looked at, and consumes nothing from the stream. `size` is a dims tuple there, so
+            // only its dimensions count (AsClean): a view's Shape must not leave its strides or offset on the result.
             if (!size.IsEmpty && size.size == 0)
-                return new NDArray(resultType, size);
+                return new NDArray(resultType, size.AsClean());
 
             // The internal generator produces on the closed interval [low, high]; subtract 1 for half-open.
             if (!endpoint)
@@ -91,8 +92,10 @@ namespace NumSharp
                     return NDArray.Scalar(one.GetAtIndex(0), tc);
                 }
 
-                // Every element is written by the fill, so the allocation skips its zero pass.
-                var nd = new NDArray(resultType, size, false);
+                // NumPy's np.empty(size, dtype), from `size`'s dimensions only (AsClean): the fill writes nd.size values in
+                // memory order, so a view's Shape (a stepped x.Shape read past the buffer; an F one transposed the
+                // draws) must not reach the allocation. Every element is written by the fill, so it skips its zero pass.
+                var nd = new NDArray(resultType, size.AsClean(), false);
                 Fill(bg, nd, nd.size, width, off, rng, useMasked);
                 return nd;
             }

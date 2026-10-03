@@ -53,10 +53,12 @@ namespace NumSharp
         /// <remarks>
         ///     Rebuilding the shape from its dimensions matters: a <paramref name="size"/> taken from a view carries that view's
         ///     strides and offset, and allocating <c>size</c> elements under those strides would write past the buffer.
+        ///     <see cref="Shape.AsClean"/> keeps a size that already is the C layout of its dimensions (no allocation) and
+        ///     re-lays out anything else, a dense F view included, because the fills write in memory order.
         /// </remarks>
         /// <exception cref="ValueError">A dimension is negative (<c>negative dimensions are not allowed</c>).</exception>
         private static NDArray LegacyOutput(NPTypeCode typeCode, Shape size)
-            => new NDArray(typeCode, new Shape(size.dimensions), false);
+            => new NDArray(typeCode, size.AsClean(), false);
 
         /// <summary>
         ///     NumPy's <c>legacy_gauss</c>: the cached polar (Marsaglia) method. Returns the cached value if there is one —

@@ -10,12 +10,16 @@ namespace NumSharp
         // bit generator's lock for the whole fill.
 
         /// <summary>Allocates <paramref name="shape"/> as float64 and fills it with successive <paramref name="sampler"/> draws.</summary>
-        /// <param name="shape">The output shape (0-d and empty shapes allowed).</param>
+        /// <param name="shape">The output shape (0-d and empty shapes allowed). Only its dimensions are used — NumPy's
+        ///     <c>np.empty(size)</c> of a dims tuple — so a Shape read off a view lays out like any other.</param>
         /// <param name="sampler">The per-element draw; called exactly <c>shape.size</c> times, in order.</param>
         /// <returns>A fresh C-contiguous float64 array.</returns>
+        /// <exception cref="ValueError">A dimension is negative (<c>negative dimensions are not allowed</c>).</exception>
         private unsafe NDArray FillDoubleDist(Shape shape, Func<double> sampler)
         {
-            var ret = new NDArray(typeof(double), shape, false);
+            // AsClean: the draws are written in memory order, so the result must be C-ordered whatever layout the
+            // caller's Shape carried (a view's strides would read past the buffer, an F layout would transpose them).
+            var ret = new NDArray(typeof(double), shape.AsClean(), false);
             if (shape.size == 0)
                 return ret;
             var p = (double*)ret.Address;
@@ -26,12 +30,15 @@ namespace NumSharp
         }
 
         /// <summary>Allocates <paramref name="shape"/> as float32 and fills it with successive <paramref name="sampler"/> draws.</summary>
-        /// <param name="shape">The output shape (0-d and empty shapes allowed).</param>
+        /// <param name="shape">The output shape (0-d and empty shapes allowed). Only its dimensions are used — NumPy's
+        ///     <c>np.empty(size)</c> of a dims tuple — so a Shape read off a view lays out like any other.</param>
         /// <param name="sampler">The per-element draw; called exactly <c>shape.size</c> times, in order.</param>
         /// <returns>A fresh C-contiguous float32 array.</returns>
+        /// <exception cref="ValueError">A dimension is negative (<c>negative dimensions are not allowed</c>).</exception>
         private unsafe NDArray FillFloatDist(Shape shape, Func<float> sampler)
         {
-            var ret = new NDArray(typeof(float), shape, false);
+            // AsClean: the draws are written in memory order (see FillDoubleDist).
+            var ret = new NDArray(typeof(float), shape.AsClean(), false);
             if (shape.size == 0)
                 return ret;
             var p = (float*)ret.Address;

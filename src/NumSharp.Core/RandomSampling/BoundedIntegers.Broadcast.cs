@@ -66,8 +66,9 @@ namespace NumSharp
             DType resultType = DType.From(tc);
 
             // `if size is not None and np.prod(size) == 0: return np.empty(size, dtype)` — before either bound is read.
+            // `size` is a dims tuple there, so only its dimensions count (AsClean), never a view's strides or offset.
             if (!size.IsEmpty && size.size == 0)
-                return new NDArray(resultType, size);
+                return new NDArray(resultType, size.AsClean());
 
             // `if high is None: high = low; low = 0` — the Python int 0, whose np.asarray is a 0-d int64.
             bool oneArg = high is null;

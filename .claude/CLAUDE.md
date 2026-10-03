@@ -476,6 +476,27 @@ behind: the `real`/`imag` SETTERS and `setfield` (now `[NDScoped]`), and `view<T
 to wrap the alias in an untyped NDArray and then `AsGeneric<T>()` it, which built a SECOND NDArray; they now construct
 the typed array directly.
 
+**Allocating from a view's Shape is safe (fixed 2026-10-03).** A `Shape` carries a view's strides, offset and buffer
+size next to its dimensions, so the natural port `np.empty(x.Shape)` of NumPy's `np.empty(x.shape)` used to hand the
+allocator the VIEW's addressing over a buffer of only `size` elements: `np.zeros(arange(20)["::4"].Shape)` read heap
+memory, `np.polyval(p, a[::4])` (which allocates `np.zeros(x.Shape)`) crashed the CLR, and
+`default_rng(42).integers(0, 100, x.Shape)` returned heap pointers. Every allocating entry point
+(`UnmanagedStorage.Allocate(Shape, …)` behind `new NDArray(dtype, shape)` / `np.empty` / `np.zeros`, plus the `np.ones` and
+`np.full` cores) now routes the shape through `Shape.ForFreshAllocation()` (`View/Shape.Allocation.cs`): a layout that
+already describes a fresh buffer — offset 0, buffer size == element count, dense C/F or a KEEPORDER permutation — is
+KEPT (the `copy(order='K')`, `NpyIterOutputShape` and `ConcatOutputShape` callers allocate exactly such shapes), and any
+view layout (a step, an offset, a negative stride, a broadcast, a contiguous slice reporting its parent's buffer) is
+re-laid out in C order, NumPy's answer for a dims-only request; the result is always writeable. A shape used ONLY for its
+dimensions — NumPy's `size` tuple, every `np.random` sampler — goes through the stricter `Shape.AsClean()`, which also
+re-lays out a dense F/permuted view (a sampler fills in memory order, so `x.T.Shape` would otherwise transpose the
+draws) and returns its input unchanged when it already is the C layout. NOT covered: the WRAP constructors install the
+given layout over the CALLER's buffer as given. `new UnmanagedStorage(IArraySlice, Shape)` builds internal views that way
+on purpose; `new NDArray(Array | IArraySlice, Shape)` still reads past a `size`-element buffer when handed a stepped
+view's Shape (open item, probed 2026-10-03). Gates: `View/Shape.ForFreshAllocation.Tests.cs`,
+`Creation/FreshAllocation.ViewShape.Tests.cs`, `RandomSampling/RandomSizeViewShape.Test.cs`, and the oracle replay
+`FuzzCorpusTests.RandomApiSizeLayouts` (every random overload taking a `Shape`, its size handed over as a view's layout
+of the same dimensions, against NumPy).
+
 ## Slicing Syntax
 
 ```csharp

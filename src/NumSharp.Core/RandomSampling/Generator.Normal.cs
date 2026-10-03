@@ -42,7 +42,9 @@ namespace NumSharp
                         ? NDArray.Scalar((double)NextStandardNormalF())
                         : NDArray.Scalar(NextStandardNormal());
 
-                var ret = new NDArray(tc == NPTypeCode.Single ? typeof(float) : typeof(double), size, false);
+                // NumPy's np.empty(size, dtype), from `size`'s dimensions only (AsClean): the fill writes in memory order,
+                // so a view's Shape must not reach the allocation.
+                var ret = new NDArray(tc == NPTypeCode.Single ? typeof(float) : typeof(double), size.AsClean(), false);
                 unsafe
                 {
                     if (tc == NPTypeCode.Single) FillStandardNormalF((float*)ret.Address, ret.size);
@@ -73,8 +75,9 @@ namespace NumSharp
                 if (IsNoSize(size))
                     return NDArray.Scalar(loc + scale * NextStandardNormal());
 
-                // loc + scale * z for each standard normal z — the same expression per element as NumPy's cont().
-                var ret = new NDArray(typeof(double), size, false);
+                // loc + scale * z for each standard normal z — the same expression per element as NumPy's cont(), into
+                // np.empty(size) built from `size`'s dimensions only (AsClean): the fill writes in memory order.
+                var ret = new NDArray(typeof(double), size.AsClean(), false);
                 unsafe
                 {
                     var p = (double*)ret.Address;

@@ -29,6 +29,20 @@ namespace NumSharp.Tests.Fuzz.RandomApi
     /// </remarks>
     internal static class RandomApiHarness
     {
+        /// <summary>
+        ///     When set, builds every decoded <see cref="Shape"/> argument (a <c>size</c>) from its dimensions instead of the
+        ///     plain <c>new Shape(dims)</c> — the size-layout replays set it to a view's layout of the same dimensions, which
+        ///     NumPy cannot express (its <c>size</c> is a tuple) and so must not change any answer. Null in every ordinary
+        ///     replay.
+        /// </summary>
+        /// <remarks>
+        ///     Thread-static so a replay that sets it cannot leak a layout into another test running in parallel; the setter
+        ///     clears it in a <c>finally</c>. It sees only the dimensions the corpus encodes (never <c>size=None</c>), and
+        ///     priming never decodes, so the receiver's set-up draws are untouched.
+        /// </remarks>
+        [ThreadStatic]
+        internal static Func<long[], Shape> SizeLayout;
+
         /// <summary>The outcome of one invocation.</summary>
         /// <param name="Result">The member's return value (null for <c>void</c>, setters and fields' absence).</param>
         /// <param name="Receiver">The receiver after the call (null for constructors and static members).</param>
@@ -521,6 +535,10 @@ namespace NumSharp.Tests.Fuzz.RandomApi
                 if (a.TryGetProperty("none", out _))
                     return default(Shape);
                 var dims = LongArray(a.GetProperty("dims"));
+                // The size-layout replays (FuzzCorpusTests.RandomApiSizeLayouts) hand the same dimensions over as a view's
+                // Shape; a negative dimension stays clean, since no view has one and NumPy raises before any layout matters.
+                if (SizeLayout != null && Array.TrueForAll(dims, d => d >= 0))
+                    return SizeLayout(dims);
                 return dims.Length == 0 ? Shape.Scalar : new Shape(dims);
             }
             if (under == typeof(DType))

@@ -52,7 +52,7 @@ namespace NumSharp
             }
 
             if (a == 0.0)
-                return np.zeros(new Shape(size.dimensions), NPTypeCode.Double); // legacy_weibull(0) draws nothing
+                return np.zeros(size.AsClean(), NPTypeCode.Double); // legacy_weibull(0) draws nothing; dims only (NumPy's np.empty(size))
 
             var ret = LegacyOutput(NPTypeCode.Double, size);
             unsafe

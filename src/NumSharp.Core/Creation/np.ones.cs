@@ -128,7 +128,10 @@ namespace NumSharp
             // dimension guard has to be explicit here — see np.full.
             AllocationGuard.CheckDimensions(shape.dimensions, typeCode);
 
-            return new NDArray(ArraySlice.Allocate(typeCode, shape.size, one), shape);
+            // The wrapping constructor installs the shape as given, so the fresh-layout rule of the allocating funnel has
+            // to be applied here: a view's Shape (np.ones(x.Shape) for x = a[::4]) would otherwise address past the
+            // `size`-element buffer, and a read-only source's Shape would make the new array read-only.
+            return new NDArray(ArraySlice.Allocate(typeCode, shape.size, one), shape.ForFreshAllocation());
         }
 
         /// <summary>

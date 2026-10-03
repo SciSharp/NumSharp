@@ -49,9 +49,10 @@ namespace NumSharp
             if (shape.IsEmpty)
                 return rand();
 
-            // A fresh C-contiguous array of the requested dimensions: a view's Shape (strides/offset) must not leak
-            // into the allocation, and NumPy's random_sample always fills a new C-order array.
-            NDArray ret = new NDArray(typeof(double), shape.IsEmpty ? shape : new Shape(shape.dimensions), false);
+            // A fresh C-contiguous array of the requested dimensions: a view's Shape (strides/offset, or a dense F order)
+            // must not leak into the allocation, and NumPy's random_sample always fills a new C-order array. AsClean keeps
+            // a shape that already is that layout, so the common call allocates no second Shape.
+            NDArray ret = new NDArray(typeof(double), shape.AsClean(), false);
 
             // Handle empty arrays (any dimension is 0)
             if (ret.size == 0)

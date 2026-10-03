@@ -1244,10 +1244,16 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     Allocates a new <see cref="Array"/> into memory.
+        ///     Allocates a new, zero-filled buffer for <paramref name="shape"/>'s dimensions and makes it this storage's
+        ///     data — NumPy's <c>PyArray_NewFromDescr</c> with no data pointer.
         /// </summary>
+        /// <param name="shape">The dimensions to allocate. Only a fresh layout (C, F or a dense permutation at offset 0)
+        ///     is kept; a view's layout (stepped, offset, reversed, broadcast) is re-laid out in C order
+        ///     (<see cref="Shape.ForFreshAllocation"/>), so <c>Allocate(x.Shape)</c> of a view never addresses past the
+        ///     new buffer.</param>
         /// <param name="dtype">The type of the Array, if null <see cref="DType"/> is used.</param>
-        /// <param name="shape">The shape of the array.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="shape"/> is uninitialized (<c>default(Shape)</c>).</exception>
+        /// <exception cref="ValueError">A dimension is negative, or the byte count overflows (<see cref="AllocationGuard"/>).</exception>
         public void Allocate(Shape shape, Type dtype = null)
         {
             if (shape.IsEmpty)
@@ -1256,22 +1262,19 @@ namespace NumSharp.Backends
             var resolved = dtype ?? DType;
             AllocationGuard.CheckDimensions(shape.dimensions, resolved.GetTypeCode());
 
-            _Allocate(FreshWriteable(shape), ArraySlice.Allocate(resolved, shape.size, true));
+            _Allocate(shape.ForFreshAllocation(), ArraySlice.Allocate(resolved, shape.size, true));
         }
 
-        // This overload allocates BRAND-NEW owned memory, so its result is always writeable — even when
-        // the shape was borrowed from a read-only source (e.g. an elementwise result whose shape is the
-        // read-only operand's shape, `mmap_r + 1`). Without this the fresh array would inherit the stale
-        // read-only flag and diverge from NumPy. (Views never allocate — they Alias, which correctly
-        // inherits read-only.)
-        private static Shape FreshWriteable(Shape shape)
-            => shape.IsWriteable ? shape : shape.WithFlags(flagsToSet: ArrayFlags.WRITEABLE);
-
         /// <summary>
-        ///     Allocates a new <see cref="Array"/> into memory.
+        ///     Allocates a new buffer for <paramref name="shape"/>'s dimensions and makes it this storage's data — NumPy's
+        ///     <c>PyArray_NewFromDescr</c> with no data pointer.
         /// </summary>
+        /// <param name="shape">The dimensions to allocate. Only a fresh layout (C, F or a dense permutation at offset 0)
+        ///     is kept; a view's layout is re-laid out in C order (<see cref="Shape.ForFreshAllocation"/>).</param>
         /// <param name="dtype">The type of the Array, if null <see cref="DType"/> is used.</param>
-        /// <param name="shape">The shape of the array.</param>
+        /// <param name="fillZeros">Zero the fresh buffer, else leave the allocation noise (the caller writes every element).</param>
+        /// <exception cref="ArgumentNullException"><paramref name="shape"/> is uninitialized (<c>default(Shape)</c>).</exception>
+        /// <exception cref="ValueError">A dimension is negative, or the byte count overflows (<see cref="AllocationGuard"/>).</exception>
         public void Allocate(Shape shape, Type dtype, bool fillZeros)
         {
             if (shape.IsEmpty)
@@ -1280,14 +1283,19 @@ namespace NumSharp.Backends
             var resolved = dtype ?? DType;
             AllocationGuard.CheckDimensions(shape.dimensions, resolved.GetTypeCode());
 
-            _Allocate(FreshWriteable(shape), ArraySlice.Allocate(resolved, shape.size, fillZeros));
+            _Allocate(shape.ForFreshAllocation(), ArraySlice.Allocate(resolved, shape.size, fillZeros));
         }
 
         /// <summary>
-        ///     Allocates a new <see cref="Array"/> into memory.
+        ///     Allocates a new buffer for <paramref name="shape"/>'s dimensions and makes it this storage's data — NumPy's
+        ///     <c>PyArray_NewFromDescr</c> with no data pointer.
         /// </summary>
-        /// <param name="dtype">The type of the Array, if null <see cref="DType"/> is used.</param>
-        /// <param name="shape">The shape of the array.</param>
+        /// <param name="shape">The dimensions to allocate. Only a fresh layout (C, F or a dense permutation at offset 0)
+        ///     is kept; a view's layout is re-laid out in C order (<see cref="Shape.ForFreshAllocation"/>).</param>
+        /// <param name="dtype">The storage lane to allocate.</param>
+        /// <param name="fillZeros">Zero the fresh buffer, else leave the allocation noise (the caller writes every element).</param>
+        /// <exception cref="ArgumentNullException"><paramref name="shape"/> is uninitialized, or <paramref name="dtype"/> is <see cref="NPTypeCode.Empty"/>.</exception>
+        /// <exception cref="ValueError">A dimension is negative, or the byte count overflows (<see cref="AllocationGuard"/>).</exception>
         public void Allocate(Shape shape, NPTypeCode dtype, bool fillZeros)
         {
             if (shape.IsEmpty)
@@ -1298,17 +1306,22 @@ namespace NumSharp.Backends
 
             AllocationGuard.CheckDimensions(shape.dimensions, dtype);
 
-            _Allocate(FreshWriteable(shape), ArraySlice.Allocate(dtype, shape.size, fillZeros));
+            _Allocate(shape.ForFreshAllocation(), ArraySlice.Allocate(dtype, shape.size, fillZeros));
         }
 
         /// <summary>
         ///     Allocates a new <see cref="Array"/> into memory described by a dtype DESCRIPTOR (NumPy's
         ///     <c>PyArray_NewFromDescr</c>): the descriptor becomes <see cref="Descr"/>, its class supplies the lane.
         /// </summary>
-        /// <param name="shape">The shape of the array.</param>
+        /// <param name="shape">The dimensions to allocate. Only a fresh layout (C, F or a dense permutation at offset 0)
+        ///     is kept; a view's layout is re-laid out in C order (<see cref="Shape.ForFreshAllocation"/>), which is what
+        ///     makes <c>new NDArray(dtype, x.Shape)</c>, <c>np.empty(x.Shape)</c> and <c>np.zeros(x.Shape)</c> safe for a
+        ///     view <c>x</c>.</param>
         /// <param name="dtype">The dtype descriptor of the array; a non-native byte order is canonicalised (NumSharp buffers are always native).</param>
         /// <param name="fillZeros">Zero the fresh buffer, else leave the allocation noise.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="shape"/> is uninitialized, or <paramref name="dtype"/> is null.</exception>
         /// <exception cref="NotSupportedException">The descriptor's class has no storage lane yet (a datetime64/timedelta64 descriptor before Stage C).</exception>
+        /// <exception cref="ValueError">A dimension is negative, or the byte count overflows (<see cref="AllocationGuard"/>).</exception>
         public void Allocate(Shape shape, DType dtype, bool fillZeros)
         {
             if (shape.IsEmpty)
@@ -1320,7 +1333,7 @@ namespace NumSharp.Backends
             var typeCode = dtype.GetTypeCode(); // throws the descriptive "no storage yet" for a descriptor-only class
             AllocationGuard.CheckDimensions(shape.dimensions, typeCode);
 
-            _Allocate(FreshWriteable(shape), ArraySlice.Allocate(typeCode, shape.size, fillZeros));
+            _Allocate(shape.ForFreshAllocation(), ArraySlice.Allocate(typeCode, shape.size, fillZeros));
             _descr = dtype.isnative ? dtype : dtype.Meta.EnsureCanonical(dtype);
         }
 

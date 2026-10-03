@@ -43,7 +43,9 @@ namespace NumSharp
                     // the float32 draw to a Python float); only sized/()/out= stay float32.
                     return tc == NPTypeCode.Single ? NDArray.Scalar((double)f()) : NDArray.Scalar(d());
 
-                var ret = new NDArray(tc == NPTypeCode.Single ? typeof(float) : typeof(double), size, false);
+                // NumPy's np.empty(size, dtype), from `size`'s dimensions only (AsClean): the fill writes in memory order,
+                // so a view's Shape must not reach the allocation.
+                var ret = new NDArray(tc == NPTypeCode.Single ? typeof(float) : typeof(double), size.AsClean(), false);
                 unsafe
                 {
                     FillStandardExponentialInto((byte*)ret.Address, ret.size, tc, zig);
@@ -109,7 +111,8 @@ namespace NumSharp
                 if (IsNoSize(size))
                     return NDArray.Scalar(scale * NextStandardExponential());
 
-                var ret = new NDArray(typeof(double), size, false);
+                // np.empty(size) from `size`'s dimensions only (AsClean): the fill below writes in memory order.
+                var ret = new NDArray(typeof(double), size.AsClean(), false);
                 unsafe
                 {
                     var p = (double*)ret.Address;

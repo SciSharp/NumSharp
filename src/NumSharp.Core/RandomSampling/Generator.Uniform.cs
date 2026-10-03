@@ -29,8 +29,9 @@ namespace NumSharp
                 if (IsNoSize(size))
                     return NDArray.Scalar(low + range * _bitGenerator.NextDouble());
 
-                // One bulk uniform fill, then low + range * u in place — NumPy's per-element expression.
-                var ret = new NDArray(typeof(double), size, false);
+                // One bulk uniform fill, then low + range * u in place — NumPy's per-element expression. The output is
+                // np.empty(size) from `size`'s dimensions only (AsClean): the fill writes in memory order.
+                var ret = new NDArray(typeof(double), size.AsClean(), false);
                 unsafe
                 {
                     var p = (double*)ret.Address;

@@ -20,7 +20,12 @@ namespace NumSharp
         /// <param name="size">The requested shape.</param>
         /// <returns>A fresh, uninitialized C-contiguous array.</returns>
         /// <exception cref="ValueError">A dimension is negative.</exception>
-        private static NDArray DistOutput(NPTypeCode typeCode, Shape size) => new NDArray(typeCode, new Shape(size.dimensions), false);
+        /// <remarks>
+        ///     <see cref="Shape.AsClean"/> keeps a size that already is the C layout of its dimensions (no allocation) and
+        ///     re-lays out anything else, a dense F view included: the samplers fill in memory order, so the output must be
+        ///     C-ordered for the draws to land where NumPy puts them.
+        /// </remarks>
+        private static NDArray DistOutput(NPTypeCode typeCode, Shape size) => new NDArray(typeCode, size.AsClean(), false);
 
         /// <summary>
         ///     Draw samples from a Beta distribution.
@@ -459,7 +464,7 @@ namespace NumSharp
                     return NDArray.Scalar(a == 0.0 ? 0.0 : Math.Pow(NextStandardExponential(), 1.0 / a));
 
                 if (a == 0.0)
-                    return np.zeros(new Shape(size.dimensions), NPTypeCode.Double); // random_weibull(0) draws nothing
+                    return np.zeros(size.AsClean(), NPTypeCode.Double); // random_weibull(0) draws nothing; dims only (NumPy's np.empty(size))
 
                 var ret = DistOutput(NPTypeCode.Double, size);
                 unsafe
