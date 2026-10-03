@@ -121,6 +121,13 @@ buffer. The pin takes its own atomic reference, so:
   pipelines use, never disposes the cursor it opens on its input - and before the net one shuffle kept the
   NumSharp buffer referenced for the life of the process (the pool never got it back, and
   `resize(refcheck)` refused).
+- **Reachable means valid.** Whatever can reach the view - you, a transform's output, a cursor, a getter
+  delegate (its closure holds the cursor, the cursor the view) - keeps the pins and the buffer alive, and a
+  getter keeps its cursor reachable until its read is done, so a collection that lands while it copies a row
+  cannot release the row under it (in a probe, 117 of 279 cursors held only by their getter were finalized
+  during that getter's own call). The finalizers of the view and of its cursors only give their reference back
+  (never free eagerly), so an alias of the buffer you still hold stays valid after they run, in any order.
+  The full analysis: `docs/plans/interop-lifetime-gc-analysis.md`.
 
 **Cursors follow ML.NET's own contract**, checked against the cursors of ML.NET's `Cache`,
 `FilterRowsByColumn`, `TakeRows` and `LoadFromEnumerable`:
