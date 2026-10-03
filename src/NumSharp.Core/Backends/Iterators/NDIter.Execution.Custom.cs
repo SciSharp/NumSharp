@@ -129,7 +129,9 @@ namespace NumSharp.Backends.Iteration
         /// Cookie passed to every inner-loop call, or null. It must stay valid for the whole call. The 2-D block kernels
         /// (narrow strided rows, masked or not) do not receive it: they serve multi-axis iterations, which NumPy mostly
         /// BUFFERS into one contiguous call (the second operand's NaN everywhere, which the kernel bodies already give).
-        /// The multi-axis broadcasts NumPy runs unbuffered, one region-rule call per row, are a documented residual.
+        /// The multi-axis broadcasts NumPy runs one region-rule call per row (unbuffered) or per buffer fill (a 0-d or
+        /// size-1 operand stays at stride 0 in its buffered loop) are open bugs, pinned with NumPy's bits in
+        /// <c>test/NumSharp.Tests/OpenBugs.NaNOperandOrder.cs</c>.
         /// </param>
         /// <exception cref="ArgumentNullException"><paramref name="operandTypes"/> is null.</exception>
         /// <exception cref="ArgumentException">The operand-type count does not match the iterator.</exception>
@@ -531,7 +533,8 @@ namespace NumSharp.Backends.Iteration
         /// <param name="auxdata">
         /// Cookie passed to every inner-loop call, or null; it must stay valid for the whole call. The 2-D block kernel
         /// (narrow strided rows) does not receive it, because NumPy mostly buffers such multi-axis iterations into one
-        /// contiguous call; the ones it runs unbuffered (one region-rule call per row) are a documented residual.
+        /// contiguous call; the ones it runs one region-rule call per row (unbuffered) or per buffer fill (a 0-d or
+        /// size-1 operand stays at stride 0) are open bugs, pinned in <c>test/NumSharp.Tests/OpenBugs.NaNOperandOrder.cs</c>.
         /// </param>
         /// <exception cref="ArgumentException">The iterator does not have three data operands.</exception>
         public void ExecuteElementWiseBinary(

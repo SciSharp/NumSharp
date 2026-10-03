@@ -38,9 +38,19 @@ namespace NumSharp.Tests.Fuzz
                     return EvaluateFromCorpus(p, ops);
 
                 // Binary arithmetic (NEP50 promotion). NumPy is the oracle for the result dtype.
-                case "add": return ops[0] + ops[1];
+                // add / multiply also honour params.dtype, NumPy's dtype= keyword: it selects the LOOP,
+                // so both inputs are cast into it. The nan_order tier uses it to gate which NaN that
+                // cast loop returns (the two ops whose NaN choice depends on the loop); without the
+                // key the operator path runs, unchanged.
+                case "add":
+                    return p.TryGetValue("dtype", out var addLoop)
+                        ? np.add(ops[0], ops[1], dtype: FuzzCorpus.DtypeToTC(addLoop.GetString()))
+                        : ops[0] + ops[1];
                 case "subtract": return ops[0] - ops[1];
-                case "multiply": return ops[0] * ops[1];
+                case "multiply":
+                    return p.TryGetValue("dtype", out var multiplyLoop)
+                        ? np.multiply(ops[0], ops[1], dtype: FuzzCorpus.DtypeToTC(multiplyLoop.GetString()))
+                        : ops[0] * ops[1];
                 case "divide": return ops[0] / ops[1];
                 case "floor_divide": return np.floor_divide(ops[0], ops[1]);
                 case "mod": return np.mod(ops[0], ops[1]);

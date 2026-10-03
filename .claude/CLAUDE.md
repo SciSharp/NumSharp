@@ -1036,7 +1036,7 @@ chooses the order. numpy 2.4.2 win-amd64 (MSVC 19.44), probed on every path:
   pairwise order (over 9 NaNs with payloads 1–9, `sum` returns payload 8 and NumSharp payload 2): this is the
   accepted multi-accumulator reduction-order difference. `cumsum` / `cumprod` (= `add.accumulate` /
   `multiply.accumulate`) keep the NEW element's NaN at each step (payloads 1, 2, 3, …). NumSharp's scan kernels keep
-  the accumulator's (1, 1, 1, …): an open follow-up (`DirectILKernelGenerator.Scan.cs`).
+  the accumulator's (1, 1, 1, …): an open bug (`DirectILKernelGenerator.Scan.cs`, pinned below).
 
 NumSharp encodes the order EXPLICITLY (`Backends/Kernels/Direct/DirectILKernelGenerator.NaNOperandOrder.cs`), because
 RyuJIT may swap a commutative operation's operands, so the IL operand order proves nothing:
@@ -1057,19 +1057,26 @@ everywhere; its strided / `out=` / `where=` paths keep the first. The order is a
 win-amd64 like the float16 and complex NaN-sign contracts.
 
 Gates:
-- oracle `nan_order.jsonl` (2,678 cases): NaN payloads compare raw through `params.nan_bits` on x86 hosts with
-  X86_V3. 1,032 of the cases fail on the pre-fix build;
-- `Math/NaNOperandOrderTests.cs` (15 tests). 13 fail on the pre-fix build. It includes the fuzz finding
+- oracle `nan_order.jsonl` (2,796 cases): NaN payloads compare raw through `params.nan_bits` on x86 hosts with
+  X86_V3. On the fix's parent (2f92d91d) 936 of the first 2,678 cases fail. Section G (118) holds the paths a
+  2026-10-03 gap probe validated as matching: float16 scans, complex128 subtract, the buffered N-D / cast / `where=`
+  / evaluate / `dtype=` paths;
+- `Math/NaNOperandOrderTests.cs` (13 tests). 12 fail on the pre-fix build. It includes the fuzz finding
   `max(lxor(isnan(b), a*0.0), (a+m)*(a+b))`, whose result is now SHA-256-identical to NumPy's.
 
-Residuals (`[Misaligned]`):
-- N-D broadcasts that NumPy runs UNBUFFERED: outer products with ≤ 2 rows such as `(2,1)+(1,64)`, and `(m,n)+(m,1)`
-  past n = 4096;
-- a 0-d operand against a non-contiguous N-D array longer than one buffer;
-- a reversed cast operand longer than one buffer;
+Residuals — `[OpenBugs]` with NumPy's raw bits in `test/NumSharp.Tests/OpenBugs.NaNOperandOrder.cs` (7 tests, one per
+class; the probe found 272 differing cases). Most are places where NumPy makes MORE inner-loop calls than NumSharp's
+kernels, so the region rule restarts where NumSharp keeps the second operand's NaN:
+- `cumsum` / `cumprod` of float32 / float64 / complex128 (above; complex128 per part);
+- complex128 add (array layouts), multiply and divide — MSVC's complex loops choose the NaN per part and, for add,
+  per unrolled vector pair. NumSharp's complex `cumprod` also multiplies element 0 by the identity instead of copying it;
+- N-D broadcasts NumPy runs one row per call: an outer product with two rows such as `(2,1)+(1,64)`, and
+  `(m,n)+(m,1)` with n > 4096;
+- a 0-d against an N-D view NumPy buffers (a row slice `x[:, :k]`, reversed rows or columns, a 3-D slice): the
+  region rule per buffer fill of whole rows;
+- a reversed cast operand, from 9 elements on;
 - `where=` together with a cast;
-- np.evaluate trees deeper than one node with a NaN 0-d or size-1 broadcast input;
-- complex128 (MSVC's 2×-unrolled complex loop alternates the order by vector parity).
+- np.evaluate trees deeper than one node with a NaN 0-d or size-1 broadcast input.
 
 Cost: 2 extra µops per add / multiply vector. No measurable change at ≥ 4K elements, ≤ ~5–10 % at 1K (inside the
 host's ±10–15 % run-to-run noise). A NaN 0-d broadcast got faster (0.60–0.80× the old time) through the fill path.

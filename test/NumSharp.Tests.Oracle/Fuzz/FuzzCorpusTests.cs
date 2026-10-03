@@ -71,7 +71,9 @@ namespace NumSharp.Tests.Fuzz
         // and the array operand's in its tail (gen_oracle.gen_nan_order has the probed rule). Every
         // other tier tokenizes NaN; these cases carry params.nan_bits, so their NaN payloads compare
         // RAW on an x86 X86_V3 host (IsNaNOperandOrderCase) and any payload or sign difference fails.
-        // Portable across operating systems: NumSharp's NaN choice is explicit, not the JIT's.
+        // Portable across operating systems: NumSharp's NaN choice is explicit, not the JIT's. Section G
+        // adds the float16 scans, complex128 subtract and the other paths a 2026-10-03 probe found
+        // matching; the paths that still differ are [OpenBugs] (NumSharp.Tests/OpenBugs.NaNOperandOrder.cs).
         [TestMethod]
         [TestCategory("FuzzMatrix")]
         public void NaNOperandOrder() => RunCorpus("nan_order.jsonl");
@@ -872,7 +874,7 @@ namespace NumSharp.Tests.Fuzz
             ["nanscan.jsonl"] = 525,   // nancumsum all 13 dtypes; nancumprod carves complex128 (host-FMA multiply)
             ["numpy_f32_kernels.jsonl"] = 140,
             ["numpy_f64_kernels.jsonl"] = 24,
-            ["nan_order.jsonl"] = 2600,   // float add / multiply NaN-operand order (win-amd64), NaN payloads raw: 2,678 at delivery
+            ["nan_order.jsonl"] = 2750,   // float add / multiply NaN-operand order (win-amd64), NaN payloads raw: 2,678 at delivery, + 118 the 2026-10-03 gap probe validated as matching (section G: float16 scans, complex128 subtract, buffered N-D / cast / where= / evaluate / dtype= paths) — 2,796; the paths that differ are [OpenBugs] in NumSharp.Tests/OpenBugs.NaNOperandOrder.cs
             ["out_where.jsonl"] = 6300,   // §B2 out_scan/out_round/out_clip/out_nanarg + the f16/uint8 lanes (dtype-spread gate)
             ["params.jsonl"] = 1190,      // +288 §C1: multi-axis median/average/nanmedian (tuple-axis int[] overloads)
             ["instance.jsonl"] = 7500,    // §D: ndarray.* instance surface — 13 NumPy dtypes + the char proxy weave (dtype-spread gate)

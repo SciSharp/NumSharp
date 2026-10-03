@@ -32,7 +32,11 @@ using System.Runtime.Intrinsics.X86;
 //     their own compiled orders (pairwise; the new element per step). So the
 //     emitters below are opt-in per call site (the ufunc kernels), never a change
 //     of the 3-argument EmitScalarOperation / EmitVectorOperation the reduction
-//     folds use.
+//     folds use. The scans, complex128 add / multiply / divide, and the paths
+//     where NumPy makes MORE inner-loop calls than NumSharp (per row, per buffer
+//     fill, per where= run with a cast, per np.evaluate tree node) still differ:
+//     pinned with NumPy's bits as [OpenBugs] in
+//     test/NumSharp.Tests/OpenBugs.NaNOperandOrder.cs.
 //   * The linux-x86_64 GCC wheel orders the operands DIFFERENTLY on the same CPU
 //     (its contiguous SIMD body keeps the first operand's NaN, its broadcast loop
 //     the broadcast operand's everywhere), so this is a win-amd64 pin, like the

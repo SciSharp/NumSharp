@@ -30,6 +30,12 @@ namespace NumSharp.Tests.MathTests;
 ///     NaN quieted, <c>b</c> = the second operand's, <c>0</c> = +0.0 (a masked-off out slot),
 ///     <c>?</c> = anything else. The oracle tier <c>nan_order.jsonl</c> gates the full layout matrix.
 ///     </para>
+///     <para>
+///     The paths NumSharp does not match yet — cumsum / cumprod, complex128 add / multiply / divide,
+///     the N-D broadcasts NumPy runs per row or per buffer fill, a reversed cast operand, <c>where=</c>
+///     with a cast, and deeper <c>np.evaluate</c> trees with a NaN broadcast input — are pinned with
+///     NumPy's bits as <c>[OpenBugs]</c> in <c>OpenBugs.NaNOperandOrder.cs</c>.
+///     </para>
 /// </remarks>
 [TestClass]
 public class NaNOperandOrderTests
@@ -406,48 +412,5 @@ public class NaNOperandOrderTests
         Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant()
             .Should().Be("1863489c534a07433247ecc828d2ccc46fa03a069cc65cd802266f68d3b78b58",
                 "SHA-256 of numpy 2.4.2's result bytes for the same inputs");
-    }
-
-    /// <summary>
-    ///     Documented residual: an outer product with at most two rows, such as (2,1)+(1,64), is a
-    ///     broadcast NumPy runs UNBUFFERED, one broadcast inner loop per row, so NumPy keeps the first
-    ///     operand's NaN on every element; NumSharp's 2-D kernel keeps the second operand's.
-    /// </summary>
-    [TestMethod]
-    [Misaligned]
-    public void Residual_UnbufferedOuterProduct_KeepsSecond()
-    {
-        using var x = Fill(NPTypeCode.Double, A64, 2, 1);
-        using var y = Fill(NPTypeCode.Double, B64, 1, 64);
-        // numpy 2.4.2 win-amd64: 128 x 'a'.
-        Pattern(np.add(x, y), A64, B64).Should().Be(new string('b', 128));
-    }
-
-    /// <summary>
-    ///     Documented residual: complex128 add is outside the fix. MSVC's 2x-unrolled complex loop
-    ///     alternates the operand order by vector parity, so NumPy gives (per float64 component, six
-    ///     complex elements) <c>bbbbaaaabbbb</c>; NumSharp keeps the first operand's NaN.
-    /// </summary>
-    [TestMethod]
-    [Misaligned]
-    public unsafe void Residual_Complex128_KeepsFirst()
-    {
-        static NDArray FillComplex(ulong bits, long n)
-        {
-            var nd = np.zeros(new Shape(n), NPTypeCode.Complex);
-            ulong* p = (ulong*)nd.Address;
-            for (long i = 0; i < 2 * n; i++)
-                p[i] = bits;
-            return nd;
-        }
-
-        using var x = FillComplex(A64, 6);
-        using var y = FillComplex(B64, 6);
-        using var r = np.add(x, y);
-        var sb = new StringBuilder();
-        ulong* q = (ulong*)r.Address;
-        for (int i = 0; i < 12; i++)
-            sb.Append(q[i] == (A64 | (1UL << 51)) ? 'a' : q[i] == (B64 | (1UL << 51)) ? 'b' : '?');
-        sb.ToString().Should().Be("aaaaaaaaaaaa");
     }
 }

@@ -722,7 +722,7 @@ operands wins) left that list on 2026-10-03 and has its own raw-byte tier, `nan_
 
 ### Float NaN-operand order (`nan_order` tier)
 
-`nan_order.jsonl` (`gen_oracle.py nan_order`, 2,678 cases, floor 2,600; 2026-10-03) gates WHICH NaN a
+`nan_order.jsonl` (`gen_oracle.py nan_order`, 2,796 cases, floor 2,750; 2026-10-03) gates WHICH NaN a
 float add or multiply returns when BOTH operands are NaN. x86 `addpd`/`mulpd` return their FIRST source
 operand's NaN (quieted), and the operations are commutative, so the answer is the operand order the
 compiled loop emits. numpy 2.4.2 win-amd64 (MSVC 19.44), probed on every loop path:
@@ -747,8 +747,10 @@ output element names its winner); signalling NaNs (quieted, payload kept); finit
 NaNs (both-NaN, one-NaN and finite lanes, a finite 0-d broadcast); a cast operand at 9 / 17 / 8197 /
 8203 elements; `out=` (fresh, strided, a float64 out for a float32 loop) and `where=` (runs,
 alternating) as the out_where tuple; np.evaluate trees, single nodes over every broadcast side and
-multi-node trees over array-array layouts. **Bit-exact, 0 excused.** On the pre-fix build 1,032 of
-the 2,678 cases fail.
+multi-node trees over array-array layouts; and section G, the paths a 2026-10-03 gap probe validated
+as matching (118 cases, below). **Bit-exact, 0 excused.** On the fix's parent commit (2f92d91d) 936
+of the first 2,678 cases fail, and 49 of section G's 118 (the other 69 match the old first-operand
+answer too: float16 scans, complex128 subtract, and the paths where both answers coincide).
 
 **Host rule.** Linux NumPy (GCC build, same CPU, probed through WSL) orders the operands
 DIFFERENTLY: its contiguous SIMD body keeps the first operand's NaN and its tail the second's; its
@@ -759,20 +761,31 @@ comparison runs on every x86 host with NumPy's X86_V3 features (`NaNOperandOrder
 without X86_V3 split at 16-byte vectors on both sides, and arm64 NumPy is a different compiler
 build, so both tokenize NaN.
 
-**Kept out (documented residuals, `[Misaligned]` in `Math/NaNOperandOrderTests.cs`):**
+**The gap probe (2026-10-03).** Every path the add / multiply fix left open was replayed against
+NumPy's raw bits (458 cases, `params.nan_bits` on each). The 186 that match feed section G (a
+size-bounded selection of 118: a large probe shape is kept only where its size is the point, for one
+ufunc / dtype). The 272 that differ are product bugs, so they stay OUT of the tier (a failing case
+would turn the gate red, and a product bug is never registry-excused) and are pinned with NumPy's
+bits as `[OpenBugs]` in `NumSharp.Tests/OpenBugs.NaNOperandOrder.cs`, one test per class:
 
-- N-D broadcasts that NumPy runs UNBUFFERED. One example is an outer product with at most two rows,
-  such as `(2,1)+(1,64)`: NumPy runs one broadcast loop per row and keeps the first operand's NaN,
-  NumSharp keeps the second. Another is `(m,n)+(m,1)` past n = 4096.
-- A 0-d operand against a non-contiguous N-D array longer than one buffer.
-- A reversed cast operand longer than one buffer.
-- `where=` together with a cast.
+- `cumsum` / `cumprod` (`add.accumulate` / `multiply.accumulate`) of float32 / float64 / complex128:
+  NumPy keeps the NEW element's NaN at each step, NumSharp's scan kernels the accumulator's. complex128
+  is per part (cumsum: the accumulator's real NaN, the new imaginary one; cumprod: the new real NaN
+  in both parts). float16 scans match (section G).
+- complex128 add (array layouts), multiply and divide, every probed layout. NumPy's add alternates
+  the operand by unrolled vector pair in memory order (`bbaabb…` per element), multiply returns the
+  first operand's real NaN in both parts, and divide puts the first operand's real NaN in the real
+  part and the second operand's real NaN in the imaginary part. subtract, and add with a 0-d first
+  operand, match (section G).
+- N-D broadcasts NumPy runs one row per inner-loop call, the region rule per row: an outer product
+  with two rows such as `(2,1)+(1,64)`, and `(m,n)+(m,1)` with n > 4096.
+- A 0-d against an N-D view NumPy BUFFERS (a row slice `x[:, :k]`, reversed rows or columns, a 3-D
+  slice): the region rule per buffer fill of whole rows (`(6,9)` is one fill of 54, `b*48 a*6`).
+- A reversed cast operand, from 9 elements on (one fill), not only past one buffer.
+- `where=` together with a cast: the region rule per mask run, as without the cast.
 - np.evaluate trees deeper than one node with a NaN 0-d or size-1 broadcast input.
-- complex128 add / multiply. MSVC's 2×-unrolled complex loop alternates the order by vector parity
-  (`bbbbaaaabbbb` over six elements), and NumSharp keeps the first operand's NaN.
-- `cumsum` / `cumprod` (`add.accumulate` / `multiply.accumulate`): NumPy keeps the NEW element's NaN
-  at each step, NumSharp's scan kernels the accumulator's. This is an open follow-up, not a tier case.
-  `sum` / `prod` stay out by policy (the accepted reduction-order difference).
+
+`sum` / `prod` stay out by policy (the accepted reduction-order difference).
 
 ### Truthful vs precise (`precision` tier)
 

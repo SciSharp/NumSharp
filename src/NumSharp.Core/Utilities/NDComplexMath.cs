@@ -903,7 +903,10 @@ namespace NumSharp.Utilities
         /// the propagated NaN can differ from NumPy's (NumPy keeps the fused product's NaN, .NET's fma the
         /// addend's), but complex-multiply NaN is NON-contractual (a binary op — the oracle tokenizes it),
         /// so finite parity is chosen over NaN-sign parity here (unlike <see cref="Square"/>, which is
-        /// under the unary NaN-sign contract and so takes the swap). Off x86 the portable
+        /// under the unary NaN-sign contract and so takes the swap). The NaN choice is now an open bug,
+        /// pinned with NumPy's bits in <c>test/NumSharp.Tests/OpenBugs.NaNOperandOrder.cs</c> (NumPy
+        /// returns the first operand's real NaN in both parts when every part is NaN); a fix keeps this
+        /// fused structure for the finite bits and selects NumPy's NaN where a part is NaN. Off x86 the portable
         /// <see cref="Math.FusedMultiplyAdd(double,double,double)"/> keeps the finite/overflow bits
         /// identical.
         /// </remarks>

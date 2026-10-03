@@ -4281,12 +4281,45 @@ def gen_numpy_f64_kernels():
 # rule's block is two AVX2 vectors). Operand a holds one NaN payload and b another, so every
 # output element names the operand whose NaN won.
 #
-# Kept OUT on purpose (NumSharp's documented residuals, unit-pinned [Misaligned]): N-D broadcasts
-# NumPy runs UNBUFFERED (an outer product with <= 2 rows such as (2,1)+(1,64), and (m,n)+(m,1) past
-# n = 4096), a 0-d against a non-contiguous N-D array past one buffer, a reversed cast operand past
-# one buffer, where= together with a cast, np.evaluate trees deeper than one node with a NaN 0-d or
-# size-1 broadcast input, and complex128 (MSVC's 2x-unrolled body alternates the order by vector
-# parity).
+# Kept OUT on purpose: the paths NumSharp does not match yet, each pinned with NumPy's bits as
+# [OpenBugs] in test/NumSharp.Tests/OpenBugs.NaNOperandOrder.cs (a failing case here would turn the
+# gate red, and a product bug is never registry-excused). A 458-case probe (2026-10-03) replayed
+# every path the float add / multiply fix left open against NumPy's raw bits and split them:
+#   * open (272 probe cases): cumsum / cumprod of float32 / float64 / complex128 (NumPy keeps the
+#     new element's NaN at each step); complex128 add / multiply / divide; N-D broadcasts NumPy
+#     runs one row per call (an outer product with two rows such as (2,1)+(1,64), (m,n)+(m,1) with
+#     n > 4096); a 0-d against an N-D view NumPy buffers (a row slice x[:, :k], reversed rows or
+#     columns, a 3-D slice - the region rule per buffer fill); a reversed cast operand (from 9
+#     elements on); where= together with a cast; np.evaluate trees deeper than one node with a NaN
+#     0-d or size-1 broadcast input;
+#   * matching (186): section G below gates a size-bounded selection of them.
+
+def _no_payloads(dt, base, shape):
+    """A fresh C-contiguous array of `shape` whose element i (C order) holds the raw bits base + i + 1.
+    With a quiet-NaN base, every element is a NaN with its own payload, so each output element of a
+    scan names the input element whose NaN it carries."""
+    it = _NO_SPECS[dt][0]
+    n = int(np.prod(shape)) if shape else 1
+    v = np.arange(1, n + 1, dtype=np.uint64) + np.uint64(base)
+    return v.astype(it).view(np.dtype(dt)).reshape(shape)
+
+
+# complex128 operand parts for the nan_order tier: (real, imaginary) raw NaN bits. a's are negative
+# (payloads 0x01 / 0x11), b's positive (0x02 / 0x22), so each output PART names the operand part whose
+# NaN won.
+_NO_CA = (0xfff8000000000001, 0xfff8000000000011)
+_NO_CB = (0x7ff8000000000002, 0x7ff8000000000022)
+
+
+def _no_cbits(parts, shape):
+    """A fresh C-contiguous complex128 array of `shape` (() = 0-d) whose every element holds the raw
+    real / imaginary bits `parts` - written through an unsigned view, so the NaN bits are exact."""
+    n = int(np.prod(shape)) if shape else 1
+    v = np.empty(n, dtype=np.complex128)
+    u = v.view(np.uint64)
+    u[0::2] = parts[0]
+    u[1::2] = parts[1]
+    return v.reshape(shape)
 
 _NO_SPECS = {
     # dtype: (raw-bits view type, quiet NaN of a, quiet NaN of b, signalling NaN of a, of b).
@@ -4380,7 +4413,13 @@ def gen_nan_order():
       E. out= (fresh, strided, a float64 out for a float32 loop) and where= (runs, alternating),
          recorded as the out_where tier's [returned view, whole out base] tuple;
       F. np.evaluate trees - single nodes over every broadcast side (delegated to the direct
-         kernels) and multi-node trees over array-array layouts (the fused kernel's NaN order).
+         kernels) and multi-node trees over array-array layouts (the fused kernel's NaN order);
+      G. the paths the 2026-10-03 gap probe validated as MATCHING (the differing ones are
+         [OpenBugs]-pinned): float16 cumsum / cumprod, complex128 subtract and the add layouts that
+         already match, the N-D broadcasts NumPy buffers, a 0-d against a coalescing or contiguous
+         N-D array, the forward cast layouts, out= / where= with a cast where the split already
+         holds, float32 trees too short for a region block, and the dtype= loop. Large probe shapes
+         are kept for one ufunc / dtype only, to bound the corpus size.
     """
     cases = []
 
@@ -4464,7 +4503,9 @@ def gen_nan_order():
         m[36:n] = True
         return m
 
-    def emit_out(ufunc, layout, pa, pb, out_kind, out_dtype, mask):
+    def emit_out(ufunc, layout, pa, pb, out_kind, out_dtype, mask, mask_name=None):
+        # mask_name only labels the case id; None keeps the original label ('runs' for any mask),
+        # so the ids of the cases written before section G stay byte-identical.
         (ba, va), (bb, vb) = pa, pb
         n = np.broadcast_shapes(va.shape, vb.shape)
         if out_kind == "fresh":
@@ -4480,8 +4521,9 @@ def gen_nan_order():
             returned = _NO_BINARY[ufunc](va, vb, out=ov, where=mask)
         else:
             returned = _NO_BINARY[ufunc](va, vb, out=ov)
+        where_label = mask_name if mask_name is not None else ('runs' if mask is not None else None)
         cid = f"out_binary/{ufunc}/{layout}/out={out_kind}:{np.dtype(out_dtype).name}/" \
-              f"where={'runs' if mask is not None else None}/{len(cases)}"
+              f"where={where_label}/{len(cases)}"
         cases.append(_case("out_binary", params, operands,
                            _tuple_expected([np.asarray(returned), ob.ravel()]),
                            f"out_{out_kind}", "outwhere", cid=cid))
@@ -4544,6 +4586,161 @@ def gen_nan_order():
                 am, b1k, bm1 = mkA((4, 20)), mkB((1, 20)), mkB((4, 1))
                 emit_eval(expr, "2d_mk_1k_4x20", (am, am), (b1k, b1k), valueclass)
                 emit_eval(expr, "2d_mk_m1_4x20", (am, am), (bm1, bm1), valueclass)
+
+    # ---- G. paths the 2026-10-03 gap probe validated as MATCHING -------------------------------
+    # The probe replayed every path the add / multiply fix left open against NumPy's raw bits. The
+    # ones that differ are [OpenBugs]-pinned (test/NumSharp.Tests/OpenBugs.NaNOperandOrder.cs); the
+    # ones below match. A large probe shape is kept only where its size IS the case (a row-length
+    # boundary, a buffer fill), and then for one ufunc / dtype, to bound the corpus size.
+
+    # G1. float16 cumsum / cumprod: every input element a NaN with its own payload, so each output
+    #     element names the input whose NaN it carries (NumPy: the new element's at every step).
+    #     float32 / float64 / complex128 scans differ and are pinned open.
+    def emit_scan(op, layout, base, view, axis):
+        f = {"cumsum": np.cumsum, "cumprod": np.cumprod}[op]
+        r = np.asarray(f(view, axis=axis))
+        cid = f"{op}/{layout}/axis={axis}/float16/payloads/{len(cases)}"
+        cases.append(_case(op, {"axis": axis, "nan_bits": True}, [describe(base, view)],
+                           _arr_expected(r), layout, "payloads", cid=cid))
+
+    mk16 = lambda shape: _no_payloads("float16", 0x7e00, shape)
+    for op in ("cumsum", "cumprod"):
+        for n in (3, 9, 33):
+            x = mk16((n,))
+            emit_scan(op, f"contig_{n}", x, x, None)
+        x2 = mk16((18,))
+        emit_scan(op, "strided_9", x2, x2[::2], None)
+        x = mk16((9,))
+        emit_scan(op, "rev_9", x, x[::-1], None)
+        m = mk16((4, 5))
+        for ax in (None, 0, 1):
+            emit_scan(op, "2d_4x5", m, m, ax)
+        t = mk16((5, 4))          # an F-ordered operand is the transpose of a C base (see section A)
+        for ax in (0, 1):
+            emit_scan(op, "2d_T_4x5", t, t.T, ax)
+
+    # G2. complex128: subtract keeps the first operand's NaN in both parts on every layout; add matches
+    #     where the 0-d operand is the FIRST (0-d x 0-d, a 0-d against an array). add's array layouts,
+    #     multiply and divide differ and are pinned open.
+    ca = lambda shape: _no_cbits(_NO_CA, shape)
+    cb = lambda shape: _no_cbits(_NO_CB, shape)
+    complex_layouts = []
+    for n in (1, 2, 3, 4, 5, 6, 7, 8, 9, 16, 17):
+        a, b = ca((n,)), cb((n,))
+        complex_layouts.append((f"contig_{n}", (a, a), (b, b)))
+    a2, b2 = ca((18,)), cb((18,))
+    complex_layouts.append(("strided_9", (a2, a2[::2]), (b2, b2[::2])))
+    a, b = ca((9,)), cb((9,))
+    complex_layouts.append(("rev_9", (a, a[::-1]), (b, b[::-1])))
+    for n in (3, 9, 17):
+        a0, b = ca(()), cb((n,))
+        complex_layouts.append((f"sl0d_{n}", (a0, a0), (b, b)))
+        a, b0 = ca((n,)), cb(())
+        complex_layouts.append((f"sr0d_{n}", (a, a), (b0, b0)))
+    a0, b0 = ca(()), cb(())
+    complex_layouts.append(("both0d", (a0, a0), (b0, b0)))
+    am, bm = ca((4, 5)), cb((4, 5))
+    complex_layouts.append(("2d_4x5", (am, am), (bm, bm)))
+    at, bt = ca((5, 4)), cb((5, 4))
+    complex_layouts.append(("2d_T_4x5", (at, at.T), (bt, bt.T)))
+    for layout, pa, pb in complex_layouts:
+        emit("subtract", layout, pa, pb, "allnan")
+        if layout == "both0d" or layout.startswith("sl0d_"):
+            emit("add", layout, pa, pb, "allnan")
+
+    # G3. N-D broadcasts NumPy buffers into contiguous calls (the second operand's NaN), or whose rows
+    #     are too short for a region block. An outer product with two rows such as (2,1)+(1,64), and
+    #     (m,n)+(m,1) with n > 4096, run one row per call in NumPy and are pinned open.
+    for dt in ("float64", "float32"):
+        _, qa, qb, _, _ = _NO_SPECS[dt]
+        for sa, sb in (((1, 1), (1, 64)), ((1, 64), (2, 1)), ((2, 1), (1, 8)), ((3, 1), (1, 64)),
+                       ((2, 3, 1), (1, 1, 40)), ((2, 1, 40), (1, 3, 1))):
+            a, b = _no_bits(dt, qa, sa), _no_bits(dt, qb, sb)
+            layout = f"nd_{'x'.join(map(str, sa))}+{'x'.join(map(str, sb))}"
+            for op in ("add", "multiply"):
+                emit(op, layout, (a, a), (b, b), "allnan")
+    a, b = _no_bits("float32", f32qa, (2, 1)), _no_bits("float32", f32qb, (1, 9))
+    for op in ("add", "multiply"):      # 9 float32 lanes: no 16-lane block (the float64 twin is open)
+        emit(op, "nd_2x1+1x9", (a, a), (b, b), "allnan")
+    for n in (4095, 4096):              # rows of at most 4096: buffered (4097 is pinned open)
+        a, b = _no_bits("float32", f32qa, (3, n)), _no_bits("float32", f32qb, (3, 1))
+        emit("add", f"nd_3x{n}+3x1", (a, a), (b, b), "allnan")
+
+    # G4. a 0-d against an N-D array that coalesces to one run (a column stride x[:, ::2]) or is C- /
+    #     F-contiguous past one buffer. A row slice, reversed rows / columns and a 3-D slice are
+    #     buffered by NumPy (the region rule per fill) and pinned open.
+    for dt in ("float64", "float32"):
+        _, qa, qb, _, _ = _NO_SPECS[dt]
+        xa, xb = _no_bits(dt, qa, (6, 100)), _no_bits(dt, qb, (6, 100))
+        a0, b0 = _no_bits(dt, qa, ()), _no_bits(dt, qb, ())
+        for op in ("add", "multiply"):
+            emit(op, "nd_colstride_6x50+0d", (xa, xa[:, ::2]), (b0, b0), "allnan")
+            emit(op, "nd_0d+colstride_6x50", (a0, a0), (xb, xb[:, ::2]), "allnan")
+    xa, b0 = _no_bits("float32", f32qa, (100, 100)), _no_bits("float32", f32qb, ())
+    emit("add", "nd_c100x100+0d", (xa, xa), (b0, b0), "allnan")
+    a0, xb = _no_bits("float32", f32qa, ()), _no_bits("float32", f32qb, (100, 100))
+    emit("add", "nd_0d+ftrans100x100", (a0, a0), (xb, xb.T), "allnan")
+
+    # G5. a cast operand on the forward layouts (strided, a float16 array into the float32 loop) and the
+    #     reversed layouts whose fills hold whole blocks only. A reversed cast operand with a tail is
+    #     pinned open.
+    b64one, b32one = _no_bits("float64", f64qb, (1,)), _no_bits("float32", f32qb, (1,))
+    for op in ("add", "multiply"):
+        a16 = _no_bits("float16", f16qa, (40,))
+        emit(op, "mix_f16arr_f32one_40", (a16, a16), (b32one, b32one), "cast")
+        a2 = _no_bits("float32", f32qa, (18,))
+        emit(op, "mix_f32str_f64one_9", (a2, a2[::2]), (b64one, b64one), "cast")
+    a2 = _no_bits("float32", f32qa, (16406,))
+    emit("add", "mix_f32str_f64one_8203", (a2, a2[::2]), (b64one, b64one), "cast")
+    a = _no_bits("float32", f32qa, (9000,))
+    emit("add", "mix_f32rev_f64one_9000", (a, a[::-1]), (b64one, b64one), "cast")
+    a64 = _no_bits("float64", f64qa, (9000,))
+    emit("add", "mix_f64rev_f32one_9000", (a64, a64[::-1]), (b32one, b32one), "cast")
+
+    # G6. out= / where= together with a cast where NumSharp's split already holds: a cast out without
+    #     where=, an all-True mask with the array first, and a mask whose runs (of 2) never reach the
+    #     SIMD loop. where= runs of 12 / 20 with a cast are pinned open.
+    a64one = _no_bits("float64", f64qa, (1,))
+    for ufunc in ("add", "multiply"):
+        a32 = _no_bits("float32", f32qa, (9,))
+        emit_out(ufunc, "mix_f32arr_f64one_9_f32out", (a32, a32), (b64one, b64one), "fresh", "float32", None)
+        a64, b0 = _no_bits("float64", f64qa, (9,)), _no_bits("float64", f64qb, ())
+        emit_out(ufunc, "sr0d_9_f32out", (a64, a64), (b0, b0), "fresh", "float32", None)
+    a32 = _no_bits("float32", f32qa, (8203,))
+    emit_out("add", "mix_f32arr_f64one_8203_f32out", (a32, a32), (b64one, b64one), "fresh", "float32", None)
+    a32 = _no_bits("float32", f32qa, (9000,))
+    emit_out("add", "mix_f32arr_f64one_9000_alltrue", (a32, a32), (b64one, b64one), "fresh", "float64",
+             np.ones(9000, dtype=bool), mask_name="alltrue")
+    b32 = _no_bits("float32", f32qb, (9000,))
+    emit_out("add", "mix_f64one_f32arr_9000_mod3", (a64one, a64one), (b32, b32), "fresh", "float64",
+             np.arange(9000) % 3 != 0, mask_name="mod3")
+
+    # G7. float32 np.evaluate trees deeper than one node with a NaN 0-d / size-1 input over 9 elements:
+    #     no 16-lane region block, so every node keeps the second operand's NaN. Longer trees (and
+    #     every float64 one past 8 elements) are pinned open.
+    for expr in ("mul(add(in0,in1),in2)", "add(mul(in1,in0),in2)", "mul(add(in1,in0),in2)",
+                 "add(mul(in0,in1),in2)", "sub(add(in0,in1),in2)"):
+        a = _no_bits("float32", f32qa, (9,))
+        c = np.full(9, 2.0, dtype=np.float32)
+        for kname, k in (("k0d", _no_bits("float32", f32qb, ())), ("k1", _no_bits("float32", f32qb, (1,)))):
+            views = [a, k, c]
+            r = np.asarray(_ev_eval(expr, views))
+            cid = f"evaluate/{kname}_9/{expr}/float32/allnan/{len(cases)}"
+            cases.append(_case("evaluate", {"expr": expr, "nan_bits": True},
+                               [describe(v, v) for v in views], _arr_expected(r), f"{kname}_9",
+                               "allnan", cid=cid))
+
+    # G8. dtype= float64 over two float32 inputs: both operands are cast into the loop (NumPy's
+    #     dtype= keyword; OpRegistry's add / multiply honour params.dtype for it).
+    for ufunc in ("add", "multiply"):
+        for n in (9, 17) + ((8203,) if ufunc == "add" else ()):
+            a, k, b = _no_bits("float32", f32qa, (n,)), _no_bits("float32", f32qb, ()), _no_bits("float32", f32qb, (n,))
+            for layout, other in ((f"sr0d_{n}_dtype=float64", k), (f"contig_{n}_dtype=float64", b)):
+                r = np.asarray(_NO_BINARY[ufunc](a, other, dtype=np.float64))
+                cid = f"{ufunc}/{layout}/float32,float32/allnan/{len(cases)}"
+                cases.append(_case(ufunc, {"dtype": "float64", "nan_bits": True},
+                                   [describe(a, a), describe(other, other)], _arr_expected(r), layout,
+                                   "allnan", cid=cid))
     return cases
 
 
