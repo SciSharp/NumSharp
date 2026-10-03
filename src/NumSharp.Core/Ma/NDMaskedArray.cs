@@ -66,10 +66,15 @@ namespace NumSharp
         /// unmask a masked slot nor overwrite its data — only currently-UNmasked positions change (masking a slot
         /// via the <c>masked</c> singleton is still allowed). Set by <see cref="harden_mask()"/>/
         /// <see cref="soften_mask()"/>; default false (soft, so assignment unmasks — NumPy's default).</summary>
-        /// <remarks>Scope: the flag lives on the instance and gates the direct assignment paths. It is NOT
-        /// propagated through ufuncs/reductions or the view-returning members (<see cref="view(DType)"/>/
-        /// <see cref="real"/>/<see cref="imag"/>/reshape/transpose) — each result/view starts soft — a documented
-        /// simplification vs NumPy, which threads hardmask through <c>__array_wrap__</c> and shared-base views.</remarks>
+        /// <remarks>Scope: the flag lives on the instance and gates the direct assignment paths. Every indexer
+        /// result inherits it through <see cref="UpdateFrom"/>, as NumPy's <c>__getitem__</c> does with
+        /// <c>_update_from(self)</c>: a basic-slice VIEW and a fancy/boolean COPY alike. That is what stops a write
+        /// through <c>x["0:3"]</c> from unmasking the parent's protected slots. The flag is NOT yet propagated through
+        /// the other members NumPy threads it through: ufunc/operator results, and
+        /// reshape/ravel/transpose/<see cref="T"/>/swapaxes/squeeze/diagonal/<see cref="view(DType)"/>/copy/flatten/
+        /// astype/repeat/compress/clip/round/conj/sort. Each of those starts soft, a documented simplification vs NumPy,
+        /// so a write through one of those VIEWS can still unmask the parent. NumPy itself returns
+        /// <see cref="real"/>/<see cref="imag"/>/<see cref="mT"/>/take/reductions soft, so those already match.</remarks>
         internal bool _hardmask;
 
         /// <summary>
@@ -88,6 +93,35 @@ namespace NumSharp
             _data = data ?? throw new ArgumentNullException(nameof(data));
             _mask = mask;
             _fill_value = fill_value;
+        }
+
+        /// <summary>
+        ///     Copies onto this array the attributes a masked array DERIVED from <paramref name="source"/> inherits:
+        ///     the default fill value and the hard-mask flag. This is NumPy's <c>MaskedArray._update_from(obj)</c>,
+        ///     limited to the two attributes NumSharp models. Call it wherever NumPy runs <c>_update_from(self)</c>.
+        ///     Without it the result comes back SOFT with the dtype-default fill value, and a write through a view of
+        ///     a hard-masked array then unmasks the parent's protected slots.
+        /// </summary>
+        /// <param name="source">The masked array this one is derived from (for example, the array an indexer read
+        /// came from).</param>
+        /// <returns>This array, so the call chains onto its <c>new</c> expression.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="source"/> is null.</exception>
+        /// <remarks>
+        ///     The attributes are COPIED, not linked. NumPy keeps them in each instance's own <c>__dict__</c>, so a
+        ///     later <see cref="harden_mask()"/>/<see cref="soften_mask()"/> or fill-value change on either array does
+        ///     not reach the other. Probed on NumPy 2.4.2: softening a slice leaves its parent hard, and hardening a
+        ///     parent leaves an earlier slice soft. NumPy's other <c>_update_from</c> attributes (<c>_sharedmask</c>,
+        ///     <c>_isfield</c>, <c>_baseclass</c>, <c>_optinfo</c>) have no NumSharp model and are not copied.
+        ///     Decide per construction site: NumPy does NOT run it for every derived array (its <see cref="real"/>/
+        ///     <see cref="imag"/>/<see cref="mT"/>/take/reductions come back soft with the default fill value).
+        /// </remarks>
+        internal NDMaskedArray UpdateFrom(NDMaskedArray source)
+        {
+            if (source is null)
+                throw new ArgumentNullException(nameof(source));
+            _fill_value = source._fill_value;
+            _hardmask = source._hardmask;
+            return this;
         }
 
         /// <summary>The underlying data array (NumPy's <c>MaskedArray.data</c>). Masked positions are included
@@ -856,12 +890,14 @@ namespace NumSharp
         /// <param name="indices">Mixed index objects — ints (coordinate), slice strings ("1:3"), <see cref="Slice"/>s,
         /// boolean/integer <see cref="NDArray"/> masks/fancy indices — exactly as <see cref="NDArray"/>'s own
         /// <c>this[params object[]]</c> accepts.</param>
-        /// <returns>A boxed scalar, the <c>masked</c> singleton, or a <see cref="NDMaskedArray"/>.</returns>
+        /// <returns>A boxed scalar, the <c>masked</c> singleton, or a <see cref="NDMaskedArray"/>. A sub-array
+        /// inherits this array's fill value and hard-mask flag (see <see cref="UpdateFrom"/>), so a slice of a
+        /// hard-masked array is itself hard and a write through it cannot unmask the parent.</returns>
         /// <remarks>Returns <see cref="object"/> because NumPy's indexer is polymorphic (scalar vs masked vs
         /// sub-array) and a C# indexer cannot switch its type on the runtime index; a slice read is a
-        /// <see cref="NDMaskedArray"/> to cast. A mask created here for a previously-<c>nomask</c> VIEW is local to
-        /// the view (it cannot alias a parent that has no mask buffer) — the one place this differs from NumPy's
-        /// shared-base masks.</remarks>
+        /// <see cref="NDMaskedArray"/> to cast. When a masking write through a VIEW of a <c>nomask</c> array creates
+        /// the view's mask, that mask is local to the view: the parent has no mask buffer for it to alias, so the
+        /// parent stays unmasked. NumPy 2.4.2 behaves the same way.</remarks>
         public object this[params object[] indices]
         {
             get
@@ -880,7 +916,10 @@ namespace NumSharp
                         return np.ma.NDMasked;
                     return subData.GetAtIndex(0);
                 }
-                return MaskedArrayModule.Yield(scope, new NDMaskedArray(subData, subMask, _fill_value));
+                // The sub-array inherits this array's fill value AND hard-mask flag, as NumPy's __getitem__ does
+                // (`dout._update_from(self)`), for a view and a fancy/boolean copy alike. A soft VIEW would let
+                // `x["0:3"][1] = 99` overwrite and unmask the parent's protected slot through the shared buffers.
+                return MaskedArrayModule.Yield(scope, new NDMaskedArray(subData, subMask).UpdateFrom(this));
             }
             set => SetItem(indices, value);
         }
@@ -986,11 +1025,16 @@ namespace NumSharp
         /// <summary>Makes the mask HARD (NumPy's <c>harden_mask</c>): from now on a plain-value assignment cannot
         /// unmask a slot — only currently-unmasked positions change. Mutates and returns THIS array.</summary>
         /// <returns>This masked array (now hard-masked).</returns>
+        /// <remarks>Only THIS instance changes. A slice taken earlier copied the flag when it was created (see
+        /// <see cref="UpdateFrom"/>), so it stays soft, and a write through it can still unmask this array's
+        /// slots, exactly as in NumPy. Harden first, then slice.</remarks>
         public NDMaskedArray harden_mask() { _hardmask = true; return this; }
 
         /// <summary>Makes the mask SOFT again (NumPy's <c>soften_mask</c>, the default): a plain-value assignment
         /// unmasks the assigned slots. Mutates and returns THIS array.</summary>
         /// <returns>This masked array (now soft-masked).</returns>
+        /// <remarks>Only THIS instance changes: softening a slice leaves its parent hard (and the reverse), as
+        /// in NumPy, where each array keeps its own copy of the flag.</remarks>
         public NDMaskedArray soften_mask() { _hardmask = false; return this; }
 
         /// <summary>Drops an all-False mask back to nomask (NumPy's <c>shrink_mask</c>); otherwise unchanged.</summary>
@@ -999,10 +1043,9 @@ namespace NumSharp
 
         // ── Conversion / export + the hard/shared-mask flag surface (NumPy's tolist/tobytes/tofile/view +
         //    hardmask/sharedmask/recordmask/baseclass/unshare_mask/ids/iscontiguous). tolist and tobytes are
-        //    genuine value exports; view reinterprets the data dtype; the flag properties exist for surface
-        //    parity — NumSharp masks carry no hard/soft/shared state, so they report the fixed values NumPy
-        //    would after a default construction (hardmask/sharedmask False) and treat every array as
-        //    non-structured (recordmask == the plain mask). ──
+        //    genuine value exports; view reinterprets the data dtype. hardmask reports the REAL hard/soft
+        //    state (see _hardmask); sharedmask is not offered (NumSharp does not track mask sharing); every
+        //    array is non-structured, so recordmask is the plain mask. ──
 
         /// <summary>
         ///     Returns the array as a nested list structure (NumPy's <c>MaskedArray.tolist</c>): a boxed scalar

@@ -1388,6 +1388,208 @@ namespace NumSharp.Tests.Ma
             Assert.IsTrue(m2.hardmask);
         }
 
+        /// <summary>A sub-array read through the indexer INHERITS the hard mask (NumPy's <c>__getitem__</c> runs
+        /// <c>dout._update_from(self)</c>). The regression this pins: <c>x["0:3"]</c> of a hard-masked array came
+        /// back SOFT, so <c>v[1] = 99</c> wrote 99 into the parent's protected slot through the shared buffers and
+        /// unmasked it (parent data [1 99 3 4], mask all False). Every value probed against NumPy 2.4.2.</summary>
+        [TestMethod]
+        public void HardMask_SliceInheritsHardMask_ParentStaysProtected()
+        {
+            var x = np.ma.array(np.array(new long[] { 1, 2, 3, 4 }), np.array(new bool[] { false, true, false, false }), hard_mask: true);
+            var v = (NDMaskedArray)x["0:3"];
+            Assert.IsTrue(v.hardmask);
+
+            // Masked slot: the write is ignored, in the view AND in the parent whose buffers it shares.
+            v[1] = 99;
+            Assert.IsTrue(D(x).SequenceEqual(new double[] { 1, 2, 3, 4 }));
+            Assert.IsTrue(M(x).SequenceEqual(new[] { false, true, false, false }));
+            Assert.IsTrue(D(v).SequenceEqual(new double[] { 1, 2, 3 }));
+            Assert.IsTrue(M(v).SequenceEqual(new[] { false, true, false }));
+
+            // Unmasked slot: the write still reaches the parent through the shared data buffer.
+            v[0] = 11;
+            Assert.IsTrue(D(x).SequenceEqual(new double[] { 11, 2, 3, 4 }));
+            Assert.IsTrue(M(x).SequenceEqual(new[] { false, true, false, false }));
+
+            // A whole-view broadcast write changes only the unmasked slots.
+            v["..."] = 50;
+            Assert.IsTrue(D(x).SequenceEqual(new double[] { 50, 2, 50, 4 }));
+            Assert.IsTrue(M(x).SequenceEqual(new[] { false, true, false, false }));
+        }
+
+        /// <summary>Every index kind passes the hard mask on. Basic-slice VIEWS (row, column, step, negative step,
+        /// Ellipsis, newaxis, mixed int + slice) keep the parent's masked slots unchanged on write, and the
+        /// fancy/boolean COPIES are hard themselves. Values probed against NumPy 2.4.2.</summary>
+        [TestMethod]
+        public void HardMask_EveryIndexKindInherits()
+        {
+            static NDMaskedArray Mk2() => np.ma.array(np.arange(1, 7).reshape(2, 3).astype(np.int64),
+                np.array(new bool[,] { { false, true, false }, { true, false, false } }), hard_mask: true);
+            var parentMask = new[] { false, true, false, true, false, false };
+
+            // (index, parent data after `sub[...] = 50`): the masked slots (flat 1 and 3) never change.
+            var views = new (object[] key, double[] parent)[]
+            {
+                (new object[] { 0 }, new double[] { 50, 2, 50, 4, 5, 6 }),
+                (new object[] { ":", 1 }, new double[] { 1, 2, 3, 4, 50, 6 }),
+                (new object[] { "0:1", "1:" }, new double[] { 1, 2, 50, 4, 5, 6 }),
+                (new object[] { "...", 0 }, new double[] { 50, 2, 3, 4, 5, 6 }),
+                (new object[] { Slice.NewAxis }, new double[] { 50, 2, 50, 4, 50, 50 }),
+                (new object[] { 1, "::-1" }, new double[] { 1, 2, 3, 4, 50, 50 }),
+                (new object[] { "::-1", "::2" }, new double[] { 50, 2, 50, 4, 5, 50 }),
+            };
+            foreach (var (key, parent) in views)
+            {
+                var y = Mk2();
+                var sub = (NDMaskedArray)y[key];
+                string label = $"key ({string.Join(", ", key)})";
+                Assert.IsTrue(sub.hardmask, label);
+                sub["..."] = 50;
+                Assert.IsTrue(D(y).SequenceEqual(parent), label);
+                Assert.IsTrue(M(y).SequenceEqual(parentMask), label);
+            }
+
+            // Fancy and boolean indexing return COPIES: each copy is hard, and the parent is untouched.
+            var x = np.ma.array(np.array(new long[] { 1, 2, 3, 4 }), np.array(new bool[] { false, true, false, false }), hard_mask: true);
+            var c = (NDMaskedArray)x[np.array(new long[] { 0, 1, 2 })];
+            Assert.IsTrue(c.hardmask);
+            c[1] = 77;
+            c[0] = 70;
+            Assert.IsTrue(D(c).SequenceEqual(new double[] { 70, 2, 3 }));
+            Assert.IsTrue(M(c).SequenceEqual(new[] { false, true, false }));
+            var b = (NDMaskedArray)x[np.array(new bool[] { true, true, false, true })];
+            Assert.IsTrue(b.hardmask);
+            b["..."] = 5;
+            Assert.IsTrue(D(b).SequenceEqual(new double[] { 5, 2, 5 }));
+            Assert.IsTrue(M(b).SequenceEqual(new[] { false, true, false }));
+            Assert.IsTrue(D(x).SequenceEqual(new double[] { 1, 2, 3, 4 }));
+            Assert.IsTrue(M(x).SequenceEqual(new[] { false, true, false, false }));
+        }
+
+        /// <summary>The flag is COPIED when the sub-array is created, not linked: NumPy keeps it per instance.
+        /// Softening a slice leaves the parent hard, and a slice taken BEFORE <c>harden_mask()</c> stays soft, so a
+        /// write through either soft slice still unmasks the parent's slot. Probed against NumPy 2.4.2.</summary>
+        [TestMethod]
+        public void HardMask_SliceFlagIsPerInstanceSnapshot()
+        {
+            static NDMaskedArray Mk(bool hard) =>
+                np.ma.array(np.array(new long[] { 1, 2, 3, 4 }), np.array(new bool[] { false, true, false, false }), hard_mask: hard);
+
+            var x = Mk(true);
+            var v = ((NDMaskedArray)x["0:3"]).soften_mask();
+            Assert.IsTrue(x.hardmask);
+            Assert.IsFalse(v.hardmask);
+            v[1] = 99;
+            Assert.IsTrue(D(x).SequenceEqual(new double[] { 1, 99, 3, 4 }));
+            Assert.IsTrue(M(x).SequenceEqual(new[] { false, false, false, false }));
+
+            var y = Mk(false);
+            var early = (NDMaskedArray)y["0:3"];
+            y.harden_mask();
+            Assert.IsFalse(early.hardmask);
+            Assert.IsTrue(((NDMaskedArray)y["0:3"]).hardmask);
+            early[1] = 99;
+            Assert.IsTrue(D(y).SequenceEqual(new double[] { 1, 99, 3, 4 }));
+            Assert.IsTrue(M(y).SequenceEqual(new[] { false, false, false, false }));
+        }
+
+        /// <summary>A write through a hard slice follows NumPy's hard <c>__setitem__</c> for every value kind. A
+        /// masked-array value keeps the old data wherever either mask is set and ORs its mask in. <c>= masked</c>
+        /// masks the parent's slot. A slice of a slice is still hard. <c>put</c>/<c>putmask</c> on the slice honor
+        /// the flag. A slice of a <c>nomask</c> hard parent is hard too, and its first masking write creates a mask
+        /// local to the slice. The fill value is inherited with the flag. Every value probed against NumPy 2.4.2.</summary>
+        [TestMethod]
+        public void HardMask_SliceWritesFollowHardSetItem()
+        {
+            static NDMaskedArray Mk() =>
+                np.ma.array(np.array(new long[] { 1, 2, 3, 4 }), np.array(new bool[] { false, true, false, false }), hard_mask: true);
+
+            // Masked-array value: data lands only where neither mask is set; the value's mask is OR'd in.
+            var x = Mk();
+            ((NDMaskedArray)x["0:3"])["0:3"] = np.ma.array(np.array(new long[] { 7, 8, 9 }), np.array(new bool[] { true, false, false }));
+            Assert.IsTrue(D(x).SequenceEqual(new double[] { 1, 2, 9, 4 }));
+            Assert.IsTrue(M(x).SequenceEqual(new[] { true, true, false, false }));
+
+            // `= masked` through the slice masks the parent's slot (masking is always allowed).
+            x = Mk();
+            ((NDMaskedArray)x["0:3"])[2] = np.ma.masked;
+            Assert.IsTrue(D(x).SequenceEqual(new double[] { 1, 2, 3, 4 }));
+            Assert.IsTrue(M(x).SequenceEqual(new[] { false, true, true, false }));
+
+            // A slice of a slice is still hard.
+            var x5 = np.ma.array(np.array(new long[] { 1, 2, 3, 4, 5 }), np.array(new bool[] { false, true, false, false, true }), hard_mask: true);
+            var w = (NDMaskedArray)((NDMaskedArray)x5["0:4"])["1:"];
+            Assert.IsTrue(w.hardmask);
+            w["..."] = 0;
+            Assert.IsTrue(D(x5).SequenceEqual(new double[] { 1, 2, 0, 0, 5 }));
+            Assert.IsTrue(M(x5).SequenceEqual(new[] { false, true, false, false, true }));
+
+            // put drops the masked target; putmask writes data even at the masked slot but freezes the mask.
+            x = Mk();
+            ((NDMaskedArray)x["0:3"]).put(np.array(new long[] { 0, 1 }), np.array(new long[] { 70, 71 }));
+            Assert.IsTrue(D(x).SequenceEqual(new double[] { 70, 2, 3, 4 }));
+            Assert.IsTrue(M(x).SequenceEqual(new[] { false, true, false, false }));
+            x = Mk();
+            np.ma.putmask((NDMaskedArray)x["0:3"], np.array(new bool[] { true, true, false }), 60);
+            Assert.IsTrue(D(x).SequenceEqual(new double[] { 60, 60, 3, 4 }));
+            Assert.IsTrue(M(x).SequenceEqual(new[] { false, true, false, false }));
+
+            // nomask hard parent: masking the slice creates a mask LOCAL to it, and a later plain write cannot
+            // unmask that slot. The parent keeps nomask and its data.
+            var n = np.ma.array(np.array(new long[] { 1, 2, 3, 4 }), hard_mask: true);
+            var nv = (NDMaskedArray)n["0:2"];
+            Assert.IsTrue(nv.hardmask);
+            nv[0] = np.ma.masked;
+            nv[0] = 7;
+            Assert.IsTrue(D(nv).SequenceEqual(new double[] { 1, 2 }));
+            Assert.IsTrue(M(nv).SequenceEqual(new[] { true, false }));
+            Assert.IsTrue(ReferenceEquals(np.ma.getmask(n), np.ma.nomask));
+            Assert.IsTrue(D(n).SequenceEqual(new double[] { 1, 2, 3, 4 }));
+
+            // The fill value rides along with the flag.
+            var f = np.ma.array(np.array(new long[] { 1, 2, 3, 4 }), np.array(new bool[] { false, true, false, false }), fill_value: -7L, hard_mask: true);
+            Assert.AreEqual(-7L, Convert.ToInt64(((NDMaskedArray)f["0:3"]).fill_value));
+        }
+
+        /// <summary>The regression scenario on all 15 dtypes and on contiguous, strided and reversed parents. Writing
+        /// 0 into the slice's masked slot must not reach the hard-masked parent, and the parent mask must not change.
+        /// The SOFT control proves the write can detect the bug: 0 differs from the stored value (2, or True for
+        /// bool), so the same write through a soft slice overwrites and unmasks the slot.</summary>
+        [TestMethod]
+        public void HardMask_SliceProtectsParent_AllDtypesAndLayouts()
+        {
+            var dtypes = new[]
+            {
+                np.@bool, np.int8, np.uint8, np.int16, np.uint16, np.int32, np.uint32, np.int64, np.uint64,
+                np.@char, np.float16, np.float32, np.float64, np.@decimal, np.complex128
+            };
+            var mask = new[] { false, true, false, false };
+            foreach (var dt in dtypes)
+            {
+                var parents = new (string name, Func<NDArray> make)[]
+                {
+                    ("contiguous", () => np.array(new long[] { 1, 2, 3, 4 }).astype(dt)),
+                    ("strided", () => np.array(new long[] { 1, 0, 2, 0, 3, 0, 4, 0 }).astype(dt)["::2"]),
+                    ("reversed", () => np.array(new long[] { 4, 3, 2, 1 }).astype(dt)["::-1"]),
+                };
+                foreach (var (name, make) in parents)
+                {
+                    string label = $"{dt.name} {name}";
+                    var d = make();
+                    var before = d.astype(np.float64).ToArray<double>();
+                    var x = np.ma.array(d, np.array(mask), hard_mask: true);
+                    ((NDMaskedArray)x["0:3"])[1] = 0;
+                    Assert.IsTrue(D(x).SequenceEqual(before), label);
+                    Assert.IsTrue(M(x).SequenceEqual(mask), label);
+
+                    var s = np.ma.array(make(), np.array(mask));
+                    ((NDMaskedArray)s["0:3"])[1] = 0;
+                    Assert.AreEqual(0.0, D(s)[1], label + " (soft control)");
+                    Assert.IsTrue(M(s).SequenceEqual(new[] { false, false, false, false }), label + " (soft control)");
+                }
+            }
+        }
+
         /// <summary>flatten_mask ravels any mask to a fresh 1-D BOOL array in C-order (non-bool coerced by
         /// non-zero-ness); a 0-D input flattens to length 1, an empty to length 0. Values probed against
         /// NumPy 2.4.2 (whose structured recursion never branches without structured dtypes, so this is

@@ -490,6 +490,37 @@ bare `(byte)`/`(short)` scalar (no python-literal analog) maps to int64 like a p
 C#-`int`-is-int32 vs python-`int`-is-int64 language gap remains for array literals (`np.array(new[]{1,2,3})` is
 int32) — both are the documented library-wide int-width convention, not ma-specific.
 
+### 5.9 Hard mask through the indexer — slice inheritance ✅ FIXED (2026-10-03); hard `__setitem__` branch OPEN
+**Fixed.** A sub-array read through the indexer now inherits the hard-mask flag and the fill value
+(`NDMaskedArray.UpdateFrom`, a port of NumPy's `_update_from`). NumPy's `__getitem__` does this for every non-scalar
+result: basic-slice views and fancy/boolean copies alike. Before the fix, `x["0:3"]` of a hard-masked array came back
+soft, so `v[1] = 99` wrote through the shared buffers into the parent's protected slot and unmasked it (parent data
+`[1 99 3 4]`, mask all False). The flag is copied when the sub-array is created, not linked: softening a slice leaves
+the parent hard, and a slice taken before `harden_mask()` stays soft (both probed). Verified by a 25,200-case
+differential (15 dtypes × 7 source layouts × 10 index kinds × 3 mask states × hard/soft × 4 write kinds). All cases
+equal NumPy 2.4.2 except the 140 cases of casting gap 2 below. Gated by 5 `NDMaskedArrayTests`.
+
+**Still open: members other than the indexer.** NumPy also passes `hardmask` and the fill value to ufunc/operator
+results and to reshape/ravel/transpose/T/swapaxes/squeeze/diagonal/view/copy/flatten/astype/repeat/compress/clip/
+round/conj/sort. The NumSharp versions start soft (`Map1`, `Unary`/`Binary`, `view`, `astype` and `copy` do not call
+`UpdateFrom`), so a write through one of those VIEWS can still unmask the parent. NumPy is not uniform here:
+`real`/`imag`/`mT`/`take`/`atleast_2d`/reductions come back soft, and `ma.array(hard)` is soft while
+`ma.masked_array(hard)` is hard. Decide each member with a probe.
+
+**Still open: the hard branch of `SetItem`.** It snapshots the whole target, does a soft write, then restores; it is
+not NumPy's index-local branch. The gaps predate the fix and also show on parents (probed 2026-10-03):
+1. **Cost:** every hard write copies the whole target's data and mask. A hard element write through a slice of 100K /
+   1M elements takes 48 µs / 1.2–1.4 ms in NumSharp against 1.3–3.2 µs in NumPy (NPY/NS 0.00–0.06).
+2. **Casting:** NumPy's hard branch writes through `np.copyto(dindx, dval, where=~mindx)`, so a multi-element write
+   applies `same_kind` and raises `TypeError` for `bool ← int` and `int64 ← 1.5`. NumSharp casts silently.
+3. **Boolean index:** NumPy's hard branch for a bool-array index is `indx = indx * logical_not(_mask);
+   _data[indx] = dval`. It ignores the value's mask (`x[[T,F,T,F]] = ma([7,8], mask=[1,0])` gives data `[7,2,8,4]`
+   and an unchanged mask) and raises `ValueError` when the value is sized to the original True count. NumSharp masks
+   the slot in the first case and writes the value in the second.
+
+The fix for all three is a port of NumPy's hard branch (`mindx = mask_or(_mask[indx], mval)`, `dindx = _data[indx]`,
+`copyto` where `~mindx`, write back), which costs O(indexed elements) instead of O(target).
+
 ---
 
 ## 6. Prioritized backlog (recommended order)
@@ -529,7 +560,11 @@ int32) — both are the documented library-wide int-width convention, not ma-spe
     semantics (`base`/`ctypes`/`flags`/`setflags`), pickle (`dump`/`dumps`) and array-API device
     (`device`/`to_device`), all N/A in NumSharp; `core`/`extras` (submodule refs — N/A in C#); and the
     library-wide `out=`/`subok`/`order` policy gaps (§5.5). **Every other backlog item is DONE — the module is
-    functionally complete for NumSharp.Core bar structured dtypes.**
+    functionally complete for NumSharp.Core bar structured dtypes.** (Pass-13 status; item 15 was found on 2026-10-03.)
+15. ⬜ **OPEN (found 2026-10-03)** — port NumPy's hard `__setitem__` branch into `SetItem` (§5.9): O(indexed
+    elements) instead of the whole-target snapshot, `same_kind` casting for multi-element writes, and the
+    boolean-index branch. Then pass `hardmask` and the fill value through the other members NumPy threads them
+    through (§5.9), deciding each member with a probe. (The indexer itself inherits both since 2026-10-03.)
 
 ---
 
@@ -560,4 +595,5 @@ int32) — both are the documented library-wide int-width convention, not ma-spe
 15. **2026-09-14 pass 12** — a fresh multi-technique re-audit (do NOT assume "functionally complete" means "audited"). **Technique A — reflection surface diff:** dumped NumPy's `__all__` (226) + `MaskedArray` members (94) from Python, reflected NumSharp's `MaskedArrayModule`/`MaskedArray` public members via a signed `dotnet run` script, and set-differenced. Found instance `copy`/`choose`/`product` present only as MODULE functions → added the instance wrappers. **TRAP — the reflection filter's `set_`/`get_` accessor-name drop produced a FALSE POSITIVE for `set_fill_value`** (a real module function whose name starts with `set_`); always cross-check a flagged name against the source before "closing" it. **Technique B — a 527-case behavioral differential fuzz** (Python oracle emits per-element bit-tokens — `"M"` at masked slots, else the value's little-endian bit pattern — across 4 dtypes × 5 layouts × 28 ops + edges; C# replays and bit-compares, made layout-independent by `.copy()`-ing any non-C-contiguous result before `GetAtIndex`). Found the scalar-strong promotion divergence (§5.8). **Three harness TRAPS hit, all documented elsewhere but re-encountered:** (1) `NDArray != null` is an ELEMENTWISE compare returning `NDArray<bool>` (CS0266) — use `is not null`; (2) `GetInt64(long)` binds the COORDINATE overload (`long[]`), not a flat index → use `GetAtIndex(long)` for flat C-order reads; (3) `GetAtIndex(0)` on a 0-D result works where `GetInt64(0)` (coordinate) throws. **Discovery that made the fix tractable:** NumPy's ma scalar promotion is EXACTLY `result_type(array_dtype, np.asarray(scalar).dtype)` (verified predicted==actual across dtypes×scalars), and it must widen the INPUTS not the result (probed `ma.multiply(int32 2e9, 2) == 4e9`, so casting the result up would give the int32-wrapped value). Gated by 2 new `MaskedArrayTests` (**87 total**, green net8.0 + net10.0); post-fix fuzz 527/527. No worktree quarantine needed — only `Ma/MaskedArray.cs` + its test changed, and the ma change cannot affect non-ma code (single-file boundary). **Surface diff RE-VERIFIED with the correct filter** (`MethodInfo.IsSpecialName` distinguishes compiler-generated accessors from real methods, instead of the lossy `set_`/`get_` name-prefix drop): every prefixed member the old filter hid is a `[Method special]` accessor EXCEPT the one genuine `MaskedArrayModule.set_fill_value` (the sole false positive, already caught), so no real gap was missed — a name-prefix filter can only INFLATE the "missing" list, never hide a gap, and this proved it. The authoritative reflected counts are **218/226 module** and **77/94 instance**; the earlier hand-tallied "81/~13" instance figure was slightly inflated and is corrected to 77/17 (all 17 blocked/policy, enumerated in §0). `MaskedArray.get_fill_value`/`set_fill_value` reflect as `[Method special]` — they exist as the `fill_value` PROPERTY's accessors, which is the concrete CS0082 reason NumPy's method spellings can't be added.
 
 16. **2026-09-16 pass 13** — the "prove byte-perfect" pass. Built a **6055-case** oracle differential (vs pass-12's 527): the full implemented op surface × ALL 13 NumPy dtypes × 7 layouts {C,F,T,rev,strided,1-D-row,offset} × edge masks, Python `emit(thunk)` (defers each op so any error/crash is captured, not raised), per-element bit-tokens with NaN canonicalized. **It disproved "527/527 byte-perfect" and found 3 real bugs, all fixed:** (A) `np.arctan2(complex,complex)` → **fatal CLR `ExecutionEngineException`** (heap corruption in `ExecuteATan2Kernel`, no complex guard) — a CORE bug; fixed in `Default.ATan2.cs` mirroring `hypot`'s guard (throws NumPy's `TypeError`). **Isolation was the hard part** — the crash surfaced non-deterministically at *later* allocations (usually `arctan2:float16`), and every op passed in isolation; bisecting by fresh-process chunks showed it needed op DIVERSITY, and looping single complex ufuncs 250× was clean, until a direct `np.arctan2(complex,complex)` reproduced it minimally. **All the "cumulative churn crashes" were THIS one bug.** (B) a **pass-12 REGRESSION**: `PromoteMaScalar` widened `ma.left_shift`/`right_shift` scalars to int64, but NumPy's shifts are plain functions that keep the array dtype — fixed with a `promoteScalar:false` flag; the stale-runfile-cache trap ([[dotnet-run-script-stale-cache]]) hid the fix until a fresh filename was used. (C) masked `median` of a 1-D narrow-float along an axis returned float64 (0-D-weak `/2` widening) vs NumPy's float16/float32 — fixed with a bit-exact dtype restore. **Post-fix: 5961/6055 byte-exact + 39 correct-error + 4 correct-masked-singleton; the 51 remainders are all ~1 ULP allclose (50 `var`/`std`, 1 complex `sinh`).** Gated by 3 new `MaskedArrayTests` (**90 total**, green both TFMs) + 27 core arctan2 tests (no regression). **Lesson: a smaller/less-diverse oracle certified clean what a bigger one found broken — always widen dtype×layout×op coverage before claiming "N/N bit-exact", and never trust a fresh-Core result from a cached runfile.**
+17. **2026-10-03 — hard mask through the indexer (§5.9).** Read `MaskedArray.__getitem__` in `refs/numpy/numpy/ma/core.py`: every non-scalar result runs `dout._update_from(self)`, which copies `_hardmask` and `_fill_value`. Probed the inheritance matrix (views, fancy/boolean copies, view of a view, the copy-at-creation semantics, nomask parents, every write kind) and the propagation through 37 other members; only the indexer is uniform. Fixed with `UpdateFrom`. Verified by a Python/C# twin differential that prints one canonical line per case and diffs them: 25,200 cases, all equal except the 140 cases of the hard-branch casting gap, which also show on parents. A NumPy probe of the hard `__setitem__` edges found the boolean-index divergences, and a timing pair found the O(target) snapshot cost. **Non-vacuity:** reverting the fix turns all 5 new tests red, and dropping the fill-value copy from `UpdateFrom` turns 1 red. **Isolation:** built and tested in a quarantine worktree, because a parallel session's half-done `AdoptLayout` move broke the shared tree's Core build.
 
