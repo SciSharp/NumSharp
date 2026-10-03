@@ -492,7 +492,9 @@ re-lays out a dense F/permuted view (a sampler fills in memory order, so `x.T.Sh
 draws) and returns its input unchanged when it already is the C layout. NOT covered: the WRAP constructors install the
 given layout over the CALLER's buffer as given. `new UnmanagedStorage(IArraySlice, Shape)` builds internal views that way
 on purpose; `new NDArray(Array | IArraySlice, Shape)` still reads past a `size`-element buffer when handed a stepped
-view's Shape (open item, probed 2026-10-03). Gates: `View/Shape.ForFreshAllocation.Tests.cs`,
+view's Shape. Also open: a kept shape SHARES its dimension array with the caller's, and `Shape`'s public indexer setter
+writes into it (`var s = new Shape(3, 4); var a = np.zeros(s); s[0] = 100;` makes `a.shape` `(100, 4)` over 12
+elements). Both are `[OpenBugs]` pins in `OpenBugs.ViewShape.cs`. Gates: `View/Shape.ForFreshAllocation.Tests.cs`,
 `Creation/FreshAllocation.ViewShape.Tests.cs`, `RandomSampling/RandomSizeViewShape.Test.cs`, and the oracle replay
 `FuzzCorpusTests.RandomApiSizeLayouts` (every random overload taking a `Shape`, its size handed over as a view's layout
 of the same dimensions, against NumPy).
@@ -4033,7 +4035,7 @@ dotnet test --filter "TestCategory=Misaligned"
 dotnet test --filter "TestCategory!=OpenBugs&TestCategory!=HighMemory&TestCategory!=WindowsOnly"
 ```
 
-**OpenBugs files**: `OpenBugs.cs` (general), `OpenBugs.Bitmap.cs` (bitmap), `OpenBugs.ApiAudit.cs` (API audit), `OpenBugs.ILKernelBattle.cs` (IL kernel), `OpenBugs.Random.cs` (random), `OpenBugs.BroadcastReduce.cs` (broadcast reduce).
+**OpenBugs files**: `OpenBugs.cs` (general), `OpenBugs.Bitmap.cs` (bitmap), `OpenBugs.ApiAudit.cs` (API audit), `OpenBugs.ILKernelBattle.cs` (IL kernel), `OpenBugs.Random.cs` (random), `OpenBugs.BroadcastReduce.cs` (broadcast reduce), `OpenBugs.ViewShape.cs` (a caller's `Shape` reaching an array's storage: wrap constructors, shared dimension arrays).
 
 ## Differential-Fuzz Pipeline (NumPy oracle)
 
