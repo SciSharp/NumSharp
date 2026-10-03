@@ -562,7 +562,10 @@ namespace NumSharp.Tests.Fuzz
 
             string gotType = caught.GetType().Name;
             string gotText = NormalizeMessage(caught.Message);
-            string wantText = c.Error.Text ?? "";
+            // Trimmed like NumSharp's side (NormalizeMessage): NumPy's iterator texts END in a space
+            // ("operands could not be broadcast together with shapes (3,) (4,) "), which a one-sided trim
+            // could never match.
+            string wantText = (c.Error.Text ?? "").Trim();
 
             // NumSharp names several exceptions exactly after NumPy's (Exceptions/{ValueError,
             // TypeError,IndexError,AxisError}.cs), so an identical name is the strongest possible

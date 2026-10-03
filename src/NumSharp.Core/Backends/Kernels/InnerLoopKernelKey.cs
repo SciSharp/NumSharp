@@ -32,6 +32,12 @@ namespace NumSharp.Backends.Kernels
             ShiftLeft = 4,
             /// <summary>Right shift: <c>npy_shift_R_{value}_{result}</c>.</summary>
             ShiftRight = 5,
+            /// <summary>
+            /// np.clip's iterator route: <c>npy_clip_{mode}_{general|const}_{dtype}</c>, every operand of the one
+            /// loop dtype. The op byte carries the bound mode (or 3 for np.positive's identity copy) in its low
+            /// nibble and NumPy's const fast path in bit 4.
+            /// </summary>
+            Clip = 6,
         }
 
         // Layout (low → high): t2:8 | t1:8 | t0:8 | (unused):8 | op:8 | family:8.
@@ -77,6 +83,18 @@ namespace NumSharp.Backends.Kernels
             => new(Pack(isLeftShift ? KernelFamily.ShiftLeft : KernelFamily.ShiftRight, 0, valueLoopType, result, NPTypeCode.Empty));
 
         /// <summary>
+        /// Key of np.clip's iterator-route kernel <c>npy_clip_{mode}_{general|const}_{dtype}</c>. The body differs per
+        /// bound mode and per NumPy loop (const vs general), so both are part of the identity; the dtype is the loop
+        /// dtype every operand carries.
+        /// </summary>
+        /// <param name="mode">The clip mode, or <c>null</c> for the no-bound identity copy (NumPy's positive).</param>
+        /// <param name="constSelect">True for NumPy's const fast path (float32/float64, two bounds).</param>
+        /// <param name="dtype">The loop dtype.</param>
+        /// <returns>The packed key.</returns>
+        public static InnerLoopKernelKey Clip(DirectILKernelGenerator.ClipMode? mode, bool constSelect, NPTypeCode dtype)
+            => new(Pack(KernelFamily.Clip, (mode is null ? 3 : (int)mode.Value) | (constSelect ? 0x10 : 0), dtype, NPTypeCode.Empty, NPTypeCode.Empty));
+
+        /// <summary>
         ///     The string key this kernel is registered under in the string-keyed inner-loop
         ///     cache — byte-identical to the interpolated key the route built before the packed
         ///     key existed. Only evaluated on a cache miss.
@@ -95,6 +113,12 @@ namespace NumSharp.Backends.Kernels
                     return $"npy_shift_L_{Type0}_{Type1}";
                 case KernelFamily.ShiftRight:
                     return $"npy_shift_R_{Type0}_{Type1}";
+                case KernelFamily.Clip:
+                {
+                    int mode = Op & 0x0F;
+                    string modeName = mode == 3 ? "Identity" : ((DirectILKernelGenerator.ClipMode)mode).ToString();
+                    return $"npy_clip_{modeName}_{((Op & 0x10) != 0 ? "const" : "general")}_{Type0}";
+                }
                 default:
                     throw new InvalidOperationException($"Unknown inner-loop kernel family {(byte)Family}.");
             }

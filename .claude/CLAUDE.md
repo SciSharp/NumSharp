@@ -814,17 +814,25 @@ unlike `absolute`), while NumSharp rides `Vector.Abs`: float16 **4.5–24.8×**,
 **1.6–10.8×**, `out=` paths 2.5–14× (the one sub-1.5× cell, fresh-alloc float32@100K at 1.19×, is the shared
 allocation floor — its `out=` variant is 12.2×). See `Math/np.fabs.cs`, `Backends/Default/Math/Default.Fabs.cs`.
 
-**`np.clip`** — a port of `numpy/_core/_methods.py::_clip` (the code behind `np.clip` and `ndarray.clip`) plus the
-argument handling of the ufunc it routes to (2026-10-03; probed against 2.4.2; gates the `clip_pyint` fuzz tier
-(4,170 cases, strict) + `Math/np.clip.PythonIntBounds.Test.cs`). A 0-d integer bound (any C# integer literal, or a
-char) is NumPy's Python int:
+**`np.clip`** — a port of `numpy/_core/_methods.py::_clip` (the code behind `np.clip` and `ndarray.clip`), of
+`fromnumeric.clip`'s keyword rule, and of the ufunc call it routes to (2026-10-03; probed against 2.4.2; gates the
+`clip_pyint` fuzz tier (4,170 cases) + the `clip_ufunc` tier (2,302 cases) + `Math/np.clip.{PythonIntBounds,Ufunc}.Test.cs`
++ `Backends/Kernels/BroadcastPatternStageTests.cs`). Signature `clip(a, a_min=null, a_max=null, out=null, dtype=null,
+min=null, max=null, where=null)`; `ndarray.clip(min, max, out, dtype, where)`. A 0-d integer bound (any C# integer
+literal, or a char) is NumPy's Python int:
+- **Keyword rule** (`fromnumeric.clip`, raised before any ufunc error, a read-only out included). `min=`/`max=` alone
+  are the bounds (NumPy 2.x aliases). Both positionals plus a keyword → ValueError "Passing `min` or `max` keyword
+  argument when `a_min` and `a_max` are provided is forbidden."; one positional plus a keyword → TypeError
+  "clip() missing 1 required positional argument: 'a_min'" (or 'a_max'). C# has no "omitted" distinct from null, so a
+  null positional counts as omitted only when a keyword is given (`[Misaligned]`: `np.clip(a, 1)` is legal here,
+  NumPy's TypeError needs the argument absent).
 - **Drop rule.** On an integer array, a bound at or past `iinfo(a.dtype)` (`min <= iinfo.min`, `max >= iinfo.max`)
   cannot clip anything and is DROPPED: `np.clip(uint8, 0, 256)` returns the array unchanged, and
   `np.clip(uint8, -1, 100)` only clips from above. Before this, the 0-d bound adopted the array's dtype and
   `astype` WRAPPED it (256→0 gave all zeros, int8 ±1000 gave all -24).
 - **Routing.** No bound left → `positive` (a typed copy, with positive's own rules: `np.clip(bool_array)` raises
   its no-loop TypeError). One bound → `minimum`/`maximum`. Two → the clip kernel. The routed name is what every
-  cast error quotes.
+  cast error quotes. `where=` and `dtype=` ride along (NumPy forwards `**kwargs`).
 - **Packing.** A kept bound that does not fit the LOOP dtype raises OverflowError "Python integer 1000 out of bounds
   for int8" before any element is read, so an empty array raises too (`NDExprTypeRules.CheckPyIntPacksIntoLoop`,
   NumPy's `@TYPE@_safe_pyint_setitem`).
@@ -833,32 +841,86 @@ char) is NumPy's Python int:
 - **Platform texts.** Past ±2³¹ NumPy's text follows the platform C `long`; NumSharp pins the LP64 (Linux/macOS)
   texts. A value past long.MaxValue reports "Python int too large to convert to C long", except into uint32/uint64.
 - **Casts.** `dtype=` validates each input same_kind, in operand order (a Python int reaches any integer or inexact
-  loop but not bool, named int64), so `np.clip(f64, min: 3.0, dtype: int32)` now RAISES as in NumPy. `out=` accepts
-  any same_kind-reachable dtype (computed at the loop dtype, then cast in), not only an exact match. A given `out` is
-  returned itself, also for an F-contiguous input.
-- **Error order** (NumPy's): read-only out → packing → dtype= input casts → out cast → out shape.
+  loop but not bool, named int64), so `np.clip(f64, min: 3.0, dtype: int32)` RAISES as in NumPy. `out=` accepts
+  any same_kind-reachable dtype (computed at the loop dtype, then cast in through the iterator's buffers). A given
+  `out` is returned itself.
+- **Broadcasting** (NpyIter's joint broadcast). The array, both bounds, `out` and `where` broadcast together: a bound
+  may be LARGER than the array (`np.clip(arange(3), zeros((2,3)), 1)` is (2,3)), and an out larger than every input
+  receives the broadcast; out itself never stretches. NumPy's two texts, verbatim: "operands could not be broadcast
+  together with shapes (3,) (4,) () (3,) " (every operand, 0-d as `()`, trailing space) and "non-broadcastable output
+  operand with shape (3,) doesn't match the broadcast shape (2,3)".
+- **where=** must be bool (the house `ArgumentException` "Cannot cast array data from dtype('int64') to dtype('bool')
+  according to the rule 'safe'" where NumPy raises TypeError — same text). Masked-off positions of a given out keep
+  their contents; of a fresh result they are uninitialized, as in NumPy.
+- **Overlap.** An out that overlaps an input other than as its exact elementwise alias (`np.clip(x[:-1], 1, 4,
+  out=x[1:])`) is computed as if from a copy (NDIter COPY_IF_OVERLAP); the in-place `np.clip(x, lo, hi, out=x)` is
+  not copied. With where= the out is READWRITE (NumPy's masked ufunc rule), so masked-off positions come back intact.
+  **Library-wide fix found here:** the ufunc out=/where= routes (`DefaultEngine.UfuncOut.cs`) and np.evaluate's
+  masked route flagged a passed-in masked out WRITEONLY, so an overlapping out + where wrote heap garbage into the
+  masked-off positions (`np.add(x[:-1], 1, out=x[1:], where=m)`); now READWRITE.
+- **Error order** (NumPy's): keyword rule → read-only out → where= dtype → packing → dtype= input casts → out cast →
+  broadcast / out shape.
 - **Promotion.** 0-d bounds use the ufunc array-scalar table (`np._FindCommonArrayScalarType`), so a Char array with a
   float bound promotes to float64 instead of truncating the bound into char.
-- **Signed zeros.** Two scalar float32/float64 bounds run NumPy's CONST fast path (clip.cpp
-  `_npy_clip_const_minmax_`: `x < lo ? lo : x; x > hi ? hi : x`, a tie keeps the element, so
-  `np.clip(-0.0, 0, 1)` is -0.0). Array bounds keep the general `MIN(MAX())` (a tie takes the bound).
+- **The float loop.** NumPy's clip loop runs its CONST fast path (clip.cpp `_npy_clip_const_minmax_`:
+  `x < lo ? lo : x; x > hi ? hi : x`, a tie keeps the element, so `np.clip(-0.0, 0, 1)` is -0.0; a NaN bound fills
+  the CALL with that NaN's own bits) whenever both bound strides of an inner-loop call are 0, else the general
+  `MIN(MAX())` (a tie takes the bound). Which one runs depends on NumPy's trivial-loop test and NpyIter's axis order,
+  coalescing and buffering — a (2,1) bound against a (2,3) array runs const when NpyIter does not buffer it; a
+  one-element call off the trivial loop runs const (`Default.ClipNDArray.ConstLoop.cs` ports that decision; validated
+  over 21,000 random layout / dtype / out / where / overlap cases against live NumPy, the -0.0 tie revealing the loop).
+  On x86 the const compare-selects ARE `MAXPD(lo, x)` / `MINPD(hi, x)` (second operand on a tie or a NaN), one
+  instruction per bound.
+- **Result layout.** A fresh result takes NumPy's ufunc output layout (`Shape.NpyIterOutputShape`: the operands' memory
+  order, the mask votes, C wins ties); a dense F or permuted input is clipped as a C run and relabelled
+  (`NDArray.AdoptLayout`), no second pass.
+
+Two execution routes (`Backends/Default/Math/Default.ClipNDArray{,.Iter,.ConstLoop}.cs`): the FLAT route (no where=,
+every operand one dense run after the layout permutation, no harmful overlap) runs the whole-array kernel
+(`DirectILKernelGenerator.Clip.cs`: output-alignment peel, then aligned stores; past 16 MiB out-of-place, non-temporal
+stores + sfence); everything else is NumPy's own structure — ONE NDIter over (a, lo, hi, out[, where]) driving a
+Tier-3B clip kernel (`DirectILKernelGenerator.Clip.InnerLoop.cs`). Three-input kernels with a broadcast input reached
+SIMD only through the **N-ary broadcast-pattern stages** added with this work
+(`DirectILKernelGenerator.InnerLoop.BroadcastPatterns.cs`, shared by every Tier-3B kernel): the 1-D shell, the 2-D
+block kernel and the where= 2-D block kernel dispatch on the inputs' C/S pattern once per call (the all-C loop
+inline, each other pattern a DynamicMethod STAGE compiled on its first call, so the JIT's per-method inline budget is
+not split 2^N ways), and the gather route broadcasts a stride-0 input next to strided ones instead of gathering it
+(binary ufuncs too). Fixed costs trimmed on the way: the scalar bounds of the flat route are read in place or
+converted into stack slots (no 0-d astype per call), the kernel bodies and op-flag arrays are cached per key, the
+dispatcher's operand array and np.clip's own empty `[NDScoped]` scope are gone (-224 B / call), and NDIter's
+broadcast of differing operand shapes is one right-aligned pass instead of a List / Shape[] / ResolveReturnShape
+round trip (every ufunc call with a 0-d or row operand).
 
 Remaining divergences:
 - A strong 0-d NDArray bound (NumPy's `np.int64(5)` / `np.array(5)`) cannot be told from a literal, so it is treated
   as a Python int; NumPy promotes with it (an int8 clip by `np.int64(1000)` is int64 there).
-- NumPy's const path for array bounds that are constant along its inner loop is not ported.
-- A NaN bound fills with .NET's NaN bits (the oracle tokenizes NaN).
+- The keyword rule's null-as-omitted reading (`np.clip(a, 1)`, `np.clip(a, 2, None, min=3)`) — `[Misaligned]`.
+- where= with an overlapping out of ANOTHER dtype: NumPy round-trips the masked-off values through the loop dtype,
+  NumSharp keeps them exactly (`[Misaligned]`).
+- The where= mask's error TYPE (house ArgumentException vs NumPy TypeError; text identical).
+- `np.broadcast_to` / `np.broadcast_arrays` keep an extent-1 axis's original stride where NumPy writes 0; only a
+  one-element bound built by broadcast_to can change clip's const-loop decision through it (library-wide).
+- `NDExpr.Clip` (np.evaluate) has no drop rule, throws on two null bounds and on an out-of-range literal, and runs the
+  general loop on ties (`MIN(MAX())`) — the fused-expression node, not np.clip.
 
-**Perf (NPY/NS, P-core pinned):** the drop routes run 2.6–13× faster at 1K/100K (a dropped pair is a memcpy, where
-NumPy's `positive` loops). The 10M cells of 8-byte dtypes sit at ~1.0× on both base and new code; that is the shared
-fresh-output page-fault floor. The pre-existing sub-1.5× cells are the follow-up:
-- float clip at 100K is ~0.8–1.0× (L2 bandwidth);
-- `dtype=` widening at 10M is ~0.4–0.5× (a full-array cast, then a second clip pass, where NumPy buffers both in one
-  pass);
-- the `out=`-cast relay at 10M is ~0.9–1.1× (two passes).
+**Perf (NPY/NS, clock locked, one P-core, best-of-rounds; float64 / float32 / int32 at 1K / 100K / 10M):**
+- broadcast bounds (`np.clip(m, row, 0.75)`, column bounds, row bound into out=): **4.7–27× at 100K, 1.5–8.6× at 10M**
+  (were 0.18–0.5×: a ternary kernel with a stride-0 input ran a scalar loop);
+- where= over 2-D rows with a row bound: **19–41× at 100K, 10–21× at 10M** (were 1.6–2.1×);
+- strided input + 0-d bounds: 1.0–3.0× at 100K (the gather route no longer gathers the bounds);
+- 1K: **1.4–14×** on every shape but float32 strided (1.1×: its two 0-d float64 bounds are cast to 0-d float32 arrays,
+  the NDArray construction floor); the iterator route's fixed cost roughly halved;
+- 10M contiguous into out=: 1.35–1.6× (non-temporal stores; were ~1.0×).
 
-See `Math/np.clip.cs`, `Backends/Default/Math/Default.ClipNDArray.cs`,
-`Backends/Kernels/Direct/DirectILKernelGenerator.Clip.cs`.
+Cells still under 1.5×, all shared floors rather than clip costs: contiguous clip at 100K (~0.8–1.4×, L2-bandwidth
+bound on both sides — NumPy's loop streams as fast; misaligned outputs no longer cost extra) and fresh 10M results
+(page-fault bound, ~1.0–1.1×); 1-D where= (~1.0×: NumPy and NumSharp both run one inner-loop call per mask run —
+admitting 1-D into the masked block kernel is the lever, it changes every masked ufunc); a buffered out= cast or
+dtype= cast at 10M (~1.1×, two passes on both sides) and the int32→float64 dtype= result at 10M (page faults of the
+80 MB result); an out overlapping the input at 100K (the COPY_IF_OVERLAP temporary on both sides).
+
+See `Math/np.clip.cs`, `Backends/Default/Math/Default.ClipNDArray{,.Iter,.ConstLoop}.cs`,
+`Backends/Kernels/Direct/DirectILKernelGenerator.{Clip,Clip.InnerLoop,InnerLoop.BroadcastPatterns}.cs`.
 
 **The divmod family** — `remainder`/`mod`, `fmod`, `divmod` (all probed against 2.4.2; gates the
 `divmod_power`/`multioutput` fuzz tiers + `Math` unit tests). `np.remainder` is an exact ALIAS of the existing
@@ -2098,6 +2160,20 @@ reproduce) — `narrow_probe.cs`/`numpy_twins.py` honour `NS_PROBE_AFFINITY`; 10
 from the masked path (a half-vector store would add ~1.3× — a per-width specialization, not done);
 buffered-cast routes are untouched; a strided-inner row that does not coalesce stays
 on the per-chunk gather path.
+
+**Three or more inputs with a broadcast input — the pattern stages (2026-10-03, np.clip's work).** The unary
+{C, S} / binary {CC, SC, CS} dispatch above stopped at two inputs: a ternary kernel (np.clip's (x, lo, hi)) with
+any stride-0 input ran the scalar 2-D block, the 1-D shell's all-contig requirement sent it to a gather with
+zero-offset indices, and the where= block kernel to its scalar block. All three now dispatch on the inputs' C/S
+pattern ONCE per call (`DirectILKernelGenerator.InnerLoop.BroadcastPatterns.cs`; up to 4 inputs, 15 patterns):
+the all-C loop stays INLINE, every other pattern is a STAGE — a DynamicMethod with the kernel's own signature,
+reached by one direct call and JIT-compiled on its FIRST call (probed: a DynamicMethod another one calls compiles
+when the call first executes), because 2^N copies of a 4×-unrolled SIMD loop in one method would spend its inline
+budget (the polynomial kernels' 3.3× trap). The gather route does the same for two or more inputs: a stride-0
+input next to strided ones is read once and broadcast instead of gathered (`np.clip(x[::2], lo, hi)`,
+`np.add(x[::2], 5.0, out=o)`; the caller's vector body is unchanged, so the add/multiply NaN-operand order holds).
+Gates: `Backends/Kernels/BroadcastPatternStageTests.cs` (every pattern × 1-D / 2-D / where= / gather against the
+materialized all-C route; a swapped pattern map fails 3 of its tests) + the `clip_ufunc` tier; 70,560 probe checks.
 
 **Tier 1 of the discovery document's next-wins list, remeasured and closed (2026-09-03, second
 pass; `docs/NDITER_PERF_DISCOVERY.md` §6.6, probe `benchmark/nditer/probes/fancy_where_probe.cs` +

@@ -46,11 +46,18 @@ namespace NumSharp.Backends
             NDIterPerOpFlags.WRITEONLY | NDIterPerOpFlags.NO_BROADCAST | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
         };
 
+        // The MASKED configs flag the output READWRITE, not WRITEONLY: NumPy's masked ufunc loop does the
+        // same for a passed-in out (ufunc_object.c: "In the masked version, we consider the output
+        // read-write"). It decides the overlap case. COPY_IF_OVERLAP computes into a temporary and writes
+        // it back WHOLE, and only a READ operand has that temporary initialized from the array, so with
+        // WRITEONLY the mask's False positions came back as heap bytes (np.add(x[:-1], 1, out=x[1:],
+        // where=m) wrote 6.95e-310 where NumPy keeps x). For a fresh result (no out) the flag changes
+        // nothing: the target overlaps no input and needs no cast, so it is never copied or buffered.
         private static readonly NDIterPerOpFlags[] s_ufuncBinaryOutMaskedFlags =
         {
             NDIterPerOpFlags.READONLY | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
             NDIterPerOpFlags.READONLY | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
-            NDIterPerOpFlags.WRITEONLY | NDIterPerOpFlags.WRITEMASKED | NDIterPerOpFlags.NO_BROADCAST | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+            NDIterPerOpFlags.READWRITE | NDIterPerOpFlags.WRITEMASKED | NDIterPerOpFlags.NO_BROADCAST | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
             NDIterPerOpFlags.READONLY | NDIterPerOpFlags.ARRAYMASK,
         };
 
@@ -60,10 +67,11 @@ namespace NumSharp.Backends
             NDIterPerOpFlags.WRITEONLY | NDIterPerOpFlags.NO_BROADCAST | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
         };
 
+        // READWRITE output for the same reason as s_ufuncBinaryOutMaskedFlags.
         private static readonly NDIterPerOpFlags[] s_ufuncUnaryOutMaskedFlags =
         {
             NDIterPerOpFlags.READONLY | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
-            NDIterPerOpFlags.WRITEONLY | NDIterPerOpFlags.WRITEMASKED | NDIterPerOpFlags.NO_BROADCAST | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+            NDIterPerOpFlags.READWRITE | NDIterPerOpFlags.WRITEMASKED | NDIterPerOpFlags.NO_BROADCAST | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
             NDIterPerOpFlags.READONLY | NDIterPerOpFlags.ARRAYMASK,
         };
 

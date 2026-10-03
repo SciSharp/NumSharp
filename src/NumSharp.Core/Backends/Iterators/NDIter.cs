@@ -1124,6 +1124,59 @@ namespace NumSharp.Backends.Iteration
                 }
             }
 
+            // Broadcasting shapes that differ (a 0-d scalar operand, a row or column bound): one right-aligned pass
+            // straight into the result dims — NumPy's npyiter_fill_axisdata rule, an extent-1 axis adopting any
+            // extent. The ResolveReturnShape route below allocates a List, a Shape[] copy, a scratch Shape and a
+            // cleaned one per call (~0.6 KB at three operands), all garbage, on every ufunc call whose operands
+            // differ in shape. A mismatch is NOT raised here: it falls through to that route, which raises the
+            // established exception and message.
+            {
+                int nd = 0;
+                bool anyOperand = false;
+                for (int i = 0; i < nop; i++)
+                {
+                    if (op[i] is null)
+                        continue;
+                    anyOperand = true;
+                    int ond = op[i].Shape.dimensions.Length;
+                    if (ond > nd)
+                        nd = ond;
+                }
+
+                if (anyOperand)
+                {
+                    var broadcast = new long[nd];
+                    for (int d = 0; d < nd; d++)
+                        broadcast[d] = 1;
+
+                    bool compatible = true;
+                    for (int i = 0; i < nop && compatible; i++)
+                    {
+                        if (op[i] is null)
+                            continue;
+                        var od = op[i].Shape.dimensions;
+                        int shift = nd - od.Length;
+                        for (int k = 0; k < od.Length; k++)
+                        {
+                            long extent = od[k];
+                            if (extent == 1)
+                                continue;
+                            ref long slot = ref broadcast[shift + k];
+                            if (slot == 1)
+                                slot = extent;
+                            else if (slot != extent)
+                            {
+                                compatible = false;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (compatible)
+                        return broadcast;
+                }
+            }
+
             // Standard broadcasting: use production NumSharp.Shape.ResolveReturnShape
             var shapes = new System.Collections.Generic.List<NumSharp.Shape>(nop);
             for (int i = 0; i < nop; i++)

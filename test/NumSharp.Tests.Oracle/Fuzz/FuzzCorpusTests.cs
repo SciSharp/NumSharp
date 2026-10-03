@@ -437,6 +437,17 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void ClipPyInt() => RunCorpus("clip_pyint.jsonl");
 
+        // np.clip as the ufunc call it routes to (gen_clip_ufunc): array bounds that broadcast (own and wider dtype,
+        // row / column / unit / full-F shapes) over 9 layouts x 13 dtypes + Char; out= broadcast up into, in C/F/
+        // strided/reversed layouts, of another dtype, read-only, of a wrong shape; where= with out (the masked-off
+        // slots' prior contents are checked through the whole base buffer); out overlapping an input (shifted,
+        // reversed, aliased, a bound overlapping out, interleaved, transposed), with and without a mask; NumPy's
+        // const-vs-general float loop choice (signed-zero ties against broadcast, one-element, in-place, cast and
+        // buffered bounds); and the iterator's broadcast + fromnumeric's keyword-rule error texts.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void ClipUfunc() => RunCorpus("clip_ufunc.jsonl");
+
         // W7 logic (T13): isnan/isinf/isfinite (unary->bool), maximum/minimum (NaN-propagating),
         // fmax/fmin (NaN-ignoring), isclose (binary->bool) — NaN/inf-laced operands.
         [TestMethod]
@@ -916,6 +927,7 @@ namespace NumSharp.Tests.Fuzz
             ["sort.jsonl"] = 940,   // +102: searchsorted expansion (dup/mixed-promotion/sorter/nan/complex-lex/strided/empty)
             ["specials.jsonl"] = 1920,
             ["stat.jsonl"] = 3412,
+            ["clip_ufunc.jsonl"] = 2100,   // np.clip as a ufunc call: 2,302 at delivery (broadcast bounds, out=, where=, overlap, the float loop choice, errors)
             ["clip_pyint.jsonl"] = 3900,   // np.clip with Python-int bounds: 4,175 at delivery (8 integer dtypes + Char x bound pairs x 12 layouts, the dtype=/out= rows, bool/float/complex)
             ["tail.jsonl"] = 1872,
             ["unary.jsonl"] = 5969,

@@ -29,6 +29,19 @@ using System.Runtime.CompilerServices;
 //     Min(Max()) takes the bound: clip(-0.0, 0, 1) is -0.0 in NumPy, not +0.0.
 //     float16 and complex have no such path in NumPy (half_tag / complex_tag are
 //     not floating_point_tag), and the integers cannot tell the two forms apart.
+//     On x86 those two compare-selects ARE MAXPD(lo, x) / MINPD(hi, x) (the
+//     instruction returns its second operand on a tie or a NaN), so the const body
+//     is one instruction per bound (TryGetX86OrderedMaxMin).
+//
+// Stores (the vector section):
+//   - An ALIGNMENT PEEL clips the first elements scalar until dst is aligned to
+//     the vector width, so every vector store is aligned (a misaligned output cost
+//     ~15-20% at 100K float64, and the buffer pool hands out either alignment).
+//   - Past ClipStreamingMinBytes (16 MiB) an out-of-place call writes the vectors
+//     with aligned NON-TEMPORAL stores and ends with sfence: input plus result no
+//     longer fit the last-level cache, and a streaming store skips each line's
+//     read-for-ownership (1.5-2.8x at 2.5M-10M elements). The variant is part of
+//     the kernel key; both compute the same bytes.
 //
 // Bounds kind:
 //   - Scalar: `lo`, `hi` point to one element of the dtype. Broadcast into
@@ -84,16 +97,113 @@ namespace NumSharp.Backends.Kernels
             NPTypeCode dtype, ClipMode mode, ClipBoundsKind kind,
             void* src, void* dst, long size, void* lo, void* hi)
         {
-            int key = ((int)dtype << 16) | ((int)mode << 8) | (int)kind;
-            var kernel = _clipKernelCache.GetOrAdd(key, _ => Generate(dtype, mode, kind));
+            // Bit 24 = the streaming-store variant (Complex = 128 occupies bit 23 of the dtype field, so no collision).
+            bool streaming = UseClipStreamingStores(dtype, src, dst, size);
+            int key = (streaming ? 1 << 24 : 0) | ((int)dtype << 16) | ((int)mode << 8) | (int)kind;
+            var kernel = _clipKernelCache.GetOrAdd(key, _ => Generate(dtype, mode, kind, streaming));
             kernel(src, dst, size, lo, hi);
         }
+
+        /// <summary>
+        /// The result size, in bytes, from which an out-of-place clip writes its vectors with NON-TEMPORAL stores: once
+        /// input plus result outgrow the last-level cache the result is evicted to memory anyway, and a streaming store
+        /// skips the read-for-ownership of every destination line (a third of the memory traffic of a read-one-write-one
+        /// kernel). Below it the result may still be cache-resident for its consumer, which plain stores keep.
+        /// </summary>
+        /// <remarks>
+        /// 16 MiB: input + result = 32 MiB, about this host's 36 MB L3 (i9-13900K). Measured in one process, plain vs
+        /// streaming, into a reused out= (boosted, unpinned): 100K elements 0.60-0.65x (L2-resident: streaming HURTS),
+        /// 1M 1.05-1.28x, float64 2.5M (20 MB result) 2.24x, float32 / int32 5M (20 MB) 1.85-2.79x, 10M 1.55-1.64x. The
+        /// 4-10 MB results gain at most ~1.2x for the producer while evicting a result a consumer could still read from
+        /// L3, so they keep plain stores.
+        /// </remarks>
+        internal const long ClipStreamingMinBytes = 16L << 20;
+
+        /// <summary>
+        /// Test hook: forces the streaming-store variant on (<c>true</c>) or off (<c>false</c>) whatever the size; <c>null</c>
+        /// (the default) applies <see cref="ClipStreamingMinBytes"/>. The two variants compute the same bytes; only the store
+        /// instruction differs.
+        /// </summary>
+        internal static bool? ClipStreamingOverride;
+
+        /// <summary>
+        /// Whether a flat clip call writes its vectors with non-temporal stores (see <see cref="ClipStreamingMinBytes"/>).
+        /// </summary>
+        /// <param name="dtype">The loop dtype.</param>
+        /// <param name="src">The input's first element.</param>
+        /// <param name="dst">The output's first element.</param>
+        /// <param name="size">The element count.</param>
+        /// <returns>True for a large out-of-place call of a vectorized dtype on a host with the streaming store, whose
+        /// output is element-aligned (so the peel can align the vector stores, which a streaming store requires).</returns>
+        /// <remarks>An in-place call (<paramref name="src"/> == <paramref name="dst"/>) keeps plain stores: the element's line
+        /// was just read into the cache, so there is no read-for-ownership to save.</remarks>
+        private static unsafe bool UseClipStreamingStores(NPTypeCode dtype, void* src, void* dst, long size)
+        {
+            // This runs on EVERY flat clip call, so the cheap tests come first and the store lookup is cached: the
+            // first version resolved StoreAlignedNonTemporal by reflection per call (~0.4 us and ~0.5 KB of garbage,
+            // as much as a whole 1K-element clip).
+            if (src == dst)
+                return false;
+            int sz = GetTypeSize(dtype);
+            bool wanted = ClipStreamingOverride ?? size * sz >= ClipStreamingMinBytes;
+            if (!wanted || ((long)dst & (sz - 1)) != 0)
+                return false;
+            return CanUseSimd(dtype) && SupportsVectorMinMax(dtype) && HasNonTemporalStore(dtype);
+        }
+
+        /// <summary>Per dtype (indexed by <c>(int)dtype &amp; 31</c>): 0 = not looked up yet, 1 = no streaming store, 2 = available.</summary>
+        private static readonly byte[] s_clipNonTemporalAvailable = new byte[32];
+
+        /// <summary>Whether <see cref="GetNonTemporalStore"/> finds a store for the dtype's lane, looked up once per dtype.</summary>
+        /// <param name="dtype">A vectorized clip dtype.</param>
+        /// <returns>True when the host has the aligned non-temporal store at the baked vector width.</returns>
+        private static bool HasNonTemporalStore(NPTypeCode dtype)
+        {
+            int slot = (int)dtype & 31;
+            byte known = System.Threading.Volatile.Read(ref s_clipNonTemporalAvailable[slot]);
+            if (known == 0)
+            {
+                known = GetNonTemporalStore(GetClrType(dtype)) is null ? (byte)1 : (byte)2;
+                System.Threading.Volatile.Write(ref s_clipNonTemporalAvailable[slot], known);
+            }
+            return known == 2;
+        }
+
+        /// <summary>
+        /// The aligned non-temporal vector store for <paramref name="laneType"/> at the baked vector width
+        /// (<c>Sse/Sse2/Avx/Avx512F.StoreAlignedNonTemporal(T*, Vector{W}&lt;T&gt;)</c>), or null when the host has none.
+        /// </summary>
+        /// <param name="laneType">The lane type.</param>
+        /// <returns>The method, or null.</returns>
+        private static MethodInfo GetNonTemporalStore(Type laneType)
+        {
+            Type isa = VectorBits switch
+            {
+                128 when laneType == typeof(float) && System.Runtime.Intrinsics.X86.Sse.IsSupported => typeof(System.Runtime.Intrinsics.X86.Sse),
+                128 when System.Runtime.Intrinsics.X86.Sse2.IsSupported => typeof(System.Runtime.Intrinsics.X86.Sse2),
+                256 when System.Runtime.Intrinsics.X86.Avx.IsSupported => typeof(System.Runtime.Intrinsics.X86.Avx),
+                512 when System.Runtime.Intrinsics.X86.Avx512F.IsSupported => typeof(System.Runtime.Intrinsics.X86.Avx512F),
+                _ => null,
+            };
+            return isa?.GetMethod("StoreAlignedNonTemporal", new[] { laneType.MakePointerType(), VectorMethodCache.V(VectorBits, laneType) });
+        }
+
+        /// <summary><c>Sse.StoreFence</c> (sfence): orders a streaming kernel's weakly-ordered stores before it returns.</summary>
+        private static readonly MethodInfo s_clipStoreFence =
+            typeof(System.Runtime.Intrinsics.X86.Sse).GetMethod(nameof(System.Runtime.Intrinsics.X86.Sse.StoreFence), Type.EmptyTypes);
 
         #endregion
 
         #region IL Generation
 
-        private static ClipKernel Generate(NPTypeCode dtype, ClipMode mode, ClipBoundsKind kind)
+        /// <summary>Emits one flat clip kernel (see the file header).</summary>
+        /// <param name="dtype">The loop dtype every pointer carries.</param>
+        /// <param name="mode">Which bounds are present.</param>
+        /// <param name="kind">Scalar bounds (one value each) or array bounds (one per element).</param>
+        /// <param name="streaming">Write the vector section with aligned non-temporal stores and end with a store fence
+        /// (only requested by <see cref="UseClipStreamingStores"/>, which guarantees an element-aligned output).</param>
+        /// <returns>The compiled kernel.</returns>
+        private static ClipKernel Generate(NPTypeCode dtype, ClipMode mode, ClipBoundsKind kind, bool streaming)
         {
             // f16 clip is two chained bit-level pair-selects (max with lo, min with hi) on
             // raw ushort lanes — zero float conversions, every (mode, kind) combo served.
@@ -103,7 +213,7 @@ namespace NumSharp.Backends.Kernels
                 return GetHalfClipKernel(mode, kind);
 
             var dm = new DynamicMethod(
-                name: $"Clip_{dtype}_{mode}_{kind}",
+                name: $"Clip_{dtype}_{mode}_{kind}{(streaming ? "_nt" : "")}",
                 returnType: typeof(void),
                 parameterTypes: new[] { typeof(void*), typeof(void*), typeof(long), typeof(void*), typeof(void*) },
                 owner: typeof(DirectILKernelGenerator),
@@ -140,12 +250,29 @@ namespace NumSharp.Backends.Kernels
 
             // SIMD section — only for hardware-supported types (skipped for
             // Char / Decimal / Half / Complex, which have no Vector<T> Min/Max).
+            MethodInfo ntStore = null;
             if (CanUseSimd(dtype) && SupportsVectorMinMax(dtype))
-                EmitSimdLoop(il, dtype, mode, kind, sz, locI, locLoVal, locHiVal);
+            {
+                // Output-alignment peel: scalar elements until dst + i*sz is vector-aligned, so every vector store
+                // after it is aligned. A misaligned 32-byte store splits a cache line every other vector; measured on
+                // 100K float64 (L2-resident) a misaligned output cost ~15-20% (13.5-14.5 vs 11.5 us), and the pool
+                // hands out buffers at either alignment. A streaming store REQUIRES the alignment.
+                var locPeelEnd = il.DeclareLocal(typeof(long));
+                EmitClipPeelEnd(il, sz, locPeelEnd);
+                EmitScalarLoop(il, dtype, mode, kind, sz, locI, locLoVal, locHiVal, locPeelEnd);
+
+                if (streaming)
+                    ntStore = GetNonTemporalStore(GetClrType(dtype));
+                EmitSimdLoop(il, dtype, mode, kind, sz, locI, locLoVal, locHiVal, ntStore);
+            }
 
             // Scalar loop covers the tail after SIMD and the entire range for
             // non-SIMD dtypes.
             EmitScalarLoop(il, dtype, mode, kind, sz, locI, locLoVal, locHiVal);
+
+            // Streaming stores are weakly ordered: fence them before the result is handed back.
+            if (ntStore != null)
+                il.EmitCall(OpCodes.Call, s_clipStoreFence, null);
 
             il.Emit(OpCodes.Ret);
             return (ClipKernel)dm.CreateDelegate(typeof(ClipKernel));
@@ -187,9 +314,23 @@ namespace NumSharp.Backends.Kernels
 
         private const int ClipUnroll = 4;
 
+        /// <summary>
+        /// The vector section of a flat clip kernel: the ClipUnroll×-unrolled body, then single vectors, starting at
+        /// <paramref name="locI"/> (after the alignment peel) and leaving <paramref name="locI"/> at the first element the
+        /// scalar tail must still do.
+        /// </summary>
+        /// <param name="il">The kernel's generator.</param>
+        /// <param name="dtype">The loop dtype.</param>
+        /// <param name="mode">Which bounds are present.</param>
+        /// <param name="kind">Scalar or array bounds.</param>
+        /// <param name="sz">The element size in bytes.</param>
+        /// <param name="locI">The element index (in: the first vector element; out: the first tail element).</param>
+        /// <param name="locLoVal">The scalar lower bound (scalar kind), or null.</param>
+        /// <param name="locHiVal">The scalar upper bound (scalar kind), or null.</param>
+        /// <param name="ntStore">Null for plain stores, or the aligned non-temporal store (the streaming variant).</param>
         private static void EmitSimdLoop(
             ILGenerator il, NPTypeCode dtype, ClipMode mode, ClipBoundsKind kind, int sz,
-            LocalBuilder locI, LocalBuilder locLoVal, LocalBuilder locHiVal)
+            LocalBuilder locI, LocalBuilder locLoVal, LocalBuilder locHiVal, MethodInfo ntStore = null)
         {
             var vectorType = VectorMethodCache.V(VectorBits, GetClrType(dtype));
             int vectorCount = GetVectorCount(dtype);
@@ -251,7 +392,7 @@ namespace NumSharp.Backends.Kernels
                 il.Emit(OpCodes.Stloc, bo[k]);
             }
             for (int k = 0; k < ClipUnroll; k++)
-                EmitClipVectorBody(il, dtype, kind, bo[k], needLo, needHi, locLoVec, locHiVec, constSelect);
+                EmitClipVectorBody(il, dtype, kind, bo[k], needLo, needHi, locLoVec, locHiVec, constSelect, ntStore);
 
             // i += ClipUnroll * vectorCount
             il.Emit(OpCodes.Ldloc, locI);
@@ -282,7 +423,7 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Ldc_I8, (long)sz);
             il.Emit(OpCodes.Mul);
             il.Emit(OpCodes.Stloc, bo[0]);
-            EmitClipVectorBody(il, dtype, kind, bo[0], needLo, needHi, locLoVec, locHiVec, constSelect);
+            EmitClipVectorBody(il, dtype, kind, bo[0], needLo, needHi, locLoVec, locHiVec, constSelect, ntStore);
 
             // i += vectorCount
             il.Emit(OpCodes.Ldloc, locI);
@@ -311,6 +452,59 @@ namespace NumSharp.Backends.Kernels
             => mode == ClipMode.BothBounds && kind == ClipBoundsKind.Scalar
                && (dtype == NPTypeCode.Single || dtype == NPTypeCode.Double);
 
+        /// <summary>
+        /// The x86 MAX/MIN instructions for float32/float64 lanes at the baked vector width
+        /// (<c>Sse.Max</c> / <c>Sse2.Max</c>, <c>Avx.Max</c>, <c>Avx512F.Max</c> and their Min twins),
+        /// whose operand order IS NumPy's clip const path: <c>MAXPS/MAXPD a, b</c> computes
+        /// <c>a &gt; b ? a : b</c> and <c>MINPS/MINPD a, b</c> computes <c>a &lt; b ? a : b</c>, both
+        /// returning the SECOND operand on a tie (±0 against ∓0) or when either is NaN. So
+        /// <c>Max(lo, x)</c> is <c>x &lt; lo ? lo : x</c> and <c>Min(hi, x)</c> is <c>x &gt; hi ? hi : x</c>,
+        /// lane for lane — a signed-zero tie keeps the element, a NaN element passes through.
+        /// </summary>
+        /// <param name="laneType">The lane type: <c>float</c> or <c>double</c>.</param>
+        /// <param name="max">The ordered max (<c>Isa.Max(Vector{W}, Vector{W})</c>), or null.</param>
+        /// <param name="min">The ordered min, or null.</param>
+        /// <returns>
+        /// True on an x86 host whose ISA matches <see cref="VectorBits"/>. False for any other lane type
+        /// or host: the portable <c>Vector{W}.Max/Min</c> follow IEEE 754-2019 maximum/minimum (a NaN
+        /// operand wins, -0 &lt; +0) and ARM's FMAX/FMIN propagate NaN, so neither may replace the
+        /// compare-selects — those callers keep the explicit <c>ConditionalSelect</c> form.
+        /// </returns>
+        /// <remarks>
+        /// RyuJIT keeps the operand order of the floating-point x86 Max/Min intrinsics (it treats them
+        /// as commutative only for integer lanes), which the oracle's signed-zero tie cases pin: a
+        /// swapped pair would turn <c>clip(-0.0, 0.0, 1.0)</c> from -0.0 into +0.0.
+        /// </remarks>
+        internal static bool TryGetX86OrderedMaxMin(Type laneType, out MethodInfo max, out MethodInfo min)
+        {
+            max = null;
+            min = null;
+            if (laneType != typeof(float) && laneType != typeof(double))
+                return false;
+
+            Type isa = VectorBits switch
+            {
+                128 when laneType == typeof(float) && System.Runtime.Intrinsics.X86.Sse.IsSupported => typeof(System.Runtime.Intrinsics.X86.Sse),
+                128 when laneType == typeof(double) && System.Runtime.Intrinsics.X86.Sse2.IsSupported => typeof(System.Runtime.Intrinsics.X86.Sse2),
+                256 when System.Runtime.Intrinsics.X86.Avx.IsSupported => typeof(System.Runtime.Intrinsics.X86.Avx),
+                512 when System.Runtime.Intrinsics.X86.Avx512F.IsSupported => typeof(System.Runtime.Intrinsics.X86.Avx512F),
+                _ => null,
+            };
+            if (isa == null)
+                return false;
+
+            var vecType = VectorMethodCache.V(VectorBits, laneType);
+            max = isa.GetMethod("Max", new[] { vecType, vecType });
+            min = isa.GetMethod("Min", new[] { vecType, vecType });
+            if (max == null || min == null)
+            {
+                max = null;
+                min = null;
+                return false;
+            }
+            return true;
+        }
+
         // Emits ONE vector clip step: load src at byteOff, clamp to lo/hi (NaN-propagating
         // float min/max via EmitVectorMinOrMax), store at dst+byteOff. Stack-neutral. Shared
         // by the unrolled body and the single-vector remainder so both stay bit-identical.
@@ -318,10 +512,30 @@ namespace NumSharp.Backends.Kernels
         // fails both compares and passes through, so no NaN fix-up is needed there.
         private static void EmitClipVectorBody(
             ILGenerator il, NPTypeCode dtype, ClipBoundsKind kind, LocalBuilder locByteOff,
-            bool needLo, bool needHi, LocalBuilder locLoVec, LocalBuilder locHiVec, bool constSelect)
+            bool needLo, bool needHi, LocalBuilder locLoVec, LocalBuilder locHiVec, bool constSelect,
+            MethodInfo ntStore = null)
         {
             EmitOffsetAddrFromLocal(il, 0, locByteOff);
             EmitVectorLoad(il, dtype);                                         // [vec]
+
+            if (constSelect && TryGetX86OrderedMaxMin(GetClrType(dtype), out var orderedMax, out var orderedMin))
+            {
+                // x = Max(lo, x) ; x = Min(hi, x) with x86's ordered MAXPD/MINPD, which ARE the two
+                // compare-selects below (see TryGetX86OrderedMaxMin): one instruction per bound
+                // instead of a compare plus a blend. The dispatcher has already replaced a NaN bound
+                // with a fill, so no NaN-bound fix-up is needed on this path.
+                var locX = il.DeclareLocal(VectorMethodCache.V(VectorBits, GetClrType(dtype)));
+                il.Emit(OpCodes.Stloc, locX);                                  // []
+                il.Emit(OpCodes.Ldloc, locLoVec);
+                il.Emit(OpCodes.Ldloc, locX);
+                il.EmitCall(OpCodes.Call, orderedMax, null);                   // [lo > x ? lo : x]
+                il.Emit(OpCodes.Stloc, locX);
+                il.Emit(OpCodes.Ldloc, locHiVec);
+                il.Emit(OpCodes.Ldloc, locX);
+                il.EmitCall(OpCodes.Call, orderedMin, null);                   // [hi < x ? hi : x]
+                EmitClipStore(il, dtype, locByteOff, ntStore);                 // []
+                return;
+            }
 
             if (constSelect)
             {
@@ -342,8 +556,7 @@ namespace NumSharp.Backends.Kernels
                 il.Emit(OpCodes.Ldloc, locHiVec);
                 il.Emit(OpCodes.Ldloc, locX);
                 il.EmitCall(OpCodes.Call, VectorMethodCache.ConditionalSelect(VectorBits, clrType), null); // [x'']
-                EmitOffsetAddrFromLocal(il, 1, locByteOff);
-                EmitVectorStore(il, dtype);                                    // []
+                EmitClipStore(il, dtype, locByteOff, ntStore);                 // []
                 return;
             }
 
@@ -371,13 +584,96 @@ namespace NumSharp.Backends.Kernels
                 EmitVectorMinOrMax(il, isMax: false, dtype, propagateNaN: true);   // vec = Min(vec, hi)
             }
 
-            EmitOffsetAddrFromLocal(il, 1, locByteOff);
-            EmitVectorStore(il, dtype);                                        // []
+            EmitClipStore(il, dtype, locByteOff, ntStore);                     // []
         }
 
+        /// <summary>
+        /// Stores the clipped vector on the stack at <c>dst + byteOff</c>: a plain vector store, or — in the streaming
+        /// variant — an aligned non-temporal store (the peel guarantees the alignment).
+        /// </summary>
+        /// <param name="il">The kernel's generator.</param>
+        /// <param name="dtype">The loop dtype.</param>
+        /// <param name="locByteOff">The group's byte offset.</param>
+        /// <param name="ntStore">Null for a plain store, or the non-temporal store method.</param>
+        private static void EmitClipStore(ILGenerator il, NPTypeCode dtype, LocalBuilder locByteOff, MethodInfo ntStore)
+        {
+            if (ntStore == null)
+            {
+                EmitOffsetAddrFromLocal(il, 1, locByteOff);
+                EmitVectorStore(il, dtype);
+                return;
+            }
+            // StoreAlignedNonTemporal(T* address, Vector{W}<T> source) wants [ptr, vec]; the stack holds [vec].
+            var locVec = il.DeclareLocal(VectorMethodCache.V(VectorBits, GetClrType(dtype)));
+            il.Emit(OpCodes.Stloc, locVec);
+            EmitOffsetAddrFromLocal(il, 1, locByteOff);
+            il.Emit(OpCodes.Ldloc, locVec);
+            il.EmitCall(OpCodes.Call, ntStore, null);
+        }
+
+        /// <summary>
+        /// Emits <c>peelEnd</c>: how many leading elements the scalar loop clips before the vector section so that
+        /// <c>dst + peelEnd*sz</c> is aligned to the vector width — <c>(W − dst % W) / sz</c>, 0 when dst is already aligned
+        /// or not element-aligned (then no peel can help), capped at the size.
+        /// </summary>
+        /// <param name="il">The kernel's generator.</param>
+        /// <param name="sz">The element size in bytes.</param>
+        /// <param name="locPeelEnd">Receives the peel end (an element index).</param>
+        private static void EmitClipPeelEnd(ILGenerator il, int sz, LocalBuilder locPeelEnd)
+        {
+            long vectorBytes = VectorBits / 8;
+            var locMis = il.DeclareLocal(typeof(long));
+            var lblDone = il.DefineLabel();
+
+            // mis = (long)dst & (W - 1)
+            il.Emit(OpCodes.Ldarg_1);
+            il.Emit(OpCodes.Conv_I8);
+            il.Emit(OpCodes.Ldc_I8, vectorBytes - 1);
+            il.Emit(OpCodes.And);
+            il.Emit(OpCodes.Stloc, locMis);
+
+            // peelEnd = 0; if (mis == 0 || (mis & (sz - 1)) != 0) done
+            il.Emit(OpCodes.Ldc_I8, 0L);
+            il.Emit(OpCodes.Stloc, locPeelEnd);
+            il.Emit(OpCodes.Ldloc, locMis);
+            il.Emit(OpCodes.Brfalse, lblDone);
+            il.Emit(OpCodes.Ldloc, locMis);
+            il.Emit(OpCodes.Ldc_I8, (long)(sz - 1));
+            il.Emit(OpCodes.And);
+            il.Emit(OpCodes.Brtrue, lblDone);
+
+            // peelEnd = (W - mis) / sz, capped at size
+            il.Emit(OpCodes.Ldc_I8, vectorBytes);
+            il.Emit(OpCodes.Ldloc, locMis);
+            il.Emit(OpCodes.Sub);
+            il.Emit(OpCodes.Ldc_I8, (long)sz);
+            il.Emit(OpCodes.Div);
+            il.Emit(OpCodes.Stloc, locPeelEnd);
+            il.Emit(OpCodes.Ldloc, locPeelEnd);
+            il.Emit(OpCodes.Ldarg_2);
+            il.Emit(OpCodes.Ble, lblDone);
+            il.Emit(OpCodes.Ldarg_2);
+            il.Emit(OpCodes.Stloc, locPeelEnd);
+
+            il.MarkLabel(lblDone);
+        }
+
+        /// <summary>
+        /// The scalar clip loop from <paramref name="locI"/> to <paramref name="locEnd"/> (or to the size): the peel before
+        /// the vector section, the tail after it, and the whole range for dtypes without a vector form.
+        /// </summary>
+        /// <param name="il">The kernel's generator.</param>
+        /// <param name="dtype">The loop dtype.</param>
+        /// <param name="mode">Which bounds are present.</param>
+        /// <param name="kind">Scalar or array bounds.</param>
+        /// <param name="sz">The element size in bytes.</param>
+        /// <param name="locI">The element index (advanced in place).</param>
+        /// <param name="locLoVal">The scalar lower bound (scalar kind), or null.</param>
+        /// <param name="locHiVal">The scalar upper bound (scalar kind), or null.</param>
+        /// <param name="locEnd">The exclusive end, or null for the kernel's size argument.</param>
         private static void EmitScalarLoop(
             ILGenerator il, NPTypeCode dtype, ClipMode mode, ClipBoundsKind kind, int sz,
-            LocalBuilder locI, LocalBuilder locLoVal, LocalBuilder locHiVal)
+            LocalBuilder locI, LocalBuilder locLoVal, LocalBuilder locHiVal, LocalBuilder locEnd = null)
         {
             var clrType = GetClrType(dtype);
             bool needLo = mode != ClipMode.MaxOnly;
@@ -394,9 +690,12 @@ namespace NumSharp.Backends.Kernels
             var lblEnd = il.DefineLabel();
 
             il.MarkLabel(lblLoop);
-            // if (i >= size) break
+            // if (i >= end) break   (end = locEnd, or the size)
             il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldarg_2);
+            if (locEnd != null)
+                il.Emit(OpCodes.Ldloc, locEnd);
+            else
+                il.Emit(OpCodes.Ldarg_2);
             il.Emit(OpCodes.Bge, lblEnd);
 
             // byteOff = i * sz

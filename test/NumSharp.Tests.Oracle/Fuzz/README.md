@@ -284,6 +284,7 @@ python test/oracle/gen_oracle.py place            # np.place(arr,mask,vals)
 python test/oracle/gen_oracle.py matmul           # T8 linalg: matmul/dot/outer (gufunc shapes, C/F layouts)
 python test/oracle/gen_oracle.py specials         # IEEE special-value parity (nan/±inf/±0/subnormal/max)
 python test/oracle/gen_oracle.py nan_order        # float add/multiply NaN-operand order (win-amd64), NaN payloads raw
+python test/oracle/gen_oracle.py clip_ufunc       # np.clip as a ufunc: broadcast bounds, out=, where=, overlap, the float loop
 python test/oracle/gen_oracle.py precision        # truthful-vs-precise (adversarial accumulation; needs mpmath)
 python test/oracle/gen_oracle.py products         # CBLAS product family values (inner/vdot/vecdot/matvec/...)
 python test/oracle/gen_oracle.py fft              # np.fft.* — 1-D/N-D/hermitian transforms + freq/shift helpers
@@ -1392,9 +1393,42 @@ by `test/NumSharp.Tests/Math/np.clip.PythonIntBounds.Test.cs`.
 scalar float32/float64 bounds run `x < lo ? lo : x; x > hi ? hi : x`, which keeps the element on a tie, so
 `np.clip(-0.0, 0, 1)` is -0.0. Array bounds run the general `MIN(MAX(x, lo), hi)`, which takes the bound
 (+0.0). The clip kernel now reproduces the split (`DirectILKernelGenerator.UsesConstSelect`). That is also
-why `out_clip` left K13 (see the 2026-09-18 note above). One corner remains unported: NumPy also takes the
-const path for ARRAY bounds that are constant along its inner loop (a size-1 bound broadcast over n ≥ 2
-elements).
+why `out_clip` left K13 (see the 2026-09-18 note above). NumPy also takes the const path for ARRAY bounds
+that are constant along its inner loop (a size-1 bound broadcast over n ≥ 2 elements); that decision is ported
+and gated by the `clip_ufunc` tier below.
+
+### np.clip as a ufunc (`clip_ufunc` tier)
+
+`clip_ufunc.jsonl` (`gen_oracle.py clip_ufunc`, 2,302 cases, floor 2,100; 2026-10-03) gates np.clip as the
+ufunc call NumPy routes it to (`um.clip`, or `minimum` / `maximum` / `positive` after `_methods._clip`). The
+earlier tiers only clip an array by scalar bounds of its own shape. Sections:
+- **A** — ARRAY bounds of other shapes (a row, a column, a `(1,1)` unit, a full F-ordered one; of the array's
+  dtype or a wider one) over 9 layouts, and the result's layout;
+- **B** — `out=` that the inputs broadcast up into, of another same_kind dtype, in any layout; a read-only
+  out and one that would have to stretch are refused;
+- **C** — `where=` (out's prior contents kept at the mask's False positions; a non-bool mask refused);
+- **D** — an out overlapping an input (COPY_IF_OVERLAP), also under a mask;
+- **E** — the CONST-vs-general float loop NumPy picks per call (float32 / float64): the element is -0.0 and the
+  bound the opposite zero, so every result element's sign says which loop ran — trivial-loop calls, NpyIter's
+  buffering decision, one-element calls off the trivial loop;
+- **F** — the error texts: the iterator's two broadcast errors and fromnumeric.clip's keyword rule.
+
+Every case is a TUPLE: slot 0 the returned array, slot 1 (with out=) the WHOLE base buffer behind out after
+the call, so a write outside the view or into a masked-off slot fails. Arguments are a param grammar
+(`OpRegistry.ClipUfunc.cs`): an operand, a VIEW of an operand (several arguments can alias one buffer — the
+overlap cases), or a Python scalar. NumPy's error texts end the broadcast message with a space;
+`CheckError` now trims BOTH sides before comparing (it trimmed only NumSharp's). Char rides the uint16
+proxy without sections E/F (`extras=False`, which do not vary with the dtype). `clip_ufunc` is listed in
+`ByteExactArithmeticUnaryOps` and excluded from K7 like `clip_pyint`. **Bit-exact; the two excused cases are
+the registry's NEP 50 weak-scalar rule** — a 0-d array operand NumPy promotes as an array and NumSharp as a
+Python scalar (it cannot tell the two apart; the remaining divergence the np.clip docs name).
+
+The tier found, and the work fixed: no broadcasting of bounds / out / where (a larger bound raised), no
+`where=` on np.clip at all, wrong answers for an out overlapping an input, the const loop's NaN-bound fill
+using .NET's NaN bits, calls NumPy runs on its const loop (array bounds constant along the inner loop,
+one-element calls off the trivial loop) running on the general one, and — library-wide — the ufunc
+out=/where= routes writing heap garbage into the masked-off positions of an out that overlaps an input
+(the masked out must be READWRITE, NumPy's rule).
 
 ### np.random byte-parity (`random_parity` tiers)
 

@@ -824,6 +824,357 @@ def gen_clip_pyint(dtypes=None):
     return cases
 
 
+# ---- np.clip as the ufunc call it routes to (broadcasting, out=, where=, overlap, the float loop choice) ----------
+#
+# gen_clip / gen_clip_pyint only clip an array by scalar bounds of its own shape. NumPy's np.clip is a ufunc call
+# (um.clip, or minimum / maximum / positive after _methods._clip routed it), so it also:
+#   A. broadcasts the array with ARRAY bounds of other shapes (a row, a column, a (1,1) unit, a full F-ordered one),
+#      of the array's own dtype or a wider one (the loop promotes), and allocates the result in its operands' layout;
+#   B. writes into an out= that the inputs broadcast up into, of another (same_kind) dtype, in any layout, and
+#      refuses a read-only out or one it would have to stretch;
+#   C. honours where= (prior contents of out kept at the mask's False positions; a non-bool mask is refused);
+#   D. computes as if from copies when out overlaps an input (COPY_IF_OVERLAP), also under a mask;
+#   E. picks, per call, between clip.cpp's CONST float loop (both bound steps 0: a signed-zero tie keeps the element)
+#      and the general MIN(MAX(x, lo), hi) (a tie takes the bound), from the trivial-loop test and NpyIter's
+#      buffering decision — including one-element calls, where an iterator gives every axis stride 0;
+#   F. raises NumPy's texts: the iterator's two broadcast errors and fromnumeric.clip's keyword rule.
+# Op key "clip_ufunc", always a tuple: slot 0 the returned array, slot 1 (when out= is given) the WHOLE base buffer
+# behind out after the call, so a write outside the view or into a masked-off slot is caught.
+# Params name every argument (absent = NumPy's no-value; the C# replay passes null there):
+#   a / a_min / a_max / min / max / out / where:
+#       {"op": k}                    operand k as reconstructed;
+#       {"of": k, "view": "dsl"}     a view of operand k: '|'-separated steps, each "[slice]", "T" or
+#                                    "reshape(d0,d1,...)" (overlap cases: several arguments view ONE buffer);
+#       {"py": v, "t": "int"|"float"|"bool"}   a Python scalar (the C# literal of that type);
+#   dtype: an optional loop dtype name.
+CLIP_UFUNC_A_LAYOUTS = ["c_contiguous_2d", "f_contiguous_2d", "strided_2d_cols", "negstride_2d_offset",
+                        "transposed_3d", "c_contiguous_1d", "broadcast_row_partial", "one_element_1d", "scalar_0d"]
+# (lower, upper) bound kinds per section-A case: a shape kind from _clip_ufunc_bound_shapes, "py" (a Python scalar)
+# or "none" (no bound: the call routes to maximum / minimum).
+CLIP_UFUNC_A_COMBOS = [("row", "py"), ("py", "row"), ("col", "py"), ("unit", "unit"), ("row", "col"),
+                       ("full", "unit"), ("fullF", "fullF"), ("row", "none"), ("none", "col"), ("py", "py")]
+# A same_kind-reachable out dtype other than the loop's, per loop dtype (section B).
+CLIP_UFUNC_OUT_CAST = {"bool": "int8", "int8": "int16", "uint8": "int8", "int16": "float32", "uint16": "int64",
+                       "int32": "float64", "uint32": "int32", "int64": "float64", "uint64": "int64",
+                       "float16": "float64", "float32": "float16", "float64": "float32", "complex128": "complex128"}
+
+
+def _clip_ufunc_bound_shapes(shape):
+    """The bound shapes section A pairs with an array of `shape`: every one broadcasts to it."""
+    nd = len(shape)
+    if nd == 0:
+        return {"row": (1,), "col": (1, 1), "unit": (1,), "full": (), "fullF": ()}
+    return {
+        "row": (shape[-1],),
+        "col": tuple(shape[:-1]) + (1,) if nd >= 2 else (1,),
+        "unit": (1,) * nd,
+        "full": tuple(shape),
+        "fullF": tuple(shape),
+    }
+
+
+def _clip_ufunc_view(shape, dt, kind, roll):
+    """(base, view) of `shape` and dtype `dt` from the value pools (rolled by `roll`), in layout `kind`:
+    C, F (column-major), S (stride 2 on the last axis) or R (the last axis reversed)."""
+    shape = tuple(shape)
+    n = int(np.prod(shape)) if shape else 1
+    vals = np.roll(_fill(2 * n + 1, dt), roll)
+    if kind == "C" or len(shape) == 0:
+        base = vals[:n].reshape(shape).copy()
+        return base, base
+    if kind == "F":
+        base = vals[:n].reshape(shape[::-1]).copy()
+        return base, base.T
+    if kind == "S":
+        base = vals[:2 * n].reshape(shape[:-1] + (2 * shape[-1],)).copy()
+        return base, base[..., ::2]
+    if kind == "R":
+        base = vals[:n].reshape(shape).copy()
+        return base, base[..., ::-1]
+    raise ValueError(kind)
+
+
+def _clip_ufunc_py(dt, upper):
+    """A Python scalar bound for an array of dtype `dt`: (value, C# literal type)."""
+    k = np.dtype(dt).kind
+    if k == "b":
+        return (True, "bool") if upper else (False, "bool")
+    if k == "u":
+        return (100, "int") if upper else (3, "int")
+    if k == "i":
+        return (100, "int") if upper else (-3, "int")
+    return (1.9, "float") if upper else (-0.5, "float")
+
+
+def _clip_ufunc_apply_view(arr, dsl):
+    """The view DSL of the params (see the tier header), applied in NumPy."""
+    v = arr
+    for step in dsl.split("|"):
+        if step == "T":
+            v = v.T
+        elif step.startswith("reshape("):
+            v = v.reshape(tuple(int(t) for t in step[len("reshape("):-1].split(",")))
+        elif step.startswith("[") and step.endswith("]"):
+            v = eval("v" + step, {"v": v})          # noqa: S307 — generator-side, literal slice strings only
+        else:
+            raise ValueError(step)
+    return v
+
+
+def gen_clip_ufunc(dtypes=None, extras=True):
+    """np.clip as a ufunc call (op key ``clip_ufunc``) — see the header above.
+
+    `extras` adds sections E (float32/float64 only) and F (float64 error texts), which do not vary with
+    `dtypes`; the Char weave turns them off so they are not recorded twice.
+    """
+    dtypes = dtypes or list(CLIP_DTYPES)
+    cases = []
+    n = 0
+
+    def emit(tag, s, operands, args, layout):
+        """Record one call. `operands` are (base, view) pairs; `args` maps a parameter name to its spec
+        (NumPy side: a resolved Python value is computed from the spec here)."""
+        nonlocal n
+        ops = [view for _, view in operands]
+
+        def resolve(spec):
+            if "py" in spec:
+                return spec["py"]
+            if "op" in spec:
+                return ops[spec["op"]]
+            return _clip_ufunc_apply_view(ops[spec["of"]], spec["view"])
+
+        kw = {}
+        for name in ("a_min", "a_max", "min", "max", "out", "where"):
+            if name in args:
+                kw[name] = resolve(args[name])
+        if "dtype" in args:
+            kw["dtype"] = np.dtype(args["dtype"])
+        a = resolve(args["a"])
+        out_owner = None
+        if "out" in args:
+            out_owner = args["out"].get("op", args["out"].get("of"))
+        params = dict(args)
+        descs = [describe(base, view) for base, view in operands]
+        cid = f"clip_ufunc/{tag}/{s}/{n}"
+        try:
+            with warnings.catch_warnings(), np.errstate(all="ignore"):
+                warnings.simplefilter("ignore")
+                r = np.clip(a, **kw)
+        except Exception as e:                    # noqa: BLE001 — NumPy's outcome is recorded verbatim
+            cases.append(_error_case("clip_ufunc", params, descs, e, layout, cid=cid, kind="tuple"))
+            n += 1
+            return
+        if "where" in args and "out" not in args:
+            return                                 # masked-off slots of a fresh result are uninitialized: no claim
+        slots = [np.asarray(r)]
+        if out_owner is not None:
+            slots.append(operands[out_owner][0].ravel())
+        cases.append(_case("clip_ufunc", params, descs, _tuple_expected(slots), layout, "mixed", cid=cid))
+        n += 1
+
+    for s in dtypes:
+        dt = np.dtype(s)
+        lo_py, lo_t = _clip_ufunc_py(dt, False)
+        hi_py, hi_t = _clip_ufunc_py(dt, True)
+        wider = "float64" if dt.kind in "biuf" and dt != np.float64 else None
+
+        # ---- A. array bounds that broadcast against the array, own dtype and a wider one --------------------
+        for ln in CLIP_UFUNC_A_LAYOUTS:
+            for bdt in [s] + ([wider] if wider else []):
+                for ci, (lk, hk) in enumerate(CLIP_UFUNC_A_COMBOS):
+                    if bdt != s and ci % 3 != 0:
+                        continue                   # the wider-dtype bounds ride every third combo
+                    base, view = LAYOUTS[ln](dt)
+                    shapes = _clip_ufunc_bound_shapes(view.shape)
+                    operands = [(base, view)]
+                    args = {"a": {"op": 0}}
+                    for name, k, py, t, roll in (("a_min", lk, lo_py, lo_t, 3), ("a_max", hk, hi_py, hi_t, 7)):
+                        if k == "none":
+                            args[name] = {"py": None, "t": "none"}
+                            continue
+                        if k == "py":
+                            args[name] = {"py": py, "t": t}
+                            continue
+                        bshape = shapes[k]
+                        kind = "F" if k == "fullF" and len(bshape) >= 2 else ("S" if k == "row" and ci % 2 else "C")
+                        operands.append(_clip_ufunc_view(bshape, np.dtype(bdt), kind, roll))
+                        args[name] = {"op": len(operands) - 1}
+                    emit(f"A/{ln}/{lk}-{hk}/{bdt}", s, operands, args, ln)
+
+        # ---- B. out=: broadcast up into it, other layouts, a cast, read-only, wrong shape ----------------------
+        row = _clip_ufunc_view((5,), dt, "C", 1)
+        for out_kind in ("C", "F", "S", "R"):
+            ob = _clip_ufunc_view((4, 5), dt, out_kind, 11)
+            emit(f"B/up/{out_kind}", s, [row, ob],
+                 {"a": {"op": 0}, "a_min": {"py": lo_py, "t": lo_t}, "a_max": {"py": hi_py, "t": hi_t}, "out": {"op": 1}},
+                 f"out_{out_kind}")
+        cast_to = CLIP_UFUNC_OUT_CAST.get(s)
+        if cast_to:
+            a2 = _clip_ufunc_view((4, 5), dt, "F", 2)
+            lo2 = _clip_ufunc_view((5,), dt, "C", 5)
+            oc = _clip_ufunc_view((4, 5), np.dtype(cast_to), "C", 0)
+            emit("B/cast", s, [a2, lo2, oc],
+                 {"a": {"op": 0}, "a_min": {"op": 1}, "a_max": {"py": hi_py, "t": hi_t}, "out": {"op": 2}}, "out_cast")
+        ro_base, ro_view = LAYOUTS["broadcast_1d_to_2d"](dt)
+        emit("B/readonly", s, [_clip_ufunc_view(ro_view.shape, dt, "C", 1), (ro_base, ro_view)],
+             {"a": {"op": 0}, "a_min": {"py": lo_py, "t": lo_t}, "a_max": {"py": hi_py, "t": hi_t}, "out": {"op": 1}},
+             "out_readonly")
+        for oshape in ((3,), (2, 4), (4,)):
+            ob = _clip_ufunc_view(oshape, dt, "C", 0)
+            emit(f"B/badshape/{'x'.join(map(str, oshape))}", s, [_clip_ufunc_view((4, 5), dt, "C", 1), ob],
+                 {"a": {"op": 0}, "a_min": {"py": lo_py, "t": lo_t}, "a_max": {"py": hi_py, "t": hi_t}, "out": {"op": 1}},
+                 "out_badshape")
+
+        # ---- C. where= with out (prior contents kept), every mask shape, Python-bool masks, a non-bool mask --
+        a3 = _clip_ufunc_view((4, 5), dt, "C", 4)
+        masks = {
+            "alt": np.arange(20).reshape(4, 5) % 3 != 0,
+            "row": np.array([True, False, True, True, False]),
+            "col": np.array([[True], [False], [True], [False]]),
+            "allF": np.zeros((4, 5), bool),
+            # A column-major mask: the .T of a C-contiguous (5, 4) base (describe() serializes the BASE in C order).
+            "F": (np.arange(20).reshape(5, 4) % 2 == 0).T,
+        }
+        for mk, m in masks.items():
+            for bk in ("py", "row"):
+                operands = [a3, (m if m.base is None else m.base, m), _clip_ufunc_view((4, 5), dt, "S", 9)]
+                args = {"a": {"op": 0}, "where": {"op": 1}, "out": {"op": 2},
+                        "a_max": {"py": hi_py, "t": hi_t}}
+                if bk == "py":
+                    args["a_min"] = {"py": lo_py, "t": lo_t}
+                else:
+                    operands.append(_clip_ufunc_view((5,), dt, "C", 6))
+                    args["a_min"] = {"op": 3}
+                emit(f"C/{mk}/{bk}", s, operands, args, f"where_{mk}")
+        for wv in (True, False):
+            emit(f"C/pybool/{wv}", s, [a3, _clip_ufunc_view((4, 5), dt, "C", 9)],
+                 {"a": {"op": 0}, "a_min": {"py": lo_py, "t": lo_t}, "a_max": {"py": hi_py, "t": hi_t},
+                  "out": {"op": 1}, "where": {"py": wv, "t": "bool"}}, "where_pybool")
+        im = np.array([1, 0, 1, 1, 0], dtype=np.int64)
+        emit("C/intmask", s, [a3, (im, im), _clip_ufunc_view((4, 5), dt, "C", 9)],
+             {"a": {"op": 0}, "a_min": {"py": lo_py, "t": lo_t}, "a_max": {"py": hi_py, "t": hi_t},
+              "out": {"op": 1 + 1}, "where": {"op": 1}}, "where_intmask")
+
+        # ---- D. out overlapping an input: COPY_IF_OVERLAP (with and without a mask) ---------------------------
+        overlaps = [
+            ("shift_fwd", "[:-1]", "[1:]", None, None), ("shift_back", "[1:]", "[:-1]", None, None),
+            ("reverse", "[::-1]", "[:]", None, None), ("alias", "[:]", "[:]", None, None),
+            ("lo_shift", "[1:]", "[1:]", "[:-1]", None), ("hi_shift", "[1:]", "[1:]", None, "[:-1]"),
+            ("transpose", "reshape(3,4)|T", "reshape(4,3)", None, None),
+            ("interleave", "[::2]", "[1::2]", None, None),
+        ]
+        for name, av, ov, lv, hv in overlaps:
+            for masked in (False, True):
+                xb = _clip_ufunc_view((12,), dt, "C", 2)       # fresh: the call writes into it
+                operands = [xb]
+                args = {"a": {"of": 0, "view": av}, "out": {"of": 0, "view": ov},
+                        "a_min": {"of": 0, "view": lv} if lv else {"py": lo_py, "t": lo_t},
+                        "a_max": {"of": 0, "view": hv} if hv else {"py": hi_py, "t": hi_t}}
+                if masked:
+                    out_len = len(_clip_ufunc_apply_view(xb[1], ov).ravel())
+                    oshape = _clip_ufunc_apply_view(xb[1], ov).shape
+                    m = (np.arange(out_len) % 3 != 0).reshape(oshape)
+                    operands.append((m, m))
+                    args["where"] = {"op": 1}
+                emit(f"D/{name}/{'w' if masked else 'u'}", s, operands, args, f"overlap_{name}")
+
+    # ---- E. the float loop choice: -0.0 against +0.0 bounds, broadcast / one-element / in-place / buffered ---------
+    for s in (("float64", "float32") if extras else ()):
+        dt = np.dtype(s)
+
+        def zeros_view(shape, kind, fill):
+            base, view = _clip_ufunc_view(shape, dt, kind, 0)
+            base[...] = fill
+            return base, view
+
+        e_cases = [
+            # (tag, a shape, a kind, lower spec, upper spec)
+            ("row", (4, 5), "C", ("arr", (5,), "C"), ("py",)),
+            ("col", (4, 5), "C", ("arr", (4, 1), "C"), ("py",)),
+            ("unit", (4, 5), "C", ("arr", (1, 1), "C"), ("py",)),
+            ("unit1d", (6,), "S", ("arr", (1,), "C"), ("py",)),
+            ("bothunit", (6,), "C", ("arr", (1,), "C"), ("arr", (1,), "C")),
+            ("rowfull", (6,), "C", ("arr", (1,), "C"), ("arr", (6,), "C")),
+            ("F", (4, 5), "F", ("arr", (1, 1), "C"), ("py",)),
+            ("strided", (4, 5), "S", ("arr", (1, 1), "C"), ("py",)),
+            ("one", (1,), "C", ("arr", (1,), "C"), ("py",)),
+            ("one2d", (1, 1), "C", ("arr", (1, 1), "C"), ("py",)),
+            ("one_vs0d", (), "C", ("arr", (1,), "C"), ("py",)),
+            ("bcast3", (3,), "C", ("arr", (2, 1), "C"), ("py",)),
+            ("big", (2, 4500), "C", ("arr", (2, 1), "C"), ("py",)),
+            ("bigrow", (9000,), "C", ("arr", (1,), "C"), ("py",)),
+        ]
+        for tag, ashape, akind, lspec, hspec in e_cases:
+            for lo_dt in (s, "float32" if s == "float64" else "float64"):
+                operands = [zeros_view(ashape, akind, -0.0)]
+                args = {"a": {"op": 0}, "a_max": {"py": 1.0, "t": "float"}}
+                if lspec[0] == "arr":
+                    lb, lv = _clip_ufunc_view(lspec[1], np.dtype(lo_dt), lspec[2], 0)
+                    lb[...] = 0.0
+                    operands.append((lb, lv))
+                    args["a_min"] = {"op": 1}
+                if hspec[0] == "arr":
+                    hb, hv = _clip_ufunc_view(hspec[1], dt, hspec[2], 0)
+                    hb[...] = 1.0
+                    operands.append((hb, hv))
+                    args["a_max"] = {"op": len(operands) - 1}
+                emit(f"E/{tag}/{lo_dt}", s, operands, args, "zero_tie")
+        # One-element calls the trivial loop refuses: in place (a one-element input is never ahead of its
+        # output) and a 2-D operand needing a cast: NpyIter gives every axis stride 0, so CONST runs.
+        x1 = zeros_view((1,), "C", -0.0)
+        h1 = _clip_ufunc_view((2,), dt, "C", 0)
+        h1[0][...] = 1.0
+        emit("E/inplace_one", s, [x1, h1],
+             {"a": {"op": 0}, "a_min": {"py": 0.0, "t": "float"}, "a_max": {"of": 1, "view": "[::-1]|[:1]"},
+              "out": {"op": 0}}, "zero_tie")
+        x11 = zeros_view((1, 1), "C", -0.0)
+        l11 = _clip_ufunc_view((1, 1), np.dtype("float32" if s == "float64" else "float16"), "C", 0)
+        l11[0][...] = 0.0
+        emit("E/cast_one2d", s, [x11, l11],
+             {"a": {"op": 0}, "a_min": {"op": 1}, "a_max": {"py": 1.0, "t": "float"}}, "zero_tie")
+        # A stride-0 (1,) bound (np.broadcast_to keeps no stride on an extent-1 axis): the trivial loop's step 0.
+        b0 = np.zeros(1, dt)
+        bv = np.broadcast_to(b0, (1,))
+        emit("E/bcast_one", s, [zeros_view((1,), "C", -0.0), (b0, bv)],
+             {"a": {"op": 0}, "a_min": {"op": 1}, "a_max": {"py": 1.0, "t": "float"}}, "zero_tie")
+
+    # ---- F. NumPy's error texts: the iterator's broadcast errors, the keyword rule ---------------------------------
+    a3 = _clip_ufunc_view((3,), np.dtype("float64"), "C", 0)
+    z4 = _clip_ufunc_view((4,), np.dtype("float64"), "C", 0)
+    _m4, _m23 = np.ones(4, bool), np.ones((2, 3), bool)
+    m4, m23 = (_m4, _m4), (_m23, _m23)
+    e3 = _clip_ufunc_view((3,), np.dtype("float64"), "C", 0)
+    e23 = _clip_ufunc_view((2, 3), np.dtype("float64"), "C", 0)
+    PY0, PY1 = {"py": 0.0, "t": "float"}, {"py": 1.0, "t": "float"}
+    NONE = {"py": None, "t": "none"}
+    f_cases = [
+        ("bcast", [a3, z4], {"a": {"op": 0}, "a_min": {"op": 1}, "a_max": PY1}),
+        ("bcast_out", [a3, z4, e3], {"a": {"op": 0}, "a_min": {"op": 1}, "a_max": PY1, "out": {"op": 2}}),
+        ("out_small", [_clip_ufunc_view((2, 3), np.dtype("float64"), "C", 0), e3],
+         {"a": {"op": 0}, "a_min": PY0, "a_max": PY1, "out": {"op": 1}}),
+        ("bcast_where", [a3, m4], {"a": {"op": 0}, "a_min": PY0, "a_max": PY1, "where": {"op": 1}}),
+        ("out_where", [a3, e3, m23], {"a": {"op": 0}, "a_min": PY0, "a_max": PY1, "out": {"op": 1}, "where": {"op": 2}}),
+        ("bcast_max", [a3, z4], {"a": {"op": 0}, "a_min": {"op": 1}, "a_max": NONE}),
+        ("positive_out", [a3, _clip_ufunc_view((2,), np.dtype("float64"), "C", 0)],
+         {"a": {"op": 0}, "a_min": NONE, "a_max": NONE, "out": {"op": 1}}),
+        ("positive_up", [a3, e23], {"a": {"op": 0}, "a_min": NONE, "a_max": NONE, "out": {"op": 1}}),
+        ("three_way", [a3, _clip_ufunc_view((2, 1), np.dtype("float64"), "C", 0),
+                       _clip_ufunc_view((4, 1, 1), np.dtype("float64"), "C", 0)],
+         {"a": {"op": 0}, "a_min": {"op": 1}, "a_max": {"op": 2}}),
+        ("kw_min", [a3], {"a": {"op": 0}, "min": PY0}),
+        ("kw_both", [a3], {"a": {"op": 0}, "min": PY0, "max": PY1}),
+        ("kw_max_only", [a3], {"a": {"op": 0}, "max": PY1}),
+        ("kw_missing_a_max", [a3], {"a": {"op": 0}, "a_min": PY0, "min": PY0}),
+        ("kw_missing_a_min", [a3], {"a": {"op": 0}, "a_max": PY1, "max": PY1}),
+        ("kw_forbidden", [a3], {"a": {"op": 0}, "a_min": PY0, "a_max": PY1, "min": PY0}),
+        ("kw_forbidden_max", [a3], {"a": {"op": 0}, "a_min": PY0, "a_max": PY1, "max": PY1}),
+    ]
+    for tag, operands, args in (f_cases if extras else ()):
+        emit(f"F/{tag}", "float64", operands, args, "errors")
+    return cases
+
+
 # np.where(cond, x, y) -> select. Result dtype = result_type(x, y); NumPy is the oracle.
 WHERE_DT_PAIRS = [
     ("int32", "int32"), ("int32", "float64"), ("float32", "float64"), ("int32", "int64"),
@@ -4948,6 +5299,8 @@ def char_tier(mode):
         # np.dtypes.CharDType, which the uint16 proxy cannot spell (it says UInt16DType). Unit-test-pinned
         # (np_clip_python_int_bounds_tests.NoBoundLeft_IsPositive).
         raw = [c for c in gen_clip_pyint([_C]) if "UInt16DType" not in (c.get("error") or {}).get("text", "")]
+    elif mode == "clip_ufunc":                                     # broadcast / out= / where= / overlap on the proxy
+        raw = gen_clip_ufunc([_C], extras=False)
     return _relabel_dtype(raw, _C, "char")
 
 
@@ -15207,6 +15560,13 @@ def main():
         cases = gen_clip_pyint()
         cases += char_tier("clip_pyint")
         write_jsonl(os.path.join(corpus_dir, "clip_pyint.jsonl"), cases)
+    elif mode == "clip_ufunc":
+        # np.clip as the ufunc call it routes to: array bounds that broadcast, out= (up-broadcast, layouts, casts,
+        # read-only, wrong shape), where=, out overlapping an input, the const-vs-general float loop choice, and
+        # NumPy's broadcast / keyword-rule error texts. Its own file, so regenerating it renumbers nothing else.
+        cases = gen_clip_ufunc()
+        cases += char_tier("clip_ufunc")
+        write_jsonl(os.path.join(corpus_dir, "clip_ufunc.jsonl"), cases)
     elif mode == "logic":
         cases = gen_unary(LOGIC_UNARY_OPS, LOGIC_UNARY_DTYPES, list(LAYOUTS.keys()))
         cases += gen_binary(LOGIC_BIN_OPS, LOGIC_BIN_PAIRS, list(PAIR_LAYOUTS.keys()))

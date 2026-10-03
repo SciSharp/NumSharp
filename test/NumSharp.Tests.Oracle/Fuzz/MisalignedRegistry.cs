@@ -134,7 +134,10 @@ namespace NumSharp.Tests.Fuzz
             // np.clip with Python-int bounds selects one of {element, converted bound} per element (a
             // min/max — no arithmetic), so a 1-ULP difference is a wrong BOUND conversion, never noise.
             // Held strict: its one operand (the bounds ride as params) made it look like a unary op.
-            "clip_pyint"
+            "clip_pyint",
+            // np.clip as a ufunc call: the same selection, and its overlap / keyword cases carry ONE operand
+            // (every argument a view of it, or a Python scalar), so it must not ride the unary-ULP excuse either.
+            "clip_ufunc"
         };
 
         /// <summary>
@@ -1155,10 +1158,11 @@ namespace NumSharp.Tests.Fuzz
             //
             // EXCLUDES clip_pyint too: its 0-D operand is the CLIPPED array (the scalar_0d layouts, with
             // an out= operand beside it) — its bounds ride as params, so there is no weak 0-D operand to
-            // promote, and a divergence there is a real clip bug.
+            // promote, and a divergence there is a real clip bug. And clip_ufunc, whose 0-D operands are the
+            // clipped array (scalar_0d) and its zero-filled 0-D a: the scalar bounds ride as params there too.
             if ((kind == DivergenceKind.Value || kind == DivergenceKind.ErrorText)
                 && (c.Op == null || !c.Op.StartsWith("out_"))
-                && c.Op != "clip_pyint"
+                && c.Op != "clip_pyint" && c.Op != "clip_ufunc"
                 && c.Operands.Length >= 2 && c.Operands.Any(o => o.Shape.Length == 0))
                 return "NEP50 weak-scalar (error path): a 0-D operand promotes weakly, so a pairing "
                      + "NumPy refuses succeeds instead";

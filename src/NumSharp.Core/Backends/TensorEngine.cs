@@ -256,7 +256,23 @@ namespace NumSharp
         // unary ufunc (ee/ff/dd loops + NumSharp's decimal extension); complex has NO loop.
         public abstract NDArray Spacing(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
 
-        public abstract NDArray ClipNDArray(NDArray lhs, NDArray min, NDArray max, DType dtype = null, NDArray @out = null);
+        /// <summary>
+        /// np.clip's engine entry (NumPy's <c>_methods._clip</c> plus the routed ufunc): drops an unclipping
+        /// Python-int bound, routes to positive / minimum / maximum / clip, and broadcasts the array, the bounds,
+        /// <paramref name="out"/> and <paramref name="where"/> together.
+        /// </summary>
+        /// <param name="lhs">The array to clip.</param>
+        /// <param name="min">The lower bound, or null for none (a 0-d bound is a scalar; a 0-d integer bound is a Python int).</param>
+        /// <param name="max">The upper bound, or null for none.</param>
+        /// <param name="dtype">The loop dtype (NumPy's <c>dtype=</c>), or null for the promoted one.</param>
+        /// <param name="out">The out= array, or null for a fresh result.</param>
+        /// <param name="where">The bool where= mask, or null for everywhere.</param>
+        /// <returns><paramref name="out"/>, or a fresh array in NumPy's ufunc output layout.</returns>
+        /// <exception cref="ValueError">A read-only out, or operands that do not broadcast / an out that would be stretched.</exception>
+        /// <exception cref="ArgumentException">A non-bool where, or a dtype= / out= cast NumPy's same_kind rule refuses.</exception>
+        /// <exception cref="OverflowException">A kept Python-int bound does not fit an integer loop dtype.</exception>
+        /// <exception cref="TypeError">No bound is left and the loop would be bool (positive has no bool loop).</exception>
+        public abstract NDArray ClipNDArray(NDArray lhs, NDArray min, NDArray max, DType dtype = null, NDArray @out = null, NDArray where = null);
 
         /// <summary>
         ///     Fused evaluation of an <see cref="NDExpr"/> tree in one iterator

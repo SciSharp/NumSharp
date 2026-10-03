@@ -400,7 +400,8 @@ namespace NumSharp.Tests.Math
                 "Cannot cast ufunc 'clip' input 0 from dtype('float64') to dtype('int8') with casting rule 'same_kind'");
             ExpectCastError(() => np.clip(I8(), 5, 10, np.empty(new Shape(7), np.uint8)),
                 "Cannot cast ufunc 'clip' output from dtype('int8') to dtype('uint8') with casting rule 'same_kind'");
-            Assert.ThrowsExactly<ArgumentException>(() => np.clip(I8(), 5, 10, np.empty(new Shape(7), np.int8)));
+            var shape = Assert.ThrowsExactly<ValueError>(() => np.clip(I8(), 5, 10, np.empty(new Shape(7), np.int8)));
+            shape.Message.Should().Be("operands could not be broadcast together with shapes (5,) () () (7,) ");
         }
 
         /// <summary>Dropped bounds keep NumPy's output layout: K order for a fresh result, a fresh writeable array for a broadcast input.</summary>

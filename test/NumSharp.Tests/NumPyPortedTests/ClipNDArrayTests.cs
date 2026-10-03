@@ -343,17 +343,22 @@ namespace NumSharp.Tests.NumPyPortedTests
         [TestMethod]
         public void Clip_ConflictingAMinAndMin_Throws()
         {
+            // NumPy 2.4.2: np.clip(a, a_min=2, min=3) leaves a_max omitted, and fromnumeric.clip reports THAT:
+            // TypeError: clip() missing 1 required positional argument: 'a_max'
             var a = np.arange(10);
 
-            Assert.ThrowsExactly<ArgumentException>(() => np.clip(a, a_min: 2, min: 3));
+            var e = Assert.ThrowsExactly<TypeError>(() => np.clip(a, a_min: 2, min: 3));
+            Assert.AreEqual("clip() missing 1 required positional argument: 'a_max'", e.Message);
         }
 
         [TestMethod]
         public void Clip_ConflictingAMaxAndMax_Throws()
         {
+            // NumPy 2.4.2: TypeError: clip() missing 1 required positional argument: 'a_min'
             var a = np.arange(10);
 
-            Assert.ThrowsExactly<ArgumentException>(() => np.clip(a, a_max: 2, max: 3));
+            var e = Assert.ThrowsExactly<TypeError>(() => np.clip(a, a_max: 2, max: 3));
+            Assert.AreEqual("clip() missing 1 required positional argument: 'a_min'", e.Message);
         }
 
         [TestMethod]
@@ -515,10 +520,12 @@ namespace NumSharp.Tests.NumPyPortedTests
         [TestMethod]
         public void Clip_OutShapeMismatch_Throws()
         {
+            // NumPy 2.4.2: the ufunc's iterator lists every operand, 0-d bounds as (), with a trailing space.
             var src = np.arange(10.0);
             var bad = np.empty(new Shape(5), NPTypeCode.Double);
 
-            Assert.ThrowsExactly<ArgumentException>(() => np.clip(src, 3.0, 7.0, @out: bad));
+            var e = Assert.ThrowsExactly<ValueError>(() => np.clip(src, 3.0, 7.0, @out: bad));
+            Assert.AreEqual("operands could not be broadcast together with shapes (10,) () () (5,) ", e.Message);
         }
 
         [TestMethod]

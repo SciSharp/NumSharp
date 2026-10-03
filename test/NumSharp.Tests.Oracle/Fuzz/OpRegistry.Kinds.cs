@@ -197,6 +197,10 @@ namespace NumSharp.Tests.Fuzz
                 case "evaluate":
                     return EvaluateOutFromCorpus(p, ops);
 
+                // np.clip as a ufunc call: [returned] or [returned, whole out base buffer] (OpRegistry.ClipUfunc.cs).
+                case "clip_ufunc":
+                    return ClipUfuncFromCorpus(p, ops);
+
                 // (index, value) for every element, in flatiter C-order whatever the layout.
                 case "ndenumerate":
                 {

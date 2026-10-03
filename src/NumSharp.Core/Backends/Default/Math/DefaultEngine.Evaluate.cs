@@ -76,7 +76,11 @@ namespace NumSharp.Backends
                 var flags = new NDIterPerOpFlags[n + 2];
                 for (int i = 0; i < n; i++)
                     flags[i] = NDIterPerOpFlags.READONLY | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP;
-                flags[n] = NDIterPerOpFlags.WRITEONLY
+                // READWRITE, not WRITEONLY: NumPy's masked ufunc loop reads a passed-in out, and only a READ
+                // operand's COPY_IF_OVERLAP temporary starts from the array's values, so with WRITEONLY an
+                // out overlapping an input got heap bytes at the mask's False positions (the temporary is
+                // written back whole). A fresh result is never copied or buffered, so it is unaffected.
+                flags[n] = NDIterPerOpFlags.READWRITE
                            | NDIterPerOpFlags.WRITEMASKED
                            | NDIterPerOpFlags.NO_BROADCAST
                            | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP;
