@@ -18,7 +18,7 @@ using System.Reflection.Emit;
 // The binary kernels enumerate their patterns ({CC, SC, CS}); the 1-D shell sent every other
 // input count to "all inputs contiguous, else hardware gather (a zero-offset gather per vector for
 // each broadcast input), else scalar", and both 2-D block kernels required all-C for nIn >= 3,
-// else their scalar 2-D block. Measured: np.clip(m, row, 0.75) at 0.2-0.5x NumPy — and NumPy's own
+// else their scalar 2-D block. Measured: np.clip(m, row, 0.75) at 0.2-0.7x NumPy — and NumPy's own
 // loop for array bounds is SCALAR (clip.cpp `_npy_clip_`: one `_NPY_CLIP` per element).
 //
 // THE SHAPE
@@ -58,8 +58,8 @@ using System.Reflection.Emit;
 // forwards to a stage that gathers only the strided inputs and broadcasts the rest once per call,
 // with the shell's own contiguous / scattered / scalar output dispatch.
 //
-// Measured (np.clip, NPY/NS, P-core pinned, clock locked): row / column bounds 5-28x at 100K
-// (were 0.2-0.5x), where= over 2-D rows with a row bound 19-41x (were 1.6-2.1x), strided float32
+// Measured (np.clip, NPY/NS, P-core pinned, clock locked): row / column bounds 4.7-27x at 100K
+// (were 0.2-0.7x), where= over 2-D rows with a row bound 19-41x (were 1.6-2.1x), strided float32
 // with 0-d bounds 1.9x (was 0.76x); the probes in the commit message have the full table.
 //
 // =============================================================================
@@ -202,7 +202,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// One 1-D broadcast-pattern stage: the <see cref="NDInnerLoopFunc"/> signature, a prologue
+        /// One 1-D broadcast-pattern stage: the <see cref="NumSharp.Backends.Iteration.NDInnerLoopFunc"/> signature, a prologue
         /// that snapshots the pointers and strides, and <see cref="EmitSimdContigLoop"/> with the
         /// pattern's broadcast inputs hoisted.
         /// </summary>
@@ -304,7 +304,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// One gather broadcast-pattern stage: the <see cref="NDInnerLoopFunc"/> signature, the gather loop with the
+        /// One gather broadcast-pattern stage: the <see cref="NumSharp.Backends.Iteration.NDInnerLoopFunc"/> signature, the gather loop with the
         /// pattern's broadcast inputs hoisted, and the shell's own output dispatch — a contiguous output takes the
         /// vector store, a strided one within the gather budget the per-lane scatter, anything else the scalar strided
         /// loop.

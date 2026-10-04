@@ -17,8 +17,12 @@ namespace NumSharp.Tests.Math
     [TestClass]
     public class np_clip_python_int_bounds_tests
     {
+        /// <summary>The int8 test array: both limits, a negative, zero and a positive value.</summary>
+        /// <returns>A fresh int8 array [-128, -5, 0, 5, 127].</returns>
         private static NDArray I8() => np.array(new sbyte[] { -128, -5, 0, 5, 127 });
 
+        /// <summary>The uint8 test array from the bug report: zero, a small value, a large value and the limit.</summary>
+        /// <returns>A fresh uint8 array [0, 5, 200, 255].</returns>
         private static NDArray U8() => np.array(new byte[] { 0, 5, 200, 255 });
 
         /// <summary>Asserts the call raises NumPy's OverflowError with the exact NumPy message.</summary>
@@ -487,13 +491,15 @@ namespace NumSharp.Tests.Math
         ///     <c>_npy_clip_const_minmax_</c>): <c>x &lt; lo ? lo : x</c>, then <c>x &gt; hi ? hi : x</c>, which keeps the element
         ///     on a tie. Its general path (array bounds) and one-sided clips (maximum / minimum) take the bound instead. So
         ///     the sign of a zero tied with a ±0 bound depends on the path. Bytes probed against NumPy 2.4.2. The arrays are
-        ///     long enough to cross the SIMD body, its remainder and the scalar tail, and strided/F/transposed views take the
-        ///     strided loop.
+        ///     long enough to cross the SIMD body, its remainder and the scalar tail. A strided view takes the iterator
+        ///     route; F-ordered and transposed views are dense runs and take the flat route after the layout permutation.
         /// </summary>
         [TestMethod]
         public void SignedZeroTies_FollowNumPysPathPerBoundKind()
         {
             const ulong NegZero = 0x8000000000000000UL;
+            // The raw float64 bit patterns of r in C order: a float32 widens exactly, so -0.0 stays 0x8000000000000000 and
+            // +0.0 stays 0, which a value comparison (-0.0 == +0.0) could not tell apart.
             static ulong[] Bits(NDArray r) => r.astype(np.float64).ToArray<double>().Select(d => (ulong)BitConverter.DoubleToInt64Bits(d)).ToArray();
 
             foreach (int n in new[] { 1, 7, 37, 100 })

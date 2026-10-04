@@ -777,6 +777,10 @@ def gen_clip_pyint(dtypes=None):
     skipped = 0
 
     def run(ln, s, lo, hi, dtype, out_dtype, tag):
+        """Records one clip call: dtype `s` in layout `ln`, Python-int (or float) bounds `lo` / `hi` (None = no
+        bound), an optional loop `dtype` and an optional zero-filled `out` of `out_dtype`; `tag` names the row family
+        in the case id. A call whose NumPy outcome is platform-dependent (_clip_pyint_portable) is counted in
+        `skipped` instead of being recorded."""
         nonlocal n, skipped
         base, view = LAYOUTS[ln](np.dtype(s))
         params = {"lo": lo, "hi": hi}
@@ -938,6 +942,9 @@ def gen_clip_ufunc(dtypes=None, extras=True):
         ops = [view for _, view in operands]
 
         def resolve(spec):
+            """The NumPy argument a spec names: a Python scalar ({"py": v}), an operand ({"op": i}), or a view of
+            an operand ({"of": i, "view": ...}, built by _clip_ufunc_apply_view, so several arguments can alias one
+            buffer)."""
             if "py" in spec:
                 return spec["py"]
             if "op" in spec:
@@ -1084,6 +1091,8 @@ def gen_clip_ufunc(dtypes=None, extras=True):
         dt = np.dtype(s)
 
         def zeros_view(shape, kind, fill):
+            """(base, view) of `shape` in layout `kind` with every element of the base set to `fill` (a signed zero
+            here), so each result element's sign tells which float loop NumPy ran."""
             base, view = _clip_ufunc_view(shape, dt, kind, 0)
             base[...] = fill
             return base, view

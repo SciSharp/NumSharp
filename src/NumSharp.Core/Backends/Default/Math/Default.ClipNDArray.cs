@@ -561,8 +561,24 @@ namespace NumSharp.Backends
             _ => false,
         };
 
-        // Extract pointers and invoke the flat IL clip kernel. src/dst (and array bounds) must
-        // be C-contiguous offset-0; scalar bounds are single values.
+        /// <summary>
+        /// Runs the flat IL clip kernel once over a whole dense run: it reads <paramref name="src"/> and the bounds and
+        /// writes <paramref name="dst"/>, element i of each at the same position.
+        /// </summary>
+        /// <param name="src">The input at the loop dtype: C-contiguous, offset 0.</param>
+        /// <param name="dst">The output run: C-contiguous, offset 0, of <paramref name="outType"/>; its <c>size</c> is the
+        /// element count the kernel processes.</param>
+        /// <param name="loCast">The lower bound at the loop dtype — a run of <paramref name="dst"/>'s size for
+        /// <see cref="DirectILKernelGenerator.ClipBoundsKind.Array"/>, one value for a scalar kind — or <c>null</c>.</param>
+        /// <param name="hiCast">The upper bound, under the same rules as <paramref name="loCast"/>, or <c>null</c>.</param>
+        /// <param name="outType">The loop dtype every pointer is read and written at.</param>
+        /// <param name="mode">Which bounds are present; it must agree with which of the two bound arrays are non-null.</param>
+        /// <param name="kind">Whether the bounds are one value each or full runs.</param>
+        /// <remarks>
+        /// The pointers come from <c>Address</c> WITHOUT <c>Shape.offset</c>, so every array must start at offset 0. The
+        /// caller guarantees it: <c>IsFlatRun</c> admits only C-contiguous offset-0 views, a cast or a fresh result
+        /// is a new C-contiguous array, and <see cref="PrepareFlatBound"/> returns offset-0 bounds.
+        /// </remarks>
         private static unsafe void RunClipKernel(NDArray src, NDArray dst, NDArray loCast, NDArray hiCast,
             NPTypeCode outType, DirectILKernelGenerator.ClipMode mode, DirectILKernelGenerator.ClipBoundsKind kind)
         {

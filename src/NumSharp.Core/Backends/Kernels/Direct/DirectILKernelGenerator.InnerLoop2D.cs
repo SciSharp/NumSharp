@@ -58,8 +58,8 @@ using System.Runtime.Intrinsics.X86;
 // and every other pattern is a STAGE — a DynamicMethod of its own, compiled on its
 // first call, so the kernel's inline budget is not split N ways
 // (DirectILKernelGenerator.InnerLoop.BroadcastPatterns.cs). Before them a ternary
-// kernel with any S input ran the scalar 2-D block (np.clip(m, row, hi): 0.2-0.5x
-// NumPy, now 5-28x).
+// kernel with any S input ran the scalar 2-D block (np.clip(m, row, hi): 0.2-0.7x
+// NumPy, now 4.7-27x at 100K).
 //
 // SUB-VECTOR ROWS — the masked tail
 // ---------------------------------

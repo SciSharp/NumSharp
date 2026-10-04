@@ -904,29 +904,85 @@ namespace NumSharp.Backends.Kernels
         // STRICT comparison returns the SECOND operand on a tie — so the signed-zero tie resolves
         // like hardware MAXPS/MINPD (f32/f64 maximum(+0,-0) = -0), the OPPOSITE of float16 (which
         // ties to the first operand, hence the separate Half helpers above) and of Math.Max (+0).
-        // Used by both the IL kernel's scalar tail (EmitScalarClamp) and the engine's ClipStrided,
-        // so the contiguous and strided paths agree bit-for-bit on signed-zero / NaN.
+        // Every scalar float32/float64 maximum/minimum goes through these, via EmitScalarClamp: the flat clip
+        // kernel's scalar loop (peel and tail), the iterator route's general clip body
+        // (DirectILKernelGenerator.Clip.InnerLoop.cs) and the np.maximum / np.minimum scalar operation
+        // (EmitScalarOperation). So every clip route and the two ufuncs agree bit for bit on signed zeros and NaN.
+
+        /// <summary>
+        /// float32 <c>np.maximum</c> of one pair: a NaN in either operand propagates (the first one's when both are NaN),
+        /// and a tie (±0) returns the SECOND operand, as the hardware MAXPS does.
+        /// </summary>
+        /// <param name="a">The first operand (the element, or the running value).</param>
+        /// <param name="b">The second operand (the bound).</param>
+        /// <returns><paramref name="a"/> when it is NaN or strictly greater, else <paramref name="b"/>.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         internal static float FloatMaxNaN(float a, float b) => float.IsNaN(a) ? a : (a > b ? a : b);
+
+        /// <summary>
+        /// float32 <c>np.minimum</c> of one pair: a NaN in either operand propagates (the first one's when both are NaN),
+        /// and a tie (±0) returns the SECOND operand, as the hardware MINPS does.
+        /// </summary>
+        /// <param name="a">The first operand (the element, or the running value).</param>
+        /// <param name="b">The second operand (the bound).</param>
+        /// <returns><paramref name="a"/> when it is NaN or strictly less, else <paramref name="b"/>.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         internal static float FloatMinNaN(float a, float b) => float.IsNaN(a) ? a : (a < b ? a : b);
+
+        /// <summary>
+        /// float64 <c>np.maximum</c> of one pair: a NaN in either operand propagates (the first one's when both are NaN),
+        /// and a tie (±0) returns the SECOND operand, as the hardware MAXPD does.
+        /// </summary>
+        /// <param name="a">The first operand (the element, or the running value).</param>
+        /// <param name="b">The second operand (the bound).</param>
+        /// <returns><paramref name="a"/> when it is NaN or strictly greater, else <paramref name="b"/>.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         internal static double DoubleMaxNaN(double a, double b) => double.IsNaN(a) ? a : (a > b ? a : b);
+
+        /// <summary>
+        /// float64 <c>np.minimum</c> of one pair: a NaN in either operand propagates (the first one's when both are NaN),
+        /// and a tie (±0) returns the SECOND operand, as the hardware MINPD does.
+        /// </summary>
+        /// <param name="a">The first operand (the element, or the running value).</param>
+        /// <param name="b">The second operand (the bound).</param>
+        /// <returns><paramref name="a"/> when it is NaN or strictly less, else <paramref name="b"/>.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         internal static double DoubleMinNaN(double a, double b) => double.IsNaN(a) ? a : (a < b ? a : b);
 
         // float32/float64 clip with two SCALAR bounds — NumPy's const fast path (clip.cpp
         // _npy_clip_const_minmax_, floating_point_tag): x < lo ? lo : x, then x > hi ? hi : x. A tie keeps
         // the ELEMENT (clip(-0.0, 0.0, 1.0) = -0.0, where Min(Max()) gives +0.0), a NaN element fails both
-        // compares and passes through with its own bits, and min > max still yields max. Used by the IL
-        // kernel's scalar tail and by ClipStrided, so every layout agrees with the SIMD body. NaN BOUNDS
-        // never reach these: ClipNDArray answers them before any kernel runs.
+        // compares and passes through with its own bits, and min > max still yields max. Only the flat kernel's
+        // scalar loop (peel and tail) calls these, so its scalar elements agree with its SIMD body. NaN BOUNDS never
+        // reach them: the flat route fills a call whose scalar bound is NaN itself (FillWithNaNBound) before any
+        // kernel runs. The iterator route uses FloatClipConst / DoubleClipConst instead, which carry NumPy's
+        // NaN-bound rule (a broadcast bound array can hold NaN in some rows only).
+
+        /// <summary>The lower half of NumPy's float32 const clip: the bound replaces the element only when the element is strictly below it.</summary>
+        /// <param name="x">The element.</param>
+        /// <param name="lo">The lower bound (never NaN here).</param>
+        /// <returns><paramref name="lo"/> when <c>x &lt; lo</c>, else <paramref name="x"/> (a tie or a NaN element keeps the element).</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         internal static float FloatClipLowSelect(float x, float lo) => x < lo ? lo : x;
+
+        /// <summary>The upper half of NumPy's float32 const clip: the bound replaces the element only when the element is strictly above it.</summary>
+        /// <param name="x">The element (after the lower half).</param>
+        /// <param name="hi">The upper bound (never NaN here).</param>
+        /// <returns><paramref name="hi"/> when <c>x &gt; hi</c>, else <paramref name="x"/> (a tie or a NaN element keeps the element).</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         internal static float FloatClipHighSelect(float x, float hi) => x > hi ? hi : x;
+
+        /// <summary>The lower half of NumPy's float64 const clip: the bound replaces the element only when the element is strictly below it.</summary>
+        /// <param name="x">The element.</param>
+        /// <param name="lo">The lower bound (never NaN here).</param>
+        /// <returns><paramref name="lo"/> when <c>x &lt; lo</c>, else <paramref name="x"/> (a tie or a NaN element keeps the element).</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         internal static double DoubleClipLowSelect(double x, double lo) => x < lo ? lo : x;
+
+        /// <summary>The upper half of NumPy's float64 const clip: the bound replaces the element only when the element is strictly above it.</summary>
+        /// <param name="x">The element (after the lower half).</param>
+        /// <param name="hi">The upper bound (never NaN here).</param>
+        /// <returns><paramref name="hi"/> when <c>x &gt; hi</c>, else <paramref name="x"/> (a tie or a NaN element keeps the element).</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         internal static double DoubleClipHighSelect(double x, double hi) => x > hi ? hi : x;
 

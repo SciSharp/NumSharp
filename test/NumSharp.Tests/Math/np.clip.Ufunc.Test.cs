@@ -18,6 +18,7 @@ namespace NumSharp.Tests.Math
     public class np_clip_ufunc_tests
     {
         /// <summary>The 12-element buffer the overlap cases view twice: [0, 5, 0, 5, …].</summary>
+        /// <returns>A fresh float64 array, so each case starts from the same values.</returns>
         private static NDArray Zigzag() => np.array(new[] { 0.0, 5, 0, 5, 0, 5, 0, 5, 0, 5, 0, 5 });
 
         /// <summary>The sign pattern of a float result in C order: '-' for -0.0, '+' for +0.0, '.' otherwise.</summary>

@@ -905,7 +905,7 @@ Remaining divergences:
 
 **Perf (NPY/NS, clock locked, one P-core, best-of-rounds; float64 / float32 / int32 at 1K / 100K / 10M):**
 - broadcast bounds (`np.clip(m, row, 0.75)`, column bounds, row bound into out=): **4.7–27× at 100K, 1.5–8.6× at 10M**
-  (were 0.18–0.5×: a ternary kernel with a stride-0 input ran a scalar loop);
+  (were 0.2–0.7×: a ternary kernel with a stride-0 input ran a scalar loop);
 - where= over 2-D rows with a row bound: **19–41× at 100K, 10–21× at 10M** (were 1.6–2.1×);
 - strided input + 0-d bounds: 1.0–3.0× at 100K (the gather route no longer gathers the bounds);
 - 1K: **1.4–14×** on every shape but float32 strided (1.1×: its two 0-d float64 bounds are cast to 0-d float32 arrays,
@@ -2174,6 +2174,11 @@ input next to strided ones is read once and broadcast instead of gathered (`np.c
 `np.add(x[::2], 5.0, out=o)`; the caller's vector body is unchanged, so the add/multiply NaN-operand order holds).
 Gates: `Backends/Kernels/BroadcastPatternStageTests.cs` (every pattern × 1-D / 2-D / where= / gather against the
 materialized all-C route; a swapped pattern map fails 3 of its tests) + the `clip_ufunc` tier; 70,560 probe checks.
+Who reaches the stages: np.clip's iterator route, the binary ufuncs' gather route (two inputs), and a caller's own
+3–4-input kernel through `NDIterRef.ExecuteElementWise` / `ExecuteElementWiseTernary` / `ExecuteExpression`. NOT
+np.evaluate: its fused kernels come from their own generator (`CompileFusedInnerLoop` / `EmitFusedSimdLoop`), so a
+broadcast input of an np.evaluate tree does not run these stages (a JIT trace of `np.evaluate(a * col + c)` compiles
+no stage; a 144,259-check probe found the fused results byte-identical to materialized inputs either way).
 
 **Tier 1 of the discovery document's next-wins list, remeasured and closed (2026-09-03, second
 pass; `docs/NDITER_PERF_DISCOVERY.md` §6.6, probe `benchmark/nditer/probes/fancy_where_probe.cs` +

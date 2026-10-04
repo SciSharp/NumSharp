@@ -26,9 +26,24 @@ namespace NumSharp.Tests.Backends.Kernels
     [TestClass]
     public class BroadcastPatternStageTests
     {
+        /// <summary>
+        /// The dtypes the pattern tests sweep: each has a vector clip body, and together they cover the 2-, 4- and 8-byte
+        /// lanes, signed and unsigned integers and both float widths (the const loop's float32 / float64 paths).
+        /// </summary>
         private static readonly DType[] SimdDtypes = { np.int16, np.int32, np.uint32, np.int64, np.float32, np.float64 };
 
-        /// <summary>Distinct values lo..lo+span (plus a fraction for floats), seeded per call site.</summary>
+        /// <summary>
+        /// Random whole values in [lo, lo + span), plus <paramref name="frac"/> for a float dtype. The tests give the
+        /// elements and the bounds different fractions (0.5 and 0.25), so no float element ever ties a bound: a tie is
+        /// where NumPy's const and general float loops differ (an integer tie changes nothing).
+        /// </summary>
+        /// <param name="rnd">The seeded generator of the calling test, so every run draws the same values.</param>
+        /// <param name="dt">The dtype of the result.</param>
+        /// <param name="shape">The result shape; an empty array gives a 0-d result.</param>
+        /// <param name="lo">The smallest whole value.</param>
+        /// <param name="span">The number of whole values to draw from.</param>
+        /// <param name="frac">The fraction added to every value of a float dtype (ignored for integer dtypes).</param>
+        /// <returns>A fresh C-contiguous array of <paramref name="dt"/> with <paramref name="shape"/>.</returns>
         private static NDArray Data(System.Random rnd, DType dt, long[] shape, int lo, int span, double frac)
         {
             long n = shape.Aggregate(1L, (a, b) => a * b);
@@ -39,7 +54,9 @@ namespace NumSharp.Tests.Backends.Kernels
             return np.array(v).reshape(shape).astype(dt);
         }
 
-        /// <summary>NumPy's right-aligned broadcast of operand shapes (the inputs here always broadcast).</summary>
+        /// <summary>NumPy's right-aligned broadcast of operand shapes. It does not check compatibility: the tests only pass shapes that broadcast.</summary>
+        /// <param name="shapes">The operand shapes (an empty array is a 0-d operand).</param>
+        /// <returns>The broadcast shape: per axis, the extent of the last operand that is not 1 there, else 1.</returns>
         private static long[] BroadcastShape(params long[][] shapes)
         {
             int nd = shapes.Max(s => s.Length);
@@ -58,10 +75,24 @@ namespace NumSharp.Tests.Backends.Kernels
             return b;
         }
 
-        /// <summary>The broadcast of every operand, materialized as a fresh C-contiguous array.</summary>
+        /// <summary>
+        /// One operand broadcast to the call's full shape and copied into a fresh C-contiguous array: the reference
+        /// operand, which takes the all-contiguous loop that predates the stages.
+        /// </summary>
+        /// <param name="a">The operand.</param>
+        /// <param name="shape">The full broadcast shape of the call.</param>
+        /// <returns>A fresh, writeable C-contiguous array of <paramref name="a"/>'s dtype.</returns>
         private static NDArray Full(NDArray a, long[] shape) => np.broadcast_to(a, new Shape(shape)).copy();
 
-        /// <summary>Byte-compares two results after widening (the dtypes are asserted equal first).</summary>
+        /// <summary>
+        /// Asserts that two results have the same dtype, shape and values. The values are compared after a cast to
+        /// float64, which is exact for every dtype these tests use (all integers here are far below 2^53).
+        /// </summary>
+        /// <param name="got">The result of the route under test.</param>
+        /// <param name="want">The result of the reference route.</param>
+        /// <param name="what">The case description that a failure message names.</param>
+        /// <exception cref="AssertFailedException">The dtype, the shape or a value differs (AwesomeAssertions raises the
+        /// test framework's failure type).</exception>
         private static void SameResult(NDArray got, NDArray want, string what)
         {
             got.dtype.Should().Be(want.dtype, what);

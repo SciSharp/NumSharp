@@ -171,8 +171,20 @@ namespace NumSharp.Backends
             /// <summary>The kernel's packed cache key.</summary>
             public readonly InnerLoopKernelKey Key;
 
+            /// <summary>
+            /// The built instances, one slot per (mode slot 0–3, const or general, dtype's low five bits) — the index
+            /// <see cref="For"/> computes. A slot is null until its first call publishes an instance into it.
+            /// </summary>
             private static readonly ClipIterKernel[] s_table = new ClipIterKernel[4 * 2 * 32];
 
+            /// <summary>
+            /// Builds the inputs of one clip kernel: the operand types, the body emitters (closures that emit IL only
+            /// when the kernel is compiled — building an instance emits nothing) and the packed key. Only
+            /// <see cref="For"/> calls it, once per table slot.
+            /// </summary>
+            /// <param name="loop">The loop dtype every operand carries.</param>
+            /// <param name="mode">The bounds present, or <c>null</c> for no bound (NumPy's positive: a plain copy).</param>
+            /// <param name="constSelect">True for NumPy's const float path (see <see cref="NumPyClipRunsConstLoop"/>).</param>
             private ClipIterKernel(NPTypeCode loop, DirectILKernelGenerator.ClipMode? mode, bool constSelect)
             {
                 int nIn = mode is null ? 1 : mode == DirectILKernelGenerator.ClipMode.BothBounds ? 3 : 2;

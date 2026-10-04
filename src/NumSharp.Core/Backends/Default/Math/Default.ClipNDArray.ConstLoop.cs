@@ -453,7 +453,14 @@ namespace NumSharp.Backends
             return InnerStride(1) == 0 && InnerStride(2) == 0;
         }
 
-        /// <summary>True when two dimension arrays are element-wise equal.</summary>
+        /// <summary>
+        /// True when two <c>long</c> arrays hold the same values in the same order. The const-loop decision compares
+        /// dims with it (an operand whose dims differ from the operation's is a broadcast, which NumPy's trivial loop
+        /// refuses) and the exact-alias test compares both dims and byte strides.
+        /// </summary>
+        /// <param name="x">The first array (dims or byte strides).</param>
+        /// <param name="y">The second array, of the same kind as <paramref name="x"/>.</param>
+        /// <returns><c>true</c> when both arrays have the same length and equal elements; <c>false</c> otherwise.</returns>
         private static bool SameLongs(long[] x, long[] y)
         {
             if (x.Length != y.Length)
@@ -488,6 +495,18 @@ namespace NumSharp.Backends
             /// <summary>The array, or null for a fresh copy / converted scalar.</summary>
             public readonly NDArray Array;
 
+            /// <summary>
+            /// Stores already-computed parts. Only the factories (<see cref="Of"/>, <see cref="OfBound"/>,
+            /// <see cref="Copy"/>) call it, and they derive every part from an array or a copy NumPy makes, so the
+            /// constructor checks nothing; the arrays are kept by reference, not copied.
+            /// </summary>
+            /// <param name="dims">The operand's dims (empty for 0-d).</param>
+            /// <param name="byteStrides">The operand's strides in bytes, one per dimension.</param>
+            /// <param name="dtype">The operand's dtype as the ufunc receives it.</param>
+            /// <param name="c">NumPy's C_CONTIGUOUS flag of the operand.</param>
+            /// <param name="f">NumPy's F_CONTIGUOUS flag of the operand.</param>
+            /// <param name="start">Byte address of element 0 (<c>PyArray_BYTES</c>), or 0 for a fresh operand.</param>
+            /// <param name="array">The array, or <c>null</c> for a fresh copy or converted scalar.</param>
             private ClipLoopOperand(long[] dims, long[] byteStrides, NPTypeCode dtype, bool c, bool f, long start, NDArray array)
             {
                 Dims = dims;

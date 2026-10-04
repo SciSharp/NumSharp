@@ -427,23 +427,34 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Stat() => RunCorpus("stat.jsonl");
 
-        // np.clip with Python-int bounds (gen_clip_pyint): numpy/_core/_methods.py::_clip's drop rule (a bound at
-        // or past an integer dtype's limit is ignored), NEP 50 packing (a kept bound that does not fit raises
-        // OverflowError, empties included), dtype= / out= casts named after the routed ufunc
-        // (positive / minimum / maximum / clip), across the 8 integer dtypes + Char (uint16 proxy), bool and the
-        // inexact dtypes. stat.jsonl's clip cases only use in-range bounds of the array's own dtype, which is why
-        // np.clip(uint8, 0, 256) returning [0 0 0 0] went unnoticed. Portable: generated identically on Linux.
+        /// <summary>
+        /// np.clip with Python-int bounds (gen_clip_pyint): numpy/_core/_methods.py::_clip's drop rule (a bound at
+        /// or past an integer dtype's limit is ignored), NEP 50 packing (a kept bound that does not fit raises
+        /// OverflowError, empties included), dtype= / out= casts named after the routed ufunc
+        /// (positive / minimum / maximum / clip), across the 8 integer dtypes + Char (uint16 proxy), bool and the
+        /// inexact dtypes.
+        /// </summary>
+        /// <remarks>
+        /// stat.jsonl's clip cases only use in-range bounds of the array's own dtype, which is why
+        /// np.clip(uint8, 0, 256) returning [0 0 0 0] went unnoticed. Portable: generated identically on Linux.
+        /// </remarks>
+        /// <exception cref="AssertFailedException">The tier holds fewer cases than its floor, or a case's result, dtype,
+        /// shape or error differs from NumPy's and no MisalignedRegistry entry excuses it.</exception>
         [TestMethod]
         [TestCategory("FuzzMatrix")]
         public void ClipPyInt() => RunCorpus("clip_pyint.jsonl");
 
-        // np.clip as the ufunc call it routes to (gen_clip_ufunc): array bounds that broadcast (own and wider dtype,
-        // row / column / unit / full-F shapes) over 9 layouts x 13 dtypes + Char; out= broadcast up into, in C/F/
-        // strided/reversed layouts, of another dtype, read-only, of a wrong shape; where= with out (the masked-off
-        // slots' prior contents are checked through the whole base buffer); out overlapping an input (shifted,
-        // reversed, aliased, a bound overlapping out, interleaved, transposed), with and without a mask; NumPy's
-        // const-vs-general float loop choice (signed-zero ties against broadcast, one-element, in-place, cast and
-        // buffered bounds); and the iterator's broadcast + fromnumeric's keyword-rule error texts.
+        /// <summary>
+        /// np.clip as the ufunc call it routes to (gen_clip_ufunc): array bounds that broadcast (own and wider dtype,
+        /// row / column / unit / full-F shapes) over 9 layouts x 13 dtypes + Char; out= broadcast up into, in C/F/
+        /// strided/reversed layouts, of another dtype, read-only, of a wrong shape; where= with out (the masked-off
+        /// slots' prior contents are checked through the whole base buffer); out overlapping an input (shifted,
+        /// reversed, aliased, a bound overlapping out, interleaved, transposed), with and without a mask; NumPy's
+        /// const-vs-general float loop choice (signed-zero ties against broadcast, one-element, in-place, cast and
+        /// buffered bounds); and the iterator's broadcast + fromnumeric's keyword-rule error texts.
+        /// </summary>
+        /// <exception cref="AssertFailedException">The tier holds fewer cases than its floor, or a case's result, dtype,
+        /// shape, out base buffer or error differs from NumPy's and no MisalignedRegistry entry excuses it.</exception>
         [TestMethod]
         [TestCategory("FuzzMatrix")]
         public void ClipUfunc() => RunCorpus("clip_ufunc.jsonl");
