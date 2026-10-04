@@ -51,10 +51,34 @@ namespace NumSharp.Tests
     ///     the same float64 hard-code and is pinned with the group.
     ///     </para>
     ///     <para>
+    ///     The 2026-10-04 reduction-start probe extended groups 1-4. It ran every reduction, scan and product
+    ///     over all-<c>-0.0</c> operands (size 1, length-1 axes, longer runs; C, transposed, reversed and stepped
+    ///     layouts; float64, float32, float16 and complex128) against NumPy 2.4.2 bit for bit. The 7,942 cells
+    ///     NumSharp gets right are the <c>reduce_start.jsonl</c> oracle tier
+    ///     (<c>FuzzCorpusTests.ReductionStart</c>). The cells it gets wrong are that tier's carve
+    ///     (<c>gen_oracle._rs_carved</c>, one rule per root cause), and every rule names the test below that pins
+    ///     it (the one-element float32/float16 <c>std</c>/<c>var</c> dtype rule names group 5's test). Two more of
+    ///     NumPy's rules showed up there:
+    ///     </para>
+    ///     <list type="bullet">
+    ///         <item><b><c>multiply.reduce</c> starts from the identity <c>1</c>, which is not a no-op for a
+    ///         complex element.</b> NumPy's complex product of one element is <c>(1+0j) * x</c>, so
+    ///         <c>np.prod([-0-0j])</c> is <c>(+0, -0)</c>. NumSharp copies the element.</item>
+    ///         <item><b><c>np.median</c> is <c>np.mean</c> of the middle element(s).</b> It starts from
+    ///         <c>+0.0</c> too, so a <c>-0.0</c> middle gives <c>+0.0</c>. NumSharp returns the middle element
+    ///         itself.</item>
+    ///     </list>
+    ///     <para>
+    ///     The probe also found reductions that return the wrong shape or VALUES (group 6), and
+    ///     <c>np.trapezoid</c>'s error for an axis outside <c>y</c> (group 7). Those tests use ordinary values,
+    ///     where a value comparison alone already fails.
+    ///     </para>
+    ///     <para>
     ///     Every expected string below is NumPy 2.4.2's output for the same call (same operands, same arguments),
-    ///     probed on 2026-10-03 (groups 1-4) and 2026-10-04 (group 5), in <see cref="Describe"/>'s format:
-    ///     <c>dtype (shape) bits…</c>, bits as hex in logical C order (a complex element is its real word, then
-    ///     its imaginary word).
+    ///     probed on 2026-10-03 (groups 1-4) and 2026-10-04 (groups 5-7 and the probe's additions to groups 1-4),
+    ///     in <see cref="Describe"/>'s format: <c>dtype (shape) bits…</c>, bits as hex in logical C order (a
+    ///     complex element is its real word, then its imaginary word). An error is
+    ///     <c>threw &lt;type&gt;: &lt;message&gt;</c>, NumPy's Python exception type and message.
     ///     </para>
     /// </remarks>
     [TestClass]
@@ -160,18 +184,26 @@ namespace NumSharp.Tests
             Check(fails, "mean f64 (1,3) axis0", () => np.mean(F64(3).reshape(1, 3), axis: 0),
                   "float64 (3,) 0000000000000000 0000000000000000 0000000000000000");
             Check(fails, "average f64 [-0]", () => np.average(F64(1)), "float64 () 0000000000000000");
+            Check(fails, "average f64 (1,3) axis0", () => np.average(F64(3).reshape(1, 3), 0),
+                  "float64 (3,) 0000000000000000 0000000000000000 0000000000000000");
+            Check(fails, "mean c128 [-0-0j]", () => np.mean(C128(1)), "complex128 () 0000000000000000 0000000000000000");
             AssertNoMismatch(fails, "NumPy's mean is the +0.0-started sum divided by the count");
         }
 
         /// <summary>
         ///     The fused <c>np.evaluate(NDExpr.Sum(x, axis))</c> over a length-1 axis must give <c>+0.0</c> for a
-        ///     <c>-0.0</c> slab, as <c>np.sum</c> does in NumPy. NumSharp copies the slab. The flat
-        ///     <c>NDExpr.Sum(x)</c> of one element is already correct.
+        ///     <c>-0.0</c> slab, as <c>np.sum</c> does in NumPy. NumSharp copies the slab. The same holds for the
+        ///     other sum-based kinds over a length-1 axis of a 2-D operand (<c>Mean</c>, <c>NanSum</c>,
+        ///     <c>NanMean</c>) and for float32 and complex128. The flat <c>NDExpr.Sum(x)</c> of one element is
+        ///     already correct.
         /// </summary>
         /// <remarks>
         ///     Root cause: <c>DefaultEngine.Evaluate.Stream.cs</c> produces an extent-1 axis straight into the result
         ///     ON PURPOSE, to mirror the engine's copy in <c>HandleTrivialAxisReduction</c> (its comment says so).
-        ///     Fix it together with <see cref="Sum_LengthOneAxis_IsPositiveZero"/>, or the two drift apart.
+        ///     Fix it together with <see cref="Sum_LengthOneAxis_IsPositiveZero"/>, or the two drift apart. The
+        ///     complex128 <c>Mean</c> keeps the real part's <c>-0.0</c> and gives an imaginary <c>+0.0</c>, so the
+        ///     copy and the divide by the count both show there. A float16 operand takes another route and is
+        ///     already correct.
         /// </remarks>
         [TestMethod, OpenBugs]
         public void Evaluate_SumOverLengthOneAxis_IsPositiveZero()
@@ -179,7 +211,91 @@ namespace NumSharp.Tests
             var fails = new List<string>();
             Check(fails, "evaluate Sum f64 (1,3) axis0", () => np.evaluate(NDExpr.Sum((NDExpr)F64(3).reshape(1, 3), 0)),
                   "float64 (3,) 0000000000000000 0000000000000000 0000000000000000");
-            AssertNoMismatch(fails, "np.evaluate's Sum must match np.sum, which is +0.0 + x in NumPy");
+            Check(fails, "evaluate Mean f64 (1,3) axis0", () => np.evaluate(NDExpr.Mean((NDExpr)F64(3).reshape(1, 3), 0)),
+                  "float64 (3,) 0000000000000000 0000000000000000 0000000000000000");
+            Check(fails, "evaluate NanSum f64 (3,1) axis1", () => np.evaluate(NDExpr.NanSum((NDExpr)F64(3).reshape(3, 1), 1)),
+                  "float64 (3,) 0000000000000000 0000000000000000 0000000000000000");
+            Check(fails, "evaluate NanMean f32 (1,1) axis0", () => np.evaluate(NDExpr.NanMean((NDExpr)F32(1).reshape(1, 1), 0)),
+                  "float32 (1,) 00000000");
+            Check(fails, "evaluate Sum c128 (1,3) axis0 keepdims",
+                  () => np.evaluate(NDExpr.Sum((NDExpr)C128(3).reshape(1, 3), 0, true)),
+                  "complex128 (1,3) 0000000000000000 0000000000000000 0000000000000000 0000000000000000 " +
+                  "0000000000000000 0000000000000000");
+            Check(fails, "evaluate Mean c128 (1,1) axis1", () => np.evaluate(NDExpr.Mean((NDExpr)C128(1).reshape(1, 1), 1)),
+                  "complex128 (1,) 0000000000000000 0000000000000000");
+            AssertNoMismatch(fails, "np.evaluate's sum-based kinds must match NumPy's, which start from +0.0");
+        }
+
+        /// <summary>
+        ///     The complex <c>np.prod</c> and <c>np.nanprod</c> of one element (0-d, one-element 1-D, or a
+        ///     length-1 axis) must be <c>(1+0j) * x</c>, NumPy's identity times the element, so <c>-0-0j</c> gives
+        ///     <c>(+0, -0)</c> and <c>2-0j</c> gives <c>(2, +0)</c>. NumSharp returns the element itself. The fused
+        ///     <c>np.evaluate(NDExpr.Prod(x))</c> and <c>NDExpr.NanProd</c> give <c>(+0, +0)</c> instead.
+        /// </summary>
+        /// <remarks>
+        ///     <para>
+        ///     For a real dtype the identity is exact (<c>1 * x</c> is <c>x</c>, sign included), so copying the
+        ///     element is right and float64 / float32 / float16 already match. For complex it is not:
+        ///     <c>(1+0j) * (a+bj)</c> is <c>(1*a - 0*b, 1*b + 0*a)</c>, and <c>-0.0 - (-0.0)</c> is <c>+0.0</c>.
+        ///     A longer product multiplies anyway and is already correct.
+        ///     </para>
+        ///     <para>
+        ///     Root cause: <c>Default.Reduction.Product.cs</c> sends a size-1 input to
+        ///     <c>HandleScalarReduction</c> and an extent-1 axis to <c>HandleTrivialAxisReduction</c>, both of which
+        ///     copy. <c>NanProd</c> sends a complex input to <c>ReduceProduct</c>, the same path. The fused
+        ///     reduction's fold multiplies the element by the identity and then combines it with its other
+        ///     identity accumulators, which turns the imaginary <c>-0.0</c> into <c>+0.0</c>
+        ///     (<c>-0.0 * 1 + 0 * 0</c>).
+        ///     </para>
+        /// </remarks>
+        [TestMethod, OpenBugs]
+        public void Prod_OneComplexElement_IsTheIdentityTimesTheElement()
+        {
+            var fails = new List<string>();
+            const string plusMinus = "0000000000000000 8000000000000000";
+            Check(fails, "prod c128 [-0-0j]", () => np.prod(C128(1)), "complex128 () " + plusMinus);
+            Check(fails, "prod c128 0-d -0-0j", () => np.prod(NDArray.Scalar(new Complex(-0.0, -0.0))), "complex128 () " + plusMinus);
+            Check(fails, "prod c128 [-0-0j] keepdims", () => np.prod(C128(1), keepdims: true), "complex128 (1,) " + plusMinus);
+            Check(fails, "prod c128 (1,3) axis0", () => np.prod(C128(3).reshape(1, 3), 0),
+                  "complex128 (3,) " + plusMinus + " " + plusMinus + " " + plusMinus);
+            Check(fails, "prod c128 [2-0j]", () => np.prod(np.array(new[] { new Complex(2.0, -0.0) })),
+                  "complex128 () 4000000000000000 0000000000000000");
+            Check(fails, "nanprod c128 [-0-0j]", () => np.nanprod(C128(1)), "complex128 () " + plusMinus);
+            Check(fails, "nanprod c128 (3,1) axis1", () => np.nanprod(C128(3).reshape(3, 1), 1),
+                  "complex128 (3,) " + plusMinus + " " + plusMinus + " " + plusMinus);
+            Check(fails, "evaluate Prod c128 [-0-0j]", () => np.evaluate(NDExpr.Prod((NDExpr)C128(1))), "complex128 () " + plusMinus);
+            Check(fails, "evaluate NanProd c128 (1,1) axis0", () => np.evaluate(NDExpr.NanProd((NDExpr)C128(1).reshape(1, 1), 0)),
+                  "complex128 (1,) " + plusMinus);
+            AssertNoMismatch(fails, "NumPy's complex multiply.reduce multiplies the lone element by the identity 1+0j");
+        }
+
+        /// <summary>
+        ///     <c>np.median</c> and <c>np.nanmedian</c> must be <c>np.mean</c> of the middle element(s), as in
+        ///     NumPy, so a <c>-0.0</c> middle gives <c>+0.0</c> (<c>np.median([-0.0, 5.0, -0.0])</c> is
+        ///     <c>0.0</c>). NumSharp returns the middle element itself, or <c>(a + b) / 2</c> for an even count,
+        ///     which keeps the <c>-0.0</c>. Every cell of the probe's all-<c>-0.0</c> matrix differs: every float
+        ///     dtype, complex128, flat and per axis, with and without keepdims.
+        /// </summary>
+        /// <remarks>
+        ///     Root cause: <c>DirectILKernelGenerator.Quantile.cs</c> <c>WriteCell</c> with <c>medianMean</c> writes
+        ///     <c>prev</c> for an odd count ("γ = 0 … already yields that sample, so it needs no special case") and
+        ///     <c>(prev + next) / 2</c> for an even count. NumPy's <c>median</c> calls <c>np.mean(part[indexer])</c>,
+        ///     which is <c>(+0.0 + prev [+ next]) / n</c>. The values are equal except for the sign of a zero.
+        ///     <c>np.percentile</c> and <c>np.quantile</c> use NumPy's <c>_lerp</c> and already match.
+        /// </remarks>
+        [TestMethod, OpenBugs]
+        public void Median_OfNegativeZeros_IsPositiveZero()
+        {
+            var fails = new List<string>();
+            Check(fails, "median f64 [-0,-0,-0]", () => np.median(F64(3)), "float64 () 0000000000000000");
+            Check(fails, "median f64 [-0,5,-0]", () => np.median(np.array(new[] { -0.0, 5.0, -0.0 })), "float64 () 0000000000000000");
+            Check(fails, "median f32 [-0,-0]", () => np.median(F32(2)), "float32 () 00000000");
+            Check(fails, "median f64 (2,3) axis0", () => np.median(F64(6).reshape(2, 3), axis: 0),
+                  "float64 (3,) 0000000000000000 0000000000000000 0000000000000000");
+            Check(fails, "median c128 [-0-0j]*3", () => np.median(C128(3)), "complex128 () 0000000000000000 0000000000000000");
+            Check(fails, "nanmedian f64 [-0]", () => np.nanmedian(F64(1)), "float64 () 0000000000000000");
+            Check(fails, "nanmedian f16 [-0]*9", () => np.nanmedian(F16(9)), "float16 () 0000");
+            AssertNoMismatch(fails, "NumPy's median is np.mean of the middle element(s), which starts from +0.0");
         }
 
         /// <summary>
@@ -203,6 +319,16 @@ namespace NumSharp.Tests
                   "float64 () 0000000000000000");
             Check(fails, "trapezoid (2,3) x=[1,0] axis0", () => np.trapezoid(np.zeros(new Shape(2, 3)), np.array(new[] { 1.0, 0.0 }), 1.0, 0),
                   "float64 (3,) 0000000000000000 0000000000000000 0000000000000000");
+            // 2026-10-04 probe: a -0.0 y with a positive spacing, the last axis of a 2-D y, and the narrower dtypes.
+            Check(fails, "trapezoid [-0,-0] dx=1", () => np.trapezoid(F64(2), null, 1.0), "float64 () 0000000000000000");
+            Check(fails, "trapezoid (3,2) dx=-1 axis1", () => np.trapezoid(np.zeros(new Shape(3, 2)), null, -1.0, 1),
+                  "float64 (3,) 0000000000000000 0000000000000000 0000000000000000");
+            Check(fails, "trapezoid f32 [0,0] dx=-1", () => np.trapezoid(np.zeros(new Shape(2), np.float32), null, -1.0),
+                  "float32 () 00000000");
+            Check(fails, "trapezoid f16 (2,3) dx=-1 axis0", () => np.trapezoid(np.zeros(new Shape(2, 3), np.float16), null, -1.0, 0),
+                  "float16 (3,) 0000 0000 0000");
+            Check(fails, "trapezoid c128 [-0-0j]*2 dx=1", () => np.trapezoid(C128(2), null, 1.0),
+                  "complex128 () 0000000000000000 0000000000000000");
             AssertNoMismatch(fails, "NumPy's trapezoid sums its one product from the +0.0 identity");
         }
 
@@ -223,6 +349,58 @@ namespace NumSharp.Tests
             Check(fails, "einsum ij->j (1,3)", () => np.einsum("ij->j", F64(3).reshape(1, 3)),
                   "float64 (3,) 0000000000000000 0000000000000000 0000000000000000");
             AssertNoMismatch(fails, "NumPy's einsum sum starts from +0.0");
+        }
+
+        /// <summary>
+        ///     NumPy's default <c>np.einsum</c> (<c>optimize=False</c>) adds every term into a ZERO-FILLED output,
+        ///     so each output element is <c>+0.0 + terms</c>: a <c>-0.0</c> sum, a lone <c>-0.0</c> term and even
+        ///     a bare elementwise product (<c>'i,i->i'</c>, <c>'i,j->ij'</c>) come out <c>+0.0</c>.
+        ///     NumSharp's contraction returns <c>-0.0</c> for all of them; for complex128 it returns the bare
+        ///     product's <c>(+0, -0)</c> where NumPy returns <c>(+0, +0)</c>. An ordinary operand shows it too:
+        ///     <c>np.einsum('i,i->i', [-0.0, 1.0], [1.0, 1.0])</c> is <c>[0.0, 1.0]</c>.
+        /// </summary>
+        /// <remarks>
+        ///     <para>
+        ///     Root cause: <c>np.EinsumContract</c> (<c>LinearAlgebra/np.einsum.Contract.cs</c>) ports NumPy's
+        ///     <c>optimize=</c> structure: it takes diagonals and sums with <c>np.sum</c> (which copies a lone
+        ///     element, <see cref="Sum_OneElement_IsPositiveZero_LikeNumPysAddReduceIdentity"/>), and it returns a
+        ///     contraction with nothing summed as a broadcast <c>np.multiply</c>. NumPy's DEFAULT einsum is
+        ///     <c>PyArray_EinsteinSum</c>: the output operand is zeroed and every <c>sum_of_products</c> loop
+        ///     computes <c>out += a * b</c>. NumPy's own <c>optimize=True</c> path gives <c>-0.0</c> for the bare
+        ///     products here (probed: <c>[-0., 1.]</c> for the ordinary case above), so the fix is to start each
+        ///     output from <c>+0.0</c> on the default path, not to change which kernels compose.
+        ///     </para>
+        ///     <para>
+        ///     The einsum oracle tier feeds nonzero operands and so never meets this; the reduce_start tier gates the
+        ///     einsum cells that already match (sums over two or more terms, views, the 2-D contractions over
+        ///     <c>k = 2</c>).
+        ///     </para>
+        /// </remarks>
+        [TestMethod, OpenBugs]
+        public void Einsum_ZeroFilledAccumulator_GivesPositiveZero()
+        {
+            var fails = new List<string>();
+            const string z64 = "0000000000000000";
+            Check(fails, "einsum ij-> (1,1)", () => np.einsum("ij->", F64(1).reshape(1, 1)), "float64 () " + z64);
+            Check(fails, "einsum ij->i (3,1)", () => np.einsum("ij->i", F64(3).reshape(3, 1)),
+                  $"float64 (3,) {z64} {z64} {z64}");
+            Check(fails, "einsum ii-> (1,1)", () => np.einsum("ii->", F64(1).reshape(1, 1)), "float64 () " + z64);
+            Check(fails, "einsum i,i-> [-0].[1]", () => np.einsum("i,i->", F64(1), np.ones(1)), "float64 () " + z64);
+            Check(fails, "einsum i,i->i (3).(3)", () => np.einsum("i,i->i", F64(3), np.ones(3)),
+                  $"float64 (3,) {z64} {z64} {z64}");
+            Check(fails, "einsum i,j->ij (2).(3)", () => np.einsum("i,j->ij", F64(2), np.ones(3)),
+                  $"float64 (2,3) {z64} {z64} {z64} {z64} {z64} {z64}");
+            Check(fails, "einsum ij,j->i (2,1).(1)", () => np.einsum("ij,j->i", F64(2).reshape(2, 1), np.ones(1)),
+                  $"float64 (2,) {z64} {z64}");
+            Check(fails, "einsum ij,jk->ik (2,1).(1,2)", () => np.einsum("ij,jk->ik", F64(2).reshape(2, 1), np.ones(new Shape(1, 2))),
+                  $"float64 (2,2) {z64} {z64} {z64} {z64}");
+            Check(fails, "einsum ij,jk->ik (1,1).(1,1)", () => np.einsum("ij,jk->ik", F64(1).reshape(1, 1), np.ones(new Shape(1, 1))),
+                  "float64 (1,1) " + z64);
+            Check(fails, "einsum i,i->i c128 (3).(3)", () => np.einsum("i,i->i", C128(3), np.ones(new Shape(3), np.complex128)),
+                  $"complex128 (3,) {z64} {z64} {z64} {z64} {z64} {z64}");
+            Check(fails, "einsum i,i->i [-0,1].[1,1]", () => np.einsum("i,i->i", np.array(new[] { -0.0, 1.0 }), np.ones(2)),
+                  $"float64 (2,) {z64} 3ff0000000000000");
+            AssertNoMismatch(fails, "NumPy's default einsum adds every term into a zero-filled output");
         }
 
         // ======================================================================================================
@@ -267,6 +445,37 @@ namespace NumSharp.Tests
             var fails = new List<string>();
             Check(fails, "nancumsum f64 [-0,-0]", () => np.nancumsum(F64(2)), "float64 (2,) 8000000000000000 8000000000000000");
             AssertNoMismatch(fails, "NumPy's nancumsum is cumsum after the NaN replacement, which copies the first element");
+        }
+
+        /// <summary>
+        ///     The complex128 <c>np.cumprod</c> and <c>np.nancumprod</c> (flat and per axis) must COPY the first
+        ///     element, as NumPy's <c>multiply.accumulate</c> does, so <c>[-0-0j, -0-0j]</c> gives
+        ///     <c>[(-0, -0), (+0, +0)]</c> and <c>[2-0j, 1+0j]</c> gives <c>[(2, -0), (2, +0)]</c>. NumSharp
+        ///     multiplies the first element by the identity <c>1+0j</c>, so the first output is <c>(+0, -0)</c> /
+        ///     <c>(2, +0)</c> and every later output inherits the change. Real dtypes are already correct (their
+        ///     identity is exact), and so is a one-element input (the size-1 shortcut copies).
+        /// </summary>
+        /// <remarks>
+        ///     Root cause: the complex scan in <c>DirectILKernelGenerator.Scan.cs</c> seeds its running product with
+        ///     <c>Complex.One</c> and multiplies every element into it, including the first. The same seed shows in
+        ///     the NaN-payload pin <c>OpenBugsNaNOperandOrderTests.CumsumCumprod_KeepNumPysNaNAtEveryStep</c>
+        ///     (output 0 loses its imaginary payload); fix both together: copy element 0, multiply from element 1.
+        /// </remarks>
+        [TestMethod, OpenBugs]
+        public void CumProd_Complex_CopiesTheFirstElement()
+        {
+            var fails = new List<string>();
+            // The complex words of one element: real then imaginary, m = -0.0, p = +0.0.
+            const string mm = "8000000000000000 8000000000000000", pp = "0000000000000000 0000000000000000";
+            const string pm = "0000000000000000 8000000000000000";
+            Check(fails, "cumprod c128 [-0-0j]*2", () => np.cumprod(C128(2)), $"complex128 (2,) {mm} {pp}");
+            Check(fails, "cumprod c128 (2,3) axis1", () => np.cumprod(C128(6).reshape(2, 3), 1),
+                  $"complex128 (2,3) {mm} {pp} {pm} {mm} {pp} {pm}");
+            Check(fails, "cumprod c128 [2-0j, 1+0j]",
+                  () => np.cumprod(np.array(new[] { new Complex(2.0, -0.0), new Complex(1.0, 0.0) })),
+                  "complex128 (2,) 4000000000000000 8000000000000000 4000000000000000 0000000000000000");
+            Check(fails, "nancumprod c128 [-0-0j]*2", () => np.nancumprod(C128(2)), $"complex128 (2,) {mm} {pp}");
+            AssertNoMismatch(fails, "NumPy's multiply.accumulate copies the first element instead of multiplying it by 1+0j");
         }
 
         // ======================================================================================================
@@ -318,6 +527,64 @@ namespace NumSharp.Tests
             }
         }
 
+        /// <summary>
+        ///     On the managed path, <c>np.dot</c> and <c>np.inner</c> with any size-1 operand must follow NumPy's
+        ///     scalar branch: a 0-d operand times a longer array is a <c>daxpy</c> INTO A ZERO-FILLED output
+        ///     (<c>+0.0 + s * b</c>, so <c>-0.0 · [1, 1]</c> is <c>[+0.0, +0.0]</c>), and two size-1 operands are
+        ///     the plain product (<c>[[-0.0]] · [[1.0]]</c> is <c>[[-0.0]]</c>). NumSharp returns the plain
+        ///     product (<c>-0.0</c>) for the first and a zero-started sum (<c>+0.0</c>) for the second, the
+        ///     opposite of NumPy in both.
+        /// </summary>
+        /// <remarks>
+        ///     <para>
+        ///     NumPy's <c>cblas_matrixproduct</c> (cblasfuncs.c) runs for every float32 / float64 / complex
+        ///     <c>np.dot</c> with operands of at most 2 dimensions, and <c>np.inner</c> reaches it through
+        ///     <c>PyArray_MatrixProduct2</c>. It classifies any size-1 operand (0-d, <c>(1,)</c>, <c>(1,1)</c>) as
+        ///     <c>_scalar</c>, zeroes the output, and then writes <c>a * b</c> when the result has one element
+        ///     (<c>l == 1</c>) or calls <c>?axpy</c> into the zeroed output otherwise. Root cause:
+        ///     <c>Default.Dot.cs</c> sends a 0-d operand to <c>Multiply</c> (a plain product) and a
+        ///     <c>(1,1)·(1,1)</c> pair to <c>MultiplyMatrix</c> (a sum started from 0). The 0-d · 0-d product and
+        ///     <c>(1,1)·(1,3)</c> (an <c>axpy</c> into zeros) already match.
+        ///     </para>
+        ///     <para>
+        ///     The BLAS backend is removed for the test's duration, as in
+        ///     <see cref="Dot_LengthOneVectors_IsThePlainProduct_OnTheManagedPath"/>: the OpenBLAS package ports
+        ///     <c>cblas_matrixproduct</c> route for route and would hide the managed bug.
+        ///     </para>
+        /// </remarks>
+        [TestMethod, OpenBugs]
+        public void Dot_SizeOneOperand_FollowsNumPysScalarBranch_OnTheManagedPath()
+        {
+            var engine = BackendFactory.GetEngine();
+            var saved = engine.Blas;
+            engine.Blas = null;
+            try
+            {
+                var fails = new List<string>();
+                const string z64 = "0000000000000000";
+                Check(fails, "dot f64 0-d -0 . [1,1]", () => np.dot(NDArray.Scalar(-0.0), np.ones(2)), $"float64 (2,) {z64} {z64}");
+                Check(fails, "dot f64 [[-0]] . [[1]]", () => np.dot(F64(1).reshape(1, 1), np.ones(new Shape(1, 1))),
+                      "float64 (1,1) 8000000000000000");
+                Check(fails, "dot f32 [[-0]] . [[1]]", () => np.dot(F32(1).reshape(1, 1), np.ones(new Shape(1, 1), np.float32)),
+                      "float32 (1,1) 80000000");
+                Check(fails, "dot c128 0-d (-0-0j) . [1,1]",
+                      () => np.dot(NDArray.Scalar(new Complex(-0.0, -0.0)), np.ones(new Shape(2), np.complex128)),
+                      $"complex128 (2,) {z64} {z64} {z64} {z64}");
+                Check(fails, "dot c128 [[-0-0j]] . [[1+0j]]",
+                      () => np.dot(C128(1).reshape(1, 1), np.ones(new Shape(1, 1), np.complex128)),
+                      $"complex128 (1,1) {z64} 8000000000000000");
+                Check(fails, "inner f64 0-d -0 . [1,1]", () => np.inner(NDArray.Scalar(-0.0), np.ones(2)), $"float64 (2,) {z64} {z64}");
+                Check(fails, "inner f64 [[-0]] . [[1]]", () => np.inner(F64(1).reshape(1, 1), np.ones(new Shape(1, 1))),
+                      "float64 (1,1) 8000000000000000");
+                AssertNoMismatch(fails, "NumPy's cblas_matrixproduct treats a size-1 operand as a scalar");
+            }
+            finally
+            {
+                // Restore the engine-wide backend even when an assertion throws (see the test above).
+                engine.Blas = saved;
+            }
+        }
+
         // ======================================================================================================
         //  GROUP 4 — the nan-reduction size-1 shortcuts return the input's clone: (1,) for a one-element 1-D
         //  array, the input dtype for nanmean (one-element or 0-d), and the sign of a -0.0.
@@ -350,7 +617,96 @@ namespace NumSharp.Tests
             Check(fails, "nansum f64 [-0]", () => np.nansum(F64(1)), "float64 () 0000000000000000");
             Check(fails, "nansum f64 0-d -0", () => np.nansum(NDArray.Scalar(-0.0)), "float64 () 0000000000000000");
             Check(fails, "nanprod f64 [3]", () => np.nanprod(np.array(new[] { 3.0 })), "float64 () 4008000000000000");
+            // 2026-10-04 probe: the same shortcut with axis=0, and the float16 / float32 lanes.
+            Check(fails, "nansum f64 [1] axis0", () => np.nansum(np.array(new[] { 1.0 }), 0), "float64 () 3ff0000000000000");
+            Check(fails, "nanprod f64 [3] axis0", () => np.nanprod(np.array(new[] { 3.0 }), 0), "float64 () 4008000000000000");
+            Check(fails, "nansum f16 [-0]", () => np.nansum(F16(1)), "float16 () 0000");
+            Check(fails, "nansum f32 0-d -0", () => np.nansum(NDArray.Scalar(-0.0f)), "float32 () 00000000");
+            Check(fails, "nanprod f32 [2]", () => np.nanprod(np.array(new[] { 2.0f })), "float32 () 40000000");
             AssertNoMismatch(fails, "NumPy's nansum / nanprod reduce to a 0-d result, starting from the identity");
+        }
+
+        /// <summary>
+        ///     <c>np.nansum</c> over a length-1 axis must give <c>+0.0</c> for a <c>-0.0</c> slab (it is
+        ///     <c>np.sum</c> after the NaN replacement). NumSharp copies the slab, for float64 and float32, plain
+        ///     and with <c>keepdims</c>, and for a transposed operand too.
+        /// </summary>
+        /// <remarks>
+        ///     Root cause: the float32 / float64 axis kernel (<c>DirectILKernelGenerator.Reduction.Axis.NaN.cs</c>)
+        ///     sends a reduced axis of stride 1 to <c>NanReduceContiguousAxis</c>, whose <c>if (size == 1)</c>
+        ///     branch returns the lone element itself: the same copy as
+        ///     <see cref="Sum_LengthOneAxis_IsPositiveZero"/>. A length-1 axis with any other stride takes
+        ///     <c>NanReduceStridedAxis</c>, which starts from <c>0</c> and is already correct; that is why the
+        ///     probe's <c>(1,3)</c> axis 0 in C order (stride 3) matched. The oracle carve keeps the whole
+        ///     length-1-axis class out until the path is fixed.
+        /// </remarks>
+        [TestMethod, OpenBugs]
+        public void NanSum_LengthOneAxis_IsPositiveZero()
+        {
+            var fails = new List<string>();
+            const string z64x3 = "0000000000000000 0000000000000000 0000000000000000";
+            Check(fails, "nansum f64 (3,1) axis1", () => np.nansum(F64(3).reshape(3, 1), 1), "float64 (3,) " + z64x3);
+            Check(fails, "nansum f64 (3,1) axis1 keepdims", () => np.nansum(F64(3).reshape(3, 1), 1, true), "float64 (3,1) " + z64x3);
+            Check(fails, "nansum f64 (1,1) axis0", () => np.nansum(F64(1).reshape(1, 1), 0), "float64 (1,) 0000000000000000");
+            Check(fails, "nansum f32 (3,1).T axis0", () => np.nansum(F32(3).reshape(3, 1).T, 0), "float32 (3,) 00000000 00000000 00000000");
+            AssertNoMismatch(fails, "NumPy's nansum is np.sum after the NaN replacement, which starts from +0.0");
+        }
+
+        /// <summary>
+        ///     <c>np.nansum</c> of a 1-D complex128 array along <c>axis=0</c> must return the 0-d sum
+        ///     (<c>np.nansum([1+2j, 3+4j], axis=0)</c> is <c>4+6j</c>). NumSharp throws
+        ///     <c>InvalidOperationException</c> ("Can't construct NDCoordinatesAxisIncrementor with a vector
+        ///     shape."), for every length and layout. The flat form and 2-D axis reductions already work.
+        /// </summary>
+        /// <remarks>
+        ///     Root cause: <c>Default.Reduction.Nan.cs</c> <c>NanSumComplex</c> walks the output with an
+        ///     <c>NDCoordinatesAxisIncrementor</c>, which refuses a 1-D shape (the reduced output of a 1-D input has
+        ///     no coordinates left). A 1-D axis reduction is the flat reduction plus <c>keepdims</c>; route it
+        ///     there.
+        /// </remarks>
+        [TestMethod, OpenBugs]
+        public void NanSum_Complex1D_AlongAxis0_ReturnsTheSum()
+        {
+            var fails = new List<string>();
+            var pair = np.array(new[] { new Complex(1, 2), new Complex(3, 4) });
+            Check(fails, "nansum c128 [1+2j,3+4j] axis0", () => np.nansum(pair, 0), "complex128 () 4010000000000000 4018000000000000");
+            Check(fails, "nansum c128 [1+2j] axis0", () => np.nansum(np.array(new[] { new Complex(1, 2) }), 0),
+                  "complex128 () 3ff0000000000000 4000000000000000");
+            Check(fails, "nansum c128 [1+2j,3+4j][::-1] axis0", () => np.nansum(pair["::-1"], 0),
+                  "complex128 () 4010000000000000 4018000000000000");
+            Check(fails, "nansum c128 [-0-0j]*2 axis0 keepdims", () => np.nansum(C128(2), 0, true),
+                  "complex128 (1,) 0000000000000000 0000000000000000");
+            AssertNoMismatch(fails, "NumPy's 1-D axis=0 nansum is the flat nansum");
+        }
+
+        /// <summary>
+        ///     <c>np.nanmean</c>, <c>np.nanstd</c> and <c>np.nanvar</c> of a 1-D array along <c>axis=0</c> must
+        ///     return a 0-d result (shape <c>(1,)</c> with <c>keepdims</c>). NumSharp returns <c>(1,)</c>, and
+        ///     <c>(1,1)</c> with <c>keepdims</c>, for float64, float32, float16 and complex128. A one-element
+        ///     input with <c>keepdims</c> has the opposite bug in <c>nanstd</c> / <c>nanvar</c>: NumSharp drops
+        ///     <c>keepdims</c> and returns 0-d where NumPy returns <c>(1,)</c>.
+        /// </summary>
+        /// <remarks>
+        ///     Root cause: <c>Statistics/np.nanmean.cs</c> <c>nanmean_axis</c> builds the output shape from the
+        ///     non-reduced axes and adds a <c>1</c> when none is left (<c>if (outputShapeList.Count == 0)
+        ///     outputShapeList.Add(1);</c>), and <c>keepdims</c> then expands that <c>(1,)</c> again; <c>nanstd</c> /
+        ///     <c>nanvar</c> share the pattern. Their one-element shortcut returns a scalar without applying
+        ///     <c>keepdims</c>. Values are right in every case below.
+        /// </remarks>
+        [TestMethod, OpenBugs]
+        public void NanMeanStdVar_1DAxis_ReturnNumPysShape()
+        {
+            var fails = new List<string>();
+            var v = np.array(new[] { 1.0, 2.0, 3.0 });
+            Check(fails, "nanmean f64 [1,2,3] axis0", () => np.nanmean(v, 0), "float64 () 4000000000000000");
+            Check(fails, "nanmean f64 [1,2,3] axis0 keepdims", () => np.nanmean(v, 0, true), "float64 (1,) 4000000000000000");
+            Check(fails, "nanmean c128 [1+2j,3+4j] axis0", () => np.nanmean(np.array(new[] { new Complex(1, 2), new Complex(3, 4) }), 0),
+                  "complex128 () 4000000000000000 4008000000000000");
+            Check(fails, "nanstd f64 [1,2,3] axis0", () => np.nanstd(v, 0), "float64 () 3fea20bd700c2c3e");
+            Check(fails, "nanvar f64 [1,2,3] axis0 keepdims", () => np.nanvar(v, 0, true), "float64 (1,) 3fe5555555555555");
+            Check(fails, "nanstd f64 [5] keepdims", () => np.nanstd(np.array(new[] { 5.0 }), keepdims: true), "float64 (1,) 0000000000000000");
+            Check(fails, "nanvar f64 [5] axis0 keepdims", () => np.nanvar(np.array(new[] { 5.0 }), 0, true), "float64 (1,) 0000000000000000");
+            AssertNoMismatch(fails, "NumPy reduces the only axis of a 1-D array to a 0-d result");
         }
 
         /// <summary>
@@ -638,6 +994,122 @@ namespace NumSharp.Tests
             Check(fails, "mean f64 (0,3) axis0 (already right)", () => np.mean(np.zeros(new Shape(0, 3), np.float64), 0), "float64 (3,) nan nan nan");
             Check(fails, "mean i32 (0,3) (already right)", () => np.mean(np.zeros(new Shape(0, 3), np.int32)), "float64 () nan");
             AssertNoMismatch(fails, "NumPy's empty mean is NaN in the input's float or complex dtype");
+        }
+
+        // ======================================================================================================
+        //  GROUP 6 — reductions that return the wrong shape or values (found by the 2026-10-04 reduction-start
+        //  probe; its one-element float32/float16 std/var dtype finding is group 5's
+        //  VarStd_OneElement_KeepsFloat16Float32_AndHonoursTheDtypeArgument).
+        // ======================================================================================================
+
+        /// <summary>
+        ///     The flat <c>np.cumprod</c> / <c>np.nancumprod</c> of a size-1 array with two or more dimensions
+        ///     (<c>[[2.0]]</c>, a <c>(1,1,1)</c> array) must return a 1-D <c>(1,)</c> array: a scan never returns
+        ///     0-d. NumSharp returns 0-d. <c>np.cumsum</c> of the same input is already correct.
+        /// </summary>
+        /// <remarks>
+        ///     Root cause: <c>Default.Reduction.CumMul.cs</c> <c>ReduceCumMul</c>'s flat branch reshapes a
+        ///     one-element 1-D result to <c>Shape.Scalar</c> (<c>if (... r.Shape.size == 1 &amp;&amp; r.ndim == 1)
+        ///     r.Storage.Reshape(Shape.Scalar);</c>), a line that belongs to a reduction, not a scan. A size-1 input
+        ///     with one dimension or none never reaches it (the shortcut above returns <c>(1,)</c>), so only an
+        ///     N-D size-1 input shows it. The complex <c>[[-0-0j]]</c> case would also show
+        ///     <see cref="CumProd_Complex_CopiesTheFirstElement"/>, so the cases here are real and integer.
+        /// </remarks>
+        [TestMethod, OpenBugs]
+        public void CumProd_FlatOfOneByOne_ReturnsOneDimensional()
+        {
+            var fails = new List<string>();
+            Check(fails, "cumprod f64 [[2]] flat", () => np.cumprod(np.array(new double[,] { { 2.0 } })), "float64 (1,) 4000000000000000");
+            Check(fails, "cumprod f32 [[-0]] flat", () => np.cumprod(F32(1).reshape(1, 1)), "float32 (1,) 80000000");
+            Check(fails, "cumprod f64 (1,1,1) flat", () => np.cumprod(np.full(new Shape(1, 1, 1), 2.0)), "float64 (1,) 4000000000000000");
+            Check(fails, "cumprod i32 [[3]] flat", () => np.cumprod(np.array(new int[,] { { 3 } })), "int64 (1,) 3");
+            Check(fails, "nancumprod f64 [[2]] flat", () => np.nancumprod(np.array(new double[,] { { 2.0 } })), "float64 (1,) 4000000000000000");
+            AssertNoMismatch(fails, "NumPy's flat cumprod returns a 1-D array of the input's size");
+        }
+
+        /// <summary>
+        ///     The float16 <c>np.nansum</c> and <c>np.nanprod</c> along an axis must read the view's elements:
+        ///     <c>np.nanprod([2, 3][::-1], axis=0)</c> is <c>6</c>. On a reversed, stepped or transposed view
+        ///     NumSharp reads OTHER memory and returns garbage that changes from run to run (the probes saw
+        ///     <c>-243.2</c> and <c>1.9e-4</c> for that call). C-contiguous inputs, the flat (no axis) forms, and float16
+        ///     <c>np.nanmean</c> / <c>np.nanstd</c> / <c>np.nanvar</c> (their own axis paths, probed on the same
+        ///     views) are already correct.
+        /// </summary>
+        /// <remarks>
+        ///     <para>
+        ///     Root cause: float16 has no IL nan-axis kernel, so <c>Default.Reduction.Nan.cs</c>
+        ///     <c>ExecuteNanAxisReduction</c> falls back to <c>ExecuteNanAxisReductionScalar</c>. It builds each
+        ///     element's MEMORY offset from the view's strides (<c>inputBaseOffset + i * axisStride</c>) and passes
+        ///     it to <c>arr.GetAtIndex</c>, which takes a LOGICAL C-order index and maps it through the strides a
+        ///     second time. On a C-contiguous array the two agree, so the bug only shows on other layouts; a
+        ///     negative stride gives a negative index. float32 / float64 have IL kernels and do not reach this path.
+        ///     </para>
+        ///     <para>
+        ///     The oracle corpus never caught it. The nanreduce tier excuses EVERY value divergence of these ops as a
+        ///     known bug (<c>MisalignedRegistry</c>'s <c>NanReduceOps</c> blanket, "nan-reduction value: NaN masking /
+        ///     count / summation-order divergence"), garbage float16 values included, and the reduce_start tier's
+        ///     all-<c>-0.0</c> operands hide a wrong element when every element is the same.
+        ///     </para>
+        /// </remarks>
+        [TestMethod, OpenBugs]
+        public void NanReduction_Float16_NonCLayoutAxis_ReadsTheRightElements()
+        {
+            var fails = new List<string>();
+            var h23 = np.array(new Half[,] { { (Half)1, (Half)2, (Half)3 }, { (Half)4, (Half)5, (Half)6 } });
+            Check(fails, "nanprod f16 [2,3][::-1] axis0", () => np.nanprod(np.array(new[] { (Half)2, (Half)3 })["::-1"], 0), "float16 () 4600");
+            Check(fails, "nanprod f16 [2,3,5][::-1] axis0", () => np.nanprod(np.array(new[] { (Half)2, (Half)3, (Half)5 })["::-1"], 0),
+                  "float16 () 4f80");
+            Check(fails, "nansum f16 [1,2,3][::-1] axis0", () => np.nansum(np.array(new[] { (Half)1, (Half)2, (Half)3 })["::-1"], 0),
+                  "float16 () 4600");
+            Check(fails, "nansum f16 [1..9][::2] axis0", () => np.nansum(np.arange(1, 10).astype(np.float16)["::2"], 0), "float16 () 4e40");
+            Check(fails, "nansum f16 (2,3).T axis0", () => np.nansum(h23.T, 0), "float16 (2,) 4600 4b80");
+            Check(fails, "nanprod f16 (2,3).T axis1", () => np.nanprod(h23.T, 1), "float16 (3,) 4400 4900 4c80");
+            Check(fails, "nansum f16 (2,3)[:, ::-1] axis1", () => np.nansum(h23[":, ::-1"], 1), "float16 (2,) 4600 4b80");
+            Check(fails, "nansum f16 [-0]*9[::-1] axis0", () => np.nansum(F16(9)["::-1"], 0), "float16 () 0000");
+            AssertNoMismatch(fails, "NumPy's float16 nan-reductions read the view's elements on every layout");
+        }
+
+        // ======================================================================================================
+        //  GROUP 7 — np.trapezoid's error for an axis outside y.
+        // ======================================================================================================
+
+        /// <summary>
+        ///     <c>np.trapezoid</c> with an axis outside <c>y</c>'s dimensions must raise NumPy's
+        ///     <c>IndexError: list assignment index out of range</c>: for a 0-d <c>y</c>, an out-of-range positive
+        ///     or negative axis, a 1-D <c>x</c>, and an N-D <c>x</c> whose own rank admits the axis. NumSharp raises
+        ///     <c>ArgumentOutOfRangeException("axis N is out of bounds for array of dimension M")</c>. An axis
+        ///     outside an N-D <c>x</c> is already right: NumPy's <c>diff(x, axis)</c> raises the <c>AxisError</c>
+        ///     first, and so does NumSharp.
+        /// </summary>
+        /// <remarks>
+        ///     <para>
+        ///     NumPy's <c>trapezoid</c> never checks the axis. It writes into Python lists of length <c>y.ndim</c>
+        ///     (<c>slice1[axis] = slice(1, None)</c>, and <c>shape[axis] = d.shape[0]</c> for a 1-D <c>x</c>), so
+        ///     the list assignment raises. NumSharp reproduces NumPy's leaked Python <c>IndexError</c>s verbatim
+        ///     elsewhere (<c>np.tensordot</c>, <c>np.fft</c>, <c>numpy.polynomial</c>: "tuple index out of
+        ///     range") and has the <c>IndexError</c> type for it.
+        ///     </para>
+        ///     <para>
+        ///     Root cause: <c>Math/np.trapezoid.cs</c> <c>TrapezoidAxis</c> raises the axis error on purpose (its
+        ///     documentation calls it "the clearer axis-out-of-bounds error"). The unit tests
+        ///     <c>Trapezoid_0D_Throws</c> and <c>Trapezoid_XErrorsComeBeforeYAxisErrors</c> now assert only that
+        ///     these calls throw, so they hold before and after the fix.
+        ///     </para>
+        /// </remarks>
+        [TestMethod, OpenBugs]
+        public void Trapezoid_AxisOutsideY_RaisesNumPysIndexError()
+        {
+            var fails = new List<string>();
+            const string indexError = "threw IndexError: list assignment index out of range";
+            Check(fails, "trapezoid 0-d y", () => np.trapezoid(np.array(5.0)), indexError);
+            Check(fails, "trapezoid 0-d y, 1-D x", () => np.trapezoid(np.array(5.0), np.array(new[] { 1.0, 2.0 })), indexError);
+            Check(fails, "trapezoid y(2,3) axis=5", () => np.trapezoid(np.ones(new Shape(2, 3)), axis: 5), indexError);
+            Check(fails, "trapezoid y(2,3) axis=-3", () => np.trapezoid(np.ones(new Shape(2, 3)), axis: -3), indexError);
+            Check(fails, "trapezoid y(2,3) 1-D x axis=5",
+                  () => np.trapezoid(np.ones(new Shape(2, 3)), np.array(new[] { 1.0, 2.0, 3.0 }), axis: 5), indexError);
+            Check(fails, "trapezoid y(2,3) x(2,2,3) axis=2",
+                  () => np.trapezoid(np.ones(new Shape(2, 3)), np.ones(new Shape(2, 2, 3)), axis: 2), indexError);
+            AssertNoMismatch(fails, "NumPy's trapezoid leaks the IndexError of its slice-list assignment");
         }
 
         // ======================================================================================================

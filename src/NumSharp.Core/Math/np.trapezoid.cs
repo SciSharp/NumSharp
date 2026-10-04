@@ -121,15 +121,18 @@ namespace NumSharp
         ///     always in the float family (float16/float32/float64/complex128, or the
         ///     NumSharp-only Decimal); integer and boolean inputs yield float64. The values are
         ///     bit-identical to NumPy's for every memory layout of <paramref name="y"/> and
-        ///     <paramref name="x"/>.
+        ///     <paramref name="x"/>, with one open exception: a <c>-0.0</c> area over a single interval
+        ///     comes back <c>-0.0</c> where NumPy's sum gives <c>+0.0</c> (the length-1-axis sum,
+        ///     pinned by <c>OpenBugsReductionTests.Trapezoid_OneInterval_NegativeZeroArea_IsPositiveZero</c>).
         /// </returns>
         /// <exception cref="ArgumentNullException"><paramref name="y"/> is <c>null</c>.</exception>
         /// <exception cref="ArgumentOutOfRangeException">
         ///     <paramref name="y"/> is 0-D, or <paramref name="axis"/> is outside
         ///     <c>[-y.ndim, y.ndim-1]</c> (NumPy raises an <c>IndexError</c> from its slice list
-        ///     there; both reject). Also, as <see cref="diff(NDArray, int, int, object, object)"/>
-        ///     raises it, when an N-D <paramref name="x"/> has no such axis — that check runs first,
-        ///     as in NumPy.
+        ///     there, an open parity gap pinned by
+        ///     <c>OpenBugsReductionTests.Trapezoid_AxisOutsideY_RaisesNumPysIndexError</c>; both reject).
+        ///     Also, as <see cref="diff(NDArray, int, int, object, object)"/> raises it, when an N-D
+        ///     <paramref name="x"/> has no such axis — that check runs first, as in NumPy.
         /// </exception>
         /// <exception cref="ArgumentException">
         ///     A 0-D <paramref name="x"/> ("diff requires input that is at least one dimensional",
@@ -279,7 +282,10 @@ namespace NumSharp
         /// <exception cref="ArgumentOutOfRangeException">
         ///     <paramref name="axis"/> is outside <c>[-nd, nd-1]</c>, including every axis of a 0-D
         ///     <c>y</c>. NumPy leaks a Python "list assignment index out of range" <c>IndexError</c> here;
-        ///     NumSharp raises the clearer axis-out-of-bounds error (both reject).
+        ///     NumSharp raises the axis-out-of-bounds error instead (both reject). That is an open parity gap:
+        ///     the house rule reproduces NumPy's leaked <c>IndexError</c>s verbatim (<c>np.tensordot</c>,
+        ///     <c>np.fft</c>), and <c>OpenBugsReductionTests.Trapezoid_AxisOutsideY_RaisesNumPysIndexError</c>
+        ///     pins NumPy's type and message for every route that reaches here.
         /// </exception>
         private static int TrapezoidAxis(int axis, int nd)
         {

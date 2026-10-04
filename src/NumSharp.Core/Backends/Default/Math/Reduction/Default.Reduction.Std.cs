@@ -82,6 +82,10 @@ namespace NumSharp.Backends
             {
                 // NumPy: std of single element with ddof=0 is 0.0
                 // With ddof >= size, the divisor is <= 0, which produces NaN
+                // Open gaps: NumPy's _var computes x - mean even for one element, so a NaN / +-inf element gives NaN
+                // (OpenBugsReductionTests.VarStd_OneElement_NonFiniteValue_IsNaN), and it keeps a float16 / float32
+                // input's dtype (VarStd_OneElement_KeepsFloat16Float32_AndHonoursTheDtypeArgument); this C# double
+                // scalar does neither. Var has the same shortcut.
                 int _ddof = ddof ?? 0;
                 double value = (arr.size - _ddof) <= 0 ? double.NaN : 0.0;
                 var r = NDArray.Scalar(value);

@@ -565,8 +565,11 @@ namespace NumSharp.Backends.Kernels
         ///     When true, a continuous even-size result (γ = 0.5, the two central samples) is the
         ///     <b>mean</b> <c>(a+b)/2</c> at the output precision — NumPy's <c>np.median</c> rule,
         ///     which differs from the quantile <c>_lerp</c> at q=0.5 by up to 1 ULP. γ = 0 (odd, a
-        ///     single central sample) already yields that sample, so it needs no special case. Set
-        ///     only by <c>np.median</c>/<c>np.nanmedian</c>; the discrete methods never see it.
+        ///     single central sample) yields that sample, equal to NumPy's value. Set only by
+        ///     <c>np.median</c>/<c>np.nanmedian</c>; the discrete methods never see it. Open gap: NumPy's
+        ///     median is <c>np.mean</c> of the central sample(s), i.e. <c>(+0.0 + a [+ b]) / n</c>, so a
+        ///     <c>-0.0</c> result there is <c>+0.0</c>; both branches here keep the <c>-0.0</c>
+        ///     (pinned by <c>OpenBugsReductionTests.Median_OfNegativeZeros_IsPositiveZero</c>).
         /// </param>
         private static unsafe void WriteCell<T, TOut>(
             T* scratch, int prevIdx, int nextIdx, double gamma,

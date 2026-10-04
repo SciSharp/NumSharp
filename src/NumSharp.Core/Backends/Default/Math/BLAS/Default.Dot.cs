@@ -43,6 +43,11 @@ namespace NumSharp.Backends
             }
 
             //If either a or b is 0-D (scalar), it is equivalent to multiply and using numpy.multiply(a, b) or a * b is preferred.
+            // NumPy's own float/complex route differs in the sign of a zero: cblas_matrixproduct treats a size-1
+            // operand as a scalar and, for a result longer than one element, runs ?axpy into a ZERO-FILLED output,
+            // so np.dot(-0.0, [1, 1]) is [+0, +0] where this multiply gives [-0, -0]; a (1,1)·(1,1) pair is the
+            // plain product there but a zero-started sum in MultiplyMatrix below. Open gap, pinned by
+            // OpenBugsReductionTests.Dot_SizeOneOperand_FollowsNumPysScalarBranch_OnTheManagedPath.
             if (isLeftScalar || isRightScalar)
             {
                 return Multiply(left, right);

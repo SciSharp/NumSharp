@@ -108,6 +108,10 @@ namespace NumSharp.Tests.Fuzz
         private static readonly string[] BlasAffectedTiers =
         {
             "matmul.jsonl", "products.jsonl", "groupa.jsonl", "specials.jsonl", "einsum.jsonl", "polyalgebra.jsonl",
+            // dot / matmul / inner / vdot / einsum over all-(-0.0) operands with size-1 and length-1 axes: the
+            // backend's route port treats a size-1 dot operand as a scalar (cblas_matrixproduct), so a kept cell
+            // may flip there and is then byte-checked against NumPy like every other flip.
+            "reduce_start.jsonl",
         };
 
         [TestMethod]

@@ -5236,6 +5236,388 @@ def gen_nan_order():
     return cases
 
 
+# ---------------------------------------------------------------------------
+# Reduction START tier (reduce_start.jsonl): the sign of a zero result.
+#
+# How a reduction starts is invisible until its result is zero. NumPy's add.reduce passes the +0.0 IDENTITY as the
+# initial value for every numeric dtype, so a sum of only -0.0 values is +0.0 — a one-element sum and a length-1 axis
+# included. add.accumulate COPIES the first element (np.cumsum([-0.0, -0.0]) keeps -0.0), multiply.reduce starts from
+# its identity 1 (prod keeps -0.0), maximum / minimum copy the first element, np.dot of two length-1 vectors is the
+# plain product (cblas_matrixproduct's _scalar branch), and einsum's sum_of_products accumulates into a zero-filled
+# output. The ordinary pools never produce such a result: their size-1 layouts hold NaN and their longer layouts mix
+# -0.0 with non-zero values, so no other tier can see the start rule — and NumSharp's size-1 shortcuts, which COPY
+# the element, went unnoticed until np.trapezoid's bit-exact work met them (2026-10-03).
+#
+# Every operand here is all -0.0 (complex: -0.0-0.0j), or zeros under a negative spacing (trapezoid), over the
+# size-1, length-1-axis and longer shapes, in the C / transposed / reversed / stepped layouts that reach NumSharp's
+# different reduction routes. The 2026-10-04 probe replayed the UNCARVED matrix (gen_reduce_start(carve=False))
+# against NumSharp bit for bit: the cells that differ are this tier's corpus carve (_rs_carved) and are pinned by
+# NumSharp.Tests/OpenBugs.Reductions.cs; every other cell is here and must stay exact. When a pinned path is fixed,
+# drop its rule from _rs_carved and regenerate, so its cells join the gate.
+# ---------------------------------------------------------------------------
+
+_RS_DTYPES = ("float64", "float32", "float16", "complex128")
+
+# Reductions replayed through OpRegistry's axis / keepdims keys. Each entry: (NumPy call, extra params). The
+# percentile / quantile keys read params.q; the rest read only params.axis / params.keepdims.
+_RS_REDUCE = {
+    "sum": (lambda a, ax, kd: np.sum(a, axis=ax, keepdims=kd), {}),
+    "prod": (lambda a, ax, kd: np.prod(a, axis=ax, keepdims=kd), {}),
+    "mean": (lambda a, ax, kd: np.mean(a, axis=ax, keepdims=kd), {}),
+    "average": (lambda a, ax, kd: np.average(a, axis=ax, keepdims=kd), {}),
+    "std": (lambda a, ax, kd: np.std(a, axis=ax, keepdims=kd), {}),
+    "var": (lambda a, ax, kd: np.var(a, axis=ax, keepdims=kd), {}),
+    "min": (lambda a, ax, kd: np.min(a, axis=ax, keepdims=kd), {}),
+    "max": (lambda a, ax, kd: np.max(a, axis=ax, keepdims=kd), {}),
+    "ptp": (lambda a, ax, kd: np.ptp(a, axis=ax, keepdims=kd), {}),
+    "median": (lambda a, ax, kd: np.median(a, axis=ax, keepdims=kd), {}),
+    "percentile": (lambda a, ax, kd: np.percentile(a, 50.0, axis=ax, keepdims=kd), {"q": 50.0}),
+    "quantile": (lambda a, ax, kd: np.quantile(a, 0.5, axis=ax, keepdims=kd), {"q": 0.5}),
+    "nansum": (lambda a, ax, kd: np.nansum(a, axis=ax, keepdims=kd), {}),
+    "nanprod": (lambda a, ax, kd: np.nanprod(a, axis=ax, keepdims=kd), {}),
+    "nanmean": (lambda a, ax, kd: np.nanmean(a, axis=ax, keepdims=kd), {}),
+    "nanstd": (lambda a, ax, kd: np.nanstd(a, axis=ax, keepdims=kd), {}),
+    "nanvar": (lambda a, ax, kd: np.nanvar(a, axis=ax, keepdims=kd), {}),
+    "nanmin": (lambda a, ax, kd: np.nanmin(a, axis=ax, keepdims=kd), {}),
+    "nanmax": (lambda a, ax, kd: np.nanmax(a, axis=ax, keepdims=kd), {}),
+    "nanmedian": (lambda a, ax, kd: np.nanmedian(a, axis=ax, keepdims=kd), {}),
+}
+
+# Scans replayed through OpRegistry's axis keys (params.axis; JSON null = the flat scan).
+_RS_SCAN = {"cumsum": np.cumsum, "cumprod": np.cumprod, "nancumsum": np.nancumsum, "nancumprod": np.nancumprod}
+
+# np.evaluate root reductions over a bare leaf ("in0"), replayed through OpRegistry.Evaluate (params.reduce). The
+# float16 var / std / nanmean kinds are left out: NDExpr rejects a float16 result for them by design (no float16
+# pairwise kernel), which is a documented limitation, not a start rule.
+_RS_EVAL_KINDS = ("sum", "prod", "mean", "min", "max", "nansum", "nanprod", "nanmean", "nanmin", "nanmax", "ptp",
+                  "var", "std")
+_RS_EVAL_NO_HALF = ("var", "std", "nanmean")
+
+# Two-operand products: (layout, a's shape, b's shape, b's sign). a is all -0.0, b all +1 or all -1, so every
+# product term is a signed zero and only the start rule decides the sign of the result.
+_RS_PRODUCT_PAIRS = (
+    ("1_1", (1,), (1,), 1.0),            # the length-1 dot: NumPy's plain product
+    ("1_1_neg", (1,), (1,), -1.0),       # a +0.0 product, so every start rule agrees
+    ("2_2", (2,), (2,), 1.0),
+    ("1_1x3", (1,), (1, 3), 1.0),        # NumPy: a daxpy into a zero-filled output
+    ("1x1_1x1", (1, 1), (1, 1), 1.0),
+    ("2x1_1x2", (2, 1), (1, 2), 1.0),    # K = 1
+    ("1x2_2x1", (1, 2), (2, 1), 1.0),
+    ("1x1_1x3", (1, 1), (1, 3), 1.0),
+    ("0d_2", (), (2,), 1.0),             # a 0-d operand: NumPy's daxpy into a zero-filled output (l = 2)
+)
+
+# einsum expressions: (subscripts, operand shapes). The first operand is all -0.0, the others all +1.
+_RS_EINSUM = (
+    ("i->", ((1,),)), ("i->", ((3,),)),
+    ("ij->", ((1, 1),)), ("ij->", ((2, 3),)),
+    ("ij->i", ((3, 1),)), ("ij->i", ((2, 3),)),
+    ("ij->j", ((1, 3),)), ("ij->j", ((2, 3),)),
+    ("ii->", ((1, 1),)), ("ii->", ((2, 2),)), ("ii", ((2, 2),)),
+    ("ii->i", ((2, 2),)), ("ij->ji", ((2, 3),)),
+    ("i,i->", ((1,), (1,))), ("i,i->", ((2,), (2,))),
+    ("ij,jk->ik", ((2, 1), (1, 2))), ("ij,jk->ik", ((1, 1), (1, 1))), ("ij,jk->ik", ((2, 2), (2, 2))),
+    ("i,j->ij", ((2,), (3,))), ("ij,j->i", ((2, 1), (1,))), ("i,i->i", ((3,), (3,))),
+)
+
+# trapezoid: (layout, y's shape, x or None, dx, axis, y's zero sign). A negative spacing times a +0.0 sum is a -0.0
+# product, and so is a positive spacing times a -0.0 sum; the products are then summed along the axis.
+_RS_TRAPEZOID = (
+    ("x_1_0", (2,), (1.0, 0.0), 1.0, -1, False),        # one interval: the sum of ONE -0.0 product
+    ("dx_neg_2", (2,), None, -1.0, -1, False),
+    ("negy_dx_2", (2,), None, 1.0, -1, True),
+    ("x_2_1_0", (3,), (2.0, 1.0, 0.0), 1.0, -1, False),  # two intervals
+    ("dx_neg_3", (3,), None, -1.0, -1, False),
+    ("x_1_0_ax0_2x3", (2, 3), (1.0, 0.0), 1.0, 0, False),
+    ("dx_neg_ax0_2x3", (2, 3), None, -1.0, 0, False),
+    ("x_2_1_0_ax0_3x2", (3, 2), (2.0, 1.0, 0.0), 1.0, 0, False),
+    ("dx_neg_ax1_2x3", (2, 3), None, -1.0, 1, False),
+    ("dx_neg_ax1_3x2", (3, 2), None, -1.0, 1, False),
+)
+
+
+def _rs_zeros(dt, shape, negative=True):
+    """An array of signed zeros of dtype ``dt`` and shape ``shape``, C-contiguous.
+
+    ``negative=True`` gives -0.0, and for a complex dtype -0.0-0.0j: a plain -0.0 cast to complex would carry a
+    +0.0 imaginary part, which hides half of the start rule. ``negative=False`` gives +0.0.
+    """
+    if np.dtype(dt).kind == "c":
+        value = complex(-0.0, -0.0) if negative else complex(0.0, 0.0)
+    else:
+        value = -0.0 if negative else 0.0
+    return np.full(shape, value, dtype=dt)
+
+
+def _rs_shape_tag(shape):
+    """The layout-name spelling of a shape: ``()`` is ``0d``, ``(2, 3)`` is ``2x3``."""
+    return "x".join(str(d) for d in shape) if shape else "0d"
+
+
+def _rs_operands(dt):
+    """Every all -0.0 operand of dtype ``dt``, as ``(layout, base, view)`` triples.
+
+    Size classes: 0-d, one element, length-2 and length-9 runs, and the 2-D blocks (1, 1), (1, 3), (3, 1), (2, 3),
+    which put a length-1 axis on either side. Layouts: C everywhere, the transposed (F-contiguous) view of each
+    non-square 2-D block, and the reversed and stepped views of the 1-D runs, so the negative-stride and strided
+    reduction routes are reached as well as the contiguous ones.
+    """
+    out = []
+    for shape in ((), (1,), (2,), (9,), (1, 1), (1, 3), (3, 1), (2, 3)):
+        b = _rs_zeros(dt, shape)
+        out.append((f"c_{_rs_shape_tag(shape)}", b, b))
+    for shape in ((1, 3), (3, 1), (2, 3)):
+        b = _rs_zeros(dt, shape[::-1])
+        out.append((f"t_{_rs_shape_tag(shape)}", b, b.T))
+    for n in (2, 9):
+        b = _rs_zeros(dt, (n,))
+        out.append((f"rev_{n}", b, b[::-1]))
+    b = _rs_zeros(dt, (18,))
+    out.append(("step_9", b, b[::2]))
+    return out
+
+
+def _rs_axis_combos(ndim):
+    """``(axis, keepdims)`` pairs: the flat reduction and every axis, each with and without keepdims."""
+    return [(ax, kd) for ax in [None] + list(range(ndim)) for kd in (False, True)]
+
+
+# The one-interval trapezoid layouts: the integration axis has two samples, so the result sums ONE product.
+_RS_TRAPEZOID_ONE_INTERVAL = ("x_1_0", "dx_neg_2", "negy_dx_2", "x_1_0_ax0_2x3", "dx_neg_ax0_2x3", "dx_neg_ax1_3x2")
+
+# The einsum (subscripts, layout) cells where NumPy's default einsum (sum_of_products into a zero-filled output, so
+# every output element is +0.0 + its terms) and NumSharp's composition (NumPy's optimize=True structure: a bare
+# product, a copied element or an np.sum) disagree on the sign of a zero.
+_RS_EINSUM_CARVED = {
+    ("i->", "1"), ("ij->", "1x1"), ("ij->i", "3x1"), ("ij->j", "1x3"), ("ii->", "1x1"),
+    ("i,i->", "1_1"), ("i,i->i", "3_3"), ("i,j->ij", "2_3"), ("ij,j->i", "2x1_1"),
+    ("ij,jk->ik", "2x1_1x2"), ("ij,jk->ik", "1x1_1x1"),
+}
+
+
+def _rs_carved(op, layout, dt, params, shape):
+    """True for a cell NumSharp computes differently from NumPy: the corpus carve, pinned by [OpenBugs] tests.
+
+    Drawn from the 2026-10-04 probe of the uncarved matrix (every carved cell was checked against the probe's
+    verdicts; a few EXACT cells are carved with their rule's neighbours where the rule is simpler that way). Every
+    rule names the OpenBugsReductionTests test (NumSharp.Tests/OpenBugs.Reductions.cs) that pins it. When a path is
+    fixed, drop its rule and regenerate: its cells join the gate.
+
+    Parameters:
+        op: the corpus op key.
+        layout: the case's layout name (``c_*`` C-contiguous, ``t_*`` transposed, ``rev_*`` / ``step_*`` strided).
+        dt: the first operand's dtype name.
+        params: the case's params (``axis`` / ``keepdims`` for reductions and scans, ``reduce`` for np.evaluate,
+            ``subscripts`` for einsum).
+        shape: the first operand's (view) shape.
+
+    Returns:
+        True when the cell is carved out of the committed tier.
+    """
+    size = int(np.prod(shape)) if shape else 1
+    nd = len(shape)
+    ax = params.get("axis")
+    kd = bool(params.get("keepdims", False))
+    ext = shape[ax] if ax is not None and nd > 0 else None    # the reduced axis' length
+    one_element_flat = ax is None and nd <= 1 and size == 1   # 0-d or (1,): NumSharp's size-1 shortcut
+    strided = not layout.startswith("c_")                     # t_*, rev_*, step_*: a non-C operand
+
+    if op in ("sum", "mean", "average"):
+        # The size-1 shortcut and a length-1 axis COPY the element (NumPy: +0.0 + x). Pinned by
+        # Sum_OneElement_*, Sum_LengthOneAxis_*, Mean_OneElementOrLengthOneAxis_*; the float16 flat sum's own route
+        # by Sum_Float16Flat_*.
+        return one_element_flat or ext == 1 or (op == "sum" and ax is None and dt == "float16")
+    if op == "prod":
+        # NumPy multiplies a lone complex element by the identity 1+0j (-0-0j becomes +0-0j); NumSharp copies it.
+        # Pinned by Prod_OneComplexElement_*.
+        return dt == "complex128" and (one_element_flat or ext == 1)
+    if op in ("std", "var"):
+        # One float32 / float16 element (or 0-d) comes back float64. Pinned by
+        # VarStd_OneElement_KeepsFloat16Float32_* (group 5 of the same file).
+        return dt in ("float32", "float16") and nd <= 1 and size == 1
+    if op in ("median", "nanmedian"):
+        # NumPy's median is np.mean of the middle element(s), so it starts from +0.0; NumSharp returns the middle
+        # element (or the average of two) itself. Every cell of an all -0.0 operand differs. Pinned by
+        # Median_OfNegativeZeros_*.
+        return True
+    if op in ("nansum", "nanprod") and dt == "float16" and ax is not None and strided:
+        # float16 nansum / nanprod along an axis of a non-C layout read the wrong elements (garbage values, which can
+        # match by chance on all -0.0 data, so every such cell is carved; nanmean / nanstd / nanvar have their own
+        # float16 axis paths and read the right elements). Pinned by NanReduction_Float16_*.
+        return True
+    if op == "nansum":
+        # 0-d / one element: the size-1 shortcut clones (shape (1,), the sign of -0.0); a length-1 axis copies
+        # (float32 / float64); a complex 1-D axis reduction throws. Pinned by NanSumNanProd_OneElement_*,
+        # NanSum_LengthOneAxis_*, NanSum_Complex1D_*.
+        if nd == 0 or (nd == 1 and size == 1):
+            return not (dt == "complex128" and ax is None)
+        if nd == 1 and ax == 0:
+            return dt == "complex128"
+        return ext == 1 and dt in ("float32", "float64")
+    if op == "nanprod":
+        # A lone complex element (identity 1+0j, as prod); one float element without keepdims comes back (1,).
+        # Pinned by Prod_OneComplexElement_* and NanSumNanProd_OneElement_*.
+        if dt == "complex128":
+            return one_element_flat or ext == 1
+        return nd == 1 and size == 1 and not kd
+    if op == "nanmean":
+        # 0-d / one element: the clone (sign, shape); a 1-D axis reduction comes back (1,) / (1,1). Pinned by
+        # NanMean_OneElement_* and NanMeanStdVar_1DAxis_*.
+        return nd == 0 or (nd == 1 and (ax == 0 or size == 1))
+    if op in ("nanstd", "nanvar"):
+        # A 1-D axis reduction comes back (1,) and drops keepdims; one element drops keepdims. Pinned by
+        # NanMeanStdVar_1DAxis_*.
+        return nd == 1 and ((ax == 0 and (size > 1 or kd)) or (ax is None and size == 1 and kd))
+    if op in ("cumsum", "nancumsum"):
+        # The flat scan starts from +0.0 instead of copying element 0 (every flat cell past the one-element 1-D
+        # shortcut). Pinned by CumSum_Flat_* and NanCumSum_Flat_*.
+        return ax is None and not (nd <= 1 and size == 1)
+    if op in ("cumprod", "nancumprod"):
+        # A (1,1) operand's flat scan comes back 0-d; complex scans multiply element 0 by the identity 1+0j. Pinned
+        # by CumProd_FlatOfOneByOne_* and CumProd_Complex_*.
+        if layout == "c_1x1" and ax is None:
+            return True
+        return dt == "complex128" and ((ax is None and size >= 2) or (ax is not None and ext >= 2))
+    if op in ("dot", "inner"):
+        # A size-1 operand: NumPy's cblas_matrixproduct treats it as a scalar (scalar x scalar is the plain product,
+        # scalar x array a daxpy into a zero-filled output). Pinned by Dot_LengthOneVectors_* and
+        # Dot_SizeOneOperand_*.
+        return dt != "float16" and layout in ("1_1", "0d_2", "1x1_1x1")
+    if op == "einsum":
+        # Pinned by Einsum_SumOfOneTerm_* and Einsum_ZeroFilledAccumulator_*.
+        return (params["subscripts"], layout) in _RS_EINSUM_CARVED
+    if op == "trapezoid":
+        # One interval sums ONE product over a length-1 axis (np.sum's size-1 path). Pinned by
+        # Trapezoid_OneInterval_*.
+        return layout in _RS_TRAPEZOID_ONE_INTERVAL
+    if op == "evaluate":
+        red = params["reduce"]
+        k, rax = red["kind"], red["axis"]
+        rext = shape[rax] if rax is not None and nd > 0 else None
+        if k in ("sum", "mean", "nansum", "nanmean"):
+            # A length-1 axis of a 2-D operand: the axis stream copies the slab. Pinned by
+            # Evaluate_SumOverLengthOneAxis_*.
+            return dt != "float16" and nd == 2 and rext == 1
+        if k in ("prod", "nanprod"):
+            # A lone complex element (identity 1+0j). Pinned by Prod_OneComplexElement_*.
+            return dt == "complex128" and size == 1
+        return False
+    return False
+
+
+def gen_reduce_start(carve=True):
+    """The reduction-start tier (reduce_start.jsonl) - see the block comment above for the rule.
+
+    Sections:
+      A. reductions (sum / prod / mean / average / std / var / min / max / ptp / median / percentile / quantile and
+         the nan-aware family) over every all -0.0 operand, flat and per axis, with and without keepdims;
+      B. scans (cumsum / cumprod / nancumsum / nancumprod), flat and per axis;
+      C. the products dot / matmul / inner / vdot of an all -0.0 operand with +1 or -1;
+      D. np.trace of the 2-D operands;
+      E. np.einsum reductions, contractions and views (default optimize=False: sum_of_products);
+      F. np.trapezoid with a -0.0 product per interval (one interval, two intervals, both axes);
+      G. np.evaluate root reductions over a bare leaf.
+
+    Parameters:
+        carve: True (the committed tier) leaves out the cells _rs_carved names; False emits the whole matrix,
+            which is how the probe that drew the carve was run (and how to re-probe after a fix).
+
+    Returns:
+        The list of corpus cases. A cell NumPy rejects is skipped, like gen_reduce does.
+    """
+    cases = []
+    skipped = 0
+
+    def emit(op, params, operands, layout, dt, fn):
+        """Record one case: ``fn()`` computes NumPy's result; a NumPy error skips the cell."""
+        nonlocal skipped
+        if carve and _rs_carved(op, layout, dt, params, operands[0][1].shape):
+            return
+        try:
+            r = np.asarray(fn())
+        except Exception:
+            skipped += 1
+            return
+        tag = ",".join(f"{k}={params[k]}" for k in sorted(params) if k not in ("subscripts", "expr", "reduce"))
+        if "reduce" in params:
+            red = params["reduce"]
+            tag = f"{red['kind']}[{red['axis']},{int(red['keepdims'])}]"
+        if "subscripts" in params:
+            tag = params["subscripts"]
+        cid = f"{op}/{layout}/{dt}/{tag}/{len(cases)}"
+        cases.append(_case(op, params, [describe(b, v) for (b, v) in operands], _arr_expected(r), layout,
+                           "negzero", cid=cid))
+
+    for dt in _RS_DTYPES:
+        operands = _rs_operands(dt)
+
+        # ---- A. reductions --------------------------------------------------------------------
+        for op, (f, extra) in _RS_REDUCE.items():
+            for layout, b, v in operands:
+                for ax, kd in _rs_axis_combos(v.ndim):
+                    params = {"axis": ax, "keepdims": kd, **extra}
+                    emit(op, params, [(b, v)], layout, dt, lambda f=f, v=v, ax=ax, kd=kd: f(v, ax, kd))
+
+        # ---- B. scans ---------------------------------------------------------------------------
+        for op, f in _RS_SCAN.items():
+            for layout, b, v in operands:
+                for ax in [None] + list(range(v.ndim)):
+                    emit(op, {"axis": ax}, [(b, v)], layout, dt, lambda f=f, v=v, ax=ax: f(v, axis=ax))
+
+        # ---- C. products ------------------------------------------------------------------------
+        for layout, sa, sb, sign in _RS_PRODUCT_PAIRS:
+            a = _rs_zeros(dt, sa)
+            bb = (np.ones(sb, dtype=dt) * sign).astype(dt)
+            for op, f in (("dot", np.dot), ("matmul", np.matmul), ("inner", np.inner), ("vdot", np.vdot)):
+                if op == "matmul" and (a.ndim == 0 or bb.ndim == 0):
+                    continue   # matmul refuses a 0-d operand in both libraries
+                emit(op, {}, [(a, a), (bb, bb)], layout, dt, lambda f=f, a=a, bb=bb: f(a, bb))
+
+        # ---- D. trace ---------------------------------------------------------------------------
+        trace_ops = [(layout, b, v) for (layout, b, v) in operands if v.ndim == 2]
+        sq = _rs_zeros(dt, (2, 2))
+        trace_ops.append(("c_2x2", sq, sq))
+        for layout, b, v in trace_ops:
+            emit("trace", {}, [(b, v)], layout, dt, lambda v=v: np.trace(v))
+
+        # ---- E. einsum --------------------------------------------------------------------------
+        for subscripts, shapes in _RS_EINSUM:
+            ops = [_rs_zeros(dt, shapes[0])] + [np.ones(s, dtype=dt) for s in shapes[1:]]
+            layout = "_".join(_rs_shape_tag(s) for s in shapes)
+            emit("einsum", {"subscripts": subscripts}, [(o, o) for o in ops], layout, dt,
+                 lambda subscripts=subscripts, ops=ops: np.einsum(subscripts, *ops))
+
+        # ---- F. trapezoid -----------------------------------------------------------------------
+        for layout, sy, x, dx, ax, negy in _RS_TRAPEZOID:
+            y = _rs_zeros(dt, sy, negative=negy)
+            params = {"axis": ax} if x is not None else {"dx": dx, "axis": ax}
+            if x is None:
+                emit("trapezoid", params, [(y, y)], layout, dt,
+                     lambda y=y, dx=dx, ax=ax: np.trapezoid(y, dx=dx, axis=ax))
+            else:
+                xs = np.array(x, dtype=np.float64)
+                emit("trapezoid", params, [(y, y), (xs, xs)], layout, dt,
+                     lambda y=y, xs=xs, ax=ax: np.trapezoid(y, x=xs, axis=ax))
+
+        # ---- G. np.evaluate root reductions -------------------------------------------------------
+        for kind in _RS_EVAL_KINDS:
+            if dt == "float16" and kind in _RS_EVAL_NO_HALF:
+                continue
+            for layout, b, v in operands:
+                for ax, kd in _rs_axis_combos(v.ndim):
+                    red = {"kind": kind, "axis": ax, "keepdims": kd}
+                    if kind in ("var", "std"):
+                        red["ddof"] = 0
+                        fn = (lambda kind=kind, v=v, ax=ax, kd=kd: _EV_REDUCE[kind](v, ax, kd, 0))
+                    else:
+                        fn = (lambda kind=kind, v=v, ax=ax, kd=kd: _EV_REDUCE[kind](v, ax, kd))
+                    emit("evaluate", {"expr": "in0", "reduce": red}, [(b, v)], layout, dt, fn)
+
+    if skipped:
+        print(f"  (skipped {skipped} cells where NumPy raised)")
+    return cases
+
+
 def char_tier(mode):
     """Relabelled Char cases to append into tier-file `mode` (woven coverage)."""
     L = list(LAYOUTS.keys())
@@ -15642,6 +16024,10 @@ def main():
         # float add / multiply NaN-operand order (win-amd64), NaN payloads compared raw - its own
         # file, so regenerating it renumbers nothing else.
         write_jsonl(os.path.join(corpus_dir, "nan_order.jsonl"), gen_nan_order())
+    elif mode == "reduce_start":
+        # How a reduction starts (identity vs first element), seen through the sign of a zero result. Its own
+        # file: the cells NumSharp gets wrong are carved (_rs_carved) and pinned by OpenBugs.Reductions.cs.
+        write_jsonl(os.path.join(corpus_dir, "reduce_start.jsonl"), gen_reduce_start())
     elif mode == "numpy_f32":
         cases = gen_numpy_f32_kernels()                                 # bit-exact float32 kernel tier
         write_jsonl(os.path.join(corpus_dir, "numpy_f32_kernels.jsonl"), cases)
@@ -15733,7 +16119,7 @@ def main():
         write_jsonl(os.path.join(corpus_dir, "polyroots_parity.jsonl"), host)
         write_jsonl(os.path.join(corpus_dir, "polyroots_parity.host.jsonl"), [blas_identity()])
     else:
-        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | sinc | i0 | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | nan_order | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows | evaluate | real_if_close | instance | emath | polyeval | polyseries | polycalc | polyvander | polyalgebra | polyroots)")
+        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | sinc | i0 | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | nan_order | reduce_start | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows | evaluate | real_if_close | instance | emath | polyeval | polyseries | polycalc | polyvander | polyalgebra | polyroots)")
         sys.exit(2)
 
 

@@ -78,6 +78,20 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void NaNOperandOrder() => RunCorpus("nan_order.jsonl");
 
+        // How a reduction STARTS, seen through the sign of a zero result: NumPy's add.reduce starts from the
+        // +0.0 identity (a sum of only -0.0 values is +0.0, one element included), add.accumulate copies the
+        // first element, multiply's identity 1+0j shows on a lone complex element, a median is np.mean of its
+        // middle elements, a size-1 np.dot operand is a scalar, and the default einsum accumulates into a
+        // zero-filled output. The ordinary pools never make such a result (their size-1 layouts hold NaN), so no
+        // other tier reaches the start rule. Every operand is all -0.0 (or zeros under a negative spacing) over
+        // the size-1, length-1-axis and longer shapes in C / transposed / reversed / stepped layouts. The cells
+        // NumSharp gets wrong are the corpus carve (gen_oracle._rs_carved, each rule naming its pin) and are
+        // [OpenBugs]-pinned in NumSharp.Tests/OpenBugs.Reductions.cs; the 7,942 kept cells must stay bit-exact.
+        // The comparison is the ordinary one: BitDiff tokenizes NaN, never a signed zero.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void ReductionStart() => RunCorpus("reduce_start.jsonl");
+
         [TestMethod]
         [TestCategory("FuzzMatrix")]
         public void Reduce() => RunCorpus("reduce.jsonl");
@@ -909,6 +923,7 @@ namespace NumSharp.Tests.Fuzz
             ["nanscan.jsonl"] = 525,   // nancumsum all 13 dtypes; nancumprod carves complex128 (host-FMA multiply)
             ["numpy_f32_kernels.jsonl"] = 140,
             ["numpy_f64_kernels.jsonl"] = 24,
+            ["reduce_start.jsonl"] = 7500,   // reduction start rules through the sign of a zero result (2026-10-04): 7,942 at delivery, the uncarved 9,448-cell probe minus the 1,506 carved cells pinned in NumSharp.Tests/OpenBugs.Reductions.cs
             ["nan_order.jsonl"] = 2750,   // float add / multiply NaN-operand order (win-amd64), NaN payloads raw: 2,678 at delivery, + 118 the 2026-10-03 gap probe validated as matching (section G: float16 scans, complex128 subtract, buffered N-D / cast / where= / evaluate / dtype= paths) — 2,796; the paths that differ are [OpenBugs] in NumSharp.Tests/OpenBugs.NaNOperandOrder.cs
             ["out_where.jsonl"] = 6300,   // §B2 out_scan/out_round/out_clip/out_nanarg + the f16/uint8 lanes (dtype-spread gate)
             ["params.jsonl"] = 1190,      // +288 §C1: multi-axis median/average/nanmedian (tuple-axis int[] overloads)

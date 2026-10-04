@@ -162,9 +162,11 @@ namespace NumSharp.Tests.Math
         [TestMethod]
         public void Trapezoid_0D_Throws()
         {
-            // NumPy leaks an IndexError; NumSharp raises the clearer axis-out-of-bounds error.
+            // NumPy leaks "IndexError: list assignment index out of range" here; NumSharp still raises an axis
+            // error. Only "it throws" is asserted, which holds before and after the fix: the exact type and message
+            // are the open parity pin OpenBugsReductionTests.Trapezoid_AxisOutsideY_RaisesNumPysIndexError.
             Action act = () => np.trapezoid(np.array(5.0));
-            act.Should().Throw<ArgumentOutOfRangeException>();
+            act.Should().Throw<Exception>();
         }
 
         // ---------------------- layout-order (KEEPORDER) parity ----------------------
@@ -444,9 +446,12 @@ namespace NumSharp.Tests.Math
             Action outsideX = () => np.trapezoid(np.ones(new Shape(2, 3)), np.ones(new Shape(2, 2, 3)), axis: 5);
             outsideX.Should().Throw<ArgumentOutOfRangeException>().WithMessage("axis 5 is out of bounds for array of dimension 3*");
 
-            // An axis inside x but outside y fails at y's slicing (NumPy: IndexError).
+            // An axis inside x but outside y fails at y's slicing: NumPy raises "IndexError: list assignment index
+            // out of range" there, AFTER x's diff succeeded. Only "it throws" is asserted here; NumSharp still raises
+            // an axis error, and NumPy's exact type and message are the open parity pin
+            // OpenBugsReductionTests.Trapezoid_AxisOutsideY_RaisesNumPysIndexError.
             Action outsideY = () => np.trapezoid(np.ones(new Shape(2, 3)), np.ones(new Shape(2, 2, 3)), axis: 2);
-            outsideY.Should().Throw<ArgumentOutOfRangeException>().WithMessage("axis 2 is out of bounds for array of dimension 2*");
+            outsideY.Should().Throw<Exception>();
 
             // A spacing that does not broadcast: NumPy's multiply error, verbatim.
             Action mismatch = () => np.trapezoid(np.ones(new Shape(2, 3)), np.ones(new Shape(2, 5)), axis: 1);

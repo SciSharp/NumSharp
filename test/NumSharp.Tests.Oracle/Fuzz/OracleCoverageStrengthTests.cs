@@ -152,8 +152,9 @@ namespace NumSharp.Tests.Fuzz
             ["std_ddof"] = "ddof=1 variant; std itself carries the full axis",
             ["var_ddof"] = "ddof=1 variant; var itself carries the full axis",
 
-            // Deliberately narrow by op semantics.
-            ["einsum"] = "small-EXACT contractions (int64/f64/c128): wider float lanes route through matmul and lose byte-parity",
+            // Deliberately narrow by op semantics. ("einsum" retired 2026-10-04: einsum.jsonl still keeps its random
+            // contractions small-EXACT in int64/f64/c128, but reduce_start.jsonl's all-(-0.0) contractions are exact
+            // in every float width and add float32/float16.)
             ["einsum_path"] = "contraction PLANNER: shape-derived info string, operand dtype irrelevant",
             ["interp"] = "1-D linear interpolation: int64->f64 promotion, f64, and the complex fp lane — NumPy's own loop set",
             ["meshgrid"] = "dtype-PRESERVING coordinate construction: int32/f64/c128 span the width classes",
