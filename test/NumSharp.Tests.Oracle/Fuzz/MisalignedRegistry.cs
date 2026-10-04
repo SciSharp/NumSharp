@@ -691,6 +691,32 @@ namespace NumSharp.Tests.Fuzz
             // --- Reductions (single-operand, but classified before the unary rules) ---
             if (ReduceOps.Contains(c.Op))
             {
+                // (V1) var/std at a degenerate size skip NumPy's arithmetic [known bug, pinned by
+                //      OpenBugsReductionTests.VarStd_* in NumSharp.Tests]. ReduceVar/ReduceStd answer one element
+                //      per output (a 0-d or one-element input, or a reduced axis of extent 1) with zeros WITHOUT
+                //      reading it, as float64, and an empty input as float64 too. NumPy's _var computes
+                //      sum((x - mean)^2) / max(n - ddof, 0) in the input's float dtype, so a NaN or ±inf element
+                //      (or ddof >= 1) gives NaN and a float16/float32 input keeps its dtype. Classified FIRST: the
+                //      generic branches below used to take these cases under names that describe other bugs
+                //      ("summation precision", the min/max "axis SIMD skips NaN" bug, the generic reduction-dtype
+                //      bug). Scoped to var/std (np.*, ndarray.*, ma.*, which all reach the same engine) × one
+                //      element per output (or an empty operand, Dtype only) × (Value: every diff is a NumPy NaN
+                //      against NumSharp's +0.0, the shortcut's only answer | Dtype: NumPy's result is
+                //      float16/float32). Any other value divergence (a nonzero number where NumPy has NaN, a wrong
+                //      finite value, a NaN where NumPy has a number) falls through to the branches below.
+                if ((c.Op == "var" || c.Op == "std") && c.Operands.Length == 1)
+                {
+                    // A diff token is the element's little-endian bytes in hex, so +0.0 is all '0' at any width.
+                    if (kind == DivergenceKind.Value && diffs.Count > 0 && OneElementPerOutput(c)
+                        && diffs.All(d => d.Expected == "NaN" && d.Actual.Length > 0 && d.Actual.All(ch => ch == '0')))
+                        return "var/std of one element per output skips the arithmetic: 0 instead of NaN for a "
+                             + "NaN/inf element or ddof >= 1 [known bug: OpenBugsReductionTests.VarStd_*]";
+                    if (kind == DivergenceKind.Dtype && (tc == NPTypeCode.Half || tc == NPTypeCode.Single)
+                        && (OneElementPerOutput(c) || ElementCount(c.Operands[0]) == 0))
+                        return "var/std of one element per output or of an empty input is float64 where NumPy keeps "
+                             + "float16/float32 [known bug: OpenBugsReductionTests.VarStd_*]";
+                }
+
                 // Reduction result dtype differs (NEP50 accumulator width / complex->real for std/var).
                 // sum/prod now apply NEP50 accumulator widening on EVERY size — including the degenerate
                 // 0-d scalar / single-element 1-D flat path (fixed 2026-09-13: HandleScalarReduction was
@@ -1178,6 +1204,41 @@ namespace NumSharp.Tests.Fuzz
         /// </summary>
         private static long TruthSlack(long dNPY)
             => dNPY >= (long.MaxValue - 8) / 4 ? long.MaxValue : Math.Max(4 * dNPY, dNPY + 8);
+
+        /// <summary>The element count of a corpus operand: the product of its dimensions (1 for a 0-d operand).</summary>
+        /// <param name="o">The operand descriptor.</param>
+        /// <returns>The number of logical elements; 0 when any dimension is 0.</returns>
+        private static long ElementCount(FuzzCorpus.Operand o)
+        {
+            long n = 1;
+            foreach (var d in o.Shape)
+                n *= d;
+            return n;
+        }
+
+        /// <summary>
+        ///     True when every output of a single-operand reduction case reduces exactly ONE element: the operand
+        ///     holds one element (a 0-d or one-element array, reduced flat or along an axis), or the reduced axis
+        ///     (<c>params.axis</c>, negative counted from the end) has extent 1. That is the size at which
+        ///     <c>ReduceVar</c> / <c>ReduceStd</c> answer without reading the data — the (V1) known bug.
+        /// </summary>
+        /// <param name="c">The case; its first operand is the reduced array.</param>
+        /// <returns>True for one element per output; false for an empty operand, a flat reduction of several
+        /// elements, an axis longer than 1, or an axis the case does not state as a plain integer.</returns>
+        private static bool OneElementPerOutput(FuzzCorpus.Case c)
+        {
+            long size = ElementCount(c.Operands[0]);
+            if (size == 1)
+                return true;
+            if (size == 0 || c.Params == null || !c.Params.TryGetValue("axis", out var ax)
+                || ax.ValueKind != System.Text.Json.JsonValueKind.Number)
+                return false;
+            var shape = c.Operands[0].Shape;
+            int axis = ax.GetInt32();
+            if (axis < 0)
+                axis += shape.Length;
+            return axis >= 0 && axis < shape.Length && shape[axis] == 1;
+        }
 
         /// <summary>
         ///     Generator.power's documented in-band expm1 bound, <c>ceil(2 / a) + 3</c> ULP, for the SMALLEST exponent
