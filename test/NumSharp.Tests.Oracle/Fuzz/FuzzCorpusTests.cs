@@ -96,6 +96,21 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Reduce() => RunCorpus("reduce.jsonl");
 
+        // np.sum's identity-seeded add reduction (gen_sum_identity): NumPy assigns the identity +0.0 to the
+        // result and only then adds every element, so a sum of only negative zeros is +0.0 — on every route a
+        // reduction can take (one element, a length-1 axis, contiguous / strided / reversed / F / broadcast,
+        // every axis, keepdims) and for the reductions built on it (mean, nansum, nanmean, average,
+        // ndarray.sum). Section "d" adds np.sum's dtype= loop for every pair of the 13 NumPy dtypes. Those
+        // values are exact and order-independent. Section "s" is the opposite: order-SENSITIVE float sums and
+        // means over every layout NpyIter schedules differently (one run, per-run calls, buffered fills,
+        // np.setbufsize 16 / 32), which only NumPy's own call schedule reproduces (NumPyAddReduce). The whole
+        // tier is held to ZERO excuses (MisalignedRegistry returns null for its valueclass); reduce.jsonl's
+        // pools rarely reach a signed zero, and its summation-order excuse would have swallowed the -0.0 the
+        // engine's copy shortcuts returned.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void SumIdentity() => RunCorpus("sum_identity.jsonl");
+
         // np.evaluate / NDExpr: fused trees over the pairwise + single layouts, every dtype, weak /
         // strong literals, comparisons / where / min-max / logical nodes, the unary catalog, root
         // reductions (flat + axis + keepdims) and out= (returned view + whole out base). NumPy has
@@ -923,7 +938,8 @@ namespace NumSharp.Tests.Fuzz
             ["nanscan.jsonl"] = 525,   // nancumsum all 13 dtypes; nancumprod carves complex128 (host-FMA multiply)
             ["numpy_f32_kernels.jsonl"] = 140,
             ["numpy_f64_kernels.jsonl"] = 24,
-            ["reduce_start.jsonl"] = 7500,   // reduction start rules through the sign of a zero result (2026-10-04): 7,942 at delivery, the uncarved 9,448-cell probe minus the 1,506 carved cells pinned in NumSharp.Tests/OpenBugs.Reductions.cs
+            ["reduce_start.jsonl"] = 8300,   // reduction start rules through the sign of a zero result (2026-10-04): 7,942 at delivery (the uncarved 9,448-cell probe minus 1,506 carved cells); 8,586 once the identity-seeded add reduction fixed the sum / mean / nan-family / trapezoid / evaluate rules (862 carved cells left, pinned in NumSharp.Tests/OpenBugs.Reductions.cs)
+            ["sum_identity.jsonl"] = 22500,  // np.sum's identity add + dtype= loops + the reductions built on it (2026-10-04): 23,121 at delivery, incl. section "s" (704 flat float sum / mean schedule cases: layouts x np.setbufsize 16 / 32)
             ["nan_order.jsonl"] = 2750,   // float add / multiply NaN-operand order (win-amd64), NaN payloads raw: 2,678 at delivery, + 118 the 2026-10-03 gap probe validated as matching (section G: float16 scans, complex128 subtract, buffered N-D / cast / where= / evaluate / dtype= paths) — 2,796; the paths that differ are [OpenBugs] in NumSharp.Tests/OpenBugs.NaNOperandOrder.cs
             ["out_where.jsonl"] = 6300,   // §B2 out_scan/out_round/out_clip/out_nanarg + the f16/uint8 lanes (dtype-spread gate)
             ["params.jsonl"] = 1190,      // +288 §C1: multi-axis median/average/nanmedian (tuple-axis int[] overloads)

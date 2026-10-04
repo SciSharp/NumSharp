@@ -654,6 +654,13 @@ namespace NumSharp.Backends.Kernels
             public static readonly MethodInfo ConvertsUInt64ToSingle = ConvertsOverload(nameof(Converts.ToSingle), typeof(ulong));
             public static readonly MethodInfo ConvertsUInt64ToDouble = ConvertsOverload(nameof(Converts.ToDouble), typeof(ulong));
 
+            // complex128 -> float64 as NumPy's unsafe cast does it (the real part; NumPy only warns ComplexWarning). A
+            // STATIC method that takes the struct BY VALUE, which is exactly what the conversion emitter has on the IL
+            // stack — the instance getter Complex.Real needs a managed reference as 'this' (ComplexGetReal above is
+            // called after an ldloca), and calling it on the value made the JIT read the real part's bits as an
+            // address: every emitted complex -> real / decimal conversion crashed the process (0x80131506).
+            public static readonly MethodInfo ConvertsComplexToDouble = ConvertsOverload(nameof(Converts.ToDouble), typeof(System.Numerics.Complex));
+
             // The PACKED float32 <-> float64 conversions for a scalar value (see EmitConvertTo's Single/Double arms):
             // cvtps2pd / cvtpd2ps write their whole destination register, where the scalar cvtss2sd / cvtsd2ss that
             // conv.r8 / conv.r4 compile to MERGE into it — a false dependency on the register's previous value that
@@ -1318,10 +1325,9 @@ namespace NumSharp.Backends.Kernels
                 }
                 if (from == NPTypeCode.Complex)
                 {
-                    // Complex -> Real (double) -> decimal (matches NumPy ComplexWarning truncation)
-                    var realGetter = typeof(System.Numerics.Complex).GetProperty("Real")?.GetGetMethod()
-                        ?? throw new InvalidOperationException("Complex.Real not found");
-                    il.EmitCall(OpCodes.Call, realGetter, null);
+                    // Complex -> Real (double) -> decimal (matches NumPy ComplexWarning truncation). The struct is on the
+                    // stack BY VALUE, so the real part comes from the static by-value helper, not the instance getter.
+                    il.EmitCall(OpCodes.Call, CachedMethods.ConvertsComplexToDouble, null);
                     il.EmitCall(OpCodes.Call, CachedMethods.DecimalExplicitFromDouble, null);
                     return;
                 }
@@ -1437,10 +1443,9 @@ namespace NumSharp.Backends.Kernels
             // Complex -> other: get Real part as double, then convert
             if (from == NPTypeCode.Complex)
             {
-                // Complex.Real property getter
-                var realGetter = typeof(System.Numerics.Complex).GetProperty("Real")?.GetGetMethod()
-                    ?? throw new InvalidOperationException("Complex.Real not found");
-                il.EmitCall(OpCodes.Call, realGetter, null);
+                // The struct is on the stack BY VALUE: the static by-value helper reads its real part (the instance
+                // getter Complex.Real would need a managed reference — see CachedMethods.ConvertsComplexToDouble).
+                il.EmitCall(OpCodes.Call, CachedMethods.ConvertsComplexToDouble, null);
 
                 if (to == NPTypeCode.Double)
                     return;  // Already double

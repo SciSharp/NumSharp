@@ -137,6 +137,11 @@ namespace NumSharp.Backends
             // provided out needs the full iterator (ufunc_object.c:2213).
             if (@out is not null || where is not null)
             {
+                // NumPy keeps the trivial loop for a provided out when every operand is trivially iterable
+                // (try_trivial_single_output_loop); only a mask, a cast or a layout / overlap the loop cannot take
+                // needs the iterator.
+                if (where is null && TryTrivialBinaryOpInto(lhs, rhs, op, lhsType, rhsType, resultType, @out))
+                    return @out;
                 return ExecuteBinaryUfuncInto(lhs, rhs, op, lhsType, rhsType, resultType, @out, where);
             }
 
@@ -688,6 +693,165 @@ namespace NumSharp.Backends
             // kernel reads the scalar side once and walks the array side linearly.
             ExecuteKernel(kernel, lhs, rhs, result, lhs.Shape, rhs.Shape);
             return result;
+        }
+
+        /// <summary>
+        ///     The trivial loop for a binary ufunc WITH a provided output: NumPy's ufunc runs
+        ///     <c>try_trivial_single_output_loop</c> for <c>out=</c> too whenever every operand is trivially iterable,
+        ///     and so does this — the same whole-array DirectIL kernel the fresh-result trivial loop
+        ///     (<see cref="TryTrivialContiguousBinaryOp"/>) calls, writing straight into <paramref name="out"/>, with no
+        ///     iterator. The iterator route stays for everything else (a cast, a broadcast array, a strided or mixed
+        ///     layout, an overlap to resolve).
+        /// </summary>
+        /// <param name="lhs">The first input.</param>
+        /// <param name="rhs">The second input.</param>
+        /// <param name="op">The binary op, after the bool remaps of <see cref="ExecuteBinaryOp"/>.</param>
+        /// <param name="lhsType">The first input's dtype.</param>
+        /// <param name="rhsType">The second input's dtype.</param>
+        /// <param name="resultType">The loop dtype.</param>
+        /// <param name="out">The provided output; written in place when the call is trivial.</param>
+        /// <returns>True when the result was written into <paramref name="out"/>; false (nothing written, nothing
+        /// raised) when the call is not trivially iterable or the kernel is not available, so the caller takes the
+        /// iterator route — which also raises every error (a read-only out, a bad cast, a shape mismatch).</returns>
+        /// <remarks>
+        ///     <para>
+        ///     Trivial means: one dtype for both inputs and the output (no cast); a writeable, non-broadcast output,
+        ///     C- or F-contiguous; every array input of the output's exact dimensions, contiguous in the output's
+        ///     order; at most one size-1 input, of rank no higher than the output's (it broadcasts, as a stride-0
+        ///     scalar, without growing the shape — NumPy's 0-d operands); and no memory overlap that NumPy's
+        ///     <c>COPY_IF_OVERLAP</c> would resolve: an array input is either disjoint from the output or the output
+        ///     itself (same first element and, with the same dimensions and order, the same strides — the in-place
+        ///     <c>np.add(x, 1, out=x)</c>), and a size-1 input is disjoint (it is read once, before the loop overwrites
+        ///     anything). The overlaps NumPy's <c>PyArray_EQUIVALENTLY_ITERABLE_OVERLAP_OK</c> also accepts (an input
+        ///     reading ahead of the output) go to the iterator, whose copy gives the same values.
+        ///     </para>
+        ///     <para>
+        ///     Bit-identical to the iterator route: both run the same scalar/vector op bodies, and a float add /
+        ///     multiply with a NaN broadcast operand applies NumPy's AVX2 scalar-broadcast region rule over the one
+        ///     inner-loop call NumPy's trivial loop makes (<see cref="NumPyBroadcastNaNRule"/> computes the same split
+        ///     for the iterator). What it saves is the iterator's construction — and, for float16, the per-element
+        ///     scalar body: the iterator route has no float16 vector body (there is no <c>Vector256&lt;Half&gt;</c>
+        ///     arithmetic), while the DirectIL kernels serve float16 add / subtract / multiply / divide with the SIMD
+        ///     widen-compute-narrow kernels (<c>DirectILKernelGenerator.TryGetHalfArithKernel</c>): 3.9 → ~0.5 ns per
+        ///     element for <c>np.add(0-d, x, out=o)</c> over 1M float16 elements.
+        ///     </para>
+        /// </remarks>
+        private unsafe bool TryTrivialBinaryOpInto(
+            NDArray lhs, NDArray rhs, BinaryOp op,
+            NPTypeCode lhsType, NPTypeCode rhsType, NPTypeCode resultType, NDArray @out)
+        {
+            if (DisableTrivialBinaryOut)
+                return false;
+
+            if (lhsType != rhsType || lhsType != resultType || @out.GetTypeCode != resultType)
+                return false;
+
+            // The shifts have their own kernels (NumPy's overflow rule); the DirectIL binary kernels are not theirs.
+            if (op == BinaryOp.LeftShift || op == BinaryOp.RightShift)
+                return false;
+
+            var os = @out.Shape;
+            // A read-only or broadcast output, or an empty one, is the iterator route's to raise / return.
+            if (!os.IsWriteable || os.IsBroadcasted || os.size == 0)
+                return false;
+            bool outC = os.IsContiguous;
+            bool outF = !outC && os.IsFContiguous;
+            if (!outC && !outF)
+                return false;
+
+            var ls = lhs.Shape;
+            var rs = rhs.Shape;
+            bool lhsScalar = ls.size == 1 && ls.NDim <= os.NDim;
+            bool rhsScalar = rs.size == 1 && rs.NDim <= os.NDim;
+            bool lhsArray = !lhsScalar && IsTrivialArrayOperand(ls, os, outC);
+            bool rhsArray = !rhsScalar && IsTrivialArrayOperand(rs, os, outC);
+
+            ExecutionPath path;
+            if (lhsArray && rhsArray)
+                path = ExecutionPath.SimdFull;
+            else if (lhsScalar && rhsArray)
+                path = ExecutionPath.SimdScalarLeft;
+            else if (lhsArray && rhsScalar)
+                path = ExecutionPath.SimdScalarRight;
+            else
+                return false;   // two size-1 inputs filling a larger out, a broadcast array, a strided input: iterator
+
+            // Overlap: an array input must be disjoint from out or be out itself; a size-1 input must be disjoint.
+            if (!TrivialOverlapOk(lhs, @out, lhsArray) || !TrivialOverlapOk(rhs, @out, rhsArray))
+                return false;
+
+            MixedTypeKernel kernel;
+            try
+            {
+                kernel = DirectILKernelGenerator.GetMixedTypeKernel(
+                    new MixedTypeKernelKey(resultType, resultType, resultType, op, path));
+            }
+            catch (NotSupportedException)
+            {
+                return false;   // no DirectIL kernel for this (op, dtype): the iterator route handles / raises it
+            }
+            if (kernel == null)
+                return false;
+
+            int itemSize = resultType.SizeOf();
+            byte* lhsAddr = (byte*)lhs.Address + ls.offset * itemSize;
+            byte* rhsAddr = (byte*)rhs.Address + rs.offset * itemSize;
+            byte* outAddr = (byte*)@out.Address + os.offset * itemSize;
+            fixed (long* lhsStrides = ls.strides)
+            fixed (long* rhsStrides = rs.strides)
+            fixed (long* dims = os.dimensions)
+            {
+                kernel(lhsAddr, rhsAddr, outAddr, lhsStrides, rhsStrides, dims, os.NDim, os.size);
+            }
+            TrivialBinaryOutRuns++;
+            return true;
+        }
+
+        /// <summary>
+        ///     Test hook: when true on the calling thread, a binary ufunc with <c>out=</c> never takes
+        ///     <see cref="TryTrivialBinaryOpInto"/> and always runs the iterator route — so a test can compute the same
+        ///     call through both routes and compare their bytes. Thread-static: parallel tests do not see each other's
+        ///     setting. Production code never sets it.
+        /// </summary>
+        [ThreadStatic] internal static bool DisableTrivialBinaryOut;
+
+        /// <summary>
+        ///     Test hook: the number of binary <c>out=</c> calls <see cref="TryTrivialBinaryOpInto"/> served on the
+        ///     calling thread (it only ever increases; a test reads it before and after a call to learn which route ran).
+        /// </summary>
+        [ThreadStatic] internal static int TrivialBinaryOutRuns;
+
+        /// <summary>
+        ///     Whether an input can be walked element for element against a contiguous output: the output's exact
+        ///     dimensions, no broadcast axis, and contiguous in the output's order (C, or F).
+        /// </summary>
+        /// <param name="s">The input's shape.</param>
+        /// <param name="outShape">The output's shape (C- or F-contiguous).</param>
+        /// <param name="outC">True when the output is C-contiguous, false when it is strictly F-contiguous.</param>
+        /// <returns>True when buffer element k of the input is the logical element of the output's buffer element k.</returns>
+        private static bool IsTrivialArrayOperand(in Shape s, in Shape outShape, bool outC)
+            => !s.IsBroadcasted && SameDims(s, outShape) && (outC ? s.IsContiguous : s.IsFContiguous);
+
+        /// <summary>
+        ///     The overlap half of NumPy's trivial-loop test, restricted to the two cases a single forward kernel pass
+        ///     is safe for: the input and the output share no memory, or (an array input only) the input IS the
+        ///     output — the same first element, which with the same dimensions and contiguity means the same strides.
+        /// </summary>
+        /// <param name="input">The input operand.</param>
+        /// <param name="out">The output operand.</param>
+        /// <param name="isArray">True for an array input walked alongside the output, false for a size-1 input read
+        /// once before the loop.</param>
+        /// <returns>True when the kernel may run on the operands as they are.</returns>
+        private static unsafe bool TrivialOverlapOk(NDArray input, NDArray @out, bool isArray)
+        {
+            // Compare first ELEMENTS, not (Address, offset) pairs: a contiguous slice re-seats Storage.Address with
+            // offset 0 while another view of the same element may keep the base address and a non-zero offset.
+            if (isArray
+                && (byte*)input.Address + input.Shape.offset * input.dtypesize
+                   == (byte*)@out.Address + @out.Shape.offset * @out.dtypesize)
+                return true;
+            // Bounds first, then NumPy's bounded solver (max_work 1, as PyArray_EQUIVALENTLY_ITERABLE_OVERLAP_OK asks).
+            return NDMemOverlap.SolveMayShareMemory(input, @out, maxWork: 1) == MemOverlap.No;
         }
 
         /// <summary>

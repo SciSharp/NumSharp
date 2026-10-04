@@ -247,10 +247,19 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Emit the recursive pairwise fold: <c>T fold(void* a, long n, long stride)</c>
         /// (stride in ELEMENTS). 1:1 with NumPy's pairwise_sum — n&lt;8 naive (seed -0),
-        /// n≤128 the eight-accumulator unrolled block (SIMD when stride==1, scalar
-        /// 8-accumulator otherwise) then the exact tree-combine, n&gt;128 split
-        /// (kept a multiple of 8) and self-recurse. Bit-identical to np.add.reduce.
+        /// n≤128 the eight-accumulator unrolled block then the exact tree-combine, n&gt;128
+        /// split (kept a multiple of 8) and self-recurse. Bit-identical to np.add.reduce.
+        /// A contiguous run (stride 1) — and on AVX2 hosts a reversed (stride -1) or
+        /// every-other-element (stride 2) run — goes to its own SIMD fold
+        /// (ILKernelGenerator.Reduction.Pairwise.Runs.cs) at entry; every other stride keeps
+        /// the scalar eight-accumulator leaf here.
         /// </summary>
+        /// <param name="tc">Double or Single.</param>
+        /// <param name="clrType">The element CLR type.</param>
+        /// <param name="elemSize">The element size in bytes.</param>
+        /// <param name="simdBits">The vector width of the contiguous run fold.</param>
+        /// <param name="laneCount">Elements per vector at <paramref name="simdBits"/> (divides 8).</param>
+        /// <returns>The emitted fold.</returns>
         private static DynamicMethod EmitPairwiseFold(NPTypeCode tc, Type clrType, int elemSize, int simdBits, int laneCount)
         {
             Type pV = typeof(void).MakePointerType();
@@ -258,19 +267,24 @@ namespace NumSharp.Backends.Kernels
                 typeof(ILKernelGenerator), skipVisibility: true);
             var il = dm.GetILGenerator();
 
-            int numAccVecs = 8 / laneCount;
-            Type vecType = VectorMethodCache.V(simdBits, clrType);
-            MethodInfo mLoad = VectorMethodCache.LoadX86(simdBits, clrType) ?? VectorMethodCache.Load(simdBits, clrType);
-            MethodInfo mAdd = VectorMethodCache.BinaryX86(simdBits, "Add", clrType) ?? VectorMethodCache.Generic(simdBits, "Add", clrType, paramCount: 2);
-            MethodInfo mGet = VectorMethodCache.GetElement(simdBits, clrType);
             OpCode ldT = LdindFloat(elemSize);
+
+            // The run kinds, emitted (and rooted in _pwRunFolds) before this method so its call sites bind to them. Their
+            // bits equal this method's generic path for the same stride: only the loads differ.
+            var runFolds = new System.Collections.Generic.List<(long Stride, DynamicMethod Fold)>
+            {
+                (1L, GetPairwiseRunFold(tc, PairwiseRunKind.Contiguous, clrType, elemSize, simdBits, laneCount)),
+            };
+            if (PairwiseRunKindsSupported)
+            {
+                runFolds.Add((-1L, GetPairwiseRunFold(tc, PairwiseRunKind.Reversed, clrType, elemSize, simdBits, laneCount)));
+                runFolds.Add((2L, GetPairwiseRunFold(tc, PairwiseRunKind.Stride2, clrType, elemSize, simdBits, laneCount)));
+            }
 
             var locI = il.DeclareLocal(typeof(long));
             var locRes = il.DeclareLocal(clrType);
             var locLim = il.DeclareLocal(typeof(long));
             var locN2 = il.DeclareLocal(typeof(long));
-            var acc = new LocalBuilder[numAccVecs];
-            for (int v = 0; v < numAccVecs; v++) acc[v] = il.DeclareLocal(vecType);
             // up to 8 scalar accumulators for the strided block
             var r = new LocalBuilder[8];
             for (int k = 0; k < 8; k++) r[k] = il.DeclareLocal(clrType);
@@ -279,6 +293,16 @@ namespace NumSharp.Backends.Kernels
             var LLEAF = il.DefineLabel();
             var LSCALAR = il.DefineLabel();
             var LREC = il.DefineLabel();
+
+            // ---- run-kind dispatch: if (stride == s) return runFold(a, n) — the stride never changes down the recursion,
+            //      so only the top call of a generic stride falls through to the code below ----
+            foreach (var (stride, fold) in runFolds)
+            {
+                var next = il.DefineLabel();
+                il.Emit(OpCodes.Ldarg_2); il.Emit(OpCodes.Ldc_I8, stride); il.Emit(OpCodes.Bne_Un, next);
+                il.Emit(OpCodes.Ldarg_0); il.Emit(OpCodes.Ldarg_1); il.Emit(OpCodes.Call, fold); il.Emit(OpCodes.Ret);
+                il.MarkLabel(next);
+            }
 
             // ---- pointer math: push (a + elemIndex*stride*elemSize) -----------------
             // push (a + byteOffset) where byteOffset = idxExpr * elemSize, idxExpr already in elements×stride.
@@ -311,49 +335,9 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Br, bL); il.MarkLabel(bE);
             il.Emit(OpCodes.Ldloc, locRes); il.Emit(OpCodes.Ret);
 
-            // ---- LEAF: if stride!=1 → SCALAR else SIMD -----------------------------
+            // ---- LEAF: the scalar 8-accumulator block (a stride without a run fold) ----
+            // (The contiguous SIMD leaf that used to live here is the Contiguous run fold, dispatched above.)
             il.MarkLabel(LLEAF);
-            il.Emit(OpCodes.Ldarg_2); il.Emit(OpCodes.Ldc_I8, 1L); il.Emit(OpCodes.Bne_Un, LSCALAR);
-
-            // SIMD block (contiguous). acc[v] = Load(a + v*laneCount); seeds a[0..7].
-            for (int v = 0; v < numAccVecs; v++)
-            {
-                int seedElem = v * laneCount;
-                il.Emit(OpCodes.Ldarg_0);
-                if (seedElem != 0) { il.Emit(OpCodes.Ldc_I8, (long)seedElem * elemSize); il.Emit(OpCodes.Conv_I); il.Emit(OpCodes.Add); }
-                il.Emit(OpCodes.Call, mLoad); il.Emit(OpCodes.Stloc, acc[v]);
-            }
-            // lim = n - (n%8)
-            il.Emit(OpCodes.Ldarg_1); il.Emit(OpCodes.Ldarg_1); il.Emit(OpCodes.Ldc_I8, 8L); il.Emit(OpCodes.Rem); il.Emit(OpCodes.Sub); il.Emit(OpCodes.Stloc, locLim);
-            // i = 8
-            il.Emit(OpCodes.Ldc_I8, 8L); il.Emit(OpCodes.Stloc, locI);
-            var lL = il.DefineLabel(); var lE = il.DefineLabel();
-            il.MarkLabel(lL);
-            il.Emit(OpCodes.Ldloc, locI); il.Emit(OpCodes.Ldloc, locLim); il.Emit(OpCodes.Bge, lE);
-            for (int v = 0; v < numAccVecs; v++)
-            {
-                int laneOff = v * laneCount;
-                il.Emit(OpCodes.Ldloc, acc[v]);
-                il.Emit(OpCodes.Ldarg_0);
-                il.Emit(OpCodes.Ldloc, locI);
-                if (laneOff != 0) { il.Emit(OpCodes.Ldc_I8, (long)laneOff); il.Emit(OpCodes.Add); }
-                il.Emit(OpCodes.Ldc_I8, (long)elemSize); il.Emit(OpCodes.Mul); il.Emit(OpCodes.Conv_I); il.Emit(OpCodes.Add);
-                il.Emit(OpCodes.Call, mLoad);
-                il.Emit(OpCodes.Call, mAdd); il.Emit(OpCodes.Stloc, acc[v]);
-            }
-            il.Emit(OpCodes.Ldloc, locI); il.Emit(OpCodes.Ldc_I8, 8L); il.Emit(OpCodes.Add); il.Emit(OpCodes.Stloc, locI);
-            il.Emit(OpCodes.Br, lL); il.MarkLabel(lE);
-            // combine via GetElement: r[k] = acc[k/laneCount] lane (k%laneCount).
-            // res = ((r0+r1)+(r2+r3)) + ((r4+r5)+(r6+r7))
-            void LdR(int k) { il.Emit(OpCodes.Ldloc, acc[k / laneCount]); il.Emit(OpCodes.Ldc_I4, k % laneCount); il.Emit(OpCodes.Call, mGet); }
-            LdR(0); LdR(1); il.Emit(OpCodes.Add); LdR(2); LdR(3); il.Emit(OpCodes.Add); il.Emit(OpCodes.Add);
-            LdR(4); LdR(5); il.Emit(OpCodes.Add); LdR(6); LdR(7); il.Emit(OpCodes.Add); il.Emit(OpCodes.Add);
-            il.Emit(OpCodes.Add); il.Emit(OpCodes.Stloc, locRes);
-            // tail: for(; i<n; i++) res += a[i]
-            EmitContiguousTail(il, locI, locRes, elemSize, ldT);
-            il.Emit(OpCodes.Ldloc, locRes); il.Emit(OpCodes.Ret);
-
-            // ---- SCALAR 8-accumulator block (stride != 1) --------------------------
             il.MarkLabel(LSCALAR);
             for (int k = 0; k < 8; k++)
             {
@@ -401,19 +385,6 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Add); il.Emit(OpCodes.Ret);
 
             return dm;
-        }
-
-        // tail: for(; i<n; i++) res += a[i]  (contiguous, stride==1; n in arg1)
-        private static void EmitContiguousTail(ILGenerator il, LocalBuilder locI, LocalBuilder locRes, int elemSize, OpCode ldT)
-        {
-            var tL = il.DefineLabel(); var tE = il.DefineLabel();
-            il.MarkLabel(tL);
-            il.Emit(OpCodes.Ldloc, locI); il.Emit(OpCodes.Ldarg_1); il.Emit(OpCodes.Bge, tE);
-            il.Emit(OpCodes.Ldloc, locRes);
-            il.Emit(OpCodes.Ldarg_0); il.Emit(OpCodes.Ldloc, locI); il.Emit(OpCodes.Ldc_I8, (long)elemSize); il.Emit(OpCodes.Mul); il.Emit(OpCodes.Conv_I); il.Emit(OpCodes.Add); il.Emit(ldT);
-            il.Emit(OpCodes.Add); il.Emit(OpCodes.Stloc, locRes);
-            il.Emit(OpCodes.Ldloc, locI); il.Emit(OpCodes.Ldc_I8, 1L); il.Emit(OpCodes.Add); il.Emit(OpCodes.Stloc, locI);
-            il.Emit(OpCodes.Br, tL); il.MarkLabel(tE);
         }
 
         /// <summary>
@@ -575,6 +546,27 @@ namespace NumSharp.Backends.Kernels
             }
 
             var LBASE = il.DefineLabel(); var LLEAF = il.DefineLabel(); var LREC = il.DefineLabel();
+
+            // On AVX2 hosts every run goes to a 256-bit fold (ILKernelGenerator.Reduction.Pairwise.Runs.cs: two complexes
+            // per register, two-leaf nodes) — the same bits, about twice the throughput: a contiguous (16-byte stride) or
+            // reversed (-16) run to its own kind, any other stride to the any-stride fold (one 128-bit load per complex).
+            // The 128-bit path below remains for hosts without AVX2.
+            if (PairwiseRunKindsSupported)
+            {
+                foreach (var (strideBytes, kind) in new[] { (16L, PairwiseRunKind.Contiguous), (-16L, PairwiseRunKind.Reversed) })
+                {
+                    var runFold = GetComplexPairwiseRunFold(kind);
+                    var next = il.DefineLabel();
+                    il.Emit(OpCodes.Ldarg_2); il.Emit(OpCodes.Ldc_I8, strideBytes); il.Emit(OpCodes.Bne_Un, next);
+                    il.Emit(OpCodes.Ldarg_0); il.Emit(OpCodes.Ldarg_1); il.Emit(OpCodes.Call, runFold); il.Emit(OpCodes.Ret);
+                    il.MarkLabel(next);
+                }
+
+                il.Emit(OpCodes.Ldarg_0); il.Emit(OpCodes.Ldarg_1); il.Emit(OpCodes.Ldarg_2);
+                il.Emit(OpCodes.Call, GetComplexPairwiseStridedFold());
+                il.Emit(OpCodes.Ret);
+            }
+
             il.Emit(OpCodes.Ldarg_1); il.Emit(OpCodes.Ldc_I8, 4L); il.Emit(OpCodes.Blt, LBASE);
             il.Emit(OpCodes.Ldarg_1); il.Emit(OpCodes.Ldc_I8, 64L); il.Emit(OpCodes.Ble, LLEAF);
             il.Emit(OpCodes.Br, LREC);

@@ -1184,6 +1184,327 @@ def gen_clip_ufunc(dtypes=None, extras=True):
     return cases
 
 
+# ---------------------------------------------------------------------------------------------
+# The identity-seeded add reduction — op keys sum / mean / nansum / nanmean / average /
+# ndarray.sum, corpus sum_identity.jsonl.
+#
+# NumPy reduces with an identity. PyUFunc_ReduceWrapper (numpy/_core/src/umath/reduction.c) asks
+# the loop for its initial value — get_initial_from_ufunc (legacy_array_method.c) packs the add
+# ufunc's identity 0 into the loop dtype, +0.0 for every inexact loop — assigns it to the result
+# with raw_array_assign_scalar, and only THEN runs the add loop over every element, even when the
+# reduction holds one element or the reduced axis has length 1. +0.0 + (-0.0) is +0.0, so np.sum
+# of only negative zeros is +0.0 (float16, float32, float64, and each part of complex128), and so
+# are np.mean (umr_sum / count), np.nansum / np.nanmean (np.sum / np.mean of the NaN-replaced
+# array) and np.average. Nothing else can make an identity-seeded sum negative zero, so a -0.0 out
+# of any of these is never "summation order". (add.reduce(..., initial=None) copies the first
+# element instead, and np.cumsum — an accumulate — always does; neither is generated here.)
+#
+#   * section "z": signed-zero value patterns x the four inexact dtypes x layouts chosen for the
+#     DIFFERENT engine routes a reduction can take (a single element, a length-1 axis, short /
+#     pairwise-blocked / SIMD-length contiguous runs, strided, reversed, F-order, transposed,
+#     broadcast) x every axis (+ keepdims), plus np.sum's dtype= into the other inexact loops;
+#     complex mean also carries inf / NaN parts, whose division by the count NumPy runs as the
+#     complex loop (Smith's algorithm with the divisor n+0j, so an inf part poisons the other one).
+#   * section "d": np.sum(a, axis, dtype=X) for every pair of the 13 NumPy dtypes on small exact
+#     values (no float->int conversion leaves its range and no negative float meets an unsigned
+#     loop, so no cell is C-undefined): NumPy casts the input to X and reduces in X.
+#   * section "s": the FLAT add.reduce SCHEDULE. Every inner-loop call does `*out += pairwise_sum(call)`, so
+#     which elements share a call is observable: NpyIter sorts the axes by |stride|, coalesces them signed,
+#     and npyiter_find_buffering_setup's cost model picks one call per run in place or buffered fills of
+#     whole runs (never across an outer block); a CAST operand (dtype=, np.mean's float64 loop over integers
+#     and its float32 loop over float16) is buffered from the start, in fills of np.getbufsize() elements.
+#     Order-sensitive values (magnitudes over 24 binades) under SMALL buffer sizes (params "bufsize": 16 / 32,
+#     NumPy's np.setbufsize; the replay sets and restores it) reach every regime with operands of a few
+#     hundred elements: one run, per-run calls, buffered fills, 3-D / 4-D outer blocks, F order, reversed
+#     runs, and the float16 mean whose keepdims spelling rounds twice.
+# ---------------------------------------------------------------------------------------------
+SUM_IDENTITY_INEXACT = ["float16", "float32", "float64", "complex128"]
+
+# Section "s": (source dtype, loop dtype or None) for np.sum, the np.mean input dtypes, the buffer sizes.
+_SUM_SCHED_PAIRS = [
+    ("float64", None), ("float32", None), ("float16", None), ("complex128", None),
+    ("float32", "float64"), ("float64", "float32"), ("float16", "float32"), ("float64", "float16"),
+    ("int32", "float64"), ("float64", "complex128"), ("complex128", "float64"), ("uint8", "float16"),
+    ("bool", "float32"),
+]
+_SUM_SCHED_MEAN_SRCS = ["float64", "float32", "float16", "complex128", "int32", "uint8", "bool"]
+_SUM_SCHED_BUFSIZES = [16, 32]
+# (name, base shape, view builder) — view operations only. Sized for buffer sizes of 16 / 32 elements.
+_SUM_SCHED_LAYOUTS = [
+    ("one_run_1d", (83,), lambda b: b),
+    ("strided_1d", (166,), lambda b: b[::2]),
+    ("reversed_1d", (69,), lambda b: b[::-1]),
+    ("short_runs_2d", (24, 16), lambda b: b[:, :5]),
+    ("long_runs_2d", (6, 40), lambda b: b[:, :33]),
+    ("offset_runs_2d", (13, 9), lambda b: b[1:, 1:]),
+    ("strided_runs_2d", (10, 24), lambda b: b[:, ::2]),
+    ("reversed_runs_2d", (12, 11), lambda b: b[:, ::-1]),
+    ("reversed_both_2d", (12, 11), lambda b: b[::-1, ::-1]),
+    ("transposed_2d", (12, 11), lambda b: b.T),
+    ("f_order_3d", (4, 5, 6), lambda b: b.T),
+    ("blocks_3d", (9, 7, 6), lambda b: b[:, :, :4]),
+    ("outer_blocks_4d", (3, 9, 7, 6), lambda b: b[..., :4]),
+]
+
+
+def _sum_sched_values(shape, dt, seed):
+    """Section "s" operand values: order-sensitive (every call boundary moves the last bits), deterministic."""
+    rng = np.random.default_rng(seed)
+    dt = np.dtype(dt)
+    n = int(np.prod(shape))
+    if dt.kind == "b":
+        flat = rng.integers(0, 2, n).astype(bool)
+    elif dt.kind in "iu":
+        info = np.iinfo(dt)
+        flat = rng.integers(max(info.min, -10**9), min(info.max, 10**9), n, endpoint=True).astype(dt)
+    elif dt == np.float16:
+        flat = (rng.standard_normal(n) * 50).astype(dt)
+    elif dt.kind == "c":
+        flat = (rng.standard_normal(n) * np.exp(rng.uniform(-12, 12, n))
+                + 1j * (rng.standard_normal(n) * np.exp(rng.uniform(-12, 12, n)))).astype(dt)
+    else:
+        flat = (rng.standard_normal(n) * np.exp(rng.uniform(-12, 12, n))).astype(dt)
+    return flat.reshape(shape).copy()
+
+# Signed-zero patterns, cycled over the C-contiguous base buffer. Every pattern's exact sum is
+# zero, so NumPy's result is +0.0 (both parts for complex) wherever the reduction is non-empty.
+_SUM_ZERO_PATTERNS = {
+    "negz": ([-0.0], [complex(-0.0, -0.0)]),
+    "mixz": ([-0.0, 0.0], [complex(-0.0, -0.0), complex(0.0, -0.0), complex(-0.0, 0.0)]),
+    "posz": ([0.0], [complex(0.0, 0.0)]),
+    "cancel": ([-0.0, 1.5, -0.0, -1.5], [complex(-0.0, 2.5), complex(1.5, -0.0), complex(-1.5, -2.5),
+                                         complex(-0.0, -0.0)]),
+    "negre": (None, [complex(-0.0, 0.0)]),
+    "negim": (None, [complex(0.0, -0.0)]),
+}
+# The NaN-replacing reductions also see a NaN among the negative zeros (np.nansum / np.nanmean skip
+# it; a slice of only NaN makes np.nanmean NaN with a RuntimeWarning, which NumPy still returns).
+_SUM_ZERO_NAN_PATTERNS = {
+    "negz_nan": ([-0.0, float("nan")], [complex(-0.0, -0.0), complex(float("nan"), -0.0)]),
+}
+# np.mean of a complex slice divides by the count with NumPy's complex loop: (re + im*0)*(1/n),
+# (im - re*0)*(1/n) — an infinite or NaN part poisons the other one even for one element.
+_SUM_MEAN_COMPLEX_PATTERNS = {
+    "cinf": (None, [complex(5.0, float("inf")), complex(-0.0, -0.0)]),
+    "cinf_re": (None, [complex(float("inf"), -2.0)]),
+    "cnan": (None, [complex(float("nan"), 1.0), complex(-0.0, 3.0)]),
+}
+
+
+def _sum_zero_fill(shape, dt, pattern):
+    """Fresh C-contiguous base of `shape` holding `pattern` cycled in C order (None: unsupported dtype)."""
+    real, cplx = pattern
+    vals = cplx if np.dtype(dt).kind == "c" else real
+    if vals is None:
+        return None
+    n = int(np.prod(shape)) if len(shape) else 1
+    flat = np.array([vals[i % len(vals)] for i in range(n)], dtype=np.complex128 if np.dtype(dt).kind == "c" else np.float64)
+    # .copy(), not np.ascontiguousarray: the latter returns ndim >= 1, which would turn the 0-d layouts into (1,).
+    return flat.astype(dt).reshape(shape).copy()
+
+
+# (name, base shape, view builder). The views use view operations only (describe() requires it).
+_SUM_ID_LAYOUTS = [
+    ("scalar_0d", (), lambda b: b),
+    ("zerod_from_index", (2, 3), lambda b: b.reshape(-1)[4:5].reshape(())),
+    ("one_element_1d", (1,), lambda b: b),
+    ("one_element_strided", (10,), lambda b: b[3::20]),
+    ("c_1d_2", (2,), lambda b: b),
+    ("c_1d_7", (7,), lambda b: b),
+    ("c_1d_9", (9,), lambda b: b),
+    ("c_1d_33", (33,), lambda b: b),
+    ("c_1d_300", (300,), lambda b: b),
+    ("c_2d", (3, 4), lambda b: b),
+    ("f_2d", (4, 3), lambda b: b.T),
+    ("c_3d", (2, 3, 4), lambda b: b),
+    ("transposed_3d", (2, 3, 4), lambda b: b.transpose(2, 0, 1)),
+    ("strided_2d_cols", (4, 6), lambda b: b[:, ::2]),
+    ("negstride_1d", (8,), lambda b: b[::-1]),
+    ("negstride_2d_offset", (4, 5), lambda b: b[::-1, ::-1]),
+    ("broadcast_1d_to_2d", (5,), lambda b: np.broadcast_to(b, (4, 5))),
+    ("scalar_broadcast", (), lambda b: np.broadcast_to(b, (3, 4))),
+    ("row_1xn", (1, 5), lambda b: b),
+    ("col_nx1", (5, 1), lambda b: b),
+    ("one_by_one", (1, 1), lambda b: b),
+    ("singleton_mid_3d", (2, 1, 3), lambda b: b),
+    ("singleton_f_3d", (4, 1, 3), lambda b: b.T),
+    ("singleton_strided_3d", (2, 1, 8), lambda b: b[:, :, ::2]),
+    ("singleton_negstride_2d", (1, 6), lambda b: b[:, ::-1]),
+    ("highrank_5d", (2, 1, 3, 1, 2), lambda b: b),
+    ("empty_2d", (0, 3), lambda b: b),
+]
+# Section "d" rides the layouts whose engine routes differ; its claim is the loop dtype, not the layout.
+_SUM_ID_DTYPE_LAYOUTS = ["scalar_0d", "one_element_1d", "c_1d_7", "c_1d_33", "c_2d", "f_2d", "strided_2d_cols",
+                         "negstride_1d", "broadcast_1d_to_2d", "row_1xn", "col_nx1", "empty_2d"]
+
+
+def _sum_id_exact_values(shape, dt):
+    """Section "d" operand values: small and exact in every dtype, never negative for a float.
+
+    Float sources carry fractional parts (an integer loop truncates them, a defined in-range cast),
+    signed sources carry negatives (wrapping into an unsigned loop is defined), and every sum fits
+    int8 / uint8 so the narrow loops never overflow differently from NumPy.
+    """
+    dt = np.dtype(dt)
+    n = int(np.prod(shape)) if len(shape) else 1
+    if dt.kind == "b":
+        flat = np.array([(i % 3) != 1 for i in range(n)], dtype=bool)
+    elif dt.kind == "i":
+        pool = [1, 0, 2, -1, 3, 1, -2, 2]
+        flat = np.array([pool[i % len(pool)] for i in range(n)], dtype=np.int64).astype(dt)
+    elif dt.kind == "u":
+        pool = [1, 0, 2, 3, 1, 2]
+        flat = np.array([pool[i % len(pool)] for i in range(n)], dtype=np.int64).astype(dt)
+    elif dt.kind == "f":
+        pool = [0.5, 1.25, -0.0, 2.0, 0.75, 1.5]
+        flat = np.array([pool[i % len(pool)] for i in range(n)], dtype=np.float64).astype(dt)
+    else:
+        pool = [complex(0.5, 1.0), complex(1.25, -0.5), complex(-0.0, 2.0), complex(2.0, 0.0), complex(0.75, -1.5)]
+        flat = np.array([pool[i % len(pool)] for i in range(n)], dtype=np.complex128).astype(dt)
+    return flat.reshape(shape).copy()          # .copy() keeps a 0-d base 0-d (ascontiguousarray would not)
+
+
+def _sum_id_axes(ndim):
+    """axis=None, every axis, and the negative spelling of the last one.
+
+    A 0-d operand also gets axis 0 and -1: ufunc.reduce reads either as "every axis" of a 0-d array (a
+    backward-compatibility rule), so np.sum / np.nansum / np.nanmean / ndarray.sum accept them while np.mean and
+    np.average (their own normalize_axis_index) raise — emit() skips the raising cells.
+    """
+    if ndim == 0:
+        return [None, 0, -1]
+    return [None] + list(range(ndim)) + [-1]
+
+
+def gen_sum_identity():
+    """np.sum's identity-seeded add reduction (op keys sum/mean/nansum/nanmean/average/ndarray.sum).
+
+    See the section header above. Params: ``axis`` (int or null), ``keepdims``, — section "d"
+    and np.sum's dtype= rows of sections "z" / "s" — ``dtype`` (a NumPy dtype name, the loop dtype),
+    and — section "s" — ``bufsize`` (np.setbufsize in effect while NumPy computed the case).
+    """
+    cases = []
+    n = 0
+    skipped = 0
+    layouts = {name: (shape, fn) for name, shape, fn in _SUM_ID_LAYOUTS}
+
+    def emit(op, base, view, params, f, ln, tag):
+        nonlocal n, skipped
+        try:
+            with warnings.catch_warnings(), np.errstate(all="ignore"):
+                warnings.simplefilter("ignore")      # empty means / all-NaN slices / complex->real casts warn
+                r = f(view)
+        except Exception:                           # noqa: BLE001 — NumPy refused: nothing to compare
+            skipped += 1
+            return
+        cases.append({"id": f"{op}/{tag}/{ln}/{n}", "op": op, "params": params,
+                      "operands": [describe(base, view)], "expected": _arr_expected(r),
+                      "layout": ln, "valueclass": "sum_identity"})
+        n += 1
+
+    funcs = {
+        "sum": lambda v, ax, kd: np.sum(v, axis=ax, keepdims=kd),
+        "mean": lambda v, ax, kd: np.mean(v, axis=ax, keepdims=kd),
+        "nansum": lambda v, ax, kd: np.nansum(v, axis=ax, keepdims=kd),
+        "nanmean": lambda v, ax, kd: np.nanmean(v, axis=ax, keepdims=kd),
+        "average": lambda v, ax, kd: np.average(v, axis=ax, keepdims=kd),
+        "ndarray.sum": lambda v, ax, kd: v.sum(axis=ax),
+    }
+    # Which patterns each spelling meets: np.sum all of them; the reductions built on it the ones
+    # that reach a different rule (np.mean's complex count division, the NaN-replacing pair's NaN).
+    plan = {
+        "sum": ["negz", "mixz", "posz", "cancel", "negre", "negim"],
+        "mean": ["negz", "mixz", "cancel", "negre", "negim", "cinf", "cinf_re", "cnan"],
+        "nansum": ["negz", "mixz", "negz_nan"],
+        "nanmean": ["negz", "mixz", "negz_nan"],
+        "average": ["negz", "mixz", "cinf", "cnan"],
+        "ndarray.sum": ["negz"],
+    }
+    patterns = {**_SUM_ZERO_PATTERNS, **_SUM_ZERO_NAN_PATTERNS, **_SUM_MEAN_COMPLEX_PATTERNS}
+    for dt in SUM_IDENTITY_INEXACT:
+        for op, pnames in plan.items():
+            call = funcs[op]
+            for pname in pnames:
+                for ln, (shape, fn) in layouts.items():
+                    base = _sum_zero_fill(shape, dt, patterns[pname])
+                    if base is None:
+                        continue
+                    view = fn(base)
+                    for axis in _sum_id_axes(view.ndim):
+                        for kd in ((False,) if op == "ndarray.sum" else (False, True)):   # no instance keepdims
+                            emit(op, base, view, {"axis": axis, "keepdims": kd},
+                                 lambda v, call=call, axis=axis, kd=kd: call(v, axis, kd), ln, f"z/{dt}/{pname}")
+                        # np.sum's dtype= into every other inexact loop (keepdims is the plain rows' claim).
+                        if op == "sum" and pname in ("negz", "mixz"):
+                            for tgt in SUM_IDENTITY_INEXACT:
+                                if tgt != dt:
+                                    emit("sum", base, view, {"axis": axis, "keepdims": False, "dtype": tgt},
+                                         lambda v, axis=axis, tgt=tgt: np.sum(v, axis=axis, dtype=tgt),
+                                         ln, f"z/{dt}/{pname}/dtype={tgt}")
+
+    # Section "d": the dtype= loop for every (input, loop) pair of the 13 NumPy dtypes.
+    for src in ALL_DTYPES:
+        for ln in _SUM_ID_DTYPE_LAYOUTS:
+            shape, fn = layouts[ln]
+            base = _sum_id_exact_values(shape, src)
+            view = fn(base)
+            axes = [None] if view.ndim == 0 else ([None, 0] + ([view.ndim - 1] if view.ndim > 1 else []))
+            for tgt in ALL_DTYPES:
+                for axis in axes:
+                    emit("sum", base, view, {"axis": axis, "keepdims": False, "dtype": tgt},
+                         lambda v, axis=axis, tgt=tgt: np.sum(v, axis=axis, dtype=tgt), ln, f"d/{src}->{tgt}")
+
+    # Section "s": the flat schedule under small buffer sizes (see the section header). np.setbufsize is
+    # context-local in NumPy 2.x; it is restored after every block so later sections run at the default.
+    for bufsize in _SUM_SCHED_BUFSIZES:
+        previous = np.setbufsize(bufsize)
+        try:
+            for li, (ln, shape, fn) in enumerate(_SUM_SCHED_LAYOUTS):
+                for si, (src, loop) in enumerate(_SUM_SCHED_PAIRS):
+                    base = _sum_sched_values(shape, src, 7000 + 97 * li + si)
+                    view = fn(base)
+                    params = {"axis": None, "keepdims": False, "bufsize": bufsize}
+                    if loop is not None:
+                        params["dtype"] = loop
+                    emit("sum", base, view, params, lambda v, loop=loop: np.sum(v, dtype=loop), ln,
+                         f"s/{src}->{loop or src}/b{bufsize}")
+                for si, src in enumerate(_SUM_SCHED_MEAN_SRCS):
+                    base = _sum_sched_values(shape, src, 9000 + 97 * li + si)
+                    view = fn(base)
+                    for kd in (False, True):
+                        emit("mean", base, view, {"axis": None, "keepdims": kd, "bufsize": bufsize},
+                             lambda v, kd=kd: np.mean(v, keepdims=kd), ln, f"s/{src}/b{bufsize}")
+        finally:
+            np.setbufsize(previous)
+    # The float16 mean whose two spellings round differently (sum/n -> float16 once, keepdims: through the
+    # float32 sum array first): 4096 ones and 4097 x (1 + 2**-10) put the float32 quotient on a float16 tie.
+    tie = np.array([1.0] * 4096 + [1 + 2 ** -10] * 4097, dtype=np.float16)
+    for kd in (False, True):
+        emit("mean", tie, tie, {"axis": None, "keepdims": kd}, lambda v, kd=kd: np.mean(v, keepdims=kd),
+             "one_run_1d", "s/float16/tie")
+
+    # Section "e": the axes a one-element np.sum must still refuse — past the operand's rank, the 0-d
+    # "every axis" reading notwithstanding (AxisError, recorded verbatim).
+    for ln in ("scalar_0d", "one_element_1d", "one_by_one"):
+        shape, fn = layouts[ln]
+        base = _sum_zero_fill(shape, "float64", _SUM_ZERO_PATTERNS["negz"])
+        view = fn(base)
+        for axis in (view.ndim + 1, view.ndim, -view.ndim - 1):
+            if view.ndim == 0 and axis in (0, -1):
+                continue                                  # accepted (the reduce-all reading above)
+            try:
+                np.sum(view, axis=axis)
+            except Exception as e:                        # noqa: BLE001 — the refusal is the claim
+                cases.append({"id": f"sum/e/{ln}/axis={axis}/{n}", "op": "sum",
+                              "params": {"axis": axis, "keepdims": False}, "operands": [describe(base, view)],
+                              "expected": {}, "expects_throw": True, "error": _exc(e),
+                              "layout": ln, "valueclass": "sum_identity"})
+                n += 1
+    if skipped:
+        print(f"  (skipped {skipped} sum_identity cases where NumPy raised)")
+    return cases
+
+
 # np.where(cond, x, y) -> select. Result dtype = result_type(x, y); NumPy is the oracle.
 WHERE_DT_PAIRS = [
     ("int32", "int32"), ("int32", "float64"), ("float32", "float64"), ("int32", "int64"),
@@ -5382,26 +5703,26 @@ def _rs_axis_combos(ndim):
     return [(ax, kd) for ax in [None] + list(range(ndim)) for kd in (False, True)]
 
 
-# The one-interval trapezoid layouts: the integration axis has two samples, so the result sums ONE product.
-_RS_TRAPEZOID_ONE_INTERVAL = ("x_1_0", "dx_neg_2", "negy_dx_2", "x_1_0_ax0_2x3", "dx_neg_ax0_2x3", "dx_neg_ax1_3x2")
-
 # The einsum (subscripts, layout) cells where NumPy's default einsum (sum_of_products into a zero-filled output, so
-# every output element is +0.0 + its terms) and NumSharp's composition (NumPy's optimize=True structure: a bare
-# product, a copied element or an np.sum) disagree on the sign of a zero.
-_RS_EINSUM_CARVED = {
-    ("i->", "1"), ("ij->", "1x1"), ("ij->i", "3x1"), ("ij->j", "1x3"), ("ii->", "1x1"),
-    ("i,i->", "1_1"), ("i,i->i", "3_3"), ("i,j->ij", "2_3"), ("ij,j->i", "2x1_1"),
-    ("ij,jk->ik", "2x1_1x2"), ("ij,jk->ik", "1x1_1x1"),
-}
+# every output element is +0.0 + its terms) and NumSharp's composition (NumPy's optimize=True structure) disagree on
+# the sign of a zero. Since the identity-seeded add reduction, every term NumSharp sums through np.sum starts from
+# +0.0 as well; what is left are the two expressions it computes as a bare elementwise product.
+_RS_EINSUM_CARVED = {("i,i->i", "3_3"), ("i,j->ij", "2_3")}
 
 
 def _rs_carved(op, layout, dt, params, shape):
     """True for a cell NumSharp computes differently from NumPy: the corpus carve, pinned by [OpenBugs] tests.
 
     Drawn from the 2026-10-04 probe of the uncarved matrix (every carved cell was checked against the probe's
-    verdicts; a few EXACT cells are carved with their rule's neighbours where the rule is simpler that way). Every
-    rule names the OpenBugsReductionTests test (NumSharp.Tests/OpenBugs.Reductions.cs) that pins it. When a path is
-    fixed, drop its rule and regenerate: its cells join the gate.
+    verdicts). Every rule names the OpenBugsReductionTests test (NumSharp.Tests/OpenBugs.Reductions.cs) that pins it.
+    When a path is fixed, drop its rule and regenerate: its cells join the gate.
+
+    Re-probed the same day after the identity-seeded add reduction landed (np.sum / np.mean / np.average / np.nansum
+    / np.nanmean / np.trapezoid and np.evaluate's Sum / Mean / NanSum / NanMean start from +0.0 on every route, the
+    float16 nan-axis walk reads the view's own elements, the nan-family one-element and 1-D axis results are 0-d):
+    the uncarved matrix then differed from NumPy in 862 of 9,448 cells, and the rules below carve exactly those
+    862 — the add-reduction rules are gone, the nanprod / nanstd / nanvar / einsum rules are narrowed to the cells
+    that still differ, and no rule carves an exact cell any more.
 
     Parameters:
         op: the corpus op key.
@@ -5420,13 +5741,9 @@ def _rs_carved(op, layout, dt, params, shape):
     kd = bool(params.get("keepdims", False))
     ext = shape[ax] if ax is not None and nd > 0 else None    # the reduced axis' length
     one_element_flat = ax is None and nd <= 1 and size == 1   # 0-d or (1,): NumSharp's size-1 shortcut
-    strided = not layout.startswith("c_")                     # t_*, rev_*, step_*: a non-C operand
 
-    if op in ("sum", "mean", "average"):
-        # The size-1 shortcut and a length-1 axis COPY the element (NumPy: +0.0 + x). Pinned by
-        # Sum_OneElement_*, Sum_LengthOneAxis_*, Mean_OneElementOrLengthOneAxis_*; the float16 flat sum's own route
-        # by Sum_Float16Flat_*.
-        return one_element_flat or ext == 1 or (op == "sum" and ax is None and dt == "float16")
+    # sum / mean / average / nansum / nanmean / trapezoid have no rule: the identity-seeded add reduction made every
+    # cell of theirs exact (their pins moved to NumSharp.Tests/Math/np.sum.Identity.Test.cs).
     if op == "prod":
         # NumPy multiplies a lone complex element by the identity 1+0j (-0-0j becomes +0-0j); NumSharp copies it.
         # Pinned by Prod_OneComplexElement_*.
@@ -5440,34 +5757,13 @@ def _rs_carved(op, layout, dt, params, shape):
         # element (or the average of two) itself. Every cell of an all -0.0 operand differs. Pinned by
         # Median_OfNegativeZeros_*.
         return True
-    if op in ("nansum", "nanprod") and dt == "float16" and ax is not None and strided:
-        # float16 nansum / nanprod along an axis of a non-C layout read the wrong elements (garbage values, which can
-        # match by chance on all -0.0 data, so every such cell is carved; nanmean / nanstd / nanvar have their own
-        # float16 axis paths and read the right elements). Pinned by NanReduction_Float16_*.
-        return True
-    if op == "nansum":
-        # 0-d / one element: the size-1 shortcut clones (shape (1,), the sign of -0.0); a length-1 axis copies
-        # (float32 / float64); a complex 1-D axis reduction throws. Pinned by NanSumNanProd_OneElement_*,
-        # NanSum_LengthOneAxis_*, NanSum_Complex1D_*.
-        if nd == 0 or (nd == 1 and size == 1):
-            return not (dt == "complex128" and ax is None)
-        if nd == 1 and ax == 0:
-            return dt == "complex128"
-        return ext == 1 and dt in ("float32", "float64")
     if op == "nanprod":
-        # A lone complex element (identity 1+0j, as prod); one float element without keepdims comes back (1,).
-        # Pinned by Prod_OneComplexElement_* and NanSumNanProd_OneElement_*.
-        if dt == "complex128":
-            return one_element_flat or ext == 1
-        return nd == 1 and size == 1 and not kd
-    if op == "nanmean":
-        # 0-d / one element: the clone (sign, shape); a 1-D axis reduction comes back (1,) / (1,1). Pinned by
-        # NanMean_OneElement_* and NanMeanStdVar_1DAxis_*.
-        return nd == 0 or (nd == 1 and (ax == 0 or size == 1))
+        # A lone complex element (identity 1+0j, as prod). Pinned by Prod_OneComplexElement_*.
+        return dt == "complex128" and (one_element_flat or ext == 1)
     if op in ("nanstd", "nanvar"):
-        # A 1-D axis reduction comes back (1,) and drops keepdims; one element drops keepdims. Pinned by
-        # NanMeanStdVar_1DAxis_*.
-        return nd == 1 and ((ax == 0 and (size > 1 or kd)) or (ax is None and size == 1 and kd))
+        # A float32 / float64 1-D axis reduction comes back (1,) (keepdims: (1,1)); one element drops keepdims (every
+        # dtype). The float16 / complex128 axis routes give NumPy's shape. Pinned by NanStdVar_1DAxis_*.
+        return nd == 1 and ((size == 1 and kd) or (ax == 0 and size > 1 and dt in ("float32", "float64")))
     if op in ("cumsum", "nancumsum"):
         # The flat scan starts from +0.0 instead of copying element 0 (every flat cell past the one-element 1-D
         # shortcut). Pinned by CumSum_Flat_* and NanCumSum_Flat_*.
@@ -5484,20 +5780,11 @@ def _rs_carved(op, layout, dt, params, shape):
         # Dot_SizeOneOperand_*.
         return dt != "float16" and layout in ("1_1", "0d_2", "1x1_1x1")
     if op == "einsum":
-        # Pinned by Einsum_SumOfOneTerm_* and Einsum_ZeroFilledAccumulator_*.
+        # A bare elementwise product where NumPy adds every term to a zero-filled output. Pinned by
+        # Einsum_ZeroFilledAccumulator_*.
         return (params["subscripts"], layout) in _RS_EINSUM_CARVED
-    if op == "trapezoid":
-        # One interval sums ONE product over a length-1 axis (np.sum's size-1 path). Pinned by
-        # Trapezoid_OneInterval_*.
-        return layout in _RS_TRAPEZOID_ONE_INTERVAL
     if op == "evaluate":
-        red = params["reduce"]
-        k, rax = red["kind"], red["axis"]
-        rext = shape[rax] if rax is not None and nd > 0 else None
-        if k in ("sum", "mean", "nansum", "nanmean"):
-            # A length-1 axis of a 2-D operand: the axis stream copies the slab. Pinned by
-            # Evaluate_SumOverLengthOneAxis_*.
-            return dt != "float16" and nd == 2 and rext == 1
+        k = params["reduce"]["kind"]
         if k in ("prod", "nanprod"):
             # A lone complex element (identity 1+0j). Pinned by Prod_OneComplexElement_*.
             return dt == "complex128" and size == 1
@@ -15958,6 +16245,12 @@ def main():
         cases = gen_clip_ufunc()
         cases += char_tier("clip_ufunc")
         write_jsonl(os.path.join(corpus_dir, "clip_ufunc.jsonl"), cases)
+    elif mode == "sum_identity":
+        # np.sum's identity-seeded add reduction (+0.0 + -0.0 = +0.0) and its dtype= loop, with the
+        # reductions built on it (mean / nansum / nanmean / average / ndarray.sum). No Char rows: the
+        # signed-zero patterns need an inexact dtype, and the dtype= matrix spans NumPy's own dtypes.
+        cases = gen_sum_identity()
+        write_jsonl(os.path.join(corpus_dir, "sum_identity.jsonl"), cases)
     elif mode == "logic":
         cases = gen_unary(LOGIC_UNARY_OPS, LOGIC_UNARY_DTYPES, list(LAYOUTS.keys()))
         cases += gen_binary(LOGIC_BIN_OPS, LOGIC_BIN_PAIRS, list(PAIR_LAYOUTS.keys()))

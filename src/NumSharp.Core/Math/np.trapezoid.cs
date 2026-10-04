@@ -121,9 +121,9 @@ namespace NumSharp
         ///     always in the float family (float16/float32/float64/complex128, or the
         ///     NumSharp-only Decimal); integer and boolean inputs yield float64. The values are
         ///     bit-identical to NumPy's for every memory layout of <paramref name="y"/> and
-        ///     <paramref name="x"/>, with one open exception: a <c>-0.0</c> area over a single interval
-        ///     comes back <c>-0.0</c> where NumPy's sum gives <c>+0.0</c> (the length-1-axis sum,
-        ///     pinned by <c>OpenBugsReductionTests.Trapezoid_OneInterval_NegativeZeroArea_IsPositiveZero</c>).
+        ///     <paramref name="x"/>, a single interval included: its final sum runs over a length-1 axis,
+        ///     which starts from NumPy's <c>+0.0</c> identity, so a <c>-0.0</c> area comes back <c>+0.0</c>
+        ///     (<c>np_sum_identity_tests.Trapezoid_OneInterval_NegativeZeroArea_IsPositiveZero</c>).
         /// </returns>
         /// <exception cref="ArgumentNullException"><paramref name="y"/> is <c>null</c>.</exception>
         /// <exception cref="ArgumentOutOfRangeException">

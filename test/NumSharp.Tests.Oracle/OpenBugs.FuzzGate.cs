@@ -102,6 +102,22 @@ namespace NumSharp.Tests
                 }).ToArray(),
             };
 
+        /// <summary>
+        ///     A float64 <c>sum</c> over AXIS 0 of a (4, 8) operand — the vehicle for the summation-order excuse and the
+        ///     truthful-vs-precise branches. A FLAT float sum no longer reaches them: it is NumPy's add.reduce bit for bit
+        ///     (<c>NumPyAddReduce</c>), so the registry excuses nothing there (<see cref="B1_FlatFloatSumValueDiff_NotExcused"/>).
+        /// </summary>
+        /// <returns>The synthetic case.</returns>
+        private static FuzzCorpus.Case AxisSumCase()
+        {
+            var c = Case("sum", ("float64", new long[] { 4, 8 }));
+            c.Params = new System.Collections.Generic.Dictionary<string, System.Text.Json.JsonElement>
+            {
+                ["axis"] = System.Text.Json.JsonDocument.Parse("0").RootElement,
+            };
+            return c;
+        }
+
         private static byte[] C128(double re, double im)
             => BitConverter.GetBytes(re).Concat(BitConverter.GetBytes(im)).ToArray();
 
@@ -126,10 +142,27 @@ namespace NumSharp.Tests
         [TestMethod]
         public void B1_FloatSumValueDiff_StillExcused()
         {
-            var c = Case("sum", ("float64", new long[] { 8 }));
+            var c = AxisSumCase();
             MisalignedRegistry.Classify(c, DivergenceKind.Value,
                 BitConverter.GetBytes(0.3), BitConverter.GetBytes(UlpUp(0.3)), NPTypeCode.Double, OneDiff)
                 .Should().NotBeNull("float summation-order drift is the documented divergence");
+        }
+
+        [TestMethod]
+        public void B1_FlatFloatSumValueDiff_NotExcused()
+        {
+            // The flat float sum / mean is NumPy's exact add.reduce (identity start, NpyIter's call schedule, a pairwise
+            // sum per call), so a one-ULP drift there is a real bug — no summation-order excuse, with or without truth.
+            foreach (var op in new[] { "sum", "mean" })
+            {
+                var c = Case(op, ("float64", new long[] { 8 }));
+                MisalignedRegistry.Classify(c, DivergenceKind.Value,
+                    BitConverter.GetBytes(0.3), BitConverter.GetBytes(UlpUp(0.3)), NPTypeCode.Double, OneDiff)
+                    .Should().BeNull($"a flat float {op} must be bit-exact");
+                MisalignedRegistry.Classify(c, DivergenceKind.Value,
+                    BitConverter.GetBytes(UlpUp(0.3, 2)), BitConverter.GetBytes(0.3), NPTypeCode.Double, OneDiff,
+                    BitConverter.GetBytes(0.3)).Should().BeNull($"not even toward truth: a flat float {op} has NumPy's order");
+            }
         }
 
         // ---- B2: complex binary per-op scopes ----
@@ -557,7 +590,7 @@ namespace NumSharp.Tests
         public void P_TowardTruth_Excused()
         {
             // NumSharp lands ON truth, NumPy 2 ULP off -> excused as parity debt (toward truth).
-            var c = Case("sum", ("float64", new long[] { 8 }));
+            var c = AxisSumCase();
             var truth = BitConverter.GetBytes(0.3);
             MisalignedRegistry.Classify(c, DivergenceKind.Value,
                 BitConverter.GetBytes(UlpUp(0.3, 2)), BitConverter.GetBytes(0.3), NPTypeCode.Double,
@@ -569,7 +602,7 @@ namespace NumSharp.Tests
         public void P_EquallyTruthful_Excused()
         {
             // Both sides 2 ULP from truth, opposite directions -> within truth-equivalence slack.
-            var c = Case("sum", ("float64", new long[] { 8 }));
+            var c = AxisSumCase();
             var truth = BitConverter.GetBytes(0.3);
             MisalignedRegistry.Classify(c, DivergenceKind.Value,
                 BitConverter.GetBytes(UlpUp(0.3, 2)), BitConverter.GetBytes(UlpUp(0.3, -2)), NPTypeCode.Double,
@@ -582,7 +615,7 @@ namespace NumSharp.Tests
             // NumPy exact, NumSharp 100000 ULP off truth, outside every known-loss scope ->
             // a genuine precision loss must be RED (the truth==null gate on the unbounded
             // reduction blanket is what keeps it from hiding there).
-            var c = Case("sum", ("float64", new long[] { 8 }));
+            var c = AxisSumCase();
             var truth = BitConverter.GetBytes(0.3);
             MisalignedRegistry.Classify(c, DivergenceKind.Value,
                 BitConverter.GetBytes(0.3), BitConverter.GetBytes(UlpUp(0.3, 100000)), NPTypeCode.Double,
@@ -594,7 +627,7 @@ namespace NumSharp.Tests
         public void P_KnownLoss_NegstrideSum_Excused_ButBounded()
         {
             // The documented negstride accumulation loss (measured 32 ULP) is excused ≤256...
-            var c = Case("sum", ("float64", new long[] { 8 }));
+            var c = AxisSumCase();
             c.Layout = "negstride_1d";
             var truth = BitConverter.GetBytes(0.3);
             MisalignedRegistry.Classify(c, DivergenceKind.Value,
@@ -612,7 +645,7 @@ namespace NumSharp.Tests
         {
             // Without truth (every pre-existing tier) the float summation blanket still applies —
             // the truth==null gate narrows it only where adjudication is possible.
-            var c = Case("sum", ("float64", new long[] { 8 }));
+            var c = AxisSumCase();
             MisalignedRegistry.Classify(c, DivergenceKind.Value,
                 BitConverter.GetBytes(0.3), BitConverter.GetBytes(UlpUp(0.3)), NPTypeCode.Double,
                 OneDiff).Should().NotBeNull("truthless tiers keep the documented summation excuse");

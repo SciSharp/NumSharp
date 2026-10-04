@@ -79,10 +79,12 @@ public class GistMetricsLiveParityTests : InteropTestBase
     }
 
     /// <summary>
-    /// All thirty forecast scores against live NumPy on three layouts, exact except the two metrics whose
-    /// 1-ULP budgets were measured on the x64 reference fixture. On arm64 it is inconclusive: the
-    /// macos-latest runner measured <c>mpe</c> 1 ULP off (0.06249999999656575 vs …754), and the budgets
-    /// are deliberately not widened per host (see <see cref="AssertWithinUlps"/>).
+    /// All thirty forecast scores against live NumPy on three layouts, byte-exact on the x64 reference fixture.
+    /// The name keeps the first live run's measurement (smape and mrae one ULP off — np.mean's flat summation
+    /// order, retired on 2026-10-04 when np.sum / np.mean began running NumPy's own add.reduce schedule)
+    /// because the gist evidence records cite it. On arm64 it is inconclusive: the macos-latest runner measured
+    /// <c>mpe</c> 1 ULP off (0.06249999999656575 vs …754), and the budgets are deliberately not widened per
+    /// host (see <see cref="AssertWithinUlps"/>).
     /// </summary>
     [TestMethod]
     public void AllThirtyForecastScores_AreExactExceptTwoOneUlpMetrics_OnThreeLayouts()
@@ -114,10 +116,12 @@ public class GistMetricsLiveParityTests : InteropTestBase
                 {
                     using var actual = np.array(scores[name]);
                     using var expected = reference.Eval($"np.asarray(scores['{name}'], dtype=np.float64)");
-                    // Measured on the first live run: 86/90 byte-identical; smape and mrae
-                    // differed by one ULP on the two forward layouts, zero when reversed.
-                    // All other names remain hard byte gates, including log/exp/arctan metrics.
-                    AssertWithinUlps(actual, expected, name is "smape" or "mrae" ? 1UL : 0UL, name);
+                    // The first live run measured 86/90 byte-identical: smape and mrae (np.mean of a
+                    // fresh 6- / 5-element array) were one ULP off on the two forward layouts, because
+                    // the flat mean summed in another order than NumPy's pairwise add.reduce. The flat
+                    // sum / mean are NumPy's schedule since 2026-10-04 and all 90 are byte-identical,
+                    // so every name is a hard byte gate, including the log/exp/arctan metrics.
+                    AssertWithinUlps(actual, expected, 0UL, name);
                 }
             }
         }
@@ -214,10 +218,12 @@ public class GistMetricsLiveParityTests : InteropTestBase
     }
 
     /// <summary>
-    /// Ranking discounts against live NumPy: exact for method 0, within the measured 1-2 ULP for method 1,
-    /// on the x64 reference fixture. On arm64 it is inconclusive: the macos-latest runner measured method-0
-    /// <c>dcg</c> 1 ULP off (7.323465818787765 vs …766), and the budgets are deliberately not widened per
-    /// host (see <see cref="AssertWithinUlps"/>).
+    /// Ranking discounts against live NumPy, byte-exact for both methods on the x64 reference fixture. The
+    /// name keeps the first live run's measurement (method 1 within 1-2 ULP — np.sum's flat summation order,
+    /// retired on 2026-10-04 with NumPy's own add.reduce schedule) because the gist evidence records cite it.
+    /// On arm64 it is inconclusive: the macos-latest runner measured method-0 <c>dcg</c> 1 ULP off
+    /// (7.323465818787765 vs …766), and the budgets are deliberately not widened per host (see
+    /// <see cref="AssertWithinUlps"/>).
     /// </summary>
     [TestMethod]
     public void RankingDiscounts_AreExactForMethodZero_AndOneOrTwoUlpsForMethodOne()
@@ -245,18 +251,21 @@ public class GistMetricsLiveParityTests : InteropTestBase
                 reference.Exec($"def gain(x):\n    return {gain} if len(x) else 0.0\nx = r[:{k}]\ny = np.sort(r)[::-1][:{k}]\nz = gain(y)");
                 using var expectedDcg = reference.Eval("np.asarray(gain(x),dtype=np.float64)");
                 using var expectedNdcg = reference.Eval("np.asarray(gain(x)/z if z else 0.0,dtype=np.float64)");
-                // First live run: all 30 method-0 scalars exact. Method 1 had six one-ULP
-                // DCG and six two-ULP NDCG differences; its other 18 scalars were exact.
-                AssertWithinUlps(dcg, expectedDcg, method == 0 ? 0UL : 1UL, $"dcg method={method}, k={k}");
-                AssertWithinUlps(ndcg, expectedNdcg, method == 0 ? 0UL : 2UL, $"ndcg method={method}, k={k}");
+                // First live run: all 30 method-0 scalars exact; method 1 had six one-ULP DCG and six
+                // two-ULP NDCG differences (np.sum of the discounted gains, summed in another order than
+                // NumPy's pairwise add.reduce). Since the flat sum runs NumPy's schedule (2026-10-04) all
+                // 60 are byte-identical.
+                AssertWithinUlps(dcg, expectedDcg, 0UL, $"dcg method={method}, k={k}");
+                AssertWithinUlps(ndcg, expectedNdcg, 0UL, $"ndcg method={method}, k={k}");
             }
         }
     }
 
-    // These named bounds are the measured maxima on the NumPy 2.4.2 Windows/net10 fixture,
-    // not a promise that arbitrary platforms/data differ by at most this many ULP. Other hosts
-    // deliberately expose a disagreement instead of silently widening the gate. There is no
-    // broad relative tolerance or fallback from a failed exact test to a permissive comparison.
+    // A named bound is the measured maximum on the NumPy 2.4.2 Windows/net10 fixture, not a promise
+    // that arbitrary platforms/data differ by at most this many ULP (every caller passes 0 since
+    // 2026-10-04). Other hosts deliberately expose a disagreement instead of silently widening the
+    // gate. There is no broad relative tolerance or fallback from a failed exact test to a
+    // permissive comparison.
     private void AssertWithinUlps(NDArray actual, PyObject expected, ulong limit, string context)
     {
         using var oracle = expected.ToNDArray();

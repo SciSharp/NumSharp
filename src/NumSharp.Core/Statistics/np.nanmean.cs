@@ -25,9 +25,24 @@ namespace NumSharp
             if (shape.IsEmpty)
                 return arr;
 
-            if (shape.IsScalar || (shape.size == 1 && shape.NDim == 1))
+            // A one-element input. NumPy's nanmean is np.sum(replaced) / count-of-non-NaN, which for one element is
+            // (0 + x) / 1 — np.mean of it — or 0 / 0 = NaN when x is NaN (np.mean of a NaN is NaN too; NaN bits are not
+            // part of the contract, and a complex NaN part poisons both parts either way). So np.mean's one-element
+            // route answers: 0-d (keepdims: (1,)*ndim), float64 for an integer input, the +0.0 identity for a -0.0.
+            // The old shortcut returned the input's clone — shape (1,), the integer dtype, the -0.0 sign.
+            if (shape.size == 1)
             {
-                return a.Clone().MarkReductionScalar(); // 0-d input -> numpy scalar (read-only)
+                int? ax = axis;
+                if (ax != null && arr.ndim == 0)
+                {
+                    // nanmean reduces through np.sum, so a 0-d input takes axis 0 / -1 as every axis (ufunc.reduce's
+                    // rule) where np.mean itself would raise.
+                    if (ax.Value != 0 && ax.Value != -1)
+                        throw new AxisError(ax.Value, 0);
+                    ax = null;
+                }
+
+                return ax.HasValue ? mean(arr, ax.Value, keepdims) : mean(arr, keepdims);
             }
 
             // Element-wise (axis=None): compute mean ignoring NaN
@@ -231,12 +246,9 @@ namespace NumSharp
                 }
             }
 
-            // Handle keepdims: ExpandDimension re-inserts the reduced axis preserving the KEEPORDER
-            // layout (a reshape to a fresh C-shape would reset it to C).
-            if (keepdims)
-                result.Storage.ExpandDimension(axis);
-
-            return result;
+            // Handle keepdims (ExpandDimension re-inserts the reduced axis preserving the KEEPORDER layout; a reshape
+            // to a fresh C-shape would reset it to C) and the 0-d result of a 1-D input.
+            return ApplyKeepdims(result, arr.ndim, axis, outputShape, keepdims);
         }
 
         private static NDArray nanmean_axis_half(NDArray arr, int axis, bool keepdims)
@@ -334,8 +346,26 @@ namespace NumSharp
             return ApplyKeepdims(result, arr.ndim, axis, outputShape, keepdims);
         }
 
+        /// <summary>
+        ///     Gives an axis nanmean result NumPy's final shape: a 1-D input reduced over its only axis is 0-d (a
+        ///     read-only scalar; <c>(1,)</c> under keepdims), and otherwise keepdims re-inserts the reduced axis.
+        /// </summary>
+        /// <param name="result">The computed means, over the loops' output shape — a placeholder <c>(1,)</c> for a 1-D input.</param>
+        /// <param name="ndim">The input's rank.</param>
+        /// <param name="axis">The normalized reduced axis.</param>
+        /// <param name="outputShape">The output shape the loops used (unused; kept for the call sites' symmetry).</param>
+        /// <param name="keepdims">Whether the reduced axis stays with length 1.</param>
+        /// <returns><paramref name="result"/>, relabelled in place (one element or an axis of length 1: nothing moves).</returns>
         private static NDArray ApplyKeepdims(NDArray result, int ndim, int axis, long[] outputShape, bool keepdims)
         {
+            if (ndim == 1)
+            {
+                // The loops ran over a placeholder (1,) output (they need a coordinate to write); NumPy's result for a
+                // 1-D input is 0-d — which also kept keepdims from turning it into (1,1).
+                result.Storage.Reshape(keepdims ? new Shape(1L) : Shape.Scalar);
+                return result.MarkReductionScalar();
+            }
+
             if (!keepdims) return result;
             // ExpandDimension re-inserts the reduced axis preserving the KEEPORDER layout (issue #610).
             result.Storage.ExpandDimension(axis);

@@ -16,7 +16,10 @@ namespace NumSharp
         ///     iteration is chunked. For almost every operation that is invisible, but — exactly as in NumPy —
         ///     a reduction that CASTS through the buffer sums chunk by chunk: <c>np.evaluate</c>'s flat
         ///     <c>Mean</c> of an integer / bool child adds one pairwise sum per chunk (NumPy's
-        ///     <c>np.mean(int_array)</c> does the same), so its last bits follow this value.
+        ///     <c>np.mean(int_array)</c> does the same), so its last bits follow this value. The flat
+        ///     <c>np.sum</c> / <c>np.mean</c> of a float loop follow it too, exactly as NumPy's do: a cast operand
+        ///     (<c>dtype=</c>, the mean of integers or float16) and a layout of several short runs (a sliced or
+        ///     strided 2-D block) are summed one buffer fill at a time.
         ///     <example>
         ///     <code>
         ///     np.getbufsize();          // 8192
@@ -50,8 +53,9 @@ namespace NumSharp
         ///     Mirrors <c>numpy.setbufsize(size)</c>. The setting is <b>thread-local</b> (matching NumPy
         ///     2.x's context-local buffer state) and persists until changed again on the same thread; it
         ///     never affects other threads. Buffering is a performance/chunking knob: results are
-        ///     unchanged EXCEPT where NumPy's own are — a reduction that casts through the buffer (see
-        ///     <see cref="getbufsize"/>) pairwise-sums per chunk, so its last bits follow the size, as NumPy's do.
+        ///     unchanged EXCEPT where NumPy's own are — a reduction that casts through the buffer, or the flat
+        ///     <c>np.sum</c> / <c>np.mean</c> of several short runs (see <see cref="getbufsize"/>), pairwise-sums per
+        ///     chunk, so its last bits follow the size, as NumPy's do.
         ///     <para>
         ///     Unlike NumPy — which accepts any Python int and raises <c>TypeError</c> for a
         ///     <c>float</c>/<c>bool</c> and <c>OverflowError</c> for a value beyond the platform integer —

@@ -838,7 +838,22 @@ namespace NumSharp.Tests.Fuzz
                     // the rest of the family has no int[] overload and never receives "axes".
                     if (op == "nanmedian" && p.ContainsKey("axes"))
                         return np.nanmedian(ops[0], ParseIntArray(p["axes"]), keepdims: ParseKeepdims(p));
-                    return ApplyReduce(op, ParseAxis(p), ParseKeepdims(p), ops[0]);
+                    // sum_identity.jsonl section "s": NumPy computed the case under np.setbufsize(bufsize), which
+                    // decides the flat add.reduce's buffer fills — run it under the same size, then restore the
+                    // thread's previous one (np.setbufsize is thread-local, so no other test sees it).
+                    if (p.TryGetValue("bufsize", out var bufsizeEl))
+                    {
+                        long previousBufsize = np.setbufsize(bufsizeEl.GetInt64());
+                        try
+                        {
+                            return SumIdentityReduce(op, p, ops[0]);
+                        }
+                        finally
+                        {
+                            np.setbufsize(previousBufsize);
+                        }
+                    }
+                    return SumIdentityReduce(op, p, ops[0]);
 
                 // np.random byte-parity (random_parity tiers): seed -> draw -> compare the raw
                 // stream bytes against NumPy's recorded sequence. "draws" > 1 pins stream
@@ -1091,6 +1106,22 @@ namespace NumSharp.Tests.Fuzz
 
         private static bool ParseKeepdims(IReadOnlyDictionary<string, JsonElement> p)
             => p.TryGetValue("keepdims", out var kd) && kd.GetBoolean();
+
+        /// <summary>
+        ///     The reduce family's call for one case: <see cref="ApplyReduce"/>, except np.sum's <c>dtype=</c> loop
+        ///     (sum_identity.jsonl) — the one reduction here whose cases carry a loop dtype, where the input is cast to
+        ///     the named dtype and reduced in it.
+        /// </summary>
+        /// <param name="op">The reduce op key.</param>
+        /// <param name="p">The case params (<c>axis</c>, <c>keepdims</c>, optional <c>dtype</c>).</param>
+        /// <param name="a">The operand.</param>
+        /// <returns>NumSharp's result.</returns>
+        private static NDArray SumIdentityReduce(string op, IReadOnlyDictionary<string, JsonElement> p, NDArray a)
+        {
+            if (op == "sum" && p.TryGetValue("dtype", out var sumDtype))
+                return np.sum(a, ParseAxis(p), ParseKeepdims(p), (DType)FuzzCorpus.DtypeToTC(sumDtype.GetString()));
+            return ApplyReduce(op, ParseAxis(p), ParseKeepdims(p), a);
+        }
 
         private static NDArray ApplyReduce(string op, int? axis, bool keepdims, NDArray a)
         {

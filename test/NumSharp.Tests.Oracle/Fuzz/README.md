@@ -285,6 +285,7 @@ python test/oracle/gen_oracle.py matmul           # T8 linalg: matmul/dot/outer 
 python test/oracle/gen_oracle.py specials         # IEEE special-value parity (nan/±inf/±0/subnormal/max)
 python test/oracle/gen_oracle.py nan_order        # float add/multiply NaN-operand order (win-amd64), NaN payloads raw
 python test/oracle/gen_oracle.py reduce_start     # how reductions/scans/products START, via the sign of a zero result (carve: _rs_carved)
+python test/oracle/gen_oracle.py sum_identity     # np.sum's identity start, dtype= loops, and the flat add.reduce schedule (np.setbufsize 16 / 32)
 python test/oracle/gen_oracle.py clip_ufunc       # np.clip as a ufunc: broadcast bounds, out=, where=, overlap, the float loop
 python test/oracle/gen_oracle.py precision        # truthful-vs-precise (adversarial accumulation; needs mpmath)
 python test/oracle/gen_oracle.py products         # CBLAS product family values (inner/vdot/vecdot/matvec/...)
@@ -622,10 +623,10 @@ rather than portable IEEE parity — the same status as the "Host-dependent valu
 | unary hyperbolic/inverse-trig/angle: no Half kernel | sinh…arctan × {bool,i8,u8,f16} (+deg2rad/rad2deg×c128) × Threw | 0 | |
 | unary preserve-dtype pending: square/floor/ceil/trunc widen int→float64 | those 4 ops × Dtype | 78 | F3b |
 | **V1** var/std at a degenerate size skip NumPy's arithmetic: one element per output (0-d / one-element input, or a reduced axis of extent 1) answers `0` without reading the element (NumPy: NaN for a NaN/±inf element or `ddof >= 1`), and a float16/float32 input of one element per output or an empty one comes back float64. Classified BEFORE the generic reduction branches, which used to take these cases as "summation precision", the min/max axis-NaN bug and the generic dtype bug. Pinned by `OpenBugsReductionTests.VarStd_*` (NumSharp.Tests), together with the flat `ddof >= n` cases the corpus does not reach (NaN or a negative variance where NumPy has `+inf`) | var/std (np./ndarray./ma.) × one element per output × Value (every diff NumPy-NaN vs NumSharp +0.0) · same × Dtype float16/float32, or an empty operand | 48 + 106 (2026-10-04) | |
-| reduction result dtype differs (NEP50 accumulator / complex→real) — sum/prod/cumprod NOW bit-exact on EVERY size incl. flat 0-d/size-1 (fixed 2026-09-13) & EXCLUDED from the excuse (regression-guarded). Residual (traced 2026-10-04): `np.mean` of an EMPTY float16/float32/complex128 array is float64 (18, pinned by `OpenBugsReductionTests.Mean_EmptyFloat16Float32Complex_KeepTheirDtype`), decimal `mean` (11), `ma.mean` of float32 is float64 (86), 2 `ma.var` float32 slices; the var/std float16/float32 cases moved to **V1** and no complex→real case remains | reductions × Dtype (excl. sum/prod/cumprod) | 117 (2026-10-04) | #10 |
+| reduction result dtype differs (NEP50 accumulator / complex→real) — sum/prod/cumprod NOW bit-exact on EVERY size incl. flat 0-d/size-1 (fixed 2026-09-13) & EXCLUDED from the excuse (regression-guarded). Residual (traced 2026-10-04): decimal `mean` (11), `ma.mean` of float32 is float64 (86), 2 `ma.var` float32 slices; the var/std float16/float32 cases moved to **V1** and no complex→real case remains; the empty float16/float32/complex128 `np.mean` (18) keeps its dtype since the identity-seeded add reduction | reductions × Dtype (excl. sum/prod/cumprod) | 99 (2026-10-04) | #10 |
 | axis-reduction NaN propagation: axis SIMD min/max skips NaN (flat fixed) — DEAD since 2026-10-04: every hit it still had was a var/std one-element case (now **V1**), and no min/max case reaches it; removal candidate | min/max × axis≠null × all-NaN diffs | 0 (2026-10-04) | #10 |
 | bool min/max along axis diverges | min/max × Boolean × Value | 0 | #10 |
-| complex 1-D axis reduction throws (NDCoordinatesAxisIncrementor) | (nan)reductions × complex 1-D × Threw | 8 | #10 |
+| complex 1-D axis reduction throws (NDCoordinatesAxisIncrementor) — FIXED 2026-10-04 (the complex axis nansum is NumPy's composition, np.sum of the NaN-replaced array); both registry branches removed, now regression-guarded | (nan)reductions × complex 1-D × Threw | 0 | #10 |
 | nan-reduction family: shape ([1] vs scalar, keepdims dropped) / value (masking·count·order) / dtype / nanmedian propagates NaN / empty throws | nan* ops, per-kind branches | 885/526/184/176/4 | #10 |
 | median/percentile/quantile: ±inf-NaN interpolation · float interp precision · int-axis gross error | QuantileEngine ops × Value, three branches | 72/40/28 | |
 | average: summation-order precision (pairwise vs naive) | average × Value | 30 | |
@@ -651,7 +652,7 @@ rather than portable IEEE parity — the same status as the "Host-dependent valu
 | `gen_unique` contiguous+finite | unique on raw-offset views (#11) + inf/NaN complex ordering | documented at carve site (no pin — unreachable via API) |
 | `ALIAS_DTYPES` excludes complex128 | a·a self-multiply catastrophic cancellation (NumSharp matches NumPy *scalar*; NumPy's array ufunc disagrees with itself) | documented non-bug |
 | `gen_nanquantile` finite+NaN (no inf) | percentile interpolation across ±inf is ill-defined (inf−inf) | documented out-of-scope |
-| `_rs_carved` (`gen_reduce_start`) | 1,506 all-`-0.0` cells, one rule per root cause: size-1 / length-1-axis sums that copy the element (sum, mean, average, nansum, np.evaluate, trapezoid, einsum); complex prod/nanprod of one element; every median/nanmedian cell; flat cumsum/nancumsum; complex and N-D size-1 cumprod/nancumprod; dot/inner with a size-1 operand; einsum's zero-filled accumulator; std/var one-element dtype; nanmean/nanstd/nanvar 1-D axis shape; nansum/nanprod one-element shape; complex 1-D nansum axis throw; float16 nansum/nanprod non-C axis reads | `OpenBugsReductionTests.*` (each rule names its test; the one-element std/var dtype rule names group 5's `VarStd_OneElement_KeepsFloat16Float32_*`) |
+| `_rs_carved` (`gen_reduce_start`) | 862 all-`-0.0` cells (1,506 at delivery, before the identity-seeded add reduction fixed the sum / mean / average / nansum / nanmean / trapezoid / np.evaluate-sum cells), one rule per root cause: complex prod/nanprod of one element (np.evaluate's too); every median/nanmedian cell; flat cumsum/nancumsum; complex and N-D size-1 cumprod/nancumprod; dot/inner with a size-1 operand; einsum's zero-filled accumulator (`i,i->i`, `i,j->ij`); std/var one-element dtype; nanstd/nanvar 1-D axis shape and one-element keepdims | `OpenBugsReductionTests.*` (each rule names its test; the one-element std/var dtype rule names group 5's `VarStd_OneElement_KeepsFloat16Float32_*`) |
 | `gen_random_parity` carve list | `multivariate_normal` only: byte-identical only through a LAPACK backend's `gesdd` (the managed Jacobi SVD flips a singular vector's sign). The other seven samplers (gamma shape<1, f, pareto, standard_cauchy, binomial, negative_binomial, multinomial) were uncarved 2026-09-25 — legacy-distributions.c ports — and every sampler is also covered by the `random_api` tiers | `OpenBugsRandom.RandomParity_MultivariateNormal_Seed42_ShouldMatchNumPy` (the seven former pins are ordinary tests) |
 
 **FIXED on this branch or before it** (classifier branch/carve removed — the matrix now verifies
@@ -796,7 +797,7 @@ bits as `[OpenBugs]` in `NumSharp.Tests/OpenBugs.NaNOperandOrder.cs`, one test p
 
 ### Reduction start (`reduce_start` tier) — 2026-10-04
 
-`reduce_start.jsonl` (`gen_oracle.py reduce_start`, 7,942 cases, floor 7,500) gates how a reduction STARTS.
+`reduce_start.jsonl` (`gen_oracle.py reduce_start`, 8,586 cases, floor 8,300) gates how a reduction STARTS.
 That is visible only when the result is zero: the sign of the zero tells whether the loop started from the
 identity or copied the first element. NumPy 2.4.2's rules:
 
@@ -832,21 +833,35 @@ dtypes). **Bit-exact, 0 excused.** `FuzzCorpusTests.ReductionStart` replays it; 
 `inner` / `vdot` / `einsum` cells also join `BlasBackendDelta` (no flips). When a pinned path is fixed,
 drop its rule from `_rs_carved` and regenerate, so its cells join the gate.
 
-**What the probe found** (all pinned):
+**Re-probe after the identity-seeded add reduction (same day).** The identity add (np.sum's size-1 and
+length-1-axis routes add the element to `+0.0`, the exact flat add.reduce engine, the nan family's one-element
+and 1-D-axis results, the float16 nan-axis walk reading the view's own elements) was re-probed through the same
+uncarved matrix, this time with `MisalignedRegistry` held to zero excuses for the tier's valueclass (`negzero`,
+the rule that now keeps the committed tier honest too): 862 of 9,448 cells differ, all inside the remaining
+rules. The sum / mean / average / nansum / nanmean / trapezoid rules and np.evaluate's Sum / Mean / NanSum /
+NanMean rule are gone; nanprod keeps only the complex one-element identity, nanstd / nanvar only the float32 /
+float64 1-D axis shape and the one-element keepdims drop, einsum only the two bare-product expressions
+(`i,i->i`, `i,j->ij`). The rules now carve exactly the 862 differing cells and no exact one, so the tier grew
+from 7,942 to 8,586 cases. 13 `[OpenBugs]` tests (and the passing cases of two partial ones) moved to
+`NumSharp.Tests/Math/np.sum.Identity.Test.cs`.
 
-- size-1 shortcuts and length-1 axes that COPY the element: `sum`, `mean`, `average`, `nansum`,
+**What the probe found** (pinned until fixed; "fixed" marks what the identity add repaired):
+
+- (fixed) size-1 shortcuts and length-1 axes that COPY the element: `sum`, `mean`, `average`, `nansum`,
   `np.evaluate`'s sum kinds, `trapezoid` over one interval, `einsum` sums;
 - complex `prod` / `nanprod` (and `np.evaluate`'s) of one element skip the `1+0j` identity;
 - `median` / `nanmedian` return the middle element instead of its `np.mean` (every cell);
 - the flat `cumsum` / `nancumsum` start from `+0.0`; complex `cumprod` / `nancumprod` multiply element 0
   by `1+0j`;
 - `dot` / `inner` with a size-1 operand take the opposite of NumPy's scalar branch;
-- `einsum` composes products and `np.sum` where NumPy's default path starts every output from `+0.0`;
-- wrong dtype or shape: `std` / `var` of one float32 / float16 element are float64; `nanmean` / `nanstd`
-  / `nanvar` of a 1-D array along axis 0 are `(1,)`; one-element `nansum` / `nanprod` are `(1,)`; the
-  flat `cumprod` of an N-D size-1 array is 0-d; complex 1-D `nansum` along axis 0 throws;
-- float16 `nansum` / `nanprod` along an axis of a non-C view read the WRONG elements (garbage values,
-  e.g. `np.nanprod(float16([2, 3])[::-1], axis=0)` is not 6);
+- `einsum` composes products and `np.sum` where NumPy's default path starts every output from `+0.0` (the
+  `np.sum` part is fixed; `i,i->i` and `i,j->ij`, bare products, remain);
+- wrong dtype or shape: `std` / `var` of one float32 / float16 element are float64; `nanstd` / `nanvar` of a
+  float32 / float64 1-D array along axis 0 are `(1,)`, and drop `keepdims` for one element; the flat `cumprod`
+  of an N-D size-1 array is 0-d; (fixed) `nanmean` of a 1-D array along axis 0 was `(1,)`, one-element
+  `nansum` / `nanprod` were `(1,)`, complex 1-D `nansum` along axis 0 threw;
+- (fixed) float16 `nansum` / `nanprod` along an axis of a non-C view read the WRONG elements (garbage values,
+  e.g. `np.nanprod(float16([2, 3])[::-1], axis=0)` was not 6);
 - not a start rule, pinned in the same file: `np.trapezoid` with an axis outside `y` raises the axis
   error, where NumPy leaks `IndexError: list assignment index out of range`.
 
@@ -855,6 +870,56 @@ excuse 1,483 of the nanreduce tier's 10,416 cases today (909 shape, 378 value, 1
 8 complex throw, 4 empty throw). The value branch matches any value divergence of `nansum` / `nanprod` /
 `nanmean` / `nanstd` / `nanvar` / `nanmedian`, so wrong-element reads passed as "NaN masking / count /
 summation-order". Narrowing those branches to the classes they name is a separate nan-family pass.
+
+### np.sum's add reduction (`sum_identity` tier) — 2026-10-04
+
+`sum_identity.jsonl` (`gen_oracle.py sum_identity`, 23,121 cases, floor 22,500) gates `np.sum` as NumPy's
+`add.reduce` and the reductions built on it (`mean`, `nansum`, `nanmean`, `average`, `ndarray.sum`). Two NumPy rules
+decide its bits:
+
+- **The identity start.** `PyUFunc_ReduceWrapper` assigns the loop's identity (`+0.0` for every inexact loop) to the
+  result and only then runs the add loop, also for one element and a length-1 axis. So a sum of only `-0.0` is
+  `+0.0` (each part of a complex), and a signalling NaN comes back quiet.
+- **The call schedule.** Every inner-loop call does `*out += pairwise_sum(call)`, so which elements share a call
+  changes the last bits of a float sum. NpyIter sorts the axes by |stride| and coalesces them signed, and
+  `npyiter_find_buffering_setup`'s cost model then picks one call per run in place, or buffered fills of whole
+  runs that never cross an outer block. A cast operand (`dtype=`, `np.mean`'s float64 loop over integers and its
+  float32 loop over float16) is buffered from the start, in fills of `np.getbufsize()` elements.
+
+**Sections:**
+
+- **z** (17,340): signed-zero value patterns over float16 / float32 / float64 / complex128. Their layouts are chosen
+  so that each reaches another engine route: one element, a length-1 axis, short / blocked / SIMD-length runs,
+  strided, reversed, F-order, transposed and broadcast. Every axis is covered, with and without keepdims, plus
+  `np.sum(dtype=)` into the other inexact loops. Complex `mean` also carries inf / NaN parts: NumPy divides by the
+  count with its complex loop (Smith's algorithm, divisor `n+0j`), so an infinite part poisons the other one.
+- **d** (5,070): `np.sum(a, axis, dtype=X)` for every pair of the 13 NumPy dtypes, on small exact values. No
+  float→int conversion leaves its range and no negative float meets an unsigned loop, so no cell is C-undefined.
+- **s** (704): order-SENSITIVE flat `sum` / `mean` values (magnitudes over 24 binades) under `np.setbufsize(16)` and
+  `np.setbufsize(32)`. The case records the size in `params.bufsize`, and the replay sets it and restores it. With
+  small buffers, operands of a few hundred elements reach every regime: one run, per-run calls, buffered fills,
+  3-D / 4-D outer blocks, F order, reversed runs, and the float16 `mean` whose keepdims spelling rounds twice.
+- **e** (7): the axes a one-element `np.sum` must still refuse (AxisError, verbatim).
+
+**Bit-exact, 0 excused.** `MisalignedRegistry` returns null for the tier's valueclass (`sum_identity`). It also
+excuses nothing for a FLAT float `sum` / `mean` over a non-broadcast operand in any other tier
+(`IsExactFlatAddReduce`). A signed-zero flip of `sum` / `mean` / `nansum` / `nanmean` no longer reaches the
+summation-order or nan-family blankets (`IsIdentitySumSignedZeroFlip`), because an identity-seeded sum cannot be
+`-0.0` in any summation order. `FuzzCorpusTests.SumIdentity` replays the tier.
+
+**What it found** (all fixed 2026-10-04):
+
+- the one-element and length-1-axis routes copied the element (the `amin` / `amax` helpers), so the sum of a `-0.0`
+  was `-0.0`;
+- the flat float `sum` / `mean` used a multi-accumulator fold: right values, other bits than NumPy's schedule;
+- `dtype=` loops converted per element for only a few widening pairs: float→int summed in double and truncated the
+  total, a negative int saturated into an unsigned loop, and a complex or float16 loop read the input buffer as its
+  own dtype;
+- complex→real crashed the CLR (the IL emitter called `Complex.get_Real` on a struct value);
+- an explicit same-type int8 sum over an F view put an int8 kernel under the (int8, int64) cache key, which
+  poisoned every later default int8 sum;
+- complex `mean` divided each part by n, where NumPy uses Smith's division;
+- an empty `mean` was float64 NaN for float16 / float32 / complex128.
 
 ### float16 selections (`half_minmax` tier + the selection contract) — 2026-10-03
 

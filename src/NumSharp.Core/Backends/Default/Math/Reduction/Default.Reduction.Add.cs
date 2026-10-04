@@ -7,16 +7,53 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
+        /// <summary>
+        ///     <c>np.sum</c> / <c>ndarray.sum</c> / <c>np.add.reduce</c>: the add reduction of <paramref name="arr"/>
+        ///     over <paramref name="axis_"/> (every axis when null), computed the way NumPy's
+        ///     <c>PyUFunc_ReduceWrapper</c> computes it — the result is first assigned the loop's IDENTITY (+0.0 for an
+        ///     inexact loop, 0 / False otherwise) and only then does the add loop run over every element. A sum of only
+        ///     negative zeros is therefore +0.0 (each part of a complex), including the one-element and length-1-axis
+        ///     reductions that look like a plain copy.
+        /// </summary>
+        /// <param name="arr">The array to reduce; any dtype and any layout (contiguous, strided, reversed, F, broadcast, 0-d).</param>
+        /// <param name="axis_">The axis to reduce (negative counts from the last), or null to reduce every axis. A 0-d
+        /// array also accepts 0 and -1, which ufunc.reduce reads as "every axis" (NumPy's backward-compatibility rule).</param>
+        /// <param name="keepdims">When true the reduced axes stay in the result with length 1.</param>
+        /// <param name="dtype">NumPy's <c>dtype=</c>: the LOOP dtype — every element is cast to it (unsafely, element by
+        /// element) before it is added, and the sum is computed and returned in it. Null selects the NEP 50 accumulator
+        /// (int64 for bool and signed integers, uint64 for unsigned integers and Char, the input dtype otherwise).</param>
+        /// <param name="out">Optional output that receives the result and is returned; its shape must be the result's.</param>
+        /// <returns>The sum: a read-only 0-d scalar for a full reduction without keepdims, otherwise a fresh array (or
+        /// <paramref name="out"/>).</returns>
+        /// <exception cref="AxisError"><paramref name="axis_"/> is out of range for <paramref name="arr"/>'s rank.</exception>
+        /// <exception cref="IncorrectShapeException"><paramref name="out"/> does not have the result's shape.</exception>
+        /// <remarks>
+        ///     <para>
+        ///     The loop dtype decides the arithmetic, so three dtype relations are told apart before anything is summed:
+        ///     the default accumulator (or a <c>dtype=</c> naming it) and the input's own dtype keep the existing
+        ///     same-type / widening kernels; any OTHER loop casts the input first (<see cref="ReduceAddInCastLoop"/>),
+        ///     exactly NumPy's semantics (its buffered iterator casts each element before the add loop sees it). The
+        ///     kernels only ever converted per element for a few widening pairs: float→int accumulated in double and
+        ///     truncated the TOTAL, a negative int saturated into an unsigned loop, and a complex / float16 loop read the
+        ///     input buffer as its own dtype (out-of-bounds reads, a CLR crash for complex→real).
+        ///     </para>
+        ///     <para>
+        ///     The bool loop is NumPy's logical-OR add (<c>True + True</c> is <c>True</c>), i.e. <c>np.any</c>.
+        ///     </para>
+        /// </remarks>
         public override NDArray ReduceAdd(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null, NDArray @out = null)
         {
             NPTypeCode? typeCode = dtype?.GetTypeCode();
             var shape = arr.Shape;
+            var inputType = arr.GetTypeCode;
+            var accumulatorType = inputType.GetAccumulatingType();
+            // NumPy's loop dtype: the dtype= request, else the NEP 50 accumulator.
+            var loopType = typeCode ?? accumulatorType;
 
             if (shape.IsEmpty)
             {
-                // NumPy parity: sum of empty array uses accumulating type (int/bool -> int64/uint64, floats preserved).
-                var defaultType = typeCode ?? arr.typecode.GetAccumulatingType();
-                var defaultVal = defaultType.GetDefaultValue();
+                // The UNINITIALIZED shape sentinel (not a size-0 array — that is the next branch): the identity of the loop.
+                var defaultVal = loopType.GetDefaultValue();
                 if (@out is not null) { @out.SetAtIndex(defaultVal, 0); return @out; }
                 return NDArray.Scalar(defaultVal);
             }
@@ -24,23 +61,66 @@ namespace NumSharp.Backends
             if (shape.size == 0)
                 return HandleEmptyArrayReduction(arr, axis_, keepdims, typeCode, @out, ReductionOp.Sum);
 
-            // Degenerate flat reduction (0-d scalar or single-element 1-D). NumPy still applies the
-            // NEP50 sum accumulator here — sum(int32)->int64, sum(bool)->int64 — REGARDLESS of size,
-            // so resolve the accumulating dtype at the call site (the n>=2 path below does the same via
-            // GetAccumulatingType). HandleScalarReduction is shared with amin/amax, which must PRESERVE
-            // the input dtype and therefore keep passing the raw (possibly-null) typeCode; the widening
-            // is a property of sum/prod, not of the helper.
-            if (shape.IsScalar || (shape.size == 1 && shape.NDim == 1))
-                return HandleScalarReduction(arr, keepdims, typeCode ?? arr.GetTypeCode.GetAccumulatingType(), @out);
+            // The flat sum of a float loop is NumPy's exact add.reduce — the identity start, NpyIter's call schedule and a
+            // pairwise sum per call — whether the input already is the loop dtype or is cast into it (NumPyAddReduce). One
+            // element keeps SumOfOneElement below; a broadcast operand and the rest of the engine's declines keep the
+            // routes that follow.
+            if (axis_ == null && shape.size > 1 && NumPyAddReduce.SupportsLoop(loopType))
+            {
+                var exact = TryExactFlatSum(arr, keepdims, loopType, @out);
+                if (exact is not null)
+                    return exact;
+            }
+
+            // ONE element per output — a one-element input reduced flat (or over its only axis; a 0-d input reads axis 0
+            // and -1 as every axis) — is still identity + x in NumPy, never a copy of x. HandleScalarReduction stays the
+            // copy amin/amax need (they have no identity). Taken before the cast-loop and bool-loop branches: the
+            // identity add casts the lone element into any loop itself (WriteIdentityPlus), and for a bool loop
+            // False OR bool(x) is that cast, so the cast copy those branches would make first is one allocation and one
+            // pass too many.
+            if (shape.size == 1 && (axis_ == null || shape.NDim <= 1))
+            {
+                if (axis_ != null)
+                {
+                    if (shape.NDim == 0)
+                    {
+                        if (axis_.Value != 0 && axis_.Value != -1)
+                            throw new AxisError(axis_.Value, 0);
+                    }
+                    else
+                        NormalizeAxis(axis_.Value, shape.NDim);
+                }
+
+                return SumOfOneElement(arr, keepdims, loopType, @out);
+            }
+
+            // A length-1 axis gives every output exactly one element: identity + x again (HandleTrivialAxisReduction's
+            // copy stays for amin/amax/nanmin/nanmax, which have no identity) — before the cast loop for the same reason.
+            if (axis_ != null && shape.NDim > 0)
+            {
+                var unitAxis = NormalizeAxis(axis_.Value, arr.ndim);
+                if (shape[unitAxis] == 1)
+                    return SumOverLengthOneAxis(arr, unitAxis, keepdims, loopType, @out);
+            }
+
+            // A loop dtype that is neither the input's own nor its default accumulator: NumPy casts every element into it
+            // before the add loop runs, so the cast copy is reduced in its own dtype (no kernel converts per element for
+            // every such pair — see the remarks). The axis kernels' own widening paths are NOT the cast copy's order in
+            // general — float32 -> float64 and float16 -> float32 summed a contiguous axis differently from NumPy — but
+            // float32 -> float64 over a non-innermost axis is (IsSequentialWideningAxisSum), and runs directly.
+            if (loopType != inputType && loopType != accumulatorType
+                && !(axis_ != null && IsSequentialWideningAxisSum(arr, axis_.Value, inputType, loopType)))
+                return ReduceAddInCastLoop(arr, axis_, keepdims, loopType, @out);
+
+            // NumPy's bool add loop is logical OR: a bool loop over a bool input is np.any (identity False).
+            if (loopType == NPTypeCode.Boolean)
+                return ReduceAddBooleanLoop(arr, axis_, keepdims, @out);
 
             if (axis_ == null)
                 return HandleElementWiseSum(arr, keepdims, typeCode, @out);
 
             var axis = NormalizeAxis(axis_.Value, arr.ndim);
-            var outputType = typeCode ?? arr.GetTypeCode.GetAccumulatingType();
-
-            if (shape[axis] == 1)
-                return HandleTrivialAxisReduction(arr, axis, keepdims, outputType, @out);
+            var outputType = loopType;
 
             // Half AXIS sum: reproduce NumPy's HALF_add reduce (float32 intermediate, narrowed per
             // inner-loop call) in a FLOAT32 shadow accumulator, then narrow to Half ONCE. The NDIter
@@ -50,8 +130,9 @@ namespace NumSharp.Backends
             // float32 shadow (vs re-widening the half accumulator from memory every step) + the
             // in-place RoundToF16 is what makes the large-kept SLAB beat NumPy instead of losing to
             // its hardware F16C. The OLD Double-accumulator path returned 4096 for that SLAB case — a
-            // real divergence this fixes. An explicit dtype request is honored by the normal path.
-            if (arr.typecode == NPTypeCode.Half && typeCode == null)
+            // real divergence this fixes. dtype=float16 on a float16 input IS this loop (NumPy runs the same
+            // HALF_add), so the explicit spelling takes it too; other loops arrived here already cast.
+            if (arr.typecode == NPTypeCode.Half && loopType == NPTypeCode.Half)
             {
                 // Both temporaries are this branch's own intermediates: `wide` is consumed by the
                 // narrowing astype COPY, and `halfResult` is element-copied into @out when one is
@@ -80,6 +161,39 @@ namespace NumSharp.Backends
             }
 
             return ExecuteAxisReduction(arr, axis, keepdims, outputType, @out, ReductionOp.Sum);
+        }
+
+        /// <summary>
+        ///     Whether <c>np.sum(arr, axis, dtype=float64)</c> of a float32 <paramref name="arr"/> may run the axis kernel's
+        ///     own float32 → float64 path instead of reducing a cast copy: when the reduced axis is NOT the operand's
+        ///     smallest-|stride| axis, every output is a SEQUENTIAL sum (<c>out += next slab</c>) in both NumPy's buffered
+        ///     loop and that kernel, and the per-element conversion is exact, so the bits are the cast copy's — 10 of 10
+        ///     probed layouts (C, F, strided rows / columns, reversed, 3-D, transposed 3-D), and NumPy itself on C axis 0 /
+        ///     F axis 1. Over the innermost axis NumPy sums each output pairwise, which only the cast copy reproduces (the
+        ///     kernel differed on all 8 such probes), so that case keeps the copy.
+        /// </summary>
+        /// <param name="arr">The operand.</param>
+        /// <param name="axis">The reduced axis (negative counts from the last; out of range returns false so the copy
+        /// route raises NumPy's AxisError).</param>
+        /// <param name="src">The input dtype.</param>
+        /// <param name="loop">The loop dtype.</param>
+        /// <returns>True for a float32 → float64 reduction over a non-innermost axis of a non-broadcast operand.</returns>
+        private static bool IsSequentialWideningAxisSum(NDArray arr, int axis, NPTypeCode src, NPTypeCode loop)
+        {
+            if (src != NPTypeCode.Single || loop != NPTypeCode.Double)
+                return false;
+            var shape = arr.Shape;
+            int nd = shape.NDim;
+            if (axis < -nd || axis >= nd || nd < 2 || shape.IsBroadcasted)
+                return false;
+            int ax = axis < 0 ? axis + nd : axis;
+            if (shape.dimensions[ax] < 2)
+                return false;
+            long axisStride = Math.Abs(shape.strides[ax]);
+            for (int d = 0; d < nd; d++)
+                if (d != ax && shape.dimensions[d] > 1 && Math.Abs(shape.strides[d]) < axisStride)
+                    return true;   // some kept axis is strictly tighter: the reduced axis is not the innermost
+            return false;          // (a tie — two axes of one stride — counts as innermost and keeps the copy)
         }
 
         private NDArray HandleElementWiseSum(NDArray arr, bool keepdims, NPTypeCode? typeCode, NDArray @out)
@@ -379,10 +493,13 @@ namespace NumSharp.Backends
         /// <summary>
         ///     Degenerate flat reduction of a 0-d scalar or single-element 1-D array: the result is the
         ///     lone element, reshaped to a numpy scalar (0-d) or, under <paramref name="keepdims"/>, to
-        ///     all-ones. Shared by sum/prod (which pass their RESOLVED accumulating dtype, so the element
-        ///     is cast/widened) and amin/amax (which pass <c>null</c> to PRESERVE the input dtype) — the
-        ///     helper does not decide widening, the caller does. A null <paramref name="typeCode"/>
-        ///     therefore clones the input verbatim; a non-null one casts to it.
+        ///     all-ones. A COPY, which is right only for a reduction whose result IS the lone element —
+        ///     prod (which passes its RESOLVED accumulating dtype, so the element is cast/widened; 1 * x is
+        ///     x) and amin/amax/nanmin/nanmax (which pass <c>null</c> to PRESERVE the input dtype; they
+        ///     have no identity, NumPy copies the first element). The helper does not decide widening, the
+        ///     caller does: a null <paramref name="typeCode"/> clones the input verbatim, a non-null one
+        ///     casts to it. np.sum / np.mean do NOT come here — their identity add turns a -0.0 into +0.0
+        ///     (<see cref="SumOfOneElement"/>).
         /// </summary>
         /// <param name="arr">The size-&#8804;1 operand.</param>
         /// <param name="keepdims">When true, the result keeps the input rank with every axis length 1.</param>
@@ -400,6 +517,19 @@ namespace NumSharp.Backends
             return r.MarkReductionScalar();
         }
 
+        /// <summary>
+        ///     Reduction over an axis of LENGTH 1 by COPYING each lone element (cast to
+        ///     <paramref name="outputType"/>): right only for the reductions without an identity —
+        ///     amin/amax/nanmin/nanmax, where NumPy copies the first element (PyArray_CopyInitialReduceValues) —
+        ///     and for prod (1 * x is x). np.sum and np.mean go to <see cref="SumOverLengthOneAxis"/> instead: their
+        ///     identity add makes a -0.0 element +0.0.
+        /// </summary>
+        /// <param name="arr">The input; <c>arr.shape[axis] == 1</c>.</param>
+        /// <param name="axis">The normalized reduced axis.</param>
+        /// <param name="keepdims">When true the reduced axis stays in the result with length 1.</param>
+        /// <param name="outputType">The result dtype each element is converted to.</param>
+        /// <param name="out">Unsupported: a non-null value returns null (every caller passes null).</param>
+        /// <returns>The copied slab in KEEPORDER layout, a 0-d scalar for a 1-D input, or null when <paramref name="out"/> is given.</returns>
         private NDArray HandleTrivialAxisReduction(NDArray arr, int axis, bool keepdims, NPTypeCode outputType, NDArray @out)
         {
             if (@out is not null) return null;

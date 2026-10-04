@@ -197,8 +197,19 @@ namespace NumSharp.Backends.Kernels
         /// path) then the exact tree-combine; n&gt;128 split (kept a multiple of 8) and
         /// recurse. Bit-for-bit identical to <c>np.add.reduce</c> for float/double.
         /// </summary>
+        /// <remarks>
+        /// Scalar: the IL-emitted SIMD folds (<see cref="TryGetPairwiseFoldDouble"/> /
+        /// <see cref="TryGetPairwiseFoldSingle"/>) compute the same bits faster and are preferred. This one is the
+        /// fallback where those are unavailable (no SIMD, no dynamic code), which is why it is internal: the flat
+        /// add.reduce engine (<c>NumPyAddReduce</c>) falls back to it on such hosts.
+        /// </remarks>
+        /// <typeparam name="T">float or double — the accumulator is the element type, as in NumPy's FLOAT / DOUBLE loops.</typeparam>
+        /// <param name="a">Address of logical element 0.</param>
+        /// <param name="n">Element count (0 returns -0.0).</param>
+        /// <param name="stride">Distance between consecutive elements, in ELEMENTS (may be negative).</param>
+        /// <returns>The pairwise sum, WITHOUT the reduce loop's addition to the identity.</returns>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe T PairwiseFold<T>(T* a, long n, long stride)
+        internal static unsafe T PairwiseFold<T>(T* a, long n, long stride)
             where T : unmanaged, INumber<T>
         {
             if (n < 8)
@@ -363,15 +374,17 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Divide every element of <paramref name="output"/> by <paramref name="count"/> in
         /// place — the post-pass that turns an accumulated axis Sum into a Mean. For Complex
-        /// this divides both components by the real count (NumPy: <c>mean = sum / n</c>),
-        /// which is exactly what the legacy <c>MeanAxisComplex</c> did per element but without
-        /// its per-output-row NDArray allocation. Any output layout is honored.
+        /// this is NumPy's complex division by <c>count+0j</c> (np.mean's <c>true_divide(sum, n)</c>
+        /// runs the CDOUBLE_divide loop, Smith's algorithm: <c>((re + im*0)*(1/n), (im - re*0)*(1/n))</c>,
+        /// see <see cref="DefaultEngine.ComplexDivideByCountLikeNumPy"/>), so an
+        /// infinite or NaN part poisons the other one and the rounding is NumPy's; it used to divide each
+        /// component by the count. Any output layout is honored.
         /// </summary>
         /// <remarks>
         /// A writeable dense-block output (C- or F-contiguous) is divided through typed pointers — a
         /// <see cref="Vector{T}"/> loop for float64/float32, a scalar loop for complex/decimal — with the
         /// IDENTICAL arithmetic of the boxed loop (<c>x / (double)count</c>, <c>x / (float)count</c>,
-        /// component-wise complex, decimal): IEEE division is correctly rounded per lane, so the vector
+        /// NumPy's complex division, decimal): IEEE division is correctly rounded per lane, so the vector
         /// and scalar forms are bit-identical. The boxed <c>GetAtIndex</c>/<c>SetAtIndex</c> loop it
         /// replaces cost ~4 ns per output (np.mean(axis=0) of 3×1M spent ~4 of its 6.7 ms here). A
         /// strided or read-only output keeps the boxed loop.
@@ -392,11 +405,11 @@ namespace NumSharp.Backends.Kernels
             {
                 case NPTypeCode.Complex:
                 {
-                    double d = count;
+                    // NumPy's complex division by n+0j (see the dense-block twin below), not component-wise.
                     for (long i = 0; i < n; i++)
                     {
                         var c = (System.Numerics.Complex)output.GetAtIndex(i);
-                        output.SetAtIndex(new System.Numerics.Complex(c.Real / d, c.Imaginary / d), i);
+                        output.SetAtIndex(DefaultEngine.ComplexDivideByCountLikeNumPy(c, count), i);
                     }
                     return;
                 }
@@ -515,7 +528,7 @@ namespace NumSharp.Backends.Kernels
         /// through typed pointers with the SAME arithmetic as the boxed loop — float64 <c>x / (double)count</c>
         /// and float32 <c>x / (float)count</c> over <see cref="Vector{T}"/> lanes (IEEE division is correctly
         /// rounded per lane, so bit-identical to the scalar form, NaN payloads included), complex
-        /// component-wise by <c>(double)count</c>, decimal <c>x / (decimal)count</c>.
+        /// through NumPy's complex division by <c>count+0j</c>, decimal <c>x / (decimal)count</c>.
         /// </summary>
         /// <param name="output">The accumulated sums.</param>
         /// <param name="tc">The output dtype.</param>
@@ -563,13 +576,13 @@ namespace NumSharp.Backends.Kernels
                 }
                 case NPTypeCode.Complex:
                 {
+                    // np.mean's true_divide(sum, count) runs NumPy's COMPLEX division loop with the divisor n+0j
+                    // (Smith's algorithm: rat = 0, scl = 1/n, ((re + im*0)*scl, (im - re*0)*scl)): a component-wise
+                    // re / n rounds differently (re * (1/n) is not re / n for most n) and keeps an infinite or NaN part
+                    // from poisoning the other one (np.mean([5+infj]) is nan+infj).
                     var p = (System.Numerics.Complex*)block;
-                    double d = count;
                     for (long i = 0; i < n; i++)
-                    {
-                        var c = p[i];
-                        p[i] = new System.Numerics.Complex(c.Real / d, c.Imaginary / d);
-                    }
+                        p[i] = DefaultEngine.ComplexDivideByCountLikeNumPy(p[i], count);
 
                     return true;
                 }

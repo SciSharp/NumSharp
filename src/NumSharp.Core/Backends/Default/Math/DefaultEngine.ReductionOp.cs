@@ -190,8 +190,10 @@ namespace NumSharp.Backends
                 case NPTypeCode.UInt32:  { uint    x = *(uint*)&v;    uint    r = isProd ? (uint)   IPowU(x, count) : unchecked((uint)   (x * (ulong)count)); return *(TResult*)&r; }
                 case NPTypeCode.Int64:   { long    x = *(long*)&v;    long    r = isProd ? IPowS(x, count)          : unchecked(x * count);                    return *(TResult*)&r; }
                 case NPTypeCode.UInt64:  { ulong   x = *(ulong*)&v;   ulong   r = isProd ? IPowU(x, count)          : unchecked(x * (ulong)count);             return *(TResult*)&r; }
-                case NPTypeCode.Single:  { float   x = *(float*)&v;   float   r = isProd ? (float)Math.Pow(x, count) : (float)(x * (double)count);            return *(TResult*)&r; }
-                case NPTypeCode.Double:  { double  x = *(double*)&v;  double  r = isProd ? Math.Pow(x, count)        : x * count;                              return *(TResult*)&r; }
+                // A float sum adds the multiplied value to the identity +0.0, as NumPy's reduction does: a broadcast
+                // -0.0 times the count is -0.0, and np.sum of only -0.0 is +0.0 (np.sum(np.broadcast_to(-0.0, 5))).
+                case NPTypeCode.Single:  { float   x = *(float*)&v;   float   r = isProd ? (float)Math.Pow(x, count) : 0f + (float)(x * (double)count);       return *(TResult*)&r; }
+                case NPTypeCode.Double:  { double  x = *(double*)&v;  double  r = isProd ? Math.Pow(x, count)        : 0.0 + x * count;                        return *(TResult*)&r; }
                 case NPTypeCode.Decimal: { decimal x = *(decimal*)&v; decimal r = isProd ? DPow(x, count)           : x * count;                              return *(TResult*)&r; }
                 // Char/Boolean/Half/Complex only reach CombineWithCount via min/max (returned above) → identity.
                 default: return v;
@@ -247,7 +249,9 @@ namespace NumSharp.Backends
             try
             {
                 using var iter = NDIterRef.New(arr, NDIterGlobalFlags.None);
-                return iter.ExecuteReduction<TResult>(op);
+                // The resolved accumulator travels with the call: the iterator must not re-derive it from the input
+                // dtype (an explicit same-type int8 sum would get an int64 accumulator in an int8-typed kernel).
+                return iter.ExecuteReduction<TResult>(op, accumType);
             }
             catch (Exception)
             {
@@ -868,7 +872,9 @@ namespace NumSharp.Backends
             if (sumType == NPTypeCode.Complex)
             {
                 var sum = ComplexReduceViaNDIter(arr, isProd: false);
-                return sum / count;
+                // NumPy's complex division by count+0j (Smith's algorithm), not System.Numerics' component-wise
+                // z / n: an infinite or NaN part poisons the other one, and re * (1/n) rounds like NumPy.
+                return ComplexDivideByCountLikeNumPy(sum, count);
             }
 
             // Handle Half separately - NumPy 2.x preserves float16 dtype for mean.
@@ -931,9 +937,12 @@ namespace NumSharp.Backends
             if (shape.IsContiguous || shape.IsFContiguous)
             {
                 // Raw buffer is linearly contiguous (C- or F-order) → fold in memory order, which
-                // is exactly the order NumPy's iterator folds a contiguous array in.
+                // is exactly the order NumPy's iterator folds a contiguous array in. The fold is added
+                // to the identity +0.0 — HALF_add's reduce is `io1 = (float)identity; io1 +=
+                // pairwise_sum(...)`, and the pairwise leaf itself starts from -0.0 — so a sum of only
+                // -0.0 is +0.0 (and a signalling NaN comes back quiet), not the fold's -0.0.
                 ushort* p = (ushort*)((byte*)arr.Address + shape.offset * 2);
-                float acc = Kernels.ILKernelGenerator.PairwiseFoldHalf(p, arr.size, 1);
+                float acc = 0f + Kernels.ILKernelGenerator.PairwiseFoldHalf(p, arr.size, 1);
                 return BitConverter.UInt16BitsToHalf(Kernels.DirectILKernelGenerator.SingleToHalfBits(acc));
             }
             // Strided / transposed / broadcast → materialize C-contiguous (Giesen SIMD copy is exact
@@ -946,7 +955,8 @@ namespace NumSharp.Backends
             try
             {
                 ushort* cp = (ushort*)((byte*)c.Address + c.Shape.offset * 2);
-                float acc2 = Kernels.ILKernelGenerator.PairwiseFoldHalf(cp, c.size, 1);
+                // Identity first, as above: +0.0 + fold.
+                float acc2 = 0f + Kernels.ILKernelGenerator.PairwiseFoldHalf(cp, c.size, 1);
                 return BitConverter.UInt16BitsToHalf(Kernels.DirectILKernelGenerator.SingleToHalfBits(acc2));
             }
             finally

@@ -1918,9 +1918,13 @@ namespace NumSharp.Backends
         /// and <c>out_i = (im - re*0)*scl</c> — a NaN or inf in EITHER part poisons BOTH
         /// (<c>nan*0 = nan</c>). System.Numerics' component-wise <c>z / n</c> keeps the other part
         /// finite and diverged from np.mean on every NaN-carrying complex slice (probed 2.4.2:
-        /// <c>np.mean([nan+1j, 2+3j]) == nan+nanj</c>).
+        /// <c>np.mean([nan+1j, 2+3j]) == nan+nanj</c>). Shared with the engine's np.mean
+        /// (<see cref="ILKernelGenerator.MeanDivideByCount"/>), which divided component-wise too.
         /// </summary>
-        private static System.Numerics.Complex ComplexDivideByCountLikeNumPy(System.Numerics.Complex z, long n)
+        /// <param name="z">The complex sum.</param>
+        /// <param name="n">The count it is divided by (≥ 1).</param>
+        /// <returns>NumPy's <c>z / (n+0j)</c>.</returns>
+        internal static System.Numerics.Complex ComplexDivideByCountLikeNumPy(System.Numerics.Complex z, long n)
         {
             double scl = 1.0 / n;
             double re = z.Real, im = z.Imaginary;

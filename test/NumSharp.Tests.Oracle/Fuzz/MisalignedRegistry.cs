@@ -266,6 +266,30 @@ namespace NumSharp.Tests.Fuzz
             if (OpRegistry.IsPolynomialOp(c.Op))
                 return null;
 
+            // sum_identity.jsonl (np.sum's identity-seeded add reduction) is held to ZERO excuses too. Its values
+            // are signed zeros, exact cancellations, inf / NaN complex parts and small exact numbers, so every sum
+            // is exact in every order: the summation-order and nan-family blankets below have nothing legitimate
+            // to excuse there, and they are precisely what kept a -0.0 out of the engine's copy shortcuts green.
+            if (c.Valueclass == "sum_identity")
+                return null;
+
+            // reduce_start.jsonl (valueclass "negzero": every operand all -0.0, every result a signed zero) is held to
+            // ZERO excuses as well. Its cells exist to show how a reduction STARTS, which only the sign of a zero
+            // result reveals, and a zero is exact in every summation order — so the order, nan-family and
+            // median-sign blankets below would excuse exactly the start bugs the tier is there to catch. A path
+            // NumSharp still gets wrong is carved out of the tier by gen_oracle._rs_carved and pinned by an
+            // [OpenBugs] test, never excused here.
+            if (c.Valueclass == "negzero")
+                return null;
+
+            // The FLAT np.sum / np.mean of a float loop over a non-broadcast operand is NumPy's add.reduce bit for bit
+            // (NumPyAddReduce, Default.Reduction.Add.Exact.cs: the identity start, NpyIter's call schedule over the
+            // operand's layout, a pairwise sum per call, _mean's loop dtype and its float64 division by the count), so
+            // no branch below describes a divergence it may have. The summation-order blanket used to excuse these
+            // cases while the flat route was a multi-accumulator fold; a value or dtype difference is now a real bug.
+            if (IsExactFlatAddReduce(c, tc))
+                return null;
+
             // The ndarray.* / emath.* namespaced tiers delegate to the SAME kernels as their np.*
             // twins (a.std() -> the var/std engine, emath.sqrt -> np.sqrt over the promoted
             // operand), so every excuse branch below must apply to the namespaced spelling too —
@@ -601,9 +625,9 @@ namespace NumSharp.Tests.Fuzz
                 // "Can't construct NDIterator with an empty shape" instead of returning NaN.
                 if (kind == DivergenceKind.Threw && c.Operands[0].Shape.Any(d => d == 0))
                     return "nan-reduction(empty): throws 'NDIterator empty shape' instead of NaN [known bug]";
-                // (W4-D) complex 1-D axis reduction throws (shared NDCoordinatesAxisIncrementor bug).
-                if (kind == DivergenceKind.Threw && c.Operands.Length == 1 && c.Operands[0].Dtype == "complex128")
-                    return "complex 1-D axis reduction throws (NDCoordinatesAxisIncrementor vector shape) [known bug]";
+                // (W4-D FIXED 2026-10-04) the complex 1-D axis nansum no longer throws: NanSumComplex's axis route is
+                // NumPy's composition (np.sum of the NaN-replaced array) instead of the NDCoordinatesAxisIncrementor walk
+                // that refused a 1-D shape. The excuse is removed, so a regression turns the gate red.
                 // (W4-A) shape: nanmean/nanstd/nanvar collapse a 1-D axis reduction to [1] instead of
                 // a scalar [], and drop keepdims entirely on the integer input path.
                 if (kind == DivergenceKind.Shape)
@@ -614,8 +638,10 @@ namespace NumSharp.Tests.Fuzz
                 // (W4-C) nanmedian propagates NaN instead of ignoring it.
                 if (kind == DivergenceKind.Value && c.Op == "nanmedian")
                     return "nanmedian: propagates NaN instead of ignoring it [known bug]";
-                // (W4-B) nansum/nanmean/nanstd/nanvar: wrong NaN masking / count, or summation order.
-                if (kind == DivergenceKind.Value)
+                // (W4-B) nansum/nanmean/nanstd/nanvar: wrong NaN masking / count, or summation order. Never a
+                // -0.0 out of nansum / nanmean: they are np.sum / np.mean of the NaN-replaced array, which start from
+                // the identity +0.0 and so cannot be -0.0 in any summation order (see IsIdentitySumSignedZeroFlip).
+                if (kind == DivergenceKind.Value && !IsIdentitySumSignedZeroFlip(c.Op, expected, actual, tc, diffs))
                     return "nan-reduction value: NaN masking / count / summation-order divergence [known bug]";
             }
 
@@ -725,12 +751,8 @@ namespace NumSharp.Tests.Fuzz
                 // must turn the gate red. The residual excuse is std/var's complex->real result dtype.
                 if (kind == DivergenceKind.Dtype && c.Op != "sum" && c.Op != "prod")
                     return "reduction result dtype differs (NEP50 accumulator / complex->real) [known bug]";
-                // Complex axis reduction on a 2-D+ array now works (resolved); but reducing a 1-D
-                // complex array along its only axis still throws "NDCoordinatesAxisIncrementor with a
-                // vector shape". Excuse only that residual Threw case — the 2-D cases are verified
-                // (value diffs fall to the summation / ~ULP branches).
-                if (kind == DivergenceKind.Threw && c.Operands.Length == 1 && c.Operands[0].Dtype == "complex128")
-                    return "complex 1-D axis reduction throws (NDCoordinatesAxisIncrementor vector shape) [known bug]";
+                // Complex axis reductions work on every rank since 2026-10-04 (the 1-D case used to throw
+                // "NDCoordinatesAxisIncrementor with a vector shape"); no Threw case is excused any more.
 
                 // NaN propagation: the FLAT (axis=null) min/max reduction now propagates NaN
                 // (Phase 1 F2-reductions: NaN-propagating SIMD min/max in the IL flat kernel +
@@ -752,10 +774,12 @@ namespace NumSharp.Tests.Fuzz
                 // UNBOUNDED, so a truth-bearing case (precision tier) must be adjudicated by the
                 // P1/P2 truthful branch above instead — a divergence that is LESS truthful than
                 // NumPy would otherwise hide in here.
+                // A signed-zero flip of sum / mean is NOT order (IsIdentitySumSignedZeroFlip) and stays red.
                 if (kind == DivergenceKind.Value && truth == null
                     && (tc == NPTypeCode.Half || tc == NPTypeCode.Single
                         || tc == NPTypeCode.Double || tc == NPTypeCode.Complex)
-                    && (c.Op == "sum" || c.Op == "mean" || c.Op == "std" || c.Op == "var" || c.Op == "prod"))
+                    && (c.Op == "sum" || c.Op == "mean" || c.Op == "std" || c.Op == "var" || c.Op == "prod")
+                    && !IsIdentitySumSignedZeroFlip(c.Op, expected, actual, tc, diffs))
                     return "reduction summation/two-pass precision (algorithm order)";
             }
 
@@ -1302,6 +1326,85 @@ namespace NumSharp.Tests.Fuzz
         private static bool IsSignedZeroPairSingle(BitDiff.Diff d) =>
             (d.Expected == "00000000" || d.Expected == "00000080")
             && (d.Actual == "00000000" || d.Actual == "00000080");
+
+        /// <summary>
+        ///     Whether case <paramref name="c"/> is a FLAT (<c>axis=None</c>) <c>sum</c> / <c>mean</c> with a float result
+        ///     over a non-broadcast operand — exactly the cells NumSharp's exact add.reduce engine (NumPyAddReduce) computes,
+        ///     so the classifier excuses nothing there.
+        /// </summary>
+        /// <remarks>
+        ///     Broadcast operands (a stride-0 axis of extent &gt; 1) are left to the old route by the engine (NpyIter's axis
+        ///     sort skips their comparisons, a schedule the engine does not model), and Decimal has no NumPy dtype, so both
+        ///     keep the branches below. An integer or bool result is exact in any order and never reaches the summation
+        ///     branches anyway. The <c>ma.</c> tier reaches this classifier with its prefix stripped
+        ///     (<c>FuzzCorpusTests.Ma.StripMa</c>) but runs <c>NDMaskedArray</c>'s own reductions, not this engine, so its
+        ///     cases (ids <c>ma.*</c>) keep their documented gaps.
+        /// </remarks>
+        /// <param name="c">The case.</param>
+        /// <param name="tc">The result dtype the classifier compares in.</param>
+        /// <returns>True when the case must be bit-exact.</returns>
+        private static bool IsExactFlatAddReduce(FuzzCorpus.Case c, NPTypeCode tc)
+        {
+            if ((c.Op != "sum" && c.Op != "mean") || c.Operands.Length != 1)
+                return false;
+            if (c.Id != null && c.Id.StartsWith("ma.", StringComparison.Ordinal))
+                return false;
+            if (c.Params != null && c.Params.TryGetValue("axis", out var axis)
+                && axis.ValueKind != System.Text.Json.JsonValueKind.Null)
+                return false;
+            if (tc != NPTypeCode.Half && tc != NPTypeCode.Single && tc != NPTypeCode.Double && tc != NPTypeCode.Complex)
+                return false;
+            var o = c.Operands[0];
+            if (o.Dtype == "decimal" || o.Shape == null || o.Strides == null)
+                return false;
+            for (int d = 0; d < o.Shape.Length; d++)
+                if (o.Strides[d] == 0 && o.Shape[d] > 1)
+                    return false;
+            return true;
+        }
+
+        /// <summary>
+        ///     True when <paramref name="op"/> is one of the identity-seeded add reductions — sum, mean, nansum,
+        ///     nanmean — and some differing element is a SIGNED-ZERO flip (both values numerically zero, opposite sign
+        ///     bits; for complex, either part). NumPy assigns the add identity +0.0 to the result before the loop runs
+        ///     (PyUFunc_ReduceWrapper), so +0.0 + (-0.0) makes its sum, and every mean / NaN-skipping variant built on
+        ///     it, NEVER -0.0 — in any summation order. Such a flip is therefore a NumSharp bug (a copy where NumPy adds
+        ///     to the identity), never the "summation order" the reduction blankets excuse; those blankets kept a
+        ///     -0.0 out of every one-element / length-1-axis sum green until 2026-10.
+        /// </summary>
+        /// <param name="op">The bare op key (the ndarray. prefix already stripped).</param>
+        /// <param name="expected">NumPy's result bytes.</param>
+        /// <param name="actual">NumSharp's result bytes.</param>
+        /// <param name="tc">The result dtype.</param>
+        /// <param name="diffs">The differing elements.</param>
+        /// <returns>Whether the divergence includes a signed-zero flip the identity rules out.</returns>
+        private static bool IsIdentitySumSignedZeroFlip(string op, byte[] expected, byte[] actual, NPTypeCode tc,
+            IReadOnlyList<BitDiff.Diff> diffs)
+        {
+            if (expected == null || actual == null || diffs == null || diffs.Count == 0)
+                return false;
+            if (op != "sum" && op != "mean" && op != "nansum" && op != "nanmean")
+                return false;
+            foreach (var d in diffs)
+            {
+                if (tc == NPTypeCode.Complex)
+                {
+                    // A complex element is two float64 words; either one flipping its zero sign counts.
+                    if (ZeroFlipAt(expected, actual, d.Index * 16) || ZeroFlipAt(expected, actual, d.Index * 16 + 8))
+                        return true;
+                }
+                else if (BitDiff.IsSignedZeroFlip(expected, actual, d.Index, tc))
+                    return true;
+            }
+
+            return false;
+
+            static bool ZeroFlipAt(byte[] e, byte[] a, int off)
+            {
+                double x = BitConverter.ToDouble(e, off), y = BitConverter.ToDouble(a, off);
+                return x == 0.0 && y == 0.0 && BitConverter.DoubleToInt64Bits(x) != BitConverter.DoubleToInt64Bits(y);
+            }
+        }
 
         /// <summary>
         ///     Both the expected and actual tokens are a signed zero at the float dtype

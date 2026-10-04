@@ -302,9 +302,66 @@ namespace NumSharp.Backends
                 for (; i + w <= n; i += w)
                     Vector256.Store(GatherRun(x + i * xs, xs), o + i);
             }
+            else if (os == 1 && Ssse3.IsSupported && (sizeof(T) == 1 || sizeof(T) == 2) && (xs == 2 || xs == -1))
+            {
+                // The sub-word runs the flat add.reduce stages before a cast (np.mean of x[::2] / x[::-1] for bool, int8,
+                // uint8, int16, uint16, float16): byte / word shuffles of whole 16-byte loads.
+                i = CopySubwordRun((byte*)o, (byte*)x, xs, n, sizeof(T));
+            }
 
-            for (; i < n; i++)
-                o[i * os] = x[i * xs];
+            // The rest one element at a time, by pointer bumps: an index multiplied by a runtime stride per element ran
+            // this copy ~3x slower (0.37 ns per byte on a stride-2 uint8 run, against 0.13 ns inlined at a constant stride).
+            T* op = o + i * os, xp = x + i * xs;
+            for (; i < n; i++, op += os, xp += xs)
+                *op = *xp;
+        }
+
+        /// <summary>Byte shuffle keeping the even bytes of a 16-byte load in its low 8 bytes (stride-2 1-byte runs).</summary>
+        private static readonly Vector128<byte> s_evenBytes = Vector128.Create((byte)0, 2, 4, 6, 8, 10, 12, 14, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80);
+
+        /// <summary>Byte shuffle keeping the even words of a 16-byte load in its low 8 bytes (stride-2 2-byte runs).</summary>
+        private static readonly Vector128<byte> s_evenWords = Vector128.Create((byte)0, 1, 4, 5, 8, 9, 12, 13, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80);
+
+        /// <summary>Byte shuffle reversing the 16 bytes of a load.</summary>
+        private static readonly Vector128<byte> s_reverseBytes = Vector128.Create((byte)15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0);
+
+        /// <summary>Byte shuffle reversing the 8 words of a load.</summary>
+        private static readonly Vector128<byte> s_reverseWords = Vector128.Create((byte)14, 15, 12, 13, 10, 11, 8, 9, 6, 7, 4, 5, 2, 3, 0, 1);
+
+        /// <summary>
+        /// The vector body of <see cref="CopyRun{T}"/> for 1- and 2-byte elements at a source stride of 2 or -1 into a
+        /// contiguous destination: 16-byte loads shuffled — the even elements kept, or the order reversed — then stored.
+        /// No load reads past the run's last element: a stride-2 block loads only while an element follows the block's
+        /// last one (the odd byte / word after it is then inside the run), and a reversed block loads exactly its own
+        /// elements.
+        /// </summary>
+        /// <param name="o">The contiguous destination.</param>
+        /// <param name="x">The run's first element.</param>
+        /// <param name="xs">The source stride in elements: 2 or -1.</param>
+        /// <param name="n">The run length.</param>
+        /// <param name="size">The element size: 1 or 2 bytes.</param>
+        /// <returns>How many leading elements were copied; the caller copies the rest.</returns>
+        private static unsafe long CopySubwordRun(byte* o, byte* x, long xs, long n, int size)
+        {
+            long i = 0;
+            if (xs == 2)
+            {
+                // 16 bytes hold (16 / size) source elements of which every other one is copied: 8 bytes or 4 words.
+                long per = 8 / size;
+                var mask = size == 1 ? s_evenBytes : s_evenWords;
+                // a block of `per` elements spans elements i .. i+per-1 at bytes [2i·size, 2(i+per)·size) — the load's last
+                // unit is the odd one after element i+per-1, inside the run while element i+per exists (i + per < n).
+                for (; i + per < n; i += per)
+                    Sse2.StoreScalar((ulong*)(o + i * size), Ssse3.Shuffle(Sse2.LoadVector128(x + 2 * i * size), mask).AsUInt64());
+                return i;
+            }
+
+            // xs == -1: elements i .. i+count-1 sit at x - (i+count-1) .. x - i; load from the lowest address and reverse.
+            long count = 16 / size;
+            var rev = size == 1 ? s_reverseBytes : s_reverseWords;
+            for (; i + count <= n; i += count)
+                Sse2.Store(o + i * size, Ssse3.Shuffle(Sse2.LoadVector128(x - (i + count - 1) * size), rev));
+            return i;
         }
 
         /// <summary>
@@ -1295,12 +1352,19 @@ namespace NumSharp.Backends
         /// <param name="maximumSize">The buffer size in elements (<c>np.getbufsize()</c>).</param>
         /// <param name="coreSize">The core (product of the extents below the chosen dimension); 1 for dimension 0.</param>
         /// <param name="bestSize">The core times the chosen dimension's extent — the elements one outer index spans.</param>
+        /// <param name="castOperand">True when the operand needs a CAST into the loop dtype (NumPy's
+        /// <c>NPY_OP_ITFLAG_CAST</c>, e.g. <c>np.sum(a, dtype=…)</c> or np.mean's float64 loop over integers). A cast
+        /// operand is buffered from the start, so the cost begins at 2: the core then grows only while it is below the
+        /// buffer size (no GROWINNER escape), and dimension 0 is kept only when its run alone fills the buffer. False is
+        /// min/max's (and an uncast sum's) model, unchanged.</param>
         /// <returns>The chosen outer dimension.</returns>
-        internal static int FlatBufferingDim(ReadOnlySpan<long> cd, long maximumSize, out long coreSize, out long bestSize)
+        internal static int FlatBufferingDim(ReadOnlySpan<long> cd, long maximumSize, out long coreSize, out long bestSize,
+            bool castOperand = false)
         {
-            int cost = 1;
+            // npyiter_find_buffering_setup: cost = 1 + the operands buffered so far; a CAST operand counts from the start.
+            int cost = castOperand ? 2 : 1;
             long size = cd[0];
-            int bestDim = 0, bestCost = 1;
+            int bestDim = 0, bestCost = cost;
             bestSize = size;
             coreSize = 1;
             for (int idim = 1; idim < cd.Length; idim++)

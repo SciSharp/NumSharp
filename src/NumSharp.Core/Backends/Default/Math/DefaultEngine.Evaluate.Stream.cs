@@ -490,10 +490,12 @@ namespace NumSharp.Backends
 
                 if (!sequentialProd && axisSize == 1)
                 {
-                    // The engine reduces a size-1 axis by COPYING it (ReduceAdd → HandleTrivialAxisReduction), so
-                    // the materialized path returns x itself, not 0 + x; child index (o·1 + 0)·inner + i equals
-                    // result index o·inner + i, so the child is produced straight into the result.
+                    // A length-1 axis gives every output ONE element, and NumPy (like the engine's ReduceAdd →
+                    // SumOverLengthOneAxis) still adds it to the identity: 0 + x, so a -0.0 slab sums to +0.0. Child
+                    // index (o·1 + 0)·inner + i equals result index o·inner + i, so the child is produced straight
+                    // into the result and the identity is added there in place (one SIMD pass over the outputs).
                     ProduceBlocked(ref stream, 0, outer * inner, dst, childType.SizeOf());
+                    WriteIdentityPlus(result, result, childType);
                     return result;
                 }
 

@@ -27,7 +27,7 @@ Each claim is bounded by its recorded inputs and scope. The coverage report dist
 
 The oracle receives the same input buffers through zero-copy NumSharp → NumPy exports. Shape/dtype and canonical C-order value bytes are compared; canonicalization changes layout, not values. Interop cleanup also checks conversion lifetimes.
 
-Exact bytes remain the default. The existing composed-metric suite retains its explicitly selected allowances: only forecast `smape`/`mrae` allow one ULP, ranking method-1 DCG one and NDCG two. The dedicated 150-scalar comparison reports 134 exact, ten one-ULP and six two-ULP results per framework. Other helper assertions are additional. There is no failed-exact-to-`allclose` fallback. Zero-norm Slerp and undefined legacy-HPS interpolation have separately identified NaN-classification checks.
+Exact bytes remain the default. The composed-metric suite's measured allowances (forecast `smape`/`mrae` one ULP, ranking method-1 DCG one and NDCG two) were retired on 2026-10-04: they came from `np.sum`/`np.mean`'s flat summation order, and once those run NumPy's own add.reduce schedule the dedicated 150-scalar comparison reports all 150 exact per framework (it reported 134 exact, ten one-ULP and six two-ULP results before). The two test names still carry the first run's budgets, because the evidence records cite them. Other helper assertions are additional. There is no failed-exact-to-`allclose` fallback. Zero-norm Slerp and undefined legacy-HPS interpolation have separately identified NaN-classification checks.
 
 The larger fixtures exposed three reduction-order differences:
 

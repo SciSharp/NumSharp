@@ -12,8 +12,9 @@ namespace NumSharp.Tests.Backends.Kernels;
 /// along an axis and by np.evaluate's fused axis reductions). Both take a typed dense-block fast path for a
 /// writeable C- or F-contiguous output and keep the boxed per-element loop for every other layout. The
 /// contract pinned here: every logical element receives exactly the value the boxed loop would write (the
-/// identity through the boxed setter's own conversion; <c>x / (T)count</c> bit-for-bit, NaN payloads and signed
-/// zeros included), nothing OUTSIDE the output view is touched (a dense view at an offset, a strided view), and
+/// identity through the boxed setter's own conversion; <c>x / (T)count</c> bit-for-bit for the real dtypes, NaN
+/// payloads and signed zeros included, and NumPy's complex division by <c>count+0j</c> for complex), nothing OUTSIDE
+/// the output view is touched (a dense view at an offset, a strided view), and
 /// a read-only output still raises the read-only error and stays unchanged.
 /// </summary>
 [TestClass]
@@ -161,10 +162,15 @@ public class ReductionPostPassTests
                     }
                     case NPTypeCode.Complex:
                     {
+                        // np.mean's true_divide(sum, count) is NumPy's COMPLEX division by count+0j (CDOUBLE_divide,
+                        // Smith's algorithm with rat = 0, scl = 1/count): ((re + im*0)*scl, (im - re*0)*scl) — an
+                        // infinite or NaN part poisons the other one, and re*scl rounds unlike re/count. The pool's
+                        // infinities and NaN payload pin exactly that.
                         var x = (Complex)input.GetAtIndex(i);
                         var y = (Complex)view.GetAtIndex(i);
-                        Assert.AreEqual(BitConverter.DoubleToInt64Bits(x.Real / count), BitConverter.DoubleToInt64Bits(y.Real), $"c128.re {name} [{i}]");
-                        Assert.AreEqual(BitConverter.DoubleToInt64Bits(x.Imaginary / count), BitConverter.DoubleToInt64Bits(y.Imaginary), $"c128.im {name} [{i}]");
+                        double scl = 1.0 / count;
+                        Assert.AreEqual(BitConverter.DoubleToInt64Bits((x.Real + x.Imaginary * 0.0) * scl), BitConverter.DoubleToInt64Bits(y.Real), $"c128.re {name} [{i}]");
+                        Assert.AreEqual(BitConverter.DoubleToInt64Bits((x.Imaginary - x.Real * 0.0) * scl), BitConverter.DoubleToInt64Bits(y.Imaginary), $"c128.im {name} [{i}]");
                         break;
                     }
                     default:
