@@ -56,8 +56,8 @@ namespace NumSharp
             }
 
             // Recursive case: iterate over first dimension
-            var list = new List<object>((int)System.Math.Min(arr.shape[0], int.MaxValue));
-            for (long i = 0; i < arr.shape[0]; i++)
+            var list = new List<object>((int)System.Math.Min(arr.Shape.dimensions[0], int.MaxValue));
+            for (long i = 0; i < arr.Shape.dimensions[0]; i++)
             {
                 // Get sub-array along first dimension
                 var subArray = arr[i];

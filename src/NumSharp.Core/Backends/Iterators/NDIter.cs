@@ -1023,7 +1023,7 @@ namespace NumSharp.Backends.Iteration
                     if (opIdx < opAxes.Length && opAxes[opIdx] != null)
                     {
                         var axisMap = opAxes[opIdx];
-                        var opShape = op[opIdx].shape;
+                        var opShape = op[opIdx].Shape.dimensions;
                         for (int iterAxis = 0; iterAxis < opAxesNDim; iterAxis++)
                         {
                             int rawOpAxis = iterAxis < axisMap.Length ? axisMap[iterAxis] : -1;
@@ -1072,7 +1072,7 @@ namespace NumSharp.Backends.Iteration
                     else
                     {
                         // No op_axes for this operand: right-align shape to opAxesNDim
-                        var opShape = op[opIdx].shape;
+                        var opShape = op[opIdx].Shape.dimensions;
                         int offset = opAxesNDim - opShape.Length;
                         if (offset < 0)
                             throw new IncorrectShapeException(
@@ -1213,7 +1213,7 @@ namespace NumSharp.Backends.Iteration
                     continue;
 
                 bool noBroadcast = (opFlags[opIdx] & NDIterPerOpFlags.NO_BROADCAST) != 0;
-                var opShape = op[opIdx].shape;
+                var opShape = op[opIdx].Shape.dimensions;
 
                 // When opAxes is provided for this operand, use it for validation
                 if (opAxes != null && opIdx < opAxes.Length && opAxes[opIdx] != null)

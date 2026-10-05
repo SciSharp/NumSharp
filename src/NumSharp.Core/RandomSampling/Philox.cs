@@ -429,7 +429,7 @@ namespace NumSharp
                         words[i] = u.GetAtIndex<ulong>(i);
                     var shape = new long[u.ndim];
                     for (int d = 0; d < shape.Length; d++)
-                        shape[d] = u.shape[d];
+                        shape[d] = u.Shape.dimensions[d];
                     return CheckArrayForm(words, name, len, shape);
                 }
 

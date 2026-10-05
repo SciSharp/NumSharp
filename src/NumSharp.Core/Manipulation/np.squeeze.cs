@@ -49,8 +49,8 @@ namespace NumSharp
             if (axis >= a.ndim)
                 throw new ArgumentOutOfRangeException(nameof(axis));
 
-            if (a.shape[axis] != 1)
-                throw new IncorrectShapeException($"Unable to squeeze axis {axis} because it is of length {a.shape[axis]} and not 1.");
+            if (a.Shape.dimensions[axis] != 1)
+                throw new IncorrectShapeException($"Unable to squeeze axis {axis} because it is of length {a.Shape.dimensions[axis]} and not 1.");
 
             // Stride-dropping VIEW (see squeeze(NDArray)) removing ONLY the named axis.
             return SqueezeView(a, a.ndim - 1, onlyAxis: axis);

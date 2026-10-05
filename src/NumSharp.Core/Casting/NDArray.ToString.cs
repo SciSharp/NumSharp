@@ -44,11 +44,11 @@ namespace NumSharp
         private string LegacyCharToString(bool flat)
         {
             var s = new StringBuilder();
-            if (shape.Length == 0)
+            if (this.Shape.dimensions.Length == 0)
             {
                 s.Append($"{Storage.GetAtIndex(0)}");
             }
-            else if (shape.Length == 1)
+            else if (this.Shape.dimensions.Length == 1)
             {
                 s.Append(string.Join("", GetData<char>()));
             }
@@ -78,7 +78,7 @@ namespace NumSharp
                 return;
             }
 
-            if (shape.Length == 1)
+            if (this.Shape.dimensions.Length == 1)
             {
                 s.Append("[");
                 s.Append("\"");
@@ -89,7 +89,7 @@ namespace NumSharp
                 return;
             }
 
-            var size = shape[0];
+            var size = this.Shape.dimensions[0];
             s.Append("[");
 
             for (long i = 0; i < size; i++)

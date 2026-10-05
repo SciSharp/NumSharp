@@ -176,7 +176,7 @@ namespace NumSharp
 
             // Otherwise axis 0 is the condition axis. NumPy's condlist[0] access raises on an empty
             // first axis before any wrap decision is made.
-            long count = condlist.shape[0];
+            long count = condlist.Shape.dimensions[0];
             if (count == 0)
                 throw new IndexError("index 0 is out of bounds for axis 0 with size 0");
 

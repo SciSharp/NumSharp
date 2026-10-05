@@ -98,7 +98,7 @@ namespace NumSharp.Backends
                 if (kernel != null)
                 {
                     fixed (long* inputStrides = arr.Shape.Strides)
-                    fixed (long* shapePtr = arr.shape)
+                    fixed (long* shapePtr = arr.Shape.dimensions)
                     {
                         kernel((void*)arr.Address, (void*)ret.Address, inputStrides, shapePtr, axis, arr.ndim, arr.size);
                     }

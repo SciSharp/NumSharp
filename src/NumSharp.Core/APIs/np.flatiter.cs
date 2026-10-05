@@ -127,7 +127,7 @@ namespace NumSharp
                 _ndim = a.ndim;
                 _size = a.size;
                 _dims = new long[_ndim];
-                var shp = a.shape;
+                var shp = a.Shape.dimensions;
                 for (int i = 0; i < _ndim; i++)
                     _dims[i] = shp[i];
             }

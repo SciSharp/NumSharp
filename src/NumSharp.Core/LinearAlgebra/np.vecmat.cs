@@ -66,7 +66,7 @@ namespace NumSharp
             }
 
             GufuncGuard.RequireCoreSize("vecmat", VecmatSignature, 1, 0,
-                b.shape[b.ndim - 2], a.shape[a.ndim - 1]);
+                b.Shape.dimensions[b.ndim - 2], a.Shape.dimensions[a.ndim - 1]);
 
             a = GufuncGuard.ToLoop(a, dtype);
             b = GufuncGuard.ToLoop(b, dtype);

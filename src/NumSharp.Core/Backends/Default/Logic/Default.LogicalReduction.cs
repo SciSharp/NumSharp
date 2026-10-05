@@ -162,7 +162,7 @@ namespace NumSharp.Backends
             {
                 var newDims = new List<long>(ndim - normalized.Length);
                 var axesSet = new HashSet<int>(normalized);
-                long[] resultShape = chained.shape;
+                long[] resultShape = chained.Shape.dimensions;
                 for (int d = 0; d < ndim; d++)
                 {
                     if (!axesSet.Contains(d))
@@ -193,7 +193,7 @@ namespace NumSharp.Backends
         private NDArray<bool> ReduceContiguousAxisRun(NDArray nd, int[] sortedAxes, bool keepdims, bool reduceAll)
         {
             int ndim = nd.ndim;
-            long[] origDims = nd.shape;
+            long[] origDims = nd.Shape.dimensions;
             int firstAxis = sortedAxes[0];
             int lastAxis = sortedAxes[sortedAxes.Length - 1];
 

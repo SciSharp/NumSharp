@@ -196,10 +196,10 @@ namespace NumSharp
                 for (int i = 0; i < args.Length; i++)
                     arrays[i] = args[i] as NDArray ?? (converted[i] = OrdinateArray(args[i]));
 
-                var shape0 = arrays[0].shape;
+                var shape0 = arrays[0].Shape.dimensions;
                 for (int i = 1; i < arrays.Length; i++)
                 {
-                    if (!SameShape(arrays[i].shape, shape0))
+                    if (!SameShape(arrays[i].Shape.dimensions, shape0))
                         throw new ValueError(arrays.Length switch
                         {
                             3 => "x, y, z are incompatible",
@@ -334,7 +334,7 @@ namespace NumSharp
         /// <exception cref="OverflowException">A Python int does not fit an integer x dtype.</exception>
         private static NDArray Evaluate(PolyBasis basis, NDArray xa, PyScalar xw, bool weak, NDArray c, Shape cLayout, bool tensor)
         {
-            long nc = c.shape[0];
+            long nc = c.Shape.dimensions[0];
             if (nc == 0)
                 throw new IndexError($"index {(basis == PolyBasis.Power ? -1 : -2)} is out of bounds for axis 0 with size 0");
 

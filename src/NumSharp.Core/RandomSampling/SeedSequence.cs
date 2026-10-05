@@ -357,7 +357,7 @@ namespace NumSharp
         {
             var shape = new long[nd.ndim];
             for (int d = 0; d < shape.Length; d++)
-                shape[d] = nd.shape[d];
+                shape[d] = nd.Shape.dimensions[d];
             return shape;
         }
 

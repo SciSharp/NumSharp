@@ -94,7 +94,7 @@ namespace NumSharp
             }
 
             // Strip leading near-zero remainder coefficients (NumPy: rtol 1e-14, keep at least one).
-            while (r.shape[r.ndim - 1] > 1 && np.allclose(r["0"], NDArray.Scalar(0.0), rtol: 1e-14))
+            while (r.Shape.dimensions[r.ndim - 1] > 1 && np.allclose(r["0"], NDArray.Scalar(0.0), rtol: 1e-14))
                 r = r["1:"];
 
             return (q, r);

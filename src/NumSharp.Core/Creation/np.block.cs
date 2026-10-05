@@ -192,7 +192,7 @@ namespace NumSharp
                 for (int i = 0; i < pad; i++)
                     dims[i] = 1;
                 for (int i = 0; i < a.ndim; i++)
-                    dims[pad + i] = a.shape[i];
+                    dims[pad + i] = a.Shape.dimensions[i];
                 return a.reshape(dims);
             }
 
@@ -358,7 +358,7 @@ namespace NumSharp
                 // slice and the array inside a list to be consistent with the
                 // recursive case.
                 var arr = AtLeastNdView((NDArray)arrays, resultNdim);
-                return ((long[])arr.shape.Clone(),
+                return ((long[])arr.Shape.dimensions.Clone(),
                         new List<(long, long)[]> { Array.Empty<(long, long)>() },
                         new List<NDArray> { arr });
             }

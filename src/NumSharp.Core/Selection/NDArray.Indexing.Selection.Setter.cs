@@ -287,8 +287,8 @@ namespace NumSharp
                 if (values.size != 1)
                 {
                     var selShape = boolBasic.Length == 0
-                        ? (long[])this.shape.Select(x => (long)x).ToArray()
-                        : this[boolBasic].shape.Select(x => (long)x).ToArray();
+                        ? (long[])this.Shape.dimensions.Select(x => (long)x).ToArray()
+                        : this[boolBasic].Shape.dimensions.Select(x => (long)x).ToArray();
                     selShape[boolAxis] = 0;                      // False -> empty axis
                     string Tup(long[] s) => s.Length == 1 ? $"({s[0]},)" : "(" + string.Join(",", s) + ")";
                     try { np.broadcast_to(values, (Shape)selShape); }
@@ -489,7 +489,7 @@ namespace NumSharp
             {
                 var ndim = indicesObjects.Length;
                 var prematureSlices = new Slice[ndim];
-                var dims = @this.shape;
+                var dims = @this.Shape.dimensions;
                 for (int i = 0; i < ndim; i++)
                 {
                     if (indicesObjects[i] is Slice slice)
@@ -506,7 +506,7 @@ namespace NumSharp
                 @this = @this[prematureSlices];
 
                 //updated premature axes
-                dims = @this.shape;
+                dims = @this.Shape.dimensions;
                 for (int i = 0; i < ndim; i++)
                 {
                     if (prematureSlices[i] != Slice.All)
@@ -654,7 +654,7 @@ namespace NumSharp
                 //handle non-flat index
                 if (idxs.ndim != 1)
                 {
-                    indicesImpliedShape = idxs.shape;
+                    indicesImpliedShape = idxs.Shape.dimensions;
                     idxs = idxs.flat;
                 }
 
@@ -698,7 +698,7 @@ namespace NumSharp
                     var nd = indices[i];
                     if (nd.ndim != 1)
                     {
-                        indicesImpliedShape = nd.shape;
+                        indicesImpliedShape = nd.Shape.dimensions;
                         indices[i] = nd = nd.flat;
                     }
                 }
@@ -707,7 +707,7 @@ namespace NumSharp
             //resolve retShape
             if (!isSubshaped)
             {
-                retShape = indicesImpliedShape ?? (long[])idxs.shape.Clone();
+                retShape = indicesImpliedShape ?? (long[])idxs.Shape.dimensions.Clone();
             }
             else
             {
@@ -715,7 +715,7 @@ namespace NumSharp
                 {
                     retShape = new long[idxs.ndim + srcShape.NDim - ndsCount];
                     for (int i = 0; i < idxs.ndim; i++)
-                        retShape[i] = idxs.shape[i];
+                        retShape[i] = idxs.Shape.dimensions[i];
 
 
                     subShape = new long[srcShape.NDim - ndsCount];

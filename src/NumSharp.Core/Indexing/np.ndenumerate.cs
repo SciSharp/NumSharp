@@ -246,7 +246,7 @@ namespace NumSharp
                     int ndim = arr.ndim;
                     _coords = new long[ndim];
                     _dims = new long[ndim];
-                    var shp = arr.shape;
+                    var shp = arr.Shape.dimensions;
                     for (int i = 0; i < ndim; i++)
                         _dims[i] = shp[i];
                     _started = false;

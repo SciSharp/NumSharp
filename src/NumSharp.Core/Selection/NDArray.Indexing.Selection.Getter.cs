@@ -381,7 +381,7 @@ namespace NumSharp
             {
                 var ndim = indicesObjects.Length;
                 var prematureSlices = new Slice[ndim];
-                var dims = @this.shape;
+                var dims = @this.Shape.dimensions;
                 for (int i = 0; i < ndim; i++)
                 {
                     if (indicesObjects[i] is Slice slice)
@@ -398,7 +398,7 @@ namespace NumSharp
                 @this = @this[prematureSlices];
 
                 //updated premature axes
-                dims = @this.shape;
+                dims = @this.Shape.dimensions;
                 for (int i = 0; i < ndim; i++)
                 {
                     if (prematureSlices[i] != Slice.All)
@@ -1163,7 +1163,7 @@ namespace NumSharp
                     // subshape, so a[np.array(0)] matches a[0] -> (subshape), NOT a length-1
                     // leading axis. Keep the natural (possibly empty) implied shape instead of
                     // forcing (1,), which left a spurious size-1 axis (NumPy parity).
-                    indicesImpliedShape = idxs.shape;
+                    indicesImpliedShape = idxs.Shape.dimensions;
                     idxs = idxs.flat;
                 }
 
@@ -1211,7 +1211,7 @@ namespace NumSharp
                         // 0-D operand (e.g. broadcast of all-scalar advanced indices) -> empty
                         // implied shape, no spurious leading size-1 axis: a[np.array(0), np.array(1)]
                         // -> scalar, matching NumPy.
-                        indicesImpliedShape = nd.shape;
+                        indicesImpliedShape = nd.Shape.dimensions;
                         indices[i] = nd = np.atleast_1d(nd).flat;
                     }
                 }
@@ -1220,7 +1220,7 @@ namespace NumSharp
             //resolve retShape
             if (!isSubshaped)
             {
-                retShape = indicesImpliedShape ?? (long[])idxs.shape.Clone();
+                retShape = indicesImpliedShape ?? (long[])idxs.Shape.dimensions.Clone();
             }
             else
             {
@@ -1228,7 +1228,7 @@ namespace NumSharp
                 {
                     retShape = new long[idxs.ndim + srcShape.NDim - ndsCount];
                     for (int i = 0; i < idxs.ndim; i++)
-                        retShape[i] = idxs.shape[i];
+                        retShape[i] = idxs.Shape.dimensions[i];
 
                     subShape = new long[srcShape.NDim - ndsCount];
                     for (int dst_i = idxs.ndim, src_i = ndsCount, i = 0; src_i < srcShape.NDim; dst_i++, src_i++, i++)
@@ -1395,8 +1395,8 @@ namespace NumSharp
             else
             {
                 //compare computed retShape vs given @out
-                if (!retShape.SequenceEqual(@out.shape))
-                    throw new ArgumentException($"Given @out NDArray is expected to be shaped [{string.Join(", ", retShape)}] but is instead [{string.Join(", ", @out.shape)}]");
+                if (!retShape.SequenceEqual(@out.Shape.dimensions))
+                    throw new ArgumentException($"Given @out NDArray is expected to be shaped [{string.Join(", ", retShape)}] but is instead [{string.Join(", ", @out.Shape.dimensions)}]");
                 if (@out.dtype != typeof(T))
                     throw new ArgumentException($"Given @out NDArray is expected to be dtype '{typeof(T).Name}' but is instead '{@out.dtype.type.Name}'");
 
@@ -1463,8 +1463,8 @@ namespace NumSharp
             else
             {
                 //compare computed retShape vs given @out
-                if (!retShape.SequenceEqual(@out.shape))
-                    throw new ArgumentException($"Given @out NDArray is expected to be shaped [{string.Join(", ", retShape)}] but is instead [{string.Join(", ", @out.shape)}]");
+                if (!retShape.SequenceEqual(@out.Shape.dimensions))
+                    throw new ArgumentException($"Given @out NDArray is expected to be shaped [{string.Join(", ", retShape)}] but is instead [{string.Join(", ", @out.Shape.dimensions)}]");
                 if (@out.dtype != typeof(T))
                     throw new ArgumentException($"Given @out NDArray is expected to be dtype '{typeof(T).Name}' but is instead '{@out.dtype.type.Name}'");
 

@@ -420,7 +420,7 @@ namespace NumSharp.IO
             {
                 ["descr"] = DtypeToDescr(array.typecode),
                 ["fortran_order"] = fortranOrder,
-                ["shape"] = array.shape,
+                ["shape"] = array.Shape.dimensions,
             };
         }
 

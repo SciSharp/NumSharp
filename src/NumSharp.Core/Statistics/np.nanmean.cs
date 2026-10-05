@@ -144,7 +144,7 @@ namespace NumSharp
             }
 
             // Build output shape
-            var inputShape = arr.shape;
+            var inputShape = arr.Shape.dimensions;
             var outputShapeList = new System.Collections.Generic.List<long>();
             for (int i = 0; i < inputShape.Length; i++)
             {
@@ -253,7 +253,7 @@ namespace NumSharp
 
         private static NDArray nanmean_axis_half(NDArray arr, int axis, bool keepdims)
         {
-            var inputShape = arr.shape;
+            var inputShape = arr.Shape.dimensions;
             var outputShapeList = new System.Collections.Generic.List<long>();
             for (int i = 0; i < inputShape.Length; i++)
                 if (i != axis) outputShapeList.Add(inputShape[i]);
@@ -299,7 +299,7 @@ namespace NumSharp
 
         private static NDArray nanmean_axis_complex(NDArray arr, int axis, bool keepdims)
         {
-            var inputShape = arr.shape;
+            var inputShape = arr.Shape.dimensions;
             var outputShapeList = new System.Collections.Generic.List<long>();
             for (int i = 0; i < inputShape.Length; i++)
                 if (i != axis) outputShapeList.Add(inputShape[i]);

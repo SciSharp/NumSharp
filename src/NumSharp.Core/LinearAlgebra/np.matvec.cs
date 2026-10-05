@@ -72,7 +72,7 @@ namespace NumSharp
             }
 
             GufuncGuard.RequireCoreSize("matvec", MatvecSignature, 1, 0,
-                b.shape[b.ndim - 1], a.shape[a.ndim - 1]);
+                b.Shape.dimensions[b.ndim - 1], a.Shape.dimensions[a.ndim - 1]);
 
             a = GufuncGuard.ToLoop(a, dtype);
             b = GufuncGuard.ToLoop(b, dtype);

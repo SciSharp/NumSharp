@@ -50,7 +50,7 @@ namespace NumSharp
                 throw new TypeError("expected non-empty vector for x");
             if (y.ndim < 1 || y.ndim > 2)
                 throw new TypeError("expected 1D or 2D array for y");
-            if (x.shape[0] != y.shape[0])
+            if (x.Shape.dimensions[0] != y.Shape.dimensions[0])
                 throw new TypeError("expected x and y to have same length");
 
             double rc = rcond ?? (x.size * np.finfo(x.dtype).eps);
@@ -64,7 +64,7 @@ namespace NumSharp
                 w = np.asarray(w) + 0.0;
                 if (w.ndim != 1)
                     throw new TypeError("expected a 1-d array for weights");
-                if (w.shape[0] != y.shape[0])
+                if (w.Shape.dimensions[0] != y.Shape.dimensions[0])
                     throw new TypeError("expected w and y to have the same length");
                 NDArray wcol = np.expand_dims(w, -1);
                 lhs = lhs * wcol;

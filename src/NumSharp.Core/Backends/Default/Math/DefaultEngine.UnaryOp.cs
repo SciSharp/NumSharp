@@ -723,7 +723,7 @@ namespace NumSharp.Backends
             byte* inputAddr = (byte*)input.Address + inputShape.offset * inputElemSize;
 
             fixed (long* strides = inputShape.strides)
-            fixed (long* shape = result.shape)
+            fixed (long* shape = result.Shape.dimensions)
             {
                 kernel(
                     (void*)inputAddr,

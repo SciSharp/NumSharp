@@ -70,7 +70,7 @@ namespace NumSharp
                     bool reduced = false;
                     for (int j = 0; j < normalized.Length; j++)
                         if (normalized[j] == i) { reduced = true; break; }
-                    if (!reduced) kept.Add(a.shape[i]);
+                    if (!reduced) kept.Add(a.Shape.dimensions[i]);
                 }
                 diff = diff.reshape(kept.ToArray());
             }
@@ -81,9 +81,9 @@ namespace NumSharp
         private static NDArray WriteOrReturn(NDArray diff, NDArray @out)
         {
             if (@out is null) return diff;
-            if (!diff.shape.SequenceEqual(@out.shape))
+            if (!diff.Shape.dimensions.SequenceEqual(@out.Shape.dimensions))
                 throw new ArgumentException(
-                    $"out has wrong shape; expected=[{string.Join(",", diff.shape)}] got=[{string.Join(",", @out.shape)}]");
+                    $"out has wrong shape; expected=[{string.Join(",", diff.Shape.dimensions)}] got=[{string.Join(",", @out.Shape.dimensions)}]");
             np.copyto(@out, diff);
             return @out;
         }

@@ -55,7 +55,7 @@ namespace NumSharp
                 //   result = len(bins) - searchsorted(bins[::-1], x, side)
                 NDArray rev = binsC["::-1"].copy();
                 NDArray ss = np.searchsorted(rev, x, side);
-                return NDArray.Scalar((long)bins.shape[0]) - ss;
+                return NDArray.Scalar((long)bins.Shape.dimensions[0]) - ss;
             }
 
             return np.searchsorted(binsC, x, side);

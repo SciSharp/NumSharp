@@ -45,11 +45,11 @@ namespace NumSharp.Backends
         /// </summary>
         private unsafe NDArray DotInner1D(NDArray left, NDArray right)
         {
-            long n = left.shape[0];
-            if (right.shape[0] != n)
+            long n = left.Shape.dimensions[0];
+            if (right.Shape.dimensions[0] != n)
                 throw new IncorrectShapeException(
-                    $"shapes ({left.shape[0]},) and ({right.shape[0]},) not aligned: " +
-                    $"{left.shape[0]} (dim 0) != {right.shape[0]} (dim 0)");
+                    $"shapes ({left.Shape.dimensions[0]},) and ({right.Shape.dimensions[0]},) not aligned: " +
+                    $"{left.Shape.dimensions[0]} (dim 0) != {right.Shape.dimensions[0]} (dim 0)");
 
             var tc = left.typecode;
 

@@ -58,10 +58,10 @@ namespace NumSharp
             int ndim = nw.ndim;
             bool isFortran = ndim > 1 && nw.Shape.IsFContiguous && !nw.Shape.IsContiguous;
 
-            long axisLen = nw.shape[packAxis];
+            long axisLen = nw.Shape.dimensions[packAxis];
             long nOut = axisLen == 0 ? 0 : ((axisLen - 1) >> 3) + 1;
 
-            long[] outDims = (long[])nw.shape.Clone();
+            long[] outDims = (long[])nw.Shape.dimensions.Clone();
             outDims[packAxis] = nOut;
 
             // pack's output axis is ceil(inputAxis/8), so an empty input always yields an empty output
@@ -72,7 +72,7 @@ namespace NumSharp
 
             // Normalise to C-contiguous so (n_outer, axisLen, nel) is a plain block walk.
             NDArray srcC = nw.Shape.IsContiguous ? nw : np.ascontiguousarray(nw);
-            ComputeAxisGeometry(srcC.shape, packAxis, out long nOuter, out long nel);
+            ComputeAxisGeometry(srcC.Shape.dimensions, packAxis, out long nOuter, out long nel);
 
             // Logical element 0 = base Address + Shape.offset elements: a contiguous slice keeps a
             // non-zero offset into a shared buffer (e.g. a[2:5]), which the whole-array block walk must
@@ -124,7 +124,7 @@ namespace NumSharp
             int ndim = nw.ndim;
             bool isFortran = ndim > 1 && nw.Shape.IsFContiguous && !nw.Shape.IsContiguous;
 
-            long axisLen = nw.shape[unpackAxis];   // input bytes along the axis
+            long axisLen = nw.Shape.dimensions[unpackAxis];   // input bytes along the axis
             long full = axisLen * 8;
 
             // count resolves the output axis length (NumPy: outdims[axis]*=8, then count adjusts).
@@ -144,7 +144,7 @@ namespace NumSharp
                     outLen = cnt;
             }
 
-            long[] outDims = (long[])nw.shape.Clone();
+            long[] outDims = (long[])nw.Shape.dimensions.Clone();
             outDims[unpackAxis] = outLen;
 
             long outSize = 1;
@@ -164,7 +164,7 @@ namespace NumSharp
             var cOut = new NDArray(NPTypeCode.Byte, new Shape(outDims, 'C'), false);
 
             NDArray srcC = nw.Shape.IsContiguous ? nw : np.ascontiguousarray(nw);
-            ComputeAxisGeometry(srcC.shape, unpackAxis, out long nOuter, out long nel);
+            ComputeAxisGeometry(srcC.Shape.dimensions, unpackAxis, out long nOuter, out long nel);
 
             // Logical element 0 = base Address + Shape.offset (uint8, so offset is in bytes). The fresh
             // output is offset 0.

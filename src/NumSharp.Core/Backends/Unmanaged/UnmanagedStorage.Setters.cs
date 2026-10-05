@@ -1192,7 +1192,7 @@ namespace NumSharp.Backends
                 throw new ArgumentNullException(nameof(nd));
 
             //first try to convert to dtype only then we apply changes.
-            _shape = nd.shape;
+            _shape = nd.Shape.dimensions;
             OnReshaped(); // keep OWNDATA mirroring this storage's ownership (fresh shapes carry no bit)
             _dtype = nd.Storage.DType;
             _typecode = nd.GetTypeCode;

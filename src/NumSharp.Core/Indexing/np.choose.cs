@@ -124,7 +124,7 @@ namespace NumSharp
             if (choices is null) throw new ArgumentNullException(nameof(choices));
             if (choices.ndim == 0)
                 throw new TypeError("iteration over a 0-d array");
-            int n = (int)choices.shape[0];
+            int n = (int)choices.Shape.dimensions[0];
             var objs = new object[n];
             for (int i = 0; i < n; i++)
                 objs[i] = choices[i];   // view along axis 0

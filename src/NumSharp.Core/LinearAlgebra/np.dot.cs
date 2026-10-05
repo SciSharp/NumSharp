@@ -46,7 +46,7 @@
                     "number of dimensions, and be a C-Array)");
 
             for (int d = 0; d < result.ndim; d++)
-                if (result.shape[d] != @out.shape[d])
+                if (result.Shape.dimensions[d] != @out.Shape.dimensions[d])
                     throw new ValueError("output array has wrong dimensions");
 
             // dtype already validated equal, so this is a straight copy of the freshly-computed

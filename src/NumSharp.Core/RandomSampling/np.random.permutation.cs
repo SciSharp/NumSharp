@@ -109,7 +109,7 @@ namespace NumSharp
                 return arr;
             }
 
-            var idx = np.arange(x.shape[0]);
+            var idx = np.arange(x.Shape.dimensions[0]);
             shuffle(idx);
             return np.take(x, idx, axis: 0);
         }

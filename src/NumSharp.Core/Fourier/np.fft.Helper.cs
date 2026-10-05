@@ -93,7 +93,7 @@ namespace NumSharp
             foreach (int ax in axes)
             {
                 int a = ax < 0 ? ax + nd : ax;
-                long shift = x.shape[a] / 2;   // dim // 2 (a >= 0 here, so int-div == floor-div)
+                long shift = x.Shape.dimensions[a] / 2;   // dim // 2 (a >= 0 here, so int-div == floor-div)
                 result = np.roll(result, negate ? -shift : shift, a);
             }
             return ReferenceEquals(result, x) ? x.copy() : result;

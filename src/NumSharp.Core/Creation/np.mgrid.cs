@@ -24,7 +24,7 @@ namespace NumSharp
             public NDArray Grid => _grid;
 
             /// <summary>The number of per-axis grids stacked along the first axis (0 for a scalar/empty grid).</summary>
-            public int Length => _grid is null || _grid.ndim == 0 ? 0 : (int)_grid.shape[0];
+            public int Length => _grid is null || _grid.ndim == 0 ? 0 : (int)_grid.Shape.dimensions[0];
 
             /// <summary>The k-th per-axis grid — <c>grid[k]</c> along the first axis.</summary>
             public NDArray this[int index] => _grid[index];

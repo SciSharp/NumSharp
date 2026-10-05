@@ -118,7 +118,7 @@ namespace NumSharp.Backends.Sorting
 
         private static void SortInPlace(NDArray target, int axis)
         {
-            long N = target.shape[axis];
+            long N = target.Shape.dimensions[axis];
             if (N <= 1 || target.size == 0) return;
 
             var tc = target.GetTypeCode;
@@ -182,7 +182,7 @@ namespace NumSharp.Backends.Sorting
         /// </remarks>
         private static void ArgSortInto(NDArray src, NDArray dst, int axis)
         {
-            long N = src.shape[axis];
+            long N = src.Shape.dimensions[axis];
             var tc = src.GetTypeCode;
             int elsize = tc.SizeOf();
             var ctx = new LineCtx

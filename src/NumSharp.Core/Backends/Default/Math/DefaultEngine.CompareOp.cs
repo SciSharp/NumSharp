@@ -276,7 +276,7 @@ namespace NumSharp.Backends
 
             fixed (long* lhsStrides = lhsShape.strides)
             fixed (long* rhsStrides = rhsShape.strides)
-            fixed (long* shape = result.shape)
+            fixed (long* shape = result.Shape.dimensions)
             {
                 kernel(
                     (void*)lhsAddr,

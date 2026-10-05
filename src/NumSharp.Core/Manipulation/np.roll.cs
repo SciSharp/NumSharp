@@ -22,7 +22,7 @@ namespace NumSharp
         public static NDArray roll(NDArray a, long shift, int? axis = null)
         {
             if (axis == null)
-                return roll(a.ravel(), shift, 0).reshape(a.shape);
+                return roll(a.ravel(), shift, 0).reshape(a.Shape.dimensions);
 
             int ax = axis.Value;
             if (ax < 0) ax += a.ndim;
@@ -30,7 +30,7 @@ namespace NumSharp
                 throw new ArgumentException(
                     $"axis {axis.Value} is out of bounds for array of dimension {a.ndim}");
 
-            long n = a.shape[ax];
+            long n = a.Shape.dimensions[ax];
 
             // Python-style modulo: always non-negative when n > 0.
             // If n == 0 (empty axis), offset stays 0 — nothing to roll.

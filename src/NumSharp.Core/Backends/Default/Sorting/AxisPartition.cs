@@ -251,7 +251,7 @@ namespace NumSharp.Backends.Sorting
 
         private static void PartitionInPlaceCore(NDArray target, int axis, long[] kth)
         {
-            long N = target.shape[axis];
+            long N = target.Shape.dimensions[axis];
             var ks = PrepKth(kth, N, target.size);
             if (target.size == 0 || N <= 1 || ks.Length == 0)
                 return;
@@ -292,7 +292,7 @@ namespace NumSharp.Backends.Sorting
 
         private static void ArgPartitionInto(NDArray src, NDArray dst, int axis, long[] kth)
         {
-            long N = src.shape[axis];
+            long N = src.Shape.dimensions[axis];
             var ks = PrepKth(kth, N, src.size);
             if (src.size == 0)
                 return;

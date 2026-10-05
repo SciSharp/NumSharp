@@ -80,7 +80,7 @@ namespace NumSharp
                 if (a.ndim == 2)
                     return eye;
 
-                return np.broadcast_to(eye, new Shape(a.shape)).copy();
+                return np.broadcast_to(eye, new Shape(a.Shape.dimensions)).copy();
             }
         }
     }

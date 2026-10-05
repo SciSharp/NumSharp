@@ -49,8 +49,8 @@ namespace NumSharp
             var as_ = new long[nd];
             var bs = new long[nd];
             for (int i = 0; i < nd; i++) { as_[i] = 1; bs[i] = 1; }
-            for (int i = 0; i < nda; i++) as_[nd - nda + i] = a.shape[i];
-            for (int i = 0; i < ndb; i++) bs[nd - ndb + i] = b.shape[i];
+            for (int i = 0; i < nda; i++) as_[nd - nda + i] = a.Shape.dimensions[i];
+            for (int i = 0; i < ndb; i++) bs[nd - ndb + i] = b.Shape.dimensions[i];
 
             // Interleave: a-dims get a trailing size-1 axis (odd positions), b-dims a leading size-1 axis
             // (even positions). Broadcasting the two interleaved views to (r0,s0,r1,s1,...) and multiplying

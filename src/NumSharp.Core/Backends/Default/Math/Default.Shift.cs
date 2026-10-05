@@ -346,7 +346,7 @@ namespace NumSharp.Backends
             // never an alias of value, so disposing value here is safe.
             bool valueIsTemp = !ReferenceEquals(value, lhs);
 
-            var result = new NDArray(resultType, new Shape((long[])value.shape.Clone()), false);
+            var result = new NDArray(resultType, new Shape((long[])value.Shape.dimensions.Clone()), false);
             if (result.size == 0)
             {
                 if (valueIsTemp) value.Dispose();

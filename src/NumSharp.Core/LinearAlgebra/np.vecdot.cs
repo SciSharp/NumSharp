@@ -91,7 +91,7 @@ namespace NumSharp
                     b = moveaxis(b, rb, -1);
             }
 
-            GufuncGuard.RequireCoreSize("vecdot", VecdotSignature, 1, 0, b.shape[b.ndim - 1], a.shape[a.ndim - 1]);
+            GufuncGuard.RequireCoreSize("vecdot", VecdotSignature, 1, 0, b.Shape.dimensions[b.ndim - 1], a.Shape.dimensions[a.ndim - 1]);
 
             a = GufuncGuard.ToLoop(a, dtype);
             b = GufuncGuard.ToLoop(b, dtype);

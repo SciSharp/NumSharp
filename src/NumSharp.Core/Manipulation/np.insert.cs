@@ -103,7 +103,7 @@ namespace NumSharp
             if (values is null) throw new ArgumentNullException(nameof(values));
 
             var ctx = PrepareAxisContext(arr, axis);
-            long N = ctx.work.shape[ctx.axis];
+            long N = ctx.work.Shape.dimensions[ctx.axis];
             var indices = InsertExpandSliceObj(obj, N);
             // Slice obj is never treated as scalar for the broadcast quirk
             // (matches NumPy: ``isinstance(obj, slice)`` short-circuits the
@@ -340,7 +340,7 @@ namespace NumSharp
         private static NDArray InsertSingleIndex(
             NDArray arr, long index, NDArray values, int axis, bool scalarObj)
         {
-            long N = arr.shape[axis];
+            long N = arr.Shape.dimensions[axis];
             if (index < -N || index > N) // Insert allows index == N (append-at-end).
                 throw new IndexOutOfRangeException(
                     $"index {index} is out of bounds for axis {axis} with size {N}");
@@ -351,7 +351,7 @@ namespace NumSharp
             // axis to the insertion axis (scalarObj quirk).
             var coerced = CoerceValuesForSingleIndex(arr, values, axis, scalarObj);
 
-            long numNew = coerced.shape[axis];
+            long numNew = coerced.Shape.dimensions[axis];
             if (numNew == 0)
                 return DuplicateArray(arr);
 
@@ -359,13 +359,13 @@ namespace NumSharp
             var post = SliceAlongAxis(arr, axis, index, N);
             // Build the chunk list, dropping any empty-along-axis ones so
             // concatenate doesn't have to filter them itself.
-            if (pre.shape[axis] == 0)
+            if (pre.Shape.dimensions[axis] == 0)
             {
-                if (post.shape[axis] == 0)
+                if (post.Shape.dimensions[axis] == 0)
                     return np.concatenate(new[] { coerced }, axis);
                 return np.concatenate(new[] { coerced, post }, axis);
             }
-            if (post.shape[axis] == 0)
+            if (post.Shape.dimensions[axis] == 0)
                 return np.concatenate(new[] { pre, coerced }, axis);
             return np.concatenate(new[] { pre, coerced, post }, axis);
         }
@@ -389,7 +389,7 @@ namespace NumSharp
         private static NDArray InsertMultiIndex(
             NDArray arr, long[] indices, NDArray values, int axis)
         {
-            long N = arr.shape[axis];
+            long N = arr.Shape.dimensions[axis];
 
             // Empty indices ⇒ NumPy returns arr.copy() (NumPy: indices.size == 0 and
             // not isinstance(obj, np.ndarray); we always normalise empty regardless,
@@ -541,7 +541,7 @@ namespace NumSharp
                 var newDims = new long[targetNDim];
                 int prefix = targetNDim - v.ndim;
                 for (int i = 0; i < prefix; i++) newDims[i] = 1;
-                for (int i = 0; i < v.ndim; i++) newDims[prefix + i] = v.shape[i];
+                for (int i = 0; i < v.ndim; i++) newDims[prefix + i] = v.Shape.dimensions[i];
                 var reshaped = v.reshape(new Shape(newDims));
                 v = reshaped;
             }
@@ -557,7 +557,7 @@ namespace NumSharp
             }
 
             // Broadcast to arr.shape with axis dim = v.shape[axis].
-            long numNew = arr.ndim == 0 ? v.size : v.shape[axis];
+            long numNew = arr.ndim == 0 ? v.size : v.Shape.dimensions[axis];
             var broadcasted = BroadcastValuesToInsertSlot(arr, v, axis, numNew);
             return broadcasted;
         }
@@ -588,15 +588,15 @@ namespace NumSharp
                 bool same = true;
                 for (int i = 0; i < arr.ndim; i++)
                 {
-                    long expected = i == axis ? numNew : arr.shape[i];
-                    if (values.shape[i] != expected) { same = false; break; }
+                    long expected = i == axis ? numNew : arr.Shape.dimensions[i];
+                    if (values.Shape.dimensions[i] != expected) { same = false; break; }
                 }
                 if (same) return values;
             }
 
             // Build target shape and broadcast.
             var targetDims = new long[arr.ndim];
-            for (int i = 0; i < arr.ndim; i++) targetDims[i] = arr.shape[i];
+            for (int i = 0; i < arr.ndim; i++) targetDims[i] = arr.Shape.dimensions[i];
             targetDims[axis] = numNew;
 
             var bcast = np.broadcast_to(values, new Shape(targetDims));
@@ -638,7 +638,7 @@ namespace NumSharp
 
             // Build target shape: arr.shape with axis dim = numNew.
             var targetDims = new long[arr.ndim];
-            for (int i = 0; i < arr.ndim; i++) targetDims[i] = arr.shape[i];
+            for (int i = 0; i < arr.ndim; i++) targetDims[i] = arr.Shape.dimensions[i];
             targetDims[axis] = numNew;
             var targetShape = new Shape(targetDims);
 
@@ -648,7 +648,7 @@ namespace NumSharp
                 bool same = true;
                 for (int i = 0; i < arr.ndim; i++)
                 {
-                    if (v.shape[i] != targetDims[i]) { same = false; break; }
+                    if (v.Shape.dimensions[i] != targetDims[i]) { same = false; break; }
                 }
                 if (same)
                 {
@@ -668,7 +668,7 @@ namespace NumSharp
                 var newDims = new long[targetNDim];
                 int prefix = targetNDim - v.ndim;
                 for (int i = 0; i < prefix; i++) newDims[i] = 1;
-                for (int i = 0; i < v.ndim; i++) newDims[prefix + i] = v.shape[i];
+                for (int i = 0; i < v.ndim; i++) newDims[prefix + i] = v.Shape.dimensions[i];
                 var reshaped = v.reshape(new Shape(newDims));
                 v = reshaped;
             }

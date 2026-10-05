@@ -46,7 +46,7 @@ namespace NumSharp
             if (keepdims && nd.ndim > 0)
             {
                 axis = DefaultEngine.NormalizeAxis(axis, nd.ndim);
-                var dims = (long[])nd.shape.Clone();
+                var dims = (long[])nd.Shape.dimensions.Clone();
                 dims[axis] = 1;
                 result.Storage.Reshape(new Shape(dims));
             }
@@ -277,7 +277,7 @@ namespace NumSharp
         {
             var axesSet = new System.Collections.Generic.HashSet<int>(reducedAxes);
             var newDims = new System.Collections.Generic.List<long>(arr.ndim - reducedAxes.Length);
-            long[] shape = arr.shape;
+            long[] shape = arr.Shape.dimensions;
             for (int d = 0; d < shape.Length; d++)
             {
                 if (!axesSet.Contains(d))

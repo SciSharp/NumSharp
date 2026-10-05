@@ -49,7 +49,7 @@ namespace NumSharp
             // NumPy: "array is read-only".
             NumSharpException.ThrowIfNotWriteable(x.Shape, "array");
 
-            long n = x.shape[0];
+            long n = x.Shape.dimensions[0];
             if (x.size == 0 || n <= 1)
                 return;
 

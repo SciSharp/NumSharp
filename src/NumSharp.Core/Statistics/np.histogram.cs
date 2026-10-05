@@ -844,7 +844,7 @@ namespace NumSharp
         /// <summary>True when two arrays have identical shapes (dimension-by-dimension).</summary>
         private static bool ShapeEquals(NDArray x, NDArray y)
         {
-            var xs = x.shape; var ys = y.shape;
+            var xs = x.Shape.dimensions; var ys = y.Shape.dimensions;
             if (xs.Length != ys.Length) return false;
             for (int i = 0; i < xs.Length; i++)
                 if (xs[i] != ys[i]) return false;

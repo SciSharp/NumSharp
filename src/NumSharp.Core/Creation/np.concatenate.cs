@@ -115,7 +115,7 @@ namespace NumSharp
             // Shape validation: all inputs must have same ndim and match on
             // non-axis dimensions. Accumulate axis size for the result.
             long axisSize = 0;
-            var firstShape = (long[])first.shape.Clone();
+            var firstShape = (long[])first.Shape.dimensions.Clone();
             for (int k = 0; k < workArrays.Length; k++)
             {
                 var src = workArrays[k];
@@ -124,7 +124,7 @@ namespace NumSharp
                         $"all the input arrays must have same number of dimensions, " +
                         $"but the array at index 0 has {ndim} dimension(s) and the array at index {k} has {src.ndim} dimension(s)");
 
-                var srcShape = src.shape;
+                var srcShape = src.Shape.dimensions;
                 for (int j = 0; j < ndim; j++)
                 {
                     if (j == effectiveAxis) continue;
@@ -173,10 +173,10 @@ namespace NumSharp
                         $"Output array has wrong dimensionality: expected {ndim}, got {@out.ndim}");
                 for (int j = 0; j < ndim; j++)
                 {
-                    if (@out.shape[j] != firstShape[j])
+                    if (@out.Shape.dimensions[j] != firstShape[j])
                         throw new IncorrectShapeException(
                             $"Output array has wrong shape: expected " +
-                            $"({string.Join(", ", firstShape)}), got ({string.Join(", ", @out.shape)})");
+                            $"({string.Join(", ", firstShape)}), got ({string.Join(", ", @out.Shape.dimensions)})");
                 }
                 dst = @out;
             }
@@ -234,7 +234,7 @@ namespace NumSharp
             for (int k = 0; k < workArrays.Length; k++)
             {
                 var src = workArrays[k];
-                var len = src.shape[effectiveAxis];
+                var len = src.Shape.dimensions[effectiveAxis];
                 if (len == 0) continue; // skip empty inputs along the concat axis
 
                 dstAccessor[effectiveAxis] = new Slice(dstAxisPos, dstAxisPos + len);
@@ -309,18 +309,18 @@ namespace NumSharp
             long outerCount = 1, innerStride = 1;
             if (cPath)
             {
-                for (int i = 0; i < axis; i++) outerCount *= dst.shape[i];
-                for (int i = axis + 1; i < ndim; i++) innerStride *= dst.shape[i];
+                for (int i = 0; i < axis; i++) outerCount *= dst.Shape.dimensions[i];
+                for (int i = axis + 1; i < ndim; i++) innerStride *= dst.Shape.dimensions[i];
             }
             else
             {
-                for (int i = axis + 1; i < ndim; i++) outerCount *= dst.shape[i];
-                for (int i = 0; i < axis; i++) innerStride *= dst.shape[i];
+                for (int i = axis + 1; i < ndim; i++) outerCount *= dst.Shape.dimensions[i];
+                for (int i = 0; i < axis; i++) innerStride *= dst.Shape.dimensions[i];
             }
 
             // Per-outer dst row size in elements = sum of src.shape[axis] * innerStride.
             // Equivalent to dst.shape[axis] * innerStride.
-            long dstRowSize = dst.shape[axis] * innerStride;
+            long dstRowSize = dst.Shape.dimensions[axis] * innerStride;
             long dstRowBytes = dstRowSize * elemSize;
 
             // Degenerate-slab specialization: (N,1)-style concats (column_stack
@@ -348,7 +348,7 @@ namespace NumSharp
             long[] srcOffsetBytes = new long[sources.Length];
             for (int k = 0; k < sources.Length; k++)
             {
-                slabBytes[k] = sources[k].shape[axis] * innerStride * elemSize;
+                slabBytes[k] = sources[k].Shape.dimensions[axis] * innerStride * elemSize;
                 srcBases[k] = sources[k].Storage.Address;
                 srcOffsetBytes[k] = sources[k].Shape.Offset * elemSize;
             }
@@ -389,11 +389,11 @@ namespace NumSharp
         {
             int nsrc = sources.Length;
 
-            long slab = sources[0].shape[axis] * innerStride * elemSize;
+            long slab = sources[0].Shape.dimensions[axis] * innerStride * elemSize;
             if (slab != 1 && slab != 2 && slab != 4 && slab != 8 && slab != 16)
                 return false;
             for (int k = 1; k < nsrc; k++)
-                if (sources[k].shape[axis] * innerStride * elemSize != slab)
+                if (sources[k].Shape.dimensions[axis] * innerStride * elemSize != slab)
                     return false;
 
             byte* dRow = dst.Storage.Address + dst.Shape.Offset * elemSize;
@@ -513,13 +513,13 @@ namespace NumSharp
             long outerCount = 1, innerStride = 1;
             if (cPath)
             {
-                for (int i = 0; i < axis; i++) outerCount *= dst.shape[i];
-                for (int i = axis + 1; i < ndim; i++) innerStride *= dst.shape[i];
+                for (int i = 0; i < axis; i++) outerCount *= dst.Shape.dimensions[i];
+                for (int i = axis + 1; i < ndim; i++) innerStride *= dst.Shape.dimensions[i];
             }
             else
             {
-                for (int i = axis + 1; i < ndim; i++) outerCount *= dst.shape[i];
-                for (int i = 0; i < axis; i++) innerStride *= dst.shape[i];
+                for (int i = axis + 1; i < ndim; i++) outerCount *= dst.Shape.dimensions[i];
+                for (int i = 0; i < axis; i++) innerStride *= dst.Shape.dimensions[i];
             }
 
             // Same degenerate-slab guard as TryDirectMemcpyConcat: tiny per-outer
@@ -529,7 +529,7 @@ namespace NumSharp
                 long maxSlabBytes = 0;
                 for (int k = 0; k < sources.Length; k++)
                 {
-                    long sb = sources[k].shape[axis] * innerStride * dstElemSize;
+                    long sb = sources[k].Shape.dimensions[axis] * innerStride * dstElemSize;
                     if (sb > maxSlabBytes)
                         maxSlabBytes = sb;
                 }
@@ -538,7 +538,7 @@ namespace NumSharp
                     return false;
             }
 
-            long dstRowElems = dst.shape[axis] * innerStride;
+            long dstRowElems = dst.Shape.dimensions[axis] * innerStride;
             long dstRowBytes = dstRowElems * dstElemSize;
 
             byte* dstBase = dst.Storage.Address;
@@ -552,7 +552,7 @@ namespace NumSharp
             long[] srcOffsetBytes = new long[sources.Length];
             for (int k = 0; k < sources.Length; k++)
             {
-                slabElems[k] = sources[k].shape[axis] * innerStride;
+                slabElems[k] = sources[k].Shape.dimensions[axis] * innerStride;
                 srcElemSize[k] = sources[k].GetTypeCode.SizeOf();
                 slabBytesDst[k] = slabElems[k] * dstElemSize;
                 srcBases[k] = sources[k].Storage.Address;

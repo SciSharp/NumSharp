@@ -170,7 +170,7 @@ namespace NumSharp
                     ax = TrapezoidAxis(axis, nd);
                     long[] shp = new long[nd];
                     for (int i = 0; i < nd; i++) shp[i] = 1;
-                    shp[ax] = dd.shape[0];
+                    shp[ax] = dd.Shape.dimensions[0];
                     d = dd.reshape(new Shape(shp));     // view sharing dd's storage
                     // At most one axis of extent > 1, so it never takes part in a vote: any
                     // shape with these dims lays the product out the same way.

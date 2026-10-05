@@ -472,16 +472,36 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Data length of every dimension (NumPy's <c>ndarray.shape</c>). Assigning it reshapes the array
-        ///     IN PLACE — only when the new shape is expressible over the existing memory; see
+        ///     Data length of every dimension (NumPy's <c>ndarray.shape</c>), as a NEW array on every read: NumPy hands out an
+        ///     immutable tuple, so writing into the returned array never changes this array. Assigning the property reshapes
+        ///     the array IN PLACE — only when the new shape is expressible over the existing memory; see
         ///     <see cref="SetShapeInPlace"/> for the exact rule and the error it raises otherwise.
         /// </summary>
+        /// <value>(get) A copy of the dimensions, the caller's to keep or change; a 0-d array returns an empty array.
+        ///     (set) The new dimensions, read once (a later change to the caller's array does not reach this array).</value>
         /// <exception cref="AttributeError">(set) The new shape needs a copy (e.g. flattening a transposed
         /// view); NumPy's message verbatim — use <see cref="reshape(long[])"/> to get a copy.</exception>
         /// <exception cref="IncorrectShapeException">(set) The new shape's size differs from the array's.</exception>
+        /// <remarks>
+        ///     <para>
+        ///     <b>Why a copy.</b> Shapes and arrays SHARE dimension arrays (an allocation keeps its caller's shape, an
+        ///     elementwise result keeps its input's), so returning the shared array let <c>var d = a.shape; d[0] = 100;</c>
+        ///     change <c>a</c> — and every array sharing it — to <c>(100, 4)</c> over 12 elements: the cached size and the
+        ///     buffer stayed, so the new rows read past the buffer. Plan <c>docs/plans/view-shape-open-bugs.md</c>, bug 2b.
+        ///     </para>
+        ///     <para>
+        ///     The copy costs one small allocation per read. Code inside NumSharp reads <c>Shape.dimensions</c> instead;
+        ///     user code that reads <c>shape</c> in a hot loop should hoist it.
+        ///     </para>
+        /// </remarks>
         public long[] shape
         {
-            get => Storage.Shape.Dimensions;
+            get
+            {
+                // A 0-d array's dimension array has no element to write into, so it can be handed out as is.
+                var dims = Storage.Shape.dimensions;
+                return dims.Length == 0 ? dims : (long[])dims.Clone();
+            }
             set => SetShapeInPlace(new Shape(value));
         }
 
@@ -928,7 +948,7 @@ namespace NumSharp
             {
                 // Iterate over slices along first axis
                 // For a (3, 4, 5) array, yields 3 slices of shape (4, 5)
-                var len = shape[0];
+                var len = this.Shape.dimensions[0];
                 for (int i = 0; i < len; i++)
                 {
                     yield return this[i];

@@ -20,8 +20,8 @@ divergence proved), B (confirmed as a parity bug) and F (fixed and gated).
 | # | Bug | Tests that pin it | P | D | B | F | Commit |
 |---|---|---|---|---|---|---|---|
 | 1 | The wrap constructors install the caller's layout | 4 pins + new | [x] | [x] | [x] | [x] | `ec28e5b1` |
-| 2a | The `Shape` indexer has a setter | 3 pins + `AuditV2.T1_10` | [x] | [x] | [x] | [x] | (the commit after `ec28e5b1`) |
-| 2b | `NDArray.shape` returns the array's own dimension array | new | [x] | [x] | [x] | [ ] | |
+| 2a | The `Shape` indexer has a setter | 3 pins + `AuditV2.T1_10` | [x] | [x] | [x] | [x] | `bd26afb8` |
+| 2b | `NDArray.shape` returns the array's own dimension array | new | [x] | [x] | [x] | [x] | (the commit after `bb5b2fcf`) |
 | 2c | `Shape.Dimensions` and `Shape.Strides` return the shape's own arrays | new | [x] | [x] | [x] | [ ] | |
 | 2d | The public `Shape` constructors keep the caller's array | new | [x] | [x] | [x] | [ ] | |
 | 3 | `choice` without replacement returns a view | 3 pins + 1 control | [x] | [x] | [x] | [ ] | (another session, see bug 3) |
@@ -252,7 +252,47 @@ through it:
 Gates: NumSharp.Tests net10.0 17,876 passed and net8.0 17,875 passed (0 failed), Oracle 226 passed, `[OpenBugs]` set
 fails 67 (was 68: `T1_10` left it). No runtime cost (a removed setter).
 
-2b, 2c and 2d: not started.
+**2b done.** `NDArray.shape` returns a copy of the dimensions on every read (a 0-d array returns its empty array:
+nothing to write into), documented why.
+
+The copy alone made internal paths allocate. A first build changed only the getter, and these calls allocated more
+than 2a (bytes per call, best of 15): `x + y` +32, `np.sum(m, 0)` and `np.mean(m, 1)` +144, `np.concatenate` and
+`np.stack` +320, `np.dot` +160, `np.sort` +112, `np.where` and `np.cumsum` +32, with times up 7% to 28%. So every
+internal read moved to the internal field `Shape.dimensions`:
+
+- The list came from the compiler: `[Obsolete(error)]` on the getter for one audit build gave 384 read sites in 115 Core
+  files (247 `x.shape[i]`, 4 `.Length`, 133 others; no `x.shape = …` setter site needed a change).
+- Every alias of the result was checked for a later write through the alias (indexed assignment, `ref`/`out`,
+  `Array.Reverse/Sort/Fill/Clear/Copy` as destination, `AsSpan`, followed through second-level aliases): none. The one
+  site that stores it (`UnmanagedStorage.ReplaceData`'s `_shape = nd.shape`) converts it to an immutable `Shape`. The
+  callees that receive it (`KeepdimsReshape`, `ComputeAxisGeometry`, `BuildNestedRec`, `SameShape`, `ShapeTuple`, the
+  kernels that pin it with `fixed`) only read it. So the switch is exactly the behavior before 2b.
+- 381 reads in 109 files were switched mechanically at the compiler's positions (`x.shape` to `x.Shape.dimensions`,
+  a bare `shape` inside `NDArray` to `this.Shape.dimensions`).
+- The change was written on `bd26afb8` and rebased onto `bb5b2fcf`, which added `ReductionArguments.cs` (the
+  `np.all`/`np.any` reduce prologue). A second audit build on the rebased tree listed its 6 new reads; all are
+  read-only (the broadcast walk writes only its own fresh `bshape`), so they were switched too: 387 reads in 110 files.
+- Kept on the copying getter, on purpose: the three public wrappers whose job is to hand out NumPy's shape
+  (`MaskedArray.shape`, `np.ma.shape(a)`, `UniqueResult.shape`), and the 19 reads in five random-sampling files that
+  another session was editing at the time (`Generator.Choice*.cs`, `Generator.Multivariate.cs`,
+  `np.random.choice.cs`, `np.random.multivariate_normal.cs`); those are correct, and cost one small allocation each.
+  The second audit build listed exactly these 22 sites and no other.
+
+After the switch every one of the 22 measured calls allocates exactly what it did at 2a, byte for byte, and the times
+are within noise (`np.sort` rechecked three times: 7.33–7.45 µs at 2a, 7.37–7.61 µs now).
+
+Tests (`View/Shape.Immutability.Tests.cs`, +6): a write into `x.shape` leaves `x` alone and each read is a new array;
+it does not reach an array that shares the dimensions (`y = x + 1`, probe P16); a view's `shape` is a copy; 0-d is
+empty; `MaskedArray.shape` and `np.unique(...).shape` return copies; the setter reads the caller's array once (guard).
+Against the old getter the four copy tests fail; the guards pass.
+
+Gates (on `bb5b2fcf` + 2b): NumSharp.Tests net10.0 17,885 passed and net8.0 17,884 passed (0 failed), Oracle 227
+passed, the four interop suites that need no native binary pass (System.Numerics.Tensors 101 passed, OnnxRuntime 207
+passed + 2 skipped, MLNet 206 passed + 1 skipped, ParquetNet 11 passed; 0 failed). The `[OpenBugs]` failing set is the same as on `bb5b2fcf` without 2b: 69 tests by name. One more
+pin, the timing test `T2_NonZero_Is_Much_Slower_Than_NumPy`, failed once in the baseline's full run and passes alone on
+both builds (noise).
+
+2c and 2d: not started.
 
 ---
 

@@ -30,8 +30,8 @@ namespace NumSharp.Backends
 
             // Compute output shape:
             // lhs shape without last dim + rhs shape without second-to-last dim
-            long[] lshape = lhs.shape.RemoveAt(lhs.ndim - 1);  // All but last
-            long[] rshape = rhs.shape.RemoveAt(rhs.ndim - 2);  // All but second-to-last
+            long[] lshape = lhs.Shape.dimensions.RemoveAt(lhs.ndim - 1);  // All but last
+            long[] rshape = rhs.Shape.dimensions.RemoveAt(rhs.ndim - 2);  // All but second-to-last
 
             var retShape = new long[lshape.Length + rshape.Length];
             Array.Copy(lshape, 0, retShape, 0, lshape.Length);

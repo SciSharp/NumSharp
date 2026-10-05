@@ -38,8 +38,8 @@ namespace NumSharp.Backends
             if (lhsWas1D) lhs = np.expand_dims(lhs, 0);
             if (rhsWas1D) rhs = np.expand_dims(rhs, 1);
 
-            long K = lhs.shape[lhs.ndim - 1];
-            long Kr = rhs.shape[rhs.ndim - 2];
+            long K = lhs.Shape.dimensions[lhs.ndim - 1];
+            long Kr = rhs.Shape.dimensions[rhs.ndim - 2];
             if (K != Kr)
                 throw new IncorrectShapeException(
                     $"matmul: Input operand core dimension mismatch (n?,k),(k,m?)->(n?,m?): " +
@@ -67,9 +67,9 @@ namespace NumSharp.Backends
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         protected NDArray BatchedMatmul(NDArray lhs, NDArray rhs)
         {
-            long n = lhs.shape[lhs.ndim - 2];
-            long k = lhs.shape[lhs.ndim - 1];
-            long m = rhs.shape[rhs.ndim - 1];
+            long n = lhs.Shape.dimensions[lhs.ndim - 2];
+            long k = lhs.Shape.dimensions[lhs.ndim - 1];
+            long m = rhs.Shape.dimensions[rhs.ndim - 1];
 
             // Stack (batch) dims = every axis except the trailing matrix pair.
             long[] batchA = TakeDims(lhs.Shape, lhs.ndim - 2);

@@ -1831,7 +1831,7 @@ namespace NumSharp.Backends
                                 bool same = ops[i].ndim == ndim;
                                 if (same)
                                     for (int d = 0; d < ndim; d++)
-                                        if (ops[i].shape[d] != inputShape[d]) { same = false; break; }
+                                        if (ops[i].Shape.dimensions[d] != inputShape[d]) { same = false; break; }
                                 operands[i] = same ? ops[i] : np.broadcast_to(ops[i], inputShape);
                             }
                             operands[ops.Length] = outAcc;
@@ -1904,7 +1904,7 @@ namespace NumSharp.Backends
             if (reduce.Keepdims)
             {
                 var kd = new long[ndim];
-                for (int d = 0, rd = 0; d < ndim; d++) kd[d] = (d == axis) ? 1 : reduced.shape[rd++];
+                for (int d = 0, rd = 0; d < ndim; d++) kd[d] = (d == axis) ? 1 : reduced.Shape.dimensions[rd++];
                 reduced = reduced.reshape(kd);
             }
 

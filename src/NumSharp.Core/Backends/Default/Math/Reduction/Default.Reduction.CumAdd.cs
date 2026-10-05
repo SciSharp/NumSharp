@@ -97,7 +97,7 @@ namespace NumSharp.Backends
                     if (kernel != null)
                     {
                         fixed (long* inputStrides = arr.Shape.Strides)
-                        fixed (long* shapePtr = arr.shape)
+                        fixed (long* shapePtr = arr.Shape.dimensions)
                             kernel((void*)arr.Address, (void*)ret.Address, inputStrides, shapePtr, axis, arr.ndim, arr.size);
                         return order == 'F' && ret.Shape.NDim > 1 ? ret.copy('F') : ret;
                     }
@@ -238,7 +238,7 @@ namespace NumSharp.Backends
                         // math as DefaultEngine.ReductionOp.cs.
                         byte* baseAddr = (byte*)arr.Address + arr.Shape.offset * arr.dtypesize;
                         fixed (long* strides = arr.Shape.Strides)
-                        fixed (long* shape = arr.shape)
+                        fixed (long* shape = arr.Shape.dimensions)
                         {
                             kernel((void*)baseAddr, (void*)ret.Address, strides, shape, arr.ndim, arr.size);
                         }

@@ -167,7 +167,7 @@ namespace NumSharp
         {
             if (ndim == 0)
                 throw new TypeError("len() of unsized object");
-            return shape[0];
+            return this.Shape.dimensions[0];
         }
 
         #endregion

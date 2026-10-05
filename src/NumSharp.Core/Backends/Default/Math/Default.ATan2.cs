@@ -312,7 +312,7 @@ namespace NumSharp.Backends
 
             fixed (long* yStrides = yShape.strides)
             fixed (long* xStrides = xShape.strides)
-            fixed (long* shape = result.shape)
+            fixed (long* shape = result.Shape.dimensions)
             {
                 kernel(
                     (void*)yAddr,

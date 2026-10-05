@@ -450,6 +450,11 @@ public readonly partial struct Shape
 - `IsSliced` — True if offset != 0, different size, or non-contiguous
 - `IsSimpleSlice` — IsSliced && !IsBroadcasted (fast offset path)
 
+**Shapes and arrays SHARE dimension and stride arrays** (an allocation keeps its caller's shape, an elementwise result
+keeps its input's), which is safe only because nothing public writes into them: `Shape` has no setter, and `a.shape`
+returns a COPY (NumPy's tuple). Inside Core, read `x.Shape.dimensions` / `x.Shape.strides`, never `x.shape` (it
+allocates on every read). Plan `docs/plans/view-shape-open-bugs.md`, bug 2.
+
 ## Critical: View Semantics
 
 **Slicing returns views, not copies!** Memory is shared:
@@ -500,9 +505,10 @@ buffer, a reversed one read backwards, a transposed one in F order, a broadcast 
 code that must install a specific layout over a fresh buffer (`np.ones`'s KEEPORDER result) uses
 `new UnmanagedStorage(IArraySlice, Shape)`, which trusts its layout like NumPy's C API. `Shape` is immutable: its
 indexer has no setter (removed 2026-10-05; it wrote into a dimension array that shapes and arrays share). Still open
-(plan `docs/plans/view-shape-open-bugs.md`, bug 2b-2d): the public `Shape` constructors keep the caller's `long[]`
+(plan `docs/plans/view-shape-open-bugs.md`, bug 2c-2d): the public `Shape` constructors keep the caller's `long[]`
 (`long[] s = {3, 4}; var a = np.zeros(s); s[0] = 100;` makes `a.shape` `(100, 4)` over 12 elements, pinned in
-`OpenBugs.ViewShape.cs`), and `a.shape`, `Shape.Dimensions` and `Shape.Strides` return the shared arrays. Gates: `View/Shape.ForFreshAllocation.Tests.cs`,
+`OpenBugs.ViewShape.cs`), and `Shape.Dimensions` and `Shape.Strides` return the shared arrays (`a.shape` returns a
+copy since 2026-10-05). Gates: `View/Shape.ForFreshAllocation.Tests.cs`,
 `Creation/FreshAllocation.ViewShape.Tests.cs`, `Creation/WrapConstructor.ViewShape.Tests.cs`,
 `RandomSampling/RandomSizeViewShape.Test.cs`, and the oracle replay
 `FuzzCorpusTests.RandomApiSizeLayouts` (every random overload taking a `Shape`, its size handed over as a view's layout

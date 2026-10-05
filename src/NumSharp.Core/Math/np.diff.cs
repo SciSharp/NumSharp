@@ -128,7 +128,7 @@ namespace NumSharp
             bool currentOwned = workOwned;
             for (int it = 0; it < n; it++)
             {
-                long len = current.shape[ax];
+                long len = current.Shape.dimensions[ax];
                 long m = len > 0 ? len - 1 : 0;                      // result length along axis
                 var hi = SliceAlongAxis(current, ax, len - m, len);  // a[1:]  (last  m)
                 var lo = SliceAlongAxis(current, ax, 0, m);          // a[:-1] (first m)
@@ -245,7 +245,7 @@ namespace NumSharp
             if (v.ndim == 0)
             {
                 long[] dims = new long[a.ndim];
-                for (int i = 0; i < a.ndim; i++) dims[i] = a.shape[i];
+                for (int i = 0; i < a.ndim; i++) dims[i] = a.Shape.dimensions[i];
                 dims[axis] = 1;
                 var bcast = np.broadcast_to(v, new Shape(dims));
                 toDispose.Add(bcast);
@@ -283,7 +283,7 @@ namespace NumSharp
             // Fresh C-contiguous, uninitialised output with hi's dimensions.
             int nd = hi.ndim;
             long[] dims = new long[nd];
-            for (int i = 0; i < nd; i++) dims[i] = hi.shape[i];
+            for (int i = 0; i < nd; i++) dims[i] = hi.Shape.dimensions[i];
             var outp = new NDArray(hi.dtype, new Shape(dims), false);
 
             // Empty result: the NDIter element-wise path must not run over zero

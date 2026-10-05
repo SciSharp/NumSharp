@@ -195,7 +195,7 @@ namespace NumSharp
             // chunked memcpy reads a logically-rectangular slab of inner dims.
             NDArray src = a.Shape.IsContiguous ? a : np.ascontiguousarray(a);
 
-            long[] inDims = src.shape;
+            long[] inDims = src.Shape.dimensions;
             long n = inDims[normalizedAxis];
             long total = n * repeats;
 
@@ -236,7 +236,7 @@ namespace NumSharp
             NDArray src = a.Shape.IsContiguous ? a : np.ascontiguousarray(a);
             NDArray repFlat = repeats.ravel();
 
-            long[] inDims = src.shape;
+            long[] inDims = src.Shape.dimensions;
             long n = inDims[normalizedAxis];
 
             // NumPy parity: scalar (0-d) or size-1 repeats broadcasts along the axis; otherwise the

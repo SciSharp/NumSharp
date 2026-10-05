@@ -139,7 +139,7 @@ namespace NumSharp
             if (obj is null) throw new ArgumentNullException(nameof(obj));
 
             var ctx = PrepareAxisContext(arr, axis);
-            long N = ctx.work.shape[ctx.axis];
+            long N = ctx.work.Shape.dimensions[ctx.axis];
             if (obj.Length != N)
                 throw new ArgumentException(
                     "boolean array argument obj to delete must be one dimensional " +
@@ -181,7 +181,7 @@ namespace NumSharp
 
             if (obj.GetTypeCode == NPTypeCode.Boolean)
             {
-                long N = ctx.work.shape[ctx.axis];
+                long N = ctx.work.Shape.dimensions[ctx.axis];
                 if (obj.size != N || obj.ndim != 1)
                     throw new ArgumentException(
                         "boolean array argument obj to delete must be one dimensional " +
@@ -321,7 +321,7 @@ namespace NumSharp
         [NDScopedCovered]
         private static NDArray DeleteSingleIndex(NDArray arr, long obj, int axis)
         {
-            long N = arr.shape[axis];
+            long N = arr.Shape.dimensions[axis];
             if (obj < -N || obj >= N)
                 throw new IndexOutOfRangeException(
                     $"index {obj} is out of bounds for axis {axis} with size {N}");
@@ -330,8 +330,8 @@ namespace NumSharp
             var pre = SliceAlongAxis(arr, axis, 0, obj);
             var post = SliceAlongAxis(arr, axis, obj + 1, N);
 
-            if (pre.shape[axis] == 0) return np.copy(post);
-            if (post.shape[axis] == 0) return np.copy(pre);
+            if (pre.Shape.dimensions[axis] == 0) return np.copy(post);
+            if (post.Shape.dimensions[axis] == 0) return np.copy(pre);
             return np.concatenate(new[] { pre, post }, axis);
         }
 
@@ -352,7 +352,7 @@ namespace NumSharp
         [NDScopedCovered]
         private static NDArray DeleteSlice(NDArray arr, Slice obj, int axis)
         {
-            long N = arr.shape[axis];
+            long N = arr.Shape.dimensions[axis];
             var (start, stop, step) = PythonSliceIndices(obj, N);
 
             // Count elements that will actually be removed (matches NumPy's `xr`).
@@ -392,8 +392,8 @@ namespace NumSharp
             {
                 var pre = SliceAlongAxis(arr, axis, 0, start);
                 var post = SliceAlongAxis(arr, axis, stop, N);
-                if (pre.shape[axis] == 0) return np.copy(post);
-                if (post.shape[axis] == 0) return np.copy(pre);
+                if (pre.Shape.dimensions[axis] == 0) return np.copy(post);
+                if (post.Shape.dimensions[axis] == 0) return np.copy(pre);
                 return np.concatenate(new[] { pre, post }, axis);
             }
 
@@ -430,7 +430,7 @@ namespace NumSharp
         [NDScopedCovered]
         private static NDArray DeleteIndexArray(NDArray arr, long[] indices, int axis)
         {
-            long N = arr.shape[axis];
+            long N = arr.Shape.dimensions[axis];
 
             if (indices.Length == 0)
                 return DuplicateArray(arr);
@@ -485,7 +485,7 @@ namespace NumSharp
         [NDScopedCovered] // only caller: DeleteIndexArray ← the [NDScoped] delete overloads
         private static NDArray DeleteChunkConcat(NDArray arr, long[] indices, int axis)
         {
-            long N = arr.shape[axis];
+            long N = arr.Shape.dimensions[axis];
 
             // Sort + dedupe in place. The chunks must be derived from monotonic
             // axis positions; duplicates count as a single deletion.
@@ -525,7 +525,7 @@ namespace NumSharp
                 // Every axis position was deleted ⇒ allocate an empty
                 // result with axis dim 0 (NumPy parity).
                 var emptyDims = new long[arr.ndim];
-                for (int d = 0; d < arr.ndim; d++) emptyDims[d] = arr.shape[d];
+                for (int d = 0; d < arr.ndim; d++) emptyDims[d] = arr.Shape.dimensions[d];
                 emptyDims[axis] = 0;
                 return new NDArray(arr.GetTypeCode, new Shape(emptyDims), false);
             }

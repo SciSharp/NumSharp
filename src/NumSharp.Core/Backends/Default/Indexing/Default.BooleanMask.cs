@@ -49,7 +49,7 @@ namespace NumSharp.Backends
             // Trailing block size B = prod(arr.shape[leadNdim:]) (1 for a full element mask).
             long blockSize = 1;
             for (int d = leadNdim; d < arr.ndim; d++)
-                blockSize *= arr.shape[d];
+                blockSize *= arr.Shape.dimensions[d];
 
             long trueCount = CountMaskTrue(mask.MakeGeneric<bool>());
 
@@ -128,7 +128,7 @@ namespace NumSharp.Backends
             // true-count.
             long blockSize = 1;
             for (int d = leadNdim; d < arr.ndim; d++)
-                blockSize *= arr.shape[d];
+                blockSize *= arr.Shape.dimensions[d];
 
             long trueCount = CountMaskTrue(mask.MakeGeneric<bool>());
             if (trueCount == 0 || blockSize == 0)
@@ -192,7 +192,7 @@ namespace NumSharp.Backends
             var dims = new long[1 + trailing];
             dims[0] = count;
             for (int i = 0; i < trailing; i++)
-                dims[i + 1] = arr.shape[leadNdim + i];
+                dims[i + 1] = arr.Shape.dimensions[leadNdim + i];
             return new Shape(dims);
         }
 
@@ -207,7 +207,7 @@ namespace NumSharp.Backends
             int trailing = arr.ndim - mask.ndim;
             var reshaped = new long[mask.ndim + trailing];
             for (int i = 0; i < mask.ndim; i++)
-                reshaped[i] = mask.shape[i];
+                reshaped[i] = mask.Shape.dimensions[i];
             for (int i = 0; i < trailing; i++)
                 reshaped[mask.ndim + i] = 1;
             return np.broadcast_to(mask.reshape(reshaped), arr.Shape);

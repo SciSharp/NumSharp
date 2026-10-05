@@ -275,7 +275,7 @@ namespace NumSharp
                     NDArray distances = np.asanyarray(v);
                     if (distances.ndim != 1)
                         throw new ValueError("distances must be either scalars or 1d");
-                    if (distances.shape[0] != f.shape[axes[i]])
+                    if (distances.Shape.dimensions[0] != f.Shape.dimensions[axes[i]])
                         throw new ValueError(
                             "when 1d, distances must match the length of the corresponding dimension");
                     // Integer coordinates are converted to float64 to avoid modular arithmetic in diff.
@@ -328,7 +328,7 @@ namespace NumSharp
             {
                 int axis = axes[ai];
                 object ax_dx = dx[ai];
-                long M = work.shape[axis];
+                long M = work.Shape.dimensions[axis];
                 if (M < edge_order + 1)
                     throw new ValueError(
                         "Shape of array too small to calculate a numerical gradient, " +
@@ -337,7 +337,7 @@ namespace NumSharp
                 // Fresh C-contiguous output of `work`'s DIMENSIONS (never `work.Shape`, which would
                 // inherit a strided view's strides/offset and mis-place the assigned slices).
                 long[] outDims = new long[N];
-                for (int d = 0; d < N; d++) outDims[d] = work.shape[d];
+                for (int d = 0; d < N; d++) outDims[d] = work.Shape.dimensions[d];
                 NDArray outp = np.empty(new Shape(outDims), otype);
                 bool uniform = ax_dx is double;
 
@@ -557,7 +557,7 @@ namespace NumSharp
         {
             long[] shp = new long[N];
             for (int i = 0; i < N; i++) shp[i] = 1;
-            shp[axis] = a.shape[0];
+            shp[axis] = a.Shape.dimensions[0];
             var r = a.reshape(new Shape(shp));
             a.Dispose();
             return r;

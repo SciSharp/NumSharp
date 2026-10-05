@@ -41,10 +41,10 @@ namespace NumSharp.Backends.Printing
             string lst = Array2String(a, opts, ", ", prefix, ")");
 
             var extras = new List<string>();
-            bool shapeShown = (a.size == 0 && !(a.ndim == 1 && a.shape[0] == 0))
+            bool shapeShown = (a.size == 0 && !(a.ndim == 1 && a.Shape.dimensions[0] == 0))
                               || (opts.legacy > 210 && a.size > opts.threshold);
             if (shapeShown)
-                extras.Add("shape=" + ShapeTuple(a.shape));
+                extras.Add("shape=" + ShapeTuple(a.Shape.dimensions));
             if (!DtypeIsImplied(a.typecode) || a.size == 0)
                 extras.Add("dtype=" + DtypeShortRepr(a.typecode));
 
@@ -152,7 +152,7 @@ namespace NumSharp.Backends.Printing
             string nextHangingIndent = hangingIndent + " ";
             int nextWidth = legacy <= 113 ? currWidth : currWidth - 1; // - len(']')
 
-            long aLen = cur.shape[0];
+            long aLen = cur.Shape.dimensions[0];
             bool showSummary = summaryInsert.Length != 0 && 2L * edgeItems < aLen;
             long leadingItems = showSummary ? edgeItems : 0L;
             long trailingItems = showSummary ? edgeItems : aLen;
@@ -300,7 +300,7 @@ namespace NumSharp.Backends.Printing
 
         private static void Walk(NDArray cur, bool summarize, int edge, List<object> outp)
         {
-            long n = cur.shape[0];
+            long n = cur.Shape.dimensions[0];
             if (cur.ndim == 1)
             {
                 ForEachIndex(n, summarize, edge, i => outp.Add(cur.GetAtIndex(i)));

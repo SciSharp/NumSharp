@@ -30,7 +30,7 @@ namespace NumSharp
             // owndata=True, base=None, so clear WRITEABLE on the owned array itself rather than aliasing
             // a view, which would misreport owndata=False. setflags(write=True) on it then succeeds,
             // exactly as NumPy's _IsWriteable allows for an owner).
-            var zeros = np.zeros(new Shape(val.shape), val.typecode);
+            var zeros = np.zeros(new Shape(val.Shape.dimensions), val.typecode);
             zeros.Storage.SetShapeUnsafe(zeros.Shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE));
             return zeros;
         }

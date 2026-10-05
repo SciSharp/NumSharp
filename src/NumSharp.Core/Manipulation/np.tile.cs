@@ -58,7 +58,7 @@ namespace NumSharp
             var aShape = new long[outDim];
             var tup = new long[outDim];
             for (int i = 0; i < outDim - aDim; i++) aShape[i] = 1;
-            for (int i = 0; i < aDim; i++) aShape[outDim - aDim + i] = A.shape[i];
+            for (int i = 0; i < aDim; i++) aShape[outDim - aDim + i] = A.Shape.dimensions[i];
             for (int i = 0; i < outDim - d; i++) tup[i] = 1;
             for (int i = 0; i < d; i++) tup[outDim - d + i] = reps[i];
 

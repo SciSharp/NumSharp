@@ -251,8 +251,8 @@ namespace NumSharp
                 return;
             for (int c = 0; c < outputCore; c++)
             {
-                long resDim = result.shape[rn - outputCore + c];
-                long outDim = @out.shape[on - outputCore + c];
+                long resDim = result.Shape.dimensions[rn - outputCore + c];
+                long outDim = @out.Shape.dimensions[on - outputCore + c];
                 if (outDim != resDim)
                     throw new ValueError(
                         $"matmul: Output operand 0 has a mismatch in its core dimension {c}, " +

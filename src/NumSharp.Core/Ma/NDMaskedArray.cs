@@ -290,7 +290,7 @@ namespace NumSharp
             // line and align the rest by '='; otherwise each key goes on its own 2-space-indented line).
             bool isOneRow = true;
             for (int i = 0; i < _data.ndim - 1; i++)
-                if (_data.shape[i] != 1) { isOneRow = false; break; }
+                if (_data.Shape.dimensions[i] != 1) { isOneRow = false; break; }
 
             string dataIndent, maskIndent, fillIndent, dtypeIndent, lead;
             if (isOneRow)
@@ -1019,7 +1019,7 @@ namespace NumSharp
                 // DIMENSIONS only, never _data.Shape: a strided/offset _data view carries strides + a
                 // larger bufferSize, and np.zeros(that Shape) builds a strided zeros over the base buffer
                 // whose materialized tail is garbage (see MaskedArrayModule.DimsOf). Size the mask by dims.
-                _mask = MaskedArrayModule.Own(np.zeros(new Shape(_data.shape), np.@bool));
+                _mask = MaskedArrayModule.Own(np.zeros(new Shape(_data.Shape.dimensions), np.@bool));
         }
 
         /// <summary>Sets <c>x.flat[indices] = values</c> (mask-aware) — the instance form of
@@ -1090,7 +1090,7 @@ namespace NumSharp
         private static object BuildNestedList(NDArray data, NDArray mask)
         {
             long flat = 0;
-            return BuildNestedRec(data, mask, data.shape, 0, ref flat);
+            return BuildNestedRec(data, mask, data.Shape.dimensions, 0, ref flat);
         }
 
         /// <summary>Recursion behind <see cref="BuildNestedList"/>: <paramref name="dim"/> walks the axes while
@@ -1535,7 +1535,7 @@ namespace NumSharp
                 case Slice[]:
                     // DIMENSIONS only (see MaskedArrayModule.DimsOf): a non-contiguous r_ result Shape
                     // would make np.zeros build a garbage strided mask; size by dims instead.
-                    return np.zeros(new Shape(np.r_[item].shape), np.@bool);
+                    return np.zeros(new Shape(np.r_[item].Shape.dimensions), np.@bool);
                 // Masked array → its mask; plain array/scalar → an all-False array of its shape.
                 default:
                     return np.ma.getmaskarray(item);
@@ -2456,7 +2456,7 @@ namespace NumSharp
         /// </remarks>
         /// <param name="a">The array whose logical dimensions the allocation should match.</param>
         /// <returns>A fresh contiguous <see cref="Shape"/> with <paramref name="a"/>'s dimensions, stride 0 offset.</returns>
-        private static Shape DimsOf(NDArray a) => new Shape(a.shape);
+        private static Shape DimsOf(NDArray a) => new Shape(a.Shape.dimensions);
 
         /// <summary>
         ///     The <c>~isfinite(result)</c> term of a domained op's mask, but only for inexact (float/complex)
@@ -3105,7 +3105,7 @@ namespace NumSharp
                 xd = np.concatenate(new[] { xd, yd }, catAxis);
                 xmask = np.concatenate(new[] { xmask, ymask }, catAxis);
             }
-            if (xd.shape[0] == 1)
+            if (xd.Shape.dimensions[0] == 1)
                 rowvar = true;
             int meanAxis = rowvar ? 1 : 0;
             // Per-variable masked mean, broadcast back for the centering subtraction.
@@ -4190,7 +4190,7 @@ namespace NumSharp
         /// so no slice-string parsing is needed for an arbitrary axis.</summary>
         private static NDArray DropAlong(NDArray a, int axis, bool dropFirst)
         {
-            int len = (int)a.shape[axis];
+            int len = (int)a.Shape.dimensions[axis];
             var idx = dropFirst ? np.arange(1, len) : np.arange(0, len - 1);
             return np.take(a, idx, axis);
         }
@@ -4301,7 +4301,7 @@ namespace NumSharp
             if (axis is not null && !wgt.Shape.Equals(d.Shape))
             {
                 var shp = Enumerable.Repeat(1L, d.ndim).ToArray();
-                shp[axis.Value] = d.shape[axis.Value];
+                shp[axis.Value] = d.Shape.dimensions[axis.Value];
                 wgt = np.reshape(wgt, new Shape(shp));
             }
             var w = np.broadcast_to(wgt, d.Shape).copy();
@@ -4382,7 +4382,7 @@ namespace NumSharp
             NDArray smask = asorted._mask;
 
             // Empty reduced axis: the median of an empty slice is NaN (NumPy takes the mean of the 0-length slice).
-            if (sdata.shape[ax] == 0)
+            if (sdata.Shape.dimensions[ax] == 0)
                 return mean(asorted, ax, null, keepdims);
 
             bool inexact = IsInexact(data.typecode);
@@ -4670,7 +4670,7 @@ namespace NumSharp
                 NDArray wcheck = AsData(w);
                 if (wcheck.ndim != 1)
                     throw new TypeError("expected a 1-d array for weights");
-                if (wcheck.shape[0] != yd.shape[0])
+                if (wcheck.Shape.dimensions[0] != yd.Shape.dimensions[0])
                     throw new TypeError("expected w and y to have the same length");
                 m = Or(m, (w as NDMaskedArray)?._mask);
             }
@@ -4972,7 +4972,7 @@ namespace NumSharp
             // NumPy: idx = array(np.indices(a.shape), mask=[m]*a.ndim); then per dimension i, the compressed
             // min/max of idx[i] along `axis`. idx[i] is the i-th coordinate grid, masked wherever a is masked.
             var mArr = getmaskarray(a);
-            var indices = np.indices(d.shape); // (nd, *shape); indices[i] = grid i — d.shape is long[], no down-cast
+            var indices = np.indices(d.Shape.dimensions); // (nd, *shape); indices[i] = grid i — d.shape is long[], no down-cast
             var mins = new NDArray[nd];
             var maxs = new NDArray[nd];
             for (int i = 0; i < nd; i++)
@@ -5026,7 +5026,7 @@ namespace NumSharp
             // that 1-D line's contiguous unmasked runs — one inner list per line.
             int other = (ax + 1) % 2;
             var ma_ = array(a);
-            long n = d.shape[other];
+            long n = d.Shape.dimensions[other];
             var result = new Slice[n][];
             for (int i = 0; i < n; i++)
             {

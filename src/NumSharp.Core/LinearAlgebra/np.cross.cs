@@ -56,8 +56,8 @@ namespace NumSharp
             a = moveaxis(a, normA, -1);
             b = moveaxis(b, normB, -1);
 
-            long aLen = a.shape[a.ndim - 1];
-            long bLen = b.shape[b.ndim - 1];
+            long aLen = a.Shape.dimensions[a.ndim - 1];
+            long bLen = b.Shape.dimensions[b.ndim - 1];
             if ((aLen != 2 && aLen != 3) || (bLen != 2 && bLen != 3))
                 throw new ValueError(
                     "incompatible dimensions for cross product\n(dimension must be 2 or 3)");

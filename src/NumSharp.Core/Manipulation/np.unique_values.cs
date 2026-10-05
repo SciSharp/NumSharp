@@ -296,6 +296,6 @@ namespace NumSharp
         ///     inverse array.
         /// </summary>
         private static NDArray ReshapeInverseToInput(NDArray inverse, NDArray x)
-            => inverse.reshape(x.shape);
+            => inverse.reshape(x.Shape.dimensions);
     }
 }

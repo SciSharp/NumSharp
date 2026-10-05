@@ -707,7 +707,7 @@ namespace NumSharp
                 && x.ndim != y.ndim && x.size == 1 && y.size == 1)
             {
                 // NpyIter's single-element loop (output stride 0): CDOUBLE_multiply's contracted loop_scalar.
-                var shape = new Shape(x.ndim > y.ndim ? x.shape : y.shape);
+                var shape = new Shape(x.ndim > y.ndim ? x.Shape.dimensions : y.Shape.dimensions);
                 var r = new NDArray(NPTypeCode.Complex, shape, false);
                 Complex p = ILKernelGenerator.PolyLoopScalarComplexMultiply(x.GetAtIndex<Complex>(0), y.GetAtIndex<Complex>(0));
                 r.SetAtIndex(p, 0);

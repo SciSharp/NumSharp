@@ -72,7 +72,7 @@ namespace NumSharp
                 return NDArray.Scalar(idx);
             }
 
-            Shape outShape = new Shape(v.shape);
+            Shape outShape = new Shape(v.Shape.dimensions);
 
             if (v.size == 0)
                 return new NDArray(NPTypeCode.Int64, outShape, false);

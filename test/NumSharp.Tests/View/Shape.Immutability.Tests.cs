@@ -50,5 +50,99 @@ namespace NumSharp.Tests.View
             Action past = () => { var unused = s[3]; };
             past.Should().Throw<IndexOutOfRangeException>();
         }
+
+        /// <summary>
+        ///     Bug 2b: <c>a.shape</c> is NumPy's tuple — a value the caller owns. Writing into it does not change the array (it
+        ///     made <c>x</c> <c>(100, 4)</c> over 12 elements), and every read is a new array.
+        /// </summary>
+        [TestMethod]
+        public void NDArrayShape_ReturnsACopy()
+        {
+            using var x = np.zeros(new Shape(3, 4));
+            var d = x.shape;
+            d[0] = 100;
+
+            x.shape.Should().Equal(new long[] { 3, 4 }, "the caller's copy is not the array's dimensions");
+            x.size.Should().Be(12);
+            ReferenceEquals(x.shape, x.shape).Should().BeFalse("each read is a fresh array, like a fresh tuple");
+        }
+
+        /// <summary>
+        ///     An elementwise result shares its input's dimension array, so a write through the input's old <c>shape</c>
+        ///     changed BOTH arrays (probe P16: <c>y = x + 1; d = x.shape; d[1] = 9</c> made both <c>(3, 9)</c>). NumPy:
+        ///     <c>y.shape == (3, 4)</c>.
+        /// </summary>
+        [TestMethod]
+        public void NDArrayShape_WriteDoesNotReachArraysSharingTheDimensions()
+        {
+            using var x = np.zeros(new Shape(3, 4));
+            using var y = x + 1;
+            var d = x.shape;
+            d[1] = 9;
+
+            x.shape.Should().Equal(new long[] { 3, 4 });
+            y.shape.Should().Equal(new long[] { 3, 4 });
+        }
+
+        /// <summary>
+        ///     A view's <c>shape</c> is a copy too: <c>v = x[0:1]; d = v.shape; d[1] = 50</c> left <c>v</c> as <c>(1, 50)</c>
+        ///     over a <c>(2, 3)</c> buffer (probe P13 through the old getter).
+        /// </summary>
+        [TestMethod]
+        public void NDArrayShape_OfAView_ReturnsACopy()
+        {
+            using var x = np.zeros(new Shape(2, 3));
+            using var v = x["0:1"];
+            var d = v.shape;
+            d[1] = 50;
+
+            v.shape.Should().Equal(new long[] { 1, 3 });
+            x.shape.Should().Equal(new long[] { 2, 3 });
+        }
+
+        /// <summary>
+        ///     A 0-d array's <c>shape</c> is empty (NumPy's <c>()</c>); there is no element to write into.
+        /// </summary>
+        [TestMethod]
+        public void NDArrayShape_ZeroDimensional_IsEmpty()
+        {
+            using var a = np.array(5.0);
+            a.shape.Should().BeEmpty();
+        }
+
+        /// <summary>
+        ///     The public wrappers that hand out NumPy's <c>shape</c> (<c>MaskedArray.shape</c>, <c>np.unique</c>'s result)
+        ///     return copies too: writing into what they return does not change the wrapped array.
+        /// </summary>
+        [TestMethod]
+        public void Wrappers_ReturnCopies()
+        {
+            using var data = np.zeros(new Shape(2, 3));
+            var masked = np.ma.array(data);
+            var md = masked.shape;
+            md[0] = 7;
+            masked.shape.Should().Equal(new long[] { 2, 3 });
+            data.shape.Should().Equal(new long[] { 2, 3 });
+
+            var u = np.unique(np.array(new[] { 3, 1, 3, 2 }));
+            var ud = u.shape;
+            ud[0] = 99;
+            u.shape.Should().Equal(new long[] { 3 });
+        }
+
+        /// <summary>
+        ///     The setter reads the caller's dimensions once (NumPy's <c>a.shape = s; s[0] = 100</c> leaves <c>a</c> alone).
+        ///     This already held; it guards the setter while the getter changes.
+        /// </summary>
+        [TestMethod]
+        public void NDArrayShape_Setter_ReadsTheCallersArrayOnce()
+        {
+            using var a = np.arange(6);
+            long[] dims = { 3, 2 };
+            a.shape = dims;
+            dims[0] = 100;
+
+            a.shape.Should().Equal(new long[] { 3, 2 });
+        }
     }
 }

@@ -10,7 +10,7 @@ namespace NumSharp
 
             if (scalarArrayNo == 0)
             {
-                if (!Enumerable.SequenceEqual(this.shape, np2.shape))
+                if (!Enumerable.SequenceEqual(this.Shape.dimensions, np2.Shape.dimensions))
                 {
                     throw new IncorrectShapeException();
                 }
@@ -29,19 +29,19 @@ namespace NumSharp
             {
                 case 1:
                 {
-                    result = new NDArray(np2.dtype, np2.shape);
+                    result = new NDArray(np2.dtype, np2.Shape.dimensions);
                     break;
                 }
 
                 case 2:
                 {
-                    result = new NDArray(this.dtype, this.shape);
+                    result = new NDArray(this.dtype, this.Shape.dimensions);
                     break;
                 }
 
                 default:
                 {
-                    result = new NDArray(this.dtype, this.shape);
+                    result = new NDArray(this.dtype, this.Shape.dimensions);
                     break;
                 }
             }

@@ -71,8 +71,8 @@ namespace NumSharp
                 throw new ArgumentException("tri() missing 1 required positional argument: 'N'");
 
             // NumPy: tri(*m.shape[-2:], ...) — for 1-D that is tri(n) which squares up to (n, n).
-            long rows = ndim == 1 ? m.shape[0] : m.shape[ndim - 2];
-            long cols = ndim == 1 ? m.shape[0] : m.shape[ndim - 1];
+            long rows = ndim == 1 ? m.Shape.dimensions[0] : m.Shape.dimensions[ndim - 2];
+            long cols = ndim == 1 ? m.Shape.dimensions[0] : m.Shape.dimensions[ndim - 1];
 
             var fast = TryTriangleBlit(m, k, lower, cols);
             if (!(fast is null))
@@ -109,7 +109,7 @@ namespace NumSharp
 
             long size = m.size;
             if (size == 0 || cols == 0)
-                return np.zeros(new Shape((long[])m.shape.Clone()), m.typecode);
+                return np.zeros(new Shape((long[])m.Shape.dimensions.Clone()), m.typecode);
 
             int elemSize = m.typecode.SizeOf();
             bool writeOnce = PrefersWriteOnce(size * elemSize);
@@ -118,8 +118,8 @@ namespace NumSharp
             // write every byte of every row exactly once (zeros, retained run, zeros). Above it
             // np.zeros rides free OS zero-pages and only the retained run is worth touching.
             var res = writeOnce
-                ? new NDArray(m.typecode, new Shape((long[])m.shape.Clone()), false)
-                : np.zeros(new Shape((long[])m.shape.Clone()), m.typecode);
+                ? new NDArray(m.typecode, new Shape((long[])m.Shape.dimensions.Clone()), false)
+                : np.zeros(new Shape((long[])m.Shape.dimensions.Clone()), m.typecode);
             byte* src = m.Storage.Address;
             byte* dst = res.Storage.Address + res.Shape.Offset * elemSize;
 

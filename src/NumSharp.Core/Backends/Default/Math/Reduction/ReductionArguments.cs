@@ -181,7 +181,7 @@ namespace NumSharp.Backends
         internal static void ValidateOperands(NDArray input, bool[] axisFlags, bool keepdims, NDArray @out, NDArray @where, string funcname)
         {
             int ndim = input.ndim;
-            long[] inShape = input.shape;
+            long[] inShape = input.Shape.dimensions;
 
             // result_axes: the out axis each input axis maps to (-1 for a reduced axis that keepdims drops), and
             // whether the input axis is a reduction axis (NPY_ITER_REDUCTION_AXIS).
@@ -199,8 +199,8 @@ namespace NumSharp.Backends
                     (keepdims ? " (must match the operand's when keepdims=True)" : ""));
             }
 
-            long[] outShape = @out?.shape;
-            long[] whereShape = @where?.shape;
+            long[] outShape = @out?.Shape.dimensions;
+            long[] whereShape = @where?.Shape.dimensions;
 
             // Pass 1 (npyiter_fill_axisdata): broadcast every operand's shape onto the iterator's, in operand order.
             var bshape = new long[ndim];
@@ -307,7 +307,7 @@ namespace NumSharp.Backends
             var sb = new StringBuilder("operands could not be broadcast together with remapped shapes [original->remapped]: ");
             if (@out is not null)
             {
-                long[] outShape = @out.shape;
+                long[] outShape = @out.Shape.dimensions;
                 var remapped = new long[resultAxes.Length];
                 for (int idim = 0; idim < resultAxes.Length; idim++)
                 {
@@ -318,9 +318,9 @@ namespace NumSharp.Backends
                 sb.Append(Shape.ConvertShapeToString(outShape)).Append("->").Append(Shape.ConvertShapeToString(remapped)).Append(' ');
             }
 
-            sb.Append(Shape.ConvertShapeToString(input.shape)).Append(' ');
+            sb.Append(Shape.ConvertShapeToString(input.Shape.dimensions)).Append(' ');
             if (@where is not null)
-                sb.Append(Shape.ConvertShapeToString(@where.shape)).Append(' ');
+                sb.Append(Shape.ConvertShapeToString(@where.Shape.dimensions)).Append(' ');
             return new IncorrectShapeException(sb.ToString());
         }
     }

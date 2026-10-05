@@ -62,7 +62,7 @@ namespace NumSharp
             if (ax < 0) ax += nd;
             if (ax < 0 || ax >= nd)
                 throw new IndexError("tuple index out of range");
-            return (int)a.shape[ax];
+            return (int)a.Shape.dimensions[ax];
         }
 
         /// <summary>
@@ -82,7 +82,7 @@ namespace NumSharp
             if (ax < 0) ax += nd;
             if (ax < 0 || ax >= nd)
                 throw new IndexError($"index {axis} is out of bounds for axis 0 with size {nd}");
-            return (int)a.shape[ax];
+            return (int)a.Shape.dimensions[ax];
         }
 
         /// <summary>
@@ -152,7 +152,7 @@ namespace NumSharp
             if (@out is not null)
             {
                 // NumPy: raise if len(out.shape) != a.ndim or out.shape[axis] != n_out.
-                if (@out.ndim != a.ndim || @out.shape[axis] != nOut)
+                if (@out.ndim != a.ndim || @out.Shape.dimensions[axis] != nOut)
                     throw new ValueError("output array has wrong shape.");
 
                 // A read-only out refuses AFTER the shape check (probed 2.4.2: a wrong-shaped
@@ -236,7 +236,7 @@ namespace NumSharp
                 if (axes == null)
                 {
                     // s = list(a.shape). NDArray.shape is long[]; FFT lengths are int-range.
-                    long[] shp = a.shape;
+                    long[] shp = a.Shape.dimensions;
                     sList = new int[shp.Length];
                     for (int i = 0; i < shp.Length; i++)
                         sList[i] = (int)shp[i];

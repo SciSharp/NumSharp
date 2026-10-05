@@ -22,7 +22,7 @@ namespace NumSharp
             int nd = seq_of_zeros.ndim;
 
             NDArray seq;
-            if (nd == 2 && seq_of_zeros.shape[0] == seq_of_zeros.shape[1] && seq_of_zeros.shape[0] != 0)
+            if (nd == 2 && seq_of_zeros.Shape.dimensions[0] == seq_of_zeros.Shape.dimensions[1] && seq_of_zeros.Shape.dimensions[0] != 0)
             {
                 // Characteristic polynomial: build from the matrix's eigenvalues.
                 seq = np.linalg.eigvals(seq_of_zeros);

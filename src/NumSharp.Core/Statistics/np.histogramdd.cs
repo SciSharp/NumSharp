@@ -290,7 +290,7 @@ namespace NumSharp
             if (sample is null) throw new ArgumentNullException(nameof(sample));
             if (sample.ndim == 2)
             {
-                int d = (int)sample.shape[1];
+                int d = (int)sample.Shape.dimensions[1];
                 var cols = new NDArray[d];
                 for (int i = 0; i < d; i++)
                     cols[i] = sample[$":, {i}"];

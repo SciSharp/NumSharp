@@ -36,7 +36,7 @@ namespace NumSharp
                 // Error: mask doesn't match a leading prefix of the array shape.
                 throw new IndexOutOfRangeException(
                     $"boolean index did not match indexed array along axis 0; " +
-                    $"size of axis is {this.shape[0]} but size of boolean index is {mask.shape[0]}");
+                    $"size of axis is {this.Shape.dimensions[0]} but size of boolean index is {mask.Shape.dimensions[0]}");
             }
             set
             {
@@ -55,7 +55,7 @@ namespace NumSharp
 
                 throw new IndexOutOfRangeException(
                     $"boolean index did not match indexed array along axis 0; " +
-                    $"size of axis is {this.shape[0]} but size of boolean index is {mask.shape[0]}");
+                    $"size of axis is {this.Shape.dimensions[0]} but size of boolean index is {mask.Shape.dimensions[0]}");
             }
         }
 
@@ -70,7 +70,7 @@ namespace NumSharp
         {
             for (int i = 0; i < mask.ndim; i++)
             {
-                if (mask.shape[i] != this.shape[i] && mask.shape[i] != 0)
+                if (mask.Shape.dimensions[i] != this.Shape.dimensions[i] && mask.Shape.dimensions[i] != 0)
                     return false;
             }
             return true;

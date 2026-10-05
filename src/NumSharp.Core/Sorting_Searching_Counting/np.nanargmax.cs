@@ -127,7 +127,7 @@ namespace NumSharp
             if (@out.ndim != result.ndim)
                 throw new ValueError($"output array does not match result of np.{name}.");
             for (int d = 0; d < result.ndim; d++)
-                if (@out.shape[d] != result.shape[d])
+                if (@out.Shape.dimensions[d] != result.Shape.dimensions[d])
                     throw new ValueError($"output array does not match result of np.{name}.");
 
             np.copyto(@out, result, casting: "unsafe");

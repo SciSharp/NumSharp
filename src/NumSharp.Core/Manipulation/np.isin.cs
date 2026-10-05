@@ -36,7 +36,7 @@ namespace NumSharp
             // Result is shaped like element in C-order. Build the shape from the DIMENSIONS (a fresh
             // C-contiguous shape) — reusing element.Shape would carry a view's strides and scramble the
             // contiguous membership buffer on reshape (transposed/strided/negative-stride element).
-            Shape outShape = new Shape(element.shape);
+            Shape outShape = new Shape(element.Shape.dimensions);
             NDArray ar1 = np.ravel(element);        // C-order flatten (NumPy: np.asarray(element).ravel())
             NDArray ar2 = np.ravel(test_elements);  // test values are always flattened
 

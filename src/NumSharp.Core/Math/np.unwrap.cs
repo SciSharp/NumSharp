@@ -278,7 +278,7 @@ namespace NumSharp
                 intervalLowF = -intervalHighF;
             }
 
-            long len = p.shape[ax];
+            long len = p.Shape.dimensions[ax];
 
             NDArray dd = null, ph = null, correction = null, pTail = null, tail = null, castTail = null;
             NDArray upTail = null;

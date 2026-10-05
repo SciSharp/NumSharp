@@ -82,7 +82,7 @@ namespace NumSharp
 
                 double count = (double)a.size / avg.size;
                 NDArray scl = NDArray.Scalar(count).astype(avg.typecode);
-                if (!scl.shape.SequenceEqual(avg.shape))
+                if (!scl.Shape.dimensions.SequenceEqual(avg.Shape.dimensions))
                     scl = np.broadcast_to(scl, avg).copy();
                 return (scope.Returns(avg), scope.Returns(scl));
             }
@@ -106,8 +106,8 @@ namespace NumSharp
             {
                 if (keepdims)
                 {
-                    avgScalar = KeepdimsReshape(avgScalar, a.shape, normalizedAxis);
-                    sclScalar = KeepdimsReshape(sclScalar, a.shape, normalizedAxis);
+                    avgScalar = KeepdimsReshape(avgScalar, a.Shape.dimensions, normalizedAxis);
+                    sclScalar = KeepdimsReshape(sclScalar, a.Shape.dimensions, normalizedAxis);
                 }
                 return (scope.Returns(avgScalar), returned ? scope.Returns(sclScalar) : null);
             }
@@ -126,11 +126,11 @@ namespace NumSharp
                 NDArray avgFast = numFast / sclFast;
                 if (keepdims)
                 {
-                    avgFast = KeepdimsReshape(avgFast, a.shape, normalizedAxis);
-                    sclFast = KeepdimsReshape(sclFast, a.shape, normalizedAxis);
+                    avgFast = KeepdimsReshape(avgFast, a.Shape.dimensions, normalizedAxis);
+                    sclFast = KeepdimsReshape(sclFast, a.Shape.dimensions, normalizedAxis);
                 }
                 if (!returned) return (scope.Returns(avgFast), null);
-                if (!sclFast.shape.SequenceEqual(avgFast.shape))
+                if (!sclFast.Shape.dimensions.SequenceEqual(avgFast.Shape.dimensions))
                     sclFast = np.broadcast_to(sclFast, avgFast).copy();
                 return (scope.Returns(avgFast), scope.Returns(sclFast));
             }
@@ -143,7 +143,7 @@ namespace NumSharp
             NDArray num = SumWithAxes(prod, normalizedAxis, resultDtype, keepdims);
             NDArray avg_ = num / scl_;
             if (!returned) return (scope.Returns(avg_), null);
-            if (!scl_.shape.SequenceEqual(avg_.shape))
+            if (!scl_.Shape.dimensions.SequenceEqual(avg_.Shape.dimensions))
                 scl_ = np.broadcast_to(scl_, avg_).copy();
             return (scope.Returns(avg_), scope.Returns(scl_));
         }
@@ -159,7 +159,7 @@ namespace NumSharp
             {
                 bool isReduced = axes is null || Array.IndexOf(axes, i) >= 0;
                 if (isReduced) kd[i] = 1L;
-                else kd[i] = reduced.shape[outIdx++];
+                else kd[i] = reduced.Shape.dimensions[outIdx++];
             }
             return reduced.reshape(kd);
         }
@@ -305,14 +305,14 @@ namespace NumSharp
                 outShape = new long[ndim - axes.Length];
                 int oi = 0;
                 for (int i = 0; i < ndim; i++)
-                    if (Array.IndexOf(axes, i) < 0) outShape[oi++] = a.shape[i];
+                    if (Array.IndexOf(axes, i) < 0) outShape[oi++] = a.Shape.dimensions[i];
             }
 
             num = np.zeros(outShape.Length == 0 ? Shape.Scalar : new Shape(outShape), resultDtype);
             scl = np.zeros(outShape.Length == 0 ? Shape.Scalar : new Shape(outShape), resultDtype);
 
             // Pre-broadcast w to a's shape so both inputs share the iter shape.
-            NDArray wBcast = w.shape.SequenceEqual(a.shape) ? w : np.broadcast_to(w, a.Shape);
+            NDArray wBcast = w.Shape.dimensions.SequenceEqual(a.Shape.dimensions) ? w : np.broadcast_to(w, a.Shape);
 
             // op_axes: identity for a/w; -1 in reduce axes for num/scl.
             int[] aAxes = new int[ndim];
@@ -393,7 +393,7 @@ namespace NumSharp
                 for (int i = 0; i < ndim; i++)
                 {
                     if (Array.IndexOf(axes, i) < 0)
-                        kept.Add(a.shape[i]);
+                        kept.Add(a.Shape.dimensions[i]);
                 }
                 cur = cur.reshape(kept.ToArray());
             }
@@ -430,7 +430,7 @@ namespace NumSharp
                 for (int i = 0; i < ndim; i++)
                 {
                     if (Array.IndexOf(axes, i) < 0)
-                        kept.Add(a.shape[i]);
+                        kept.Add(a.Shape.dimensions[i]);
                 }
                 cur = cur.reshape(kept.ToArray());
             }
@@ -442,7 +442,7 @@ namespace NumSharp
         private static NDArray WeightsAreValid(NDArray weights, NDArray a, int[] axis)
         {
             NDArray wgt = weights;
-            if (a.shape.SequenceEqual(wgt.shape))
+            if (a.Shape.dimensions.SequenceEqual(wgt.Shape.dimensions))
                 return wgt;
 
             if (axis is null)
@@ -451,9 +451,9 @@ namespace NumSharp
 
             long[] expected = new long[axis.Length];
             for (int i = 0; i < axis.Length; i++)
-                expected[i] = a.shape[axis[i]];
+                expected[i] = a.Shape.dimensions[axis[i]];
 
-            if (!wgt.shape.SequenceEqual(expected))
+            if (!wgt.Shape.dimensions.SequenceEqual(expected))
                 throw new ArgumentException(
                     "Shape of weights must be consistent with shape of a along specified axis.");
 
@@ -471,7 +471,7 @@ namespace NumSharp
             int ndim = a.ndim;
             long[] newShape = new long[ndim];
             for (int i = 0; i < ndim; i++)
-                newShape[i] = Array.IndexOf(axis, i) >= 0 ? a.shape[i] : 1L;
+                newShape[i] = Array.IndexOf(axis, i) >= 0 ? a.Shape.dimensions[i] : 1L;
             wgt = wgt.reshape(newShape);
             return wgt;
         }

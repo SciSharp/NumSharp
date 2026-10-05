@@ -76,7 +76,7 @@ namespace NumSharp
                         throw new LinAlgError(
                             $"{a.ndim}-dimensional array given. Array must be at least two-dimensional");
 
-                    if (a.shape[a.ndim - 2] != a.shape[a.ndim - 1])
+                    if (a.Shape.dimensions[a.ndim - 2] != a.Shape.dimensions[a.ndim - 1])
                         throw new LinAlgError("Last 2 dimensions of the array must be square");
                 }
             }
@@ -194,7 +194,7 @@ namespace NumSharp
                     return np.multiply(real, real);
                 }
 
-                var magnitudes = np.zeros(new Shape(x.shape), NPTypeCode.Double);
+                var magnitudes = np.zeros(new Shape(x.Shape.dimensions), NPTypeCode.Double);
 
                 // Both walks are pinned to 'C' — the typed iterator defaults to 'K' (MEMORY order),
                 // which for a strided or transposed source visits elements in a different sequence
