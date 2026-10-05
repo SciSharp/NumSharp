@@ -1157,6 +1157,15 @@ namespace NumSharp.Tests.Fuzz
                 bool keepdims = ParseKeepdims(p);
                 return axis.HasValue ? np.mean(a, axis.Value, loop, keepdims) : a.TensorEngine.Mean(a, null, loop, keepdims);
             }
+            // nanmean.jsonl: np.nanmean with dtype= (a NumPy dtype name or null) — NumPy's nanmean (plan
+            // api-parameter-parity A7).
+            if (op == "nanmean" && p.ContainsKey("dtype"))
+            {
+                DType loop = p["dtype"].ValueKind != JsonValueKind.Null
+                    ? (DType)FuzzCorpus.DtypeToTC(p["dtype"].GetString())
+                    : null;
+                return np.nanmean(a, ParseAxis(p), ParseKeepdims(p), loop);
+            }
             if (op == "sum" && p.TryGetValue("dtype", out var sumDtype))
                 return np.sum(a, ParseAxis(p), ParseKeepdims(p), (DType)FuzzCorpus.DtypeToTC(sumDtype.GetString()));
             return ApplyReduce(op, ParseAxis(p), ParseKeepdims(p), a);

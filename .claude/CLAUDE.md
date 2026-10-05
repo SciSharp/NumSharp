@@ -1605,6 +1605,19 @@ moment loop in double with its own shortcuts; NumPy's (`numpy/lib/_nanfunctions_
   nanvar / nanstd out of the nan-family blankets (`NanReduceOps`) and in `ByteExactArithmeticUnaryOps`, unit
   `Math/np.nanvar.NumPyPort.Test.cs` (12).
 
+**`np.nanmean` is NumPy's `nanmean`, statement for statement** (`Backends/Default/Math/Reduction/Default.Reduction.NanMean.cs`,
+`NanMeanNumPy`; `np.nanmean` is a thin wrapper with `dtype=`; 2026-10-05, plan `docs/plans/api-parameter-parity.md` A7).
+An input that is not inexact (and decimal) is `np.mean` with the same keywords — NumPy's `_mean` since X9, which this
+item found. An inexact input: the dtype TypeError, ufunc.reduce's axis rule (np.sum reads the axis first: a 0-d input
+takes 0 / -1 as flat), the non-NaN count (`keepdims=keepdims`), the sum of the NaN-zeroed K-order copy in its loop, and
+the in-place division (`DivideByCountsLikeNumPy`: the float64 loop, Smith's complex division; an all-NaN slice keeps
+`0 / 0`). Routes as nanvar's: the count streams; a dense input without a cast streams its zeroed sum; otherwise the
+K-order copy is materialized for `ReduceAdd`; float16 and hosts without dynamic code run NumPy's eager statements, whose
+zero fill (shared with nanvar, `ZeroWhereMask`) is `np.putmask` with a scalar — 21 µs where `np.copyto(where=)` took
+253 µs into a float16 `(250, 400)` (plan X11). Perf (72 cells): geomean 5.82×, min 1.70×. Gates: `nanmean.jsonl` (5,017
+cases, zero excuses; nanmean left `NanReduceOps` and joined `ByteExactArithmeticUnaryOps`), unit
+`Math/np.nanmean.NumPyPort.Test.cs` (5).
+
 ### Bitwise
 `bitwise_and`, `bitwise_or`, `bitwise_xor` (ufunc `out=`/`where=`/`dtype=` supported; float/complex/decimal INPUTS raise NumPy's coercion TypeError while a float/complex/decimal `dtype=` raises the no-loop text — distinct messages, both probed; probed order: bad `where` → no-loop → out-cast → shape), `invert`, `left_shift`, `right_shift`
 
@@ -4545,6 +4558,7 @@ test/NumSharp.Tests/IO/            .npy/.npz format gate (no Python)
 - **var / std** (`varstd.jsonl`, 16,108 cases, 2026-10-05, `gen_oracle.py varstd`): np.var / np.std as NumPy's `_var` / `_std` over every layout × dtype × axis × keepdims × ddof, `ddof` past the count, `dtype=` × 10 loops, special values, `np.setbufsize` 16 / 32 fills (`params.bufsize`) and order-sensitive sizes. Held to ZERO excuses (`MisalignedRegistry` returns null for its `varstd` valueclass, and var / std are in `ByteExactArithmeticUnaryOps`, so no blanket takes them in any tier; `ma.var` / `ma.std` excepted, `IsMaVarStd`). `VarStdChunked` replays it through the chunked deviation sums. Carve: 12 cast-loop cells whose pinned rows are longer than the buffer (np.sum's X6 residual, `OpenBugsReductionTests.Sum_CastLoopAxis_RowLongerThanTheBuffer_SplitsAcrossFills`).
 - **nanvar / nanstd** (`nanvarstd.jsonl`, 13,382 cases, 2026-10-05, `gen_oracle.py nanvarstd`): np.nanvar / np.nanstd as NumPy's `nanvar` / `nanstd` over every catalog layout (refilled with finite values and NaNs) × dtype × axis × keepdims × ddof, NaN patterns (one, all, an all-NaN slice per axis, inf, a NaN complex part), `ddof` past uneven non-NaN counts, `dtype=` × 7 loops, special values, `np.setbufsize` fills, order-sensitive sizes, empty inputs and 0-d axes. Held to ZERO excuses (valueclass `nanvarstd`; nanvar / nanstd left the registry's nan-family branches, `NanReduceOps`, and joined `ByteExactArithmeticUnaryOps`). Carve: the same 12 cast-loop cells as `varstd` (np.sum's X6 residual).
 - **mean** (`mean_loops.jsonl`, 6,550 cases, 2026-10-05, `gen_oracle.py mean_loops`): np.mean as NumPy's `_mean` over every catalog layout × dtype × axis × keepdims, `dtype=` for every input against nine loops (float16 / float32 / float64 / complex128 / int8 / uint8 / int32 / int64 / bool), empty and 0-d inputs, special values (complex parts, uint64 past 2**63, broadcast), order-sensitive sizes (float offsets; int64 near 2**62) and `np.setbufsize` fills. Held to ZERO excuses (valueclass `meanloops`; mean is in `ByteExactArithmeticUnaryOps` and out of the reduction blankets in every tier, `ma.mean` excepted, `IsMaMean`; one narrow branch takes np.sum's finding-5 layout in the older tiers). Carves, each pinned: finding 5 (16 cells), X6 (5), the broadcast flat schedule (24).
+- **nanmean** (`nanmean.jsonl`, 5,017 cases, 2026-10-05, `gen_oracle.py nanmean`): np.nanmean as NumPy's `nanmean` over every catalog layout (refilled with finite values and NaNs) × dtype × axis × keepdims, NaN patterns (one, all, an all-NaN slice per axis, NaN / inf complex parts), `dtype=` for every input against nine loops, special values, `np.setbufsize` fills, order-sensitive sizes, empty and 0-d inputs. Held to ZERO excuses (valueclass `nanmean`; nanmean left `NanReduceOps` and joined `ByteExactArithmeticUnaryOps`; the nan-family shape branch is removed). Carve: 5 cast-loop cells (np.sum's X6 residual).
 - **Products & random streams**: `products.jsonl` (408) gates the CBLAS family, tensor products,
   cross/cov/corrcoef, and Array-API vector/matrix norms. `random_parity.jsonl` (38 portable) +
   `random_parity_host.jsonl` (108 host-libm) pin 35 stream methods/distributions; only managed

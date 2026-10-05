@@ -353,6 +353,36 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
+        /// Every nanmean divergence is a real bug since it left the nan-family blankets (2026-10-05, plan
+        /// api-parameter-parity A7): the (W4-A) shape cell of an integer input's dropped keepdims (the branch is gone), the
+        /// (W4-B) value cell (NaN masking / count / summation order), the nan-family dtype cell, and a one-ULP value
+        /// difference that the single-operand unary-ULP or complex 3-ULP branches would otherwise take.
+        /// </summary>
+        [TestMethod]
+        public void NanMean_NoDivergenceIsExcused()
+        {
+            var none = System.Array.Empty<BitDiff.Diff>();
+            double v = 1.2345;
+            byte[] nan = BitConverter.GetBytes(double.NaN), one = BitConverter.GetBytes(1.0);
+            var nanVsOne = new[] { new BitDiff.Diff(0, "NaN", "000000000000f03f") };
+            MisalignedRegistry.Classify(Case("nanmean", ("int32", new long[] { 3, 4 })), DivergenceKind.Shape,
+                null, null, NPTypeCode.Double, none).Should().BeNull("nanmean of an integer input dropping keepdims (the old W4-A cell)");
+            MisalignedRegistry.Classify(Case("nanmean", ("float32", new long[] { 8 })), DivergenceKind.Dtype, null, null,
+                NPTypeCode.Single, none).Should().BeNull("nanmean of float32 returning another dtype");
+            MisalignedRegistry.Classify(WithAxis(Case("nanmean", ("float64", new long[] { 4, 8 })), 0), DivergenceKind.Value,
+                nan, one, NPTypeCode.Double, nanVsOne).Should().BeNull("nanmean missing NumPy's NaN (an all-NaN slice)");
+            MisalignedRegistry.Classify(WithAxis(Case("nanmean", ("float64", new long[] { 4, 8 })), 0), DivergenceKind.Value,
+                BitConverter.GetBytes(v), BitConverter.GetBytes(UlpUp(v)), NPTypeCode.Double, OneDiff)
+                .Should().BeNull("nanmean one ULP off over an axis is not NaN masking or summation order: it is NumPy's nanmean");
+            MisalignedRegistry.Classify(Case("nanmean", ("float64", new long[] { 8 })), DivergenceKind.Value,
+                BitConverter.GetBytes(v), BitConverter.GetBytes(UlpUp(v)), NPTypeCode.Double, OneDiff)
+                .Should().BeNull("nanmean one ULP off flat (the unary-ULP branch must not take it)");
+            MisalignedRegistry.Classify(Case("nanmean", ("complex128", new long[] { 8 })), DivergenceKind.Value,
+                new byte[16], new byte[16], NPTypeCode.Complex, OneDiff)
+                .Should().BeNull("nanmean of complex off flat (the complex unary 3-ULP branch must not take it)");
+        }
+
+        /// <summary>
         /// Every np.mean / ndarray.mean divergence is a real bug since np.mean became NumPy's <c>_mean</c> statement for
         /// statement (2026-10-05, plan api-parameter-parity X9) and left the reduction blankets: a result dtype that is
         /// not NumPy's (the dtype blanket hid the flat decimal mean's float64), a few-ULP value difference flat or over an

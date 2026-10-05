@@ -6843,6 +6843,236 @@ def gen_mean_loops(dtypes=None):
     return cases
 
 
+# ---------------------------------------------------------------------------
+# np.nanmean — NumPy's nanmean (plan docs/plans/api-parameter-parity.md, item A7)
+# ---------------------------------------------------------------------------
+# NumPy's nanmean (numpy/lib/_nanfunctions_impl.py): an input that is not inexact has no mask and IS np.mean (the
+# mean_loops tier's rules, keywords included); for an inexact input the dtype check (TypeError "If a is inexact, then
+# dtype must be inexact"), a K-order copy with its NaNs zeroed, cnt = np.sum(~mask, axis, dtype=intp,
+# keepdims=keepdims) (the first axis consumer: a 0-d input takes axis 0 / -1 as flat), tot = np.sum(arr, axis, dtype,
+# keepdims), and avg = tot / cnt in place (the float64 loop for a real dtype, Smith's complex division; an all-NaN slice
+# is 0 / 0, NaN). Sections (the id carries the letter):
+#   L  every catalog layout (refilled with finite values and NaNs) x dtype x axis {None, each axis, -1, out of range}
+#      x keepdims
+#   N  NaN patterns: one NaN, all NaN, one all-NaN slice per axis, NaN in a complex part, +-inf with NaN
+#   T  dtype= for every input against nine loops (an integer / bool loop over an inexact input is NumPy's TypeError)
+#   S  special values in one element and over a length-1 axis
+#   B  np.setbufsize(16 / 32): the buffered fills of a cast loop with NaNs
+#   M  order-sensitive values (offsets plus noise, NaN every 7th; 129 / 1031 / 2049 elements; 2-D C / F / transposed)
+#   E  empty inputs; Z  0-d inputs with axis 0 / -1 / 1 (flat for an inexact input, np.mean's AxisError otherwise)
+# Carved (none excused): an integer / bool input is np.mean, so it inherits the mean_loops carves (finding 5: a reversed
+# view along an axis; finding 10: a broadcast operand reduced flat; X6), each unless order-free; an inexact input's
+# cast-loop rows longer than the buffer (X6). Params: axis (int or null), keepdims, dtype (a NumPy dtype name or null)
+# and, in section B, bufsize.
+
+
+def gen_nanmean(dtypes=None):
+    """np.nanmean cases (op key nanmean, valueclass nanmean) over `dtypes` (default: ALL_DTYPES); see the header."""
+    dtypes = ALL_DTYPES if dtypes is None else dtypes
+    cases = []
+    n = 0
+    carved = {"finding5": 0, "finding10": 0, "x6": 0}
+
+    def reversed_axis(view):
+        return any(st < 0 and sh > 1 for st, sh in zip(view.strides, view.shape))
+
+    def broadcast_axis(view):
+        return any(st == 0 and sh > 1 for st, sh in zip(view.strides, view.shape))
+
+    def emit(base, view, axis, keepdims, dt, ln, tag, bufsize=None):
+        nonlocal n
+        if view.dtype.kind in "biu":
+            # np.mean's route: its residuals, unless the sum is order-free.
+            loop = _mean_loop_of(view, dt)
+            valid_axis = isinstance(axis, int) and -view.ndim <= axis < view.ndim
+            if valid_axis and view.ndim >= 2 and reversed_axis(view) and not _mean_order_free(view, axis, loop):
+                carved["finding5"] += 1
+                return
+            if axis is None and broadcast_axis(view) and not _mean_order_free(view, None, loop):
+                carved["finding10"] += 1
+                return
+        params = {"axis": axis, "keepdims": keepdims, "dtype": dt}
+        if bufsize is not None:
+            params["bufsize"] = bufsize
+        operand = describe(base, view)
+        cid = f"nanmean/{tag}/{ln}/{n}"
+        n += 1
+        previous = np.getbufsize()
+        try:
+            if bufsize is not None:
+                np.setbufsize(bufsize)
+            with warnings.catch_warnings(), np.errstate(all="ignore"):
+                warnings.simplefilter("ignore")      # all-NaN slices, empty slices, complex -> real casts
+                r = np.nanmean(view, axis=axis, keepdims=keepdims, dtype=dt)
+        except Exception as e:                       # noqa: BLE001 — NumPy's error is the expectation
+            cases.append(_error_case("nanmean", params, [operand], e, ln, cid=cid))
+            return
+        finally:
+            np.setbufsize(previous)
+        cases.append({"id": cid, "op": "nanmean", "params": params, "operands": [operand],
+                      "expected": _arr_expected(r), "layout": ln, "valueclass": "nanmean"})
+
+    def axes_of(view):
+        if view.ndim == 0:
+            return [None, 0, -1, 1]                  # inexact: 0 / -1 flat, 1 AxisError; integer: np.mean's AxisError
+        return [None] + list(range(view.ndim)) + [-1, view.ndim]   # view.ndim: out of range
+
+    # Section L: every layout of the catalog, refilled (the catalog's pools start with NaN, +-inf).
+    for ln, fn_layout in LAYOUTS.items():
+        for s in dtypes:
+            base, view = fn_layout(np.dtype(s))
+            if base.size:
+                base[...] = _nvs_values(s, base.shape, 1)
+            for axis in axes_of(view):
+                for kd in ((False, True) if axis in (None, 0) else (False,)):
+                    emit(base, view, axis, kd, None, ln, f"L/{s}")
+
+    inexact = [d for d in ("float16", "float32", "float64", "complex128") if d in dtypes]
+
+    # Section N: NaN patterns over fixed shapes.
+    for s in inexact:
+        for shape in ((5,), (3, 4), (2, 3, 4)):
+            nanv = complex(np.nan, 0) if s == "complex128" else np.nan
+            pats = {}
+            one = _nvs_values(s, shape, 2, 0)
+            one.reshape(-1)[1] = nanv
+            pats["one"] = one
+            pats["all"] = np.full(shape, nanv, dtype=s)
+            for ax in range(len(shape)):
+                v = _nvs_values(s, shape, 2, 0)
+                idx = [slice(None)] * len(shape)
+                idx[ax] = 0
+                v[tuple(idx)] = nanv
+                pats[f"slice{ax}"] = v
+            v = _nvs_values(s, shape, 2, 3)
+            v.reshape(-1)[2] = np.inf
+            pats["inf"] = v
+            if s == "complex128":
+                v = _nvs_values(s, shape, 2, 0)
+                v.reshape(-1)[0] = complex(1.0, np.nan)
+                pats["nanj"] = v
+                v = _nvs_values(s, shape, 2, 4)
+                v.reshape(-1)[3] = complex(np.inf, 2.0)
+                pats["infre"] = v
+            for pn, v in pats.items():
+                base = np.ascontiguousarray(v)
+                for axis in [None] + list(range(len(shape))):
+                    for kd in (False, True):
+                        emit(base, base, axis, kd, None, "c_contiguous", f"N/{s}/{pn}")
+
+    # Section T: dtype= for every (input, loop) pair.
+    for s in [d for d in ("float16", "float32", "float64", "complex128", "int32", "bool", "uint8", "int64") if d in dtypes]:
+        for shape, axes in (((7,), (None, 0)), ((3, 5), (None, 0, 1)), ((), (None,)), ((2, 3, 4), (None, 0, 2))):
+            base = np.ascontiguousarray(_nvs_values(s, shape, 4, 4))
+            for dt in MEAN_LOOPS:
+                for axis in axes:
+                    for kd in ((False, True) if axis is None else (False,)):
+                        emit(base, base, axis, kd, dt, "c_contiguous", f"T/{s}->{dt}")
+
+    # Section S: special values in one element (0-d and 1-D) and over a length-1 axis.
+    specials = {
+        "float16": [np.nan, np.inf, -np.inf, -0.0],
+        "float32": [np.nan, np.inf, -np.inf, -0.0],
+        "float64": [np.nan, np.inf, -np.inf, -0.0],
+        "complex128": [complex(np.nan, 0.0), complex(0.0, np.nan), complex(0.0, np.inf), complex(-np.inf, 1.0),
+                       complex(-0.0, -0.0)],
+    }
+    for s, values in specials.items():
+        if s not in dtypes:
+            continue
+        for k, v in enumerate(values):
+            zero_d = np.array(v, dtype=s)
+            one = np.array([v], dtype=s)
+            col = np.array([[v], [1.5], [-2.0], [v]], dtype=s)          # (4, 1): axis 1 has length 1
+            row = np.array([[1.5, v, -2.0], [v, 0.25, 3.0]], dtype=s)
+            for dt in (None, "complex128", "float64"):
+                emit(zero_d, zero_d, None, False, dt, "scalar_0d", f"S/{s}/{k}")
+                emit(one, one, None, False, dt, "one_element_1d", f"S/{s}/{k}")
+                emit(one, one, 0, True, dt, "one_element_1d", f"S/{s}/{k}")
+                emit(col, col, 1, False, dt, "length1_axis_2d", f"S/{s}/{k}")
+                emit(col, col, 0, False, dt, "length1_axis_2d", f"S/{s}/{k}")
+                for axis in (None, 0, 1):
+                    emit(row, row, axis, False, dt, "c_contiguous_2d", f"S/{s}/{k}")
+
+    rng = np.random.default_rng(20261008)
+
+    # Section B: the buffered fills of a cast loop under a small np.setbufsize.
+    casts = [("float64", "float32"), ("float32", "float16"), ("complex128", "complex128"), ("float64", "complex128"),
+             ("float16", "float64"), ("float32", "float64"), ("float16", None)]
+    for src, dt in casts:
+        if src not in dtypes:
+            continue
+        vals = 1000.0 + rng.normal(0.0, 3.0, 200)
+        if src == "complex128":
+            vals = vals + 1j * (-40.0 + rng.normal(0.0, 2.0, 200))
+        if src == "float16":
+            vals = 8.0 + rng.normal(0.0, 1.5, 200)
+        vals[::9] = np.nan
+        base = np.asarray(vals).astype(src)
+        for ln, view in (("c_contiguous_1d", base), ("c_contiguous_2d", base.reshape(8, 25)),
+                         ("f_contiguous_2d", base.reshape(25, 8).T)):
+            for axis in ([None] if view.ndim == 1 else [None, 0, 1]):
+                # X6 (carved): a pinned row of the K-order copy (the reduced axis innermost) longer than the buffer, in
+                # a cast loop: NumPy splits it across fills, np.sum's cast-loop axis route sums it in one call.
+                pinned = (ln == "c_contiguous_2d" and axis == 1) or (ln == "f_contiguous_2d" and axis == 0)
+                loop = view.dtype.name if dt is None else np.dtype(dt).name
+                for bufsize in (16, 32):
+                    if pinned and view.shape[axis] > bufsize and loop != view.dtype.name:
+                        carved["x6"] += 1
+                        continue
+                    emit(base, view, axis, False, dt, ln, f"B/{src}->{dt}", bufsize)
+
+    # Section M: order-sensitive values, where the pairwise schedule shows in the last bits.
+    for s in inexact:
+        for size in (129, 1031, 2049):
+            vals = 1000.0 + rng.normal(0.0, 3.0, size)
+            if s == "float16":
+                vals = 8.0 + rng.normal(0.0, 1.5, size)
+            if s == "complex128":
+                vals = vals + 1j * (-250.0 + rng.normal(0.0, 7.0, size))
+            vals[::7] = np.nan
+            base = np.asarray(vals).astype(s)
+            for ln, view in (("c_contiguous_1d", base), ("negstride_1d", base[::-1]), ("strided_step2_1d", base[::2])):
+                for axis in (None, 0):
+                    for dt in (None, "float64"):
+                        emit(base, view, axis, False, dt, ln, f"M/{s}/{size}")
+        vals = 1000.0 + rng.normal(0.0, 3.0, 31 * 41)
+        if s == "float16":
+            vals = 8.0 + rng.normal(0.0, 1.5, 31 * 41)
+        if s == "complex128":
+            vals = vals + 1j * (-250.0 + rng.normal(0.0, 7.0, 31 * 41))
+        vals[::7] = np.nan
+        base = np.asarray(vals).astype(s)
+        for ln, view in (("c_contiguous_2d", base.reshape(31, 41)), ("f_contiguous_2d", base.reshape(41, 31).T),
+                         ("transposed_3d", base[: 30 * 41].reshape(5, 6, 41).transpose(2, 0, 1)),
+                         ("negstride_2d", base.reshape(31, 41)[::-1, ::-1]), ("broadcast_2d", np.broadcast_to(base[:41], (6, 41)))):
+            for axis in [None] + list(range(view.ndim)):
+                emit(base, view, axis, False, None, ln, f"M/{s}/2d")
+
+    # Section E: empty inputs (cnt 0 everywhere: 0 / 0, NaN of the sum's dtype; np.mean's rules for an integer input).
+    for s in [d for d in ("float16", "float32", "float64", "complex128", "int32", "bool") if d in dtypes]:
+        for shape, axes in (((0,), (None, 0)), ((0, 3), (None, 0, 1)), ((3, 0), (None, 0, 1))):
+            base = np.zeros(shape, dtype=s)
+            for axis in axes:
+                for kd in (False, True):
+                    for dt in (None, "float32", "complex128"):
+                        emit(base, base, axis, kd, dt, "empty", f"E/{s}")
+
+    # Section Z: 0-d inputs with an axis.
+    for s in dtypes:
+        base = np.array(_nvs_values(s, (), 6, 0))
+        for axis in (None, 0, -1, 1):
+            for dt in (None, "float32"):
+                emit(base, base, axis, False, dt, "scalar_0d", f"Z/{s}")
+        if np.dtype(s).kind in "fc":
+            nanv = np.array(complex(np.nan, 0) if s == "complex128" else np.nan, dtype=s)
+            for axis in (None, 0, -1):
+                emit(nanv, nanv, axis, True, None, "scalar_0d", f"Z/{s}/nan")
+    print(f"  nanmean carved: finding 5 {carved['finding5']}, finding 10 {carved['finding10']}, X6 {carved['x6']}",
+          file=sys.stderr)
+    return cases
+
+
 def char_tier(mode):
     """Relabelled Char cases to append into tier-file `mode` (woven coverage)."""
     L = list(LAYOUTS.keys())
@@ -6923,6 +7153,8 @@ def char_tier(mode):
         raw = gen_nanvarstd([_C])
     elif mode == "mean_loops":                                     # Char -> float64 like uint16 (an unsigned integer)
         raw = gen_mean_loops([_C])
+    elif mode == "nanmean":                                        # Char has no NaN: np.mean's route, like uint16
+        raw = gen_nanmean([_C])
     return _relabel_dtype(raw, _C, "char")
 
 
@@ -17468,6 +17700,13 @@ def main():
         cases = gen_mean_loops()
         cases += char_tier("mean_loops")
         write_jsonl(os.path.join(corpus_dir, "mean_loops.jsonl"), cases)
+    elif mode == "nanmean":
+        # np.nanmean as NumPy's nanmean (plan docs/plans/api-parameter-parity.md A7): every layout and dtype, NaN
+        # patterns, dtype= for every (input, loop) pair, special values, np.setbufsize fills, order-sensitive sizes,
+        # empty and 0-d inputs. Its own file.
+        cases = gen_nanmean()
+        cases += char_tier("nanmean")
+        write_jsonl(os.path.join(corpus_dir, "nanmean.jsonl"), cases)
     elif mode == "sum_identity":
         # np.sum's identity-seeded add reduction (+0.0 + -0.0 = +0.0) and its dtype= loop, with the
         # reductions built on it (mean / nansum / nanmean / average / ndarray.sum). No Char rows: the
@@ -17635,7 +17874,7 @@ def main():
         write_jsonl(os.path.join(corpus_dir, "polyroots_parity.jsonl"), host)
         write_jsonl(os.path.join(corpus_dir, "polyroots_parity.host.jsonl"), [blas_identity()])
     else:
-        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | sinc | i0 | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | nan_order | reduce_start | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows | evaluate | real_if_close | instance | emath | polyeval | polyseries | polycalc | polyvander | polyalgebra | polyroots | iter | dtype_text | errors_full | out_where | gcd | unwrap | half_minmax | clip_pyint | clip_ufunc | reduce_kwargs | sum_identity | varstd | nanvarstd | mean_loops | ndarray)")
+        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | sinc | i0 | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | nan_order | reduce_start | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows | evaluate | real_if_close | instance | emath | polyeval | polyseries | polycalc | polyvander | polyalgebra | polyroots | iter | dtype_text | errors_full | out_where | gcd | unwrap | half_minmax | clip_pyint | clip_ufunc | reduce_kwargs | sum_identity | varstd | nanvarstd | mean_loops | ndarray | nanmean)")
         sys.exit(2)
 
 

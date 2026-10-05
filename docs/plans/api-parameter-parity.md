@@ -225,9 +225,49 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
   or `count - ddof <= 0`) carries NaN instead of the masked 0, and some slices are finite where NumPy has +inf. They
   were hidden by the registry's unbounded "summation precision" blanket until A2 removed var/std from it (finding 7);
   `MisalignedRegistry.IsMaVarStd` keeps the blanket for the ma ids only and names this item.
-- [ ] **A7 `np.nanmean`: an integer or bool input drops `keepdims` for `axis=None`.** NumPy keeps the reduced axes
+- [x] **A7 `np.nanmean`: an integer or bool input drops `keepdims` for `axis=None`.** NumPy keeps the reduced axes
   (shape `(1,)*ndim`); NumSharp returns 0-d. 117 cases of the nanreduce oracle tier (every integer dtype and bool ×
-  13 layouts) sit under the registry's (W4-A) shape branch, which names only this bug since A3. Found by A3.
+  13 layouts) sit under the registry's (W4-A) shape branch, which names only this bug since A3. Found by A3. Done
+  2026-10-05, with B6's `dtype=`.
+  - Proof (2026-10-05, at `d1759ec8`): an 11,415-case NumPy 2.4.2 matrix (`nanmean` over float16 / float32 / float64 /
+    complex128, bool and integer dtypes × NaN patterns as A3's × shapes `()` to `(2,3,2)` and empties × axis forms ×
+    keepdims × C / F / stepped / reversed / transposed × `dtype=`): 9,429 exact (errors included), 207 within 64 ULP,
+    538 grossly different, and the 1,241 `dtype=` cases could not be called. The gross classes: keepdims dropped for
+    a flat integer / bool input (240); a complex mean with an infinite part (264: NumPy `(inf, nan)` through its complex
+    division, NumSharp `(inf, -0.1)`); float16 overflow stayed finite (30); 4 axis errors. The ULP class: float16 /
+    float32 summed in double.
+  - NumPy's `nanmean` (`numpy/lib/_nanfunctions_impl.py`): `_replace_nan(a, 0)` — an input that is not inexact has no
+    mask and returns `np.mean(arr, axis, dtype, out, keepdims)` —; the `dtype` / `out` checks (TypeError "If a is
+    inexact, then dtype must be inexact"); `cnt = np.sum(~mask, axis, dtype=intp, keepdims=keepdims)`; `tot =
+    np.sum(arr, axis, dtype, out, keepdims)`; `avg = _divide_by_count(tot, cnt, out)` (`divide(tot, cnt, out=tot,
+    casting='unsafe')`; an all-NaN slice keeps the division's `0 / 0`, NaN).
+  - Fix (`Default.Reduction.NanMean.cs`, `NanMeanNumPy`; `np.nanmean` is a thin wrapper and gained `dtype=`): those
+    statements on A3's routes. A non-inexact input (and decimal) is `ReduceMean`, which is NumPy's `_mean` since X9 —
+    X9 was found here: the probe's last ULP case was `np.mean(int32, axis=0, dtype=complex128)`. The axis follows
+    ufunc.reduce's rule (np.sum is nanmean's first axis consumer). The count streams over the input; a dense input
+    without a cast streams its NaN-zeroed sum (np.evaluate), anything else materializes NumPy's K-order copy for
+    `ReduceAdd`; float16 and hosts without dynamic code take NumPy's eager statements. The division is A3's
+    `DivideByCountsLikeNumPy`. The eager zero fill is `np.putmask` with a scalar (`ZeroWhereMask`, shared with A3's
+    eager nanvar route): `np.copyto(where=)` cost 253 µs over a float16 `(250, 400)` and `np.putmask` 21 µs (X11).
+  - Proof of the fix: the 11,415-case matrix — all exact, errors included; a 1,078-case large-size matrix (up to
+    1,000,003 elements; sparse NaNs, all-NaN rows and columns; C / F / stepped / reversed / transposed; `dtype=` casts;
+    keepdims) — all exact; a 3,451-case view-chain matrix — 3,450 exact, and one inherited through np.mean: a broadcast
+    int32 row reduced flat with `dtype=float32` (finding 10). A3's probes rerun exact after the shared zero fill
+    (45,832 + 2,872 + 10,306).
+  - Gates: oracle tier `nanmean.jsonl` (5,017 cases, zero excuses: every catalog layout refilled with finite values and
+    NaNs × dtype × axis × keepdims; NaN patterns incl. NaN / inf complex parts; `dtype=` for every input against nine
+    loops; special values; `np.setbufsize` fills (5 X6 cells carved); order-sensitive sizes; empty and 0-d inputs; the
+    char proxy); `nanmean` left the registry's nan-family set (`NanReduceOps`) and joined `ByteExactArithmeticUnaryOps`,
+    the (W4-A) shape branch is removed (its last case was this bug; the nan-family value branch fell 161 → 114, the rest
+    nansum / nanprod / nanmedian); tightness test `NanMean_NoDivergenceIsExcused`; unit tests
+    `Math/np.nanmean.NumPyPort.Test.cs` (5).
+  - Speed (NPY/NS, one pinned P-core, best of rounds; 72 cells: float64 / float32 / float16 / complex128 / int32 × flat
+    and both axes × 1K / 100K / 10M, plus F / strided / `dtype=` forms of the two float dtypes; NaNs every 7th element):
+    geomean 5.82×, minimum 1.70× (float64 → float32 `dtype=` at 10M: NumPy's cast loop on both sides). NumPy's nanmean
+    makes about six passes; flat float64 at 100K 18×, float32 along an axis at 10M 9–11×, float16 along axis 1 at 100K
+    6.3× (was 1.37× before the putmask fill). The A3 float16 cells improved with it (nanvar flat 100K 3.4× → 8.4×).
+  - Left open: B6's `out=` / `where=` and NumPy's parameter order; the unused nanmean struct kernels (X8); finding 10
+    reaching an integer input through np.mean.
 
 ### Phase S: signature gate
 
@@ -248,7 +288,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
 - [ ] B4 `np.std`, `np.var`, `ndarray.std`, `ndarray.var`: `out=`, `where=`, `mean=`, `correction=`; NumPy's order
   `(a, axis, dtype, out, ddof, keepdims)`.
 - [ ] B5 `np.nansum`, `np.nanprod`: `dtype=`, `out=`, `initial=`, `where=`.
-- [ ] B6 `np.nanmean`: `dtype=`, `out=`, `where=`.
+- [ ] B6 `np.nanmean`: `dtype=`, `out=`, `where=`. (`dtype=` landed with A7.)
 - [ ] B7 `np.nanstd`, `np.nanvar`: `out=`, `where=`, `mean=`, `correction=`; NumPy's order. (`dtype=` landed with A3.)
 - [ ] B8 `np.argmax`, `np.argmin`, `ndarray.argmax`, `ndarray.argmin`: `out=`.
 - [ ] B9 `np.cumsum`, `np.cumprod`: parameter names `a` and `dtype` (today `arr` and `typeCode`).
@@ -380,8 +420,9 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
   `NDAxisIter`'s `VarAxisDoubleKernel` / `StdAxisDoubleKernel` computed var/std in their own order; nothing calls them
   since the port. A3 left the same for nanvar / nanstd: `NDNanReductionKernels`' four `NanSquaredDeviation*Kernel`
   structs, `DirectILKernelGenerator.NanVarSimdHelperFloat` / `NanVarSimdHelperDouble` (`Masking.NaN.cs`) and the
-  `ReductionOp.NanVar` / `ReductionOp.NanStd` IL kernels (no caller outside the generator). Decide: remove them, or
-  keep them for a future non-NumPy fast mode.
+  `ReductionOp.NanVar` / `ReductionOp.NanStd` IL kernels (no caller outside the generator). A7 left np.nanmean's:
+  `NDNanReductionKernels`' `NanMeanAccumulator`, `NanMeanComplexAccumulator` and the four `NanMean*Kernel` structs.
+  Decide: remove them, or keep them for a future non-NumPy fast mode.
 - [x] **X9 `np.mean`: every `dtype=` loop along an axis, an integer loop flat, a flat decimal mean and a broadcast
   uint64 mean are not NumPy's.** Found by A7: np.nanmean of an integer input is np.mean, and its one ULP case was
   `np.mean(int32, axis=0, dtype=complex128)`. Done 2026-10-05.
@@ -434,6 +475,11 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
   a `(1, 0, 2)`-permuted float64 input along axis 2 gives NumPy strides `(1, 5)` (elements), NumSharp `(3, 1)`. The
   values are right, and the oracle compares C-order bytes, so only a flags or strides facet sees it. np.sum's bool
   loop (`dtype=bool`) and np.mean's bool loop are np.any and inherit it. Found by X9's probe.
+- [ ] **X11 `np.copyto(dst, scalar, where=mask)` into a float16 array is slow.** 2.5 ns per element over a `(250, 400)`
+  float16 with every 7th element masked: 253 µs, where `np.putmask(dst, mask, scalar)` — the same assignment for a
+  same-shape mask — takes 21 µs (float32 / float64 masked copies are fast). Speed only. nanvar / nanmean's eager float16
+  route now zeroes with putmask (A7, `ZeroWhereMask`); other callers of `np.copyto(where=)` into float16 keep the gap.
+  Found by A7's benchmark.
 
 ## 6. Findings
 
@@ -479,13 +525,19 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
    stride-0 axis with its neighbour, so it calls the add loop once per broadcast row (`out += pairwise(row)`);
    NumSharp's exact flat engine declines a broadcast operand and the elementwise fold sums in its own order: 1 ULP on
    12 of the mean_loops tier's broadcast cells (np.sum shares it). Pinned by
-   `OpenBugsReductionTests.Sum_BroadcastOperand_Flat_IsNumPysCallSchedule`. Belongs with B1.
+   `OpenBugsReductionTests.Sum_BroadcastOperand_Flat_IsNumPysCallSchedule`. Belongs with B1. An integer operand in a
+   float32 / float16 loop reaches it too, through np.sum's cast copy (one pairwise call over the materialized copy where
+   NumPy fills a buffer per row): A7's view-chain probe found it for `nanmean(int32 broadcast row, dtype=float32)`.
 11. **Hold the ported function strict across every tier, not only its own** (X9, as finding 7 for A2). The reduce tier's
    mean cases sat under the unbounded summation branch, which had hidden a gross divergence (a broadcast uint64 mean
    of 101.8 for NumPy's 3.69e18) and a dtype one (decimal); the new tier alone would not have reached either.
 
 ## 7. State log
 
+- **2026-10-05**: A7 done (np.nanmean is NumPy's nanmean; `dtype=` added, B6's first part; the `nanmean` oracle tier;
+  nanmean left the registry's nan-family blankets and the (W4-A) shape branch is gone; the eager float16 zero fill of
+  nanmean and nanvar / nanstd is `np.putmask`); X11 recorded, X8 and finding 10 extended. Commit: the A7 commit on
+  `journey4`.
 - **2026-10-05**: X9 done (np.mean is NumPy's `_mean`: every `dtype=` loop, the flat integer loops, decimal, a broadcast
   uint64; the `mean_loops` oracle tier; np.mean held strict in every tier), with X7's integer / bool part; X10 and
   findings 10–11 recorded, finding 5 pinned. Found by A7, which is in progress. Commit: the X9 commit on `journey4`.

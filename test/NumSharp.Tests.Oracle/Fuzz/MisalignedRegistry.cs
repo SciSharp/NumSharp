@@ -58,11 +58,12 @@ namespace NumSharp.Tests.Fuzz
         ///     tiers (0 divergences on 2,168 cases when removed from this set — a regression now fails the gate).
         ///     <c>nanvar</c> / <c>nanstd</c> left on 2026-10-05 (plan api-parameter-parity A3): they are NumPy's
         ///     <c>nanvar</c> / <c>nanstd</c> statement for statement and are held bit-exact in every tier (the
-        ///     <c>nanvarstd</c> tier included).
+        ///     <c>nanvarstd</c> tier included). <c>nanmean</c> left the same day (plan A7): it is NumPy's <c>nanmean</c>
+        ///     statement for statement (the <c>nanmean</c> tier), and np.mean for an integer input (X9).
         /// </summary>
         private static readonly System.Collections.Generic.HashSet<string> NanReduceOps = new()
         {
-            "nansum", "nanprod", "nanmean", "nanmedian"
+            "nansum", "nanprod", "nanmedian"
         };
 
         private static readonly System.Collections.Generic.HashSet<string> QuantileOps = new()
@@ -156,7 +157,11 @@ namespace NumSharp.Tests.Fuzz
             // np.mean is NumPy's _mean statement for statement since 2026-10-05 (plan api-parameter-parity X9): np.sum's
             // add reduction in the loop dtype and the division by the count — no platform libm. (ma.mean keeps the
             // reduction blankets, which classify it before this branch: IsMaMean.)
-            "mean"
+            "mean",
+            // np.nanmean is NumPy's nanmean statement for statement since 2026-10-05 (plan api-parameter-parity A7): the
+            // count and the NaN-zeroed sum in NumPy's schedule over the K-order copy, the division by the count; an
+            // integer input is np.mean (X9).
+            "nanmean"
         };
 
         /// <summary>
@@ -306,6 +311,10 @@ namespace NumSharp.Tests.Fuzz
             // empty and 0-d inputs, special values, order-sensitive sizes, np.setbufsize fills) is held to ZERO excuses too;
             // the cells that inherit np.sum's residuals (finding 5, X6) are carved by the generator, each pinned.
             if (c.Valueclass == "meanloops")
+                return null;
+            // nanmean.jsonl (np.nanmean as NumPy's nanmean, plan api-parameter-parity A7: every layout, dtype, NaN pattern
+            // and dtype= loop, special values, np.setbufsize fills, empty and 0-d inputs) is held to ZERO excuses too.
+            if (c.Valueclass == "nanmean")
                 return null;
 
             // reduce_start.jsonl (valueclass "negzero": every operand all -0.0, every result a signed zero) is held to
@@ -652,9 +661,9 @@ namespace NumSharp.Tests.Fuzz
             // making the clip SIMD min/max NaN-aware (the scalar path already propagated). The
             // classifier branch is removed so the matrix verifies clip(NaN) bit-exact.
 
-            // --- NaN-aware reductions (T10 / W4): the nan* family is broadly broken — nanmax / nanmin (2026-09-23) and
-            // nanvar / nanstd (2026-10-05, plan api-parameter-parity A3) excepted: they left NanReduceOps and are ENFORCED
-            // bit-exact, so none of the excuses below reaches them ---
+            // --- NaN-aware reductions (T10 / W4): the nan* family is broadly broken — nanmax / nanmin (2026-09-23),
+            // nanvar / nanstd (2026-10-05, plan api-parameter-parity A3) and nanmean (the same day, A7) excepted: they left
+            // NanReduceOps and are ENFORCED bit-exact, so none of the excuses below reaches them ---
             if (NanReduceOps.Contains(c.Op))
             {
                 // (W4-E) nanmean over an EMPTY float16 array (axis=None) throws
@@ -664,11 +673,10 @@ namespace NumSharp.Tests.Fuzz
                 // (W4-D FIXED 2026-10-04) the complex 1-D axis nansum no longer throws: NanSumComplex's axis route is
                 // NumPy's composition (np.sum of the NaN-replaced array) instead of the NDCoordinatesAxisIncrementor walk
                 // that refused a 1-D shape. The excuse is removed, so a regression turns the gate red.
-                // (W4-A) shape: nanmean of an integer / bool input drops keepdims for axis=None (117 nanreduce cases on
-                // 2026-10-05, plan api-parameter-parity A7). Its float path's 1-D axis shape was fixed 2026-10-04, and
-                // nanstd / nanvar, which had both bugs, left this set with A3.
-                if (kind == DivergenceKind.Shape)
-                    return "nan-reduction shape: nanmean of an integer / bool input drops keepdims for axis=None [known bug]";
+                // (W4-A, removed 2026-10-05) shape: the branch's last case was nanmean of an integer / bool input dropping
+                // keepdims for axis=None (117 nanreduce cases); nanmean is NumPy's nanmean since plan api-parameter-parity
+                // A7 and left this set. nanstd / nanvar, which had the 1-D axis shape bug too, left it with A3, and no
+                // nansum / nanprod / nanmedian case diverges in shape: any shape divergence of the family now fails.
                 // result dtype (NEP50 accumulator width).
                 if (kind == DivergenceKind.Dtype)
                     return "nan-reduction result dtype differs (NEP50 accumulator / complex->real) [known bug]";
