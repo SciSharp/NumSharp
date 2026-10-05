@@ -87,7 +87,7 @@ namespace NumSharp
         {
             long[] outDims = sizeGiven ? (long[])(size.dimensions ?? Array.Empty<long>()).Clone() : Broadcast(a, b, c);
             // NumPy's MultiIterNew(randoms, a, b, c): the output takes part as arg 0.
-            var withOut = new System.Collections.Generic.List<Shape> { new Shape(outDims) };
+            var withOut = new System.Collections.Generic.List<Shape> { Shape.Adopt(outDims) };
             withOut.Add(a.Shape);
             if (b is not null)
                 withOut.Add(b.Shape);
@@ -165,10 +165,10 @@ namespace NumSharp
         internal static NDArray NewOutput(NPTypeCode typeCode, Shape size, bool sizeGiven, NDArray a, NDArray b = null, NDArray c = null)
         {
             if (!sizeGiven)
-                return new NDArray(typeCode, new Shape(Broadcast(a, b, c)), false);
+                return new NDArray(typeCode, Shape.Adopt(Broadcast(a, b, c)), false);
 
             // np.empty(size) first: the allocation guard rejects a negative or overflowing size in NumPy's left-to-right order.
-            var ret = new NDArray(typeCode, new Shape((long[])(size.dimensions ?? Array.Empty<long>()).Clone()), false);
+            var ret = new NDArray(typeCode, Shape.Adopt((long[])(size.dimensions ?? Array.Empty<long>()).Clone()), false);
             try
             {
                 // Then MultiIterNew(randoms, a, b, c) + validate_output_shape over the output's own (fresh) shape.

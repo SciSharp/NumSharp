@@ -41,7 +41,7 @@ namespace NumSharp.Backends
                 }
 
                 return new NDArray(emptyRetType,
-                    axis_ == null ? Shape.Vector(shape.size) : new Shape(shape.dimensions), false);
+                    axis_ == null ? Shape.Vector(shape.size) : Shape.Adopt(shape.dimensions), false);
             }
 
             // 0-d scalar or single-element 1-D: cumprod is the value itself, promoted to the
@@ -83,7 +83,7 @@ namespace NumSharp.Backends
             NDArray inputArr = arr;
 
             // Create output with CONTIGUOUS strides even if input is broadcast.
-            var outputShape = new Shape(shape.dimensions);  // Fresh contiguous shape
+            var outputShape = Shape.Adopt(shape.dimensions);  // Fresh contiguous shape
             var retTypeCode = typeCode ?? (inputArr.GetTypeCode.GetAccumulatingType());
             var ret = new NDArray(retTypeCode, outputShape, false);
 

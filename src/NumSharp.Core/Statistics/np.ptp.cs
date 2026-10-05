@@ -72,7 +72,7 @@ namespace NumSharp
                         if (normalized[j] == i) { reduced = true; break; }
                     if (!reduced) kept.Add(a.Shape.dimensions[i]);
                 }
-                diff = diff.reshape(kept.ToArray());
+                diff = diff.reshape(Shape.Adopt(kept.ToArray()));
             }
 
             return WriteOrReturn(diff, @out);

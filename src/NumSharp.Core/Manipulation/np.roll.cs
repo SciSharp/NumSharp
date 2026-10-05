@@ -22,7 +22,7 @@ namespace NumSharp
         public static NDArray roll(NDArray a, long shift, int? axis = null)
         {
             if (axis == null)
-                return roll(a.ravel(), shift, 0).reshape(a.Shape.dimensions);
+                return roll(a.ravel(), shift, 0).reshape(Shape.Adopt(a.Shape.dimensions));
 
             int ax = axis.Value;
             if (ax < 0) ax += a.ndim;

@@ -885,7 +885,7 @@ namespace NumSharp.Backends
                     dims[o++] = 1;
             }
 
-            var r = dims.Length == 0 ? new NDArray(loopType, Shape.NewScalar(), false) : new NDArray(loopType, new Shape(dims), false);
+            var r = dims.Length == 0 ? new NDArray(loopType, Shape.NewScalar(), false) : new NDArray(loopType, Shape.Adopt(dims), false); // dims is built above
             int size = loopType.SizeOf();
             Buffer.MemoryCopy(slot, (byte*)r.Address, size, size);
             return dims.Length == 0 ? r.MarkReductionScalar() : r;
@@ -993,7 +993,7 @@ namespace NumSharp.Backends
                 return new NDArray(type, Shape.Scalar, false);
             var ones = new long[ndim];
             Array.Fill(ones, 1L);
-            return new NDArray(type, new Shape(ones), false);
+            return new NDArray(type, Shape.Adopt(ones), false);
         }
 
         /// <summary>The loop-dtype value in <paramref name="slot"/>, boxed (for an <c>out=</c> element write).</summary>

@@ -525,7 +525,7 @@ namespace NumSharp.Backends
                                  && cleanShape.NDim > 1 && cleanShape.size > 1
                                  && !nd.Shape.IsScalar;
             Shape resultShape = inputStrictF
-                ? new Shape((long[])cleanShape.dimensions.Clone(), 'F')
+                ? Shape.Adopt((long[])cleanShape.dimensions.Clone(), 'F')
                 : cleanShape;
             var result = new NDArray(outputType, resultShape, false);
 

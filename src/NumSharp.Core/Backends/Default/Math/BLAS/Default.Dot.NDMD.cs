@@ -38,7 +38,7 @@ namespace NumSharp.Backends
             Array.Copy(rshape, 0, retShape, lshape.Length, rshape.Length);
 
             var resultType = np._FindCommonArrayType(lhs.typecode, rhs.typecode);
-            var result = new NDArray(resultType, new Shape(retShape));
+            var result = new NDArray(resultType, Shape.Adopt(retShape));
 
             // Try SIMD fast path for contiguous same-type float/double
             if (TryDotNDMDSimd(lhs, rhs, result, lshape, rshape, contractDim))

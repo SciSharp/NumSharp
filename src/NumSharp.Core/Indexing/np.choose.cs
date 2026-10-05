@@ -248,7 +248,7 @@ namespace NumSharp
             }
 
             // ── 6) allocate the fresh C-contiguous result (common dtype) ──────────────────
-            var result = new NDArray(dtype, new Shape((long[])resultDims.Clone()), false);
+            var result = new NDArray(dtype, Shape.Adopt((long[])resultDims.Clone()), false);
             long totalSize = result.size;
 
             if (totalSize == 0)

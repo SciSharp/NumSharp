@@ -193,7 +193,7 @@ namespace NumSharp
                     dims[i] = 1;
                 for (int i = 0; i < a.ndim; i++)
                     dims[pad + i] = a.Shape.dimensions[i];
-                return a.reshape(dims);
+                return a.reshape(Shape.Adopt(dims));
             }
 
             // ONE alias, not one per axis. `ndim` can be user-supplied (np.r_'s ndmin comes
@@ -384,7 +384,7 @@ namespace NumSharp
                 if (!fOrder && !cOrder) break;
             }
 
-            var retShape = fOrder && !cOrder ? new Shape(shape, 'F') : new Shape(shape);
+            var retShape = fOrder && !cOrder ? Shape.Adopt(shape, 'F') : Shape.Adopt(shape);
             // fillZeros: false — the slice windows tile the output exactly
             // (validated level-by-level in _concatenate_shapes), so every byte
             // is written below (NumPy uses np.empty for the same reason).

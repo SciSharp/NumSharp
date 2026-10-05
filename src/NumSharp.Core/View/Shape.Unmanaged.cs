@@ -100,7 +100,7 @@ namespace NumSharp
 
             //TODO! This is not full support of sliced,
             //TODO! when sliced it usually diverts from this function but it would be better if we add support for sliced arrays too.
-            return (new Shape(innerShape), offset);
+            return (Shape.Adopt(innerShape), offset);
         }
 
 

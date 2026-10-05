@@ -34,7 +34,7 @@ namespace NumSharp.Backends
                     ? TryExactFlatMinMaxScalar(arr, MinMaxOp.Min)
                     : null;
                 r ??= NDArray.Scalar(min_elementwise_il(arr, typeCode));
-                if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks)); }
+                if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(Shape.Adopt(ks)); }
                 else if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1) r.Storage.Reshape(Shape.Scalar);
                 return r.MarkReductionScalar();
             }

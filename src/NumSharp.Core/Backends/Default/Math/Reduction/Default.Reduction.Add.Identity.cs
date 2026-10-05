@@ -87,7 +87,7 @@ namespace NumSharp.Backends
             var ones = new long[arr.ndim];
             for (int d = 0; d < ones.Length; d++)
                 ones[d] = 1;
-            var result = new NDArray(loopType, ones.Length == 0 ? Shape.Scalar : new Shape(ones), false);
+            var result = new NDArray(loopType, ones.Length == 0 ? Shape.Scalar : Shape.Adopt(ones), false);
             try
             {
                 WriteIdentityPlus(arr, result, loopType);

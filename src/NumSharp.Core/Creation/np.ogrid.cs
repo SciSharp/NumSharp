@@ -278,7 +278,7 @@ namespace NumSharp
                     shape[d] = 1L;
                 shape[k] = line.size;
 
-                @out[k] = line.reshape(shape);
+                @out[k] = line.reshape(Shape.Adopt(shape));
             }
 
             return @out;

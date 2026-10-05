@@ -88,7 +88,7 @@ namespace NumSharp
             }
             else
             {
-                buffer = new NDArray(a.typecode, new Shape(dims), false);
+                buffer = new NDArray(a.typecode, Shape.Adopt(dims), false);
                 if (buffer.size > 0)
                 {
                     // The kernel addresses the source as (outer, maxItem, inner) C-contiguous; any other layout is copied

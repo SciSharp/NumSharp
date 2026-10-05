@@ -126,7 +126,7 @@ namespace NumSharp
                 }
             }
 
-            return new Shape(result);
+            return Shape.Adopt(result);
         }
 
         /// <summary>

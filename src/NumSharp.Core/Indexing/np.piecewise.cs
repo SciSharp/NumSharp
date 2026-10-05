@@ -501,7 +501,7 @@ namespace NumSharp
             object seed = hasDefault ? funclist[n] : (object)0;   // funclist[n] is the default
             WriteCoercedScalar(fvals + n * elemSize, seed, dtype, elemSize);
 
-            var res = new NDArray(dtype, new Shape((long[])x.Shape.dimensions.Clone()), false);
+            var res = new NDArray(dtype, Shape.Adopt((long[])x.Shape.dimensions.Clone()), false);
 
             bool** condPtrs = stackalloc bool*[n];
             for (int k = 0; k < n; k++)

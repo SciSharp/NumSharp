@@ -155,7 +155,7 @@ namespace NumSharp
                 // coordinates, so it is skipped — the common np.mgrid[0:a, 0:b] case is a single fused
                 // indices fill with no post-pass, and this reuses SliceSpec's exact arange/linspace
                 // values instead of a dtype-branching multiply-add.
-                var fullShape = new Shape(sizes);
+                var fullShape = Shape.Adopt(sizes);
 
                 for (int k = 0; k < n; k++)
                 {
@@ -172,7 +172,7 @@ namespace NumSharp
                         lineShape[d] = 1L;
                     lineShape[k] = line.size;
 
-                    copyto(grid[k], broadcast_to(line.reshape(lineShape), fullShape));
+                    copyto(grid[k], broadcast_to(line.reshape(Shape.Adopt(lineShape)), fullShape));
                 }
 
                 return grid;

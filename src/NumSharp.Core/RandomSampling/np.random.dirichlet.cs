@@ -144,7 +144,7 @@ namespace NumSharp
         /// </remarks>
         [OverloadResolutionPriority(-1)]
         public NDArray dirichlet(double[] alpha, long size)
-            => dirichlet(alpha, new long[] { size });
+            => dirichlet(alpha, Shape.Adopt(new long[] { size }));
 
         /// <summary>
         ///     The shared body of the <c>dirichlet</c> overloads — NumPy's legacy loop over a contiguous float64 alpha.
@@ -177,7 +177,7 @@ namespace NumSharp
                 outputDims[sizeVal.NDim] = k;
             }
 
-            var ret = new NDArray(NPTypeCode.Double, new Shape(outputDims), false);
+            var ret = new NDArray(NPTypeCode.Double, Shape.Adopt(outputDims), false);
             var val = (double*)ret.Address;
             long totsize = ret.size;
 

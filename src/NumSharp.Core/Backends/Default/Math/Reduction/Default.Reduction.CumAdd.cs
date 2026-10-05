@@ -47,7 +47,7 @@ namespace NumSharp.Backends
             // (0,)); with an axis the shape is preserved.
             if (shape.IsEmpty || shape.size == 0)
                 return new NDArray(retTypeCode,
-                    axis_ == null ? Shape.Vector(shape.size) : new Shape(shape.dimensions), false);
+                    axis_ == null ? Shape.Vector(shape.size) : Shape.Adopt(shape.dimensions), false);
 
             // 0-d scalar or single-element 1-D: cumsum is the value itself, promoted to the
             // accumulator dtype and shaped 1-D — cumsum NEVER returns 0-d (NumPy: cumsum(0-d) -> (1,),
@@ -88,7 +88,7 @@ namespace NumSharp.Backends
                 // NDIter accumulate construction fails for an exotic view; the legacy path
                 // allocates a C-contiguous output, so relay it to F when the source asked for it.
                 System.Diagnostics.Debug.WriteLine($"[cumsum] AccumulateAxis fallback: {ex.GetType().Name}: {ex.Message}");
-                var ret = new NDArray(retTypeCode, new Shape(shape.dimensions), false);
+                var ret = new NDArray(retTypeCode, Shape.Adopt(shape.dimensions), false);
                 if (DirectILKernelGenerator.Enabled && !shape.IsBroadcasted && shape.IsContiguous && shape.offset == 0)
                 {
                     bool innerAxisContiguous = (axis == arr.ndim - 1) && (arr.Shape.strides[axis] == 1);
@@ -124,7 +124,7 @@ namespace NumSharp.Backends
 
             long[] dims = new long[ndim];
             for (int i = 0; i < ndim; i++) dims[i] = shape.dimensions[i];
-            var ret = new NDArray(retType, new Shape(dims, order), false);
+            var ret = new NDArray(retType, Shape.Adopt(dims, order), false);
 
             // Scan-axis geometry (bytes). Negative for reversed views — the iterator base points
             // at scan-axis index 0 and the kernel walks forward in logical order regardless.

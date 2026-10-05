@@ -93,7 +93,7 @@ namespace NumSharp
             // A 1-byte dtype has no bytes to swap, so it is a straight contiguous copy.
             if (Shape.IsContiguous && size > 0)
             {
-                var result = new NDArray(typecode, new Shape(this.Shape.dimensions), fillZeros: false);
+                var result = new NDArray(typecode, Shape.Adopt(this.Shape.dimensions), fillZeros: false);
                 unsafe
                 {
                     byte* src = (byte*)Storage.Address + Shape.offset * (long)itemsize;

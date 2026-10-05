@@ -1019,7 +1019,7 @@ namespace NumSharp
                 // DIMENSIONS only, never _data.Shape: a strided/offset _data view carries strides + a
                 // larger bufferSize, and np.zeros(that Shape) builds a strided zeros over the base buffer
                 // whose materialized tail is garbage (see MaskedArrayModule.DimsOf). Size the mask by dims.
-                _mask = MaskedArrayModule.Own(np.zeros(new Shape(_data.Shape.dimensions), np.@bool));
+                _mask = MaskedArrayModule.Own(np.zeros(Shape.Adopt(_data.Shape.dimensions), np.@bool));
         }
 
         /// <summary>Sets <c>x.flat[indices] = values</c> (mask-aware) — the instance form of
@@ -1535,7 +1535,7 @@ namespace NumSharp
                 case Slice[]:
                     // DIMENSIONS only (see MaskedArrayModule.DimsOf): a non-contiguous r_ result Shape
                     // would make np.zeros build a garbage strided mask; size by dims instead.
-                    return np.zeros(new Shape(np.r_[item].Shape.dimensions), np.@bool);
+                    return np.zeros(Shape.Adopt(np.r_[item].Shape.dimensions), np.@bool);
                 // Masked array → its mask; plain array/scalar → an all-False array of its shape.
                 default:
                     return np.ma.getmaskarray(item);
@@ -2456,7 +2456,7 @@ namespace NumSharp
         /// </remarks>
         /// <param name="a">The array whose logical dimensions the allocation should match.</param>
         /// <returns>A fresh contiguous <see cref="Shape"/> with <paramref name="a"/>'s dimensions, stride 0 offset.</returns>
-        private static Shape DimsOf(NDArray a) => new Shape(a.Shape.dimensions);
+        private static Shape DimsOf(NDArray a) => Shape.Adopt(a.Shape.dimensions);
 
         /// <summary>
         ///     The <c>~isfinite(result)</c> term of a domained op's mask, but only for inexact (float/complex)
@@ -3431,8 +3431,8 @@ namespace NumSharp
                 if (resNd == 0)
                 {
                     // Scalar per slice → output shape is exactly the outer shape.
-                    var d = np.reshape(np.stack(datas, 0), new Shape(outerShape));
-                    var m = np.reshape(np.stack(masks, 0), new Shape(outerShape));
+                    var d = np.reshape(np.stack(datas, 0), Shape.Adopt(outerShape));
+                    var m = np.reshape(np.stack(masks, 0), Shape.Adopt(outerShape));
                     return Yield(scope, new NDMaskedArray(d, np.any(m) ? m : null));
                 }
                 if (resNd == 1)
@@ -3441,8 +3441,8 @@ namespace NumSharp
                     // move that trailing L axis into the original `axis` position (a.shape with axis → L).
                     var resLen = results[0].shape[0];
                     var newShape = outerShape.Concat(new[] { resLen }).ToArray();
-                    var d = np.moveaxis(np.reshape(np.stack(datas, 0), new Shape(newShape)), outerAxes.Length, ax);
-                    var m = np.moveaxis(np.reshape(np.stack(masks, 0), new Shape(newShape)), outerAxes.Length, ax);
+                    var d = np.moveaxis(np.reshape(np.stack(datas, 0), Shape.Adopt(newShape)), outerAxes.Length, ax);
+                    var m = np.moveaxis(np.reshape(np.stack(masks, 0), Shape.Adopt(newShape)), outerAxes.Length, ax);
                     return Yield(scope, new NDMaskedArray(d, np.any(m) ? m : null));
                 }
                 throw new NotSupportedException(
@@ -4302,7 +4302,7 @@ namespace NumSharp
             {
                 var shp = Enumerable.Repeat(1L, d.ndim).ToArray();
                 shp[axis.Value] = d.Shape.dimensions[axis.Value];
-                wgt = np.reshape(wgt, new Shape(shp));
+                wgt = np.reshape(wgt, Shape.Adopt(shp));
             }
             var w = np.broadcast_to(wgt, d.Shape).copy();
             if (mask is not null)
@@ -4339,7 +4339,7 @@ namespace NumSharp
                 var med = np.median(comp);
                 // keepdims on a flattened reduction ⇒ an all-ones shape of the input's rank (NumPy's (1,…,1)).
                 if (keepdims && d.ndim > 0)
-                    med = np.reshape(med, new Shape(Enumerable.Repeat(1L, d.ndim).ToArray()));
+                    med = np.reshape(med, Shape.Adopt(Enumerable.Repeat(1L, d.ndim).ToArray()));
                 return Yield(scope, new NDMaskedArray(med, null));
             }
             return Yield(scope, MedianAxisMasked((NDMaskedArray)a, axis.Value, keepdims));

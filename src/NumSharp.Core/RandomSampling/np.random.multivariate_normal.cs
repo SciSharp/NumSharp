@@ -183,7 +183,7 @@ namespace NumSharp
                     finalShape[d] = sizeVal.dimensions[d];
                 finalShape[sizeVal.NDim] = n;
             }
-            NDArray normals = standard_normal(new Shape(finalShape));
+            NDArray normals = standard_normal(Shape.Adopt(finalShape));
             // x.reshape(-1, 0) cannot infer -1 from a zero-size array: NumPy leaks that reshape's ValueError (after the
             // empty draw), and NumSharp's own reshape would raise its house IncorrectShapeException with the same text.
             if (n == 0)
@@ -208,7 +208,9 @@ namespace NumSharp
             np.add(transformed, mean, @out: transformed);   // x += mean
             // NumPy: x.shape = tuple(final_shape) — an IN-PLACE shape assignment on the fresh product, so the result owns
             // its data. reshape() would return a view (owndata False, and a size-changing resize would refuse).
-            transformed.shape = finalShape;
+            // The shape setter would copy finalShape (it cannot tell a caller's array from this one, bug 2d); the array
+            // is built here and already shared with `normals`' shape, so the Shape setter adopts it.
+            transformed.Shape = Shape.Adopt(finalShape);
             return transformed;
         }
 

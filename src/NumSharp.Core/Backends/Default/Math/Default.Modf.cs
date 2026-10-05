@@ -88,7 +88,7 @@ namespace NumSharp.Backends
             // it carries F-contiguous or broadcast strides (an F input or a broadcast join).
             Shape ccShape = (iterShape.NDim == 0 || iterShape.IsContiguous)
                 ? iterShape
-                : new Shape((long[])iterShape.dimensions.Clone());
+                : Shape.Adopt((long[])iterShape.dimensions.Clone());
 
             NDArray broadcastView = SameDims(nd.Shape, iterShape) ? null : np.broadcast_to(nd, ccShape);
             NDArray readFrom = broadcastView ?? nd;

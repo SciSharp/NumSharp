@@ -66,7 +66,7 @@ namespace NumSharp
 
             // pack's output axis is ceil(inputAxis/8), so an empty input always yields an empty output
             // (no zero-fill needed). The main path overwrites every output byte, so fillZeros: false.
-            var cOut = new NDArray(NPTypeCode.Byte, new Shape(outDims, 'C'), false);
+            var cOut = new NDArray(NPTypeCode.Byte, Shape.Adopt(outDims, 'C'), false);
             if (nw.size == 0 || cOut.size == 0)
                 return isFortran ? np.asfortranarray(cOut) : cOut;
 
@@ -156,12 +156,12 @@ namespace NumSharp
             // divergence, and the more correct behaviour. Truly-empty outputs need no fill.
             if (nw.size == 0 || outSize == 0)
             {
-                var z = new NDArray(NPTypeCode.Byte, new Shape(outDims, 'C'), fillZeros: outSize != 0);
+                var z = new NDArray(NPTypeCode.Byte, Shape.Adopt(outDims, 'C'), fillZeros: outSize != 0);
                 return isFortran ? np.asfortranarray(z) : z;
             }
 
             // Main path overwrites every output byte (full bytes + partial + explicit pad), so fillZeros: false.
-            var cOut = new NDArray(NPTypeCode.Byte, new Shape(outDims, 'C'), false);
+            var cOut = new NDArray(NPTypeCode.Byte, Shape.Adopt(outDims, 'C'), false);
 
             NDArray srcC = nw.Shape.IsContiguous ? nw : np.ascontiguousarray(nw);
             ComputeAxisGeometry(srcC.Shape.dimensions, unpackAxis, out long nOuter, out long nel);

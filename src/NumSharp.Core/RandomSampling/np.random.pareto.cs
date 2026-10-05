@@ -113,7 +113,7 @@ namespace NumSharp
         /// </remarks>
         [OverloadResolutionPriority(-1)]
         public NDArray pareto(double a, long size)
-            => pareto(a, new long[] { size });
+            => pareto(a, Shape.Adopt(new long[] { size }));
 
         /// <summary>
         ///     Draw a single sample from a Pareto II or Lomax distribution.

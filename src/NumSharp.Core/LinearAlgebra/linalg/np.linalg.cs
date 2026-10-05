@@ -194,7 +194,7 @@ namespace NumSharp
                     return np.multiply(real, real);
                 }
 
-                var magnitudes = np.zeros(new Shape(x.Shape.dimensions), NPTypeCode.Double);
+                var magnitudes = np.zeros(Shape.Adopt(x.Shape.dimensions), NPTypeCode.Double);
 
                 // Both walks are pinned to 'C' — the typed iterator defaults to 'K' (MEMORY order),
                 // which for a strided or transposed source visits elements in a different sequence

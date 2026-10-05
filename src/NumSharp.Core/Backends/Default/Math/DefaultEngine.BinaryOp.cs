@@ -260,7 +260,7 @@ namespace NumSharp.Backends
             bool allStrictFContig = AreAllOperandsStrictFContig(lhs, rhs, cleanShape)
                                     && !HasNonScalarBroadcastOperand(lhs, rhs, cleanShape);
             Shape resultShape = allStrictFContig
-                ? new Shape((long[])cleanShape.dimensions.Clone(), 'F')
+                ? Shape.Adopt((long[])cleanShape.dimensions.Clone(), 'F')
                 : cleanShape;
 
             // Allocate result
@@ -443,7 +443,7 @@ namespace NumSharp.Backends
             // post-kernel "looser-F" copy step rectify when needed.
             bool allStrictFContig = AreAllOperandsStrictFContig(lhs, rhs, cleanShape);
             Shape resultShape = allStrictFContig
-                ? new Shape((long[])cleanShape.dimensions.Clone(), 'F')
+                ? Shape.Adopt((long[])cleanShape.dimensions.Clone(), 'F')
                 : cleanShape;
 
             var result = new NDArray(resultType, resultShape, false);
@@ -1125,7 +1125,7 @@ namespace NumSharp.Backends
             }
 
             var dims = (long[])src.dimensions.Clone();
-            return wantF ? new Shape(dims, 'F') : new Shape(dims);
+            return wantF ? Shape.Adopt(dims, 'F') : Shape.Adopt(dims);
         }
 
         /// <summary>

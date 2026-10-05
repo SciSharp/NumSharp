@@ -229,7 +229,7 @@ namespace NumSharp
             long[] outDims = size.IsEmpty
                 ? BroadcastDims(loW.Shape, hiW.Shape)
                 : (long[])(size.dimensions ?? Array.Empty<long>()).Clone();
-            var ret = new NDArray(resultType, new Shape(outDims), false);
+            var ret = new NDArray(resultType, Shape.Adopt(outDims), false);
             NDArray loIt = null, hiIt = null, outIt = null;
             try
             {
@@ -473,7 +473,7 @@ namespace NumSharp
                 values[i] = unchecked((ulong)(long)(v - subtract));
             }
 
-            var ret = new NDArray(DType.From(tc), new Shape((long[])x.Shape.dimensions.Clone()), false);
+            var ret = new NDArray(DType.From(tc), Shape.Adopt((long[])x.Shape.dimensions.Clone()), false);
             var dst = (ulong*)ret.Address;
             long[] mem = KeepOrderMemoryIndex(x.Shape);
             if (mem is null)
@@ -674,7 +674,7 @@ namespace NumSharp
         /// <returns>A new 1-D array of <paramref name="n"/> elements the caller disposes.</returns>
         private static NDArray FirstPositions(NDArray x, long[] dims, long n)
         {
-            using var b = np.broadcast_to(x, new Shape(dims));
+            using var b = np.broadcast_to(x, Shape.Adopt(dims));
             using var flat = b.flatten();
             using var head = flat[$":{n}"];
             return head.copy();

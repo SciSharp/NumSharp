@@ -262,7 +262,7 @@ namespace NumSharp.Interop.OpenBLAS
             long is1 = s1.strides[nd1 - 1];
             long is2 = s2.strides[matchDim];
 
-            var outShape = nd == 0 ? Shape.Scalar : new Shape(SubArray(dimensions, nd));
+            var outShape = nd == 0 ? Shape.Scalar : Shape.Adopt(SubArray(dimensions, nd));
             // fillZeros:false: the dot loop below writes every output cell (the empty-operand case has its own Zero).
             var outBuf = new NDArray(InfoOf<T>.NPTypeCode, outShape, fillZeros: false);
             result = outBuf;

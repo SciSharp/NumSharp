@@ -109,7 +109,7 @@ namespace NumSharp
 
             long size = m.size;
             if (size == 0 || cols == 0)
-                return np.zeros(new Shape((long[])m.Shape.dimensions.Clone()), m.typecode);
+                return np.zeros(Shape.Adopt((long[])m.Shape.dimensions.Clone()), m.typecode);
 
             int elemSize = m.typecode.SizeOf();
             bool writeOnce = PrefersWriteOnce(size * elemSize);
@@ -118,8 +118,8 @@ namespace NumSharp
             // write every byte of every row exactly once (zeros, retained run, zeros). Above it
             // np.zeros rides free OS zero-pages and only the retained run is worth touching.
             var res = writeOnce
-                ? new NDArray(m.typecode, new Shape((long[])m.Shape.dimensions.Clone()), false)
-                : np.zeros(new Shape((long[])m.Shape.dimensions.Clone()), m.typecode);
+                ? new NDArray(m.typecode, Shape.Adopt((long[])m.Shape.dimensions.Clone()), false)
+                : np.zeros(Shape.Adopt((long[])m.Shape.dimensions.Clone()), m.typecode);
             byte* src = m.Storage.Address;
             byte* dst = res.Storage.Address + res.Shape.Offset * elemSize;
 

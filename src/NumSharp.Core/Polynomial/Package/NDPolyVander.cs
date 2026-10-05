@@ -141,7 +141,7 @@ namespace NumSharp
                 // 4. v = np.empty((ideg + 1,) + x.shape, dtype=x.dtype): NumPy's dimension conversion, then the allocation
                 //    (AllocationGuard's "array is too big", the allocator's MemoryError).
                 long rows = Rows(ideg);
-                var buf = new NDArray(t, new Shape(Prepend(rows, pdims)), false);
+                var buf = new NDArray(t, Shape.Adopt(Prepend(rows, pdims)), false);
 
                 // 5. The recurrence, straight into the matrix's rows (none for no points: NumPy's loop over empty rows).
                 if (npts > 0)
@@ -396,7 +396,7 @@ namespace NumSharp
                     var dims = new long[n + 1];
                     for (int d = 0; d <= n; d++) dims[d] = 1;
                     dims[k + 1] = v.Shape.dimensions[1];
-                    var vk = v.reshape(new Shape(dims));
+                    var vk = v.reshape(Shape.Adopt(dims));
                     dead.Add(vk);
                     if (k == 0)
                     {
@@ -667,7 +667,7 @@ namespace NumSharp
                 strideBytes = col * size;
                 return;
             }
-            temp = new NDArray(a.typecode, new Shape(pdims), false);
+            temp = new NDArray(a.typecode, Shape.Adopt(pdims), false);
             NDIter.Copy(temp, a);
             p = Ptr(temp);
             strideBytes = size;
@@ -736,7 +736,7 @@ namespace NumSharp
             AllocationGuard.CheckDimensions(dims, size);
             if (Count(dims) * size > SizeBucketedBufferPool.MaxPoolableBytes)
             {
-                var probe = new NDArray(t, new Shape(dims), false);
+                var probe = new NDArray(t, Shape.Adopt(dims), false);
                 probe.Dispose();
             }
         }

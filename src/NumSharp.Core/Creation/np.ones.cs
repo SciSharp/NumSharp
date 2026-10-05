@@ -153,7 +153,7 @@ namespace NumSharp
         public static NDArray ones(Shape shape, char order, DType dtype = null)
         {
             char physical = OrderResolver.Resolve(order);
-            var orderedShape = new Shape(shape.dimensions, physical);
+            var orderedShape = Shape.Adopt(shape.dimensions, physical);
             return OnesCore(orderedShape, dtype?.GetTypeCode() ?? NPTypeCode.Double);
         }
     }

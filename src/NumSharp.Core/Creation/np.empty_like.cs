@@ -34,7 +34,7 @@ namespace NumSharp
             ValidateDevice(device);
             char physical = OrderResolver.Resolve(order, prototype.Shape);
             var dims = shape.IsEmpty ? (long[])prototype.Shape.dimensions.Clone() : (long[])shape;
-            var resolvedShape = new Shape(dims, physical);
+            var resolvedShape = Shape.Adopt(dims, physical);
             return new NDArray(dtype ?? prototype.dtype, resolvedShape, false);
         }
     }

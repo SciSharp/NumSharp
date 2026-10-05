@@ -62,7 +62,7 @@ namespace NumSharp.Backends
             // strided / transposed / broadcast (stride=0) views are consumed in place —
             // no materializing copy — while the result is freshly C-contiguous.
             var tc = nd.GetTypeCode;
-            var result = new NDArray(tc, new Shape((long[])nd.Shape.dimensions.Clone()), false);
+            var result = new NDArray(tc, Shape.Adopt((long[])nd.Shape.dimensions.Clone()), false);
             long n = nd.size;
             bool contig = nd.Shape.IsContiguous;
             var dims = nd.Shape.dimensions;

@@ -122,7 +122,7 @@ namespace NumSharp
             // Use cond.shape (dimensions only) not cond.Shape (which may have broadcast strides).
             // NumPy's iterator allocation preserves F-order when all full-size operands agree
             // on F layout; any full C-contiguous or non-contiguous operand falls back to C.
-            var result = empty(new Shape((long[])cond.Shape.dimensions.Clone(), resultOrder), outType);
+            var result = empty(Shape.Adopt((long[])cond.Shape.dimensions.Clone(), resultOrder), outType);
 
             // Handle empty arrays - nothing to iterate
             if (result.size == 0)

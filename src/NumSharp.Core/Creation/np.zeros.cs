@@ -102,7 +102,7 @@ namespace NumSharp
         public static NDArray zeros(Shape shape, char order, DType dtype = null)
         {
             char physical = OrderResolver.Resolve(order);
-            var orderedShape = new Shape(shape.dimensions, physical);
+            var orderedShape = Shape.Adopt(shape.dimensions, physical);
             return new NDArray(dtype ?? DType.Double, orderedShape, true);
         }
     }

@@ -1026,7 +1026,7 @@ namespace NumSharp
                         var shp = new long[outRank];
                         for (int d = 0; d < outRank; d++) shp[d] = 1;
                         for (int d = 0; d < m; d++) shp[blockStart + d] = bshape[d];
-                        axisIndex[a] = advB[advBOf[i]].reshape(shp);
+                        axisIndex[a] = advB[advBOf[i]].reshape(Shape.Adopt(shp));
                         break;
                     }
                     // ZeroBool (0-d bool) consumes no source axis; it only shaped the block above.
@@ -1034,7 +1034,7 @@ namespace NumSharp
                     {
                         var shp = new long[outRank];
                         for (int d = 0; d < outRank; d++) shp[d] = 1;
-                        axisIndex[a] = np.array(new long[] { items[i].iv }, copy: false).reshape(shp);
+                        axisIndex[a] = np.array(new long[] { items[i].iv }, copy: false).reshape(Shape.Adopt(shp));
                         break;
                     }
                     case MixKind.Slice:
@@ -1042,7 +1042,7 @@ namespace NumSharp
                         var shp = new long[outRank];
                         for (int d = 0; d < outRank; d++) shp[d] = 1;
                         shp[slicePos[i]] = sliceIndex[i].size;
-                        axisIndex[a] = sliceIndex[i].reshape(shp);
+                        axisIndex[a] = sliceIndex[i].reshape(Shape.Adopt(shp));
                         break;
                     }
                     // NewAxis consumes no source axis (its size-1 output dim is implicit
@@ -1068,7 +1068,7 @@ namespace NumSharp
             var outShapeArr = outShape.ToArray();
             if (!grid[0].Shape.dimensions.SequenceEqual(outShapeArr))
                 for (int i = 0; i < grid.Length; i++)
-                    grid[i] = np.broadcast_to(grid[i], (Shape)outShapeArr);
+                    grid[i] = np.broadcast_to(grid[i], Shape.Adopt(outShapeArr));
             return true;
         }
 
@@ -1274,7 +1274,7 @@ namespace NumSharp
                 {
                     // Allocated at the FINAL retShape (fresh, C-contiguous, owned — flags.owndata=True
                     // like NumPy's fancy result); the kernel fills it flat.
-                    var gathered = new NDArray<T>(retShape, false);
+                    var gathered = new NDArray<T>(Shape.Adopt(retShape), false);
                     byte* srcBase = (byte*)source.Storage.Address + srcShape.offset * InfoOf<T>.Size;
                     long fail = FancyIndexKernelRoute.Gather(srcBase, kernelIdxPtr, kernelIdx32, indexCount, axisLength, slabBytes, (byte*)gathered.Address);
                     if (fail == -1)
@@ -1346,7 +1346,7 @@ namespace NumSharp
                 // Allocate at the FINAL retShape and fill flat (the fresh buffer is C-contiguous either
                 // way) — a terminal dst.reshape(retShape) would hand back a VIEW of the hidden temp and
                 // misreport flags.owndata=False, where NumPy's fancy result OWNS its data.
-                var dst = new NDArray<T>(retShape ?? new[] { computedOffsets.size }, false);
+                var dst = new NDArray<T>(Shape.Adopt(retShape ?? new[] { computedOffsets.size }), false);
                 T* dstAddr = dst.Address;
                 //indices point to a scalar
                 var len = dst.size;
@@ -1391,7 +1391,7 @@ namespace NumSharp
 
             NDArray dst;
             if (@out is null)
-                dst = new NDArray<T>(retShape, false);
+                dst = new NDArray<T>(Shape.Adopt(retShape), false);
             else
             {
                 //compare computed retShape vs given @out
@@ -1459,7 +1459,7 @@ namespace NumSharp
 
             NDArray<T> ret;
             if (@out is null)
-                ret = new NDArray<T>(retShape, false);
+                ret = new NDArray<T>(Shape.Adopt(retShape), false);
             else
             {
                 //compare computed retShape vs given @out

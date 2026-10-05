@@ -168,7 +168,7 @@ namespace NumSharp.Statistics
                     long[] newShape = new long[keep.Length + 1];
                     for (int i = 0; i < keep.Length; i++) newShape[i] = a.Shape.dimensions[keep[i]];
                     newShape[keep.Length] = reduced;
-                    staged = moved.reshape(newShape).copy();
+                    staged = moved.reshape(Shape.Adopt(newShape)).copy();
                     n = (int)staged.Shape.dimensions[staged.ndim - 1];
                     outerSize = 1;
                     for (int i = 0; i < staged.ndim - 1; i++) outerSize *= staged.Shape.dimensions[i];
@@ -199,7 +199,7 @@ namespace NumSharp.Statistics
                 }
             }
 
-            NDArray resultRaw = new NDArray(outTypeCode, qIsScalar && outerDims == 0 ? new Shape() : new Shape(outShape));
+            NDArray resultRaw = new NDArray(outTypeCode, qIsScalar && outerDims == 0 ? new Shape() : Shape.Adopt(outShape));
 
             // ── Empty reduction axis ──
             // The IL/Complex row kernels assume at least one element per row and index
@@ -374,7 +374,7 @@ namespace NumSharp.Statistics
 
             NDArray result = shapeArr.Length == 0
                 ? new NDArray(tc, new Shape())
-                : new NDArray(tc, new Shape(shapeArr));
+                : new NDArray(tc, Shape.Adopt(shapeArr));
             FillWithNaN(result, tc);
 
             if (@out is not null)
@@ -609,7 +609,7 @@ namespace NumSharp.Statistics
                     else outShape[qDim + i] = result.Shape.dimensions[srcIdx++];
                 }
             }
-            return result.reshape(outShape);
+            return result.reshape(Shape.Adopt(outShape));
         }
 
         /// <summary>

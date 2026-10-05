@@ -122,7 +122,7 @@ namespace NumSharp
             bool oneD = md.Length == 1;
             long cols = Cols(md);
             int size = DirectILKernelGenerator.GetTypeSize(t);
-            var buf = new NDArray(t, new Shape(BufferDims(md, n)), false);
+            var buf = new NDArray(t, Shape.Adopt(BufferDims(md, n)), false);
             byte* b0 = Ptr(buf);
             long bufRow = cols * size;
             long block = Block(n, size, cols);
@@ -279,7 +279,7 @@ namespace NumSharp
             long cols = Cols(md);
             int remaining = m - first;
             int size = DirectILKernelGenerator.GetTypeSize(t);
-            var buf = new NDArray(t, new Shape(BufferDims(md, len + remaining)), false);
+            var buf = new NDArray(t, Shape.Adopt(BufferDims(md, len + remaining)), false);
             byte* b0 = Ptr(buf);
             long bufRow = cols * size;
             long block = Block(len + remaining, size, cols);
@@ -631,7 +631,7 @@ namespace NumSharp
             }
             if (!same)
                 throw new ValueError($"non-broadcastable output operand with shape {target.ToPythonTuple()} " +
-                                     $"doesn't match the broadcast shape {new Shape(r).ToPythonTuple()}");
+                                     $"doesn't match the broadcast shape {Shape.Adopt(r).ToPythonTuple()}");
         }
 
         // ---------------------------------------------------------------------------------------------
@@ -835,8 +835,8 @@ namespace NumSharp
             Moved(src.Shape, iaxis, out var sd, out var ss);
             long first = Math.Min(1, cd[0]);
             cd[0] = first;
-            int[] perm = Shape.MultiSortedStridePerm(new[] { new Shape(cd, cs) }, cd.Length);
-            var r = new NDArray(t, new Shape((long[])cd.Clone(), Shape.StridesForPerm(cd, perm)), false);
+            int[] perm = Shape.MultiSortedStridePerm(new[] { Shape.Adopt(cd, cs) }, cd.Length);
+            var r = new NDArray(t, Shape.Adopt((long[])cd.Clone(), Shape.StridesForPerm(cd, perm)), false);
             if (r.size > 0)
             {
                 sd[0] = first;

@@ -142,7 +142,7 @@ namespace NumSharp
             var idx64 = CastIndicesToInt64(indices, "same_kind", out _, out bool idx32);
 
             // Output shape = indices.shape, dtype = a.dtype, C-contig allocated.
-            var outShape = new Shape((long[])indices.Shape.dimensions.Clone());
+            var outShape = Shape.Adopt((long[])indices.Shape.dimensions.Clone());
             var result = new NDArray(a.typecode, outShape, false);
 
             long indicesCount = indices.size;
@@ -208,7 +208,7 @@ namespace NumSharp
             for (int d = 0; d < indices.ndim; d++) outDims[outIdx++] = indices.Shape.dimensions[d];
             for (int d = axis + 1; d < a.ndim; d++) outDims[outIdx++] = a.Shape.dimensions[d];
 
-            var result = new NDArray(a.typecode, new Shape(outDims), false);
+            var result = new NDArray(a.typecode, Shape.Adopt(outDims), false);
 
             long indicesCount = indices.size;
             if (indicesCount == 0 || outerSize == 0)

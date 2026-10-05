@@ -406,7 +406,7 @@ namespace NumSharp.Backends
                     var ks = new long[nd];
                     for (int i = 0; i < nd; i++)
                         ks[i] = 1;
-                    r.Storage.Reshape(new Shape(ks));
+                    r.Storage.Reshape(Shape.Adopt(ks));
                 }
 
                 return r.MarkReductionScalar();

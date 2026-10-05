@@ -78,7 +78,7 @@ namespace NumSharp
             // Empty result: any rep==0 or any aShape[i]==0 → return zero-element array of the
             // correct shape and dtype. NumPy: tile([], 3) → array([], shape=(0,), dtype=float64).
             if (outSize == 0)
-                return zeros(new Shape(outShape), A.dtype);
+                return zeros(Shape.Adopt(outShape), A.dtype);
 
             // Trivial case: all reps are 1 → return a keep-order copy preserving the
             // (possibly promoted) shape. Matches NumPy's array(A, copy=True, ndmin=d)
@@ -87,7 +87,7 @@ namespace NumSharp
             for (int i = 0; i < outDim; i++) if (tup[i] != 1) { allOnes = false; break; }
             if (allOnes)
             {
-                var c = aDim == outDim ? A.copy('K') : A.reshape(new Shape(aShape)).copy('K');
+                var c = aDim == outDim ? A.copy('K') : A.reshape(Shape.Adopt(aShape)).copy('K');
                 return c;
             }
 
@@ -117,10 +117,10 @@ namespace NumSharp
             // reshape doesn't keep, released by this method's scope — the returned
             // NDArray shares contiguous's storage but holds its own ARC ref via
             // InitializeArc, so releasing contiguous does not free that buffer.
-            var promoted = A.reshape(new Shape(interleaved));
-            var broadcasted = broadcast_to(promoted, new Shape(broadcastTarget));
+            var promoted = A.reshape(Shape.Adopt(interleaved));
+            var broadcasted = broadcast_to(promoted, Shape.Adopt(broadcastTarget));
             var contiguous = broadcasted.copy();
-            return contiguous.reshape(new Shape(outShape));
+            return contiguous.reshape(Shape.Adopt(outShape));
         }
 
         private static long[] ToLongArray(int[] arr)

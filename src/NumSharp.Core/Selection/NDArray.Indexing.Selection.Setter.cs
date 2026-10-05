@@ -161,7 +161,7 @@ namespace NumSharp
                 long len = axisIndex[a].size;
                 var sh = new long[gridDims];
                 for (int k = 0; k < gridDims; k++) sh[k] = (k == pos) ? len : 1L;
-                axisIndex[a] = axisIndex[a].reshape(sh);
+                axisIndex[a] = axisIndex[a].reshape(Shape.Adopt(sh));
                 pos++;
             }
 
@@ -291,7 +291,7 @@ namespace NumSharp
                         : this[boolBasic].Shape.dimensions.Select(x => (long)x).ToArray();
                     selShape[boolAxis] = 0;                      // False -> empty axis
                     string Tup(long[] s) => s.Length == 1 ? $"({s[0]},)" : "(" + string.Join(",", s) + ")";
-                    try { np.broadcast_to(values, (Shape)selShape); }
+                    try { np.broadcast_to(values, Shape.Adopt(selShape)); }
                     catch (IncorrectShapeException ex)
                     {
                         throw new ValueError($"shape mismatch: value array of shape {Tup(values.Shape.dimensions)} " +
@@ -837,7 +837,7 @@ namespace NumSharp
                     string Tup(long[] s) => s.Length == 1 ? $"({s[0]},)" : "(" + string.Join(",", s) + ")";
                     try
                     {
-                        valuesTyped = np.broadcast_to(valuesTyped, (Shape)retShape).copy().MakeGeneric<T>();
+                        valuesTyped = np.broadcast_to(valuesTyped, Shape.Adopt(retShape)).copy().MakeGeneric<T>();
                     }
                     catch (IncorrectShapeException ex)
                     {
@@ -865,7 +865,7 @@ namespace NumSharp
                 {
                     try
                     {
-                        typedValues = np.broadcast_to(typedValues, (Shape)retShape).copy().MakeGeneric<T>();
+                        typedValues = np.broadcast_to(typedValues, Shape.Adopt(retShape)).copy().MakeGeneric<T>();
                     }
                     catch (IncorrectShapeException ex)
                     {
@@ -933,7 +933,7 @@ namespace NumSharp
                 // exactly retShape (the same ValueError texts as the general route, per branch).
                 try
                 {
-                    typed = np.broadcast_to(typed, (Shape)retShape).copy().MakeGeneric<T>();
+                    typed = np.broadcast_to(typed, Shape.Adopt(retShape)).copy().MakeGeneric<T>();
                 }
                 catch (IncorrectShapeException ex)
                 {

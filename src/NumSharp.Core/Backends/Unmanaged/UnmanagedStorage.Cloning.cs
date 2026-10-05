@@ -536,7 +536,7 @@ namespace NumSharp.Backends
         {
             Shape outShape = _shape.NDim == 0
                 ? Shape.NewScalar()
-                : new Shape((long[])_shape.dimensions.Clone(), 'C');
+                : Shape.Adopt((long[])_shape.dimensions.Clone(), 'C');
 
             var dst = new UnmanagedStorage(ArraySlice.Allocate(typeCode, outShape.size, false), outShape) { Engine = Engine };
             NDIter.Copy(dst, this);

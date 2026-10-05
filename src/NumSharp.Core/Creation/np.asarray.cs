@@ -6,14 +6,14 @@ namespace NumSharp
     {
         public static NDArray asarray(string data)
         {
-            var nd = new NDArray(typeof(string), Array.Empty<long>());
+            var nd = new NDArray(typeof(string), Shape.Adopt(Array.Empty<long>()));
             nd.ReplaceData(new string[] {data});
             return nd;
         }
 
         public static NDArray asarray<T>(T data) where T : struct
         {
-            var nd = new NDArray(typeof(T), Array.Empty<long>());
+            var nd = new NDArray(typeof(T), Shape.Adopt(Array.Empty<long>()));
             nd.ReplaceData(new T[] {data});
             return nd;
         }

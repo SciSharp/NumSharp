@@ -72,7 +72,7 @@ namespace NumSharp.Backends
             // storage of the new dtype is the observable result (shape preserved, dtype changed).
             if (_shape.size == 0 || InternalArray == null)
             {
-                var emptyShape = ndim == 0 ? Shape.NewScalar() : new Shape((long[])dims.Clone(), 'C');
+                var emptyShape = ndim == 0 ? Shape.NewScalar() : Shape.Adopt((long[])dims.Clone(), 'C');
                 return new UnmanagedStorage(ArraySlice.Allocate(InfoOf<T>.NPTypeCode, emptyShape.size, false), emptyShape) { Engine = Engine };
             }
 

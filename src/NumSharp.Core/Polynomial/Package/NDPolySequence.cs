@@ -237,7 +237,7 @@ namespace NumSharp
             NPTypeCode t = d.Dtype == NPTypeCode.Empty ? NPTypeCode.Double : d.Dtype;
             var dims = new long[d.MaxDims];
             System.Array.Copy(d.Shape, dims, dims.Length);
-            var r = new NDArray(t, new Shape(dims), false);
+            var r = new NDArray(t, Shape.Adopt(dims), false);
             try
             {
                 int size = r.dtypesize;
@@ -686,8 +686,8 @@ namespace NumSharp
             {
                 var sd = new long[Math.Max(slot, 0)];
                 System.Array.Copy(dims, depth, sd, 0, sd.Length);
-                throw new ValueError($"could not broadcast input array from shape {new Shape(ld).ToPythonTuple()} " +
-                                     $"into shape {new Shape(sd).ToPythonTuple()}");
+                throw new ValueError($"could not broadcast input array from shape {Shape.Adopt(ld).ToPythonTuple()} " +
+                                     $"into shape {Shape.Adopt(sd).ToPythonTuple()}");
             }
             if (slot == 0)
             {

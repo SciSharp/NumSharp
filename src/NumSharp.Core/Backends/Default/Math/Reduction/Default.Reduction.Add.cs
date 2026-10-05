@@ -221,7 +221,7 @@ namespace NumSharp.Backends
             var result = sum_elementwise_il(arr, typeCode);
             if (@out is not null) { @out.SetAtIndex(result, 0); return @out; }
             var r = NDArray.Scalar(result);
-            if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks)); }
+            if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(Shape.Adopt(ks)); }
             else if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1) r.Storage.Reshape(Shape.Scalar);
             return r.MarkReductionScalar();
         }
@@ -261,7 +261,7 @@ namespace NumSharp.Backends
             var outputDims = new long[arr.ndim - 1];
             for (int d = 0, od = 0; d < arr.ndim; d++) if (d != axis) outputDims[od++] = shape.dimensions[d];
 
-            var outputShape = outputDims.Length > 0 ? new Shape(outputDims) : Shape.Scalar;
+            var outputShape = outputDims.Length > 0 ? Shape.Adopt(outputDims) : Shape.Scalar;
             NDArray result;
             if (@out is not null) { if (@out.Shape != outputShape) throw new IncorrectShapeException($"Output shape mismatch"); result = @out; }
             else result = AllocateReductionResult(outputType, outputDims, shape);
@@ -304,7 +304,7 @@ namespace NumSharp.Backends
             if (outputDims.Length == 0)
                 return new NDArray(outputType, Shape.Scalar, false);
             var order = outputDims.Length >= 2 ? OrderResolver.Resolve('K', inputShape) : 'C';
-            var outputShape = order == 'F' ? new Shape(outputDims, 'F') : new Shape(outputDims);
+            var outputShape = order == 'F' ? Shape.Adopt(outputDims, 'F') : Shape.Adopt(outputDims);
             return new NDArray(outputType, outputShape, false);
         }
 
@@ -318,7 +318,7 @@ namespace NumSharp.Backends
         internal static NDArray AllocateReductionZeros(NPTypeCode outputType, long[] dims, Shape inputShape)
         {
             var order = dims.Length >= 2 ? OrderResolver.Resolve('K', inputShape) : 'C';
-            var zeroShape = order == 'F' ? new Shape(dims, 'F') : new Shape(dims);
+            var zeroShape = order == 'F' ? Shape.Adopt(dims, 'F') : Shape.Adopt(dims);
             return np.zeros(zeroShape, outputType);
         }
 
@@ -411,7 +411,7 @@ namespace NumSharp.Backends
             var shape = arr.Shape;
             var outputDims = new long[arr.ndim - 1];
             for (int d = 0, od = 0; d < arr.ndim; d++) if (d != axis) outputDims[od++] = shape.dimensions[d];
-            var outputShape = outputDims.Length > 0 ? new Shape(outputDims) : Shape.Scalar;
+            var outputShape = outputDims.Length > 0 ? Shape.Adopt(outputDims) : Shape.Scalar;
 
             NDArray result;
             if (@out is not null)
@@ -471,14 +471,14 @@ namespace NumSharp.Backends
             // return an empty array of the correct shape
             var resultShape = Shape.GetAxis(shape, axis);
             var outputType = typeCode ?? arr.GetTypeCode;
-            var result = new NDArray(outputType, new Shape(resultShape), false);
+            var result = new NDArray(outputType, Shape.Adopt(resultShape), false);
 
             if (keepdims)
             {
                 var ks = new long[arr.ndim];
                 for (int d = 0, sd = 0; d < arr.ndim; d++)
                     ks[d] = (d == axis) ? 1 : resultShape[sd++];
-                result.Storage.Reshape(new Shape(ks));
+                result.Storage.Reshape(Shape.Adopt(ks));
             }
             return result;
         }
@@ -493,18 +493,18 @@ namespace NumSharp.Backends
                 var defaultVal = defaultType.GetDefaultValue();
                 if (@out is not null) { @out.SetAtIndex(defaultVal, 0); return @out; }
                 var r = NDArray.Scalar(defaultVal);
-                if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks)); }
+                if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(Shape.Adopt(ks)); }
                 return r.MarkReductionScalar();
             }
             var axis = NormalizeAxis(axis_.Value, arr.ndim);
             var resultShape = Shape.GetAxis(shape, axis);
             var outputType = typeCode ?? arr.GetTypeCode.GetAccumulatingType();
-            var result = np.zeros(new Shape(resultShape), outputType);
+            var result = np.zeros(Shape.Adopt(resultShape), outputType);
             if (keepdims)
             {
                 var ks = new long[arr.ndim];
                 for (int d = 0, sd = 0; d < arr.ndim; d++) ks[d] = (d == axis) ? 1 : resultShape[sd++];
-                result.Storage.Reshape(new Shape(ks));
+                result.Storage.Reshape(Shape.Adopt(ks));
             }
             if (@out is not null) { np.copyto(@out, result); return @out; }
             return result;
@@ -530,7 +530,7 @@ namespace NumSharp.Backends
         {
             var r = typeCode.HasValue ? Cast(arr, typeCode.Value, true) : arr.Clone();
             if (@out is not null) { @out.SetAtIndex(r.GetAtIndex(0), 0); return @out; }
-            if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks)); }
+            if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(Shape.Adopt(ks)); }
             else if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1) r.Storage.Reshape(Shape.Scalar);
             // A 0-d exit — including keepdims over a 0-d input, whose (1,)*0 reshape is still
             // 0-d — is a numpy SCALAR (read-only); (1,) keepdims results pass through writeable.

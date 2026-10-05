@@ -95,7 +95,7 @@ namespace NumSharp
                 else throw new IndexError(BuildBroadcastMismatchMessage(arrShape, idxShape, ax));
             }
 
-            var result = new NDArray(arr.typecode, new Shape(resultDims), false);
+            var result = new NDArray(arr.typecode, Shape.Adopt(resultDims), false);
 
             long totalSize = result.size;
             if (totalSize == 0)

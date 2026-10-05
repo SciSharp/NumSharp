@@ -438,7 +438,7 @@ namespace NumSharp.Backends
                     var ndims = new long[subShape.NDim];
                     for (int i = 0; i < ndims.Length; i++)
                         ndims[i] = valueshape.dimensions[drop + i];
-                    vForBc = value.reshape(ndims);
+                    vForBc = value.reshape(Shape.Adopt(ndims));
                 }
                 // else: a leading non-1 dim -> broadcast_to below raises -> ValueError.
             }
@@ -1192,7 +1192,7 @@ namespace NumSharp.Backends
                 throw new ArgumentNullException(nameof(nd));
 
             //first try to convert to dtype only then we apply changes.
-            _shape = nd.Shape.dimensions;
+            _shape = Shape.Adopt(nd.Shape.dimensions);
             OnReshaped(); // keep OWNDATA mirroring this storage's ownership (fresh shapes carry no bit)
             _dtype = nd.Storage.DType;
             _typecode = nd.GetTypeCode;

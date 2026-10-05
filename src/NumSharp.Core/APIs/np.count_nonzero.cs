@@ -39,13 +39,13 @@ namespace NumSharp
                     throw new ArgumentOutOfRangeException(nameof(axis));
 
                 var resultShape = Shape.GetAxis(shape, axis);
-                var result = np.zeros(new Shape(resultShape), NPTypeCode.Int64);
+                var result = np.zeros(Shape.Adopt(resultShape), NPTypeCode.Int64);
                 if (keepdims)
                 {
                     var ks = new long[a.ndim];
                     for (int d = 0, sd = 0; d < a.ndim; d++)
                         ks[d] = (d == axis) ? 1 : resultShape[sd++];
-                    result.Storage.Reshape(new Shape(ks));
+                    result.Storage.Reshape(Shape.Adopt(ks));
                 }
                 return result;
             }

@@ -378,7 +378,7 @@ namespace NumSharp
             try
             {
                 for (int i = 0; i < args.Length; i++)
-                    bargs[i] = np.broadcast_to(args[i], new Shape(inputShapes[i]));
+                    bargs[i] = np.broadcast_to(args[i], Shape.Adopt(inputShapes[i]));
 
                 NDArray[] outputs = null;
                 // Byte size of one broadcast-index slot per output (product of that output's core dims x
@@ -495,7 +495,7 @@ namespace NumSharp
                 int lead = dims.Length - inputCoreDims[i].Length;   // # of broadcast (non-core) dims
                 var leading = new long[lead];
                 Array.Copy(dims, 0, leading, 0, lead);
-                leadingShapes[i] = new Shape(leading);
+                leadingShapes[i] = Shape.Adopt(leading);
             }
             // broadcast_shapes is NumPy's _broadcast_shape over the non-core leading shapes. A 0-d
             // result (all inputs entirely core) exposes a null/empty dimension array — normalize to
@@ -560,8 +560,8 @@ namespace NumSharp
             {
                 DType dtype = dtypes?[j];
                 arrays[j] = results != null
-                    ? np.empty_like(results[j], dtype, new Shape(shapes[j]))
-                    : np.empty(new Shape(shapes[j]), dtype);   // size-0 path: dtype is otypes[j], never null
+                    ? np.empty_like(results[j], dtype, Shape.Adopt(shapes[j]))
+                    : np.empty(Shape.Adopt(shapes[j]), dtype);   // size-0 path: dtype is otypes[j], never null
             }
             return arrays;
         }

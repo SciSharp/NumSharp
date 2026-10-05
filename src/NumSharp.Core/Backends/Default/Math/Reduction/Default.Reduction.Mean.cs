@@ -40,7 +40,7 @@ namespace NumSharp.Backends
                 if (axis_ == null)
                 {
                     var r = NDArray.Scalar(nan, nanType);
-                    if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks)); }
+                    if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(Shape.Adopt(ks)); }
                     return r.MarkReductionScalar();
                 }
                 var axis = NormalizeAxis(axis_.Value, arr.ndim);
@@ -49,15 +49,15 @@ namespace NumSharp.Backends
                 NDArray result;
                 if (shape[axis] == 0)
                 {
-                    result = np.empty(new Shape(resultShape), outputType);
+                    result = np.empty(Shape.Adopt(resultShape), outputType);
                     for (long i = 0; i < result.size; i++) result.SetAtIndex(nan, i);
                 }
-                else result = np.empty(new Shape(resultShape), outputType);
+                else result = np.empty(Shape.Adopt(resultShape), outputType);
                 if (keepdims)
                 {
                     var ks = new long[arr.ndim];
                     for (int d = 0, sd = 0; d < arr.ndim; d++) ks[d] = (d == axis) ? 1 : resultShape[sd++];
-                    result.Storage.Reshape(new Shape(ks));
+                    result.Storage.Reshape(Shape.Adopt(ks));
                 }
                 return result;
             }
@@ -89,7 +89,7 @@ namespace NumSharp.Backends
 
                 var result = mean_elementwise_il(arr, typeCode);
                 var r = NDArray.Scalar(result);
-                if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks)); }
+                if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(Shape.Adopt(ks)); }
                 else if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1) r.Storage.Reshape(Shape.Scalar);
                 return r.MarkReductionScalar();
             }

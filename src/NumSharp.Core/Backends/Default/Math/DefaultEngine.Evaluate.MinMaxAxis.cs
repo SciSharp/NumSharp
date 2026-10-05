@@ -182,7 +182,7 @@ namespace NumSharp.Backends
             for (int d = 0, rd = 0; d < nd; d++)
                 if (d != axis)
                     reducedDims[rd++] = inputShape[d];
-            Shape reducedShape = reducedDims.Length > 0 ? new Shape(reducedDims) : Shape.NewScalar();
+            Shape reducedShape = reducedDims.Length > 0 ? Shape.Adopt(reducedDims) : Shape.NewScalar();
 
             var reduced = TryExactAxisMinMaxEval(program, inputs, axis, reduce.Kind, axisSize, reducedShape);
             if (reduced is null)
@@ -308,7 +308,7 @@ namespace NumSharp.Backends
             }
 
             var result = fOrder && reducedShape.NDim > 1
-                ? new NDArray(t, new Shape((long[])reducedShape.dimensions.Clone(), 'F'), false)
+                ? new NDArray(t, Shape.Adopt((long[])reducedShape.dimensions.Clone(), 'F'), false)
                 : new NDArray(t, reducedShape, false);
             try
             {
@@ -541,7 +541,7 @@ namespace NumSharp.Backends
                 axes[mem[i]] = i;   // logical axis mem[i] is memory position i
             }
 
-            buffer = new NDArray(child.ResultType, new Shape(memDims), false);
+            buffer = new NDArray(child.ResultType, Shape.Adopt(memDims), false);
             NDArray view = null;
             try
             {

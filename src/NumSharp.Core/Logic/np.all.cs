@@ -48,7 +48,7 @@ namespace NumSharp
                 axis = DefaultEngine.NormalizeAxis(axis, nd.ndim);
                 var dims = (long[])nd.Shape.dimensions.Clone();
                 dims[axis] = 1;
-                result.Storage.Reshape(new Shape(dims));
+                result.Storage.Reshape(Shape.Adopt(dims));
             }
 
             return result;
@@ -123,7 +123,7 @@ namespace NumSharp
             var dims = new long[nd.ndim];
             for (int i = 0; i < dims.Length; i++) dims[i] = 1;
             var result = np.array(scalar).MakeGeneric<bool>();
-            result.Storage.Reshape(new Shape(dims));
+            result.Storage.Reshape(Shape.Adopt(dims));
             return result;
         }
 
@@ -284,7 +284,7 @@ namespace NumSharp
                     newDims.Add(shape[d]);
             }
 
-            Shape newShape = newDims.Count == 0 ? Shape.Scalar : new Shape(newDims.ToArray());
+            Shape newShape = newDims.Count == 0 ? Shape.Scalar : Shape.Adopt(newDims.ToArray());
             arr.Storage.Reshape(newShape);
             return arr;
         }

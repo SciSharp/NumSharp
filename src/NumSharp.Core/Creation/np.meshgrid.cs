@@ -150,7 +150,7 @@ namespace NumSharp
                 NDArray a = xi[i] ?? throw new ArgumentNullException($"xi[{i}]",
                     "meshgrid coordinate vectors must not be null.");
                 int axis = swapXY ? (i == 0 ? 1 : i == 1 ? 0 : i) : i;
-                output[i] = a.reshape(OpenMeshShape(ndim, axis, a.size));
+                output[i] = a.reshape(Shape.Adopt(OpenMeshShape(ndim, axis, a.size)));
             }
 
             // Dense grids: broadcast each open-mesh axis across the full shape.

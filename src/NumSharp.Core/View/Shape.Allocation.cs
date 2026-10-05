@@ -149,7 +149,8 @@ namespace NumSharp
         /// <returns>
         ///     This shape when it already is exactly that layout and writeable, so the common call allocates nothing; the
         ///     same layout with <see cref="ArrayFlags.WRITEABLE"/> set when only the flag differs; otherwise a new shape of
-        ///     the same dimensions in that layout (its dimension array is a copy, so it shares nothing with this shape). An
+        ///     the same dimensions in that layout (C: a copy of the dimension array; F: this shape's own, immutable,
+        ///     dimension array, shared). An
         ///     uninitialized shape (<see cref="IsEmpty"/>) is returned unchanged: the wrap constructors replace it with the
         ///     values' own shape before they call here.
         /// </returns>
@@ -186,9 +187,10 @@ namespace NumSharp
             if (offset == 0 && (bufferSize == size || bufferSize == 0) && HasExactContiguousStrides(fortran))
                 return IsWriteable ? this : WithFlags(flagsToSet: ArrayFlags.WRITEABLE);
 
-            // Clean() clones the dimensions and computes C strides; the F constructor gets a clone too, so the new layout
-            // never shares a dimension array with the caller's shape.
-            return fortran ? new Shape((long[])dimensions.Clone(), 'F') : Clean();
+            // Clean() clones the dimensions and computes C strides. The F layout takes this shape's dimension array as it
+            // is: a Shape's arrays are immutable (no setter, copying getters, copying public constructors - plan
+            // view-shape-open-bugs.md, bug 2), so sharing it cannot let the caller's later writes reach the new array.
+            return fortran ? Shape.Adopt(dimensions, 'F') : Clean();
         }
 
         /// <summary>

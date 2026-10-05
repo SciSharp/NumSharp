@@ -567,7 +567,7 @@ namespace NumSharp
             // C: a rank ≤ 1 result, or C-ordered voters only (a 1-D series never votes — its c[k] is a scalar or all
             // unit axes — so any 1-D series counts as C here).
             if (outDims.Length <= 1 || ((cLayout.NDim <= 1 || cLayout.IsContiguous) && (xa is null || xa.Shape.IsContiguous)))
-                return new Shape(outDims);
+                return Shape.Adopt(outDims);
 
             bool scalarX = xa is null || xa.ndim == 0;
             if (scalarX || cLayout.NDim == 1 || tensor)
@@ -576,7 +576,7 @@ namespace NumSharp
                 // one) and x's block is C (a scalar, at most 1-D, or C-contiguous) — the common non-C-series calls
                 // (an F-ordered (n, k) series at a vector of points) skip every allocation below.
                 if (cLayout.NDim <= 2 && (scalarX || xa.ndim <= 1 || xa.Shape.IsContiguous))
-                    return new Shape(outDims);
+                    return Shape.Adopt(outDims);
                 var xDims = scalarX ? Array.Empty<long>() : xa.Shape.dimensions;
                 Shape xs = scalarX ? default : xa.Shape;
                 var xBlock = scalarX ? default : Shape.NpyIterOutputShape((long[])xDims.Clone(), new ReadOnlySpan<Shape>(in xs));
@@ -588,7 +588,7 @@ namespace NumSharp
                 Array.Copy(cLayout.dimensions, 1, cDims, 0, ncd);
                 Array.Copy(cLayout.strides, 1, cStrides, 0, ncd);
                 // The operand shape and the block share cDims: neither is ever written again.
-                var cOperand = new Shape(cDims, cStrides);
+                var cOperand = Shape.Adopt(cDims, cStrides);
                 var cBlock = Shape.NpyIterOutputShape(cDims, new ReadOnlySpan<Shape>(in cOperand));
                 if (scalarX)
                     return cBlock;
@@ -599,13 +599,13 @@ namespace NumSharp
                     strides[d] = cBlock.strides[d] * xSize;
                 for (int d = 0; d < xDims.Length; d++)
                     strides[ncd + d] = xBlock.strides[d];
-                return new Shape(outDims, strides);
+                return Shape.Adopt(outDims, strides);
             }
 
             // tensor=False with an N-D series: a C-contiguous operand spanning the whole result makes it C (remarks).
             if ((xa.Shape.IsContiguous && SameDims(xa.Shape.dimensions, 0, outDims))
                 || (cLayout.IsContiguous && SameDims(cLayout.dimensions, 1, outDims)))
-                return new Shape(outDims);
+                return Shape.Adopt(outDims);
             return ReplayResultShape(basis, cLayout, xa, tensor, outDims);
         }
 
@@ -659,7 +659,7 @@ namespace NumSharp
             // before reading would otherwise crash the replay instead of abstaining.
             var env = new LayoutEnv
             {
-                Ck = nck == 0 ? Shape.NewScalar() : new Shape(ckDims, ckStrides),
+                Ck = nck == 0 ? Shape.NewScalar() : Shape.Adopt(ckDims, ckStrides),
                 X = xa is null || xa.ndim == 0 ? Shape.NewScalar() : xa.Shape,
                 X2 = Shape.NewScalar(),
                 C0 = Shape.NewScalar(),
@@ -709,10 +709,10 @@ namespace NumSharp
 
             // Defensive: the replay's broadcast must reproduce the caller's dims; anything else falls back to C.
             if (r.NDim != outDims.Length)
-                return new Shape((long[])outDims.Clone());
+                return Shape.Adopt((long[])outDims.Clone());
             for (int d = 0; d < outDims.Length; d++)
                 if (r.dimensions[d] != outDims[d])
-                    return new Shape((long[])outDims.Clone());
+                    return Shape.Adopt((long[])outDims.Clone());
             return r;
         }
 
@@ -811,7 +811,7 @@ namespace NumSharp
         {
             if (s.NDim == 0) return Shape.NewScalar();
             if (!s.IsContiguous && !s.IsFContiguous) return s.KeepOrder();
-            return new Shape((long[])s.dimensions.Clone(), OrderResolver.Resolve('K', s));
+            return Shape.Adopt((long[])s.dimensions.Clone(), OrderResolver.Resolve('K', s));
         }
 
         /// <summary>

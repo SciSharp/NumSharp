@@ -65,8 +65,8 @@ namespace NumSharp
 
                 if (padded)
                 {
-                    x = np.zeros(new Shape(new long[] {n, 0}), common);            // x[..., :0]
-                    resids = np.zeros(new Shape(new long[] {0}), NPTypeCode.Double); // resids[..., :0]
+                    x = np.zeros(Shape.Adopt(new long[] {n, 0}), common);            // x[..., :0]
+                    resids = np.zeros(Shape.Adopt(new long[] {0}), NPTypeCode.Double); // resids[..., :0]
                 }
 
                 if (is1d)
@@ -76,7 +76,7 @@ namespace NumSharp
                 // discards them otherwise, replacing them with an empty array of the real result type.
                 long rankVal = Convert.ToInt64(rank.GetAtIndex(0));
                 if (rankVal != n || m <= n)
-                    resids = np.zeros(new Shape(new long[] {0}), realCommon);
+                    resids = np.zeros(Shape.Adopt(new long[] {0}), realCommon);
                 else
                     resids = resids.astype(realCommon);
 

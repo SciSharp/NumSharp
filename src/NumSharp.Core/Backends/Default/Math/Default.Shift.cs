@@ -208,7 +208,7 @@ namespace NumSharp.Backends
             // Mirror the unified path's NumPy-aligned F-order preservation.
             bool allStrictFContig = AreAllOperandsStrictFContig(value, count, cleanShape);
             Shape resultShape = allStrictFContig
-                ? new Shape((long[])cleanShape.dimensions.Clone(), 'F')
+                ? Shape.Adopt((long[])cleanShape.dimensions.Clone(), 'F')
                 : cleanShape;
 
             var result = new NDArray(resultType, resultShape, false);
@@ -285,7 +285,7 @@ namespace NumSharp.Backends
             var cleanShape = valueShape.Clean();
             bool allStrictFContig = AreAllOperandsStrictFContig(lhs, rhs, cleanShape);
             Shape resultShape = allStrictFContig
-                ? new Shape((long[])cleanShape.dimensions.Clone(), 'F')
+                ? Shape.Adopt((long[])cleanShape.dimensions.Clone(), 'F')
                 : cleanShape;
             return new NDArray(resultType, resultShape, fillZeros: true);
         }
@@ -346,7 +346,7 @@ namespace NumSharp.Backends
             // never an alias of value, so disposing value here is safe.
             bool valueIsTemp = !ReferenceEquals(value, lhs);
 
-            var result = new NDArray(resultType, new Shape((long[])value.Shape.dimensions.Clone()), false);
+            var result = new NDArray(resultType, Shape.Adopt((long[])value.Shape.dimensions.Clone()), false);
             if (result.size == 0)
             {
                 if (valueIsTemp) value.Dispose();

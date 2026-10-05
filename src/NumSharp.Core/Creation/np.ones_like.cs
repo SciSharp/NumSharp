@@ -26,7 +26,7 @@ namespace NumSharp
         {
             ValidateDevice(device);
             char physical = OrderResolver.Resolve(order, a.Shape);
-            var resolvedShape = new Shape((long[])a.Shape.dimensions.Clone(), physical);
+            var resolvedShape = Shape.Adopt((long[])a.Shape.dimensions.Clone(), physical);
             return np.ones(resolvedShape, dtype ?? a.dtype);
         }
     }

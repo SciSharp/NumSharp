@@ -189,7 +189,7 @@ namespace NumSharp
                     dims[k] = sizeVal.dimensions[k];
                 dims[sizeVal.NDim] = d;
             }
-            var multin = new NDArray(LegacyLong.typecode, new Shape(dims), true);
+            var multin = new NDArray(LegacyLong.typecode, Shape.Adopt(dims), true);
 
             // NumPy validates n only after the output exists (so a bad size is reported first); the output is released
             // when n is refused, so that error path leaves no pooled buffer behind.

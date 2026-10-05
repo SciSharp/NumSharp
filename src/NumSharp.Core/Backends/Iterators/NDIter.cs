@@ -355,7 +355,7 @@ namespace NumSharp.Backends.Iteration
                     }
 
                     // Allocate the NDArray with the resolved dtype and shape
-                    var shape = outputShape.Length == 0 ? new Shape() : new Shape(outputShape);
+                    var shape = outputShape.Length == 0 ? new Shape() : NumSharp.Shape.Adopt(outputShape);
                     op[opIdx] = np.zeros(shape, allocDtype);
                 }
             }
@@ -569,7 +569,7 @@ namespace NumSharp.Backends.Iteration
                     }
                     else
                     {
-                        var broadcastArr = np.broadcast_to(arrShape, new Shape(broadcastShape));
+                        var broadcastArr = np.broadcast_to(arrShape, NumSharp.Shape.Adopt(broadcastShape));
                         basePtr = (byte*)arr.Address + (broadcastArr.offset * elemBytes);
 
                         for (int d = 0; d < _state->NDim; d++)
@@ -1080,7 +1080,7 @@ namespace NumSharp.Backends.Iteration
                         for (int d = 0; d < opAxesNDim; d++)
                             virtualDims[d] = d < offset ? 1 : opShape[d - offset];
                     }
-                    virtualShapes.Add(new NumSharp.Shape(virtualDims));
+                    virtualShapes.Add(NumSharp.Shape.Adopt(virtualDims));
                 }
 
                 if (virtualShapes.Count == 0)
@@ -4386,7 +4386,7 @@ namespace NumSharp.Backends.Iteration
             else
             {
                 char physical = OrderResolver.Resolve(order, srcShape);
-                outShape = new Shape((long[])srcShape.dimensions.Clone(), physical);
+                outShape = Shape.Adopt((long[])srcShape.dimensions.Clone(), physical);
             }
 
             var dst = new NDArray(dstType, outShape, false) { TensorEngine = engine };

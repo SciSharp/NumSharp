@@ -161,7 +161,7 @@ namespace NumSharp
                 if (isReduced) kd[i] = 1L;
                 else kd[i] = reduced.Shape.dimensions[outIdx++];
             }
-            return reduced.reshape(kd);
+            return reduced.reshape(Shape.Adopt(kd));
         }
 
         // Scalar (reduce-all, both inputs C-contig) fast path.
@@ -308,8 +308,8 @@ namespace NumSharp
                     if (Array.IndexOf(axes, i) < 0) outShape[oi++] = a.Shape.dimensions[i];
             }
 
-            num = np.zeros(outShape.Length == 0 ? Shape.Scalar : new Shape(outShape), resultDtype);
-            scl = np.zeros(outShape.Length == 0 ? Shape.Scalar : new Shape(outShape), resultDtype);
+            num = np.zeros(outShape.Length == 0 ? Shape.Scalar : Shape.Adopt(outShape), resultDtype);
+            scl = np.zeros(outShape.Length == 0 ? Shape.Scalar : Shape.Adopt(outShape), resultDtype);
 
             // Pre-broadcast w to a's shape so both inputs share the iter shape.
             NDArray wBcast = w.Shape.dimensions.SequenceEqual(a.Shape.dimensions) ? w : np.broadcast_to(w, a.Shape);
@@ -395,7 +395,7 @@ namespace NumSharp
                     if (Array.IndexOf(axes, i) < 0)
                         kept.Add(a.Shape.dimensions[i]);
                 }
-                cur = cur.reshape(kept.ToArray());
+                cur = cur.reshape(Shape.Adopt(kept.ToArray()));
             }
 
             return cur;
@@ -432,7 +432,7 @@ namespace NumSharp
                     if (Array.IndexOf(axes, i) < 0)
                         kept.Add(a.Shape.dimensions[i]);
                 }
-                cur = cur.reshape(kept.ToArray());
+                cur = cur.reshape(Shape.Adopt(kept.ToArray()));
             }
 
             return cur;
@@ -472,7 +472,7 @@ namespace NumSharp
             long[] newShape = new long[ndim];
             for (int i = 0; i < ndim; i++)
                 newShape[i] = Array.IndexOf(axis, i) >= 0 ? a.Shape.dimensions[i] : 1L;
-            wgt = wgt.reshape(newShape);
+            wgt = wgt.reshape(Shape.Adopt(newShape));
             return wgt;
         }
 

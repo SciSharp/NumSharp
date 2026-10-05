@@ -22,8 +22,8 @@ divergence proved), B (confirmed as a parity bug) and F (fixed and gated).
 | 1 | The wrap constructors install the caller's layout | 4 pins + new | [x] | [x] | [x] | [x] | `ec28e5b1` |
 | 2a | The `Shape` indexer has a setter | 3 pins + `AuditV2.T1_10` | [x] | [x] | [x] | [x] | `bd26afb8` |
 | 2b | `NDArray.shape` returns the array's own dimension array | new | [x] | [x] | [x] | [x] | `b88bcb81` |
-| 2c | `Shape.Dimensions` and `Shape.Strides` return the shape's own arrays | new | [x] | [x] | [x] | [x] | (the commit after `d3c863ef`) |
-| 2d | The public `Shape` constructors keep the caller's array | new | [x] | [x] | [x] | [ ] | |
+| 2c | `Shape.Dimensions` and `Shape.Strides` return the shape's own arrays | new | [x] | [x] | [x] | [x] | `95fd5149` |
+| 2d | The public `Shape` constructors keep the caller's array | 3 pins + new | [x] | [x] | [x] | [x] | (the commit after `4d06d591`) |
 | 3 | `choice` without replacement returns a view | 3 pins + 1 control | [x] | [x] | [x] | [x] | `0f904216` |
 
 Order of work: 1, 2a, 2b, 2c, 2d, 3 (highest severity first; see the 2026-10-05 scoring: bug 1 scored 72 to 85, bug 2
@@ -336,7 +336,112 @@ passed without the binary staged and the same 69 `[OpenBugs]` tests as 2b. The p
 (gitignored, `tools/fetch_openblas.py`): without it, 26 of its tests fail the same way with and without 2c ("the interop
 suite runs with OpenBLAS as the default backend").
 
-2d: not started.
+**2d done.** Every public route that takes a caller's `long[]` of dimensions or strides copies it, as NumPy's
+`PyArray_IntpConverter` does, and NumSharp's own arrays go through an internal factory that takes them as they are.
+
+Probes (the caller changes its array after the call; NumPy 2.4.2 with a list and with an int64 ndarray):
+
+- NumPy KEPT the dimensions on all 19 routes: `np.zeros`/`np.empty`/`np.ones`/`np.full`, `np.ndarray(s, buffer)` in C and
+  F order and with `strides=s`, `as_strided`, `reshape` (method and function), `a.resize(s)`, `a.shape = s`,
+  `np.broadcast_to`, `np.indices`, `np.tile`, and the legacy and `Generator` samplers.
+- NumSharp at `4d06d591` (2c) CHANGED 24 of 32 routes: dimensions `(100, 3)` with the cached size still 6. They were
+  every public `Shape` constructor and conversion that takes a `long[]` (both arrays of the strides form), the `long[]`
+  creation functions and their generic forms, `np.zeros(new Shape(long[]))`, `new NDArray(np.float64, new Shape(long[]))`
+  and the C-order wrap `new NDArray(double[6], long[])`, `a.resize(long[])`, and the `long[]` and `Shape` sizes of `rand`,
+  `randn`, `random_sample`, `normal`,
+  `default_rng().random` and `integers`. The 8 routes that build their own array (the three reshape spellings, the
+  `shape` setter, `np.broadcast_to`, `np.indices`, `np.tile`, the F wrap of bug 1) KEPT them.
+- The same 32 routes after 2d: 0 CHANGED.
+
+Parity verdict: a parity bug. No `[Misaligned]` test or registry entry covers it, and `.claude/CLAUDE.md` listed it as
+open.
+
+What changed:
+
+- **`Shape`.** The four public constructors that take a `long[]` (`Shape(params long[])`, `Shape(long[], char)`,
+  `Shape(long[], long[])`, `Shape(long[], long[], Shape)`) and the two implicit conversions (`long[]` to `Shape` and to
+  `Shape?`) copy the array. A null or empty array becomes the shared empty array (a 0-d shape has nothing to write into),
+  and the argument checks run before the copy, with the same texts and types. A new `Shape(params ReadOnlySpan<long>)`
+  takes inline values (`new Shape(3, 4)`) and allocates once, as before. The internal `Shape.Adopt(long[])`,
+  `Adopt(long[], char)` and `Adopt(long[], long[])` take an array NumSharp built, with no copy.
+- **The constructor audit.** `[Obsolete]` warnings on the six copying members for one build listed 336 Core sites: 262
+  `new Shape(dims)`, 32 `new Shape(dims, order)`, 10 `new Shape(dims, strides)` and 32 conversions.
+  - A site keeps the copy when its array is a parameter of a public or protected member: 26 sites, each in a public
+    method that forwards a caller's array (the `shape` setter, `UnmanagedStorage.Reshape(long[])`, `reshape(long[])`,
+    `are_broadcastable(long[], long[])`, the `long[]` overloads of `np.empty`/`np.zeros`/`np.ones`/`np.full`,
+    `resize(long[])`, the eight `long[]` random sizes and five incrementor constructors).
+  - The other 310 hand over arrays NumSharp built (fresh arrays, another shape's immutable arrays, internal helpers'
+    parameters, checked by hand) and call `Shape.Adopt`. Three in `NDIter.cs` spell it `NumSharp.Shape.Adopt`, because a
+    member named `Shape` hides the type there.
+  - The OpenBLAS package (a friend assembly) adopts at its 13 sites. The other packages keep the copying constructors
+    (pythonnet 5 sites, MLNet 1, ONNX Runtime 1, System.Numerics.Tensors 1): they are not friends, and the copy is one
+    small allocation per conversion.
+  - `Shape.ForWrappedBuffer`'s F layout adopts the dimensions. Bug 1 copied them "while bug 2 is open".
+- **The copying methods.** A public method that takes a `long[]` now copies it, so it also copied arrays that internal
+  callers built and inline values (a compiler-built params array). The method-level audit marked the 28 copying methods
+  for one whole-solution build:
+  - It listed 41 Core call sites. 38 arrays at 36 lines in 21 files are NumSharp's own (fresh arrays, `ToArray()`
+    results, another shape's dimensions) and now go through `x.reshape(Shape.Adopt(arr))` (or the storage's
+    `Reshape(Shape)`).
+  - 3 sites keep the copying overload on purpose: `np.reshape(nd, long[])` and `random_sample(params long[])` forward a
+    caller's array, and `rand()` passes an empty params array, which returns before any copy.
+  - The two `x.shape = finalShape` writes of `multivariate_normal` (bug 3) became `x.Shape = Shape.Adopt(finalShape)`.
+    The setter cannot tell a caller's array from one built here.
+- **Inline values.** New `params ReadOnlySpan<long>` overloads: `NDArray.reshape`, `NDArray.reshape_unsafe`, their typed
+  `NDArray<T>` twins, and `NDArray.resize`. An inline call binds them, because C# 13 prefers a span to an array in
+  expanded form, and allocates only the dimension array the new shape keeps. An array argument still binds the `long[]`
+  overload (an identity conversion), which copies it. The whole solution (tests, benchmarks, examples) compiled
+  unchanged.
+- **Rebased** onto `4d06d591`. The `np.sum` commit added one `new Shape(dims)` over a fresh local
+  (`Default.Reduction.Add.Exact.cs`), which now adopts. A last audit build with all 34 copying members marked lists in
+  Core only the `shape` setter and the three forwarding sites, besides the copies inside the copying methods.
+
+Not changed (follow-ups):
+
+- The random module's `params long[]` overloads (`rand`, `randn`, `random_sample`) still allocate 40 bytes more for
+  inline values (`np.random.rand(3, 4)`: 592 to 632 B). A span overload changes the G1-pinned random surface
+  (`test/oracle/random_surface.json`), and the random-API oracle must then be regenerated.
+- `np.ndindex(params long[])` keeps the caller's array. It walks an index space and is not an array's shape.
+- B1.10, B1.11 and the `np.ndarray` defaults of bug 1.
+
+Cost (bytes per call and ns, best of 15 after a 300 ms warm-up; base `4d06d591` and 2d in one session):
+
+| Call | Base | 2d |
+|---|---|---|
+| `m.reshape(16, 64)` | 488 B, 177 ns | 488 B, 177 ns |
+| typed `t.reshape(16, 64)` | 488 B, 174 ns | 488 B, 174 ns |
+| `m.reshape_unsafe(16, 64)` | 488 B, 162 ns | 488 B, 177 ns |
+| `small.resize(3, 4)` (same size) | 120 B, 43 ns | 120 B, 47 ns |
+| `np.zeros(new Shape(3, 4))` | 560 B, 244 ns | 560 B, 242 ns |
+| `np.roll(x, 3)`, `np.kron`, `np.ptp(m, 0)`, `np.average(m, 0, w)`, `np.indices`, `np.meshgrid`, `np.all(m > 3, 0)`, `multivariate_normal` | the same bytes | the same bytes |
+| `np.zeros(long[] {3, 4})` (a caller's array) | 520 B, 240 ns | 560 B, 265 ns |
+| `m.reshape(new long[] {16, 64})` (a caller's array) | 488 B, 180 ns | 528 B, 199 ns |
+| `np.random.rand(3, 4)` (follow-up above) | 592 B, 245 ns | 632 B, 268 ns |
+
+The 22 rows of the earlier passes (`x + y`, `np.sum(m, 0)`, `np.dot`, `np.sort`, …) allocate the same bytes, and every
+time is within the run-to-run noise. Only a caller's own array pays the copy (40 B for two dimensions), as in NumPy.
+
+Tests (`View/Shape.CallerArrays.Tests.cs`, 13; every expected value probed against NumPy 2.4.2):
+
+- The three former pins (`OpenBugs.ViewShape.cs` is deleted).
+- Every public constructor and conversion, the creation functions, `resize` and the random sizes.
+- Guards for the routes that already built their own array, the typed reshape and `UnmanagedStorage.Reshape` included.
+- Allocation parity: `new Shape(r, c)` and the five span overloads allocate what the same call over an adopted array
+  allocates.
+- The span overloads' answers, `Adopt` against the public constructor, and the unchanged argument checks.
+
+On `4d06d591` the 10 tests that compile there (the three others call `Shape.Adopt`) give 7 failures and 3 passing
+guards. Renaming any one of the five span overloads fails the allocation test at that overload's own assertion (+40 B a
+call).
+
+Gates (on `4d06d591` + 2d, the OpenBLAS binary staged):
+
+- NumSharp.Tests: net10.0 18,183 passed and net8.0 18,182 passed (0 failed, 12 skipped).
+- Oracle: 255 passed (1 skipped).
+- Interop suites: pythonnet 736 of 736, System.Numerics.Tensors 101, ONNX Runtime 207 + 2 skipped, MLNet 206 + 1
+  skipped, ParquetNet 11.
+- `[OpenBugs]`: 78 tests fail. On `4d06d591` 81 fail (`264e3793` added 15 pins); the difference is exactly the three
+  moved pins.
 
 ---
 

@@ -140,7 +140,7 @@ namespace NumSharp.Backends
             if (slicedShape.IsContiguous && slicedShape.offset > 0)
             {
                 // Create a fresh contiguous shape (no offset)
-                var freshShape = new Shape(slicedShape.dimensions);
+                var freshShape = Shape.Adopt(slicedShape.dimensions);
                 // A view of a non-writeable array (broadcast, or a read-only 'r' memmap) must stay
                 // non-writeable — the fresh shape above defaults WRITEABLE back to true, which would let
                 // a write reach read-only memory (a hard segfault on memory-mapped read-only pages, and

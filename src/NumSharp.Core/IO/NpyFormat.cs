@@ -848,7 +848,7 @@ namespace NumSharp.IO
                     throw new FormatException("negative dimensions are not allowed");
 
             long count = header.Count;
-            var result = new NDArray(header.Dtype.TypeCode, new Shape(header.Shape));
+            var result = new NDArray(header.Dtype.TypeCode, Shape.Adopt(header.Shape));
 
             if (count > 0)
                 ReadArrayData(stream, result, header.Dtype, count);
@@ -860,7 +860,7 @@ namespace NumSharp.IO
                 var reversed = new long[header.Shape.Length];
                 for (int i = 0; i < header.Shape.Length; i++)
                     reversed[i] = header.Shape[header.Shape.Length - 1 - i];
-                result = result.reshape(reversed).T;
+                result = result.reshape(Shape.Adopt(reversed)).T;
             }
 
             return result;
@@ -1025,7 +1025,7 @@ namespace NumSharp.IO
                     // No element bytes to point at — return a plain empty array and drop the handle.
                     fs.Dispose();
                     transferred = true;
-                    var empty = new NDArray(header.Dtype.TypeCode, new Shape(header.Shape));
+                    var empty = new NDArray(header.Dtype.TypeCode, Shape.Adopt(header.Shape));
                     // NumPy's memmap reports owndata=False in EVERY mode (its base is the mmap object).
                     empty.Storage.ExternalBase = true;
                     empty.Storage.OnReshaped(); // drop the allocating ctor's OWNDATA bit
@@ -1121,7 +1121,7 @@ namespace NumSharp.IO
                 capturedMmf.Dispose(); // disposes the FileStream too (leaveOpen: false)
             };
 
-            NDArray nd = WrapMappedBlock(header.Dtype.TypeCode, (void*)dataPtr, count, free, new Shape(header.Shape));
+            NDArray nd = WrapMappedBlock(header.Dtype.TypeCode, (void*)dataPtr, count, free, Shape.Adopt(header.Shape));
 
             // The mapped memory belongs to the file mapping, not the array — NumPy's memmap has the mmap
             // object as its (non-array) base and reports owndata=False in EVERY mode ('r'/'r+'/'c').
@@ -1148,7 +1148,7 @@ namespace NumSharp.IO
                 var reversed = new long[header.Shape.Length];
                 for (int i = 0; i < header.Shape.Length; i++)
                     reversed[i] = header.Shape[header.Shape.Length - 1 - i];
-                nd = nd.reshape(reversed).T;
+                nd = nd.reshape(Shape.Adopt(reversed)).T;
             }
 
             // Defensive: the wrap-storage clear above already propagates through reshape/transpose.

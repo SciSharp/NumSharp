@@ -84,9 +84,9 @@ namespace NumSharp.Interop.OpenBLAS
             long maxmn = Math.Max(m, n);
             bool isComplex = typeof(T) == typeof(Complex);
 
-            var x = new NDArray(InfoOf<T>.NPTypeCode, new Shape(new long[] { n, nrhs }));   // zero-filled
-            var resids = new NDArray(NPTypeCode.Double, new Shape(new long[] { nrhs }));
-            var sarr = new NDArray(NPTypeCode.Double, new Shape(new long[] { mn }));
+            var x = new NDArray(InfoOf<T>.NPTypeCode, Shape.Adopt(new long[] { n, nrhs }));   // zero-filled
+            var resids = new NDArray(NPTypeCode.Double, Shape.Adopt(new long[] { nrhs }));
+            var sarr = new NDArray(NPTypeCode.Double, Shape.Adopt(new long[] { mn }));
 
             double* residPtr = nrhs == 0 ? null : (double*)resids.Address + resids.Shape.offset;
             double* sPtr = mn == 0 ? null : (double*)sarr.Address + sarr.Shape.offset;

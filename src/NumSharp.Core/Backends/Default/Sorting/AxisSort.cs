@@ -85,7 +85,7 @@ namespace NumSharp.Backends.Sorting
             }
             int ax = NormalizeAxis(axis.Value, a.ndim);
             var src = a.Shape.IsContiguous ? a : a.copy('C');
-            var ret = new NDArray(NPTypeCode.Int64, new Shape((long[])a.Shape.dimensions.Clone()), false);
+            var ret = new NDArray(NPTypeCode.Int64, Shape.Adopt((long[])a.Shape.dimensions.Clone()), false);
             ArgSortInto(src, ret, ax);
             return ret;
         }

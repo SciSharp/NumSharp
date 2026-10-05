@@ -231,7 +231,7 @@ namespace NumSharp
 
             // Allocate as Int64 first (the kernel's native dtype). If the caller asked for a
             // different dtype, astype afterwards — the dense-fill IL kernel only emits long stores.
-            var int64Result = new NDArray(NPTypeCode.Int64, new Shape(resultShape), false);
+            var int64Result = new NDArray(NPTypeCode.Int64, Shape.Adopt(resultShape), false);
 
             // Fast-exit for shapes with size 0 — the buffer is already zero-allocated and no
             // slab fill is needed.
@@ -288,7 +288,7 @@ namespace NumSharp
 
                 // Build via arange then reshape. arange(0L, dim) picks the long overload, so a
                 // 64-bit dimension is honoured rather than truncated.
-                var arr = np.arange(0L, dim).reshape(axisShape);
+                var arr = np.arange(0L, dim).reshape(Shape.Adopt(axisShape));
                 if (arr.GetTypeCode != dtype)
                     arr = arr.astype(dtype);
                 result[d] = arr;

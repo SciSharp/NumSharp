@@ -214,7 +214,7 @@ namespace NumSharp
             }
             outDims[nd - 1] = inLen - 1;
 
-            var outp = new NDArray(a.dtype, new Shape(outDims), false);
+            var outp = new NDArray(a.dtype, Shape.Adopt(outDims), false);
             if (outp.size == 0) return outp;
 
             int elemSize = a.dtypesize;
@@ -247,7 +247,7 @@ namespace NumSharp
                 long[] dims = new long[a.ndim];
                 for (int i = 0; i < a.ndim; i++) dims[i] = a.Shape.dimensions[i];
                 dims[axis] = 1;
-                var bcast = np.broadcast_to(v, new Shape(dims));
+                var bcast = np.broadcast_to(v, Shape.Adopt(dims));
                 toDispose.Add(bcast);
                 return bcast;
             }
@@ -284,7 +284,7 @@ namespace NumSharp
             int nd = hi.ndim;
             long[] dims = new long[nd];
             for (int i = 0; i < nd; i++) dims[i] = hi.Shape.dimensions[i];
-            var outp = new NDArray(hi.dtype, new Shape(dims), false);
+            var outp = new NDArray(hi.dtype, Shape.Adopt(dims), false);
 
             // Empty result: the NDIter element-wise path must not run over zero
             // elements (it walks broadcast dims as if non-empty). Nothing to do.

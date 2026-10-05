@@ -426,7 +426,7 @@ namespace NumSharp.Interop.OpenBLAS
             long m = shape.dimensions[nd - 1];
 
             // fillZeros:false: Delinearize writes every cell, so pre-zeroing is wasted (see the file header note).
-            var result = new NDArray(InfoOf<T>.NPTypeCode, new Shape((long[])shape.dimensions.Clone()), fillZeros: false);
+            var result = new NDArray(InfoOf<T>.NPTypeCode, Shape.Adopt((long[])shape.dimensions.Clone()), fillZeros: false);
             if (result.size == 0)
                 return result; // (…,0,0) → empty inverse, matching NumPy
 
@@ -526,7 +526,7 @@ namespace NumSharp.Interop.OpenBLAS
             for (int i = 0; i < trailing.Length; i++)
                 outDims[nb + i] = trailing[i];
 
-            var result = new NDArray(InfoOf<T>.NPTypeCode, new Shape(outDims), fillZeros: false);
+            var result = new NDArray(InfoOf<T>.NPTypeCode, Shape.Adopt(outDims), fillZeros: false);
             if (result.size == 0)
                 return result;
 
@@ -587,7 +587,7 @@ namespace NumSharp.Interop.OpenBLAS
                 count *= batchDims[i];
             }
 
-            var batchShape = nb == 0 ? Shape.Scalar : new Shape(batchDims);
+            var batchShape = nb == 0 ? Shape.Scalar : Shape.Adopt(batchDims);
 
             NDArray det = null, sign = null, logdet = null;
             T* pdet = null, psign = null;

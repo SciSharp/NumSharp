@@ -139,7 +139,7 @@ namespace NumSharp
         internal readonly Shape KeepOrder()
         {
             var dims = (long[])dimensions.Clone();
-            return new Shape(dims, StridesForPerm(dims, SortedStridePerm(strides)));
+            return Shape.Adopt(dims, StridesForPerm(dims, SortedStridePerm(strides)));
         }
 
         /// <summary>
@@ -165,9 +165,9 @@ namespace NumSharp
 
             var dims = (long[])outDims.Clone();
             if (allC)
-                return new Shape(dims);
+                return Shape.Adopt(dims);
 
-            return new Shape(dims, StridesForPerm(dims, MultiSortedStridePerm(inputs, dims.Length)));
+            return Shape.Adopt(dims, StridesForPerm(dims, MultiSortedStridePerm(inputs, dims.Length)));
         }
 
         /// <summary>
@@ -290,7 +290,7 @@ namespace NumSharp
                 stride *= dims[ax];
             }
 
-            return new Shape(dims, strides);
+            return Shape.Adopt(dims, strides);
         }
 
         /// <summary>

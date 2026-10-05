@@ -24,17 +24,17 @@ namespace NumSharp.Backends
                 {
                     var emptyType = typeCode ?? arr.typecode.GetAccumulatingType();
                     var r = NDArray.Scalar(emptyType.GetOneValue());
-                    if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks)); }
+                    if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(Shape.Adopt(ks)); }
                     return r.MarkReductionScalar();
                 }
                 var axis = NormalizeAxis(axis_.Value, arr.ndim);
                 var resultShape = Shape.GetAxis(shape, axis);
-                var result = np.ones(new Shape(resultShape), typeCode ?? arr.GetTypeCode.GetAccumulatingType());
+                var result = np.ones(Shape.Adopt(resultShape), typeCode ?? arr.GetTypeCode.GetAccumulatingType());
                 if (keepdims)
                 {
                     var ks = new long[arr.ndim];
                     for (int d = 0, sd = 0; d < arr.ndim; d++) ks[d] = (d == axis) ? 1 : resultShape[sd++];
-                    result.Storage.Reshape(new Shape(ks));
+                    result.Storage.Reshape(Shape.Adopt(ks));
                 }
                 return result;
             }
@@ -51,7 +51,7 @@ namespace NumSharp.Backends
             {
                 var result = prod_elementwise_il(arr, typeCode);
                 var r = NDArray.Scalar(result);
-                if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks)); }
+                if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(Shape.Adopt(ks)); }
                 else if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1) r.Storage.Reshape(Shape.Scalar);
                 return r.MarkReductionScalar();
             }

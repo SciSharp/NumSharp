@@ -35,7 +35,7 @@ namespace NumSharp.Backends
                         var keepdimsShape = new long[arr.ndim];
                         for (int i = 0; i < arr.ndim; i++)
                             keepdimsShape[i] = 1;
-                        r.Storage.Reshape(new Shape(keepdimsShape));
+                        r.Storage.Reshape(Shape.Adopt(keepdimsShape));
                     }
                     return r.MarkReductionScalar();
                 }
@@ -54,14 +54,14 @@ namespace NumSharp.Backends
                 if (shape[emptyAxis] == 0)
                 {
                     // Reducing along a zero-size axis - return NaN filled array
-                    result = np.empty(new Shape(resultShape), emptyOutputType);
+                    result = np.empty(Shape.Adopt(resultShape), emptyOutputType);
                     for (long i = 0; i < result.size; i++)
                         result.SetAtIndex(double.NaN, i);
                 }
                 else
                 {
                     // Reducing along non-zero axis - return empty array with reduced shape
-                    result = np.empty(new Shape(resultShape), emptyOutputType);
+                    result = np.empty(Shape.Adopt(resultShape), emptyOutputType);
                 }
 
                 if (keepdims)
@@ -74,7 +74,7 @@ namespace NumSharp.Backends
                         else
                             keepdimsShape[d] = resultShape[sd++];
                     }
-                    result.Storage.Reshape(new Shape(keepdimsShape));
+                    result.Storage.Reshape(Shape.Adopt(keepdimsShape));
                 }
 
                 return result;
@@ -97,7 +97,7 @@ namespace NumSharp.Backends
                     var keepdimsShape = new long[arr.ndim];
                     for (int i = 0; i < arr.ndim; i++)
                         keepdimsShape[i] = 1;
-                    r.Storage.Reshape(new Shape(keepdimsShape));
+                    r.Storage.Reshape(Shape.Adopt(keepdimsShape));
                 }
                 else if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1)
                     r.Storage.Reshape(Shape.Scalar);
@@ -113,7 +113,7 @@ namespace NumSharp.Backends
                     var keepdimsShape = new long[arr.ndim];
                     for (int i = 0; i < arr.ndim; i++)
                         keepdimsShape[i] = 1;
-                    r.Storage.Reshape(new Shape(keepdimsShape));
+                    r.Storage.Reshape(Shape.Adopt(keepdimsShape));
                 }
                 else if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1)
                     r.Storage.Reshape(Shape.Scalar);
@@ -171,7 +171,7 @@ namespace NumSharp.Backends
         /// </summary>
         private NDArray ExecuteAxisVarReductionFallback(NDArray arr, int axis, bool keepdims, NPTypeCode? typeCode, int? ddof)
         {
-            Shape axisedShape = Shape.GetAxis(arr.Shape, axis);
+            Shape axisedShape = Shape.Adopt(Shape.GetAxis(arr.Shape, axis));
             var retType = typeCode ?? arr.GetTypeCode.GetComputingType();
 
             // KEEPORDER: allocate in the input's memory order (F for an F-contig input); NDAxisIter

@@ -114,7 +114,7 @@ namespace NumSharp
         /// </remarks>
         [OverloadResolutionPriority(-1)]
         public NDArray power(double a, long size)
-            => power(a, new long[] { size });
+            => power(a, Shape.Adopt(new long[] { size }));
 
         /// <summary>
         ///     Draws a single sample in [0, 1] from a power distribution with positive exponent a - 1.

@@ -118,7 +118,7 @@ namespace NumSharp
             var bufDims = new long[leadingLen + resNd];
             Array.Copy(leading, 0, bufDims, 0, leadingLen);
             Array.Copy(resDims, 0, bufDims, leadingLen, resNd);
-            NDArray buff = np.zeros(new Shape(bufDims), res0.dtype);
+            NDArray buff = np.zeros(Shape.Adopt(bufDims), res0.dtype);
 
             // Because ndindex walks the leading dims in C-order and `buff` is C-contiguous, the k-th
             // slice's slot is exactly the k-th contiguous block of `buff`'s bytes — NumPy's "each

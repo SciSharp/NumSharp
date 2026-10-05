@@ -735,7 +735,7 @@ namespace NumSharp
                     if (mask[i]) rank++;
                     invDst[perm[i]] = rank;
                 }
-                var invShape = ndim <= 1 ? Shape.Vector(n) : new Shape(Storage.Shape.dimensions);
+                var invShape = ndim <= 1 ? Shape.Vector(n) : Shape.Adopt(Storage.Shape.dimensions);
                 results[outPos++] = new NDArray(invSlice, invShape);
             }
 
@@ -837,7 +837,7 @@ namespace NumSharp
             for (int d = 1; d < moved.ndim; d++)
                 resultShapeDims[d] = moved.Shape.dimensions[d];
 
-            var values = GatherSlabs(movedCopy, sortedKeepIdx.ToArray(), slabSize, new Shape(resultShapeDims));
+            var values = GatherSlabs(movedCopy, sortedKeepIdx.ToArray(), slabSize, Shape.Adopt(resultShapeDims));
 
             if (axis != 0)
                 values = np.moveaxis(values, 0, axis);
@@ -1316,7 +1316,7 @@ namespace NumSharp
                     if (mask[i] != 0) rank++;
                     invDst[kp[i].Perm] = rank;
                 }
-                var invShape = ndim <= 1 ? Shape.Vector(n) : new Shape(Storage.Shape.dimensions);
+                var invShape = ndim <= 1 ? Shape.Vector(n) : Shape.Adopt(Storage.Shape.dimensions);
                 results[outPos++] = new NDArray(invSlice, invShape);
             }
 
@@ -1492,7 +1492,7 @@ namespace NumSharp
                     if (mask[i] != 0) rank++;
                     invDst[kp[i].Perm] = rank;
                 }
-                var invShape = ndim <= 1 ? Shape.Vector(n) : new Shape(Storage.Shape.dimensions);
+                var invShape = ndim <= 1 ? Shape.Vector(n) : Shape.Adopt(Storage.Shape.dimensions);
                 results[outPos++] = new NDArray(invSlice, invShape);
             }
 

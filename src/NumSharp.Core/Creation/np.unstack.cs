@@ -68,7 +68,7 @@ namespace NumSharp
                 // result array above). There is no data to alias — each entry is
                 // an empty array of the remaining shape.
                 for (int i = 0; i < result.Length; i++)
-                    result[i] = new NDArray(x.dtype, new Shape(subDims));
+                    result[i] = new NDArray(x.dtype, Shape.Adopt(subDims));
                 return result;
             }
 

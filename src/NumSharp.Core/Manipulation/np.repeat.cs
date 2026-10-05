@@ -201,7 +201,7 @@ namespace NumSharp
 
             long[] outDims = (long[])inDims.Clone();
             outDims[normalizedAxis] = total;
-            var ret = new NDArray(a.GetTypeCode, new Shape(outDims));
+            var ret = new NDArray(a.GetTypeCode, Shape.Adopt(outDims));
 
             if (src.size == 0 || total == 0)
                 return ret;
@@ -252,7 +252,7 @@ namespace NumSharp
 
             long[] outDims = (long[])inDims.Clone();
             outDims[normalizedAxis] = total;
-            var ret = new NDArray(a.GetTypeCode, new Shape(outDims));
+            var ret = new NDArray(a.GetTypeCode, Shape.Adopt(outDims));
 
             if (src.size == 0 || total == 0)
                 return ret;

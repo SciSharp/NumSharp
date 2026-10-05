@@ -171,7 +171,7 @@ namespace NumSharp
                 var keepdimsShape = new long[arr.ndim];
                 for (int i = 0; i < arr.ndim; i++)
                     keepdimsShape[i] = 1;
-                r.Storage.Reshape(new Shape(keepdimsShape));
+                r.Storage.Reshape(Shape.Adopt(keepdimsShape));
             }
             return r.MarkReductionScalar();
         }

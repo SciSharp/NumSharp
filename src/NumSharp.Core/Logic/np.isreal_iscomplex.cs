@@ -33,7 +33,7 @@ namespace NumSharp
             // only (never `a.Shape`, whose strides/offset for a sliced/broadcast/strided view make
             // np.ones read past the logical window and return garbage bytes).
             if (a.GetTypeCode != NPTypeCode.Complex)
-                return np.ones(new Shape(a.Shape.dimensions), NPTypeCode.Boolean);
+                return np.ones(Shape.Adopt(a.Shape.dimensions), NPTypeCode.Boolean);
 
             // Complex: the imaginary lane (a strided float64 view via np.imag) compared to zero.
             // IEEE `==` gives NumPy's semantics exactly: -0.0 == 0 (real), NaN/Inf != 0 (not real).
@@ -68,7 +68,7 @@ namespace NumSharp
             // Non-complex short-circuits to all-False from the DIMENSIONS only (not `a.Shape`, whose
             // view strides/offset would make np.zeros emit garbage bytes on a strided/broadcast input).
             if (a.GetTypeCode != NPTypeCode.Complex)
-                return np.zeros(new Shape(a.Shape.dimensions), NPTypeCode.Boolean);
+                return np.zeros(Shape.Adopt(a.Shape.dimensions), NPTypeCode.Boolean);
 
             // Complex: the imaginary lane (a strided float64 view via np.imag) compared to zero.
             // IEEE `!=` gives NumPy's semantics exactly: -0.0 != 0 is False, NaN/Inf != 0 is True.
