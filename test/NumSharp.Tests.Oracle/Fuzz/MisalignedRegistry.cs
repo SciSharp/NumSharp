@@ -140,7 +140,12 @@ namespace NumSharp.Tests.Fuzz
             "clip_ufunc",
             // The reductions' keyword surface: all / any reduce bools (no arithmetic), and its error cases carry ONE
             // operand, so no excuse may apply.
-            "reduce_kwargs"
+            "reduce_kwargs",
+            // np.var / np.std are NumPy's _var / _std statement for statement since 2026-10-05 (plan
+            // api-parameter-parity A2): NumPy's sum schedule, a subtract and a multiply, and an IEEE square root —
+            // no platform libm, so a ULP drift is a regression. (ma.var / ma.std keep the reduction blankets, which
+            // classify them before this branch: IsMaVarStd.)
+            "var", "std"
         };
 
         /// <summary>
@@ -274,6 +279,12 @@ namespace NumSharp.Tests.Fuzz
             // is exact in every order: the summation-order and nan-family blankets below have nothing legitimate
             // to excuse there, and they are precisely what kept a -0.0 out of the engine's copy shortcuts green.
             if (c.Valueclass == "sum_identity")
+                return null;
+            // varstd.jsonl (np.var / np.std as NumPy's _var / _std, plan api-parameter-parity A2: every layout, dtype,
+            // ddof and dtype= pair, special values, np.setbufsize fills, order-sensitive sizes) is held to ZERO excuses:
+            // every statement of _var is reproduced, so any divergence is a bug. Cells that inherit a residual of
+            // np.sum's own schedule are carved by the generator instead, each naming its [OpenBugs] pin.
+            if (c.Valueclass == "varstd")
                 return null;
 
             // reduce_start.jsonl (valueclass "negzero": every operand all -0.0, every result a signed zero) is held to
@@ -694,9 +705,10 @@ namespace NumSharp.Tests.Fuzz
             //      (2026-08-14), excused as tracked known bugs with a measured bound — kept in
             //      the corpus so a kernel fix flips them bit-exact automatically and a WORSE
             //      regression still fails:
-            //        * float32 var/std accumulation: 55/26 ULP from truth where NumPy's two-pass
-            //          pairwise sits at 3/2 (contiguous wide-magnitude input);
-            //        * the NEGATIVE-STRIDE reduce path (sum/mean/var/std): 11-32 ULP from truth
+            //        * (float32 var/std accumulation: 55/26 ULP from truth where NumPy's two-pass
+            //          pairwise sits at 3/2 — FIXED 2026-10-05, np.var / np.std are NumPy's _var / _std
+            //          now (plan api-parameter-parity A2), bit-exact, no longer excused);
+            //        * the NEGATIVE-STRIDE reduce path (sum/mean): 11-32 ULP from truth
             //          where NumPy is EXACT on the same reversed view — the backward traversal
             //          accumulates in a worse order than the contiguous kernel;
             //        * float32 DEEP product contractions (inner/tensordot at K=2049, products
@@ -708,51 +720,31 @@ namespace NumSharp.Tests.Fuzz
             //      lane variation); a loss beyond that — or in any other cell — is red.
             if (kind == DivergenceKind.Value && truth != null && expected != null
                 && truth.Length == expected.Length && diffs.Count > 0
-                && ((c.Layout == "negstride_1d"
-                     && (c.Op == "sum" || c.Op == "mean" || c.Op == "var" || c.Op == "std"))
-                    || (tc == NPTypeCode.Single && (c.Op == "var" || c.Op == "std"))
+                && ((c.Layout == "negstride_1d" && (c.Op == "sum" || c.Op == "mean"))
                     || (tc == NPTypeCode.Single && ProductOps.Contains(c.Op)))
                 && diffs.All(d => BitDiff.UlpDistance(actual, truth, d.Index, tc) <= 256))
-                return "precision-loss (known): f32 var/std accumulation + negative-stride reduction "
-                     + "accumulation + f32 deep product contraction lose ULP vs truth where NumPy "
+                return "precision-loss (known): negative-stride reduction accumulation + f32 deep product "
+                     + "contraction lose ULP vs truth where NumPy "
                      + "stays near-exact (bounded ≤256) [known bug]";
 
             // --- Reductions (single-operand, but classified before the unary rules) ---
             if (ReduceOps.Contains(c.Op))
             {
-                // (V1) var/std at a degenerate size skip NumPy's arithmetic [known bug, pinned by
-                //      OpenBugsReductionTests.VarStd_* in NumSharp.Tests]. ReduceVar/ReduceStd answer one element
-                //      per output (a 0-d or one-element input, or a reduced axis of extent 1) with zeros WITHOUT
-                //      reading it, as float64, and an empty input as float64 too. NumPy's _var computes
-                //      sum((x - mean)^2) / max(n - ddof, 0) in the input's float dtype, so a NaN or ±inf element
-                //      (or ddof >= 1) gives NaN and a float16/float32 input keeps its dtype. Classified FIRST: the
-                //      generic branches below used to take these cases under names that describe other bugs
-                //      ("summation precision", the min/max "axis SIMD skips NaN" bug, the generic reduction-dtype
-                //      bug). Scoped to var/std (np.*, ndarray.*, ma.*, which all reach the same engine) × one
-                //      element per output (or an empty operand, Dtype only) × (Value: every diff is a NumPy NaN
-                //      against NumSharp's +0.0, the shortcut's only answer | Dtype: NumPy's result is
-                //      float16/float32). Any other value divergence (a nonzero number where NumPy has NaN, a wrong
-                //      finite value, a NaN where NumPy has a number) falls through to the branches below.
-                if ((c.Op == "var" || c.Op == "std") && c.Operands.Length == 1)
-                {
-                    // A diff token is the element's little-endian bytes in hex, so +0.0 is all '0' at any width.
-                    if (kind == DivergenceKind.Value && diffs.Count > 0 && OneElementPerOutput(c)
-                        && diffs.All(d => d.Expected == "NaN" && d.Actual.Length > 0 && d.Actual.All(ch => ch == '0')))
-                        return "var/std of one element per output skips the arithmetic: 0 instead of NaN for a "
-                             + "NaN/inf element or ddof >= 1 [known bug: OpenBugsReductionTests.VarStd_*]";
-                    if (kind == DivergenceKind.Dtype && (tc == NPTypeCode.Half || tc == NPTypeCode.Single)
-                        && (OneElementPerOutput(c) || ElementCount(c.Operands[0]) == 0))
-                        return "var/std of one element per output or of an empty input is float64 where NumPy keeps "
-                             + "float16/float32 [known bug: OpenBugsReductionTests.VarStd_*]";
-                }
+                // (V1, removed 2026-10-05) var/std at a degenerate size used to skip NumPy's arithmetic — 0 instead
+                //      of NaN for a NaN/inf element or ddof >= 1, float64 instead of float16/float32. np.var / np.std
+                //      are NumPy's _var / _std statement for statement now (plan api-parameter-parity A2), so every
+                //      var/std case is held to NumPy's bits, dtype and shape with no excuse here or below.
 
                 // Reduction result dtype differs (NEP50 accumulator width / complex->real for std/var).
                 // sum/prod now apply NEP50 accumulator widening on EVERY size — including the degenerate
                 // 0-d scalar / single-element 1-D flat path (fixed 2026-09-13: HandleScalarReduction was
                 // cloning the input dtype instead of casting to GetAccumulatingType) — so they are BIT-
                 // EXACT on dtype and are NO LONGER excused: a regression that drops the widening again
-                // must turn the gate red. The residual excuse is std/var's complex->real result dtype.
-                if (kind == DivergenceKind.Dtype && c.Op != "sum" && c.Op != "prod")
+                // must turn the gate red. np.var / np.std / ndarray.var / ndarray.std are exact on dtype too
+                // since 2026-10-05 (NumPy's _var: the input's float dtype, float64 for integer/bool/complex,
+                // dtype= when given); ma.var / ma.std keep the branch (IsMaVarStd).
+                if (kind == DivergenceKind.Dtype && c.Op != "sum" && c.Op != "prod"
+                    && ((c.Op != "var" && c.Op != "std") || IsMaVarStd(c)))
                     return "reduction result dtype differs (NEP50 accumulator / complex->real) [known bug]";
                 // Complex axis reductions work on every rank since 2026-10-04 (the 1-D case used to throw
                 // "NDCoordinatesAxisIncrementor with a vector shape"); no Threw case is excused any more.
@@ -762,7 +754,10 @@ namespace NumSharp.Tests.Fuzz
                 // CombineVectors), so it is NOT excused — a flat regression fails the gate. The
                 // axis (vertical/strided) SIMD min/max path still drops NaN; excuse only that.
                 // (mean/std/var/sum propagate NaN on both paths already, via arithmetic.)
+                // var/std (np.* / ndarray.*) are NumPy's _var since 2026-10-05: a NaN they miss is a real bug, not
+                // this min/max one (ma.var / ma.std keep it with their other gaps, IsMaVarStd).
                 if (kind == DivergenceKind.Value && diffs.Count > 0 && diffs.Count > 0 && diffs.All(d => d.Expected == "NaN")
+                    && ((c.Op != "var" && c.Op != "std") || IsMaVarStd(c))
                     && c.Params != null
                     && c.Params.TryGetValue("axis", out var axEl)
                     && axEl.ValueKind != System.Text.Json.JsonValueKind.Null)
@@ -781,7 +776,7 @@ namespace NumSharp.Tests.Fuzz
                 if (kind == DivergenceKind.Value && truth == null
                     && (tc == NPTypeCode.Half || tc == NPTypeCode.Single
                         || tc == NPTypeCode.Double || tc == NPTypeCode.Complex)
-                    && (c.Op == "sum" || c.Op == "mean" || c.Op == "std" || c.Op == "var" || c.Op == "prod")
+                    && (c.Op == "sum" || c.Op == "mean" || c.Op == "prod" || IsMaVarStd(c))
                     && !IsIdentitySumSignedZeroFlip(c.Op, expected, actual, tc, diffs))
                     return "reduction summation/two-pass precision (algorithm order)";
             }
@@ -1232,41 +1227,6 @@ namespace NumSharp.Tests.Fuzz
         private static long TruthSlack(long dNPY)
             => dNPY >= (long.MaxValue - 8) / 4 ? long.MaxValue : Math.Max(4 * dNPY, dNPY + 8);
 
-        /// <summary>The element count of a corpus operand: the product of its dimensions (1 for a 0-d operand).</summary>
-        /// <param name="o">The operand descriptor.</param>
-        /// <returns>The number of logical elements; 0 when any dimension is 0.</returns>
-        private static long ElementCount(FuzzCorpus.Operand o)
-        {
-            long n = 1;
-            foreach (var d in o.Shape)
-                n *= d;
-            return n;
-        }
-
-        /// <summary>
-        ///     True when every output of a single-operand reduction case reduces exactly ONE element: the operand
-        ///     holds one element (a 0-d or one-element array, reduced flat or along an axis), or the reduced axis
-        ///     (<c>params.axis</c>, negative counted from the end) has extent 1. That is the size at which
-        ///     <c>ReduceVar</c> / <c>ReduceStd</c> answer without reading the data — the (V1) known bug.
-        /// </summary>
-        /// <param name="c">The case; its first operand is the reduced array.</param>
-        /// <returns>True for one element per output; false for an empty operand, a flat reduction of several
-        /// elements, an axis longer than 1, or an axis the case does not state as a plain integer.</returns>
-        private static bool OneElementPerOutput(FuzzCorpus.Case c)
-        {
-            long size = ElementCount(c.Operands[0]);
-            if (size == 1)
-                return true;
-            if (size == 0 || c.Params == null || !c.Params.TryGetValue("axis", out var ax)
-                || ax.ValueKind != System.Text.Json.JsonValueKind.Number)
-                return false;
-            var shape = c.Operands[0].Shape;
-            int axis = ax.GetInt32();
-            if (axis < 0)
-                axis += shape.Length;
-            return axis >= 0 && axis < shape.Length && shape[axis] == 1;
-        }
-
         /// <summary>
         ///     Generator.power's documented in-band expm1 bound, <c>ceil(2 / a) + 3</c> ULP, for the SMALLEST exponent
         ///     parameter <c>a</c> the case draws with — the one that amplifies the expm1 difference most.
@@ -1329,6 +1289,19 @@ namespace NumSharp.Tests.Fuzz
         private static bool IsSignedZeroPairSingle(BitDiff.Diff d) =>
             (d.Expected == "00000000" || d.Expected == "00000080")
             && (d.Actual == "00000000" || d.Actual == "00000080");
+
+        /// <summary>
+        ///     Whether case <paramref name="c"/> is <c>ma.var</c> / <c>ma.std</c> (an <c>ma.*</c> id, prefix stripped): the only
+        ///     var/std cases the reduction blankets still excuse. <c>NDMaskedArray.var</c>'s masked path is its own
+        ///     arithmetic, not <c>np.var</c>, and still diverges from NumPy beyond any summation order: a slice NumPy
+        ///     masks (all masked, or <c>count - ddof &lt;= 0</c>) carries NaN instead of the masked 0, and some slices
+        ///     come back finite where NumPy has +inf (242 ma tier cases on 2026-10-05, hidden until then by the unbounded
+        ///     summation blanket; plan <c>docs/plans/api-parameter-parity.md</c> item A6).
+        /// </summary>
+        /// <param name="c">The case (prefix already stripped).</param>
+        /// <returns>True for an <c>ma.var</c> / <c>ma.std</c> case.</returns>
+        private static bool IsMaVarStd(FuzzCorpus.Case c)
+            => (c.Op == "var" || c.Op == "std") && c.Id != null && c.Id.StartsWith("ma.", StringComparison.Ordinal);
 
         /// <summary>
         ///     Whether case <paramref name="c"/> is a FLAT (<c>axis=None</c>) <c>sum</c> / <c>mean</c> with a float result

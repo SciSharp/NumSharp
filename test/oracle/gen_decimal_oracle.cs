@@ -409,16 +409,22 @@ static class Gen
             }
         }
 
-        // ----- VAR / STD (axis=None, ddof=0). var = mean((x-mean)^2) is EXACT decimal arithmetic
-        // (no sqrt). std = sqrt(var) uses an INDEPENDENT Newton decimal sqrt as the oracle. -----
+        // ----- VAR / STD (axis=None, ddof=0). np.var(decimal) is NumPy's _var in exact decimal arithmetic (plan
+        // api-parameter-parity A2, 2026-10-05): the mean and the squared deviations are each summed sequentially in
+        // the memory order of the array NumPy sums — a DENSE operand (C, F or a transpose of one block) in ADDRESS
+        // order, anything else (strided, reversed, broadcast: NumPy's x is then a fresh array in logical order) in
+        // logical order. A 28-digit decimal sum can round differently in another order (f_contiguous_2d did, in the
+        // last digit, against the C-order reference this tier used before). std = sqrt(var) uses an INDEPENDENT
+        // Newton decimal sqrt as the oracle. The one-element layouts are appended at the end of the file. -----
         foreach (var ln in SINGLE_LAYOUTS)
         {
-            if (ln == "scalar_0d" || ln == "one_element_1d") continue; // var of 1 elem = 0 (degenerate)
+            if (ln == "scalar_0d" || ln == "one_element_1d") continue; // appended below, keeping these ids stable
             var o = SingleLayout(ln, 4, false);
             var log = o.Logical();
             if (log.Length == 0) continue;
-            decimal mean = log.Aggregate(0m,(x,y)=>x+y) / log.Length;
-            decimal v = log.Aggregate(0m,(acc,x)=>acc + (x-mean)*(x-mean)) / log.Length;
+            var ord = DenseAddressOrder(o) ?? log;
+            decimal mean = ord.Aggregate(0m,(x,y)=>x+y) / ord.Length;
+            decimal v = ord.Aggregate(0m,(acc,x)=>acc + (x-mean)*(x-mean)) / ord.Length;
             varstd.Add(Case($"var/decimal/{ln}/{n++}", "var", "{}", new[]{o.Describe()}, "decimal", new int[0], HexOf(new[]{v})));
             varstd.Add(Case($"std/decimal/{ln}/{n++}", "std", "{}", new[]{o.Describe()}, "decimal", new int[0], HexOf(new[]{DecSqrt(v)})));
         }
@@ -966,22 +972,16 @@ static class Gen
                     new[] { o.Describe() }, "int64", new[] { outN }, HexOf(Bytes(amax))));
                   reduce.Add(Case($"argmin/decimal/{ln}/ax{axis}/{n++}", "argmin", $"{{\"axis\":{axis},\"keepdims\":false}}",
                     new[] { o.Describe() }, "int64", new[] { outN }, HexOf(Bytes(amin)))); }
-                // var / std (ddof=0). The AXIS decimal var/std kernel (AxisVarStdDecimalHelper) computes
-                // the mean and sum-of-squared-deviations in EXACT decimal but then rounds the variance
-                // through a DOUBLE intermediate (`variance = (double)(sqDiffSum/divisor)`; std =
-                // Math.Sqrt(variance)) before storing — UNLIKE the flat path (VarMomentsDecimal +
-                // DecimalMath.Sqrt), which stays full-precision. So the axis result carries ~15
-                // significant digits, not 28. The oracle replicates that EXACT double intermediate
-                // (portable: Math.Sqrt is IEEE-correctly-rounded, the casts are deterministic) so it
-                // still catches an iteration / mean / divisor bug (which diverges by orders of
-                // magnitude) without over-claiming a precision the axis path does not provide — the
-                // same per-path-fidelity policy the decimal TRANSCEND tier uses for its double bridge.
+                // var / std (ddof=0). Since 2026-10-05 (plan api-parameter-parity A2) the axis form is NumPy's
+                // _var in EXACT decimal like the flat one: per output, the mean and the squared deviations are
+                // summed sequentially along the reduced axis (how np.sum adds decimal per output) and divided by the
+                // count; std is the independent Newton DecSqrt of that variance. (The old axis kernel rounded the
+                // variance through a double and this tier replicated that 15-digit intermediate.)
                 { var vv = new decimal[outN]; var sd = new decimal[outN];
                   for (int s = 0; s < outN; s++)
                   { var sl = slices[s]; decimal mean = sl.Aggregate(0m, (x, y) => x + y) / sl.Length;
                     decimal sqDiff = sl.Aggregate(0m, (acc, x) => acc + (x - mean) * (x - mean));
-                    double varD = (double)(sqDiff / (decimal)sl.Length);   // the kernel's double intermediate
-                    vv[s] = (decimal)varD; sd[s] = (decimal)Math.Sqrt(varD); }
+                    vv[s] = sqDiff / sl.Length; sd[s] = DecSqrt(vv[s]); }
                   varstd.Add(Case($"var/decimal/{ln}/ax{axis}/{n++}", "var", $"{{\"axis\":{axis},\"keepdims\":false}}",
                     new[] { o.Describe() }, "decimal", new[] { outN }, HexOf(vv)));
                   varstd.Add(Case($"std/decimal/{ln}/ax{axis}/{n++}", "std", $"{{\"axis\":{axis},\"keepdims\":false}}",
@@ -1012,6 +1012,47 @@ static class Gen
                     { decimal s = 0m, p = 1m; for (int j = 0; j < cols; j++) { s += log[i * cols + j]; cs[i * cols + j] = s; p *= log[i * cols + j]; cp[i * cols + j] = p; } }
                   scan.Add(Case($"cumsum/decimal/{ln}/ax{axis}/{n++}", "cumsum", $"{{\"axis\":{axis}}}", new[] { o.Describe() }, "decimal", new[] { rows, cols }, HexOf(cs)));
                   scan.Add(Case($"cumprod/decimal/{ln}/ax{axis}/{n++}", "cumprod", $"{{\"axis\":{axis}}}", new[] { o.Describe() }, "decimal", new[] { rows, cols }, HexOf(cp))); }
+            }
+        }
+
+        // ----- VAR / STD at a degenerate size and with ddof (2026-10-05, plan api-parameter-parity A2), appended
+        // LAST so every earlier case keeps its id. One element: (x - x)^2 / 1 = 0. ddof divides by n - ddof. -----
+        foreach (var ln in new[] { "scalar_0d", "one_element_1d" })
+        {
+            var o = SingleLayout(ln, 4, false);
+            varstd.Add(Case($"var/decimal/{ln}/{n++}", "var", "{}", new[]{o.Describe()}, "decimal", new int[0], HexOf(new[]{0m})));
+            varstd.Add(Case($"std/decimal/{ln}/{n++}", "std", "{}", new[]{o.Describe()}, "decimal", new int[0], HexOf(new[]{0m})));
+        }
+        foreach (int ddof in new[] { 1, 2 })
+        {
+            var o = SingleLayout("c_contiguous_1d", 7, false);
+            var log = o.Logical();
+            decimal mean = log.Aggregate(0m, (x, y) => x + y) / log.Length;
+            decimal v = log.Aggregate(0m, (acc, x) => acc + (x - mean) * (x - mean)) / (log.Length - ddof);
+            varstd.Add(Case($"var/decimal/c_contiguous_1d/ddof{ddof}/{n++}", "var", $"{{\"ddof\":{ddof}}}", new[]{o.Describe()},
+                "decimal", new int[0], HexOf(new[]{v})));
+            varstd.Add(Case($"std/decimal/c_contiguous_1d/ddof{ddof}/{n++}", "std", $"{{\"ddof\":{ddof}}}", new[]{o.Describe()},
+                "decimal", new int[0], HexOf(new[]{DecSqrt(v)})));
+            var o2 = SingleLayout("c_contiguous_2d", 7, false);
+            var log2 = o2.Logical();
+            foreach (int axis in new[] { 0, 1 })
+            {
+                var slices = Slices2D(log2, o2.Shape[0], o2.Shape[1], axis);
+                var vv = new decimal[slices.Length];
+                var sd = new decimal[slices.Length];
+                for (int t = 0; t < slices.Length; t++)
+                {
+                    var sl = slices[t];
+                    decimal m = sl.Aggregate(0m, (x, y) => x + y) / sl.Length;
+                    vv[t] = sl.Aggregate(0m, (acc, x) => acc + (x - m) * (x - m)) / (sl.Length - ddof);
+                    sd[t] = DecSqrt(vv[t]);
+                }
+                varstd.Add(Case($"var/decimal/c_contiguous_2d/ax{axis}/ddof{ddof}/{n++}", "var",
+                    $"{{\"axis\":{axis},\"keepdims\":false,\"ddof\":{ddof}}}", new[]{o2.Describe()}, "decimal",
+                    new[]{slices.Length}, HexOf(vv)));
+                varstd.Add(Case($"std/decimal/c_contiguous_2d/ax{axis}/ddof{ddof}/{n++}", "std",
+                    $"{{\"axis\":{axis},\"keepdims\":false,\"ddof\":{ddof}}}", new[]{o2.Describe()}, "decimal",
+                    new[]{slices.Length}, HexOf(sd)));
             }
         }
 
@@ -1066,6 +1107,31 @@ static class Gen
         bool neg = e < 0; int n = Math.Abs(e);
         decimal r = 1m; for (int i = 0; i < n; i++) r *= a;
         return neg ? 1m / r : r;
+    }
+
+    // The elements of a DENSE operand — every non-unit axis with a positive stride, the strides tiling one block (C, F
+    // or a transpose of one) — in ADDRESS order (the memory order NumPy's K-order reduction walks); null for any other
+    // operand (strided, reversed, broadcast), whose reductions run in logical order.
+    static decimal[] DenseAddressOrder(Operand o)
+    {
+        var axes = Enumerable.Range(0, o.Shape.Length).Where(d => o.Shape[d] > 1).ToArray();
+        if (axes.Any(d => o.Strides[d] <= 0)) return null;
+        long expect = 1;
+        foreach (int d in axes.OrderBy(d => o.Strides[d]))
+        {
+            if (o.Strides[d] != expect) return null;
+            expect *= o.Shape[d];
+        }
+        var log = o.Logical();
+        int n = log.Length;
+        var addr = new long[n];
+        for (int k = 0; k < n; k++)
+        {
+            long rem = k, off = o.Offset;
+            for (int d = o.Shape.Length - 1; d >= 0; d--) { off += (rem % o.Shape[d]) * o.Strides[d]; rem /= o.Shape[d]; }
+            addr[k] = off;
+        }
+        return Enumerable.Range(0, n).OrderBy(k => addr[k]).Select(k => log[k]).ToArray();
     }
 
     // Independent decimal sqrt (Newton-Raphson) — the oracle for std (NOT NumSharp's DecimalMath.Sqrt).

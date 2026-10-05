@@ -286,6 +286,7 @@ python test/oracle/gen_oracle.py specials         # IEEE special-value parity (n
 python test/oracle/gen_oracle.py nan_order        # float add/multiply NaN-operand order (win-amd64), NaN payloads raw
 python test/oracle/gen_oracle.py reduce_start     # how reductions/scans/products START, via the sign of a zero result (carve: _rs_carved)
 python test/oracle/gen_oracle.py sum_identity     # np.sum's identity start, dtype= loops, and the flat add.reduce schedule (np.setbufsize 16 / 32)
+python test/oracle/gen_oracle.py varstd           # np.var / np.std as NumPy's _var / _std: layouts, ddof, dtype= loops, specials, np.setbufsize fills
 python test/oracle/gen_oracle.py clip_ufunc       # np.clip as a ufunc: broadcast bounds, out=, where=, overlap, the float loop
 python test/oracle/gen_oracle.py reduce_kwargs    # reductions through their NumPy-shaped overload: out=, where=, axis forms, prologue errors
 python test/oracle/gen_oracle.py precision        # truthful-vs-precise (adversarial accumulation; needs mpmath)
@@ -548,21 +549,21 @@ widening that set is C#-oracle work tracked in its own memory topic.
 | complex corrcoef: `cov`'s managed complex GEMM vs zgemm (division itself is now bit-exact) | corrcoef × complex input/result × Value, ≤2 ULP | 1 |
 | complex add/subtract within 2 ULP (FMA contraction) | add/subtract × complex × Value, ≤2 ULP | 0 |
 | complex power, NON-integer/complex exponent ~ULP / gross inf-NaN edge (Complex.Pow vs npy_cpow's host cpow) (F5, ledger L6) — INTEGER exponents are now BIT-EXACT (ComplexPowNumPy ports npy_cpow's exact repeated-multiplication branch), so this is scoped OFF integer exponents | power × complex × non-integer exponent × Value, ≤512 element-magnitude ULP or non-finite | 30 |
-| reduction summation/two-pass precision (algorithm order) | sum/mean/std/var/prod × float-family result (Half/Single/Double/Complex) × Value | 401 |
+| reduction summation/two-pass precision (algorithm order) — np.var / np.std / ndarray.var / ndarray.std are NumPy's `_var` / `_std` since 2026-10-05 and no longer reach it (the `varstd` tier); `ma.var` / `ma.std` still do (`IsMaVarStd`, plan `docs/plans/api-parameter-parity.md` A6) | sum/mean/prod (+ ma.var/ma.std) × float-family result (Half/Single/Double/Complex) × Value | 362 (2026-10-05) |
 | complex reduction/scan NaN ordering/propagation differs | reduce+cumsum/cumprod × complex × Value, diffs must contain a NaN token | 35 |
-| decimal std last digit (independent 28-digit sqrts) (ledger L7) | std × Decimal × Value, ≤1 unit in the 28th significant digit | 4 |
+| decimal std last digit (independent 28-digit sqrts) (ledger L7) — 13 since 2026-10-05: the AXIS std carries 28 digits now (it rounded the variance through a double before, and the oracle replicated that), so it meets the same last-digit difference as the flat one | std × Decimal × Value, ≤1 unit in the 28th significant digit | 13 (2026-10-05) |
 | **S1** expm1/log1p small-\|x\| precision loss / -0 / subnormal flush (`Exp(x)-1`, `Log(1+x)`; NumPy calls the CRT, non-portable) | expm1/log1p × Value, every diff ≤2 ULP **or** ≤~ulp(1) abs | 20 |
 | **S2** fmax/fmin ±0-tie sign on a reversed float32 view (NumPy's OWN fmax ±0 sign is SIMD-path-dependent — array returns operand 2, scalar returns +0) | fmax/fmin × Single × Value, both tokens a signed zero | 2 |
 | **S3** complex matmul/dot/outer infinite-operand product: C99-unspecified complex-inf (zgemm `(nan,nan)` inf-recovery vs managed `(inf,nan)`) | matmul/dot/outer × complex × Value, every diff non-finite | 9 |
-| **P1** prefer-precise: diverges from NumPy TOWARD the correctly-rounded truth — parity debt (port NumPy's algorithm), never a win | truth-bearing × Value, all diffs not-less-truthful, some strictly closer | 15 |
-| **P2** prefer-precise: diverges within truth-equivalence slack (neither side less accurate) | truth-bearing × Value, all diffs ≤ max(4×dNPY, dNPY+8) ULP-vs-truth | 19 |
+| **P1** prefer-precise: diverges from NumPy TOWARD the correctly-rounded truth — parity debt (port NumPy's algorithm), never a win | truth-bearing × Value, all diffs not-less-truthful, some strictly closer | 9 (2026-10-05) |
+| **P2** prefer-precise: diverges within truth-equivalence slack (neither side less accurate) | truth-bearing × Value, all diffs ≤ max(4×dNPY, dNPY+8) ULP-vs-truth | 1 (2026-10-05) |
 | **R1** rnd transform ~ULP: chisquare/wald/noncentral_f/dirichlet compose their draws with a slightly different arithmetic ordering than NumPy's C (stream bit-identical — a stream slip is gross and still fails) | rnd × those 4 dists × Value, ≤8 ULP (32 for wald) | 12 |
 
 **Known bugs (tracked for fix — remove the branch when fixed), truth-adjudicated:**
 
 | Excuse class | Scope | Hits |
 |---|---|---|
-| **P3** precision-loss (known): f32 var/std accumulation (55/26 ULP vs truth where NumPy sits at 3/2) + negative-stride reduction accumulation (11–32 ULP where NumPy is EXACT on the same reversed view) + f32 deep product contraction (inner/tensordot K=2049, 1–2 ULP past the prefer-precise slack vs BLAS sgemm) | truth-bearing × Value × (negstride sum/mean/var/std, or Single var/std, or Single product family), every diff ≤256 ULP-vs-truth | 9 |
+| **P3** precision-loss (known): negative-stride reduction accumulation (sum/mean: 11–32 ULP where NumPy is EXACT on the same reversed view — no hit since the exact flat add.reduce of 2026-10-04) + f32 deep product contraction (inner/tensordot K=2049, 1–2 ULP past the prefer-precise slack vs BLAS sgemm). The f32 var/std accumulation clause (55/26 ULP vs truth where NumPy sits at 3/2) and var/std on the reversed view are gone: np.var / np.std are NumPy's `_var` since 2026-10-05, bit-exact on the precision tier | truth-bearing × Value × (negstride sum/mean, or Single product family), every diff ≤256 ULP-vs-truth | 2 (2026-10-05) |
 
 **Narrowed: the NumPy-ported float kernels are no longer excused.** `NDFloatMath` ports the kernels NumPy
 2.4.2 actually runs — `simd_exp_FLOAT`, `simd_log_FLOAT`, `simd_sincos_f32`, `simd_tanh_f32`/`simd_tanh_f64` — and
@@ -623,9 +624,8 @@ rather than portable IEEE parity — the same status as the "Host-dependent valu
 | modf(float16/int): no Half kernel, no int→float64 promotion | modf × dtype ∉ {f32,f64} × Threw | 32 | |
 | unary hyperbolic/inverse-trig/angle: no Half kernel | sinh…arctan × {bool,i8,u8,f16} (+deg2rad/rad2deg×c128) × Threw | 0 | |
 | unary preserve-dtype pending: square/floor/ceil/trunc widen int→float64 | those 4 ops × Dtype | 78 | F3b |
-| **V1** var/std at a degenerate size skip NumPy's arithmetic: one element per output (0-d / one-element input, or a reduced axis of extent 1) answers `0` without reading the element (NumPy: NaN for a NaN/±inf element or `ddof >= 1`), and a float16/float32 input of one element per output or an empty one comes back float64. Classified BEFORE the generic reduction branches, which used to take these cases as "summation precision", the min/max axis-NaN bug and the generic dtype bug. Pinned by `OpenBugsReductionTests.VarStd_*` (NumSharp.Tests), together with the flat `ddof >= n` cases the corpus does not reach (NaN or a negative variance where NumPy has `+inf`) | var/std (np./ndarray./ma.) × one element per output × Value (every diff NumPy-NaN vs NumSharp +0.0) · same × Dtype float16/float32, or an empty operand | 48 + 106 (2026-10-04) | |
-| reduction result dtype differs (NEP50 accumulator / complex→real) — sum/prod/cumprod NOW bit-exact on EVERY size incl. flat 0-d/size-1 (fixed 2026-09-13) & EXCLUDED from the excuse (regression-guarded). Residual (traced 2026-10-04): decimal `mean` (11), `ma.mean` of float32 is float64 (86), 2 `ma.var` float32 slices; the var/std float16/float32 cases moved to **V1** and no complex→real case remains; the empty float16/float32/complex128 `np.mean` (18) keeps its dtype since the identity-seeded add reduction | reductions × Dtype (excl. sum/prod/cumprod) | 99 (2026-10-04) | #10 |
-| axis-reduction NaN propagation: axis SIMD min/max skips NaN (flat fixed) — DEAD since 2026-10-04: every hit it still had was a var/std one-element case (now **V1**), and no min/max case reaches it; removal candidate | min/max × axis≠null × all-NaN diffs | 0 (2026-10-04) | #10 |
+| reduction result dtype differs (NEP50 accumulator / complex→real) — sum/prod/cumprod NOW bit-exact on EVERY size incl. flat 0-d/size-1 (fixed 2026-09-13) & EXCLUDED from the excuse (regression-guarded). Residual (traced 2026-10-04, recounted 2026-10-05): decimal `mean` (11), `ma.mean` of float32 is float64 (86), 2 `ma.var` float32 slices; np.var / np.std / ndarray.var / ndarray.std are exact on dtype since 2026-10-05 and EXCLUDED (only `ma.var` / `ma.std` reach the branch, `IsMaVarStd`); no complex→real case remains; the empty float16/float32/complex128 `np.mean` (18) keeps its dtype since the identity-seeded add reduction | reductions × Dtype (excl. sum/prod/cumprod, np./ndarray. var/std) | 99 (2026-10-05) | #10 |
+| axis-reduction NaN propagation: axis SIMD min/max skips NaN (flat fixed) — DEAD since 2026-10-04: every hit it still had was a var/std one-element case (fixed 2026-10-05, np.var / np.std are NumPy's `_var`; the branch skips them now, `ma.var` / `ma.std` excepted), and no min/max case reaches it; removal candidate | min/max × axis≠null × all-NaN diffs | 0 (2026-10-05) | #10 |
 | bool min/max along axis diverges | min/max × Boolean × Value | 0 | #10 |
 | complex 1-D axis reduction throws (NDCoordinatesAxisIncrementor) — FIXED 2026-10-04 (the complex axis nansum is NumPy's composition, np.sum of the NaN-replaced array); both registry branches removed, now regression-guarded | (nan)reductions × complex 1-D × Threw | 0 | #10 |
 | nan-reduction family: shape ([1] vs scalar, keepdims dropped) / value (masking·count·order) / dtype / nanmedian propagates NaN / empty throws | nan* ops, per-kind branches | 885/526/184/176/4 | #10 |
@@ -653,7 +653,8 @@ rather than portable IEEE parity — the same status as the "Host-dependent valu
 | `gen_unique` contiguous+finite | unique on raw-offset views (#11) + inf/NaN complex ordering | documented at carve site (no pin — unreachable via API) |
 | `ALIAS_DTYPES` excludes complex128 | a·a self-multiply catastrophic cancellation (NumSharp matches NumPy *scalar*; NumPy's array ufunc disagrees with itself) | documented non-bug |
 | `gen_nanquantile` finite+NaN (no inf) | percentile interpolation across ±inf is ill-defined (inf−inf) | documented out-of-scope |
-| `_rs_carved` (`gen_reduce_start`) | 862 all-`-0.0` cells (1,506 at delivery, before the identity-seeded add reduction fixed the sum / mean / average / nansum / nanmean / trapezoid / np.evaluate-sum cells), one rule per root cause: complex prod/nanprod of one element (np.evaluate's too); every median/nanmedian cell; flat cumsum/nancumsum; complex and N-D size-1 cumprod/nancumprod; dot/inner with a size-1 operand; einsum's zero-filled accumulator (`i,i->i`, `i,j->ij`); std/var one-element dtype; nanstd/nanvar 1-D axis shape and one-element keepdims | `OpenBugsReductionTests.*` (each rule names its test; the one-element std/var dtype rule names group 5's `VarStd_OneElement_KeepsFloat16Float32_*`) |
+| `_rs_carved` (`gen_reduce_start`) | 838 all-`-0.0` cells (1,506 at delivery, 862 after the identity-seeded add reduction fixed the sum / mean / average / nansum / nanmean / trapezoid / np.evaluate-sum cells; the 24 one-element std/var dtype cells joined the gate on 2026-10-05, when np.var / np.std became NumPy's `_var`), one rule per root cause: complex prod/nanprod of one element (np.evaluate's too); every median/nanmedian cell; flat cumsum/nancumsum; complex and N-D size-1 cumprod/nancumprod; dot/inner with a size-1 operand; einsum's zero-filled accumulator (`i,i->i`, `i,j->ij`); nanstd/nanvar 1-D axis shape and one-element keepdims | `OpenBugsReductionTests.*` (each rule names its test) |
+| `gen_varstd` section B, "pinned row longer than the buffer" | 12 cells: var/std with `dtype=` (a cast loop) along the axis that is innermost in memory, `c_contiguous_2d` (8, 25) along axis 1 under `np.setbufsize(16)`. NumPy splits each 25-element row across two buffer fills; np.sum's cast-loop axis route sums it in one pairwise call (9 of the 12 differ by 1 ULP). An np.sum residual both sums of `_var` inherit (plan `docs/plans/api-parameter-parity.md` X6) | `OpenBugsReductionTests.Sum_CastLoopAxis_RowLongerThanTheBuffer_SplitsAcrossFills` |
 | `gen_random_parity` carve list | `multivariate_normal` only: byte-identical only through a LAPACK backend's `gesdd` (the managed Jacobi SVD flips a singular vector's sign). The other seven samplers (gamma shape<1, f, pareto, standard_cauchy, binomial, negative_binomial, multinomial) were uncarved 2026-09-25 — legacy-distributions.c ports — and every sampler is also covered by the `random_api` tiers | `OpenBugsRandom.RandomParity_MultivariateNormal_Seed42_ShouldMatchNumPy` (the seven former pins are ordinary tests) |
 
 **FIXED on this branch or before it** (classifier branch/carve removed — the matrix now verifies
@@ -798,7 +799,7 @@ bits as `[OpenBugs]` in `NumSharp.Tests/OpenBugs.NaNOperandOrder.cs`, one test p
 
 ### Reduction start (`reduce_start` tier) — 2026-10-04
 
-`reduce_start.jsonl` (`gen_oracle.py reduce_start`, 8,586 cases, floor 8,300) gates how a reduction STARTS.
+`reduce_start.jsonl` (`gen_oracle.py reduce_start`, 8,610 cases, floor 8,300) gates how a reduction STARTS.
 That is visible only when the result is zero: the sign of the zero tells whether the loop started from the
 identity or copied the first element. NumPy 2.4.2's rules:
 
@@ -827,7 +828,8 @@ for bit through the real comparators (scratch harness, not committed), 7,985 cel
 (1,263 bits, 164 shape, 24 dtype, 12 threw). `_rs_carved` takes the differing cells out, one rule per root
 cause, and each rule names its `[OpenBugs]` pin in `NumSharp.Tests/OpenBugs.Reductions.cs` (groups 1-4, 6
 and 7: 23 tests, 136 cases with NumPy's raw bits, every case failing today on net10.0 and net8.0; the
-one-element float32 / float16 `std` / `var` dtype rule names group 5's test). The carve holds 1,506 cells:
+one-element float32 / float16 `std` / `var` dtype rule named group 5's test, which is fixed since 2026-10-05). The carve
+held 1,506 cells at delivery:
 all 1,463 that differ, plus 43 that match by chance under a carved rule (a float16 `nansum` / `nanprod` view
 that reads a wrong `-0.0`, the `nansum` length-1-axis route that starts from 0, one-interval `trapezoid`
 dtypes). **Bit-exact, 0 excused.** `FuzzCorpusTests.ReductionStart` replays it; the `dot` / `matmul` /
@@ -846,6 +848,11 @@ float64 1-D axis shape and the one-element keepdims drop, einsum only the two ba
 from 7,942 to 8,586 cases. 13 `[OpenBugs]` tests (and the passing cases of two partial ones) moved to
 `NumSharp.Tests/Math/np.sum.Identity.Test.cs`.
 
+**np.var / np.std (2026-10-05).** np.var / np.std became NumPy's `_var` / `_std` statement for statement (plan
+`docs/plans/api-parameter-parity.md` A2; the `varstd` tier below). The one-element std / var dtype rule is gone: its 24
+cells match NumPy and joined the tier (8,586 → 8,610), and the carve holds 838 cells. Group 5's tests moved to
+`NumSharp.Tests/Math/np.var.NumPyPort.Test.cs`.
+
 **What the probe found** (pinned until fixed; "fixed" marks what the identity add repaired):
 
 - (fixed) size-1 shortcuts and length-1 axes that COPY the element: `sum`, `mean`, `average`, `nansum`,
@@ -857,7 +864,7 @@ from 7,942 to 8,586 cases. 13 `[OpenBugs]` tests (and the passing cases of two p
 - `dot` / `inner` with a size-1 operand take the opposite of NumPy's scalar branch;
 - `einsum` composes products and `np.sum` where NumPy's default path starts every output from `+0.0` (the
   `np.sum` part is fixed; `i,i->i` and `i,j->ij`, bare products, remain);
-- wrong dtype or shape: `std` / `var` of one float32 / float16 element are float64; `nanstd` / `nanvar` of a
+- wrong dtype or shape: (fixed 2026-10-05) `std` / `var` of one float32 / float16 element were float64; `nanstd` / `nanvar` of a
   float32 / float64 1-D array along axis 0 are `(1,)`, and drop `keepdims` for one element; the flat `cumprod`
   of an N-D size-1 array is 0-d; (fixed) `nanmean` of a 1-D array along axis 0 was `(1,)`, one-element
   `nansum` / `nanprod` were `(1,)`, complex 1-D `nansum` along axis 0 threw;
@@ -929,6 +936,64 @@ summation-order or nan-family blankets (`IsIdentitySumSignedZeroFlip`), because 
 - complex `mean` divided each part by n, where NumPy uses Smith's division;
 - an empty `mean` was float64 NaN for float16 / float32 / complex128.
 
+### np.var / np.std as NumPy's `_var` / `_std` (`varstd` tier) — 2026-10-05
+
+`varstd.jsonl` (`gen_oracle.py varstd`, 16,108 cases, floor 15,800) gates `np.var` / `np.std` (and `ndarray.var` /
+`ndarray.std`, the same engine) as NumPy 2.4.2's `_var` / `_std` (`numpy/_core/_methods.py`). `_var` has no special path
+for any size or keyword, so its bits depend on the reduction schedule, the layouts and every keyword at once:
+
+1. `rcount` is the reduced element count (`_count_reduce_items` normalizes the axis first, so an axis on a 0-d array is
+   an AxisError).
+2. The loop is `dtype=`, else float64 for an integer or bool input (NumSharp's Char counts as an integer), else the
+   input's dtype.
+3. `arrmean = umr_sum(arr, axis, dtype, keepdims=True)`, then `true_divide(arrmean, rcount, out=arrmean,
+   casting='unsafe')`: a float16 / float32 mean is divided in float64 (the divisor is an `intp`), a complex one by Smith's
+   division, and an integer loop truncates the quotient.
+4. `x = arr - arrmean`, laid out by NpyIter from `arr` and the mean's strides. The next sum's order follows that layout.
+5. `x * x` for a real or integer input (a complex `x * x` when the loop is complex); `real² + imag²` of a complex `x`
+   from a complex or bool input; else `(x * conj(x)).real`.
+6. `ret = umr_sum(x², axis, dtype, keepdims) / max(rcount - ddof, 0)`: NaN or `+inf` at `ddof >= rcount`, never a
+   negative variance.
+7. `_std`: `sqrt(ret, out=ret)` for an array, so an integer loop raises `Cannot cast ufunc 'sqrt' output from
+   dtype('float64') to dtype('int32') with casting rule 'same_kind'`; `ret.dtype.type(sqrt(ret))` for a scalar, so an
+   integer loop truncates.
+
+**Sections** (the id carries the letter):
+
+- **L** (10,080): every catalog layout × the 13 NumPy dtypes × var / std × axis {None, each axis, -1, out of range} ×
+  keepdims × ddof {0, 1}. 1,680 cases are NumPy's AxisError. Char rides L, D and T through the uint16 proxy (1,168 of
+  the sections' cases).
+- **D** (896): `ddof` at and past the reduced count (n-1, n, n+1, n+3), flat and per axis.
+- **T** (4,480): `dtype=` for every input against ten loops (bool, int8, uint8, int32, int64, uint64, float16, float32,
+  float64, complex128), flat and per axis. 530 raise: std into an integer loop for an array result, and `bool - bool`
+  in a bool loop.
+- **S** (320): NaN, ±inf, -0.0 and complex NaN / inf parts in one element and over a length-1 axis.
+- **B** (156): `np.setbufsize(16 / 32)` over cast loops, flat and per axis. The case records the size in
+  `params.bufsize`, and the replay sets it and restores it.
+- **M** (176): order-sensitive values (a mean offset plus noise, 129 to 1,031 elements) over C, reversed, stepped, F and
+  transposed layouts, where the pairwise schedule shows in the last bits.
+
+**Bit-exact, 0 excused.** `MisalignedRegistry` returns null for the tier's valueclass (`varstd`), and `var` / `std` are
+in `ByteExactArithmeticUnaryOps`. No summation-order, unary-ULP, NaN-propagation or dtype branch excuses an `np.var` /
+`np.std` case in ANY tier; only `ma.var` / `ma.std` keep the reduction blankets (`IsMaVarStd`: the masked path is its
+own arithmetic, plan item A6). `FuzzCorpusTests.VarStd` replays the tier. `FuzzCorpusTests.VarStdChunked` replays it
+again with `DefaultEngine.VarStdChunkBytesTestOverride = 64`, which sends every reduction through the chunked deviation
+sums that the default threshold (8 MiB of squared deviations) takes only for large inputs, and asserts that the chunked
+routes ran more than 1,000 times.
+
+**The carve.** Section B skips a pinned row (the reduced axis innermost in memory) that is longer than the buffer: 12
+cells (Table 2). NumPy splits such a row across buffer fills, while np.sum's cast-loop axis route sums it in one pairwise
+call. That is an np.sum residual, pinned by `OpenBugsReductionTests.Sum_CastLoopAxis_RowLongerThanTheBuffer_SplitsAcrossFills`.
+
+**What it replaced** (fixed 2026-10-05, plan `docs/plans/api-parameter-parity.md` A2). The old kernels computed a
+two-pass variance in their own order. Their values were close but their bits were not NumPy's: float32 var / std sat
+55 / 26 ULP from truth on the `precision` tier, where NumPy sits at 3 / 2, and the reversed-view path lost 11–32 ULP
+where NumPy is exact. The registry's summation-precision blanket (P3 on the `precision` tier) excused those cases. One
+element per output answered `0` without reading the element
+(NumPy: NaN for a NaN / ±inf element or `ddof >= 1`), and `ddof >= n` gave NaN or a negative variance where NumPy has
+`+inf`. One-element and empty float16 / float32 results came back float64. The decimal axis form rounded the variance
+through a double.
+
 ### float16 selections (`half_minmax` tier + the selection contract) — 2026-10-03
 
 `half_minmax.jsonl` (5,900 cases, 1,180 per op, `gen_oracle.py half_minmax`) runs `max` / `min` / `nanmax` / `nanmin`
@@ -994,11 +1059,13 @@ On a divergence the registry adjudicates by ULP distance to truth (branches P1�
   (`truth-ulp NS=… NPY=…`).
 
 The unbounded reduction blanket is gated on `truth == null` so a truth-bearing loss cannot hide in
-it; truthless tiers keep it unchanged. **Findings on arrival** (now P3, bounded ≤256): f32 var/std
+it; truthless tiers keep it unchanged. **Findings on arrival** (then P3, bounded ≤256): f32 var/std
 accumulation loses 55/26 ULP where NumPy's two-pass pairwise sits at 3/2, and the negative-stride
-reduce path loses 11–32 ULP where NumPy is EXACT on the same reversed view. 59/100 cases are
-bit-exact; scope pins in `MisalignedRegistryTightnessTests` (`P_*`) hold the branch tight from both
-sides.
+reduce path loses 11–32 ULP where NumPy is EXACT on the same reversed view. 59/100 cases were
+bit-exact then; 90/100 are on 2026-10-05: the exact flat add.reduce (2026-10-04) and np.var / np.std as
+NumPy's `_var` (2026-10-05) made every sum / mean / var / std / cumsum case bit-exact, and only `prod` near 1
+(P1 / P2) and the expm1 / log1p band (S1) still differ. Scope pins in `MisalignedRegistryTightnessTests` (`P_*`)
+hold the branch tight from both sides.
 
 **The AXIS dimension** (28 cases): the flat cases never touch the axis kernels
 (`Reduction.Axis.*`), which are different code AND different NumPy behavior — NumPy's axis-0
@@ -1702,8 +1769,14 @@ member set changes, `python test/oracle/random_api_oracle_map.py` rebuilds the `
 `std` is oracled by an independent Newton decimal sqrt, NOT NumSharp's `DecimalMath`) across
 unary / binary / reduce (flat + **axis×keepdims** + **empty**) / scan / power (int exponents
 **−2…3**) / var / std / matmul / astype (decimal↔int·float·**bool·int16·uint64**) / stat (clip +
-median/ptp/percentile/quantile) / where / sort / manip × 13 single + 9 pair layouts — **703 cases
-across 12 tiers, all green** except the 15 registry-excused cells (11 argmax/argmin/count_nonzero
-result-dtype + 4 std-last-digit, both in Table 1). The one decimal-adjacent finding of the
+median/ptp/percentile/quantile) / where / sort / manip × 13 single + 9 pair layouts — **1,009 cases
+across 17 tiers (2026-10-05), all green** except the 24 registry-excused cells (11 result-dtype in
+`decimal_reduce` + 13 std-last-digit in `decimal_varstd`, both in Table 1). Since 2026-10-05 (plan
+`docs/plans/api-parameter-parity.md` A2) var / std reference NumPy's `_var` in exact decimal: the mean and the
+squared deviations are each summed sequentially in the memory order NumPy's sum walks (a dense operand in ADDRESS
+order, anything else in logical order; per output along an axis), then divided by `n - ddof`. A 28-digit decimal
+sum can round differently in another order (`f_contiguous_2d` did, in the last digit). The axis cases used to
+replicate the old kernel's double intermediate (15 digits); the tier also gained one-element and `ddof` 1 / 2
+cases (34 → 50). The one decimal-adjacent finding of the
 remediation: `DecimalMath.Pow` matches the exact reciprocal-of-product oracle for negative integer
 exponents by value — zero divergence.

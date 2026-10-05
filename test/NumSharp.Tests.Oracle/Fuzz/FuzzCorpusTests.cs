@@ -111,6 +111,37 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void SumIdentity() => RunCorpus("sum_identity.jsonl");
 
+        // np.var / np.std as NumPy's _var / _std (gen_varstd, plan api-parameter-parity A2): every catalog layout x
+        // dtype x axis x keepdims x ddof {0, 1}, ddof at and past the reduced count, dtype= for every (input, loop)
+        // pair, special values in one element, np.setbufsize fills of a cast loop and order-sensitive sizes. Held to
+        // ZERO excuses (the "varstd" valueclass): before the port, the degenerate sizes, every dtype= and every ddof
+        // >= n gave other values or dtypes, hidden from the older tiers, which never passed ddof= or dtype=.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void VarStd() => RunCorpus("varstd.jsonl");
+
+        // The same tier with the chunked deviation sums FORCED (DefaultEngine.VarStdChunkBytesTestOverride = 64
+        // bytes): every axis case and every flat cast case takes ChunkedDeviationSum / RowBlockDeviationSum /
+        // FlatFillDeviationSum instead of the one-buffer route, which only arrays of 8 MiB and more reach otherwise.
+        // The answers must still be NumPy's to the bit, and the counter proves the routes ran.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void VarStdChunked()
+        {
+            int before = NumSharp.Backends.DefaultEngine.VarStdChunkedRuns;
+            NumSharp.Backends.DefaultEngine.VarStdChunkBytesTestOverride = 64;
+            try
+            {
+                RunCorpus("varstd.jsonl");
+            }
+            finally
+            {
+                NumSharp.Backends.DefaultEngine.VarStdChunkBytesTestOverride = 0;
+            }
+            Assert.IsTrue(NumSharp.Backends.DefaultEngine.VarStdChunkedRuns - before > 1000,
+                "the forced chunked routes ran only " + (NumSharp.Backends.DefaultEngine.VarStdChunkedRuns - before) + " times");
+        }
+
         // np.evaluate / NDExpr: fused trees over the pairwise + single layouts, every dtype, weak /
         // strong literals, comparisons / where / min-max / logical nodes, the unary catalog, root
         // reductions (flat + axis + keepdims) and out= (returned view + whole out base). NumPy has
@@ -949,6 +980,7 @@ namespace NumSharp.Tests.Fuzz
             ["numpy_f32_kernels.jsonl"] = 140,
             ["numpy_f64_kernels.jsonl"] = 24,
             ["reduce_start.jsonl"] = 8300,   // reduction start rules through the sign of a zero result (2026-10-04): 7,942 at delivery (the uncarved 9,448-cell probe minus 1,506 carved cells); 8,586 once the identity-seeded add reduction fixed the sum / mean / nan-family / trapezoid / evaluate rules (862 carved cells left, pinned in NumSharp.Tests/OpenBugs.Reductions.cs)
+            ["varstd.jsonl"] = 15800,  // np.var / np.std as NumPy's _var / _std (2026-10-05, plan api-parameter-parity A2): 16,120 at delivery, sections L / D / T / S / B / M + the char proxy weave
             ["sum_identity.jsonl"] = 23300,  // np.sum's identity add + dtype= loops + the reductions built on it (2026-10-04): 23,121 at delivery, incl. section "s" (704 flat float sum / mean schedule cases: layouts x np.setbufsize 16 / 32); +832 section "o" (one-output axis schedules, plan api-parameter-parity X5) - 23,953
             ["nan_order.jsonl"] = 2750,   // float add / multiply NaN-operand order (win-amd64), NaN payloads raw: 2,678 at delivery, + 118 the 2026-10-03 gap probe validated as matching (section G: float16 scans, complex128 subtract, buffered N-D / cast / where= / evaluate / dtype= paths) — 2,796; the paths that differ are [OpenBugs] in NumSharp.Tests/OpenBugs.NaNOperandOrder.cs
             ["out_where.jsonl"] = 6300,   // §B2 out_scan/out_round/out_clip/out_nanarg + the f16/uint8 lanes (dtype-spread gate)

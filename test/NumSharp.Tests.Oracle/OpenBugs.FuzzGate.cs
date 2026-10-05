@@ -277,10 +277,7 @@ namespace NumSharp.Tests
                 .Should().BeNull("the size-<=1 fast path now widens (7fd70a3b), so a dtype miss there is a real regression");
         }
 
-        // ---- V1: var/std at a degenerate size is its own known-bug branch, pinned by OpenBugsReductionTests ----
-
-        /// <summary>The label fragment every (V1) excuse carries: the [OpenBugs] tests that reproduce the bug.</summary>
-        private const string VarStdPins = "OpenBugsReductionTests.VarStd_";
+        // ---- V1 (removed 2026-10-05): np.var / np.std are NumPy's _var / _std, so nothing excuses them ----
 
         /// <summary>
         /// <paramref name="c"/> with <c>params.axis</c> set, the way a corpus axis-reduction case carries it.
@@ -297,78 +294,50 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        /// A var/std of ONE element per output (a one-element or 0-d operand, flat or over its axis, or a reduced
-        /// axis of extent 1) where NumPy has NaN and NumSharp a number is the (V1) degenerate-size bug, for the np.*,
-        /// ndarray.* and complex spellings — named as such instead of "summation precision" or the min/max axis-NaN
-        /// bug that used to take these corpus cases.
+        /// Every var/std divergence of the np.* and ndarray.* spellings is a real bug since the (V1) branch and the
+        /// var/std share of the reduction blankets were removed: the degenerate-size NaN-vs-zero cell V1 excused, a
+        /// float16/float32 result that comes back float64 (the dtype blanket), and a few-ULP value difference over an
+        /// axis (the unbounded summation blanket, which hid the degenerate-size bug for months).
         /// </summary>
         [TestMethod]
-        public void V1_VarStdOneElementPerOutput_NumPyNaN_IsTheDegenerateSizeBug()
+        public void VarStd_NoDivergenceIsExcused()
         {
             var nanVsZero = new[] { new BitDiff.Diff(0, "NaN", "0000000000000000") };
             byte[] nan = BitConverter.GetBytes(double.NaN), zero = BitConverter.GetBytes(0.0);
+            var none = System.Array.Empty<BitDiff.Diff>();
             foreach (var op in new[] { "var", "std", "ndarray.var", "ndarray.std" })
             {
                 MisalignedRegistry.Classify(Case(op, ("float64", new long[] { 1 })), DivergenceKind.Value,
-                    nan, zero, NPTypeCode.Double, nanVsZero).Should().Contain(VarStdPins, $"{op} of a one-element array");
-                MisalignedRegistry.Classify(Case(op, ("complex128", Array.Empty<long>())), DivergenceKind.Value,
-                    nan, zero, NPTypeCode.Double, nanVsZero).Should().Contain(VarStdPins, $"{op} of a 0-d complex array");
-                MisalignedRegistry.Classify(WithAxis(Case(op, ("float64", new long[] { 1 })), 0), DivergenceKind.Value,
-                    nan, zero, NPTypeCode.Double, nanVsZero).Should().Contain(VarStdPins, $"{op} of a one-element array along axis 0");
+                    nan, zero, NPTypeCode.Double, nanVsZero).Should().BeNull($"{op} of a one-element array (the old V1 cell)");
                 MisalignedRegistry.Classify(WithAxis(Case(op, ("float64", new long[] { 4, 1 })), -1), DivergenceKind.Value,
-                    nan, zero, NPTypeCode.Double, nanVsZero).Should().Contain(VarStdPins, $"{op} over a (4,1) array's length-1 last axis");
+                    nan, zero, NPTypeCode.Double, nanVsZero).Should().BeNull($"{op} over a length-1 axis (the old V1 cell)");
+                MisalignedRegistry.Classify(Case(op, ("float32", new long[] { 1 })), DivergenceKind.Dtype, null, null,
+                    NPTypeCode.Single, none).Should().BeNull($"{op} of a one-element float32 array returning another dtype");
+                MisalignedRegistry.Classify(Case(op, ("float32", new long[] { 8 })), DivergenceKind.Dtype, null, null,
+                    NPTypeCode.Single, none).Should().BeNull($"{op} of eight float32 elements returning another dtype");
+                double v = 1.2345;
+                MisalignedRegistry.Classify(WithAxis(Case(op, ("float64", new long[] { 4, 8 })), 0), DivergenceKind.Value,
+                    BitConverter.GetBytes(v), BitConverter.GetBytes(UlpUp(v)), NPTypeCode.Double, OneDiff)
+                    .Should().BeNull($"{op} one ULP off over an axis is not summation order any more: it is NumPy's _var");
             }
         }
 
         /// <summary>
-        /// The (V1) branch stays inside its cell: several elements per output, a wrong FINITE value, a nonzero number
-        /// where NumPy has NaN, a NaN where NumPy has a number, and another reduction (mean) of one element are NOT
-        /// this bug — they fall through to the other branches (or fail the gate).
+        /// <c>ma.var</c> / <c>ma.std</c> keep the reduction blankets: <c>NDMaskedArray.var</c>'s masked path is its own
+        /// arithmetic, not <c>np.var</c>, and its known gaps are plan item A6. The scope is the <c>ma.*</c> id only.
         /// </summary>
         [TestMethod]
-        public void V1_OutsideTheDegenerateSizeCell_NotTheDegenerateSizeBug()
+        public void MaVarStd_KeepsTheReductionBlankets_OnlyForMaIds()
         {
-            var nanVsZero = new[] { new BitDiff.Diff(0, "NaN", "0000000000000000") };
-            byte[] nan = BitConverter.GetBytes(double.NaN), zero = BitConverter.GetBytes(0.0);
-
-            (MisalignedRegistry.Classify(Case("var", ("float64", new long[] { 8 })), DivergenceKind.Value,
-                nan, zero, NPTypeCode.Double, nanVsZero) ?? "").Should().NotContain(VarStdPins, "a flat var of 8 elements");
-            (MisalignedRegistry.Classify(WithAxis(Case("std", ("float64", new long[] { 4, 3 })), 0), DivergenceKind.Value,
-                nan, zero, NPTypeCode.Double, nanVsZero) ?? "").Should().NotContain(VarStdPins, "a std over an axis of length 4");
-            (MisalignedRegistry.Classify(Case("var", ("float64", new long[] { 1 })), DivergenceKind.Value,
-                BitConverter.GetBytes(0.25), BitConverter.GetBytes(0.5), NPTypeCode.Double,
-                new[] { new BitDiff.Diff(0, "000000000000d03f", "000000000000e03f") }) ?? "")
-                .Should().NotContain(VarStdPins, "a wrong finite variance of one element is not the skipped-arithmetic bug");
-            (MisalignedRegistry.Classify(Case("var", ("float64", new long[] { 1 })), DivergenceKind.Value,
-                nan, BitConverter.GetBytes(0.5), NPTypeCode.Double, new[] { new BitDiff.Diff(0, "NaN", "000000000000e03f") }) ?? "")
-                .Should().NotContain(VarStdPins, "the shortcut answers +0.0; a nonzero number where NumPy has NaN is another bug");
-            (MisalignedRegistry.Classify(Case("var", ("float64", new long[] { 1 })), DivergenceKind.Value,
-                zero, nan, NPTypeCode.Double, new[] { new BitDiff.Diff(0, "0000000000000000", "NaN") }) ?? "")
-                .Should().NotContain(VarStdPins, "NumSharp NaN where NumPy has 0 is the opposite divergence");
-            (MisalignedRegistry.Classify(Case("mean", ("float64", new long[] { 1 })), DivergenceKind.Value,
-                nan, zero, NPTypeCode.Double, nanVsZero) ?? "").Should().NotContain(VarStdPins, "mean is not var/std");
-        }
-
-        /// <summary>
-        /// A float16/float32 var/std of one element per output or of an EMPTY operand that comes back float64 is the
-        /// (V1) bug; a float64 NumPy result (an integer or complex input) or a float32 result of several elements per
-        /// output is not.
-        /// </summary>
-        [TestMethod]
-        public void V1_VarStdFloat16Float32Dtype_OneElementOrEmpty_IsTheDegenerateSizeBug()
-        {
-            var none = System.Array.Empty<BitDiff.Diff>();
-            MisalignedRegistry.Classify(Case("std", ("float32", new long[] { 1 })), DivergenceKind.Dtype, null, null,
-                NPTypeCode.Single, none).Should().Contain(VarStdPins, "std of a one-element float32 array");
-            MisalignedRegistry.Classify(Case("var", ("float16", Array.Empty<long>())), DivergenceKind.Dtype, null, null,
-                NPTypeCode.Half, none).Should().Contain(VarStdPins, "var of a 0-d float16 array");
-            MisalignedRegistry.Classify(WithAxis(Case("var", ("float16", new long[] { 0, 3 })), 1), DivergenceKind.Dtype, null, null,
-                NPTypeCode.Half, none).Should().Contain(VarStdPins, "var of an empty float16 array");
-
-            (MisalignedRegistry.Classify(Case("var", ("int32", new long[] { 1 })), DivergenceKind.Dtype, null, null,
-                NPTypeCode.Double, none) ?? "").Should().NotContain(VarStdPins, "NumPy's result is float64 there");
-            (MisalignedRegistry.Classify(Case("var", ("float32", new long[] { 8 })), DivergenceKind.Dtype, null, null,
-                NPTypeCode.Single, none) ?? "").Should().NotContain(VarStdPins, "eight elements per output is not the degenerate size");
+            double v = 1.2345;
+            var c = WithAxis(Case("var", ("float64", new long[] { 4, 8 })), 0);
+            c.Id = "ma.var/selftest";
+            MisalignedRegistry.Classify(c, DivergenceKind.Value, BitConverter.GetBytes(v), BitConverter.GetBytes(UlpUp(v)),
+                NPTypeCode.Double, OneDiff).Should().NotBeNull("ma.var's masked path is a known gap (plan A6)");
+            var d = Case("std", ("float32", new long[] { 8 }));
+            d.Id = "ma.std/selftest";
+            MisalignedRegistry.Classify(d, DivergenceKind.Dtype, null, null, NPTypeCode.Single,
+                System.Array.Empty<BitDiff.Diff>()).Should().NotBeNull("ma.std's dtype gap stays under the dtype blanket");
         }
 
         // ---- B4: modf threw excuse excludes f32/f64 ----

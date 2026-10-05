@@ -10,8 +10,8 @@ namespace NumSharp.Tests
     /// <summary>
     ///     Open bugs in how NumSharp STARTS a reduction, a scan or a size-1 product — found while making
     ///     <c>np.trapezoid</c> bit-exact (commit 94c9eb6b, 2026-10-03) and by the 2026-10-04 reduction-start probe —
-    ///     plus <c>np.var</c> / <c>np.std</c> at a degenerate size (group 5), the probe's wrong shapes and errors
-    ///     (groups 4, 6, 7), and which NaN a flat sum of several NaNs returns (group 8). Each test asserts NumPy
+    ///     plus the probe's wrong shapes and errors (groups 4, 6, 7), which NaN a flat sum of several NaNs returns
+    ///     (group 8), and an axis sum in a cast loop whose rows are longer than the buffer (group 9). Each test asserts NumPy
     ///     2.4.2's answer — dtype, shape and the raw bits of every element — so it FAILS while the bug lives and passes
     ///     once it is fixed. Remove <c>[OpenBugs]</c> from a test when its path is fixed, and move the test next to the
     ///     function's own tests.
@@ -44,25 +44,21 @@ namespace NumSharp.Tests
     ///     and float16 nan-axis read pins) moved to <c>Math/np.sum.Identity.Test.cs</c> without <c>[OpenBugs]</c>.
     ///     </para>
     ///     <para>
-    ///     Group 5 (added 2026-10-04) is <c>np.var</c> / <c>np.std</c> at a degenerate size: one element per
-    ///     output, a <c>ddof</c> at or past the element count, or an empty float16/float32 input. NumPy's
-    ///     <c>_var</c> always runs its arithmetic — <c>(x - mean)²</c> summed, then divided by
-    ///     <c>max(n - ddof, 0)</c>, in the input's float dtype — while NumSharp's shortcuts answer without it:
-    ///     <c>0</c> instead of NaN for a NaN or ±inf element, <c>0</c> instead of NaN for <c>ddof &gt;= 1</c> over a
-    ///     length-1 axis, NaN or a NEGATIVE variance instead of <c>+inf</c> for <c>ddof &gt;= n</c>, and float64
-    ///     instead of float16/float32. The oracle had these cases all along but excused them under labels that
-    ///     describe other bugs ("summation precision", the min/max "axis SIMD skips NaN" bug, the generic
-    ///     reduction-dtype bug); its registry now names this bug and points here. <c>np.mean</c>'s empty path had
-    ///     the same float64 hard-code; the identity work fixed it, and its cases moved with the other mean tests.
+    ///     Group 5 (2026-10-04) was <c>np.var</c> / <c>np.std</c> at a degenerate size: one element per output, a
+    ///     <c>ddof</c> at or past the element count, or an empty float16/float32 input, where NumSharp's shortcuts
+    ///     answered without NumPy's arithmetic. It is fixed — np.var / np.std are NumPy's <c>_var</c> / <c>_std</c>
+    ///     statement for statement since 2026-10-05 (plan <c>docs/plans/api-parameter-parity.md</c> A2) — and its tests
+    ///     moved to <c>Math/np.var.NumPyPort.Test.cs</c> without <c>[OpenBugs]</c>; the oracle's registry no longer
+    ///     excuses any var/std case (the new <c>varstd.jsonl</c> tier holds them to zero excuses).
     ///     </para>
     ///     <para>
     ///     The 2026-10-04 reduction-start probe ran every reduction, scan and product over all-<c>-0.0</c> operands
     ///     (size 1, length-1 axes, longer runs; C, transposed, reversed and stepped layouts; float64, float32,
     ///     float16 and complex128) against NumPy 2.4.2 bit for bit. The cells NumSharp gets right are the
     ///     <c>reduce_start.jsonl</c> oracle tier (<c>FuzzCorpusTests.ReductionStart</c>; 7,942 at delivery, 8,586
-    ///     once the identity add landed). The cells it gets wrong are that tier's carve (<c>gen_oracle._rs_carved</c>,
-    ///     one rule per root cause, exactly the 862 differing cells), and every rule names the test below that pins
-    ///     it (the one-element float32/float16 <c>std</c>/<c>var</c> dtype rule names group 5's test).
+    ///     once the identity add landed, 8,610 once np.var / np.std became NumPy's <c>_var</c>). The cells it gets
+    ///     wrong are that tier's carve (<c>gen_oracle._rs_carved</c>, one rule per root cause, exactly the 838 differing
+    ///     cells), and every rule names the test below that pins it.
     ///     </para>
     ///     <para>
     ///     The probe also found reductions that return the wrong shape (groups 4 and 6) and <c>np.trapezoid</c>'s
@@ -412,239 +408,9 @@ namespace NumSharp.Tests
         }
 
         // ======================================================================================================
-        //  GROUP 5 — np.var / np.std at a degenerate size. NumPy's _var always computes
-        //  sum((x - mean)²) / max(n - ddof, 0) in the input's float dtype; NumSharp's shortcuts skip that.
-        //  np.mean's empty path shares the float64 hard-code of the var/std one.
-        // ======================================================================================================
-
-        /// <summary>
-        ///     <c>np.var</c> / <c>np.std</c> of ONE element (a one-element 1-D array or a 0-d array, flat, over its
-        ///     one axis, or with <c>keepdims</c>) must be NaN when the element is NaN or ±inf, because NumPy computes
-        ///     <c>x - mean</c> (<c>nan - nan</c>, <c>inf - inf</c>). NumSharp returns <c>0</c> for every element; a
-        ///     finite element already gives NumPy's <c>0</c>. A NaN or inf in one-element data therefore vanishes
-        ///     from a variance, which turns a missing-value marker into "no spread".
-        /// </summary>
-        /// <remarks>
-        ///     Root cause: <c>Default.Reduction.Var.cs</c> <c>ReduceVar</c> and <c>Default.Reduction.Std.cs</c>
-        ///     <c>ReduceStd</c> send <c>shape.IsScalar || (shape.size == 1 &amp;&amp; shape.NDim == 1)</c> to a
-        ///     shortcut that returns <c>(arr.size - ddof) &lt;= 0 ? NaN : 0.0</c> WITHOUT reading the element, and
-        ///     <c>var_elementwise</c> / <c>std_elementwise</c> repeat it. NumPy's <c>_var</c>
-        ///     (<c>numpy/_core/_methods.py</c>) has no size-1 path; for complex it sums
-        ///     <c>x.real² + x.imag²</c>, NaN for a NaN or infinite part. The oracle excused these corpus cases
-        ///     (<c>scalar_0d</c> / <c>one_element_1d</c> × float64 / complex128 in <c>reduce.jsonl</c> and
-        ///     <c>instance.jsonl</c>) as "summation precision" (flat) and as the min/max "axis SIMD skips NaN"
-        ///     bug (<c>axis=0</c>) before its registry named this bug.
-        /// </remarks>
-        [TestMethod, OpenBugs]
-        public void VarStd_OneElement_NonFiniteValue_IsNaN()
-        {
-            var fails = new List<string>();
-            Check(fails, "var f64 [nan]", () => np.var(Of(double.NaN)), "float64 () nan");
-            Check(fails, "var f64 [inf]", () => np.var(Of(double.PositiveInfinity)), "float64 () nan");
-            Check(fails, "var f64 [-inf]", () => np.var(Of(double.NegativeInfinity)), "float64 () nan");
-            Check(fails, "std f64 [inf]", () => np.std(Of(double.PositiveInfinity)), "float64 () nan");
-            Check(fails, "var f64 0-d nan", () => np.var(NDArray.Scalar(double.NaN)), "float64 () nan");
-            Check(fails, "std f64 0-d -inf", () => np.std(NDArray.Scalar(double.NegativeInfinity)), "float64 () nan");
-            Check(fails, "var f64 [nan] axis0", () => np.var(Of(double.NaN), 0), "float64 () nan");
-            Check(fails, "var f64 [inf] keepdims", () => np.var(Of(double.PositiveInfinity), keepdims: true), "float64 (1,) nan");
-            Check(fails, "var c128 [nan+0j]", () => np.var(OfComplex(new Complex(double.NaN, 0))), "float64 () nan");
-            Check(fails, "std c128 [0+infj]", () => np.std(OfComplex(new Complex(0, double.PositiveInfinity))), "float64 () nan");
-            Check(fails, "var f64 [5] (finite: already right)", () => np.var(Of(5.0)), "float64 () 0000000000000000");
-            AssertNoMismatch(fails, "NumPy's _var computes x - mean even for one element, so NaN and inf propagate");
-        }
-
-        /// <summary>
-        ///     <c>np.var</c> / <c>np.std</c> over an axis of length 1 must be NaN at every output whose element is
-        ///     NaN or ±inf (and <c>0</c> elsewhere), for every float dtype, complex, both axis positions and
-        ///     <c>keepdims</c>. NumSharp returns zeros without reading the slab, so the non-finite outputs read
-        ///     <c>0</c>.
-        /// </summary>
-        /// <remarks>
-        ///     Root cause: <c>ReduceVar</c> / <c>ReduceStd</c> send an extent-1 reduced axis
-        ///     (<c>shape[axis] == 1</c>) to <c>AllocateReductionZeros</c>. NumPy runs <c>x - mean</c> per output
-        ///     like any other axis. Axes of length 2 or more take the IL axis kernel
-        ///     (<c>ExecuteAxisVarReductionIL</c>) and propagate NaN and inf already.
-        /// </remarks>
-        [TestMethod, OpenBugs]
-        public void VarStd_LengthOneAxis_NonFiniteValue_IsNaN()
-        {
-            var fails = new List<string>();
-            const string nanThenZeros64 = "nan 0000000000000000 0000000000000000 0000000000000000";
-            Check(fails, "var f64 (1,4) axis0 nan", () => np.var(Of(double.NaN, 2, 3, -4).reshape(1, 4), 0),
-                  "float64 (4,) " + nanThenZeros64);
-            Check(fails, "std f64 (4,1) axis1 inf", () => np.std(Of(double.PositiveInfinity, 2, 3, -4).reshape(4, 1), 1),
-                  "float64 (4,) " + nanThenZeros64);
-            Check(fails, "var f64 (2,1,2) axis1 -inf", () => np.var(Of(double.NegativeInfinity, 2, 3, -4).reshape(2, 1, 2), 1),
-                  "float64 (2,2) " + nanThenZeros64);
-            Check(fails, "var f64 (1,4) axis0 nan keepdims", () => np.var(Of(double.NaN, 2, 3, -4).reshape(1, 4), 0, keepdims: true),
-                  "float64 (1,4) " + nanThenZeros64);
-            Check(fails, "var f32 (1,4) axis0 nan", () => np.var(OfSingle(float.NaN, 2, 3, -4).reshape(1, 4), 0),
-                  "float32 (4,) nan 00000000 00000000 00000000");
-            Check(fails, "std f16 (1,4) axis0 inf", () => np.std(OfHalf(double.PositiveInfinity, 2, 3, -4).reshape(1, 4), 0),
-                  "float16 (4,) nan 0000 0000 0000");
-            Check(fails, "var c128 (1,4) axis0 nanj",
-                  () => np.var(OfComplex(new Complex(0, double.NaN), new Complex(2, -1), new Complex(3, 0.5), new Complex(-4, 4)).reshape(1, 4), 0),
-                  "float64 (4,) " + nanThenZeros64);
-            AssertNoMismatch(fails, "NumPy reduces a length-1 axis with the same arithmetic as any other axis");
-        }
-
-        /// <summary>
-        ///     <c>np.var</c> / <c>np.std</c> over an axis of length 1 with <c>ddof &gt;= 1</c> must be NaN at EVERY
-        ///     output: NumPy divides the zero sum of squares by <c>max(1 - ddof, 0) = 0</c>. NumSharp returns zeros,
-        ///     so a sample variance (<c>ddof=1</c>) of single observations reads as "no spread" instead of
-        ///     "undefined".
-        /// </summary>
-        /// <remarks>
-        ///     Root cause: the same <c>AllocateReductionZeros</c> shortcut as
-        ///     <see cref="VarStd_LengthOneAxis_NonFiniteValue_IsNaN"/>; it never looks at <c>ddof</c>. The one-element
-        ///     FLAT shortcut does check <c>size - ddof &lt;= 0</c>, and a <c>(1, 1)</c> float64 array reduced flat is
-        ///     2-D, so it skips that shortcut and its contiguous route (<c>VarSimdHelper</c>) returns NaN for
-        ///     <c>ddof &gt;= n</c>; both already give NumPy's NaN there. Every dtype is affected over a length-1 axis,
-        ///     the integer and bool inputs (float64 results) included.
-        /// </remarks>
-        [TestMethod, OpenBugs]
-        public void VarStd_LengthOneAxis_DdofOfOneOrMore_IsNaN()
-        {
-            var fails = new List<string>();
-            Check(fails, "var f64 (1,4) axis0 ddof1", () => np.var(Of(5, 2, 3, -4).reshape(1, 4), 0, ddof: 1), "float64 (4,) nan nan nan nan");
-            Check(fails, "std f64 (1,4) axis0 ddof2", () => np.std(Of(5, 2, 3, -4).reshape(1, 4), 0, ddof: 2), "float64 (4,) nan nan nan nan");
-            Check(fails, "std f32 (4,1) axis1 ddof1", () => np.std(OfSingle(5, 2, 3, -4).reshape(4, 1), 1, ddof: 1), "float32 (4,) nan nan nan nan");
-            Check(fails, "var f16 (2,1,2) axis1 ddof1", () => np.var(OfHalf(5, 2, 3, -4).reshape(2, 1, 2), 1, ddof: 1), "float16 (2,2) nan nan nan nan");
-            Check(fails, "var i32 (1,4) axis0 ddof1", () => np.var(OfInt32(5, 2, 3, -4).reshape(1, 4), 0, ddof: 1), "float64 (4,) nan nan nan nan");
-            Check(fails, "var bool (1,3) axis0 ddof1", () => np.var(OfBool(true, false, true).reshape(1, 3), 0, ddof: 1), "float64 (3,) nan nan nan");
-            Check(fails, "var c128 (1,2) axis0 ddof1",
-                  () => np.var(OfComplex(new Complex(1, 2), new Complex(2, -1)).reshape(1, 2), 0, ddof: 1), "float64 (2,) nan nan");
-            Check(fails, "var f64 (1,1) axis1 ddof1 keepdims", () => np.var(Of(5.0).reshape(1, 1), 1, keepdims: true, ddof: 1), "float64 (1,1) nan");
-            AssertNoMismatch(fails, "NumPy divides by max(n - ddof, 0), which is 0 for one element and ddof >= 1");
-        }
-
-        /// <summary>
-        ///     <c>np.var</c> / <c>np.std</c> of one element must keep a float16/float32 input's dtype and compute in
-        ///     the <c>dtype=</c> argument when one is given. NumSharp returns float64 in every such case, so the
-        ///     result type of a float32 pipeline changes when a slice happens to hold one element.
-        /// </summary>
-        /// <remarks>
-        ///     Root cause: the one-element shortcut of <see cref="VarStd_OneElement_NonFiniteValue_IsNaN"/> wraps a C#
-        ///     <c>double</c> (<c>NDArray.Scalar(value)</c>), so the result is float64 whatever the input dtype and
-        ///     <c>dtype=</c> is ignored. NumPy's <c>_var</c> keeps a float16/float32 input in its own dtype (the
-        ///     mean, the squares and the division) and computes in <c>dtype=</c> when it is given. Flat reductions of
-        ///     two or more elements and the axis reductions keep the dtype already.
-        /// </remarks>
-        [TestMethod, OpenBugs]
-        public void VarStd_OneElement_KeepsFloat16Float32_AndHonoursTheDtypeArgument()
-        {
-            var fails = new List<string>();
-            Check(fails, "var f32 [5]", () => np.var(OfSingle(5)), "float32 () 00000000");
-            Check(fails, "var f16 [5]", () => np.var(OfHalf(5)), "float16 () 0000");
-            Check(fails, "std f32 0-d 5", () => np.std(NDArray.Scalar(5f)), "float32 () 00000000");
-            Check(fails, "var f32 [5] axis0", () => np.var(OfSingle(5), 0), "float32 () 00000000");
-            Check(fails, "var f32 [5] ddof1", () => np.var(OfSingle(5), ddof: 1), "float32 () nan");
-            Check(fails, "std f16 [nan]", () => np.std(OfHalf(double.NaN)), "float16 () nan");
-            Check(fails, "var f64 [5] dtype=f32", () => np.var(Of(5.0), dtype: np.float32), "float32 () 00000000");
-            Check(fails, "std f64 [5] axis0 dtype=f32", () => np.std(Of(5.0), 0, dtype: np.float32), "float32 () 00000000");
-            Check(fails, "var i32 [5] dtype=f16", () => np.var(OfInt32(5), dtype: np.float16), "float16 () 0000");
-            AssertNoMismatch(fails, "NumPy's _var computes in the input's float dtype, or in dtype= when given");
-        }
-
-        /// <summary>
-        ///     A flat <c>np.var</c> / <c>np.std</c> of a contiguous float32, float64 or integer array with
-        ///     <c>ddof &gt;= n</c> must be <c>+inf</c>: NumPy divides the positive sum of squares by
-        ///     <c>max(n - ddof, 0) = 0</c> (only a slice whose squares sum to zero gives <c>0/0 = NaN</c>). NumSharp
-        ///     returns NaN for every such case.
-        /// </summary>
-        /// <remarks>
-        ///     Root cause: <c>DirectILKernelGenerator.Masking.VarStd.cs</c> <c>VarSimdHelper</c> returns NaN as soon
-        ///     as <c>size &lt;= ddof</c>, before it sums anything. The helper serves the contiguous
-        ///     float32/float64/integer flat route; float16, complex, bool and strided inputs take
-        ///     <c>var_elementwise_fallback</c> (see
-        ///     <see cref="VarStd_DdofPastTheCount_GeneralRoute_IsInfinityNotNegative"/>), and the axis kernels clamp
-        ///     the divisor with <c>Math.Max(axisSize - ddof, 0)</c>, so both are right at <c>ddof == n</c>. The two
-        ///     NaN cases at the end are already right and stay as guards for the fix.
-        /// </remarks>
-        [TestMethod, OpenBugs]
-        public void VarStd_DdofAtLeastTheCount_ContiguousRoute_IsInfinity()
-        {
-            var fails = new List<string>();
-            const string inf64 = "float64 () 7ff0000000000000";
-            Check(fails, "var f64 [1,2] ddof2", () => np.var(Of(1, 2), ddof: 2), inf64);
-            Check(fails, "std f64 [1,2] ddof2", () => np.std(Of(1, 2), ddof: 2), inf64);
-            Check(fails, "var f64 [1,2,4] ddof3", () => np.var(Of(1, 2, 4), ddof: 3), inf64);
-            Check(fails, "var f64 [1,2] ddof3", () => np.var(Of(1, 2), ddof: 3), inf64);
-            Check(fails, "std f64 [1,2] ddof3", () => np.std(Of(1, 2), ddof: 3), inf64);
-            Check(fails, "var f64 (2,3) ddof7", () => np.var(Of(1, 2, 4, 8, 16, 32).reshape(2, 3), ddof: 7), inf64);
-            Check(fails, "var f32 [1,2,4] ddof4", () => np.var(OfSingle(1, 2, 4), ddof: 4), "float32 () 7f800000");
-            Check(fails, "std f32 [1,2] ddof2", () => np.std(OfSingle(1, 2), ddof: 2), "float32 () 7f800000");
-            Check(fails, "var i32 [1,2] ddof2", () => np.var(OfInt32(1, 2), ddof: 2), inf64);
-            Check(fails, "var i32 [1,2] ddof3", () => np.var(OfInt32(1, 2), ddof: 3), inf64);
-            Check(fails, "var f64 [3,3] ddof2 (constant slice: 0/0, already right)", () => np.var(Of(3, 3), ddof: 2), "float64 () nan");
-            Check(fails, "var f64 (1,1) ddof2 (one element: 0/0, already right)", () => np.var(Of(5.0).reshape(1, 1), ddof: 2), "float64 () nan");
-            AssertNoMismatch(fails, "NumPy divides a positive sum of squares by max(n - ddof, 0) = 0, which is +inf");
-        }
-
-        /// <summary>
-        ///     A flat <c>np.var</c> / <c>np.std</c> with <c>ddof &gt; n</c> on the general route (float16, complex,
-        ///     bool, a strided view) must be <c>+inf</c> (NaN when the squares sum to zero). NumSharp divides by the
-        ///     NEGATIVE <c>n - ddof</c>: <c>var</c> comes out negative (<c>var([1, 2], ddof=3)</c> is <c>-0.5</c>),
-        ///     <c>std</c> is the NaN square root of it, and a zero sum gives <c>-0.0</c>. A negative variance is
-        ///     impossible, so anything downstream that trusts its sign is wrong.
-        /// </summary>
-        /// <remarks>
-        ///     Root cause: <c>var_elementwise_fallback</c>'s <c>VarMomentsReal</c> / <c>VarMomentsBool</c> /
-        ///     <c>VarMomentsComplex</c> return <c>sq / (n - ddof)</c> without NumPy's clamp
-        ///     (<c>um.maximum(rcount - ddof, 0)</c> in <c>_var</c>). <c>ddof == n</c> divides by an exact 0 and is
-        ///     already <c>+inf</c> (the last case stays as a guard for the fix).
-        /// </remarks>
-        [TestMethod, OpenBugs]
-        public void VarStd_DdofPastTheCount_GeneralRoute_IsInfinityNotNegative()
-        {
-            var fails = new List<string>();
-            const string inf64 = "float64 () 7ff0000000000000";
-            Check(fails, "var f64 [1,2,4] strided ddof4", () => np.var(Of(1, 0, 2, 0, 4)["::2"], ddof: 4), inf64);
-            Check(fails, "std f64 [1,2,4] strided ddof4", () => np.std(Of(1, 0, 2, 0, 4)["::2"], ddof: 4), inf64);
-            Check(fails, "var f16 [1,2] ddof3", () => np.var(OfHalf(1, 2), ddof: 3), "float16 () 7c00");
-            Check(fails, "std f16 [1,2,4] ddof4", () => np.std(OfHalf(1, 2, 4), ddof: 4), "float16 () 7c00");
-            Check(fails, "var c128 [1,2] ddof3", () => np.var(OfComplex(1, 2), ddof: 3), inf64);
-            Check(fails, "std bool [T,F] ddof3", () => np.std(OfBool(true, false), ddof: 3), inf64);
-            Check(fails, "var f16 (1,1) ddof2", () => np.var(OfHalf(5).reshape(1, 1), ddof: 2), "float16 () nan");
-            Check(fails, "var f64 [1,2,4] strided ddof3 (ddof == n: already right)", () => np.var(Of(1, 0, 2, 0, 4)["::2"], ddof: 3), inf64);
-            AssertNoMismatch(fails, "NumPy clamps the divisor at 0, so a variance is never negative");
-        }
-
-        /// <summary>
-        ///     <c>np.var</c> / <c>np.std</c> of an EMPTY float16/float32 array must return NaN (or an empty result) in
-        ///     the input's dtype, flat and per axis, and in the <c>dtype=</c> argument when one is given. NumSharp
-        ///     returns float64. float64, complex and integer inputs already match (their result is float64).
-        /// </summary>
-        /// <remarks>
-        ///     Root cause: the empty-input path of <c>ReduceVar</c> / <c>ReduceStd</c> returns
-        ///     <c>NDArray.Scalar(double.NaN)</c> for a flat reduction and allocates
-        ///     <c>typeCode ?? NPTypeCode.Double</c> per axis, so it never consults the input's float dtype, and the
-        ///     flat branch also drops <c>dtype=</c>. NumPy's <c>_var</c> runs its arithmetic on the empty slice in
-        ///     the input's float dtype: the empty float16/float32 sum divided by the zero count is a NaN of that
-        ///     dtype.
-        /// </remarks>
-        [TestMethod, OpenBugs]
-        public void VarStd_EmptyFloat16Float32_KeepTheirDtype()
-        {
-            var fails = new List<string>();
-            Check(fails, "var f16 (0,3)", () => np.var(np.zeros(new Shape(0, 3), np.float16)), "float16 () nan");
-            Check(fails, "std f32 (0,3)", () => np.std(np.zeros(new Shape(0, 3), np.float32)), "float32 () nan");
-            Check(fails, "var f16 (0,3) axis0", () => np.var(np.zeros(new Shape(0, 3), np.float16), 0), "float16 (3,) nan nan nan");
-            Check(fails, "std f32 (0,3) axis0", () => np.std(np.zeros(new Shape(0, 3), np.float32), 0), "float32 (3,) nan nan nan");
-            Check(fails, "var f32 (0,3) axis1", () => np.var(np.zeros(new Shape(0, 3), np.float32), 1), "float32 (0,) ");
-            Check(fails, "var f16 (0,3) axis0 keepdims", () => np.var(np.zeros(new Shape(0, 3), np.float16), 0, keepdims: true),
-                  "float16 (1,3) nan nan nan");
-            Check(fails, "var f64 (0,) dtype=f32", () => np.var(np.zeros(new Shape(0), np.float64), dtype: np.float32), "float32 () nan");
-            Check(fails, "var f64 (0,3) axis0 (already right)", () => np.var(np.zeros(new Shape(0, 3), np.float64), 0), "float64 (3,) nan nan nan");
-            Check(fails, "var c128 (0,3) axis0 (already right)", () => np.var(np.zeros(new Shape(0, 3), np.complex128), 0), "float64 (3,) nan nan nan");
-            Check(fails, "var i32 (0,3) (already right)", () => np.var(np.zeros(new Shape(0, 3), np.int32)), "float64 () nan");
-            AssertNoMismatch(fails, "NumPy's empty variance is NaN in the input's float dtype");
-        }
-
-        // ======================================================================================================
         //  GROUP 6 — reductions that return the wrong shape or values (found by the 2026-10-04 reduction-start
-        //  probe; its one-element float32/float16 std/var dtype finding is group 5's
-        //  VarStd_OneElement_KeepsFloat16Float32_AndHonoursTheDtypeArgument).
+        //  probe; its one-element float32/float16 std/var dtype finding was group 5, now fixed and moved to
+        //  Math/np.var.NumPyPort.Test.cs as VarStd_OneElement_KeepsFloat16Float32_AndHonoursTheDtypeArgument).
         // ======================================================================================================
 
         /// <summary>
@@ -762,47 +528,46 @@ namespace NumSharp.Tests
         }
 
         // ======================================================================================================
-        //  Helpers
+        //  GROUP 9 — an axis sum in a CAST loop whose rows are longer than np.getbufsize(). NumPy buffers the cast
+        //  operand in fills of the buffer size, and a fill splits a pinned row (the reduced axis innermost): the
+        //  row's sum is out += pairwise(part) per fill. NumSharp's cast-loop axis route sums each row in one call.
         // ======================================================================================================
 
         /// <summary>
-        ///     Builds a 1-D float64 array from literal values, the spelling of NumPy's <c>np.array([...])</c> that the
-        ///     group 5 cases mirror (an integer literal widens to its exact double).
+        ///     <c>np.sum(x, axis=1, dtype=np.float32)</c> of a float64 <c>(8, 25)</c> array under <c>np.setbufsize(16)</c>
+        ///     splits each 25-element row across two buffer fills, as NumPy does (<c>out += pairwise(16 elements)</c>, then
+        ///     <c>out += pairwise(9)</c>). NumSharp sums each row in one pairwise call, which is NumPy's answer only while a
+        ///     row fits one buffer (the default 8192), so three of the eight sums are 1 ULP off. <c>np.var</c> /
+        ///     <c>np.std</c> with the same <c>dtype=</c> inherit it: both sums of NumPy's <c>_var</c> are such cast loops.
         /// </summary>
-        /// <param name="values">The elements, in order.</param>
-        /// <returns>A fresh C-contiguous float64 array.</returns>
-        private static NDArray Of(params double[] values) => np.array(values);
-
-        /// <summary>Builds a 1-D float32 array from literal values (NumPy's <c>np.array([...], np.float32)</c>).</summary>
-        /// <param name="values">The elements, in order.</param>
-        /// <returns>A fresh C-contiguous float32 array.</returns>
-        private static NDArray OfSingle(params float[] values) => np.array(values);
-
-        /// <summary>
-        ///     Builds a 1-D float16 array from literal values (NumPy's <c>np.array([...], np.float16)</c>). Each value
-        ///     is rounded to float16; every value the cases use (small integers, NaN, ±inf) is exact there, so the
-        ///     array holds exactly what NumPy's does.
-        /// </summary>
-        /// <param name="values">The elements, in order, as doubles.</param>
-        /// <returns>A fresh C-contiguous float16 array.</returns>
-        private static NDArray OfHalf(params double[] values) => np.array(Array.ConvertAll(values, v => (Half)v));
-
-        /// <summary>
-        ///     Builds a 1-D complex128 array from literal values (NumPy's <c>np.array([...], np.complex128)</c>); an
-        ///     integer literal converts to <c>value + 0j</c>.
-        /// </summary>
-        /// <param name="values">The elements, in order.</param>
-        /// <returns>A fresh C-contiguous complex128 array.</returns>
-        private static NDArray OfComplex(params Complex[] values) => np.array(values);
-
-        /// <summary>Builds a 1-D int32 array from literal values (NumPy's <c>np.array([...], np.int32)</c>).</summary>
-        /// <param name="values">The elements, in order.</param>
-        /// <returns>A fresh C-contiguous int32 array.</returns>
-        private static NDArray OfInt32(params int[] values) => np.array(values);
-
-        /// <summary>Builds a 1-D bool array from literal values (NumPy's <c>np.array([...], np.bool_)</c>).</summary>
-        /// <param name="values">The elements, in order.</param>
-        /// <returns>A fresh C-contiguous bool array.</returns>
-        private static NDArray OfBool(params bool[] values) => np.array(values);
+        /// <remarks>
+        ///     Root cause: <c>Default.Reduction.Add.cs</c> <c>ReduceAddInCastLoop</c>'s axis route casts blocks along the
+        ///     outermost kept axis and sums each reduced row in one pairwise call; NumPy's fills come from
+        ///     <c>npyiter_find_buffering_setup</c> (<c>.claude/CLAUDE.md</c> names it among np.sum's residuals: "an axis
+        ///     reduction in a cast loop whose reduced runs exceed the buffer is not modeled"). Found by the varstd oracle
+        ///     tier's section B (2026-10-05, plan <c>docs/plans/api-parameter-parity.md</c> A2), which carves these cells
+        ///     (<c>gen_oracle.gen_varstd</c>, "pinned row longer than the buffer") and names this test. NumPy 2.4.2's
+        ///     default-buffer answers, which NumSharp gives today, differ from these at elements 1, 6 and 7 (sum) and
+        ///     element 5 (var).
+        /// </remarks>
+        [TestMethod, OpenBugs]
+        public void Sum_CastLoopAxis_RowLongerThanTheBuffer_SplitsAcrossFills()
+        {
+            var fails = new List<string>();
+            var x = ((np.arange(200) % 37) * 1.0001 + 1000.0).reshape(8, 25);
+            long previous = np.setbufsize(16);
+            try
+            {
+                Check(fails, "sum f64 (8,25) axis1 dtype=f32 bufsize16", () => np.sum(x, 1, dtype: np.float32),
+                      "float32 (8,) 46c5a80f 46c6c816 46c7e81e 46c5da11 46c6b016 46c7d01e 46c60c12 46c69816");
+                Check(fails, "var f64 (8,25) axis1 dtype=f32 bufsize16", () => np.var(x, 1, dtype: np.float32),
+                      "float32 (8,) 42500aa6 4322dadf 428a2078 42500aa6 43216f13 42a96403 42500aa6 431e977a");
+            }
+            finally
+            {
+                np.setbufsize(previous);
+            }
+            AssertNoMismatch(fails, "NumPy's buffered fills split a pinned row longer than the buffer");
+        }
     }
 }

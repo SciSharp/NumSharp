@@ -9,8 +9,8 @@ parity and only then fix."
 **State:** see [§7 State log](#7-state-log) (newest entry first) and the checklists in [§5](#5-items).
 
 **Out of scope here:** the seven view-`Shape` bugs (`OpenBugs.ViewShape.cs`: the wrap constructors and the shared
-dimension array). A parallel session owns them in its own plan. Item D7 below touches the same constructors and waits
-for that work.
+dimension array). A parallel session owned them in its own plan, `docs/plans/view-shape-open-bugs.md`, which is done
+(2026-10-05, last fix `5c9d7925`). Its `np.ndarray` follow-ups joined item D7 below.
 
 ---
 
@@ -92,9 +92,10 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
   - Also fixed: a bare `null` axis (`np.all(a, null, null, false, w)`, NumPy's positional `None`) was ambiguous
     between the `int?` and `int[]` overloads (CS0121); the `int[]` overloads now carry `OverloadResolutionPriority(-1)`.
     The other functions with the same ambiguity are item G4.
-- [~] **A2 `np.var` / `np.std`: `ddof=` and `dtype=` do not work** — at a degenerate size (one element per output,
+- [x] **A2 `np.var` / `np.std`: `ddof=` and `dtype=` do not work** — at a degenerate size (one element per output,
   an axis of length 1, `ddof >= n`, empty float16/float32 input) and, as the proof below found, at every size for
-  `dtype=`. Pins: the 7 `VarStd_*` tests in `OpenBugs.Reductions.cs`; oracle excuse `MisalignedRegistry` V1.
+  `dtype=`. Pins: the 7 `VarStd_*` tests in `OpenBugs.Reductions.cs`; oracle excuse `MisalignedRegistry` V1. Done
+  2026-10-05.
   - Proof (2026-10-05, at `bb5b2fcf`): a 22,110-case NumPy 2.4.2 matrix (`var`/`std` × 13 dtypes × one element per
     output / empty / `ddof` at or past the count / `dtype=` of every kind at ordinary sizes × C/F/strided/reversed/
     transposed layouts × axis forms × keepdims). NumSharp: 12,212 exact, 678 within 64 ULP, 8,284 grossly different
@@ -107,6 +108,58 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
   - Design proof: a prototype that ports `_var` statement for statement over NumSharp's own ufuncs matched NumPy in
     22,102 of the 22,110 cases, error texts included. The 8 others: 2 are the `np.sum` reversed-view finding (§6,
     item 5), 6 were item X3 (fixed first).
+  - Fix (`Default.Reduction.VarStd.cs`, `VarStdNumPy`; `ReduceVar` / `ReduceStd` delegate to it, and the old
+    shortcuts, moment loops and axis-kernel wrappers are gone): NumPy's statements in order. The axis is normalized
+    first (AxisError for a 0-d operand too); an integer / bool / char input sums in float64; the mean is `ReduceAdd`
+    (NumPy's add.reduce schedule) divided in place like `true_divide(arrmean, intp n, out=arrmean, casting='unsafe')`
+    (the float64 loop for every real dtype, Smith for complex, an unsafe cast for an integer `dtype=`); `x` is laid out
+    as NpyIter lays out `arr - arrmean` (`DeviationLayout`, with the mean's vote taken from the layout NumPy allocates
+    for a keepdims sum, `KeepdimsReductionLayout` — NumSharp's own keepdims result is C-ordered on a permuted input,
+    and its vote put `x` in C order, one ULP off at the first probed case); the square is NumPy's statement for the
+    case (`x*x`; `x*x` in complex for a real input with a complex `dtype=`; `real² + imag²` for a complex or bool
+    input with a complex `x`); the sum is `ReduceAdd`, then `/ max(n - ddof, 0)`; std is `sqrt(ret, out=ret)` for an
+    array (an integer loop raises NumPy's output-cast error) and `ret.dtype.type(sqrt(ret))` for a scalar.
+    Engines: one fused `np.evaluate` pass for the deviations; a flat reduction over one memory run without a cast
+    streams them (`np.evaluate`'s flat Sum, no temporary); float16 / decimal / no-dynamic-code hosts use the eager
+    ufuncs (np.evaluate's half arithmetic costs ~8 ns per element, the SIMD half kernels 1.3); an integer or narrower
+    float input is cast into the buffer first and evaluated in place (np.evaluate converts a mixed-width leaf one
+    element at a time: 0.42 against 0.16 ns per element). Inputs of 8 MiB of squared deviations and more are summed
+    in L2-sized chunks with NumPy's order kept: whole outputs along the outermost kept axis (`ChunkedDeviationSum`),
+    row blocks with a running `np.add(acc, slab)` when every kept axis lies inside the reduced one
+    (`RowBlockDeviationSum`), whole buffer fills of a flat cast loop added in the loop dtype
+    (`FlatFillDeviationSum`); a cast loop chunks only where NumPy's fills cannot split an output
+    (`CastLoopChunksExactly`). The 936 heap-corrupting empty cases are gone with the old empty path.
+  - Proof of the fix: the 22,110-case matrix — 22,108 exact, the 2 ULP cases of finding 5; a 1,408-case large-size
+    matrix (up to 1,000,003 elements, C/F/stepped/reversed, `dtype=` casts) — all exact; a 7,700-case layout matrix (3-D
+    permutations with and without a reversed axis, broadcast, offset, stepped, 0-d, 5-D; 8 dtypes) — 7,210 exact, and
+    each of the 490 others inherits a difference of `np.sum(a, axis, dtype, keepdims=True)` itself (a reversed axis,
+    finding 5, or a broadcast operand's sum), checked case by case. All three again with the chunked routes forced:
+    the same answers.
+  - Gates: oracle tier `varstd.jsonl` (16,108 cases, zero excuses: every catalog layout × dtype × axis × keepdims ×
+    ddof {0, 1}; ddof at and past the count; `dtype=` for every (input, loop) pair; special values; `np.setbufsize`
+    fills; order-sensitive sizes; the char proxy) and `VarStdChunked` (the same tier with the chunked routes forced,
+    the run counter asserted); `MisalignedRegistry` excuses no np/ndarray var/std case (V1, the dtype blanket, the
+    unbounded summation blanket, the "axis SIMD min/max skips NaN" branch and the unary ULP branch all stopped
+    covering them — finding 7; tightness test `VarStd_NoDivergenceIsExcused`); `reduce_start.jsonl` gained the 24
+    var/std cells it carved (8,610); the decimal tier's var/std reference is exact decimal in NumSharp's summation
+    order (finding 8); unit tests `Math/np.var.NumPyPort.Test.cs` (15: the 7 former pins, `dtype=` loops, the errors,
+    the permuted layout, float16 / char / decimal, the chunked routes byte for byte).
+  - Speed (NPY/NS, one pinned P-core, best of rounds; 116 cells: 7 dtypes × 1K / 100K / 10M × flat / axis 0 / axis 1,
+    plus strided / F / ddof / `dtype=` forms): geomean 3.07×, minimum 1.33×, none below 1.0 (the old engine: from
+    0.03× on F-ordered and integer flat inputs to 38× on contiguous float32 at 1K, with the wrong answers above).
+    Flat float64 4.1× at 10M, complex128 4.1×, bool 14×; float64 axis 0 / 1 at 10M 3.0× / 3.8× (were 0.95× / 1.5×
+    before the chunked routes). Under 1.5×: the 1K axis cells (1.33–1.43×: the building blocks' fixed cost — two
+    `np.sum` calls of ~1.1 µs, two in-place divisions of ~0.6 µs and one `np.evaluate` of ~0.95 µs; the same calls
+    made by hand without the boundary scope take 4.8 µs against NumPy's 6.9), and bool axis 0 at 10M (1.38×: the
+    mean's sum is item X7). Measured on `4d06d591`; after the rebase onto `5c9d7925` (the new code adopts the shapes it
+    builds) an interleaved A/B of the cells that moved in a full rerun (two runs per build, one pinned P-core) showed no
+    difference beyond run-to-run noise (flat float64 at 100K 16.9 / 18.7 µs against 22.3 / 20.2 µs on the old base).
+  - Behavior change outside NumPy: Decimal (no NumPy dtype) raises `DivideByZeroException` for an empty input or
+    `ddof >= n` (decimal has no NaN or infinity; the old engine returned a float64 NaN for an empty input and a
+    NEGATIVE decimal variance for `ddof > n`).
+  - Left open: finding 5 and a broadcast operand's sum (inherited, B1); item X6 (cast-loop rows longer than the
+    buffer, inherited, pinned); `ddof` as a float (finding 6, B4); `out=` / `where=` / `mean=` / `correction=` (B4);
+    `np.ma.var` / `np.ma.std` (A6); the unused var/std kernels (X8).
 - [ ] **A3 `np.nanstd` / `np.nanvar`: `axis=` and `keepdims=` give the wrong shape.** A 1-D float32/float64 array
   along axis 0 gives `(1,)` (NumPy 0-d); one element with `keepdims` drops the axis. Pin:
   `NanStdVar_1DAxis_ReturnNumPysShape`.
@@ -118,6 +171,11 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
   - [ ] A4c `where=`
 - [ ] **A5 `np.trapezoid`: an `axis=` outside `y`.** NumPy raises `IndexError: list assignment index out of range`;
   NumSharp raises `ArgumentOutOfRangeException`. Pin: `Trapezoid_AxisOutsideY_RaisesNumPysIndexError`.
+- [ ] **A6 `np.ma.var` / `np.ma.std` with a mask: the masked path is not NumPy's.** `NDMaskedArray.var` computes its
+  own formula (it never reaches `np.var`): 242 cases of the ma oracle tier differ — a slice NumPy masks (all masked,
+  or `count - ddof <= 0`) carries NaN instead of the masked 0, and some slices are finite where NumPy has +inf. They
+  were hidden by the registry's unbounded "summation precision" blanket until A2 removed var/std from it (finding 7);
+  `MisalignedRegistry.IsMaVarStd` keeps the blanket for the ma ids only and names this item.
 
 ### Phase S: signature gate
 
@@ -157,8 +215,15 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
 - [ ] D4 `np.indices`: `sparse=` (array-or-tuple result type; `np.indices_sparse` exists today).
 - [ ] D5 `np.asanyarray`: `copy=`.
 - [ ] D6 `np.array`: `ndmax=`; first parameter named `object`.
-- [ ] D7 `np.ndarray(shape, dtype, buffer, offset, strides, order)`: `offset=`, `strides=`. Waits for the view-`Shape`
-  session (the same constructors).
+- [ ] D7 `np.ndarray(shape, dtype, buffer, offset, strides, order)`: `offset=`, `strides=`. Unblocked: the view-`Shape`
+  plan is done (2026-10-05). It adds three follow-ups of its bug 1 (`docs/plans/view-shape-open-bugs.md`, "Not in this
+  bug"):
+  - B1.10: a buffer that is too small must raise `TypeError: buffer is too small for requested array` (NumSharp:
+    `ArgumentException: values.Length does not match shape.Size`).
+  - B1.11: a buffer that is larger than the shape must give an array over its prefix (NumSharp raises the same
+    `ArgumentException`).
+  - NumSharp's `np.ndarray(shape, dtype, buffer, order)` defaults to `order='F'` and float32 (NumPy: `order=None`, which
+    is C, and float64), and ignores `order` without a buffer (NumPy: `np.ndarray((2,3), order='F')` is F-contiguous).
 
 ### Phase E: manipulation
 
@@ -231,11 +296,25 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
   - Gate: section "o" of the `sum_identity` oracle tier (832 cases under `np.setbufsize(16/32)`; 248 diverge before
     the fix) and `np_sum_flat_schedule_tests.Sum_AxisLeavingOneOutput_RunsTheFlatSchedule` (17 NumPy-probed cases).
   - Open (the rest of that residual): an axis reduction with SEVERAL outputs whose reduced runs exceed the buffer in
-    a cast loop (`(2, 20000)` along 1 with `dtype=float32`).
+    a cast loop (`(2, 20000)` along 1 with `dtype=float32`): item X6.
 - [ ] X4 float16 `add` / `subtract` / `multiply` / `divide` with a broadcast, non-contiguous operand set run the
   direct route's scalar General loop: `(30,40,20) F * (30,1,20) F` takes 328 µs (NumPy 72 µs, 0.22×), and
   `(100,100,100)` 27 ms (NumPy 3.0 ms). The same before X3 (HEAD measured 320 µs while computing wrong values).
   Speed only; the values are NumPy's.
+- [ ] **X6 `np.sum(a, axis, dtype=…)`: a pinned row (the reduced axis innermost) longer than `np.getbufsize()` in a
+  cast loop.** NumPy's buffered fills split the row (`out += pairwise(part)` per fill); NumSharp's cast-loop axis
+  route sums it in one call. `np.sum(x (8,25), axis=1, dtype=np.float32)` under `np.setbufsize(16)` differs at 3 of 8
+  sums; `np.var` / `np.std` with that `dtype=` inherit it. Pin:
+  `OpenBugsReductionTests.Sum_CastLoopAxis_RowLongerThanTheBuffer_SplitsAcrossFills`; the varstd tier carves the
+  cells (section B). Found by A2's oracle tier; the several-output part of X5's residual.
+- [ ] **X7 `np.sum(bool / int, axis=0, dtype=float64)` (a SLAB cast loop) is slower than NumPy.** At `(2500, 4000)`:
+  bool 27.3 ms (NumPy 5.0, 0.18×), int32 9.1 ms (NumPy 4.3); `astype(bool → float64)` takes 11.4 ms (no SIMD kernel).
+  Speed only. `np.var` / `np.std` of a bool / int input along axis 0 inherit it (bool at 10M: 1.38× NumPy, the only
+  10M var/std cell under 1.5×).
+- [ ] **X8 The var/std kernels A2 no longer reaches.** `DirectILKernelGenerator.VarSimdHelper` / `StdSimdHelper`
+  (`Masking.VarStd.cs`), the `ReductionOp.Var` / `ReductionOp.Std` axis kernels (`Reduction.Axis.VarStd.cs`) and
+  `NDAxisIter`'s `VarAxisDoubleKernel` / `StdAxisDoubleKernel` computed var/std in their own order; nothing calls them
+  since the port. Decide: remove them, or keep them for a future non-NumPy fast mode.
 
 ## 6. Findings
 
@@ -258,9 +337,24 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
    sum; the deviation sum runs over a fresh array). Belongs with B1.
 6. **`ddof` is an `int?` in NumSharp; NumPy accepts a float** (`np.var(x, ddof=1.5)` divides by `n - 1.5`). Belongs
    with B4 / B7 (`correction=` is NumPy's float alias of `ddof`).
+7. **Removing an excuse is not enough; every branch that can catch the op must be checked** (A2). With V1 gone,
+   np.var / np.std divergences were still excused by four generic branches: the dtype blanket for every reduction
+   but sum / prod, the UNBOUNDED "summation/two-pass precision" blanket, the "axis SIMD min/max skips NaN" branch
+   (any reduction with an axis whose diffs are NaN) and the unary "~ULP" branch (any one-operand op within 2 ULP).
+   The fix is a tightness test that asserts `null` for the op across every kind of divergence
+   (`VarStd_NoDivergenceIsExcused`). The same blanket hid `np.ma.var`'s real gaps (A6).
+8. **Decimal sums are sequential in memory order** (A2). `np.sum(decimal)` adds an F-ordered array column by column,
+   and a 28-digit decimal sum can round differently in another order, so the decimal tier's C-order reference
+   differed from the port in the last digit on `f_contiguous_2d`. Its reference now sums the way NumSharp does: a
+   dense operand in address order, anything else in logical order; per output along the axis. Its axis cases used to
+   replicate the old kernel's double intermediate (15 digits).
 
 ## 7. State log
 
+- **2026-10-05**: A2 done (np.var / np.std are NumPy's `_var` / `_std`; the `varstd` oracle tier; the chunked
+  deviation sums); A6, X6, X7, X8 and findings 7–8 recorded. Rebased onto `5c9d7925` (the view-`Shape` plan's last fix:
+  the new code adopts the shapes it builds with `Shape.Adopt`); D7 unblocked and given that plan's `np.ndarray`
+  follow-ups. Commit: the A2 commit on `journey4`.
 - **2026-10-05**: X5 done (`np.sum` along an axis that leaves one output, in a cast loop), found by A2's large-size
   check; B3 widened (`np.mean` has no flat `dtype=` overload). Commit: the X5 commit on `journey4`.
 - **2026-10-05**: X3 done (binary ufuncs with an F-ordered broadcast operand), found while proving A2; X4 and

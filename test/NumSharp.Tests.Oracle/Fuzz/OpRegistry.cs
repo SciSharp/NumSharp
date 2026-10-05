@@ -1113,11 +1113,25 @@ namespace NumSharp.Tests.Fuzz
         ///     the named dtype and reduced in it.
         /// </summary>
         /// <param name="op">The reduce op key.</param>
-        /// <param name="p">The case params (<c>axis</c>, <c>keepdims</c>, optional <c>dtype</c>).</param>
+        /// <param name="p">The case params (<c>axis</c>, <c>keepdims</c>, optional <c>dtype</c>; for var / std also
+        /// <c>ddof</c>).</param>
         /// <param name="a">The operand.</param>
         /// <returns>NumSharp's result.</returns>
         private static NDArray SumIdentityReduce(string op, IReadOnlyDictionary<string, JsonElement> p, NDArray a)
         {
+            // varstd.jsonl: np.var / np.std with ddof= and dtype= (a NumPy dtype name or null).
+            if ((op == "var" || op == "std") && (p.ContainsKey("ddof") || p.ContainsKey("dtype")))
+            {
+                int ddof = p.TryGetValue("ddof", out var dd) ? dd.GetInt32() : 0;
+                DType loop = p.TryGetValue("dtype", out var vd) && vd.ValueKind != JsonValueKind.Null
+                    ? (DType)FuzzCorpus.DtypeToTC(vd.GetString())
+                    : null;
+                int? axis = ParseAxis(p);
+                bool keepdims = ParseKeepdims(p);
+                if (op == "var")
+                    return axis.HasValue ? np.var(a, axis.Value, keepdims, ddof, loop) : np.var(a, keepdims, ddof, loop);
+                return axis.HasValue ? np.std(a, axis.Value, keepdims, ddof, loop) : np.std(a, keepdims, ddof, loop);
+            }
             if (op == "sum" && p.TryGetValue("dtype", out var sumDtype))
                 return np.sum(a, ParseAxis(p), ParseKeepdims(p), (DType)FuzzCorpus.DtypeToTC(sumDtype.GetString()));
             return ApplyReduce(op, ParseAxis(p), ParseKeepdims(p), a);

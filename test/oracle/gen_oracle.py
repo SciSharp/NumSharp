@@ -6018,10 +6018,9 @@ def _rs_carved(op, layout, dt, params, shape):
         # NumPy multiplies a lone complex element by the identity 1+0j (-0-0j becomes +0-0j); NumSharp copies it.
         # Pinned by Prod_OneComplexElement_*.
         return dt == "complex128" and (one_element_flat or ext == 1)
-    if op in ("std", "var"):
-        # One float32 / float16 element (or 0-d) comes back float64. Pinned by
-        # VarStd_OneElement_KeepsFloat16Float32_* (group 5 of the same file).
-        return dt in ("float32", "float16") and nd <= 1 and size == 1
+    # std / var have no rule since 2026-10-05: np.var / np.std are NumPy's _var / _std (plan
+    # docs/plans/api-parameter-parity.md A2), so the one-element float32 / float16 dtype cell is exact (its pin moved
+    # to NumSharp.Tests/Math/np.var.NumPyPort.Test.cs).
     if op in ("median", "nanmedian"):
         # NumPy's median is np.mean of the middle element(s), so it starts from +0.0; NumSharp returns the middle
         # element (or the average of two) itself. Every cell of an all -0.0 operand differs. Pinned by
@@ -6175,6 +6174,165 @@ def gen_reduce_start(carve=True):
     return cases
 
 
+# ---------------------------------------------------------------------------
+# np.var / np.std — NumPy's _var / _std (plan docs/plans/api-parameter-parity.md, item A2)
+# ---------------------------------------------------------------------------
+# NumPy's _var (numpy/_core/_methods.py) has no special path for any size or keyword: a mean by umr_sum and the
+# count, x = arr - mean (laid out by NpyIter), x*x (or real**2 + imag**2 of a complex x), umr_sum again, then
+# / max(n - ddof, 0); _std takes the square root (a cast for a scalar result). So the bits depend on the reduction
+# schedule, the layouts and every keyword at once. Sections (the id carries the letter):
+#   L  every catalog layout x dtype x {var, std} x axis {None, each axis, -1, out of range} x keepdims x ddof {0, 1}
+#   D  ddof at and past the reduced count (n-1, n, n+1, n+3): NaN or +inf, never a negative variance
+#   T  dtype= for every (input, loop) pair of VARSTD_LOOPS, flat and per axis: an integer loop truncates the mean,
+#      std over an integer loop raises for an array result and truncates a scalar one, bool - bool raises
+#   S  special values in one element and over a length-1 axis: NaN, +-inf, -0.0, a complex NaN / inf in one part
+#   B  np.setbufsize(16 / 32): the buffered fills of a cast loop, flat and per axis (a pinned row longer than the
+#      buffer is carved: np.sum's cast-loop axis route, OpenBugsReductionTests.Sum_CastLoopAxis_RowLongerThanTheBuffer_*)
+#   M  order-sensitive values (a mean offset plus noise, 129-1031 elements): the pairwise schedule per layout
+# Params: axis (int or null), keepdims, ddof, dtype (a NumPy dtype name or null) and, in section B, bufsize.
+
+VARSTD_LOOPS = ["bool", "int8", "uint8", "int32", "int64", "uint64", "float16", "float32", "float64", "complex128"]
+
+
+def gen_varstd(dtypes=None):
+    """np.var / np.std cases (op keys var / std) over `dtypes` (default: ALL_DTYPES); see the section header."""
+    dtypes = ALL_DTYPES if dtypes is None else dtypes
+    cases = []
+    n = 0
+
+    def emit(fn, base, view, axis, keepdims, ddof, dt, ln, tag, bufsize=None):
+        nonlocal n
+        params = {"axis": axis, "keepdims": keepdims, "ddof": ddof, "dtype": dt}
+        if bufsize is not None:
+            params["bufsize"] = bufsize
+        operand = describe(base, view)
+        cid = f"{fn}/{tag}/{ln}/{n}"
+        n += 1
+        f = np.var if fn == "var" else np.std
+        previous = np.getbufsize()
+        try:
+            if bufsize is not None:
+                np.setbufsize(bufsize)
+            with warnings.catch_warnings(), np.errstate(all="ignore"):
+                warnings.simplefilter("ignore")      # ddof >= n, empty slices, complex -> real casts warn
+                r = f(view, axis=axis, keepdims=keepdims, ddof=ddof, dtype=dt)
+        except Exception as e:                       # noqa: BLE001 — NumPy's error is the expectation
+            cases.append(_error_case(fn, params, [operand], e, ln, cid=cid))
+            return
+        finally:
+            np.setbufsize(previous)
+        cases.append({"id": cid, "op": fn, "params": params, "operands": [operand],
+                      "expected": _arr_expected(r), "layout": ln, "valueclass": "varstd"})
+
+    def axes_of(view):
+        if view.ndim == 0:
+            return [None, 0, -1]                     # an axis on a 0-d array is NumPy's AxisError
+        return [None] + list(range(view.ndim)) + [-1, view.ndim]   # view.ndim: out of range
+
+    # Section L: every layout of the catalog.
+    for ln, fn_layout in LAYOUTS.items():
+        for s in dtypes:
+            base, view = fn_layout(np.dtype(s))
+            for axis in axes_of(view):
+                for kd in ((False, True) if axis in (None, 0) else (False,)):
+                    for ddof in (0, 1):
+                        for fn in ("var", "std"):
+                            emit(fn, base, view, axis, kd, ddof, None, ln, f"L/{s}")
+
+    # Section D: ddof at and past the reduced count.
+    for ln in ("c_contiguous_2d", "f_contiguous_2d", "one_element_1d", "scalar_0d", "broadcast_1d_to_2d", "strided_2d_cols"):
+        for s in [d for d in ("float64", "float32", "float16", "int32", "complex128", "bool") if d in dtypes] or dtypes[:1]:
+            base, view = LAYOUTS[ln](np.dtype(s))
+            for axis in ([None] if view.ndim == 0 else [None, 0, -1]):
+                count = view.size if axis is None else view.shape[axis]
+                for ddof in sorted({max(count - 1, 0), count, count + 1, count + 3}):
+                    for fn in ("var", "std"):
+                        emit(fn, base, view, axis, False, ddof, None, ln, f"D/{s}")
+
+    # Section T: dtype= for every (input, loop) pair.
+    for ln in ("c_contiguous_2d", "f_contiguous_2d", "one_element_1d", "empty_2d", "negstride_1d", "scalar_0d"):
+        for s in dtypes:
+            base, view = LAYOUTS[ln](np.dtype(s))
+            for dt in VARSTD_LOOPS:
+                for axis in ([None] if view.ndim == 0 else [None, 0, -1]):
+                    for fn in ("var", "std"):
+                        emit(fn, base, view, axis, False, 0, dt, ln, f"T/{s}->{dt}")
+
+    # Section S: special values in one element (0-d and 1-D) and over a length-1 axis.
+    specials = {
+        "float16": [np.nan, np.inf, -np.inf, -0.0],
+        "float32": [np.nan, np.inf, -np.inf, -0.0],
+        "float64": [np.nan, np.inf, -np.inf, -0.0],
+        "complex128": [complex(np.nan, 0.0), complex(0.0, np.inf), complex(-np.inf, 1.0), complex(-0.0, -0.0)],
+    }
+    for s, values in specials.items():
+        if s not in dtypes:
+            continue
+        for k, v in enumerate(values):
+            zero_d = np.array(v, dtype=s)
+            one = np.array([v], dtype=s)
+            col = np.array([[v], [1.5], [-2.0], [v]], dtype=s)          # (4, 1): axis 1 has length 1
+            for ddof in (0, 1):
+                for fn in ("var", "std"):
+                    emit(fn, zero_d, zero_d, None, False, ddof, None, "scalar_0d", f"S/{s}/{k}")
+                    emit(fn, one, one, None, False, ddof, None, "one_element_1d", f"S/{s}/{k}")
+                    emit(fn, one, one, 0, True, ddof, None, "one_element_1d", f"S/{s}/{k}")
+                    emit(fn, col, col, 1, False, ddof, None, "length1_axis_2d", f"S/{s}/{k}")
+                    emit(fn, col, col, 0, False, ddof, None, "length1_axis_2d", f"S/{s}/{k}")
+
+    # Section B: the buffered fills of a cast loop under a small np.setbufsize.
+    rng = np.random.default_rng(20261005)
+    casts = [("float64", "float32"), ("float32", "float16"), ("complex128", "float64"), ("float64", "complex128"),
+             ("int32", "float32"), ("float16", "float64")]
+    for src, dt in casts:
+        if src not in dtypes:
+            continue
+        vals = (1000.0 + rng.normal(0.0, 3.0, 200)) if src != "complex128" else \
+            (1000.0 + rng.normal(0.0, 3.0, 200)) + 1j * (-40.0 + rng.normal(0.0, 2.0, 200))
+        if src == "int32":
+            vals = rng.integers(-5000, 5000, 200)
+        base = np.asarray(vals).astype(src)
+        for ln, view in (("c_contiguous_1d", base), ("c_contiguous_2d", base.reshape(8, 25)),
+                         ("f_contiguous_2d", base.reshape(25, 8).T)):
+            for axis in ([None] if view.ndim == 1 else [None, 0, 1]):
+                # A pinned row (the reduced axis innermost in memory) longer than the buffer: NumPy splits it across
+                # fills, np.sum's cast-loop axis route sums it in one call. CARVED, pinned by
+                # OpenBugsReductionTests.Sum_CastLoopAxis_RowLongerThanTheBuffer_SplitsAcrossFills.
+                pinned = (ln == "c_contiguous_2d" and axis == 1) or (ln == "f_contiguous_2d" and axis == 0)
+                for bufsize in (16, 32):
+                    if pinned and view.shape[axis] > bufsize:
+                        continue
+                    for fn in ("var", "std"):
+                        emit(fn, base, view, axis, False, 0, dt, ln, f"B/{src}->{dt}", bufsize)
+
+    # Section M: order-sensitive values, where the pairwise schedule shows in the last bits.
+    for s in [d for d in ("float64", "float32", "float16", "complex128") if d in dtypes]:
+        for size in (129, 1031):
+            vals = 1000.0 + rng.normal(0.0, 3.0, size)
+            if s == "float16":
+                vals = 8.0 + rng.normal(0.0, 1.5, size)
+            if s == "complex128":
+                vals = vals + 1j * (-250.0 + rng.normal(0.0, 7.0, size))
+            base = np.asarray(vals).astype(s)
+            views = [("c_contiguous_1d", base), ("negstride_1d", base[::-1]), ("strided_step2_1d", base[::2])]
+            for ln, view in views:
+                for axis in (None, 0):
+                    for fn in ("var", "std"):
+                        emit(fn, base, view, axis, False, 0, None, ln, f"M/{s}/{size}")
+        vals = 1000.0 + rng.normal(0.0, 3.0, 31 * 41)
+        if s == "float16":
+            vals = 8.0 + rng.normal(0.0, 1.5, 31 * 41)
+        if s == "complex128":
+            vals = vals + 1j * (-250.0 + rng.normal(0.0, 7.0, 31 * 41))
+        base = np.asarray(vals).astype(s)
+        for ln, view in (("c_contiguous_2d", base.reshape(31, 41)), ("f_contiguous_2d", base.reshape(41, 31).T),
+                         ("transposed_3d", base[: 30 * 41].reshape(5, 6, 41).transpose(2, 0, 1))):
+            for axis in [None] + list(range(view.ndim)):
+                for fn in ("var", "std"):
+                    emit(fn, base, view, axis, False, 0, None, ln, f"M/{s}/2d")
+    return cases
+
+
 def char_tier(mode):
     """Relabelled Char cases to append into tier-file `mode` (woven coverage)."""
     L = list(LAYOUTS.keys())
@@ -6249,6 +6407,8 @@ def char_tier(mode):
         raw = [c for c in gen_clip_pyint([_C]) if "UInt16DType" not in (c.get("error") or {}).get("text", "")]
     elif mode == "clip_ufunc":                                     # broadcast / out= / where= / overlap on the proxy
         raw = gen_clip_ufunc([_C], extras=False)
+    elif mode == "varstd":                                         # Char -> float64 like uint16 (an unsigned integer)
+        raw = gen_varstd([_C])
     return _relabel_dtype(raw, _C, "char")
 
 
@@ -16520,6 +16680,12 @@ def main():
         # axis forms and NumPy's reduce-prologue errors, through each function's NumPy-shaped overload. Its own
         # file, so regenerating it renumbers nothing else.
         write_jsonl(os.path.join(corpus_dir, "reduce_kwargs.jsonl"), gen_reduce_kwargs())
+    elif mode == "varstd":
+        # np.var / np.std as NumPy's _var / _std (plan docs/plans/api-parameter-parity.md A2): every layout, dtype,
+        # ddof and dtype= pair, special values, np.setbufsize fills and order-sensitive sizes. Its own file.
+        cases = gen_varstd()
+        cases += char_tier("varstd")
+        write_jsonl(os.path.join(corpus_dir, "varstd.jsonl"), cases)
     elif mode == "sum_identity":
         # np.sum's identity-seeded add reduction (+0.0 + -0.0 = +0.0) and its dtype= loop, with the
         # reductions built on it (mean / nansum / nanmean / average / ndarray.sum). No Char rows: the
