@@ -290,8 +290,29 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
     broadcast-flat float routes above; a 0-d bool ARRAY holding true is read as Python's `where=True` (C# cannot tell
     `np.array(True)` from the literal; `[Misaligned]`, NumPy raises the no-identity error without initial=); X10
     (np.any / np.all keep C order: they do not use `AllocateReductionResult`).
-- [ ] **A5 `np.trapezoid`: an `axis=` outside `y`.** NumPy raises `IndexError: list assignment index out of range`;
-  NumSharp raises `ArgumentOutOfRangeException`. Pin: `Trapezoid_AxisOutsideY_RaisesNumPysIndexError`.
+- [x] **A5 `np.trapezoid`: an `axis=` outside `y`.** NumPy raises `IndexError: list assignment index out of range`;
+  NumSharp raises `ArgumentOutOfRangeException`. Pin: `Trapezoid_AxisOutsideY_RaisesNumPysIndexError`. Done
+  2026-10-05 (this commit).
+  - Proof (2026-10-05, at `76b03855`): a 480-case NumPy 2.4.2 matrix (y of rank 0–3 × axis −6..5 × ten x forms: none,
+    a 1-D x of the axis's length / of 5 / empty / of shape `(4,)`, a 0-d x, N-D x of shapes `(1,4)`, `(3,4)`,
+    `(2,3,4)`, `(2,2,3,4)`), each outcome compared as type + text, or dtype + shape: 217 equal, 224 differ — every one
+    NumPy's `IndexError: list assignment index out of range` against NumSharp's `ArgumentOutOfRangeException("axis N is
+    out of bounds for array of dimension M")`. The x errors that come first (diff's AxisError for an axis outside x as
+    well, its ValueError for a 0-d x) and every result were already equal.
+  - NumPy's `trapezoid` (`numpy/lib/_function_base_impl.py`) never checks the axis. It assigns into Python lists of
+    length `y.ndim` — `shape[axis] = d.shape[0]` for a 1-D x (after `d = diff(x)`), then `slice1[axis] =
+    slice(1, None)` — so Python's list assignment raises, after an N-D x's `diff(x, axis=axis)`. NumSharp already ran
+    the statements in that order.
+  - Fix (`Math/np.trapezoid.cs`, `TrapezoidAxis`): raise `IndexError("list assignment index out of range")`, the
+    house's leaked-Python-error rule (`np.tensordot`, `np.fft`). The code that computes a result is unchanged.
+  - Proof of the fix: the 480-case matrix — all equal.
+  - Gates: 106 `err_axis_outside_y` cases appended to the `multioutput` oracle tier (687 cases, floor 680; 78 of them the
+    IndexError, 12 diff's AxisError and 16 its ValueError, which still come first; every y rank × both ends of the axis
+    × none / 1-D / empty 1-D / N-D x that admits the axis / N-D x that does not / 0-d x, plus seven other dtypes); the
+    generator no longer skips NumPy's IndexError; trapezoid excluded from the registry's K7 branch (finding 15); the pin
+    moved to `Math/np.trapezoid.Test.cs` without `[OpenBugs]` and widened to 14 cases; `Trapezoid_0D_Throws` and
+    `Trapezoid_XErrorsComeBeforeYAxisErrors` assert the type and text again. With the old error planted back, 78 tier
+    cases turn red (66 before the K7 change).
 - [ ] **A6 `np.ma.var` / `np.ma.std` with a mask: the masked path is not NumPy's.** `NDMaskedArray.var` computes its
   own formula (it never reaches `np.var`): 242 cases of the ma oracle tier differ — a slice NumPy masks (all masked,
   or `count - ddof <= 0`) carries NaN instead of the masked 0, and some slices are finite where NumPy has +inf. They
@@ -626,9 +647,20 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
    count, not the element count, sets the time (NumPy ~9 ns per run). The lane ops are associative, so each call's
    result is a closed form of the out's value and numbers taken from the run alone — only a compare-and-select stays on
    the chain (float64 where= 0.94× → 2.2× NumPy).
+15. **Plant the old behavior back to prove a new error gate** (A5). The new tier passed on the fixed build, but with the
+   old error planted back only 66 of its 78 IndexError cases turned red: the registry's K7 branch ("NEP50 weak-scalar
+   (error path)") excuses any value or error-text divergence of an op with two operands, one of them 0-d, and so covered
+   every 0-d y with an x. A trapezoid 0-d operand is never a weak scalar, so the branch now skips trapezoid, as it skips
+   clip_pyint / clip_ufunc. K7 is keyed on the operand shape, not the op, so any tier's 0-d-operand case can fall into
+   it; on the fixed build it excuses 6 cases in the whole oracle suite, all in `errors_full` and all its documented
+   class (`bitwise_and` / `bitwise_or` / `bitwise_xor` of an int64 / uint64 pair with a 0-d operand), checked by
+   tagging its reason with the case id for one run.
 
 ## 7. State log
 
+- **2026-10-05**: A5 done (np.trapezoid raises NumPy's `IndexError: list assignment index out of range` for an axis
+  outside y; 106 `err_axis_outside_y` cases in the `multioutput` tier; trapezoid out of the registry's K7 branch); finding
+  15 recorded. Commit: this one.
 - **2026-10-05**: A4 done (np.max / np.min / np.amax / np.amin / np.nanmax / np.nanmin / ndarray.max / ndarray.min take
   NumPy's `out=` / `initial=` / `where=` in NumPy's order, through a port of NumPy's reduction iterator; the
   `minmax_kwargs` oracle tier; plain np.max of complex128, broadcast and bool inputs and the fresh axis-result layout of

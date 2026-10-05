@@ -10,7 +10,7 @@ namespace NumSharp.Tests
     /// <summary>
     ///     Open bugs in how NumSharp STARTS a reduction, a scan or a size-1 product — found while making
     ///     <c>np.trapezoid</c> bit-exact (commit 94c9eb6b, 2026-10-03) and by the 2026-10-04 reduction-start probe —
-    ///     plus the probe's wrong shapes and errors (groups 6, 7), which NaN a flat sum of several NaNs returns
+    ///     plus the probe's wrong shapes (group 6; its trapezoid error, group 7, is fixed), which NaN a flat sum of several NaNs returns
     ///     (group 8), and an axis sum in a cast loop whose rows are longer than the buffer (group 9). Each test asserts NumPy
     ///     2.4.2's answer — dtype, shape and the raw bits of every element — so it FAILS while the bug lives and passes
     ///     once it is fixed. Remove <c>[OpenBugs]</c> from a test when its path is fixed, and move the test next to the
@@ -69,7 +69,9 @@ namespace NumSharp.Tests
     ///     <para>
     ///     The probe also found reductions that return the wrong shape (group 6; group 4 is fixed) and <c>np.trapezoid</c>'s
     ///     error for an axis outside <c>y</c> (group 7). Those tests use ordinary values, where a value comparison
-    ///     alone already fails.
+    ///     alone already fails. Group 7 is fixed — np.trapezoid raises NumPy's <c>IndexError: list assignment index out
+    ///     of range</c> since 2026-10-05 (plan <c>docs/plans/api-parameter-parity.md</c> A5) — and its test moved to
+    ///     <c>Math/np.trapezoid.Test.cs</c> without <c>[OpenBugs]</c>.
     ///     </para>
     ///     <para>
     ///     Every expected string below is NumPy 2.4.2's output for the same call (same operands, same arguments),
@@ -413,47 +415,10 @@ namespace NumSharp.Tests
         }
 
         // ======================================================================================================
-        //  GROUP 7 — np.trapezoid's error for an axis outside y.
+        //  GROUP 7 — np.trapezoid's error for an axis outside y: FIXED 2026-10-05 (plan
+        //  docs/plans/api-parameter-parity.md A5). Its test moved to Math/np.trapezoid.Test.cs as
+        //  Trapezoid_AxisOutsideY_RaisesNumPysIndexError without [OpenBugs].
         // ======================================================================================================
-
-        /// <summary>
-        ///     <c>np.trapezoid</c> with an axis outside <c>y</c>'s dimensions must raise NumPy's
-        ///     <c>IndexError: list assignment index out of range</c>: for a 0-d <c>y</c>, an out-of-range positive
-        ///     or negative axis, a 1-D <c>x</c>, and an N-D <c>x</c> whose own rank admits the axis. NumSharp raises
-        ///     <c>ArgumentOutOfRangeException("axis N is out of bounds for array of dimension M")</c>. An axis
-        ///     outside an N-D <c>x</c> is already right: NumPy's <c>diff(x, axis)</c> raises the <c>AxisError</c>
-        ///     first, and so does NumSharp.
-        /// </summary>
-        /// <remarks>
-        ///     <para>
-        ///     NumPy's <c>trapezoid</c> never checks the axis. It writes into Python lists of length <c>y.ndim</c>
-        ///     (<c>slice1[axis] = slice(1, None)</c>, and <c>shape[axis] = d.shape[0]</c> for a 1-D <c>x</c>), so
-        ///     the list assignment raises. NumSharp reproduces NumPy's leaked Python <c>IndexError</c>s verbatim
-        ///     elsewhere (<c>np.tensordot</c>, <c>np.fft</c>, <c>numpy.polynomial</c>: "tuple index out of
-        ///     range") and has the <c>IndexError</c> type for it.
-        ///     </para>
-        ///     <para>
-        ///     Root cause: <c>Math/np.trapezoid.cs</c> <c>TrapezoidAxis</c> raises the axis error on purpose (its
-        ///     documentation calls it "the clearer axis-out-of-bounds error"). The unit tests
-        ///     <c>Trapezoid_0D_Throws</c> and <c>Trapezoid_XErrorsComeBeforeYAxisErrors</c> now assert only that
-        ///     these calls throw, so they hold before and after the fix.
-        ///     </para>
-        /// </remarks>
-        [TestMethod, OpenBugs]
-        public void Trapezoid_AxisOutsideY_RaisesNumPysIndexError()
-        {
-            var fails = new List<string>();
-            const string indexError = "threw IndexError: list assignment index out of range";
-            Check(fails, "trapezoid 0-d y", () => np.trapezoid(np.array(5.0)), indexError);
-            Check(fails, "trapezoid 0-d y, 1-D x", () => np.trapezoid(np.array(5.0), np.array(new[] { 1.0, 2.0 })), indexError);
-            Check(fails, "trapezoid y(2,3) axis=5", () => np.trapezoid(np.ones(new Shape(2, 3)), axis: 5), indexError);
-            Check(fails, "trapezoid y(2,3) axis=-3", () => np.trapezoid(np.ones(new Shape(2, 3)), axis: -3), indexError);
-            Check(fails, "trapezoid y(2,3) 1-D x axis=5",
-                  () => np.trapezoid(np.ones(new Shape(2, 3)), np.array(new[] { 1.0, 2.0, 3.0 }), axis: 5), indexError);
-            Check(fails, "trapezoid y(2,3) x(2,2,3) axis=2",
-                  () => np.trapezoid(np.ones(new Shape(2, 3)), np.ones(new Shape(2, 2, 3)), axis: 2), indexError);
-            AssertNoMismatch(fails, "NumPy's trapezoid leaks the IndexError of its slice-list assignment");
-        }
 
         // ======================================================================================================
         //  GROUP 8 — NumPy's compiled pairwise_sum picks a NaN by operand order; the emitted folds pick another.

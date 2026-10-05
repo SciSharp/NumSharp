@@ -1031,7 +1031,7 @@ namespace NumSharp.Tests.Fuzz
             ["poly.jsonl"] = 60,
             ["einsum.jsonl"] = 35,
             ["modf.jsonl"] = 165,   // all non-complex lanes + char (the 59f99320 per-width promotion, dtype-spread gate)
-            ["multioutput.jsonl"] = 575,  // 473 before the np.trapezoid section (108: broadcast / unit-axis / permuted / F y, 1-D and N-D x of any rank, bool and wrapping x, three NumPy errors — the NpyIter layout rule) — 581
+            ["multioutput.jsonl"] = 680,  // 473 before the np.trapezoid section (108: broadcast / unit-axis / permuted / F y, 1-D and N-D x of any rank, bool and wrapping x, three NumPy errors — the NpyIter layout rule) — 581; +106 err_axis_outside_y (plan api-parameter-parity A5: NumPy's leaked "list assignment index out of range" IndexError, and the x errors that come first) — 687
             ["nanreduce.jsonl"] = 8300,   // + nanpercentile/nanquantile integer/bool degenerate lanes (dtype-spread gate)
             ["half_minmax.jsonl"] = 5800, // float16 max/min/nanmax/nanmin/ptp, distinct NaN payloads + ±0 ties x 45 layouts — 5,900 at delivery (2026-10-03; 1,180 per op)
             ["nanscan.jsonl"] = 525,   // nancumsum all 13 dtypes; nancumprod carves complex128 (host-FMA multiply)

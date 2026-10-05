@@ -50,7 +50,10 @@ namespace NumSharp
     // another rank than `y` changes (y (5,) with x (3, 2, 5) integrates x's last axis and sums
     // the product's last axis, giving (3, 2)). Only the slices `y[1:]`/`y[:-1]` and the 1-D
     // spacing's reshape read it against y.ndim. NumPy resolves the spacing first, so an error in
-    // `x` (a 0-d x, an axis outside x) is reported before one in y's axis.
+    // `x` (a 0-d x, an axis outside x) is reported before one in y's axis. NumPy never checks y's
+    // axis itself: it assigns into Python lists of length y.ndim (`shape[axis] = d.shape[0]` for a
+    // 1-D x, then `slice1[axis] = slice(1, None)`), so an axis outside y is Python's
+    // `IndexError: list assignment index out of range`, which TrapezoidAxis raises verbatim.
     //
     // LAYOUT-ORDER PARITY (bit-exact on every layout, all dtypes). trapezoid ends in a reduction,
     // and floating-point summation is not associative, so the result depends on the ORDER the
@@ -126,13 +129,17 @@ namespace NumSharp
         ///     (<c>np_sum_identity_tests.Trapezoid_OneInterval_NegativeZeroArea_IsPositiveZero</c>).
         /// </returns>
         /// <exception cref="ArgumentNullException"><paramref name="y"/> is <c>null</c>.</exception>
+        /// <exception cref="IndexError">
+        ///     <paramref name="axis"/> is outside <c>[-y.ndim, y.ndim-1]</c>, which every axis of a 0-D
+        ///     <paramref name="y"/> is: NumPy's "list assignment index out of range", verbatim. NumPy's trapezoid
+        ///     never checks the axis; Python's assignment into its list of length <c>y.ndim</c> raises. An error
+        ///     in <paramref name="x"/> (the two below) is reported first, as in NumPy, which resolves the spacing
+        ///     before it slices <paramref name="y"/>.
+        /// </exception>
         /// <exception cref="ArgumentOutOfRangeException">
-        ///     <paramref name="y"/> is 0-D, or <paramref name="axis"/> is outside
-        ///     <c>[-y.ndim, y.ndim-1]</c> (NumPy raises an <c>IndexError</c> from its slice list
-        ///     there, an open parity gap pinned by
-        ///     <c>OpenBugsReductionTests.Trapezoid_AxisOutsideY_RaisesNumPysIndexError</c>; both reject).
-        ///     Also, as <see cref="diff(NDArray, int, int, object, object)"/> raises it, when an N-D
-        ///     <paramref name="x"/> has no such axis — that check runs first, as in NumPy.
+        ///     An N-D <paramref name="x"/> has no axis <paramref name="axis"/>:
+        ///     <see cref="diff(NDArray, int, int, object, object)"/>'s "axis N is out of bounds for array of
+        ///     dimension M" (NumPy's <c>AxisError</c> from <c>diff(x, axis=axis)</c>).
         /// </exception>
         /// <exception cref="ArgumentException">
         ///     A 0-D <paramref name="x"/> ("diff requires input that is at least one dimensional",
@@ -274,25 +281,26 @@ namespace NumSharp
         /// <summary>
         ///     Normalizes <paramref name="axis"/> against <paramref name="nd"/> — the check NumPy's
         ///     trapezoid makes implicitly when it indexes its per-axis slice list (and the 1-D spacing's
-        ///     shape list) of length <c>y.ndim</c> with the raw axis.
+        ///     shape list) of length <c>y.ndim</c> with the raw axis. Call it where NumPy's first such list
+        ///     assignment runs: after the spacing is resolved, so an error in <c>x</c> is reported first.
         /// </summary>
         /// <param name="axis">The caller's axis; negative counts from the end.</param>
         /// <param name="nd">The rank of <c>y</c>.</param>
         /// <returns>The axis in <c>[0, nd)</c>.</returns>
-        /// <exception cref="ArgumentOutOfRangeException">
-        ///     <paramref name="axis"/> is outside <c>[-nd, nd-1]</c>, including every axis of a 0-D
-        ///     <c>y</c>. NumPy leaks a Python "list assignment index out of range" <c>IndexError</c> here;
-        ///     NumSharp raises the axis-out-of-bounds error instead (both reject). That is an open parity gap:
-        ///     the house rule reproduces NumPy's leaked <c>IndexError</c>s verbatim (<c>np.tensordot</c>,
-        ///     <c>np.fft</c>), and <c>OpenBugsReductionTests.Trapezoid_AxisOutsideY_RaisesNumPysIndexError</c>
-        ///     pins NumPy's type and message for every route that reaches here.
+        /// <exception cref="IndexError">
+        ///     <paramref name="axis"/> is outside <c>[-nd, nd-1]</c>, which every axis of a 0-D <c>y</c> is.
+        ///     The text is NumPy's, "list assignment index out of range", verbatim: NumPy's trapezoid never checks
+        ///     the axis, and Python's assignment into a list of length <c>y.ndim</c>
+        ///     (<c>slice1[axis] = slice(1, None)</c>, and first <c>shape[axis] = d.shape[0]</c> for a 1-D x)
+        ///     raises it. NumSharp reproduces NumPy's leaked Python errors the same way elsewhere
+        ///     (<c>np.tensordot</c>, <c>np.fft</c>: "tuple index out of range").
         /// </exception>
         private static int TrapezoidAxis(int axis, int nd)
         {
+            // Python's list index rule: an index i of a list of length nd is valid when -nd <= i < nd.
             int ax = axis < 0 ? axis + nd : axis;
             if (ax < 0 || ax >= nd)
-                throw new ArgumentOutOfRangeException(nameof(axis),
-                    $"axis {axis} is out of bounds for array of dimension {nd}");
+                throw new IndexError("list assignment index out of range");
             return ax;
         }
 

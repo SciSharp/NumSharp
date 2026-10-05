@@ -1249,9 +1249,15 @@ namespace NumSharp.Tests.Fuzz
             // an out= operand beside it) — its bounds ride as params, so there is no weak 0-D operand to
             // promote, and a divergence there is a real clip bug. And clip_ufunc, whose 0-D operands are the
             // clipped array (scalar_0d) and its zero-filled 0-D a: the scalar bounds ride as params there too.
+            //
+            // EXCLUDES trapezoid as well (plan api-parameter-parity A5): its 0-D operands are y, whose every axis
+            // is NumPy's leaked "list assignment index out of range" IndexError, and x, which diff refuses ("diff
+            // requires input that is at least one dimensional") — never a weak scalar a pairing could promote.
+            // With the old axis error planted back, this branch excused the 12 err_axis_outside_y cases of a 0-D y
+            // with an x, so a regression there passed; without it all 78 IndexError cases turn red.
             if ((kind == DivergenceKind.Value || kind == DivergenceKind.ErrorText)
                 && (c.Op == null || !c.Op.StartsWith("out_"))
-                && c.Op != "clip_pyint" && c.Op != "clip_ufunc"
+                && c.Op != "clip_pyint" && c.Op != "clip_ufunc" && c.Op != "trapezoid"
                 && c.Operands.Length >= 2 && c.Operands.Any(o => o.Shape.Length == 0))
                 return "NEP50 weak-scalar (error path): a 0-D operand promotes weakly, so a pairing "
                      + "NumPy refuses succeeds instead";

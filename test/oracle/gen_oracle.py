@@ -9247,8 +9247,9 @@ def gen_multioutput():
     # y, a C y with an extent-1 axis against an F x, permuted / F y (whose result is itself F or
     # permuted), and an x of another rank than y (NumPy hands the RAW axis to diff and to sum). Values
     # are inexact so a wrong order changes the bits. Errors are recorded stripped (the harness trims
-    # NumSharp's message); y's axis out of range is skipped — NumPy leaks a list IndexError there and
-    # NumSharp's clearer axis error is unit-tested instead.
+    # NumSharp's message), y's axis out of range included: NumPy never checks it and leaks Python's
+    # "list assignment index out of range" IndexError, which NumSharp raises verbatim since plan
+    # api-parameter-parity A5 (the err_axis_outside_y cases at the end of this section).
     def _trap_vals(nn, dt):
         vals = ((np.arange(nn) * 37) % 101) * 0.1
         if np.dtype(dt).kind == "c":
@@ -9269,8 +9270,6 @@ def gen_multioutput():
                 r = np.asarray(np.trapezoid(yview, x=xview, dx=params.get("dx", 1.0),
                                             axis=params.get("axis", -1)))
         except Exception as e:                       # noqa: BLE001 — every NumPy outcome is recorded
-            if type(e) is IndexError:                # y's slice list; AxisError (an IndexError too) is kept
-                return
             cases.append({"id": cid, "op": "trapezoid", "params": params, "operands": operands,
                           "expected": {}, "expects_throw": True,
                           "error": {"type": type(e).__name__, "text": str(e).strip()},
@@ -9343,6 +9342,41 @@ def gen_multioutput():
     trap_emit("err_x_0d", e2, e2, x0, x0.reshape(()), {"axis": 1})
     x3e = np.ones((2, 2, 3))
     trap_emit("err_axis_outside_x", e2, e2, x3e, x3e, {"axis": 5})
+
+    # An axis outside y (plan api-parameter-parity A5). NumPy's trapezoid never checks the axis: it assigns
+    # into Python lists of length y.ndim (shape[axis] = d.shape[0] for a 1-D x, then slice1[axis] =
+    # slice(1, None)), so the assignment raises "IndexError: list assignment index out of range". Every y
+    # rank 0-3 at the first axis past each end (ndim, -ndim-1) and two further out (ndim+2, -ndim-3),
+    # against every x form: none, a 1-D x
+    # (the list assignment runs before the multiply, so its length never matters, an empty one included),
+    # an N-D x whose own rank admits the axis (diff succeeds, then y's list raises), an N-D x that does not
+    # (diff's AxisError comes first), and a 0-d x (diff's ValueError comes first). A 0-d operand is a view
+    # of a one-element base, like err_x_0d. Then one call per other dtype: the error precedes any dtype work.
+    # Appended last so no earlier case id moves.
+    for yshape in [(), (4,), (2, 3), (2, 3, 4)]:
+        ynd = len(yshape)
+        ybase = (np.arange(max(int(np.prod(yshape)), 1)) * 0.3 + 1.0)
+        yview = ybase.reshape(yshape)
+        for ax in (ynd, ynd + 2, -ynd - 1, -ynd - 3):
+            tag = f"err_axis_outside_y/{ynd}d"
+            trap_emit(f"{tag}/x_none", ybase, yview, params={"axis": ax})
+            x1 = np.arange(3) * 0.5
+            trap_emit(f"{tag}/x_1d", ybase, yview, x1, x1, {"axis": ax})
+            x1e = np.zeros(0)
+            trap_emit(f"{tag}/x_1d_empty", ybase, yview, x1e, x1e, {"axis": ax})
+            xk = max(2, ax + 1 if ax >= 0 else -ax)
+            xn = (np.arange(2 ** xk) * 0.25).reshape((2,) * xk)
+            trap_emit(f"{tag}/x_nd_admits_axis", ybase, yview, xn, xn, {"axis": ax})
+            if not -2 <= ax < 2:                     # outside the 2-D x as well: diff's AxisError
+                x2d = np.arange(4.0).reshape(2, 2)
+                trap_emit(f"{tag}/x_nd_outside_too", ybase, yview, x2d, x2d, {"axis": ax})
+            x0b = np.array([2.5])
+            trap_emit(f"{tag}/x_0d", ybase, yview, x0b, x0b.reshape(()), {"axis": ax})
+    for dt in ["float16", "float32", "complex128", "int32", "int64", "uint8", "bool"]:
+        yd = _trap_vals(6, dt)
+        trap_emit(f"err_axis_outside_y/dtype/{dt}", yd, yd.reshape(2, 3), params={"axis": 2})
+        xd = _trap_vals(12, dt).reshape(2, 2, 3)
+        trap_emit(f"err_axis_outside_y/dtype/{dt}", yd, yd.reshape(2, 3), xd, xd, {"axis": -3})
 
     return cases
 

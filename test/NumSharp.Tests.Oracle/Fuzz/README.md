@@ -400,7 +400,7 @@ row is scoped in `MisalignedRegistry` branches K1–K9, so each is counted and p
 | `power(bool, negative int)` misses the integer-power guard | K6 | known bug |
 | `power(int, negative int)` trips `Debug.Fail("index < Count, Memory corruption expected")` instead of NumPy's ValueError — in Release that path has no assert | K8 | known bug (memory safety) |
 | `result_type(mixed signed/unsigned, 0-D operand)` throws instead of resolving | K9 | known bug |
-| NEP50 weak-scalar reached via the error path (int64+uint64 succeeds where NumPy refuses) | K7 | intended |
+| NEP50 weak-scalar reached via the error path (int64+uint64 succeeds where NumPy refuses). Not for `clip_pyint`, `clip_ufunc` or `trapezoid`: their 0-d operands are never weak scalars (trapezoid's are `y` and `x`; with the old axis error planted back, K7 excused 12 of its 78 axis-outside-`y` cases, 2026-10-05) | K7 | intended |
 | ufunc `out=` on a read-only **broadcast** view (983 cases) | K10 | **FIXED** — `ThrowReadOnly` now raises NumPy's exact `ValueError("output array is read-only")` (was `NumSharpException`, same text) so these pass without an excuse; the write-through was already prevented by `ThrowIfNotWriteable` |
 | `isnan` into a **strided bool `out`**: results land on the wrong elements (contiguous out is correct) | K12 | known bug |
 | `exp(1.0f)` in a (4,5) float32 array returns `0x402df854` from `np.exp(x)`, `np.exp(x, out)` and `np.exp(x, out, where)` alike, while NumPy **and the committed `unary.jsonl` expectation for the same values/shape/dtype** say `0x402df855` — the unary tier is green, so the same op on the same data disagrees depending on how the array was built | K11 | **open question** |
@@ -882,8 +882,11 @@ cells match NumPy and joined the tier (8,586 → 8,610), and the carve holds 838
   `nansum` / `nanprod` were `(1,)`, complex 1-D `nansum` along axis 0 threw;
 - (fixed) float16 `nansum` / `nanprod` along an axis of a non-C view read the WRONG elements (garbage values,
   e.g. `np.nanprod(float16([2, 3])[::-1], axis=0)` was not 6);
-- not a start rule, pinned in the same file: `np.trapezoid` with an axis outside `y` raises the axis
-  error, where NumPy leaks `IndexError: list assignment index out of range`.
+- not a start rule, pinned in the same file until it was fixed (2026-10-05, plan api-parameter-parity A5):
+  `np.trapezoid` with an axis outside `y` raised the axis error, where NumPy leaks
+  `IndexError: list assignment index out of range`. NumSharp raises NumPy's error now; the `multioutput`
+  tier's 106 `err_axis_outside_y` cases (78 of them that IndexError) hold it, and the pin moved to
+  `Math/np.trapezoid.Test.cs`.
 
 **The nanreduce blanket hid the float16 garbage.** Table 1's "nan-reduction family" known-bug branches
 excuse 1,483 of the nanreduce tier's 10,416 cases today (909 shape, 378 value, 112 nanmedian NaN, 72 dtype,

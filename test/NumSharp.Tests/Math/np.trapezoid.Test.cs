@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using static NumSharp.Tests.Utilities.RawBitCases;
 
 namespace NumSharp.Tests.Math
 {
@@ -162,11 +164,64 @@ namespace NumSharp.Tests.Math
         [TestMethod]
         public void Trapezoid_0D_Throws()
         {
-            // NumPy leaks "IndexError: list assignment index out of range" here; NumSharp still raises an axis
-            // error. Only "it throws" is asserted, which holds before and after the fix: the exact type and message
-            // are the open parity pin OpenBugsReductionTests.Trapezoid_AxisOutsideY_RaisesNumPysIndexError.
+            // NumPy's trapezoid assigns into a slice list of length y.ndim = 0 (slice1[axis] = slice(1, None)), so
+            // every axis of a 0-d y is Python's "IndexError: list assignment index out of range" (NumPy 2.4.2).
             Action act = () => np.trapezoid(np.array(5.0));
-            act.Should().Throw<Exception>();
+            act.Should().Throw<IndexError>().WithMessage("list assignment index out of range");
+        }
+
+        /// <summary>
+        ///     <c>np.trapezoid</c> with an axis outside <c>y</c>'s dimensions raises NumPy's
+        ///     <c>IndexError: list assignment index out of range</c>: for a 0-d <c>y</c>, an out-of-range positive
+        ///     or negative axis, a 1-D <c>x</c> (empty, or of a length that would not broadcast), and an N-D
+        ///     <c>x</c> whose own rank admits the axis. An error in <c>x</c> still comes first, as in NumPy.
+        /// </summary>
+        /// <remarks>
+        ///     <para>
+        ///     NumPy's <c>trapezoid</c> never checks the axis. It writes into Python lists of length <c>y.ndim</c>
+        ///     (<c>shape[axis] = d.shape[0]</c> for a 1-D <c>x</c>, then <c>slice1[axis] = slice(1, None)</c>), so the
+        ///     list assignment raises. Every expected string is NumPy 2.4.2's outcome for the same call, in
+        ///     <see cref="NumSharp.Tests.Utilities.RawBitCases.Describe"/>'s format (<c>threw &lt;type&gt;:
+        ///     &lt;message&gt;</c> for an error).
+        ///     </para>
+        ///     <para>
+        ///     Moved from <c>OpenBugs.Reductions.cs</c> (group 7) without <c>[OpenBugs]</c> when the fix landed (plan
+        ///     <c>docs/plans/api-parameter-parity.md</c> A5); before it NumSharp raised
+        ///     <c>ArgumentOutOfRangeException("axis N is out of bounds for array of dimension M")</c> for all of them.
+        ///     The 480-case probe behind the fix (y ranks 0-3 × axes -6..5 × ten x forms) matched NumPy in every case.
+        ///     </para>
+        /// </remarks>
+        [TestMethod]
+        public void Trapezoid_AxisOutsideY_RaisesNumPysIndexError()
+        {
+            var fails = new List<string>();
+            const string indexError = "threw IndexError: list assignment index out of range";
+            Check(fails, "trapezoid 0-d y", () => np.trapezoid(np.array(5.0)), indexError);
+            Check(fails, "trapezoid 0-d y, 1-D x", () => np.trapezoid(np.array(5.0), np.array(new[] { 1.0, 2.0 })), indexError);
+            Check(fails, "trapezoid 0-d y, x(3,4)", () => np.trapezoid(np.array(5.0), np.ones(new Shape(3, 4))), indexError);
+            Check(fails, "trapezoid y(4,) axis=1", () => np.trapezoid(np.ones(new Shape(4)), axis: 1), indexError);
+            Check(fails, "trapezoid y(4,) axis=-2", () => np.trapezoid(np.ones(new Shape(4)), axis: -2), indexError);
+            Check(fails, "trapezoid y(2,3) axis=5", () => np.trapezoid(np.ones(new Shape(2, 3)), axis: 5), indexError);
+            Check(fails, "trapezoid y(2,3) axis=-3", () => np.trapezoid(np.ones(new Shape(2, 3)), axis: -3), indexError);
+            Check(fails, "trapezoid y(2,3) 1-D x axis=5",
+                  () => np.trapezoid(np.ones(new Shape(2, 3)), np.array(new[] { 1.0, 2.0, 3.0 }), axis: 5), indexError);
+            // The list assignment runs before the multiply, so a spacing that would not broadcast is never reached.
+            Check(fails, "trapezoid y(2,3) 1-D x of length 7 axis=2",
+                  () => np.trapezoid(np.ones(new Shape(2, 3)), np.arange(7).astype(np.float64), axis: 2), indexError);
+            Check(fails, "trapezoid y(2,3) empty 1-D x axis=-3",
+                  () => np.trapezoid(np.ones(new Shape(2, 3)), np.zeros(new Shape(0)), axis: -3), indexError);
+            Check(fails, "trapezoid y(2,3) x(2,2,3) axis=2",
+                  () => np.trapezoid(np.ones(new Shape(2, 3)), np.ones(new Shape(2, 2, 3)), axis: 2), indexError);
+            Check(fails, "trapezoid y(2,3) x(2,2,3) axis=-3",
+                  () => np.trapezoid(np.ones(new Shape(2, 3)), np.ones(new Shape(2, 2, 3)), axis: -3), indexError);
+            // diff(x, axis) runs first: an axis outside x as well is x's AxisError, a 0-d x diff's ValueError.
+            CheckThrows<ArgumentOutOfRangeException>(fails, "trapezoid y(2,3) x(2,2,3) axis=-4",
+                  () => np.trapezoid(np.ones(new Shape(2, 3)), np.ones(new Shape(2, 2, 3)), axis: -4),
+                  "axis -4 is out of bounds for array of dimension 3");
+            CheckThrows<ArgumentException>(fails, "trapezoid 0-d y, 0-d x axis=3",
+                  () => np.trapezoid(np.array(5.0), np.array(2.0), axis: 3),
+                  "diff requires input that is at least one dimensional");
+            AssertNoMismatch(fails, "NumPy's trapezoid leaks the IndexError of its slice-list assignment");
         }
 
         // ---------------------- layout-order (KEEPORDER) parity ----------------------
@@ -447,11 +502,9 @@ namespace NumSharp.Tests.Math
             outsideX.Should().Throw<ArgumentOutOfRangeException>().WithMessage("axis 5 is out of bounds for array of dimension 3*");
 
             // An axis inside x but outside y fails at y's slicing: NumPy raises "IndexError: list assignment index
-            // out of range" there, AFTER x's diff succeeded. Only "it throws" is asserted here; NumSharp still raises
-            // an axis error, and NumPy's exact type and message are the open parity pin
-            // OpenBugsReductionTests.Trapezoid_AxisOutsideY_RaisesNumPysIndexError.
+            // out of range" there, AFTER x's diff succeeded.
             Action outsideY = () => np.trapezoid(np.ones(new Shape(2, 3)), np.ones(new Shape(2, 2, 3)), axis: 2);
-            outsideY.Should().Throw<Exception>();
+            outsideY.Should().Throw<IndexError>().WithMessage("list assignment index out of range");
 
             // A spacing that does not broadcast: NumPy's multiply error, verbatim.
             Action mismatch = () => np.trapezoid(np.ones(new Shape(2, 3)), np.ones(new Shape(2, 5)), axis: 1);
