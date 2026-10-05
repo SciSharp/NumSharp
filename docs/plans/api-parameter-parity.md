@@ -637,7 +637,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
   values are right, and the oracle compares C-order bytes, so only a flags or strides facet sees it. np.sum's bool
   loop (`dtype=bool`) and np.mean's bool loop are np.any and inherit it. Found by X9's probe.
 - [x] **X11 `np.copyto(dst, src, where=mask)` runs a branch per element (and a generic loop for float16 / complex).**
-  Done with X16 (2026-10-06, this commit): the masked copy is a new bit-copy kernel per element width; the speed is in
+  Done with X16 (2026-10-06, `2dffb8d9`): the masked copy is a new bit-copy kernel per element width; the speed is in
   X16.
   2.5 ns per element over a `(250, 400)` float16 with every 7th element masked: 253 µs, where
   `np.putmask(dst, mask, scalar)` — the same assignment for a same-shape mask — takes 21 µs. Speed only. nanvar /
@@ -680,7 +680,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
   float16 (250,1))` takes 1,141 µs (11 ns per element) where NumPy takes 377 µs and the same-shape float16 subtract takes
   72 µs. Speed only. numpy.ma's anom of float16 along axis 1 meets it (0.86× NumPy). Found by A6's benchmark.
 - [x] **X16 `np.copyto` is not NumPy's `array_copyto`: wrong values for an overlapping copy, NumPy's checks missing or
-  in another order, weak scalars wrapped.** Found by X11's probe (2026-10-06). Done 2026-10-06 (this commit).
+  in another order, weak scalars wrapped.** Found by X11's probe (2026-10-06). Done 2026-10-06 (`2dffb8d9`).
   - Proof (NumPy 2.4.2 vs NumSharp at `04e0e703`; `copyto_probe`, 86 calls; the house exception types mapped to
     NumPy's): 54 differ.
     - Silent wrong values. A masked copy never checked overlap: `np.copyto(a[1:], a[:-1], where=m)` gave
@@ -875,7 +875,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
 - **2026-10-06**: X16 done with X11 (np.copyto is NumPy's `array_copyto`: the checks in NumPy's order, weak C#
   scalars, the overlap rule shared with NDIter.Copy and slice assignment, a new masked bit-copy kernel; the
   `copyto_full` oracle tier, zero excuses; 21 planted bugs killed); A6 re-measured (4.60×); X17 and findings 21–24
-  recorded. This commit.
+  recorded. Commit `2dffb8d9`.
 - **2026-10-06**: A6 done (np.ma.mean / var / std / anom are numpy.ma's statements; the `ma_meanvar` oracle tier with
   raw data and result forms, zero excuses; `ma_reduce` holds the four strict but a finding-5 branch; 14 planted bugs
   killed); X11 widened (random masks, the dead same-dtype SIMD blend); X12–X15 and findings 16–20 recorded. Commit
