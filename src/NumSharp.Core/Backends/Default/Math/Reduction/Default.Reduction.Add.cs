@@ -123,13 +123,27 @@ namespace NumSharp.Backends
                     return SumOverLengthOneAxis(arr, unitAxis, keepdims, loopType, @out);
             }
 
+            // A bool sum along an axis is the count of its nonzero elements: exact in int64, and in float64 (a count never
+            // reaches 2^53), whatever the order. np.evaluate's CountNonzero axis stream counts a C- or F-contiguous operand
+            // in NumPy's result layout; the axis kernel walked every output's column one element at a time (np.sum(bool
+            // (2500,4000), axis=0, dtype=float64) took 27 ms, NumPy 5 ms; plan item X7).
+            if (axis_ != null && inputType == NPTypeCode.Boolean && @out is null
+                && (loopType == NPTypeCode.Int64 || loopType == NPTypeCode.Double))
+            {
+                var counted = TryCountBoolAxisSum(arr, NormalizeAxis(axis_.Value, arr.ndim), keepdims, loopType);
+                if (counted is not null)
+                    return counted;
+            }
+
             // A loop dtype that is neither the input's own nor its default accumulator: NumPy casts every element into it
             // before the add loop runs, so the cast copy is reduced in its own dtype (no kernel converts per element for
             // every such pair — see the remarks). The axis kernels' own widening paths are NOT the cast copy's order in
             // general — float32 -> float64 and float16 -> float32 summed a contiguous axis differently from NumPy — but
-            // float32 -> float64 over a non-innermost axis is (IsSequentialWideningAxisSum), and runs directly.
+            // float32 -> float64 over a non-innermost axis is (IsSequentialWideningAxisSum), and so is an integer ->
+            // float64 sum the axis kernel provably computes exactly (IsExactIntegerWideningAxisSum): both run directly.
             if (loopType != inputType && loopType != accumulatorType
-                && !(axis_ != null && IsSequentialWideningAxisSum(arr, axis_.Value, inputType, loopType)))
+                && !(axis_ != null && (IsSequentialWideningAxisSum(arr, axis_.Value, inputType, loopType)
+                                       || IsExactIntegerWideningAxisSum(arr, axis_.Value, inputType, loopType))))
                 return ReduceAddInCastLoop(arr, axis_, keepdims, loopType, @out);
 
             // NumPy's bool add loop is logical OR: a bool loop over a bool input is np.any (identity False).
@@ -214,6 +228,104 @@ namespace NumSharp.Backends
                 if (d != ax && shape.dimensions[d] > 1 && Math.Abs(shape.strides[d]) < axisStride)
                     return true;   // some kept axis is strictly tighter: the reduced axis is not the innermost
             return false;          // (a tie — two axes of one stride — counts as innermost and keeps the copy)
+        }
+
+        /// <summary>
+        ///     Whether <c>np.sum(arr, axis, dtype=float64)</c> of an integer <paramref name="arr"/> may run the axis kernel
+        ///     (its integer → float64 widening path) instead of reducing a cast copy, because the kernel's result is then
+        ///     provably NumPy's bits:
+        ///     <list type="bullet">
+        ///         <item>an input of 32 bits or less whose largest possible sum, <c>axis length × max |x|</c>, is at most
+        ///         2^53: every partial sum is an integer float64 holds exactly, so every summation order (NumPy's pairwise
+        ///         innermost order, the kernel's accumulators) gives the same result;</item>
+        ///         <item>an int64 / uint64 input over a NON-innermost axis: its sums can round, but every route the
+        ///         kernel takes for these two pairs is sequential per output (the widening kernel keeps them off its
+        ///         multi-accumulator path), which is NumPy's slab order (<c>out += next slab</c>), and the per-element
+        ///         conversion is the same correctly rounded one NumPy's cast makes.</item>
+        ///     </list>
+        /// </summary>
+        /// <param name="arr">The operand.</param>
+        /// <param name="axis">The reduced axis (negative counts from the last; out of range returns false so the copy
+        /// route raises NumPy's AxisError).</param>
+        /// <param name="src">The input dtype.</param>
+        /// <param name="loop">The loop dtype.</param>
+        /// <returns>True when the axis kernel's sum is NumPy's; false keeps the cast copy (an int64 / uint64 innermost
+        /// axis, which NumPy sums pairwise, or a bound that does not hold).</returns>
+        private static bool IsExactIntegerWideningAxisSum(NDArray arr, int axis, NPTypeCode src, NPTypeCode loop)
+        {
+            if (loop != NPTypeCode.Double)
+                return false;
+            // The largest magnitude one element of the input dtype holds; 0 marks a 64-bit integer (no useful bound).
+            double maxAbs = IntegerMaxMagnitude(src);
+            if (maxAbs < 0)
+                return false;
+            var shape = arr.Shape;
+            int nd = shape.NDim;
+            if (axis < -nd || axis >= nd || shape.IsBroadcasted)
+                return false;
+            int ax = axis < 0 ? axis + nd : axis;
+            if (maxAbs > 0)
+                return shape.dimensions[ax] * maxAbs <= 9007199254740992.0;   // 2^53, computed in double: no overflow
+
+            // int64 / uint64: only where some kept axis is strictly tighter than the reduced one (a slab reduction).
+            if (nd < 2 || shape.dimensions[ax] < 2)
+                return false;
+            long axisStride = Math.Abs(shape.strides[ax]);
+            for (int d = 0; d < nd; d++)
+                if (d != ax && shape.dimensions[d] > 1 && Math.Abs(shape.strides[d]) < axisStride)
+                    return true;
+            return false;
+        }
+
+        /// <summary>
+        ///     The largest magnitude one element of an integer, bool or char dtype holds — the bound that makes a sum of
+        ///     <c>n</c> such elements exact in float64 whenever <c>n × bound ≤ 2^53</c> (every partial sum is then an
+        ///     integer float64 holds, so every summation order gives the same, correctly rounded result).
+        /// </summary>
+        /// <param name="src">The element dtype.</param>
+        /// <returns>The bound (1 for bool, 255 for uint8, 2^31 for int32, …); 0 for int64 / uint64, whose elements alone
+        /// can exceed 2^53 (no useful bound); -1 for a dtype that is not an integer, bool or char.</returns>
+        internal static double IntegerMaxMagnitude(NPTypeCode src) => src switch
+        {
+            NPTypeCode.Boolean => 1.0,
+            NPTypeCode.SByte => 128.0,
+            NPTypeCode.Byte => 255.0,
+            NPTypeCode.Int16 => 32768.0,
+            NPTypeCode.UInt16 or NPTypeCode.Char => 65535.0,
+            NPTypeCode.Int32 => 2147483648.0,
+            NPTypeCode.UInt32 => 4294967295.0,
+            NPTypeCode.Int64 or NPTypeCode.UInt64 => 0.0,
+            _ => -1.0,
+        };
+
+        /// <summary>
+        ///     <c>np.sum(arr, axis)</c> of a bool <paramref name="arr"/> in the int64 or float64 loop, as the count of its
+        ///     nonzero elements (NumPy's bool → number cast is <c>x != 0</c>, so a count is the sum exactly, in any order).
+        ///     Served by np.evaluate's CountNonzero axis stream, which reads a C- or F-contiguous operand in place and
+        ///     returns the counts in that operand's order (C for C, F for F), NumPy's K-order reduction layout.
+        /// </summary>
+        /// <param name="arr">A bool operand with at least one element.</param>
+        /// <param name="axis">The normalized reduced axis.</param>
+        /// <param name="keepdims">Keep the reduced axis with length 1.</param>
+        /// <param name="loopType">Int64 (np.sum's default bool loop) or Double (a <c>dtype=float64</c> request).</param>
+        /// <returns>The sums, a read-only 0-d scalar when every axis is reduced without keepdims; null when the operand is
+        /// neither C- nor F-contiguous or dynamic code is unavailable (the caller's routes then run).</returns>
+        private static NDArray TryCountBoolAxisSum(NDArray arr, int axis, bool keepdims, NPTypeCode loopType)
+        {
+            var shape = arr.Shape;
+            if (!DirectILKernelGenerator.Enabled || shape.size == 0 || !(shape.IsContiguous || shape.IsFContiguous))
+                return null;
+
+            var counts = np.evaluate(NDExpr.CountNonzero(NDExpr.Arr(arr), axis, keepdims));
+            if (loopType == NPTypeCode.Double)
+            {
+                // Exact: a count is an integer below 2^53. astype keeps the counts' layout (order 'K').
+                var wide = counts.astype(np.float64, copy: true);
+                counts.Dispose();
+                counts = wide;
+            }
+
+            return counts.ndim == 0 ? counts.MarkReductionScalar() : counts;
         }
 
         private NDArray HandleElementWiseSum(NDArray arr, bool keepdims, NPTypeCode? typeCode, NDArray @out)

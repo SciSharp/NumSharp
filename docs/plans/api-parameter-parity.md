@@ -243,7 +243,8 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
 - [ ] B1 `np.sum`, `ndarray.sum`: `out=`, `initial=`, `where=`; NumPy's order `(a, axis, dtype, out, keepdims, …)`.
 - [ ] B2 `np.prod`, `ndarray.prod`: `out=`, `initial=`, `where=`.
 - [ ] B3 `np.mean`, `ndarray.mean`: `out=`, `where=`; and `dtype=` without an axis (no overload takes it: `np.mean(a,
-  dtype=np.float32)` does not compile; the axis forms do).
+  dtype=np.float32)` does not compile; the axis forms do). The `dtype=` loops themselves are NumPy's since X9 (the
+  engine's np.mean takes every axis form).
 - [ ] B4 `np.std`, `np.var`, `ndarray.std`, `ndarray.var`: `out=`, `where=`, `mean=`, `correction=`; NumPy's order
   `(a, axis, dtype, out, ddof, keepdims)`.
 - [ ] B5 `np.nansum`, `np.nanprod`: `dtype=`, `out=`, `initial=`, `where=`.
@@ -363,6 +364,17 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
   bool 27.3 ms (NumPy 5.0, 0.18×), int32 9.1 ms (NumPy 4.3); `astype(bool → float64)` takes 11.4 ms (no SIMD kernel).
   Speed only. `np.var` / `np.std` of a bool / int input along axis 0 inherit it (bool at 10M: 1.38× NumPy, the only
   10M var/std cell under 1.5×).
+  - Part done with X9 (2026-10-05), the float64 loop np.mean's default needed: an integer source of 32 bits or less
+    whose largest possible sum `L × max|x|` is within 2^53 (every partial sum exact, so every order gives NumPy's
+    sum), or an int64 / uint64 source along a non-innermost axis (every route of the widening kernel is sequential per
+    output, NumPy's slab order), runs the axis widening kernel instead of the cast copy
+    (`IsExactIntegerWideningAxisSum`); a bool source along an axis counts its nonzero elements with np.evaluate's
+    CountNonzero axis stream (C / F operands, NumPy's K-order result; `TryCountBoolAxisSum`), in the int64 loop too.
+    np.mean at (2500, 4000) along axis 0: bool 67.6 ms → 0.18 ms (NumPy 5.1, 28×), int32 3.16×, int64 1.70×.
+  - Left open: the float32 / float16 cast loops along a non-innermost axis (the blocked cast copy gathers column
+    blocks): np.mean(int32, axis=0, dtype=float32) 0.31× and np.mean(float16, axis=0) 0.80× NumPy at 10M; an int64
+    innermost axis (the pairwise order needs the cast copy) 1.20×. The fix is NumPy's own schedule: cast a block of
+    rows along the reduced axis and add it into the running result.
 - [ ] **X8 The var/std kernels A2 no longer reaches.** `DirectILKernelGenerator.VarSimdHelper` / `StdSimdHelper`
   (`Masking.VarStd.cs`), the `ReductionOp.Var` / `ReductionOp.Std` axis kernels (`Reduction.Axis.VarStd.cs`) and
   `NDAxisIter`'s `VarAxisDoubleKernel` / `StdAxisDoubleKernel` computed var/std in their own order; nothing calls them
@@ -370,6 +382,58 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
   structs, `DirectILKernelGenerator.NanVarSimdHelperFloat` / `NanVarSimdHelperDouble` (`Masking.NaN.cs`) and the
   `ReductionOp.NanVar` / `ReductionOp.NanStd` IL kernels (no caller outside the generator). Decide: remove them, or
   keep them for a future non-NumPy fast mode.
+- [x] **X9 `np.mean`: every `dtype=` loop along an axis, an integer loop flat, a flat decimal mean and a broadcast
+  uint64 mean are not NumPy's.** Found by A7: np.nanmean of an integer input is np.mean, and its one ULP case was
+  `np.mean(int32, axis=0, dtype=complex128)`. Done 2026-10-05.
+  - Proof (2026-10-05, at `d1759ec8`): a 9,660-case NumPy 2.4.2 matrix (`np.mean` over int8 / int32 / int64 / uint64 /
+    bool / float16 / float32 / float64 / complex128 × no dtype and nine loops × shapes `(1,)` to `(2049,)` with
+    length-1 axes and empties × axis forms × keepdims × C / transposed / stepped / reversed): 6,724 exact, 2,936 off.
+    The classes: an axis cast loop read each element as a double and summed in one sequential pass (int32 → float16
+    never overflowed where NumPy gives inf / NaN; float64 → float32 never rounded per element); a complex sum was
+    divided part by part (`14 / 3` where NumPy's Smith division gives `14 * (1/3)`: 1 ULP, and an infinite part did
+    not turn the other into NaN); float16 summed in double; an integer or bool loop on an empty input threw
+    `InvalidCastException` along an axis and gave a float64 NaN flat (NumPy: INT_MIN, True); a flat integer loop did
+    not wrap; a reversed 1-D view walked memory order. Holding np.mean strict in the oracle found two more under the
+    reduce tier's blankets: a flat decimal mean returned float64, and the flat fallback summed a broadcast uint64 in a
+    wrapping uint64 accumulator (101.8 for NumPy's 3.69e18).
+  - NumPy's `_mean` (`numpy/_core/_methods.py`): `rcount = _count_reduce_items(arr, axis)` (an `np.intp`, a STRONG
+    int64; the axis normalized against the rank, so a 0-d input refuses every axis); the loop `dtype=`, else float64 for
+    bool / integers and float32 for float16 (`is_float16_result`); `ret = umr_sum(arr, axis, dtype, keepdims)`; then
+    `true_divide(ret, rcount, out=ret, casting='unsafe')` (and `arr.dtype.type(ret)` for a float16 result), or
+    `ret.dtype.type(ret / rcount)` for a scalar.
+  - Fix (`Default.Reduction.Mean.cs`, `MeanLikeNumPy`): those statements, with np.sum's `ReduceAdd` as `umr_sum`, for
+    every float / complex loop along an axis (a length-1 axis keeps its exact identity add), every integer / bool loop
+    on any shape, a flat decimal mean, and a flat operand the exact engine declines (a broadcast one) whenever the old
+    fold is not NumPy's value (an int64 / uint64 input, a sum past 2^53, a loop other than float64). The division is
+    the engine's dense-block division where it is NumPy's quotient (float64, complex, float32 while `n <= 2^24`), else
+    A2's `DivideByCountLikeNumPy` (the float64 loop, NumPy's unsafe cast back; it now disposes its own temporaries).
+    A float16 result rounds twice for an array and once for a scalar, as NumPy's two branches do. X7's integer / bool
+    part rode along, because np.sum's cast loop became np.mean's speed limit.
+  - Proof of the fix: the 9,660-case matrix 9,615 exact; the other 45 are inherited, 3 per float loop over a reversed
+    view (finding 5) and 3 per bool loop over a transposed 3-D input (layout only, X10). The A7 probe's 11,415 nanmean
+    cases are exact, its integer cases included.
+  - Gates: oracle tier `mean_loops.jsonl` (6,550 cases, zero excuses: every catalog layout × dtype × axis × keepdims,
+    `dtype=` for every input against nine loops, empty and 0-d inputs, special values, order-sensitive sizes,
+    `np.setbufsize` fills; it carves 16 finding-5 cells, 5 X6 cells and 24 broadcast-flat cells, each naming its pin);
+    np.mean held strict in every tier (`ByteExactArithmeticUnaryOps`; out of the reduction dtype, axis-NaN and
+    summation branches; `ma.mean` keeps them, `IsMaMean`) except a narrow branch for finding 5's layout (2 reduce-tier
+    cases); tightness tests `Mean_NoDivergenceIsExcused`, `Mean_ReversedViewAxis_IsTheOnlyExcusedLayout`,
+    `MaMean_KeepsTheReductionBlankets_OnlyForMaIds`; unit tests `Math/np.mean.NumPyPort.Test.cs` (9); `[OpenBugs]`
+    pins `Sum_ReversedViewAxis_WalksTheLogicalOrder` (finding 5) and `Sum_BroadcastOperand_Flat_IsNumPysCallSchedule`
+    (finding 10).
+  - Speed (NPY/NS, one pinned P-core, best of rounds; 54 cells: int32 / int64 / bool / float64 / float32 / float16 /
+    complex128 along axis 0 and 1 × 1K / 100K / 10M, plus F, flat and `dtype=` forms): geomean 2.62× (the old, wrong
+    routes 1.83×). The 12 cells under 1.5×: the same-type slab means at 100K and 10M (float64 / float32 / complex128
+    along axis 0, 1.0–1.35×, the unchanged route; at 10M a DRAM ceiling — float64 axis 0 streams 80 MB at 26 GB/s,
+    NumPy at 23, one core's limit ~27.8); X7's open float loops (int32 → float32 0.31×, float16 0.80× at 10M); an int64
+    innermost axis 1.20× and a flat int64 → int32 loop 1.43× at 10M; float64 → float32 along axis 1 1.34× at 10M.
+    complex128 / float64 axis 0 at 100K swing between 0.8× and 1.2× on both builds (allocator regime, interleaved A/B).
+  - Left open: B3 (`out=`, `where=`, the flat `dtype=` overload); X7's float loops; X10; finding 5; finding 10.
+- [ ] **X10 `np.any` / `np.all` along an axis of an F-ordered or permuted input return C order; NumPy keeps K order.**
+  Probe (2026-10-05): `np.any(b.reshape(3, 5, 6).T, axis)` is F-contiguous in NumPy for every axis and C in NumSharp;
+  a `(1, 0, 2)`-permuted float64 input along axis 2 gives NumPy strides `(1, 5)` (elements), NumSharp `(3, 1)`. The
+  values are right, and the oracle compares C-order bytes, so only a flags or strides facet sees it. np.sum's bool
+  loop (`dtype=bool`) and np.mean's bool loop are np.any and inherit it. Found by X9's probe.
 
 ## 6. Findings
 
@@ -389,7 +453,10 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
    check, 452 cases over float16/float32/float64/complex128 × C/F/stepped/reversed/transposed × flat/axis). Every
    layout is bit-exact except an axis reduction over a reversed view (`a[::-1]` reduced along an axis: 5 of 7
    per dtype differ along the reversed axis, 1–3 along the other). A `_var` port inherits it only there (the mean's
-   sum; the deviation sum runs over a fresh array). Belongs with B1.
+   sum; the deviation sum runs over a fresh array). Belongs with B1. Pinned since X9 by
+   `OpenBugsReductionTests.Sum_ReversedViewAxis_WalksTheLogicalOrder` (`np.sum(b[::-1], axis=0)` of cancelling float32
+   rows: NumPy `[0, 1, 8]`, NumSharp `[1, 0, 8]`); np.mean, held strict since X9, keeps a narrow registry branch for
+   this layout in the older tiers, and the mean_loops tier carves it.
 6. **`ddof` is an `int?` in NumSharp; NumPy accepts a float** (`np.var(x, ddof=1.5)` divides by `n - 1.5`). Belongs
    with B4 / B7 (`correction=` is NumPy's float alias of `ddof`).
 7. **Removing an excuse is not enough; every branch that can catch the op must be checked** (A2). With V1 gone,
@@ -408,9 +475,20 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
    np.var inherits on a view with a reversed axis or a broadcast operand (finding 5) cannot reach it: the 10,306-case
    view-chain matrix is exact without exceptions, where np.var's had 490 inherited cases. A port that streams over
    the view instead must prove the view's walk equals the copy's (dense inputs only, here).
+10. **The flat sum of a broadcast operand is not NumPy's call schedule** (X9). NumPy's iterator cannot coalesce a
+   stride-0 axis with its neighbour, so it calls the add loop once per broadcast row (`out += pairwise(row)`);
+   NumSharp's exact flat engine declines a broadcast operand and the elementwise fold sums in its own order: 1 ULP on
+   12 of the mean_loops tier's broadcast cells (np.sum shares it). Pinned by
+   `OpenBugsReductionTests.Sum_BroadcastOperand_Flat_IsNumPysCallSchedule`. Belongs with B1.
+11. **Hold the ported function strict across every tier, not only its own** (X9, as finding 7 for A2). The reduce tier's
+   mean cases sat under the unbounded summation branch, which had hidden a gross divergence (a broadcast uint64 mean
+   of 101.8 for NumPy's 3.69e18) and a dtype one (decimal); the new tier alone would not have reached either.
 
 ## 7. State log
 
+- **2026-10-05**: X9 done (np.mean is NumPy's `_mean`: every `dtype=` loop, the flat integer loops, decimal, a broadcast
+  uint64; the `mean_loops` oracle tier; np.mean held strict in every tier), with X7's integer / bool part; X10 and
+  findings 10–11 recorded, finding 5 pinned. Found by A7, which is in progress. Commit: the X9 commit on `journey4`.
 - **2026-10-05**: A3 done (np.nanvar / np.nanstd are NumPy's nanvar / nanstd; `dtype=` added, B7's first part; the
   `nanvarstd` oracle tier; nanvar / nanstd left the registry's nan-family blankets); A7 and finding 9 recorded; the
   generator's unknown-mode list completed (13 modes were missing). Commit: the A3 commit on `journey4`.

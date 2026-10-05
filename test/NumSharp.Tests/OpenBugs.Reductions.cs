@@ -543,5 +543,71 @@ namespace NumSharp.Tests
             }
             AssertNoMismatch(fails, "NumPy's buffered fills split a pinned row longer than the buffer");
         }
+
+        // ======================================================================================================
+        //  GROUP 10 — an axis sum over a view with a REVERSED axis (several outputs). NumPy's reduction iterator keeps
+        //  the logical order (DONT_NEGATE_STRIDES); NumSharp's axis kernel walks memory order, so cancelling values
+        //  give other bits. A one-output axis already takes the exact flat engine, which walks the logical order.
+        // ======================================================================================================
+
+        /// <summary>
+        ///     <c>np.sum(b[::-1], axis=0)</c> of a float32 <c>(4, 3)</c> array whose first two columns cancel
+        ///     (<c>±1e8</c> with <c>1.0</c>s) is <c>[0, 1, 8]</c> in NumPy: it adds the rows in the view's logical order
+        ///     (row 3 first). NumSharp adds them in memory order (row 0 first) and gives <c>[1, 0, 8]</c>. <c>np.mean</c>
+        ///     inherits it through its sum (<c>[0, 0.25, 2]</c> vs <c>[0.25, 0, 2]</c>).
+        /// </summary>
+        /// <remarks>
+        ///     Root cause: <c>Default.Reduction.Add.cs</c> routes an axis sum with several outputs to the axis kernels,
+        ///     which walk a negative-stride reduced axis from its lowest address; NumPy's reduce iterator does not negate
+        ///     strides. Plan <c>docs/plans/api-parameter-parity.md</c> finding 5 (found by A2's building-block check,
+        ///     2026-10-05; also along the non-reversed axis in some layouts). The mean_loops oracle tier carves these cells
+        ///     (<c>gen_oracle.gen_mean_loops</c>, "finding 5") and names this test, and the registry keeps a narrow branch
+        ///     for np.mean's other tiers (<c>MisalignedRegistry.IsReversedAxisReduction</c>).
+        /// </remarks>
+        [TestMethod, OpenBugs]
+        public void Sum_ReversedViewAxis_WalksTheLogicalOrder()
+        {
+            var fails = new List<string>();
+            var b = np.array(new float[,] { { 1e8f, 1f, 2f }, { 1f, 1e8f, 2f }, { -1e8f, 3f, 2f }, { 1f, -1e8f, 2f } });
+            var v = b["::-1"];
+            Check(fails, "sum f32 b[::-1] axis0", () => np.sum(v, 0), "float32 (3,) 00000000 3f800000 41000000");
+            Check(fails, "mean f32 b[::-1] axis0", () => np.mean(v, 0), "float32 (3,) 00000000 3e800000 40000000");
+            AssertNoMismatch(fails, "NumPy adds the rows of a reversed view in its logical order");
+        }
+
+        // ======================================================================================================
+        //  GROUP 11 — the FLAT sum of a broadcast operand (a stride-0 axis). NumPy's iterator cannot coalesce a
+        //  stride-0 axis with its neighbour, so it calls the add loop once per broadcast row: out += pairwise(row).
+        //  NumSharp's exact flat engine declines a broadcast operand, and the elementwise fold it falls back to sums
+        //  all the elements in its own order.
+        // ======================================================================================================
+
+        /// <summary>
+        ///     <c>np.sum(np.broadcast_to(r, (4, 5)))</c> of five float32 values is <c>0x40d3f48a</c> in NumPy (four calls
+        ///     of the add loop, one per broadcast row, each adding the row's pairwise sum to the result); NumSharp's
+        ///     fold gives <c>0x40d3f488</c>. A float64 scalar broadcast to <c>(3, 4)</c> is one ULP off the same way.
+        ///     <c>np.mean</c> inherits it through its sum.
+        /// </summary>
+        /// <remarks>
+        ///     Root cause: <c>NumPyAddReduce</c> (<c>Default.Reduction.Add.Exact.cs</c>) declines a broadcast operand —
+        ///     NpyIter's axis sort skips the comparisons a stride-0 operand takes part in, a schedule the engine does not
+        ///     model — and <c>sum_elementwise_il</c> / <c>mean_elementwise_il</c> fold instead (<c>.claude/CLAUDE.md</c>,
+        ///     "Math — Reductions", residuals: "a broadcast operand declines to the old fold (value-exact, not
+        ///     order-exact)"). Found by the mean_loops oracle tier (2026-10-05, plan
+        ///     <c>docs/plans/api-parameter-parity.md</c> X9), which carves these cells (<c>gen_oracle.gen_mean_loops</c>,
+        ///     "broadcast") and names this test.
+        /// </remarks>
+        [TestMethod, OpenBugs]
+        public void Sum_BroadcastOperand_Flat_IsNumPysCallSchedule()
+        {
+            var fails = new List<string>();
+            var b = np.broadcast_to(np.array(new[] { -0.8627f, 1.9222f, 0.373f, -1.1762f, 1.3996f }), new Shape(4, 5));
+            Check(fails, "sum f32 broadcast (4,5)", () => np.sum(b), "float32 () 40d3f48a");
+            Check(fails, "mean f32 broadcast (4,5)", () => np.mean(b), "float32 () 3ea9906e");
+            var s = np.broadcast_to(np.array(new[] { -0.8627 }), new Shape(3, 4));
+            Check(fails, "sum f64 scalar broadcast (3,4)", () => np.sum(s), "float64 () c024b46dc5d63887");
+            Check(fails, "mean f64 scalar broadcast (3,4)", () => np.mean(s), "float64 () bfeb9b3d07c84b5f");
+            AssertNoMismatch(fails, "NumPy adds a broadcast operand one row (one add-loop call) at a time");
+        }
     }
 }

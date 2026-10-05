@@ -1145,6 +1145,18 @@ namespace NumSharp.Tests.Fuzz
                     ? np.nanvar(a, ParseAxis(p), ParseKeepdims(p), ddof, loop)
                     : np.nanstd(a, ParseAxis(p), ParseKeepdims(p), ddof, loop);
             }
+            // mean_loops.jsonl: np.mean with dtype= (a NumPy dtype name or null) — NumPy's _mean (plan
+            // api-parameter-parity X9). No np.mean overload carries dtype= without an axis yet (plan item B3), so the flat
+            // form calls the engine's np.mean (TensorEngine.Mean), which every np.mean overload reaches.
+            if (op == "mean" && p.ContainsKey("dtype"))
+            {
+                DType loop = p["dtype"].ValueKind != JsonValueKind.Null
+                    ? (DType)FuzzCorpus.DtypeToTC(p["dtype"].GetString())
+                    : null;
+                int? axis = ParseAxis(p);
+                bool keepdims = ParseKeepdims(p);
+                return axis.HasValue ? np.mean(a, axis.Value, loop, keepdims) : a.TensorEngine.Mean(a, null, loop, keepdims);
+            }
             if (op == "sum" && p.TryGetValue("dtype", out var sumDtype))
                 return np.sum(a, ParseAxis(p), ParseKeepdims(p), (DType)FuzzCorpus.DtypeToTC(sumDtype.GetString()));
             return ApplyReduce(op, ParseAxis(p), ParseKeepdims(p), a);

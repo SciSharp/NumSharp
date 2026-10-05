@@ -353,6 +353,80 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
+        /// Every np.mean / ndarray.mean divergence is a real bug since np.mean became NumPy's <c>_mean</c> statement for
+        /// statement (2026-10-05, plan api-parameter-parity X9) and left the reduction blankets: a result dtype that is
+        /// not NumPy's (the dtype blanket hid the flat decimal mean's float64), a few-ULP value difference flat or over an
+        /// axis (the unbounded summation blanket hid a broadcast uint64 read as int64), a NaN NumPy has and NumSharp
+        /// lacks over an axis (the axis-NaN branch), and the single-operand ULP branches.
+        /// </summary>
+        [TestMethod]
+        public void Mean_NoDivergenceIsExcused()
+        {
+            var none = System.Array.Empty<BitDiff.Diff>();
+            double v = 1.2345;
+            byte[] nan = BitConverter.GetBytes(double.NaN), one = BitConverter.GetBytes(1.0);
+            var nanVsOne = new[] { new BitDiff.Diff(0, "NaN", "000000000000f03f") };
+            foreach (var op in new[] { "mean", "ndarray.mean" })
+            {
+                MisalignedRegistry.Classify(Case(op, ("float32", new long[] { 8 })), DivergenceKind.Dtype, null, null,
+                    NPTypeCode.Single, none).Should().BeNull($"{op} of float32 returning another dtype");
+                MisalignedRegistry.Classify(WithAxis(Case(op, ("float64", new long[] { 4, 8 })), 0), DivergenceKind.Value,
+                    BitConverter.GetBytes(v), BitConverter.GetBytes(UlpUp(v)), NPTypeCode.Double, OneDiff)
+                    .Should().BeNull($"{op} one ULP off over an axis is not summation order: it is NumPy's _mean");
+                MisalignedRegistry.Classify(WithAxis(Case(op, ("float64", new long[] { 4, 8 })), 1), DivergenceKind.Value,
+                    nan, one, NPTypeCode.Double, nanVsOne).Should().BeNull($"{op} missing NumPy's NaN over an axis");
+                MisalignedRegistry.Classify(Case(op, ("uint64", new long[] { 4, 5 })), DivergenceKind.Value,
+                    BitConverter.GetBytes(v), BitConverter.GetBytes(UlpUp(v, 1000)), NPTypeCode.Double, OneDiff)
+                    .Should().BeNull($"{op} of an integer input off flat (the summation blanket hid a uint64 read as int64)");
+                MisalignedRegistry.Classify(Case(op, ("complex128", new long[] { 8 })), DivergenceKind.Value,
+                    new byte[16], new byte[16], NPTypeCode.Complex, OneDiff)
+                    .Should().BeNull($"{op} of complex off flat (the complex unary 3-ULP branch must not take it)");
+            }
+        }
+
+        /// <summary>
+        /// The one mean layout still excused: an axis reduction over a view with a REVERSED axis, which inherits np.sum's
+        /// order there (plan api-parameter-parity finding 5, pinned by
+        /// <c>OpenBugsReductionTests.Sum_ReversedViewAxis_WalksTheLogicalOrder</c>). The same values over a forward view
+        /// are not excused.
+        /// </summary>
+        [TestMethod]
+        public void Mean_ReversedViewAxis_IsTheOnlyExcusedLayout()
+        {
+            double v = 1.2345;
+            var reversed = WithAxis(Case("mean", ("float32", new long[] { 4, 5 })), 0);
+            reversed.Operands[0].Strides = new long[] { -5, -1 };
+            reversed.Operands[0].Offset = 19;
+            MisalignedRegistry.Classify(reversed, DivergenceKind.Value, BitConverter.GetBytes(v),
+                BitConverter.GetBytes(UlpUp(v)), NPTypeCode.Double, OneDiff)
+                .Should().Contain("finding 5", "a reversed view along an axis is np.sum's open order residual");
+            var forward = WithAxis(Case("mean", ("float32", new long[] { 4, 5 })), 0);
+            MisalignedRegistry.Classify(forward, DivergenceKind.Value, BitConverter.GetBytes(v),
+                BitConverter.GetBytes(UlpUp(v)), NPTypeCode.Double, OneDiff)
+                .Should().BeNull("a forward view has no residual left");
+            var flatReversed = Case("mean", ("float32", new long[] { 4, 5 }));
+            flatReversed.Operands[0].Strides = new long[] { -5, -1 };
+            flatReversed.Operands[0].Offset = 19;
+            MisalignedRegistry.Classify(flatReversed, DivergenceKind.Value, BitConverter.GetBytes(v),
+                BitConverter.GetBytes(UlpUp(v)), NPTypeCode.Double, OneDiff)
+                .Should().BeNull("the flat mean of a reversed view runs the exact flat engine");
+        }
+
+        /// <summary>
+        /// <c>ma.mean</c> keeps the reduction blankets: <c>NDMaskedArray.mean</c> is its own masked arithmetic, not
+        /// <c>np.mean</c>. The scope is the <c>ma.*</c> id only.
+        /// </summary>
+        [TestMethod]
+        public void MaMean_KeepsTheReductionBlankets_OnlyForMaIds()
+        {
+            double v = 1.2345;
+            var c = WithAxis(Case("mean", ("float64", new long[] { 4, 8 })), 0);
+            c.Id = "ma.mean/selftest";
+            MisalignedRegistry.Classify(c, DivergenceKind.Value, BitConverter.GetBytes(v), BitConverter.GetBytes(UlpUp(v)),
+                NPTypeCode.Double, OneDiff).Should().NotBeNull("ma.mean's masked path keeps the summation blanket");
+        }
+
+        /// <summary>
         /// <c>ma.var</c> / <c>ma.std</c> keep the reduction blankets: <c>NDMaskedArray.var</c>'s masked path is its own
         /// arithmetic, not <c>np.var</c>, and its known gaps are plan item A6. The scope is the <c>ma.*</c> id only.
         /// </summary>

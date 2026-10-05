@@ -162,6 +162,16 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void NanVarStd() => RunCorpus("nanvarstd.jsonl");
 
+        // np.mean as NumPy's _mean (gen_mean_loops, plan api-parameter-parity X9): every catalog layout x dtype x axis x
+        // keepdims, dtype= for every (input, loop) pair (nine loops incl. integer and bool ones), empty and 0-d inputs,
+        // special values (complex parts, uint64 past 2**63, a broadcast operand), order-sensitive sizes (float offsets,
+        // int64 near 2**62) and np.setbufsize fills. Held to ZERO excuses (the "meanloops" valueclass): before the port an
+        // axis cast loop summed as doubles, a complex sum was divided part by part, an integer loop did not wrap and an
+        // empty slice in it threw, float16 summed in double, and a broadcast uint64 read as int64.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void MeanLoops() => RunCorpus("mean_loops.jsonl");
+
         // np.evaluate / NDExpr: fused trees over the pairwise + single layouts, every dtype, weak /
         // strong literals, comparisons / where / min-max / logical nodes, the unary catalog, root
         // reductions (flat + axis + keepdims) and out= (returned view + whole out base). NumPy has
@@ -1003,6 +1013,7 @@ namespace NumSharp.Tests.Fuzz
             ["reduce_start.jsonl"] = 8300,   // reduction start rules through the sign of a zero result (2026-10-04): 7,942 at delivery (the uncarved 9,448-cell probe minus 1,506 carved cells); 8,586 once the identity-seeded add reduction fixed the sum / mean / nan-family / trapezoid / evaluate rules (862 carved cells left, pinned in NumSharp.Tests/OpenBugs.Reductions.cs)
             ["varstd.jsonl"] = 15800,  // np.var / np.std as NumPy's _var / _std (2026-10-05, plan api-parameter-parity A2): 16,108 at delivery, sections L / D / T / S / B / M + the char proxy weave
             ["nanvarstd.jsonl"] = 13000,  // np.nanvar / np.nanstd as NumPy's nanvar / nanstd (2026-10-05, plan api-parameter-parity A3): 13,382 at delivery, sections L / N / D / T / S / B / M / E + the char proxy weave
+            ["mean_loops.jsonl"] = 6400,  // np.mean as NumPy's _mean (2026-10-05, plan api-parameter-parity X9): 6,550 at delivery, sections L / T / E / Z / S / M / B + the char proxy weave
             ["sum_identity.jsonl"] = 23300,  // np.sum's identity add + dtype= loops + the reductions built on it (2026-10-04): 23,121 at delivery, incl. section "s" (704 flat float sum / mean schedule cases: layouts x np.setbufsize 16 / 32); +832 section "o" (one-output axis schedules, plan api-parameter-parity X5) - 23,953
             ["nan_order.jsonl"] = 2750,   // float add / multiply NaN-operand order (win-amd64), NaN payloads raw: 2,678 at delivery, + 118 the 2026-10-03 gap probe validated as matching (section G: float16 scans, complex128 subtract, buffered N-D / cast / where= / evaluate / dtype= paths) — 2,796; the paths that differ are [OpenBugs] in NumSharp.Tests/OpenBugs.NaNOperandOrder.cs
             ["out_where.jsonl"] = 6300,   // §B2 out_scan/out_round/out_clip/out_nanarg + the f16/uint8 lanes (dtype-spread gate)

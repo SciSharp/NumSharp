@@ -6562,6 +6562,287 @@ def gen_nanvarstd(dtypes=None):
     return cases
 
 
+# ---------------------------------------------------------------------------
+# np.mean — NumPy's _methods._mean (plan docs/plans/api-parameter-parity.md, item X9)
+# ---------------------------------------------------------------------------
+# NumPy's _mean: rcount = the reduced extent (np.intp), the loop dtype (dtype=, else float64 for bool / integers, float32
+# for float16 with a float16 result), ret = umr_sum(arr, axis, dtype, keepdims), then true_divide(ret, rcount, out=ret,
+# casting='unsafe') for an array (ret.dtype.type(ret / rcount) for a scalar; a float16 result rounds the float32 quotient
+# array into float16, or the scalar's float64 quotient once). Sections (the id carries the letter):
+#   L  every catalog layout (refilled with finite values) x dtype x axis {None, each axis, -1, out of range} x keepdims
+#   T  dtype= for every input dtype against nine loops (float16 / float32 / float64 / complex128 / int8 / uint8 / int32 /
+#      int64 / bool), flat and per axis, keepdims
+#   E  empty inputs in every loop (0 / 0: NaN, nan+nanj, INT_MIN through the unsafe cast, True)
+#   Z  0-d inputs with an axis (np.mean normalizes it itself: AxisError, unlike np.sum)
+#   S  special values: NaN / inf / -0.0 in one element, a length-1 axis and a row; complex parts (Smith's division
+#      poisons the other part); uint64 past 2**63
+#   M  order-sensitive values: float32 / float64 / complex128 / float16 offsets plus noise (129 / 1031 / 2049 elements,
+#      2-D C / F / transposed 3-D), int64 / uint64 near 2**62 (float64 rounding: slab vs innermost order)
+#   B  np.setbufsize(16 / 32): the buffered fills of a cast loop, flat and per axis
+# Carved (none excused):
+#   - an axis reduction over a view with a reversed axis whose sum is NOT order-free (np.sum's axis kernel walks memory
+#     order there, NumPy the logical order: finding 5, pinned by
+#     OpenBugsReductionTests.Sum_ReversedViewAxis_WalksTheLogicalOrder); order-free = every value an integer in the loop
+#     and the largest possible sum inside the loop's exact-integer range;
+#   - a pinned row (the reduced axis innermost) longer than the buffer in a cast loop under np.setbufsize (X6, pinned by
+#     OpenBugsReductionTests.Sum_CastLoopAxis_RowLongerThanTheBuffer_SplitsAcrossFills);
+#   - a FLAT reduction of a float / complex operand with a broadcast (stride-0) axis whose sum is not order-free (np.sum's
+#     exact flat engine declines a broadcast operand, and the elementwise fold it falls back to is not NumPy's call
+#     schedule of one pairwise sum per row; pinned by OpenBugsReductionTests.Sum_BroadcastOperand_Flat_IsNumPysCallSchedule).
+# Params: axis (int or null), keepdims, dtype (a NumPy dtype name or null) and, in section B, bufsize.
+
+MEAN_LOOPS = ["float16", "float32", "float64", "complex128", "int8", "uint8", "int32", "int64", "bool"]
+
+# The largest integer magnitude each loop holds exactly (a float sum of integers inside it is exact in every order).
+_MEAN_EXACT_INT = {"float16": 2.0 ** 11, "float32": 2.0 ** 24, "float64": 2.0 ** 53, "complex128": 2.0 ** 53}
+
+
+def _mean_loop_of(view, dt):
+    """_mean's loop dtype name for `view` and the dtype= request `dt` (None: NumPy's default)."""
+    if dt is not None:
+        return np.dtype(dt).name
+    k = view.dtype.kind
+    if k in "biu":
+        return "float64"
+    if view.dtype == np.float16:
+        return "float32"
+    return view.dtype.name
+
+
+def _mean_order_free(view, axis, loop):
+    """Whether np.sum(view, axis, dtype=loop) is exact in every summation order: an integer / bool loop (modular add,
+    logical OR), or a float loop where every element cast to it is an integer and the largest possible partial sum stays
+    inside the loop's exact-integer range."""
+    if np.dtype(loop).kind in "biu":
+        return True
+    if view.size == 0:
+        return True
+    with warnings.catch_warnings(), np.errstate(all="ignore"):
+        warnings.simplefilter("ignore")
+        v = view.astype(loop)
+        parts = [v.real, v.imag] if np.dtype(loop).kind == "c" else [v]
+        for p in parts:
+            p64 = p.astype(np.float64)
+            if not np.all(np.isfinite(p64)) or not np.all(p64 == np.floor(p64)):
+                return False
+            extent = view.size if axis is None else view.shape[axis]
+            if float(np.max(np.abs(p64))) * extent > _MEAN_EXACT_INT[np.dtype(loop).name]:
+                return False
+    return True
+
+
+def _mean_values(dtype, shape, seed):
+    """Deterministic finite values of `shape` with fractional parts (a float sum's bits depend on its order)."""
+    n = int(np.prod(shape)) if len(shape) else 1
+    i = np.arange(n)
+    dt = np.dtype(dtype)
+    if dt.kind == "b":
+        return ((i * 3 + seed) % 2 == 0).reshape(shape)
+    if dt.kind in "iu":
+        hi = 100 if dt.itemsize == 1 else 30000
+        return np.array([((k * 7919 + seed * 31) % hi) - (hi // 3 if dt.kind == "i" else 0) for k in range(n)],
+                        dtype=object).astype(dt).reshape(shape)
+    v = (((i * 7 + seed) % 11) * 0.375 - 1.25 + ((i * 13 + seed) % 17) * 0.0123).astype(np.float64)
+    if dt.kind == "c":
+        v = v + 1j * (((i * 5 + seed) % 7) * 0.5 - 1.0 + ((i * 3 + seed) % 5) * 0.0471)
+    return v.astype(dt).reshape(shape)
+
+
+def gen_mean_loops(dtypes=None):
+    """np.mean cases (op key mean, valueclass meanloops) over `dtypes` (default: ALL_DTYPES); see the header."""
+    dtypes = ALL_DTYPES if dtypes is None else dtypes
+    cases = []
+    n = 0
+    carved = {"finding5": 0, "x6": 0, "broadcast": 0}
+
+    def reversed_axis(view):
+        return any(st < 0 and sh > 1 for st, sh in zip(view.strides, view.shape))
+
+    def broadcast_axis(view):
+        return any(st == 0 and sh > 1 for st, sh in zip(view.strides, view.shape))
+
+    def emit(base, view, axis, keepdims, dt, ln, tag, bufsize=None):
+        nonlocal n
+        loop = _mean_loop_of(view, dt)
+        # The broadcast flat residual (carved): a float / complex operand with a stride-0 axis, reduced flat in a float
+        # loop, unless the sum is order-free.
+        if axis is None and view.dtype.kind in "fc" and broadcast_axis(view) and not _mean_order_free(view, None, loop):
+            carved["broadcast"] += 1
+            return
+        # Finding 5 (carved): an axis reduction over a view with a reversed axis, unless its sum is order-free.
+        if axis is not None and reversed_axis(view) and view.ndim >= 2 \
+                and not (isinstance(axis, int) and -view.ndim <= axis < view.ndim
+                         and _mean_order_free(view, axis, loop)):
+            if isinstance(axis, int) and -view.ndim <= axis < view.ndim:
+                carved["finding5"] += 1
+                return
+        params = {"axis": axis, "keepdims": keepdims, "dtype": dt}
+        if bufsize is not None:
+            params["bufsize"] = bufsize
+        operand = describe(base, view)
+        cid = f"mean/{tag}/{ln}/{n}"
+        n += 1
+        previous = np.getbufsize()
+        try:
+            if bufsize is not None:
+                np.setbufsize(bufsize)
+            with warnings.catch_warnings(), np.errstate(all="ignore"):
+                warnings.simplefilter("ignore")      # empty slices, invalid casts, complex -> real
+                r = np.mean(view, axis=axis, keepdims=keepdims, dtype=dt)
+        except Exception as e:                       # noqa: BLE001 — NumPy's error is the expectation
+            cases.append(_error_case("mean", params, [operand], e, ln, cid=cid))
+            return
+        finally:
+            np.setbufsize(previous)
+        cases.append({"id": cid, "op": "mean", "params": params, "operands": [operand],
+                      "expected": _arr_expected(r), "layout": ln, "valueclass": "meanloops"})
+
+    def axes_of(view):
+        if view.ndim == 0:
+            return [None, 0, -1]                     # np.mean refuses every axis on a 0-d input (AxisError)
+        return [None] + list(range(view.ndim)) + [-1, view.ndim]   # view.ndim: out of range
+
+    # Section L: every layout of the catalog, refilled (the catalog's pools start with NaN, +-inf).
+    for ln, fn_layout in LAYOUTS.items():
+        for s in dtypes:
+            base, view = fn_layout(np.dtype(s))
+            if base.size:
+                base[...] = _mean_values(s, base.shape, 1)
+            for axis in axes_of(view):
+                for kd in ((False, True) if axis in (None, 0) else (False,)):
+                    emit(base, view, axis, kd, None, ln, f"L/{s}")
+
+    # Section T: dtype= for every (input, loop) pair.
+    for s in dtypes:
+        for shape, axes in (((7,), (None, 0)), ((3, 5), (None, 0, 1)), ((), (None,)), ((2, 3, 4), (None, 0, 2))):
+            base = np.ascontiguousarray(_mean_values(s, shape, 4))
+            for dt in MEAN_LOOPS:
+                for axis in axes:
+                    for kd in ((False, True) if axis is None else (False,)):
+                        emit(base, base, axis, kd, dt, "c_contiguous", f"T/{s}->{dt}")
+        if s in ("int64", "float64", "float32", "int32"):
+            base = np.ascontiguousarray(_mean_values(s, (5, 6), 5))
+            view = base.T                                                  # F-ordered: the loop's result keeps F
+            for dt in MEAN_LOOPS:
+                for axis in (None, 0, 1):
+                    emit(base, view, axis, False, dt, "f_contiguous_2d", f"T/{s}->{dt}")
+
+    # Section E: empty inputs in every loop.
+    for s in [d for d in ("float16", "float32", "float64", "complex128", "int32", "uint8", "bool") if d in dtypes]:
+        for shape, axes in (((0,), (None, 0)), ((0, 3), (None, 0, 1)), ((3, 0), (None, 0, 1))):
+            base = np.zeros(shape, dtype=s)
+            for axis in axes:
+                for kd in (False, True):
+                    for dt in [None] + MEAN_LOOPS:
+                        emit(base, base, axis, kd, dt, "empty", f"E/{s}")
+
+    # Section Z: 0-d inputs with an axis (AxisError) and without one.
+    for s in dtypes:
+        base = np.array(_mean_values(s, (), 6))
+        for axis in (None, 0, -1, 1):
+            for dt in (None, "float32", "int32"):
+                emit(base, base, axis, False, dt, "scalar_0d", f"Z/{s}")
+
+    # Section S: special values.
+    specials = {
+        "float16": [np.nan, np.inf, -np.inf, -0.0],
+        "float32": [np.nan, np.inf, -np.inf, -0.0],
+        "float64": [np.nan, np.inf, -np.inf, -0.0],
+        "complex128": [complex(np.nan, 0.0), complex(0.0, np.nan), complex(0.0, np.inf), complex(-np.inf, 1.0),
+                       complex(-0.0, -0.0)],
+    }
+    for s, values in specials.items():
+        if s not in dtypes:
+            continue
+        for k, v in enumerate(values):
+            zero_d = np.array(v, dtype=s)
+            one = np.array([v], dtype=s)
+            col = np.array([[v], [1.5], [-2.0], [v]], dtype=s)          # (4, 1): axis 1 has length 1
+            row = np.array([[1.5, v, -2.0], [v, 0.25, 3.0]], dtype=s)
+            for dt in (None, "complex128", "float64"):
+                emit(zero_d, zero_d, None, False, dt, "scalar_0d", f"S/{s}/{k}")
+                emit(one, one, None, False, dt, "one_element_1d", f"S/{s}/{k}")
+                emit(one, one, 0, True, dt, "one_element_1d", f"S/{s}/{k}")
+                emit(col, col, 1, False, dt, "length1_axis_2d", f"S/{s}/{k}")
+                emit(col, col, 0, False, dt, "length1_axis_2d", f"S/{s}/{k}")
+                for axis in (None, 0, 1):
+                    emit(row, row, axis, False, dt, "c_contiguous_2d", f"S/{s}/{k}")
+    if "uint64" in dtypes:
+        big = np.array([0, 2 ** 64 - 1, 2 ** 63, 127, 2 ** 63 + 2 ** 11, 255], dtype=np.uint64)
+        for ln, base, view in (("c_contiguous_1d", big, big), ("c_contiguous_2d", big, big.reshape(2, 3)),
+                               ("broadcast_1d_to_2d", big, np.broadcast_to(big, (4, 6)))):
+            for axis in [None] + list(range(view.ndim)):
+                for dt in (None, "float32", "complex128", "int64"):
+                    emit(base, view, axis, False, dt, ln, "S/uint64")
+
+    rng = np.random.default_rng(20261007)
+
+    # Section M: order-sensitive values, where the pairwise / sequential schedule shows in the last bits.
+    for s in [d for d in ("float64", "float32", "float16", "complex128") if d in dtypes]:
+        for size in (129, 1031, 2049):
+            vals = 1000.0 + rng.normal(0.0, 3.0, size)
+            if s == "float16":
+                vals = 8.0 + rng.normal(0.0, 1.5, size)
+            if s == "complex128":
+                vals = vals + 1j * (-250.0 + rng.normal(0.0, 7.0, size))
+            base = np.asarray(vals).astype(s)
+            for ln, view in (("c_contiguous_1d", base), ("negstride_1d", base[::-1]), ("strided_step2_1d", base[::2])):
+                for axis in (None, 0):
+                    for dt in (None, "float64", "float32"):
+                        emit(base, view, axis, False, dt, ln, f"M/{s}/{size}")
+        vals = 1000.0 + rng.normal(0.0, 3.0, 31 * 41)
+        if s == "float16":
+            vals = 8.0 + rng.normal(0.0, 1.5, 31 * 41)
+        if s == "complex128":
+            vals = vals + 1j * (-250.0 + rng.normal(0.0, 7.0, 31 * 41))
+        base = np.asarray(vals).astype(s)
+        for ln, view in (("c_contiguous_2d", base.reshape(31, 41)), ("f_contiguous_2d", base.reshape(41, 31).T),
+                         ("transposed_3d", base[: 30 * 41].reshape(5, 6, 41).transpose(2, 0, 1)),
+                         ("strided_2d_rows", base.reshape(31, 41)[::2])):
+            for axis in [None] + list(range(view.ndim)):
+                for dt in (None, "float64", "float32"):
+                    emit(base, view, axis, False, dt, ln, f"M/{s}/2d")
+    for s in [d for d in ("int64", "uint64", "int32") if d in dtypes]:
+        hi = 2 ** 62 if s != "int32" else 2 ** 31 - 1
+        lo = -hi if s != "uint64" else 0
+        base = rng.integers(lo, hi, 33 * 17, endpoint=False).astype(s)
+        for ln, view in (("c_contiguous_2d", base.reshape(33, 17)), ("f_contiguous_2d", base.reshape(17, 33).T),
+                         ("transposed_3d", base[: 32 * 17].reshape(4, 8, 17).transpose(2, 0, 1)),
+                         ("strided_2d_rows", base.reshape(33, 17)[::2])):
+            for axis in [None] + list(range(view.ndim)):
+                for dt in (None, "float32", "complex128"):
+                    emit(base, view, axis, False, dt, ln, f"M/{s}/2d")
+
+    # Section B: the buffered fills of a cast loop under a small np.setbufsize.
+    casts = [("float64", "float32"), ("float32", "float16"), ("complex128", "float64"), ("float64", "complex128"),
+             ("int32", None), ("int64", "float32"), ("float16", None), ("uint8", None)]
+    for src, dt in casts:
+        if src not in dtypes:
+            continue
+        if np.dtype(src).kind in "iu":
+            vals = rng.integers(-5000 if np.dtype(src).kind == "i" else 0, 5000 if src != "uint8" else 256, 200)
+        else:
+            vals = 1000.0 + rng.normal(0.0, 3.0, 200) if src != "float16" else 8.0 + rng.normal(0.0, 1.5, 200)
+            if src == "complex128":
+                vals = vals + 1j * (-40.0 + rng.normal(0.0, 2.0, 200))
+        base = np.asarray(vals).astype(src)
+        for ln, view in (("c_contiguous_1d", base), ("c_contiguous_2d", base.reshape(8, 25)),
+                         ("f_contiguous_2d", base.reshape(25, 8).T)):
+            for axis in ([None] if view.ndim == 1 else [None, 0, 1]):
+                loop = _mean_loop_of(view, dt)
+                pinned = (ln == "c_contiguous_2d" and axis == 1) or (ln == "f_contiguous_2d" and axis == 0)
+                for bufsize in (16, 32):
+                    # X6 (carved): a pinned row longer than the buffer in a cast loop, unless order-free.
+                    if pinned and view.shape[axis] > bufsize and loop != view.dtype.name \
+                            and not _mean_order_free(view, axis, loop):
+                        carved["x6"] += 1
+                        continue
+                    emit(base, view, axis, False, dt, ln, f"B/{src}->{dt}", bufsize)
+    print(f"  mean_loops carved: finding 5 {carved['finding5']}, X6 {carved['x6']}, broadcast {carved['broadcast']}",
+          file=sys.stderr)
+    return cases
+
+
 def char_tier(mode):
     """Relabelled Char cases to append into tier-file `mode` (woven coverage)."""
     L = list(LAYOUTS.keys())
@@ -6640,6 +6921,8 @@ def char_tier(mode):
         raw = gen_varstd([_C])
     elif mode == "nanvarstd":                                      # Char has no NaN: np.var's route, like uint16
         raw = gen_nanvarstd([_C])
+    elif mode == "mean_loops":                                     # Char -> float64 like uint16 (an unsigned integer)
+        raw = gen_mean_loops([_C])
     return _relabel_dtype(raw, _C, "char")
 
 
@@ -17178,6 +17461,13 @@ def main():
         cases = gen_nanvarstd()
         cases += char_tier("nanvarstd")
         write_jsonl(os.path.join(corpus_dir, "nanvarstd.jsonl"), cases)
+    elif mode == "mean_loops":
+        # np.mean as NumPy's _mean (plan docs/plans/api-parameter-parity.md X9): every layout and dtype, dtype= for every
+        # (input, loop) pair, empty and 0-d inputs, special values, order-sensitive sizes and np.setbufsize fills. Its
+        # own file.
+        cases = gen_mean_loops()
+        cases += char_tier("mean_loops")
+        write_jsonl(os.path.join(corpus_dir, "mean_loops.jsonl"), cases)
     elif mode == "sum_identity":
         # np.sum's identity-seeded add reduction (+0.0 + -0.0 = +0.0) and its dtype= loop, with the
         # reductions built on it (mean / nansum / nanmean / average / ndarray.sum). No Char rows: the
@@ -17345,7 +17635,7 @@ def main():
         write_jsonl(os.path.join(corpus_dir, "polyroots_parity.jsonl"), host)
         write_jsonl(os.path.join(corpus_dir, "polyroots_parity.host.jsonl"), [blas_identity()])
     else:
-        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | sinc | i0 | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | nan_order | reduce_start | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows | evaluate | real_if_close | instance | emath | polyeval | polyseries | polycalc | polyvander | polyalgebra | polyroots | iter | dtype_text | errors_full | out_where | gcd | unwrap | half_minmax | clip_pyint | clip_ufunc | reduce_kwargs | sum_identity | varstd | nanvarstd)")
+        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | sinc | i0 | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | nan_order | reduce_start | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows | evaluate | real_if_close | instance | emath | polyeval | polyseries | polycalc | polyvander | polyalgebra | polyroots | iter | dtype_text | errors_full | out_where | gcd | unwrap | half_minmax | clip_pyint | clip_ufunc | reduce_kwargs | sum_identity | varstd | nanvarstd | mean_loops | ndarray)")
         sys.exit(2)
 
 

@@ -753,7 +753,10 @@ namespace NumSharp.Backends
         /// <param name="count">The divisor (the element count, or <c>max(n - ddof, 0)</c>); 0 gives NumPy's NaN / ±inf.</param>
         private static void DivideByCountLikeNumPy(NDArray a, long count)
         {
-            var divisor = NDArray.Scalar(count);
+            // The divisor and the integer branch's quotient are this method's own temporaries: disposed here, because
+            // np.mean's route (MeanLikeNumPy) runs outside any [NDScoped] member (np.var / np.std's scopes disposed them
+            // before; Dispose is idempotent, so those scopes are unaffected). The out= calls return `a` itself.
+            using var divisor = NDArray.Scalar(count);
             switch (a.GetTypeCode)
             {
                 case NPTypeCode.Double:
@@ -769,7 +772,7 @@ namespace NumSharp.Backends
                 default:
                 {
                     // An integer / bool / char sum (an integer or bool dtype=): float64 quotient, unsafe cast back.
-                    var q = np.true_divide(a, divisor);
+                    using var q = np.true_divide(a, divisor);
                     np.copyto(a, q, casting: "unsafe");
                     break;
                 }
